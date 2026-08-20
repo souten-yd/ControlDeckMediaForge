@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/job-request.json",
+  "title": "Media Forge job request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["operation", "intent"],
+  "properties": {
+    "operation": {
+      "type": "string",
+      "enum": ["image.generate", "image.edit", "media.inspect", "asset.pack"]
+    },
+    "intent": {"type": "string", "minLength": 1, "maxLength": 8000},
+    "inputs": {
+      "type": "array",
+      "maxItems": 16,
+      "default": [],
+      "items": {"$ref": "#/$defs/assetInput"}
+    },
+    "profile": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$",
+      "default": null
+    },
+    "model_policy": {
+      "type": "string",
+      "enum": ["auto", "fast", "balanced", "quality", "low_vram", "manual"],
+      "default": "auto"
+    },
+    "model_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 200, "default": null},
+    "constraints": {"type": "object", "default": {}},
+    "output": {"$ref": "#/$defs/output"},
+    "qa": {"$ref": "#/$defs/qa"},
+    "local_only": {"const": true, "default": true}
+  },
+  "$defs": {
+    "assetInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id"],
+      "properties": {"asset_id": {"type": "string", "pattern": "^asset_[0-9a-f]{32}$"}}
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": {"type": "string", "enum": ["png", "webp", "jpeg"], "default": "png"},
+        "count": {"type": "integer", "minimum": 1, "maximum": 8, "default": 1}
+      },
+      "default": {}
+    },
+    "qa": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deterministic": {"type": "boolean", "default": true},
+        "semantic": {"type": "boolean", "default": false},
+        "max_regeneration_attempts": {"type": "integer", "minimum": 0, "maximum": 3, "default": 0}
+      },
+      "default": {}
+    }
+  }
+}

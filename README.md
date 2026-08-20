@@ -20,9 +20,41 @@ The system is designed around **capabilities, not model names**. Models and runt
 
 ControlDeck integration is also deliberately generic: Media Forge remains a separate add-on/runtime, while ControlDeck provides reusable extension points for embedded UI, scoped identity/files/projects, Jobs, workflow/agent contributions, notifications, and a shared AI/GPU resource broker. Media-specific UI/tools are exposed only while the add-on is enabled and authorized.
 
+## Current implementation
+
+MF0-0 and MF0-1 provide isolated core/runtime environments, the Add-on v2 manifest,
+and a loopback health service. Job execution, assets, the embedded workspace, and
+host execution bridges remain explicitly unavailable until their later MF0 slices.
+
+## Run locally
+
+```bash
+./mf.sh doctor
+./mf.sh serve
+```
+
+Open <http://127.0.0.1:9130/>. The service binds to loopback only in G0.
+
+Install [`addon.json`](addon.json) through ControlDeck's Extensions screen. At
+MF0-1 the host can display setup state, while unfinished execution contributions
+remain unavailable. ControlDeck remains the lifecycle, identity, grant, Jobs
+bridge, and resource-broker authority; this repository contains all Media-specific
+code.
+
+## Test
+
+```bash
+./mf.sh test
+```
+
+Public contracts are documented in [`docs/api.md`](docs/api.md). Current evidence and untested areas are in [`docs/implementation-status.md`](docs/implementation-status.md).
+
 ## Planning documents
 
 - [Base plan](docs/base-plan.md) — general Media Forge product/runtime architecture and implementation phases.
 - [ControlDeck integration plan](docs/controldeck-integration-plan.md) — **normative for add-on integration, enabled-only UI/UX, ControlDeck Jobs integration, and shared AI/GPU resource management**. Where the older base plan describes a Media-Forge-owned global resource scheduler, this integration plan supersedes it: ControlDeck's shared AI Resource Broker is the platform-level admission/queue/lease authority, while Media Forge workers retain only local safety/concurrency guards.
 
 The matching ControlDeck host-side plans are maintained in the ControlDeck repository as `docs/design-addon-platform-v2.md` and `docs/design-ai-resource-broker.md`.
+
+Implementation order and real-machine acceptance gates are documented in
+[`docs/implementation/README.md`](docs/implementation/README.md).

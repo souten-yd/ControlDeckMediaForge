@@ -1,0 +1,5 @@
+# AMD official ROCm 7.2.1 wheel repository.
+# Keep this runtime separate from the Media Forge core environment.
+--find-links https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.1/
+numpy>=2.0,<3
+torch==2.10.0

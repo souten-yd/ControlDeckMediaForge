@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/asset.json",
+  "title": "Media Forge asset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "job_id", "parent_asset_ids", "mime_type", "size_bytes", "sha256", "suggested_filename", "provenance_id", "created_at"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^asset_[0-9a-f]{32}$"},
+    "job_id": {"type": "string", "pattern": "^job_[0-9a-f]{32}$"},
+    "parent_asset_ids": {"type": "array", "items": {"type": "string", "pattern": "^asset_[0-9a-f]{32}$"}},
+    "mime_type": {"type": "string", "enum": ["image/png", "image/webp", "image/jpeg"]},
+    "width": {"type": ["integer", "null"], "minimum": 1},
+    "height": {"type": ["integer", "null"], "minimum": 1},
+    "size_bytes": {"type": "integer", "minimum": 1},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "suggested_filename": {"type": "string", "minLength": 1, "maxLength": 255},
+    "provenance_id": {"type": "string", "pattern": "^prov_[0-9a-f]{32}$"},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

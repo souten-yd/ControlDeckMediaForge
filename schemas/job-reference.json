@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/job-reference.json",
+  "title": "Media Forge job reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job_id", "status"],
+  "properties": {
+    "job_id": {"type": "string", "pattern": "^job_[0-9a-f]{32}$"},
+    "status": {"type": "string", "enum": ["queued", "running", "succeeded", "failed", "canceled"]},
+    "asset_ids": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^asset_[0-9a-f]{32}$"}
+    }
+  }
+}

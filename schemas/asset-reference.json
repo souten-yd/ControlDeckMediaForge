@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/asset-reference.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["asset_id"],
+  "properties": {"asset_id": {"type": "string", "pattern": "^asset_[0-9a-f]{32}$"}}
+}
