@@ -1,0 +1,118 @@
+{
+  "api_version": "2",
+  "id": "media-forge",
+  "name": "Media Forge",
+  "version": "0.1.0",
+  "description": "Local-first media generation and asset library",
+  "publisher": "souten-yd",
+  "requires": {
+    "addon_contract": ">=2.0 <3.0"
+  },
+  "runtime": {
+    "kind": "external-service",
+    "base_url": "http://127.0.0.1:9130",
+    "health_path": "/health"
+  },
+  "host_capabilities": [
+    "context.read",
+    "theme.read",
+    "route.open",
+    "files.pick",
+    "files.export",
+    "projects.pick",
+    "jobs.read",
+    "jobs.write",
+    "notifications.show",
+    "resources.acquire"
+  ],
+  "contributions": {
+    "navigation": [
+      {
+        "id": "workspace",
+        "label": {"en": "Media", "ja": "Media"},
+        "route": "/x/media-forge/workspace",
+        "icon": "images"
+      }
+    ],
+    "embedded_views": [
+      {
+        "id": "workspace",
+        "label": "Media Forge",
+        "route": "/x/media-forge/workspace",
+        "path": "/",
+        "mobile": "companion"
+      }
+    ],
+    "commands": [
+      {
+        "id": "create-media",
+        "label": {"en": "Create media", "ja": "メディアを作成"},
+        "endpoint": "/addon/v1/commands/create"
+      }
+    ],
+    "quick_actions": [
+      {
+        "id": "create-media",
+        "label": {"en": "Create media", "ja": "メディアを作成"},
+        "endpoint": "/addon/v1/commands/create"
+      }
+    ],
+    "settings": [
+      {
+        "id": "settings",
+        "label": "Media Forge",
+        "route": "/x/media-forge/workspace/settings",
+        "permission": "settings.manage"
+      }
+    ],
+    "workflow_executors": [
+      {
+        "id": "media.generate",
+        "label": {"en": "Generate media", "ja": "メディア生成"},
+        "endpoint": "/addon/v1/workflow/execute",
+        "input_schema_path": "/schemas/job-request.json",
+        "output_schema_path": "/schemas/job-reference.json",
+        "permission": "workflows.run"
+      }
+    ],
+    "agent_tools": [
+      {
+        "id": "media.capabilities",
+        "label": "Inspect media capabilities",
+        "endpoint": "/addon/v1/agent/capabilities",
+        "schema_path": "/schemas/empty-input.json",
+        "permission": "workflows.run"
+      },
+      {
+        "id": "media.generate",
+        "label": "Generate media",
+        "endpoint": "/addon/v1/agent/generate",
+        "schema_path": "/schemas/job-request.json",
+        "permission": "workflows.run"
+      },
+      {
+        "id": "media.inspect",
+        "label": "Inspect a media asset",
+        "endpoint": "/addon/v1/agent/inspect",
+        "schema_path": "/schemas/asset-reference.json",
+        "permission": "workflows.run"
+      }
+    ],
+    "context_actions": [
+      {
+        "id": "edit-image",
+        "label": {"en": "Edit in Media Forge", "ja": "Media Forge で編集"},
+        "endpoint": "/addon/v1/context/edit-image",
+        "contexts": ["file", "project"],
+        "permission": "project_lab.view"
+      }
+    ],
+    "setup_checklist": [
+      {
+        "id": "core",
+        "label": {"en": "Media Forge service", "ja": "Media Forge サービス"},
+        "permission": "settings.manage"
+      }
+    ]
+  }
+}

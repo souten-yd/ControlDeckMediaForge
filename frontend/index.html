@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <title>Media Forge</title>
+    <link rel="stylesheet" href="static/styles.css">
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">CONTROLDECK ADD-ON</p>
+        <h1>Media Forge</h1>
+      </div>
+      <span class="badge">G0 · FAKE WORKER</span>
+    </header>
+    <nav aria-label="Media Forge sections">
+      <button class="tab active" data-tab="create">Create</button>
+      <button class="tab" data-tab="library">Library</button>
+      <button class="tab" data-tab="jobs">Jobs</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </nav>
+    <main>
+      <section id="create" class="panel active">
+        <div class="intro">
+          <p class="eyebrow">LOCAL MEDIA SERVICE</p>
+          <h2>作りたいものを言葉にする</h2>
+          <p>この段階では決定的な fake 画像を生成します。API・履歴・provenance は実 worker と同じです。</p>
+        </div>
+        <form id="create-form">
+          <label for="intent">作りたい画像</label>
+          <textarea id="intent" required maxlength="8000" placeholder="夜の作業机に置かれた、小さな青いロボット"></textarea>
+          <div class="form-row">
+            <label>幅 <input id="width" type="number" min="1" max="2048" value="512"></label>
+            <label>高さ <input id="height" type="number" min="1" max="2048" value="512"></label>
+          </div>
+          <button class="primary" type="submit">生成する</button>
+          <p id="create-status" role="status"></p>
+        </form>
+      </section>
+      <section id="library" class="panel">
+        <div class="section-title"><h2>Library</h2><button data-refresh="library">更新</button></div>
+        <div id="asset-grid" class="asset-grid"><p class="muted">まだ素材はありません。</p></div>
+      </section>
+      <section id="jobs" class="panel">
+        <div class="section-title"><h2>Jobs</h2><button data-refresh="jobs">更新</button></div>
+        <div id="job-list" class="job-list"></div>
+      </section>
+      <section id="settings" class="panel">
+        <h2>Settings</h2>
+        <dl><div><dt>Inference policy</dt><dd>local_only (強制)</dd></div><div><dt>Worker</dt><dd>fake-subprocess</dd></div><div><dt>GPU lease</dt><dd>未使用（G0 worker は CPU-only）</dd></div></dl>
+      </section>
+    </main>
+    <dialog id="provenance-dialog"><button id="close-dialog" aria-label="閉じる">×</button><h2>Provenance</h2><pre id="provenance"></pre></dialog>
+    <script src="static/app.js" defer></script>
+  </body>
+</html>

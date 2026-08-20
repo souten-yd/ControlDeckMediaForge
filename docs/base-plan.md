@@ -946,6 +946,8 @@ Every model/runtime adapter passes the same capability contract suite using smal
 
 ### Phase 0 — Add-on/API skeleton
 
+Implementation status (2026-08-21): the G0 code slice is implemented in this repository with a separate deterministic fake worker, durable jobs/assets/provenance, Add-on v2 manifest, and usable Create/Library/Jobs workspace. Focused and real-process checks pass. Full installed ControlDeck shell enable/disable E2E remains **NOT TESTED**, so Phase 0 is not recorded as complete; see `docs/implementation-status.md`.
+
 Goal: establish boundaries before adding heavy models.
 
 Deliver:

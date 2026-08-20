@@ -20,6 +20,30 @@ The system is designed around **capabilities, not model names**. Models and runt
 
 ControlDeck integration is also deliberately generic: Media Forge remains a separate add-on/runtime, while ControlDeck provides reusable extension points for embedded UI, scoped identity/files/projects, Jobs, workflow/agent contributions, notifications, and a shared AI/GPU resource broker. Media-specific UI/tools are exposed only while the add-on is enabled and authorized.
 
+## Current implementation
+
+The G0 slice provides the Add-on/API experience with a deterministic CPU-only fake worker. The fake worker runs in a separate process and writes assets through the same job, validation, library, provenance, and lineage contracts that real image workers will use.
+
+## Run locally
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e '.[test]'
+MEDIA_FORGE_DATA_DIR="$PWD/.local-data" .venv/bin/media-forge
+```
+
+Open <http://127.0.0.1:9130/>. The service binds to loopback only in G0.
+
+Install [`addon.json`](addon.json) through ControlDeck's Extensions screen to expose the workspace inside the ControlDeck shell. ControlDeck remains the lifecycle, identity, grant, Jobs bridge, and resource-broker authority; this repository contains all Media-specific code.
+
+## Test
+
+```bash
+.venv/bin/python -m pytest
+```
+
+Public contracts are documented in [`docs/api.md`](docs/api.md). Current evidence and untested areas are in [`docs/implementation-status.md`](docs/implementation-status.md).
+
 ## Planning documents
 
 - [Base plan](docs/base-plan.md) — general Media Forge product/runtime architecture and implementation phases.
