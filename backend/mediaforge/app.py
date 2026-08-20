@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query, Response
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import __version__
@@ -14,11 +16,13 @@ from .config import Settings
 from .domain import JobRequest
 from .environment import setup_snapshot
 from .jobs import JobManager
+from .host.security import reject_host_paths, require_host_service
 from .store import Store
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS_DIR = REPOSITORY_ROOT / "schemas"
+FRONTEND_DIR = REPOSITORY_ROOT / "frontend"
 HealthState = Literal["healthy", "degraded", "unavailable", "setup_required"]
 
 
@@ -51,6 +55,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.health_override = None
     app.state.store = store
     app.state.jobs = manager
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+    def authorize_host(request: Request) -> dict[str, Any]:
+        return require_host_service(request, resolved)
+
+    async def wait_for_terminal(job_id: str, timeout: float = 25.0) -> dict[str, Any]:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            job = store.get_job(job_id)
+            if job.status.value in {"succeeded", "failed", "canceled"}:
+                return job.model_dump(mode="json")
+            await asyncio.sleep(0.02)
+        raise HTTPException(status_code=504, detail={"code": "job_wait_timeout", "job_id": job_id})
+
+    def submitted_reference(value: dict[str, Any]) -> dict[str, Any]:
+        return {"job_id": value["id"], "status": value["status"], "asset_ids": value["asset_ids"]}
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -197,14 +217,99 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail={"code": "schema_not_found"})
         return FileResponse(SCHEMAS_DIR / schema_name, media_type="application/schema+json")
 
-    @app.get("/", response_class=HTMLResponse)
-    @app.get("/settings", response_class=HTMLResponse)
-    async def service_placeholder() -> str:
-        return (
-            "<!doctype html><html lang='en'><meta charset='utf-8'>"
-            "<title>Media Forge setup</title><body><h1>Media Forge</h1>"
-            "<p>The embedded workspace is introduced in MF0-5.</p></body></html>"
-        )
+    @app.post("/addon/v1/commands/create")
+    async def create_command(request: Request) -> dict[str, Any]:
+        authorize_host(request)
+        return {"route": "/x/media-forge/workspace/create"}
+
+    @app.post("/addon/v1/workflow/execute")
+    async def workflow_execute(request: Request) -> dict[str, Any]:
+        authorize_host(request)
+        payload = await request.json()
+        reject_host_paths(payload)
+        value = JobRequest.model_validate(payload.get("input", {}))
+        return submitted_reference(manager.submit(value).model_dump(mode="json"))
+
+    @app.post("/addon/v1/workflow/media.generate/execute")
+    async def workflow_execute_compat(request: Request) -> dict[str, Any]:
+        return await workflow_execute(request)
+
+    @app.post("/addon/v1/workflow/media.generate/cancel")
+    async def workflow_cancel(request: Request) -> dict[str, Any]:
+        authorize_host(request)
+        payload = await request.json()
+        reject_host_paths(payload)
+        job_id = payload.get("job_id")
+        if not isinstance(job_id, str):
+            raise HTTPException(status_code=422, detail={"code": "invalid_job_id"})
+        try:
+            job = await manager.cancel(job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "job_not_found"}) from exc
+        return submitted_reference(job.model_dump(mode="json"))
+
+    @app.post("/addon/v1/agent/capabilities")
+    async def agent_capabilities(request: Request) -> dict[str, Any]:
+        authorize_host(request)
+        payload = await request.json()
+        reject_host_paths(payload)
+        return await capabilities()
+
+    @app.post("/addon/v1/agent/generate")
+    async def agent_generate(request: Request) -> dict[str, Any]:
+        authorize_host(request)
+        payload = await request.json()
+        reject_host_paths(payload)
+        value = JobRequest.model_validate(payload.get("input", {}))
+        job = manager.submit(value)
+        terminal = await wait_for_terminal(job.id)
+        result = submitted_reference(terminal)
+        result["asset_id"] = terminal["asset_ids"][0] if terminal["asset_ids"] else None
+        return result
+
+    @app.post("/addon/v1/agent/inspect")
+    async def agent_inspect(request: Request) -> dict[str, Any]:
+        authorize_host(request)
+        payload = await request.json()
+        reject_host_paths(payload)
+        asset_id = payload.get("input", {}).get("asset_id")
+        if not isinstance(asset_id, str):
+            raise HTTPException(status_code=422, detail={"code": "invalid_asset_id"})
+        try:
+            asset = store.get_asset(asset_id)
+            provenance = store.get_provenance(asset_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        return {"asset": asset.model_dump(mode="json"), "provenance": provenance.model_dump(mode="json")}
+
+    @app.post("/addon/v1/context/edit-image")
+    async def context_edit_image(request: Request) -> dict[str, Any]:
+        authorize_host(request)
+        payload = await request.json()
+        reject_host_paths(payload)
+        context = payload.get("context")
+        if not isinstance(context, dict) or context.get("type") not in {"file", "project"}:
+            raise HTTPException(status_code=422, detail={"code": "invalid_context"})
+        resource_id = context.get("resource_id")
+        grant_id = context.get("grant_id")
+        if not isinstance(resource_id, str) or not isinstance(grant_id, str) or not grant_id:
+            raise HTTPException(status_code=422, detail={"code": "scoped_grant_required"})
+        if context["type"] == "file" and not resource_id.startswith(("grant:", "asset:")):
+            raise HTTPException(status_code=422, detail={"code": "scoped_grant_required"})
+        return {
+            "action": "open_workspace",
+            "route": "/x/media-forge/workspace/create",
+            "context": {"type": context["type"], "resource_id": resource_id},
+        }
+
+    @app.get("/")
+    @app.get("/create")
+    @app.get("/library")
+    @app.get("/jobs")
+    @app.get("/models")
+    @app.get("/settings")
+    async def workspace() -> FileResponse:
+        return FileResponse(FRONTEND_DIR / "index.html", media_type="text/html")
 
     return app
 
