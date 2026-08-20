@@ -18,4 +18,11 @@ Primary targets:
 
 The system is designed around **capabilities, not model names**. Models and runtimes are replaceable workers/adapters; recipes/presets are optional constraints layered on top of the same general media APIs.
 
-See [docs/base-plan.md](docs/base-plan.md) for the initial architecture and implementation plan.
+ControlDeck integration is also deliberately generic: Media Forge remains a separate add-on/runtime, while ControlDeck provides reusable extension points for embedded UI, scoped identity/files/projects, Jobs, workflow/agent contributions, notifications, and a shared AI/GPU resource broker. Media-specific UI/tools are exposed only while the add-on is enabled and authorized.
+
+## Planning documents
+
+- [Base plan](docs/base-plan.md) — general Media Forge product/runtime architecture and implementation phases.
+- [ControlDeck integration plan](docs/controldeck-integration-plan.md) — **normative for add-on integration, enabled-only UI/UX, ControlDeck Jobs integration, and shared AI/GPU resource management**. Where the older base plan describes a Media-Forge-owned global resource scheduler, this integration plan supersedes it: ControlDeck's shared AI Resource Broker is the platform-level admission/queue/lease authority, while Media Forge workers retain only local safety/concurrency guards.
+
+The matching ControlDeck host-side plans are maintained in the ControlDeck repository as `docs/design-addon-platform-v2.md` and `docs/design-ai-resource-broker.md`.
