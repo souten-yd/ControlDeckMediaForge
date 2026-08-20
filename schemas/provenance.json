@@ -4,7 +4,7 @@
   "title": "Media Forge provenance",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id", "asset_id", "parent_asset_ids", "operation", "intent", "model_id", "model_version", "weights_hash", "license", "runtime_adapter", "runtime_version", "tool_versions", "seed", "parameters", "reference_asset_hashes", "postprocessing", "validation", "output_sha256", "created_at"],
+  "required": ["schema_version", "id", "asset_id", "parent_asset_ids", "operation", "intent", "model_id", "model_version", "weights_hash", "license", "runtime_adapter", "runtime_version", "tool_versions", "seed", "parameters", "reference_asset_hashes", "postprocessing", "validation", "warnings", "output_sha256", "created_at"],
   "properties": {
     "schema_version": {"const": "1.0"},
     "id": {"type": "string", "pattern": "^prov_[0-9a-f]{32}$"},
@@ -24,6 +24,7 @@
     "reference_asset_hashes": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
     "postprocessing": {"type": "array", "items": {"type": "string"}},
     "validation": {"type": "array", "items": {"type": "object"}},
+    "warnings": {"type": "array", "items": {"type": "string"}},
     "output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "created_at": {"type": "string", "format": "date-time"}
   }

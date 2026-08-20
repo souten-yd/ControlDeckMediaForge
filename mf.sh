@@ -383,7 +383,7 @@ serve() {
   write_environment_status
   start_auto_provision
   export MEDIA_FORGE_ENV_STATUS_FILE="$ENV_STATUS_FILE"
-  export MEDIA_FORGE_DATA_DIR="$(media_data_dir)"
+  export MEDIA_FORGE_DATA_DIR="${MEDIA_FORGE_DATA_DIR:-$(media_data_dir)}"
   export PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}"
   exec "$VENV/bin/python" -m uvicorn mediaforge.app:app --host 127.0.0.1 --port "${MEDIA_FORGE_PORT:-9130}"
 }
