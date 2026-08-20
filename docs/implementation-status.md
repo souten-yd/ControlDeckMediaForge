@@ -1,14 +1,32 @@
 # Media Forge implementation status
 
-Date: 2026-08-21  
-Scope: MF0-0 only (`docs/implementation/mf0-0-environment.md`)  
+Date: 2026-08-21
+Scope: MF0-0 and MF0-1 (`docs/implementation/mf0-addon-core.md`)
 Repository head at start: `770383a` (`origin/main`)
 
 ## MF0-0 — COMPLETE for the requested environment slice
 
 The core service, heavyweight ROCm runtime, caches, and persistent Media Forge data are separated. Section 10 was executed from retreated `.venv` / runtime state on the target host. This status uses runtime observations; lint, syntax checks, and unit tests are not counted as proof that the environments work.
 
-MF0-1 and later work was not started in this slice. The repository already contained an untracked add-on prototype before this slice began. It was left outside scope except for the explicitly authorized, minimal health-snapshot integration in `backend/mediaforge/app.py` and `backend/mediaforge/environment.py`.
+## MF0-1 — COMPLETE
+
+The loopback service skeleton, Add-on v2 manifest, schema serving, four-state health contract, contribution-level availability, and setup snapshot integration are implemented. Unfinished execution contributions fail closed with explicit reasons and actions; no fake job runner or later MF0 behavior is claimed in this slice.
+
+Real-process verification on 2026-08-21:
+
+```text
+ControlDeck ./deck.sh ext lint: valid=true, warnings=0
+healthy health:        HTTP 200, 0.001353 sec
+degraded health:       HTTP 200, 0.000551 sec
+unavailable health:    HTTP 200, 0.000397 sec
+setup_required health: HTTP 200, 0.000414 sec
+schema response:       HTTP 200, 0.003092 sec
+placeholder response:  HTTP 200, 178 bytes
+```
+
+For all four health states, `navigation:workspace=available` remained stable while `workflow_executor:media.generate=unavailable`. The manual health switch returned 404 unless `MEDIA_FORGE_ENABLE_TEST_ENDPOINTS=1`.
+
+The final default process returned `setup_required` in 0.001575 seconds with a 2373-byte response. Core/runtime/GPU setup items were `ok`, model library was `missing`, and the disabled test switch returned HTTP 404.
 
 ## Implemented artifacts
 
@@ -159,17 +177,17 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 ## Additional behavior checks
 
 - Temporarily removing the GPU snapshot left the real core service running. Health returned HTTP 200 / `setup_required`, with `gpu.state=checking`; restoring and rerunning the GPU check returned it to `ok`.
-- Final `./mf.sh test`: 14 passed in 2.47 seconds with one upstream Starlette/httpx deprecation warning. This is regression evidence only, not runtime proof.
+- Final focused `./mf.sh test`: 9 passed in 0.16 seconds with one upstream Starlette/httpx deprecation warning. This is regression evidence only, not runtime proof.
 - `bash -n mf.sh` and `git diff --check` passed. These are static checks only.
 - Final ControlDeck checkout observation: HEAD `9272c05`, clean `git status --short`. It was read-only throughout this slice; no ControlDeck file was modified.
 
 ## NOT TESTED / intentionally deferred
 
-- Worker-pack enable/disable mutation of `.refs`: no MF0-1 worker-pack lifecycle was implemented in this MF0-0-only slice. The current non-empty reference and prune protection were tested.
-- Host-rendered ControlDeck setup checklist UI: ControlDeck was read-only. The Media Forge real HTTP payload feeding that checklist was tested.
+- Worker-pack enable/disable mutation of `.refs`: no worker-pack lifecycle is present yet. The current non-empty reference and prune protection were tested.
+- Installed ControlDeck setup checklist and enable/disable browser flow: deferred to MF0-7. The real Media Forge HTTP payload and ControlDeck's real manifest linter were tested.
 - Hugging Face model download/cache reuse: no model adoption or weights belong to MF0-0.
 - Model library configuration: deliberately remains `missing`; selecting and benchmarking a model belongs to G1.
 
 ## Scope boundary
 
-No model, Diffusers adapter, worker-pack implementation, public API addition, add-on contribution, broker integration, or MF0-1+ feature was added. The ROCm runtime check is environment qualification only and is not a model benchmark or a G1 implementation.
+No model, Diffusers adapter, job runner, fake worker, asset store, embedded workspace, host token/lease/jobs bridge, or MF0-2+ execution feature is included. The ROCm runtime check is environment qualification only and is not a model benchmark or a G1 implementation.

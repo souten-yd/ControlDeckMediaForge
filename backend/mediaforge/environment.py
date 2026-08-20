@@ -41,4 +41,3 @@ def setup_snapshot() -> dict[str, Any] | None:
             ],
         }
     return payload
-

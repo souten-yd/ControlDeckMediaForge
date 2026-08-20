@@ -13,7 +13,6 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         configured = os.environ.get("MEDIA_FORGE_DATA_DIR")
-        data_dir = Path(configured) if configured else Path.home() / ".local/share/media-forge"
+        data_dir = Path(configured) if configured else Path.home() / ".local/share/control-deck-media-forge"
         timeout = float(os.environ.get("MEDIA_FORGE_WORKER_TIMEOUT_SEC", "30"))
         return cls(data_dir=data_dir.resolve(), worker_timeout_sec=timeout)
-

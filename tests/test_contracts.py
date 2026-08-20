@@ -29,4 +29,3 @@ def test_job_schema_does_not_require_model_id():
     schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
     assert schema["required"] == ["operation", "intent"]
     jsonschema.validate({"operation": "image.generate", "intent": "a blue robot"}, schema)
-
