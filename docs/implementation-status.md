@@ -177,7 +177,7 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 ## Additional behavior checks
 
 - Temporarily removing the GPU snapshot left the real core service running. Health returned HTTP 200 / `setup_required`, with `gpu.state=checking`; restoring and rerunning the GPU check returned it to `ok`.
-- Final focused `./mf.sh test`: 9 passed in 0.16 seconds with one upstream Starlette/httpx deprecation warning. This is regression evidence only, not runtime proof.
+- Final focused `./mf.sh test`: 9 passed in 0.15 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
 - `bash -n mf.sh` and `git diff --check` passed. These are static checks only.
 - Final ControlDeck checkout observation: HEAD `9272c05`, clean `git status --short`. It was read-only throughout this slice; no ControlDeck file was modified.
 
