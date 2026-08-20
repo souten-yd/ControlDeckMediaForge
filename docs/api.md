@@ -8,14 +8,16 @@ The API is capability-driven. `model_id` is not required. Normal clients use `mo
 
 ## Current availability
 
-MF0-3 implements `/health`, `/schemas/{schema_name}`, the local job/capability/
-asset APIs below, and a development-only
+MF0-6 implements `/health`, `/schemas/{schema_name}`, the local job/capability/
+asset APIs below, the embedded workspace, and the Add-on execution endpoints. It also provides a development-only
 `/test/health` switch. The switch is disabled unless
 `MEDIA_FORGE_ENABLE_TEST_ENDPOINTS=1`.
 
-Workflow, agent, context, and host command contracts are declared for stable
-discovery but are not executable yet. Health reports each corresponding
-contribution as unavailable with a reason and action.
+Add-on execution requires an audience-bound ControlDeck service token and
+`X-Control-Deck-Addon-ID: media-forge`. The verification key must be explicitly
+provisioned. Workflow and agent generation remain unavailable in health because
+the referenced host revision has no service-side resource lease/Jobs bridge;
+there is no unleased or cookie-based fallback.
 
 ## Jobs
 
@@ -42,11 +44,15 @@ Asset and provenance documents conform to [`schemas/asset.json`](../schemas/asse
 
 Parentage uses asset IDs only. Host paths are not part of this API.
 
-## Add-on execution endpoints (MF0-6 and later)
+## Add-on execution endpoints
 
 ControlDeck calls `/addon/v1/*` endpoints declared by [`addon.json`](../addon.json). Workflow and agent payloads use `{input, correlation}` envelopes. Responses return structured `job_id` and `asset_ids`; agents do not scrape filenames and do not receive a selected model name from generation or capability discovery.
 
 Context actions require a host-issued opaque `grant:` ID. Raw paths are rejected. Project commit is not available before G4.
+
+`GET /api/v1/host-integration` reports non-secret integration readiness. It does
+not expose tokens, key paths, lease details belonging to other owners, or a host
+filesystem path.
 
 ## Contract evolution
 

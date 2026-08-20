@@ -9,7 +9,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from . import __version__
 from .config import Settings
@@ -72,9 +72,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def submitted_reference(value: dict[str, Any]) -> dict[str, Any]:
         return {"job_id": value["id"], "status": value["status"], "asset_ids": value["asset_ids"]}
 
+    def host_job_input(payload: object) -> JobRequest:
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=422, detail={"code": "invalid_execution_envelope"})
+        reject_host_paths(payload)
+        try:
+            return JobRequest.model_validate(payload.get("input", {}))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_job_request"}) from exc
+
     @app.get("/health")
     async def health() -> dict[str, Any]:
         environment = setup_snapshot()
+        token_ready = resolved.host_token_key_file is not None and resolved.host_token_key_file.is_file()
+        token_state: str | dict[str, Any] = "available" if token_ready else _unavailable(
+            "host_token_verifier_unconfigured",
+            "ControlDeck service token verification has not been provisioned",
+        )
+        service_bridge_unavailable = _unavailable(
+            "host_service_bridge_unavailable",
+            "ControlDeck does not expose the Add-on service resource/jobs bridge in the referenced host revision",
+        )
         status: HealthState = app.state.health_override or (
             environment.get("status", "setup_required") if environment else "setup_required"
         )
@@ -83,31 +101,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "contract_version": "2.0",
             "contributions": {
                 "navigation:workspace": "available",
-                "embedded_view:workspace": _unavailable(
-                    "workspace_not_implemented", "The embedded workspace is introduced in MF0-5"
-                ),
-                "command:create-media": _unavailable(
-                    "host_command_not_implemented", "Host commands are introduced in MF0-6"
-                ),
-                "quick_action:create-media": _unavailable(
-                    "host_command_not_implemented", "Host commands are introduced in MF0-6"
-                ),
+                "embedded_view:workspace": "available",
+                "command:create-media": token_state,
+                "quick_action:create-media": token_state,
                 "settings:settings": "available",
-                "workflow_executor:media.generate": _unavailable(
-                    "workflow_not_implemented", "Workflow execution is introduced in MF0-6"
-                ),
-                "agent_tool:media.capabilities": _unavailable(
-                    "agent_tools_not_implemented", "Agent tools are introduced in MF0-6"
-                ),
-                "agent_tool:media.generate": _unavailable(
-                    "agent_tools_not_implemented", "Agent tools are introduced in MF0-6"
-                ),
-                "agent_tool:media.inspect": _unavailable(
-                    "agent_tools_not_implemented", "Agent tools are introduced in MF0-6"
-                ),
-                "context_action:edit-image": _unavailable(
-                    "context_action_not_implemented", "Context actions are introduced in MF0-6"
-                ),
+                "workflow_executor:media.generate": service_bridge_unavailable,
+                "agent_tool:media.capabilities": token_state,
+                "agent_tool:media.generate": service_bridge_unavailable,
+                "agent_tool:media.inspect": token_state,
+                "context_action:edit-image": token_state,
             },
             "setup": (
                 environment["setup"]
@@ -127,6 +129,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
         }
         return payload
+
+    @app.get("/api/v1/host-integration")
+    async def host_integration() -> dict[str, Any]:
+        return {
+            "service_token_verifier": (
+                "configured"
+                if resolved.host_token_key_file is not None and resolved.host_token_key_file.is_file()
+                else "unconfigured"
+            ),
+            "resource_lease_bridge": "unavailable_in_host_revision",
+            "remote_jobs_bridge": "unavailable_in_host_revision",
+            "scoped_files_bridge": "unavailable_in_host_revision",
+            "fallback": "none",
+        }
 
     @app.post("/test/health")
     async def set_health(update: HealthUpdate) -> dict[str, Any]:
@@ -226,8 +242,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def workflow_execute(request: Request) -> dict[str, Any]:
         authorize_host(request)
         payload = await request.json()
-        reject_host_paths(payload)
-        value = JobRequest.model_validate(payload.get("input", {}))
+        value = host_job_input(payload)
         return submitted_reference(manager.submit(value).model_dump(mode="json"))
 
     @app.post("/addon/v1/workflow/media.generate/execute")
@@ -259,8 +274,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def agent_generate(request: Request) -> dict[str, Any]:
         authorize_host(request)
         payload = await request.json()
-        reject_host_paths(payload)
-        value = JobRequest.model_validate(payload.get("input", {}))
+        value = host_job_input(payload)
         job = manager.submit(value)
         terminal = await wait_for_terminal(job.id)
         result = submitted_reference(terminal)
