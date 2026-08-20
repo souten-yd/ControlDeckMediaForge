@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from . import __version__
+from .config import Settings
+from .domain import JobRequest
 from .environment import setup_snapshot
+from .jobs import JobManager
+from .store import Store
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -30,9 +35,22 @@ def _unavailable(reason: str, message: str) -> dict[str, Any]:
     }
 
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="ControlDeck Media Forge", version=__version__)
+def create_app(settings: Settings | None = None) -> FastAPI:
+    resolved = settings or Settings.from_env()
+    store = Store(resolved.data_dir)
+    manager = JobManager(store, worker_timeout_sec=resolved.worker_timeout_sec)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        store.initialize()
+        await manager.start()
+        yield
+        await manager.stop()
+
+    app = FastAPI(title="ControlDeck Media Forge", version=__version__, lifespan=lifespan)
     app.state.health_override = None
+    app.state.store = store
+    app.state.jobs = manager
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -49,10 +67,10 @@ def create_app() -> FastAPI:
                     "workspace_not_implemented", "The embedded workspace is introduced in MF0-5"
                 ),
                 "command:create-media": _unavailable(
-                    "job_runner_not_implemented", "Media jobs are introduced in MF0-2"
+                    "host_command_not_implemented", "Host commands are introduced in MF0-6"
                 ),
                 "quick_action:create-media": _unavailable(
-                    "job_runner_not_implemented", "Media jobs are introduced in MF0-2"
+                    "host_command_not_implemented", "Host commands are introduced in MF0-6"
                 ),
                 "settings:settings": "available",
                 "workflow_executor:media.generate": _unavailable(
@@ -96,6 +114,81 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail={"code": "not_found"})
         app.state.health_override = update.status
         return await health()
+
+    @app.get("/api/v1/capabilities")
+    async def capabilities() -> dict[str, Any]:
+        return {
+            "contract_version": "1.0",
+            "capabilities": {
+                "image.text_to_image": {
+                    "state": "available",
+                    "implementation": "fake",
+                    "confidence": "low",
+                    "local_only": True,
+                },
+                "image.single_reference_edit": {"state": "unavailable", "reason": "planned_for_g2"},
+                "image.multi_reference_edit": {"state": "unavailable", "reason": "planned_for_g2"},
+                "image.strict_edit": {"state": "unavailable", "reason": "planned_for_g2"},
+                "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
+                "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
+            },
+        }
+
+    @app.post("/api/v1/jobs", status_code=202)
+    async def create_job(job_request: JobRequest, response: Response) -> dict[str, Any]:
+        job = manager.submit(job_request)
+        response.headers["Location"] = f"/api/v1/jobs/{job.id}"
+        return job.model_dump(mode="json")
+
+    @app.get("/api/v1/jobs")
+    async def list_jobs(limit: int = Query(default=100, ge=1, le=500)) -> dict[str, Any]:
+        return {"items": [item.model_dump(mode="json") for item in store.list_jobs(limit)]}
+
+    @app.get("/api/v1/jobs/{job_id}")
+    async def get_job(job_id: str) -> dict[str, Any]:
+        try:
+            return store.get_job(job_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "job_not_found"}) from exc
+
+    @app.delete("/api/v1/jobs/{job_id}")
+    async def cancel_job(job_id: str) -> dict[str, Any]:
+        try:
+            await manager.cancel(job_id)
+            return store.get_job(job_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "job_not_found"}) from exc
+
+    @app.get("/api/v1/assets")
+    async def list_assets(limit: int = Query(default=100, ge=1, le=500)) -> dict[str, Any]:
+        return {"items": [item.model_dump(mode="json") for item in store.list_assets(limit)]}
+
+    @app.get("/api/v1/assets/{asset_id}")
+    async def get_asset(asset_id: str) -> dict[str, Any]:
+        try:
+            return store.get_asset(asset_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+
+    @app.get("/api/v1/assets/{asset_id}/content")
+    async def asset_content(asset_id: str) -> FileResponse:
+        try:
+            asset = store.get_asset(asset_id)
+            return FileResponse(
+                store.asset_path(asset_id),
+                media_type=asset.mime_type,
+                filename=asset.suggested_filename,
+                content_disposition_type="inline",
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+
+    @app.get("/api/v1/assets/{asset_id}/provenance")
+    async def asset_provenance(asset_id: str) -> dict[str, Any]:
+        try:
+            return store.get_provenance(asset_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
 
     @app.get("/schemas/{schema_name}")
     async def schema(schema_name: str) -> FileResponse:

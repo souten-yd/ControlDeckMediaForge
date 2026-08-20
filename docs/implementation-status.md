@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-21
-Scope: MF0-0 and MF0-1 (`docs/implementation/mf0-addon-core.md`)
+Scope: MF0-0 through MF0-3 (`docs/implementation/mf0-addon-core.md`)
 Repository head at start: `770383a` (`origin/main`)
 
 ## MF0-0 — COMPLETE for the requested environment slice
@@ -27,6 +27,35 @@ placeholder response:  HTTP 200, 178 bytes
 For all four health states, `navigation:workspace=available` remained stable while `workflow_executor:media.generate=unavailable`. The manual health switch returned 404 unless `MEDIA_FORGE_ENABLE_TEST_ENDPOINTS=1`.
 
 The final default process returned `setup_required` in 0.001575 seconds with a 2373-byte response. Core/runtime/GPU setup items were `ok`, model library was `missing`, and the disabled test switch returned HTTP 404.
+
+## MF0-2 / MF0-3 — COMPLETE for the local job and asset slice
+
+The local API now provides a durable SQLite job queue, a bounded fake-worker subprocess, explicit cancellation/timeout/crash normalization, deterministic validation, immutable asset copies, provenance sidecars, and lineage fields. Host token, GPU lease, and Jobs bridge remain MF0-4 and are not claimed here. The fake worker is CPU-only; it does not acquire or use the GPU.
+
+Real-process evidence using an isolated temporary data directory:
+
+```text
+submit -> succeeded -> asset/provenance: 40 ms
+PNG: 128x80, 8-bit RGBA, 716 bytes
+same intent + seed output SHA-256:
+  823c25d57f4e077f3a67fc129ce267cba2a0973d2e011ff39cecb8faa0bf3393
+second run same hash: yes
+worker crash result: failed / worker_crash
+next job after crash: succeeded
+running cancel result: canceled
+normal terminal work-directory entries: 0
+```
+
+The provenance response contained the fake implementation ID, `CC0-1.0` license, empty warnings, and passed `image.non_empty`, `image.dimensions`, `image.mode`, and `image.alpha` validators. Capability discovery did not expose the implementation/model ID.
+
+Shutdown and crash isolation were exercised separately:
+
+- graceful service stop during a running job produced `failed / service_stopped`, not `worker_crash`
+- `SIGKILL` of the exact service PID during a running job left the database row running; on restart it became `failed / service_restarted`
+- the isolated child worker was gone after parent death and stale work entries changed from 1 before restart to 0 after restart
+- persisted job and asset lists remained readable after restart
+
+During the first isolated-data attempt, `mf.sh serve` was found to overwrite an explicit `MEDIA_FORGE_DATA_DIR`. Two exact test jobs and assets therefore entered the default data tree. This was not accepted as isolated evidence: the script was fixed to preserve the explicit variable, the database was backed up to `/tmp/mediaforge-mf03-cleanup.yx1Ia0/media-forge.sqlite3.backup`, the two identified files were moved to trash, and only their exact database rows were deleted. Verification reported zero remaining test jobs/assets. The complete E2E was then rerun successfully in `/tmp/mediaforge-mf03-e2e.s5f9e6`, which was moved to trash after evidence collection.
 
 ## Implemented artifacts
 
@@ -177,7 +206,7 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 ## Additional behavior checks
 
 - Temporarily removing the GPU snapshot left the real core service running. Health returned HTTP 200 / `setup_required`, with `gpu.state=checking`; restoring and rerunning the GPU check returned it to `ok`.
-- Final focused `./mf.sh test`: 9 passed in 0.15 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
+- Latest focused `./mf.sh test`: 26 passed in 1.02 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
 - `bash -n mf.sh` and `git diff --check` passed. These are static checks only.
 - Final ControlDeck checkout observation: HEAD `9272c05`, clean `git status --short`. It was read-only throughout this slice; no ControlDeck file was modified.
 
@@ -190,4 +219,4 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 
 ## Scope boundary
 
-No model, Diffusers adapter, job runner, fake worker, asset store, embedded workspace, host token/lease/jobs bridge, or MF0-2+ execution feature is included. The ROCm runtime check is environment qualification only and is not a model benchmark or a G1 implementation.
+No real model, Diffusers adapter, embedded workspace, host token/lease/jobs bridge, agent/workflow/context execution, or MF0-4+ feature is included. The ROCm runtime check is environment qualification only and is not a model benchmark or a G1 implementation.

@@ -6,19 +6,20 @@ Date: 2026-08-21
 
 The API is capability-driven. `model_id` is not required. Normal clients use `model_policy=auto`; an explicit model ID is accepted only with the opt-in `manual` policy.
 
-## MF0-1 availability
+## Current availability
 
-MF0-1 implements `/health`, `/schemas/{schema_name}`, and a development-only
+MF0-3 implements `/health`, `/schemas/{schema_name}`, the local job/capability/
+asset APIs below, and a development-only
 `/test/health` switch. The switch is disabled unless
 `MEDIA_FORGE_ENABLE_TEST_ENDPOINTS=1`.
 
-The job, capability, asset, workflow, agent, and context contracts below are
-declared for stable discovery but are not executable in MF0-1. Health reports
-each corresponding contribution as unavailable with a reason and action.
+Workflow, agent, context, and host command contracts are declared for stable
+discovery but are not executable yet. Health reports each corresponding
+contribution as unavailable with a reason and action.
 
-## Jobs (MF0-2 and later)
+## Jobs
 
-`POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json). MF0-2 will execute `image.generate` through a deterministic fake worker. Other operation names are reserved by the public contract and fail with `capability_unavailable` until their goal is delivered.
+`POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json). MF0-2 executes `image.generate` through a deterministic fake worker. Other operation names are reserved by the public contract and fail with `capability_unavailable` until their goal is delivered.
 
 `GET /api/v1/jobs` lists durable jobs. `GET /api/v1/jobs/{job_id}` returns one job. `DELETE /api/v1/jobs/{job_id}` requests cancellation.
 
@@ -26,11 +27,11 @@ States are `queued`, `running`, `succeeded`, `failed`, and `canceled`. `phase` i
 
 Every request is local-only. `local_only` defaults to `true`; any explicit `false` value is rejected by backend validation.
 
-## Capabilities (MF0-2 and later)
+## Capabilities
 
-`GET /api/v1/capabilities` reports capability state as `available`, `unavailable`, or later `experimental`. MF0-2 will report `image.text_to_image` as available with `implementation=fake` and `confidence=low`; it will not claim a real model is installed.
+`GET /api/v1/capabilities` reports capability state as `available`, `unavailable`, or later `experimental`. MF0-2 reports `image.text_to_image` as available with `implementation=fake` and `confidence=low`; it does not claim a real model is installed or expose the selected fake implementation ID.
 
-## Assets and provenance (MF0-3 and later)
+## Assets and provenance
 
 - `GET /api/v1/assets`
 - `GET /api/v1/assets/{asset_id}`

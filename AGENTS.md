@@ -19,8 +19,8 @@ docs/implementation-status.md         現在の進捗。必ず確認・更新す
 
 ## 現在地
 
-MF0-0（分離実行環境）と MF0-1（service skeleton / health / manifest）まで実装済み。
-次は `docs/implementation/mf0-addon-core.md` の MF0-2（durable job + fake worker）。
+MF0-0〜MF0-3（分離環境、health、durable job、fake worker、asset/provenance）まで実装済み。
+次は `docs/implementation/mf0-addon-core.md` の MF0-4（host token / lease / Jobs bridge）。
 各段階を飛ばさず、実機証跡を `docs/implementation-status.md` に追記する。
 全体像は `docs/implementation/goal-roadmap.md`（G0〜G10）。
 
