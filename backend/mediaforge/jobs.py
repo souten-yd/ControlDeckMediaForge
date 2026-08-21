@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .config import REPOSITORY_ROOT
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
 from .host.client import ControlDeckHostClient, HostApiError
@@ -712,7 +713,7 @@ class JobManager:
                 license=str(model["license"]),
                 runtime_adapter=str(model["runtime_adapter"]),
                 runtime_version=str(model["runtime_version"]),
-                tool_versions={"media-forge": "0.1.0", "validator.png": "1.0.0"},
+                tool_versions={"media-forge": __version__, "validator.png": "1.0.0"},
                 seed=int(output.get("seed", response["seed"])),
                 parameters={
                     "model_policy": job.request.model_policy,

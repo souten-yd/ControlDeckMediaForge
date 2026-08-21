@@ -87,7 +87,7 @@ def test_fake_generation_registers_asset_and_complete_provenance(client):
     assert provenance["asset_id"] == asset_id
     assert provenance["model_id"] == "media-forge/fake-image"
     assert provenance["weights_hash"] and provenance["license"] == "CC0-1.0"
-    assert provenance["tool_versions"]["media-forge"] == "0.1.0"
+    assert provenance["tool_versions"]["media-forge"] == "0.1.1"
     assert provenance["output_sha256"] == asset["sha256"]
     assert provenance["parent_asset_ids"] == []
     assert provenance["warnings"] == []

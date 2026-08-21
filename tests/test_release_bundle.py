@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +14,7 @@ def test_release_launcher_uses_managed_persistent_roots_without_source_build():
     assert "CONTROL_DECK_FEATURE_DATA_DIR" in launcher
     assert "CONTROL_DECK_SHARED_CACHE_DIR" in launcher
     assert "MEDIA_FORGE_IMAGE_RUNTIME_PYTHON" in launcher
+    assert "MEDIA_FORGE_ENV_STATUS_FILE" in launcher
     assert "git clone" not in launcher
     assert "pip install" not in launcher
     assert "npm install" not in launcher
@@ -22,8 +26,46 @@ def test_bundle_builder_excludes_heavy_runtime_and_binds_package_identity():
     assert '"feature_id": "media-forge"' in builder
     assert '"entrypoint": "bin/mediaforge"' in builder
     assert '"addon_manifest": "control-deck-addon.json"' in builder
+    assert '"provision_args": ["provision"]' in builder
     assert '"health_url": "http://127.0.0.1:9130/health"' in builder
     assert "runtimes/rocm-torch/.venv" not in builder
+
+
+def test_bundle_provision_writes_health_only_after_runtime_gpu_and_model(monkeypatch, tmp_path):
+    from scripts import bundle_entrypoint
+
+    feature_data = tmp_path / "feature-data"
+    cache = tmp_path / "cache"
+    monkeypatch.setenv("CONTROL_DECK_FEATURE_DATA_DIR", str(feature_data))
+    monkeypatch.setenv("CONTROL_DECK_SHARED_CACHE_DIR", str(cache))
+    monkeypatch.setattr(bundle_entrypoint, "_resource_root", lambda: ROOT)
+    monkeypatch.setattr(bundle_entrypoint.shutil, "disk_usage", lambda _path: SimpleNamespace(free=100_000_000_000))
+    monkeypatch.setattr(bundle_entrypoint, "_model_installed", lambda _cache: True)
+    runtime_python = feature_data / "runtimes" / "rocm-torch" / ".venv" / "bin" / "python"
+    monkeypatch.setattr(bundle_entrypoint, "_ensure_runtime", lambda *_args: (runtime_python, True))
+    monkeypatch.setattr(bundle_entrypoint, "_verify_gpu", lambda _python: {"gcn_arch": "gfx1201"})
+    monkeypatch.setattr(bundle_entrypoint, "_ensure_model", lambda *_args: True)
+    result = bundle_entrypoint.provision()
+    assert result["runtime_reused"] is True and result["model_reused"] is True
+    status = (feature_data / "environment-status.json").read_text(encoding="utf-8")
+    assert '"status": "healthy"' in status
+    assert '"gcn_arch": "gfx1201"' in status
+
+
+def test_bundle_provision_failure_does_not_publish_healthy_status(monkeypatch, tmp_path):
+    from scripts import bundle_entrypoint
+
+    feature_data = tmp_path / "feature-data"
+    monkeypatch.setenv("CONTROL_DECK_FEATURE_DATA_DIR", str(feature_data))
+    monkeypatch.setenv("CONTROL_DECK_SHARED_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(bundle_entrypoint, "_resource_root", lambda: ROOT)
+    monkeypatch.setattr(bundle_entrypoint.shutil, "disk_usage", lambda _path: SimpleNamespace(free=100_000_000_000))
+    monkeypatch.setattr(bundle_entrypoint, "_model_installed", lambda _cache: True)
+    monkeypatch.setattr(bundle_entrypoint, "_ensure_runtime", lambda *_args: (tmp_path / "python", False))
+    monkeypatch.setattr(bundle_entrypoint, "_verify_gpu", lambda _python: (_ for _ in ()).throw(RuntimeError("gpu failed")))
+    with pytest.raises(RuntimeError, match="gpu failed"):
+        bundle_entrypoint.provision()
+    assert not (feature_data / "environment-status.json").exists()
 
 
 def test_bundle_build_environment_contains_no_ml_runtime_dependencies():
