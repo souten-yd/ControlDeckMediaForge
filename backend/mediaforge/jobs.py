@@ -24,6 +24,7 @@ from .validators import validate_png
 
 logger = logging.getLogger(__name__)
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
+OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 
 
 class WorkerFailure(RuntimeError):
@@ -64,6 +65,7 @@ class JobManager:
         self._host_executions: dict[str, HostExecution] = {}
         self._host_failures: dict[str, HostApiError] = {}
         self._selected_models: dict[str, ModelDescriptor] = {}
+        self._admission_floor_bytes: dict[str, int] = {}
         self._execution_guard = asyncio.Semaphore(1)
         self._stopping = False
 
@@ -382,13 +384,16 @@ class JobManager:
                 response = response["result"]
             elif response.get("ok") is False:
                 detail = response.get("error", {})
+                error_code = str(detail.get("code", "worker_error"))
+                if error_code == "resource_oom":
+                    self._record_oom(selected)
                 await self._update(
                     job_id,
                     reporter,
                     status=JobStatus.FAILED,
                     phase="generating",
                     error=ErrorDetail(
-                        code=str(detail.get("code", "worker_error")),
+                        code=error_code,
                         message=str(detail.get("message", "image worker failed"))[:300],
                     ),
                 )
@@ -437,14 +442,8 @@ class JobManager:
         delay = float(job.request.constraints.get("_fake_delay_sec", 0))
         estimate = max(1.0, min(self.worker_timeout_sec, delay + 1.0))
         try:
-            status = await self.host_client.request_resource(
-                execution.identity,
-                image_model_request(execution.host_job_id, selected, workload_class=execution.workload_class)
-                if selected is not None
-                else fake_image_request(
-                    execution.host_job_id, runtime_sec=estimate, workload_class=execution.workload_class
-                ),
-            )
+            resource_request = self._resource_request(job, execution, selected, estimate)
+            status = await self.host_client.request_resource(execution.identity, resource_request)
             request_id = status.get("request_id")
             if not isinstance(request_id, str) or not request_id:
                 raise HostApiError("invalid_host_response", "ControlDeck did not return a resource request ID")
@@ -486,6 +485,34 @@ class JobManager:
                 error=ErrorDetail(code=exc.code, message=str(exc)[:300]),
             )
             return False
+
+    def _resource_request(
+        self,
+        job: Job,
+        execution: HostExecution,
+        selected: ModelDescriptor | None,
+        fake_runtime_sec: float,
+    ) -> dict[str, Any]:
+        request = (
+            image_model_request(execution.host_job_id, selected, workload_class=execution.workload_class)
+            if selected is not None
+            else fake_image_request(
+                execution.host_job_id, runtime_sec=fake_runtime_sec, workload_class=execution.workload_class
+            )
+        )
+        if selected is not None:
+            floor = self._admission_floor_bytes.get(selected.model_id)
+            if floor is not None:
+                headroom = int(request["vram"]["headroom_bytes"])
+                peak_floor = max(0, floor - headroom)
+                for key in ("execution_peak_bytes", "cold_load_peak_bytes"):
+                    request["vram"][key] = max(int(request["vram"][key]), peak_floor)
+        return request
+
+    def _record_oom(self, selected: ModelDescriptor) -> None:
+        measured = selected.measured_vram_bytes or 0
+        current_floor = self._admission_floor_bytes.get(selected.model_id, measured)
+        self._admission_floor_bytes[selected.model_id] = max(measured, current_floor) + OOM_FLOOR_INCREMENT_BYTES
 
     async def _maintain_host_lease(self, job_id: str, execution: HostExecution) -> None:
         assert self.host_client is not None and execution.lease_id is not None

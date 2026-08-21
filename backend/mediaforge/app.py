@@ -133,6 +133,21 @@ def create_app(
             ]
         }
 
+    def image_capability() -> dict[str, Any]:
+        try:
+            models = ModelRegistry.load(resolved.model_manifest, hf_home=resolved.hf_home).all()
+        except ModelRegistryError:
+            return {"state": "unavailable", "reason": "model_registry_invalid", "local_only": True}
+        if any(
+            item.state.value == "available" and item.installed and item.healthy
+            and "image.text_to_image" in item.capabilities
+            for item in models
+        ):
+            return {"state": "available", "implementation": "local", "confidence": "measured", "local_only": True}
+        if any(item.state.value == "available" and "image.text_to_image" in item.capabilities for item in models):
+            return {"state": "unavailable", "reason": "model_not_installed", "local_only": True}
+        return {"state": "available", "implementation": "fake", "confidence": "low", "local_only": True}
+
     async def submit_hosted(
         value: JobRequest,
         identity: HostIdentity,
@@ -281,12 +296,7 @@ def create_app(
         return {
             "contract_version": "1.0",
             "capabilities": {
-                "image.text_to_image": {
-                    "state": "available",
-                    "implementation": "fake",
-                    "confidence": "low",
-                    "local_only": True,
-                },
+                "image.text_to_image": image_capability(),
                 "image.single_reference_edit": {"state": "unavailable", "reason": "planned_for_g2"},
                 "image.multi_reference_edit": {"state": "unavailable", "reason": "planned_for_g2"},
                 "image.strict_edit": {"state": "unavailable", "reason": "planned_for_g2"},
