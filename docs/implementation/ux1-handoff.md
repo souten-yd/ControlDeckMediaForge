@@ -9,18 +9,20 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/transport-foundation（g3/profiles + ux1/design-and-workflow の上）
-PR          #21 設計 / #22 G3 profiles / #23 PR-U0（いずれも未マージ）
-状態        PR-U0 実装済み・実測済み。UI はまだ 1 行も書いていない
+ブランチ    ux1/workspace-shell（main から。main = bf8e3ac）
+PR          #21 設計 / #22 G3 profiles / #23 PR-U0 — すべてマージ済み
+状態        backend の土台は main に入った。UI はまだ 1 行も書いていない
+基準値      ./mf.sh test = 155 passed
 ```
 
 ## PR 進捗
 
 | PR | 内容 | 状態 |
 |---|---|---|
-| — | 設計 + 実装計画 + 運用ルール | PR #21 |
-| PR-U0 | /ws 追加メソッドと保存基盤 | PR #23（転送量 -85.9% 実測済み） |
-| PR-U1 | シェル刷新（3ナビ・モード・モバイル IA） | 次はここ |
+| — | 設計 + 実装計画 + 運用ルール | #21 マージ済み |
+| — | G3 profiles backend | #22 マージ済み |
+| PR-U0 | /ws 追加メソッドと保存基盤 | #23 マージ済み（転送量 -85.9%） |
+| PR-U1 | シェル刷新（3ナビ・モード・モバイル IA） | 実装中 |
 | PR-U2 | 作成体験 | 未着手 |
 | PR-U3 | マスクエディタ・外側拡張 | 未着手 |
 | PR-U4 | 状況と結果ステージ | 未着手 |
@@ -32,7 +34,7 @@ PR          #21 設計 / #22 G3 profiles / #23 PR-U0（いずれも未マージ�
 
 ```text
 PR-U1（シェル刷新）を開始する。
-  ブランチ    ux1/workspace-shell（#22 の上に積む）
+  ブランチ    ux1/workspace-shell（main から。作成済み）
   最初の作業  frontend/index.html を 3 ナビ + ヘッダのモードトグル + モバイル下部タブ
               の構造へ書き直す。DOM 契約の id は §3 の表どおりに付ける
   仕様        docs/implementation/ux1-workspace.md §3
@@ -60,14 +62,9 @@ PR-U1（シェル刷新）を開始する。
 ## リポジトリの状態で注意すること
 
 ```text
-PR が 3 本積み重なっている（いずれも未マージ）
-    main
-     ├─ #21 ux1/design-and-workflow   設計・実装計画・運用
-     └─ #22 g3/profiles               G3 backend（旧・未 commit 作業を独立させたもの）
-          └─ #23 ux1/transport-foundation  PR-U0（#21 を merge 済み）
-  → #23 は #22 と #21 の両方を含む。マージ順は #21 → #22 → #23。
-  → 以降の UX1 ブランチは ux1/transport-foundation から切る。
-  → PR-U6（一貫性 UI）は #22 がマージされてから着手する。
+main はクリーン。以降の UX1 ブランチは main から切る
+    #21 #22 #23 はすべてマージ済み。積み重ねは解消した。
+    PR-U6（一貫性 UI）の前提だった G3 backend も main に入っている。
 
 docs/README-updated.md / docs/README-updated 2.md は untracked のまま
     UX1 とは無関係の残置ファイル。触らない。
