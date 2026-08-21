@@ -739,8 +739,8 @@ regression evidence only.
 
 ### NOT TESTED / remaining G2
 
-- Multi-reference edit and VLM semantic review with bounded retry remain NOT
-  TESTED and are required before G2 completion.
+- VLM semantic review with bounded retry remains NOT TESTED and is required
+  before G2 completion.
 - Natural OOM during edit is NOT TESTED. Existing conservative G1 lease values
   remain in use; the sampled absolute VRAM value is not substituted for the
   lease envelope.
@@ -785,3 +785,38 @@ evidence for this sample, not a G3 consistency claim. Evidence is retained under
 Focused editing/API/host regression completed with 68 passed. Full
 `./mf.sh test` completed with 106 passed in 5.62 seconds. These are regression
 evidence, not substitutes for the real browser and worker observations above.
+
+### Multi-reference edit
+
+`image.edit` now accepts `edit_mode=multi_reference` with 2..4 asset inputs.
+The first input is the editable primary and sole lineage parent; additional
+inputs are visual references, and provenance hashes every input. Strict mode is
+rejected for this path. The worker receives only contained job-local copies and
+the FLUX.2 adapter uses its official image-list input; model identity remains
+absent from capability/tool responses.
+
+Real installed-host Chromium used a Media Forge-generated 512x512 primary and
+two Media Forge-generated references. Both separate-worker runs succeeded:
+
+```text
+first browser total:          28.895831 sec; load 9.890928; generation 11.739208
+repeat browser total:         21.830374 sec; load 9.882474; generation 4.771229
+assets per run:               3 imports + 1 result
+lineage parent count:         1 (primary)
+provenance reference hashes:  3
+same-seed result:             byte-identical 352,021-byte PNG
+browser errors:               0
+placement/offload:            all cuda:0 / hooks 0 / non-GPU targets 0
+Broker after each:            active 0 / waiting 0
+```
+
+Visual inspection confirmed that features from all routes were reflected: the
+primary black/orange design and hoodie, orange mesh detail, and the referenced
+two-hand waving pose. This does not claim the broader G3 identity metric.
+Evidence is retained under
+`/data1tb/mediaforge-g2-e2e.Frwz2w/multi-reference-browser/` and
+`multi-reference-browser-repeat/`.
+
+Focused multi-reference/edit/adapter/API/host regression completed with 90
+passed. Full `./mf.sh test` completed with 123 passed in 6.54 seconds. These are
+regression evidence only.

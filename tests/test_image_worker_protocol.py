@@ -169,3 +169,16 @@ def test_image_worker_rejects_edit_source_and_mask_path_escape(monkeypatch, tmp_
     mask_escape["worker_inputs"] = {"source_path": str(inside), "mask_path": str(outside)}
     with pytest.raises(ValueError, match="edit mask is outside"):
         worker.handle(mask_escape)
+
+    reference_escape = payload(model, work_root / "reference-escape")
+    reference_escape["request"]["operation"] = "image.edit"
+    reference_escape["request"]["constraints"].update({
+        "strict_edit": False,
+        "edit_mode": "multi_reference",
+    })
+    reference_escape["worker_inputs"] = {
+        "source_path": str(inside),
+        "reference_paths": [str(outside)],
+    }
+    with pytest.raises(ValueError, match="reference image is outside"):
+        worker.handle(reference_escape)

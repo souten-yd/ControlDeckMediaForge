@@ -33,11 +33,13 @@
                 <option value="reference">画像全体を指示に沿って編集</option>
                 <option value="variation">元画像を参考に別案を作る</option>
                 <option value="outpaint">キャンバスを外側へ広げる</option>
+                <option value="multi_reference">複数画像を参考に編集</option>
               </select>
               <p id="edit-help" class="muted">白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。</p>
               <div class="file-row">
                 <label>元画像<input id="source-file" type="file" accept="image/png,image/jpeg"></label>
                 <label id="mask-input">編集マスク<input id="mask-file" type="file" accept="image/png,image/jpeg"></label>
+                <label id="reference-input" hidden>追加の参照画像（1〜3枚）<input id="reference-files" type="file" accept="image/png,image/jpeg" multiple></label>
               </div>
             </fieldset>
             <div class="form-row">

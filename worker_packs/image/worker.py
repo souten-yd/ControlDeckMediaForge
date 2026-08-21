@@ -105,12 +105,20 @@ class ImageWorker:
             raise ValueError("worker inputs are invalid")
         source_path: Path | None = None
         mask_path: Path | None = None
+        reference_paths: tuple[Path, ...] = ()
         source_size: tuple[int, int] | None = None
         if operation == "image.edit":
             source_path = _contained(self.work_root, worker_inputs.get("source_path"), "source image")
             mask_value = worker_inputs.get("mask_path")
             if mask_value is not None:
                 mask_path = _contained(self.work_root, mask_value, "edit mask")
+            references_value = worker_inputs.get("reference_paths", [])
+            if not isinstance(references_value, list):
+                raise ValueError("worker reference images are invalid")
+            reference_paths = tuple(
+                _contained(self.work_root, value, "reference image")
+                for value in references_value
+            )
             try:
                 with Image.open(source_path) as source:
                     source_size = source.size
@@ -167,6 +175,7 @@ class ImageWorker:
                     output_path=output_path,
                     strict_edit=strict_edit,
                     edit_mode=edit_mode,
+                    reference_paths=reference_paths,
                 ))
             else:
                 result = adapter.generate(ImageGenerationRequest(

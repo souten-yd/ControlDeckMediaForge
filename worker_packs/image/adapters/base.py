@@ -33,6 +33,7 @@ class ImageEditRequest:
     output_path: Path
     strict_edit: bool
     edit_mode: str = "reference"
+    reference_paths: tuple[Path, ...] = ()
 
 
 class ImageAdapter(Protocol):

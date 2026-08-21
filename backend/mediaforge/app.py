@@ -315,7 +315,7 @@ def create_app(
                 "image.inpaint": image_capability("image.inpaint"),
                 "image.outpaint": image_capability("image.outpaint"),
                 "image.variation": image_capability("image.variation"),
-                "image.multi_reference_edit": {"state": "unavailable", "reason": "planned_for_g2"},
+                "image.multi_reference_edit": image_capability("image.multi_reference_edit"),
                 "image.strict_edit": image_capability("image.strict_edit"),
                 "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},

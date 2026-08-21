@@ -54,6 +54,11 @@ operation names fail with `capability_unavailable` until their goal is delivered
 `variation` cannot be combined with `strict_edit`; a mask ID without strict
 editing also fails explicitly rather than being ignored.
 
+Multi-reference editing uses `edit_mode=multi_reference`, `strict_edit=false`,
+and 2..4 `inputs`. The first input is the editable primary and sole lineage
+parent; remaining inputs are visual references. Provenance records the content
+hash of every input. Other modes continue to require exactly one input.
+
 Outpaint uses `strict_edit=true`, target `width`/`height`, and no mask asset. The
 target must be a multiple of 16, contain the complete source, expand at least
 one dimension, and stay within the selected model envelope. Media Forge centers
@@ -69,8 +74,8 @@ Every request is local-only. `local_only` defaults to `true`; any explicit `fals
 ## Capabilities
 
 `GET /api/v1/capabilities` reports capability state as `available`, `unavailable`, or `experimental`.
-It reports text generation, single-reference edit, inpaint, outpaint,
-variation, and strict edit independently from installed measured model capabilities and never
+It reports text generation, single-reference edit, multi-reference edit,
+inpaint, outpaint, variation, and strict edit independently from installed measured model capabilities and never
 exposes the automatically selected model ID.
 
 ## Models

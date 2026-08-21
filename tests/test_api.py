@@ -132,6 +132,7 @@ def test_capability_discovery_does_not_expose_model_names(client):
     assert "image.single_reference_edit" in capabilities
     assert "image.inpaint" in capabilities
     assert "image.outpaint" in capabilities
+    assert "image.multi_reference_edit" in capabilities
     assert "image.variation" in capabilities
     serialized = json.dumps(response.json()).lower()
     assert "fake-image" not in serialized

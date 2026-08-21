@@ -259,7 +259,7 @@ class DiffusersFlux2KleinAdapter:
             raise ValueError("source image is not decodable") from exc
 
         patch_box = (0, 0, source.width, source.height)
-        reference = source
+        reference: Image.Image | list[Image.Image] = source
         if request.edit_mode == "outpaint":
             reference, _plan = outpaint_reference(request.source_path, request.width, request.height)
         elif request.strict_edit:
@@ -268,8 +268,29 @@ class DiffusersFlux2KleinAdapter:
             plan = strict_edit_plan(request.source_path, request.mask_path)
             patch_box = self._edit_crop_box(plan.crop_box, plan.width, plan.height)
             reference = source.crop(patch_box)
-        generation_size = self._generation_size(reference.width, reference.height)
-        if reference.size != generation_size:
+        elif request.edit_mode == "multi_reference":
+            references = [source]
+            for path in request.reference_paths:
+                try:
+                    with Image.open(path) as opened:
+                        opened.load()
+                        references.append(opened.convert("RGBA"))
+                except (OSError, SyntaxError) as exc:
+                    raise ValueError("reference image is not decodable") from exc
+            reference = references
+        if request.edit_mode == "outpaint":
+            generation_size = self._generation_size(request.width, request.height)
+        elif request.strict_edit:
+            assert isinstance(reference, Image.Image)
+            generation_size = self._generation_size(reference.width, reference.height)
+        else:
+            generation_size = self._generation_size(source.width, source.height)
+        if isinstance(reference, list):
+            reference = [
+                item if item.size == generation_size else item.resize(generation_size, Image.Resampling.LANCZOS)
+                for item in reference
+            ]
+        elif reference.size != generation_size:
             reference = reference.resize(generation_size, Image.Resampling.LANCZOS)
 
         generator = torch.Generator(device="cuda").manual_seed(request.seed)

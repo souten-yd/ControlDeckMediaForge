@@ -132,16 +132,22 @@ document.getElementById("operation").addEventListener("change", (event) => {
   document.getElementById("edit-inputs").hidden = !editing;
   document.getElementById("source-file").required = editing;
   document.getElementById("mask-file").required = editing && document.getElementById("edit-mode").value === "strict";
+  document.getElementById("reference-files").required = editing && document.getElementById("edit-mode").value === "multi_reference";
 });
 
 document.getElementById("edit-mode").addEventListener("change", (event) => {
   const strict = event.target.value === "strict";
+  const multiReference = event.target.value === "multi_reference";
   document.getElementById("mask-input").hidden = !strict;
+  document.getElementById("reference-input").hidden = !multiReference;
   document.getElementById("mask-file").required = strict;
+  document.getElementById("reference-files").required = multiReference;
   document.getElementById("edit-help").textContent = strict
     ? "白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。"
     : event.target.value === "outpaint"
       ? "幅と高さを元画像以上に設定して外側を生成します。中央の元画像は1ピクセルも変更しません。"
+    : multiReference
+      ? "元画像に加えて1〜3枚の参照画像を使います。画像全体が変わる可能性があります。"
     : event.target.value === "variation"
       ? "元画像の特徴を参考に別案を作ります。画像全体が変わる可能性があります。"
       : "元画像全体を指示に沿って編集します。ピクセル保持保証はありません。";
@@ -202,6 +208,15 @@ document.getElementById("create-form").addEventListener("submit", async (event) 
         const maskFile = document.getElementById("mask-file").files[0];
         const mask = await importFile(maskFile, "edit_mask");
         constraints.editable_mask_asset_id = mask.id;
+      }
+      if (editMode === "multi_reference") {
+        const files = Array.from(document.getElementById("reference-files").files);
+        if (files.length < 1 || files.length > 3) throw {code: "invalid_reference_count"};
+        status.textContent = "元画像と参照画像をローカルへ取り込み中…";
+        for (const file of files) {
+          const reference = await importFile(file, "source");
+          inputs.push({asset_id: reference.id});
+        }
       }
     }
     const job = await workspaceCall("jobs.create", {

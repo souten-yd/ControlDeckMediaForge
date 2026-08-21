@@ -307,6 +307,8 @@ class JobManager:
             return "image.text_to_image"
         if job.request.constraints.get("edit_mode") == "outpaint":
             return "image.outpaint"
+        if job.request.constraints.get("edit_mode") == "multi_reference":
+            return "image.multi_reference_edit"
         if job.request.constraints.get("edit_mode") == "variation":
             return "image.variation"
         return (
@@ -318,20 +320,30 @@ class JobManager:
     def _validate_input_assets(self, job: Job) -> None:
         if job.request.operation != "image.edit":
             return
-        if len(job.request.inputs) != 1:
-            raise WorkerFailure("invalid_reference_count", "single-reference image.edit requires exactly one input")
+        edit_mode = job.request.constraints.get("edit_mode", "reference")
+        expected_multi = edit_mode == "multi_reference"
+        if (expected_multi and not 2 <= len(job.request.inputs) <= 4) or (
+            not expected_multi and len(job.request.inputs) != 1
+        ):
+            raise WorkerFailure(
+                "invalid_reference_count",
+                "multi-reference edit requires 2..4 inputs; other image.edit modes require exactly one",
+            )
         try:
             source = self.store.get_asset(job.request.inputs[0].asset_id)
             source_path = self.store.asset_path(source.id)
         except KeyError as exc:
             raise WorkerFailure("asset_not_found", "source image asset was not found") from exc
-        if source.mime_type != "image/png":
-            raise WorkerFailure("unsupported_reference", "image.edit currently requires a PNG source asset")
+        try:
+            references = [self.store.get_asset(item.asset_id) for item in job.request.inputs[1:]]
+        except KeyError as exc:
+            raise WorkerFailure("asset_not_found", "reference image asset was not found") from exc
+        if source.mime_type != "image/png" or any(item.mime_type != "image/png" for item in references):
+            raise WorkerFailure("unsupported_reference", "image.edit currently requires PNG source assets")
         strict = job.request.constraints.get("strict_edit", False)
         if not isinstance(strict, bool):
             raise WorkerFailure("invalid_constraint", "strict_edit must be a boolean")
-        edit_mode = job.request.constraints.get("edit_mode", "reference")
-        if edit_mode not in {"reference", "variation", "inpaint", "outpaint"}:
+        if edit_mode not in {"reference", "variation", "inpaint", "outpaint", "multi_reference"}:
             raise WorkerFailure("invalid_constraint", "edit_mode is unsupported")
         if strict and edit_mode == "variation":
             raise WorkerFailure("invalid_constraint", "variation cannot request strict_edit")
@@ -358,6 +370,8 @@ class JobManager:
             except StrictEditError as exc:
                 raise WorkerFailure("invalid_dimensions", str(exc)) from exc
             return
+        if edit_mode == "multi_reference" and strict:
+            raise WorkerFailure("invalid_constraint", "multi-reference edit cannot request strict_edit")
         if not strict and "editable_mask_asset_id" in job.request.constraints:
             raise WorkerFailure("invalid_constraint", "editable_mask_asset_id requires strict_edit")
         if not strict:
@@ -611,7 +625,7 @@ class JobManager:
             asset_ids=asset_ids,
         )
 
-    def _materialize_worker_inputs(self, job: Job, job_root: Path) -> dict[str, str]:
+    def _materialize_worker_inputs(self, job: Job, job_root: Path) -> dict[str, Any]:
         if job.request.operation != "image.edit":
             return {}
         inputs_dir = contained(job_root, job_root / "inputs")
@@ -620,6 +634,13 @@ class JobManager:
         source_destination = contained(inputs_dir, inputs_dir / "source.png")
         shutil.copyfile(self.store.asset_path(source_id), source_destination)
         result = {"source_path": str(source_destination)}
+        reference_paths: list[str] = []
+        for index, reference in enumerate(job.request.inputs[1:], start=1):
+            destination = contained(inputs_dir, inputs_dir / f"reference-{index}.png")
+            shutil.copyfile(self.store.asset_path(reference.asset_id), destination)
+            reference_paths.append(str(destination))
+        if reference_paths:
+            result["reference_paths"] = reference_paths
         if (
             job.request.constraints.get("strict_edit") is True
             and job.request.constraints.get("edit_mode") != "outpaint"
@@ -865,10 +886,15 @@ class JobManager:
             now = utc_now()
             asset_id = f"asset_{uuid.uuid4().hex}"
             provenance_id = f"prov_{uuid.uuid4().hex}"
+            parent_asset_ids = (
+                [job.request.inputs[0].asset_id]
+                if job.request.operation == "image.edit"
+                else [item.asset_id for item in job.request.inputs]
+            )
             asset = Asset(
                 id=asset_id,
                 job_id=job.id,
-                parent_asset_ids=[item.asset_id for item in job.request.inputs],
+                parent_asset_ids=parent_asset_ids,
                 mime_type="image/png",
                 width=width,
                 height=height,
