@@ -941,6 +941,7 @@ def create_app(
     @app.get("/")
     @app.get("/create")
     @app.get("/library")
+    @app.get("/activity")
     @app.get("/jobs")
     @app.get("/models")
     @app.get("/profiles")
@@ -952,10 +953,7 @@ def create_app(
         if delay_sec:
             await asyncio.sleep(delay_sec)
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
-        stylesheet = "\n".join(
-            (FRONTEND_DIR / name).read_text(encoding="utf-8")
-            for name in ("styles.css", "edit.css")
-        )
+        stylesheet = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
         script = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
         html = html.replace("<!-- MEDIA_FORGE_INLINE_STYLE -->", f"<style>{stylesheet}</style>")
         html = html.replace("<!-- MEDIA_FORGE_INLINE_SCRIPT -->", f"<script>{script}</script>")

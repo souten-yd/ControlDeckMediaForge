@@ -2,7 +2,7 @@
   "api_version": "2",
   "id": "media-forge",
   "name": "Media Forge",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Local-first media generation and asset library",
   "publisher": "souten-yd",
   "requires": {
@@ -29,7 +29,10 @@
     "navigation": [
       {
         "id": "workspace",
-        "label": {"en": "Media", "ja": "Media"},
+        "label": {
+          "en": "Media",
+          "ja": "Media"
+        },
         "route": "/x/media-forge/workspace",
         "icon": "images"
       }
@@ -40,20 +43,26 @@
         "label": "Media Forge",
         "route": "/x/media-forge/workspace",
         "path": "/",
-        "mobile": "companion"
+        "mobile": "embedded"
       }
     ],
     "commands": [
       {
         "id": "create-media",
-        "label": {"en": "Create media", "ja": "メディアを作成"},
+        "label": {
+          "en": "Create media",
+          "ja": "メディアを作成"
+        },
         "endpoint": "/addon/v1/commands/create"
       }
     ],
     "quick_actions": [
       {
         "id": "create-media",
-        "label": {"en": "Create media", "ja": "メディアを作成"},
+        "label": {
+          "en": "Create media",
+          "ja": "メディアを作成"
+        },
         "endpoint": "/addon/v1/commands/create"
       }
     ],
@@ -68,7 +77,10 @@
     "workflow_executors": [
       {
         "id": "media.generate",
-        "label": {"en": "Generate media", "ja": "メディア生成"},
+        "label": {
+          "en": "Generate media",
+          "ja": "メディア生成"
+        },
         "endpoint": "/addon/v1/workflow/execute",
         "input_schema_path": "/schemas/job-request.json",
         "output_schema_path": "/schemas/job-reference.json",
@@ -101,16 +113,25 @@
     "context_actions": [
       {
         "id": "edit-image",
-        "label": {"en": "Edit in Media Forge", "ja": "Media Forge で編集"},
+        "label": {
+          "en": "Edit in Media Forge",
+          "ja": "Media Forge で編集"
+        },
         "endpoint": "/addon/v1/context/edit-image",
-        "contexts": ["file", "project"],
+        "contexts": [
+          "file",
+          "project"
+        ],
         "permission": "project_lab.view"
       }
     ],
     "setup_checklist": [
       {
         "id": "core",
-        "label": {"en": "Media Forge service", "ja": "Media Forge サービス"},
+        "label": {
+          "en": "Media Forge service",
+          "ja": "Media Forge サービス"
+        },
         "permission": "settings.manage"
       }
     ]

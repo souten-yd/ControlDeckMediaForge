@@ -9,19 +9,21 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/transport-foundation（g3/profiles + ux1/design-and-workflow の上）
-PR          #21 設計 / #22 G3 profiles / #23 PR-U0（いずれも未マージ）
-状態        PR-U0 実装済み・実測済み。UI はまだ 1 行も書いていない
+ブランチ    ux1/workspace-shell
+PR          #21 #22 #23 マージ済み / PR-U1 は #24
+状態        シェル刷新まで完了。実ブラウザ（standalone）で観測済み
+基準値      ./mf.sh test = 171 passed
 ```
 
 ## PR 進捗
 
 | PR | 内容 | 状態 |
 |---|---|---|
-| — | 設計 + 実装計画 + 運用ルール | PR #21 |
-| PR-U0 | /ws 追加メソッドと保存基盤 | PR #23（転送量 -85.9% 実測済み） |
-| PR-U1 | シェル刷新（3ナビ・モード・モバイル IA） | 次はここ |
-| PR-U2 | 作成体験 | 未着手 |
+| — | 設計 + 実装計画 + 運用ルール | #21 マージ済み |
+| — | G3 profiles backend | #22 マージ済み |
+| PR-U0 | /ws 追加メソッドと保存基盤 | #23 マージ済み（転送量 -85.9%） |
+| PR-U1 | シェル刷新（3ナビ・モード・モバイル IA） | PR #24 |
+| PR-U2 | 作成体験 | 次はここ |
 | PR-U3 | マスクエディタ・外側拡張 | 未着手 |
 | PR-U4 | 状況と結果ステージ | 未着手 |
 | PR-U5 | ライブラリと書き出し | 未着手 |
@@ -31,17 +33,17 @@ PR          #21 設計 / #22 G3 profiles / #23 PR-U0（いずれも未マージ�
 ## 次にやること（1 つだけ）
 
 ```text
-PR-U1（シェル刷新）を開始する。
-  ブランチ    ux1/workspace-shell（#22 の上に積む）
-  最初の作業  frontend/index.html を 3 ナビ + ヘッダのモードトグル + モバイル下部タブ
-              の構造へ書き直す。DOM 契約の id は §3 の表どおりに付ける
-  仕様        docs/implementation/ux1-workspace.md §3
-  完了の目安  tests/test_frontend_contract.py（新規）が通り、
-              standalone の Playwright で 320px / 390×844 / 1280×800 が崩れない
+PR-U2（作成体験）を開始する。
+  ブランチ    ux1/create-experience（main から。#24 マージ後に切る）
+  最初の作業  frontend/app.js の submitJob を分解し、送信前の検証を
+              「GPU 受付前に落とす」方向へ寄せる（幅高さ・参照枚数・マスク有無）
+  仕様        docs/implementation/ux1-workspace.md §4
+  完了の目安  Playwright で送信 payload を捕捉し job-request schema に適合すること、
+              詳細 ON で 16 の倍数でない幅が送信前に止まること
 
-  注意        addon.json の mobile: "embedded" 変更はこの PR で同時に行う。
-              モバイル IA が動く状態になるまで宣言を変えない。
-              preferences.get/set は PR-U0 で入っているので、モード保存はそれを使う。
+  注意        シェルは完成しているので index.html の構造を作り直さない。
+              サイズ preset は capabilities.get の presets を使う（standalone では
+              フォールバック値になる点に注意）。
 ```
 
 ## 未解決の判断
@@ -60,14 +62,16 @@ PR-U1（シェル刷新）を開始する。
 ## リポジトリの状態で注意すること
 
 ```text
-PR が 3 本積み重なっている（いずれも未マージ）
-    main
-     ├─ #21 ux1/design-and-workflow   設計・実装計画・運用
-     └─ #22 g3/profiles               G3 backend（旧・未 commit 作業を独立させたもの）
-          └─ #23 ux1/transport-foundation  PR-U0（#21 を merge 済み）
-  → #23 は #22 と #21 の両方を含む。マージ順は #21 → #22 → #23。
-  → 以降の UX1 ブランチは ux1/transport-foundation から切る。
-  → PR-U6（一貫性 UI）は #22 がマージされてから着手する。
+実ブラウザ試験には別 venv が要る
+    playwright は core venv に入れない（AGENTS.md「core を軽く保つ」）。
+    実行例: /data1tb/ControlDeck-release-bundle/.venv/bin/python \
+              scripts/ux_standalone_e2e.py --media-forge-url http://127.0.0.1:9137 \
+              --evidence-dir /tmp/ux1-evidence
+    証跡: /data1tb/mediaforge-ux1-evidence/{light,dark}/
+
+main はクリーン。以降の UX1 ブランチは main から切る
+    #21 #22 #23 はすべてマージ済み。積み重ねは解消した。
+    PR-U6（一貫性 UI）の前提だった G3 backend も main に入っている。
 
 docs/README-updated.md / docs/README-updated 2.md は untracked のまま
     UX1 とは無関係の残置ファイル。触らない。
