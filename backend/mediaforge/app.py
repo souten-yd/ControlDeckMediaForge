@@ -19,10 +19,11 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from . import __version__
+from . import __version__, library, preferences, thumbnails
 from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
 from .config import Settings
 from .domain import JobRequest
+from .events import JobEventBus, JobSubscription
 from .environment import setup_snapshot
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.files import GrantContentTooLarge, read_grant, require_grant_id
@@ -33,7 +34,9 @@ from .paths import contained
 from .profiles import ProfileInput, ReferenceCollectionInput
 from .semantic_review import OllamaSemanticReviewer, SemanticReviewer
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
+from .preferences import PreferenceError
 from .store import Store
+from .thumbnails import ThumbnailError
 
 
 REPOSITORY_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
@@ -42,6 +45,8 @@ FRONTEND_DIR = REPOSITORY_ROOT / "frontend"
 HealthState = Literal["healthy", "degraded", "unavailable", "setup_required"]
 MAX_CONTEXT_IMAGE_BYTES = 64 * 1024 * 1024
 MAX_CONTEXT_IMAGE_PIXELS = 100_000_000
+TERMINAL_JOB_STATES = {"succeeded", "failed", "canceled"}
+JOB_EVENT_INTERVAL_SEC = 0.2
 
 
 def workspace_test_response_delay_sec() -> float:
@@ -102,6 +107,8 @@ def create_app(
         image_runtime_python=resolved.image_runtime_python,
         semantic_reviewer=reviewer,
     )
+    events = JobEventBus()
+    store.observe(events.publish)
     workspace_test_delay_pending = True
 
     @asynccontextmanager
@@ -116,6 +123,7 @@ def create_app(
     app.state.health_override = None
     app.state.store = store
     app.state.jobs = manager
+    app.state.job_events = events
     app.state.host = host
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -322,8 +330,65 @@ def create_app(
             "output": committed,
         }
 
-    @app.get("/api/v1/capabilities")
-    async def capabilities() -> dict[str, Any]:
+    def size_envelope() -> dict[str, Any]:
+        """Derive the size bounds the UI may offer from installed models.
+
+        Conservative on purpose: the workspace must not present a preset that a
+        routed model would reject after the user pressed the button.
+        """
+        fallback = {
+            "min_side": 256,
+            "max_side": 1024,
+            "multiple_of": 16,
+            "max_pixels": 1024 * 1024,
+            "max_count": 8,
+            "max_reference_assets": 4,
+            "envelope_source": "fallback",
+        }
+        try:
+            models = ModelRegistry.load(resolved.model_manifest, hf_home=resolved.hf_home).all()
+        except ModelRegistryError:
+            return fallback
+        usable = [
+            item for item in models
+            if item.state.value == "available" and item.installed and item.healthy
+            and "image.text_to_image" in item.capabilities
+        ]
+        if not usable:
+            return fallback
+        return {
+            "min_side": 256,
+            "max_side": min(min(item.max_width, item.max_height) for item in usable),
+            "multiple_of": 16,
+            "max_pixels": min(item.max_pixels for item in usable),
+            "max_count": 8,
+            "max_reference_assets": 4,
+            "envelope_source": "measured",
+        }
+
+    def size_presets(envelope: dict[str, Any]) -> list[dict[str, Any]]:
+        """Presets are clamped into the envelope instead of being hardcoded."""
+        multiple = int(envelope["multiple_of"])
+        limit = int(envelope["max_side"])
+
+        def fit(width: int, height: int) -> tuple[int, int]:
+            scale = min(1.0, limit / max(width, height))
+            values = []
+            for side in (width, height):
+                bounded = max(int(envelope["min_side"]), int(side * scale))
+                values.append(bounded - bounded % multiple)
+            return values[0], values[1]
+
+        square = fit(1024, 1024)
+        landscape = fit(1024, 576)
+        portrait = fit(576, 1024)
+        return [
+            {"id": "square", "label_key": "size.square", "width": square[0], "height": square[1]},
+            {"id": "landscape", "label_key": "size.landscape", "width": landscape[0], "height": landscape[1]},
+            {"id": "portrait", "label_key": "size.portrait", "width": portrait[0], "height": portrait[1]},
+        ]
+
+    async def capability_document() -> dict[str, Any]:
         semantic_available = await reviewer.available()
         return {
             "contract_version": "1.0",
@@ -344,6 +409,10 @@ def create_app(
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },
         }
+
+    @app.get("/api/v1/capabilities")
+    async def capabilities() -> dict[str, Any]:
+        return await capability_document()
 
     @app.get("/api/v1/models")
     async def models() -> dict[str, Any]:
@@ -612,6 +681,29 @@ def create_app(
             "context": {"type": context["type"], "source": source},
         }
 
+    async def push_job_events(websocket: WebSocket, subscription: JobSubscription) -> None:
+        """Coalesce job changes so fine-grained progress cannot flood the socket."""
+        pending: dict[str, Any] = {}
+        while True:
+            job = await subscription.queue.get()
+            pending[job.id] = job
+            await asyncio.sleep(JOB_EVENT_INTERVAL_SEC)
+            while not subscription.queue.empty():
+                queued = subscription.queue.get_nowait()
+                pending[queued.id] = queued
+            for job_id, value in list(pending.items()):
+                try:
+                    await websocket.send_json({
+                        "type": "event",
+                        "event": "job.changed",
+                        "data": value.model_dump(mode="json"),
+                    })
+                except (WebSocketDisconnect, RuntimeError):
+                    return
+                if value.status.value in TERMINAL_JOB_STATES:
+                    subscription.unwatch([job_id])
+            pending.clear()
+
     @app.websocket("/ws")
     async def workspace_socket(websocket: WebSocket) -> None:
         try:
@@ -621,6 +713,8 @@ def create_app(
             return
         await websocket.accept()
         uploads: dict[str, dict[str, Any]] = {}
+        subscription = events.subscribe(asyncio.get_running_loop())
+        sender = asyncio.create_task(push_job_events(websocket, subscription))
         try:
             while True:
                 raw = await websocket.receive_text()
@@ -752,9 +846,79 @@ def create_app(
                         result = {"deleted": True}
                     elif method == "models.list":
                         result = model_catalog()
+                    elif method == "capabilities.get":
+                        envelope = size_envelope()
+                        result = {
+                            **await capability_document(),
+                            "envelope": envelope,
+                            "presets": size_presets(envelope),
+                        }
+                    elif method == "library.list":
+                        kind = params.get("kind", "all")
+                        if kind not in library.KINDS:
+                            raise ValueError("library kind is not supported")
+                        before = params.get("before")
+                        if before is not None and not isinstance(before, str):
+                            raise ValueError("library cursor must be a string")
+                        limit = library.clamp_limit(params.get("limit"))
+                        result = library.page(
+                            store.list_asset_records(limit, before),
+                            kind=str(kind),
+                            include_masks=params.get("include_masks") is True,
+                            limit=limit,
+                        )
+                    elif method == "assets.thumbnail":
+                        asset_id = str(params.get("asset_id", ""))
+                        asset = store.get_asset(asset_id)
+                        if not thumbnails.is_thumbnailable(asset.mime_type):
+                            raise ThumbnailError()
+                        thumbnail = thumbnails.cached(
+                            store.asset_path(asset_id),
+                            store.thumbnail_dir,
+                            asset_id,
+                            thumbnails.clamp_max_side(params.get("max_side")),
+                        )
+                        result = {
+                            "mime_type": thumbnail.mime_type,
+                            "width": thumbnail.width,
+                            "height": thumbnail.height,
+                            "base64": base64.b64encode(thumbnail.content).decode("ascii"),
+                        }
+                    elif method == "preferences.get":
+                        result = {"values": preferences.merged(
+                            store.get_preferences(preferences.subject_of(identity))
+                        )}
+                    elif method == "preferences.set":
+                        payload = params.get("values")
+                        if len(json.dumps(payload, ensure_ascii=False).encode()) > preferences.MAX_PAYLOAD_BYTES:
+                            raise PreferenceError("preferences_too_large", "preferences exceed the stored bound")
+                        subject = preferences.subject_of(identity)
+                        stored = preferences.merged(store.get_preferences(subject))
+                        stored.update(preferences.validate(payload))
+                        result = {"values": store.set_preferences(subject, stored)}
+                    elif method == "jobs.watch":
+                        job_ids = params.get("job_ids", [])
+                        if not isinstance(job_ids, list) or not all(isinstance(value, str) for value in job_ids):
+                            raise ValueError("job_ids must be a list of strings")
+                        watched = job_ids or [
+                            item.id for item in store.list_jobs(20)
+                            if item.status.value not in TERMINAL_JOB_STATES
+                        ]
+                        result = {"watching": subscription.watch(watched)}
+                    elif method == "jobs.unwatch":
+                        job_ids = params.get("job_ids", [])
+                        if not isinstance(job_ids, list) or not all(isinstance(value, str) for value in job_ids):
+                            raise ValueError("job_ids must be a list of strings")
+                        result = {"watching": subscription.unwatch(job_ids)}
                     else:
                         raise ValueError("workspace method is not supported")
                     await websocket.send_json({"id": request_id, "ok": True, "result": result})
+                except (ThumbnailError, PreferenceError) as exc:
+                    await websocket.send_json({
+                        "id": request_id,
+                        "ok": False,
+                        "error": {"code": exc.code, "message": str(exc)[:300]},
+                    })
                 except (KeyError, ValueError, ValidationError) as exc:
                     await websocket.send_json({
                         "id": request_id,
@@ -767,6 +931,8 @@ def create_app(
         except WebSocketDisconnect:
             return
         finally:
+            subscription.close()
+            sender.cancel()
             for upload in uploads.values():
                 root = upload.get("root")
                 if isinstance(root, Path) and root.exists():
