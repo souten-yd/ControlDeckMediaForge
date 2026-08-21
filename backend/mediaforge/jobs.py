@@ -23,6 +23,7 @@ from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
 from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .routing import ModelRouteError, route_model
+from .semantic_review import SemanticReviewError, SemanticReviewer
 from .store import Store, utc_now
 from .validators import validate_png
 
@@ -58,6 +59,7 @@ class JobManager:
         model_manifest: Path | None = None,
         hf_home: Path | None = None,
         image_runtime_python: Path | None = None,
+        semantic_reviewer: SemanticReviewer | None = None,
     ):
         self.store = store
         self.worker_timeout_sec = worker_timeout_sec
@@ -66,6 +68,7 @@ class JobManager:
         self.model_manifest = model_manifest
         self.hf_home = hf_home
         self.image_runtime_python = image_runtime_python
+        self.semantic_reviewer = semantic_reviewer
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
         self._runner: asyncio.Task[None] | None = None
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
@@ -453,6 +456,10 @@ class JobManager:
                 "worker_output_dir": str(output_dir),
                 "worker_inputs": worker_inputs,
             }
+        if job.request.qa.semantic:
+            candidate_count = job.request.output.count + job.request.qa.max_regeneration_attempts
+            target = payload["request"] if selected is not None else payload
+            target["output"]["count"] = candidate_count
         backend_root = str(Path(__file__).resolve().parents[1])
         environment = dict(os.environ)
         environment["PYTHONPATH"] = backend_root + os.pathsep + environment.get("PYTHONPATH", "")
@@ -592,7 +599,25 @@ class JobManager:
                 )
         await self._update(job_id, reporter, phase="postprocess", progress=0.65)
         try:
-            asset_ids = self._register_outputs(job, response, job_root)
+            asset_ids = await self._register_outputs(job, response, job_root)
+        except SemanticReviewError as exc:
+            await self._update(
+                job_id,
+                reporter,
+                status=JobStatus.FAILED,
+                phase="semantic_review",
+                error=ErrorDetail(code="semantic_review_unavailable", message=str(exc)[:300]),
+            )
+            return
+        except WorkerFailure as exc:
+            await self._update(
+                job_id,
+                reporter,
+                status=JobStatus.FAILED,
+                phase="semantic_review",
+                error=ErrorDetail(code=exc.code, message=str(exc)[:300]),
+            )
+            return
         except StrictEditError as exc:
             code = (
                 "outpaint_invariant_failed"
@@ -842,14 +867,16 @@ class JobManager:
             await reporter.progress(phase, normalized_progress, wait_reason=wait_reason)
         return result
 
-    def _register_outputs(self, job: Job, response: dict[str, Any], job_root: Path) -> list[str]:
-        outputs = response["outputs"]
-        if not isinstance(outputs, list) or len(outputs) != job.request.output.count:
-            raise ValueError("worker returned an unexpected output count")
-        model = response["model"]
-        reference_hashes = {
-            item.asset_id: self.store.get_asset(item.asset_id).sha256 for item in job.request.inputs
-        }
+    def _validate_output(
+        self,
+        job: Job,
+        output: dict[str, Any],
+        job_root: Path,
+    ) -> tuple[Path, int, int, list[dict[str, Any]]]:
+        path = contained(job_root, Path(output["path"]))
+        if path.stat().st_size > MAX_ARTIFACT_BYTES:
+            raise ValueError("worker artifact exceeded the 64 MiB limit")
+        width, height, validation = validate_png(path)
         outpaint = (
             job.request.operation == "image.edit"
             and job.request.constraints.get("edit_mode") == "outpaint"
@@ -860,29 +887,90 @@ class JobManager:
             and not outpaint
         )
         source_path = contained(job_root, job_root / "inputs" / "source.png") if strict_edit or outpaint else None
-        mask_path = contained(job_root, job_root / "inputs" / "mask.png") if strict_edit else None
         if strict_edit:
+            mask_path = contained(job_root, job_root / "inputs" / "mask.png")
+            assert source_path is not None
+            validation.append(validate_strict_edit(source_path, mask_path, path))
+        if outpaint:
+            assert source_path is not None
+            validation.append(validate_outpaint(
+                source_path,
+                path,
+                width=int(job.request.constraints["width"]),
+                height=int(job.request.constraints["height"]),
+            ))
+        return path, width, height, validation
+
+    async def _semantic_selection(
+        self,
+        job: Job,
+        outputs: list[dict[str, Any]],
+        validated: list[tuple[Path, int, int, list[dict[str, Any]]]],
+    ) -> tuple[list[int], dict[int, tuple[dict[str, Any], list[str], str]]]:
+        if not job.request.qa.semantic:
+            return list(range(len(outputs))), {}
+        if self.semantic_reviewer is None or not await self.semantic_reviewer.available():
+            raise SemanticReviewError("local semantic reviewer is unavailable")
+        target_count = job.request.output.count
+        retry_budget = job.request.qa.max_regeneration_attempts
+        selected: list[int] = []
+        reviews: dict[int, tuple[dict[str, Any], list[str], str]] = {}
+        rejected = 0
+        for index, (path, _, _, _) in enumerate(validated):
+            result = await self.semantic_reviewer.review(path, job.request.intent)
+            validation = {
+                "validator": "semantic.advisory",
+                "passed": result.accepted,
+                "summary": result.summary,
+            }
+            if result.accepted:
+                selected.append(index)
+                reviews[index] = (validation, [], result.reviewer)
+            elif retry_budget == 0:
+                selected.append(index)
+                reviews[index] = (
+                    validation,
+                    [f"semantic review advisory: {result.summary}"],
+                    result.reviewer,
+                )
+            else:
+                rejected += 1
+            if len(selected) == target_count:
+                return selected, reviews
+            if rejected > retry_budget:
+                break
+        raise WorkerFailure(
+            "semantic_review_exhausted",
+            f"semantic review rejected all candidates within retry budget {retry_budget}",
+        )
+
+    async def _register_outputs(self, job: Job, response: dict[str, Any], job_root: Path) -> list[str]:
+        outputs = response["outputs"]
+        expected = job.request.output.count + (
+            job.request.qa.max_regeneration_attempts if job.request.qa.semantic else 0
+        )
+        if not isinstance(outputs, list) or len(outputs) != expected:
+            raise ValueError("worker returned an unexpected output count")
+        model = response["model"]
+        reference_hashes = {
+            item.asset_id: self.store.get_asset(item.asset_id).sha256 for item in job.request.inputs
+        }
+        if job.request.constraints.get("strict_edit") is True and job.request.constraints.get("edit_mode") != "outpaint":
             mask_id = str(job.request.constraints["editable_mask_asset_id"])
             reference_hashes[mask_id] = self.store.get_asset(mask_id).sha256
+        # Complete every deterministic validation before invoking a subjective
+        # reviewer. A semantic pass can therefore never mask file/invariant failure.
+        validated = [self._validate_output(job, output, job_root) for output in outputs]
+        selected, semantic = await self._semantic_selection(job, outputs, validated)
         asset_ids: list[str] = []
         self.store.update_job(job.id, phase="validate", progress=0.75)
-        for index, output in enumerate(outputs):
-            path = contained(job_root, Path(output["path"]))
-            if path.stat().st_size > MAX_ARTIFACT_BYTES:
-                raise ValueError("worker artifact exceeded the 64 MiB limit")
+        for result_index, candidate_index in enumerate(selected):
+            output = outputs[candidate_index]
+            path, width, height, validation = validated[candidate_index]
             sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
-            width, height, validation = validate_png(path)
-            if strict_edit:
-                assert source_path is not None and mask_path is not None
-                validation.append(validate_strict_edit(source_path, mask_path, path))
-            if outpaint:
-                assert source_path is not None
-                validation.append(validate_outpaint(
-                    source_path,
-                    path,
-                    width=int(job.request.constraints["width"]),
-                    height=int(job.request.constraints["height"]),
-                ))
+            review_validation, warnings, reviewer = semantic.get(candidate_index, ({}, [], ""))
+            if review_validation:
+                validation.append(review_validation)
             now = utc_now()
             asset_id = f"asset_{uuid.uuid4().hex}"
             provenance_id = f"prov_{uuid.uuid4().hex}"
@@ -900,7 +988,7 @@ class JobManager:
                 height=height,
                 size_bytes=path.stat().st_size,
                 sha256=sha256,
-                suggested_filename=f"media-forge-{job.id[4:12]}-{index + 1}.png",
+                suggested_filename=f"media-forge-{job.id[4:12]}-{result_index + 1}.png",
                 provenance_id=provenance_id,
                 created_at=now,
             )
@@ -916,7 +1004,11 @@ class JobManager:
                 license=str(model["license"]),
                 runtime_adapter=str(model["runtime_adapter"]),
                 runtime_version=str(model["runtime_version"]),
-                tool_versions={"media-forge": __version__, "validator.png": "1.0.0"},
+                tool_versions={
+                    "media-forge": __version__,
+                    "validator.png": "1.0.0",
+                    **({"reviewer.semantic": reviewer} if reviewer else {}),
+                },
                 seed=int(output.get("seed", response["seed"])),
                 parameters={
                     "model_policy": job.request.model_policy,
@@ -926,7 +1018,7 @@ class JobManager:
                 reference_asset_hashes=reference_hashes,
                 postprocessing=[str(item) for item in response.get("postprocessing", [])],
                 validation=validation,
-                warnings=[],
+                warnings=warnings,
                 output_sha256=sha256,
                 created_at=now,
             )

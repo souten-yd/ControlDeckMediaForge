@@ -30,6 +30,7 @@ from .host.jobs import HostExecution
 from .jobs import JobManager
 from .models import ModelRegistry, ModelRegistryError
 from .paths import contained
+from .semantic_review import OllamaSemanticReviewer, SemanticReviewer
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .store import Store
 
@@ -77,12 +78,18 @@ def create_app(
     settings: Settings | None = None,
     *,
     host_client: ControlDeckHostClient | None = None,
+    semantic_reviewer: SemanticReviewer | None = None,
 ) -> FastAPI:
     resolved = settings or Settings.from_env()
     store = Store(resolved.data_dir)
     host = host_client or ControlDeckHostClient(
         resolved.control_deck_url,
         timeout_sec=resolved.host_request_timeout_sec,
+    )
+    reviewer = semantic_reviewer or OllamaSemanticReviewer(
+        resolved.semantic_reviewer_url,
+        resolved.semantic_reviewer_model,
+        timeout_sec=resolved.semantic_reviewer_timeout_sec,
     )
     manager = JobManager(
         store,
@@ -92,6 +99,7 @@ def create_app(
         model_manifest=resolved.model_manifest,
         hf_home=resolved.hf_home,
         image_runtime_python=resolved.image_runtime_python,
+        semantic_reviewer=reviewer,
     )
     workspace_test_delay_pending = True
 
@@ -307,6 +315,7 @@ def create_app(
 
     @app.get("/api/v1/capabilities")
     async def capabilities() -> dict[str, Any]:
+        semantic_available = await reviewer.available()
         return {
             "contract_version": "1.0",
             "capabilities": {
@@ -317,6 +326,11 @@ def create_app(
                 "image.variation": image_capability("image.variation"),
                 "image.multi_reference_edit": image_capability("image.multi_reference_edit"),
                 "image.strict_edit": image_capability("image.strict_edit"),
+                "image.semantic_review": (
+                    {"state": "available"}
+                    if semantic_available
+                    else {"state": "unavailable", "reason": "local_vlm_not_installed"}
+                ),
                 "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },

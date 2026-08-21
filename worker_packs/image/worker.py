@@ -139,7 +139,9 @@ class ImageWorker:
                 raise ValueError("strict edit dimensions must be in the range 1..2048")
         elif not 256 <= width <= 2048 or not 256 <= height <= 2048 or width % 16 or height % 16:
             raise ValueError("image dimensions must be multiples of 16 in the range 256..2048")
-        if not 1 <= steps <= 50 or not 1 <= count <= 8:
+        # Public output count remains capped at eight. Three additional bounded
+        # candidates are internal-only for semantic retry selection.
+        if not 1 <= steps <= 50 or not 1 <= count <= 11:
             raise ValueError("image steps or output count is outside the bounded range")
         prompt = request.get("intent")
         if not isinstance(prompt, str) or not prompt:

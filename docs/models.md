@@ -206,6 +206,50 @@ Qwen-Image remains **NOT TESTED** and was not downloaded. It is an alternative
 only if the accepted FLUX.2 route later fails the target-hardware or quality
 gate; candidates are not installed for their own sake.
 
+## G2 optional semantic reviewer — Qwen3-VL 2B
+
+Adoption state: **accepted as an explicit opt-in, CPU-only advisory reviewer**.
+It is not an image generator, does not replace deterministic validation, and is
+not called when `qa.semantic=false`.
+
+```text
+runtime: Ollama loopback API
+model: qwen3-vl:2b
+Ollama ID: 0635d9d857d4
+size: 1.9 GB
+parameters: 2.13B / Q4_K_M
+license: Apache-2.0
+```
+
+### `base-plan.md` section 24 adoption answers
+
+1. It fills G2's advisory semantic review after deterministic validation.
+2. It uses the generic `SemanticReviewer` boundary and loopback HTTP. The core
+   imports no model runtime and ControlDeck credentials are not reused.
+3. Two direct accepted reviews and two real product jobs ran on the R9700 host.
+   The deliberate mismatch product job produced two rejections as intended.
+4. Review input is normalized to RGB JPEG, at most 768x768 and 2 MiB; context is
+   4,096 tokens and retry count remains the public 0..3 bound.
+5. The exact Ollama manifest reports Apache-2.0.
+6. Reviewer identity and semantic result are recorded in provenance; the agent
+   generation response still exposes only job/asset IDs.
+7. It adds about 1.9 GB on disk and about 3.0..4.3 GiB RSS while loaded. The
+   request retains it for only one minute to cover bounded retries. Exact-path
+   cold/warm reviews measured 31.289228 / 13.745254 seconds.
+8. Ollama is a separate external process. Requests force `num_gpu=0`; observed
+   review-runner swap was zero and GPU VRAM did not increase.
+9. It uses Ollama's maintained Qwen3-VL runtime with structured output. No
+   custom kernels or arbitrary commands are introduced.
+10. Yes. Removing the model makes `image.semantic_review` unavailable without
+    changing the frozen job, asset, provenance, workflow, agent, or Add-on
+    contracts; ordinary generation and editing continue.
+
+The reviewer remains opt-in because CPU review latency and multi-GiB RSS
+are material. A local Ollama install is discovered, never downloaded during a
+job. Remote reviewer URLs are rejected. ControlDeck Gateway reuse is deferred
+until the Host exposes a generic scoped inference authority; Media Forge does
+not read or duplicate the Host's Gateway secret.
+
 ## G2 supplement — strict edit
 
 Adoption state: **accepted for `image.strict_edit` on the measured R9700
