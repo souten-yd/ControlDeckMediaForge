@@ -156,6 +156,50 @@ The symptom was similar, but process, GPU, disk, RSS, and swap observations
 localized this case to mmap transfer/device placement plus first-use ROCm
 compilation.
 
+### Direct-placement invariant and offload comparison (2026-08-22)
+
+The image adapter now inspects the loaded pipeline, text encoder, transformer,
+and VAE before accepting a direct-device load. In `direct_device_map` mode it
+fails the worker if any component remains on CPU/meta, any device map targets
+CPU/disk/meta, or any Accelerate CPU/offload hook is found. This prevents a
+library/runtime change from silently turning the measured route back into an
+offload route. The bounded placement summary is internal worker telemetry; it
+does not change the frozen public API.
+
+An exact-branch 512x512 / four-step ControlDeck Workflow/Broker run measured:
+
+```text
+direct_device_map total:                15.049693 s
+  adapter load / generation:            10.426083 / 1.487908 s
+  placement:                            pipeline/text encoder/transformer/VAE = cuda:0
+  offload hooks / non-GPU targets:      0 / 0
+  sampled incremental peak VRAM:        21,819,142,144 bytes (separate run)
+
+cpu_offload first valid comparison:     40.504328 s
+  adapter load / generation:            25.533552 / 7.037108 s
+  sampled incremental peak VRAM:         8,879,714,304 bytes
+cpu_offload cache-warm repeat:           18.069923 s
+  adapter load / generation:             9.655885 / 4.586891 s
+  placement:                            all four components resident on CPU between calls
+  detected offload hooks:               text encoder / transformer / VAE
+```
+
+The outputs were byte-identical for the same seed (168,170-byte PNG, SHA-256
+`9f644dfc60d63f51b14858fd01bd34b45f400c682019565cd001484ee48b7037`).
+Both routes acquired, renewed, and released a ControlDeck lease; no active
+Media Forge lease remained. One earlier comparison attempt was discarded after
+the observer itself polled two APIs every 50ms and caused `host_unreachable`;
+it is not included in the timing table.
+
+`cpu_offload` is therefore a real VRAM/latency tradeoff for constrained hardware,
+not a speed optimization and not the R9700 default. `direct_device_map` plus
+`disable_mmap` remains the standard route. The one-shot worker intentionally
+exits after lease release, so a later job reloads weights from the persistent
+NVMe/page/ROCm caches. Keeping a live 20+GB GPU pipeline between leases would
+misreport resident VRAM and obstruct ControlDeck's LLM coexistence policy;
+compiled caches can persist on NVMe, live GPU tensors cannot be treated as a
+reusable disk artifact.
+
 ## Deferred candidate — Qwen-Image
 
 Qwen-Image remains **NOT TESTED** and was not downloaded. It is an alternative

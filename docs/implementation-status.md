@@ -1,6 +1,6 @@
 # Media Forge implementation status
 
-Date: 2026-08-21
+Date: 2026-08-22
 Scope: MF0-0 through MF0-7 complete; G0 and G1 complete (`docs/implementation/mf0-addon-core.md`)
 Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
 Repository head released and verified for G1: `b29cec014f172b58058bd6e01ced60292e1085ae` (`v0.1.1`)
@@ -443,6 +443,30 @@ Hugging Face parallel loading reduced measured 512 load from 11.508421 to
 10.589401 seconds (about 8% of load time); it is retained as a secondary
 optimization, not described as the root fix. Persistent NVMe Hugging Face,
 AMD COMGR, and MIOpen cache paths are exported by `mf.sh`.
+
+On 2026-08-22 the direct route was hardened against silent regression into
+offload. After load, the worker inspects component devices, device maps, and
+Accelerate hooks; `direct_device_map` fails rather than succeeding if any
+CPU/disk/meta target or CPU/offload hook is present. The final real Workflow /
+Broker run completed in 15.049693 seconds (load 10.426083, generation 1.487908)
+with pipeline, text encoder, transformer, and VAE all on `cuda:0`, zero offload
+hooks, zero non-GPU targets, a released lease, and a 168,170-byte PNG.
+
+The bounded `cpu_offload` comparison completed in 40.504328 seconds on its first
+valid run (load 25.533552, generation 7.037108; sampled incremental peak VRAM
+8,879,714,304 bytes) and 18.069923 seconds after cache warm-up (load 9.655885,
+generation 4.586891). It left all four components on CPU between calls and the
+worker detected offload hooks on the text encoder, transformer, and VAE. A
+separate direct sample used 21,819,142,144 incremental bytes. Identical seed and
+settings produced the same SHA-256 on both routes. The first aggressive-observer
+attempt that caused `host_unreachable` is excluded, not relabeled as a model
+failure. These observations retain direct placement as default; offload is a
+low-VRAM diagnostic tradeoff rather than a speed fix.
+
+This hardening is the v0.1.2 release candidate. Relative to the frozen v0.1.1
+contract, `addon.json` changes only its release version; contribution IDs,
+schemas, agent/workflow inputs, and required asset/provenance fields are
+unchanged.
 
 ### R9700 measurements and lease envelope
 

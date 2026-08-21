@@ -62,6 +62,13 @@ def test_image_worker_returns_bounded_model_metadata_and_per_output_seed(monkeyp
             assert disable_mmap is True
             self.load_sec = 1.25
             self.last_generation_sec = None
+            self.placement = {
+                "component_devices": {"transformer": "cuda:0"},
+                "device_maps": {"pipeline": {"": "cuda"}},
+                "offload_hooks": [],
+                "non_gpu_devices": {},
+                "non_gpu_map_targets": [],
+            }
 
         def generate(self, request):
             request.output_path.write_bytes(b"png")
@@ -83,6 +90,13 @@ def test_image_worker_returns_bounded_model_metadata_and_per_output_seed(monkeyp
         "generation_sec": 1.0,
         "device_mode": "cpu_offload",
         "disable_mmap": True,
+        "placement": {
+            "component_devices": {"transformer": "cuda:0"},
+            "device_maps": {"pipeline": {"": "cuda"}},
+            "offload_hooks": [],
+            "non_gpu_devices": {},
+            "non_gpu_map_targets": [],
+        },
     }
 
 

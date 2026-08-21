@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,124 @@ class DiffusersFlux2KleinAdapter:
         self.pipeline: Any | None = None
         self.load_sec: float | None = None
         self.last_generation_sec: float | None = None
+        self.placement: dict[str, Any] = {}
+
+    @staticmethod
+    def _hook_uses_offload(hook: object, *, depth: int = 0) -> bool:
+        if depth > 4:
+            return False
+        hook_type = type(hook).__name__.lower()
+        if "offload" in hook_type:
+            return True
+        if getattr(hook, "offload", False) is True:
+            return True
+        nested = getattr(hook, "hooks", ())
+        if not isinstance(nested, (list, tuple)):
+            return False
+        return any(
+            DiffusersFlux2KleinAdapter._hook_uses_offload(item, depth=depth + 1)
+            for item in nested[:32]
+        )
+
+    @staticmethod
+    def _component_device(component: object) -> str | None:
+        device = getattr(component, "device", None)
+        if device is not None:
+            return str(device)
+        parameters = getattr(component, "parameters", None)
+        if not callable(parameters):
+            return None
+        try:
+            parameter = next(iter(parameters()))
+        except (StopIteration, TypeError):
+            return None
+        value = getattr(parameter, "device", None)
+        return str(value) if value is not None else None
+
+    @staticmethod
+    def _device_map(component: object) -> dict[str, str]:
+        value = getattr(component, "hf_device_map", None)
+        if not isinstance(value, dict):
+            return {}
+        return {
+            str(name)[:120]: str(target)[:40]
+            for name, target in list(value.items())[:64]
+        }
+
+    @classmethod
+    def _offload_hook_paths(cls, components: dict[str, object]) -> list[str]:
+        found: set[str] = set()
+        visited: set[int] = set()
+        for component_name, component in components.items():
+            candidates: list[tuple[str, object]] = [(component_name, component)]
+            named_modules = getattr(component, "named_modules", None)
+            if callable(named_modules):
+                try:
+                    candidates.extend(
+                        (f"{component_name}.{name}" if name else component_name, module)
+                        for name, module in islice(named_modules(), 8192)
+                    )
+                except (TypeError, RuntimeError):
+                    pass
+            for path, module in candidates:
+                identity = id(module)
+                if identity in visited:
+                    continue
+                visited.add(identity)
+                if cls._hook_uses_offload(getattr(module, "_hf_hook", None)):
+                    found.add(path[:200])
+                    if len(found) >= 64:
+                        return sorted(found)
+        return sorted(found)
+
+    def _inspect_placement(self, pipeline: object) -> dict[str, Any]:
+        components: dict[str, object] = {"pipeline": pipeline}
+        for name in ("text_encoder", "transformer", "vae"):
+            component = getattr(pipeline, name, None)
+            if component is not None:
+                components[name] = component
+        devices = {
+            name: device
+            for name, component in components.items()
+            if (device := self._component_device(component)) is not None
+        }
+        device_maps = {
+            name: mapping
+            for name, component in components.items()
+            if (mapping := self._device_map(component))
+        }
+        offload_hooks = self._offload_hook_paths(components)
+        non_gpu_devices = {
+            name: device
+            for name, device in devices.items()
+            if not device.lower().startswith(("cuda", "hip"))
+        }
+        non_gpu_map_targets = sorted({
+            target
+            for mapping in device_maps.values()
+            for target in mapping.values()
+            if target.lower() in {"cpu", "disk", "meta"}
+        })
+        return {
+            "component_devices": devices,
+            "device_maps": device_maps,
+            "offload_hooks": offload_hooks,
+            "non_gpu_devices": non_gpu_devices,
+            "non_gpu_map_targets": non_gpu_map_targets,
+        }
+
+    def _verify_direct_placement(self) -> None:
+        if self.device_mode != "direct_device_map":
+            return
+        if (
+            self.placement.get("offload_hooks")
+            or self.placement.get("non_gpu_devices")
+            or self.placement.get("non_gpu_map_targets")
+        ):
+            raise RuntimeError(
+                "direct_device_map unexpectedly selected CPU/disk offload: "
+                f"{self.placement}"
+            )
 
     def load(self) -> None:
         if self.pipeline is not None:
@@ -68,6 +187,8 @@ class DiffusersFlux2KleinAdapter:
             pipeline.to("cuda")
         pipeline.set_progress_bar_config(disable=True)
         torch.cuda.synchronize()
+        self.placement = self._inspect_placement(pipeline)
+        self._verify_direct_placement()
         self.pipeline = pipeline
         self.load_sec = time.perf_counter() - started
 

@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from worker_packs.image.adapters.diffusers_flux2 import DiffusersFlux2KleinAdapter
 
 
@@ -71,6 +73,69 @@ def test_direct_no_mmap_loads_diffusers_and_qwen_components_on_device(monkeypatc
     assert "offload" not in calls
     assert calls["progress"] == {"disable": True}
     assert synchronize_calls == [True]
+    assert adapter.placement == {
+        "component_devices": {},
+        "device_maps": {},
+        "offload_hooks": [],
+        "non_gpu_devices": {},
+        "non_gpu_map_targets": [],
+    }
+
+
+@pytest.mark.parametrize(
+    "transformer",
+    [
+        SimpleNamespace(device="cpu", hf_device_map={"": "cpu"}),
+        SimpleNamespace(
+            device="cuda:0",
+            hf_device_map={"": "cuda"},
+            _hf_hook=SimpleNamespace(offload=True),
+        ),
+        SimpleNamespace(
+            device="cuda:0",
+            hf_device_map={"": "cuda"},
+            named_modules=lambda: [
+                ("layer", SimpleNamespace(_hf_hook=SimpleNamespace(offload=True)))
+            ],
+        ),
+    ],
+)
+def test_direct_device_map_rejects_unexpected_offload(monkeypatch, tmp_path: Path, transformer):
+    model = tmp_path / "model"
+    model.mkdir()
+
+    class Pipeline:
+        hf_device_map = {"transformer": "cuda"}
+
+        def __init__(self):
+            self.transformer = transformer
+
+        @classmethod
+        def from_pretrained(cls, _path, **_kwargs):
+            return cls()
+
+        def set_progress_bar_config(self, **_kwargs):
+            pass
+
+    fake_torch = SimpleNamespace(
+        bfloat16=object(),
+        cuda=SimpleNamespace(synchronize=lambda: None),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "diffusers", SimpleNamespace(Flux2KleinPipeline=Pipeline))
+
+    adapter = DiffusersFlux2KleinAdapter(
+        model,
+        device_mode="direct_device_map",
+        disable_mmap=False,
+    )
+    with pytest.raises(RuntimeError, match="unexpectedly selected CPU/disk offload"):
+        adapter.load()
+
+
+def test_accelerate_cpu_offload_hook_type_is_detected():
+    CpuOffload = type("CpuOffload", (), {})
+    assert DiffusersFlux2KleinAdapter._hook_uses_offload(CpuOffload()) is True
 
 
 def test_full_device_uses_post_load_transfer_without_qwen_preload(monkeypatch, tmp_path: Path):

@@ -155,6 +155,7 @@ class ImageWorker:
                 "generation_sec": generation_sec,
                 "device_mode": device_mode,
                 "disable_mmap": disable_mmap,
+                "placement": adapter.placement,
             },
         }
 
