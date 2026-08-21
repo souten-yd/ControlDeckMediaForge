@@ -3,6 +3,10 @@
 Status: Draft / baseline architecture  
 Date: 2026-08-20
 
+Implementation: G0 / MF0 completed on 2026-08-21. G1 model adoption and image
+generation are not started; see `docs/implementation-status.md` for measured
+evidence and remaining NOT TESTED items.
+
 ## 1. Purpose
 
 ControlDeck Media Forge (Media Forge) is a **local-first, general-purpose media generation subsystem** that can be installed as a ControlDeck add-on while remaining useful through a stable API outside ControlDeck.

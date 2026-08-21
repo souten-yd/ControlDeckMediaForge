@@ -1,8 +1,8 @@
 # Media Forge implementation status
 
 Date: 2026-08-21
-Scope: MF0-0 through MF0-6 complete; MF0-7 A-I/K-N verified, J OpenCode discovery remains pending (`docs/implementation/mf0-addon-core.md`)
-Repository head at start: `c76ab5c8f498a94dbfcc568d83f46c7dd20cfe71` (`origin/main`)
+Scope: MF0-0 through MF0-7 complete; G0 complete (`docs/implementation/mf0-addon-core.md`)
+Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
 
 ## MF0-0 — COMPLETE for the requested environment slice
 
@@ -148,7 +148,7 @@ collection. No ControlDeck module, cookie, signing key, or path crossed into
 Media Forge. Final `./mf.sh test` completed with 51 passed in 3.38 seconds;
 this is regression evidence, not a substitute for the real-process run above.
 
-## MF0-5 / MF0-6 — COMPLETE; MF0-7 — OPENCode DISCOVERY PENDING
+## MF0-5 / MF0-6 / MF0-7 — COMPLETE
 
 The embedded workspace provides Create, Library, Jobs, Models, and Settings without localStorage, sessionStorage, cookies, or parent DOM access. It waits for the MessageChannel handshake before first paint, validates the parent origin, applies initial/theme-change tokens without reload, handles locale/safe-area/route/session/disable events, syncs routes, updates the title, exposes the command-palette shortcut, and clears busy state on disable. Standalone rendering remains available when the page is not framed.
 
@@ -196,9 +196,39 @@ test endpoints are explicitly enabled. The assertion captured the actual Host
 iframe as `invisible` with its connection overlay visible before the delayed
 workspace response, then observed the bridge becoming ready.
 
-MF0-7 is not complete yet. Check J was exercised through the real ControlDeck
-Agent Tool API, but no OpenCode process discovered the tool. This remains a Host
-generic agent-tool projection gap; it is not replaced by an API-only claim.
+Check J was completed after the generic Host projection shipped in ControlDeck
+PR #214 (merge `60ab09d8`). No Media-specific route, dependency, tool, or
+capability was added to ControlDeck. An isolated ControlDeck process generated a
+0600 OpenCode runtime config whose local stdio MCP projected the current effective
+Add-on agent tools. External OpenCode 1.18.18 reported
+`controldeck_addons connected` and discovered these three public contributions:
+
+```text
+media.capabilities
+media.generate
+media.inspect
+```
+
+The stdio MCP called `media.capabilities` through the real Host endpoint and
+received ControlDeck Job `4aa6c2f74ae9` plus opaque asset ID
+`job-result:4aa6c2f74ae9`. With that token still alive, disabling Media Forge
+changed discovery from 3 tools to 0; re-enabling changed it from 0 to 3. This
+proves discovery is based on current Host availability rather than a stale
+startup snapshot.
+
+Finally, a real `opencode run` process called
+`controldeck_addons_media_capabilities` exactly once, received Host Job
+`7966ff194635`, and replied `available`. The process exited 0 in 19.5 seconds.
+The tool result contained capability names and fake availability metadata but no
+`model_id`, model field, FLUX, or Qwen identity. The first `auto` attempt started
+the local 27B model but did not reach a tool call within five minutes; it was
+interrupted and is not counted as success. The bounded retry used the already
+loaded local model with minimal reasoning and completed.
+
+After verification, Media Forge was disabled and uninstalled through the public
+Host API. The isolated Host and Media Forge processes, ports 18770/9134, and the
+Qwen3.8-27B instance started for this check on port 8097 were stopped. The
+token-bearing runtime config and login cookie were deleted.
 
 ## Implemented artifacts
 
@@ -349,7 +379,7 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 ## Additional behavior checks
 
 - Temporarily removing the GPU snapshot left the real core service running. Health returned HTTP 200 / `setup_required`, with `gpu.state=checking`; restoring and rerunning the GPU check returned it to `ok`.
-- Latest full `./mf.sh test`: 52 passed in 3.36 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
+- Latest full `./mf.sh test`: 52 passed in 3.37 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
 - `bash -n mf.sh` and `git diff --check` passed. These are static checks only.
 - ControlDeck's generic Context Action route gap was fixed and merged separately
   in ControlDeck PR #213 (`a5e4fc7`). No Media-specific route, action, dependency,
@@ -360,7 +390,6 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 - Worker-pack enable/disable mutation of `.refs`: no worker-pack lifecycle is present yet. The current non-empty reference and prune protection were tested.
 - Hugging Face model download/cache reuse: no model adoption or weights belong to MF0-0.
 - Model library configuration: deliberately remains `missing`; selecting and benchmarking a model belongs to G1.
-- OpenCode discovery is NOT TESTED. Agent tool invocation through the real ControlDeck API and its ControlDeck Job response were tested, but no OpenCode process was involved.
 - ControlDeck Jobs creation, Broker waiting reason, and lease cleanup were
   observed through the real Host API during the browser run. Dedicated visual
   inspection of the Jobs/Broker detail screens and their cancel controls remains
@@ -371,7 +400,7 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 
 ## Scope boundary
 
-No real model or Diffusers adapter is included. MF0-0 through MF0-6 are complete;
-MF0-7 and therefore G0 remain incomplete only because actual OpenCode discovery
-has not run. The ROCm runtime check is environment qualification only and is not
-a model benchmark or a G1 implementation.
+No real image model or Diffusers adapter is included. MF0-0 through MF0-7 and
+therefore G0 are complete. The local LLM used to prove OpenCode tool invocation
+is not a Media Forge generation model or a G1 benchmark. G1 has not started; the
+ROCm runtime check remains environment qualification only.
