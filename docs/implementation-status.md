@@ -3,7 +3,7 @@
 Date: 2026-08-22
 Scope: MF0-0 through MF0-7 complete; G0 and G1 complete (`docs/implementation/mf0-addon-core.md`)
 Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
-Repository head released and verified for G1: `b29cec014f172b58058bd6e01ced60292e1085ae` (`v0.1.1`)
+Repository head released and verified for G1: `1e88472e753fd484638f072f7c4b327c8010ab60` (`v0.1.2`)
 
 ## MF0-0 — COMPLETE for the requested environment slice
 
@@ -403,8 +403,8 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 
 MF0-0 through MF0-7 / G0 and G1 are complete. The real image route, R9700
 acceptance evidence, and trusted release-bundle standard installation path were
-exercised end-to-end. Media Forge PRs #10/#11 and ControlDeck's generic provider
-PRs #216/#217 are merged. G2 and later have not started.
+exercised end-to-end. Media Forge PRs #10/#11/#14 and ControlDeck's generic provider
+PRs #216/#217/#219 are merged. G2 and later have not started.
 
 ## G1 — local image generation (COMPLETE, 2026-08-21)
 
@@ -463,10 +463,31 @@ attempt that caused `host_unreachable` is excluded, not relabeled as a model
 failure. These observations retain direct placement as default; offload is a
 low-VRAM diagnostic tradeoff rather than a speed fix.
 
-This hardening is the v0.1.2 release candidate. Relative to the frozen v0.1.1
+This hardening is released as v0.1.2. Relative to the frozen v0.1.1
 contract, `addon.json` changes only its release version; contribution IDs,
 schemas, agent/workflow inputs, and required asset/provenance fields are
 unchanged.
+
+The public GitHub Release artifact
+`control-deck-media-forge-0.1.2-linux-x86_64.tar.gz` is 29,043,648 bytes with
+SHA-256 `855303fd90e25e2ff2886b255fd98365c862eb417e0e57268cb0e8a27c06916c`.
+Its release digest, downloaded file, and ControlDeck trusted-catalog pin agree.
+The archive contains neither a venv nor model weights; its packaged provision
+reused the persistent runtime/model cache and completed in 4.972467 seconds.
+
+ControlDeck PR #219 installed that exact public bundle through the standard
+release-bundle provider in 18.375702 seconds. A real Workflow/Broker generation
+then completed in 13.327802 seconds (load 9.265287, generation 1.483399), with
+all four inspected components on `cuda:0`, no offload hooks or non-GPU map
+targets, and the lease released. A final exact-PR-head Chromium run traversed
+Settings disable/enable, the opaque Media iframe, Models, Create, Library, and
+Provenance in 16.2 seconds with zero page errors. Its separate image job took
+12.888887 seconds (load 9.013070, generation 1.458398), again with direct GPU
+placement and zero active/waiting Broker work afterward.
+
+A fully empty Hugging Face cache download of approximately 15.99 GB remains
+NOT TESTED. The release download and warm persistent-cache reuse above are not
+presented as empty-cache model-download evidence.
 
 ### R9700 measurements and lease envelope
 
