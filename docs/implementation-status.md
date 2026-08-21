@@ -124,19 +124,20 @@ allowlist. Media Forge then removed both fail-closed availability blocks, runs
 Workflow generation through the same leased Host Job path, and consumes the
 actual Context Action read grant without receiving or reflecting a path.
 
-Current exact-merge real-process acceptance used ControlDeck main `2dad80b3`, isolated
-ControlDeck／Media Forge data, separate Uvicorn processes, the public Host API,
-and the real AMD GPU Broker. The complete run took 17.544168 seconds:
+Current exact-code real-process acceptance used ControlDeck main `2dad80b3` and
+Media Forge `e0f4b89`, isolated ControlDeck／Media Forge data, separate Uvicorn
+processes, the public Host API, and the real AMD GPU Broker. The complete run
+took 20.199074 seconds:
 
 ```text
 discovery: workflow executor 1, context action 1
 workflow dry-run: Media Forge Job delta 0
 workflow execution: SUCCEEDED; generated Media Forge Job succeeded
 context file: 1206-byte 48x48 RGBA PNG validated through Runtime grant; path/grant reflected false
-normal generation: 0.605402 sec; 335544320-byte gpu0 reservation; lease released
+normal generation: 0.627521 sec; 335544320-byte gpu0 reservation; lease released
 two concurrent Jobs: second device_busy_exclusive / queue 1; both leases released
 Host cancel: Job canceled; lease released
-10-second Job: 10.649874 sec; lease renew delta 5; lease released
+10-second Job: 13.094774 sec wall time; lease renew delta 5; lease released
 scoped read/output: 1206 bytes; SHA-256 identical; Host asset committed
 disable while active: Job canceled; lease released; re-enable healthy
 ```
