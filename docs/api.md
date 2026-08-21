@@ -78,6 +78,16 @@ It reports text generation, single-reference edit, multi-reference edit,
 inpaint, outpaint, variation, and strict edit independently from installed measured model capabilities and never
 exposes the automatically selected model ID.
 
+`image.semantic_review` is available only when the configured loopback local
+VLM is installed. `qa.semantic=false` never calls it. With semantic review
+enabled and `max_regeneration_attempts=0`, a subjective rejection is advisory:
+the deterministic-valid asset succeeds with a provenance warning. A positive
+retry budget is explicit opt-in; Media Forge creates only that many additional
+candidates, selects the first accepted candidate, and fails with
+`semantic_review_exhausted` when the bounded candidates are all rejected.
+Deterministic validation completes first and can never be overridden by a
+semantic pass. The reviewer runs CPU-only and remote reviewer URLs are rejected.
+
 ## Models
 
 `GET /api/v1/models` reports entries conforming to

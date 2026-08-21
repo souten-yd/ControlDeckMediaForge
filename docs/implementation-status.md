@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-22
-Scope: MF0-0 through MF0-7 complete; G0 and G1 complete; G2 edit slices implemented and measured
+Scope: MF0-0 through MF0-7 and G0 through G2 complete
 Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
 Repository head released and verified for G1: `1e88472e753fd484638f072f7c4b327c8010ab60` (`v0.1.2`)
 
@@ -401,11 +401,11 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 
 ## Scope boundary
 
-MF0-0 through MF0-7 / G0 and G1 are complete. The real image route, R9700
+MF0-0 through MF0-7 / G0 through G2 are complete. The real image route, R9700
 acceptance evidence, and trusted release-bundle standard installation path were
 exercised end-to-end. Media Forge PRs #10/#11/#14 and ControlDeck's generic provider
-PRs #216/#217/#219 are merged. G2 is in progress; its measured strict-edit
-vertical slice is recorded below. G3 and later have not started.
+PRs #216/#217/#219 are merged. G2's measured editing and bounded semantic-review
+evidence is recorded below. G3 and later have not started.
 
 ## G1 — local image generation (COMPLETE, 2026-08-21)
 
@@ -634,11 +634,10 @@ requires the documented impact, migration, and contract/schema version bump.
 - The installed-bundle Settings/Create E2E used a 1280x800 Chromium viewport.
   A separate 320px mobile Settings layout run is NOT TESTED; Media uses the
   declared companion surface rather than squeezing the workspace into mobile.
-- G2 non-strict single-reference edit, inpaint, outpaint, variation, multi-reference
-  edit, and VLM semantic review are NOT TESTED. G3 character consistency and G5
-  M5Stack expression/gesture variants have not started out of roadmap order.
+- G3 character consistency and G5 M5Stack expression/gesture variants have not
+  started out of roadmap order.
 
-## G2 — image editing (IN PROGRESS, measured 2026-08-22)
+## G2 — image editing (COMPLETE, measured 2026-08-22)
 
 The existing frozen `image.edit` operation now accepts exactly one imported
 source asset plus `strict_edit=true` and an `editable_mask_asset_id`. Imports
@@ -737,14 +736,17 @@ Focused outpaint/edit/adapter/API/host regression completed with 85 passed.
 Full `./mf.sh test` completed with 118 passed in 9.65 seconds. These are
 regression evidence only.
 
-### NOT TESTED / remaining G2
+### NOT TESTED / remaining limits
 
-- VLM semantic review with bounded retry remains NOT TESTED and is required
-  before G2 completion.
 - Natural OOM during edit is NOT TESTED. Existing conservative G1 lease values
   remain in use; the sampled absolute VRAM value is not substituted for the
   lease envelope.
-- G2 is not marked complete, and no release version is assigned by this slice.
+- A 60-second Host iframe proxy read bound returned 502 before the intentionally
+  failing 108-second two-candidate semantic review reached its terminal state.
+  The durable Media Forge and ControlDeck Jobs continued, stopped at the stated
+  retry budget, and released the lease. Long synchronous agent-tool UX belongs
+  to G4 and is not claimed as solved by G2.
+- No release version is assigned by this source-development slice.
 
 ### Single-reference edit, inpaint, and variation
 
@@ -820,3 +822,50 @@ Evidence is retained under
 Focused multi-reference/edit/adapter/API/host regression completed with 90
 passed. Full `./mf.sh test` completed with 123 passed in 6.54 seconds. These are
 regression evidence only.
+
+### Bounded semantic review
+
+The frozen `qa.semantic` and `qa.max_regeneration_attempts` fields now drive an
+optional local VLM review. The reviewer endpoint is restricted to a loopback
+HTTP origin; its request forces `num_gpu=0`, `temperature=0`, a 4,096-token
+context, structured output, and a 768x768 / 2 MiB maximum review image. Core has
+no VLM/torch dependency. `image.semantic_review` is unavailable when the exact
+configured model is absent.
+
+Deterministic validation of every candidate completes before the first VLM
+call. With the default retry budget zero, rejection is advisory and is retained
+as a provenance warning. A positive budget is explicit opt-in: only `count +
+budget` candidates are generated and all-rejected output fails with
+`semantic_review_exhausted`; a semantic pass never overrides a deterministic
+failure.
+
+The optional reviewer is Ollama `qwen3-vl:2b`, ID `0635d9d857d4`, 1.9 GB,
+Apache-2.0. Direct R9700-host measurements using the retained Media
+Forge-generated 512x512 character were:
+
+```text
+first CPU-only review before bounded-JPEG change: 40.665945 sec
+warm review before bounded-JPEG change:           16.612088 sec
+exact bounded-JPEG cold review:                   31.289228 sec
+exact bounded-JPEG warm review:                   13.745254 sec
+Ollama processor:                                 100% CPU
+review runner RSS observed:                       about 3.0..4.3 GiB
+review runner swap:                               0 bytes
+GPU VRAM before/after direct review:              184,848,384 / 184,848,384 bytes
+```
+
+A real ControlDeck agent/Broker product job generated a new 512x512 image and
+then reviewed it successfully in 40 seconds. The exact final branch repeated
+the same job in 35 seconds as asset
+`asset_c99a931c8d624d6baeee6262682f3757`. It recorded the real FLUX model, reviewer,
+passed deterministic validators, semantic result, seed, license, and output
+SHA-256 `8f6b4aa1...69fd78c`; the two outputs were byte-identical and all 17 observed
+Broker leases were released with zero waiting requests after the run.
+
+A second real strict-edit job deliberately requested a full-scene blue
+elephant through a small edit mask. Both VLM reviews rejected the two bounded
+candidates and the durable job failed explicitly with
+`semantic_review_exhausted` at retry budget one after about 108 seconds. No
+asset was registered and the Broker lease was released. Full `./mf.sh test`
+completed with 133 passed on the final branch. These are regression evidence
+only; the real jobs above are the runtime evidence.
