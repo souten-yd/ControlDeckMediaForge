@@ -42,6 +42,7 @@ class Store:
                     asset_ids_json TEXT NOT NULL,
                     error_json TEXT,
                     cancel_requested INTEGER NOT NULL DEFAULT 0,
+                    host_managed INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -57,6 +58,9 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_assets_created ON assets(created_at DESC);
                 """
             )
+            columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(jobs)")}
+            if "host_managed" not in columns:
+                connection.execute("ALTER TABLE jobs ADD COLUMN host_managed INTEGER NOT NULL DEFAULT 0")
             connection.execute(
                 """UPDATE jobs SET status = ?, phase = NULL,
                    error_json = ?, updated_at = ? WHERE status = ?""",
@@ -65,6 +69,20 @@ class Store:
                     json.dumps({"code": "service_restarted", "message": "Service restarted while the worker was running"}),
                     utc_now(),
                     JobStatus.RUNNING,
+                ),
+            )
+            connection.execute(
+                """UPDATE jobs SET status = ?, phase = NULL,
+                   error_json = ?, updated_at = ?
+                   WHERE status = ? AND host_managed = 1""",
+                (
+                    JobStatus.FAILED,
+                    json.dumps({
+                        "code": "host_context_lost",
+                        "message": "Service restarted after the short-lived ControlDeck job credential was lost",
+                    }),
+                    utc_now(),
+                    JobStatus.QUEUED,
                 ),
             )
         for entry in self.work_dir.iterdir():
@@ -80,16 +98,16 @@ class Store:
         connection.execute("PRAGMA foreign_keys=ON")
         return connection
 
-    def create_job(self, request: JobRequest) -> Job:
+    def create_job(self, request: JobRequest, *, host_managed: bool = False) -> Job:
         now = utc_now()
         job_id = f"job_{uuid.uuid4().hex}"
         with self._lock, self._connect() as connection:
             connection.execute(
                 """INSERT INTO jobs
                    (id, status, phase, progress, request_json, asset_ids_json, error_json,
-                    cancel_requested, created_at, updated_at)
-                   VALUES (?, ?, NULL, 0, ?, '[]', NULL, 0, ?, ?)""",
-                (job_id, JobStatus.QUEUED, request.model_dump_json(), now, now),
+                    cancel_requested, host_managed, created_at, updated_at)
+                   VALUES (?, ?, NULL, 0, ?, '[]', NULL, 0, ?, ?, ?)""",
+                (job_id, JobStatus.QUEUED, request.model_dump_json(), int(host_managed), now, now),
             )
         return self.get_job(job_id)
 

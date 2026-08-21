@@ -20,9 +20,11 @@ docs/implementation-status.md         現在の進捗。必ず確認・更新す
 ## 現在地
 
 MF0-0〜MF0-3（分離環境、health、durable job、fake worker、asset/provenance）まで実装済み。
-MF0-5/6のworkspaceと実行endpointは、host契約が許す範囲でinstalled-host browser実測済みだが、
-MF0-4は参照ControlDeckにservice-side resource / Jobs / files bridgeが存在せずhost-blocked。
-次は `docs/implementation-status.md` のblockerを再検証してからMF0-4を完了させる。
+MF0-4のtoken introspection / Jobs / resource lease / scoped files bridgeは、Hostが受理する
+identity経路で実装・実機確認済み。workflow:* と context:* subjectをHost Runtime側が受理しない
+2件はfail-closedのまま未完了。MF0-5/6のworkspaceと実行endpointも、host契約が許す範囲で
+installed-host browser実測済み。次は `docs/implementation-status.md` の2件のHost blockerを
+再検証してMF0-4を完了させる。
 各段階を飛ばさず、実機証跡を `docs/implementation-status.md` に追記する。
 全体像は `docs/implementation/goal-roadmap.md`（G0〜G10）。
 

@@ -14,10 +14,12 @@ asset APIs below, the embedded workspace, and the Add-on execution endpoints. It
 `MEDIA_FORGE_ENABLE_TEST_ENDPOINTS=1`.
 
 Add-on execution requires an audience-bound ControlDeck service token and
-`X-Control-Deck-Addon-ID: media-forge`. The verification key must be explicitly
-provisioned. Workflow and agent generation remain unavailable in health because
-the referenced host revision has no service-side resource lease/Jobs bridge;
-there is no unleased or cookie-based fallback.
+`X-Control-Deck-Addon-ID: media-forge`. Media Forge validates it through the
+ControlDeck Add-on Runtime introspection API; no Host signing key or session
+cookie is provisioned to Media Forge. Agent and workspace generation use the
+Host Jobs and resource APIs. Workflow execution remains fail-closed because the
+current Host issues a `workflow:*` subject that its Add-on Runtime Jobs and
+resource APIs do not accept; there is no unleased or cookie-based fallback.
 
 The embedded opaque-origin workspace uses the private `/ws` transport through
 ControlDeck's nonce-bound WebSocket proxy. It accepts only a bounded set of
@@ -57,9 +59,16 @@ ControlDeck calls `/addon/v1/*` endpoints declared by [`addon.json`](../addon.js
 
 Context actions require a host-issued opaque `grant:` ID. Raw paths are rejected. Project commit is not available before G4.
 
-`GET /api/v1/host-integration` reports non-secret integration readiness. It does
-not expose tokens, key paths, lease details belonging to other owners, or a host
-filesystem path.
+The current Host can read and commit scoped grants for numeric-user and `job:*`
+subjects. Its context-action token uses a `context:*` subject that the Runtime
+grant API does not yet resolve, so actual context-action file consumption is
+fail-closed. The development-only `/test/host-files/roundtrip` endpoint exercises
+the same private Host bridge with accepted identity forms and is hidden unless
+test endpoints are explicitly enabled.
+
+`GET /api/v1/host-integration` reports non-secret integration readiness and
+known Host limitations. It does not expose tokens, lease details belonging to
+other owners, or a host filesystem path.
 
 ## Contract evolution
 

@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
+from .host.client import ControlDeckHostClient, HostApiError
+from .host.jobs import HostExecution, HostJobReporter
+from .host.resources import fake_image_request
 from .paths import contained
 from .store import Store, utc_now
 from .validators import validate_png
@@ -30,16 +33,29 @@ class WorkerFailure(RuntimeError):
 class JobManager:
     """Durable queue with a single worker-local execution guard.
 
-    G0 jobs are CPU-only fake jobs. GPU workers added in G1 must acquire and
-    renew a ControlDeck broker lease before entering this execution section.
+    Host-originated jobs use the ControlDeck broker contract even with the G0
+    fake worker. Standalone jobs remain usable without a host connection.
     """
 
-    def __init__(self, store: Store, *, worker_timeout_sec: float = 30.0):
+    def __init__(
+        self,
+        store: Store,
+        *,
+        worker_timeout_sec: float = 30.0,
+        host_client: ControlDeckHostClient | None = None,
+        lease_renew_sec: float = 10.0,
+    ):
         self.store = store
         self.worker_timeout_sec = worker_timeout_sec
+        self.host_client = host_client
+        self.lease_renew_sec = lease_renew_sec
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
         self._runner: asyncio.Task[None] | None = None
+        self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._processes: dict[str, asyncio.subprocess.Process] = {}
+        self._host_executions: dict[str, HostExecution] = {}
+        self._host_failures: dict[str, HostApiError] = {}
+        self._execution_guard = asyncio.Semaphore(1)
         self._stopping = False
 
     async def start(self) -> None:
@@ -54,15 +70,17 @@ class JobManager:
         if self._runner is None:
             return
         self._stopping = True
-        processes = list(self._processes.items())
-        for job_id, process in processes:
+        active_job_ids = list(self._job_tasks)
+        for job_id in active_job_ids:
             current = self.store.get_job(job_id)
-            if current.status == JobStatus.RUNNING:
+            if current.status in {JobStatus.QUEUED, JobStatus.RUNNING}:
                 self.store.update_job(
                     job_id,
                     status=JobStatus.FAILED,
-                    error=ErrorDetail(code="service_stopped", message="Service stopped while the worker was running"),
+                    error=ErrorDetail(code="service_stopped", message="Service stopped while the job was active"),
                 )
+        processes = list(self._processes.items())
+        for job_id, process in processes:
             if process.returncode is None:
                 process.terminate()
         self._runner.cancel()
@@ -70,6 +88,11 @@ class JobManager:
             await self._runner
         except asyncio.CancelledError:
             pass
+        tasks = list(self._job_tasks.values())
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         for _, process in processes:
             if process.returncode is None:
                 try:
@@ -84,6 +107,14 @@ class JobManager:
         self._queue.put_nowait(job.id)
         return job
 
+    def submit_hosted(self, request: JobRequest, execution: HostExecution) -> Job:
+        if self.host_client is None:
+            raise RuntimeError("ControlDeck Host client is not configured")
+        job = self.store.create_job(request, host_managed=True)
+        self._host_executions[job.id] = execution
+        self._queue.put_nowait(job.id)
+        return job
+
     async def cancel(self, job_id: str) -> Job:
         job = self.store.request_cancel(job_id)
         process = self._processes.get(job_id)
@@ -91,32 +122,48 @@ class JobManager:
             process.terminate()
         return self.store.get_job(job_id)
 
+    async def wait_cleanup(self, job_id: str, timeout: float = 5.0) -> None:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while job_id in self._job_tasks:
+            if asyncio.get_running_loop().time() >= deadline:
+                raise TimeoutError(f"job {job_id} cleanup did not finish")
+            await asyncio.sleep(0.01)
+
     async def _run(self) -> None:
         while True:
             job_id = await self._queue.get()
             if job_id is None:
                 return
+            task = asyncio.create_task(self._run_one(job_id), name=f"media-forge-job-{job_id}")
+            self._job_tasks[job_id] = task
+
+    async def _run_one(self, job_id: str) -> None:
+        try:
+            await self._execute(job_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # final isolation boundary; runner must survive a job defect
             try:
-                await self._execute(job_id)
-            except Exception as exc:  # final isolation boundary; runner must survive a job defect
+                current = self.store.get_job(job_id)
+                if current.status not in {JobStatus.CANCELED, JobStatus.SUCCEEDED, JobStatus.FAILED}:
+                    self.store.update_job(
+                        job_id,
+                        status=JobStatus.FAILED,
+                        error=ErrorDetail(code="internal_error", message=str(exc)[:300]),
+                    )
+            except KeyError:
+                pass
+        finally:
+            job_root = contained(self.store.work_dir, self.store.work_dir / job_id)
+            if job_root.exists():
                 try:
-                    current = self.store.get_job(job_id)
-                    if current.status not in {JobStatus.CANCELED, JobStatus.SUCCEEDED, JobStatus.FAILED}:
-                        self.store.update_job(
-                            job_id,
-                            status=JobStatus.FAILED,
-                            error=ErrorDetail(code="internal_error", message=str(exc)[:300]),
-                        )
-                except KeyError:
-                    pass
-            finally:
-                job_root = contained(self.store.work_dir, self.store.work_dir / job_id)
-                if job_root.exists():
-                    try:
-                        shutil.rmtree(job_root)
-                    except OSError:
-                        logger.exception("failed to remove bounded job work directory for %s", job_id)
-                self._queue.task_done()
+                    shutil.rmtree(job_root)
+                except OSError:
+                    logger.exception("failed to remove bounded job work directory for %s", job_id)
+            self._host_executions.pop(job_id, None)
+            self._host_failures.pop(job_id, None)
+            self._job_tasks.pop(job_id, None)
+            self._queue.task_done()
 
     async def _execute(self, job_id: str) -> None:
         job = self.store.get_job(job_id)
@@ -129,9 +176,39 @@ class JobManager:
                 error=ErrorDetail(code="capability_unavailable", message=f"{job.request.operation} is unavailable in G0"),
             )
             return
-        self.store.update_job(job_id, status=JobStatus.RUNNING, phase="normalize_request", progress=0.01)
-        self.store.update_job(job_id, phase="select_model", progress=0.03)
-        self.store.update_job(job_id, phase="generating", progress=0.05)
+        execution = self._host_executions.get(job_id)
+        reporter = (
+            HostJobReporter(self.host_client, execution)
+            if execution is not None and self.host_client is not None
+            else None
+        )
+        maintenance: asyncio.Task[None] | None = None
+        try:
+            if execution is not None:
+                admitted = await self._acquire_host_lease(job, execution, reporter)
+                if not admitted:
+                    return
+                maintenance = asyncio.create_task(
+                    self._maintain_host_lease(job_id, execution),
+                    name=f"media-forge-lease-{job_id}",
+                )
+            async with self._execution_guard:
+                if self.store.cancel_requested(job_id):
+                    await self._finish_canceled(job_id, reporter)
+                    return
+                await self._execute_worker(job_id, reporter)
+        finally:
+            if maintenance is not None:
+                maintenance.cancel()
+                await asyncio.gather(maintenance, return_exceptions=True)
+            if execution is not None:
+                await self._release_host_resource(execution)
+
+    async def _execute_worker(self, job_id: str, reporter: HostJobReporter | None) -> None:
+        job = self.store.get_job(job_id)
+        await self._update(job_id, reporter, status=JobStatus.RUNNING, phase="normalize_request", progress=0.01)
+        await self._update(job_id, reporter, phase="select_model", progress=0.03)
+        await self._update(job_id, reporter, phase="generating", progress=0.05)
         job_root = contained(self.store.work_dir, self.store.work_dir / job_id)
         if job_root.exists():
             shutil.rmtree(job_root)
@@ -160,9 +237,11 @@ class JobManager:
         except TimeoutError:
             process.kill()
             await process.wait()
-            self.store.update_job(
+            await self._update(
                 job_id,
+                reporter,
                 status=JobStatus.FAILED,
+                phase="generating",
                 error=ErrorDetail(code="worker_timeout", message="fake worker exceeded its timeout"),
             )
             return
@@ -170,13 +249,25 @@ class JobManager:
             self._processes.pop(job_id, None)
         if self._stopping:
             return
+        host_failure = self._host_failures.get(job_id)
+        if host_failure is not None:
+            await self._update(
+                job_id,
+                reporter,
+                status=JobStatus.FAILED,
+                phase="generating",
+                error=ErrorDetail(code=host_failure.code, message=str(host_failure)[:300]),
+            )
+            return
         if self.store.cancel_requested(job_id):
-            self.store.update_job(job_id, status=JobStatus.CANCELED, progress=0)
+            await self._finish_canceled(job_id, reporter)
             return
         if len(stdout) > 1024 * 1024 or len(stderr) > 64 * 1024:
-            self.store.update_job(
+            await self._update(
                 job_id,
+                reporter,
                 status=JobStatus.FAILED,
+                phase="generating",
                 error=ErrorDetail(code="worker_output_too_large", message="worker output exceeded its bound"),
             )
             return
@@ -189,25 +280,198 @@ class JobManager:
             detail = response.get("error", {}) if isinstance(response, dict) else {}
             code = str(detail.get("code", "worker_crash"))
             message = str(detail.get("message", f"worker exited with code {process.returncode}"))
-            self.store.update_job(job_id, status=JobStatus.FAILED, error=ErrorDetail(code=code, message=message[:300]))
+            await self._update(
+                job_id,
+                reporter,
+                status=JobStatus.FAILED,
+                phase="generating",
+                error=ErrorDetail(code=code, message=message[:300]),
+            )
             return
-        self.store.update_job(job_id, phase="postprocess", progress=0.65)
+        await self._update(job_id, reporter, phase="postprocess", progress=0.65)
         try:
             asset_ids = self._register_outputs(job, response, job_root)
         except (KeyError, TypeError, ValueError, OSError) as exc:
-            self.store.update_job(
+            await self._update(
                 job_id,
+                reporter,
                 status=JobStatus.FAILED,
+                phase="validate",
                 error=ErrorDetail(code="artifact_integrity_failed", message=str(exc)[:300]),
             )
             return
-        self.store.update_job(
+        await self._update(
             job_id,
+            reporter,
             status=JobStatus.SUCCEEDED,
-            phase=None,
+            phase="register_asset",
             progress=1,
             asset_ids=asset_ids,
         )
+
+    async def _acquire_host_lease(
+        self,
+        job: Job,
+        execution: HostExecution,
+        reporter: HostJobReporter | None,
+    ) -> bool:
+        assert self.host_client is not None and reporter is not None
+        delay = float(job.request.constraints.get("_fake_delay_sec", 0))
+        estimate = max(1.0, min(self.worker_timeout_sec, delay + 1.0))
+        try:
+            status = await self.host_client.request_resource(
+                execution.identity,
+                fake_image_request(
+                    execution.host_job_id,
+                    runtime_sec=estimate,
+                    workload_class=execution.workload_class,
+                ),
+            )
+            request_id = status.get("request_id")
+            if not isinstance(request_id, str) or not request_id:
+                raise HostApiError("invalid_host_response", "ControlDeck did not return a resource request ID")
+            execution.request_id = request_id
+            while status.get("state") == "waiting":
+                reason = status.get("reason")
+                await self._update(
+                    job.id,
+                    reporter,
+                    phase="waiting_resource",
+                    progress=max(self.store.get_job(job.id).progress, 0.03),
+                    wait_reason=reason if isinstance(reason, str) else None,
+                )
+                if await self._host_or_local_cancel_requested(job.id, execution):
+                    await self._finish_canceled(job.id, reporter)
+                    return False
+                await asyncio.sleep(0.1)
+                status = await self.host_client.resource_status(execution.identity, request_id)
+            if status.get("state") != "granted" or not isinstance(status.get("lease_id"), str):
+                reason = str(status.get("reason") or status.get("state") or "unknown")
+                await self._update(
+                    job.id,
+                    reporter,
+                    status=JobStatus.FAILED,
+                    phase="waiting_resource",
+                    error=ErrorDetail(code="resource_unavailable", message=f"ControlDeck admission failed: {reason}"),
+                )
+                return False
+            execution.lease_id = status["lease_id"]
+            await self.host_client.lease_action(execution.identity, execution.lease_id, "activate")
+            await self._update(job.id, reporter, phase="starting", progress=0.04)
+            return True
+        except HostApiError as exc:
+            await self._update(
+                job.id,
+                reporter=None,
+                status=JobStatus.FAILED,
+                phase="waiting_resource",
+                error=ErrorDetail(code=exc.code, message=str(exc)[:300]),
+            )
+            return False
+
+    async def _maintain_host_lease(self, job_id: str, execution: HostExecution) -> None:
+        assert self.host_client is not None and execution.lease_id is not None
+        loop = asyncio.get_running_loop()
+        renew_at = loop.time() + self.lease_renew_sec
+        try:
+            while True:
+                await asyncio.sleep(0.25)
+                if await self._host_or_local_cancel_requested(job_id, execution):
+                    process = self._processes.get(job_id)
+                    if process is not None and process.returncode is None:
+                        process.terminate()
+                    return
+                if loop.time() >= renew_at:
+                    await self.host_client.lease_action(execution.identity, execution.lease_id, "renew")
+                    renew_at = loop.time() + self.lease_renew_sec
+        except asyncio.CancelledError:
+            raise
+        except HostApiError as exc:
+            self._host_failures[job_id] = exc
+            self.store.request_cancel(job_id)
+            process = self._processes.get(job_id)
+            if process is not None and process.returncode is None:
+                process.terminate()
+
+    async def _host_or_local_cancel_requested(self, job_id: str, execution: HostExecution) -> bool:
+        if self.store.cancel_requested(job_id):
+            return True
+        assert self.host_client is not None
+        control = await self.host_client.job_control(execution.identity, execution.host_job_id)
+        if control.get("cancel_requested") is True:
+            self.store.request_cancel(job_id)
+            return True
+        return False
+
+    async def _release_host_resource(self, execution: HostExecution) -> None:
+        if self.host_client is None:
+            return
+        try:
+            if execution.lease_id is not None:
+                await self.host_client.lease_action(execution.identity, execution.lease_id, "release")
+            elif execution.request_id is not None:
+                await self.host_client.cancel_resource(execution.identity, execution.request_id)
+        except HostApiError:
+            logger.exception("failed to release ControlDeck resource state for %s", execution.host_job_id)
+
+    async def _finish_canceled(self, job_id: str, reporter: HostJobReporter | None) -> None:
+        current = self.store.get_job(job_id)
+        effective_reporter = reporter
+        if reporter is not None and reporter.execution.owns_terminal and self.host_client is not None:
+            try:
+                control = await self.host_client.job_control(
+                    reporter.execution.identity,
+                    reporter.execution.host_job_id,
+                )
+                if control.get("status") == "canceled":
+                    effective_reporter = None
+            except HostApiError:
+                effective_reporter = None
+        await self._update(
+            job_id,
+            effective_reporter,
+            status=JobStatus.CANCELED,
+            phase=current.phase or "canceled",
+            progress=current.progress,
+        )
+
+    async def _update(
+        self,
+        job_id: str,
+        reporter: HostJobReporter | None,
+        *,
+        status: JobStatus | None = None,
+        phase: str,
+        progress: float | None = None,
+        asset_ids: list[str] | None = None,
+        error: ErrorDetail | None = None,
+        wait_reason: str | None = None,
+    ) -> Job:
+        current = self.store.get_job(job_id)
+        normalized_progress = current.progress if progress is None else progress
+        terminal = status in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
+        if reporter is not None and terminal:
+            if reporter.execution.owns_terminal:
+                await reporter.terminal(
+                    status.value,
+                    phase=phase,
+                    progress=normalized_progress,
+                    result={"asset_ids": asset_ids} if status == JobStatus.SUCCEEDED else None,
+                    error=error.message if error is not None else None,
+                )
+            else:
+                await reporter.finish_attached(phase=phase, progress=normalized_progress)
+        result = self.store.update_job(
+            job_id,
+            status=status,
+            phase=None if terminal else phase,
+            progress=normalized_progress,
+            asset_ids=asset_ids,
+            error=error,
+        )
+        if reporter is not None and not terminal:
+            await reporter.progress(phase, normalized_progress, wait_reason=wait_reason)
+        return result
 
     def _register_outputs(self, job: Job, response: dict[str, Any], job_root: Path) -> list[str]:
         outputs = response["outputs"]

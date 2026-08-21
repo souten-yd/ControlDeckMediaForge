@@ -24,11 +24,11 @@ ControlDeck integration is also deliberately generic: Media Forge remains a sepa
 
 MF0-0 through MF0-3 provide isolated environments, the Add-on v2 health service,
 a durable local job API, a deterministic subprocess fake worker, and immutable
-assets with provenance. The MF0 embedded workspace and secured workflow/agent/context
-endpoints have been exercised in an installed ControlDeck browser flow where the host
-contract permits. Full host integration remains fail-closed because
-the referenced ControlDeck revision does not expose its designed Add-on service-side
-resource, Jobs, or scoped-files bridge; see `docs/implementation-status.md`.
+assets with provenance. MF0-4 connects accepted Host identities to ControlDeck
+token introspection, Jobs, resource leases, cancellation, and scoped file
+read/output commit. Agent and workspace generation have real Host evidence.
+Workflow and context-action file consumption remain fail-closed due to two
+ControlDeck subject-routing mismatches; see `docs/implementation-status.md`.
 
 ## Run locally
 
@@ -40,9 +40,10 @@ resource, Jobs, or scoped-files bridge; see `docs/implementation-status.md`.
 Open <http://127.0.0.1:9130/>. The service binds to loopback only in G0.
 
 Install [`addon.json`](addon.json) through ControlDeck's Extensions screen. The
-host can display setup state, while resource-dependent execution contributions remain
-unavailable. ControlDeck remains the lifecycle, identity, grant, Jobs bridge, and
-resource-broker authority; this repository contains all Media-specific code.
+host can display setup state and run supported generation contributions through
+its Jobs and resource broker. ControlDeck remains the lifecycle, identity,
+grant, Jobs bridge, and resource-broker authority; this repository contains all
+Media-specific code.
 
 ## Test
 

@@ -333,6 +333,10 @@ granted capabilities
 nonce/session binding
 ```
 
+For the current Add-on Runtime HTTP contract, Media Forge validates this
+credential through Host token introspection. It does not receive ControlDeck's
+signing key and does not validate by importing Host internals.
+
 ### Namespaced permissions
 
 Long term, Add-on Contract v2 should support namespaced plugin permissions, for example:
@@ -411,6 +415,10 @@ Conceptual lease request:
   "model_residency_key": "flux2-klein-4b-rocm"
 }
 ```
+
+`owner` above describes the resulting Broker record. An Add-on Runtime client
+must omit that field; ControlDeck derives and forces it from the authenticated
+Add-on identity so the caller cannot select another owner.
 
 LLM requests may additionally include KV/slot requirements through provider-specific admission probes, but those probes should plug into the same scheduler rather than define the scheduler itself.
 

@@ -81,7 +81,7 @@ ControlDeckMediaForge/
 │     │  └─ context.py           context action
 │     ├─ host/
 │     │  ├─ client.py            ControlDeck host API client
-│     │  ├─ token.py             service token 受領・検証
+│     │  ├─ security.py          service token introspection / path rejection
 │     │  ├─ resources.py         lease acquire/renew/release
 │     │  └─ jobs.py              remote job register/update
 │     ├─ jobs/                   durable job store + runner
@@ -244,10 +244,12 @@ ControlDeck の proxy が audience 束縛・10分TTL の service token を注入
 Media Forge は **Cookie を受け取らない前提**で実装する。
 
 ```text
-token の audience / addon_id / 有効期限を検証する
+ControlDeck の Add-on Runtime introspection API で active / addon_id /
+  subject / 有効期限 / granted capabilities を検証する
 token 無しのリクエストは 401
 loopback 直アクセス（proxy を経由しない）でも token 検証を行う
 token を log に出さない
+ControlDeck の signing key を共有・読み取りしない
 ```
 
 ### 6.2 GPU lease
@@ -261,7 +263,6 @@ ControlDeck 側の thrash guard はこの値が無いと退避判断ができず
 
 ```json
 {
-  "owner": "addon:media-forge",
   "job_id": "...",
   "device": "auto",
   "vram": {
@@ -280,6 +281,9 @@ ControlDeck 側の thrash guard はこの値が無いと退避判断ができず
   "on_insufficient": "queue"
 }
 ```
+
+Add-on Runtime request では `owner` を送らない。ControlDeck が認証済み
+Add-on identity から `addon:media-forge` を強制設定する。
 
 `confidence` は MF0 では `"low"` 固定。実測が入る MF1 以降で上げる。
 lease は renew を怠らないこと。TTL 切れで強制回収される。

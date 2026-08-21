@@ -1,8 +1,8 @@
 # Media Forge implementation status
 
 Date: 2026-08-21
-Scope: MF0-0 through MF0-3 complete; MF0-4 host-blocked; MF0-5/MF0-6 installed-host browser verified where the host contract permits (`docs/implementation/mf0-addon-core.md`)
-Repository head at start: `770383a` (`origin/main`)
+Scope: MF0-0 through MF0-3 complete; MF0-4 implemented for supported Host identities with two ControlDeck subject-routing blockers; MF0-5/MF0-6 installed-host browser verified where the host contract permits (`docs/implementation/mf0-addon-core.md`)
+Repository head at start: `9fbb6183de9bee88883227d777ad60ba33ef6498` (`origin/main`)
 
 ## MF0-0 — COMPLETE for the requested environment slice
 
@@ -57,29 +57,73 @@ Shutdown and crash isolation were exercised separately:
 
 During the first isolated-data attempt, `mf.sh serve` was found to overwrite an explicit `MEDIA_FORGE_DATA_DIR`. Two exact test jobs and assets therefore entered the default data tree. This was not accepted as isolated evidence: the script was fixed to preserve the explicit variable, the database was backed up to `/tmp/mediaforge-mf03-cleanup.yx1Ia0/media-forge.sqlite3.backup`, the two identified files were moved to trash, and only their exact database rows were deleted. Verification reported zero remaining test jobs/assets. The complete E2E was then rerun successfully in `/tmp/mediaforge-mf03-e2e.s5f9e6`, which was moved to trash after evidence collection.
 
-## MF0-4 — PARTIAL / HOST CONTRACT BLOCKED
+## MF0-4 — PARTIAL / TWO HOST SUBJECT ROUTES BLOCKED
 
-Media Forge now verifies the ControlDeck HMAC service token signature, `aud=media-forge`, `kind=service`, subject, issued-at time, expiry, and the 600-second maximum lifetime. It also requires `X-Control-Deck-Addon-ID: media-forge`, never logs the credential, rejects raw Unix/Windows/file-URI paths recursively, and accepts file context only as `grant:`/`asset:` opaque IDs. Verification-key provisioning is explicit through `MEDIA_FORGE_CONTROLDECK_TOKEN_KEY_FILE`; no ControlDeck module is imported.
+ControlDeck upstream `main` was re-audited read-only at
+`f86cb82055bc0d572c6ec8f91fc956834aaf4dc9`. Its Add-on Runtime now provides
+token introspection plus scoped Jobs, resource, grant, and output APIs. Media
+Forge uses only those HTTP contracts: it imports no ControlDeck module, receives
+no session cookie, and no longer provisions or reads the Host signing key.
 
-The lease request builder includes all four VRAM dimensions, `confidence=low`, and mandatory `estimated_runtime_sec`. The Jobs boundary enforces monotonic progress and at most 2 Hz before transport. These contract checks pass, but they are not recorded as live host integration.
+Incoming credentials are introspected at
+`/api/v1/addon-runtime/token/introspect`. Media Forge then verifies active state,
+`addon_id=media-forge`, nonempty subject, expiry, maximum lifetime, and granted
+capabilities. Credentials are excluded from object representations and Host
+errors do not include response bodies. Raw Unix/Windows/file-URI paths remain
+recursively rejected; file content moves only through opaque `grant:` and output
+IDs.
 
-The referenced ControlDeck checkout at `9272c05` does not implement the service-side methods required by the normative integration plan:
+Hosted generation now creates or attaches a ControlDeck Job before admission,
+requests a real Broker lease before entering the worker-local execution guard,
+reports all four VRAM dimensions plus `estimated_runtime_sec`, activates and
+renews the lease, observes Host cancellation, and releases or cancels Broker
+state in `finally`. ControlDeck forces the request owner to
+`addon:media-forge`; Media Forge does not send a caller-selected owner. Attached
+agent Jobs leave terminal ownership to ControlDeck's outer runner, while Jobs
+created for the workspace are terminalled by Media Forge. Host-managed queued
+jobs are failed with `host_context_lost` after restart instead of resuming
+without their short-lived authority.
+
+Real-process verification on 2026-08-21 used disposable ControlDeck and Media
+Forge data directories, the public ControlDeck API, the real AMD GPU Broker,
+and separate loopback processes:
 
 ```text
-host.resources.acquire / renew / release
-host.jobs.register_remote / update_remote
-host.files.stage_read / commit_write
+agent generation: HTTP 200 in 0.648 sec
+ControlDeck Job: 3151f0d8aacf / succeeded / register_asset / 1000 of 1000
+Broker lease: c088e41f... / gpu0 / owner addon:media-forge / released
+reservation: 335544320 bytes / exclusive-preferred
+two concurrent jobs: first granted; second waiting / device_busy_exclusive / queue 1
+completion times: 1.685 sec and 2.327 sec; all leases released
+Host cancel: running Job 015c881fe14e -> canceled; active lease -> released
+10 sec job: HTTP 200 in 10.671 sec; lease.renewed delta 1
+scoped file roundtrip: 31 input bytes -> 31 output bytes; content identical
+file transport response: grant/output/asset IDs and metadata only; no path
 ```
 
-Read-only source inspection found that `/api/v1/resources` requires a session cookie, `settings.manage`, and CSRF. The injected Add-on service token is accepted only by the Add-on's upstream endpoint; ControlDeck's resource router does not authenticate it. The signing key also has no public verification/JWKS endpoint or provisioned per-Add-on key exchange. Media Forge will not replay a user cookie, read ControlDeck data implicitly, invent an undocumented URL, or create an independent GPU scheduler. `GET /api/v1/host-integration` therefore reports these three bridges as `unavailable_in_host_revision` with `fallback=none`, and generation contributions remain unavailable in health.
+The fake worker is CPU-only, but the MF0 contract deliberately acquires a small
+real GPU reservation so the complete admission/renew/cancel/release lifecycle is
+exercised before G1 substitutes a GPU worker. Two-job contract testing also
+confirmed that only one worker subprocess runs while the second job waits for
+Host admission.
 
-MF0-4 completion and the lease/Jobs/file-grant portions of MF0-7 are blocked until ControlDeck exposes the already-designed audience-bound service bridge. ControlDeck was not modified.
+Two remaining failures are in the current ControlDeck service-token subject
+routing and are not bypassed:
 
-This blocker was re-audited read-only against upstream ControlDeck `main` at
-`08a23c57cc1ed2791284924e1c3986570713d94f` using a disposable sparse clone.
-The same three service methods and service-token authentication for
-`/api/v1/resources` were still absent. The reference checkout was not fetched,
-checked out, or modified.
+```text
+workflow executor token subject = workflow:<execution_id>
+  Add-on Runtime Jobs/Resources accept numeric user or job:* subjects only
+context action token subject = context:<user_id>
+  Add-on Runtime Grants accept numeric user or job:* subjects only
+```
+
+Therefore agent, workspace, Broker, Jobs, cancellation, renewal, and direct
+scoped-file bridge behavior are implemented and measured, but workflow execution
+and an actual context-action grant read remain UNAVAILABLE. Media Forge returns
+`host_workflow_job_bridge_unavailable` for the former and exposes no cookie,
+path, unleased, or local-signing-key fallback. ControlDeck was not modified; its
+canonical reference checkout remained at `9272c05` and clean throughout the
+test.
 
 ## MF0-5 / MF0-6 — INSTALLED-HOST BROWSER VERIFIED / HOST-LIMITED
 
@@ -87,7 +131,10 @@ The embedded workspace provides Create, Library, Jobs, Models, and Settings with
 
 Workflow, agent capability/generate/inspect, command, and edit-image context endpoints are implemented with service-token enforcement and structured job/asset responses. Capability discovery and all agent tool responses contain no model name; inspect returns the license, lineage, validation, warnings, and output hash without implementation identity. Context responses do not echo the scoped token.
 
-Real-process verification on 2026-08-21 used an isolated data directory and an isolated 0600 32-byte signing key; the directory was moved to trash after shutdown:
+Earlier pre-bridge real-process verification on 2026-08-21 used an isolated
+data directory and the then-current local signing-key contract; the directory
+was moved to trash after shutdown. This evidence is retained as history but its
+authentication and Host-readiness observations are superseded by MF0-4 above:
 
 ```text
 health:                         HTTP 200, 0.015009 sec, 1421 bytes
@@ -292,7 +339,7 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 ## Additional behavior checks
 
 - Temporarily removing the GPU snapshot left the real core service running. Health returned HTTP 200 / `setup_required`, with `gpu.state=checking`; restoring and rerunning the GPU check returned it to `ok`.
-- Latest focused `./mf.sh test`: 37 passed in 1.40 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
+- Latest full `./mf.sh test`: 50 passed in 5.85 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
 - `bash -n mf.sh` and `git diff --check` passed. These are static checks only.
 - Final ControlDeck checkout observation: HEAD `9272c05`, clean `git status --short`. It was read-only throughout this slice; no ControlDeck file was modified.
 
@@ -303,10 +350,28 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 - Model library configuration: deliberately remains `missing`; selecting and benchmarking a model belongs to G1.
 - FOUC video/frame capture is NOT TESTED. First rendered workspace state was visually inspected after the handshake, but no frame-by-frame white-flash measurement was made.
 - OpenCode discovery is NOT TESTED. Agent tool invocation through the real ControlDeck API and its ControlDeck Job response were tested, but no OpenCode process was involved.
-- Workflow dry-run is UNAVAILABLE because the referenced host omits the fail-closed unavailable executor.
-- Files context invocation is tested; scoped staging/commit and automatic workspace route opening are UNAVAILABLE with the referenced host bridge/UI behavior.
-- Resource acquire/wait/renew/release, two fake exclusive jobs, Jobs bridge progress/toast, scoped file staging/commit, and disable cleanup are UNAVAILABLE in the referenced host revision, not passed or substituted.
+- Workflow execution and dry-run are UNAVAILABLE because the current Host's
+  `workflow:*` credential cannot attach to Add-on Runtime Jobs/Resources. Media
+  Forge does not run it unleased.
+- Direct scoped read/output commit is tested with numeric-user authority.
+  Consuming that grant from the actual Files context-action route is UNAVAILABLE
+  because the current Host's `context:*` credential cannot resolve Runtime
+  grants. Automatic workspace route opening remains NOT TESTED on the updated
+  Host revision.
+- Jobs and Broker UI presentation in a fresh browser run, including the waiting
+  reason and cancellation display, is NOT TESTED on the updated Host revision;
+  their public API state and real resource lifecycle were measured. The
+  disposable read-only sparse Host clone had no built frontend (`GET /login`
+  returned 404), and a frontend build was not introduced into the ControlDeck
+  tree merely to convert this into UI evidence.
+- Add-on disable while a hosted lease is active is NOT TESTED. Host cancellation
+  during an active lease was measured; hosted service-shutdown failure and lease
+  cleanup are covered by contract tests but not separate real-process evidence.
 
 ## Scope boundary
 
-No real model or Diffusers adapter is included. The embedded workspace and the host-permitted MF0-7 browser paths are verified, but MF0-4 and the bridge-dependent MF0-7 paths remain incomplete for the explicit host-contract reasons above. The ROCm runtime check is environment qualification only and is not a model benchmark or a G1 implementation.
+No real model or Diffusers adapter is included. MF0-4 is implemented for the
+Host identity forms its Runtime APIs currently accept, but remains incomplete
+for workflow and context-action subjects as recorded above. The ROCm runtime
+check is environment qualification only and is not a model benchmark or a G1
+implementation.

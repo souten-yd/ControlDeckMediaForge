@@ -84,6 +84,9 @@ def main() -> int:
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    # Keep the committed manifest canonical while allowing isolated test
+    # processes to bind a different loopback port.
+    manifest["runtime"]["base_url"] = args.media_forge_url.rstrip("/")
     args.evidence_dir.mkdir(parents=True, exist_ok=True)
     observations: dict[str, Any] = {"started_at": time.time(), "checks": {}}
     browser_errors: list[str] = []

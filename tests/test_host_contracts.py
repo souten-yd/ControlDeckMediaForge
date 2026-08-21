@@ -7,7 +7,7 @@ from mediaforge.host.resources import fake_image_request
 
 def test_fake_lease_request_has_complete_vram_and_runtime_estimate():
     payload = fake_image_request("job_123", runtime_sec=12.5)
-    assert payload["owner"] == "addon:media-forge"
+    assert "owner" not in payload
     assert payload["estimated_runtime_sec"] == 12.5
     assert payload["vram"]["confidence"] == "low"
     assert set(payload["vram"]) == {

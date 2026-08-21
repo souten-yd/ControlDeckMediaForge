@@ -26,13 +26,14 @@ class LeaseEstimate:
             raise ValueError("lease estimates must be non-negative and runtime must be positive")
 
 
-def fake_image_request(job_id: str, *, runtime_sec: float, vram_bytes: int = 256 * MIB) -> dict[str, Any]:
-    """Build the frozen broker request shape without selecting a host transport.
-
-    ControlDeck does not currently expose the documented Add-on service-side
-    transport. Keeping transport out of this builder prevents a guessed URL or
-    session-cookie workaround from becoming part of Media Forge.
-    """
+def fake_image_request(
+    job_id: str,
+    *,
+    runtime_sec: float,
+    workload_class: str = "interactive",
+    vram_bytes: int = 256 * MIB,
+) -> dict[str, Any]:
+    """Build the Add-on Runtime request; ControlDeck forces the owner identity."""
     estimate = LeaseEstimate(
         resident_bytes=0,
         execution_peak_bytes=vram_bytes,
@@ -41,7 +42,6 @@ def fake_image_request(job_id: str, *, runtime_sec: float, vram_bytes: int = 256
         estimated_runtime_sec=max(0.001, runtime_sec),
     )
     return {
-        "owner": "addon:media-forge",
         "job_id": job_id,
         "device": "auto",
         "vram": {
@@ -52,8 +52,8 @@ def fake_image_request(job_id: str, *, runtime_sec: float, vram_bytes: int = 256
             "confidence": "low",
         },
         "compute_mode": "exclusive-preferred",
-        "priority": 20,
-        "class": "interactive",
+        "priority": {"interactive": 20, "agent-interactive": 20, "workflow": 10}.get(workload_class, 0),
+        "class": workload_class,
         "residency_key": "mediaforge:fake-image-v1",
         "estimated_runtime_sec": estimate.estimated_runtime_sec,
         "max_wait_sec": 300,
@@ -62,6 +62,9 @@ def fake_image_request(job_id: str, *, runtime_sec: float, vram_bytes: int = 256
 
 
 class ResourceLeaseBridge(Protocol):
-    async def acquire(self, request: dict[str, Any]) -> dict[str, Any]: ...
+    async def request_resource(self, request: dict[str, Any]) -> dict[str, Any]: ...
+    async def resource_status(self, request_id: str) -> dict[str, Any]: ...
+    async def cancel_resource(self, request_id: str) -> dict[str, Any]: ...
+    async def activate(self, lease_id: str) -> dict[str, Any]: ...
     async def renew(self, lease_id: str) -> dict[str, Any]: ...
     async def release(self, lease_id: str) -> dict[str, Any]: ...
