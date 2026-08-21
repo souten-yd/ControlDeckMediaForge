@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .config import REPOSITORY_ROOT
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
 from .host.client import ControlDeckHostClient, HostApiError
 from .host.jobs import HostExecution, HostJobReporter
@@ -343,7 +344,7 @@ class JobManager:
                 raise WorkerFailure("worker_not_installed", "image runtime is not installed")
             executable = self.image_runtime_python
             module = "worker_packs.image.worker"
-            repository_root = str(Path(__file__).resolve().parents[2])
+            repository_root = str(REPOSITORY_ROOT)
             environment["PYTHONPATH"] = repository_root + os.pathsep + environment.get("PYTHONPATH", "")
             environment["MEDIA_FORGE_MODEL_ROOT"] = str(selected.local_path.parents[1])
             environment["MEDIA_FORGE_WORK_ROOT"] = str(self.store.work_dir.resolve())

@@ -6,6 +6,7 @@ import hashlib
 from io import BytesIO
 import json
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -29,7 +30,7 @@ from .host.security import reject_host_paths, require_host_service, require_host
 from .store import Store
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
 SCHEMAS_DIR = REPOSITORY_ROOT / "schemas"
 FRONTEND_DIR = REPOSITORY_ROOT / "frontend"
 HealthState = Literal["healthy", "degraded", "unavailable", "setup_required"]

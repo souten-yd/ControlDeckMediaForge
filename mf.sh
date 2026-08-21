@@ -466,6 +466,7 @@ Usage:
   ./mf.sh env prune
   ./mf.sh model list
   ./mf.sh model download flux2-klein-4b
+  ./mf.sh bundle build <version> <output-dir>
   ./mf.sh test
 EOF
 }
@@ -491,6 +492,19 @@ main() {
       case "${2:-}" in
         list) [ "$#" -eq 2 ] || die "model list takes no arguments"; list_models ;;
         download) [ "$#" -eq 3 ] || die "model download requires one model name"; download_model "$3" ;;
+        *) usage; exit 2 ;;
+      esac
+      ;;
+    bundle)
+      case "${2:-}" in
+        build)
+          [ "$#" -eq 4 ] || die "bundle build requires version and output directory"
+          bundle_build_root="$RUNTIME_ROOT/bundle-build"
+          ensure_env "$bundle_build_root/.venv" "$bundle_build_root/requirements.txt" "bundle build"
+          "$bundle_build_root/.venv/bin/python" "$REPO_ROOT/scripts/build_release_bundle.py" \
+            --version "$3" --output-dir "$4" \
+            --pyinstaller "$bundle_build_root/.venv/bin/pyinstaller"
+          ;;
         *) usage; exit 2 ;;
       esac
       ;;

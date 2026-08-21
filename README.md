@@ -25,9 +25,10 @@ ControlDeck integration is also deliberately generic: Media Forge remains a sepa
 MF0-0 through MF0-7 / G0 are complete: the isolated service, durable fake-worker
 jobs, assets/provenance, embedded workspace, ControlDeck Jobs/Broker/files,
 Workflow, Context Action, and real OpenCode tool discovery/call have passed their
-real-process acceptance checks. G1 local image generation is in progress; no
-image model is promoted as the automatic default until its R9700/ROCm benchmark
-and adoption gate are recorded. See `docs/implementation-status.md`.
+real-process acceptance checks. G1 local image generation now has a measured
+FLUX.2 Klein 4B automatic route and real R9700/ROCm evidence. G1 remains in
+progress while the verified release-bundle standard installation path is
+completed. See `docs/implementation-status.md`.
 
 ## Run locally
 
@@ -39,17 +40,17 @@ and adoption gate are recorded. See `docs/implementation-status.md`.
 
 Open <http://127.0.0.1:9130/>. The service binds to loopback only in G0.
 
-Install [`addon.json`](addon.json) through ControlDeck's Extensions screen. The
-host can display setup state and run supported generation contributions through
-its Jobs and resource broker. ControlDeck remains the lifecycle, identity,
-grant, Jobs bridge, and resource-broker authority; this repository contains all
+Normal installation uses ControlDeck's trusted `release-bundle` Optional Feature
+provider and a verified GitHub Release artifact. Installing `addon.json`
+directly and running this source tree remain developer workflows, not the
+Settings default. ControlDeck remains the lifecycle, identity, grant, Jobs
+bridge, and resource-broker authority; this repository contains all
 Media-specific code.
 
-Model downloads are explicit. During G1 evaluation, the current candidate can
+Model downloads are explicit. The adopted local model can
 be fetched to the shared Hugging Face cache with
-`./mf.sh model download flux2-klein-4b`; this does not promote it to the automatic
-route. The command pins the repository revision and excludes the redundant
-single-file checkpoint.
+`./mf.sh model download flux2-klein-4b`. The command pins the repository revision
+and excludes the redundant single-file checkpoint.
 
 ## Test
 
