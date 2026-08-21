@@ -10,7 +10,9 @@ ControlDeck Media Forge — ローカル完結の汎用メディア生成サー�
 ```text
 docs/base-plan.md                     設計の正（何を作るか・なぜそう決めたか）
 docs/controldeck-integration-plan.md  統合の正（ホストとの境界。add-on 統合は本書が優先）
+docs/design-workspace-ux.md           UI/UX の正（画面構成・段階開示・レイアウト）
 docs/implementation/                  実装の指示（どの順で・何を確認して進めるか）
+docs/implementation/ux1-handoff.md    UX1 の引き継ぎ状態。**再開時に最初に読む**
 docs/implementation-status.md         現在の進捗。必ず確認・更新する
 ```
 
@@ -28,6 +30,19 @@ installed-host browser実測済み。次は `docs/implementation-status.md` の2
 各段階を飛ばさず、実機証跡を `docs/implementation-status.md` に追記する。
 全体像は `docs/implementation/goal-roadmap.md`（G0〜G10）。
 
+## 作業の進め方（context が切れる前提）
+
+```text
+再開時    docs/implementation/ux1-handoff.md を最初に読む
+1 PR      1 スライス。跨がない。ブランチは ux1/<slug>
+commit    ./mf.sh test 全通過 + 引き継ぎファイル更新をしてから
+push      git push -u origin <branch> → gh pr create
+記録      実測値のみ docs/implementation-status.md へ。推測を書かない
+```
+
+未 commit の状態は引き継げない。作業を止めるときは必ず commit と push を済ませる。
+詳細は `docs/implementation/ux1-workspace.md` §14。
+
 ## ControlDeck との関係
 
 ホスト側の Add-on Platform v2 / AI Resource Broker は実装済み。
@@ -40,7 +55,12 @@ ControlDeck/tools/fake-addon/                  contract 2.0 準拠の動く参�
 ControlDeck/deck.sh                            venv 管理・キャッシュ配置の作法
 ```
 
-**ControlDeck リポジトリは読み取り専用の参照。** 変更しない。
+**ControlDeck リポジトリは原則として読み取り専用の参照。**
+2026-08-22 に利用者が host 変更を許可したが、**汎用 host 機能に限る**。
+Media 固有のコード・ルート・依存・文言を ControlDeck へ入れない
+（`goal-roadmap.md` §4「完成の定義」は変わらない）。
+host を触る前に「なぜ Media Forge 側で解けないか」を 1 行で書き、別リポジトリの
+別 PR にする。条件は `docs/implementation/ux1-workspace.md` §0 B1。
 manifest や API を推測で書かず、上記を読んでから書く。
 
 ## 技術スタック
@@ -109,6 +129,9 @@ asset / provenance の必須フィールド
 - `disable.pending` を受けたら 2 秒以内に保存・中断処理
 - mobile は `companion` 宣言。320px に workspace を押し込まない
 - node graph を作らない。`Create` は chat/prompt 指向
+- 機能の出し分けは capability document から導出する。使えないものを既定で出さない
+- 簡単さは段階開示で作る。機能削除で作らない。詳細モードから全機能へ到達できること
+- 画面構成・レイアウト・文言表の正は `docs/design-workspace-ux.md`
 - 詳細は `ControlDeck/docs/addon-ux-guidelines.md`
 
 ## コード規約
