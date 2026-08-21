@@ -19,6 +19,25 @@ def test_store_recovers_interrupted_running_job_as_failed(tmp_path: Path):
     assert recovered.error is not None and recovered.error.code == "service_restarted"
 
 
+def test_store_does_not_resume_host_managed_job_without_short_lived_credential(tmp_path: Path):
+    store = Store(tmp_path / "state")
+    store.initialize()
+    local_job = store.create_job(JobRequest(operation="image.generate", intent="resume locally"))
+    hosted_job = store.create_job(
+        JobRequest(operation="image.generate", intent="must retain host authority"),
+        host_managed=True,
+    )
+
+    restarted = Store(tmp_path / "state")
+    restarted.initialize()
+
+    assert restarted.get_job(local_job.id).status == JobStatus.QUEUED
+    recovered = restarted.get_job(hosted_job.id)
+    assert recovered.status == JobStatus.FAILED
+    assert recovered.error is not None and recovered.error.code == "host_context_lost"
+    assert restarted.queued_job_ids() == [local_job.id]
+
+
 def test_store_removes_only_stale_entries_inside_work_directory(tmp_path: Path):
     store = Store(tmp_path / "state")
     store.initialize()

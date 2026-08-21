@@ -4,26 +4,20 @@ from collections.abc import Mapping
 
 from fastapi import HTTPException, Request
 
-from ..config import Settings
-from .token import ServiceTokenError, read_signing_key, verify_service_token
+from .client import ControlDeckHostClient, HostApiError, HostIdentity
 
 
-def require_host_service_headers(headers: Mapping[str, str], settings: Settings) -> dict:
-    addon_id = headers.get("X-Control-Deck-Addon-ID", "")
-    authorization = headers.get("Authorization", "")
-    if addon_id != "media-forge" or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail={"code": "host_service_token_required"})
-    if settings.host_token_key_file is None:
-        raise HTTPException(status_code=503, detail={"code": "host_token_verifier_unconfigured"})
+async def require_host_service_headers(
+    headers: Mapping[str, str], host: ControlDeckHostClient,
+) -> HostIdentity:
     try:
-        key = read_signing_key(settings.host_token_key_file)
-        return verify_service_token(authorization[7:], signing_key=key)
-    except ServiceTokenError as exc:
-        raise HTTPException(status_code=401, detail={"code": "invalid_host_service_token"}) from exc
+        return await host.authenticate(headers)
+    except HostApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from exc
 
 
-def require_host_service(request: Request, settings: Settings) -> dict:
-    return require_host_service_headers(request.headers, settings)
+async def require_host_service(request: Request, host: ControlDeckHostClient) -> HostIdentity:
+    return await require_host_service_headers(request.headers, host)
 
 
 def reject_host_paths(value: object) -> None:

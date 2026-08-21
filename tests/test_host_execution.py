@@ -1,48 +1,188 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import hashlib
-import hmac
 import json
 import time
 from pathlib import Path
+from typing import Any
 
+import httpx
+import pytest
+from fastapi import Body, FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
 
 from conftest import wait_terminal
 from mediaforge.app import create_app
 from mediaforge.config import Settings
+from mediaforge.host import client as host_client_module
+from mediaforge.host.client import ControlDeckHostClient, HostApiError
+from mediaforge.host.files import commit_file, read_grant
+from mediaforge.store import Store
 
 
-def _b64(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
+    app = FastAPI()
+    state: dict[str, Any] = {
+        "jobs": {},
+        "job_updates": [],
+        "resource_requests": [],
+        "lease_actions": [],
+        "grant_content": b"reference-bytes",
+        "outputs": {},
+        "serialize_resources": False,
+        "reserved_leases": set(),
+        "reject_resources": False,
+        "next_job": 0,
+    }
+
+    def subject(authorization: str | None) -> str | None:
+        return {
+            "Bearer valid-user": "7",
+            "Bearer valid-job": "job:host-agent",
+            "Bearer valid-workflow": "workflow:42",
+            "Bearer valid-context": "context:7",
+            "Bearer expired-active": "7",
+        }.get(authorization)
+
+    @app.post("/api/v1/addon-runtime/token/introspect")
+    async def introspect(
+        authorization: str | None = Header(default=None),
+        addon_id: str | None = Header(default=None, alias="X-Control-Deck-Addon-ID"),
+    ) -> dict[str, Any]:
+        token_subject = subject(authorization)
+        if token_subject is None or addon_id != "media-forge":
+            return {"active": False}
+        return {
+            "active": True,
+            "addon_id": "media-forge",
+            "subject": token_subject,
+            "expires_at": int(time.time()) + (-1 if authorization == "Bearer expired-active" else 600),
+            "granted_capabilities": ["jobs.write", "resources.acquire", "files.pick", "files.export"],
+        }
+
+    @app.post("/api/v1/addon-runtime/media-forge/jobs", status_code=201)
+    async def create_job(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+        token_subject = subject(authorization)
+        if token_subject == "job:host-agent":
+            host_job_id, created = "host-agent", False
+        elif token_subject == "7":
+            state["next_job"] += 1
+            host_job_id, created = f"host-created-{state['next_job']}", True
+        else:
+            raise HTTPException(status_code=403)
+        state["jobs"].setdefault(host_job_id, {"id": host_job_id, "status": "running"})
+        return {"created": created, "job": state["jobs"][host_job_id]}
+
+    @app.patch("/api/v1/addon-runtime/media-forge/jobs/{host_job_id}")
+    async def update_job(host_job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        state["job_updates"].append({"job_id": host_job_id, **payload})
+        job = state["jobs"].setdefault(host_job_id, {"id": host_job_id, "status": "running"})
+        if payload.get("status"):
+            job["status"] = payload["status"]
+        job.update({"phase": payload["phase"], "progress": payload.get("progress")})
+        return job
+
+    @app.get("/api/v1/addon-runtime/media-forge/jobs/{host_job_id}/control")
+    async def control(host_job_id: str) -> dict[str, Any]:
+        job = state["jobs"].setdefault(host_job_id, {"id": host_job_id, "status": "running"})
+        return {"host_job_id": host_job_id, "cancel_requested": job["status"] == "canceled", "status": job["status"], "revision": 1}
+
+    @app.post("/api/v1/addon-runtime/media-forge/resources/requests", status_code=202)
+    async def request_resource(payload: dict[str, Any]) -> dict[str, Any]:
+        if state["reject_resources"]:
+            raise HTTPException(status_code=503)
+        assert "owner" not in payload
+        assert payload["estimated_runtime_sec"] > 0
+        assert set(payload["vram"]) == {
+            "resident_bytes", "execution_peak_bytes", "cold_load_peak_bytes", "headroom_bytes", "confidence",
+        }
+        request_id = f"request-{len(state['resource_requests']) + 1}"
+        lease_id = f"lease-{request_id}"
+        if state["serialize_resources"] and state["reserved_leases"]:
+            value = {"request_id": request_id, "state": "waiting", "lease_id": None, "reason": "held_by_other_owner"}
+        else:
+            value = {"request_id": request_id, "state": "granted", "lease_id": lease_id, "reason": None}
+            state["reserved_leases"].add(lease_id)
+        state["resource_requests"].append({"payload": payload, **value})
+        return value
+
+    @app.get("/api/v1/addon-runtime/media-forge/resources/requests/{request_id}")
+    async def resource_status(request_id: str) -> dict[str, Any]:
+        return next(item for item in state["resource_requests"] if item["request_id"] == request_id)
+
+    @app.delete("/api/v1/addon-runtime/media-forge/resources/requests/{request_id}")
+    async def cancel_resource(request_id: str) -> dict[str, Any]:
+        return {"request_id": request_id, "state": "canceled"}
+
+    @app.post("/api/v1/addon-runtime/media-forge/resources/leases/{lease_id}/{action}")
+    async def lease_action(lease_id: str, action: str) -> dict[str, Any]:
+        state["lease_actions"].append((lease_id, action))
+        if action == "release":
+            state["reserved_leases"].discard(lease_id)
+            waiting = next((item for item in state["resource_requests"] if item["state"] == "waiting"), None)
+            if waiting is not None:
+                waiting["state"] = "granted"
+                waiting["reason"] = None
+                waiting["lease_id"] = f"lease-{waiting['request_id']}"
+                state["reserved_leases"].add(waiting["lease_id"])
+        return {"lease_id": lease_id, "job_id": "host", "device_id": "gpu0", "state": "released" if action == "release" else "active"}
+
+    @app.get("/api/v1/addon-runtime/media-forge/grants/grant:read-1")
+    async def grant_metadata() -> dict[str, Any]:
+        return {"grant_id": "grant:read-1", "kind": "read", "name": "reference.png", "size": len(state["grant_content"])}
+
+    @app.get("/api/v1/addon-runtime/media-forge/grants/grant:read-1/content")
+    async def grant_content() -> bytes:
+        from fastapi.responses import Response
+        return Response(state["grant_content"], media_type="application/octet-stream")
+
+    @app.post("/api/v1/addon-runtime/media-forge/files/outputs", status_code=201)
+    async def create_output(payload: dict[str, Any]) -> dict[str, Any]:
+        output_id = f"output-{len(state['outputs']) + 1}"
+        state["outputs"][output_id] = {"metadata": payload, "content": b""}
+        return {"output_id": output_id, "name": payload["filename"], "size": payload["size"], "received": 0}
+
+    @app.put("/api/v1/addon-runtime/media-forge/files/outputs/{output_id}/content")
+    async def upload_output(output_id: str, payload: bytes = Body()) -> dict[str, Any]:
+        state["outputs"][output_id]["content"] = payload
+        return {"output_id": output_id, "received": len(payload)}
+
+    @app.post("/api/v1/addon-runtime/media-forge/files/outputs/{output_id}/commit")
+    async def commit_output(output_id: str) -> dict[str, Any]:
+        output = state["outputs"][output_id]
+        assert len(output["content"]) == output["metadata"]["size"]
+        return {"asset_id": "asset:committed", "job_id": output["metadata"]["job_id"], "name": output["metadata"]["filename"]}
+
+    return app, state
 
 
-def issue(key: bytes, *, aud: str = "media-forge", now: int | None = None, lifetime: int = 600) -> str:
-    issued = int(time.time()) if now is None else now
-    encoded = _b64(json.dumps({
-        "aud": aud,
-        "sub": "job:test",
-        "kind": "service",
-        "iat": issued,
-        "exp": issued + lifetime,
-        "nonce": "test-nonce",
-    }, sort_keys=True, separators=(",", ":")).encode())
-    signature = _b64(hmac.new(key, encoded.encode(), hashlib.sha256).digest())
-    return f"{encoded}.{signature}"
-
-
-def host_client(tmp_path: Path) -> tuple[TestClient, dict[str, str]]:
-    key = b"k" * 32
-    key_file = tmp_path / "addon-token.key"
-    key_file.write_bytes(key)
-    key_file.chmod(0o600)
-    app = create_app(Settings(data_dir=tmp_path / "data", worker_timeout_sec=3, host_token_key_file=key_file))
+def host_client(
+    tmp_path: Path,
+    *,
+    token: str = "valid-job",
+    renew_sec: float = 10.0,
+) -> tuple[TestClient, dict[str, str], dict[str, Any]]:
+    host_app, state = control_deck_stub()
+    bridge = ControlDeckHostClient(
+        "https://control-deck.test",
+        transport=httpx.ASGITransport(app=host_app),
+    )
+    app = create_app(
+        Settings(
+            data_dir=tmp_path / "data",
+            worker_timeout_sec=3,
+            control_deck_url="https://control-deck.test",
+            host_lease_renew_sec=renew_sec,
+        ),
+        host_client=bridge,
+    )
     headers = {
-        "Authorization": f"Bearer {issue(key)}",
+        "Authorization": f"Bearer {token}",
         "X-Control-Deck-Addon-ID": "media-forge",
     }
-    return TestClient(app), headers
+    return TestClient(app), headers, state
 
 
 def generate_input(intent: str = "host generated robot") -> dict:
@@ -54,21 +194,35 @@ def generate_input(intent: str = "host generated robot") -> dict:
     }
 
 
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://control-deck.example",
+        "http://127.0.0.1:8765/api/v1",
+        "https://user:password@control-deck.example",
+        "file:///data1tb/ControlDeck",
+    ],
+)
+def test_control_deck_origin_rejects_unscoped_or_insecure_urls(tmp_path: Path, origin: str):
+    with pytest.raises(ValueError):
+        Settings(data_dir=tmp_path, control_deck_url=origin)
+
+
 def test_host_execution_requires_valid_audience_bound_token(tmp_path: Path):
-    client, headers = host_client(tmp_path)
+    client, headers, _state = host_client(tmp_path)
     with client:
         assert client.post("/addon/v1/agent/capabilities", json={}).status_code == 401
         wrong = dict(headers)
-        wrong["Authorization"] = f"Bearer {issue(b'k' * 32, aud='another-addon')}"
+        wrong["X-Control-Deck-Addon-ID"] = "another-addon"
         assert client.post("/addon/v1/agent/capabilities", json={}, headers=wrong).status_code == 401
         expired = dict(headers)
-        expired["Authorization"] = f"Bearer {issue(b'k' * 32, now=int(time.time()) - 601)}"
+        expired["Authorization"] = "Bearer expired-active"
         assert client.post("/addon/v1/agent/capabilities", json={}, headers=expired).status_code == 401
         assert client.post("/addon/v1/agent/capabilities", json={}, headers=headers).status_code == 200
 
 
 def test_agent_capabilities_never_disclose_model_names(tmp_path: Path):
-    client, headers = host_client(tmp_path)
+    client, headers, _state = host_client(tmp_path)
     with client:
         response = client.post("/addon/v1/agent/capabilities", json={"input": {}}, headers=headers)
     serialized = json.dumps(response.json()).lower()
@@ -77,7 +231,7 @@ def test_agent_capabilities_never_disclose_model_names(tmp_path: Path):
 
 
 def test_agent_inspect_does_not_disclose_model_identity(tmp_path: Path):
-    client, headers = host_client(tmp_path)
+    client, headers, _state = host_client(tmp_path)
     with client:
         created = client.post("/api/v1/jobs", json=generate_input("inspect robot")).json()
         terminal = wait_terminal(client, created["id"])
@@ -93,16 +247,16 @@ def test_agent_inspect_does_not_disclose_model_identity(tmp_path: Path):
 
 
 def test_workflow_and_agent_generate_return_opaque_references(tmp_path: Path):
-    client, headers = host_client(tmp_path)
+    client, headers, state = host_client(tmp_path)
     with client:
+        workflow_headers = {**headers, "Authorization": "Bearer valid-workflow"}
         workflow = client.post(
             "/addon/v1/workflow/execute",
             json={"input": generate_input(), "correlation": {"execution_id": "7", "node_id": "n1"}},
-            headers=headers,
+            headers=workflow_headers,
         )
-        assert workflow.status_code == 200
-        assert set(workflow.json()) == {"job_id", "status", "asset_ids"}
-        assert wait_terminal(client, workflow.json()["job_id"])["status"] == "succeeded"
+        assert workflow.status_code == 503
+        assert workflow.json()["detail"]["code"] == "host_workflow_job_bridge_unavailable"
 
         agent = client.post(
             "/addon/v1/agent/generate",
@@ -112,10 +266,13 @@ def test_workflow_and_agent_generate_return_opaque_references(tmp_path: Path):
         assert agent.status_code == 200
         assert agent.json()["job_id"].startswith("job_")
         assert agent.json()["asset_id"].startswith("asset_")
+        assert state["resource_requests"][0]["payload"]["job_id"] == "host-agent"
+        assert [action for _lease, action in state["lease_actions"]] == ["activate", "release"]
+        assert not any(update.get("status") for update in state["job_updates"])
 
 
 def test_host_payload_rejects_raw_paths_and_context_requires_grant(tmp_path: Path):
-    client, headers = host_client(tmp_path)
+    client, headers, _state = host_client(tmp_path)
     with client:
         raw = client.post(
             "/addon/v1/workflow/execute",
@@ -141,7 +298,7 @@ def test_host_payload_rejects_raw_paths_and_context_requires_grant(tmp_path: Pat
 
 
 def test_workspace_uses_host_bridge_without_browser_storage(tmp_path: Path):
-    client, _headers = host_client(tmp_path)
+    client, _headers, _state = host_client(tmp_path)
     with client:
         index = client.get("/")
         script = client.get("/static/app.js")
@@ -156,7 +313,7 @@ def test_workspace_uses_host_bridge_without_browser_storage(tmp_path: Path):
 
 
 def test_workspace_websocket_uses_host_token_and_structured_asset_transport(tmp_path: Path):
-    client, headers = host_client(tmp_path)
+    client, headers, state = host_client(tmp_path, token="valid-user")
     with client:
         try:
             with client.websocket_connect("/ws"):
@@ -192,3 +349,202 @@ def test_workspace_websocket_uses_host_token_and_structured_asset_transport(tmp_
             content = socket.receive_json()
             assert content["ok"] is True
             assert base64.b64decode(content["result"]["base64"]).startswith(b"\x89PNG")
+    assert state["resource_requests"][0]["payload"]["job_id"] == "host-created-1"
+    assert any(update.get("status") == "succeeded" for update in state["job_updates"])
+
+
+def test_scoped_file_bridge_reads_and_commits_without_host_paths(tmp_path: Path):
+    host_app, state = control_deck_stub()
+    bridge = ControlDeckHostClient(
+        "https://control-deck.test",
+        transport=httpx.ASGITransport(app=host_app),
+    )
+    source = tmp_path / "result.png"
+    source.write_bytes(b"generated-output")
+
+    async def scenario() -> None:
+        identity = await bridge.authenticate({
+            "Authorization": "Bearer valid-user",
+            "X-Control-Deck-Addon-ID": "media-forge",
+        })
+        metadata, content = await read_grant(bridge, identity, "grant:read-1")
+        assert metadata["name"] == "reference.png"
+        assert content == b"reference-bytes"
+        committed = await commit_file(
+            bridge,
+            identity,
+            host_job_id="host-created-1",
+            grant_id="grant:export-1",
+            source=source,
+            filename="result.png",
+            mime_type="image/png",
+            sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+        )
+        assert committed["asset_id"] == "asset:committed"
+        await bridge.close()
+
+    asyncio.run(scenario())
+    serialized = json.dumps(state["outputs"], default=lambda value: f"<{len(value)} bytes>")
+    assert str(tmp_path) not in serialized and "path" not in serialized
+
+
+def test_grant_content_stream_is_bounded(monkeypatch):
+    host_app, _ = control_deck_stub()
+    bridge = ControlDeckHostClient(
+        "https://control-deck.test",
+        transport=httpx.ASGITransport(app=host_app),
+    )
+    monkeypatch.setattr(host_client_module, "MAX_GRANT_BYTES", 4)
+
+    async def scenario() -> None:
+        identity = await bridge.authenticate({
+            "Authorization": "Bearer valid-user",
+            "X-Control-Deck-Addon-ID": "media-forge",
+        })
+        try:
+            await bridge.grant_content(identity, "grant:read-1")
+        except HostApiError as exc:
+            assert exc.code == "host_response_too_large"
+        else:
+            raise AssertionError("oversized grant response was accepted")
+        await bridge.close()
+
+    asyncio.run(scenario())
+
+
+def test_real_test_endpoint_exercises_scoped_file_roundtrip(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("MEDIA_FORGE_ENABLE_TEST_ENDPOINTS", "1")
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    with client:
+        response = client.post(
+            "/test/host-files/roundtrip",
+            json={
+                "read_grant_id": "grant:read-1",
+                "export_grant_id": "grant:export-1",
+                "filename": "roundtrip.bin",
+            },
+            headers=headers,
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["output"]["asset_id"] == "asset:committed"
+    assert state["outputs"]["output-1"]["content"] == b"reference-bytes"
+    assert any(update.get("status") == "succeeded" for update in state["job_updates"])
+
+
+def test_scoped_file_roundtrip_endpoint_is_hidden_by_default(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("MEDIA_FORGE_ENABLE_TEST_ENDPOINTS", raising=False)
+    client, headers, _ = host_client(tmp_path, token="valid-user")
+    with client:
+        response = client.post(
+            "/test/host-files/roundtrip",
+            json={
+                "read_grant_id": "grant:read-1",
+                "export_grant_id": "grant:export-1",
+                "filename": "roundtrip.bin",
+            },
+            headers=headers,
+        )
+    assert response.status_code == 404
+
+
+def test_hosted_jobs_wait_outside_worker_guard_renew_and_release(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user", renew_sec=0.05)
+    state["serialize_resources"] = True
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            socket.send_json({
+                "id": "first",
+                "method": "jobs.create",
+                "params": generate_input("first serialized") | {"constraints": {"_fake_delay_sec": 0.3}},
+            })
+            first = socket.receive_json()["result"]
+            socket.send_json({
+                "id": "second",
+                "method": "jobs.create",
+                "params": generate_input("second serialized") | {"constraints": {"_fake_delay_sec": 0.1}},
+            })
+            second = socket.receive_json()["result"]
+
+            deadline = time.monotonic() + 3
+            observed_waiting = False
+            while time.monotonic() < deadline:
+                first_job = client.app.state.store.get_job(first["id"])
+                second_job = client.app.state.store.get_job(second["id"])
+                if first_job.status == "running" and second_job.phase == "waiting_resource":
+                    observed_waiting = True
+                    assert len(client.app.state.jobs._processes) == 1
+                    break
+                time.sleep(0.01)
+            assert observed_waiting
+            assert wait_terminal(client, first["id"])["status"] == "succeeded"
+            assert wait_terminal(client, second["id"])["status"] == "succeeded"
+
+        deadline = time.monotonic() + 2
+        while len([action for _lease, action in state["lease_actions"] if action == "release"]) < 2:
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+
+    actions = [action for _lease, action in state["lease_actions"]]
+    assert actions.count("activate") == 2
+    assert actions.count("release") == 2
+    assert "renew" in actions
+
+
+def test_host_cancel_stops_worker_and_releases_lease(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            socket.send_json({
+                "id": "create",
+                "method": "jobs.create",
+                "params": generate_input("host canceled") | {"constraints": {"_fake_delay_sec": 1}},
+            })
+            created = socket.receive_json()["result"]
+            deadline = time.monotonic() + 2
+            while not client.app.state.jobs._processes:
+                assert time.monotonic() < deadline
+                time.sleep(0.01)
+            state["jobs"]["host-created-1"]["status"] = "canceled"
+            terminal = wait_terminal(client, created["id"])
+            assert terminal["status"] == "canceled"
+
+        deadline = time.monotonic() + 2
+        while not any(action == "release" for _lease, action in state["lease_actions"]):
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+    assert not any(update.get("status") == "canceled" for update in state["job_updates"])
+
+
+def test_service_stop_fails_hosted_job_and_releases_lease(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            socket.send_json({
+                "id": "stop",
+                "method": "jobs.create",
+                "params": generate_input("stop hosted") | {"constraints": {"_fake_delay_sec": 2}},
+            })
+            job_id = socket.receive_json()["result"]["id"]
+            deadline = time.monotonic() + 2
+            while not any(action == "activate" for _lease, action in state["lease_actions"]):
+                assert time.monotonic() < deadline
+                time.sleep(0.01)
+
+    stopped = Store(tmp_path / "data").get_job(job_id)
+    assert stopped.status == "failed"
+    assert stopped.error is not None and stopped.error.code == "service_stopped"
+    assert any(action == "release" for _lease, action in state["lease_actions"])
+
+
+def test_host_resource_rejection_fails_before_worker_start(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    state["reject_resources"] = True
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            socket.send_json({"id": "create", "method": "jobs.create", "params": generate_input("rejected")})
+            created = socket.receive_json()["result"]
+            terminal = wait_terminal(client, created["id"])
+            assert terminal["status"] == "failed"
+            assert terminal["error"]["code"] == "host_request_rejected"
+            assert client.app.state.jobs._processes == {}
+    assert state["lease_actions"] == []

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 from contextlib import asynccontextmanager
@@ -11,12 +12,15 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from . import __version__
 from .config import Settings
 from .domain import JobRequest
 from .environment import setup_snapshot
+from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
+from .host.files import read_grant, require_grant_id
+from .host.jobs import HostExecution
 from .jobs import JobManager
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .store import Store
@@ -32,6 +36,14 @@ class HealthUpdate(BaseModel):
     status: HealthState
 
 
+class HostFileRoundtrip(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    read_grant_id: str
+    export_grant_id: str
+    filename: str
+
+
 def _unavailable(reason: str, message: str) -> dict[str, Any]:
     return {
         "state": "unavailable",
@@ -41,10 +53,23 @@ def _unavailable(reason: str, message: str) -> dict[str, Any]:
     }
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    host_client: ControlDeckHostClient | None = None,
+) -> FastAPI:
     resolved = settings or Settings.from_env()
     store = Store(resolved.data_dir)
-    manager = JobManager(store, worker_timeout_sec=resolved.worker_timeout_sec)
+    host = host_client or ControlDeckHostClient(
+        resolved.control_deck_url,
+        timeout_sec=resolved.host_request_timeout_sec,
+    )
+    manager = JobManager(
+        store,
+        worker_timeout_sec=resolved.worker_timeout_sec,
+        host_client=host,
+        lease_renew_sec=resolved.host_lease_renew_sec,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -52,15 +77,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await manager.start()
         yield
         await manager.stop()
+        await host.close()
 
     app = FastAPI(title="ControlDeck Media Forge", version=__version__, lifespan=lifespan)
     app.state.health_override = None
     app.state.store = store
     app.state.jobs = manager
+    app.state.host = host
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
-    def authorize_host(request: Request) -> dict[str, Any]:
-        return require_host_service(request, resolved)
+    async def authorize_host(request: Request) -> HostIdentity:
+        return await require_host_service(request, host)
+
+    async def submit_hosted(
+        value: JobRequest,
+        identity: HostIdentity,
+        *,
+        workload_class: str,
+    ) -> dict[str, Any]:
+        missing = {"jobs.write", "resources.acquire"} - identity.granted_capabilities
+        if missing:
+            raise HTTPException(status_code=403, detail={"code": "host_capability_not_granted"})
+        try:
+            attached = await host.create_or_attach_job(identity, title="Media Forge image generation")
+        except HostApiError as exc:
+            raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from exc
+        host_job = attached.get("job")
+        if not isinstance(host_job, dict) or not isinstance(host_job.get("id"), str):
+            raise HTTPException(status_code=502, detail={"code": "invalid_host_response"})
+        execution = HostExecution(
+            identity=identity,
+            host_job_id=host_job["id"],
+            workload_class=workload_class,
+            owns_terminal=attached.get("created") is True,
+        )
+        return manager.submit_hosted(value, execution).model_dump(mode="json")
 
     async def wait_for_terminal(job_id: str, timeout: float = 25.0) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -86,14 +137,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, Any]:
         environment = setup_snapshot()
-        token_ready = resolved.host_token_key_file is not None and resolved.host_token_key_file.is_file()
-        token_state: str | dict[str, Any] = "available" if token_ready else _unavailable(
-            "setup_incomplete",
-            "ControlDeck service token verification has not been provisioned",
-        )
-        service_bridge_unavailable = _unavailable(
+        token_state: str | dict[str, Any] = "available"
+        workflow_bridge_unavailable = _unavailable(
             "dependency_unavailable",
-            "ControlDeck does not expose the Add-on service resource/jobs bridge in the referenced host revision",
+            "ControlDeck workflow tokens cannot attach to Add-on Runtime Jobs in the referenced host revision",
+        )
+        context_bridge_unavailable = _unavailable(
+            "dependency_unavailable",
+            "ControlDeck context tokens cannot read Add-on Runtime file grants in the referenced host revision",
         )
         status: HealthState = app.state.health_override or (
             environment.get("status", "setup_required") if environment else "setup_required"
@@ -107,11 +158,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "command:create-media": token_state,
                 "quick_action:create-media": token_state,
                 "settings:settings": "available",
-                "workflow_executor:media.generate": service_bridge_unavailable,
+                "workflow_executor:media.generate": workflow_bridge_unavailable,
                 "agent_tool:media.capabilities": token_state,
-                "agent_tool:media.generate": service_bridge_unavailable,
+                "agent_tool:media.generate": token_state,
                 "agent_tool:media.inspect": token_state,
-                "context_action:edit-image": token_state,
+                "context_action:edit-image": context_bridge_unavailable,
             },
             "setup": (
                 environment["setup"]
@@ -135,14 +186,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/host-integration")
     async def host_integration() -> dict[str, Any]:
         return {
-            "service_token_verifier": (
-                "configured"
-                if resolved.host_token_key_file is not None and resolved.host_token_key_file.is_file()
-                else "unconfigured"
-            ),
-            "resource_lease_bridge": "unavailable_in_host_revision",
-            "remote_jobs_bridge": "unavailable_in_host_revision",
-            "scoped_files_bridge": "unavailable_in_host_revision",
+            "service_token_verifier": "control_deck_introspection",
+            "resource_lease_bridge": "configured",
+            "remote_jobs_bridge": "configured",
+            "scoped_files_bridge": "configured",
+            "control_deck_origin": resolved.control_deck_url,
+            "known_host_limitations": [
+                "workflow_subject_not_accepted_by_runtime_jobs",
+                "context_subject_not_accepted_by_runtime_grants",
+            ],
             "fallback": "none",
         }
 
@@ -152,6 +204,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail={"code": "not_found"})
         app.state.health_override = update.status
         return await health()
+
+    @app.post("/test/host-files/roundtrip")
+    async def host_file_roundtrip(update: HostFileRoundtrip, request: Request) -> dict[str, Any]:
+        if os.environ.get("MEDIA_FORGE_ENABLE_TEST_ENDPOINTS") != "1":
+            raise HTTPException(status_code=404, detail={"code": "not_found"})
+        identity = await authorize_host(request)
+        if Path(update.filename).name != update.filename or update.filename in {"", ".", ".."}:
+            raise HTTPException(status_code=422, detail={"code": "invalid_filename"})
+        try:
+            read_id = require_grant_id(update.read_grant_id)
+            export_id = require_grant_id(update.export_grant_id)
+            metadata, content = await read_grant(host, identity, read_id)
+            attached = await host.create_or_attach_job(identity, title="Media Forge scoped file bridge test")
+            host_job_id = attached["job"]["id"]
+            created = await host.create_output(identity, {
+                "job_id": host_job_id,
+                "grant_id": export_id,
+                "filename": update.filename,
+                "size": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "content_type": "application/octet-stream",
+            })
+            await host.upload_output(identity, created["output_id"], content)
+            committed = await host.commit_output(identity, created["output_id"])
+            if attached.get("created") is True:
+                await host.update_job(identity, host_job_id, {
+                    "phase": "package",
+                    "progress": {"completed": 1, "total": 1},
+                    "status": "succeeded",
+                    "result": {"asset_id": committed["asset_id"]},
+                })
+        except (HostApiError, KeyError, ValueError) as exc:
+            code = exc.code if isinstance(exc, HostApiError) else "invalid_host_response"
+            raise HTTPException(status_code=502, detail={"code": code}) from exc
+        return {
+            "source": {"grant_id": read_id, "name": metadata["name"], "size": len(content)},
+            "output": committed,
+        }
 
     @app.get("/api/v1/capabilities")
     async def capabilities() -> dict[str, Any]:
@@ -237,15 +327,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/addon/v1/commands/create")
     async def create_command(request: Request) -> dict[str, Any]:
-        authorize_host(request)
+        await authorize_host(request)
         return {"route": "/x/media-forge/workspace/create"}
 
     @app.post("/addon/v1/workflow/execute")
     async def workflow_execute(request: Request) -> dict[str, Any]:
-        authorize_host(request)
+        identity = await authorize_host(request)
         payload = await request.json()
         value = host_job_input(payload)
-        return submitted_reference(manager.submit(value).model_dump(mode="json"))
+        if identity.subject.startswith("workflow:"):
+            raise HTTPException(status_code=503, detail={"code": "host_workflow_job_bridge_unavailable"})
+        return submitted_reference(await submit_hosted(value, identity, workload_class="workflow"))
 
     @app.post("/addon/v1/workflow/media.generate/execute")
     async def workflow_execute_compat(request: Request) -> dict[str, Any]:
@@ -253,7 +345,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/addon/v1/workflow/media.generate/cancel")
     async def workflow_cancel(request: Request) -> dict[str, Any]:
-        authorize_host(request)
+        await authorize_host(request)
         payload = await request.json()
         reject_host_paths(payload)
         job_id = payload.get("job_id")
@@ -267,25 +359,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/addon/v1/agent/capabilities")
     async def agent_capabilities(request: Request) -> dict[str, Any]:
-        authorize_host(request)
+        await authorize_host(request)
         payload = await request.json()
         reject_host_paths(payload)
         return await capabilities()
 
     @app.post("/addon/v1/agent/generate")
     async def agent_generate(request: Request) -> dict[str, Any]:
-        authorize_host(request)
+        identity = await authorize_host(request)
         payload = await request.json()
         value = host_job_input(payload)
-        job = manager.submit(value)
-        terminal = await wait_for_terminal(job.id)
+        job = await submit_hosted(value, identity, workload_class="agent-interactive")
+        terminal = await wait_for_terminal(job["id"])
+        await manager.wait_cleanup(job["id"])
+        if terminal["status"] != "succeeded":
+            error = terminal.get("error") or {"code": "media_job_failed"}
+            raise HTTPException(status_code=502, detail={"code": error.get("code", "media_job_failed")})
         result = submitted_reference(terminal)
         result["asset_id"] = terminal["asset_ids"][0] if terminal["asset_ids"] else None
         return result
 
     @app.post("/addon/v1/agent/inspect")
     async def agent_inspect(request: Request) -> dict[str, Any]:
-        authorize_host(request)
+        await authorize_host(request)
         payload = await request.json()
         reject_host_paths(payload)
         asset_id = payload.get("input", {}).get("asset_id")
@@ -310,7 +406,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/addon/v1/context/edit-image")
     async def context_edit_image(request: Request) -> dict[str, Any]:
-        authorize_host(request)
+        await authorize_host(request)
         payload = await request.json()
         reject_host_paths(payload)
         context = payload.get("context")
@@ -331,7 +427,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.websocket("/ws")
     async def workspace_socket(websocket: WebSocket) -> None:
         try:
-            require_host_service_headers(websocket.headers, resolved)
+            identity = await require_host_service_headers(websocket.headers, host)
         except HTTPException:
             await websocket.close(code=4401, reason="invalid host service token")
             return
@@ -356,7 +452,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     result: dict[str, Any]
                     if method == "jobs.create":
                         value = JobRequest.model_validate(params)
-                        result = manager.submit(value).model_dump(mode="json")
+                        result = await submit_hosted(value, identity, workload_class="interactive")
                     elif method == "jobs.get":
                         result = store.get_job(str(params.get("job_id", ""))).model_dump(mode="json")
                     elif method == "jobs.cancel":
