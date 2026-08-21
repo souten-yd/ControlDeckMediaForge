@@ -24,6 +24,7 @@ from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.files import GrantContentTooLarge, read_grant, require_grant_id
 from .host.jobs import HostExecution
 from .jobs import JobManager
+from .models import ModelRegistry, ModelRegistryError
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .store import Store
 
@@ -103,6 +104,31 @@ def create_app(
 
     async def authorize_host(request: Request) -> HostIdentity:
         return await require_host_service(request, host)
+
+    def model_catalog() -> dict[str, Any]:
+        try:
+            models = ModelRegistry.load(resolved.model_manifest, hf_home=resolved.hf_home).all()
+        except ModelRegistryError as exc:
+            raise HTTPException(status_code=503, detail={"code": "model_registry_invalid"}) from exc
+        return {
+            "items": [
+                {
+                    "id": item.model_id,
+                    "family": item.family,
+                    "version": item.version,
+                    "revision": item.revision,
+                    "license": item.license,
+                    "runtime_adapter": item.runtime_adapter,
+                    "capabilities": list(item.capabilities),
+                    "state": item.state,
+                    "installed": item.installed,
+                    "healthy": item.healthy,
+                    "measured_vram_bytes": item.measured_vram_bytes,
+                    "measured_runtime_sec": item.measured_runtime_sec,
+                }
+                for item in models
+            ]
+        }
 
     async def submit_hosted(
         value: JobRequest,
@@ -265,6 +291,10 @@ def create_app(
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },
         }
+
+    @app.get("/api/v1/models")
+    async def models() -> dict[str, Any]:
+        return model_catalog()
 
     @app.post("/api/v1/jobs", status_code=202)
     async def create_job(job_request: JobRequest, response: Response) -> dict[str, Any]:
@@ -514,6 +544,8 @@ def create_app(
                         if len(content) > 12 * 1024 * 1024:
                             raise ValueError("asset preview exceeds the workspace transport bound")
                         result = {"mime_type": asset.mime_type, "base64": base64.b64encode(content).decode("ascii")}
+                    elif method == "models.list":
+                        result = model_catalog()
                     else:
                         raise ValueError("workspace method is not supported")
                     await websocket.send_json({"id": request_id, "ok": True, "result": result})

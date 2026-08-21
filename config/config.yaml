@@ -4,5 +4,6 @@ data_dir: ~/.local/share/control-deck-media-forge
 # Heavy runtimes are prepared only after their size and disk checks are shown.
 auto_provision: true
 
-# Model weights require an explicit NVMe-backed library. Never place weights in a venv.
+# Additional model libraries can be configured here. Pinned models in the shared
+# NVMe-backed Hugging Face cache are detected automatically. Never place weights in a venv.
 model_libraries: []

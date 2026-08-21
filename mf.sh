@@ -145,6 +145,18 @@ filesystem_probe_path() {
 model_library_state() {
   if rg -q '^model_libraries:[[:space:]]*\[[^]]+\]' "$CONFIG_FILE" 2>/dev/null; then
     printf 'ok'
+  elif [ -d "$HF_HOME/hub" ] && PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PYTHON_BIN" - "$(model_registry_manifest)" "$HF_HOME" >/dev/null 2>&1 <<'PY'
+import sys
+from pathlib import Path
+
+from mediaforge.models import ModelRegistry
+
+models = ModelRegistry.load(Path(sys.argv[1]), hf_home=Path(sys.argv[2])).all()
+raise SystemExit(0 if any(model.installed for model in models) else 1)
+PY
+  then
+    printf 'ok'
   else
     printf 'missing'
   fi

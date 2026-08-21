@@ -133,6 +133,19 @@ def test_capability_discovery_does_not_expose_model_names(client):
     assert "qwen" not in serialized
 
 
+def test_model_catalog_reports_candidate_without_exposing_local_paths(client):
+    response = client.get("/api/v1/models")
+
+    assert response.status_code == 200
+    model = response.json()["items"][0]
+    assert model["id"] == "black-forest-labs/FLUX.2-klein-4B"
+    assert model["state"] == "experimental"
+    assert model["healthy"] is False
+    assert model["license"] == "Apache-2.0"
+    serialized = json.dumps(response.json())
+    assert "/data" not in serialized and "/home" not in serialized
+
+
 def test_manual_model_policy_is_explicit_opt_in(client):
     missing = request()
     missing["model_policy"] = "manual"
