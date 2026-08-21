@@ -921,3 +921,60 @@ ControlDeck リポジトリ                                              変更�
 push 更新の遅延測定
 320px / 390×844 でのレイアウト実測
 ```
+
+### PR-U0 — workspace transport foundation (IMPLEMENTED, measured 2026-08-22)
+
+`/ws` に表示系メソッドを追加した。公開 API・`schemas/`・`addon.json` は変更していない。
+
+```text
+capabilities.get   公開 capability document + サイズ envelope + clamp 済み preset
+library.list       asset に由来(generated/edited/imported)・要約・保護画素差分を付与
+                   edit_mask は既定で除外。ページングは読み取った最古行を基準にする
+assets.thumbnail   WebP・長辺 512px 上限・64KiB 上限・data_dir/thumbnails へキャッシュ
+preferences.*      ControlDeck identity subject 単位。allowlist 外のキーを拒否、4KiB 上限
+jobs.watch/unwatch job.changed を push。接続あたり 10 job、200ms 間引き、終端で自動解除
+```
+
+#### 実測（本開発機、fake worker 構成、1024×1024 ノイズ画像 50 枚）
+
+`assets.list` + `assets.content`（現行 app.js の経路）と、
+`library.list` + `assets.thumbnail` を同一データで比較した。
+`/ws` は base64 で運ぶため、content の実バイト数を 4/3 倍して計上している。
+
+```text
+元 PNG 1 枚:                        295,396 bytes
+before  転送量 50 枚:            19,715,361 bytes (18.80 MiB)
+after   転送量 50 枚:             2,777,682 bytes (2.65 MiB)
+削減:                                  85.9%
+after   生成込み所要:                 1.163 sec
+after   キャッシュ命中時:             0.009 sec
+最大サムネイル:                      41,392 bytes（上限 65,536）
+```
+
+サムネイル形式は測定で決めた。同じ画像を 256px へ縮小したとき PNG は
+220,714 バイトで 64KiB に収まらず、解像度を 128px まで落とす必要があった。
+WebP q80 は 256px を保ったまま 41,392 バイト。実装は画質を先に譲り
+（80→65→50）、それでも収まらない場合にだけ解像度を下げる。
+
+#### 確認したこと
+
+```text
+./mf.sh test                      155 passed（追加 17 件。従来 138 件は不変）
+新メソッドの host identity 要求    未認証接続は従来どおり 4401 で切断
+reject_host_paths                 5 メソッドすべてで unscoped_host_path を確認
+listener 例外の隔離               購読側が例外を投げても job 更新が継続することを確認
+preferences の秘密漏れ            拒否メッセージに送信値が含まれないことを確認
+```
+
+#### NOT TESTED / 未実施
+
+```text
+subresource 直接取得の可否（設計 §10.1）
+    installed host とログイン資格情報が必要なため未実施。
+    PR-U5（書き出し・原寸プレビュー）の着手前までに実施する。
+    サムネイルはこの結論に依存しないため、PR-U1〜U4 は先行できる。
+実ブラウザでの動作
+    本 PR は transport のみ。UI は未実装であり、実機証拠は PR-U7 で取る。
+実 GPU での生成を伴う push 挙動
+    fake worker 構成でのみ確認。実 worker の phase 遷移頻度は未計測。
+```

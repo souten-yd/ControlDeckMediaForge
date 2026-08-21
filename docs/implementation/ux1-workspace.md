@@ -124,13 +124,14 @@ tests/test_workspace_transport.py  新規
 
 ```json
 → {"method": "assets.thumbnail", "params": {"asset_id": "asset_...", "max_side": 256}}
-← {"mime_type": "image/png", "base64": "...", "width": 256, "height": 256}
+← {"mime_type": "image/webp", "base64": "...", "width": 256, "height": 256}
 ```
 
 - `max_side` は 64..512 に丸める。既定 256。
-- 生成物は `data_dir/thumbnails/<asset_id>_<max_side>.png`（mode 0o600、`contained()` 検証）。
+- 形式は **WebP**（実測根拠は設計 §8）。`mime_type` は `image/webp`。
+- 生成物は `data_dir/thumbnails/<asset_id>_<max_side>.webp`（mode 0o600、`contained()` 検証）。
   存在すれば再利用。asset 削除機能は現状無いので無効化処理は不要。
-- 出力が 64 KiB を超える場合は品質ではなくサイズを下げて再試行し、
+- 64 KiB を超える場合は **画質を先に下げ（80→65→50）、次に解像度を下げる**。
   それでも超えるなら `thumbnail_unavailable` を返す（握り潰さない）。
 - 元 asset が画像でない場合も `thumbnail_unavailable`。将来の video 用に
   `mime_type` 判定を 1 箇所へ集約する。
@@ -200,7 +201,9 @@ tests/test_workspace_transport.py
 
 ### 2.6 実測タスク: subresource 直接取得の可否（設計 §10.1）
 
-実装ではなく**測定**。PR-U0 の成果物は結論と証跡のみ。
+実装ではなく**測定**。installed host とログイン資格情報が要るため、
+**PR-U5（書き出し・原寸プレビュー）の着手前までに実施する**。
+それまでは /ws base64 を前提に実装してよい（サムネイルは結論に依存しない）。
 
 ```text
 手順

@@ -29,6 +29,20 @@ host path strings, limits requests to 1 MiB, and limits asset previews to 12 MiB
 This transport is an implementation detail for the workspace; it is not a new
 public operation or a replacement for the host resource/Jobs/files bridges.
 
+Workspace presentation methods were added for the UI slice and keep that same
+status. `capabilities.get` returns the public capability document plus the size
+envelope and clamped presets the UI may offer. `library.list` returns assets with
+their origin, a bounded summary, and the measured protected-pixel result, hiding
+edit masks unless they are explicitly requested. `assets.thumbnail` returns a
+cached WebP bounded to 512 px and 64 KiB. `preferences.get` / `preferences.set`
+persist an allowlisted set of presentation choices per ControlDeck identity
+subject, because the sandboxed view has no browser storage; they reject unknown
+keys and payloads above 4 KiB. `jobs.watch` / `jobs.unwatch` push
+`{"type": "event", "event": "job.changed"}` frames for up to ten jobs per
+connection, coalesced to at most one frame per job every 200 ms, so progress is
+no longer polled from a single panel. None of these appear in the public API,
+`schemas/`, or `addon.json`.
+
 ## Jobs
 
 `POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json).

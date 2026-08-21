@@ -7,6 +7,7 @@ import threading
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
@@ -24,12 +25,27 @@ class Store:
         self.db_path = self.data_dir / "media-forge.sqlite3"
         self.asset_dir = self.data_dir / "assets"
         self.work_dir = self.data_dir / "work"
+        self.thumbnail_dir = self.data_dir / "thumbnails"
         self._lock = threading.RLock()
+        self._listeners: list[Callable[[Job], None]] = []
+
+    def observe(self, listener: Callable[[Job], None]) -> None:
+        """Register a job-change listener. Listener failures never reach callers."""
+        self._listeners.append(listener)
+
+    def _notify(self, job: Job) -> Job:
+        for listener in list(self._listeners):
+            try:
+                listener(job)
+            except Exception:  # noqa: BLE001 - observation must not break job execution
+                continue
+        return job
 
     def initialize(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.asset_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.work_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.thumbnail_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript(
                 """
@@ -68,6 +84,11 @@ class Store:
                     id TEXT PRIMARY KEY,
                     value_json TEXT NOT NULL,
                     created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS preferences (
+                    subject TEXT PRIMARY KEY,
+                    values_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
                 """
@@ -139,7 +160,7 @@ class Store:
                     now,
                 ),
             )
-        return self.get_job(job_id)
+        return self._notify(self.get_job(job_id))
 
     def get_job(self, job_id: str) -> Job:
         with self._connect() as connection:
@@ -198,7 +219,7 @@ class Store:
             )
             if cursor.rowcount != 1:
                 raise KeyError(job_id)
-        return self.get_job(job_id)
+        return self._notify(self.get_job(job_id))
 
     def request_cancel(self, job_id: str) -> Job:
         with self._lock, self._connect() as connection:
@@ -214,7 +235,7 @@ class Store:
                         "UPDATE jobs SET status = ?, phase = NULL, updated_at = ? WHERE id = ?",
                         (JobStatus.CANCELED, utc_now(), job_id),
                     )
-        return self.get_job(job_id)
+        return self._notify(self.get_job(job_id))
 
     def cancel_requested(self, job_id: str) -> bool:
         with self._connect() as connection:
@@ -264,6 +285,43 @@ class Store:
         with self._connect() as connection:
             rows = connection.execute("SELECT metadata_json FROM assets ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
         return [Asset.model_validate_json(row["metadata_json"]) for row in rows]
+
+    def list_asset_records(self, limit: int, before: str | None = None) -> list[tuple[Asset, Provenance]]:
+        """Return asset+provenance pairs so the workspace never issues N+1 lookups."""
+        query = "SELECT metadata_json, provenance_json FROM assets"
+        parameters: list[object] = []
+        if before:
+            query += " WHERE created_at < ?"
+            parameters.append(before)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        parameters.append(limit)
+        with self._connect() as connection:
+            rows = connection.execute(query, tuple(parameters)).fetchall()
+        return [
+            (
+                Asset.model_validate_json(row["metadata_json"]),
+                Provenance.model_validate_json(row["provenance_json"]),
+            )
+            for row in rows
+        ]
+
+    def get_preferences(self, subject: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT values_json FROM preferences WHERE subject = ?", (subject,)
+            ).fetchone()
+        return json.loads(row["values_json"]) if row else {}
+
+    def set_preferences(self, subject: str, values: dict[str, Any]) -> dict[str, Any]:
+        payload = json.dumps(values, ensure_ascii=False)
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """INSERT INTO preferences (subject, values_json, updated_at) VALUES (?, ?, ?)
+                   ON CONFLICT(subject) DO UPDATE SET values_json = excluded.values_json,
+                   updated_at = excluded.updated_at""",
+                (subject, payload, utc_now()),
+            )
+        return values
 
     def create_reference_collection(self, value: ReferenceCollectionInput) -> ReferenceCollection:
         for asset_id in value.asset_ids:
