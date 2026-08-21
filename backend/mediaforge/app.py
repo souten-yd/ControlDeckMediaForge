@@ -36,6 +36,16 @@ MAX_CONTEXT_IMAGE_BYTES = 64 * 1024 * 1024
 MAX_CONTEXT_IMAGE_PIXELS = 100_000_000
 
 
+def workspace_test_response_delay_sec() -> float:
+    if os.environ.get("MEDIA_FORGE_ENABLE_TEST_ENDPOINTS") != "1":
+        return 0.0
+    try:
+        requested = float(os.environ.get("MEDIA_FORGE_TEST_WORKSPACE_DELAY_SEC", "0"))
+    except ValueError:
+        return 0.0
+    return min(max(requested, 0.0), 2.0)
+
+
 class HealthUpdate(BaseModel):
     status: HealthState
 
@@ -74,6 +84,7 @@ def create_app(
         host_client=host,
         lease_renew_sec=resolved.host_lease_renew_sec,
     )
+    workspace_test_delay_pending = True
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -187,10 +198,7 @@ def create_app(
             "remote_jobs_bridge": "configured",
             "scoped_files_bridge": "configured",
             "control_deck_origin": resolved.control_deck_url,
-            "known_host_limitations": [
-                "workflow_subject_not_accepted_by_runtime_jobs",
-                "context_subject_not_accepted_by_runtime_grants",
-            ],
+            "known_host_limitations": [],
             "fallback": "none",
         }
 
@@ -455,7 +463,7 @@ def create_app(
         elif not isinstance(resource_id, str) or not resource_id:
             raise HTTPException(status_code=422, detail={"code": "invalid_context"})
         return {
-            "action": "open_workspace",
+            "action": "open_route",
             "route": "/x/media-forge/workspace/create",
             "context": {"type": context["type"], "source": source},
         }
@@ -528,6 +536,11 @@ def create_app(
     @app.get("/models")
     @app.get("/settings")
     async def workspace() -> HTMLResponse:
+        nonlocal workspace_test_delay_pending
+        delay_sec = workspace_test_response_delay_sec() if workspace_test_delay_pending else 0.0
+        workspace_test_delay_pending = False
+        if delay_sec:
+            await asyncio.sleep(delay_sec)
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         stylesheet = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
         script = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")

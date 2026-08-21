@@ -306,6 +306,7 @@ def test_host_payload_rejects_raw_paths_and_context_requires_grant(tmp_path: Pat
             headers=headers,
         )
         assert accepted.status_code == 200
+        assert accepted.json()["action"] == "open_route"
         assert "grant_id" not in json.dumps(accepted.json())
         assert accepted.json()["context"]["source"] == {
             "name": "reference.png", "size": len(_state["grant_content"]),
@@ -351,6 +352,17 @@ def test_workspace_uses_host_bridge_without_browser_storage(tmp_path: Path):
     assert "control-deck-addon.connect" in script.text
     assert "theme.changed" in script.text and "route.sync" in script.text and "disable.pending" in script.text
     assert "localStorage" not in script.text and "sessionStorage" not in script.text and "document.cookie" not in script.text
+
+
+def test_workspace_response_delay_is_bounded_and_test_only(monkeypatch):
+    from mediaforge.app import workspace_test_response_delay_sec
+
+    monkeypatch.setenv("MEDIA_FORGE_TEST_WORKSPACE_DELAY_SEC", "10")
+    assert workspace_test_response_delay_sec() == 0.0
+    monkeypatch.setenv("MEDIA_FORGE_ENABLE_TEST_ENDPOINTS", "1")
+    assert workspace_test_response_delay_sec() == 2.0
+    monkeypatch.setenv("MEDIA_FORGE_TEST_WORKSPACE_DELAY_SEC", "invalid")
+    assert workspace_test_response_delay_sec() == 0.0
 
 
 def test_workspace_websocket_uses_host_token_and_structured_asset_transport(tmp_path: Path):
