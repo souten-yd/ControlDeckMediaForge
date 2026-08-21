@@ -294,7 +294,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             provenance = store.get_provenance(asset_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
-        return {"asset": asset.model_dump(mode="json"), "provenance": provenance.model_dump(mode="json")}
+        return {
+            "asset": asset.model_dump(mode="json"),
+            "provenance": {
+                "operation": provenance.operation,
+                "license": provenance.license,
+                "parent_asset_ids": provenance.parent_asset_ids,
+                "validation": provenance.validation,
+                "warnings": provenance.warnings,
+                "output_sha256": provenance.output_sha256,
+            },
+        }
 
     @app.post("/addon/v1/context/edit-image")
     async def context_edit_image(request: Request) -> dict[str, Any]:

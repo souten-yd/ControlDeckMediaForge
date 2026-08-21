@@ -76,6 +76,22 @@ def test_agent_capabilities_never_disclose_model_names(tmp_path: Path):
     assert "fake-image" not in serialized and "flux" not in serialized and "qwen" not in serialized
 
 
+def test_agent_inspect_does_not_disclose_model_identity(tmp_path: Path):
+    client, headers = host_client(tmp_path)
+    with client:
+        created = client.post("/api/v1/jobs", json=generate_input("inspect robot")).json()
+        terminal = wait_terminal(client, created["id"])
+        response = client.post(
+            "/addon/v1/agent/inspect",
+            json={"input": {"asset_id": terminal["asset_ids"][0]}, "correlation": {"job_id": "host-inspect"}},
+            headers=headers,
+        )
+    serialized = json.dumps(response.json()).lower()
+    assert response.status_code == 200
+    assert "model_id" not in serialized and "fake-image" not in serialized
+    assert response.json()["provenance"]["license"] == "CC0-1.0"
+
+
 def test_workflow_and_agent_generate_return_opaque_references(tmp_path: Path):
     client, headers = host_client(tmp_path)
     with client:

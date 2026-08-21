@@ -5,6 +5,7 @@ let bridgeNonce = "";
 let bridgeSequence = 0;
 let activeJobId = "";
 let disabled = false;
+let hostBusy = false;
 
 function applyTheme(theme = {}) {
   const root = document.documentElement;
@@ -37,6 +38,12 @@ function callHost(method, params = {}) {
   });
 }
 
+function setHostBusy(value) {
+  if (!bridgePort || hostBusy === value) return;
+  hostBusy = value;
+  void callHost("host.busy.set", {busy: value}).catch(() => { hostBusy = !value; });
+}
+
 function activate(name, sync = true) {
   const selected = document.getElementById(name) ? name : "create";
   document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === selected));
@@ -48,6 +55,9 @@ function activate(name, sync = true) {
 
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => activate(tab.dataset.tab)));
 document.querySelectorAll("[data-refresh]").forEach((button) => button.addEventListener("click", () => activate(button.dataset.refresh, false)));
+document.querySelectorAll("#create-form textarea, #create-form input, #create-form select").forEach((field) => field.addEventListener("input", () => {
+  setHostBusy(true);
+}));
 
 document.getElementById("create-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -63,6 +73,7 @@ document.getElementById("create-form").addEventListener("submit", async (event) 
     local_only: true
   })});
   if (!response.ok) { status.textContent = `受付に失敗しました (${response.status})`; return; }
+  setHostBusy(false);
   const job = await response.json();
   activeJobId = job.id;
   status.textContent = `Job ${job.id} を実行中…`;
@@ -127,8 +138,7 @@ async function showProvenance(id) {
 
 document.getElementById("close-dialog").addEventListener("click", () => document.getElementById("provenance-dialog").close());
 document.getElementById("open-host-jobs").addEventListener("click", () => {
-  if (activeJobId) void callHost("host.job.open", {job_id: activeJobId}).catch(() => {});
-  else void callHost("host.route.open", {route: "/jobs"}).catch(() => {});
+  void callHost("host.route.open", {route: "/jobs"}).catch(() => {});
 });
 
 window.addEventListener("message", (event) => {
@@ -143,7 +153,12 @@ window.addEventListener("message", (event) => {
     if (message.event === "safe_area.changed") applySafeArea(message.data);
     if (message.event === "route.changed") activate(String(message.data?.path || "/").split("/")[1] || "create", false);
     if (message.event === "session.updated") bridgeNonce = message.data.session_nonce;
-    if (message.event === "disable.pending") { disabled = true; activeJobId = ""; void callHost("host.busy.set", {busy: false}).catch(() => {}); }
+    if (message.event === "disable.pending") {
+      disabled = true;
+      if (activeJobId) void api(`jobs/${encodeURIComponent(activeJobId)}`, {method: "DELETE"}).catch(() => {});
+      activeJobId = "";
+      setHostBusy(false);
+    }
   };
   bridgePort.start();
   document.documentElement.dataset.bridge = "ready";

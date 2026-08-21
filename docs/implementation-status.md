@@ -79,7 +79,7 @@ MF0-4 completion and the lease/Jobs/file-grant portions of MF0-7 are blocked unt
 
 The embedded workspace provides Create, Library, Jobs, Models, and Settings without localStorage, sessionStorage, cookies, or parent DOM access. It waits for the MessageChannel handshake before first paint, validates the parent origin, applies initial/theme-change tokens without reload, handles locale/safe-area/route/session/disable events, syncs routes, updates the title, exposes the command-palette shortcut, and clears busy state on disable. Standalone rendering remains available when the page is not framed.
 
-Workflow, agent capability/generate/inspect, command, and edit-image context endpoints are implemented with service-token enforcement and structured job/asset responses. Capability discovery contains no model name. Context responses do not echo the scoped token.
+Workflow, agent capability/generate/inspect, command, and edit-image context endpoints are implemented with service-token enforcement and structured job/asset responses. Capability discovery and all agent tool responses contain no model name; inspect returns the license, lineage, validation, warnings, and output hash without implementation identity. Context responses do not echo the scoped token.
 
 Real-process verification on 2026-08-21 used an isolated data directory and an isolated 0600 32-byte signing key; the directory was moved to trash after shutdown:
 
@@ -249,7 +249,7 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 ## Additional behavior checks
 
 - Temporarily removing the GPU snapshot left the real core service running. Health returned HTTP 200 / `setup_required`, with `gpu.state=checking`; restoring and rerunning the GPU check returned it to `ok`.
-- Latest focused `./mf.sh test`: 34 passed in 1.29 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
+- Latest focused `./mf.sh test`: 35 passed in 1.35 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
 - `bash -n mf.sh` and `git diff --check` passed. These are static checks only.
 - Final ControlDeck checkout observation: HEAD `9272c05`, clean `git status --short`. It was read-only throughout this slice; no ControlDeck file was modified.
 
