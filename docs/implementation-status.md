@@ -978,3 +978,73 @@ subresource 直接取得の可否（設計 §10.1）
 実 GPU での生成を伴う push 挙動
     fake worker 構成でのみ確認。実 worker の phase 遷移頻度は未計測。
 ```
+
+### PR-U1 — workspace shell (IMPLEMENTED, browser-observed 2026-08-22)
+
+情報構造を 5 タブから 3 ナビ + 設定へ作り替え、段階開示とモバイル専用レイアウトを入れた。
+
+```text
+frontend/index.html   3 ナビ・モードトグル・skeleton・詳細断片を <template> に分離
+frontend/styles.css   PC 2 ペイン / モバイル単一列 + 下部タブ。edit.css を統合して 1 本化
+frontend/app.js       capability による出し分け、preferences 復元、jobs.watch での進捗、
+                      library.list + assets.thumbnail での一覧、phase/失敗の日本語化
+addon.json            mobile: "companion" -> "embedded" / version 0.1.2 -> 0.2.0
+backend/app.py        /activity ルート追加、stylesheet を 1 本に
+```
+
+#### 実機ブラウザ観測（standalone、Chromium、light と dark の 2 パス）
+
+`scripts/ux_standalone_e2e.py` を実行。証跡は `/data1tb/mediaforge-ux1-evidence/{light,dark}/`。
+
+```text
+desktop 1280x800   2 ペイン / ナビ 3 / シンプルで advanced-* が DOM に 0 件
+詳細モード          advanced-* 16 件が出現、モデル方針 6 種、戻すと再び 0 件
+capability 反映     video.image_to_video と 3d.image_to_3d を「使えません」と表示
+編集操作            画像添付で 5 種が出現し、保護保証の文言が操作と同時に切り替わる
+phone 390x844      下部タブが position: fixed、単一列、横スクロール 0px、
+                    タップ標的 60px、一覧 2 列
+narrow 320x640     横スクロール 0px
+console / page error  両パスとも 0 件
+初期表示            0.06 sec（standalone・fake ではない実 manifest 構成）
+```
+
+崩れを 1 件見つけて直した。`[hidden]` が `.sub-field { display: grid }` に負けており、
+「一部だけ直す」を選んでいるのに参照画像の入力と件数バッジ 0 が出ていた。
+`[hidden] { display: none !important }` を入れ、E2E に選択と入力の対応を検査する
+assertion を追加した（スクリーンショット目視だけでは見落とす種類の崩れ）。
+
+#### 確認したこと
+
+```text
+./mf.sh test        171 passed（追加 16 件の静的契約テストを含む）
+静的契約テスト       storage API 不使用 / DOM 契約 id / advanced-* が template の外に無い /
+                    UI が読む capability が backend の出力の部分集合 /
+                    失敗文言の code が実在 / 全 phase に日本語がある /
+                    preferences キーが allowlist 内 / addon.json の mobile と version
+```
+
+`./mf.sh test` は 1 度だけ
+`test_workspace_websocket_chunk_import_exceeds_single_message_bound_and_cleans_up`
+で失敗した。standalone の開発サーバを同時に動かしていた回であり、その後
+単体 1 回・全体 5 回では再現しなかった。原因は特定できていないため、
+再発したら記録する。
+
+#### NOT TESTED / 未実施
+
+```text
+installed host での埋め込み表示
+    768px 未満で状態カードではなく workspace が出ることを実機で未確認。
+    addon.json は embedded を宣言済みだが、確認は PR-U7 で行う。
+モードの再読込またぎの復元
+    preferences の永続化は backend 単体テスト済みだが、UI 経路は standalone では
+    /ws を張れないため未確認（standalone は identity を持てない）。
+theme token の反映・safe_area・route 同期・通知条件
+    host bridge が要るため未確認。
+サイズ preset の実値
+    standalone では capabilities.get が envelope を返さずフォールバック値を使う。
+    実 envelope に基づく preset は installed host で確認する。
+マスクを筆で描く経路
+    未実装（PR-U3）。現在はマスク画像のファイル指定のみ。
+失敗時の「出口」ボタン
+    未実装（PR-U4）。現在は日本語 1 文までで、操作は付いていない。
+```
