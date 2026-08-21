@@ -19,6 +19,13 @@ provisioned. Workflow and agent generation remain unavailable in health because
 the referenced host revision has no service-side resource lease/Jobs bridge;
 there is no unleased or cookie-based fallback.
 
+The embedded opaque-origin workspace uses the private `/ws` transport through
+ControlDeck's nonce-bound WebSocket proxy. It accepts only a bounded set of
+structured job/asset methods, requires the same Add-on service identity, rejects
+host path strings, limits requests to 1 MiB, and limits asset previews to 12 MiB.
+This transport is an implementation detail for the workspace; it is not a new
+public operation or a replacement for the host resource/Jobs/files bridges.
+
 ## Jobs
 
 `POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json). MF0-2 executes `image.generate` through a deterministic fake worker. Other operation names are reserved by the public contract and fail with `capability_unavailable` until their goal is delivered.

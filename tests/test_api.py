@@ -36,6 +36,18 @@ def test_health_defaults_to_setup_required(client):
     assert payload["contributions"]["workflow_executor:media.generate"]["state"] == "unavailable"
 
 
+def test_health_uses_only_control_deck_reason_codes(client):
+    allowed = {
+        "service_not_running", "service_unreachable", "setup_incomplete", "worker_not_installed",
+        "model_not_installed", "runtime_incompatible", "contract_incompatible", "capability_not_granted",
+        "permission_denied", "resource_unavailable", "dependency_unavailable", "health_check_failed", "unknown",
+    }
+    payload = client.get("/health").json()
+    for contribution in payload["contributions"].values():
+        if isinstance(contribution, dict):
+            assert contribution["reason_code"] in allowed
+
+
 def test_health_supports_all_states_only_when_test_endpoint_is_enabled(client, monkeypatch):
     monkeypatch.setenv("MEDIA_FORGE_ENABLE_TEST_ENDPOINTS", "1")
     for state in ("healthy", "degraded", "unavailable", "setup_required"):

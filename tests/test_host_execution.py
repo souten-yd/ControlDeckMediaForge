@@ -146,7 +146,49 @@ def test_workspace_uses_host_bridge_without_browser_storage(tmp_path: Path):
         index = client.get("/")
         script = client.get("/static/app.js")
     assert index.status_code == 200 and 'data-bridge="waiting"' in index.text
+    assert "MEDIA_FORGE_INLINE_STYLE" not in index.text
+    assert "MEDIA_FORGE_INLINE_SCRIPT" not in index.text
+    assert "control-deck-addon.connect" in index.text
     assert script.status_code == 200
     assert "control-deck-addon.connect" in script.text
     assert "theme.changed" in script.text and "route.sync" in script.text and "disable.pending" in script.text
     assert "localStorage" not in script.text and "sessionStorage" not in script.text and "document.cookie" not in script.text
+
+
+def test_workspace_websocket_uses_host_token_and_structured_asset_transport(tmp_path: Path):
+    client, headers = host_client(tmp_path)
+    with client:
+        try:
+            with client.websocket_connect("/ws"):
+                pass
+        except Exception:
+            pass
+        else:
+            raise AssertionError("workspace WebSocket accepted a request without a host token")
+
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            socket.send_json({"id": "path", "method": "assets.list", "params": {"path": "/tmp/escape"}})
+            rejected = socket.receive_json()
+            assert rejected["ok"] is False
+            assert rejected["error"]["code"] == "unscoped_host_path"
+
+            socket.send_json({"id": "create", "method": "jobs.create", "params": generate_input("socket robot")})
+            created = socket.receive_json()
+            assert created["ok"] is True
+            job_id = created["result"]["id"]
+
+            deadline = time.monotonic() + 5
+            terminal = None
+            while time.monotonic() < deadline:
+                socket.send_json({"id": "get", "method": "jobs.get", "params": {"job_id": job_id}})
+                terminal = socket.receive_json()["result"]
+                if terminal["status"] in {"succeeded", "failed", "canceled"}:
+                    break
+                time.sleep(0.02)
+            assert terminal is not None and terminal["status"] == "succeeded"
+
+            asset_id = terminal["asset_ids"][0]
+            socket.send_json({"id": "content", "method": "assets.content", "params": {"asset_id": asset_id}})
+            content = socket.receive_json()
+            assert content["ok"] is True
+            assert base64.b64decode(content["result"]["base64"]).startswith(b"\x89PNG")
