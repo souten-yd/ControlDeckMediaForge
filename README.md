@@ -25,10 +25,11 @@ ControlDeck integration is also deliberately generic: Media Forge remains a sepa
 MF0-0 through MF0-7 / G0 are complete: the isolated service, durable fake-worker
 jobs, assets/provenance, embedded workspace, ControlDeck Jobs/Broker/files,
 Workflow, Context Action, and real OpenCode tool discovery/call have passed their
-real-process acceptance checks. G1 local image generation now has a measured
-FLUX.2 Klein 4B automatic route and real R9700/ROCm evidence. G1 remains in
-progress while the verified release-bundle standard installation path is
-completed. See `docs/implementation-status.md`.
+real-process acceptance checks. G1 local image generation is complete with a
+measured FLUX.2 Klein 4B automatic route, real R9700/ROCm evidence, and the
+verified GitHub release-bundle standard installation path. Public contracts are
+frozen at G1; later goals must extend them without breaking existing consumers.
+See `docs/implementation-status.md`.
 
 ## Run locally
 

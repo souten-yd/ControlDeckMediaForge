@@ -3,9 +3,9 @@
 Status: Draft / baseline architecture  
 Date: 2026-08-20
 
-Implementation: G0 / MF0 completed on 2026-08-21. G1 real image generation is
-implemented and measured on R9700/ROCm; completion remains pending on the
-verified release-bundle standard installation E2E. See
+Implementation: G0 / MF0 and G1 completed on 2026-08-21. Real image generation
+and the verified release-bundle standard installation were measured on
+R9700/ROCm. G1 public contracts are frozen at Media Forge commit `b29cec0`; see
 `docs/implementation-status.md` for measurements and remaining NOT TESTED items.
 
 ## 1. Purpose
