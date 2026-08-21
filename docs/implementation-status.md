@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-22
-Scope: MF0-0 through MF0-7 complete; G0 and G1 complete; G2 strict-edit slice implemented and measured
+Scope: MF0-0 through MF0-7 complete; G0 and G1 complete; G2 edit slices implemented and measured
 Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
 Repository head released and verified for G1: `1e88472e753fd484638f072f7c4b327c8010ab60` (`v0.1.2`)
 
@@ -638,7 +638,7 @@ requires the documented impact, migration, and contract/schema version bump.
   edit, and VLM semantic review are NOT TESTED. G3 character consistency and G5
   M5Stack expression/gesture variants have not started out of roadmap order.
 
-## G2 — strict edit vertical slice (IN PROGRESS, measured 2026-08-22)
+## G2 — image editing (IN PROGRESS, measured 2026-08-22)
 
 The existing frozen `image.edit` operation now accepts exactly one imported
 source asset plus `strict_edit=true` and an `editable_mask_asset_id`. Imports
@@ -702,11 +702,49 @@ process/browser run above.
 
 ### NOT TESTED / remaining G2
 
-- Non-strict single-reference edit is deliberately not advertised and is NOT
-  TESTED; unavailable capability requests fail closed instead of using fake.
-- Inpaint, outpaint, variation, multi-reference edit, and VLM semantic review
-  with bounded retry remain NOT TESTED and are required before G2 completion.
+- Outpaint, multi-reference edit, and VLM semantic review with bounded retry
+  remain NOT TESTED and are required before G2 completion.
 - Natural OOM during edit is NOT TESTED. Existing conservative G1 lease values
   remain in use; the sampled absolute VRAM value is not substituted for the
   lease envelope.
 - G2 is not marked complete, and no release version is assigned by this slice.
+
+### Single-reference edit, inpaint, and variation
+
+PR #16 merged the strict masked compositor and validator as Media Forge main
+`18960a8`. The next additive slice keeps `image.edit` and exposes an `edit_mode`
+constraint: `reference` for whole-image instruction editing, `variation` for a
+new alternative from one source, and `inpaint` for strict masked editing. The UI
+requires a mask only for inpaint and clearly warns that reference/variation may
+change the whole image. Invalid combinations fail before GPU admission.
+
+The first 1024x1024 variation job found a new first-use cost: load completed in
+9.424858 seconds, while reference-image ROCm compilation/generation took
+229.208449 seconds. Its 180-second browser assertion timed out, so it is not
+reported as a browser pass. The underlying job succeeded and released its
+lease. Two cache-warm, separate-worker installed-host Chromium runs then passed:
+
+```text
+variation:       27.002184 sec browser total; load 9.655933; generation 10.720631
+reference edit:  25.875298 sec browser total; load 10.693552; generation 9.148814
+final exact branch variation: 25.737216 sec; load 9.577456; generation 9.121249
+assets per run:  source import + one lineage child
+output pair:     identical 1,447,679-byte PNG / SHA-256 b03dd63d...778689
+browser errors:  0
+placement:       pipeline/text encoder/transformer/VAE cuda:0; offload hooks 0
+Broker after:    active 0 / waiting 0
+```
+
+The final exact branch also reported `available` for single-reference edit,
+inpaint, variation, and strict edit, and the post-run Broker query returned
+active 0 / waiting 0.
+
+Visual inspection confirmed the requested cheerful two-hand waving pose while
+retaining the orange mesh hair and black/orange hoodie. This is edit quality
+evidence for this sample, not a G3 consistency claim. Evidence is retained under
+`/data1tb/mediaforge-g2-e2e.Frwz2w/variation-browser-warm/` and
+`reference-browser-warm/`.
+
+Focused editing/API/host regression completed with 68 passed. Full
+`./mf.sh test` completed with 106 passed in 5.62 seconds. These are regression
+evidence, not substitutes for the real browser and worker observations above.

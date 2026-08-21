@@ -33,10 +33,13 @@ public operation or a replacement for the host resource/Jobs/files bridges.
 
 `POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json).
 `image.generate` routes by `image.text_to_image`. `image.edit` uses one source
-`inputs[].asset_id`; strict editing additionally uses these additive constraint fields:
+`inputs[].asset_id`. Its optional `edit_mode` is `reference` (default),
+`variation`, or `inpaint`. Reference and variation may change the whole image;
+inpaint requires strict editing and an asset mask:
 
 ```json
 {
+  "edit_mode": "inpaint",
   "strict_edit": true,
   "editable_mask_asset_id": "asset_0123456789abcdef0123456789abcdef"
 }
@@ -48,6 +51,8 @@ nonzero is editable. Empty, full-canvas, mismatched, missing, or non-PNG masks
 fail before GPU admission. A strict output succeeds only if the backend's
 independent validator measures zero changed protected pixels. Other reserved
 operation names fail with `capability_unavailable` until their goal is delivered.
+`variation` cannot be combined with `strict_edit`; a mask ID without strict
+editing also fails explicitly rather than being ignored.
 
 `GET /api/v1/jobs` lists durable jobs. `GET /api/v1/jobs/{job_id}` returns one job. `DELETE /api/v1/jobs/{job_id}` requests cancellation.
 
@@ -58,9 +63,9 @@ Every request is local-only. `local_only` defaults to `true`; any explicit `fals
 ## Capabilities
 
 `GET /api/v1/capabilities` reports capability state as `available`, `unavailable`, or `experimental`.
-It reports text generation, single-reference edit, and strict edit independently
-from installed measured model capabilities and never exposes the automatically
-selected model ID.
+It reports text generation, single-reference edit, inpaint, variation, and
+strict edit independently from installed measured model capabilities and never
+exposes the automatically selected model ID.
 
 ## Models
 
@@ -108,6 +113,6 @@ other owners, or a host filesystem path.
 
 G1 froze public schemas, manifest contributions, agent tools, workflow executor
 types, and required asset/provenance fields. G2 retains contract version `1.0`:
-the import route and strict-edit constraint keys are additive, while the existing
+the import route and edit constraint keys are additive, while the existing
 `image.edit` operation and open `constraints` object remain unchanged. A future
 breaking change still requires impact, migration, and version-bump documentation.

@@ -235,3 +235,50 @@ def test_strict_edit_generates_only_bounded_patch_then_preserves_protected_pixel
     assert calls["generator_device"] == "cuda" and calls["seed"] == 17
     assert Image.open(output_path).size == source.size
     assert validate_strict_edit(source_path, mask_path, output_path)["protected_pixel_difference"] == 0
+
+
+def test_reference_edit_uses_full_source_and_requested_output(monkeypatch, tmp_path: Path):
+    model = tmp_path / "model"
+    model.mkdir()
+    source_path = tmp_path / "source.png"
+    output_path = tmp_path / "edited.png"
+    Image.new("RGBA", (320, 256), "navy").save(source_path, format="PNG")
+    calls: dict[str, object] = {}
+
+    class Generator:
+        def __init__(self, *, device):
+            calls["generator_device"] = device
+
+        def manual_seed(self, seed):
+            calls["seed"] = seed
+            return self
+
+    class Pipeline:
+        def __call__(self, **kwargs):
+            calls["pipeline"] = kwargs
+            return SimpleNamespace(images=[Image.new("RGBA", (kwargs["width"], kwargs["height"]), "orange")])
+
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(
+        Generator=Generator,
+        cuda=SimpleNamespace(synchronize=lambda: None, empty_cache=lambda: None),
+    ))
+    adapter = DiffusersFlux2KleinAdapter(model, device_mode="direct_device_map")
+    adapter.pipeline = Pipeline()
+
+    adapter.edit(ImageEditRequest(
+        prompt="make a cheerful variation",
+        source_path=source_path,
+        mask_path=None,
+        width=320,
+        height=256,
+        steps=4,
+        seed=23,
+        output_path=output_path,
+        strict_edit=False,
+    ))
+
+    pipeline_call = calls["pipeline"]
+    assert pipeline_call["image"].size == (320, 256)
+    assert pipeline_call["width"] == 320 and pipeline_call["height"] == 256
+    assert calls["generator_device"] == "cuda" and calls["seed"] == 23
+    assert Image.open(output_path).size == (320, 256)

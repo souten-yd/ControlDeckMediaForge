@@ -128,6 +128,10 @@ def test_capability_discovery_does_not_expose_model_names(client):
     response = client.get("/api/v1/capabilities")
 
     assert response.status_code == 200
+    capabilities = response.json()["capabilities"]
+    assert "image.single_reference_edit" in capabilities
+    assert "image.inpaint" in capabilities
+    assert "image.variation" in capabilities
     serialized = json.dumps(response.json()).lower()
     assert "fake-image" not in serialized
     assert "flux" not in serialized

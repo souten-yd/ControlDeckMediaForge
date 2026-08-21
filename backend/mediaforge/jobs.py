@@ -304,6 +304,8 @@ class JobManager:
     def _model_capability(job: Job) -> str:
         if job.request.operation == "image.generate":
             return "image.text_to_image"
+        if job.request.constraints.get("edit_mode") == "variation":
+            return "image.variation"
         return (
             "image.strict_edit"
             if job.request.constraints.get("strict_edit") is True
@@ -325,6 +327,15 @@ class JobManager:
         strict = job.request.constraints.get("strict_edit", False)
         if not isinstance(strict, bool):
             raise WorkerFailure("invalid_constraint", "strict_edit must be a boolean")
+        edit_mode = job.request.constraints.get("edit_mode", "reference")
+        if edit_mode not in {"reference", "variation", "inpaint"}:
+            raise WorkerFailure("invalid_constraint", "edit_mode is unsupported")
+        if strict and edit_mode == "variation":
+            raise WorkerFailure("invalid_constraint", "variation cannot request strict_edit")
+        if edit_mode == "inpaint" and not strict:
+            raise WorkerFailure("invalid_constraint", "inpaint requires strict_edit")
+        if not strict and "editable_mask_asset_id" in job.request.constraints:
+            raise WorkerFailure("invalid_constraint", "editable_mask_asset_id requires strict_edit")
         if not strict:
             return
         mask_id = job.request.constraints.get("editable_mask_asset_id")

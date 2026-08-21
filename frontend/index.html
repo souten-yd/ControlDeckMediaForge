@@ -26,11 +26,17 @@
             <label for="intent">作りたい画像</label>
             <textarea id="intent" required maxlength="8000" placeholder="夜の机に置かれた、小さな青いロボット"></textarea>
             <fieldset id="edit-inputs" hidden>
-              <legend>Strict edit</legend>
-              <p class="muted">白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。</p>
+              <legend>画像編集</legend>
+              <label for="edit-mode">編集方法</label>
+              <select id="edit-mode">
+                <option value="strict">指定範囲だけ直す（マスク外を完全保持）</option>
+                <option value="reference">画像全体を指示に沿って編集</option>
+                <option value="variation">元画像を参考に別案を作る</option>
+              </select>
+              <p id="edit-help" class="muted">白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。</p>
               <div class="file-row">
                 <label>元画像<input id="source-file" type="file" accept="image/png,image/jpeg"></label>
-                <label>編集マスク<input id="mask-file" type="file" accept="image/png,image/jpeg"></label>
+                <label id="mask-input">編集マスク<input id="mask-file" type="file" accept="image/png,image/jpeg"></label>
               </div>
             </fieldset>
             <div class="form-row">
