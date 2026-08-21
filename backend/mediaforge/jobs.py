@@ -20,6 +20,7 @@ from .host.jobs import HostExecution, HostJobReporter
 from .host.resources import fake_image_request, image_model_request
 from .image_edit import StrictEditError, strict_edit_plan, validate_strict_edit
 from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
+from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .routing import ModelRouteError, route_model
 from .store import Store, utc_now
@@ -304,6 +305,8 @@ class JobManager:
     def _model_capability(job: Job) -> str:
         if job.request.operation == "image.generate":
             return "image.text_to_image"
+        if job.request.constraints.get("edit_mode") == "outpaint":
+            return "image.outpaint"
         if job.request.constraints.get("edit_mode") == "variation":
             return "image.variation"
         return (
@@ -328,12 +331,33 @@ class JobManager:
         if not isinstance(strict, bool):
             raise WorkerFailure("invalid_constraint", "strict_edit must be a boolean")
         edit_mode = job.request.constraints.get("edit_mode", "reference")
-        if edit_mode not in {"reference", "variation", "inpaint"}:
+        if edit_mode not in {"reference", "variation", "inpaint", "outpaint"}:
             raise WorkerFailure("invalid_constraint", "edit_mode is unsupported")
         if strict and edit_mode == "variation":
             raise WorkerFailure("invalid_constraint", "variation cannot request strict_edit")
         if edit_mode == "inpaint" and not strict:
             raise WorkerFailure("invalid_constraint", "inpaint requires strict_edit")
+        if edit_mode == "outpaint":
+            if not strict:
+                raise WorkerFailure("invalid_constraint", "outpaint requires strict_edit")
+            if "editable_mask_asset_id" in job.request.constraints:
+                raise WorkerFailure("invalid_constraint", "outpaint derives its mask and does not accept one")
+            width = job.request.constraints.get("width")
+            height = job.request.constraints.get("height")
+            if (
+                not isinstance(width, int)
+                or isinstance(width, bool)
+                or not isinstance(height, int)
+                or isinstance(height, bool)
+                or width % 16
+                or height % 16
+            ):
+                raise WorkerFailure("invalid_dimensions", "outpaint dimensions must be integer multiples of 16")
+            try:
+                outpaint_plan(source_path, width, height)
+            except StrictEditError as exc:
+                raise WorkerFailure("invalid_dimensions", str(exc)) from exc
+            return
         if not strict and "editable_mask_asset_id" in job.request.constraints:
             raise WorkerFailure("invalid_constraint", "editable_mask_asset_id requires strict_edit")
         if not strict:
@@ -556,12 +580,17 @@ class JobManager:
         try:
             asset_ids = self._register_outputs(job, response, job_root)
         except StrictEditError as exc:
+            code = (
+                "outpaint_invariant_failed"
+                if job.request.constraints.get("edit_mode") == "outpaint"
+                else "strict_edit_invariant_failed"
+            )
             await self._update(
                 job_id,
                 reporter,
                 status=JobStatus.FAILED,
                 phase="validate",
-                error=ErrorDetail(code="strict_edit_invariant_failed", message=str(exc)[:300]),
+                error=ErrorDetail(code=code, message=str(exc)[:300]),
             )
             return
         except (KeyError, TypeError, ValueError, OSError) as exc:
@@ -591,7 +620,10 @@ class JobManager:
         source_destination = contained(inputs_dir, inputs_dir / "source.png")
         shutil.copyfile(self.store.asset_path(source_id), source_destination)
         result = {"source_path": str(source_destination)}
-        if job.request.constraints.get("strict_edit") is True:
+        if (
+            job.request.constraints.get("strict_edit") is True
+            and job.request.constraints.get("edit_mode") != "outpaint"
+        ):
             mask_id = str(job.request.constraints["editable_mask_asset_id"])
             mask_destination = contained(inputs_dir, inputs_dir / "mask.png")
             shutil.copyfile(self.store.asset_path(mask_id), mask_destination)
@@ -797,11 +829,16 @@ class JobManager:
         reference_hashes = {
             item.asset_id: self.store.get_asset(item.asset_id).sha256 for item in job.request.inputs
         }
+        outpaint = (
+            job.request.operation == "image.edit"
+            and job.request.constraints.get("edit_mode") == "outpaint"
+        )
         strict_edit = (
             job.request.operation == "image.edit"
             and job.request.constraints.get("strict_edit") is True
+            and not outpaint
         )
-        source_path = contained(job_root, job_root / "inputs" / "source.png") if strict_edit else None
+        source_path = contained(job_root, job_root / "inputs" / "source.png") if strict_edit or outpaint else None
         mask_path = contained(job_root, job_root / "inputs" / "mask.png") if strict_edit else None
         if strict_edit:
             mask_id = str(job.request.constraints["editable_mask_asset_id"])
@@ -817,6 +854,14 @@ class JobManager:
             if strict_edit:
                 assert source_path is not None and mask_path is not None
                 validation.append(validate_strict_edit(source_path, mask_path, path))
+            if outpaint:
+                assert source_path is not None
+                validation.append(validate_outpaint(
+                    source_path,
+                    path,
+                    width=int(job.request.constraints["width"]),
+                    height=int(job.request.constraints["height"]),
+                ))
             now = utc_now()
             asset_id = f"asset_{uuid.uuid4().hex}"
             provenance_id = f"prov_{uuid.uuid4().hex}"

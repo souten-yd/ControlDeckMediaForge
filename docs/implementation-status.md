@@ -700,10 +700,47 @@ with 49 passed. Full `./mf.sh test` completed with 101 passed in 5.41 seconds.
 These are regression evidence only; the product evidence is the real
 process/browser run above.
 
+### Outpaint
+
+Outpaint remains the existing `image.edit` operation with
+`edit_mode=outpaint`, `strict_edit=true`, and a larger target canvas. It accepts
+no mask because the exterior region is derived deterministically. The source is
+centered, recopied after model generation, and independently checked before
+registration. Crop-sized, unchanged-sized, non-multiple-of-16, non-strict, and
+caller-mask combinations fail before worker execution.
+
+A real installed-host Chromium run extended the retained Media Forge-generated
+512x512 anime character to 768x512:
+
+```text
+first browser total:        108.756109 sec
+  load/generation:           10.742962 / 92.188142 sec
+warm separate-worker total:  19.807051 sec
+  load/generation:           10.774391 / 3.397528 sec
+source RGBA differences:     0 across 262,144 pixels
+generated exterior:          131,072 pixels
+same-seed repeat:             byte-identical 281,762-byte PNG
+lineage:                      imported source -> outpaint result
+browser errors:               0
+placement/offload:            all cuda:0 / hooks 0 / non-GPU targets 0
+Broker after each:            active 0 / waiting 0
+```
+
+The first route-specific compile cost is recorded rather than hidden. The warm
+run came from a new worker process and reused persistent NVMe/ROCm caches.
+Visual inspection found the entire character unchanged and the gray background
+continued naturally into both generated side regions. Evidence is retained at
+`/data1tb/mediaforge-g2-e2e.Frwz2w/outpaint-browser/` and
+`outpaint-browser-warm/`.
+
+Focused outpaint/edit/adapter/API/host regression completed with 85 passed.
+Full `./mf.sh test` completed with 118 passed in 9.65 seconds. These are
+regression evidence only.
+
 ### NOT TESTED / remaining G2
 
-- Outpaint, multi-reference edit, and VLM semantic review with bounded retry
-  remain NOT TESTED and are required before G2 completion.
+- Multi-reference edit and VLM semantic review with bounded retry remain NOT
+  TESTED and are required before G2 completion.
 - Natural OOM during edit is NOT TESTED. Existing conservative G1 lease values
   remain in use; the sampled absolute VRAM value is not substituted for the
   lease envelope.

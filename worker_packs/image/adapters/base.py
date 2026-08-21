@@ -32,6 +32,7 @@ class ImageEditRequest:
     seed: int
     output_path: Path
     strict_edit: bool
+    edit_mode: str = "reference"
 
 
 class ImageAdapter(Protocol):

@@ -15,6 +15,7 @@ from pathlib import Path
 from PIL import Image
 
 from mediaforge.image_edit import compose_strict_edit, editable_mask
+from mediaforge.outpaint import compose_outpaint, outpaint_plan
 
 
 def _terminate_with_parent() -> None:
@@ -74,7 +75,25 @@ def main() -> int:
     for index in range(int(request.get("output", {}).get("count", 1))):
         output_path = output_dir / f"output-{index}.png"
         generated = _png(width, height, hashlib.sha256(f"{request['intent']}:{seed}:{index}".encode()).digest())
-        if request.get("operation") == "image.edit" and constraints.get("strict_edit") is True:
+        if request.get("operation") == "image.edit" and constraints.get("edit_mode") == "outpaint":
+            worker_inputs = request.get("worker_inputs", {})
+            with Image.open(io.BytesIO(generated)) as patch:
+                compose_outpaint(
+                    Path(worker_inputs["source_path"]),
+                    patch,
+                    output_path,
+                    width=width,
+                    height=height,
+                )
+            if constraints.get("_fake_outpaint_violation") is True:
+                plan = outpaint_plan(Path(worker_inputs["source_path"]), width, height)
+                with Image.open(output_path) as opened:
+                    image = opened.convert("RGBA")
+                x, y = plan.source_box[:2]
+                original = image.getpixel((x, y))
+                image.putpixel((x, y), ((original[0] + 1) % 256, *original[1:]))
+                image.save(output_path, format="PNG")
+        elif request.get("operation") == "image.edit" and constraints.get("strict_edit") is True:
             worker_inputs = request.get("worker_inputs", {})
             source_path = Path(worker_inputs["source_path"])
             mask_path = Path(worker_inputs["mask_path"])
@@ -108,7 +127,9 @@ def main() -> int:
         },
         "seed": seed,
         "postprocessing": (
-            ["strict_edit.mask_composite", "strict_edit.protected_pixel_copy"]
+            ["outpaint.source_pixel_copy"]
+            if request.get("operation") == "image.edit" and constraints.get("edit_mode") == "outpaint"
+            else ["strict_edit.mask_composite", "strict_edit.protected_pixel_copy"]
             if request.get("operation") == "image.edit" and constraints.get("strict_edit") is True
             else []
         ),

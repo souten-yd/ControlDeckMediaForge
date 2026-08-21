@@ -140,6 +140,8 @@ document.getElementById("edit-mode").addEventListener("change", (event) => {
   document.getElementById("mask-file").required = strict;
   document.getElementById("edit-help").textContent = strict
     ? "白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。"
+    : event.target.value === "outpaint"
+      ? "幅と高さを元画像以上に設定して外側を生成します。中央の元画像は1ピクセルも変更しません。"
     : event.target.value === "variation"
       ? "元画像の特徴を参考に別案を作ります。画像全体が変わる可能性があります。"
       : "元画像全体を指示に沿って編集します。ピクセル保持保証はありません。";
@@ -185,13 +187,16 @@ document.getElementById("create-form").addEventListener("submit", async (event) 
     if (operation === "image.edit") {
       const editMode = document.getElementById("edit-mode").value;
       const strict = editMode === "strict";
+      const preserving = strict || editMode === "outpaint";
       status.textContent = strict ? "元画像とマスクをローカルへ取り込み中…" : "元画像をローカルへ取り込み中…";
       const sourceFile = document.getElementById("source-file").files[0];
       const source = await importFile(sourceFile, "source");
       inputs = [{asset_id: source.id}];
-      constraints.width = source.width;
-      constraints.height = source.height;
-      constraints.strict_edit = strict;
+      if (editMode !== "outpaint") {
+        constraints.width = source.width;
+        constraints.height = source.height;
+      }
+      constraints.strict_edit = preserving;
       constraints.edit_mode = editMode === "strict" ? "inpaint" : editMode;
       if (strict) {
         const maskFile = document.getElementById("mask-file").files[0];

@@ -123,6 +123,7 @@ class ImageWorker:
         steps = _integer(constraints.get("steps", 4), "image steps")
         count = _integer(output.get("count", 1), "image count")
         strict_edit = constraints.get("strict_edit", False)
+        edit_mode = constraints.get("edit_mode", "reference")
         if not isinstance(strict_edit, bool):
             raise ValueError("strict_edit must be a boolean")
         if strict_edit:
@@ -148,7 +149,7 @@ class ImageWorker:
             self.adapters = {model_id: adapter}
         outputs = []
         generation_sec = 0.0
-        if operation == "image.edit" and strict_edit and mask_path is None:
+        if operation == "image.edit" and strict_edit and edit_mode != "outpaint" and mask_path is None:
             raise ValueError("strict edit requires an edit mask")
         for index in range(count):
             output_seed = seed + index
@@ -165,6 +166,7 @@ class ImageWorker:
                     seed=output_seed,
                     output_path=output_path,
                     strict_edit=strict_edit,
+                    edit_mode=edit_mode,
                 ))
             else:
                 result = adapter.generate(ImageGenerationRequest(
@@ -179,8 +181,8 @@ class ImageWorker:
             outputs.append({
                 "path": str(result.output_path),
                 "mime_type": "image/png",
-                "width": source_size[0] if strict_edit and source_size is not None else width,
-                "height": source_size[1] if strict_edit and source_size is not None else height,
+                "width": source_size[0] if strict_edit and edit_mode != "outpaint" and source_size is not None else width,
+                "height": source_size[1] if strict_edit and edit_mode != "outpaint" and source_size is not None else height,
                 "seed": result.seed,
             })
         return {
@@ -195,7 +197,9 @@ class ImageWorker:
             },
             "seed": seed,
             "postprocessing": (
-                ["pil.convert.rgba", "strict_edit.mask_composite", "strict_edit.protected_pixel_copy"]
+                ["pil.convert.rgba", "outpaint.source_pixel_copy"]
+                if operation == "image.edit" and edit_mode == "outpaint"
+                else ["pil.convert.rgba", "strict_edit.mask_composite", "strict_edit.protected_pixel_copy"]
                 if operation == "image.edit" and strict_edit
                 else ["pil.convert.rgba"]
             ),

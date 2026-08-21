@@ -15,6 +15,7 @@
         "image.text_to_image",
         "image.single_reference_edit",
         "image.inpaint",
+        "image.outpaint",
         "image.variation",
         "image.strict_edit"
       ],
