@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-21
-Scope: MF0-0 through MF0-3 complete; MF0-4 host-blocked; MF0-5/MF0-6 local implementation (`docs/implementation/mf0-addon-core.md`)
+Scope: MF0-0 through MF0-3 complete; MF0-4 host-blocked; MF0-5/MF0-6 installed-host browser verified where the host contract permits (`docs/implementation/mf0-addon-core.md`)
 Repository head at start: `770383a` (`origin/main`)
 
 ## MF0-0 — COMPLETE for the requested environment slice
@@ -75,7 +75,13 @@ Read-only source inspection found that `/api/v1/resources` requires a session co
 
 MF0-4 completion and the lease/Jobs/file-grant portions of MF0-7 are blocked until ControlDeck exposes the already-designed audience-bound service bridge. ControlDeck was not modified.
 
-## MF0-5 / MF0-6 — IMPLEMENTED LOCALLY, INSTALLED-HOST E2E NOT TESTED
+This blocker was re-audited read-only against upstream ControlDeck `main` at
+`08a23c57cc1ed2791284924e1c3986570713d94f` using a disposable sparse clone.
+The same three service methods and service-token authentication for
+`/api/v1/resources` were still absent. The reference checkout was not fetched,
+checked out, or modified.
+
+## MF0-5 / MF0-6 — INSTALLED-HOST BROWSER VERIFIED / HOST-LIMITED
 
 The embedded workspace provides Create, Library, Jobs, Models, and Settings without localStorage, sessionStorage, cookies, or parent DOM access. It waits for the MessageChannel handshake before first paint, validates the parent origin, applies initial/theme-change tokens without reload, handles locale/safe-area/route/session/disable events, syncs routes, updates the title, exposes the command-palette shortcut, and clears busy state on disable. Standalone rendering remains available when the page is not framed.
 
@@ -98,7 +104,44 @@ edit-image context action:     HTTP 200, 0.000942 sec
 host integration diagnostic:  token configured; resource/jobs/files unavailable; fallback none
 ```
 
-This proves the real Media Forge process and HTTP routes, not browser or installed-ControlDeck behavior. MF0-5/MF0-6 are not marked complete because roadmap sequencing requires MF0-4 and §11 host E2E.
+The first installed-host attempt exposed three real integration defects that
+unit/static checks had not detected: health reason codes outside ControlDeck's
+closed enum, 401 responses for external iframe CSS/JS, and 401 responses to
+opaque-origin iframe HTTP API calls. The implementation now uses only host
+reason codes, serves the trusted workspace CSS/JS inline, and carries bounded
+structured workspace RPC over ControlDeck's nonce-bound authenticated WebSocket
+proxy. Raw paths are rejected on that transport and asset previews are capped at
+12 MiB before base64 encoding.
+
+Final installed-host browser verification used isolated ControlDeck and Media
+Forge data directories, real loopback processes, Chromium at 1280x800 and
+320x700, and installation through ControlDeck's public Add-on API. The reusable
+driver was `scripts/mf0_control_deck_e2e.py`; it always uninstalled the Add-on in
+`finally`. The final run completed in 9.199 seconds with zero browser console
+errors and zero page errors. Observed results:
+
+```text
+disabled: Media navigation absent
+setup_required: setup dialog and missing model library visible
+healthy: Media navigation and opaque iframe workspace visible
+workspace transport: bridge ready; Create produced one fake asset; Library preview rendered
+theme: light -> dark applied without reload; in-frame marker survived
+route: Library back / forward / reload / share URL preserved
+Files: edit-image context action invoked and success toast visible
+agent: media.capabilities returned ControlDeck job_id=baf9eaf98eb0 and asset_id=job-result:baf9eaf98eb0
+agent response: no model_id, fake implementation name, FLUX, or Qwen string
+workflow: unavailable contribution omitted fail-closed
+disable: iframe and Media navigation removed
+re-enable: five pre-existing isolated-run assets remained visible
+mobile 320px: companion rendered and iframe remained absent
+```
+
+Create is deliberately recorded as local/partial: the generated fake job does
+not appear in ControlDeck Jobs because the host bridge in MF0-4 is unavailable.
+The Files action invocation and toast are verified, but scoped file staging and
+route opening are not claimed. Workflow dry-run cannot be performed because the
+host correctly omits the unavailable executor. MF0-5/MF0-6 therefore have real
+installed-host evidence but G0 remains incomplete until MF0-4 is unblocked.
 
 ## Implemented artifacts
 
@@ -249,19 +292,21 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 ## Additional behavior checks
 
 - Temporarily removing the GPU snapshot left the real core service running. Health returned HTTP 200 / `setup_required`, with `gpu.state=checking`; restoring and rerunning the GPU check returned it to `ok`.
-- Latest focused `./mf.sh test`: 35 passed in 1.35 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
+- Latest focused `./mf.sh test`: 37 passed in 1.40 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
 - `bash -n mf.sh` and `git diff --check` passed. These are static checks only.
 - Final ControlDeck checkout observation: HEAD `9272c05`, clean `git status --short`. It was read-only throughout this slice; no ControlDeck file was modified.
 
 ## NOT TESTED / intentionally deferred
 
 - Worker-pack enable/disable mutation of `.refs`: no worker-pack lifecycle is present yet. The current non-empty reference and prune protection were tested.
-- Installed ControlDeck setup checklist and enable/disable browser flow: deferred to MF0-7. The real Media Forge HTTP payload and ControlDeck's real manifest linter were tested.
 - Hugging Face model download/cache reuse: no model adoption or weights belong to MF0-0.
 - Model library configuration: deliberately remains `missing`; selecting and benchmarking a model belongs to G1.
-- Actual iframe rendering, theme transition without reload, FOUC capture, back/forward/reload/share, mobile companion, Files Open with, Workflow dry-run, and OpenCode discovery are NOT TESTED. They require installed-ControlDeck MF0-7 E2E.
+- FOUC video/frame capture is NOT TESTED. First rendered workspace state was visually inspected after the handshake, but no frame-by-frame white-flash measurement was made.
+- OpenCode discovery is NOT TESTED. Agent tool invocation through the real ControlDeck API and its ControlDeck Job response were tested, but no OpenCode process was involved.
+- Workflow dry-run is UNAVAILABLE because the referenced host omits the fail-closed unavailable executor.
+- Files context invocation is tested; scoped staging/commit and automatic workspace route opening are UNAVAILABLE with the referenced host bridge/UI behavior.
 - Resource acquire/wait/renew/release, two fake exclusive jobs, Jobs bridge progress/toast, scoped file staging/commit, and disable cleanup are UNAVAILABLE in the referenced host revision, not passed or substituted.
 
 ## Scope boundary
 
-No real model or Diffusers adapter is included. The embedded workspace and execution endpoints are implemented, but MF0-4 and installed-host MF0-7 remain incomplete for the explicit host-contract reasons above. The ROCm runtime check is environment qualification only and is not a model benchmark or a G1 implementation.
+No real model or Diffusers adapter is included. The embedded workspace and the host-permitted MF0-7 browser paths are verified, but MF0-4 and the bridge-dependent MF0-7 paths remain incomplete for the explicit host-contract reasons above. The ROCm runtime check is environment qualification only and is not a model benchmark or a G1 implementation.

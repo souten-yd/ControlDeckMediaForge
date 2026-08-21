@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from fastapi import HTTPException, Request
 
 from ..config import Settings
 from .token import ServiceTokenError, read_signing_key, verify_service_token
 
 
-def require_host_service(request: Request, settings: Settings) -> dict:
-    addon_id = request.headers.get("X-Control-Deck-Addon-ID", "")
-    authorization = request.headers.get("Authorization", "")
+def require_host_service_headers(headers: Mapping[str, str], settings: Settings) -> dict:
+    addon_id = headers.get("X-Control-Deck-Addon-ID", "")
+    authorization = headers.get("Authorization", "")
     if addon_id != "media-forge" or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail={"code": "host_service_token_required"})
     if settings.host_token_key_file is None:
@@ -18,6 +20,10 @@ def require_host_service(request: Request, settings: Settings) -> dict:
         return verify_service_token(authorization[7:], signing_key=key)
     except ServiceTokenError as exc:
         raise HTTPException(status_code=401, detail={"code": "invalid_host_service_token"}) from exc
+
+
+def require_host_service(request: Request, settings: Settings) -> dict:
+    return require_host_service_headers(request.headers, settings)
 
 
 def reject_host_paths(value: object) -> None:

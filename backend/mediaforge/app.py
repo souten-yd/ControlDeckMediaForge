@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
@@ -16,7 +18,7 @@ from .config import Settings
 from .domain import JobRequest
 from .environment import setup_snapshot
 from .jobs import JobManager
-from .host.security import reject_host_paths, require_host_service
+from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .store import Store
 
 
@@ -86,11 +88,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         environment = setup_snapshot()
         token_ready = resolved.host_token_key_file is not None and resolved.host_token_key_file.is_file()
         token_state: str | dict[str, Any] = "available" if token_ready else _unavailable(
-            "host_token_verifier_unconfigured",
+            "setup_incomplete",
             "ControlDeck service token verification has not been provisioned",
         )
         service_bridge_unavailable = _unavailable(
-            "host_service_bridge_unavailable",
+            "dependency_unavailable",
             "ControlDeck does not expose the Add-on service resource/jobs bridge in the referenced host revision",
         )
         status: HealthState = app.state.health_override or (
@@ -326,14 +328,80 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "context": {"type": context["type"], "resource_id": resource_id},
         }
 
+    @app.websocket("/ws")
+    async def workspace_socket(websocket: WebSocket) -> None:
+        try:
+            require_host_service_headers(websocket.headers, resolved)
+        except HTTPException:
+            await websocket.close(code=4401, reason="invalid host service token")
+            return
+        await websocket.accept()
+        try:
+            while True:
+                raw = await websocket.receive_text()
+                if len(raw.encode()) > 1024 * 1024:
+                    await websocket.close(code=4409, reason="request too large")
+                    return
+                request_id = ""
+                try:
+                    payload = json.loads(raw)
+                    if not isinstance(payload, dict):
+                        raise ValueError("request must be an object")
+                    request_id = str(payload.get("id", ""))[:128]
+                    method = payload.get("method")
+                    params = payload.get("params", {})
+                    if not request_id or not isinstance(method, str) or not isinstance(params, dict):
+                        raise ValueError("invalid workspace request")
+                    reject_host_paths(params)
+                    result: dict[str, Any]
+                    if method == "jobs.create":
+                        value = JobRequest.model_validate(params)
+                        result = manager.submit(value).model_dump(mode="json")
+                    elif method == "jobs.get":
+                        result = store.get_job(str(params.get("job_id", ""))).model_dump(mode="json")
+                    elif method == "jobs.cancel":
+                        result = (await manager.cancel(str(params.get("job_id", "")))).model_dump(mode="json")
+                    elif method == "jobs.list":
+                        result = {"items": [item.model_dump(mode="json") for item in store.list_jobs(100)]}
+                    elif method == "assets.list":
+                        result = {"items": [item.model_dump(mode="json") for item in store.list_assets(100)]}
+                    elif method == "assets.provenance":
+                        result = store.get_provenance(str(params.get("asset_id", ""))).model_dump(mode="json")
+                    elif method == "assets.content":
+                        asset_id = str(params.get("asset_id", ""))
+                        asset = store.get_asset(asset_id)
+                        content = store.asset_path(asset_id).read_bytes()
+                        if len(content) > 12 * 1024 * 1024:
+                            raise ValueError("asset preview exceeds the workspace transport bound")
+                        result = {"mime_type": asset.mime_type, "base64": base64.b64encode(content).decode("ascii")}
+                    else:
+                        raise ValueError("workspace method is not supported")
+                    await websocket.send_json({"id": request_id, "ok": True, "result": result})
+                except (KeyError, ValueError, ValidationError) as exc:
+                    await websocket.send_json({
+                        "id": request_id,
+                        "ok": False,
+                        "error": {"code": "workspace_request_rejected", "message": str(exc)[:300]},
+                    })
+                except HTTPException as exc:
+                    detail = exc.detail if isinstance(exc.detail, dict) else {"code": "workspace_request_rejected"}
+                    await websocket.send_json({"id": request_id, "ok": False, "error": detail})
+        except WebSocketDisconnect:
+            return
+
     @app.get("/")
     @app.get("/create")
     @app.get("/library")
     @app.get("/jobs")
     @app.get("/models")
     @app.get("/settings")
-    async def workspace() -> FileResponse:
-        return FileResponse(FRONTEND_DIR / "index.html", media_type="text/html")
+    async def workspace() -> HTMLResponse:
+        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+        stylesheet = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+        script = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+        html = html.replace("<!-- MEDIA_FORGE_INLINE_STYLE -->", f"<style>{stylesheet}</style>")
+        html = html.replace("<!-- MEDIA_FORGE_INLINE_SCRIPT -->", f"<script>{script}</script>")
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
     return app
 
