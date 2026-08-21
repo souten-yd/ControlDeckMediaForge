@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+from io import BytesIO
 import json
 import os
 from contextlib import asynccontextmanager
@@ -12,6 +13,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from . import __version__
@@ -30,6 +32,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SCHEMAS_DIR = REPOSITORY_ROOT / "schemas"
 FRONTEND_DIR = REPOSITORY_ROOT / "frontend"
 HealthState = Literal["healthy", "degraded", "unavailable", "setup_required"]
+MAX_CONTEXT_IMAGE_BYTES = 64 * 1024 * 1024
+MAX_CONTEXT_IMAGE_PIXELS = 100_000_000
 
 
 class HealthUpdate(BaseModel):
@@ -138,14 +142,6 @@ def create_app(
     async def health() -> dict[str, Any]:
         environment = setup_snapshot()
         token_state: str | dict[str, Any] = "available"
-        workflow_bridge_unavailable = _unavailable(
-            "dependency_unavailable",
-            "ControlDeck workflow tokens cannot attach to Add-on Runtime Jobs in the referenced host revision",
-        )
-        context_bridge_unavailable = _unavailable(
-            "dependency_unavailable",
-            "ControlDeck context tokens cannot read Add-on Runtime file grants in the referenced host revision",
-        )
         status: HealthState = app.state.health_override or (
             environment.get("status", "setup_required") if environment else "setup_required"
         )
@@ -158,11 +154,11 @@ def create_app(
                 "command:create-media": token_state,
                 "quick_action:create-media": token_state,
                 "settings:settings": "available",
-                "workflow_executor:media.generate": workflow_bridge_unavailable,
+                "workflow_executor:media.generate": token_state,
                 "agent_tool:media.capabilities": token_state,
                 "agent_tool:media.generate": token_state,
                 "agent_tool:media.inspect": token_state,
-                "context_action:edit-image": context_bridge_unavailable,
+                "context_action:edit-image": token_state,
             },
             "setup": (
                 environment["setup"]
@@ -335,8 +331,6 @@ def create_app(
         identity = await authorize_host(request)
         payload = await request.json()
         value = host_job_input(payload)
-        if identity.subject.startswith("workflow:"):
-            raise HTTPException(status_code=503, detail={"code": "host_workflow_job_bridge_unavailable"})
         return submitted_reference(await submit_hosted(value, identity, workload_class="workflow"))
 
     @app.post("/addon/v1/workflow/media.generate/execute")
@@ -406,7 +400,7 @@ def create_app(
 
     @app.post("/addon/v1/context/edit-image")
     async def context_edit_image(request: Request) -> dict[str, Any]:
-        await authorize_host(request)
+        identity = await authorize_host(request)
         payload = await request.json()
         reject_host_paths(payload)
         context = payload.get("context")
@@ -414,14 +408,51 @@ def create_app(
             raise HTTPException(status_code=422, detail={"code": "invalid_context"})
         resource_id = context.get("resource_id")
         grant_id = context.get("grant_id")
-        if not isinstance(resource_id, str) or not isinstance(grant_id, str) or not grant_id:
-            raise HTTPException(status_code=422, detail={"code": "scoped_grant_required"})
-        if context["type"] == "file" and not resource_id.startswith(("grant:", "asset:")):
-            raise HTTPException(status_code=422, detail={"code": "scoped_grant_required"})
+        source: dict[str, Any] | None = None
+        if context["type"] == "file":
+            if (
+                not isinstance(resource_id, str)
+                or not isinstance(grant_id, str)
+                or resource_id != grant_id
+            ):
+                raise HTTPException(status_code=422, detail={"code": "scoped_grant_required"})
+            try:
+                metadata, content = await read_grant(host, identity, require_grant_id(grant_id))
+            except (HostApiError, ValueError) as exc:
+                status_code = exc.status_code if isinstance(exc, HostApiError) else 422
+                code = exc.code if isinstance(exc, HostApiError) else "invalid_scoped_grant"
+                raise HTTPException(status_code=status_code, detail={"code": code}) from exc
+            if len(content) > MAX_CONTEXT_IMAGE_BYTES:
+                raise HTTPException(status_code=413, detail={"code": "context_image_too_large"})
+            try:
+                with Image.open(BytesIO(content)) as image:
+                    image.verify()
+                with Image.open(BytesIO(content)) as image:
+                    width, height = image.size
+                    image_format = image.format
+                    mode = image.mode
+            except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+                raise HTTPException(status_code=422, detail={"code": "invalid_context_image"}) from exc
+            if (
+                image_format not in {"PNG", "JPEG"}
+                or width <= 0
+                or height <= 0
+                or width * height > MAX_CONTEXT_IMAGE_PIXELS
+            ):
+                raise HTTPException(status_code=422, detail={"code": "unsupported_context_image"})
+            source = {
+                "name": metadata.get("name", "selected"),
+                "size": len(content),
+                "width": width,
+                "height": height,
+                "mode": mode,
+            }
+        elif not isinstance(resource_id, str) or not resource_id:
+            raise HTTPException(status_code=422, detail={"code": "invalid_context"})
         return {
             "action": "open_workspace",
             "route": "/x/media-forge/workspace/create",
-            "context": {"type": context["type"], "resource_id": resource_id},
+            "context": {"type": context["type"], "source": source},
         }
 
     @app.websocket("/ws")

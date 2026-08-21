@@ -4,6 +4,7 @@ import base64
 import asyncio
 import hashlib
 import json
+from io import BytesIO
 import time
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ import httpx
 import pytest
 from fastapi import Body, FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from conftest import wait_terminal
 from mediaforge.app import create_app
@@ -24,12 +26,14 @@ from mediaforge.store import Store
 
 def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
     app = FastAPI()
+    grant_buffer = BytesIO()
+    Image.new("RGBA", (3, 2), (10, 20, 30, 255)).save(grant_buffer, format="PNG")
     state: dict[str, Any] = {
         "jobs": {},
         "job_updates": [],
         "resource_requests": [],
         "lease_actions": [],
-        "grant_content": b"reference-bytes",
+        "grant_content": grant_buffer.getvalue(),
         "outputs": {},
         "serialize_resources": False,
         "reserved_leases": set(),
@@ -67,7 +71,7 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
         token_subject = subject(authorization)
         if token_subject == "job:host-agent":
             host_job_id, created = "host-agent", False
-        elif token_subject == "7":
+        elif token_subject in {"7", "workflow:42"}:
             state["next_job"] += 1
             host_job_id, created = f"host-created-{state['next_job']}", True
         else:
@@ -255,8 +259,10 @@ def test_workflow_and_agent_generate_return_opaque_references(tmp_path: Path):
             json={"input": generate_input(), "correlation": {"execution_id": "7", "node_id": "n1"}},
             headers=workflow_headers,
         )
-        assert workflow.status_code == 503
-        assert workflow.json()["detail"]["code"] == "host_workflow_job_bridge_unavailable"
+        assert workflow.status_code == 200
+        assert workflow.json()["job_id"].startswith("job_")
+        assert wait_terminal(client, workflow.json()["job_id"])["status"] == "succeeded"
+        assert state["resource_requests"][0]["payload"]["class"] == "workflow"
 
         agent = client.post(
             "/addon/v1/agent/generate",
@@ -266,9 +272,12 @@ def test_workflow_and_agent_generate_return_opaque_references(tmp_path: Path):
         assert agent.status_code == 200
         assert agent.json()["job_id"].startswith("job_")
         assert agent.json()["asset_id"].startswith("asset_")
-        assert state["resource_requests"][0]["payload"]["job_id"] == "host-agent"
-        assert [action for _lease, action in state["lease_actions"]] == ["activate", "release"]
-        assert not any(update.get("status") for update in state["job_updates"])
+        assert state["resource_requests"][-1]["payload"]["job_id"] == "host-agent"
+        assert [action for _lease, action in state["lease_actions"]] == [
+            "activate", "release", "activate", "release",
+        ]
+        attached_updates = [update for update in state["job_updates"] if update["job_id"] == "host-agent"]
+        assert not any(update.get("status") for update in attached_updates)
 
 
 def test_host_payload_rejects_raw_paths_and_context_requires_grant(tmp_path: Path):
@@ -290,11 +299,27 @@ def test_host_payload_rejects_raw_paths_and_context_requires_grant(tmp_path: Pat
         assert missing.status_code == 422
         accepted = client.post(
             "/addon/v1/context/edit-image",
-            json={"input": {}, "context": {"type": "file", "resource_id": "grant:abc", "grant_id": "opaque-token"}},
+            json={"input": {}, "context": {
+                "type": "file", "resource_id": "grant:read-1", "grant_id": "grant:read-1",
+            }},
             headers=headers,
         )
         assert accepted.status_code == 200
         assert "grant_id" not in json.dumps(accepted.json())
+        assert accepted.json()["context"]["source"] == {
+            "name": "reference.png", "size": len(_state["grant_content"]),
+            "width": 3, "height": 2, "mode": "RGBA",
+        }
+        _state["grant_content"] = b"not-an-image"
+        invalid_image = client.post(
+            "/addon/v1/context/edit-image",
+            json={"input": {}, "context": {
+                "type": "file", "resource_id": "grant:read-1", "grant_id": "grant:read-1",
+            }},
+            headers=headers,
+        )
+        assert invalid_image.status_code == 422
+        assert invalid_image.json()["detail"]["code"] == "invalid_context_image"
 
 
 def test_workspace_uses_host_bridge_without_browser_storage(tmp_path: Path):
@@ -369,7 +394,7 @@ def test_scoped_file_bridge_reads_and_commits_without_host_paths(tmp_path: Path)
         })
         metadata, content = await read_grant(bridge, identity, "grant:read-1")
         assert metadata["name"] == "reference.png"
-        assert content == b"reference-bytes"
+        assert content == state["grant_content"]
         committed = await commit_file(
             bridge,
             identity,
@@ -427,7 +452,7 @@ def test_real_test_endpoint_exercises_scoped_file_roundtrip(tmp_path: Path, monk
         )
     assert response.status_code == 200, response.text
     assert response.json()["output"]["asset_id"] == "asset:committed"
-    assert state["outputs"]["output-1"]["content"] == b"reference-bytes"
+    assert state["outputs"]["output-1"]["content"] == state["grant_content"]
     assert any(update.get("status") == "succeeded" for update in state["job_updates"])
 
 
