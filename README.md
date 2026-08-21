@@ -22,19 +22,19 @@ ControlDeck integration is also deliberately generic: Media Forge remains a sepa
 
 ## Current implementation
 
-MF0-0 through MF0-3 provide isolated environments, the Add-on v2 health service,
-a durable local job API, a deterministic subprocess fake worker, and immutable
-assets with provenance. MF0-4 connects accepted Host identities to ControlDeck
-token introspection, Jobs, resource leases, cancellation, and scoped file
-read/output commit. Agent and workspace generation have real Host evidence.
-Workflow and context-action file consumption remain fail-closed due to two
-ControlDeck subject-routing mismatches; see `docs/implementation-status.md`.
+MF0-0 through MF0-7 / G0 are complete: the isolated service, durable fake-worker
+jobs, assets/provenance, embedded workspace, ControlDeck Jobs/Broker/files,
+Workflow, Context Action, and real OpenCode tool discovery/call have passed their
+real-process acceptance checks. G1 local image generation is in progress; no
+image model is promoted as the automatic default until its R9700/ROCm benchmark
+and adoption gate are recorded. See `docs/implementation-status.md`.
 
 ## Run locally
 
 ```bash
 ./mf.sh doctor
 ./mf.sh serve
+./mf.sh model list
 ```
 
 Open <http://127.0.0.1:9130/>. The service binds to loopback only in G0.
@@ -44,6 +44,12 @@ host can display setup state and run supported generation contributions through
 its Jobs and resource broker. ControlDeck remains the lifecycle, identity,
 grant, Jobs bridge, and resource-broker authority; this repository contains all
 Media-specific code.
+
+Model downloads are explicit. During G1 evaluation, the current candidate can
+be fetched to the shared Hugging Face cache with
+`./mf.sh model download flux2-klein-4b`; this does not promote it to the automatic
+route. The command pins the repository revision and excludes the redundant
+single-file checkpoint.
 
 ## Test
 

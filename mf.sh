@@ -283,6 +283,51 @@ PY
   mv -- "$temporary" "$snapshot"
 }
 
+model_registry_manifest() {
+  printf '%s/worker_packs/image/models.json\n' "$REPO_ROOT"
+}
+
+list_models() {
+  ensure_env "$VENV" "$REPO_ROOT/requirements.txt" "core"
+  PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" "$VENV/bin/python" - \
+    "$(model_registry_manifest)" "$HF_HOME" <<'PY'
+import sys
+from pathlib import Path
+
+from mediaforge.models import ModelRegistry
+
+for model in ModelRegistry.load(Path(sys.argv[1]), hf_home=Path(sys.argv[2])).all():
+    print(
+        f"{model.model_id}\tstate={model.state}\tinstalled={'yes' if model.installed else 'no'}"
+        f"\thealthy={'yes' if model.healthy else 'no'}\trevision={model.revision}"
+    )
+PY
+}
+
+download_model() {
+  local name="$1" estimate required available hf
+  case "$name" in
+    flux2-klein-4b)
+      estimate=15988901735
+      required=21474836480
+      ;;
+    *) die "unknown model: $name" ;;
+  esac
+  available="$(df -B1 --output=avail "$HF_HOME" | tail -1 | tr -d ' ')"
+  info "model: black-forest-labs/FLUX.2-klein-4B at e7b7dc27f91deacad38e78976d1f2b499d76a294"
+  info "estimated download: $estimate bytes (duplicate single-file checkpoint excluded)"
+  info "disk check: $available bytes available; $required bytes required"
+  [ "$available" -ge "$required" ] || die "insufficient disk space; model download was not started"
+  ensure_env "$RUNTIME_ROOT/rocm-torch/.venv" "$RUNTIME_ROOT/rocm-torch/requirements.txt" "rocm-torch runtime" verbose
+  hf="$RUNTIME_ROOT/rocm-torch/.venv/bin/hf"
+  "$hf" download \
+    black-forest-labs/FLUX.2-klein-4B \
+    --revision e7b7dc27f91deacad38e78976d1f2b499d76a294 \
+    --exclude flux-2-klein-4b.safetensors \
+    --max-workers 4
+  list_models
+}
+
 build_runtime() {
   local name="$1" root requirements description estimate required available before_cache after_cache started elapsed size
   root="$RUNTIME_ROOT/$name"
@@ -396,6 +441,8 @@ Usage:
   ./mf.sh env build <name>
   ./mf.sh env list
   ./mf.sh env prune
+  ./mf.sh model list
+  ./mf.sh model download flux2-klein-4b
   ./mf.sh test
 EOF
 }
@@ -413,6 +460,14 @@ main() {
         build) [ "$#" -eq 3 ] || die "env build requires one runtime name"; build_runtime "$3" ;;
         list) [ "$#" -eq 2 ] || die "env list takes no arguments"; list_envs ;;
         prune) [ "$#" -eq 2 ] || die "env prune takes no arguments"; prune_envs ;;
+        *) usage; exit 2 ;;
+      esac
+      ;;
+    model)
+      export_cache_paths yes
+      case "${2:-}" in
+        list) [ "$#" -eq 2 ] || die "model list takes no arguments"; list_models ;;
+        download) [ "$#" -eq 3 ] || die "model download requires one model name"; download_model "$3" ;;
         *) usage; exit 2 ;;
       esac
       ;;
