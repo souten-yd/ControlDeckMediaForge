@@ -143,6 +143,7 @@ def main() -> int:
         "gcn_arch": getattr(torch.cuda.get_device_properties(0), "gcnArchName", "unknown"),
         "device_mode": args.device_mode,
         "disable_mmap": args.disable_mmap,
+        "placement": adapter.placement,
         "load_sec": adapter.load_sec,
         "load_memory": load_memory.result(),
         "resident_used_bytes": int(resident_total - resident_free),

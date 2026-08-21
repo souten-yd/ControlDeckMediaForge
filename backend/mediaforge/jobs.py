@@ -457,6 +457,18 @@ class JobManager:
                     float(load_sec),
                     float(generation_sec),
                 )
+            placement = metrics.get("placement")
+            if isinstance(placement, dict):
+                logger.info(
+                    "image worker placement job=%s device_mode=%s component_devices=%s "
+                    "offload_hooks=%s non_gpu_devices=%s non_gpu_map_targets=%s",
+                    job_id,
+                    str(metrics.get("device_mode", "unknown"))[:40],
+                    placement.get("component_devices", {}),
+                    placement.get("offload_hooks", []),
+                    placement.get("non_gpu_devices", {}),
+                    placement.get("non_gpu_map_targets", []),
+                )
         await self._update(job_id, reporter, phase="postprocess", progress=0.65)
         try:
             asset_ids = self._register_outputs(job, response, job_root)
