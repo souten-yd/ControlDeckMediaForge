@@ -6,7 +6,9 @@ import hashlib
 from io import BytesIO
 import json
 import os
+import shutil
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -18,6 +20,7 @@ from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from . import __version__
+from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
 from .config import Settings
 from .domain import JobRequest
 from .environment import setup_snapshot
@@ -26,6 +29,7 @@ from .host.files import GrantContentTooLarge, read_grant, require_grant_id
 from .host.jobs import HostExecution
 from .jobs import JobManager
 from .models import ModelRegistry, ModelRegistryError
+from .paths import contained
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .store import Store
 
@@ -135,26 +139,28 @@ def create_app(
             ]
         }
 
-    def image_capability() -> dict[str, Any]:
+    def image_capability(capability: str, *, fake_fallback: bool = False) -> dict[str, Any]:
         try:
             models = ModelRegistry.load(resolved.model_manifest, hf_home=resolved.hf_home).all()
         except ModelRegistryError:
             return {"state": "unavailable", "reason": "model_registry_invalid", "local_only": True}
         if any(
             item.state.value == "available" and item.installed and item.healthy
-            and "image.text_to_image" in item.capabilities
+            and capability in item.capabilities
             for item in models
         ):
             confidence = next(
                 item.measurement_confidence
                 for item in models
                 if item.state.value == "available" and item.installed and item.healthy
-                and "image.text_to_image" in item.capabilities
+                and capability in item.capabilities
             )
             return {"state": "available", "implementation": "local", "confidence": confidence, "local_only": True}
-        if any(item.state.value == "available" and "image.text_to_image" in item.capabilities for item in models):
+        if any(item.state.value == "available" and capability in item.capabilities for item in models):
             return {"state": "unavailable", "reason": "model_not_installed", "local_only": True}
-        return {"state": "available", "implementation": "fake", "confidence": "low", "local_only": True}
+        if fake_fallback:
+            return {"state": "available", "implementation": "fake", "confidence": "low", "local_only": True}
+        return {"state": "unavailable", "reason": "capability_not_installed", "local_only": True}
 
     async def submit_hosted(
         value: JobRequest,
@@ -180,7 +186,7 @@ def create_app(
         )
         return manager.submit_hosted(value, execution).model_dump(mode="json")
 
-    async def wait_for_terminal(job_id: str, timeout: float = 25.0) -> dict[str, Any]:
+    async def wait_for_terminal(job_id: str, timeout: float = 110.0) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + timeout
         while asyncio.get_running_loop().time() < deadline:
             job = store.get_job(job_id)
@@ -304,10 +310,10 @@ def create_app(
         return {
             "contract_version": "1.0",
             "capabilities": {
-                "image.text_to_image": image_capability(),
-                "image.single_reference_edit": {"state": "unavailable", "reason": "planned_for_g2"},
+                "image.text_to_image": image_capability("image.text_to_image", fake_fallback=True),
+                "image.single_reference_edit": image_capability("image.single_reference_edit"),
                 "image.multi_reference_edit": {"state": "unavailable", "reason": "planned_for_g2"},
-                "image.strict_edit": {"state": "unavailable", "reason": "planned_for_g2"},
+                "image.strict_edit": image_capability("image.strict_edit"),
                 "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },
@@ -345,6 +351,24 @@ def create_app(
     @app.get("/api/v1/assets")
     async def list_assets(limit: int = Query(default=100, ge=1, le=500)) -> dict[str, Any]:
         return {"items": [item.model_dump(mode="json") for item in store.list_assets(limit)]}
+
+    @app.post("/api/v1/assets/import", status_code=201)
+    async def import_asset(
+        request: Request,
+        purpose: Literal["source", "edit_mask"] = Query(default="source"),
+    ) -> dict[str, Any]:
+        content = bytearray()
+        async for chunk in request.stream():
+            if len(content) + len(chunk) > MAX_IMPORT_BYTES:
+                raise HTTPException(status_code=413, detail={"code": "asset_import_too_large"})
+            content.extend(chunk)
+        try:
+            return import_image_asset(store, bytes(content), purpose=purpose).model_dump(mode="json")
+        except AssetImportError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "invalid_image_import", "message": str(exc)[:300]},
+            ) from exc
 
     @app.get("/api/v1/assets/{asset_id}")
     async def get_asset(asset_id: str) -> dict[str, Any]:
@@ -527,6 +551,7 @@ def create_app(
             await websocket.close(code=4401, reason="invalid host service token")
             return
         await websocket.accept()
+        uploads: dict[str, dict[str, Any]] = {}
         try:
             while True:
                 raw = await websocket.receive_text()
@@ -556,6 +581,79 @@ def create_app(
                         result = {"items": [item.model_dump(mode="json") for item in store.list_jobs(100)]}
                     elif method == "assets.list":
                         result = {"items": [item.model_dump(mode="json") for item in store.list_assets(100)]}
+                    elif method == "assets.import":
+                        encoded = params.get("base64")
+                        purpose = params.get("purpose", "source")
+                        if not isinstance(encoded, str) or len(encoded) > (MAX_IMPORT_BYTES * 4 // 3 + 8):
+                            raise ValueError("asset import payload exceeds the transport bound")
+                        try:
+                            content = base64.b64decode(encoded, validate=True)
+                        except ValueError as exc:
+                            raise ValueError("asset import payload is not valid base64") from exc
+                        result = import_image_asset(store, content, purpose=str(purpose)).model_dump(mode="json")
+                    elif method == "assets.import.begin":
+                        size = params.get("size")
+                        purpose = params.get("purpose")
+                        if (
+                            not isinstance(size, int)
+                            or isinstance(size, bool)
+                            or not 1 <= size <= MAX_IMPORT_BYTES
+                            or purpose not in {"source", "edit_mask"}
+                            or len(uploads) >= 2
+                        ):
+                            raise ValueError("asset import declaration is invalid")
+                        upload_id = f"upload_{uuid.uuid4().hex}"
+                        root = contained(store.work_dir, store.work_dir / f"workspace-{upload_id}")
+                        root.mkdir(mode=0o700)
+                        path = contained(root, root / "content.bin")
+                        path.touch(mode=0o600)
+                        uploads[upload_id] = {
+                            "path": path,
+                            "root": root,
+                            "size": size,
+                            "received": 0,
+                            "purpose": purpose,
+                        }
+                        result = {"upload_id": upload_id, "chunk_bytes": 512 * 1024}
+                    elif method == "assets.import.chunk":
+                        upload_id = params.get("upload_id")
+                        offset = params.get("offset")
+                        encoded = params.get("base64")
+                        upload = uploads.get(upload_id) if isinstance(upload_id, str) else None
+                        if (
+                            upload is None
+                            or not isinstance(offset, int)
+                            or isinstance(offset, bool)
+                            or offset != upload["received"]
+                            or not isinstance(encoded, str)
+                            or len(encoded) > 700_000
+                        ):
+                            raise ValueError("asset import chunk is invalid")
+                        try:
+                            chunk = base64.b64decode(encoded, validate=True)
+                        except ValueError as exc:
+                            raise ValueError("asset import chunk is not valid base64") from exc
+                        if not chunk or len(chunk) > 512 * 1024 or upload["received"] + len(chunk) > upload["size"]:
+                            raise ValueError("asset import chunk exceeds its declaration")
+                        with upload["path"].open("ab") as stream:
+                            stream.write(chunk)
+                        upload["received"] += len(chunk)
+                        result = {"received": upload["received"]}
+                    elif method == "assets.import.commit":
+                        upload_id = params.get("upload_id")
+                        upload = uploads.get(upload_id) if isinstance(upload_id, str) else None
+                        if upload is None or upload["received"] != upload["size"]:
+                            raise ValueError("asset import is incomplete")
+                        uploads.pop(upload_id)
+                        try:
+                            content = upload["path"].read_bytes()
+                            result = import_image_asset(
+                                store,
+                                content,
+                                purpose=upload["purpose"],
+                            ).model_dump(mode="json")
+                        finally:
+                            shutil.rmtree(upload["root"])
                     elif method == "assets.provenance":
                         result = store.get_provenance(str(params.get("asset_id", ""))).model_dump(mode="json")
                     elif method == "assets.content":
@@ -581,6 +679,11 @@ def create_app(
                     await websocket.send_json({"id": request_id, "ok": False, "error": detail})
         except WebSocketDisconnect:
             return
+        finally:
+            for upload in uploads.values():
+                root = upload.get("root")
+                if isinstance(root, Path) and root.exists():
+                    shutil.rmtree(root)
 
     @app.get("/")
     @app.get("/create")
@@ -595,7 +698,10 @@ def create_app(
         if delay_sec:
             await asyncio.sleep(delay_sec)
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
-        stylesheet = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
+        stylesheet = "\n".join(
+            (FRONTEND_DIR / name).read_text(encoding="utf-8")
+            for name in ("styles.css", "edit.css")
+        )
         script = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
         html = html.replace("<!-- MEDIA_FORGE_INLINE_STYLE -->", f"<style>{stylesheet}</style>")
         html = html.replace("<!-- MEDIA_FORGE_INLINE_SCRIPT -->", f"<script>{script}</script>")

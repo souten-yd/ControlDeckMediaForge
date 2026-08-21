@@ -21,5 +21,20 @@ class ImageGenerationResult:
     seed: int
 
 
+@dataclass(frozen=True)
+class ImageEditRequest:
+    prompt: str
+    source_path: Path
+    mask_path: Path | None
+    width: int
+    height: int
+    steps: int
+    seed: int
+    output_path: Path
+    strict_edit: bool
+
+
 class ImageAdapter(Protocol):
     def generate(self, request: ImageGenerationRequest) -> ImageGenerationResult: ...
+
+    def edit(self, request: ImageEditRequest) -> ImageGenerationResult: ...

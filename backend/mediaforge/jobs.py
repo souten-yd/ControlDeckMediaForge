@@ -18,6 +18,7 @@ from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
 from .host.client import ControlDeckHostClient, HostApiError
 from .host.jobs import HostExecution, HostJobReporter
 from .host.resources import fake_image_request, image_model_request
+from .image_edit import StrictEditError, strict_edit_plan, validate_strict_edit
 from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
 from .paths import contained
 from .routing import ModelRouteError, route_model
@@ -195,7 +196,7 @@ class JobManager:
         job = self.store.get_job(job_id)
         if job.status != JobStatus.QUEUED or self.store.cancel_requested(job_id):
             return
-        if job.request.operation != "image.generate":
+        if job.request.operation not in {"image.generate", "image.edit"}:
             self.store.update_job(
                 job_id,
                 status=JobStatus.FAILED,
@@ -210,6 +211,17 @@ class JobManager:
         )
         maintenance: asyncio.Task[None] | None = None
         try:
+            try:
+                self._validate_input_assets(job)
+            except WorkerFailure as exc:
+                await self._update(
+                    job_id,
+                    reporter,
+                    status=JobStatus.FAILED,
+                    phase="validate_request",
+                    error=ErrorDetail(code=exc.code, message=str(exc)[:300]),
+                )
+                return
             try:
                 selected = self._select_real_model(job)
             except WorkerFailure as exc:
@@ -260,17 +272,23 @@ class JobManager:
             models = ModelRegistry.load(self.model_manifest, hf_home=self.hf_home).all()
         except ModelRegistryError as exc:
             raise WorkerFailure("model_registry_invalid", str(exc)) from exc
+        capability = self._model_capability(job)
         available = any(
             item.state.value == "available"
             for item in models
-            if "image.text_to_image" in item.capabilities
+            if capability in item.capabilities
         )
         if not available and job.request.model_policy != "manual":
+            if any(item.state.value == "available" for item in models):
+                raise WorkerFailure(
+                    "capability_unavailable",
+                    f"no installed model provides {capability}",
+                )
             return None
         try:
             selected = route_model(
                 models,
-                capability="image.text_to_image",
+                capability=capability,
                 policy=job.request.model_policy,
                 model_id=job.request.model_id,
                 hardware_backend="rocm",
@@ -283,9 +301,60 @@ class JobManager:
             raise WorkerFailure(exc.code, str(exc)) from exc
 
     @staticmethod
-    def _validate_generation_limits(job: Job, selected: ModelDescriptor) -> None:
-        width = job.request.constraints.get("width", 1024)
-        height = job.request.constraints.get("height", 1024)
+    def _model_capability(job: Job) -> str:
+        if job.request.operation == "image.generate":
+            return "image.text_to_image"
+        return (
+            "image.strict_edit"
+            if job.request.constraints.get("strict_edit") is True
+            else "image.single_reference_edit"
+        )
+
+    def _validate_input_assets(self, job: Job) -> None:
+        if job.request.operation != "image.edit":
+            return
+        if len(job.request.inputs) != 1:
+            raise WorkerFailure("invalid_reference_count", "single-reference image.edit requires exactly one input")
+        try:
+            source = self.store.get_asset(job.request.inputs[0].asset_id)
+            source_path = self.store.asset_path(source.id)
+        except KeyError as exc:
+            raise WorkerFailure("asset_not_found", "source image asset was not found") from exc
+        if source.mime_type != "image/png":
+            raise WorkerFailure("unsupported_reference", "image.edit currently requires a PNG source asset")
+        strict = job.request.constraints.get("strict_edit", False)
+        if not isinstance(strict, bool):
+            raise WorkerFailure("invalid_constraint", "strict_edit must be a boolean")
+        if not strict:
+            return
+        mask_id = job.request.constraints.get("editable_mask_asset_id")
+        if not isinstance(mask_id, str) or not mask_id.startswith("asset_"):
+            raise WorkerFailure("invalid_edit_mask", "strict edit requires editable_mask_asset_id")
+        try:
+            mask = self.store.get_asset(mask_id)
+            mask_path = self.store.asset_path(mask.id)
+        except KeyError as exc:
+            raise WorkerFailure("invalid_edit_mask", "edit mask asset was not found") from exc
+        if mask.mime_type != "image/png":
+            raise WorkerFailure("invalid_edit_mask", "edit mask must be a PNG asset")
+        for key, actual in (("width", source.width), ("height", source.height)):
+            requested = job.request.constraints.get(key, actual)
+            if requested != actual:
+                raise WorkerFailure("invalid_dimensions", "strict edit dimensions must match the source image")
+        try:
+            strict_edit_plan(source_path, mask_path)
+        except StrictEditError as exc:
+            raise WorkerFailure("invalid_edit_mask", str(exc)) from exc
+
+    def _validate_generation_limits(self, job: Job, selected: ModelDescriptor) -> None:
+        source = None
+        if job.request.operation == "image.edit":
+            try:
+                source = self.store.get_asset(job.request.inputs[0].asset_id)
+            except (IndexError, KeyError):
+                pass
+        width = job.request.constraints.get("width", source.width if source and source.width else 1024)
+        height = job.request.constraints.get("height", source.height if source and source.height else 1024)
         if (
             not isinstance(width, int)
             or isinstance(width, bool)
@@ -309,11 +378,13 @@ class JobManager:
             shutil.rmtree(job_root)
         job_root.mkdir(mode=0o700)
         output_dir = job_root / "outputs"
+        worker_inputs = self._materialize_worker_inputs(job, job_root)
         selected = self._selected_models.get(job_id)
         payload: dict[str, Any]
         if selected is None:
             payload = job.request.model_dump(mode="json")
             payload["worker_output_dir"] = str(output_dir)
+            payload["worker_inputs"] = worker_inputs
         else:
             assert selected.local_path is not None
             payload = {
@@ -331,6 +402,7 @@ class JobManager:
                 },
                 "request": job.request.model_dump(mode="json"),
                 "worker_output_dir": str(output_dir),
+                "worker_inputs": worker_inputs,
             }
         backend_root = str(Path(__file__).resolve().parents[1])
         environment = dict(os.environ)
@@ -472,6 +544,15 @@ class JobManager:
         await self._update(job_id, reporter, phase="postprocess", progress=0.65)
         try:
             asset_ids = self._register_outputs(job, response, job_root)
+        except StrictEditError as exc:
+            await self._update(
+                job_id,
+                reporter,
+                status=JobStatus.FAILED,
+                phase="validate",
+                error=ErrorDetail(code="strict_edit_invariant_failed", message=str(exc)[:300]),
+            )
+            return
         except (KeyError, TypeError, ValueError, OSError) as exc:
             await self._update(
                 job_id,
@@ -489,6 +570,22 @@ class JobManager:
             progress=1,
             asset_ids=asset_ids,
         )
+
+    def _materialize_worker_inputs(self, job: Job, job_root: Path) -> dict[str, str]:
+        if job.request.operation != "image.edit":
+            return {}
+        inputs_dir = contained(job_root, job_root / "inputs")
+        inputs_dir.mkdir(mode=0o700)
+        source_id = job.request.inputs[0].asset_id
+        source_destination = contained(inputs_dir, inputs_dir / "source.png")
+        shutil.copyfile(self.store.asset_path(source_id), source_destination)
+        result = {"source_path": str(source_destination)}
+        if job.request.constraints.get("strict_edit") is True:
+            mask_id = str(job.request.constraints["editable_mask_asset_id"])
+            mask_destination = contained(inputs_dir, inputs_dir / "mask.png")
+            shutil.copyfile(self.store.asset_path(mask_id), mask_destination)
+            result["mask_path"] = str(mask_destination)
+        return result
 
     async def _acquire_host_lease(
         self,
@@ -689,6 +786,15 @@ class JobManager:
         reference_hashes = {
             item.asset_id: self.store.get_asset(item.asset_id).sha256 for item in job.request.inputs
         }
+        strict_edit = (
+            job.request.operation == "image.edit"
+            and job.request.constraints.get("strict_edit") is True
+        )
+        source_path = contained(job_root, job_root / "inputs" / "source.png") if strict_edit else None
+        mask_path = contained(job_root, job_root / "inputs" / "mask.png") if strict_edit else None
+        if strict_edit:
+            mask_id = str(job.request.constraints["editable_mask_asset_id"])
+            reference_hashes[mask_id] = self.store.get_asset(mask_id).sha256
         asset_ids: list[str] = []
         self.store.update_job(job.id, phase="validate", progress=0.75)
         for index, output in enumerate(outputs):
@@ -697,6 +803,9 @@ class JobManager:
                 raise ValueError("worker artifact exceeded the 64 MiB limit")
             sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
             width, height, validation = validate_png(path)
+            if strict_edit:
+                assert source_path is not None and mask_path is not None
+                validation.append(validate_strict_edit(source_path, mask_path, path))
             now = utc_now()
             asset_id = f"asset_{uuid.uuid4().hex}"
             provenance_id = f"prov_{uuid.uuid4().hex}"

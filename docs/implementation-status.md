@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-22
-Scope: MF0-0 through MF0-7 complete; G0 and G1 complete (`docs/implementation/mf0-addon-core.md`)
+Scope: MF0-0 through MF0-7 complete; G0 and G1 complete; G2 strict-edit slice implemented and measured
 Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
 Repository head released and verified for G1: `1e88472e753fd484638f072f7c4b327c8010ab60` (`v0.1.2`)
 
@@ -404,7 +404,8 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 MF0-0 through MF0-7 / G0 and G1 are complete. The real image route, R9700
 acceptance evidence, and trusted release-bundle standard installation path were
 exercised end-to-end. Media Forge PRs #10/#11/#14 and ControlDeck's generic provider
-PRs #216/#217/#219 are merged. G2 and later have not started.
+PRs #216/#217/#219 are merged. G2 is in progress; its measured strict-edit
+vertical slice is recorded below. G3 and later have not started.
 
 ## G1 — local image generation (COMPLETE, 2026-08-21)
 
@@ -633,5 +634,79 @@ requires the documented impact, migration, and contract/schema version bump.
 - The installed-bundle Settings/Create E2E used a 1280x800 Chromium viewport.
   A separate 320px mobile Settings layout run is NOT TESTED; Media uses the
   declared companion surface rather than squeezing the workspace into mobile.
-- G2 strict edit, G3 character consistency, and G5 M5Stack expression/gesture
-  variants are NOT TESTED and were not started out of roadmap order.
+- G2 non-strict single-reference edit, inpaint, outpaint, variation, multi-reference
+  edit, and VLM semantic review are NOT TESTED. G3 character consistency and G5
+  M5Stack expression/gesture variants have not started out of roadmap order.
+
+## G2 — strict edit vertical slice (IN PROGRESS, measured 2026-08-22)
+
+The existing frozen `image.edit` operation now accepts exactly one imported
+source asset plus `strict_edit=true` and an `editable_mask_asset_id`. Imports
+are bounded PNG/JPEG byte streams; neither the public API nor the opaque
+workspace transport accepts a filesystem path. Masks are canonical RGBA PNGs,
+must match the source, and empty/full masks fail explicitly before GPU
+admission.
+
+The worker sends only the bounded mask crop to the model. Core then composites
+the patch, recopies protected pixels from the immutable source, and runs an
+independent RGBA-channel comparison. Any protected-pixel difference produces
+`strict_edit_invariant_failed` and no asset. Provenance records source and mask
+hashes; lineage contains the source as the parent. No schema or Add-on
+contribution changed after the G1 freeze.
+
+Real R9700 acceptance used isolated Media Forge and ControlDeck data, the
+installed-host agent route, a real Broker lease, the retained Media Forge G1
+anime character, and a 10,179-pixel mouth mask:
+
+```text
+first accepted edit:       17.772403 sec (load 9.037687, generation 5.164945)
+same-seed repeat:          13.942717 sec (load 9.045363, generation 1.394409)
+third-generation edit:     14.959 sec (load 10.085912, generation 1.329025)
+protected pixel changes:   0 in every accepted output
+editable pixels changed:   10,154 of 10,179
+same-seed output hash:     identical
+three-generation lineage: source -> edit -> re-edit
+sampled worker peak RSS:   8,743,202,816 bytes
+sampled worker swap:       0 bytes
+sampled absolute VRAM use: 17,898,610,688 bytes
+lease after completion:    active 0 / waiting 0
+invalid full mask:         failed / invalid_edit_mask / asset count 0
+```
+
+The first real attempt found a product defect rather than producing accepted
+evidence: the worker completed in about 27.4 seconds but the agent endpoint's
+25-second bounded wait returned 504 first. The wait is now 110 seconds, below
+the Host's 120-second generic execution timeout; three later runs passed. This
+failed attempt is not counted as a successful generation.
+
+Installed-host Chromium then exercised Create operation selection, chunked
+source/mask upload through the authenticated opaque iframe transport, real edit,
+Library, and provenance. It completed in 17.786943 seconds, added exactly three
+assets, observed protected difference 0 and editable pixels 10,179, and recorded
+zero console/page errors. After the final fail-closed/upload-cleanup audit, the
+exact branch was restarted and the same browser route passed again in 32.869204
+seconds (adapter load 9.219171, generation 17.133812), again adding exactly
+three assets with protected difference 0 and no browser errors. Evidence is
+retained at `/data1tb/mediaforge-g2-e2e.Frwz2w/browser-final/`.
+
+The host had approximately 3.9 GB of globally allocated swap during diagnosis,
+mostly stale pages from unrelated long-lived processes. Media Forge worker swap
+was zero and `vmstat` showed no sustained swap-out. RAM shortage/pagefile
+thrashing is therefore not the cause of the observed 12-minute-class G1 load;
+the measured direct-placement/mmap path remains the applicable fix.
+
+Focused strict-edit, worker, adapter, and host-transport regression completed
+with 49 passed. Full `./mf.sh test` completed with 101 passed in 5.41 seconds.
+These are regression evidence only; the product evidence is the real
+process/browser run above.
+
+### NOT TESTED / remaining G2
+
+- Non-strict single-reference edit is deliberately not advertised and is NOT
+  TESTED; unavailable capability requests fail closed instead of using fake.
+- Inpaint, outpaint, variation, multi-reference edit, and VLM semantic review
+  with bounded retry remain NOT TESTED and are required before G2 completion.
+- Natural OOM during edit is NOT TESTED. Existing conservative G1 lease values
+  remain in use; the sampled absolute VRAM value is not substituted for the
+  lease envelope.
+- G2 is not marked complete, and no release version is assigned by this slice.
