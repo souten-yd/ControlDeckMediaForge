@@ -21,8 +21,18 @@
         <section id="create" class="panel active">
           <div class="intro"><p class="eyebrow">CREATE</p><h2>作りたいものを言葉にする</h2><p>ローカル worker で、履歴と provenance を含む素材を作ります。</p></div>
           <form id="create-form">
+            <label for="operation">操作</label>
+            <select id="operation"><option value="image.generate">新しい画像を作る</option><option value="image.edit">既存画像の一部を直す</option></select>
             <label for="intent">作りたい画像</label>
             <textarea id="intent" required maxlength="8000" placeholder="夜の机に置かれた、小さな青いロボット"></textarea>
+            <fieldset id="edit-inputs" hidden>
+              <legend>Strict edit</legend>
+              <p class="muted">白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。</p>
+              <div class="file-row">
+                <label>元画像<input id="source-file" type="file" accept="image/png,image/jpeg"></label>
+                <label>編集マスク<input id="mask-file" type="file" accept="image/png,image/jpeg"></label>
+              </div>
+            </fieldset>
             <div class="form-row">
               <label>幅<input id="width" type="number" min="256" max="1024" step="16" value="512"></label>
               <label>高さ<input id="height" type="number" min="256" max="1024" step="16" value="512"></label>

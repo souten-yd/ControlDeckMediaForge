@@ -12,7 +12,8 @@
       "runtime_options": {"device_mode": "direct_device_map", "disable_mmap": true},
       "generation_limits": {"max_width": 1024, "max_height": 1024, "max_pixels": 1048576},
       "capabilities": [
-        "image.text_to_image"
+        "image.text_to_image",
+        "image.strict_edit"
       ],
       "hardware_backends": ["rocm", "cuda"],
       "state": "available",

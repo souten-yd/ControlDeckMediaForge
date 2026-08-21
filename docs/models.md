@@ -19,9 +19,9 @@ Its only purpose is to prove job, process-isolation, asset, validation, provenan
 ## G1 default — FLUX.2 [klein] 4B
 
 Adoption state: **accepted for `image.text_to_image` on the measured R9700
-envelope of at most 1024x1024 pixels**. Editing capabilities described by the
-upstream model card are deliberately not advertised; Media Forge has not yet
-implemented or accepted the G2 editing path.
+envelope of at most 1024x1024 pixels**. The same pinned implementation is also
+accepted for the G2 `image.strict_edit` slice described below. Unbounded
+single-reference editing is not advertised yet.
 
 Identity:
 
@@ -205,3 +205,59 @@ reusable disk artifact.
 Qwen-Image remains **NOT TESTED** and was not downloaded. It is an alternative
 only if the accepted FLUX.2 route later fails the target-hardware or quality
 gate; candidates are not installed for their own sake.
+
+## G2 supplement — strict edit
+
+Adoption state: **accepted for `image.strict_edit` on the measured R9700
+envelope of at most 1024x1024 source images**. This is an additive capability
+of the already adopted immutable FLUX.2 Klein 4B revision, not a new model or
+runtime. The public operation remains `image.edit`; strictness and the mask
+asset ID are constraints. No model ID or filesystem path was added to the
+public contract.
+
+The section 24 answers remain the G1 answers above with these G2-specific
+supplements: the upstream Diffusers pipeline accepts a source image; Media
+Forge supplies only a bounded mask crop, composites the result itself, copies
+every protected RGBA pixel from the immutable source, and independently rejects
+any protected-pixel difference before asset registration. The mask hash and
+source hash are recorded in provenance. Removing the model still leaves the
+generic operation, constraints, asset, lineage, and validator contracts intact,
+so gate #10 remains Yes.
+
+Real ControlDeck agent/Broker runs on the R9700 observed:
+
+```text
+source/mask/result:             1024x1024 RGBA PNG
+first accepted edit total:      17.772403 sec
+  adapter load/generation:       9.037687 / 5.164945 sec
+same-seed repeat total:         13.942717 sec
+  adapter load/generation:       9.045363 / 1.394409 sec
+third-generation lineage total: 14.959 sec
+  adapter load/generation:      10.085912 / 1.329025 sec
+sampled worker peak RSS:         8,743,202,816 bytes
+sampled worker swap:             0 bytes
+sampled absolute VRAM used:     17,898,610,688 bytes
+protected RGBA pixel changes:    0
+editable mask pixels:           10,179
+changed editable pixels:        10,154
+same-seed output SHA-256:       8433840ef27840efe916a82786cab2224fe3d6246dcdb980eab2debab24975e5
+```
+
+All inspected pipeline components were on `cuda:0`; offload hooks and non-GPU
+targets were zero. Each run used the existing conservative measured lease
+request and released it. The VRAM number above is absolute sampled device use,
+not an incremental peak and not a replacement for the G1 lease envelope.
+
+The first real edit worker finished in 27.4 seconds but exposed a 25-second
+agent wait bound: the Host call returned 504 and postprocessing could not update
+the already failed Host Job. This run is not counted as success. The bound is
+now 110 seconds, below ControlDeck's 120-second generic execution timeout; the
+subsequent three product jobs completed normally.
+
+At the same observation point the host had about 3.9 GB of globally allocated
+swap, primarily stale pages belonging to long-lived unrelated processes. The
+Media Forge worker used zero swap during both the original 852-second G1 slow
+route and the accepted G2 edits; `vmstat` showed no sustained swap-out. RAM
+shortage/pagefile thrashing is therefore rejected as the cause of the measured
+12-minute-class load. The direct-placement/mmap diagnosis above remains the
+observed cause for this implementation.

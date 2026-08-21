@@ -9,7 +9,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .adapters import DiffusersFlux2KleinAdapter, ImageGenerationRequest
+from PIL import Image
+
+from .adapters import DiffusersFlux2KleinAdapter, ImageEditRequest, ImageGenerationRequest
 
 
 MAX_MESSAGE_BYTES = 1024 * 1024
@@ -95,11 +97,38 @@ class ImageWorker:
             raise ValueError("worker constraints or output are invalid")
         if output.get("format", "png") != "png":
             raise ValueError("image worker currently emits PNG only")
-        width = _integer(constraints.get("width", 1024), "image width")
-        height = _integer(constraints.get("height", 1024), "image height")
+        operation = request.get("operation")
+        if operation not in {"image.generate", "image.edit"}:
+            raise ValueError("image worker operation is unsupported")
+        worker_inputs = payload.get("worker_inputs", {})
+        if not isinstance(worker_inputs, dict):
+            raise ValueError("worker inputs are invalid")
+        source_path: Path | None = None
+        mask_path: Path | None = None
+        source_size: tuple[int, int] | None = None
+        if operation == "image.edit":
+            source_path = _contained(self.work_root, worker_inputs.get("source_path"), "source image")
+            mask_value = worker_inputs.get("mask_path")
+            if mask_value is not None:
+                mask_path = _contained(self.work_root, mask_value, "edit mask")
+            try:
+                with Image.open(source_path) as source:
+                    source_size = source.size
+            except (OSError, SyntaxError) as exc:
+                raise ValueError("source image is not decodable") from exc
+        width_default = source_size[0] if source_size is not None else 1024
+        height_default = source_size[1] if source_size is not None else 1024
+        width = _integer(constraints.get("width", width_default), "image width")
+        height = _integer(constraints.get("height", height_default), "image height")
         steps = _integer(constraints.get("steps", 4), "image steps")
         count = _integer(output.get("count", 1), "image count")
-        if not 256 <= width <= 2048 or not 256 <= height <= 2048 or width % 16 or height % 16:
+        strict_edit = constraints.get("strict_edit", False)
+        if not isinstance(strict_edit, bool):
+            raise ValueError("strict_edit must be a boolean")
+        if strict_edit:
+            if not 1 <= width <= 2048 or not 1 <= height <= 2048:
+                raise ValueError("strict edit dimensions must be in the range 1..2048")
+        elif not 256 <= width <= 2048 or not 256 <= height <= 2048 or width % 16 or height % 16:
             raise ValueError("image dimensions must be multiples of 16 in the range 256..2048")
         if not 1 <= steps <= 50 or not 1 <= count <= 8:
             raise ValueError("image steps or output count is outside the bounded range")
@@ -119,23 +148,39 @@ class ImageWorker:
             self.adapters = {model_id: adapter}
         outputs = []
         generation_sec = 0.0
+        if operation == "image.edit" and strict_edit and mask_path is None:
+            raise ValueError("strict edit requires an edit mask")
         for index in range(count):
             output_seed = seed + index
             output_path = output_dir / f"output-{index}.png"
-            result = adapter.generate(ImageGenerationRequest(
-                prompt=prompt,
-                width=width,
-                height=height,
-                steps=steps,
-                seed=output_seed,
-                output_path=output_path,
-            ))
+            if operation == "image.edit":
+                assert source_path is not None
+                result = adapter.edit(ImageEditRequest(
+                    prompt=prompt,
+                    source_path=source_path,
+                    mask_path=mask_path,
+                    width=width,
+                    height=height,
+                    steps=steps,
+                    seed=output_seed,
+                    output_path=output_path,
+                    strict_edit=strict_edit,
+                ))
+            else:
+                result = adapter.generate(ImageGenerationRequest(
+                    prompt=prompt,
+                    width=width,
+                    height=height,
+                    steps=steps,
+                    seed=output_seed,
+                    output_path=output_path,
+                ))
             generation_sec += float(adapter.last_generation_sec or 0)
             outputs.append({
                 "path": str(result.output_path),
                 "mime_type": "image/png",
-                "width": width,
-                "height": height,
+                "width": source_size[0] if strict_edit and source_size is not None else width,
+                "height": source_size[1] if strict_edit and source_size is not None else height,
                 "seed": result.seed,
             })
         return {
@@ -149,7 +194,11 @@ class ImageWorker:
                 "runtime_version": importlib.metadata.version("diffusers"),
             },
             "seed": seed,
-            "postprocessing": ["pil.convert.rgba"],
+            "postprocessing": (
+                ["pil.convert.rgba", "strict_edit.mask_composite", "strict_edit.protected_pixel_copy"]
+                if operation == "image.edit" and strict_edit
+                else ["pil.convert.rgba"]
+            ),
             "runtime_metrics": {
                 "load_sec": float(adapter.load_sec or 0),
                 "generation_sec": generation_sec,

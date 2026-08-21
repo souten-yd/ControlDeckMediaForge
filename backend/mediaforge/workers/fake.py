@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
+import io
 import json
 import os
 import signal
@@ -10,6 +11,10 @@ import sys
 import time
 import zlib
 from pathlib import Path
+
+from PIL import Image
+
+from mediaforge.image_edit import compose_strict_edit, editable_mask
 
 
 def _terminate_with_parent() -> None:
@@ -68,9 +73,28 @@ def main() -> int:
     outputs = []
     for index in range(int(request.get("output", {}).get("count", 1))):
         output_path = output_dir / f"output-{index}.png"
-        output_path.write_bytes(
-            _png(width, height, hashlib.sha256(f"{request['intent']}:{seed}:{index}".encode()).digest())
-        )
+        generated = _png(width, height, hashlib.sha256(f"{request['intent']}:{seed}:{index}".encode()).digest())
+        if request.get("operation") == "image.edit" and constraints.get("strict_edit") is True:
+            worker_inputs = request.get("worker_inputs", {})
+            source_path = Path(worker_inputs["source_path"])
+            mask_path = Path(worker_inputs["mask_path"])
+            with Image.open(io.BytesIO(generated)) as patch:
+                compose_strict_edit(source_path, mask_path, patch, output_path)
+            if constraints.get("_fake_strict_violation") is True:
+                mask = editable_mask(mask_path)
+                with Image.open(output_path) as opened:
+                    image = opened.convert("RGBA")
+                protected = next(
+                    (index for index, value in enumerate(mask.getdata()) if value == 0),
+                    None,
+                )
+                if protected is not None:
+                    x, y = protected % image.width, protected // image.width
+                    original = image.getpixel((x, y))
+                    image.putpixel((x, y), ((original[0] + 1) % 256, *original[1:]))
+                    image.save(output_path, format="PNG")
+        else:
+            output_path.write_bytes(generated)
         outputs.append({"path": str(output_path), "mime_type": "image/png", "width": width, "height": height})
     print(json.dumps({
         "outputs": outputs,
@@ -83,7 +107,11 @@ def main() -> int:
             "runtime_version": "1.0.0",
         },
         "seed": seed,
-        "postprocessing": [],
+        "postprocessing": (
+            ["strict_edit.mask_composite", "strict_edit.protected_pixel_copy"]
+            if request.get("operation") == "image.edit" and constraints.get("strict_edit") is True
+            else []
+        ),
     }))
     return 0
 

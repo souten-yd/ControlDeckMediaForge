@@ -4,6 +4,7 @@ import base64
 import asyncio
 import hashlib
 import json
+import os
 from io import BytesIO
 import time
 from pathlib import Path
@@ -417,6 +418,63 @@ def test_workspace_websocket_uses_host_token_and_structured_asset_transport(tmp_
             assert base64.b64decode(content["result"]["base64"]).startswith(b"\x89PNG")
     assert state["resource_requests"][0]["payload"]["job_id"] == "host-created-1"
     assert any(update.get("status") == "succeeded" for update in state["job_updates"])
+
+
+def test_workspace_websocket_chunk_import_exceeds_single_message_bound_and_cleans_up(tmp_path: Path):
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    image = Image.frombytes("RGBA", (512, 512), os.urandom(512 * 512 * 4))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    content = buffer.getvalue()
+    assert len(content) > 1024 * 1024
+
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            socket.send_json({
+                "id": "begin",
+                "method": "assets.import.begin",
+                "params": {"purpose": "source", "size": len(content)},
+            })
+            upload = socket.receive_json()["result"]
+            for offset in range(0, len(content), upload["chunk_bytes"]):
+                chunk = content[offset:offset + upload["chunk_bytes"]]
+                socket.send_json({
+                    "id": f"chunk-{offset}",
+                    "method": "assets.import.chunk",
+                    "params": {
+                        "upload_id": upload["upload_id"],
+                        "offset": offset,
+                        "base64": base64.b64encode(chunk).decode("ascii"),
+                    },
+                })
+                assert socket.receive_json()["result"]["received"] == offset + len(chunk)
+            socket.send_json({
+                "id": "commit",
+                "method": "assets.import.commit",
+                "params": {"upload_id": upload["upload_id"]},
+            })
+            imported = socket.receive_json()
+            assert imported["ok"] is True
+            assert imported["result"]["width"] == 512
+            assert imported["result"]["height"] == 512
+
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            socket.send_json({
+                "id": "orphan",
+                "method": "assets.import.begin",
+                "params": {"purpose": "edit_mask", "size": 100},
+            })
+            orphan = socket.receive_json()["result"]
+            socket.send_json({
+                "id": "incomplete",
+                "method": "assets.import.commit",
+                "params": {"upload_id": orphan["upload_id"]},
+            })
+            rejected = socket.receive_json()
+            assert rejected["ok"] is False
+            assert "incomplete" in rejected["error"]["message"]
+
+        assert list(client.app.state.store.work_dir.iterdir()) == []
 
 
 def test_scoped_file_bridge_reads_and_commits_without_host_paths(tmp_path: Path):

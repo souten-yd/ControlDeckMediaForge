@@ -75,6 +75,16 @@ async function standaloneCall(method, params) {
   if (method === "jobs.cancel") return jsonRequest(`/api/v1/jobs/${encodeURIComponent(params.job_id)}`, {method: "DELETE"});
   if (method === "jobs.list") return jsonRequest("/api/v1/jobs");
   if (method === "assets.list") return jsonRequest("/api/v1/assets");
+  if (method === "assets.import") {
+    const binary = atob(params.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    const response = await fetch(`/api/v1/assets/import?purpose=${encodeURIComponent(params.purpose)}`, {
+      method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: bytes
+    });
+    if (!response.ok) throw {code: `http_${response.status}`};
+    return response.json();
+  }
   if (method === "models.list") return jsonRequest("/api/v1/models");
   if (method === "assets.provenance") return jsonRequest(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/provenance`);
   if (method === "assets.content") {
@@ -117,6 +127,37 @@ function activate(name, sync = true) {
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => activate(tab.dataset.tab)));
 document.querySelectorAll("[data-refresh]").forEach((button) => button.addEventListener("click", () => activate(button.dataset.refresh, false)));
 document.querySelectorAll("#create-form textarea, #create-form input, #create-form select").forEach((field) => field.addEventListener("input", () => setHostBusy(true)));
+document.getElementById("operation").addEventListener("change", (event) => {
+  const editing = event.target.value === "image.edit";
+  document.getElementById("edit-inputs").hidden = !editing;
+  document.getElementById("source-file").required = editing;
+  document.getElementById("mask-file").required = editing;
+});
+
+async function fileBase64(file) {
+  if (!file || file.size < 1 || file.size > 64 * 1024 * 1024) throw {code: "invalid_import_size"};
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunk = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
+  }
+  return btoa(binary);
+}
+
+async function importFile(file, purpose) {
+  if (!file || file.size < 1 || file.size > 64 * 1024 * 1024) throw {code: "invalid_import_size"};
+  if (window.parent === window) {
+    return workspaceCall("assets.import", {purpose, base64: await fileBase64(file)});
+  }
+  const upload = await workspaceCall("assets.import.begin", {purpose, size: file.size});
+  for (let offset = 0; offset < file.size; offset += upload.chunk_bytes) {
+    const slice = file.slice(offset, Math.min(file.size, offset + upload.chunk_bytes));
+    const base64 = await fileBase64(slice);
+    await workspaceCall("assets.import.chunk", {upload_id: upload.upload_id, offset, base64});
+  }
+  return workspaceCall("assets.import.commit", {upload_id: upload.upload_id});
+}
 
 document.getElementById("create-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -124,11 +165,30 @@ document.getElementById("create-form").addEventListener("submit", async (event) 
   const status = document.getElementById("create-status");
   status.textContent = "受付中…";
   try {
+    const operation = document.getElementById("operation").value;
+    let inputs = [];
+    const constraints = {
+      width: Number(document.getElementById("width").value),
+      height: Number(document.getElementById("height").value)
+    };
+    if (operation === "image.edit") {
+      status.textContent = "元画像とマスクをローカルへ取り込み中…";
+      const sourceFile = document.getElementById("source-file").files[0];
+      const maskFile = document.getElementById("mask-file").files[0];
+      const source = await importFile(sourceFile, "source");
+      const mask = await importFile(maskFile, "edit_mask");
+      inputs = [{asset_id: source.id}];
+      constraints.width = source.width;
+      constraints.height = source.height;
+      constraints.strict_edit = true;
+      constraints.editable_mask_asset_id = mask.id;
+    }
     const job = await workspaceCall("jobs.create", {
-      operation: "image.generate",
+      operation,
       intent: document.getElementById("intent").value,
+      inputs,
       model_policy: document.getElementById("policy").value,
-      constraints: {width: Number(document.getElementById("width").value), height: Number(document.getElementById("height").value)},
+      constraints,
       output: {format: "png", count: Number(document.getElementById("count").value)},
       local_only: true
     });

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from worker_packs.image.adapters import ImageGenerationResult
 from worker_packs.image import worker as image_worker
@@ -19,6 +20,7 @@ def payload(model_path: Path, output_dir: Path) -> dict:
             "runtime_adapter": "diffusers.flux2-klein",
         },
         "request": {
+            "operation": "image.generate",
             "intent": "a blue robot",
             "constraints": {"width": 256, "height": 256, "steps": 4, "seed": 7},
             "output": {"format": "png", "count": 1},
@@ -138,3 +140,32 @@ def test_image_worker_rejects_fractional_and_boolean_numeric_constraints(monkeyp
     boolean["request"]["constraints"]["seed"] = True
     with pytest.raises(ValueError, match="seed must be an integer"):
         worker.handle(boolean)
+
+
+def test_image_worker_rejects_edit_source_and_mask_path_escape(monkeypatch, tmp_path):
+    model_root = tmp_path / "models"
+    work_root = tmp_path / "work"
+    model = model_root / "model"
+    model.mkdir(parents=True)
+    work_root.mkdir()
+    outside = tmp_path / "outside.png"
+    Image.new("RGBA", (256, 256), "white").save(outside, format="PNG")
+    inside = work_root / "inside.png"
+    Image.new("RGBA", (256, 256), "black").save(inside, format="PNG")
+    monkeypatch.setenv("MEDIA_FORGE_MODEL_ROOT", str(model_root))
+    monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(work_root))
+    worker = image_worker.ImageWorker()
+
+    source_escape = payload(model, work_root / "source-escape")
+    source_escape["request"]["operation"] = "image.edit"
+    source_escape["request"]["constraints"]["strict_edit"] = True
+    source_escape["worker_inputs"] = {"source_path": str(outside), "mask_path": str(inside)}
+    with pytest.raises(ValueError, match="source image is outside"):
+        worker.handle(source_escape)
+
+    mask_escape = payload(model, work_root / "mask-escape")
+    mask_escape["request"]["operation"] = "image.edit"
+    mask_escape["request"]["constraints"]["strict_edit"] = True
+    mask_escape["worker_inputs"] = {"source_path": str(inside), "mask_path": str(outside)}
+    with pytest.raises(ValueError, match="edit mask is outside"):
+        worker.handle(mask_escape)

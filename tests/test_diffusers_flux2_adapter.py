@@ -5,7 +5,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
+from mediaforge.image_edit import validate_strict_edit
+from worker_packs.image.adapters import ImageEditRequest
 from worker_packs.image.adapters.diffusers_flux2 import DiffusersFlux2KleinAdapter
 
 
@@ -170,3 +173,65 @@ def test_full_device_uses_post_load_transfer_without_qwen_preload(monkeypatch, t
         {"torch_dtype": fake_torch.bfloat16, "local_files_only": True, "disable_mmap": False},
     )
     assert calls["to"] == "cuda"
+
+
+def test_strict_edit_generates_only_bounded_patch_then_preserves_protected_pixels(
+    monkeypatch, tmp_path: Path
+):
+    model = tmp_path / "model"
+    model.mkdir()
+    source_path = tmp_path / "source.png"
+    mask_path = tmp_path / "mask.png"
+    output_path = tmp_path / "edited.png"
+    source = Image.new("RGBA", (300, 200))
+    for y in range(source.height):
+        for x in range(source.width):
+            source.putpixel((x, y), (x % 256, y % 256, 70, (x + y) % 256))
+    source.save(source_path, format="PNG")
+    mask = Image.new("RGBA", source.size, (0, 0, 0, 255))
+    for y in range(80, 100):
+        for x in range(100, 120):
+            mask.putpixel((x, y), (255, 255, 255, 255))
+    mask.save(mask_path, format="PNG")
+    calls: dict[str, object] = {}
+
+    class Generator:
+        def __init__(self, *, device):
+            calls["generator_device"] = device
+
+        def manual_seed(self, seed):
+            calls["seed"] = seed
+            return self
+
+    class Pipeline:
+        def __call__(self, **kwargs):
+            calls["pipeline"] = kwargs
+            return SimpleNamespace(images=[Image.new("RGBA", (kwargs["width"], kwargs["height"]), "orange")])
+
+    fake_torch = SimpleNamespace(
+        Generator=Generator,
+        cuda=SimpleNamespace(synchronize=lambda: None, empty_cache=lambda: None),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    adapter = DiffusersFlux2KleinAdapter(model, device_mode="direct_device_map")
+    adapter.pipeline = Pipeline()
+
+    result = adapter.edit(ImageEditRequest(
+        prompt="make the eyes orange",
+        source_path=source_path,
+        mask_path=mask_path,
+        width=300,
+        height=200,
+        steps=4,
+        seed=17,
+        output_path=output_path,
+        strict_edit=True,
+    ))
+
+    assert result.output_path == output_path
+    pipeline_call = calls["pipeline"]
+    assert pipeline_call["image"].size == (256, 256)
+    assert pipeline_call["width"] == 256 and pipeline_call["height"] == 256
+    assert calls["generator_device"] == "cuda" and calls["seed"] == 17
+    assert Image.open(output_path).size == source.size
+    assert validate_strict_edit(source_path, mask_path, output_path)["protected_pixel_difference"] == 0

@@ -5,7 +5,11 @@ from itertools import islice
 from pathlib import Path
 from typing import Any
 
-from .base import ImageGenerationRequest, ImageGenerationResult
+from PIL import Image
+
+from mediaforge.image_edit import compose_strict_edit, strict_edit_plan
+
+from .base import ImageEditRequest, ImageGenerationRequest, ImageGenerationResult
 
 
 class DiffusersFlux2KleinAdapter:
@@ -216,4 +220,85 @@ class DiffusersFlux2KleinAdapter:
         self.last_generation_sec = time.perf_counter() - started
         request.output_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         image.save(request.output_path, format="PNG")
+        return ImageGenerationResult(output_path=request.output_path, seed=request.seed)
+
+    @staticmethod
+    def _edit_crop_box(
+        mask_box: tuple[int, int, int, int],
+        width: int,
+        height: int,
+        *,
+        context_pixels: int = 64,
+    ) -> tuple[int, int, int, int]:
+        left, top, right, bottom = mask_box
+        return (
+            max(0, left - context_pixels),
+            max(0, top - context_pixels),
+            min(width, right + context_pixels),
+            min(height, bottom + context_pixels),
+        )
+
+    @staticmethod
+    def _generation_size(width: int, height: int) -> tuple[int, int]:
+        return (
+            max(256, (width + 15) // 16 * 16),
+            max(256, (height + 15) // 16 * 16),
+        )
+
+    def edit(self, request: ImageEditRequest) -> ImageGenerationResult:
+        import torch
+
+        self.load()
+        assert self.pipeline is not None
+        try:
+            with Image.open(request.source_path) as opened:
+                opened.load()
+                source = opened.convert("RGBA")
+        except (OSError, SyntaxError) as exc:
+            raise ValueError("source image is not decodable") from exc
+
+        patch_box = (0, 0, source.width, source.height)
+        reference = source
+        if request.strict_edit:
+            if request.mask_path is None:
+                raise ValueError("strict edit requires an edit mask")
+            plan = strict_edit_plan(request.source_path, request.mask_path)
+            patch_box = self._edit_crop_box(plan.crop_box, plan.width, plan.height)
+            reference = source.crop(patch_box)
+        generation_size = self._generation_size(reference.width, reference.height)
+        if reference.size != generation_size:
+            reference = reference.resize(generation_size, Image.Resampling.LANCZOS)
+
+        generator = torch.Generator(device="cuda").manual_seed(request.seed)
+        started = time.perf_counter()
+        try:
+            result = self.pipeline(
+                image=reference,
+                prompt=request.prompt,
+                width=generation_size[0],
+                height=generation_size[1],
+                num_inference_steps=request.steps,
+                guidance_scale=1.0,
+                generator=generator,
+            )
+            generated = result.images[0].convert("RGBA")
+        finally:
+            torch.cuda.synchronize()
+            if self.device_mode == "cpu_offload":
+                torch.cuda.empty_cache()
+        self.last_generation_sec = time.perf_counter() - started
+
+        if request.strict_edit:
+            assert request.mask_path is not None
+            compose_strict_edit(
+                request.source_path,
+                request.mask_path,
+                generated,
+                request.output_path,
+                patch_box=patch_box,
+            )
+        else:
+            output = generated.resize((request.width, request.height), Image.Resampling.LANCZOS)
+            request.output_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            output.save(request.output_path, format="PNG")
         return ImageGenerationResult(output_path=request.output_path, seed=request.seed)
