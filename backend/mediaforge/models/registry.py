@@ -47,8 +47,20 @@ class ModelDescriptor:
     installed: bool = False
     healthy: bool = False
     local_path: Path | None = None
-    measured_vram_bytes: int | None = None
+    resident_vram_bytes: int | None = None
+    execution_peak_vram_bytes: int | None = None
+    cold_load_peak_vram_bytes: int | None = None
+    headroom_vram_bytes: int | None = None
     measured_runtime_sec: float | None = None
+
+    @property
+    def measured_vram_bytes(self) -> int | None:
+        values = (self.execution_peak_vram_bytes, self.cold_load_peak_vram_bytes, self.headroom_vram_bytes)
+        if any(value is None for value in values):
+            return None
+        return max(self.execution_peak_vram_bytes or 0, self.cold_load_peak_vram_bytes or 0) + (
+            self.headroom_vram_bytes or 0
+        )
 
 
 def _required_string(value: dict[str, Any], key: str) -> str:
@@ -102,6 +114,27 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     required_files = _string_tuple(value, "required_files")
     if any(Path(path).is_absolute() or ".." in Path(path).parts for path in required_files):
         raise ModelRegistryError("model registry required file path must be relative and contained")
+    measurements = value.get("measurements")
+    measurement_values: dict[str, int | float | None] = {
+        "resident_vram_bytes": None,
+        "execution_peak_vram_bytes": None,
+        "cold_load_peak_vram_bytes": None,
+        "headroom_vram_bytes": None,
+        "measured_runtime_sec": None,
+    }
+    if measurements is not None:
+        if not isinstance(measurements, dict) or set(measurements) != set(measurement_values):
+            raise ModelRegistryError("model registry measurements are invalid")
+        for key in measurement_values:
+            measured = measurements[key]
+            if key == "measured_runtime_sec":
+                if not isinstance(measured, (int, float)) or isinstance(measured, bool) or measured <= 0:
+                    raise ModelRegistryError("model registry runtime measurement is invalid")
+                measurement_values[key] = float(measured)
+            else:
+                if not isinstance(measured, int) or isinstance(measured, bool) or measured < 0:
+                    raise ModelRegistryError("model registry VRAM measurement is invalid")
+                measurement_values[key] = measured
     return ModelDescriptor(
         model_id=model_id,
         family=_required_string(value, "family"),
@@ -116,6 +149,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         policy_rank=dict(policy),
         required_files=required_files,
         weights=tuple(weights),
+        **measurement_values,
     )
 
 

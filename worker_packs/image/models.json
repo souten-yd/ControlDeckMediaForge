@@ -16,6 +16,7 @@
       ],
       "hardware_backends": ["rocm", "cuda"],
       "state": "experimental",
+      "measurements": null,
       "policy_rank": {"auto": 10, "fast": 10, "balanced": 10, "quality": 20, "low_vram": 10},
       "required_files": [
         "model_index.json",

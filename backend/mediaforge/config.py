@@ -29,11 +29,13 @@ class Settings:
     host_lease_renew_sec: float = 10.0
     model_manifest: Path = REPOSITORY_ROOT / "worker_packs/image/models.json"
     hf_home: Path = Path.home() / ".cache/huggingface"
+    image_runtime_python: Path = REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python"
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "control_deck_url", _control_deck_origin(self.control_deck_url))
         object.__setattr__(self, "model_manifest", self.model_manifest.resolve())
         object.__setattr__(self, "hf_home", self.hf_home.resolve())
+        object.__setattr__(self, "image_runtime_python", self.image_runtime_python.resolve())
         if self.worker_timeout_sec <= 0 or self.host_request_timeout_sec <= 0 or self.host_lease_renew_sec <= 0:
             raise ValueError("worker and host request timeouts must be positive")
 
@@ -52,4 +54,10 @@ class Settings:
                 os.environ.get("MEDIA_FORGE_MODEL_MANIFEST", REPOSITORY_ROOT / "worker_packs/image/models.json")
             ),
             hf_home=Path(os.environ.get("HF_HOME", Path.home() / ".cache/huggingface")),
+            image_runtime_python=Path(
+                os.environ.get(
+                    "MEDIA_FORGE_IMAGE_RUNTIME_PYTHON",
+                    REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python",
+                )
+            ),
         )

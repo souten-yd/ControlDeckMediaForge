@@ -28,7 +28,10 @@ def descriptor(identifier: str, *, rank: int, vram: int, state: ModelState = Mod
         installed=True,
         healthy=state == ModelState.AVAILABLE,
         local_path=Path("/model") / identifier,
-        measured_vram_bytes=vram,
+        resident_vram_bytes=max(0, vram - 1),
+        execution_peak_vram_bytes=vram,
+        cold_load_peak_vram_bytes=vram,
+        headroom_vram_bytes=0,
         measured_runtime_sec=1.0,
     )
 
@@ -46,7 +49,7 @@ def test_router_is_deterministic_for_capability_policy_and_measured_vram():
 
 
 def test_router_never_promotes_unmeasured_or_experimental_model():
-    unmeasured = replace(descriptor("unmeasured", rank=1, vram=1), measured_vram_bytes=None)
+    unmeasured = replace(descriptor("unmeasured", rank=1, vram=1), execution_peak_vram_bytes=None)
     experimental = descriptor("experimental", rank=1, vram=1, state=ModelState.EXPERIMENTAL)
     with pytest.raises(ModelRouteError) as error:
         route_model(
@@ -81,6 +84,7 @@ def test_registry_detects_exact_huggingface_snapshot(tmp_path):
             "weights_hash": "sha256:" + "e" * 64, "license": "Apache-2.0", "runtime_adapter": "test",
             "capabilities": ["image.text_to_image"], "hardware_backends": ["rocm"],
             "state": "experimental", "policy_rank": {"auto": 1},
+            "measurements": None,
             "required_files": ["config.json"],
             "weights": [{"path": "model.safetensors", "size_bytes": 4, "sha256": digest}],
         }],
@@ -109,6 +113,7 @@ def test_registry_rejects_escape_and_hash_mismatch(tmp_path):
             "weights_hash": "sha256:" + "e" * 64, "license": "Apache-2.0", "runtime_adapter": "test",
             "capabilities": ["image.text_to_image"], "hardware_backends": ["rocm"],
             "state": "experimental", "policy_rank": {"auto": 1},
+            "measurements": None,
             "required_files": ["config.json"],
             "weights": [{"path": "../escape", "size_bytes": 4, "sha256": "c" * 64}],
         }],
@@ -116,3 +121,25 @@ def test_registry_rejects_escape_and_hash_mismatch(tmp_path):
     manifest.write_text(json.dumps(value), encoding="utf-8")
     with pytest.raises(ModelRegistryError):
         ModelRegistry.load(manifest, hf_home=tmp_path / "huggingface")
+
+
+def test_registry_requires_complete_positive_runtime_measurements(tmp_path):
+    manifest = tmp_path / "models.json"
+    base = {
+        "model_id": "owner/model", "family": "test", "version": "1", "revision": "d" * 40,
+        "weights_hash": "sha256:" + "e" * 64, "license": "Apache-2.0", "runtime_adapter": "test",
+        "capabilities": ["image.text_to_image"], "hardware_backends": ["rocm"],
+        "state": "available", "policy_rank": {"auto": 1}, "required_files": ["config.json"],
+        "weights": [{"path": "model.safetensors", "size_bytes": 4, "sha256": "c" * 64}],
+    }
+    base["measurements"] = {
+        "resident_vram_bytes": 1,
+        "execution_peak_vram_bytes": 2,
+        "cold_load_peak_vram_bytes": 3,
+        "headroom_vram_bytes": 4,
+        "measured_runtime_sec": 0,
+    }
+    manifest.write_text(json.dumps({"schema_version": "1.0", "models": [base]}), encoding="utf-8")
+
+    with pytest.raises(ModelRegistryError, match="runtime measurement"):
+        ModelRegistry.load(manifest)

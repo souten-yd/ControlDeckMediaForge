@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -235,3 +236,55 @@ def test_unavailable_operation_fails_explicitly(client):
     failed = wait_terminal(client, created["id"])
     assert failed["status"] == "failed"
     assert failed["error"]["code"] == "capability_unavailable"
+
+
+def test_available_real_model_requires_host_managed_lease(tmp_path: Path):
+    model_id = "owner/model"
+    revision = "d" * 40
+    hf_home = tmp_path / "hf"
+    repo = hf_home / "hub/models--owner--model"
+    blob_content = b"test"
+    digest = hashlib.sha256(blob_content).hexdigest()
+    blob = repo / "blobs" / digest
+    blob.parent.mkdir(parents=True)
+    blob.write_bytes(blob_content)
+    config_blob = repo / "blobs" / ("f" * 64)
+    config_blob.write_text("{}", encoding="utf-8")
+    snapshot = repo / "snapshots" / revision
+    snapshot.mkdir(parents=True)
+    (snapshot / "config.json").symlink_to(config_blob)
+    (snapshot / "model.safetensors").symlink_to(blob)
+    manifest = tmp_path / "models.json"
+    manifest.write_text(json.dumps({
+        "schema_version": "1.0",
+        "models": [{
+            "model_id": model_id,
+            "family": "test",
+            "version": "1",
+            "revision": revision,
+            "weights_hash": "sha256:" + "e" * 64,
+            "license": "Apache-2.0",
+            "runtime_adapter": "test",
+            "capabilities": ["image.text_to_image"],
+            "hardware_backends": ["rocm"],
+            "state": "available",
+            "measurements": {
+                "resident_vram_bytes": 1,
+                "execution_peak_vram_bytes": 2,
+                "cold_load_peak_vram_bytes": 3,
+                "headroom_vram_bytes": 4,
+                "measured_runtime_sec": 1,
+            },
+            "policy_rank": {"auto": 1},
+            "required_files": ["config.json"],
+            "weights": [{"path": "model.safetensors", "size_bytes": 4, "sha256": digest}],
+        }],
+    }), encoding="utf-8")
+    app = create_app(Settings(data_dir=tmp_path / "data", model_manifest=manifest, hf_home=hf_home))
+
+    with TestClient(app) as local_client:
+        created = local_client.post("/api/v1/jobs", json=request()).json()
+        failed = wait_terminal(local_client, created["id"])
+
+    assert failed["status"] == "failed"
+    assert failed["error"]["code"] == "host_lease_required"

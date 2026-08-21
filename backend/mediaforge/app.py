@@ -84,6 +84,9 @@ def create_app(
         worker_timeout_sec=resolved.worker_timeout_sec,
         host_client=host,
         lease_renew_sec=resolved.host_lease_renew_sec,
+        model_manifest=resolved.model_manifest,
+        hf_home=resolved.hf_home,
+        image_runtime_python=resolved.image_runtime_python,
     )
     workspace_test_delay_pending = True
 
