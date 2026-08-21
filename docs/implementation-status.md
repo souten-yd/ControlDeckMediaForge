@@ -537,6 +537,15 @@ required no Host reload. Persistent feature data remained exactly
 4,687,592,191 bytes / 8 files, including both generated PNGs (128,589 and
 159,515 bytes); the worker runtime and shared cache were not deleted.
 
+After the lifecycle environment was hardened and ControlDeck PR #217 was
+merged, its exact provider contents were run again against the isolated host.
+Install job `de4cf085cfd3` completed in 11.521913 seconds from persistent warm
+runtime/cache state and returned v0.1.1 / healthy; the live service again
+reported R9700/gfx1201, ROCm 7.2.1, and model installed/healthy. A second real
+uninstall returned `not-installed` and left the same 4,687,592,191 bytes / 8
+files. This closes the gap between the pre-hardening runtime evidence and the
+merged provider implementation.
+
 Media Forge full regression at the released code completed with 80 passed in
 8.01 seconds. ControlDeck provider final-head regression completed with 738
 passed / 1 skipped in 61.79 seconds, frontend production build transformed
