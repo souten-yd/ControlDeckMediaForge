@@ -33,8 +33,8 @@ def test_health_defaults_to_setup_required(client):
     assert payload["status"] == "setup_required"
     assert payload["contract_version"] == "2.0"
     assert payload["contributions"]["navigation:workspace"] == "available"
-    assert payload["contributions"]["workflow_executor:media.generate"]["state"] == "unavailable"
-    assert payload["contributions"]["context_action:edit-image"]["state"] == "unavailable"
+    assert payload["contributions"]["workflow_executor:media.generate"] == "available"
+    assert payload["contributions"]["context_action:edit-image"] == "available"
 
 
 def test_health_uses_only_control_deck_reason_codes(client):

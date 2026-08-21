@@ -3,10 +3,14 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .client import ControlDeckHostClient, HostIdentity
+from .client import ControlDeckHostClient, HostApiError, HostIdentity
 
 
 OPAQUE_GRANT = re.compile(r"^grant:[A-Za-z0-9._:-]{1,256}$")
+
+
+class GrantContentTooLarge(ValueError):
+    pass
 
 
 def require_grant_id(value: str) -> str:
@@ -15,10 +19,24 @@ def require_grant_id(value: str) -> str:
     return value
 
 
-async def read_grant(client: ControlDeckHostClient, identity: HostIdentity, grant_id: str) -> tuple[dict, bytes]:
+async def read_grant(
+    client: ControlDeckHostClient,
+    identity: HostIdentity,
+    grant_id: str,
+    *,
+    max_bytes: int | None = None,
+) -> tuple[dict, bytes]:
     scoped = require_grant_id(grant_id)
     metadata = await client.grant_metadata(identity, scoped)
-    content = await client.grant_content(identity, scoped)
+    size = metadata.get("size")
+    if max_bytes is not None and (not isinstance(size, int) or size < 0 or size > max_bytes):
+        raise GrantContentTooLarge("ControlDeck read grant exceeds the caller's content bound")
+    try:
+        content = await client.grant_content(identity, scoped, max_bytes=max_bytes)
+    except HostApiError as exc:
+        if exc.code == "host_response_too_large":
+            raise GrantContentTooLarge("ControlDeck read grant exceeds the caller's content bound") from exc
+        raise
     if metadata.get("kind") != "read" or metadata.get("size") != len(content):
         raise ValueError("ControlDeck read grant metadata does not match its content")
     return metadata, content
