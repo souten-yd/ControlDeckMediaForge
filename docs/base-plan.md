@@ -225,6 +225,32 @@ Therefore:
 
 ControlDeck should install/enable/disable Media Forge as an add-on, but PyTorch, model runtimes, video dependencies, and Blender belong to Media Forge workers. ControlDeck core should not inherit those dependencies.
 
+### 3.9 "Expose every implemented feature as a flat, always-visible control set"
+
+**Rejected.**
+
+The G0 workspace showed every operation, edit mode, and file input at once. Once
+G1–G3 landed, that surface required the user to understand masks, edit modes,
+model policies, and QA budgets before producing a single image, while still
+offering no preview, no export, and no mobile access.
+
+The replacement is progressive disclosure with an explicit advanced mode:
+hide by default, never remove. Removing advanced capability to buy simplicity is
+also rejected, because expert access is a product requirement.
+
+### 3.10 "Add a Media-specific mobile screen to ControlDeck"
+
+**Rejected.**
+
+Mobile users saw only the host's generic companion card, so the obvious fix was to
+teach ControlDeck how to render Media Forge jobs and assets. That would put
+Media-specific code into the host and void the reason for building a generic
+add-on platform (§4.1).
+
+Media Forge instead ships a purpose-built mobile information architecture inside
+its own embedded view. The host declaration changes from `companion` to
+`embedded`; no host code changes.
+
 ---
 
 ## 4. System architecture
@@ -790,24 +816,41 @@ A user or agent should be able to ask:
 
 ## 16. UI
 
-Initial navigation:
+Normative detail lives in [`design-workspace-ux.md`](design-workspace-ux.md).
+This section records the decision, not the layout.
+
+The first navigation sketch (`Create / Library / Projects / Characters / Profiles /
+Models / Jobs`) was **revised after G3**. Seven flat top-level entries put
+capability-gated and expert-only surfaces (models, raw profiles) at the same level
+as the primary task, and left no room for a preview/progress surface. The revised
+top level is three entries plus settings:
 
 ```text
 Media Forge
-├─ Create
-├─ Library
-├─ Projects
-├─ Characters
-├─ Profiles
-├─ Models
-└─ Jobs
+├─ Create      creation, running progress, and latest results in one surface
+├─ Library     finished assets, imports, characters/styles
+├─ Activity    running and historical jobs
+└─ ⚙ Settings  state, storage, advanced-mode toggle (Models lives here)
 ```
 
-`Create` is chat/prompt oriented and supports image/video modes, references, and advanced options.
+Rules that the layout must satisfy:
 
-M5/game/web workflows should appear as optional profile shortcuts, not separate applications.
+- `Create` is chat/prompt oriented, single screen, and grows only with context
+  (attaching an image reveals editing actions; nothing is a wizard step).
+- Feature visibility derives from the capability document, never from hardcoded
+  lists. Unavailable capabilities are hidden by default and shown disabled with a
+  reason in advanced mode.
+- Simplicity is achieved by **progressive disclosure, never by removing features**.
+  An explicit advanced mode must reach every field of the public job request.
+- Model identity appears only inside the opt-in advanced/manual path, so the
+  capability-driven principle in §2.2 stays intact on the default path.
+- Mobile is designed as its own information architecture, not a scaled desktop
+  workspace, and must show finished assets and creation progress.
+- M5/game/web workflows remain optional profile shortcuts, not separate applications.
 
-Node graph editing is intentionally out of scope for the primary UI. If advanced pipeline visualization is later useful, expose the internal execution plan read-only first before considering editable graphs.
+Node graph editing stays out of scope for the primary UI. If advanced pipeline
+visualization later proves useful, expose the internal execution plan read-only
+first before considering editable graphs.
 
 ---
 

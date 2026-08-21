@@ -869,3 +869,55 @@ candidates and the durable job failed explicitly with
 asset was registered and the Broker lease was released. Full `./mf.sh test`
 completed with 133 passed on the final branch. These are regression evidence
 only; the real jobs above are the runtime evidence.
+
+## UX1 — workspace UI/UX (DESIGNED, NOT IMPLEMENTED, 2026-08-22)
+
+設計と実装指示のみを追加した段階であり、**コードは 1 行も書いていない**。
+実測値は存在しない。以下はすべて「未実施」である。
+
+```text
+docs/design-workspace-ux.md            設計の正（IA・段階開示・レイアウト・文言表・却下案）
+docs/implementation/ux1-workspace.md   PR-U0〜U7 の実装指示とテスト計画
+docs/base-plan.md §16                  ナビゲーション決定を改訂（7 項目 → 3 + 設定）
+docs/base-plan.md §3.9 / §3.10         却下案を追記（平坦な全表示 / host 側モバイル画面）
+```
+
+### 設計が解こうとしている実測済みの欠落
+
+G0 の workspace のまま G1〜G3 を積んだ結果として、以下がコード読解で確認済み。
+
+```text
+モバイル       addon.json が mobile: "companion" のため、ControlDeck は 768px 未満で
+               AddonCompanion（状態カードのみ）を描画する。asset も進捗も出ない。
+書き出し       host.file.export と host files bridge は実装済み（/test/host-files/roundtrip で
+               疎通実績あり）だが、workspace UI に書き出し導線が 1 つも無い。
+マスク作成     inpaint はマスク PNG を要求するが、UI はファイル選択のみ。
+capability     /api/v1/capabilities を UI が呼んでいない（出し分けが無い）。
+進捗           pollJob が create-status ノードにのみ書き込み、タブ移動で見えなくなる。
+ライブラリ     asset ごとに assets.content（実測 1.4 MB 級）を直列取得している。
+G3 UI          profile / reference collection の UI が存在しない。
+```
+
+### 契約に対する予定変更（実施前）
+
+```text
+公開 API / schemas / workflow / agent tools / provenance 必須項目   変更なし
+/ws への追加メソッド                                                実装詳細として追加予定
+addon.json  mobile: "companion" → "embedded" / version 0.1.2 → 0.2.0  実施前
+ControlDeck リポジトリ                                              変更しない（差分 0 行が完了条件）
+```
+
+`embedded` への変更は、モバイル専用 IA を実装した PR でのみ行う。
+未実装のまま宣言だけ変えることを禁止する（縮小 workspace は UX 規約違反）。
+
+### NOT TESTED（このセクション時点ですべて未実施）
+
+```text
+新 /ws メソッドの実装・テスト
+モバイル埋め込みの実機確認（状態カードではなく workspace が出ること）
+マスクエディタ
+書き出しの sha256 一致
+サムネイル導入前後の転送量比較
+push 更新の遅延測定
+320px / 390×844 でのレイアウト実測
+```
