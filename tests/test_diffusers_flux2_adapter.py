@@ -8,6 +8,7 @@ import pytest
 from PIL import Image
 
 from mediaforge.image_edit import validate_strict_edit
+from mediaforge.outpaint import validate_outpaint
 from worker_packs.image.adapters import ImageEditRequest
 from worker_packs.image.adapters.diffusers_flux2 import DiffusersFlux2KleinAdapter
 
@@ -282,3 +283,53 @@ def test_reference_edit_uses_full_source_and_requested_output(monkeypatch, tmp_p
     assert pipeline_call["width"] == 320 and pipeline_call["height"] == 256
     assert calls["generator_device"] == "cuda" and calls["seed"] == 23
     assert Image.open(output_path).size == (320, 256)
+
+
+def test_outpaint_uses_expanded_reference_then_recopies_source(monkeypatch, tmp_path: Path):
+    model = tmp_path / "model"
+    model.mkdir()
+    source_path = tmp_path / "source.png"
+    output_path = tmp_path / "outpaint.png"
+    source = Image.new("RGBA", (320, 256), (30, 60, 90, 170))
+    source.save(source_path, format="PNG")
+    calls: dict[str, object] = {}
+
+    class Generator:
+        def __init__(self, *, device):
+            calls["generator_device"] = device
+
+        def manual_seed(self, seed):
+            calls["seed"] = seed
+            return self
+
+    class Pipeline:
+        def __call__(self, **kwargs):
+            calls["pipeline"] = kwargs
+            return SimpleNamespace(images=[Image.new("RGBA", (kwargs["width"], kwargs["height"]), "orange")])
+
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(
+        Generator=Generator,
+        cuda=SimpleNamespace(synchronize=lambda: None, empty_cache=lambda: None),
+    ))
+    adapter = DiffusersFlux2KleinAdapter(model, device_mode="direct_device_map")
+    adapter.pipeline = Pipeline()
+
+    adapter.edit(ImageEditRequest(
+        prompt="extend the background",
+        source_path=source_path,
+        mask_path=None,
+        width=512,
+        height=384,
+        steps=4,
+        seed=29,
+        output_path=output_path,
+        strict_edit=True,
+        edit_mode="outpaint",
+    ))
+
+    pipeline_call = calls["pipeline"]
+    assert pipeline_call["image"].size == (512, 384)
+    assert pipeline_call["width"] == 512 and pipeline_call["height"] == 384
+    assert pipeline_call["image"].getpixel((0, 0))[3] == 0
+    assert calls["generator_device"] == "cuda" and calls["seed"] == 29
+    assert validate_outpaint(source_path, output_path, width=512, height=384)["source_pixel_difference"] == 0

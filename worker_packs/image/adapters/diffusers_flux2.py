@@ -8,6 +8,7 @@ from typing import Any
 from PIL import Image
 
 from mediaforge.image_edit import compose_strict_edit, strict_edit_plan
+from mediaforge.outpaint import compose_outpaint, outpaint_reference
 
 from .base import ImageEditRequest, ImageGenerationRequest, ImageGenerationResult
 
@@ -259,7 +260,9 @@ class DiffusersFlux2KleinAdapter:
 
         patch_box = (0, 0, source.width, source.height)
         reference = source
-        if request.strict_edit:
+        if request.edit_mode == "outpaint":
+            reference, _plan = outpaint_reference(request.source_path, request.width, request.height)
+        elif request.strict_edit:
             if request.mask_path is None:
                 raise ValueError("strict edit requires an edit mask")
             plan = strict_edit_plan(request.source_path, request.mask_path)
@@ -288,7 +291,15 @@ class DiffusersFlux2KleinAdapter:
                 torch.cuda.empty_cache()
         self.last_generation_sec = time.perf_counter() - started
 
-        if request.strict_edit:
+        if request.edit_mode == "outpaint":
+            compose_outpaint(
+                request.source_path,
+                generated,
+                request.output_path,
+                width=request.width,
+                height=request.height,
+            )
+        elif request.strict_edit:
             assert request.mask_path is not None
             compose_strict_edit(
                 request.source_path,

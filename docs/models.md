@@ -294,3 +294,33 @@ The accepted visual retained the anime character's orange mesh hair and black/
 orange hoodie while producing a cheerful two-hand waving pose. This is a
 bounded observed sample, not a general character-identity guarantee; structured
 identity evaluation belongs to G3.
+
+### Outpaint supplement
+
+`image.outpaint` uses the same model through `image.edit`. Media Forge builds a
+larger centered reference canvas, derives the exterior generation region, then
+recopies and independently validates every original RGBA pixel. The model is
+never trusted to preserve the source rectangle.
+
+Real installed-host Chromium extended a Media Forge generated 512x512 character
+to 768x512 on the R9700:
+
+```text
+first outpaint browser total: 108.756109 sec
+  adapter load/generation:     10.742962 / 92.188142 sec
+warm separate worker total:    19.807051 sec
+  adapter load/generation:     10.774391 / 3.397528 sec
+preserved source pixels:       262,144; RGBA differences 0
+generated exterior pixels:     131,072
+output:                        768x512 RGBA PNG, 281,762 bytes
+same-seed SHA-256:             04c00781464a760d5d4c066c2c2da8b3d6455cff198988652171eec818298f26
+placement:                     all inspected components cuda:0
+offload hooks/non-GPU targets: 0 / 0
+Broker after each:             active 0 / waiting 0
+```
+
+The 92.2-second first generation is retained as a resolution/route-specific
+ROCm compile sample. It is not attributed to RAM pressure or swap; the warm
+separate-worker repeat demonstrates persistent compiler/cache reuse. Visual
+inspection showed the original character unchanged and the neutral background
+extended continuously on both sides.

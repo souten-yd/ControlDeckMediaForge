@@ -29,7 +29,9 @@ def main() -> int:
     parser.add_argument("--cookie-file", type=Path)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--mask", type=Path)
-    parser.add_argument("--mode", choices=("strict", "reference", "variation"), default="strict")
+    parser.add_argument("--mode", choices=("strict", "reference", "variation", "outpaint"), default="strict")
+    parser.add_argument("--width", type=int, default=768)
+    parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     password = os.environ.get(args.password_env)
@@ -74,12 +76,17 @@ def main() -> int:
         frame.get_by_label("操作").select_option("image.edit")
         frame.get_by_label("編集方法").select_option(args.mode)
         frame.get_by_label("元画像").set_input_files(str(args.source))
+        if args.mode == "outpaint":
+            frame.get_by_label("幅").fill(str(args.width))
+            frame.get_by_label("高さ").fill(str(args.height))
         if args.mode == "strict":
             expect(frame.get_by_text("白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。")).to_be_visible()
             frame.get_by_label("編集マスク").set_input_files(str(args.mask))
         frame.get_by_label("作りたい画像").fill(
             "Close her mouth into a small gentle smile, preserve the same character and art style"
             if args.mode == "strict"
+            else "Extend the scene naturally beyond the original canvas, preserve the complete centered source"
+            if args.mode == "outpaint"
             else "Create a cheerful waving pose of the same character, preserve the orange mesh hair and anime style"
         )
         frame.get_by_role("button", name="生成する").click()
@@ -107,6 +114,13 @@ def main() -> int:
         assert (strict is not None) == (args.mode == "strict")
         if strict is not None:
             assert strict["protected_pixel_difference"] == 0
+        outpaint = next((
+            item for item in provenance["validation"]
+            if item["validator"] == "image.outpaint.source_pixel_diff"
+        ), None)
+        assert (outpaint is not None) == (args.mode == "outpaint")
+        if outpaint is not None:
+            assert outpaint["source_pixel_difference"] == 0
         assert len(result["parent_asset_ids"]) == 1
         assert len(provenance["reference_asset_hashes"]) == (2 if args.mode == "strict" else 1)
         assert provenance["parameters"]["constraints"]["edit_mode"] == (
@@ -124,6 +138,8 @@ def main() -> int:
         "parent_asset_ids": result["parent_asset_ids"],
         "protected_pixel_difference": strict["protected_pixel_difference"] if strict else None,
         "editable_pixels": strict["editable_pixels"] if strict else None,
+        "source_pixel_difference": outpaint["source_pixel_difference"] if outpaint else None,
+        "generated_pixels": outpaint["generated_pixels"] if outpaint else None,
         "browser_errors": errors,
     }
     (args.evidence_dir / "evidence.json").write_text(
