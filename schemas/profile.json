@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/profile.json",
+  "title": "Media Forge character or style profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "kind", "name", "description", "reference_collection_id", "character", "style", "created_at", "updated_at"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^(character|style)_[0-9a-f]{32}$"},
+    "kind": {"enum": ["character", "style"]},
+    "name": {"type": "string", "minLength": 1, "maxLength": 120},
+    "description": {"type": "string", "maxLength": 1000},
+    "reference_collection_id": {"type": ["string", "null"], "pattern": "^refs_[0-9a-f]{32}$"},
+    "character": {"oneOf": [{"$ref": "#/$defs/character"}, {"type": "null"}]},
+    "style": {"oneOf": [{"$ref": "#/$defs/style"}, {"type": "null"}]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "stringList": {"type": "array", "maxItems": 16, "items": {"type": "string", "maxLength": 200}},
+    "character": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appearance", "clothing", "colors", "distinguishing_features", "negative_traits"],
+      "properties": {
+        "appearance": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "clothing": {"type": "string", "maxLength": 2000},
+        "colors": {"$ref": "#/$defs/stringList"},
+        "distinguishing_features": {"$ref": "#/$defs/stringList"},
+        "negative_traits": {"$ref": "#/$defs/stringList"}
+      }
+    },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["art_style", "linework", "coloring", "texture", "negative_traits"],
+      "properties": {
+        "art_style": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "linework": {"type": "string", "maxLength": 1000},
+        "coloring": {"type": "string", "maxLength": 1000},
+        "texture": {"type": "string", "maxLength": 1000},
+        "negative_traits": {"$ref": "#/$defs/stringList"}
+      }
+    }
+  }
+}

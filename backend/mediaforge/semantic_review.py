@@ -37,7 +37,13 @@ class SemanticReviewResult:
 class SemanticReviewer(Protocol):
     async def available(self) -> bool: ...
 
-    async def review(self, path: Path, intent: str) -> SemanticReviewResult: ...
+    async def review(
+        self,
+        path: Path,
+        intent: str,
+        *,
+        reference_paths: tuple[Path, ...] = (),
+    ) -> SemanticReviewResult: ...
 
 
 def loopback_origin(value: str) -> str:
@@ -75,9 +81,18 @@ class OllamaSemanticReviewer:
         except (httpx.HTTPError, json.JSONDecodeError, TypeError, ValueError):
             return False
 
-    async def review(self, path: Path, intent: str) -> SemanticReviewResult:
-        image = base64.b64encode(_bounded_review_image(path)).decode("ascii")
-        payload = self.request_payload(image, intent)
+    async def review(
+        self,
+        path: Path,
+        intent: str,
+        *,
+        reference_paths: tuple[Path, ...] = (),
+    ) -> SemanticReviewResult:
+        if len(reference_paths) > 4:
+            raise SemanticReviewError("semantic review references exceeded their bound")
+        images = [path, *reference_paths]
+        encoded = [base64.b64encode(_bounded_review_image(item)).decode("ascii") for item in images]
+        payload = self.request_payload(encoded, intent)
         try:
             async with httpx.AsyncClient(timeout=self.timeout_sec) as client:
                 response = await client.post(f"{self.origin}/api/chat", json=payload)
@@ -96,7 +111,7 @@ class OllamaSemanticReviewer:
         except (httpx.HTTPError, json.JSONDecodeError, KeyError, OSError, TypeError) as exc:
             raise SemanticReviewError("local semantic reviewer failed") from exc
 
-    def request_payload(self, image: str, intent: str) -> dict[str, Any]:
+    def request_payload(self, images: list[str], intent: str) -> dict[str, Any]:
         return {
             "model": self.model,
             "stream": False,
@@ -109,12 +124,14 @@ class OllamaSemanticReviewer:
             "messages": [{
                 "role": "user",
                 "content": (
-                    "Review whether this generated image visibly satisfies the user's intent. "
+                    "The first image is the generated candidate. Any later images are identity/style references. "
+                    "Review whether the candidate visibly satisfies the user's intent and remains consistent "
+                    "with those references. "
                     "Judge only semantic content and obvious visual defects; deterministic file "
                     "validation is handled separately. Return accepted=true unless there is a "
                     f"clear mismatch. User intent: {intent}"
                 ),
-                "images": [image],
+                "images": images,
             }],
         }
 
