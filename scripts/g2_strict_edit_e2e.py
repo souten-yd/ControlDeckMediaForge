@@ -29,9 +29,14 @@ def main() -> int:
     parser.add_argument("--cookie-file", type=Path)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--mask", type=Path)
-    parser.add_argument("--mode", choices=("strict", "reference", "variation", "outpaint"), default="strict")
+    parser.add_argument(
+        "--mode",
+        choices=("strict", "reference", "variation", "outpaint", "multi_reference"),
+        default="strict",
+    )
     parser.add_argument("--width", type=int, default=768)
     parser.add_argument("--height", type=int, default=512)
+    parser.add_argument("--reference", type=Path, action="append", default=[])
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     password = os.environ.get(args.password_env)
@@ -39,6 +44,10 @@ def main() -> int:
         raise RuntimeError(f"password environment variable is unset: {args.password_env}")
     if not args.source.is_file() or (args.mode == "strict" and (args.mask is None or not args.mask.is_file())):
         raise RuntimeError("source and required mask fixtures must exist")
+    if args.mode == "multi_reference" and (
+        not 1 <= len(args.reference) <= 3 or any(not path.is_file() for path in args.reference)
+    ):
+        raise RuntimeError("multi-reference mode requires 1..3 reference fixtures")
     args.evidence_dir.mkdir(parents=True, exist_ok=True)
     before = len(media_json(args.media_forge_url, "/api/v1/assets")["items"])
     errors: list[str] = []
@@ -82,27 +91,36 @@ def main() -> int:
         if args.mode == "strict":
             expect(frame.get_by_text("白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。")).to_be_visible()
             frame.get_by_label("編集マスク").set_input_files(str(args.mask))
+        if args.mode == "multi_reference":
+            frame.get_by_label("追加の参照画像（1〜3枚）").set_input_files([str(path) for path in args.reference])
         frame.get_by_label("作りたい画像").fill(
             "Close her mouth into a small gentle smile, preserve the same character and art style"
             if args.mode == "strict"
             else "Extend the scene naturally beyond the original canvas, preserve the complete centered source"
             if args.mode == "outpaint"
+            else "Use the additional images as visual references while preserving the primary character design"
+            if args.mode == "multi_reference"
             else "Create a cheerful waving pose of the same character, preserve the orange mesh hair and anime style"
         )
         frame.get_by_role("button", name="生成する").click()
-        expect(frame.get_by_text(
+        expected_status = (
             "元画像とマスクをローカルへ取り込み中…"
-            if args.mode == "strict" else "元画像をローカルへ取り込み中…"
-        )).to_be_visible(timeout=10_000)
+            if args.mode == "strict"
+            else "元画像と参照画像をローカルへ取り込み中…"
+            if args.mode == "multi_reference"
+            else "元画像をローカルへ取り込み中…"
+        )
+        expect(frame.get_by_text(expected_status)).to_be_visible(timeout=10_000)
         expect(frame.get_by_role("heading", name="Library", exact=True)).to_be_visible(timeout=180_000)
         deadline = time.monotonic() + 10
         items: list[dict[str, Any]] = []
         while time.monotonic() < deadline:
             items = media_json(args.media_forge_url, "/api/v1/assets")["items"]
-            if len(items) >= before + (3 if args.mode == "strict" else 2):
+            expected_delta = 2 + (1 if args.mode == "strict" else len(args.reference))
+            if len(items) >= before + expected_delta:
                 break
             time.sleep(0.1)
-        expected_delta = 3 if args.mode == "strict" else 2
+        expected_delta = 2 + (1 if args.mode == "strict" else len(args.reference))
         if len(items) < before + expected_delta:
             raise AssertionError({"before": before, "after": len(items)})
         result = items[0]
@@ -122,7 +140,8 @@ def main() -> int:
         if outpaint is not None:
             assert outpaint["source_pixel_difference"] == 0
         assert len(result["parent_asset_ids"]) == 1
-        assert len(provenance["reference_asset_hashes"]) == (2 if args.mode == "strict" else 1)
+        expected_references = 2 if args.mode == "strict" else 1 + len(args.reference)
+        assert len(provenance["reference_asset_hashes"]) == expected_references
         assert provenance["parameters"]["constraints"]["edit_mode"] == (
             "inpaint" if args.mode == "strict" else args.mode
         )

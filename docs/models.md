@@ -324,3 +324,34 @@ ROCm compile sample. It is not attributed to RAM pressure or swap; the warm
 separate-worker repeat demonstrates persistent compiler/cache reuse. Visual
 inspection showed the original character unchanged and the neutral background
 extended continuously on both sides.
+
+### Multi-reference supplement
+
+The locally installed Diffusers `Flux2KleinPipeline` signature accepts an image
+or image list. Media Forge bounds `image.multi_reference_edit` to one primary
+plus one to three additional asset references, materializes only job-local
+copies, resizes them to the primary generation envelope, and passes the list to
+the same isolated worker. The primary is the lineage parent; all input hashes
+remain in provenance.
+
+Two installed-host Chromium jobs used a Media Forge-generated 512x512 primary
+and two Media Forge-generated 1024x1024 references:
+
+```text
+first browser total:           28.895831 sec
+  adapter load/generation:      9.890928 / 11.739208 sec
+separate-worker repeat:        21.830374 sec
+  adapter load/generation:      9.882474 / 4.771229 sec
+output:                        512x512 RGBA PNG, 352,021 bytes
+same-seed SHA-256:             7ce548fa7ed146e60862ba9de01f2f65bc759988887f92e113c31f516db4d281
+lineage parents:               primary only (1)
+provenance reference hashes:   primary plus two references (3)
+placement:                     all inspected components cuda:0
+offload hooks/non-GPU targets: 0 / 0
+Broker after each:             active 0 / waiting 0
+```
+
+Visual inspection found that the result combined the primary black/orange hair
+design and clothing with the referenced orange mesh detail and two-hand waving
+pose. This is evidence that the multi-image route is active, not a statistical
+G3 character-consistency guarantee.

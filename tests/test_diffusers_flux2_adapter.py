@@ -285,6 +285,60 @@ def test_reference_edit_uses_full_source_and_requested_output(monkeypatch, tmp_p
     assert Image.open(output_path).size == (320, 256)
 
 
+def test_multi_reference_edit_passes_bounded_image_list(monkeypatch, tmp_path: Path):
+    model = tmp_path / "model"
+    model.mkdir()
+    source_path = tmp_path / "source.png"
+    reference_a = tmp_path / "reference-a.png"
+    reference_b = tmp_path / "reference-b.png"
+    output_path = tmp_path / "edited.png"
+    Image.new("RGBA", (320, 256), "navy").save(source_path, format="PNG")
+    Image.new("RGBA", (128, 128), "orange").save(reference_a, format="PNG")
+    Image.new("RGBA", (640, 512), "green").save(reference_b, format="PNG")
+    calls: dict[str, object] = {}
+
+    class Generator:
+        def __init__(self, *, device):
+            calls["generator_device"] = device
+
+        def manual_seed(self, seed):
+            calls["seed"] = seed
+            return self
+
+    class Pipeline:
+        def __call__(self, **kwargs):
+            calls["pipeline"] = kwargs
+            return SimpleNamespace(images=[Image.new("RGBA", (kwargs["width"], kwargs["height"]), "orange")])
+
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(
+        Generator=Generator,
+        cuda=SimpleNamespace(synchronize=lambda: None, empty_cache=lambda: None),
+    ))
+    adapter = DiffusersFlux2KleinAdapter(model, device_mode="direct_device_map")
+    adapter.pipeline = Pipeline()
+
+    adapter.edit(ImageEditRequest(
+        prompt="combine the references",
+        source_path=source_path,
+        mask_path=None,
+        width=320,
+        height=256,
+        steps=4,
+        seed=31,
+        output_path=output_path,
+        strict_edit=False,
+        edit_mode="multi_reference",
+        reference_paths=(reference_a, reference_b),
+    ))
+
+    pipeline_call = calls["pipeline"]
+    assert isinstance(pipeline_call["image"], list)
+    assert len(pipeline_call["image"]) == 3
+    assert {item.size for item in pipeline_call["image"]} == {(320, 256)}
+    assert pipeline_call["width"] == 320 and pipeline_call["height"] == 256
+    assert calls["generator_device"] == "cuda" and calls["seed"] == 31
+
+
 def test_outpaint_uses_expanded_reference_then_recopies_source(monkeypatch, tmp_path: Path):
     model = tmp_path / "model"
     model.mkdir()
