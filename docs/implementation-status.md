@@ -144,7 +144,7 @@ disable while active: Job canceled; lease released; re-enable healthy
 The driver removed its temporary Workflow and uninstalled the Add-on in
 `finally`. The isolated services and directories are removed after evidence
 collection. No ControlDeck module, cookie, signing key, or path crossed into
-Media Forge. Final `./mf.sh test` completed with 50 passed in 3.30 seconds;
+Media Forge. Final `./mf.sh test` completed with 51 passed in 3.38 seconds;
 this is regression evidence, not a substitute for the real-process run above.
 
 ## MF0-5 / MF0-6 — INSTALLED-HOST BROWSER VERIFIED / HOST-LIMITED

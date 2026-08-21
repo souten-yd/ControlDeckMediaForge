@@ -21,7 +21,7 @@ from .config import Settings
 from .domain import JobRequest
 from .environment import setup_snapshot
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
-from .host.files import read_grant, require_grant_id
+from .host.files import GrantContentTooLarge, read_grant, require_grant_id
 from .host.jobs import HostExecution
 from .jobs import JobManager
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
@@ -417,13 +417,18 @@ def create_app(
             ):
                 raise HTTPException(status_code=422, detail={"code": "scoped_grant_required"})
             try:
-                metadata, content = await read_grant(host, identity, require_grant_id(grant_id))
+                metadata, content = await read_grant(
+                    host,
+                    identity,
+                    require_grant_id(grant_id),
+                    max_bytes=MAX_CONTEXT_IMAGE_BYTES,
+                )
+            except GrantContentTooLarge as exc:
+                raise HTTPException(status_code=413, detail={"code": "context_image_too_large"}) from exc
             except (HostApiError, ValueError) as exc:
                 status_code = exc.status_code if isinstance(exc, HostApiError) else 422
                 code = exc.code if isinstance(exc, HostApiError) else "invalid_scoped_grant"
                 raise HTTPException(status_code=status_code, detail={"code": code}) from exc
-            if len(content) > MAX_CONTEXT_IMAGE_BYTES:
-                raise HTTPException(status_code=413, detail={"code": "context_image_too_large"})
             try:
                 with Image.open(BytesIO(content)) as image:
                     image.verify()

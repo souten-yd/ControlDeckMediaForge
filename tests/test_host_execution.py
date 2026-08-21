@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import mediaforge.app as mediaforge_app
 import pytest
 from fastapi import Body, FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
@@ -320,6 +321,21 @@ def test_host_payload_rejects_raw_paths_and_context_requires_grant(tmp_path: Pat
         )
         assert invalid_image.status_code == 422
         assert invalid_image.json()["detail"]["code"] == "invalid_context_image"
+
+
+def test_context_image_bound_is_enforced_before_content_transfer(tmp_path: Path, monkeypatch):
+    client, headers, state = host_client(tmp_path)
+    monkeypatch.setattr(mediaforge_app, "MAX_CONTEXT_IMAGE_BYTES", len(state["grant_content"]) - 1)
+    with client:
+        response = client.post(
+            "/addon/v1/context/edit-image",
+            json={"input": {}, "context": {
+                "type": "file", "resource_id": "grant:read-1", "grant_id": "grant:read-1",
+            }},
+            headers=headers,
+        )
+    assert response.status_code == 413
+    assert response.json()["detail"]["code"] == "context_image_too_large"
 
 
 def test_workspace_uses_host_bridge_without_browser_storage(tmp_path: Path):

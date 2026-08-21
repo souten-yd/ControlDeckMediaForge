@@ -114,8 +114,17 @@ class ControlDeckHostClient:
     async def grant_metadata(self, identity: HostIdentity, grant_id: str) -> dict[str, Any]:
         return await self._request(identity, "GET", f"/{ADDON_ID}/grants/{grant_id}")
 
-    async def grant_content(self, identity: HostIdentity, grant_id: str) -> bytes:
+    async def grant_content(
+        self,
+        identity: HostIdentity,
+        grant_id: str,
+        *,
+        max_bytes: int | None = None,
+    ) -> bytes:
         path = f"/api/v1/addon-runtime/{ADDON_ID}/grants/{grant_id}/content"
+        limit = MAX_GRANT_BYTES if max_bytes is None else max_bytes
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 0 < limit <= MAX_GRANT_BYTES:
+            raise ValueError("grant content bound is invalid")
         chunks: list[bytes] = []
         total = 0
         try:
@@ -132,7 +141,7 @@ class ControlDeckHostClient:
                     )
                 async for chunk in response.aiter_bytes():
                     total += len(chunk)
-                    if total > MAX_GRANT_BYTES:
+                    if total > limit:
                         raise HostApiError(
                             "host_response_too_large",
                             "grant content exceeds the 1 GiB bound",
