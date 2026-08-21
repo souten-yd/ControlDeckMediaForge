@@ -131,7 +131,18 @@ document.getElementById("operation").addEventListener("change", (event) => {
   const editing = event.target.value === "image.edit";
   document.getElementById("edit-inputs").hidden = !editing;
   document.getElementById("source-file").required = editing;
-  document.getElementById("mask-file").required = editing;
+  document.getElementById("mask-file").required = editing && document.getElementById("edit-mode").value === "strict";
+});
+
+document.getElementById("edit-mode").addEventListener("change", (event) => {
+  const strict = event.target.value === "strict";
+  document.getElementById("mask-input").hidden = !strict;
+  document.getElementById("mask-file").required = strict;
+  document.getElementById("edit-help").textContent = strict
+    ? "白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。"
+    : event.target.value === "variation"
+      ? "元画像の特徴を参考に別案を作ります。画像全体が変わる可能性があります。"
+      : "元画像全体を指示に沿って編集します。ピクセル保持保証はありません。";
 });
 
 async function fileBase64(file) {
@@ -172,16 +183,21 @@ document.getElementById("create-form").addEventListener("submit", async (event) 
       height: Number(document.getElementById("height").value)
     };
     if (operation === "image.edit") {
-      status.textContent = "元画像とマスクをローカルへ取り込み中…";
+      const editMode = document.getElementById("edit-mode").value;
+      const strict = editMode === "strict";
+      status.textContent = strict ? "元画像とマスクをローカルへ取り込み中…" : "元画像をローカルへ取り込み中…";
       const sourceFile = document.getElementById("source-file").files[0];
-      const maskFile = document.getElementById("mask-file").files[0];
       const source = await importFile(sourceFile, "source");
-      const mask = await importFile(maskFile, "edit_mask");
       inputs = [{asset_id: source.id}];
       constraints.width = source.width;
       constraints.height = source.height;
-      constraints.strict_edit = true;
-      constraints.editable_mask_asset_id = mask.id;
+      constraints.strict_edit = strict;
+      constraints.edit_mode = editMode === "strict" ? "inpaint" : editMode;
+      if (strict) {
+        const maskFile = document.getElementById("mask-file").files[0];
+        const mask = await importFile(maskFile, "edit_mask");
+        constraints.editable_mask_asset_id = mask.id;
+      }
     }
     const job = await workspaceCall("jobs.create", {
       operation,

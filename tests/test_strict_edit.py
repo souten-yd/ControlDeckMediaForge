@@ -314,6 +314,39 @@ def test_installed_model_without_edit_capability_fails_instead_of_using_fake(cli
 
 
 @pytest.mark.parametrize(
+    "constraints",
+    [
+        {"edit_mode": "unknown"},
+        {"edit_mode": "variation", "strict_edit": True},
+        {"edit_mode": "inpaint", "strict_edit": False},
+        {"strict_edit": False, "editable_mask_asset_id": "asset_" + "f" * 32},
+    ],
+)
+def test_edit_mode_combinations_fail_explicitly(client, constraints):
+    source = Image.new("RGBA", (96, 64), (20, 40, 80, 255))
+    encoded = io.BytesIO()
+    source.save(encoded, format="PNG")
+    source_id = client.post(
+        "/api/v1/assets/import?purpose=source",
+        content=encoded.getvalue(),
+        headers={"content-type": "image/png"},
+    ).json()["id"]
+    created = client.post("/api/v1/jobs", json={
+        "operation": "image.edit",
+        "intent": "reject inconsistent edit constraints",
+        "inputs": [{"asset_id": source_id}],
+        "constraints": {"width": 96, "height": 64, **constraints},
+        "output": {"format": "png", "count": 1},
+        "local_only": True,
+    }).json()
+    terminal = wait_terminal(client, created["id"])
+
+    assert terminal["status"] == "failed"
+    assert terminal["error"]["code"] == "invalid_constraint"
+    assert terminal["asset_ids"] == []
+
+
+@pytest.mark.parametrize(
     ("suffix", "size", "color"),
     [
         ("c", (96, 64), (0, 0, 0, 255)),

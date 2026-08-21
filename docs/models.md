@@ -20,8 +20,8 @@ Its only purpose is to prove job, process-isolation, asset, validation, provenan
 
 Adoption state: **accepted for `image.text_to_image` on the measured R9700
 envelope of at most 1024x1024 pixels**. The same pinned implementation is also
-accepted for the G2 `image.strict_edit` slice described below. Unbounded
-single-reference editing is not advertised yet.
+accepted for the G2 `image.strict_edit`, `image.single_reference_edit`,
+`image.inpaint`, and `image.variation` slices described below.
 
 Identity:
 
@@ -261,3 +261,36 @@ route and the accepted G2 edits; `vmstat` showed no sustained swap-out. RAM
 shortage/pagefile thrashing is therefore rejected as the cause of the measured
 12-minute-class load. The direct-placement/mmap diagnosis above remains the
 observed cause for this implementation.
+
+### Single-reference edit and variation supplement
+
+The same immutable model and adapter are accepted for whole-image reference
+editing and variations. These modes use one source asset and produce a new
+lineage child; unlike strict/inpaint mode they explicitly do not promise
+unchanged pixels. `edit_mode=reference|variation` selects capability routing
+without exposing a model name.
+
+The first 1024x1024 variation process completed, but its first reference-image
+ROCm compile took 229.208449 seconds after a 9.424858-second load. The browser's
+180-second assertion therefore timed out and this run is not browser-success
+evidence. The job itself succeeded, its Host lease was released, and a later
+separate worker reused persistent compiler/storage caches:
+
+```text
+variation browser total:       27.002184 sec
+  adapter load/generation:      9.655933 / 10.720631 sec
+reference edit browser total:  25.875298 sec
+  adapter load/generation:     10.693552 / 9.148814 sec
+final exact-branch variation:  25.737216 sec
+  adapter load/generation:      9.577456 / 9.121249 sec
+output:                        1024x1024 RGBA PNG, 1,447,679 bytes
+repeat output SHA-256:         b03dd63d868edc5d2242f6d4ac21a06f8c46bb214e611e5175c666e806778689
+placement:                     all inspected components cuda:0
+offload hooks/non-GPU targets: 0 / 0
+lease after each job:          released; active 0 / waiting 0
+```
+
+The accepted visual retained the anime character's orange mesh hair and black/
+orange hoodie while producing a cheerful two-hand waving pose. This is a
+bounded observed sample, not a general character-identity guarantee; structured
+identity evaluation belongs to G3.

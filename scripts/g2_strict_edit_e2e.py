@@ -28,14 +28,15 @@ def main() -> int:
     parser.add_argument("--password-env", default="MEDIA_FORGE_E2E_PASSWORD")
     parser.add_argument("--cookie-file", type=Path)
     parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--mask", type=Path, required=True)
+    parser.add_argument("--mask", type=Path)
+    parser.add_argument("--mode", choices=("strict", "reference", "variation"), default="strict")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     password = os.environ.get(args.password_env)
     if not password and args.cookie_file is None:
         raise RuntimeError(f"password environment variable is unset: {args.password_env}")
-    if not args.source.is_file() or not args.mask.is_file():
-        raise RuntimeError("source and mask fixtures must exist")
+    if not args.source.is_file() or (args.mode == "strict" and (args.mask is None or not args.mask.is_file())):
+        raise RuntimeError("source and required mask fixtures must exist")
     args.evidence_dir.mkdir(parents=True, exist_ok=True)
     before = len(media_json(args.media_forge_url, "/api/v1/assets")["items"])
     errors: list[str] = []
@@ -71,34 +72,47 @@ def main() -> int:
         frame = page.frame_locator('iframe[title="Media Forge — workspace"]')
         expect(frame.locator("html")).to_have_attribute("data-bridge", "ready")
         frame.get_by_label("操作").select_option("image.edit")
-        expect(frame.get_by_text("白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。")).to_be_visible()
+        frame.get_by_label("編集方法").select_option(args.mode)
         frame.get_by_label("元画像").set_input_files(str(args.source))
-        frame.get_by_label("編集マスク").set_input_files(str(args.mask))
+        if args.mode == "strict":
+            expect(frame.get_by_text("白い部分だけを変更するマスクを指定します。黒い部分は1ピクセルも変更しません。")).to_be_visible()
+            frame.get_by_label("編集マスク").set_input_files(str(args.mask))
         frame.get_by_label("作りたい画像").fill(
             "Close her mouth into a small gentle smile, preserve the same character and art style"
+            if args.mode == "strict"
+            else "Create a cheerful waving pose of the same character, preserve the orange mesh hair and anime style"
         )
         frame.get_by_role("button", name="生成する").click()
-        expect(frame.get_by_text("元画像とマスクをローカルへ取り込み中…")).to_be_visible(timeout=10_000)
+        expect(frame.get_by_text(
+            "元画像とマスクをローカルへ取り込み中…"
+            if args.mode == "strict" else "元画像をローカルへ取り込み中…"
+        )).to_be_visible(timeout=10_000)
         expect(frame.get_by_role("heading", name="Library", exact=True)).to_be_visible(timeout=180_000)
         deadline = time.monotonic() + 10
         items: list[dict[str, Any]] = []
         while time.monotonic() < deadline:
             items = media_json(args.media_forge_url, "/api/v1/assets")["items"]
-            if len(items) >= before + 3:
+            if len(items) >= before + (3 if args.mode == "strict" else 2):
                 break
             time.sleep(0.1)
-        if len(items) < before + 3:
+        expected_delta = 3 if args.mode == "strict" else 2
+        if len(items) < before + expected_delta:
             raise AssertionError({"before": before, "after": len(items)})
         result = items[0]
         provenance = media_json(args.media_forge_url, f"/api/v1/assets/{result['id']}/provenance")
-        strict = next(
+        strict = next((
             item for item in provenance["validation"]
             if item["validator"] == "image.strict_edit.unmasked_pixel_diff"
-        )
-        assert strict["protected_pixel_difference"] == 0
+        ), None)
+        assert (strict is not None) == (args.mode == "strict")
+        if strict is not None:
+            assert strict["protected_pixel_difference"] == 0
         assert len(result["parent_asset_ids"]) == 1
-        assert len(provenance["reference_asset_hashes"]) == 2
-        page.screenshot(path=args.evidence_dir / "strict-edit-library.png", full_page=True)
+        assert len(provenance["reference_asset_hashes"]) == (2 if args.mode == "strict" else 1)
+        assert provenance["parameters"]["constraints"]["edit_mode"] == (
+            "inpaint" if args.mode == "strict" else args.mode
+        )
+        page.screenshot(path=args.evidence_dir / f"{args.mode}-edit-library.png", full_page=True)
         browser.close()
 
     observations = {
@@ -106,9 +120,10 @@ def main() -> int:
         "asset_count_before": before,
         "asset_count_after": len(items),
         "result_asset_id": result["id"],
+        "mode": args.mode,
         "parent_asset_ids": result["parent_asset_ids"],
-        "protected_pixel_difference": strict["protected_pixel_difference"],
-        "editable_pixels": strict["editable_pixels"],
+        "protected_pixel_difference": strict["protected_pixel_difference"] if strict else None,
+        "editable_pixels": strict["editable_pixels"] if strict else None,
         "browser_errors": errors,
     }
     (args.evidence_dir / "evidence.json").write_text(

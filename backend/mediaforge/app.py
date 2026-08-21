@@ -312,6 +312,8 @@ def create_app(
             "capabilities": {
                 "image.text_to_image": image_capability("image.text_to_image", fake_fallback=True),
                 "image.single_reference_edit": image_capability("image.single_reference_edit"),
+                "image.inpaint": image_capability("image.inpaint"),
+                "image.variation": image_capability("image.variation"),
                 "image.multi_reference_edit": {"state": "unavailable", "reason": "planned_for_g2"},
                 "image.strict_edit": image_capability("image.strict_edit"),
                 "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
