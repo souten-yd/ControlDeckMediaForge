@@ -24,8 +24,8 @@
             <label for="intent">作りたい画像</label>
             <textarea id="intent" required maxlength="8000" placeholder="夜の机に置かれた、小さな青いロボット"></textarea>
             <div class="form-row">
-              <label>幅<input id="width" type="number" min="1" max="2048" value="512"></label>
-              <label>高さ<input id="height" type="number" min="1" max="2048" value="512"></label>
+              <label>幅<input id="width" type="number" min="256" max="1024" step="16" value="512"></label>
+              <label>高さ<input id="height" type="number" min="256" max="1024" step="16" value="512"></label>
               <label>出力数<input id="count" type="number" min="1" max="8" value="1"></label>
               <label>方針<select id="policy"><option value="auto">Auto</option><option value="fast">Fast</option><option value="balanced">Balanced</option><option value="quality">Quality</option></select></label>
             </div>

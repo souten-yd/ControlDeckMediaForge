@@ -56,6 +56,32 @@ def test_measured_image_lease_preserves_all_vram_dimensions():
     assert payload["residency_key"] == "mediaforge:owner/model:" + "a" * 40
 
 
+def test_bootstrap_image_lease_does_not_claim_measured_confidence():
+    model = ModelDescriptor(
+        model_id="owner/model",
+        family="test",
+        version="1",
+        revision="a" * 40,
+        weights_hash="sha256:" + "b" * 64,
+        license="Apache-2.0",
+        runtime_adapter="test",
+        capabilities=("image.text_to_image",),
+        hardware_backends=("rocm",),
+        state=ModelState.AVAILABLE,
+        policy_rank={"auto": 1},
+        required_files=("config.json",),
+        weights=(),
+        resident_vram_bytes=0,
+        execution_peak_vram_bytes=30,
+        cold_load_peak_vram_bytes=30,
+        headroom_vram_bytes=2,
+        measured_runtime_sec=1200,
+        measurement_confidence="low",
+    )
+
+    assert image_model_request("job_123", model)["vram"]["confidence"] == "low"
+
+
 def test_host_progress_gate_is_monotonic_and_limited_to_two_hz():
     gate = ProgressGate()
     assert gate.accept(progress=0.1, phase="starting", now=1.0)

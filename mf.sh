@@ -79,9 +79,15 @@ export_cache_paths() {
   export npm_config_cache="${npm_config_cache:-$cache/npm}"
   export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$cache/ms-playwright}"
   export HF_HOME="${HF_HOME:-$cache/huggingface}"
+  export HF_ENABLE_PARALLEL_LOADING="${HF_ENABLE_PARALLEL_LOADING:-YES}"
+  export AMD_COMGR_CACHE="${AMD_COMGR_CACHE:-1}"
+  export AMD_COMGR_CACHE_DIR="${AMD_COMGR_CACHE_DIR:-$cache/rocm/comgr}"
+  export MIOPEN_CUSTOM_CACHE_DIR="${MIOPEN_CUSTOM_CACHE_DIR:-$cache/rocm/miopen-kernel}"
+  export MIOPEN_USER_DB_PATH="${MIOPEN_USER_DB_PATH:-$cache/rocm/miopen-db}"
   if [ "$create" = yes ]; then
     mkdir -p "$PIP_CACHE_DIR" "$UV_CACHE_DIR" "$npm_config_cache" \
-      "$PLAYWRIGHT_BROWSERS_PATH" "$HF_HOME" 2>/dev/null || true
+      "$PLAYWRIGHT_BROWSERS_PATH" "$HF_HOME" "$AMD_COMGR_CACHE_DIR" \
+      "$MIOPEN_CUSTOM_CACHE_DIR" "$MIOPEN_USER_DB_PATH" 2>/dev/null || true
   fi
 }
 
@@ -243,6 +249,11 @@ doctor() {
   printf 'PIP_CACHE_DIR=%s\n' "$PIP_CACHE_DIR"
   printf 'UV_CACHE_DIR=%s\n' "$UV_CACHE_DIR"
   printf 'HF_HOME=%s\n' "$HF_HOME"
+  printf 'HF_ENABLE_PARALLEL_LOADING=%s\n' "$HF_ENABLE_PARALLEL_LOADING"
+  printf 'AMD_COMGR_CACHE=%s\n' "$AMD_COMGR_CACHE"
+  printf 'AMD_COMGR_CACHE_DIR=%s\n' "$AMD_COMGR_CACHE_DIR"
+  printf 'MIOPEN_CUSTOM_CACHE_DIR=%s\n' "$MIOPEN_CUSTOM_CACHE_DIR"
+  printf 'MIOPEN_USER_DB_PATH=%s\n' "$MIOPEN_USER_DB_PATH"
   printf 'disk_available_bytes=%s\n' "$available"
 }
 

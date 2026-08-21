@@ -8,7 +8,7 @@ from pathlib import Path
 import jsonschema
 from fastapi.testclient import TestClient
 
-from conftest import wait_terminal
+from conftest import fake_settings, wait_terminal
 from mediaforge.app import create_app
 from mediaforge.config import Settings
 from mediaforge.domain import JobRequest
@@ -193,7 +193,7 @@ def test_running_and_queued_jobs_can_be_canceled(client):
 
 
 def test_worker_timeout_is_explicit_and_core_survives(tmp_path: Path):
-    app = create_app(Settings(data_dir=tmp_path / "timeout", worker_timeout_sec=0.05))
+    app = create_app(fake_settings(tmp_path / "timeout", worker_timeout_sec=0.05))
     with TestClient(app) as client:
         created = client.post("/api/v1/jobs", json=request(_fake_delay_sec=1)).json()
         failed = wait_terminal(client, created["id"])
@@ -204,7 +204,7 @@ def test_worker_timeout_is_explicit_and_core_survives(tmp_path: Path):
 
 def test_graceful_service_stop_is_not_reported_as_worker_crash(tmp_path: Path):
     data_dir = tmp_path / "shutdown"
-    app = create_app(Settings(data_dir=data_dir, worker_timeout_sec=3))
+    app = create_app(fake_settings(tmp_path / "shutdown-settings", data_dir=data_dir, worker_timeout_sec=3))
     with TestClient(app) as client:
         created = client.post("/api/v1/jobs", json=request(_fake_delay_sec=2)).json()
         deadline = time.monotonic() + 2
@@ -223,7 +223,7 @@ def test_queued_job_resumes_after_service_start(tmp_path: Path):
     store.initialize()
     queued = store.create_job(JobRequest(operation="image.generate", intent="resume queued job"))
 
-    with TestClient(create_app(Settings(data_dir=data_dir, worker_timeout_sec=3))) as client:
+    with TestClient(create_app(fake_settings(tmp_path / "resume-settings", data_dir=data_dir, worker_timeout_sec=3))) as client:
         resumed = wait_terminal(client, queued.id)
 
     assert resumed["status"] == "succeeded"

@@ -142,7 +142,7 @@ document.getElementById("create-form").addEventListener("submit", async (event) 
 });
 
 async function pollJob(id, statusNode) {
-  for (let attempt = 0; attempt < 300 && !disabled; attempt += 1) {
+  for (let attempt = 0; attempt < 3600 && !disabled; attempt += 1) {
     let job;
     try { job = await workspaceCall("jobs.get", {job_id: id}); } catch { break; }
     statusNode.textContent = `${job.status} · ${Math.round(job.progress * 100)}% · ${job.phase || "-"}`;
@@ -152,7 +152,7 @@ async function pollJob(id, statusNode) {
       if (bridgePort) void callHost("host.notification.show", {title: "Media Forge", message: `Job ${job.status}`, level: job.status === "succeeded" ? "success" : "error", dedupe_key: id}).catch(() => {});
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   if (!disabled) statusNode.textContent = "状態確認がタイムアウトしました。Jobsから確認してください。";
 }

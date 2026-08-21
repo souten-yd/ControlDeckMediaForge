@@ -94,7 +94,7 @@ def image_model_request(
             "execution_peak_bytes": estimate.execution_peak_bytes,
             "cold_load_peak_bytes": estimate.cold_load_peak_bytes,
             "headroom_bytes": estimate.headroom_bytes,
-            "confidence": "measured",
+            "confidence": model.measurement_confidence,
         },
         "compute_mode": "exclusive-preferred",
         "priority": {"interactive": 20, "agent-interactive": 20, "workflow": 10}.get(workload_class, 0),

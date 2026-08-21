@@ -82,6 +82,8 @@ def test_registry_detects_exact_huggingface_snapshot(tmp_path):
         "models": [{
             "model_id": "owner/model", "family": "test", "version": "1", "revision": "d" * 40,
             "weights_hash": "sha256:" + "e" * 64, "license": "Apache-2.0", "runtime_adapter": "test",
+            "runtime_options": {"device_mode": "direct_device_map", "disable_mmap": True},
+            "generation_limits": {"max_width": 1024, "max_height": 768, "max_pixels": 786432},
             "capabilities": ["image.text_to_image"], "hardware_backends": ["rocm"],
             "state": "experimental", "policy_rank": {"auto": 1},
             "measurements": None,
@@ -102,6 +104,9 @@ def test_registry_detects_exact_huggingface_snapshot(tmp_path):
     assert model.installed is True
     assert model.healthy is False
     assert model.local_path == snapshot.resolve()
+    assert model.device_mode == "direct_device_map"
+    assert model.disable_mmap is True
+    assert (model.max_width, model.max_height, model.max_pixels) == (1024, 768, 786432)
 
 
 def test_registry_rejects_escape_and_hash_mismatch(tmp_path):
@@ -142,4 +147,44 @@ def test_registry_requires_complete_positive_runtime_measurements(tmp_path):
     manifest.write_text(json.dumps({"schema_version": "1.0", "models": [base]}), encoding="utf-8")
 
     with pytest.raises(ModelRegistryError, match="runtime measurement"):
+        ModelRegistry.load(manifest)
+
+
+def test_registry_rejects_unknown_runtime_options(tmp_path):
+    manifest = tmp_path / "models.json"
+    value = {
+        "schema_version": "1.0",
+        "models": [{
+            "model_id": "owner/model", "family": "test", "version": "1", "revision": "d" * 40,
+            "weights_hash": "sha256:" + "e" * 64, "license": "Apache-2.0", "runtime_adapter": "test",
+            "runtime_options": {"device_mode": "magic"},
+            "capabilities": ["image.text_to_image"], "hardware_backends": ["rocm"],
+            "state": "experimental", "policy_rank": {"auto": 1}, "measurements": None,
+            "required_files": ["config.json"],
+            "weights": [{"path": "model.safetensors", "size_bytes": 4, "sha256": "c" * 64}],
+        }],
+    }
+    manifest.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(ModelRegistryError, match="runtime_options"):
+        ModelRegistry.load(manifest)
+
+
+def test_registry_rejects_invalid_generation_limits(tmp_path):
+    manifest = tmp_path / "models.json"
+    value = {
+        "schema_version": "1.0",
+        "models": [{
+            "model_id": "owner/model", "family": "test", "version": "1", "revision": "d" * 40,
+            "weights_hash": "sha256:" + "e" * 64, "license": "Apache-2.0", "runtime_adapter": "test",
+            "generation_limits": {"max_pixels": True},
+            "capabilities": ["image.text_to_image"], "hardware_backends": ["rocm"],
+            "state": "experimental", "policy_rank": {"auto": 1}, "measurements": None,
+            "required_files": ["config.json"],
+            "weights": [{"path": "model.safetensors", "size_bytes": 4, "sha256": "c" * 64}],
+        }],
+    }
+    manifest.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(ModelRegistryError, match="generation_limits"):
         ModelRegistry.load(manifest)

@@ -52,6 +52,12 @@ class ModelDescriptor:
     cold_load_peak_vram_bytes: int | None = None
     headroom_vram_bytes: int | None = None
     measured_runtime_sec: float | None = None
+    measurement_confidence: str = "measured"
+    device_mode: str = "full_device"
+    disable_mmap: bool = False
+    max_width: int = 2048
+    max_height: int = 2048
+    max_pixels: int = 2048 * 2048
 
     @property
     def measured_vram_bytes(self) -> int | None:
@@ -135,6 +141,30 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
                 if not isinstance(measured, int) or isinstance(measured, bool) or measured < 0:
                     raise ModelRegistryError("model registry VRAM measurement is invalid")
                 measurement_values[key] = measured
+    confidence = value.get("measurement_confidence", "measured" if measurements is not None else "low")
+    if confidence not in {"low", "measured"}:
+        raise ModelRegistryError("model registry measurement_confidence is invalid")
+    runtime_options = value.get("runtime_options", {})
+    if not isinstance(runtime_options, dict) or set(runtime_options) - {"device_mode", "disable_mmap"}:
+        raise ModelRegistryError("model registry runtime_options are invalid")
+    generation_limits = value.get("generation_limits", {})
+    if not isinstance(generation_limits, dict) or set(generation_limits) - {
+        "max_width", "max_height", "max_pixels"
+    }:
+        raise ModelRegistryError("model registry generation_limits are invalid")
+    limits = {
+        "max_width": generation_limits.get("max_width", 2048),
+        "max_height": generation_limits.get("max_height", 2048),
+        "max_pixels": generation_limits.get("max_pixels", 2048 * 2048),
+    }
+    if any(not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0 for limit in limits.values()):
+        raise ModelRegistryError("model registry generation_limits are invalid")
+    device_mode = runtime_options.get("device_mode", "full_device")
+    disable_mmap = runtime_options.get("disable_mmap", False)
+    if device_mode not in {"full_device", "direct_device_map", "cpu_offload"} or not isinstance(
+        disable_mmap, bool
+    ):
+        raise ModelRegistryError("model registry runtime_options are invalid")
     return ModelDescriptor(
         model_id=model_id,
         family=_required_string(value, "family"),
@@ -149,6 +179,10 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         policy_rank=dict(policy),
         required_files=required_files,
         weights=tuple(weights),
+        measurement_confidence=confidence,
+        device_mode=device_mode,
+        disable_mmap=disable_mmap,
+        **limits,
         **measurement_values,
     )
 

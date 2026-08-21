@@ -128,6 +128,7 @@ def create_app(
                     "healthy": item.healthy,
                     "measured_vram_bytes": item.measured_vram_bytes,
                     "measured_runtime_sec": item.measured_runtime_sec,
+                    "measurement_confidence": item.measurement_confidence,
                 }
                 for item in models
             ]
@@ -143,7 +144,13 @@ def create_app(
             and "image.text_to_image" in item.capabilities
             for item in models
         ):
-            return {"state": "available", "implementation": "local", "confidence": "measured", "local_only": True}
+            confidence = next(
+                item.measurement_confidence
+                for item in models
+                if item.state.value == "available" and item.installed and item.healthy
+                and "image.text_to_image" in item.capabilities
+            )
+            return {"state": "available", "implementation": "local", "confidence": confidence, "local_only": True}
         if any(item.state.value == "available" and "image.text_to_image" in item.capabilities for item in models):
             return {"state": "unavailable", "reason": "model_not_installed", "local_only": True}
         return {"state": "available", "implementation": "fake", "confidence": "low", "local_only": True}

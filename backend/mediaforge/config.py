@@ -35,7 +35,14 @@ class Settings:
         object.__setattr__(self, "control_deck_url", _control_deck_origin(self.control_deck_url))
         object.__setattr__(self, "model_manifest", self.model_manifest.resolve())
         object.__setattr__(self, "hf_home", self.hf_home.resolve())
-        object.__setattr__(self, "image_runtime_python", self.image_runtime_python.resolve())
+        # Preserve the venv launcher path. Resolving its final `python`
+        # symlink to /usr/bin/python bypasses pyvenv.cfg discovery and silently
+        # starts the system interpreter without the heavyweight dependencies.
+        object.__setattr__(
+            self,
+            "image_runtime_python",
+            Path(os.path.abspath(self.image_runtime_python)),
+        )
         if self.worker_timeout_sec <= 0 or self.host_request_timeout_sec <= 0 or self.host_lease_renew_sec <= 0:
             raise ValueError("worker and host request timeouts must be positive")
 

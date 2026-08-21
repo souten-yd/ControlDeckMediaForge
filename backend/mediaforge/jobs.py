@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,10 @@ from .store import Store, utc_now
 from .validators import validate_png
 
 
-logger = logging.getLogger(__name__)
+# Media Forge is served by Uvicorn in both `mf.sh serve` and the installed
+# Add-on. Reuse its configured application logger so bounded worker telemetry
+# is visible without configuring a second handler or leaking worker stderr.
+logger = logging.getLogger("uvicorn.error")
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 
@@ -262,7 +266,7 @@ class JobManager:
         if not available and job.request.model_policy != "manual":
             return None
         try:
-            return route_model(
+            selected = route_model(
                 models,
                 capability="image.text_to_image",
                 policy=job.request.model_policy,
@@ -271,8 +275,27 @@ class JobManager:
                 # ControlDeck performs live admission against current free VRAM.
                 free_vram_bytes=2**63 - 1,
             )
+            self._validate_generation_limits(job, selected)
+            return selected
         except ModelRouteError as exc:
             raise WorkerFailure(exc.code, str(exc)) from exc
+
+    @staticmethod
+    def _validate_generation_limits(job: Job, selected: ModelDescriptor) -> None:
+        width = job.request.constraints.get("width", 1024)
+        height = job.request.constraints.get("height", 1024)
+        if (
+            not isinstance(width, int)
+            or isinstance(width, bool)
+            or not isinstance(height, int)
+            or isinstance(height, bool)
+        ):
+            raise WorkerFailure("invalid_dimensions", "image dimensions must be integers")
+        if width > selected.max_width or height > selected.max_height or width * height > selected.max_pixels:
+            raise WorkerFailure(
+                "resource_limit",
+                "requested image dimensions exceed this model's measured generation envelope",
+            )
 
     async def _execute_worker(self, job_id: str, reporter: HostJobReporter | None) -> None:
         job = self.store.get_job(job_id)
@@ -299,6 +322,10 @@ class JobManager:
                     "weights_hash": selected.weights_hash,
                     "license": selected.license,
                     "runtime_adapter": selected.runtime_adapter,
+                    "runtime_options": {
+                        "device_mode": selected.device_mode,
+                        "disable_mmap": selected.disable_mmap,
+                    },
                 },
                 "request": job.request.model_dump(mode="json"),
                 "worker_output_dir": str(output_dir),
@@ -410,6 +437,24 @@ class JobManager:
                 error=ErrorDetail(code=code, message=message[:300]),
             )
             return
+        metrics = response.get("runtime_metrics") if isinstance(response, dict) else None
+        if isinstance(metrics, dict):
+            load_sec = metrics.get("load_sec")
+            generation_sec = metrics.get("generation_sec")
+            if (
+                isinstance(load_sec, (int, float))
+                and not isinstance(load_sec, bool)
+                and 0 <= load_sec <= timeout_sec
+                and isinstance(generation_sec, (int, float))
+                and not isinstance(generation_sec, bool)
+                and 0 <= generation_sec <= timeout_sec
+            ):
+                logger.info(
+                    "image worker timing job=%s load_sec=%.6f generation_sec=%.6f",
+                    job_id,
+                    float(load_sec),
+                    float(generation_sec),
+                )
         await self._update(job_id, reporter, phase="postprocess", progress=0.65)
         try:
             asset_ids = self._register_outputs(job, response, job_root)
@@ -521,6 +566,10 @@ class JobManager:
         try:
             while True:
                 await asyncio.sleep(0.25)
+                if execution.identity.expires_at - int(time.time()) <= 120:
+                    execution.identity = await self.host_client.refresh_lease_identity(
+                        execution.identity, execution.lease_id
+                    )
                 if await self._host_or_local_cancel_requested(job_id, execution):
                     process = self._processes.get(job_id)
                     if process is not None and process.returncode is None:

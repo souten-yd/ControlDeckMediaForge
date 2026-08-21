@@ -48,7 +48,8 @@ Every request is local-only. `local_only` defaults to `true`; any explicit `fals
 [`schemas/model.json`](../schemas/model.json): ID, family,
 version/revision, license, adapter, capabilities, adoption state, installed and
 healthy flags, and measured VRAM/runtime when available. It never returns a
-local filesystem path. A downloaded candidate remains `experimental` and
+local filesystem path. `measurement_confidence` is `low` for bootstrap
+estimates and `measured` only after target-hardware evidence. A downloaded candidate remains `experimental` and
 `healthy=false` until its target-hardware benchmark is recorded and it is
 explicitly promoted; installation alone does not alter `model_policy=auto`.
 

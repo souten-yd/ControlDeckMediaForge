@@ -58,16 +58,38 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def reset_peak_memory_stats(torch: Any) -> str | None:
+    try:
+        torch.cuda.reset_peak_memory_stats(0)
+    except RuntimeError as exc:
+        return str(exc)[:200]
+    return None
+
+
+def peak_allocated_bytes(torch: Any) -> int | None:
+    try:
+        return int(torch.cuda.max_memory_allocated(0))
+    except RuntimeError:
+        return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--result-path", type=Path)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--repeat", type=int, default=2)
     parser.add_argument("--prompt", default="A small red robot reading a paper map, clean studio illustration")
+    parser.add_argument(
+        "--device-mode",
+        choices=("full_device", "direct_device_map", "cpu_offload"),
+        default="full_device",
+    )
+    parser.add_argument("--disable-mmap", action="store_true")
     args = parser.parse_args()
     if not 256 <= args.width <= 2048 or not 256 <= args.height <= 2048 or not 1 <= args.steps <= 50:
         raise SystemExit("benchmark dimensions or steps are outside the bounded range")
@@ -78,15 +100,19 @@ def main() -> int:
     import torch
     import transformers
 
-    adapter = DiffusersFlux2KleinAdapter(args.model_path)
-    torch.cuda.reset_peak_memory_stats(0)
+    adapter = DiffusersFlux2KleinAdapter(
+        args.model_path,
+        device_mode=args.device_mode,
+        disable_mmap=args.disable_mmap,
+    )
+    peak_stats_error = reset_peak_memory_stats(torch)
     with GpuMemoryMonitor() as load_memory:
         adapter.load()
     resident_free, resident_total = torch.cuda.mem_get_info(0)
     records: list[dict[str, Any]] = []
     for index in range(args.repeat):
         output = args.output_dir / f"benchmark-{args.width}x{args.height}-{args.steps}-{index}.png"
-        torch.cuda.reset_peak_memory_stats(0)
+        reset_error = reset_peak_memory_stats(torch)
         with GpuMemoryMonitor() as execution_memory:
             started = time.perf_counter()
             adapter.generate(ImageGenerationRequest(
@@ -104,7 +130,7 @@ def main() -> int:
             "elapsed_sec": elapsed,
             "output_bytes": output.stat().st_size,
             "output_sha256": sha256(output),
-            "torch_peak_allocated_bytes": int(torch.cuda.max_memory_allocated(0)),
+            "torch_peak_allocated_bytes": peak_allocated_bytes(torch) if reset_error is None else None,
             "device_memory": execution_memory.result(),
         })
     payload = {
@@ -115,16 +141,23 @@ def main() -> int:
         "transformers_version": transformers.__version__,
         "device_name": torch.cuda.get_device_name(0),
         "gcn_arch": getattr(torch.cuda.get_device_properties(0), "gcnArchName", "unknown"),
+        "device_mode": args.device_mode,
+        "disable_mmap": args.disable_mmap,
         "load_sec": adapter.load_sec,
         "load_memory": load_memory.result(),
         "resident_used_bytes": int(resident_total - resident_free),
+        "torch_peak_stats_error": peak_stats_error,
         "width": args.width,
         "height": args.height,
         "steps": args.steps,
         "seed": args.seed,
         "records": records,
     }
-    print(json.dumps(payload, indent=2))
+    serialized = json.dumps(payload, indent=2)
+    if args.result_path is not None:
+        args.result_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        args.result_path.write_text(serialized + "\n", encoding="utf-8")
+    print(serialized)
     return 0
 
 

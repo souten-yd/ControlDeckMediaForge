@@ -16,7 +16,8 @@
     "installed",
     "healthy",
     "measured_vram_bytes",
-    "measured_runtime_sec"
+    "measured_runtime_sec",
+    "measurement_confidence"
   ],
   "properties": {
     "id": {"type": "string", "minLength": 1, "maxLength": 200},
@@ -35,6 +36,7 @@
     "installed": {"type": "boolean"},
     "healthy": {"type": "boolean"},
     "measured_vram_bytes": {"type": ["integer", "null"], "minimum": 0},
-    "measured_runtime_sec": {"type": ["number", "null"], "exclusiveMinimum": 0}
+    "measured_runtime_sec": {"type": ["number", "null"], "exclusiveMinimum": 0},
+    "measurement_confidence": {"type": "string", "enum": ["low", "measured"]}
   }
 }

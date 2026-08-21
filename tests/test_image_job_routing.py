@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
+
+import pytest
 
 from mediaforge.domain import JobRequest
 from mediaforge.host.client import HostIdentity
 from mediaforge.host.jobs import HostExecution
-from mediaforge.jobs import JobManager, OOM_FLOOR_INCREMENT_BYTES
+from mediaforge.jobs import JobManager, OOM_FLOOR_INCREMENT_BYTES, WorkerFailure
 from mediaforge.models import ModelDescriptor, ModelState
 from mediaforge.store import Store
 
@@ -62,3 +65,21 @@ def test_oom_raises_next_broker_admission_floor(tmp_path: Path):
     assert request["vram"]["execution_peak_bytes"] + request["vram"]["headroom_bytes"] == expected_total
     assert request["vram"]["cold_load_peak_bytes"] + request["vram"]["headroom_bytes"] == expected_total
     assert request["vram"]["confidence"] == "measured"
+
+
+def test_real_model_rejects_dimensions_outside_measured_envelope_before_lease(tmp_path: Path):
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    model = measured_model()
+    model = replace(model, max_width=1024, max_height=1024, max_pixels=1048576)
+    job = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="test",
+        constraints={"width": 1536, "height": 512},
+    ))
+
+    with pytest.raises(WorkerFailure) as exc:
+        manager._validate_generation_limits(job, model)
+
+    assert exc.value.code == "resource_limit"
