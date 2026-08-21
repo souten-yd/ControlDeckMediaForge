@@ -1,8 +1,9 @@
 # Media Forge implementation status
 
 Date: 2026-08-21
-Scope: MF0-0 through MF0-7 complete; G0 complete (`docs/implementation/mf0-addon-core.md`)
+Scope: MF0-0 through MF0-7 complete; G0 and G1 complete (`docs/implementation/mf0-addon-core.md`)
 Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
+Repository head released and verified for G1: `b29cec014f172b58058bd6e01ced60292e1085ae` (`v0.1.1`)
 
 ## MF0-0 — COMPLETE for the requested environment slice
 
@@ -400,12 +401,12 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 
 ## Scope boundary
 
-MF0-0 through MF0-7 / G0 remain complete. G1's real image route and R9700
-acceptance evidence are implemented, but G1 remains **IN PROGRESS** until the
-new release-bundle standard installation path is exercised end-to-end and its
-ControlDeck and Media Forge PRs are merged. G2 and later have not started.
+MF0-0 through MF0-7 / G0 and G1 are complete. The real image route, R9700
+acceptance evidence, and trusted release-bundle standard installation path were
+exercised end-to-end. Media Forge PRs #10/#11 and ControlDeck's generic provider
+PRs #216/#217 are merged. G2 and later have not started.
 
-## G1 — local image generation (IN PROGRESS, 2026-08-21)
+## G1 — local image generation (COMPLETE, 2026-08-21)
 
 ### Adopted route and model gate
 
@@ -492,23 +493,78 @@ diagnostic variants were explicitly canceled and are not counted as failures.
   reason `yield_load_cost_unknown`, queue position 1, cancel/lower-priority
   actions, and the LLM identified as a yieldable blocker. It did not silently
   overcommit or kill chat merely to satisfy the image request.
-- Latest full Media Forge regression run: 78 passed in 3.94 seconds with one
+- Latest full Media Forge regression run: 80 passed in 3.95 seconds with one
   upstream Starlette/httpx deprecation warning. This is regression evidence,
   not the runtime evidence above.
 
-### Release-bundle installation work
+### Release-bundle standard installation
 
-The default installation is being changed from source checkout/build to a
-verified prebuilt bundle. A locally built `0.1.0` linux-x86_64 artifact is
-29,035,125 bytes with SHA-256
-`bcbde4514c6a5ef8d1c226509a4ca6afccb888e159fca10f9cb3fa933835c87e`.
-Its packaged binary reported `packaged=true`, served the real workspace and
-model API from port 9136, and returned HTTP 200 / `setup_required` on a clean
-persistent runtime directory. This proves the artifact runs; installation via
-the ControlDeck release provider, GitHub Release download, atomic update,
-rollback, and removal remain pending and are not yet claimed.
+GitHub Release `v0.1.1` publishes the verified linux-x86_64 artifact used by the
+trusted ControlDeck catalog. It is 29,041,267 bytes with SHA-256
+`66dfb88425d61e533e5ca8b45e0e19169e07e66cbc9ba1846364de4177981d4a`.
+The bundle contains the packaged core and pinned runtime recipe, but no source
+checkout, prebuilt venv, PyTorch wheels, or model weights. Its `provision`
+lifecycle builds the persistent worker venv and verifies GPU/model readiness
+before the provider can select the version.
 
-### NOT TESTED / remaining before G1 completion
+An isolated real ControlDeck updated the public v0.1.0 bundle to v0.1.1 in
+37.914599 seconds. During provisioning, `current` and PID 1599352 remained on
+v0.1.0. After smoke/health, both version trees remained and `current` switched
+atomically to v0.1.1/PID 1627743. The persistent ROCm venv occupied
+4,686,979,949 bytes; the shared NVMe pip/model caches were reused. Health
+reported R9700/gfx1201, PyTorch 2.10.0+ROCm 7.2.1, and an installed/healthy
+model.
+
+A post-switch health-gate fault injection exercised rollback through the real
+version tree, systemd service, and Add-on registry. `current`, the running
+service, and the enabled manifest returned to v0.1.0 in 10.4 seconds; a normal
+API update then restored healthy v0.1.1. This is an explicit health failure
+injection, not a claim that a public release was naturally unhealthy.
+
+The installed v0.1.1 bundle generated through the real ControlDeck
+Workflow/Broker path. It acquired a 33,349,320,704-byte lease, renewed it six
+times, released it, and produced a 512x512 PNG of 128,589 bytes with SHA-256
+`9a1920654a48007c4917385d05af43a82d144803c66c19cefb906a9e93be962e`.
+Its provenance identifies FLUX.2 Klein 4B, Apache-2.0, and Media Forge 0.1.1.
+A Chromium Settings -> enable -> Media -> Create -> Library -> Provenance run
+also produced a 159,515-byte PNG, passed in 19.5 seconds, and observed no page
+errors or active lease after completion.
+
+The isolated uninstall stopped and removed the managed service, disabled and
+unregistered the Add-on, and removed `current`, `versions`, and `downloads`.
+The provider reported `installed=false`, `enabled=false`, `not-installed` and
+required no Host reload. Persistent feature data remained exactly
+4,687,592,191 bytes / 8 files, including both generated PNGs (128,589 and
+159,515 bytes); the worker runtime and shared cache were not deleted.
+
+Media Forge full regression at the released code completed with 80 passed in
+8.01 seconds. ControlDeck provider final-head regression completed with 738
+passed / 1 skipped in 61.79 seconds, frontend production build transformed
+1,542 modules, and the installed-bundle browser E2E passed. These are regression
+evidence and do not replace the real process observations above.
+
+### G1 public contract freeze
+
+The public contract is frozen at Media Forge commit `b29cec0` / release v0.1.1.
+The freeze covers `schemas/*.json`, `addon.json` contributions, agent tool and
+workflow executor names/inputs, and required asset/provenance fields as
+documented in `docs/api.md`. The recorded SHA-256 values are:
+
+```text
+addon.json                    30d1c9f64c7069eb556cc9ef1bf10bc1fc508855c1a32ca98d32fed6bd1d2583
+asset-reference.json          76bcdf271278cc206d1595a8ea5d96737382d9ed2c8649ea9856acfac5c7147b
+asset.json                    51903d157035ccb75e6384ea4fb63b5180e847be1890cecc3a8560bd61510241
+empty-input.json              c26eb030dfc9f52409427dd4e03b4dc270b2151d534e864ac546531607d753af
+job-reference.json            41191771b145ff3984e658622a57d1d6d154fb608b54e139ed02f44f761c34ab
+job-request.json              e5f42b412f39f37e3435717aba4a1ba0af15e99d25bcfaef89a179151ced43f4
+model.json                    a1495f9f2ee395a1865fbcd73a8a77baf2e8a1a9eaefec918d8412884a963234
+provenance.json               9579f96c0921176617474867515b1797cb68aa0a62c3dbd8c1bbb5d1f89b8697
+```
+
+Future goals may add capabilities or optional fields. A breaking change first
+requires the documented impact, migration, and contract/schema version bump.
+
+### NOT TESTED / intentionally deferred
 
 - A kernel page-cache drop was intentionally not performed on the shared host;
   fully cache-cold storage timing is NOT TESTED.
@@ -517,7 +573,11 @@ rollback, and removal remain pending and are not yet claimed.
 - A natural hardware OOM is NOT TESTED. Error normalization and admission-floor
   adjustment are covered by tests; unsafe oversized requests are rejected by
   model limits before lease acquisition.
-- The standard GitHub release-bundle install/update/rollback/removal E2E and its
-  desktop/mobile Settings assertions are pending.
+- A fully cache-empty download of the pinned 15.99GB model is NOT TESTED. Both
+  direct bundle provisioning and the ControlDeck update reused the verified
+  shared NVMe model cache; this is not reported as cold-download evidence.
+- The installed-bundle Settings/Create E2E used a 1280x800 Chromium viewport.
+  A separate 320px mobile Settings layout run is NOT TESTED; Media uses the
+  declared companion surface rather than squeezing the workspace into mobile.
 - G2 strict edit, G3 character consistency, and G5 M5Stack expression/gesture
   variants are NOT TESTED and were not started out of roadmap order.
