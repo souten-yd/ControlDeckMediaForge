@@ -20,7 +20,9 @@ docs/implementation-status.md         現在の進捗。必ず確認・更新す
 ## 現在地
 
 MF0-0〜MF0-3（分離環境、health、durable job、fake worker、asset/provenance）まで実装済み。
-次は `docs/implementation/mf0-addon-core.md` の MF0-4（host token / lease / Jobs bridge）。
+MF0-5/6のworkspaceと実行endpointはローカル実装済みだが、MF0-4は参照ControlDeckに
+service-side resource / Jobs / files bridgeが存在せずhost-blocked。
+次は `docs/implementation-status.md` のblockerを再検証してからMF0-4を完了させる。
 各段階を飛ばさず、実機証跡を `docs/implementation-status.md` に追記する。
 全体像は `docs/implementation/goal-roadmap.md`（G0〜G10）。
 

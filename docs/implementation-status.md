@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-21
-Scope: MF0-0 through MF0-3 (`docs/implementation/mf0-addon-core.md`)
+Scope: MF0-0 through MF0-3 complete; MF0-4 host-blocked; MF0-5/MF0-6 local implementation (`docs/implementation/mf0-addon-core.md`)
 Repository head at start: `770383a` (`origin/main`)
 
 ## MF0-0 — COMPLETE for the requested environment slice
@@ -56,6 +56,49 @@ Shutdown and crash isolation were exercised separately:
 - persisted job and asset lists remained readable after restart
 
 During the first isolated-data attempt, `mf.sh serve` was found to overwrite an explicit `MEDIA_FORGE_DATA_DIR`. Two exact test jobs and assets therefore entered the default data tree. This was not accepted as isolated evidence: the script was fixed to preserve the explicit variable, the database was backed up to `/tmp/mediaforge-mf03-cleanup.yx1Ia0/media-forge.sqlite3.backup`, the two identified files were moved to trash, and only their exact database rows were deleted. Verification reported zero remaining test jobs/assets. The complete E2E was then rerun successfully in `/tmp/mediaforge-mf03-e2e.s5f9e6`, which was moved to trash after evidence collection.
+
+## MF0-4 — PARTIAL / HOST CONTRACT BLOCKED
+
+Media Forge now verifies the ControlDeck HMAC service token signature, `aud=media-forge`, `kind=service`, subject, issued-at time, expiry, and the 600-second maximum lifetime. It also requires `X-Control-Deck-Addon-ID: media-forge`, never logs the credential, rejects raw Unix/Windows/file-URI paths recursively, and accepts file context only as `grant:`/`asset:` opaque IDs. Verification-key provisioning is explicit through `MEDIA_FORGE_CONTROLDECK_TOKEN_KEY_FILE`; no ControlDeck module is imported.
+
+The lease request builder includes all four VRAM dimensions, `confidence=low`, and mandatory `estimated_runtime_sec`. The Jobs boundary enforces monotonic progress and at most 2 Hz before transport. These contract checks pass, but they are not recorded as live host integration.
+
+The referenced ControlDeck checkout at `9272c05` does not implement the service-side methods required by the normative integration plan:
+
+```text
+host.resources.acquire / renew / release
+host.jobs.register_remote / update_remote
+host.files.stage_read / commit_write
+```
+
+Read-only source inspection found that `/api/v1/resources` requires a session cookie, `settings.manage`, and CSRF. The injected Add-on service token is accepted only by the Add-on's upstream endpoint; ControlDeck's resource router does not authenticate it. The signing key also has no public verification/JWKS endpoint or provisioned per-Add-on key exchange. Media Forge will not replay a user cookie, read ControlDeck data implicitly, invent an undocumented URL, or create an independent GPU scheduler. `GET /api/v1/host-integration` therefore reports these three bridges as `unavailable_in_host_revision` with `fallback=none`, and generation contributions remain unavailable in health.
+
+MF0-4 completion and the lease/Jobs/file-grant portions of MF0-7 are blocked until ControlDeck exposes the already-designed audience-bound service bridge. ControlDeck was not modified.
+
+## MF0-5 / MF0-6 — IMPLEMENTED LOCALLY, INSTALLED-HOST E2E NOT TESTED
+
+The embedded workspace provides Create, Library, Jobs, Models, and Settings without localStorage, sessionStorage, cookies, or parent DOM access. It waits for the MessageChannel handshake before first paint, validates the parent origin, applies initial/theme-change tokens without reload, handles locale/safe-area/route/session/disable events, syncs routes, updates the title, exposes the command-palette shortcut, and clears busy state on disable. Standalone rendering remains available when the page is not framed.
+
+Workflow, agent capability/generate/inspect, command, and edit-image context endpoints are implemented with service-token enforcement and structured job/asset responses. Capability discovery and all agent tool responses contain no model name; inspect returns the license, lineage, validation, warnings, and output hash without implementation identity. Context responses do not echo the scoped token.
+
+Real-process verification on 2026-08-21 used an isolated data directory and an isolated 0600 32-byte signing key; the directory was moved to trash after shutdown:
+
+```text
+health:                         HTTP 200, 0.015009 sec, 1421 bytes
+workspace HTML:                HTTP 200, 0.004198 sec, 3416 bytes
+capabilities without token:    HTTP 401
+capabilities with valid token: HTTP 200, 0.000757 sec, 517 bytes
+workflow submit:               HTTP 200, 0.005339 sec
+submitted state:               queued
+observed terminal state:       succeeded, progress 1.0
+asset:                         80x48 RGBA PNG, 541 bytes
+asset SHA-256:                 64de30334bba9b39174ca24b4fbf903cc474c48c9dce3e1928a0f9bf659611bc
+provenance validators:         4, warnings 0, output hash matched
+edit-image context action:     HTTP 200, 0.000942 sec
+host integration diagnostic:  token configured; resource/jobs/files unavailable; fallback none
+```
+
+This proves the real Media Forge process and HTTP routes, not browser or installed-ControlDeck behavior. MF0-5/MF0-6 are not marked complete because roadmap sequencing requires MF0-4 and §11 host E2E.
 
 ## Implemented artifacts
 
@@ -206,7 +249,7 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 ## Additional behavior checks
 
 - Temporarily removing the GPU snapshot left the real core service running. Health returned HTTP 200 / `setup_required`, with `gpu.state=checking`; restoring and rerunning the GPU check returned it to `ok`.
-- Latest focused `./mf.sh test`: 26 passed in 1.02 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
+- Latest focused `./mf.sh test`: 35 passed in 1.35 seconds with one upstream Starlette/httpx deprecation warning. Core and runtime `pip check` both reported no broken requirements. This is regression evidence only, not runtime proof.
 - `bash -n mf.sh` and `git diff --check` passed. These are static checks only.
 - Final ControlDeck checkout observation: HEAD `9272c05`, clean `git status --short`. It was read-only throughout this slice; no ControlDeck file was modified.
 
@@ -216,7 +259,9 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 - Installed ControlDeck setup checklist and enable/disable browser flow: deferred to MF0-7. The real Media Forge HTTP payload and ControlDeck's real manifest linter were tested.
 - Hugging Face model download/cache reuse: no model adoption or weights belong to MF0-0.
 - Model library configuration: deliberately remains `missing`; selecting and benchmarking a model belongs to G1.
+- Actual iframe rendering, theme transition without reload, FOUC capture, back/forward/reload/share, mobile companion, Files Open with, Workflow dry-run, and OpenCode discovery are NOT TESTED. They require installed-ControlDeck MF0-7 E2E.
+- Resource acquire/wait/renew/release, two fake exclusive jobs, Jobs bridge progress/toast, scoped file staging/commit, and disable cleanup are UNAVAILABLE in the referenced host revision, not passed or substituted.
 
 ## Scope boundary
 
-No real model, Diffusers adapter, embedded workspace, host token/lease/jobs bridge, agent/workflow/context execution, or MF0-4+ feature is included. The ROCm runtime check is environment qualification only and is not a model benchmark or a G1 implementation.
+No real model or Diffusers adapter is included. The embedded workspace and execution endpoints are implemented, but MF0-4 and installed-host MF0-7 remain incomplete for the explicit host-contract reasons above. The ROCm runtime check is environment qualification only and is not a model benchmark or a G1 implementation.

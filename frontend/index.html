@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja" data-bridge="waiting">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <title>Media Forge</title>
+    <link rel="stylesheet" href="static/styles.css">
+  </head>
+  <body>
+    <div id="workspace" aria-busy="true">
+      <header><div><p class="eyebrow">LOCAL MEDIA SERVICE</p><h1>Media Forge</h1></div><span class="badge">G0 · FAKE</span></header>
+      <nav aria-label="Media Forge sections">
+        <button class="tab active" data-tab="create">Create</button>
+        <button class="tab" data-tab="library">Library</button>
+        <button class="tab" data-tab="jobs">Jobs</button>
+        <button class="tab" data-tab="models">Models</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </nav>
+      <main>
+        <section id="create" class="panel active">
+          <div class="intro"><p class="eyebrow">CREATE</p><h2>作りたいものを言葉にする</h2><p>ローカルの決定的なfake workerで、履歴とprovenanceを含む素材を作ります。</p></div>
+          <form id="create-form">
+            <label for="intent">作りたい画像</label>
+            <textarea id="intent" required maxlength="8000" placeholder="夜の机に置かれた、小さな青いロボット"></textarea>
+            <div class="form-row">
+              <label>幅<input id="width" type="number" min="1" max="2048" value="512"></label>
+              <label>高さ<input id="height" type="number" min="1" max="2048" value="512"></label>
+              <label>出力数<input id="count" type="number" min="1" max="8" value="1"></label>
+              <label>方針<select id="policy"><option value="auto">Auto</option><option value="fast">Fast</option><option value="balanced">Balanced</option><option value="quality">Quality</option></select></label>
+            </div>
+            <button class="primary" type="submit">生成する</button><p id="create-status" role="status"></p>
+          </form>
+        </section>
+        <section id="library" class="panel"><div class="section-title"><h2>Library</h2><button data-refresh="library">更新</button></div><div id="asset-grid" class="asset-grid"><p class="muted">まだ素材はありません。</p></div></section>
+        <section id="jobs" class="panel"><div class="section-title"><h2>Jobs</h2><div><button id="open-host-jobs">ControlDeck Jobs</button><button data-refresh="jobs">更新</button></div></div><div id="job-list" class="job-list"></div></section>
+        <section id="models" class="panel"><h2>Models</h2><article class="info-card"><strong>image.text_to_image</strong><p>available · fake adapter · confidence low</p></article><p class="muted">モデルの導入機能はG1で追加します。</p></section>
+        <section id="settings" class="panel"><h2>Settings</h2><dl><div><dt>Inference policy</dt><dd>local_only（backend強制）</dd></div><div><dt>Worker</dt><dd>別プロセス fake adapter</dd></div><div><dt>Host resource bridge</dt><dd>ControlDeck側service API待ち</dd></div></dl></section>
+      </main>
+      <dialog id="provenance-dialog"><button id="close-dialog" aria-label="閉じる">×</button><h2>Provenance</h2><pre id="provenance"></pre></dialog>
+    </div>
+    <script src="static/app.js" defer></script>
+  </body>
+</html>
