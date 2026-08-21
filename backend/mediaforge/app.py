@@ -6,6 +6,7 @@ import hashlib
 from io import BytesIO
 import json
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -24,11 +25,12 @@ from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.files import GrantContentTooLarge, read_grant, require_grant_id
 from .host.jobs import HostExecution
 from .jobs import JobManager
+from .models import ModelRegistry, ModelRegistryError
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .store import Store
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
 SCHEMAS_DIR = REPOSITORY_ROOT / "schemas"
 FRONTEND_DIR = REPOSITORY_ROOT / "frontend"
 HealthState = Literal["healthy", "degraded", "unavailable", "setup_required"]
@@ -83,6 +85,9 @@ def create_app(
         worker_timeout_sec=resolved.worker_timeout_sec,
         host_client=host,
         lease_renew_sec=resolved.host_lease_renew_sec,
+        model_manifest=resolved.model_manifest,
+        hf_home=resolved.hf_home,
+        image_runtime_python=resolved.image_runtime_python,
     )
     workspace_test_delay_pending = True
 
@@ -103,6 +108,53 @@ def create_app(
 
     async def authorize_host(request: Request) -> HostIdentity:
         return await require_host_service(request, host)
+
+    def model_catalog() -> dict[str, Any]:
+        try:
+            models = ModelRegistry.load(resolved.model_manifest, hf_home=resolved.hf_home).all()
+        except ModelRegistryError as exc:
+            raise HTTPException(status_code=503, detail={"code": "model_registry_invalid"}) from exc
+        return {
+            "items": [
+                {
+                    "id": item.model_id,
+                    "family": item.family,
+                    "version": item.version,
+                    "revision": item.revision,
+                    "license": item.license,
+                    "runtime_adapter": item.runtime_adapter,
+                    "capabilities": list(item.capabilities),
+                    "state": item.state,
+                    "installed": item.installed,
+                    "healthy": item.healthy,
+                    "measured_vram_bytes": item.measured_vram_bytes,
+                    "measured_runtime_sec": item.measured_runtime_sec,
+                    "measurement_confidence": item.measurement_confidence,
+                }
+                for item in models
+            ]
+        }
+
+    def image_capability() -> dict[str, Any]:
+        try:
+            models = ModelRegistry.load(resolved.model_manifest, hf_home=resolved.hf_home).all()
+        except ModelRegistryError:
+            return {"state": "unavailable", "reason": "model_registry_invalid", "local_only": True}
+        if any(
+            item.state.value == "available" and item.installed and item.healthy
+            and "image.text_to_image" in item.capabilities
+            for item in models
+        ):
+            confidence = next(
+                item.measurement_confidence
+                for item in models
+                if item.state.value == "available" and item.installed and item.healthy
+                and "image.text_to_image" in item.capabilities
+            )
+            return {"state": "available", "implementation": "local", "confidence": confidence, "local_only": True}
+        if any(item.state.value == "available" and "image.text_to_image" in item.capabilities for item in models):
+            return {"state": "unavailable", "reason": "model_not_installed", "local_only": True}
+        return {"state": "available", "implementation": "fake", "confidence": "low", "local_only": True}
 
     async def submit_hosted(
         value: JobRequest,
@@ -252,12 +304,7 @@ def create_app(
         return {
             "contract_version": "1.0",
             "capabilities": {
-                "image.text_to_image": {
-                    "state": "available",
-                    "implementation": "fake",
-                    "confidence": "low",
-                    "local_only": True,
-                },
+                "image.text_to_image": image_capability(),
                 "image.single_reference_edit": {"state": "unavailable", "reason": "planned_for_g2"},
                 "image.multi_reference_edit": {"state": "unavailable", "reason": "planned_for_g2"},
                 "image.strict_edit": {"state": "unavailable", "reason": "planned_for_g2"},
@@ -265,6 +312,10 @@ def create_app(
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },
         }
+
+    @app.get("/api/v1/models")
+    async def models() -> dict[str, Any]:
+        return model_catalog()
 
     @app.post("/api/v1/jobs", status_code=202)
     async def create_job(job_request: JobRequest, response: Response) -> dict[str, Any]:
@@ -514,6 +565,8 @@ def create_app(
                         if len(content) > 12 * 1024 * 1024:
                             raise ValueError("asset preview exceeds the workspace transport bound")
                         result = {"mime_type": asset.mime_type, "base64": base64.b64encode(content).decode("ascii")}
+                    elif method == "models.list":
+                        result = model_catalog()
                     else:
                         raise ValueError("workspace method is not supported")
                     await websocket.send_json({"id": request_id, "ok": True, "result": result})

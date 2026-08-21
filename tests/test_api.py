@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -7,7 +8,7 @@ from pathlib import Path
 import jsonschema
 from fastapi.testclient import TestClient
 
-from conftest import wait_terminal
+from conftest import fake_settings, wait_terminal
 from mediaforge.app import create_app
 from mediaforge.config import Settings
 from mediaforge.domain import JobRequest
@@ -133,6 +134,19 @@ def test_capability_discovery_does_not_expose_model_names(client):
     assert "qwen" not in serialized
 
 
+def test_model_catalog_reports_candidate_without_exposing_local_paths(client):
+    response = client.get("/api/v1/models")
+
+    assert response.status_code == 200
+    model = response.json()["items"][0]
+    assert model["id"] == "black-forest-labs/FLUX.2-klein-4B"
+    assert model["state"] == "experimental"
+    assert model["healthy"] is False
+    assert model["license"] == "Apache-2.0"
+    serialized = json.dumps(response.json())
+    assert "/data" not in serialized and "/home" not in serialized
+
+
 def test_manual_model_policy_is_explicit_opt_in(client):
     missing = request()
     missing["model_policy"] = "manual"
@@ -179,7 +193,7 @@ def test_running_and_queued_jobs_can_be_canceled(client):
 
 
 def test_worker_timeout_is_explicit_and_core_survives(tmp_path: Path):
-    app = create_app(Settings(data_dir=tmp_path / "timeout", worker_timeout_sec=0.05))
+    app = create_app(fake_settings(tmp_path / "timeout", worker_timeout_sec=0.05))
     with TestClient(app) as client:
         created = client.post("/api/v1/jobs", json=request(_fake_delay_sec=1)).json()
         failed = wait_terminal(client, created["id"])
@@ -190,7 +204,7 @@ def test_worker_timeout_is_explicit_and_core_survives(tmp_path: Path):
 
 def test_graceful_service_stop_is_not_reported_as_worker_crash(tmp_path: Path):
     data_dir = tmp_path / "shutdown"
-    app = create_app(Settings(data_dir=data_dir, worker_timeout_sec=3))
+    app = create_app(fake_settings(tmp_path / "shutdown-settings", data_dir=data_dir, worker_timeout_sec=3))
     with TestClient(app) as client:
         created = client.post("/api/v1/jobs", json=request(_fake_delay_sec=2)).json()
         deadline = time.monotonic() + 2
@@ -209,7 +223,7 @@ def test_queued_job_resumes_after_service_start(tmp_path: Path):
     store.initialize()
     queued = store.create_job(JobRequest(operation="image.generate", intent="resume queued job"))
 
-    with TestClient(create_app(Settings(data_dir=data_dir, worker_timeout_sec=3))) as client:
+    with TestClient(create_app(fake_settings(tmp_path / "resume-settings", data_dir=data_dir, worker_timeout_sec=3))) as client:
         resumed = wait_terminal(client, queued.id)
 
     assert resumed["status"] == "succeeded"
@@ -222,3 +236,55 @@ def test_unavailable_operation_fails_explicitly(client):
     failed = wait_terminal(client, created["id"])
     assert failed["status"] == "failed"
     assert failed["error"]["code"] == "capability_unavailable"
+
+
+def test_available_real_model_requires_host_managed_lease(tmp_path: Path):
+    model_id = "owner/model"
+    revision = "d" * 40
+    hf_home = tmp_path / "hf"
+    repo = hf_home / "hub/models--owner--model"
+    blob_content = b"test"
+    digest = hashlib.sha256(blob_content).hexdigest()
+    blob = repo / "blobs" / digest
+    blob.parent.mkdir(parents=True)
+    blob.write_bytes(blob_content)
+    config_blob = repo / "blobs" / ("f" * 64)
+    config_blob.write_text("{}", encoding="utf-8")
+    snapshot = repo / "snapshots" / revision
+    snapshot.mkdir(parents=True)
+    (snapshot / "config.json").symlink_to(config_blob)
+    (snapshot / "model.safetensors").symlink_to(blob)
+    manifest = tmp_path / "models.json"
+    manifest.write_text(json.dumps({
+        "schema_version": "1.0",
+        "models": [{
+            "model_id": model_id,
+            "family": "test",
+            "version": "1",
+            "revision": revision,
+            "weights_hash": "sha256:" + "e" * 64,
+            "license": "Apache-2.0",
+            "runtime_adapter": "test",
+            "capabilities": ["image.text_to_image"],
+            "hardware_backends": ["rocm"],
+            "state": "available",
+            "measurements": {
+                "resident_vram_bytes": 1,
+                "execution_peak_vram_bytes": 2,
+                "cold_load_peak_vram_bytes": 3,
+                "headroom_vram_bytes": 4,
+                "measured_runtime_sec": 1,
+            },
+            "policy_rank": {"auto": 1},
+            "required_files": ["config.json"],
+            "weights": [{"path": "model.safetensors", "size_bytes": 4, "sha256": digest}],
+        }],
+    }), encoding="utf-8")
+    app = create_app(Settings(data_dir=tmp_path / "data", model_manifest=manifest, hf_home=hf_home))
+
+    with TestClient(app) as local_client:
+        created = local_client.post("/api/v1/jobs", json=request()).json()
+        failed = wait_terminal(local_client, created["id"])
+
+    assert failed["status"] == "failed"
+    assert failed["error"]["code"] == "host_lease_required"

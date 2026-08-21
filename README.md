@@ -22,28 +22,35 @@ ControlDeck integration is also deliberately generic: Media Forge remains a sepa
 
 ## Current implementation
 
-MF0-0 through MF0-3 provide isolated environments, the Add-on v2 health service,
-a durable local job API, a deterministic subprocess fake worker, and immutable
-assets with provenance. MF0-4 connects accepted Host identities to ControlDeck
-token introspection, Jobs, resource leases, cancellation, and scoped file
-read/output commit. Agent and workspace generation have real Host evidence.
-Workflow and context-action file consumption remain fail-closed due to two
-ControlDeck subject-routing mismatches; see `docs/implementation-status.md`.
+MF0-0 through MF0-7 / G0 are complete: the isolated service, durable fake-worker
+jobs, assets/provenance, embedded workspace, ControlDeck Jobs/Broker/files,
+Workflow, Context Action, and real OpenCode tool discovery/call have passed their
+real-process acceptance checks. G1 local image generation now has a measured
+FLUX.2 Klein 4B automatic route and real R9700/ROCm evidence. G1 remains in
+progress while the verified release-bundle standard installation path is
+completed. See `docs/implementation-status.md`.
 
 ## Run locally
 
 ```bash
 ./mf.sh doctor
 ./mf.sh serve
+./mf.sh model list
 ```
 
 Open <http://127.0.0.1:9130/>. The service binds to loopback only in G0.
 
-Install [`addon.json`](addon.json) through ControlDeck's Extensions screen. The
-host can display setup state and run supported generation contributions through
-its Jobs and resource broker. ControlDeck remains the lifecycle, identity,
-grant, Jobs bridge, and resource-broker authority; this repository contains all
+Normal installation uses ControlDeck's trusted `release-bundle` Optional Feature
+provider and a verified GitHub Release artifact. Installing `addon.json`
+directly and running this source tree remain developer workflows, not the
+Settings default. ControlDeck remains the lifecycle, identity, grant, Jobs
+bridge, and resource-broker authority; this repository contains all
 Media-specific code.
+
+Model downloads are explicit. The adopted local model can
+be fetched to the shared Hugging Face cache with
+`./mf.sh model download flux2-klein-4b`. The command pins the repository revision
+and excludes the redundant single-file checkpoint.
 
 ## Test
 

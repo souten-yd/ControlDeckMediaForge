@@ -1,0 +1,9 @@
+fastapi>=0.111,<1
+uvicorn[standard]>=0.30,<1
+pydantic>=2.7,<3
+sqlalchemy>=2.0,<3
+alembic>=1.13,<2
+pillow>=10.0,<13
+httpx>=0.27,<1
+jsonschema>=4.23,<5
+pyinstaller==6.22.0

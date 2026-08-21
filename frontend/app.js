@@ -75,6 +75,7 @@ async function standaloneCall(method, params) {
   if (method === "jobs.cancel") return jsonRequest(`/api/v1/jobs/${encodeURIComponent(params.job_id)}`, {method: "DELETE"});
   if (method === "jobs.list") return jsonRequest("/api/v1/jobs");
   if (method === "assets.list") return jsonRequest("/api/v1/assets");
+  if (method === "models.list") return jsonRequest("/api/v1/models");
   if (method === "assets.provenance") return jsonRequest(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/provenance`);
   if (method === "assets.content") {
     const response = await fetch(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/content`);
@@ -109,6 +110,7 @@ function activate(name, sync = true) {
   document.querySelectorAll(".panel").forEach((panel) => panel.classList.toggle("active", panel.id === selected));
   if (selected === "library") void loadAssets();
   if (selected === "jobs") void loadJobs();
+  if (selected === "models") void loadModels();
   if (sync && bridgePort) void callHost("host.route.sync", {path: selected === "create" ? "/" : `/${selected}`}).catch(() => {});
 }
 
@@ -140,7 +142,7 @@ document.getElementById("create-form").addEventListener("submit", async (event) 
 });
 
 async function pollJob(id, statusNode) {
-  for (let attempt = 0; attempt < 300 && !disabled; attempt += 1) {
+  for (let attempt = 0; attempt < 3600 && !disabled; attempt += 1) {
     let job;
     try { job = await workspaceCall("jobs.get", {job_id: id}); } catch { break; }
     statusNode.textContent = `${job.status} · ${Math.round(job.progress * 100)}% · ${job.phase || "-"}`;
@@ -150,7 +152,7 @@ async function pollJob(id, statusNode) {
       if (bridgePort) void callHost("host.notification.show", {title: "Media Forge", message: `Job ${job.status}`, level: job.status === "succeeded" ? "success" : "error", dedupe_key: id}).catch(() => {});
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   if (!disabled) statusNode.textContent = "状態確認がタイムアウトしました。Jobsから確認してください。";
 }
@@ -187,6 +189,23 @@ async function loadJobs() {
     const detail = document.createElement("p"); detail.textContent = `${job.id} · ${job.phase || "-"}`; info.append(title, detail);
     const state = document.createElement("span"); state.className = "status"; state.textContent = job.status;
     card.append(info, state); list.append(card);
+  });
+}
+
+async function loadModels() {
+  const list = document.getElementById("model-list");
+  let items;
+  try { ({items} = await workspaceCall("models.list")); } catch { list.textContent = "Modelsを読み込めませんでした。"; return; }
+  list.replaceChildren();
+  if (!items.length) { list.textContent = "登録済みモデルはありません。"; return; }
+  items.forEach((model) => {
+    const card = document.createElement("article"); card.className = "info-card";
+    const title = document.createElement("strong"); title.textContent = model.id;
+    const state = document.createElement("p");
+    state.textContent = `${model.state} · ${model.installed ? "installed" : "not installed"} · ${model.license}`;
+    const capabilities = document.createElement("p"); capabilities.className = "muted";
+    capabilities.textContent = model.capabilities.join(" · ");
+    card.append(title, state, capabilities); list.append(card);
   });
 }
 

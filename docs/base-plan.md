@@ -3,9 +3,10 @@
 Status: Draft / baseline architecture  
 Date: 2026-08-20
 
-Implementation: G0 / MF0 completed on 2026-08-21. G1 model adoption and image
-generation are not started; see `docs/implementation-status.md` for measured
-evidence and remaining NOT TESTED items.
+Implementation: G0 / MF0 completed on 2026-08-21. G1 real image generation is
+implemented and measured on R9700/ROCm; completion remains pending on the
+verified release-bundle standard installation E2E. See
+`docs/implementation-status.md` for measurements and remaining NOT TESTED items.
 
 ## 1. Purpose
 

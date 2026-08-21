@@ -1,6 +1,6 @@
 # Media Forge public API
 
-Status: MF0 contract candidate
+Status: G1 contract candidate; freeze pending G1 acceptance
 Contract version: `1.0`
 Date: 2026-08-21
 
@@ -8,8 +8,8 @@ The API is capability-driven. `model_id` is not required. Normal clients use `mo
 
 ## Current availability
 
-MF0-6 implements `/health`, `/schemas/{schema_name}`, the local job/capability/
-asset APIs below, the embedded workspace, and the Add-on execution endpoints. It also provides a development-only
+MF0-7 / G0 implements `/health`, `/schemas/{schema_name}`, the local job/capability/
+asset/model APIs below, the embedded workspace, and the Add-on execution endpoints. It also provides a development-only
 `/test/health` switch. The switch is disabled unless
 `MEDIA_FORGE_ENABLE_TEST_ENDPOINTS=1`.
 
@@ -17,9 +17,9 @@ Add-on execution requires an audience-bound ControlDeck service token and
 `X-Control-Deck-Addon-ID: media-forge`. Media Forge validates it through the
 ControlDeck Add-on Runtime introspection API; no Host signing key or session
 cookie is provisioned to Media Forge. Agent and workspace generation use the
-Host Jobs and resource APIs. Workflow execution remains fail-closed because the
-current Host issues a `workflow:*` subject that its Add-on Runtime Jobs and
-resource APIs do not accept; there is no unleased or cookie-based fallback.
+Host Jobs and resource APIs. Workflow and Context Action execution use the
+Host-signed actor and exact per-call grant allowlist; there is no unleased,
+raw-path, or cookie-based fallback.
 
 The embedded opaque-origin workspace uses the private `/ws` transport through
 ControlDeck's nonce-bound WebSocket proxy. It accepts only a bounded set of
@@ -30,7 +30,7 @@ public operation or a replacement for the host resource/Jobs/files bridges.
 
 ## Jobs
 
-`POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json). MF0-2 executes `image.generate` through a deterministic fake worker. Other operation names are reserved by the public contract and fail with `capability_unavailable` until their goal is delivered.
+`POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json). G0 executes `image.generate` through a deterministic fake worker. G1 is adding a capability-routed local image worker without changing this request. Other operation names are reserved by the public contract and fail with `capability_unavailable` until their goal is delivered.
 
 `GET /api/v1/jobs` lists durable jobs. `GET /api/v1/jobs/{job_id}` returns one job. `DELETE /api/v1/jobs/{job_id}` requests cancellation.
 
@@ -40,7 +40,18 @@ Every request is local-only. `local_only` defaults to `true`; any explicit `fals
 
 ## Capabilities
 
-`GET /api/v1/capabilities` reports capability state as `available`, `unavailable`, or later `experimental`. MF0-2 reports `image.text_to_image` as available with `implementation=fake` and `confidence=low`; it does not claim a real model is installed or expose the selected fake implementation ID.
+`GET /api/v1/capabilities` reports capability state as `available`, `unavailable`, or `experimental`. Until a G1 model passes the adoption gate, it reports `image.text_to_image` as available with `implementation=fake` and `confidence=low`; it does not claim the experimental model is the default or expose a selected model ID.
+
+## Models
+
+`GET /api/v1/models` reports entries conforming to
+[`schemas/model.json`](../schemas/model.json): ID, family,
+version/revision, license, adapter, capabilities, adoption state, installed and
+healthy flags, and measured VRAM/runtime when available. It never returns a
+local filesystem path. `measurement_confidence` is `low` for bootstrap
+estimates and `measured` only after target-hardware evidence. A downloaded candidate remains `experimental` and
+`healthy=false` until its target-hardware benchmark is recorded and it is
+explicitly promoted; installation alone does not alter `model_policy=auto`.
 
 ## Assets and provenance
 
@@ -57,14 +68,10 @@ Parentage uses asset IDs only. Host paths are not part of this API.
 
 ControlDeck calls `/addon/v1/*` endpoints declared by [`addon.json`](../addon.json). Workflow and agent payloads use `{input, correlation}` envelopes. Responses return structured `job_id` and `asset_ids`; agents do not scrape filenames and do not receive a selected model name from generation or capability discovery.
 
-Context actions require a host-issued opaque `grant:` ID. Raw paths are rejected. Project commit is not available before G4.
-
-The current Host can read and commit scoped grants for numeric-user and `job:*`
-subjects. Its context-action token uses a `context:*` subject that the Runtime
-grant API does not yet resolve, so actual context-action file consumption is
-fail-closed. The development-only `/test/host-files/roundtrip` endpoint exercises
-the same private Host bridge with accepted identity forms and is hidden unless
-test endpoints are explicitly enabled.
+Context actions require a host-issued opaque `grant:` ID. Raw paths are rejected.
+Project commit is not available before G4. The development-only
+`/test/host-files/roundtrip` endpoint exercises the same private Host bridge and
+is hidden unless test endpoints are explicitly enabled.
 
 `GET /api/v1/host-integration` reports non-secret integration readiness and
 known Host limitations. It does not expose tokens, lease details belonging to

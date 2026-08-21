@@ -16,7 +16,7 @@ from fastapi import Body, FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from conftest import wait_terminal
+from conftest import fake_settings, wait_terminal
 from mediaforge.app import create_app
 from mediaforge.config import Settings
 from mediaforge.host import client as host_client_module
@@ -40,6 +40,8 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
         "reserved_leases": set(),
         "reject_resources": False,
         "next_job": 0,
+        "token_ttl_sec": 600,
+        "credential_refreshes": 0,
     }
 
     def subject(authorization: str | None) -> str | None:
@@ -49,6 +51,7 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
             "Bearer valid-workflow": "workflow:42",
             "Bearer valid-context": "context:7",
             "Bearer expired-active": "7",
+            "Bearer valid-refreshed": "7",
         }.get(authorization)
 
     @app.post("/api/v1/addon-runtime/token/introspect")
@@ -63,7 +66,11 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
             "active": True,
             "addon_id": "media-forge",
             "subject": token_subject,
-            "expires_at": int(time.time()) + (-1 if authorization == "Bearer expired-active" else 600),
+            "expires_at": int(time.time()) + (
+                -1 if authorization == "Bearer expired-active"
+                else 600 if authorization == "Bearer valid-refreshed"
+                else state["token_ttl_sec"]
+            ),
             "granted_capabilities": ["jobs.write", "resources.acquire", "files.pick", "files.export"],
         }
 
@@ -134,6 +141,12 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
                 state["reserved_leases"].add(waiting["lease_id"])
         return {"lease_id": lease_id, "job_id": "host", "device_id": "gpu0", "state": "released" if action == "release" else "active"}
 
+    @app.post("/api/v1/addon-runtime/media-forge/resources/leases/{lease_id}/credential/refresh")
+    async def refresh_credential(lease_id: str) -> dict[str, Any]:
+        assert lease_id in state["reserved_leases"]
+        state["credential_refreshes"] += 1
+        return {"access_token": "valid-refreshed", "token_type": "Bearer", "expires_at": int(time.time()) + 600}
+
     @app.get("/api/v1/addon-runtime/media-forge/grants/grant:read-1")
     async def grant_metadata() -> dict[str, Any]:
         return {"grant_id": "grant:read-1", "kind": "read", "name": "reference.png", "size": len(state["grant_content"])}
@@ -175,8 +188,8 @@ def host_client(
         transport=httpx.ASGITransport(app=host_app),
     )
     app = create_app(
-        Settings(
-            data_dir=tmp_path / "data",
+        fake_settings(
+            tmp_path,
             worker_timeout_sec=3,
             control_deck_url="https://control-deck.test",
             host_lease_renew_sec=renew_sec,
@@ -541,6 +554,23 @@ def test_hosted_jobs_wait_outside_worker_guard_renew_and_release(tmp_path: Path)
     assert actions.count("activate") == 2
     assert actions.count("release") == 2
     assert "renew" in actions
+
+
+def test_long_hosted_job_refreshes_scoped_identity_before_expiry(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user", renew_sec=0.05)
+    state["token_ttl_sec"] = 1
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            socket.send_json({
+                "id": "refresh",
+                "method": "jobs.create",
+                "params": generate_input("refresh credential") | {"constraints": {"_fake_delay_sec": 0.3}},
+            })
+            created = socket.receive_json()["result"]
+            assert wait_terminal(client, created["id"])["status"] == "succeeded"
+
+    assert state["credential_refreshes"] == 1
+    assert "renew" in [action for _lease, action in state["lease_actions"]]
 
 
 def test_host_cancel_stops_worker_and_releases_lease(tmp_path: Path):

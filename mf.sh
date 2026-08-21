@@ -79,9 +79,15 @@ export_cache_paths() {
   export npm_config_cache="${npm_config_cache:-$cache/npm}"
   export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$cache/ms-playwright}"
   export HF_HOME="${HF_HOME:-$cache/huggingface}"
+  export HF_ENABLE_PARALLEL_LOADING="${HF_ENABLE_PARALLEL_LOADING:-YES}"
+  export AMD_COMGR_CACHE="${AMD_COMGR_CACHE:-1}"
+  export AMD_COMGR_CACHE_DIR="${AMD_COMGR_CACHE_DIR:-$cache/rocm/comgr}"
+  export MIOPEN_CUSTOM_CACHE_DIR="${MIOPEN_CUSTOM_CACHE_DIR:-$cache/rocm/miopen-kernel}"
+  export MIOPEN_USER_DB_PATH="${MIOPEN_USER_DB_PATH:-$cache/rocm/miopen-db}"
   if [ "$create" = yes ]; then
     mkdir -p "$PIP_CACHE_DIR" "$UV_CACHE_DIR" "$npm_config_cache" \
-      "$PLAYWRIGHT_BROWSERS_PATH" "$HF_HOME" 2>/dev/null || true
+      "$PLAYWRIGHT_BROWSERS_PATH" "$HF_HOME" "$AMD_COMGR_CACHE_DIR" \
+      "$MIOPEN_CUSTOM_CACHE_DIR" "$MIOPEN_USER_DB_PATH" 2>/dev/null || true
   fi
 }
 
@@ -144,6 +150,18 @@ filesystem_probe_path() {
 
 model_library_state() {
   if rg -q '^model_libraries:[[:space:]]*\[[^]]+\]' "$CONFIG_FILE" 2>/dev/null; then
+    printf 'ok'
+  elif [ -d "$HF_HOME/hub" ] && PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PYTHON_BIN" - "$(model_registry_manifest)" "$HF_HOME" >/dev/null 2>&1 <<'PY'
+import sys
+from pathlib import Path
+
+from mediaforge.models import ModelRegistry
+
+models = ModelRegistry.load(Path(sys.argv[1]), hf_home=Path(sys.argv[2])).all()
+raise SystemExit(0 if any(model.installed for model in models) else 1)
+PY
+  then
     printf 'ok'
   else
     printf 'missing'
@@ -231,6 +249,11 @@ doctor() {
   printf 'PIP_CACHE_DIR=%s\n' "$PIP_CACHE_DIR"
   printf 'UV_CACHE_DIR=%s\n' "$UV_CACHE_DIR"
   printf 'HF_HOME=%s\n' "$HF_HOME"
+  printf 'HF_ENABLE_PARALLEL_LOADING=%s\n' "$HF_ENABLE_PARALLEL_LOADING"
+  printf 'AMD_COMGR_CACHE=%s\n' "$AMD_COMGR_CACHE"
+  printf 'AMD_COMGR_CACHE_DIR=%s\n' "$AMD_COMGR_CACHE_DIR"
+  printf 'MIOPEN_CUSTOM_CACHE_DIR=%s\n' "$MIOPEN_CUSTOM_CACHE_DIR"
+  printf 'MIOPEN_USER_DB_PATH=%s\n' "$MIOPEN_USER_DB_PATH"
   printf 'disk_available_bytes=%s\n' "$available"
 }
 
@@ -281,6 +304,51 @@ path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 print(json.dumps(payload, indent=2))
 PY
   mv -- "$temporary" "$snapshot"
+}
+
+model_registry_manifest() {
+  printf '%s/worker_packs/image/models.json\n' "$REPO_ROOT"
+}
+
+list_models() {
+  ensure_env "$VENV" "$REPO_ROOT/requirements.txt" "core"
+  PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" "$VENV/bin/python" - \
+    "$(model_registry_manifest)" "$HF_HOME" <<'PY'
+import sys
+from pathlib import Path
+
+from mediaforge.models import ModelRegistry
+
+for model in ModelRegistry.load(Path(sys.argv[1]), hf_home=Path(sys.argv[2])).all():
+    print(
+        f"{model.model_id}\tstate={model.state}\tinstalled={'yes' if model.installed else 'no'}"
+        f"\thealthy={'yes' if model.healthy else 'no'}\trevision={model.revision}"
+    )
+PY
+}
+
+download_model() {
+  local name="$1" estimate required available hf
+  case "$name" in
+    flux2-klein-4b)
+      estimate=15988901735
+      required=21474836480
+      ;;
+    *) die "unknown model: $name" ;;
+  esac
+  available="$(df -B1 --output=avail "$HF_HOME" | tail -1 | tr -d ' ')"
+  info "model: black-forest-labs/FLUX.2-klein-4B at e7b7dc27f91deacad38e78976d1f2b499d76a294"
+  info "estimated download: $estimate bytes (duplicate single-file checkpoint excluded)"
+  info "disk check: $available bytes available; $required bytes required"
+  [ "$available" -ge "$required" ] || die "insufficient disk space; model download was not started"
+  ensure_env "$RUNTIME_ROOT/rocm-torch/.venv" "$RUNTIME_ROOT/rocm-torch/requirements.txt" "rocm-torch runtime" verbose
+  hf="$RUNTIME_ROOT/rocm-torch/.venv/bin/hf"
+  "$hf" download \
+    black-forest-labs/FLUX.2-klein-4B \
+    --revision e7b7dc27f91deacad38e78976d1f2b499d76a294 \
+    --exclude flux-2-klein-4b.safetensors \
+    --max-workers 4
+  list_models
 }
 
 build_runtime() {
@@ -396,6 +464,9 @@ Usage:
   ./mf.sh env build <name>
   ./mf.sh env list
   ./mf.sh env prune
+  ./mf.sh model list
+  ./mf.sh model download flux2-klein-4b
+  ./mf.sh bundle build <version> <output-dir>
   ./mf.sh test
 EOF
 }
@@ -413,6 +484,27 @@ main() {
         build) [ "$#" -eq 3 ] || die "env build requires one runtime name"; build_runtime "$3" ;;
         list) [ "$#" -eq 2 ] || die "env list takes no arguments"; list_envs ;;
         prune) [ "$#" -eq 2 ] || die "env prune takes no arguments"; prune_envs ;;
+        *) usage; exit 2 ;;
+      esac
+      ;;
+    model)
+      export_cache_paths yes
+      case "${2:-}" in
+        list) [ "$#" -eq 2 ] || die "model list takes no arguments"; list_models ;;
+        download) [ "$#" -eq 3 ] || die "model download requires one model name"; download_model "$3" ;;
+        *) usage; exit 2 ;;
+      esac
+      ;;
+    bundle)
+      case "${2:-}" in
+        build)
+          [ "$#" -eq 4 ] || die "bundle build requires version and output directory"
+          bundle_build_root="$RUNTIME_ROOT/bundle-build"
+          ensure_env "$bundle_build_root/.venv" "$bundle_build_root/requirements.txt" "bundle build"
+          "$bundle_build_root/.venv/bin/python" "$REPO_ROOT/scripts/build_release_bundle.py" \
+            --version "$3" --output-dir "$4" \
+            --pyinstaller "$bundle_build_root/.venv/bin/pyinstaller"
+          ;;
         *) usage; exit 2 ;;
       esac
       ;;

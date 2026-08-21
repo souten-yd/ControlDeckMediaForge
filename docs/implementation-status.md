@@ -400,7 +400,124 @@ The Media Forge path still contained `media-forge.sqlite3`, `assets/`, and `work
 
 ## Scope boundary
 
-No real image model or Diffusers adapter is included. MF0-0 through MF0-7 and
-therefore G0 are complete. The local LLM used to prove OpenCode tool invocation
-is not a Media Forge generation model or a G1 benchmark. G1 has not started; the
-ROCm runtime check remains environment qualification only.
+MF0-0 through MF0-7 / G0 remain complete. G1's real image route and R9700
+acceptance evidence are implemented, but G1 remains **IN PROGRESS** until the
+new release-bundle standard installation path is exercised end-to-end and its
+ControlDeck and Media Forge PRs are merged. G2 and later have not started.
+
+## G1 — local image generation (IN PROGRESS, 2026-08-21)
+
+### Adopted route and model gate
+
+`black-forest-labs/FLUX.2-klein-4B` at immutable revision
+`e7b7dc27f91deacad38e78976d1f2b499d76a294` is installed in the shared NVMe
+Hugging Face cache and is the measured automatic `image.text_to_image` route.
+The pinned weight set is 15,964,212,614 bytes; the cache repository occupied
+15,988,907,862 bytes. A repeated `./mf.sh model download flux2-klein-4b`
+completed in 0.36 seconds with 51,144 KiB maximum RSS and did not re-download
+weights. The provenance weight identity is
+`sha256:f3fcfa8fdaf5ebcd26c33cd53b485ec5ebe54939b5ace585b3f488278dfae278`;
+license is Apache-2.0. `docs/models.md` records all ten adoption-gate answers.
+
+The production registry exposes only `image.text_to_image`, state `available`,
+installed/healthy true, and confidence `measured`. `model_id` remains optional
+and internal routing still accepts `auto / fast / balanced / quality /
+low_vram / manual`. Premature edit capabilities were removed rather than
+claiming G2 behavior.
+
+### Cold-load diagnosis and bounded optimization
+
+Media Forge uses Diffusers, not ComfyUI, so ComfyUI Dynamic VRAM flags were not
+applicable to this route. The directly observed slow path was CPU/mmap loading
+followed by `pipeline.to("cuda")`: one 512x512 job took 852.587283 seconds.
+`device_map="cuda"` alone was still over 142.209076 seconds when canceled, and
+Diffusers-only mmap disabling still left the Qwen3 text encoder loading after
+353.455380 seconds when canceled.
+
+The adopted adapter explicitly loads `Qwen3ForCausalLM` and the FLUX pipeline
+with direct device placement and mmap disabled. Equivalent jobs then measured
+37.284804 seconds on the first optimized attempt, 25.762736 seconds on the
+second, and 14.936748–15.789333 seconds after cache/compiler warm-up. Enabling
+Hugging Face parallel loading reduced measured 512 load from 11.508421 to
+10.589401 seconds (about 8% of load time); it is retained as a secondary
+optimization, not described as the root fix. Persistent NVMe Hugging Face,
+AMD COMGR, and MIOpen cache paths are exported by `mf.sh`.
+
+### R9700 measurements and lease envelope
+
+All measurements below used the AMD Radeon AI PRO R9700 / gfx1201, ROCm, local
+NVMe, four inference steps, and a separate PyTorch worker process:
+
+```text
+1024x1024 first product job:       208.820067 s (included first kernel compilation)
+1024x1024 repeated product job:     18.009386 s
+1024x1024 parallel-loading repeat:  17.933032 s
+  adapter load / generation:        11.344260 / 3.537276 s
+512x512 committed-manifest job:     15.031645 s
+  adapter load / generation:        11.140961 / 1.471561 s
+worker peak RSS:                    16,384,692,224 bytes
+worker peak swap:                   0 bytes
+resident VRAM:                      0 bytes
+execution peak VRAM:                29,625,200,640 bytes
+cold-load peak VRAM:                32,275,578,880 bytes
+headroom:                            1,073,741,824 bytes
+broker reservation:                33,349,320,704 bytes
+R9700 total VRAM:                   34,208,743,424 bytes
+```
+
+The static lease estimate conservatively uses the worst observed cold-load
+peak. Every measured success acquired a Host lease, declared
+`estimated_runtime_sec=208.820067`, renewed it, and released it. Eight requested
+optimized generations completed without an unrequested failure. The two slow
+diagnostic variants were explicitly canceled and are not counted as failures.
+
+### Real product behavior
+
+- The same prompt/settings/seed produced byte-identical 512 and 1024 pairs.
+  The 1024 sample SHA-256 is
+  `bf83e5941312a6221b13b5c604876ba6b4ea2322c60b4265472f5d756ccdc162`.
+- The requested adult tomboy anime character with orange mesh hair was generated
+  by Media Forge itself. The retained 1024 asset is
+  `/data1tb/mediaforge-g1-e2e-XOqcbh/media-optimized-final/assets/asset_4134e5db722a401e9cac8d5106277f6a.png`.
+- An installed-host Playwright run completed Create -> ControlDeck Job -> Library
+  preview -> provenance in 17.551425 seconds. It observed a succeeded Host job,
+  a 512x512 asset, the real model/hash/license, and zero console/page errors.
+- Host cancellation at two seconds ended the Media job as `canceled` in
+  2.5947 seconds and left zero active leases.
+- SIGKILL of the sole real worker PID during a leased 1024 job was normalized to
+  `worker_crash` (`worker exited with code -9`) in 2.431407 seconds. The lease
+  count returned to zero and the core remained `healthy`.
+- With a live 15,891,902,464-byte llama.cpp model, managed Broker policy retained
+  chat availability (`READY`) and placed the image request in `waiting` with
+  reason `yield_load_cost_unknown`, queue position 1, cancel/lower-priority
+  actions, and the LLM identified as a yieldable blocker. It did not silently
+  overcommit or kill chat merely to satisfy the image request.
+- Latest full Media Forge regression run: 78 passed in 3.94 seconds with one
+  upstream Starlette/httpx deprecation warning. This is regression evidence,
+  not the runtime evidence above.
+
+### Release-bundle installation work
+
+The default installation is being changed from source checkout/build to a
+verified prebuilt bundle. A locally built `0.1.0` linux-x86_64 artifact is
+29,035,125 bytes with SHA-256
+`bcbde4514c6a5ef8d1c226509a4ca6afccb888e159fca10f9cb3fa933835c87e`.
+Its packaged binary reported `packaged=true`, served the real workspace and
+model API from port 9136, and returned HTTP 200 / `setup_required` on a clean
+persistent runtime directory. This proves the artifact runs; installation via
+the ControlDeck release provider, GitHub Release download, atomic update,
+rollback, and removal remain pending and are not yet claimed.
+
+### NOT TESTED / remaining before G1 completion
+
+- A kernel page-cache drop was intentionally not performed on the shared host;
+  fully cache-cold storage timing is NOT TESTED.
+- Qwen-Image fallback was not downloaded or benchmarked because the adopted
+  route passed the measured gate.
+- A natural hardware OOM is NOT TESTED. Error normalization and admission-floor
+  adjustment are covered by tests; unsafe oversized requests are rejected by
+  model limits before lease acquisition.
+- The standard GitHub release-bundle install/update/rollback/removal E2E and its
+  desktop/mobile Settings assertions are pending.
+- G2 strict edit, G3 character consistency, and G5 M5Stack expression/gesture
+  variants are NOT TESTED and were not started out of roadmap order.

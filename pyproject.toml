@@ -31,5 +31,5 @@ packages = ["backend/mediaforge"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
-pythonpath = ["backend"]
+pythonpath = ["backend", "."]
 testpaths = ["tests"]

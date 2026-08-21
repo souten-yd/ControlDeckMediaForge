@@ -111,6 +111,23 @@ class ControlDeckHostClient:
             raise ValueError("unsupported lease action")
         return await self._request(identity, "POST", f"/{ADDON_ID}/resources/leases/{lease_id}/{action}")
 
+    async def refresh_lease_identity(self, identity: HostIdentity, lease_id: str) -> HostIdentity:
+        value = await self._request(
+            identity,
+            "POST",
+            f"/{ADDON_ID}/resources/leases/{lease_id}/credential/refresh",
+        )
+        token = value.get("access_token")
+        if value.get("token_type") != "Bearer" or not isinstance(token, str) or not token or " " in token:
+            raise HostApiError("invalid_host_response", "ControlDeck did not return a refreshed service token")
+        refreshed = await self.authenticate({
+            "Authorization": f"Bearer {token}",
+            "X-Control-Deck-Addon-ID": identity.addon_id,
+        })
+        if refreshed.addon_id != identity.addon_id or refreshed.subject != identity.subject:
+            raise HostApiError("invalid_host_response", "ControlDeck changed the service token scope")
+        return refreshed
+
     async def grant_metadata(self, identity: HostIdentity, grant_id: str) -> dict[str, Any]:
         return await self._request(identity, "GET", f"/{ADDON_ID}/grants/{grant_id}")
 

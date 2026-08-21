@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "models": [
+    {
+      "model_id": "black-forest-labs/FLUX.2-klein-4B",
+      "family": "flux2-klein",
+      "version": "4b-distilled",
+      "revision": "e7b7dc27f91deacad38e78976d1f2b499d76a294",
+      "weights_hash": "sha256:f3fcfa8fdaf5ebcd26c33cd53b485ec5ebe54939b5ace585b3f488278dfae278",
+      "license": "Apache-2.0",
+      "runtime_adapter": "diffusers.flux2-klein",
+      "runtime_options": {"device_mode": "direct_device_map", "disable_mmap": true},
+      "generation_limits": {"max_width": 1024, "max_height": 1024, "max_pixels": 1048576},
+      "capabilities": [
+        "image.text_to_image"
+      ],
+      "hardware_backends": ["rocm", "cuda"],
+      "state": "available",
+      "measurements": {
+        "resident_vram_bytes": 0,
+        "execution_peak_vram_bytes": 29625200640,
+        "cold_load_peak_vram_bytes": 32275578880,
+        "headroom_vram_bytes": 1073741824,
+        "measured_runtime_sec": 208.820067
+      },
+      "measurement_confidence": "measured",
+      "policy_rank": {"auto": 10, "fast": 10, "balanced": 10, "quality": 20, "low_vram": 10},
+      "required_files": [
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "text_encoder/config.json",
+        "text_encoder/model.safetensors.index.json",
+        "tokenizer/chat_template.jinja",
+        "tokenizer/tokenizer.json",
+        "tokenizer/tokenizer_config.json",
+        "transformer/config.json",
+        "vae/config.json"
+      ],
+      "weights": [
+        {
+          "path": "text_encoder/model-00001-of-00002.safetensors",
+          "size_bytes": 4967215360,
+          "sha256": "8c0506e7f4936fa7e26183a4fd8da4e2bdbc5990ba64ae441f965d51228f36ea"
+        },
+        {
+          "path": "text_encoder/model-00002-of-00002.safetensors",
+          "size_bytes": 3077766632,
+          "sha256": "82f2bd839378541b0557bfabaf37c7d3d637071fdcb73302dedd7cf61162ce07"
+        },
+        {
+          "path": "transformer/diffusion_pytorch_model.safetensors",
+          "size_bytes": 7751109744,
+          "sha256": "9f29f9edcfdae452a653ffb51a534ca4decd389952c225724ff3b94042612a6e"
+        },
+        {
+          "path": "vae/diffusion_pytorch_model.safetensors",
+          "size_bytes": 168120878,
+          "sha256": "ca70d2202afe6415bdbcb8793ba8cd99fd159cfe6192381504d6c4d3036e0f04"
+        }
+      ]
+    }
+  ]
+}
