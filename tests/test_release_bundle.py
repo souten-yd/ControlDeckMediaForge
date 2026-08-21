@@ -49,7 +49,7 @@ def test_bundle_provision_writes_health_only_after_runtime_gpu_and_model(monkeyp
     assert result["runtime_reused"] is True and result["model_reused"] is True
     status = (feature_data / "environment-status.json").read_text(encoding="utf-8")
     assert '"status": "healthy"' in status
-    assert '"gcn_arch": "gfx1201"' in status
+    assert "gfx1201" in status
 
 
 def test_bundle_provision_failure_does_not_publish_healthy_status(monkeypatch, tmp_path):

@@ -125,7 +125,15 @@ def _write_environment_status(feature_data: Path, gpu: dict[str, object]) -> Non
         "setup": [
             {"id": "core_env", "label": "Packaged core", "state": "ok"},
             {"id": "rocm_runtime", "label": "Image worker environment", "state": "ok"},
-            {"id": "gpu", "label": "GPU verification", "state": "ok", "detail": gpu},
+            {
+                "id": "gpu",
+                "label": "GPU verification",
+                "state": "ok",
+                "detail": (
+                    f"{gpu.get('device', 'GPU')} {gpu.get('gcn_arch', 'unknown')} · "
+                    f"torch {gpu.get('torch_version', 'unknown')} · HIP {gpu.get('hip_version', 'unknown')}"
+                ),
+            },
             {"id": "model_library", "label": "Pinned model library", "state": "ok"},
             {"id": "disk", "label": "Free disk space", "state": "ok", "detail": f"{available} bytes available"},
         ],
@@ -147,7 +155,10 @@ def provision() -> dict[str, object]:
     with lock_path.open("w", encoding="ascii") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         model_present = _model_installed(cache)
-        required = RUNTIME_REQUIRED_FREE_BYTES + (0 if model_present else MODEL_REQUIRED_FREE_BYTES)
+        runtime_present = _runtime_current(feature_data / "runtimes" / "rocm-torch", requirements)
+        required = (0 if runtime_present else RUNTIME_REQUIRED_FREE_BYTES) + (
+            0 if model_present else MODEL_REQUIRED_FREE_BYTES
+        )
         if shutil.disk_usage(feature_data).free < required:
             raise RuntimeError(f"insufficient disk space; {required} bytes are required")
         python, runtime_reused = _ensure_runtime(feature_data, cache, requirements)
