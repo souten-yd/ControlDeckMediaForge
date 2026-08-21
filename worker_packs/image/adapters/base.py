@@ -13,6 +13,7 @@ class ImageGenerationRequest:
     steps: int
     seed: int
     output_path: Path
+    reference_paths: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)

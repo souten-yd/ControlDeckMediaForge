@@ -27,9 +27,10 @@ from .environment import setup_snapshot
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.files import GrantContentTooLarge, read_grant, require_grant_id
 from .host.jobs import HostExecution
-from .jobs import JobManager
+from .jobs import JobManager, ProfileResolutionError
 from .models import ModelRegistry, ModelRegistryError
 from .paths import contained
+from .profiles import ProfileInput, ReferenceCollectionInput
 from .semantic_review import OllamaSemanticReviewer, SemanticReviewer
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .store import Store
@@ -180,6 +181,10 @@ def create_app(
         if missing:
             raise HTTPException(status_code=403, detail={"code": "host_capability_not_granted"})
         try:
+            profile_snapshot = manager.resolve_profiles(value)
+        except ProfileResolutionError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
+        try:
             attached = await host.create_or_attach_job(identity, title="Media Forge image generation")
         except HostApiError as exc:
             raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from exc
@@ -192,7 +197,11 @@ def create_app(
             workload_class=workload_class,
             owns_terminal=attached.get("created") is True,
         )
-        return manager.submit_hosted(value, execution).model_dump(mode="json")
+        return manager.submit_hosted(
+            value,
+            execution,
+            profile_snapshot=profile_snapshot,
+        ).model_dump(mode="json")
 
     async def wait_for_terminal(job_id: str, timeout: float = 110.0) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -342,7 +351,10 @@ def create_app(
 
     @app.post("/api/v1/jobs", status_code=202)
     async def create_job(job_request: JobRequest, response: Response) -> dict[str, Any]:
-        job = manager.submit(job_request)
+        try:
+            job = manager.submit(job_request)
+        except ProfileResolutionError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
         response.headers["Location"] = f"/api/v1/jobs/{job.id}"
         return job.model_dump(mode="json")
 
@@ -368,6 +380,46 @@ def create_app(
     @app.get("/api/v1/assets")
     async def list_assets(limit: int = Query(default=100, ge=1, le=500)) -> dict[str, Any]:
         return {"items": [item.model_dump(mode="json") for item in store.list_assets(limit)]}
+
+    @app.get("/api/v1/reference-collections")
+    async def list_reference_collections() -> dict[str, Any]:
+        return {"items": [item.model_dump(mode="json") for item in store.list_reference_collections()]}
+
+    @app.post("/api/v1/reference-collections", status_code=201)
+    async def create_reference_collection(value: ReferenceCollectionInput) -> dict[str, Any]:
+        try:
+            return store.create_reference_collection(value).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=422, detail={"code": "reference_asset_not_found"}) from exc
+
+    @app.delete("/api/v1/reference-collections/{collection_id}", status_code=204)
+    async def delete_reference_collection(collection_id: str) -> Response:
+        try:
+            store.delete_reference_collection(collection_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "reference_collection_not_found"}) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail={"code": "reference_collection_in_use"}) from exc
+        return Response(status_code=204)
+
+    @app.get("/api/v1/profiles")
+    async def list_profiles() -> dict[str, Any]:
+        return {"items": [item.model_dump(mode="json") for item in store.list_profiles()]}
+
+    @app.post("/api/v1/profiles", status_code=201)
+    async def create_profile(value: ProfileInput) -> dict[str, Any]:
+        try:
+            return store.create_profile(value).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=422, detail={"code": "reference_collection_not_found"}) from exc
+
+    @app.delete("/api/v1/profiles/{profile_id}", status_code=204)
+    async def delete_profile(profile_id: str) -> Response:
+        try:
+            store.delete_profile(profile_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "profile_not_found"}) from exc
+        return Response(status_code=204)
 
     @app.post("/api/v1/assets/import", status_code=201)
     async def import_asset(
@@ -680,6 +732,24 @@ def create_app(
                         if len(content) > 12 * 1024 * 1024:
                             raise ValueError("asset preview exceeds the workspace transport bound")
                         result = {"mime_type": asset.mime_type, "base64": base64.b64encode(content).decode("ascii")}
+                    elif method == "reference_collections.list":
+                        result = {"items": [
+                            item.model_dump(mode="json") for item in store.list_reference_collections()
+                        ]}
+                    elif method == "reference_collections.create":
+                        result = store.create_reference_collection(
+                            ReferenceCollectionInput.model_validate(params)
+                        ).model_dump(mode="json")
+                    elif method == "reference_collections.delete":
+                        store.delete_reference_collection(str(params.get("collection_id", "")))
+                        result = {"deleted": True}
+                    elif method == "profiles.list":
+                        result = {"items": [item.model_dump(mode="json") for item in store.list_profiles()]}
+                    elif method == "profiles.create":
+                        result = store.create_profile(ProfileInput.model_validate(params)).model_dump(mode="json")
+                    elif method == "profiles.delete":
+                        store.delete_profile(str(params.get("profile_id", "")))
+                        result = {"deleted": True}
                     elif method == "models.list":
                         result = model_catalog()
                     else:
@@ -707,6 +777,7 @@ def create_app(
     @app.get("/library")
     @app.get("/jobs")
     @app.get("/models")
+    @app.get("/profiles")
     @app.get("/settings")
     async def workspace() -> HTMLResponse:
         nonlocal workspace_test_delay_pending

@@ -22,6 +22,7 @@ from .image_edit import StrictEditError, strict_edit_plan, validate_strict_edit
 from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
 from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
+from .profiles import profile_prompt
 from .routing import ModelRouteError, route_model
 from .semantic_review import SemanticReviewError, SemanticReviewer
 from .store import Store, utc_now
@@ -37,6 +38,12 @@ OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 
 
 class WorkerFailure(RuntimeError):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+class ProfileResolutionError(ValueError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
@@ -125,14 +132,24 @@ class JobManager:
         self._runner = None
 
     def submit(self, request: JobRequest) -> Job:
-        job = self.store.create_job(request)
+        job = self.store.create_job(request, profile_snapshot=self.resolve_profiles(request))
         self._queue.put_nowait(job.id)
         return job
 
-    def submit_hosted(self, request: JobRequest, execution: HostExecution) -> Job:
+    def submit_hosted(
+        self,
+        request: JobRequest,
+        execution: HostExecution,
+        *,
+        profile_snapshot: dict[str, Any] | None = None,
+    ) -> Job:
         if self.host_client is None:
             raise RuntimeError("ControlDeck Host client is not configured")
-        job = self.store.create_job(request, host_managed=True)
+        job = self.store.create_job(
+            request,
+            host_managed=True,
+            profile_snapshot=profile_snapshot if profile_snapshot is not None else self.resolve_profiles(request),
+        )
         self._host_executions[job.id] = execution
         self._queue.put_nowait(job.id)
         return job
@@ -304,8 +321,9 @@ class JobManager:
         except ModelRouteError as exc:
             raise WorkerFailure(exc.code, str(exc)) from exc
 
-    @staticmethod
-    def _model_capability(job: Job) -> str:
+    def _model_capability(self, job: Job) -> str:
+        if self.store.job_profile_snapshot(job.id).get("reference_asset_ids"):
+            return "image.multi_reference_edit"
         if job.request.operation == "image.generate":
             return "image.text_to_image"
         if job.request.constraints.get("edit_mode") == "outpaint":
@@ -319,6 +337,73 @@ class JobManager:
             if job.request.constraints.get("strict_edit") is True
             else "image.single_reference_edit"
         )
+
+    def resolve_profiles(self, request: JobRequest) -> dict[str, Any]:
+        requested = {
+            "character": request.constraints.get("character_profile_id"),
+            "style": request.constraints.get("style_profile_id"),
+        }
+        if all(value is None for value in requested.values()):
+            return {}
+        profiles: dict[str, Any] = {}
+        reference_asset_ids: list[str] = []
+        prompt_parts: list[str] = []
+        for expected_kind, profile_id in requested.items():
+            if profile_id is None:
+                continue
+            if not isinstance(profile_id, str):
+                raise ProfileResolutionError(
+                    "invalid_profile_id", f"{expected_kind} profile ID must be a string"
+                )
+            try:
+                profile = self.store.get_profile(profile_id)
+            except KeyError as exc:
+                raise ProfileResolutionError(
+                    "profile_not_found", f"{expected_kind} profile was not found"
+                ) from exc
+            if profile.kind != expected_kind:
+                raise ProfileResolutionError(
+                    "profile_kind_mismatch", f"expected a {expected_kind} profile"
+                )
+            collection = None
+            if profile.reference_collection_id is not None:
+                try:
+                    collection = self.store.get_reference_collection(profile.reference_collection_id)
+                except KeyError as exc:
+                    raise ProfileResolutionError(
+                        "reference_collection_not_found", "profile reference collection was not found"
+                    ) from exc
+                for asset_id in collection.asset_ids:
+                    try:
+                        asset = self.store.get_asset(asset_id)
+                    except KeyError as exc:
+                        raise ProfileResolutionError(
+                            "reference_asset_not_found", "profile reference asset was not found"
+                        ) from exc
+                    if asset.mime_type != "image/png":
+                        raise ProfileResolutionError(
+                            "unsupported_reference", "profile references must be PNG assets"
+                        )
+                    if asset_id not in reference_asset_ids:
+                        reference_asset_ids.append(asset_id)
+            profiles[expected_kind] = {
+                "profile": profile.model_dump(mode="json"),
+                "reference_collection": collection.model_dump(mode="json") if collection else None,
+            }
+            prompt_parts.append(profile_prompt(profile))
+        combined_references = list(dict.fromkeys(
+            [item.asset_id for item in request.inputs] + reference_asset_ids
+        ))
+        if len(combined_references) > 4:
+            raise ProfileResolutionError(
+                "profile_reference_limit",
+                "combined job and profile references may contain at most four assets",
+            )
+        return {
+            "profiles": profiles,
+            "reference_asset_ids": reference_asset_ids,
+            "prompt": "\n".join(prompt_parts),
+        }
 
     def _validate_input_assets(self, job: Job) -> None:
         if job.request.operation != "image.edit":
@@ -456,6 +541,10 @@ class JobManager:
                 "worker_output_dir": str(output_dir),
                 "worker_inputs": worker_inputs,
             }
+        snapshot = self.store.job_profile_snapshot(job.id)
+        if snapshot.get("prompt"):
+            target = payload["request"] if selected is not None else payload
+            target["intent"] = f"{job.request.intent}\n{snapshot['prompt']}"
         if job.request.qa.semantic:
             candidate_count = job.request.output.count + job.request.qa.max_regeneration_attempts
             target = payload["request"] if selected is not None else payload
@@ -651,14 +740,18 @@ class JobManager:
         )
 
     def _materialize_worker_inputs(self, job: Job, job_root: Path) -> dict[str, Any]:
-        if job.request.operation != "image.edit":
+        snapshot = self.store.job_profile_snapshot(job.id)
+        profile_asset_ids = snapshot.get("reference_asset_ids", [])
+        if job.request.operation != "image.edit" and not profile_asset_ids:
             return {}
         inputs_dir = contained(job_root, job_root / "inputs")
         inputs_dir.mkdir(mode=0o700)
-        source_id = job.request.inputs[0].asset_id
-        source_destination = contained(inputs_dir, inputs_dir / "source.png")
-        shutil.copyfile(self.store.asset_path(source_id), source_destination)
-        result = {"source_path": str(source_destination)}
+        result: dict[str, Any] = {}
+        if job.request.operation == "image.edit":
+            source_id = job.request.inputs[0].asset_id
+            source_destination = contained(inputs_dir, inputs_dir / "source.png")
+            shutil.copyfile(self.store.asset_path(source_id), source_destination)
+            result["source_path"] = str(source_destination)
         reference_paths: list[str] = []
         for index, reference in enumerate(job.request.inputs[1:], start=1):
             destination = contained(inputs_dir, inputs_dir / f"reference-{index}.png")
@@ -666,6 +759,16 @@ class JobManager:
             reference_paths.append(str(destination))
         if reference_paths:
             result["reference_paths"] = reference_paths
+        profile_reference_paths: list[str] = []
+        direct_input_ids = {item.asset_id for item in job.request.inputs}
+        for index, asset_id in enumerate(profile_asset_ids, start=1):
+            if asset_id in direct_input_ids:
+                continue
+            destination = contained(inputs_dir, inputs_dir / f"profile-reference-{index}.png")
+            shutil.copyfile(self.store.asset_path(str(asset_id)), destination)
+            profile_reference_paths.append(str(destination))
+        if profile_reference_paths:
+            result["profile_reference_paths"] = profile_reference_paths
         if (
             job.request.constraints.get("strict_edit") is True
             and job.request.constraints.get("edit_mode") != "outpaint"
@@ -913,11 +1016,20 @@ class JobManager:
             raise SemanticReviewError("local semantic reviewer is unavailable")
         target_count = job.request.output.count
         retry_budget = job.request.qa.max_regeneration_attempts
+        snapshot = self.store.job_profile_snapshot(job.id)
+        reference_paths = tuple(
+            self.store.asset_path(str(asset_id))
+            for asset_id in snapshot.get("reference_asset_ids", [])
+        )
         selected: list[int] = []
         reviews: dict[int, tuple[dict[str, Any], list[str], str]] = {}
         rejected = 0
         for index, (path, _, _, _) in enumerate(validated):
-            result = await self.semantic_reviewer.review(path, job.request.intent)
+            result = await self.semantic_reviewer.review(
+                path,
+                job.request.intent,
+                reference_paths=reference_paths,
+            )
             validation = {
                 "validator": "semantic.advisory",
                 "passed": result.accepted,
@@ -955,6 +1067,9 @@ class JobManager:
         reference_hashes = {
             item.asset_id: self.store.get_asset(item.asset_id).sha256 for item in job.request.inputs
         }
+        snapshot = self.store.job_profile_snapshot(job.id)
+        for asset_id in snapshot.get("reference_asset_ids", []):
+            reference_hashes[str(asset_id)] = self.store.get_asset(str(asset_id)).sha256
         if job.request.constraints.get("strict_edit") is True and job.request.constraints.get("edit_mode") != "outpaint":
             mask_id = str(job.request.constraints["editable_mask_asset_id"])
             reference_hashes[mask_id] = self.store.get_asset(mask_id).sha256
@@ -1014,6 +1129,7 @@ class JobManager:
                     "model_policy": job.request.model_policy,
                     "constraints": job.request.constraints,
                     "output": job.request.output.model_dump(mode="json"),
+                    **({"resolved_profiles": snapshot.get("profiles", {})} if snapshot else {}),
                 },
                 reference_asset_hashes=reference_hashes,
                 postprocessing=[str(item) for item in response.get("postprocessing", [])],

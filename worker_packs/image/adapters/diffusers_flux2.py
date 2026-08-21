@@ -203,9 +203,20 @@ class DiffusersFlux2KleinAdapter:
         self.load()
         assert self.pipeline is not None
         generator = torch.Generator(device="cuda").manual_seed(request.seed)
+        references: list[Image.Image] = []
+        for path in request.reference_paths:
+            try:
+                with Image.open(path) as opened:
+                    opened.load()
+                    reference = opened.convert("RGBA")
+            except (OSError, SyntaxError) as exc:
+                raise ValueError("profile reference image is not decodable") from exc
+            if reference.size != (request.width, request.height):
+                reference = reference.resize((request.width, request.height), Image.Resampling.LANCZOS)
+            references.append(reference)
         started = time.perf_counter()
         try:
-            result = self.pipeline(
+            arguments = dict(
                 prompt=request.prompt,
                 width=request.width,
                 height=request.height,
@@ -213,6 +224,9 @@ class DiffusersFlux2KleinAdapter:
                 guidance_scale=1.0,
                 generator=generator,
             )
+            if references:
+                arguments["image"] = references
+            result = self.pipeline(**arguments)
             image = result.images[0].convert("RGBA")
         finally:
             torch.cuda.synchronize()
@@ -268,8 +282,16 @@ class DiffusersFlux2KleinAdapter:
             plan = strict_edit_plan(request.source_path, request.mask_path)
             patch_box = self._edit_crop_box(plan.crop_box, plan.width, plan.height)
             reference = source.crop(patch_box)
-        elif request.edit_mode == "multi_reference":
-            references = [source]
+        if request.edit_mode == "outpaint":
+            generation_size = self._generation_size(request.width, request.height)
+        elif request.strict_edit:
+            assert isinstance(reference, Image.Image)
+            generation_size = self._generation_size(reference.width, reference.height)
+        else:
+            generation_size = self._generation_size(source.width, source.height)
+        if request.edit_mode == "multi_reference" or request.reference_paths:
+            assert isinstance(reference, Image.Image)
+            references = [reference]
             for path in request.reference_paths:
                 try:
                     with Image.open(path) as opened:
@@ -278,13 +300,6 @@ class DiffusersFlux2KleinAdapter:
                 except (OSError, SyntaxError) as exc:
                     raise ValueError("reference image is not decodable") from exc
             reference = references
-        if request.edit_mode == "outpaint":
-            generation_size = self._generation_size(request.width, request.height)
-        elif request.strict_edit:
-            assert isinstance(reference, Image.Image)
-            generation_size = self._generation_size(reference.width, reference.height)
-        else:
-            generation_size = self._generation_size(source.width, source.height)
         if isinstance(reference, list):
             reference = [
                 item if item.size == generation_size else item.resize(generation_size, Image.Resampling.LANCZOS)

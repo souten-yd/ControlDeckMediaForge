@@ -106,6 +106,7 @@ class ImageWorker:
         source_path: Path | None = None
         mask_path: Path | None = None
         reference_paths: tuple[Path, ...] = ()
+        profile_reference_paths: tuple[Path, ...] = ()
         source_size: tuple[int, int] | None = None
         if operation == "image.edit":
             source_path = _contained(self.work_root, worker_inputs.get("source_path"), "source image")
@@ -124,6 +125,15 @@ class ImageWorker:
                     source_size = source.size
             except (OSError, SyntaxError) as exc:
                 raise ValueError("source image is not decodable") from exc
+        profile_references_value = worker_inputs.get("profile_reference_paths", [])
+        if not isinstance(profile_references_value, list):
+            raise ValueError("worker profile references are invalid")
+        profile_reference_paths = tuple(
+            _contained(self.work_root, value, "profile reference image")
+            for value in profile_references_value
+        )
+        if len(profile_reference_paths) > 4:
+            raise ValueError("worker profile references exceed the bounded limit")
         width_default = source_size[0] if source_size is not None else 1024
         height_default = source_size[1] if source_size is not None else 1024
         width = _integer(constraints.get("width", width_default), "image width")
@@ -177,7 +187,7 @@ class ImageWorker:
                     output_path=output_path,
                     strict_edit=strict_edit,
                     edit_mode=edit_mode,
-                    reference_paths=reference_paths,
+                    reference_paths=reference_paths + profile_reference_paths,
                 ))
             else:
                 result = adapter.generate(ImageGenerationRequest(
@@ -187,6 +197,7 @@ class ImageWorker:
                     steps=steps,
                     seed=output_seed,
                     output_path=output_path,
+                    reference_paths=profile_reference_paths,
                 ))
             generation_sec += float(adapter.last_generation_sec or 0)
             outputs.append({

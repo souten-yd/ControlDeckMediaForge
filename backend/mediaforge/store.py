@@ -11,6 +11,7 @@ from typing import Any
 
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
 from .paths import contained
+from .profiles import Profile, ProfileInput, ReferenceCollection, ReferenceCollectionInput
 
 
 def utc_now() -> str:
@@ -43,6 +44,7 @@ class Store:
                     error_json TEXT,
                     cancel_requested INTEGER NOT NULL DEFAULT 0,
                     host_managed INTEGER NOT NULL DEFAULT 0,
+                    profile_snapshot_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -56,11 +58,25 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_assets_created ON assets(created_at DESC);
+                CREATE TABLE IF NOT EXISTS reference_collections (
+                    id TEXT PRIMARY KEY,
+                    value_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS profiles (
+                    id TEXT PRIMARY KEY,
+                    value_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
             columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(jobs)")}
             if "host_managed" not in columns:
                 connection.execute("ALTER TABLE jobs ADD COLUMN host_managed INTEGER NOT NULL DEFAULT 0")
+            if "profile_snapshot_json" not in columns:
+                connection.execute("ALTER TABLE jobs ADD COLUMN profile_snapshot_json TEXT NOT NULL DEFAULT '{}'")
             connection.execute(
                 """UPDATE jobs SET status = ?, phase = NULL,
                    error_json = ?, updated_at = ? WHERE status = ?""",
@@ -98,16 +114,30 @@ class Store:
         connection.execute("PRAGMA foreign_keys=ON")
         return connection
 
-    def create_job(self, request: JobRequest, *, host_managed: bool = False) -> Job:
+    def create_job(
+        self,
+        request: JobRequest,
+        *,
+        host_managed: bool = False,
+        profile_snapshot: dict[str, Any] | None = None,
+    ) -> Job:
         now = utc_now()
         job_id = f"job_{uuid.uuid4().hex}"
         with self._lock, self._connect() as connection:
             connection.execute(
                 """INSERT INTO jobs
                    (id, status, phase, progress, request_json, asset_ids_json, error_json,
-                    cancel_requested, host_managed, created_at, updated_at)
-                   VALUES (?, ?, NULL, 0, ?, '[]', NULL, 0, ?, ?, ?)""",
-                (job_id, JobStatus.QUEUED, request.model_dump_json(), int(host_managed), now, now),
+                    cancel_requested, host_managed, profile_snapshot_json, created_at, updated_at)
+                   VALUES (?, ?, NULL, 0, ?, '[]', NULL, 0, ?, ?, ?, ?)""",
+                (
+                    job_id,
+                    JobStatus.QUEUED,
+                    request.model_dump_json(),
+                    int(host_managed),
+                    json.dumps(profile_snapshot or {}, separators=(",", ":")),
+                    now,
+                    now,
+                ),
             )
         return self.get_job(job_id)
 
@@ -129,6 +159,18 @@ class Store:
                 "SELECT id FROM jobs WHERE status = ? AND cancel_requested = 0 ORDER BY created_at", (JobStatus.QUEUED,)
             ).fetchall()
         return [str(row["id"]) for row in rows]
+
+    def job_profile_snapshot(self, job_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT profile_snapshot_json FROM jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(job_id)
+        value = json.loads(row["profile_snapshot_json"])
+        if not isinstance(value, dict):
+            raise ValueError("stored profile snapshot is invalid")
+        return value
 
     def update_job(
         self,
@@ -222,6 +264,82 @@ class Store:
         with self._connect() as connection:
             rows = connection.execute("SELECT metadata_json FROM assets ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
         return [Asset.model_validate_json(row["metadata_json"]) for row in rows]
+
+    def create_reference_collection(self, value: ReferenceCollectionInput) -> ReferenceCollection:
+        for asset_id in value.asset_ids:
+            self.get_asset(asset_id)
+        now = utc_now()
+        result = ReferenceCollection(
+            id=f"refs_{uuid.uuid4().hex}",
+            created_at=now,
+            updated_at=now,
+            **value.model_dump(),
+        )
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "INSERT INTO reference_collections (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (result.id, result.model_dump_json(), now, now),
+            )
+        return result
+
+    def get_reference_collection(self, collection_id: str) -> ReferenceCollection:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT value_json FROM reference_collections WHERE id = ?", (collection_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(collection_id)
+        return ReferenceCollection.model_validate_json(row["value_json"])
+
+    def list_reference_collections(self) -> list[ReferenceCollection]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT value_json FROM reference_collections ORDER BY created_at DESC"
+            ).fetchall()
+        return [ReferenceCollection.model_validate_json(row["value_json"]) for row in rows]
+
+    def delete_reference_collection(self, collection_id: str) -> None:
+        if any(item.reference_collection_id == collection_id for item in self.list_profiles()):
+            raise ValueError("reference collection is used by a profile")
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute("DELETE FROM reference_collections WHERE id = ?", (collection_id,))
+            if cursor.rowcount != 1:
+                raise KeyError(collection_id)
+
+    def create_profile(self, value: ProfileInput) -> Profile:
+        if value.reference_collection_id is not None:
+            self.get_reference_collection(value.reference_collection_id)
+        now = utc_now()
+        result = Profile(
+            id=f"{value.kind}_{uuid.uuid4().hex}",
+            created_at=now,
+            updated_at=now,
+            **value.model_dump(),
+        )
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "INSERT INTO profiles (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (result.id, result.model_dump_json(), now, now),
+            )
+        return result
+
+    def get_profile(self, profile_id: str) -> Profile:
+        with self._connect() as connection:
+            row = connection.execute("SELECT value_json FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+        if row is None:
+            raise KeyError(profile_id)
+        return Profile.model_validate_json(row["value_json"])
+
+    def list_profiles(self) -> list[Profile]:
+        with self._connect() as connection:
+            rows = connection.execute("SELECT value_json FROM profiles ORDER BY created_at DESC").fetchall()
+        return [Profile.model_validate_json(row["value_json"]) for row in rows]
+
+    def delete_profile(self, profile_id: str) -> None:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
+            if cursor.rowcount != 1:
+                raise KeyError(profile_id)
 
     def _asset_row(self, asset_id: str) -> sqlite3.Row:
         with self._connect() as connection:

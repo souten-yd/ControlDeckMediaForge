@@ -37,7 +37,13 @@ class Reviewer:
     async def available(self) -> bool:
         return self.is_available
 
-    async def review(self, path: Path, intent: str) -> SemanticReviewResult:
+    async def review(
+        self,
+        path: Path,
+        intent: str,
+        *,
+        reference_paths: tuple[Path, ...] = (),
+    ) -> SemanticReviewResult:
         self.calls.append(path)
         accepted = self.decisions.popleft()
         return SemanticReviewResult(accepted, "clear match" if accepted else "missing wave", "test-vlm")
@@ -51,7 +57,7 @@ def test_reviewer_rejects_non_loopback_origin(origin: str):
 
 def test_ollama_request_forces_cpu_only_and_bounded_context():
     reviewer = OllamaSemanticReviewer("http://127.0.0.1:11434", "qwen3-vl:2b")
-    payload = reviewer.request_payload("image", "intent")
+    payload = reviewer.request_payload(["image"], "intent")
     assert payload["options"] == {"temperature": 0, "num_gpu": 0, "num_ctx": 4096}
     assert payload["stream"] is False
     assert payload["think"] is False

@@ -115,6 +115,31 @@ filesystem path. Imported assets carry `asset.import` provenance with
 
 Asset and provenance documents conform to [`schemas/asset.json`](../schemas/asset.json) and [`schemas/provenance.json`](../schemas/provenance.json). A provenance sidecar is stored next to every immutable asset copy. The SQLite index can be rebuilt in a future maintenance operation without losing the producing facts.
 
+## Reference collections and profiles
+
+- `GET /api/v1/reference-collections`
+- `POST /api/v1/reference-collections`
+- `DELETE /api/v1/reference-collections/{collection_id}`
+- `GET /api/v1/profiles`
+- `POST /api/v1/profiles`
+- `DELETE /api/v1/profiles/{profile_id}`
+
+Reference collections conform to
+[`schemas/reference-collection.json`](../schemas/reference-collection.json) and
+contain one to four immutable asset IDs, never paths. Character and style
+profiles conform to [`schemas/profile.json`](../schemas/profile.json); their
+definitions are structured separately and may point to one reference
+collection.
+
+Generation and editing keep their existing operations. Callers optionally set
+`constraints.character_profile_id` and/or `constraints.style_profile_id`.
+Media Forge resolves and snapshots the full profile and collection before Host
+Job creation, routes reference-conditioned work by capability, and supplies
+only contained job-local image copies to the worker. A maximum of four unique
+job/profile reference assets is enforced. Provenance retains the full resolved
+snapshot plus every reference asset hash, so deleting a profile does not erase
+the producing facts. Jobs without profiles follow the unchanged G1/G2 route.
+
 Parentage uses asset IDs only. Host paths are not part of this API.
 
 ## Add-on execution endpoints
