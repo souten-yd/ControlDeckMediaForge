@@ -5,6 +5,7 @@
 ```text
 docs/base-plan.md                    設計の正（何を作るか・なぜそう決めたか）
 docs/controldeck-integration-plan.md 統合の正（ホストとの境界）
+docs/design-workspace-ux.md          UI/UX の正（画面構成・段階開示・レイアウト）
 docs/implementation/                 実装の指示（どの順で・何を確認して進めるか）
 ```
 
@@ -20,6 +21,7 @@ docs/implementation/                 実装の指示（どの順で・何を確�
 | 1 | [goal-roadmap.md](goal-roadmap.md) | MediaForge | 全体像。G0〜G10 のゴール機能と進め方の原則 |
 | 2 | [mf0-0-environment.md](mf0-0-environment.md) | MediaForge | 実行環境の分離・自動整備・削除安全性。**最初に実施** |
 | 3 | [mf0-addon-core.md](mf0-addon-core.md) | MediaForge | G0。Add-on として成立させる（fake worker） |
+| 4 | [ux1-workspace.md](ux1-workspace.md) | MediaForge | G0〜G3 の機能を使える形にする workspace UI。設計は `../design-workspace-ux.md` |
 | — | [host-load-profile-fix.md](host-load-profile-fix.md) | **ControlDeck** | ホスト側の LLM 退避コスト計測の修正。G7 の前提 |
 
 `host-load-profile-fix.md` だけ作業対象が ControlDeck リポジトリ。
