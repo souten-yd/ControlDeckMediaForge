@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/settings-about-details
-PR          Settings詳細移動 #52 open。#48 / #50 / CI v2計画 #51 マージ済み
-状態        PR #52 local full gateと実browser確認済み。merge待ち
-基準値      ./mf.sh test = 275 passed（28.86秒）
+ブランチ    ci/provider-neutral-ai-cutover
+PR          CI-1 #53 open。Settings詳細移動 #52 merge済み
+状態        PR #53 exact implementation head 2e225a7。実Host acceptanceとfull gate済み
+基準値      ./mf.sh test = 275 passed（23.36秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
@@ -36,7 +36,7 @@ PR          Settings詳細移動 #52 open。#48 / #50 / CI v2計画 #51 マー�
 ## 次にやること（1 つだけ）
 
 ```text
-Settings詳細移動PRをmergeし、CI-1 provider-neutral AI cutoverへ進む。
+CI-1 provider-neutral AI cutoverの最終gate、PR、mergeを完了する。
   優先        docs/implementation/creative-intelligence.md のCI-1〜CI-6を順番に完了
   保留        Wan runtime／R9700生成評価と他の動画model download
   次UI        画像model catalog複数候補化
@@ -84,6 +84,10 @@ Settings詳細移動PRをmergeし、CI-1 provider-neutral AI cutoverへ進む。
      利用者がM0〜M2を先行指定し、候補の実download確認も明示したため、boundedなmanaged
      snapshot取得までは先行する。R9700 worker実行、available/default昇格、G7 APIには進まない。
      C0 は CameraSpec を共通化し、MotionSpec を後から加法的に載せられる形にする。
+6. 次回release時のControlDeck trusted catalog
+     CI-1でaddon manifestへ`ai.inference`を加法追加した。source manifestの実Host受け入れは
+     完了したが、v0.3.0向けtrusted catalogのallowlistにはまだ無い。CI-6 release時に
+     artifact SHA/version更新と同じControlDeck PRで許可する。Media固有code追加は不要。
 ```
 
 ## リポジトリの状態で注意すること

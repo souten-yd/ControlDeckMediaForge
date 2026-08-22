@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import base64
-from io import BytesIO
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import urlsplit
 
-import httpx
-from PIL import Image, UnidentifiedImageError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from .host.ai import HostAIError, HostAIGateway
+from .host.client import HostIdentity
+from .vision import VisionInputError, vision_message
 
 
 REVIEW_SCHEMA: dict[str, Any] = {
@@ -23,8 +23,16 @@ REVIEW_SCHEMA: dict[str, Any] = {
 }
 
 
+class _ReviewPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    accepted: bool
+    summary: str = Field(max_length=300)
+
+
 class SemanticReviewError(RuntimeError):
-    pass
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -35,7 +43,7 @@ class SemanticReviewResult:
 
 
 class SemanticReviewer(Protocol):
-    async def available(self) -> bool: ...
+    async def available(self, identity: HostIdentity | None = None) -> bool: ...
 
     async def review(
         self,
@@ -43,42 +51,21 @@ class SemanticReviewer(Protocol):
         intent: str,
         *,
         reference_paths: tuple[Path, ...] = (),
+        identity: HostIdentity | None = None,
     ) -> SemanticReviewResult: ...
 
 
-def loopback_origin(value: str) -> str:
-    parsed = urlsplit(value)
-    if (
-        parsed.scheme != "http"
-        or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
-        or parsed.username
-        or parsed.password
-        or parsed.path not in {"", "/"}
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise ValueError("semantic reviewer URL must be a loopback HTTP origin")
-    return value.rstrip("/")
-
-
-class OllamaSemanticReviewer:
-    def __init__(self, origin: str, model: str, *, timeout_sec: float = 120.0):
-        self.origin = loopback_origin(origin)
-        if not model or len(model) > 200:
-            raise ValueError("semantic reviewer model must be a bounded non-empty name")
-        if timeout_sec <= 0:
-            raise ValueError("semantic reviewer timeout must be positive")
-        self.model = model
+class HostSemanticReviewer:
+    def __init__(self, gateway: HostAIGateway, *, timeout_sec: float = 120.0):
+        self.gateway = gateway
         self.timeout_sec = timeout_sec
 
-    async def available(self) -> bool:
+    async def available(self, identity: HostIdentity | None = None) -> bool:
+        if identity is None or "ai.inference" not in identity.granted_capabilities:
+            return False
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                response = await client.get(f"{self.origin}/api/tags")
-                response.raise_for_status()
-            models = response.json().get("models", [])
-            return any(item.get("name") == self.model for item in models if isinstance(item, dict))
-        except (httpx.HTTPError, json.JSONDecodeError, TypeError, ValueError):
+            return await self.gateway.available(identity, "vision.analyze")
+        except HostAIError:
             return False
 
     async def review(
@@ -87,65 +74,37 @@ class OllamaSemanticReviewer:
         intent: str,
         *,
         reference_paths: tuple[Path, ...] = (),
+        identity: HostIdentity | None = None,
     ) -> SemanticReviewResult:
-        if len(reference_paths) > 4:
-            raise SemanticReviewError("semantic review references exceeded their bound")
-        images = [path, *reference_paths]
-        encoded = [base64.b64encode(bounded_review_image(item)).decode("ascii") for item in images]
-        payload = self.request_payload(encoded, intent)
+        if identity is None or "ai.inference" not in identity.granted_capabilities:
+            raise SemanticReviewError("host_ai_not_granted", "ControlDeck AI access is not granted")
+        prompt = (
+            "The first image is the generated candidate. The optional second image is a sheet of "
+            "identity/style references. Review whether the candidate visibly satisfies the user's intent "
+            "and remains consistent with those references. Judge only semantic content and obvious visual "
+            "defects; deterministic file validation is handled separately. Return accepted=true unless "
+            f"there is a clear mismatch. User intent: {intent}"
+        )
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_sec) as client:
-                response = await client.post(f"{self.origin}/api/chat", json=payload)
-                response.raise_for_status()
-            body = response.json()
-            result = json.loads(body["message"]["content"])
-            accepted = result["accepted"]
-            summary = result["summary"]
-            if not isinstance(accepted, bool) or not isinstance(summary, str):
-                raise TypeError("semantic review result has invalid types")
-            return SemanticReviewResult(
-                accepted=accepted,
-                summary=summary[:300],
-                reviewer=f"ollama:{self.model}",
+            result = await self.gateway.complete(
+                identity,
+                "vision.analyze",
+                [vision_message(prompt, path, reference_paths)],
+                response_format={
+                    "type": "json_schema",
+                    "name": "mediaforge_semantic_review",
+                    "schema": REVIEW_SCHEMA,
+                    "strict": True,
+                },
+                max_tokens=512,
+                timeout_seconds=max(1, min(300, int(self.timeout_sec))),
             )
-        except (httpx.HTTPError, json.JSONDecodeError, KeyError, OSError, TypeError) as exc:
-            raise SemanticReviewError("local semantic reviewer failed") from exc
-
-    def request_payload(self, images: list[str], intent: str) -> dict[str, Any]:
-        return {
-            "model": self.model,
-            "stream": False,
-            "think": False,
-            # Keep the CPU model only long enough for bounded retries; do not
-            # retain several GiB of RAM as a standing Media Forge dependency.
-            "keep_alive": "1m",
-            "format": REVIEW_SCHEMA,
-            "options": {"temperature": 0, "num_gpu": 0, "num_ctx": 4096},
-            "messages": [{
-                "role": "user",
-                "content": (
-                    "The first image is the generated candidate. Any later images are identity/style references. "
-                    "Review whether the candidate visibly satisfies the user's intent and remains consistent "
-                    "with those references. "
-                    "Judge only semantic content and obvious visual defects; deterministic file "
-                    "validation is handled separately. Return accepted=true unless there is a "
-                    f"clear mismatch. User intent: {intent}"
-                ),
-                "images": images,
-            }],
-        }
-
-
-def bounded_review_image(path: Path) -> bytes:
-    try:
-        with Image.open(path) as opened:
-            image = opened.convert("RGB")
-    except (OSError, UnidentifiedImageError) as exc:
-        raise SemanticReviewError("semantic review image is not decodable") from exc
-    image.thumbnail((768, 768), Image.Resampling.LANCZOS)
-    buffer = BytesIO()
-    image.save(buffer, format="JPEG", quality=85, optimize=True)
-    value = buffer.getvalue()
-    if len(value) > 2 * 1024 * 1024:
-        raise SemanticReviewError("semantic review image exceeded its bound")
-    return value
+            payload = _ReviewPayload.model_validate(json.loads(result.content))
+        except HostAIError as exc:
+            code = "vision_result_invalid" if exc.code == "host_ai_invalid_response" else exc.code
+            raise SemanticReviewError(code, str(exc)) from exc
+        except (VisionInputError, json.JSONDecodeError, ValidationError, TypeError) as exc:
+            raise SemanticReviewError(
+                "vision_result_invalid", "ControlDeck returned an invalid vision result"
+            ) from exc
+        return SemanticReviewResult(payload.accepted, payload.summary, "control-deck:vision.analyze")

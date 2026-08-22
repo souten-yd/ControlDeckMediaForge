@@ -35,9 +35,7 @@ class Settings:
     creative_layout_manifest: Path = REPOSITORY_ROOT / "creative/layouts.json"
     hf_home: Path = Path.home() / ".cache/huggingface"
     image_runtime_python: Path = REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python"
-    semantic_reviewer_url: str = "http://127.0.0.1:11434"
-    semantic_reviewer_model: str = "qwen3-vl:2b-instruct"
-    semantic_reviewer_timeout_sec: float = 120.0
+    host_ai_timeout_sec: float = 120.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "control_deck_url", _control_deck_origin(self.control_deck_url))
@@ -59,16 +57,13 @@ class Settings:
             "image_runtime_python",
             Path(os.path.abspath(self.image_runtime_python)),
         )
-        from .semantic_review import loopback_origin
-
-        object.__setattr__(self, "semantic_reviewer_url", loopback_origin(self.semantic_reviewer_url))
         if (
             self.worker_timeout_sec <= 0
             or self.host_request_timeout_sec <= 0
             or self.host_lease_renew_sec <= 0
-            or self.semantic_reviewer_timeout_sec <= 0
+            or self.host_ai_timeout_sec <= 0
         ):
-            raise ValueError("worker, host, and reviewer timeouts must be positive")
+            raise ValueError("worker and host timeouts must be positive")
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -104,13 +99,5 @@ class Settings:
                     REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python",
                 )
             ),
-            semantic_reviewer_url=os.environ.get(
-                "MEDIA_FORGE_SEMANTIC_REVIEWER_URL", "http://127.0.0.1:11434"
-            ),
-            semantic_reviewer_model=os.environ.get(
-                "MEDIA_FORGE_SEMANTIC_REVIEWER_MODEL", "qwen3-vl:2b-instruct"
-            ),
-            semantic_reviewer_timeout_sec=float(
-                os.environ.get("MEDIA_FORGE_SEMANTIC_REVIEWER_TIMEOUT_SEC", "120")
-            ),
+            host_ai_timeout_sec=float(os.environ.get("MEDIA_FORGE_HOST_AI_TIMEOUT_SEC", "120")),
         )

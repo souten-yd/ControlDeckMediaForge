@@ -80,9 +80,10 @@ class HostAIGateway:
                 "POST",
                 f"/{identity.addon_id}/ai/complete",
                 json=payload,
+                timeout_sec=timeout_seconds + 5,
             )
         except HostApiError as exc:
-            raise self._normalize_host_error(exc) from exc
+            raise self._normalize_host_error(exc, capability=capability) from exc
         content = value.get("content")
         returned_capability = value.get("capability")
         if not isinstance(content, str) or returned_capability != capability:
@@ -92,11 +93,18 @@ class HostAIGateway:
         return HostAIResult(content=content, capability=capability)
 
     @staticmethod
-    def _normalize_host_error(exc: HostApiError) -> HostAIError:
+    def _normalize_host_error(
+        exc: HostApiError, *, capability: HostAICapability | None = None
+    ) -> HostAIError:
         if exc.status_code == 403:
             return HostAIError("host_ai_not_granted", "ControlDeck AI access is not granted")
         if exc.status_code == 503:
-            return HostAIError("host_ai_capability_unavailable", "Requested ControlDeck AI capability is unavailable")
+            if capability == "vision.analyze":
+                return HostAIError(
+                    "vision_analyzer_unavailable",
+                    "Requested ControlDeck vision capability is unavailable",
+                )
+            return HostAIError("host_ai_unavailable", "Requested ControlDeck AI capability is unavailable")
         if exc.code == "host_unreachable":
             return HostAIError("host_ai_unavailable", "ControlDeck AI service is unavailable")
-        return HostAIError("host_ai_failed", "ControlDeck AI request failed")
+        return HostAIError("host_ai_unavailable", "ControlDeck AI request failed")

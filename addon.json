@@ -23,7 +23,8 @@
     "jobs.read",
     "jobs.write",
     "notifications.show",
-    "resources.acquire"
+    "resources.acquire",
+    "ai.inference"
   ],
   "contributions": {
     "navigation": [

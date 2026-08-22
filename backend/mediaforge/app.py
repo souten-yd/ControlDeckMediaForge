@@ -39,7 +39,7 @@ from .evaluator import (
     CreativeEvaluationError,
     CreativeEvaluator,
     EvaluationRequest,
-    OllamaCreativeEvaluator,
+    HostCreativeEvaluator,
 )
 from .events import (
     JobEventBus,
@@ -49,6 +49,7 @@ from .events import (
 )
 from .environment import setup_snapshot
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
+from .host.ai import HostAIGateway
 from .host.files import GrantContentTooLarge, read_grant, require_grant_id
 from .host.jobs import HostExecution
 from .jobs import JobManager, ProfileResolutionError
@@ -61,7 +62,7 @@ from .models import (
 )
 from .paths import contained
 from .profiles import ProfileInput, ReferenceCollectionInput
-from .semantic_review import OllamaSemanticReviewer, SemanticReviewer
+from .semantic_review import HostSemanticReviewer, SemanticReviewer
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .preferences import PreferenceError
 from .store import Store, utc_now
@@ -125,15 +126,12 @@ def create_app(
         resolved.control_deck_url,
         timeout_sec=resolved.host_request_timeout_sec,
     )
-    reviewer = semantic_reviewer or OllamaSemanticReviewer(
-        resolved.semantic_reviewer_url,
-        resolved.semantic_reviewer_model,
-        timeout_sec=resolved.semantic_reviewer_timeout_sec,
+    ai_gateway = HostAIGateway(host)
+    reviewer = semantic_reviewer or HostSemanticReviewer(
+        ai_gateway, timeout_sec=resolved.host_ai_timeout_sec
     )
-    evaluator = creative_evaluator or OllamaCreativeEvaluator(
-        resolved.semantic_reviewer_url,
-        resolved.semantic_reviewer_model,
-        timeout_sec=resolved.semantic_reviewer_timeout_sec,
+    evaluator = creative_evaluator or HostCreativeEvaluator(
+        ai_gateway, timeout_sec=resolved.host_ai_timeout_sec
     )
     manager = JobManager(
         store,
@@ -485,11 +483,15 @@ def create_app(
             {"id": "portrait", "label_key": "size.portrait", "width": portrait[0], "height": portrait[1]},
         ]
 
-    async def capability_document() -> dict[str, Any]:
-        semantic_available, evaluator_available = await asyncio.gather(
-            reviewer.available(),
-            evaluator.available(),
-        )
+    async def capability_document(identity: HostIdentity | None = None) -> dict[str, Any]:
+        if isinstance(reviewer, HostSemanticReviewer) and isinstance(evaluator, HostCreativeEvaluator):
+            vision_available = await reviewer.available(identity)
+            semantic_available = evaluator_available = vision_available
+        else:
+            semantic_available, evaluator_available = await asyncio.gather(
+                reviewer.available(identity),
+                evaluator.available(identity),
+            )
         return {
             "contract_version": "1.0",
             "capabilities": {
@@ -503,12 +505,12 @@ def create_app(
                 "image.semantic_review": (
                     {"state": "available"}
                     if semantic_available
-                    else {"state": "unavailable", "reason": "local_vlm_not_installed"}
+                    else {"state": "unavailable", "reason": "vision_analyzer_unavailable"}
                 ),
                 "image.creative_evaluation": (
                     {"state": "available"}
                     if evaluator_available
-                    else {"state": "unavailable", "reason": "local_vlm_not_installed"}
+                    else {"state": "unavailable", "reason": "vision_analyzer_unavailable"}
                 ),
                 "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
@@ -806,10 +808,26 @@ def create_app(
         store.update_creative_composition(record)
         return composition_projection(record)
 
-    async def evaluate_creative_candidates(payload: dict[str, Any]) -> dict[str, Any]:
+    async def evaluate_creative_candidates(
+        payload: dict[str, Any], identity: HostIdentity | None = None
+    ) -> dict[str, Any]:
         request = EvaluationRequest.model_validate(payload)
-        if not await evaluator.available():
-            raise CreativeEvaluationError("local creative evaluator is unavailable")
+        if identity is None and isinstance(evaluator, HostCreativeEvaluator):
+            raise CreativeEvaluationError(
+                "host_ai_not_granted", "ControlDeck AI access is not granted"
+            )
+        if (
+            identity is not None
+            and "ai.inference" not in identity.granted_capabilities
+            and isinstance(evaluator, HostCreativeEvaluator)
+        ):
+            raise CreativeEvaluationError(
+                "host_ai_not_granted", "ControlDeck AI access is not granted"
+            )
+        if not await evaluator.available(identity):
+            raise CreativeEvaluationError(
+                "vision_analyzer_unavailable", "ControlDeck vision analyzer is unavailable"
+            )
         reference_paths = tuple(store.asset_path(asset_id) for asset_id in request.reference_asset_ids)
         results = []
         for asset_id in request.asset_ids:
@@ -821,6 +839,7 @@ def create_app(
                 request.intent,
                 creative_plan=request.creative_plan,
                 reference_paths=reference_paths,
+                identity=identity,
             )
             results.append({
                 "asset_id": asset_id,
@@ -1001,10 +1020,10 @@ def create_app(
 
     @app.post("/addon/v1/agent/capabilities")
     async def agent_capabilities(request: Request) -> dict[str, Any]:
-        await authorize_host(request)
+        identity = await authorize_host(request)
         payload = await request.json()
         reject_host_paths(payload)
-        return await capabilities()
+        return await capability_document(identity)
 
     @app.post("/addon/v1/agent/generate")
     async def agent_generate(request: Request) -> dict[str, Any]:
@@ -1341,7 +1360,7 @@ def create_app(
                         available_references = {
                             item.asset_id for item in request.inputs
                         } | set(profile_snapshot.get("reference_asset_ids", []))
-                        capability_value = await capability_document()
+                        capability_value = await capability_document(identity)
                         result = creative_compiler.compile(
                             request,
                             creative_spec,
@@ -1385,11 +1404,11 @@ def create_app(
                             str(params.get("composition_id", ""))
                         )
                     elif method == "creative.evaluate":
-                        result = await evaluate_creative_candidates(params)
+                        result = await evaluate_creative_candidates(params, identity)
                     elif method == "capabilities.get":
                         envelope = size_envelope()
                         result = {
-                            **await capability_document(),
+                            **await capability_document(identity),
                             "envelope": envelope,
                             "presets": size_presets(envelope),
                         }
@@ -1466,7 +1485,7 @@ def create_app(
                     await websocket.send_json({
                         "id": request_id,
                         "ok": False,
-                        "error": {"code": "creative_evaluation_unavailable", "message": str(exc)[:300]},
+                        "error": {"code": exc.code, "message": str(exc)[:300]},
                     })
                 except (KeyError, ValueError, ValidationError) as exc:
                     await websocket.send_json({
@@ -1617,7 +1636,7 @@ def create_app(
         except CreativeEvaluationError as exc:
             raise HTTPException(
                 status_code=422,
-                detail={"code": "creative_evaluation_unavailable", "message": str(exc)[:300]},
+                detail={"code": exc.code, "message": str(exc)[:300]},
             ) from exc
         except (ValueError, ValidationError) as exc:
             raise HTTPException(

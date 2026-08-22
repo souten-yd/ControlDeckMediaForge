@@ -24,7 +24,7 @@ from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .profiles import profile_prompt
 from .routing import ModelRouteError, route_model
-from .semantic_review import SemanticReviewError, SemanticReviewer
+from .semantic_review import HostSemanticReviewer, SemanticReviewError, SemanticReviewer
 from .store import Store, utc_now
 from .validators import validate_png
 
@@ -762,7 +762,7 @@ class JobManager:
                 reporter,
                 status=JobStatus.FAILED,
                 phase="semantic_review",
-                error=ErrorDetail(code="semantic_review_unavailable", message=str(exc)[:300]),
+                error=ErrorDetail(code=exc.code, message=str(exc)[:300]),
             )
             return
         except WorkerFailure as exc:
@@ -1079,8 +1079,19 @@ class JobManager:
     ) -> tuple[list[int], dict[int, tuple[dict[str, Any], list[str], str]]]:
         if not job.request.qa.semantic:
             return list(range(len(outputs))), {}
-        if self.semantic_reviewer is None or not await self.semantic_reviewer.available():
-            raise SemanticReviewError("local semantic reviewer is unavailable")
+        execution = self._host_executions.get(job.id)
+        identity = execution.identity if execution is not None else None
+        if (
+            isinstance(self.semantic_reviewer, HostSemanticReviewer)
+            and (identity is None or "ai.inference" not in identity.granted_capabilities)
+        ):
+            raise SemanticReviewError(
+                "host_ai_not_granted", "ControlDeck AI access is not granted"
+            )
+        if self.semantic_reviewer is None or not await self.semantic_reviewer.available(identity):
+            raise SemanticReviewError(
+                "vision_analyzer_unavailable", "ControlDeck vision analyzer is unavailable"
+            )
         target_count = job.request.output.count
         retry_budget = job.request.qa.max_regeneration_attempts
         snapshot = self.store.job_profile_snapshot(job.id)
@@ -1096,6 +1107,7 @@ class JobManager:
                 path,
                 job.request.intent,
                 reference_paths=reference_paths,
+                identity=identity,
             )
             validation = {
                 "validator": "semantic.advisory",
