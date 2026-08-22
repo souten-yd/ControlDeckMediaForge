@@ -2044,7 +2044,7 @@ focused reference/director/batch/workspace/frontend regressionは109 passed。�
 C4 multi-cutのAI shot briefはCI-5、Evaluator統合はCI-4なので **NOT TESTED**。実GPU生成、
 profileへの自動反映（仕様上行わない）、installed release bundleは **NOT TESTED**。
 ControlDeck repository変更0件、hosted CI利用0件。
-# MiniMax H3 bounded catalog and download evaluation (2026-08-22, active)
+# MiniMax H3 bounded catalog and runtime evaluation (2026-08-22 to 2026-08-23, active)
 
 The official `MiniMaxAI/MiniMax-H3` FL2VA revision
 `42ed227ee7df40d41602854ae760620d6eb651fe` was measured from the Hugging Face
@@ -2070,8 +2070,33 @@ Observed local gate after these changes:
 309 passed, 1 warning in 27.88 sec
 ```
 
-The GGUF download operation `modelop_0dfc422e9d9d480a996e02ba552d6b89` is
-currently active under the NVMe feature-data model store. Final bytes,
-SHA-256 verification time, stable-diffusion.cpp HIPBLAS build, R9700 runtime,
-VRAM/RAM/swap measurements, output quality, cancellation, and prompt-skill
-Gateway projection are **NOT TESTED** at this checkpoint.
+The real GGUF download operation `modelop_0dfc422e9d9d480a996e02ba552d6b89`
+ran sequentially against the NVMe feature-data model store from
+`2026-08-22T14:12:33.901575+00:00` through
+`2026-08-22T15:01:33.263368+00:00` (49 minutes 00 seconds). It reached
+`ready` with `26,978,277,946 / 26,978,277,946` bytes and no error or cancel
+request. The installed snapshot occupied 26,978,361,344 bytes; the NVMe had
+657,629,118,464 bytes available afterward. The operation-specific temporary
+download tree was absent after promotion, and catalog discovery reported
+`installed=yes`, `healthy=no`, `state=experimental`.
+
+An independent `sha256sum` over all four inference files completed in 17.49
+seconds with 3,740 KiB maximum RSS. All values matched the catalog pins:
+
+```text
+denoiser      cfe0795c00ab6e6ebf8c64fe4574f45a828e8a93e0876bca704e055662a9d7b8
+text encoder  a8ccadccd57ef34c838ffb8a7da8368bb554721b2760274a1d3b0df63960b997
+video VAE     7c1f131492e7eddacaac9069a61b81bdd39de5cc96561e677c5eab1cdce5e522
+audio VAE     8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48
+```
+
+This proves bounded download, verification, and installation only. The pinned
+stable-diffusion.cpp HIPBLAS build, R9700 runtime, VRAM/RAM/swap measurements,
+output quality, runtime cancellation, and prompt-recipe Gateway projection are
+still **NOT TESTED**. Runtime evaluation may use bounded CPU/RAM offload even
+when working memory exceeds 32GB VRAM, but only practical measured wall time,
+safe RAM headroom, and absence of sustained swap thrashing can make that route
+eligible. The 32,000,000,000-byte managed-artifact limit remains unchanged.
+After recording this checkpoint, the local full `./mf.sh test` gate reported
+309 passed and one dependency deprecation warning in 25.47 seconds. Hosted CI
+was not used, and ControlDeck repository changes remain zero.

@@ -168,6 +168,14 @@ accepting a URL, repository, path, or command from the client. The files are
 downloaded directly under the NVMe managed model store and verified before one
 atomic snapshot promotion.
 
+The exact bundle was installed on the development NVMe in one sequential
+operation on 2026-08-22/23. It reached `ready` after 49 minutes 00 seconds with
+26,978,277,946 transferred bytes. The promoted snapshot occupied
+26,978,361,344 bytes, and an independent hash pass over the four inference
+files matched every catalog pin in 17.49 seconds. This is installation evidence,
+not R9700 inference evidence; the descriptor therefore remains unhealthy and
+experimental.
+
 The runtime candidate is pinned stable-diffusion.cpp with HIPBLAS. Evaluation
 may place the text encoder on CPU and stage components between RAM and VRAM.
 VRAM overflow alone is not a rejection if measured wall time is practical,
