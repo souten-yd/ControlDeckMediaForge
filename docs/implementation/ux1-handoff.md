@@ -9,13 +9,11 @@
 
 ```text
 最終更新    2026-08-22
-基準main    8f61d054d09735381a6c5224546b01c64fb1da26
-作業        Creative Intelligence v2 計画統廃合（docs/creative-intelligence-unified-v2）
-PR          v0.3.0 #48 / Creative Intelligence A0 #46 / protected-field fix #49 マージ済み
-状態        UX2 M0〜C5は完了。A0基盤を残し、旧A1〜A7をCI-1〜CI-6へ統廃合中
-基準値      ./mf.sh test = 269 passed（24.58秒、#49）
+ブランチ    fix/creative-intelligence-owned-fields
+PR          v0.3.0 #48 / Creative Intelligence A0 #46 マージ済み
+状態        PR #46のserver-owned field回帰を分離修正中
+基準値      ./mf.sh test = 269 passed（24.58秒、修正後）
 リリース    v0.3.0公開済み（artifact d8055331...aa48f）。installed host は v0.2.4
-別作業      PR #50 video candidate catalog は open。Creative Intelligence と混ぜない
 ```
 
 ## PR 進捗
@@ -32,43 +30,16 @@ PR          v0.3.0 #48 / Creative Intelligence A0 #46 / protected-field fix #49 
 | — | 実使用で見つかった不具合 6 件 | #28 #29 マージ済み |
 | PR-U7 | 実機受け入れ | 一部完了（desktop / mobile を観測） |
 | PR-U5 | ライブラリ viewer | #33 マージ済み |
-| UX2 M0〜C5 | model management / creative compiler / references / batches / Composer / evaluator | #35〜#43 マージ済み |
-| Release | v0.3.0 creative workflow | #48 マージ済み |
-| Creative Intelligence A0 | provider-neutral Host AI seam + typed planning models | #46 マージ済み |
-| A0 fix | server-owned PromptPlan fields保護 | #49 マージ済み |
-| Creative Intelligence v2 | Director / conditional vision / unified evaluator 計画 | 本docs PR |
+| PR-U6 | 一貫性 UI（G3） | 未着手 |
+| PR-U7 | 実機受け入れ | 未着手 |
 
 ## 次にやること（1 つだけ）
 
 ```text
-Creative Intelligence v2 docsをmerge後、CI-1 provider-neutral AI cutoverへ進む。
-  最優先      addon.jsonにai.inference grantを追加
-  移行        semantic_review.py / evaluator.py のOllama直結をHostAIGateway vision.analyzeへ交換
-  削除        config.py のprovider URL/model決め打ち
-  維持        prompt-only生成、deterministic QA、C5 ranking、既存retry budget
-  次          CI-2 Creative Director。新規text-only生成ではtext.generateを使い、pre-generation vision=0
-  注意        PR #50 video catalogと混ぜない。保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
-```
-
-## Creative Intelligence v2 の要点
-
-```text
-新規画像（参照なし）
-  intent -> text.generate Creative Director -> ActionState/Scene/Composition/Camera
-         -> existing CreativeCompiler -> image Job
-         -> vision.analyzeは生成後の任意評価だけ
-
-参照画像あり
-  reference -> deterministic VisualFacts + cached vision.analyze
-  intent + accepted analysis -> text.generate Director -> generation
-
-Pose preset
-  削除しない。Advanced/shortcut/fallbackへ降格。
-  主経路はActionStateSpec、既存compilerへはcustom pose detailsとして互換投影。
-
-Evaluator
-  C5 six-axis evaluatorとbinary semantic reviewを最終的に1本化。
-  deterministic validationが常に優先、semantic retryは既存budget内だけ。
+protected-field修正をPR作成・mergeし、動画候補catalogの別PRへ戻る。
+  修正        AIがechoしたversion / original_intent / modeだけを無視
+  維持        その他の未知fieldはfail-closed
+  注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
 ## リリースの運用
@@ -94,8 +65,9 @@ Evaluator
      PR-U1（モバイル IA 実装）と同じ PR でのみ変更する。先行して変えない。
 3. ControlDeck 側の変更
      利用者が許可済み（2026-08-22）。ただし汎用 host 機能に限る（§0 B1）。
-     Creative IntelligenceではControlDeck #224のgeneric ai.inferenceを使用する。
-     Media固有provider/model routeは追加しない。
+     UI 実装のために必要な host 変更は 1 つも出ていない。
+     ただし v0.2.0 を配布するには trusted-catalog.json の pin 更新が要る
+     （これは Media 固有のコードではなく、カタログの版指定なので許容範囲）。
 4. worker が core を import している（層の違反・未解決）
      worker_packs/image/adapters/diffusers_flux2.py が
      mediaforge.image_edit / mediaforge.outpaint を import している。
@@ -107,8 +79,9 @@ Evaluator
      M1 installer は image 専用にせず capability-driven のまま維持した。
      M2 では検証済み `media_types`（image / video / audio_video）を分類表示に追加し、
      routing の正は capability のままにする。両者が矛盾した catalog は fail-closed。
-     PR #50はvideo候補catalogの別作業。Creative Intelligence planへ混ぜない。
-     Directorは将来MotionSpecをtext.generateで作れる形にし、visionはstart/reference frameがある時だけ使う。
+     Wan 2.2 TI2V-5B / Animate-14B / LTX 系は G7 の評価候補としてのみ記録し、
+     G1〜G4 とモデル採用ゲートを終える前に download/default/worker 実装へ進まない。
+     C0 は CameraSpec を共通化し、MotionSpec を後から加法的に載せられる形にする。
 ```
 
 ## リポジトリの状態で注意すること
@@ -121,31 +94,27 @@ Evaluator
               --evidence-dir /tmp/ux1-evidence
     証跡: /data1tb/mediaforge-ux1-evidence/{light,dark}/
 
-機能スライスは直前スライスをmainへmergeしてから切る。
-Creative Intelligenceは docs/implementation/creative-intelligence.md の CI-1〜CI-6 を順に進める。
+UX2 の各ブランチは直前スライスを main へ merge してから切る
+    PR-C0 は ux1/creative-spec-c0。C0 と C1 を同一 PR に混ぜない。
 ```
 
 ## 再開コマンド
 
 ```bash
 cd /data1tb/ControlDeckMediaForge
-cat docs/implementation/ux1-handoff.md
-git fetch --all --prune && git log --oneline -8
+cat docs/implementation/ux1-handoff.md          # このファイル
+git fetch --all --prune && git log --oneline -5
 gh pr list --state open
-cat docs/design-creative-intelligence.md
-cat docs/implementation/creative-intelligence.md
-./mf.sh test
+sed -n '/## 9\. PR-C3/,/## 10\. PR-C4/p' docs/implementation/ux2-model-scene.md
+./mf.sh test                                     # C1の最終基準値はstatusを確認
 ```
 
 ## 参照
 
 ```text
-設計の正             docs/design-workspace-ux.md
-UX2拡張設計           docs/design-model-scene-ux.md
-Creative Intelligence docs/design-creative-intelligence.md
-実装指示              docs/implementation/ux1-workspace.md
-UX2実装指示            docs/implementation/ux2-model-scene.md
-CI実装指示             docs/implementation/creative-intelligence.md
-運用ルール             docs/implementation/ux1-workspace.md §14
-進捗と実測             docs/implementation-status.md（実測値のみ。推測を書かない）
+設計の正        docs/design-workspace-ux.md
+実装指示        docs/implementation/ux1-workspace.md
+UX2 実装指示    docs/implementation/ux2-model-scene.md
+運用ルール      docs/implementation/ux1-workspace.md §14
+進捗と実測      docs/implementation-status.md（実測値のみ。推測を書かない）
 ```
