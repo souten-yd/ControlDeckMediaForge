@@ -57,11 +57,22 @@
               <div id="edit-actions" role="radiogroup" aria-label="編集方法"></div>
               <p id="guarantee-badge" class="guarantee"></p>
 
-              <label id="mask-input" class="sub-field" hidden>
-                変更する場所の画像（白＝変える／黒＝そのまま）
-                <input id="mask-file" type="file" accept="image/png,image/jpeg">
-                <span class="hint">筆で塗って指定する機能は次の段階で入ります。</span>
-              </label>
+              <div id="mask-input" class="sub-field" hidden>
+                <div class="mask-row">
+                  <button type="button" id="mask-draw" class="cta-secondary">変えたい場所を塗る</button>
+                  <img id="mask-preview" alt="塗った範囲" hidden>
+                </div>
+                <p id="mask-state" class="hint">まだ塗っていません。</p>
+                <div data-adv-slot="mask"></div>
+              </div>
+
+              <div id="outpaint-input" class="sub-field" hidden>
+                <p class="section-label">広げ方</p>
+                <div id="outpaint-ratios" class="chips" role="radiogroup" aria-label="広げる形"></div>
+                <div id="outpaint-scales" class="chips" role="radiogroup" aria-label="広げる量"></div>
+                <div id="outpaint-preview" aria-hidden="true"><span id="outpaint-source"></span></div>
+                <p id="outpaint-note" class="hint"></p>
+              </div>
 
               <label id="reference-input" class="sub-field" hidden>
                 参考にする画像（1〜3枚）
@@ -155,6 +166,32 @@
         <button type="button" id="mini-cancel" aria-label="中止">✕</button>
       </div>
 
+      <dialog id="mask-dialog">
+        <div class="mask-head">
+          <h2>変えたい場所を塗る</h2>
+          <button type="button" id="mask-close" aria-label="閉じる">×</button>
+        </div>
+        <p class="hint">塗ったところだけが変わります。塗っていないところは 1px も変わりません。</p>
+        <div id="mask-stage">
+          <div id="mask-canvas-wrap">
+            <img id="mask-source" alt="">
+            <canvas id="mask-canvas"></canvas>
+          </div>
+        </div>
+        <div class="mask-tools">
+          <button type="button" id="mask-brush" aria-pressed="true">筆</button>
+          <button type="button" id="mask-eraser" aria-pressed="false">消しゴム</button>
+          <label class="mask-size">太さ<input id="mask-width" type="range" min="8" max="256" step="4"></label>
+          <button type="button" id="mask-undo">取り消す</button>
+          <button type="button" id="mask-clear">全部消す</button>
+        </div>
+        <p id="mask-hint" class="hint">指やマウスで塗ってください。2 本指または Ctrl+ホイールで拡大できます。</p>
+        <div class="mask-actions">
+          <button type="button" id="mask-cancel">やめる</button>
+          <button type="button" id="mask-apply" class="primary">この範囲で決定</button>
+        </div>
+      </dialog>
+
       <dialog id="detail-dialog">
         <button type="button" id="close-dialog" aria-label="閉じる">×</button>
         <h2 id="detail-title">詳細</h2>
@@ -205,6 +242,13 @@
         </label>
         <p class="hint" id="advanced-constraints"></p>
       </div>
+    </template>
+
+    <template data-adv-template="mask">
+      <label class="sub-field" id="advanced-mask-file">
+        マスク画像を直接指定（白＝変える／黒＝そのまま）
+        <input id="mask-file" type="file" accept="image/png">
+      </label>
     </template>
 
     <template data-adv-template="settings">

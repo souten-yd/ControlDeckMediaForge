@@ -1114,3 +1114,65 @@ installed host での検証       envelope の実値・theme・grant は PR-U7
 outpaint の方向ハンドル       未実装（PR-U3）。現在はプリセットからの寸法指定のみ
 失敗時の出口ボタン            未実装（PR-U4）
 ```
+
+### PR-U3 — mask editor and outpaint (IMPLEMENTED, browser-observed 2026-08-22)
+
+外部ペイントツールが必須だった inpaint を、画面内で完結できるようにした。
+
+```text
+マスク編集   canvas に筆で塗る。太さ（短辺の 4% を既定）・消しゴム・取り消し 8 段・全消去
+             pointer events で 1 本指描画 / 2 本指ピンチ拡大 / Ctrl+ホイール拡大
+             出力は元画像と同寸法の 2 値 PNG（塗った所=白、それ以外=黒）で、
+             既存の import 経路（purpose=edit_mask）へ流す
+             空マスクと全面マスクは決定時に止める（backend と同じ規則を UI でも見せる）
+外側を広げる 比率（元のまま / 16:9 / 正方形 / 9:16）と倍率（1.25 / 1.5 / 2）から
+             目標寸法を計算し、元画像を中央に置いた枠を preview で見せる
+             16 の倍数・元画像を内包・少なくとも 1 辺拡大・envelope 内を UI で保証
+詳細モード   マスク画像の直接指定を残す（既存経路を消さない）
+```
+
+#### 設計を 1 件修正した
+
+実装前に backend を確認したところ、`outpaint_plan` は
+`left = (width - source.width) // 2` で元画像を**必ず中央へ置く**。
+設計に書いていた「上下左右のハンドルをドラッグ」は非対称拡張を前提にしており、
+現行契約では表現できない。できるかのような操作を見せないため、
+比率と倍率の選択に変更し、`design-workspace-ux.md` §6 F2 と
+`ux1-workspace.md` §5 に根拠を記録した。中央配置の前提が変わっていないことを
+静的試験でも検査している。
+
+#### 実機ブラウザ観測（standalone、Chromium、light と dark の 2 パス）
+
+実際のポインタ操作で塗り、送信は捕捉して生成させていない。
+
+```text
+何も塗らずに決定       ダイアログが閉じず「変えたい場所を塗ってください。」
+実際に塗った結果       1,108 ピクセル（全体の 1.7%）を変更対象として記録
+取り消し・消しゴム     操作でき、状態が切り替わる
+送信された constraints strict_edit=true / edit_mode=inpaint /
+                       editable_mask_asset_id=asset_... （実際に import された資産）
+外側を広げる           「256×256 を中央に置いて 512×288 へ広げます。」
+                       constraints は 16 の倍数・元画像を内包・1 辺拡大・strict_edit=true
+console・page error    両パスとも 0 件
+```
+
+証跡: `/data1tb/mediaforge-ux1-evidence/{light,dark}/`（`mask-editor.png` / `outpaint.png` を含む）
+
+#### 確認したこと
+
+```text
+./mf.sh test   174 passed
+静的試験の追加  マスクのファイル指定が詳細モードにしか無いこと、
+                非対称拡張の操作が UI に無いこと、中央配置の前提が変わっていないこと
+```
+
+#### NOT TESTED / 未実施
+
+```text
+実機のタッチ操作        pointer events で実装しているが、実端末の指操作は未確認。
+                        Playwright のマウス操作でのみ確認した
+実際の生成を伴う inpaint 送信を捕捉して止めているため、strict edit の実行経路は未確認
+全面マスクの UI 阻止    筆で全面を塗る操作が長いため未実施。backend 側は既存試験で確認済み
+installed host での確認 PR-U7
+失敗時の出口ボタン      未実装（PR-U4）
+```

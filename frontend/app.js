@@ -67,6 +67,11 @@ const state = {
   presets: [],
   editMode: "",
   source: null,
+  sourceUrl: "",
+  maskFile: null,
+  maskPainted: 0,
+  outpaintRatio: "source",
+  outpaintScale: 1.5,
   estimateSec: null,
   activeJob: "",
   libraryCursor: null,
@@ -405,16 +410,13 @@ function renderSizeSection() {
     note.textContent = "";
     return;
   }
-  if (state.editMode === "outpaint") {
-    block.hidden = false;
+  // outpaint の寸法は「広げ方」から決まる。詳細モードでだけ数値を触らせる。
+  block.hidden = state.editMode !== "outpaint" || state.mode !== "advanced";
+  if (!block.hidden) {
     label.textContent = "広げる先の大きさ";
-    const preset = currentPreset();
-    note.textContent = `元画像 ${state.source.width}×${state.source.height} を中央に置いて広げます。`;
-    const problem = outpaintProblem(preset);
-    if (problem) note.textContent = `${note.textContent} ${problem}`;
+    note.textContent = outpaintProblem(currentPreset()) || "";
     return;
   }
-  block.hidden = true;
   label.textContent = "サイズ";
   note.textContent = "";
 }
@@ -439,9 +441,12 @@ function selectEditMode(mode) {
   const action = EDIT_ACTIONS.find((item) => item.mode === mode);
   byId("guarantee-badge").textContent = action ? action.guarantee : "";
   byId("mask-input").hidden = mode !== "inpaint";
-  byId("mask-file").required = mode === "inpaint";
   byId("reference-input").hidden = mode !== "multi_reference";
   byId("reference-files").required = mode === "multi_reference";
+  byId("outpaint-input").hidden = mode !== "outpaint";
+  if (mode === "outpaint") renderOutpaintControls();
+  if (mode !== "inpaint") maskReset();
+  mountAdvanced();
   renderSizeSection();
   clearError();
   if (state.mode === "advanced") syncAdvancedCreate();
@@ -469,6 +474,7 @@ async function refreshAttachment() {
   byId("attach-label").textContent = file ? `画像: ${file.name}` : "＋ 画像を追加";
   byId("attach-clear").hidden = !file;
   byId("edit-block").hidden = !file;
+  if (!file) maskReset();
   state.source = file ? await measure(file) : null;
   byId("attach-size").textContent = state.source ? `${state.source.width}×${state.source.height}` : "";
   if (file) renderEditActions();
@@ -499,8 +505,17 @@ async function importFile(file, purpose) {
   return call("assets.import.commit", {upload_id: upload.upload_id});
 }
 
+function maskAsset() {
+  const chosen = byId("mask-file");
+  return state.maskFile || (chosen && chosen.files[0]) || null;
+}
+
 function buildConstraints(preset) {
   const constraints = {width: preset.width, height: preset.height};
+  if (state.editMode === "outpaint" && state.mode !== "advanced") {
+    const target = outpaintTarget();
+    if (target) return target;
+  }
   if (state.mode === "advanced" && byId("advanced-width")) {
     constraints.width = Number(byId("advanced-width").value) || preset.width;
     constraints.height = Number(byId("advanced-height").value) || preset.height;
@@ -552,8 +567,8 @@ function requestProblem(constraints) {
   if (!file) return validateSize(constraints);
 
   if (!state.editMode) return "この画像をどうするか選んでください。";
-  if (state.editMode === "inpaint" && !byId("mask-file").files[0]) {
-    return "変更する場所の画像を指定してください。";
+  if (state.editMode === "inpaint" && !maskAsset()) {
+    return "変えたい場所を塗ってください。";
   }
   if (state.editMode === "multi_reference") {
     const count = byId("reference-files").files.length;
@@ -599,8 +614,8 @@ async function submitJob(event) {
       constraints.strict_edit = preserving;
       constraints.edit_mode = state.editMode;
       if (state.editMode === "inpaint") {
-        const mask = await importFile(byId("mask-file").files[0], "edit_mask");
-        constraints.editable_mask_asset_id = mask.id;
+        const imported = await importFile(maskAsset(), "edit_mask");
+        constraints.editable_mask_asset_id = imported.id;
       }
       if (state.editMode === "multi_reference") {
         const files = Array.from(byId("reference-files").files);
@@ -806,6 +821,257 @@ async function loadRecent() {
       activate("library");
     }));
   }
+}
+
+/* ── マスク編集 ───────────────────────────────────────────────────────── */
+
+/* 塗った所を「変えてよい場所」として扱う。出力は元画像と同寸法の PNG で、
+   塗った所が白、それ以外が黒。backend の strict edit がこの規則で保護する。 */
+const MASK_HINT = "指やマウスで塗ってください。2 本指または Ctrl+ホイールで拡大できます。";
+
+const mask = {
+  canvas: null,
+  context: null,
+  history: [],
+  erasing: false,
+  drawing: false,
+  pointers: new Map(),
+  pinch: 0,
+  scale: 1,
+};
+
+function maskOpen() {
+  const file = attachedFile();
+  if (!file || !state.source) return;
+  const dialog = byId("mask-dialog");
+  mask.canvas = byId("mask-canvas");
+  mask.canvas.width = state.source.width;
+  mask.canvas.height = state.source.height;
+  mask.context = mask.canvas.getContext("2d", {willReadFrequently: true});
+  mask.history = [];
+  mask.scale = 1;
+  byId("mask-canvas-wrap").style.transform = "scale(1)";
+  setMaskTool(false);
+
+  byId("mask-hint").textContent = MASK_HINT;
+  const width = byId("mask-width");
+  width.value = Math.max(8, Math.min(256, Math.round(Math.min(state.source.width, state.source.height) * 0.04)));
+
+  if (state.sourceUrl) URL.revokeObjectURL(state.sourceUrl);
+  state.sourceUrl = URL.createObjectURL(file);
+  byId("mask-source").src = state.sourceUrl;
+
+  if (state.maskFile) {
+    const image = new Image();
+    image.onload = () => {
+      mask.context.drawImage(image, 0, 0, mask.canvas.width, mask.canvas.height);
+      URL.revokeObjectURL(image.src);
+    };
+    image.src = URL.createObjectURL(state.maskFile);
+  }
+  dialog.showModal();
+}
+
+function setMaskTool(erasing) {
+  mask.erasing = erasing;
+  byId("mask-brush").setAttribute("aria-pressed", String(!erasing));
+  byId("mask-eraser").setAttribute("aria-pressed", String(erasing));
+}
+
+function maskPoint(event) {
+  const rect = mask.canvas.getBoundingClientRect();
+  return {
+    x: ((event.clientX - rect.left) / rect.width) * mask.canvas.width,
+    y: ((event.clientY - rect.top) / rect.height) * mask.canvas.height,
+  };
+}
+
+function maskSnapshot() {
+  mask.history.push(mask.context.getImageData(0, 0, mask.canvas.width, mask.canvas.height));
+  if (mask.history.length > 8) mask.history.shift();
+}
+
+function maskStroke(from, to) {
+  const context = mask.context;
+  context.save();
+  context.globalCompositeOperation = mask.erasing ? "destination-out" : "source-over";
+  context.strokeStyle = "#ffffff";
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.lineWidth = Number(byId("mask-width").value);
+  context.beginPath();
+  context.moveTo(from.x, from.y);
+  context.lineTo(to.x, to.y);
+  context.stroke();
+  context.restore();
+}
+
+function maskPointerDown(event) {
+  mask.pointers.set(event.pointerId, event);
+  if (mask.pointers.size === 2) {
+    mask.drawing = false;
+    mask.pinch = pointerDistance();
+    return;
+  }
+  if (mask.pointers.size > 2) return;
+  mask.canvas.setPointerCapture(event.pointerId);
+  byId("mask-hint").textContent = MASK_HINT;
+  maskSnapshot();
+  mask.drawing = true;
+  mask.last = maskPoint(event);
+  maskStroke(mask.last, mask.last);
+}
+
+function pointerDistance() {
+  const [first, second] = [...mask.pointers.values()];
+  return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+}
+
+function maskPointerMove(event) {
+  if (!mask.pointers.has(event.pointerId)) return;
+  mask.pointers.set(event.pointerId, event);
+  if (mask.pointers.size === 2 && mask.pinch) {
+    const ratio = pointerDistance() / mask.pinch;
+    mask.scale = Math.max(1, Math.min(6, mask.scale * ratio));
+    mask.pinch = pointerDistance();
+    byId("mask-canvas-wrap").style.transform = `scale(${mask.scale})`;
+    return;
+  }
+  if (!mask.drawing) return;
+  const point = maskPoint(event);
+  maskStroke(mask.last, point);
+  mask.last = point;
+}
+
+function maskPointerUp(event) {
+  mask.pointers.delete(event.pointerId);
+  if (mask.pointers.size < 2) mask.pinch = 0;
+  if (mask.pointers.size === 0) mask.drawing = false;
+}
+
+function maskPaintedPixels() {
+  const data = mask.context.getImageData(0, 0, mask.canvas.width, mask.canvas.height).data;
+  let painted = 0;
+  for (let index = 3; index < data.length; index += 4) if (data[index] > 0) painted += 1;
+  return painted;
+}
+
+/* 空マスクと全面マスクは backend が受付前に落とす。同じ規則を UI でも見せる。 */
+function maskProblem(painted, total) {
+  if (painted === 0) return "変えたい場所を塗ってください。";
+  if (painted >= total) return "全部を塗ると「一部だけ直す」になりません。塗る範囲を減らすか、別の操作を選んでください。";
+  return "";
+}
+
+async function maskApply() {
+  const total = mask.canvas.width * mask.canvas.height;
+  const painted = maskPaintedPixels();
+  const problem = maskProblem(painted, total);
+  if (problem) { byId("mask-hint").textContent = problem; return; }
+
+  // 出力は白（変える）/ 黒（保護）の 2 値。表示用の半透明は持ち込まない。
+  const output = document.createElement("canvas");
+  output.width = mask.canvas.width;
+  output.height = mask.canvas.height;
+  const context = output.getContext("2d");
+  context.fillStyle = "#000000";
+  context.fillRect(0, 0, output.width, output.height);
+  context.drawImage(mask.canvas, 0, 0);
+
+  const blob = await new Promise((resolve) => output.toBlob(resolve, "image/png"));
+  state.maskFile = new File([blob], "mask.png", {type: "image/png"});
+  state.maskPainted = painted;
+  byId("mask-preview").src = URL.createObjectURL(state.maskFile);
+  byId("mask-preview").hidden = false;
+  byId("mask-state").textContent =
+    `${painted.toLocaleString()} ピクセルを変更対象にしました（全体の ${((painted / total) * 100).toFixed(1)}%）。`;
+  byId("mask-draw").textContent = "塗り直す";
+  byId("mask-dialog").close();
+  clearError();
+}
+
+function maskReset() {
+  state.maskFile = null;
+  state.maskPainted = 0;
+  byId("mask-preview").hidden = true;
+  byId("mask-state").textContent = "まだ塗っていません。";
+  byId("mask-draw").textContent = "変えたい場所を塗る";
+}
+
+/* ── 外側を広げる ─────────────────────────────────────────────────────── */
+
+const OUTPAINT_RATIOS = [
+  {id: "source", label: "元のまま"},
+  {id: "16:9", label: "16:9", value: 16 / 9},
+  {id: "1:1", label: "正方形", value: 1},
+  {id: "9:16", label: "9:16", value: 9 / 16},
+];
+const OUTPAINT_SCALES = [1.25, 1.5, 2];
+
+function renderOutpaintControls() {
+  byId("outpaint-ratios").replaceChildren(...OUTPAINT_RATIOS.map((ratio) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chip";
+    button.dataset.ratio = ratio.id;
+    button.setAttribute("role", "radio");
+    button.setAttribute("aria-checked", String(ratio.id === state.outpaintRatio));
+    button.textContent = ratio.label;
+    return button;
+  }));
+  byId("outpaint-scales").replaceChildren(...OUTPAINT_SCALES.map((scale) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chip";
+    button.dataset.scale = String(scale);
+    button.setAttribute("role", "radio");
+    button.setAttribute("aria-checked", String(scale === state.outpaintScale));
+    button.textContent = `${scale}倍`;
+    return button;
+  }));
+  renderOutpaintPreview();
+}
+
+/* 元画像は必ず中央に置かれる（backend の outpaint_plan）。
+   片側だけ広げる操作は作らない。 */
+function outpaintTarget() {
+  const source = state.source;
+  if (!source) return null;
+  const envelope = sizeEnvelope();
+  const multiple = envelope.multiple_of;
+  const ratio = OUTPAINT_RATIOS.find((item) => item.id === state.outpaintRatio);
+  const area = Math.max(source.width, source.height) * state.outpaintScale;
+  let width = area;
+  let height = area;
+  if (ratio?.value) {
+    if (ratio.value >= 1) height = area / ratio.value;
+    else width = area * ratio.value;
+  } else {
+    width = source.width * state.outpaintScale;
+    height = source.height * state.outpaintScale;
+  }
+  const round = (value, floor) => {
+    const bounded = Math.min(envelope.max_side, Math.max(floor, envelope.min_side, value));
+    return Math.ceil(bounded / multiple) * multiple;
+  };
+  return {width: round(width, source.width), height: round(height, source.height)};
+}
+
+function renderOutpaintPreview() {
+  const target = outpaintTarget();
+  const note = byId("outpaint-note");
+  const box = byId("outpaint-source");
+  if (!target || !state.source) { note.textContent = ""; return; }
+  const frame = 116;
+  const scale = frame / Math.max(target.width, target.height);
+  byId("outpaint-preview").style.width = `${Math.round(target.width * scale)}px`;
+  byId("outpaint-preview").style.height = `${Math.round(target.height * scale)}px`;
+  box.style.width = `${Math.round(state.source.width * scale)}px`;
+  box.style.height = `${Math.round(state.source.height * scale)}px`;
+  const problem = outpaintProblem(target);
+  note.textContent = problem
+    ? problem
+    : `${state.source.width}×${state.source.height} を中央に置いて ${target.width}×${target.height} へ広げます。`;
 }
 
 /* ── library ──────────────────────────────────────────────────────────── */
@@ -1066,6 +1332,47 @@ byId("library-kinds").addEventListener("click", (event) => {
 byId("edit-actions").addEventListener("click", (event) => {
   const button = event.target.closest("[data-edit-mode]");
   if (button && !button.disabled) selectEditMode(button.dataset.editMode);
+});
+
+byId("mask-draw").addEventListener("click", maskOpen);
+byId("mask-close").addEventListener("click", () => byId("mask-dialog").close());
+byId("mask-cancel").addEventListener("click", () => byId("mask-dialog").close());
+byId("mask-apply").addEventListener("click", () => void maskApply());
+byId("mask-brush").addEventListener("click", () => setMaskTool(false));
+byId("mask-eraser").addEventListener("click", () => setMaskTool(true));
+byId("mask-clear").addEventListener("click", () => {
+  maskSnapshot();
+  mask.context.clearRect(0, 0, mask.canvas.width, mask.canvas.height);
+});
+byId("mask-undo").addEventListener("click", () => {
+  const previous = mask.history.pop();
+  if (previous) mask.context.putImageData(previous, 0, 0);
+});
+byId("mask-canvas").addEventListener("pointerdown", maskPointerDown);
+byId("mask-canvas").addEventListener("pointermove", maskPointerMove);
+for (const name of ["pointerup", "pointercancel", "pointerleave"]) {
+  byId("mask-canvas").addEventListener(name, maskPointerUp);
+}
+byId("mask-stage").addEventListener("wheel", (event) => {
+  if (!event.ctrlKey) return;
+  event.preventDefault();
+  mask.scale = Math.max(1, Math.min(6, mask.scale * (event.deltaY < 0 ? 1.1 : 0.9)));
+  byId("mask-canvas-wrap").style.transform = `scale(${mask.scale})`;
+}, {passive: false});
+
+byId("outpaint-ratios").addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-ratio]");
+  if (!chip) return;
+  state.outpaintRatio = chip.dataset.ratio;
+  renderOutpaintControls();
+  clearError();
+});
+byId("outpaint-scales").addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-scale]");
+  if (!chip) return;
+  state.outpaintScale = Number(chip.dataset.scale);
+  renderOutpaintControls();
+  clearError();
 });
 
 byId("source-file").addEventListener("change", () => void refreshAttachment());
