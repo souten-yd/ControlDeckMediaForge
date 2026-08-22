@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
+import struct
 import time
 
 from PIL import Image
@@ -119,6 +120,21 @@ def test_fully_transparent_image_has_no_invented_black_palette(tmp_path: Path):
     assert facts.opaque_fraction == 0.0
     assert facts.dominant_colors == [] and facts.accent_colors == []
     assert facts.mean_luminance == 0.0 and facts.mean_saturation == 0.0
+
+
+def test_visual_facts_reject_oversized_dimensions_before_decoding_pixels(tmp_path: Path):
+    path = tmp_path / "oversized.bmp"
+    width = height = 9000
+    header = (
+        b"BM" + struct.pack("<IHHI", 54, 0, 0, 54)
+        + struct.pack("<IIIHHIIIIII", 40, width, height, 1, 24, 0, 0, 2835, 2835, 0, 0)
+    )
+    path.write_bytes(header)
+
+    with pytest.raises(ReferenceIntelligenceError) as error:
+        analyze_visual_facts(path)
+
+    assert error.value.code == "reference_image_invalid"
 
 
 @pytest.mark.parametrize("kind", ["person", "robot", "vehicle", "product"])

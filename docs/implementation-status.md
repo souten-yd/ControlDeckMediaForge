@@ -2038,8 +2038,8 @@ evidence                       /data1tb/mediaforge-ci3-evidence-20260822/
 で上記最終runを再実行した。最終確認はBroker active lease 0 / waiting request 0、試験用LLMを
 unload、隔離Host/Media Forgeを停止、共有ControlDeckはactiveかつhealth okだった。
 
-focused reference/director/batch/workspace/frontend regressionは108 passed。最終
-`./mf.sh test`は302 passed（25.57秒）。これは契約回帰証跡であり、上記の実Host/Vision/browser
+focused reference/director/batch/workspace/frontend regressionは109 passed。最終
+`./mf.sh test`は303 passed（28.11秒）。これは契約回帰証跡であり、上記の実Host/Vision/browser
 観測とは区別する。public schemas / addon.json / agent tool / workflow executorは変更していない。
 C4 multi-cutのAI shot briefはCI-5、Evaluator統合はCI-4なので **NOT TESTED**。実GPU生成、
 profileへの自動反映（仕様上行わない）、installed release bundleは **NOT TESTED**。

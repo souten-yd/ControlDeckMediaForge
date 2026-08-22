@@ -12,7 +12,7 @@
 ブランチ    ci/reference-intelligence
 PR          CI-2 Creative Director #55 merge済み（merge b6e3dab。#54もmerge済み）
 状態        CI-3実装・実Host/Vision/browser確認完了。PR作成前
-基準値      focused CI-3 = 108 passed / ./mf.sh test = 302 passed（25.57秒）
+基準値      focused CI-3 = 109 passed / ./mf.sh test = 303 passed（28.11秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 

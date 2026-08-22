@@ -25,6 +25,7 @@ from .vision import VisionInputError, vision_message
 
 VISUAL_FACTS_VERSION = "visual-facts-v1"
 VISUAL_ANALYSIS_VERSION = "visual-analysis-v1"
+MAX_VISUAL_FACT_PIXELS = 64 * 1024 * 1024
 ReferenceFocus = Literal["overall", "identity", "pose", "palette", "composition", "style"]
 REFERENCE_FOCUSES: tuple[ReferenceFocus, ...] = (
     "overall", "identity", "pose", "palette", "composition", "style",
@@ -85,15 +86,19 @@ def analyze_visual_facts(path: Path) -> VisualFacts:
     try:
         with Image.open(path) as opened:
             width, height = opened.size
+            if width <= 0 or height <= 0 or width * height > MAX_VISUAL_FACT_PIXELS:
+                raise ReferenceIntelligenceError(
+                    "reference_image_invalid", "Reference image dimensions are outside the safe bound"
+                )
             had_alpha = "A" in opened.getbands() or "transparency" in opened.info
             image = opened.convert("RGBA")
             alpha_histogram = image.getchannel("A").histogram()
             opaque_fraction = sum(alpha_histogram[250:]) / (width * height)
             image.thumbnail((256, 256), Image.Resampling.LANCZOS)
             pixels = list(image.get_flattened_data())
-    except (OSError, UnidentifiedImageError) as exc:
+    except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
         raise ReferenceIntelligenceError("reference_image_invalid", "Reference image is not decodable") from exc
-    if width <= 0 or height <= 0 or not pixels:
+    if not pixels:
         raise ReferenceIntelligenceError("reference_image_invalid", "Reference image is empty")
 
     visible = [(red, green, blue) for red, green, blue, alpha in pixels if alpha >= 32]
