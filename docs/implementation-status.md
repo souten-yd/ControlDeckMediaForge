@@ -1176,3 +1176,47 @@ console・page error    両パスとも 0 件
 installed host での確認 PR-U7
 失敗時の出口ボタン      未実装（PR-U4）
 ```
+
+## Release v0.2.0 (2026-08-22)
+
+UX1 の PR-U0〜U3 と G3 backend を含む版を公開した。
+
+```text
+artifact  control-deck-media-forge-0.2.0-linux-x86_64.tar.gz
+bytes     29,121,065
+sha256    ec7dd2296b8a640acb780c30b39c54e19c65a5488ebc4ec1c876bf9aa43f97c6
+release   https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.2.0
+```
+
+#### リリース物そのものに対する検証
+
+ソースツリーではなく、**展開したバンドルを起動して**確認した。
+
+```text
+起動            bin/mediaforge-core serve が health 200 を返す
+配信内容        workspace HTML 80,781 バイトに 3 ナビ・モードトグル・マスク編集・
+                広げ方・詳細テンプレート・受付前エラー・モバイル下部タブが含まれ、
+                旧 UI の operation select は含まれない
+addon manifest  version 0.2.0 / mobile embedded
+実ブラウザ試験  scripts/ux_standalone_e2e.py がバンドルに対して PASSED
+                1280×800 の 2 ペイン / 390×844 の下部タブ・横スクロール 0px /
+                320px 崩れなし / console・page error 0 件
+```
+
+#### 未確認のまま公開した点（リリースノートにも明記）
+
+```text
+installed host での埋め込み表示
+    mobile: "embedded" を宣言しているが、実機ホストで 768px 未満に
+    状態カードではなく workspace が出ることを確認できていない。
+    確認には ControlDeck のログイン資格情報が必要（PR-U7）。
+実端末のタッチ操作          Playwright のマウス操作でのみ確認
+実際の生成を伴う inpaint    送信を捕捉して止めているため実行経路は未確認
+生成物の書き出し            未実装（PR-U5）
+キャラクター／画風の UI      未実装（PR-U6）
+```
+
+#### ホスト側カタログ
+
+ControlDeck の `backend/app/features/trusted-catalog.json` は v0.1.2 を pin している。
+v0.2.0 を配布するには ControlDeck 側の別 PR が必要。
