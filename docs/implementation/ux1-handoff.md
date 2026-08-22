@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    creative/ci4-unified-evaluator
-PR          #63（H3 prompt recipe）merge済み。CI-4 PR準備中
-状態        CI-4単一Evaluator実装・実Gateway受入完了。H3 quality routeは延期のまま
-基準値      現worktree ./mf.sh test = 336 passed, 1 warning（32.36秒）
+ブランチ    g4/coding-agent-placement
+PR          #63（prompt recipe）/ #64（CI-4）merge済み。G4 Host prerequisite設計中
+状態        G4調査でnon-interactive project output grantのHost gapを確認
+基準値      現worktree ./mf.sh test = 336 passed, 1 warning（33.19秒）
 リリース    v0.3.2公開・ControlDeck導入済み（artifact ec864154...e12e3d9、Host PR #230/#231）
 ```
 
@@ -39,12 +39,13 @@ PR          #63（H3 prompt recipe）merge済み。CI-4 PR準備中
 ## 次にやること（1 つだけ）
 
 ```text
-H3 prompt recipeとCI-4 Unified Evaluatorは完了。次はG4 asset placementスライス。
+H3 prompt recipeとCI-4 Unified Evaluatorは完了。次はG4 Host prerequisiteスライス。
   完了        26.98GB GGUF、pinned HIP runtime、Host lease/cancel、R9700 smoke実測
   延期        H3 quality route（Host watchdog/swap/output gate失敗。条件改善まで再実行しない）
   完了        版固定recipe、構造化projection、実Gateway text.generate、原文保持/fail-closed
   完了        CI-4 canonical EvaluationResult、advisory rank、bounded retry、旧binary reviewer削除
-  次          goal-roadmap.md G4 Coding Agent project/output grant placement
+  次          ControlDeck汎用 current-project output grant（integration plan §11.1、別repo/PR）
+  続き        Media Forge media.pack / atomic asset placement / OpenCode実機E2E
   保留        video public API/runtime実装（G7には着手しない）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
