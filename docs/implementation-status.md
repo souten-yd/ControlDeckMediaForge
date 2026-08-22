@@ -1777,3 +1777,22 @@ version bump後の`./mf.sh test`は262 passed（24.97秒、全command 26.43秒�
 v0.3.0 bundleのControlDeck trusted catalog導入・installed-host更新と、実端末の指操作は
 **NOT TESTED**。動画runtimeはこのReleaseに含まれず **UNAVAILABLE**。hosted CIと
 ControlDeckコード変更は0件。
+
+## Creative Intelligence protected-field regression fix (2026-08-22)
+
+PR #46 merge後のfull gateで、モデル応答がfull `PromptPlan`をechoすると、server-owned
+`version / original_intent / mode`まで`PromptPlanDraft(extra=forbid)`へ渡され、意図を
+保護する既存試験が`prompt_plan_invalid`で失敗する回帰を観測した。provider出力を
+objectに限定し、この3 fieldだけをvalidation前に捨てる。その他の未知fieldは従来どおり
+fail-closedであり、`provider_model`混入を拒否する試験を追加した。
+
+```text
+before full gate     1 failed / 272 passed（動画catalog統合branch上で観測）
+focused after fix    7 passed
+main full after fix  269 passed / 24.58 seconds
+full command         26.06 seconds / max RSS 261,500 KiB
+```
+
+これはAI応答境界の回帰修正であり、実providerへのHTTP、実画像生成、GPU動作は
+**NOT TESTED**。public schema / addon.json / agent tool / workflow executorは変更していない。
+hosted CIとControlDeckコード変更は0件。
