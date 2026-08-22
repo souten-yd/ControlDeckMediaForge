@@ -1220,3 +1220,118 @@ installed host での埋め込み表示
 
 ControlDeck の `backend/app/features/trusted-catalog.json` は v0.1.2 を pin している。
 v0.2.0 を配布するには ControlDeck 側の別 PR が必要。
+
+## PR-U7 partial — installed-host acceptance (2026-08-22)
+
+テスト用の管理者 `mf-e2e` を作り、実機の ControlDeck に対して
+`scripts/ux_control_deck_e2e.py` を実行した。
+
+```text
+bridge                ready（standalone ではなく host bridge に接続）
+theme token           host から届いた値が適用される（accent #3b82f6 等）
+サイズ preset         実 envelope 由来の 1024x1024 / 1024x576 / 576x1024
+                      standalone のフォールバックではない
+詳細モードの永続化    再読込後も維持される（standalone では確認できなかった項目）
+route 同期            /x/media-forge/workspace/library まで URL へ反映
+モバイル 390x844      状態カードではなく workspace が出る（embedded 宣言が効いている）
+                      下部タブ fixed / 単一列 / 横スクロール 0px / タップ標的 60px / 一覧 2 列
+console・page error   0 件
+```
+
+`mobile: "embedded"` の実機確認は v0.2.0 時点で唯一残っていた重要な未確認事項であり、
+これで解消した。
+
+## 実使用で見つかった不具合（2026-08-22）
+
+実機のモバイルで実際に触ったことで、試験では出なかった問題が 6 件出た。
+
+### 1. パッケージ済み worker が起動できない（最も重い）
+
+installed bundle での画像生成が**必ず** `worker_crash` になっていた。
+worker を手で起動して原因を特定した。
+
+```text
+ModuleNotFoundError: No module named 'mediaforge'
+  worker_packs/image/adapters/diffusers_flux2.py:10
+```
+
+G2 で adapter が `mediaforge.image_edit` / `mediaforge.outpaint` を import する
+ようになったが、bundle には凍結された core しか無く worker の venv からは
+import できない。dev で気付かなかったのは、親プロセスから継いだ `PYTHONPATH` に
+たまたま `backend` が含まれていたためで、経路として保証されていなかった。
+
+修正: bundle へ `backend/mediaforge` を同梱し、worker の `PYTHONPATH` を明示する。
+`worker_packs` が import する自リポジトリのパッケージが bundle に入っているかを
+検査する試験を追加した。
+
+**残る設計上の問題**: worker が core を import すること自体が
+`AGENTS.md`「worker は core から実装を import しない」に反する。
+今回は動作を先に戻した。`image_edit` / `outpaint` は PIL だけに依存する純粋な
+幾何処理なので、worker pack 側へ寄せるのが筋。層の整理は未着手。
+
+### 2. 端末の写真が取り込めない
+
+3024x4032 の写真は取り込みの画素数上限（2048x2048）を超えて失敗し、
+画面には「うまくいきませんでした」としか出ていなかった。
+出力はどのみち envelope 内の寸法になるので、送る前にブラウザ側で縮小する。
+
+### 3. base64 の chunk がパスとして誤検出される
+
+`reject_host_paths` が運搬用の base64 本体まで検査しており、先頭が `/` になる
+chunk（base64 のアルファベットに含まれるため約 1/64）が `unscoped_host_path` で
+拒否されていた。取り込みが不定期に失敗する原因であり、
+`test_workspace_websocket_chunk_import_exceeds_single_message_bound_and_cleans_up` の
+間欠失敗の正体でもある。
+
+この間欠失敗は PR-U0 より前のコミット（6499047）を worktree に取り出して
+8 回中 1 回再現することを確認しており、UX1 の変更が持ち込んだものではない。
+修正後は 5 回連続で通る。
+
+### 4. 入力しただけで「未保存」警告が出る
+
+`host.busy` を keystroke ごとに立てて降ろしていなかった。Media Forge に保存の
+概念は無く、実行中の作業はサーバ側の job として残る。実際に失うものがある間だけ立てる。
+
+### 5. 取り込み中の進捗が出ない
+
+job になる前の取り込み時間が最も長いのに進捗が無かった。モバイルではステージが
+画面外にあり、常時表示のミニバーが唯一の手掛かりになる。
+
+### 6. 版の出所が二重化していた
+
+`doctor` が 0.1.2 を返し、provenance にも 0.1.2 が記録されていた。
+`mediaforge.__version__` へ一本化し、pyproject は hatch の dynamic version で読む。
+
+### 修正後の実機確認
+
+```text
+インストール済み 0.2.2 経由の実生成   1024x1024 が 20 秒で完了し結果を表示
+モバイルの進捗バー                    生成中に表示される
+「未保存」                            入力しただけでは出ない
+端末写真の取り込み                    3024x4032 -> 768x1024 に縮小して成功
+console・page error                   0 件
+```
+
+## Release v0.2.1 / v0.2.2
+
+```text
+v0.2.1  b3405cd7662de9972dabe5182c8996ac3f6b63a4807c7ecbf42f0929324ca75a  29,126,043 bytes
+v0.2.2  a8e6e7342d2a4885bf3a45ca23803f671de3b1f53915caf13232f101a2817992  29,320,459 bytes
+```
+
+ControlDeck の `trusted-catalog.json` は v0.2.2 を pin 済み（ControlDeck PR #222）。
+この開発機の稼働環境も 0.2.2 へ更新し、旧版は versions/ に残してロールバック可能。
+
+## ControlDeck 側の変更（利用者の許可のもと・汎用機能に限定）
+
+```text
+PR #220  trusted-catalog の pin を v0.2.0 へ
+PR #221  quick action / command を宣言どおり実行する host API と、
+         Quick Actions のアイコンを NAVIGATION から引く修正
+PR #222  trusted-catalog の pin を v0.2.2 へ
+```
+
+PR #221 は「宣言された contribution を実行する」汎用機能であり、Media 固有の
+分岐は入れていない。Media Forge 側は contract どおり
+`{"route": "/x/media-forge/workspace/create"}` を返しており、host が呼んで
+いなかっただけだった。

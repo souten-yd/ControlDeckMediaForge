@@ -25,8 +25,10 @@ PR          #21〜#26 マージ済み / release 記録は #27
 | PR-U0 | /ws 追加メソッドと保存基盤 | #23 マージ済み（転送量 -85.9%） |
 | PR-U1 | シェル刷新（3ナビ・モード・モバイル IA） | #24 マージ済み |
 | PR-U2 | 作成体験 | #25 マージ済み |
-| PR-U3 | マスクエディタ・外側拡張 | PR #26 |
+| PR-U3 | マスクエディタ・外側拡張 | #26 マージ済み |
 | PR-U4 | 状況と結果ステージ | 次はここ |
+| — | 実使用で見つかった不具合 6 件 | #28 #29 マージ済み |
+| PR-U7 | 実機受け入れ | 一部完了（desktop / mobile を観測） |
 | PR-U5 | ライブラリと書き出し | 未着手 |
 | PR-U6 | 一貫性 UI（G3） | 未着手 |
 | PR-U7 | 実機受け入れ | 未着手 |
@@ -35,7 +37,7 @@ PR          #21〜#26 マージ済み / release 記録は #27
 
 ```text
 PR-U4（状況と結果ステージ）を開始する。
-  ブランチ    ux1/activity-stage（main から。#26 マージ後に切る）
+  ブランチ    ux1/activity-stage（main から）
   最初の作業  失敗コードごとの「出口」を作る。frontend/app.js の failureText を
               {文言, 操作ラベル, 操作} の表に広げ、状況一覧と作る画面の両方から押せるようにする
   仕様        docs/implementation/ux1-workspace.md §6
@@ -74,9 +76,13 @@ PR-U4（状況と結果ステージ）を開始する。
      UI 実装のために必要な host 変更は 1 つも出ていない。
      ただし v0.2.0 を配布するには trusted-catalog.json の pin 更新が要る
      （これは Media 固有のコードではなく、カタログの版指定なので許容範囲）。
-4. installed host での確認が資格情報待ち
-     mobile: "embedded" の実機確認ができていない。ControlDeck のログインが要る。
-     利用者に確認方法を尋ねるか、利用者自身に実行してもらう。
+4. worker が core を import している（層の違反・未解決）
+     worker_packs/image/adapters/diffusers_flux2.py が
+     mediaforge.image_edit / mediaforge.outpaint を import している。
+     AGENTS.md「worker は core から実装を import しない」に反する。
+     v0.2.2 では bundle へ同梱して動作を戻したが、層の整理は未着手。
+     image_edit / outpaint は PIL だけに依存するので worker pack 側へ寄せるのが筋。
+     ただし strict edit の独立検証は core 側に残すこと（共有すると保証の意味が消える）。
 ```
 
 ## リポジトリの状態で注意すること
