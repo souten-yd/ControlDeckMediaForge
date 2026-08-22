@@ -9,11 +9,11 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    video/h3-bounded-evaluator
-PR          bounded evaluator #58 open（#57 merge 273d983から分岐）
-状態        Host Job/lease対応H3 evaluator実装中。実NVMe preflight成功、GPU推論は未実施
-基準値      ./mf.sh test = 317 passed（31.12秒）
-リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
+ブランチ    release/v031-install-evidence
+PR          #58 merge済み（bcfa670）。v0.3.1 install evidence記録中
+状態        v0.3.1公開・ControlDeck導入済み。H3実GPU評価のworkspace開始操作待ち
+基準値      ./mf.sh test = 317 passed（28.02秒）
+リリース    v0.3.1公開・ControlDeck導入済み（artifact 1b15eaa5...30c4、Host PR #227/#228）
 ```
 
 ## PR 進捗

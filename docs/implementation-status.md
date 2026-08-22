@@ -2169,3 +2169,50 @@ execution evidence. Actual H3 load/generation, peak RAM/VRAM/swap behavior,
 output quality, installed-host browser action, and real cancellation remain
 **NOT TESTED**. Hosted CI was not used and the ControlDeck repository was not
 changed.
+
+## v0.3.1 release-bundle and installed Host update (2026-08-23)
+
+PR #58 merged as `bcfa6701aee892f5fa2c574c5f6ae1f464fb1207`. An exact-head local
+bundle build produced
+`control-deck-media-forge-0.3.1-linux-x86_64.tar.gz`, 30,641,380 bytes,
+SHA-256 `1b15eaa58f477bce982c3dcc3b093518c84382d11f8fc6bb7a9e1afe47dd30c4`.
+The checksum file verified locally and the uploaded GitHub Release asset digest
+reported the same value. The release target is the merge commit above.
+
+The extracted bundle started as a real process on port 9137. Its isolated temp
+data root correctly reported `setup_required`, rather than claiming a configured
+runtime. Standalone Chromium then passed both light and dark runs with 32
+advanced nodes, 320px/narrow overflow 0, console errors 0, deterministic edit
+and outpaint assertions, and 13 capability states. Evidence is under
+`/tmp/mediaforge-v031-evidence.bkUipk/` and is ephemeral local evidence.
+
+ControlDeck PR #227 changed only the trusted artifact SHA. The first real
+update failed closed before changing `current`, because the v0.3.1 manifest's
+standard `ai.inference` capability was not yet in the trusted allowlist. The
+existing v0.3.0 service was restored healthy. ControlDeck PR #228 then added
+only that existing provider-neutral capability to the catalog allowlist; it did
+not add a Media route, implementation, dependency, or UI string. The corrected
+local Host gates passed 28 release-bundle/add-on-AI/contract tests. Hosted CI
+was not used.
+
+The second real Optional Feature Manager update succeeded:
+
+```text
+version:          0.3.1
+state:            installed, managed, enabled, healthy
+current:          versions/0.3.1
+previous_version: 0.3.0
+systemd main PID: 421078
+```
+
+Real HTTP `/health` returned contract 2.0 / healthy with the R9700 gfx1201,
+ROCm Torch runtime, model library, and disk checks all `ok`. H3 evaluation was
+not started without a normal authenticated workspace action: unsigned token
+creation, signing-key access, and reuse of another job's lease remain forbidden.
+Therefore actual H3 load/generation, RAM/VRAM/swap peaks, output validation,
+real cancel, and quality remain **NOT TESTED**. The installed logged-in browser
+was opened at `/x/media-forge/workspace/settings`; the next action is the H3
+card's `実機で評価` button.
+
+After recording the exact release and installed state, the local full gate
+remained 317 passed with one dependency deprecation warning in 28.02 seconds.
