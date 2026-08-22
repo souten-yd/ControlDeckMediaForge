@@ -90,6 +90,7 @@ const state = {
   activeBatch: "",
   activeComposition: "",
   currentComposition: null,
+  resultAssetIds: [],
   batches: [],
   jobs: [],
   libraryCursor: null,
@@ -246,6 +247,9 @@ async function standaloneCall(method, params) {
     return json(`/workspace-api/creative/compositions/${encodeURIComponent(params.composition_id)}`, {
       method: "DELETE",
     });
+  }
+  if (method === "creative.evaluate") {
+    return json("/workspace-api/creative/evaluate", {method: "POST", body: JSON.stringify(params)});
   }
   if (method === "models.list") return json("/api/v1/models");
   if (method === "models.catalog") {
@@ -1549,10 +1553,14 @@ function runExit(action, job) {
 }
 
 async function showResult(assetIds) {
+  state.resultAssetIds = [...assetIds];
   const stage = byId("stage-result");
   stage.hidden = false;
   const strip = byId("candidate-strip");
   strip.replaceChildren();
+  byId("result-evaluation").textContent = "";
+  const evaluate = byId("result-evaluate");
+  evaluate.hidden = assetIds.length < 2 || capabilityState("image.creative_evaluation") !== "available";
   await showAsset(assetIds[0]);
   if (assetIds.length < 2) return;
   for (const assetId of assetIds) {
@@ -2204,6 +2212,7 @@ const CAPABILITY_LABEL = {
   "image.multi_reference_edit": "参考を足して直す",
   "image.strict_edit": "変えない部分を保証する",
   "image.semantic_review": "内容を自動で確認する",
+  "image.creative_evaluation": "候補を比較・順位付けする",
   "video.image_to_video": "動画にする",
   "3d.image_to_3d": "3D にする",
 };
@@ -2837,6 +2846,31 @@ byId("result-detail").addEventListener("click", () => {
 });
 byId("result-edit").addEventListener("click", () => {
   byId("create-status").textContent = "ライブラリから画像を選び直して「画像を追加」に読み込ませてください。";
+});
+byId("result-evaluate").addEventListener("click", async () => {
+  const button = byId("result-evaluate");
+  const note = byId("result-evaluation");
+  if (state.resultAssetIds.length < 2) return;
+  button.disabled = true;
+  button.textContent = "比べています…";
+  try {
+    const evaluated = await call("creative.evaluate", {
+      asset_ids: state.resultAssetIds,
+      reference_asset_ids: selectedProfileReferences().map((item) => item.asset_id).slice(0, 4),
+      intent: byId("create-intent").value,
+      creative_plan: creativeSpec(),
+    });
+    await showResult(evaluated.ranked_asset_ids);
+    const best = evaluated.results[0];
+    note.textContent = state.mode === "advanced"
+      ? `おすすめ: ${best.summary} · ${JSON.stringify(best.scores)} · rank ${best.rank_score}`
+      : `おすすめ: ${best.summary}`;
+  } catch (error) {
+    note.textContent = error?.message || "候補を比べられませんでした。";
+  } finally {
+    button.disabled = false;
+    button.textContent = "候補を比べる";
+  }
 });
 byId("composition-update-text").addEventListener("click", async () => {
   const composition = state.currentComposition;

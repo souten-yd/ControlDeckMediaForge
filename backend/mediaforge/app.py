@@ -35,6 +35,12 @@ from .composer import (
 from .creative import CreativeCompiler, CreativeSpec, CreativeValidationError
 from .creative_batches import CreativeBatchPlanner, CreativeBatchRecord, project_batch
 from .domain import Asset, AssetInput, ErrorDetail, JobRequest, JobStatus, Provenance
+from .evaluator import (
+    CreativeEvaluationError,
+    CreativeEvaluator,
+    EvaluationRequest,
+    OllamaCreativeEvaluator,
+)
 from .events import (
     JobEventBus,
     JobSubscription,
@@ -109,6 +115,7 @@ def create_app(
     *,
     host_client: ControlDeckHostClient | None = None,
     semantic_reviewer: SemanticReviewer | None = None,
+    creative_evaluator: CreativeEvaluator | None = None,
     model_download_origin: str = "https://huggingface.co",
     model_download_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
@@ -119,6 +126,11 @@ def create_app(
         timeout_sec=resolved.host_request_timeout_sec,
     )
     reviewer = semantic_reviewer or OllamaSemanticReviewer(
+        resolved.semantic_reviewer_url,
+        resolved.semantic_reviewer_model,
+        timeout_sec=resolved.semantic_reviewer_timeout_sec,
+    )
+    evaluator = creative_evaluator or OllamaCreativeEvaluator(
         resolved.semantic_reviewer_url,
         resolved.semantic_reviewer_model,
         timeout_sec=resolved.semantic_reviewer_timeout_sec,
@@ -183,6 +195,7 @@ def create_app(
     app.state.creative_batch_planner = creative_batch_planner
     app.state.multi_cut_planner = multi_cut_planner
     app.state.deterministic_composer = deterministic_composer
+    app.state.creative_evaluator = evaluator
     app.state.host = host
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -473,7 +486,10 @@ def create_app(
         ]
 
     async def capability_document() -> dict[str, Any]:
-        semantic_available = await reviewer.available()
+        semantic_available, evaluator_available = await asyncio.gather(
+            reviewer.available(),
+            evaluator.available(),
+        )
         return {
             "contract_version": "1.0",
             "capabilities": {
@@ -487,6 +503,11 @@ def create_app(
                 "image.semantic_review": (
                     {"state": "available"}
                     if semantic_available
+                    else {"state": "unavailable", "reason": "local_vlm_not_installed"}
+                ),
+                "image.creative_evaluation": (
+                    {"state": "available"}
+                    if evaluator_available
                     else {"state": "unavailable", "reason": "local_vlm_not_installed"}
                 ),
                 "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
@@ -784,6 +805,37 @@ def create_app(
         record.updated_at = utc_now()
         store.update_creative_composition(record)
         return composition_projection(record)
+
+    async def evaluate_creative_candidates(payload: dict[str, Any]) -> dict[str, Any]:
+        request = EvaluationRequest.model_validate(payload)
+        if not await evaluator.available():
+            raise CreativeEvaluationError("local creative evaluator is unavailable")
+        reference_paths = tuple(store.asset_path(asset_id) for asset_id in request.reference_asset_ids)
+        results = []
+        for asset_id in request.asset_ids:
+            asset = store.get_asset(asset_id)
+            if not asset.mime_type.startswith("image/"):
+                raise ValueError("creative evaluation accepts image assets only")
+            score = await evaluator.evaluate(
+                store.asset_path(asset_id),
+                request.intent,
+                creative_plan=request.creative_plan,
+                reference_paths=reference_paths,
+            )
+            results.append({
+                "asset_id": asset_id,
+                "scores": score.scores,
+                "rank_score": score.rank_score,
+                "summary": score.summary,
+                "evaluator": score.evaluator,
+            })
+        results.sort(key=lambda item: (-item["rank_score"], item["asset_id"]))
+        return {
+            "results": results,
+            "ranked_asset_ids": [item["asset_id"] for item in results],
+            "advisory": True,
+            "regeneration_requested": False,
+        }
 
     @app.get("/api/v1/capabilities")
     async def capabilities() -> dict[str, Any]:
@@ -1332,6 +1384,8 @@ def create_app(
                         result = await cancel_creative_composition(
                             str(params.get("composition_id", ""))
                         )
+                    elif method == "creative.evaluate":
+                        result = await evaluate_creative_candidates(params)
                     elif method == "capabilities.get":
                         envelope = size_envelope()
                         result = {
@@ -1407,6 +1461,12 @@ def create_app(
                         "id": request_id,
                         "ok": False,
                         "error": error,
+                    })
+                except CreativeEvaluationError as exc:
+                    await websocket.send_json({
+                        "id": request_id,
+                        "ok": False,
+                        "error": {"code": "creative_evaluation_unavailable", "message": str(exc)[:300]},
                     })
                 except (KeyError, ValueError, ValidationError) as exc:
                     await websocket.send_json({
@@ -1542,6 +1602,24 @@ def create_app(
                 detail["field"] = exc.field
             raise HTTPException(status_code=422, detail=detail) from exc
         except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "workspace_request_rejected", "message": str(exc)[:300]},
+            ) from exc
+
+    @app.post("/workspace-api/creative/evaluate", include_in_schema=False)
+    async def standalone_creative_evaluate(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            return await evaluate_creative_candidates(payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        except CreativeEvaluationError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "creative_evaluation_unavailable", "message": str(exc)[:300]},
+            ) from exc
+        except (ValueError, ValidationError) as exc:
             raise HTTPException(
                 status_code=422,
                 detail={"code": "workspace_request_rejected", "message": str(exc)[:300]},

@@ -45,6 +45,7 @@ DOM_IDS = (
     "mask-apply", "mask-cancel",
     "outpaint-input", "outpaint-ratios", "outpaint-scales", "outpaint-preview", "outpaint-note",
     "stage", "stage-progress", "stage-result", "candidate-strip", "recent-strip",
+    "result-evaluate", "result-evaluation",
     "mini-progress", "library-grid", "library-kinds", "activity-list",
     "capability-list", "detail-dialog",
     "model-storage", "model-filters", "model-catalog", "model-empty", "model-error",
@@ -147,6 +148,13 @@ def test_multicut_composer_reuses_create_result_and_viewer():
     assert "restoreCreativeComposition" in SCRIPT
     assert 'byId("composition-update-text")' in SCRIPT
     assert 'await showResult(composition.asset_ids)' in SCRIPT
+
+
+def test_evaluator_only_ranks_existing_candidates():
+    assert 'call("creative.evaluate"' in SCRIPT
+    assert "ranked_asset_ids" in SCRIPT
+    assert "regeneration_requested" not in SCRIPT
+    assert 'capabilityState("image.creative_evaluation")' in SCRIPT
 
 
 def test_model_remove_has_exactly_one_confirmation_dialog():

@@ -36,7 +36,7 @@ class Settings:
     hf_home: Path = Path.home() / ".cache/huggingface"
     image_runtime_python: Path = REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python"
     semantic_reviewer_url: str = "http://127.0.0.1:11434"
-    semantic_reviewer_model: str = "qwen3-vl:2b"
+    semantic_reviewer_model: str = "qwen3-vl:2b-instruct"
     semantic_reviewer_timeout_sec: float = 120.0
 
     def __post_init__(self) -> None:
@@ -108,7 +108,7 @@ class Settings:
                 "MEDIA_FORGE_SEMANTIC_REVIEWER_URL", "http://127.0.0.1:11434"
             ),
             semantic_reviewer_model=os.environ.get(
-                "MEDIA_FORGE_SEMANTIC_REVIEWER_MODEL", "qwen3-vl:2b"
+                "MEDIA_FORGE_SEMANTIC_REVIEWER_MODEL", "qwen3-vl:2b-instruct"
             ),
             semantic_reviewer_timeout_sec=float(
                 os.environ.get("MEDIA_FORGE_SEMANTIC_REVIEWER_TIMEOUT_SEC", "120")
