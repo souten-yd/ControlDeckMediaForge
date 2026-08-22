@@ -562,8 +562,15 @@ class JobManager:
                 raise WorkerFailure("worker_not_installed", "image runtime is not installed")
             executable = self.image_runtime_python
             module = "worker_packs.image.worker"
-            repository_root = str(REPOSITORY_ROOT)
-            environment["PYTHONPATH"] = repository_root + os.pathsep + environment.get("PYTHONPATH", "")
+            # worker_packs は repository root、core の純粋モジュールは backend にある。
+            # 凍結時は両方 _MEIPASS 直下に来る。親から継いだ PYTHONPATH に依存しない。
+            roots = [str(REPOSITORY_ROOT)]
+            backend_root = REPOSITORY_ROOT / "backend"
+            if backend_root.is_dir():
+                roots.append(str(backend_root))
+            environment["PYTHONPATH"] = os.pathsep.join(
+                [*roots, environment.get("PYTHONPATH", "")]
+            ).rstrip(os.pathsep)
             environment["MEDIA_FORGE_MODEL_ROOT"] = str(selected.local_path.parents[1])
             environment["MEDIA_FORGE_WORK_ROOT"] = str(self.store.work_dir.resolve())
             stdin_payload += b"\n"

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "control-deck-media-forge"
-version = "0.2.1"
+dynamic = ["version"]
 description = "Local-first media generation add-on for ControlDeck"
 requires-python = ">=3.11"
 dependencies = [
@@ -25,6 +25,9 @@ test = [
 
 [project.scripts]
 media-forge = "mediaforge.__main__:main"
+
+[tool.hatch.version]
+path = "backend/mediaforge/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend/mediaforge"]

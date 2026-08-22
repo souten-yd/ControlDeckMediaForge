@@ -74,3 +74,32 @@ def test_bundle_build_environment_contains_no_ml_runtime_dependencies():
     assert "torch" not in requirements
     assert "diffusers" not in requirements
     assert "transformers" not in requirements
+
+
+def test_bundle_ships_what_the_worker_imports():
+    """worker は別 venv で動く。adapter が import するものが同梱されていないと必ず crash する。
+
+    実機で image.edit が worker_crash になった（ModuleNotFoundError: mediaforge）。
+    """
+    import ast
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+    build = (root / "scripts" / "build_release_bundle.py").read_text(encoding="utf-8")
+    shipped = set(re.findall(r'--add-data", f"\{[^}]+\}:([a-zA-Z_/]+)"', build))
+
+    top_level: set[str] = set()
+    for path in (root / "worker_packs").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                top_level.add(node.module.split(".")[0])
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    top_level.add(alias.name.split(".")[0])
+
+    # 同梱が要るのは、この repository のパッケージだけ（外部依存は worker venv 側）
+    local = {name for name in top_level if (root / "backend" / name).is_dir() or (root / name).is_dir()}
+    missing = local - shipped
+    assert not missing, f"worker が import するのに bundle へ入っていない: {sorted(missing)}"

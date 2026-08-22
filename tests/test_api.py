@@ -8,6 +8,7 @@ from pathlib import Path
 import jsonschema
 from fastapi.testclient import TestClient
 
+from mediaforge import __version__ as mediaforge_version
 from conftest import fake_settings, wait_terminal
 from mediaforge.app import create_app
 from mediaforge.config import Settings
@@ -87,7 +88,8 @@ def test_fake_generation_registers_asset_and_complete_provenance(client):
     assert provenance["asset_id"] == asset_id
     assert provenance["model_id"] == "media-forge/fake-image"
     assert provenance["weights_hash"] and provenance["license"] == "CC0-1.0"
-    assert provenance["tool_versions"]["media-forge"] == "0.1.2"
+    # 版は毎リリース動く。固定値ではなく、実際に動いている版が記録されることを見る。
+    assert provenance["tool_versions"]["media-forge"] == mediaforge_version
     assert provenance["output_sha256"] == asset["sha256"]
     assert provenance["parent_asset_ids"] == []
     assert provenance["warnings"] == []
