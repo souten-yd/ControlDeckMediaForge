@@ -23,6 +23,20 @@ Catalog domains are advisory only. They do not bypass capability, state,
 health, hardware, policy, or measured-resource routing checks. Downloading a
 model also does not promote unmeasured metadata to measured.
 
+Managed installation is explicit and catalog-only. The installer downloads
+the exact pinned revision into a contained `.downloads/<operation_id>` tree,
+persists progress in Media Forge's SQLite database, resumes HTTP Range
+transfers after restart, validates required files and every declared weight
+size/SHA-256, then atomically promotes the completed repository on the same
+filesystem. Partial content is never exposed as installed. Removal accepts
+only the exact resolved managed repository, rejects symlinks and active-job
+models, and never targets the shared `HF_HOME` cache.
+
+Files are transferred sequentially (`parallelism=1`). Each file gets up to five
+bounded connection retries from its current byte offset. This deliberately
+trades peak download throughput for predictable disk/network pressure on the
+development workstation.
+
 ## G0 fake worker
 
 The G0 worker is not a generative model and is not eligible for default-model promotion.

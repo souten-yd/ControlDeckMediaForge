@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .domain import Job
+    from .models import ModelOperation
 
 MAX_WATCHED_JOBS = 10
 QUEUE_LIMIT = 64
@@ -84,3 +85,59 @@ class JobEventBus:
                 subscription.deliver(job)
             except Exception:  # noqa: BLE001 - a broken subscriber never fails a job
                 continue
+
+
+class ModelOperationSubscription:
+    def __init__(self, bus: "ModelOperationEventBus", loop: asyncio.AbstractEventLoop):
+        self._bus = bus
+        self._loop = loop
+        self.queue: asyncio.Queue[ModelOperation] = asyncio.Queue(maxsize=QUEUE_LIMIT)
+        self.operation_ids: set[str] = set()
+
+    def watch(self, operation_ids: list[str]) -> list[str]:
+        for operation_id in operation_ids:
+            if len(self.operation_ids) >= MAX_WATCHED_JOBS:
+                break
+            self.operation_ids.add(operation_id)
+        return sorted(self.operation_ids)
+
+    def unwatch(self, operation_ids: list[str]) -> list[str]:
+        self.operation_ids.difference_update(operation_ids)
+        return sorted(self.operation_ids)
+
+    def deliver(self, operation: "ModelOperation") -> None:
+        try:
+            self._loop.call_soon_threadsafe(self._offer, operation)
+        except RuntimeError:
+            pass
+
+    def _offer(self, operation: "ModelOperation") -> None:
+        try:
+            self.queue.put_nowait(operation)
+        except asyncio.QueueFull:
+            pass
+
+    def close(self) -> None:
+        self._bus.remove(self)
+
+
+class ModelOperationEventBus:
+    def __init__(self) -> None:
+        self._subscriptions: list[ModelOperationSubscription] = []
+
+    def subscribe(self, loop: asyncio.AbstractEventLoop) -> ModelOperationSubscription:
+        subscription = ModelOperationSubscription(self, loop)
+        self._subscriptions.append(subscription)
+        return subscription
+
+    def remove(self, subscription: ModelOperationSubscription) -> None:
+        if subscription in self._subscriptions:
+            self._subscriptions.remove(subscription)
+
+    def publish(self, operation: "ModelOperation") -> None:
+        for subscription in list(self._subscriptions):
+            if operation.id in subscription.operation_ids:
+                try:
+                    subscription.deliver(operation)
+                except Exception:  # noqa: BLE001 - observation never fails installation
+                    continue

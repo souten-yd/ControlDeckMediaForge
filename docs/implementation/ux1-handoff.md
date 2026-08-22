@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/model-registry-m0
-PR          UX1 #21〜#33 マージ済み / UX2 PR-M0 作業中
-状態        UX2 M0 の registry/catalog ownership を実装・ローカル実測済み
-基準値      ./mf.sh test = 189 passed
+ブランチ    ux1/model-operations-m1
+PR          UX1 #21〜#33 / UX2 M0 #35 マージ済み、PR-M1 #36 open
+状態        UX2 M1 を push・PR作成済み。exact head確認後にmergeする
+基準値      ./mf.sh test = 202 passed
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
 
@@ -36,13 +36,15 @@ PR          UX1 #21〜#33 マージ済み / UX2 PR-M0 作業中
 ## 次にやること（1 つだけ）
 
 ```text
-UX2 PR-M0 を commit / push / merge する。
-  ブランチ    ux1/model-registry-m0
-  実装        単一 ModelRegistry + catalog metadata + managed/external 検出
-  実測        FLUX.2 Klein 4B は NVMe shared HF cache から external / healthy /
-              removable=no。走査 0.03 秒、最大 RSS 14,340 KiB
-  次          merge 後に PR-M1（durable model install/remove backend）
-  注意        M1 の partial download を installed と見なさず、外部 cache を削除しない。
+UX2 PR-M1 を commit / push / merge する。
+  ブランチ    ux1/model-operations-m1
+  実装        trusted catalog only / durable operation / sequential Range resume /
+              verify / atomic promote / managed-only remove / workspace events
+  実測        FLUX.2 Klein 4B 15,975,681,525 bytes を NVMe managed root へ導入。
+              780,840,902 bytes で中断後、同じ operation id で再開して ready。
+              実 core は health=healthy、registry は managed/healthy/removable=yes。
+  次          merge 後に PR-M2（Model Management UI）
+  注意        実モデルは C5 まで保持し、大容量 remove は NOT TESTED のままにする。
               hosted CI は使わずローカル gate を記録する。
 ```
 
@@ -79,6 +81,13 @@ UX2 PR-M0 を commit / push / merge する。
      v0.2.2 では bundle へ同梱して動作を戻したが、層の整理は未着手。
      image_edit / outpaint は PIL だけに依存するので worker pack 側へ寄せるのが筋。
      ただし strict edit の独立検証は core 側に残すこと（共有すると保証の意味が消える）。
+5. 動画モデル管理の将来互換（利用者指示 2026-08-22）
+     M1 installer は image 専用にせず capability-driven のまま維持した。
+     M2 では検証済み `media_types`（image / video / audio_video）を分類表示に追加し、
+     routing の正は capability のままにする。両者が矛盾した catalog は fail-closed。
+     Wan 2.2 TI2V-5B / Animate-14B / LTX 系は G7 の評価候補としてのみ記録し、
+     G1〜G4 とモデル採用ゲートを終える前に download/default/worker 実装へ進まない。
+     C0 は CameraSpec を共通化し、MotionSpec を後から加法的に載せられる形にする。
 ```
 
 ## リポジトリの状態で注意すること
@@ -92,7 +101,7 @@ UX2 PR-M0 を commit / push / merge する。
     証跡: /data1tb/mediaforge-ux1-evidence/{light,dark}/
 
 UX2 の各ブランチは直前スライスを main へ merge してから切る
-    PR-M0 は ux1/model-registry-m0。M0 と M1 を同一 PR に混ぜない。
+    PR-M1 は ux1/model-operations-m1。M1 と M2 を同一 PR に混ぜない。
 ```
 
 ## 再開コマンド
@@ -102,8 +111,8 @@ cd /data1tb/ControlDeckMediaForge
 cat docs/implementation/ux1-handoff.md          # このファイル
 git fetch --all --prune && git log --oneline -5
 gh pr list --state open
-sed -n '/## 4\. PR-M1/,/## 5\. PR-M2/p' docs/implementation/ux2-model-scene.md
-./mf.sh test                                     # 基準値: 189 passed
+sed -n '/## 5\. PR-M2/,/## 6\. PR-C0/p' docs/implementation/ux2-model-scene.md
+./mf.sh test                                     # 基準値: 202 passed
 ```
 
 ## 参照

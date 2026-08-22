@@ -1369,3 +1369,61 @@ max RSS     14,340 KiB
 verify、remove、Settings UI は PR-M1/M2 のため **NOT TESTED**。稼働中の installed
 bundle は v0.2.4 であり、M0 はまだリリース bundle へ含めていない。ControlDeck の
 コード変更は不要だった。
+
+## UX2 PR-M1 — durable model install/remove backend (2026-08-22)
+
+trusted catalog の pinned revision だけを対象にする durable operation を実装した。
+URL、repository、command は workspace input として受け取らない。転送は常に
+`parallelism=1` で、各ファイルは現在 offset から最大 5 回まで再試行する。
+partial は `.downloads/<operation_id>` に隔離し、required file と weight の
+size/SHA-256 検証後に同一 filesystem 上で atomic promote する。明示 cancel は
+partial を削除し、service shutdown / Ctrl-C は再開用に残す。external model と
+実行中 job が保持する managed model の削除は拒否する。
+
+開発機の NVMe 上に空の external cache と専用 managed root を作り、実際の
+FLUX.2 Klein 4B を取得した。
+
+```text
+operation id       modelop_f392eb94cd4d445499a957d5e5b87485
+model/revision      black-forest-labs/FLUX.2-klein-4B
+                    e7b7dc27f91deacad38e78976d1f2b499d76a294
+managed root        data/model-management/managed（/dev/nvme0n1p1, ext4）
+transfer mode       sequential, parallelism=1
+interruption        780,840,902 bytes で Ctrl-C
+resume              同じ operation id / queued から再開し 781,119,430 bytes を観測
+resume process      1,592.15 seconds / max RSS 63,088 KiB
+operation elapsed   1,691.26 seconds（中断と再起動を含む DB timestamp 差）
+verified blobs      15,975,681,525 bytes / 13 snapshot files
+final state         ready / installed=yes / healthy=yes / ownership=managed /
+                    removable=yes
+partial cleanup     ready 後 `.downloads/` に operation directory なし
+registry rescan     0.10 seconds / max RSS 24,892 KiB
+repeat install      model_already_installed、0.15 seconds、exit 1
+```
+
+開発中の実転送では 2 件の失敗も観測した。1 件目は size 未知の完了済み小ファイルへ
+Range request を送り HTTP 416 になったため、`Content-Range: bytes */<total>` と
+local size が一致する場合だけ完了として扱うよう修正した。2 件目は受信途中の
+remote close で失敗したため、offset 継続の bounded retry を追加した。失敗 operation
+は `failed` のまま durable history に残り、partial は削除されている。成功 run では
+約 10.39 GB 地点で受信停止後に同じ operation のまま進行が戻った。
+
+実転送対象の合計が cache directory 全体の初期概算より 13,226,337 bytes 小さいことを
+観測したため、catalog の `approx_download_bytes` は検証対象 13 files の実合計
+15,975,681,525 bytes に補正した。成功 operation は補正前の概算値を durable history
+として保持しているが、以後の operation は補正値を使う。
+
+同じ managed root と空の external cache で実 core を `127.0.0.1:9139` に起動した。
+最初の確認で `model_library=missing` を観測し、`mf.sh` の setup 判定が外部
+`HF_HOME/hub` の存在だけを前提にしていたことを特定した。managed hub も判定対象にし、
+core venv の interpreter で registry を読むよう修正後、実 HTTP で `/health` は
+`healthy` / `model_library=ok`、`/api/v1/models` は対象モデルを
+`installed=true` / `healthy=true` / `available` と返した。
+
+`./mf.sh test` は 202 passed（14.39 秒、全 command 15.50 秒、最大 RSS
+180,192 KiB）。これは契約回帰の証拠であり、上記の実ダウンロード、再開、検証、
+実プロセス/API観測とは区別する。実 15.98 GB model の remove は、次工程でも使うため
+**NOT TESTED**。小さい隔離 fixture の remove、external/in-use拒否、cancel cleanup、
+hash不一致、symlink脱出、workspace event はテストで確認した。managed copyからの
+実画像生成と Settings UI は **NOT TESTED**（後続 M2/C5）。ControlDeck のコード変更は
+不要だった。
