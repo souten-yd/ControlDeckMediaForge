@@ -469,8 +469,19 @@ These are adapter targets, not architecture dependencies.
 
 **Video / animation**
 
-- Wan2.2 family
-- LTX-2 family
+- Wan2.2 TI2V-5B as the general/lightweight T2V+I2V first probe
+- Wan2.2 I2V-A14B / T2V-A14B as higher-quality comparison candidates
+- Wan2.2 Animate-14B for character/companion animation
+- LTX-2.x for synchronized audio-video generation
+- HunyuanVideo 1.5 as a quality-comparison candidate
+
+An exact candidate may appear in Model Management before Phase 3 only as
+`experimental` / `measurement_confidence=low`. Candidate discovery and a
+verified checkpoint download do not make a video capability available and do
+not authorize a video worker. Only a bounded, revision-pinned checkpoint set
+may use the Media-Forge-managed installer. Repositories whose runnable package
+still depends on separately managed preprocessing/runtime assets remain
+external until that package boundary is specified.
 
 **3D**
 

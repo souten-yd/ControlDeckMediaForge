@@ -363,6 +363,9 @@ download_model() {
   local name="$1" model_id
   case "$name" in
     flux2-klein-4b) model_id=black-forest-labs/FLUX.2-klein-4B ;;
+    wan2.2-ti2v-5b) model_id=Wan-AI/Wan2.2-TI2V-5B ;;
+    wan2.2-i2v-a14b) model_id=Wan-AI/Wan2.2-I2V-A14B ;;
+    wan2.2-t2v-a14b) model_id=Wan-AI/Wan2.2-T2V-A14B ;;
     *) die "unknown model: $name" ;;
   esac
   run_model_operation install "$model_id"
@@ -373,6 +376,9 @@ remove_model() {
   local name="$1" model_id
   case "$name" in
     flux2-klein-4b) model_id=black-forest-labs/FLUX.2-klein-4B ;;
+    wan2.2-ti2v-5b) model_id=Wan-AI/Wan2.2-TI2V-5B ;;
+    wan2.2-i2v-a14b) model_id=Wan-AI/Wan2.2-I2V-A14B ;;
+    wan2.2-t2v-a14b) model_id=Wan-AI/Wan2.2-T2V-A14B ;;
     *) die "unknown model: $name" ;;
   esac
   run_model_operation remove "$model_id"
@@ -554,6 +560,9 @@ Usage:
   ./mf.sh env prune
   ./mf.sh model list
   ./mf.sh model download flux2-klein-4b
+  ./mf.sh model download wan2.2-ti2v-5b
+  ./mf.sh model download wan2.2-i2v-a14b
+  ./mf.sh model download wan2.2-t2v-a14b
   ./mf.sh model remove flux2-klein-4b
   ./mf.sh bundle build <version> <output-dir>
   ./mf.sh test

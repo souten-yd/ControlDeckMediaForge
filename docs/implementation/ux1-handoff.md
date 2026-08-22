@@ -9,11 +9,11 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    fix/creative-intelligence-owned-fields
-PR          v0.3.0 #48 / Creative Intelligence A0 #46 マージ済み
-状態        PR #46のserver-owned field回帰を分離修正中
-基準値      ./mf.sh test = 269 passed（24.58秒、修正後）
-リリース    v0.3.0公開済み（artifact d8055331...aa48f）。installed host は v0.2.4
+ブランチ    ux1/video-model-catalog-v0
+PR          v0.3.0 #48 / CI v2計画 #51 マージ済み。動画catalog #50 open
+状態        PR #50のWan TI2V-5B snapshot取得／NVMe SHA検証済み。CI-1〜CI-6を次に優先
+基準値      ./mf.sh test = 274 passed（23.54秒）
+リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
 ## PR 進捗
@@ -36,9 +36,10 @@ PR          v0.3.0 #48 / Creative Intelligence A0 #46 マージ済み
 ## 次にやること（1 つだけ）
 
 ```text
-protected-field修正をPR作成・mergeし、動画候補catalogの別PRへ戻る。
-  修正        AIがechoしたversion / original_intent / modeだけを無視
-  維持        その他の未知fieldはfail-closed
+PR #50へ実download証拠をpushしてmergeし、CI-1 provider-neutral AI cutoverへ進む。
+  優先        docs/implementation/creative-intelligence.md のCI-1〜CI-6を順番に完了
+  保留        Wan runtime／R9700生成評価と他の動画model download
+  次UI        画像model catalog複数候補化。Settingsの長いAbout一覧は「詳細」へ移動
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
@@ -79,8 +80,9 @@ protected-field修正をPR作成・mergeし、動画候補catalogの別PRへ戻�
      M1 installer は image 専用にせず capability-driven のまま維持した。
      M2 では検証済み `media_types`（image / video / audio_video）を分類表示に追加し、
      routing の正は capability のままにする。両者が矛盾した catalog は fail-closed。
-     Wan 2.2 TI2V-5B / Animate-14B / LTX 系は G7 の評価候補としてのみ記録し、
-     G1〜G4 とモデル採用ゲートを終える前に download/default/worker 実装へ進まない。
+     Wan 2.2 TI2V-5B / Animate-14B / LTX 系は G7 の評価候補としてのみ記録する。
+     利用者がM0〜M2を先行指定し、候補の実download確認も明示したため、boundedなmanaged
+     snapshot取得までは先行する。R9700 worker実行、available/default昇格、G7 APIには進まない。
      C0 は CameraSpec を共通化し、MotionSpec を後から加法的に載せられる形にする。
 ```
 
@@ -94,8 +96,8 @@ protected-field修正をPR作成・mergeし、動画候補catalogの別PRへ戻�
               --evidence-dir /tmp/ux1-evidence
     証跡: /data1tb/mediaforge-ux1-evidence/{light,dark}/
 
-UX2 の各ブランチは直前スライスを main へ merge してから切る
-    PR-C0 は ux1/creative-spec-c0。C0 と C1 を同一 PR に混ぜない。
+機能スライスは直前PRをmainへmergeしてから切る。
+Creative Intelligenceは docs/implementation/creative-intelligence.md の CI-1〜CI-6 を順に進める。
 ```
 
 ## 再開コマンド

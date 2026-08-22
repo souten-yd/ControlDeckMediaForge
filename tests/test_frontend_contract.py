@@ -103,7 +103,11 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert "models.operations.watch" in SCRIPT and "model.operation.changed" in SCRIPT
     assert 'data-model-filter="installed"' in MARKUP
     assert 'data-model-filter="recommended"' in MARKUP
+    assert 'data-model-filter="video"' in MARKUP
     assert 'data-model-filter="all"' in MARKUP
+    assert 'model.ownership === "managed"' in SCRIPT
+    assert '"外部ランタイムで導入"' in SCRIPT
+    assert 'experimental: "実験的・未実測"' in SCRIPT
     assert "card.dataset.modelId" not in SCRIPT
     assert "dataset.modelId =" not in SCRIPT
 

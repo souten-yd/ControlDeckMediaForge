@@ -5,6 +5,39 @@ Scope: MF0-0 through MF0-7 and G0 through G2 complete
 Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
 Repository head released and verified for G1: `1e88472e753fd484638f072f7c4b327c8010ab60` (`v0.1.2`)
 
+## Video model candidate catalog — IMPLEMENTED, SNAPSHOT VERIFIED
+
+Wan 2.2 TI2V-5B／I2V-A14B／T2V-A14B／Animate-14B、LTX-2.3、HunyuanVideo-1.5の
+exact revisionとbounded checkpoint identityを、既存Model Registry／Model Managementへ追加した。
+全候補は`experimental`、measurement confidence `low`、ROCm未実測、recommended profileなしであり、
+R9700向けavailable/defaultや動画worker実装を主張しない。runtime packageまでsnapshotが閉じるWan生成3件だけを
+managed download対象とし、Animate／LTX／Hunyuanはexternal ownerとしてbackendでもdownloadを拒否する。
+UIは動画候補filter、実験的表示、外部runtime所有表示を追加し、別の動画モデル管理APIは作っていない。
+
+ローカル自動検証はcatalog／manager／frontend集中46件成功、`./mf.sh test`全274件成功（23.54秒）。
+
+実model download: 製品のdurable installerを並列1で使い、Wan 2.2 TI2V-5Bのfixed revision
+`921dbaf3f1674a56f47e83fb80a34bac8a8f203e`を取得した。operation
+`modelop_0164bf6e9d79411b87bfe97c2c0c9f3d`は2026-08-22 18:12:50 JSTから19:15:16 JSTまで
+3,745.295068秒で、34,201,521,212／34,201,521,212 bytes、errorなし、`ready`となった。download中は
+partialが`.downloads/<operation_id>`内だけにあり、全取得後に`verifying`を経てsnapshotへatomic配置された。
+平均転送量は約9.13 MB/sで、配信帯域の一時低下は観測したがretry/errorは観測しなかった。resumeは実中断を
+行っていないためNOT TESTED。
+
+初回の開発CLIはtracked configのhome既定を使い、root filesystemへ一旦配置した。これはNVMe証拠として採用せず、
+同一filesystem上の実運用store
+`/data1tb/ControlDeck/data/feature-data/media-forge/data/models`へcopy後、5 weight全てのsizeとSHA-256を
+独立再計算した。34,201,521,212 bytesの全weightがcatalogと一致し、required file 7件とrevisionも一致した
+（25.66秒、最大RSS 31,768 KiB）。その後registryはWanを`managed/removable/installed`、既存共有FLUXを
+`external/installed/available`として同時に検出した。home既定model pathはこのNVMe storeへのsymlinkに切り替え、
+root filesystem使用率は89%から77%へ戻った。誤配置元の同一copyは削除せず
+`/data1tb/mediaforge-recovery/root-misplaced-Wan2.2-TI2V-5B-20260822`へ退避している。
+
+Wanの主用途はText-to-Video／Image-to-Video、規模は5B、R9700の第一評価候補である。ただしsnapshot取得は
+ROCm runtime動作の証拠ではないため、stateは`experimental`、measurement confidenceは`low`、hardware backendは
+CUDA-only、healthy=false、recommended profileなしを維持する。R9700 runtime実行、VRAM、生成時間、失敗率は
+CI-1〜CI-6優先のためNOT TESTEDとして延期する。
+
 ## MF0-0 — COMPLETE for the requested environment slice
 
 The core service, heavyweight ROCm runtime, caches, and persistent Media Forge data are separated. Section 10 was executed from retreated `.venv` / runtime state on the target host. This status uses runtime observations; lint, syntax checks, and unit tests are not counted as proof that the environments work.
