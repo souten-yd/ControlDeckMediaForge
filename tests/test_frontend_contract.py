@@ -183,10 +183,10 @@ def test_workspace_routes_match_the_views_the_ui_syncs():
 def test_addon_declares_a_real_mobile_view():
     view = next(item for item in ADDON["contributions"]["embedded_views"] if item["id"] == "workspace")
     assert view["mobile"] == "embedded", "モバイル IA を実装したので companion ではない"
-    # 版はリリースごとに動く。固定値ではなく pyproject と一致していることを見る。
-    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    packaged = re.search(r'^version = "([^"]+)"', pyproject, re.MULTILINE).group(1)
-    assert ADDON["version"] == packaged, "addon.json と pyproject の版が食い違っている"
+    # 版はリリースごとに動く。固定値ではなくパッケージ側と一致していることを見る。
+    source = (ROOT / "backend" / "mediaforge" / "__init__.py").read_text(encoding="utf-8")
+    packaged = re.search(r'__version__ = "([^"]+)"', source).group(1)
+    assert ADDON["version"] == packaged, "addon.json と mediaforge.__version__ が食い違っている"
 
 
 @pytest.mark.parametrize("kind", ["all", "generated", "edited", "imported"])
