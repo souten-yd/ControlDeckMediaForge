@@ -246,7 +246,6 @@ def create_app(
                 "navigation:workspace": "available",
                 "embedded_view:workspace": "available",
                 "command:create-media": token_state,
-                "quick_action:create-media": token_state,
                 "settings:settings": "available",
                 "workflow_executor:media.generate": token_state,
                 "agent_tool:media.capabilities": token_state,

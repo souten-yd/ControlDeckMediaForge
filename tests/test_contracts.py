@@ -38,3 +38,21 @@ def test_model_catalog_matches_public_schema_without_local_path(client):
     for model in response.json()["items"]:
         jsonschema.validate(model, schema)
         assert "path" not in model
+
+
+def test_no_contribution_duplicates_the_navigation_entry():
+    """ナビがあるのに quick action で同じ場所を出さない。
+
+    実機の Quick Actions で「Media」と「メディアを作成」が並び、
+    どちらも workspace を開くだけだった。ホストが導線を持つものを
+    プラグイン側で二重に宣言しない。
+    """
+    import json
+    from pathlib import Path
+
+    manifest = json.loads((Path(__file__).parents[1] / "addon.json").read_text(encoding="utf-8"))
+    contributions = manifest["contributions"]
+    assert "quick_actions" not in contributions, "navigation と重複する quick action を宣言しない"
+    assert contributions["navigation"], "ナビゲーションは残す"
+    # command palette から呼ぶ command は残す（別の導線であり重複ではない）
+    assert contributions["commands"], "command は残す"
