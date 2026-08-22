@@ -10,8 +10,8 @@
 ```text
 最終更新    2026-08-22
 ブランチ    ux2/image-model-catalog-v1
-PR          未作成。CI-1 #53 / Settings詳細移動 #52 merge済み
-状態        画像catalog v1実装・実HTTP/browser・full gate済み。commit/PR前
+PR          画像catalog v1 #54 open。CI-1 #53 / Settings詳細移動 #52 merge済み
+状態        PR #54 implementation head ae2f844。実HTTP/browser・full gate済み
 基準値      ./mf.sh test = 279 passed（28.51秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
