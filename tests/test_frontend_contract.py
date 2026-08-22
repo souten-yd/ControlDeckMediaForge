@@ -127,6 +127,16 @@ def test_profiles_are_simple_but_reference_roles_and_strength_are_advanced():
     assert "supports_reference_strength" in SCRIPT
 
 
+def test_intentional_variations_use_durable_batches_and_advanced_drilldown():
+    assert 'call("creative.batches.create"' in SCRIPT
+    assert 'call("creative.batches.get"' in SCRIPT
+    assert 'call("creative.batches.cancel"' in SCRIPT
+    assert "restoreCreativeBatch" in SCRIPT
+    assert "creativeBatchRow" in SCRIPT
+    assert "dataset.cancelBatch" in SCRIPT
+    assert "child_job_ids" in SCRIPT
+
+
 def test_model_remove_has_exactly_one_confirmation_dialog():
     assert MARKUP.count('id="model-remove-dialog"') == 1
     assert MARKUP.count('id="model-remove-confirm"') == 1

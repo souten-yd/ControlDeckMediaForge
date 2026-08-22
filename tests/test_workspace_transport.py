@@ -98,6 +98,27 @@ def test_creative_templates_and_validation_stay_on_private_transport(tmp_path: P
     assert directed["result"]["request"]["model_id"] is None
 
 
+def test_creative_batch_uses_private_transport_and_restores_children(tmp_path: Path):
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client, client.websocket_connect("/ws", headers=headers) as socket:
+        created = call(socket, "creative.batches.create", {
+            "request": generate_input("four deliberate poses"),
+            "creative_spec": {"variation": {"axis": "pose"}},
+            "count": 4,
+        })
+        assert created["ok"] is True
+        batch_id = created["result"]["id"]
+        child_ids = created["result"]["child_job_ids"]
+        restored = call(socket, "creative.batches.get", {"batch_id": batch_id})
+        listed = call(socket, "creative.batches.list")
+
+    assert len(child_ids) == 4
+    assert len(set(child_ids)) == 4
+    assert restored["result"]["id"] == batch_id
+    assert listed["result"]["items"][0]["id"] == batch_id
+    assert len({plan["pose"]["id"] for plan in restored["result"]["child_plans"]}) == 4
+
+
 # ── library.list ────────────────────────────────────────────────────────────
 
 
@@ -343,7 +364,8 @@ def test_job_publication_survives_a_failing_listener(tmp_path: Path):
     [
         "capabilities.get", "library.list", "assets.thumbnail", "preferences.get", "jobs.watch",
         "models.catalog", "models.install", "models.remove", "models.operations.list",
-        "creative.templates", "creative.validate",
+        "creative.templates", "creative.validate", "creative.batches.create",
+        "creative.batches.get", "creative.batches.list", "creative.batches.cancel",
     ],
 )
 def test_new_methods_reject_host_path_strings(tmp_path: Path, method: str):

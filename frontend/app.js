@@ -87,6 +87,8 @@ const state = {
   outpaintScale: 1.5,
   estimateSec: null,
   activeJob: "",
+  activeBatch: "",
+  batches: [],
   jobs: [],
   libraryCursor: null,
   libraryKind: "all",
@@ -215,6 +217,16 @@ async function standaloneCall(method, params) {
   if (method === "jobs.watch" || method === "jobs.unwatch") return {watching: []};
   if (method === "creative.validate") {
     return json("/workspace-api/creative/validate", {method: "POST", body: JSON.stringify(params)});
+  }
+  if (method === "creative.batches.create") {
+    return json("/workspace-api/creative/batches", {method: "POST", body: JSON.stringify(params)});
+  }
+  if (method === "creative.batches.list") return json("/workspace-api/creative/batches");
+  if (method === "creative.batches.get") {
+    return json(`/workspace-api/creative/batches/${encodeURIComponent(params.batch_id)}`);
+  }
+  if (method === "creative.batches.cancel") {
+    return json(`/workspace-api/creative/batches/${encodeURIComponent(params.batch_id)}`, {method: "DELETE"});
   }
   if (method === "models.list") return json("/api/v1/models");
   if (method === "models.catalog") {
@@ -1109,6 +1121,21 @@ async function submitJob(event) {
       ...modelSelection(),
     };
     const spec = creativeSpec();
+    const batchAxes = new Set(["pose", "scene", "composition"]);
+    const batchCount = requestedCount();
+    if (batchCount > 1 && batchAxes.has(spec.variation.axis)) {
+      request.output.count = 1;
+      showPreparing("差分を計画しています", 0.65);
+      const batch = await call("creative.batches.create", {
+        request, creative_spec: spec, count: batchCount,
+      });
+      setHostBusy(false);
+      state.activeBatch = batch.id;
+      showBatchProgress(batch);
+      void savePreferences({last_preset: preset.id, last_count: selectedCount()});
+      void pollBatch(batch.id);
+      return;
+    }
     if (creativeActive(spec)) {
       showPreparing("シーン指定を確認しています", 0.65);
       request = (await call("creative.validate", {request, creative_spec: spec})).request;
@@ -1170,6 +1197,52 @@ async function pollJob(id) {
   }
 }
 
+async function pollBatch(id) {
+  for (let attempt = 0; attempt < 3600 && !state.disabled; attempt += 1) {
+    let batch;
+    try { batch = await call("creative.batches.get", {batch_id: id}); } catch { return; }
+    showBatchProgress(batch);
+    if (["succeeded", "partial", "failed", "canceled"].includes(batch.state)) {
+      return finishBatch(batch);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
+function showBatchProgress(batch) {
+  const running = batch.state === "running";
+  const percent = Math.round((batch.progress || 0) * 100);
+  byId("stage-progress").hidden = !running;
+  byId("mini-progress").hidden = !running;
+  byId("progress-phase").textContent = `差分を作っています（${batch.completed_count}/${batch.requested_count}）`;
+  byId("mini-phase").textContent = `差分 ${batch.completed_count}/${batch.requested_count}`;
+  byId("progress-bar").style.width = `${percent}%`;
+  byId("mini-bar").style.width = `${percent}%`;
+  byId("progress-detail").textContent = state.mode === "advanced"
+    ? `${batch.id} · ${batch.state} · child jobs ${batch.child_job_ids.join(", ")}`
+    : `${percent}%`;
+  updateActivityBadge(running ? 1 : 0);
+}
+
+async function finishBatch(batch) {
+  if (state.activeBatch !== batch.id) return;
+  state.activeBatch = "";
+  byId("stage-progress").hidden = true;
+  byId("mini-progress").hidden = true;
+  updateActivityBadge(0);
+  if (batch.asset_ids.length) {
+    await showResult(batch.asset_ids);
+    await loadRecent();
+  }
+  if (batch.state === "partial") {
+    showError(`${batch.succeeded_count} 枚は完成し、${batch.failed_count + batch.canceled_count} 枚は完成しませんでした。`);
+  } else if (batch.state === "failed") {
+    showError("差分を作れませんでした。");
+  } else if (batch.state === "canceled") {
+    byId("create-status").textContent = "差分作成を中止しました。";
+  }
+}
+
 /* job になる前の待ち時間も進捗として見せる。
    モバイルではステージが画面外にあり、ミニバーだけが手掛かりになる。 */
 function showPreparing(text, ratio) {
@@ -1184,7 +1257,7 @@ function showPreparing(text, ratio) {
 }
 
 function hidePreparing() {
-  if (state.activeJob) return;
+  if (state.activeJob || state.activeBatch) return;
   byId("stage-progress").hidden = true;
   byId("mini-progress").hidden = true;
 }
@@ -1839,19 +1912,76 @@ function updateActivityBadge(count) {
 async function loadActivity() {
   const list = byId("activity-list");
   let items = [];
+  let batches = [];
   try { ({items} = await call("jobs.list")); state.jobs = items; } catch {
     byId("activity-empty").hidden = false;
     byId("activity-empty").textContent = "状況を読み込めませんでした。";
     return;
   }
+  if (state.mode === "advanced") {
+    try { ({items: batches} = await call("creative.batches.list")); } catch { batches = []; }
+    state.batches = batches;
+  }
   const running = items.filter((job) => !TERMINAL.has(job.status));
   const finished = items.filter((job) => TERMINAL.has(job.status));
-  list.replaceChildren(...[...running, ...finished].map(activityRow));
-  byId("activity-empty").hidden = items.length > 0;
-  updateActivityBadge(running.length);
+  const batchRows = state.mode === "advanced" ? batches.map(creativeBatchRow) : [];
+  list.replaceChildren(...batchRows, ...[...running, ...finished].map(activityRow));
+  byId("activity-empty").hidden = items.length + batchRows.length > 0;
+  updateActivityBadge(running.length + batches.filter((batch) => batch.state === "running").length);
+}
+
+async function restoreCreativeBatch() {
+  try {
+    const {items} = await call("creative.batches.list");
+    state.batches = items || [];
+    const active = state.batches.find((batch) => batch.state === "running");
+    if (!active) return;
+    state.activeBatch = active.id;
+    showBatchProgress(active);
+    void pollBatch(active.id);
+  } catch { state.batches = []; }
 }
 
 const STATUS_LABEL = {queued: "待機", running: "実行中", succeeded: "完了", failed: "失敗", canceled: "中止"};
+
+function creativeBatchRow(batch) {
+  const row = document.createElement("article");
+  row.className = "row";
+  row.dataset.batchId = batch.id;
+  row.dataset.status = batch.state;
+
+  const info = document.createElement("div");
+  const title = document.createElement("p");
+  title.className = "t";
+  title.textContent = `差分セット · ${batch.axis}`;
+  const sub = document.createElement("p");
+  sub.className = "s";
+  sub.textContent = `${batch.succeeded_count}/${batch.requested_count} 枚完成 · ${batch.id}`;
+  const children = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = `子ジョブ ${batch.child_job_ids.length} 件`;
+  const childList = document.createElement("p");
+  childList.className = "s";
+  childList.textContent = batch.child_job_ids.map((id, index) => `${index + 1}. ${id}`).join("\n");
+  children.append(summary, childList);
+  info.append(title, sub, children);
+
+  const side = document.createElement("div");
+  side.className = "row-side";
+  const status = document.createElement("span");
+  status.className = "state";
+  status.textContent = STATUS_LABEL[batch.state] || (batch.state === "partial" ? "一部完了" : batch.state);
+  side.append(status);
+  if (batch.state === "running") {
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.dataset.cancelBatch = batch.id;
+    cancel.textContent = "すべて中止";
+    side.append(cancel);
+  }
+  row.append(info, side);
+  return row;
+}
 
 function relativeTime(value) {
   const seconds = Math.max(0, (Date.now() - Date.parse(value)) / 1000);
@@ -1887,7 +2017,9 @@ function activityRow(job) {
   if (state.mode === "advanced") {
     const raw = document.createElement("p");
     raw.className = "s";
-    raw.textContent = `${job.id} · ${job.phase || "-"}${job.error ? ` · ${job.error.code}` : ""}`;
+    const batch = job.request.constraints?.creative_plan?.batch;
+    raw.textContent = `${job.id} · ${job.phase || "-"}${job.error ? ` · ${job.error.code}` : ""}`
+      + (batch ? ` · ${batch.id} child ${batch.index + 1}/${batch.total}` : "");
     info.append(raw);
   }
 
@@ -2488,6 +2620,12 @@ for (const holder of [byId("activity-list"), byId("create-error")]) {
         .then(() => loadActivity())
         .catch(() => {});
     }
+    const cancelBatch = event.target.closest("[data-cancel-batch]");
+    if (cancelBatch) {
+      void call("creative.batches.cancel", {batch_id: cancelBatch.dataset.cancelBatch})
+        .then(() => loadActivity())
+        .catch(() => {});
+    }
   });
 }
 
@@ -2567,7 +2705,9 @@ byId("result-edit").addEventListener("click", () => {
 });
 for (const id of ["progress-cancel", "mini-cancel"]) {
   byId(id).addEventListener("click", () => {
-    if (state.activeJob) void call("jobs.cancel", {job_id: state.activeJob}).catch(() => {});
+    if (state.activeBatch) {
+      void call("creative.batches.cancel", {batch_id: state.activeBatch}).then(finishBatch).catch(() => {});
+    } else if (state.activeJob) void call("jobs.cancel", {job_id: state.activeJob}).catch(() => {});
   });
 }
 
@@ -2602,6 +2742,7 @@ async function boot() {
   await refreshAttachment();
   void loadEstimate();
   await loadRecent();
+  await restoreCreativeBatch();
   activate(state.preferences.last_view || "create", {sync: false});
   await call("jobs.watch", {job_ids: []}).catch(() => {});
   document.documentElement.dataset.bridge = window.parent === window ? "standalone" : "ready";
@@ -2626,7 +2767,9 @@ window.addEventListener("message", (event) => {
     if (message.event === "session.updated") state.nonce = message.data.session_nonce;
     if (message.event === "disable.pending") {
       state.disabled = true;
+      if (state.activeBatch) void call("creative.batches.cancel", {batch_id: state.activeBatch}).catch(() => {});
       if (state.activeJob) void call("jobs.cancel", {job_id: state.activeJob}).catch(() => {});
+      state.activeBatch = "";
       state.activeJob = "";
       setHostBusy(false);
     }

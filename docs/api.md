@@ -66,6 +66,16 @@ and reference roles that do not name request assets before job submission.
 It never introduces `model_id` unless the incoming request already uses
 `model_policy=manual`.
 
+Intentional variation batches are also private workspace orchestration.
+`creative.batches.create` accepts an existing JobRequest-shaped object, an
+internal CreativeSpec, and a bounded count (2..8). It returns a durable logical
+batch with explicit child plans and child job IDs. `creative.batches.get`,
+`.list`, and `.cancel` support reconnect, Activity drilldown, and safe logical
+cancel. Every child still uses the normal `jobs.create` / hosted Broker admission
+route; successful child assets are retained when siblings fail or are canceled.
+The standalone same-origin `/workspace-api/creative/batches` bridge mirrors
+these methods for development, is excluded from OpenAPI, and is not a public API.
+
 ## Jobs
 
 `POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json).

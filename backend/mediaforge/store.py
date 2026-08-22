@@ -5,20 +5,21 @@ import shutil
 import sqlite3
 import threading
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from collections.abc import Callable
 from typing import Any
 
+from .creative_batches import CreativeBatchRecord
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
-from .paths import contained
-from .profiles import Profile, ProfileInput, ReferenceCollection, ReferenceCollectionInput
 from .models.operations import (
+    TERMINAL_MODEL_OPERATION_STATES,
     ModelOperation,
     ModelOperationAction,
     ModelOperationState,
-    TERMINAL_MODEL_OPERATION_STATES,
 )
+from .paths import contained
+from .profiles import Profile, ProfileInput, ReferenceCollection, ReferenceCollectionInput
 
 
 def utc_now() -> str:
@@ -124,6 +125,14 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_model_operations_created
                     ON model_operations(created_at DESC);
+                CREATE TABLE IF NOT EXISTS creative_batches (
+                    id TEXT PRIMARY KEY,
+                    value_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_creative_batches_created
+                    ON creative_batches(created_at DESC);
                 """
             )
             columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(jobs)")}
@@ -559,6 +568,41 @@ class Store:
             cursor = connection.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
             if cursor.rowcount != 1:
                 raise KeyError(profile_id)
+
+    def create_creative_batch(self, value: CreativeBatchRecord) -> CreativeBatchRecord:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "INSERT INTO creative_batches (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (value.id, value.model_dump_json(), value.created_at, value.updated_at),
+            )
+        return value
+
+    def update_creative_batch(self, value: CreativeBatchRecord) -> CreativeBatchRecord:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE creative_batches SET value_json = ?, updated_at = ? WHERE id = ?",
+                (value.model_dump_json(), value.updated_at, value.id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(value.id)
+        return value
+
+    def get_creative_batch(self, batch_id: str) -> CreativeBatchRecord:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT value_json FROM creative_batches WHERE id = ?", (batch_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(batch_id)
+        return CreativeBatchRecord.model_validate_json(row["value_json"])
+
+    def list_creative_batches(self, limit: int = 100) -> list[CreativeBatchRecord]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT value_json FROM creative_batches ORDER BY created_at DESC LIMIT ?",
+                (max(1, min(100, limit)),),
+            ).fetchall()
+        return [CreativeBatchRecord.model_validate_json(row["value_json"]) for row in rows]
 
     def _asset_row(self, asset_id: str) -> sqlite3.Row:
         with self._connect() as connection:

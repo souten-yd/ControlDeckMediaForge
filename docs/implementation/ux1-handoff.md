@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/reference-roles-c2
-PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 / C0 #38 / C1 #39 マージ済み、C2 #40 open
-状態        UX2 C2 をpush・PR作成済み。exact head確認後にmergeする
-基準値      ./mf.sh test = 228 passed
+ブランチ    ux1/creative-batches-c3
+PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 / C0 #38 / C1 #39 / C2 #40 マージ済み、C3 #41 open
+状態        UX2 C3 をpush・PR作成済み。exact head / mergeability確認後にmergeする
+基準値      ./mf.sh test = 240 passed
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
 
@@ -36,13 +36,13 @@ PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 / C0 #38 / C1 #39 マ�
 ## 次にやること（1 つだけ）
 
 ```text
-UX2 PR-C2 を commit / push / merge する。
-  ブランチ    ux1/reference-roles-c2
-  実装        既存G3 profile選択、collection role metadata、Advanced role override、
-              model envelope由来の参照上限/role/strength対応
-  実測        同一profile/identityで3 pose、pose/composition ref swap、上限4枚、
-              unsupported strength disabled、320px overflow 0、console/page error 0。
-  次          merge 後に PR-C3（意図的な複数差分生成）
+UX2 PR-C3 のfull gateを通し、commit / push / PR / mergeする。
+  ブランチ    ux1/creative-batches-c3
+  実装        deterministic child planner、durable parent batch、logical cancel、
+              reconnect、partial asset保持、候補strip、Advanced child drilldown
+  実測        pose/composition各4差分、全child cancel、partial 1 asset保持、
+              reload復元、320px overflow 0、console/page error 0。
+  次          merge 後に PR-C4（multi-cut planner + deterministic Composer）
   注意        実モデルは C5 まで保持し、大容量 remove は NOT TESTED のままにする。
               hosted CI は使わずローカル gate を記録する。
 ```
