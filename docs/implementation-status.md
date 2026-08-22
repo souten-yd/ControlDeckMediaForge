@@ -1598,3 +1598,44 @@ dataとして埋め込み、standaloneとembeddedが同じ数値的正を使う�
 `./mf.sh test`は228 passed（12.59秒、全command 13.93秒、最大RSS
 191,848 KiB）。実GPUで3 pose/reference swapの視覚品質はC5のため **NOT TESTED**。
 numeric strengthは対象modelが未対応なで **UNAVAILABLE**。ControlDeck変更は不要だった。
+
+## UX2 PR-C3 — intentional pose/scene/composition batches (2026-08-22)
+
+`count > 1` と pose / scene / composition variation の組み合わせを、単一workerへの
+曖昧な複数出力ではなく、2〜8件の明示的child CreativeSpecへ展開するplannerを追加した。
+各childは異なるtemplate snapshot、seed、batch ID/indexを持ち、通常のjob admissionを
+1件ずつ通る。親batchはSQLiteへ永続化し、reload後のprogress復元、logical cancel、
+successful assetを残すpartial stateを提供する。public JobRequest/schema/addon contractは
+変更していない。
+
+隔離data dirの実core（`127.0.0.1:9143`）、fake workerの別process、Chromiumで
+`scripts/ux_creative_batches_c3_e2e.py`を実行した。
+
+```text
+pose x4                  holding_item / typing / peace / wave
+pose seeds               1664062594 / 1664062595 / 1664062596 / 1664062597
+composition x4           bust_up / full_body_center / full_body_off_center /
+                         three_quarter
+result candidate assets  pose batch 4件
+reload/reconnect          batch IDを復元、表示は「差分を作っています（0/4）」
+logical cancel            child 4件すべて canceled、queued/running 0件
+partial success           succeeded 1 / canceled 3 / retained asset 1
+Advanced Activity         親batchからchild job ID 4件を展開
+browser wall time         3.4 seconds
+320x640 overflow          0 px
+console / page errors     0 / 0
+evidence                  /tmp/mediaforge-c3-evidence-20260822d/
+```
+
+初回browser runは実modelを空rootへ隔離した結果、capabilityが正しく
+`model_not_installed`となり受付前に422で停止した。実modelを偽ってavailableにせず、
+experimental manifestでfake workerを明示するfixtureへ切り替えた。次のrunではSimpleの
+progress detailにbatch IDが出ると仮定したprobeがtimeoutし、実際のSimple表現に合わせて
+進捗文言と可視状態を観測した。3回目は新しいparent drilldownの長いIDが320pxでoverflow
+する実不具合を検出し、grid childのmin-widthと折返しを修正後に上記runが完了した。
+
+`./mf.sh test`は240 passed（16.39秒、全command 17.81秒、最大RSS 203,108 KiB）。
+これは契約回帰であり、上記の実process/browser観測とは区別する。
+実GPUによる4 pose / 4 compositionの視覚品質、ControlDeck broker上での4-child連続
+admission、installed-host iframeでのreconnectはC5まで **NOT TESTED**。fake workerは
+CPU-onlyでありlease不要。ControlDeck変更は不要だった。

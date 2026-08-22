@@ -392,6 +392,14 @@ additive future spec and is not accepted until the G7 runtime is designed.
 Generic templates must not contain sampler, scheduler, kernel, or other
 engine-specific terms.
 
+When VariationSpec requests pose, scene, or composition differences with
+`output.count > 1`, the workspace expands it into a durable logical batch of
+bounded child JobRequests. Each child stores an explicit normalized plan,
+deterministic seed, batch ID and index, and follows the ordinary job/Broker
+admission path. A logical cancel only cancels queued/running children; completed
+assets remain valid. This is private orchestration and does not add a public
+generation operation.
+
 ---
 
 ## 6. Capability catalog and model registry

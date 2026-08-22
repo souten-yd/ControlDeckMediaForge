@@ -52,6 +52,7 @@
   "variations": [
     {"id": "auto", "version": "1.0", "label": "自動", "prompt": ""},
     {"id": "pose", "version": "1.0", "label": "ポーズ違い", "prompt": "vary the pose while preserving the subject"},
+    {"id": "scene", "version": "1.0", "label": "シーン違い", "prompt": "vary the scene deliberately while preserving the subject"},
     {"id": "expression", "version": "1.0", "label": "表情違い", "prompt": "vary the expression while preserving identity"},
     {"id": "composition", "version": "1.0", "label": "構図違い", "prompt": "vary the composition deliberately"},
     {"id": "camera", "version": "1.0", "label": "カメラ違い", "prompt": "vary the camera treatment deliberately"}

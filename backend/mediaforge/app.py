@@ -9,6 +9,7 @@ import os
 import shutil
 import sys
 import uuid
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -24,6 +25,7 @@ from . import __version__, library, preferences, thumbnails
 from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
 from .config import Settings
 from .creative import CreativeCompiler, CreativeSpec, CreativeValidationError
+from .creative_batches import CreativeBatchPlanner, CreativeBatchRecord, project_batch
 from .domain import JobRequest
 from .events import (
     JobEventBus,
@@ -48,7 +50,7 @@ from .profiles import ProfileInput, ReferenceCollectionInput
 from .semantic_review import OllamaSemanticReviewer, SemanticReviewer
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .preferences import PreferenceError
-from .store import Store
+from .store import Store, utc_now
 from .thumbnails import ThumbnailError
 
 
@@ -129,6 +131,7 @@ def create_app(
     model_events = ModelOperationEventBus()
     store.observe_model_operations(model_events.publish)
     creative_compiler = CreativeCompiler.load(resolved.creative_template_manifest)
+    creative_batch_planner = CreativeBatchPlanner(creative_compiler)
     model_operations = (
         ModelOperationManager(
             store,
@@ -165,6 +168,7 @@ def create_app(
     app.state.model_operations = model_operations
     app.state.model_operation_events = model_events
     app.state.creative_compiler = creative_compiler
+    app.state.creative_batch_planner = creative_batch_planner
     app.state.host = host
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -475,6 +479,73 @@ def create_app(
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },
         }
+
+    def batch_projection(record: CreativeBatchRecord) -> dict[str, Any]:
+        jobs = []
+        for job_id in record.child_job_ids:
+            try:
+                jobs.append(store.get_job(job_id))
+            except KeyError:
+                continue
+        return project_batch(record, jobs)
+
+    async def create_creative_batch(
+        payload: dict[str, Any],
+        submit_child: Callable[[JobRequest], Awaitable[dict[str, Any]]],
+    ) -> dict[str, Any]:
+        request = JobRequest.model_validate(payload.get("request"))
+        creative_spec = CreativeSpec.model_validate(payload.get("creative_spec", {}))
+        count = payload.get("count")
+        profile_snapshot = manager.resolve_profiles(request)
+        available_references = {
+            item.asset_id for item in request.inputs
+        } | set(profile_snapshot.get("reference_asset_ids", []))
+        capability_value = await capability_document()
+        batch_id, child_requests, child_plans = creative_batch_planner.plan(
+            request,
+            creative_spec,
+            count,
+            capabilities=capability_value["capabilities"],
+            envelope=size_envelope(),
+            available_reference_ids=available_references,
+        )
+        now = utc_now()
+        record = store.create_creative_batch(CreativeBatchRecord(
+            id=batch_id,
+            axis=creative_spec.variation.axis,
+            requested_count=count,
+            child_plans=child_plans,
+            created_at=now,
+            updated_at=now,
+        ))
+        for child in child_requests:
+            try:
+                submitted = await submit_child(child)
+                record.child_job_ids.append(str(submitted["id"]))
+            except (HTTPException, ProfileResolutionError, KeyError, ValueError) as exc:
+                code = (
+                    str(exc.detail.get("code", "batch_child_submission_failed"))
+                    if isinstance(exc, HTTPException) and isinstance(exc.detail, dict)
+                    else exc.code if isinstance(exc, ProfileResolutionError)
+                    else "batch_child_submission_failed"
+                )
+                record.submission_errors.append({"code": code, "message": str(exc)[:300]})
+            record.updated_at = utc_now()
+            store.update_creative_batch(record)
+        return batch_projection(record)
+
+    async def cancel_creative_batch(batch_id: str) -> dict[str, Any]:
+        record = store.get_creative_batch(batch_id)
+        for job_id in record.child_job_ids:
+            try:
+                job = store.get_job(job_id)
+                if job.status.value not in {"succeeded", "failed", "canceled"}:
+                    await manager.cancel(job_id)
+            except KeyError:
+                continue
+        record.updated_at = utc_now()
+        store.update_creative_batch(record)
+        return batch_projection(record)
 
     @app.get("/api/v1/capabilities")
     async def capabilities() -> dict[str, Any]:
@@ -988,6 +1059,17 @@ def create_app(
                             envelope=size_envelope(),
                             available_reference_ids=available_references,
                         ).model_dump(mode="json")
+                    elif method == "creative.batches.create":
+                        async def submit_batch_child(child: JobRequest) -> dict[str, Any]:
+                            return await submit_hosted(child, identity, workload_class="interactive")
+
+                        result = await create_creative_batch(params, submit_batch_child)
+                    elif method == "creative.batches.get":
+                        result = batch_projection(store.get_creative_batch(str(params.get("batch_id", ""))))
+                    elif method == "creative.batches.list":
+                        result = {"items": [batch_projection(item) for item in store.list_creative_batches()]}
+                    elif method == "creative.batches.cancel":
+                        result = await cancel_creative_batch(str(params.get("batch_id", "")))
                     elif method == "capabilities.get":
                         envelope = size_envelope()
                         result = {
@@ -1085,6 +1167,41 @@ def create_app(
                 root = upload.get("root")
                 if isinstance(root, Path) and root.exists():
                     shutil.rmtree(root)
+
+    @app.post("/workspace-api/creative/batches", include_in_schema=False)
+    async def standalone_creative_batch(payload: dict[str, Any]) -> dict[str, Any]:
+        async def submit_batch_child(child: JobRequest) -> dict[str, Any]:
+            return manager.submit(child).model_dump(mode="json")
+
+        try:
+            reject_host_paths(payload)
+            return await create_creative_batch(payload, submit_batch_child)
+        except CreativeValidationError as exc:
+            detail: dict[str, Any] = {"code": exc.code, "message": str(exc)}
+            if exc.field is not None:
+                detail["field"] = exc.field
+            raise HTTPException(status_code=422, detail=detail) from exc
+        except (ProfileResolutionError, ValueError) as exc:
+            code = exc.code if isinstance(exc, ProfileResolutionError) else "workspace_request_rejected"
+            raise HTTPException(status_code=422, detail={"code": code, "message": str(exc)[:300]}) from exc
+
+    @app.get("/workspace-api/creative/batches", include_in_schema=False)
+    async def standalone_creative_batches() -> dict[str, Any]:
+        return {"items": [batch_projection(item) for item in store.list_creative_batches()]}
+
+    @app.get("/workspace-api/creative/batches/{batch_id}", include_in_schema=False)
+    async def standalone_creative_batch_get(batch_id: str) -> dict[str, Any]:
+        try:
+            return batch_projection(store.get_creative_batch(batch_id))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "creative_batch_not_found"}) from exc
+
+    @app.delete("/workspace-api/creative/batches/{batch_id}", include_in_schema=False)
+    async def standalone_creative_batch_cancel(batch_id: str) -> dict[str, Any]:
+        try:
+            return await cancel_creative_batch(batch_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "creative_batch_not_found"}) from exc
 
     @app.post("/workspace-api/creative/validate", include_in_schema=False)
     async def standalone_creative_validate(payload: dict[str, Any]) -> dict[str, Any]:
