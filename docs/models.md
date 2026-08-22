@@ -484,11 +484,12 @@ Qwen-Image remains **NOT TESTED** and was not downloaded. It is an alternative
 only if the accepted FLUX.2 route later fails the target-hardware or quality
 gate; candidates are not installed for their own sake.
 
-## G2 optional semantic reviewer — Qwen3-VL 2B
+## Historical G2 optional semantic reviewer — Qwen3-VL 2B
 
-Adoption state: **accepted as an explicit opt-in, CPU-only advisory reviewer**.
-It is not an image generator, does not replace deterministic validation, and is
-not called when `qa.semantic=false`.
+This records the model used for the original G2 acceptance. The provider/model
+route below is historical evidence and is not production configuration after
+CI-1/CI-4. Production now has one provider-neutral unified evaluator through
+ControlDeck `vision.analyze`; it is not called when `qa.semantic=false`.
 
 ```text
 runtime: Ollama loopback API
@@ -502,8 +503,9 @@ license: Apache-2.0
 ### `base-plan.md` section 24 adoption answers
 
 1. It fills G2's advisory semantic review after deterministic validation.
-2. It uses the generic `SemanticReviewer` boundary and loopback HTTP. The core
-   imports no model runtime and ControlDeck credentials are not reused.
+2. It originally used the generic `SemanticReviewer` boundary and loopback
+   HTTP. CI-1 removed that transport and CI-4 removed the binary reviewer;
+   ControlDeck now owns provider/model/runtime selection.
 3. Two direct accepted reviews and two real product jobs ran on the R9700 host.
    The deliberate mismatch product job produced two rejections as intended.
 4. Review input is normalized to RGB JPEG, at most 768x768 and 2 MiB; context is

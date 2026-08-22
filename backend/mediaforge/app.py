@@ -71,7 +71,6 @@ from .models import (
 from .paths import contained
 from .prompt_recipes import H3PromptRecipe, PromptRecipeError, PromptRecipeRequest
 from .profiles import ProfileInput, ReferenceCollectionInput
-from .semantic_review import HostSemanticReviewer, SemanticReviewer
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .preferences import PreferenceError
 from .reference_intelligence import (
@@ -131,7 +130,6 @@ def create_app(
     settings: Settings | None = None,
     *,
     host_client: ControlDeckHostClient | None = None,
-    semantic_reviewer: SemanticReviewer | None = None,
     creative_evaluator: CreativeEvaluator | None = None,
     native_model_evaluator: H3ModelEvaluator | None = None,
     model_download_origin: str = "https://huggingface.co",
@@ -151,9 +149,6 @@ def create_app(
         ReferenceAnalysisCache(resolved.data_dir / "reference-analysis-cache"),
         timeout_sec=resolved.host_ai_timeout_sec,
     )
-    reviewer = semantic_reviewer or HostSemanticReviewer(
-        ai_gateway, timeout_sec=resolved.host_ai_timeout_sec
-    )
     evaluator = creative_evaluator or HostCreativeEvaluator(
         ai_gateway, timeout_sec=resolved.host_ai_timeout_sec
     )
@@ -167,7 +162,7 @@ def create_app(
         model_store_root=resolved.model_store_root,
         hf_home=resolved.hf_home,
         image_runtime_python=resolved.image_runtime_python,
-        semantic_reviewer=reviewer,
+        creative_evaluator=evaluator,
     )
     events = JobEventBus()
     store.observe(events.publish)
@@ -556,14 +551,8 @@ def create_app(
 
     async def capability_document(identity: HostIdentity | None = None) -> dict[str, Any]:
         text_direction_available = await creative_director.available(identity)
-        if isinstance(reviewer, HostSemanticReviewer) and isinstance(evaluator, HostCreativeEvaluator):
-            vision_available = await reviewer.available(identity)
-            semantic_available = evaluator_available = vision_available
-        else:
-            semantic_available, evaluator_available = await asyncio.gather(
-                reviewer.available(identity),
-                evaluator.available(identity),
-            )
+        evaluator_available = await evaluator.available(identity)
+        semantic_available = evaluator_available
         return {
             "contract_version": "1.0",
             "capabilities": {
@@ -1027,19 +1016,22 @@ def create_app(
             asset = store.get_asset(asset_id)
             if not asset.mime_type.startswith("image/"):
                 raise ValueError("creative evaluation accepts image assets only")
-            score = await evaluator.evaluate(
+            evaluated = await evaluator.evaluate(
                 store.asset_path(asset_id),
                 request.intent,
                 creative_plan=request.creative_plan,
                 reference_paths=reference_paths,
                 identity=identity,
             )
+            evaluation = evaluated.result.model_dump(mode="json")
             results.append({
                 "asset_id": asset_id,
-                "scores": score.scores,
-                "rank_score": score.rank_score,
-                "summary": score.summary,
-                "evaluator": score.evaluator,
+                "evaluation": evaluation,
+                "scores": evaluation["scores"],
+                "rank_score": evaluated.rank_score,
+                "summary": evaluated.summary,
+                "evaluator": evaluated.evaluator,
+                "relevant_dimensions": list(evaluated.relevant_dimensions),
             })
         results.sort(key=lambda item: (-item["rank_score"], item["asset_id"]))
         return {

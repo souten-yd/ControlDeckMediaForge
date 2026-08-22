@@ -98,9 +98,11 @@ def test_addon_grants_provider_neutral_ai_and_production_has_no_ollama_transport
     for forbidden in (
         "/api/chat", "/api/tags", "11434", "OllamaSemanticReviewer",
         "OllamaCreativeEvaluator", "MEDIA_FORGE_SEMANTIC_REVIEWER_URL",
-        "MEDIA_FORGE_SEMANTIC_REVIEWER_MODEL",
+        "MEDIA_FORGE_SEMANTIC_REVIEWER_MODEL", "mediaforge_semantic_review",
+        "identity_match", "obvious_visual_breakage",
     ):
         assert forbidden not in production
+    assert not (ROOT / "backend" / "mediaforge" / "semantic_review.py").exists()
 
 
 def test_host_ai_errors_use_the_ci1_normalized_codes():

@@ -443,6 +443,22 @@ Keep one bounded image-preprocessing utility and one ControlDeck `vision.analyze
 - retry count never exceeds existing configured budget;
 - current C5 result-stage ranking behavior remains available.
 
+### Completion (2026-08-23)
+
+Implemented on `creative/ci4-unified-evaluator`. Jobs and C5 comparison now use
+the same `HostCreativeEvaluator` and canonical `EvaluationResult`; the binary
+`semantic_review.py` implementation was removed. The frozen `qa.semantic` and
+`image.semantic_review` names remain compatibility entrances only. Deterministic
+validation runs before evaluation, normal single generation remains opt-out,
+and the existing 0..3 regeneration budget is the only retry budget.
+
+Real isolated-Host acceptance ranked two imported candidates through two
+`vision.analyze` calls in 18.338 seconds. Only `intent` and
+`visual_integrity` were relevant; the other six scores were null. Host audit
+metadata contained only the capability name, Broker active/waiting counts were
+zero, and the selected runtime was unloaded. See `implementation-status.md` for
+the full evidence and NOT TESTED scope.
+
 ---
 
 ## 8. CI-5 — C4 shot direction + bounded quality integration

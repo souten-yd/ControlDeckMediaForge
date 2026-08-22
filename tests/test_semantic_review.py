@@ -12,8 +12,9 @@ from conftest import fake_settings, wait_terminal
 from mediaforge.app import create_app
 from PIL import Image
 
+from mediaforge.creative_intelligence import EvaluationResult, EvaluationScores
+from mediaforge.evaluator import EvaluatedCandidate, HostCreativeEvaluator
 from mediaforge.host.client import HostIdentity
-from mediaforge.semantic_review import HostSemanticReviewer, SemanticReviewResult
 
 
 IDENTITY = HostIdentity(
@@ -49,18 +50,33 @@ class Reviewer:
         del identity
         return self.is_available
 
-    async def review(
+    async def evaluate(
         self,
         path: Path,
         intent: str,
         *,
+        creative_plan: dict,
         reference_paths: tuple[Path, ...] = (),
         identity=None,
-    ) -> SemanticReviewResult:
-        del identity, reference_paths, intent
+    ) -> EvaluatedCandidate:
+        del identity, reference_paths, intent, creative_plan
         self.calls.append(path)
         accepted = self.decisions.popleft()
-        return SemanticReviewResult(accepted, "clear match" if accepted else "missing wave", "test-vlm")
+        return EvaluatedCandidate(
+            result=EvaluationResult(
+                accepted_for_requested_constraints=accepted,
+                scores=EvaluationScores(
+                    intent=0.9 if accepted else 0.2,
+                    visual_integrity=0.9,
+                ),
+                issues=[] if accepted else ["missing wave"],
+                strengths=["clear match"] if accepted else [],
+                retry_suggestions=[] if accepted else ["show the wave clearly"],
+                review_budget_used=1,
+            ),
+            evaluator="test-vlm",
+            relevant_dimensions=("intent", "visual_integrity"),
+        )
 
 
 class Gateway:
@@ -77,13 +93,25 @@ class Gateway:
         return type("Result", (), {"content": json.dumps(self.content), "capability": capability})()
 
 
-def test_host_reviewer_uses_bounded_vision_message_without_model_or_provider(tmp_path: Path):
+def evaluation_body(*, references: bool = False) -> dict:
+    scores = {name: None for name in (
+        "intent", "subject_identity", "action_state", "palette", "composition",
+        "style", "props_clothing", "visual_integrity",
+    )}
+    scores.update({"intent": 0.9, "visual_integrity": 0.9})
+    if references:
+        scores.update({"subject_identity": 0.8, "style": 0.8})
+    return {"scores": scores, "issues": [], "strengths": ["clear match"], "retry_suggestions": []}
+
+
+def test_host_evaluator_uses_bounded_vision_message_without_model_or_provider(tmp_path: Path):
     image = tmp_path / "candidate.png"
     Image.new("RGB", (32, 32), "orange").save(image)
-    gateway = Gateway({"accepted": True, "summary": "clear match", "model": "ignored"})
-    reviewer = HostSemanticReviewer(gateway)  # type: ignore[arg-type]
-    result = asyncio.run(reviewer.review(image, "orange", identity=IDENTITY))
-    assert result.accepted is True and result.reviewer == "control-deck:vision.analyze"
+    gateway = Gateway(evaluation_body())
+    reviewer = HostCreativeEvaluator(gateway)  # type: ignore[arg-type]
+    result = asyncio.run(reviewer.evaluate(image, "orange", creative_plan={}, identity=IDENTITY))
+    assert result.result.accepted_for_requested_constraints is True
+    assert result.evaluator == "control-deck:vision.analyze"
     call = gateway.calls[-1]
     assert call[2] == "vision.analyze"
     assert call[3][0]["content"][1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
@@ -98,10 +126,10 @@ def test_four_references_are_bounded_into_one_host_image_part(tmp_path: Path):
         path = tmp_path / f"reference-{index}.png"
         Image.new("RGB", (32 + index, 32), (index * 40, 20, 10)).save(path)
         references.append(path)
-    gateway = Gateway({"accepted": True, "summary": "consistent"})
-    reviewer = HostSemanticReviewer(gateway)  # type: ignore[arg-type]
-    asyncio.run(reviewer.review(
-        candidate, "orange", reference_paths=tuple(references), identity=IDENTITY
+    gateway = Gateway(evaluation_body(references=True))
+    reviewer = HostCreativeEvaluator(gateway)  # type: ignore[arg-type]
+    asyncio.run(reviewer.evaluate(
+        candidate, "orange", creative_plan={}, reference_paths=tuple(references), identity=IDENTITY
     ))
     content = gateway.calls[-1][3][0]["content"]
     images = [part for part in content if part["type"] == "image_url"]
@@ -111,7 +139,7 @@ def test_four_references_are_bounded_into_one_host_image_part(tmp_path: Path):
 
 def test_semantic_disabled_never_calls_reviewer(tmp_path: Path):
     reviewer = Reviewer([])
-    app = create_app(fake_settings(tmp_path), semantic_reviewer=reviewer)
+    app = create_app(fake_settings(tmp_path), creative_evaluator=reviewer)
     payload = request()
     payload["qa"]["semantic"] = False
     with TestClient(app) as client:
@@ -122,19 +150,20 @@ def test_semantic_disabled_never_calls_reviewer(tmp_path: Path):
 
 def test_default_rejection_is_advisory_without_retry(tmp_path: Path):
     reviewer = Reviewer([False])
-    app = create_app(fake_settings(tmp_path), semantic_reviewer=reviewer)
+    app = create_app(fake_settings(tmp_path), creative_evaluator=reviewer)
     with TestClient(app) as client:
         terminal = wait_terminal(client, client.post("/api/v1/jobs", json=request()).json()["id"])
         provenance = client.get(f"/api/v1/assets/{terminal['asset_ids'][0]}/provenance").json()
     assert terminal["status"] == "succeeded"
     assert len(reviewer.calls) == 1
     assert provenance["validation"][-1]["passed"] is False
-    assert provenance["warnings"] == ["semantic review advisory: missing wave"]
+    assert provenance["warnings"] == ["evaluation advisory: missing wave"]
+    assert provenance["validation"][-1]["evaluation"]["scores"]["intent"] == 0.2
 
 
 def test_explicit_retry_selects_next_accepted_candidate(tmp_path: Path):
     reviewer = Reviewer([False, True])
-    app = create_app(fake_settings(tmp_path), semantic_reviewer=reviewer)
+    app = create_app(fake_settings(tmp_path), creative_evaluator=reviewer)
     with TestClient(app) as client:
         terminal = wait_terminal(client, client.post("/api/v1/jobs", json=request(retries=1)).json()["id"])
         provenance = client.get(f"/api/v1/assets/{terminal['asset_ids'][0]}/provenance").json()
@@ -142,12 +171,13 @@ def test_explicit_retry_selects_next_accepted_candidate(tmp_path: Path):
     assert len(reviewer.calls) == 2
     assert provenance["seed"] == 42
     assert provenance["validation"][-1]["passed"] is True
+    assert provenance["validation"][-1]["evaluation"]["review_budget_used"] == 2
     assert provenance["warnings"] == []
 
 
 def test_retry_budget_exhaustion_fails_explicitly(tmp_path: Path):
     reviewer = Reviewer([False, False])
-    app = create_app(fake_settings(tmp_path), semantic_reviewer=reviewer)
+    app = create_app(fake_settings(tmp_path), creative_evaluator=reviewer)
     with TestClient(app) as client:
         terminal = wait_terminal(client, client.post("/api/v1/jobs", json=request(retries=1)).json()["id"])
     assert terminal["status"] == "failed"
@@ -155,23 +185,27 @@ def test_retry_budget_exhaustion_fails_explicitly(tmp_path: Path):
     assert len(reviewer.calls) == 2
 
 
-def test_unavailable_reviewer_fails_without_review(tmp_path: Path):
+def test_unavailable_evaluator_preserves_deterministically_valid_asset(tmp_path: Path):
     reviewer = Reviewer([], available=False)
-    app = create_app(fake_settings(tmp_path), semantic_reviewer=reviewer)
+    app = create_app(fake_settings(tmp_path), creative_evaluator=reviewer)
     with TestClient(app) as client:
         capabilities = client.get("/api/v1/capabilities").json()["capabilities"]
         terminal = wait_terminal(client, client.post("/api/v1/jobs", json=request()).json()["id"])
+        provenance = client.get(f"/api/v1/assets/{terminal['asset_ids'][0]}/provenance").json()
     assert capabilities["image.semantic_review"] == {
         "state": "unavailable",
         "reason": "vision_analyzer_unavailable",
     }
-    assert terminal["error"]["code"] == "vision_analyzer_unavailable"
+    assert terminal["status"] == "succeeded"
+    assert provenance["warnings"] == [
+        "unified evaluator unavailable; deterministic validation passed"
+    ]
     assert reviewer.calls == []
 
 
 def test_deterministic_failure_prevents_semantic_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     reviewer = Reviewer([True])
-    app = create_app(fake_settings(tmp_path), semantic_reviewer=reviewer)
+    app = create_app(fake_settings(tmp_path), creative_evaluator=reviewer)
 
     def fail_validation(_: Path):
         raise ValueError("deterministic failure")
