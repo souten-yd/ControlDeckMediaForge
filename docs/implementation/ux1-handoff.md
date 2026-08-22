@@ -9,9 +9,9 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/evaluator-r9700-c5
-PR          UX1 #21〜#33 / UX2 M0 #35〜C4 #42 マージ済み、C5 #43 open
-状態        UX2 C5 commit e514642をpush済み。PR #43 exact head / mergeable / checksなし確認済み
+ブランチ    main（C5 merge後のcloseout）
+PR          UX1 #21〜#33 / UX2 M0 #35〜C5 #43 マージ済み
+状態        UX2 M0〜C5完了。main / origin/main = 14bbc74、通常service healthy確認済み
 基準値      ./mf.sh test = 262 passed（25.10秒）
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
@@ -36,13 +36,10 @@ PR          UX1 #21〜#33 / UX2 M0 #35〜C4 #42 マージ済み、C5 #43 open
 ## 次にやること（1 つだけ）
 
 ```text
-UX2 PR-C5 #43 をmergeし、main exact headを確認する。
-  ブランチ    ux1/evaluator-r9700-c5
-  実装        6軸advisory evaluator、候補ranking、bounded CPU VLM、fail-closed
-  実測        FLUX 3候補、Broker/VRAM/swap、Qwen instruct 3候補、worker crash、
-              installed-host iframe、320px overflow 0、console/page error 0。
-  次          merge後、G3本体または利用者指定の次スライスを設計の正から選ぶ。
-  注意        保持済みFLUX modelを削除しない。hosted CIは使わない。
+利用者の次の優先スライスを確認し、設計の正から新しいPR境界を切る。
+  完了        UX2 M0〜C5（Model Management / CreativeSpec / batch / Composer / Evaluator）
+  候補        goal-roadmapのG3本体、または利用者が次に指定するgoal
+  注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
 ## リリースの運用
