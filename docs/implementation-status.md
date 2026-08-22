@@ -2350,3 +2350,53 @@ service, browser, Host API, and filesystem evidence above.
 The evidence and self-contained E2E fixture merged in Media Forge PR #61 as
 `4c310cb19d26bbf548c93c145a24f84314a0cd80`. ControlDeck recorded the Host-side
 update in PR #231 as `ee28acb1527ccad8856bacbad297c7954bc55739`.
+
+## MiniMax H3 version-pinned prompt recipe (2026-08-23)
+
+Media Forge now owns a private `minimax-h3-prompt-writing` projection based on
+the upstream `skills/h3-prompt-writing` layout at commit
+`d21241f0a4b3acbb34c97dae47fa417b7065e438`. The adapter supports T2VA, I2VA,
+FL2VA, L2VA, and Ref2VA without adding a public model-specific API. It bounds
+duration to 4--15 seconds, validates mode-specific reference counts, assigns
+`<Picture n>` / `<Video n>` / `<Audio n>` labels, validates required and unknown
+labels, preserves caller-declared dialogue/lyrics/visible text verbatim, and
+renders a fixed three-field or six-field result. Arbitrary skill execution,
+repository/path/command input, and Media Forge provider/model/port selection do
+not exist.
+
+The upstream skill text was not vendored because that pinned repository commit
+has no root license file covering it. The consulted `SKILL.md`, `base-en.txt`,
+and `ref-en.txt` hashes are pinned in code as
+`a7000443588ca3f145e3b3fd8900f14e0325dc460bd811268fac89a9dc8e56d0`,
+`2cfebc096a6e08370f288d468d90b60f7f9bcb938f94bf090816e910e48e75fc`, and
+`1e574f356716ad55612247ffb7bbccbcdb484ad96599d63c7dca1af186b1fab7`.
+This records provenance without redistributing the source text.
+
+An isolated real ControlDeck process on port 18776 used its normal AI routing
+policy and a normal Add-on bridge service identity. A source Media Forge process
+on port 19131 submitted a prompt-only T2VA projection. ControlDeck selected and
+served its configured text model; Media Forge sent exactly one
+`text.generate` request and no `vision.analyze` request. The successful warm
+request completed in 14.126 seconds and returned a 1,519-byte rendered prompt
+with the required field order and the Japanese dialogue string preserved. Host
+audit entries recorded only capability `text.generate`; no provider/model
+identity was added to Media Forge provenance.
+
+The first real response was strict-schema JSON inside one Markdown JSON fence.
+The initial parser rejected it as `prompt_recipe_invalid`; the adapter now
+accepts exactly one bounded JSON fence while still rejecting surrounding prose.
+A projection that omitted required verbatim text also failed closed, and a
+subsequent corrected projection succeeded. No automatic retry loop was added.
+After the run, the selected text runtime was unloaded, Broker active/waiting
+counts were both zero, isolated processes were stopped, and the shared installed
+v0.3.2 service remained healthy on port 9130. ControlDeck source changes were
+zero; its pre-existing `frontend/tsconfig.tsbuildinfo` modification was not
+touched.
+
+Focused recipe/workspace transport tests passed 38 tests. The full local gate
+was `333 passed, 1 warning in 34.60s`. Hosted CI was not used. Public schemas,
+`addon.json`, agent tools, workflow executors, and asset/provenance contracts
+were unchanged. Real H3 generation with this projection, video quality, and a
+release bundle containing this slice are **NOT TESTED**. H3 remains
+Experimental, unhealthy, and unroutable. The next implementation slice is CI-4
+Unified Evaluator; public G7 video work remains deferred.

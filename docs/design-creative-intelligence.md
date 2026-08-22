@@ -473,6 +473,13 @@ Evaluator:
   only when explicitly useful; batch candidates where bounded and supported
 ```
 
+Model-family prompt recipes are private, versioned projections owned by Media
+Forge adapters. They may constrain fields, ordering, reference labels, timing,
+and verbatim text before calling the existing `text.generate` capability. They
+must not execute arbitrary upstream skills or send repository/path/command
+metadata to ControlDeck, and they do not create a public model-specific API.
+Prompt-only recipes require no pre-generation vision request.
+
 Cache accepted Director plans by a hash of the immutable intent + relevant accepted controls + Director schema/version. Never reuse across changed user constraints.
 
 ---

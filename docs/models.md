@@ -233,11 +233,21 @@ The publisher also provides `skills/h3-prompt-writing` at Git commit
 `d21241f0a4b3acbb34c97dae47fa417b7065e438`. Media Forge will not ask
 ControlDeck to load or execute that skill: the Host Gateway contract stays at
 the provider-neutral `text.generate` capability and accepts no repository,
-path, skill, or command. A future H3 adapter may use a Media-Forge-owned,
-version-pinned prompt recipe to build bounded structured messages, then send
-those messages through the existing Gateway. The upstream skill text is not
-vendored in this release; fetching, integrity verification, licensing, prompt
-projection, and real H3 generation remain **NOT TESTED**.
+path, skill, or command. Media Forge implements that guidance as the private,
+version-pinned `minimax-h3-prompt-writing` recipe. It supports bounded T2VA,
+I2VA, FL2VA, L2VA, and Ref2VA projections, assigns deterministic reference
+labels, requires a 4--15 second duration, validates the mode-specific reference
+shape, and renders the documented field order. Prompt-only T2VA uses one
+`text.generate` request and no `vision.analyze` request. Provider/model/port
+selection remains entirely in ControlDeck.
+
+The upstream text is not vendored. The pinned commit contains no repository
+license file covering the skill text, so Media Forge records SHA-256 values for
+the three consulted sources and implements only its interoperable field/order,
+label, timing, and preservation behavior. The real Gateway projection is
+recorded in `implementation-status.md`. It does not make H3 generation usable:
+real H3 prompt-to-quality generation remains **NOT TESTED**, and the model stays
+Experimental, unhealthy, and unroutable.
 
 `base-plan.md` §24 candidate-gate answers:
 

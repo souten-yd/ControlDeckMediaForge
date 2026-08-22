@@ -159,6 +159,38 @@ def test_text_only_director_projects_custom_action_without_a_vision_call(tmp_pat
     assert "image" not in json.dumps(state["ai_calls"][0]).lower()
 
 
+def test_h3_prompt_recipe_projects_through_service_identity_without_skill_execution(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    state["ai_capabilities"]["text.generate"] = True
+    state["ai_responses"].append(json.dumps({
+        "integrated_multimodal_description": (
+            "[Shot 1] 2D animation, a small blue robot waves beside a workbench for six seconds."
+        ),
+        "overall_soundscape": "A quiet workshop with one soft servo movement.",
+        "non_diegetic_music": "N/A",
+    }))
+    with client, client.websocket_connect("/ws", headers=headers) as socket:
+        projected = call(socket, "creative.prompt_recipe", {
+            "recipe_id": "minimax-h3-prompt-writing",
+            "request": {
+                "intent": "小さな青いロボットが作業台の横で手を振る",
+                "mode": "t2va",
+                "duration_seconds": 6,
+                "references": [],
+            },
+        })
+
+    assert projected["ok"] is True
+    assert projected["result"]["capability"] == "text.generate"
+    assert projected["result"]["reference_labels"] == []
+    assert projected["result"]["rendered_prompt"].startswith("integrated_multimodal_description:")
+    assert [item["capability"] for item in state["ai_calls"]] == ["text.generate"]
+    user_message = state["ai_calls"][0]["messages"][1]["content"]
+    assert "/data1tb/" not in user_message
+    assert "skills/h3-prompt-writing" not in user_message
+    assert "MiniMax-AI/MiniMax-H3" not in user_message
+
+
 def test_reference_analysis_uses_one_cached_vision_call_and_passes_only_structured_context(tmp_path: Path):
     client, headers, state = host_client(tmp_path, token="valid-user")
     state["ai_capabilities"].update({"vision.analyze": True, "text.generate": True})
@@ -586,7 +618,7 @@ def test_job_publication_survives_a_failing_listener(tmp_path: Path):
         "capabilities.get", "library.list", "assets.thumbnail", "preferences.get", "jobs.watch",
         "models.catalog", "models.install", "models.remove", "models.operations.list",
         "creative.templates", "creative.validate", "creative.batches.create",
-        "creative.direct", "references.analyze",
+        "creative.direct", "creative.prompt_recipe", "references.analyze",
         "creative.batches.get", "creative.batches.list", "creative.batches.cancel",
         "creative.compositions.create", "creative.compositions.get",
         "creative.compositions.list", "creative.compositions.update_text",
