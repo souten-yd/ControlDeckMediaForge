@@ -209,7 +209,16 @@ class PromptPlanner:
         except HostAIError as exc:
             raise CreativeIntelligenceError(exc.code, str(exc)) from exc
         try:
-            draft = PromptPlanDraft.model_validate(json.loads(result.content))
+            authored = json.loads(result.content)
+            if not isinstance(authored, dict):
+                raise TypeError("prompt plan must be an object")
+            # These fields are owned by Media Forge. A provider may echo a full
+            # PromptPlan despite the requested draft schema; discard only the
+            # protected fields and keep fail-closed validation for every other
+            # unknown field.
+            for protected in ("version", "original_intent", "mode"):
+                authored.pop(protected, None)
+            draft = PromptPlanDraft.model_validate(authored)
         except (json.JSONDecodeError, ValidationError, TypeError) as exc:
             raise CreativeIntelligenceError("prompt_plan_invalid", "ControlDeck returned an invalid prompt plan") from exc
 

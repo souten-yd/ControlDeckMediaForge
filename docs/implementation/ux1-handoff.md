@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    release/v0.3.0
-PR          UX1 #21〜#33 / UX2 M0 #35〜C5 #43 / closeout #44 マージ済み
-状態        UX2 M0〜C5完了。v0.3.0 Release公開済み、PR #48 merge待ち
-基準値      ./mf.sh test = 262 passed（24.97秒、version bump後）
+ブランチ    fix/creative-intelligence-owned-fields
+PR          v0.3.0 #48 / Creative Intelligence A0 #46 マージ済み
+状態        PR #46のserver-owned field回帰を分離修正中
+基準値      ./mf.sh test = 269 passed（24.58秒、修正後）
 リリース    v0.3.0公開済み（artifact d8055331...aa48f）。installed host は v0.2.4
 ```
 
@@ -36,9 +36,9 @@ PR          UX1 #21〜#33 / UX2 M0 #35〜C5 #43 / closeout #44 マージ済み
 ## 次にやること（1 つだけ）
 
 ```text
-PR #48 をlocal gate確認後にmergeし、動画候補catalogの別PRへ戻る。
-  収録        UX2 M0〜C5（Model Management / CreativeSpec / batch / Composer / Evaluator）
-  次PR        動画候補model catalog（Wan / LTX / Hunyuan）はreleaseと混ぜない
+protected-field修正をPR作成・mergeし、動画候補catalogの別PRへ戻る。
+  修正        AIがechoしたversion / original_intent / modeだけを無視
+  維持        その他の未知fieldはfail-closed
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 

@@ -136,6 +136,13 @@ def test_prompt_planner_rejects_malformed_host_json_without_changing_intent():
     assert caught.value.code == "prompt_plan_invalid"
 
 
+def test_prompt_planner_still_rejects_unknown_ai_authored_fields():
+    planner = PromptPlanner(FakeGateway(json.dumps({"provider_model": "must not pass"})))  # type: ignore[arg-type]
+    with pytest.raises(CreativeIntelligenceError) as caught:
+        asyncio.run(planner.plan(IDENTITY, "small orange robot", mode="refine"))
+    assert caught.value.code == "prompt_plan_invalid"
+
+
 def test_non_person_action_state_projects_into_existing_pose_details_without_requiring_person_pose():
     plan = PromptPlan(
         original_intent="a robot opens its chest panel",
