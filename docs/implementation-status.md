@@ -2346,3 +2346,7 @@ models, feature data, or shared caches. Public contracts were unchanged. After
 the self-contained light/dark browser rerun, the local full regression gate was
 `318 passed, 1 warning in 29.34s`; tests are not substituted for the installed
 service, browser, Host API, and filesystem evidence above.
+
+The evidence and self-contained E2E fixture merged in Media Forge PR #61 as
+`4c310cb19d26bbf548c93c145a24f84314a0cd80`. ControlDeck recorded the Host-side
+update in PR #231 as `ee28acb1527ccad8856bacbad297c7954bc55739`.

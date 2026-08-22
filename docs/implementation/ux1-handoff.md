@@ -9,11 +9,11 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    release/v032-install-evidence
-PR          #60 merge済み（676f8cc）。v0.3.2 release/install evidenceを記録中
-状態        v0.3.2公開・ControlDeck導入済み。H3 quality RAM-offload routeはHost共存失敗で却下
-基準値      ./mf.sh test = 318 passed, 1 warning（29.34秒）
-リリース    v0.3.2公開・ControlDeck導入済み（artifact ec864154...e12e3d9、Host PR #230）
+ブランチ    docs/v032-final-handoff
+PR          #60（H3 hardening）/ #61（v0.3.2 evidence）merge済み
+状態        v0.3.2実導入・最終監査完了。H3 quality RAM-offload routeはHost共存失敗で延期
+基準値      exact PR head ./mf.sh test = 318 passed, 1 warning（32.25秒）
+リリース    v0.3.2公開・ControlDeck導入済み（artifact ec864154...e12e3d9、Host PR #230/#231）
 ```
 
 ## PR 進捗
@@ -32,14 +32,16 @@ PR          #60 merge済み（676f8cc）。v0.3.2 release/install evidenceを記
 | PR-U5 | ライブラリ viewer | #33 マージ済み |
 | PR-U6 | 一貫性 UI（G3） | 未着手 |
 | PR-U7 | 実機受け入れ | 未着手 |
+| — | H3 bounded evaluator hardening | #60 マージ済み（676f8cc） |
+| — | v0.3.2 release/install evidence | #61 マージ済み（4c310cb） |
 
 ## 次にやること（1 つだけ）
 
 ```text
-利用者指定のMiniMax H3 bounded evaluatorスライスを完了させる。
-  前回        26.98GB GGUF download、stable-diffusion.cpp HIP build/device probe（#57）
-  今回        Host Job + broker lease + cancel + 計測付き短尺smoke evaluatorを実測済み
-  設計        公式prompt-writing skillを版固定recipeとしてGateway text.generateへ渡す
+H3 bounded evaluatorは完了。次は独立したprompt recipe / CI-4スライス。
+  完了        26.98GB GGUF、pinned HIP runtime、Host lease/cancel、R9700 smoke実測
+  延期        H3 quality route（Host watchdog/swap/output gate失敗。条件改善まで再実行しない）
+  次          公式prompt-writing skillを版固定recipeとしてGateway text.generateへ渡す設計・実装
   続き        docs/implementation/creative-intelligence.md CI-4 Unified Evaluator
   保留        video public API/runtime実装（G7には着手しない）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
@@ -87,9 +89,9 @@ PR          #60 merge済み（676f8cc）。v0.3.2 release/install evidenceを記
      snapshot取得までは先行する。R9700 worker実行、available/default昇格、G7 APIには進まない。
      C0 は CameraSpec を共通化し、MotionSpec を後から加法的に載せられる形にする。
 6. 次回release時のControlDeck trusted catalog
-     CI-1でaddon manifestへ`ai.inference`を加法追加した。source manifestの実Host受け入れは
-     完了したが、v0.3.0向けtrusted catalogのallowlistにはまだ無い。CI-6 release時に
-     artifact SHA/version更新と同じControlDeck PRで許可する。Media固有code追加は不要。
+     `ai.inference`は汎用allowlistへ追加済み。v0.3.2はPR #230でartifact SHAのみ更新し、
+     PR #231で実update証跡を記録した。次版も同じくgeneric catalog dataだけを更新し、
+     Media固有code、route、依存を追加しない。
 7. MiniMax H3（利用者指示 2026-08-22）
      公式BF16 FL2VA 144.05GBは上限超過。1.865GBでcancelしpartial削除済み。
      第1候補をunsloth FL2VA UD-Q2 GGUF composite 26.98GBへ変更した。
