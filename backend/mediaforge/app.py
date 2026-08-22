@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,13 +24,24 @@ from . import __version__, library, preferences, thumbnails
 from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
 from .config import Settings
 from .domain import JobRequest
-from .events import JobEventBus, JobSubscription
+from .events import (
+    JobEventBus,
+    JobSubscription,
+    ModelOperationEventBus,
+    ModelOperationSubscription,
+)
 from .environment import setup_snapshot
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.files import GrantContentTooLarge, read_grant, require_grant_id
 from .host.jobs import HostExecution
 from .jobs import JobManager, ProfileResolutionError
-from .models import ModelRegistry, ModelRegistryError
+from .model_manager import ModelOperationManager
+from .models import (
+    ModelOperationError,
+    ModelRegistry,
+    ModelRegistryError,
+    TERMINAL_MODEL_OPERATION_STATES,
+)
 from .paths import contained
 from .profiles import ProfileInput, ReferenceCollectionInput
 from .semantic_review import OllamaSemanticReviewer, SemanticReviewer
@@ -85,6 +97,8 @@ def create_app(
     *,
     host_client: ControlDeckHostClient | None = None,
     semantic_reviewer: SemanticReviewer | None = None,
+    model_download_origin: str = "https://huggingface.co",
+    model_download_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     resolved = settings or Settings.from_env()
     store = Store(resolved.data_dir)
@@ -111,13 +125,33 @@ def create_app(
     )
     events = JobEventBus()
     store.observe(events.publish)
+    model_events = ModelOperationEventBus()
+    store.observe_model_operations(model_events.publish)
+    model_operations = (
+        ModelOperationManager(
+            store,
+            model_manifest=resolved.model_manifest,
+            catalog_manifest=resolved.model_catalog_manifest,
+            model_store_root=resolved.model_store_root,
+            hf_home=resolved.hf_home,
+            model_in_use=manager.model_in_use,
+            download_origin=model_download_origin,
+            transport=model_download_transport,
+        )
+        if resolved.model_catalog_manifest is not None
+        else None
+    )
     workspace_test_delay_pending = True
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         store.initialize()
         await manager.start()
+        if model_operations is not None:
+            await model_operations.start()
         yield
+        if model_operations is not None:
+            await model_operations.stop()
         await manager.stop()
         await host.close()
 
@@ -126,6 +160,8 @@ def create_app(
     app.state.store = store
     app.state.jobs = manager
     app.state.job_events = events
+    app.state.model_operations = model_operations
+    app.state.model_operation_events = model_events
     app.state.host = host
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -720,6 +756,23 @@ def create_app(
                     subscription.unwatch([job_id])
             pending.clear()
 
+    async def push_model_operation_events(
+        websocket: WebSocket,
+        subscription: ModelOperationSubscription,
+    ) -> None:
+        while True:
+            operation = await subscription.queue.get()
+            try:
+                await websocket.send_json({
+                    "type": "event",
+                    "event": "model.operation.changed",
+                    "data": operation.model_dump(mode="json"),
+                })
+            except (WebSocketDisconnect, RuntimeError):
+                return
+            if operation.state in TERMINAL_MODEL_OPERATION_STATES:
+                subscription.unwatch([operation.id])
+
     @app.websocket("/ws")
     async def workspace_socket(websocket: WebSocket) -> None:
         try:
@@ -731,6 +784,8 @@ def create_app(
         uploads: dict[str, dict[str, Any]] = {}
         subscription = events.subscribe(asyncio.get_running_loop())
         sender = asyncio.create_task(push_job_events(websocket, subscription))
+        model_subscription = model_events.subscribe(asyncio.get_running_loop())
+        model_sender = asyncio.create_task(push_model_operation_events(websocket, model_subscription))
         try:
             while True:
                 raw = await websocket.receive_text()
@@ -862,6 +917,46 @@ def create_app(
                         result = {"deleted": True}
                     elif method == "models.list":
                         result = model_catalog()
+                    elif method == "models.catalog":
+                        if model_operations is None:
+                            raise ModelOperationError("model_not_found", "model catalog is unavailable")
+                        result = model_operations.catalog()
+                    elif method == "models.install":
+                        if model_operations is None:
+                            raise ModelOperationError("model_not_found", "model catalog is unavailable")
+                        result = model_operations.install(str(params.get("model_id", ""))).model_dump(mode="json")
+                    elif method == "models.remove":
+                        if model_operations is None:
+                            raise ModelOperationError("model_not_found", "model catalog is unavailable")
+                        result = model_operations.remove(str(params.get("model_id", ""))).model_dump(mode="json")
+                    elif method == "models.operations.list":
+                        result = {
+                            "items": [item.model_dump(mode="json") for item in store.list_model_operations()]
+                        }
+                    elif method == "models.operations.cancel":
+                        if model_operations is None:
+                            raise ModelOperationError("model_not_found", "model catalog is unavailable")
+                        result = model_operations.cancel(
+                            str(params.get("operation_id", ""))
+                        ).model_dump(mode="json")
+                    elif method == "models.operations.watch":
+                        operation_ids = params.get("operation_ids", [])
+                        if not isinstance(operation_ids, list) or not all(
+                            isinstance(value, str) for value in operation_ids
+                        ):
+                            raise ValueError("operation_ids must be a list of strings")
+                        watched = operation_ids or [
+                            item.id for item in store.list_model_operations(20)
+                            if item.state not in TERMINAL_MODEL_OPERATION_STATES
+                        ]
+                        result = {"watching": model_subscription.watch(watched)}
+                    elif method == "models.operations.unwatch":
+                        operation_ids = params.get("operation_ids", [])
+                        if not isinstance(operation_ids, list) or not all(
+                            isinstance(value, str) for value in operation_ids
+                        ):
+                            raise ValueError("operation_ids must be a list of strings")
+                        result = {"watching": model_subscription.unwatch(operation_ids)}
                     elif method == "capabilities.get":
                         envelope = size_envelope()
                         result = {
@@ -929,7 +1024,7 @@ def create_app(
                     else:
                         raise ValueError("workspace method is not supported")
                     await websocket.send_json({"id": request_id, "ok": True, "result": result})
-                except (ThumbnailError, PreferenceError) as exc:
+                except (ThumbnailError, PreferenceError, ModelOperationError) as exc:
                     await websocket.send_json({
                         "id": request_id,
                         "ok": False,
@@ -948,6 +1043,9 @@ def create_app(
             return
         finally:
             subscription.close()
+            model_subscription.close()
+            model_sender.cancel()
+            await asyncio.gather(model_sender, return_exceptions=True)
             sender.cancel()
             for upload in uploads.values():
                 root = upload.get("root")

@@ -13,6 +13,12 @@ from typing import Any
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
 from .paths import contained
 from .profiles import Profile, ProfileInput, ReferenceCollection, ReferenceCollectionInput
+from .models.operations import (
+    ModelOperation,
+    ModelOperationAction,
+    ModelOperationState,
+    TERMINAL_MODEL_OPERATION_STATES,
+)
 
 
 def utc_now() -> str:
@@ -28,6 +34,7 @@ class Store:
         self.thumbnail_dir = self.data_dir / "thumbnails"
         self._lock = threading.RLock()
         self._listeners: list[Callable[[Job], None]] = []
+        self._model_operation_listeners: list[Callable[[ModelOperation], None]] = []
 
     def observe(self, listener: Callable[[Job], None]) -> None:
         """Register a job-change listener. Listener failures never reach callers."""
@@ -40,6 +47,17 @@ class Store:
             except Exception:  # noqa: BLE001 - observation must not break job execution
                 continue
         return job
+
+    def observe_model_operations(self, listener: Callable[[ModelOperation], None]) -> None:
+        self._model_operation_listeners.append(listener)
+
+    def _notify_model_operation(self, operation: ModelOperation) -> ModelOperation:
+        for listener in list(self._model_operation_listeners):
+            try:
+                listener(operation)
+            except Exception:  # noqa: BLE001 - observation must not break installation
+                continue
+        return operation
 
     def initialize(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -91,6 +109,21 @@ class Store:
                     values_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS model_operations (
+                    id TEXT PRIMARY KEY,
+                    model_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    bytes_total INTEGER NOT NULL,
+                    bytes_done INTEGER NOT NULL,
+                    error_code TEXT,
+                    error_message TEXT,
+                    cancel_requested INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_model_operations_created
+                    ON model_operations(created_at DESC);
                 """
             )
             columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(jobs)")}
@@ -106,6 +139,29 @@ class Store:
                     json.dumps({"code": "service_restarted", "message": "Service restarted while the worker was running"}),
                     utc_now(),
                     JobStatus.RUNNING,
+                ),
+            )
+            connection.execute(
+                """UPDATE model_operations SET state = ?, error_code = NULL,
+                   error_message = NULL, updated_at = ?
+                   WHERE state NOT IN (?, ?, ?) AND cancel_requested = 0""",
+                (
+                    ModelOperationState.QUEUED,
+                    utc_now(),
+                    ModelOperationState.READY,
+                    ModelOperationState.FAILED,
+                    ModelOperationState.CANCELED,
+                ),
+            )
+            connection.execute(
+                """UPDATE model_operations SET state = ?, updated_at = ?
+                   WHERE state NOT IN (?, ?, ?) AND cancel_requested = 1""",
+                (
+                    ModelOperationState.CANCELED,
+                    utc_now(),
+                    ModelOperationState.READY,
+                    ModelOperationState.FAILED,
+                    ModelOperationState.CANCELED,
                 ),
             )
             connection.execute(
@@ -323,6 +379,111 @@ class Store:
             )
         return values
 
+    def create_model_operation(
+        self,
+        model_id: str,
+        action: ModelOperationAction,
+        *,
+        bytes_total: int,
+    ) -> ModelOperation:
+        now = utc_now()
+        operation_id = f"modelop_{uuid.uuid4().hex}"
+        with self._lock, self._connect() as connection:
+            active = connection.execute(
+                """SELECT id FROM model_operations WHERE model_id = ?
+                   AND state NOT IN (?, ?, ?) LIMIT 1""",
+                (
+                    model_id,
+                    ModelOperationState.READY,
+                    ModelOperationState.FAILED,
+                    ModelOperationState.CANCELED,
+                ),
+            ).fetchone()
+            if active is not None:
+                raise ValueError("a model operation is already active")
+            connection.execute(
+                """INSERT INTO model_operations
+                   (id, model_id, action, state, bytes_total, bytes_done, error_code,
+                    error_message, cancel_requested, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, 0, NULL, NULL, 0, ?, ?)""",
+                (operation_id, model_id, action, ModelOperationState.QUEUED, bytes_total, now, now),
+            )
+        return self._notify_model_operation(self.get_model_operation(operation_id))
+
+    def get_model_operation(self, operation_id: str) -> ModelOperation:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM model_operations WHERE id = ?", (operation_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(operation_id)
+        return self._model_operation(row)
+
+    def list_model_operations(self, limit: int = 100) -> list[ModelOperation]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM model_operations ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [self._model_operation(row) for row in rows]
+
+    def resumable_model_operation_ids(self) -> list[str]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT id FROM model_operations WHERE state = ? AND cancel_requested = 0
+                   ORDER BY created_at""",
+                (ModelOperationState.QUEUED,),
+            ).fetchall()
+        return [str(row["id"]) for row in rows]
+
+    def update_model_operation(
+        self,
+        operation_id: str,
+        *,
+        state: ModelOperationState | None = None,
+        bytes_done: int | None = None,
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> ModelOperation:
+        values: dict[str, Any] = {"updated_at": utc_now()}
+        if state is not None:
+            values["state"] = state
+        if bytes_done is not None:
+            values["bytes_done"] = bytes_done
+        values["error_code"] = error_code
+        values["error_message"] = error_message
+        assignments = ", ".join(f"{name} = ?" for name in values)
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                f"UPDATE model_operations SET {assignments} WHERE id = ?",  # noqa: S608 - fixed columns
+                (*values.values(), operation_id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(operation_id)
+        return self._notify_model_operation(self.get_model_operation(operation_id))
+
+    def request_model_operation_cancel(self, operation_id: str) -> ModelOperation:
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT state FROM model_operations WHERE id = ?", (operation_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(operation_id)
+            if row["state"] not in {state.value for state in TERMINAL_MODEL_OPERATION_STATES}:
+                connection.execute(
+                    "UPDATE model_operations SET cancel_requested = 1, updated_at = ? WHERE id = ?",
+                    (utc_now(), operation_id),
+                )
+        return self._notify_model_operation(self.get_model_operation(operation_id))
+
+    def model_operation_cancel_requested(self, operation_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT cancel_requested FROM model_operations WHERE id = ?", (operation_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(operation_id)
+        return bool(row["cancel_requested"])
+
     def create_reference_collection(self, value: ReferenceCollectionInput) -> ReferenceCollection:
         for asset_id in value.asset_ids:
             self.get_asset(asset_id)
@@ -418,5 +579,15 @@ class Store:
             asset_ids=json.loads(row["asset_ids_json"]),
             error=error,
             created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _model_operation(row: sqlite3.Row) -> ModelOperation:
+        return ModelOperation(
+            id=row["id"], model_id=row["model_id"], action=row["action"], state=row["state"],
+            bytes_total=row["bytes_total"], bytes_done=row["bytes_done"],
+            error_code=row["error_code"], error_message=row["error_message"],
+            cancel_requested=bool(row["cancel_requested"]), created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

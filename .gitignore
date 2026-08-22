@@ -6,6 +6,7 @@ runtimes/*/.build.lock
 config/environment-status.json
 config/environment-status.tmp
 .local-data/
+/data/
 .pytest_cache/
 __pycache__/
 *.py[cod]

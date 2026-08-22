@@ -316,7 +316,10 @@ def test_job_publication_survives_a_failing_listener(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "method",
-    ["capabilities.get", "library.list", "assets.thumbnail", "preferences.get", "jobs.watch"],
+    [
+        "capabilities.get", "library.list", "assets.thumbnail", "preferences.get", "jobs.watch",
+        "models.catalog", "models.install", "models.remove", "models.operations.list",
+    ],
 )
 def test_new_methods_reject_host_path_strings(tmp_path: Path, method: str):
     client, headers, _state = host_client(tmp_path, token="valid-user")

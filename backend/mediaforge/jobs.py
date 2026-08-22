@@ -99,6 +99,9 @@ class JobManager:
             self._queue.put_nowait(job_id)
         self._runner = asyncio.create_task(self._run(), name="media-forge-job-runner")
 
+    def model_in_use(self, model_id: str) -> bool:
+        return any(model.model_id == model_id for model in self._selected_models.values())
+
     async def stop(self) -> None:
         if self._runner is None:
             return

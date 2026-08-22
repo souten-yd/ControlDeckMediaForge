@@ -43,6 +43,17 @@ connection, coalesced to at most one frame per job every 200 ms, so progress is
 no longer polled from a single panel. None of these appear in the public API,
 `schemas/`, or `addon.json`.
 
+Model Management also stays on this private transport. `models.catalog`
+returns trusted catalog metadata, managed-store capacity and effective
+managed/external ownership without returning a local path. `models.install`
+and `models.remove` accept only a catalog `model_id`; no URL, repository or
+command is accepted. `models.operations.list`, `.watch`, `.unwatch`, and
+`.cancel` expose durable progress. Watched changes arrive as
+`{"type":"event","event":"model.operation.changed"}`. Install states are
+`queued`, `preflight`, `downloading`, `verifying`, `installing`, then `ready`,
+`failed`, or `canceled`. A reconnect can list and re-watch the same operation.
+This workspace surface does not alter the frozen generation contract.
+
 ## Jobs
 
 `POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json).

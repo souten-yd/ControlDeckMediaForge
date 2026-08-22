@@ -38,6 +38,10 @@ expand_home() {
 
 media_data_dir() {
   local value=""
+  if [ -n "${MEDIA_FORGE_DATA_DIR:-}" ]; then
+    printf '%s\n' "$MEDIA_FORGE_DATA_DIR"
+    return
+  fi
   value="$(yaml_scalar "$CONFIG_FILE" data_dir || true)"
   [ -n "$value" ] || value="$HOME/.local/share/control-deck-media-forge"
   expand_home "$value"
@@ -45,6 +49,10 @@ media_data_dir() {
 
 model_store_root() {
   local value=""
+  if [ -n "${MEDIA_FORGE_MODEL_STORE_ROOT:-}" ]; then
+    printf '%s\n' "$MEDIA_FORGE_MODEL_STORE_ROOT"
+    return
+  fi
   value="$(yaml_scalar "$CONFIG_FILE" model_store_root || true)"
   [ -n "$value" ] || value="$(media_data_dir)/models"
   expand_home "$value"
@@ -156,10 +164,13 @@ filesystem_probe_path() {
 }
 
 model_library_state() {
+  local registry_python="$PYTHON_BIN"
+  [ ! -x "$VENV/bin/python" ] || registry_python="$VENV/bin/python"
   if rg -q '^model_libraries:[[:space:]]*\[[^]]+\]' "$CONFIG_FILE" 2>/dev/null; then
     printf 'ok'
-  elif [ -d "$HF_HOME/hub" ] && PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" \
-    "$PYTHON_BIN" - "$(model_registry_manifest)" "$(model_catalog_manifest)" "$HF_HOME" \
+  elif { [ -d "$HF_HOME/hub" ] || [ -d "$(model_store_root)/hub" ]; } && \
+    PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" \
+    "$registry_python" - "$(model_registry_manifest)" "$(model_catalog_manifest)" "$HF_HOME" \
       "$(model_store_root)" >/dev/null 2>&1 <<'PY'
 import sys
 from pathlib import Path
@@ -349,27 +360,82 @@ PY
 }
 
 download_model() {
-  local name="$1" estimate required available hf
+  local name="$1" model_id
   case "$name" in
-    flux2-klein-4b)
-      estimate=15988901735
-      required=21474836480
-      ;;
+    flux2-klein-4b) model_id=black-forest-labs/FLUX.2-klein-4B ;;
     *) die "unknown model: $name" ;;
   esac
-  available="$(df -B1 --output=avail "$HF_HOME" | tail -1 | tr -d ' ')"
-  info "model: black-forest-labs/FLUX.2-klein-4B at e7b7dc27f91deacad38e78976d1f2b499d76a294"
-  info "estimated download: $estimate bytes (duplicate single-file checkpoint excluded)"
-  info "disk check: $available bytes available; $required bytes required"
-  [ "$available" -ge "$required" ] || die "insufficient disk space; model download was not started"
-  ensure_env "$RUNTIME_ROOT/rocm-torch/.venv" "$RUNTIME_ROOT/rocm-torch/requirements.txt" "rocm-torch runtime" verbose
-  hf="$RUNTIME_ROOT/rocm-torch/.venv/bin/hf"
-  "$hf" download \
-    black-forest-labs/FLUX.2-klein-4B \
-    --revision e7b7dc27f91deacad38e78976d1f2b499d76a294 \
-    --exclude flux-2-klein-4b.safetensors \
-    --max-workers 4
+  run_model_operation install "$model_id"
   list_models
+}
+
+remove_model() {
+  local name="$1" model_id
+  case "$name" in
+    flux2-klein-4b) model_id=black-forest-labs/FLUX.2-klein-4B ;;
+    *) die "unknown model: $name" ;;
+  esac
+  run_model_operation remove "$model_id"
+  list_models
+}
+
+run_model_operation() {
+  local action="$1" model_id="$2"
+  ensure_env "$VENV" "$REPO_ROOT/requirements.txt" "core"
+  PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" "$VENV/bin/python" - \
+    "$(media_data_dir)" "$(model_registry_manifest)" "$(model_catalog_manifest)" \
+    "$(model_store_root)" "$HF_HOME" "$action" "$model_id" <<'PY'
+import asyncio
+import sys
+from pathlib import Path
+
+from mediaforge.model_manager import ModelOperationManager
+from mediaforge.models import ModelOperationError, TERMINAL_MODEL_OPERATION_STATES
+from mediaforge.store import Store
+
+
+async def main() -> int:
+    data_dir, manifest, catalog, managed, external = map(Path, sys.argv[1:6])
+    action, model_id = sys.argv[6:8]
+    store = Store(data_dir)
+    store.initialize()
+    service = ModelOperationManager(
+        store,
+        model_manifest=manifest,
+        catalog_manifest=catalog,
+        model_store_root=managed,
+        hf_home=external,
+    )
+    await service.start()
+    try:
+        operation = service.install(model_id) if action == "install" else service.remove(model_id)
+    except ModelOperationError as exc:
+        await service.stop()
+        print(f"{exc.code}: {exc}", file=sys.stderr)
+        return 1
+    last = None
+    while True:
+        current = store.get_model_operation(operation.id)
+        observed = (current.state, current.bytes_done, current.error_code)
+        if observed != last:
+            print(
+                f"operation={current.id} state={current.state} "
+                f"bytes={current.bytes_done}/{current.bytes_total} error={current.error_code or '-'}",
+                flush=True,
+            )
+            last = observed
+        if current.state in TERMINAL_MODEL_OPERATION_STATES:
+            await service.stop()
+            return 0 if current.state.value == "ready" else 1
+        await asyncio.sleep(0.5)
+
+
+try:
+    raise SystemExit(asyncio.run(main()))
+except KeyboardInterrupt:
+    print("model operation interrupted; partial download remains resumable", file=sys.stderr)
+    raise SystemExit(130)
+PY
 }
 
 build_runtime() {
@@ -488,6 +554,7 @@ Usage:
   ./mf.sh env prune
   ./mf.sh model list
   ./mf.sh model download flux2-klein-4b
+  ./mf.sh model remove flux2-klein-4b
   ./mf.sh bundle build <version> <output-dir>
   ./mf.sh test
 EOF
@@ -514,6 +581,7 @@ main() {
       case "${2:-}" in
         list) [ "$#" -eq 2 ] || die "model list takes no arguments"; list_models ;;
         download) [ "$#" -eq 3 ] || die "model download requires one model name"; download_model "$3" ;;
+        remove) [ "$#" -eq 3 ] || die "model remove requires one model name"; remove_model "$3" ;;
         *) usage; exit 2 ;;
       esac
       ;;
