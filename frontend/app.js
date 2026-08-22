@@ -2682,16 +2682,45 @@ function showModelError(code, modelId) {
   holder.hidden = false;
 }
 
+function confirmModelAction({title, detail, confirmLabel}) {
+  const dialog = byId("model-confirm-dialog");
+  const cancel = byId("model-confirm-cancel");
+  const submit = byId("model-confirm-submit");
+  byId("model-confirm-title").textContent = title;
+  byId("model-confirm-detail").textContent = detail;
+  submit.textContent = confirmLabel;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (accepted) => {
+      if (settled) return;
+      settled = true;
+      cancel.removeEventListener("click", onCancel);
+      submit.removeEventListener("click", onSubmit);
+      dialog.removeEventListener("cancel", onDialogCancel);
+      if (dialog.open) dialog.close();
+      resolve(accepted);
+    };
+    const onCancel = () => finish(false);
+    const onSubmit = () => finish(true);
+    const onDialogCancel = (event) => { event.preventDefault(); finish(false); };
+    cancel.addEventListener("click", onCancel);
+    submit.addEventListener("click", onSubmit);
+    dialog.addEventListener("cancel", onDialogCancel);
+    dialog.showModal();
+  });
+}
+
 async function startModelInstall(modelId) {
   byId("model-error").hidden = true;
   const model = state.modelCatalog.find((item) => item.model_id === modelId);
   let licenseAcceptance = null;
   if (model?.gated) {
     if (!model.license_acceptance_id) return showModelError("model_gated", modelId);
-    const accepted = window.confirm(
-      `${model.display_name} の利用条件を確認してください。\n\n${model.license_notice}\n\n` +
-      "この版の条件に同意して、この端末へダウンロードしますか？",
-    );
+    const accepted = await confirmModelAction({
+      title: `${model.display_name} の利用条件`,
+      detail: `${model.license_notice}\n\nこの版の条件に同意して、この端末へダウンロードしますか？`,
+      confirmLabel: "同意してダウンロード",
+    });
     if (!accepted) return;
     licenseAcceptance = model.license_acceptance_id;
   }
@@ -2715,15 +2744,10 @@ async function cancelModelOperation(operationId) {
 }
 
 async function startModelEvaluation(modelId) {
-  const model = state.modelCatalog.find((item) => item.model_id === modelId);
-  if (!model || !state.modelEvaluationIds.has(modelId)) {
+  if (!state.modelCatalog.some((item) => item.model_id === modelId) ||
+      !state.modelEvaluationIds.has(modelId)) {
     return showModelError("model_runtime_unavailable", modelId);
   }
-  const accepted = window.confirm(
-    `${model.display_name} をR9700で実測します。\n\n` +
-    "短い音声付き動画を作り、GPU・RAM・swap・所要時間を測ります。長時間かかる場合があります。続けますか？",
-  );
-  if (!accepted) return;
   try {
     const operation = await call("models.evaluate", {model_id: modelId});
     state.modelOperations.set(operation.id, operation);

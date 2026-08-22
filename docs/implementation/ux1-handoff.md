@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    release/v031-install-evidence
-PR          #58 merge済み（bcfa670）。v0.3.1 install evidence記録中
-状態        v0.3.1公開・ControlDeck導入済み。H3実GPU評価のworkspace開始操作待ち
-基準値      ./mf.sh test = 317 passed（28.02秒）
+ブランチ    fix/h3-evaluation-sandbox
+PR          未作成。実測・回帰ゲート後に1スライスで作成する
+状態        H3実GPU smoke/cancel完了。quality RAM-offload routeはHost共存失敗で却下
+基準値      ./mf.sh test = 318 passed, 1 warning（31.05秒）
 リリース    v0.3.1公開・ControlDeck導入済み（artifact 1b15eaa5...30c4、Host PR #227/#228）
 ```
 
@@ -36,9 +36,9 @@ PR          #58 merge済み（bcfa670）。v0.3.1 install evidence記録中
 ## 次にやること（1 つだけ）
 
 ```text
-利用者指定のMiniMax H3を独立したbounded evaluatorスライスで扱う。
+利用者指定のMiniMax H3 bounded evaluatorスライスを完了させる。
   前回        26.98GB GGUF download、stable-diffusion.cpp HIP build/device probe（#57）
-  今回        Host Job + broker lease + cancel + 計測付き短尺smoke evaluator
+  今回        Host Job + broker lease + cancel + 計測付き短尺smoke evaluatorを実測済み
   設計        公式prompt-writing skillを版固定recipeとしてGateway text.generateへ渡す
   続き        docs/implementation/creative-intelligence.md CI-4 Unified Evaluator
   保留        video public API/runtime実装（G7には着手しない）
@@ -98,13 +98,18 @@ PR          #58 merge済み（bcfa670）。v0.3.1 install evidence記録中
      pinned stable-diffusion.cpp `97d2990`をROCm 7.2.1/gfx1201でbuild済み（539.64秒）。
      `sd-cli --list-devices`はR9700をROCm0/32,624MiBとして列挙（0.06秒）。
      lease acquire/renew/cancel/releaseを備えたprivate evaluatorを現在branchで実装した。
-     実NVMe上のmodel/runtime preflightは成功したが、H3 load/generateはまだNOT TESTED。
+     実NVMe上のmodel/runtime preflightと5-frame/1-step smokeは成功。
+     smokeは160.86秒、peak RSS 26.35GB、VRAM delta 14.55GB、process swap 0。
+     出力frameは破綻しておりquality証拠ではない。
+     25-frame/4-step probeはRAM/swap圧でHost watchdogが再起動し、outputなし。
+     H3はexperimental/healthy=no/unroutableを維持する。
      token偽造やlease流用はしない。実測後も`experimental / healthy=no`を維持する。
      公式prompt-writing skillはMarkdownと参照guideだけで外部APIを呼ばない。次スライスで
      prompt recipeの版固定・構造化projectionを実装する。任意skill実行経路は作らない。
      skillをHostへ任意実行させず、版固定したprompt recipeをMedia Forgeが構造化messageとして
-     `text.generate`へ渡す。実行時は32GB VRAM超をbounded RAM offloadで試してよいが、
-     wall time/RAM headroom/swapを実測するまでR9700実行可否はexperimentalのまま。
+     `text.generate`へ渡す。32GB VRAM超のworking memoryをbounded RAM offloadで試すことは
+     許容するが、wall time/RAM headroom/swap/Host watchdog/output qualityを全て実測する。
+     今回のH3 quality routeはこのgateに失敗したため採用しない。
 ```
 
 ## リポジトリの状態で注意すること

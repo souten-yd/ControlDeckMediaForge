@@ -113,7 +113,9 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert '"外部ランタイムで導入"' in SCRIPT
     assert 'experimental: "実験的・未実測"' in SCRIPT
     assert "model.license_acceptance_id" in SCRIPT
-    assert "window.confirm" in SCRIPT
+    assert "window.confirm" not in SCRIPT
+    assert 'id="model-confirm-dialog"' in MARKUP
+    assert "confirmModelAction" in SCRIPT
     assert "license_acceptance: licenseAcceptance" in SCRIPT
     assert "MAX_MANAGED_MODEL_DOWNLOAD_BYTES = 32_000_000_000" in SCRIPT
     assert 'action.textContent = "32GB上限対象"' in SCRIPT

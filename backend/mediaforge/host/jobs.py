@@ -56,11 +56,12 @@ class HostJobReporter:
         message: str | None = None,
         force: bool = False,
     ) -> bool:
-        if not force and not self.gate.accept(progress=progress, phase=phase):
-            return False
         if force:
-            self.gate.last_progress = max(self.gate.last_progress, progress)
-            self.gate.last_sent_at = time.monotonic()
+            delay = max(0.0, 0.55 - (time.monotonic() - self.gate.last_sent_at))
+            if delay:
+                await asyncio.sleep(delay)
+        if not self.gate.accept(progress=progress, phase=phase):
+            return False
         payload: dict[str, Any] = {
             "phase": phase,
             "progress": {"completed": round(progress * 1000), "total": 1000},
