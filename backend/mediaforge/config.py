@@ -31,6 +31,7 @@ class Settings:
     model_manifest: Path = REPOSITORY_ROOT / "worker_packs/image/models.json"
     model_catalog_manifest: Path | None = None
     model_store_root: Path | None = None
+    creative_template_manifest: Path = REPOSITORY_ROOT / "creative/templates.json"
     hf_home: Path = Path.home() / ".cache/huggingface"
     image_runtime_python: Path = REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python"
     semantic_reviewer_url: str = "http://127.0.0.1:11434"
@@ -47,6 +48,7 @@ class Settings:
         model_store_root = self.model_store_root or self.data_dir / "models"
         object.__setattr__(self, "model_store_root", model_store_root.resolve())
         object.__setattr__(self, "hf_home", self.hf_home.resolve())
+        object.__setattr__(self, "creative_template_manifest", self.creative_template_manifest.resolve())
         # Preserve the venv launcher path. Resolving its final `python`
         # symlink to /usr/bin/python bypasses pyvenv.cfg discovery and silently
         # starts the system interpreter without the heavyweight dependencies.
@@ -86,6 +88,11 @@ class Settings:
             model_store_root=Path(os.environ["MEDIA_FORGE_MODEL_STORE_ROOT"])
             if "MEDIA_FORGE_MODEL_STORE_ROOT" in os.environ else None,
             hf_home=Path(os.environ.get("HF_HOME", Path.home() / ".cache/huggingface")),
+            creative_template_manifest=Path(
+                os.environ.get(
+                    "MEDIA_FORGE_CREATIVE_TEMPLATES", REPOSITORY_ROOT / "creative/templates.json"
+                )
+            ),
             image_runtime_python=Path(
                 os.environ.get(
                     "MEDIA_FORGE_IMAGE_RUNTIME_PYTHON",

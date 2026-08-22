@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from . import __version__, library, preferences, thumbnails
 from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
 from .config import Settings
+from .creative import CreativeCompiler, CreativeSpec, CreativeValidationError
 from .domain import JobRequest
 from .events import (
     JobEventBus,
@@ -127,6 +128,7 @@ def create_app(
     store.observe(events.publish)
     model_events = ModelOperationEventBus()
     store.observe_model_operations(model_events.publish)
+    creative_compiler = CreativeCompiler.load(resolved.creative_template_manifest)
     model_operations = (
         ModelOperationManager(
             store,
@@ -162,6 +164,7 @@ def create_app(
     app.state.job_events = events
     app.state.model_operations = model_operations
     app.state.model_operation_events = model_events
+    app.state.creative_compiler = creative_compiler
     app.state.host = host
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -957,6 +960,18 @@ def create_app(
                         ):
                             raise ValueError("operation_ids must be a list of strings")
                         result = {"watching": model_subscription.unwatch(operation_ids)}
+                    elif method == "creative.templates":
+                        result = creative_compiler.catalog.public_document()
+                    elif method == "creative.validate":
+                        request = JobRequest.model_validate(params.get("request"))
+                        creative_spec = CreativeSpec.model_validate(params.get("creative_spec", {}))
+                        capability_value = await capability_document()
+                        result = creative_compiler.compile(
+                            request,
+                            creative_spec,
+                            capabilities=capability_value["capabilities"],
+                            envelope=size_envelope(),
+                        ).model_dump(mode="json")
                     elif method == "capabilities.get":
                         envelope = size_envelope()
                         result = {
@@ -1024,11 +1039,14 @@ def create_app(
                     else:
                         raise ValueError("workspace method is not supported")
                     await websocket.send_json({"id": request_id, "ok": True, "result": result})
-                except (ThumbnailError, PreferenceError, ModelOperationError) as exc:
+                except (ThumbnailError, PreferenceError, ModelOperationError, CreativeValidationError) as exc:
+                    error = {"code": exc.code, "message": str(exc)[:300]}
+                    if isinstance(exc, CreativeValidationError) and exc.field is not None:
+                        error["field"] = exc.field
                     await websocket.send_json({
                         "id": request_id,
                         "ok": False,
-                        "error": {"code": exc.code, "message": str(exc)[:300]},
+                        "error": error,
                     })
                 except (KeyError, ValueError, ValidationError) as exc:
                     await websocket.send_json({

@@ -1479,3 +1479,43 @@ overflow 0、console error 0 件だった。既存スクリプトが outpaint �
 実 15.98 GB model の削除、installed ControlDeck の配布版でのM2表示、G7動画model、
 managed copyからの画像生成は **NOT TESTED**。大容量modelはNVMeに保持した。
 ControlDeck のコード変更は不要だった。
+
+## UX2 PR-C0 — CreativeSpec/template/compiler (2026-08-22)
+
+公開 JobRequest/schema/addon contract を変更せず、private planning object と
+deterministic compiler を追加した。`CreativeSpec` は domain、SceneSpec、PoseSpec、
+CompositionSpec、CameraSpec、VariationSpec、ReferenceRole を持つ。template は
+`creative/templates.json` のversioned dataであり、DOMやengine adapterへhardcode
+していない。Cameraは将来の動画でも共用できるが、MotionSpecはG7まで受理しない。
+
+`creative.templates` と `creative.validate` はauthenticated workspace transportだけに
+追加した。compilerは既存intent/constraintsへcompileし、template ID/version、役割、
+envelopeを含むnormalized planを`constraints.creative_plan`へ保存する。空/全Autoは
+requestを1 fieldも変えない。scene/pose不整合、unknown template、unavailable
+capability、requestに無いreference role assetをjob作成前に拒否する。routingは
+変えず、auto requestへmodel IDを追加しない。
+
+別Python processで実templateをloadし、anime / presenting_device / holding_item /
+full_body_off_center / eye_level / expressionのspecを1,000回compileした。
+
+```text
+catalog version            2026.08.22
+template counts            domain 6 / scene 8 / pose 9 / composition 8 /
+                           camera 7 / variation 5 / reference role 5
+empty request identical    true
+1,000 compile elapsed      0.029042 seconds
+deterministic hashes       unique=1
+process wall / max RSS     0.11 seconds / 30,012 KiB
+model routing              model_policy=auto / model_id=null
+plan snapshot              constraints内のplanとcompiler resultが一致
+invalid combination        creative_combination_invalid / field=pose /
+                           「選んだシーンとポーズは組み合わせられません。」
+```
+
+最初の測定コマンドは製品起動時と同じ`PYTHONPATH=backend`を付け忘れ、
+`ModuleNotFoundError: mediaforge`で0.01秒終了した。上記の成功値には含めていない。
+focused testは43 passed。`./mf.sh test`は222 passed（15.63秒、全 command
+16.93秒、最大 RSS 185,752 KiB）。これは契約回帰の証拠であり、上記の
+実 process compile 実測とは区別する。CreativeSpecを使うUI、
+実job生成、profile/reference統合、variation child生成はC1〜C3のため **NOT TESTED**。
+G7 MotionSpec/動画modelは **NOT TESTED**。ControlDeck変更は不要だった。

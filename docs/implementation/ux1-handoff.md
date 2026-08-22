@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/model-management-m2
-PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 マージ済み、PR-M2 #37 open
-状態        UX2 M2 をpush・PR作成済み。exact head確認後にmergeする
-基準値      ./mf.sh test = 207 passed
+ブランチ    ux1/creative-spec-c0
+PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 マージ済み
+状態        UX2 C0 を実装・実測済み。commit / push / PR の直前
+基準値      ./mf.sh test = 222 passed
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
 
@@ -36,14 +36,13 @@ PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 マージ済み、PR-M2 #37 open
 ## 次にやること（1 つだけ）
 
 ```text
-UX2 PR-M2 を commit / push / merge する。
-  ブランチ    ux1/model-management-m2
-  実装        Simple model management / Advanced details / media_types /
-              inline+global progress / reload復元 / remove確認
-  実測        private WebSocket E2E: 1 tap download、reload復元、確認1回、
-              390px/320px overflow 0、console/page error 0。
-              既存 standalone browser E2E も PASSED。
-  次          merge 後に PR-C0（CreativeSpec/compiler）
+UX2 PR-C0 を commit / push / merge する。
+  ブランチ    ux1/creative-spec-c0
+  実装        private CreativeSpec / versioned template / deterministic compiler /
+              private workspace validate+catalog transport
+  実測        1,000 compile 0.029042秒、unique hash 1、空spec exact identical、
+              invalid combinationはGPU実行前に明示エラー。
+  次          merge 後に PR-C1（Create UIのDomain/シーン/見せ方）
   注意        実モデルは C5 まで保持し、大容量 remove は NOT TESTED のままにする。
               hosted CI は使わずローカル gate を記録する。
 ```
@@ -101,7 +100,7 @@ UX2 PR-M2 を commit / push / merge する。
     証跡: /data1tb/mediaforge-ux1-evidence/{light,dark}/
 
 UX2 の各ブランチは直前スライスを main へ merge してから切る
-    PR-M2 は ux1/model-management-m2。M2 と C0 を同一 PR に混ぜない。
+    PR-C0 は ux1/creative-spec-c0。C0 と C1 を同一 PR に混ぜない。
 ```
 
 ## 再開コマンド
@@ -111,8 +110,8 @@ cd /data1tb/ControlDeckMediaForge
 cat docs/implementation/ux1-handoff.md          # このファイル
 git fetch --all --prune && git log --oneline -5
 gh pr list --state open
-sed -n '/## 6\. PR-C0/,/## 7\. PR-C1/p' docs/implementation/ux2-model-scene.md
-./mf.sh test                                     # 基準値: 207 passed
+sed -n '/## 7\. PR-C1/,/## 8\. PR-C2/p' docs/implementation/ux2-model-scene.md
+./mf.sh test                                     # 基準値: 222 passed
 ```
 
 ## 参照

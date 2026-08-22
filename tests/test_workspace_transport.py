@@ -16,6 +16,7 @@ from PIL import Image
 
 from conftest import wait_terminal
 from mediaforge import library, preferences, thumbnails
+from mediaforge.domain import JobRequest
 from mediaforge.thumbnails import THUMBNAIL_BYTE_LIMIT
 from test_host_execution import generate_input, host_client
 
@@ -72,6 +73,29 @@ def test_capabilities_get_matches_the_public_document_and_bounds_presets(tmp_pat
     for preset in result["presets"]:
         assert preset["width"] % 16 == 0 and preset["height"] % 16 == 0
         assert max(preset["width"], preset["height"]) <= envelope["max_side"]
+
+
+def test_creative_templates_and_validation_stay_on_private_transport(tmp_path: Path):
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    original = generate_input("unchanged prompt")
+    with client, client.websocket_connect("/ws", headers=headers) as socket:
+        templates = call(socket, "creative.templates")
+        unchanged = call(socket, "creative.validate", {
+            "request": original,
+            "creative_spec": {},
+        })
+        directed = call(socket, "creative.validate", {
+            "request": original,
+            "creative_spec": {"pose": {"preset": "wave"}},
+        })
+
+    assert templates["ok"] is True
+    assert templates["result"]["catalog_version"] == "2026.08.22"
+    assert unchanged["result"]["request"] == JobRequest.model_validate(original).model_dump(mode="json")
+    assert unchanged["result"]["plan"]["active"] is False
+    assert directed["ok"] is True
+    assert directed["result"]["plan"]["pose"]["id"] == "wave"
+    assert directed["result"]["request"]["model_id"] is None
 
 
 # ── library.list ────────────────────────────────────────────────────────────
@@ -319,6 +343,7 @@ def test_job_publication_survives_a_failing_listener(tmp_path: Path):
     [
         "capabilities.get", "library.list", "assets.thumbnail", "preferences.get", "jobs.watch",
         "models.catalog", "models.install", "models.remove", "models.operations.list",
+        "creative.templates", "creative.validate",
     ],
 )
 def test_new_methods_reject_host_path_strings(tmp_path: Path, method: str):
