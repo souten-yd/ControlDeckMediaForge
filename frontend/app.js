@@ -2427,6 +2427,7 @@ const DOMAIN_LABEL = {
   background: "背景",
 };
 const MEDIA_TYPE_LABEL = {image: "画像", video: "動画", audio_video: "音声付き動画"};
+const MAX_MANAGED_MODEL_DOWNLOAD_BYTES = 32_000_000_000;
 const MODEL_STATE_LABEL = {
   queued: "順番を待っています", preflight: "容量と利用条件を確認しています",
   downloading: "ダウンロードしています", verifying: "内容を検証しています",
@@ -2441,6 +2442,7 @@ const MODEL_ADOPTION_LABEL = {
 const MODEL_FAILURE = {
   insufficient_disk: {text: "保存先の空き容量が足りません。", exit: "空き容量を見る", action: "storage"},
   model_gated: {text: "配布元で利用条件への同意が必要です。", exit: "詳細を見る", action: "details"},
+  model_too_large: {text: "32GB以上のモデルはこの端末ではダウンロードしません。", exit: "詳細を見る", action: "details"},
   model_download_failed: {text: "ダウンロードを続けられませんでした。", exit: "再試行", action: "retry"},
   model_verify_failed: {text: "取得したファイルを検証できませんでした。", exit: "再試行", action: "retry"},
   model_in_use: {text: "実行中の処理がこのモデルを使っています。", exit: "状況を見る", action: "activity"},
@@ -2551,9 +2553,13 @@ function renderModelManagement() {
       if (!state.modelManagementAvailable) {
         action.disabled = true;
         action.textContent = "CLI で管理";
-      } else if (!model.installed && model.ownership === "managed") {
+      } else if (!model.installed && model.ownership === "managed" &&
+                 model.approx_download_bytes < MAX_MANAGED_MODEL_DOWNLOAD_BYTES) {
         action.dataset.installModel = modelKey;
         action.textContent = "ダウンロード";
+      } else if (!model.installed && model.ownership === "managed") {
+        action.disabled = true;
+        action.textContent = "32GB上限対象";
       } else if (model.ownership === "managed" && model.removable) {
         action.dataset.removeModel = modelKey;
         action.textContent = "削除";
@@ -2643,8 +2649,21 @@ function showModelError(code, modelId) {
 
 async function startModelInstall(modelId) {
   byId("model-error").hidden = true;
+  const model = state.modelCatalog.find((item) => item.model_id === modelId);
+  let licenseAcceptance = null;
+  if (model?.gated) {
+    if (!model.license_acceptance_id) return showModelError("model_gated", modelId);
+    const accepted = window.confirm(
+      `${model.display_name} の利用条件を確認してください。\n\n${model.license_notice}\n\n` +
+      "この版の条件に同意して、この端末へダウンロードしますか？",
+    );
+    if (!accepted) return;
+    licenseAcceptance = model.license_acceptance_id;
+  }
   try {
-    const operation = await call("models.install", {model_id: modelId});
+    const operation = await call("models.install", {
+      model_id: modelId, license_acceptance: licenseAcceptance,
+    });
     state.modelOperations.set(operation.id, operation);
     await call("models.operations.watch", {operation_ids: [operation.id]});
     await loadModelManagement();

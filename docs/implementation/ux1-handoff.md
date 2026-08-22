@@ -11,8 +11,8 @@
 最終更新    2026-08-22
 ブランチ    video/minimax-h3-catalog
 PR          CI-3 Reference Intelligence #56 merge済み（merge ffcf838）
-状態        CI-3完了。次はMiniMax H3 catalog/download評価
-基準値      focused CI-3 = 109 passed / ./mf.sh test = 303 passed（28.11秒）
+状態        MiniMax H3 GGUF catalog実装済み・NVMe download/ROCm評価中
+基準値      ./mf.sh test = 309 passed（27.88秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
@@ -37,7 +37,7 @@ PR          CI-3 Reference Intelligence #56 merge済み（merge ffcf838）
 
 ```text
 利用者指定のMiniMax H3を独立catalog/download評価スライスで扱う。
-  今回        exact revision/license/必要bytes、FL2VA bounded download、R9700採用gate
+  今回        26.98GB GGUF download、stable-diffusion.cpp HIP build、R9700採用gate
   設計        公式prompt-writing skillを版固定recipeとしてGateway text.generateへ渡す
   続き        docs/implementation/creative-intelligence.md CI-4 Unified Evaluator
   保留        video public API/runtime実装（G7には着手しない）
@@ -90,7 +90,8 @@ PR          CI-3 Reference Intelligence #56 merge済み（merge ffcf838）
      完了したが、v0.3.0向けtrusted catalogのallowlistにはまだ無い。CI-6 release時に
      artifact SHA/version更新と同じControlDeck PRで許可する。Media固有code追加は不要。
 7. MiniMax H3（利用者指示 2026-08-22）
-     公式open-weightは33B BF16のaudio-video modelで、FL2VAとRef2VAが別checkpoint。
+     公式BF16 FL2VA 144.05GBは上限超過。1.865GBでcancelしpartial削除済み。
+     第1候補をunsloth FL2VA UD-Q2 GGUF composite 26.98GBへ変更した。
      公式prompt-writing skillはMarkdownと参照guideだけで外部APIを呼ばない。次スライスで
      exact revision/license/必要bytesを固定し、まずFL2VAのbounded download可否を確認する。
      skillをHostへ任意実行させず、版固定したprompt recipeをMedia Forgeが構造化messageとして

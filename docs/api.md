@@ -47,7 +47,14 @@ Model Management also stays on this private transport. `models.catalog`
 returns trusted catalog metadata, managed-store capacity and effective
 managed/external ownership without returning a local path. `models.install`
 and `models.remove` accept only a catalog `model_id`; no URL, repository or
-command is accepted. `models.operations.list`, `.watch`, `.unwatch`, and
+command is accepted. A catalog item marked `gated` also requires an explicit
+license acceptance identifier derived from that exact model ID, revision,
+license, and notice; a stale or missing identifier fails before transfer.
+Managed artifacts at or above 32,000,000,000 bytes also fail before an
+operation is created. Composite bundles may declare additional catalog-pinned
+Hugging Face source identities per weight; clients still cannot supply or
+override any source.
+`models.operations.list`, `.watch`, `.unwatch`, and
 `.cancel` expose durable progress. Watched changes arrive as
 `{"type":"event","event":"model.operation.changed"}`. Install states are
 `queued`, `preflight`, `downloading`, `verifying`, `installing`, then `ready`,

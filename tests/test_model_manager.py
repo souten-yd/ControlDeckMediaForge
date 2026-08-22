@@ -29,7 +29,13 @@ WEIGHT_DIGEST = hashlib.sha256(WEIGHT).hexdigest()
 CONFIG = b'{"model_type":"test"}'
 
 
-def manifests(tmp_path: Path, *, digest: str = WEIGHT_DIGEST) -> tuple[Path, Path]:
+def manifests(
+    tmp_path: Path,
+    *,
+    digest: str = WEIGHT_DIGEST,
+    gated: bool = False,
+    approx_download_bytes: int | None = None,
+) -> tuple[Path, Path]:
     runtime = tmp_path / "models.json"
     runtime.write_text(json.dumps({
         "schema_version": "1.0",
@@ -55,10 +61,12 @@ def manifests(tmp_path: Path, *, digest: str = WEIGHT_DIGEST) -> tuple[Path, Pat
         "models": [{
             "model_id": "owner/model", "display_name": "Example Model", "domains": ["general"],
             "media_types": ["image"],
-            "description": "Test fixture", "approx_download_bytes": len(CONFIG) + len(WEIGHT),
+            "description": "Test fixture", "approx_download_bytes": (
+                approx_download_bytes if approx_download_bytes is not None else len(CONFIG) + len(WEIGHT)
+            ),
             "source": {"kind": "huggingface", "repo_id": "owner/model", "revision": REVISION},
             "ownership": "managed", "supports_lora": False, "max_references": 0,
-            "recommended_profiles": [], "gated": False, "license_notice": "Apache-2.0",
+            "recommended_profiles": [], "gated": gated, "license_notice": "Apache-2.0",
         }],
     }), encoding="utf-8")
     return runtime, catalog
@@ -129,6 +137,75 @@ def test_successful_install_is_atomic_and_registry_visible(tmp_path: Path):
         await service.stop()
 
     asyncio.run(scenario())
+
+
+def test_composite_bundle_downloads_weight_from_its_pinned_auxiliary_source(tmp_path: Path):
+    async def scenario() -> None:
+        runtime, catalog = manifests(tmp_path)
+        value = json.loads(runtime.read_text(encoding="utf-8"))
+        value["models"][0]["weights"][0]["source"] = {
+            "kind": "huggingface",
+            "repo_id": "auxiliary/weights",
+            "revision": "a" * 40,
+        }
+        runtime.write_text(json.dumps(value), encoding="utf-8")
+        requested: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(request.url.path)
+            content = CONFIG if request.url.path.endswith("/config.json") else WEIGHT
+            return httpx.Response(200, content=content, request=request)
+
+        store = Store(tmp_path / "data")
+        store.initialize()
+        service = manager(tmp_path, store, runtime, catalog, mock=httpx.MockTransport(handler))
+        await service.start()
+        operation = service.install("owner/model")
+        finished = await wait_terminal(store, operation.id)
+        assert finished.state == ModelOperationState.READY
+        assert any(
+            path == f"/auxiliary/weights/resolve/{'a' * 40}/model.safetensors"
+            for path in requested
+        )
+        await service.stop()
+
+    asyncio.run(scenario())
+
+
+def test_gated_install_requires_acceptance_bound_to_exact_catalog_entry(tmp_path: Path):
+    async def scenario() -> None:
+        runtime, catalog = manifests(tmp_path, gated=True)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        service = manager(tmp_path, store, runtime, catalog)
+        await service.start()
+        item = service.catalog()["items"][0]
+        acceptance = item["license_acceptance_id"]
+        assert isinstance(acceptance, str) and acceptance.startswith("sha256:")
+        with pytest.raises(ModelOperationError, match="exact catalog license") as missing:
+            service.install("owner/model")
+        assert missing.value.code == "model_gated"
+        with pytest.raises(ModelOperationError) as stale:
+            service.install("owner/model", license_acceptance="sha256:" + "0" * 64)
+        assert stale.value.code == "model_gated"
+        operation = service.install("owner/model", license_acceptance=acceptance)
+        finished = await wait_terminal(store, operation.id)
+        assert finished.state == ModelOperationState.READY
+        await service.stop()
+
+    asyncio.run(scenario())
+
+
+def test_managed_download_at_or_above_32gb_fails_before_operation(tmp_path: Path):
+    runtime, catalog = manifests(tmp_path, approx_download_bytes=32_000_000_000)
+    store = Store(tmp_path / "data")
+    store.initialize()
+    service = manager(tmp_path, store, runtime, catalog)
+
+    with pytest.raises(ModelOperationError) as rejected:
+        service.install("owner/model")
+    assert rejected.value.code == "model_too_large"
+    assert store.list_model_operations() == []
 
 
 def test_bad_hash_never_becomes_installed_and_cleans_partial_files(tmp_path: Path):

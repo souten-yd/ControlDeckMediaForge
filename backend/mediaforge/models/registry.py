@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass, replace
@@ -41,6 +42,7 @@ class WeightFile:
     path: str
     size_bytes: int
     sha256: str
+    source: ModelSource | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,14 @@ class ModelDescriptor:
     def removable(self) -> bool:
         return self.installed and self.ownership == ModelOwnership.MANAGED
 
+    @property
+    def license_acceptance_id(self) -> str | None:
+        """Bind an explicit acceptance to the exact catalog license and revision."""
+        if not self.gated:
+            return None
+        canonical = "\0".join((self.model_id, self.revision, self.license, self.license_notice))
+        return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
 
 def _required_string(value: dict[str, Any], key: str) -> str:
     result = value.get(key)
@@ -123,6 +133,8 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     for item in weights_value:
         if not isinstance(item, dict):
             raise ModelRegistryError("model registry weight entry must be an object")
+        if set(item) - {"path", "size_bytes", "sha256", "source"}:
+            raise ModelRegistryError("model registry weight entry fields are invalid")
         path = _required_string(item, "path")
         if Path(path).is_absolute() or ".." in Path(path).parts:
             raise ModelRegistryError("model registry weight path must be relative and contained")
@@ -130,7 +142,23 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         digest = _required_string(item, "sha256")
         if not isinstance(size, int) or isinstance(size, bool) or size <= 0 or _SHA256.fullmatch(digest) is None:
             raise ModelRegistryError("model registry weight metadata is invalid")
-        weights.append(WeightFile(path=path, size_bytes=size, sha256=digest))
+        source_value = item.get("source")
+        source = None
+        if source_value is not None:
+            if not isinstance(source_value, dict) or set(source_value) != {"kind", "repo_id", "revision"}:
+                raise ModelRegistryError("model registry weight source is invalid")
+            source = ModelSource(
+                kind=_required_string(source_value, "kind"),
+                repo_id=_required_string(source_value, "repo_id"),
+                revision=_required_string(source_value, "revision"),
+            )
+            if (
+                source.kind != "huggingface"
+                or _MODEL_ID.fullmatch(source.repo_id) is None
+                or re.fullmatch(r"[0-9a-f]{40}", source.revision) is None
+            ):
+                raise ModelRegistryError("model registry weight source is invalid")
+        weights.append(WeightFile(path=path, size_bytes=size, sha256=digest, source=source))
     policy = value.get("policy_rank")
     if not isinstance(policy, dict) or not policy or any(
         key not in {"auto", "fast", "balanced", "quality", "low_vram"}

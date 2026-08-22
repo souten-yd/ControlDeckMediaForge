@@ -360,15 +360,13 @@ PY
 }
 
 download_model() {
-  local name="$1" model_id
+  local name="$1" accept_license="${2:-no}" model_id
   case "$name" in
     flux2-klein-4b) model_id=black-forest-labs/FLUX.2-klein-4B ;;
-    wan2.2-ti2v-5b) model_id=Wan-AI/Wan2.2-TI2V-5B ;;
-    wan2.2-i2v-a14b) model_id=Wan-AI/Wan2.2-I2V-A14B ;;
-    wan2.2-t2v-a14b) model_id=Wan-AI/Wan2.2-T2V-A14B ;;
+    minimax-h3-gguf) model_id=unsloth/MiniMax-H3-GGUF ;;
     *) die "unknown model: $name" ;;
   esac
-  run_model_operation install "$model_id"
+  run_model_operation install "$model_id" "$accept_license"
   list_models
 }
 
@@ -386,11 +384,11 @@ remove_model() {
 }
 
 run_model_operation() {
-  local action="$1" model_id="$2"
+  local action="$1" model_id="$2" accept_license="${3:-no}"
   ensure_env "$VENV" "$REPO_ROOT/requirements.txt" "core"
   PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" "$VENV/bin/python" - \
     "$(media_data_dir)" "$(model_registry_manifest)" "$(model_catalog_manifest)" \
-    "$(model_store_root)" "$HF_HOME" "$action" "$model_id" <<'PY'
+    "$(model_store_root)" "$HF_HOME" "$action" "$model_id" "$accept_license" <<'PY'
 import asyncio
 import sys
 from pathlib import Path
@@ -402,7 +400,7 @@ from mediaforge.store import Store
 
 async def main() -> int:
     data_dir, manifest, catalog, managed, external = map(Path, sys.argv[1:6])
-    action, model_id = sys.argv[6:8]
+    action, model_id, accept_license = sys.argv[6:9]
     store = Store(data_dir)
     store.initialize()
     service = ModelOperationManager(
@@ -414,7 +412,15 @@ async def main() -> int:
     )
     await service.start()
     try:
-        operation = service.install(model_id) if action == "install" else service.remove(model_id)
+        if action == "install":
+            model = next(
+                (item for item in service.catalog()["items"] if item["model_id"] == model_id),
+                None,
+            )
+            acceptance = model["license_acceptance_id"] if model is not None and accept_license == "yes" else None
+            operation = service.install(model_id, license_acceptance=acceptance)
+        else:
+            operation = service.remove(model_id)
     except ModelOperationError as exc:
         await service.stop()
         print(f"{exc.code}: {exc}", file=sys.stderr)
@@ -560,9 +566,7 @@ Usage:
   ./mf.sh env prune
   ./mf.sh model list
   ./mf.sh model download flux2-klein-4b
-  ./mf.sh model download wan2.2-ti2v-5b
-  ./mf.sh model download wan2.2-i2v-a14b
-  ./mf.sh model download wan2.2-t2v-a14b
+  ./mf.sh model download minimax-h3-gguf --accept-license
   ./mf.sh model remove flux2-klein-4b
   ./mf.sh bundle build <version> <output-dir>
   ./mf.sh test
@@ -589,7 +593,11 @@ main() {
       export_cache_paths yes
       case "${2:-}" in
         list) [ "$#" -eq 2 ] || die "model list takes no arguments"; list_models ;;
-        download) [ "$#" -eq 3 ] || die "model download requires one model name"; download_model "$3" ;;
+        download)
+          [ "$#" -eq 3 ] || { [ "$#" -eq 4 ] && [ "$4" = "--accept-license" ]; } || \
+            die "model download requires a model name and optional --accept-license"
+          download_model "$3" "$([ "${4:-}" = "--accept-license" ] && printf yes || printf no)"
+          ;;
         remove) [ "$#" -eq 3 ] || die "model remove requires one model name"; remove_model "$3" ;;
         *) usage; exit 2 ;;
       esac

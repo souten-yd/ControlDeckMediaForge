@@ -210,6 +210,82 @@
       "recommended_profiles": [],
       "gated": false,
       "license_notice": "Tencent Hunyuan Community License; territorial and acceptable-use terms apply. Review LICENSE and NOTICE before use. ROCm/gfx1201 is NOT TESTED."
+    },
+    {
+      "model_id": "MiniMaxAI/MiniMax-H3",
+      "display_name": "MiniMax H3 FL2VA (BF16)",
+      "domains": [
+        "general",
+        "anime",
+        "illustration",
+        "photoreal"
+      ],
+      "media_types": [
+        "video",
+        "audio_video"
+      ],
+      "description": "Official 144.1GB BF16 FL2VA checkpoint shown for comparison only. It exceeds the local 32GB managed-download limit and is not downloadable or routable on the single R9700.",
+      "approx_download_bytes": 144051182625,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "MiniMaxAI/MiniMax-H3",
+        "revision": "42ed227ee7df40d41602854ae760620d6eb651fe"
+      },
+      "ownership": "external",
+      "supports_lora": false,
+      "max_references": 2,
+      "reference_roles": [
+        "identity",
+        "pose",
+        "composition",
+        "environment"
+      ],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": true,
+      "license_notice": "MiniMax H3 Community License (2026-08-02): use and distribution are limited to its Applicable Territory (excluding the EU, UK, Republic of Korea, and USA); separate commercial authorization is required above USD 20M annual revenue; product attribution, downstream notice, acceptable-use, and other upstream terms apply. Review https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/LICENSE before accepting."
+    },
+    {
+      "model_id": "DiffSynth-Studio/MiniMax-H3-NF4",
+      "display_name": "MiniMax H3 FL2VA Pruned NF4",
+      "domains": ["general", "anime", "illustration", "photoreal"],
+      "media_types": ["video", "audio_video"],
+      "description": "27.71GB selected NF4 bundle for single-GPU evaluation. It remains experimental and unroutable until the isolated DiffSynth runtime succeeds on R9700/ROCm.",
+      "approx_download_bytes": 27705875746,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "DiffSynth-Studio/MiniMax-H3-NF4",
+        "revision": "363fdc8fbd7ae55f5b9e7fb87cf3d508df28ee0d"
+      },
+      "ownership": "external",
+      "supports_lora": false,
+      "max_references": 2,
+      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": true,
+      "license_notice": "Community NF4 conversion derived from MiniMax H3. The repository card says Apache-2.0, but Media Forge conservatively applies the upstream MiniMax H3 Community License and its territory, commercial authorization, attribution, downstream notice, and acceptable-use terms. Review https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/LICENSE before accepting. ROCm/gfx1201 is NOT TESTED."
+    },
+    {
+      "model_id": "unsloth/MiniMax-H3-GGUF",
+      "display_name": "MiniMax H3 FL2VA UD-Q2 GGUF",
+      "domains": ["general", "anime", "illustration", "photoreal"],
+      "media_types": ["video", "audio_video"],
+      "description": "26.98GB four-component GGUF bundle selected for one-R9700 evaluation through an isolated stable-diffusion.cpp HIP runtime.",
+      "approx_download_bytes": 26978277946,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "unsloth/MiniMax-H3-GGUF",
+        "revision": "d629413c2e5b51b38c453668b75ca3b06ca92703"
+      },
+      "ownership": "managed",
+      "supports_lora": false,
+      "max_references": 2,
+      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": true,
+      "license_notice": "Unsloth GGUF Model Derivative under the MiniMax H3 Community License Agreement. This bundle uses the pruned UD-Q2_K_XL FL2VA denoiser, Q2_K_M text encoder, and Comfy-Org video/audio VAEs. Review the pinned LICENSE and NOTICE before accepting. ROCm/gfx1201 is NOT TESTED."
     }
   ]
 }

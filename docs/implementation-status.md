@@ -2044,3 +2044,34 @@ focused reference/director/batch/workspace/frontend regressionは109 passed。�
 C4 multi-cutのAI shot briefはCI-5、Evaluator統合はCI-4なので **NOT TESTED**。実GPU生成、
 profileへの自動反映（仕様上行わない）、installed release bundleは **NOT TESTED**。
 ControlDeck repository変更0件、hosted CI利用0件。
+# MiniMax H3 bounded catalog and download evaluation (2026-08-22, active)
+
+The official `MiniMaxAI/MiniMax-H3` FL2VA revision
+`42ed227ee7df40d41602854ae760620d6eb651fe` was measured from the Hugging Face
+tree as 81 selected files / 144,051,182,625 bytes. A real managed download to
+the NVMe model store was canceled at 1,865,101,859 bytes after the 32GB local
+artifact limit was established. The operation reached `canceled`; its contained
+`.downloads/modelop_2f7d58dbfd13401d94b3a6eb7d70c1c2` tree was absent afterward,
+and no installed `models--MiniMaxAI--MiniMax-H3` repository existed.
+
+The replacement candidate is `unsloth/MiniMax-H3-GGUF` revision
+`d629413c2e5b51b38c453668b75ca3b06ca92703`: pruned FL2VA UD-Q2_K_XL,
+Qwen3-VL Q2_K_M, and two Comfy-Org VAEs at revision
+`0f7fb980293fcc4d55c1158cbda920806682ed5d`, totaling 26,978,277,946 bytes.
+The installer now accepts only those catalog-pinned per-weight sources, requires
+an exact license-acceptance identifier, rejects managed artifacts at or above
+32,000,000,000 bytes before creating an operation, and still transfers one file
+at a time directly under the configured model store.
+
+Observed local gate after these changes:
+
+```text
+./mf.sh test
+309 passed, 1 warning in 27.88 sec
+```
+
+The GGUF download operation `modelop_0dfc422e9d9d480a996e02ba552d6b89` is
+currently active under the NVMe feature-data model store. Final bytes,
+SHA-256 verification time, stable-diffusion.cpp HIPBLAS build, R9700 runtime,
+VRAM/RAM/swap measurements, output quality, cancellation, and prompt-skill
+Gateway projection are **NOT TESTED** at this checkpoint.
