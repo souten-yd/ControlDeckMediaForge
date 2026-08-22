@@ -10,8 +10,8 @@
 ```text
 最終更新    2026-08-22
 ブランチ    ux1/creative-spec-c0
-PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 マージ済み
-状態        UX2 C0 を実装・実測済み。commit / push / PR の直前
+PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 マージ済み、C0 #38 open
+状態        UX2 C0 をpush・PR作成済み。exact head確認後にmergeする
 基準値      ./mf.sh test = 222 passed
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
