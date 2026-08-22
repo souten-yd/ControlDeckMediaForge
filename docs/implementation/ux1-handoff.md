@@ -9,9 +9,9 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ci/reference-intelligence
-PR          CI-2 Creative Director #55 merge済み（merge b6e3dab。#54もmerge済み）
-状態        CI-3実装・実Host/Vision/browser確認完了。PR作成前
+ブランチ    video/minimax-h3-catalog
+PR          CI-3 Reference Intelligence #56 merge済み（merge ffcf838）
+状態        CI-3完了。次はMiniMax H3 catalog/download評価
 基準値      focused CI-3 = 109 passed / ./mf.sh test = 303 passed（28.11秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
@@ -36,8 +36,9 @@ PR          CI-2 Creative Director #55 merge済み（merge b6e3dab。#54もmerge
 ## 次にやること（1 つだけ）
 
 ```text
-CI-3 Reference Intelligenceを独立PRでpush・mergeする。
-  その次      利用者指定のMiniMax H3を独立catalog/download評価スライスで扱う
+利用者指定のMiniMax H3を独立catalog/download評価スライスで扱う。
+  今回        exact revision/license/必要bytes、FL2VA bounded download、R9700採用gate
+  設計        公式prompt-writing skillを版固定recipeとしてGateway text.generateへ渡す
   続き        docs/implementation/creative-intelligence.md CI-4 Unified Evaluator
   保留        video public API/runtime実装（G7には着手しない）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
