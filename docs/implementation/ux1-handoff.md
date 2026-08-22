@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    docs/v032-final-handoff
-PR          #60（H3 hardening）/ #61（v0.3.2 evidence）merge済み
-状態        v0.3.2実導入・最終監査完了。H3 quality RAM-offload routeはHost共存失敗で延期
-基準値      exact PR head ./mf.sh test = 318 passed, 1 warning（32.25秒）
+ブランチ    ux1/h3-prompt-recipe
+PR          #60（H3 hardening）/ #61（v0.3.2 evidence）merge済み。prompt recipe PR準備中
+状態        H3版固定prompt recipe実装・実Gateway受入完了。quality routeは延期のまま
+基準値      現worktree ./mf.sh test = 333 passed, 1 warning（34.60秒）
 リリース    v0.3.2公開・ControlDeck導入済み（artifact ec864154...e12e3d9、Host PR #230/#231）
 ```
 
@@ -38,11 +38,11 @@ PR          #60（H3 hardening）/ #61（v0.3.2 evidence）merge済み
 ## 次にやること（1 つだけ）
 
 ```text
-H3 bounded evaluatorは完了。次は独立したprompt recipe / CI-4スライス。
+H3 bounded evaluatorとprompt recipeは完了。次は独立したCI-4スライス。
   完了        26.98GB GGUF、pinned HIP runtime、Host lease/cancel、R9700 smoke実測
   延期        H3 quality route（Host watchdog/swap/output gate失敗。条件改善まで再実行しない）
-  次          公式prompt-writing skillを版固定recipeとしてGateway text.generateへ渡す設計・実装
-  続き        docs/implementation/creative-intelligence.md CI-4 Unified Evaluator
+  完了        版固定recipe、構造化projection、実Gateway text.generate、原文保持/fail-closed
+  次          docs/implementation/creative-intelligence.md CI-4 Unified Evaluator
   保留        video public API/runtime実装（G7には着手しない）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
@@ -106,10 +106,10 @@ H3 bounded evaluatorは完了。次は独立したprompt recipe / CI-4スライ�
      25-frame/4-step probeはRAM/swap圧でHost watchdogが再起動し、outputなし。
      H3はexperimental/healthy=no/unroutableを維持する。
      token偽造やlease流用はしない。実測後も`experimental / healthy=no`を維持する。
-     公式prompt-writing skillはMarkdownと参照guideだけで外部APIを呼ばない。次スライスで
-     prompt recipeの版固定・構造化projectionを実装する。任意skill実行経路は作らない。
-     skillをHostへ任意実行させず、版固定したprompt recipeをMedia Forgeが構造化messageとして
-     `text.generate`へ渡す。32GB VRAM超のworking memoryをbounded RAM offloadで試すことは
+     公式prompt-writing skillはMarkdownと参照guideだけで外部APIを呼ばない。版固定recipeを
+     Media Forgeのprivate projectionとして実装済み。任意skill実行経路はなく、Hostへは
+     構造化messageを`text.generate`として渡す。prompt-onlyではvisionを要求しない。
+     32GB VRAM超のworking memoryをbounded RAM offloadで試すことは
      許容するが、wall time/RAM headroom/swap/Host watchdog/output qualityを全て実測する。
      今回のH3 quality routeはこのgateに失敗したため採用しない。
 ```

@@ -69,6 +69,7 @@ from .models import (
     TERMINAL_MODEL_OPERATION_STATES,
 )
 from .paths import contained
+from .prompt_recipes import H3PromptRecipe, PromptRecipeError, PromptRecipeRequest
 from .profiles import ProfileInput, ReferenceCollectionInput
 from .semantic_review import HostSemanticReviewer, SemanticReviewer
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
@@ -144,6 +145,7 @@ def create_app(
     )
     ai_gateway = HostAIGateway(host)
     creative_director = CreativeDirector(PromptPlanner(ai_gateway))
+    prompt_recipe = H3PromptRecipe(ai_gateway)
     reference_intelligence = ReferenceIntelligence(
         ai_gateway,
         ReferenceAnalysisCache(resolved.data_dir / "reference-analysis-cache"),
@@ -1581,6 +1583,17 @@ def create_app(
                         # Re-validate the projection before it crosses back to the UI.
                         CreativeSpec.model_validate(directed.creative_spec)
                         result = directed.model_dump(mode="json")
+                    elif method == "creative.prompt_recipe":
+                        if set(params) != {"recipe_id", "request"}:
+                            raise ValueError("prompt recipe accepts only recipe_id and request")
+                        if params.get("recipe_id") != "minimax-h3-prompt-writing":
+                            raise ValueError("prompt recipe is not supported")
+                        result = (
+                            await prompt_recipe.project(
+                                identity,
+                                PromptRecipeRequest.model_validate(params.get("request")),
+                            )
+                        ).model_dump(mode="json")
                     elif method == "creative.validate":
                         request = JobRequest.model_validate(params.get("request"))
                         creative_spec = CreativeSpec.model_validate(params.get("creative_spec", {}))
@@ -1712,6 +1725,7 @@ def create_app(
                     ModelOperationError,
                     CreativeValidationError,
                     ReferenceIntelligenceError,
+                    PromptRecipeError,
                 ) as exc:
                     error = {"code": exc.code, "message": str(exc)[:300]}
                     if isinstance(exc, CreativeValidationError) and exc.field is not None:
