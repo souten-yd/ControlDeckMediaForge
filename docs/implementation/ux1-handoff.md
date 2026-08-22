@@ -10,8 +10,8 @@
 ```text
 最終更新    2026-08-22
 ブランチ    ux1/multicut-composer-c4
-PR          UX1 #21〜#33 / UX2 M0 #35〜C2 #40 / C3 #41 マージ済み
-状態        UX2 C4 実装・実process/browser受け入れ・local full gate済み。PR作成前
+PR          UX1 #21〜#33 / UX2 M0 #35〜C2 #40 / C3 #41 マージ済み、C4 #42 open
+状態        UX2 C4 をpush・PR作成済み。exact head / mergeability確認後にmergeする
 基準値      ./mf.sh test = 255 passed
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
