@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/video-model-catalog-v0
-PR          v0.3.0 #48 / CI v2計画 #51 マージ済み。動画catalog #50 open
-状態        PR #50のWan TI2V-5B snapshot取得／NVMe SHA検証済み。CI-1〜CI-6を次に優先
-基準値      ./mf.sh test = 274 passed（23.54秒）
+ブランチ    ux1/settings-about-details
+PR          Settings詳細移動 #52 open。#48 / #50 / CI v2計画 #51 マージ済み
+状態        PR #52 local full gateと実browser確認済み。merge待ち
+基準値      ./mf.sh test = 275 passed（28.86秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
@@ -36,10 +36,10 @@ PR          v0.3.0 #48 / CI v2計画 #51 マージ済み。動画catalog #50 ope
 ## 次にやること（1 つだけ）
 
 ```text
-PR #50へ実download証拠をpushしてmergeし、CI-1 provider-neutral AI cutoverへ進む。
+Settings詳細移動PRをmergeし、CI-1 provider-neutral AI cutoverへ進む。
   優先        docs/implementation/creative-intelligence.md のCI-1〜CI-6を順番に完了
   保留        Wan runtime／R9700生成評価と他の動画model download
-  次UI        画像model catalog複数候補化。Settingsの長いAbout一覧は「詳細」へ移動
+  次UI        画像model catalog複数候補化
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
