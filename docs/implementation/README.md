@@ -6,11 +6,13 @@
 docs/base-plan.md                    設計の正（何を作るか・なぜそう決めたか）
 docs/controldeck-integration-plan.md 統合の正（ホストとの境界）
 docs/design-workspace-ux.md          UI/UX の正（画面構成・段階開示・レイアウト）
+docs/design-model-scene-ux.md        既存UXを流用するモデル管理・シーン/ポーズ/構図拡張
 docs/implementation/                 実装の指示（どの順で・何を確認して進めるか）
 ```
 
 設計判断を変えるときは `base-plan.md` / `controldeck-integration-plan.md` を先に更新する。
 指示書だけを書き換えて設計を変えないこと。
+`design-model-scene-ux.md` は既存 `design-workspace-ux.md` の情報構造と Simple/Advanced 方針を維持したまま、モデル管理とクリエイティブ制御を追加する拡張設計である。
 
 ---
 
@@ -22,6 +24,7 @@ docs/implementation/                 実装の指示（どの順で・何を確�
 | 2 | [mf0-0-environment.md](mf0-0-environment.md) | MediaForge | 実行環境の分離・自動整備・削除安全性。**最初に実施** |
 | 3 | [mf0-addon-core.md](mf0-addon-core.md) | MediaForge | G0。Add-on として成立させる（fake worker） |
 | 4 | [ux1-workspace.md](ux1-workspace.md) | MediaForge | G0〜G3 の機能を使える形にする workspace UI。設計は `../design-workspace-ux.md` |
+| 5 | [ux2-model-scene.md](ux2-model-scene.md) | MediaForge | **UX1を作り直さず**、モデルDL/削除、領域、シーン、ポーズ、構図、意図的な差分生成、Composerを追加。設計は `../design-model-scene-ux.md` |
 | — | [host-load-profile-fix.md](host-load-profile-fix.md) | **ControlDeck** | ホスト側の LLM 退避コスト計測の修正。G7 の前提 |
 
 `host-load-profile-fix.md` だけ作業対象が ControlDeck リポジトリ。
@@ -36,6 +39,7 @@ G0   Add-onとして成立する          mf0-addon-core.md
 G1   ローカルで画像が作れる
 G2   画像を壊さずに直せる
 G3   同じキャラ・同じ絵柄で作れる
+UX2  既存UXのままモデル管理・シーン/ポーズ/構図を使いこなせる  ux2-model-scene.md
 G4   コーディングエージェントが素材を置ける
 G5   M5Stack companion が実運用できる
 G6   2Dゲーム素材一式が出せる
@@ -46,6 +50,7 @@ G10  手持ち資料を参照源にできる
 ```
 
 G0〜G4 で local media service として実用成立する。
+UX2 は G1〜G3 の既存能力を利用者が使い分けるための横断スライスで、G4〜G6に進む前に入れる。
 G5 以降は用途別の上積みで、順序を入れ替えてよい。
 **G7 以降を先に着手しない**（理由は goal-roadmap.md §0.4）。
 
@@ -60,6 +65,8 @@ G5 以降は用途別の上積みで、順序を入れ替えてよい。
 記録            docs/implementation-status.md に実測値と NOT TESTED を書く
 環境            ControlDeck の .venv を共有しない。キャッシュのみ共有する
 境界            ControlDeck 本体に Media 固有のコードを 1 行も入れない
+UX再利用         UX2 で Create/Library/Activity/Settings と Simple/Advanced を作り直さない
+モデル削除       Media Forge 管理下の重みだけ削除し、共有HF/ComfyUI/外部モデルを勝手に消さない
 ```
 
 ---
