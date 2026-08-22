@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import jsonschema
 from playwright.sync_api import Page, sync_playwright
 
 DESKTOP = {"width": 1280, "height": 800}
@@ -55,6 +56,125 @@ def visible(page: Page, selector: str) -> bool:
 def ready(page: Page, url: str) -> None:
     page.goto(url, wait_until="domcontentloaded")
     page.wait_for_selector('#app[aria-busy="false"]', timeout=15_000)
+
+
+def submitted_payload(page: Page, evidence: Path) -> dict[str, Any] | None:
+    """送信内容だけを捕まえ、実際の生成は起こさせない。
+
+    この開発機には実モデルが入っているため、本当に投げると GPU を数分占有する。
+    """
+    captured: list[dict[str, Any]] = []
+
+    def intercept(route, request):
+        try:
+            captured.append(json.loads(request.post_data or "{}"))
+        except json.JSONDecodeError:
+            captured.append({})
+        route.fulfill(
+            status=202,
+            content_type="application/json",
+            body=json.dumps({
+                "id": "job_" + "0" * 32, "status": "queued", "phase": None, "progress": 0.0,
+                "request": captured[-1], "asset_ids": [], "error": None,
+                "created_at": "2026-08-22T00:00:00Z", "updated_at": "2026-08-22T00:00:00Z",
+            }),
+        )
+
+    page.route("**/api/v1/jobs", intercept)
+    page.click("#create-submit")
+    page.wait_for_timeout(800)
+    page.unroute("**/api/v1/jobs")
+    if captured:
+        (evidence / "submitted-request.json").write_text(
+            json.dumps(captured[-1], ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    return captured[-1] if captured else None
+
+
+FAKE_JOB_ID = "job_" + "0" * 32
+
+
+def pre_submit_checks(page: Page, evidence: Path) -> dict[str, Any]:
+    """受付前検証。落ちるべきものが落ち、通るべきものが schema に適合すること。"""
+    result: dict[str, Any] = {}
+
+    # 捕まえた送信の job は実在しない。polling が 404 を出さないよう応答を用意する。
+    page.route(f"**/api/v1/jobs/{FAKE_JOB_ID}", lambda route, _request: route.fulfill(
+        status=200,
+        content_type="application/json",
+        body=json.dumps({
+            "id": FAKE_JOB_ID, "status": "canceled", "phase": None, "progress": 0.0,
+            "request": {"operation": "image.generate", "intent": "captured", "local_only": True},
+            "asset_ids": [], "error": None,
+            "created_at": "2026-08-22T00:00:00Z", "updated_at": "2026-08-22T00:00:00Z",
+        }),
+    ))
+
+    # 以降は「書いていない」以外の理由で止まることを見たいので、先に書いておく
+    page.fill("#create-intent", "受付前検証のためのテスト入力")
+
+    # 元画像より小さい行き先は受付前に止まる
+    page.click('#size-presets [data-preset="square"]')
+    smaller = page.evaluate(
+        "() => Number(document.querySelector('#size-presets [aria-checked=\"true\"]').dataset.width)"
+    )
+    source = page.evaluate("() => document.querySelector('#attach-size').textContent")
+    if smaller < int(source.split("×")[0]):
+        check(submitted_payload(page, evidence) is None, "元画像より小さい行き先が送信された")
+        check(visible(page, "#create-error"), "受付前エラーが表示されていない")
+        result["outpaint_smaller_blocked"] = page.locator("#create-error").inner_text()
+
+    # 外側を広げるのに広がっていない指定（詳細モードで元画像と同じ寸法を入れる）
+    page.click("#mode-advanced")
+    page.wait_for_selector("#advanced-width")
+    source_width, source_height = (int(value) for value in source.split("×"))
+    page.fill("#advanced-width", str(source_width))
+    page.fill("#advanced-height", str(source_height))
+    check(submitted_payload(page, evidence) is None, "広がっていない outpaint が送信された")
+    result["outpaint_not_expanding_blocked"] = page.locator("#create-error").inner_text()
+    check(bool(result["outpaint_not_expanding_blocked"].strip()), "止めた理由が表示されていない")
+    page.click("#mode-simple")
+
+    # 詳細モード: 16 の倍数でない幅
+    page.click('[data-edit-mode="reference"]')
+    page.click("#attach-clear")
+    page.click("#mode-advanced")
+    page.wait_for_selector("#advanced-width")
+    page.fill("#advanced-width", "1000")
+    check(submitted_payload(page, evidence) is None, "16 の倍数でない幅が送信された")
+    result["non_multiple_blocked"] = page.locator("#create-error").inner_text()
+    check(bool(result["non_multiple_blocked"].strip()),
+          "16 の倍数でない幅を止めたのに理由が表示されていない")
+
+    # 詳細モード: manual を選んだらモデル指定が必ず載る
+    page.fill("#advanced-width", "512")
+    page.fill("#advanced-height", "512")
+    page.select_option("#advanced-policy", "manual")
+    page.wait_for_timeout(100)
+    schema = json.loads((Path(__file__).parents[1] / "schemas" / "job-request.json").read_text(encoding="utf-8"))
+    if page.locator("#advanced-model").input_value():
+        manual = submitted_payload(page, evidence)
+        check(manual is not None, "manual の送信が捕まえられなかった")
+        check(manual["model_policy"] == "manual" and bool(manual.get("model_id")),
+              "manual なのに model_id が載っていない")
+        jsonschema.validate(manual, schema)
+        result["manual_model_id"] = manual["model_id"]
+    else:
+        check(submitted_payload(page, evidence) is None, "モデル未指定の manual が送信された")
+        result["manual_without_model_blocked"] = page.locator("#create-error").inner_text()
+    page.select_option("#advanced-policy", "auto")
+
+    # 既定の送信が job-request schema に適合する
+    payload = submitted_payload(page, evidence)
+    check(payload is not None, "正しい入力が送信されていない")
+    result["payload"] = payload
+    jsonschema.validate(payload, schema)
+    result["schema"] = "valid"
+    check(payload["local_only"] is True, "local_only が true ではない")
+    check("model_id" not in payload, "auto なのに model_id が載っている")
+    page.click("#mode-simple")
+    page.unroute(f"**/api/v1/jobs/{FAKE_JOB_ID}")
+    return result
 
 
 def run(page: Page, url: str, evidence: Path) -> dict[str, Any]:
@@ -124,8 +244,19 @@ def run(page: Page, url: str, evidence: Path) -> dict[str, Any]:
     page.click('[data-edit-mode="inpaint"]')
 
     page.screenshot(path=str(evidence / "desktop-edit.png"), full_page=True)
-    page.click("#attach-clear")
+
+    # 出力寸法が元画像で決まる操作では、無視される値を選ばせない
+    check(not visible(page, "#size-block"), "結果に影響しないサイズ欄が出ている")
+    page.click('[data-edit-mode="outpaint"]')
+    check(visible(page, "#size-block"), "外側を広げるのにサイズ欄が出ない")
+    observations["outpaint_note"] = page.locator("#size-note").inner_text()
+
+    # 受付前に落とすべきものを落としているか（GPU を取りに行かせない）
+    observations["pre_submit"] = pre_submit_checks(page, evidence)
+
+    # pre_submit_checks の中で添付を外している
     check(not visible(page, "#edit-block"), "画像を外しても編集操作が残っている")
+    check(visible(page, "#size-block"), "生成に戻ってもサイズ欄が出ない")
 
     # ── タブレット ──
     page.set_viewport_size(TABLET)

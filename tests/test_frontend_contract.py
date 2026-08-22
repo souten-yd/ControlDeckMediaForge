@@ -30,8 +30,9 @@ DOM_IDS = (
     "nav-create", "nav-library", "nav-activity", "nav-settings",
     "mode-simple", "mode-advanced",
     "create-form", "create-intent", "create-submit", "create-status",
-    "attach-image", "source-file", "edit-actions", "guarantee-badge",
-    "size-presets", "count-chips",
+    "attach-image", "attach-size", "source-file", "edit-actions", "guarantee-badge",
+    "size-block", "size-label", "size-note", "size-presets", "count-chips",
+    "create-error", "create-estimate",
     "stage", "stage-progress", "stage-result", "candidate-strip", "recent-strip",
     "mini-progress", "library-grid", "library-kinds", "activity-list",
     "capability-list", "detail-dialog",
@@ -134,12 +135,30 @@ def backend_error_codes() -> set[str]:
     return codes
 
 
-def test_failure_sentences_only_name_real_backend_codes():
+def ui_thrown_codes() -> set[str]:
+    """UI 自身が投げる code（受付前に落とすもの）も説明の対象になる。
+
+    standaloneCall は ControlDeck 無しで開発するための shim であり、
+    製品経路では通らない。利用者向けの文言を要求しない。
+    """
+    product = SCRIPT.split("async function standaloneCall(", 1)
+    product = product[0] + product[1].split("\nasync function ", 1)[1]
+    return set(re.findall(r'throw \{code: "([a-z][a-z0-9_]+)"', product))
+
+
+def test_failure_sentences_only_name_real_codes():
     table = SCRIPT.split("function failureText(", 1)[1].split("}", 2)[0]
     named = set(re.findall(r"^\s{4}([a-z][a-z0-9_]+):", table, re.MULTILINE))
     assert named, "失敗の言い換え表が読み取れなかった"
-    unknown = named - backend_error_codes()
-    assert not unknown, f"backend に存在しない error code を UI が説明している: {sorted(unknown)}"
+    unknown = named - backend_error_codes() - ui_thrown_codes()
+    assert not unknown, f"どこにも存在しない error code を UI が説明している: {sorted(unknown)}"
+
+
+def test_every_code_the_ui_throws_has_a_sentence():
+    table = SCRIPT.split("function failureText(", 1)[1].split("}", 2)[0]
+    named = set(re.findall(r"^\s{4}([a-z][a-z0-9_]+):", table, re.MULTILINE))
+    missing = ui_thrown_codes() - named
+    assert not missing, f"UI が投げるのに説明の無い code: {sorted(missing)}"
 
 
 def test_every_phase_the_backend_reports_has_japanese_text():

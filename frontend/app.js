@@ -66,6 +66,8 @@ const state = {
   envelope: null,
   presets: [],
   editMode: "",
+  source: null,
+  estimateSec: null,
   activeJob: "",
   libraryCursor: null,
   libraryKind: "all",
@@ -247,14 +249,18 @@ function syncAdvancedCreate() {
   const width = byId("advanced-width");
   if (!width) return;
   const preset = currentPreset();
+  const envelope = sizeEnvelope();
+  for (const input of [width, byId("advanced-height")]) {
+    input.min = envelope.min_side;
+    input.max = envelope.max_side;
+    input.step = envelope.multiple_of;
+  }
   width.value = preset.width;
   byId("advanced-height").value = preset.height;
   byId("advanced-count").value = selectedCount();
-  const envelope = state.envelope;
-  byId("advanced-size-hint").textContent = envelope
-    ? `${envelope.min_side}〜${envelope.max_side}px・${envelope.multiple_of} の倍数（${
-        envelope.envelope_source === "measured" ? "実測値" : "暫定値"}）`
-    : "";
+  byId("advanced-size-hint").textContent =
+    `${envelope.min_side}〜${envelope.max_side}px・${envelope.multiple_of} の倍数（${
+      state.envelope ? (envelope.envelope_source === "measured" ? "実測値" : "暫定値") : "暫定値"}）`;
   const semantic = state.capabilities["image.semantic_review"] || {};
   const check = byId("advanced-semantic");
   check.disabled = semantic.state !== "available";
@@ -387,6 +393,44 @@ function renderEditActions() {
   else selectEditMode(state.editMode);
 }
 
+/* 生成と outpaint 以外はサイズが結果に影響しない（出力は元画像と同じ寸法）。
+   選ばせた値が無視される状態を作らないため、欄ごと隠して理由を書く。 */
+function renderSizeSection() {
+  const block = byId("size-block");
+  const label = byId("size-label");
+  const note = byId("size-note");
+  if (!state.source) {
+    block.hidden = false;
+    label.textContent = "サイズ";
+    note.textContent = "";
+    return;
+  }
+  if (state.editMode === "outpaint") {
+    block.hidden = false;
+    label.textContent = "広げる先の大きさ";
+    const preset = currentPreset();
+    note.textContent = `元画像 ${state.source.width}×${state.source.height} を中央に置いて広げます。`;
+    const problem = outpaintProblem(preset);
+    if (problem) note.textContent = `${note.textContent} ${problem}`;
+    return;
+  }
+  block.hidden = true;
+  label.textContent = "サイズ";
+  note.textContent = "";
+}
+
+function outpaintProblem(target) {
+  const source = state.source;
+  if (!source) return "";
+  if (target.width < source.width || target.height < source.height) {
+    return "元画像より小さくはできません。";
+  }
+  if (target.width === source.width && target.height === source.height) {
+    return "少なくとも片方の辺を大きくしてください。";
+  }
+  return validateSize(target);
+}
+
 function selectEditMode(mode) {
   state.editMode = mode;
   for (const button of document.querySelectorAll(".edit-action")) {
@@ -398,6 +442,8 @@ function selectEditMode(mode) {
   byId("mask-file").required = mode === "inpaint";
   byId("reference-input").hidden = mode !== "multi_reference";
   byId("reference-files").required = mode === "multi_reference";
+  renderSizeSection();
+  clearError();
   if (state.mode === "advanced") syncAdvancedCreate();
 }
 
@@ -405,15 +451,30 @@ function attachedFile() {
   return byId("source-file").files[0] || null;
 }
 
-function refreshAttachment() {
+/* 寸法はアップロード前にブラウザ側で測る。
+   これが無いと「外側を広げる」の可否が GPU 受付後にしか分からない。 */
+async function measure(file) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const size = {width: bitmap.width, height: bitmap.height};
+    bitmap.close();
+    return size;
+  } catch { return null; }
+}
+
+async function refreshAttachment() {
   const file = attachedFile();
   const zone = byId("attach-image");
   zone.classList.toggle("filled", Boolean(file));
   byId("attach-label").textContent = file ? `画像: ${file.name}` : "＋ 画像を追加";
   byId("attach-clear").hidden = !file;
   byId("edit-block").hidden = !file;
+  state.source = file ? await measure(file) : null;
+  byId("attach-size").textContent = state.source ? `${state.source.width}×${state.source.height}` : "";
   if (file) renderEditActions();
   else selectEditMode("");
+  renderSizeSection();
+  clearError();
 }
 
 async function fileBase64(file) {
@@ -447,14 +508,60 @@ function buildConstraints(preset) {
   return constraints;
 }
 
+const FALLBACK_ENVELOPE = {min_side: 256, max_side: 1024, multiple_of: 16};
+
+/* envelope が取れなくても検証を止めない。止めると「16 の倍数」の規則が
+   受付後にしか効かなくなり、待たせてから落とすことになる。 */
+function sizeEnvelope() {
+  return state.envelope || FALLBACK_ENVELOPE;
+}
+
 function validateSize(constraints) {
-  const envelope = state.envelope;
-  if (!envelope) return "";
+  const envelope = sizeEnvelope();
   for (const side of [constraints.width, constraints.height]) {
     if (side % envelope.multiple_of !== 0) return `幅と高さは ${envelope.multiple_of} の倍数にしてください`;
     if (side < envelope.min_side || side > envelope.max_side) {
       return `幅と高さは ${envelope.min_side}〜${envelope.max_side}px にしてください`;
     }
+  }
+  return "";
+}
+
+function showError(message) {
+  const node = byId("create-error");
+  node.textContent = message;
+  node.hidden = !message;
+}
+
+function clearError() {
+  showError("");
+}
+
+/* GPU を取りに行く前に落とせるものはすべてここで落とす。
+   backend も同じ規則で fail-closed するが、受付後に落ちると待ち時間が無駄になる。 */
+function requestProblem(constraints) {
+  const file = attachedFile();
+  if (!byId("create-intent").value.trim()) return "作りたいものを書いてください。";
+
+  if (state.mode === "advanced" && byId("advanced-policy")) {
+    if (byId("advanced-policy").value === "manual" && !byId("advanced-model").value) {
+      return "manual を選んだときはモデルを指定してください。";
+    }
+  }
+
+  if (!file) return validateSize(constraints);
+
+  if (!state.editMode) return "この画像をどうするか選んでください。";
+  if (state.editMode === "inpaint" && !byId("mask-file").files[0]) {
+    return "変更する場所の画像を指定してください。";
+  }
+  if (state.editMode === "multi_reference") {
+    const count = byId("reference-files").files.length;
+    if (count < 1 || count > 3) return "参考にする画像は 1〜3 枚にしてください。";
+  }
+  if (state.editMode === "outpaint") {
+    const problem = outpaintProblem(constraints);
+    if (problem) return problem;
   }
   return "";
 }
@@ -466,8 +573,9 @@ async function submitJob(event) {
   const submit = byId("create-submit");
   const preset = currentPreset();
   const constraints = buildConstraints(preset);
-  const sizeProblem = validateSize(constraints);
-  if (sizeProblem) { status.textContent = sizeProblem; return; }
+  const problem = requestProblem(constraints);
+  if (problem) { showError(problem); return; }
+  clearError();
 
   submit.disabled = true;
   submit.textContent = "実行中…";
@@ -484,6 +592,9 @@ async function submitJob(event) {
       if (state.editMode !== "outpaint") {
         constraints.width = source.width;
         constraints.height = source.height;
+      } else if (source.width > constraints.width || source.height > constraints.height) {
+        // 添付時の計測とサーバの正規化がずれた場合の保険。受付前に止める。
+        throw {code: "invalid_dimensions"};
       }
       constraints.strict_edit = preserving;
       constraints.edit_mode = state.editMode;
@@ -493,7 +604,6 @@ async function submitJob(event) {
       }
       if (state.editMode === "multi_reference") {
         const files = Array.from(byId("reference-files").files);
-        if (files.length < 1 || files.length > 3) throw {code: "invalid_reference_count"};
         for (const reference of files) {
           inputs.push({asset_id: (await importFile(reference, "source")).id});
         }
@@ -519,7 +629,8 @@ async function submitJob(event) {
     void savePreferences({last_preset: preset.id, last_count: selectedCount()});
     if (window.parent === window) void pollJob(job.id);
   } catch (error) {
-    status.textContent = `受け付けられませんでした（${error?.code || "unknown"}）`;
+    status.textContent = "";
+    showError(failureText(error?.code));
   } finally {
     submit.disabled = false;
     submit.textContent = "作る";
@@ -613,6 +724,12 @@ function failureText(code) {
     resource_unavailable: "GPU の空きを確保できませんでした。",
     worker_timeout: "時間内に終わりませんでした。",
     capability_unavailable: "この操作はいま使えません。",
+    invalid_dimensions: "指定した大きさが使えません。プリセットに戻してください。",
+    invalid_reference_count: "参考にする画像は 1〜3 枚にしてください。",
+    invalid_import_size: "この画像は取り込めません。別の画像を選んでください。",
+    invalid_image_import: "この画像は取り込めません。別の画像を選んでください。",
+    asset_import_too_large: "この画像は大きすぎます。別の画像を選んでください。",
+    model_unavailable: "使えるモデルがありません。設定を開いて確認してください。",
   };
   return table[code] || "うまくいきませんでした。状況を開いて確認してください。";
 }
@@ -655,6 +772,27 @@ async function thumbnailButton(assetId, onClick) {
     image.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
   } catch { button.textContent = "?"; }
   return button;
+}
+
+/* 実測が無いモデルしか無いときは何も出さない。推測を出さないため。
+
+   registry が持つ measured_runtime_sec は初回実行（モデル読み込みと
+   カーネルコンパイルを含む）の実測であり、暖まった後の所要時間ではない。
+   一般的な目安として出すと大きく外れるので、何の数字かを明示する。 */
+async function loadEstimate() {
+  const node = byId("create-estimate");
+  node.textContent = "";
+  try {
+    const {items} = await call("models.list");
+    const measured = items
+      .filter((model) => model.installed && model.healthy && model.measurement_confidence === "measured")
+      .map((model) => model.measured_runtime_sec)
+      .filter((value) => typeof value === "number" && value > 0);
+    if (!measured.length) return;
+    state.estimateSec = Math.min(...measured);
+    node.textContent =
+      `初回は約 ${Math.round(state.estimateSec)} 秒（モデルの読み込みを含む実測）。2 回目以降は短くなります。`;
+  } catch { /* 目安が出せなくても作成はできる */ }
 }
 
 async function loadRecent() {
@@ -900,6 +1038,8 @@ byId("size-presets").addEventListener("click", (event) => {
   for (const other of byId("size-presets").children) {
     other.setAttribute("aria-checked", String(other === chip));
   }
+  renderSizeSection();
+  clearError();
   if (state.mode === "advanced") syncAdvancedCreate();
   void savePreferences({last_preset: chip.dataset.preset});
 });
@@ -928,10 +1068,30 @@ byId("edit-actions").addEventListener("click", (event) => {
   if (button && !button.disabled) selectEditMode(button.dataset.editMode);
 });
 
-byId("source-file").addEventListener("change", refreshAttachment);
+byId("source-file").addEventListener("change", () => void refreshAttachment());
 byId("attach-clear").addEventListener("click", () => {
   byId("source-file").value = "";
-  refreshAttachment();
+  void refreshAttachment();
+});
+
+const dropzone = byId("attach-image");
+for (const name of ["dragenter", "dragover"]) {
+  dropzone.addEventListener(name, (event) => {
+    event.preventDefault();
+    dropzone.classList.add("dragging");
+  });
+}
+for (const name of ["dragleave", "drop"]) {
+  dropzone.addEventListener(name, () => dropzone.classList.remove("dragging"));
+}
+dropzone.addEventListener("drop", (event) => {
+  event.preventDefault();
+  const file = event.dataTransfer?.files?.[0];
+  if (!file || !file.type.startsWith("image/")) return;
+  const transfer = new DataTransfer();
+  transfer.items.add(file);
+  byId("source-file").files = transfer.files;
+  void refreshAttachment();
 });
 byId("create-form").addEventListener("submit", submitJob);
 byId("create-form").addEventListener("input", () => setHostBusy(true));
@@ -970,7 +1130,8 @@ async function boot() {
   renderCounts();
   renderLibraryKinds();
   setMode(state.preferences.mode || "simple", {persist: false});
-  refreshAttachment();
+  await refreshAttachment();
+  void loadEstimate();
   await loadRecent();
   activate(state.preferences.last_view || "create", {sync: false});
   await call("jobs.watch", {job_ids: []}).catch(() => {});

@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/workspace-shell
-PR          #21 #22 #23 マージ済み / PR-U1 は #24
-状態        シェル刷新まで完了。実ブラウザ（standalone）で観測済み
-基準値      ./mf.sh test = 171 passed
+ブランチ    ux1/create-experience
+PR          #21 #22 #23 #24 マージ済み / PR-U2 は #25
+状態        作成体験まで完了。受付前検証を実ブラウザで観測済み
+基準値      ./mf.sh test = 172 passed
 ```
 
 ## PR 進捗
@@ -22,9 +22,9 @@ PR          #21 #22 #23 マージ済み / PR-U1 は #24
 | — | 設計 + 実装計画 + 運用ルール | #21 マージ済み |
 | — | G3 profiles backend | #22 マージ済み |
 | PR-U0 | /ws 追加メソッドと保存基盤 | #23 マージ済み（転送量 -85.9%） |
-| PR-U1 | シェル刷新（3ナビ・モード・モバイル IA） | PR #24 |
-| PR-U2 | 作成体験 | 次はここ |
-| PR-U3 | マスクエディタ・外側拡張 | 未着手 |
+| PR-U1 | シェル刷新（3ナビ・モード・モバイル IA） | #24 マージ済み |
+| PR-U2 | 作成体験 | PR #25 |
+| PR-U3 | マスクエディタ・外側拡張 | 次はここ |
 | PR-U4 | 状況と結果ステージ | 未着手 |
 | PR-U5 | ライブラリと書き出し | 未着手 |
 | PR-U6 | 一貫性 UI（G3） | 未着手 |
@@ -33,17 +33,18 @@ PR          #21 #22 #23 マージ済み / PR-U1 は #24
 ## 次にやること（1 つだけ）
 
 ```text
-PR-U2（作成体験）を開始する。
-  ブランチ    ux1/create-experience（main から。#24 マージ後に切る）
-  最初の作業  frontend/app.js の submitJob を分解し、送信前の検証を
-              「GPU 受付前に落とす」方向へ寄せる（幅高さ・参照枚数・マスク有無）
-  仕様        docs/implementation/ux1-workspace.md §4
-  完了の目安  Playwright で送信 payload を捕捉し job-request schema に適合すること、
-              詳細 ON で 16 の倍数でない幅が送信前に止まること
+PR-U3（マスクエディタと外側拡張）を開始する。
+  ブランチ    ux1/mask-editor（main から。#25 マージ後に切る）
+  最初の作業  frontend に canvas のマスク描画を作る。元画像と同寸法の PNG を出力し、
+              白=変更可 / 黒=保護へ変換して既存の import 経路（purpose=edit_mask）へ流す
+  仕様        docs/implementation/ux1-workspace.md §5
+  完了の目安  外部ツール無しで inpaint が完了すること、
+              空マスク・全面マスクを送信前に止めること、
+              タッチ（1 本指で描画・2 本指でパン/ズーム）で操作できること
 
-  注意        シェルは完成しているので index.html の構造を作り直さない。
-              サイズ preset は capabilities.get の presets を使う（standalone では
-              フォールバック値になる点に注意）。
+  注意        マスクのファイル指定は詳細モードに残す（既存経路を消さない）。
+              添付時の寸法計測（state.source）は U2 で入っているので再実装しない。
+              outpaint の方向ハンドルも同じ PR。数値入力は詳細モードのみに残す。
 ```
 
 ## 未解決の判断
