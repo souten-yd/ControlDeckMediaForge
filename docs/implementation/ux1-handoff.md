@@ -10,8 +10,8 @@
 ```text
 最終更新    2026-08-22
 ブランチ    ux1/video-model-catalog-v0
-PR          v0.3.0 #48 / Creative Intelligence修正 #49 マージ済み。動画catalog PRは未作成
-状態        G7候補6件のexperimental catalog／Model Management分類を実装、実download前
+PR          v0.3.0 #48 / CI v2計画 #51 マージ済み。動画catalog #50 open
+状態        PR #50のWan TI2V-5B snapshot取得／NVMe SHA検証済み。CI-1〜CI-6を次に優先
 基準値      ./mf.sh test = 274 passed（23.54秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
@@ -36,10 +36,11 @@ PR          v0.3.0 #48 / Creative Intelligence修正 #49 マージ済み。動�
 ## 次にやること（1 つだけ）
 
 ```text
-動画候補catalogをcommit/pushし、Wan 2.2 TI2V-5Bをmanaged installerで実downloadする。
-  確認        exact revision／全weight SHA／resume/progress／NVMe配置／削除境界
-  維持        全動画候補はexperimental/low。R9700 runtime未実測のためroute/defaultにしない
-  注意        並列1。保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
+PR #50へ実download証拠をpushしてmergeし、CI-1 provider-neutral AI cutoverへ進む。
+  優先        docs/implementation/creative-intelligence.md のCI-1〜CI-6を順番に完了
+  保留        Wan runtime／R9700生成評価と他の動画model download
+  次UI        画像model catalog複数候補化。Settingsの長いAbout一覧は「詳細」へ移動
+  注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
 ## リリースの運用
@@ -95,8 +96,8 @@ PR          v0.3.0 #48 / Creative Intelligence修正 #49 マージ済み。動�
               --evidence-dir /tmp/ux1-evidence
     証跡: /data1tb/mediaforge-ux1-evidence/{light,dark}/
 
-UX2 の各ブランチは直前スライスを main へ merge してから切る
-    PR-C0 は ux1/creative-spec-c0。C0 と C1 を同一 PR に混ぜない。
+機能スライスは直前PRをmainへmergeしてから切る。
+Creative Intelligenceは docs/implementation/creative-intelligence.md の CI-1〜CI-6 を順に進める。
 ```
 
 ## 再開コマンド

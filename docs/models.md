@@ -61,6 +61,12 @@ quality comparison              tencent/HunyuanVideo-1.5 @ 9b49404b (71,655,871,
 lightweight fallback            select only after R9700 measurements
 ```
 
+Wan 2.2 TI2V-5B is the first R9700 evaluation candidate: its primary use is
+both Text-to-Video and Image-to-Video, its parameter scale is 5B, and its
+single-model shape is materially smaller than the separate 14B expert pairs.
+The verified local snapshot does not itself prove ROCm execution, so this
+priority does not change its experimental/unmeasured adoption state.
+
 The three bounded Wan generation repositories are eligible for explicit
 Media-Forge-managed download. Animate remains external because its official
 preprocessing package contains separately structured detection, pose and
