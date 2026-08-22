@@ -14,6 +14,8 @@ from mediaforge.config import Settings
 from mediaforge.host.client import ControlDeckHostClient
 from mediaforge.model_manager import ModelOperationManager
 from mediaforge.models import (
+    ModelOperation,
+    ModelOperationAction,
     ModelOperationError,
     ModelOperationState,
     ModelOwnership,
@@ -514,6 +516,83 @@ def test_workspace_catalog_install_watch_remove_and_capability_rescan(tmp_path: 
         assert terminal["state"] == "ready"
         after = call(socket, "after", "models.catalog")["result"]["items"][0]
         assert (after["installed"], after["removable"]) == (False, False)
+
+
+def test_workspace_model_evaluation_passes_host_identity_and_rejects_extra_inputs(tmp_path: Path):
+    runtime, catalog = manifests(tmp_path)
+    host_app, _state = control_deck_stub()
+    bridge = ControlDeckHostClient(
+        "https://control-deck.test", transport=httpx.ASGITransport(app=host_app)
+    )
+
+    class FakeEvaluator:
+        def __init__(self) -> None:
+            self.identities = []
+
+        async def start(self) -> None:
+            return None
+
+        async def stop(self) -> None:
+            return None
+
+        def available_model_ids(self) -> list[str]:
+            return ["owner/model"]
+
+        def evaluate(self, model_id: str, identity) -> ModelOperation:
+            assert model_id == "owner/model"
+            self.identities.append(identity)
+            return ModelOperation(
+                id="modelop_evaluation",
+                model_id=model_id,
+                action=ModelOperationAction.EVALUATE,
+                state=ModelOperationState.QUEUED,
+                bytes_total=0,
+                bytes_done=0,
+                created_at="2026-08-23T00:00:00+00:00",
+                updated_at="2026-08-23T00:00:00+00:00",
+            )
+
+    evaluator = FakeEvaluator()
+    app = create_app(
+        Settings(
+            data_dir=tmp_path / "data",
+            control_deck_url="https://control-deck.test",
+            model_manifest=runtime,
+            model_catalog_manifest=catalog,
+            model_store_root=tmp_path / "managed",
+            hf_home=tmp_path / "external",
+        ),
+        host_client=bridge,
+        native_model_evaluator=evaluator,  # type: ignore[arg-type]
+    )
+    headers = {
+        "Authorization": "Bearer valid-user",
+        "X-Control-Deck-Addon-ID": "media-forge",
+    }
+
+    def call(socket, request_id: str, method: str, params: dict | None = None) -> dict:
+        socket.send_json({"id": request_id, "method": method, "params": params or {}})
+        while True:
+            answer = socket.receive_json()
+            if answer.get("id") == request_id:
+                return answer
+
+    with TestClient(app) as client, client.websocket_connect("/ws", headers=headers) as socket:
+        result = call(socket, "catalog", "models.catalog")["result"]
+        assert result["evaluation"]["available_model_ids"] == ["owner/model"]
+        rejected = call(
+            socket,
+            "reject-extra",
+            "models.evaluate",
+            {"model_id": "owner/model", "prompt": "untrusted"},
+        )
+        assert rejected["error"]["code"] == "workspace_request_rejected"
+        started = call(socket, "evaluate", "models.evaluate", {"model_id": "owner/model"})
+
+    assert started["result"]["action"] == "evaluate"
+    assert len(evaluator.identities) == 1
+    assert evaluator.identities[0].subject == "7"
+    assert "resources.acquire" in evaluator.identities[0].granted_capabilities
 
 
 def test_transient_network_failure_retries_from_partial_offset(tmp_path: Path):

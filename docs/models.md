@@ -192,11 +192,14 @@ with 32,624 MiB VRAM in 0.06 seconds. It requires the runtime-local ROCm OpenMP
 library directory in its library search path; installing or copying that
 library into ControlDeck was deliberately avoided.
 
-No H3 tensors have yet been loaded. At the preflight point only
+The private bounded evaluator now exists and its real NVMe preflight detects the
+installed H3 bundle and pinned native runtime. No H3 tensors have yet been
+loaded. At the preflight point only
 27,586,805,760 of 32,605,573,120 host RAM bytes were available and swap already
 held 1,516,511,232 bytes, so full CPU offload is not presumed safe. The next
-evaluation must compare bounded placement while sampling RSS, swap I/O, and
-R9700 VRAM under a real ControlDeck lease.
+evaluation uses a fixed mixed placement (text encoder on CPU, diffusion/VAE on
+R9700) while sampling RSS, process swap, system swap I/O, and R9700 VRAM under
+a real ControlDeck lease. Full CPU offload is not the initial configuration.
 
 The upstream MiniMax H3 Community License dated 2026-08-02 is not treated as a
 permissive default. Its applicable-territory, commercial authorization,

@@ -105,6 +105,7 @@ const state = {
   modelOperations: new Map(),
   modelFilter: "installed",
   modelManagementAvailable: false,
+  modelEvaluationIds: new Set(),
   removeModelId: "",
   socket: null,
   socketReady: null,
@@ -2432,8 +2433,19 @@ const MODEL_STATE_LABEL = {
   queued: "順番を待っています", preflight: "容量と利用条件を確認しています",
   downloading: "ダウンロードしています", verifying: "内容を検証しています",
   installing: "導入しています", ready: "準備できました", failed: "導入できませんでした",
+  acquiring_resource: "GPU の空きを待っています", loading: "モデルを読み込んでいます",
+  generating: "短い検証動画を作っています", validating: "出力を検証しています",
   canceled: "中止しました",
 };
+
+function modelOperationStateLabel(operation) {
+  if (operation?.action === "evaluate") {
+    if (operation.state === "ready") return "評価が完了しました";
+    if (operation.state === "failed") return "評価できませんでした";
+    if (operation.state === "canceled") return "評価を中止しました";
+  }
+  return MODEL_STATE_LABEL[operation?.state] || operation?.state || "";
+}
 const MODEL_ADOPTION_LABEL = {
   experimental: "実験的・未実測",
   unavailable: "利用不可",
@@ -2448,6 +2460,13 @@ const MODEL_FAILURE = {
   model_in_use: {text: "実行中の処理がこのモデルを使っています。", exit: "状況を見る", action: "activity"},
   external_model_owned: {text: "共有モデルは配布元で管理してください。", exit: "一覧を更新", action: "refresh"},
   model_not_found: {text: "モデル一覧が更新されています。", exit: "一覧を更新", action: "refresh"},
+  model_evaluation_unsupported: {text: "このモデルには固定評価手順がありません。", exit: "詳細を見る", action: "details"},
+  model_runtime_unavailable: {text: "検証済みの実行環境がこの端末にありません。", exit: "詳細を見る", action: "details"},
+  model_evaluation_failed: {text: "実機評価を完了できませんでした。", exit: "状況を見る", action: "activity"},
+  model_evaluation_timeout: {text: "実機評価が制限時間を超えました。", exit: "状況を見る", action: "activity"},
+  model_evaluation_invalid_output: {text: "生成された検証動画が要件を満たしません。", exit: "状況を見る", action: "activity"},
+  host_capability_not_granted: {text: "ControlDeck がGPU評価権限を許可していません。", exit: "詳細を見る", action: "details"},
+  resource_unavailable: {text: "GPUを確保できませんでした。", exit: "状況を見る", action: "activity"},
 };
 
 function formatBytes(value) {
@@ -2537,10 +2556,10 @@ function renderModelManagement() {
       const progress = document.createElement("progress");
       progress.max = Math.max(operation.bytes_total, 1);
       progress.value = operation.bytes_done;
-      progress.setAttribute("aria-label", MODEL_STATE_LABEL[operation.state] || operation.state);
+      progress.setAttribute("aria-label", modelOperationStateLabel(operation));
       const status = document.createElement("span");
       status.className = "model-operation-state";
-      status.textContent = `${MODEL_STATE_LABEL[operation.state] || operation.state} ${
+      status.textContent = `${modelOperationStateLabel(operation)} ${
         operation.bytes_total ? Math.floor(operation.bytes_done / operation.bytes_total * 100) : 0}%`;
       const cancel = document.createElement("button");
       cancel.type = "button";
@@ -2567,8 +2586,23 @@ function renderModelManagement() {
         action.disabled = true;
         action.textContent = model.installed ? "共有モデル" : "外部ランタイムで導入";
       }
+      if (model.installed && state.modelEvaluationIds.has(model.model_id)) {
+        const evaluate = document.createElement("button");
+        evaluate.type = "button";
+        evaluate.dataset.evaluateModel = modelKey;
+        evaluate.textContent = "実機で評価";
+        foot.append(evaluate);
+      }
       foot.append(action);
       card.append(head, chips, description, foot);
+      if (operation?.action === "evaluate" && operation.state === "ready" && operation.result) {
+        const measured = document.createElement("p");
+        measured.className = "s model-evaluation-result";
+        measured.textContent = `実測 ${Number(operation.result.elapsed_sec || 0).toFixed(1)}秒 · ` +
+          `VRAM ${formatBytes(operation.result.execution_vram_delta_bytes || 0)} · ` +
+          `RAM ${formatBytes(operation.result.peak_rss_bytes || 0)}`;
+        card.append(measured);
+      }
       if (operation?.state === "failed") card.append(modelFailureNode(operation.error_code, modelKey));
     }
     return card;
@@ -2611,7 +2645,7 @@ function renderModelMiniProgress() {
   if (!active) return;
   const model = state.modelCatalog.find((item) => item.model_id === active.model_id);
   byId("model-mini-phase").textContent = `${model?.display_name || "モデル"}: ${
-    MODEL_STATE_LABEL[active.state] || active.state}`;
+    modelOperationStateLabel(active)}`;
   byId("model-mini-bar").style.width = `${active.bytes_total
     ? Math.min(100, active.bytes_done / active.bytes_total * 100) : 0}%`;
   byId("model-mini-cancel").dataset.operationId = active.id;
@@ -2624,6 +2658,7 @@ async function loadModelManagement() {
     ]);
     state.modelCatalog = catalog.items || [];
     state.modelManagementAvailable = catalog.management_available !== false;
+    state.modelEvaluationIds = new Set(catalog.evaluation?.available_model_ids || []);
     state.modelOperations = new Map((operations.items || []).map((item) => [item.id, item]));
     const active = [...state.modelOperations.values()]
       .filter((item) => !MODEL_TERMINAL.has(item.state)).map((item) => item.id);
@@ -2677,6 +2712,24 @@ async function cancelModelOperation(operationId) {
     state.modelOperations.set(operation.id, operation);
     await loadModelManagement();
   } catch (error) { showModelError(error?.code, ""); }
+}
+
+async function startModelEvaluation(modelId) {
+  const model = state.modelCatalog.find((item) => item.model_id === modelId);
+  if (!model || !state.modelEvaluationIds.has(modelId)) {
+    return showModelError("model_runtime_unavailable", modelId);
+  }
+  const accepted = window.confirm(
+    `${model.display_name} をR9700で実測します。\n\n` +
+    "短い音声付き動画を作り、GPU・RAM・swap・所要時間を測ります。長時間かかる場合があります。続けますか？",
+  );
+  if (!accepted) return;
+  try {
+    const operation = await call("models.evaluate", {model_id: modelId});
+    state.modelOperations.set(operation.id, operation);
+    await call("models.operations.watch", {operation_ids: [operation.id]});
+    await loadModelManagement();
+  } catch (error) { showModelError(error?.code, modelId); }
 }
 
 function openModelRemove(modelId) {
@@ -2772,6 +2825,9 @@ for (const holder of [byId("model-catalog"), byId("model-error")]) {
     const install = event.target.closest("[data-install-model]");
     const installModel = install ? state.modelCatalog[Number(install.dataset.installModel)] : null;
     if (installModel) return void startModelInstall(installModel.model_id);
+    const evaluate = event.target.closest("[data-evaluate-model]");
+    const evaluateModel = evaluate ? state.modelCatalog[Number(evaluate.dataset.evaluateModel)] : null;
+    if (evaluateModel) return void startModelEvaluation(evaluateModel.model_id);
     const remove = event.target.closest("[data-remove-model]");
     const removeModel = remove ? state.modelCatalog[Number(remove.dataset.removeModel)] : null;
     if (removeModel) return openModelRemove(removeModel.model_id);

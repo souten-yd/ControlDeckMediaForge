@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    video/minimax-h3-catalog
-PR          MiniMax H3 bounded catalog #57 open（commit 9162eb8以降）
-状態        H3 GGUF導入・gfx1201 HIPBLAS build/device probe済み、lease対応推論は未実施
-基準値      ./mf.sh test = 309 passed（26.30秒）
+ブランチ    video/h3-bounded-evaluator
+PR          bounded evaluator #58 open（#57 merge 273d983から分岐）
+状態        Host Job/lease対応H3 evaluator実装中。実NVMe preflight成功、GPU推論は未実施
+基準値      ./mf.sh test = 317 passed（31.12秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
@@ -36,8 +36,9 @@ PR          MiniMax H3 bounded catalog #57 open（commit 9162eb8以降）
 ## 次にやること（1 つだけ）
 
 ```text
-利用者指定のMiniMax H3を独立catalog/download評価スライスで扱う。
-  今回        26.98GB GGUF download、stable-diffusion.cpp HIP build、R9700採用gate
+利用者指定のMiniMax H3を独立したbounded evaluatorスライスで扱う。
+  前回        26.98GB GGUF download、stable-diffusion.cpp HIP build/device probe（#57）
+  今回        Host Job + broker lease + cancel + 計測付き短尺smoke evaluator
   設計        公式prompt-writing skillを版固定recipeとしてGateway text.generateへ渡す
   続き        docs/implementation/creative-intelligence.md CI-4 Unified Evaluator
   保留        video public API/runtime実装（G7には着手しない）
@@ -96,8 +97,9 @@ PR          MiniMax H3 bounded catalog #57 open（commit 9162eb8以降）
      独立SHAは4ファイル全一致（17.49秒）、snapshot 26,978,361,344 bytes、
      pinned stable-diffusion.cpp `97d2990`をROCm 7.2.1/gfx1201でbuild済み（539.64秒）。
      `sd-cli --list-devices`はR9700をROCm0/32,624MiBとして列挙（0.06秒）。
-     H3 load/generateはHost lease対応evaluatorが未実装のためNOT TESTED。token偽造やlease流用はしない。
-     実測後も`experimental / healthy=no`。次はlease acquire/renew/cancel/releaseを備えたbounded evaluator。
+     lease acquire/renew/cancel/releaseを備えたprivate evaluatorを現在branchで実装した。
+     実NVMe上のmodel/runtime preflightは成功したが、H3 load/generateはまだNOT TESTED。
+     token偽造やlease流用はしない。実測後も`experimental / healthy=no`を維持する。
      公式prompt-writing skillはMarkdownと参照guideだけで外部APIを呼ばない。次スライスで
      prompt recipeの版固定・構造化projectionを実装する。任意skill実行経路は作らない。
      skillをHostへ任意実行させず、版固定したprompt recipeをMedia Forgeが構造化messageとして

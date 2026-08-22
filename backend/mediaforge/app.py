@@ -60,6 +60,7 @@ from .host.ai import HostAIGateway
 from .host.files import GrantContentTooLarge, read_grant, require_grant_id
 from .host.jobs import HostExecution
 from .jobs import JobManager, ProfileResolutionError
+from .model_evaluator import H3ModelEvaluator
 from .model_manager import ModelOperationManager
 from .models import (
     ModelOperationError,
@@ -131,6 +132,7 @@ def create_app(
     host_client: ControlDeckHostClient | None = None,
     semantic_reviewer: SemanticReviewer | None = None,
     creative_evaluator: CreativeEvaluator | None = None,
+    native_model_evaluator: H3ModelEvaluator | None = None,
     model_download_origin: str = "https://huggingface.co",
     model_download_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
@@ -188,6 +190,23 @@ def create_app(
         if resolved.model_catalog_manifest is not None
         else None
     )
+    native_runtime_root = resolved.native_media_runtime_root
+    assert native_runtime_root is not None
+    model_evaluations = native_model_evaluator or (
+        H3ModelEvaluator(
+            store,
+            host,
+            model_manifest=resolved.model_manifest,
+            catalog_manifest=resolved.model_catalog_manifest,
+            model_store_root=resolved.model_store_root,
+            hf_home=resolved.hf_home,
+            runtime_root=native_runtime_root,
+            lease_renew_sec=resolved.host_lease_renew_sec,
+            timeout_sec=resolved.model_evaluation_timeout_sec,
+        )
+        if resolved.model_catalog_manifest is not None
+        else None
+    )
     workspace_test_delay_pending = True
 
     @asynccontextmanager
@@ -196,7 +215,11 @@ def create_app(
         await manager.start()
         if model_operations is not None:
             await model_operations.start()
+        if model_evaluations is not None:
+            await model_evaluations.start()
         yield
+        if model_evaluations is not None:
+            await model_evaluations.stop()
         if model_operations is not None:
             await model_operations.stop()
         await manager.stop()
@@ -208,6 +231,7 @@ def create_app(
     app.state.jobs = manager
     app.state.job_events = events
     app.state.model_operations = model_operations
+    app.state.model_evaluations = model_evaluations
     app.state.model_operation_events = model_events
     app.state.creative_compiler = creative_compiler
     app.state.creative_batch_planner = creative_batch_planner
@@ -1482,6 +1506,10 @@ def create_app(
                         if model_operations is None:
                             raise ModelOperationError("model_not_found", "model catalog is unavailable")
                         result = model_operations.catalog()
+                        result["evaluation"] = {
+                            "available_model_ids": model_evaluations.available_model_ids()
+                            if model_evaluations is not None else []
+                        }
                     elif method == "models.install":
                         if model_operations is None:
                             raise ModelOperationError("model_not_found", "model catalog is unavailable")
@@ -1496,6 +1524,18 @@ def create_app(
                         if model_operations is None:
                             raise ModelOperationError("model_not_found", "model catalog is unavailable")
                         result = model_operations.remove(str(params.get("model_id", ""))).model_dump(mode="json")
+                    elif method == "models.evaluate":
+                        if model_evaluations is None:
+                            raise ModelOperationError(
+                                "model_runtime_unavailable",
+                                "model evaluator is unavailable",
+                            )
+                        if set(params) != {"model_id"}:
+                            raise ValueError("model evaluation accepts only model_id")
+                        result = model_evaluations.evaluate(
+                            str(params.get("model_id", "")),
+                            identity,
+                        ).model_dump(mode="json")
                     elif method == "models.operations.list":
                         result = {
                             "items": [item.model_dump(mode="json") for item in store.list_model_operations()]

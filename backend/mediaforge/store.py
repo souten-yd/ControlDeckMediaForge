@@ -120,6 +120,8 @@ class Store:
                     bytes_done INTEGER NOT NULL,
                     error_code TEXT,
                     error_message TEXT,
+                    host_job_id TEXT,
+                    result_json TEXT,
                     cancel_requested INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
@@ -149,6 +151,13 @@ class Store:
                 connection.execute("ALTER TABLE jobs ADD COLUMN host_managed INTEGER NOT NULL DEFAULT 0")
             if "profile_snapshot_json" not in columns:
                 connection.execute("ALTER TABLE jobs ADD COLUMN profile_snapshot_json TEXT NOT NULL DEFAULT '{}'")
+            model_operation_columns = {
+                str(row["name"]) for row in connection.execute("PRAGMA table_info(model_operations)")
+            }
+            if "host_job_id" not in model_operation_columns:
+                connection.execute("ALTER TABLE model_operations ADD COLUMN host_job_id TEXT")
+            if "result_json" not in model_operation_columns:
+                connection.execute("ALTER TABLE model_operations ADD COLUMN result_json TEXT")
             connection.execute(
                 """UPDATE jobs SET status = ?, phase = NULL,
                    error_json = ?, updated_at = ? WHERE status = ?""",
@@ -160,12 +169,16 @@ class Store:
                 ),
             )
             connection.execute(
-                """UPDATE model_operations SET state = ?, error_code = NULL,
-                   error_message = NULL, updated_at = ?
-                   WHERE state NOT IN (?, ?, ?) AND cancel_requested = 0""",
+                """UPDATE model_operations SET state = ?, error_code = ?,
+                   error_message = ?, updated_at = ?
+                   WHERE action = ? AND cancel_requested = 0
+                   AND state NOT IN (?, ?, ?)""",
                 (
-                    ModelOperationState.QUEUED,
+                    ModelOperationState.FAILED,
+                    "host_context_lost",
+                    "Service restarted after the short-lived ControlDeck evaluation credential was lost",
                     utc_now(),
+                    ModelOperationAction.EVALUATE,
                     ModelOperationState.READY,
                     ModelOperationState.FAILED,
                     ModelOperationState.CANCELED,
@@ -173,10 +186,37 @@ class Store:
             )
             connection.execute(
                 """UPDATE model_operations SET state = ?, updated_at = ?
-                   WHERE state NOT IN (?, ?, ?) AND cancel_requested = 1""",
+                   WHERE action = ? AND cancel_requested = 1
+                   AND state NOT IN (?, ?, ?)""",
                 (
                     ModelOperationState.CANCELED,
                     utc_now(),
+                    ModelOperationAction.EVALUATE,
+                    ModelOperationState.READY,
+                    ModelOperationState.FAILED,
+                    ModelOperationState.CANCELED,
+                ),
+            )
+            connection.execute(
+                """UPDATE model_operations SET state = ?, error_code = NULL,
+                   error_message = NULL, updated_at = ?
+                   WHERE action != ? AND state NOT IN (?, ?, ?) AND cancel_requested = 0""",
+                (
+                    ModelOperationState.QUEUED,
+                    utc_now(),
+                    ModelOperationAction.EVALUATE,
+                    ModelOperationState.READY,
+                    ModelOperationState.FAILED,
+                    ModelOperationState.CANCELED,
+                ),
+            )
+            connection.execute(
+                """UPDATE model_operations SET state = ?, updated_at = ?
+                   WHERE action != ? AND state NOT IN (?, ?, ?) AND cancel_requested = 1""",
+                (
+                    ModelOperationState.CANCELED,
+                    utc_now(),
+                    ModelOperationAction.EVALUATE,
                     ModelOperationState.READY,
                     ModelOperationState.FAILED,
                     ModelOperationState.CANCELED,
@@ -425,8 +465,8 @@ class Store:
             connection.execute(
                 """INSERT INTO model_operations
                    (id, model_id, action, state, bytes_total, bytes_done, error_code,
-                    error_message, cancel_requested, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, 0, NULL, NULL, 0, ?, ?)""",
+                    error_message, host_job_id, result_json, cancel_requested, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, 0, NULL, NULL, NULL, NULL, 0, ?, ?)""",
                 (operation_id, model_id, action, ModelOperationState.QUEUED, bytes_total, now, now),
             )
         return self._notify_model_operation(self.get_model_operation(operation_id))
@@ -450,9 +490,10 @@ class Store:
     def resumable_model_operation_ids(self) -> list[str]:
         with self._connect() as connection:
             rows = connection.execute(
-                """SELECT id FROM model_operations WHERE state = ? AND cancel_requested = 0
+                """SELECT id FROM model_operations WHERE state = ? AND action != ?
+                   AND cancel_requested = 0
                    ORDER BY created_at""",
-                (ModelOperationState.QUEUED,),
+                (ModelOperationState.QUEUED, ModelOperationAction.EVALUATE),
             ).fetchall()
         return [str(row["id"]) for row in rows]
 
@@ -464,6 +505,8 @@ class Store:
         bytes_done: int | None = None,
         error_code: str | None = None,
         error_message: str | None = None,
+        host_job_id: str | None = None,
+        result: dict[str, Any] | None = None,
     ) -> ModelOperation:
         values: dict[str, Any] = {"updated_at": utc_now()}
         if state is not None:
@@ -472,6 +515,10 @@ class Store:
             values["bytes_done"] = bytes_done
         values["error_code"] = error_code
         values["error_message"] = error_message
+        if host_job_id is not None:
+            values["host_job_id"] = host_job_id
+        if result is not None:
+            values["result_json"] = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
         assignments = ", ".join(f"{name} = ?" for name in values)
         with self._lock, self._connect() as connection:
             cursor = connection.execute(
@@ -683,6 +730,8 @@ class Store:
             id=row["id"], model_id=row["model_id"], action=row["action"], state=row["state"],
             bytes_total=row["bytes_total"], bytes_done=row["bytes_done"],
             error_code=row["error_code"], error_message=row["error_message"],
+            host_job_id=row["host_job_id"],
+            result=json.loads(row["result_json"]) if row["result_json"] else None,
             cancel_requested=bool(row["cancel_requested"]), created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

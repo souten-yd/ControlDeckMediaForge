@@ -102,7 +102,7 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     for name in ("model-filters", "model-catalog", "model-storage"):
         assert f'id="{name}"' in without_templates
     assert 'id="advanced-models"' not in without_templates
-    assert "models.install" in SCRIPT and "models.remove" in SCRIPT
+    assert "models.install" in SCRIPT and "models.remove" in SCRIPT and "models.evaluate" in SCRIPT
     assert "models.operations.watch" in SCRIPT and "model.operation.changed" in SCRIPT
     assert 'data-model-filter="installed"' in MARKUP
     assert 'data-model-filter="recommended"' in MARKUP
@@ -117,6 +117,8 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert "license_acceptance: licenseAcceptance" in SCRIPT
     assert "MAX_MANAGED_MODEL_DOWNLOAD_BYTES = 32_000_000_000" in SCRIPT
     assert 'action.textContent = "32GB上限対象"' in SCRIPT
+    assert 'evaluate.textContent = "実機で評価"' in SCRIPT
+    assert "state.modelEvaluationIds.has(model.model_id)" in SCRIPT
     assert "card.dataset.modelId" not in SCRIPT
     assert "dataset.modelId =" not in SCRIPT
 
