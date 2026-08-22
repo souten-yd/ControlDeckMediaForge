@@ -97,6 +97,10 @@ class ModelOperationManager:
         if model.installed:
             code = "external_model_owned" if model.ownership == ModelOwnership.EXTERNAL else "model_already_installed"
             raise ModelOperationError(code, "model is already installed")
+        if model.ownership != ModelOwnership.MANAGED:
+            raise ModelOperationError(
+                "external_model_owned", "external model must be installed by its runtime owner"
+            )
         if model.source is None or model.source.kind != "huggingface":
             raise ModelOperationError("model_not_found", "model has no supported catalog source")
         operation = self.store.create_model_operation(

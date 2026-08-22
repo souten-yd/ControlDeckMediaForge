@@ -52,6 +52,12 @@ Decision:
 - exact `model_id`, revision, hash, runtime adapter, raw capability list and benchmark diagnostics remain Advanced.
 - the Create screen still hides model names in Simple mode.
 
+Experimental candidates are visible under an explicit media filter and carry
+an `Experimental / not measured` label. They never appear under Recommended.
+When the trusted catalog can describe a candidate but cannot yet package every
+runtime-owned dependency, its action is disabled as `Install with external
+runtime`; the UI must not start an incomplete managed download.
+
 This preserves capability-driven generation while making local model ownership practical.
 
 ### 3.3 Keep: bounded semantic review

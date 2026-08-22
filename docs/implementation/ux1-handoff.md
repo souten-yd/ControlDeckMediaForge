@@ -9,11 +9,11 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    fix/creative-intelligence-owned-fields
-PR          v0.3.0 #48 / Creative Intelligence A0 #46 マージ済み
-状態        PR #46のserver-owned field回帰を分離修正中
-基準値      ./mf.sh test = 269 passed（24.58秒、修正後）
-リリース    v0.3.0公開済み（artifact d8055331...aa48f）。installed host は v0.2.4
+ブランチ    ux1/video-model-catalog-v0
+PR          v0.3.0 #48 / Creative Intelligence修正 #49 マージ済み。動画catalog PRは未作成
+状態        G7候補6件のexperimental catalog／Model Management分類を実装、実download前
+基準値      ./mf.sh test = 274 passed（23.54秒）
+リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
 ## PR 進捗
@@ -36,10 +36,10 @@ PR          v0.3.0 #48 / Creative Intelligence A0 #46 マージ済み
 ## 次にやること（1 つだけ）
 
 ```text
-protected-field修正をPR作成・mergeし、動画候補catalogの別PRへ戻る。
-  修正        AIがechoしたversion / original_intent / modeだけを無視
-  維持        その他の未知fieldはfail-closed
-  注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
+動画候補catalogをcommit/pushし、Wan 2.2 TI2V-5Bをmanaged installerで実downloadする。
+  確認        exact revision／全weight SHA／resume/progress／NVMe配置／削除境界
+  維持        全動画候補はexperimental/low。R9700 runtime未実測のためroute/defaultにしない
+  注意        並列1。保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
 ## リリースの運用
@@ -79,8 +79,9 @@ protected-field修正をPR作成・mergeし、動画候補catalogの別PRへ戻�
      M1 installer は image 専用にせず capability-driven のまま維持した。
      M2 では検証済み `media_types`（image / video / audio_video）を分類表示に追加し、
      routing の正は capability のままにする。両者が矛盾した catalog は fail-closed。
-     Wan 2.2 TI2V-5B / Animate-14B / LTX 系は G7 の評価候補としてのみ記録し、
-     G1〜G4 とモデル採用ゲートを終える前に download/default/worker 実装へ進まない。
+     Wan 2.2 TI2V-5B / Animate-14B / LTX 系は G7 の評価候補としてのみ記録する。
+     利用者がM0〜M2を先行指定し、候補の実download確認も明示したため、boundedなmanaged
+     snapshot取得までは先行する。R9700 worker実行、available/default昇格、G7 APIには進まない。
      C0 は CameraSpec を共通化し、MotionSpec を後から加法的に載せられる形にする。
 ```
 

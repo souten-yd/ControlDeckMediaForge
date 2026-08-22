@@ -44,24 +44,43 @@ Catalog `media_types` is presentation metadata with the closed values `image`,
 but is never a router input. This lets one Model Management view classify future
 video models without creating a second installer or changing generation APIs.
 
-### Deferred G7 evaluation roles
+### G7 candidate catalog (not adopted)
 
-The following are evaluation roles, not adopted defaults. No download or AMD
-benchmark is authorized by this list.
+The following exact revisions are discoverable in Model Management as
+`experimental` / `measurement_confidence=low`. None is an adopted default or
+an available runtime. The current official runtimes are CUDA-first; therefore
+the descriptors advertise only `cuda` until a real ROCm/gfx1201 run succeeds.
 
 ```text
-general/lightweight T2V+I2V     Wan 2.2 TI2V-5B family first probe
-character/companion animation   Wan 2.2 Animate family candidate
-high-feature synchronized audio LTX family candidate
-quality comparison              HunyuanVideo family candidate
+general/lightweight T2V+I2V     Wan-AI/Wan2.2-TI2V-5B @ 921dbaf3 (34,201,521,212 B)
+high-quality I2V                Wan-AI/Wan2.2-I2V-A14B @ 206a9ee1 (126,202,610,088 B)
+high-quality T2V                Wan-AI/Wan2.2-T2V-A14B @ c8c270b1 (126,199,333,288 B)
+character/companion animation   Wan-AI/Wan2.2-Animate-14B @ cb93a225 (51,213,260,089 B main set)
+high-feature synchronized audio Lightricks/LTX-2.3 @ 6b5a83e3 (46,149,373,312 B distilled 1.1)
+quality comparison              tencent/HunyuanVideo-1.5 @ 9b49404b (71,655,871,264 B selected 720p set)
 lightweight fallback            select only after R9700 measurements
 ```
 
-All are **NOT TESTED** on the R9700 until G7. Before adding a trusted catalog
-entry or marking one Recommended, verify the authoritative model/runtime
-source, license, exact capabilities, ROCm/gfx1201 operation, VRAM phases,
-runtime, failure rate, and all ten adoption-gate answers from `base-plan.md`
-§24. A candidate that is removed later must not change the public API.
+The three bounded Wan generation repositories are eligible for explicit
+Media-Forge-managed download. Animate remains external because its official
+preprocessing package contains separately structured detection, pose and
+segmentation assets that are not yet a bounded worker bundle. LTX-2.3 and
+HunyuanVideo 1.5 also remain external because their runnable package includes
+runtime-owned dependencies outside the selected primary checkpoint set. The UI
+shows this distinction and the backend rejects an install request for external
+candidates before creating an operation.
+
+The pinned Wan repositories declare Apache-2.0. LTX-2.3 uses the LTX-2
+Community License Agreement dated 2026-01-05. HunyuanVideo 1.5 uses the Tencent
+Hunyuan Community License, including territorial and acceptable-use terms;
+its LICENSE and NOTICE must be reviewed rather than treating it as Apache-2.0.
+Source identities are the official Hugging Face repositories named above.
+
+All are **NOT TESTED** on the R9700. Before marking one Available or
+Recommended, verify the authoritative model/runtime source, license, exact
+capabilities, ROCm/gfx1201 operation, VRAM phases, runtime, failure rate, and
+all ten adoption-gate answers from `base-plan.md` §24. A candidate that is
+removed later must not change the public API.
 
 ## G0 fake worker
 

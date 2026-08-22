@@ -319,6 +319,22 @@ def test_external_remove_and_in_use_managed_remove_are_rejected(tmp_path: Path):
     asyncio.run(scenario())
 
 
+def test_uninstalled_external_candidate_cannot_start_managed_download(tmp_path: Path):
+    runtime, catalog = manifests(tmp_path)
+    value = json.loads(catalog.read_text(encoding="utf-8"))
+    value["models"][0]["ownership"] = "external"
+    catalog.write_text(json.dumps(value), encoding="utf-8")
+    store = Store(tmp_path / "data")
+    store.initialize()
+    service = manager(tmp_path, store, runtime, catalog)
+
+    with pytest.raises(ModelOperationError, match="runtime owner") as error:
+        service.install("owner/model")
+
+    assert error.value.code == "external_model_owned"
+    assert store.list_model_operations() == []
+
+
 def test_managed_hub_symlink_escape_fails_without_writing_outside(tmp_path: Path):
     async def scenario() -> None:
         runtime, catalog = manifests(tmp_path)

@@ -5,6 +5,19 @@ Scope: MF0-0 through MF0-7 and G0 through G2 complete
 Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
 Repository head released and verified for G1: `1e88472e753fd484638f072f7c4b327c8010ab60` (`v0.1.2`)
 
+## Video model candidate catalog — IMPLEMENTED, DOWNLOAD PENDING
+
+Wan 2.2 TI2V-5B／I2V-A14B／T2V-A14B／Animate-14B、LTX-2.3、HunyuanVideo-1.5の
+exact revisionとbounded checkpoint identityを、既存Model Registry／Model Managementへ追加した。
+全候補は`experimental`、measurement confidence `low`、ROCm未実測、recommended profileなしであり、
+R9700向けavailable/defaultや動画worker実装を主張しない。runtime packageまでsnapshotが閉じるWan生成3件だけを
+managed download対象とし、Animate／LTX／Hunyuanはexternal ownerとしてbackendでもdownloadを拒否する。
+UIは動画候補filter、実験的表示、外部runtime所有表示を追加し、別の動画モデル管理APIは作っていない。
+
+ローカル自動検証はcatalog／manager／frontend集中46件成功、`./mf.sh test`全274件成功（23.54秒）。
+実model download、resume、全weight SHA検証、NVMe配置、R9700 runtime実行、VRAM／生成時間／失敗率は
+このcheckpoint時点でNOT TESTED。次の同一PR checkpointでWan 2.2 TI2V-5Bを並列1で取得して記録する。
+
 ## MF0-0 — COMPLETE for the requested environment slice
 
 The core service, heavyweight ROCm runtime, caches, and persistent Media Forge data are separated. Section 10 was executed from retreated `.venv` / runtime state on the target host. This status uses runtime observations; lint, syntax checks, and unit tests are not counted as proof that the environments work.

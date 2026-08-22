@@ -2229,6 +2229,10 @@ const MODEL_STATE_LABEL = {
   installing: "導入しています", ready: "準備できました", failed: "導入できませんでした",
   canceled: "中止しました",
 };
+const MODEL_ADOPTION_LABEL = {
+  experimental: "実験的・未実測",
+  unavailable: "利用不可",
+};
 
 const MODEL_FAILURE = {
   insufficient_disk: {text: "保存先の空き容量が足りません。", exit: "空き容量を見る", action: "storage"},
@@ -2280,6 +2284,9 @@ function renderModelManagement() {
   const visible = state.modelCatalog.filter((model) => {
     if (state.modelFilter === "installed") return model.installed;
     if (state.modelFilter === "recommended") return modelRecommended(model);
+    if (state.modelFilter === "video") {
+      return model.media_types.includes("video") || model.media_types.includes("audio_video");
+    }
     return true;
   });
   holder.replaceChildren(...visible.map((model) => {
@@ -2298,6 +2305,7 @@ function renderModelManagement() {
     const chips = document.createElement("div");
     chips.className = "model-tags";
     for (const label of [
+      ...(MODEL_ADOPTION_LABEL[model.state] ? [MODEL_ADOPTION_LABEL[model.state]] : []),
       ...model.media_types.map((item) => MEDIA_TYPE_LABEL[item] || item),
       ...model.domains.map((item) => DOMAIN_LABEL[item] || item),
     ]) {
@@ -2338,7 +2346,7 @@ function renderModelManagement() {
       if (!state.modelManagementAvailable) {
         action.disabled = true;
         action.textContent = "CLI で管理";
-      } else if (!model.installed) {
+      } else if (!model.installed && model.ownership === "managed") {
         action.dataset.installModel = modelKey;
         action.textContent = "ダウンロード";
       } else if (model.ownership === "managed" && model.removable) {
@@ -2346,7 +2354,7 @@ function renderModelManagement() {
         action.textContent = "削除";
       } else {
         action.disabled = true;
-        action.textContent = "共有モデル";
+        action.textContent = model.installed ? "共有モデル" : "外部ランタイムで導入";
       }
       foot.append(action);
       card.append(head, chips, description, foot);

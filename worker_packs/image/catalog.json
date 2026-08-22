@@ -21,6 +21,132 @@
       "recommended_profiles": [],
       "gated": false,
       "license_notice": "Apache-2.0; review the upstream model card before redistribution."
+    },
+    {
+      "model_id": "Wan-AI/Wan2.2-TI2V-5B",
+      "display_name": "Wan 2.2 TI2V 5B",
+      "domains": ["general", "anime", "illustration", "game2d"],
+      "media_types": ["video"],
+      "description": "General lightweight candidate for both text-to-video and image-to-video at 720p/24fps. R9700 runtime is not measured.",
+      "approx_download_bytes": 34201521212,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "Wan-AI/Wan2.2-TI2V-5B",
+        "revision": "921dbaf3f1674a56f47e83fb80a34bac8a8f203e"
+      },
+      "ownership": "managed",
+      "supports_lora": false,
+      "max_references": 1,
+      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "Apache-2.0; upstream documents 720p/24fps and at least 24GB VRAM with offloading. ROCm/gfx1201 is NOT TESTED."
+    },
+    {
+      "model_id": "Wan-AI/Wan2.2-I2V-A14B",
+      "display_name": "Wan 2.2 I2V A14B",
+      "domains": ["general", "anime", "illustration", "photoreal"],
+      "media_types": ["video"],
+      "description": "High-quality image-to-video comparison candidate with separate high/low-noise experts. R9700 runtime is not measured.",
+      "approx_download_bytes": 126202610088,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "Wan-AI/Wan2.2-I2V-A14B",
+        "revision": "206a9ee1b7bfaaf8f7e4d81335650533490646a3"
+      },
+      "ownership": "managed",
+      "supports_lora": false,
+      "max_references": 1,
+      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "Apache-2.0; approximately 126.2GB for the pinned complete checkpoint set. ROCm/gfx1201 is NOT TESTED."
+    },
+    {
+      "model_id": "Wan-AI/Wan2.2-T2V-A14B",
+      "display_name": "Wan 2.2 T2V A14B",
+      "domains": ["general", "anime", "illustration", "photoreal"],
+      "media_types": ["video"],
+      "description": "High-quality text-to-video comparison candidate with separate high/low-noise experts. R9700 runtime is not measured.",
+      "approx_download_bytes": 126199333288,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "Wan-AI/Wan2.2-T2V-A14B",
+        "revision": "c8c270b13ee05bfa474194ac9fb07a5868a97cea"
+      },
+      "ownership": "managed",
+      "supports_lora": false,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "Apache-2.0; approximately 126.2GB for the pinned complete checkpoint set. ROCm/gfx1201 is NOT TESTED."
+    },
+    {
+      "model_id": "Wan-AI/Wan2.2-Animate-14B",
+      "display_name": "Wan 2.2 Animate 14B",
+      "domains": ["general", "anime", "illustration", "game2d"],
+      "media_types": ["video"],
+      "description": "Character and companion animation/replacement candidate. Its preprocessing bundle remains runtime-managed.",
+      "approx_download_bytes": 51213260089,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "Wan-AI/Wan2.2-Animate-14B",
+        "revision": "cb93a225fbaf1ca100f54e79da8f994995b689b3"
+      },
+      "ownership": "external",
+      "supports_lora": true,
+      "max_references": 2,
+      "reference_roles": ["identity", "pose"],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "Apache-2.0; main weights are listed, but the official preprocessing assets are not yet a bounded Media Forge bundle. ROCm/gfx1201 is NOT TESTED."
+    },
+    {
+      "model_id": "Lightricks/LTX-2.3",
+      "display_name": "LTX 2.3 Distilled 1.1",
+      "domains": ["general", "illustration", "photoreal"],
+      "media_types": ["video", "audio_video"],
+      "description": "High-feature candidate for synchronized audio and video. Official runtime requirements are CUDA-first; R9700 is not measured.",
+      "approx_download_bytes": 46149373312,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "Lightricks/LTX-2.3",
+        "revision": "6b5a83e3045eaf8e46cfa0acce512412aa2b9cce"
+      },
+      "ownership": "external",
+      "supports_lora": true,
+      "max_references": 1,
+      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "LTX-2 Community License Agreement, dated 2026-01-05; review the upstream terms before use. ROCm/gfx1201 is NOT TESTED."
+    },
+    {
+      "model_id": "tencent/HunyuanVideo-1.5",
+      "display_name": "HunyuanVideo 1.5 720p",
+      "domains": ["general", "illustration", "photoreal"],
+      "media_types": ["video"],
+      "description": "8.3B quality-comparison candidate using pinned 720p T2V and distilled I2V checkpoints. Runtime dependencies remain external.",
+      "approx_download_bytes": 71655871264,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "tencent/HunyuanVideo-1.5",
+        "revision": "9b49404b3f5df2a8f0b31df27a0c7ab872e7b038"
+      },
+      "ownership": "external",
+      "supports_lora": false,
+      "max_references": 1,
+      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "Tencent Hunyuan Community License; territorial and acceptable-use terms apply. Review LICENSE and NOTICE before use. ROCm/gfx1201 is NOT TESTED."
     }
   ]
 }
