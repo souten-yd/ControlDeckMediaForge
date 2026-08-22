@@ -80,6 +80,9 @@ const state = {
   characterProfileId: "",
   styleProfileId: "",
   referenceOverrides: new Map(),
+  referenceAnalysis: null,
+  referenceFocus: "overall",
+  sourceAsset: null,
   editMode: "",
   source: null,
   upload: null,
@@ -226,6 +229,9 @@ async function standaloneCall(method, params) {
   }
   if (method === "creative.direct") {
     return json("/workspace-api/creative/direct", {method: "POST", body: JSON.stringify(params)});
+  }
+  if (method === "references.analyze") {
+    return json("/workspace-api/references/analyze", {method: "POST", body: JSON.stringify(params)});
   }
   if (method === "creative.batches.create") {
     return json("/workspace-api/creative/batches", {method: "POST", body: JSON.stringify(params)});
@@ -695,6 +701,85 @@ function renderProfileChoices() {
       : "必要なときだけ選べます。"
     : "登録済みのキャラ・画風はまだありません。";
   renderAdvancedReferenceRoles();
+  renderReferenceIntelligence();
+}
+
+function referenceTarget() {
+  if (attachedFile()) return state.sourceAsset ? {asset_id: state.sourceAsset.id, label: "追加した画像"} : null;
+  const reference = selectedProfileReferences()[0];
+  return reference ? {asset_id: reference.asset_id, label: reference.label} : null;
+}
+
+function resetReferenceAnalysis({keepSource = false} = {}) {
+  state.referenceAnalysis = null;
+  state.referenceFocus = "overall";
+  if (!keepSource) state.sourceAsset = null;
+  renderReferenceIntelligence();
+}
+
+function referenceAnalysisRequest() {
+  const target = referenceTarget();
+  return state.referenceAnalysis?.analysis && target
+    && state.referenceAnalysis.asset_id === target.asset_id
+    ? [{asset_id: target.asset_id, focus: state.referenceFocus}]
+    : [];
+}
+
+function renderReferenceIntelligence() {
+  const holder = byId("reference-intelligence");
+  const hasImage = Boolean(attachedFile() || selectedProfileReferences().length);
+  holder.hidden = !hasImage;
+  if (!hasImage) return;
+  for (const button of holder.querySelectorAll("[data-reference-focus]")) {
+    button.setAttribute("aria-checked", String(button.dataset.referenceFocus === state.referenceFocus));
+  }
+  const summary = byId("reference-analysis-summary");
+  const result = state.referenceAnalysis;
+  summary.hidden = !result;
+  if (!result) {
+    byId("reference-analysis-note").textContent = attachedFile()
+      ? "追加した画像を、必要な観点だけ読み取れます。"
+      : "選んだキャラ・画風の先頭の参照画像を読み取ります。";
+    return;
+  }
+  const facts = result.facts || {};
+  const analysis = result.analysis;
+  const colors = (facts.dominant_colors || []).slice(0, 4).map((item) => item.hex).join(" / ");
+  const action = analysis ? actionSummary(analysis.action_state) : "";
+  const values = {
+    overall: analysis ? [analysis.subject?.kind, action, analysis.scene, analysis.composition].filter(Boolean).join(" / ") : "",
+    identity: analysis ? [analysis.subject?.kind, ...(analysis.subject?.identity_traits || []), ...(analysis.subject?.appearance_traits || [])].filter(Boolean).join(" / ") : "",
+    pose: action,
+    palette: colors,
+    composition: analysis?.composition || "",
+    style: (analysis?.style || []).join(" / "),
+  };
+  summary.textContent = values[state.referenceFocus] || `${facts.width}×${facts.height}${colors ? ` / ${colors}` : ""}`;
+  byId("reference-analysis-note").textContent = analysis
+    ? `${result.analysis_cache_hit ? "保存済み解析" : "画像解析"}を「整える」「演出を任せる」で使えます。`
+    : "寸法と色は確認できました。内容の解析はControlDeck Visionを利用できません。";
+}
+
+async function ensureReferenceTargetAsset() {
+  if (!attachedFile()) return referenceTarget();
+  if (state.sourceAsset) return {asset_id: state.sourceAsset.id, label: "追加した画像"};
+  byId("reference-analysis-note").textContent = "画像を取り込んでいます…";
+  state.sourceAsset = await importFile(state.upload || attachedFile(), "source");
+  return {asset_id: state.sourceAsset.id, label: "追加した画像"};
+}
+
+async function analyzeReferenceFocus(focus) {
+  state.referenceFocus = focus;
+  renderReferenceIntelligence();
+  try {
+    const target = await ensureReferenceTargetAsset();
+    if (!target) return;
+    byId("reference-analysis-note").textContent = "画像を読み取っています…";
+    state.referenceAnalysis = await call("references.analyze", {asset_id: target.asset_id});
+    renderReferenceIntelligence();
+  } catch (error) {
+    byId("reference-analysis-note").textContent = FAILURES[error?.code]?.text || "画像を読み取れませんでした。";
+  }
 }
 
 async function loadProfiles() {
@@ -1051,6 +1136,9 @@ async function refreshAttachment() {
   byId("edit-block").hidden = !file;
   if (!file) maskReset();
   state.upload = null;
+  state.sourceAsset = null;
+  state.referenceAnalysis = null;
+  state.referenceFocus = "overall";
   const measured = file ? await measure(file) : null;
   if (file && measured && needsResize(measured)) {
     byId("attach-size").textContent = "読み込んでいます…";
@@ -1067,6 +1155,7 @@ async function refreshAttachment() {
   if (file) renderEditActions();
   else selectEditMode("");
   renderSizeSection();
+  renderReferenceIntelligence();
   clearError();
 }
 
@@ -1213,9 +1302,12 @@ async function submitJob(event) {
     let inputs = [];
     if (file) {
       showPreparing("画像を取り込んでいます", 0.15);
-      const source = await importFile(state.upload || file, "source", (ratio) => {
-        showPreparing("画像を取り込んでいます", 0.15 + ratio * 0.35);
-      });
+      const source = state.sourceAsset || await importFile(
+        state.upload || file, "source", (ratio) => {
+          showPreparing("画像を取り込んでいます", 0.15 + ratio * 0.35);
+        },
+      );
+      state.sourceAsset = source;
       inputs = [{asset_id: source.id}];
       const preserving = state.editMode === "inpaint" || state.editMode === "outpaint";
       if (state.editMode !== "outpaint") {
@@ -1260,13 +1352,14 @@ async function submitJob(event) {
     const directedPoseBatch = operation === "image.generate" && batchCount > 1
       && spec.variation.axis === "pose" && state.directorMode !== "original" && batchCount <= 4;
     let directorPlan = null;
-    if (operation === "image.generate" && state.directorMode !== "original"
-        && !layout && !creativeBatch) {
+    const referenceAnalysis = referenceAnalysisRequest();
+    if (state.directorMode !== "original" && !layout && !creativeBatch) {
       showPreparing("演出内容を整理しています", 0.6);
       const directed = await call("creative.direct", {
         intent: request.intent,
         director_mode: state.directorMode,
         creative_spec: spec,
+        reference_analysis: referenceAnalysis,
       });
       renderDirectorPlan(directed);
       if (directed.assistance_used) {
@@ -1296,6 +1389,7 @@ async function submitJob(event) {
       const batch = await call("creative.batches.create", {
         request, creative_spec: spec, count: batchCount,
         director_mode: directedPoseBatch ? state.directorMode : "original",
+        reference_analysis: referenceAnalysis,
       });
       if (batch.director) renderDirectorPlan(batch.director);
       setHostBusy(false);
@@ -1309,6 +1403,7 @@ async function submitJob(event) {
       showPreparing("シーン指定を確認しています", 0.65);
       request = (await call("creative.validate", {
         request, creative_spec: spec, director_plan: directorPlan,
+        reference_analysis: referenceAnalysis,
       })).request;
     }
     showPreparing("受け付けています", 0.7);
@@ -2697,13 +2792,20 @@ byId("domain-chips").addEventListener("click", (event) => {
 
 byId("character-profile").addEventListener("change", (event) => {
   state.characterProfileId = event.target.value;
+  resetReferenceAnalysis({keepSource: true});
   renderProfileChoices();
   clearError();
 });
 byId("style-profile").addEventListener("change", (event) => {
   state.styleProfileId = event.target.value;
+  resetReferenceAnalysis({keepSource: true});
   renderProfileChoices();
   clearError();
+});
+
+byId("reference-focuses").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-reference-focus]");
+  if (button) void analyzeReferenceFocus(button.dataset.referenceFocus);
 });
 
 for (const key of ["scene", "pose", "composition", "camera", "variation"]) {

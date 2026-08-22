@@ -99,6 +99,20 @@
               <button type="button" id="attach-clear" hidden>使わない</button>
             </div>
 
+            <div id="reference-intelligence" class="sub-field" hidden>
+              <p class="section-label">画像から読み取る</p>
+              <div id="reference-focuses" class="chips" role="radiogroup" aria-label="画像から読み取る内容">
+                <button type="button" data-reference-focus="overall">全体</button>
+                <button type="button" data-reference-focus="identity">主役</button>
+                <button type="button" data-reference-focus="pose">動き</button>
+                <button type="button" data-reference-focus="palette">色</button>
+                <button type="button" data-reference-focus="composition">構図</button>
+                <button type="button" data-reference-focus="style">画風</button>
+              </div>
+              <div id="reference-analysis-summary" class="reference-analysis-summary" hidden></div>
+              <p id="reference-analysis-note" class="hint">画像があるときだけ解析します。</p>
+            </div>
+
             <div id="edit-block" hidden>
               <p class="section-label">この画像を…</p>
               <div id="edit-actions" role="radiogroup" aria-label="編集方法"></div>

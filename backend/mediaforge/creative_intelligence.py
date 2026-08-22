@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -97,6 +97,7 @@ class DirectedPlan(BaseModel):
     applied_fields: list[str] = Field(default_factory=list)
     assistance_used: bool
     skipped_reason: str | None = None
+    reference_context: list[dict] = Field(default_factory=list, max_length=4)
 
 
 class DirectedActionVariations(BaseModel):
@@ -106,6 +107,7 @@ class DirectedActionVariations(BaseModel):
     actions: list[ActionStateSpec] = Field(default_factory=list, max_length=4)
     assistance_used: bool
     skipped_reason: str | None = None
+    reference_context: list[dict] = Field(default_factory=list, max_length=4)
 
 
 class PaletteColor(BaseModel):
@@ -154,7 +156,10 @@ class VisualAnalysis(BaseModel):
     text_regions: list[str] = Field(default_factory=list, max_length=32)
     observations: list[SemanticObservation] = Field(default_factory=list, max_length=64)
     inferences: list[SemanticObservation] = Field(default_factory=list, max_length=64)
-    confidence_by_field: dict[str, float] = Field(default_factory=dict)
+    confidence_by_field: dict[
+        Annotated[str, Field(min_length=1, max_length=80)],
+        Annotated[float, Field(ge=0.0, le=1.0)],
+    ] = Field(default_factory=dict, max_length=64)
 
 
 class EvaluationScores(BaseModel):
@@ -243,6 +248,7 @@ class PromptPlanner:
         intent: str,
         *,
         mode: CreativeMode = "refine",
+        reference_context: list[dict] | None = None,
     ) -> PromptPlan:
         normalized = intent.strip()
         if not normalized or len(normalized) > 8000:
@@ -265,6 +271,11 @@ class PromptPlanner:
             if mode == "refine"
             else "For art_direct mode, you may suggest composition, camera, lighting or staging, but mark all additions as optional suggestions."
         )
+        accepted_context = _validated_reference_context(reference_context)
+        user_content = normalized
+        if accepted_context:
+            user_content += "\nAccepted structured reference context (do not infer fields that are absent):\n"
+            user_content += json.dumps(accepted_context, ensure_ascii=False, sort_keys=True)
         response_format = {
             "type": "json_schema",
             "name": "mediaforge_prompt_plan",
@@ -277,7 +288,7 @@ class PromptPlanner:
                 "text.generate",
                 [
                     {"role": "system", "content": instruction},
-                    {"role": "user", "content": normalized},
+                    {"role": "user", "content": user_content},
                 ],
                 response_format=response_format,
                 temperature=0.1 if mode == "refine" else 0.4,
@@ -317,6 +328,7 @@ class PromptPlanner:
         *,
         mode: CreativeMode,
         count: int,
+        reference_context: list[dict] | None = None,
     ) -> tuple[PromptPlan, list[ActionStateSpec]]:
         normalized = intent.strip()
         if not normalized or len(normalized) > 8000:
@@ -340,13 +352,18 @@ class PromptPlanner:
             "schema": _provider_strict_schema(ActionVariationDraft.model_json_schema()),
             "strict": True,
         }
+        accepted_context = _validated_reference_context(reference_context)
+        user_content = f"count={count}\n{normalized}"
+        if accepted_context:
+            user_content += "\nAccepted structured reference context (vary actions only):\n"
+            user_content += json.dumps(accepted_context, ensure_ascii=False, sort_keys=True)
         try:
             result = await self.gateway.complete(
                 identity,
                 "text.generate",
                 [
                     {"role": "system", "content": instruction},
-                    {"role": "user", "content": f"count={count}\n{normalized}"},
+                    {"role": "user", "content": user_content},
                 ],
                 response_format=response_format,
                 temperature=0.2 if mode == "refine" else 0.4,
@@ -397,6 +414,7 @@ class CreativeDirector:
         creative_spec: dict,
         *,
         mode: CreativeMode,
+        reference_context: list[dict] | None = None,
     ) -> DirectedPlan:
         normalized = intent.strip()
         fallback = PromptPlan(original_intent=normalized, mode=mode)
@@ -411,7 +429,9 @@ class CreativeDirector:
                 skipped_reason="text_generator_unavailable",
             )
         try:
-            plan = await self.planner.plan(identity, normalized, mode=mode)
+            plan = await self.planner.plan(
+                identity, normalized, mode=mode, reference_context=reference_context,
+            )
         except CreativeIntelligenceError as exc:
             return DirectedPlan(
                 plan=fallback, creative_spec=creative_spec, assistance_used=False,
@@ -420,6 +440,7 @@ class CreativeDirector:
         projected, applied = project_plan_to_creative_spec(plan, creative_spec)
         return DirectedPlan(
             plan=plan, creative_spec=projected, applied_fields=applied, assistance_used=True,
+            reference_context=_validated_reference_context(reference_context),
         )
 
     async def action_variations(
@@ -429,6 +450,7 @@ class CreativeDirector:
         *,
         mode: CreativeMode,
         count: int,
+        reference_context: list[dict] | None = None,
     ) -> DirectedActionVariations:
         normalized = intent.strip()
         fallback = PromptPlan(original_intent=normalized, mode=mode)
@@ -440,12 +462,16 @@ class CreativeDirector:
         try:
             plan, actions = await self.planner.plan_action_variations(
                 identity, normalized, mode=mode, count=count,
+                reference_context=reference_context,
             )
         except CreativeIntelligenceError as exc:
             return DirectedActionVariations(
                 plan=fallback, assistance_used=False, skipped_reason=exc.code,
             )
-        return DirectedActionVariations(plan=plan, actions=actions, assistance_used=True)
+        return DirectedActionVariations(
+            plan=plan, actions=actions, assistance_used=True,
+            reference_context=_validated_reference_context(reference_context),
+        )
 
 
 def prompt_plan_to_creative_details(plan: PromptPlan) -> dict[str, str]:
@@ -510,3 +536,16 @@ def _bounded_join(values: list[str], limit: int) -> str:
             break
         result = candidate
     return result
+
+
+def _validated_reference_context(value: list[dict] | None) -> list[dict]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > 4 or any(not isinstance(item, dict) for item in value):
+        raise CreativeIntelligenceError("reference_context_invalid", "Reference context is invalid")
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if len(encoded.encode()) > 16 * 1024 or any(
+        forbidden in encoded.lower() for forbidden in ("data:image", "base64", "file://")
+    ):
+        raise CreativeIntelligenceError("reference_context_invalid", "Reference context is invalid")
+    return json.loads(encoded)

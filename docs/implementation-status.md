@@ -1998,3 +1998,49 @@ standalone Chromiumは390px/320pxともoverflow 0、3 mode、
 **NOT TESTED**。focused CI-2 regressionは130 passed、最終`./mf.sh test`は287 passed
 （24.93秒）。これは回帰gateであり、上記実Host／実browser観測とは区別する。
 ControlDeck repository変更0件、hosted CI利用0件。
+
+## Creative Intelligence CI-3 — Reference Intelligence (2026-08-22)
+
+既存assetをPillowだけで測るversioned `VisualFacts` と、ControlDeck
+`vision.analyze`から厳格な`VisualAnalysis`を得るprivate workspace経路を追加した。cache keyは
+asset SHA-256とfacts/semantic analyzer versionから作り、同一bytesを別asset IDで参照しても
+再解析しない。paletteは256px以内へ縮小してから量子化し、alpha 32未満を除外する。完全透過
+画像へ黒を捏造しない。元assetは読み取りだけで、coreへtorch/transformers/OpenCVを追加していない。
+
+Createには画像が存在するときだけ「全体／主役／動き／色／構図／画風」を表示する。選択した
+観点のserver生成JSON要約だけをCreative Directorへ渡し、画像data URLはVision呼び出しだけに
+留める。profileは変更しない。`そのまま`かつ参照なしではText/Vision呼び出し0件を回帰試験で
+固定した。C3の3 childは同一cache要約を共有し、Vision呼び出しは親で1件だけだった。
+
+ControlDeck PR #226 merge commit `d97508b103cd302add46e6bf26899613a46920c3`の隔離Hostを
+`127.0.0.1:18776`、現在のMedia Forge sourceを`127.0.0.1:19131`、ControlDeckが選択した
+Qwen3.8-27B + mmproj endpointを`127.0.0.1:8096`で実起動した。C5でR9700生成済みの
+512x512 RGBA画像（SHA-256 `78fa04f7...f3a2`）をinstalled-host Chromiumから取り込み、
+次を観測した。
+
+```text
+VisualFacts                    512x512 / alpha=true / opaque_fraction=1.0
+Vision VisualAnalysis          50.353 seconds / subject=person / action=holding smartphone
+facts cache                    573 bytes
+semantic cache                 4,414 bytes
+same asset second analysis     0.060 seconds / analysis_cache_hit=true
+Director with pose summary     13.287 seconds / structured context 1件
+Host audit delta               vision.analyze 1 / text.generate 1
+original assistance            false / 追加audit 0
+320px overflow                 0 px
+browser console/page errors    0 / 0
+evidence                       /data1tb/mediaforge-ci3-evidence-20260822/
+```
+
+最初のbrowser試行は存在しない一時model manifestを指定してworkspace初期化が停止したため、
+成功に数えていない。その後の2試行で、長い実asset名が320px幅を95px押し広げる実不具合を
+観測した。Director grid子の縮小境界と添付名の`overflow-wrap:anywhere`を追加し、fresh data/cache
+で上記最終runを再実行した。最終確認はBroker active lease 0 / waiting request 0、試験用LLMを
+unload、隔離Host/Media Forgeを停止、共有ControlDeckはactiveかつhealth okだった。
+
+focused reference/director/batch/workspace/frontend regressionは109 passed。最終
+`./mf.sh test`は303 passed（28.11秒）。これは契約回帰証跡であり、上記の実Host/Vision/browser
+観測とは区別する。public schemas / addon.json / agent tool / workflow executorは変更していない。
+C4 multi-cutのAI shot briefはCI-5、Evaluator統合はCI-4なので **NOT TESTED**。実GPU生成、
+profileへの自動反映（仕様上行わない）、installed release bundleは **NOT TESTED**。
+ControlDeck repository変更0件、hosted CI利用0件。

@@ -201,10 +201,12 @@ textarea { resize: vertical; min-height: 96px; }
   font-size: .85rem;
   color: var(--muted);
   cursor: pointer;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .dropzone.filled { border-style: solid; color: var(--text); }
 .dropzone input { display: none; }
-#attach-row { display: flex; gap: 8px; align-items: center; }
+#attach-row { display: flex; gap: 8px; align-items: center; min-width: 0; }
 #attach-row .dropzone { flex: 1; }
 
 #edit-actions { display: grid; gap: 6px; }
@@ -306,6 +308,7 @@ textarea { resize: vertical; min-height: 96px; }
 #attach-size:empty { display: none; }
 .sub-field { display: grid; gap: 6px; font-size: .8rem; }
 .director-control { display: grid; grid-template-columns: auto minmax(120px, 200px) 1fr; gap: 8px; align-items: center; }
+.director-control > * { min-width: 0; }
 .director-control label { font-size: .82rem; font-weight: 700; }
 .director-control .hint { margin: 0; }
 #director-understanding { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
@@ -586,6 +589,18 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
 #model-mini-progress[hidden] { display: none; }
 #model-mini-progress .track { flex: 1; margin: 0; }
 #model-mini-cancel { min-width: 38px; }
+
+.reference-analysis-summary {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.reference-analysis-summary[hidden] { display: none; }
+#reference-focuses button[aria-checked="true"] { border-color: var(--accent); color: var(--accent); }
 
 /* ── モバイル ───────────────────────────────────────────────── */
 @media (max-width: 767px) {

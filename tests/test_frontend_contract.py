@@ -36,6 +36,8 @@ DOM_IDS = (
     "creative-simple", "domain-chips", "scene-framing", "scene-framing-summary",
     "creative-scene", "creative-pose", "creative-composition", "creative-camera", "creative-variation",
     "profile-choice", "character-profile", "style-profile", "profile-choice-note",
+    "reference-intelligence", "reference-focuses", "reference-analysis-summary",
+    "reference-analysis-note",
     "composition-options", "composition-title", "composition-caption",
     "composition-text-edit", "composition-edit-title", "composition-edit-caption",
     "composition-update-text", "composition-edit-status",
@@ -148,6 +150,18 @@ def test_profiles_are_simple_but_reference_roles_and_strength_are_advanced():
     assert "selectedProfileReferences" in SCRIPT
     assert "max_reference_assets" in SCRIPT
     assert "supports_reference_strength" in SCRIPT
+
+
+def test_reference_intelligence_is_image_gated_and_uses_the_private_bridge():
+    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
+    for name in ("reference-intelligence", "reference-focuses", "reference-analysis-summary"):
+        assert f'id="{name}"' in without_templates
+    for focus in ("overall", "identity", "pose", "palette", "composition", "style"):
+        assert f'data-reference-focus="{focus}"' in MARKUP
+    assert 'call("references.analyze"' in SCRIPT
+    assert 'reference_analysis: referenceAnalysis' in SCRIPT
+    assert 'Boolean(attachedFile() || selectedProfileReferences().length)' in SCRIPT
+    assert "data:image" not in SCRIPT
 
 
 def test_intentional_variations_use_durable_batches_and_advanced_drilldown():

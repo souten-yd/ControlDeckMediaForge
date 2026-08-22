@@ -72,6 +72,13 @@ from .profiles import ProfileInput, ReferenceCollectionInput
 from .semantic_review import HostSemanticReviewer, SemanticReviewer
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .preferences import PreferenceError
+from .reference_intelligence import (
+    REFERENCE_FOCUSES,
+    ReferenceAnalysisCache,
+    ReferenceIntelligence,
+    ReferenceIntelligenceError,
+    analysis_summary,
+)
 from .store import Store, utc_now
 from .thumbnails import ThumbnailError
 from .validators import validate_png
@@ -135,6 +142,11 @@ def create_app(
     )
     ai_gateway = HostAIGateway(host)
     creative_director = CreativeDirector(PromptPlanner(ai_gateway))
+    reference_intelligence = ReferenceIntelligence(
+        ai_gateway,
+        ReferenceAnalysisCache(resolved.data_dir / "reference-analysis-cache"),
+        timeout_sec=resolved.host_ai_timeout_sec,
+    )
     reviewer = semantic_reviewer or HostSemanticReviewer(
         ai_gateway, timeout_sec=resolved.host_ai_timeout_sec
     )
@@ -203,6 +215,7 @@ def create_app(
     app.state.deterministic_composer = deterministic_composer
     app.state.creative_evaluator = evaluator
     app.state.creative_director = creative_director
+    app.state.reference_intelligence = reference_intelligence
     app.state.host = host
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -550,6 +563,11 @@ def create_app(
                     if text_direction_available
                     else {"state": "unavailable", "reason": "text_generator_unavailable"}
                 ),
+                "creative.reference_intelligence": {
+                    "state": "available",
+                    "semantic_state": "available" if semantic_available else "unavailable",
+                    "semantic_reason": None if semantic_available else "vision_analyzer_unavailable",
+                },
                 "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },
@@ -562,6 +580,7 @@ def create_app(
         capabilities: dict[str, Any],
         available_references: set[str],
         director_plan: PromptPlan | None = None,
+        reference_context: list[dict[str, Any]] | None = None,
     ) -> CreativeCompileResult:
         compiled = creative_compiler.compile(
             request,
@@ -575,6 +594,7 @@ def create_app(
         plan = {**compiled.plan, "director": {
             **director_plan.model_dump(mode="json"),
             "source": "control-deck:text.generate",
+            "reference_context": reference_context or [],
         }}
         value = compiled.request.model_dump(mode="json")
         value["constraints"] = {**value["constraints"], "creative_plan": plan}
@@ -595,6 +615,50 @@ def create_app(
             raise ValueError("director_mode is invalid")
         return value
 
+    def accepted_reference_context(payload: dict[str, Any]) -> list[dict[str, Any]]:
+        requested = payload.get("reference_analysis", [])
+        if not isinstance(requested, list) or len(requested) > 4:
+            raise ValueError("reference_analysis is invalid")
+        result: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in requested:
+            if not isinstance(item, dict) or set(item) != {"asset_id", "focus"}:
+                raise ValueError("reference_analysis is invalid")
+            asset_id = item.get("asset_id")
+            focus = item.get("focus")
+            if not isinstance(asset_id, str) or focus not in REFERENCE_FOCUSES or asset_id in seen:
+                raise ValueError("reference_analysis is invalid")
+            asset = store.get_asset(asset_id)
+            analysis = reference_intelligence.cache.read_analysis(asset.sha256)
+            if analysis is None or analysis.asset_hash != asset.sha256:
+                raise ReferenceIntelligenceError(
+                    "reference_analysis_missing", "Accepted reference analysis is not cached"
+                )
+            result.append({
+                "asset_id": asset_id,
+                "asset_hash": asset.sha256,
+                **analysis_summary(analysis, focus),
+            })
+            seen.add(asset_id)
+        return result
+
+    async def analyze_reference(
+        payload: dict[str, Any], identity: HostIdentity | None,
+    ) -> dict[str, Any]:
+        if set(payload) != {"asset_id"} or not isinstance(payload.get("asset_id"), str):
+            raise ValueError("reference analysis accepts one asset_id")
+        asset = store.get_asset(payload["asset_id"])
+        if not asset.mime_type.startswith("image/"):
+            raise ReferenceIntelligenceError(
+                "reference_image_invalid", "Reference analysis accepts image assets only"
+            )
+        return (await reference_intelligence.analyze(
+            asset_id=asset.id,
+            asset_sha256=asset.sha256,
+            path=store.asset_path(asset.id),
+            identity=identity,
+        )).model_dump(mode="json")
+
     async def create_creative_batch(
         payload: dict[str, Any],
         submit_child: Callable[[JobRequest], Awaitable[dict[str, Any]]],
@@ -609,6 +673,7 @@ def create_app(
         } | set(profile_snapshot.get("reference_asset_ids", []))
         capability_value = await capability_document(identity)
         director_mode = params_director_mode(payload)
+        reference_context = accepted_reference_context(payload)
         directed = None
         if (
             creative_spec.variation.axis == "pose"
@@ -619,6 +684,7 @@ def create_app(
         ):
             directed = await creative_director.action_variations(
                 identity, request.intent, mode=director_mode, count=count,
+                reference_context=reference_context,
             )
         if directed is not None and directed.assistance_used:
             projected, _ = project_plan_to_creative_spec(
@@ -630,6 +696,7 @@ def create_app(
                 creative_spec,
                 directed.actions,
                 directed.plan,
+                reference_context=reference_context,
                 capabilities=capability_value["capabilities"],
                 envelope=size_envelope(),
                 available_reference_ids=available_references,
@@ -1453,13 +1520,17 @@ def create_app(
                         result = {"watching": model_subscription.unwatch(operation_ids)}
                     elif method == "creative.templates":
                         result = creative_compiler.catalog.public_document()
+                    elif method == "references.analyze":
+                        result = await analyze_reference(params, identity)
                     elif method == "creative.direct":
                         creative_spec = CreativeSpec.model_validate(params.get("creative_spec", {}))
+                        reference_context = accepted_reference_context(params)
                         directed = await creative_director.direct(
                             identity,
                             str(params.get("intent", "")),
                             creative_spec.model_dump(mode="json"),
                             mode=params_director_mode(params),
+                            reference_context=reference_context,
                         )
                         # Re-validate the projection before it crosses back to the UI.
                         CreativeSpec.model_validate(directed.creative_spec)
@@ -1471,6 +1542,7 @@ def create_app(
                             PromptPlan.model_validate(params["director_plan"])
                             if params.get("director_plan") is not None else None
                         )
+                        reference_context = accepted_reference_context(params)
                         profile_snapshot = manager.resolve_profiles(request)
                         available_references = {
                             item.asset_id for item in request.inputs
@@ -1482,6 +1554,7 @@ def create_app(
                             capabilities=capability_value["capabilities"],
                             available_references=available_references,
                             director_plan=director_plan,
+                            reference_context=reference_context,
                         ).model_dump(mode="json")
                     elif method == "creative.batches.create":
                         async def submit_batch_child(child: JobRequest) -> dict[str, Any]:
@@ -1587,7 +1660,13 @@ def create_app(
                     else:
                         raise ValueError("workspace method is not supported")
                     await websocket.send_json({"id": request_id, "ok": True, "result": result})
-                except (ThumbnailError, PreferenceError, ModelOperationError, CreativeValidationError) as exc:
+                except (
+                    ThumbnailError,
+                    PreferenceError,
+                    ModelOperationError,
+                    CreativeValidationError,
+                    ReferenceIntelligenceError,
+                ) as exc:
                     error = {"code": exc.code, "message": str(exc)[:300]}
                     if isinstance(exc, CreativeValidationError) and exc.field is not None:
                         error["field"] = exc.field
@@ -1637,6 +1716,12 @@ def create_app(
             if exc.field is not None:
                 detail["field"] = exc.field
             raise HTTPException(status_code=422, detail=detail) from exc
+        except ReferenceIntelligenceError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
         except (ProfileResolutionError, ValueError) as exc:
             code = exc.code if isinstance(exc, ProfileResolutionError) else "workspace_request_rejected"
             raise HTTPException(status_code=422, detail={"code": code, "message": str(exc)[:300]}) from exc
@@ -1722,6 +1807,7 @@ def create_app(
                 PromptPlan.model_validate(payload["director_plan"])
                 if payload.get("director_plan") is not None else None
             )
+            reference_context = accepted_reference_context(payload)
             profile_snapshot = manager.resolve_profiles(request)
             available_references = {
                 item.asset_id for item in request.inputs
@@ -1733,13 +1819,20 @@ def create_app(
                 capabilities=capability_value["capabilities"],
                 available_references=available_references,
                 director_plan=director_plan,
+                reference_context=reference_context,
             ).model_dump(mode="json")
         except CreativeValidationError as exc:
             detail: dict[str, Any] = {"code": exc.code, "message": str(exc)}
             if exc.field is not None:
                 detail["field"] = exc.field
             raise HTTPException(status_code=422, detail=detail) from exc
-        except ValueError as exc:
+        except ReferenceIntelligenceError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        except (ValueError, ValidationError) as exc:
             raise HTTPException(
                 status_code=422,
                 detail={"code": "workspace_request_rejected", "message": str(exc)[:300]},
@@ -1751,13 +1844,39 @@ def create_app(
         try:
             reject_host_paths(payload)
             creative_spec = CreativeSpec.model_validate(payload.get("creative_spec", {}))
+            reference_context = accepted_reference_context(payload)
             directed = await creative_director.direct(
                 None,
                 str(payload.get("intent", "")),
                 creative_spec.model_dump(mode="json"),
                 mode=params_director_mode(payload),
+                reference_context=reference_context,
             )
             return directed.model_dump(mode="json")
+        except ReferenceIntelligenceError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        except (ValueError, ValidationError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "workspace_request_rejected", "message": str(exc)[:300]},
+            ) from exc
+
+    @app.post("/workspace-api/references/analyze", include_in_schema=False)
+    async def standalone_reference_analyze(payload: dict[str, Any]) -> dict[str, Any]:
+        """Deterministic standalone analysis; semantic Vision requires Host identity."""
+        try:
+            reject_host_paths(payload)
+            return await analyze_reference(payload, None)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        except ReferenceIntelligenceError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
         except (ValueError, ValidationError) as exc:
             raise HTTPException(
                 status_code=422,
