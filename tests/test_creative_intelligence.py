@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -14,7 +15,11 @@ from mediaforge.creative_intelligence import (
     prompt_plan_to_creative_details,
 )
 from mediaforge.host.ai import HostAIGateway
-from mediaforge.host.client import HostIdentity
+from mediaforge.host.ai import HostAIError
+from mediaforge.host.client import HostApiError, HostIdentity
+
+
+ROOT = Path(__file__).parents[1]
 
 
 IDENTITY = HostIdentity(
@@ -29,11 +34,11 @@ IDENTITY = HostIdentity(
 class FakeHost:
     def __init__(self, responses: list[dict]):
         self.responses = list(responses)
-        self.calls: list[tuple[str, str, dict | None]] = []
+        self.calls: list[tuple[str, str, dict | None, float | None]] = []
 
-    async def _request(self, identity, method, path, *, json=None, content=None):
+    async def _request(self, identity, method, path, *, json=None, content=None, timeout_sec=None):
         del identity, content
-        self.calls.append((method, path, json))
+        self.calls.append((method, path, json, timeout_sec))
         return self.responses.pop(0)
 
 
@@ -65,6 +70,7 @@ def test_host_ai_gateway_uses_only_capability_and_ignores_host_identity_fields()
             "timeout_seconds": 120,
             "response_format": {"type": "json_object"},
         },
+        125,
     )]
 
 
@@ -78,6 +84,36 @@ def test_host_ai_capabilities_are_normalized_without_provider_metadata():
         "text.generate": True,
         "vision.analyze": False,
     }
+
+
+def test_addon_grants_provider_neutral_ai_and_production_has_no_ollama_transport():
+    manifest = json.loads((ROOT / "addon.json").read_text(encoding="utf-8"))
+    assert "ai.inference" in manifest["host_capabilities"]
+    production = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "backend" / "mediaforge").rglob("*.py")
+    )
+    for forbidden in (
+        "/api/chat", "/api/tags", "11434", "OllamaSemanticReviewer",
+        "OllamaCreativeEvaluator", "MEDIA_FORGE_SEMANTIC_REVIEWER_URL",
+        "MEDIA_FORGE_SEMANTIC_REVIEWER_MODEL",
+    ):
+        assert forbidden not in production
+
+
+def test_host_ai_errors_use_the_ci1_normalized_codes():
+    expected = {
+        ("denied", 403): "host_ai_not_granted",
+        ("unavailable", 503): "vision_analyzer_unavailable",
+        ("host_unreachable", 502): "host_ai_unavailable",
+        ("other", 502): "host_ai_unavailable",
+    }
+    for (code, status), normalized in expected.items():
+        error = HostAIGateway._normalize_host_error(
+            HostApiError(code, "failure", status_code=status), capability="vision.analyze"
+        )
+        assert isinstance(error, HostAIError)
+        assert error.code == normalized
 
 
 class FakeGateway:

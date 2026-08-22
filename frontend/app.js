@@ -38,7 +38,7 @@ const EDIT_ACTIONS = [
 ];
 
 const CAPABILITY_REASON = {
-  local_vlm_not_installed: "ローカルの確認用モデルが入っていません",
+  vision_analyzer_unavailable: "ControlDeck の画像確認機能をいま使えません",
   model_not_installed: "使うモデルがまだ入っていません",
   capability_not_installed: "対応するモデルがありません",
   model_registry_invalid: "モデル一覧を読み込めません",
@@ -1450,8 +1450,20 @@ const FAILURES = {
     text: "指示どおりの結果になりませんでした。",
     exit: "指示を書き直す", action: "edit_intent",
   },
-  semantic_review_unavailable: {
+  vision_analyzer_unavailable: {
     text: "内容の自動チェックはいま使えません。",
+    exit: "チェックなしで作る", action: "rerun_without_review",
+  },
+  host_ai_not_granted: {
+    text: "内容の自動チェックを使う権限がありません。",
+    exit: "チェックなしで作る", action: "rerun_without_review",
+  },
+  host_ai_unavailable: {
+    text: "ControlDeck の画像確認機能に接続できません。",
+    exit: "チェックなしで作る", action: "rerun_without_review",
+  },
+  vision_result_invalid: {
+    text: "内容の自動チェック結果を確認できませんでした。",
     exit: "チェックなしで作る", action: "rerun_without_review",
   },
   resource_unavailable: {

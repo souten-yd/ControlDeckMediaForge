@@ -186,6 +186,7 @@ class ControlDeckHostClient:
         *,
         json: dict[str, Any] | None = None,
         content: bytes | None = None,
+        timeout_sec: float | None = None,
     ) -> dict[str, Any]:
         return await self._request_raw(
             method,
@@ -194,6 +195,7 @@ class ControlDeckHostClient:
             addon_id=identity.addon_id,
             json=json,
             content=content,
+            timeout_sec=timeout_sec,
         )
 
     async def _request_raw(
@@ -205,6 +207,7 @@ class ControlDeckHostClient:
         addon_id: str,
         json: dict[str, Any] | None = None,
         content: bytes | None = None,
+        timeout_sec: float | None = None,
     ) -> dict[str, Any]:
         response = await self._send_raw(
             method,
@@ -213,6 +216,7 @@ class ControlDeckHostClient:
             addon_id=addon_id,
             json=json,
             content=content,
+            timeout_sec=timeout_sec,
         )
         if len(response.content) > MAX_JSON_RESPONSE_BYTES:
             raise HostApiError("host_response_too_large", "ControlDeck response exceeds the 4 MiB bound")
@@ -251,15 +255,17 @@ class ControlDeckHostClient:
         addon_id: str,
         json: dict[str, Any] | None = None,
         content: bytes | None = None,
+        timeout_sec: float | None = None,
     ) -> httpx.Response:
         try:
-            response = await self._client.request(
-                method,
-                path,
-                headers=self._headers(authorization, addon_id),
-                json=json,
-                content=content,
-            )
+            request_kwargs: dict[str, Any] = {
+                "headers": self._headers(authorization, addon_id),
+                "json": json,
+                "content": content,
+            }
+            if timeout_sec is not None:
+                request_kwargs["timeout"] = timeout_sec
+            response = await self._client.request(method, path, **request_kwargs)
         except httpx.HTTPError as exc:
             raise HostApiError("host_unreachable", "ControlDeck Host API is unreachable") from exc
         if response.status_code >= 400:

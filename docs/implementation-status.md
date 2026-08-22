@@ -1848,3 +1848,53 @@ console/page error 0件で、全browser試験は20.5秒でPASSEDした。証跡�
 実端末の指操作、リリースbundleは **NOT TESTED**。hosted CIは使用していない。
 full `./mf.sh test`は275 passed（28.86秒）。これは回帰gateであり、上記の実process/browser
 観測とは区別する。
+
+## Creative Intelligence CI-1 — provider-neutral AI cutover (2026-08-22)
+
+productionのsemantic reviewerとCreative EvaluatorからOllama固有のURL、model、port、
+`/api/tags`、`/api/chat`を除去し、ControlDeck `ai.inference` grant配下の
+`vision.analyze`へ置き換えた。Media Forgeはcapabilityと画像data URL、構造化response schema
+だけを送り、Host応答のprovider/model追加fieldは無視する。候補画像は768px・JPEG・2MiBに
+制限し、最大4参照は1枚の決定的なreference sheetへまとめる。deterministic validation、
+advisory既定、bounded retry/rankingは変更していない。
+
+ControlDeck exact `d97508b103cd302add46e6bf26899613a46920c3`を、既存PR #226の隔離data
+directory・`127.0.0.1:18776`で実起動した。現在のMedia Forge sourceは
+`127.0.0.1:19131`、既存のexperimental fake worker fixtureを使い、source manifestを
+Add-on v2として登録・`ai.inference`を含む11 grantでenableした。ControlDeck発行service
+token経由のagent generationで次を観測した。
+
+```text
+target 1              qwen3-vl:2b-instruct / ControlDeck-selected Ollama
+job                   job_f2ebdcfc33be4d0c881b6cfb017cd85b / succeeded
+elapsed               7.510583 seconds
+asset                 asset_aa62546278e94d0e8bb21c8eff54fe04
+target 2              qwen3-vl:2b / ControlDeck-selected Ollama
+job                   job_52ccfff09b304269bea80d6c52784304 / succeeded
+elapsed               2.182804 seconds
+asset                 asset_5df5b8d9449b40adb8c6b647ed748162
+Media Forge config    target切替前後で変更0件
+Host audit            addon.runtime.ai.complete / resource_id=vision.analyze
+audit metadata        capabilityだけ。provider/model identityなし
+```
+
+2件目はsemantic rejectionを正しくadvisory warningとして返し、再生成要求0件だった。1件目は
+summaryが意図不一致を述べた一方`accepted=true`を返すモデル品質上の矛盾を観測したため、
+transport成功とは分けて品質PASSには数えない。これはCI-4 evaluatorで扱う課題である。
+
+両VLMの`vlm_enabled`をfalseにした状態でagent capabilityが
+`vision_analyzer_unavailable`となることを確認した。同じHost経路で`qa.semantic=false`の
+prompt-only生成は0.492620秒、job `job_b73babe372414904aa1cdf76248c3542`、asset
+`asset_47f39979736b4215be58bf04e0ba0b3c`でsucceededした。semantic=trueはjob
+`job_dc773d1fdfd54d5cb7a757d50a9b3f3a`が`vision_analyzer_unavailable`でfail-closedした。
+
+隔離Host停止前にruntime policyとmodel configを元へ戻し、試験でloadしたOllama VLMもunload
+した。共有ControlDeckは`control-deck-web.service`を再起動し、`active`かつ
+`GET /api/v1/health = {"ok":true}`を確認した。ControlDeck repository変更は0件で、既存の
+`frontend/tsconfig.tsbuildinfo`差分は保持した。llama.cpp runtimeへの切替を通した
+Media Forge再実行、installed release bundle、実画像workerは **NOT TESTED**。hosted CIは
+使用していない。
+
+focused CI-1 / semantic / evaluator / frontend / workspace / host execution regressionは116 passed。
+full `./mf.sh test`は275 passed（23.36秒）。これは回帰gateであり、上記の実Host・service
+token・target切替観測とは区別する。

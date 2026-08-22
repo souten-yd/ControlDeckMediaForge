@@ -197,7 +197,7 @@ def test_mobile_layout_respects_safe_area_and_touch_targets():
 
 def capability_names() -> set[str]:
     source = (BACKEND / "app.py").read_text(encoding="utf-8")
-    document = source.split("async def capability_document()", 1)[1].split("@app.get", 1)[0]
+    document = source.split("async def capability_document(", 1)[1].split("@app.get", 1)[0]
     return set(re.findall(r'"((?:image|video|3d)\.[a-z_0-9]+)":', document))
 
 
@@ -225,7 +225,7 @@ def test_operations_the_ui_submits_are_valid_schema_values():
 # 判定式の中の裸の文字列。どれか 1 つに絞ると UI 側の文言が実在しないコードを説明し始める。
 CODE_PATTERNS = (
     r'(?:code=|"code":\s*)"([a-z][a-z0-9_]+)"',
-    r'raise \w+\(\s*\n?\s*"([a-z][a-z0-9_]+)"',
+    r'(?:raise|return) \w+\(\s*\n?\s*"([a-z][a-z0-9_]+)"',
     r'^\s*"([a-z][a-z0-9_]{6,})",?$',
     r'else "([a-z][a-z0-9_]{6,})"',
     # detail.get("code", "worker_crash") のような既定値も実在するコード

@@ -136,15 +136,21 @@ It reports text generation, single-reference edit, multi-reference edit,
 inpaint, outpaint, variation, and strict edit independently from installed measured model capabilities and never
 exposes the automatically selected model ID.
 
-`image.semantic_review` is available only when the configured loopback local
-VLM is installed. `qa.semantic=false` never calls it. With semantic review
+`image.semantic_review` is available only for a Host-authenticated execution when
+ControlDeck grants `ai.inference` and its provider-neutral `vision.analyze` capability has a
+compatible target. Media Forge does not contain a provider URL, model name, or local-provider
+fallback. `qa.semantic=false` never calls Host AI. With semantic review
 enabled and `max_regeneration_attempts=0`, a subjective rejection is advisory:
 the deterministic-valid asset succeeds with a provenance warning. A positive
 retry budget is explicit opt-in; Media Forge creates only that many additional
 candidates, selects the first accepted candidate, and fails with
 `semantic_review_exhausted` when the bounded candidates are all rejected.
 Deterministic validation completes first and can never be overridden by a
-semantic pass. The reviewer runs CPU-only and remote reviewer URLs are rejected.
+semantic pass. Candidate/reference images are normalized to bounded data URLs before the scoped
+Host call; ControlDeck owns provider, runtime, model selection, lifecycle, and admission. Host AI
+failures are normalized as `host_ai_not_granted`, `vision_analyzer_unavailable`,
+`host_ai_unavailable`, or `vision_result_invalid`. Standalone prompt-only generation remains
+available, while standalone semantic review is unavailable because it has no Host identity.
 
 ## Models
 

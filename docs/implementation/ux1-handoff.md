@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/settings-about-details
-PR          Settings詳細移動 #52 open。#48 / #50 / CI v2計画 #51 マージ済み
-状態        PR #52 local full gateと実browser確認済み。merge待ち
-基準値      ./mf.sh test = 275 passed（28.86秒）
+ブランチ    ci/provider-neutral-ai-cutover
+PR          Settings詳細移動 #52 merge済み。CI-1 PR作成前
+状態        CI-1実装と2 target実Host acceptance、最終full gate済み。PR作成前
+基準値      ./mf.sh test = 275 passed（23.36秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
@@ -36,7 +36,7 @@ PR          Settings詳細移動 #52 open。#48 / #50 / CI v2計画 #51 マー�
 ## 次にやること（1 つだけ）
 
 ```text
-Settings詳細移動PRをmergeし、CI-1 provider-neutral AI cutoverへ進む。
+CI-1 provider-neutral AI cutoverの最終gate、PR、mergeを完了する。
   優先        docs/implementation/creative-intelligence.md のCI-1〜CI-6を順番に完了
   保留        Wan runtime／R9700生成評価と他の動画model download
   次UI        画像model catalog複数候補化
