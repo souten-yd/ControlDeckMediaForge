@@ -1944,4 +1944,57 @@ private WebSocket、durable model operation、installerを使う既存実ブラ�
 focused catalog/model manager/frontend/API regressionは67 passedと39 passed、最終
 `./mf.sh test`は279 passed（28.51秒）。これは回帰gateであり、上記の実HTTP/browser観測とは
 区別する。3候補のweight download、runtime adapter、R9700/ROCm推論、VRAM/時間/品質、
-installed-host iframeは **NOT TESTED**。ControlDeck変更とhosted CI利用は0件。
+ installed-host iframeは **NOT TESTED**。ControlDeck変更とhosted CI利用は0件。
+
+## Creative Intelligence CI-2 — Creative Director / action variations (2026-08-22)
+
+既存PromptPlanner、CreativeCompiler、C3 durable batch/child Jobを再利用し、新規画像向けの
+provider-neutral Creative Directorを実装した。UIは`そのまま` / `自動` / `演出強め`を持ち、
+`text.generate`利用可能時だけSimpleの既定を`自動`にする。ActionStateは既存
+`PoseSpec(preset=custom)`へbounded projectionし、canonical PromptPlanはprivate
+CreativePlan/provenanceへ保存する。manual scene/pose/composition/cameraはDirector出力より優先する。
+
+実モデル初回試験でprovider schemaの全fieldが省略可能だったため、`{}`が合法になり
+`assistance_used=true`だが内容が空になる欠陥を観測した。この試行は成功に数えない。provider
+向けstrict schemaだけ全object fieldをrequiredにし、内容ゼロも`prompt_plan_invalid`へ正規化して
+fail-softにした。canonical product modelの既定値とpublic schemaは変更していない。
+
+ControlDeck PR #226 merge commit `d97508b103cd302add46e6bf26899613a46920c3`の隔離Hostを
+`127.0.0.1:18776`、source Media Forgeを`127.0.0.1:19131`で実起動した。隔離Hostから
+現在稼働中のQwen3.8-27B llama.cpp endpointをControlDeck policyで選択し、Media Forgeには
+provider/model/portを渡していない。実service tokenで次を観測した。
+
+```text
+Host capabilities             text.generate=true / vision.analyze=true
+creative.text_direction       available
+prompt-only Director          robot / inspecting / PoseSpec custom
+original intent               compile後も先頭一致
+canonical source              control-deck:text.generate
+Host audit delta              text.generate 1 / vision.analyze 0
+directed action batch         3 child Jobs / custom pose 3 / distinct action 3
+batch Host audit delta        text.generate 1 / vision.analyze 0
+batch persistence             reconnect getでchild 3件
+```
+
+画像生成は、共有LLMが25,166,778,368 bytesをresident使用しHost policyがexclusiveかつ
+supervision=observedだったため、GPU leaseが`device_busy_exclusive`で正しく待機した。3 child
+Jobsと先行確認jobは明示cancelした。installed-host browserの最終job
+`job_e14912bacadd4328a5d6bdcfbdfc1a4a`は画面で待機を観測した後、8096 endpoint停止後にHostが
+leaseをactivateし、fake workerがsucceeded、asset `asset_edd01a97d4ae4c658ed293050e559fb5`
+1件、lease releaseまで到達した。最終確認はactive lease 0 / waiting request 0。この検証で
+leaseを迂回してworkerを走らせていない。別のstandalone実プロセスではtext assistance unavailableを
+`text_generator_unavailable`としてfail-softにし、元prompt不変のままCPU fake job
+`job_337079b8298240abb00bf8cb83b56990`がsucceeded、asset 1件を返した。
+
+実installed-host Chromiumでは`自動`が既定、Simple PoseがAuto時だけhidden、生成後の
+「理解した内容」に元の希望・対象・動き/状態・scene・構図/camera・提案が表示された。
+Hostは生成jobを「GPU の空きを待っています」と表示し、その後のjob terminalは上記のとおり
+succeededだった。browser観測は16.581秒、console/page error 0件。
+standalone Chromiumは390px/320pxともoverflow 0、3 mode、
+理解した内容DOM 1、Advanced Pose到達を確認した。証跡は
+`/tmp/mediaforge-ci2-hosted-ui.oeKn9z`と`/tmp/mediaforge-ci2-director-ui.uZ6kC2`。
+
+実GPU画像生成、実画像品質、art_directの主観品質、reference付きVision連携（CI-3）は
+**NOT TESTED**。focused CI-2 regressionは130 passed、最終`./mf.sh test`は287 passed
+（24.93秒）。これは回帰gateであり、上記実Host／実browser観測とは区別する。
+ControlDeck repository変更0件、hosted CI利用0件。

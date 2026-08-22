@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux2/image-model-catalog-v1
-PR          画像catalog v1 #54 open。CI-1 #53 / Settings詳細移動 #52 merge済み
-状態        PR #54 implementation head ae2f844。実HTTP/browser・full gate済み
-基準値      ./mf.sh test = 279 passed（28.51秒）
+ブランチ    ci/prompt-compiler
+PR          CI-2 Creative Director（作成前。#54はmerge済み）
+状態        CI-2実装・実Host text.generate・installed-host browser・full gate済み。commit待ち
+基準値      focused CI-2 = 130 passed / ./mf.sh test = 287 passed（24.93秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
@@ -36,10 +36,10 @@ PR          画像catalog v1 #54 open。CI-1 #53 / Settings詳細移動 #52 merg
 ## 次にやること（1 つだけ）
 
 ```text
-画像model catalog v1をcommitし、PR、mergeまで完了する。
+CI-2をfull gate、commit、PR、mergeまで完了する。
   優先        docs/implementation/creative-intelligence.md のCI-1〜CI-6を順番に完了
   保留        Wan runtime／R9700生成評価と他の動画model download
-  次          CI-2 prompt compilerを独立PRで開始
+  次          CI-3 Reference Intelligenceを独立PRで開始
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 

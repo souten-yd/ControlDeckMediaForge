@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 from io import BytesIO
+import json
 from pathlib import Path
 
 import pytest
@@ -117,6 +118,81 @@ def test_creative_batch_uses_private_transport_and_restores_children(tmp_path: P
     assert restored["result"]["id"] == batch_id
     assert listed["result"]["items"][0]["id"] == batch_id
     assert len({plan["pose"]["id"] for plan in restored["result"]["child_plans"]}) == 4
+
+
+def test_text_only_director_projects_custom_action_without_a_vision_call(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    state["ai_capabilities"]["text.generate"] = True
+    state["ai_responses"].append(json.dumps({
+        "subject": {"kind": "robot", "appearance_traits": ["orange shell"]},
+        "primary_action": {
+            "action": "opens its chest panel",
+            "gesture": "holds a diagnostic cable in the left gripper",
+        },
+        "scene": "compact repair bay",
+        "composition": "full body with room for tools",
+        "camera": "eye level",
+        "hard_constraints": ["orange shell"],
+        "optional_suggestions": ["soft rim light"],
+    }))
+    original = generate_input("orange robot opens its chest panel")
+    with client, client.websocket_connect("/ws", headers=headers) as socket:
+        capabilities = call(socket, "capabilities.get")["result"]
+        directed = call(socket, "creative.direct", {
+            "intent": original["intent"],
+            "director_mode": "refine",
+            "creative_spec": {},
+        })["result"]
+        compiled = call(socket, "creative.validate", {
+            "request": original,
+            "creative_spec": directed["creative_spec"],
+            "director_plan": directed["plan"],
+        })["result"]
+
+    assert capabilities["capabilities"]["creative.text_direction"]["state"] == "available"
+    assert directed["assistance_used"] is True
+    assert directed["creative_spec"]["pose"]["preset"] == "custom"
+    assert compiled["request"]["intent"].startswith(original["intent"])
+    assert compiled["plan"]["director"]["primary_action"]["action"] == "opens its chest panel"
+    assert len(state["ai_calls"]) == 1
+    assert state["ai_calls"][0]["capability"] == "text.generate"
+    assert "image" not in json.dumps(state["ai_calls"][0]).lower()
+
+
+def test_directed_pose_batch_uses_one_text_call_and_normal_child_jobs(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    state["ai_capabilities"]["text.generate"] = True
+    state["ai_responses"].append(json.dumps({
+        "plan": {
+            "subject": {"kind": "product"},
+            "primary_action": {"action": "showing the device"},
+            "hard_constraints": ["orange device"],
+        },
+        "actions": [
+            {"action": "tilted toward the viewer", "orientation": "front three-quarter"},
+            {"action": "rotated to expose the rear ports", "orientation": "rear three-quarter"},
+            {"action": "resting flat while the lid opens", "motion_hint": "hinge opening"},
+        ],
+    }))
+    with client, client.websocket_connect("/ws", headers=headers) as socket:
+        created = call(socket, "creative.batches.create", {
+            "request": generate_input("three useful views of the orange device"),
+            "creative_spec": {"variation": {"axis": "pose"}},
+            "count": 3,
+            "director_mode": "refine",
+        })
+        assert created["ok"] is True
+        result = created["result"]
+
+    assert len(state["ai_calls"]) == 1
+    assert state["ai_calls"][0]["capability"] == "text.generate"
+    assert len(result["child_job_ids"]) == 3
+    assert all(plan["pose"]["id"] == "custom" for plan in result["child_plans"])
+    assert [plan["director"]["child_action_state"]["action"] for plan in result["child_plans"]] == [
+        "tilted toward the viewer",
+        "rotated to expose the rear ports",
+        "resting flat while the lid opens",
+    ]
 
 
 def test_multicut_children_use_hosted_job_submission_before_deterministic_composition(tmp_path: Path):

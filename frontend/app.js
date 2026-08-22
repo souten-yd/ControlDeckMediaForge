@@ -44,6 +44,7 @@ const CAPABILITY_REASON = {
   model_registry_invalid: "モデル一覧を読み込めません",
   planned_for_g7: "これからの対応予定です",
   planned_for_g9: "これからの対応予定です",
+  text_generator_unavailable: "ControlDeck の文章による演出補助をいま使えません",
 };
 
 const LIBRARY_KINDS = [
@@ -72,6 +73,8 @@ const state = {
     camera: "auto", variation: "auto",
     sceneDetails: "", poseDetails: "", compositionDetails: "", cameraDetails: "",
   },
+  directorMode: "original",
+  directorPlan: null,
   profiles: [],
   referenceCollections: [],
   characterProfileId: "",
@@ -220,6 +223,9 @@ async function standaloneCall(method, params) {
   if (method === "jobs.watch" || method === "jobs.unwatch") return {watching: []};
   if (method === "creative.validate") {
     return json("/workspace-api/creative/validate", {method: "POST", body: JSON.stringify(params)});
+  }
+  if (method === "creative.direct") {
+    return json("/workspace-api/creative/direct", {method: "POST", body: JSON.stringify(params)});
   }
   if (method === "creative.batches.create") {
     return json("/workspace-api/creative/batches", {method: "POST", body: JSON.stringify(params)});
@@ -502,6 +508,7 @@ function setCreativeValue(key, value) {
   if (advanced) advanced.value = value;
   updateCreativeSummary();
   updateCompositionOptions();
+  renderDirectorControl();
   clearError();
 }
 
@@ -557,6 +564,64 @@ function creativeActive(spec = creativeSpec()) {
     || spec.pose.preset !== "auto" || spec.pose.details
     || spec.composition.preset !== "auto" || spec.composition.details
     || spec.camera.preset !== "auto" || spec.camera.details || spec.variation.axis !== "auto";
+}
+
+function directorAvailable() {
+  return capabilityState("creative.text_direction") === "available";
+}
+
+function renderDirectorControl() {
+  const available = directorAvailable();
+  const select = byId("director-mode");
+  for (const option of select.options) option.disabled = !available && option.value !== "original";
+  if (!available && state.directorMode !== "original") state.directorMode = "original";
+  select.value = state.directorMode;
+  byId("director-reason").textContent = available
+    ? "作る前に内容を整理します。画像の確認は行いません。"
+    : "演出補助は使えません。そのままの文章で作れます。";
+  const pose = byId("simple-pose-control");
+  pose.hidden = available && state.directorMode !== "original" && state.creative.pose === "auto";
+}
+
+function directorRow(label, value) {
+  const row = document.createElement("div");
+  const term = document.createElement("dt");
+  const detail = document.createElement("dd");
+  term.textContent = label;
+  detail.textContent = value || "—";
+  row.append(term, detail);
+  return row;
+}
+
+function actionSummary(action = {}) {
+  return [action.action, action.state, action.orientation, action.gesture, action.gaze, action.motion_hint]
+    .concat(action.body_or_part_relations || []).filter(Boolean).join(" / ");
+}
+
+function renderDirectorPlan(directed) {
+  const holder = byId("director-understanding");
+  const plan = directed?.plan;
+  if (!plan) {
+    holder.hidden = true;
+    state.directorPlan = null;
+    return;
+  }
+  holder.hidden = false;
+  const facts = byId("director-plan-summary");
+  facts.replaceChildren(
+    directorRow("元の希望", plan.original_intent),
+    directorRow("対象", [plan.subject?.kind, ...(plan.subject?.identity_traits || []),
+      ...(plan.subject?.appearance_traits || [])].filter(Boolean).join(" / ")),
+    directorRow("動き・状態", actionSummary(plan.primary_action)),
+    directorRow("シーン", plan.scene),
+    directorRow("構図・カメラ", [plan.composition, plan.camera].filter(Boolean).join(" / ")),
+    directorRow("提案", (plan.optional_suggestions || []).join(" / ")),
+  );
+  const reason = directed.assistance_used ? ""
+    : directed.skipped_reason === "original_mode" ? "「そのまま」を使いました。"
+    : "演出補助を使えなかったため、元の文章をそのまま使います。";
+  byId("director-plan-note").textContent = reason;
+  state.directorPlan = directed.assistance_used ? plan : null;
 }
 
 function creativeProblem() {
@@ -1186,8 +1251,31 @@ async function submitJob(event) {
       local_only: true,
       ...modelSelection(),
     };
-    const spec = creativeSpec();
+    let spec = creativeSpec();
     const layout = compositionLayout();
+    const batchAxes = new Set(["pose", "scene", "composition"]);
+    const batchCount = requestedCount();
+    const creativeBatch = operation === "image.generate" && batchCount > 1
+      && batchAxes.has(spec.variation.axis);
+    const directedPoseBatch = operation === "image.generate" && batchCount > 1
+      && spec.variation.axis === "pose" && state.directorMode !== "original" && batchCount <= 4;
+    let directorPlan = null;
+    if (operation === "image.generate" && state.directorMode !== "original"
+        && !layout && !creativeBatch) {
+      showPreparing("演出内容を整理しています", 0.6);
+      const directed = await call("creative.direct", {
+        intent: request.intent,
+        director_mode: state.directorMode,
+        creative_spec: spec,
+      });
+      renderDirectorPlan(directed);
+      if (directed.assistance_used) {
+        spec = directed.creative_spec;
+        directorPlan = directed.plan;
+      }
+    } else if (state.directorMode === "original") {
+      renderDirectorPlan(null);
+    }
     if (layout) {
       request.output.count = 1;
       showPreparing("カットを計画しています", 0.65);
@@ -1202,14 +1290,14 @@ async function submitJob(event) {
       void pollComposition(composition.id);
       return;
     }
-    const batchAxes = new Set(["pose", "scene", "composition"]);
-    const batchCount = requestedCount();
     if (batchCount > 1 && batchAxes.has(spec.variation.axis)) {
       request.output.count = 1;
       showPreparing("差分を計画しています", 0.65);
       const batch = await call("creative.batches.create", {
         request, creative_spec: spec, count: batchCount,
+        director_mode: directedPoseBatch ? state.directorMode : "original",
       });
+      if (batch.director) renderDirectorPlan(batch.director);
       setHostBusy(false);
       state.activeBatch = batch.id;
       showBatchProgress(batch);
@@ -1217,9 +1305,11 @@ async function submitJob(event) {
       void pollBatch(batch.id);
       return;
     }
-    if (creativeActive(spec)) {
+    if (creativeActive(spec) || directorPlan) {
       showPreparing("シーン指定を確認しています", 0.65);
-      request = (await call("creative.validate", {request, creative_spec: spec})).request;
+      request = (await call("creative.validate", {
+        request, creative_spec: spec, director_plan: directorPlan,
+      })).request;
     }
     showPreparing("受け付けています", 0.7);
     const job = await call("jobs.create", request);
@@ -2231,6 +2321,7 @@ const CAPABILITY_LABEL = {
   "image.strict_edit": "変えない部分を保証する",
   "image.semantic_review": "内容を自動で確認する",
   "image.creative_evaluation": "候補を比較・順位付けする",
+  "creative.text_direction": "演出内容を整理する",
   "video.image_to_video": "動画にする",
   "3d.image_to_3d": "3D にする",
 };
@@ -2619,6 +2710,14 @@ for (const key of ["scene", "pose", "composition", "camera", "variation"]) {
   byId(`creative-${key}`).addEventListener("change", (event) => setCreativeValue(key, event.target.value));
 }
 
+byId("director-mode").addEventListener("change", (event) => {
+  state.directorMode = event.target.value;
+  state.directorPlan = null;
+  renderDirectorPlan(null);
+  renderDirectorControl();
+  void savePreferences({director_mode: state.directorMode});
+});
+
 byId("create-form").addEventListener("input", (event) => {
   if (!event.target.id.startsWith("advanced-")) return;
   const detail = {
@@ -2956,7 +3055,11 @@ async function boot() {
   }
 
   state.libraryKind = state.preferences.library_kind || "all";
+  state.directorMode = directorAvailable()
+    ? (state.preferences.director_mode || "refine")
+    : "original";
   renderCreative();
+  renderDirectorControl();
   await loadProfiles();
   renderPresets();
   renderCounts();

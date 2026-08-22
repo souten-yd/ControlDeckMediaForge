@@ -7,6 +7,7 @@ import pytest
 from conftest import wait_terminal
 from mediaforge.creative import CreativeCompiler, CreativeSpec, CreativeValidationError
 from mediaforge.creative_batches import CreativeBatchPlanner, CreativeBatchRecord, project_batch
+from mediaforge.creative_intelligence import ActionStateSpec, PromptPlan, SubjectSpec
 from mediaforge.domain import AssetInput, Job, JobRequest, JobStatus, OutputOptions
 from mediaforge.store import Store, utc_now
 
@@ -46,6 +47,31 @@ def test_planner_rejects_unavailable_number_of_scene_variants():
     with pytest.raises(CreativeValidationError) as error:
         planner.plan(base_request(), spec, 4, capabilities=CAPABILITIES, envelope=ENVELOPE)
     assert error.value.code == "creative_batch_variants_unavailable"
+
+
+def test_directed_action_deltas_reuse_normal_children_and_preserve_canonical_plan():
+    planner = CreativeBatchPlanner(CreativeCompiler.load(ROOT / "creative/templates.json"))
+    spec = CreativeSpec.model_validate({"variation": {"axis": "pose"}})
+    plan = PromptPlan(
+        original_intent="orange robot performs maintenance",
+        subject=SubjectSpec(kind="robot"),
+    )
+    actions = [
+        ActionStateSpec(action="kneeling beside exposed wiring"),
+        ActionStateSpec(action="holding a diagnostic terminal at eye level"),
+        ActionStateSpec(action="reaching into an open service panel"),
+    ]
+    _, requests, plans = planner.plan_action_variations(
+        base_request(), spec, actions, plan, capabilities=CAPABILITIES, envelope=ENVELOPE,
+    )
+
+    assert len(requests) == 3
+    assert [item.constraints["seed"] for item in requests] == [100, 101, 102]
+    assert all(item.constraints["creative_plan"]["pose"]["id"] == "custom" for item in requests)
+    assert [item["director"]["child_action_state"]["action"] for item in plans] == [
+        action.action for action in actions
+    ]
+    assert all(item["director"]["original_intent"] == plan.original_intent for item in plans)
 
 
 def test_standalone_batch_is_durable_and_collects_child_assets(client):

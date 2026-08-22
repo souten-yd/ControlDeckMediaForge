@@ -66,6 +66,16 @@ and reference roles that do not name request assets before job submission.
 It never introduces `model_id` unless the incoming request already uses
 `model_policy=manual`.
 
+`creative.direct` is the private provider-neutral text Director for a brand-new
+image. It accepts the original intent, `original` / `refine` / `art_direct`, and
+an internal CreativeSpec. The result keeps the original intent verbatim, returns
+a canonical PromptPlan plus the projected CreativeSpec, and reports whether
+assistance was used. Missing, timed-out, or invalid `text.generate` assistance
+is fail-soft: the existing prompt-only request remains usable. Prompt-only
+direction sends no image and never calls `vision.analyze`. A directed pose/action
+batch may request 2..4 ActionState alternatives in one `text.generate` call;
+the existing durable batch and child Job contracts remain unchanged.
+
 Intentional variation batches are also private workspace orchestration.
 `creative.batches.create` accepts an existing JobRequest-shaped object, an
 internal CreativeSpec, and a bounded count (2..8). It returns a durable logical
@@ -224,12 +234,14 @@ than silently ignored.
 Parentage uses asset IDs only. Host paths are not part of this API.
 
 The workspace obtains the versioned CreativeSpec template catalog through its
-authenticated private WebSocket transport and validates directed requests with
-`creative.validate` before job admission. Standalone workspace mode uses the
-same compiler through `POST /workspace-api/creative/validate`; this route is
-same-origin UI plumbing, is excluded from OpenAPI, and is not a public API
-contract. Prompt-only/Auto requests bypass it and retain their prior request
-shape. Neither route accepts a model name or filesystem path.
+authenticated private WebSocket transport. When Host text direction is
+available, a single-image Auto request uses `creative.direct`, then validates
+the projected request with `creative.validate` before job admission. `そのまま`
+and fail-soft fallback retain the original prompt-only behavior. Standalone
+workspace mode mirrors both steps at `POST /workspace-api/creative/direct` and
+`POST /workspace-api/creative/validate`; these routes are same-origin UI
+plumbing, are excluded from OpenAPI, and are not a public API contract. Neither
+route accepts a model name or filesystem path.
 
 ## Add-on execution endpoints
 
