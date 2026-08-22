@@ -163,6 +163,20 @@
           </dl>
           <p class="section-label">今できること</p>
           <div id="capability-list" class="rows"></div>
+          <div class="model-management-head">
+            <div>
+              <p class="section-label">モデル管理</p>
+              <p id="model-storage" class="hint">保存容量を確認しています…</p>
+            </div>
+            <div id="model-filters" class="chips" role="radiogroup" aria-label="モデルの絞り込み">
+              <button type="button" class="chip" data-model-filter="installed" aria-checked="true">導入済み</button>
+              <button type="button" class="chip" data-model-filter="recommended" aria-checked="false">おすすめ</button>
+              <button type="button" class="chip" data-model-filter="all" aria-checked="false">すべて</button>
+            </div>
+          </div>
+          <div id="model-catalog" class="model-grid"></div>
+          <p id="model-empty" class="hint" hidden>条件に合うモデルはありません。</p>
+          <div id="model-error" class="error" role="alert" hidden></div>
           <div data-adv-slot="settings"></div>
         </section>
       </main>
@@ -172,6 +186,22 @@
         <span class="track"><i id="mini-bar"></i></span>
         <button type="button" id="mini-cancel" aria-label="中止">✕</button>
       </div>
+
+      <div id="model-mini-progress" hidden>
+        <span id="model-mini-phase">モデルを準備しています</span>
+        <span class="track"><i id="model-mini-bar"></i></span>
+        <button type="button" id="model-mini-cancel" aria-label="モデル操作を中止">✕</button>
+      </div>
+
+      <dialog id="model-remove-dialog">
+        <h2>モデルを削除しますか？</h2>
+        <p id="model-remove-summary"></p>
+        <p id="model-remove-detail" class="hint"></p>
+        <div class="dialog-actions">
+          <button type="button" id="model-remove-cancel">戻る</button>
+          <button type="button" id="model-remove-confirm" class="primary">削除する</button>
+        </div>
+      </dialog>
 
       <dialog id="mask-dialog">
         <div class="mask-head">
@@ -274,7 +304,7 @@
 
     <template data-adv-template="settings">
       <div class="advanced" id="advanced-settings">
-        <p class="section-label">モデル</p>
+        <p class="section-label">モデルの技術詳細</p>
         <div id="advanced-models" class="rows"></div>
         <p class="section-label">連携診断</p>
         <pre id="advanced-host-integration"></pre>

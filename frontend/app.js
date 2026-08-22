@@ -6,6 +6,7 @@
    （保存 API の名前をこのファイルに 1 度も書かないこと自体を試験で守っている） */
 
 const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
+const MODEL_TERMINAL = new Set(["ready", "failed", "canceled"]);
 const VIEWS = ["create", "library", "activity", "settings"];
 
 const PHASE_TEXT = {
@@ -78,6 +79,11 @@ const state = {
   jobs: [],
   libraryCursor: null,
   libraryKind: "all",
+  modelCatalog: [],
+  modelOperations: new Map(),
+  modelFilter: "installed",
+  modelManagementAvailable: false,
+  removeModelId: "",
   socket: null,
   socketReady: null,
   pending: new Map(),
@@ -143,7 +149,7 @@ function setHostBusy(value) {
 function connectSocket() {
   if (state.socketReady) return state.socketReady;
   state.socketReady = new Promise((resolve, reject) => {
-    const frameRoot = location.pathname.split("/").slice(0, 3).join("/");
+    const frameRoot = location.pathname.split("/").slice(0, 3).join("/").replace(/\/+$/, "");
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     state.socket = new WebSocket(`${scheme}://${location.host}${frameRoot}/ws`, [`control-deck-bridge.${state.nonce}`]);
     state.socket.onopen = () => resolve();
@@ -166,10 +172,20 @@ function connectSocket() {
 }
 
 function handleEvent(message) {
-  if (message?.event !== "job.changed" || !message.data) return;
-  const job = message.data;
-  if (job.id === state.activeJob) showProgress(job);
-  if (TERMINAL.has(job.status)) void finishJob(job);
+  if (!message?.data) return;
+  if (message.event === "model.operation.changed") {
+    const operation = message.data;
+    state.modelOperations.set(operation.id, operation);
+    renderModelManagement();
+    renderModelMiniProgress();
+    if (MODEL_TERMINAL.has(operation.state)) void loadModelManagement();
+    return;
+  }
+  if (message.event === "job.changed") {
+    const job = message.data;
+    if (job.id === state.activeJob) showProgress(job);
+    if (TERMINAL.has(job.status)) void finishJob(job);
+  }
 }
 
 async function standaloneCall(method, params) {
@@ -184,6 +200,24 @@ async function standaloneCall(method, params) {
   if (method === "jobs.list") return json("/api/v1/jobs");
   if (method === "jobs.watch" || method === "jobs.unwatch") return {watching: []};
   if (method === "models.list") return json("/api/v1/models");
+  if (method === "models.catalog") {
+    const {items} = await json("/api/v1/models");
+    return {items: items.map((model) => ({
+      model_id: model.id, display_name: model.id, domains: ["general"], media_types: ["image"],
+      description: "", approx_download_bytes: 0, reclaimable_bytes: 0,
+      profile_reference_count: 0, source: null, ownership: "external",
+      installed: model.installed, healthy: model.healthy, removable: false,
+      state: model.state, supports_lora: false, max_references: 0,
+      recommended_profiles: [], gated: false, license: model.license,
+      license_notice: model.license, runtime_adapter: model.runtime_adapter,
+      hardware_backends: [], capabilities: model.capabilities,
+      weights_hash: "", measurement_confidence: model.measurement_confidence,
+      measured_vram_bytes: model.measured_vram_bytes,
+      measured_runtime_sec: model.measured_runtime_sec,
+    })), storage: {managed_bytes: 0, free_bytes: 0, total_bytes: 0}, management_available: false};
+  }
+  if (method === "models.operations.list") return {items: []};
+  if (method === "models.operations.watch" || method === "models.operations.unwatch") return {watching: []};
   if (method === "assets.provenance") return json(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/provenance`);
   if (method === "preferences.get") return {values: state.preferences};
   if (method === "preferences.set") return {values: {...state.preferences, ...params.values}};
@@ -949,7 +983,7 @@ const FAILURES = {
   },
   model_unavailable: {
     text: "使えるモデルがありません。",
-    exit: "できることを見る", action: "open_settings",
+    exit: "モデル管理を開く", action: "open_model_management",
   },
   invalid_dimensions: {
     text: "指定した大きさが使えません。",
@@ -1002,6 +1036,11 @@ function runExit(action, job) {
   if (action === "rerun") return void rerun(job);
   if (action === "rerun_without_review") return void rerun(job, {withoutReview: true});
   if (action === "open_settings") return activate("settings");
+  if (action === "open_model_management") {
+    state.modelFilter = "recommended";
+    activate("settings");
+    return byId("model-catalog").scrollIntoView({block: "start"});
+  }
   if (action === "edit_intent") {
     activate("create");
     if (job) byId("create-intent").value = job.request.intent;
@@ -1601,6 +1640,246 @@ const CAPABILITY_LABEL = {
   "3d.image_to_3d": "3D にする",
 };
 
+const DOMAIN_LABEL = {
+  general: "汎用", anime: "アニメ", illustration: "イラスト", photoreal: "写真",
+  game2d: "2Dゲーム", poster: "ポスター", character_sheet: "キャラクター表",
+  background: "背景",
+};
+const MEDIA_TYPE_LABEL = {image: "画像", video: "動画", audio_video: "音声付き動画"};
+const MODEL_STATE_LABEL = {
+  queued: "順番を待っています", preflight: "容量と利用条件を確認しています",
+  downloading: "ダウンロードしています", verifying: "内容を検証しています",
+  installing: "導入しています", ready: "準備できました", failed: "導入できませんでした",
+  canceled: "中止しました",
+};
+
+const MODEL_FAILURE = {
+  insufficient_disk: {text: "保存先の空き容量が足りません。", exit: "空き容量を見る", action: "storage"},
+  model_gated: {text: "配布元で利用条件への同意が必要です。", exit: "詳細を見る", action: "details"},
+  model_download_failed: {text: "ダウンロードを続けられませんでした。", exit: "再試行", action: "retry"},
+  model_verify_failed: {text: "取得したファイルを検証できませんでした。", exit: "再試行", action: "retry"},
+  model_in_use: {text: "実行中の処理がこのモデルを使っています。", exit: "状況を見る", action: "activity"},
+  external_model_owned: {text: "共有モデルは配布元で管理してください。", exit: "一覧を更新", action: "refresh"},
+  model_not_found: {text: "モデル一覧が更新されています。", exit: "一覧を更新", action: "refresh"},
+};
+
+function formatBytes(value) {
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  return `${(value / (1024 ** index)).toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+
+function modelRecommended(model) {
+  return model.state === "available" && model.measurement_confidence === "measured" && !model.gated;
+}
+
+function latestModelOperation(modelId) {
+  return [...state.modelOperations.values()]
+    .filter((item) => item.model_id === modelId)
+    .sort((left, right) => right.created_at.localeCompare(left.created_at))[0] || null;
+}
+
+function modelFailureNode(code, modelKey) {
+  const detail = MODEL_FAILURE[code] || {
+    text: "モデル操作を完了できませんでした。", exit: "一覧を更新", action: "refresh",
+  };
+  const holder = document.createElement("div");
+  holder.className = "model-failure";
+  const text = document.createElement("span");
+  text.textContent = detail.text;
+  const exit = document.createElement("button");
+  exit.type = "button";
+  exit.dataset.modelExit = detail.action;
+  exit.dataset.modelKey = modelKey;
+  exit.textContent = detail.exit;
+  holder.append(text, exit);
+  return holder;
+}
+
+function renderModelManagement() {
+  const holder = byId("model-catalog");
+  if (!holder) return;
+  const visible = state.modelCatalog.filter((model) => {
+    if (state.modelFilter === "installed") return model.installed;
+    if (state.modelFilter === "recommended") return modelRecommended(model);
+    return true;
+  });
+  holder.replaceChildren(...visible.map((model) => {
+    const modelKey = String(state.modelCatalog.indexOf(model));
+    const card = document.createElement("article");
+    card.className = "model-card";
+    card.dataset.modelKey = modelKey;
+    const head = document.createElement("div");
+    head.className = "model-card-head";
+    const title = document.createElement("h3");
+    title.textContent = model.display_name;
+    const stateLabel = document.createElement("span");
+    stateLabel.className = "state";
+    stateLabel.textContent = model.installed ? (model.healthy ? "導入済み" : "要確認") : "未導入";
+    head.append(title, stateLabel);
+    const chips = document.createElement("div");
+    chips.className = "model-tags";
+    for (const label of [
+      ...model.media_types.map((item) => MEDIA_TYPE_LABEL[item] || item),
+      ...model.domains.map((item) => DOMAIN_LABEL[item] || item),
+    ]) {
+      const chip = document.createElement("span");
+      chip.textContent = label;
+      chips.append(chip);
+    }
+    const description = document.createElement("p");
+    description.className = "s";
+    description.textContent = model.description || "この環境で利用できるモデルです。";
+    const foot = document.createElement("div");
+    foot.className = "model-card-foot";
+    const size = document.createElement("span");
+    size.className = "hint";
+    size.textContent = model.installed && model.reclaimable_bytes
+      ? `${formatBytes(model.reclaimable_bytes)} 使用中`
+      : `約 ${formatBytes(model.approx_download_bytes)}`;
+    foot.append(size);
+    const operation = latestModelOperation(model.model_id);
+    const active = operation && !MODEL_TERMINAL.has(operation.state);
+    if (active) {
+      const progress = document.createElement("progress");
+      progress.max = Math.max(operation.bytes_total, 1);
+      progress.value = operation.bytes_done;
+      progress.setAttribute("aria-label", MODEL_STATE_LABEL[operation.state] || operation.state);
+      const status = document.createElement("span");
+      status.className = "model-operation-state";
+      status.textContent = `${MODEL_STATE_LABEL[operation.state] || operation.state} ${
+        operation.bytes_total ? Math.floor(operation.bytes_done / operation.bytes_total * 100) : 0}%`;
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.dataset.cancelModelOperation = operation.id;
+      cancel.textContent = "中止";
+      card.append(head, chips, description, progress, status, cancel);
+    } else {
+      const action = document.createElement("button");
+      action.type = "button";
+      if (!state.modelManagementAvailable) {
+        action.disabled = true;
+        action.textContent = "CLI で管理";
+      } else if (!model.installed) {
+        action.dataset.installModel = modelKey;
+        action.textContent = "ダウンロード";
+      } else if (model.ownership === "managed" && model.removable) {
+        action.dataset.removeModel = modelKey;
+        action.textContent = "削除";
+      } else {
+        action.disabled = true;
+        action.textContent = "共有モデル";
+      }
+      foot.append(action);
+      card.append(head, chips, description, foot);
+      if (operation?.state === "failed") card.append(modelFailureNode(operation.error_code, modelKey));
+    }
+    return card;
+  }));
+  byId("model-empty").hidden = visible.length !== 0;
+  renderAdvancedModels();
+}
+
+function renderAdvancedModels() {
+  const holder = byId("advanced-models");
+  if (!holder) return;
+  holder.replaceChildren(...state.modelCatalog.map((model) => {
+    const row = document.createElement("article");
+    row.className = "row technical-model";
+    const title = document.createElement("p");
+    title.className = "t";
+    title.textContent = model.display_name;
+    const detail = document.createElement("pre");
+    detail.textContent = [
+      `model_id: ${model.model_id}`, `revision: ${model.source?.revision || "-"}`,
+      `weights: ${model.weights_hash || "-"}`, `runtime: ${model.runtime_adapter}`,
+      `backend: ${(model.hardware_backends || []).join(", ") || "-"}`,
+      `capabilities: ${(model.capabilities || []).join(", ") || "-"}`,
+      `VRAM: ${formatBytes(model.measured_vram_bytes)}`,
+      `runtime: ${model.measured_runtime_sec ? `${model.measured_runtime_sec.toFixed(2)} sec` : "NOT MEASURED"}`,
+      `license: ${model.license} · gated=${model.gated}`,
+    ].join("\n");
+    row.append(title, detail);
+    return row;
+  }));
+}
+
+function renderModelMiniProgress() {
+  const active = [...state.modelOperations.values()]
+    .filter((item) => !MODEL_TERMINAL.has(item.state))
+    .sort((left, right) => right.created_at.localeCompare(left.created_at))[0];
+  const holder = byId("model-mini-progress");
+  holder.hidden = !active;
+  document.documentElement.dataset.modelProgress = active ? "true" : "false";
+  if (!active) return;
+  const model = state.modelCatalog.find((item) => item.model_id === active.model_id);
+  byId("model-mini-phase").textContent = `${model?.display_name || "モデル"}: ${
+    MODEL_STATE_LABEL[active.state] || active.state}`;
+  byId("model-mini-bar").style.width = `${active.bytes_total
+    ? Math.min(100, active.bytes_done / active.bytes_total * 100) : 0}%`;
+  byId("model-mini-cancel").dataset.operationId = active.id;
+}
+
+async function loadModelManagement() {
+  try {
+    const [catalog, operations] = await Promise.all([
+      call("models.catalog"), call("models.operations.list"),
+    ]);
+    state.modelCatalog = catalog.items || [];
+    state.modelManagementAvailable = catalog.management_available !== false;
+    state.modelOperations = new Map((operations.items || []).map((item) => [item.id, item]));
+    const active = [...state.modelOperations.values()]
+      .filter((item) => !MODEL_TERMINAL.has(item.state)).map((item) => item.id);
+    if (active.length) await call("models.operations.watch", {operation_ids: active});
+    const storage = catalog.storage || {};
+    byId("model-storage").textContent = state.modelManagementAvailable
+      ? `管理中 ${formatBytes(storage.managed_bytes)} · 空き ${formatBytes(storage.free_bytes)}`
+      : "単体表示ではモデル操作に CLI を使います";
+    byId("model-error").hidden = true;
+    renderModelManagement();
+    renderModelMiniProgress();
+  } catch (error) {
+    showModelError(error?.code || "model_not_found", "");
+  }
+}
+
+function showModelError(code, modelId) {
+  const holder = byId("model-error");
+  const modelKey = String(state.modelCatalog.findIndex((item) => item.model_id === modelId));
+  holder.replaceChildren(modelFailureNode(code, modelKey));
+  holder.hidden = false;
+}
+
+async function startModelInstall(modelId) {
+  byId("model-error").hidden = true;
+  try {
+    const operation = await call("models.install", {model_id: modelId});
+    state.modelOperations.set(operation.id, operation);
+    await call("models.operations.watch", {operation_ids: [operation.id]});
+    await loadModelManagement();
+  } catch (error) { showModelError(error?.code, modelId); }
+}
+
+async function cancelModelOperation(operationId) {
+  if (!operationId) return;
+  try {
+    const operation = await call("models.operations.cancel", {operation_id: operationId});
+    state.modelOperations.set(operation.id, operation);
+    await loadModelManagement();
+  } catch (error) { showModelError(error?.code, ""); }
+}
+
+function openModelRemove(modelId) {
+  const model = state.modelCatalog.find((item) => item.model_id === modelId);
+  if (!model) return;
+  state.removeModelId = modelId;
+  byId("model-remove-summary").textContent = `${model.display_name} をこの端末から削除します。`;
+  byId("model-remove-detail").textContent = `${formatBytes(model.reclaimable_bytes)} を解放 · ${
+    model.profile_reference_count || 0} 件のプロファイルが参照`;
+  byId("model-remove-dialog").showModal();
+}
+
 async function loadSettings() {
   const list = byId("capability-list");
   list.replaceChildren(...Object.entries(state.capabilities).map(([name, value]) => {
@@ -1625,6 +1904,7 @@ async function loadSettings() {
     return row;
   }));
   byId("host-state").textContent = state.bridgePort ? "接続しています" : "この画面だけで動いています";
+  await loadModelManagement();
 }
 
 async function loadAdvancedSettings() {
@@ -1632,20 +1912,7 @@ async function loadAdvancedSettings() {
   if (!holder) return;
   try {
     const {items} = await call("models.list");
-    holder.replaceChildren(...items.map((model) => {
-      const row = document.createElement("article");
-      row.className = "row";
-      const info = document.createElement("div");
-      const title = document.createElement("p");
-      title.className = "t";
-      title.textContent = model.id;
-      const sub = document.createElement("p");
-      sub.className = "s";
-      sub.textContent = `${model.state} · ${model.installed ? "installed" : "not installed"} · ${model.license}`;
-      info.append(title, sub);
-      row.append(info);
-      return row;
-    }));
+    renderAdvancedModels();
     const select = byId("advanced-model");
     if (select) {
       select.replaceChildren(...items.map((model) => {
@@ -1663,6 +1930,58 @@ async function loadAdvancedSettings() {
 byId("mode-simple").addEventListener("click", () => setMode("simple"));
 byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
 byId("nav-settings").addEventListener("click", () => activate("settings"));
+byId("model-filters").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-model-filter]");
+  if (!button) return;
+  state.modelFilter = button.dataset.modelFilter;
+  for (const item of byId("model-filters").children) {
+    item.setAttribute("aria-checked", String(item === button));
+  }
+  renderModelManagement();
+});
+
+function handleModelExit(button) {
+  const action = button.dataset.modelExit;
+  const model = state.modelCatalog[Number(button.dataset.modelKey)];
+  if (action === "retry" && model) void startModelInstall(model.model_id);
+  else if (action === "storage") byId("model-storage").scrollIntoView({block: "center"});
+  else if (action === "details") {
+    setMode("advanced");
+    byId("advanced-models")?.scrollIntoView({block: "center"});
+  } else if (action === "activity") activate("activity");
+  else void loadModelManagement();
+}
+
+for (const holder of [byId("model-catalog"), byId("model-error")]) {
+  holder.addEventListener("click", (event) => {
+    const install = event.target.closest("[data-install-model]");
+    const installModel = install ? state.modelCatalog[Number(install.dataset.installModel)] : null;
+    if (installModel) return void startModelInstall(installModel.model_id);
+    const remove = event.target.closest("[data-remove-model]");
+    const removeModel = remove ? state.modelCatalog[Number(remove.dataset.removeModel)] : null;
+    if (removeModel) return openModelRemove(removeModel.model_id);
+    const cancel = event.target.closest("[data-cancel-model-operation]");
+    if (cancel) return void cancelModelOperation(cancel.dataset.cancelModelOperation);
+    const exit = event.target.closest("[data-model-exit]");
+    if (exit) handleModelExit(exit);
+  });
+}
+
+byId("model-mini-cancel").addEventListener("click", () => {
+  void cancelModelOperation(byId("model-mini-cancel").dataset.operationId);
+});
+byId("model-remove-cancel").addEventListener("click", () => byId("model-remove-dialog").close());
+byId("model-remove-confirm").addEventListener("click", async () => {
+  const modelId = state.removeModelId;
+  byId("model-remove-dialog").close();
+  if (!modelId) return;
+  try {
+    const operation = await call("models.remove", {model_id: modelId});
+    state.modelOperations.set(operation.id, operation);
+    await call("models.operations.watch", {operation_ids: [operation.id]});
+    await loadModelManagement();
+  } catch (error) { showModelError(error?.code, modelId); }
+});
 for (const button of document.querySelectorAll("#shell-nav button")) {
   button.addEventListener("click", () => activate(button.dataset.view));
 }
@@ -1912,6 +2231,7 @@ async function boot() {
   renderCounts();
   renderLibraryKinds();
   setMode(state.preferences.mode || "simple", {persist: false});
+  await loadModelManagement();
   await refreshAttachment();
   void loadEstimate();
   await loadRecent();

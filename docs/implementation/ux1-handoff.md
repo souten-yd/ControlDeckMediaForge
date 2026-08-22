@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/model-operations-m1
-PR          UX1 #21〜#33 / UX2 M0 #35 マージ済み、PR-M1 #36 open
-状態        UX2 M1 を push・PR作成済み。exact head確認後にmergeする
-基準値      ./mf.sh test = 202 passed
+ブランチ    ux1/model-management-m2
+PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 マージ済み、PR-M2 push 前
+状態        UX2 M2 Settings Model Management を実装・実ブラウザ確認済み
+基準値      ./mf.sh test = 207 passed
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
 
@@ -36,14 +36,14 @@ PR          UX1 #21〜#33 / UX2 M0 #35 マージ済み、PR-M1 #36 open
 ## 次にやること（1 つだけ）
 
 ```text
-UX2 PR-M1 を commit / push / merge する。
-  ブランチ    ux1/model-operations-m1
-  実装        trusted catalog only / durable operation / sequential Range resume /
-              verify / atomic promote / managed-only remove / workspace events
-  実測        FLUX.2 Klein 4B 15,975,681,525 bytes を NVMe managed root へ導入。
-              780,840,902 bytes で中断後、同じ operation id で再開して ready。
-              実 core は health=healthy、registry は managed/healthy/removable=yes。
-  次          merge 後に PR-M2（Model Management UI）
+UX2 PR-M2 を commit / push / merge する。
+  ブランチ    ux1/model-management-m2
+  実装        Simple model management / Advanced details / media_types /
+              inline+global progress / reload復元 / remove確認
+  実測        private WebSocket E2E: 1 tap download、reload復元、確認1回、
+              390px/320px overflow 0、console/page error 0。
+              既存 standalone browser E2E も PASSED。
+  次          merge 後に PR-C0（CreativeSpec/compiler）
   注意        実モデルは C5 まで保持し、大容量 remove は NOT TESTED のままにする。
               hosted CI は使わずローカル gate を記録する。
 ```
@@ -101,7 +101,7 @@ UX2 PR-M1 を commit / push / merge する。
     証跡: /data1tb/mediaforge-ux1-evidence/{light,dark}/
 
 UX2 の各ブランチは直前スライスを main へ merge してから切る
-    PR-M1 は ux1/model-operations-m1。M1 と M2 を同一 PR に混ぜない。
+    PR-M2 は ux1/model-management-m2。M2 と C0 を同一 PR に混ぜない。
 ```
 
 ## 再開コマンド
@@ -111,8 +111,8 @@ cd /data1tb/ControlDeckMediaForge
 cat docs/implementation/ux1-handoff.md          # このファイル
 git fetch --all --prune && git log --oneline -5
 gh pr list --state open
-sed -n '/## 5\. PR-M2/,/## 6\. PR-C0/p' docs/implementation/ux2-model-scene.md
-./mf.sh test                                     # 基準値: 202 passed
+sed -n '/## 6\. PR-C0/,/## 7\. PR-C1/p' docs/implementation/ux2-model-scene.md
+./mf.sh test                                     # 基準値: 207 passed
 ```
 
 ## 参照

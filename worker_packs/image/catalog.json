@@ -5,6 +5,7 @@
       "model_id": "black-forest-labs/FLUX.2-klein-4B",
       "display_name": "FLUX.2 Klein 4B",
       "domains": ["general", "illustration", "poster", "background"],
+      "media_types": ["image"],
       "description": "Fast local image generation and reference editing model.",
       "approx_download_bytes": 15975681525,
       "source": {

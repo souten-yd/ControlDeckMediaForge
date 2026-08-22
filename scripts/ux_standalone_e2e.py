@@ -120,7 +120,7 @@ def pre_submit_checks(page: Page, evidence: Path) -> dict[str, Any]:
     # 以降は「書いていない」以外の理由で止まることを見たいので、先に書いておく
     page.fill("#create-intent", "受付前検証のためのテスト入力")
 
-    source = page.evaluate("() => document.querySelector('#attach-size').textContent")
+    source = page.evaluate("() => document.querySelector('#attach-size').textContent").split(" → ", 1)[0]
 
     # 外側を広げるのに広がっていない指定（詳細モードで元画像と同じ寸法を入れる）
     page.click("#mode-advanced")
@@ -252,8 +252,8 @@ def outpaint_checks(page: Page, evidence: Path) -> dict[str, Any]:
     payload = submitted_payload(page, evidence)
     check(payload is not None, "outpaint の送信が捕まえられなかった")
     constraints = payload["constraints"]
-    source_width, source_height = (int(value) for value in
-                                   page.locator("#attach-size").inner_text().split("×"))
+    source_label = page.locator("#attach-size").inner_text().split(" → ", 1)[0]
+    source_width, source_height = (int(value) for value in source_label.split("×"))
     check(constraints["width"] % 16 == 0 and constraints["height"] % 16 == 0, "16 の倍数ではない")
     check(constraints["width"] >= source_width and constraints["height"] >= source_height,
           "元画像を含んでいない")

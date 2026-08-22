@@ -94,10 +94,11 @@ before                      after
   Library                     ライブラリ  （完成物・取り込み・キャラ/画風）
   Jobs                        状況        （実行中と履歴。バッジで件数）
   Models        ──┐
-  Settings      ──┴─────→     ⚙ 設定      （状態・保存先・詳細モード・Models は詳細内）
+  Settings      ──┴─────→     ⚙ 設定      （状態・保存先・モデル管理・詳細モード）
 ```
 
-- **Models は独立タブをやめる**。詳細モード ON のときだけ設定内に現れる。
+- **Models は独立タブをやめる**。導入・削除・進捗は設定内で両モードに現れ、
+  model ID・hash・runtime・生 capability などの技術詳細だけを詳細モードに置く。
 - **状況**は実行中があるときだけバッジが付く。空でもタブは消さない
   （UX ガイドライン「状態は消さずに説明する」）。
 - route は host へ同期する（`host.route.sync`）:
@@ -144,7 +145,8 @@ before                      after
 | strict_edit / edit_mode の生指定 | L3 | 通常はアクション選択から導出 |
 | provenance 生 JSON | L3 | シンプルでは要約カード |
 | job 生 JSON / phase 生名 | L3 | シンプルでは日本語フェーズ |
-| Models カタログ / capability 一覧 | L3 | 設定内 |
+| モデル管理（容量・分類・導入・削除・進捗） | L1 | 設定内。通常利用に必要 |
+| model ID / hash / runtime / capability 生値 | L3 | 設定内の展開詳細 |
 | host 連携診断（host-integration） | L3 | 設定内 |
 | edit_mask として取り込んだ asset | 非表示 | 作業中間物。ライブラリを汚す |
 | 動画 / 3D | 非表示 | G7 / G9 未実装。空タブを作らない |

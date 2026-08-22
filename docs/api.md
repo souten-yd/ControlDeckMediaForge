@@ -53,6 +53,9 @@ command is accepted. `models.operations.list`, `.watch`, `.unwatch`, and
 `queued`, `preflight`, `downloading`, `verifying`, `installing`, then `ready`,
 `failed`, or `canceled`. A reconnect can list and re-watch the same operation.
 This workspace surface does not alter the frozen generation contract.
+Catalog items also carry validated `media_types` for Settings classification,
+`reclaimable_bytes`, and `profile_reference_count`. Routing never reads
+`media_types`; runtime capability remains authoritative.
 
 ## Jobs
 

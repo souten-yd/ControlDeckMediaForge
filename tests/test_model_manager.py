@@ -54,6 +54,7 @@ def manifests(tmp_path: Path, *, digest: str = WEIGHT_DIGEST) -> tuple[Path, Pat
         "schema_version": "1.0",
         "models": [{
             "model_id": "owner/model", "display_name": "Example Model", "domains": ["general"],
+            "media_types": ["image"],
             "description": "Test fixture", "approx_download_bytes": len(CONFIG) + len(WEIGHT),
             "source": {"kind": "huggingface", "repo_id": "owner/model", "revision": REVISION},
             "ownership": "managed", "supports_lora": False, "max_references": 0,
@@ -381,6 +382,9 @@ def test_workspace_catalog_install_watch_remove_and_capability_rescan(tmp_path: 
         catalog_result = call(socket, "catalog", "models.catalog")["result"]
         item = catalog_result["items"][0]
         assert (item["installed"], item["ownership"], item["removable"]) == (False, "managed", False)
+        assert item["media_types"] == ["image"]
+        assert (item["reclaimable_bytes"], item["profile_reference_count"]) == (0, 0)
+        assert catalog_result["management_available"] is True
         assert "local_path" not in item and str(tmp_path) not in json.dumps(catalog_result)
         rejected = call(
             socket, "unknown", "models.install", {"model_id": "owner/not-in-catalog"}

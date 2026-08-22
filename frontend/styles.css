@@ -409,6 +409,47 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
 .facts dt { font-size: .82rem; font-weight: 600; }
 .facts dd { margin: 0; font-size: .82rem; color: var(--muted); }
 
+.model-management-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 22px;
+}
+.model-management-head .section-label { margin-bottom: 3px; }
+.model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.model-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px;
+  display: grid;
+  gap: 9px;
+}
+.model-card-head, .model-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.model-card h3 { margin: 0; font-size: .94rem; overflow-wrap: anywhere; }
+.model-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.model-tags span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--sunk);
+  color: var(--muted);
+  font-size: .7rem;
+}
+.model-card progress { width: 100%; accent-color: var(--accent); }
+.model-operation-state { color: var(--muted); font-size: .74rem; }
+.model-failure { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #b3261e; font-size: .76rem; }
+.model-failure button { flex: none; }
+.technical-model { grid-template-columns: minmax(120px, .35fr) 1fr; align-items: start; }
+.technical-model pre { margin: 0; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .74rem; background: var(--sunk); border-radius: 10px; padding: 10px; }
 
 /* ── 全画面ビューア ─────────────────────────────────────────── */
@@ -490,12 +531,28 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
 #mini-progress[hidden] { display: none; }
 #mini-progress .track { flex: 1; margin: 0; }
 #mini-cancel { min-width: 38px; }
+#model-mini-progress {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px calc(8px + var(--safe-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: .78rem;
+}
+#model-mini-progress[hidden] { display: none; }
+#model-mini-progress .track { flex: 1; margin: 0; }
+#model-mini-cancel { min-width: 38px; }
 
 /* ── モバイル ───────────────────────────────────────────────── */
 @media (max-width: 767px) {
   #view-create { grid-template-columns: minmax(0, 1fr); }
   main { padding: 12px 12px calc(var(--tabbar) + var(--safe-bottom) + 12px); }
   .grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .model-grid { grid-template-columns: 1fr; }
+  .model-management-head { align-items: stretch; flex-direction: column; }
 
   #shell-header .pill { display: none; }
 
@@ -529,6 +586,18 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
     z-index: 3;
     padding: 8px 12px;
   }
+  html[data-model-progress="true"] #mini-progress:not([hidden]) {
+    bottom: calc(var(--tabbar) + var(--safe-bottom) + 46px);
+  }
+  #model-mini-progress {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--tabbar) + var(--safe-bottom));
+    z-index: 3;
+    padding: 8px 12px;
+  }
+  #model-remove-dialog { margin: auto 12px 12px; width: calc(100% - 24px); max-height: 76vh; }
 
   #result-image { max-height: 44vh; }
   .thumb { width: 72px; height: 72px; }

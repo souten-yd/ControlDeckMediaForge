@@ -41,6 +41,10 @@ DOM_IDS = (
     "stage", "stage-progress", "stage-result", "candidate-strip", "recent-strip",
     "mini-progress", "library-grid", "library-kinds", "activity-list",
     "capability-list", "detail-dialog",
+    "model-storage", "model-filters", "model-catalog", "model-empty", "model-error",
+    "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
+    "model-remove-dialog", "model-remove-summary", "model-remove-detail",
+    "model-remove-cancel", "model-remove-confirm",
     "viewer", "viewer-stage", "viewer-image", "viewer-caption",
     "viewer-detail", "viewer-edit", "viewer-close",
 )
@@ -77,6 +81,26 @@ def test_advanced_controls_live_only_inside_templates():
     for slot in ("create", "settings", "mask"):
         assert f'data-adv-slot="{slot}"' in MARKUP
         assert f'data-adv-template="{slot}"' in MARKUP
+
+
+def test_model_management_actions_are_simple_but_technical_details_are_advanced():
+    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
+    for name in ("model-filters", "model-catalog", "model-storage"):
+        assert f'id="{name}"' in without_templates
+    assert 'id="advanced-models"' not in without_templates
+    assert "models.install" in SCRIPT and "models.remove" in SCRIPT
+    assert "models.operations.watch" in SCRIPT and "model.operation.changed" in SCRIPT
+    assert 'data-model-filter="installed"' in MARKUP
+    assert 'data-model-filter="recommended"' in MARKUP
+    assert 'data-model-filter="all"' in MARKUP
+    assert "card.dataset.modelId" not in SCRIPT
+    assert "dataset.modelId =" not in SCRIPT
+
+
+def test_model_remove_has_exactly_one_confirmation_dialog():
+    assert MARKUP.count('id="model-remove-dialog"') == 1
+    assert MARKUP.count('id="model-remove-confirm"') == 1
+    assert "openModelRemove" in SCRIPT and 'call("models.remove"' in SCRIPT
 
 
 def test_navigation_is_declared_once_and_switched_by_css():
