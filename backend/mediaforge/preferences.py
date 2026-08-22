@@ -15,14 +15,18 @@ STANDALONE_SUBJECT = "local"
 
 ALLOWED: dict[str, tuple[type, tuple[Any, ...] | None]] = {
     "mode": (str, ("simple", "advanced")),
-    "last_preset": (str, ("square", "landscape", "portrait", "custom")),
+    "last_preset": (str, ("square", "landscape", "portrait", "wide", "tall", "cinema", "custom")),
     "last_count": (int, (1, 2, 3, 4, 5, 6, 7, 8)),
+    "last_custom_width": (int, None),
+    "last_custom_height": (int, None),
     "last_view": (str, ("create", "library", "activity", "settings")),
     "library_kind": (str, ("all", "generated", "edited", "imported")),
 }
 
 DEFAULTS: dict[str, Any] = {
     "mode": "simple",
+    "last_custom_width": 0,
+    "last_custom_height": 0,
     "last_preset": "square",
     "last_count": 1,
     "last_view": "create",

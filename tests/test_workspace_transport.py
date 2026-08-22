@@ -339,3 +339,38 @@ def test_new_methods_require_the_host_service_identity(tmp_path: Path):
         except Exception:
             return
     raise AssertionError("workspace WebSocket accepted a request without a host token")
+
+
+def test_binary_payloads_are_not_mistaken_for_host_paths(tmp_path: Path):
+    """base64 の先頭が "/" になる chunk が拒否されると取り込みが途中で失敗する。
+
+    実際に端末からの画像取り込みが不定期に失敗していた。
+    """
+    from mediaforge.host.security import reject_host_paths
+
+    # "/" 始まりの base64 は普通に発生する（アルファベットに含まれるため）
+    reject_host_paths({"upload_id": "upload_1", "offset": 0, "base64": "/9j/4AAQSkZJRgABAQ=="})
+    # 通常フィールドの path 検査は変わらない
+    with pytest.raises(Exception):
+        reject_host_paths({"hint": "/etc/passwd"})
+
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    content = png_bytes((64, 64))
+    with client, client.websocket_connect("/ws", headers=headers) as socket:
+        begin = call(socket, "assets.import.begin", {"purpose": "source", "size": len(content)})
+        upload = begin["result"]
+        socket.send_json({
+            "id": "chunk",
+            "method": "assets.import.chunk",
+            "params": {
+                "upload_id": upload["upload_id"],
+                "offset": 0,
+                # 先頭が "/" の base64 を意図的に送る
+                "base64": base64.b64encode(content).decode("ascii"),
+            },
+        })
+        while True:
+            message = socket.receive_json()
+            if message.get("id") == "chunk":
+                break
+    assert message["ok"] is True, message
