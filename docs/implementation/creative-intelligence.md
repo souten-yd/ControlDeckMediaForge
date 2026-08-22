@@ -1,148 +1,312 @@
-# Creative Intelligence implementation plan
+# Creative Intelligence v2 implementation plan
 
 Design: `docs/design-creative-intelligence.md`  
 Existing UX base: `docs/design-workspace-ux.md`  
 Existing creative base: `docs/implementation/ux2-model-scene.md`
 
-This plan is additive. Keep the current Create/Library/Activity/Settings shell and current JobRequest/public schemas.
+This plan supersedes the earlier future A1–A7 sequencing. A0 is already merged and remains the foundation. The new plan consolidates overlapping work around the **Creative Director**, conditional **Reference Intelligence**, and one **Unified Evaluator** while reusing UX2 C0–C5.
 
-## 0. Hard boundaries
+---
+
+## 0. Current baseline and scope
+
+Repository baseline when this plan was rewritten:
 
 ```text
-A1  No Ollama/llama.cpp/provider/model/port branches in Media Forge AI assistance code.
-A2  Text planning uses ControlDeck capability `text.generate`.
-A3  Image understanding/evaluation uses ControlDeck capability `vision.analyze`.
-A4  No global ControlDeck gateway API key copied into Media Forge; use scoped Add-on Runtime credentials.
-A5  Prompt-only generation remains usable when AI assistance is absent.
-A6  Deterministic pixel/geometry facts never depend on VLM output.
-A7  Keep original intent immutable and distinguish AI suggestion from user fact.
-A8  Reuse CreativeSpec/Compiler, reference roles, C3 batches, C4 Composer and current semantic QA coordinator.
-A9  No new top-level navigation and no wizard.
-A10 Automatic semantic retry stays bounded by the existing QA budget.
+main                 8f61d054d09735381a6c5224546b01c64fb1da26
+v0.3.0               merged/released through PR #48
+Creative Intel A0    PR #46 merged
+A0 protected fields PR #49 merged
+local full gate       269 passed / 24.58 s (recorded by #49)
+open unrelated work   PR #50 video candidate catalog
 ```
 
-## 1. Current code audit
+Do not mix this plan into the video-catalog PR. Branch each Creative Intelligence slice from the then-current `main` after checking open PRs.
 
-Already reusable:
+### Already implemented and reused
 
 ```text
-backend/mediaforge/creative.py            CreativeSpec + deterministic compiler
-backend/mediaforge/creative_batches.py    bounded deliberate variants
-backend/mediaforge/composer.py            C4 planner/composer
-backend/mediaforge/profiles.py            Character/Style profiles
-backend/mediaforge/jobs.py                deterministic QA + bounded semantic retry
-frontend/index.html + app.js              current Create/Result/Library/Activity UI
+backend/mediaforge/creative.py             CreativeSpec + deterministic compiler
+backend/mediaforge/creative_batches.py     bounded C3 child jobs
+backend/mediaforge/composer.py             C4 deterministic Composer
+backend/mediaforge/evaluator.py            C5 six-axis ranking foundation
+backend/mediaforge/profiles.py             Character/Style profiles
+backend/mediaforge/jobs.py                 deterministic QA + bounded retry budget
+backend/mediaforge/creative_intelligence.py
+  Host-facing PromptPlan / SubjectSpec / ActionStateSpec / Visual* / Evaluation* models
+backend/mediaforge/host/ai.py               provider-neutral HostAIGateway
+frontend/index.html + app.js                existing Create/Result/Library/Activity/Settings
 ```
 
-Must be replaced/retired:
+### Still provider-specific / incomplete
 
 ```text
+addon.json
+  does not yet request ai.inference
+
 backend/mediaforge/semantic_review.py
-  current production implementation calls Ollama `/api/tags` and `/api/chat` directly.
+  direct Ollama /api/tags + /api/chat
+
+backend/mediaforge/evaluator.py
+  direct Ollama /api/tags + /api/chat
 
 backend/mediaforge/config.py
-  current semantic reviewer defaults name an Ollama URL and a concrete VLM model.
+  reviewer URL/model defaults
+
+HostAIGateway / PromptPlanner
+  foundation only; production Create flow not connected
+
+VisualFacts / VisualAnalysis
+  models only; analyzer/cache absent
 ```
-
-ControlDeck facts verified before this plan:
-
-```text
-- RuntimeChatRequest/provider layer already normalizes OpenAI-compatible and Ollama generation.
-- multimodal content arrays are already converted to Ollama native `images` when required.
-- llama.cpp instances already expose `mmproj_path` for VLM operation.
-- Ollama model config already has `vlm_enabled`.
-- existing public LLM gateway uses a dedicated API key and is not an appropriate secret to copy into an add-on.
-- Add-on Runtime currently lacks scoped AI inference; ControlDeck PR #224 adds generic `ai.inference`.
-```
-
-## 2. PR order
-
-One slice per PR. Do not combine UI/product behavior with the host-boundary migration.
-
-```text
-PR-A0  provider-neutral Host AI seam + typed creative-intelligence models + detailed plan
-PR-A1  replace direct Ollama semantic reviewer with ControlDeck `vision.analyze`
-PR-A2  deterministic VisualFacts + cached Reference Analyzer backend
-PR-A3  VLM VisualAnalysis + apply-to-CreativeSpec/reference roles
-PR-A4  text Prompt Planner/Refiner backend + immutable original intent
-PR-A5  reuse current Create UI for Refine / analyzed-reference suggestions
-PR-A6  multi-dimensional Evaluator + ranking + current bounded retry integration
-PR-A7  installed-host acceptance + R9700/selected-runtime swap evidence
-```
-
-ControlDeck PR #224 is a dependency for A1/A3/A4/A6. It is a separate repository/PR because the host feature is generic.
 
 ---
 
-## 3. PR-A0 — provider-neutral seam
-
-### Deliverables
-
-Add lightweight core types/services only:
+## 1. Hard boundaries
 
 ```text
-HostAIGateway
-PromptPlan
-SubjectSpec
-ActionStateSpec
-VisualFacts
-VisualAnalysis
-EvaluationResult
+B1  No Ollama/llama.cpp/provider/model/port branch in Media Forge production AI assistance.
+B2  Text-only creative planning uses ControlDeck `text.generate`.
+B3  `vision.analyze` is used only when actual image bytes already exist.
+B4  A prompt-only first image never requires `vision.analyze`.
+B5  No global ControlDeck gateway key/session cookie copied into Media Forge.
+B6  Normal prompt-only generation/edit remains usable without AI assistance.
+B7  Deterministic pixel/geometry facts never depend on VLM output.
+B8  User facts/overrides outrank deterministic facts, accepted reference semantics, Director inference, and suggestions.
+B9  Reuse current CreativeCompiler/C3/C4/C5 paths; no second generation/batch/composer/evaluator stack.
+B10 Fixed Pose presets remain fallback/Advanced shortcuts, not the primary vocabulary.
+B11 Automatic semantic retry remains bounded by the existing QA budget.
+B12 No public frozen JobRequest break and no Media-specific ControlDeck route.
 ```
-
-`HostAIGateway` takes existing `ControlDeckHostClient` + `HostIdentity` and calls only:
-
-```text
-/{addon_id}/ai/capabilities
-/{addon_id}/ai/complete
-```
-
-It does not accept provider/model/base_url parameters.
-
-### Acceptance
-
-- fake Host returns structured text and vision responses;
-- returned provider/model fields, if a malicious fake includes them, are ignored by typed result code;
-- unsupported capability maps to one normalized Media Forge error;
-- no production string `/api/chat`, `11434`, `llama.cpp`, or provider branch exists in the new path;
-- no existing generation behavior changes in A0.
 
 ---
 
-## 4. PR-A1 — semantic reviewer migration
+## 2. Canonical execution flows
 
-Replace the transport implementation behind the existing `SemanticReviewer` coordinator.
+### 2.1 New image, no reference
+
+```text
+intent
+ -> Creative Director (`text.generate`, when available)
+ -> PromptPlan / ActionStateSpec
+ -> compatibility projection + existing CreativeCompiler
+ -> normal image Job/Broker/worker
+ -> deterministic validation
+ -> optional post-image evaluator (`vision.analyze`)
+```
+
+**Pre-generation vision calls: zero.**
+
+### 2.2 New image with reference(s)
+
+```text
+reference asset
+ -> VisualFacts (deterministic, cached)
+ -> VisualAnalysis (`vision.analyze`, cached)
+
+intent + accepted reference summary
+ -> Creative Director (`text.generate`)
+ -> existing CreativeCompiler / normal generation
+ -> optional evaluator
+```
+
+### 2.3 C3 action variation
+
+```text
+accepted parent PromptPlan
+ -> one text.generate request for 2–4 bounded semantic deltas
+ -> existing C3 child CreativeSpecs/Jobs
+```
+
+Do not call the Director once per child and do not re-analyze the same reference per child.
+
+### 2.4 C4 multi-cut
+
+Director may produce child shot briefs. Exact layout/text remains the current deterministic Composer.
+
+---
+
+## 3. Old-plan consolidation mapping
+
+The old future slices are retired as planning units:
+
+```text
+old A1  semantic reviewer migration       -> CI-1
+old A2  VisualFacts                       -> CI-3
+old A3  VLM VisualAnalysis                -> CI-3
+old A4  Prompt Planner/Refiner            -> CI-2
+old A5  Create UI integration             -> CI-2 + CI-3
+old A6  multidimensional evaluator        -> CI-4
+old A7  installed-host acceptance         -> CI-5
+```
+
+A0 stays complete and is not reimplemented.
+
+---
+
+## 4. CI-1 — provider-neutral AI cutover
+
+### Goal
+
+Remove all production provider/model/port decisions from Media Forge before expanding AI usage.
 
 ### Required changes
 
-- remove production `OllamaSemanticReviewer`;
-- remove `semantic_reviewer_url` / concrete model defaults from Settings;
-- hosted semantic review receives the current `HostIdentity` from the active HostExecution;
-- standalone semantic QA is unavailable unless a future standalone host-AI adapter is explicitly configured;
-- current deterministic-first ordering and bounded retry semantics stay unchanged.
+1. Add `ai.inference` to `addon.json` `host_capabilities`.
+2. Replace production `OllamaSemanticReviewer` transport with a ControlDeck-backed reviewer using `HostAIGateway(..., "vision.analyze")`.
+3. Replace production `OllamaCreativeEvaluator` transport with a ControlDeck-backed evaluator using `vision.analyze` while preserving current C5 scoring behavior.
+4. Remove `semantic_reviewer_url` / `semantic_reviewer_model` and corresponding environment variables from production Settings.
+5. Move shared bounded review-image preprocessing out of provider-specific code if needed so both Reference Intelligence/Evaluator can reuse it without importing an Ollama implementation.
+6. Preserve deterministic-first validation and existing retry/ranking semantics.
 
-### Error mapping
+### Important constraint
+
+This slice changes transport/boundary, not product behavior. Do not redesign the evaluator or UI here.
+
+### Error normalization
 
 ```text
-host capability not granted -> host_ai_not_granted
-vision unavailable          -> vision_analyzer_unavailable
-host unreachable            -> host_ai_unavailable
-malformed structured result -> vision_result_invalid
+host AI grant missing       host_ai_not_granted
+vision unavailable          vision_analyzer_unavailable
+host unavailable            host_ai_unavailable
+invalid structured response vision_result_invalid
 ```
 
-No fallback to a local provider port.
+No local-provider fallback.
+
+### Tests
+
+- add-on manifest grants `ai.inference`;
+- fake Host vision response drives current semantic review/evaluator behavior;
+- response/provider/model extras do not affect Media Forge behavior;
+- no production `/api/chat`, `/api/tags`, `11434`, provider/model URL setting remains in AI-assistance transport;
+- prompt-only generation remains unchanged;
+- existing deterministic QA/retry budget tests remain green.
+
+### Real acceptance before merge
+
+- installed ControlDeck service token can call `vision.analyze` through Media Forge;
+- change ControlDeck-selected compatible target/runtime and repeat without Media Forge config change;
+- normal image generation remains functional when `vision.analyze` is unavailable.
 
 ---
 
-## 5. PR-A2 — deterministic VisualFacts
+## 5. CI-2 — Creative Director for brand-new generation
 
-Add a lightweight analyzer under core, Pillow-only initially.
+### Goal
 
-### Input
+Make arbitrary action/pose/scene/composition direction come from a structured text Director rather than a growing preset list.
 
-Existing asset ID/path after current containment checks.
+### Reuse
 
-### Output
+Use the already-merged `PromptPlanner`, `PromptPlan`, `SubjectSpec`, `ActionStateSpec`, `HostAIGateway`, and `CreativeCompiler`.
+
+Do **not** create a second planner service. If naming improves clarity, introduce `CreativeDirector` as a thin product-level wrapper around the existing planner implementation.
+
+### User-facing modes
+
+Map the current internal modes without a schema break:
+
+```text
+そのまま  -> original
+自動      -> refine
+演出強め  -> art_direct
+```
+
+Simple default: `自動` when `text.generate` is available. The user may always choose `そのまま`.
+
+### Director semantics
+
+`自動`:
+
+- preserve user meaning;
+- extract/structure subject and action/state;
+- fill only useful missing visible direction conservatively;
+- do not compile imaginative optional suggestions automatically;
+- never change explicit count/color/identity/action constraints.
+
+`演出強め`:
+
+- may propose camera/lighting/staging/composition;
+- additions stay identifiable as AI suggestions;
+- accepted suggestions become normal structured values/provenance.
+
+### Existing Pose compatibility
+
+First production bridge:
+
+```text
+ActionStateSpec
+ -> PoseSpec(preset="custom", details=<bounded compiled action text>)
+```
+
+All current Scene templates already accept `custom`, so this reuses the current compiler without expanding the public contract.
+
+Canonical provenance still stores `ActionStateSpec`. For non-human subjects, “pose” is only the compatibility field used by the existing compiler.
+
+### Create integration
+
+Reuse the current intent field and Scene & framing area. Add one compact control:
+
+```text
+演出 [自動 ▾]
+  そのまま
+  自動
+  演出強め
+```
+
+Do not add a wizard or new top-level page.
+
+After a Director run, provide a compact existing-page disclosure:
+
+```text
+理解した内容
+  user facts
+  action/state
+  inferred scene/composition/camera
+  optional suggestions
+```
+
+The current Simple Pose selector is demoted/conditional, not deleted yet. Advanced retains manual Pose/custom details and exposes canonical Action/State fields as they become available.
+
+### Fail-soft policy
+
+If text planning is unavailable/invalid/times out:
+
+- keep the original intent intact;
+- explain that Director assistance was skipped;
+- allow the existing prompt-only generation path;
+- do not convert the image job itself into a Host AI failure.
+
+### Variation upgrade in the same vertical slice
+
+For C3 `pose/action` variations, add a bounded Director method that returns 2–4 ActionState deltas in **one** `text.generate` request. Feed those deltas into the existing C3 parent/child system.
+
+Do not alter batch persistence, reconnect, cancel, partial-retention, candidate-strip, or Broker paths.
+
+### Tests
+
+- new text-only prompt makes zero vision calls before generation;
+- uncommon human pose -> custom action details -> normal CreativeCompiler;
+- robot/vehicle/product actions do not require person-only presets;
+- explicit user constraints win over Director output;
+- server-owned `version/original_intent/mode` remain protected (#49 regression);
+- unknown provider-authored fields still fail closed;
+- unavailable text.generate -> prompt-only generation still works;
+- C3 action variations use one planner request and create normal child Jobs;
+- Simple/Advanced DOM rule and 320/390 px no-overflow remain intact.
+
+---
+
+## 6. CI-3 — Reference Intelligence
+
+### Goal
+
+Analyze existing/reference images without making vision a dependency for new prompt-only generation.
+
+### Part A: deterministic VisualFacts
+
+Implement lightweight Pillow-only analysis:
 
 ```text
 width
@@ -151,37 +315,36 @@ aspect_ratio
 has_alpha
 opaque_fraction
 dominant_colors [{hex, coverage}]
-accent_colors[]
+accent_colors
 mean_luminance
 mean_saturation
 ```
 
-### Cache key
+Cache key:
 
 ```text
-asset sha256 + VisualFacts analyzer version
+asset sha256 + visual-facts analyzer version
 ```
 
-Do not mutate the asset.
+Rules:
 
-### Acceptance
+- downsample before palette quantization;
+- ignore highly transparent pixels for palette coverage;
+- no torch/transformers/OpenCV dependency in core;
+- do not mutate the asset.
 
-- same bytes produce same facts/hash;
-- alpha-transparent pixels do not dominate palette;
-- bounded memory on a large input by downsampling before quantization;
-- no ML dependency enters core.
+### Part B: VLM VisualAnalysis
 
----
-
-## 6. PR-A3 — VLM VisualAnalysis
-
-Use `vision.analyze` through HostAIGateway.
-
-### Schema sections
+Only after an image exists, call:
 
 ```text
-subject
-subject_count
+HostAIGateway.complete(..., "vision.analyze", ...)
+```
+
+Strict result sections:
+
+```text
+subject / count
 action_state
 scene
 composition
@@ -193,98 +356,50 @@ inferences
 confidence_by_field
 ```
 
-### Merge rule
+Deterministic facts win on measurable fields.
 
-Deterministic VisualFacts wins on measurable facts. VLM values are semantic annotations and cannot override exact dimensions/palette samples.
+### Reference-role integration
 
-### Reference-role application
-
-Analysis may **suggest** roles:
+Reuse the current collection/roles:
 
 ```text
 identity / style / pose / composition / clothing / palette / prop / environment
 ```
 
-The current reference collection is reused. No second reference store.
+Analysis proposes roles/values; it never silently mutates a Character/Style profile.
 
-### Non-person requirement
+### Director integration
 
-At least vehicle, robot and product fixtures must produce ActionStateSpec without requiring PoseSpec.
+The Director receives accepted **analysis JSON summaries**, not raw image bytes. The VLM sees the image; the text Director sees structured accepted context.
 
----
+### UI
 
-## 7. PR-A4 — Prompt Planner / Refiner
-
-Call `text.generate` with strict structured output.
-
-### Modes
-
-```text
-original
-refine
-art_direct
-```
-
-### Invariants
-
-- store original intent unchanged;
-- explicit user constraints win;
-- AI additions are marked suggestions until accepted;
-- no engine-specific sampler/scheduler vocabulary;
-- accepted plan compiles through existing CreativeCompiler;
-- empty/unaccepted plan leaves current JobRequest unchanged.
-
-### Tests
-
-- conflict resolution;
-- malformed host JSON;
-- same accepted plan compiles deterministically;
-- text target unavailable leaves original generation usable.
-
----
-
-## 8. PR-A5 — current Create UI integration
-
-Do not redesign the page.
-
-Reuse the current intent field and `Scene & framing` disclosure.
-
-### Add
-
-Near intent:
-
-```text
-[指示を整える]
-```
-
-Inline result card:
-
-```text
-理解した内容
-user facts
-AI suggestions
-[使う] [調整] [元に戻す]
-```
-
-For an attached/reference image add compact role shortcuts:
+Reuse the current reference area. Add compact shortcuts only when an image exists:
 
 ```text
 全体 / 主役 / 動き / 色 / 構図 / 画風
 ```
 
-The current explicit Pose selector is not deleted in this slice. Simple may hide/demote it after real-use evidence shows Prompt Planner + reference analysis covers the common path. Advanced retains exact Pose/Action fields.
+### Tests
 
-### Mobile
-
-320px/390px: inline card, no modal wizard, no horizontal scroll.
+- same bytes -> same VisualFacts/cache key;
+- transparent background does not dominate palette;
+- person, robot, vehicle/product fixtures produce bounded ActionState semantics;
+- no vision call when no reference image exists;
+- cached reference analysis reused across C3/C4 children;
+- role-specific application does not overwrite unrelated dimensions.
 
 ---
 
-## 9. PR-A6 — Evaluator
+## 7. CI-4 — Unified Evaluator and semantic-QA de-duplication
 
-Evolve the existing binary semantic review result, do not create another judge loop.
+### Goal
 
-### Scores
+Converge the current C5 six-axis evaluator and older binary semantic reviewer into one product-level evaluation result without creating a second judge loop.
+
+### Target model
+
+Use the already-defined `EvaluationResult` dimensions:
 
 ```text
 intent
@@ -297,58 +412,127 @@ props_clothing
 visual_integrity
 ```
 
-### Reference-role awareness
+### Behavior
 
-Only score dimensions requested by the reference role. Example: a palette reference does not penalize pose.
+1. deterministic validators remain authoritative and run first;
+2. VLM evaluation is post-image only;
+3. score only dimensions relevant to user constraints/reference roles;
+4. default = advisory rank/show/explain;
+5. automatic regeneration is opt-in and consumes the existing bounded QA budget;
+6. provenance records dimension scores/issues/strengths/capability name, not required provider/model identity.
 
-### Default behavior
+### Migration
 
-```text
-score -> rank/show alternatives
-```
+Retire duplicate binary semantic-review interpretation once Jobs can derive required accept/retry behavior from `EvaluationResult`.
 
-Automatic regeneration remains opt-in and uses the current `max_regeneration_attempts` bound.
+Keep one bounded image-preprocessing utility and one ControlDeck `vision.analyze` transport.
 
-### Provenance
+### Performance
 
-Store dimension scores, issues, strengths, and host AI capability name. Do not make provider/model identity a required field.
+- do not evaluate every normal single-candidate generation by default;
+- rank when user requests compare/quality or when C3 provides multiple candidates;
+- batch candidate context where bounded and supported;
+- never introduce an unbounded generate->judge->retry loop.
+
+### Tests
+
+- palette-only reference does not penalize action;
+- pose/action reference does not require palette match;
+- deterministic failure cannot be overridden by VLM score;
+- evaluator unavailable leaves valid generated assets usable;
+- retry count never exceeds existing configured budget;
+- current C5 result-stage ranking behavior remains available.
 
 ---
 
-## 10. PR-A7 — real acceptance
+## 8. CI-5 — C4 shot direction + bounded quality integration
 
-Installed ControlDeck + Media Forge, not standalone mocks only.
+### Goal
+
+Use the Director to improve multi-cut shot intent while preserving deterministic composition.
+
+### Scope
+
+- Director may create 2–4 structured shot briefs from the accepted parent PromptPlan.
+- Existing child Job path generates each shot.
+- Existing C4 Composer remains authoritative for layout, crop, frame, title/caption, safe margins, dimensions and exact text.
+- Reuse Character/Style/reference analysis across all children.
+- Optional evaluator may rank/select child candidates or inspect final composition, but must not regenerate unboundedly.
+
+### Explicit non-goal
+
+Do not ask a diffusion/VLM model to render exact title/logo/UI text that the Composer can place deterministically.
+
+---
+
+## 9. CI-6 — installed-host acceptance and release gate
+
+Run against an installed ControlDeck + Media Forge, not mocks only.
 
 Required evidence:
 
 ```text
-- ControlDeck ai.inference grant present
+- addon has ai.inference grant
 - text.generate works through service token
-- vision.analyze works through service token
-- switch selected ControlDeck runtime/target and repeat without Media Forge config change
-- reference image: person action + palette + composition extracted
-- reference image: non-person action/state extracted
-- prompt refine -> accepted plan -> normal generation
-- evaluator ranks at least two candidates
-- no retry beyond budget
-- normal prompt-only route still works with AI assistance unused
-- 320px/390px browser acceptance
-- console/page errors 0
+- brand-new text-only image: Director works, pre-generation vision calls = 0
+- `そのまま` mode: no Director call and normal generation works
+- vision.analyze works for a real reference image
+- ControlDeck selected runtime/target can change without Media Forge config changes
+- uncommon human action produces Director custom action/pose details
+- non-human action/state works
+- C3 action variation creates 2–4 meaningful child actions with one Director request
+- reference facts/analysis cache reused
+- evaluator ranks at least two candidates when explicitly requested
+- no retry beyond existing budget
+- AI unavailable -> prompt-only generation still succeeds
+- 320px and 390px installed iframe acceptance
+- browser console/page errors 0
+- Broker active/waiting returns to 0 after tests
 ```
 
-Any missing real-model evidence is recorded `NOT TESTED`, never inferred from unit tests.
+R9700 measurements should record separately:
+
+```text
+Director request latency (warm/cold if observable)
+reference VLM analysis latency
+candidate evaluation latency
+image generation latency
+runtime swap/load impact
+VRAM/Broker behavior
+```
+
+Do not promote a claim from unit tests to real-machine evidence.
 
 ---
 
-## 11. Stop conditions
+## 10. Stop conditions
 
-Stop and return to design if:
+Return to design instead of patching around the boundary if any implementation would require:
 
 ```text
-- host AI contract would need a Media-specific route or model name;
-- Media Forge would need a ControlDeck session cookie or global gateway API key;
-- VLM requires raw filesystem paths crossing the host boundary;
-- public frozen JobRequest must be broken rather than extended privately;
-- evaluator needs an unbounded retry loop;
-- core would need torch/transformers only for analysis orchestration.
+- Media-specific ControlDeck provider/model route;
+- provider/model/port choice in Media Forge;
+- ControlDeck global gateway key/session cookie in Media Forge;
+- vision.analyze before a prompt-only first image exists;
+- raw filesystem paths across the Host AI boundary;
+- a new public JobRequest break instead of private/additive planning data;
+- a second batch/composer/evaluator storage stack;
+- an unbounded autonomous retry loop;
+- torch/transformers in lightweight core merely for orchestration;
+- expansion of a huge human Pose preset catalog as the primary action solution.
 ```
+
+---
+
+## 11. Implementation order
+
+```text
+CI-1  provider-neutral AI cutover
+CI-2  Creative Director + new-image path + action variations
+CI-3  Reference Intelligence (VisualFacts + VLM + roles/cache)
+CI-4  Unified Evaluator / semantic-QA de-duplication
+CI-5  C4 Director shot briefs / bounded quality integration
+CI-6  installed-host + R9700 acceptance / release
+```
+
+CI-1 is mandatory before production use of new AI assistance. CI-2 is the highest user-value slice after the boundary migration because it directly removes dependence on the limited Pose preset vocabulary for brand-new generation.
