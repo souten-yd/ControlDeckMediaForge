@@ -337,6 +337,18 @@ textarea { resize: vertical; min-height: 96px; }
 .creative-selects label { display: grid; gap: 3px; min-width: 0; font-size: .76rem; font-weight: 600; }
 .creative-selects label:last-child { grid-column: 1 / -1; }
 .creative-selects select { min-width: 0; padding: 8px; }
+#profile-choice { display: grid; gap: 6px; }
+.reference-role-list { display: grid; gap: 7px; }
+.reference-role-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 88px;
+  gap: 7px;
+  align-items: end;
+  font-size: .76rem;
+}
+.reference-role-row label { display: grid; gap: 3px; min-width: 0; }
+.reference-role-row .reference-name { align-self: center; overflow-wrap: anywhere; }
+.reference-role-row input, .reference-role-row select { padding: 8px; min-width: 0; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-row label, .advanced > label { display: grid; gap: 5px; font-size: .8rem; font-weight: 600; }
@@ -630,6 +642,7 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
   .modeswitch button { padding: 5px 8px; }
   .creative-selects { grid-template-columns: 1fr; }
   .creative-selects label:last-child { grid-column: auto; }
+  .reference-role-row { grid-template-columns: 1fr; }
 }
 
 @media (min-width: 768px) and (max-width: 1099px) {

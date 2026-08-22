@@ -16,6 +16,8 @@
       "ownership": "managed",
       "supports_lora": false,
       "max_references": 4,
+      "reference_roles": ["identity", "style", "pose", "composition", "clothing", "palette", "prop", "environment"],
+      "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": false,
       "license_notice": "Apache-2.0; review the upstream model card before redistribution."

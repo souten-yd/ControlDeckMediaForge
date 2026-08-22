@@ -1557,3 +1557,44 @@ evidence                       /tmp/mediaforge-c1-evidence/
 Character/Style と role-aware reference は C2、複数差分 job は C3 のため
 **NOT TESTED**。CreativeSpec 指定での実 GPU 生成・品質差は C5 のため
 **NOT TESTED**。G7 MotionSpec/動画モデルは **NOT TESTED**。ControlDeck 変更は不要だった。
+
+## UX2 PR-C2 — Character / Style / role-aware references (2026-08-22)
+
+新しい profile store を作らず、G3 の ReferenceCollection / CharacterProfile /
+StyleProfile を Create に接続した。Simple では「キャラ・画風を使う」の選択だけを
+出し、collectionのrole metadata、またはprofile kindからidentity/styleを推定する。
+strength sliderのmatrixはSimple DOMに存在しない。
+
+ReferenceCollection schema に省略可能な `roles` map を加法的に追加した。
+旧asset/collection/clientは省略でき、既存fieldの意味は変わらず、migrationと
+contract version bumpは不要。jobごとのoverrideはprofileを変更せず
+CreativePlan/provenanceに保存する。roleはidentity/style/pose/composition/clothing/
+palette/prop/environment。
+
+model catalog に `reference_roles` と `supports_reference_strength` を加法し、
+active model群の共通role、最小`max_references`、strength対応をprivate envelopeの正とした。
+FLUX.2 Klein 4Bは8 role、最大4参照、numeric strength未対応とし、未対応
+strengthは理由付きでdisabledにした。
+
+隔離data dirの実core（`127.0.0.1:9142`）に6画像、2 collection、2 profileを
+実HTTPで登録し、Chromiumで`scripts/ux_reference_roles_c2_e2e.py`を実行した。
+
+```text
+Simple profile inference       character refs 3枚 / role matrix DOM 0
+deliberate pose variants       wave / peace / holding_item（同一profile・identity）
+identity fixed / pose changed  identityは固定、pose役のassetだけswap
+style fixed / composition      style profileは固定、composition役assetだけswap
+strength support               3 controls全てdisabled（model metadata=false）
+reference admission            character 3 + style 3は上限4枚の手前でjob POST 0
+320x640 horizontal overflow    0 px
+console / page errors          0 / 0
+evidence                       /tmp/mediaforge-c2-evidence/
+```
+
+初回browser probeでstandalone shimにprivate envelopeが渡らず上限0枚と表示する
+実不具合を検出した。coreが算出したtemplate/preset/envelopeをworkspace HTMLへ
+dataとして埋め込み、standaloneとembeddedが同じ数値的正を使うよう修正した。
+
+`./mf.sh test`は228 passed（12.59秒、全command 13.93秒、最大RSS
+191,848 KiB）。実GPUで3 pose/reference swapの視覚品質はC5のため **NOT TESTED**。
+numeric strengthは対象modelが未対応なで **UNAVAILABLE**。ControlDeck変更は不要だった。

@@ -81,6 +81,8 @@ class ModelDescriptor:
     ownership: ModelOwnership = ModelOwnership.EXTERNAL
     supports_lora: bool = False
     max_references: int = 0
+    reference_roles: tuple[str, ...] = ()
+    supports_reference_strength: bool = False
     recommended_profiles: tuple[str, ...] = ()
     gated: bool = False
     license_notice: str = ""
@@ -221,9 +223,10 @@ def _catalog_metadata(value: dict[str, Any]) -> dict[str, Any]:
     allowed = {
         "model_id", "display_name", "domains", "media_types", "description", "approx_download_bytes",
         "source", "ownership", "supports_lora", "max_references", "recommended_profiles",
-        "gated", "license_notice",
+        "reference_roles", "supports_reference_strength", "gated", "license_notice",
     }
-    if set(value) != allowed:
+    optional = {"reference_roles", "supports_reference_strength"}
+    if set(value) - allowed or (allowed - optional) - set(value):
         raise ModelRegistryError("model catalog entry fields are invalid")
     model_id = _required_string(value, "model_id")
     if _MODEL_ID.fullmatch(model_id) is None:
@@ -239,6 +242,14 @@ def _catalog_metadata(value: dict[str, Any]) -> dict[str, Any]:
         not isinstance(item, str) or not item for item in recommended_profiles
     ):
         raise ModelRegistryError("model catalog recommended_profiles must be a string array")
+    reference_roles = value.get("reference_roles", [])
+    allowed_roles = {"identity", "style", "pose", "composition", "clothing", "palette", "prop", "environment"}
+    if (
+        not isinstance(reference_roles, list)
+        or any(not isinstance(item, str) or item not in allowed_roles for item in reference_roles)
+        or len(reference_roles) != len(set(reference_roles))
+    ):
+        raise ModelRegistryError("model catalog reference_roles are invalid")
     approx_download_bytes = value.get("approx_download_bytes")
     max_references = value.get("max_references")
     if (
@@ -267,8 +278,13 @@ def _catalog_metadata(value: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         raise ModelRegistryError("model catalog ownership is invalid") from exc
     supports_lora = value.get("supports_lora")
+    supports_reference_strength = value.get("supports_reference_strength", False)
     gated = value.get("gated")
-    if not isinstance(supports_lora, bool) or not isinstance(gated, bool):
+    if (
+        not isinstance(supports_lora, bool)
+        or not isinstance(supports_reference_strength, bool)
+        or not isinstance(gated, bool)
+    ):
         raise ModelRegistryError("model catalog boolean metadata is invalid")
     return {
         "display_name": _required_string(value, "display_name"),
@@ -280,6 +296,8 @@ def _catalog_metadata(value: dict[str, Any]) -> dict[str, Any]:
         "ownership": ownership,
         "supports_lora": supports_lora,
         "max_references": max_references,
+        "reference_roles": tuple(reference_roles),
+        "supports_reference_strength": supports_reference_strength,
         "recommended_profiles": tuple(recommended_profiles),
         "gated": gated,
         "license_notice": _required_string(value, "license_notice"),

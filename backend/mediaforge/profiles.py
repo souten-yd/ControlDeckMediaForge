@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 AssetId = str
 ShortTrait = Annotated[str, Field(min_length=1, max_length=200)]
+ReferenceRoleName = Literal[
+    "identity", "style", "pose", "composition", "clothing", "palette", "prop", "environment"
+]
 
 
 class ReferenceCollectionInput(BaseModel):
@@ -15,6 +18,7 @@ class ReferenceCollectionInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1000)
     asset_ids: list[AssetId] = Field(min_length=1, max_length=4)
+    roles: dict[AssetId, ReferenceRoleName] = Field(default_factory=dict, max_length=4)
 
     @model_validator(mode="after")
     def validate_assets(self) -> "ReferenceCollectionInput":
@@ -22,6 +26,8 @@ class ReferenceCollectionInput(BaseModel):
             raise ValueError("reference collection asset IDs must be unique")
         if any(not value.startswith("asset_") or len(value) != 38 for value in self.asset_ids):
             raise ValueError("reference collection contains an invalid asset ID")
+        if set(self.roles) - set(self.asset_ids):
+            raise ValueError("reference collection role references an asset outside the collection")
         return self
 
 

@@ -388,6 +388,8 @@ def test_workspace_embeds_creative_catalog_and_standalone_validation_is_private(
 
     assert index.status_code == 200
     assert 'id="creative-template-data"' in index.text
+    assert 'id="workspace-config-data"' in index.text
+    assert '"max_reference_assets":4' in index.text
     assert '"catalog_version":"2026.08.22"' in index.text
     assert compiled.status_code == 200
     assert compiled.json()["request"]["model_id"] is None

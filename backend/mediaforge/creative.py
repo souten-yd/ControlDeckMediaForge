@@ -57,7 +57,9 @@ class VariationSpec(BaseModel):
 class ReferenceRole(BaseModel):
     model_config = ConfigDict(extra="forbid")
     asset_id: str = Field(pattern=r"^asset_[0-9a-f]{32}$")
-    role: Literal["identity", "style", "pose", "composition", "content"]
+    role: Literal[
+        "identity", "style", "pose", "composition", "clothing", "palette", "prop", "environment"
+    ]
     strength: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
@@ -185,6 +187,7 @@ class CreativeCompiler:
         *,
         capabilities: Mapping[str, Mapping[str, Any]],
         envelope: Mapping[str, Any] | None = None,
+        available_reference_ids: set[str] | None = None,
     ) -> CreativeCompileResult:
         resolved = {
             "domain": self.catalog.resolve("domains", creative.domain),
@@ -200,16 +203,42 @@ class CreativeCompiler:
                 "選んだシーンとポーズは組み合わせられません。",
                 field="pose",
             )
-        input_ids = {item.asset_id for item in request.inputs}
+        input_ids = available_reference_ids or {item.asset_id for item in request.inputs}
         if any(item.asset_id not in input_ids for item in creative.reference_roles):
             raise CreativeValidationError(
                 "creative_reference_not_in_request",
                 "参照役割の画像が入力に含まれていません。",
                 field="reference_roles",
             )
+        reference_limit = int((envelope or {}).get("max_reference_assets", 0))
+        if creative.reference_roles and (
+            reference_limit < 1 or len(input_ids) > reference_limit
+        ):
+            raise CreativeValidationError(
+                "creative_reference_limit",
+                f"参照画像は最大 {reference_limit} 枚までです。",
+                field="reference_roles",
+            )
+        supported_roles = set((envelope or {}).get("reference_roles", []))
+        if any(item.role not in supported_roles for item in creative.reference_roles):
+            raise CreativeValidationError(
+                "creative_reference_role_unsupported",
+                "選んだ参照画像の役割は現在のモデルでは使えません。",
+                field="reference_roles",
+            )
+        if any(item.strength != 1.0 for item in creative.reference_roles) and not bool(
+            (envelope or {}).get("supports_reference_strength", False)
+        ):
+            raise CreativeValidationError(
+                "creative_reference_strength_unsupported",
+                "現在のモデルは参照の強さを指定できません。",
+                field="reference_roles",
+            )
         if creative.active:
             required = (
-                "image.text_to_image"
+                "image.multi_reference_edit"
+                if creative.reference_roles
+                else "image.text_to_image"
                 if request.operation == "image.generate"
                 else "image.single_reference_edit"
                 if request.operation == "image.edit"

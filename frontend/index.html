@@ -58,6 +58,15 @@
               </details>
             </div>
 
+            <div id="profile-choice">
+              <p class="section-label">キャラ・画風を使う</p>
+              <div class="form-row">
+                <label>キャラ<select id="character-profile"><option value="">使わない</option></select></label>
+                <label>画風<select id="style-profile"><option value="">使わない</option></select></label>
+              </div>
+              <p id="profile-choice-note" class="hint"></p>
+            </div>
+
             <div id="attach-row">
               <label id="attach-image" class="dropzone">
                 <span id="attach-label">＋ 画像を追加</span>
@@ -291,6 +300,11 @@
           <label>変化させるもの<select id="advanced-variation"></select></label>
         </div>
         <label>カメラの詳細<input id="advanced-camera-details" type="text" maxlength="500" placeholder="焦点距離や視点の補足"></label>
+        <div id="advanced-reference-block">
+          <p class="section-label">参照画像の役割</p>
+          <div id="advanced-reference-roles" class="reference-role-list"></div>
+          <p id="advanced-reference-reason" class="hint"></p>
+        </div>
         <div class="form-row">
           <label>出力形式
             <select id="advanced-format">
@@ -343,6 +357,7 @@
       </div>
     </template>
 
+    <!-- MEDIA_FORGE_WORKSPACE_CONFIG -->
     <!-- MEDIA_FORGE_CREATIVE_TEMPLATES -->
     <!-- MEDIA_FORGE_INLINE_SCRIPT -->
   </body>
