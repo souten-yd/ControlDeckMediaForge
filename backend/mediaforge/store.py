@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .composer import CreativeCompositionRecord
 from .creative_batches import CreativeBatchRecord
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
 from .models.operations import (
@@ -133,6 +134,14 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_creative_batches_created
                     ON creative_batches(created_at DESC);
+                CREATE TABLE IF NOT EXISTS creative_compositions (
+                    id TEXT PRIMARY KEY,
+                    value_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_creative_compositions_created
+                    ON creative_compositions(created_at DESC);
                 """
             )
             columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(jobs)")}
@@ -206,6 +215,8 @@ class Store:
         *,
         host_managed: bool = False,
         profile_snapshot: dict[str, Any] | None = None,
+        initial_status: JobStatus = JobStatus.QUEUED,
+        initial_phase: str | None = None,
     ) -> Job:
         now = utc_now()
         job_id = f"job_{uuid.uuid4().hex}"
@@ -214,10 +225,11 @@ class Store:
                 """INSERT INTO jobs
                    (id, status, phase, progress, request_json, asset_ids_json, error_json,
                     cancel_requested, host_managed, profile_snapshot_json, created_at, updated_at)
-                   VALUES (?, ?, NULL, 0, ?, '[]', NULL, 0, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, 0, ?, '[]', NULL, 0, ?, ?, ?, ?)""",
                 (
                     job_id,
-                    JobStatus.QUEUED,
+                    initial_status,
+                    initial_phase,
                     request.model_dump_json(),
                     int(host_managed),
                     json.dumps(profile_snapshot or {}, separators=(",", ":")),
@@ -603,6 +615,45 @@ class Store:
                 (max(1, min(100, limit)),),
             ).fetchall()
         return [CreativeBatchRecord.model_validate_json(row["value_json"]) for row in rows]
+
+    def create_creative_composition(
+        self, value: CreativeCompositionRecord
+    ) -> CreativeCompositionRecord:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "INSERT INTO creative_compositions (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (value.id, value.model_dump_json(), value.created_at, value.updated_at),
+            )
+        return value
+
+    def update_creative_composition(
+        self, value: CreativeCompositionRecord
+    ) -> CreativeCompositionRecord:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE creative_compositions SET value_json = ?, updated_at = ? WHERE id = ?",
+                (value.model_dump_json(), value.updated_at, value.id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(value.id)
+        return value
+
+    def get_creative_composition(self, composition_id: str) -> CreativeCompositionRecord:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT value_json FROM creative_compositions WHERE id = ?", (composition_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(composition_id)
+        return CreativeCompositionRecord.model_validate_json(row["value_json"])
+
+    def list_creative_compositions(self, limit: int = 100) -> list[CreativeCompositionRecord]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT value_json FROM creative_compositions ORDER BY created_at DESC LIMIT ?",
+                (max(1, min(100, limit)),),
+            ).fetchall()
+        return [CreativeCompositionRecord.model_validate_json(row["value_json"]) for row in rows]
 
     def _asset_row(self, asset_id: str) -> sqlite3.Row:
         with self._connect() as connection:

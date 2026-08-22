@@ -7,7 +7,8 @@
     {"id": "illustration", "version": "1.0", "label": "イラスト", "prompt": "polished illustration"},
     {"id": "photoreal", "version": "1.0", "label": "写真", "prompt": "photorealistic image"},
     {"id": "game2d", "version": "1.0", "label": "2Dゲーム", "prompt": "production-ready 2D game art"},
-    {"id": "poster", "version": "1.0", "label": "ポスター", "prompt": "designed poster artwork"}
+    {"id": "poster", "version": "1.0", "label": "ポスター", "prompt": "designed poster artwork"},
+    {"id": "character_sheet", "version": "1.0", "label": "キャラクター表", "prompt": "consistent character reference artwork"}
   ],
   "scenes": [
     {"id": "auto", "version": "1.0", "label": "自動", "prompt": "", "compatible_poses": ["auto", "holding_item", "typing", "peace", "wave", "arms_crossed", "sitting", "walking", "custom"]},

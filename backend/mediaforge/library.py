@@ -22,6 +22,8 @@ DEFAULT_LIMIT = 60
 def classify(provenance: Provenance, asset: Asset) -> Kind:
     if provenance.operation == "asset.import":
         return "imported"
+    if provenance.operation == "asset.pack":
+        return "generated"
     if provenance.operation == "image.edit" or asset.parent_asset_ids:
         return "edited"
     return "generated"

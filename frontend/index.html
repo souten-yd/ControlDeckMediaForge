@@ -67,6 +67,13 @@
               <p id="profile-choice-note" class="hint"></p>
             </div>
 
+            <div id="composition-options" class="sub-field" hidden>
+              <p class="section-label" id="composition-options-label">複数カットをまとめる</p>
+              <label>タイトル<input id="composition-title" maxlength="120" placeholder="ORANGE COMPANION"></label>
+              <label>説明<input id="composition-caption" maxlength="500" placeholder="同じキャラの見せ方を1枚にまとめます"></label>
+              <p class="hint">2〜4枚のカットを個別に作り、文字とレイアウトは正確に合成します。</p>
+            </div>
+
             <div id="attach-row">
               <label id="attach-image" class="dropzone">
                 <span id="attach-label">＋ 画像を追加</span>
@@ -142,6 +149,12 @@
               <div class="actions">
                 <button type="button" id="result-edit">これを編集</button>
                 <button type="button" id="result-detail">詳細</button>
+              </div>
+              <div id="composition-text-edit" class="sub-field" hidden>
+                <label>タイトル<input id="composition-edit-title" maxlength="120"></label>
+                <label>説明<input id="composition-edit-caption" maxlength="500"></label>
+                <button type="button" id="composition-update-text">文字だけ更新</button>
+                <p id="composition-edit-status" class="hint"></p>
               </div>
             </div>
 

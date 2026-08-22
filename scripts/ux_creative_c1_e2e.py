@@ -83,7 +83,9 @@ def main() -> int:
         check(observations["simple_advanced_nodes"] == 0, "advanced controls leaked into Simple DOM")
         check(not page.locator("#scene-framing").get_attribute("open"), "scene accordion is open by default")
         observations["domain_labels"] = page.locator("#domain-chips button").all_text_contents()
-        check(observations["domain_labels"] == ["自動", "アニメ", "イラスト", "写真", "2Dゲーム", "ポスター"],
+        check(observations["domain_labels"] == [
+            "自動", "アニメ", "イラスト", "写真", "2Dゲーム", "ポスター", "キャラクター表",
+        ],
               "domain labels do not come from the expected catalog")
 
         page.fill("#create-intent", "prompt only baseline")

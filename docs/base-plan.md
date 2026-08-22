@@ -400,6 +400,15 @@ admission path. A logical cancel only cancels queued/running children; completed
 assets remain valid. This is private orchestration and does not add a public
 generation operation.
 
+Poster and character-sheet layouts follow the same rule: a private multi-cut
+planner creates 2..4 ordinary child image jobs with shared Character/Style
+constraints, then a deterministic Composer places the resulting asset IDs into
+a versioned layout. Crop, frames, safe margins, title, caption, and final PNG
+dimensions are deterministic post-processing. Text edits create a new composed
+asset revision from the same child assets and must never regenerate a shot.
+Composer provenance lists every shot as a parent and snapshots the layout and
+cached font hash needed to reproduce the pixels.
+
 ---
 
 ## 6. Capability catalog and model registry

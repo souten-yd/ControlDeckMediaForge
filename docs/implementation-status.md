@@ -1639,3 +1639,43 @@ progress detailにbatch IDが出ると仮定したprobeがtimeoutし、実際の
 実GPUによる4 pose / 4 compositionの視覚品質、ControlDeck broker上での4-child連続
 admission、installed-host iframeでのreconnectはC5まで **NOT TESTED**。fake workerは
 CPU-onlyでありlease不要。ControlDeck変更は不要だった。
+
+## UX2 PR-C4 — multi-cut planner + deterministic Composer (2026-08-22)
+
+Poster / Character Sheetを新しいtop-level appやpublic operationにせず、既存Createの
+Domainとcomposition presetとして追加した。2〜4件のmain/coding/device/chibi shotを
+同じCharacter/Style constraintを持つ通常の`image.generate` child jobへ展開し、完了後に
+CPU-only Composerがversioned layoutのregionへcrop/配置、枠、safe margin、日本語title/
+caption、固定出力寸法を適用する。最終assetは`asset.pack`で、全child assetをlineageと
+hash付きprovenanceに持つ。
+
+日本語fontは環境から選んだNoto Sans CJKをdata dirへSHA-256名で初回cacheし、layout
+snapshotへfont hashを保存する。model/venv内へ置かず、text再編集時も同じcached bytesを
+使う。今回の実測cacheは19,484,784 bytes、SHA-256は
+`b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a`。
+
+隔離data dirの実core（`127.0.0.1:9144`）、別process fake worker、Chromiumで
+`scripts/ux_multicut_composer_c4_e2e.py`を実行した。
+
+```text
+child shots                 3 jobs / 3 assets（main / coding / device）
+final poster                1024x1536 RGBA PNG
+initial SHA-256             b6168adc74b8c34db2090aa1bd8661132490eb060da95d3d065ca6f0e14512fb
+title/caption update        image.generate job delta 0 / final revision +1
+changed SHA-256             ee99bf1ef7f1c2b0789d35096dfa18d61d12c9ab3187e74be218598af2bd09b5
+same layout+children        initial SHA-256と再一致
+lineage                     parent asset 3件がshot asset 3件と完全一致
+mobile viewer               natural 1024x1536 / existing viewerを使用
+browser wall time           4.6 seconds
+320x640 overflow            0 px
+console / page errors       0 / 0
+evidence                    /tmp/mediaforge-c4-evidence-20260822b/
+```
+
+最初のbrowser runではPillow default fontが日本語を豆腐字形にする実不具合を画像で確認した。
+上記のcontent-addressed font cacheへ修正し、2回目の画像で日本語glyphを目視確認した。
+focused testでは2/3/4 shot layoutのbyte-for-byte再現、safe dimensions、hosted workspace
+child path、文字更新時のchild不変を確認した。実GPU shotの視覚的一貫性とinstalled-host
+iframeはC5まで **NOT TESTED**。`./mf.sh test`は255 passed（23.75秒、全command
+25.21秒、最大RSS 248,256 KiB）。これは回帰gateであり、上記の実process/browser観測とは
+区別する。ControlDeck変更は不要だった。

@@ -119,6 +119,30 @@ def test_creative_batch_uses_private_transport_and_restores_children(tmp_path: P
     assert len({plan["pose"]["id"] for plan in restored["result"]["child_plans"]}) == 4
 
 
+def test_multicut_children_use_hosted_job_submission_before_deterministic_composition(tmp_path: Path):
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client, client.websocket_connect("/ws", headers=headers) as socket:
+        created = call(socket, "creative.compositions.create", {
+            "request": generate_input("hosted three-cut poster"),
+            "creative_spec": {"domain": "poster"},
+            "layout": {"template": "poster", "title": "HOSTED", "caption": "three shots", "shot_count": 3},
+        })
+        assert created["ok"] is True
+        for job_id in created["result"]["child_job_ids"]:
+            assert wait_terminal(client, job_id)["status"] == "succeeded"
+        restored = call(socket, "creative.compositions.get", {
+            "composition_id": created["result"]["id"],
+        })
+        provenance = client.get(
+            f"/api/v1/assets/{restored['result']['asset_ids'][0]}/provenance"
+        ).json()
+
+    assert restored["ok"] is True
+    assert restored["result"]["state"] == "succeeded"
+    assert len(restored["result"]["shot_asset_ids"]) == 3
+    assert provenance["parent_asset_ids"] == restored["result"]["shot_asset_ids"]
+
+
 # ── library.list ────────────────────────────────────────────────────────────
 
 
@@ -366,6 +390,9 @@ def test_job_publication_survives_a_failing_listener(tmp_path: Path):
         "models.catalog", "models.install", "models.remove", "models.operations.list",
         "creative.templates", "creative.validate", "creative.batches.create",
         "creative.batches.get", "creative.batches.list", "creative.batches.cancel",
+        "creative.compositions.create", "creative.compositions.get",
+        "creative.compositions.list", "creative.compositions.update_text",
+        "creative.compositions.cancel",
     ],
 )
 def test_new_methods_reject_host_path_strings(tmp_path: Path, method: str):
