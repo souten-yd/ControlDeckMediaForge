@@ -228,6 +228,17 @@ textarea { resize: vertical; min-height: 96px; }
 .edit-action .why { margin-left: auto; font-size: .72rem; color: var(--muted); }
 
 .guarantee { font-size: .78rem; color: var(--accent); }
+.error {
+  font-size: .82rem;
+  font-weight: 600;
+  color: #b3261e;
+  background: rgba(179, 38, 30, .1);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+@media (prefers-color-scheme: dark) { .error { color: #f0a9a2; background: rgba(240, 169, 162, .12); } }
+.dropzone.dragging { border-color: var(--accent); color: var(--accent); }
+#attach-size:empty { display: none; }
 .sub-field { display: grid; gap: 6px; font-size: .8rem; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }

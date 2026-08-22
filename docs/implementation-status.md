@@ -1048,3 +1048,69 @@ theme token の反映・safe_area・route 同期・通知条件
 失敗時の「出口」ボタン
     未実装（PR-U4）。現在は日本語 1 文までで、操作は付いていない。
 ```
+
+### PR-U2 — create experience (IMPLEMENTED, browser-observed 2026-08-22)
+
+作成画面の検証を「GPU を取りに行く前」に寄せ、無視される入力を出さないようにした。
+
+```text
+送信前検証   intent 未記入 / manual なのにモデル未指定 / 16 の倍数でない寸法 /
+             envelope 外 / inpaint でマスク未指定 / 参考画像 1〜3 枚の範囲外 /
+             outpaint が元画像より小さい・広がっていない
+             すべて inline error で止め、import も job 作成も行わない
+寸法の計測   添付時に createImageBitmap でブラウザ側が測る。
+             これが無いと outpaint の可否が受付後にしか分からない
+サイズ欄     出力寸法が元画像で決まる操作（inpaint / reference / variation /
+             multi_reference）では欄ごと隠す。選ばせた値が無視される状態を作らない
+             outpaint では「広げる先の大きさ」に変わり、元画像の寸法を併記する
+目安時間     measured な実測がある場合のみ表示
+ドロップ     画像のドラッグ&ドロップに対応
+```
+
+`<form novalidate>` にした。ブラウザ既定の吹き出しは文言を持てず、モバイルで
+見落としやすいため、検証と表示を `requestProblem()` に一本化している。
+
+#### 実機ブラウザ観測（standalone、Chromium、light と dark の 2 パス）
+
+送信は `page.route` で捕捉して 202 を返し、実際の生成は起こしていない
+（この開発機には実モデルが入っており、本当に投げると GPU を数分占有するため）。
+
+```text
+16 の倍数でない幅 1000      送信されず「幅と高さは 16 の倍数にしてください」
+広がっていない outpaint     送信されず「少なくとも片方の辺を大きくしてください。」
+manual を選んだ送信         model_policy=manual と model_id が載り schema 適合
+既定の送信                  schema 適合 / local_only=true / model_id は載らない
+編集を選んだとき            サイズ欄が消え、外側を広げるときだけ戻る
+console・page error         両パスとも 0 件
+```
+
+捕捉した送信内容は `/data1tb/mediaforge-ux1-evidence/light/submitted-request.json`。
+
+#### 直したこと
+
+```text
+envelope 未取得時に寸法検証が丸ごと無効化されていた
+    standalone や取得失敗時に「16 の倍数」の規則が受付後にしか効かなかった。
+    フォールバック envelope（256〜1024・16 の倍数）を使って必ず検証する。
+目安時間の表示が誤解を招いていた
+    registry の measured_runtime_sec は初回実行（モデル読み込みと
+    カーネルコンパイル込み）の実測 208.82 秒であり、暖まった後の 10〜17 秒台とは
+    別物。「目安 209 秒前後」と出すと大きく外れるため、
+    「初回は約 209 秒（モデルの読み込みを含む実測）。2 回目以降は短くなります。」に変更。
+```
+
+#### 確認したこと
+
+```text
+./mf.sh test   172 passed（UI が投げる code にも日本語文言を要求する試験を追加）
+```
+
+#### NOT TESTED / 未実施
+
+```text
+実際の生成を伴う受付         送信は捕捉して止めているため、GPU 経路は未確認
+installed host での検証       envelope の実値・theme・grant は PR-U7
+筆でマスクを描く経路          未実装（PR-U3）。現在はマスク画像のファイル指定のみ
+outpaint の方向ハンドル       未実装（PR-U3）。現在はプリセットからの寸法指定のみ
+失敗時の出口ボタン            未実装（PR-U4）
+```
