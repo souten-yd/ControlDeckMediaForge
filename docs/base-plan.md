@@ -378,6 +378,20 @@ Conceptual job request:
 
 Engine-specific advanced parameters may exist under a namespaced `engine_options` object, but profiles and agents should avoid relying on them.
 
+### 5.1 Internal creative planning
+
+The workspace may use versioned `CreativeSpec`, `SceneSpec`, `PoseSpec`,
+`CompositionSpec`, `CameraSpec`, `VariationSpec`, and `ReferenceRole` objects.
+They are private planning inputs, not new public generation operations. A
+deterministic compiler resolves trusted data templates into the existing
+`JobRequest` intent/constraints and stores the normalized plan snapshot for
+provenance. Empty/Auto planning must preserve the original request exactly.
+
+Camera is shared by still-image and future video planning. Motion is an
+additive future spec and is not accepted until the G7 runtime is designed.
+Generic templates must not contain sampler, scheduler, kernel, or other
+engine-specific terms.
+
 ---
 
 ## 6. Capability catalog and model registry

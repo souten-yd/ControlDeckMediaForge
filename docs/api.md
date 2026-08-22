@@ -57,6 +57,15 @@ Catalog items also carry validated `media_types` for Settings classification,
 `reclaimable_bytes`, and `profile_reference_count`. Routing never reads
 `media_types`; runtime capability remains authoritative.
 
+Creative planning also remains private. `creative.templates` returns the
+versioned trusted template catalog. `creative.validate` accepts an existing
+JobRequest-shaped object plus an internal CreativeSpec and returns a
+JobRequest-compatible compiled request and normalized plan snapshot. It rejects
+unknown templates, invalid scene/pose combinations, unavailable capabilities,
+and reference roles that do not name request assets before job submission.
+It never introduces `model_id` unless the incoming request already uses
+`model_policy=manual`.
+
 ## Jobs
 
 `POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json).

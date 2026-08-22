@@ -29,6 +29,7 @@ def test_bundle_builder_excludes_heavy_runtime_and_binds_package_identity():
     assert '"provision_args": ["provision"]' in builder
     assert '"health_url": "http://127.0.0.1:9130/health"' in builder
     assert "runtimes/rocm-torch/.venv" not in builder
+    assert 'f"{ROOT / \'creative\'}:creative"' in builder
 
 
 def test_bundle_provision_writes_health_only_after_runtime_gpu_and_model(monkeypatch, tmp_path):
