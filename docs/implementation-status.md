@@ -2400,3 +2400,63 @@ were unchanged. Real H3 generation with this projection, video quality, and a
 release bundle containing this slice are **NOT TESTED**. H3 remains
 Experimental, unhealthy, and unroutable. The next implementation slice is CI-4
 Unified Evaluator; public G7 video work remains deferred.
+
+## Creative Intelligence CI-4 — Unified Evaluator (2026-08-23)
+
+The former binary semantic reviewer and C5 six-axis evaluator now converge on
+one `HostCreativeEvaluator` and the canonical `EvaluationResult` dimensions:
+`intent`, `subject_identity`, `action_state`, `palette`, `composition`, `style`,
+`props_clothing`, and `visual_integrity`. `semantic_review.py` and its binary
+provider schema were removed. The frozen `qa.semantic`,
+`image.semantic_review`, and `semantic_review_exhausted` contract names remain
+compatibility entrances/results, but they no longer select a second reviewer.
+
+Deterministic PNG/edit/outpaint validation still completes first. Normal
+single-candidate generation with `qa.semantic=false` performs no VLM call.
+Explicit comparison and opt-in QA use the same evaluator. Only dimensions
+implied by user controls and reference roles are scored; all other dimensions
+must be null or the provider result fails closed. Acceptance and advisory rank
+derive from that result. Opt-in regeneration consumes only the existing 0..3
+candidate budget, and provenance records scores, issues, strengths, retry
+suggestions, relevant dimensions, review budget used, and capability-level
+evaluator identity. It records no required provider/model identity. If the
+evaluator is unavailable or invalid, deterministic-valid output remains usable
+with an explicit advisory warning.
+
+Focused evaluator, QA, and Creative Intelligence tests passed 30 tests. They
+cover palette-only references not scoring action, role-specific dimensions,
+irrelevant-score rejection, deterministic failure preceding VLM, advisory
+single-candidate behavior, second-candidate acceptance with
+`review_budget_used=2`, bounded exhaustion, evaluator-unavailable degradation,
+and existing C5 result-stage ranking.
+
+For real acceptance, an isolated ControlDeck on port 18776 and source Media
+Forge on port 19131 used a normal login, bridge handshake, and Host-issued
+service identity. Two deterministic 192x192 imported PNG candidates were sent
+through the existing `creative.evaluate` workspace method. The request
+completed in 18.338 seconds, returned two advisory ranked results, requested no
+regeneration, and populated only `intent` and `visual_integrity`; the other six
+canonical scores were null. Both candidates were accepted with rank score 100.
+This is transport/schema/ranking evidence for deliberately simple fixtures, not
+a broad subjective-quality benchmark.
+
+The isolated Host audit DB contained exactly two successful
+`addon.runtime.ai.complete` entries, each with only capability
+`vision.analyze`. Broker active leases and waiting requests were both zero.
+The ControlDeck-selected text/vision runtime was unloaded, ports 18776, 19131,
+and 8096 were closed, the shared Add-on registry was restored byte-for-byte to
+its pre-test normalized v0.3.2 manifest, and installed port 9130 remained
+healthy. ControlDeck source changes were zero; the pre-existing
+`frontend/tsconfig.tsbuildinfo` modification was untouched.
+
+Installed-bundle browser behavior, release bundle creation, real FLUX candidate
+evaluation, and subjective ranking across complex reference roles are **NOT
+TESTED** in this slice. Public schemas, `addon.json`, agent tools, workflow
+executors, and asset/provenance contracts were unchanged. Hosted CI was not
+used. The next slice is G4 Coding Agent project/output grant placement; G7 video
+remains deferred.
+
+The final full local regression gate for this worktree was
+`336 passed, 1 warning in 32.36s`. This is regression evidence and is not
+substituted for the real Host bridge, AI audit, process, or cleanup observations
+above.

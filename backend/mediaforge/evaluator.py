@@ -4,27 +4,46 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from .creative_intelligence import EvaluationResult, EvaluationScores
 from .host.ai import HostAIError, HostAIGateway
 from .host.client import HostIdentity
 from .vision import VisionInputError, vision_message
 
 
-SCORE_NAMES = (
-    "identity_match", "style_match", "pose_action_match", "scene_match",
-    "composition_match", "obvious_visual_breakage",
+EvaluationDimension = Literal[
+    "intent",
+    "subject_identity",
+    "action_state",
+    "palette",
+    "composition",
+    "style",
+    "props_clothing",
+    "visual_integrity",
+]
+EVALUATION_DIMENSIONS: tuple[EvaluationDimension, ...] = (
+    "intent",
+    "subject_identity",
+    "action_state",
+    "palette",
+    "composition",
+    "style",
+    "props_clothing",
+    "visual_integrity",
 )
-EVALUATION_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        **{name: {"type": "integer", "minimum": 0, "maximum": 100} for name in SCORE_NAMES},
-        "summary": {"type": "string", "maxLength": 300},
-    },
-    "required": [*SCORE_NAMES, "summary"],
-    "additionalProperties": False,
+MIN_ACCEPTED_SCORE = 0.55
+_ROLE_DIMENSIONS: dict[str, EvaluationDimension] = {
+    "identity": "subject_identity",
+    "style": "style",
+    "pose": "action_state",
+    "composition": "composition",
+    "clothing": "props_clothing",
+    "palette": "palette",
+    "prop": "props_clothing",
+    "environment": "composition",
 }
 
 
@@ -42,6 +61,16 @@ class EvaluationRequest(BaseModel):
             raise ValueError("creative evaluation accepts asset IDs only")
         if len(set(self.asset_ids)) != len(self.asset_ids):
             raise ValueError("creative evaluation candidates must be unique")
+        if len(set(self.reference_asset_ids)) != len(self.reference_asset_ids):
+            raise ValueError("creative evaluation references must be unique")
+        roles = self.creative_plan.get("reference_roles", [])
+        if isinstance(roles, list) and any(
+            isinstance(item, dict)
+            and isinstance(item.get("asset_id"), str)
+            and item["asset_id"] not in self.reference_asset_ids
+            for item in roles
+        ):
+            raise ValueError("creative evaluation role references an unavailable asset")
         encoded_plan = json.dumps(
             self.creative_plan, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
@@ -50,22 +79,47 @@ class EvaluationRequest(BaseModel):
         return self
 
 
-@dataclass(frozen=True)
-class CreativeScore:
-    scores: dict[str, int]
-    summary: str
-    evaluator: str
+BoundedIssue = Annotated[str, Field(min_length=1, max_length=300)]
 
-    @property
-    def rank_score(self) -> float:
-        positive = sum(self.scores[name] for name in SCORE_NAMES[:-1]) / 5
-        return round(positive - self.scores["obvious_visual_breakage"] * 0.5, 3)
+
+class _EvaluationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scores: EvaluationScores
+    issues: list[BoundedIssue] = Field(max_length=32)
+    strengths: list[BoundedIssue] = Field(max_length=32)
+    retry_suggestions: list[BoundedIssue] = Field(max_length=16)
 
 
 class CreativeEvaluationError(RuntimeError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+@dataclass(frozen=True)
+class EvaluatedCandidate:
+    result: EvaluationResult
+    evaluator: str
+    relevant_dimensions: tuple[EvaluationDimension, ...]
+
+    @property
+    def rank_score(self) -> float:
+        values = [
+            value
+            for name in self.relevant_dimensions
+            if (value := getattr(self.result.scores, name)) is not None
+        ]
+        return round(sum(values) * 100 / len(values), 3) if values else 0.0
+
+    @property
+    def summary(self) -> str:
+        values = (
+            self.result.strengths
+            if self.result.accepted_for_requested_constraints
+            else self.result.issues
+        )
+        return "; ".join(values[:2]) or "評価できる説明はありません。"
 
 
 class CreativeEvaluator(Protocol):
@@ -79,10 +133,77 @@ class CreativeEvaluator(Protocol):
         creative_plan: dict[str, Any],
         reference_paths: tuple[Path, ...] = (),
         identity: HostIdentity | None = None,
-    ) -> CreativeScore: ...
+    ) -> EvaluatedCandidate: ...
+
+
+def relevant_dimensions(
+    creative_plan: dict[str, Any], *, has_references: bool
+) -> tuple[EvaluationDimension, ...]:
+    selected: set[EvaluationDimension] = {"intent", "visual_integrity"}
+    roles = creative_plan.get("reference_roles", [])
+    if isinstance(roles, list):
+        for value in roles:
+            if isinstance(value, dict) and isinstance(value.get("role"), str):
+                dimension = _ROLE_DIMENSIONS.get(value["role"])
+                if dimension is not None:
+                    selected.add(dimension)
+    if has_references and len(selected) == 2:
+        # Role-less legacy references still ask for broad subject/style consistency.
+        selected.update(("subject_identity", "style"))
+
+    def active(section: str) -> bool:
+        value = creative_plan.get(section)
+        if isinstance(value, str):
+            return value not in {"", "auto"}
+        if not isinstance(value, dict):
+            return False
+        return any(
+            item not in (None, "", "auto", False, [], {})
+            for key, item in value.items()
+            if key not in {"label", "version", "prompt"}
+        )
+
+    if active("pose") or active("action_state"):
+        selected.add("action_state")
+    if active("scene") or active("composition") or active("camera"):
+        selected.add("composition")
+    if active("domain") or active("style"):
+        selected.add("style")
+    return tuple(name for name in EVALUATION_DIMENSIONS if name in selected)
+
+
+def _evaluation_schema() -> dict[str, Any]:
+    nullable_score = {
+        "anyOf": [
+            {"type": "number", "minimum": 0, "maximum": 1},
+            {"type": "null"},
+        ]
+    }
+    bounded_strings = {
+        "type": "array",
+        "items": {"type": "string", "minLength": 1, "maxLength": 300},
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "scores": {
+                "type": "object",
+                "properties": {name: nullable_score for name in EVALUATION_DIMENSIONS},
+                "required": list(EVALUATION_DIMENSIONS),
+                "additionalProperties": False,
+            },
+            "issues": {**bounded_strings, "maxItems": 32},
+            "strengths": {**bounded_strings, "maxItems": 32},
+            "retry_suggestions": {**bounded_strings, "maxItems": 16},
+        },
+        "required": ["scores", "issues", "strengths", "retry_suggestions"],
+        "additionalProperties": False,
+    }
 
 
 class HostCreativeEvaluator:
+    """The one product evaluator for advisory ranking and bounded QA retry."""
+
     def __init__(self, gateway: HostAIGateway, *, timeout_sec: float = 120.0):
         self.gateway = gateway
         self.timeout_sec = timeout_sec
@@ -103,48 +224,66 @@ class HostCreativeEvaluator:
         creative_plan: dict[str, Any],
         reference_paths: tuple[Path, ...] = (),
         identity: HostIdentity | None = None,
-    ) -> CreativeScore:
+    ) -> EvaluatedCandidate:
         if identity is None or "ai.inference" not in identity.granted_capabilities:
-            raise CreativeEvaluationError("host_ai_not_granted", "ControlDeck AI access is not granted")
+            raise CreativeEvaluationError(
+                "host_ai_not_granted", "ControlDeck AI access is not granted"
+            )
+        dimensions = relevant_dimensions(creative_plan, has_references=bool(reference_paths))
         plan = json.dumps(
             creative_plan, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         )[:4000]
         prompt = (
-            "The first image is one generated candidate. The optional second image is a sheet of identity/style "
-            "references. Score each named criterion from 0 to 100. Higher is better except "
-            "obvious_visual_breakage, where 0 means no visible breakage and 100 means severe breakage. "
-            "Return exactly the requested scores plus a short summary. Use the intent when a reference is absent. "
-            f"This is advisory ranking only. User intent: {intent}. Creative plan: {plan}"
+            "The first image is one generated candidate. The optional second image is a bounded sheet of "
+            "references. Evaluate only these requested dimensions: "
+            + ", ".join(dimensions)
+            + ". Return a 0..1 score for each requested dimension and null for every other score. "
+            "visual_integrity means absence of visible breakage, so higher is always better. "
+            "List concise issues, strengths, and actionable retry suggestions. Deterministic file and edit "
+            "validators already ran and are authoritative; do not claim to override them. "
+            f"User intent: {intent}. Creative plan: {plan}"
         )
         try:
-            result = await self.gateway.complete(
+            response = await self.gateway.complete(
                 identity,
                 "vision.analyze",
                 [vision_message(prompt, path, reference_paths)],
                 response_format={
                     "type": "json_schema",
-                    "name": "mediaforge_creative_evaluation",
-                    "schema": EVALUATION_SCHEMA,
+                    "name": "mediaforge_unified_evaluation",
+                    "schema": _evaluation_schema(),
                     "strict": True,
                 },
-                max_tokens=512,
+                max_tokens=1024,
                 timeout_seconds=max(1, min(300, int(self.timeout_sec))),
             )
-            body = json.loads(result.content)
-            scores = {name: body[name] for name in SCORE_NAMES}
-            summary = body["summary"]
-            if any(
-                not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 100
-                for value in scores.values()
-            ):
-                raise TypeError("creative evaluator scores are invalid")
-            if not isinstance(summary, str) or len(summary) > 300:
-                raise TypeError("creative evaluator summary is invalid")
+            payload = _EvaluationPayload.model_validate(json.loads(response.content))
+            for name in EVALUATION_DIMENSIONS:
+                value = getattr(payload.scores, name)
+                if (name in dimensions) != (value is not None):
+                    raise ValueError("evaluator populated the wrong dimensions")
         except HostAIError as exc:
             code = "vision_result_invalid" if exc.code == "host_ai_invalid_response" else exc.code
             raise CreativeEvaluationError(code, str(exc)) from exc
-        except (VisionInputError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        except (VisionInputError, json.JSONDecodeError, ValidationError, TypeError, ValueError) as exc:
             raise CreativeEvaluationError(
                 "vision_result_invalid", "ControlDeck returned an invalid vision result"
             ) from exc
-        return CreativeScore(scores=scores, summary=summary, evaluator="control-deck:vision.analyze")
+
+        accepted = all(
+            (getattr(payload.scores, name) or 0.0) >= MIN_ACCEPTED_SCORE
+            for name in dimensions
+        )
+        result = EvaluationResult(
+            accepted_for_requested_constraints=accepted,
+            scores=payload.scores,
+            issues=payload.issues,
+            strengths=payload.strengths,
+            retry_suggestions=payload.retry_suggestions,
+            review_budget_used=1,
+        )
+        return EvaluatedCandidate(
+            result=result,
+            evaluator="control-deck:vision.analyze",
+            relevant_dimensions=dimensions,
+        )

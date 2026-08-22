@@ -15,6 +15,7 @@ from typing import Any
 from . import __version__
 from .config import REPOSITORY_ROOT
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
+from .evaluator import CreativeEvaluationError, CreativeEvaluator
 from .host.client import ControlDeckHostClient, HostApiError
 from .host.jobs import HostExecution, HostJobReporter
 from .host.resources import fake_image_request, image_model_request
@@ -24,7 +25,6 @@ from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .profiles import profile_prompt
 from .routing import ModelRouteError, route_model
-from .semantic_review import HostSemanticReviewer, SemanticReviewError, SemanticReviewer
 from .store import Store, utc_now
 from .validators import validate_png
 
@@ -68,7 +68,7 @@ class JobManager:
         model_store_root: Path | None = None,
         hf_home: Path | None = None,
         image_runtime_python: Path | None = None,
-        semantic_reviewer: SemanticReviewer | None = None,
+        creative_evaluator: CreativeEvaluator | None = None,
     ):
         self.store = store
         self.worker_timeout_sec = worker_timeout_sec
@@ -79,7 +79,7 @@ class JobManager:
         self.model_store_root = model_store_root
         self.hf_home = hf_home
         self.image_runtime_python = image_runtime_python
-        self.semantic_reviewer = semantic_reviewer
+        self.creative_evaluator = creative_evaluator
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
         self._runner: asyncio.Task[None] | None = None
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
@@ -756,7 +756,7 @@ class JobManager:
         await self._update(job_id, reporter, phase="postprocess", progress=0.65)
         try:
             asset_ids = await self._register_outputs(job, response, job_root)
-        except SemanticReviewError as exc:
+        except CreativeEvaluationError as exc:
             await self._update(
                 job_id,
                 reporter,
@@ -1071,7 +1071,7 @@ class JobManager:
             ))
         return path, width, height, validation
 
-    async def _semantic_selection(
+    async def _evaluation_selection(
         self,
         job: Job,
         outputs: list[dict[str, Any]],
@@ -1081,48 +1081,79 @@ class JobManager:
             return list(range(len(outputs))), {}
         execution = self._host_executions.get(job.id)
         identity = execution.identity if execution is not None else None
-        if (
-            isinstance(self.semantic_reviewer, HostSemanticReviewer)
-            and (identity is None or "ai.inference" not in identity.granted_capabilities)
-        ):
-            raise SemanticReviewError(
-                "host_ai_not_granted", "ControlDeck AI access is not granted"
-            )
-        if self.semantic_reviewer is None or not await self.semantic_reviewer.available(identity):
-            raise SemanticReviewError(
-                "vision_analyzer_unavailable", "ControlDeck vision analyzer is unavailable"
-            )
         target_count = job.request.output.count
         retry_budget = job.request.qa.max_regeneration_attempts
+        if self.creative_evaluator is None or not await self.creative_evaluator.available(identity):
+            selected = list(range(target_count))
+            return selected, {
+                index: (
+                    {
+                        "validator": "evaluation.unified",
+                        "passed": True,
+                        "available": False,
+                        "reason": "vision_analyzer_unavailable",
+                    },
+                    ["unified evaluator unavailable; deterministic validation passed"],
+                    "",
+                )
+                for index in selected
+            }
         snapshot = self.store.job_profile_snapshot(job.id)
         reference_paths = tuple(
             self.store.asset_path(str(asset_id))
             for asset_id in snapshot.get("reference_asset_ids", [])
         )
+        creative_plan = job.request.constraints.get("creative_plan", {})
+        if not isinstance(creative_plan, dict):
+            creative_plan = {}
         selected: list[int] = []
         reviews: dict[int, tuple[dict[str, Any], list[str], str]] = {}
         rejected = 0
+        review_budget_used = 0
         for index, (path, _, _, _) in enumerate(validated):
-            result = await self.semantic_reviewer.review(
-                path,
-                job.request.intent,
-                reference_paths=reference_paths,
-                identity=identity,
-            )
+            try:
+                evaluated = await self.creative_evaluator.evaluate(
+                    path,
+                    job.request.intent,
+                    creative_plan=creative_plan,
+                    reference_paths=reference_paths,
+                    identity=identity,
+                )
+            except CreativeEvaluationError as exc:
+                selected.extend(
+                    candidate for candidate in range(index, len(validated))
+                    if candidate not in selected
+                )
+                selected = selected[:target_count]
+                for candidate in selected:
+                    reviews.setdefault(candidate, (
+                        {
+                            "validator": "evaluation.unified",
+                            "passed": True,
+                            "available": False,
+                            "reason": exc.code,
+                        },
+                        ["unified evaluator unavailable; deterministic validation passed"],
+                        "",
+                    ))
+                return selected, reviews
+            review_budget_used += 1
+            result = evaluated.result.model_copy(update={"review_budget_used": review_budget_used})
             validation = {
-                "validator": "semantic.advisory",
-                "passed": result.accepted,
-                "summary": result.summary,
+                "validator": "evaluation.unified",
+                "passed": result.accepted_for_requested_constraints,
+                "evaluation": result.model_dump(mode="json"),
+                "relevant_dimensions": list(evaluated.relevant_dimensions),
             }
-            if result.accepted:
+            if result.accepted_for_requested_constraints:
                 selected.append(index)
-                reviews[index] = (validation, [], result.reviewer)
+                reviews[index] = (validation, [], evaluated.evaluator)
             elif retry_budget == 0:
                 selected.append(index)
                 reviews[index] = (
                     validation,
-                    [f"semantic review advisory: {result.summary}"],
-                    result.reviewer,
+                    [f"evaluation advisory: {evaluated.summary}"],
+                    evaluated.evaluator,
                 )
             else:
                 rejected += 1
@@ -1155,14 +1186,14 @@ class JobManager:
         # Complete every deterministic validation before invoking a subjective
         # reviewer. A semantic pass can therefore never mask file/invariant failure.
         validated = [self._validate_output(job, output, job_root) for output in outputs]
-        selected, semantic = await self._semantic_selection(job, outputs, validated)
+        selected, evaluations = await self._evaluation_selection(job, outputs, validated)
         asset_ids: list[str] = []
         self.store.update_job(job.id, phase="validate", progress=0.75)
         for result_index, candidate_index in enumerate(selected):
             output = outputs[candidate_index]
             path, width, height, validation = validated[candidate_index]
             sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
-            review_validation, warnings, reviewer = semantic.get(candidate_index, ({}, [], ""))
+            review_validation, warnings, reviewer = evaluations.get(candidate_index, ({}, [], ""))
             if review_validation:
                 validation.append(review_validation)
             now = utc_now()
@@ -1201,7 +1232,7 @@ class JobManager:
                 tool_versions={
                     "media-forge": __version__,
                     "validator.png": "1.0.0",
-                    **({"reviewer.semantic": reviewer} if reviewer else {}),
+                    **({"evaluator.unified": reviewer} if reviewer else {}),
                 },
                 seed=int(output.get("seed", response["seed"])),
                 parameters={

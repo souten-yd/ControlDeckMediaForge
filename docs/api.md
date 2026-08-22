@@ -153,21 +153,25 @@ It reports text generation, single-reference edit, multi-reference edit,
 inpaint, outpaint, variation, and strict edit independently from installed measured model capabilities and never
 exposes the automatically selected model ID.
 
-`image.semantic_review` is available only for a Host-authenticated execution when
-ControlDeck grants `ai.inference` and its provider-neutral `vision.analyze` capability has a
-compatible target. Media Forge does not contain a provider URL, model name, or local-provider
-fallback. `qa.semantic=false` never calls Host AI. With semantic review
-enabled and `max_regeneration_attempts=0`, a subjective rejection is advisory:
-the deterministic-valid asset succeeds with a provenance warning. A positive
-retry budget is explicit opt-in; Media Forge creates only that many additional
-candidates, selects the first accepted candidate, and fails with
-`semantic_review_exhausted` when the bounded candidates are all rejected.
-Deterministic validation completes first and can never be overridden by a
-semantic pass. Candidate/reference images are normalized to bounded data URLs before the scoped
-Host call; ControlDeck owns provider, runtime, model selection, lifecycle, and admission. Host AI
-failures are normalized as `host_ai_not_granted`, `vision_analyzer_unavailable`,
-`host_ai_unavailable`, or `vision_result_invalid`. Standalone prompt-only generation remains
-available, while standalone semantic review is unavailable because it has no Host identity.
+`image.semantic_review` is the frozen compatibility capability for the unified
+evaluator. It is available only for a Host-authenticated execution when
+ControlDeck grants `ai.inference` and its provider-neutral `vision.analyze`
+capability has a compatible target. Media Forge contains no provider URL, model
+name, or local-provider fallback. `qa.semantic=false` never calls Host AI. When
+enabled, the evaluator emits the canonical `EvaluationResult` dimensions and
+scores only constraints/reference roles relevant to that request. With
+`max_regeneration_attempts=0`, a subjective rejection is advisory and the
+deterministic-valid asset succeeds with a provenance warning. A positive retry
+budget is explicit opt-in; Media Forge creates only that many additional
+candidates, selects the first accepted candidate, and retains the frozen
+`semantic_review_exhausted` error when all bounded candidates are rejected.
+
+Deterministic validation completes first and can never be overridden by a VLM
+score. If the evaluator is unavailable or its response is invalid, a
+deterministically valid generated asset remains usable and records an advisory
+warning. Candidate/reference images are normalized to bounded data URLs before
+the scoped Host call; ControlDeck owns provider, runtime, model selection,
+lifecycle, and admission. Standalone prompt-only generation remains available.
 
 ## Models
 

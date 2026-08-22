@@ -5,13 +5,20 @@ from collections import deque
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from conftest import fake_settings, wait_terminal
 from mediaforge.app import create_app
+from mediaforge.creative_intelligence import EvaluationResult, EvaluationScores
 from PIL import Image
 
-from mediaforge.evaluator import CreativeScore, HostCreativeEvaluator
+from mediaforge.evaluator import (
+    CreativeEvaluationError,
+    EvaluatedCandidate,
+    HostCreativeEvaluator,
+    relevant_dimensions,
+)
 from mediaforge.host.client import HostIdentity
 
 
@@ -49,21 +56,22 @@ class Evaluator:
         creative_plan: dict,
         reference_paths: tuple[Path, ...] = (),
         identity=None,
-    ) -> CreativeScore:
+    ) -> EvaluatedCandidate:
         del identity, creative_plan, reference_paths, intent
         self.calls.append(path)
         value = self.values.popleft()
-        return CreativeScore(
-            scores={
-                "identity_match": value,
-                "style_match": value,
-                "pose_action_match": value,
-                "scene_match": value,
-                "composition_match": value,
-                "obvious_visual_breakage": 100 - value,
-            },
-            summary=f"score {value}",
+        score = value / 100
+        return EvaluatedCandidate(
+            result=EvaluationResult(
+                accepted_for_requested_constraints=score >= 0.55,
+                scores=EvaluationScores(intent=score, visual_integrity=score),
+                issues=[] if score >= 0.55 else [f"score {value}"],
+                strengths=[f"score {value}"] if score >= 0.55 else [],
+                retry_suggestions=[],
+                review_budget_used=1,
+            ),
             evaluator="test-vlm",
+            relevant_dimensions=("intent", "visual_integrity"),
         )
 
 
@@ -83,21 +91,103 @@ class Gateway:
 def test_host_evaluator_is_provider_neutral_bounded_and_advisory(tmp_path: Path):
     image = tmp_path / "candidate.png"
     Image.new("RGB", (32, 32), "orange").save(image)
-    body = {name: 80 for name in (
-        "identity_match", "style_match", "pose_action_match", "scene_match", "composition_match"
-    )}
-    body.update({"obvious_visual_breakage": 5, "summary": "good", "provider": "ignored"})
+    body = {
+        "scores": {
+            "intent": 0.8,
+            "subject_identity": None,
+            "action_state": 0.8,
+            "palette": None,
+            "composition": None,
+            "style": None,
+            "props_clothing": None,
+            "visual_integrity": 0.95,
+        },
+        "issues": [],
+        "strengths": ["good"],
+        "retry_suggestions": [],
+    }
     gateway = Gateway(body)
     evaluator = HostCreativeEvaluator(gateway)  # type: ignore[arg-type]
     score = asyncio.run(evaluator.evaluate(
         image, "wave", creative_plan={"pose": "wave"}, identity=IDENTITY
     ))
     assert score.evaluator == "control-deck:vision.analyze"
+    assert score.result.accepted_for_requested_constraints is True
     _, capability, messages, kwargs = gateway.calls[0]
     assert capability == "vision.analyze"
-    assert "advisory ranking only" in messages[0]["content"][0]["text"]
-    assert kwargs["response_format"]["schema"]["properties"]["obvious_visual_breakage"]["maximum"] == 100
+    assert "Deterministic file and edit validators already ran" in messages[0]["content"][0]["text"]
+    score_schema = kwargs["response_format"]["schema"]["properties"]["scores"]
+    assert score_schema["properties"]["visual_integrity"]["anyOf"][0]["maximum"] == 1
     assert "model" not in kwargs and "provider" not in kwargs
+
+
+def test_palette_only_reference_does_not_score_or_penalize_action(tmp_path: Path):
+    image = tmp_path / "candidate.png"
+    reference = tmp_path / "palette.png"
+    Image.new("RGB", (32, 32), "orange").save(image)
+    Image.new("RGB", (32, 32), "blue").save(reference)
+    body = {
+        "scores": {
+            "intent": 0.9,
+            "subject_identity": None,
+            "action_state": None,
+            "palette": 0.8,
+            "composition": None,
+            "style": None,
+            "props_clothing": None,
+            "visual_integrity": 0.9,
+        },
+        "issues": [],
+        "strengths": ["palette matches"],
+        "retry_suggestions": [],
+    }
+    evaluator = HostCreativeEvaluator(Gateway(body))  # type: ignore[arg-type]
+    evaluated = asyncio.run(evaluator.evaluate(
+        image,
+        "use the reference palette",
+        creative_plan={"reference_roles": [{"role": "palette"}]},
+        reference_paths=(reference,),
+        identity=IDENTITY,
+    ))
+
+    assert evaluated.relevant_dimensions == ("intent", "palette", "visual_integrity")
+    assert evaluated.result.scores.action_state is None
+    assert evaluated.result.accepted_for_requested_constraints is True
+
+
+def test_evaluator_rejects_scores_for_irrelevant_dimensions(tmp_path: Path):
+    image = tmp_path / "candidate.png"
+    Image.new("RGB", (32, 32), "orange").save(image)
+    body = {
+        "scores": {
+            "intent": 0.9,
+            "subject_identity": None,
+            "action_state": 0.9,
+            "palette": None,
+            "composition": None,
+            "style": None,
+            "props_clothing": None,
+            "visual_integrity": 0.9,
+        },
+        "issues": [],
+        "strengths": ["good"],
+        "retry_suggestions": [],
+    }
+    evaluator = HostCreativeEvaluator(Gateway(body))  # type: ignore[arg-type]
+
+    with pytest.raises(CreativeEvaluationError) as caught:
+        asyncio.run(evaluator.evaluate(image, "orange", creative_plan={}, identity=IDENTITY))
+    assert caught.value.code == "vision_result_invalid"
+
+
+def test_relevant_dimensions_follow_reference_roles_and_explicit_controls():
+    assert relevant_dimensions(
+        {
+            "reference_roles": [{"role": "pose"}, {"role": "clothing"}],
+            "composition": {"id": "centered"},
+        },
+        has_references=True,
+    ) == ("intent", "action_state", "composition", "props_clothing", "visual_integrity")
 
 
 def test_candidate_evaluation_ranks_without_regeneration(tmp_path: Path):

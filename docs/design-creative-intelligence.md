@@ -344,7 +344,8 @@ Analysis proposes roles; it does not silently rewrite profiles. A user can accep
 
 A VLM evaluator cannot judge a candidate that does not yet exist. It runs only after a generated/existing image is available.
 
-The current C5 evaluator and the older binary semantic reviewer overlap. The target architecture is one product-level evaluator path:
+Before CI-4, the C5 evaluator and older binary semantic reviewer overlapped.
+They now use one product-level evaluator path:
 
 ```text
 deterministic validators (authoritative)
