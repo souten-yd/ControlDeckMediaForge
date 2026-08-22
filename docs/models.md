@@ -182,7 +182,21 @@ VRAM overflow alone is not a rejection if measured wall time is practical,
 host RAM retains safe headroom, and swap does not grow continuously. Persistent
 swap thrashing, an unbounded load, or a worker/runtime crash rejects the route.
 The GGUF descriptor remains `experimental`, `measurement_confidence=low`, and
-CUDA-only in routing metadata until this exact R9700 run succeeds.
+unroutable until this exact R9700 run succeeds.
+
+Pinned stable-diffusion.cpp commit `97d2990` was built locally with ROCm 7.2.1,
+HIPBLAS, gfx1201-only code generation, Release mode, and build parallelism one.
+Configure took 2.59 seconds and the build took 539.64 seconds; the latter used
+7,153,248 KiB maximum RSS. The resulting CLI enumerated the R9700 as `ROCm0`
+with 32,624 MiB VRAM in 0.06 seconds. It requires the runtime-local ROCm OpenMP
+library directory in its library search path; installing or copying that
+library into ControlDeck was deliberately avoided.
+
+No H3 tensors have yet been loaded. At the preflight point only
+27,586,805,760 of 32,605,573,120 host RAM bytes were available and swap already
+held 1,516,511,232 bytes, so full CPU offload is not presumed safe. The next
+evaluation must compare bounded placement while sampling RSS, swap I/O, and
+R9700 VRAM under a real ControlDeck lease.
 
 The upstream MiniMax H3 Community License dated 2026-08-02 is not treated as a
 permissive default. Its applicable-territory, commercial authorization,
@@ -206,7 +220,8 @@ projection, and real H3 generation remain **NOT TESTED**.
 1. H3 is a synchronized audio-video and first/last-frame comparison candidate.
 2. It requires a new isolated stable-diffusion.cpp native adapter; no existing
    Media Forge worker supports it.
-3. R9700/gfx1201 reliability is **NOT TESTED**.
+3. The native runtime builds and enumerates R9700/gfx1201, but H3 load and
+   generation reliability are **NOT TESTED**.
 4. VRAM phases, load/generation time, and failure rate are **NOT TESTED**.
 5. The pinned weights use the MiniMax H3 Community License; the UI does not
    simplify it to an open-source identifier.
@@ -215,8 +230,8 @@ projection, and real H3 generation remain **NOT TESTED**.
 7. Quality and maintenance benefit over Wan/LTX candidates is **NOT TESTED**.
 8. A future implementation must be a bounded cancellable worker; **NOT TESTED**.
 9. The BF16 runtime includes custom Python and multi-GPU assumptions. The GGUF
-   candidate uses a pinned native runtime with a documented HIPBLAS build; H3
-   execution on gfx1201 is still **NOT TESTED**.
+   candidate's pinned native HIPBLAS runtime now builds for and enumerates
+   gfx1201; H3 tensor load and execution are still **NOT TESTED**.
 10. Yes. It remains behind generic video capabilities and can be deleted from
     the catalog without changing any public API.
 

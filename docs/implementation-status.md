@@ -2091,12 +2091,43 @@ audio VAE     8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48
 ```
 
 This proves bounded download, verification, and installation only. The pinned
-stable-diffusion.cpp HIPBLAS build, R9700 runtime, VRAM/RAM/swap measurements,
-output quality, runtime cancellation, and prompt-recipe Gateway projection are
-still **NOT TESTED**. Runtime evaluation may use bounded CPU/RAM offload even
+stable-diffusion.cpp runtime was then fetched at exact commit
+`97d2990807fe6d558e395f8764198d7c7e7b411c` with pinned shallow submodules and
+configured for HIPBLAS/gfx1201. The documented `clang` command first failed in
+0.18 seconds because clang was not on `PATH`; using the ROCm 7.2.1 compiler at
+`/opt/rocm-7.2.1/lib/llvm/bin/{clang,clang++}` configured successfully in 2.59
+seconds. A single-parallel Release build completed in 539.64 seconds with
+7,153,248 KiB maximum RSS. The runtime tree occupied 1,233,055,744 bytes and
+the resulting `sd-cli` SHA-256 was
+`7c2aebea172e4199da1307769a1b6dc38cecd73c102e3262351283702ed7de03`.
+
+The first CLI smoke correctly exposed a missing runtime search path for
+ROCm's `libomp.so`; no system library was installed. With the isolated runtime
+library path `/opt/rocm-7.2.1/lib/llvm/lib:/opt/rocm-7.2.1/lib`, `sd-cli
+--help` succeeded and `--list-devices` completed in 0.06 seconds / 86,796 KiB
+maximum RSS. It reported the R9700 as `ROCm0`, gfx1201, 32,624 MiB VRAM, plus
+the integrated gfx1036 GPU as a separate `ROCm1`; future evaluation must pin
+the R9700 explicitly.
+
+Immediately before inference, the host had 32,605,573,120 total RAM,
+27,586,805,760 available RAM, and 1,516,511,232 bytes of swap already used.
+The 26.98GB weight set therefore leaves too little evidence to assume that
+full `--offload-to-cpu` will be practical. A mixed/streamed placement may still
+be viable, but must be measured rather than inferred.
+
+R9700 model load/generation, VRAM execution phases, RAM/swap deltas, output
+quality, runtime cancellation, and prompt-recipe Gateway projection are still
+**NOT TESTED**. They were not run directly because every GPU evaluation must
+hold a ControlDeck lease, while this catalog slice does not yet provide an H3
+worker/evaluator capable of receiving a Host service identity, creating its
+Host Job, renewing the lease, and releasing it. An unauthenticated resource
+probe returned HTTP 401 as designed; no token was forged, signing key read, or
+unrelated model lease reused. Runtime evaluation may use bounded CPU/RAM offload even
 when working memory exceeds 32GB VRAM, but only practical measured wall time,
 safe RAM headroom, and absence of sustained swap thrashing can make that route
 eligible. The 32,000,000,000-byte managed-artifact limit remains unchanged.
-After recording this checkpoint, the local full `./mf.sh test` gate reported
-309 passed and one dependency deprecation warning in 25.47 seconds. Hosted CI
+After recording the download checkpoint, the local full `./mf.sh test` gate
+reported 309 passed and one dependency deprecation warning in 25.47 seconds.
+After the runtime/device evidence update, the final local full gate reported
+the same 309 passed and one warning in 26.30 seconds. Hosted CI
 was not used, and ControlDeck repository changes remain zero.

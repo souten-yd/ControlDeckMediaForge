@@ -11,8 +11,8 @@
 最終更新    2026-08-23
 ブランチ    video/minimax-h3-catalog
 PR          MiniMax H3 bounded catalog #57 open（commit 9162eb8以降）
-状態        MiniMax H3 GGUFのNVMe導入・SHA検証済み、ROCm runtime評価中
-基準値      ./mf.sh test = 309 passed（25.47秒）
+状態        H3 GGUF導入・gfx1201 HIPBLAS build/device probe済み、lease対応推論は未実施
+基準値      ./mf.sh test = 309 passed（26.30秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
@@ -94,7 +94,10 @@ PR          MiniMax H3 bounded catalog #57 open（commit 9162eb8以降）
      第1候補をunsloth FL2VA UD-Q2 GGUF composite 26.98GBへ変更した。
      operation `modelop_0dfc422e9d9d480a996e02ba552d6b89` は49分00秒でready。
      独立SHAは4ファイル全一致（17.49秒）、snapshot 26,978,361,344 bytes、
-     実測後も`experimental / healthy=no`。次はpinned stable-diffusion.cpp HIPBLAS build。
+     pinned stable-diffusion.cpp `97d2990`をROCm 7.2.1/gfx1201でbuild済み（539.64秒）。
+     `sd-cli --list-devices`はR9700をROCm0/32,624MiBとして列挙（0.06秒）。
+     H3 load/generateはHost lease対応evaluatorが未実装のためNOT TESTED。token偽造やlease流用はしない。
+     実測後も`experimental / healthy=no`。次はlease acquire/renew/cancel/releaseを備えたbounded evaluator。
      公式prompt-writing skillはMarkdownと参照guideだけで外部APIを呼ばない。次スライスで
      prompt recipeの版固定・構造化projectionを実装する。任意skill実行経路は作らない。
      skillをHostへ任意実行させず、版固定したprompt recipeをMedia Forgeが構造化messageとして
