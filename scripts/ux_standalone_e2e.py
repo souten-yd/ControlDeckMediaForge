@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import struct
 import time
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +39,26 @@ class Failure(AssertionError):
 def check(condition: bool, message: str) -> None:
     if not condition:
         raise Failure(message)
+
+
+def write_sample_png(path: Path) -> None:
+    """Write a dependency-free 64x64 RGB fixture for upload/edit checks."""
+    width = height = 64
+    rows = b"".join(
+        b"\x00" + bytes((240, 120 + y, 32)) * width
+        for y in range(height)
+    )
+
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        body = kind + payload
+        return struct.pack(">I", len(payload)) + body + struct.pack(">I", zlib.crc32(body))
+
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
 
 
 def horizontal_overflow(page: Page) -> int:
@@ -313,7 +335,7 @@ def run(page: Page, url: str, evidence: Path) -> dict[str, Any]:
     # ── 画像を添付すると編集操作が現れる ──
     sample = evidence / "sample.png"
     if not sample.exists():
-        page.evaluate("() => {}")
+        write_sample_png(sample)
     page.set_input_files("#source-file", str(sample))
     page.wait_for_selector("#edit-actions .edit-action", timeout=5_000)
     actions = page.evaluate(

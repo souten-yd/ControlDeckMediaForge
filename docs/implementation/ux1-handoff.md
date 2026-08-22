@@ -9,11 +9,11 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    fix/h3-evaluation-sandbox
-PR          未作成。実測・回帰ゲート後に1スライスで作成する
-状態        H3実GPU smoke/cancel完了。quality RAM-offload routeはHost共存失敗で却下
-基準値      ./mf.sh test = 318 passed, 1 warning（31.05秒）
-リリース    v0.3.1公開・ControlDeck導入済み（artifact 1b15eaa5...30c4、Host PR #227/#228）
+ブランチ    release/v032-install-evidence
+PR          #60 merge済み（676f8cc）。v0.3.2 release/install evidenceを記録中
+状態        v0.3.2公開・ControlDeck導入済み。H3 quality RAM-offload routeはHost共存失敗で却下
+基準値      ./mf.sh test = 318 passed, 1 warning（29.34秒）
+リリース    v0.3.2公開・ControlDeck導入済み（artifact ec864154...e12e3d9、Host PR #230）
 ```
 
 ## PR 進捗

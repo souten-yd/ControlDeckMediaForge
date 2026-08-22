@@ -2289,3 +2289,60 @@ card's `実機で評価` button.
 
 After recording the exact release and installed state, the local full gate
 remained 317 passed with one dependency deprecation warning in 28.02 seconds.
+
+## v0.3.2 release-bundle and installed Host update (2026-08-23)
+
+PR #60 merged as `676f8cce1e4ecdc929967a2923250440cc4de817`. An exact-head
+local bundle build produced
+`control-deck-media-forge-0.3.2-linux-x86_64.tar.gz`, 30,642,575 bytes,
+SHA-256 `ec864154b9d5e79fdfee8f616d3b02bd74ac29f80fd10822ac676881de12e3d9`.
+The checksum file verified locally and the uploaded GitHub Release asset digest
+reported the same value. Release v0.3.2 targets the merge commit above. Hosted
+CI was not used.
+
+The extracted artifact started as a real process on port 9137. Its isolated
+data root correctly returned `setup_required`, and the bundle served the
+v0.3.2 manifest, in-workspace model dialog, and updated JavaScript. Standalone
+Chromium passed light and dark runs with 32 advanced nodes, 13 capability
+states, phone and 320px overflow 0, 60px mobile tabs, deterministic mask and
+outpaint assertions, and zero console errors. The first attempts also exposed
+that `scripts/ux_standalone_e2e.py` did not create its declared `sample.png`;
+manual fixtures made the release checks pass, and this evidence slice adds a
+dependency-free deterministic 64x64 PNG writer so future runs are self-contained.
+Evidence is under `/tmp/mediaforge-v032-evidence.9nl0ol/` and is ephemeral.
+
+ControlDeck PR #230 changed only the generic trusted-catalog SHA and merged as
+`a47e4175e55f74d18b20bb5400b2fea96d048167`. No route, provider code,
+dependency, capability, or Media-specific UI string was added. From the Host's
+expected backend cwd, the local release-bundle, Add-on AI, and contract gate
+passed 28 tests in 1.18 seconds. A prior invocation from the repository root
+failed two subprocess CLI checks because `app` was not importable from that
+cwd; the correct invocation passed and no code change was needed.
+
+The real Optional Feature Manager update completed in 23.59 seconds:
+
+```text
+version:             0.3.2
+state:               installed, managed, enabled, healthy
+current:             versions/0.3.2
+previous_version:    0.3.1 (update result)
+retained versions:   0.3.1, 0.3.2
+systemd main PID:    474013
+```
+
+The installed service unit and `current` symlink both resolve to v0.3.2. Real
+HTTP `/health` returned contract 2.0 / healthy with core, ROCm runtime, R9700
+gfx1201, model library, and disk checks all `ok`. An authenticated installed
+Chromium session observed Host bridge `ready`, the H3 card and evaluation
+button, the new model dialog, and zero console/page errors. Host
+`/api/v1/resources` reported zero active Media Forge leases.
+
+The shared data/model boundary was preserved. Before and after update the H3
+snapshot occupied 26,978,278,484 bytes, and the denoiser blob independently
+hashed to its pinned
+`cfe0795c00ab6e6ebf8c64fe4574f45a828e8a93e0876bca704e055662a9d7b8`.
+No native H3 worker remained. The update did not delete Media Forge assets,
+models, feature data, or shared caches. Public contracts were unchanged. After
+the self-contained light/dark browser rerun, the local full regression gate was
+`318 passed, 1 warning in 29.34s`; tests are not substituted for the installed
+service, browser, Host API, and filesystem evidence above.
