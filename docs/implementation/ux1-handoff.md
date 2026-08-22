@@ -10,8 +10,8 @@
 ```text
 最終更新    2026-08-22
 ブランチ    ci/prompt-compiler
-PR          CI-2 Creative Director（作成前。#54はmerge済み）
-状態        CI-2実装・実Host text.generate・installed-host browser・full gate済み。commit待ち
+PR          CI-2 Creative Director #55 open（implementation commit ea159e0。#54はmerge済み）
+状態        CI-2実装・実Host text.generate・installed-host browser・full gate済み。merge待ち
 基準値      focused CI-2 = 130 passed / ./mf.sh test = 287 passed（24.93秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
