@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -57,12 +57,11 @@ class ActionStateSpec(BaseModel):
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
-class PromptPlan(BaseModel):
+class PromptPlanDraft(BaseModel):
+    """AI-authored fields only; user-owned immutable fields are excluded."""
+
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal["1"] = "1"
-    original_intent: str = Field(min_length=1, max_length=8000)
-    mode: CreativeMode = "refine"
     subject: SubjectSpec = Field(default_factory=SubjectSpec)
     primary_action: ActionStateSpec = Field(default_factory=ActionStateSpec)
     scene: str = Field(default="", max_length=1000)
@@ -73,6 +72,14 @@ class PromptPlan(BaseModel):
     hard_constraints: list[str] = Field(default_factory=list, max_length=64)
     optional_suggestions: list[str] = Field(default_factory=list, max_length=64)
     assumptions: list[str] = Field(default_factory=list, max_length=32)
+
+
+class PromptPlan(PromptPlanDraft):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal["1"] = "1"
+    original_intent: str = Field(min_length=1, max_length=8000)
+    mode: CreativeMode = "refine"
 
 
 class PaletteColor(BaseModel):
@@ -183,7 +190,7 @@ class PromptPlanner:
         response_format = {
             "type": "json_schema",
             "name": "mediaforge_prompt_plan",
-            "schema": PromptPlan.model_json_schema(),
+            "schema": PromptPlanDraft.model_json_schema(),
             "strict": True,
         }
         try:
@@ -202,15 +209,17 @@ class PromptPlanner:
         except HostAIError as exc:
             raise CreativeIntelligenceError(exc.code, str(exc)) from exc
         try:
-            value = json.loads(result.content)
-            plan = PromptPlan.model_validate(value)
+            draft = PromptPlanDraft.model_validate(json.loads(result.content))
         except (json.JSONDecodeError, ValidationError, TypeError) as exc:
             raise CreativeIntelligenceError("prompt_plan_invalid", "ControlDeck returned an invalid prompt plan") from exc
 
-        # The model is not authoritative for these two values. Keeping them from
-        # the caller makes the original request immutable and prevents a model
-        # from silently changing the requested planning mode.
-        return plan.model_copy(update={"original_intent": normalized, "mode": mode})
+        # The AI never authors these values. The original request is therefore
+        # immutable by construction rather than being trusted and overwritten later.
+        return PromptPlan(
+            **draft.model_dump(mode="python"),
+            original_intent=normalized,
+            mode=mode,
+        )
 
 
 def prompt_plan_to_creative_details(plan: PromptPlan) -> dict[str, str]:
