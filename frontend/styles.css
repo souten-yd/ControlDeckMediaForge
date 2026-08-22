@@ -228,6 +228,71 @@ textarea { resize: vertical; min-height: 96px; }
 .edit-action .why { margin-left: auto; font-size: .72rem; color: var(--muted); }
 
 .guarantee { font-size: .78rem; color: var(--accent); }
+
+/* ── マスク編集 ─────────────────────────────────────────────── */
+.mask-row { display: flex; align-items: center; gap: 10px; }
+.cta-secondary {
+  border: 1px solid var(--accent) !important;
+  color: var(--accent) !important;
+  font-weight: 700;
+  min-height: 44px !important;
+}
+#mask-preview {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #000;
+  object-fit: contain;
+}
+
+#mask-dialog { width: min(880px, calc(100% - 20px)); }
+.mask-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#mask-stage {
+  margin: 10px 0;
+  background: var(--sunk);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  max-height: 52vh;
+}
+#mask-canvas-wrap { position: relative; line-height: 0; transform-origin: center center; }
+#mask-source { max-width: 100%; max-height: 52vh; display: block; }
+#mask-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: .55;
+  cursor: crosshair;
+  touch-action: none;
+}
+.mask-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mask-tools button[aria-pressed="true"] { border-color: var(--accent) !important; color: var(--accent); font-weight: 700; }
+.mask-size { display: flex; align-items: center; gap: 8px; font-size: .8rem; font-weight: 600; }
+.mask-size input { width: 140px; }
+.mask-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.mask-actions .primary { padding: 0 18px; }
+
+/* ── 外側を広げる ───────────────────────────────────────────── */
+#outpaint-preview {
+  position: relative;
+  height: 120px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  background: var(--sunk);
+  display: grid;
+  place-items: center;
+}
+#outpaint-source {
+  display: block;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  border-radius: 4px;
+}
 .error {
   font-size: .82rem;
   font-weight: 600;

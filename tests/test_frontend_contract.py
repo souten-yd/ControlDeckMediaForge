@@ -33,6 +33,10 @@ DOM_IDS = (
     "attach-image", "attach-size", "source-file", "edit-actions", "guarantee-badge",
     "size-block", "size-label", "size-note", "size-presets", "count-chips",
     "create-error", "create-estimate",
+    "mask-input", "mask-draw", "mask-preview", "mask-state",
+    "mask-dialog", "mask-canvas", "mask-brush", "mask-eraser", "mask-undo", "mask-clear",
+    "mask-apply", "mask-cancel",
+    "outpaint-input", "outpaint-ratios", "outpaint-scales", "outpaint-preview", "outpaint-note",
     "stage", "stage-progress", "stage-result", "candidate-strip", "recent-strip",
     "mini-progress", "library-grid", "library-kinds", "activity-list",
     "capability-list", "detail-dialog",
@@ -41,7 +45,7 @@ DOM_IDS = (
 ADVANCED_IDS = (
     "advanced-create", "advanced-width", "advanced-height", "advanced-format",
     "advanced-count", "advanced-policy", "advanced-model", "advanced-semantic",
-    "advanced-attempts", "advanced-settings", "advanced-models",
+    "advanced-attempts", "advanced-settings", "advanced-models", "advanced-mask-file",
 )
 
 
@@ -67,10 +71,9 @@ def test_advanced_controls_live_only_inside_templates():
         assert f'id="{name}"' not in without_templates, f"{name} が template の外にある"
     for name in ("advanced-create", "advanced-settings"):
         assert f'id="{name}"' in MARKUP, f"{name} の template が無い"
-    assert 'data-adv-slot="create"' in MARKUP
-    assert 'data-adv-slot="settings"' in MARKUP
-    assert 'data-adv-template="create"' in MARKUP
-    assert 'data-adv-template="settings"' in MARKUP
+    for slot in ("create", "settings", "mask"):
+        assert f'data-adv-slot="{slot}"' in MARKUP
+        assert f'data-adv-template="{slot}"' in MARKUP
 
 
 def test_navigation_is_declared_once_and_switched_by_css():
@@ -198,3 +201,19 @@ def test_preference_keys_used_by_the_ui_are_allowlisted():
     assert used, "preferences を使っていない"
     unknown = used - set(preferences.ALLOWED)
     assert not unknown, f"backend が拒否する preference キーを UI が使っている: {sorted(unknown)}"
+
+
+def test_mask_file_input_is_an_advanced_escape_hatch_only():
+    """筆で塗る経路が既定。ファイル指定は詳細モードにだけ残す。"""
+    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
+    assert 'id="mask-file"' not in without_templates, "マスクのファイル指定が既定経路に出ている"
+    assert 'id="mask-file"' in MARKUP, "詳細モード用のファイル指定が消えている"
+    assert 'id="mask-draw"' in without_templates, "筆で塗る導線が既定経路に無い"
+
+
+def test_outpaint_has_no_per_side_controls():
+    """backend は元画像を必ず中央へ置く。片側だけ広げられるように見せない。"""
+    outpaint = (BACKEND / "outpaint.py").read_text(encoding="utf-8")
+    assert "left = (width - source.width) // 2" in outpaint, "中央配置の前提が変わっている"
+    for forbidden in ("data-side", "expand-left", "expand-right", "expand-top", "expand-bottom"):
+        assert forbidden not in MARKUP and forbidden not in SCRIPT, f"非対称拡張の操作がある: {forbidden}"

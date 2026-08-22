@@ -82,7 +82,11 @@ def submitted_payload(page: Page, evidence: Path) -> dict[str, Any] | None:
 
     page.route("**/api/v1/jobs", intercept)
     page.click("#create-submit")
-    page.wait_for_timeout(800)
+    # 画像の取り込みを挟むと送信までに時間がかかる。捕捉できるまで待つ。
+    deadline = time.monotonic() + 8
+    while not captured and time.monotonic() < deadline:
+        page.wait_for_timeout(100)
+    page.wait_for_timeout(200)
     page.unroute("**/api/v1/jobs")
     if captured:
         (evidence / "submitted-request.json").write_text(
@@ -94,12 +98,9 @@ def submitted_payload(page: Page, evidence: Path) -> dict[str, Any] | None:
 FAKE_JOB_ID = "job_" + "0" * 32
 
 
-def pre_submit_checks(page: Page, evidence: Path) -> dict[str, Any]:
-    """受付前検証。落ちるべきものが落ち、通るべきものが schema に適合すること。"""
-    result: dict[str, Any] = {}
-
-    # 捕まえた送信の job は実在しない。polling が 404 を出さないよう応答を用意する。
-    page.route(f"**/api/v1/jobs/{FAKE_JOB_ID}", lambda route, _request: route.fulfill(
+def canned_job(route, _request) -> None:
+    """捕まえた送信の job は実在しない。polling が 404 を出さないよう応答を用意する。"""
+    route.fulfill(
         status=200,
         content_type="application/json",
         body=json.dumps({
@@ -108,21 +109,18 @@ def pre_submit_checks(page: Page, evidence: Path) -> dict[str, Any]:
             "asset_ids": [], "error": None,
             "created_at": "2026-08-22T00:00:00Z", "updated_at": "2026-08-22T00:00:00Z",
         }),
-    ))
+    )
+
+
+def pre_submit_checks(page: Page, evidence: Path) -> dict[str, Any]:
+    """受付前検証。落ちるべきものが落ち、通るべきものが schema に適合すること。"""
+    result: dict[str, Any] = {}
+    page.route(f"**/api/v1/jobs/{FAKE_JOB_ID}", canned_job)
 
     # 以降は「書いていない」以外の理由で止まることを見たいので、先に書いておく
     page.fill("#create-intent", "受付前検証のためのテスト入力")
 
-    # 元画像より小さい行き先は受付前に止まる
-    page.click('#size-presets [data-preset="square"]')
-    smaller = page.evaluate(
-        "() => Number(document.querySelector('#size-presets [aria-checked=\"true\"]').dataset.width)"
-    )
     source = page.evaluate("() => document.querySelector('#attach-size').textContent")
-    if smaller < int(source.split("×")[0]):
-        check(submitted_payload(page, evidence) is None, "元画像より小さい行き先が送信された")
-        check(visible(page, "#create-error"), "受付前エラーが表示されていない")
-        result["outpaint_smaller_blocked"] = page.locator("#create-error").inner_text()
 
     # 外側を広げるのに広がっていない指定（詳細モードで元画像と同じ寸法を入れる）
     page.click("#mode-advanced")
@@ -174,6 +172,95 @@ def pre_submit_checks(page: Page, evidence: Path) -> dict[str, Any]:
     check("model_id" not in payload, "auto なのに model_id が載っている")
     page.click("#mode-simple")
     page.unroute(f"**/api/v1/jobs/{FAKE_JOB_ID}")
+    return result
+
+
+def draw_on_mask(page: Page, strokes: int = 3) -> None:
+    """実際のポインタ操作で塗る。canvas への直接描画は経路の検証にならない。"""
+    box = page.locator("#mask-canvas").bounding_box()
+    page.mouse.move(box["x"] + box["width"] * 0.35, box["y"] + box["height"] * 0.35)
+    page.mouse.down()
+    for index in range(strokes):
+        page.mouse.move(
+            box["x"] + box["width"] * (0.35 + 0.08 * index),
+            box["y"] + box["height"] * (0.45 + 0.05 * index),
+            steps=6,
+        )
+    page.mouse.up()
+
+
+def mask_editor_checks(page: Page, evidence: Path) -> dict[str, Any]:
+    """外部ツール無しで inpaint の範囲を指定できること。"""
+    result: dict[str, Any] = {}
+    page.fill("#create-intent", "口元を笑顔に変える")
+    page.click('[data-edit-mode="inpaint"]')
+    check(visible(page, "#mask-draw"), "塗る導線が出ていない")
+    check(not page.locator("#advanced-mask-file").count(), "シンプルにファイル指定が出ている")
+
+    page.click("#mask-draw")
+    page.wait_for_selector("#mask-dialog[open]")
+
+    # 何も塗らずに決定しても閉じない
+    page.click("#mask-apply")
+    check(page.locator("#mask-dialog").get_attribute("open") is not None, "空のまま決定できてしまった")
+    result["empty_mask_blocked"] = page.locator("#mask-hint").inner_text()
+    check("塗って" in result["empty_mask_blocked"], "空マスクの理由が出ていない")
+
+    draw_on_mask(page)
+    page.screenshot(path=str(evidence / "mask-editor.png"))
+
+    # 取り消しと消しゴムが操作できる
+    page.click("#mask-undo")
+    draw_on_mask(page)
+    page.click("#mask-eraser")
+    check(page.locator("#mask-eraser").get_attribute("aria-pressed") == "true", "消しゴムに切り替わらない")
+    page.click("#mask-brush")
+
+    page.click("#mask-apply")
+    # 閉じた dialog は不可視なので、可視性ではなく属性で待つ
+    page.wait_for_function(
+        "() => !document.getElementById('mask-dialog').hasAttribute('open')", timeout=5_000
+    )
+    check(visible(page, "#mask-preview"), "塗った範囲の見本が出ていない")
+    result["mask_state"] = page.locator("#mask-state").inner_text()
+    check("ピクセル" in result["mask_state"], "塗った量が示されていない")
+
+    # 塗った範囲が実際にマスク資産として送られる
+    payload = submitted_payload(page, evidence)
+    check(payload is not None, "マスク付きの送信が捕まえられなかった")
+    check(payload["operation"] == "image.edit", "operation が image.edit ではない")
+    check(payload["constraints"].get("strict_edit") is True, "strict_edit が立っていない")
+    mask_id = payload["constraints"].get("editable_mask_asset_id", "")
+    check(mask_id.startswith("asset_"), f"マスク資産が載っていない: {mask_id!r}")
+    result["mask_asset_id"] = mask_id
+    result["mask_constraints"] = payload["constraints"]
+    return result
+
+
+def outpaint_checks(page: Page, evidence: Path) -> dict[str, Any]:
+    """広げ方の選択だけで有効な寸法が決まること。"""
+    result: dict[str, Any] = {}
+    page.click('[data-edit-mode="outpaint"]')
+    check(visible(page, "#outpaint-input"), "広げ方の選択が出ていない")
+    check(not visible(page, "#size-block"), "シンプルで寸法欄が出ている")
+    page.click('#outpaint-ratios [data-ratio="16:9"]')
+    page.click('#outpaint-scales [data-scale="2"]')
+    result["note"] = page.locator("#outpaint-note").inner_text()
+    check("中央" in result["note"], "中央配置であることが書かれていない")
+    page.screenshot(path=str(evidence / "outpaint.png"))
+
+    payload = submitted_payload(page, evidence)
+    check(payload is not None, "outpaint の送信が捕まえられなかった")
+    constraints = payload["constraints"]
+    source_width, source_height = (int(value) for value in
+                                   page.locator("#attach-size").inner_text().split("×"))
+    check(constraints["width"] % 16 == 0 and constraints["height"] % 16 == 0, "16 の倍数ではない")
+    check(constraints["width"] >= source_width and constraints["height"] >= source_height,
+          "元画像を含んでいない")
+    check(constraints["width"] > source_width or constraints["height"] > source_height,
+          "どちらの辺も広がっていない")
+    check(constraints.get("strict_edit") is True, "strict_edit が立っていない")
+    result["constraints"] = constraints
     return result
 
 
@@ -247,9 +334,11 @@ def run(page: Page, url: str, evidence: Path) -> dict[str, Any]:
 
     # 出力寸法が元画像で決まる操作では、無視される値を選ばせない
     check(not visible(page, "#size-block"), "結果に影響しないサイズ欄が出ている")
-    page.click('[data-edit-mode="outpaint"]')
-    check(visible(page, "#size-block"), "外側を広げるのにサイズ欄が出ない")
-    observations["outpaint_note"] = page.locator("#size-note").inner_text()
+
+    page.route(f"**/api/v1/jobs/{FAKE_JOB_ID}", canned_job)
+    observations["mask"] = mask_editor_checks(page, evidence)
+    observations["outpaint"] = outpaint_checks(page, evidence)
+    page.unroute(f"**/api/v1/jobs/{FAKE_JOB_ID}")
 
     # 受付前に落とすべきものを落としているか（GPU を取りに行かせない）
     observations["pre_submit"] = pre_submit_checks(page, evidence)
