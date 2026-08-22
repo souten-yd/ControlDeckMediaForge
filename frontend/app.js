@@ -88,6 +88,8 @@ const state = {
   estimateSec: null,
   activeJob: "",
   activeBatch: "",
+  activeComposition: "",
+  currentComposition: null,
   batches: [],
   jobs: [],
   libraryCursor: null,
@@ -227,6 +229,23 @@ async function standaloneCall(method, params) {
   }
   if (method === "creative.batches.cancel") {
     return json(`/workspace-api/creative/batches/${encodeURIComponent(params.batch_id)}`, {method: "DELETE"});
+  }
+  if (method === "creative.compositions.create") {
+    return json("/workspace-api/creative/compositions", {method: "POST", body: JSON.stringify(params)});
+  }
+  if (method === "creative.compositions.list") return json("/workspace-api/creative/compositions");
+  if (method === "creative.compositions.get") {
+    return json(`/workspace-api/creative/compositions/${encodeURIComponent(params.composition_id)}`);
+  }
+  if (method === "creative.compositions.update_text") {
+    return json(`/workspace-api/creative/compositions/${encodeURIComponent(params.composition_id)}`, {
+      method: "PATCH", body: JSON.stringify(params),
+    });
+  }
+  if (method === "creative.compositions.cancel") {
+    return json(`/workspace-api/creative/compositions/${encodeURIComponent(params.composition_id)}`, {
+      method: "DELETE",
+    });
   }
   if (method === "models.list") return json("/api/v1/models");
   if (method === "models.catalog") {
@@ -427,6 +446,7 @@ function renderCreative() {
   fillCreativeSelect("creative-camera", "cameras", state.creative.camera);
   fillCreativeSelect("creative-variation", "variations", state.creative.variation);
   updateCreativeSummary();
+  updateCompositionOptions();
   renderAdvancedCreative();
 }
 
@@ -471,7 +491,38 @@ function setCreativeValue(key, value) {
   const advanced = byId(`advanced-${key}`);
   if (advanced) advanced.value = value;
   updateCreativeSummary();
+  updateCompositionOptions();
   clearError();
+}
+
+function compositionTemplate() {
+  if (state.creative.domain === "poster" || state.creative.composition === "poster"
+      || state.creative.composition === "multi_cut_promo") return "poster";
+  if (state.creative.domain === "character_sheet" || state.creative.composition === "character_sheet") {
+    return "character_sheet";
+  }
+  return "";
+}
+
+function updateCompositionOptions() {
+  const template = compositionTemplate();
+  const block = byId("composition-options");
+  block.hidden = !template;
+  if (template) {
+    byId("composition-options-label").textContent = template === "poster"
+      ? "複数カットのポスター" : "キャラクター表";
+  }
+}
+
+function compositionLayout() {
+  const template = compositionTemplate();
+  if (!template) return null;
+  return {
+    template,
+    title: byId("composition-title").value,
+    caption: byId("composition-caption").value,
+    shot_count: requestedCount(),
+  };
 }
 
 function creativeSpec() {
@@ -1035,6 +1086,9 @@ function requestProblem(constraints) {
   if (directedProblem) return directedProblem;
   const referenceProblem = profileReferenceProblem();
   if (referenceProblem) return referenceProblem;
+  if (compositionTemplate() && requestedCount() < 2) {
+    return "複数カットは2〜4枚を選んでください。";
+  }
 
   if (state.mode === "advanced" && byId("advanced-policy")) {
     if (byId("advanced-policy").value === "manual" && !byId("advanced-model").value) {
@@ -1070,6 +1124,8 @@ async function submitJob(event) {
   const problem = requestProblem(constraints);
   if (problem) { showError(problem); return; }
   clearError();
+  byId("composition-text-edit").hidden = true;
+  state.currentComposition = null;
 
   submit.disabled = true;
   submit.textContent = "実行中…";
@@ -1121,6 +1177,21 @@ async function submitJob(event) {
       ...modelSelection(),
     };
     const spec = creativeSpec();
+    const layout = compositionLayout();
+    if (layout) {
+      request.output.count = 1;
+      showPreparing("カットを計画しています", 0.65);
+      const composition = await call("creative.compositions.create", {
+        request, creative_spec: spec, layout,
+      });
+      setHostBusy(false);
+      state.activeComposition = composition.id;
+      state.currentComposition = composition;
+      showCompositionProgress(composition);
+      void savePreferences({last_preset: preset.id, last_count: selectedCount()});
+      void pollComposition(composition.id);
+      return;
+    }
     const batchAxes = new Set(["pose", "scene", "composition"]);
     const batchCount = requestedCount();
     if (batchCount > 1 && batchAxes.has(spec.variation.axis)) {
@@ -1243,6 +1314,58 @@ async function finishBatch(batch) {
   }
 }
 
+async function pollComposition(id) {
+  for (let attempt = 0; attempt < 3600 && !state.disabled; attempt += 1) {
+    let composition;
+    try {
+      composition = await call("creative.compositions.get", {composition_id: id});
+    } catch { return; }
+    showCompositionProgress(composition);
+    if (["succeeded", "partial", "failed", "canceled"].includes(composition.state)) {
+      return finishComposition(composition);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
+function showCompositionProgress(composition) {
+  const running = composition.state === "running";
+  const percent = Math.round((composition.progress || 0) * 90);
+  byId("stage-progress").hidden = !running;
+  byId("mini-progress").hidden = !running;
+  byId("progress-phase").textContent = `カットを作っています（${composition.completed_count}/${composition.layout.shot_count}）`;
+  byId("mini-phase").textContent = `カット ${composition.completed_count}/${composition.layout.shot_count}`;
+  byId("progress-bar").style.width = `${percent}%`;
+  byId("mini-bar").style.width = `${percent}%`;
+  byId("progress-detail").textContent = state.mode === "advanced"
+    ? `${composition.id} · ${composition.state} · ${composition.child_job_ids.join(", ")}`
+    : `${percent}%`;
+  updateActivityBadge(running ? 1 : 0);
+}
+
+async function finishComposition(composition) {
+  if (state.activeComposition !== composition.id) return;
+  state.activeComposition = "";
+  state.currentComposition = composition;
+  byId("stage-progress").hidden = true;
+  byId("mini-progress").hidden = true;
+  updateActivityBadge(0);
+  if (composition.asset_ids.length) {
+    await showResult(composition.asset_ids);
+    byId("composition-text-edit").hidden = false;
+    byId("composition-edit-title").value = composition.layout.title;
+    byId("composition-edit-caption").value = composition.layout.caption;
+    await loadRecent();
+  }
+  if (composition.state === "partial") {
+    showError("一部のカットが完成しなかったため、合成を完了できませんでした。");
+  } else if (composition.state === "failed") {
+    showError("カットを1枚にまとめられませんでした。");
+  } else if (composition.state === "canceled") {
+    byId("create-status").textContent = "複数カットの作成を中止しました。";
+  }
+}
+
 /* job になる前の待ち時間も進捗として見せる。
    モバイルではステージが画面外にあり、ミニバーだけが手掛かりになる。 */
 function showPreparing(text, ratio) {
@@ -1257,7 +1380,7 @@ function showPreparing(text, ratio) {
 }
 
 function hidePreparing() {
-  if (state.activeJob || state.activeBatch) return;
+  if (state.activeJob || state.activeBatch || state.activeComposition) return;
   byId("stage-progress").hidden = true;
   byId("mini-progress").hidden = true;
 }
@@ -1940,6 +2063,18 @@ async function restoreCreativeBatch() {
     showBatchProgress(active);
     void pollBatch(active.id);
   } catch { state.batches = []; }
+}
+
+async function restoreCreativeComposition() {
+  try {
+    const {items} = await call("creative.compositions.list");
+    const active = (items || []).find((composition) => composition.state === "running");
+    if (!active) return;
+    state.activeComposition = active.id;
+    state.currentComposition = active;
+    showCompositionProgress(active);
+    void pollComposition(active.id);
+  } catch { /* a private feature may be unavailable on an older core */ }
 }
 
 const STATUS_LABEL = {queued: "待機", running: "実行中", succeeded: "完了", failed: "失敗", canceled: "中止"};
@@ -2703,9 +2838,31 @@ byId("result-detail").addEventListener("click", () => {
 byId("result-edit").addEventListener("click", () => {
   byId("create-status").textContent = "ライブラリから画像を選び直して「画像を追加」に読み込ませてください。";
 });
+byId("composition-update-text").addEventListener("click", async () => {
+  const composition = state.currentComposition;
+  if (!composition) return;
+  const status = byId("composition-edit-status");
+  status.textContent = "文字を更新しています…";
+  try {
+    const updated = await call("creative.compositions.update_text", {
+      composition_id: composition.id,
+      title: byId("composition-edit-title").value,
+      caption: byId("composition-edit-caption").value,
+    });
+    state.currentComposition = updated;
+    await showResult(updated.asset_ids);
+    await loadRecent();
+    status.textContent = "カットを作り直さず、文字だけ更新しました。";
+  } catch (error) {
+    status.textContent = error?.message || "文字を更新できませんでした。";
+  }
+});
 for (const id of ["progress-cancel", "mini-cancel"]) {
   byId(id).addEventListener("click", () => {
-    if (state.activeBatch) {
+    if (state.activeComposition) {
+      void call("creative.compositions.cancel", {composition_id: state.activeComposition})
+        .then(finishComposition).catch(() => {});
+    } else if (state.activeBatch) {
       void call("creative.batches.cancel", {batch_id: state.activeBatch}).then(finishBatch).catch(() => {});
     } else if (state.activeJob) void call("jobs.cancel", {job_id: state.activeJob}).catch(() => {});
   });
@@ -2742,6 +2899,7 @@ async function boot() {
   await refreshAttachment();
   void loadEstimate();
   await loadRecent();
+  await restoreCreativeComposition();
   await restoreCreativeBatch();
   activate(state.preferences.last_view || "create", {sync: false});
   await call("jobs.watch", {job_ids: []}).catch(() => {});
@@ -2767,9 +2925,13 @@ window.addEventListener("message", (event) => {
     if (message.event === "session.updated") state.nonce = message.data.session_nonce;
     if (message.event === "disable.pending") {
       state.disabled = true;
+      if (state.activeComposition) {
+        void call("creative.compositions.cancel", {composition_id: state.activeComposition}).catch(() => {});
+      }
       if (state.activeBatch) void call("creative.batches.cancel", {batch_id: state.activeBatch}).catch(() => {});
       if (state.activeJob) void call("jobs.cancel", {job_id: state.activeJob}).catch(() => {});
       state.activeBatch = "";
+      state.activeComposition = "";
       state.activeJob = "";
       setHostBusy(false);
     }

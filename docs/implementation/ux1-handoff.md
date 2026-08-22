@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/creative-batches-c3
-PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 / C0 #38 / C1 #39 / C2 #40 マージ済み、C3 #41 open
-状態        UX2 C3 をpush・PR作成済み。exact head / mergeability確認後にmergeする
-基準値      ./mf.sh test = 240 passed
+ブランチ    ux1/multicut-composer-c4
+PR          UX1 #21〜#33 / UX2 M0 #35〜C2 #40 / C3 #41 マージ済み
+状態        UX2 C4 実装・実process/browser受け入れ・local full gate済み。PR作成前
+基準値      ./mf.sh test = 255 passed
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
 
@@ -36,13 +36,13 @@ PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 / C0 #38 / C1 #39 / C2 
 ## 次にやること（1 つだけ）
 
 ```text
-UX2 PR-C3 のfull gateを通し、commit / push / PR / mergeする。
-  ブランチ    ux1/creative-batches-c3
-  実装        deterministic child planner、durable parent batch、logical cancel、
-              reconnect、partial asset保持、候補strip、Advanced child drilldown
-  実測        pose/composition各4差分、全child cancel、partial 1 asset保持、
-              reload復元、320px overflow 0、console/page error 0。
-  次          merge 後に PR-C4（multi-cut planner + deterministic Composer）
+UX2 PR-C4 のfull gateを通し、commit / push / PR / mergeする。
+  ブランチ    ux1/multicut-composer-c4
+  実装        2〜4 shot planner、poster/character-sheet layout、deterministic Composer、
+              全child lineage、font hash cache、文字だけ再compose、existing viewer
+  実測        3 child、1024x1536、日本語title、child job delta 0、hash再現、
+              320px overflow 0、console/page error 0。
+  次          merge 後に PR-C5（Evaluator + R9700実機評価）
   注意        実モデルは C5 まで保持し、大容量 remove は NOT TESTED のままにする。
               hosted CI は使わずローカル gate を記録する。
 ```

@@ -76,6 +76,17 @@ route; successful child assets are retained when siblings fail or are canceled.
 The standalone same-origin `/workspace-api/creative/batches` bridge mirrors
 these methods for development, is excluded from OpenAPI, and is not a public API.
 
+`creative.compositions.create` is the corresponding private multi-cut surface.
+It accepts an existing JobRequest-shaped object, internal CreativeSpec, and a
+trusted `poster` or `character_sheet` layout with 2..4 shots. Children use normal
+job/Broker admission; the CPU-only Composer then returns one `asset.pack` asset.
+`.get`, `.list`, and `.cancel` support durable progress. `.update_text` changes
+title/caption and creates a new deterministic final revision without creating
+new image-generation jobs. Its provenance contains every child asset ID/hash,
+the normalized layout snapshot, and the cached font hash. The same-origin
+`/workspace-api/creative/compositions` development bridge is excluded from
+OpenAPI and accepts no path.
+
 ## Jobs
 
 `POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json).

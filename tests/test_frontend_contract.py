@@ -36,6 +36,9 @@ DOM_IDS = (
     "creative-simple", "domain-chips", "scene-framing", "scene-framing-summary",
     "creative-scene", "creative-pose", "creative-composition", "creative-camera", "creative-variation",
     "profile-choice", "character-profile", "style-profile", "profile-choice-note",
+    "composition-options", "composition-title", "composition-caption",
+    "composition-text-edit", "composition-edit-title", "composition-edit-caption",
+    "composition-update-text", "composition-edit-status",
     "create-error", "create-estimate",
     "mask-input", "mask-draw", "mask-preview", "mask-state",
     "mask-dialog", "mask-canvas", "mask-brush", "mask-eraser", "mask-undo", "mask-clear",
@@ -135,6 +138,15 @@ def test_intentional_variations_use_durable_batches_and_advanced_drilldown():
     assert "creativeBatchRow" in SCRIPT
     assert "dataset.cancelBatch" in SCRIPT
     assert "child_job_ids" in SCRIPT
+
+
+def test_multicut_composer_reuses_create_result_and_viewer():
+    assert 'call("creative.compositions.create"' in SCRIPT
+    assert 'call("creative.compositions.get"' in SCRIPT
+    assert 'call("creative.compositions.update_text"' in SCRIPT
+    assert "restoreCreativeComposition" in SCRIPT
+    assert 'byId("composition-update-text")' in SCRIPT
+    assert 'await showResult(composition.asset_ids)' in SCRIPT
 
 
 def test_model_remove_has_exactly_one_confirmation_dialog():

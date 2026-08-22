@@ -18,15 +18,23 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError, __version__ as PILLOW_VERSION
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from . import __version__, library, preferences, thumbnails
 from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
 from .config import Settings
+from .composer import (
+    CreativeCompositionRecord,
+    DeterministicComposer,
+    LayoutCatalog,
+    LayoutSpec,
+    MultiCutPlanner,
+    cache_composer_font,
+)
 from .creative import CreativeCompiler, CreativeSpec, CreativeValidationError
 from .creative_batches import CreativeBatchPlanner, CreativeBatchRecord, project_batch
-from .domain import JobRequest
+from .domain import Asset, AssetInput, ErrorDetail, JobRequest, JobStatus, Provenance
 from .events import (
     JobEventBus,
     JobSubscription,
@@ -52,6 +60,7 @@ from .host.security import reject_host_paths, require_host_service, require_host
 from .preferences import PreferenceError
 from .store import Store, utc_now
 from .thumbnails import ThumbnailError
+from .validators import validate_png
 
 
 REPOSITORY_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
@@ -132,6 +141,9 @@ def create_app(
     store.observe_model_operations(model_events.publish)
     creative_compiler = CreativeCompiler.load(resolved.creative_template_manifest)
     creative_batch_planner = CreativeBatchPlanner(creative_compiler)
+    layout_catalog = LayoutCatalog.load(resolved.creative_layout_manifest)
+    multi_cut_planner = MultiCutPlanner(creative_compiler, layout_catalog)
+    deterministic_composer = DeterministicComposer()
     model_operations = (
         ModelOperationManager(
             store,
@@ -169,6 +181,8 @@ def create_app(
     app.state.model_operation_events = model_events
     app.state.creative_compiler = creative_compiler
     app.state.creative_batch_planner = creative_batch_planner
+    app.state.multi_cut_planner = multi_cut_planner
+    app.state.deterministic_composer = deterministic_composer
     app.state.host = host
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -546,6 +560,230 @@ def create_app(
         record.updated_at = utc_now()
         store.update_creative_batch(record)
         return batch_projection(record)
+
+    def compose_record(record: CreativeCompositionRecord) -> CreativeCompositionRecord:
+        child_jobs = [store.get_job(job_id) for job_id in record.child_job_ids]
+        child_asset_ids = [job.asset_ids[0] for job in child_jobs]
+        request = JobRequest(
+            operation="asset.pack",
+            intent=f"Compose {record.layout.template}: {record.layout.title or 'untitled'}",
+            inputs=[AssetInput(asset_id=asset_id) for asset_id in child_asset_ids],
+            constraints={"layout_spec": record.layout.model_dump(mode="json")},
+        )
+        job = store.create_job(
+            request,
+            initial_status=JobStatus.RUNNING,
+            initial_phase="compose",
+        )
+        root = contained(store.work_dir, store.work_dir / job.id)
+        try:
+            root.mkdir(mode=0o700)
+            output = contained(root, root / "composed.png")
+            font_path, font_sha256 = cache_composer_font(
+                store.data_dir,
+                str(record.layout_snapshot["font_sha256"])
+                if "font_sha256" in record.layout_snapshot else None,
+            )
+            record.layout_snapshot = {**record.layout_snapshot, "font_sha256": font_sha256}
+            store.update_creative_composition(record)
+            deterministic_composer.compose(
+                [store.asset_path(asset_id) for asset_id in child_asset_ids],
+                record.layout,
+                record.layout_snapshot,
+                output,
+                font_path=font_path,
+            )
+            width, height, validation = validate_png(output)
+            digest = hashlib.sha256(output.read_bytes()).hexdigest()
+            now = utc_now()
+            asset_id = f"asset_{uuid.uuid4().hex}"
+            provenance_id = f"prov_{uuid.uuid4().hex}"
+            asset = Asset(
+                id=asset_id,
+                job_id=job.id,
+                parent_asset_ids=child_asset_ids,
+                mime_type="image/png",
+                width=width,
+                height=height,
+                size_bytes=output.stat().st_size,
+                sha256=digest,
+                suggested_filename=f"media-forge-{record.layout.template}-{asset_id[6:14]}.png",
+                provenance_id=provenance_id,
+                created_at=now,
+            )
+            provenance = Provenance(
+                id=provenance_id,
+                asset_id=asset_id,
+                parent_asset_ids=child_asset_ids,
+                operation="asset.pack",
+                intent=job.request.intent,
+                model_id="media-forge/deterministic-composer",
+                model_version="1.0.0",
+                weights_hash="sha256:" + "0" * 64,
+                license="derived-from-parent-assets",
+                runtime_adapter="deterministic.pillow-composer",
+                runtime_version=PILLOW_VERSION,
+                tool_versions={"media-forge": __version__, "composer.layout": "1.0.0", "validator.png": "1.0.0"},
+                seed=0,
+                parameters={
+                    "composition_id": record.id,
+                    "layout": record.layout.model_dump(mode="json"),
+                    "layout_snapshot": record.layout_snapshot,
+                    "child_asset_ids": child_asset_ids,
+                },
+                reference_asset_hashes={asset_id: store.get_asset(asset_id).sha256 for asset_id in child_asset_ids},
+                postprocessing=["composer.image_fit", "composer.frame", "composer.text", "png.normalize"],
+                validation=validation,
+                warnings=[],
+                output_sha256=digest,
+                created_at=now,
+            )
+            store.register_asset(asset, provenance, output)
+            store.update_job(job.id, status=JobStatus.SUCCEEDED, progress=1, asset_ids=[asset.id])
+            record.final_asset_ids.append(asset.id)
+            record.composition_error = None
+            record.updated_at = utc_now()
+            return store.update_creative_composition(record)
+        except Exception as exc:
+            store.update_job(
+                job.id,
+                status=JobStatus.FAILED,
+                progress=1,
+                error=ErrorDetail(code="creative_composition_failed", message=str(exc)[:300]),
+            )
+            record.composition_error = {"code": "creative_composition_failed", "message": str(exc)[:300]}
+            record.updated_at = utc_now()
+            store.update_creative_composition(record)
+            return record
+        finally:
+            if root.exists():
+                shutil.rmtree(root)
+
+    def composition_projection(record: CreativeCompositionRecord) -> dict[str, Any]:
+        jobs = []
+        for job_id in record.child_job_ids:
+            try:
+                jobs.append(store.get_job(job_id))
+            except KeyError:
+                continue
+        statuses = [job.status.value for job in jobs]
+        active = any(status in {"queued", "running"} for status in statuses)
+        succeeded = sum(status == "succeeded" for status in statuses)
+        failed = sum(status == "failed" for status in statuses) + len(record.submission_errors)
+        canceled = sum(status == "canceled" for status in statuses)
+        if (
+            succeeded == record.layout.shot_count
+            and not record.final_asset_ids
+            and record.composition_error is None
+        ):
+            record = compose_record(record)
+        if record.final_asset_ids:
+            state = "succeeded"
+        elif record.composition_error is not None:
+            state = "failed"
+        elif active:
+            state = "running"
+        elif succeeded:
+            state = "partial"
+        elif canceled and not failed:
+            state = "canceled"
+        else:
+            state = "failed"
+        completed = succeeded + failed + canceled
+        return {
+            **record.model_dump(mode="json"),
+            "state": state,
+            "completed_count": completed,
+            "succeeded_count": succeeded,
+            "failed_count": failed,
+            "canceled_count": canceled,
+            "progress": completed / record.layout.shot_count,
+            "shot_asset_ids": [asset_id for job in jobs for asset_id in job.asset_ids[:1]],
+            "asset_ids": list(record.final_asset_ids[-1:]),
+            "children": [job.model_dump(mode="json") for job in jobs],
+        }
+
+    async def create_creative_composition(
+        payload: dict[str, Any],
+        submit_child: Callable[[JobRequest], Awaitable[dict[str, Any]]],
+    ) -> dict[str, Any]:
+        request = JobRequest.model_validate(payload.get("request"))
+        creative_spec = CreativeSpec.model_validate(payload.get("creative_spec", {}))
+        layout = LayoutSpec.model_validate(payload.get("layout"))
+        profile_snapshot = manager.resolve_profiles(request)
+        available_references = {item.asset_id for item in request.inputs} | set(
+            profile_snapshot.get("reference_asset_ids", [])
+        )
+        capability_value = await capability_document()
+        composition_id, child_requests, child_plans, layout_snapshot = multi_cut_planner.plan(
+            request,
+            creative_spec,
+            layout,
+            capabilities=capability_value["capabilities"],
+            envelope=size_envelope(),
+            available_reference_ids=available_references,
+        )
+        now = utc_now()
+        record = store.create_creative_composition(CreativeCompositionRecord(
+            id=composition_id,
+            layout=layout,
+            layout_snapshot=layout_snapshot,
+            child_plans=child_plans,
+            created_at=now,
+            updated_at=now,
+        ))
+        for child in child_requests:
+            try:
+                submitted = await submit_child(child)
+                record.child_job_ids.append(str(submitted["id"]))
+            except (HTTPException, ProfileResolutionError, KeyError, ValueError) as exc:
+                code = (
+                    str(exc.detail.get("code", "composition_child_submission_failed"))
+                    if isinstance(exc, HTTPException) and isinstance(exc.detail, dict)
+                    else exc.code if isinstance(exc, ProfileResolutionError)
+                    else "composition_child_submission_failed"
+                )
+                record.submission_errors.append({"code": code, "message": str(exc)[:300]})
+            record.updated_at = utc_now()
+            store.update_creative_composition(record)
+        return composition_projection(record)
+
+    def recompose_creative_composition(composition_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if set(payload) - {"composition_id", "title", "caption"}:
+            raise ValueError("composition text update contains unsupported fields")
+        record = store.get_creative_composition(composition_id)
+        if not record.final_asset_ids:
+            raise ValueError("composition is not ready")
+        layout_value = record.layout.model_dump(mode="json") | {
+            "title": payload.get("title", record.layout.title),
+            "caption": payload.get("caption", record.layout.caption),
+        }
+        record.layout = LayoutSpec.model_validate(layout_value)
+        previous_font = record.layout_snapshot.get("font_sha256")
+        record.layout_snapshot = {
+            **layout_catalog.resolve(record.layout),
+            **({"font_sha256": previous_font} if previous_font else {}),
+        }
+        record.composition_error = None
+        record.updated_at = utc_now()
+        store.update_creative_composition(record)
+        record = compose_record(record)
+        if record.composition_error is not None:
+            raise ValueError(record.composition_error["message"])
+        return composition_projection(record)
+
+    async def cancel_creative_composition(composition_id: str) -> dict[str, Any]:
+        record = store.get_creative_composition(composition_id)
+        for job_id in record.child_job_ids:
+            try:
+                job = store.get_job(job_id)
+                if job.status.value not in {"succeeded", "failed", "canceled"}:
+                    await manager.cancel(job_id)
+            except KeyError:
+                continue
+        record.updated_at = utc_now()
+        store.update_creative_composition(record)
+        return composition_projection(record)
 
     @app.get("/api/v1/capabilities")
     async def capabilities() -> dict[str, Any]:
@@ -1070,6 +1308,30 @@ def create_app(
                         result = {"items": [batch_projection(item) for item in store.list_creative_batches()]}
                     elif method == "creative.batches.cancel":
                         result = await cancel_creative_batch(str(params.get("batch_id", "")))
+                    elif method == "creative.compositions.create":
+                        async def submit_composition_child(child: JobRequest) -> dict[str, Any]:
+                            return await submit_hosted(child, identity, workload_class="interactive")
+
+                        result = await create_creative_composition(params, submit_composition_child)
+                    elif method == "creative.compositions.get":
+                        result = composition_projection(
+                            store.get_creative_composition(str(params.get("composition_id", "")))
+                        )
+                    elif method == "creative.compositions.list":
+                        result = {
+                            "items": [
+                                composition_projection(item)
+                                for item in store.list_creative_compositions()
+                            ]
+                        }
+                    elif method == "creative.compositions.update_text":
+                        result = recompose_creative_composition(
+                            str(params.get("composition_id", "")), params
+                        )
+                    elif method == "creative.compositions.cancel":
+                        result = await cancel_creative_composition(
+                            str(params.get("composition_id", ""))
+                        )
                     elif method == "capabilities.get":
                         envelope = size_envelope()
                         result = {
@@ -1202,6 +1464,58 @@ def create_app(
             return await cancel_creative_batch(batch_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "creative_batch_not_found"}) from exc
+
+    @app.post("/workspace-api/creative/compositions", include_in_schema=False)
+    async def standalone_creative_composition(payload: dict[str, Any]) -> dict[str, Any]:
+        async def submit_composition_child(child: JobRequest) -> dict[str, Any]:
+            return manager.submit(child).model_dump(mode="json")
+
+        try:
+            reject_host_paths(payload)
+            return await create_creative_composition(payload, submit_composition_child)
+        except CreativeValidationError as exc:
+            detail: dict[str, Any] = {"code": exc.code, "message": str(exc)}
+            if exc.field is not None:
+                detail["field"] = exc.field
+            raise HTTPException(status_code=422, detail=detail) from exc
+        except (ProfileResolutionError, ValueError, ValidationError) as exc:
+            code = exc.code if isinstance(exc, ProfileResolutionError) else "workspace_request_rejected"
+            raise HTTPException(status_code=422, detail={"code": code, "message": str(exc)[:300]}) from exc
+
+    @app.get("/workspace-api/creative/compositions", include_in_schema=False)
+    async def standalone_creative_compositions() -> dict[str, Any]:
+        return {
+            "items": [composition_projection(item) for item in store.list_creative_compositions()]
+        }
+
+    @app.get("/workspace-api/creative/compositions/{composition_id}", include_in_schema=False)
+    async def standalone_creative_composition_get(composition_id: str) -> dict[str, Any]:
+        try:
+            return composition_projection(store.get_creative_composition(composition_id))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "creative_composition_not_found"}) from exc
+
+    @app.patch("/workspace-api/creative/compositions/{composition_id}", include_in_schema=False)
+    async def standalone_creative_composition_update(
+        composition_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            return recompose_creative_composition(composition_id, payload)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "creative_composition_not_found"}) from exc
+        except (ValueError, ValidationError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "workspace_request_rejected", "message": str(exc)[:300]},
+            ) from exc
+
+    @app.delete("/workspace-api/creative/compositions/{composition_id}", include_in_schema=False)
+    async def standalone_creative_composition_cancel(composition_id: str) -> dict[str, Any]:
+        try:
+            return await cancel_creative_composition(composition_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "creative_composition_not_found"}) from exc
 
     @app.post("/workspace-api/creative/validate", include_in_schema=False)
     async def standalone_creative_validate(payload: dict[str, Any]) -> dict[str, Any]:
