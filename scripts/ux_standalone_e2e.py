@@ -297,13 +297,17 @@ def run(page: Page, url: str, evidence: Path) -> dict[str, Any]:
 
     # ── 可用性: 使えない操作はシンプルに出さない ──
     page.click("#nav-settings")
-    page.wait_for_selector("#capability-list .row")
+    check(page.locator("#advanced-capability-list").count() == 0,
+          "シンプル設定に拡張機能の詳細が出ている")
+    page.click("#mode-advanced")
+    page.wait_for_selector("#advanced-capability-list .row")
     states = page.evaluate(
-        "() => Array.from(document.querySelectorAll('#capability-list .row'))"
+        "() => Array.from(document.querySelectorAll('#advanced-capability-list .row'))"
         ".map(row => [row.dataset.capability, row.querySelector('.state').textContent])"
     )
     observations["capabilities"] = dict(states)
     check(any(value == "使えません" for _, value in states), "unavailable な capability が 1 つも無い")
+    page.click("#mode-simple")
     page.click("#nav-create")
 
     # ── 画像を添付すると編集操作が現れる ──

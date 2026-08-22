@@ -2466,7 +2466,13 @@ function openModelRemove(modelId) {
 }
 
 async function loadSettings() {
-  const list = byId("capability-list");
+  renderExtensionDetails();
+  await loadModelManagement();
+}
+
+function renderExtensionDetails() {
+  const list = byId("advanced-capability-list");
+  if (!list) return;
   list.replaceChildren(...Object.entries(state.capabilities).map(([name, value]) => {
     const row = document.createElement("article");
     row.className = "row";
@@ -2488,13 +2494,13 @@ async function loadSettings() {
     row.append(info, status);
     return row;
   }));
-  byId("host-state").textContent = state.bridgePort ? "接続しています" : "この画面だけで動いています";
-  await loadModelManagement();
+  byId("advanced-host-state").textContent = state.bridgePort ? "接続しています" : "この画面だけで動いています";
 }
 
 async function loadAdvancedSettings() {
   const holder = byId("advanced-models");
   if (!holder) return;
+  renderExtensionDetails();
   try {
     const {items} = await call("models.list");
     renderAdvancedModels();

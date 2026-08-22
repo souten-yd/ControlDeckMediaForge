@@ -47,7 +47,7 @@ DOM_IDS = (
     "stage", "stage-progress", "stage-result", "candidate-strip", "recent-strip",
     "result-evaluate", "result-evaluation",
     "mini-progress", "library-grid", "library-kinds", "activity-list",
-    "capability-list", "detail-dialog",
+    "detail-dialog",
     "model-storage", "model-filters", "model-catalog", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
     "model-remove-dialog", "model-remove-summary", "model-remove-detail",
@@ -60,6 +60,7 @@ ADVANCED_IDS = (
     "advanced-create", "advanced-width", "advanced-height", "advanced-format",
     "advanced-count", "advanced-policy", "advanced-model", "advanced-semantic",
     "advanced-attempts", "advanced-settings", "advanced-models", "advanced-mask-file",
+    "advanced-host-state", "advanced-capability-list",
     "advanced-domain", "advanced-scene", "advanced-scene-details", "advanced-pose",
     "advanced-pose-details", "advanced-composition", "advanced-composition-details",
     "advanced-camera", "advanced-camera-details", "advanced-variation",
@@ -110,6 +111,16 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert 'experimental: "実験的・未実測"' in SCRIPT
     assert "card.dataset.modelId" not in SCRIPT
     assert "dataset.modelId =" not in SCRIPT
+
+
+def test_extension_about_and_capabilities_are_advanced_only():
+    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
+    for name in ("advanced-host-state", "advanced-capability-list"):
+        assert f'id="{name}"' not in without_templates
+        assert f'id="{name}"' in MARKUP
+    assert "この拡張機能について" not in without_templates
+    assert "今できること" not in without_templates
+    assert 'byId("advanced-capability-list")' in SCRIPT
 
 
 def test_creative_controls_use_the_versioned_catalog_and_preserve_prompt_only_requests():

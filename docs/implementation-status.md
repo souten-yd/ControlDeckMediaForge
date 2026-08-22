@@ -1829,3 +1829,22 @@ full command         26.06 seconds / max RSS 261,500 KiB
 これはAI応答境界の回帰修正であり、実providerへのHTTP、実画像生成、GPU動作は
 **NOT TESTED**。public schema / addon.json / agent tool / workflow executorは変更していない。
 hosted CIとControlDeckコード変更は0件。
+
+## Settings の拡張情報を詳細モードへ移動 (2026-08-22)
+
+Settings の既定表示から「この拡張機能について」と capability 一覧を外し、ヘッダーの
+「詳細」を選んだ時だけ `template` から DOM へ載せる詳細領域へ移した。モデル管理は
+シンプル／詳細の両方に残し、backend の capability document と local-only 強制は変更して
+いない。ControlDeck 側の変更も不要だった。
+
+現在のソースを隔離data directory・`127.0.0.1:9140`で実起動し、Chromiumから標準workspace
+試験を実行した。シンプル設定では `advanced-capability-list` が DOM に0件、詳細切替後は
+11 capability が表示された。desktop ready 0.071秒、390px/320px horizontal overflow 0、
+console/page error 0件で、全browser試験は20.5秒でPASSEDした。証跡は
+`/tmp/mediaforge-settings-detail-evidence/`に置いた。
+
+最初の試行はfixture不在の`FileNotFoundError`、2回目は試験が詳細モードからシンプルへ
+戻さず後続mask検査へ進む問題で停止しており、成功には数えていない。installed-host iframe、
+実端末の指操作、リリースbundleは **NOT TESTED**。hosted CIは使用していない。
+full `./mf.sh test`は275 passed（28.86秒）。これは回帰gateであり、上記の実process/browser
+観測とは区別する。

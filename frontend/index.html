@@ -194,14 +194,6 @@
 
         <!-- 設定 -->
         <section id="view-settings" class="view" data-view="settings" hidden>
-          <p class="section-label">この拡張機能について</p>
-          <dl class="facts">
-            <div><dt>推論</dt><dd>この端末の中だけ（backend で強制。UI から解除できません）</dd></div>
-            <div><dt>生成処理</dt><dd>本体とは別のプロセスで動きます</dd></div>
-            <div><dt>ControlDeck 連携</dt><dd id="host-state">確認しています…</dd></div>
-          </dl>
-          <p class="section-label">今できること</p>
-          <div id="capability-list" class="rows"></div>
           <div class="model-management-head">
             <div>
               <p class="section-label">モデル管理</p>
@@ -366,6 +358,14 @@
 
     <template data-adv-template="settings">
       <div class="advanced" id="advanced-settings">
+        <p class="section-label">この拡張機能について</p>
+        <dl class="facts">
+          <div><dt>推論</dt><dd>この端末の中だけ（backend で強制。UI から解除できません）</dd></div>
+          <div><dt>生成処理</dt><dd>本体とは別のプロセスで動きます</dd></div>
+          <div><dt>ControlDeck 連携</dt><dd id="advanced-host-state">確認しています…</dd></div>
+        </dl>
+        <p class="section-label">今できること</p>
+        <div id="advanced-capability-list" class="rows"></div>
         <p class="section-label">モデルの技術詳細</p>
         <div id="advanced-models" class="rows"></div>
         <p class="section-label">連携診断</p>
