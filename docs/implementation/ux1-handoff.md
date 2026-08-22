@@ -10,8 +10,8 @@
 ```text
 最終更新    2026-08-22
 ブランチ    ux1/settings-about-details
-PR          v0.3.0 #48 / 動画catalog #50 / CI v2計画 #51 マージ済み
-状態        Settingsの長いAbout/capability一覧を詳細モードへ移動。PR作成前のgate中
+PR          Settings詳細移動 #52 open。#48 / #50 / CI v2計画 #51 マージ済み
+状態        PR #52 local full gateと実browser確認済み。merge待ち
 基準値      ./mf.sh test = 275 passed（28.86秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
