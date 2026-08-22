@@ -35,6 +35,11 @@ H3_ESTIMATED_RUNTIME_SEC = 1800.0
 H3_EXECUTION_PEAK_BYTES = 30_000_000_000
 H3_COLD_LOAD_PEAK_BYTES = 32_000_000_000
 H3_HEADROOM_BYTES = 1024 * 1024 * 1024
+H3_EVALUATION_WIDTH = 640
+H3_EVALUATION_HEIGHT = 384
+H3_EVALUATION_STEPS = 1
+H3_EVALUATION_FRAMES = 5
+H3_EVALUATION_PRESET = "bounded_smoke"
 H3_EVALUATION_PROMPT = (
     "Integrated multimodal description: An adult boyish young woman in a polished anime illustration style, "
     "with short dark hair and vivid orange mesh highlights, smiles warmly at the viewer. In one continuous "
@@ -455,10 +460,10 @@ class H3ModelEvaluator:
             "--audio-vae", str(files["vae/minimax_h3_audio_vae_fp32.safetensors"]),
             "--prompt", H3_EVALUATION_PROMPT,
             "--cfg-scale", "1.0",
-            "--width", "640",
-            "--height", "384",
-            "--steps", "1",
-            "--video-frames", "5",
+            "--width", str(H3_EVALUATION_WIDTH),
+            "--height", str(H3_EVALUATION_HEIGHT),
+            "--steps", str(H3_EVALUATION_STEPS),
+            "--video-frames", str(H3_EVALUATION_FRAMES),
             "--fps", "24",
             "--rng", "cpu",
             "--threads", "8",
@@ -540,7 +545,7 @@ class H3ModelEvaluator:
         pswpin, pswpout = self._vmstat_swap()
         return {
             "evaluation_id": output_path.parent.name,
-            "preset": "smoke",
+            "preset": H3_EVALUATION_PRESET,
             "runtime_commit": H3_RUNTIME_COMMIT,
             "elapsed_sec": round(time.monotonic() - metrics.started_at, 3),
             "peak_rss_bytes": metrics.peak_rss_bytes,
@@ -594,8 +599,8 @@ class H3ModelEvaluator:
             not isinstance(video, dict)
             or not isinstance(video.get("width"), int)
             or not isinstance(video.get("height"), int)
-            or video["width"] != 640
-            or video["height"] != 384
+            or video["width"] != H3_EVALUATION_WIDTH
+            or video["height"] != H3_EVALUATION_HEIGHT
         ):
             raise ModelOperationError("model_evaluation_invalid_output", "generated video dimensions differ")
         if not isinstance(audio, dict):

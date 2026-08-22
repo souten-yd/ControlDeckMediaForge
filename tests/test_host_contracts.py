@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import time
+
 from mediaforge.host.files import require_grant_id
-from mediaforge.host.jobs import ProgressGate
+from mediaforge.host.client import HostIdentity
+from mediaforge.host.jobs import HostExecution, HostJobReporter, ProgressGate
 from pathlib import Path
 
 from mediaforge.host.resources import fake_image_request, image_model_request
@@ -89,6 +93,40 @@ def test_host_progress_gate_is_monotonic_and_limited_to_two_hz():
     assert gate.accept(progress=0.2, phase="generating", now=1.5)
     assert not gate.accept(progress=0.1, phase="generating", now=2.0)
     assert gate.accept(progress=1.0, phase="complete", terminal=True, now=2.01)
+
+
+def test_forced_host_progress_waits_instead_of_bypassing_two_hz_limit():
+    class Client:
+        def __init__(self) -> None:
+            self.sent_at: list[float] = []
+
+        async def update_job(self, _identity, _job_id, _payload):
+            self.sent_at.append(time.monotonic())
+
+    async def scenario() -> list[float]:
+        client = Client()
+        reporter = HostJobReporter(
+            client,  # type: ignore[arg-type]
+            HostExecution(
+                identity=HostIdentity(
+                    authorization="Bearer test",
+                    addon_id="media-forge",
+                    subject="7",
+                    expires_at=2_000_000_000,
+                    granted_capabilities=frozenset({"jobs.write"}),
+                ),
+                host_job_id="host-job",
+                workload_class="batch",
+                owns_terminal=True,
+            ),
+        )
+        assert await reporter.progress("first", 0.1, force=True)
+        assert await reporter.progress("second", 0.2, force=True)
+        return client.sent_at
+
+    sent_at = asyncio.run(scenario())
+    assert len(sent_at) == 2
+    assert sent_at[1] - sent_at[0] >= 0.5
 
 
 def test_file_boundary_accepts_only_opaque_grant_ids():

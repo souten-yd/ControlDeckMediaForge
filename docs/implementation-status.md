@@ -2140,7 +2140,7 @@ Job, requests the broker with all four VRAM dimensions and
 `estimated_runtime_sec=1800`, activates and renews the granted lease, observes
 both local and Host cancel, and releases the lease in its isolation boundary.
 The native command is an argument array with a fixed 640x384 / 5-frame / 1-step
-audio-video smoke preset. It pins `ROCm0`, places the text encoder on CPU and
+bounded smoke preset. It pins `ROCm0`, places the text encoder on CPU and
 diffusion/VAE on the GPU, and does not enable unbounded full CPU offload.
 
 The evaluator records elapsed time, worker RSS/process swap, system swap-in and
@@ -2165,10 +2165,83 @@ The isolated subprocess tests observed lease activate/renew/release, Host and
 local cancellation, process-group termination, nonzero native exit isolation,
 restart fail-closed behavior, fixed mixed placement, and video-plus-audio
 validation. These are implementation/contract observations, not R9700 tensor
-execution evidence. Actual H3 load/generation, peak RAM/VRAM/swap behavior,
-output quality, installed-host browser action, and real cancellation remain
-**NOT TESTED**. Hosted CI was not used and the ControlDeck repository was not
-changed.
+execution evidence. The real evidence is recorded in the following section.
+Hosted CI was not used and the ControlDeck repository was not changed by this
+evaluator slice.
+
+## MiniMax H3 real R9700 evaluation and RAM-offload decision (2026-08-23)
+
+The first installed-workspace action exposed two integration defects before a
+model was allowed to run. The Host accepted and activated a real 33,073,741,824
+byte lease, but consecutive forced Job progress updates exceeded the Host's
+2 Hz limit and HTTP 429 was normalized to `host_request_rejected` in operation
+`modelop_0bded9ab51d4431eb060a7f2d9331a3c`. `force=True` now waits until the
+0.55-second progress interval instead of bypassing `ProgressGate`; a focused
+clock-based regression test covers this behavior. The lease was released.
+
+The workspace had also used `window.confirm()` even though the Host's opaque
+iframe intentionally omits `allow-modals`; Chrome ignored the call and no
+request was submitted. Gated license acceptance now uses an in-workspace
+`dialog`, and the non-destructive evaluation action starts directly. An actual
+installed-host Chromium action subsequently reached the evaluator with zero
+console/page errors. The Host sandbox was not weakened.
+
+Operation `modelop_c52ded655bbc4f3a8d5d1aee12bc7c79`, Host Job
+`19498496a63a`, completed the shipped bounded smoke preset:
+
+```text
+input                         640x384, 5 requested frames, 1 step, 24 fps
+elapsed                       160.860 sec
+parameter placement           text encoder 13,985.83 MB RAM
+                              diffusion + VAE 13,331.93 MB VRAM
+peak process RSS              26,347,757,568 bytes
+peak process swap             0 bytes
+baseline / peak R9700 VRAM    59,912,192 / 14,614,786,048 bytes
+incremental peak VRAM         14,554,873,856 bytes
+system pswpin / pswpout       +1,167 / +192,766 pages
+output                        122,118-byte WebM, SHA-256
+                              0a66b4e5b71e769b5c10b6daf04de0ca5b4d5aa92b51e50d0143bd2617b6712a
+media                         VP8 640x384 24fps 0.167sec + stereo PCM s16le
+```
+
+Independent `sha256sum` and `ffprobe` reproduced the stored hash and media
+metadata. The extracted frame was inspected at original resolution and showed
+an incoherent hair/skin smear with no complete person. A one-step smoke is not
+a quality preset; it proves the native runtime and output validator only.
+
+A second internal probe used the upstream README's 640x384, 25-frame, 4-step
+shape to test useful quality. MiniMax aligned 25 frames to 39. Text conditioning
+took 115.48 seconds, and diffusion tensor load then took 65.33 seconds. Sampled
+RSS reached at least 19.78 GB, process swap at least 671.3 MB, and system
+swap-free fell by about 1.31 GB before sampling ended. `systemd-journald`
+reported memory pressure at 01:23:57, 01:24:01, and 01:24:24 JST. The
+ControlDeck watchdog timed out at 01:24:30 and restarted the Host at 01:24:57.
+Operation `modelop_93008f35df39411fbc3dcf885f6d30f8` failed closed as
+`host_unreachable` after about 182 seconds; no video was written. The evaluator
+then terminated its worker boundary. No GPU runtime crash is inferred from
+these observations.
+
+This quality route is rejected: placing working memory beyond VRAM into RAM is
+permitted in principle, but it is practical only if measured wall time, safe
+RAM headroom, non-growing swap, Host responsiveness, cancellation, and output
+quality all pass. Here Host coexistence, swap behavior, completion, and quality
+failed. The shipped evaluator therefore stays at the successful bounded smoke
+preset, and H3 remains `experimental`, `healthy=no`, and unroutable. The
+32,000,000,000-byte managed-artifact download limit is unchanged and is not a
+working-memory limit.
+
+Finally, an installed-host Chromium run started
+`modelop_5881b25aec82401fbcb6bed66cbfdffb` and pressed the workspace cancel
+button after 6 seconds. It reached `canceled` in 6.24 seconds with no browser
+console errors; no `sd-cli` process remained. Host API `/api/v1/resources`
+reported request `a0a10307-d048-4abf-8aa6-c0a8a6a51db0`, lease
+`258a08cd-5fc5-4a9f-8a0d-b9398f00bcca` as `released`, and Host Job
+`470a851b4cc5` as `canceled`. Hosted CI was not used. Public schemas,
+`addon.json`, agent tools, workflow executors, and asset/provenance contracts
+were not changed. The final local regression gate for this exact worktree was
+`318 passed, 1 warning in 31.05s`; this is regression evidence and is not
+substituted for the real browser, Host API, process, or R9700 observations
+above.
 
 ## v0.3.1 release-bundle and installed Host update (2026-08-23)
 

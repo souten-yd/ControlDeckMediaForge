@@ -192,14 +192,35 @@ with 32,624 MiB VRAM in 0.06 seconds. It requires the runtime-local ROCm OpenMP
 library directory in its library search path; installing or copying that
 library into ControlDeck was deliberately avoided.
 
-The private bounded evaluator now exists and its real NVMe preflight detects the
-installed H3 bundle and pinned native runtime. No H3 tensors have yet been
-loaded. At the preflight point only
-27,586,805,760 of 32,605,573,120 host RAM bytes were available and swap already
-held 1,516,511,232 bytes, so full CPU offload is not presumed safe. The next
-evaluation uses a fixed mixed placement (text encoder on CPU, diffusion/VAE on
-R9700) while sampling RSS, process swap, system swap I/O, and R9700 VRAM under
-a real ControlDeck lease. Full CPU offload is not the initial configuration.
+The private bounded evaluator and real NVMe preflight both detect the installed
+H3 bundle and pinned native runtime. A 640x384, 5-frame, 1-step smoke run then
+completed under a real ControlDeck lease in 160.860 seconds. The runtime placed
+13,985.83 MB of text-encoder parameters in RAM and 13,331.93 MB of
+diffusion/VAE parameters in VRAM. The evaluator measured 26,347,757,568 bytes
+peak RSS, zero process swap, 14,554,873,856 bytes incremental peak VRAM, and
+192,766 system swap-out pages. It produced a valid 122,118-byte WebM with VP8
+video and stereo PCM audio. Its single inspected frame was an incoherent
+hair/skin smear rather than the requested character, so this is runtime smoke
+evidence only and not usable quality evidence.
+
+A separate 640x384, 25-requested-frame, 4-step quality probe was rejected as an
+operational route. The runtime aligned 25 frames to 39, again placed the text
+encoder in RAM, and completed text conditioning in 115.48 seconds. During the
+next model-load phase, sampled process RSS reached at least 19.78 GB, process
+swap reached at least 671.3 MB, and system swap-free fell by about 1.31 GB.
+ControlDeck's systemd watchdog timed out while the host was under memory
+pressure; the Host restarted, the evaluator failed closed with
+`host_unreachable` after about 182 seconds, and no output was produced. This
+violates the host-coexistence gate even though mixed RAM/VRAM placement itself
+was technically possible.
+
+Accordingly, working memory above 32 GB VRAM remains eligible only as a measured
+bounded RAM-offload candidate; it is not rejected by capacity alone. It must
+complete without sustained swap growth, preserve safe RAM headroom and Host
+watchdog responsiveness, release its lease, and produce useful output in a
+practical wall time. This H3 quality route fails those conditions. Full CPU
+offload is not enabled, and the managed artifact limit remains strictly below
+32,000,000,000 bytes.
 
 The upstream MiniMax H3 Community License dated 2026-08-02 is not treated as a
 permissive default. Its applicable-territory, commercial authorization,
@@ -223,23 +244,30 @@ projection, and real H3 generation remain **NOT TESTED**.
 1. H3 is a synchronized audio-video and first/last-frame comparison candidate.
 2. It requires a new isolated stable-diffusion.cpp native adapter; no existing
    Media Forge worker supports it.
-3. The native runtime builds and enumerates R9700/gfx1201, but H3 load and
-   generation reliability are **NOT TESTED**.
-4. VRAM phases, load/generation time, and failure rate are **NOT TESTED**.
+3. The native runtime builds and executes on R9700/gfx1201. One bounded smoke
+   completed, while the quality probe caused enough memory pressure for the
+   Host watchdog to restart; production reliability therefore fails.
+4. The smoke measurement is recorded above. One of two generation probes
+   completed, so the observed probe failure rate is 50%; this is not a broad
+   statistical benchmark.
 5. The pinned weights use the MiniMax H3 Community License; the UI does not
    simplify it to an open-source identifier.
-6. The existing asset/provenance contract can carry its identity, but no output
-   has been produced; output provenance is **NOT TESTED**.
-7. Quality and maintenance benefit over Wan/LTX candidates is **NOT TESTED**.
-8. A future implementation must be a bounded cancellable worker; **NOT TESTED**.
+6. The existing asset/provenance contract can carry its identity, but the
+   private evaluator output is deliberately not a public Asset; G7 asset
+   provenance remains **NOT TESTED**.
+7. The one-step smoke frame was unusable and the quality probe did not finish;
+   no quality benefit over Wan/LTX has been demonstrated.
+8. The private evaluator is bounded and a real workspace cancel terminated the
+   worker and released the Host lease in 6.24 seconds.
 9. The BF16 runtime includes custom Python and multi-GPU assumptions. The GGUF
-   candidate's pinned native HIPBLAS runtime now builds for and enumerates
-   gfx1201; H3 tensor load and execution are still **NOT TESTED**.
+   candidate's pinned native HIPBLAS runtime loads and executes on gfx1201, but
+   the quality configuration failed the Host-coexistence gate.
 10. Yes. It remains behind generic video capabilities and can be deleted from
     the catalog without changing any public API.
 
-Only #10 passes as an architectural gate. H3 cannot become Available or
-Recommended until the other runtime and hardware evidence exists.
+The architecture and cancel boundary pass, but reliability, quality, and Host
+coexistence do not. H3 remains Experimental, unhealthy, and unroutable; it
+cannot become Available or Recommended from this evidence.
 
 ## G0 fake worker
 
