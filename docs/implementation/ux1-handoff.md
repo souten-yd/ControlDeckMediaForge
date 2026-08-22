@@ -10,8 +10,8 @@
 ```text
 最終更新    2026-08-22
 ブランチ    ux1/model-operations-m1
-PR          UX1 #21〜#33 / UX2 M0 #35 マージ済み、PR-M1 push 前
-状態        UX2 M1 の durable install/remove を実装・実 download/resume/verify 済み
+PR          UX1 #21〜#33 / UX2 M0 #35 マージ済み、PR-M1 #36 open
+状態        UX2 M1 を push・PR作成済み。exact head確認後にmergeする
 基準値      ./mf.sh test = 202 passed
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
