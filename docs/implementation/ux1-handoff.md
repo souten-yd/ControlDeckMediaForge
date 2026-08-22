@@ -9,11 +9,12 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/multicut-composer-c4
-PR          UX1 #21〜#33 / UX2 M0 #35〜C2 #40 / C3 #41 マージ済み、C4 #42 open
-状態        UX2 C4 をpush・PR作成済み。exact head / mergeability確認後にmergeする
-基準値      ./mf.sh test = 255 passed
-リリース    installed host は v0.2.4（M0 はまだ未収録）
+main        d330c5207edc54427c8ce6eab9b7660292886cef
+ブランチ    ux1/creative-intelligence-a0
+PR          UX1 #21〜#33 / UX2 M0 #35〜C4 #42 マージ済み
+状態        Creative Intelligence A0 の設計 + provider-neutral Host AI seam を実装済み、NOT TESTED
+Host依存    ControlDeck PR #224 `feat(addons): provider-neutral AI gateway for add-ons` は open / NOT TESTED
+リリース    installed host は v0.2.4（この新規スライスは未収録）
 ```
 
 ## PR 進捗
@@ -27,99 +28,170 @@ PR          UX1 #21〜#33 / UX2 M0 #35〜C2 #40 / C3 #41 マージ済み、C4 #4
 | PR-U2 | 作成体験 | #25 マージ済み |
 | PR-U3 | マスクエディタ・外側拡張 | #26 マージ済み |
 | PR-U4 | 状況と結果ステージ | #32 マージ済み |
-| — | 実使用で見つかった不具合 6 件 | #28 #29 マージ済み |
-| PR-U7 | 実機受け入れ | 一部完了（desktop / mobile を観測） |
+| — | 実使用で見つかった不具合 | #28 #29 マージ済み |
 | PR-U5 | ライブラリ viewer | #33 マージ済み |
-| PR-U6 | 一貫性 UI（G3） | 未着手 |
-| PR-U7 | 実機受け入れ | 未着手 |
+| UX2 M0-M2 | モデルregistry/install/UI | #35〜#37 マージ済み |
+| UX2 C0 | CreativeSpec / compiler | #38 マージ済み |
+| UX2 C1 | Create creative controls | #39 マージ済み |
+| UX2 C2 | role-aware Character/Style references | #40 マージ済み |
+| UX2 C3 | intentional variation batches | #41 マージ済み |
+| UX2 C4 | deterministic multi-cut Composer | #42 マージ済み |
+| UX2 C5 | semantic evaluator + R9700 acceptance | 未完了。Creative Intelligence A6/A7で一般化して完了条件へ接続する |
+| CI A0 | Host AI seam + typed planning models + design | 実装済み / NOT TESTED |
 
-## 次にやること（1 つだけ）
+## 今回追加した設計
 
 ```text
-UX2 PR-C4 のfull gateを通し、commit / push / PR / mergeする。
-  ブランチ    ux1/multicut-composer-c4
-  実装        2〜4 shot planner、poster/character-sheet layout、deterministic Composer、
-              全child lineage、font hash cache、文字だけ再compose、existing viewer
-  実測        3 child、1024x1536、日本語title、child job delta 0、hash再現、
-              320px overflow 0、console/page error 0。
-  次          merge 後に PR-C5（Evaluator + R9700実機評価）
-  注意        実モデルは C5 まで保持し、大容量 remove は NOT TESTED のままにする。
-              hosted CI は使わずローカル gate を記録する。
+docs/design-creative-intelligence.md
+docs/implementation/creative-intelligence.md
 ```
 
-## リリースの運用
+重要な決定:
 
 ```text
-区切りごとに版を出す（利用者の指示 2026-08-22）
-  1. ./mf.sh bundle build <version> /data1tb/mediaforge-release-bundles
-  2. 展開して bin/mediaforge-core serve を起動し、配信 HTML が新 UI であることを確認
-  3. そのバンドルに対して scripts/ux_standalone_e2e.py を回す
-  4. gh release create v<version> --title ... で tar.gz と .sha256 を添付
-     資産名は control-deck-media-forge-<version>-linux-x86_64.tar.gz(.sha256)
-  5. docs/implementation-status.md に artifact / bytes / sha256 / 未確認事項を記録
-  6. 配布するには ControlDeck の trusted-catalog.json を更新する別 PR が要る
+1. Text prompt refinement と image understanding を分離する。
+     text.generate     -> Prompt Planner / Refiner
+     vision.analyze    -> Reference Analyzer / Evaluator (VLM)
+2. Media Forge は Ollama / llama.cpp / provider / port / model を決め打ちしない。
+3. ControlDeck の scoped Add-on Runtime AI capability を通す。
+4. 画像の色・サイズ・alpha等、機械的に測れる事実は VLM ではなく deterministic code で取る。
+5. original_intent は不変。AIが足した内容は suggestion と user fact を分ける。
+6. Simple の人物中心 Pose UI を今すぐ消さない。内部Pose/Action構造は C3 variation / 評価 / provenanceに必要。
+   A5で既存UIを流用し、自然文 + 参考画像で共通操作が足りることを実測してから Simple Pose を縮退/条件表示する。
+7. semantic retry は既存 QA budget を超えない。無制限 generate -> judge loop は禁止。
+```
+
+## A0 のコード
+
+```text
+backend/mediaforge/host/ai.py
+  HostAIGateway
+  text.generate / vision.analyze の capability だけを指定
+  provider/model/port を受け取らない
+  Hostが将来provider/model情報を返しても無視する
+
+backend/mediaforge/creative_intelligence.py
+  PromptPlan
+  SubjectSpec
+  ActionStateSpec
+  VisualFacts
+  VisualAnalysis
+  EvaluationResult
+  PromptPlanner
+  prompt_plan_to_creative_details()
+
+  A0では既存JobRequest/Create動作へまだ接続しない。
+```
+
+テストコード `tests/test_creative_intelligence.py` も追加したが、このChatGPT実行環境からリポジトリを実行できないため **結果は NOT TESTED**。成功したと記録しないこと。
+
+## ControlDeck 側の依存
+
+ControlDeck main `23aae9ce50b3b6c26e5566f055856370caa2f213` を調査し、以下を確認した。
+
+```text
+既存:
+  RuntimeChatRequest / runtime_provider
+  provider別 multimodal message conversion
+  structured response fallback
+  llama.cpp mmproj_path
+  Ollama vlm_enabled
+  Add-on Runtime service-token capability auth
+
+不足:
+  Add-on Runtime から scoped に text/VLM inference を呼ぶgeneric API
+```
+
+そのため別リポジトリの **ControlDeck PR #224** を作成した。
+
+```text
+branch  feat/addon-ai-gateway
+PR      #224
+scope   generic host only
+cap     ai.inference
+API     GET  /api/v1/addon-runtime/{addon_id}/ai/capabilities
+        POST /api/v1/addon-runtime/{addon_id}/ai/complete
+logical capability
+        text.generate
+        vision.analyze
+```
+
+ControlDeck #224 もこの環境では未実行なので **merge禁止**。ローカル backend test + 実 text/VLM 呼び出しを通すこと。
+
+既存の ControlDeck `/api/v1/llm/v1` gateway API key を Media Forge へコピーする案は却下。Add-on service token + `ai.inference` が正しい境界。
+
+## 次にやること（1つだけ）
+
+```text
+A0 をローカルgateする。
+
+1. ControlDeck PR #224:
+   - backend/tests/test_addon_runtime_ai.py
+   - 通常backend test
+   - fake/test add-on service tokenで text.generate 1回
+   - VLM設定済み環境で vision.analyze 1回
+   - provider/model identityをAdd-on responseへ出さない確認
+
+2. Media Forge A0:
+   - ./mf.sh test
+   - tests/test_creative_intelligence.py
+   - 既存 prompt-only generation の回帰がないこと
+   - grepで新規production pathに Ollama/llama.cpp/11434//api/chat がないこと
+
+3. 実測結果だけ docs/implementation-status.md に追記。
+4. A0 PRを作成/mergeするのは上記gate後。
+5. その後 A1: 既存 direct Ollama semantic reviewer を ControlDeck `vision.analyze` へ置換する。
+```
+
+## その後の実装順
+
+```text
+A1  direct Ollama semantic reviewer -> ControlDeck vision.analyze
+A2  deterministic VisualFacts + cache
+A3  VLM VisualAnalysis + reference roles / CreativeSpec suggestion
+A4  text Prompt Planner / Refiner backend
+A5  既存Createへ「指示を整える」+ reference analysis UI（新wizardを作らない）
+A6  multidimensional Evaluator + ranking + bounded retry
+A7  installed-host / R9700 / ControlDeck runtime swap acceptance
 ```
 
 ## 未解決の判断
 
 ```text
-1. subresource 直接取得の可否（設計 §10.1 / 実装 §2.6）
-     未実測のまま。installed host とログイン資格情報が要るため PR-U0 では行えなかった。
-     PR-U5 の着手前までに 1 度だけ測る。サムネイルは結論に依存しないので U1〜U4 は先行可。
-2. addon.json の mobile: "companion" → "embedded"
-     PR-U1（モバイル IA 実装）と同じ PR でのみ変更する。先行して変えない。
-3. ControlDeck 側の変更
-     利用者が許可済み（2026-08-22）。ただし汎用 host 機能に限る（§0 B1）。
-     UI 実装のために必要な host 変更は 1 つも出ていない。
-     ただし v0.2.0 を配布するには trusted-catalog.json の pin 更新が要る
-     （これは Media 固有のコードではなく、カタログの版指定なので許容範囲）。
-4. worker が core を import している（層の違反・未解決）
-     worker_packs/image/adapters/diffusers_flux2.py が
-     mediaforge.image_edit / mediaforge.outpaint を import している。
-     AGENTS.md「worker は core から実装を import しない」に反する。
-     v0.2.2 では bundle へ同梱して動作を戻したが、層の整理は未着手。
-     image_edit / outpaint は PIL だけに依存するので worker pack 側へ寄せるのが筋。
-     ただし strict edit の独立検証は core 側に残すこと（共有すると保証の意味が消える）。
-5. 動画モデル管理の将来互換（利用者指示 2026-08-22）
-     M1 installer は image 専用にせず capability-driven のまま維持した。
-     M2 では検証済み `media_types`（image / video / audio_video）を分類表示に追加し、
-     routing の正は capability のままにする。両者が矛盾した catalog は fail-closed。
-     Wan 2.2 TI2V-5B / Animate-14B / LTX 系は G7 の評価候補としてのみ記録し、
-     G1〜G4 とモデル採用ゲートを終える前に download/default/worker 実装へ進まない。
-     C0 は CameraSpec を共通化し、MotionSpec を後から加法的に載せられる形にする。
-```
+1. worker が core を import している層違反
+   worker_packs/image/adapters/diffusers_flux2.py が mediaforge.image_edit / outpaint を import。
+   新adapterを増やす前に整理する。strict edit validatorはcore側に独立して残す。
 
-## リポジトリの状態で注意すること
+2. 動画モデル管理
+   installer/catalogは capability-driven + media_types image/video/audio_video を維持。
+   Wan/LTXは G7候補のまま。Creative IntelligenceのCamera/Actionは将来MotionSpecへ加法拡張する。
 
-```text
-実ブラウザ試験には別 venv が要る
-    playwright は core venv に入れない（AGENTS.md「core を軽く保つ」）。
-    実行例: /data1tb/ControlDeck-release-bundle/.venv/bin/python \
-              scripts/ux_standalone_e2e.py --media-forge-url http://127.0.0.1:9137 \
-              --evidence-dir /tmp/ux1-evidence
-    証跡: /data1tb/mediaforge-ux1-evidence/{light,dark}/
-
-UX2 の各ブランチは直前スライスを main へ merge してから切る
-    PR-C0 は ux1/creative-spec-c0。C0 と C1 を同一 PR に混ぜない。
+3. Simple Pose control
+   直ちに削除しない。A5/A7実測後に、自然文/VLM解析で通常操作が足りる場合のみ
+   Simpleから縮退またはsubject-aware表示へ変更。Advanced/内部Pose/Actionは残す。
 ```
 
 ## 再開コマンド
 
 ```bash
 cd /data1tb/ControlDeckMediaForge
-cat docs/implementation/ux1-handoff.md          # このファイル
-git fetch --all --prune && git log --oneline -5
+cat docs/implementation/ux1-handoff.md
+git fetch --all --prune && git log --oneline -8
 gh pr list --state open
-sed -n '/## 9\. PR-C3/,/## 10\. PR-C4/p' docs/implementation/ux2-model-scene.md
-./mf.sh test                                     # C1の最終基準値はstatusを確認
+cat docs/design-creative-intelligence.md
+cat docs/implementation/creative-intelligence.md
+./mf.sh test
 ```
 
 ## 参照
 
 ```text
-設計の正        docs/design-workspace-ux.md
-実装指示        docs/implementation/ux1-workspace.md
-UX2 実装指示    docs/implementation/ux2-model-scene.md
-運用ルール      docs/implementation/ux1-workspace.md §14
+設計の正        docs/base-plan.md
+Host境界の正    docs/controldeck-integration-plan.md
+UIの正          docs/design-workspace-ux.md
+UX2設計         docs/design-model-scene-ux.md
+CI設計          docs/design-creative-intelligence.md
+CI実装指示      docs/implementation/creative-intelligence.md
 進捗と実測      docs/implementation-status.md（実測値のみ。推測を書かない）
+ControlDeck     PR #224 / docs/design-addon-ai-gateway.md
 ```
