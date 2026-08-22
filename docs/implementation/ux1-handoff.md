@@ -10,8 +10,8 @@
 ```text
 最終更新    2026-08-22
 ブランチ    ci/provider-neutral-ai-cutover
-PR          Settings詳細移動 #52 merge済み。CI-1 PR作成前
-状態        CI-1実装と2 target実Host acceptance、最終full gate済み。PR作成前
+PR          CI-1 #53 open。Settings詳細移動 #52 merge済み
+状態        PR #53 exact implementation head 2e225a7。実Host acceptanceとfull gate済み
 基準値      ./mf.sh test = 275 passed（23.36秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
@@ -84,6 +84,10 @@ CI-1 provider-neutral AI cutoverの最終gate、PR、mergeを完了する。
      利用者がM0〜M2を先行指定し、候補の実download確認も明示したため、boundedなmanaged
      snapshot取得までは先行する。R9700 worker実行、available/default昇格、G7 APIには進まない。
      C0 は CameraSpec を共通化し、MotionSpec を後から加法的に載せられる形にする。
+6. 次回release時のControlDeck trusted catalog
+     CI-1でaddon manifestへ`ai.inference`を加法追加した。source manifestの実Host受け入れは
+     完了したが、v0.3.0向けtrusted catalogのallowlistにはまだ無い。CI-6 release時に
+     artifact SHA/version更新と同じControlDeck PRで許可する。Media固有code追加は不要。
 ```
 
 ## リポジトリの状態で注意すること
