@@ -103,6 +103,8 @@ def create_app(
         host_client=host,
         lease_renew_sec=resolved.host_lease_renew_sec,
         model_manifest=resolved.model_manifest,
+        model_catalog_manifest=resolved.model_catalog_manifest,
+        model_store_root=resolved.model_store_root,
         hf_home=resolved.hf_home,
         image_runtime_python=resolved.image_runtime_python,
         semantic_reviewer=reviewer,
@@ -132,7 +134,12 @@ def create_app(
 
     def model_catalog() -> dict[str, Any]:
         try:
-            models = ModelRegistry.load(resolved.model_manifest, hf_home=resolved.hf_home).all()
+            models = ModelRegistry.load(
+                resolved.model_manifest,
+                hf_home=resolved.hf_home,
+                catalog_manifest=resolved.model_catalog_manifest,
+                model_store_root=resolved.model_store_root,
+            ).all()
         except ModelRegistryError as exc:
             raise HTTPException(status_code=503, detail={"code": "model_registry_invalid"}) from exc
         return {
@@ -158,7 +165,12 @@ def create_app(
 
     def image_capability(capability: str, *, fake_fallback: bool = False) -> dict[str, Any]:
         try:
-            models = ModelRegistry.load(resolved.model_manifest, hf_home=resolved.hf_home).all()
+            models = ModelRegistry.load(
+                resolved.model_manifest,
+                hf_home=resolved.hf_home,
+                catalog_manifest=resolved.model_catalog_manifest,
+                model_store_root=resolved.model_store_root,
+            ).all()
         except ModelRegistryError:
             return {"state": "unavailable", "reason": "model_registry_invalid", "local_only": True}
         if any(
@@ -345,7 +357,12 @@ def create_app(
             "envelope_source": "fallback",
         }
         try:
-            models = ModelRegistry.load(resolved.model_manifest, hf_home=resolved.hf_home).all()
+            models = ModelRegistry.load(
+                resolved.model_manifest,
+                hf_home=resolved.hf_home,
+                catalog_manifest=resolved.model_catalog_manifest,
+                model_store_root=resolved.model_store_root,
+            ).all()
         except ModelRegistryError:
             return fallback
         usable = [

@@ -9,11 +9,11 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    release/v0.2.0
-PR          #21〜#26 マージ済み / release 記録は #27
-状態        v0.2.0 を公開済み。次は PR-U4（状況と結果ステージ）
-基準値      ./mf.sh test = 174 passed
-リリース    v0.2.0 / sha256 ec7dd229…f97c6 / 29,121,065 bytes
+ブランチ    ux1/model-registry-m0
+PR          UX1 #21〜#33 マージ済み / UX2 PR-M0 作業中
+状態        UX2 M0 の registry/catalog ownership を実装・ローカル実測済み
+基準値      ./mf.sh test = 189 passed
+リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
 
 ## PR 進捗
@@ -26,28 +26,24 @@ PR          #21〜#26 マージ済み / release 記録は #27
 | PR-U1 | シェル刷新（3ナビ・モード・モバイル IA） | #24 マージ済み |
 | PR-U2 | 作成体験 | #25 マージ済み |
 | PR-U3 | マスクエディタ・外側拡張 | #26 マージ済み |
-| PR-U4 | 状況と結果ステージ | 次はここ |
+| PR-U4 | 状況と結果ステージ | #32 マージ済み |
 | — | 実使用で見つかった不具合 6 件 | #28 #29 マージ済み |
 | PR-U7 | 実機受け入れ | 一部完了（desktop / mobile を観測） |
-| PR-U5 | ライブラリと書き出し | 未着手 |
+| PR-U5 | ライブラリ viewer | #33 マージ済み |
 | PR-U6 | 一貫性 UI（G3） | 未着手 |
 | PR-U7 | 実機受け入れ | 未着手 |
 
 ## 次にやること（1 つだけ）
 
 ```text
-PR-U4（状況と結果ステージ）を開始する。
-  ブランチ    ux1/activity-stage（main から）
-  最初の作業  失敗コードごとの「出口」を作る。frontend/app.js の failureText を
-              {文言, 操作ラベル, 操作} の表に広げ、状況一覧と作る画面の両方から押せるようにする
-  仕様        docs/implementation/ux1-workspace.md §6
-  完了の目安  失敗表示に必ず実行可能な出口が 1 つあること、
-              中止が 2 秒以内に反映されること、
-              workspace 表示中に toast が出ないこと（visibility.changed を購読）
-
-  注意        jobs.watch の push は U1 で入っている。polling へ戻さない。
-              待機理由の日本語は host が所有する。MF 側で enum を訳し直さない
-              （ControlDeck/docs/addon-ux-guidelines.md）。
+UX2 PR-M0 を commit / push / merge する。
+  ブランチ    ux1/model-registry-m0
+  実装        単一 ModelRegistry + catalog metadata + managed/external 検出
+  実測        FLUX.2 Klein 4B は NVMe shared HF cache から external / healthy /
+              removable=no。走査 0.03 秒、最大 RSS 14,340 KiB
+  次          merge 後に PR-M1（durable model install/remove backend）
+  注意        M1 の partial download を installed と見なさず、外部 cache を削除しない。
+              hosted CI は使わずローカル gate を記録する。
 ```
 
 ## リリースの運用
@@ -95,12 +91,8 @@ PR-U4（状況と結果ステージ）を開始する。
               --evidence-dir /tmp/ux1-evidence
     証跡: /data1tb/mediaforge-ux1-evidence/{light,dark}/
 
-main はクリーン。以降の UX1 ブランチは main から切る
-    #21 #22 #23 はすべてマージ済み。積み重ねは解消した。
-    PR-U6（一貫性 UI）の前提だった G3 backend も main に入っている。
-
-docs/README-updated.md / docs/README-updated 2.md は untracked のまま
-    UX1 とは無関係の残置ファイル。触らない。
+UX2 の各ブランチは直前スライスを main へ merge してから切る
+    PR-M0 は ux1/model-registry-m0。M0 と M1 を同一 PR に混ぜない。
 ```
 
 ## 再開コマンド
@@ -110,8 +102,8 @@ cd /data1tb/ControlDeckMediaForge
 cat docs/implementation/ux1-handoff.md          # このファイル
 git fetch --all --prune && git log --oneline -5
 gh pr list --state open
-sed -n '/## 3\. PR-U1/,/## 4\. PR-U2/p' docs/implementation/ux1-workspace.md   # 次の仕様
-./mf.sh test                                     # 基準値: 155 passed
+sed -n '/## 4\. PR-M1/,/## 5\. PR-M2/p' docs/implementation/ux2-model-scene.md
+./mf.sh test                                     # 基準値: 189 passed
 ```
 
 ## 参照
@@ -119,6 +111,7 @@ sed -n '/## 3\. PR-U1/,/## 4\. PR-U2/p' docs/implementation/ux1-workspace.md   #
 ```text
 設計の正        docs/design-workspace-ux.md
 実装指示        docs/implementation/ux1-workspace.md
+UX2 実装指示    docs/implementation/ux2-model-scene.md
 運用ルール      docs/implementation/ux1-workspace.md §14
 進捗と実測      docs/implementation-status.md（実測値のみ。推測を書かない）
 ```

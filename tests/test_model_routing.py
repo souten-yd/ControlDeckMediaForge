@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mediaforge.models import ModelDescriptor, ModelRegistry, ModelRegistryError, ModelState
+from mediaforge.models import ModelDescriptor, ModelOwnership, ModelRegistry, ModelRegistryError, ModelState
 from mediaforge.routing import ModelRouteError, route_model
 
 
@@ -188,3 +188,128 @@ def test_registry_rejects_invalid_generation_limits(tmp_path):
 
     with pytest.raises(ModelRegistryError, match="generation_limits"):
         ModelRegistry.load(manifest)
+
+
+def _m0_runtime_manifest(path: Path) -> Path:
+    value = {
+        "schema_version": "1.0",
+        "models": [{
+            "model_id": "owner/model", "family": "test", "version": "1", "revision": "d" * 40,
+            "weights_hash": "sha256:" + "e" * 64, "license": "Apache-2.0", "runtime_adapter": "test",
+            "capabilities": ["image.text_to_image"], "hardware_backends": ["rocm"],
+            "state": "available", "policy_rank": {"auto": 1},
+            "measurements": {
+                "resident_vram_bytes": 1, "execution_peak_vram_bytes": 2,
+                "cold_load_peak_vram_bytes": 3, "headroom_vram_bytes": 1,
+                "measured_runtime_sec": 1,
+            },
+            "required_files": ["config.json"],
+            "weights": [{"path": "model.safetensors", "size_bytes": 4, "sha256": "c" * 64}],
+        }],
+    }
+    path.write_text(json.dumps(value), encoding="utf-8")
+    return path
+
+
+def _m0_catalog(path: Path, *, ownership: str = "managed", domains: list[str] | None = None) -> Path:
+    value = {
+        "schema_version": "1.0",
+        "models": [{
+            "model_id": "owner/model", "display_name": "Example Model",
+            "domains": domains or ["general"], "description": "A test model.",
+            "approx_download_bytes": 4,
+            "source": {"kind": "huggingface", "repo_id": "owner/model", "revision": "d" * 40},
+            "ownership": ownership, "supports_lora": False, "max_references": 2,
+            "recommended_profiles": [], "gated": False, "license_notice": "Apache-2.0",
+        }],
+    }
+    path.write_text(json.dumps(value), encoding="utf-8")
+    return path
+
+
+def _m0_install(root: Path) -> Path:
+    repo = root / "hub/models--owner--model"
+    blob = repo / "blobs" / ("c" * 64)
+    blob.parent.mkdir(parents=True)
+    blob.write_bytes(b"test")
+    config = repo / "blobs" / ("f" * 64)
+    config.write_text("{}", encoding="utf-8")
+    snapshot = repo / "snapshots" / ("d" * 40)
+    snapshot.mkdir(parents=True)
+    (snapshot / "config.json").symlink_to(config)
+    (snapshot / "model.safetensors").symlink_to(blob)
+    return snapshot
+
+
+def test_catalog_rejects_unknown_ownership(tmp_path):
+    manifest = _m0_runtime_manifest(tmp_path / "models.json")
+    catalog = _m0_catalog(tmp_path / "catalog.json", ownership="borrowed")
+    with pytest.raises(ModelRegistryError, match="ownership"):
+        ModelRegistry.load(manifest, catalog_manifest=catalog)
+
+
+def test_registry_reports_external_model_as_usable_and_non_removable(tmp_path):
+    manifest = _m0_runtime_manifest(tmp_path / "models.json")
+    catalog = _m0_catalog(tmp_path / "catalog.json", ownership="managed")
+    snapshot = _m0_install(tmp_path / "external")
+    model = ModelRegistry.load(
+        manifest, catalog_manifest=catalog, hf_home=tmp_path / "external",
+        model_store_root=tmp_path / "managed",
+    ).all()[0]
+    assert (model.installed, model.healthy, model.ownership, model.removable) == (
+        True, True, ModelOwnership.EXTERNAL, False,
+    )
+    assert model.local_path == snapshot.resolve()
+
+
+def test_registry_reports_contained_managed_model_as_removable(tmp_path):
+    manifest = _m0_runtime_manifest(tmp_path / "models.json")
+    catalog = _m0_catalog(tmp_path / "catalog.json")
+    _m0_install(tmp_path / "managed")
+    model = ModelRegistry.load(
+        manifest, catalog_manifest=catalog, hf_home=tmp_path / "external",
+        model_store_root=tmp_path / "managed",
+    ).all()[0]
+    assert (model.installed, model.ownership, model.removable) == (True, ModelOwnership.MANAGED, True)
+
+
+def test_registry_rejects_managed_store_symlink_escape(tmp_path):
+    manifest = _m0_runtime_manifest(tmp_path / "models.json")
+    catalog = _m0_catalog(tmp_path / "catalog.json")
+    outside = tmp_path / "outside"
+    _m0_install(outside)
+    managed = tmp_path / "managed"
+    managed.mkdir()
+    (managed / "hub").symlink_to(outside / "hub", target_is_directory=True)
+    model = ModelRegistry.load(
+        manifest, catalog_manifest=catalog, model_store_root=managed,
+    ).all()[0]
+    assert model.installed is False
+    assert model.local_path is None
+
+
+def test_registry_rejects_ambiguous_managed_and_external_installations(tmp_path):
+    manifest = _m0_runtime_manifest(tmp_path / "models.json")
+    catalog = _m0_catalog(tmp_path / "catalog.json")
+    _m0_install(tmp_path / "managed")
+    _m0_install(tmp_path / "external")
+    with pytest.raises(ModelRegistryError, match="ambiguous"):
+        ModelRegistry.load(
+            manifest, catalog_manifest=catalog, hf_home=tmp_path / "external",
+            model_store_root=tmp_path / "managed",
+        )
+
+
+def test_catalog_metadata_does_not_change_capability_routing(tmp_path):
+    manifest = _m0_runtime_manifest(tmp_path / "models.json")
+    catalog = _m0_catalog(tmp_path / "catalog.json", domains=["anime", "poster"])
+    _m0_install(tmp_path / "managed")
+    model = ModelRegistry.load(
+        manifest, catalog_manifest=catalog, model_store_root=tmp_path / "managed",
+    ).all()[0]
+    selected = route_model(
+        (model,), capability="image.text_to_image", policy="auto",
+        hardware_backend="rocm", free_vram_bytes=100,
+    )
+    assert selected.model_id == "owner/model"
+    assert selected.domains == ("anime", "poster")

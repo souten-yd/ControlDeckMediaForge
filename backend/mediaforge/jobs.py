@@ -64,6 +64,8 @@ class JobManager:
         host_client: ControlDeckHostClient | None = None,
         lease_renew_sec: float = 10.0,
         model_manifest: Path | None = None,
+        model_catalog_manifest: Path | None = None,
+        model_store_root: Path | None = None,
         hf_home: Path | None = None,
         image_runtime_python: Path | None = None,
         semantic_reviewer: SemanticReviewer | None = None,
@@ -73,6 +75,8 @@ class JobManager:
         self.host_client = host_client
         self.lease_renew_sec = lease_renew_sec
         self.model_manifest = model_manifest
+        self.model_catalog_manifest = model_catalog_manifest
+        self.model_store_root = model_store_root
         self.hf_home = hf_home
         self.image_runtime_python = image_runtime_python
         self.semantic_reviewer = semantic_reviewer
@@ -290,7 +294,12 @@ class JobManager:
         if self.model_manifest is None or self.hf_home is None:
             return None
         try:
-            models = ModelRegistry.load(self.model_manifest, hf_home=self.hf_home).all()
+            models = ModelRegistry.load(
+                self.model_manifest,
+                hf_home=self.hf_home,
+                catalog_manifest=self.model_catalog_manifest,
+                model_store_root=self.model_store_root,
+            ).all()
         except ModelRegistryError as exc:
             raise WorkerFailure("model_registry_invalid", str(exc)) from exc
         capability = self._model_capability(job)

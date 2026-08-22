@@ -29,6 +29,8 @@ class Settings:
     host_request_timeout_sec: float = 10.0
     host_lease_renew_sec: float = 10.0
     model_manifest: Path = REPOSITORY_ROOT / "worker_packs/image/models.json"
+    model_catalog_manifest: Path | None = None
+    model_store_root: Path | None = None
     hf_home: Path = Path.home() / ".cache/huggingface"
     image_runtime_python: Path = REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python"
     semantic_reviewer_url: str = "http://127.0.0.1:11434"
@@ -38,6 +40,12 @@ class Settings:
     def __post_init__(self) -> None:
         object.__setattr__(self, "control_deck_url", _control_deck_origin(self.control_deck_url))
         object.__setattr__(self, "model_manifest", self.model_manifest.resolve())
+        catalog = self.model_catalog_manifest
+        if catalog is None and self.model_manifest == (REPOSITORY_ROOT / "worker_packs/image/models.json").resolve():
+            catalog = REPOSITORY_ROOT / "worker_packs/image/catalog.json"
+        object.__setattr__(self, "model_catalog_manifest", catalog.resolve() if catalog is not None else None)
+        model_store_root = self.model_store_root or self.data_dir / "models"
+        object.__setattr__(self, "model_store_root", model_store_root.resolve())
         object.__setattr__(self, "hf_home", self.hf_home.resolve())
         # Preserve the venv launcher path. Resolving its final `python`
         # symlink to /usr/bin/python bypasses pyvenv.cfg discovery and silently
@@ -72,6 +80,11 @@ class Settings:
             model_manifest=Path(
                 os.environ.get("MEDIA_FORGE_MODEL_MANIFEST", REPOSITORY_ROOT / "worker_packs/image/models.json")
             ),
+            model_catalog_manifest=Path(
+                os.environ.get("MEDIA_FORGE_MODEL_CATALOG", REPOSITORY_ROOT / "worker_packs/image/catalog.json")
+            ),
+            model_store_root=Path(os.environ["MEDIA_FORGE_MODEL_STORE_ROOT"])
+            if "MEDIA_FORGE_MODEL_STORE_ROOT" in os.environ else None,
             hf_home=Path(os.environ.get("HF_HOME", Path.home() / ".cache/huggingface")),
             image_runtime_python=Path(
                 os.environ.get(
