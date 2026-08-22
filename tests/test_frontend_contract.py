@@ -32,6 +32,7 @@ DOM_IDS = (
     "create-form", "create-intent", "create-submit", "create-status",
     "attach-image", "attach-size", "source-file", "edit-actions", "guarantee-badge",
     "size-block", "size-label", "size-note", "size-presets", "count-chips",
+    "size-custom", "custom-width", "custom-height", "custom-ratios",
     "create-error", "create-estimate",
     "mask-input", "mask-draw", "mask-preview", "mask-state",
     "mask-dialog", "mask-canvas", "mask-brush", "mask-eraser", "mask-undo", "mask-clear",
@@ -182,7 +183,10 @@ def test_workspace_routes_match_the_views_the_ui_syncs():
 def test_addon_declares_a_real_mobile_view():
     view = next(item for item in ADDON["contributions"]["embedded_views"] if item["id"] == "workspace")
     assert view["mobile"] == "embedded", "モバイル IA を実装したので companion ではない"
-    assert ADDON["version"] == "0.2.0", "contribution を変えたので version を上げる"
+    # 版はリリースごとに動く。固定値ではなく pyproject と一致していることを見る。
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    packaged = re.search(r'^version = "([^"]+)"', pyproject, re.MULTILINE).group(1)
+    assert ADDON["version"] == packaged, "addon.json と pyproject の版が食い違っている"
 
 
 @pytest.mark.parametrize("kind", ["all", "generated", "edited", "imported"])
@@ -217,3 +221,22 @@ def test_outpaint_has_no_per_side_controls():
     assert "left = (width - source.width) // 2" in outpaint, "中央配置の前提が変わっている"
     for forbidden in ("data-side", "expand-left", "expand-right", "expand-top", "expand-bottom"):
         assert forbidden not in MARKUP and forbidden not in SCRIPT, f"非対称拡張の操作がある: {forbidden}"
+
+
+def test_custom_size_is_reachable_without_advanced_mode():
+    """カスタム寸法は上級者だけのものではない。既定の経路から入力できる。"""
+    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
+    for name in ("size-custom", "custom-width", "custom-height", "custom-ratios"):
+        assert f'id="{name}"' in without_templates, f"{name} が既定経路に無い"
+    assert 'dataset.preset = "custom"' in SCRIPT, "カスタムの選択肢が無い"
+
+
+def test_device_photos_are_resized_before_upload():
+    """取り込みの画素数上限を超える端末写真をそのまま送らない。"""
+    assert "fitToEnvelope" in SCRIPT and "needsResize" in SCRIPT
+    assert "createImageBitmap" in SCRIPT and "toBlob" in SCRIPT
+
+
+def test_typing_does_not_mark_the_workspace_as_unsaved():
+    """保存の概念が無いのに離脱警告を出さない。"""
+    assert 'addEventListener("input", () => setHostBusy(true))' not in SCRIPT

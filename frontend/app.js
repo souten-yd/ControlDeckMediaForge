@@ -67,6 +67,7 @@ const state = {
   presets: [],
   editMode: "",
   source: null,
+  upload: null,
   sourceUrl: "",
   maskFile: null,
   maskPainted: 0,
@@ -127,6 +128,9 @@ function callHost(method, params = {}) {
   });
 }
 
+/* host の「未保存」は離脱を警告する。Media Forge には保存の概念が無く、
+   実行中の作業はサーバ側の job として残るので、入力しただけでは立てない。
+   実際に失うものがある間（取り込み中・受付中）だけ立てる。 */
 function setHostBusy(value) {
   if (!state.bridgePort || state.hostBusy === value) return;
   state.hostBusy = value;
@@ -306,27 +310,92 @@ function activate(name, {sync = true} = {}) {
 
 /* ── create ───────────────────────────────────────────────────────────── */
 
+/* よく使う比率。envelope に収まるよう長辺を basis に合わせて計算する。
+   数値ではなく用途で選べることを優先し、正確な寸法はチップに併記する。 */
+const RATIO_PRESETS = [
+  {id: "square", label: "正方形", ratio: [1, 1]},
+  {id: "landscape", label: "横長", ratio: [4, 3]},
+  {id: "portrait", label: "縦長", ratio: [3, 4]},
+  {id: "wide", label: "ワイド", ratio: [16, 9]},
+  {id: "tall", label: "縦ワイド", ratio: [9, 16]},
+  {id: "cinema", label: "シネマ", ratio: [21, 9]},
+];
+
+function ratioSize(ratio) {
+  const envelope = sizeEnvelope();
+  const multiple = envelope.multiple_of;
+  const [long, short] = ratio[0] >= ratio[1] ? ratio : [ratio[1], ratio[0]];
+  const longSide = envelope.max_side;
+  const shortSide = Math.max(envelope.min_side, (longSide * short) / long);
+  const snap = (value) => Math.max(multiple, Math.round(value / multiple) * multiple);
+  return ratio[0] >= ratio[1]
+    ? {width: snap(longSide), height: snap(shortSide)}
+    : {width: snap(shortSide), height: snap(longSide)};
+}
+
 function renderPresets() {
   const holder = byId("size-presets");
-  const presets = state.presets.length ? state.presets : [
-    {id: "square", width: 512, height: 512},
-    {id: "landscape", width: 768, height: 448},
-    {id: "portrait", width: 448, height: 768},
-  ];
-  const labels = {square: "正方形", landscape: "横長", portrait: "縦長"};
   const chosen = state.preferences.last_preset || "square";
-  holder.replaceChildren(...presets.map((preset) => {
+  const chips = RATIO_PRESETS.map((preset) => {
+    const size = ratioSize(preset.ratio);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "chip";
     button.dataset.preset = preset.id;
-    button.dataset.width = preset.width;
-    button.dataset.height = preset.height;
+    button.dataset.width = size.width;
+    button.dataset.height = size.height;
     button.setAttribute("role", "radio");
     button.setAttribute("aria-checked", String(preset.id === chosen));
-    button.textContent = `${labels[preset.id] || preset.id} ${preset.width}×${preset.height}`;
+    button.textContent = `${preset.label} ${size.width}×${size.height}`;
+    return button;
+  });
+  const custom = document.createElement("button");
+  custom.type = "button";
+  custom.className = "chip";
+  custom.id = "preset-custom";
+  custom.dataset.preset = "custom";
+  custom.setAttribute("role", "radio");
+  custom.setAttribute("aria-checked", String(chosen === "custom"));
+  custom.textContent = "カスタム";
+  chips.push(custom);
+  holder.replaceChildren(...chips);
+  renderCustomRatios();
+  syncCustomVisibility();
+}
+
+/* カスタムでも比率だけは選べるようにする。数値を両方入れ直す手間を無くす。 */
+function renderCustomRatios() {
+  const holder = byId("custom-ratios");
+  if (!holder) return;
+  holder.replaceChildren(...RATIO_PRESETS.map((preset) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chip";
+    button.dataset.customRatio = preset.ratio.join(":");
+    button.textContent = preset.label;
     return button;
   }));
+}
+
+function syncCustomVisibility() {
+  const chosen = byId("size-presets").querySelector('[aria-checked="true"]');
+  const custom = chosen?.dataset.preset === "custom";
+  byId("size-custom").hidden = !custom;
+  if (!custom) return;
+  const width = byId("custom-width");
+  if (!width.value) {
+    const envelope = sizeEnvelope();
+    width.value = Number(state.preferences.last_custom_width) || envelope.max_side;
+    byId("custom-height").value = Number(state.preferences.last_custom_height) || envelope.max_side;
+  }
+  const envelope = sizeEnvelope();
+  for (const input of [width, byId("custom-height")]) {
+    input.min = envelope.min_side;
+    input.max = envelope.max_side;
+    input.step = envelope.multiple_of;
+  }
+  byId("size-note").textContent =
+    `${envelope.min_side}〜${envelope.max_side}px・${envelope.multiple_of} の倍数で指定してください。`;
 }
 
 function renderCounts() {
@@ -346,6 +415,14 @@ function renderCounts() {
 
 function currentPreset() {
   const chosen = byId("size-presets").querySelector('[aria-checked="true"]');
+  if (chosen?.dataset.preset === "custom") {
+    const envelope = sizeEnvelope();
+    return {
+      id: "custom",
+      width: Number(byId("custom-width").value) || envelope.max_side,
+      height: Number(byId("custom-height").value) || envelope.max_side,
+    };
+  }
   return {
     id: chosen?.dataset.preset || "square",
     width: Number(chosen?.dataset.width || 512),
@@ -467,6 +544,40 @@ async function measure(file) {
   } catch { return null; }
 }
 
+/* 端末の写真は 12 メガピクセル級で、取り込みの画素数上限（2048×2048）を超える。
+   出力はどのみち envelope に収まる寸法なので、送る前にここで縮める。
+   これをしないと「大きすぎます」で落ちるか、無駄に長いアップロードになる。 */
+function fitToEnvelope(width, height) {
+  const envelope = sizeEnvelope();
+  const multiple = envelope.multiple_of;
+  const limit = Math.min(envelope.max_side, 2048);
+  const scale = Math.min(1, limit / Math.max(width, height));
+  const round = (value) => {
+    const bounded = Math.max(envelope.min_side, Math.round(value * scale));
+    return Math.max(multiple, Math.round(bounded / multiple) * multiple);
+  };
+  return {width: round(width), height: round(height)};
+}
+
+function needsResize(size) {
+  const target = fitToEnvelope(size.width, size.height);
+  return target.width !== size.width || target.height !== size.height;
+}
+
+async function resized(file, size) {
+  const target = fitToEnvelope(size.width, size.height);
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement("canvas");
+  canvas.width = target.width;
+  canvas.height = target.height;
+  const context = canvas.getContext("2d");
+  context.imageSmoothingQuality = "high";
+  context.drawImage(bitmap, 0, 0, target.width, target.height);
+  bitmap.close();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  return {file: new File([blob], "source.png", {type: "image/png"}), size: target};
+}
+
 async function refreshAttachment() {
   const file = attachedFile();
   const zone = byId("attach-image");
@@ -475,8 +586,20 @@ async function refreshAttachment() {
   byId("attach-clear").hidden = !file;
   byId("edit-block").hidden = !file;
   if (!file) maskReset();
-  state.source = file ? await measure(file) : null;
-  byId("attach-size").textContent = state.source ? `${state.source.width}×${state.source.height}` : "";
+  state.upload = null;
+  const measured = file ? await measure(file) : null;
+  if (file && measured && needsResize(measured)) {
+    byId("attach-size").textContent = "読み込んでいます…";
+    const prepared = await resized(file, measured);
+    state.upload = prepared.file;
+    state.source = prepared.size;
+    byId("attach-size").textContent =
+      `${measured.width}×${measured.height} → ${prepared.size.width}×${prepared.size.height} に縮小して使います`;
+  } else {
+    state.upload = file;
+    state.source = measured;
+    byId("attach-size").textContent = measured ? `${measured.width}×${measured.height}` : "";
+  }
   if (file) renderEditActions();
   else selectEditMode("");
   renderSizeSection();
@@ -494,13 +617,14 @@ async function fileBase64(file) {
   return btoa(binary);
 }
 
-async function importFile(file, purpose) {
+async function importFile(file, purpose, onProgress) {
   if (!file || file.size < 1 || file.size > 64 * 1024 * 1024) throw {code: "invalid_import_size"};
   if (window.parent === window) return call("assets.import", {purpose, base64: await fileBase64(file)});
   const upload = await call("assets.import.begin", {purpose, size: file.size});
   for (let offset = 0; offset < file.size; offset += upload.chunk_bytes) {
     const slice = file.slice(offset, Math.min(file.size, offset + upload.chunk_bytes));
     await call("assets.import.chunk", {upload_id: upload.upload_id, offset, base64: await fileBase64(slice)});
+    if (onProgress) onProgress(Math.min(1, (offset + slice.size) / file.size));
   }
   return call("assets.import.commit", {upload_id: upload.upload_id});
 }
@@ -594,14 +718,18 @@ async function submitJob(event) {
 
   submit.disabled = true;
   submit.textContent = "実行中…";
-  status.textContent = "受け付けています…";
+  status.textContent = "";
+  setHostBusy(true);
+  showPreparing("受け付けています", 0.05);
   try {
     const file = attachedFile();
     const operation = file ? "image.edit" : "image.generate";
     let inputs = [];
     if (file) {
-      status.textContent = "画像を取り込んでいます…";
-      const source = await importFile(file, "source");
+      showPreparing("画像を取り込んでいます", 0.15);
+      const source = await importFile(state.upload || file, "source", (ratio) => {
+        showPreparing("画像を取り込んでいます", 0.15 + ratio * 0.35);
+      });
       inputs = [{asset_id: source.id}];
       const preserving = state.editMode === "inpaint" || state.editMode === "outpaint";
       if (state.editMode !== "outpaint") {
@@ -614,11 +742,13 @@ async function submitJob(event) {
       constraints.strict_edit = preserving;
       constraints.edit_mode = state.editMode;
       if (state.editMode === "inpaint") {
+        showPreparing("塗った範囲を取り込んでいます", 0.55);
         const imported = await importFile(maskAsset(), "edit_mask");
         constraints.editable_mask_asset_id = imported.id;
       }
       if (state.editMode === "multi_reference") {
         const files = Array.from(byId("reference-files").files);
+        showPreparing("参考画像を取り込んでいます", 0.6);
         for (const reference of files) {
           inputs.push({asset_id: (await importFile(reference, "source")).id});
         }
@@ -635,6 +765,7 @@ async function submitJob(event) {
       local_only: true,
       ...modelSelection(),
     };
+    showPreparing("受け付けています", 0.7);
     const job = await call("jobs.create", request);
     setHostBusy(false);
     state.activeJob = job.id;
@@ -646,7 +777,9 @@ async function submitJob(event) {
   } catch (error) {
     status.textContent = "";
     showError(failureText(error?.code));
+    hidePreparing();
   } finally {
+    setHostBusy(false);
     submit.disabled = false;
     submit.textContent = "作る";
   }
@@ -687,6 +820,25 @@ async function pollJob(id) {
     if (TERMINAL.has(job.status)) return finishJob(job);
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
+}
+
+/* job になる前の待ち時間も進捗として見せる。
+   モバイルではステージが画面外にあり、ミニバーだけが手掛かりになる。 */
+function showPreparing(text, ratio) {
+  byId("stage-progress").hidden = false;
+  byId("mini-progress").hidden = false;
+  byId("progress-phase").textContent = text;
+  byId("mini-phase").textContent = text;
+  const percent = `${Math.round(ratio * 100)}%`;
+  byId("progress-bar").style.width = percent;
+  byId("mini-bar").style.width = percent;
+  byId("progress-detail").textContent = "";
+}
+
+function hidePreparing() {
+  if (state.activeJob) return;
+  byId("stage-progress").hidden = true;
+  byId("mini-progress").hidden = true;
 }
 
 function showProgress(job) {
@@ -841,7 +993,7 @@ const mask = {
 };
 
 function maskOpen() {
-  const file = attachedFile();
+  const file = state.upload || attachedFile();
   if (!file || !state.source) return;
   const dialog = byId("mask-dialog");
   mask.canvas = byId("mask-canvas");
@@ -1304,6 +1456,7 @@ byId("size-presets").addEventListener("click", (event) => {
   for (const other of byId("size-presets").children) {
     other.setAttribute("aria-checked", String(other === chip));
   }
+  syncCustomVisibility();
   renderSizeSection();
   clearError();
   if (state.mode === "advanced") syncAdvancedCreate();
@@ -1318,6 +1471,28 @@ byId("count-chips").addEventListener("click", (event) => {
   }
   if (state.mode === "advanced") syncAdvancedCreate();
   void savePreferences({last_count: Number(chip.dataset.count)});
+});
+
+byId("size-custom").addEventListener("input", (event) => {
+  if (!event.target.id.startsWith("custom-")) return;
+  clearError();
+  renderSizeSection();
+  void savePreferences({
+    last_custom_width: Number(byId("custom-width").value) || 0,
+    last_custom_height: Number(byId("custom-height").value) || 0,
+  });
+});
+
+byId("custom-ratios").addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-custom-ratio]");
+  if (!chip) return;
+  const [first, second] = chip.dataset.customRatio.split(":").map(Number);
+  const size = ratioSize([first, second]);
+  byId("custom-width").value = size.width;
+  byId("custom-height").value = size.height;
+  clearError();
+  renderSizeSection();
+  void savePreferences({last_custom_width: size.width, last_custom_height: size.height});
 });
 
 byId("library-kinds").addEventListener("click", (event) => {
@@ -1401,7 +1576,6 @@ dropzone.addEventListener("drop", (event) => {
   void refreshAttachment();
 });
 byId("create-form").addEventListener("submit", submitJob);
-byId("create-form").addEventListener("input", () => setHostBusy(true));
 byId("library-more").addEventListener("click", () => void loadLibrary());
 byId("close-dialog").addEventListener("click", () => byId("detail-dialog").close());
 byId("open-host-jobs").addEventListener("click", () => void callHost("host.route.open", {route: "/jobs"}).catch(() => {}));
