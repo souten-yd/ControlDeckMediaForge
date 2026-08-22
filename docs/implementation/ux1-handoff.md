@@ -10,8 +10,8 @@
 ```text
 最終更新    2026-08-22
 ブランチ    ux1/evaluator-r9700-c5
-PR          UX1 #21〜#33 / UX2 M0 #35〜C4 #42 マージ済み、C5準備中
-状態        UX2 C5実装・実GPU・実VLM・installed-host browser実測・local gate済み。commit前
+PR          UX1 #21〜#33 / UX2 M0 #35〜C4 #42 マージ済み、C5 #43 open
+状態        UX2 C5 commit e514642をpush済み。PR #43 exact head / mergeable / checksなし確認済み
 基準値      ./mf.sh test = 262 passed（25.10秒）
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
@@ -36,7 +36,7 @@ PR          UX1 #21〜#33 / UX2 M0 #35〜C4 #42 マージ済み、C5準備中
 ## 次にやること（1 つだけ）
 
 ```text
-UX2 PR-C5 のfull local gateを通し、commit / push / PR / mergeする。
+UX2 PR-C5 #43 をmergeし、main exact headを確認する。
   ブランチ    ux1/evaluator-r9700-c5
   実装        6軸advisory evaluator、候補ranking、bounded CPU VLM、fail-closed
   実測        FLUX 3候補、Broker/VRAM/swap、Qwen instruct 3候補、worker crash、
