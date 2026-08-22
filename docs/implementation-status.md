@@ -1742,3 +1742,38 @@ ControlDeckコード変更とhosted CI利用はどちらも0件。
 focused evaluator / semantic / frontend / workspace transport regressionは84 passed、
 full `./mf.sh test`は262 passed（25.10秒）。これは契約回帰証跡であり、上記の
 実Workflow/GPU/VLM/browser観測とは区別する。
+
+## Release v0.3.0 — Creative direction workflow (2026-08-22)
+
+UX2 M0〜C5を、ポーズ指定を含む最初のCreative direction機能版として公開した。
+Release tagは、version bumpと全bundle入力を含むexact commit
+`c4754ac26fb310978f1d806d0a55e4b993aabdee`を指す。動画候補catalogの作業中差分は
+別worktree/別branchに隔離し、このartifactへ含めていない。
+
+```text
+release       https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.3.0
+artifact      control-deck-media-forge-0.3.0-linux-x86_64.tar.gz
+bytes         30,781,945
+sha256        d8055331b96befc3de2bbf99cb3823ad6a5159158a0fab6521f40f8d719aa48f
+build         18.02 seconds / max RSS 115,648 KiB
+doctor        status=ok / version=0.3.0 / packaged=true
+manifest      addon 0.3.0 / feature 0.3.0 / entrypoint bin/mediaforge
+```
+
+展開したbundleを`127.0.0.1:9140`で実際に起動し、source treeではなく配布binaryへ
+HTTPとChromiumを接続した。標準workspace試験は20.52秒、desktop ready 0.076秒、
+390px/320px horizontal overflow 0、console error 0件でPASSED。入力fixtureは既存の
+858-byte PNG（SHA-256 `8314eb3e...e47`）を証跡directoryへ明示配置した。fixtureが
+無い最初の試行は`FileNotFoundError`で停止しており、成功には数えていない。
+
+ポーズ専用のbrowser試験は1.32秒で、`presenting_device` scene、`holding_item` pose、
+`full_body_off_center` compositionが別々のCreativePlan fieldへcompileされ、model IDを
+強制しなかった。`coding_at_desk + wave`の不正組合せはjob送信前に日本語理由付きで
+拒否された。320x640 overflowは0、console/page errorは0/0。証跡は
+`/data1tb/mediaforge-v0.3.0-evidence/`へ保持する。
+
+version bump後の`./mf.sh test`は262 passed（24.97秒、全command 26.43秒、最大RSS
+257,956 KiB）。これは回帰gateであり、上記の配布binary/HTTP/browser観測とは区別する。
+v0.3.0 bundleのControlDeck trusted catalog導入・installed-host更新と、実端末の指操作は
+**NOT TESTED**。動画runtimeはこのReleaseに含まれず **UNAVAILABLE**。hosted CIと
+ControlDeckコード変更は0件。

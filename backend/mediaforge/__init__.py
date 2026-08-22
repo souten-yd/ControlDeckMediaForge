@@ -1,3 +1,3 @@
 """ControlDeck Media Forge core service."""
 
-__version__ = "0.2.4"
+__version__ = "0.3.0"

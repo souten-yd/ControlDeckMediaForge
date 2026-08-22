@@ -9,11 +9,11 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    main（C5 merge後のcloseout）
-PR          UX1 #21〜#33 / UX2 M0 #35〜C5 #43 マージ済み
-状態        UX2 M0〜C5完了。main / origin/main = 14bbc74、通常service healthy確認済み
-基準値      ./mf.sh test = 262 passed（25.10秒）
-リリース    installed host は v0.2.4（M0 はまだ未収録）
+ブランチ    release/v0.3.0
+PR          UX1 #21〜#33 / UX2 M0 #35〜C5 #43 / closeout #44 マージ済み
+状態        UX2 M0〜C5完了。v0.3.0 Release公開済み、PR #48 merge待ち
+基準値      ./mf.sh test = 262 passed（24.97秒、version bump後）
+リリース    v0.3.0公開済み（artifact d8055331...aa48f）。installed host は v0.2.4
 ```
 
 ## PR 進捗
@@ -36,9 +36,9 @@ PR          UX1 #21〜#33 / UX2 M0 #35〜C5 #43 マージ済み
 ## 次にやること（1 つだけ）
 
 ```text
-利用者の次の優先スライスを確認し、設計の正から新しいPR境界を切る。
-  完了        UX2 M0〜C5（Model Management / CreativeSpec / batch / Composer / Evaluator）
-  候補        goal-roadmapのG3本体、または利用者が次に指定するgoal
+PR #48 をlocal gate確認後にmergeし、動画候補catalogの別PRへ戻る。
+  収録        UX2 M0〜C5（Model Management / CreativeSpec / batch / Composer / Evaluator）
+  次PR        動画候補model catalog（Wan / LTX / Hunyuan）はreleaseと混ぜない
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
