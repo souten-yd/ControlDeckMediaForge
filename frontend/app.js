@@ -1392,12 +1392,67 @@ async function libraryCard(item) {
   size.textContent = item.width && item.height ? `${item.width}×${item.height}` : "";
   meta.append(kind, size);
   card.append(image, summary, meta);
-  card.addEventListener("click", () => void openDetail(item.asset_id));
+  card.addEventListener("click", () => void openViewer(item.asset_id, item));
   try {
     const thumbnail = await call("assets.thumbnail", {asset_id: item.asset_id});
     image.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
   } catch { image.alt = "表示できません"; }
   return card;
+}
+
+/* ── 全画面ビューア ───────────────────────────────────────────────────── */
+
+/* 一覧のサムネイルは小さい。タップしたら原寸で見られる場所が要る。
+   ピンチ／ホイールで拡大し、拡大中はドラッグで動かせる。 */
+const viewer = {assetId: "", scale: 1, x: 0, y: 0, pointers: new Map(), pinch: 0, drag: null};
+
+function viewerApply() {
+  byId("viewer-image").style.transform =
+    `translate(${viewer.x}px, ${viewer.y}px) scale(${viewer.scale})`;
+}
+
+function viewerReset() {
+  viewer.scale = 1;
+  viewer.x = 0;
+  viewer.y = 0;
+  viewer.pointers.clear();
+  viewer.pinch = 0;
+  viewer.drag = null;
+  viewerApply();
+}
+
+function viewerZoom(factor) {
+  viewer.scale = Math.max(1, Math.min(8, viewer.scale * factor));
+  if (viewer.scale === 1) { viewer.x = 0; viewer.y = 0; }
+  viewerApply();
+}
+
+async function openViewer(assetId, item) {
+  viewer.assetId = assetId;
+  viewerReset();
+  const image = byId("viewer-image");
+  const caption = byId("viewer-caption");
+  image.removeAttribute("src");
+  caption.textContent = "読み込んでいます…";
+  byId("viewer").showModal();
+  try {
+    const content = await call("assets.content", {asset_id: assetId});
+    image.src = `data:${content.mime_type};base64,${content.base64}`;
+    image.alt = item?.summary || "";
+    caption.textContent = item
+      ? [item.summary, item.width && item.height ? `${item.width}×${item.height}` : "", KIND_LABEL[item.kind] || ""]
+          .filter(Boolean).join(" · ")
+      : "";
+  } catch {
+    // 12 MiB を超える素材は運べない。小さい版で見せて理由を書く。
+    try {
+      const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 512});
+      image.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
+      caption.textContent = "原寸は大きすぎて表示できません。書き出して確認してください。";
+    } catch {
+      caption.textContent = "この素材は表示できません。";
+    }
+  }
 }
 
 async function openDetail(assetId) {
@@ -1760,7 +1815,71 @@ for (const holder of [byId("activity-list"), byId("create-error")]) {
 
 byId("library-more").addEventListener("click", () => void loadLibrary());
 byId("close-dialog").addEventListener("click", () => byId("detail-dialog").close());
+byId("viewer-close").addEventListener("click", () => byId("viewer").close());
+byId("viewer-detail").addEventListener("click", () => {
+  byId("viewer").close();
+  if (viewer.assetId) void openDetail(viewer.assetId);
+});
+byId("viewer-edit").addEventListener("click", () => {
+  byId("viewer").close();
+  activate("create");
+  byId("create-status").textContent =
+    "編集したい画像を「画像を追加」から読み込ませてください。書き出しからの直接編集は次の段階で入ります。";
+});
+
+const viewerStage = byId("viewer-stage");
+viewerStage.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  viewerZoom(event.deltaY < 0 ? 1.15 : 0.87);
+}, {passive: false});
+
+viewerStage.addEventListener("dblclick", () => viewerZoom(viewer.scale > 1 ? 0.01 : 2.5));
+
+viewerStage.addEventListener("pointerdown", (event) => {
+  viewer.pointers.set(event.pointerId, event);
+  if (viewer.pointers.size === 2) {
+    const [first, second] = [...viewer.pointers.values()];
+    viewer.pinch = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+    viewer.drag = null;
+    return;
+  }
+  if (viewer.scale > 1) {
+    viewer.drag = {x: event.clientX - viewer.x, y: event.clientY - viewer.y};
+    byId("viewer-image").classList.add("dragging");
+  }
+});
+
+viewerStage.addEventListener("pointermove", (event) => {
+  if (!viewer.pointers.has(event.pointerId)) return;
+  viewer.pointers.set(event.pointerId, event);
+  if (viewer.pointers.size === 2 && viewer.pinch) {
+    const [first, second] = [...viewer.pointers.values()];
+    const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+    viewerZoom(distance / viewer.pinch);
+    viewer.pinch = distance;
+    return;
+  }
+  if (!viewer.drag) return;
+  viewer.x = event.clientX - viewer.drag.x;
+  viewer.y = event.clientY - viewer.drag.y;
+  viewerApply();
+});
+
+for (const name of ["pointerup", "pointercancel", "pointerleave"]) {
+  viewerStage.addEventListener(name, (event) => {
+    viewer.pointers.delete(event.pointerId);
+    if (viewer.pointers.size < 2) viewer.pinch = 0;
+    if (viewer.pointers.size === 0) {
+      viewer.drag = null;
+      byId("viewer-image").classList.remove("dragging");
+    }
+  });
+}
 byId("open-host-jobs").addEventListener("click", () => void callHost("host.route.open", {route: "/jobs"}).catch(() => {}));
+byId("result-image").addEventListener("click", () => {
+  const assetId = byId("result-image").dataset.assetId;
+  if (assetId) void openViewer(assetId);
+});
 byId("result-detail").addEventListener("click", () => {
   const assetId = byId("result-image").dataset.assetId;
   if (assetId) void openDetail(assetId);
