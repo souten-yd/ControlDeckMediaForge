@@ -1679,3 +1679,66 @@ child path、文字更新時のchild不変を確認した。実GPU shotの視覚
 iframeはC5まで **NOT TESTED**。`./mf.sh test`は255 passed（23.75秒、全command
 25.21秒、最大RSS 248,256 KiB）。これは回帰gateであり、上記の実process/browser観測とは
 区別する。ControlDeck変更は不要だった。
+
+## UX2 PR-C5 — semantic evaluator + R9700 acceptance (2026-08-22)
+
+既存のdeterministic validatorとC0 plannerの後段に、6軸（identity / style /
+pose-action / scene / composition / obvious breakage）のCPU-only advisory
+Evaluatorを追加した。候補asset IDだけを受け取り、結果を順位表示する。自動再生成は行わず、
+評価前後のjob件数も不変である。入力は最大8候補・4参照・16KiB plan、画像は既存の
+768x768 / 2MiB境界を再利用する。path入力、remote origin、壊れたJSON、timeoutは
+`creative_evaluation_unavailable`でfail-closedする。public schema / addon.json /
+agent tool / workflow executorは変更していない。
+
+隔離ControlDeck（`127.0.0.1:18765`）と現在のMedia Forgeソース
+（`127.0.0.1:19130`）、実Broker、R9700/gfx1201、保持済みNVMe modelを使った。
+3件はすべてControlDeck Workflowからleaseを取得し、完了後に解放した。
+
+```text
+candidate 1                  15.967179 s; load 11.335529 / generation 1.584339
+candidate 2                  17.460744 s; load 13.448332 / generation 1.461965
+candidate 3                  19.440341 s; load 14.989607 / generation 1.592628
+resolution / steps           512x512 / 4
+first absolute VRAM peak     21,245,644,800 bytes
+later absolute VRAM peaks    17,478,889,472 / 17,470,918,656 bytes
+maximum worker RSS           16,494,501,888 bytes
+worker swap                  0 bytes
+lease renew / after          each 1 / active 0
+model/revision               FLUX.2-klein-4B / e7b7dc27...a294
+runtime                      Diffusers 0.40.0 / direct_device_map / cuda:0
+weights / license            f3fcfa8f...ae278 / Apache-2.0
+```
+
+目視では3枚とも短い黒髪、オレンジメッシュ、黒/オレンジhoodie、顔と配色が
+一貫し、端末提示・手振り・3/4 poseの差分が成立した。実出力と証跡は
+`/data1tb/mediaforge-c5-e2e-20260822/`へ保持する。
+
+Ollama 0.31.1の`qwen3-vl:2b` thinking tagは`think=false`を無視し、1画像でも
+約105秒をreasoningだけに使ってcontentを空で返した。最初の3候補評価と切り分け1候補は
+HTTP 422でfail-closedし、成功扱いしていない。非thinking rendererの同容量
+`qwen3-vl:2b-instruct`（digest `ea422f1e7365`, 1,889,519,783 bytes,
+Apache-2.0）へ切り替え、以下を実測した。初回pullは72%後に再試行したため、安定取得とは
+記録しない。
+
+```text
+direct evaluator             3 candidates / 40.60 s
+ranked first                 asset_906012a17a1145d399fc82545d639385
+Media Forge jobs             3 -> 3
+GPU VRAM before / after      59,949,056 / 59,949,056 bytes
+regeneration_requested       false
+installed-host iframe        40.222 s / same first candidate
+320px overflow               0 px
+browser console/page errors  0 / 0
+semantic review instruct     accepted / first response 12.88 s / warm 2.08 s
+```
+
+workerをlease取得後1秒でSIGKILLしたprobeは1.374453秒で`worker_crash`へ正規化され、
+active lease 0、core health `healthy`を確認した。既存の同一revision multi-reference
+実測は`docs/models.md`のG2 supplementを採用ゲート証跡として参照するが、C5では再実行
+していない。LoRAはcatalog metadataが`supports_lora=false`のため **UNAVAILABLE**。
+共有Hostのkernel page cache dropは行わず、完全storage-cold loadは **NOT TESTED**。
+ControlDeckコード変更とhosted CI利用はどちらも0件。
+
+focused evaluator / semantic / frontend / workspace transport regressionは84 passed、
+full `./mf.sh test`は262 passed（25.10秒）。これは契約回帰証跡であり、上記の
+実Workflow/GPU/VLM/browser観測とは区別する。

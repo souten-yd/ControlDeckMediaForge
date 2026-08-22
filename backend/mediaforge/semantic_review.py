@@ -91,7 +91,7 @@ class OllamaSemanticReviewer:
         if len(reference_paths) > 4:
             raise SemanticReviewError("semantic review references exceeded their bound")
         images = [path, *reference_paths]
-        encoded = [base64.b64encode(_bounded_review_image(item)).decode("ascii") for item in images]
+        encoded = [base64.b64encode(bounded_review_image(item)).decode("ascii") for item in images]
         payload = self.request_payload(encoded, intent)
         try:
             async with httpx.AsyncClient(timeout=self.timeout_sec) as client:
@@ -136,7 +136,7 @@ class OllamaSemanticReviewer:
         }
 
 
-def _bounded_review_image(path: Path) -> bytes:
+def bounded_review_image(path: Path) -> bytes:
     try:
         with Image.open(path) as opened:
             image = opened.convert("RGB")

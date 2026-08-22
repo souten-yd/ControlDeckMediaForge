@@ -276,8 +276,8 @@ not called when `qa.semantic=false`.
 
 ```text
 runtime: Ollama loopback API
-model: qwen3-vl:2b
-Ollama ID: 0635d9d857d4
+model: qwen3-vl:2b-instruct
+Ollama ID: ea422f1e7365
 size: 1.9 GB
 parameters: 2.13B / Q4_K_M
 license: Apache-2.0
@@ -296,8 +296,9 @@ license: Apache-2.0
 6. Reviewer identity and semantic result are recorded in provenance; the agent
    generation response still exposes only job/asset IDs.
 7. It adds about 1.9 GB on disk and about 3.0..4.3 GiB RSS while loaded. The
-   request retains it for only one minute to cover bounded retries. Exact-path
-   cold/warm reviews measured 31.289228 / 13.745254 seconds.
+   request retains it for only one minute to cover bounded retries. The original
+   G2 thinking-tag measurements were 31.289228 / 13.745254 seconds; C5 records
+   the instruct-tag replacement separately below.
 8. Ollama is a separate external process. Requests force `num_gpu=0`; observed
    review-runner swap was zero and GPU VRAM did not increase.
 9. It uses Ollama's maintained Qwen3-VL runtime with structured output. No
@@ -461,3 +462,52 @@ Visual inspection found that the result combined the primary black/orange hair
 design and clothing with the referenced orange mesh detail and two-hand waving
 pose. This is evidence that the multi-image route is active, not a statistical
 G3 character-consistency guarantee.
+
+## UX2 C5 adoption refresh — R9700 and creative evaluator
+
+The exact FLUX.2 Klein 4B revision remains the Recommended local image route.
+C5 did not promote a new image model. An isolated current-source Media Forge,
+an isolated ControlDeck Host, the real Broker, and the retained managed model
+store produced three new 512x512 / four-step character candidates:
+
+```text
+model/revision:       black-forest-labs/FLUX.2-klein-4B
+                      e7b7dc27f91deacad38e78976d1f2b499d76a294
+runtime:              Diffusers 0.40.0 / PyTorch 2.10.0+ROCm 7.2.1
+placement:            direct_device_map, all components cuda:0, mmap disabled
+first process:        15.967179 s (load 11.335529 / generation 1.584339)
+later processes:      17.460744 / 19.440341 s
+                      (load 13.448332 / 14.989607,
+                       generation 1.461965 / 1.592628)
+sampled VRAM:         21,245,644,800 first absolute peak;
+                      17,478,889,472 / 17,470,918,656 later absolute peaks
+worker peak RSS:      16,494,501,888 bytes
+worker swap:          0 bytes
+lease after runs:     active 0 / waiting 0
+```
+
+The conservative 1024 acceptance envelope remains authoritative: resident 0,
+execution peak 29,625,200,640, cold-load peak 32,275,578,880, headroom
+1,073,741,824, reservation 33,349,320,704 bytes. C5 did not flush the shared
+kernel page cache, so fully storage-cold load remains **NOT TESTED**. Existing
+same-revision multi-reference acceptance above remains applicable; it was not
+rerun in C5. The catalog declares `supports_lora=false`, therefore LoRA is
+**UNAVAILABLE**, not unmeasured.
+
+The optional CPU evaluator now uses `qwen3-vl:2b-instruct`, Ollama digest
+`ea422f1e7365`, 1,889,519,783 bytes, Apache-2.0. The prior `qwen3-vl:2b`
+thinking tag ignored `think=false` under Ollama 0.31.1, spent 105 seconds in
+reasoning, returned empty content, and correctly failed closed. The instruct
+renderer evaluated three candidates in 40.60 seconds; GPU VRAM was unchanged
+at 59,949,056 bytes and Media Forge job count remained 3. Installed-host browser
+ranking repeated in 40.222 seconds with no job delta. Scores are advisory and
+never override deterministic validation or request regeneration.
+
+The unchanged G2 semantic-review path also accepted a real candidate with the
+instruct tag. Its first call completed before a probe-output typo at 12.88
+seconds; the corrected warm call took 2.08 seconds. Both observed GPU samples
+remained 59,949,056 bytes.
+
+A bounded worker-crash probe killed the image subprocess with SIGKILL after
+lease acquisition. The job failed as `worker_crash`, the lease count returned
+to zero, and core health remained `healthy` after 1.374453 seconds.

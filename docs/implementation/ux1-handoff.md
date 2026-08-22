@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/multicut-composer-c4
-PR          UX1 #21〜#33 / UX2 M0 #35〜C2 #40 / C3 #41 マージ済み、C4 #42 open
-状態        UX2 C4 をpush・PR作成済み。exact head / mergeability確認後にmergeする
-基準値      ./mf.sh test = 255 passed
+ブランチ    ux1/evaluator-r9700-c5
+PR          UX1 #21〜#33 / UX2 M0 #35〜C4 #42 マージ済み、C5準備中
+状態        UX2 C5実装・実GPU・実VLM・installed-host browser実測・local gate済み。commit前
+基準値      ./mf.sh test = 262 passed（25.10秒）
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
 
@@ -36,15 +36,13 @@ PR          UX1 #21〜#33 / UX2 M0 #35〜C2 #40 / C3 #41 マージ済み、C4 #4
 ## 次にやること（1 つだけ）
 
 ```text
-UX2 PR-C4 のfull gateを通し、commit / push / PR / mergeする。
-  ブランチ    ux1/multicut-composer-c4
-  実装        2〜4 shot planner、poster/character-sheet layout、deterministic Composer、
-              全child lineage、font hash cache、文字だけ再compose、existing viewer
-  実測        3 child、1024x1536、日本語title、child job delta 0、hash再現、
-              320px overflow 0、console/page error 0。
-  次          merge 後に PR-C5（Evaluator + R9700実機評価）
-  注意        実モデルは C5 まで保持し、大容量 remove は NOT TESTED のままにする。
-              hosted CI は使わずローカル gate を記録する。
+UX2 PR-C5 のfull local gateを通し、commit / push / PR / mergeする。
+  ブランチ    ux1/evaluator-r9700-c5
+  実装        6軸advisory evaluator、候補ranking、bounded CPU VLM、fail-closed
+  実測        FLUX 3候補、Broker/VRAM/swap、Qwen instruct 3候補、worker crash、
+              installed-host iframe、320px overflow 0、console/page error 0。
+  次          merge後、G3本体または利用者指定の次スライスを設計の正から選ぶ。
+  注意        保持済みFLUX modelを削除しない。hosted CIは使わない。
 ```
 
 ## リリースの運用
