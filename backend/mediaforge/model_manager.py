@@ -21,6 +21,7 @@ from .models import (
     ModelOwnership,
     ModelRegistry,
     ModelRegistryError,
+    ModelSource,
 )
 from .paths import contained
 from .store import Store
@@ -29,6 +30,7 @@ from .store import Store
 CHUNK_BYTES = 4 * 1024 * 1024
 PROGRESS_BYTES = 16 * 1024 * 1024
 MINIMUM_DISK_MARGIN_BYTES = 1024 * 1024 * 1024
+MAX_MANAGED_MODEL_DOWNLOAD_BYTES = 32_000_000_000
 DOWNLOAD_RETRIES = 5
 logger = logging.getLogger("uvicorn.error")
 
@@ -89,7 +91,7 @@ class ModelOperationManager:
             "total_bytes": usage.total,
         }
 
-    def install(self, model_id: str) -> ModelOperation:
+    def install(self, model_id: str, *, license_acceptance: str | None = None) -> ModelOperation:
         active = self._active_operation(model_id, ModelOperationAction.INSTALL)
         if active is not None:
             return active
@@ -103,6 +105,14 @@ class ModelOperationManager:
             )
         if model.source is None or model.source.kind != "huggingface":
             raise ModelOperationError("model_not_found", "model has no supported catalog source")
+        if model.approx_download_bytes >= MAX_MANAGED_MODEL_DOWNLOAD_BYTES:
+            raise ModelOperationError(
+                "model_too_large", "managed model download must be smaller than 32 GB"
+            )
+        if model.gated and license_acceptance != model.license_acceptance_id:
+            raise ModelOperationError(
+                "model_gated", "the exact catalog license must be accepted before download"
+            )
         operation = self.store.create_model_operation(
             model.model_id,
             ModelOperationAction.INSTALL,
@@ -209,8 +219,6 @@ class ModelOperationManager:
                 )
 
     async def _install(self, operation: ModelOperation, model: ModelDescriptor) -> None:
-        if model.gated:
-            raise ModelOperationError("model_gated", "model requires authorization before download")
         required = model.approx_download_bytes + max(
             MINIMUM_DISK_MARGIN_BYTES, model.approx_download_bytes // 10
         )
@@ -225,7 +233,7 @@ class ModelOperationManager:
         files = self._download_files(model)
         completed = sum(
             (files_root / relative).stat().st_size
-            for relative, _size, _digest in files
+            for relative, _size, _digest, _source in files
             if (files_root / relative).is_file()
         )
         self.store.update_model_operation(
@@ -246,11 +254,11 @@ class ModelOperationManager:
             # intentionally sequential to favor stable local installation.
             first, *remaining = files
             await self._download_with_retry(
-                client, operation, model, files_root, first[0], first[1]
+                client, operation, model, files_root, first[0], first[1], first[3]
             )
             for entry in remaining:
                 await self._download_with_retry(
-                    client, operation, model, files_root, entry[0], entry[1]
+                    client, operation, model, files_root, entry[0], entry[1], entry[3]
                 )
 
         self._raise_if_canceled(operation.id)
@@ -260,7 +268,7 @@ class ModelOperationManager:
         snapshot = contained(repo_stage, repo_stage / "snapshots" / model.revision)
         blobs.mkdir(mode=0o700, parents=True, exist_ok=True)
         snapshot.mkdir(mode=0o700, parents=True, exist_ok=True)
-        for relative, expected_size, expected_digest in files:
+        for relative, expected_size, expected_digest, _source in files:
             source = contained(files_root, files_root / relative)
             if not source.is_file() or source.stat().st_size <= 0:
                 raise ModelOperationError("model_verify_failed", f"download is incomplete: {relative}")
@@ -308,6 +316,7 @@ class ModelOperationManager:
         files_root: Path,
         relative: str,
         expected_size: int | None,
+        source: ModelSource,
     ) -> None:
         target = contained(files_root, files_root / relative)
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -318,9 +327,6 @@ class ModelOperationManager:
             target.unlink()
             existing = 0
         headers = {"Range": f"bytes={existing}-"} if existing else {}
-        source = model.source
-        if source is None:
-            raise ModelOperationError("model_not_found", "catalog source disappeared")
         url = (
             f"{self.download_origin}/{quote(source.repo_id, safe='/')}/resolve/"
             f"{source.revision}/{quote(relative, safe='/')}?download=true"
@@ -338,12 +344,14 @@ class ModelOperationManager:
                     return
                 target.unlink(missing_ok=True)
                 return await self._download_file(
-                    client, operation, model, files_root, relative, expected_size
+                    client, operation, model, files_root, relative, expected_size, source
                 )
             if response.status_code not in ({206} if existing else {200}):
                 if existing and response.status_code == 200:
                     target.unlink(missing_ok=True)
-                    return await self._download_file(client, operation, model, files_root, relative, expected_size)
+                    return await self._download_file(
+                        client, operation, model, files_root, relative, expected_size, source
+                    )
                 raise ModelOperationError("model_download_failed", f"source returned HTTP {response.status_code}")
             mode = "ab" if existing else "wb"
             reported = existing
@@ -370,11 +378,12 @@ class ModelOperationManager:
         files_root: Path,
         relative: str,
         expected_size: int | None,
+        source: ModelSource,
     ) -> None:
         for attempt in range(DOWNLOAD_RETRIES):
             try:
                 await self._download_file(
-                    client, operation, model, files_root, relative, expected_size
+                    client, operation, model, files_root, relative, expected_size, source
                 )
                 return
             except httpx.HTTPError as exc:
@@ -459,6 +468,7 @@ class ModelOperationManager:
             "supports_reference_strength": model.supports_reference_strength,
             "recommended_profiles": list(model.recommended_profiles),
             "gated": model.gated,
+            "license_acceptance_id": model.license_acceptance_id,
             "license": model.license,
             "license_notice": model.license_notice,
             "runtime_adapter": model.runtime_adapter,
@@ -470,10 +480,20 @@ class ModelOperationManager:
             "measured_runtime_sec": model.measured_runtime_sec,
         }
 
-    def _download_files(self, model: ModelDescriptor) -> list[tuple[str, int | None, str | None]]:
-        weights = {item.path: (item.size_bytes, item.sha256) for item in model.weights}
+    def _download_files(
+        self, model: ModelDescriptor
+    ) -> list[tuple[str, int | None, str | None, ModelSource]]:
+        if model.source is None:
+            raise ModelOperationError("model_not_found", "catalog source disappeared")
+        weights = {
+            item.path: (item.size_bytes, item.sha256, item.source or model.source)
+            for item in model.weights
+        }
         paths = list(dict.fromkeys((*model.required_files, *weights)))
-        return [(path, *(weights.get(path, (None, None)))) for path in paths]
+        return [
+            (path, *(weights.get(path, (None, None, model.source))))
+            for path in paths
+        ]
 
     def _download_root(self) -> Path:
         try:

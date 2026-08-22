@@ -2044,3 +2044,90 @@ focused reference/director/batch/workspace/frontend regressionは109 passed。�
 C4 multi-cutのAI shot briefはCI-5、Evaluator統合はCI-4なので **NOT TESTED**。実GPU生成、
 profileへの自動反映（仕様上行わない）、installed release bundleは **NOT TESTED**。
 ControlDeck repository変更0件、hosted CI利用0件。
+# MiniMax H3 bounded catalog and runtime evaluation (2026-08-22 to 2026-08-23, active)
+
+The official `MiniMaxAI/MiniMax-H3` FL2VA revision
+`42ed227ee7df40d41602854ae760620d6eb651fe` was measured from the Hugging Face
+tree as 81 selected files / 144,051,182,625 bytes. A real managed download to
+the NVMe model store was canceled at 1,865,101,859 bytes after the 32GB local
+artifact limit was established. The operation reached `canceled`; its contained
+`.downloads/modelop_2f7d58dbfd13401d94b3a6eb7d70c1c2` tree was absent afterward,
+and no installed `models--MiniMaxAI--MiniMax-H3` repository existed.
+
+The replacement candidate is `unsloth/MiniMax-H3-GGUF` revision
+`d629413c2e5b51b38c453668b75ca3b06ca92703`: pruned FL2VA UD-Q2_K_XL,
+Qwen3-VL Q2_K_M, and two Comfy-Org VAEs at revision
+`0f7fb980293fcc4d55c1158cbda920806682ed5d`, totaling 26,978,277,946 bytes.
+The installer now accepts only those catalog-pinned per-weight sources, requires
+an exact license-acceptance identifier, rejects managed artifacts at or above
+32,000,000,000 bytes before creating an operation, and still transfers one file
+at a time directly under the configured model store.
+
+Observed local gate after these changes:
+
+```text
+./mf.sh test
+309 passed, 1 warning in 27.88 sec
+```
+
+The real GGUF download operation `modelop_0dfc422e9d9d480a996e02ba552d6b89`
+ran sequentially against the NVMe feature-data model store from
+`2026-08-22T14:12:33.901575+00:00` through
+`2026-08-22T15:01:33.263368+00:00` (49 minutes 00 seconds). It reached
+`ready` with `26,978,277,946 / 26,978,277,946` bytes and no error or cancel
+request. The installed snapshot occupied 26,978,361,344 bytes; the NVMe had
+657,629,118,464 bytes available afterward. The operation-specific temporary
+download tree was absent after promotion, and catalog discovery reported
+`installed=yes`, `healthy=no`, `state=experimental`.
+
+An independent `sha256sum` over all four inference files completed in 17.49
+seconds with 3,740 KiB maximum RSS. All values matched the catalog pins:
+
+```text
+denoiser      cfe0795c00ab6e6ebf8c64fe4574f45a828e8a93e0876bca704e055662a9d7b8
+text encoder  a8ccadccd57ef34c838ffb8a7da8368bb554721b2760274a1d3b0df63960b997
+video VAE     7c1f131492e7eddacaac9069a61b81bdd39de5cc96561e677c5eab1cdce5e522
+audio VAE     8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48
+```
+
+This proves bounded download, verification, and installation only. The pinned
+stable-diffusion.cpp runtime was then fetched at exact commit
+`97d2990807fe6d558e395f8764198d7c7e7b411c` with pinned shallow submodules and
+configured for HIPBLAS/gfx1201. The documented `clang` command first failed in
+0.18 seconds because clang was not on `PATH`; using the ROCm 7.2.1 compiler at
+`/opt/rocm-7.2.1/lib/llvm/bin/{clang,clang++}` configured successfully in 2.59
+seconds. A single-parallel Release build completed in 539.64 seconds with
+7,153,248 KiB maximum RSS. The runtime tree occupied 1,233,055,744 bytes and
+the resulting `sd-cli` SHA-256 was
+`7c2aebea172e4199da1307769a1b6dc38cecd73c102e3262351283702ed7de03`.
+
+The first CLI smoke correctly exposed a missing runtime search path for
+ROCm's `libomp.so`; no system library was installed. With the isolated runtime
+library path `/opt/rocm-7.2.1/lib/llvm/lib:/opt/rocm-7.2.1/lib`, `sd-cli
+--help` succeeded and `--list-devices` completed in 0.06 seconds / 86,796 KiB
+maximum RSS. It reported the R9700 as `ROCm0`, gfx1201, 32,624 MiB VRAM, plus
+the integrated gfx1036 GPU as a separate `ROCm1`; future evaluation must pin
+the R9700 explicitly.
+
+Immediately before inference, the host had 32,605,573,120 total RAM,
+27,586,805,760 available RAM, and 1,516,511,232 bytes of swap already used.
+The 26.98GB weight set therefore leaves too little evidence to assume that
+full `--offload-to-cpu` will be practical. A mixed/streamed placement may still
+be viable, but must be measured rather than inferred.
+
+R9700 model load/generation, VRAM execution phases, RAM/swap deltas, output
+quality, runtime cancellation, and prompt-recipe Gateway projection are still
+**NOT TESTED**. They were not run directly because every GPU evaluation must
+hold a ControlDeck lease, while this catalog slice does not yet provide an H3
+worker/evaluator capable of receiving a Host service identity, creating its
+Host Job, renewing the lease, and releasing it. An unauthenticated resource
+probe returned HTTP 401 as designed; no token was forged, signing key read, or
+unrelated model lease reused. Runtime evaluation may use bounded CPU/RAM offload even
+when working memory exceeds 32GB VRAM, but only practical measured wall time,
+safe RAM headroom, and absence of sustained swap thrashing can make that route
+eligible. The 32,000,000,000-byte managed-artifact limit remains unchanged.
+After recording the download checkpoint, the local full `./mf.sh test` gate
+reported 309 passed and one dependency deprecation warning in 25.47 seconds.
+After the runtime/device evidence update, the final local full gate reported
+the same 309 passed and one warning in 26.30 seconds. Hosted CI
+was not used, and ControlDeck repository changes remain zero.

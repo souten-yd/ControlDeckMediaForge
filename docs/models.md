@@ -39,6 +39,13 @@ bounded connection retries from its current byte offset. This deliberately
 trades peak download throughput for predictable disk/network pressure on the
 development workstation.
 
+New managed downloads must be smaller than 32,000,000,000 bytes and target the
+configured NVMe model store; entries at or above that bound fail before an
+operation is created. Runtime memory is a separate gate: a model may use
+bounded CPU placement/offload beyond the 32GB VRAM capacity when real
+measurements show practical wall time, RAM headroom, and no sustained swap
+growth. Artifact size never implies runtime availability.
+
 Catalog `media_types` is presentation metadata with the closed values `image`,
 `video`, and `audio_video`. It must agree with the runtime capability family,
 but is never a router input. This lets one Model Management view classify future
@@ -111,6 +118,7 @@ character/companion animation   Wan-AI/Wan2.2-Animate-14B @ cb93a225 (51,213,260
 high-feature synchronized audio Lightricks/LTX-2.3 @ 6b5a83e3 (46,149,373,312 B distilled 1.1)
 quality comparison              tencent/HunyuanVideo-1.5 @ 9b49404b (71,655,871,264 B selected 720p set)
 lightweight fallback            select only after R9700 measurements
+audio-video comparison          MiniMaxAI/MiniMax-H3 FL2VA @ 42ed227e (144,051,182,625 B)
 ```
 
 Wan 2.2 TI2V-5B is the first R9700 evaluation candidate: its primary use is
@@ -139,6 +147,96 @@ Recommended, verify the authoritative model/runtime source, license, exact
 capabilities, ROCm/gfx1201 operation, VRAM phases, runtime, failure rate, and
 all ten adoption-gate answers from `base-plan.md` §24. A candidate that is
 removed later must not change the public API.
+
+### MiniMax H3 FL2VA evaluation gate
+
+The catalog records the publisher's BF16 FL2VA snapshot at revision
+`42ed227ee7df40d41602854ae760620d6eb651fe`: 52 runtime/configuration files,
+29 SHA-256-pinned weight files, and 144,051,182,625 total bytes. It is an
+external comparison entry and cannot be downloaded by Media Forge. A real
+attempt was canceled after 1,865,101,859 bytes when the local 32GB artifact
+limit was established; the contained partial tree was deleted and no installed
+snapshot remained.
+
+The selected single-R9700 evaluation candidate is instead
+`unsloth/MiniMax-H3-GGUF` revision
+`d629413c2e5b51b38c453668b75ca3b06ca92703`. Its fixed bundle contains the
+FL2VA pruned `UD-Q2_K_XL` denoiser, the Qwen3-VL `Q2_K_M` text encoder, and the
+pinned Comfy-Org video/audio VAEs: four files and 26,978,277,946 bytes total.
+Weight-level source metadata allows the two trusted repositories without
+accepting a URL, repository, path, or command from the client. The files are
+downloaded directly under the NVMe managed model store and verified before one
+atomic snapshot promotion.
+
+The exact bundle was installed on the development NVMe in one sequential
+operation on 2026-08-22/23. It reached `ready` after 49 minutes 00 seconds with
+26,978,277,946 transferred bytes. The promoted snapshot occupied
+26,978,361,344 bytes, and an independent hash pass over the four inference
+files matched every catalog pin in 17.49 seconds. This is installation evidence,
+not R9700 inference evidence; the descriptor therefore remains unhealthy and
+experimental.
+
+The runtime candidate is pinned stable-diffusion.cpp with HIPBLAS. Evaluation
+may place the text encoder on CPU and stage components between RAM and VRAM.
+VRAM overflow alone is not a rejection if measured wall time is practical,
+host RAM retains safe headroom, and swap does not grow continuously. Persistent
+swap thrashing, an unbounded load, or a worker/runtime crash rejects the route.
+The GGUF descriptor remains `experimental`, `measurement_confidence=low`, and
+unroutable until this exact R9700 run succeeds.
+
+Pinned stable-diffusion.cpp commit `97d2990` was built locally with ROCm 7.2.1,
+HIPBLAS, gfx1201-only code generation, Release mode, and build parallelism one.
+Configure took 2.59 seconds and the build took 539.64 seconds; the latter used
+7,153,248 KiB maximum RSS. The resulting CLI enumerated the R9700 as `ROCm0`
+with 32,624 MiB VRAM in 0.06 seconds. It requires the runtime-local ROCm OpenMP
+library directory in its library search path; installing or copying that
+library into ControlDeck was deliberately avoided.
+
+No H3 tensors have yet been loaded. At the preflight point only
+27,586,805,760 of 32,605,573,120 host RAM bytes were available and swap already
+held 1,516,511,232 bytes, so full CPU offload is not presumed safe. The next
+evaluation must compare bounded placement while sampling RSS, swap I/O, and
+R9700 VRAM under a real ControlDeck lease.
+
+The upstream MiniMax H3 Community License dated 2026-08-02 is not treated as a
+permissive default. Its applicable-territory, commercial authorization,
+attribution, downstream notice, and acceptable-use conditions remain visible.
+Both the private workspace action and `mf.sh` require an acceptance token bound
+to the exact model ID, revision, license identifier, and notice before starting
+the transfer. Changing any of those fields invalidates an earlier UI action.
+
+The publisher also provides `skills/h3-prompt-writing` at Git commit
+`d21241f0a4b3acbb34c97dae47fa417b7065e438`. Media Forge will not ask
+ControlDeck to load or execute that skill: the Host Gateway contract stays at
+the provider-neutral `text.generate` capability and accepts no repository,
+path, skill, or command. A future H3 adapter may use a Media-Forge-owned,
+version-pinned prompt recipe to build bounded structured messages, then send
+those messages through the existing Gateway. The upstream skill text is not
+vendored in this release; fetching, integrity verification, licensing, prompt
+projection, and real H3 generation remain **NOT TESTED**.
+
+`base-plan.md` §24 candidate-gate answers:
+
+1. H3 is a synchronized audio-video and first/last-frame comparison candidate.
+2. It requires a new isolated stable-diffusion.cpp native adapter; no existing
+   Media Forge worker supports it.
+3. The native runtime builds and enumerates R9700/gfx1201, but H3 load and
+   generation reliability are **NOT TESTED**.
+4. VRAM phases, load/generation time, and failure rate are **NOT TESTED**.
+5. The pinned weights use the MiniMax H3 Community License; the UI does not
+   simplify it to an open-source identifier.
+6. The existing asset/provenance contract can carry its identity, but no output
+   has been produced; output provenance is **NOT TESTED**.
+7. Quality and maintenance benefit over Wan/LTX candidates is **NOT TESTED**.
+8. A future implementation must be a bounded cancellable worker; **NOT TESTED**.
+9. The BF16 runtime includes custom Python and multi-GPU assumptions. The GGUF
+   candidate's pinned native HIPBLAS runtime now builds for and enumerates
+   gfx1201; H3 tensor load and execution are still **NOT TESTED**.
+10. Yes. It remains behind generic video capabilities and can be deleted from
+    the catalog without changing any public API.
+
+Only #10 passes as an architectural gate. H3 cannot become Available or
+Recommended until the other runtime and hardware evidence exists.
 
 ## G0 fake worker
 

@@ -8,11 +8,11 @@
 ## 現在地
 
 ```text
-最終更新    2026-08-22
-ブランチ    ci/reference-intelligence
-PR          CI-2 Creative Director #55 merge済み（merge b6e3dab。#54もmerge済み）
-状態        CI-3実装・実Host/Vision/browser確認完了。PR作成前
-基準値      focused CI-3 = 109 passed / ./mf.sh test = 303 passed（28.11秒）
+最終更新    2026-08-23
+ブランチ    video/minimax-h3-catalog
+PR          MiniMax H3 bounded catalog #57 open（commit 9162eb8以降）
+状態        H3 GGUF導入・gfx1201 HIPBLAS build/device probe済み、lease対応推論は未実施
+基準値      ./mf.sh test = 309 passed（26.30秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
@@ -36,8 +36,9 @@ PR          CI-2 Creative Director #55 merge済み（merge b6e3dab。#54もmerge
 ## 次にやること（1 つだけ）
 
 ```text
-CI-3 Reference Intelligenceを独立PRでpush・mergeする。
-  その次      利用者指定のMiniMax H3を独立catalog/download評価スライスで扱う
+利用者指定のMiniMax H3を独立catalog/download評価スライスで扱う。
+  今回        26.98GB GGUF download、stable-diffusion.cpp HIP build、R9700採用gate
+  設計        公式prompt-writing skillを版固定recipeとしてGateway text.generateへ渡す
   続き        docs/implementation/creative-intelligence.md CI-4 Unified Evaluator
   保留        video public API/runtime実装（G7には着手しない）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
@@ -89,11 +90,19 @@ CI-3 Reference Intelligenceを独立PRでpush・mergeする。
      完了したが、v0.3.0向けtrusted catalogのallowlistにはまだ無い。CI-6 release時に
      artifact SHA/version更新と同じControlDeck PRで許可する。Media固有code追加は不要。
 7. MiniMax H3（利用者指示 2026-08-22）
-     公式open-weightは33B BF16のaudio-video modelで、FL2VAとRef2VAが別checkpoint。
+     公式BF16 FL2VA 144.05GBは上限超過。1.865GBでcancelしpartial削除済み。
+     第1候補をunsloth FL2VA UD-Q2 GGUF composite 26.98GBへ変更した。
+     operation `modelop_0dfc422e9d9d480a996e02ba552d6b89` は49分00秒でready。
+     独立SHAは4ファイル全一致（17.49秒）、snapshot 26,978,361,344 bytes、
+     pinned stable-diffusion.cpp `97d2990`をROCm 7.2.1/gfx1201でbuild済み（539.64秒）。
+     `sd-cli --list-devices`はR9700をROCm0/32,624MiBとして列挙（0.06秒）。
+     H3 load/generateはHost lease対応evaluatorが未実装のためNOT TESTED。token偽造やlease流用はしない。
+     実測後も`experimental / healthy=no`。次はlease acquire/renew/cancel/releaseを備えたbounded evaluator。
      公式prompt-writing skillはMarkdownと参照guideだけで外部APIを呼ばない。次スライスで
-     exact revision/license/必要bytesを固定し、まずFL2VAのbounded download可否を確認する。
+     prompt recipeの版固定・構造化projectionを実装する。任意skill実行経路は作らない。
      skillをHostへ任意実行させず、版固定したprompt recipeをMedia Forgeが構造化messageとして
-     `text.generate`へ渡す。R9700実行可否と32GB VRAM適合は実測までexperimentalのまま。
+     `text.generate`へ渡す。実行時は32GB VRAM超をbounded RAM offloadで試してよいが、
+     wall time/RAM headroom/swapを実測するまでR9700実行可否はexperimentalのまま。
 ```
 
 ## リポジトリの状態で注意すること

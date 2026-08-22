@@ -17,6 +17,9 @@ VIDEO_IDS = {
     "Wan-AI/Wan2.2-Animate-14B",
     "Lightricks/LTX-2.3",
     "tencent/HunyuanVideo-1.5",
+    "MiniMaxAI/MiniMax-H3",
+    "DiffSynth-Studio/MiniMax-H3-NF4",
+    "unsloth/MiniMax-H3-GGUF",
 }
 
 
@@ -51,19 +54,68 @@ def test_video_checkpoint_identity_hashes_are_reproducible() -> None:
         assert model.weights_hash == "sha256:" + hashlib.sha256(canonical).hexdigest()
 
 
-def test_only_bounded_complete_wan_snapshots_are_managed() -> None:
+def test_only_bounded_complete_video_snapshots_are_managed() -> None:
     candidates = {model.model_id: model for model in registry().all() if model.model_id in VIDEO_IDS}
 
     assert {model_id for model_id, model in candidates.items() if model.ownership == ModelOwnership.MANAGED} == {
         "Wan-AI/Wan2.2-TI2V-5B",
         "Wan-AI/Wan2.2-I2V-A14B",
         "Wan-AI/Wan2.2-T2V-A14B",
+        "unsloth/MiniMax-H3-GGUF",
     }
     assert {model_id for model_id, model in candidates.items() if model.ownership == ModelOwnership.EXTERNAL} == {
         "Wan-AI/Wan2.2-Animate-14B",
         "Lightricks/LTX-2.3",
         "tencent/HunyuanVideo-1.5",
+        "MiniMaxAI/MiniMax-H3",
+        "DiffSynth-Studio/MiniMax-H3-NF4",
     }
+
+
+def test_minimax_h3_is_license_gated_and_never_claims_r9700_support() -> None:
+    model = next(item for item in registry().all() if item.model_id == "MiniMaxAI/MiniMax-H3")
+
+    assert model.version == "fl2va-bf16"
+    assert model.gated is True
+    assert model.ownership == ModelOwnership.EXTERNAL
+    assert model.hardware_backends == ("cuda",)
+    assert model.state == "experimental"
+    assert model.approx_download_bytes == 144_051_182_625
+    assert len(model.weights) == 29
+    assert len(model.required_files) == 52
+    assert model.license_acceptance_id is not None
+
+
+def test_minimax_h3_nf4_bundle_is_bounded_below_local_download_limit() -> None:
+    model = next(
+        item for item in registry().all()
+        if item.model_id == "DiffSynth-Studio/MiniMax-H3-NF4"
+    )
+
+    assert model.version == "fl2va-pruned-nf4"
+    assert model.gated is True
+    assert model.ownership == ModelOwnership.EXTERNAL
+    assert model.approx_download_bytes == 27_705_875_746
+    assert model.approx_download_bytes < 32_000_000_000
+    assert len(model.weights) == 4
+    assert model.hardware_backends == ("cuda",)
+    assert model.state == "experimental"
+
+
+def test_minimax_h3_gguf_composite_bundle_is_bounded_and_pinned() -> None:
+    model = next(item for item in registry().all() if item.model_id == "unsloth/MiniMax-H3-GGUF")
+
+    assert model.version == "fl2va-pruned-ud-q2-k-xl"
+    assert model.gated is True
+    assert model.ownership == ModelOwnership.MANAGED
+    assert model.approx_download_bytes == 26_978_277_946
+    assert model.approx_download_bytes < 32_000_000_000
+    assert len(model.weights) == 4
+    assert {item.source.repo_id for item in model.weights if item.source is not None} == {
+        "Comfy-Org/MiniMax-H3"
+    }
+    assert model.hardware_backends == ("cuda",)
+    assert model.state == "experimental"
 
 
 def test_unmeasured_video_candidates_cannot_route_on_r9700() -> None:

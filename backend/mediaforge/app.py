@@ -1485,7 +1485,13 @@ def create_app(
                     elif method == "models.install":
                         if model_operations is None:
                             raise ModelOperationError("model_not_found", "model catalog is unavailable")
-                        result = model_operations.install(str(params.get("model_id", ""))).model_dump(mode="json")
+                        acceptance = params.get("license_acceptance")
+                        if acceptance is not None and not isinstance(acceptance, str):
+                            raise ValueError("license_acceptance must be a string")
+                        result = model_operations.install(
+                            str(params.get("model_id", "")),
+                            license_acceptance=acceptance,
+                        ).model_dump(mode="json")
                     elif method == "models.remove":
                         if model_operations is None:
                             raise ModelOperationError("model_not_found", "model catalog is unavailable")
