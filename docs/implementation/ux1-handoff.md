@@ -9,9 +9,9 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ci/prompt-compiler
-PR          CI-2 Creative Director #55 open（implementation commit ea159e0。#54はmerge済み）
-状態        CI-2実装・実Host text.generate・installed-host browser・full gate済み。merge待ち
+ブランチ    ci/reference-intelligence
+PR          CI-2 Creative Director #55 merge済み（merge b6e3dab。#54もmerge済み）
+状態        CI-2完了。次はCI-3 Reference Intelligence
 基準値      focused CI-2 = 130 passed / ./mf.sh test = 287 passed（24.93秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
@@ -36,10 +36,10 @@ PR          CI-2 Creative Director #55 open（implementation commit ea159e0。#5
 ## 次にやること（1 つだけ）
 
 ```text
-CI-2をfull gate、commit、PR、mergeまで完了する。
+CI-3 Reference Intelligenceを独立PRで実装・実測する。
   優先        docs/implementation/creative-intelligence.md のCI-1〜CI-6を順番に完了
   保留        Wan runtime／R9700生成評価と他の動画model download
-  次          CI-3 Reference Intelligenceを独立PRで開始
+  次          CI-4 Unified Evaluator（CI-3完了後）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
