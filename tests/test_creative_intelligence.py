@@ -10,6 +10,7 @@ from mediaforge.creative_intelligence import (
     CreativeIntelligenceError,
     PromptPlanner,
     PromptPlan,
+    PromptPlanDraft,
     SubjectSpec,
     prompt_plan_to_creative_details,
 )
@@ -92,9 +93,7 @@ class FakeGateway:
 
 
 def test_prompt_planner_preserves_original_intent_and_marks_non_user_additions():
-    value = PromptPlan(
-        original_intent="model tried to replace this",
-        mode="art_direct",
+    value = PromptPlanDraft(
         subject=SubjectSpec(kind="vehicle", appearance_traits=["red sports car"]),
         primary_action=ActionStateSpec(action="drifting", orientation="front three-quarter"),
         scene="rainy mountain road at night",
@@ -117,7 +116,9 @@ def test_prompt_planner_preserves_original_intent_and_marks_non_user_additions()
     assert plan.primary_action.action == "drifting"
     assert plan.optional_suggestions == ["tire spray", "wet-road reflections"]
     assert gateway.calls[0][0] == "text.generate"
-    assert gateway.calls[0][2]["response_format"]["type"] == "json_schema"
+    schema = gateway.calls[0][2]["response_format"]["schema"]
+    assert "original_intent" not in schema["properties"]
+    assert "mode" not in schema["properties"]
 
 
 def test_prompt_planner_original_mode_never_calls_ai():
