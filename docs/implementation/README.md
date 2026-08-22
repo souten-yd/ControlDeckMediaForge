@@ -7,12 +7,14 @@ docs/base-plan.md                    設計の正（何を作るか・なぜそ�
 docs/controldeck-integration-plan.md 統合の正（ホストとの境界）
 docs/design-workspace-ux.md          UI/UX の正（画面構成・段階開示・レイアウト）
 docs/design-model-scene-ux.md        既存UXを流用するモデル管理・シーン/ポーズ/構図拡張
+docs/design-creative-intelligence.md 既存CreativeSpecを流用するPrompt Planner / Reference Analyzer / Evaluator拡張
 docs/implementation/                 実装の指示（どの順で・何を確認して進めるか）
 ```
 
 設計判断を変えるときは `base-plan.md` / `controldeck-integration-plan.md` を先に更新する。
 指示書だけを書き換えて設計を変えないこと。
 `design-model-scene-ux.md` は既存 `design-workspace-ux.md` の情報構造と Simple/Advanced 方針を維持したまま、モデル管理とクリエイティブ制御を追加する拡張設計である。
+`design-creative-intelligence.md` は `base-plan.md` の capability-driven / deterministic-first / VLM-advisory 原則と `controldeck-integration-plan.md` の Host 境界を具体化する。Media Forge は provider/model を選ばず、ControlDeck の scoped AI capability を利用する。
 
 ---
 
@@ -25,9 +27,11 @@ docs/implementation/                 実装の指示（どの順で・何を確�
 | 3 | [mf0-addon-core.md](mf0-addon-core.md) | MediaForge | G0。Add-on として成立させる（fake worker） |
 | 4 | [ux1-workspace.md](ux1-workspace.md) | MediaForge | G0〜G3 の機能を使える形にする workspace UI。設計は `../design-workspace-ux.md` |
 | 5 | [ux2-model-scene.md](ux2-model-scene.md) | MediaForge | **UX1を作り直さず**、モデルDL/削除、領域、シーン、ポーズ、構図、意図的な差分生成、Composerを追加。設計は `../design-model-scene-ux.md` |
+| 6 | [creative-intelligence.md](creative-intelligence.md) | MediaForge | **既存UX/CreativeSpec/QAを流用**し、Prompt Planner、画像解析、汎用Action/State、Evaluatorを追加。設計は `../design-creative-intelligence.md` |
 | — | [host-load-profile-fix.md](host-load-profile-fix.md) | **ControlDeck** | ホスト側の LLM 退避コスト計測の修正。G7 の前提 |
 
 `host-load-profile-fix.md` だけ作業対象が ControlDeck リポジトリ。
+Creative Intelligence は generic Host AI bridge を必要とする。2026-08-22 時点では ControlDeck PR #224 が `ai.inference` / `text.generate` / `vision.analyze` の汎用 Add-on Runtime 境界を追加する候補であり、Media 固有コードを Host に入れない。
 Media Forge G7（動画）で LLM 退避が実際に必要になるため、依存関係の記録としてここに置く。
 
 ---
@@ -40,6 +44,7 @@ G1   ローカルで画像が作れる
 G2   画像を壊さずに直せる
 G3   同じキャラ・同じ絵柄で作れる
 UX2  既存UXのままモデル管理・シーン/ポーズ/構図を使いこなせる  ux2-model-scene.md
+CI   自然文と参考画像を構造化し、汎用的に補強・評価できる          creative-intelligence.md
 G4   コーディングエージェントが素材を置ける
 G5   M5Stack companion が実運用できる
 G6   2Dゲーム素材一式が出せる
@@ -51,6 +56,7 @@ G10  手持ち資料を参照源にできる
 
 G0〜G4 で local media service として実用成立する。
 UX2 は G1〜G3 の既存能力を利用者が使い分けるための横断スライスで、G4〜G6に進む前に入れる。
+Creative Intelligence は UX2/C5 の semantic evaluator を一般化し、人物専用UIを増やさずに Prompt / Reference / Evaluation を同じ CreativeSpec へ接続する横断スライスである。
 G5 以降は用途別の上積みで、順序を入れ替えてよい。
 **G7 以降を先に着手しない**（理由は goal-roadmap.md §0.4）。
 
@@ -65,7 +71,9 @@ G5 以降は用途別の上積みで、順序を入れ替えてよい。
 記録            docs/implementation-status.md に実測値と NOT TESTED を書く
 環境            ControlDeck の .venv を共有しない。キャッシュのみ共有する
 境界            ControlDeck 本体に Media 固有のコードを 1 行も入れない
-UX再利用         UX2 で Create/Library/Activity/Settings と Simple/Advanced を作り直さない
+AI境界           Media Forge から Ollama/llama.cpp/model/port を決め打ちしない。
+                Text/Vision は ControlDeck の scoped capability を通す
+UX再利用         UX2/CI で Create/Library/Activity/Settings と Simple/Advanced を作り直さない
 モデル削除       Media Forge 管理下の重みだけ削除し、共有HF/ComfyUI/外部モデルを勝手に消さない
 ```
 
@@ -77,6 +85,7 @@ UX再利用         UX2 で Create/Library/Activity/Settings と Simple/Advanced
 
 ```text
 ControlDeck/docs/design-addon-platform-v2.md   Add-on contract 2.0
+ControlDeck/docs/design-llm-runtime-chat-contract.md provider-neutral text/VLM message execution
 ControlDeck/docs/addon-ux-guidelines.md        状態表現・文言規約
 ControlDeck/tools/fake-addon/                  contract 2.0 準拠の動く参照実装
 ControlDeck/deck.sh                            venv 管理・キャッシュ配置の作法
@@ -84,7 +93,7 @@ ControlDeck/deck.sh                            venv 管理・キャッシュ配�
 
 両リポジトリを並べた親ディレクトリから起動し、
 **ControlDeck は読み取り専用の参照**であることを明示すること
-（`host-load-profile-fix.md` の作業時を除く）。
+（`host-load-profile-fix.md` または利用者が明示許可した汎用 Host 機能の別 PR を除く）。
 
 ```text
 ~/dev/
