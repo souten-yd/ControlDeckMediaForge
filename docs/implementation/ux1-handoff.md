@@ -10,8 +10,8 @@
 ```text
 最終更新    2026-08-22
 ブランチ    ux1/creative-batches-c3
-PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 / C0 #38 / C1 #39 / C2 #40 マージ済み
-状態        UX2 C3 実装・実process/browser受け入れ・local full gate済み。PR作成前
+PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 / C0 #38 / C1 #39 / C2 #40 マージ済み、C3 #41 open
+状態        UX2 C3 をpush・PR作成済み。exact head / mergeability確認後にmergeする
 基準値      ./mf.sh test = 240 passed
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
