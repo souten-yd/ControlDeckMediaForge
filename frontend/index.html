@@ -43,6 +43,21 @@
             <textarea id="create-intent" required maxlength="8000" rows="4"
               placeholder="夜の机に置かれた、小さな青いロボット"></textarea>
 
+            <div id="creative-simple">
+              <p class="section-label">ドメイン</p>
+              <div id="domain-chips" class="chips" role="radiogroup" aria-label="作る絵の種類"></div>
+              <details id="scene-framing">
+                <summary>シーンと見せ方 <span id="scene-framing-summary">自動</span></summary>
+                <div class="creative-selects">
+                  <label>シーン<select id="creative-scene"></select></label>
+                  <label>ポーズ<select id="creative-pose"></select></label>
+                  <label>構図<select id="creative-composition"></select></label>
+                  <label>カメラ・画角<select id="creative-camera"></select></label>
+                  <label>変化させるもの<select id="creative-variation"></select></label>
+                </div>
+              </details>
+            </div>
+
             <div id="attach-row">
               <label id="attach-image" class="dropzone">
                 <span id="attach-label">＋ 画像を追加</span>
@@ -259,6 +274,23 @@
           <label>高さ<input id="advanced-height" type="number" step="16" inputmode="numeric"></label>
         </div>
         <p id="advanced-size-hint" class="hint"></p>
+        <p class="section-label">シーン設計</p>
+        <div class="form-row">
+          <label>ドメイン<select id="advanced-domain"></select></label>
+          <label>シーン<select id="advanced-scene"></select></label>
+        </div>
+        <label>シーンの詳細<input id="advanced-scene-details" type="text" maxlength="500" placeholder="場所や状況の補足"></label>
+        <div class="form-row">
+          <label>ポーズ<select id="advanced-pose"></select></label>
+          <label>構図<select id="advanced-composition"></select></label>
+        </div>
+        <label>ポーズの詳細<input id="advanced-pose-details" type="text" maxlength="500" placeholder="手足や視線の補足"></label>
+        <label>構図の詳細<input id="advanced-composition-details" type="text" maxlength="500" placeholder="余白や配置の補足"></label>
+        <div class="form-row">
+          <label>カメラ・画角<select id="advanced-camera"></select></label>
+          <label>変化させるもの<select id="advanced-variation"></select></label>
+        </div>
+        <label>カメラの詳細<input id="advanced-camera-details" type="text" maxlength="500" placeholder="焦点距離や視点の補足"></label>
         <div class="form-row">
           <label>出力形式
             <select id="advanced-format">
@@ -311,6 +343,7 @@
       </div>
     </template>
 
+    <!-- MEDIA_FORGE_CREATIVE_TEMPLATES -->
     <!-- MEDIA_FORGE_INLINE_SCRIPT -->
   </body>
 </html>

@@ -179,6 +179,14 @@ the producing facts. Jobs without profiles follow the unchanged G1/G2 route.
 
 Parentage uses asset IDs only. Host paths are not part of this API.
 
+The workspace obtains the versioned CreativeSpec template catalog through its
+authenticated private WebSocket transport and validates directed requests with
+`creative.validate` before job admission. Standalone workspace mode uses the
+same compiler through `POST /workspace-api/creative/validate`; this route is
+same-origin UI plumbing, is excluded from OpenAPI, and is not a public API
+contract. Prompt-only/Auto requests bypass it and retain their prior request
+shape. Neither route accepts a model name or filesystem path.
+
 ## Add-on execution endpoints
 
 ControlDeck calls `/addon/v1/*` endpoints declared by [`addon.json`](../addon.json). Workflow and agent payloads use `{input, correlation}` envelopes. Responses return structured `job_id` and `asset_ids`; agents do not scrape filenames and do not receive a selected model name from generation or capability discovery.

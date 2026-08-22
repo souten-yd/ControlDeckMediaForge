@@ -1070,6 +1070,31 @@ def create_app(
                 if isinstance(root, Path) and root.exists():
                     shutil.rmtree(root)
 
+    @app.post("/workspace-api/creative/validate", include_in_schema=False)
+    async def standalone_creative_validate(payload: dict[str, Any]) -> dict[str, Any]:
+        """Same-origin workspace bridge for standalone mode; not a public API contract."""
+        try:
+            reject_host_paths(payload)
+            request = JobRequest.model_validate(payload.get("request"))
+            creative_spec = CreativeSpec.model_validate(payload.get("creative_spec", {}))
+            capability_value = await capability_document()
+            return creative_compiler.compile(
+                request,
+                creative_spec,
+                capabilities=capability_value["capabilities"],
+                envelope=size_envelope(),
+            ).model_dump(mode="json")
+        except CreativeValidationError as exc:
+            detail: dict[str, Any] = {"code": exc.code, "message": str(exc)}
+            if exc.field is not None:
+                detail["field"] = exc.field
+            raise HTTPException(status_code=422, detail=detail) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "workspace_request_rejected", "message": str(exc)[:300]},
+            ) from exc
+
     @app.get("/")
     @app.get("/create")
     @app.get("/library")
@@ -1087,7 +1112,14 @@ def create_app(
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         stylesheet = (FRONTEND_DIR / "styles.css").read_text(encoding="utf-8")
         script = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+        creative_templates = json.dumps(
+            creative_compiler.catalog.public_document(), ensure_ascii=False, separators=(",", ":")
+        ).replace("</", "<\\/")
         html = html.replace("<!-- MEDIA_FORGE_INLINE_STYLE -->", f"<style>{stylesheet}</style>")
+        html = html.replace(
+            "<!-- MEDIA_FORGE_CREATIVE_TEMPLATES -->",
+            f'<script type="application/json" id="creative-template-data">{creative_templates}</script>',
+        )
         html = html.replace("<!-- MEDIA_FORGE_INLINE_SCRIPT -->", f"<script>{script}</script>")
         return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 

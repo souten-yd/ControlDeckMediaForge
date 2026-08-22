@@ -33,6 +33,8 @@ DOM_IDS = (
     "attach-image", "attach-size", "source-file", "edit-actions", "guarantee-badge",
     "size-block", "size-label", "size-note", "size-presets", "count-chips",
     "size-custom", "custom-width", "custom-height", "custom-ratios",
+    "creative-simple", "domain-chips", "scene-framing", "scene-framing-summary",
+    "creative-scene", "creative-pose", "creative-composition", "creative-camera", "creative-variation",
     "create-error", "create-estimate",
     "mask-input", "mask-draw", "mask-preview", "mask-state",
     "mask-dialog", "mask-canvas", "mask-brush", "mask-eraser", "mask-undo", "mask-clear",
@@ -53,6 +55,9 @@ ADVANCED_IDS = (
     "advanced-create", "advanced-width", "advanced-height", "advanced-format",
     "advanced-count", "advanced-policy", "advanced-model", "advanced-semantic",
     "advanced-attempts", "advanced-settings", "advanced-models", "advanced-mask-file",
+    "advanced-domain", "advanced-scene", "advanced-scene-details", "advanced-pose",
+    "advanced-pose-details", "advanced-composition", "advanced-composition-details",
+    "advanced-camera", "advanced-camera-details", "advanced-variation",
 )
 
 
@@ -95,6 +100,19 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert 'data-model-filter="all"' in MARKUP
     assert "card.dataset.modelId" not in SCRIPT
     assert "dataset.modelId =" not in SCRIPT
+
+
+def test_creative_controls_use_the_versioned_catalog_and_preserve_prompt_only_requests():
+    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
+    for name in ("domain-chips", "creative-scene", "creative-pose", "creative-composition", "creative-camera"):
+        assert f'id="{name}"' in without_templates
+    assert 'id="scene-framing"' in without_templates
+    assert 'id="advanced-domain"' not in without_templates
+    assert "MEDIA_FORGE_CREATIVE_TEMPLATES" in MARKUP
+    assert 'byId("creative-template-data")' in SCRIPT
+    assert 'if (creativeActive(spec))' in SCRIPT
+    assert 'call("creative.validate"' in SCRIPT
+    assert 'call("jobs.create", request)' in SCRIPT
 
 
 def test_model_remove_has_exactly_one_confirmation_dialog():
