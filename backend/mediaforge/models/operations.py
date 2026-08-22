@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class ModelOperationAction(StrEnum):
     INSTALL = "install"
     REMOVE = "remove"
+    EVALUATE = "evaluate"
 
 
 class ModelOperationState(StrEnum):
@@ -16,6 +18,10 @@ class ModelOperationState(StrEnum):
     DOWNLOADING = "downloading"
     VERIFYING = "verifying"
     INSTALLING = "installing"
+    ACQUIRING_RESOURCE = "acquiring_resource"
+    LOADING = "loading"
+    GENERATING = "generating"
+    VALIDATING = "validating"
     READY = "ready"
     FAILED = "failed"
     CANCELED = "canceled"
@@ -39,6 +45,8 @@ class ModelOperation(BaseModel):
     bytes_done: int = Field(ge=0)
     error_code: str | None = None
     error_message: str | None = None
+    host_job_id: str | None = None
+    result: dict[str, Any] | None = None
     cancel_requested: bool = False
     created_at: str
     updated_at: str

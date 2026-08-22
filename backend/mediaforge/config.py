@@ -35,6 +35,8 @@ class Settings:
     creative_layout_manifest: Path = REPOSITORY_ROOT / "creative/layouts.json"
     hf_home: Path = Path.home() / ".cache/huggingface"
     image_runtime_python: Path = REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python"
+    native_media_runtime_root: Path | None = None
+    model_evaluation_timeout_sec: float = 3600.0
     host_ai_timeout_sec: float = 120.0
 
     def __post_init__(self) -> None:
@@ -57,10 +59,15 @@ class Settings:
             "image_runtime_python",
             Path(os.path.abspath(self.image_runtime_python)),
         )
+        native_runtime = self.native_media_runtime_root or (
+            self.data_dir.parent / "runtimes" / "stable-diffusion-cpp-97d2990"
+        )
+        object.__setattr__(self, "native_media_runtime_root", native_runtime.resolve())
         if (
             self.worker_timeout_sec <= 0
             or self.host_request_timeout_sec <= 0
             or self.host_lease_renew_sec <= 0
+            or self.model_evaluation_timeout_sec <= 0
             or self.host_ai_timeout_sec <= 0
         ):
             raise ValueError("worker and host timeouts must be positive")
@@ -98,6 +105,11 @@ class Settings:
                     "MEDIA_FORGE_IMAGE_RUNTIME_PYTHON",
                     REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python",
                 )
+            ),
+            native_media_runtime_root=Path(os.environ["MEDIA_FORGE_NATIVE_RUNTIME_ROOT"])
+            if "MEDIA_FORGE_NATIVE_RUNTIME_ROOT" in os.environ else None,
+            model_evaluation_timeout_sec=float(
+                os.environ.get("MEDIA_FORGE_MODEL_EVALUATION_TIMEOUT_SEC", "3600")
             ),
             host_ai_timeout_sec=float(os.environ.get("MEDIA_FORGE_HOST_AI_TIMEOUT_SEC", "120")),
         )

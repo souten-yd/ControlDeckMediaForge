@@ -2131,3 +2131,41 @@ reported 309 passed and one dependency deprecation warning in 25.47 seconds.
 After the runtime/device evidence update, the final local full gate reported
 the same 309 passed and one warning in 26.30 seconds. Hosted CI
 was not used, and ControlDeck repository changes remain zero.
+
+## MiniMax H3 bounded evaluator implementation (2026-08-23, active)
+
+A private Model Management evaluation action now accepts only the catalog-pinned
+`unsloth/MiniMax-H3-GGUF` identifier. It creates or attaches a ControlDeck Host
+Job, requests the broker with all four VRAM dimensions and
+`estimated_runtime_sec=1800`, activates and renews the granted lease, observes
+both local and Host cancel, and releases the lease in its isolation boundary.
+The native command is an argument array with a fixed 640x384 / 5-frame / 1-step
+audio-video smoke preset. It pins `ROCm0`, places the text encoder on CPU and
+diffusion/VAE on the GPU, and does not enable unbounded full CPU offload.
+
+The evaluator records elapsed time, worker RSS/process swap, system swap-in and
+swap-out page deltas, baseline/peak R9700 VRAM, output bytes/hash, and bounded
+ffprobe metadata. The output and runtime log stay below the private data root;
+no path, prompt, repository, URL, or command is accepted from the workspace.
+Evaluation metadata is capped at 16 KiB. A service restart fail-closes an
+in-flight evaluation because its short-lived Host identity cannot be resumed.
+
+An isolated preflight using a temporary SQLite data directory and the actual
+NVMe model/runtime roots returned
+`available_model_ids=['unsloth/MiniMax-H3-GGUF']`. Focused evaluator, Model
+Management, frontend-contract, Host-execution, and video-catalog tests passed
+86 tests in 11.45 seconds. The full local gate after the evaluator changes was:
+
+```text
+./mf.sh test
+317 passed, 1 warning in 31.12 sec
+```
+
+The isolated subprocess tests observed lease activate/renew/release, Host and
+local cancellation, process-group termination, nonzero native exit isolation,
+restart fail-closed behavior, fixed mixed placement, and video-plus-audio
+validation. These are implementation/contract observations, not R9700 tensor
+execution evidence. Actual H3 load/generation, peak RAM/VRAM/swap behavior,
+output quality, installed-host browser action, and real cancellation remain
+**NOT TESTED**. Hosted CI was not used and the ControlDeck repository was not
+changed.
