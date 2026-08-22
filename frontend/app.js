@@ -75,6 +75,7 @@ const state = {
   outpaintScale: 1.5,
   estimateSec: null,
   activeJob: "",
+  jobs: [],
   libraryCursor: null,
   libraryKind: "all",
   socket: null,
@@ -666,10 +667,22 @@ function validateSize(constraints) {
   return "";
 }
 
-function showError(message) {
+function showError(message, exit) {
   const node = byId("create-error");
-  node.textContent = message;
+  node.replaceChildren();
   node.hidden = !message;
+  if (!message) return;
+  const text = document.createElement("span");
+  text.textContent = message;
+  node.append(text);
+  if (!exit) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "exit";
+  button.dataset.exitAction = exit.action;
+  if (exit.jobId) button.dataset.exitJob = exit.jobId;
+  button.textContent = exit.exit;
+  node.append(button);
 }
 
 function clearError() {
@@ -867,7 +880,9 @@ async function finishJob(job) {
     await showResult(job.asset_ids);
     await loadRecent();
   } else if (job.status === "failed") {
-    byId("create-status").textContent = failureText(job.error?.code);
+    const detail = failure(job.error?.code);
+    state.jobs = [job, ...state.jobs.filter((item) => item.id !== job.id)];
+    showError(detail.text, {...detail, jobId: job.id});
   } else if (job.status === "canceled") {
     byId("create-status").textContent = "中止しました。";
   }
@@ -881,24 +896,120 @@ async function finishJob(job) {
   }
 }
 
-/* 出口つきの言い換えは PR-U4 で完成させる。ここでは最低限の日本語にする。 */
+/* 失敗は「何が起きたか」と「次に何ができるか」を必ず対にする。
+   exit は job があるときだけ意味を持つものと、いつでも押せるものがある。 */
+const FAILURES = {
+  invalid_edit_mask: {
+    text: "変えたい場所が指定されていません。",
+    exit: "もう一度やる", action: "rerun",
+  },
+  strict_edit_invariant_failed: {
+    text: "守るはずの部分が変わってしまったため、結果を破棄しました。",
+    exit: "もう一度やる", action: "rerun",
+  },
+  outpaint_invariant_failed: {
+    text: "元の画像を保ったまま広げられませんでした。",
+    exit: "広げる量を減らす", action: "open_create",
+  },
+  semantic_review_exhausted: {
+    text: "指示どおりの結果になりませんでした。",
+    exit: "指示を書き直す", action: "edit_intent",
+  },
+  semantic_review_unavailable: {
+    text: "内容の自動チェックはいま使えません。",
+    exit: "チェックなしで作る", action: "rerun_without_review",
+  },
+  resource_unavailable: {
+    text: "GPU の空きを確保できませんでした。",
+    exit: "もう一度やる", action: "rerun",
+  },
+  host_lease_required: {
+    text: "GPU の空きを確保できませんでした。",
+    exit: "もう一度やる", action: "rerun",
+  },
+  worker_timeout: {
+    text: "時間内に終わりませんでした。",
+    exit: "小さくしてやり直す", action: "open_create",
+  },
+  worker_crash: {
+    text: "処理が途中で止まりました。サービスの再起動などで中断されたときに起きます。",
+    exit: "もう一度やる", action: "rerun",
+  },
+  service_restarted: {
+    text: "サービスが再起動したため中断しました。",
+    exit: "もう一度やる", action: "rerun",
+  },
+  host_context_lost: {
+    text: "サービスが再起動したため中断しました。",
+    exit: "もう一度やる", action: "rerun",
+  },
+  capability_unavailable: {
+    text: "この操作はいま使えません。",
+    exit: "できることを見る", action: "open_settings",
+  },
+  model_unavailable: {
+    text: "使えるモデルがありません。",
+    exit: "できることを見る", action: "open_settings",
+  },
+  invalid_dimensions: {
+    text: "指定した大きさが使えません。",
+    exit: "サイズを選び直す", action: "open_create",
+  },
+  invalid_reference_count: {
+    text: "参考にする画像は 1〜3 枚にしてください。",
+    exit: "選び直す", action: "open_create",
+  },
+  invalid_import_size: {text: "この画像は取り込めません。", exit: "別の画像を選ぶ", action: "open_create"},
+  invalid_image_import: {text: "この画像は取り込めません。", exit: "別の画像を選ぶ", action: "open_create"},
+  asset_import_too_large: {text: "この画像は大きすぎます。", exit: "別の画像を選ぶ", action: "open_create"},
+};
+
+const UNKNOWN_FAILURE = {
+  text: "うまくいきませんでした。",
+  exit: "もう一度やる",
+  action: "rerun",
+};
+
+function failure(code) {
+  return FAILURES[code] || UNKNOWN_FAILURE;
+}
+
 function failureText(code) {
-  const table = {
-    invalid_edit_mask: "変更する場所が指定されていません。",
-    strict_edit_invariant_failed: "守るはずの部分が変わってしまったため破棄しました。",
-    outpaint_invariant_failed: "元の画像を保ったまま広げられませんでした。",
-    semantic_review_exhausted: "指示どおりの結果になりませんでした。",
-    resource_unavailable: "GPU の空きを確保できませんでした。",
-    worker_timeout: "時間内に終わりませんでした。",
-    capability_unavailable: "この操作はいま使えません。",
-    invalid_dimensions: "指定した大きさが使えません。プリセットに戻してください。",
-    invalid_reference_count: "参考にする画像は 1〜3 枚にしてください。",
-    invalid_import_size: "この画像は取り込めません。別の画像を選んでください。",
-    invalid_image_import: "この画像は取り込めません。別の画像を選んでください。",
-    asset_import_too_large: "この画像は大きすぎます。別の画像を選んでください。",
-    model_unavailable: "使えるモデルがありません。設定を開いて確認してください。",
-  };
-  return table[code] || "うまくいきませんでした。状況を開いて確認してください。";
+  return failure(code).text;
+}
+
+/* 同じ設定でもう一度。素材は取り込み済みなので送り直すだけで済む。 */
+async function rerun(job, {withoutReview = false} = {}) {
+  if (!job) return;
+  const request = JSON.parse(JSON.stringify(job.request));
+  if (withoutReview) request.qa = {...(request.qa || {}), semantic: false};
+  try {
+    const created = await call("jobs.create", request);
+    state.activeJob = created.id;
+    await call("jobs.watch", {job_ids: [created.id]}).catch(() => {});
+    showProgress(created);
+    activate("create");
+    clearError();
+    if (window.parent === window) void pollJob(created.id);
+  } catch (error) {
+    showError(failureText(error?.code));
+    activate("create");
+  }
+}
+
+/* 失敗行の出口。押した先で必ず次の操作ができる状態にする。 */
+function runExit(action, job) {
+  if (action === "rerun") return void rerun(job);
+  if (action === "rerun_without_review") return void rerun(job, {withoutReview: true});
+  if (action === "open_settings") return activate("settings");
+  if (action === "edit_intent") {
+    activate("create");
+    if (job) byId("create-intent").value = job.request.intent;
+    byId("create-intent").focus();
+    return;
+  }
+  activate("create");
+  if (job) byId("create-intent").value = job.request.intent;
 }
 
 async function showResult(assetIds) {
@@ -1333,7 +1444,7 @@ function updateActivityBadge(count) {
 async function loadActivity() {
   const list = byId("activity-list");
   let items = [];
-  try { ({items} = await call("jobs.list")); } catch {
+  try { ({items} = await call("jobs.list")); state.jobs = items; } catch {
     byId("activity-empty").hidden = false;
     byId("activity-empty").textContent = "状況を読み込めませんでした。";
     return;
@@ -1345,24 +1456,78 @@ async function loadActivity() {
   updateActivityBadge(running.length);
 }
 
+const STATUS_LABEL = {queued: "待機", running: "実行中", succeeded: "完了", failed: "失敗", canceled: "中止"};
+
+function relativeTime(value) {
+  const seconds = Math.max(0, (Date.now() - Date.parse(value)) / 1000);
+  if (seconds < 60) return "たった今";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分前`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} 時間前`;
+  return `${Math.floor(seconds / 86400)} 日前`;
+}
+
 function activityRow(job) {
   const row = document.createElement("article");
   row.className = "row";
   row.dataset.jobId = job.id;
+  row.dataset.status = job.status;
+
   const info = document.createElement("div");
   const title = document.createElement("p");
   title.className = "t";
   title.textContent = job.request.intent;
   const sub = document.createElement("p");
   sub.className = "s";
-  sub.textContent = TERMINAL.has(job.status)
-    ? (job.status === "succeeded" ? "できあがりました" : failureText(job.error?.code))
-    : (PHASE_TEXT[job.phase] || "実行しています");
+  const running = !TERMINAL.has(job.status);
+  if (running) {
+    sub.textContent = `${PHASE_TEXT[job.phase] || "実行しています"} · ${Math.round((job.progress || 0) * 100)}%`;
+  } else if (job.status === "succeeded") {
+    sub.textContent = `できあがりました · ${relativeTime(job.updated_at)}`;
+  } else if (job.status === "canceled") {
+    sub.textContent = `中止しました · ${relativeTime(job.updated_at)}`;
+  } else {
+    sub.textContent = `${failureText(job.error?.code)} · ${relativeTime(job.updated_at)}`;
+  }
   info.append(title, sub);
+  if (state.mode === "advanced") {
+    const raw = document.createElement("p");
+    raw.className = "s";
+    raw.textContent = `${job.id} · ${job.phase || "-"}${job.error ? ` · ${job.error.code}` : ""}`;
+    info.append(raw);
+  }
+
+  const side = document.createElement("div");
+  side.className = "row-side";
   const status = document.createElement("span");
   status.className = "state";
-  status.textContent = {queued: "待機", running: "実行中", succeeded: "完了", failed: "失敗", canceled: "中止"}[job.status] || job.status;
-  row.append(info, status);
+  status.textContent = STATUS_LABEL[job.status] || job.status;
+  side.append(status);
+
+  // 出口はここで作る。失敗を見せるだけで終わらせない。
+  if (running) {
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.dataset.cancelJob = job.id;
+    cancel.textContent = "中止";
+    side.append(cancel);
+  } else if (job.status === "failed") {
+    const detail = failure(job.error?.code);
+    const exit = document.createElement("button");
+    exit.type = "button";
+    exit.dataset.exitAction = detail.action;
+    exit.dataset.exitJob = job.id;
+    exit.textContent = detail.exit;
+    side.append(exit);
+  } else if (job.status === "succeeded") {
+    const again = document.createElement("button");
+    again.type = "button";
+    again.dataset.exitAction = "rerun";
+    again.dataset.exitJob = job.id;
+    again.textContent = "同じ設定でもう一度";
+    side.append(again);
+  }
+
+  row.append(info, side);
   return row;
 }
 
@@ -1576,6 +1741,23 @@ dropzone.addEventListener("drop", (event) => {
   void refreshAttachment();
 });
 byId("create-form").addEventListener("submit", submitJob);
+function jobById(id) {
+  return state.jobs.find((item) => item.id === id) || null;
+}
+
+for (const holder of [byId("activity-list"), byId("create-error")]) {
+  holder.addEventListener("click", (event) => {
+    const exit = event.target.closest("[data-exit-action]");
+    if (exit) return runExit(exit.dataset.exitAction, jobById(exit.dataset.exitJob));
+    const cancel = event.target.closest("[data-cancel-job]");
+    if (cancel) {
+      void call("jobs.cancel", {job_id: cancel.dataset.cancelJob})
+        .then(() => loadActivity())
+        .catch(() => {});
+    }
+  });
+}
+
 byId("library-more").addEventListener("click", () => void loadLibrary());
 byId("close-dialog").addEventListener("click", () => byId("detail-dialog").close());
 byId("open-host-jobs").addEventListener("click", () => void callHost("host.route.open", {route: "/jobs"}).catch(() => {}));

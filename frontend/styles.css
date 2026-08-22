@@ -394,6 +394,16 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
 .row .t { font-size: .88rem; font-weight: 600; overflow-wrap: anywhere; }
 .row .s { font-size: .76rem; color: var(--muted); }
 .state { font-size: .74rem; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.row-side { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.row[data-status="failed"] .state { color: #b3261e; }
+@media (prefers-color-scheme: dark) { .row[data-status="failed"] .state { color: #f0a9a2; } }
+.error { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.error .exit {
+  border: 1px solid currentColor !important;
+  color: inherit !important;
+  background: none !important;
+  font-weight: 700;
+}
 .facts { margin: 0; display: grid; gap: 0; }
 .facts div { display: grid; grid-template-columns: minmax(140px, 1fr) 2fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .facts dt { font-size: .82rem; font-weight: 600; }

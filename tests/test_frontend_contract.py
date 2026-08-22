@@ -127,6 +127,8 @@ CODE_PATTERNS = (
     r'raise \w+\(\s*\n?\s*"([a-z][a-z0-9_]+)"',
     r'^\s*"([a-z][a-z0-9_]{6,})",?$',
     r'else "([a-z][a-z0-9_]{6,})"',
+    # detail.get("code", "worker_crash") のような既定値も実在するコード
+    r'\.get\("code", "([a-z][a-z0-9_]+)"\)',
 )
 
 
@@ -150,18 +152,20 @@ def ui_thrown_codes() -> set[str]:
     return set(re.findall(r'throw \{code: "([a-z][a-z0-9_]+)"', product))
 
 
+def failure_table() -> set[str]:
+    table = SCRIPT.split("const FAILURES = {", 1)[1].split("\n};", 1)[0]
+    return set(re.findall(r"^\s{2}([a-z][a-z0-9_]+):", table, re.MULTILINE))
+
+
 def test_failure_sentences_only_name_real_codes():
-    table = SCRIPT.split("function failureText(", 1)[1].split("}", 2)[0]
-    named = set(re.findall(r"^\s{4}([a-z][a-z0-9_]+):", table, re.MULTILINE))
+    named = failure_table()
     assert named, "失敗の言い換え表が読み取れなかった"
     unknown = named - backend_error_codes() - ui_thrown_codes()
     assert not unknown, f"どこにも存在しない error code を UI が説明している: {sorted(unknown)}"
 
 
 def test_every_code_the_ui_throws_has_a_sentence():
-    table = SCRIPT.split("function failureText(", 1)[1].split("}", 2)[0]
-    named = set(re.findall(r"^\s{4}([a-z][a-z0-9_]+):", table, re.MULTILINE))
-    missing = ui_thrown_codes() - named
+    missing = ui_thrown_codes() - failure_table()
     assert not missing, f"UI が投げるのに説明の無い code: {sorted(missing)}"
 
 
@@ -240,3 +244,14 @@ def test_device_photos_are_resized_before_upload():
 def test_typing_does_not_mark_the_workspace_as_unsaved():
     """保存の概念が無いのに離脱警告を出さない。"""
     assert 'addEventListener("input", () => setHostBusy(true))' not in SCRIPT
+
+
+def test_every_failure_offers_one_exit():
+    """失敗を見せるだけで終わらせない。すべての言い換えに出口を 1 つ持たせる。"""
+    table = SCRIPT.split("const FAILURES = {", 1)[1].split("\n};", 1)[0]
+    entries = re.findall(r"^  ([a-z][a-z0-9_]+): \{(.*?)\n  \},", table, re.MULTILINE | re.DOTALL)
+    assert entries, "失敗表を読み取れなかった"
+    for code, body in entries:
+        assert "text:" in body, f"{code} に文言が無い"
+        assert "exit:" in body and "action:" in body, f"{code} に出口が無い"
+    assert "UNKNOWN_FAILURE" in SCRIPT, "未知の失敗にも出口が要る"
