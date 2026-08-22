@@ -9,10 +9,11 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/mask-editor
-PR          #21〜#25 マージ済み / PR-U3 は #26
-状態        マスク編集と外側拡張まで完了。外部ツール無しで inpaint できる
+ブランチ    release/v0.2.0
+PR          #21〜#26 マージ済み / release 記録は #27
+状態        v0.2.0 を公開済み。次は PR-U4（状況と結果ステージ）
 基準値      ./mf.sh test = 174 passed
+リリース    v0.2.0 / sha256 ec7dd229…f97c6 / 29,121,065 bytes
 ```
 
 ## PR 進捗
@@ -47,6 +48,19 @@ PR-U4（状況と結果ステージ）を開始する。
               （ControlDeck/docs/addon-ux-guidelines.md）。
 ```
 
+## リリースの運用
+
+```text
+区切りごとに版を出す（利用者の指示 2026-08-22）
+  1. ./mf.sh bundle build <version> /data1tb/mediaforge-release-bundles
+  2. 展開して bin/mediaforge-core serve を起動し、配信 HTML が新 UI であることを確認
+  3. そのバンドルに対して scripts/ux_standalone_e2e.py を回す
+  4. gh release create v<version> --title ... で tar.gz と .sha256 を添付
+     資産名は control-deck-media-forge-<version>-linux-x86_64.tar.gz(.sha256)
+  5. docs/implementation-status.md に artifact / bytes / sha256 / 未確認事項を記録
+  6. 配布するには ControlDeck の trusted-catalog.json を更新する別 PR が要る
+```
+
 ## 未解決の判断
 
 ```text
@@ -57,7 +71,12 @@ PR-U4（状況と結果ステージ）を開始する。
      PR-U1（モバイル IA 実装）と同じ PR でのみ変更する。先行して変えない。
 3. ControlDeck 側の変更
      利用者が許可済み（2026-08-22）。ただし汎用 host 機能に限る（§0 B1）。
-     現時点で必要な host 変更は 1 つも特定されていない。
+     UI 実装のために必要な host 変更は 1 つも出ていない。
+     ただし v0.2.0 を配布するには trusted-catalog.json の pin 更新が要る
+     （これは Media 固有のコードではなく、カタログの版指定なので許容範囲）。
+4. installed host での確認が資格情報待ち
+     mobile: "embedded" の実機確認ができていない。ControlDeck のログインが要る。
+     利用者に確認方法を尋ねるか、利用者自身に実行してもらう。
 ```
 
 ## リポジトリの状態で注意すること
