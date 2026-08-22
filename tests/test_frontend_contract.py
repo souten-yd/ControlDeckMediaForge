@@ -41,6 +41,8 @@ DOM_IDS = (
     "stage", "stage-progress", "stage-result", "candidate-strip", "recent-strip",
     "mini-progress", "library-grid", "library-kinds", "activity-list",
     "capability-list", "detail-dialog",
+    "viewer", "viewer-stage", "viewer-image", "viewer-caption",
+    "viewer-detail", "viewer-edit", "viewer-close",
 )
 
 ADVANCED_IDS = (
@@ -255,3 +257,18 @@ def test_every_failure_offers_one_exit():
         assert "text:" in body, f"{code} に文言が無い"
         assert "exit:" in body and "action:" in body, f"{code} に出口が無い"
     assert "UNKNOWN_FAILURE" in SCRIPT, "未知の失敗にも出口が要る"
+
+
+def test_library_cards_open_the_full_screen_viewer():
+    """一覧のサムネイルは小さい。タップで原寸を見られる場所へ行く。"""
+    assert "openViewer(item.asset_id, item)" in SCRIPT, "一覧のタップがビューアへ行っていない"
+    assert "#viewer[open] { display: grid" in STYLES, "ビューアが全画面になっていない"
+    # 12 MiB を超える素材は運べないので、代わりに何を出すかを決めてある
+    viewer = SCRIPT.split("async function openViewer(", 1)[1].split("\nasync function ", 1)[0]
+    assert "assets.thumbnail" in viewer, "原寸を運べないときの代替が無い"
+    assert "書き出して確認" in viewer, "代替表示の理由が書かれていない"
+
+
+def test_viewer_supports_touch_zoom():
+    assert "pointerdown" in SCRIPT and "viewerZoom" in SCRIPT
+    assert "touch-action: none" in STYLES
