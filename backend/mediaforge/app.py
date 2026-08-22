@@ -200,6 +200,46 @@ def create_app(
     async def authorize_host(request: Request) -> HostIdentity:
         return await require_host_service(request, host)
 
+    def public_model(item: ModelDescriptor) -> dict[str, Any]:
+        value: dict[str, Any] = {
+            "id": item.model_id,
+            "family": item.family,
+            "version": item.version,
+            "revision": item.revision,
+            "license": item.license,
+            "runtime_adapter": item.runtime_adapter,
+            "capabilities": list(item.capabilities),
+            "state": item.state,
+            "installed": item.installed,
+            "healthy": item.healthy,
+            "measured_vram_bytes": item.measured_vram_bytes,
+            "measured_runtime_sec": item.measured_runtime_sec,
+            "measurement_confidence": item.measurement_confidence,
+        }
+        if item.source is not None:
+            value.update({
+                "hardware_backends": list(item.hardware_backends),
+                "display_name": item.display_name,
+                "domains": list(item.domains),
+                "media_types": list(item.media_types),
+                "description": item.description,
+                "approx_download_bytes": item.approx_download_bytes,
+                "source": {
+                    "kind": item.source.kind,
+                    "repo_id": item.source.repo_id,
+                    "revision": item.source.revision,
+                },
+                "ownership": item.ownership,
+                "supports_lora": item.supports_lora,
+                "max_references": item.max_references,
+                "reference_roles": list(item.reference_roles),
+                "supports_reference_strength": item.supports_reference_strength,
+                "recommended_profiles": list(item.recommended_profiles),
+                "gated": item.gated,
+                "license_notice": item.license_notice,
+            })
+        return value
+
     def model_catalog() -> dict[str, Any]:
         try:
             models = ModelRegistry.load(
@@ -211,24 +251,7 @@ def create_app(
         except ModelRegistryError as exc:
             raise HTTPException(status_code=503, detail={"code": "model_registry_invalid"}) from exc
         return {
-            "items": [
-                {
-                    "id": item.model_id,
-                    "family": item.family,
-                    "version": item.version,
-                    "revision": item.revision,
-                    "license": item.license,
-                    "runtime_adapter": item.runtime_adapter,
-                    "capabilities": list(item.capabilities),
-                    "state": item.state,
-                    "installed": item.installed,
-                    "healthy": item.healthy,
-                    "measured_vram_bytes": item.measured_vram_bytes,
-                    "measured_runtime_sec": item.measured_runtime_sec,
-                    "measurement_confidence": item.measurement_confidence,
-                }
-                for item in models
-            ]
+            "items": [public_model(item) for item in models]
         }
 
     def image_capability(capability: str, *, fake_fallback: bool = False) -> dict[str, Any]:

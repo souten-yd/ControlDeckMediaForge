@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ci/provider-neutral-ai-cutover
-PR          CI-1 #53 open。Settings詳細移動 #52 merge済み
-状態        PR #53 exact implementation head 2e225a7。実Host acceptanceとfull gate済み
-基準値      ./mf.sh test = 275 passed（23.36秒）
+ブランチ    ux2/image-model-catalog-v1
+PR          未作成。CI-1 #53 / Settings詳細移動 #52 merge済み
+状態        画像catalog v1実装・実HTTP/browser・full gate済み。commit/PR前
+基準値      ./mf.sh test = 279 passed（28.51秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
@@ -36,10 +36,10 @@ PR          CI-1 #53 open。Settings詳細移動 #52 merge済み
 ## 次にやること（1 つだけ）
 
 ```text
-CI-1 provider-neutral AI cutoverの最終gate、PR、mergeを完了する。
+画像model catalog v1をcommitし、PR、mergeまで完了する。
   優先        docs/implementation/creative-intelligence.md のCI-1〜CI-6を順番に完了
   保留        Wan runtime／R9700生成評価と他の動画model download
-  次UI        画像model catalog複数候補化
+  次          CI-2 prompt compilerを独立PRで開始
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 

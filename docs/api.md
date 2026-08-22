@@ -162,6 +162,12 @@ local filesystem path. `measurement_confidence` is `low` for bootstrap
 estimates and `measured` only after target-hardware evidence. A downloaded candidate remains `experimental` and
 `healthy=false` until its target-hardware benchmark is recorded and it is
 explicitly promoted; installation alone does not alter `model_policy=auto`.
+The response also carries additive, optional presentation metadata from the
+trusted catalog (`display_name`, domains, media types, source identity,
+ownership, reference/LoRA support, size, and license notice). Standalone UI may
+therefore render the same catalog classifications without reading repository
+files or inventing model capabilities. These fields do not participate in
+routing.
 
 ## Assets and provenance
 

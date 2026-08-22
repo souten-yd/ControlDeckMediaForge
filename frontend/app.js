@@ -255,14 +255,20 @@ async function standaloneCall(method, params) {
   if (method === "models.catalog") {
     const {items} = await json("/api/v1/models");
     return {items: items.map((model) => ({
-      model_id: model.id, display_name: model.id, domains: ["general"], media_types: ["image"],
-      description: "", approx_download_bytes: 0, reclaimable_bytes: 0,
-      profile_reference_count: 0, source: null, ownership: "external",
+      model_id: model.id, display_name: model.display_name || model.id,
+      domains: model.domains || ["general"], media_types: model.media_types || ["image"],
+      description: model.description || "", approx_download_bytes: model.approx_download_bytes || 0,
+      reclaimable_bytes: 0,
+      profile_reference_count: 0, source: model.source || null, ownership: "external",
       installed: model.installed, healthy: model.healthy, removable: false,
-      state: model.state, supports_lora: false, max_references: 0,
-      recommended_profiles: [], gated: false, license: model.license,
-      license_notice: model.license, runtime_adapter: model.runtime_adapter,
-      hardware_backends: [], capabilities: model.capabilities,
+      state: model.state, supports_lora: model.supports_lora || false,
+      max_references: model.max_references || 0,
+      reference_roles: model.reference_roles || [],
+      supports_reference_strength: model.supports_reference_strength || false,
+      recommended_profiles: model.recommended_profiles || [], gated: model.gated || false,
+      license: model.license, license_notice: model.license_notice || model.license,
+      runtime_adapter: model.runtime_adapter,
+      hardware_backends: model.hardware_backends || [], capabilities: model.capabilities,
       weights_hash: "", measurement_confidence: model.measurement_confidence,
       measured_vram_bytes: model.measured_vram_bytes,
       measured_runtime_sec: model.measured_runtime_sec,
@@ -2296,6 +2302,7 @@ function renderModelManagement() {
   const visible = state.modelCatalog.filter((model) => {
     if (state.modelFilter === "installed") return model.installed;
     if (state.modelFilter === "recommended") return modelRecommended(model);
+    if (state.modelFilter === "image") return model.media_types.includes("image");
     if (state.modelFilter === "video") {
       return model.media_types.includes("video") || model.media_types.includes("audio_video");
     }
