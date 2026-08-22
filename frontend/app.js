@@ -66,6 +66,12 @@ const state = {
   capabilities: {},
   envelope: null,
   presets: [],
+  creativeTemplates: null,
+  creative: {
+    domain: "auto", scene: "auto", pose: "auto", composition: "auto",
+    camera: "auto", variation: "auto",
+    sceneDetails: "", poseDetails: "", compositionDetails: "", cameraDetails: "",
+  },
   editMode: "",
   source: null,
   upload: null,
@@ -191,7 +197,10 @@ function handleEvent(message) {
 async function standaloneCall(method, params) {
   const json = async (path, options = {}) => {
     const response = await fetch(path, {headers: {"Content-Type": "application/json"}, ...options});
-    if (!response.ok) throw {code: `http_${response.status}`};
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw payload.detail || {code: `http_${response.status}`};
+    }
     return response.json();
   };
   if (method === "jobs.create") return json("/api/v1/jobs", {method: "POST", body: JSON.stringify(params)});
@@ -199,6 +208,9 @@ async function standaloneCall(method, params) {
   if (method === "jobs.cancel") return json(`/api/v1/jobs/${encodeURIComponent(params.job_id)}`, {method: "DELETE"});
   if (method === "jobs.list") return json("/api/v1/jobs");
   if (method === "jobs.watch" || method === "jobs.unwatch") return {watching: []};
+  if (method === "creative.validate") {
+    return json("/workspace-api/creative/validate", {method: "POST", body: JSON.stringify(params)});
+  }
   if (method === "models.list") return json("/api/v1/models");
   if (method === "models.catalog") {
     const {items} = await json("/api/v1/models");
@@ -314,6 +326,7 @@ function syncAdvancedCreate() {
   byId("advanced-constraints").textContent = state.editMode
     ? `constraints.edit_mode = ${state.editMode}`
     : "constraints.width / height を直接指定できます";
+  renderAdvancedCreative();
 }
 
 async function savePreferences(values) {
@@ -347,6 +360,128 @@ function activate(name, {sync = true} = {}) {
 
 /* よく使う比率。envelope に収まるよう長辺を basis に合わせて計算する。
    数値ではなく用途で選べることを優先し、正確な寸法はチップに併記する。 */
+function embeddedCreativeTemplates() {
+  try { return JSON.parse(byId("creative-template-data")?.textContent || "null"); }
+  catch { return null; }
+}
+
+function creativeEntries(section) {
+  const entries = state.creativeTemplates?.[section];
+  return Array.isArray(entries) ? entries : [];
+}
+
+function creativeOption(entry) {
+  const option = document.createElement("option");
+  option.value = entry.id;
+  option.textContent = entry.label;
+  return option;
+}
+
+function fillCreativeSelect(id, section, selected) {
+  const select = byId(id);
+  if (!select) return;
+  select.replaceChildren(...creativeEntries(section).map(creativeOption));
+  select.value = selected;
+}
+
+function renderCreative() {
+  const holder = byId("domain-chips");
+  holder.replaceChildren(...creativeEntries("domains").map((entry) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chip";
+    button.dataset.domain = entry.id;
+    button.setAttribute("role", "radio");
+    button.setAttribute("aria-checked", String(entry.id === state.creative.domain));
+    button.textContent = entry.label;
+    return button;
+  }));
+  fillCreativeSelect("creative-scene", "scenes", state.creative.scene);
+  fillCreativeSelect("creative-pose", "poses", state.creative.pose);
+  fillCreativeSelect("creative-composition", "compositions", state.creative.composition);
+  fillCreativeSelect("creative-camera", "cameras", state.creative.camera);
+  fillCreativeSelect("creative-variation", "variations", state.creative.variation);
+  updateCreativeSummary();
+  renderAdvancedCreative();
+}
+
+function renderAdvancedCreative() {
+  if (!byId("advanced-domain")) return;
+  fillCreativeSelect("advanced-domain", "domains", state.creative.domain);
+  fillCreativeSelect("advanced-scene", "scenes", state.creative.scene);
+  fillCreativeSelect("advanced-pose", "poses", state.creative.pose);
+  fillCreativeSelect("advanced-composition", "compositions", state.creative.composition);
+  fillCreativeSelect("advanced-camera", "cameras", state.creative.camera);
+  fillCreativeSelect("advanced-variation", "variations", state.creative.variation);
+  byId("advanced-scene-details").value = state.creative.sceneDetails;
+  byId("advanced-pose-details").value = state.creative.poseDetails;
+  byId("advanced-composition-details").value = state.creative.compositionDetails;
+  byId("advanced-camera-details").value = state.creative.cameraDetails;
+}
+
+function creativeLabel(section, id) {
+  return creativeEntries(section).find((entry) => entry.id === id)?.label || id;
+}
+
+function updateCreativeSummary() {
+  const chosen = [
+    ["scenes", state.creative.scene], ["poses", state.creative.pose],
+    ["compositions", state.creative.composition], ["cameras", state.creative.camera],
+    ["variations", state.creative.variation],
+  ].filter(([, id]) => id !== "auto").map(([section, id]) => creativeLabel(section, id));
+  byId("scene-framing-summary").textContent = chosen.length ? chosen.join(" / ") : "自動";
+}
+
+function setCreativeValue(key, value) {
+  state.creative[key] = value;
+  if (key === "domain") {
+    for (const button of byId("domain-chips").children) {
+      button.setAttribute("aria-checked", String(button.dataset.domain === value));
+    }
+  } else {
+    const simple = byId(`creative-${key}`);
+    if (simple) simple.value = value;
+  }
+  const advanced = byId(`advanced-${key}`);
+  if (advanced) advanced.value = value;
+  updateCreativeSummary();
+  clearError();
+}
+
+function creativeSpec() {
+  return {
+    domain: state.creative.domain,
+    scene: {preset: state.creative.scene, details: state.creative.sceneDetails},
+    pose: {preset: state.creative.pose, details: state.creative.poseDetails},
+    composition: {
+      preset: state.creative.composition,
+      details: state.creative.compositionDetails,
+    },
+    camera: {preset: state.creative.camera, details: state.creative.cameraDetails},
+    variation: {axis: state.creative.variation},
+    reference_roles: [],
+  };
+}
+
+function creativeActive(spec = creativeSpec()) {
+  return spec.domain !== "auto" || spec.scene.preset !== "auto" || spec.scene.details
+    || spec.pose.preset !== "auto" || spec.pose.details
+    || spec.composition.preset !== "auto" || spec.composition.details
+    || spec.camera.preset !== "auto" || spec.camera.details || spec.variation.axis !== "auto";
+}
+
+function creativeProblem() {
+  const scene = creativeEntries("scenes").find((entry) => entry.id === state.creative.scene);
+  if (!scene) return "シーンを選び直してください。";
+  if (!creativeEntries("poses").some((entry) => entry.id === state.creative.pose)) {
+    return "ポーズを選び直してください。";
+  }
+  if (!scene.compatible_poses.includes(state.creative.pose)) {
+    return "選んだシーンとポーズは組み合わせられません。";
+  }
+  return "";
+}
+
 const RATIO_PRESETS = [
   {id: "square", label: "正方形", ratio: [1, 1]},
   {id: "landscape", label: "横長", ratio: [4, 3]},
@@ -728,6 +863,8 @@ function clearError() {
 function requestProblem(constraints) {
   const file = attachedFile();
   if (!byId("create-intent").value.trim()) return "作りたいものを書いてください。";
+  const directedProblem = creativeProblem();
+  if (directedProblem) return directedProblem;
 
   if (state.mode === "advanced" && byId("advanced-policy")) {
     if (byId("advanced-policy").value === "manual" && !byId("advanced-model").value) {
@@ -802,7 +939,7 @@ async function submitJob(event) {
       }
     }
 
-    const request = {
+    let request = {
       operation,
       intent: byId("create-intent").value,
       inputs,
@@ -812,6 +949,11 @@ async function submitJob(event) {
       local_only: true,
       ...modelSelection(),
     };
+    const spec = creativeSpec();
+    if (creativeActive(spec)) {
+      showPreparing("シーン指定を確認しています", 0.65);
+      request = (await call("creative.validate", {request, creative_spec: spec})).request;
+    }
     showPreparing("受け付けています", 0.7);
     const job = await call("jobs.create", request);
     setHostBusy(false);
@@ -823,7 +965,7 @@ async function submitJob(event) {
     if (window.parent === window) void pollJob(job.id);
   } catch (error) {
     status.textContent = "";
-    showError(failureText(error?.code));
+    showError(error?.message || failureText(error?.code));
     hidePreparing();
   } finally {
     setHostBusy(false);
@@ -1989,6 +2131,39 @@ for (const button of document.querySelectorAll("[data-refresh]")) {
   button.addEventListener("click", () => activate(button.dataset.refresh, {sync: false}));
 }
 
+byId("domain-chips").addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-domain]");
+  if (chip) setCreativeValue("domain", chip.dataset.domain);
+});
+
+for (const key of ["scene", "pose", "composition", "camera", "variation"]) {
+  byId(`creative-${key}`).addEventListener("change", (event) => setCreativeValue(key, event.target.value));
+}
+
+byId("create-form").addEventListener("input", (event) => {
+  if (!event.target.id.startsWith("advanced-")) return;
+  const detail = {
+    "advanced-scene-details": "sceneDetails",
+    "advanced-pose-details": "poseDetails",
+    "advanced-composition-details": "compositionDetails",
+    "advanced-camera-details": "cameraDetails",
+  }[event.target.id];
+  if (detail) state.creative[detail] = event.target.value;
+  clearError();
+});
+
+byId("create-form").addEventListener("change", (event) => {
+  const key = {
+    "advanced-domain": "domain",
+    "advanced-scene": "scene",
+    "advanced-pose": "pose",
+    "advanced-composition": "composition",
+    "advanced-camera": "camera",
+    "advanced-variation": "variation",
+  }[event.target.id];
+  if (key) setCreativeValue(key, event.target.value);
+});
+
 byId("size-presets").addEventListener("click", (event) => {
   const chip = event.target.closest("[data-preset]");
   if (!chip) return;
@@ -2226,7 +2401,14 @@ async function boot() {
     state.presets = document_.presets || [];
   } catch { state.capabilities = {}; }
 
+  state.creativeTemplates = embeddedCreativeTemplates();
+  if (!state.creativeTemplates) {
+    try { state.creativeTemplates = await call("creative.templates"); }
+    catch { state.creativeTemplates = {domains: [], scenes: [], poses: [], compositions: [], cameras: [], variations: []}; }
+  }
+
   state.libraryKind = state.preferences.library_kind || "all";
+  renderCreative();
   renderPresets();
   renderCounts();
   renderLibraryKinds();

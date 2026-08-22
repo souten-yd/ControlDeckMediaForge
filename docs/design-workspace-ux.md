@@ -127,6 +127,8 @@ before                      after
 | 項目 | 段階 | 根拠 |
 |---|---|---|
 | 作りたいものの入力（intent） | L1 | 主操作 |
+| ドメイン（自動/アニメ/イラスト/写真/2Dゲーム/ポスター） | L1 | モデル名ではなく意図で routing |
+| シーンと見せ方（シーン/ポーズ/構図/カメラ/変化軸） | L1の閉じた展開 | 全て自動のまま使える |
 | サイズプリセット（正方形/横長/縦長） | L1 | 数値を触らせない |
 | 枚数（1〜4 のチップ、既定 1） | L1 | 8 まで要るのは上級者 |
 | 「作る」ボタン + 目安時間 | L1 | 待ち時間の予告 |
@@ -143,6 +145,7 @@ before                      after
 | model_id 指定（manual） | L3 | **唯一モデル名が出る場所** |
 | 意味レビュー（qa.semantic）とリトライ上限 | L3 | 既定 OFF。unavailable なら理由付き無効 |
 | strict_edit / edit_mode の生指定 | L3 | 通常はアクション選択から導出 |
+| domain/scene/pose/composition/camera の全 template と自由補足 | L3 | versioned CreativeSpec template から表示 |
 | provenance 生 JSON | L3 | シンプルでは要約カード |
 | job 生 JSON / phase 生名 | L3 | シンプルでは日本語フェーズ |
 | モデル管理（容量・分類・導入・削除・進捗） | L1 | 設定内。通常利用に必要 |

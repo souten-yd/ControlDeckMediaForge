@@ -368,6 +368,35 @@ def test_workspace_uses_host_bridge_without_browser_storage(tmp_path: Path):
     assert "localStorage" not in script.text and "sessionStorage" not in script.text and "document.cookie" not in script.text
 
 
+def test_workspace_embeds_creative_catalog_and_standalone_validation_is_private(tmp_path: Path):
+    client, _headers, _state = host_client(tmp_path)
+    request = generate_input("directed robot")
+    with client:
+        index = client.get("/")
+        compiled = client.post("/workspace-api/creative/validate", json={
+            "request": request,
+            "creative_spec": {"domain": "anime", "pose": {"preset": "wave"}},
+        })
+        rejected = client.post("/workspace-api/creative/validate", json={
+            "request": request,
+            "creative_spec": {
+                "scene": {"preset": "coding_at_desk"},
+                "pose": {"preset": "wave"},
+            },
+        })
+        openapi = client.get("/openapi.json").json()
+
+    assert index.status_code == 200
+    assert 'id="creative-template-data"' in index.text
+    assert '"catalog_version":"2026.08.22"' in index.text
+    assert compiled.status_code == 200
+    assert compiled.json()["request"]["model_id"] is None
+    assert compiled.json()["request"]["constraints"]["creative_plan"]["domain"]["id"] == "anime"
+    assert rejected.status_code == 422
+    assert rejected.json()["detail"]["code"] == "creative_combination_invalid"
+    assert "/workspace-api/creative/validate" not in openapi["paths"]
+
+
 def test_workspace_response_delay_is_bounded_and_test_only(monkeypatch):
     from mediaforge.app import workspace_test_response_delay_sec
 

@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-22
-ブランチ    ux1/creative-spec-c0
-PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 マージ済み、C0 #38 open
-状態        UX2 C0 をpush・PR作成済み。exact head確認後にmergeする
-基準値      ./mf.sh test = 222 passed
+ブランチ    ux1/create-creative-c1
+PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 / C0 #38 マージ済み、C1 #39 open
+状態        UX2 C1 をpush・PR作成済み。exact head確認後にmergeする
+基準値      ./mf.sh test = 224 passed
 リリース    installed host は v0.2.4（M0 はまだ未収録）
 ```
 
@@ -36,13 +36,13 @@ PR          UX1 #21〜#33 / UX2 M0 #35 / M1 #36 / M2 #37 マージ済み、C0 #3
 ## 次にやること（1 つだけ）
 
 ```text
-UX2 PR-C0 を commit / push / merge する。
-  ブランチ    ux1/creative-spec-c0
-  実装        private CreativeSpec / versioned template / deterministic compiler /
-              private workspace validate+catalog transport
-  実測        1,000 compile 0.029042秒、unique hash 1、空spec exact identical、
-              invalid combinationはGPU実行前に明示エラー。
-  次          merge 後に PR-C1（Create UIのDomain/シーン/見せ方）
+UX2 PR-C1 を commit / push / merge する。
+  ブランチ    ux1/create-creative-c1
+  実装        Simple Domain + 閉じたシーン/見せ方、Advanced構造化入力、
+              admission前compiler検証、standalone private bridge
+  実測        prompt-only unchanged、directed plan、invalid POST 0、320px overflow 0、
+              Simple advanced nodes 0、console/page error 0。
+  次          merge 後に PR-C2（Character/Style/role-aware reference）
   注意        実モデルは C5 まで保持し、大容量 remove は NOT TESTED のままにする。
               hosted CI は使わずローカル gate を記録する。
 ```
@@ -110,8 +110,8 @@ cd /data1tb/ControlDeckMediaForge
 cat docs/implementation/ux1-handoff.md          # このファイル
 git fetch --all --prune && git log --oneline -5
 gh pr list --state open
-sed -n '/## 7\. PR-C1/,/## 8\. PR-C2/p' docs/implementation/ux2-model-scene.md
-./mf.sh test                                     # 基準値: 222 passed
+sed -n '/## 8\. PR-C2/,/## 9\. PR-C3/p' docs/implementation/ux2-model-scene.md
+./mf.sh test                                     # C1の最終基準値はstatusを確認
 ```
 
 ## 参照

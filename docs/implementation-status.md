@@ -1519,3 +1519,41 @@ focused testは43 passed。`./mf.sh test`は222 passed（15.63秒、全 command
 実 process compile 実測とは区別する。CreativeSpecを使うUI、
 実job生成、profile/reference統合、variation child生成はC1〜C3のため **NOT TESTED**。
 G7 MotionSpec/動画modelは **NOT TESTED**。ControlDeck変更は不要だった。
+
+## UX2 PR-C1 — Create creative direction UI (2026-08-22)
+
+既存 Create の intent、画像取り込み、サイズ、枚数、実行、result stage、
+Advanced panel を移動・複製せず、Simple に Domain と閉じた
+「シーンと見せ方」を追加した。全ラベルは C0 の versioned template data
+から導出し、Simple に model 名や engine 語を出していない。Advanced の
+domain/scene/pose/composition/camera/variation と自由補足は従来どおり
+template を mount したときだけ DOM に存在する。
+
+Auto のままでは `creative.validate` を呼ばず、prompt-only の既存 JobRequest
+形を維持する。指定があるときだけ private compiler による検証・compile
+を job admission 前に行う。standalone workspace も同じ compiler を使うため、
+OpenAPI から除外した same-origin の `/workspace-api/creative/validate` を追加した。
+これは public API ではなく、path/model を受理しない。
+
+隔離 data dir の実 core（`127.0.0.1:9141`）と Chromium で
+`scripts/ux_creative_c1_e2e.py` を実行した。
+
+```text
+Simple advanced nodes          0
+Domain labels                  自動 / アニメ / イラスト / 写真 / 2Dゲーム / ポスター
+prompt-only constraints        width=1024 / height=1024 / creative_plan無し
+directed selections            scene / pose / composition / camera / variation を独立選択
+compiled routing               domain=anime / model_id=null / catalog=2026.08.22
+invalid combination            job POST 0件 / inline理由を表示
+Advanced nodes                 27
+320x640 horizontal overflow    0 px
+tab order                      intent -> scene/pose/composition/camera/variation -> submit
+console / page errors          0 / 0
+evidence                       /tmp/mediaforge-c1-evidence/
+```
+
+`./mf.sh test` は224 passed（15.64秒、全 command 16.89秒、最大 RSS
+189,288 KiB）。これは回帰gateであり、上記の実process/browser観測とは区別する。
+Character/Style と role-aware reference は C2、複数差分 job は C3 のため
+**NOT TESTED**。CreativeSpec 指定での実 GPU 生成・品質差は C5 のため
+**NOT TESTED**。G7 MotionSpec/動画モデルは **NOT TESTED**。ControlDeck 変更は不要だった。
