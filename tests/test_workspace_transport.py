@@ -159,6 +159,127 @@ def test_text_only_director_projects_custom_action_without_a_vision_call(tmp_pat
     assert "image" not in json.dumps(state["ai_calls"][0]).lower()
 
 
+def test_reference_analysis_uses_one_cached_vision_call_and_passes_only_structured_context(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    state["ai_capabilities"].update({"vision.analyze": True, "text.generate": True})
+    state["ai_responses"].append(json.dumps({
+        "subject": {
+            "kind": "robot", "count": 1,
+            "identity_traits": ["round amber eyes"],
+            "appearance_traits": ["orange shell"], "materials": ["painted metal"],
+        },
+        "action_state": {
+            "action": "waving", "state": "cheerful", "orientation": "front",
+            "gesture": "right arm raised", "gaze": "toward viewer", "motion_hint": "small wave",
+            "body_or_part_relations": ["right hand above shoulder"], "confidence": 0.9,
+        },
+        "scene": "compact workshop", "composition": "full body centered",
+        "style": ["anime illustration"], "clothing_props": ["tool belt"], "text_regions": [],
+        "observations": [
+            {"field": "pose", "value": "arm raised", "source": "observed", "confidence": 0.9}
+        ],
+        "inferences": [], "confidence_by_field": {"subject": 0.9},
+    }))
+    state["ai_responses"].append(json.dumps({
+        "subject": {"kind": "robot", "appearance_traits": ["orange shell"]},
+        "primary_action": {"action": "holds a small device"},
+        "scene": "compact workshop", "composition": "full body centered",
+        "camera": "eye level", "hard_constraints": ["orange shell"],
+        "optional_suggestions": ["soft rim light"],
+    }))
+
+    with client:
+        asset = import_asset(client, "source")
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            first = call(socket, "references.analyze", {"asset_id": asset["id"]})["result"]
+            second = call(socket, "references.analyze", {"asset_id": asset["id"]})["result"]
+            directed = call(socket, "creative.direct", {
+                "intent": "orange robot holds a device",
+                "director_mode": "refine",
+                "creative_spec": {},
+                "reference_analysis": [{"asset_id": asset["id"], "focus": "identity"}],
+            })["result"]
+            compiled = call(socket, "creative.validate", {
+                "request": generate_input("orange robot holds a device"),
+                "creative_spec": directed["creative_spec"],
+                "director_plan": directed["plan"],
+                "reference_analysis": [{"asset_id": asset["id"], "focus": "identity"}],
+            })["result"]
+
+    assert first["analysis_cache_hit"] is False
+    assert second["analysis_cache_hit"] is True
+    assert first["asset_hash"] == second["asset_hash"]
+    assert [item["capability"] for item in state["ai_calls"]] == ["vision.analyze", "text.generate"]
+    vision_payload = json.dumps(state["ai_calls"][0])
+    text_payload = json.dumps(state["ai_calls"][1])
+    assert "data:image/jpeg;base64," in vision_payload
+    assert "data:image" not in text_payload and "base64" not in text_payload
+    assert first["asset_hash"] in text_payload
+    assert directed["reference_context"][0]["focus"] == "identity"
+    assert set(directed["reference_context"][0]) == {"asset_id", "asset_hash", "focus", "subject"}
+    assert compiled["plan"]["director"]["reference_context"] == directed["reference_context"]
+
+
+def test_original_prompt_route_calls_neither_text_nor_vision_without_references(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    state["ai_capabilities"].update({"vision.analyze": True, "text.generate": True})
+
+    with client, client.websocket_connect("/ws", headers=headers) as socket:
+        directed = call(socket, "creative.direct", {
+            "intent": "use this prompt exactly",
+            "director_mode": "original",
+            "creative_spec": {},
+        })["result"]
+
+    assert directed["assistance_used"] is False
+    assert directed["plan"]["original_intent"] == "use this prompt exactly"
+    assert directed["skipped_reason"] == "original_mode"
+    assert state["ai_calls"] == []
+
+
+def test_cached_reference_analysis_is_reused_by_all_directed_batch_children(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    state["ai_capabilities"].update({"vision.analyze": True, "text.generate": True})
+    state["ai_responses"].append(json.dumps({
+        "subject": {"kind": "product", "count": 1},
+        "action_state": {"state": "stationary"},
+        "scene": "studio", "composition": "centered", "style": [],
+        "clothing_props": [], "text_regions": [], "observations": [], "inferences": [],
+        "confidence_by_field": {"subject": 0.8},
+    }))
+    state["ai_responses"].append(json.dumps({
+        "plan": {
+            "subject": {"kind": "product"},
+            "primary_action": {"action": "showing the device"},
+            "hard_constraints": ["same product identity"],
+        },
+        "actions": [
+            {"action": "tilted toward viewer"},
+            {"action": "rotated to rear ports"},
+            {"action": "resting with lid open"},
+        ],
+    }))
+
+    with client:
+        asset = import_asset(client, "source")
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            analyzed = call(socket, "references.analyze", {"asset_id": asset["id"]})["result"]
+            created = call(socket, "creative.batches.create", {
+                "request": generate_input("three useful product views"),
+                "creative_spec": {"variation": {"axis": "pose"}},
+                "count": 3,
+                "director_mode": "refine",
+                "reference_analysis": [{"asset_id": asset["id"], "focus": "identity"}],
+            })["result"]
+
+    assert analyzed["analysis"] is not None
+    assert [item["capability"] for item in state["ai_calls"]] == ["vision.analyze", "text.generate"]
+    contexts = [plan["director"]["reference_context"] for plan in created["child_plans"]]
+    assert len(contexts) == 3
+    assert all(context == contexts[0] for context in contexts)
+    assert contexts[0][0]["asset_hash"] == analyzed["asset_hash"]
+
+
 def test_directed_pose_batch_uses_one_text_call_and_normal_child_jobs(tmp_path: Path):
     client, headers, state = host_client(tmp_path, token="valid-user")
     state["ai_capabilities"]["text.generate"] = True
@@ -465,6 +586,7 @@ def test_job_publication_survives_a_failing_listener(tmp_path: Path):
         "capabilities.get", "library.list", "assets.thumbnail", "preferences.get", "jobs.watch",
         "models.catalog", "models.install", "models.remove", "models.operations.list",
         "creative.templates", "creative.validate", "creative.batches.create",
+        "creative.direct", "references.analyze",
         "creative.batches.get", "creative.batches.list", "creative.batches.cancel",
         "creative.compositions.create", "creative.compositions.get",
         "creative.compositions.list", "creative.compositions.update_text",

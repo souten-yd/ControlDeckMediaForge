@@ -11,8 +11,8 @@
 最終更新    2026-08-22
 ブランチ    ci/reference-intelligence
 PR          CI-2 Creative Director #55 merge済み（merge b6e3dab。#54もmerge済み）
-状態        CI-2完了。次はCI-3 Reference Intelligence
-基準値      focused CI-2 = 130 passed / ./mf.sh test = 287 passed（24.93秒）
+状態        CI-3実装・実Host/Vision/browser確認完了。PR作成前
+基準値      focused CI-3 = 108 passed / ./mf.sh test = 302 passed（25.57秒）
 リリース    v0.3.0公開・ControlDeck導入済み（artifact d8055331...aa48f、Host PR #225）
 ```
 
@@ -36,10 +36,10 @@ PR          CI-2 Creative Director #55 merge済み（merge b6e3dab。#54もmerge
 ## 次にやること（1 つだけ）
 
 ```text
-CI-3 Reference Intelligenceを独立PRで実装・実測する。
-  優先        docs/implementation/creative-intelligence.md のCI-1〜CI-6を順番に完了
-  保留        Wan runtime／R9700生成評価と他の動画model download
-  次          CI-4 Unified Evaluator（CI-3完了後）
+CI-3 Reference Intelligenceを独立PRでpush・mergeする。
+  その次      利用者指定のMiniMax H3を独立catalog/download評価スライスで扱う
+  続き        docs/implementation/creative-intelligence.md CI-4 Unified Evaluator
+  保留        video public API/runtime実装（G7には着手しない）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
@@ -88,6 +88,12 @@ CI-3 Reference Intelligenceを独立PRで実装・実測する。
      CI-1でaddon manifestへ`ai.inference`を加法追加した。source manifestの実Host受け入れは
      完了したが、v0.3.0向けtrusted catalogのallowlistにはまだ無い。CI-6 release時に
      artifact SHA/version更新と同じControlDeck PRで許可する。Media固有code追加は不要。
+7. MiniMax H3（利用者指示 2026-08-22）
+     公式open-weightは33B BF16のaudio-video modelで、FL2VAとRef2VAが別checkpoint。
+     公式prompt-writing skillはMarkdownと参照guideだけで外部APIを呼ばない。次スライスで
+     exact revision/license/必要bytesを固定し、まずFL2VAのbounded download可否を確認する。
+     skillをHostへ任意実行させず、版固定したprompt recipeをMedia Forgeが構造化messageとして
+     `text.generate`へ渡す。R9700実行可否と32GB VRAM適合は実測までexperimentalのまま。
 ```
 
 ## リポジトリの状態で注意すること

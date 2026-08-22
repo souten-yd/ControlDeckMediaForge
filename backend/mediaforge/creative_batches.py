@@ -99,6 +99,7 @@ class CreativeBatchPlanner:
         actions: list[ActionStateSpec],
         director_plan: PromptPlan,
         *,
+        reference_context: list[dict[str, Any]] | None = None,
         capabilities: Mapping[str, Mapping[str, Any]],
         envelope: Mapping[str, Any],
         available_reference_ids: set[str] | None = None,
@@ -134,6 +135,7 @@ class CreativeBatchPlanner:
                 **director_plan.model_dump(mode="json"),
                 "child_action_state": action.model_dump(mode="json"),
                 "source": "control-deck:text.generate",
+                "reference_context": reference_context or [],
             }
             plan["batch"] = {
                 "id": identifier,
