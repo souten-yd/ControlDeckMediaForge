@@ -389,8 +389,11 @@ Media Forge に project 全体のアクセスを渡さない
 path 文字列を受け取らない。grant: ID のみ
 ```
 
-ControlDeck 側が既にこの実装になっている。
-**path が渡ってきたら ControlDeck 側のバグとして報告する。** 受け入れない。
+ControlDeck 側にはbrowser file/export grantとRuntime output commitがある。
+ただしOpenCode MCP tokenを現在projectへ束縛し、非対話でproject output grantを発行する
+汎用経路は未実装である。`controldeck-integration-plan.md` §11.1のHost prerequisiteを
+先に実装する。**path がMedia Forgeへ渡ってきたらControlDeck側のバグとして報告する。**
+受け入れない。
 
 ### エージェント体験の要件
 

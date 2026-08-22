@@ -2460,3 +2460,21 @@ The final full local regression gate for this worktree was
 `336 passed, 1 warning in 32.36s`. This is regression evidence and is not
 substituted for the real Host bridge, AI audit, process, or cleanup observations
 above.
+
+## G4 prerequisite design correction (2026-08-23)
+
+Repository inspection found that ControlDeck already provides browser-issued
+read/export grants and atomic Runtime output commit, but its OpenCode Add-on MCP
+token is not bound to the current project and has no non-interactive generic
+project-output grant tool. Therefore the earlier roadmap statement that all G4
+Host acceptance was implemented was too broad. Media Forge cannot close this
+gap without receiving or deriving a raw Host project path, which is forbidden.
+
+`controldeck-integration-plan.md` §11.1 now defines the minimum generic Host
+prerequisite: bind the MCP token to an already-resolved managed project and
+issue an opaque Add-on output grant for a bounded existing project-relative
+directory. No Media-specific Host route/policy is permitted. Host
+implementation, Media Forge `media.pack`, atomic real project placement,
+OpenCode code-reference update, and build/test are **NOT TESTED** at this design
+checkpoint. The docs-only worktree retained the full regression gate at
+`336 passed, 1 warning in 33.19s`; hosted CI was not used.

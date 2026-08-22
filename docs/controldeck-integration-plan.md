@@ -580,6 +580,33 @@ Agents do not hardcode FLUX/Qwen/Wan model IDs unless the user explicitly pins a
 
 Agent file writes follow the same project grant rules and cannot bypass ControlDeck filesystem restrictions through Media Forge.
 
+### 11.1 Non-interactive project output grant prerequisite
+
+The existing browser file/export picker is not sufficient for an OpenCode run:
+the Add-on MCP token is user-bound but is not bound to the current project and
+cannot obtain an output grant without a separate human picker action.
+
+**Media Forge cannot solve this gap because doing so would require receiving or
+deriving a raw ControlDeck project path.** ControlDeck must provide the minimum
+generic acceptance feature instead:
+
+1. bind each OpenCode Add-on MCP token to the already-resolved current Project
+   Lab project when that project is inside the managed project root;
+2. advertise a generic Host MCP tool that creates an output grant only for an
+   enabled Add-on with `projects.pick` and `files.export` grants;
+3. accept a bounded project-relative existing directory, resolve it inside the
+   token-bound project with the existing realpath/symlink policy, and return only
+   an opaque `grant:` ID plus non-path metadata;
+4. pass only that grant ID to the Add-on tool call. The Add-on never receives the
+   project ID, relative directory, absolute path, or Host filesystem metadata.
+
+This is an Add-on Platform/OpenCode project-output feature, not a Media-specific
+route, provider, model, or policy. TUI/runs outside a managed Project Lab project
+do not receive the Host grant tool. Grant creation is request-scoped and keeps
+the existing owner/add-on/expiry checks. The first Media Forge vertical slice
+uses the existing atomic single-output commit; bounded multi-file pack
+transactionality remains a later G4 slice if a pack contains more than one file.
+
 ---
 
 ## 12. Workflow integration
