@@ -1898,3 +1898,50 @@ Media Forge再実行、installed release bundle、実画像workerは **NOT TESTE
 focused CI-1 / semantic / evaluator / frontend / workspace / host execution regressionは116 passed。
 full `./mf.sh test`は275 passed（23.36秒）。これは回帰gateであり、上記の実Host・service
 token・target切替観測とは区別する。
+
+## 画像モデルカタログ v1 (2026-08-22)
+
+測定済み既定のFLUX.2 Klein 4Bに、用途が重複しない3候補を追加した。publisherの
+Hugging Face APIから同日に取得したexact revision、各weightのsize/SHA-256を固定し、
+canonical weight identity hashの再現試験を追加した。
+
+```text
+general/text quality    Qwen/Qwen-Image-2512 @ 25468b98 / external / 57,704,574,910 B
+anime/illustration      Illustrious-XL-v2.0 @ 69459c1f / managed / 6,938,042,078 B
+lightweight fallback    segmind/SSD-1B FP16 @ 60987f37 / managed / 4,468,829,801 B
+```
+
+3候補はすべて`experimental`、`measurement_confidence=low`、CUDA metadataのみ、
+recommended profileなしである。未実測候補はROCm routerへ入らず、downloadしても
+Availableへ昇格しない。Illustriousはbounded single checkpoint、SSD-1Bはbounded FP16
+Diffusers setなので明示download対象にできる。57.7GBのQwenはruntime envelope未確定のため
+externalのままにした。
+
+単体workspaceが`/api/v1/models`の最小応答を全件「汎用画像」と推測していたため、trusted
+catalog由来の表示metadataを既存Model schemaへoptional fieldとして加法追加した。既存required
+field、routing、job/asset/provenance、agent/workflow契約は不変で、migrationとversion bumpは
+不要。catalog metadataが無いregistryでは従来の最小応答のままである。
+
+現在のsourceを`127.0.0.1:9142`で実起動した。実HTTPは全10件、画像4件を返し、既存FLUXだけが
+available/installed/healthy、3候補はexperimental/not-installed/not-healthyだった。Chromiumの
+単体workspaceでSettingsの「画像候補」を選ぶと次の4 cardが0.148秒で表示された。
+
+```text
+FLUX.2 Klein 4B
+Qwen Image 2512
+Illustrious XL v2.0
+Segmind SSD-1B (FP16)
+console / page errors       0 / 0
+standalone action boundary  4 cardsすべて「CLI で管理」（UI installを偽らない）
+```
+
+private WebSocket、durable model operation、installerを使う既存実ブラウザfixtureも再実行した。
+画像filter 2 cards、download tap 1、reload後のoperation復元、削除確認1、install 10.538秒、
+390px/320px overflow 0、console/page error 0/0を観測した。最初の単体browser assertionは
+仕様にない日本語「軽量」tagを期待して停止したため成功に数えず、実card名とadoption tagを
+検査する形へ直して再実行した。
+
+focused catalog/model manager/frontend/API regressionは67 passedと39 passed、最終
+`./mf.sh test`は279 passed（28.51秒）。これは回帰gateであり、上記の実HTTP/browser観測とは
+区別する。3候補のweight download、runtime adapter、R9700/ROCm推論、VRAM/時間/品質、
+installed-host iframeは **NOT TESTED**。ControlDeck変更とhosted CI利用は0件。

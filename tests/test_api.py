@@ -155,6 +155,31 @@ def test_model_catalog_reports_candidate_without_exposing_local_paths(client):
     assert "/data" not in serialized and "/home" not in serialized
 
 
+def test_model_catalog_adds_trusted_presentation_metadata(tmp_path: Path):
+    root = Path(__file__).parents[1]
+    app = create_app(Settings(
+        data_dir=tmp_path / "data",
+        model_manifest=root / "worker_packs/image/models.json",
+        model_catalog_manifest=root / "worker_packs/image/catalog.json",
+        model_store_root=tmp_path / "models",
+        hf_home=tmp_path / "hf",
+    ))
+
+    with TestClient(app) as value:
+        response = value.get("/api/v1/models")
+
+    assert response.status_code == 200
+    images = [item for item in response.json()["items"] if "image" in item["media_types"]]
+    assert [item["display_name"] for item in images] == [
+        "FLUX.2 Klein 4B",
+        "Qwen Image 2512",
+        "Illustrious XL v2.0",
+        "Segmind SSD-1B (FP16)",
+    ]
+    assert all(item["source"]["revision"] == item["revision"] for item in images)
+    assert all("path" not in item for item in response.json()["items"])
+
+
 def test_manual_model_policy_is_explicit_opt_in(client):
     missing = request()
     missing["model_policy"] = "manual"

@@ -268,6 +268,10 @@ def run_browser(url: str, evidence: Path) -> dict[str, object]:
         shared_button = frame.locator("#model-catalog button", has_text="共有モデル")
         assert shared_button.count() == 1 and shared_button.is_disabled()
 
+        frame.locator('[data-model-filter="image"]').click()
+        assert frame.locator("#model-catalog .model-card").count() == 2
+        observations["image_filter_cards"] = 2
+
         frame.locator('[data-model-filter="all"]').click()
         assert frame.locator("#model-catalog .model-card").count() == 2
         started = time.perf_counter()

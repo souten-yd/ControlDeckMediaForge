@@ -26,6 +26,51 @@
     "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "license": {"type": "string", "minLength": 1, "maxLength": 100},
     "runtime_adapter": {"type": "string", "minLength": 1, "maxLength": 100},
+    "hardware_backends": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 100}
+    },
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 200},
+    "domains": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["general", "anime", "illustration", "photoreal", "game2d", "poster", "character_sheet", "background"]}
+    },
+    "media_types": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["image", "video", "audio_video"]}
+    },
+    "description": {"type": "string", "minLength": 1},
+    "approx_download_bytes": {"type": "integer", "minimum": 1},
+    "source": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["kind", "repo_id", "revision"],
+      "properties": {
+        "kind": {"const": "huggingface"},
+        "repo_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "ownership": {"enum": ["managed", "external"]},
+    "supports_lora": {"type": "boolean"},
+    "max_references": {"type": "integer", "minimum": 0},
+    "reference_roles": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["identity", "style", "pose", "composition", "clothing", "palette", "prop", "environment"]}
+    },
+    "supports_reference_strength": {"type": "boolean"},
+    "recommended_profiles": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "gated": {"type": "boolean"},
+    "license_notice": {"type": "string", "minLength": 1},
     "capabilities": {
       "type": "array",
       "minItems": 1,

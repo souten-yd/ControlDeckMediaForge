@@ -23,6 +23,69 @@
       "license_notice": "Apache-2.0; review the upstream model card before redistribution."
     },
     {
+      "model_id": "Qwen/Qwen-Image-2512",
+      "display_name": "Qwen Image 2512",
+      "domains": ["general", "illustration", "poster", "background"],
+      "media_types": ["image"],
+      "description": "General high-quality and text-rendering comparison candidate. Its 57.7GB runtime remains externally managed and R9700 is not measured.",
+      "approx_download_bytes": 57704574910,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "Qwen/Qwen-Image-2512",
+        "revision": "25468b98e3276ca6700de15c6628e51b7de54a26"
+      },
+      "ownership": "external",
+      "supports_lora": true,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "Apache-2.0; this text-to-image checkpoint is an unmeasured comparison candidate, not an installed default."
+    },
+    {
+      "model_id": "OnomaAIResearch/Illustrious-XL-v2.0",
+      "display_name": "Illustrious XL v2.0",
+      "domains": ["anime", "illustration", "game2d"],
+      "media_types": ["image"],
+      "description": "Anime and illustration candidate distributed as a bounded SDXL single-file checkpoint. Its Media Forge runtime is not implemented or measured.",
+      "approx_download_bytes": 6938042078,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "OnomaAIResearch/Illustrious-XL-v2.0",
+        "revision": "69459c1fe6f46db41ab31e6114f05acc0e06bcaa"
+      },
+      "ownership": "managed",
+      "supports_lora": true,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "CreativeML Open RAIL-M; review the upstream license and use restrictions before use or redistribution. ROCm/gfx1201 is NOT TESTED."
+    },
+    {
+      "model_id": "segmind/SSD-1B",
+      "display_name": "Segmind SSD-1B (FP16)",
+      "domains": ["general", "illustration", "photoreal", "background"],
+      "media_types": ["image"],
+      "description": "Lightweight 1.3B SDXL-derived text-to-image fallback candidate using the bounded FP16 Diffusers files. R9700 is not measured.",
+      "approx_download_bytes": 4468829801,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "segmind/SSD-1B",
+        "revision": "60987f37e94cd59c36b1cba832b9f97b57395a10"
+      },
+      "ownership": "managed",
+      "supports_lora": true,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "Apache-2.0; upstream describes a 1.3B SDXL-derived model. ROCm/gfx1201 is NOT TESTED."
+    },
+    {
       "model_id": "Wan-AI/Wan2.2-TI2V-5B",
       "display_name": "Wan 2.2 TI2V 5B",
       "domains": ["general", "anime", "illustration", "game2d"],

@@ -44,6 +44,58 @@ Catalog `media_types` is presentation metadata with the closed values `image`,
 but is never a router input. This lets one Model Management view classify future
 video models without creating a second installer or changing generation APIs.
 
+### Image candidate catalog (not adopted)
+
+The image catalog contains three exact comparison candidates in addition to the
+measured FLUX.2 Klein 4B default. They are intentionally
+`experimental` / `measurement_confidence=low`, advertise no ROCm backend, and
+have no recommended profile. Downloading one does not make it routable.
+
+```text
+general high quality/text       Qwen/Qwen-Image-2512 @ 25468b98 (57,704,574,910 B selected repository)
+anime/illustration              OnomaAIResearch/Illustrious-XL-v2.0 @ 69459c1f (6,938,042,078 B)
+lightweight fallback            segmind/SSD-1B @ 60987f37 (4,468,829,801 B selected FP16 set)
+```
+
+Qwen-Image-2512 remains external because its approximately 57.7GB Diffusers
+runtime has not been bounded or run on the R9700. Illustrious XL v2.0 is a
+single immutable checkpoint and SSD-1B has a complete bounded FP16 Diffusers
+file set, so both are eligible for explicit managed download. Their runtime
+adapters do not yet exist; the UI must therefore continue to show them as
+experimental and unavailable after download rather than implying generation
+support.
+
+The pinned Qwen and SSD repositories declare Apache-2.0. Illustrious XL v2.0
+declares CreativeML Open RAIL-M, whose use restrictions and redistribution
+terms must remain visible. Source identity, exact revision, file sizes, and
+weight SHA-256 values were read from the publishers' Hugging Face repositories
+on 2026-08-22.
+
+#### `base-plan.md` section 24 candidate-gate answers
+
+1. Qwen is a general/text-rendering quality comparison, Illustrious fills the
+   anime/illustration comparison, and SSD-1B is the lightweight fallback.
+2. Upstream exposes Qwen and SSD through Diffusers and Illustrious as an SDXL
+   single-file checkpoint. Media Forge has not implemented or accepted any of
+   those three adapters, so runtime support is **NOT TESTED**.
+3. None has run on the R9700/gfx1201. Reliability is **NOT TESTED**.
+4. VRAM, cold/warm load, generation time, and failure rate are **NOT TESTED**.
+5. Qwen-Image-2512 and SSD-1B declare Apache-2.0. Illustrious XL v2.0 declares
+   CreativeML Open RAIL-M; the catalog does not simplify it to Apache-2.0.
+6. The existing generic asset/provenance contract can record any selected
+   identity, but no output exists yet. Output provenance is **NOT TESTED**.
+7. The three roles justify discovery, not adoption. Quality and maintenance
+   benefit over the installed FLUX model is **NOT TESTED**.
+8. A future adapter must remain a cancellable one-job worker subprocess. Actual
+   cancellation and crash isolation are **NOT TESTED**.
+9. The expected upstream paths use Diffusers/SDXL without a Media Forge custom
+   kernel. Exact dependency maintenance on ROCm is **NOT TESTED**.
+10. Yes. All three remain behind `image.text_to_image`; deleting any descriptor
+    changes no public operation, job, asset, profile, or provenance schema.
+
+The answer to #10 is Yes, but the other missing evidence prevents any candidate
+from becoming Available or Recommended.
+
 ### G7 candidate catalog (not adopted)
 
 The following exact revisions are discoverable in Model Management as
