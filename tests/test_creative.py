@@ -14,6 +14,7 @@ TEMPLATES = ROOT / "creative/templates.json"
 AVAILABLE = {
     "image.text_to_image": {"state": "available"},
     "image.single_reference_edit": {"state": "available"},
+    "image.multi_reference_edit": {"state": "available"},
 }
 
 
@@ -106,6 +107,36 @@ def test_reference_roles_must_name_existing_request_inputs():
     with pytest.raises(CreativeValidationError) as error:
         compiler.compile(request(), spec, capabilities=AVAILABLE)
     assert error.value.code == "creative_reference_not_in_request"
+
+
+def test_profile_reference_roles_use_resolved_ids_and_envelope():
+    compiler = CreativeCompiler.load(TEMPLATES)
+    profile_asset = "asset_" + "b" * 32
+    spec = CreativeSpec.model_validate({
+        "reference_roles": [{"asset_id": profile_asset, "role": "pose", "strength": 1.0}],
+    })
+    envelope = {
+        "max_reference_assets": 4,
+        "reference_roles": ["identity", "style", "pose", "composition"],
+        "supports_reference_strength": False,
+    }
+    result = compiler.compile(
+        request(), spec, capabilities=AVAILABLE, envelope=envelope,
+        available_reference_ids={profile_asset},
+    )
+    assert result.plan["reference_roles"] == [
+        {"asset_id": profile_asset, "role": "pose", "strength": 1.0}
+    ]
+
+    unsupported = spec.model_copy(update={
+        "reference_roles": [spec.reference_roles[0].model_copy(update={"strength": 0.5})]
+    })
+    with pytest.raises(CreativeValidationError) as error:
+        compiler.compile(
+            request(), unsupported, capabilities=AVAILABLE, envelope=envelope,
+            available_reference_ids={profile_asset},
+        )
+    assert error.value.code == "creative_reference_strength_unsupported"
 
 
 def test_template_catalog_rejects_unknown_fields(tmp_path: Path):

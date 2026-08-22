@@ -35,6 +35,7 @@ DOM_IDS = (
     "size-custom", "custom-width", "custom-height", "custom-ratios",
     "creative-simple", "domain-chips", "scene-framing", "scene-framing-summary",
     "creative-scene", "creative-pose", "creative-composition", "creative-camera", "creative-variation",
+    "profile-choice", "character-profile", "style-profile", "profile-choice-note",
     "create-error", "create-estimate",
     "mask-input", "mask-draw", "mask-preview", "mask-state",
     "mask-dialog", "mask-canvas", "mask-brush", "mask-eraser", "mask-undo", "mask-clear",
@@ -58,6 +59,7 @@ ADVANCED_IDS = (
     "advanced-domain", "advanced-scene", "advanced-scene-details", "advanced-pose",
     "advanced-pose-details", "advanced-composition", "advanced-composition-details",
     "advanced-camera", "advanced-camera-details", "advanced-variation",
+    "advanced-reference-block", "advanced-reference-roles", "advanced-reference-reason",
 )
 
 
@@ -113,6 +115,16 @@ def test_creative_controls_use_the_versioned_catalog_and_preserve_prompt_only_re
     assert 'if (creativeActive(spec))' in SCRIPT
     assert 'call("creative.validate"' in SCRIPT
     assert 'call("jobs.create", request)' in SCRIPT
+
+
+def test_profiles_are_simple_but_reference_roles_and_strength_are_advanced():
+    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
+    assert 'id="character-profile"' in without_templates
+    assert 'id="style-profile"' in without_templates
+    assert 'id="advanced-reference-roles"' not in without_templates
+    assert "selectedProfileReferences" in SCRIPT
+    assert "max_reference_assets" in SCRIPT
+    assert "supports_reference_strength" in SCRIPT
 
 
 def test_model_remove_has_exactly_one_confirmation_dialog():

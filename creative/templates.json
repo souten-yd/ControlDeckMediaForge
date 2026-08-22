@@ -61,6 +61,9 @@
     {"id": "style", "version": "1.0", "label": "画風"},
     {"id": "pose", "version": "1.0", "label": "ポーズ"},
     {"id": "composition", "version": "1.0", "label": "構図"},
-    {"id": "content", "version": "1.0", "label": "内容"}
+    {"id": "clothing", "version": "1.0", "label": "服装"},
+    {"id": "palette", "version": "1.0", "label": "色"},
+    {"id": "prop", "version": "1.0", "label": "小物"},
+    {"id": "environment", "version": "1.0", "label": "背景・環境"}
   ]
 }

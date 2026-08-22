@@ -16,6 +16,14 @@
       "uniqueItems": true,
       "items": {"type": "string", "pattern": "^asset_[0-9a-f]{32}$"}
     },
+    "roles": {
+      "type": "object",
+      "maxProperties": 4,
+      "propertyNames": {"pattern": "^asset_[0-9a-f]{32}$"},
+      "additionalProperties": {
+        "enum": ["identity", "style", "pose", "composition", "clothing", "palette", "prop", "environment"]
+      }
+    },
     "created_at": {"type": "string", "format": "date-time"},
     "updated_at": {"type": "string", "format": "date-time"}
   }

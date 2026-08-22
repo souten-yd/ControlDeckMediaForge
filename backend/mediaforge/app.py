@@ -393,6 +393,10 @@ def create_app(
             "max_pixels": 1024 * 1024,
             "max_count": 8,
             "max_reference_assets": 4,
+            "reference_roles": [
+                "identity", "style", "pose", "composition", "clothing", "palette", "prop", "environment"
+            ],
+            "supports_reference_strength": False,
             "envelope_source": "fallback",
         }
         try:
@@ -411,13 +415,20 @@ def create_app(
         ]
         if not usable:
             return fallback
+        reference_limits = [item.max_references for item in usable if item.max_references > 0]
+        role_sets = [set(item.reference_roles) for item in usable if item.max_references > 0]
+        shared_roles = set.intersection(*role_sets) if role_sets else set()
         return {
             "min_side": 256,
             "max_side": min(min(item.max_width, item.max_height) for item in usable),
             "multiple_of": 16,
             "max_pixels": min(item.max_pixels for item in usable),
             "max_count": 8,
-            "max_reference_assets": 4,
+            "max_reference_assets": min(reference_limits) if reference_limits else 0,
+            "reference_roles": sorted(shared_roles),
+            "supports_reference_strength": bool(reference_limits) and all(
+                item.supports_reference_strength for item in usable if item.max_references > 0
+            ),
             "envelope_source": "measured",
         }
 
@@ -965,12 +976,17 @@ def create_app(
                     elif method == "creative.validate":
                         request = JobRequest.model_validate(params.get("request"))
                         creative_spec = CreativeSpec.model_validate(params.get("creative_spec", {}))
+                        profile_snapshot = manager.resolve_profiles(request)
+                        available_references = {
+                            item.asset_id for item in request.inputs
+                        } | set(profile_snapshot.get("reference_asset_ids", []))
                         capability_value = await capability_document()
                         result = creative_compiler.compile(
                             request,
                             creative_spec,
                             capabilities=capability_value["capabilities"],
                             envelope=size_envelope(),
+                            available_reference_ids=available_references,
                         ).model_dump(mode="json")
                     elif method == "capabilities.get":
                         envelope = size_envelope()
@@ -1077,12 +1093,17 @@ def create_app(
             reject_host_paths(payload)
             request = JobRequest.model_validate(payload.get("request"))
             creative_spec = CreativeSpec.model_validate(payload.get("creative_spec", {}))
+            profile_snapshot = manager.resolve_profiles(request)
+            available_references = {
+                item.asset_id for item in request.inputs
+            } | set(profile_snapshot.get("reference_asset_ids", []))
             capability_value = await capability_document()
             return creative_compiler.compile(
                 request,
                 creative_spec,
                 capabilities=capability_value["capabilities"],
                 envelope=size_envelope(),
+                available_reference_ids=available_references,
             ).model_dump(mode="json")
         except CreativeValidationError as exc:
             detail: dict[str, Any] = {"code": exc.code, "message": str(exc)}
@@ -1115,7 +1136,17 @@ def create_app(
         creative_templates = json.dumps(
             creative_compiler.catalog.public_document(), ensure_ascii=False, separators=(",", ":")
         ).replace("</", "<\\/")
+        envelope = size_envelope()
+        workspace_config = json.dumps(
+            {"envelope": envelope, "presets": size_presets(envelope)},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).replace("</", "<\\/")
         html = html.replace("<!-- MEDIA_FORGE_INLINE_STYLE -->", f"<style>{stylesheet}</style>")
+        html = html.replace(
+            "<!-- MEDIA_FORGE_WORKSPACE_CONFIG -->",
+            f'<script type="application/json" id="workspace-config-data">{workspace_config}</script>',
+        )
         html = html.replace(
             "<!-- MEDIA_FORGE_CREATIVE_TEMPLATES -->",
             f'<script type="application/json" id="creative-template-data">{creative_templates}</script>',

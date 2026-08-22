@@ -451,6 +451,8 @@ class ModelOperationManager:
             "state": model.state,
             "supports_lora": model.supports_lora,
             "max_references": model.max_references,
+            "reference_roles": list(model.reference_roles),
+            "supports_reference_strength": model.supports_reference_strength,
             "recommended_profiles": list(model.recommended_profiles),
             "gated": model.gated,
             "license": model.license,

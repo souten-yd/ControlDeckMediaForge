@@ -8,8 +8,10 @@ The runtime registry remains the single source used by capability routing. A
 separate `worker_packs/image/catalog.json` adds presentation and installation
 metadata without changing the frozen public model schema. Catalog metadata
 contains a friendly name, bounded domain tags, source identity, approximate
-download size, reference/LoRA support, recommendations, gating/license notice,
-and an ownership mode.
+download size, reference/LoRA support, supported reference roles, explicit
+per-reference-strength support, recommendations, gating/license notice, and an
+ownership mode. A missing role/strength declaration is treated as unsupported,
+not guessed from a generic multi-reference capability.
 
 `managed` means the detected immutable snapshot is inside Media Forge's
 configured model store and may later be removed by Model Management. `external`

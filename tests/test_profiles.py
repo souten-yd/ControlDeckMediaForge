@@ -124,3 +124,48 @@ def test_collection_cannot_be_deleted_while_profile_uses_it(client):
     response = client.delete(f"/api/v1/reference-collections/{collection['id']}")
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "reference_collection_in_use"
+
+
+def test_collection_roles_are_additive_and_snapshotted_with_job_overrides(client):
+    identity = client.post("/api/v1/assets/import?purpose=source", content=png("orange")).json()
+    pose = client.post("/api/v1/assets/import?purpose=source", content=png("blue")).json()
+    collection = client.post("/api/v1/reference-collections", json={
+        "name": "Role-aware character", "description": "identity and pose",
+        "asset_ids": [identity["id"], pose["id"]],
+        "roles": {identity["id"]: "identity", pose["id"]: "pose"},
+    })
+    assert collection.status_code == 201
+    profile = client.post("/api/v1/profiles", json={
+        "kind": "character", "name": "Rin roles", "description": "",
+        "reference_collection_id": collection.json()["id"],
+        "character": {"appearance": "orange-haired tomboy", "clothing": "", "colors": [],
+                      "distinguishing_features": [], "negative_traits": []},
+        "style": None,
+    }).json()
+    request_value = job_request(character_profile_id=profile["id"])
+    request_value["constraints"]["creative_plan"] = {
+        "reference_roles": [
+            {"asset_id": identity["id"], "role": "identity", "strength": 1.0},
+            {"asset_id": pose["id"], "role": "composition", "strength": 1.0},
+        ]
+    }
+    terminal = wait_terminal(client, client.post("/api/v1/jobs", json=request_value).json()["id"])
+    provenance = client.get(f"/api/v1/assets/{terminal['asset_ids'][0]}/provenance").json()
+    snapshot = provenance["parameters"]["resolved_profiles"]["character"]
+    assert snapshot["reference_collection"]["roles"] == {
+        identity["id"]: "identity", pose["id"]: "pose",
+    }
+    assert provenance["parameters"]["constraints"]["creative_plan"]["reference_roles"][1]["role"] == "composition"
+    assert provenance["reference_asset_hashes"] == {
+        identity["id"]: identity["sha256"], pose["id"]: pose["sha256"],
+    }
+
+
+def test_collection_rejects_role_for_asset_outside_collection(client):
+    first = client.post("/api/v1/assets/import?purpose=source", content=png("red")).json()
+    second = client.post("/api/v1/assets/import?purpose=source", content=png("green")).json()
+    response = client.post("/api/v1/reference-collections", json={
+        "name": "invalid roles", "asset_ids": [first["id"]],
+        "roles": {second["id"]: "pose"},
+    })
+    assert response.status_code == 422

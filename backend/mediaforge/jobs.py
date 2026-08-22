@@ -355,7 +355,8 @@ class JobManager:
             "character": request.constraints.get("character_profile_id"),
             "style": request.constraints.get("style_profile_id"),
         }
-        if all(value is None for value in requested.values()):
+        requested_role_values = request.constraints.get("creative_plan", {}).get("reference_roles", [])
+        if all(value is None for value in requested.values()) and not requested_role_values:
             return {}
         profiles: dict[str, Any] = {}
         reference_asset_ids: list[str] = []
@@ -411,9 +412,56 @@ class JobManager:
                 "profile_reference_limit",
                 "combined job and profile references may contain at most four assets",
             )
+        inferred_roles: dict[str, str] = {}
+        for expected_kind, value in profiles.items():
+            collection_value = value.get("reference_collection")
+            if not isinstance(collection_value, dict):
+                continue
+            stored_roles = collection_value.get("roles", {})
+            for asset_id in collection_value.get("asset_ids", []):
+                inferred_roles[str(asset_id)] = str(stored_roles.get(asset_id, expected_kind))
+        role_values = requested_role_values
+        if not isinstance(role_values, list) or len(role_values) > 4:
+            raise ProfileResolutionError("invalid_reference_roles", "reference roles are invalid")
+        role_overrides: dict[str, dict[str, Any]] = {}
+        allowed_roles = {
+            "identity", "style", "pose", "composition", "clothing", "palette", "prop", "environment"
+        }
+        for value in role_values:
+            if not isinstance(value, dict) or set(value) != {"asset_id", "role", "strength"}:
+                raise ProfileResolutionError("invalid_reference_roles", "reference roles are invalid")
+            asset_id = value.get("asset_id")
+            role = value.get("role")
+            strength = value.get("strength")
+            if (
+                asset_id not in combined_references
+                or role not in allowed_roles
+                or not isinstance(strength, (int, float))
+                or isinstance(strength, bool)
+                or not 0 <= float(strength) <= 1
+                or asset_id in role_overrides
+            ):
+                raise ProfileResolutionError("invalid_reference_roles", "reference roles are invalid")
+            role_overrides[str(asset_id)] = {
+                "asset_id": str(asset_id), "role": str(role), "strength": float(strength)
+            }
+        role_asset_ids = list(dict.fromkeys([*reference_asset_ids, *role_overrides]))
+        resolved_roles = [
+            role_overrides.get(asset_id, {
+                "asset_id": asset_id,
+                "role": inferred_roles.get(asset_id, "identity"),
+                "strength": 1.0,
+            })
+            for asset_id in role_asset_ids
+        ]
+        if resolved_roles:
+            prompt_parts.append(
+                "Reference image roles: " + ", ".join(item["role"] for item in resolved_roles)
+            )
         return {
             "profiles": profiles,
             "reference_asset_ids": reference_asset_ids,
+            "reference_roles": resolved_roles,
             "prompt": "\n".join(prompt_parts),
         }
 

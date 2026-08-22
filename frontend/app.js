@@ -72,6 +72,11 @@ const state = {
     camera: "auto", variation: "auto",
     sceneDetails: "", poseDetails: "", compositionDetails: "", cameraDetails: "",
   },
+  profiles: [],
+  referenceCollections: [],
+  characterProfileId: "",
+  styleProfileId: "",
+  referenceOverrides: new Map(),
   editMode: "",
   source: null,
   upload: null,
@@ -233,9 +238,12 @@ async function standaloneCall(method, params) {
   if (method === "assets.provenance") return json(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/provenance`);
   if (method === "preferences.get") return {values: state.preferences};
   if (method === "preferences.set") return {values: {...state.preferences, ...params.values}};
+  if (method === "profiles.list") return json("/api/v1/profiles");
+  if (method === "reference_collections.list") return json("/api/v1/reference-collections");
   if (method === "capabilities.get") {
     const document_ = await json("/api/v1/capabilities");
-    return {...document_, envelope: null, presets: []};
+    const config = embeddedWorkspaceConfig();
+    return {...document_, envelope: config?.envelope || null, presets: config?.presets || []};
   }
   if (method === "library.list") {
     const {items} = await json("/api/v1/assets");
@@ -365,6 +373,11 @@ function embeddedCreativeTemplates() {
   catch { return null; }
 }
 
+function embeddedWorkspaceConfig() {
+  try { return JSON.parse(byId("workspace-config-data")?.textContent || "null"); }
+  catch { return null; }
+}
+
 function creativeEntries(section) {
   const entries = state.creativeTemplates?.[section];
   return Array.isArray(entries) ? entries : [];
@@ -417,6 +430,7 @@ function renderAdvancedCreative() {
   byId("advanced-pose-details").value = state.creative.poseDetails;
   byId("advanced-composition-details").value = state.creative.compositionDetails;
   byId("advanced-camera-details").value = state.creative.cameraDetails;
+  renderAdvancedReferenceRoles();
 }
 
 function creativeLabel(section, id) {
@@ -459,7 +473,9 @@ function creativeSpec() {
     },
     camera: {preset: state.creative.camera, details: state.creative.cameraDetails},
     variation: {axis: state.creative.variation},
-    reference_roles: [],
+    reference_roles: selectedProfileReferences().map(({asset_id, role, strength}) => ({
+      asset_id, role, strength,
+    })),
   };
 }
 
@@ -480,6 +496,146 @@ function creativeProblem() {
     return "選んだシーンとポーズは組み合わせられません。";
   }
   return "";
+}
+
+function profileById(id) {
+  return state.profiles.find((profile) => profile.id === id) || null;
+}
+
+function collectionById(id) {
+  return state.referenceCollections.find((collection) => collection.id === id) || null;
+}
+
+function selectedProfileReferences() {
+  const references = new Map();
+  for (const profileId of [state.characterProfileId, state.styleProfileId]) {
+    const profile = profileById(profileId);
+    const collection = profile ? collectionById(profile.reference_collection_id) : null;
+    if (!profile || !collection) continue;
+    collection.asset_ids.forEach((assetId, index) => {
+      if (references.has(assetId)) return;
+      const inferred = collection.roles?.[assetId] || (profile.kind === "character" ? "identity" : "style");
+      references.set(assetId, {
+        asset_id: assetId,
+        role: inferred,
+        strength: 1,
+        label: `${profile.name} ・ 参照 ${index + 1}`,
+      });
+    });
+  }
+  return [...references.values()].map((reference) => ({
+    ...reference,
+    ...(state.referenceOverrides.get(reference.asset_id) || {}),
+  }));
+}
+
+function profileOption(profile) {
+  const option = document.createElement("option");
+  option.value = profile.id;
+  option.textContent = profile.name;
+  return option;
+}
+
+function renderProfileChoices() {
+  const characters = state.profiles.filter((profile) => profile.kind === "character");
+  const styles = state.profiles.filter((profile) => profile.kind === "style");
+  for (const [id, items, value] of [
+    ["character-profile", characters, state.characterProfileId],
+    ["style-profile", styles, state.styleProfileId],
+  ]) {
+    const select = byId(id);
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "使わない";
+    select.replaceChildren(empty, ...items.map(profileOption));
+    select.value = value;
+  }
+  const references = selectedProfileReferences();
+  byId("profile-choice-note").textContent = state.profiles.length
+    ? references.length
+      ? `参照 ${references.length} 枚を使います。`
+      : "必要なときだけ選べます。"
+    : "登録済みのキャラ・画風はまだありません。";
+  renderAdvancedReferenceRoles();
+}
+
+async function loadProfiles() {
+  try {
+    const [profiles, collections] = await Promise.all([
+      call("profiles.list"), call("reference_collections.list"),
+    ]);
+    state.profiles = profiles.items || [];
+    state.referenceCollections = collections.items || [];
+  } catch {
+    state.profiles = [];
+    state.referenceCollections = [];
+  }
+  renderProfileChoices();
+}
+
+function renderAdvancedReferenceRoles() {
+  const holder = byId("advanced-reference-roles");
+  if (!holder) return;
+  const roles = Array.isArray(state.envelope?.reference_roles) ? state.envelope.reference_roles : [];
+  const labels = new Map(creativeEntries("reference_roles").map((entry) => [entry.id, entry.label]));
+  const references = selectedProfileReferences();
+  holder.replaceChildren(...references.map((reference) => {
+    const row = document.createElement("div");
+    row.className = "reference-role-row";
+    const name = document.createElement("span");
+    name.className = "reference-name";
+    name.textContent = reference.label;
+    const roleLabel = document.createElement("label");
+    roleLabel.textContent = "役割";
+    const select = document.createElement("select");
+    select.dataset.referenceRole = reference.asset_id;
+    select.replaceChildren(...creativeEntries("reference_roles").map((entry) => {
+      const option = creativeOption(entry);
+      option.disabled = !roles.includes(entry.id);
+      return option;
+    }));
+    select.value = reference.role;
+    roleLabel.append(select);
+    const strengthLabel = document.createElement("label");
+    strengthLabel.textContent = "強さ";
+    const strength = document.createElement("input");
+    strength.type = "number";
+    strength.min = "0";
+    strength.max = "1";
+    strength.step = "0.05";
+    strength.value = String(reference.strength);
+    strength.dataset.referenceStrength = reference.asset_id;
+    strength.disabled = state.envelope?.supports_reference_strength !== true;
+    strengthLabel.append(strength);
+    row.append(name, roleLabel, strengthLabel);
+    if (!roles.includes(reference.role)) {
+      select.title = `${labels.get(reference.role) || reference.role} は現在のモデルでは使えません`;
+    }
+    return row;
+  }));
+  byId("advanced-reference-reason").textContent = !references.length
+    ? "キャラまたは画風を選ぶと、参照ごとの役割を指定できます。"
+    : state.envelope?.supports_reference_strength === true
+      ? "役割と強さは job ごとに保存されます。"
+      : "現在のモデルは役割に対応しますが、強さは指定できません。";
+}
+
+function applyProfileConstraints(constraints) {
+  if (state.characterProfileId) constraints.character_profile_id = state.characterProfileId;
+  if (state.styleProfileId) constraints.style_profile_id = state.styleProfileId;
+}
+
+function profileReferenceProblem() {
+  const references = selectedProfileReferences();
+  if (!references.length) return "";
+  if (capabilityState("image.multi_reference_edit") === "unavailable") {
+    return "キャラ・画風の参照に対応するモデルがありません。";
+  }
+  const direct = attachedFile() ? 1 + (state.editMode === "multi_reference" ? byId("reference-files").files.length : 0) : 0;
+  const unique = new Set([...references.map((item) => item.asset_id)]);
+  const total = unique.size + direct;
+  const limit = Number(state.envelope?.max_reference_assets || 0);
+  return total > limit ? `参照画像は合計 ${limit} 枚までです。` : "";
 }
 
 const RATIO_PRESETS = [
@@ -865,6 +1021,8 @@ function requestProblem(constraints) {
   if (!byId("create-intent").value.trim()) return "作りたいものを書いてください。";
   const directedProblem = creativeProblem();
   if (directedProblem) return directedProblem;
+  const referenceProblem = profileReferenceProblem();
+  if (referenceProblem) return referenceProblem;
 
   if (state.mode === "advanced" && byId("advanced-policy")) {
     if (byId("advanced-policy").value === "manual" && !byId("advanced-model").value) {
@@ -896,6 +1054,7 @@ async function submitJob(event) {
   const submit = byId("create-submit");
   const preset = currentPreset();
   const constraints = buildConstraints(preset);
+  applyProfileConstraints(constraints);
   const problem = requestProblem(constraints);
   if (problem) { showError(problem); return; }
   clearError();
@@ -2136,6 +2295,17 @@ byId("domain-chips").addEventListener("click", (event) => {
   if (chip) setCreativeValue("domain", chip.dataset.domain);
 });
 
+byId("character-profile").addEventListener("change", (event) => {
+  state.characterProfileId = event.target.value;
+  renderProfileChoices();
+  clearError();
+});
+byId("style-profile").addEventListener("change", (event) => {
+  state.styleProfileId = event.target.value;
+  renderProfileChoices();
+  clearError();
+});
+
 for (const key of ["scene", "pose", "composition", "camera", "variation"]) {
   byId(`creative-${key}`).addEventListener("change", (event) => setCreativeValue(key, event.target.value));
 }
@@ -2153,6 +2323,20 @@ byId("create-form").addEventListener("input", (event) => {
 });
 
 byId("create-form").addEventListener("change", (event) => {
+  if (event.target.dataset.referenceRole) {
+    const assetId = event.target.dataset.referenceRole;
+    const previous = state.referenceOverrides.get(assetId) || {};
+    state.referenceOverrides.set(assetId, {...previous, role: event.target.value});
+    clearError();
+    return;
+  }
+  if (event.target.dataset.referenceStrength) {
+    const assetId = event.target.dataset.referenceStrength;
+    const previous = state.referenceOverrides.get(assetId) || {};
+    state.referenceOverrides.set(assetId, {...previous, strength: Number(event.target.value)});
+    clearError();
+    return;
+  }
   const key = {
     "advanced-domain": "domain",
     "advanced-scene": "scene",
@@ -2409,6 +2593,7 @@ async function boot() {
 
   state.libraryKind = state.preferences.library_kind || "all";
   renderCreative();
+  await loadProfiles();
   renderPresets();
   renderCounts();
   renderLibraryKinds();

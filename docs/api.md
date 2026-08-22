@@ -163,7 +163,10 @@ Asset and provenance documents conform to [`schemas/asset.json`](../schemas/asse
 
 Reference collections conform to
 [`schemas/reference-collection.json`](../schemas/reference-collection.json) and
-contain one to four immutable asset IDs, never paths. Character and style
+contain one to four immutable asset IDs, never paths. The additive optional
+`roles` map classifies collection assets as `identity`, `style`, `pose`,
+`composition`, `clothing`, `palette`, `prop`, or `environment`; omitted roles
+remain valid and are inferred from the selected profile kind. Character and style
 profiles conform to [`schemas/profile.json`](../schemas/profile.json); their
 definitions are structured separately and may point to one reference
 collection.
@@ -176,6 +179,14 @@ only contained job-local image copies to the worker. A maximum of four unique
 job/profile reference assets is enforced. Provenance retains the full resolved
 snapshot plus every reference asset hash, so deleting a profile does not erase
 the producing facts. Jobs without profiles follow the unchanged G1/G2 route.
+
+The `roles` property is an additive extension to the frozen collection schema:
+existing stored collections and clients may omit it, no existing field changes
+meaning, and no migration or contract version bump is required. Per-job role
+overrides and strengths live in the private CreativePlan snapshot. The active
+model envelope is authoritative for the reference limit, supported roles, and
+whether numeric strength is usable; unsupported controls are disabled rather
+than silently ignored.
 
 Parentage uses asset IDs only. Host paths are not part of this API.
 

@@ -415,6 +415,8 @@ supports_quantization
 supports_lora
 supports_seed
 max_references
+reference_roles[]             # role vocabulary the adapter can consume
+supports_reference_strength  # per-reference numeric strength, not inferred
 resolution_constraints
 installed
 healthy
