@@ -2,6 +2,27 @@
 
 Date: 2026-08-21
 
+## Catalog ownership and storage
+
+The runtime registry remains the single source used by capability routing. A
+separate `worker_packs/image/catalog.json` adds presentation and installation
+metadata without changing the frozen public model schema. Catalog metadata
+contains a friendly name, bounded domain tags, source identity, approximate
+download size, reference/LoRA support, recommendations, gating/license notice,
+and an ownership mode.
+
+`managed` means the detected immutable snapshot is inside Media Forge's
+configured model store and may later be removed by Model Management. `external`
+means the snapshot was detected in the shared Hugging Face cache and is always
+read-only. Detection resolves the root, repository, snapshot, required files,
+and weight blobs before accepting the installation. A symlink escape is not an
+installation, and the same identity resolving as both managed and external is
+an invalid registry rather than an arbitrary ownership choice.
+
+Catalog domains are advisory only. They do not bypass capability, state,
+health, hardware, policy, or measured-resource routing checks. Downloading a
+model also does not promote unmeasured metadata to measured.
+
 ## G0 fake worker
 
 The G0 worker is not a generative model and is not eligible for default-model promotion.
@@ -32,6 +53,7 @@ weights_hash: sha256:f3fcfa8fdaf5ebcd26c33cd53b485ec5ebe54939b5ace585b3f488278df
 license: Apache-2.0
 pinned weight bytes: 15964212614
 shared cache: /data1tb/ControlDeck/data/cache/huggingface
+catalog ownership when detected here: external (usable, never removable)
 ```
 
 The path above is deployment evidence, not a public API value. The registry

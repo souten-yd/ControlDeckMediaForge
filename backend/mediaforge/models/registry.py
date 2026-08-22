@@ -10,6 +10,7 @@ from typing import Any
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
+_DOMAINS = {"general", "anime", "illustration", "photoreal", "game2d", "poster", "character_sheet", "background"}
 
 
 class ModelRegistryError(RuntimeError):
@@ -20,6 +21,18 @@ class ModelState(StrEnum):
     UNAVAILABLE = "unavailable"
     EXPERIMENTAL = "experimental"
     AVAILABLE = "available"
+
+
+class ModelOwnership(StrEnum):
+    MANAGED = "managed"
+    EXTERNAL = "external"
+
+
+@dataclass(frozen=True)
+class ModelSource:
+    kind: str
+    repo_id: str
+    revision: str
 
 
 @dataclass(frozen=True)
@@ -58,6 +71,17 @@ class ModelDescriptor:
     max_width: int = 2048
     max_height: int = 2048
     max_pixels: int = 2048 * 2048
+    display_name: str = ""
+    domains: tuple[str, ...] = ()
+    description: str = ""
+    approx_download_bytes: int = 0
+    source: ModelSource | None = None
+    ownership: ModelOwnership = ModelOwnership.EXTERNAL
+    supports_lora: bool = False
+    max_references: int = 0
+    recommended_profiles: tuple[str, ...] = ()
+    gated: bool = False
+    license_notice: str = ""
 
     @property
     def measured_vram_bytes(self) -> int | None:
@@ -67,6 +91,10 @@ class ModelDescriptor:
         return max(self.execution_peak_vram_bytes or 0, self.cold_load_peak_vram_bytes or 0) + (
             self.headroom_vram_bytes or 0
         )
+
+    @property
+    def removable(self) -> bool:
+        return self.installed and self.ownership == ModelOwnership.MANAGED
 
 
 def _required_string(value: dict[str, Any], key: str) -> str:
@@ -187,6 +215,71 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     )
 
 
+def _catalog_metadata(value: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "model_id", "display_name", "domains", "description", "approx_download_bytes",
+        "source", "ownership", "supports_lora", "max_references", "recommended_profiles",
+        "gated", "license_notice",
+    }
+    if set(value) != allowed:
+        raise ModelRegistryError("model catalog entry fields are invalid")
+    model_id = _required_string(value, "model_id")
+    if _MODEL_ID.fullmatch(model_id) is None:
+        raise ModelRegistryError("model catalog identity is invalid")
+    domains = _string_tuple(value, "domains")
+    if any(domain not in _DOMAINS for domain in domains) or len(domains) != len(set(domains)):
+        raise ModelRegistryError("model catalog domains are invalid")
+    recommended_profiles = value.get("recommended_profiles")
+    if not isinstance(recommended_profiles, list) or any(
+        not isinstance(item, str) or not item for item in recommended_profiles
+    ):
+        raise ModelRegistryError("model catalog recommended_profiles must be a string array")
+    approx_download_bytes = value.get("approx_download_bytes")
+    max_references = value.get("max_references")
+    if (
+        not isinstance(approx_download_bytes, int)
+        or isinstance(approx_download_bytes, bool)
+        or approx_download_bytes <= 0
+        or not isinstance(max_references, int)
+        or isinstance(max_references, bool)
+        or max_references < 0
+    ):
+        raise ModelRegistryError("model catalog numeric metadata is invalid")
+    source_value = value.get("source")
+    if not isinstance(source_value, dict) or set(source_value) != {"kind", "repo_id", "revision"}:
+        raise ModelRegistryError("model catalog source is invalid")
+    source = ModelSource(
+        kind=_required_string(source_value, "kind"),
+        repo_id=_required_string(source_value, "repo_id"),
+        revision=_required_string(source_value, "revision"),
+    )
+    if source.kind != "huggingface" or source.repo_id != model_id or not re.fullmatch(
+        r"[0-9a-f]{40}", source.revision
+    ):
+        raise ModelRegistryError("model catalog source is invalid")
+    try:
+        ownership = ModelOwnership(_required_string(value, "ownership"))
+    except ValueError as exc:
+        raise ModelRegistryError("model catalog ownership is invalid") from exc
+    supports_lora = value.get("supports_lora")
+    gated = value.get("gated")
+    if not isinstance(supports_lora, bool) or not isinstance(gated, bool):
+        raise ModelRegistryError("model catalog boolean metadata is invalid")
+    return {
+        "display_name": _required_string(value, "display_name"),
+        "domains": domains,
+        "description": _required_string(value, "description"),
+        "approx_download_bytes": approx_download_bytes,
+        "source": source,
+        "ownership": ownership,
+        "supports_lora": supports_lora,
+        "max_references": max_references,
+        "recommended_profiles": tuple(recommended_profiles),
+        "gated": gated,
+        "license_notice": _required_string(value, "license_notice"),
+    }
+
+
 class ModelRegistry:
     def __init__(self, descriptors: tuple[ModelDescriptor, ...]):
         identifiers = [item.model_id for item in descriptors]
@@ -195,7 +288,14 @@ class ModelRegistry:
         self._descriptors = descriptors
 
     @classmethod
-    def load(cls, manifest: Path, *, hf_home: Path | None = None) -> "ModelRegistry":
+    def load(
+        cls,
+        manifest: Path,
+        *,
+        hf_home: Path | None = None,
+        catalog_manifest: Path | None = None,
+        model_store_root: Path | None = None,
+    ) -> "ModelRegistry":
         try:
             value = json.loads(manifest.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -209,28 +309,88 @@ class ModelRegistry:
         if len(descriptors) != len(models):
             raise ModelRegistryError("model registry entry must be an object")
         registry = cls(descriptors)
-        return registry.detect_huggingface(hf_home) if hf_home is not None else registry
+        if catalog_manifest is not None:
+            registry = registry.with_catalog(catalog_manifest)
+        if hf_home is not None or model_store_root is not None:
+            registry = registry.detect_installations(hf_home=hf_home, model_store_root=model_store_root)
+        return registry
 
     def all(self) -> tuple[ModelDescriptor, ...]:
         return self._descriptors
 
+    def with_catalog(self, catalog_manifest: Path) -> "ModelRegistry":
+        try:
+            value = json.loads(catalog_manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ModelRegistryError(f"model catalog could not be read: {catalog_manifest}") from exc
+        if not isinstance(value, dict) or value.get("schema_version") != "1.0":
+            raise ModelRegistryError("model catalog schema_version is unsupported")
+        entries = value.get("models")
+        if not isinstance(entries, list) or any(not isinstance(item, dict) for item in entries):
+            raise ModelRegistryError("model catalog models must be an object array")
+        metadata: dict[str, dict[str, Any]] = {}
+        for entry in entries:
+            parsed = _catalog_metadata(entry)
+            model_id = entry["model_id"]
+            if model_id in metadata:
+                raise ModelRegistryError("model catalog contains duplicate model IDs")
+            metadata[model_id] = parsed
+        registry_ids = {item.model_id for item in self._descriptors}
+        if set(metadata) != registry_ids:
+            raise ModelRegistryError("model catalog and runtime registry IDs differ")
+        for descriptor in self._descriptors:
+            source = metadata[descriptor.model_id]["source"]
+            if source.revision != descriptor.revision:
+                raise ModelRegistryError("model catalog source revision differs from runtime registry")
+        return ModelRegistry(tuple(replace(item, **metadata[item.model_id]) for item in self._descriptors))
+
     def detect_huggingface(self, hf_home: Path) -> "ModelRegistry":
+        return self.detect_installations(hf_home=hf_home)
+
+    def detect_installations(
+        self,
+        *,
+        hf_home: Path | None,
+        model_store_root: Path | None = None,
+    ) -> "ModelRegistry":
         detected: list[ModelDescriptor] = []
         for descriptor in self._descriptors:
-            repo_root = hf_home / "hub" / ("models--" + descriptor.model_id.replace("/", "--"))
-            snapshot = repo_root / "snapshots" / descriptor.revision
-            installed = (
-                snapshot.is_dir()
-                and all(self._required_file_matches(repo_root, snapshot, item) for item in descriptor.required_files)
-                and all(self._weight_matches(repo_root, snapshot, item) for item in descriptor.weights)
+            external = self._installation(descriptor, hf_home) if hf_home is not None else None
+            managed = self._installation(descriptor, model_store_root) if model_store_root is not None else None
+            if external is not None and managed is not None:
+                raise ModelRegistryError(f"model ownership is ambiguous: {descriptor.model_id}")
+            snapshot = managed or external
+            ownership = ModelOwnership.MANAGED if managed is not None else (
+                ModelOwnership.EXTERNAL if external is not None else descriptor.ownership
             )
+            installed = snapshot is not None
             detected.append(replace(
                 descriptor,
                 installed=installed,
                 healthy=installed and descriptor.state == ModelState.AVAILABLE,
-                local_path=snapshot.resolve() if installed else None,
+                local_path=snapshot,
+                ownership=ownership,
             ))
         return ModelRegistry(tuple(detected))
+
+    @classmethod
+    def _installation(cls, descriptor: ModelDescriptor, root: Path) -> Path | None:
+        repo_root = root / "hub" / ("models--" + descriptor.model_id.replace("/", "--"))
+        snapshot = repo_root / "snapshots" / descriptor.revision
+        try:
+            resolved_root = root.resolve(strict=True)
+            resolved_repo = repo_root.resolve(strict=True)
+            resolved_snapshot = snapshot.resolve(strict=True)
+            if not resolved_repo.is_relative_to(resolved_root) or not resolved_snapshot.is_relative_to(resolved_repo):
+                return None
+        except OSError:
+            return None
+        installed = (
+            resolved_snapshot.is_dir()
+            and all(cls._required_file_matches(resolved_repo, resolved_snapshot, item) for item in descriptor.required_files)
+            and all(cls._weight_matches(resolved_repo, resolved_snapshot, item) for item in descriptor.weights)
+        )
+        return resolved_snapshot if installed else None
 
     @staticmethod
     def _required_file_matches(repo_root: Path, snapshot: Path, relative: str) -> bool:

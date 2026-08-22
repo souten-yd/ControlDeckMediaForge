@@ -43,6 +43,13 @@ media_data_dir() {
   expand_home "$value"
 }
 
+model_store_root() {
+  local value=""
+  value="$(yaml_scalar "$CONFIG_FILE" model_store_root || true)"
+  [ -n "$value" ] || value="$(media_data_dir)/models"
+  expand_home "$value"
+}
+
 control_deck_config() {
   local candidate=""
   if [ -n "${CONTROL_DECK_CONFIG:-}" ]; then
@@ -152,13 +159,17 @@ model_library_state() {
   if rg -q '^model_libraries:[[:space:]]*\[[^]]+\]' "$CONFIG_FILE" 2>/dev/null; then
     printf 'ok'
   elif [ -d "$HF_HOME/hub" ] && PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" \
-    "$PYTHON_BIN" - "$(model_registry_manifest)" "$HF_HOME" >/dev/null 2>&1 <<'PY'
+    "$PYTHON_BIN" - "$(model_registry_manifest)" "$(model_catalog_manifest)" "$HF_HOME" \
+      "$(model_store_root)" >/dev/null 2>&1 <<'PY'
 import sys
 from pathlib import Path
 
 from mediaforge.models import ModelRegistry
 
-models = ModelRegistry.load(Path(sys.argv[1]), hf_home=Path(sys.argv[2])).all()
+models = ModelRegistry.load(
+    Path(sys.argv[1]), catalog_manifest=Path(sys.argv[2]), hf_home=Path(sys.argv[3]),
+    model_store_root=Path(sys.argv[4]),
+).all()
 raise SystemExit(0 if any(model.installed for model in models) else 1)
 PY
   then
@@ -245,6 +256,7 @@ doctor() {
   printf 'gpu_tool_rocminfo=%s\n' "$(command -v rocminfo || printf missing)"
   printf 'model_library=%s\n' "$model"
   printf 'media_data_dir=%s\n' "$(media_data_dir)"
+  printf 'model_store_root=%s\n' "$(model_store_root)"
   printf 'control_deck_config=%s\n' "${config_path:-unavailable}"
   printf 'PIP_CACHE_DIR=%s\n' "$PIP_CACHE_DIR"
   printf 'UV_CACHE_DIR=%s\n' "$UV_CACHE_DIR"
@@ -310,18 +322,27 @@ model_registry_manifest() {
   printf '%s/worker_packs/image/models.json\n' "$REPO_ROOT"
 }
 
+model_catalog_manifest() {
+  printf '%s/worker_packs/image/catalog.json\n' "$REPO_ROOT"
+}
+
 list_models() {
   ensure_env "$VENV" "$REPO_ROOT/requirements.txt" "core"
   PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" "$VENV/bin/python" - \
-    "$(model_registry_manifest)" "$HF_HOME" <<'PY'
+    "$(model_registry_manifest)" "$(model_catalog_manifest)" "$HF_HOME" "$(model_store_root)" <<'PY'
 import sys
 from pathlib import Path
 
 from mediaforge.models import ModelRegistry
 
-for model in ModelRegistry.load(Path(sys.argv[1]), hf_home=Path(sys.argv[2])).all():
+for model in ModelRegistry.load(
+    Path(sys.argv[1]), catalog_manifest=Path(sys.argv[2]), hf_home=Path(sys.argv[3]),
+    model_store_root=Path(sys.argv[4]),
+).all():
     print(
-        f"{model.model_id}\tstate={model.state}\tinstalled={'yes' if model.installed else 'no'}"
+        f"{model.model_id}\tname={model.display_name}\tdomains={','.join(model.domains)}"
+        f"\townership={model.ownership}\tremovable={'yes' if model.removable else 'no'}"
+        f"\tstate={model.state}\tinstalled={'yes' if model.installed else 'no'}"
         f"\thealthy={'yes' if model.healthy else 'no'}\trevision={model.revision}"
     )
 PY
@@ -452,6 +473,7 @@ serve() {
   start_auto_provision
   export MEDIA_FORGE_ENV_STATUS_FILE="$ENV_STATUS_FILE"
   export MEDIA_FORGE_DATA_DIR="${MEDIA_FORGE_DATA_DIR:-$(media_data_dir)}"
+  export MEDIA_FORGE_MODEL_STORE_ROOT="${MEDIA_FORGE_MODEL_STORE_ROOT:-$(model_store_root)}"
   export PYTHONPATH="$REPO_ROOT/backend${PYTHONPATH:+:$PYTHONPATH}"
   exec "$VENV/bin/python" -m uvicorn mediaforge.app:app --host 127.0.0.1 --port "${MEDIA_FORGE_PORT:-9130}"
 }

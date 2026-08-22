@@ -1,3 +1,12 @@
-from .registry import ModelDescriptor, ModelRegistry, ModelRegistryError, ModelState
+from .registry import (
+    ModelDescriptor,
+    ModelOwnership,
+    ModelRegistry,
+    ModelRegistryError,
+    ModelSource,
+    ModelState,
+)
 
-__all__ = ["ModelDescriptor", "ModelRegistry", "ModelRegistryError", "ModelState"]
+__all__ = [
+    "ModelDescriptor", "ModelOwnership", "ModelRegistry", "ModelRegistryError", "ModelSource", "ModelState",
+]

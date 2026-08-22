@@ -7,3 +7,7 @@ auto_provision: true
 # Additional model libraries can be configured here. Pinned models in the shared
 # NVMe-backed Hugging Face cache are detected automatically. Never place weights in a venv.
 model_libraries: []
+
+# Only this Media-Forge-owned directory may be modified by Model Management.
+# Shared Hugging Face caches remain external and read-only.
+model_store_root: ~/.local/share/control-deck-media-forge/models

@@ -1335,3 +1335,37 @@ PR #221 は「宣言された contribution を実行する」汎用機能であ�
 分岐は入れていない。Media Forge 側は contract どおり
 `{"route": "/x/media-forge/workspace/create"}` を返しており、host が呼んで
 いなかっただけだった。
+
+## UX2 PR-M0 — model catalog and ownership (2026-08-22)
+
+既存の単一 `ModelRegistry` に、公開 `/api/v1/models` schema を変更せず
+catalog metadata を合成した。Media Forge 管理ストアと共有 Hugging Face cache は
+別 root として走査し、同じ model identity が双方で有効なら registry 全体を
+`model ownership is ambiguous` として fail-closed にする。管理 root からの symlink
+脱出は installed と認めない。external snapshot は生成に利用できるが
+`removable=false` である。
+
+開発機で `./mf.sh model list` を実行した実測:
+
+```text
+model       black-forest-labs/FLUX.2-klein-4B
+revision    e7b7dc27f91deacad38e78976d1f2b499d76a294
+domains     general,illustration,poster,background
+source      /data1tb/ControlDeck/data/cache/huggingface (NVMe/ext4)
+state       available / installed=yes / healthy=yes
+ownership   external / removable=no
+scan time   0.03 seconds
+max RSS     14,340 KiB
+```
+
+別プロセスの core を `127.0.0.1:9138` で起動し、`/health` は healthy、
+`/api/v1/models` は従来の公開 field 集合のまま上記モデルを installed/healthy と返し、
+`/api/v1/capabilities` は `image.text_to_image` を local/measured/available と返した。
+この確認用 managed root は `/data1tb/ControlDeckMediaForge/.runtime-evidence/m0/models`
+（NVMe device 66305）を指定し、観測後の一時データは `/tmp` へ退避した。
+
+`./mf.sh test` は 189 passed（13.24 秒）。これは契約回帰の証拠であり、上記の
+実プロセス/API/実ストレージ観測とは区別する。モデルの新規 download、resume、
+verify、remove、Settings UI は PR-M1/M2 のため **NOT TESTED**。稼働中の installed
+bundle は v0.2.4 であり、M0 はまだリリース bundle へ含めていない。ControlDeck の
+コード変更は不要だった。
