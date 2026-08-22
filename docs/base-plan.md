@@ -394,6 +394,7 @@ weights_hash
 license
 runtime_adapter
 capabilities[]
+media_types[]                 # catalog/UI classification only; routing never reads it
 hardware_backends[]
 recommended_vram
 supports_quantization
@@ -404,6 +405,11 @@ resolution_constraints
 installed
 healthy
 ```
+
+`media_types` is a validated catalog classification (`image`, `video`, or
+`audio_video`) used for discovery and filtering. It is not a routing input and
+must agree with the capability family. Capability remains the sole behavioral
+contract, so adding or removing a video runtime never changes generation APIs.
 
 Routing inputs include:
 

@@ -11,6 +11,7 @@ from typing import Any
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
 _DOMAINS = {"general", "anime", "illustration", "photoreal", "game2d", "poster", "character_sheet", "background"}
+_MEDIA_TYPES = {"image", "video", "audio_video"}
 
 
 class ModelRegistryError(RuntimeError):
@@ -73,6 +74,7 @@ class ModelDescriptor:
     max_pixels: int = 2048 * 2048
     display_name: str = ""
     domains: tuple[str, ...] = ()
+    media_types: tuple[str, ...] = ()
     description: str = ""
     approx_download_bytes: int = 0
     source: ModelSource | None = None
@@ -217,7 +219,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
 
 def _catalog_metadata(value: dict[str, Any]) -> dict[str, Any]:
     allowed = {
-        "model_id", "display_name", "domains", "description", "approx_download_bytes",
+        "model_id", "display_name", "domains", "media_types", "description", "approx_download_bytes",
         "source", "ownership", "supports_lora", "max_references", "recommended_profiles",
         "gated", "license_notice",
     }
@@ -229,6 +231,9 @@ def _catalog_metadata(value: dict[str, Any]) -> dict[str, Any]:
     domains = _string_tuple(value, "domains")
     if any(domain not in _DOMAINS for domain in domains) or len(domains) != len(set(domains)):
         raise ModelRegistryError("model catalog domains are invalid")
+    media_types = _string_tuple(value, "media_types")
+    if any(item not in _MEDIA_TYPES for item in media_types) or len(media_types) != len(set(media_types)):
+        raise ModelRegistryError("model catalog media_types are invalid")
     recommended_profiles = value.get("recommended_profiles")
     if not isinstance(recommended_profiles, list) or any(
         not isinstance(item, str) or not item for item in recommended_profiles
@@ -268,6 +273,7 @@ def _catalog_metadata(value: dict[str, Any]) -> dict[str, Any]:
     return {
         "display_name": _required_string(value, "display_name"),
         "domains": domains,
+        "media_types": media_types,
         "description": _required_string(value, "description"),
         "approx_download_bytes": approx_download_bytes,
         "source": source,
@@ -342,6 +348,15 @@ class ModelRegistry:
             source = metadata[descriptor.model_id]["source"]
             if source.revision != descriptor.revision:
                 raise ModelRegistryError("model catalog source revision differs from runtime registry")
+            media_types = set(metadata[descriptor.model_id]["media_types"])
+            capability_families = {name.split(".", 1)[0] for name in descriptor.capabilities}
+            expected = {"image" for family in capability_families if family == "image"}
+            if "video" in capability_families:
+                expected.add("video")
+            if not expected.issubset(media_types) or (
+                "audio_video" in media_types and "video" not in capability_families
+            ):
+                raise ModelRegistryError("model catalog media_types differ from runtime capabilities")
         return ModelRegistry(tuple(replace(item, **metadata[item.model_id]) for item in self._descriptors))
 
     def detect_huggingface(self, hf_home: Path) -> "ModelRegistry":

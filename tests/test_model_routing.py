@@ -211,12 +211,19 @@ def _m0_runtime_manifest(path: Path) -> Path:
     return path
 
 
-def _m0_catalog(path: Path, *, ownership: str = "managed", domains: list[str] | None = None) -> Path:
+def _m0_catalog(
+    path: Path,
+    *,
+    ownership: str = "managed",
+    domains: list[str] | None = None,
+    media_types: list[str] | None = None,
+) -> Path:
     value = {
         "schema_version": "1.0",
         "models": [{
             "model_id": "owner/model", "display_name": "Example Model",
-            "domains": domains or ["general"], "description": "A test model.",
+            "domains": domains or ["general"], "media_types": media_types or ["image"],
+            "description": "A test model.",
             "approx_download_bytes": 4,
             "source": {"kind": "huggingface", "repo_id": "owner/model", "revision": "d" * 40},
             "ownership": ownership, "supports_lora": False, "max_references": 2,
@@ -245,6 +252,14 @@ def test_catalog_rejects_unknown_ownership(tmp_path):
     manifest = _m0_runtime_manifest(tmp_path / "models.json")
     catalog = _m0_catalog(tmp_path / "catalog.json", ownership="borrowed")
     with pytest.raises(ModelRegistryError, match="ownership"):
+        ModelRegistry.load(manifest, catalog_manifest=catalog)
+
+
+@pytest.mark.parametrize("media_types", [["document"], ["video"], ["audio_video"]])
+def test_catalog_rejects_invalid_or_capability_mismatched_media_types(tmp_path, media_types):
+    manifest = _m0_runtime_manifest(tmp_path / "models.json")
+    catalog = _m0_catalog(tmp_path / "catalog.json", media_types=media_types)
+    with pytest.raises(ModelRegistryError, match="media_types"):
         ModelRegistry.load(manifest, catalog_manifest=catalog)
 
 

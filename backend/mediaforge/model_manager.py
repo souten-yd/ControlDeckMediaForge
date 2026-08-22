@@ -77,6 +77,7 @@ class ModelOperationManager:
         return {
             "items": [self._catalog_item(model) for model in models],
             "storage": self.storage_summary(),
+            "management_available": True,
         }
 
     def storage_summary(self) -> dict[str, int]:
@@ -432,8 +433,12 @@ class ModelOperationManager:
             "model_id": model.model_id,
             "display_name": model.display_name,
             "domains": list(model.domains),
+            "media_types": list(model.media_types),
             "description": model.description,
             "approx_download_bytes": model.approx_download_bytes,
+            "reclaimable_bytes": self._directory_bytes(self._repo_root(model))
+            if model.ownership == ModelOwnership.MANAGED and model.installed else 0,
+            "profile_reference_count": 0,
             "source": {
                 "kind": source.kind,
                 "repo_id": source.repo_id,

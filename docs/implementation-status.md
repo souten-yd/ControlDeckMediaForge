@@ -1427,3 +1427,55 @@ core venv の interpreter で registry を読むよう修正後、実 HTTP で `
 hash不一致、symlink脱出、workspace event はテストで確認した。managed copyからの
 実画像生成と Settings UI は **NOT TESTED**（後続 M2/C5）。ControlDeck のコード変更は
 不要だった。
+
+## UX2 PR-M2 — Settings Model Management (2026-08-22)
+
+既存 Settings に、Simple から到達できるモデル管理を追加した。保存容量、
+Installed / Recommended / All、media type/domain chip、friendly name、導入・削除、
+inline progress、global model progress を表示する。model ID、revision、hash、runtime、
+backend、生 capability、VRAM/時間、license/gated は Advanced template を mount した
+ときだけ DOM に現れる。Simple の操作対象は一時 catalog index で結び、model ID を
+`data-*` にも置かない。
+
+`media_types`（image / video / audio_video）は catalog/UI 分類専用として追加した。
+routing は読まず capability が唯一の挙動契約である。runtime capability family と
+矛盾する catalog は registry 全体を fail-closed にする。これにより将来の動画・
+音声付き動画も同じ Model Management を使えるが、G7 model の download/worker/default
+昇格には着手していない。
+
+実ブラウザと実 core/private WebSocket/durable SQLite を使う隔離 E2E
+`scripts/ux_model_management_e2e.py` を実行した。モデル byte だけを 32 MiB の
+fixture にし、実 installer/verifier/atomic managed store/remove を通した。
+
+```text
+Download開始                 1 tap
+install wall time            10.539 seconds
+別画面の global progress     visible
+reload/reconnect             同じ active operation を operations.list から復元
+Advanced detail              Simple DOM には無し / Advanced で model_id 等を確認
+external model               disabled「共有モデル」/ destructive action 無し
+Remove                       action 後の確認 dialog は 1 回だけ
+390x844 horizontal overflow  0 px
+320x640 horizontal overflow  0 px
+console / page error         0 件
+evidence                     /tmp/mediaforge-m2-evidence/
+```
+
+この試験で 3 件の実不具合を検出して修正した。
+
+1. mount URL が `/` で終わると WebSocket URL が `//ws` になったため末尾 slash を正規化。
+2. 最後に Settings 以外を見て reload すると operation を復元しなかったため、boot 時に
+   durable operation を常に読む。
+3. 小さい remove が watch 登録前に完了すると queued 表示に残ったため、watch 直後にも
+   durable list/catalog を再取得して event race を収束させる。
+
+実 managed FLUX.2 Klein 4B を読む standalone core に対して既存
+`scripts/ux_standalone_e2e.py` も実行し PASSED。desktop ready 0.120 秒、390px/320px
+overflow 0、console error 0 件だった。既存スクリプトが outpaint 後の
+`source → target` 寸法表示を旧形式として parse していた 2 箇所も更新した。
+
+`./mf.sh test` は 207 passed（12.10 秒、全 command 13.22 秒、最大 RSS
+181,556 KiB）。これは契約回帰で、上記ブラウザ/実process観測とは区別する。
+実 15.98 GB model の削除、installed ControlDeck の配布版でのM2表示、G7動画model、
+managed copyからの画像生成は **NOT TESTED**。大容量modelはNVMeに保持した。
+ControlDeck のコード変更は不要だった。

@@ -37,6 +37,30 @@ bounded connection retries from its current byte offset. This deliberately
 trades peak download throughput for predictable disk/network pressure on the
 development workstation.
 
+Catalog `media_types` is presentation metadata with the closed values `image`,
+`video`, and `audio_video`. It must agree with the runtime capability family,
+but is never a router input. This lets one Model Management view classify future
+video models without creating a second installer or changing generation APIs.
+
+### Deferred G7 evaluation roles
+
+The following are evaluation roles, not adopted defaults. No download or AMD
+benchmark is authorized by this list.
+
+```text
+general/lightweight T2V+I2V     Wan 2.2 TI2V-5B family first probe
+character/companion animation   Wan 2.2 Animate family candidate
+high-feature synchronized audio LTX family candidate
+quality comparison              HunyuanVideo family candidate
+lightweight fallback            select only after R9700 measurements
+```
+
+All are **NOT TESTED** on the R9700 until G7. Before adding a trusted catalog
+entry or marking one Recommended, verify the authoritative model/runtime
+source, license, exact capabilities, ROCm/gfx1201 operation, VRAM phases,
+runtime, failure rate, and all ten adoption-gate answers from `base-plan.md`
+§24. A candidate that is removed later must not change the public API.
+
 ## G0 fake worker
 
 The G0 worker is not a generative model and is not eligible for default-model promotion.
