@@ -8,11 +8,13 @@ import pytest
 
 from mediaforge.creative_intelligence import (
     ActionStateSpec,
+    CreativeDirector,
     CreativeIntelligenceError,
     PromptPlanner,
     PromptPlan,
     SubjectSpec,
     prompt_plan_to_creative_details,
+    project_plan_to_creative_spec,
 )
 from mediaforge.host.ai import HostAIGateway
 from mediaforge.host.ai import HostAIError
@@ -154,6 +156,11 @@ def test_prompt_planner_preserves_original_intent_and_marks_non_user_additions()
     assert plan.optional_suggestions == ["tire spray", "wet-road reflections"]
     assert gateway.calls[0][0] == "text.generate"
     assert gateway.calls[0][2]["response_format"]["type"] == "json_schema"
+    response_schema = gateway.calls[0][2]["response_format"]["schema"]
+    assert response_schema["required"] == list(response_schema["properties"])
+    assert response_schema["$defs"]["ActionStateSpec"]["required"] == list(
+        response_schema["$defs"]["ActionStateSpec"]["properties"]
+    )
 
 
 def test_prompt_planner_original_mode_never_calls_ai():
@@ -179,6 +186,13 @@ def test_prompt_planner_still_rejects_unknown_ai_authored_fields():
     assert caught.value.code == "prompt_plan_invalid"
 
 
+def test_prompt_planner_rejects_content_free_default_object():
+    planner = PromptPlanner(FakeGateway("{}"))  # type: ignore[arg-type]
+    with pytest.raises(CreativeIntelligenceError) as caught:
+        asyncio.run(planner.plan(IDENTITY, "small orange robot", mode="refine"))
+    assert caught.value.code == "prompt_plan_invalid"
+
+
 def test_non_person_action_state_projects_into_existing_pose_details_without_requiring_person_pose():
     plan = PromptPlan(
         original_intent="a robot opens its chest panel",
@@ -192,3 +206,111 @@ def test_non_person_action_state_projects_into_existing_pose_details_without_req
     details = prompt_plan_to_creative_details(plan)
     assert details["pose_details"] == "opening chest panel; crouched; three-quarter view"
     assert details["scene_details"] == ""
+
+
+def test_director_projects_uncommon_non_person_action_but_preserves_manual_controls():
+    authored = PromptPlan(
+        original_intent="provider-owned value",
+        mode="art_direct",
+        subject=SubjectSpec(kind="robot", appearance_traits=["orange shell"]),
+        primary_action=ActionStateSpec(
+            action="opens its chest panel",
+            gesture="holds a diagnostic cable in the left gripper",
+            gaze="optical sensor aimed at the panel",
+        ),
+        scene="repair bay",
+        composition="subject on the right third",
+        camera="low angle",
+        optional_suggestions=["soft rim light"],
+    )
+    gateway = FakeGateway(json.dumps(authored.model_dump(mode="json")))
+    director = CreativeDirector(PromptPlanner(gateway))  # type: ignore[arg-type]
+    directed = asyncio.run(director.direct(
+        IDENTITY,
+        "orange robot opens its chest panel",
+        {
+            "domain": "auto",
+            "scene": {"preset": "coding_at_desk", "details": "user scene"},
+            "pose": {"preset": "auto", "details": ""},
+            "composition": {"preset": "full_body_center", "details": ""},
+            "camera": {"preset": "auto", "details": ""},
+            "variation": {"axis": "auto"},
+            "reference_roles": [],
+        },
+        mode="refine",
+    ))
+
+    assert directed.assistance_used is True
+    assert directed.plan.original_intent == "orange robot opens its chest panel"
+    assert directed.creative_spec["scene"] == {"preset": "coding_at_desk", "details": "user scene"}
+    assert directed.creative_spec["composition"] == {"preset": "full_body_center", "details": ""}
+    assert directed.creative_spec["pose"]["preset"] == "custom"
+    assert "chest panel" in directed.creative_spec["pose"]["details"]
+    assert directed.creative_spec["camera"]["details"] == "low angle"
+    assert gateway.calls[0][0] == "text.generate"
+    assert all(call[0] != "vision.analyze" for call in gateway.calls)
+
+
+class RaisingGateway:
+    async def complete(self, *args, **kwargs):
+        del args, kwargs
+        raise HostAIError("host_ai_unavailable", "offline")
+
+
+def test_director_failure_is_fail_soft_and_keeps_the_original_spec():
+    director = CreativeDirector(PromptPlanner(RaisingGateway()))  # type: ignore[arg-type]
+    creative = {
+        "scene": {"preset": "auto", "details": ""},
+        "pose": {"preset": "auto", "details": ""},
+        "composition": {"preset": "auto", "details": ""},
+        "camera": {"preset": "auto", "details": ""},
+    }
+    directed = asyncio.run(director.direct(
+        IDENTITY, "a vehicle unfolds its solar panels", creative, mode="refine"
+    ))
+    assert directed.assistance_used is False
+    assert directed.skipped_reason == "host_ai_unavailable"
+    assert directed.plan.original_intent == "a vehicle unfolds its solar panels"
+    assert directed.creative_spec == creative
+
+
+def test_action_variations_use_one_text_request_and_exact_bounded_count():
+    authored = {
+        "plan": {
+            "version": "provider-value",
+            "original_intent": "provider-value",
+            "mode": "art_direct",
+            "subject": {"kind": "product"},
+            "primary_action": {"action": "displaying status"},
+        },
+        "actions": [
+            {"action": "tilted toward the viewer", "orientation": "front three-quarter"},
+            {"action": "rotated to expose the rear ports", "orientation": "rear three-quarter"},
+            {"action": "resting flat while the lid opens", "motion_hint": "hinge opening"},
+        ],
+    }
+    gateway = FakeGateway(json.dumps(authored))
+    director = CreativeDirector(PromptPlanner(gateway))  # type: ignore[arg-type]
+    directed = asyncio.run(director.action_variations(
+        IDENTITY, "show three useful views of the orange device", mode="refine", count=3,
+    ))
+
+    assert directed.assistance_used is True
+    assert len(directed.actions) == 3
+    assert directed.plan.original_intent == "show three useful views of the orange device"
+    assert directed.plan.mode == "refine"
+    assert len(gateway.calls) == 1 and gateway.calls[0][0] == "text.generate"
+
+
+def test_projection_bounds_pose_compatibility_text_to_existing_schema_limit():
+    plan = PromptPlan(
+        original_intent="bounded",
+        primary_action=ActionStateSpec(
+            action="a" * 500,
+            body_or_part_relations=["b" * 500],
+        ),
+    )
+    projected, applied = project_plan_to_creative_spec(plan, {})
+    assert applied == ["action_state"]
+    assert projected["pose"]["preset"] == "custom"
+    assert len(projected["pose"]["details"]) == 500

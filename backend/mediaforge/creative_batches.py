@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from pydantic import BaseModel, ConfigDict, Field
 
 from .creative import CreativeCompiler, CreativeSpec, CreativeValidationError
+from .creative_intelligence import ActionStateSpec, PromptPlan, action_state_to_pose_details
 from .domain import Job, JobRequest
 
 
@@ -81,6 +82,65 @@ class CreativeBatchPlanner:
             plan = compiled.plan
             plan["batch"] = {
                 "id": identifier, "axis": axis, "index": index, "total": count, "seed": seed + index,
+            }
+            value = compiled.request.model_dump(mode="json")
+            value["constraints"] = {
+                **value["constraints"], "seed": seed + index, "creative_plan": plan,
+            }
+            value["output"]["count"] = 1
+            requests.append(JobRequest.model_validate(value))
+            plans.append(plan)
+        return identifier, requests, plans
+
+    def plan_action_variations(
+        self,
+        request: JobRequest,
+        creative: CreativeSpec,
+        actions: list[ActionStateSpec],
+        director_plan: PromptPlan,
+        *,
+        capabilities: Mapping[str, Mapping[str, Any]],
+        envelope: Mapping[str, Any],
+        available_reference_ids: set[str] | None = None,
+        batch_id: str | None = None,
+    ) -> tuple[str, list[JobRequest], list[dict[str, Any]]]:
+        if not 2 <= len(actions) <= 4:
+            raise CreativeValidationError(
+                "creative_batch_count_invalid", "演出による動きの差分は2〜4枚です。", field="count"
+            )
+        identifier = batch_id or f"batch_{uuid.uuid4().hex}"
+        seed = self._base_seed(request, creative)
+        requests: list[JobRequest] = []
+        plans: list[dict[str, Any]] = []
+        for index, action in enumerate(actions):
+            details = action_state_to_pose_details(action)
+            if not details:
+                raise CreativeValidationError(
+                    "creative_batch_variants_unavailable",
+                    "動きの差分に使える内容がありません。",
+                    field="variation",
+                )
+            child = creative.model_copy(deep=True)
+            child.pose = child.pose.model_copy(update={"preset": "custom", "details": details})
+            compiled = self.compiler.compile(
+                request.model_copy(update={"output": request.output.model_copy(update={"count": 1})}),
+                child,
+                capabilities=capabilities,
+                envelope=envelope,
+                available_reference_ids=available_reference_ids,
+            )
+            plan = compiled.plan
+            plan["director"] = {
+                **director_plan.model_dump(mode="json"),
+                "child_action_state": action.model_dump(mode="json"),
+                "source": "control-deck:text.generate",
+            }
+            plan["batch"] = {
+                "id": identifier,
+                "axis": "pose",
+                "index": index,
+                "total": len(actions),
+                "seed": seed + index,
             }
             value = compiled.request.model_dump(mode="json")
             value["constraints"] = {

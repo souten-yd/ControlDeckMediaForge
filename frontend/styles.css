@@ -305,6 +305,11 @@ textarea { resize: vertical; min-height: 96px; }
 .dropzone.dragging { border-color: var(--accent); color: var(--accent); }
 #attach-size:empty { display: none; }
 .sub-field { display: grid; gap: 6px; font-size: .8rem; }
+.director-control { display: grid; grid-template-columns: auto minmax(120px, 200px) 1fr; gap: 8px; align-items: center; }
+.director-control label { font-size: .82rem; font-weight: 700; }
+.director-control .hint { margin: 0; }
+#director-understanding { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
+#director-understanding summary { cursor: pointer; font-weight: 700; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
@@ -646,6 +651,8 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
   .modeswitch button { padding: 5px 8px; }
   .creative-selects { grid-template-columns: 1fr; }
   .creative-selects label:last-child { grid-column: auto; }
+  .director-control { grid-template-columns: auto 1fr; }
+  .director-control .hint { grid-column: 1 / -1; }
   .reference-role-row { grid-template-columns: 1fr; }
 }
 

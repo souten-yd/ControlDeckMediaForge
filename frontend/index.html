@@ -43,6 +43,22 @@
             <textarea id="create-intent" required maxlength="8000" rows="4"
               placeholder="夜の机に置かれた、小さな青いロボット"></textarea>
 
+            <div id="director-control" class="director-control">
+              <label for="director-mode">演出</label>
+              <select id="director-mode">
+                <option value="original">そのまま</option>
+                <option value="refine">自動</option>
+                <option value="art_direct">演出強め</option>
+              </select>
+              <p id="director-reason" class="hint"></p>
+            </div>
+
+            <details id="director-understanding" class="sub-field" hidden>
+              <summary>理解した内容</summary>
+              <dl id="director-plan-summary" class="facts"></dl>
+              <p id="director-plan-note" class="hint"></p>
+            </details>
+
             <div id="creative-simple">
               <p class="section-label">ドメイン</p>
               <div id="domain-chips" class="chips" role="radiogroup" aria-label="作る絵の種類"></div>
@@ -50,7 +66,7 @@
                 <summary>シーンと見せ方 <span id="scene-framing-summary">自動</span></summary>
                 <div class="creative-selects">
                   <label>シーン<select id="creative-scene"></select></label>
-                  <label>ポーズ<select id="creative-pose"></select></label>
+                  <label id="simple-pose-control">ポーズ<select id="creative-pose"></select></label>
                   <label>構図<select id="creative-composition"></select></label>
                   <label>カメラ・画角<select id="creative-camera"></select></label>
                   <label>変化させるもの<select id="creative-variation"></select></label>

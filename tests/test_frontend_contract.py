@@ -132,7 +132,10 @@ def test_creative_controls_use_the_versioned_catalog_and_preserve_prompt_only_re
     assert 'id="advanced-domain"' not in without_templates
     assert "MEDIA_FORGE_CREATIVE_TEMPLATES" in MARKUP
     assert 'byId("creative-template-data")' in SCRIPT
-    assert 'if (creativeActive(spec))' in SCRIPT
+    assert 'if (creativeActive(spec) || directorPlan)' in SCRIPT
+    assert 'id="director-mode"' in without_templates
+    assert 'id="director-understanding"' in without_templates
+    assert 'call("creative.direct"' in SCRIPT
     assert 'call("creative.validate"' in SCRIPT
     assert 'call("jobs.create", request)' in SCRIPT
 

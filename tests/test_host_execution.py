@@ -43,6 +43,9 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
         "next_job": 0,
         "token_ttl_sec": 600,
         "credential_refreshes": 0,
+        "ai_capabilities": {"text.generate": False, "vision.analyze": False},
+        "ai_responses": [],
+        "ai_calls": [],
     }
 
     def subject(authorization: str | None) -> str | None:
@@ -72,8 +75,27 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
                 else 600 if authorization == "Bearer valid-refreshed"
                 else state["token_ttl_sec"]
             ),
-            "granted_capabilities": ["jobs.write", "resources.acquire", "files.pick", "files.export"],
+            "granted_capabilities": [
+                "jobs.write", "resources.acquire", "files.pick", "files.export", "ai.inference",
+            ],
         }
+
+    @app.get("/api/v1/addon-runtime/media-forge/ai/capabilities")
+    async def ai_capabilities() -> dict[str, dict[str, bool]]:
+        return {
+            name: {"available": available}
+            for name, available in state["ai_capabilities"].items()
+        }
+
+    @app.post("/api/v1/addon-runtime/media-forge/ai/complete")
+    async def ai_complete(payload: dict[str, Any]) -> dict[str, Any]:
+        state["ai_calls"].append(payload)
+        capability = payload.get("capability")
+        if not state["ai_capabilities"].get(capability, False):
+            raise HTTPException(status_code=503, detail={"code": "ai_capability_unavailable"})
+        if not state["ai_responses"]:
+            raise HTTPException(status_code=503, detail={"code": "ai_response_unavailable"})
+        return {"capability": capability, "content": state["ai_responses"].pop(0)}
 
     @app.post("/api/v1/addon-runtime/media-forge/jobs", status_code=201)
     async def create_job(authorization: str | None = Header(default=None)) -> dict[str, Any]:

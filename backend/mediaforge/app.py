@@ -32,8 +32,15 @@ from .composer import (
     MultiCutPlanner,
     cache_composer_font,
 )
-from .creative import CreativeCompiler, CreativeSpec, CreativeValidationError
+from .creative import CreativeCompileResult, CreativeCompiler, CreativeSpec, CreativeValidationError
 from .creative_batches import CreativeBatchPlanner, CreativeBatchRecord, project_batch
+from .creative_intelligence import (
+    CreativeDirector,
+    CreativeMode,
+    PromptPlan,
+    PromptPlanner,
+    project_plan_to_creative_spec,
+)
 from .domain import Asset, AssetInput, ErrorDetail, JobRequest, JobStatus, Provenance
 from .evaluator import (
     CreativeEvaluationError,
@@ -127,6 +134,7 @@ def create_app(
         timeout_sec=resolved.host_request_timeout_sec,
     )
     ai_gateway = HostAIGateway(host)
+    creative_director = CreativeDirector(PromptPlanner(ai_gateway))
     reviewer = semantic_reviewer or HostSemanticReviewer(
         ai_gateway, timeout_sec=resolved.host_ai_timeout_sec
     )
@@ -194,6 +202,7 @@ def create_app(
     app.state.multi_cut_planner = multi_cut_planner
     app.state.deterministic_composer = deterministic_composer
     app.state.creative_evaluator = evaluator
+    app.state.creative_director = creative_director
     app.state.host = host
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -507,6 +516,7 @@ def create_app(
         ]
 
     async def capability_document(identity: HostIdentity | None = None) -> dict[str, Any]:
+        text_direction_available = await creative_director.available(identity)
         if isinstance(reviewer, HostSemanticReviewer) and isinstance(evaluator, HostCreativeEvaluator):
             vision_available = await reviewer.available(identity)
             semantic_available = evaluator_available = vision_available
@@ -535,10 +545,40 @@ def create_app(
                     if evaluator_available
                     else {"state": "unavailable", "reason": "vision_analyzer_unavailable"}
                 ),
+                "creative.text_direction": (
+                    {"state": "available"}
+                    if text_direction_available
+                    else {"state": "unavailable", "reason": "text_generator_unavailable"}
+                ),
                 "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },
         }
+
+    def compile_creative(
+        request: JobRequest,
+        creative_spec: CreativeSpec,
+        *,
+        capabilities: dict[str, Any],
+        available_references: set[str],
+        director_plan: PromptPlan | None = None,
+    ) -> CreativeCompileResult:
+        compiled = creative_compiler.compile(
+            request,
+            creative_spec,
+            capabilities=capabilities,
+            envelope=size_envelope(),
+            available_reference_ids=available_references,
+        )
+        if director_plan is None:
+            return compiled
+        plan = {**compiled.plan, "director": {
+            **director_plan.model_dump(mode="json"),
+            "source": "control-deck:text.generate",
+        }}
+        value = compiled.request.model_dump(mode="json")
+        value["constraints"] = {**value["constraints"], "creative_plan": plan}
+        return CreativeCompileResult(request=JobRequest.model_validate(value), plan=plan)
 
     def batch_projection(record: CreativeBatchRecord) -> dict[str, Any]:
         jobs = []
@@ -549,9 +589,16 @@ def create_app(
                 continue
         return project_batch(record, jobs)
 
+    def params_director_mode(payload: dict[str, Any]) -> CreativeMode:
+        value = payload.get("director_mode", "original")
+        if value not in {"original", "refine", "art_direct"}:
+            raise ValueError("director_mode is invalid")
+        return value
+
     async def create_creative_batch(
         payload: dict[str, Any],
         submit_child: Callable[[JobRequest], Awaitable[dict[str, Any]]],
+        identity: HostIdentity | None = None,
     ) -> dict[str, Any]:
         request = JobRequest.model_validate(payload.get("request"))
         creative_spec = CreativeSpec.model_validate(payload.get("creative_spec", {}))
@@ -560,15 +607,42 @@ def create_app(
         available_references = {
             item.asset_id for item in request.inputs
         } | set(profile_snapshot.get("reference_asset_ids", []))
-        capability_value = await capability_document()
-        batch_id, child_requests, child_plans = creative_batch_planner.plan(
-            request,
-            creative_spec,
-            count,
-            capabilities=capability_value["capabilities"],
-            envelope=size_envelope(),
-            available_reference_ids=available_references,
-        )
+        capability_value = await capability_document(identity)
+        director_mode = params_director_mode(payload)
+        directed = None
+        if (
+            creative_spec.variation.axis == "pose"
+            and director_mode != "original"
+            and isinstance(count, int)
+            and not isinstance(count, bool)
+            and 2 <= count <= 4
+        ):
+            directed = await creative_director.action_variations(
+                identity, request.intent, mode=director_mode, count=count,
+            )
+        if directed is not None and directed.assistance_used:
+            projected, _ = project_plan_to_creative_spec(
+                directed.plan, creative_spec.model_dump(mode="json")
+            )
+            creative_spec = CreativeSpec.model_validate(projected)
+            batch_id, child_requests, child_plans = creative_batch_planner.plan_action_variations(
+                request,
+                creative_spec,
+                directed.actions,
+                directed.plan,
+                capabilities=capability_value["capabilities"],
+                envelope=size_envelope(),
+                available_reference_ids=available_references,
+            )
+        else:
+            batch_id, child_requests, child_plans = creative_batch_planner.plan(
+                request,
+                creative_spec,
+                count,
+                capabilities=capability_value["capabilities"],
+                envelope=size_envelope(),
+                available_reference_ids=available_references,
+            )
         now = utc_now()
         record = store.create_creative_batch(CreativeBatchRecord(
             id=batch_id,
@@ -592,7 +666,10 @@ def create_app(
                 record.submission_errors.append({"code": code, "message": str(exc)[:300]})
             record.updated_at = utc_now()
             store.update_creative_batch(record)
-        return batch_projection(record)
+        result = batch_projection(record)
+        if directed is not None:
+            result["director"] = directed.model_dump(mode="json")
+        return result
 
     async def cancel_creative_batch(batch_id: str) -> dict[str, Any]:
         record = store.get_creative_batch(batch_id)
@@ -1376,26 +1453,41 @@ def create_app(
                         result = {"watching": model_subscription.unwatch(operation_ids)}
                     elif method == "creative.templates":
                         result = creative_compiler.catalog.public_document()
+                    elif method == "creative.direct":
+                        creative_spec = CreativeSpec.model_validate(params.get("creative_spec", {}))
+                        directed = await creative_director.direct(
+                            identity,
+                            str(params.get("intent", "")),
+                            creative_spec.model_dump(mode="json"),
+                            mode=params_director_mode(params),
+                        )
+                        # Re-validate the projection before it crosses back to the UI.
+                        CreativeSpec.model_validate(directed.creative_spec)
+                        result = directed.model_dump(mode="json")
                     elif method == "creative.validate":
                         request = JobRequest.model_validate(params.get("request"))
                         creative_spec = CreativeSpec.model_validate(params.get("creative_spec", {}))
+                        director_plan = (
+                            PromptPlan.model_validate(params["director_plan"])
+                            if params.get("director_plan") is not None else None
+                        )
                         profile_snapshot = manager.resolve_profiles(request)
                         available_references = {
                             item.asset_id for item in request.inputs
                         } | set(profile_snapshot.get("reference_asset_ids", []))
                         capability_value = await capability_document(identity)
-                        result = creative_compiler.compile(
+                        result = compile_creative(
                             request,
                             creative_spec,
                             capabilities=capability_value["capabilities"],
-                            envelope=size_envelope(),
-                            available_reference_ids=available_references,
+                            available_references=available_references,
+                            director_plan=director_plan,
                         ).model_dump(mode="json")
                     elif method == "creative.batches.create":
                         async def submit_batch_child(child: JobRequest) -> dict[str, Any]:
                             return await submit_hosted(child, identity, workload_class="interactive")
 
-                        result = await create_creative_batch(params, submit_batch_child)
+                        result = await create_creative_batch(params, submit_batch_child, identity)
                     elif method == "creative.batches.get":
                         result = batch_projection(store.get_creative_batch(str(params.get("batch_id", ""))))
                     elif method == "creative.batches.list":
@@ -1626,17 +1718,21 @@ def create_app(
             reject_host_paths(payload)
             request = JobRequest.model_validate(payload.get("request"))
             creative_spec = CreativeSpec.model_validate(payload.get("creative_spec", {}))
+            director_plan = (
+                PromptPlan.model_validate(payload["director_plan"])
+                if payload.get("director_plan") is not None else None
+            )
             profile_snapshot = manager.resolve_profiles(request)
             available_references = {
                 item.asset_id for item in request.inputs
             } | set(profile_snapshot.get("reference_asset_ids", []))
             capability_value = await capability_document()
-            return creative_compiler.compile(
+            return compile_creative(
                 request,
                 creative_spec,
                 capabilities=capability_value["capabilities"],
-                envelope=size_envelope(),
-                available_reference_ids=available_references,
+                available_references=available_references,
+                director_plan=director_plan,
             ).model_dump(mode="json")
         except CreativeValidationError as exc:
             detail: dict[str, Any] = {"code": exc.code, "message": str(exc)}
@@ -1644,6 +1740,25 @@ def create_app(
                 detail["field"] = exc.field
             raise HTTPException(status_code=422, detail=detail) from exc
         except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "workspace_request_rejected", "message": str(exc)[:300]},
+            ) from exc
+
+    @app.post("/workspace-api/creative/direct", include_in_schema=False)
+    async def standalone_creative_direct(payload: dict[str, Any]) -> dict[str, Any]:
+        """Fail-soft standalone bridge: no Host identity means no text inference."""
+        try:
+            reject_host_paths(payload)
+            creative_spec = CreativeSpec.model_validate(payload.get("creative_spec", {}))
+            directed = await creative_director.direct(
+                None,
+                str(payload.get("intent", "")),
+                creative_spec.model_dump(mode="json"),
+                mode=params_director_mode(payload),
+            )
+            return directed.model_dump(mode="json")
+        except (ValueError, ValidationError) as exc:
             raise HTTPException(
                 status_code=422,
                 detail={"code": "workspace_request_rejected", "message": str(exc)[:300]},

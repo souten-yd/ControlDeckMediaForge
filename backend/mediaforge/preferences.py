@@ -21,6 +21,7 @@ ALLOWED: dict[str, tuple[type, tuple[Any, ...] | None]] = {
     "last_custom_height": (int, None),
     "last_view": (str, ("create", "library", "activity", "settings")),
     "library_kind": (str, ("all", "generated", "edited", "imported")),
+    "director_mode": (str, ("original", "refine", "art_direct")),
 }
 
 DEFAULTS: dict[str, Any] = {
@@ -31,6 +32,7 @@ DEFAULTS: dict[str, Any] = {
     "last_count": 1,
     "last_view": "create",
     "library_kind": "all",
+    "director_mode": "refine",
 }
 
 
