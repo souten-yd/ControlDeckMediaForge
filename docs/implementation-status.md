@@ -2816,3 +2816,52 @@ and R9700 VRAM use was 59,924,480 bytes. H3 quality was not run. Hosted CI was
 not used. The final canonical local regression gate passed 352 tests in 37.33
 seconds with one upstream Starlette/httpx deprecation warning. G5 M5 companion
 profiles/validators/pack are the next slice.
+
+## v0.5.1 worker-boundary release and installed Host update (2026-08-23)
+
+Release v0.5.1 targets worker-boundary merge commit
+`2b3114dd8e2c92c1b4464a1c2d600b0a8aff57cd`. The exact-head artifact is
+`control-deck-media-forge-0.5.1-linux-x86_64.tar.gz`, 30,585,125 bytes,
+SHA-256 `a615fc014d6584c255c72399b40963dbc06a4f5bd99d02ee3137b083f7409c0f`.
+The local checksum and published GitHub Release digest match.
+
+PyInstaller archive inspection found
+`worker_packs/image/edit_composition.py` and the FLUX adapter, and found zero
+worker data entries for `mediaforge/image_edit.py` or `mediaforge/outpaint.py`.
+The extracted bundle ran on port 9137 with an isolated data root and returned
+`setup_required`, contract 2.0, and the existing contributions. Standalone
+Chromium reported ready in 0.082 seconds, 32 advanced nodes, 320px and narrow
+overflow 0, 60px tabs, a two-column phone grid, and console errors 0.
+
+ControlDeck PR #237 changed only the generic trusted artifact SHA and merged as
+`ab2b9c82440f5e6adfb8833ce38ea7983ddf89bf`. The canonical backend-cwd
+release-bundle/Add-on-AI/contract suite passed 28 tests in 1.19 seconds with one
+upstream warning. An earlier root-cwd invocation passed 26 but failed two CLI
+subprocess tests because `app` was not on their module path; that environment
+mistake is not counted as a product result.
+
+The real Optional Feature update completed from v0.5.0 to v0.5.1 in 11.51
+seconds with max RSS 786,632 KiB and swap operations 0. It retained the existing
+116 asset/provenance files and 67,174,355,135-byte feature-data root. Installed
+worker acceptance then produced:
+
+```text
+strict edit       13.086 s / protected pixel difference 0 / editable 10,179
+outpaint          108.380 s / source pixel difference 0 / generated 131,072
+browser errors    0
+installed light   bridge ready 0.639 s / mobile overflow 0 / console errors 0
+installed dark    bridge ready 0.638 s / mobile overflow 0 / console errors 0
+```
+
+Final `current`, service WorkingDirectory, and ExecStart resolved to v0.5.1;
+versions v0.5.0 and v0.5.1 were retained. Status was active, running, enabled,
+and healthy. The persistent asset/provenance file count became 126 after the two
+source/mask/result groups, with feature data 67,177,490,449 bytes. Broker active
+leases, waiting requests, and reserved bytes were zero, no image worker
+remained, and R9700 VRAM use was 59,924,480 bytes.
+
+The H3 snapshot remained 26,978,278,484 bytes and its 8,063,029,344-byte
+denoiser retained SHA-256
+`cfe0795c00ab6e6ebf8c64fe4574f45a828e8a93e0876bca704e055662a9d7b8`.
+H3 quality was not retried. Hosted CI was not used and frozen public contracts
+were unchanged. G5 is the next implementation slice.
