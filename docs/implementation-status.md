@@ -2650,8 +2650,8 @@ the exact 0.5-second boundary using request-start time and repeatedly sent the
 same waiting state, while resource and cancel state were each polled every 0.1
 seconds. Media Forge now uses a 0.65-second progress margin, suppresses identical
 waiting reports, and polls waiting resource state at 0.5 seconds. Focused Host,
-workspace, composer, Creative Intelligence, and frontend regression passed 146
-tests. The full local gate passed 350 tests in 34.48 seconds with one upstream
+workspace, composer, Creative Intelligence, and frontend regression passed 147
+tests. The full local gate passed 351 tests in 38.71 seconds with one upstream
 Starlette/httpx deprecation warning.
 
 After acceptance, test browser sessions 457--460 were revoked and the fixture

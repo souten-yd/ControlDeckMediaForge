@@ -12,7 +12,7 @@
 ブランチ    creative/ci5-shot-quality
 PR          #63〜#67 merge済み。CI-5 PR作成前
 状態        G0〜G4 v0.4.0導入済み。CI-5実装／installed Host構造受入完了、次はPR化してCI-6
-基準値      CI-5 focused = 146 passed。full = 350 passed（34.48秒）
+基準値      CI-5 focused = 147 passed。full = 351 passed（38.71秒）
 リリース    v0.4.0公開・ControlDeck導入済み（artifact 51ee55c1...5f98799、Host PR #234/#235）
 ```
 

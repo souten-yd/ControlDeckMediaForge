@@ -166,6 +166,39 @@ def test_forced_host_progress_waits_instead_of_bypassing_two_hz_limit():
     assert sent_at[1] - sent_at[0] >= 0.5
 
 
+def test_attached_job_final_progress_may_repeat_the_last_waiting_state():
+    class Client:
+        def __init__(self) -> None:
+            self.payloads: list[dict[str, object]] = []
+
+        async def update_job(self, _identity, _job_id, payload):
+            self.payloads.append(payload)
+
+    async def scenario() -> list[dict[str, object]]:
+        client = Client()
+        reporter = HostJobReporter(
+            client,  # type: ignore[arg-type]
+            HostExecution(
+                identity=HostIdentity(
+                    authorization="Bearer test",
+                    addon_id="media-forge",
+                    subject="job:host-job",
+                    expires_at=2_000_000_000,
+                    granted_capabilities=frozenset({"jobs.write"}),
+                ),
+                host_job_id="host-job",
+                workload_class="interactive",
+                owns_terminal=False,
+            ),
+        )
+        assert await reporter.progress("waiting_resource", 0.03)
+        reporter.gate.last_sent_at = 0
+        await reporter.finish_attached(phase="waiting_resource", progress=0.03)
+        return client.payloads
+
+    assert len(asyncio.run(scenario())) == 2
+
+
 def test_file_boundary_accepts_only_opaque_grant_ids():
     assert require_grant_id("grant:abc-123") == "grant:abc-123"
     for value in ("/tmp/file.png", "file.png", "asset:abc", "grant:/tmp/file.png"):

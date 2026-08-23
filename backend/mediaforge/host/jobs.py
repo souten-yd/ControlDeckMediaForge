@@ -110,13 +110,8 @@ class HostJobReporter:
         await self.client.update_job(self.execution.identity, self.execution.host_job_id, payload)
 
     async def finish_attached(self, *, phase: str, progress: float) -> None:
-        # The host records its receive time slightly after our send timestamp;
-        # keep a small margin above the exact 2 Hz boundary.
-        delay = max(
-            0.0,
-            HOST_PROGRESS_INTERVAL_SEC - (time.monotonic() - self.gate.last_sent_at),
-        )
-        if delay:
-            await asyncio.sleep(delay)
-        if not await self.progress(phase, progress):
+        # A final attached-job update may intentionally repeat the last waiting
+        # phase/progress.  It still has to reach the Host, but only after the
+        # same conservative interval used by every forced update.
+        if not await self.progress(phase, progress, force=True):
             raise ValueError("attached Host Job final progress was rejected by the local gate")
