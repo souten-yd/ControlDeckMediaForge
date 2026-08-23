@@ -2253,8 +2253,17 @@ async function loadActivity() {
   let items = [];
   let batches = [];
   try { ({items} = await call("jobs.list")); state.jobs = items; } catch {
-    byId("activity-empty").hidden = false;
-    byId("activity-empty").textContent = "状況を読み込めませんでした。";
+    // 読み込めなかったときも行き止まりにしない。前回の一覧を残し、出口を出す。
+    const empty = byId("activity-empty");
+    empty.hidden = false;
+    empty.replaceChildren();
+    const text = document.createElement("span");
+    text.textContent = "状況をいま読み込めませんでした。";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.dataset.retryActivity = "1";
+    retry.textContent = "もう一度読み込む";
+    empty.append(text, retry);
     return;
   }
   if (state.mode === "advanced") {
@@ -2265,7 +2274,9 @@ async function loadActivity() {
   const finished = items.filter((job) => TERMINAL.has(job.status));
   const batchRows = state.mode === "advanced" ? batches.map(creativeBatchRow) : [];
   list.replaceChildren(...batchRows, ...[...running, ...finished].map(activityRow));
-  byId("activity-empty").hidden = items.length + batchRows.length > 0;
+  const empty = byId("activity-empty");
+  empty.textContent = "まだ実行した記録はありません。";
+  empty.hidden = items.length + batchRows.length > 0;
   updateActivityBadge(running.length + batches.filter((batch) => batch.state === "running").length);
 }
 
@@ -2351,7 +2362,7 @@ function activityRow(job) {
   const info = document.createElement("div");
   const title = document.createElement("p");
   title.className = "t";
-  title.textContent = job.request.intent;
+  title.textContent = job.request.intent || "(記録に指示が残っていません)";
   const sub = document.createElement("p");
   sub.className = "s";
   const running = !TERMINAL.has(job.status);
@@ -2365,6 +2376,14 @@ function activityRow(job) {
     sub.textContent = `${failureText(job.error?.code)} · ${relativeTime(job.updated_at)}`;
   }
   info.append(title, sub);
+  // 新しい版が書いた記録は degraded として残す。黙って一覧から消さない。
+  if (job.record_state === "degraded") {
+    const note = document.createElement("p");
+    note.className = "s";
+    note.dataset.recordState = "degraded";
+    note.textContent = "この記録は新しい版で作られています。内容の一部だけ表示しています。";
+    info.append(note);
+  }
   if (state.mode === "advanced") {
     const raw = document.createElement("p");
     raw.className = "s";
@@ -3090,6 +3109,10 @@ byId("create-form").addEventListener("submit", submitJob);
 function jobById(id) {
   return state.jobs.find((item) => item.id === id) || null;
 }
+
+byId("activity-empty").addEventListener("click", (event) => {
+  if (event.target.closest("[data-retry-activity]")) void loadActivity();
+});
 
 for (const holder of [byId("activity-list"), byId("create-error")]) {
   holder.addEventListener("click", (event) => {

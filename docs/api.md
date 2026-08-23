@@ -144,6 +144,14 @@ rejects a result unless `image.outpaint.source_pixel_diff` reports zero.
 
 States are `queued`, `running`, `succeeded`, `failed`, and `canceled`. `phase` is an optional execution detail and is not a separate terminal state.
 
+`record_state` reports whether the persisted request could be read strictly by
+the running contract. It is `ok` for every normal record. A record written by a
+newer additive contract version is served as `degraded`: the job stays in the
+list with its status, assets, and error intact, and the request is returned as
+stored. Reading never fails a whole collection because one record is degraded.
+A `degraded` record is not executable; submitting it fails with
+`job_record_unreadable`.
+
 Every request is local-only. `local_only` defaults to `true`; any explicit `false` value is rejected by backend validation.
 
 ## Capabilities

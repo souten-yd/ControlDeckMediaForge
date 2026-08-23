@@ -2865,3 +2865,52 @@ denoiser retained SHA-256
 `cfe0795c00ab6e6ebf8c64fe4574f45a828e8a93e0876bca704e055662a9d7b8`.
 H3 quality was not retried. Hosted CI was not used and frozen public contracts
 were unchanged. G5 is the next implementation slice.
+
+## G6 S1 — 永続化読み出しの前方互換（2026-08-24）
+
+利用者報告「状況タブが読めない」を実プロセスで再現し、根本原因を特定した。
+installed v0.5.1（pid 705506 / :9130）へ実 HTTP を投げた結果:
+
+```text
+GET http://127.0.0.1:9130/api/v1/jobs   ->  500  21 bytes
+service.log の traceback
+  mediaforge/app.py:1092 list_jobs -> store.py:292 list_jobs -> store.py:720 _job
+  pydantic ValidationError: 2 errors for JobRequest
+    inputs         List should have at most 16 items after validation, not 21
+    output.format  Input should be 'png','webp' or 'jpeg', input_value='zip'
+```
+
+`Store._job()` が保存済み行を **その時点の `JobRequest` で再検証**していた。
+公開契約を加法的に広げた版が書いた行を旧版が読めず、1 行の不整合が
+`jobs.list` を**コレクション単位**で落としていた。UI はこの失敗を捕まえて
+「状況を読み込めませんでした。」と出すだけなので、状況タブ全体が死ぬ。
+
+実データでの実測。installed の実 DB（`media-forge.sqlite3` 491,520 bytes）を
+複製し、v0.5.1 の契約（`inputs<=16` / `format` に `zip` 無し）で読ませた:
+
+```text
+実 DB の job 行                              90
+v0.5.1 契約で厳格に読めない行                3
+  job_bbd62caeea9a47aba49a8f9e2ac112b2
+  job_c24d3e60d7514a22bce00d8fb6e6036f
+  job_7319eaf22ee34a2d95e54c266ce13509
+修正前   この 3 行のうち 1 行目で例外。一覧全体が 500
+修正後   提供できた行 90 / 90、degraded 3、失われた行 0
+```
+
+修正は「ingress で厳格に検証し、読み出しは寛容にする」。
+`StoredJobRequest` は `JobRequest` の部分型で、値の意味は変えず受理範囲だけ広げる。
+`Job.request` を `SerializeAsAny` にしたので、新しい版が書いた未知フィールドを
+古い版が黙って落とさない（`future_field` が往復することをテストで固定した）。
+degraded 行は表示は続けるが実行は fail-closed（`job_record_unreadable`）。
+
+欠陥は job 固有ではなかったため、コレクション読み出し全体を行単位 fail-soft に
+した（assets / library page / profiles / reference collections / creative
+batches / creative compositions）。
+
+```text
+./mf.sh test   363 passed, 1 warning in 36.59s（G5 の 359 + S1 4 件）
+```
+
+NOT TESTED: 修正版を実 installed へ入れ替えた状態でのブラウザ操作は未実施。
+S2 以降と合わせて 1 度で実機受入する。

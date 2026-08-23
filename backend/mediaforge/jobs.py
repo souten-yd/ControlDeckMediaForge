@@ -33,7 +33,7 @@ from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .profiles import profile_prompt
 from .routing import ModelRouteError, route_model
-from .store import Store, utc_now
+from .store import Store, UnreadableJobRecord, utc_now
 from .validators import validate_png
 
 
@@ -229,7 +229,20 @@ class JobManager:
             self._queue.task_done()
 
     async def _execute(self, job_id: str) -> None:
-        job = self.store.get_job(job_id)
+        try:
+            job = self.store.executable_job(job_id)
+        except UnreadableJobRecord:
+            # 表示は degraded で続けられるが、実行は fail-closed にする。
+            # 現在の契約で読めない指示を推測で実行しない。
+            self.store.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                error=ErrorDetail(
+                    code="job_record_unreadable",
+                    message="this job record cannot be read by the current contract",
+                ),
+            )
+            return
         if job.status != JobStatus.QUEUED or self.store.cancel_requested(job_id):
             return
         if job.request.operation not in {"image.generate", "image.edit", "asset.pack"}:
