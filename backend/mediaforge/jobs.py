@@ -33,6 +33,7 @@ from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .profiles import profile_prompt
 from .routing import ModelRouteError, route_model
+from .host.ai import HostAIGateway, HostAIReleaseResult
 from .store import Store, UnreadableJobRecord, utc_now
 from .validators import validate_png
 
@@ -41,6 +42,21 @@ from .validators import validate_png
 # Add-on. Reuse its configured application logger so bounded worker telemetry
 # is visible without configuring a second handler or leaking worker stderr.
 logger = logging.getLogger("uvicorn.error")
+
+# Broker が「VRAM が足りない/待たされる」と言ったときだけ、保持した解放理由を
+# 添える。それ以外の受理失敗（policy 拒否など）に AI 常駐の話を混ぜない。
+_VRAM_WAIT_REASONS = frozenset({
+    "insufficient_vram",
+    "device_busy",
+    "timeout",
+    "yield_thrash_cost",
+    "yield_load_cost_unknown",
+    "yield_runtime_unknown",
+    "yield_minimum_uptime",
+    "yield_thrash_window",
+    "yield_drain_timeout",
+    "waiting",
+})
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 
@@ -77,6 +93,7 @@ class JobManager:
         hf_home: Path | None = None,
         image_runtime_python: Path | None = None,
         creative_evaluator: CreativeEvaluator | None = None,
+        ai_gateway: HostAIGateway | None = None,
     ):
         self.store = store
         self.worker_timeout_sec = worker_timeout_sec
@@ -88,7 +105,10 @@ class JobManager:
         self.hf_home = hf_home
         self.image_runtime_python = image_runtime_python
         self.creative_evaluator = creative_evaluator
+        self.ai_gateway = ai_gateway
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
+        # AI ターン終了の宣言結果。lease が取れなかったときに理由を添えるために持つ。
+        self._ai_release: dict[str, HostAIReleaseResult] = {}
         self._runner: asyncio.Task[None] | None = None
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._processes: dict[str, asyncio.subprocess.Process] = {}
@@ -309,6 +329,11 @@ class JobManager:
                     return
                 self._selected_models[job_id] = selected
             if execution is not None:
+                if selected is not None:
+                    # 生成の前に AI ターンを閉じる。lease は取らずに宣言だけ行う。
+                    # 先に AI 常駐を落としてから受理を求めるので、以後の LLM 再
+                    # ロードは broker の受理を通る。二重予約も deadlock も起きない。
+                    await self._release_host_ai(job, execution, reporter)
                 admitted = await self._acquire_host_lease(job, execution, reporter)
                 if not admitted:
                     return
@@ -1058,6 +1083,53 @@ class JobManager:
             result["mask_path"] = str(mask_destination)
         return result
 
+    async def _release_host_ai(
+        self,
+        job: Job,
+        execution: HostExecution,
+        reporter: HostJobReporter | None,
+    ) -> None:
+        """Ask ControlDeck to end this add-on's AI turn before generation.
+
+        Asking once is deliberate. ControlDeck's own chat, an OpenCode session,
+        or another add-on may still be using the shared model, and retrying
+        would starve them. A refusal is recorded, not fought: Broker admission
+        still decides, and the reason only surfaces if admission then fails.
+        """
+        self._ai_release.pop(job.id, None)
+        if self.ai_gateway is None:
+            return
+        await self._update(job.id, reporter, phase="release_ai", progress=0.02)
+        try:
+            result = await self.ai_gateway.release(execution.identity)
+        except Exception:  # noqa: BLE001 - 解放要求の失敗が生成を止めてはいけない
+            logger.exception("failed to declare the AI turn finished for %s", job.id)
+            return
+        self._ai_release[job.id] = result
+        logger.info(
+            "ai turn released job=%s released=%s reason=%s freed_bytes=%d",
+            job.id,
+            result.released,
+            result.reason,
+            result.freed_bytes,
+        )
+
+    def _admission_failure(self, job_id: str, reason: str) -> ErrorDetail:
+        """Name the retained AI residency instead of an anonymous admission failure."""
+        release = self._ai_release.get(job_id)
+        if release is not None and not release.released and reason in _VRAM_WAIT_REASONS:
+            return ErrorDetail(
+                code="host_ai_residency_retained",
+                message=(
+                    "ControlDeck kept its AI model resident, so no GPU capacity was "
+                    f"admitted for generation (reason: {release.reason})"
+                )[:300],
+            )
+        return ErrorDetail(
+            code="resource_unavailable",
+            message=f"ControlDeck admission failed: {reason}"[:300],
+        )
+
     async def _acquire_host_lease(
         self,
         job: Job,
@@ -1099,7 +1171,7 @@ class JobManager:
                     reporter,
                     status=JobStatus.FAILED,
                     phase="waiting_resource",
-                    error=ErrorDetail(code="resource_unavailable", message=f"ControlDeck admission failed: {reason}"),
+                    error=self._admission_failure(job.id, reason),
                 )
                 return False
             execution.lease_id = status["lease_id"]

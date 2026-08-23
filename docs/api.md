@@ -154,6 +154,26 @@ A `degraded` record is not executable; submitting it fails with
 
 Every request is local-only. `local_only` defaults to `true`; any explicit `false` value is rejected by backend validation.
 
+## Resource turn
+
+A hosted job that needs real GPU capacity runs in ordered stages so that Host AI
+residency and image generation never contend for the same VRAM:
+
+```text
+analyze       Host AI (text.generate / vision.analyze). No GPU lease is held.
+release_ai    Media Forge declares its AI turn finished to ControlDeck.
+generate      Broker lease with estimated_runtime_sec, then the image worker.
+review        The generation lease is released before any vision evaluation.
+```
+
+`release_ai` is a request, asked once. ControlDeck refuses whenever its own
+chat, an OpenCode session, or another add-on is still using the shared model,
+and Media Forge never retries — retrying would starve those consumers. A refusal
+is recorded, not fought: Broker admission still decides. Only if admission then
+fails for lack of VRAM does the job fail with `host_ai_residency_retained`,
+carrying the reason ControlDeck gave. A Host without the explicit release
+behaves exactly as before.
+
 ## Capabilities
 
 `GET /api/v1/capabilities` reports capability state as `available`, `unavailable`, or `experimental`.

@@ -184,6 +184,7 @@ def create_app(
         hf_home=resolved.hf_home,
         image_runtime_python=resolved.image_runtime_python,
         creative_evaluator=evaluator,
+        ai_gateway=ai_gateway,
     )
     events = JobEventBus()
     store.observe(events.publish)

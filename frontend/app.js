@@ -14,6 +14,7 @@ const PHASE_TEXT = {
   normalize_request: "準備しています",
   validate_request: "準備しています",
   select_model: "使うモデルを選んでいます",
+  release_ai: "文章・画像認識に使った GPU を空けています",
   waiting_resource: "GPU の空きを待っています",
   generating: "生成しています",
   release_resource: "GPU リソースを解放しています",
@@ -2512,6 +2513,10 @@ const MODEL_FAILURE = {
   model_evaluation_invalid_output: {text: "生成された検証動画が要件を満たしません。", exit: "状況を見る", action: "activity"},
   host_capability_not_granted: {text: "ControlDeck がGPU評価権限を許可していません。", exit: "詳細を見る", action: "details"},
   resource_unavailable: {text: "GPUを確保できませんでした。", exit: "状況を見る", action: "activity"},
+  host_ai_residency_retained: {
+    text: "ControlDeck が文章・画像認識のモデルを GPU に置いたままのため、画像生成の空きを取れませんでした。",
+    exit: "状況を見る", action: "activity",
+  },
 };
 
 function formatBytes(value) {

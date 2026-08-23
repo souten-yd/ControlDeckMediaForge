@@ -2969,3 +2969,70 @@ scripts/ux_standalone_e2e.py PASSED / console errors 0 / phone overflow 0
 
 NOT TESTED: installed ControlDeck の埋め込み iframe での実測。S3 以降と
 合わせて 1 度で実機受入する。
+
+## G6 S3 — AI と画像生成の resource turn 分割（2026-08-24）
+
+「VLM が VRAM を返さないため画像生成が失敗する」の根本原因を実機設定から特定した。
+
+```text
+/data1tb/ControlDeck/data/model-runtime-policy.json
+  supervision = "observed"   （"managed" ではない）
+-> LlamaCapacityProvider._managed() が False
+-> reservations() の yield_level が常に NONE
+-> broker は設計上 LLM を降ろさない
+実機 LLM   Qwen3.8-27B-UD-Q4_K_M + mmproj-BF16 / ctx_size 262144 / n_gpu_layers 999
+実機 GPU   R9700 34,208,743,424 B
+```
+
+Media Forge は既に生成 lease を vision 前に解放していた（image -> vision 方向）。
+足りないのは逆方向（LLM -> image）で、add-on から「AI ターン終了」を伝える口が
+公開契約に存在しなかった。
+
+### ControlDeck 本体 / OpenCode との競合（利用者指摘）
+
+実機の経路を確認した。
+
+```text
+integrations/opencode/settings.json
+  base_url = http://127.0.0.1:8765/api/v1/llm/v1   use_gateway = true
+runtime policy  gateway_only = true
+```
+
+OpenCode も ControlDeck chat も同じ gateway を通るため、add-on の `ai/complete`
+と同じ `_acquire_gateway_lease` / `_active_requests` に集約される。ControlDeck は
+idle unload 用に「使用中なら降ろさない」判定を既に持っている
+（`_has_connected_clients` / `_opencode_session_uses` / `idle_exclude` / `role`）。
+
+**新しい判定を作らず**、明示解放はこの判定集合と drain 経路をそのまま再利用した。
+30 分の idle unload と同じ決定を、時間ではなく要求で起こすだけにした。
+
+### 変更
+
+```text
+ControlDeck（別 PR #238）
+  POST /{addon_id}/ai/release   ai.inference を持つ任意の add-on が使える宣言
+  /ai/complete + ensure_ready   gateway_chat と同じ on-demand 起動
+                                これが無いと解放が次の要求を壊す
+
+Media Forge（本 PR）
+  4 ステージ  analyze -> release_ai -> generate -> review
+              release_ai は lease を持たずに宣言だけ行う
+              先に AI 常駐を落としてから受理を求めるので二重予約も deadlock も無い
+  1 回だけ    リトライループを作らない（chat / OpenCode を飢えさせない）
+  理由付き    解放拒否 + VRAM 由来の受理失敗のときだけ
+              host_ai_residency_retained として拒否理由を添える
+              それ以外の受理失敗に AI 常駐の話を混ぜない
+  旧 Host     404 は既知状態として扱い、従来どおり broker 受理へ落とす
+```
+
+```text
+./mf.sh test                            376 passed
+ControlDeck backend pytest -q           760 passed, 1 skipped（62.93 秒）
+```
+
+`llama.py` の `asyncio` は関数内 import のままにした。module 直下へ移すと
+`test_jobs_persistence::test_two_exclusive_resource_jobs_execute_serially` の
+broker 受理が `queued` のまま止まることを実測で切り分けた。
+
+NOT TESTED: 実機での「LLM 常駐 -> 解放 -> 画像生成」通し。ControlDeck PR #238 を
+入れてから rocm-smi の VRAM 推移込みで 1 度に実測する。
