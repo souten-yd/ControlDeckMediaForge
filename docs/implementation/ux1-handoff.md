@@ -10,7 +10,7 @@
 ```text
 最終更新    2026-08-23
 ブランチ    release/v040-install-evidence
-PR          #63（recipe）/ #64（CI-4）/ #65（G4設計）/ #66（G4実装）merge済み
+PR          #63（recipe）/ #64（CI-4）/ #65（G4設計）/ #66（G4実装）merge済み。#67 review中
 状態        G0〜G4 v0.4.0 release／installed Host受け入れ完了。次はCI-5
 基準値      focused host/evaluator regression = 47 passed。release full = 344 passed（34.55秒）
 リリース    v0.4.0公開・ControlDeck導入済み（artifact 51ee55c1...5f98799、Host PR #234/#235）
@@ -38,7 +38,7 @@ PR          #63（recipe）/ #64（CI-4）/ #65（G4設計）/ #66（G4実装）
 | — | CI-4 Unified Evaluator | #64 マージ済み（3a2d6eb） |
 | — | G4 prerequisite design correction | #65 マージ済み（43aa08c） |
 | — | G4 coding-agent asset placement | #66 マージ済み（5a340ac） |
-| — | v0.4.0 release/install evidence | 実測完了、PR準備中 |
+| — | v0.4.0 release/install evidence | #67 review中 |
 
 ## 次にやること（1 つだけ）
 
