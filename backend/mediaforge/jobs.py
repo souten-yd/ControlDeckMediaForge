@@ -285,7 +285,12 @@ class JobManager:
                 if self.store.cancel_requested(job_id):
                     await self._finish_canceled(job_id, reporter)
                     return
-                await self._execute_worker(job_id, reporter)
+                await self._execute_worker(
+                    job_id,
+                    reporter,
+                    execution=execution,
+                    maintenance=maintenance,
+                )
         finally:
             if maintenance is not None:
                 maintenance.cancel()
@@ -565,7 +570,14 @@ class JobManager:
                 "requested image dimensions exceed this model's measured generation envelope",
             )
 
-    async def _execute_worker(self, job_id: str, reporter: HostJobReporter | None) -> None:
+    async def _execute_worker(
+        self,
+        job_id: str,
+        reporter: HostJobReporter | None,
+        *,
+        execution: HostExecution | None = None,
+        maintenance: asyncio.Task[None] | None = None,
+    ) -> None:
         job = self.store.get_job(job_id)
         await self._update(job_id, reporter, status=JobStatus.RUNNING, phase="normalize_request", progress=0.01)
         await self._update(job_id, reporter, phase="select_model", progress=0.03)
@@ -753,6 +765,26 @@ class JobManager:
                     placement.get("non_gpu_devices", {}),
                     placement.get("non_gpu_map_targets", []),
                 )
+        # The GPU worker is gone and its outputs are now ordinary files.  Release
+        # the generation lease before deterministic post-processing can opt into
+        # Host vision evaluation.  Keeping an exclusive image lease while asking
+        # the Host to load its VLM creates a Broker deadlock on single-GPU hosts.
+        if execution is not None:
+            if maintenance is not None:
+                maintenance.cancel()
+                await asyncio.gather(maintenance, return_exceptions=True)
+            if not await self._release_host_resource(execution):
+                await self._update(
+                    job_id,
+                    reporter,
+                    status=JobStatus.FAILED,
+                    phase="release_resource",
+                    error=ErrorDetail(
+                        code="host_resource_release_failed",
+                        message="ControlDeck did not confirm generation resource release",
+                    ),
+                )
+                return
         await self._update(job_id, reporter, phase="postprocess", progress=0.65)
         try:
             asset_ids = await self._register_outputs(job, response, job_root)
@@ -967,9 +999,9 @@ class JobManager:
             return True
         return False
 
-    async def _release_host_resource(self, execution: HostExecution) -> None:
+    async def _release_host_resource(self, execution: HostExecution) -> bool:
         if self.host_client is None:
-            return
+            return True
         try:
             if execution.lease_id is not None:
                 await self.host_client.lease_action(execution.identity, execution.lease_id, "release")
@@ -977,6 +1009,10 @@ class JobManager:
                 await self.host_client.cancel_resource(execution.identity, execution.request_id)
         except HostApiError:
             logger.exception("failed to release ControlDeck resource state for %s", execution.host_job_id)
+            return False
+        execution.lease_id = None
+        execution.request_id = None
+        return True
 
     async def _finish_canceled(self, job_id: str, reporter: HostJobReporter | None) -> None:
         current = self.store.get_job(job_id)

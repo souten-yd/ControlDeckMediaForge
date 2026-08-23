@@ -259,7 +259,12 @@ route accepts a model name or filesystem path.
 ControlDeck calls `/addon/v1/*` endpoints declared by [`addon.json`](../addon.json). Workflow and agent payloads use `{input, correlation}` envelopes. Responses return structured `job_id` and `asset_ids`; agents do not scrape filenames and do not receive a selected model name from generation or capability discovery.
 
 Context actions require a host-issued opaque `grant:` ID. Raw paths are rejected.
-Project commit is not available before G4. The development-only
+`media.pack` commits one existing immutable Media Forge asset to a Host-issued
+project output `grant:`. Its additive request schema accepts only a Media Forge
+`asset_id`, the opaque output grant, and an optional safe filename. The Host
+stages and atomically commits the bytes after size/SHA-256 verification; the
+response returns the Host `asset:` ID and non-path metadata. It never accepts or
+returns a project ID, relative directory, or filesystem path. The development-only
 `/test/host-files/roundtrip` endpoint exercises the same private Host bridge and
 is hidden unless test endpoints are explicitly enabled.
 

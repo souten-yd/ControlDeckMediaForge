@@ -389,11 +389,10 @@ Media Forge に project 全体のアクセスを渡さない
 path 文字列を受け取らない。grant: ID のみ
 ```
 
-ControlDeck 側にはbrowser file/export grantとRuntime output commitがある。
-ただしOpenCode MCP tokenを現在projectへ束縛し、非対話でproject output grantを発行する
-汎用経路は未実装である。`controldeck-integration-plan.md` §11.1のHost prerequisiteを
-先に実装する。**path がMedia Forgeへ渡ってきたらControlDeck側のバグとして報告する。**
-受け入れない。
+ControlDeck 側のbrowser file/export grantとRuntime output commitに加え、OpenCode MCP
+tokenを現在projectへ束縛して非対話でopaque output grantを発行する汎用経路を実装済み。
+Media Forgeは`media.pack`で既存asset 1件をstaging/SHA検証/atomic commitする。
+**path がMedia Forgeへ渡ってきたらControlDeck側のバグとして報告し、受け入れない。**
 
 ### エージェント体験の要件
 
@@ -428,6 +427,13 @@ Add-on disable 後、保存済み workflow が unavailable 表示で壊れない
 
 > エージェントが人間の手を借りずに素材を作って置ける。
 > ただしファイルシステムの境界は一度も越えていない。
+
+### 完了記録（2026-08-23）
+
+OpenCode 1.18.18が実projectを読み、capability-driven生成、deterministic/unified評価、
+`media.inspect`、Host project output grant、`media.pack`、HTML参照更新、build/testまで完走した。
+Host pathはAdd-on境界に現れず、73,238 byte PNGのHost commit SHAはMedia Forge asset SHAと一致した。
+複数ファイルを単一transactionでcommitする将来のpack拡張はG4完了条件に含めない。
 
 ---
 

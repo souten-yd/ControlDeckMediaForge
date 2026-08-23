@@ -607,6 +607,14 @@ the existing owner/add-on/expiry checks. The first Media Forge vertical slice
 uses the existing atomic single-output commit; bounded multi-file pack
 transactionality remains a later G4 slice if a pack contains more than one file.
 
+Implemented and accepted on 2026-08-23. ControlDeck PR #232 binds only a direct
+managed-project CodeDEV run and exposes the generic
+`control_deck.project_output_grant`; PR #233 aligns the generic MCP client timeout
+with the existing Host job/bridge bounds. Media Forge `media.pack` consumes only
+the resulting opaque export grant and uses the existing staged atomic output
+commit. A real OpenCode 1.18.18 run completed generate, inspect, grant, pack,
+project reference update, build, and test without exposing a Host path.
+
 ---
 
 ## 12. Workflow integration
