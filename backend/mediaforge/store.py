@@ -362,7 +362,10 @@ class Store:
         return bool(row["cancel_requested"])
 
     def register_asset(self, metadata: Asset, provenance: Provenance, source: Path) -> Asset:
-        suffix = {"image/png": ".png", "image/webp": ".webp", "image/jpeg": ".jpg"}[metadata.mime_type]
+        suffix = {
+            "image/png": ".png", "image/webp": ".webp", "image/jpeg": ".jpg",
+            "application/zip": ".zip",
+        }[metadata.mime_type]
         storage_name = f"{metadata.id}{suffix}"
         destination = contained(self.asset_dir, self.asset_dir / storage_name)
         source = source.resolve()

@@ -20,6 +20,14 @@ from .host.client import ControlDeckHostClient, HostApiError
 from .host.jobs import HostExecution, HostJobReporter
 from .host.resources import fake_image_request, image_model_request
 from .image_edit import StrictEditError, strict_edit_plan, validate_strict_edit
+from .m5_companion import (
+    M5CompanionError,
+    build_pack as build_m5_pack,
+    is_m5_profile,
+    parse_pack_entries as parse_m5_pack_entries,
+    validate_edit_mask as validate_m5_edit_mask,
+    validate_image as validate_m5_image,
+)
 from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
 from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
@@ -224,7 +232,7 @@ class JobManager:
         job = self.store.get_job(job_id)
         if job.status != JobStatus.QUEUED or self.store.cancel_requested(job_id):
             return
-        if job.request.operation not in {"image.generate", "image.edit"}:
+        if job.request.operation not in {"image.generate", "image.edit", "asset.pack"}:
             self.store.update_job(
                 job_id,
                 status=JobStatus.FAILED,
@@ -237,6 +245,20 @@ class JobManager:
             if execution is not None and self.host_client is not None
             else None
         )
+        if job.request.operation == "asset.pack":
+            try:
+                self._validate_input_assets(job)
+                await self._execute_m5_pack(job, reporter)
+            except WorkerFailure as exc:
+                await self._update(
+                    job_id,
+                    reporter,
+                    status=JobStatus.FAILED,
+                    phase="validate_request",
+                    progress=1,
+                    error=ErrorDetail(code=exc.code, message=str(exc)[:300]),
+                )
+            return
         maintenance: asyncio.Task[None] | None = None
         try:
             try:
@@ -471,6 +493,49 @@ class JobManager:
         }
 
     def _validate_input_assets(self, job: Job) -> None:
+        if job.request.operation == "asset.pack":
+            if (
+                job.request.profile != "m5.companion.pack"
+                or job.request.output.format != "zip"
+                or job.request.output.count != 1
+                or job.request.model_policy != "auto"
+                or job.request.qa.semantic
+                or job.request.qa.max_regeneration_attempts != 0
+            ):
+                raise WorkerFailure(
+                    "unsupported_pack_profile",
+                    "asset.pack requires one deterministic m5.companion.pack ZIP output",
+                )
+            if set(job.request.constraints) != {"pack_name", "entries"}:
+                raise WorkerFailure("invalid_pack", "M5 companion pack constraints are pack_name and entries only")
+            try:
+                entries = parse_m5_pack_entries(job.request.constraints.get("entries"))
+            except M5CompanionError as exc:
+                raise WorkerFailure("invalid_pack", str(exc)) from exc
+            requested = [item.asset_id for item in job.request.inputs]
+            mapped = [entry.asset_id for entry in entries]
+            if len(set(requested)) != len(requested) or set(requested) != set(mapped):
+                raise WorkerFailure("invalid_pack", "pack entries must map every input asset exactly once")
+            try:
+                assets = [self.store.get_asset(asset_id) for asset_id in requested]
+            except KeyError as exc:
+                raise WorkerFailure("asset_not_found", "pack input asset was not found") from exc
+            if any(asset.mime_type != "image/png" for asset in assets):
+                raise WorkerFailure("unsupported_reference", "M5 companion packs require PNG inputs")
+            return
+        if is_m5_profile(job.request.profile):
+            if job.request.profile == "m5.companion.pack" or job.request.operation not in {
+                "image.generate", "image.edit"
+            }:
+                raise WorkerFailure("unsupported_profile", "M5 companion profile does not match the operation")
+            if (
+                job.request.output.format != "png"
+                or job.request.constraints.get("width") != 1280
+                or job.request.constraints.get("height") != 960
+            ):
+                raise WorkerFailure(
+                    "invalid_dimensions", "M5 companion image jobs require exact 1280x960 PNG output"
+                )
         if job.request.operation != "image.edit":
             return
         edit_mode = job.request.constraints.get("edit_mode", "reference")
@@ -493,6 +558,11 @@ class JobManager:
             raise WorkerFailure("asset_not_found", "reference image asset was not found") from exc
         if source.mime_type != "image/png" or any(item.mime_type != "image/png" for item in references):
             raise WorkerFailure("unsupported_reference", "image.edit currently requires PNG source assets")
+        if is_m5_profile(job.request.profile):
+            try:
+                validate_m5_image(source_path, str(job.request.profile))
+            except M5CompanionError as exc:
+                raise WorkerFailure("m5_validation_failed", str(exc)) from exc
         strict = job.request.constraints.get("strict_edit", False)
         if not isinstance(strict, bool):
             raise WorkerFailure("invalid_constraint", "strict_edit must be a boolean")
@@ -547,6 +617,89 @@ class JobManager:
             strict_edit_plan(source_path, mask_path)
         except StrictEditError as exc:
             raise WorkerFailure("invalid_edit_mask", str(exc)) from exc
+        if is_m5_profile(job.request.profile):
+            try:
+                validate_m5_edit_mask(mask_path, str(job.request.profile))
+            except M5CompanionError as exc:
+                raise WorkerFailure("invalid_edit_mask", str(exc)) from exc
+
+    async def _execute_m5_pack(self, job: Job, reporter: HostJobReporter | None) -> None:
+        await self._update(job.id, reporter, status=JobStatus.RUNNING, phase="validate", progress=0.1)
+        root = contained(self.store.work_dir, self.store.work_dir / job.id)
+        root.mkdir(mode=0o700)
+        output = contained(root, root / "companion-pack.zip")
+        entries = parse_m5_pack_entries(job.request.constraints.get("entries"))
+        assets = {entry.asset_id: self.store.get_asset(entry.asset_id) for entry in entries}
+        paths = {asset_id: self.store.asset_path(asset_id) for asset_id in assets}
+        hashes = {asset_id: asset.sha256 for asset_id, asset in assets.items()}
+        try:
+            manifest, validation = await asyncio.to_thread(
+                build_m5_pack,
+                output,
+                pack_name=str(job.request.constraints.get("pack_name", "companion")),
+                entries=entries,
+                asset_paths=paths,
+                asset_hashes=hashes,
+            )
+        except M5CompanionError as exc:
+            raise WorkerFailure("m5_validation_failed", str(exc)) from exc
+        if output.stat().st_size > MAX_ARTIFACT_BYTES:
+            raise WorkerFailure("artifact_too_large", "M5 companion pack exceeded the 64 MiB artifact bound")
+        await self._update(job.id, reporter, phase="register_asset", progress=0.9)
+        digest = hashlib.sha256(output.read_bytes()).hexdigest()
+        now = utc_now()
+        asset_id = f"asset_{uuid.uuid4().hex}"
+        provenance_id = f"prov_{uuid.uuid4().hex}"
+        parent_ids = [entry.asset_id for entry in entries]
+        pack_name = str(job.request.constraints.get("pack_name", "companion"))
+        asset = Asset(
+            id=asset_id,
+            job_id=job.id,
+            parent_asset_ids=parent_ids,
+            mime_type="application/zip",
+            width=None,
+            height=None,
+            size_bytes=output.stat().st_size,
+            sha256=digest,
+            suggested_filename=f"{pack_name}-m5-companion.zip",
+            provenance_id=provenance_id,
+            created_at=now,
+        )
+        provenance = Provenance(
+            id=provenance_id,
+            asset_id=asset_id,
+            parent_asset_ids=parent_ids,
+            operation="asset.pack",
+            intent=job.request.intent,
+            model_id="media-forge/m5-companion-packer",
+            model_version="1.0.0",
+            weights_hash="sha256:" + "0" * 64,
+            license="derived-from-parent-assets",
+            runtime_adapter="deterministic.m5-companion-pack",
+            runtime_version="1.0.0",
+            tool_versions={"media-forge": __version__, "m5.companion.pack": "1.0.0"},
+            seed=0,
+            parameters={
+                "profile": job.request.profile,
+                "pack_name": pack_name,
+                "manifest": manifest,
+            },
+            reference_asset_hashes=hashes,
+            postprocessing=["m5.validate", "m5.atlas", "zip.reproducible"],
+            validation=validation,
+            warnings=[],
+            output_sha256=digest,
+            created_at=now,
+        )
+        self.store.register_asset(asset, provenance, output)
+        await self._update(
+            job.id,
+            reporter,
+            status=JobStatus.SUCCEEDED,
+            phase="package",
+            progress=1,
+            asset_ids=[asset.id],
+        )
 
     def _validate_generation_limits(self, job: Job, selected: ModelDescriptor) -> None:
         source = None
@@ -564,6 +717,25 @@ class JobManager:
             or isinstance(height, bool)
         ):
             raise WorkerFailure("invalid_dimensions", "image dimensions must be integers")
+        if (
+            job.request.operation == "image.edit"
+            and job.request.constraints.get("strict_edit") is True
+            and job.request.constraints.get("edit_mode") != "outpaint"
+        ):
+            mask_id = job.request.constraints.get("editable_mask_asset_id")
+            try:
+                assert source is not None and isinstance(mask_id, str)
+                plan = strict_edit_plan(self.store.asset_path(source.id), self.store.asset_path(mask_id))
+            except (AssertionError, KeyError, StrictEditError) as exc:
+                raise WorkerFailure("invalid_edit_mask", "strict edit mask could not be bounded") from exc
+            # Real strict edit generates only a context-bearing patch, then the
+            # worker composes it onto the full canvas and core independently
+            # checks protected pixels. Admit against that bounded inference,
+            # conservatively including 64px context on each side.
+            crop_width = plan.crop_box[2] - plan.crop_box[0]
+            crop_height = plan.crop_box[3] - plan.crop_box[1]
+            width = max(256, (crop_width + 128 + 15) // 16 * 16)
+            height = max(256, (crop_height + 128 + 15) // 16 * 16)
         if width > selected.max_width or height > selected.max_height or width * height > selected.max_pixels:
             raise WorkerFailure(
                 "resource_limit",
@@ -1103,6 +1275,11 @@ class JobManager:
                 width=int(job.request.constraints["width"]),
                 height=int(job.request.constraints["height"]),
             ))
+        if is_m5_profile(job.request.profile):
+            try:
+                validation.extend(validate_m5_image(path, str(job.request.profile)))
+            except M5CompanionError as exc:
+                raise ValueError(str(exc)) from exc
         return path, width, height, validation
 
     async def _evaluation_selection(

@@ -220,6 +220,11 @@ def test_project_asset_placement_accepts_only_safe_matching_filenames():
         suggested="generated.png",
         mime_type="image/png",
     ) == "generated.png"
+    assert placement_filename(
+        requested="kizuna-m5-companion.zip",
+        suggested="generated.zip",
+        mime_type="application/zip",
+    ) == "kizuna-m5-companion.zip"
     for filename in ("../outside.png", "nested/output.png", "nested\\output.png", "output.jpg"):
         try:
             request = ProjectAssetPlacement.model_validate({

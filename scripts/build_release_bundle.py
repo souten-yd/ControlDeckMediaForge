@@ -57,6 +57,7 @@ def main() -> int:
                 "--add-data", f"{ROOT / 'schemas'}:schemas",
                 "--add-data", f"{ROOT / 'worker_packs'}:worker_packs",
                 "--add-data", f"{ROOT / 'creative'}:creative",
+                "--add-data", f"{ROOT / 'profiles'}:profiles",
                 "--add-data", f"{ROOT / 'runtimes' / 'rocm-torch' / 'requirements.txt'}:runtimes/rocm-torch",
                 str(ROOT / "scripts" / "bundle_entrypoint.py"),
             ],

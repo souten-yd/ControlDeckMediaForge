@@ -62,6 +62,7 @@ from .host.ai import HostAIGateway
 from .host.files import GrantContentTooLarge, commit_file, read_grant, require_grant_id
 from .host.jobs import HostExecution
 from .jobs import JobManager, ProfileResolutionError
+from .m5_companion import profile_documents as m5_profile_documents
 from .model_evaluator import H3ModelEvaluator
 from .model_manager import ModelOperationManager
 from .models import (
@@ -586,6 +587,7 @@ def create_app(
                     "semantic_state": "available" if semantic_available else "unavailable",
                     "semantic_reason": None if semantic_available else "vision_analyzer_unavailable",
                 },
+                "asset.m5_companion_pack": {"state": "available"},
                 "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },
@@ -1134,6 +1136,10 @@ def create_app(
     @app.get("/api/v1/profiles")
     async def list_profiles() -> dict[str, Any]:
         return {"items": [item.model_dump(mode="json") for item in store.list_profiles()]}
+
+    @app.get("/api/v1/domain-profiles")
+    async def list_domain_profiles() -> dict[str, Any]:
+        return {"items": m5_profile_documents()}
 
     @app.post("/api/v1/profiles", status_code=201)
     async def create_profile(value: ProfileInput) -> dict[str, Any]:
