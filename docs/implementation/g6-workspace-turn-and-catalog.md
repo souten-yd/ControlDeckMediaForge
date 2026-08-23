@@ -140,6 +140,66 @@ Media Forge は解放できなかった場合に `host_ai_residency_retained` �
 **理由付きで fail-closed** する。無言の OOM にしない。
 `supervision=observed` は診断として利用者へそのまま提示する。
 
+### ❷-b ControlDeck 本体 / OpenCode との競合（利用者指摘 2026-08-24）
+
+同じ VLM を ControlDeck の chat と OpenCode も使う。実機の経路を確認した。
+
+```text
+/data1tb/ControlDeck/data/integrations/opencode/settings.json
+  base_url = http://127.0.0.1:8765/api/v1/llm/v1   use_gateway = true
+runtime policy   gateway_only = true
+```
+
+**OpenCode も ControlDeck chat も同じ gateway を通る。** したがって
+`gateway_chat` -> `_acquire_gateway_lease` -> `adapter.enter_request()` を経由し、
+`LlamaCapacityProvider._active_requests` に数えられる。add-on の `ai/complete`
+も同じ経路なので、3 者は同じ 1 個のカウンタで見えている。
+
+さらに ControlDeck は idle unload 用に「使用中なら降ろさない」判定を既に持つ。
+
+```text
+llama.py  _has_connected_clients(port)          実 TCP 接続を直接見る
+                                                （gateway を通らない外部 client 用）
+          _opencode_session_uses(port, window)  OpenCode TUI の tmux pane 活動時刻
+          idle_exclude                          instance 単位の除外
+          role != "llm"                         embedding / reranker は対象外
+```
+
+**新しい判定を作らない。** 明示解放はこの判定集合をそのまま再利用する。
+30 分の idle unload と同じ決定を、時間ではなく要求で起こすだけにする。
+
+```text
+POST /{addon_id}/ai/release の順序
+  1. policy が managed 相当か（gateway_only / supervision）
+  2. drain。_active_requests が 0 になるまで drain_timeout_sec 待つ
+     -> chat / OpenCode / 他 add-on の実行中要求を絶対に切らない
+  3. _has_connected_clients        -> refuse "clients_connected"
+  4. _opencode_session_uses        -> refuse "opencode_active"
+  5. idle_exclude                  -> refuse "idle_excluded"
+  6. role != "llm" の instance には触れない
+  7. すべて通ったときだけ stop_instance
+戻り値 {"released": bool, "reason": str, "freed_bytes": int}
+```
+
+Media Forge 側の作法。
+
+```text
+解放要求は 1 回だけ。リトライループを作らない（chat / OpenCode を飢えさせない）
+拒否されたら理由を保持したまま、生成 lease は通常どおり broker へ出す
+  broker が受理できればそのまま生成する（VRAM に余裕があった = 問題は無かった）
+  受理できず insufficient_vram で待たされたら、保持した理由を添えて fail する
+      host_ai_residency_retained + reason（opencode_active 等）
+```
+
+この形なら Media Forge は**横取りをせず要求するだけ**で、決定権は
+ControlDeck が既に持つ判定に残る。queue とも競合しない。
+
+残るコストは「chat / OpenCode の会話の合間に降ろすと、次の turn が
+cold load を払う」こと。これは `ai_complete` への `ensure_ready` 追加で
+自動復帰する。cold load 時間を払うか VRAM を空けるかの選択そのものは
+`min_uptime_sec` / `warm_idle_sec` という ControlDeck の既存 policy の領分であり、
+Media Forge 側で新しい policy を作らない。
+
 ### ❶❹ 状態管理をサーバ側へ
 
 | 案 | 内容 | 判断 |
