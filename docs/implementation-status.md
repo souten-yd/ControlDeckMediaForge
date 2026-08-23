@@ -2545,6 +2545,50 @@ visual inspection confirmed a readable centered blue robot with transparent
 background; this is direct output-quality evidence for this one 2D-game fixture,
 not a broad model-quality benchmark. Focused host/evaluator regression passed 47
 tests. The final full gate passed 344 tests in 34.58 seconds with one upstream
-Starlette/httpx deprecation warning. The exact-head bundle, extracted bundle, installed update,
-and installed-browser acceptance are recorded after their actual execution and
-are otherwise **NOT TESTED**. Hosted CI was not used.
+Starlette/httpx deprecation warning. The exact-head bundle, extracted bundle,
+installed update, and installed-browser acceptance were completed in the release
+section below. Hosted CI was not used.
+
+## v0.4.0 G0–G4 release-bundle and installed Host update (2026-08-23)
+
+Release v0.4.0 targets G4 merge commit
+`5a340ac2a9729b1fd591e4287c7adfca1252ff4a`. The exact-head local bundle is
+`control-deck-media-forge-0.4.0-linux-x86_64.tar.gz`, 30,971,889 bytes, SHA-256
+`51ee55c1da6d491852e145d6e2fc42b1b46eccedfae50176b1a34d6ba5f98799`.
+The local checksum and GitHub Release asset digest match. Hosted CI was not used.
+
+The extracted artifact ran as a real process on port 9137 with an isolated data
+root. It correctly returned `setup_required`, contract 2.0, and
+`agent_tool:media.pack=available`; the packaged manifest reported version 0.4.0
+and the additive `media.pack` endpoint/schema. Standalone Chromium light and dark
+runs both passed with 32 advanced nodes, 13 capability states, mask/outpaint
+pointer assertions, 390px and 320px overflow 0, 60px mobile tabs, and zero
+console errors.
+
+ControlDeck PR #234 changed only the generic trusted artifact SHA and merged as
+`f716630b9067ca0d91ffe2722ac75ce849bb5ac6`; PR #235 records Host evidence.
+The release-bundle/Add-on-AI/contract focus passed 28 tests in 1.19 seconds.
+The real Optional Feature Manager update completed in 12.75 seconds with max RSS
+784,004 KiB and returned version 0.4.0, previous version 0.3.2, installed,
+managed, enabled, and healthy. `current`, service WorkingDirectory, and ExecStart
+all resolve to v0.4.0; versions 0.3.2 and 0.4.0 are retained. Real HTTP health
+reported every R9700 gfx1201/ROCm/model/disk setup check `ok`.
+
+The first installed-browser attempt stopped on a stale E2E fixture assertion:
+the current UI intentionally has six ratio presets plus custom, while the script
+still required exactly three. The fixture now verifies the six named bounded
+presets, 16-pixel divisibility, and a dimensionless custom choice. Rerun light
+and dark Chromium both passed with Host bridge `ready`, correct theme tokens,
+advanced-mode persistence across reload, Host route sync, 390px overflow 0,
+60px tabs, two-column mobile library, and zero console/page errors.
+
+Post-update cleanup observed Host active lease 0, waiting request 0, Media Forge
+lease 0; saved Media Forge jobs 41 with active 0; and no image/video worker.
+The H3 snapshot remained 26,978,278,484 bytes and its 8,063,029,344-byte denoiser
+blob retained SHA-256
+`cfe0795c00ab6e6ebf8c64fe4574f45a828e8a93e0876bca704e055662a9d7b8`.
+All 94 asset files remained. Browser-test sessions were revoked and the existing
+fixture user's password hash was restored after each run. H3 quality generation,
+public video generation, CI-5, and CI-6 remain **NOT TESTED** by this release.
+The final release-evidence worktree regression gate passed 344 tests in 34.55
+seconds with one upstream Starlette/httpx deprecation warning.

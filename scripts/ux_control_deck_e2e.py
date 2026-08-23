@@ -97,12 +97,19 @@ def desktop_checks(page: Page, evidence: Path) -> dict[str, Any]:
     )
     presets = frame.evaluate(
         "() => Array.from(document.querySelectorAll('#size-presets [data-preset]'))"
-        ".map(chip => [chip.dataset.preset, Number(chip.dataset.width), Number(chip.dataset.height)])"
+        ".map(chip => [chip.dataset.preset, chip.dataset.width || null, chip.dataset.height || null])"
     )
     result["presets"] = presets
-    check(len(presets) == 3, f"サイズ preset が 3 件ではない: {presets}")
-    for _name, width, height in presets:
+    check(
+        [item[0] for item in presets] == [
+            "square", "landscape", "portrait", "wide", "tall", "cinema", "custom",
+        ],
+        f"サイズ preset が現行設計と一致しない: {presets}",
+    )
+    for _name, raw_width, raw_height in presets[:-1]:
+        width, height = int(raw_width), int(raw_height)
         check(width % 16 == 0 and height % 16 == 0, f"preset が 16 の倍数ではない: {presets}")
+    check(presets[-1][1:] == [None, None], f"custom preset が固定寸法を持っている: {presets}")
 
     check(frame.evaluate("() => document.querySelectorAll('[id^=\"advanced-\"]').length") == 0,
           "シンプルで advanced-* が DOM にある")
