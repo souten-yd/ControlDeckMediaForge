@@ -9,11 +9,11 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    g4/asset-pack-placement
-PR          #63（prompt recipe）/ #64（CI-4）/ #65（G4設計）merge済み。G4実装PR準備中
-状態        G4 real OpenCode project placement E2E完了。次はG4 release bundle
-基準値      focused host/evaluator regression = 47 passed。full = 344 passed（34.58秒）
-リリース    v0.3.2公開・ControlDeck導入済み（artifact ec864154...e12e3d9、Host PR #230/#231）
+ブランチ    release/v040-install-evidence
+PR          #63（recipe）/ #64（CI-4）/ #65（G4設計）/ #66（G4実装）merge済み。#67 review中
+状態        G0〜G4 v0.4.0 release／installed Host受け入れ完了。次はCI-5
+基準値      focused host/evaluator regression = 47 passed。release full = 344 passed（34.55秒）
+リリース    v0.4.0公開・ControlDeck導入済み（artifact 51ee55c1...5f98799、Host PR #234/#235）
 ```
 
 ## PR 進捗
@@ -37,19 +37,21 @@ PR          #63（prompt recipe）/ #64（CI-4）/ #65（G4設計）merge済み�
 | — | H3 version-pinned prompt recipe | #63 マージ済み（6730bb7） |
 | — | CI-4 Unified Evaluator | #64 マージ済み（3a2d6eb） |
 | — | G4 prerequisite design correction | #65 マージ済み（43aa08c） |
+| — | G4 coding-agent asset placement | #66 マージ済み（5a340ac） |
+| — | v0.4.0 release/install evidence | #67 review中 |
 
 ## 次にやること（1 つだけ）
 
 ```text
-G4 coding-agent project placementは実機完了。次は利用者に意味のあるG0〜G4 release。
+G4 coding-agent project placementとG0〜G4 releaseは実機完了。次はCI-5。
   完了        26.98GB GGUF、pinned HIP runtime、Host lease/cancel、R9700 smoke実測
   延期        H3 quality route（Host watchdog/swap/output gate失敗。条件改善まで再実行しない）
   完了        版固定recipe、構造化projection、実Gateway text.generate、原文保持/fail-closed
   完了        CI-4 canonical EvaluationResult、advisory rank、bounded retry、旧binary reviewer削除
   完了        ControlDeck汎用 current-project output grant（PR #232）/ long MCP timeout（PR #233）
   完了        media.pack / atomic asset placement / OpenCode inspect・参照更新・build・test実機E2E
-  次          exact G4 merge headからrelease bundleを作成し、extracted/browser/installed Hostを確認
-  続き        release完了後にCI-5 C4 shot direction + bounded quality integration
+  完了        v0.4.0 exact-head bundle、extracted light/dark、installed Host light/dark、Broker cleanup
+  次          CI-5 C4 shot direction + bounded quality integration
   保留        video public API/runtime実装（CI-5/CI-6とworker境界解消前は着手しない）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
