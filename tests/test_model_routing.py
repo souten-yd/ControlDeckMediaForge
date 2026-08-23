@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from mediaforge.models import ModelDescriptor, ModelOwnership, ModelRegistry, ModelRegistryError, ModelState
-from mediaforge.routing import ModelRouteError, route_model
+from mediaforge.routing import ModelRouteError, route, route_model
 
 
 def descriptor(identifier: str, *, rank: int, vram: int, state: ModelState = ModelState.AVAILABLE):
@@ -328,3 +328,84 @@ def test_catalog_metadata_does_not_change_capability_routing(tmp_path):
     )
     assert selected.model_id == "owner/model"
     assert selected.domains == ("anime", "poster")
+
+
+# ── domain 対応 routing（G6 S5） ─────────────────────────────────────────
+
+
+def domain_model(model_id: str, domains: tuple[str, ...], rank: int) -> ModelDescriptor:
+    return replace(
+        descriptor(model_id, rank=rank, vram=1_000),
+        domains=domains,
+    )
+
+
+def test_auto_prefers_a_model_declared_for_the_requested_domain():
+    """catalog は domains を持っていたのに routing が使っていなかった。"""
+    general = domain_model("owner/general", ("general",), rank=1)
+    anime = domain_model("owner/anime", ("general", "anime"), rank=9)
+
+    decision = route(
+        (general, anime),
+        capability="image.text_to_image",
+        policy="auto",
+        hardware_backend="rocm",
+        free_vram_bytes=2**40,
+        domain="anime",
+    )
+
+    assert decision.model.model_id == "owner/anime"
+    assert decision.domain_matched is True
+    assert decision.domain == "anime"
+
+
+def test_auto_falls_back_to_every_candidate_when_no_model_declares_the_domain():
+    """domain を選んだだけで使えるモデルが消えてはいけない。"""
+    general = domain_model("owner/general", ("general",), rank=1)
+
+    decision = route(
+        (general,),
+        capability="image.text_to_image",
+        policy="auto",
+        hardware_backend="rocm",
+        free_vram_bytes=2**40,
+        domain="character_sheet",
+    )
+
+    assert decision.model.model_id == "owner/general"
+    assert decision.domain_matched is False
+
+
+def test_domain_preference_never_overrides_an_explicit_manual_choice():
+    """明示指定は自動判断より強い。"""
+    general = domain_model("owner/general", ("general",), rank=1)
+    anime = domain_model("owner/anime", ("general", "anime"), rank=9)
+
+    decision = route(
+        (general, anime),
+        capability="image.text_to_image",
+        policy="manual",
+        model_id="owner/general",
+        hardware_backend="rocm",
+        free_vram_bytes=2**40,
+        domain="anime",
+    )
+
+    assert decision.model.model_id == "owner/general"
+
+
+def test_auto_keeps_the_policy_rank_order_inside_the_matching_domain():
+    fast = domain_model("owner/fast", ("general", "anime"), rank=1)
+    slow = domain_model("owner/slow", ("general", "anime"), rank=5)
+
+    decision = route(
+        (slow, fast),
+        capability="image.text_to_image",
+        policy="auto",
+        hardware_backend="rocm",
+        free_vram_bytes=2**40,
+        domain="anime",
+    )
+
+    assert decision.model.model_id == "owner/fast"
+    assert decision.candidate_count == 2

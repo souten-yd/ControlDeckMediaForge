@@ -154,6 +154,22 @@ A `degraded` record is not executable; submitting it fails with
 
 Every request is local-only. `local_only` defaults to `true`; any explicit `false` value is rejected by backend validation.
 
+## Model routing
+
+`model_policy` selects how a model is chosen: `auto`, `fast`, `balanced`,
+`quality`, `low_vram`, or `manual`. `manual` requires `model_id` and is never
+overridden by an automatic preference.
+
+Automatic policies prefer a model whose catalog `domains` include the scene
+domain of the request (`constraints.creative_plan.domain.id`), then order by the
+policy rank. If no installed model declares that domain, every candidate stays
+eligible: choosing a scene must never remove a usable model.
+
+The decision is recorded in provenance under `parameters.model_route`
+(`policy`, `capability`, `domain`, `domain_matched`, `candidate_count`).
+Generation responses and capability discovery still do not carry a selected
+model name.
+
 ## Resource turn
 
 A hosted job that needs real GPU capacity runs in ordered stages so that Host AI

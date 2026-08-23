@@ -32,7 +32,7 @@ from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
 from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .profiles import profile_prompt
-from .routing import ModelRouteError, route_model
+from .routing import ModelRoute, ModelRouteError, route
 from .host.ai import HostAIGateway, HostAIReleaseResult
 from .store import Store, UnreadableJobRecord, utc_now
 from .validators import validate_png
@@ -115,6 +115,8 @@ class JobManager:
         self._host_executions: dict[str, HostExecution] = {}
         self._host_failures: dict[str, HostApiError] = {}
         self._selected_models: dict[str, ModelDescriptor] = {}
+        # 選択の根拠。provenance と UI に「なぜこのモデルか」を出すために持つ。
+        self._routes: dict[str, ModelRoute] = {}
         self._admission_floor_bytes: dict[str, int] = {}
         self._execution_guard = asyncio.Semaphore(1)
         self._stopping = False
@@ -245,6 +247,7 @@ class JobManager:
             self._host_executions.pop(job_id, None)
             self._host_failures.pop(job_id, None)
             self._selected_models.pop(job_id, None)
+            self._routes.pop(job_id, None)
             self._job_tasks.pop(job_id, None)
             self._queue.task_done()
 
@@ -384,7 +387,7 @@ class JobManager:
                 )
             return None
         try:
-            selected = route_model(
+            decision = route(
                 models,
                 capability=capability,
                 policy=job.request.model_policy,
@@ -392,11 +395,33 @@ class JobManager:
                 hardware_backend="rocm",
                 # ControlDeck performs live admission against current free VRAM.
                 free_vram_bytes=2**63 - 1,
+                domain=self._job_domain(job),
             )
-            self._validate_generation_limits(job, selected)
-            return selected
+            self._validate_generation_limits(job, decision.model)
+            self._routes[job.id] = decision
+            return decision.model
         except ModelRouteError as exc:
             raise WorkerFailure(exc.code, str(exc)) from exc
+
+    def _route_summary(self, job_id: str) -> dict[str, Any]:
+        decision = self._routes[job_id]
+        return {
+            "policy": decision.policy,
+            "capability": decision.capability,
+            "domain": decision.domain,
+            "domain_matched": decision.domain_matched,
+            "candidate_count": decision.candidate_count,
+        }
+
+    @staticmethod
+    def _job_domain(job: Job) -> str:
+        plan = job.request.constraints.get("creative_plan")
+        if not isinstance(plan, dict):
+            return "general"
+        domain = plan.get("domain")
+        if isinstance(domain, dict):
+            return str(domain.get("id") or "general")
+        return "general"
 
     def _model_capability(self, job: Job) -> str:
         if self.store.job_profile_snapshot(job.id).get("reference_asset_ids"):
@@ -1535,6 +1560,10 @@ class JobManager:
                     "model_policy": job.request.model_policy,
                     "constraints": job.request.constraints,
                     "output": job.request.output.model_dump(mode="json"),
+                    # なぜこのモデルが選ばれたか。provenance にしか置かない。
+                    # 生成応答や capability discovery にモデル名を出さない規約
+                    # （AGENTS.md 7 / docs/api.md）を保つ。
+                    **({"model_route": self._route_summary(job.id)} if self._routes.get(job.id) else {}),
                     **({"resolved_profiles": snapshot.get("profiles", {})} if snapshot else {}),
                 },
                 reference_asset_hashes=reference_hashes,
