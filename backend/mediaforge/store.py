@@ -77,6 +77,7 @@ class Store:
         self._lock = threading.RLock()
         self._listeners: list[Callable[[Job], None]] = []
         self._model_operation_listeners: list[Callable[[ModelOperation], None]] = []
+        self._session_listeners: list[Callable[[str], None]] = []
 
     def observe(self, listener: Callable[[Job], None]) -> None:
         """Register a job-change listener. Listener failures never reach callers."""
@@ -92,6 +93,21 @@ class Store:
 
     def observe_model_operations(self, listener: Callable[[ModelOperation], None]) -> None:
         self._model_operation_listeners.append(listener)
+
+    def observe_session(self, listener: Callable[[str], None]) -> None:
+        """Register a session-part invalidation listener.
+
+        状態の正はサーバ側の session snapshot に置く。変わった部分の名前だけを
+        通知し、workspace は必要な部分だけ読み直す。
+        """
+        self._session_listeners.append(listener)
+
+    def _notify_session(self, part: str) -> None:
+        for listener in list(self._session_listeners):
+            try:
+                listener(part)
+            except Exception:  # noqa: BLE001 - observation must not break the mutation
+                continue
 
     def _notify_model_operation(self, operation: ModelOperation) -> ModelOperation:
         for listener in list(self._model_operation_listeners):
@@ -437,6 +453,7 @@ class Store:
                     metadata.created_at,
                 ),
             )
+        self._notify_session("library")
         return metadata
 
     def get_asset(self, asset_id: str) -> Asset:
@@ -499,6 +516,7 @@ class Store:
                    updated_at = excluded.updated_at""",
                 (subject, payload, utc_now()),
             )
+        self._notify_session("preferences")
         return values
 
     def create_model_operation(
@@ -628,6 +646,7 @@ class Store:
                 "INSERT INTO reference_collections (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (result.id, result.model_dump_json(), now, now),
             )
+        self._notify_session("reference_collections")
         return result
 
     def get_reference_collection(self, collection_id: str) -> ReferenceCollection:
@@ -653,6 +672,7 @@ class Store:
             cursor = connection.execute("DELETE FROM reference_collections WHERE id = ?", (collection_id,))
             if cursor.rowcount != 1:
                 raise KeyError(collection_id)
+        self._notify_session("reference_collections")
 
     def create_profile(self, value: ProfileInput) -> Profile:
         if value.reference_collection_id is not None:
@@ -669,6 +689,7 @@ class Store:
                 "INSERT INTO profiles (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (result.id, result.model_dump_json(), now, now),
             )
+        self._notify_session("profiles")
         return result
 
     def get_profile(self, profile_id: str) -> Profile:
@@ -688,6 +709,7 @@ class Store:
             cursor = connection.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
             if cursor.rowcount != 1:
                 raise KeyError(profile_id)
+        self._notify_session("profiles")
 
     def create_creative_batch(self, value: CreativeBatchRecord) -> CreativeBatchRecord:
         with self._lock, self._connect() as connection:
@@ -695,6 +717,7 @@ class Store:
                 "INSERT INTO creative_batches (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (value.id, value.model_dump_json(), value.created_at, value.updated_at),
             )
+        self._notify_session("creative_batches")
         return value
 
     def update_creative_batch(self, value: CreativeBatchRecord) -> CreativeBatchRecord:
@@ -705,6 +728,7 @@ class Store:
             )
             if cursor.rowcount != 1:
                 raise KeyError(value.id)
+        self._notify_session("creative_batches")
         return value
 
     def get_creative_batch(self, batch_id: str) -> CreativeBatchRecord:
@@ -732,6 +756,7 @@ class Store:
                 "INSERT INTO creative_compositions (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (value.id, value.model_dump_json(), value.created_at, value.updated_at),
             )
+        self._notify_session("creative_compositions")
         return value
 
     def update_creative_composition(
@@ -744,6 +769,7 @@ class Store:
             )
             if cursor.rowcount != 1:
                 raise KeyError(value.id)
+        self._notify_session("creative_compositions")
         return value
 
     def get_creative_composition(self, composition_id: str) -> CreativeCompositionRecord:

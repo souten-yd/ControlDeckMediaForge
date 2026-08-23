@@ -141,3 +141,55 @@ class ModelOperationEventBus:
                     subscription.deliver(operation)
                 except Exception:  # noqa: BLE001 - observation never fails installation
                     continue
+
+
+class SessionSubscription:
+    """One workspace connection's stream of server-side session invalidations.
+
+    The workspace no longer keeps the authoritative copy of its own state. The
+    server owns the session snapshot and tells the connection which parts of it
+    went stale; the connection re-reads only those parts. This replaces the
+    per-second polling the workspace used to run for batches and compositions.
+    """
+
+    def __init__(self, bus: "SessionEventBus", loop: asyncio.AbstractEventLoop):
+        self._bus = bus
+        self._loop = loop
+        self.queue: asyncio.Queue[str] = asyncio.Queue(maxsize=QUEUE_LIMIT)
+
+    def deliver(self, part: str) -> None:
+        try:
+            self._loop.call_soon_threadsafe(self._offer, part)
+        except RuntimeError:
+            pass
+
+    def _offer(self, part: str) -> None:
+        try:
+            self.queue.put_nowait(part)
+        except asyncio.QueueFull:
+            # 取りこぼしても次の変更が新しい状態を運ぶ。生成を止めない。
+            pass
+
+    def close(self) -> None:
+        self._bus.remove(self)
+
+
+class SessionEventBus:
+    def __init__(self) -> None:
+        self._subscriptions: list[SessionSubscription] = []
+
+    def subscribe(self, loop: asyncio.AbstractEventLoop) -> SessionSubscription:
+        subscription = SessionSubscription(self, loop)
+        self._subscriptions.append(subscription)
+        return subscription
+
+    def remove(self, subscription: SessionSubscription) -> None:
+        if subscription in self._subscriptions:
+            self._subscriptions.remove(subscription)
+
+    def publish(self, part: str) -> None:
+        for subscription in list(self._subscriptions):
+            try:
+                subscription.deliver(part)
+            except Exception:  # noqa: BLE001 - a broken subscriber never fails a mutation
+                continue

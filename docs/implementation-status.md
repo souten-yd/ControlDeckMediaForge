@@ -2914,3 +2914,58 @@ batches / creative compositions）。
 
 NOT TESTED: 修正版を実 installed へ入れ替えた状態でのブラウザ操作は未実施。
 S2 以降と合わせて 1 度で実機受入する。
+
+## G6 S2 — workspace session と一覧サムネイルの往復削減（2026-08-24）
+
+「GUI が重い」の内訳を実ブラウザで計測した。installed v0.5.1（実データ:
+job 90 / asset 95）の workspace を読み取りのみで開き、要求を数えた。
+
+```text
+修正前   boot ready 2.609 秒   要求 104 件
+           api/v1/assets/{asset}/content   95   一覧カード 1 枚 1 往復
+           api/v1/models                    2
+           その他（capabilities / profiles / reference-collections /
+           assets / creative batches / compositions / index）  7
+```
+
+主因は 2 つあった。
+
+1. boot が直列 10 往復で状態を組み立てていた（`preferences.get` から
+   `jobs.watch` まで）。状態の正がクライアント側の `state` にあった。
+2. 一覧のサムネイルが 1 枚 1 往復だった。埋め込み時は 24 枚 = 24 往復、
+   standalone の shim では `limit` を無視して 95 枚の**原寸**を取っていた。
+
+対応は 2 つ。
+
+```text
+workspace.session   boot と更新を 1 メソッドへ集約。部分指定で読み直せる
+                    部分ごとに fail-soft（Host AI probe が落ちても session は返る）
+                    jobs / model operations の watch はサーバが張る
+session.changed     変わった部分名だけを push。1 秒 polling 3 本を削除
+                    （job / creative batch / creative composition）
+                    polling は push の無い standalone にだけ残した
+一覧サムネイル      160px WebP をカードに同梱。往復 0
+                    原寸と拡大表示は従来どおり個別要求のまま
+```
+
+同じ実データでの実測。
+
+```text
+修正前   boot ready 2.609 秒 / 要求 104 件
+修正後   boot ready 0.264 秒 / 要求  14 件      -89.9% / -86.5%
+```
+
+埋め込み時はさらに減る。standalone に残る 13 件は集約 endpoint を持たない
+shim がクライアント側で束ねているためで、埋め込みでは `workspace.session`
+1 往復になる（サムネイル同梱により追加要求 0）。
+
+サーバ側の集約コストは増えていない。実 DB に対する in-process 実測で
+旧 11 メソッドの合計 14.05 ms に対し `workspace.session` は 14.25 ms。
+
+```text
+./mf.sh test                368 passed
+scripts/ux_standalone_e2e.py PASSED / console errors 0 / phone overflow 0
+```
+
+NOT TESTED: installed ControlDeck の埋め込み iframe での実測。S3 以降と
+合わせて 1 度で実機受入する。

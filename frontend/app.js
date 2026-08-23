@@ -209,6 +209,12 @@ function handleEvent(message) {
     const job = message.data;
     if (job.id === state.activeJob) showProgress(job);
     if (TERMINAL.has(job.status)) void finishJob(job);
+    return;
+  }
+  if (message.event === "session.changed") {
+    // 状態の正はサーバにある。変わった部分だけ読み直す。polling はしない。
+    const parts = Array.isArray(message.data.parts) ? message.data.parts : [];
+    if (parts.length) void refreshSession(parts);
   }
 }
 
@@ -302,7 +308,8 @@ async function standaloneCall(method, params) {
   }
   if (method === "library.list") {
     const {items} = await json("/api/v1/assets");
-    return {items: items.map((asset) => ({
+    const limited = typeof params.limit === "number" ? items.slice(0, params.limit) : items;
+    return {items: limited.map((asset) => ({
       asset_id: asset.id, width: asset.width, height: asset.height, mime_type: asset.mime_type,
       created_at: asset.created_at, kind: asset.parent_asset_ids.length ? "edited" : "generated",
       summary: asset.suggested_filename, parent_asset_ids: asset.parent_asset_ids,
@@ -325,6 +332,31 @@ async function standaloneCall(method, params) {
     });
     if (!response.ok) throw {code: `http_${response.status}`};
     return response.json();
+  }
+  if (method === "workspace.session") {
+    // standalone には集約 endpoint が無い。既存経路を並列で束ね、
+    // 呼び出し側から見た形だけ揃える。
+    const want = (name) => !params.parts || params.parts.includes(name);
+    const part = async (name, run) => {
+      if (!want(name)) return [name, undefined];
+      try { return [name, await run()]; } catch (error) { return [name, {unavailable: true, code: error?.code}]; }
+    };
+    const entries = await Promise.all([
+      part("preferences", () => standaloneCall("preferences.get", {})),
+      part("capabilities", () => standaloneCall("capabilities.get", {})),
+      part("profiles", () => standaloneCall("profiles.list", {})),
+      part("reference_collections", () => standaloneCall("reference_collections.list", {})),
+      part("models", () => standaloneCall("models.list", {})),
+      part("model_catalog", () => standaloneCall("models.catalog", {})),
+      part("model_operations", () => standaloneCall("models.operations.list", {})),
+      part("library", () => standaloneCall("library.list", {limit: 4})),
+      part("creative_batches", () => standaloneCall("creative.batches.list", {})),
+      part("creative_compositions", () => standaloneCall("creative.compositions.list", {})),
+      part("jobs", () => standaloneCall("jobs.list", {})),
+    ]);
+    const snapshot = {session_version: 1};
+    for (const [name, value] of entries) if (value !== undefined) snapshot[name] = value;
+    return snapshot;
   }
   throw {code: "workspace_method_unsupported"};
 }
@@ -785,17 +817,7 @@ async function analyzeReferenceFocus(focus) {
 }
 
 async function loadProfiles() {
-  try {
-    const [profiles, collections] = await Promise.all([
-      call("profiles.list"), call("reference_collections.list"),
-    ]);
-    state.profiles = profiles.items || [];
-    state.referenceCollections = collections.items || [];
-  } catch {
-    state.profiles = [];
-    state.referenceCollections = [];
-  }
-  renderProfileChoices();
+  await refreshSession(["profiles", "reference_collections"]);
 }
 
 function renderAdvancedReferenceRoles() {
@@ -1385,7 +1407,7 @@ async function submitJob(event) {
       state.currentComposition = composition;
       showCompositionProgress(composition);
       void savePreferences({last_preset: preset.id, last_count: selectedCount()});
-      void pollComposition(composition.id);
+      if (window.parent === window) void pollComposition(composition.id);
       return;
     }
     if (batchCount > 1 && batchAxes.has(spec.variation.axis)) {
@@ -1401,7 +1423,7 @@ async function submitJob(event) {
       state.activeBatch = batch.id;
       showBatchProgress(batch);
       void savePreferences({last_preset: preset.id, last_count: selectedCount()});
-      void pollBatch(batch.id);
+      if (window.parent === window) void pollBatch(batch.id);
       return;
     }
     if (creativeActive(spec) || directorPlan) {
@@ -1457,7 +1479,8 @@ function modelSelection() {
   return {model_policy: "manual", model_id: byId("advanced-model").value};
 }
 
-/* standalone では push が無いので、そこだけ従来どおり問い合わせる */
+/* standalone には push が無いので、そこだけ従来どおり問い合わせる。
+   埋め込み時は session.changed / job.changed に完全に任せ、polling しない。 */
 async function pollJob(id) {
   for (let attempt = 0; attempt < 3600 && !state.disabled; attempt += 1) {
     let job;
@@ -1786,7 +1809,9 @@ async function showAsset(assetId) {
   } catch { /* 表示できなくても以降の操作は続けられる */ }
 }
 
-async function thumbnailButton(assetId, onClick) {
+/* 一覧のカードは list に同梱された小さな版を使う。1 枚 1 往復にしない。
+   同梱が無いときだけ従来どおり個別に取りに行く。 */
+async function thumbnailButton(assetId, onClick, inline) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "thumb";
@@ -1795,8 +1820,14 @@ async function thumbnailButton(assetId, onClick) {
   image.alt = "";
   image.width = 84;
   image.height = 84;
+  image.loading = "lazy";
+  image.decoding = "async";
   button.append(image);
   button.addEventListener("click", onClick);
+  if (inline?.base64) {
+    image.src = `data:${inline.mime_type};base64,${inline.base64}`;
+    return button;
+  }
   try {
     const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 192});
     image.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
@@ -1809,33 +1840,8 @@ async function thumbnailButton(assetId, onClick) {
    registry が持つ measured_runtime_sec は初回実行（モデル読み込みと
    カーネルコンパイルを含む）の実測であり、暖まった後の所要時間ではない。
    一般的な目安として出すと大きく外れるので、何の数字かを明示する。 */
-async function loadEstimate() {
-  const node = byId("create-estimate");
-  node.textContent = "";
-  try {
-    const {items} = await call("models.list");
-    const measured = items
-      .filter((model) => model.installed && model.healthy && model.measurement_confidence === "measured")
-      .map((model) => model.measured_runtime_sec)
-      .filter((value) => typeof value === "number" && value > 0);
-    if (!measured.length) return;
-    state.estimateSec = Math.min(...measured);
-    node.textContent =
-      `初回は約 ${Math.round(state.estimateSec)} 秒（モデルの読み込みを含む実測）。2 回目以降は短くなります。`;
-  } catch { /* 目安が出せなくても作成はできる */ }
-}
-
 async function loadRecent() {
-  let items = [];
-  try { ({items} = await call("library.list", {limit: 4})); } catch { return; }
-  const strip = byId("recent-strip");
-  strip.replaceChildren();
-  byId("recent-empty").hidden = items.length > 0;
-  for (const item of items) {
-    strip.append(await thumbnailButton(item.asset_id, () => {
-      activate("library");
-    }));
-  }
+  await refreshSession(["library"]);
 }
 
 /* ── マスク編集 ───────────────────────────────────────────────────────── */
@@ -2143,8 +2149,15 @@ async function libraryCard(item) {
   const size = document.createElement("span");
   size.textContent = item.width && item.height ? `${item.width}×${item.height}` : "";
   meta.append(kind, size);
+  image.loading = "lazy";
+  image.decoding = "async";
   card.append(image, summary, meta);
   card.addEventListener("click", () => void openViewer(item.asset_id, item));
+  // 一覧に同梱された小さな版を使う。1 枚 1 往復にしない。
+  if (item.thumbnail?.base64) {
+    image.src = `data:${item.thumbnail.mime_type};base64,${item.thumbnail.base64}`;
+    return card;
+  }
   try {
     const thumbnail = await call("assets.thumbnail", {asset_id: item.asset_id});
     image.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
@@ -2248,31 +2261,14 @@ function updateActivityBadge(count) {
   badge.textContent = String(count);
 }
 
-async function loadActivity() {
+/* 取得と描画を分ける。session.changed で状態が更新されたら描画だけやり直す。 */
+function renderActivity() {
   const list = byId("activity-list");
-  let items = [];
-  let batches = [];
-  try { ({items} = await call("jobs.list")); state.jobs = items; } catch {
-    // 読み込めなかったときも行き止まりにしない。前回の一覧を残し、出口を出す。
-    const empty = byId("activity-empty");
-    empty.hidden = false;
-    empty.replaceChildren();
-    const text = document.createElement("span");
-    text.textContent = "状況をいま読み込めませんでした。";
-    const retry = document.createElement("button");
-    retry.type = "button";
-    retry.dataset.retryActivity = "1";
-    retry.textContent = "もう一度読み込む";
-    empty.append(text, retry);
-    return;
-  }
-  if (state.mode === "advanced") {
-    try { ({items: batches} = await call("creative.batches.list")); } catch { batches = []; }
-    state.batches = batches;
-  }
+  const items = state.jobs || [];
+  const batches = state.mode === "advanced" ? (state.batches || []) : [];
   const running = items.filter((job) => !TERMINAL.has(job.status));
   const finished = items.filter((job) => TERMINAL.has(job.status));
-  const batchRows = state.mode === "advanced" ? batches.map(creativeBatchRow) : [];
+  const batchRows = batches.map(creativeBatchRow);
   list.replaceChildren(...batchRows, ...[...running, ...finished].map(activityRow));
   const empty = byId("activity-empty");
   empty.textContent = "まだ実行した記録はありません。";
@@ -2280,28 +2276,54 @@ async function loadActivity() {
   updateActivityBadge(running.length + batches.filter((batch) => batch.state === "running").length);
 }
 
-async function restoreCreativeBatch() {
-  try {
-    const {items} = await call("creative.batches.list");
-    state.batches = items || [];
-    const active = state.batches.find((batch) => batch.state === "running");
-    if (!active) return;
-    state.activeBatch = active.id;
-    showBatchProgress(active);
-    void pollBatch(active.id);
-  } catch { state.batches = []; }
+function showActivityUnavailable() {
+  // 読み込めなかったときも行き止まりにしない。前回の一覧を残し、出口を出す。
+  const empty = byId("activity-empty");
+  empty.hidden = false;
+  empty.replaceChildren();
+  const text = document.createElement("span");
+  text.textContent = "状況をいま読み込めませんでした。";
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.dataset.retryActivity = "1";
+  retry.textContent = "もう一度読み込む";
+  empty.append(text, retry);
 }
 
-async function restoreCreativeComposition() {
+async function loadActivity() {
+  let snapshot;
   try {
-    const {items} = await call("creative.compositions.list");
-    const active = (items || []).find((composition) => composition.state === "running");
-    if (!active) return;
-    state.activeComposition = active.id;
-    state.currentComposition = active;
-    showCompositionProgress(active);
-    void pollComposition(active.id);
-  } catch { /* a private feature may be unavailable on an older core */ }
+    snapshot = await call("workspace.session", {parts: ["jobs", "creative_batches"]});
+  } catch {
+    showActivityUnavailable();
+    return;
+  }
+  if (!usable(snapshot.jobs)) {
+    showActivityUnavailable();
+    return;
+  }
+  applySessionParts(snapshot);
+  renderActivity();
+}
+
+function restoreCreativeBatch(snapshot) {
+  if (!usable(snapshot.creative_batches)) return;
+  const active = (state.batches || []).find((batch) => batch.state === "running");
+  if (!active) return;
+  state.activeBatch = active.id;
+  showBatchProgress(active);
+  if (window.parent === window) void pollBatch(active.id);
+}
+
+function restoreCreativeComposition(snapshot) {
+  if (!usable(snapshot.creative_compositions)) return;
+  const active = (snapshot.creative_compositions.items || [])
+    .find((composition) => composition.state === "running");
+  if (!active) return;
+  state.activeComposition = active.id;
+  state.currentComposition = active;
+  showCompositionProgress(active);
+  if (window.parent === window) void pollComposition(active.id);
 }
 
 const STATUS_LABEL = {queued: "待機", running: "実行中", succeeded: "完了", failed: "失敗", canceled: "中止"};
@@ -2675,27 +2697,22 @@ function renderModelMiniProgress() {
 }
 
 async function loadModelManagement() {
-  try {
-    const [catalog, operations] = await Promise.all([
-      call("models.catalog"), call("models.operations.list"),
-    ]);
-    state.modelCatalog = catalog.items || [];
-    state.modelManagementAvailable = catalog.management_available !== false;
-    state.modelEvaluationIds = new Set(catalog.evaluation?.available_model_ids || []);
-    state.modelOperations = new Map((operations.items || []).map((item) => [item.id, item]));
-    const active = [...state.modelOperations.values()]
-      .filter((item) => !MODEL_TERMINAL.has(item.state)).map((item) => item.id);
-    if (active.length) await call("models.operations.watch", {operation_ids: active});
-    const storage = catalog.storage || {};
-    byId("model-storage").textContent = state.modelManagementAvailable
-      ? `管理中 ${formatBytes(storage.managed_bytes)} · 空き ${formatBytes(storage.free_bytes)}`
-      : "単体表示ではモデル操作に CLI を使います";
-    byId("model-error").hidden = true;
-    renderModelManagement();
-    renderModelMiniProgress();
-  } catch (error) {
-    showModelError(error?.code || "model_not_found", "");
-  }
+  await refreshSession(["models", "model_catalog", "model_operations"]);
+}
+
+/* 詳細モードの「モデル」選択。catalog の表示名で出し、使えるものだけ並べる。 */
+function renderAdvancedModelChoices() {
+  const select = byId("advanced-model");
+  if (!select) return;
+  const previous = select.value;
+  const usableModels = state.modelCatalog.filter((model) => model.installed && model.healthy);
+  select.replaceChildren(...usableModels.map((model) => {
+    const option = document.createElement("option");
+    option.value = model.model_id;
+    option.textContent = model.display_name || model.model_id;
+    return option;
+  }));
+  if (usableModels.some((model) => model.model_id === previous)) select.value = previous;
 }
 
 function showModelError(code, modelId) {
@@ -3262,19 +3279,112 @@ for (const id of ["progress-cancel", "mini-cancel"]) {
   });
 }
 
+/* ── session ──────────────────────────────────────────────────────────── */
+
+/* 状態の正はサーバ側の session snapshot にある。boot も更新も同じ 1 メソッドで
+   読む。旧 boot は直列 10 往復で、そのうえ 1 秒 polling を 3 本回していた。 */
+
+const usable = (part) => part && typeof part === "object" && part.unavailable !== true;
+
+function applySessionParts(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  if (usable(snapshot.preferences)) state.preferences = snapshot.preferences.values || {};
+  if (usable(snapshot.capabilities)) {
+    state.capabilities = snapshot.capabilities.capabilities || {};
+    state.envelope = snapshot.capabilities.envelope || null;
+    state.presets = snapshot.capabilities.presets || [];
+  }
+  if (usable(snapshot.profiles)) state.profiles = snapshot.profiles.items || [];
+  if (usable(snapshot.reference_collections)) {
+    state.referenceCollections = snapshot.reference_collections.items || [];
+  }
+  if (usable(snapshot.creative_batches)) state.batches = snapshot.creative_batches.items || [];
+  if (usable(snapshot.jobs)) state.jobs = snapshot.jobs.items || [];
+}
+
+function applyModelSession(snapshot) {
+  if (usable(snapshot.model_catalog)) {
+    const catalog = snapshot.model_catalog;
+    state.modelCatalog = catalog.items || [];
+    state.modelManagementAvailable = catalog.management_available !== false;
+    state.modelEvaluationIds = new Set(catalog.evaluation?.available_model_ids || []);
+    const storage = catalog.storage || {};
+    byId("model-storage").textContent = state.modelManagementAvailable
+      ? `管理中 ${formatBytes(storage.managed_bytes)} · 空き ${formatBytes(storage.free_bytes)}`
+      : "単体表示ではモデル操作に CLI を使います";
+    byId("model-error").hidden = true;
+  }
+  if (usable(snapshot.model_operations)) {
+    state.modelOperations = new Map((snapshot.model_operations.items || []).map((item) => [item.id, item]));
+  }
+  if (usable(snapshot.model_catalog) || usable(snapshot.model_operations)) {
+    renderModelManagement();
+    renderModelMiniProgress();
+    renderAdvancedModelChoices();
+  }
+  if (usable(snapshot.models)) applyEstimate(snapshot.models.items || []);
+}
+
+function applyEstimate(models) {
+  const node = byId("create-estimate");
+  node.textContent = "";
+  const measured = models
+    .filter((model) => model.installed && model.healthy && model.measurement_confidence === "measured")
+    .map((model) => model.measured_runtime_sec)
+    .filter((value) => typeof value === "number" && value > 0);
+  if (!measured.length) return;
+  state.estimateSec = Math.min(...measured);
+  node.textContent =
+    `初回は約 ${Math.round(state.estimateSec)} 秒（モデルの読み込みを含む実測）。2 回目以降は短くなります。`;
+}
+
+async function applyRecent(page) {
+  const items = page.items || [];
+  const strip = byId("recent-strip");
+  strip.replaceChildren();
+  byId("recent-empty").hidden = items.length > 0;
+  for (const item of items) {
+    strip.append(await thumbnailButton(item.asset_id, () => { activate("library"); }, item.thumbnail));
+  }
+}
+
+/* サーバから「この部分が変わった」と言われた分だけ読み直す。 */
+async function refreshSession(parts) {
+  let snapshot;
+  try { snapshot = await call("workspace.session", {parts}); } catch { return; }
+  applySessionParts(snapshot);
+  if (parts.includes("profiles") || parts.includes("reference_collections")) renderProfileChoices();
+  if (parts.includes("model_catalog") || parts.includes("model_operations") || parts.includes("models")) {
+    applyModelSession(snapshot);
+  }
+  if (parts.includes("library") && usable(snapshot.library)) await applyRecent(snapshot.library);
+  if (parts.includes("creative_batches")) {
+    const active = (state.batches || []).find((batch) => batch.id === state.activeBatch);
+    if (active) {
+      showBatchProgress(active);
+      if (["succeeded", "partial", "failed", "canceled"].includes(active.state)) await finishBatch(active);
+    }
+  }
+  if (parts.includes("creative_compositions") && usable(snapshot.creative_compositions)) {
+    const items = snapshot.creative_compositions.items || [];
+    const active = items.find((item) => item.id === state.activeComposition);
+    if (active) {
+      state.currentComposition = active;
+      showCompositionProgress(active);
+      if (["succeeded", "partial", "failed", "canceled"].includes(active.state)) {
+        await finishComposition(active);
+      }
+    }
+  }
+  if (state.view === "activity") renderActivity();
+}
+
 /* ── boot ─────────────────────────────────────────────────────────────── */
 
 async function boot() {
-  try {
-    const {values} = await call("preferences.get");
-    state.preferences = values || {};
-  } catch { state.preferences = {}; }
-  try {
-    const document_ = await call("capabilities.get");
-    state.capabilities = document_.capabilities || {};
-    state.envelope = document_.envelope || null;
-    state.presets = document_.presets || [];
-  } catch { state.capabilities = {}; }
+  let snapshot = {};
+  try { snapshot = await call("workspace.session"); } catch { snapshot = {}; }
+  applySessionParts(snapshot);
 
   state.creativeTemplates = embeddedCreativeTemplates();
   if (!state.creativeTemplates) {
@@ -3288,19 +3398,19 @@ async function boot() {
     : "original";
   renderCreative();
   renderDirectorControl();
-  await loadProfiles();
+  renderProfileChoices();
   renderPresets();
   renderCounts();
   renderLibraryKinds();
   setMode(state.preferences.mode || "simple", {persist: false});
-  await loadModelManagement();
+  applyModelSession(snapshot);
   await refreshAttachment();
-  void loadEstimate();
-  await loadRecent();
-  await restoreCreativeComposition();
-  await restoreCreativeBatch();
+  if (usable(snapshot.library)) await applyRecent(snapshot.library);
+  restoreCreativeComposition(snapshot);
+  restoreCreativeBatch(snapshot);
   activate(state.preferences.last_view || "create", {sync: false});
-  await call("jobs.watch", {job_ids: []}).catch(() => {});
+  // watch はサーバが session と一緒に張る。standalone だけ従来どおり要求する。
+  if (window.parent === window) await call("jobs.watch", {job_ids: []}).catch(() => {});
   document.documentElement.dataset.bridge = window.parent === window ? "standalone" : "ready";
   app().setAttribute("aria-busy", "false");
 }

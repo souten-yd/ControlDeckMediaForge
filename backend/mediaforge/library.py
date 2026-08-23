@@ -7,6 +7,7 @@ here keeps the workspace from fetching a provenance document per card.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal
 
 from .domain import Asset, Provenance
@@ -75,12 +76,20 @@ def clamp_limit(value: object) -> int:
     return max(1, min(MAX_LIMIT, value))
 
 
+# 一覧 1 枚につき 1 往復のサムネイル要求は、埋め込み workspace では
+# 24 往復になっていた。カード用の小さな版は一覧に同梱して往復を 0 にする。
+# 原寸や拡大表示は従来どおり個別要求のまま。
+GRID_THUMBNAIL_MAX_SIDE = 160
+MAX_INLINE_THUMBNAILS = 32
+
+
 def page(
     records: list[tuple[Asset, Provenance]],
     *,
     kind: str,
     include_masks: bool,
     limit: int,
+    thumbnail: Callable[[Asset], dict[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
     """Filter a fetched page, keeping pagination anchored on real asset rows.
 
@@ -94,6 +103,10 @@ def page(
         value = entry(asset, provenance)
         if kind != "all" and value["kind"] != kind:
             continue
+        if thumbnail is not None and len(items) < MAX_INLINE_THUMBNAILS:
+            rendered = thumbnail(asset)
+            if rendered is not None:
+                value["thumbnail"] = rendered
         items.append(value)
     exhausted = len(records) < limit
     return {
