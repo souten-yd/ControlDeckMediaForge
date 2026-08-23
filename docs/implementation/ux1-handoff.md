@@ -9,11 +9,11 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    infra/worker-core-boundary
-PR          #63〜#69 merge済み。worker境界 PR作成前
-状態        G0〜G4 / CI-1〜CI-6完了。worker境界解消・実機受入済み。次はG5
+ブランチ    release/v051-worker-boundary
+PR          #63〜#70 merge済み。v0.5.1 evidence PR作成前
+状態        G0〜G4 / CI-1〜CI-6 / worker境界完了。v0.5.1導入済み。次はG5
 基準値      worker focused = 48 passed。full = 352 passed（37.33秒、warning 1）
-リリース    v0.5.0公開・ControlDeck導入済み（artifact 9e24c3bf...fa0be、Host PR #236）
+リリース    v0.5.1公開・ControlDeck導入済み（artifact a615fc01...09c0f、Host PR #237）
 ```
 
 ## PR 進捗
@@ -41,7 +41,8 @@ PR          #63〜#69 merge済み。worker境界 PR作成前
 | — | v0.4.0 release/install evidence | #67 マージ済み（f30c1de） |
 | — | CI-5 C4 shot direction | #68 マージ済み（8e82287） |
 | — | v0.5.0 + CI-6 installed/R9700 evidence | #69 マージ済み（2f8e917） |
-| — | worker/core image composition boundary | PR作成前（実装・実機受入済み） |
+| — | worker/core image composition boundary | #70 マージ済み（2b3114d） |
+| — | v0.5.1 release/install evidence | PR作成前（実機受入済み） |
 
 ## 次にやること（1 つだけ）
 
@@ -62,6 +63,8 @@ G4、CI-1〜CI-6、v0.5.0、worker境界解消は完了。次はG5 M5 companion 
   実測        FLUX 4 assets + fail-soft 1 asset。Director 15.218秒、C3 x2 37.504秒、GPU最大98%
   完了        workerのcore import/PYTHONPATH/source同梱を除去。core validatorは独立維持
   実測        strict 20.106秒 / protected差分0、outpaint 107.367秒 / source差分0
+  完了        v0.5.1 exact-head bundle、extracted、installed update、Host catalog PR #237
+  実測        installed strict 13.086秒 / outpaint 108.380秒、light/dark、Broker cleanup
   次          G5 M5 companion profiles + deterministic validator + atlas/manifest pack
   保留        video public API/runtime実装（G5/G6の安定用途を先に完了する）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
