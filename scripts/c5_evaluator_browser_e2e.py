@@ -44,6 +44,10 @@ def main() -> int:
     parser.add_argument("--password-env", default="MEDIA_FORGE_E2E_PASSWORD")
     parser.add_argument("--asset-id", action="append", required=True)
     parser.add_argument("--expected-first", required=True)
+    parser.add_argument(
+        "--intent",
+        default="同じオレンジメッシュのボーイッシュなコンパニオンが端末を見せる",
+    )
     parser.add_argument("--evidence-dir", required=True, type=Path)
     args = parser.parse_args()
     password = os.environ.get(args.password_env)
@@ -71,9 +75,7 @@ def main() -> int:
         page.goto("/x/media-forge/workspace", wait_until="domcontentloaded")
         frame = workspace_frame(page)
         frame.wait_for_selector('#app[aria-busy="false"]', timeout=20_000)
-        frame.locator("#create-intent").fill(
-            "同じオレンジメッシュのボーイッシュなコンパニオンが端末を見せる"
-        )
+        frame.locator("#create-intent").fill(args.intent)
         jobs_before = frame.evaluate("() => call('jobs.list', {limit: 100})")
         frame.evaluate("assetIds => showResult(assetIds)", args.asset_id)
         frame.locator("#result-evaluate").wait_for(state="visible")
@@ -108,6 +110,7 @@ def main() -> int:
     check(not browser_errors, f"browser errors: {browser_errors}")
     evidence = {
         "asset_ids": args.asset_id,
+        "intent": args.intent,
         "ranked_asset_ids": ranked,
         "expected_first": args.expected_first,
         "elapsed_sec": round(elapsed, 3),

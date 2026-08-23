@@ -2669,3 +2669,103 @@ candidates, subjective final-composition quality, 390px installed acceptance,
 and a release bundle containing CI-5 are **NOT TESTED**. These remain CI-6
 acceptance items. Hosted CI was not used and public frozen contracts were not
 changed.
+
+## v0.5.0 CI-5 release-bundle and installed Host update (2026-08-23)
+
+Release v0.5.0 targets CI-5 merge commit
+`8e822876864a48078edd41e5ca3a8957d78da067`. The exact-head artifact is
+`control-deck-media-forge-0.5.0-linux-x86_64.tar.gz`, 30,982,625 bytes,
+SHA-256 `9e24c3bff45cc4ab1763269758c202c55ab60ffd517664b1775bbd8eeecfa0be`.
+The local checksum and GitHub Release digest match.
+
+The extracted bundle ran on port 9137 from
+`/tmp/mediaforge-v050-extracted.GK26Zm` with an isolated data root and returned
+`setup_required`, contract 2.0, and `media.pack=available`. Standalone light and
+dark Chromium runs reported ready in 0.130 and 0.125 seconds, 32 advanced nodes,
+all six bounded ratio presets plus custom, 320px overflow 0, 60px mobile tabs,
+a two-column phone library, and zero console errors.
+
+ControlDeck PR #236 changed only the trusted catalog artifact SHA and merged as
+`0b56d309fa1cafe195012a0961cf20f6e7bd1a8c`. Its focused release-bundle tests
+passed 28 tests in 1.22 seconds. The real feature update from v0.4.0 completed in
+15.29 seconds with max RSS 784,384 KiB and swap operations 0. Installed status
+reported v0.5.0, managed, enabled, and healthy; retained versions are v0.4.0 and
+v0.5.0. The pre-update 94 asset files and 67,170,534,265-byte feature-data root
+were retained. Hosted CI was not used.
+
+## Creative Intelligence CI-6 — installed Host and R9700 gate (2026-08-23)
+
+Acceptance used installed ControlDeck on port 8765, installed Media Forge
+v0.5.0 on port 9130, the Host-selected Qwen3.8-27B Vulkan text/vision target,
+and FLUX.2 Klein 4B on the R9700/gfx1201 ROCm worker. The add-on effective state
+contained `ai.inference`. Media Forge `config/config.yaml` remained SHA-256
+`9a0acf73dbacc75a02df29ae19cd88b042d988c3959a9b9243a861a2c8bb80e2`
+and contains no provider, model, or port selection. CI-1 acceptance had already
+switched between two ControlDeck-selected Qwen3-VL Ollama targets with zero
+Media Forge config changes; this run used the later Qwen3.8 llama.cpp target
+through the same capability contract.
+
+The v0.5.0 real-reference run imported the retained 512x512 character image.
+`vision.analyze` completed in 50.263 seconds, the same asset hash hit the cache
+in 0.061 seconds, and the reference-aware Director completed in 11.851 seconds.
+The Host audit delta was exactly `vision.analyze`, then `text.generate`.
+Original mode used no assistance. The installed iframe had 320px overflow 0
+and browser errors 0.
+
+The main R9700 run produced these results:
+
+```text
+prompt-only Director       15.218 s / text.generate 1 / pre-generation vision 0
+uncommon human action      custom one-handed backbend pose / 17.107 s image Job
+original non-human action  solar-panel rover / Director calls 0 / 22.407 s image Job
+C3 action variation        text.generate 1 / 2 child Jobs / 37.504 s total
+child actions              welding cracked panel / replacing blown fuse
+generated outputs          4 PNG RGBA assets at 256x256 / deterministic validation PASS
+QA budget                  semantic=false / max_regeneration_attempts=0 / retries 0
+installed mobile           390px overflow 0 / 320px overflow 0
+browser                    console errors 0 / page errors 0
+```
+
+Visual inspection confirmed the human backbend and lantern, an orange rover
+with deployed solar panels, an orange robot welding with visible sparks, and a
+second orange robot working at a fuse panel. This is direct evidence for these
+five bounded prompts, not a broad FLUX quality benchmark or a claim of perfect
+identity consistency.
+
+Explicit unified evaluation compared the two real C3 candidates in 34.456
+seconds and ranked the welding asset first for the welding intent. Generation
+Job count remained 46 before and after, proving advisory evaluation created no
+new Job. Its 320px overflow and browser errors were zero.
+
+For fail-soft acceptance, the installed grant and image capability remained
+present while compatible Host text/vision targets were temporarily reduced to
+zero. Director returned `host_ai_unavailable`; the unchanged prompt-only path
+generated a validated solar-panel rover in 20.088 seconds. The add-on state,
+Qwen role selection, and Broker policy were restored afterward. Removing the
+grant itself was also tried and correctly made the Host hide the contribution
+as missing a declared requirement; that pre-generation attempt is not counted
+as the AI-unavailable generation result.
+
+Before managed handoff, resident Qwen used 31,582,920,704 of 34,208,743,424
+R9700 VRAM bytes. The real image lease automatically yielded it and VRAM fell
+to approximately 8.1 GB before worker loading. The sampler observed maximum
+GPU use 98%; swap moved from 3,631,087,616 to a maximum 3,994,058,752 bytes.
+After all tests, ControlDeck reported requests 0, leases 0,
+lease-reserved bytes 0, resident keys 0, and R9700 VRAM used 59,924,480 bytes.
+RAM available was 28,657,033,216 bytes and swap used 3,917,365,248 bytes.
+
+All temporary browser sessions were revoked and the fixture password hash was
+restored. Add-on state returned to SHA-256
+`9d56a834f40c90cdd3784e8d10abceddd23fa87e6c0a24dca7ce9c7379d220c4`;
+runtime policy returned to `observed` with 120-second minimum uptime. Installed
+v0.5.0 remained healthy. The retained H3 snapshot stayed 26,978,278,484 bytes
+and its 8,063,029,344-byte denoiser retained SHA-256
+`cfe0795c00ab6e6ebf8c64fe4574f45a828e8a93e0876bca704e055662a9d7b8`.
+H3 quality was not retried and remains experimental, unhealthy, and unroutable.
+Public video generation remains **NOT TESTED**. Hosted CI was not used and the
+frozen public contracts were unchanged.
+
+The final canonical local regression gate passed 351 tests in 42.27 seconds
+with one upstream Starlette/httpx deprecation warning. This is regression
+evidence and is not substituted for the installed browser, Host audit, Broker,
+R9700, provenance, or visual observations above.
