@@ -479,6 +479,31 @@ Use the Director to improve multi-cut shot intent while preserving deterministic
 
 Do not ask a diffusion/VLM model to render exact title/logo/UI text that the Composer can place deterministically.
 
+### Completion (2026-08-23)
+
+Implemented on `creative/ci5-shot-quality`. A non-`original` C4 composition now
+uses one provider-neutral `text.generate` request to derive the accepted parent
+PromptPlan and exactly 2--4 structured shot briefs. Shot count, index, and
+`main` / `coding` / `device` / `chibi` roles remain server-owned. The briefs are
+projected into the existing ordinary child Job requests; C4 still owns layout,
+crop, frame, safe margins, output dimensions, and exact title/caption rendering.
+No second batch, composer, evaluator, or retry budget was added.
+
+Reference Intelligence context is reused when already accepted. Prompt-only
+composition makes no pre-generation `vision.analyze` call. `original` mode and
+AI unavailable/invalid responses fail soft to the existing deterministic
+multi-cut route. Existing `qa.semantic` and its 0..3 budget remain unchanged;
+the CI-4 evaluator is the only semantic quality path.
+
+Installed-ControlDeck structural acceptance completed in 64.452 seconds with
+one text request, zero vision requests, three normal child Jobs, three shot
+assets, one deterministic composed asset, 320px overflow 0, and zero browser
+console/page errors. The fixture used the fake image worker, so the configured
+Broker correctly refused to evict a large LLM for its one-second estimate; an
+explicit operator LLM stop was used before the three leases were granted and
+released. Automatic text-to-real-image Broker handoff, R9700 visual
+consistency, and subjective final quality remain CI-6 work, not CI-5 claims.
+
 ---
 
 ## 9. CI-6 — installed-host acceptance and release gate

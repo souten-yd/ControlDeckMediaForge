@@ -2592,3 +2592,80 @@ fixture user's password hash was restored after each run. H3 quality generation,
 public video generation, CI-5, and CI-6 remain **NOT TESTED** by this release.
 The final release-evidence worktree regression gate passed 344 tests in 34.55
 seconds with one upstream Starlette/httpx deprecation warning.
+
+## Creative Intelligence CI-5 — C4 shot direction (2026-08-23)
+
+C4 multi-cut compositions now accept the existing Director mode and accepted
+Reference Intelligence context. For non-`original` mode, Media Forge sends one
+provider-neutral `text.generate` request and validates exactly 2--4 structured
+shot briefs. Count, index, and the `main` / `coding` / `device` / `chibi` roles
+are supplied and revalidated by Media Forge rather than selected by the model.
+The accepted parent plan and per-shot action, scene, composition, camera, and
+details are projected into the existing normal child Job path. The existing C4
+Composer remains authoritative for crop, frame, safe margins, dimensions, and
+exact title/caption. Exact composition text is absent from the diffusion child
+plans.
+
+No new generation, batch, composer, evaluator, or retry subsystem was added.
+The CI-4 `EvaluationResult` path remains the only semantic evaluator, and the
+existing `qa.semantic` 0..3 budget is preserved. An accepted reference analysis
+is reused across children. Prompt-only composition does not request
+`vision.analyze`. `original` mode makes no AI call, and unavailable, invalid,
+duplicate, or non-distinct AI results fail soft to deterministic C4 planning.
+
+Real installed-ControlDeck structural acceptance used the source service on
+port 19132, the installed Host on port 8765, its configured Qwen3.8 27B text
+runtime, R9700/gfx1201 Broker, and the existing fake image worker. The successful
+browser run completed in 64.452 seconds and observed:
+
+```text
+Director calls              1 text.generate / 0 vision.analyze
+composition                 composition_0914b433af5d44aa8a877c9ab8578e4b
+server-owned roles          main / coding / device
+ordinary child Jobs         3 succeeded
+shot assets                 3
+deterministic final assets  1
+exact text                  CI5 EXACT TITLE / CI5 EXACT CAPTION, composer only
+mobile                      320px overflow 0
+browser errors              console 0 / page 0
+wall time                   64.452 seconds
+```
+
+The fake worker declares a one-second resource estimate while the selected
+LLM's measured yield threshold was 47.188 seconds. Broker therefore correctly
+reported `yield_thrash_cost` instead of evicting the LLM for a shorter fake
+task. After an explicit operator `llama.stop_instance()` action, the three
+ordinary child requests were granted in order; all three leases activated and
+released, and the final restored Host snapshot had active leases 0, waiting
+requests 0, lease-reserved bytes 0, and no resident key. This is bounded
+structural/transport evidence, not evidence that a one-second fake workload
+should trigger automatic managed yield.
+
+Initial setup recorded one rejected test configuration and one real integration
+defect. A raw source manifest was rejected because it lacked the Host-normalized
+runtime contract; the test then used the installed normalized manifest with
+only its loopback base URL changed. With that corrected, three concurrently
+waiting child Jobs eventually received HTTP 429 from Host progress updates: the client scheduled at
+the exact 0.5-second boundary using request-start time and repeatedly sent the
+same waiting state, while resource and cancel state were each polled every 0.1
+seconds. Media Forge now uses a 0.65-second progress margin, suppresses identical
+waiting reports, and polls waiting resource state at 0.5 seconds. Focused Host,
+workspace, composer, Creative Intelligence, and frontend regression passed 146
+tests. The full local gate passed 350 tests in 34.48 seconds with one upstream
+Starlette/httpx deprecation warning.
+
+After acceptance, test browser sessions 457--460 were revoked and the fixture
+password hash restored. The Add-on registry, state, and runtime policy were
+restored byte-for-byte to SHA-256 `ceefb170451e3f396de4e4ac6c6f28d2c1374e9629de667a4788f814aeca5556`,
+`9d56a834f40c90cdd3784e8d10abceddd23fa87e6c0a24dca7ce9c7379d220c4`,
+and `4aa1aa93f1051dbe1d5e5b3addaa1be60ac2d964f7a4ee3d07173cedc0abbc2f`.
+Installed v0.4.0 returned healthy on port 9130 with `observed` supervision and
+120-second minimum uptime. ControlDeck remained at exact `origin/main`; its
+pre-existing `frontend/tsconfig.tsbuildinfo` modification was untouched.
+
+Automatic managed text-to-real-image handoff, real R9700 multi-shot image
+generation, identity/style consistency, evaluator ranking of real child
+candidates, subjective final-composition quality, 390px installed acceptance,
+and a release bundle containing CI-5 are **NOT TESTED**. These remain CI-6
+acceptance items. Hosted CI was not used and public frozen contracts were not
+changed.

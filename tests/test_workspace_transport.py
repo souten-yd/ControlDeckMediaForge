@@ -349,7 +349,7 @@ def test_directed_pose_batch_uses_one_text_call_and_normal_child_jobs(tmp_path: 
 
 
 def test_multicut_children_use_hosted_job_submission_before_deterministic_composition(tmp_path: Path):
-    client, headers, _state = host_client(tmp_path, token="valid-user")
+    client, headers, state = host_client(tmp_path, token="valid-user")
     with client, client.websocket_connect("/ws", headers=headers) as socket:
         created = call(socket, "creative.compositions.create", {
             "request": generate_input("hosted three-cut poster"),
@@ -370,6 +370,63 @@ def test_multicut_children_use_hosted_job_submission_before_deterministic_compos
     assert restored["result"]["state"] == "succeeded"
     assert len(restored["result"]["shot_asset_ids"]) == 3
     assert provenance["parent_asset_ids"] == restored["result"]["shot_asset_ids"]
+    assert state["ai_calls"] == []
+
+
+def test_directed_multicut_uses_one_text_call_and_existing_child_jobs(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    state["ai_capabilities"]["text.generate"] = True
+    state["ai_responses"].append(json.dumps({
+        "plan": {
+            "subject": {"kind": "robot", "appearance_traits": ["orange shell"]},
+            "primary_action": {"action": "repairing and presenting a terminal"},
+            "scene": "compact workshop",
+            "hard_constraints": ["same orange robot"],
+        },
+        "shots": [
+            {
+                "primary_action": {"action": "standing beside the damaged terminal"},
+                "composition": "establishing view",
+            },
+            {
+                "primary_action": {"action": "repairing exposed wiring with both grippers"},
+                "camera": "close view of the tools",
+            },
+            {
+                "primary_action": {"action": "presenting the repaired terminal"},
+                "details": ["green status lights are visible"],
+            },
+        ],
+    }))
+    with client, client.websocket_connect("/ws", headers=headers) as socket:
+        created = call(socket, "creative.compositions.create", {
+            "request": generate_input("orange robot repairs and presents a terminal"),
+            "creative_spec": {"domain": "poster"},
+            "layout": {
+                "template": "poster",
+                "title": "EXACT HOST TITLE",
+                "caption": "EXACT HOST CAPTION",
+                "shot_count": 3,
+            },
+            "director_mode": "refine",
+            "reference_analysis": [],
+        })
+        assert created["ok"] is True
+        result = created["result"]
+        for job_id in result["child_job_ids"]:
+            assert wait_terminal(client, job_id)["status"] == "succeeded"
+        restored = call(socket, "creative.compositions.get", {"composition_id": result["id"]})
+
+    assert len(state["ai_calls"]) == 1
+    assert state["ai_calls"][0]["capability"] == "text.generate"
+    ai_payload = json.dumps(state["ai_calls"][0])
+    assert "EXACT HOST TITLE" not in ai_payload and "EXACT HOST CAPTION" not in ai_payload
+    assert restored["result"]["state"] == "succeeded"
+    assert restored["result"]["director"]["assistance_used"] is True
+    assert [plan["director"]["shot_brief"]["role"] for plan in result["child_plans"]] == [
+        "main", "coding", "device",
+    ]
+    assert "repairing exposed wiring" in result["child_plans"][1]["pose"]["details"]
 
 
 # ── library.list ────────────────────────────────────────────────────────────

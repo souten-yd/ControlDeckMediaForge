@@ -1376,7 +1376,10 @@ async function submitJob(event) {
       showPreparing("カットを計画しています", 0.65);
       const composition = await call("creative.compositions.create", {
         request, creative_spec: spec, layout,
+        director_mode: state.directorMode,
+        reference_analysis: referenceAnalysis,
       });
+      if (composition.director) renderDirectorPlan(composition.director);
       setHostBusy(false);
       state.activeComposition = composition.id;
       state.currentComposition = composition;

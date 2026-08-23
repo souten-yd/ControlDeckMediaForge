@@ -7,6 +7,8 @@ from typing import Any, Protocol
 
 from .client import ControlDeckHostClient, HostIdentity
 
+HOST_PROGRESS_INTERVAL_SEC = 0.65
+
 
 @dataclass
 class ProgressGate:
@@ -19,7 +21,11 @@ class ProgressGate:
         if not phase or progress < self.last_progress or not 0 <= progress <= 1:
             return False
         current = time.monotonic() if now is None else now
-        if not terminal and current - self.last_sent_at < 0.5:
+        # The Host measures the interval after request parsing.  A request that
+        # took a few milliseconds longer than its successor could otherwise
+        # arrive inside the Host's exact 0.5 second boundary even though this
+        # client started both calls 0.5 seconds apart.
+        if not terminal and current - self.last_sent_at < HOST_PROGRESS_INTERVAL_SEC:
             return False
         self.last_progress = progress
         self.last_sent_at = current
@@ -46,6 +52,7 @@ class HostJobReporter:
         self.client = client
         self.execution = execution
         self.gate = ProgressGate()
+        self._last_progress: tuple[str, float, str | None, str | None] | None = None
 
     async def progress(
         self,
@@ -56,8 +63,14 @@ class HostJobReporter:
         message: str | None = None,
         force: bool = False,
     ) -> bool:
+        signature = (phase, progress, wait_reason, message)
+        if not force and signature == self._last_progress:
+            return False
         if force:
-            delay = max(0.0, 0.55 - (time.monotonic() - self.gate.last_sent_at))
+            delay = max(
+                0.0,
+                HOST_PROGRESS_INTERVAL_SEC - (time.monotonic() - self.gate.last_sent_at),
+            )
             if delay:
                 await asyncio.sleep(delay)
         if not self.gate.accept(progress=progress, phase=phase):
@@ -71,6 +84,7 @@ class HostJobReporter:
         if message:
             payload["message"] = message
         await self.client.update_job(self.execution.identity, self.execution.host_job_id, payload)
+        self._last_progress = signature
         return True
 
     async def terminal(
@@ -98,7 +112,10 @@ class HostJobReporter:
     async def finish_attached(self, *, phase: str, progress: float) -> None:
         # The host records its receive time slightly after our send timestamp;
         # keep a small margin above the exact 2 Hz boundary.
-        delay = max(0.0, 0.55 - (time.monotonic() - self.gate.last_sent_at))
+        delay = max(
+            0.0,
+            HOST_PROGRESS_INTERVAL_SEC - (time.monotonic() - self.gate.last_sent_at),
+        )
         if delay:
             await asyncio.sleep(delay)
         if not await self.progress(phase, progress):

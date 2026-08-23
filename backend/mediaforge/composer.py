@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from pydantic import BaseModel, ConfigDict, Field
 
 from .creative import CreativeCompiler, CreativeSpec, CreativeValidationError
+from .creative_intelligence import PromptPlan, ShotBrief, action_state_to_pose_details
 from .domain import JobRequest
 
 
@@ -31,6 +32,7 @@ class CreativeCompositionRecord(BaseModel):
     layout: LayoutSpec
     layout_snapshot: dict[str, Any]
     child_plans: list[dict[str, Any]]
+    director: dict[str, Any] | None = None
     child_job_ids: list[str] = Field(default_factory=list)
     final_asset_ids: list[str] = Field(default_factory=list)
     submission_errors: list[dict[str, str]] = Field(default_factory=list)
@@ -112,12 +114,33 @@ class MultiCutPlanner:
         capabilities: Mapping[str, Mapping[str, Any]],
         envelope: Mapping[str, Any],
         available_reference_ids: set[str] | None = None,
+        director_plan: PromptPlan | None = None,
+        shot_briefs: list[ShotBrief] | None = None,
+        reference_context: list[dict[str, Any]] | None = None,
     ) -> tuple[str, list[JobRequest], list[dict[str, Any]], dict[str, Any]]:
         if request.operation != "image.generate":
             raise CreativeValidationError(
                 "creative_composition_operation_invalid",
                 "複数カットは新しい画像を作るときだけ使えます。",
                 field="operation",
+            )
+        if (director_plan is None) != (shot_briefs is None):
+            raise CreativeValidationError(
+                "creative_shot_direction_invalid",
+                "演出プランとカット指示は一緒に指定してください。",
+                field="director",
+            )
+        if shot_briefs is not None and (
+            len(shot_briefs) != layout.shot_count
+            or any(
+                brief.index != index or brief.role != self.SHOTS[index][0]
+                for index, brief in enumerate(shot_briefs)
+            )
+        ):
+            raise CreativeValidationError(
+                "creative_shot_direction_invalid",
+                "カット指示が決定済みレイアウトと一致しません。",
+                field="director",
             )
         composition_id = f"composition_{uuid.uuid4().hex}"
         requests: list[JobRequest] = []
@@ -126,10 +149,37 @@ class MultiCutPlanner:
         for index, (role, scene, pose, composition, camera) in enumerate(self.SHOTS[:layout.shot_count]):
             child = creative.model_copy(deep=True)
             child.variation = child.variation.model_copy(update={"axis": "auto"})
-            child.scene = child.scene.model_copy(update={"preset": scene, "details": ""})
-            child.pose = child.pose.model_copy(update={"preset": pose, "details": ""})
-            child.composition = child.composition.model_copy(update={"preset": composition, "details": ""})
-            child.camera = child.camera.model_copy(update={"preset": camera, "details": ""})
+            brief = shot_briefs[index] if shot_briefs is not None else None
+            child.scene = child.scene.model_copy(update={
+                "preset": scene,
+                "details": _merge_details(
+                    creative.scene.details,
+                    brief.scene if brief is not None else "",
+                    *(brief.details if brief is not None else []),
+                ),
+            })
+            action_details = (
+                action_state_to_pose_details(brief.primary_action) if brief is not None else ""
+            )
+            pose_details = _merge_details(creative.pose.details, action_details)
+            child.pose = child.pose.model_copy(update={
+                "preset": "custom" if pose_details else pose,
+                "details": pose_details,
+            })
+            child.composition = child.composition.model_copy(update={
+                "preset": composition,
+                "details": _merge_details(
+                    creative.composition.details,
+                    brief.composition if brief is not None else "",
+                ),
+            })
+            child.camera = child.camera.model_copy(update={
+                "preset": camera,
+                "details": _merge_details(
+                    creative.camera.details,
+                    brief.camera if brief is not None else "",
+                ),
+            })
             compiled = self.compiler.compile(
                 request.model_copy(update={"output": request.output.model_copy(update={"count": 1})}),
                 child,
@@ -138,6 +188,13 @@ class MultiCutPlanner:
                 available_reference_ids=available_reference_ids,
             )
             plan = compiled.plan
+            if director_plan is not None and brief is not None:
+                plan["director"] = {
+                    **director_plan.model_dump(mode="json"),
+                    "shot_brief": brief.model_dump(mode="json"),
+                    "source": "control-deck:text.generate",
+                    "reference_context": reference_context or [],
+                }
             plan["multi_cut"] = {
                 "composition_id": composition_id,
                 "role": role,
@@ -169,6 +226,22 @@ class MultiCutPlanner:
             separators=(",", ":"),
         ).encode()
         return int.from_bytes(hashlib.sha256(canonical).digest()[:4], "big")
+
+
+def _merge_details(*values: str, limit: int = 500) -> str:
+    result = ""
+    for raw in values:
+        value = raw.strip()
+        if not value:
+            continue
+        candidate = f"{result}; {value}" if result else value
+        if len(candidate) > limit:
+            remaining = limit - len(result) - (2 if result else 0)
+            if remaining > 0:
+                result = f"{result}; {value[:remaining]}" if result else value[:remaining]
+            break
+        result = candidate
+    return result
 
 
 class DeterministicComposer:

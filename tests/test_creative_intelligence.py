@@ -304,6 +304,89 @@ def test_action_variations_use_one_text_request_and_exact_bounded_count():
     assert len(gateway.calls) == 1 and gateway.calls[0][0] == "text.generate"
 
 
+def test_shot_briefs_use_one_text_request_and_server_owned_roles():
+    authored = {
+        "plan": {
+            "subject": {"kind": "robot", "appearance_traits": ["orange shell"]},
+            "primary_action": {"action": "maintaining a terminal"},
+            "scene": "compact repair workshop",
+        },
+        "shots": [
+            {
+                "primary_action": {"action": "standing beside the terminal"},
+                "composition": "clear establishing view",
+            },
+            {
+                "primary_action": {"action": "repairing exposed wiring"},
+                "camera": "close view of the hands and tools",
+            },
+            {
+                "primary_action": {"action": "presenting the repaired terminal"},
+                "scene": "status lights are visible",
+            },
+        ],
+    }
+    gateway = FakeGateway(json.dumps(authored))
+    director = CreativeDirector(PromptPlanner(gateway))  # type: ignore[arg-type]
+    directed = asyncio.run(director.shot_briefs(
+        IDENTITY,
+        "orange robot repairs and presents a terminal",
+        mode="refine",
+        count=3,
+        template="poster",
+        roles=["main", "coding", "device"],
+    ))
+
+    assert directed.assistance_used is True
+    assert [item.role for item in directed.shot_briefs] == ["main", "coding", "device"]
+    assert [item.index for item in directed.shot_briefs] == [0, 1, 2]
+    assert directed.plan.original_intent == "orange robot repairs and presents a terminal"
+    assert len(gateway.calls) == 1 and gateway.calls[0][0] == "text.generate"
+    assert all(call[0] != "vision.analyze" for call in gateway.calls)
+    system_prompt = gateway.calls[0][1][0]["content"]
+    assert "title" in system_prompt and "layout region" in system_prompt
+
+
+def test_duplicate_shot_briefs_fail_soft_to_existing_deterministic_plan():
+    repeated = {
+        "primary_action": {"action": "standing still"},
+        "composition": "centered",
+    }
+    gateway = FakeGateway(json.dumps({
+        "plan": {"subject": {"kind": "robot"}},
+        "shots": [repeated, repeated],
+    }))
+    director = CreativeDirector(PromptPlanner(gateway))  # type: ignore[arg-type]
+    directed = asyncio.run(director.shot_briefs(
+        IDENTITY,
+        "two useful views of a robot",
+        mode="refine",
+        count=2,
+        template="character_sheet",
+        roles=["main", "coding"],
+    ))
+    assert directed.assistance_used is False
+    assert directed.skipped_reason == "prompt_plan_invalid"
+    assert directed.shot_briefs == []
+
+
+def test_unavailable_shot_direction_fails_soft_without_a_second_route():
+    director = CreativeDirector(PromptPlanner(RaisingGateway()))  # type: ignore[arg-type]
+    directed = asyncio.run(director.shot_briefs(
+        IDENTITY,
+        "orange robot repairs and presents a terminal",
+        mode="refine",
+        count=3,
+        template="poster",
+        roles=["main", "coding", "device"],
+    ))
+
+    assert directed.assistance_used is False
+    assert directed.skipped_reason == "host_ai_unavailable"
+    assert directed.shot_briefs == []
+    assert directed.plan.original_intent == "orange robot repairs and presents a terminal"
+
+
 def test_projection_bounds_pose_compatibility_text_to_existing_schema_limit():
     plan = PromptPlan(
         original_intent="bounded",

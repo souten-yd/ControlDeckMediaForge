@@ -185,6 +185,9 @@ def test_intentional_variations_use_durable_batches_and_advanced_drilldown():
 
 def test_multicut_composer_reuses_create_result_and_viewer():
     assert 'call("creative.compositions.create"' in SCRIPT
+    assert "director_mode: state.directorMode" in SCRIPT
+    assert "reference_analysis: referenceAnalysis" in SCRIPT
+    assert "if (composition.director) renderDirectorPlan(composition.director)" in SCRIPT
     assert 'call("creative.compositions.get"' in SCRIPT
     assert 'call("creative.compositions.update_text"' in SCRIPT
     assert "restoreCreativeComposition" in SCRIPT

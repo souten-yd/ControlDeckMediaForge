@@ -40,6 +40,7 @@ from .creative_intelligence import (
     CreativeMode,
     PromptPlan,
     PromptPlanner,
+    ShotRole,
     project_plan_to_creative_spec,
 )
 from .domain import Asset, AssetInput, ErrorDetail, JobRequest, JobStatus, Provenance
@@ -913,6 +914,7 @@ def create_app(
     async def create_creative_composition(
         payload: dict[str, Any],
         submit_child: Callable[[JobRequest], Awaitable[dict[str, Any]]],
+        identity: HostIdentity | None = None,
     ) -> dict[str, Any]:
         request = JobRequest.model_validate(payload.get("request"))
         creative_spec = CreativeSpec.model_validate(payload.get("creative_spec", {}))
@@ -921,7 +923,28 @@ def create_app(
         available_references = {item.asset_id for item in request.inputs} | set(
             profile_snapshot.get("reference_asset_ids", [])
         )
-        capability_value = await capability_document()
+        capability_value = await capability_document(identity)
+        director_mode = params_director_mode(payload)
+        reference_context = accepted_reference_context(payload)
+        directed = None
+        if director_mode != "original":
+            roles: list[ShotRole] = [
+                value[0] for value in multi_cut_planner.SHOTS[:layout.shot_count]
+            ]
+            directed = await creative_director.shot_briefs(
+                identity,
+                request.intent,
+                mode=director_mode,
+                count=layout.shot_count,
+                template=layout.template,
+                roles=roles,
+                reference_context=reference_context,
+            )
+        if directed is not None and directed.assistance_used:
+            projected, _ = project_plan_to_creative_spec(
+                directed.plan, creative_spec.model_dump(mode="json")
+            )
+            creative_spec = CreativeSpec.model_validate(projected)
         composition_id, child_requests, child_plans, layout_snapshot = multi_cut_planner.plan(
             request,
             creative_spec,
@@ -929,6 +952,9 @@ def create_app(
             capabilities=capability_value["capabilities"],
             envelope=size_envelope(),
             available_reference_ids=available_references,
+            director_plan=directed.plan if directed is not None and directed.assistance_used else None,
+            shot_briefs=directed.shot_briefs if directed is not None and directed.assistance_used else None,
+            reference_context=reference_context,
         )
         now = utc_now()
         record = store.create_creative_composition(CreativeCompositionRecord(
@@ -936,6 +962,7 @@ def create_app(
             layout=layout,
             layout_snapshot=layout_snapshot,
             child_plans=child_plans,
+            director=directed.model_dump(mode="json") if directed is not None else None,
             created_at=now,
             updated_at=now,
         ))
@@ -1678,7 +1705,9 @@ def create_app(
                         async def submit_composition_child(child: JobRequest) -> dict[str, Any]:
                             return await submit_hosted(child, identity, workload_class="interactive")
 
-                        result = await create_creative_composition(params, submit_composition_child)
+                        result = await create_creative_composition(
+                            params, submit_composition_child, identity
+                        )
                     elif method == "creative.compositions.get":
                         result = composition_projection(
                             store.get_creative_composition(str(params.get("composition_id", "")))
