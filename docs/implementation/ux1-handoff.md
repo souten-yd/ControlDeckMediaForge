@@ -9,11 +9,11 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    creative/ci5-shot-quality
-PR          #63〜#67 merge済み。CI-5 PR作成前
-状態        G0〜G4 v0.4.0導入済み。CI-5実装／installed Host構造受入完了、次はPR化してCI-6
-基準値      CI-5 focused = 147 passed。full = 351 passed（38.71秒）
-リリース    v0.4.0公開・ControlDeck導入済み（artifact 51ee55c1...5f98799、Host PR #234/#235）
+ブランチ    release/v050-ci6
+PR          #63〜#68 merge済み。CI-6 evidence PR作成前
+状態        G0〜G4 / CI-1〜CI-6完了。v0.5.0導入・実機受入済み。次はworker境界修正
+基準値      CI-6 full = 351 passed（42.27秒、warning 1）
+リリース    v0.5.0公開・ControlDeck導入済み（artifact 9e24c3bf...fa0be、Host PR #236）
 ```
 
 ## PR 進捗
@@ -39,12 +39,13 @@ PR          #63〜#67 merge済み。CI-5 PR作成前
 | — | G4 prerequisite design correction | #65 マージ済み（43aa08c） |
 | — | G4 coding-agent asset placement | #66 マージ済み（5a340ac） |
 | — | v0.4.0 release/install evidence | #67 マージ済み（f30c1de） |
-| — | CI-5 C4 shot direction | PR作成前（branch実装・実機受入済み） |
+| — | CI-5 C4 shot direction | #68 マージ済み（8e82287） |
+| — | v0.5.0 + CI-6 installed/R9700 evidence | PR作成前（実機受入済み） |
 
 ## 次にやること（1 つだけ）
 
 ```text
-G4 coding-agent project placement、v0.4.0、CI-5実装は完了。次はCI-5をPR化してCI-6。
+G4、CI-1〜CI-6、v0.5.0は完了。次はworker境界違反を独立スライスで解消する。
   完了        26.98GB GGUF、pinned HIP runtime、Host lease/cancel、R9700 smoke実測
   延期        H3 quality route（Host watchdog/swap/output gate失敗。条件改善まで再実行しない）
   完了        版固定recipe、構造化projection、実Gateway text.generate、原文保持/fail-closed
@@ -55,8 +56,11 @@ G4 coding-agent project placement、v0.4.0、CI-5実装は完了。次はCI-5を
   完了        CI-5 one text.generate / 2〜4 shot brief / existing child Job + C4 Composer再利用
   実測        installed Host fake 3-shot構造受入。64.452秒、vision 0、lease最終0、320px overflow 0
   注意        fakeの1秒estimateはBroker thrash-cost未満。operator stopを使用。自動handoffはCI-6で実画像実測
-  次          CI-6 installed-host + R9700 acceptance / release gate
-  保留        video public API/runtime実装（CI-5/CI-6とworker境界解消前は着手しない）
+  完了        v0.5.0 exact-head bundle、extracted light/dark、installed update、Host catalog PR #236
+  完了        CI-6 real Director/original/C3/evaluator/reference/fail-soft、320/390px、Broker cleanup
+  実測        FLUX 4 assets + fail-soft 1 asset。Director 15.218秒、C3 x2 37.504秒、GPU最大98%
+  次          diffusers_flux2 workerのcore implementation import解消（strict validatorは独立維持）
+  保留        video public API/runtime実装（worker境界解消前は着手しない）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 

@@ -544,6 +544,32 @@ VRAM/Broker behavior
 
 Do not promote a claim from unit tests to real-machine evidence.
 
+### Completion (2026-08-23)
+
+Completed against installed ControlDeck and the installed v0.5.0 bundle on an
+R9700/gfx1201 host. The add-on retained its `ai.inference` grant and used only
+Host-selected `text.generate` / `vision.analyze`; Media Forge configuration did
+not gain a provider, model, or port. A new prompt-only image made one Director
+text call and zero pre-generation vision calls. The Director projected an
+uncommon one-handed backbend into a custom pose, and the ordinary capability
+route generated a validated FLUX asset. `original` mode made no AI call and
+generated a non-human solar-panel rover normally.
+
+The existing C3 path made one Director request, produced two distinct repair
+actions, and completed two ordinary child Jobs. Explicit CI-4 evaluation ranked
+the welding candidate first without creating another generation Job. Real
+reference analysis, cache reuse, original-mode bypass, and installed iframe
+acceptance were repeated from the v0.5.0 bundle. Removing every compatible Host
+AI target while retaining the grant and image capability caused Director to
+fail soft with `host_ai_unavailable`; prompt-only real generation still
+succeeded. The Host target and policy were restored after the test.
+
+Measured values and output-quality observations are recorded in
+`implementation-status.md`. Final Broker leases and requests were both zero,
+320px and 390px overflow were zero, and browser console/page errors were zero.
+CI-1 through CI-6 are complete. This does not change H3's experimental,
+unhealthy, unroutable status and does not claim public video support.
+
 ---
 
 ## 10. Stop conditions
