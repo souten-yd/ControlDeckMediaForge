@@ -907,7 +907,10 @@ class JobManager:
                 if await self._host_or_local_cancel_requested(job.id, execution):
                     await self._finish_canceled(job.id, reporter)
                     return False
-                await asyncio.sleep(0.1)
+                # A waiting request does not need a high-frequency busy poll.
+                # Keeping this at two checks per second bounds Host traffic for
+                # multi-cut jobs while retaining responsive cancellation.
+                await asyncio.sleep(0.5)
                 status = await self.host_client.resource_status(execution.identity, request_id)
             if status.get("state") != "granted" or not isinstance(status.get("lease_id"), str):
                 reason = str(status.get("reason") or status.get("state") or "unknown")

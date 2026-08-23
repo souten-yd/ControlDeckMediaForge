@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    release/v040-install-evidence
-PR          #63（recipe）/ #64（CI-4）/ #65（G4設計）/ #66（G4実装）merge済み。#67 review中
-状態        G0〜G4 v0.4.0 release／installed Host受け入れ完了。次はCI-5
-基準値      focused host/evaluator regression = 47 passed。release full = 344 passed（34.55秒）
+ブランチ    creative/ci5-shot-quality
+PR          #63〜#67 merge済み。CI-5 PR作成前
+状態        G0〜G4 v0.4.0導入済み。CI-5実装／installed Host構造受入完了、次はPR化してCI-6
+基準値      CI-5 focused = 147 passed。full = 351 passed（38.71秒）
 リリース    v0.4.0公開・ControlDeck導入済み（artifact 51ee55c1...5f98799、Host PR #234/#235）
 ```
 
@@ -38,12 +38,13 @@ PR          #63（recipe）/ #64（CI-4）/ #65（G4設計）/ #66（G4実装）
 | — | CI-4 Unified Evaluator | #64 マージ済み（3a2d6eb） |
 | — | G4 prerequisite design correction | #65 マージ済み（43aa08c） |
 | — | G4 coding-agent asset placement | #66 マージ済み（5a340ac） |
-| — | v0.4.0 release/install evidence | #67 review中 |
+| — | v0.4.0 release/install evidence | #67 マージ済み（f30c1de） |
+| — | CI-5 C4 shot direction | PR作成前（branch実装・実機受入済み） |
 
 ## 次にやること（1 つだけ）
 
 ```text
-G4 coding-agent project placementとG0〜G4 releaseは実機完了。次はCI-5。
+G4 coding-agent project placement、v0.4.0、CI-5実装は完了。次はCI-5をPR化してCI-6。
   完了        26.98GB GGUF、pinned HIP runtime、Host lease/cancel、R9700 smoke実測
   延期        H3 quality route（Host watchdog/swap/output gate失敗。条件改善まで再実行しない）
   完了        版固定recipe、構造化projection、実Gateway text.generate、原文保持/fail-closed
@@ -51,7 +52,10 @@ G4 coding-agent project placementとG0〜G4 releaseは実機完了。次はCI-5�
   完了        ControlDeck汎用 current-project output grant（PR #232）/ long MCP timeout（PR #233）
   完了        media.pack / atomic asset placement / OpenCode inspect・参照更新・build・test実機E2E
   完了        v0.4.0 exact-head bundle、extracted light/dark、installed Host light/dark、Broker cleanup
-  次          CI-5 C4 shot direction + bounded quality integration
+  完了        CI-5 one text.generate / 2〜4 shot brief / existing child Job + C4 Composer再利用
+  実測        installed Host fake 3-shot構造受入。64.452秒、vision 0、lease最終0、320px overflow 0
+  注意        fakeの1秒estimateはBroker thrash-cost未満。operator stopを使用。自動handoffはCI-6で実画像実測
+  次          CI-6 installed-host + R9700 acceptance / release gate
   保留        video public API/runtime実装（CI-5/CI-6とworker境界解消前は着手しない）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```

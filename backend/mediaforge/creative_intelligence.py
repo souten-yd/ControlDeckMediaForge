@@ -26,6 +26,8 @@ SubjectKind = Literal[
     "other",
 ]
 EvidenceSource = Literal["user", "observed", "inferred", "suggested"]
+ShotRole = Literal["main", "coding", "device", "chibi"]
+CompositionTemplate = Literal["poster", "character_sheet"]
 
 
 class CreativeIntelligenceError(RuntimeError):
@@ -89,6 +91,30 @@ class ActionVariationDraft(BaseModel):
     actions: list[ActionStateSpec] = Field(min_length=2, max_length=4)
 
 
+class ShotBriefDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    primary_action: ActionStateSpec = Field(default_factory=ActionStateSpec)
+    scene: str = Field(default="", max_length=1000)
+    composition: str = Field(default="", max_length=1000)
+    camera: str = Field(default="", max_length=1000)
+    details: list[str] = Field(default_factory=list, max_length=32)
+
+
+class ShotDirectionDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plan: PromptPlanDraft
+    shots: list[ShotBriefDraft] = Field(min_length=2, max_length=4)
+
+
+class ShotBrief(ShotBriefDraft):
+    model_config = ConfigDict(extra="forbid")
+
+    role: ShotRole
+    index: int = Field(ge=0, le=3)
+
+
 class DirectedPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -105,6 +131,16 @@ class DirectedActionVariations(BaseModel):
 
     plan: PromptPlan
     actions: list[ActionStateSpec] = Field(default_factory=list, max_length=4)
+    assistance_used: bool
+    skipped_reason: str | None = None
+    reference_context: list[dict] = Field(default_factory=list, max_length=4)
+
+
+class DirectedShotBriefs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plan: PromptPlan
+    shot_briefs: list[ShotBrief] = Field(default_factory=list, max_length=4)
     assistance_used: bool
     skipped_reason: str | None = None
     reference_context: list[dict] = Field(default_factory=list, max_length=4)
@@ -392,6 +428,97 @@ class PromptPlanner:
         )
         return plan, draft.actions
 
+    async def plan_shot_briefs(
+        self,
+        identity: HostIdentity,
+        intent: str,
+        *,
+        mode: CreativeMode,
+        count: int,
+        template: CompositionTemplate,
+        roles: list[ShotRole],
+        reference_context: list[dict] | None = None,
+    ) -> tuple[PromptPlan, list[ShotBrief]]:
+        normalized = intent.strip()
+        if not normalized or len(normalized) > 8000:
+            raise CreativeIntelligenceError("invalid_intent", "Intent must contain 1 to 8000 characters")
+        if mode == "original" or not 2 <= count <= 4 or len(roles) != count:
+            raise CreativeIntelligenceError(
+                "shot_direction_invalid", "Directed compositions require 2 to 4 bounded shot roles"
+            )
+        instruction = (
+            "Structure the user's media-generation intent and produce exactly the requested number of "
+            "visibly distinct shot briefs in one response. Populate every schema field. Preserve explicit "
+            "subject identity, count, colors, objects, style and scene constraints across every shot. "
+            "Use each server-provided role only as semantic context and keep the shots coherent as one set. "
+            "Describe only what each shot depicts: action/state, scene detail, framing/composition, camera "
+            "and visible details. Do not author a title, caption, logo, UI text, layout region, crop, margin, "
+            "output dimension, model, provider, sampler, scheduler, port or engine. Do not put invented "
+            "ideas in hard_constraints."
+        )
+        response_format = {
+            "type": "json_schema",
+            "name": "mediaforge_shot_direction",
+            "schema": _provider_strict_schema(ShotDirectionDraft.model_json_schema()),
+            "strict": True,
+        }
+        accepted_context = _validated_reference_context(reference_context)
+        user_content = json.dumps(
+            {
+                "count": count,
+                "template": template,
+                "roles": roles,
+                "original_intent": normalized,
+                "accepted_reference_context": accepted_context,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        try:
+            result = await self.gateway.complete(
+                identity,
+                "text.generate",
+                [
+                    {"role": "system", "content": instruction},
+                    {"role": "user", "content": user_content},
+                ],
+                response_format=response_format,
+                temperature=0.2 if mode == "refine" else 0.4,
+                max_tokens=4096,
+                timeout_seconds=120,
+            )
+        except HostAIError as exc:
+            raise CreativeIntelligenceError(exc.code, str(exc)) from exc
+        try:
+            authored = json.loads(result.content)
+            if not isinstance(authored, dict) or not isinstance(authored.get("plan"), dict):
+                raise TypeError("shot direction plan must be an object")
+            for protected in ("version", "original_intent", "mode"):
+                authored["plan"].pop(protected, None)
+            draft = ShotDirectionDraft.model_validate(authored)
+            if (
+                not _has_useful_direction(draft.plan)
+                or len(draft.shots) != count
+                or any(not _has_useful_shot(shot) for shot in draft.shots)
+            ):
+                raise ValueError("shot direction count or content is invalid")
+            canonical = [shot.model_dump_json() for shot in draft.shots]
+            if len(set(canonical)) != count:
+                raise ValueError("shot directions must be visibly distinct")
+        except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as exc:
+            raise CreativeIntelligenceError(
+                "prompt_plan_invalid", "ControlDeck returned invalid shot directions"
+            ) from exc
+        plan = PromptPlan(
+            **draft.plan.model_dump(mode="python"),
+            original_intent=normalized,
+            mode=mode,
+        )
+        return plan, [
+            ShotBrief(**shot.model_dump(mode="python"), role=roles[index], index=index)
+            for index, shot in enumerate(draft.shots)
+        ]
+
 
 class CreativeDirector:
     """Fail-soft product wrapper around the one provider-neutral PromptPlanner."""
@@ -473,6 +600,45 @@ class CreativeDirector:
             reference_context=_validated_reference_context(reference_context),
         )
 
+    async def shot_briefs(
+        self,
+        identity: HostIdentity | None,
+        intent: str,
+        *,
+        mode: CreativeMode,
+        count: int,
+        template: CompositionTemplate,
+        roles: list[ShotRole],
+        reference_context: list[dict] | None = None,
+    ) -> DirectedShotBriefs:
+        normalized = intent.strip()
+        fallback = PromptPlan(original_intent=normalized, mode=mode)
+        if mode == "original" or identity is None or "ai.inference" not in identity.granted_capabilities:
+            reason = "original_mode" if mode == "original" else "text_generator_unavailable"
+            return DirectedShotBriefs(
+                plan=fallback, assistance_used=False, skipped_reason=reason,
+            )
+        try:
+            plan, briefs = await self.planner.plan_shot_briefs(
+                identity,
+                normalized,
+                mode=mode,
+                count=count,
+                template=template,
+                roles=roles,
+                reference_context=reference_context,
+            )
+        except CreativeIntelligenceError as exc:
+            return DirectedShotBriefs(
+                plan=fallback, assistance_used=False, skipped_reason=exc.code,
+            )
+        return DirectedShotBriefs(
+            plan=plan,
+            shot_briefs=briefs,
+            assistance_used=True,
+            reference_context=_validated_reference_context(reference_context),
+        )
+
 
 def prompt_plan_to_creative_details(plan: PromptPlan) -> dict[str, str]:
     """Additive projection into fields already understood by CreativeSpec/UI.
@@ -536,6 +702,23 @@ def _bounded_join(values: list[str], limit: int) -> str:
             break
         result = candidate
     return result
+
+
+def _has_useful_shot(shot: ShotBriefDraft) -> bool:
+    action = shot.primary_action
+    return any((
+        action.action,
+        action.state,
+        action.orientation,
+        action.gesture,
+        action.gaze,
+        action.motion_hint,
+        action.body_or_part_relations,
+        shot.scene,
+        shot.composition,
+        shot.camera,
+        shot.details,
+    ))
 
 
 def _validated_reference_context(value: list[dict] | None) -> list[dict]:

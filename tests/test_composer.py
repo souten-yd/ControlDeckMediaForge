@@ -15,7 +15,9 @@ from mediaforge.composer import (
     cache_composer_font,
 )
 from mediaforge.creative import CreativeCompiler, CreativeSpec
+from mediaforge.creative_intelligence import ActionStateSpec, PromptPlan, ShotBrief, SubjectSpec
 from mediaforge.domain import JobRequest
+from mediaforge.evaluator import relevant_dimensions
 
 
 ROOT = Path(__file__).parents[1]
@@ -64,6 +66,61 @@ def test_multicut_planner_creates_explicit_ordinary_child_jobs():
     assert all(item.constraints["character_profile_id"] == "character_" + "a" * 32 for item in requests)
     assert all(item.constraints["style_profile_id"] == "style_" + "b" * 32 for item in requests)
     assert snapshot["width"] == 1536 and len(snapshot["shot_regions"]) == 4
+
+
+def test_directed_shots_reuse_children_composer_and_existing_quality_budget():
+    compiler = CreativeCompiler.load(ROOT / "creative/templates.json")
+    planner = MultiCutPlanner(compiler, LayoutCatalog.load(ROOT / "creative/layouts.json"))
+    source_value = request().model_dump(mode="json")
+    source_value["qa"] = {
+        "deterministic": True, "semantic": True, "max_regeneration_attempts": 1,
+    }
+    source = JobRequest.model_validate(source_value)
+    parent = PromptPlan(
+        original_intent=source.intent,
+        subject=SubjectSpec(kind="robot", appearance_traits=["orange shell"]),
+        primary_action=ActionStateSpec(action="maintaining a terminal"),
+    )
+    briefs = [
+        ShotBrief(
+            role="main", index=0,
+            primary_action=ActionStateSpec(action="standing beside the damaged terminal"),
+            composition="clear establishing view",
+        ),
+        ShotBrief(
+            role="coding", index=1,
+            primary_action=ActionStateSpec(action="repairing exposed wiring with both grippers"),
+            camera="close view of the repair tools",
+        ),
+        ShotBrief(
+            role="device", index=2,
+            primary_action=ActionStateSpec(action="presenting the repaired terminal"),
+            details=["green status lights are visible"],
+        ),
+    ]
+    _composition_id, requests, plans, snapshot = planner.plan(
+        source,
+        CreativeSpec.model_validate({"domain": "poster"}),
+        LayoutSpec(template="poster", title="EXACT TITLE", caption="EXACT CAPTION", shot_count=3),
+        capabilities=CAPABILITIES,
+        envelope=ENVELOPE,
+        director_plan=parent,
+        shot_briefs=briefs,
+        reference_context=[{"focus": "identity", "subject": {"kind": "robot"}}],
+    )
+
+    assert len(requests) == 3 and len(plans) == 3
+    assert all(item.output.count == 1 for item in requests)
+    assert all(item.qa.semantic and item.qa.max_regeneration_attempts == 1 for item in requests)
+    assert [plan["director"]["shot_brief"]["role"] for plan in plans] == [
+        "main", "coding", "device",
+    ]
+    assert "repairing exposed wiring" in plans[1]["pose"]["details"]
+    assert {"action_state", "composition"}.issubset(
+        relevant_dimensions(plans[1], has_references=False)
+    )
+    assert snapshot["title_region"] and snapshot["caption_region"]
+    assert all("EXACT TITLE" not in str(plan) and "EXACT CAPTION" not in str(plan) for plan in plans)
 
 
 @pytest.mark.parametrize("count", [2, 3, 4])
