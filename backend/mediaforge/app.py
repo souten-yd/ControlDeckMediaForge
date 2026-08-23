@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from . import __version__, library, preferences, thumbnails
 from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
+from .asset_placement import ProjectAssetPlacement, placement_filename
 from .config import Settings
 from .composer import (
     CreativeCompositionRecord,
@@ -57,7 +58,7 @@ from .events import (
 from .environment import setup_snapshot
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.ai import HostAIGateway
-from .host.files import GrantContentTooLarge, read_grant, require_grant_id
+from .host.files import GrantContentTooLarge, commit_file, read_grant, require_grant_id
 from .host.jobs import HostExecution
 from .jobs import JobManager, ProfileResolutionError
 from .model_evaluator import H3ModelEvaluator
@@ -397,6 +398,7 @@ def create_app(
                 "agent_tool:media.capabilities": token_state,
                 "agent_tool:media.generate": token_state,
                 "agent_tool:media.inspect": token_state,
+                "agent_tool:media.pack": token_state,
                 "context_action:edit-image": token_state,
             },
             "setup": (
@@ -1248,6 +1250,60 @@ def create_app(
                 "warnings": provenance.warnings,
                 "output_sha256": provenance.output_sha256,
             },
+        }
+
+    @app.post("/addon/v1/agent/pack")
+    async def agent_pack(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        payload = await request.json()
+        reject_host_paths(payload)
+        if "files.export" not in identity.granted_capabilities:
+            raise HTTPException(status_code=403, detail={"code": "host_capability_not_granted"})
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=422, detail={"code": "invalid_execution_envelope"})
+        try:
+            placement = ProjectAssetPlacement.model_validate(payload.get("input", {}))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_project_asset_placement"}) from exc
+        correlation = payload.get("correlation")
+        host_job_id = correlation.get("job_id") if isinstance(correlation, dict) else None
+        if not isinstance(host_job_id, str) or identity.subject != f"job:{host_job_id}":
+            raise HTTPException(status_code=403, detail={"code": "host_job_scope_mismatch"})
+        try:
+            asset = store.get_asset(placement.asset_id)
+            source = store.asset_path(placement.asset_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        try:
+            filename = placement_filename(
+                requested=placement.filename,
+                suggested=asset.suggested_filename,
+                mime_type=asset.mime_type,
+            )
+            committed = await commit_file(
+                host,
+                identity,
+                host_job_id=host_job_id,
+                grant_id=require_grant_id(placement.output_grant_id),
+                source=source,
+                filename=filename,
+                mime_type=asset.mime_type,
+                sha256=asset.sha256,
+            )
+        except HostApiError as exc:
+            raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from exc
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail={"code": "asset_placement_rejected"}) from exc
+        project_asset_id = committed.get("asset_id")
+        if not isinstance(project_asset_id, str) or not project_asset_id.startswith("asset:"):
+            raise HTTPException(status_code=502, detail={"code": "invalid_host_response"})
+        return {
+            "asset_id": project_asset_id,
+            "media_asset_id": asset.id,
+            "name": filename,
+            "mime_type": asset.mime_type,
+            "size": asset.size_bytes,
+            "sha256": asset.sha256,
         }
 
     @app.post("/addon/v1/context/edit-image")

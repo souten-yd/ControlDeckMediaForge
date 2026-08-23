@@ -16,6 +16,7 @@ const PHASE_TEXT = {
   select_model: "使うモデルを選んでいます",
   waiting_resource: "GPU の空きを待っています",
   generating: "生成しています",
+  release_resource: "GPU リソースを解放しています",
   postprocess: "仕上げています",
   semantic_review: "内容を確認しています",
   validate: "保証を検証しています",

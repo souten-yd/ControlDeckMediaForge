@@ -46,6 +46,7 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
         "ai_capabilities": {"text.generate": False, "vision.analyze": False},
         "ai_responses": [],
         "ai_calls": [],
+        "ai_reserved_lease_snapshots": [],
     }
 
     def subject(authorization: str | None) -> str | None:
@@ -90,6 +91,7 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
     @app.post("/api/v1/addon-runtime/media-forge/ai/complete")
     async def ai_complete(payload: dict[str, Any]) -> dict[str, Any]:
         state["ai_calls"].append(payload)
+        state["ai_reserved_lease_snapshots"].append(set(state["reserved_leases"]))
         capability = payload.get("capability")
         if not state["ai_capabilities"].get(capability, False):
             raise HTTPException(status_code=503, detail={"code": "ai_capability_unavailable"})
@@ -287,6 +289,95 @@ def test_agent_inspect_does_not_disclose_model_identity(tmp_path: Path):
     assert response.json()["provenance"]["license"] == "CC0-1.0"
 
 
+def test_agent_pack_atomically_places_one_asset_through_an_opaque_grant(tmp_path: Path):
+    client, headers, state = host_client(tmp_path)
+    with client:
+        created = client.post("/api/v1/jobs", json=generate_input("project robot")).json()
+        terminal = wait_terminal(client, created["id"])
+        media_asset_id = terminal["asset_ids"][0]
+        asset = client.get(f"/api/v1/assets/{media_asset_id}").json()
+        response = client.post(
+            "/addon/v1/agent/pack",
+            json={"input": {
+                "asset_id": media_asset_id,
+                "output_grant_id": "grant:export-1",
+                "filename": "robot-player.png",
+            }, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "asset_id": "asset:committed",
+        "media_asset_id": media_asset_id,
+        "name": "robot-player.png",
+        "mime_type": "image/png",
+        "size": asset["size_bytes"],
+        "sha256": asset["sha256"],
+    }
+    output = state["outputs"]["output-1"]
+    assert output["metadata"] == {
+        "job_id": "host-agent",
+        "grant_id": "grant:export-1",
+        "filename": "robot-player.png",
+        "size": asset["size_bytes"],
+        "sha256": asset["sha256"],
+        "content_type": "image/png",
+    }
+    assert hashlib.sha256(output["content"]).hexdigest() == asset["sha256"]
+    serialized = json.dumps(response.json())
+    assert str(tmp_path) not in serialized and "model" not in serialized and "path" not in serialized
+
+
+@pytest.mark.parametrize(
+    ("patch", "expected_code"),
+    [
+        ({"output_grant_id": "/tmp/project"}, "unscoped_host_path"),
+        ({"output_grant_id": "not-a-grant"}, "invalid_project_asset_placement"),
+        ({"filename": "../outside.png"}, "invalid_project_asset_placement"),
+        ({"filename": "wrong.jpg"}, "asset_placement_rejected"),
+    ],
+)
+def test_agent_pack_rejects_paths_invalid_grants_and_mismatched_types(
+    tmp_path: Path, patch: dict[str, str], expected_code: str,
+):
+    client, headers, state = host_client(tmp_path)
+    with client:
+        created = client.post("/api/v1/jobs", json=generate_input("bounded robot")).json()
+        terminal = wait_terminal(client, created["id"])
+        payload = {
+            "asset_id": terminal["asset_ids"][0],
+            "output_grant_id": "grant:export-1",
+            "filename": "robot.png",
+            **patch,
+        }
+        response = client.post(
+            "/addon/v1/agent/pack",
+            json={"input": payload, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == expected_code
+    assert state["outputs"] == {}
+
+
+def test_agent_pack_requires_the_token_bound_host_job(tmp_path: Path):
+    client, headers, state = host_client(tmp_path)
+    with client:
+        created = client.post("/api/v1/jobs", json=generate_input("scoped robot")).json()
+        terminal = wait_terminal(client, created["id"])
+        response = client.post(
+            "/addon/v1/agent/pack",
+            json={"input": {
+                "asset_id": terminal["asset_ids"][0],
+                "output_grant_id": "grant:export-1",
+            }, "correlation": {"job_id": "another-job"}},
+            headers=headers,
+        )
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "host_job_scope_mismatch"
+    assert state["outputs"] == {}
+
+
 def test_workflow_and_agent_generate_return_opaque_references(tmp_path: Path):
     client, headers, state = host_client(tmp_path)
     with client:
@@ -315,6 +406,46 @@ def test_workflow_and_agent_generate_return_opaque_references(tmp_path: Path):
         ]
         attached_updates = [update for update in state["job_updates"] if update["job_id"] == "host-agent"]
         assert not any(update.get("status") for update in attached_updates)
+
+
+def test_semantic_evaluation_runs_after_generation_lease_release(tmp_path: Path):
+    client, headers, state = host_client(tmp_path)
+    state["ai_capabilities"]["vision.analyze"] = True
+    scores = {
+        "intent": 0.9,
+        "subject_identity": None,
+        "action_state": None,
+        "palette": None,
+        "composition": None,
+        "style": None,
+        "props_clothing": None,
+        "visual_integrity": 0.9,
+    }
+    state["ai_responses"].append(json.dumps({
+        "scores": scores,
+        "issues": [],
+        "strengths": ["clear match"],
+        "retry_suggestions": [],
+    }))
+    payload = generate_input("semantic lease handoff robot")
+    payload["qa"] = {
+        "deterministic": True,
+        "semantic": True,
+        "max_regeneration_attempts": 0,
+    }
+
+    with client:
+        response = client.post(
+            "/addon/v1/agent/generate",
+            json={"input": payload, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    assert response.status_code == 200, response.text
+    assert len(state["ai_calls"]) == 1
+    assert state["ai_calls"][0]["capability"] == "vision.analyze"
+    assert state["ai_reserved_lease_snapshots"] == [set()]
+    assert [action for _lease, action in state["lease_actions"]].count("release") == 1
 
 
 def test_host_payload_rejects_raw_paths_and_context_requires_grant(tmp_path: Path):

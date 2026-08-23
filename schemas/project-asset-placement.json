@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/project-asset-placement.json",
+  "title": "Place one Media Forge asset in a ControlDeck project output grant",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["asset_id", "output_grant_id"],
+  "properties": {
+    "asset_id": {
+      "type": "string",
+      "pattern": "^asset_[0-9a-f]{32}$"
+    },
+    "output_grant_id": {
+      "type": "string",
+      "pattern": "^grant:[A-Za-z0-9._:-]{1,256}$"
+    },
+    "filename": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^/\\\\]+$"
+    }
+  }
+}

@@ -99,6 +99,13 @@
         "endpoint": "/addon/v1/agent/inspect",
         "schema_path": "/schemas/asset-reference.json",
         "permission": "workflows.run"
+      },
+      {
+        "id": "media.pack",
+        "label": "Place a media asset in the current project",
+        "endpoint": "/addon/v1/agent/pack",
+        "schema_path": "/schemas/project-asset-placement.json",
+        "permission": "workflows.run"
       }
     ],
     "context_actions": [

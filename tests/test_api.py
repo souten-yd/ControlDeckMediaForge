@@ -36,6 +36,7 @@ def test_health_defaults_to_setup_required(client):
     assert payload["contract_version"] == "2.0"
     assert payload["contributions"]["navigation:workspace"] == "available"
     assert payload["contributions"]["workflow_executor:media.generate"] == "available"
+    assert payload["contributions"]["agent_tool:media.pack"] == "available"
     assert payload["contributions"]["context_action:edit-image"] == "available"
 
 

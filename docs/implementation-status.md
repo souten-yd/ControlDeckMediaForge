@@ -2284,8 +2284,9 @@ not started without a normal authenticated workspace action: unsigned token
 creation, signing-key access, and reuse of another job's lease remain forbidden.
 Therefore actual H3 load/generation, RAM/VRAM/swap peaks, output validation,
 real cancel, and quality remain **NOT TESTED**. The installed logged-in browser
-was opened at `/x/media-forge/workspace/settings`; the next action is the H3
-card's `実機で評価` button.
+was opened at `/x/media-forge/workspace/settings`; at that checkpoint the H3
+card's `実機で評価` button remained unpressed. The later bounded smoke evidence
+below supersedes that checkpoint.
 
 After recording the exact release and installed state, the local full gate
 remained 317 passed with one dependency deprecation warning in 28.02 seconds.
@@ -2398,8 +2399,8 @@ was `333 passed, 1 warning in 34.60s`. Hosted CI was not used. Public schemas,
 `addon.json`, agent tools, workflow executors, and asset/provenance contracts
 were unchanged. Real H3 generation with this projection, video quality, and a
 release bundle containing this slice are **NOT TESTED**. H3 remains
-Experimental, unhealthy, and unroutable. The next implementation slice is CI-4
-Unified Evaluator; public G7 video work remains deferred.
+Experimental, unhealthy, and unroutable. CI-4 Unified Evaluator was completed in
+the following slice; public G7 video work remains deferred.
 
 ## Creative Intelligence CI-4 — Unified Evaluator (2026-08-23)
 
@@ -2453,8 +2454,8 @@ Installed-bundle browser behavior, release bundle creation, real FLUX candidate
 evaluation, and subjective ranking across complex reference roles are **NOT
 TESTED** in this slice. Public schemas, `addon.json`, agent tools, workflow
 executors, and asset/provenance contracts were unchanged. Hosted CI was not
-used. The next slice is G4 Coding Agent project/output grant placement; G7 video
-remains deferred.
+used. G4 Coding Agent project/output grant placement was completed in the later
+section below; G7 video remains deferred.
 
 The final full local regression gate for this worktree was
 `336 passed, 1 warning in 32.36s`. This is regression evidence and is not
@@ -2478,3 +2479,72 @@ implementation, Media Forge `media.pack`, atomic real project placement,
 OpenCode code-reference update, and build/test are **NOT TESTED** at this design
 checkpoint. The docs-only worktree retained the full regression gate at
 `336 passed, 1 warning in 33.19s`; hosted CI was not used.
+
+## G4 Coding Agent project asset placement (2026-08-23)
+
+ControlDeck PR #232 implemented the minimum generic prerequisite from
+`controldeck-integration-plan.md` §11.1: direct CodeDEV child projects are bound
+to job-scoped OpenCode MCP tokens, and eligible Add-ons can receive an opaque
+project output grant for one bounded existing subdirectory. Root, traversal,
+backslash, and symlink escape requests fail closed. PR #233 changed the generic
+generated MCP client timeout from 10 to 135 seconds, above the existing 120-second
+Host Agent Job and 130-second stdio bridge bounds. Neither Host change contains a
+Media-specific route, provider, model, or path contract.
+
+Media Forge adds the `media.pack` agent tool and additive
+`project-asset-placement.json` schema. It accepts only an immutable Media Forge
+asset ID, an opaque export `grant:` ID, and an optional safe filename. It requires
+the token-bound correlation job, rejects raw paths and MIME/extension mismatch,
+then reuses the existing Host staged upload and atomic commit. The response
+contains the Host `asset:` ID, Media Forge asset ID, filename, MIME, size, and
+SHA-256; it contains no project/model/provider/path identity.
+
+Real acceptance used installed ControlDeck, the source Media Forge on port 19131,
+OpenCode 1.18.18, the configured local 27B text/vision runtime, and R9700 gfx1201.
+The first resource attempts correctly exposed and retained three failures:
+
+```text
+observed supervision       resource_unavailable / insufficient_capacity
+old generated MCP config  request timed out at 10.006 and 10.005 seconds
+pre-fix semantic QA       image worker ended but its exclusive lease remained,
+                          so vision runtime load and job waited until endpoint timeout
+```
+
+The semantic-QA deadlock was fixed by canceling lease maintenance and confirming
+the image generation lease release immediately after the worker exits, before
+deterministic post-processing can opt into `vision.analyze`. Release failure now
+fails the job closed instead of starting Host AI while ownership is ambiguous.
+The Host audit shows the successful final lease activated at 09:21:28, renewed
+seven times, and released at 09:22:43; only then did `vision.analyze` complete at
+09:23:06. A regression records an empty Host reserved-lease snapshot at the AI
+call. Repeated diagnostic runs entered the Broker anti-thrash window, so the final
+run explicitly stopped the then-idle LLM before the tool request; a preceding run
+had already demonstrated automatic managed yield to the same R9700 worker.
+
+The successful OpenCode run performed the planned sequence without human file
+placement:
+
+```text
+project inspect           README.md / index.html / package.json / verify.mjs
+media.generate            107.901 seconds, capability auto, local_only=true
+worker                    load 64.520666 s / generation 1.236461 s
+Media Forge asset         asset_c591c6e3e07b43a094a0b76be1f006ec
+output                    PNG RGBA 256x256 / 73,238 bytes
+SHA-256                   a10381bf2e99f650f69b145cb5457f2ac816885e77a6a82bd16aef41f085a45e
+deterministic validators  non-empty / dimensions / mode / alpha all passed
+unified evaluator         accepted; intent 1.0 / visual_integrity 1.0
+Host output grant         opaque grant only; no path returned to Media Forge
+Host committed asset      asset:d21d042b-444d-4cc3-9fa0-5e5e68522b0e
+code update               index.html -> assets/player-robot.png
+npm run build             PASS / verified 73238 byte project asset
+npm test                  PASS / verified 73238 byte project asset
+```
+
+The committed Host asset size and SHA match the immutable Media Forge asset. A
+visual inspection confirmed a readable centered blue robot with transparent
+background; this is direct output-quality evidence for this one 2D-game fixture,
+not a broad model-quality benchmark. Focused host/evaluator regression passed 47
+tests. The final full gate passed 344 tests in 34.58 seconds with one upstream
+Starlette/httpx deprecation warning. The exact-head bundle, extracted bundle, installed update,
+and installed-browser acceptance are recorded after their actual execution and
+are otherwise **NOT TESTED**. Hosted CI was not used.

@@ -4,6 +4,7 @@ import asyncio
 import time
 
 from mediaforge.host.files import require_grant_id
+from mediaforge.asset_placement import ProjectAssetPlacement, placement_filename
 from mediaforge.host.client import HostIdentity
 from mediaforge.host.jobs import HostExecution, HostJobReporter, ProgressGate
 from pathlib import Path
@@ -138,3 +139,31 @@ def test_file_boundary_accepts_only_opaque_grant_ids():
             pass
         else:
             raise AssertionError(f"accepted unscoped value: {value}")
+
+
+def test_project_asset_placement_accepts_only_safe_matching_filenames():
+    value = ProjectAssetPlacement.model_validate({
+        "asset_id": "asset_" + "a" * 32,
+        "output_grant_id": "grant:opaque-1",
+    })
+    assert placement_filename(
+        requested=value.filename,
+        suggested="generated.png",
+        mime_type="image/png",
+    ) == "generated.png"
+    for filename in ("../outside.png", "nested/output.png", "nested\\output.png", "output.jpg"):
+        try:
+            request = ProjectAssetPlacement.model_validate({
+                "asset_id": value.asset_id,
+                "output_grant_id": value.output_grant_id,
+                "filename": filename,
+            })
+            placement_filename(
+                requested=request.filename,
+                suggested="generated.png",
+                mime_type="image/png",
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"accepted unsafe or mismatched filename: {filename}")

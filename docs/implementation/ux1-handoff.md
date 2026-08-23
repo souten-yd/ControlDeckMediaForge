@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    g4/coding-agent-placement
-PR          #63（prompt recipe）/ #64（CI-4）merge済み。G4 Host prerequisite設計中
-状態        G4調査でnon-interactive project output grantのHost gapを確認
-基準値      現worktree ./mf.sh test = 336 passed, 1 warning（33.19秒）
+ブランチ    g4/asset-pack-placement
+PR          #63（prompt recipe）/ #64（CI-4）/ #65（G4設計）merge済み。G4実装PR準備中
+状態        G4 real OpenCode project placement E2E完了。次はG4 release bundle
+基準値      focused host/evaluator regression = 47 passed。full = 344 passed（34.58秒）
 リリース    v0.3.2公開・ControlDeck導入済み（artifact ec864154...e12e3d9、Host PR #230/#231）
 ```
 
@@ -35,18 +35,22 @@ PR          #63（prompt recipe）/ #64（CI-4）merge済み。G4 Host prerequis
 | — | H3 bounded evaluator hardening | #60 マージ済み（676f8cc） |
 | — | v0.3.2 release/install evidence | #61 マージ済み（4c310cb） |
 | — | H3 version-pinned prompt recipe | #63 マージ済み（6730bb7） |
+| — | CI-4 Unified Evaluator | #64 マージ済み（3a2d6eb） |
+| — | G4 prerequisite design correction | #65 マージ済み（43aa08c） |
 
 ## 次にやること（1 つだけ）
 
 ```text
-H3 prompt recipeとCI-4 Unified Evaluatorは完了。次はG4 Host prerequisiteスライス。
+G4 coding-agent project placementは実機完了。次は利用者に意味のあるG0〜G4 release。
   完了        26.98GB GGUF、pinned HIP runtime、Host lease/cancel、R9700 smoke実測
   延期        H3 quality route（Host watchdog/swap/output gate失敗。条件改善まで再実行しない）
   完了        版固定recipe、構造化projection、実Gateway text.generate、原文保持/fail-closed
   完了        CI-4 canonical EvaluationResult、advisory rank、bounded retry、旧binary reviewer削除
-  次          ControlDeck汎用 current-project output grant（integration plan §11.1、別repo/PR）
-  続き        Media Forge media.pack / atomic asset placement / OpenCode実機E2E
-  保留        video public API/runtime実装（G7には着手しない）
+  完了        ControlDeck汎用 current-project output grant（PR #232）/ long MCP timeout（PR #233）
+  完了        media.pack / atomic asset placement / OpenCode inspect・参照更新・build・test実機E2E
+  次          exact G4 merge headからrelease bundleを作成し、extracted/browser/installed Hostを確認
+  続き        release完了後にCI-5 C4 shot direction + bounded quality integration
+  保留        video public API/runtime実装（CI-5/CI-6とworker境界解消前は着手しない）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
