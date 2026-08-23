@@ -78,10 +78,7 @@ def test_bundle_build_environment_contains_no_ml_runtime_dependencies():
 
 
 def test_bundle_ships_what_the_worker_imports():
-    """worker は別 venv で動く。adapter が import するものが同梱されていないと必ず crash する。
-
-    実機で image.edit が worker_crash になった（ModuleNotFoundError: mediaforge）。
-    """
+    """Worker-owned repository packages must be explicit bundle data."""
     import ast
     import re
     from pathlib import Path
@@ -104,3 +101,4 @@ def test_bundle_ships_what_the_worker_imports():
     local = {name for name in top_level if (root / "backend" / name).is_dir() or (root / name).is_dir()}
     missing = local - shipped
     assert not missing, f"worker が import するのに bundle へ入っていない: {sorted(missing)}"
+    assert "mediaforge" not in shipped, "core source must not be shipped for the worker"

@@ -57,10 +57,6 @@ def main() -> int:
                 "--add-data", f"{ROOT / 'schemas'}:schemas",
                 "--add-data", f"{ROOT / 'worker_packs'}:worker_packs",
                 "--add-data", f"{ROOT / 'creative'}:creative",
-                # worker は別 venv・別プロセスで動く。adapter が参照する純粋な
-                # 幾何モジュール（PIL だけに依存）を source のまま同梱しないと、
-                # 凍結された core を worker から import できず必ず crash する。
-                "--add-data", f"{ROOT / 'backend' / 'mediaforge'}:mediaforge",
                 "--add-data", f"{ROOT / 'runtimes' / 'rocm-torch' / 'requirements.txt'}:runtimes/rocm-torch",
                 str(ROOT / "scripts" / "bundle_entrypoint.py"),
             ],

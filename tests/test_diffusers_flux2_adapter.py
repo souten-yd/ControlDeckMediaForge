@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,21 @@ from mediaforge.image_edit import validate_strict_edit
 from mediaforge.outpaint import validate_outpaint
 from worker_packs.image.adapters import ImageEditRequest
 from worker_packs.image.adapters.diffusers_flux2 import DiffusersFlux2KleinAdapter
+
+
+def test_image_worker_pack_does_not_import_core_implementation():
+    worker_root = Path(__file__).parents[1] / "worker_packs" / "image"
+    violations: list[str] = []
+    for path in worker_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "mediaforge":
+                violations.append(f"{path.relative_to(worker_root)}:{node.lineno}")
+            elif isinstance(node, ast.Import) and any(
+                alias.name.split(".")[0] == "mediaforge" for alias in node.names
+            ):
+                violations.append(f"{path.relative_to(worker_root)}:{node.lineno}")
+    assert violations == []
 
 
 def test_direct_no_mmap_loads_diffusers_and_qwen_components_on_device(monkeypatch, tmp_path: Path):
