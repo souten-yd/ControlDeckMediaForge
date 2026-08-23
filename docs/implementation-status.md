@@ -2769,3 +2769,50 @@ The final canonical local regression gate passed 351 tests in 42.27 seconds
 with one upstream Starlette/httpx deprecation warning. This is regression
 evidence and is not substituted for the installed browser, Host audit, Broker,
 R9700, provenance, or visual observations above.
+
+## Worker/core image composition boundary (2026-08-23)
+
+The image worker no longer imports `mediaforge.image_edit` or
+`mediaforge.outpaint`. Worker-owned PIL planning/composition now lives in
+`worker_packs/image/edit_composition.py`. The independently implemented core
+`validate_strict_edit` and `validate_outpaint` remain authoritative after the
+worker exits; no worker validation result is trusted or reused by core.
+
+The real worker environment now sets `PYTHONPATH` to the worker-pack root only
+and does not inherit the parent development path or expose `backend`. The
+release builder no longer ships `backend/mediaforge` source as worker data. A
+static AST regression rejects every absolute `mediaforge` import under the
+image worker pack, and the bundle regression rejects reintroducing core source
+for the worker. Frozen public schemas, `addon.json`, operations, tools,
+provenance, and Host contracts did not change.
+
+Focused strict-edit, outpaint, adapter, routing, and bundle regression passed
+48 tests. Real acceptance stopped the installed v0.5.0 unit and ran the exact
+source branch on the same port 9130 with the installed data, model store, ROCm
+runtime, and ControlDeck Host/Broker path. The installed unit was restored
+afterward.
+
+```text
+strict edit       20.106 s / asset_486013ae0738421c9cad20fab48fb115
+worker timing     load 10.639245 s / generation 5.877777 s
+core validator    protected pixel difference 0 / editable pixels 10,179
+outpaint          107.367 s / asset_2bcb5869f4b44471b249af134a42fb04
+worker timing     load 8.383039 s / generation 94.004853 s
+core validator    source pixel difference 0 / generated pixels 131,072
+placement         all components cuda:0 / offload hooks 0 / non-GPU targets 0
+browser errors    0
+Broker cleanup    active 0 / waiting 0 / reserved bytes 0
+```
+
+Visual inspection confirmed the strict result retained the source outside the
+mouth edit and the outpaint result retained the complete centered 512x512
+source while generating both side regions. The first browser attempt was
+**not** a generation result: the historical G2 fixture still targeted a removed
+operation select and stopped before asset import or GPU work. The dedicated
+boundary fixture uses the current opaque bridge and completed both Jobs.
+
+Installed v0.5.0 returned healthy after restoration, no image worker remained,
+and R9700 VRAM use was 59,924,480 bytes. H3 quality was not run. Hosted CI was
+not used. The final canonical local regression gate passed 352 tests in 37.33
+seconds with one upstream Starlette/httpx deprecation warning. G5 M5 companion
+profiles/validators/pack are the next slice.

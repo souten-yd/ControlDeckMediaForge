@@ -7,10 +7,13 @@ from typing import Any
 
 from PIL import Image
 
-from mediaforge.image_edit import compose_strict_edit, strict_edit_plan
-from mediaforge.outpaint import compose_outpaint, outpaint_reference
-
 from .base import ImageEditRequest, ImageGenerationRequest, ImageGenerationResult
+from ..edit_composition import (
+    compose_outpaint,
+    compose_strict_edit,
+    outpaint_reference,
+    strict_edit_plan,
+)
 
 
 class DiffusersFlux2KleinAdapter:

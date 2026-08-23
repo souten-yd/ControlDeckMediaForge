@@ -9,10 +9,10 @@
 
 ```text
 最終更新    2026-08-23
-ブランチ    release/v050-ci6
-PR          #63〜#68 merge済み。CI-6 evidence PR作成前
-状態        G0〜G4 / CI-1〜CI-6完了。v0.5.0導入・実機受入済み。次はworker境界修正
-基準値      CI-6 full = 351 passed（42.27秒、warning 1）
+ブランチ    infra/worker-core-boundary
+PR          #63〜#69 merge済み。worker境界 PR作成前
+状態        G0〜G4 / CI-1〜CI-6完了。worker境界解消・実機受入済み。次はG5
+基準値      worker focused = 48 passed。full = 352 passed（37.33秒、warning 1）
 リリース    v0.5.0公開・ControlDeck導入済み（artifact 9e24c3bf...fa0be、Host PR #236）
 ```
 
@@ -40,12 +40,13 @@ PR          #63〜#68 merge済み。CI-6 evidence PR作成前
 | — | G4 coding-agent asset placement | #66 マージ済み（5a340ac） |
 | — | v0.4.0 release/install evidence | #67 マージ済み（f30c1de） |
 | — | CI-5 C4 shot direction | #68 マージ済み（8e82287） |
-| — | v0.5.0 + CI-6 installed/R9700 evidence | PR作成前（実機受入済み） |
+| — | v0.5.0 + CI-6 installed/R9700 evidence | #69 マージ済み（2f8e917） |
+| — | worker/core image composition boundary | PR作成前（実装・実機受入済み） |
 
 ## 次にやること（1 つだけ）
 
 ```text
-G4、CI-1〜CI-6、v0.5.0は完了。次はworker境界違反を独立スライスで解消する。
+G4、CI-1〜CI-6、v0.5.0、worker境界解消は完了。次はG5 M5 companion profile/validator/pack。
   完了        26.98GB GGUF、pinned HIP runtime、Host lease/cancel、R9700 smoke実測
   延期        H3 quality route（Host watchdog/swap/output gate失敗。条件改善まで再実行しない）
   完了        版固定recipe、構造化projection、実Gateway text.generate、原文保持/fail-closed
@@ -59,8 +60,10 @@ G4、CI-1〜CI-6、v0.5.0は完了。次はworker境界違反を独立スライ�
   完了        v0.5.0 exact-head bundle、extracted light/dark、installed update、Host catalog PR #236
   完了        CI-6 real Director/original/C3/evaluator/reference/fail-soft、320/390px、Broker cleanup
   実測        FLUX 4 assets + fail-soft 1 asset。Director 15.218秒、C3 x2 37.504秒、GPU最大98%
-  次          diffusers_flux2 workerのcore implementation import解消（strict validatorは独立維持）
-  保留        video public API/runtime実装（worker境界解消前は着手しない）
+  完了        workerのcore import/PYTHONPATH/source同梱を除去。core validatorは独立維持
+  実測        strict 20.106秒 / protected差分0、outpaint 107.367秒 / source差分0
+  次          G5 M5 companion profiles + deterministic validator + atlas/manifest pack
+  保留        video public API/runtime実装（G5/G6の安定用途を先に完了する）
   注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
 ```
 
@@ -90,13 +93,10 @@ G4、CI-1〜CI-6、v0.5.0は完了。次はworker境界違反を独立スライ�
      UI 実装のために必要な host 変更は 1 つも出ていない。
      ただし v0.2.0 を配布するには trusted-catalog.json の pin 更新が要る
      （これは Media 固有のコードではなく、カタログの版指定なので許容範囲）。
-4. worker が core を import している（層の違反・未解決）
-     worker_packs/image/adapters/diffusers_flux2.py が
-     mediaforge.image_edit / mediaforge.outpaint を import している。
-     AGENTS.md「worker は core から実装を import しない」に反する。
-     v0.2.2 では bundle へ同梱して動作を戻したが、層の整理は未着手。
-     image_edit / outpaint は PIL だけに依存するので worker pack 側へ寄せるのが筋。
-     ただし strict edit の独立検証は core 側に残すこと（共有すると保証の意味が消える）。
+4. worker/core image composition boundary（2026-08-23 解決）
+     worker側のPIL compositionをworker_packsへ移し、core implementation import、
+     backend PYTHONPATH、bundleのcore source同梱を除去した。coreのstrict/outpaint
+     validatorは別実装のままworker出力を自己検証せずに検査する。
 5. 動画モデル管理の将来互換（利用者指示 2026-08-22）
      M1 installer は image 専用にせず capability-driven のまま維持した。
      M2 では検証済み `media_types`（image / video / audio_video）を分類表示に追加し、
