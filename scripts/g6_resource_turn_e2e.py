@@ -116,7 +116,7 @@ def make_llm_resident(page: Page) -> dict[str, Any]:
 def broker_snapshot(page: Page) -> dict[str, Any]:
     return page.evaluate(
         """async () => {
-          const response = await fetch('/api/v1/resources/snapshot', {
+          const response = await fetch('/api/v1/resources', {
             headers: {'X-Requested-With': 'ControlDeck'},
           });
           if (!response.ok) return {unavailable: response.status};
@@ -198,25 +198,46 @@ def main() -> int:
         page.on("pageerror", lambda error: browser_errors.append(f"pageerror:{error}"))
 
         # ── 1. boot が 1 往復であること ─────────────────────────────────
+        # framesent は payload を直接渡す（dict ではない）。JSON でないフレームや
+        # binary フレームも来るので、数えられないものは黙って捨てる。
         workspace_calls: list[str] = []
-        page.on("websocket", lambda socket: socket.on(
-            "framesent",
-            lambda payload: workspace_calls.append(
-                json.loads(payload["payload"]).get("method", "")
-                if isinstance(payload, dict) and payload.get("payload") else ""
-            ),
-        ))
+
+        def record_frame(payload: object) -> None:
+            if isinstance(payload, bytes):
+                try:
+                    payload = payload.decode("utf-8")
+                except UnicodeDecodeError:
+                    return
+            if not isinstance(payload, str):
+                return
+            try:
+                method = json.loads(payload).get("method")
+            except (ValueError, AttributeError):
+                return
+            if isinstance(method, str) and method:
+                workspace_calls.append(method)
+
+        page.on("websocket", lambda socket: socket.on("framesent", record_frame))
         login(page, args.username, password)
         boot_started = time.perf_counter()
         page.goto("/x/media-forge/workspace/create", wait_until="domcontentloaded")
         frame = workspace_frame(page)
         frame.wait_for_selector('#app[aria-busy="false"]', timeout=30_000)
         observations["boot_ready_sec"] = round(time.perf_counter() - boot_started, 3)
-        observations["boot_workspace_calls"] = [name for name in workspace_calls if name]
+        observations["boot_workspace_calls"] = list(workspace_calls)
         check(
-            observations["boot_workspace_calls"].count("workspace.session") == 1,
-            f"boot did not use one aggregated session: {observations['boot_workspace_calls']}",
+            workspace_calls.count("workspace.session") == 1,
+            f"boot did not use one aggregated session: {workspace_calls}",
         )
+        # 旧 boot が個別に投げていたメソッドが復活していないこと。
+        superseded = {
+            "preferences.get", "capabilities.get", "profiles.list",
+            "reference_collections.list", "models.catalog", "models.operations.list",
+            "models.list", "library.list", "creative.batches.list",
+            "creative.compositions.list",
+        }
+        regressed = sorted(superseded.intersection(workspace_calls))
+        check(not regressed, f"boot still issues superseded per-part calls: {regressed}")
 
         # ── 2. 状況タブが読めること ────────────────────────────────────
         jobs = frame.evaluate("() => call('workspace.session', {parts: ['jobs']})")

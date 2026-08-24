@@ -3357,3 +3357,23 @@ MEDIA_FORGE_E2E_PASSWORD=... \
 
 VRAM は rocm-smi の実測値を phase ごとに記録する。モデル自身の申告ではなく
 デバイスを読む。
+
+
+## G6 resource turn E2E スクリプトの事前検証（2026-08-24）
+
+利用者に実行してもらう前に、ログイン不要で検証できる部分を実プロセスに当てて直した。
+
+```text
+framesent の payload      dict ではなく Union[bytes, str] を直接渡す仕様だった。
+                          dict 前提のままだと全フレームが空になり、
+                          「boot が 1 往復」の判定が常に偽で落ちていた。
+                          binary / 非 JSON / method 無しフレームも来るため
+                          数えられないものは捨てる形に直し、単体で確認した。
+broker snapshot の経路    /api/v1/resources/snapshot は 404。正しくは
+                          /api/v1/resources（未認証で 401 = 経路は存在する）。
+login helper              ci6_r9700_e2e.py の実績あるものをそのまま再利用した。
+                          ControlDeck の login は SPA なので HTML からは確認できない。
+```
+
+boot 判定は「`workspace.session` がちょうど 1 回」に加えて、
+旧 boot が個別に投げていた 10 メソッドが 1 つも復活していないことも見るようにした。
