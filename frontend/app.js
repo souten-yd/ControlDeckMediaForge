@@ -770,6 +770,112 @@ function renderProfileChoices() {
   renderProfileList();
 }
 
+/* ── モデルを探す ────────────────────────────────────────────────────── */
+
+/* repository ID を手で入力させるのは、名前を既に知っている人にしか使えない。
+   探すところから引き受ける。ただし探せることと入れてよいことは別なので、
+   表から直接は取り込まず、必ず中身とライセンスの確認へ渡す。 */
+
+function formatCount(value) {
+  const count = Number(value) || 0;
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
+  return String(count);
+}
+
+function formatDay(value) {
+  const parsed = Date.parse(value || "");
+  if (!Number.isFinite(parsed)) return "-";
+  const date = new Date(parsed);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function catalogRow(item) {
+  const row = document.createElement("tr");
+  const name = document.createElement("td");
+  name.className = "name";
+  const title = document.createElement("div");
+  title.textContent = item.repo_id;
+  name.append(title);
+  for (const tag of (item.tags || []).filter((value) => !value.includes(":")).slice(0, 3)) {
+    const chip = document.createElement("span");
+    chip.className = "tag";
+    chip.textContent = tag;
+    name.append(chip);
+  }
+  const downloads = document.createElement("td");
+  downloads.className = "num";
+  downloads.textContent = formatCount(item.downloads);
+  const likes = document.createElement("td");
+  likes.className = "num";
+  likes.textContent = formatCount(item.likes);
+  const updated = document.createElement("td");
+  updated.textContent = formatDay(item.last_modified);
+  const license = document.createElement("td");
+  license.textContent = item.license || "-";
+  const action = document.createElement("td");
+  if (item.already_added) {
+    const note = document.createElement("span");
+    note.className = "tag";
+    note.textContent = "追加済み";
+    action.append(note);
+  } else {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.inspectRepo = item.repo_id;
+    button.textContent = item.gated ? "条件を確認" : "中身を見る";
+    action.append(button);
+  }
+  row.append(name, downloads, likes, updated, license, action);
+  return row;
+}
+
+function renderCatalogResults(items) {
+  const holder = byId("catalog-results");
+  const empty = byId("catalog-empty");
+  if (!items.length) {
+    holder.hidden = true;
+    empty.hidden = false;
+    empty.textContent = "条件に合うモデルは見つかりませんでした。";
+    return;
+  }
+  empty.hidden = true;
+  holder.hidden = false;
+  const table = document.createElement("table");
+  table.className = "catalog";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["モデル", "DL", "★", "更新", "ライセンス", ""]) {
+    const cell = document.createElement("th");
+    cell.textContent = label;
+    headRow.append(cell);
+  }
+  head.append(headRow);
+  const body = document.createElement("tbody");
+  body.append(...items.map(catalogRow));
+  table.append(head, body);
+  holder.replaceChildren(table);
+}
+
+async function searchCatalog() {
+  const empty = byId("catalog-empty");
+  empty.hidden = false;
+  empty.textContent = "検索しています…";
+  byId("catalog-results").hidden = true;
+  let found;
+  try {
+    found = await call("models.custom.search", {
+      query: byId("catalog-query").value,
+      sort: byId("catalog-sort").value,
+      pipeline_tag: byId("catalog-pipeline").value,
+    });
+  } catch (error) {
+    empty.textContent = error?.message || "検索できませんでした。";
+    return;
+  }
+  renderCatalogResults(found.items || []);
+}
+
 /* ── HuggingFace からモデルを追加 ────────────────────────────────────── */
 
 /* 同梱 catalog は「版が固定され、digest が検証でき、VRAM を実測済み」だから
@@ -3699,6 +3805,20 @@ function jobById(id) {
 }
 
 byId("viewer-save").addEventListener("click", () => void saveAsset(viewer.assetId));
+
+byId("catalog-search").addEventListener("click", () => void searchCatalog());
+byId("catalog-query").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); void searchCatalog(); }
+});
+byId("catalog-results").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-inspect-repo]");
+  if (!button) return;
+  // 表から直接は取り込まない。必ず中身とライセンスの確認を通す。
+  byId("custom-manual").open = true;
+  byId("custom-repo").value = button.dataset.inspectRepo;
+  byId("custom-revision").value = "main";
+  void resolveCustomModel();
+});
 
 byId("custom-resolve").addEventListener("click", () => void resolveCustomModel());
 byId("custom-result").addEventListener("click", (event) => {

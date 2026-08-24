@@ -11,7 +11,12 @@ from typing import Any
 
 from PIL import Image
 
-from .adapters import DiffusersFlux2KleinAdapter, ImageEditRequest, ImageGenerationRequest
+from .adapters import (
+    DiffusersFlux2KleinAdapter,
+    DiffusersStableDiffusionAdapter,
+    ImageEditRequest,
+    ImageGenerationRequest,
+)
 
 
 MAX_MESSAGE_BYTES = 1024 * 1024
@@ -42,6 +47,17 @@ def _integer(value: object, label: str) -> int:
     return value
 
 
+# 系統ごとの薄い adapter を名前で選ぶ。FLUX.2 が専用なのは pipeline class と
+# 参照編集の意味論が固有だからで、SD 系は Diffusers の AutoPipeline が既に
+# 吸収している。新しい checkpoint が既知の系統なら、ここへ足す必要はない。
+# 名前で引くのは import 時に固めたクラスではなく module 属性にする。
+# 固めると、試験が差し替えた偽 adapter が使われなくなる。
+ADAPTERS = {
+    "diffusers.flux2-klein": "DiffusersFlux2KleinAdapter",
+    "diffusers.stable-diffusion": "DiffusersStableDiffusionAdapter",
+}
+
+
 class ImageWorker:
     def __init__(self):
         self.model_root = Path(os.environ["MEDIA_FORGE_MODEL_ROOT"])
@@ -57,7 +73,7 @@ class ImageWorker:
         if disable_mmap is not None and disable_mmap not in {"0", "1"}:
             raise ValueError("MEDIA_FORGE_IMAGE_DISABLE_MMAP must be 0 or 1")
         self.disable_mmap_override = None if disable_mmap is None else disable_mmap == "1"
-        self.adapters: dict[str, DiffusersFlux2KleinAdapter] = {}
+        self.adapters: dict[str, Any] = {}
 
     def handle(self, payload: object) -> dict[str, Any]:
         if not isinstance(payload, dict):
@@ -73,7 +89,8 @@ class ImageWorker:
             raise ValueError("output directory is outside the worker boundary")
         output_dir.mkdir(mode=0o700, exist_ok=True)
         output_dir = _contained(self.work_root, output_dir, "output directory")
-        if model.get("runtime_adapter") != "diffusers.flux2-klein":
+        runtime_adapter = model.get("runtime_adapter")
+        if runtime_adapter not in ADAPTERS:
             raise ValueError("worker model adapter is unsupported")
         model_id = model.get("id")
         if not isinstance(model_id, str) or not model_id:
@@ -161,7 +178,8 @@ class ImageWorker:
             raise ValueError("image seed is outside the supported range")
         adapter = self.adapters.get(model_id)
         if adapter is None:
-            adapter = DiffusersFlux2KleinAdapter(
+            # 1 度に 1 つだけ常駐させる。単一 GPU では並べられない。
+            adapter = globals()[ADAPTERS[runtime_adapter]](
                 model_path,
                 device_mode=device_mode,
                 disable_mmap=disable_mmap,

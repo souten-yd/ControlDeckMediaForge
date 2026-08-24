@@ -317,3 +317,108 @@ def test_every_shard_of_a_sharded_weight_survives(tmp_path: Path):
         "text_encoder/model-00002-of-00002.safetensors",
     ]
     assert resolution.total_bytes == 300
+
+
+# ── 配布元の検索 ────────────────────────────────────────────────────────
+
+
+def search_catalog(tmp_path: Path, payload):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if isinstance(payload, int):
+            return httpx.Response(payload)
+        return httpx.Response(200, json=payload, request=request)
+
+    return CustomModelCatalog(
+        tmp_path / "custom-models.json",
+        origin="https://hub.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+
+def listing(repo_id: str, downloads: int = 10, likes: int = 1) -> dict:
+    return {
+        "id": repo_id,
+        "author": repo_id.split("/")[0],
+        "downloads": downloads,
+        "likes": likes,
+        "lastModified": "2026-01-02T03:04:05.000Z",
+        "pipeline_tag": "text-to-image",
+        "library_name": "diffusers",
+        "gated": False,
+        "tags": ["diffusers", "text-to-image", "license:openrail++"],
+    }
+
+
+def test_search_returns_the_facts_a_person_sorts_on(tmp_path: Path):
+    store = search_catalog(tmp_path, [listing("owner/one", downloads=500, likes=9)])
+
+    rows = asyncio.run(store.search("sd"))
+
+    assert len(rows) == 1
+    row = rows[0].document()
+    assert row["repo_id"] == "owner/one"
+    assert row["downloads"] == 500 and row["likes"] == 9
+    assert row["last_modified"].startswith("2026-01-02")
+    assert row["license"] == "openrail++"
+
+
+@pytest.mark.parametrize("sort", ["downloads", "likes", "lastModified", "createdAt"])
+def test_every_offered_sort_is_accepted(tmp_path: Path, sort: str):
+    store = search_catalog(tmp_path, [listing("owner/one")])
+
+    assert asyncio.run(store.search("sd", sort=sort))
+
+
+def test_an_unknown_sort_is_refused_rather_than_silently_ignored(tmp_path: Path):
+    """黙って別の順で返すと、利用者は並べ替えたつもりのまま誤った表を読む。"""
+    store = search_catalog(tmp_path, [listing("owner/one")])
+
+    with pytest.raises(CustomModelError) as exc:
+        asyncio.run(store.search("sd", sort="stars"))
+
+    assert exc.value.code == "custom_model_sort_invalid"
+
+
+def test_search_only_offers_pipelines_that_can_actually_be_used(tmp_path: Path):
+    store = search_catalog(tmp_path, [listing("owner/one")])
+
+    with pytest.raises(CustomModelError) as exc:
+        asyncio.run(store.search("sd", pipeline_tag="text-generation"))
+
+    assert exc.value.code == "custom_model_pipeline_invalid"
+
+
+def test_search_asks_the_source_only_for_usable_candidates(tmp_path: Path):
+    """取り込めない形式ばかり並べても選べない。"""
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(dict(request.url.params))
+        return httpx.Response(200, json=[])
+
+    store = CustomModelCatalog(
+        tmp_path / "custom-models.json",
+        origin="https://hub.test",
+        transport=httpx.MockTransport(handler),
+    )
+    asyncio.run(store.search("anything"))
+
+    assert seen["library"] == "diffusers"
+    assert seen["pipeline_tag"] == "text-to-image"
+
+
+def test_a_malformed_entry_is_skipped_rather_than_failing_the_search(tmp_path: Path):
+    store = search_catalog(tmp_path, ["not-an-object", {"id": "no-slash"}, listing("owner/ok")])
+
+    rows = asyncio.run(store.search("sd"))
+
+    assert [row.repo_id for row in rows] == ["owner/ok"]
+
+
+def test_an_unreachable_source_is_reported_with_a_code(tmp_path: Path):
+    store = search_catalog(tmp_path, 503)
+
+    with pytest.raises(CustomModelError) as exc:
+        asyncio.run(store.search("sd"))
+
+    assert exc.value.code == "custom_model_source_unreachable"

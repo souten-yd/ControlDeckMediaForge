@@ -185,8 +185,127 @@ def _adapter_for(library_name: str, pipeline_tag: str) -> tuple[str, tuple[str, 
     )
 
 
-class CustomModelCatalog:
-    """Durable store of user-added catalog entries."""
+# ── 配布元の検索 ────────────────────────────────────────────────────────
+#
+# repository ID を手で入力させるのは、名前を既に知っている人にしか使えない。
+# 探すところから引き受ける。ただし探せることと入れてよいことは別なので、
+# 結果は候補のままで、取り込みは従来どおり resolve と明示承諾を通す。
+
+SEARCH_LIMIT = 30
+SEARCH_SORTS = ("downloads", "likes", "lastModified", "createdAt")
+# 画像生成として扱える組み合わせだけを既定で探す。使えないものを既定で出さない。
+SEARCH_PIPELINES = ("text-to-image", "image-to-image", "inpainting")
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogCandidate:
+    repo_id: str
+    author: str
+    downloads: int
+    likes: int
+    last_modified: str
+    pipeline_tag: str
+    library_name: str
+    gated: bool
+    license: str
+    tags: tuple[str, ...]
+
+    def document(self) -> dict[str, Any]:
+        return {
+            "repo_id": self.repo_id,
+            "author": self.author,
+            "downloads": self.downloads,
+            "likes": self.likes,
+            "last_modified": self.last_modified,
+            "pipeline_tag": self.pipeline_tag,
+            "library_name": self.library_name,
+            "gated": self.gated,
+            "license": self.license,
+            "tags": list(self.tags),
+        }
+
+
+def _license_from_tags(tags: list[Any]) -> str:
+    for tag in tags:
+        if isinstance(tag, str) and tag.startswith("license:"):
+            return tag.split(":", 1)[1]
+    return "unknown"
+
+
+class CatalogSearchMixin:
+    """Search the distribution site for candidates. Adding one still needs consent."""
+
+    async def search(
+        self,
+        query: str,
+        *,
+        sort: str = "downloads",
+        pipeline_tag: str = "text-to-image",
+        limit: int = SEARCH_LIMIT,
+    ) -> list[CatalogCandidate]:
+        if sort not in SEARCH_SORTS:
+            raise CustomModelError("custom_model_sort_invalid", "並び順が正しくありません")
+        if pipeline_tag not in SEARCH_PIPELINES:
+            raise CustomModelError("custom_model_pipeline_invalid", "用途が正しくありません")
+        if not isinstance(query, str) or len(query) > 200:
+            raise CustomModelError("custom_model_query_invalid", "検索語が長すぎます")
+        params: dict[str, Any] = {
+            "pipeline_tag": pipeline_tag,
+            # Diffusers 形式に限る。ここを緩めると、取り込めない候補ばかり並ぶ。
+            "library": "diffusers",
+            "sort": sort,
+            "direction": -1,
+            "limit": max(1, min(SEARCH_LIMIT, limit)),
+        }
+        if query.strip():
+            params["search"] = query.strip()
+        try:
+            async with httpx.AsyncClient(
+                transport=self.transport, timeout=self.timeout_sec, follow_redirects=True
+            ) as client:
+                response = await client.get(f"{self.origin}/api/models", params=params)
+        except httpx.HTTPError as exc:
+            raise CustomModelError(
+                "custom_model_source_unreachable", "配布元を検索できませんでした"
+            ) from exc
+        if response.status_code != 200:
+            raise CustomModelError(
+                "custom_model_source_unreachable", "配布元を検索できませんでした"
+            )
+        try:
+            payload = response.json()
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise CustomModelError(
+                "custom_model_metadata_invalid", "検索結果を読み取れませんでした"
+            ) from exc
+        if not isinstance(payload, list):
+            raise CustomModelError("custom_model_metadata_invalid", "検索結果を読み取れませんでした")
+
+        found: list[CatalogCandidate] = []
+        for item in payload[:SEARCH_LIMIT]:
+            if not isinstance(item, dict):
+                continue
+            repo_id = str(item.get("id") or item.get("modelId") or "")
+            if _REPO_ID.fullmatch(repo_id) is None:
+                continue
+            tags = item.get("tags") if isinstance(item.get("tags"), list) else []
+            found.append(CatalogCandidate(
+                repo_id=repo_id,
+                author=str(item.get("author") or repo_id.split("/", 1)[0]),
+                downloads=int(item.get("downloads") or 0),
+                likes=int(item.get("likes") or 0),
+                last_modified=str(item.get("lastModified") or ""),
+                pipeline_tag=str(item.get("pipeline_tag") or ""),
+                library_name=str(item.get("library_name") or ""),
+                gated=item.get("gated") not in (False, None),
+                license=_license_from_tags(tags),
+                tags=tuple(str(tag) for tag in tags[:24] if isinstance(tag, str)),
+            ))
+        return found
+
+
+class CustomModelCatalog(CatalogSearchMixin):
+    """Durable store of user-added catalog entries, and search over the source."""
 
     def __init__(
         self,
