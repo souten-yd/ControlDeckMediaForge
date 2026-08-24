@@ -25,7 +25,15 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from . import __version__, library, preferences, thumbnails
 from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
-from .asset_placement import ProjectAssetPlacement, placement_filename
+from .asset_placement import (
+    PlacementItem,
+    PlacementManifest,
+    PlacementPlanError,
+    PlacementReceipt,
+    ProjectAssetPlacement,
+    placement_filename,
+    plan_placements,
+)
 from .asset_brief import (
     AssetBriefError,
     infer_brief_from_intent,
@@ -410,6 +418,62 @@ def create_app(
 
     def submitted_reference(value: dict[str, Any]) -> dict[str, Any]:
         return {"job_id": value["id"], "status": value["status"], "asset_ids": value["asset_ids"]}
+
+    def placement_manifest(request_input: object) -> PlacementManifest:
+        """Accept either the long-standing single placement or a batch.
+
+        The singular form is what every existing caller sends and it keeps
+        working unchanged, including its response shape. The batch form exists
+        because placing related assets one call at a time made the outcome hard
+        to confirm without going to the filesystem.
+        """
+        if not isinstance(request_input, dict):
+            raise HTTPException(
+                status_code=422, detail={"code": "invalid_project_asset_placement"}
+            )
+        try:
+            if "items" in request_input:
+                return PlacementManifest.model_validate(request_input)
+            single = ProjectAssetPlacement.model_validate(request_input)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "invalid_project_asset_placement"}
+            ) from exc
+        return PlacementManifest(
+            output_grant_id=single.output_grant_id,
+            items=[PlacementItem(asset_id=single.asset_id, filename=single.filename)],
+        )
+
+    def placement_response(
+        request_input: object, receipts: list[PlacementReceipt], *, partial: bool
+    ) -> dict[str, Any]:
+        """Answer in the shape the caller asked in, and never overclaim.
+
+        ControlDeck commits one file atomically. A batch of N is N separate
+        commits, so the response reports per-item outcomes and says plainly
+        that the batch is not all-or-nothing.
+        """
+        batch = isinstance(request_input, dict) and "items" in request_input
+        if not batch:
+            receipt = receipts[0]
+            return {
+                "asset_id": receipt.host_asset_id,
+                "media_asset_id": receipt.source_asset_id,
+                "name": receipt.filename,
+                "mime_type": receipt.media_type,
+                "size": receipt.size_bytes,
+                "sha256": receipt.sha256,
+                "receipt": receipt.model_dump(mode="json"),
+            }
+        return {
+            "receipts": [item.model_dump(mode="json") for item in receipts],
+            "committed_count": sum(1 for item in receipts if item.committed),
+            "requested_count": len(receipts),
+            "partial": partial,
+            # Host が原子的に扱えるのは 1 ファイルである。N 件を「全部か無か」と
+            # 名乗ると、部分的に書かれた状態を呼び出し側が見落とす。
+            "atomic": False,
+        }
 
     def apply_asset_brief(value: JobRequest) -> JobRequest:
         """Resolve the output canvas from the asset's purpose, before generation.
@@ -1382,50 +1446,103 @@ def create_app(
             raise HTTPException(status_code=403, detail={"code": "host_capability_not_granted"})
         if not isinstance(payload, dict):
             raise HTTPException(status_code=422, detail={"code": "invalid_execution_envelope"})
-        try:
-            placement = ProjectAssetPlacement.model_validate(payload.get("input", {}))
-        except ValidationError as exc:
-            raise HTTPException(status_code=422, detail={"code": "invalid_project_asset_placement"}) from exc
+        request_input = payload.get("input", {})
+        manifest = placement_manifest(request_input)
         correlation = payload.get("correlation")
         host_job_id = correlation.get("job_id") if isinstance(correlation, dict) else None
         if not isinstance(host_job_id, str) or identity.subject != f"job:{host_job_id}":
             raise HTTPException(status_code=403, detail={"code": "host_job_scope_mismatch"})
+        # 1 バイトも書く前に全件を確定させる。3 件書いたあとで重複名や欠落資産に
+        # 気づいても、Host の commit は取り消せない。
         try:
-            asset = store.get_asset(placement.asset_id)
-            source = store.asset_path(placement.asset_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
-        try:
-            filename = placement_filename(
-                requested=placement.filename,
-                suggested=asset.suggested_filename,
-                mime_type=asset.mime_type,
-            )
-            committed = await commit_file(
-                host,
-                identity,
-                host_job_id=host_job_id,
-                grant_id=require_grant_id(placement.output_grant_id),
-                source=source,
-                filename=filename,
-                mime_type=asset.mime_type,
-                sha256=asset.sha256,
-            )
-        except HostApiError as exc:
-            raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from exc
-        except (OSError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail={"code": "asset_placement_rejected"}) from exc
-        project_asset_id = committed.get("asset_id")
-        if not isinstance(project_asset_id, str) or not project_asset_id.startswith("asset:"):
-            raise HTTPException(status_code=502, detail={"code": "invalid_host_response"})
-        return {
-            "asset_id": project_asset_id,
-            "media_asset_id": asset.id,
-            "name": filename,
-            "mime_type": asset.mime_type,
-            "size": asset.size_bytes,
-            "sha256": asset.sha256,
-        }
+            planned = plan_placements(manifest, store.get_asset)
+        except PlacementPlanError as exc:
+            status = 404 if exc.code == "asset_not_found" else 422
+            raise HTTPException(
+                status_code=status, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+
+        grant_id = require_grant_id(manifest.output_grant_id)
+        receipts: list[PlacementReceipt] = []
+        failure: HTTPException | None = None
+        for entry in planned:
+            if failure is not None:
+                # 失敗のあとは書き続けない。頼まれた仕事の残りは未着手と報告する。
+                receipts.append(PlacementReceipt(
+                    committed=False,
+                    source_asset_id=entry.item.asset_id,
+                    filename=entry.filename,
+                    media_type=entry.mime_type,
+                    sha256=entry.sha256,
+                    size_bytes=entry.size_bytes,
+                    width=entry.width,
+                    height=entry.height,
+                    role=entry.item.role,
+                    error={"code": "not_attempted", "message": "an earlier item failed"},
+                ))
+                continue
+            try:
+                committed = await commit_file(
+                    host,
+                    identity,
+                    host_job_id=host_job_id,
+                    grant_id=grant_id,
+                    source=store.asset_path(entry.item.asset_id),
+                    filename=entry.filename,
+                    mime_type=entry.mime_type,
+                    sha256=entry.sha256,
+                )
+                project_asset_id = committed.get("asset_id")
+                if not isinstance(project_asset_id, str) or not project_asset_id.startswith("asset:"):
+                    raise HostApiError("invalid_host_response", "ControlDeck returned an invalid output", 502)
+            except HostApiError as exc:
+                failure = HTTPException(status_code=exc.status_code, detail={"code": exc.code})
+                receipts.append(PlacementReceipt(
+                    committed=False,
+                    source_asset_id=entry.item.asset_id,
+                    filename=entry.filename,
+                    media_type=entry.mime_type,
+                    sha256=entry.sha256,
+                    size_bytes=entry.size_bytes,
+                    width=entry.width,
+                    height=entry.height,
+                    role=entry.item.role,
+                    error={"code": exc.code, "message": str(exc)[:300]},
+                ))
+                continue
+            except (OSError, ValueError, KeyError) as exc:
+                failure = HTTPException(
+                    status_code=422, detail={"code": "asset_placement_rejected"}
+                )
+                receipts.append(PlacementReceipt(
+                    committed=False,
+                    source_asset_id=entry.item.asset_id,
+                    filename=entry.filename,
+                    media_type=entry.mime_type,
+                    sha256=entry.sha256,
+                    size_bytes=entry.size_bytes,
+                    width=entry.width,
+                    height=entry.height,
+                    role=entry.item.role,
+                    error={"code": "asset_placement_rejected", "message": str(exc)[:300]},
+                ))
+                continue
+            receipts.append(PlacementReceipt(
+                committed=True,
+                source_asset_id=entry.item.asset_id,
+                filename=entry.filename,
+                media_type=entry.mime_type,
+                sha256=entry.sha256,
+                size_bytes=entry.size_bytes,
+                host_asset_id=project_asset_id,
+                width=entry.width,
+                height=entry.height,
+                role=entry.item.role,
+            ))
+
+        if failure is not None and not any(item.committed for item in receipts):
+            raise failure
+        return placement_response(request_input, receipts, partial=failure is not None)
 
     @app.post("/addon/v1/context/edit-image")
     async def context_edit_image(request: Request) -> dict[str, Any]:

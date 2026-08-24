@@ -321,13 +321,30 @@ def test_agent_pack_atomically_places_one_asset_through_an_opaque_grant(tmp_path
             headers=headers,
         )
     assert response.status_code == 200, response.text
-    assert response.json() == {
+    body = response.json()
+    # 既存の呼び出し側が読んでいる欄はそのまま残す。
+    assert {key: body[key] for key in ("asset_id", "media_asset_id", "name", "mime_type", "size", "sha256")} == {
         "asset_id": "asset:committed",
         "media_asset_id": media_asset_id,
         "name": "robot-player.png",
         "mime_type": "image/png",
         "size": asset["size_bytes"],
         "sha256": asset["sha256"],
+    }
+    # 受領書は加法。agent が ls / file で確かめ直さずに済むだけの事実を返す。
+    assert body["receipt"] == {
+        "committed": True,
+        "source_asset_id": media_asset_id,
+        "filename": "robot-player.png",
+        "media_type": "image/png",
+        "sha256": asset["sha256"],
+        "size_bytes": asset["size_bytes"],
+        "host_asset_id": "asset:committed",
+        "width": asset["width"],
+        "height": asset["height"],
+        "role": None,
+        "warnings": [],
+        "error": None,
     }
     output = state["outputs"]["output-1"]
     assert output["metadata"] == {
@@ -888,3 +905,145 @@ def test_host_resource_rejection_fails_before_worker_start(tmp_path: Path):
             assert terminal["error"]["code"] == "host_request_rejected"
             assert client.app.state.jobs._processes == {}
     assert state["lease_actions"] == []
+
+
+# ── G4H A4: 複数資産の配置と受領書 ──────────────────────────────────────
+
+
+def _placed_assets(client: TestClient, count: int) -> list[dict]:
+    assets = []
+    for index in range(count):
+        created = client.post("/api/v1/jobs", json=generate_input(f"batch asset {index}")).json()
+        terminal = wait_terminal(client, created["id"])
+        assets.append(client.get(f"/api/v1/assets/{terminal['asset_ids'][0]}").json())
+    return assets
+
+
+def test_a_batch_places_every_asset_and_receipts_each_one(tmp_path: Path):
+    """1 件ずつ呼ぶと、何が置かれたのかを応答から確定できなかった。"""
+    client, headers, state = host_client(tmp_path, token="valid-job")
+    with client:
+        assets = _placed_assets(client, 3)
+        response = client.post(
+            "/addon/v1/agent/pack",
+            json={"input": {
+                "output_grant_id": "grant:export-1",
+                "items": [
+                    {"asset_id": assets[0]["id"], "filename": "background.png", "role": "background"},
+                    {"asset_id": assets[1]["id"], "filename": "emblem.png", "role": "emblem"},
+                    {"asset_id": assets[2]["id"], "filename": "icon.png"},
+                ],
+            }, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["committed_count"] == 3 and body["requested_count"] == 3
+    assert body["partial"] is False
+    for receipt, asset in zip(body["receipts"], assets, strict=True):
+        assert receipt["committed"] is True
+        assert receipt["sha256"] == asset["sha256"]
+        assert receipt["size_bytes"] == asset["size_bytes"]
+        assert (receipt["width"], receipt["height"]) == (asset["width"], asset["height"])
+        assert receipt["host_asset_id"].startswith("asset:")
+    assert [item["role"] for item in body["receipts"]] == ["background", "emblem", None]
+    assert len(state["outputs"]) == 3
+
+
+def test_a_batch_never_claims_to_be_all_or_nothing(tmp_path: Path):
+    """Host が原子的に扱えるのは 1 ファイル。N 件をそう名乗ると嘘になる。"""
+    client, headers, _state = host_client(tmp_path, token="valid-job")
+    with client:
+        assets = _placed_assets(client, 1)
+        response = client.post(
+            "/addon/v1/agent/pack",
+            json={"input": {
+                "output_grant_id": "grant:export-1",
+                "items": [{"asset_id": assets[0]["id"], "filename": "only.png"}],
+            }, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    assert response.json()["atomic"] is False
+
+
+def test_duplicate_destination_names_are_refused_before_any_write(tmp_path: Path):
+    """3 件書いたあとで気づいても、Host の commit は取り消せない。"""
+    client, headers, state = host_client(tmp_path, token="valid-job")
+    with client:
+        assets = _placed_assets(client, 2)
+        response = client.post(
+            "/addon/v1/agent/pack",
+            json={"input": {
+                "output_grant_id": "grant:export-1",
+                "items": [
+                    {"asset_id": assets[0]["id"], "filename": "same.png"},
+                    {"asset_id": assets[1]["id"], "filename": "SAME.PNG"},
+                ],
+            }, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "duplicate_placement_filename"
+    assert state["outputs"] == {}
+
+
+def test_a_missing_asset_stops_the_batch_before_any_write(tmp_path: Path):
+    client, headers, state = host_client(tmp_path, token="valid-job")
+    with client:
+        assets = _placed_assets(client, 1)
+        response = client.post(
+            "/addon/v1/agent/pack",
+            json={"input": {
+                "output_grant_id": "grant:export-1",
+                "items": [
+                    {"asset_id": assets[0]["id"], "filename": "good.png"},
+                    {"asset_id": "asset_" + "0" * 32, "filename": "missing.png"},
+                ],
+            }, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "asset_not_found"
+    assert state["outputs"] == {}
+
+
+def test_a_batch_receipt_leaks_no_project_path(tmp_path: Path):
+    client, headers, _state = host_client(tmp_path, token="valid-job")
+    with client:
+        assets = _placed_assets(client, 1)
+        response = client.post(
+            "/addon/v1/agent/pack",
+            json={"input": {
+                "output_grant_id": "grant:export-1",
+                "items": [{"asset_id": assets[0]["id"], "filename": "one.png"}],
+            }, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    serialized = json.dumps(response.json())
+    assert str(tmp_path) not in serialized
+    assert "path" not in serialized and "model" not in serialized
+
+
+def test_the_same_asset_cannot_be_listed_twice(tmp_path: Path):
+    client, headers, _state = host_client(tmp_path, token="valid-job")
+    with client:
+        assets = _placed_assets(client, 1)
+        response = client.post(
+            "/addon/v1/agent/pack",
+            json={"input": {
+                "output_grant_id": "grant:export-1",
+                "items": [
+                    {"asset_id": assets[0]["id"], "filename": "a.png"},
+                    {"asset_id": assets[0]["id"], "filename": "b.png"},
+                ],
+            }, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_project_asset_placement"
