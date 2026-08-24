@@ -30,9 +30,11 @@ docs/implementation/                 実装の指示（どの順で・何を確�
 | 6 | [creative-intelligence.md](creative-intelligence.md) | MediaForge | **UX2 C0〜C5を再利用**して、Creative Director / Reference Intelligence / Unified Evaluator を追加。設計は `../design-creative-intelligence.md` |
 | 7 | [g5-m5-companion.md](g5-m5-companion.md) | MediaForge | G5。shared-canvas profile、deterministic validator、atlas/manifest pack |
 | 8 | [g6-workspace-turn-and-catalog.md](g6-workspace-turn-and-catalog.md) | MediaForge (+ControlDeck 1 スライス) | G6。永続化の前方互換、workspace session、AI/画像の resource turn 分割、到達性、domain routing、custom HF model |
+| 9 | [g4-agent-asset-workflow-hardening.md](g4-agent-asset-workflow-hardening.md) | **MediaForge 主体 / ControlDeck は明示した汎用 Host follow-up のみ** | 実 OpenCode 使用で見えた G4 改善。AssetBrief、用途別canvas、VLM評価/限定再生成、placement receipt、複数asset、grant timing、Host境界 |
 | — | [host-load-profile-fix.md](host-load-profile-fix.md) | **ControlDeck** | ホスト側の LLM 退避コスト計測の修正。G7 の前提 |
 
 `host-load-profile-fix.md` だけ作業対象が ControlDeck リポジトリ。
+`g4-agent-asset-workflow-hardening.md` は原則 MediaForge の実装計画であり、文書内 H1〜H4 は **別 ControlDeck PR の候補**として明確に分離する。MediaForge PR の都合で Host に Media 固有コードを追加してはならない。
 Creative Intelligence は ControlDeck の generic `ai.inference` を利用するが、Media固有の provider/model route は追加しない。
 Media Forge G7（動画）で LLM 退避が実際に必要になるため、依存関係の記録として `host-load-profile-fix.md` をここに置く。
 
@@ -48,6 +50,7 @@ G3   同じキャラ・同じ絵柄で作れる
 UX2  既存UXのままモデル管理・シーン/ポーズ/構図を使いこなせる  ux2-model-scene.md
 CI   自然文Director・参照理解・評価を既存UXへ統合               creative-intelligence.md
 G4   コーディングエージェントが素材を置ける
+G4H  実利用の摩擦を解消し、用途→生成→評価→配置→コード利用を堅牢化  g4-agent-asset-workflow-hardening.md
 G5   M5Stack companion が実運用できる
 G6   2Dゲーム素材一式が出せる
 G7   動かせる（動画・アニメーション）    ← host-load-profile-fix.md が前提
@@ -57,6 +60,7 @@ G10  手持ち資料を参照源にできる
 ```
 
 G0〜G4 で local media service として実用成立する。
+G4H は G4 を作り直すものではなく、実 OpenCode 利用で見えた用途解釈・canvas・評価・placement の摩擦を既存 G4/CI/G6 基盤上で解消する横断 hardening である。
 UX2 は G1〜G3 の既存能力を利用者が使い分けるための横断スライス。
 Creative Intelligence は UX2 の Pose/Scene/Composer/Evaluator を捨てず、自然文のActionStateとControlDeck AI gatewayを上に載せる横断スライス。
 G5 以降は用途別の上積みで、順序を入れ替えてよい。
@@ -77,12 +81,17 @@ AI境界           Media Forgeは provider/model/port を選ばず、ControlDeck
 AI役割           text-only Director = text.generate。画像が存在する時だけ vision.analyze
 新規画像          prompt-only first image の前に vision.analyze を要求しない
 Pose              presetを増殖させず、ActionStateSpecを主経路、presetはfallback/Advanced
+Agent用途         coding agentにモデル固有prompt engineeringを主責務として押し付けない
+Canvas            wide/portrait等の用途要件はprompt文字列だけでなく構造化して解決する
+VLM改善           通常単発生成へmandatoryなcritic loopを追加しない。再生成はbounded opt-inのみ
+Placement         output grantは配置直前に取得。raw project pathをMediaForgeへ渡さない
+Host変更           別pluginでも成立するgeneric primitiveだけ。Media固有便利APIは禁止
 モデル削除       Media Forge 管理下の重みだけ削除し、共有HF/ComfyUI/外部モデルを勝手に消さない
 ```
 
 ---
 
-## Codex へ渡すときの注意
+## Codex / Claude へ渡すときの注意
 
 指示書は ControlDeck 側のファイルを繰り返し参照する。
 
