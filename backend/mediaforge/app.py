@@ -2369,6 +2369,80 @@ def create_app(
                 if isinstance(root, Path) and root.exists():
                     shutil.rmtree(root)
 
+    @app.get("/workspace-api/models/catalog", include_in_schema=False)
+    async def standalone_model_catalog() -> dict[str, Any]:
+        """Same-origin workspace bridge for standalone mode; not a public API.
+
+        The standalone shim used to report management as unavailable, so the
+        list could never offer download or delete. Managing local model files
+        needs no Host, so report what is actually configured.
+        """
+        if model_operations is None:
+            return {"items": [], "management_available": False}
+        value = model_operations.catalog()
+        value["evaluation"] = {
+            "available_model_ids": model_evaluations.available_model_ids()
+            if model_evaluations is not None else []
+        }
+        return value
+
+    @app.get("/workspace-api/models/operations", include_in_schema=False)
+    async def standalone_model_operations() -> dict[str, Any]:
+        return {"items": [item.model_dump(mode="json") for item in store.list_model_operations()]}
+
+    @app.post("/workspace-api/models/operations", include_in_schema=False)
+    async def standalone_model_operation(payload: dict[str, Any]) -> dict[str, Any]:
+        if model_operations is None:
+            raise HTTPException(status_code=503, detail={"code": "model_not_found"})
+        action = payload.get("action")
+        model_id = str(payload.get("model_id", ""))
+        try:
+            if action == "install":
+                acceptance = payload.get("license_acceptance")
+                return model_operations.install(
+                    model_id,
+                    license_acceptance=acceptance if isinstance(acceptance, str) else None,
+                ).model_dump(mode="json")
+            if action == "remove":
+                return model_operations.remove(model_id).model_dump(mode="json")
+            if action == "cancel":
+                return model_operations.cancel(str(payload.get("operation_id", ""))).model_dump(mode="json")
+        except ModelOperationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+        raise HTTPException(status_code=422, detail={"code": "invalid_model_action"})
+
+    @app.post("/workspace-api/models/search", include_in_schema=False)
+    async def standalone_model_search(payload: dict[str, Any]) -> dict[str, Any]:
+        """Same-origin workspace bridge for standalone mode; not a public API.
+
+        Searching the distribution site needs no Host at all, so the standalone
+        workspace should be able to do it. Without this the search box was dead
+        outside the embedded view.
+        """
+        try:
+            reject_host_paths(payload)
+            candidates = await custom_models.search(
+                str(payload.get("query", "")),
+                sort=str(payload.get("sort", "downloads")),
+                style=str(payload.get("style", "any")),
+                limit=int(payload.get("limit", 30) or 30),
+            )
+        except CustomModelError as exc:
+            raise HTTPException(
+                status_code=502, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+        installed = {
+            item["registry"]["model_id"]
+            for item in custom_models.entries()
+            if isinstance(item.get("registry"), dict)
+        }
+        return {"items": [
+            {**item.document(), "already_added": item.repo_id in installed}
+            for item in candidates
+        ]}
+
     @app.post("/workspace-api/creative/batches", include_in_schema=False)
     async def standalone_creative_batch(payload: dict[str, Any]) -> dict[str, Any]:
         async def submit_batch_child(child: JobRequest) -> dict[str, Any]:

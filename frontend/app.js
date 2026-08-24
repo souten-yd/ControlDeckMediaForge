@@ -286,6 +286,23 @@ async function standaloneCall(method, params) {
   }
   if (method === "models.list") return json("/api/v1/models");
   if (method === "models.catalog") {
+    // ローカルのモデル管理はホストを必要としない。単体表示でも本物を返す。
+    try { return await json("/workspace-api/models/catalog"); } catch { /* 旧 core は shim へ落ちる */ }
+  }
+  if (method === "models.operations.list") return json("/workspace-api/models/operations");
+  if (method === "models.install") {
+    return json("/workspace-api/models/operations", {method: "POST", body: JSON.stringify(
+      {action: "install", model_id: params.model_id, license_acceptance: params.license_acceptance})});
+  }
+  if (method === "models.remove") {
+    return json("/workspace-api/models/operations", {method: "POST", body: JSON.stringify(
+      {action: "remove", model_id: params.model_id})});
+  }
+  if (method === "models.operations.cancel") {
+    return json("/workspace-api/models/operations", {method: "POST", body: JSON.stringify(
+      {action: "cancel", operation_id: params.operation_id})});
+  }
+  if (method === "models.catalog") {
     const {items} = await json("/api/v1/models");
     return {items: items.map((model) => ({
       model_id: model.id, display_name: model.display_name || model.id,
@@ -307,7 +324,6 @@ async function standaloneCall(method, params) {
       measured_runtime_sec: model.measured_runtime_sec,
     })), storage: {managed_bytes: 0, free_bytes: 0, total_bytes: 0}, management_available: false};
   }
-  if (method === "models.operations.list") return {items: []};
   if (method === "models.operations.watch" || method === "models.operations.unwatch") return {watching: []};
   if (method === "assets.provenance") return json(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/provenance`);
   if (method === "preferences.get") return {values: state.preferences};
@@ -315,6 +331,10 @@ async function standaloneCall(method, params) {
   if (method === "profiles.list") return json("/api/v1/profiles");
   if (method === "reference_collections.list") return json("/api/v1/reference-collections");
   if (method === "domain_profiles.list") return json("/api/v1/domain-profiles");
+  if (method === "models.custom.search") {
+    // 配布元の検索はホストを必要としない。単体表示でも使えるべきである。
+    return json("/workspace-api/models/search", {method: "POST", body: JSON.stringify(params)});
+  }
   if (method === "models.custom.resolve" || method === "models.custom.add"
       || method === "models.custom.remove") {
     // 単体表示ではモデル取り込みに CLI を使う。UI から偽の成功を返さない。
@@ -432,17 +452,10 @@ function mountAdvanced() {
 }
 
 function syncAdvancedCreate() {
-  const width = byId("advanced-width");
-  if (!width) return;
-  const preset = currentPreset();
+  // 幅と高さは上の「サイズ」に 1 組だけ置く。詳細モードで同じ欄を再掲して
+  // いたが、そちらが上書きしていたため、どちらが効いているのか分からなかった。
+  if (!byId("advanced-count")) return;
   const envelope = sizeEnvelope();
-  for (const input of [width, byId("advanced-height")]) {
-    input.min = envelope.min_side;
-    input.max = envelope.max_side;
-    input.step = envelope.multiple_of;
-  }
-  width.value = preset.width;
-  byId("advanced-height").value = preset.height;
   byId("advanced-count").value = selectedCount();
   byId("advanced-size-hint").textContent =
     `${envelope.min_side}〜${envelope.max_side}px・${envelope.multiple_of} の倍数（${
@@ -781,6 +794,13 @@ function renderProfileChoices() {
    探すところから引き受ける。ただし探せることと入れてよいことは別なので、
    表から直接は取り込まず、必ず中身とライセンスの確認へ渡す。 */
 
+/* モバイルでは横に伸ばさず積み上げる。列名がないと、積んだ途端に
+   「14.9 GB」が何の数字なのか分からなくなるので、各セルに持たせる。 */
+function labelled(cell, label) {
+  cell.dataset.label = label;
+  return cell;
+}
+
 function formatCount(value) {
   const count = Number(value) || 0;
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
@@ -818,6 +838,13 @@ function catalogRow(item) {
   updated.textContent = formatDay(item.last_modified);
   const license = document.createElement("td");
   license.textContent = item.license || "-";
+  // 積み上げたときに数字が何を指すのか分かるようにする。カタログの表と
+  // 同じ扱いにしないと、検索結果だけ値が裸で並ぶ。
+  labelled(downloads, "ダウンロード");
+  labelled(likes, "お気に入り");
+  labelled(updated, "更新");
+  labelled(license, "ライセンス");
+  updated.classList.add("secondary");
   const action = document.createElement("td");
   if (item.already_added) {
     const note = document.createElement("span");
@@ -831,7 +858,8 @@ function catalogRow(item) {
     button.textContent = item.gated ? "条件を確認" : "中身を見る";
     action.append(button);
   }
-  row.append(name, downloads, likes, updated, license, action);
+  row.append(labelled(name, "モデル"), downloads, likes, updated, license,
+             labelled(action, "操作"));
   return row;
 }
 
@@ -942,22 +970,15 @@ function renderCustomResolution(resolution) {
   holder.append(accept, add);
 }
 
-async function resolveCustomModel() {
+/* 検索結果から選んだものを、中身とライセンスの確認へ渡す。
+   repository の手入力欄は使われないため撤去した（利用者判断）。検索に
+   出てこない版が要る場合は CLI から入れる。 */
+async function resolveCustomModel(repoId, revision = "main") {
   const error = byId("custom-error");
   error.hidden = true;
-  byId("custom-result").hidden = true;
   customResolution = null;
-  const repoId = byId("custom-repo").value.trim();
-  if (!repoId) {
-    error.hidden = false;
-    error.textContent = "repository を入れてください。";
-    return;
-  }
   try {
-    customResolution = await call("models.custom.resolve", {
-      repo_id: repoId,
-      revision: byId("custom-revision").value.trim() || "main",
-    });
+    customResolution = await call("models.custom.resolve", {repo_id: repoId, revision});
   } catch (failure) {
     error.hidden = false;
     error.textContent = failure?.message || "中身を確かめられませんでした。";
@@ -1774,10 +1795,6 @@ function buildConstraints(preset) {
   if (state.editMode === "outpaint" && state.mode !== "advanced") {
     const target = outpaintTarget();
     if (target) return target;
-  }
-  if (state.mode === "advanced" && byId("advanced-width")) {
-    constraints.width = Number(byId("advanced-width").value) || preset.width;
-    constraints.height = Number(byId("advanced-height").value) || preset.height;
   }
   return constraints;
 }
@@ -3338,13 +3355,6 @@ function modelActionCell(model, modelKey) {
   return cell;
 }
 
-/* モバイルでは横に伸ばさず積み上げる。列名がないと、積んだ途端に
-   「14.9 GB」が何の数字なのか分からなくなるので、各セルに持たせる。 */
-function labelled(cell, label) {
-  cell.dataset.label = label;
-  return cell;
-}
-
 function modelTableRow(model) {
   const modelKey = String(state.modelCatalog.indexOf(model));
   const row = document.createElement("tr");
@@ -3394,6 +3404,10 @@ function modelTableRow(model) {
     labelled(license, "ライセンス"),
     labelled(modelActionCell(model, modelKey), "操作"),
   );
+  // モバイルでは 2 列に並べるため、狭い側で落とす欄に印を付ける。
+  // 採用とライセンスは表（横並び）では読めるが、狭い枠では名前と容量を潰す。
+  adoption.classList.add("secondary");
+  license.classList.add("secondary");
   return row;
 }
 
@@ -3995,13 +4009,8 @@ byId("catalog-results").addEventListener("click", (event) => {
   const button = event.target.closest("[data-inspect-repo]");
   if (!button) return;
   // 表から直接は取り込まない。必ず中身とライセンスの確認を通す。
-  byId("custom-manual").open = true;
-  byId("custom-repo").value = button.dataset.inspectRepo;
-  byId("custom-revision").value = "main";
-  void resolveCustomModel();
+  void resolveCustomModel(button.dataset.inspectRepo);
 });
-
-byId("custom-resolve").addEventListener("click", () => void resolveCustomModel());
 byId("custom-result").addEventListener("click", (event) => {
   if (event.target.closest("#custom-add")) void addCustomModel();
 });

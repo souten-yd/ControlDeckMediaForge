@@ -840,16 +840,39 @@ table.catalog .tag {
 /* ── モバイルの表 ───────────────────────────────────────────── */
 @media (max-width: 767px) {
   /* 横に伸ばすと、肝心の容量・VRAM・操作が画面の外へ出てしまう。
-     1 行を積み上げて、必要な情報を横スクロールなしで読めるようにする。 */
+     1 行を積み上げて、必要な情報を横スクロールなしで読めるようにする。
+     さらに 2 列に並べて、一画面に入る件数を増やす。 */
   .table-wrap { overflow-x: visible; border: 0; }
-  table.catalog, table.catalog tbody, table.catalog tr, table.catalog td { display: block; width: 100%; }
+  table.catalog, table.catalog td { display: block; width: 100%; max-width: 100%; }
+  table.catalog tbody {
+    display: grid;
+    /* auto-fill に minmax(0, ...) を渡すと列が無限に増える。実測で 13 列に
+       潰れた。最小幅は必ず実数で与え、はみ出しは子側の min-width: 0 で防ぐ。 */
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+    /* 同じ行のカードを同じ高さにする。start だと名前が 2 行になった側だけ
+       伸びて段差ができ、全体がガタついて見える。 */
+    align-items: stretch;
+  }
+  table.catalog tr {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-width: 0;
+  }
+  /* 操作はカードの一番下へ揃える。上から積むと行ごとに位置がずれる。 */
+  table.catalog td[data-label="操作"] { margin-top: auto; }
+  table.catalog td, table.catalog td > * { min-width: 0; overflow-wrap: anywhere; }
+  /* 狭い枠で名前と容量を潰すので、採用とライセンスは畳む。
+     横並びの表（広い画面）では従来どおり見える。 */
+  table.catalog td.secondary { display: none; }
   table.catalog thead { display: none; }
   table.catalog tr {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
-    padding: 10px 12px;
-    margin-bottom: 8px;
+    padding: 9px 10px;
+    margin-bottom: 0;
   }
   table.catalog td {
     display: flex;
@@ -872,10 +895,39 @@ table.catalog .tag {
     text-align: left;
   }
   /* 名前は見出しとして扱う。列名は要らない。 */
-  table.catalog td.name { display: block; text-align: left; padding-bottom: 6px; }
+  /* 名前セルは後から display:block を当てているので、潰せる指定もここで
+     もう一度与える。長いモデル名が枠を押し広げて横あふれを起こしていた。 */
+  table.catalog td.name {
+    display: block;
+    text-align: left;
+    padding-bottom: 6px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  table.catalog td.name > div {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    /* 名前は 2 行ぶんの場所を先に取る。1 行のものと 2 行のもので
+       タグと数値の開始位置がずれるのを防ぐ。 */
+    min-height: 2.5em;
+    line-height: 1.25;
+  }
+  /* 用途タグも 1 行ぶん確保して、以降の行を揃える。 */
+  table.catalog td.name { min-height: 4.2em; }
   table.catalog td.name::before { content: none; }
-  table.catalog td.name > div { font-weight: 700; font-size: .95rem; margin-bottom: 4px; }
+  table.catalog td.name > div { font-weight: 700; font-size: .88rem; margin-bottom: 3px; }
+  /* 2 列だとタグまで並べる幅がない。用途の 1 つ目だけ残す。 */
+  table.catalog td.name .tag { display: none; }
+  table.catalog td.name .tag:first-of-type { display: inline-block; }
+  table.catalog td { font-size: .8rem; }
+  table.catalog td::before { font-size: .68rem; }
   table.catalog td.num { text-align: right; }
-  table.catalog td[data-label="操作"] { padding-top: 8px; }
-  table.catalog td[data-label="操作"] button { min-height: 40px; }
+  table.catalog td[data-label="操作"] { padding-top: 8px; align-items: flex-end; }
+  table.catalog td[data-label="操作"] button {
+    min-height: 40px;
+    font-size: .74rem;
+    padding: 6px 10px;
+    line-height: 1.2;
+    text-align: center;
+  }
 }

@@ -344,17 +344,7 @@
             <div id="model-downloads" class="rows"></div>
             <p id="model-downloads-empty" class="hint" hidden>進行中・完了したダウンロードはありません。</p>
           </details>
-          <details id="custom-manual">
-            <summary>repository を直接指定する</summary>
-            <div class="form-row">
-              <label>repository<input id="custom-repo" type="text" maxlength="200"
-                placeholder="stabilityai/stable-diffusion-xl-base-1.0"></label>
-              <label>revision<input id="custom-revision" type="text" maxlength="128" value="main"></label>
-            </div>
-            <button type="button" id="custom-resolve">中身を確かめる</button>
-          </details>
 
-          <div data-adv-slot="settings"></div>
         </section>
       </main>
 
@@ -490,10 +480,6 @@
     <template data-adv-template="create">
       <div class="advanced" id="advanced-create">
         <p class="section-label">詳細設定</p>
-        <div class="form-row">
-          <label>幅<input id="advanced-width" type="number" step="16" inputmode="numeric"></label>
-          <label>高さ<input id="advanced-height" type="number" step="16" inputmode="numeric"></label>
-        </div>
         <p id="advanced-size-hint" class="hint"></p>
         <p class="section-label">シーンの補足</p>
         <p class="hint">シーン・構図・カメラは上の「シーンと見せ方」で選びます。ここでは言葉で補います。</p>
@@ -549,22 +535,6 @@
       </label>
     </template>
 
-    <template data-adv-template="settings">
-      <div class="advanced" id="advanced-settings">
-        <p class="section-label">この拡張機能について</p>
-        <dl class="facts">
-          <div><dt>推論</dt><dd>この端末の中だけ（backend で強制。UI から解除できません）</dd></div>
-          <div><dt>生成処理</dt><dd>本体とは別のプロセスで動きます</dd></div>
-          <div><dt>ControlDeck 連携</dt><dd id="advanced-host-state">確認しています…</dd></div>
-        </dl>
-        <p class="section-label">今できること</p>
-        <div id="advanced-capability-list" class="rows"></div>
-        <p class="section-label">モデルの技術詳細</p>
-        <div id="advanced-models" class="rows"></div>
-        <p class="section-label">連携診断</p>
-        <pre id="advanced-host-integration"></pre>
-      </div>
-    </template>
 
     <!-- MEDIA_FORGE_WORKSPACE_CONFIG -->
     <!-- MEDIA_FORGE_CREATIVE_TEMPLATES -->

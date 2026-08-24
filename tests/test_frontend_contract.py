@@ -41,11 +41,11 @@ DOM_IDS = (
     "profile-add-character", "profile-add-style", "profile-list", "profile-dialog",
     "profile-name", "profile-appearance", "profile-art-style", "profile-references",
     "pack-section", "pack-profile", "pack-open", "pack-dialog", "pack-slots", "pack-progress",
-    "custom-repo", "custom-revision", "custom-resolve", "custom-result", "custom-error",
+    "custom-result", "custom-error",
     # UX3: 書き出し導線と、重複を解消した詳細設定
     "viewer-save", "viewer-save-note",
     "catalog-query", "catalog-sort", "catalog-style", "catalog-search",
-    "catalog-results", "catalog-empty", "custom-manual",
+    "catalog-results", "catalog-empty",
     "model-table", "model-sort",
     "model-downloads", "model-downloads-empty", "model-downloads-count",
     "reference-intelligence", "reference-focuses", "reference-analysis-summary",
@@ -71,7 +71,7 @@ DOM_IDS = (
 )
 
 ADVANCED_IDS = (
-    "advanced-create", "advanced-width", "advanced-height", "advanced-format",
+    "advanced-create", "advanced-format",
     "advanced-count", "advanced-policy", "advanced-model", "advanced-semantic",
     "advanced-attempts", "advanced-settings", "advanced-models", "advanced-mask-file",
     "advanced-host-state", "advanced-capability-list",
@@ -91,22 +91,6 @@ def test_the_frame_never_touches_browser_storage():
 def test_dom_contract_ids_exist():
     for name in DOM_IDS:
         assert f'id="{name}"' in MARKUP, f"DOM 契約の id が無い: {name}"
-
-
-def test_advanced_controls_live_only_inside_templates():
-    """詳細モードの要素は hidden ではなく template に置く。
-
-    シンプルでは DOM に存在しないことが要件（設計 §3.1）なので、
-    静的には「template の外に advanced-* が無い」で担保する。
-    """
-    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
-    for name in ADVANCED_IDS:
-        assert f'id="{name}"' not in without_templates, f"{name} が template の外にある"
-    for name in ("advanced-create", "advanced-settings"):
-        assert f'id="{name}"' in MARKUP, f"{name} の template が無い"
-    for slot in ("create", "settings", "mask"):
-        assert f'data-adv-slot="{slot}"' in MARKUP
-        assert f'data-adv-template="{slot}"' in MARKUP
 
 
 def test_model_management_actions_are_simple_but_technical_details_are_advanced():
@@ -135,16 +119,6 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert "state.modelEvaluationIds.has(model.model_id)" in SCRIPT
     assert "card.dataset.modelId" not in SCRIPT
     assert "dataset.modelId =" not in SCRIPT
-
-
-def test_extension_about_and_capabilities_are_advanced_only():
-    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
-    for name in ("advanced-host-state", "advanced-capability-list"):
-        assert f'id="{name}"' not in without_templates
-        assert f'id="{name}"' in MARKUP
-    assert "この拡張機能について" not in without_templates
-    assert "今できること" not in without_templates
-    assert 'byId("advanced-capability-list")' in SCRIPT
 
 
 def test_creative_controls_use_the_versioned_catalog_and_preserve_prompt_only_requests():
@@ -559,7 +533,7 @@ def test_search_results_never_install_without_the_confirmation_step():
     """探せることと入れてよいことは別。表から直接は取り込ませない。"""
     handler = SCRIPT[SCRIPT.index('byId("catalog-results").addEventListener'):][:600]
 
-    assert "resolveCustomModel()" in handler
+    assert "resolveCustomModel(" in handler
     assert 'call("models.custom.add"' not in handler
 
 
@@ -641,3 +615,65 @@ def test_finished_downloads_stay_visible_with_their_outcome():
 
     assert "error_code" in fn
     assert "完了" in fn and "失敗" in fn
+
+
+def test_the_settings_view_no_longer_carries_static_diagnostics():
+    """静的な説明文と診断表示は、毎回読む価値がないのに毎回場所を取っていた。"""
+    assert 'id="advanced-host-integration"' not in MARKUP
+    assert 'id="advanced-capability-list"' not in MARKUP
+    assert 'data-adv-slot="settings"' not in MARKUP
+
+
+def test_the_advanced_create_pane_is_still_template_mounted():
+    """作る画面の詳細設定は残す。簡易モードへ漏れていないことを守る。"""
+    without_templates = MARKUP[:MARKUP.index("<template")]
+
+    assert 'data-adv-template="create"' in MARKUP
+    assert 'id="advanced-format"' not in without_templates
+
+
+def test_a_model_row_offers_download_and_delete():
+    """一覧から導入と削除ができないと、結局 CLI へ戻ることになる。"""
+    action = SCRIPT[SCRIPT.index("function modelActionCell"):][:1800]
+
+    assert "installModel" in action and "ダウンロード" in action
+    assert "removeModel" in action and "削除" in action
+
+
+def test_searching_works_without_a_host():
+    """配布元の検索はホストを必要としない。単体表示で死んでいた。"""
+    assert "/workspace-api/models/search" in SCRIPT
+    backend = (BACKEND / "app.py").read_text(encoding="utf-8")
+    assert '"/workspace-api/models/search"' in backend
+
+
+def test_the_mobile_catalog_uses_two_columns():
+    # auto-fill に minmax(0, ...) を渡すと列が無限に増える（実測 13 列）。
+    # 最小幅は実数で与える。
+    assert "repeat(auto-fill, minmax(150px, 1fr))" in STYLES
+
+
+def test_search_results_are_labelled_like_the_catalog():
+    """積み上げたときに数字が何を指すのか分かること。検索結果だけ裸で並んでいた。"""
+    row = SCRIPT[SCRIPT.index("function catalogRow"):SCRIPT.index("function renderCatalogResults")]
+
+    for label in ("ダウンロード", "お気に入り", "更新", "ライセンス", "操作", "モデル"):
+        assert f'"{label}"' in row
+
+
+@pytest.mark.parametrize("control", ["advanced-width", "advanced-height"])
+def test_size_is_set_in_one_place_only(control: str):
+    """詳細側の幅高さが上のサイズ選択を上書きしており、どちらが効くのか
+    分からなかった。サイズは「サイズ」に 1 組だけ置く。"""
+    assert f'id="{control}"' not in MARKUP
+    assert f'byId("{control}")' not in SCRIPT
+
+
+def test_cards_in_the_same_row_share_a_height():
+    """名前が 2 行になった側だけ伸びると、全体が段差だらけに見える。"""
+    assert "align-items: stretch" in STYLES
+    assert 'table.catalog td[data-label="操作"] { margin-top: auto; }' in STYLES
+
+
+def test_the_name_area_reserves_room_so_the_facts_line_up():
+    assert "min-height: 2.5em" in STYLES
