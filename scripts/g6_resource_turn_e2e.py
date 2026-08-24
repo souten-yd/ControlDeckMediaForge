@@ -4,15 +4,16 @@
 Proves the handover the unit tests cannot: that a resident Host LLM actually
 gives its VRAM back before Media Forge generates, and that a real image lands.
 
-Run it against the installed stack. The password is read from the environment,
-never from an argument, so it does not reach a process listing:
+Run it against the installed stack. It asks for the password itself, so nothing
+secret reaches the command line, the shell history, or a process listing:
 
-    MEDIA_FORGE_E2E_PASSWORD=... \\
-      /data1tb/ControlDeck-release-bundle/.venv/bin/python \\
+    /data1tb/ControlDeck-release-bundle/.venv/bin/python \\
       scripts/g6_resource_turn_e2e.py \\
         --control-deck-url http://127.0.0.1:8765 \\
         --username <name> \\
         --evidence-dir /data1tb/mediaforge-g6-evidence
+
+    Unattended runs can still supply MEDIA_FORGE_E2E_PASSWORD instead.
 
 What is asserted, in order:
 
@@ -27,9 +28,11 @@ What is asserted, in order:
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -40,6 +43,29 @@ from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError, sy
 TERMINAL = {"succeeded", "failed", "canceled"}
 # ロードは実測 4.040 秒、生成は FLUX.2 Klein 4B の実測 208.8 秒を含む。
 JOB_TIMEOUT_SEC = 900.0
+
+
+def _password(variable: str) -> str:
+    """Take the password from the environment, or ask for it.
+
+    CI keeps using the environment variable. A person running this by hand
+    should not have to arrange one: setting it up by hand meant exporting a
+    secret into a shell, keeping that shell alive, and remembering to unset it,
+    and every step of that was somewhere to go wrong. getpass echoes nothing and
+    never reaches the shell history.
+    """
+    value = os.environ.get(variable)
+    if value:
+        return value
+    if not sys.stdin.isatty():
+        raise AssertionError(
+            f"パスワードがありません。環境変数 {variable} を設定するか、"
+            "対話できる端末から実行してください。"
+        )
+    value = getpass.getpass("ControlDeck のパスワード: ")
+    if not value:
+        raise AssertionError("パスワードが入力されませんでした。")
+    return value
 
 
 def check(value: object, message: str) -> None:
@@ -223,9 +249,7 @@ def main() -> int:
     parser.add_argument("--password-env", default="MEDIA_FORGE_E2E_PASSWORD")
     parser.add_argument("--evidence-dir", required=True, type=Path)
     args = parser.parse_args()
-    password = os.environ.get(args.password_env)
-    if not password:
-        raise RuntimeError(f"password environment variable is unset: {args.password_env}")
+    password = _password(args.password_env)
     args.evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
 
     browser_errors: list[str] = []
