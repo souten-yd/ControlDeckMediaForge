@@ -26,6 +26,12 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from . import __version__, library, preferences, thumbnails
 from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
 from .asset_placement import ProjectAssetPlacement, placement_filename
+from .asset_brief import (
+    AssetBriefError,
+    infer_brief_from_intent,
+    parse_brief,
+    resolve_layout,
+)
 from .config import Settings
 from .custom_models import CustomModelCatalog, CustomModelError
 from .composer import (
@@ -367,6 +373,10 @@ def create_app(
         if missing:
             raise HTTPException(status_code=403, detail={"code": "host_capability_not_granted"})
         try:
+            value = apply_asset_brief(value)
+        except AssetBriefError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}) from exc
+        try:
             profile_snapshot = manager.resolve_profiles(value)
         except ProfileResolutionError as exc:
             raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
@@ -400,6 +410,49 @@ def create_app(
 
     def submitted_reference(value: dict[str, Any]) -> dict[str, Any]:
         return {"job_id": value["id"], "status": value["status"], "asset_ids": value["asset_ids"]}
+
+    def apply_asset_brief(value: JobRequest) -> JobRequest:
+        """Resolve the output canvas from the asset's purpose, before generation.
+
+        Without this the geometry decision fell to the worker's own fallback,
+        which knows nothing about what the image is for: a request describing a
+        "wide landscape" title background arrived with empty constraints and
+        came back 1024x1024.
+
+        The brief rides inside the already free-form ``constraints`` object, so
+        no public schema changes. Editing keeps its existing source-derived
+        geometry; only generation resolves a canvas here.
+        """
+        if value.operation != "image.generate":
+            # 編集は元画像から寸法を導く。用途既定で上書きしない。
+            return value
+        brief_value = value.constraints.get("asset_brief")
+        brief = parse_brief(brief_value)
+        if brief is None:
+            # 既存の呼び出し側は用途を散文でしか書かない。構造的な語だけを
+            # 決定的に拾う。確信が持てなければ何も推論せず従来どおりにする。
+            brief = infer_brief_from_intent(value.intent)
+        if brief is None:
+            return value
+        width = value.constraints.get("width")
+        height = value.constraints.get("height")
+        explicit_width = width if isinstance(width, int) and not isinstance(width, bool) else None
+        explicit_height = height if isinstance(height, int) and not isinstance(height, bool) else None
+        resolved = resolve_layout(
+            brief,
+            envelope=size_envelope(),
+            explicit_width=explicit_width,
+            explicit_height=explicit_height,
+        )
+        if resolved is None:
+            return value
+        constraints = {
+            **value.constraints,
+            **resolved.as_constraints(),
+            # なぜこの寸法になったかを残す。provenance と UI が理由を出せる。
+            "resolved_layout": resolved.document(),
+        }
+        return value.model_copy(update={"constraints": constraints})
 
     def host_job_input(payload: object) -> JobRequest:
         if not isinstance(payload, dict):
@@ -1111,6 +1164,12 @@ def create_app(
 
     @app.post("/api/v1/jobs", status_code=202)
     async def create_job(job_request: JobRequest, response: Response) -> dict[str, Any]:
+        try:
+            job_request = apply_asset_brief(job_request)
+        except AssetBriefError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
         try:
             job = manager.submit(job_request)
         except ProfileResolutionError as exc:

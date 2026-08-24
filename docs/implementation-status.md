@@ -3501,3 +3501,96 @@ FAILED: ログインに失敗しました（HTTP 401: ユーザー名または�
 
 なお、この環境には既に `mf-e2e`（ハイフン入り）という E2E 用アカウントがあり、
 2026-08-23 の CI-6 実行で繰り返し成功している。新規作成は不要だった。
+
+## G4H A1 — AssetBrief と決定的な出力幾何（2026-08-24）
+
+実使用（OpenCode の Hanabi プロジェクト）で報告された「wide landscape と要求
+したのに 1024x1024 が生成された」を、実物と記録から追って直した。
+
+### 実物で確認した欠陥
+
+```text
+/data1tb/ControlDeck/CodeDEV/Hanabi/assets/keyart/
+  background-keyart.png   1024x1024  RGBA  1,296,977 bytes
+  fireworks-keyart.png    1024x1024  RGBA  1,977,542 bytes
+```
+
+provenance を追うと、要求は次の形だった。
+
+```text
+constraints    {}            <- 寸法がひとつも渡されていない
+model_policy   quality       <- agent が方針まで選んでいる
+intent         "... wide landscape composition ..."  <- 散文の中だけ
+validation     image.dimensions passed (1024x1024)   <- 寸法の存在は見るが用途は見ない
+```
+
+生成側の既定は `worker_packs/image/worker.py` の
+`width_default = 1024` で、**stack の最下層**にある。ここは用途を知らない。
+
+消費側の実害も確認した。
+
+```text
+index.html   #title-bg   object-fit: cover
+-> 正方形を横長の面へ cover するため上下が切られる
+-> 「上 2/3 の空を開ける」「下端に観客のシルエット」という指示どおりに
+   構図された部分が、まさに切り落とされる
+```
+
+もう 1 件、報告に無かった欠陥を実物から見つけた。
+
+```text
+fireworks-keyart.png は #title-fw として背景の上に 300px で重ねられている
+alpha min=255 max=255  半透明以下の画素 0/1,048,576 (0.00%)
+-> 透過が要件のはずの重ね要素が、独自の夜空と観客を持つ不透明な完成シーン
+-> 背景と内容が重複し、drop-shadow は花火ではなく四角い箱の縁に付く
+```
+
+### 対応
+
+用途から幾何を**生成前に決定的に**解決する層を入れた（`asset_brief.py`）。
+
+```text
+AssetBrief          role / aspect_intent / target_dimensions / safe_areas /
+                    alpha_intent / consistency_group / hard_constraints
+                    provider・model・sampler・prompt の欄を持たない
+resolve_layout      優先順位は
+                      request の明示寸法
+                      > brief の明示寸法
+                      > brief の aspect 指定
+                      > role 既定
+                      > 従来どおり（何も推論しない）
+                    envelope（multiple_of / min / max / max_pixels）へ必ず収める
+infer_brief_from_intent
+                    既存の散文から構造語だけを決定的に拾う。AI 呼び出し 0 回。
+                    確信が持てなければ何も推論せず従来の挙動を変えない。
+```
+
+公開契約は変えていない。brief は既に自由形の `JobRequest.constraints` に載る。
+
+### 実測（当時と同じ形で再実行）
+
+```text
+background    1024x576  16:9  source=brief.aspect_intent   （当時 1024x1024）
+fireworks     1024x576  16:9  source=role_default          （当時 1024x1024）
+明示 1024x1024 1024x1024       source=request.constraints   （推論は明示を上書きしない）
+AI 呼び出し    0 回
+```
+
+### AI Director を要求変換に挟む案（利用者提案 2026-08-24）
+
+**採用しない。** 実測に基づく理由を `g4-agent-asset-workflow-hardening.md` §3.2b
+へ記録した。LLM 31.5GB と FLUX 18.1GB は 34.2GB の GPU で共存できず、AI を
+挟むたびにモデルのスワップが要る。実測でスワップ 1 往復は 15〜25 秒
+（LLM load 4.0〜12.1 秒 / release 0.146〜0.371 秒 / FLUX load 10.6〜14.9 秒）。
+全生成の前段に置くとこれを毎回払う。Director は既に `text.generate` を持って
+おり、二つ目の AI 層にもなる。
+
+決定的抽出で報告された欠陥は解消したため、Director への相乗り（tier 2）は
+A3 へ送り、本スライスでは実装しない。
+
+```text
+./mf.sh test   451 passed（従来 412 + A1 39）
+```
+
+NOT TESTED: 解決後の寸法での実画像生成、および透過が必要な emblem 用途の
+実生成。A3 / A5 で実機確認する。

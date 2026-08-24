@@ -201,6 +201,49 @@ AssetBrief
 
 This object is Media Forge-private unless a later additive agent schema field is proven necessary. First try to project existing agent inputs into it without breaking the frozen public contract.
 
+### 3.2b Where the brief comes from — decision record (2026-08-24)
+
+A proposal was raised to run incoming agent requests through the AI Director so
+an LLM normalizes them into an `AssetBrief`. It is **not adopted**, for reasons
+measured rather than assumed.
+
+```text
+observed on this machine (G6 resource turn measurements)
+  LLM resident              31,555,141,632 bytes
+  FLUX resident             18,147,024,896 bytes
+  GPU total                 34,208,743,424 bytes
+  -> the two cannot coexist; every AI step costs a model swap
+  LLM load                  4.0 - 12.1 s
+  explicit release          0.146 - 0.371 s
+  FLUX load                 10.6 - 14.9 s
+  -> one swap round trip is roughly 15 - 25 s
+```
+
+Putting an LLM in front of *every* request would pay that on every generation,
+and would add a second AI layer beside the Director that already calls
+`text.generate`.
+
+Adopted instead, two tiers:
+
+```text
+tier 1  deterministic extraction from the existing prose intent
+        closed vocabulary; zero AI calls; zero swaps
+        returns nothing when unsure, so it never silently changes behavior
+tier 2  when the Director is invoked anyway, fold brief refinement into that
+        existing text.generate call — no extra round trip, no extra swap
+```
+
+Tier 1 is sufficient for the observed failure. Replayed against the two real
+Hanabi requests, with `constraints` empty exactly as they were sent:
+
+```text
+background   1024x576  16:9  source=brief.aspect_intent   (was 1024x1024)
+fireworks    1024x576  16:9  source=role_default          (was 1024x1024)
+explicit 1:1 1024x1024       source=request.constraints
+```
+
+Tier 2 is deferred to A3 and is not required to fix the reported defect.
+
 ### 3.3 Priority
 
 ```text
