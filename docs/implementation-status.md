@@ -3377,3 +3377,86 @@ login helper              ci6_r9700_e2e.py の実績あるものをそのまま�
 
 boot 判定は「`workspace.session` がちょうど 1 回」に加えて、
 旧 boot が個別に投げていた 10 メソッドが 1 つも復活していないことも見るようにした。
+
+## G6 resource turn の物理受け入れ（2026-08-24）
+
+利用者から login アカウント作成の承認が出たが、**アカウント作成とパスワード入力は
+実施しない**方針を維持した。代わりに、認証境界だけを stub にして物理現象は
+すべて実物で測る受け入れを作った（`scripts/g6_resource_turn_physical_e2e.py`）。
+
+```text
+実物        常駐 LLM / それが握る VRAM / 実際の解放 / FLUX worker / 生成 PNG
+stub        ControlDeck の token・lease の HTTP 面だけ
+            ただし ai/release は ControlDeck 自身のコードで本物の unload を行う
+別途実測済  Host 側の解放可否判断（G6 S3。実 ControlDeck に対して実測）
+```
+
+### 結果
+
+```text
+LLM 常駐            VRAM 59,912,192 -> 31,555,141,632   load 8.038 秒
+解放                released=true reason=released       0.146 秒
+解放後の VRAM        59,912,192（全量返却）
+生成                 succeeded / asset 1 枚 / 17.706 秒
+  model_id           black-forest-labs/FLUX.2-klein-4B
+  runtime_adapter    diffusers.flux2-klein
+  weights_hash       sha256:f3fcfa8f…dfae278（manifest と一致）
+  output             256x256 PNG / 114,310 bytes
+  model_route        policy=auto domain=general domain_matched=true candidate_count=1
+worker placement     device_mode=direct_device_map
+                     component_devices すべて cuda:0
+                     offload_hooks=[] non_gpu_devices={} non_gpu_map_targets=[]
+worker timing        load 10.640 秒 / generation 1.074 秒
+解放後の VRAM ピーク   18,147,024,896（51 サンプル / 0.25 秒間隔）
+後片付け             VRAM 59,912,192 / loaded instance 0
+```
+
+順序は log でも確認した。
+
+```text
+POST .../ai/release        200
+uvicorn.error              ai turn released ... released=True reason=released
+POST .../resources/requests 202
+POST .../resources/leases/lease-request-1/activate 200
+image worker timing / placement
+```
+
+**AI ターンの終了宣言が、生成 lease の要求より前**にある。設計どおり。
+
+### ❷ が物理的に確定した
+
+```text
+LLM 常駐          31,555,141,632 バイト
+FLUX 実占有        18,147,024,896 バイト（解放後の実測ピーク）
+合計              49,702,166,528 バイト
+GPU 総容量         34,208,743,424 バイト
+```
+
+**合計が GPU 容量を 15.5GB 超える。** 常駐したままでは物理的に共存できない。
+`supervision=observed` では broker が降ろさないため、待っても解消しない。
+
+### 測定側の誤りを 2 回直した（緑を鵜呑みにしない）
+
+```text
+1 回目   phase 境界でだけ VRAM を読んでいた。generating に入るのは worker が
+         確保する前なので idle を拾い、「GPU を使っていない」ように見えた。
+2 回目   ジョブ全区間のピークで見ていた。常駐 LLM の 31.5GB に支配されるため、
+         画像 worker が GPU を 1 バイトも使わなくても必ず通る判定だった。
+3 回目   サンプルに時刻を持たせ、解放より後の区間だけでピークを取るようにした。
+         これで初めて 18,147,024,896 バイトという画像 worker の実占有が出た。
+```
+
+worker の placement log は worker 自身の申告なので、rocm-smi の実測と揃えて
+初めて証拠として扱う。両方を assertion に入れた。
+
+### CPU オフロードについて（利用者指示 2026-08-24）
+
+許容の指示を受けたが、**今回は不要だった**。`direct_device_map` のまま
+`offload_hooks=[]` で完走している。
+
+catalog の `measured_vram_bytes` は 33,349,320,704 で、今回の実占有
+18,147,024,896 の約 1.84 倍を申告している。これは最大解像度側の envelope で
+あり誤りとは限らないが、broker へ GPU のほぼ全量を予約させる値ではある。
+`device_mode: cpu_offload` は registry が既に受理する値なので、より大きな
+モデルを載せる際の選択肢として使える。ただし wall time / RAM headroom /
+swap / Host watchdog を実測するまで available へ昇格させない（H3 と同じ gate）。
