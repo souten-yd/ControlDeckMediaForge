@@ -3501,3 +3501,178 @@ FAILED: ログインに失敗しました（HTTP 401: ユーザー名または�
 
 なお、この環境には既に `mf-e2e`（ハイフン入り）という E2E 用アカウントがあり、
 2026-08-23 の CI-6 実行で繰り返し成功している。新規作成は不要だった。
+
+## G4H A1 — AssetBrief と決定的な出力幾何（2026-08-24）
+
+実使用（OpenCode の Hanabi プロジェクト）で報告された「wide landscape と要求
+したのに 1024x1024 が生成された」を、実物と記録から追って直した。
+
+### 実物で確認した欠陥
+
+```text
+/data1tb/ControlDeck/CodeDEV/Hanabi/assets/keyart/
+  background-keyart.png   1024x1024  RGBA  1,296,977 bytes
+  fireworks-keyart.png    1024x1024  RGBA  1,977,542 bytes
+```
+
+provenance を追うと、要求は次の形だった。
+
+```text
+constraints    {}            <- 寸法がひとつも渡されていない
+model_policy   quality       <- agent が方針まで選んでいる
+intent         "... wide landscape composition ..."  <- 散文の中だけ
+validation     image.dimensions passed (1024x1024)   <- 寸法の存在は見るが用途は見ない
+```
+
+生成側の既定は `worker_packs/image/worker.py` の
+`width_default = 1024` で、**stack の最下層**にある。ここは用途を知らない。
+
+消費側の実害も確認した。
+
+```text
+index.html   #title-bg   object-fit: cover
+-> 正方形を横長の面へ cover するため上下が切られる
+-> 「上 2/3 の空を開ける」「下端に観客のシルエット」という指示どおりに
+   構図された部分が、まさに切り落とされる
+```
+
+もう 1 件、報告に無かった欠陥を実物から見つけた。
+
+```text
+fireworks-keyart.png は #title-fw として背景の上に 300px で重ねられている
+alpha min=255 max=255  半透明以下の画素 0/1,048,576 (0.00%)
+-> 透過が要件のはずの重ね要素が、独自の夜空と観客を持つ不透明な完成シーン
+-> 背景と内容が重複し、drop-shadow は花火ではなく四角い箱の縁に付く
+```
+
+### 対応
+
+用途から幾何を**生成前に決定的に**解決する層を入れた（`asset_brief.py`）。
+
+```text
+AssetBrief          role / aspect_intent / target_dimensions / safe_areas /
+                    alpha_intent / consistency_group / hard_constraints
+                    provider・model・sampler・prompt の欄を持たない
+resolve_layout      優先順位は
+                      request の明示寸法
+                      > brief の明示寸法
+                      > brief の aspect 指定
+                      > role 既定
+                      > 従来どおり（何も推論しない）
+                    envelope（multiple_of / min / max / max_pixels）へ必ず収める
+infer_brief_from_intent
+                    既存の散文から構造語だけを決定的に拾う。AI 呼び出し 0 回。
+                    確信が持てなければ何も推論せず従来の挙動を変えない。
+```
+
+公開契約は変えていない。brief は既に自由形の `JobRequest.constraints` に載る。
+
+### 実測（当時と同じ形で再実行）
+
+```text
+background    1024x576  16:9  source=brief.aspect_intent   （当時 1024x1024）
+fireworks     1024x576  16:9  source=role_default          （当時 1024x1024）
+明示 1024x1024 1024x1024       source=request.constraints   （推論は明示を上書きしない）
+AI 呼び出し    0 回
+```
+
+### AI Director を要求変換に挟む案（利用者提案 2026-08-24）
+
+**採用しない。** 実測に基づく理由を `g4-agent-asset-workflow-hardening.md` §3.2b
+へ記録した。LLM 31.5GB と FLUX 18.1GB は 34.2GB の GPU で共存できず、AI を
+挟むたびにモデルのスワップが要る。実測でスワップ 1 往復は 15〜25 秒
+（LLM load 4.0〜12.1 秒 / release 0.146〜0.371 秒 / FLUX load 10.6〜14.9 秒）。
+全生成の前段に置くとこれを毎回払う。Director は既に `text.generate` を持って
+おり、二つ目の AI 層にもなる。
+
+決定的抽出で報告された欠陥は解消したため、Director への相乗り（tier 2）は
+A3 へ送り、本スライスでは実装しない。
+
+```text
+./mf.sh test   451 passed（従来 412 + A1 39）
+```
+
+NOT TESTED: 解決後の寸法での実画像生成、および透過が必要な emblem 用途の
+実生成。A3 / A5 で実機確認する。
+
+## G4H A1b — defect と finding の分離（2026-08-24）
+
+利用者の指摘「予算を制限する場合、必要な生成が行われない可能性はないか」への
+対応。あり得るため、規則を明示して実体化した。
+
+```text
+予算は「任意の改善」を縛る
+予算は「必要な修正」を縛らない
+予算切れは報告する。黙って成功にしない
+```
+
+二つの階層を型で分けた。
+
+```text
+BriefDefect   用途に対して客観的に誤っている
+              canvas 不一致 / 必須 alpha の欠落 / 想定外の透過
+              -> 予算に関係なく修正するか、理由を名指しで失敗する
+finding       評価器の主観的な判断（A3 で実装）
+              -> QA 予算で縛る。予算切れは未解決事項を添えて返す
+```
+
+最良の守りは検査ではなく予防である。A1 で canvas を構造的に解決したため、
+寸法不一致は「検出して作り直す」対象ではなくなった。予防は swap 0 回、
+作り直しは 1 往復まるごと（実測 15〜25 秒）。
+
+### validator の主張を正直にした
+
+`validate_png` は `{"validator": "image.alpha", "alpha": true}` を返していたが、
+これは「mode が RGBA である」という意味でしかなかった。Hanabi の花火キーアートは
+完全不透明のままこの検査を通過していた。実際の最小 alpha を見るようにした。
+
+```text
+before  {"validator": "image.alpha", "status": "passed", "alpha": true}
+after   {"validator": "image.alpha", "status": "passed",
+         "mode_has_alpha_channel": true, "has_transparency": false, "minimum_alpha": 255}
+```
+
+### 実物での検出確認
+
+```text
+background-keyart.png  実物 1024x1024 透過=False  要求 1024x576
+  DEFECT canvas_mismatch  expected=1024x576  actual=1024x1024
+fireworks-keyart.png   実物 1024x1024 透過=False  要求 透過必須
+  DEFECT alpha_missing    expected=alpha channel with transparent regions  actual=fully opaque
+```
+
+alpha は required / forbidden / auto の三状態を保つ。bool へ潰すと「不要」と
+「禁止」が混ざり、片方が誤って defect になる。
+
+```text
+./mf.sh test   458 passed
+```
+
+NOT TESTED: defect 検出後の自動再生成（A3 の範囲。現時点では理由を名指しして失敗する）。
+
+## G4H — 資産生成の手順設計（2026-08-24）
+
+利用者提案「画像以外を全部実装してから資産をまとめて生成し、VLM で確認して
+コード修正か再生成をまとめる。逆も」を評価し、`g4-agent-asset-workflow-hardening.md`
+§6.8 に決定を記録した。
+
+```text
+採用    コード先行。Hanabi では必要な事実が既に CSS にあった
+          #title-bg object-fit: cover        -> 面は横長。正方形は切られる
+          #title-fw width: min(52vw, 300px)  -> 小さな重ね要素であって完成シーンではない
+                    filter: drop-shadow(...) -> 形のある被写体を期待する = 透過が要る
+        brief を「推測」から「実測」に変えられる
+
+不採用  検査前に全部まとめて生成する形。画風が外れると N 枚無駄になる
+        代わりに anchor 1 枚を先に作って確認する。同じ FLUX 常駐の中で
+        行うので追加 swap は 0
+
+不採用  資産を先に作ってからコードを書く順序
+        brief が測る対象を持たず、形容詞へ退行する。Hanabi の失敗の再現になる
+
+採用    「画像ではなくコードを直す」判断はしばしば正しく、再生成より安い
+        ただし Media Forge は project source を書き換えない。不一致と
+        どちら側で解決できるかを報告し、決めて直すのは coding agent
+```
+
+結果として swap は資産数によらず 2 回のまま。

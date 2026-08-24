@@ -20,6 +20,10 @@ def validate_png(path: Path) -> tuple[int, int, list[dict[str, Any]]]:
         with Image.open(path) as image:
             width, height = image.size
             mode = image.mode
+            # 「RGBA である」と「透けている所がある」は別の主張である。
+            # 実使用で、重ね合わせ用の資産が RGBA のまま完全不透明で通過し、
+            # 背景の上に角の立った四角として乗った。実際の最小 alpha を見る。
+            minimum_alpha = image.getchannel("A").getextrema()[0] if mode == "RGBA" else 255
     except (OSError, SyntaxError) as exc:
         raise ValueError("worker output is not a decodable PNG") from exc
     if width < 1 or height < 1:
@@ -30,5 +34,11 @@ def validate_png(path: Path) -> tuple[int, int, list[dict[str, Any]]]:
         {"validator": "image.non_empty", "status": "passed", "size_bytes": path.stat().st_size},
         {"validator": "image.dimensions", "status": "passed", "width": width, "height": height},
         {"validator": "image.mode", "status": "passed", "mode": mode},
-        {"validator": "image.alpha", "status": "passed", "alpha": True},
+        {
+            "validator": "image.alpha",
+            "status": "passed",
+            "mode_has_alpha_channel": True,
+            "has_transparency": minimum_alpha < 255,
+            "minimum_alpha": minimum_alpha,
+        },
     ]

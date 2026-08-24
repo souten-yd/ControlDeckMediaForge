@@ -201,6 +201,49 @@ AssetBrief
 
 This object is Media Forge-private unless a later additive agent schema field is proven necessary. First try to project existing agent inputs into it without breaking the frozen public contract.
 
+### 3.2b Where the brief comes from — decision record (2026-08-24)
+
+A proposal was raised to run incoming agent requests through the AI Director so
+an LLM normalizes them into an `AssetBrief`. It is **not adopted**, for reasons
+measured rather than assumed.
+
+```text
+observed on this machine (G6 resource turn measurements)
+  LLM resident              31,555,141,632 bytes
+  FLUX resident             18,147,024,896 bytes
+  GPU total                 34,208,743,424 bytes
+  -> the two cannot coexist; every AI step costs a model swap
+  LLM load                  4.0 - 12.1 s
+  explicit release          0.146 - 0.371 s
+  FLUX load                 10.6 - 14.9 s
+  -> one swap round trip is roughly 15 - 25 s
+```
+
+Putting an LLM in front of *every* request would pay that on every generation,
+and would add a second AI layer beside the Director that already calls
+`text.generate`.
+
+Adopted instead, two tiers:
+
+```text
+tier 1  deterministic extraction from the existing prose intent
+        closed vocabulary; zero AI calls; zero swaps
+        returns nothing when unsure, so it never silently changes behavior
+tier 2  when the Director is invoked anyway, fold brief refinement into that
+        existing text.generate call — no extra round trip, no extra swap
+```
+
+Tier 1 is sufficient for the observed failure. Replayed against the two real
+Hanabi requests, with `constraints` empty exactly as they were sent:
+
+```text
+background   1024x576  16:9  source=brief.aspect_intent   (was 1024x1024)
+fireworks    1024x576  16:9  source=role_default          (was 1024x1024)
+explicit 1:1 1024x1024       source=request.constraints
+```
+
+Tier 2 is deferred to A3 and is not required to fix the reported defect.
+
 ### 3.3 Priority
 
 ```text
@@ -392,6 +435,152 @@ generate
 No Media Forge direct LLM process control.
 
 ---
+
+## 6.6 Swap count is a first-class budget (2026-08-24)
+
+The user's constraint: model swapping is acceptable, but the number of swaps
+must be kept as low as possible. This is not a preference; it is the dominant
+latency term on a single GPU.
+
+```text
+measured   LLM load 4.0 - 12.1 s   release 0.146 - 0.371 s   FLUX load 10.6 - 14.9 s
+           one swap round trip is roughly 15 - 25 s
+```
+
+A per-asset pipeline pays that per asset:
+
+```text
+naive, N assets
+  for each asset: Director(LLM) -> release -> generate(FLUX) -> evaluate(LLM)
+  = 2N swaps        two assets already cost 30 - 50 s of pure loading
+```
+
+The phases must therefore be batched **across** assets, not nested inside each:
+
+```text
+adopted, N assets
+  1. plan every asset            LLM resident once
+  2. release the AI turn         once
+  3. generate every asset        FLUX resident once, stays warm across N images
+  4. evaluate every asset        LLM resident once, only if evaluation is wanted
+  = 2 swaps regardless of N
+```
+
+Consequences that bind later slices:
+
+```text
+A3  evaluation must not run inline after each image. An inline evaluator would
+    reintroduce a swap per image and silently undo this. Evaluation is deferred
+    and batched, or skipped entirely (the default).
+A3  bounded refinement regenerates in a batch too: collect the accepted deltas
+    for all candidates first, then re-enter generation once.
+7   consistency groups are the natural carrier for this batching. Their value is
+    not only visual coherence; a group is also the unit that makes the swap
+    count independent of asset count.
+```
+
+Do not treat a warm image model as a licence to skip Broker admission. Staying
+warm across a group is a scheduling choice inside one admitted turn, not a way
+to hold a lease indefinitely.
+
+## 6.7 A budget must never block a required correction (2026-08-24)
+
+Raised by the user: if we cap budgets, can a generation that was actually
+needed end up not happening?
+
+Yes — and that would be the wrong kind of cheap. The rule that prevents it:
+
+```text
+a budget bounds OPTIONAL improvement
+a budget never bounds REQUIRED correction
+an exhausted budget is reported, never silently hidden
+```
+
+The two classes must be kept apart explicitly.
+
+```text
+defect        objectively wrong against the brief or the validators
+              wrong canvas / missing required alpha / failed deterministic
+              validator / unreadable output / declared safe area provably
+              violated by a deterministic check
+              -> always corrected, or the job fails loudly
+              -> never traded away to save a swap or a retry
+
+finding       a subjective judgement from the evaluator
+              "composition could be stronger", "palette slightly cool"
+              -> bounded by the QA budget
+              -> exhaustion returns the best candidate WITH the unresolved
+                 findings attached, never a silent pass
+```
+
+The strongest protection is not a larger retry budget. It is making defects
+impossible before generation, which is what A1 does: a wrong canvas is no longer
+something to detect and retry, because the canvas is resolved structurally from
+the brief. Prevention costs zero swaps; retry costs a full round trip.
+
+Same rule for the swap budget in §6.6. Batching exists to make the swap count
+independent of asset count. It must never be implemented by dropping assets from
+the evaluation batch to keep a number down. If evaluation is requested for N
+assets, all N are evaluated in the one batched pass.
+
+Concretely, three things are forbidden:
+
+```text
+- returning an asset that failed a deterministic check as if it succeeded
+- skipping a required regeneration because a retry counter was spent on
+  subjective polish
+- reporting success while unresolved findings exist, without carrying them
+```
+
+## 6.8 Asset production order — decision record (2026-08-24)
+
+The user proposed: implement everything except images first, then generate the
+assets in bulk, then use the VLM to decide whether to batch-fix code or
+regenerate images. Evaluated against real evidence rather than in the abstract.
+
+**The code-first half is adopted, and it is the strongest idea here.** In the
+Hanabi run the consuming requirements already existed in the project before the
+assets were made:
+
+```text
+#title-bg   object-fit: cover          -> the surface is landscape; a square is cropped
+#title-fw   width: min(52vw, 300px)    -> a small overlay element, not a full scene
+            filter: drop-shadow(...)   -> expects a shaped subject, so alpha is required
+```
+
+Every fact needed to write a correct `AssetBrief` was already in the CSS. It was
+never read. Deriving the brief from the code the asset must live in turns guessed
+constraints into measured ones.
+
+**Bulk-generating everything before any check is not adopted as written.** If the
+style is wrong, N generations are wasted rather than one. The fix is cheap and
+costs no extra swap, because it happens inside the same image-model residency:
+
+```text
+adopted order
+  1. build the consuming code/layout first
+  2. derive AssetBriefs FROM that code   (measured requirements, not adjectives)
+  3. generate ONE anchor asset            (same FLUX residency as step 5)
+  4. check the anchor                     (deterministic always; VLM only if asked)
+  5. bulk-generate the remainder, anchored for consistency   (FLUX still warm)
+  6. deterministic validation for all
+  7. ONE batched VLM pass for all         (only when evaluation is wanted)
+  8. corrections:  defect  -> always regenerate (see 6.7)
+                   finding -> bounded; a code change is often the correct fix
+  9. place, update references, build, test
+```
+
+Swap count stays at 2 regardless of N, because the anchor check in step 4 reuses
+the residency of step 5 and does not call the LLM unless the caller asked for
+evaluation.
+
+On "or the reverse" (assets first, then code): rejected. It reproduces exactly
+the Hanabi failure, because the brief then has nothing to measure and falls back
+to adjectives.
+
+On "fix the code instead of the image": often correct, and cheaper than a
+regeneration. But Media Forge does not edit project source. It reports the
+mismatch and which side can resolve it; the coding agent decides and edits.
 
 ## 7. P1 — Related assets and consistency groups
 
