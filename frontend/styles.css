@@ -784,3 +784,21 @@ table.catalog .tag {
 @media (hover: hover) {
   table.catalog tbody tr:hover { background: var(--sunk); }
 }
+
+/* この機材で動くかどうかは、表の中で最初に目に入るべき情報である。 */
+.runnable {
+  display: inline-block;
+  font-size: .72rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid currentColor;
+}
+.runnable[data-tone="ok"]     { color: var(--accent); }
+.runnable[data-tone="warn"]   { color: #b7791f; }
+.runnable[data-tone="bad"]    { color: #c53030; }
+.runnable[data-tone="muted"]  { color: var(--muted); }
+
+/* ダウンロードの進み具合。押した先で確かめられるようにする。 */
+#model-downloads .row-side { gap: 8px; }
+#model-downloads progress { width: 140px; }

@@ -266,6 +266,12 @@
               <p class="section-label">モデル管理</p>
               <p id="model-storage" class="hint">保存容量を確認しています…</p>
             </div>
+            <label id="model-sort-row">並び順
+              <select id="model-sort">
+                <option value="runnable">この機材で動く順</option>
+                <option value="catalog">カタログ順</option>
+              </select>
+            </label>
             <div id="model-layout" class="chips" role="radiogroup" aria-label="モデルの表示形式">
               <button type="button" class="chip" data-model-layout="table" aria-checked="true">表</button>
               <button type="button" class="chip" data-model-layout="cards" aria-checked="false">カード</button>
@@ -280,6 +286,12 @@
           </div>
           <div id="model-catalog" class="model-grid"></div>
           <div id="model-table" class="table-wrap" hidden></div>
+
+          <details id="model-downloads-block">
+            <summary>ダウンロードの状況 <span id="model-downloads-count"></span></summary>
+            <div id="model-downloads" class="rows"></div>
+            <p id="model-downloads-empty" class="hint" hidden>進行中・完了したダウンロードはありません。</p>
+          </details>
           <p id="model-empty" class="hint" hidden>条件に合うモデルはありません。</p>
           <div id="model-error" class="error" role="alert" hidden></div>
 

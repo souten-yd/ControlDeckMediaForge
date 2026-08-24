@@ -46,7 +46,8 @@ DOM_IDS = (
     "viewer-save", "viewer-save-note",
     "catalog-query", "catalog-sort", "catalog-pipeline", "catalog-search",
     "catalog-results", "catalog-empty", "custom-manual",
-    "model-layout", "model-table",
+    "model-layout", "model-table", "model-sort",
+    "model-downloads", "model-downloads-empty", "model-downloads-count",
     "reference-intelligence", "reference-focuses", "reference-analysis-summary",
     "reference-analysis-note",
     "composition-options", "composition-title", "composition-caption",
@@ -593,3 +594,37 @@ def test_the_chosen_model_layout_survives_a_reload():
     assert "model_layout" in SCRIPT
     preferences = (BACKEND / "preferences.py").read_text(encoding="utf-8")
     assert '"model_layout"' in preferences
+
+
+def test_the_catalog_says_whether_a_model_runs_on_this_machine():
+    """容量とライセンスが並んでいても「これは動くのか」は分からない。"""
+    assert "modelRunnability" in SCRIPT
+    for label in ("実行可能", "オフロード前提", "未計測", "起動不可"):
+        assert label in SCRIPT
+
+
+def test_an_unmeasured_model_is_never_called_runnable():
+    """実測していないものを「動く」と言わない。"""
+    fn = SCRIPT[SCRIPT.index("function modelRunnability"):][:900]
+
+    assert 'return "unknown"' in fn
+    assert "measured_vram_bytes" in fn
+
+
+def test_models_can_be_ordered_by_whether_they_run_here():
+    assert 'value="runnable"' in MARKUP
+    assert "RUNNABILITY[modelRunnability(a)].rank" in SCRIPT
+
+
+def test_a_started_download_has_somewhere_to_check_on_it():
+    """数十 GB かかることがある。押したあとの行き先が要る。"""
+    assert "renderModelDownloads" in SCRIPT
+    assert "model-downloads-block" in SCRIPT
+
+
+def test_finished_downloads_stay_visible_with_their_outcome():
+    """何が落ちたのかを後から確かめられないと、やり直してよいのか分からない。"""
+    fn = SCRIPT[SCRIPT.index("function modelDownloadRow"):][:1600]
+
+    assert "error_code" in fn
+    assert "完了" in fn and "失敗" in fn

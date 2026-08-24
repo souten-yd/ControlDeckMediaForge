@@ -625,6 +625,23 @@ def create_app(
             "output": committed,
         }
 
+    def device_vram_bytes() -> int:
+        """How much VRAM this machine actually has, or 0 when unknown.
+
+        Needed to say whether a model can run here at all. Reported as 0 rather
+        than guessed: claiming a model fits when we do not know is worse than
+        saying we do not know.
+        """
+        environment = setup_snapshot()
+        if not isinstance(environment, dict):
+            return 0
+        for item in environment.get("setup", []):
+            if isinstance(item, dict) and item.get("id") == "gpu_memory":
+                total = item.get("total_bytes")
+                if isinstance(total, int) and not isinstance(total, bool) and total > 0:
+                    return total
+        return 0
+
     def size_envelope() -> dict[str, Any]:
         """Derive the size bounds the UI may offer from installed models.
 
@@ -1725,6 +1742,7 @@ def create_app(
                 **await capability_document(identity),
                 "envelope": envelope,
                 "presets": size_presets(envelope),
+                "device": {"vram_bytes": device_vram_bytes()},
             }
 
         def preferences_part() -> dict[str, Any]:
@@ -2194,6 +2212,7 @@ def create_app(
                             **await capability_document(identity),
                             "envelope": envelope,
                             "presets": size_presets(envelope),
+                            "device": {"vram_bytes": device_vram_bytes()},
                         }
                     elif method == "library.list":
                         kind = params.get("kind", "all")

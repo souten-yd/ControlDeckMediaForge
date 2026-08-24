@@ -107,6 +107,8 @@ const state = {
   modelOperations: new Map(),
   modelFilter: "installed",
   modelLayout: "table",
+  modelSort: "runnable",
+  deviceVramBytes: 0,
   modelChoice: "auto",
   domainProfiles: [],
   modelManagementAvailable: false,
@@ -3155,6 +3157,10 @@ const MODEL_STATE_LABEL = {
   canceled: "中止しました",
 };
 
+const MODEL_OPERATION_ACTION_LABEL = {
+  install: "ダウンロード", evaluate: "実機評価", remove: "削除",
+};
+
 function modelOperationStateLabel(operation) {
   if (operation?.action === "evaluate") {
     if (operation.state === "ready") return "評価が完了しました";
@@ -3222,6 +3228,48 @@ function modelFailureNode(code, modelKey) {
   exit.textContent = detail.exit;
   holder.append(text, exit);
   return holder;
+}
+
+/* この機材で動くのかを、表の中で一目で分かるようにする。
+
+   容量とライセンスが並んでいても「これは動くのか」は分からない。判定できる
+   材料は既にある（実測 VRAM と、この機材の VRAM 量）ので、それを使う。
+
+   実測していないものを「動く」とは言わない。分からないものは分からないと
+   出す。CPU オフロードは動くが遅くなる選択肢なので、動くものとは分けて出す。 */
+const RUNNABILITY = {
+  fits: {label: "実行可能", rank: 0, tone: "ok"},
+  offload: {label: "オフロード前提", rank: 1, tone: "warn"},
+  unknown: {label: "未計測", rank: 2, tone: "muted"},
+  blocked: {label: "起動不可", rank: 3, tone: "bad"},
+};
+
+function modelRunnability(model) {
+  const device = Number(state.deviceVramBytes) || 0;
+  if (!model.capabilities || !model.capabilities.length) return "blocked";
+  const measured = Number(model.measured_vram_bytes) || 0;
+  if (!device) return "unknown";
+  if (!measured) {
+    // 未計測。重みの大きさは目安にしかならないので、明らかに載らない場合だけ
+    // 起動不可と言い、それ以外は未計測のままにする。
+    const approximate = Number(model.approx_download_bytes) || 0;
+    return approximate > device * 3 ? "blocked" : "unknown";
+  }
+  if (measured <= device) return "fits";
+  // オフロードすれば動く見込みがある範囲。実測ではないので前提付きで出す。
+  return measured <= device * 3 ? "offload" : "blocked";
+}
+
+function runnabilityCell(model) {
+  const cell = document.createElement("td");
+  const key = modelRunnability(model);
+  const info = RUNNABILITY[key];
+  const badge = document.createElement("span");
+  badge.className = "runnable";
+  badge.dataset.tone = info.tone;
+  badge.textContent = info.label;
+  cell.append(badge);
+  return cell;
 }
 
 /* 導入済みを見比べるには表のほうが向く。カードは 1 件ずつの説明には良いが、
@@ -3316,18 +3364,28 @@ function modelTableRow(model) {
   const license = document.createElement("td");
   license.textContent = model.license || "-";
 
-  row.append(name, stateCell, adoption, size, vram, license, modelActionCell(model, modelKey));
+  row.append(
+    name, runnabilityCell(model), stateCell, adoption, size, vram, license,
+    modelActionCell(model, modelKey),
+  );
   return row;
 }
 
 function renderModelTable(visible) {
   const holder = byId("model-table");
   if (!holder) return;
+  if (state.modelSort === "runnable") {
+    // 動くものを先に。同順位なら実測 VRAM の小さい順（載せやすい順）。
+    visible = [...visible].sort((a, b) =>
+      RUNNABILITY[modelRunnability(a)].rank - RUNNABILITY[modelRunnability(b)].rank
+      || (Number(a.measured_vram_bytes) || Infinity) - (Number(b.measured_vram_bytes) || Infinity)
+      || String(a.display_name).localeCompare(String(b.display_name)));
+  }
   const table = document.createElement("table");
   table.className = "catalog";
   const head = document.createElement("thead");
   const headRow = document.createElement("tr");
-  for (const label of ["モデル", "状態", "採用", "容量", "VRAM", "ライセンス", ""]) {
+  for (const label of ["モデル", "この機材", "状態", "採用", "容量", "VRAM", "ライセンス", ""]) {
     const cell = document.createElement("th");
     cell.textContent = label;
     headRow.append(cell);
@@ -3337,6 +3395,69 @@ function renderModelTable(visible) {
   body.append(...visible.map(modelTableRow));
   table.append(head, body);
   holder.replaceChildren(table);
+}
+
+/* ダウンロードは数十 GB かかることがあり、押したあとの行き先が要る。
+   進行中だけでなく、終わったもの・失敗したものも残す。何が落ちたのかを
+   後から確かめられないと、やり直してよいのかが分からない。 */
+function modelDownloadRow(operation) {
+  const model = state.modelCatalog.find((item) => item.model_id === operation.model_id);
+  const row = document.createElement("article");
+  row.className = "row";
+  row.dataset.status = MODEL_TERMINAL.has(operation.state)
+    ? (operation.state === "ready" ? "succeeded" : "failed") : "running";
+
+  const info = document.createElement("div");
+  const title = document.createElement("p");
+  title.className = "t";
+  title.textContent = model?.display_name || operation.model_id;
+  const sub = document.createElement("p");
+  sub.className = "s";
+  const done = formatBytes(operation.bytes_done);
+  const total = operation.bytes_total ? formatBytes(operation.bytes_total) : "?";
+  sub.textContent = [
+    MODEL_OPERATION_ACTION_LABEL[operation.action] || operation.action,
+    modelOperationStateLabel(operation),
+    operation.bytes_total ? `${done} / ${total}` : done,
+    operation.error_code ? failureText(operation.error_code) : "",
+  ].filter(Boolean).join(" · ");
+  info.append(title, sub);
+
+  const side = document.createElement("div");
+  side.className = "row-side";
+  if (!MODEL_TERMINAL.has(operation.state)) {
+    const progress = document.createElement("progress");
+    progress.max = Math.max(operation.bytes_total, 1);
+    progress.value = operation.bytes_done;
+    progress.setAttribute("aria-label", modelOperationStateLabel(operation));
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.dataset.cancelModelOperation = operation.id;
+    cancel.textContent = "中止";
+    side.append(progress, cancel);
+  } else {
+    const done_ = document.createElement("span");
+    done_.className = "state";
+    done_.textContent = operation.state === "ready" ? "完了" : "失敗";
+    side.append(done_);
+  }
+  row.append(info, side);
+  return row;
+}
+
+function renderModelDownloads() {
+  const holder = byId("model-downloads");
+  if (!holder) return;
+  const operations = [...state.modelOperations.values()]
+    .filter((item) => item.action !== "remove")
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  holder.replaceChildren(...operations.map(modelDownloadRow));
+  byId("model-downloads-empty").hidden = operations.length > 0;
+  const running = operations.filter((item) => !MODEL_TERMINAL.has(item.state)).length;
+  byId("model-downloads-count").textContent = running
+    ? `進行中 ${running} 件` : operations.length ? `${operations.length} 件` : "";
+  // 進行中があるなら開いておく。押したのに何も見えないのが一番困る。
+  if (running) byId("model-downloads-block").open = true;
 }
 
 function renderModelManagement() {
@@ -3444,6 +3565,7 @@ function renderModelManagement() {
     return card;
   }));
   byId("model-empty").hidden = visible.length !== 0;
+  renderModelDownloads();
   const table = state.modelLayout === "table";
   renderModelTable(visible);
   byId("model-table").hidden = !table || visible.length === 0;
@@ -3929,6 +4051,11 @@ function jobById(id) {
 
 byId("viewer-save").addEventListener("click", () => void saveAsset(viewer.assetId));
 
+byId("model-sort").addEventListener("change", (event) => {
+  state.modelSort = event.target.value;
+  renderModelManagement();
+});
+
 byId("model-layout").addEventListener("click", (event) => {
   const chip = event.target.closest("[data-model-layout]");
   if (!chip) return;
@@ -4149,6 +4276,7 @@ function applySessionParts(snapshot) {
   if (usable(snapshot.capabilities)) {
     state.capabilities = snapshot.capabilities.capabilities || {};
     state.envelope = snapshot.capabilities.envelope || null;
+    state.deviceVramBytes = snapshot.capabilities.device?.vram_bytes || 0;
     state.presets = snapshot.capabilities.presets || [];
   }
   if (usable(snapshot.profiles)) state.profiles = snapshot.profiles.items || [];
