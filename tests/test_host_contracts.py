@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
+
+from fastapi.testclient import TestClient
 
 from mediaforge.host.files import require_grant_id
 from mediaforge.asset_placement import ProjectAssetPlacement, placement_filename
@@ -11,6 +14,9 @@ from pathlib import Path
 
 from mediaforge.host.resources import fake_image_request, image_model_request
 from mediaforge.models import ModelDescriptor, ModelState
+
+ROOT = Path(__file__).parents[1]
+BACKEND = ROOT / "backend" / "mediaforge"
 
 
 def test_fake_lease_request_has_complete_vram_and_runtime_estimate():
@@ -241,3 +247,56 @@ def test_project_asset_placement_accepts_only_safe_matching_filenames():
             pass
         else:
             raise AssertionError(f"accepted unsafe or mismatched filename: {filename}")
+
+
+# ControlDeck の SetupChecklistItem は extra="forbid" である。1 つでも知らない
+# 鍵があると health 全体が ValidationError になり、service が正常に応答して
+# いるのに「接続できません」と出る。実際にそうなった: 実行可否の判定に要る
+# gpu_memory.total_bytes を、そのまま Host へ渡していた。
+HOST_SETUP_ITEM_FIELDS = {"id", "label", "state", "detail", "message", "action"}
+
+
+def test_health_setup_items_carry_only_host_contract_fields(tmp_path: Path, monkeypatch):
+    from mediaforge.app import create_app
+    from conftest import fake_settings
+
+    settings = fake_settings(tmp_path)
+    environment = {
+        "status": "healthy",
+        "setup": [
+            {"id": "core_env", "label": "Packaged core", "state": "ok"},
+            {
+                "id": "gpu_memory",
+                "label": "GPU memory",
+                "state": "ok",
+                # ローカルには残す。実行可否の判定がこの数値を読む。
+                "total_bytes": 34_208_743_424,
+                "detail": "34208743424 bytes total",
+            },
+        ],
+    }
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    status_file = settings.data_dir / "environment-status.json"
+    status_file.write_text(json.dumps(environment), encoding="utf-8")
+    monkeypatch.setenv("MEDIA_FORGE_ENV_STATUS_FILE", str(status_file))
+
+    app = create_app(settings)
+    with TestClient(app) as client:
+        payload = client.get("/health").json()
+
+    items = payload["setup"]
+    assert any(item["id"] == "gpu_memory" for item in items), "setup が読み込まれていない"
+    for item in items:
+        extra = set(item) - HOST_SETUP_ITEM_FIELDS
+        assert not extra, f"Host 契約に無い鍵を出している: {sorted(extra)}"
+    # 数値そのものは失わない。文章側に残す。
+    memory = next(item for item in items if item["id"] == "gpu_memory")
+    assert "34208743424" in memory["detail"]
+
+
+def test_the_local_environment_file_still_carries_the_number_for_runnability():
+    """Host へ出さないことと、手元で持たないことは別。VRAM 量は判定に要る。"""
+    entrypoint = (ROOT / "scripts" / "bundle_entrypoint.py").read_text(encoding="utf-8")
+    assert '"total_bytes": int(gpu.get("total_memory_bytes") or 0)' in entrypoint
+    app_source = (BACKEND / "app.py").read_text(encoding="utf-8")
+    assert 'item.get("total_bytes")' in app_source, "実行可否の判定が数値を読まなくなっている"

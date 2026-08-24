@@ -550,7 +550,7 @@ def create_app(
                 "context_action:edit-image": token_state,
             },
             "setup": (
-                environment["setup"]
+                [host_setup_item(item) for item in environment["setup"]]
                 if environment
                 else [
                     {
@@ -641,6 +641,24 @@ def create_app(
                 if isinstance(total, int) and not isinstance(total, bool) and total > 0:
                     return total
         return 0
+
+    def host_setup_item(item: Any) -> dict[str, Any]:
+        """Emit only what the Host contract defines for a setup checklist item.
+
+        The local environment file carries more than the Host asks for —
+        gpu_memory keeps `total_bytes` because runnability needs the number and
+        digging it back out of a sentence is not something to build on. Handing
+        that field to the Host is a different matter: SetupChecklistItem forbids
+        extras, so one unknown key fails the whole health report and the add-on
+        reads as unreachable while the service is answering normally. That is
+        what happened. Media Forge vocabulary stops at this boundary.
+        """
+        if not isinstance(item, dict):
+            return {"id": "environment", "label": "Media Forge environment", "state": "error"}
+        return {
+            key: value for key, value in item.items()
+            if key in {"id", "label", "state", "detail", "message", "action"}
+        }
 
     def size_envelope() -> dict[str, Any]:
         """Derive the size bounds the UI may offer from installed models.
