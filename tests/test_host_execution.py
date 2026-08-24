@@ -575,7 +575,11 @@ def test_workspace_embeds_creative_catalog_and_standalone_validation_is_private(
     assert 'id="creative-template-data"' in index.text
     assert 'id="workspace-config-data"' in index.text
     assert '"max_reference_assets":4' in index.text
-    assert '"catalog_version":"2026.08.22"' in index.text
+    # 埋め込まれた版が同梱カタログと一致すること。値そのものは固定しない。
+    shipped = json.loads(
+        (Path(__file__).parents[1] / "creative/templates.json").read_text(encoding="utf-8")
+    )["catalog_version"]
+    assert f'"catalog_version":"{shipped}"' in index.text
     assert compiled.status_code == 200
     assert compiled.json()["request"]["model_id"] is None
     assert compiled.json()["request"]["constraints"]["creative_plan"]["domain"]["id"] == "anime"

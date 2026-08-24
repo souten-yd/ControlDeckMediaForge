@@ -1,71 +1,862 @@
 {
   "schema_version": "1.0",
-  "catalog_version": "2026.08.22",
+  "catalog_version": "2026.08.24",
   "domains": [
-    {"id": "auto", "version": "1.0", "label": "自動", "prompt": ""},
-    {"id": "anime", "version": "1.0", "label": "アニメ", "prompt": "anime illustration"},
-    {"id": "illustration", "version": "1.0", "label": "イラスト", "prompt": "polished illustration"},
-    {"id": "photoreal", "version": "1.0", "label": "写真", "prompt": "photorealistic image"},
-    {"id": "game2d", "version": "1.0", "label": "2Dゲーム", "prompt": "production-ready 2D game art"},
-    {"id": "poster", "version": "1.0", "label": "ポスター", "prompt": "designed poster artwork"},
-    {"id": "character_sheet", "version": "1.0", "label": "キャラクター表", "prompt": "consistent character reference artwork"}
+    {
+      "id": "auto",
+      "version": "1.0",
+      "label": "自動",
+      "prompt": ""
+    },
+    {
+      "id": "anime",
+      "version": "1.0",
+      "label": "アニメ",
+      "prompt": "anime illustration"
+    },
+    {
+      "id": "illustration",
+      "version": "1.0",
+      "label": "イラスト",
+      "prompt": "polished illustration"
+    },
+    {
+      "id": "photoreal",
+      "version": "1.0",
+      "label": "写真",
+      "prompt": "photorealistic image"
+    },
+    {
+      "id": "game2d",
+      "version": "1.0",
+      "label": "2Dゲーム",
+      "prompt": "production-ready 2D game art"
+    },
+    {
+      "id": "background",
+      "version": "1.0",
+      "label": "背景",
+      "prompt": "background artwork"
+    },
+    {
+      "id": "poster",
+      "version": "1.0",
+      "label": "ポスター",
+      "prompt": "designed poster artwork"
+    },
+    {
+      "id": "character_sheet",
+      "version": "1.0",
+      "label": "キャラクター表",
+      "prompt": "consistent character reference artwork"
+    },
+    {
+      "id": "watercolor",
+      "version": "1.0",
+      "label": "水彩",
+      "prompt": "watercolor painting style"
+    },
+    {
+      "id": "oil_painting",
+      "version": "1.0",
+      "label": "油彩",
+      "prompt": "oil painting style"
+    },
+    {
+      "id": "flat_vector",
+      "version": "1.0",
+      "label": "フラット・ベクター",
+      "prompt": "flat vector illustration style"
+    },
+    {
+      "id": "pixel_art",
+      "version": "1.0",
+      "label": "ドット絵",
+      "prompt": "pixel art style"
+    },
+    {
+      "id": "line_art",
+      "version": "1.0",
+      "label": "線画",
+      "prompt": "clean line art"
+    },
+    {
+      "id": "3d_render",
+      "version": "1.0",
+      "label": "3D レンダー",
+      "prompt": "a 3D rendered look"
+    },
+    {
+      "id": "concept_art",
+      "version": "1.0",
+      "label": "コンセプトアート",
+      "prompt": "concept art style"
+    },
+    {
+      "id": "ukiyoe",
+      "version": "1.0",
+      "label": "浮世絵",
+      "prompt": "ukiyo-e woodblock print style"
+    }
   ],
   "scenes": [
-    {"id": "auto", "version": "1.0", "label": "自動", "prompt": "", "compatible_poses": ["auto", "holding_item", "typing", "peace", "wave", "arms_crossed", "sitting", "walking", "custom"]},
-    {"id": "standing_intro", "version": "1.0", "label": "立って自己紹介", "prompt": "standing and introducing the subject", "compatible_poses": ["auto", "holding_item", "peace", "wave", "arms_crossed", "custom"]},
-    {"id": "coding_at_desk", "version": "1.0", "label": "机でコーディング", "prompt": "working at a computer desk", "compatible_poses": ["auto", "typing", "sitting", "custom"]},
-    {"id": "presenting_device", "version": "1.0", "label": "端末を紹介", "prompt": "presenting a handheld device clearly", "compatible_poses": ["auto", "holding_item", "peace", "wave", "custom"]},
-    {"id": "seated", "version": "1.0", "label": "座る", "prompt": "seated naturally", "compatible_poses": ["auto", "sitting", "arms_crossed", "custom"]},
-    {"id": "thinking", "version": "1.0", "label": "考える", "prompt": "pausing in thought", "compatible_poses": ["auto", "arms_crossed", "sitting", "custom"]},
-    {"id": "action", "version": "1.0", "label": "アクション", "prompt": "in a clear dynamic action scene", "compatible_poses": ["auto", "walking", "wave", "custom"]},
-    {"id": "chibi_greeting", "version": "1.0", "label": "ちびキャラ挨拶", "prompt": "cheerful chibi greeting", "compatible_poses": ["auto", "peace", "wave", "custom"]}
+    {
+      "id": "auto",
+      "version": "1.0",
+      "label": "自動",
+      "prompt": "",
+      "compatible_poses": [
+        "auto",
+        "holding_item",
+        "typing",
+        "peace",
+        "wave",
+        "arms_crossed",
+        "sitting",
+        "walking",
+        "custom"
+      ]
+    },
+    {
+      "id": "standing_intro",
+      "version": "1.0",
+      "label": "立って自己紹介",
+      "prompt": "standing and introducing the subject",
+      "compatible_poses": [
+        "auto",
+        "holding_item",
+        "peace",
+        "wave",
+        "arms_crossed",
+        "custom"
+      ]
+    },
+    {
+      "id": "coding_at_desk",
+      "version": "1.0",
+      "label": "机でコーディング",
+      "prompt": "working at a computer desk",
+      "compatible_poses": [
+        "auto",
+        "typing",
+        "sitting",
+        "custom"
+      ]
+    },
+    {
+      "id": "presenting_device",
+      "version": "1.0",
+      "label": "端末を紹介",
+      "prompt": "presenting a handheld device clearly",
+      "compatible_poses": [
+        "auto",
+        "holding_item",
+        "peace",
+        "wave",
+        "custom"
+      ]
+    },
+    {
+      "id": "seated",
+      "version": "1.0",
+      "label": "座る",
+      "prompt": "seated naturally",
+      "compatible_poses": [
+        "auto",
+        "sitting",
+        "arms_crossed",
+        "custom"
+      ]
+    },
+    {
+      "id": "thinking",
+      "version": "1.0",
+      "label": "考える",
+      "prompt": "pausing in thought",
+      "compatible_poses": [
+        "auto",
+        "arms_crossed",
+        "sitting",
+        "custom"
+      ]
+    },
+    {
+      "id": "action",
+      "version": "1.0",
+      "label": "アクション",
+      "prompt": "in a clear dynamic action scene",
+      "compatible_poses": [
+        "auto",
+        "walking",
+        "wave",
+        "custom"
+      ]
+    },
+    {
+      "id": "chibi_greeting",
+      "version": "1.0",
+      "label": "ちびキャラ挨拶",
+      "prompt": "cheerful chibi greeting",
+      "compatible_poses": [
+        "auto",
+        "peace",
+        "wave",
+        "custom"
+      ]
+    },
+    {
+      "id": "outdoor_nature",
+      "version": "1.0",
+      "label": "自然の風景",
+      "prompt": "an outdoor natural landscape",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "outdoor_city",
+      "version": "1.0",
+      "label": "街・建物",
+      "prompt": "an urban street or architectural exterior",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "interior",
+      "version": "1.0",
+      "label": "室内",
+      "prompt": "an interior space",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "night_sky",
+      "version": "1.0",
+      "label": "夜空・天体",
+      "prompt": "a night sky scene",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "waterside",
+      "version": "1.0",
+      "label": "水辺・海",
+      "prompt": "a waterside or seascape",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "weather_sky",
+      "version": "1.0",
+      "label": "空・天候",
+      "prompt": "an expansive sky with weather",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "still_life",
+      "version": "1.0",
+      "label": "静物・物",
+      "prompt": "a still-life arrangement of objects",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "abstract_pattern",
+      "version": "1.0",
+      "label": "抽象・模様",
+      "prompt": "an abstract pattern",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "festival_event",
+      "version": "1.0",
+      "label": "祭り・イベント",
+      "prompt": "a festival or event scene",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "working_at_desk",
+      "version": "1.0",
+      "label": "机で作業",
+      "prompt": "working at a desk",
+      "compatible_poses": [
+        "auto",
+        "typing",
+        "holding_item",
+        "sitting",
+        "custom"
+      ]
+    },
+    {
+      "id": "sunrise",
+      "version": "1.0",
+      "label": "朝焼け",
+      "prompt": "at sunrise",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "golden_hour",
+      "version": "1.0",
+      "label": "夕暮れ",
+      "prompt": "during golden hour",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "night_city",
+      "version": "1.0",
+      "label": "夜の街",
+      "prompt": "a city at night",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "rain",
+      "version": "1.0",
+      "label": "雨",
+      "prompt": "in the rain",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "snow",
+      "version": "1.0",
+      "label": "雪",
+      "prompt": "in falling snow",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "fog",
+      "version": "1.0",
+      "label": "霧",
+      "prompt": "in fog",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "forest",
+      "version": "1.0",
+      "label": "森",
+      "prompt": "in a forest",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "mountain",
+      "version": "1.0",
+      "label": "山",
+      "prompt": "a mountain landscape",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "desert",
+      "version": "1.0",
+      "label": "砂漠",
+      "prompt": "a desert landscape",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "space",
+      "version": "1.0",
+      "label": "宇宙",
+      "prompt": "a scene in outer space",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "underwater",
+      "version": "1.0",
+      "label": "水中",
+      "prompt": "an underwater scene",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "ruins",
+      "version": "1.0",
+      "label": "廃墟・遺跡",
+      "prompt": "ruins or an abandoned place",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "cafe",
+      "version": "1.0",
+      "label": "カフェ・店内",
+      "prompt": "inside a cafe or shop",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "classroom",
+      "version": "1.0",
+      "label": "教室",
+      "prompt": "in a classroom",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "fantasy_world",
+      "version": "1.0",
+      "label": "ファンタジー世界",
+      "prompt": "a fantasy world setting",
+      "compatible_poses": [
+        "auto"
+      ]
+    },
+    {
+      "id": "sci_fi_city",
+      "version": "1.0",
+      "label": "SF 都市",
+      "prompt": "a science-fiction cityscape",
+      "compatible_poses": [
+        "auto"
+      ]
+    }
   ],
   "poses": [
-    {"id": "auto", "version": "1.0", "label": "自動", "prompt": ""},
-    {"id": "holding_item", "version": "1.0", "label": "物を持つ", "prompt": "holding the requested item visibly"},
-    {"id": "typing", "version": "1.0", "label": "タイピング", "prompt": "hands naturally typing on a keyboard"},
-    {"id": "peace", "version": "1.0", "label": "ピース", "prompt": "making a friendly peace sign"},
-    {"id": "wave", "version": "1.0", "label": "手を振る", "prompt": "waving one hand in greeting"},
-    {"id": "arms_crossed", "version": "1.0", "label": "腕を組む", "prompt": "standing or sitting with arms crossed"},
-    {"id": "sitting", "version": "1.0", "label": "座る", "prompt": "in a stable seated pose"},
-    {"id": "walking", "version": "1.0", "label": "歩く", "prompt": "captured in a natural walking pose"},
-    {"id": "custom", "version": "1.0", "label": "自由指定", "prompt": ""}
+    {
+      "id": "auto",
+      "version": "1.0",
+      "label": "自動",
+      "prompt": ""
+    },
+    {
+      "id": "holding_item",
+      "version": "1.0",
+      "label": "物を持つ",
+      "prompt": "holding the requested item visibly"
+    },
+    {
+      "id": "typing",
+      "version": "1.0",
+      "label": "タイピング",
+      "prompt": "hands naturally typing on a keyboard"
+    },
+    {
+      "id": "peace",
+      "version": "1.0",
+      "label": "ピース",
+      "prompt": "making a friendly peace sign"
+    },
+    {
+      "id": "wave",
+      "version": "1.0",
+      "label": "手を振る",
+      "prompt": "waving one hand in greeting"
+    },
+    {
+      "id": "arms_crossed",
+      "version": "1.0",
+      "label": "腕を組む",
+      "prompt": "standing or sitting with arms crossed"
+    },
+    {
+      "id": "sitting",
+      "version": "1.0",
+      "label": "座る",
+      "prompt": "in a stable seated pose"
+    },
+    {
+      "id": "walking",
+      "version": "1.0",
+      "label": "歩く",
+      "prompt": "captured in a natural walking pose"
+    },
+    {
+      "id": "custom",
+      "version": "1.0",
+      "label": "自由指定",
+      "prompt": ""
+    }
   ],
   "compositions": [
-    {"id": "auto", "version": "1.0", "label": "自動", "prompt": ""},
-    {"id": "bust_up", "version": "1.0", "label": "バストアップ", "prompt": "bust-up framing"},
-    {"id": "full_body_center", "version": "1.0", "label": "全身・中央", "prompt": "full body centered with the whole silhouette visible"},
-    {"id": "full_body_off_center", "version": "1.0", "label": "全身・余白あり", "prompt": "full body placed off-center with intentional negative space"},
-    {"id": "three_quarter", "version": "1.0", "label": "3/4身", "prompt": "three-quarter body framing"},
-    {"id": "poster", "version": "1.0", "label": "ポスター", "prompt": "strong poster hierarchy with intentional copy space"},
-    {"id": "character_sheet", "version": "1.0", "label": "キャラクター表", "prompt": "clean character reference sheet composition"},
-    {"id": "multi_cut_promo", "version": "1.0", "label": "複数カット告知", "prompt": "multi-cut promotional composition with clearly separated regions"}
+    {
+      "id": "auto",
+      "version": "1.0",
+      "label": "自動",
+      "prompt": ""
+    },
+    {
+      "id": "bust_up",
+      "version": "1.0",
+      "label": "バストアップ",
+      "prompt": "bust-up framing"
+    },
+    {
+      "id": "full_body_center",
+      "version": "1.0",
+      "label": "全身・中央",
+      "prompt": "full body centered with the whole silhouette visible"
+    },
+    {
+      "id": "full_body_off_center",
+      "version": "1.0",
+      "label": "全身・余白あり",
+      "prompt": "full body placed off-center with intentional negative space"
+    },
+    {
+      "id": "three_quarter",
+      "version": "1.0",
+      "label": "3/4身",
+      "prompt": "three-quarter body framing"
+    },
+    {
+      "id": "poster",
+      "version": "1.0",
+      "label": "ポスター",
+      "prompt": "strong poster hierarchy with intentional copy space"
+    },
+    {
+      "id": "character_sheet",
+      "version": "1.0",
+      "label": "キャラクター表",
+      "prompt": "clean character reference sheet composition"
+    },
+    {
+      "id": "multi_cut_promo",
+      "version": "1.0",
+      "label": "複数カット告知",
+      "prompt": "multi-cut promotional composition with clearly separated regions"
+    },
+    {
+      "id": "centered",
+      "version": "1.0",
+      "label": "中央に配置",
+      "prompt": "the subject centered in frame"
+    },
+    {
+      "id": "rule_of_thirds",
+      "version": "1.0",
+      "label": "三分割",
+      "prompt": "composed on thirds"
+    },
+    {
+      "id": "symmetrical",
+      "version": "1.0",
+      "label": "左右対称",
+      "prompt": "a symmetrical composition"
+    },
+    {
+      "id": "negative_space_top",
+      "version": "1.0",
+      "label": "上に余白",
+      "prompt": "composed with the upper area left open"
+    },
+    {
+      "id": "negative_space_bottom",
+      "version": "1.0",
+      "label": "下に余白",
+      "prompt": "composed with the lower area left open"
+    },
+    {
+      "id": "negative_space_side",
+      "version": "1.0",
+      "label": "横に余白",
+      "prompt": "composed with one side left open"
+    },
+    {
+      "id": "wide_establishing",
+      "version": "1.0",
+      "label": "広く見渡す",
+      "prompt": "a wide establishing view"
+    },
+    {
+      "id": "close_detail",
+      "version": "1.0",
+      "label": "寄りの細部",
+      "prompt": "a close detail view"
+    },
+    {
+      "id": "flat_lay",
+      "version": "1.0",
+      "label": "真上から",
+      "prompt": "a flat overhead layout"
+    },
+    {
+      "id": "seamless_tile",
+      "version": "1.0",
+      "label": "継ぎ目なし",
+      "prompt": "a seamlessly tileable arrangement"
+    },
+    {
+      "id": "diagonal",
+      "version": "1.0",
+      "label": "斜めの流れ",
+      "prompt": "a diagonal composition"
+    },
+    {
+      "id": "leading_lines",
+      "version": "1.0",
+      "label": "誘導線",
+      "prompt": "composed with leading lines"
+    },
+    {
+      "id": "framed",
+      "version": "1.0",
+      "label": "額縁構図",
+      "prompt": "the subject framed by foreground elements"
+    },
+    {
+      "id": "silhouette",
+      "version": "1.0",
+      "label": "シルエット",
+      "prompt": "the subject rendered as a silhouette"
+    },
+    {
+      "id": "depth_layers",
+      "version": "1.0",
+      "label": "手前・中景・奥",
+      "prompt": "layered foreground, midground and background"
+    },
+    {
+      "id": "panorama",
+      "version": "1.0",
+      "label": "パノラマ",
+      "prompt": "a panoramic composition"
+    },
+    {
+      "id": "isometric",
+      "version": "1.0",
+      "label": "アイソメトリック",
+      "prompt": "an isometric view"
+    },
+    {
+      "id": "top_down",
+      "version": "1.0",
+      "label": "見下ろし型",
+      "prompt": "a top-down game view"
+    },
+    {
+      "id": "side_scroller",
+      "version": "1.0",
+      "label": "横スクロール",
+      "prompt": "a side-scrolling game view"
+    }
   ],
   "cameras": [
-    {"id": "auto", "version": "1.0", "label": "自動", "prompt": ""},
-    {"id": "eye_level", "version": "1.0", "label": "目線の高さ", "prompt": "eye-level camera"},
-    {"id": "low_angle", "version": "1.0", "label": "ローアングル", "prompt": "low-angle camera"},
-    {"id": "high_angle", "version": "1.0", "label": "ハイアングル", "prompt": "high-angle camera"},
-    {"id": "over_shoulder", "version": "1.0", "label": "肩越し", "prompt": "over-the-shoulder camera"},
-    {"id": "close_up", "version": "1.0", "label": "クローズアップ", "prompt": "close-up camera framing"},
-    {"id": "wide", "version": "1.0", "label": "ワイド", "prompt": "wide establishing camera framing"}
+    {
+      "id": "auto",
+      "version": "1.0",
+      "label": "自動",
+      "prompt": ""
+    },
+    {
+      "id": "eye_level",
+      "version": "1.0",
+      "label": "目線の高さ",
+      "prompt": "eye-level camera"
+    },
+    {
+      "id": "low_angle",
+      "version": "1.0",
+      "label": "ローアングル",
+      "prompt": "low-angle camera"
+    },
+    {
+      "id": "high_angle",
+      "version": "1.0",
+      "label": "ハイアングル",
+      "prompt": "high-angle camera"
+    },
+    {
+      "id": "over_shoulder",
+      "version": "1.0",
+      "label": "肩越し",
+      "prompt": "over-the-shoulder camera"
+    },
+    {
+      "id": "close_up",
+      "version": "1.0",
+      "label": "クローズアップ",
+      "prompt": "close-up camera framing"
+    },
+    {
+      "id": "wide",
+      "version": "1.0",
+      "label": "ワイド",
+      "prompt": "wide establishing camera framing"
+    },
+    {
+      "id": "birds_eye",
+      "version": "1.0",
+      "label": "俯瞰",
+      "prompt": "a bird's-eye view"
+    },
+    {
+      "id": "macro",
+      "version": "1.0",
+      "label": "接写",
+      "prompt": "a macro close view"
+    },
+    {
+      "id": "long_shot",
+      "version": "1.0",
+      "label": "遠景",
+      "prompt": "a distant long shot"
+    },
+    {
+      "id": "dutch_angle",
+      "version": "1.0",
+      "label": "傾け",
+      "prompt": "a dutch angle"
+    },
+    {
+      "id": "worms_eye",
+      "version": "1.0",
+      "label": "あおり",
+      "prompt": "a worm's-eye view"
+    },
+    {
+      "id": "telephoto",
+      "version": "1.0",
+      "label": "望遠圧縮",
+      "prompt": "a compressed telephoto perspective"
+    },
+    {
+      "id": "wide_angle",
+      "version": "1.0",
+      "label": "広角",
+      "prompt": "a wide-angle perspective"
+    },
+    {
+      "id": "shallow_depth",
+      "version": "1.0",
+      "label": "背景ぼけ",
+      "prompt": "a shallow depth of field"
+    },
+    {
+      "id": "deep_focus",
+      "version": "1.0",
+      "label": "全面ピント",
+      "prompt": "deep focus with everything sharp"
+    }
   ],
   "variations": [
-    {"id": "auto", "version": "1.0", "label": "自動", "prompt": ""},
-    {"id": "pose", "version": "1.0", "label": "ポーズ違い", "prompt": "vary the pose while preserving the subject"},
-    {"id": "scene", "version": "1.0", "label": "シーン違い", "prompt": "vary the scene deliberately while preserving the subject"},
-    {"id": "expression", "version": "1.0", "label": "表情違い", "prompt": "vary the expression while preserving identity"},
-    {"id": "composition", "version": "1.0", "label": "構図違い", "prompt": "vary the composition deliberately"},
-    {"id": "camera", "version": "1.0", "label": "カメラ違い", "prompt": "vary the camera treatment deliberately"}
+    {
+      "id": "auto",
+      "version": "1.0",
+      "label": "自動",
+      "prompt": ""
+    },
+    {
+      "id": "pose",
+      "version": "1.0",
+      "label": "ポーズ違い",
+      "prompt": "vary the pose while preserving the subject"
+    },
+    {
+      "id": "scene",
+      "version": "1.0",
+      "label": "シーン違い",
+      "prompt": "vary the scene deliberately while preserving the subject"
+    },
+    {
+      "id": "expression",
+      "version": "1.0",
+      "label": "表情違い",
+      "prompt": "vary the expression while preserving identity"
+    },
+    {
+      "id": "composition",
+      "version": "1.0",
+      "label": "構図違い",
+      "prompt": "vary the composition deliberately"
+    },
+    {
+      "id": "camera",
+      "version": "1.0",
+      "label": "カメラ違い",
+      "prompt": "vary the camera treatment deliberately"
+    },
+    {
+      "id": "palette",
+      "version": "1.0",
+      "label": "配色違い",
+      "prompt": "varying the colour palette"
+    },
+    {
+      "id": "lighting",
+      "version": "1.0",
+      "label": "光の違い",
+      "prompt": "varying the lighting"
+    },
+    {
+      "id": "angle",
+      "version": "1.0",
+      "label": "アングル違い",
+      "prompt": "varying the camera angle"
+    }
   ],
   "reference_roles": [
-    {"id": "identity", "version": "1.0", "label": "同一人物・キャラ"},
-    {"id": "style", "version": "1.0", "label": "画風"},
-    {"id": "pose", "version": "1.0", "label": "ポーズ"},
-    {"id": "composition", "version": "1.0", "label": "構図"},
-    {"id": "clothing", "version": "1.0", "label": "服装"},
-    {"id": "palette", "version": "1.0", "label": "色"},
-    {"id": "prop", "version": "1.0", "label": "小物"},
-    {"id": "environment", "version": "1.0", "label": "背景・環境"}
+    {
+      "id": "identity",
+      "version": "1.0",
+      "label": "同一人物・キャラ"
+    },
+    {
+      "id": "style",
+      "version": "1.0",
+      "label": "画風"
+    },
+    {
+      "id": "pose",
+      "version": "1.0",
+      "label": "ポーズ"
+    },
+    {
+      "id": "composition",
+      "version": "1.0",
+      "label": "構図"
+    },
+    {
+      "id": "clothing",
+      "version": "1.0",
+      "label": "服装"
+    },
+    {
+      "id": "palette",
+      "version": "1.0",
+      "label": "色"
+    },
+    {
+      "id": "prop",
+      "version": "1.0",
+      "label": "小物"
+    },
+    {
+      "id": "environment",
+      "version": "1.0",
+      "label": "背景・環境"
+    }
   ]
 }

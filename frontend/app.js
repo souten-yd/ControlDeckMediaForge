@@ -210,6 +210,11 @@ function handleEvent(message) {
   }
   if (message.event === "job.changed") {
     const job = message.data;
+    // 復元できるよう、届いた最新状態を持っておく。
+    const jobs = state.jobs || [];
+    const index = jobs.findIndex((item) => item.id === job.id);
+    if (index >= 0) jobs[index] = job; else jobs.unshift(job);
+    state.jobs = jobs;
     if (job.id === state.activeJob) showProgress(job);
     if (TERMINAL.has(job.status)) void finishJob(job);
     return;
@@ -465,10 +470,12 @@ function activate(name, {sync = true} = {}) {
   for (const section of document.querySelectorAll(".view")) {
     section.hidden = section.dataset.view !== view;
   }
-  for (const button of document.querySelectorAll("#shell-nav button")) {
+  // 設定はヘッダー側にあるが、現在地であることは同じように示す。
+  for (const button of document.querySelectorAll("#shell-nav button, #nav-settings")) {
     if (button.dataset.view === view) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   }
+  if (view === "create") restoreProgressView();
   if (view === "library") void loadLibrary({reset: true});
   if (view === "activity") void loadActivity();
   if (view === "settings") void loadSettings();
@@ -534,13 +541,10 @@ function renderCreative() {
 }
 
 function renderAdvancedCreative() {
-  if (!byId("advanced-domain")) return;
-  fillCreativeSelect("advanced-domain", "domains", state.creative.domain);
-  fillCreativeSelect("advanced-scene", "scenes", state.creative.scene);
-  fillCreativeSelect("advanced-pose", "poses", state.creative.pose);
-  fillCreativeSelect("advanced-composition", "compositions", state.creative.composition);
-  fillCreativeSelect("advanced-camera", "cameras", state.creative.camera);
-  fillCreativeSelect("advanced-variation", "variations", state.creative.variation);
+  // シーン・構図・カメラの選択は「シーンと見せ方」に 1 組だけ置く。詳細モードは
+  // 同じ選択を繰り返さず、言葉での補足だけを足す。同じ設定が 2 箇所にあると、
+  // どちらが効いているのか利用者に分からない。
+  if (!byId("advanced-scene-details")) return;
   byId("advanced-scene-details").value = state.creative.sceneDetails;
   byId("advanced-pose-details").value = state.creative.poseDetails;
   byId("advanced-composition-details").value = state.creative.compositionDetails;
@@ -2080,20 +2084,53 @@ function hidePreparing() {
   byId("mini-progress").hidden = true;
 }
 
+/* 生成中は割合が分からない。
+
+   backend は generating で 5% を出したあと、次の更新が postprocess の 65% で、
+   その間に GPU の生成全体（実測 10〜200 秒）が入る。5% のまま固まって一気に
+   飛ぶのはそのためだった。
+
+   ここで嘘の割合を動かすことはしない。分からないものは分からないまま、
+   動いていることと経過時間を見せる。所要の目安は実測値から別に出している。 */
+const INDETERMINATE_PHASES = new Set(["generating", "waiting_resource", "release_ai"]);
+
+function elapsedText(job) {
+  const started = Date.parse(job.created_at || "");
+  if (!Number.isFinite(started)) return "";
+  const seconds = Math.max(0, Math.round((Date.now() - started) / 1000));
+  return seconds < 60 ? `${seconds} 秒経過`
+    : `${Math.floor(seconds / 60)} 分 ${String(seconds % 60).padStart(2, "0")} 秒経過`;
+}
+
 function showProgress(job) {
   const running = !TERMINAL.has(job.status);
   byId("stage-progress").hidden = !running;
   byId("mini-progress").hidden = !running;
   const percent = Math.round((job.progress || 0) * 100);
   const phase = PHASE_TEXT[job.phase] || (job.status === "queued" ? "順番を待っています" : "実行しています");
+  const unknown = running && INDETERMINATE_PHASES.has(job.phase);
   byId("progress-phase").textContent = phase;
   byId("mini-phase").textContent = phase;
-  byId("progress-bar").style.width = `${percent}%`;
-  byId("mini-bar").style.width = `${percent}%`;
+  for (const id of ["progress-bar", "mini-bar"]) {
+    const bar = byId(id);
+    bar.classList.toggle("indeterminate", unknown);
+    bar.style.width = unknown ? "" : `${percent}%`;
+  }
+  const elapsed = elapsedText(job);
+  const estimate = unknown && state.estimateSec
+    ? `目安 約 ${Math.round(state.estimateSec)} 秒（実測）` : "";
   byId("progress-detail").textContent = state.mode === "advanced"
-    ? `${job.status} · ${percent}% · ${job.phase || "-"} · ${job.id}`
-    : `${percent}%`;
+    ? `${job.status} · ${unknown ? "所要不明" : `${percent}%`} · ${job.phase || "-"} · ${elapsed} · ${job.id}`
+    : [unknown ? elapsed : `${percent}%`, estimate].filter(Boolean).join(" · ");
   updateActivityBadge(running ? 1 : 0);
+}
+
+/* 別のタブへ移って戻ると進捗が消えていた。表示は state から作り直す。
+   実行中の job は state.jobs にあるので、そこから復元する。 */
+function restoreProgressView() {
+  if (!state.activeJob) return;
+  const job = (state.jobs || []).find((item) => item.id === state.activeJob);
+  if (job) showProgress(job);
 }
 
 async function finishJob(job) {
@@ -2641,7 +2678,7 @@ async function libraryCard(item) {
 
 /* 一覧のサムネイルは小さい。タップしたら原寸で見られる場所が要る。
    ピンチ／ホイールで拡大し、拡大中はドラッグで動かせる。 */
-const viewer = {assetId: "", scale: 1, x: 0, y: 0, pointers: new Map(), pinch: 0, drag: null};
+const viewer = {assetId: "", filename: "", scale: 1, x: 0, y: 0, pointers: new Map(), pinch: 0, drag: null};
 
 function viewerApply() {
   byId("viewer-image").style.transform =
@@ -2666,6 +2703,8 @@ function viewerZoom(factor) {
 
 async function openViewer(assetId, item) {
   viewer.assetId = assetId;
+  viewer.filename = item?.suggested_filename || "";
+  byId("viewer-save-note").hidden = true;
   viewerReset();
   const image = byId("viewer-image");
   const caption = byId("viewer-caption");
@@ -2708,6 +2747,40 @@ function modelRouteText(route) {
     ? `${scene}に合うモデル`
     : `${scene}に合うモデルが無かったため、使えるモデル`;
   return `${matched} ${route.candidate_count} 件から${policy}で選びました。`;
+}
+
+/* 書き出し導線が 1 つも無かった（設計 §F4 保存A）。host files bridge は実装
+   済みで疎通実績もあるのに、UI から呼ばれていなかった。ここで繋ぐ。 */
+async function saveAsset(assetId) {
+  const note = byId("viewer-save-note");
+  note.hidden = false;
+  note.textContent = "保存先を選んでいます…";
+  let grant;
+  try {
+    grant = await callHost("host.files.export", {suggested_name: viewer.filename || ""});
+  } catch (error) {
+    // 単体表示にはホストがいない。できないことをできるように見せない。
+    note.textContent = error?.code === "bridge_unavailable"
+      ? "単体表示では保存できません。ControlDeck から開いてください。"
+      : "保存先を選べませんでした。";
+    return;
+  }
+  const grantId = grant?.grant_id || grant?.export_grant_id;
+  if (!grantId) {
+    note.textContent = "保存を取りやめました。";
+    return;
+  }
+  note.textContent = "保存しています…";
+  try {
+    const receipt = await call("assets.export", {
+      asset_id: assetId,
+      export_grant_id: grantId,
+      ...(viewer.filename ? {filename: viewer.filename} : {}),
+    });
+    note.textContent = `${receipt.filename} を保存しました（${formatBytes(receipt.size_bytes)}）。`;
+  } catch (error) {
+    note.textContent = failureText(error?.code) || "保存できませんでした。";
+  }
 }
 
 async function openDetail(assetId) {
@@ -3447,6 +3520,17 @@ for (const key of ["scene", "pose", "composition", "camera", "variation"]) {
   byId(`creative-${key}`).addEventListener("change", (event) => setCreativeValue(key, event.target.value));
 }
 
+/* 指示を書き換えたら、前の解析結果は捨てる。
+
+   これは見た目の問題ではない。state.directorPlan は送信時にそのまま
+   director_plan として渡るため、残しておくと「ライオンさん」の解析が
+   「宇宙戦艦の戦闘」の生成に効いてしまう。実機で起きていた。 */
+byId("create-intent").addEventListener("input", () => {
+  if (!state.directorPlan) return;
+  state.directorPlan = null;
+  renderDirectorPlan(null);
+});
+
 byId("director-mode").addEventListener("change", (event) => {
   state.directorMode = event.target.value;
   state.directorPlan = null;
@@ -3482,15 +3566,6 @@ byId("create-form").addEventListener("change", (event) => {
     clearError();
     return;
   }
-  const key = {
-    "advanced-domain": "domain",
-    "advanced-scene": "scene",
-    "advanced-pose": "pose",
-    "advanced-composition": "composition",
-    "advanced-camera": "camera",
-    "advanced-variation": "variation",
-  }[event.target.id];
-  if (key) setCreativeValue(key, event.target.value);
 });
 
 byId("size-presets").addEventListener("click", (event) => {
@@ -3622,6 +3697,8 @@ byId("create-form").addEventListener("submit", submitJob);
 function jobById(id) {
   return state.jobs.find((item) => item.id === id) || null;
 }
+
+byId("viewer-save").addEventListener("click", () => void saveAsset(viewer.assetId));
 
 byId("custom-resolve").addEventListener("click", () => void resolveCustomModel());
 byId("custom-result").addEventListener("click", (event) => {

@@ -24,13 +24,38 @@
           <button type="button" id="mode-simple" aria-pressed="true">シンプル</button>
           <button type="button" id="mode-advanced" aria-pressed="false">詳細</button>
         </div>
-        <button type="button" id="nav-settings" class="icon" aria-label="設定">⚙</button>
+        <button type="button" id="nav-settings" class="icon" data-view="settings" aria-label="設定" title="設定">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="3.2"/>
+            <path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.8-1.4-1.9-3.2-2.2.9a7.6 7.6 0 0 0-2.6-1.5L14.2 3H9.8l-.3 2.3a7.6 7.6 0 0 0-2.6 1.5l-2.2-.9L2.8 9.1l1.8 1.4a7.6 7.6 0 0 0 0 3l-1.8 1.4 1.9 3.2 2.2-.9a7.6 7.6 0 0 0 2.6 1.5l.3 2.3h4.4l.3-2.3a7.6 7.6 0 0 0 2.6-1.5l2.2.9 1.9-3.2z"/>
+          </svg>
+        </button>
       </header>
 
       <nav id="shell-nav" aria-label="Media Forge">
-        <button type="button" id="nav-create" data-view="create" aria-current="page">作る</button>
-        <button type="button" id="nav-library" data-view="library">ライブラリ</button>
-        <button type="button" id="nav-activity" data-view="activity">状況<span class="badge" id="activity-badge" hidden>0</span></button>
+        <button type="button" id="nav-create" data-view="create" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.4l-1.9-5.6L4.5 11 10.1 9z"/>
+            <path d="M18.5 3v3.4M20.2 4.7h-3.4"/>
+          </svg>
+          <span>作る</span>
+        </button>
+        <button type="button" id="nav-library" data-view="library">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <rect x="3.2" y="4.6" width="17.6" height="14.8" rx="2.4"/>
+            <path d="M3.6 15.6 8.4 11l3.6 3.4 3-2.6 5.4 4.6"/>
+            <circle cx="9" cy="9" r="1.3"/>
+          </svg>
+          <span>ライブラリ</span>
+        </button>
+        <button type="button" id="nav-activity" data-view="activity">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="8.4"/>
+            <path d="M12 7.2V12l3.1 1.9"/>
+          </svg>
+          <span>状況</span>
+          <span class="badge" id="activity-badge" hidden>0</span>
+        </button>
       </nav>
 
       <main>
@@ -399,8 +424,10 @@
         </div>
         <div id="viewer-bar">
           <p id="viewer-caption"></p>
+          <p id="viewer-save-note" class="hint" hidden></p>
           <div class="viewer-actions">
             <button type="button" id="viewer-detail">詳細</button>
+            <button type="button" id="viewer-save">保存</button>
             <button type="button" id="viewer-edit">これを編集</button>
             <button type="button" id="viewer-close" class="primary">閉じる</button>
           </div>
@@ -423,22 +450,11 @@
           <label>高さ<input id="advanced-height" type="number" step="16" inputmode="numeric"></label>
         </div>
         <p id="advanced-size-hint" class="hint"></p>
-        <p class="section-label">シーン設計</p>
-        <div class="form-row">
-          <label>ドメイン<select id="advanced-domain"></select></label>
-          <label>シーン<select id="advanced-scene"></select></label>
-        </div>
+        <p class="section-label">シーンの補足</p>
+        <p class="hint">シーン・構図・カメラは上の「シーンと見せ方」で選びます。ここでは言葉で補います。</p>
         <label>シーンの詳細<input id="advanced-scene-details" type="text" maxlength="500" placeholder="場所や状況の補足"></label>
-        <div class="form-row">
-          <label>ポーズ<select id="advanced-pose"></select></label>
-          <label>構図<select id="advanced-composition"></select></label>
-        </div>
         <label>ポーズの詳細<input id="advanced-pose-details" type="text" maxlength="500" placeholder="手足や視線の補足"></label>
         <label>構図の詳細<input id="advanced-composition-details" type="text" maxlength="500" placeholder="余白や配置の補足"></label>
-        <div class="form-row">
-          <label>カメラ・画角<select id="advanced-camera"></select></label>
-          <label>変化させるもの<select id="advanced-variation"></select></label>
-        </div>
         <label>カメラの詳細<input id="advanced-camera-details" type="text" maxlength="500" placeholder="焦点距離や視点の補足"></label>
         <div id="advanced-reference-block">
           <p class="section-label">参照画像の役割</p>
