@@ -34,7 +34,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 
 TERMINAL = {"succeeded", "failed", "canceled"}
@@ -65,13 +65,60 @@ def vram_used_bytes() -> int:
 
 
 def login(page: Page, username: str, password: str) -> None:
+    """Sign in, and say plainly what went wrong when it does not work.
+
+    Waiting on the URL alone turns every cause — a wrong password, a rate
+    limit, a required second factor — into the same 20-second Playwright
+    timeout with a stack trace and no diagnosis. Watch the login response
+    instead and report what the server actually said.
+    """
     page.goto("/login", wait_until="domcontentloaded")
     if "/login" not in page.url:
         return
     page.get_by_label("ユーザー名").fill(username)
     page.get_by_label("パスワード").fill(password)
-    page.get_by_role("button", name="ログイン").click()
-    page.wait_for_url(lambda url: "/login" not in url, timeout=20_000)
+    try:
+        with page.expect_response(
+            lambda response: response.request.method == "POST"
+            and "/auth/login" in response.url,
+            timeout=20_000,
+        ) as caught:
+            page.get_by_role("button", name="ログイン").click()
+        response = caught.value
+    except PlaywrightTimeoutError as exc:
+        raise AssertionError(
+            "ログイン要求そのものが送信されませんでした。ControlDeck が応答しているか確認してください。"
+        ) from exc
+
+    if response.status != 200:
+        detail = ""
+        try:
+            detail = str(response.json().get("detail", ""))
+        except Exception:  # noqa: BLE001 - 応答本文が無いこともある
+            detail = response.status_text
+        if detail == "two_factor_required":
+            raise AssertionError(
+                f"{username} は二要素認証が有効です。TOTP を無効にするか、"
+                "無効なアカウントで実行してください（./deck.sh reset-totp <user>）。"
+            )
+        if response.status == 429:
+            raise AssertionError(
+                "ログイン試行が多すぎて制限されました。1 分待ってから再実行してください"
+                "（同一ユーザーは 5 回/分、同一 IP は 20 回/分）。"
+            )
+        raise AssertionError(
+            f"ログインに失敗しました（HTTP {response.status}: {detail}）。"
+            f"ユーザー名 {username} とパスワードを確認してください。"
+            " パスワードを設定し直すには ./deck.sh passwd <user> を使います。"
+        )
+
+    try:
+        page.wait_for_url(lambda url: "/login" not in url, timeout=20_000)
+    except PlaywrightTimeoutError as exc:
+        raise AssertionError(
+            "ログインは成功しましたが画面が遷移しませんでした。"
+            f"現在の URL: {page.url}"
+        ) from exc
 
 
 def workspace_frame(page: Page):
@@ -310,4 +357,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except AssertionError as failure:
+        print(f"FAILED: {failure}")
+        raise SystemExit(1) from None
