@@ -503,3 +503,42 @@ def test_the_library_can_export_an_asset():
 def test_export_says_plainly_when_there_is_no_host():
     """単体表示でできないことを、できるように見せない。"""
     assert "単体表示では保存できません" in SCRIPT
+
+
+def test_editing_the_prompt_discards_the_previous_understanding():
+    """実機で、前回の解析が新しい指示の生成に渡っていた。
+
+    state.directorPlan は送信時に director_plan としてそのまま渡るため、
+    表示を消すだけでは足りず、状態ごと捨てる必要がある。
+    """
+    handler = SCRIPT[SCRIPT.index('byId("create-intent").addEventListener("input"'):][:400]
+
+    assert "state.directorPlan = null" in handler
+    assert "renderDirectorPlan(null)" in handler
+
+
+def test_progress_does_not_invent_a_percentage_it_cannot_know():
+    """backend は generating で 5% を出したあと次が postprocess の 65%。
+
+    その間に GPU の生成全体が入るため、割合は本当に分からない。嘘の数字を
+    動かす代わりに、動いていることと経過時間を見せる。
+    """
+    assert "INDETERMINATE_PHASES" in SCRIPT
+    assert '"generating"' in SCRIPT
+    assert "indeterminate" in STYLES
+
+
+def test_returning_to_the_create_view_restores_the_running_progress():
+    """別のタブへ移って戻ると進捗が消えていた。"""
+    assert "restoreProgressView" in SCRIPT
+    assert 'if (view === "create") restoreProgressView();' in SCRIPT
+
+
+def test_the_shell_uses_drawn_icons_rather_than_bare_text_tabs():
+    """opaque sandbox では外部資産を取りに行けないので SVG を直接埋め込む。"""
+    assert MARKUP.count("<svg") >= 4
+    assert "currentColor" in STYLES
+
+
+def test_reduced_motion_users_do_not_get_a_looping_bar():
+    assert "prefers-reduced-motion: reduce" in STYLES

@@ -127,32 +127,72 @@ html[data-bridge="waiting"] #mini-progress { visibility: hidden; }
 .modeswitch button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
 button.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   background: var(--surface);
-  border-radius: 10px;
+  color: var(--muted);
+  border-radius: 999px;
   min-width: 38px;
   min-height: 38px;
   padding: 0;
 }
+button.icon svg { width: 1.15rem; height: 1.15rem; }
+button.icon[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
+@media (hover: hover) {
+  button.icon:hover { color: var(--text); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button.icon { transition: color .15s ease, border-color .15s ease; }
+}
+
+/* アイコンは線画の SVG を直接埋め込む。opaque sandbox では外部資産を取りに
+   行けないうえ、CSP でも止まる。currentColor で塗るので theme.changed に
+   そのまま追随する。 */
+svg { width: 1.25em; height: 1.25em; fill: none; stroke: currentColor; stroke-width: 1.6;
+      stroke-linecap: round; stroke-linejoin: round; }
 
 #shell-nav {
   display: flex;
-  gap: 4px;
-  padding: 0 12px;
+  gap: 2px;
+  padding: 6px 12px 0;
   border-bottom: 1px solid var(--border);
   min-height: var(--nav);
 }
 #shell-nav button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   border: 0;
   background: none;
   color: var(--muted);
-  font-size: .9rem;
+  font-size: .88rem;
   font-weight: 600;
   padding: 0 14px;
-  border-bottom: 2px solid transparent;
   min-height: var(--nav);
+  border-radius: 10px 10px 0 0;
 }
-#shell-nav button[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
+#shell-nav button svg { width: 1.1rem; height: 1.1rem; }
+#shell-nav button::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+}
+#shell-nav button[aria-current="page"] { color: var(--text); }
+#shell-nav button[aria-current="page"]::after { background: var(--accent); }
+@media (hover: hover) {
+  #shell-nav button:not([aria-current="page"]):hover { color: var(--text); background: var(--sunk); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  #shell-nav button, #shell-nav button::after { transition: color .15s ease, background-color .15s ease; }
+}
 
 .badge {
   display: inline-block;
@@ -627,12 +667,32 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
     background: var(--surface);
   }
   #shell-nav button {
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
     min-height: var(--tabbar);
     padding: 0;
-    border-bottom: 0;
-    font-size: .78rem;
+    border-radius: 0;
+    font-size: .7rem;
+    font-weight: 600;
+  }
+  #shell-nav button svg { width: 1.32rem; height: 1.32rem; }
+  /* 下線はホストのタブバーと重なって読みにくい。上側の細い印にする。 */
+  #shell-nav button::after {
+    left: 22%;
+    right: 22%;
+    top: 0;
+    bottom: auto;
+    border-radius: 0 0 2px 2px;
   }
   #shell-nav button[aria-current="page"] { color: var(--accent); }
+  #shell-nav button[aria-current="page"] svg { stroke-width: 1.9; }
+  #shell-nav .badge {
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    margin-left: 4px;
+  }
 
   #mini-progress {
     position: fixed;
@@ -674,4 +734,17 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
 @media (min-width: 768px) and (max-width: 1099px) {
   #view-create { grid-template-columns: 340px minmax(0, 1fr); }
   .grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+}
+
+/* 割合が分からない区間は、嘘の数字を動かさずに動いていることだけを示す。 */
+.track > i.indeterminate {
+  width: 40%;
+  animation: indeterminate 1.4s ease-in-out infinite;
+}
+@keyframes indeterminate {
+  0% { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .track > i.indeterminate { width: 100%; opacity: .45; animation: none; margin-left: 0; }
 }
