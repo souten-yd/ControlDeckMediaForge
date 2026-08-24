@@ -154,6 +154,26 @@ A `degraded` record is not executable; submitting it fails with
 
 Every request is local-only. `local_only` defaults to `true`; any explicit `false` value is rejected by backend validation.
 
+## User-added models
+
+The shipped catalog stays the trusted path: pinned revision, verified digests,
+measured VRAM. `models.custom.resolve` and `models.custom.add` add an explicit
+second path for models the catalog does not carry, without loosening the first.
+
+```text
+resolve   a moving ref is pinned to an immutable commit before anything is fetched
+          every weight carries the digest the Hub reported
+          one runnable variant is selected; alternate runtimes and duplicate
+          precisions are reported as skipped bytes, not silently downloaded
+          the licence and any blocking condition are returned for display
+add       the licence must be accepted by its exact name
+          the entry lands as `experimental`, so routing never selects it
+          promotion to routable requires a real `models.evaluate` measurement
+```
+
+Added entries are parsed by the same validators as the shipped manifests. No
+repository code is executed and no remote inference path is added.
+
 ## Model routing
 
 `model_policy` selects how a model is chosen: `auto`, `fast`, `balanced`,

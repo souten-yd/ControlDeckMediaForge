@@ -27,6 +27,7 @@ from . import __version__, library, preferences, thumbnails
 from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
 from .asset_placement import ProjectAssetPlacement, placement_filename
 from .config import Settings
+from .custom_models import CustomModelCatalog, CustomModelError
 from .composer import (
     CreativeCompositionRecord,
     DeterministicComposer,
@@ -68,7 +69,7 @@ from .host.jobs import HostExecution
 from .jobs import JobManager, ProfileResolutionError
 from .m5_companion import profile_documents as m5_profile_documents
 from .model_evaluator import H3ModelEvaluator
-from .model_manager import ModelOperationManager
+from .model_manager import MAX_MANAGED_MODEL_DOWNLOAD_BYTES, ModelOperationManager
 from .models import (
     ModelOperationError,
     ModelRegistry,
@@ -197,6 +198,12 @@ def create_app(
     layout_catalog = LayoutCatalog.load(resolved.creative_layout_manifest)
     multi_cut_planner = MultiCutPlanner(creative_compiler, layout_catalog)
     deterministic_composer = DeterministicComposer()
+    custom_models = CustomModelCatalog(
+        resolved.data_dir / "custom-models.json",
+        origin=model_download_origin,
+        transport=model_download_transport,
+        max_download_bytes=MAX_MANAGED_MODEL_DOWNLOAD_BYTES,
+    )
     model_operations = (
         ModelOperationManager(
             store,
@@ -207,6 +214,7 @@ def create_app(
             model_in_use=manager.model_in_use,
             download_origin=model_download_origin,
             transport=model_download_transport,
+            custom_models=custom_models,
         )
         if resolved.model_catalog_manifest is not None
         else None
@@ -1802,6 +1810,44 @@ def create_app(
                             str(params.get("model_id", "")),
                             identity,
                         ).model_dump(mode="json")
+                    elif method == "models.custom.resolve":
+                        # 取得前に必ず解決して見せる。承諾は本文の提示が先。
+                        resolution = await custom_models.resolve(
+                            str(params.get("repo_id", "")), str(params.get("revision", "main"))
+                        )
+                        result = resolution.document()
+                    elif method == "models.custom.add":
+                        resolution = await custom_models.resolve(
+                            str(params.get("repo_id", "")), str(params.get("revision", "main"))
+                        )
+                        domains = params.get("domains", ["general"])
+                        if not isinstance(domains, list) or not all(
+                            isinstance(value, str) for value in domains
+                        ):
+                            raise ValueError("custom model domains must be a list of strings")
+                        entry = custom_models.add(
+                            resolution,
+                            display_name=str(params.get("display_name", "")),
+                            license_acceptance=str(params.get("license_acceptance", "")),
+                            domains=tuple(domains) or ("general",),
+                        )
+                        # 追加分も shipped catalog と同じ parser で検証してから返す。
+                        # ここで通らない entry を残さない。
+                        try:
+                            if model_operations is not None:
+                                model_operations.catalog()
+                        except ModelRegistryError:
+                            custom_models.remove(entry["registry"]["model_id"])
+                            raise
+                        result = {
+                            "model_id": entry["registry"]["model_id"],
+                            **resolution.document(),
+                        }
+                        session_events.publish("model_catalog")
+                    elif method == "models.custom.remove":
+                        custom_models.remove(str(params.get("model_id", "")))
+                        result = {"removed": True}
+                        session_events.publish("model_catalog")
                     elif method == "models.operations.list":
                         result = {
                             "items": [item.model_dump(mode="json") for item in store.list_model_operations()]
@@ -2012,6 +2058,7 @@ def create_app(
                     ThumbnailError,
                     PreferenceError,
                     ModelOperationError,
+                    CustomModelError,
                     CreativeValidationError,
                     ReferenceIntelligenceError,
                     PromptRecipeError,

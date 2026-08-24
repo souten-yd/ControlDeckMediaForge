@@ -307,6 +307,11 @@ async function standaloneCall(method, params) {
   if (method === "profiles.list") return json("/api/v1/profiles");
   if (method === "reference_collections.list") return json("/api/v1/reference-collections");
   if (method === "domain_profiles.list") return json("/api/v1/domain-profiles");
+  if (method === "models.custom.resolve" || method === "models.custom.add"
+      || method === "models.custom.remove") {
+    // 単体表示ではモデル取り込みに CLI を使う。UI から偽の成功を返さない。
+    throw {code: "model_not_found", message: "単体表示ではモデルの取り込みに CLI を使います。"};
+  }
   if (method === "profiles.create") {
     return json("/api/v1/profiles", {method: "POST", body: JSON.stringify(params)});
   }
@@ -759,6 +764,117 @@ function renderProfileChoices() {
   renderAdvancedReferenceRoles();
   renderReferenceIntelligence();
   renderProfileList();
+}
+
+/* ── HuggingFace からモデルを追加 ────────────────────────────────────── */
+
+/* 同梱 catalog は「版が固定され、digest が検証でき、VRAM を実測済み」だから
+   信頼できる。一覧に無いモデルのために、その規則を緩めるのではなく、
+   明示的な第 2 経路を足す。取り込む前に必ず中身とライセンスを見せる。 */
+
+let customResolution = null;
+
+function customFact(term, value) {
+  const wrap = document.createElement("div");
+  const dt = document.createElement("dt");
+  dt.textContent = term;
+  const dd = document.createElement("dd");
+  dd.textContent = value;
+  wrap.append(dt, dd);
+  return wrap;
+}
+
+function renderCustomResolution(resolution) {
+  const holder = byId("custom-result");
+  holder.hidden = false;
+  holder.replaceChildren();
+  const facts = document.createElement("dl");
+  facts.className = "facts";
+  facts.append(
+    customFact("repository", resolution.repo_id),
+    customFact("固定した版", resolution.revision),
+    customFact("重みファイル", `${resolution.weight_count} 個 · ${formatBytes(resolution.total_bytes)}`),
+    customFact("ライセンス", resolution.license),
+  );
+  holder.append(facts);
+
+  for (const warning of resolution.warnings || []) {
+    const note = document.createElement("p");
+    note.className = "hint";
+    note.textContent = `⚠ ${warning}`;
+    holder.append(note);
+  }
+
+  if (!resolution.within_download_cap) {
+    const blocked = document.createElement("p");
+    blocked.className = "hint";
+    blocked.textContent = "上限を超えているため取り込めません。";
+    holder.append(blocked);
+    return;
+  }
+
+  const accept = document.createElement("label");
+  accept.className = "check";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.id = "custom-accept";
+  accept.append(box, document.createTextNode(`「${resolution.license}」の条件を確認して承諾します`));
+  const add = document.createElement("button");
+  add.type = "button";
+  add.id = "custom-add";
+  add.className = "primary";
+  add.textContent = "取り込む";
+  holder.append(accept, add);
+}
+
+async function resolveCustomModel() {
+  const error = byId("custom-error");
+  error.hidden = true;
+  byId("custom-result").hidden = true;
+  customResolution = null;
+  const repoId = byId("custom-repo").value.trim();
+  if (!repoId) {
+    error.hidden = false;
+    error.textContent = "repository を入れてください。";
+    return;
+  }
+  try {
+    customResolution = await call("models.custom.resolve", {
+      repo_id: repoId,
+      revision: byId("custom-revision").value.trim() || "main",
+    });
+  } catch (failure) {
+    error.hidden = false;
+    error.textContent = failure?.message || "中身を確かめられませんでした。";
+    return;
+  }
+  renderCustomResolution(customResolution);
+}
+
+async function addCustomModel() {
+  const error = byId("custom-error");
+  error.hidden = true;
+  if (!customResolution) return;
+  if (!byId("custom-accept")?.checked) {
+    error.hidden = false;
+    error.textContent = "ライセンスを承諾してください。";
+    return;
+  }
+  try {
+    await call("models.custom.add", {
+      repo_id: customResolution.repo_id,
+      revision: customResolution.revision,
+      display_name: customResolution.repo_id,
+      license_acceptance: customResolution.license,
+    });
+  } catch (failure) {
+    error.hidden = false;
+    error.textContent = failure?.message || "取り込めませんでした。";
+    return;
+  }
+  byId("custom-result").hidden = true;
+  customResolution = null;
+  await refreshSession(["models", "model_catalog"]);
 }
 
 /* ── 配布用にまとめる（asset.pack） ──────────────────────────────────── */
@@ -3506,6 +3622,11 @@ byId("create-form").addEventListener("submit", submitJob);
 function jobById(id) {
   return state.jobs.find((item) => item.id === id) || null;
 }
+
+byId("custom-resolve").addEventListener("click", () => void resolveCustomModel());
+byId("custom-result").addEventListener("click", (event) => {
+  if (event.target.closest("#custom-add")) void addCustomModel();
+});
 
 byId("pack-open").addEventListener("click", () => void openPackDialog());
 byId("pack-close").addEventListener("click", () => byId("pack-dialog").close());

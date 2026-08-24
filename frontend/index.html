@@ -253,6 +253,17 @@
           <p id="model-empty" class="hint" hidden>条件に合うモデルはありません。</p>
           <div id="model-error" class="error" role="alert" hidden></div>
 
+          <p class="section-label">HuggingFace からモデルを追加</p>
+          <p class="hint">一覧に無いモデルを、版を固定して取り込みます。取り込む前に中身とライセンスを確かめます。</p>
+          <div class="form-row">
+            <label>repository<input id="custom-repo" type="text" maxlength="200"
+              placeholder="stabilityai/stable-diffusion-xl-base-1.0"></label>
+            <label>revision<input id="custom-revision" type="text" maxlength="128" value="main"></label>
+          </div>
+          <button type="button" id="custom-resolve">中身を確かめる</button>
+          <div id="custom-result" class="rows" hidden></div>
+          <div id="custom-error" class="error" role="alert" hidden></div>
+
           <p class="section-label">キャラ・画風の登録</p>
           <p class="hint">同じキャラや画風を何度も使うために覚えさせておけます。作成のときに選べます。</p>
           <div>

@@ -41,6 +41,7 @@ DOM_IDS = (
     "profile-add-character", "profile-add-style", "profile-list", "profile-dialog",
     "profile-name", "profile-appearance", "profile-art-style", "profile-references",
     "pack-section", "pack-profile", "pack-open", "pack-dialog", "pack-slots", "pack-progress",
+    "custom-repo", "custom-revision", "custom-resolve", "custom-result", "custom-error",
     "reference-intelligence", "reference-focuses", "reference-analysis-summary",
     "reference-analysis-note",
     "composition-options", "composition-title", "composition-caption",
@@ -412,6 +413,8 @@ def test_viewer_supports_touch_zoom():
 
 # backend にあるのに UI から呼ばれていなかった method。到達経路を消させない。
 REACHABLE_METHODS = (
+    "models.custom.resolve",
+    "models.custom.add",
     "profiles.create",
     "profiles.delete",
     "reference_collections.create",
@@ -442,3 +445,16 @@ def test_model_choice_is_two_stage_and_reaches_every_policy_in_advanced_mode():
 def test_an_automatic_model_choice_can_explain_itself():
     assert "modelRouteText" in SCRIPT
     assert "model_route" in SCRIPT
+
+
+def test_a_custom_model_cannot_be_added_without_showing_the_licence_first():
+    """取り込む前に必ず中身とライセンスを見せる。承諾は本文の提示が先。"""
+    assert "custom-accept" in SCRIPT
+    assert "license_acceptance" in SCRIPT
+    resolve_at = SCRIPT.index('call("models.custom.resolve"')
+    add_at = SCRIPT.index('call("models.custom.add"')
+    assert resolve_at < add_at, "resolve より前に add を呼んでいる"
+
+
+def test_a_custom_model_over_the_download_cap_is_not_offered_for_adding():
+    assert "within_download_cap" in SCRIPT

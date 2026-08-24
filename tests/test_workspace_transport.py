@@ -861,3 +861,93 @@ def test_library_list_can_opt_out_of_inline_thumbnails(tmp_path: Path):
             answer = call(socket, "library.list", {"limit": 4, "thumbnails": False})
 
     assert all("thumbnail" not in item for item in answer["result"]["items"])
+
+
+# ── 利用者が追加するモデル（G6 S6） ────────────────────────────────────
+
+
+def test_custom_model_resolution_pins_the_revision_before_anything_is_fetched(tmp_path: Path):
+    import httpx as httpx_module
+
+    payload = {
+        "sha": "9" * 40,
+        "gated": False,
+        "library_name": "diffusers",
+        "pipeline_tag": "text-to-image",
+        "cardData": {"license": "openrail++"},
+        "siblings": [
+            {"rfilename": "model_index.json", "size": 100},
+            {
+                "rfilename": "unet/diffusion_pytorch_model.safetensors",
+                "size": 1_000,
+                "lfs": {"sha256": "e" * 64, "size": 1_000},
+            },
+        ],
+    }
+    root = Path(__file__).parents[1]
+    client, headers, _state = host_client(
+        tmp_path,
+        token="valid-user",
+        model_download_transport=httpx_module.MockTransport(
+            lambda request: httpx_module.Response(200, json=payload)
+        ),
+        model_catalog_manifest=root / "worker_packs/image/catalog.json",
+        model_store_root=tmp_path / "model-store",
+    )
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            resolved = call(socket, "models.custom.resolve", {
+                "repo_id": "owner/sdxl", "revision": "main",
+            })
+            added = call(socket, "models.custom.add", {
+                "repo_id": "owner/sdxl",
+                "revision": "main",
+                "display_name": "SDXL",
+                "license_acceptance": "openrail++",
+            })
+            catalog = call(socket, "models.catalog")
+
+    assert catalog["ok"] is True, catalog
+    assert resolved["ok"] is True, resolved
+    assert resolved["result"]["revision"] == "9" * 40
+    assert resolved["result"]["requested_revision"] == "main"
+    assert added["ok"] is True, added
+    items = {item["model_id"]: item for item in catalog["result"]["items"]}
+    assert "owner/sdxl" in items
+    # 実測するまで routing 対象にしない。
+    assert items["owner/sdxl"]["state"] == "experimental"
+
+
+def test_custom_model_add_is_refused_without_accepting_the_shown_licence(tmp_path: Path):
+    import httpx as httpx_module
+
+    payload = {
+        "sha": "9" * 40,
+        "gated": False,
+        "library_name": "diffusers",
+        "pipeline_tag": "text-to-image",
+        "cardData": {"license": "openrail++"},
+        "siblings": [{
+            "rfilename": "unet/diffusion_pytorch_model.safetensors",
+            "size": 1_000,
+            "lfs": {"sha256": "e" * 64, "size": 1_000},
+        }],
+    }
+    client, headers, _state = host_client(
+        tmp_path,
+        token="valid-user",
+        model_download_transport=httpx_module.MockTransport(
+            lambda request: httpx_module.Response(200, json=payload)
+        ),
+    )
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            answer = call(socket, "models.custom.add", {
+                "repo_id": "owner/sdxl",
+                "revision": "main",
+                "display_name": "SDXL",
+                "license_acceptance": "mit",
+            })
+
+    assert answer["ok"] is False
+    assert answer["error"]["code"] == "custom_model_license_not_accepted"

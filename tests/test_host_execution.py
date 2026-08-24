@@ -217,6 +217,8 @@ def host_client(
     *,
     token: str = "valid-job",
     renew_sec: float = 10.0,
+    model_download_transport: httpx.AsyncBaseTransport | None = None,
+    **settings_overrides: Any,
 ) -> tuple[TestClient, dict[str, str], dict[str, Any]]:
     host_app, state = control_deck_stub()
     bridge = ControlDeckHostClient(
@@ -229,8 +231,10 @@ def host_client(
             worker_timeout_sec=3,
             control_deck_url="https://control-deck.test",
             host_lease_renew_sec=renew_sec,
+            **settings_overrides,
         ),
         host_client=bridge,
+        model_download_transport=model_download_transport,
     )
     headers = {
         "Authorization": f"Bearer {token}",

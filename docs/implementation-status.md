@@ -3119,3 +3119,98 @@ boot ready                   0.081 秒 / 要求 15 件（機能追加後も退�
 ```
 
 NOT TESTED: installed ControlDeck の埋め込み iframe での操作。
+
+## G6 S6 — 利用者が追加する HuggingFace モデル（2026-08-24）
+
+「HuggingFace などからダウンロードできるカタログ機能」への対応。
+取得系は既にあった（`worker_packs/image/catalog.json` の revision pin 付き
+エントリ、`models.install` の SHA-256 検証・再開・32GB 上限）。不足していたのは
+**利用者が任意の HF モデルを足せない**ことだけだった。
+
+### 採用しなかった案
+
+```text
+GUI から HF Hub を検索して任意 repo を導入する
+  却下。revision 非固定・実測 VRAM 無し・license gate・任意コード実行の risk。
+  local-first の検証可能性が壊れる。
+```
+
+curated pinned catalog を信頼経路として維持し、明示的な第 2 経路を足した。
+信頼経路を検証可能にしている規則は、追加分にもそのまま適用する。
+
+```text
+revision 固定   moving ref を取得前に不変 commit へ解決する
+digest         配布元が返した sha256 を全 weight に持たせ、既存 installer が検証する
+license        表示した名前をそのまま承諾させる（本文の提示が先）
+実測 gate      experimental で登録し、routing は選ばない
+               models.evaluate の実測に成功して初めて昇格する
+parser         追加分も shipped manifest と同じ validator を通す
+```
+
+### variant 選択（実測で必要と判明）
+
+実 API に当てて分かったこと。HF の diffusers repository は同じ重みの
+Flax / ONNX / OpenVINO 版と、fp32 / fp16 の二重持ちを同居させている。
+全部数えると導入上限を超え、代表的な repository がひとつも入らない。
+
+```text
+stabilityai/stable-diffusion-xl-base-1.0
+  全ファイル      49,952,537,087 バイト   上限 32,000,000,000 を超過
+  1 variant 選択   7,105,346,772 バイト   weights 5 個
+stabilityai/sdxl-turbo
+  全ファイル      42,463,333,800 バイト
+  1 variant 選択   6,938,011,430 バイト   weights 4 個
+```
+
+shard（`model-00001-of-00002.safetensors`）を variant と取り違えて落とすと
+壊れたモデルが届くため、shard は全て残すことをテストで固定した。
+
+### 実 HuggingFace に対する /ws 実測
+
+```text
+resolve                0.285 秒
+  固定した revision    462165984030d82259a11f4367a4eed129e94a7b（要求は "main"）
+  weights / bytes      5 / 7,105,346,772
+  license              openrail++
+  usable_for_generation false
+  warn                 実行アダプタ未実測 / 重複 42,011,397,612 バイトは取り込まない
+承諾なしの追加          ok=false  custom_model_license_not_accepted
+承諾ありの追加          ok=true
+catalog 反映            state=experimental installed=false rev=462165984030
+二重追加                ok=false  custom_model_exists
+削除                    catalog から除去された
+```
+
+### Flux 系と SD 系で個別ローダーが要るか（利用者質問への回答）
+
+要る。ただし「モデルごとに 1 から書く」ではなく**系統ごとの薄い adapter**である。
+
+```text
+worker_packs/image/adapters/ が既にその境界
+  base.py            ImageAdapter Protocol（generate / edit）
+  diffusers_flux2.py FLUX.2 用。pipeline class と参照編集の意味論が固有
+  native.py          Diffusers を使えない runtime 用の口（未実装）
+
+SD1.5 / SDXL / SD3 は Diffusers の AutoPipelineForText2Image /
+Image2Image / Inpaint で 1 個の共通 adapter に相乗りできる。
+新規に要るのは pipeline class の選択、dtype と offload 方針、
+inpaint / img2img / reference の引数対応表、negative prompt や scheduler の有無だけ。
+
+別 adapter が要るのは次の場合に限る
+  Diffusers に pipeline が無い（stable-diffusion.cpp / GGUF 単一ファイル等）
+  参照編集の意味論が固有（FLUX.2 の multi-reference がこれ）
+  trust_remote_code を要求する（原則入れない）
+```
+
+本 PR では共通 adapter を**実装していない**。実測していない adapter を
+available にしないため、追加したモデルは `usable_for_generation=false` として
+その理由を明示する。取り込みと検証はできるが生成にはまだ使えない、が現状。
+
+```text
+./mf.sh test                 412 passed
+ux_standalone_e2e.py         PASSED / console errors 0
+実ブラウザ到達確認            page errors 0
+```
+
+NOT TESTED: 追加したモデルの実ダウンロードと `models.evaluate` の実測。
+共通 adapter が無い状態で実行しても生成の証拠にならないため、別スライスへ送る。
