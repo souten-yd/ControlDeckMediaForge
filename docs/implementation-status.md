@@ -3460,3 +3460,44 @@ catalog の `measured_vram_bytes` は 33,349,320,704 で、今回の実占有
 `device_mode: cpu_offload` は registry が既に受理する値なので、より大きな
 モデルを載せる際の選択肢として使える。ただし wall time / RAM headroom /
 swap / Host watchdog を実測するまで available へ昇格させない（H3 と同じ gate）。
+
+## G6 resource turn E2E のログイン失敗を診断可能にした（2026-08-24）
+
+利用者が実行したところ 20 秒の Playwright TimeoutError で止まった。原因は
+監査ログで確定した。
+
+```text
+SELECT timestamp, action, username, result FROM audit_logs WHERE action LIKE 'login%'
+2026-08-24 02:46:42  login  user='mfe2e'  result='failure'
+```
+
+**パスワード違い**であって TOTP でも rate limit でもスクリプトの不具合でもなかった。
+この環境の TOTP は `totp_requirement=optional` / `require_totp_for_admin=False`
+なので、そもそも二要素は要求されない。
+
+問題は、原因が違っても症状が同じになっていたこと。URL の遷移だけを待つと
+パスワード違い・rate limit・二要素要求のどれもが同じ 20 秒 timeout と
+40 行のトレースバックになり、利用者が原因を知る手段が無かった。
+
+`/auth/login` の応答を直接見て、サーバが実際に言ったことを返すようにした。
+
+```text
+401 + detail                  -> ユーザー名とパスワードの確認を促し、
+                                 ./deck.sh passwd <user> を案内する
+401 + two_factor_required     -> TOTP が有効である旨と reset-totp を案内する
+429                           -> 5 回/分・20 回/分の制限と待ち時間を案内する
+200 だが遷移しない            -> 現在の URL を出す
+```
+
+実測（誤ったパスワードで意図的に失敗させた）:
+
+```text
+FAILED: ログインに失敗しました（HTTP 401: ユーザー名またはパスワードが正しくありません）。
+        ユーザー名 mfe2e とパスワードを確認してください。
+        パスワードを設定し直すには ./deck.sh passwd <user> を使います。
+```
+
+40 行のトレースバック / 20 秒 -> 1 行 / 6 秒。
+
+なお、この環境には既に `mf-e2e`（ハイフン入り）という E2E 用アカウントがあり、
+2026-08-23 の CI-6 実行で繰り返し成功している。新規作成は不要だった。
