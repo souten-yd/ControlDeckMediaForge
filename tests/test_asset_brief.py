@@ -422,3 +422,69 @@ def test_one_defective_candidate_does_not_discard_the_good_ones(tmp_path):
 
     assert manager._brief_defects(job, 512, 512, clear) == []
     assert [item.code for item in manager._brief_defects(job, 512, 512, opaque)] == ["alpha_missing"]
+
+
+# ── 確かめていない必須条件 ──────────────────────────────────────────────
+#
+# A5 の実機実行で、"no text in the image" を hard_constraint に宣言した資産が
+# 文字入りで返り、warnings は空だった。決定的な検査は幾何・mode・alpha までで
+# 絵の中身は読めない。読めるのは評価器だけで、評価器は既定で回さない（毎回の
+# model 載せ替えを強いないため）。回さないこと自体は設計どおりだが、確かめて
+# いないものを確かめたように見せるのは別の話である。
+
+def test_unverified_hard_constraints_are_reported_not_implied(tmp_path):
+    from mediaforge.domain import JobRequest
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+
+    job = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="title screen background",
+        constraints={"asset_brief": {
+            "role": "background",
+            "hard_constraints": ["no text in the image", "no visible logos"],
+        }},
+    ))
+    unverified = manager._unverified_hard_constraints(job)
+    assert unverified == ["no text in the image", "no visible logos"]
+
+
+def test_a_semantic_run_does_not_claim_the_constraints_are_unverified(tmp_path):
+    """評価器を回したなら、確かめた側の結果が出る。二重に言わない。"""
+    from mediaforge.domain import JobRequest
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+
+    job = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="title screen background",
+        constraints={"asset_brief": {
+            "role": "background", "hard_constraints": ["no text in the image"],
+        }},
+        qa={"semantic": True},
+    ))
+    assert manager._unverified_hard_constraints(job) == []
+
+
+def test_a_brief_without_hard_constraints_adds_no_noise(tmp_path):
+    from mediaforge.domain import JobRequest
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+
+    for constraints in ({}, {"asset_brief": {"role": "background"}}):
+        job = store.create_job(JobRequest(
+            operation="image.generate", intent="x", constraints=constraints,
+        ))
+        assert manager._unverified_hard_constraints(job) == []

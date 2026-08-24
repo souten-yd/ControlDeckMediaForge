@@ -1189,6 +1189,25 @@ class JobManager:
             result.freed_bytes,
         )
 
+    def _unverified_hard_constraints(self, job: Job) -> list[str]:
+        """Hard constraints nobody in this run was in a position to check.
+
+        Deterministic validation covers geometry, mode and alpha. It cannot
+        read a picture, so a requirement like "no text in the image" is only
+        ever checked by the evaluator, and the evaluator is off by default on
+        purpose. Reporting them as unverified is the honest middle: no forced
+        model swap, and no silent implication that the requirement held.
+        """
+        if job.request.qa.semantic:
+            return []
+        brief = job.request.constraints.get("asset_brief") if job.request.constraints else None
+        if not isinstance(brief, dict):
+            return []
+        constraints = brief.get("hard_constraints")
+        if not isinstance(constraints, list):
+            return []
+        return [str(item)[:200] for item in constraints if isinstance(item, str) and item.strip()]
+
     def _admission_failure(self, job_id: str, reason: str) -> ErrorDetail:
         """Name the retained AI residency instead of an anonymous admission failure."""
         release = self._ai_release.get(job_id)
@@ -1636,6 +1655,18 @@ class JobManager:
         brief_warnings = [
             f"{dropped} candidate(s) did not satisfy the asset brief and were discarded"
         ] if dropped else []
+        # hard_constraints は「譲れない」と宣言されたものだが、その中身を確かめ
+        # られるのは評価器だけである。既定で評価器を回さないのは意図した設計
+        # （毎回の model 載せ替えを強いない）なので、ここでは回さない。
+        # 黙るのは別で、A5 実行で "no text in the image" を宣言した資産が文字
+        # 入りで返り、warnings は空だった。確かめていないことを、確かめたよう
+        # に見せない。
+        unverified = self._unverified_hard_constraints(job)
+        if unverified:
+            brief_warnings.append(
+                "以下は宣言された必須条件ですが、この実行では検査していません"
+                f"（qa.semantic を有効にすると検査します）: {'; '.join(unverified)}"
+            )
         selected, evaluations = await self._evaluation_selection(job, outputs, validated)
         asset_ids: list[str] = []
         self.store.update_job(job.id, phase="validate", progress=0.75)
