@@ -272,6 +272,23 @@ is hidden unless test endpoints are explicitly enabled.
 known Host limitations. It does not expose tokens, lease details belonging to
 other owners, or a host filesystem path.
 
+## Domain profiles and deterministic packs
+
+`GET /api/v1/domain-profiles` returns the bundled M5 shared-canvas profile
+documents. `asset.pack` with `profile=m5.companion.pack` accepts exactly one
+`base/front`, the fixed 12 eye slots, and the fixed 8 mouth slots through its
+normal immutable `inputs` lineage. `constraints.entries` maps each input asset
+ID to its fixed layer/name and `constraints.pack_name` is lowercase snake case.
+The output must request `format=zip`.
+
+The deterministic result is an `application/zip` asset containing the 21 PNG
+layers, `atlas.png`, `manifest.json`, and a current-firmware pack at
+`companion/packs/<name>/` with M5A v1 RGB565-BE base/eye/mouth clips and its v2
+manifest. Repeating the operation over identical assets produces byte-identical
+ZIP output. ZIP placement uses the same
+`media.pack` output grant as images; no path field or M5-specific Host route is
+added.
+
 ## Contract evolution
 
 G1 froze public schemas, manifest contributions, agent tools, workflow executor
@@ -279,3 +296,6 @@ types, and required asset/provenance fields. G2 retains contract version `1.0`:
 the import route and edit constraint keys are additive, while the existing
 `image.edit` operation and open `constraints` object remain unchanged. A future
 breaking change still requires impact, migration, and version-bump documentation.
+G5 keeps the same contract version and adds only a ZIP output enum/MIME, a higher
+input bound, domain-profile discovery, and a manifest schema. Existing requests
+and required fields are unchanged.

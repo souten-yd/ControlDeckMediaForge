@@ -9,7 +9,7 @@
     "id": {"type": "string", "pattern": "^asset_[0-9a-f]{32}$"},
     "job_id": {"type": "string", "pattern": "^job_[0-9a-f]{32}$"},
     "parent_asset_ids": {"type": "array", "items": {"type": "string", "pattern": "^asset_[0-9a-f]{32}$"}},
-    "mime_type": {"type": "string", "enum": ["image/png", "image/webp", "image/jpeg"]},
+    "mime_type": {"type": "string", "enum": ["image/png", "image/webp", "image/jpeg", "application/zip"]},
     "width": {"type": ["integer", "null"], "minimum": 1},
     "height": {"type": ["integer", "null"], "minimum": 1},
     "size_bytes": {"type": "integer", "minimum": 1},

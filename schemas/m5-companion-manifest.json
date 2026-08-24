@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/m5-companion-manifest.json",
+  "title": "M5 companion deterministic pack manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile", "name", "source_canvas", "device_canvas", "registration", "eye_slots", "mouth_slots", "atlas", "device_pack", "entries"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "profile": {"const": "m5.companion.pack"},
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+    "source_canvas": {"type": "object"},
+    "device_canvas": {"type": "object"},
+    "registration": {"type": "object"},
+    "eye_slots": {"type": "array", "minItems": 12, "maxItems": 12, "uniqueItems": true},
+    "mouth_slots": {"type": "array", "minItems": 8, "maxItems": 8, "uniqueItems": true},
+    "atlas": {"type": "object"},
+    "device_pack": {"type": "object"},
+    "entries": {"type": "array", "minItems": 21, "maxItems": 21}
+  }
+}

@@ -21,7 +21,7 @@ class AssetInput(BaseModel):
 
 class OutputOptions(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    format: Literal["png", "webp", "jpeg"] = "png"
+    format: Literal["png", "webp", "jpeg", "zip"] = "png"
     count: int = Field(default=1, ge=1, le=8)
 
 
@@ -37,7 +37,7 @@ class JobRequest(BaseModel):
 
     operation: Literal["image.generate", "image.edit", "media.inspect", "asset.pack"]
     intent: str = Field(min_length=1, max_length=8000)
-    inputs: list[AssetInput] = Field(default_factory=list, max_length=16)
+    inputs: list[AssetInput] = Field(default_factory=list, max_length=32)
     profile: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9._-]{0,127}$")
     model_policy: Literal["auto", "fast", "balanced", "quality", "low_vram", "manual"] = "auto"
     model_id: str | None = Field(default=None, min_length=1, max_length=200)
@@ -56,6 +56,10 @@ class JobRequest(BaseModel):
             raise ValueError("image.generate does not accept input assets")
         if self.operation == "image.edit" and not self.inputs:
             raise ValueError("image.edit requires at least one input asset")
+        if self.operation == "asset.pack" and not self.inputs:
+            raise ValueError("asset.pack requires input assets")
+        if self.operation != "asset.pack" and self.output.format == "zip":
+            raise ValueError("zip output is accepted only by asset.pack")
         return self
 
 
@@ -104,7 +108,7 @@ class Asset(BaseModel):
     id: str
     job_id: str
     parent_asset_ids: list[str]
-    mime_type: str
+    mime_type: Literal["image/png", "image/webp", "image/jpeg", "application/zip"]
     width: int | None = None
     height: int | None = None
     size_bytes: int

@@ -601,6 +601,25 @@ Potential profiles:
 - file naming rules
 - atlas/manifest output
 
+The bundled shared-canvas contract uses 1280x960 RGBA source layers and a
+320x240 device projection. The face center is x=640; the canonical open-eye
+pupil centers are (544,448) and (736,448); the mouth anchor is (640,576).
+Eyes are bounded to (384,328)-(896,504), mouths to
+(512,496)-(768,656), and ordinary face content stays above the device text
+band at y=736. These are new-delivery coordinates. Historical sheet-derived
+Kizuna assets with measured off-axis anchors are migration inputs, not golden
+outputs, and must be registered onto this shared canvas before validation.
+
+`m5.companion.pack` is the profile-driven use of the existing `asset.pack`
+operation, not a new M5-only operation. It emits one reproducible ZIP asset
+containing immutable PNG layers, a 320x240-cell atlas, and a canonical JSON
+manifest. The fixed initial runtime set is one `base/front`, 12 firmware eye
+slots, and 8 mouth slots. The same ZIP also contains the current M5Companion
+firmware layout under `companion/packs/<name>/`: RGB565 big-endian M5A v1 base,
+12-frame eye, and 8-frame mouth clips plus the v2 device manifest. The ZIP
+remains an ordinary Media Forge asset and can be placed through the existing
+Host output-grant flow.
+
 ### 9.3 Validation
 
 Deterministic validator:

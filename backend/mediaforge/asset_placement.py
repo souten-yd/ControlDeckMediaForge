@@ -9,6 +9,7 @@ MIME_SUFFIXES = {
     "image/png": {".png"},
     "image/webp": {".webp"},
     "image/jpeg": {".jpg", ".jpeg"},
+    "application/zip": {".zip"},
 }
 
 

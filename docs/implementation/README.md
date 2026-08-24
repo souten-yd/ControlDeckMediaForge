@@ -28,6 +28,7 @@ docs/implementation/                 実装の指示（どの順で・何を確�
 | 4 | [ux1-workspace.md](ux1-workspace.md) | MediaForge | G0〜G3 の機能を使える形にする workspace UI。設計は `../design-workspace-ux.md` |
 | 5 | [ux2-model-scene.md](ux2-model-scene.md) | MediaForge | **UX1を作り直さず**、モデルDL/削除、領域、シーン、ポーズ、構図、意図的な差分生成、Composerを追加。設計は `../design-model-scene-ux.md` |
 | 6 | [creative-intelligence.md](creative-intelligence.md) | MediaForge | **UX2 C0〜C5を再利用**して、Creative Director / Reference Intelligence / Unified Evaluator を追加。設計は `../design-creative-intelligence.md` |
+| 7 | [g5-m5-companion.md](g5-m5-companion.md) | MediaForge | G5。shared-canvas profile、deterministic validator、atlas/manifest pack |
 | — | [host-load-profile-fix.md](host-load-profile-fix.md) | **ControlDeck** | ホスト側の LLM 退避コスト計測の修正。G7 の前提 |
 
 `host-load-profile-fix.md` だけ作業対象が ControlDeck リポジトリ。

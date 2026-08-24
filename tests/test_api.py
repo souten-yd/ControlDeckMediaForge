@@ -266,10 +266,11 @@ def test_queued_job_resumes_after_service_start(tmp_path: Path):
 def test_unavailable_operation_fails_explicitly(client):
     payload = request()
     payload["operation"] = "asset.pack"
+    payload["inputs"] = [{"asset_id": "asset_" + "0" * 32}]
     created = client.post("/api/v1/jobs", json=payload).json()
     failed = wait_terminal(client, created["id"])
     assert failed["status"] == "failed"
-    assert failed["error"]["code"] == "capability_unavailable"
+    assert failed["error"]["code"] == "unsupported_pack_profile"
 
 
 def test_available_real_model_requires_host_managed_lease(tmp_path: Path):
