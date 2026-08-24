@@ -272,7 +272,6 @@
           <div class="view-head">
             <p class="section-label">実行中と履歴</p>
             <div>
-              <button type="button" id="open-host-jobs">ControlDeck の Jobs</button>
               <button type="button" id="activity-clear" hidden>履歴を消す</button>
               <button type="button" data-refresh="activity">更新</button>
             </div>
@@ -338,9 +337,17 @@
                 <option value="landscape">風景</option>
               </select>
             </label>
-            <button type="button" id="catalog-search">検索</button>
+            <div class="split-actions">
+              <button type="button" id="catalog-reset">結果を消す</button>
+              <button type="button" id="catalog-search">検索</button>
+            </div>
           </div>
           <div id="catalog-results" class="table-wrap" hidden></div>
+          <div id="catalog-pager" class="pager" hidden>
+            <button type="button" id="catalog-prev" aria-label="前のページ">‹</button>
+            <span id="catalog-page" class="hint"></span>
+            <button type="button" id="catalog-next" aria-label="次のページ">›</button>
+          </div>
           <p id="catalog-empty" class="hint" hidden></p>
 
           <div id="custom-result" class="rows" hidden></div>

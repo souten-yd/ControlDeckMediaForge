@@ -116,7 +116,7 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert "MAX_MANAGED_MODEL_DOWNLOAD_BYTES = 32_000_000_000" in SCRIPT
     # 上限超過は操作ではなく状態なので、ボタンではなく理由として出す。
     assert '"容量超過"' in SCRIPT
-    assert 'evaluate.textContent = "実機で評価"' in SCRIPT
+    assert 'evaluate.textContent = "評価"' in SCRIPT
     assert "state.modelEvaluationIds.has(model.model_id)" in SCRIPT
     assert "card.dataset.modelId" not in SCRIPT
     assert "dataset.modelId =" not in SCRIPT
@@ -707,7 +707,7 @@ def test_an_unavailable_action_is_not_rendered_as_a_button():
     action = SCRIPT[SCRIPT.index("function modelActionCell"):SCRIPT.index("function modelTableRow")]
 
     assert "const unavailable = (text, why)" in action
-    for reason in ("外部で管理", "容量超過", "共有", "使用中"):
+    for reason in ("外部で管理", "容量超過", "共有の置き場", "使用中"):
         assert f'"{reason}"' in action
 
 
