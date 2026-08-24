@@ -2332,8 +2332,18 @@ function showProgress(job) {
 
 /* 別のタブへ移って戻ると進捗が消えていた。表示は state から作り直す。
    実行中の job は state.jobs にあるので、そこから復元する。 */
+/* 画面を離れると state.activeJob は消えるが、job はサーバ側で走り続ける。
+   別のタブへ移って戻る、埋め込みごと外れて戻る、どちらでも進捗が消えていた。
+   「今どれを見ているか」を覚えていないだけなので、走っているものを拾い直す。 */
 function restoreProgressView() {
-  if (!state.activeJob) return;
+  if (!state.activeJob) {
+    const running = (state.jobs || []).find((item) => !TERMINAL.has(item.status));
+    if (!running) return;
+    state.activeJob = running.id;
+    // 拾い直したものにも通知を張る。張らないと、完了しても画面が動かない。
+    void call("jobs.watch", {job_ids: [running.id]}).catch(() => {});
+    if (window.parent === window) void pollJob(running.id);
+  }
   const job = (state.jobs || []).find((item) => item.id === state.activeJob);
   if (job) showProgress(job);
 }
@@ -4597,6 +4607,8 @@ async function boot() {
   restoreCreativeComposition(snapshot);
   restoreCreativeBatch(snapshot);
   activate(state.preferences.last_view || "create", {sync: false});
+  // create 以外を開いていても、走っている job は拾ってミニ進捗に出す。
+  restoreProgressView();
   // watch はサーバが session と一緒に張る。standalone だけ従来どおり要求する。
   if (window.parent === window) await call("jobs.watch", {job_ids: []}).catch(() => {});
   document.documentElement.dataset.bridge = window.parent === window ? "standalone" : "ready";

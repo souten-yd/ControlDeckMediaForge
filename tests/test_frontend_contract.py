@@ -878,3 +878,15 @@ def test_the_validation_marks_do_not_reuse_the_checkbox_class():
     """.check は既にチェックボックス付きラベルで使われている。"""
     assert '"checkmark ok"' in SCRIPT and '"checkmark bad"' in SCRIPT
     assert ".checkmark.ok { color: var(--accent); }" in STYLES
+
+
+def test_progress_is_recovered_from_the_job_that_is_still_running():
+    """画面を離れると state.activeJob は消えるが、job はサーバ側で走り続ける。
+    「今どれを見ているか」を覚えていないだけで、進捗そのものは失われていない。"""
+    body = SCRIPT[SCRIPT.index("function restoreProgressView"):]
+    body = body[:body.index("\n}")]
+    assert "!TERMINAL.has(item.status)" in body, "走っている job を拾っていない"
+    assert 'call("jobs.watch"' in body, "拾い直した job に通知を張っていない"
+    # boot でも view に依らず拾う。ミニ進捗は create 以外でも出る。
+    boot = SCRIPT[SCRIPT.index('activate(state.preferences.last_view'):]
+    assert "restoreProgressView();" in boot[:400], "起動時に拾い直していない"
