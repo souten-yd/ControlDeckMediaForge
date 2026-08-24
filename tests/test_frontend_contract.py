@@ -46,6 +46,7 @@ DOM_IDS = (
     "viewer-save", "viewer-save-note",
     "catalog-query", "catalog-sort", "catalog-pipeline", "catalog-search",
     "catalog-results", "catalog-empty", "custom-manual",
+    "model-layout", "model-table",
     "reference-intelligence", "reference-focuses", "reference-analysis-summary",
     "reference-analysis-note",
     "composition-options", "composition-title", "composition-caption",
@@ -570,3 +571,25 @@ def test_the_table_keeps_numbers_comparable():
     """桁が揃わない表は比較に使えない。"""
     assert "tabular-nums" in STYLES
     assert "table.catalog" in STYLES
+
+
+def test_installed_models_can_be_listed_as_a_comparable_table():
+    """容量や状態を縦に揃えられないと、どれを消すかを決められない。"""
+    assert "renderModelTable" in SCRIPT
+    for column in ("状態", "採用", "容量", "VRAM", "ライセンス"):
+        assert column in SCRIPT
+
+
+def test_the_table_and_cards_offer_the_same_actions():
+    """見た目を変えたら操作が減った、では使えない。"""
+    action = SCRIPT[SCRIPT.index("function modelActionCell"):][:1800]
+
+    for hook in ("installModel", "removeModel", "evaluateModel", "cancelModelOperation"):
+        assert hook in action
+
+
+def test_the_chosen_model_layout_survives_a_reload():
+    """状態はサーバ側に置く。ブラウザ保存領域は使えない。"""
+    assert "model_layout" in SCRIPT
+    preferences = (BACKEND / "preferences.py").read_text(encoding="utf-8")
+    assert '"model_layout"' in preferences

@@ -4054,3 +4054,34 @@ sort=lastModified 2026-08-24    pruna-test/test-save-tiny-stable-diffusion-pipe-
 
 NOT TESTED: SD adapter による実生成。実機測定まで `experimental` を維持する。
 LoRA は利用者指示どおり後続の計画とする。
+
+## UX4 — 導入済みモデルを見比べられる表（2026-08-24）
+
+モデル管理はカードだけだった。カードは 1 件ずつの説明には向くが、容量・状態・
+VRAM を縦に揃えられないため、「どれを消すか」「どれが使えるか」を決める用途に
+使えない。検索結果と同じ表の言葉づかいに揃えた。
+
+```text
+列        モデル / 状態 / 採用 / 容量 / VRAM / ライセンス / 操作
+既定       表（見比べる用途が多い）。カードは切り替えで残す
+数値       等幅で縦に揃える
+操作       表とカードで同じ（ダウンロード / 削除 / 実機で評価 / 中止）
+保持       model_layout として preferences に置く。ブラウザ保存領域は使わない
+```
+
+実ブラウザ実測:
+
+```text
+layout chips     ['表', 'カード']
+既定             table 表示 / cards 非表示
+行数             13（同梱カタログ全件）
+切り替え後        table 非表示 / cards 表示
+page errors      []
+```
+
+FLUX.2 Klein 4B が「導入済み / available / 約 14.9 GB / VRAM 31.1 GB」、
+それ以外が「未導入 / 実験的・未実測 / 未計測」と一目で分かる形になった。
+
+```text
+./mf.sh test   532 passed
+```

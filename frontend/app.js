@@ -106,6 +106,7 @@ const state = {
   modelCatalog: [],
   modelOperations: new Map(),
   modelFilter: "installed",
+  modelLayout: "table",
   modelChoice: "auto",
   domainProfiles: [],
   modelManagementAvailable: false,
@@ -3223,6 +3224,121 @@ function modelFailureNode(code, modelKey) {
   return holder;
 }
 
+/* 導入済みを見比べるには表のほうが向く。カードは 1 件ずつの説明には良いが、
+   容量や状態を縦に揃えられないので、どれを消すかを決める用途に使えない。
+   検索結果と同じ表の言葉づかいに揃える。 */
+function modelStateLabel(model) {
+  if (!model.installed) return "未導入";
+  return model.healthy ? "導入済み" : "要確認";
+}
+
+function modelActionCell(model, modelKey) {
+  const cell = document.createElement("td");
+  const operation = latestModelOperation(model.model_id);
+  if (operation && !MODEL_TERMINAL.has(operation.state)) {
+    const status = document.createElement("span");
+    status.className = "model-operation-state";
+    status.textContent = `${modelOperationStateLabel(operation)} ${
+      operation.bytes_total ? Math.floor(operation.bytes_done / operation.bytes_total * 100) : 0}%`;
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.dataset.cancelModelOperation = operation.id;
+    cancel.textContent = "中止";
+    cell.append(status, cancel);
+    return cell;
+  }
+  const action = document.createElement("button");
+  action.type = "button";
+  if (!state.modelManagementAvailable) {
+    action.disabled = true;
+    action.textContent = "CLI で管理";
+  } else if (!model.installed && model.ownership === "managed" &&
+             model.approx_download_bytes < MAX_MANAGED_MODEL_DOWNLOAD_BYTES) {
+    action.dataset.installModel = modelKey;
+    action.textContent = "ダウンロード";
+  } else if (!model.installed && model.ownership === "managed") {
+    action.disabled = true;
+    action.textContent = "32GB上限対象";
+  } else if (model.ownership === "managed" && model.removable) {
+    action.dataset.removeModel = modelKey;
+    action.textContent = "削除";
+  } else {
+    action.disabled = true;
+    action.textContent = model.installed ? "共有モデル" : "外部で導入";
+  }
+  if (model.installed && state.modelEvaluationIds.has(model.model_id)) {
+    const evaluate = document.createElement("button");
+    evaluate.type = "button";
+    evaluate.dataset.evaluateModel = modelKey;
+    evaluate.textContent = "実機で評価";
+    cell.append(evaluate);
+  }
+  cell.append(action);
+  return cell;
+}
+
+function modelTableRow(model) {
+  const modelKey = String(state.modelCatalog.indexOf(model));
+  const row = document.createElement("tr");
+  row.dataset.modelKey = modelKey;
+
+  const name = document.createElement("td");
+  name.className = "name";
+  const title = document.createElement("div");
+  title.textContent = model.display_name || model.model_id;
+  name.append(title);
+  for (const label of [
+    ...model.media_types.map((item) => MEDIA_TYPE_LABEL[item] || item),
+    ...model.domains.slice(0, 2).map((item) => DOMAIN_LABEL[item] || item),
+  ]) {
+    const chip = document.createElement("span");
+    chip.className = "tag";
+    chip.textContent = label;
+    name.append(chip);
+  }
+
+  const stateCell = document.createElement("td");
+  stateCell.textContent = modelStateLabel(model);
+
+  const adoption = document.createElement("td");
+  adoption.textContent = MODEL_ADOPTION_LABEL[model.state] || model.state;
+
+  const size = document.createElement("td");
+  size.className = "num";
+  size.textContent = model.installed && model.reclaimable_bytes
+    ? formatBytes(model.reclaimable_bytes)
+    : `約 ${formatBytes(model.approx_download_bytes)}`;
+
+  const vram = document.createElement("td");
+  vram.className = "num";
+  vram.textContent = model.measured_vram_bytes ? formatBytes(model.measured_vram_bytes) : "未計測";
+
+  const license = document.createElement("td");
+  license.textContent = model.license || "-";
+
+  row.append(name, stateCell, adoption, size, vram, license, modelActionCell(model, modelKey));
+  return row;
+}
+
+function renderModelTable(visible) {
+  const holder = byId("model-table");
+  if (!holder) return;
+  const table = document.createElement("table");
+  table.className = "catalog";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["モデル", "状態", "採用", "容量", "VRAM", "ライセンス", ""]) {
+    const cell = document.createElement("th");
+    cell.textContent = label;
+    headRow.append(cell);
+  }
+  head.append(headRow);
+  const body = document.createElement("tbody");
+  body.append(...visible.map(modelTableRow));
+  table.append(head, body);
+  holder.replaceChildren(table);
+}
+
 function renderModelManagement() {
   const holder = byId("model-catalog");
   if (!holder) return;
@@ -3328,6 +3444,13 @@ function renderModelManagement() {
     return card;
   }));
   byId("model-empty").hidden = visible.length !== 0;
+  const table = state.modelLayout === "table";
+  renderModelTable(visible);
+  byId("model-table").hidden = !table || visible.length === 0;
+  holder.hidden = table;
+  for (const chip of document.querySelectorAll("[data-model-layout]")) {
+    chip.setAttribute("aria-checked", String(chip.dataset.modelLayout === state.modelLayout));
+  }
   renderAdvancedModels();
 }
 
@@ -3806,6 +3929,14 @@ function jobById(id) {
 
 byId("viewer-save").addEventListener("click", () => void saveAsset(viewer.assetId));
 
+byId("model-layout").addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-model-layout]");
+  if (!chip) return;
+  state.modelLayout = chip.dataset.modelLayout;
+  renderModelManagement();
+  void savePreferences({model_layout: state.modelLayout});
+});
+
 byId("catalog-search").addEventListener("click", () => void searchCatalog());
 byId("catalog-query").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); void searchCatalog(); }
@@ -4121,6 +4252,7 @@ async function boot() {
   }
 
   state.libraryKind = state.preferences.library_kind || "all";
+  state.modelLayout = state.preferences.model_layout === "cards" ? "cards" : "table";
   state.directorMode = directorAvailable()
     ? (state.preferences.director_mode || "refine")
     : "original";

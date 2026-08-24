@@ -266,6 +266,10 @@
               <p class="section-label">モデル管理</p>
               <p id="model-storage" class="hint">保存容量を確認しています…</p>
             </div>
+            <div id="model-layout" class="chips" role="radiogroup" aria-label="モデルの表示形式">
+              <button type="button" class="chip" data-model-layout="table" aria-checked="true">表</button>
+              <button type="button" class="chip" data-model-layout="cards" aria-checked="false">カード</button>
+            </div>
             <div id="model-filters" class="chips" role="radiogroup" aria-label="モデルの絞り込み">
               <button type="button" class="chip" data-model-filter="installed" aria-checked="true">導入済み</button>
               <button type="button" class="chip" data-model-filter="recommended" aria-checked="false">おすすめ</button>
@@ -275,6 +279,7 @@
             </div>
           </div>
           <div id="model-catalog" class="model-grid"></div>
+          <div id="model-table" class="table-wrap" hidden></div>
           <p id="model-empty" class="hint" hidden>条件に合うモデルはありません。</p>
           <div id="model-error" class="error" role="alert" hidden></div>
 
