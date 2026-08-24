@@ -1,3 +1,3 @@
-from .router import ModelRouteError, route_model
+from .router import ModelRoute, ModelRouteError, route, route_model
 
-__all__ = ["ModelRouteError", "route_model"]
+__all__ = ["ModelRoute", "ModelRouteError", "route", "route_model"]

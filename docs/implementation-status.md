@@ -2865,3 +2865,495 @@ denoiser retained SHA-256
 `cfe0795c00ab6e6ebf8c64fe4574f45a828e8a93e0876bca704e055662a9d7b8`.
 H3 quality was not retried. Hosted CI was not used and frozen public contracts
 were unchanged. G5 is the next implementation slice.
+
+## G6 S1 — 永続化読み出しの前方互換（2026-08-24）
+
+利用者報告「状況タブが読めない」を実プロセスで再現し、根本原因を特定した。
+installed v0.5.1（pid 705506 / :9130）へ実 HTTP を投げた結果:
+
+```text
+GET http://127.0.0.1:9130/api/v1/jobs   ->  500  21 bytes
+service.log の traceback
+  mediaforge/app.py:1092 list_jobs -> store.py:292 list_jobs -> store.py:720 _job
+  pydantic ValidationError: 2 errors for JobRequest
+    inputs         List should have at most 16 items after validation, not 21
+    output.format  Input should be 'png','webp' or 'jpeg', input_value='zip'
+```
+
+`Store._job()` が保存済み行を **その時点の `JobRequest` で再検証**していた。
+公開契約を加法的に広げた版が書いた行を旧版が読めず、1 行の不整合が
+`jobs.list` を**コレクション単位**で落としていた。UI はこの失敗を捕まえて
+「状況を読み込めませんでした。」と出すだけなので、状況タブ全体が死ぬ。
+
+実データでの実測。installed の実 DB（`media-forge.sqlite3` 491,520 bytes）を
+複製し、v0.5.1 の契約（`inputs<=16` / `format` に `zip` 無し）で読ませた:
+
+```text
+実 DB の job 行                              90
+v0.5.1 契約で厳格に読めない行                3
+  job_bbd62caeea9a47aba49a8f9e2ac112b2
+  job_c24d3e60d7514a22bce00d8fb6e6036f
+  job_7319eaf22ee34a2d95e54c266ce13509
+修正前   この 3 行のうち 1 行目で例外。一覧全体が 500
+修正後   提供できた行 90 / 90、degraded 3、失われた行 0
+```
+
+修正は「ingress で厳格に検証し、読み出しは寛容にする」。
+`StoredJobRequest` は `JobRequest` の部分型で、値の意味は変えず受理範囲だけ広げる。
+`Job.request` を `SerializeAsAny` にしたので、新しい版が書いた未知フィールドを
+古い版が黙って落とさない（`future_field` が往復することをテストで固定した）。
+degraded 行は表示は続けるが実行は fail-closed（`job_record_unreadable`）。
+
+欠陥は job 固有ではなかったため、コレクション読み出し全体を行単位 fail-soft に
+した（assets / library page / profiles / reference collections / creative
+batches / creative compositions）。
+
+```text
+./mf.sh test   363 passed, 1 warning in 36.59s（G5 の 359 + S1 4 件）
+```
+
+NOT TESTED: 修正版を実 installed へ入れ替えた状態でのブラウザ操作は未実施。
+S2 以降と合わせて 1 度で実機受入する。
+
+## G6 S2 — workspace session と一覧サムネイルの往復削減（2026-08-24）
+
+「GUI が重い」の内訳を実ブラウザで計測した。installed v0.5.1（実データ:
+job 90 / asset 95）の workspace を読み取りのみで開き、要求を数えた。
+
+```text
+修正前   boot ready 2.609 秒   要求 104 件
+           api/v1/assets/{asset}/content   95   一覧カード 1 枚 1 往復
+           api/v1/models                    2
+           その他（capabilities / profiles / reference-collections /
+           assets / creative batches / compositions / index）  7
+```
+
+主因は 2 つあった。
+
+1. boot が直列 10 往復で状態を組み立てていた（`preferences.get` から
+   `jobs.watch` まで）。状態の正がクライアント側の `state` にあった。
+2. 一覧のサムネイルが 1 枚 1 往復だった。埋め込み時は 24 枚 = 24 往復、
+   standalone の shim では `limit` を無視して 95 枚の**原寸**を取っていた。
+
+対応は 2 つ。
+
+```text
+workspace.session   boot と更新を 1 メソッドへ集約。部分指定で読み直せる
+                    部分ごとに fail-soft（Host AI probe が落ちても session は返る）
+                    jobs / model operations の watch はサーバが張る
+session.changed     変わった部分名だけを push。1 秒 polling 3 本を削除
+                    （job / creative batch / creative composition）
+                    polling は push の無い standalone にだけ残した
+一覧サムネイル      160px WebP をカードに同梱。往復 0
+                    原寸と拡大表示は従来どおり個別要求のまま
+```
+
+同じ実データでの実測。
+
+```text
+修正前   boot ready 2.609 秒 / 要求 104 件
+修正後   boot ready 0.264 秒 / 要求  14 件      -89.9% / -86.5%
+```
+
+埋め込み時はさらに減る。standalone に残る 13 件は集約 endpoint を持たない
+shim がクライアント側で束ねているためで、埋め込みでは `workspace.session`
+1 往復になる（サムネイル同梱により追加要求 0）。
+
+サーバ側の集約コストは増えていない。実 DB に対する in-process 実測で
+旧 11 メソッドの合計 14.05 ms に対し `workspace.session` は 14.25 ms。
+
+```text
+./mf.sh test                368 passed
+scripts/ux_standalone_e2e.py PASSED / console errors 0 / phone overflow 0
+```
+
+NOT TESTED: installed ControlDeck の埋め込み iframe での実測。S3 以降と
+合わせて 1 度で実機受入する。
+
+## G6 S3 — AI と画像生成の resource turn 分割（2026-08-24）
+
+「VLM が VRAM を返さないため画像生成が失敗する」の根本原因を実機設定から特定した。
+
+```text
+/data1tb/ControlDeck/data/model-runtime-policy.json
+  supervision = "observed"   （"managed" ではない）
+-> LlamaCapacityProvider._managed() が False
+-> reservations() の yield_level が常に NONE
+-> broker は設計上 LLM を降ろさない
+実機 LLM   Qwen3.8-27B-UD-Q4_K_M + mmproj-BF16 / ctx_size 262144 / n_gpu_layers 999
+実機 GPU   R9700 34,208,743,424 B
+```
+
+Media Forge は既に生成 lease を vision 前に解放していた（image -> vision 方向）。
+足りないのは逆方向（LLM -> image）で、add-on から「AI ターン終了」を伝える口が
+公開契約に存在しなかった。
+
+### ControlDeck 本体 / OpenCode との競合（利用者指摘）
+
+実機の経路を確認した。
+
+```text
+integrations/opencode/settings.json
+  base_url = http://127.0.0.1:8765/api/v1/llm/v1   use_gateway = true
+runtime policy  gateway_only = true
+```
+
+OpenCode も ControlDeck chat も同じ gateway を通るため、add-on の `ai/complete`
+と同じ `_acquire_gateway_lease` / `_active_requests` に集約される。ControlDeck は
+idle unload 用に「使用中なら降ろさない」判定を既に持っている
+（`_has_connected_clients` / `_opencode_session_uses` / `idle_exclude` / `role`）。
+
+**新しい判定を作らず**、明示解放はこの判定集合と drain 経路をそのまま再利用した。
+30 分の idle unload と同じ決定を、時間ではなく要求で起こすだけにした。
+
+### 変更
+
+```text
+ControlDeck（別 PR #238）
+  POST /{addon_id}/ai/release   ai.inference を持つ任意の add-on が使える宣言
+  /ai/complete + ensure_ready   gateway_chat と同じ on-demand 起動
+                                これが無いと解放が次の要求を壊す
+
+Media Forge（本 PR）
+  4 ステージ  analyze -> release_ai -> generate -> review
+              release_ai は lease を持たずに宣言だけ行う
+              先に AI 常駐を落としてから受理を求めるので二重予約も deadlock も無い
+  1 回だけ    リトライループを作らない（chat / OpenCode を飢えさせない）
+  理由付き    解放拒否 + VRAM 由来の受理失敗のときだけ
+              host_ai_residency_retained として拒否理由を添える
+              それ以外の受理失敗に AI 常駐の話を混ぜない
+  旧 Host     404 は既知状態として扱い、従来どおり broker 受理へ落とす
+```
+
+```text
+./mf.sh test                            376 passed
+ControlDeck backend pytest -q           760 passed, 1 skipped（62.93 秒）
+```
+
+`llama.py` の `asyncio` は関数内 import のままにした。module 直下へ移すと
+`test_jobs_persistence::test_two_exclusive_resource_jobs_execute_serially` の
+broker 受理が `queued` のまま止まることを実測で切り分けた。
+
+NOT TESTED: 実機での「LLM 常駐 -> 解放 -> 画像生成」通し。ControlDeck PR #238 を
+入れてから rocm-smi の VRAM 推移込みで 1 度に実測する。
+
+## G6 S4/S5 — 到達性とモデル選択（2026-08-24）
+
+backend の /ws method 48 件と frontend の呼び出しを突き合わせ、実装済みだが
+GUI から到達できない機能を洗い出した。
+
+```text
+到達できなかった
+  profiles.create / profiles.delete            G3 一貫性プロファイル（PR-U6 未着手）
+  reference_collections.create / .delete       参照コレクション
+  asset.pack                                   G5 M5 companion pack
+  creative.prompt_recipe                       H3 版固定 prompt recipe
+  assets.list                                  library.list が上位互換
+  jobs.unwatch / models.operations.unwatch     内部用。UI 機能ではない
+```
+
+### 追加した入口
+
+```text
+キャラ・画風の登録   設定画面に作成・削除を追加した
+                     参照コレクションは profile と一体で作る
+                     （利用者に 2 段階を意識させない）
+配布用にまとめる     詳細モードから asset.pack を起動できるようにした
+                     スロットは profile の宣言だけを根拠に組む
+                     media 固有のスロット名を UI へ書き写さない
+使うモデル           おまかせ / 指定する の 2 段。詳細モードで
+                     fast / balanced / quality / low_vram / manual へ到達できる
+選んだ理由           provenance の parameters.model_route から日本語で出す
+```
+
+### 出さなかったもの（理由付き）
+
+```text
+creative.prompt_recipe   H3 は experimental / healthy=no / unroutable のまま。
+                         完了できない機能を GUI に出さない。
+                         H3 の条件が改善したときに同じ PR で出す。
+media.inspect            operation としては未実装（G0 から capability_unavailable）。
+                         「実装済みだが到達できない」ではないため入口を作らない。
+                         agent 用 /addon/v1/agent/inspect は provenance 参照であり、
+                         workspace では assets.provenance から既に到達できる。
+assets.list              library.list が上位互換。二重の入口を作らない。
+```
+
+### domain 対応 routing
+
+catalog は各モデルに `domains` を持っていたのに routing が使っていなかった。
+`route()` が domain 一致を policy_rank より前段の候補絞りに使うようにした。
+一致 0 件なら全候補へ落とす（シーンを選んだだけで使えるモデルが消えない）。
+明示指定は自動判断より強く、domain で上書きしない。
+
+### 実ブラウザでの到達確認（読み取り + 実操作）
+
+```text
+model_choice_visible                     true
+model_choice_manual_reveals_select       true
+profile_add_buttons                      true
+profile_dialog_open / character_fields   true / true
+pack_hidden_in_simple                    true
+pack_visible_in_advanced                 true
+pack_profiles                            ["m5.companion.pack"]
+pack_slot_rows                           21   （base 1 + eyes 12 + mouth 8）
+pack_progress                            "0/21 割り当て済み"
+page_errors                              []
+```
+
+キャラ登録の往復も実操作で確認した。
+
+```text
+character_options_before                 1（「使わない」のみ）
+作成後 profile_rows                      1   "オレンジの子"
+作成後 character_options                 ["使わない", "オレンジの子"]
+削除後 profile_rows                      0
+削除後 character_options                 1
+page_errors                              []
+```
+
+```text
+./mf.sh test                 387 passed
+ux_standalone_e2e.py         PASSED / console errors 0
+boot ready                   0.081 秒 / 要求 15 件（機能追加後も退行なし）
+```
+
+NOT TESTED: installed ControlDeck の埋め込み iframe での操作。
+
+## G6 S6 — 利用者が追加する HuggingFace モデル（2026-08-24）
+
+「HuggingFace などからダウンロードできるカタログ機能」への対応。
+取得系は既にあった（`worker_packs/image/catalog.json` の revision pin 付き
+エントリ、`models.install` の SHA-256 検証・再開・32GB 上限）。不足していたのは
+**利用者が任意の HF モデルを足せない**ことだけだった。
+
+### 採用しなかった案
+
+```text
+GUI から HF Hub を検索して任意 repo を導入する
+  却下。revision 非固定・実測 VRAM 無し・license gate・任意コード実行の risk。
+  local-first の検証可能性が壊れる。
+```
+
+curated pinned catalog を信頼経路として維持し、明示的な第 2 経路を足した。
+信頼経路を検証可能にしている規則は、追加分にもそのまま適用する。
+
+```text
+revision 固定   moving ref を取得前に不変 commit へ解決する
+digest         配布元が返した sha256 を全 weight に持たせ、既存 installer が検証する
+license        表示した名前をそのまま承諾させる（本文の提示が先）
+実測 gate      experimental で登録し、routing は選ばない
+               models.evaluate の実測に成功して初めて昇格する
+parser         追加分も shipped manifest と同じ validator を通す
+```
+
+### variant 選択（実測で必要と判明）
+
+実 API に当てて分かったこと。HF の diffusers repository は同じ重みの
+Flax / ONNX / OpenVINO 版と、fp32 / fp16 の二重持ちを同居させている。
+全部数えると導入上限を超え、代表的な repository がひとつも入らない。
+
+```text
+stabilityai/stable-diffusion-xl-base-1.0
+  全ファイル      49,952,537,087 バイト   上限 32,000,000,000 を超過
+  1 variant 選択   7,105,346,772 バイト   weights 5 個
+stabilityai/sdxl-turbo
+  全ファイル      42,463,333,800 バイト
+  1 variant 選択   6,938,011,430 バイト   weights 4 個
+```
+
+shard（`model-00001-of-00002.safetensors`）を variant と取り違えて落とすと
+壊れたモデルが届くため、shard は全て残すことをテストで固定した。
+
+### 実 HuggingFace に対する /ws 実測
+
+```text
+resolve                0.285 秒
+  固定した revision    462165984030d82259a11f4367a4eed129e94a7b（要求は "main"）
+  weights / bytes      5 / 7,105,346,772
+  license              openrail++
+  usable_for_generation false
+  warn                 実行アダプタ未実測 / 重複 42,011,397,612 バイトは取り込まない
+承諾なしの追加          ok=false  custom_model_license_not_accepted
+承諾ありの追加          ok=true
+catalog 反映            state=experimental installed=false rev=462165984030
+二重追加                ok=false  custom_model_exists
+削除                    catalog から除去された
+```
+
+### Flux 系と SD 系で個別ローダーが要るか（利用者質問への回答）
+
+要る。ただし「モデルごとに 1 から書く」ではなく**系統ごとの薄い adapter**である。
+
+```text
+worker_packs/image/adapters/ が既にその境界
+  base.py            ImageAdapter Protocol（generate / edit）
+  diffusers_flux2.py FLUX.2 用。pipeline class と参照編集の意味論が固有
+  native.py          Diffusers を使えない runtime 用の口（未実装）
+
+SD1.5 / SDXL / SD3 は Diffusers の AutoPipelineForText2Image /
+Image2Image / Inpaint で 1 個の共通 adapter に相乗りできる。
+新規に要るのは pipeline class の選択、dtype と offload 方針、
+inpaint / img2img / reference の引数対応表、negative prompt や scheduler の有無だけ。
+
+別 adapter が要るのは次の場合に限る
+  Diffusers に pipeline が無い（stable-diffusion.cpp / GGUF 単一ファイル等）
+  参照編集の意味論が固有（FLUX.2 の multi-reference がこれ）
+  trust_remote_code を要求する（原則入れない）
+```
+
+本 PR では共通 adapter を**実装していない**。実測していない adapter を
+available にしないため、追加したモデルは `usable_for_generation=false` として
+その理由を明示する。取り込みと検証はできるが生成にはまだ使えない、が現状。
+
+```text
+./mf.sh test                 412 passed
+ux_standalone_e2e.py         PASSED / console errors 0
+実ブラウザ到達確認            page errors 0
+```
+
+NOT TESTED: 追加したモデルの実ダウンロードと `models.evaluate` の実測。
+共通 adapter が無い状態で実行しても生成の証拠にならないため、別スライスへ送る。
+
+## G6 S3 実機検証 — LLM 常駐 / 解放 / 復帰（2026-08-24）
+
+ControlDeck を `infra/addon-ai-explicit-release` ブランチのまま再起動して実測した。
+
+```text
+経路の存在      POST /api/v1/addon-runtime/media-forge/ai/release
+                無効 token -> 401（404 ではない = 配線済み）
+runtime policy  llama.cpp / supervision=observed / gateway_only=true / yield_max=4
+対象            Qwen3.8-27B-UD-Q4_K_M + mmproj-BF16 / ctx 262144 / n_gpu_layers 999
+GPU             R9700 34,208,743,424 バイト
+```
+
+### ❷ の根本原因が数値で確定した
+
+```text
+LLM 常駐時の VRAM   59,912,192 -> 31,555,141,632（+31,495,229,440）
+```
+
+**34.2GB の GPU のうち 31.5GB を LLM が占有する。** FLUX.2 Klein 4B の
+実行 peak は 29,625,200,640 バイトなので、常駐したままでは絶対に入らない。
+`supervision=observed` では broker が降ろさないため、待っても解消しない。
+
+### 解放の実測
+
+```text
+実行中の要求がある間   released=False reason=drain_timeout（120.058 秒待って拒否）
+使用が終わったあと     released=True  reason=released  0.737 秒
+                       VRAM 31,555,141,632 -> 59,912,192（全量返却）
+推論を 1 回通した直後  released=True  reason=released  2.380 秒
+```
+
+### ❽ OpenCode 経由の生成（利用者指摘 2026-08-24）
+
+**最初の設計では成立しなかった。** 実測で判明した。
+
+```text
+integrations/opencode/settings.json  base_url = .../api/v1/llm/v1  use_gateway = true
+resolve_backend_port()               8096（LLM の実ポートと一致する）
+-> _opencode_session_uses は活動中の OpenCode セッションに True を返し続ける
+-> 解放は常に opencode_active で拒否される
+-> OpenCode から add-on へ生成を頼む経路が、この機能が必要な場面でだけ死ぬ
+```
+
+明示解放が idle unload の 30 分窓を引き継いでいたのが誤りだった。idle loop が
+「最近誰か触ったか」を見るのは**誰も要求していない**からで、その場合は暖めた
+まま保つのが安全側になる。明示解放は逆で、**要求した側が今その VRAM を必要と
+している**。実行中の推論を切らない保証は drain 側が持ち、降ろしたものは
+`ensure_ready` で自動復帰する。
+
+修正後、OpenCode セッションが活動中に見える状態を再現して測り直した。
+
+```text
+load              4.040 秒   VRAM 59,912,192 -> 31,555,141,632
+旧判定            _opencode_session_uses = True   （これを見ていたら解放できない）
+新判定            release_reason = ""             （解放可）
+解放要求          released=True reason=released 0.356 秒
+                  VRAM 31,555,141,632 -> 59,912,192（-31,495,229,440 全量返却）
+次の turn の復帰   ok=True 5.836 秒（ensure_ready による自動復帰）
+後片付け          VRAM 59,912,192（測定前と同じ）
+```
+
+残る保証は変えていない。
+
+```text
+実行中の推論を切らない      drain（実測 drain_timeout で拒否）
+streaming 中は降ろさない    _has_connected_clients
+運用者の明示除外            idle_exclude
+embedding / reranker        role で対象外
+```
+
+`freed_bytes` は降ろしたモデルファイルの大きさである。実際に空く VRAM は
+KV cache を含むため大きい（16,464,440,224 に対し 31,495,229,440）。
+
+```text
+ControlDeck backend pytest -q   764 passed, 1 skipped（57.66 秒）
+```
+
+NOT TESTED: Media Forge 側を実 add-on として動かした「analyze -> release_ai ->
+generate」の通し。installed feature は v0.5.1（旧 core）のままであり、
+本 PR の core を bundle 化して入れ替えるまで実行しない。
+
+## G6 v0.6.0 バンドル導入と installed 実測（2026-08-24）
+
+```text
+bundle   ./mf.sh bundle build 0.6.0 /data1tb/mediaforge-release-bundles
+artifact control-deck-media-forge-0.6.0-linux-x86_64.tar.gz
+bytes    30,640,703
+sha256   ef57f26f78bb5816f967c9256dfce07ae9a135d64602f4137f09004b9bfed73d
+```
+
+展開したバンドルを :9137 で起動し、配信 HTML が新 UI であることを確認した。
+
+```text
+model-choice 14 / pack-section 2 / custom-repo 2 / profile-add-character 2
+workspace.session 4 / session.changed 4
+ux_standalone_e2e.py   PASSED / console errors 0
+到達確認                pack_slot_rows 21 / page errors 0
+```
+
+installed feature を v0.5.1 から v0.6.0 へ入れ替えた（systemd drop-in で
+`versions/0.6.0` を指す。`current` symlink も更新）。
+
+### ❸ が installed で解消した
+
+```text
+修正前   GET http://127.0.0.1:9130/api/v1/jobs -> 500（1 行の不整合で全件喪失）
+修正後   GET http://127.0.0.1:9130/api/v1/jobs -> 200  90 件  degraded 0
+         /api/v1/assets -> 200   /api/v1/capabilities -> 200
+```
+
+degraded 0 なのは v0.6.0 の契約が当該行を厳格に読めるため。旧契約で読めない
+行が来ても一覧は落ちないことは `tests/test_store.py` と実 DB 90 行での
+before/after 実測（v0.5.1 契約で 3 行が読めず、修正後は 90/90 提供）で固定した。
+
+### 残る未実測と再現手順
+
+Media Forge 側の「analyze -> release_ai -> generate」通しは、ControlDeck への
+ログインが要るため未実施。**利用者のパスワードは扱わない**方針のため、
+そのまま実行できる受け入れスクリプトを用意した。
+
+```bash
+MEDIA_FORGE_E2E_PASSWORD=... \
+  /data1tb/ControlDeck-release-bundle/.venv/bin/python \
+  scripts/g6_resource_turn_e2e.py \
+    --control-deck-url http://127.0.0.1:8765 \
+    --username <name> \
+    --evidence-dir /data1tb/mediaforge-g6-evidence
+```
+
+このスクリプトが検証すること。
+
+```text
+1. boot が workspace.session 1 往復で終わること（WebSocket frame を数える）
+2. 状況タブが記録を読めること（degraded 行があっても落ちない）
+3. Host LLM を gateway 経由で常駐させ、実際に VRAM を握らせること
+4. 実画像 job の phase 列に release_ai が現れ、generating より前にあること
+5. VRAM が生成前に返っていること / 実画像が 1 枚できること
+6. Broker が空で残り、worker プロセスが残らないこと
+```
+
+VRAM は rocm-smi の実測値を phase ごとに記録する。モデル自身の申告ではなく
+デバイスを読む。

@@ -347,7 +347,14 @@ class ModelRegistry:
         hf_home: Path | None = None,
         catalog_manifest: Path | None = None,
         model_store_root: Path | None = None,
+        extra_models: list[dict[str, Any]] | None = None,
+        extra_catalog: list[dict[str, Any]] | None = None,
     ) -> "ModelRegistry":
+        """Load the shipped registry, optionally extended by user-added entries.
+
+        The extra halves are validated by exactly the same parsers as the shipped
+        manifests. A user-added model gets no weaker checks than a shipped one.
+        """
         try:
             value = json.loads(manifest.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -357,12 +364,13 @@ class ModelRegistry:
         models = value.get("models")
         if not isinstance(models, list):
             raise ModelRegistryError("model registry models must be an array")
+        models = [*models, *(extra_models or [])]
         descriptors = tuple(_descriptor(item) for item in models if isinstance(item, dict))
         if len(descriptors) != len(models):
             raise ModelRegistryError("model registry entry must be an object")
         registry = cls(descriptors)
         if catalog_manifest is not None:
-            registry = registry.with_catalog(catalog_manifest)
+            registry = registry.with_catalog(catalog_manifest, extra_entries=extra_catalog)
         if hf_home is not None or model_store_root is not None:
             registry = registry.detect_installations(hf_home=hf_home, model_store_root=model_store_root)
         return registry
@@ -370,7 +378,12 @@ class ModelRegistry:
     def all(self) -> tuple[ModelDescriptor, ...]:
         return self._descriptors
 
-    def with_catalog(self, catalog_manifest: Path) -> "ModelRegistry":
+    def with_catalog(
+        self,
+        catalog_manifest: Path,
+        *,
+        extra_entries: list[dict[str, Any]] | None = None,
+    ) -> "ModelRegistry":
         try:
             value = json.loads(catalog_manifest.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -380,6 +393,7 @@ class ModelRegistry:
         entries = value.get("models")
         if not isinstance(entries, list) or any(not isinstance(item, dict) for item in entries):
             raise ModelRegistryError("model catalog models must be an object array")
+        entries = [*entries, *(extra_entries or [])]
         metadata: dict[str, dict[str, Any]] = {}
         for entry in entries:
             parsed = _catalog_metadata(entry)

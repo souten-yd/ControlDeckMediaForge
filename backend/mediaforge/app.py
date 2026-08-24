@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import inspect
+import logging
 from io import BytesIO
 import json
 import os
@@ -25,6 +27,7 @@ from . import __version__, library, preferences, thumbnails
 from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
 from .asset_placement import ProjectAssetPlacement, placement_filename
 from .config import Settings
+from .custom_models import CustomModelCatalog, CustomModelError
 from .composer import (
     CreativeCompositionRecord,
     DeterministicComposer,
@@ -55,6 +58,8 @@ from .events import (
     JobSubscription,
     ModelOperationEventBus,
     ModelOperationSubscription,
+    SessionEventBus,
+    SessionSubscription,
 )
 from .environment import setup_snapshot
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
@@ -64,7 +69,7 @@ from .host.jobs import HostExecution
 from .jobs import JobManager, ProfileResolutionError
 from .m5_companion import profile_documents as m5_profile_documents
 from .model_evaluator import H3ModelEvaluator
-from .model_manager import ModelOperationManager
+from .model_manager import MAX_MANAGED_MODEL_DOWNLOAD_BYTES, ModelOperationManager
 from .models import (
     ModelOperationError,
     ModelRegistry,
@@ -129,6 +134,20 @@ def _unavailable(reason: str, message: str) -> dict[str, Any]:
     }
 
 
+
+logger = logging.getLogger("uvicorn.error")
+
+# session snapshot の分量。boot 1 往復に収める範囲で、旧 boot と同じ見え方を保つ。
+SESSION_RECENT_LIMIT = 4
+SESSION_JOB_LIMIT = 100
+
+
+def _error_code(exc: BaseException) -> str:
+    """既知の code 付き例外はその code を、それ以外は総称の code を返す。"""
+    code = getattr(exc, "code", None)
+    return code if isinstance(code, str) and code else "session_part_unavailable"
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -166,16 +185,25 @@ def create_app(
         hf_home=resolved.hf_home,
         image_runtime_python=resolved.image_runtime_python,
         creative_evaluator=evaluator,
+        ai_gateway=ai_gateway,
     )
     events = JobEventBus()
     store.observe(events.publish)
     model_events = ModelOperationEventBus()
     store.observe_model_operations(model_events.publish)
+    session_events = SessionEventBus()
+    store.observe_session(session_events.publish)
     creative_compiler = CreativeCompiler.load(resolved.creative_template_manifest)
     creative_batch_planner = CreativeBatchPlanner(creative_compiler)
     layout_catalog = LayoutCatalog.load(resolved.creative_layout_manifest)
     multi_cut_planner = MultiCutPlanner(creative_compiler, layout_catalog)
     deterministic_composer = DeterministicComposer()
+    custom_models = CustomModelCatalog(
+        resolved.data_dir / "custom-models.json",
+        origin=model_download_origin,
+        transport=model_download_transport,
+        max_download_bytes=MAX_MANAGED_MODEL_DOWNLOAD_BYTES,
+    )
     model_operations = (
         ModelOperationManager(
             store,
@@ -186,6 +214,7 @@ def create_app(
             model_in_use=manager.model_in_use,
             download_origin=model_download_origin,
             transport=model_download_transport,
+            custom_models=custom_models,
         )
         if resolved.model_catalog_manifest is not None
         else None
@@ -1424,6 +1453,29 @@ def create_app(
                     subscription.unwatch([job_id])
             pending.clear()
 
+    async def push_session_events(
+        websocket: WebSocket, subscription: SessionSubscription
+    ) -> None:
+        """Coalesce session invalidations so a batch cannot flood the socket.
+
+        The payload carries only which parts went stale. The workspace re-reads
+        those parts, so no projection has to be duplicated into an event.
+        """
+        while True:
+            part = await subscription.queue.get()
+            stale = {part}
+            await asyncio.sleep(JOB_EVENT_INTERVAL_SEC)
+            while not subscription.queue.empty():
+                stale.add(subscription.queue.get_nowait())
+            try:
+                await websocket.send_json({
+                    "type": "event",
+                    "event": "session.changed",
+                    "data": {"parts": sorted(stale)},
+                })
+            except (WebSocketDisconnect, RuntimeError):
+                return
+
     async def push_model_operation_events(
         websocket: WebSocket,
         subscription: ModelOperationSubscription,
@@ -1441,6 +1493,143 @@ def create_app(
             if operation.state in TERMINAL_MODEL_OPERATION_STATES:
                 subscription.unwatch([operation.id])
 
+    def grid_thumbnail(asset: Asset) -> dict[str, Any] | None:
+        """一覧カード用の小さな版。1 枚でも失敗したら None を返して一覧は続ける。"""
+        if not thumbnails.is_thumbnailable(asset.mime_type):
+            return None
+        try:
+            rendered = thumbnails.cached(
+                store.asset_path(asset.id),
+                store.thumbnail_dir,
+                asset.id,
+                library.GRID_THUMBNAIL_MAX_SIDE,
+            )
+        except (ThumbnailError, KeyError, OSError):
+            return None
+        return {
+            "mime_type": rendered.mime_type,
+            "width": rendered.width,
+            "height": rendered.height,
+            "base64": base64.b64encode(rendered.content).decode("ascii"),
+        }
+
+    SESSION_PARTS: tuple[str, ...] = (
+        "preferences",
+        "capabilities",
+        "profiles",
+        "reference_collections",
+        "domain_profiles",
+        "models",
+        "model_catalog",
+        "model_operations",
+        "library",
+        "creative_batches",
+        "creative_compositions",
+        "jobs",
+    )
+
+    async def session_snapshot(
+        identity: HostIdentity | None, parts: tuple[str, ...]
+    ) -> dict[str, Any]:
+        """Compose the whole workspace state on the server in one pass.
+
+        The workspace used to derive its own state from ten sequential requests
+        during boot. State ownership now lives here: the client renders whatever
+        this returns and re-reads only the parts a session event invalidates.
+
+        Every part fails soft on its own. One unavailable part (a Host AI probe,
+        an absent model catalog) must not cost the caller the whole session.
+        """
+        wanted = set(parts)
+        snapshot: dict[str, Any] = {"session_version": 1, "parts": sorted(wanted)}
+
+        async def capabilities_part() -> dict[str, Any]:
+            envelope = size_envelope()
+            return {
+                **await capability_document(identity),
+                "envelope": envelope,
+                "presets": size_presets(envelope),
+            }
+
+        def preferences_part() -> dict[str, Any]:
+            return {"values": preferences.merged(
+                store.get_preferences(preferences.subject_of(identity))
+            )}
+
+        def model_catalog_part() -> dict[str, Any]:
+            if model_operations is None:
+                return {"items": [], "management_available": False}
+            value = model_operations.catalog()
+            value["evaluation"] = {
+                "available_model_ids": model_evaluations.available_model_ids()
+                if model_evaluations is not None else []
+            }
+            return value
+
+        def library_part() -> dict[str, Any]:
+            limit = library.clamp_limit(SESSION_RECENT_LIMIT)
+            return library.page(
+                store.list_asset_records(limit, None),
+                kind="all",
+                include_masks=False,
+                limit=limit,
+                thumbnail=grid_thumbnail,
+            )
+
+        producers: dict[str, Any] = {
+            "preferences": preferences_part,
+            "capabilities": capabilities_part,
+            "profiles": lambda: {"items": [
+                item.model_dump(mode="json") for item in store.list_profiles()
+            ]},
+            "reference_collections": lambda: {"items": [
+                item.model_dump(mode="json") for item in store.list_reference_collections()
+            ]},
+            "domain_profiles": lambda: {"items": m5_profile_documents()},
+            "models": model_catalog,
+            "model_catalog": model_catalog_part,
+            "model_operations": lambda: {"items": [
+                item.model_dump(mode="json") for item in store.list_model_operations()
+            ]},
+            "library": library_part,
+            "creative_batches": lambda: {"items": [
+                batch_projection(item) for item in store.list_creative_batches()
+            ]},
+            "creative_compositions": lambda: {"items": [
+                composition_projection(item) for item in store.list_creative_compositions()
+            ]},
+            "jobs": lambda: {"items": [
+                item.model_dump(mode="json") for item in store.list_jobs(SESSION_JOB_LIMIT)
+            ]},
+        }
+
+        async def produce(name: str) -> tuple[str, dict[str, Any]]:
+            try:
+                value = producers[name]()
+                if inspect.isawaitable(value):
+                    value = await value
+                return name, value
+            except Exception as exc:  # noqa: BLE001 - 1 部分の失敗で session 全体を失わせない
+                logger.warning("session part %s is unavailable: %s", name, exc)
+                return name, {"unavailable": True, "code": _error_code(exc)}
+
+        for name, value in await asyncio.gather(
+            *(produce(name) for name in SESSION_PARTS if name in wanted)
+        ):
+            snapshot[name] = value
+        return snapshot
+
+    def requested_session_parts(params: dict[str, Any]) -> tuple[str, ...]:
+        raw = params.get("parts")
+        if raw is None:
+            return SESSION_PARTS
+        if not isinstance(raw, list) or not all(isinstance(value, str) for value in raw):
+            raise ValueError("session parts must be a list of strings")
+        wanted = tuple(value for value in SESSION_PARTS if value in set(raw))
+        if not wanted:
+            raise ValueError("session parts must name at least one known part")
+        return wanted
+
     @app.websocket("/ws")
     async def workspace_socket(websocket: WebSocket) -> None:
         try:
@@ -1454,6 +1643,8 @@ def create_app(
         sender = asyncio.create_task(push_job_events(websocket, subscription))
         model_subscription = model_events.subscribe(asyncio.get_running_loop())
         model_sender = asyncio.create_task(push_model_operation_events(websocket, model_subscription))
+        session_subscription = session_events.subscribe(asyncio.get_running_loop())
+        session_sender = asyncio.create_task(push_session_events(websocket, session_subscription))
         try:
             while True:
                 raw = await websocket.receive_text()
@@ -1619,6 +1810,44 @@ def create_app(
                             str(params.get("model_id", "")),
                             identity,
                         ).model_dump(mode="json")
+                    elif method == "models.custom.resolve":
+                        # 取得前に必ず解決して見せる。承諾は本文の提示が先。
+                        resolution = await custom_models.resolve(
+                            str(params.get("repo_id", "")), str(params.get("revision", "main"))
+                        )
+                        result = resolution.document()
+                    elif method == "models.custom.add":
+                        resolution = await custom_models.resolve(
+                            str(params.get("repo_id", "")), str(params.get("revision", "main"))
+                        )
+                        domains = params.get("domains", ["general"])
+                        if not isinstance(domains, list) or not all(
+                            isinstance(value, str) for value in domains
+                        ):
+                            raise ValueError("custom model domains must be a list of strings")
+                        entry = custom_models.add(
+                            resolution,
+                            display_name=str(params.get("display_name", "")),
+                            license_acceptance=str(params.get("license_acceptance", "")),
+                            domains=tuple(domains) or ("general",),
+                        )
+                        # 追加分も shipped catalog と同じ parser で検証してから返す。
+                        # ここで通らない entry を残さない。
+                        try:
+                            if model_operations is not None:
+                                model_operations.catalog()
+                        except ModelRegistryError:
+                            custom_models.remove(entry["registry"]["model_id"])
+                            raise
+                        result = {
+                            "model_id": entry["registry"]["model_id"],
+                            **resolution.document(),
+                        }
+                        session_events.publish("model_catalog")
+                    elif method == "models.custom.remove":
+                        custom_models.remove(str(params.get("model_id", "")))
+                        result = {"removed": True}
+                        session_events.publish("model_catalog")
                     elif method == "models.operations.list":
                         result = {
                             "items": [item.model_dump(mode="json") for item in store.list_model_operations()]
@@ -1735,6 +1964,27 @@ def create_app(
                         )
                     elif method == "creative.evaluate":
                         result = await evaluate_creative_candidates(params, identity)
+                    elif method == "workspace.session":
+                        # 状態の正はサーバにある。boot も更新もこの 1 メソッドで足りる。
+                        result = await session_snapshot(
+                            identity, requested_session_parts(params)
+                        )
+                        if "jobs" in result and isinstance(result["jobs"], dict):
+                            watched = [
+                                item["id"] for item in result["jobs"].get("items", [])
+                                if item.get("status") not in TERMINAL_JOB_STATES
+                            ]
+                            result["watching"] = {"jobs": subscription.watch(watched)}
+                        if "model_operations" in result and isinstance(result["model_operations"], dict):
+                            active = [
+                                item["id"] for item in result["model_operations"].get("items", [])
+                                if item.get("state") not in {
+                                    state.value for state in TERMINAL_MODEL_OPERATION_STATES
+                                }
+                            ]
+                            result.setdefault("watching", {})["model_operations"] = (
+                                model_subscription.watch(active)
+                            )
                     elif method == "capabilities.get":
                         envelope = size_envelope()
                         result = {
@@ -1755,6 +2005,8 @@ def create_app(
                             kind=str(kind),
                             include_masks=params.get("include_masks") is True,
                             limit=limit,
+                            # 既定で同梱する。呼び出し側が明示的に切れる。
+                            thumbnail=None if params.get("thumbnails") is False else grid_thumbnail,
                         )
                     elif method == "assets.thumbnail":
                         asset_id = str(params.get("asset_id", ""))
@@ -1806,6 +2058,7 @@ def create_app(
                     ThumbnailError,
                     PreferenceError,
                     ModelOperationError,
+                    CustomModelError,
                     CreativeValidationError,
                     ReferenceIntelligenceError,
                     PromptRecipeError,
@@ -1838,8 +2091,10 @@ def create_app(
         finally:
             subscription.close()
             model_subscription.close()
+            session_subscription.close()
             model_sender.cancel()
-            await asyncio.gather(model_sender, return_exceptions=True)
+            session_sender.cancel()
+            await asyncio.gather(model_sender, session_sender, return_exceptions=True)
             sender.cancel()
             for upload in uploads.values():
                 root = upload.get("root")

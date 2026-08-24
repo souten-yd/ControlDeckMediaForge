@@ -739,3 +739,215 @@ def test_binary_payloads_are_not_mistaken_for_host_paths(tmp_path: Path):
             if message.get("id") == "chunk":
                 break
     assert message["ok"] is True, message
+
+
+# ── workspace.session ───────────────────────────────────────────────────────
+
+
+SESSION_PARTS = {
+    "preferences", "capabilities", "profiles", "reference_collections",
+    "models", "model_catalog", "model_operations", "library",
+    "creative_batches", "creative_compositions", "jobs",
+}
+
+
+def test_workspace_session_returns_the_whole_boot_state_in_one_request(tmp_path: Path):
+    """boot は直列 10 往復だった。状態の正をサーバへ移し 1 往復にする。"""
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            answer = call(socket, "workspace.session")
+
+    assert answer["ok"] is True, answer
+    result = answer["result"]
+    assert result["session_version"] == 1
+    assert SESSION_PARTS <= set(result)
+    # 旧 boot が個別に取っていた値がそのまま入っていること
+    assert isinstance(result["preferences"]["values"], dict)
+    assert "capabilities" in result["capabilities"]
+    assert "envelope" in result["capabilities"]
+    assert isinstance(result["jobs"]["items"], list)
+    # watch はサーバが張る。client から jobs.watch を送らせない。
+    assert "watching" in result
+
+
+def test_workspace_session_returns_only_the_requested_parts(tmp_path: Path):
+    """session.changed を受けたら変わった部分だけ読み直せること。"""
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            answer = call(socket, "workspace.session", {"parts": ["jobs", "creative_batches"]})
+
+    result = answer["result"]
+    assert result["parts"] == ["creative_batches", "jobs"]
+    assert set(result) & SESSION_PARTS == {"jobs", "creative_batches"}
+
+
+def test_workspace_session_rejects_an_unknown_part_list(tmp_path: Path):
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            answer = call(socket, "workspace.session", {"parts": ["nonsense"]})
+
+    assert answer["ok"] is False
+    assert answer["error"]["code"] == "workspace_request_rejected"
+
+
+def test_one_unavailable_session_part_does_not_cost_the_whole_session(tmp_path: Path, monkeypatch):
+    """Host AI probe が落ちても session 全体を失わせない。"""
+    from mediaforge.host.ai import HostAIError, HostAIGateway
+
+    async def unavailable(*_args, **_kwargs):
+        raise HostAIError("host_ai_unavailable", "ControlDeck AI is unavailable")
+
+    monkeypatch.setattr(HostAIGateway, "capabilities", unavailable)
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            answer = call(socket, "workspace.session")
+
+    assert answer["ok"] is True, answer
+    result = answer["result"]
+    assert isinstance(result["jobs"]["items"], list)
+    assert isinstance(result["preferences"]["values"], dict)
+
+
+def test_session_changed_is_pushed_instead_of_polling(tmp_path: Path):
+    """1 秒 polling をやめられる根拠。変わった部分の名前が push されること。"""
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            call(socket, "workspace.session")
+            answer = call(socket, "profiles.create", {
+                "kind": "character",
+                "name": "session push",
+                "character": {"appearance": "a short test character"},
+            })
+            assert answer["ok"] is True, answer
+            for _ in range(20):
+                message = socket.receive_json()
+                if message.get("event") == "session.changed":
+                    assert "profiles" in message["data"]["parts"]
+                    break
+            else:  # pragma: no cover - 受信できなければ polling を消せない
+                raise AssertionError("session.changed was not pushed")
+
+
+def test_session_library_carries_inline_thumbnails_so_the_grid_makes_no_extra_calls(tmp_path: Path):
+    """カード 1 枚 1 往復のサムネイル要求をやめた根拠。
+
+    実データ（asset 95 件）で boot が 104 要求・2.609 秒かかっていた原因の主因。
+    """
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        imported = import_asset(client)
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            answer = call(socket, "workspace.session", {"parts": ["library"]})
+
+    items = answer["result"]["library"]["items"]
+    assert any(item["asset_id"] == imported["id"] for item in items)
+    for item in items:
+        thumbnail = item["thumbnail"]
+        assert thumbnail["mime_type"] == thumbnails.MIME_TYPE
+        assert max(thumbnail["width"], thumbnail["height"]) <= library.GRID_THUMBNAIL_MAX_SIDE
+        assert len(base64.b64decode(thumbnail["base64"])) <= THUMBNAIL_BYTE_LIMIT
+
+
+def test_library_list_can_opt_out_of_inline_thumbnails(tmp_path: Path):
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        import_asset(client)
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            answer = call(socket, "library.list", {"limit": 4, "thumbnails": False})
+
+    assert all("thumbnail" not in item for item in answer["result"]["items"])
+
+
+# ── 利用者が追加するモデル（G6 S6） ────────────────────────────────────
+
+
+def test_custom_model_resolution_pins_the_revision_before_anything_is_fetched(tmp_path: Path):
+    import httpx as httpx_module
+
+    payload = {
+        "sha": "9" * 40,
+        "gated": False,
+        "library_name": "diffusers",
+        "pipeline_tag": "text-to-image",
+        "cardData": {"license": "openrail++"},
+        "siblings": [
+            {"rfilename": "model_index.json", "size": 100},
+            {
+                "rfilename": "unet/diffusion_pytorch_model.safetensors",
+                "size": 1_000,
+                "lfs": {"sha256": "e" * 64, "size": 1_000},
+            },
+        ],
+    }
+    root = Path(__file__).parents[1]
+    client, headers, _state = host_client(
+        tmp_path,
+        token="valid-user",
+        model_download_transport=httpx_module.MockTransport(
+            lambda request: httpx_module.Response(200, json=payload)
+        ),
+        model_catalog_manifest=root / "worker_packs/image/catalog.json",
+        model_store_root=tmp_path / "model-store",
+    )
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            resolved = call(socket, "models.custom.resolve", {
+                "repo_id": "owner/sdxl", "revision": "main",
+            })
+            added = call(socket, "models.custom.add", {
+                "repo_id": "owner/sdxl",
+                "revision": "main",
+                "display_name": "SDXL",
+                "license_acceptance": "openrail++",
+            })
+            catalog = call(socket, "models.catalog")
+
+    assert catalog["ok"] is True, catalog
+    assert resolved["ok"] is True, resolved
+    assert resolved["result"]["revision"] == "9" * 40
+    assert resolved["result"]["requested_revision"] == "main"
+    assert added["ok"] is True, added
+    items = {item["model_id"]: item for item in catalog["result"]["items"]}
+    assert "owner/sdxl" in items
+    # 実測するまで routing 対象にしない。
+    assert items["owner/sdxl"]["state"] == "experimental"
+
+
+def test_custom_model_add_is_refused_without_accepting_the_shown_licence(tmp_path: Path):
+    import httpx as httpx_module
+
+    payload = {
+        "sha": "9" * 40,
+        "gated": False,
+        "library_name": "diffusers",
+        "pipeline_tag": "text-to-image",
+        "cardData": {"license": "openrail++"},
+        "siblings": [{
+            "rfilename": "unet/diffusion_pytorch_model.safetensors",
+            "size": 1_000,
+            "lfs": {"sha256": "e" * 64, "size": 1_000},
+        }],
+    }
+    client, headers, _state = host_client(
+        tmp_path,
+        token="valid-user",
+        model_download_transport=httpx_module.MockTransport(
+            lambda request: httpx_module.Response(200, json=payload)
+        ),
+    )
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            answer = call(socket, "models.custom.add", {
+                "repo_id": "owner/sdxl",
+                "revision": "main",
+                "display_name": "SDXL",
+                "license_acceptance": "mit",
+            })
+
+    assert answer["ok"] is False
+    assert answer["error"]["code"] == "custom_model_license_not_accepted"

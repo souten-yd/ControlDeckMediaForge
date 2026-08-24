@@ -8,12 +8,15 @@
 ## 現在地
 
 ```text
-最終更新    2026-08-23
-ブランチ    release/v051-worker-boundary
-PR          #63〜#70 merge済み。v0.5.1 evidence PR作成前
-状態        G0〜G4 / CI-1〜CI-6 / worker境界完了。v0.5.1導入済み。次はG5
-基準値      worker focused = 48 passed。full = 352 passed（37.33秒、warning 1）
-リリース    v0.5.1公開・ControlDeck導入済み（artifact a615fc01...09c0f、Host PR #237）
+最終更新    2026-08-24
+ブランチ    g6/workspace-turn-and-catalog
+PR          MediaForge #72(G5) / #73(G6)、ControlDeck #238。いずれも作成済み
+状態        G6 実装完了。installed v0.6.0 導入済み。残りは resource turn の実機通し 1 件
+基準値      full = 412 passed（38.76 秒、warning 1）
+リリース    v0.6.0 をローカルビルドして installed 差し替え済み
+            artifact 30,640,703 bytes
+            sha256 ef57f26f78bb5816f967c9256dfce07ae9a135d64602f4137f09004b9bfed73d
+            GitHub Release と trusted-catalog の更新はまだ行っていない
 ```
 
 ## PR 進捗
@@ -30,7 +33,7 @@ PR          #63〜#70 merge済み。v0.5.1 evidence PR作成前
 | — | 実使用で見つかった不具合 6 件 | #28 #29 マージ済み |
 | PR-U7 | 実機受け入れ | 一部完了（desktop / mobile を観測） |
 | PR-U5 | ライブラリ viewer | #33 マージ済み |
-| PR-U6 | 一貫性 UI（G3） | 未着手 |
+| PR-U6 | 一貫性 UI（G3） | #73 で実装（キャラ・画風の作成/削除） |
 | PR-U7 | 実機受け入れ | 未着手 |
 | — | H3 bounded evaluator hardening | #60 マージ済み（676f8cc） |
 | — | v0.3.2 release/install evidence | #61 マージ済み（4c310cb） |
@@ -42,32 +45,43 @@ PR          #63〜#70 merge済み。v0.5.1 evidence PR作成前
 | — | CI-5 C4 shot direction | #68 マージ済み（8e82287） |
 | — | v0.5.0 + CI-6 installed/R9700 evidence | #69 マージ済み（2f8e917） |
 | — | worker/core image composition boundary | #70 マージ済み（2b3114d） |
-| — | v0.5.1 release/install evidence | PR作成前（実機受入済み） |
+| — | v0.5.1 release/install evidence | #71 マージ済み（9482e38） |
+| — | G5 M5 companion pack | #72 作成済み（実機 E2E 未実施） |
+| — | G6 workspace turn / resource turn / catalog | #73 作成済み |
+| — | ControlDeck 汎用 ai/release contract | ControlDeck #238 作成済み |
 
 ## 次にやること（1 つだけ）
 
 ```text
-G4、CI-1〜CI-6、v0.5.0、worker境界解消は完了。次はG5 M5 companion profile/validator/pack。
-  完了        26.98GB GGUF、pinned HIP runtime、Host lease/cancel、R9700 smoke実測
-  延期        H3 quality route（Host watchdog/swap/output gate失敗。条件改善まで再実行しない）
-  完了        版固定recipe、構造化projection、実Gateway text.generate、原文保持/fail-closed
-  完了        CI-4 canonical EvaluationResult、advisory rank、bounded retry、旧binary reviewer削除
-  完了        ControlDeck汎用 current-project output grant（PR #232）/ long MCP timeout（PR #233）
-  完了        media.pack / atomic asset placement / OpenCode inspect・参照更新・build・test実機E2E
-  完了        v0.4.0 exact-head bundle、extracted light/dark、installed Host light/dark、Broker cleanup
-  完了        CI-5 one text.generate / 2〜4 shot brief / existing child Job + C4 Composer再利用
-  実測        installed Host fake 3-shot構造受入。64.452秒、vision 0、lease最終0、320px overflow 0
-  注意        fakeの1秒estimateはBroker thrash-cost未満。operator stopを使用。自動handoffはCI-6で実画像実測
-  完了        v0.5.0 exact-head bundle、extracted light/dark、installed update、Host catalog PR #236
-  完了        CI-6 real Director/original/C3/evaluator/reference/fail-soft、320/390px、Broker cleanup
-  実測        FLUX 4 assets + fail-soft 1 asset。Director 15.218秒、C3 x2 37.504秒、GPU最大98%
-  完了        workerのcore import/PYTHONPATH/source同梱を除去。core validatorは独立維持
-  実測        strict 20.106秒 / protected差分0、outpaint 107.367秒 / source差分0
-  完了        v0.5.1 exact-head bundle、extracted、installed update、Host catalog PR #237
-  実測        installed strict 13.086秒 / outpaint 108.380秒、light/dark、Broker cleanup
-  次          G5 M5 companion profiles + deterministic validator + atlas/manifest pack
-  保留        video public API/runtime実装（G5/G6の安定用途を先に完了する）
-  注意        保持済みFLUX modelとC5実画像を削除しない。hosted CIは使わない。
+残っているのは resource turn の実機通し 1 件だけ。ログインが要るので利用者が実行する。
+
+  MEDIA_FORGE_E2E_PASSWORD=... \
+    /data1tb/ControlDeck-release-bundle/.venv/bin/python \
+    scripts/g6_resource_turn_e2e.py \
+      --control-deck-url http://127.0.0.1:8765 \
+      --username <name> \
+      --evidence-dir /data1tb/mediaforge-g6-evidence
+
+  検証すること
+    boot が workspace.session 1 往復で終わる
+    状況タブが記録を読める
+    Host LLM を gateway 経由で常駐させ実際に VRAM を握らせる
+    phase 列に release_ai が現れ generating より前にある
+    VRAM が生成前に返る / 実画像が 1 枚できる
+    Broker が空で残り worker プロセスが残らない
+
+  完了        G6 S1〜S6 実装 + 412 passed + installed v0.6.0
+  完了        ❸ installed で解消（GET /api/v1/jobs 500 -> 200 / 90 件）
+  完了        ❶❹ boot 2.609 -> 0.264 秒 / 要求 104 -> 14 件（実データ実測）
+  完了        ❷ VRAM 実測。LLM 常駐 +31,495,229,440 / 解放 0.356 秒 / 全量返却
+  完了        ❽ OpenCode 活動中でも解放が成立するよう修正し実測
+  完了        ❺ 到達できなかった機能に入口を追加（実ブラウザで往復確認）
+  完了        ❻ custom HF model（実 HF で解決 -> 承諾 -> 追加 -> 削除まで実測）
+  完了        ❼ domain 対応 routing と 2 段のモデル選択 + 選択根拠の表示
+  未実施      上記の resource turn 通し
+  未実施      G5 の実機 installed E2E（scripts/g5_m5_e2e.py）
+  保留        SD/SDXL/SD3 共通 adapter。実測していない adapter を available にしない
+  注意        保持済み FLUX model と C5 実画像を削除しない。hosted CI は使わない
 ```
 
 ## リリースの運用
@@ -94,6 +108,11 @@ G4、CI-1〜CI-6、v0.5.0、worker境界解消は完了。次はG5 M5 companion 
 3. ControlDeck 側の変更
      利用者が許可済み（2026-08-22）。ただし汎用 host 機能に限る（§0 B1）。
      UI 実装のために必要な host 変更は 1 つも出ていない。
+     2026-08-24 に 1 件だけ必要になった（ControlDeck #238）。
+     LLM プロセスの寿命は ControlDeck が所有し add-on には HTTP 契約しか無いため、
+     「AI ターン終了」を伝える口が公開契約に存在しなかった。足したのは
+     `POST /{addon_id}/ai/release` という汎用宣言 1 個と、`/ai/complete` への
+     `ensure_ready` 追加だけで、media 固有の語彙は入れていない。
      ただし v0.2.0 を配布するには trusted-catalog.json の pin 更新が要る
      （これは Media 固有のコードではなく、カタログの版指定なので許容範囲）。
 4. worker/core image composition boundary（2026-08-23 解決）

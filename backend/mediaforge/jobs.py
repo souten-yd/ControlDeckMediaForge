@@ -32,8 +32,9 @@ from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
 from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .profiles import profile_prompt
-from .routing import ModelRouteError, route_model
-from .store import Store, utc_now
+from .routing import ModelRoute, ModelRouteError, route
+from .host.ai import HostAIGateway, HostAIReleaseResult
+from .store import Store, UnreadableJobRecord, utc_now
 from .validators import validate_png
 
 
@@ -41,6 +42,21 @@ from .validators import validate_png
 # Add-on. Reuse its configured application logger so bounded worker telemetry
 # is visible without configuring a second handler or leaking worker stderr.
 logger = logging.getLogger("uvicorn.error")
+
+# Broker が「VRAM が足りない/待たされる」と言ったときだけ、保持した解放理由を
+# 添える。それ以外の受理失敗（policy 拒否など）に AI 常駐の話を混ぜない。
+_VRAM_WAIT_REASONS = frozenset({
+    "insufficient_vram",
+    "device_busy",
+    "timeout",
+    "yield_thrash_cost",
+    "yield_load_cost_unknown",
+    "yield_runtime_unknown",
+    "yield_minimum_uptime",
+    "yield_thrash_window",
+    "yield_drain_timeout",
+    "waiting",
+})
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 
@@ -77,6 +93,7 @@ class JobManager:
         hf_home: Path | None = None,
         image_runtime_python: Path | None = None,
         creative_evaluator: CreativeEvaluator | None = None,
+        ai_gateway: HostAIGateway | None = None,
     ):
         self.store = store
         self.worker_timeout_sec = worker_timeout_sec
@@ -88,13 +105,18 @@ class JobManager:
         self.hf_home = hf_home
         self.image_runtime_python = image_runtime_python
         self.creative_evaluator = creative_evaluator
+        self.ai_gateway = ai_gateway
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
+        # AI ターン終了の宣言結果。lease が取れなかったときに理由を添えるために持つ。
+        self._ai_release: dict[str, HostAIReleaseResult] = {}
         self._runner: asyncio.Task[None] | None = None
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._processes: dict[str, asyncio.subprocess.Process] = {}
         self._host_executions: dict[str, HostExecution] = {}
         self._host_failures: dict[str, HostApiError] = {}
         self._selected_models: dict[str, ModelDescriptor] = {}
+        # 選択の根拠。provenance と UI に「なぜこのモデルか」を出すために持つ。
+        self._routes: dict[str, ModelRoute] = {}
         self._admission_floor_bytes: dict[str, int] = {}
         self._execution_guard = asyncio.Semaphore(1)
         self._stopping = False
@@ -225,11 +247,25 @@ class JobManager:
             self._host_executions.pop(job_id, None)
             self._host_failures.pop(job_id, None)
             self._selected_models.pop(job_id, None)
+            self._routes.pop(job_id, None)
             self._job_tasks.pop(job_id, None)
             self._queue.task_done()
 
     async def _execute(self, job_id: str) -> None:
-        job = self.store.get_job(job_id)
+        try:
+            job = self.store.executable_job(job_id)
+        except UnreadableJobRecord:
+            # 表示は degraded で続けられるが、実行は fail-closed にする。
+            # 現在の契約で読めない指示を推測で実行しない。
+            self.store.update_job(
+                job_id,
+                status=JobStatus.FAILED,
+                error=ErrorDetail(
+                    code="job_record_unreadable",
+                    message="this job record cannot be read by the current contract",
+                ),
+            )
+            return
         if job.status != JobStatus.QUEUED or self.store.cancel_requested(job_id):
             return
         if job.request.operation not in {"image.generate", "image.edit", "asset.pack"}:
@@ -296,6 +332,11 @@ class JobManager:
                     return
                 self._selected_models[job_id] = selected
             if execution is not None:
+                if selected is not None:
+                    # 生成の前に AI ターンを閉じる。lease は取らずに宣言だけ行う。
+                    # 先に AI 常駐を落としてから受理を求めるので、以後の LLM 再
+                    # ロードは broker の受理を通る。二重予約も deadlock も起きない。
+                    await self._release_host_ai(job, execution, reporter)
                 admitted = await self._acquire_host_lease(job, execution, reporter)
                 if not admitted:
                     return
@@ -346,7 +387,7 @@ class JobManager:
                 )
             return None
         try:
-            selected = route_model(
+            decision = route(
                 models,
                 capability=capability,
                 policy=job.request.model_policy,
@@ -354,11 +395,33 @@ class JobManager:
                 hardware_backend="rocm",
                 # ControlDeck performs live admission against current free VRAM.
                 free_vram_bytes=2**63 - 1,
+                domain=self._job_domain(job),
             )
-            self._validate_generation_limits(job, selected)
-            return selected
+            self._validate_generation_limits(job, decision.model)
+            self._routes[job.id] = decision
+            return decision.model
         except ModelRouteError as exc:
             raise WorkerFailure(exc.code, str(exc)) from exc
+
+    def _route_summary(self, job_id: str) -> dict[str, Any]:
+        decision = self._routes[job_id]
+        return {
+            "policy": decision.policy,
+            "capability": decision.capability,
+            "domain": decision.domain,
+            "domain_matched": decision.domain_matched,
+            "candidate_count": decision.candidate_count,
+        }
+
+    @staticmethod
+    def _job_domain(job: Job) -> str:
+        plan = job.request.constraints.get("creative_plan")
+        if not isinstance(plan, dict):
+            return "general"
+        domain = plan.get("domain")
+        if isinstance(domain, dict):
+            return str(domain.get("id") or "general")
+        return "general"
 
     def _model_capability(self, job: Job) -> str:
         if self.store.job_profile_snapshot(job.id).get("reference_asset_ids"):
@@ -1045,6 +1108,53 @@ class JobManager:
             result["mask_path"] = str(mask_destination)
         return result
 
+    async def _release_host_ai(
+        self,
+        job: Job,
+        execution: HostExecution,
+        reporter: HostJobReporter | None,
+    ) -> None:
+        """Ask ControlDeck to end this add-on's AI turn before generation.
+
+        Asking once is deliberate. ControlDeck's own chat, an OpenCode session,
+        or another add-on may still be using the shared model, and retrying
+        would starve them. A refusal is recorded, not fought: Broker admission
+        still decides, and the reason only surfaces if admission then fails.
+        """
+        self._ai_release.pop(job.id, None)
+        if self.ai_gateway is None:
+            return
+        await self._update(job.id, reporter, phase="release_ai", progress=0.02)
+        try:
+            result = await self.ai_gateway.release(execution.identity)
+        except Exception:  # noqa: BLE001 - 解放要求の失敗が生成を止めてはいけない
+            logger.exception("failed to declare the AI turn finished for %s", job.id)
+            return
+        self._ai_release[job.id] = result
+        logger.info(
+            "ai turn released job=%s released=%s reason=%s freed_bytes=%d",
+            job.id,
+            result.released,
+            result.reason,
+            result.freed_bytes,
+        )
+
+    def _admission_failure(self, job_id: str, reason: str) -> ErrorDetail:
+        """Name the retained AI residency instead of an anonymous admission failure."""
+        release = self._ai_release.get(job_id)
+        if release is not None and not release.released and reason in _VRAM_WAIT_REASONS:
+            return ErrorDetail(
+                code="host_ai_residency_retained",
+                message=(
+                    "ControlDeck kept its AI model resident, so no GPU capacity was "
+                    f"admitted for generation (reason: {release.reason})"
+                )[:300],
+            )
+        return ErrorDetail(
+            code="resource_unavailable",
+            message=f"ControlDeck admission failed: {reason}"[:300],
+        )
+
     async def _acquire_host_lease(
         self,
         job: Job,
@@ -1086,7 +1196,7 @@ class JobManager:
                     reporter,
                     status=JobStatus.FAILED,
                     phase="waiting_resource",
-                    error=ErrorDetail(code="resource_unavailable", message=f"ControlDeck admission failed: {reason}"),
+                    error=self._admission_failure(job.id, reason),
                 )
                 return False
             execution.lease_id = status["lease_id"]
@@ -1450,6 +1560,10 @@ class JobManager:
                     "model_policy": job.request.model_policy,
                     "constraints": job.request.constraints,
                     "output": job.request.output.model_dump(mode="json"),
+                    # なぜこのモデルが選ばれたか。provenance にしか置かない。
+                    # 生成応答や capability discovery にモデル名を出さない規約
+                    # （AGENTS.md 7 / docs/api.md）を保つ。
+                    **({"model_route": self._route_summary(job.id)} if self._routes.get(job.id) else {}),
                     **({"resolved_profiles": snapshot.get("profiles", {})} if snapshot else {}),
                 },
                 reference_asset_hashes=reference_hashes,

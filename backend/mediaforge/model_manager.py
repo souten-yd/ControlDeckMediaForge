@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 import httpx
 
+from .custom_models import CustomModelCatalog
 from .models import (
     ModelDescriptor,
     ModelOperation,
@@ -49,6 +50,7 @@ class ModelOperationManager:
         model_in_use: Callable[[str], bool] | None = None,
         download_origin: str = "https://huggingface.co",
         transport: httpx.AsyncBaseTransport | None = None,
+        custom_models: "CustomModelCatalog | None" = None,
     ):
         self.store = store
         self.model_manifest = model_manifest
@@ -58,6 +60,7 @@ class ModelOperationManager:
         self.model_in_use = model_in_use or (lambda _model_id: False)
         self.download_origin = download_origin.rstrip("/")
         self.transport = transport
+        self.custom_models = custom_models
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._guard = asyncio.Semaphore(1)
 
@@ -425,11 +428,16 @@ class ModelOperationManager:
             await asyncio.to_thread(shutil.rmtree, root)
 
     def _registry(self) -> ModelRegistry:
+        extra_models, extra_catalog = (
+            self.custom_models.manifests() if self.custom_models is not None else ([], [])
+        )
         return ModelRegistry.load(
             self.model_manifest,
             catalog_manifest=self.catalog_manifest,
             hf_home=self.hf_home,
             model_store_root=self.model_store_root,
+            extra_models=extra_models,
+            extra_catalog=extra_catalog,
         )
 
     def _model(self, model_id: str) -> ModelDescriptor:

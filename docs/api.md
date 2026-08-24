@@ -144,7 +144,71 @@ rejects a result unless `image.outpaint.source_pixel_diff` reports zero.
 
 States are `queued`, `running`, `succeeded`, `failed`, and `canceled`. `phase` is an optional execution detail and is not a separate terminal state.
 
+`record_state` reports whether the persisted request could be read strictly by
+the running contract. It is `ok` for every normal record. A record written by a
+newer additive contract version is served as `degraded`: the job stays in the
+list with its status, assets, and error intact, and the request is returned as
+stored. Reading never fails a whole collection because one record is degraded.
+A `degraded` record is not executable; submitting it fails with
+`job_record_unreadable`.
+
 Every request is local-only. `local_only` defaults to `true`; any explicit `false` value is rejected by backend validation.
+
+## User-added models
+
+The shipped catalog stays the trusted path: pinned revision, verified digests,
+measured VRAM. `models.custom.resolve` and `models.custom.add` add an explicit
+second path for models the catalog does not carry, without loosening the first.
+
+```text
+resolve   a moving ref is pinned to an immutable commit before anything is fetched
+          every weight carries the digest the Hub reported
+          one runnable variant is selected; alternate runtimes and duplicate
+          precisions are reported as skipped bytes, not silently downloaded
+          the licence and any blocking condition are returned for display
+add       the licence must be accepted by its exact name
+          the entry lands as `experimental`, so routing never selects it
+          promotion to routable requires a real `models.evaluate` measurement
+```
+
+Added entries are parsed by the same validators as the shipped manifests. No
+repository code is executed and no remote inference path is added.
+
+## Model routing
+
+`model_policy` selects how a model is chosen: `auto`, `fast`, `balanced`,
+`quality`, `low_vram`, or `manual`. `manual` requires `model_id` and is never
+overridden by an automatic preference.
+
+Automatic policies prefer a model whose catalog `domains` include the scene
+domain of the request (`constraints.creative_plan.domain.id`), then order by the
+policy rank. If no installed model declares that domain, every candidate stays
+eligible: choosing a scene must never remove a usable model.
+
+The decision is recorded in provenance under `parameters.model_route`
+(`policy`, `capability`, `domain`, `domain_matched`, `candidate_count`).
+Generation responses and capability discovery still do not carry a selected
+model name.
+
+## Resource turn
+
+A hosted job that needs real GPU capacity runs in ordered stages so that Host AI
+residency and image generation never contend for the same VRAM:
+
+```text
+analyze       Host AI (text.generate / vision.analyze). No GPU lease is held.
+release_ai    Media Forge declares its AI turn finished to ControlDeck.
+generate      Broker lease with estimated_runtime_sec, then the image worker.
+review        The generation lease is released before any vision evaluation.
+```
+
+`release_ai` is a request, asked once. ControlDeck refuses whenever its own
+chat, an OpenCode session, or another add-on is still using the shared model,
+and Media Forge never retries — retrying would starve those consumers. A refusal
+is recorded, not fought: Broker admission still decides. Only if admission then
+fails for lack of VRAM does the job fail with `host_ai_residency_retained`,
+carrying the reason ControlDeck gave. A Host without the explicit release
+behaves exactly as before.
 
 ## Capabilities
 

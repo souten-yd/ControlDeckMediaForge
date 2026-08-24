@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import sqlite3
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
+
+from pydantic import BaseModel, ValidationError
 
 from .composer import CreativeCompositionRecord
 from .creative_batches import CreativeBatchRecord
-from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
+from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance, StoredJobRequest
 from .models.operations import (
     TERMINAL_MODEL_OPERATION_STATES,
     ModelOperation,
@@ -21,6 +24,43 @@ from .models.operations import (
 )
 from .paths import contained
 from .profiles import Profile, ProfileInput, ReferenceCollection, ReferenceCollectionInput
+
+
+logger = logging.getLogger("uvicorn.error")
+
+
+class UnreadableJobRecord(RuntimeError):
+    """現在の契約で厳格に読めない job 行を実行しようとした。"""
+
+    def __init__(self, job_id: str):
+        super().__init__(f"job {job_id} is not readable by the current contract")
+        self.job_id = job_id
+
+
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
+
+
+def readable_rows(
+    rows: Iterable[sqlite3.Row], model: type[_ModelT], column: str, *, kind: str
+) -> list[_ModelT]:
+    """行単位で読めるものだけ返す。1 行の不整合で一覧全体を落とさない。
+
+    保存済み記録の読み出しは常に fail-soft にする。厳格な境界検査は書き込み側
+    （API ingress）の責務であり、読み出しで再検証すると、契約を加法的に広げた
+    版が書いた行を古い版が読めなくなる。
+    """
+    values: list[_ModelT] = []
+    unreadable = 0
+    for row in rows:
+        try:
+            values.append(model.model_validate_json(row[column]))
+        except ValidationError:
+            unreadable += 1
+    if unreadable:
+        logger.warning(
+            "skipped %d unreadable %s record(s); the collection is still served", unreadable, kind
+        )
+    return values
 
 
 def utc_now() -> str:
@@ -37,6 +77,7 @@ class Store:
         self._lock = threading.RLock()
         self._listeners: list[Callable[[Job], None]] = []
         self._model_operation_listeners: list[Callable[[ModelOperation], None]] = []
+        self._session_listeners: list[Callable[[str], None]] = []
 
     def observe(self, listener: Callable[[Job], None]) -> None:
         """Register a job-change listener. Listener failures never reach callers."""
@@ -52,6 +93,21 @@ class Store:
 
     def observe_model_operations(self, listener: Callable[[ModelOperation], None]) -> None:
         self._model_operation_listeners.append(listener)
+
+    def observe_session(self, listener: Callable[[str], None]) -> None:
+        """Register a session-part invalidation listener.
+
+        状態の正はサーバ側の session snapshot に置く。変わった部分の名前だけを
+        通知し、workspace は必要な部分だけ読み直す。
+        """
+        self._session_listeners.append(listener)
+
+    def _notify_session(self, part: str) -> None:
+        for listener in list(self._session_listeners):
+            try:
+                listener(part)
+            except Exception:  # noqa: BLE001 - observation must not break the mutation
+                continue
 
     def _notify_model_operation(self, operation: ModelOperation) -> ModelOperation:
         for listener in list(self._model_operation_listeners):
@@ -286,6 +342,16 @@ class Store:
             raise KeyError(job_id)
         return self._job(row)
 
+    def executable_job(self, job_id: str) -> Job:
+        """実行経路用。現在の契約で読めない行は実行させない。
+
+        表示は degraded で続けられるが、実行は fail-closed にする。
+        """
+        job = self.get_job(job_id)
+        if job.record_state != "ok":
+            raise UnreadableJobRecord(job_id)
+        return job
+
     def list_jobs(self, limit: int = 100) -> list[Job]:
         with self._connect() as connection:
             rows = connection.execute("SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
@@ -387,6 +453,7 @@ class Store:
                     metadata.created_at,
                 ),
             )
+        self._notify_session("library")
         return metadata
 
     def get_asset(self, asset_id: str) -> Asset:
@@ -404,7 +471,7 @@ class Store:
     def list_assets(self, limit: int = 100) -> list[Asset]:
         with self._connect() as connection:
             rows = connection.execute("SELECT metadata_json FROM assets ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
-        return [Asset.model_validate_json(row["metadata_json"]) for row in rows]
+        return readable_rows(rows, Asset, "metadata_json", kind="asset")
 
     def list_asset_records(self, limit: int, before: str | None = None) -> list[tuple[Asset, Provenance]]:
         """Return asset+provenance pairs so the workspace never issues N+1 lookups."""
@@ -417,13 +484,21 @@ class Store:
         parameters.append(limit)
         with self._connect() as connection:
             rows = connection.execute(query, tuple(parameters)).fetchall()
-        return [
-            (
-                Asset.model_validate_json(row["metadata_json"]),
-                Provenance.model_validate_json(row["provenance_json"]),
+        pairs: list[tuple[Asset, Provenance]] = []
+        unreadable = 0
+        for row in rows:
+            try:
+                pairs.append((
+                    Asset.model_validate_json(row["metadata_json"]),
+                    Provenance.model_validate_json(row["provenance_json"]),
+                ))
+            except ValidationError:
+                unreadable += 1
+        if unreadable:
+            logger.warning(
+                "skipped %d unreadable asset record(s); the library page is still served", unreadable
             )
-            for row in rows
-        ]
+        return pairs
 
     def get_preferences(self, subject: str) -> dict[str, Any]:
         with self._connect() as connection:
@@ -441,6 +516,7 @@ class Store:
                    updated_at = excluded.updated_at""",
                 (subject, payload, utc_now()),
             )
+        self._notify_session("preferences")
         return values
 
     def create_model_operation(
@@ -570,6 +646,7 @@ class Store:
                 "INSERT INTO reference_collections (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (result.id, result.model_dump_json(), now, now),
             )
+        self._notify_session("reference_collections")
         return result
 
     def get_reference_collection(self, collection_id: str) -> ReferenceCollection:
@@ -586,7 +663,7 @@ class Store:
             rows = connection.execute(
                 "SELECT value_json FROM reference_collections ORDER BY created_at DESC"
             ).fetchall()
-        return [ReferenceCollection.model_validate_json(row["value_json"]) for row in rows]
+        return readable_rows(rows, ReferenceCollection, "value_json", kind="reference collection")
 
     def delete_reference_collection(self, collection_id: str) -> None:
         if any(item.reference_collection_id == collection_id for item in self.list_profiles()):
@@ -595,6 +672,7 @@ class Store:
             cursor = connection.execute("DELETE FROM reference_collections WHERE id = ?", (collection_id,))
             if cursor.rowcount != 1:
                 raise KeyError(collection_id)
+        self._notify_session("reference_collections")
 
     def create_profile(self, value: ProfileInput) -> Profile:
         if value.reference_collection_id is not None:
@@ -611,6 +689,7 @@ class Store:
                 "INSERT INTO profiles (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (result.id, result.model_dump_json(), now, now),
             )
+        self._notify_session("profiles")
         return result
 
     def get_profile(self, profile_id: str) -> Profile:
@@ -623,13 +702,14 @@ class Store:
     def list_profiles(self) -> list[Profile]:
         with self._connect() as connection:
             rows = connection.execute("SELECT value_json FROM profiles ORDER BY created_at DESC").fetchall()
-        return [Profile.model_validate_json(row["value_json"]) for row in rows]
+        return readable_rows(rows, Profile, "value_json", kind="profile")
 
     def delete_profile(self, profile_id: str) -> None:
         with self._lock, self._connect() as connection:
             cursor = connection.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
             if cursor.rowcount != 1:
                 raise KeyError(profile_id)
+        self._notify_session("profiles")
 
     def create_creative_batch(self, value: CreativeBatchRecord) -> CreativeBatchRecord:
         with self._lock, self._connect() as connection:
@@ -637,6 +717,7 @@ class Store:
                 "INSERT INTO creative_batches (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (value.id, value.model_dump_json(), value.created_at, value.updated_at),
             )
+        self._notify_session("creative_batches")
         return value
 
     def update_creative_batch(self, value: CreativeBatchRecord) -> CreativeBatchRecord:
@@ -647,6 +728,7 @@ class Store:
             )
             if cursor.rowcount != 1:
                 raise KeyError(value.id)
+        self._notify_session("creative_batches")
         return value
 
     def get_creative_batch(self, batch_id: str) -> CreativeBatchRecord:
@@ -664,7 +746,7 @@ class Store:
                 "SELECT value_json FROM creative_batches ORDER BY created_at DESC LIMIT ?",
                 (max(1, min(100, limit)),),
             ).fetchall()
-        return [CreativeBatchRecord.model_validate_json(row["value_json"]) for row in rows]
+        return readable_rows(rows, CreativeBatchRecord, "value_json", kind="creative batch")
 
     def create_creative_composition(
         self, value: CreativeCompositionRecord
@@ -674,6 +756,7 @@ class Store:
                 "INSERT INTO creative_compositions (id, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
                 (value.id, value.model_dump_json(), value.created_at, value.updated_at),
             )
+        self._notify_session("creative_compositions")
         return value
 
     def update_creative_composition(
@@ -686,6 +769,7 @@ class Store:
             )
             if cursor.rowcount != 1:
                 raise KeyError(value.id)
+        self._notify_session("creative_compositions")
         return value
 
     def get_creative_composition(self, composition_id: str) -> CreativeCompositionRecord:
@@ -703,7 +787,7 @@ class Store:
                 "SELECT value_json FROM creative_compositions ORDER BY created_at DESC LIMIT ?",
                 (max(1, min(100, limit)),),
             ).fetchall()
-        return [CreativeCompositionRecord.model_validate_json(row["value_json"]) for row in rows]
+        return readable_rows(rows, CreativeCompositionRecord, "value_json", kind="creative composition")
 
     def _asset_row(self, asset_id: str) -> sqlite3.Row:
         with self._connect() as connection:
@@ -715,17 +799,42 @@ class Store:
     @staticmethod
     def _job(row: sqlite3.Row) -> Job:
         error = ErrorDetail.model_validate_json(row["error_json"]) if row["error_json"] else None
+        request, record_state = Store._job_request(row["request_json"], job_id=str(row["id"]))
         return Job(
             id=row["id"],
             status=row["status"],
             phase=row["phase"],
             progress=row["progress"],
-            request=JobRequest.model_validate_json(row["request_json"]),
+            request=request,
             asset_ids=json.loads(row["asset_ids_json"]),
             error=error,
+            record_state=record_state,
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    @staticmethod
+    def _job_request(request_json: str, *, job_id: str) -> tuple[JobRequest, str]:
+        """保存済み request を読む。厳格版で読めなければ寛容版へ落とす。
+
+        読み出しで契約境界を再検証すると、加法的に広げた版が書いた行を
+        古い版が読めず、1 行の不整合が一覧全体を落とす。行単位で degraded
+        にして残し、コレクションごと失わせない。
+        """
+        try:
+            return JobRequest.model_validate_json(request_json), "ok"
+        except ValidationError as exc:
+            logger.warning(
+                "job %s request is not readable by the current contract; "
+                "serving it as degraded (%d validation errors)",
+                job_id,
+                exc.error_count(),
+            )
+        try:
+            return StoredJobRequest.model_validate_json(request_json), "degraded"
+        except ValidationError:
+            logger.exception("job %s request is unreadable even leniently", job_id)
+            return StoredJobRequest(), "degraded"
 
     @staticmethod
     def _model_operation(row: sqlite3.Row) -> ModelOperation:

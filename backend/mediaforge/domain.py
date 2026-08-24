@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator
 
 
 class JobStatus(StrEnum):
@@ -63,6 +63,47 @@ class JobRequest(BaseModel):
         return self
 
 
+# 保存済み行の読み出しは寛容にする。厳格な境界検査は API ingress（JobRequest）
+# だけで行う。読み出しでも再検証すると、公開契約を加法的に広げた版が書いた行を
+# 旧版が読めなくなり、1 行の不整合が一覧全体を 500 にする。実機で
+# inputs 21 件 / output.format="zip" の行が jobs.list 全体を落としていた。
+class StoredOutputOptions(OutputOptions):
+    model_config = ConfigDict(extra="allow")
+    format: str = "png"
+    count: int = 1
+
+
+class StoredQAOptions(QAOptions):
+    model_config = ConfigDict(extra="allow")
+    max_regeneration_attempts: int = 0
+
+
+class StoredJobRequest(JobRequest):
+    """保存済み job 行の寛容な読み出し表現。
+
+    JobRequest の部分型なので既存の型注釈と consumer をそのまま使える。
+    値の意味は変えず、受理範囲だけを広げる。実行経路は StoredJobRequest を
+    受け取らない（Store.get_job が strict を要求する）。
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    operation: str = "image.generate"
+    intent: str = ""
+    inputs: list[AssetInput] = Field(default_factory=list)
+    profile: str | None = None
+    model_policy: str = "auto"
+    model_id: str | None = None
+    output: StoredOutputOptions = Field(default_factory=StoredOutputOptions)
+    qa: StoredQAOptions = Field(default_factory=StoredQAOptions)
+    local_only: bool = True
+
+    @model_validator(mode="after")
+    def validate_policy(self) -> "StoredJobRequest":
+        # 保存済みの行を再検証しない。ingress で一度検証済みである。
+        return self
+
+
 class ErrorDetail(BaseModel):
     code: str
     message: str
@@ -73,9 +114,15 @@ class Job(BaseModel):
     status: JobStatus
     phase: str | None = None
     progress: float = Field(ge=0, le=1)
-    request: JobRequest
+    # SerializeAsAny: StoredJobRequest で読んだ行を宣言型で切り詰めない。
+    # 未知フィールドを黙って落とすと、新しい版が書いた記録を古い版が
+    # 静かに破壊してしまう。
+    request: SerializeAsAny[JobRequest]
     asset_ids: list[str] = Field(default_factory=list)
     error: ErrorDetail | None = None
+    # 現在の版で request を厳格に読めなかった行は degraded として残す。
+    # 黙って一覧から消さない。
+    record_state: Literal["ok", "degraded"] = "ok"
     created_at: str
     updated_at: str
 
