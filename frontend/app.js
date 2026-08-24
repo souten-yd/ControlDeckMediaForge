@@ -345,6 +345,9 @@ async function standaloneCall(method, params) {
     return json("/workspace-api/models/operations", {method: "POST", body: JSON.stringify(
       {action: "clear"})});
   }
+  if (method === "jobs.clear") {
+    return json("/workspace-api/jobs/clear", {method: "POST"});
+  }
   if (method === "assets.delete") {
     return json("/workspace-api/assets/delete", {method: "POST", body: JSON.stringify(
       {asset_ids: params.asset_ids})});
@@ -3207,6 +3210,8 @@ function renderActivity() {
   const empty = byId("activity-empty");
   empty.textContent = "まだ実行した記録はありません。";
   empty.hidden = items.length + batchRows.length > 0;
+  // 消せるものが無いときに押せるボタンを出さない。
+  byId("activity-clear").hidden = finished.length === 0;
   updateActivityBadge(running.length + batches.filter((batch) => batch.state === "running").length);
 }
 
@@ -4439,6 +4444,18 @@ catalogClear.addEventListener("click", () => {
   void searchCatalog();
 });
 syncCatalogClear();
+byId("activity-clear").addEventListener("click", async () => {
+  // 走っているものは消えない。消えるのは終わった記録だけで、資産の来歴は
+  // 資産側に残る（一覧から下げるだけで、記録そのものは壊さない）。
+  const accepted = await confirmModelAction({
+    title: "履歴を消す",
+    detail: "終わった実行を一覧から消します。作った素材とその来歴は残ります。",
+    confirmLabel: "消す",
+  });
+  if (!accepted) return;
+  try { await call("jobs.clear", {}); } catch { return; }
+  await loadActivity();
+});
 byId("model-downloads-clear").addEventListener("click", () => void clearModelDownloadHistory());
 // ダウンロード一覧は行ごと作り直す。中止と再試行は委譲で受ける。
 byId("model-downloads").addEventListener("click", (event) => {

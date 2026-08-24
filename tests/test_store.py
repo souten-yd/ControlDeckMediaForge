@@ -252,3 +252,37 @@ def test_clear_finished_model_operations_keeps_the_running_ones(tmp_path: Path):
 
     assert store.clear_finished_model_operations() == 2
     assert [item.id for item in store.list_model_operations()] == [running.id]
+
+
+def test_clearing_finished_jobs_keeps_the_running_ones_and_the_provenance(tmp_path: Path):
+    """一覧から下げるだけで、記録は壊さない。資産は job を外部キーで参照して
+    いるので、行を消すと「どう作られたか」への道が切れる。"""
+    store = Store(tmp_path / "state")
+    store.initialize()
+    done = store.create_job(JobRequest(operation="image.generate", intent="finished"))
+    running = store.create_job(JobRequest(operation="image.generate", intent="still going"))
+    store.update_job(done.id, status=JobStatus.SUCCEEDED)
+    store.update_job(running.id, status=JobStatus.RUNNING, phase="generating")
+
+    assert store.clear_finished_jobs() == 1
+    assert [item.id for item in store.list_jobs()] == [running.id]
+    # 消したのは一覧からだけ。job そのものは引ける。
+    assert store.get_job(done.id).status == JobStatus.SUCCEEDED
+    assert {item.id for item in store.list_jobs(include_cleared=True)} == {done.id, running.id}
+    # 2 度目は何も残っていない
+    assert store.clear_finished_jobs() == 0
+
+
+def test_a_cleared_job_still_backs_its_assets(tmp_path: Path):
+    """来歴は資産側にあるが、job への外部キーは生きている必要がある。"""
+    store = Store(tmp_path / "state")
+    store.initialize()
+    asset_id = "asset_" + "d" * 32
+    _register_test_asset(store, tmp_path, asset_id)
+    job_id = store.get_asset(asset_id).job_id
+    store.update_job(job_id, status=JobStatus.SUCCEEDED)
+
+    store.clear_finished_jobs()
+
+    assert store.get_asset(asset_id).job_id == job_id
+    assert store.get_job(job_id).id == job_id
