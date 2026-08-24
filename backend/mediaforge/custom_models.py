@@ -133,6 +133,8 @@ class CustomModelResolution:
     capabilities: tuple[str, ...]
     max_download_bytes: int
     warnings: tuple[str, ...] = field(default=())
+    # 手元のフォルダから取り込んだときだけ入る。配布元から落とす経路では None。
+    local_root: Path | None = field(default=None)
 
     @property
     def within_download_cap(self) -> bool:
@@ -196,6 +198,21 @@ SEARCH_SORTS = ("downloads", "likes", "lastModified", "createdAt")
 # 画像生成として扱える組み合わせだけを既定で探す。使えないものを既定で出さない。
 SEARCH_PIPELINES = ("text-to-image", "image-to-image", "inpainting")
 
+# 探す人が実際に決めているのは「どんな絵を作るモデルか」であって、
+# text-to-image か image-to-image かではない。後者は配布元の技術的な分類で、
+# SD 系はほぼ全部が text-to-image なので絞り込みの役に立たない。
+# 配布元のタグで、選ぶ基準そのもので絞れるようにする。
+SEARCH_STYLES: dict[str, str] = {
+    "any": "",
+    "anime": "anime",
+    "art": "art",
+    "realistic": "realistic",
+    "pixel-art": "pixel-art",
+    "3d": "3d",
+    "character": "character",
+    "landscape": "landscape",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class CatalogCandidate:
@@ -209,6 +226,8 @@ class CatalogCandidate:
     gated: bool
     license: str
     tags: tuple[str, ...]
+    weight_bytes: int = 0
+    weight_precision: str = ""
 
     def document(self) -> dict[str, Any]:
         return {
@@ -222,6 +241,8 @@ class CatalogCandidate:
             "gated": self.gated,
             "license": self.license,
             "tags": list(self.tags),
+            "weight_bytes": self.weight_bytes,
+            "weight_precision": self.weight_precision,
         }
 
 
@@ -241,12 +262,15 @@ class CatalogSearchMixin:
         *,
         sort: str = "downloads",
         pipeline_tag: str = "text-to-image",
+        style: str = "any",
         limit: int = SEARCH_LIMIT,
     ) -> list[CatalogCandidate]:
         if sort not in SEARCH_SORTS:
             raise CustomModelError("custom_model_sort_invalid", "並び順が正しくありません")
         if pipeline_tag not in SEARCH_PIPELINES:
             raise CustomModelError("custom_model_pipeline_invalid", "用途が正しくありません")
+        if style not in SEARCH_STYLES:
+            raise CustomModelError("custom_model_style_invalid", "画風の指定が正しくありません")
         if not isinstance(query, str) or len(query) > 200:
             raise CustomModelError("custom_model_query_invalid", "検索語が長すぎます")
         params: dict[str, Any] = {
@@ -256,7 +280,15 @@ class CatalogSearchMixin:
             "sort": sort,
             "direction": -1,
             "limit": max(1, min(SEARCH_LIMIT, limit)),
+            # expand を使うと応答は要求した項目だけになる。今読んでいる列を
+            # 全部並べる必要があり、足すのを忘れると静かに空欄になる。
+            "expand[]": [
+                "author", "downloads", "likes", "lastModified", "pipeline_tag",
+                "library_name", "gated", "tags", "safetensors", "gguf",
+            ],
         }
+        if SEARCH_STYLES[style]:
+            params["filter"] = SEARCH_STYLES[style]
         if query.strip():
             params["search"] = query.strip()
         try:
@@ -289,6 +321,9 @@ class CatalogSearchMixin:
             if _REPO_ID.fullmatch(repo_id) is None:
                 continue
             tags = item.get("tags") if isinstance(item.get("tags"), list) else []
+            weight_bytes, precision = _weights_from_safetensors(item.get("safetensors"))
+            if not weight_bytes:
+                weight_bytes, precision = _weights_from_gguf(item.get("gguf"))
             found.append(CatalogCandidate(
                 repo_id=repo_id,
                 author=str(item.get("author") or repo_id.split("/", 1)[0]),
@@ -300,8 +335,118 @@ class CatalogSearchMixin:
                 gated=item.get("gated") not in (False, None),
                 license=_license_from_tags(tags),
                 tags=tuple(str(tag) for tag in tags[:24] if isinstance(tag, str)),
+                weight_bytes=weight_bytes,
+                weight_precision=precision,
             ))
         return found
+
+
+# 重みの大きさは、押す前に一番知りたい 1 行である。落ちてくる量と、載るか
+# どうかが、ほぼこれで決まる。検索の一覧 API は容量を返さないが、safetensors
+# の要素数と型は返すので、そこから重み自体の大きさを出す。
+# 実配布物にはこれ以外（設定、tokenizer、複数版）も含まれるので、下限として扱う。
+_DTYPE_BYTES = {
+    "F64": 8, "I64": 8, "U64": 8,
+    "F32": 4, "I32": 4, "U32": 4,
+    "BF16": 2, "F16": 2, "I16": 2, "U16": 2,
+    "F8_E4M3": 1, "F8_E5M2": 1, "I8": 1, "U8": 1, "BOOL": 1,
+}
+
+
+def _weights_from_safetensors(value: Any) -> tuple[int, str]:
+    if not isinstance(value, dict):
+        return 0, ""
+    parameters = value.get("parameters")
+    if not isinstance(parameters, dict):
+        return 0, ""
+    total = 0
+    dominant = ("", 0)
+    for dtype, count in parameters.items():
+        if not isinstance(dtype, str) or not isinstance(count, int) or count < 0:
+            continue
+        width = _DTYPE_BYTES.get(dtype.upper())
+        if width is None:
+            # 知らない型を 0 バイトとして黙って足すと、総量が過少に出る。
+            return 0, ""
+        total += count * width
+        if count > dominant[1]:
+            dominant = (dtype.upper(), count)
+    return total, dominant[0]
+
+
+def _weights_from_gguf(value: Any) -> tuple[int, str]:
+    """GGUF 配布は safetensors を持たない。配布元が返す実バイト数を使う。
+
+    量子化の版を全部足した数なので、実際に落とす 1 本より必ず大きい。
+    見出しでそう言い分けられるよう、出所を区別して返す。
+    """
+    if not isinstance(value, dict):
+        return 0, ""
+    total = value.get("totalFileSize")
+    if not isinstance(total, int) or total <= 0:
+        return 0, ""
+    return total, "GGUF"
+
+
+# ── 手元にある重みの取り込み ──────────────────────────────────────────────
+#
+# 配布元から落とすのが唯一の経路だと、既に手元にある重みが使えない。実際に
+# あるのは、別の道具で落とした、別の機械から持ってきた、配布元がもう無い、
+# といった場合である。取り込み自体は同じ規則を通す: どのコードも実行せず、
+# 重みの digest を自分で計算し、experimental として入れる。
+#
+# 配布元 API が無いので digest は「配布元がそう言った」ではなく「この機械で
+# こう読めた」になる。意味が違うので、その旨を warning に残す。
+
+_LOCAL_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+# model_index.json の _class_name から adapter を決める。推測はしない。
+# 名前が分からないものは取り込めても生成には使えない、として入れる。
+_PIPELINE_ADAPTERS = {
+    "StableDiffusionXLPipeline": "diffusers.sdxl",
+    "StableDiffusionXLImg2ImgPipeline": "diffusers.sdxl",
+    "StableDiffusionPipeline": "diffusers.sdxl",
+    "StableDiffusionImg2ImgPipeline": "diffusers.sdxl",
+}
+
+
+def _scan_local_directory(root: Path, *, limit_bytes: int) -> tuple[list[ResolvedWeight], list[str], int]:
+    """Walk one model directory, hashing weights and listing config files."""
+    weights: list[ResolvedWeight] = []
+    required: list[str] = []
+    total = 0
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise CustomModelError(
+                "custom_model_path_invalid", f"{path.name} は symlink です。実体だけを取り込みます"
+            )
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        name = path.name.lower()
+        if name.endswith(WEIGHT_SUFFIXES):
+            size = path.stat().st_size
+            total += size
+            if total > limit_bytes:
+                raise CustomModelError(
+                    "custom_model_too_large", "このフォルダは取り込み上限を超えています"
+                )
+            if len(weights) >= MAX_WEIGHT_FILES:
+                raise CustomModelError("custom_model_too_many_files", "ファイル数が多すぎます")
+            weights.append(ResolvedWeight(
+                path=relative, size_bytes=size, sha256=_sha256_file(path)
+            ))
+        elif name.endswith(REQUIRED_FILE_SUFFIXES) and len(required) < MAX_REQUIRED_FILES:
+            required.append(relative)
+    return weights, sorted(required), total
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 class CustomModelCatalog(CatalogSearchMixin):
@@ -459,6 +604,97 @@ class CustomModelCatalog(CatalogSearchMixin):
             capabilities=capabilities,
             max_download_bytes=self.max_download_bytes,
             warnings=warnings,
+        )
+
+    # ── 手元のフォルダ ──────────────────────────────────────────────────
+
+    def resolve_local(self, directory: str, *, name: str) -> CustomModelResolution:
+        """Describe a model that is already on this machine, without any network.
+
+        The verification story changes and the caller must be told: a digest
+        here means "this is what this machine read", not "this is what the
+        publisher published". Everything else stays the same — no repository
+        code runs, and the entry lands as experimental.
+        """
+        if not _LOCAL_MODEL_ID.fullmatch(name or ""):
+            raise CustomModelError(
+                "custom_model_name_invalid",
+                "名前は英数字と . _ - だけ、64 文字までにしてください",
+            )
+        try:
+            root = Path(directory).expanduser()
+        except (OSError, ValueError) as exc:
+            raise CustomModelError("custom_model_path_invalid", "場所を読み取れませんでした") from exc
+        if not root.is_absolute():
+            raise CustomModelError("custom_model_path_invalid", "場所は絶対パスで指定してください")
+        if root.is_symlink():
+            raise CustomModelError("custom_model_path_invalid", "symlink ではなく実体を指定してください")
+        try:
+            root = root.resolve(strict=True)
+        except OSError as exc:
+            raise CustomModelError("custom_model_path_missing", "その場所が見つかりません") from exc
+        if not root.is_dir():
+            raise CustomModelError("custom_model_path_invalid", "フォルダを指定してください")
+
+        index = root / "model_index.json"
+        if not index.is_file():
+            raise CustomModelError(
+                "custom_model_not_diffusers",
+                "model_index.json がありません。Diffusers 形式のフォルダを指定してください",
+            )
+        if index.stat().st_size > MAX_METADATA_BYTES:
+            raise CustomModelError("custom_model_metadata_invalid", "model_index.json が大きすぎます")
+        try:
+            document = json.loads(index.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise CustomModelError(
+                "custom_model_metadata_invalid", "model_index.json を読み取れませんでした"
+            ) from exc
+        pipeline = str((document or {}).get("_class_name") or "") if isinstance(document, dict) else ""
+
+        weights, required, total_bytes = _scan_local_directory(
+            root, limit_bytes=self.max_download_bytes
+        )
+        if not weights:
+            raise CustomModelError(
+                "custom_model_no_weights", "このフォルダに取り込める重みがありません"
+            )
+
+        adapter = _PIPELINE_ADAPTERS.get(pipeline, UNSUPPORTED_ADAPTER)
+        warnings = (
+            "digest はこの機械で読み取った値です。配布元が公表した値との照合はしていません。",
+        )
+        if adapter == UNSUPPORTED_ADAPTER:
+            warnings = warnings + (
+                f"pipeline {pipeline or '不明'} に対応する実行アダプタがありません。"
+                "取り込みと検証はできますが、生成には使えません。",
+            )
+        capabilities = () if adapter == UNSUPPORTED_ADAPTER else ("image.text_to_image",)
+
+        # revision は「この中身」を指す値にする。フォルダは後から書き換わりうるので、
+        # 読み取った時点の内容を identity にしておかないと来歴が嘘になる。
+        revision = hashlib.sha256(
+            "\n".join(f"{item.path}:{item.sha256}" for item in weights).encode("utf-8")
+        ).hexdigest()
+        return CustomModelResolution(
+            repo_id=f"local/{name}",
+            revision=revision,
+            requested_revision="local",
+            license="unknown",
+            license_notice=(
+                "手元のフォルダから取り込みます。配布元のライセンスは利用者が確認してください。"
+            ),
+            gated=False,
+            pipeline_tag="text-to-image",
+            library_name="diffusers",
+            weights=tuple(sorted(weights, key=lambda item: item.path)),
+            required_files=tuple(required),
+            total_bytes=total_bytes,
+            runtime_adapter=adapter,
+            capabilities=capabilities,
+            max_download_bytes=self.max_download_bytes,
+            warnings=warnings,
+            local_root=root,
         )
 
     # ── persistence ────────────────────────────────────────────────────────

@@ -52,9 +52,13 @@ def _integer(value: object, label: str) -> int:
 # 吸収している。新しい checkpoint が既知の系統なら、ここへ足す必要はない。
 # 名前で引くのは import 時に固めたクラスではなく module 属性にする。
 # 固めると、試験が差し替えた偽 adapter が使われなくなる。
+# 鍵はカタログが宣言する runtime_adapter そのものである。別名を置くと、
+# 宣言はできるが動かないモデルが一覧に並ぶ。実際そうなっていた:
+# "diffusers.stable-diffusion" という誰も宣言しない名前で実装し、
+# カタログ側の "diffusers.sdxl" は実装の無いまま出ていた。
 ADAPTERS = {
     "diffusers.flux2-klein": "DiffusersFlux2KleinAdapter",
-    "diffusers.stable-diffusion": "DiffusersStableDiffusionAdapter",
+    "diffusers.sdxl": "DiffusersStableDiffusionAdapter",
 }
 
 
@@ -96,7 +100,12 @@ class ImageWorker:
         if not isinstance(model_id, str) or not model_id:
             raise ValueError("worker model ID is invalid")
         runtime_options = model.get("runtime_options", {})
-        if not isinstance(runtime_options, dict) or set(runtime_options) - {"device_mode", "disable_mmap"}:
+        # negative_prompt と guidance_scale は SD 系にだけ効く。FLUX.2 Klein は
+        # どちらも取らないので、要求ではなくカタログの側に置く。系統ごとの既定を
+        # 利用者やエージェントに書かせない、という routing の方針と同じ扱いである。
+        if not isinstance(runtime_options, dict) or set(runtime_options) - {
+            "device_mode", "disable_mmap", "negative_prompt", "guidance_scale",
+        }:
             raise ValueError("worker model runtime options are invalid")
         device_mode = self.device_mode_override or runtime_options.get("device_mode", "full_device")
         disable_mmap = (
@@ -108,6 +117,17 @@ class ImageWorker:
             disable_mmap, bool
         ):
             raise ValueError("worker model runtime options are invalid")
+        family_options: dict[str, Any] = {}
+        if "negative_prompt" in runtime_options:
+            value = runtime_options["negative_prompt"]
+            if not isinstance(value, str) or len(value) > 2000:
+                raise ValueError("worker model runtime options are invalid")
+            family_options["negative_prompt"] = value
+        if "guidance_scale" in runtime_options:
+            value = runtime_options["guidance_scale"]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < value <= 30:
+                raise ValueError("worker model runtime options are invalid")
+            family_options["guidance_scale"] = float(value)
         constraints = request.get("constraints", {})
         output = request.get("output", {})
         if not isinstance(constraints, dict) or not isinstance(output, dict):
@@ -183,6 +203,7 @@ class ImageWorker:
                 model_path,
                 device_mode=device_mode,
                 disable_mmap=disable_mmap,
+                **family_options,
             )
             self.adapters = {model_id: adapter}
         outputs = []

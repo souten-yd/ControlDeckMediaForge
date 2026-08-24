@@ -71,6 +71,9 @@ class ModelDescriptor:
     measurement_confidence: str = "measured"
     device_mode: str = "full_device"
     disable_mmap: bool = False
+    # SD 系だけが取る。FLUX.2 Klein では常に既定のままになる。
+    negative_prompt: str = ""
+    guidance_scale: float | None = None
     max_width: int = 2048
     max_height: int = 2048
     max_pixels: int = 2048 * 2048
@@ -205,7 +208,21 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     if confidence not in {"low", "measured"}:
         raise ModelRegistryError("model registry measurement_confidence is invalid")
     runtime_options = value.get("runtime_options", {})
-    if not isinstance(runtime_options, dict) or set(runtime_options) - {"device_mode", "disable_mmap"}:
+    # negative_prompt と guidance_scale は SD 系にだけ効く。FLUX.2 Klein は
+    # どちらも取らない。系統ごとの既定なので、要求ではなくカタログに置く。
+    if not isinstance(runtime_options, dict) or set(runtime_options) - {
+        "device_mode", "disable_mmap", "negative_prompt", "guidance_scale",
+    }:
+        raise ModelRegistryError("model registry runtime_options are invalid")
+    negative_prompt = runtime_options.get("negative_prompt", "")
+    if not isinstance(negative_prompt, str) or len(negative_prompt) > 2000:
+        raise ModelRegistryError("model registry runtime_options are invalid")
+    guidance_scale = runtime_options.get("guidance_scale")
+    if guidance_scale is not None and (
+        isinstance(guidance_scale, bool)
+        or not isinstance(guidance_scale, (int, float))
+        or not 0 < guidance_scale <= 30
+    ):
         raise ModelRegistryError("model registry runtime_options are invalid")
     generation_limits = value.get("generation_limits", {})
     if not isinstance(generation_limits, dict) or set(generation_limits) - {
@@ -242,6 +259,8 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         measurement_confidence=confidence,
         device_mode=device_mode,
         disable_mmap=disable_mmap,
+        negative_prompt=negative_prompt,
+        guidance_scale=float(guidance_scale) if guidance_scale is not None else None,
         **limits,
         **measurement_values,
     )

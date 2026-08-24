@@ -134,6 +134,14 @@ def _write_environment_status(feature_data: Path, gpu: dict[str, object]) -> Non
                     f"torch {gpu.get('torch_version', 'unknown')} · HIP {gpu.get('hip_version', 'unknown')}"
                 ),
             },
+            {
+                "id": "gpu_memory",
+                "label": "GPU memory",
+                "state": "ok",
+                # 実行可否の判定に要る数値。文章の中に埋めると読み取れない。
+                "total_bytes": int(gpu.get("total_memory_bytes") or 0),
+                "detail": f"{gpu.get('total_memory_bytes', 0)} bytes total",
+            },
             {"id": "model_library", "label": "Pinned model library", "state": "ok"},
             {"id": "disk", "label": "Free disk space", "state": "ok", "detail": f"{available} bytes available"},
         ],

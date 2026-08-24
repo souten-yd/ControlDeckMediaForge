@@ -102,7 +102,7 @@ from .reference_intelligence import (
     ReferenceIntelligenceError,
     analysis_summary,
 )
-from .store import Store, utc_now
+from .store import AssetInUse, Store, utc_now
 from .thumbnails import ThumbnailError
 from .validators import validate_png
 
@@ -624,6 +624,23 @@ def create_app(
             "source": {"grant_id": read_id, "name": metadata["name"], "size": len(content)},
             "output": committed,
         }
+
+    def device_vram_bytes() -> int:
+        """How much VRAM this machine actually has, or 0 when unknown.
+
+        Needed to say whether a model can run here at all. Reported as 0 rather
+        than guessed: claiming a model fits when we do not know is worse than
+        saying we do not know.
+        """
+        environment = setup_snapshot()
+        if not isinstance(environment, dict):
+            return 0
+        for item in environment.get("setup", []):
+            if isinstance(item, dict) and item.get("id") == "gpu_memory":
+                total = item.get("total_bytes")
+                if isinstance(total, int) and not isinstance(total, bool) and total > 0:
+                    return total
+        return 0
 
     def size_envelope() -> dict[str, Any]:
         """Derive the size bounds the UI may offer from installed models.
@@ -1725,6 +1742,7 @@ def create_app(
                 **await capability_document(identity),
                 "envelope": envelope,
                 "presets": size_presets(envelope),
+                "device": {"vram_bytes": device_vram_bytes()},
             }
 
         def preferences_part() -> dict[str, Any]:
@@ -1993,6 +2011,7 @@ def create_app(
                             str(params.get("query", "")),
                             sort=str(params.get("sort", "downloads")),
                             pipeline_tag=str(params.get("pipeline_tag", "text-to-image")),
+                            style=str(params.get("style", "any")),
                             limit=int(params.get("limit", 30) or 30),
                         )
                         installed = {
@@ -2055,6 +2074,8 @@ def create_app(
                         result = {
                             "items": [item.model_dump(mode="json") for item in store.list_model_operations()]
                         }
+                    elif method == "models.operations.clear":
+                        result = {"removed": store.clear_finished_model_operations()}
                     elif method == "models.operations.cancel":
                         if model_operations is None:
                             raise ModelOperationError("model_not_found", "model catalog is unavailable")
@@ -2194,6 +2215,7 @@ def create_app(
                             **await capability_document(identity),
                             "envelope": envelope,
                             "presets": size_presets(envelope),
+                            "device": {"vram_bytes": device_vram_bytes()},
                         }
                     elif method == "library.list":
                         kind = params.get("kind", "all")
@@ -2211,6 +2233,32 @@ def create_app(
                             # 既定で同梱する。呼び出し側が明示的に切れる。
                             thumbnail=None if params.get("thumbnails") is False else grid_thumbnail,
                         )
+                    elif method == "assets.delete":
+                        # 複数選択できるので、1 件ずつの結果を返す。1 件の失敗で
+                        # 全部を消さなかったのか、どれが残ったのかを言えるようにする。
+                        asset_ids = params.get("asset_ids")
+                        if not isinstance(asset_ids, list) or not asset_ids or len(asset_ids) > 100:
+                            raise ValueError("asset_ids must be a list of 1..100 asset IDs")
+                        outcomes = []
+                        for value in asset_ids:
+                            asset_id = str(value)
+                            try:
+                                store.delete_asset(asset_id)
+                                outcomes.append({"asset_id": asset_id, "deleted": True})
+                            except AssetInUse as exc:
+                                outcomes.append({
+                                    "asset_id": asset_id, "deleted": False,
+                                    "code": exc.code, "message": str(exc)[:200],
+                                })
+                            except KeyError:
+                                outcomes.append({
+                                    "asset_id": asset_id, "deleted": False,
+                                    "code": "asset_not_found", "message": "already gone",
+                                })
+                        result = {
+                            "items": outcomes,
+                            "deleted_count": sum(1 for item in outcomes if item["deleted"]),
+                        }
                     elif method == "assets.export":
                         # 設計 §F4 保存A。実装済みの host files bridge を UI から
                         # 使えるようにする。ここまで導線が 1 つも無かった。
@@ -2348,6 +2396,106 @@ def create_app(
                 root = upload.get("root")
                 if isinstance(root, Path) and root.exists():
                     shutil.rmtree(root)
+
+    @app.post("/workspace-api/assets/delete", include_in_schema=False)
+    async def standalone_delete_assets(payload: dict[str, Any]) -> dict[str, Any]:
+        """Same-origin workspace bridge for standalone mode; not a public API."""
+        asset_ids = payload.get("asset_ids")
+        if not isinstance(asset_ids, list) or not asset_ids or len(asset_ids) > 100:
+            raise HTTPException(status_code=422, detail={"code": "invalid_asset_ids"})
+        outcomes = []
+        for value in asset_ids:
+            asset_id = str(value)
+            try:
+                store.delete_asset(asset_id)
+                outcomes.append({"asset_id": asset_id, "deleted": True})
+            except AssetInUse as exc:
+                outcomes.append({
+                    "asset_id": asset_id, "deleted": False,
+                    "code": exc.code, "message": str(exc)[:200],
+                })
+            except KeyError:
+                outcomes.append({
+                    "asset_id": asset_id, "deleted": False,
+                    "code": "asset_not_found", "message": "already gone",
+                })
+        return {"items": outcomes, "deleted_count": sum(1 for i in outcomes if i["deleted"])}
+
+    @app.get("/workspace-api/models/catalog", include_in_schema=False)
+    async def standalone_model_catalog() -> dict[str, Any]:
+        """Same-origin workspace bridge for standalone mode; not a public API.
+
+        The standalone shim used to report management as unavailable, so the
+        list could never offer download or delete. Managing local model files
+        needs no Host, so report what is actually configured.
+        """
+        if model_operations is None:
+            return {"items": [], "management_available": False}
+        value = model_operations.catalog()
+        value["evaluation"] = {
+            "available_model_ids": model_evaluations.available_model_ids()
+            if model_evaluations is not None else []
+        }
+        return value
+
+    @app.get("/workspace-api/models/operations", include_in_schema=False)
+    async def standalone_model_operations() -> dict[str, Any]:
+        return {"items": [item.model_dump(mode="json") for item in store.list_model_operations()]}
+
+    @app.post("/workspace-api/models/operations", include_in_schema=False)
+    async def standalone_model_operation(payload: dict[str, Any]) -> dict[str, Any]:
+        if model_operations is None:
+            raise HTTPException(status_code=503, detail={"code": "model_not_found"})
+        action = payload.get("action")
+        model_id = str(payload.get("model_id", ""))
+        try:
+            if action == "install":
+                acceptance = payload.get("license_acceptance")
+                return model_operations.install(
+                    model_id,
+                    license_acceptance=acceptance if isinstance(acceptance, str) else None,
+                ).model_dump(mode="json")
+            if action == "remove":
+                return model_operations.remove(model_id).model_dump(mode="json")
+            if action == "cancel":
+                return model_operations.cancel(str(payload.get("operation_id", ""))).model_dump(mode="json")
+            if action == "clear":
+                return {"removed": store.clear_finished_model_operations()}
+        except ModelOperationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+        raise HTTPException(status_code=422, detail={"code": "invalid_model_action"})
+
+    @app.post("/workspace-api/models/search", include_in_schema=False)
+    async def standalone_model_search(payload: dict[str, Any]) -> dict[str, Any]:
+        """Same-origin workspace bridge for standalone mode; not a public API.
+
+        Searching the distribution site needs no Host at all, so the standalone
+        workspace should be able to do it. Without this the search box was dead
+        outside the embedded view.
+        """
+        try:
+            reject_host_paths(payload)
+            candidates = await custom_models.search(
+                str(payload.get("query", "")),
+                sort=str(payload.get("sort", "downloads")),
+                style=str(payload.get("style", "any")),
+                limit=int(payload.get("limit", 30) or 30),
+            )
+        except CustomModelError as exc:
+            raise HTTPException(
+                status_code=502, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+        installed = {
+            item["registry"]["model_id"]
+            for item in custom_models.entries()
+            if isinstance(item.get("registry"), dict)
+        }
+        return {"items": [
+            {**item.document(), "already_added": item.repo_id in installed}
+            for item in candidates
+        ]}
 
     @app.post("/workspace-api/creative/batches", include_in_schema=False)
     async def standalone_creative_batch(payload: dict[str, Any]) -> dict[str, Any]:

@@ -22,6 +22,7 @@ ALLOWED: dict[str, tuple[type, tuple[Any, ...] | None]] = {
     "last_view": (str, ("create", "library", "activity", "settings")),
     "library_kind": (str, ("all", "generated", "edited", "imported")),
     "director_mode": (str, ("original", "refine", "art_direct")),
+    "model_layout": (str, ("table", "cards")),
 }
 
 DEFAULTS: dict[str, Any] = {
@@ -33,6 +34,8 @@ DEFAULTS: dict[str, Any] = {
     "last_view": "create",
     "library_kind": "all",
     "director_mode": "refine",
+    # 見比べる用途が多いので既定は表。カードは 1 件ずつの説明向け。
+    "model_layout": "table",
 }
 
 

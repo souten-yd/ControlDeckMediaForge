@@ -198,7 +198,6 @@
 
             <p id="create-error" class="error" role="alert" hidden></p>
             <button class="primary" type="submit" id="create-submit">作る</button>
-            <p id="create-estimate" class="hint"></p>
             <p id="create-status" role="status" class="hint"></p>
           </form>
 
@@ -237,13 +236,35 @@
 
         <!-- ライブラリ -->
         <section id="view-library" class="view" data-view="library" hidden>
-          <div class="view-head">
-            <div id="library-kinds" class="chips" role="radiogroup" aria-label="種類"></div>
-            <button type="button" data-refresh="library">更新</button>
+          <div class="view-head one-line">
+            <p id="library-count" class="hint" role="status"></p>
+            <button type="button" data-refresh="library" class="icon"
+                    aria-label="一覧を更新" title="一覧を更新">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M20 12a8 8 0 1 1-2.6-5.9"/>
+                <path d="M20 4.2V9h-4.8"/>
+              </svg>
+            </button>
+            <button type="button" id="library-select" class="icon" aria-pressed="false"
+                    aria-label="選択して削除" title="選択して削除">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="3.4" y="3.4" width="17.2" height="17.2" rx="3.4"/>
+                <path d="m7.6 12.2 3 3 5.8-6"/>
+              </svg>
+            </button>
           </div>
           <div id="library-grid" class="grid"></div>
           <p id="library-empty" class="hint" hidden>まだ素材はありません。</p>
+          <p id="library-note" class="hint" role="status" hidden></p>
           <button type="button" id="library-more" hidden>もっと見る</button>
+          <div id="library-selection" class="selection-bar" hidden>
+            <span id="library-selection-count">0 件を選択</span>
+            <div class="selection-actions">
+              <button type="button" id="library-select-all">全部</button>
+              <button type="button" id="library-select-none">解除</button>
+              <button type="button" id="library-delete" class="danger" disabled>削除</button>
+            </div>
+          </div>
         </section>
 
         <!-- 状況 -->
@@ -266,6 +287,12 @@
               <p class="section-label">モデル管理</p>
               <p id="model-storage" class="hint">保存容量を確認しています…</p>
             </div>
+            <label id="model-sort-row">並び順
+              <select id="model-sort">
+                <option value="runnable">この機材で動く順</option>
+                <option value="catalog">カタログ順</option>
+              </select>
+            </label>
             <div id="model-filters" class="chips" role="radiogroup" aria-label="モデルの絞り込み">
               <button type="button" class="chip" data-model-filter="installed" aria-checked="true">導入済み</button>
               <button type="button" class="chip" data-model-filter="recommended" aria-checked="false">おすすめ</button>
@@ -274,15 +301,22 @@
               <button type="button" class="chip" data-model-filter="all" aria-checked="false">すべて</button>
             </div>
           </div>
-          <div id="model-catalog" class="model-grid"></div>
+          <div id="model-table" class="table-wrap" hidden></div>
+
           <p id="model-empty" class="hint" hidden>条件に合うモデルはありません。</p>
           <div id="model-error" class="error" role="alert" hidden></div>
 
           <p class="section-label">モデルを探して追加</p>
           <p class="hint">配布元を検索します。取り込む前に中身とライセンスを必ず確かめます。</p>
-          <div class="form-row">
-            <label>検索<input id="catalog-query" type="search" maxlength="200"
-              placeholder="stable diffusion / anime / pixel"></label>
+          <div class="form-row search">
+            <label>検索
+              <span class="input-clear">
+                <input id="catalog-query" type="search" maxlength="200"
+                       placeholder="stable diffusion / anime / pixel">
+                <button type="button" id="catalog-clear" aria-label="検索語を消す"
+                        title="検索語を消す" hidden>×</button>
+              </span>
+            </label>
             <label>並び順
               <select id="catalog-sort">
                 <option value="downloads">ダウンロード数</option>
@@ -291,39 +325,25 @@
                 <option value="createdAt">公開日</option>
               </select>
             </label>
-            <label>用途
-              <select id="catalog-pipeline">
-                <option value="text-to-image">文章から生成</option>
-                <option value="image-to-image">画像から生成</option>
-                <option value="inpainting">部分描き直し</option>
+            <label>画風
+              <select id="catalog-style">
+                <option value="any">すべて</option>
+                <option value="anime">アニメ</option>
+                <option value="art">イラスト・アート</option>
+                <option value="realistic">写実</option>
+                <option value="pixel-art">ドット絵</option>
+                <option value="3d">3D</option>
+                <option value="character">キャラクター</option>
+                <option value="landscape">風景</option>
               </select>
             </label>
+            <button type="button" id="catalog-search">検索</button>
           </div>
-          <button type="button" id="catalog-search">検索</button>
           <div id="catalog-results" class="table-wrap" hidden></div>
           <p id="catalog-empty" class="hint" hidden></p>
 
-          <details id="custom-manual">
-            <summary>repository を直接指定する</summary>
-            <div class="form-row">
-              <label>repository<input id="custom-repo" type="text" maxlength="200"
-                placeholder="stabilityai/stable-diffusion-xl-base-1.0"></label>
-              <label>revision<input id="custom-revision" type="text" maxlength="128" value="main"></label>
-            </div>
-            <button type="button" id="custom-resolve">中身を確かめる</button>
-          </details>
           <div id="custom-result" class="rows" hidden></div>
           <div id="custom-error" class="error" role="alert" hidden></div>
-
-          <p class="section-label">キャラ・画風の登録</p>
-          <p class="hint">同じキャラや画風を何度も使うために覚えさせておけます。作成のときに選べます。</p>
-          <div>
-            <button type="button" id="profile-add-character">＋ キャラを登録</button>
-            <button type="button" id="profile-add-style">＋ 画風を登録</button>
-          </div>
-          <div id="profile-list" class="rows"></div>
-          <p id="profile-empty" class="hint" hidden>まだ登録がありません。</p>
-          <div id="profile-error" class="error" role="alert" hidden></div>
 
           <div id="pack-section" hidden>
             <p class="section-label">配布用にまとめる</p>
@@ -335,7 +355,28 @@
             <p id="pack-note" class="hint"></p>
           </div>
 
-          <div data-adv-slot="settings"></div>
+
+          <details id="model-downloads-block">
+            <summary>ダウンロードの状況 <span id="model-downloads-count"></span></summary>
+            <div class="downloads-head">
+              <button type="button" id="model-downloads-clear" hidden>履歴を消す</button>
+            </div>
+            <div id="model-downloads" class="rows"></div>
+            <p id="model-downloads-empty" class="hint" hidden>進行中・完了したダウンロードはありません。</p>
+          </details>
+
+          <div class="settings-section">
+            <p class="section-label">キャラ・画風の登録</p>
+            <p class="hint">同じキャラや画風を何度も使うために覚えさせておけます。作成のときに選べます。</p>
+            <div>
+              <button type="button" id="profile-add-character">＋ キャラを登録</button>
+              <button type="button" id="profile-add-style">＋ 画風を登録</button>
+            </div>
+            <div id="profile-list" class="rows"></div>
+            <p id="profile-empty" class="hint" hidden>まだ登録がありません。</p>
+            <div id="profile-error" class="error" role="alert" hidden></div>
+          </div>
+
         </section>
       </main>
 
@@ -407,9 +448,9 @@
             <label>線（任意）<input id="profile-linework" type="text" maxlength="1000"></label>
             <label>塗り（任意）<input id="profile-coloring" type="text" maxlength="1000"></label>
           </div>
-          <p class="section-label">参照にする画像（任意・最大 4 枚）</p>
-          <p class="hint">選ぶと、その画像を参照として一緒に使います。</p>
-          <div id="profile-references" class="rows"></div>
+          <p class="section-label">参照にする画像（任意）</p>
+          <p class="hint">最大 4 枚まで選べます。<span id="profile-reference-count">0 枚選択中</span></p>
+          <div id="profile-references" class="picker"></div>
           <div id="profile-dialog-error" class="error" role="alert" hidden></div>
           <div class="dialog-actions">
             <button type="button" id="profile-cancel">やめる</button>
@@ -449,13 +490,43 @@
           <img id="viewer-image" alt="">
         </div>
         <div id="viewer-bar">
-          <p id="viewer-caption"></p>
-          <p id="viewer-save-note" class="hint" hidden></p>
+          <div class="viewer-nav">
+            <button type="button" id="viewer-prev" aria-label="前の画像">‹</button>
+            <span id="viewer-position" class="hint"></span>
+            <button type="button" id="viewer-next" aria-label="次の画像">›</button>
+          </div>
+          <div class="viewer-meta">
+            <p id="viewer-caption"></p>
+            <p id="viewer-save-note" class="hint" hidden></p>
+          </div>
           <div class="viewer-actions">
-            <button type="button" id="viewer-detail">詳細</button>
-            <button type="button" id="viewer-save">保存</button>
-            <button type="button" id="viewer-edit">これを編集</button>
-            <button type="button" id="viewer-close" class="primary">閉じる</button>
+            <button type="button" id="viewer-detail" class="icon" aria-label="詳細" title="詳細">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="8.6"/>
+                <path d="M12 11.2v5.2"/>
+                <circle cx="12" cy="8" r=".9" fill="currentColor" stroke="none"/>
+              </svg>
+            </button>
+            <button type="button" id="viewer-save" class="icon" aria-label="保存" title="保存">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 4v10.4"/>
+                <path d="m7.8 10.6 4.2 4.2 4.2-4.2"/>
+                <path d="M5 18.6h14"/>
+              </svg>
+            </button>
+            <button type="button" id="viewer-edit" class="icon" aria-label="これを編集" title="これを編集">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M16.4 4.6a2.2 2.2 0 0 1 3.1 3.1L9 18.2l-4.2 1.1 1.1-4.2z"/>
+                <path d="m14.6 6.4 3.1 3.1"/>
+              </svg>
+            </button>
+            <button type="button" id="viewer-close" class="icon primary"
+                    aria-label="閉じる" title="閉じる">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="m6.6 6.6 10.8 10.8"/>
+                <path d="M17.4 6.6 6.6 17.4"/>
+              </svg>
+            </button>
           </div>
         </div>
       </dialog>
@@ -471,10 +542,6 @@
     <template data-adv-template="create">
       <div class="advanced" id="advanced-create">
         <p class="section-label">詳細設定</p>
-        <div class="form-row">
-          <label>幅<input id="advanced-width" type="number" step="16" inputmode="numeric"></label>
-          <label>高さ<input id="advanced-height" type="number" step="16" inputmode="numeric"></label>
-        </div>
         <p id="advanced-size-hint" class="hint"></p>
         <p class="section-label">シーンの補足</p>
         <p class="hint">シーン・構図・カメラは上の「シーンと見せ方」で選びます。ここでは言葉で補います。</p>
@@ -530,22 +597,6 @@
       </label>
     </template>
 
-    <template data-adv-template="settings">
-      <div class="advanced" id="advanced-settings">
-        <p class="section-label">この拡張機能について</p>
-        <dl class="facts">
-          <div><dt>推論</dt><dd>この端末の中だけ（backend で強制。UI から解除できません）</dd></div>
-          <div><dt>生成処理</dt><dd>本体とは別のプロセスで動きます</dd></div>
-          <div><dt>ControlDeck 連携</dt><dd id="advanced-host-state">確認しています…</dd></div>
-        </dl>
-        <p class="section-label">今できること</p>
-        <div id="advanced-capability-list" class="rows"></div>
-        <p class="section-label">モデルの技術詳細</p>
-        <div id="advanced-models" class="rows"></div>
-        <p class="section-label">連携診断</p>
-        <pre id="advanced-host-integration"></pre>
-      </div>
-    </template>
 
     <!-- MEDIA_FORGE_WORKSPACE_CONFIG -->
     <!-- MEDIA_FORGE_CREATIVE_TEMPLATES -->

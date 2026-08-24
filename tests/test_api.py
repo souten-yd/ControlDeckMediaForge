@@ -323,3 +323,36 @@ def test_available_real_model_requires_host_managed_lease(tmp_path: Path):
 
     assert failed["status"] == "failed"
     assert failed["error"]["code"] == "host_lease_required"
+
+
+def test_workspace_asset_delete_reports_each_outcome_separately(client):
+    """まとめ削除は一括で成否が決まらない。どれが残ったのかを言えること。"""
+    first = wait_terminal(client, client.post("/api/v1/jobs", json=request()).json()["id"])
+    second = wait_terminal(
+        client, client.post("/api/v1/jobs", json=request(intent="another one")).json()["id"]
+    )
+    kept = first["asset_ids"][0]
+    removed = second["asset_ids"][0]
+    missing = "asset_" + "f" * 32
+
+    response = client.post(
+        "/workspace-api/assets/delete", json={"asset_ids": [removed, missing]}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["deleted_count"] == 1
+    outcomes = {item["asset_id"]: item for item in body["items"]}
+    assert outcomes[removed]["deleted"] is True
+    assert outcomes[missing] == {
+        "asset_id": missing, "deleted": False,
+        "code": "asset_not_found", "message": "already gone",
+    }
+
+    assert client.get(f"/api/v1/assets/{removed}").status_code == 404
+    assert client.get(f"/api/v1/assets/{kept}").status_code == 200
+    assert not client.app.state.store.asset_dir.joinpath(f"{removed}.provenance.json").exists()
+
+
+def test_workspace_asset_delete_is_not_a_public_api(client):
+    assert "/workspace-api/assets/delete" not in client.get("/openapi.json").json()["paths"]
+    assert client.post("/workspace-api/assets/delete", json={"asset_ids": []}).status_code == 422

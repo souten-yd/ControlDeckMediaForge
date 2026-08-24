@@ -1,0 +1,84 @@
+{
+  "vram_baseline": 59912192,
+  "llm": {
+    "ok": true,
+    "alias": "Qwen3.8-27B",
+    "elapsed_sec": 16.294,
+    "vram_resident": 31555141632
+  },
+  "routable_models": [
+    {
+      "id": "black-forest-labs/FLUX.2-klein-4B",
+      "measured_vram_bytes": 33349320704
+    },
+    {
+      "id": "segmind/SSD-1B",
+      "measured_vram_bytes": 18497558528
+    }
+  ],
+  "vram_during_job": {
+    "samples": 85,
+    "interval_sec": 0.25,
+    "peak_bytes": 31555141632,
+    "min_bytes": 59912192,
+    "samples_after_release": 77,
+    "peak_after_release_bytes": 6547951616
+  },
+  "generation": {
+    "status": "succeeded",
+    "error": null,
+    "asset_ids": [
+      "asset_f3791de8178e4737b80b0eb94235d9be"
+    ],
+    "phases": [
+      "release_ai",
+      "generating"
+    ],
+    "vram_by_phase": {
+      "release_ai": 31555141632,
+      "generating": 59912192
+    },
+    "elapsed_sec": 25.239
+  },
+  "produced": [
+    {
+      "asset_id": "asset_f3791de8178e4737b80b0eb94235d9be",
+      "model_id": "segmind/SSD-1B",
+      "runtime_adapter": "diffusers.sdxl",
+      "weights_hash": "sha256:e0788e1fe6aeac34447364c3f72d698e46eb0d09a1f22e2700248a85a9a71f00",
+      "output_sha256": "a268a79e3169655e7cb7972d59e58a0c7ca971b845bc9fe0a0dffa60807b3be0",
+      "model_route": {
+        "policy": "manual",
+        "capability": "image.text_to_image",
+        "domain": "general",
+        "domain_matched": true,
+        "candidate_count": 1
+      },
+      "width": 256,
+      "height": 256,
+      "size_bytes": 107227,
+      "mime_type": "image/png"
+    }
+  ],
+  "worker_log": [
+    "image worker timing job=job_ba0c0395fea8419fb71b194d8addfa75 load_sec=2.513703 generation_sec=17.190102",
+    "image worker placement job=job_ba0c0395fea8419fb71b194d8addfa75 device_mode=full_device component_devices={'unet': 'cuda:0', 'text_encoder': 'cuda:0', 'text_encoder_2': 'cuda:0', 'vae': 'cuda:0', 'pipeline': 'cuda:0'} offload_hooks=[] non_gpu_devices={} non_gpu_map_targets=[]"
+  ],
+  "worker_placement": {
+    "load_sec": "2.513703",
+    "generation_sec": "17.190102",
+    "device_mode": "full_device",
+    "component_devices": "{'unet': 'cuda:0', 'text_encoder': 'cuda:0', 'text_encoder_2': 'cuda:0', 'vae': 'cuda:0', 'pipeline': 'cuda:0'} offload_hooks=[] non_gpu_devices={} non_gpu_map_targets=[]"
+  },
+  "ai_release": {
+    "released": true,
+    "reason": "released",
+    "model_bytes": 16464440224,
+    "elapsed_sec": 0.154,
+    "vram_after_release": 59912192,
+    "monotonic_at": 207914.38547065
+  },
+  "vram_final_before_cleanup": 59912192,
+  "vram_final": 59912192,
+  "loaded_after": []
+}

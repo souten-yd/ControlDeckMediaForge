@@ -10,6 +10,9 @@
   --border: #d8dfdc;
   --accent: #087f73;
   --accent-ink: #fff;
+  --danger: #a4232a;
+  --danger-bg: #fdf0f0;
+  --danger-line: #e6b9bb;
   --radius: 12px;
   --safe-top: 0px;
   --safe-right: 0px;
@@ -32,6 +35,9 @@
     --border: #31413e;
     --accent: #62d6c6;
     --accent-ink: #0b1110;
+    --danger: #ffb4b4;
+    --danger-bg: #2a1414;
+    --danger-line: #7a3030;
   }
 }
 
@@ -220,6 +226,15 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .panel { padding: 16px; display: grid; gap: 10px; align-content: start; }
 
 .field-label { font-size: .85rem; font-weight: 700; }
+/* モデルの話と、覚えさせる素材の話は別。続けて並べると設定 1 枚が
+   延々と続く帯になり、どこまでが 1 つの話なのかが読めない。 */
+.settings-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
 .section-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
 .hint { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
 
@@ -399,6 +414,29 @@ textarea { resize: vertical; min-height: 96px; }
 .reference-role-row input, .reference-role-row select { padding: 8px; min-width: 0; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* 検索・並び順・画風・ボタンを縦に 4 段積むと、結果が画面から押し出される。
+   同じ格子に入れて 2 段に畳む。ボタンは入力と底を揃える。 */
+.form-row.search { align-items: end; }
+/* type=search の × はブラウザ任せで、環境によっては出ない。実機では出ず、
+   打ち直すのに全選択が要った。自前で置いて、入力欄の中に重ねる。 */
+.input-clear { position: relative; display: block; }
+.input-clear input { padding-right: 34px; }
+.input-clear button {
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-end: 4px;
+  width: 26px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+}
+.input-clear input::-webkit-search-cancel-button { display: none; }
+.form-row.search > button { min-height: 38px; }
 .form-row label, .advanced > label { display: grid; gap: 5px; font-size: .8rem; font-weight: 600; }
 .check { display: flex; align-items: center; gap: 8px; font-size: .84rem; font-weight: 600; }
 .check input { width: auto; }
@@ -454,6 +492,78 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
 
 /* ── ライブラリ ─────────────────────────────────────────────── */
 .view-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+
+/* 絞り込みと操作は 1 行に収める。狭い画面で種類の札が折り返すと、
+   すぐ下の一覧が押し下がって、何枚あるのかが見えなくなる。
+   札の側だけを横に送り、操作ボタンは常に右端に留める。 */
+.view-head.one-line { flex-wrap: nowrap; }
+.view-head.one-line .chips {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.view-head.one-line .chips::-webkit-scrollbar { display: none; }
+.view-head.one-line .chips > * { flex: 0 0 auto; }
+.view-head.one-line > button { flex: 0 0 auto; }
+/* 見出しの左は説明、右は操作。space-between に任せると、間に入った文字数で
+   ボタン同士の間隔が動き、押す場所が毎回ずれる。左側に余白を吸わせる。 */
+.view-head.one-line > :first-child { flex: 1 1 auto; min-width: 0; }
+.view-head.one-line { gap: 8px; }
+/* 送り先が残っていることを、切れた札そのもので示す。端で薄くしないと
+   ボタンの上に札が重なっているように見え、押す所を間違える。 */
+.view-head.one-line .chips {
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+
+.selection-bar {
+  position: sticky;
+  bottom: calc(8px + var(--safe-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgb(0 0 0 / .28);
+}
+.selection-actions { display: flex; gap: 8px; }
+.selection-bar .danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--danger); }
+.selection-bar .danger:disabled { opacity: .45; }
+
+.downloads-head { display: flex; justify-content: flex-end; margin: 6px 0; }
+
+/* 選択中は開くのではなく選ぶ。押した先が変わるので、見た目でも区別する。 */
+.grid.selecting .card { position: relative; }
+.grid.selecting .card::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 8px;
+  inset-block-start: 8px;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: rgb(0 0 0 / .45);
+}
+.grid.selecting .card[aria-selected="true"]::after {
+  content: "✓";
+  display: grid;
+  place-items: center;
+  font-size: .8rem;
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.grid.selecting .card[aria-selected="true"] { outline: 2px solid var(--accent); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .card {
   border: 1px solid var(--border);
@@ -465,6 +575,8 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
   text-align: left;
 }
 .card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--sunk); }
+.card img[hidden] { display: none !important; }
+#viewer-image[hidden] { display: none !important; }
 .card .meta { display: flex; justify-content: space-between; gap: 6px; font-size: .72rem; color: var(--muted); }
 .card .sum { font-size: .8rem; overflow-wrap: anywhere; }
 
@@ -492,6 +604,23 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
 .facts div { display: grid; grid-template-columns: minmax(140px, 1fr) 2fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .facts dt { font-size: .82rem; font-weight: 600; }
 .facts dd { margin: 0; font-size: .82rem; color: var(--muted); }
+/* grid track の既定 min-width は auto。model ID のような切れ目の無い値が
+   track を押し広げ、値が画面の外へ出ていた。折り返す許可も要る。 */
+.facts dt, .facts dd { min-width: 0; overflow-wrap: anywhere; }
+.facts dd { text-align: right; }
+
+/* .check は既に「チェックボックス付きラベル」で使われている。同じ名前に
+   別の意味を足すと、片方を触ったときにもう片方が壊れる。 */
+.checks { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: flex-end; }
+.checkmark { white-space: nowrap; }
+.checkmark.ok { color: var(--accent); }
+.checkmark.bad { color: var(--danger); }
+
+@media (max-width: 560px) {
+  /* 140px の見出し列は狭い画面の半分近くを占める。上下に積む。 */
+  .facts div { grid-template-columns: 1fr; gap: 4px; }
+  .facts dd, .checks { text-align: left; justify-content: flex-start; }
+}
 
 .model-management-head {
   display: flex;
@@ -571,18 +700,48 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .74rem; backgro
 #viewer-image.dragging { cursor: grabbing; }
 
 #viewer-bar {
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  /* 送り・操作・閉じるで 2 段になると、画像の見える高さがその分削られる。
+     文言で並べる余裕は無いので、閉じる以外はアイコンで 1 段に収める。 */
+  flex-wrap: nowrap;
   justify-content: space-between;
   padding: 10px 14px calc(10px + var(--safe-bottom));
   border-top: 1px solid #31413e;
   background: #101716;
 }
-#viewer-caption { font-size: .78rem; color: #9aaba7; overflow-wrap: anywhere; }
+/* 説明は 1 行に切る。ここが伸びると操作の並びが押し出される。 */
+#viewer-caption {
+  font-size: .78rem;
+  color: #9aaba7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .viewer-actions { display: flex; gap: 8px; margin-left: auto; }
-#viewer .primary { padding: 0 18px; }
+/* 一覧に戻ってから次を開くのは、拡大したまま見比べたいときに遠回りになる。
+   ビューアを閉じずに隣へ動けるようにする。左下に置くのは、右下の
+   「閉じる」を押そうとして誤って送ってしまわないため。 */
+/* 送りは行の先頭、つまり左下に置く。右下の「閉じる」を押そうとして
+   誤って隣の画像へ送ってしまうのを避けるため。 */
+.viewer-nav { display: flex; align-items: center; gap: 6px; order: -1; }
+.viewer-meta { flex: 1 1 auto; min-width: 0; }
+.viewer-nav button { min-width: 40px; font-size: 1.25rem; line-height: 1; }
+#viewer .viewer-actions button.icon { min-width: 40px; color: #eef5f3; }
+/* button.icon は .primary より詳細度が高く、accent の背景が当たっていなかった。
+   結果として濃い前景色が濃い背景に乗り、閉じるボタンがほぼ見えなかった。 */
+#viewer .viewer-actions button.icon.primary {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent-ink) !important;
+}
+#viewer .viewer-actions button.icon.primary svg { stroke-width: 2.2; }
+.viewer-nav button:disabled { opacity: .35; }
+#viewer-position { font-size: .74rem; color: #9aaba7; min-width: 3.5em; text-align: center; }
+#viewer .primary.icon { padding: 0; color: var(--accent-ink); }
 #viewer button:not(.primary) {
   border: 1px solid #31413e !important;
   background: #182220 !important;
@@ -592,11 +751,17 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .74rem; backgro
 dialog {
   width: min(720px, calc(100% - 24px));
   max-height: 82vh;
+  /* 高さを切るなら中を送れるようにする。片方だけだと、はみ出した入力欄に
+     指が届かない。実機で名前欄に入力できないという報告の原因がこれだった。 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
+  padding: 16px;
 }
+dialog > form { display: grid; gap: 10px; }
 dialog::backdrop { background: rgba(10, 18, 17, .68); }
 #close-dialog { float: right; }
 
@@ -721,7 +886,7 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
 
 @media (max-width: 359px) {
   .grid { grid-template-columns: 1fr; }
-  .form-row { grid-template-columns: 1fr; }
+  .form-row:not(.search) { grid-template-columns: 1fr; }
   #shell-header { gap: 6px; padding: 0 10px; }
   .modeswitch button { padding: 5px 8px; }
   .creative-selects { grid-template-columns: 1fr; }
@@ -783,4 +948,145 @@ table.catalog .tag {
 }
 @media (hover: hover) {
   table.catalog tbody tr:hover { background: var(--sunk); }
+}
+
+/* この機材で動くかどうかは、表の中で最初に目に入るべき情報である。 */
+.runnable {
+  display: inline-block;
+  font-size: .72rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid currentColor;
+}
+.runnable[data-tone="ok"]     { color: var(--accent); }
+.runnable[data-tone="warn"]   { color: #b7791f; }
+.runnable[data-tone="bad"]    { color: #c53030; }
+.runnable[data-tone="muted"]  { color: var(--muted); }
+
+/* ダウンロードの進み具合。押した先で確かめられるようにする。 */
+#model-downloads .row-side { gap: 8px; }
+#model-downloads progress { width: 140px; }
+
+/* ── モバイルのダイアログ ───────────────────────────────────── */
+@media (max-width: 767px) {
+  /* 画面いっぱいに近い下からのシートにする。中央寄せの小窓は、
+     ソフトキーボードが出ると入力欄ごと隠れる。 */
+  dialog {
+    width: 100%;
+    max-width: 100%;
+    max-height: 88vh;
+    margin: auto 0 0;
+    border-radius: 16px 16px 0 0;
+    border-bottom: 0;
+    padding: 14px 14px calc(14px + var(--safe-bottom));
+  }
+  .dialog-actions {
+    position: sticky;
+    bottom: calc(-1 * var(--safe-bottom));
+    background: var(--surface);
+    padding: 10px 0 0;
+    margin-top: 14px;
+  }
+  #viewer { max-height: 100vh; height: 100vh; border-radius: 0; }
+}
+
+/* 参照の選択。上限が 4 枚なので、選んだものと選べないものを見て分かる形にする。 */
+.picker .strip { display: flex; flex-wrap: wrap; gap: 8px; }
+.picker .thumb[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.picker .thumb:disabled { opacity: .35; }
+
+/* ── モバイルの表 ───────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* 横に伸ばすと、肝心の容量・VRAM・操作が画面の外へ出てしまう。
+     1 行を積み上げて、必要な情報を横スクロールなしで読めるようにする。
+     さらに 2 列に並べて、一画面に入る件数を増やす。 */
+  .table-wrap { overflow-x: visible; border: 0; }
+  table.catalog, table.catalog td { display: block; width: 100%; max-width: 100%; }
+  table.catalog tbody {
+    display: grid;
+    /* auto-fill に minmax(0, ...) を渡すと列が無限に増える。実測で 13 列に
+       潰れた。最小幅は必ず実数で与え、はみ出しは子側の min-width: 0 で防ぐ。 */
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+    /* 同じ行のカードを同じ高さにする。start だと名前が 2 行になった側だけ
+       伸びて段差ができ、全体がガタついて見える。 */
+    align-items: stretch;
+  }
+  table.catalog tr {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-width: 0;
+  }
+  /* 操作はカードの一番下へ揃える。上から積むと行ごとに位置がずれる。 */
+  table.catalog td[data-label="操作"] { margin-top: auto; }
+  table.catalog td, table.catalog td > * { min-width: 0; overflow-wrap: anywhere; }
+  /* 狭い枠で名前と容量を潰すので、採用とライセンスは畳む。
+     横並びの表（広い画面）では従来どおり見える。 */
+  table.catalog td.secondary { display: none; }
+  table.catalog thead { display: none; }
+  table.catalog tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 8px 10px;
+    margin-bottom: 0;
+  }
+  table.catalog td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 2px 0;
+    border-bottom: 0;
+    white-space: normal;
+    text-align: right;
+  }
+  /* 積んだ途端に「14.9 GB」が何の数字か分からなくなるので列名を添える。 */
+  table.catalog td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: var(--muted);
+    text-align: left;
+  }
+  /* 名前は見出しとして扱う。列名は要らない。 */
+  /* 名前セルは後から display:block を当てているので、潰せる指定もここで
+     もう一度与える。長いモデル名が枠を押し広げて横あふれを起こしていた。 */
+  table.catalog td.name {
+    display: block;
+    text-align: left;
+    padding-bottom: 6px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  table.catalog td.name > div {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    /* 名前は 2 行ぶんの場所を先に取る。1 行のものと 2 行のもので
+       タグと数値の開始位置がずれるのを防ぐ。 */
+    min-height: 2.4em;
+    line-height: 1.2;
+  }
+  /* 用途タグも 1 行ぶん確保して、以降の行を揃える。 */
+  table.catalog td.name { min-height: 3.6em; }
+  table.catalog td.name::before { content: none; }
+  table.catalog td.name > div { font-weight: 700; font-size: .88rem; margin-bottom: 3px; }
+  /* 2 列だとタグまで並べる幅がない。用途の 1 つ目だけ残す。 */
+  table.catalog td.name .tag { display: none; }
+  table.catalog td.name .tag:first-of-type { display: inline-block; }
+  table.catalog td { font-size: .8rem; }
+  table.catalog td::before { font-size: .68rem; }
+  table.catalog td.num { text-align: right; }
+  table.catalog td[data-label="操作"] { padding-top: 8px; align-items: flex-end; }
+  table.catalog td[data-label="操作"] button {
+    min-height: 40px;
+    font-size: .74rem;
+    padding: 6px 10px;
+    line-height: 1.2;
+    text-align: center;
+  }
 }

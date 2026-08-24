@@ -49,13 +49,6 @@ const CAPABILITY_REASON = {
   text_generator_unavailable: "ControlDeck の文章による演出補助をいま使えません",
 };
 
-const LIBRARY_KINDS = [
-  {id: "all", label: "すべて"},
-  {id: "generated", label: "作ったもの"},
-  {id: "edited", label: "直したもの"},
-  {id: "imported", label: "取り込み"},
-];
-
 const state = {
   bridgePort: null,
   nonce: "",
@@ -93,7 +86,6 @@ const state = {
   maskPainted: 0,
   outpaintRatio: "source",
   outpaintScale: 1.5,
-  estimateSec: null,
   activeJob: "",
   activeBatch: "",
   activeComposition: "",
@@ -102,10 +94,16 @@ const state = {
   batches: [],
   jobs: [],
   libraryCursor: null,
-  libraryKind: "all",
+  libraryItems: [],
+  librarySelecting: false,
+  librarySelected: new Set(),
   modelCatalog: [],
   modelOperations: new Map(),
+  modelSpeeds: new Map(),
   modelFilter: "installed",
+  modelSort: "runnable",
+  lastNonSettingsView: "create",
+  deviceVramBytes: 0,
   modelChoice: "auto",
   domainProfiles: [],
   modelManagementAvailable: false,
@@ -198,10 +196,54 @@ function connectSocket() {
   return state.socketReady;
 }
 
+/* 何 GB あるかは出していたが、あと何分かかるのかは出していなかった。
+   backend は速度を持っていない（持たせると全接続に同じ数字を配ることになる）。
+   届いた bytes_done の差分から手元で出す。1 秒未満の差分は雑音なので捨て、
+   指数移動平均で均す。生の瞬間値は桁が跳ねて読めない。 */
+function recordModelSpeed(operation) {
+  if (!operation?.id) return;
+  if (MODEL_TERMINAL.has(operation.state)) {
+    state.modelSpeeds.delete(operation.id);
+    return;
+  }
+  const now = Date.now();
+  const previous = state.modelSpeeds.get(operation.id);
+  if (!previous) {
+    state.modelSpeeds.set(operation.id, {at: now, bytes: operation.bytes_done, bps: 0});
+    return;
+  }
+  const seconds = (now - previous.at) / 1000;
+  const gained = operation.bytes_done - previous.bytes;
+  if (seconds < 1 || gained < 0) return;
+  const sample = gained / seconds;
+  state.modelSpeeds.set(operation.id, {
+    at: now,
+    bytes: operation.bytes_done,
+    bps: previous.bps ? previous.bps * 0.7 + sample * 0.3 : sample,
+  });
+}
+
+function modelSpeedText(operation) {
+  const speed = state.modelSpeeds.get(operation?.id);
+  if (!speed?.bps || MODEL_TERMINAL.has(operation.state)) return "";
+  const parts = [`${formatBytes(Math.round(speed.bps))}/秒`];
+  const left = (operation.bytes_total || 0) - operation.bytes_done;
+  if (left > 0) parts.push(`残り ${formatDuration(left / speed.bps)}`);
+  return parts.join(" · ");
+}
+
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "-";
+  if (seconds < 90) return `約 ${Math.max(1, Math.round(seconds))} 秒`;
+  if (seconds < 5400) return `約 ${Math.round(seconds / 60)} 分`;
+  return `約 ${Math.round(seconds / 360) / 10} 時間`;
+}
+
 function handleEvent(message) {
   if (!message?.data) return;
   if (message.event === "model.operation.changed") {
     const operation = message.data;
+    recordModelSpeed(operation);
     state.modelOperations.set(operation.id, operation);
     renderModelManagement();
     renderModelMiniProgress();
@@ -283,6 +325,31 @@ async function standaloneCall(method, params) {
   }
   if (method === "models.list") return json("/api/v1/models");
   if (method === "models.catalog") {
+    // ローカルのモデル管理はホストを必要としない。単体表示でも本物を返す。
+    try { return await json("/workspace-api/models/catalog"); } catch { /* 旧 core は shim へ落ちる */ }
+  }
+  if (method === "models.operations.list") return json("/workspace-api/models/operations");
+  if (method === "models.install") {
+    return json("/workspace-api/models/operations", {method: "POST", body: JSON.stringify(
+      {action: "install", model_id: params.model_id, license_acceptance: params.license_acceptance})});
+  }
+  if (method === "models.remove") {
+    return json("/workspace-api/models/operations", {method: "POST", body: JSON.stringify(
+      {action: "remove", model_id: params.model_id})});
+  }
+  if (method === "models.operations.cancel") {
+    return json("/workspace-api/models/operations", {method: "POST", body: JSON.stringify(
+      {action: "cancel", operation_id: params.operation_id})});
+  }
+  if (method === "models.operations.clear") {
+    return json("/workspace-api/models/operations", {method: "POST", body: JSON.stringify(
+      {action: "clear"})});
+  }
+  if (method === "assets.delete") {
+    return json("/workspace-api/assets/delete", {method: "POST", body: JSON.stringify(
+      {asset_ids: params.asset_ids})});
+  }
+  if (method === "models.catalog") {
     const {items} = await json("/api/v1/models");
     return {items: items.map((model) => ({
       model_id: model.id, display_name: model.display_name || model.id,
@@ -304,7 +371,6 @@ async function standaloneCall(method, params) {
       measured_runtime_sec: model.measured_runtime_sec,
     })), storage: {managed_bytes: 0, free_bytes: 0, total_bytes: 0}, management_available: false};
   }
-  if (method === "models.operations.list") return {items: []};
   if (method === "models.operations.watch" || method === "models.operations.unwatch") return {watching: []};
   if (method === "assets.provenance") return json(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/provenance`);
   if (method === "preferences.get") return {values: state.preferences};
@@ -312,6 +378,10 @@ async function standaloneCall(method, params) {
   if (method === "profiles.list") return json("/api/v1/profiles");
   if (method === "reference_collections.list") return json("/api/v1/reference-collections");
   if (method === "domain_profiles.list") return json("/api/v1/domain-profiles");
+  if (method === "models.custom.search") {
+    // 配布元の検索はホストを必要としない。単体表示でも使えるべきである。
+    return json("/workspace-api/models/search", {method: "POST", body: JSON.stringify(params)});
+  }
   if (method === "models.custom.resolve" || method === "models.custom.add"
       || method === "models.custom.remove") {
     // 単体表示ではモデル取り込みに CLI を使う。UI から偽の成功を返さない。
@@ -429,17 +499,10 @@ function mountAdvanced() {
 }
 
 function syncAdvancedCreate() {
-  const width = byId("advanced-width");
-  if (!width) return;
-  const preset = currentPreset();
+  // 幅と高さは上の「サイズ」に 1 組だけ置く。詳細モードで同じ欄を再掲して
+  // いたが、そちらが上書きしていたため、どちらが効いているのか分からなかった。
+  if (!byId("advanced-count")) return;
   const envelope = sizeEnvelope();
-  for (const input of [width, byId("advanced-height")]) {
-    input.min = envelope.min_side;
-    input.max = envelope.max_side;
-    input.step = envelope.multiple_of;
-  }
-  width.value = preset.width;
-  byId("advanced-height").value = preset.height;
   byId("advanced-count").value = selectedCount();
   byId("advanced-size-hint").textContent =
     `${envelope.min_side}〜${envelope.max_side}px・${envelope.multiple_of} の倍数（${
@@ -465,6 +528,8 @@ async function savePreferences(values) {
 
 function activate(name, {sync = true} = {}) {
   const view = VIEWS.includes(name) ? name : "create";
+  // 設定を閉じたときに戻る先。設定の前にいた画面へ返す。
+  if (state.view && state.view !== "settings") state.lastNonSettingsView = state.view;
   state.view = view;
   app().dataset.view = view;
   for (const section of document.querySelectorAll(".view")) {
@@ -776,6 +841,13 @@ function renderProfileChoices() {
    探すところから引き受ける。ただし探せることと入れてよいことは別なので、
    表から直接は取り込まず、必ず中身とライセンスの確認へ渡す。 */
 
+/* モバイルでは横に伸ばさず積み上げる。列名がないと、積んだ途端に
+   「14.9 GB」が何の数字なのか分からなくなるので、各セルに持たせる。 */
+function labelled(cell, label) {
+  cell.dataset.label = label;
+  return cell;
+}
+
 function formatCount(value) {
   const count = Number(value) || 0;
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
@@ -797,6 +869,15 @@ function catalogRow(item) {
   const title = document.createElement("div");
   title.textContent = item.repo_id;
   name.append(title);
+  // 「条件を確認」では何を確認するのか分からない。押す前に分かる位置で、
+  // 配布元での同意が要ることそのものを言う。押した先の言葉は 1 つでよい。
+  if (item.gated) {
+    const gate = document.createElement("span");
+    gate.className = "tag";
+    gate.textContent = "要同意";
+    gate.title = "配布元で利用条件に同意しないと取り込めません。";
+    name.append(gate);
+  }
   for (const tag of (item.tags || []).filter((value) => !value.includes(":")).slice(0, 3)) {
     const chip = document.createElement("span");
     chip.className = "tag";
@@ -813,6 +894,25 @@ function catalogRow(item) {
   updated.textContent = formatDay(item.last_modified);
   const license = document.createElement("td");
   license.textContent = item.license || "-";
+  // 押す前に一番効く 1 行。何 GB 落ちてきて、この端末に載るのか。
+  // 配布元の一覧は容量そのものを返さないので、重みの要素数と型から出した
+  // 下限を出す。設定や複数版を含めた実配布物はこれより大きくなる。
+  const size = document.createElement("td");
+  size.className = "num";
+  size.textContent = item.weight_bytes ? `約 ${formatBytes(item.weight_bytes)}` : "不明";
+  if (item.weight_bytes) {
+    // GGUF は量子化の版を全部足した数で、実際に落とす 1 本より必ず大きい。
+    // safetensors 側は逆に重みだけの数で、設定や別版を含めると増える。
+    size.title = item.weight_precision === "GGUF"
+      ? "配布物全体。量子化の版をすべて含むので、実際に落とす量はこれより小さくなります。"
+      : `${item.weight_precision || "重み"} の合計。設定や別版を含めると増えます。`;
+  }
+  labelled(downloads, "ダウンロード");
+  labelled(likes, "お気に入り");
+  labelled(updated, "更新");
+  labelled(license, "ライセンス");
+  labelled(size, "容量");
+  updated.classList.add("secondary");
   const action = document.createElement("td");
   if (item.already_added) {
     const note = document.createElement("span");
@@ -823,10 +923,12 @@ function catalogRow(item) {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.inspectRepo = item.repo_id;
-    button.textContent = item.gated ? "条件を確認" : "中身を見る";
+    // 何が起きるか分かる言葉にする。取り込みの入口だと言う。
+    button.textContent = "追加する";
     action.append(button);
   }
-  row.append(name, downloads, likes, updated, license, action);
+  row.append(labelled(name, "モデル"), size, downloads, likes, updated, license,
+             labelled(action, "操作"));
   return row;
 }
 
@@ -845,7 +947,7 @@ function renderCatalogResults(items) {
   table.className = "catalog";
   const head = document.createElement("thead");
   const headRow = document.createElement("tr");
-  for (const label of ["モデル", "DL", "★", "更新", "ライセンス", ""]) {
+  for (const label of ["モデル", "容量", "DL", "★", "更新", "ライセンス", ""]) {
     const cell = document.createElement("th");
     cell.textContent = label;
     headRow.append(cell);
@@ -867,7 +969,7 @@ async function searchCatalog() {
     found = await call("models.custom.search", {
       query: byId("catalog-query").value,
       sort: byId("catalog-sort").value,
-      pipeline_tag: byId("catalog-pipeline").value,
+      style: byId("catalog-style").value,
     });
   } catch (error) {
     empty.textContent = error?.message || "検索できませんでした。";
@@ -937,22 +1039,15 @@ function renderCustomResolution(resolution) {
   holder.append(accept, add);
 }
 
-async function resolveCustomModel() {
+/* 検索結果から選んだものを、中身とライセンスの確認へ渡す。
+   repository の手入力欄は使われないため撤去した（利用者判断）。検索に
+   出てこない版が要る場合は CLI から入れる。 */
+async function resolveCustomModel(repoId, revision = "main") {
   const error = byId("custom-error");
   error.hidden = true;
-  byId("custom-result").hidden = true;
   customResolution = null;
-  const repoId = byId("custom-repo").value.trim();
-  if (!repoId) {
-    error.hidden = false;
-    error.textContent = "repository を入れてください。";
-    return;
-  }
   try {
-    customResolution = await call("models.custom.resolve", {
-      repo_id: repoId,
-      revision: byId("custom-revision").value.trim() || "main",
-    });
+    customResolution = await call("models.custom.resolve", {repo_id: repoId, revision});
   } catch (failure) {
     error.hidden = false;
     error.textContent = failure?.message || "中身を確かめられませんでした。";
@@ -1188,17 +1283,27 @@ async function renderProfileReferencePicker() {
   try { page = await call("library.list", {limit: 24}); } catch { return; }
   const strip = document.createElement("div");
   strip.className = "strip";
+  const update = () => {
+    const chosen = profileDraft.assetIds.length;
+    byId("profile-reference-count").textContent = `${chosen} 枚選択中`;
+    // 上限に達したら、押せない枠を並べたままにせず選べないことを示す。
+    for (const button of strip.children) {
+      const selected = profileDraft.assetIds.includes(button.dataset.assetId);
+      button.setAttribute("aria-pressed", String(selected));
+      button.disabled = !selected && chosen >= 4;
+    }
+  };
   for (const item of page.items || []) {
     const button = await thumbnailButton(item.asset_id, () => {
       const index = profileDraft.assetIds.indexOf(item.asset_id);
       if (index >= 0) profileDraft.assetIds.splice(index, 1);
       else if (profileDraft.assetIds.length < 4) profileDraft.assetIds.push(item.asset_id);
-      button.setAttribute("aria-pressed", String(profileDraft.assetIds.includes(item.asset_id)));
+      update();
     }, item.thumbnail);
-    button.setAttribute("aria-pressed", "false");
     strip.append(button);
   }
   holder.append(strip);
+  update();
   if (!(page.items || []).length) {
     const note = document.createElement("p");
     note.className = "hint";
@@ -1760,10 +1865,6 @@ function buildConstraints(preset) {
     const target = outpaintTarget();
     if (target) return target;
   }
-  if (state.mode === "advanced" && byId("advanced-width")) {
-    constraints.width = Number(byId("advanced-width").value) || preset.width;
-    constraints.height = Number(byId("advanced-height").value) || preset.height;
-  }
   return constraints;
 }
 
@@ -2223,11 +2324,9 @@ function showProgress(job) {
     bar.style.width = unknown ? "" : `${percent}%`;
   }
   const elapsed = elapsedText(job);
-  const estimate = unknown && state.estimateSec
-    ? `目安 約 ${Math.round(state.estimateSec)} 秒（実測）` : "";
   byId("progress-detail").textContent = state.mode === "advanced"
     ? `${job.status} · ${unknown ? "所要不明" : `${percent}%`} · ${job.phase || "-"} · ${elapsed} · ${job.id}`
-    : [unknown ? elapsed : `${percent}%`, estimate].filter(Boolean).join(" · ");
+    : unknown ? elapsed : `${percent}%`;
   updateActivityBadge(running ? 1 : 0);
 }
 
@@ -2386,7 +2485,7 @@ function runExit(action, job) {
   if (action === "open_model_management") {
     state.modelFilter = "recommended";
     activate("settings");
-    return byId("model-catalog").scrollIntoView({block: "start"});
+    return byId("model-table").scrollIntoView({block: "start"});
   }
   if (action === "edit_intent") {
     activate("create");
@@ -2712,26 +2811,12 @@ function renderOutpaintPreview() {
 
 /* ── library ──────────────────────────────────────────────────────────── */
 
-function renderLibraryKinds() {
-  const holder = byId("library-kinds");
-  holder.replaceChildren(...LIBRARY_KINDS.map((kind) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "chip";
-    button.dataset.kind = kind.id;
-    button.setAttribute("role", "radio");
-    button.setAttribute("aria-checked", String(kind.id === state.libraryKind));
-    button.textContent = kind.label;
-    return button;
-  }));
-}
-
 async function loadLibrary({reset = false} = {}) {
   const grid = byId("library-grid");
   if (reset) { grid.replaceChildren(); state.libraryCursor = null; }
   let page;
   try {
-    page = await call("library.list", {kind: state.libraryKind, limit: 24, before: state.libraryCursor});
+    page = await call("library.list", {kind: "all", limit: 24, before: state.libraryCursor});
   } catch {
     byId("library-empty").hidden = false;
     byId("library-empty").textContent = "ライブラリを読み込めませんでした。";
@@ -2739,10 +2824,89 @@ async function loadLibrary({reset = false} = {}) {
   }
   state.libraryCursor = page.next_before;
   byId("library-more").hidden = !page.next_before;
-  for (const item of page.items) grid.append(await libraryCard(item));
+  if (reset) state.libraryItems = [];
+  for (const item of page.items) {
+    state.libraryItems.push(item);
+    grid.append(await libraryCard(item));
+  }
+  // 消えた素材を選んだままにしない。削除の後で数だけ残ると、押しても何も起きない。
+  const present = new Set(state.libraryItems.map((item) => item.asset_id));
+  for (const id of [...state.librarySelected]) if (!present.has(id)) state.librarySelected.delete(id);
+  renderLibrarySelection();
   const empty = grid.childElementCount === 0;
   byId("library-empty").hidden = !empty;
   byId("library-empty").textContent = "まだ素材はありません。";
+  byId("library-count").textContent = empty
+    ? "" : `${state.libraryItems.length} 件${page.next_before ? "＋" : ""}`;
+}
+
+/* ── まとめて消す ─────────────────────────────────────────────────────
+   1 枚ずつ開いて消すのは、失敗した生成が並んだときに現実的でない。
+   選択中はカードの押し先を「開く」から「選ぶ」へ切り替える。同じ場所に
+   別の意味を重ねるので、選択中だと分かる印を必ず出す。 */
+
+function setLibrarySelecting(active) {
+  state.librarySelecting = active;
+  if (!active) state.librarySelected.clear();
+  byId("library-grid").classList.toggle("selecting", active);
+  const toggle = byId("library-select");
+  toggle.setAttribute("aria-pressed", String(active));
+  toggle.textContent = active ? "やめる" : "選択";
+  renderLibrarySelection();
+}
+
+function renderLibrarySelection() {
+  const bar = byId("library-selection");
+  bar.hidden = !state.librarySelecting;
+  const count = state.librarySelected.size;
+  byId("library-selection-count").textContent = `${count} 件を選択`;
+  byId("library-delete").disabled = count === 0;
+  byId("library-delete").textContent = count ? `${count} 件を削除` : "削除";
+  for (const card of byId("library-grid").querySelectorAll(".card")) {
+    card.setAttribute("aria-selected", String(state.librarySelected.has(card.dataset.assetId)));
+  }
+}
+
+function libraryNote(text) {
+  const note = byId("library-note");
+  note.textContent = text;
+  note.hidden = !text;
+}
+
+function toggleLibrarySelection(assetId) {
+  if (state.librarySelected.has(assetId)) state.librarySelected.delete(assetId);
+  else state.librarySelected.add(assetId);
+  renderLibrarySelection();
+}
+
+async function deleteSelectedAssets() {
+  const assetIds = [...state.librarySelected];
+  if (!assetIds.length) return;
+  const accepted = await confirmModelAction({
+    title: `${assetIds.length} 件を削除`,
+    detail: "選んだ素材とその来歴を消します。元には戻せません。",
+    confirmLabel: "削除する",
+  });
+  if (!accepted) return;
+  let response;
+  try {
+    response = await call("assets.delete", {asset_ids: assetIds});
+  } catch {
+    return libraryNote("削除できませんでした。");
+  }
+  // 全部消えたとは限らない。何が残ったのかを、理由込みで伝える。
+  const failed = (response.items || []).filter((item) => !item.deleted);
+  for (const item of failed) state.librarySelected.add(item.asset_id);
+  for (const item of response.items || []) {
+    if (item.deleted) state.librarySelected.delete(item.asset_id);
+  }
+  libraryNote(failed.length
+    ? `${response.deleted_count} 件を削除しました。${failed.length} 件は${
+        failed.some((item) => item.code === "asset_in_use")
+          ? "他の素材の元になっているため" : ""}残りました。`
+    : `${response.deleted_count} 件を削除しました。`);
+  if (!failed.length) setLibrarySelecting(false);
+  await loadLibrary({reset: true});
 }
 
 const KIND_LABEL = {generated: "作った", edited: "直した", imported: "取り込み"};
@@ -2753,7 +2917,9 @@ async function libraryCard(item) {
   card.className = "card";
   card.dataset.assetId = item.asset_id;
   const image = document.createElement("img");
-  image.alt = item.summary || "";
+  image.alt = "";
+  // 出せない絵の枠だけが正方形で残ると、一覧が読めない箱の列になる。畳む。
+  image.addEventListener("error", () => { image.hidden = true; });
   const summary = document.createElement("span");
   summary.className = "sum";
   summary.textContent = item.summary || "(説明なし)";
@@ -2767,7 +2933,11 @@ async function libraryCard(item) {
   image.loading = "lazy";
   image.decoding = "async";
   card.append(image, summary, meta);
-  card.addEventListener("click", () => void openViewer(item.asset_id, item));
+  card.setAttribute("aria-selected", String(state.librarySelected.has(item.asset_id)));
+  card.addEventListener("click", () => {
+    if (state.librarySelecting) return toggleLibrarySelection(item.asset_id);
+    void openViewer(item.asset_id, item, state.libraryItems);
+  });
   // 一覧に同梱された小さな版を使う。1 枚 1 往復にしない。
   if (item.thumbnail?.base64) {
     image.src = `data:${item.thumbnail.mime_type};base64,${item.thumbnail.base64}`;
@@ -2776,7 +2946,7 @@ async function libraryCard(item) {
   try {
     const thumbnail = await call("assets.thumbnail", {asset_id: item.asset_id});
     image.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
-  } catch { image.alt = "表示できません"; }
+  } catch { image.hidden = true; }
   return card;
 }
 
@@ -2784,7 +2954,11 @@ async function libraryCard(item) {
 
 /* 一覧のサムネイルは小さい。タップしたら原寸で見られる場所が要る。
    ピンチ／ホイールで拡大し、拡大中はドラッグで動かせる。 */
-const viewer = {assetId: "", filename: "", scale: 1, x: 0, y: 0, pointers: new Map(), pinch: 0, drag: null};
+const viewer = {
+  assetId: "", filename: "", scale: 1, x: 0, y: 0, pointers: new Map(), pinch: 0, drag: null,
+  // 一覧から開いたときだけ隣が存在する。単発で開いた素材には送り先がない。
+  list: [], index: -1, token: 0,
+};
 
 function viewerApply() {
   byId("viewer-image").style.transform =
@@ -2807,32 +2981,62 @@ function viewerZoom(factor) {
   viewerApply();
 }
 
-async function openViewer(assetId, item) {
+function renderViewerNav() {
+  const nav = document.querySelector(".viewer-nav");
+  if (!nav) return;
+  const total = viewer.list.length;
+  nav.hidden = total < 2;
+  if (total < 2) return;
+  byId("viewer-prev").disabled = viewer.index <= 0;
+  byId("viewer-next").disabled = viewer.index < 0 || viewer.index >= total - 1;
+  byId("viewer-position").textContent = `${viewer.index + 1} / ${total}`;
+}
+
+function stepViewer(offset) {
+  const next = viewer.index + offset;
+  const item = viewer.list[next];
+  if (!item) return;
+  viewer.index = next;
+  void openViewer(item.asset_id, item, viewer.list, {keepList: true});
+}
+
+async function openViewer(assetId, item, list, {keepList = false} = {}) {
   viewer.assetId = assetId;
   viewer.filename = item?.suggested_filename || "";
+  if (!keepList) {
+    viewer.list = Array.isArray(list) ? list : [];
+    viewer.index = viewer.list.findIndex((entry) => entry.asset_id === assetId);
+  }
+  renderViewerNav();
   byId("viewer-save-note").hidden = true;
   viewerReset();
   const image = byId("viewer-image");
   const caption = byId("viewer-caption");
   image.removeAttribute("src");
+  image.hidden = false;
   caption.textContent = "読み込んでいます…";
-  byId("viewer").showModal();
+  if (!byId("viewer").open) byId("viewer").showModal();
+  // 送り先を連打されると、遅い方の応答が後から上書きする。最後の要求だけ描く。
+  const token = ++viewer.token;
   try {
     const content = await call("assets.content", {asset_id: assetId});
+    if (token !== viewer.token) return;
     image.src = `data:${content.mime_type};base64,${content.base64}`;
-    image.alt = item?.summary || "";
-    caption.textContent = item
-      ? [item.summary, item.width && item.height ? `${item.width}×${item.height}` : "", KIND_LABEL[item.kind] || ""]
-          .filter(Boolean).join(" · ")
-      : "";
+    image.alt = "";
+    // ファイル名は原寸を見ている最中に使わない。行を専有すると操作が押し出される。
+    caption.textContent = item?.width && item?.height ? `${item.width}×${item.height}` : "";
   } catch {
+    if (token !== viewer.token) return;
     // 12 MiB を超える素材は運べない。小さい版で見せて理由を書く。
     try {
       const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 512});
+      if (token !== viewer.token) return;
       image.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
       caption.textContent = "原寸は大きすぎて表示できません。書き出して確認してください。";
     } catch {
-      caption.textContent = "この素材は表示できません。";
+      if (token !== viewer.token) return;
+      image.hidden = true;
+      caption.textContent = "表示できません";
     }
   }
 }
@@ -2889,6 +3093,37 @@ async function saveAsset(assetId) {
   }
 }
 
+/* 検証の記録は、そのまま出すと JSON の塊が 1 行に並ぶ。読む人が知りたいのは
+   「何を見て、通ったのか」だけである。名前を訳し、通否だけを添える。 */
+const VALIDATOR_LABEL = {
+  "image.non_empty": "中身がある",
+  "image.dimensions": "大きさ",
+  "image.mode": "形式",
+  "image.alpha": "透過",
+  "image.outpaint.source_pixel_diff": "元の絵が変わっていない",
+  "image.strict_edit.unmasked_pixel_diff": "塗った所だけ変わっている",
+  "evaluation.unified": "内容の確認",
+  "m5.companion.profile": "機種の設定",
+  "m5.companion.edit_mask": "編集範囲",
+  "m5.companion.pack": "同梱物",
+};
+
+function validationList(validation) {
+  const holder = document.createElement("div");
+  holder.className = "checks";
+  for (const record of validation) {
+    // 記録は status: "passed" と passed: true の二通りある。どちらも読む。
+    const passed = record?.status ? record.status === "passed" : record?.passed === true;
+    const item = document.createElement("span");
+    item.className = passed ? "checkmark ok" : "checkmark bad";
+    item.textContent = `${passed ? "✓" : "✕"} ${
+      VALIDATOR_LABEL[record?.validator] || record?.validator || "不明"}`;
+    if (record?.reason) item.title = String(record.reason);
+    holder.append(item);
+  }
+  return holder;
+}
+
 async function openDetail(assetId) {
   const body = byId("detail-body");
   byId("detail-title").textContent = "詳細";
@@ -2903,14 +3138,16 @@ async function openDetail(assetId) {
       ["選んだ理由", modelRouteText(provenance.parameters?.model_route)],
       ["元になった素材", provenance.parent_asset_ids.length ? provenance.parent_asset_ids.join(", ") : "なし"],
       ["ライセンス", provenance.license],
-      ["検証", provenance.validation.length ? JSON.stringify(provenance.validation) : "記録なし"],
+      ["検証", provenance.validation.length
+        ? validationList(provenance.validation) : "記録なし"],
     ];
     for (const [term, value] of rows) {
       const wrap = document.createElement("div");
       const dt = document.createElement("dt");
       dt.textContent = term;
       const dd = document.createElement("dd");
-      dd.textContent = String(value);
+      if (value instanceof Node) dd.append(value);
+      else dd.textContent = String(value);
       wrap.append(dt, dd);
       summary.append(wrap);
     }
@@ -3154,6 +3391,10 @@ const MODEL_STATE_LABEL = {
   canceled: "中止しました",
 };
 
+const MODEL_OPERATION_ACTION_LABEL = {
+  install: "ダウンロード", evaluate: "実機評価", remove: "削除",
+};
+
 function modelOperationStateLabel(operation) {
   if (operation?.action === "evaluate") {
     if (operation.state === "ready") return "評価が完了しました";
@@ -3223,9 +3464,300 @@ function modelFailureNode(code, modelKey) {
   return holder;
 }
 
-function renderModelManagement() {
-  const holder = byId("model-catalog");
+/* この機材で動くのかを、表の中で一目で分かるようにする。
+
+   容量とライセンスが並んでいても「これは動くのか」は分からない。判定できる
+   材料は既にある（実測 VRAM と、この機材の VRAM 量）ので、それを使う。
+
+   実測していないものを「動く」とは言わない。分からないものは分からないと
+   出す。CPU オフロードは動くが遅くなる選択肢なので、動くものとは分けて出す。 */
+const RUNNABILITY = {
+  fits: {label: "実行可能", rank: 0, tone: "ok"},
+  offload: {label: "オフロード前提", rank: 1, tone: "warn"},
+  unknown: {label: "未計測", rank: 2, tone: "muted"},
+  blocked: {label: "起動不可", rank: 3, tone: "bad"},
+};
+
+function modelRunnability(model) {
+  const device = Number(state.deviceVramBytes) || 0;
+  if (!model.capabilities || !model.capabilities.length) return "blocked";
+  const measured = Number(model.measured_vram_bytes) || 0;
+  if (!device) return "unknown";
+  if (!measured) {
+    // 未計測。重みの大きさは目安にしかならないので、明らかに載らない場合だけ
+    // 起動不可と言い、それ以外は未計測のままにする。
+    const approximate = Number(model.approx_download_bytes) || 0;
+    return approximate > device * 3 ? "blocked" : "unknown";
+  }
+  if (measured <= device) return "fits";
+  // オフロードすれば動く見込みがある範囲。実測ではないので前提付きで出す。
+  return measured <= device * 3 ? "offload" : "blocked";
+}
+
+function runnabilityCell(model) {
+  const cell = document.createElement("td");
+  const key = modelRunnability(model);
+  const info = RUNNABILITY[key];
+  const badge = document.createElement("span");
+  badge.className = "runnable";
+  badge.dataset.tone = info.tone;
+  badge.textContent = info.label;
+  cell.append(badge);
+  return cell;
+}
+
+/* 導入済みを見比べるには表のほうが向く。カードは 1 件ずつの説明には良いが、
+   容量や状態を縦に揃えられないので、どれを消すかを決める用途に使えない。
+   検索結果と同じ表の言葉づかいに揃える。 */
+function modelStateLabel(model) {
+  if (!model.installed) return "未導入";
+  return model.healthy ? "導入済み" : "要確認";
+}
+
+function modelActionCell(model, modelKey) {
+  const cell = document.createElement("td");
+  const operation = latestModelOperation(model.model_id);
+  if (operation && !MODEL_TERMINAL.has(operation.state)) {
+    const status = document.createElement("span");
+    status.className = "model-operation-state";
+    status.textContent = `${modelOperationStateLabel(operation)} ${
+      operation.bytes_total ? Math.floor(operation.bytes_done / operation.bytes_total * 100) : 0}%`;
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.dataset.cancelModelOperation = operation.id;
+    cancel.textContent = "中止";
+    cell.append(status, cancel);
+    return cell;
+  }
+  // 押せないものをボタンにしない。押せる見た目なのに反応しないと、何が
+  // 足りないのかを利用者が推測することになる。できないときは理由を書く。
+  const unavailable = (text, why) => {
+    const note = document.createElement("span");
+    note.className = "hint";
+    note.textContent = text;
+    note.title = why;
+    cell.append(note);
+    return cell;
+  };
+  if (!state.modelManagementAvailable) {
+    return unavailable(
+      "操作できません",
+      "この表示ではモデルの追加・削除ができません。ControlDeck から開いてください。",
+    );
+  }
+  if (!model.installed && model.ownership !== "managed") {
+    return unavailable(
+      "外部で管理",
+      "このモデルは Media Forge の管理外です。共有のモデル置き場へ入れると、"
+      + "同じ画面から同じように使えます。",
+    );
+  }
+  if (!model.installed && model.approx_download_bytes >= MAX_MANAGED_MODEL_DOWNLOAD_BYTES) {
+    return unavailable(
+      "容量超過",
+      `${formatBytes(model.approx_download_bytes)} は 1 度に取り込める上限を超えています。`,
+    );
+  }
+  if (model.installed && model.ownership !== "managed") {
+    return unavailable("共有", "共有のモデル置き場にあるため、ここからは削除しません。");
+  }
+
+  const action = document.createElement("button");
+  action.type = "button";
+  if (!model.installed) {
+    action.dataset.installModel = modelKey;
+    action.textContent = "ダウンロード";
+  } else if (model.removable) {
+    action.dataset.removeModel = modelKey;
+    action.textContent = "削除";
+  } else {
+    return unavailable("使用中", "実行中の処理がこのモデルを使っています。");
+  }
+  if (model.installed && state.modelEvaluationIds.has(model.model_id)) {
+    const evaluate = document.createElement("button");
+    evaluate.type = "button";
+    evaluate.dataset.evaluateModel = modelKey;
+    evaluate.textContent = "実機で評価";
+    cell.append(evaluate);
+  }
+  cell.append(action);
+  return cell;
+}
+
+function modelTableRow(model) {
+  const modelKey = String(state.modelCatalog.indexOf(model));
+  const row = document.createElement("tr");
+  row.dataset.modelKey = modelKey;
+
+  const name = document.createElement("td");
+  name.className = "name";
+  const title = document.createElement("div");
+  title.textContent = model.display_name || model.model_id;
+  name.append(title);
+  for (const label of [
+    ...model.media_types.map((item) => MEDIA_TYPE_LABEL[item] || item),
+    ...model.domains.map((item) => DOMAIN_LABEL[item] || item),
+  ]) {
+    const chip = document.createElement("span");
+    chip.className = "tag";
+    chip.textContent = label;
+    name.append(chip);
+  }
+
+  const stateCell = document.createElement("td");
+  stateCell.textContent = modelStateLabel(model);
+
+  const adoption = document.createElement("td");
+  adoption.textContent = MODEL_ADOPTION_LABEL[model.state] || model.state;
+
+  const size = document.createElement("td");
+  size.className = "num";
+  size.textContent = model.installed && model.reclaimable_bytes
+    ? formatBytes(model.reclaimable_bytes)
+    : `約 ${formatBytes(model.approx_download_bytes)}`;
+
+  const vram = document.createElement("td");
+  vram.className = "num";
+  vram.textContent = model.measured_vram_bytes ? formatBytes(model.measured_vram_bytes) : "未計測";
+
+  const license = document.createElement("td");
+  license.textContent = model.license || "-";
+
+  row.append(
+    labelled(name, "モデル"),
+    labelled(runnabilityCell(model), "この機材"),
+    labelled(stateCell, "状態"),
+    labelled(adoption, "採用"),
+    labelled(size, "容量"),
+    labelled(vram, "VRAM"),
+    labelled(license, "ライセンス"),
+    labelled(modelActionCell(model, modelKey), "操作"),
+  );
+  // モバイルでは 2 列に並べるため、狭い側で落とす欄に印を付ける。
+  // 採用とライセンスは表（横並び）では読めるが、狭い枠では名前と容量を潰す。
+  adoption.classList.add("secondary");
+  license.classList.add("secondary");
+  return row;
+}
+
+function renderModelTable(visible) {
+  const holder = byId("model-table");
   if (!holder) return;
+  if (state.modelSort === "runnable") {
+    // 動くものを先に。同順位なら実測 VRAM の小さい順（載せやすい順）。
+    visible = [...visible].sort((a, b) =>
+      RUNNABILITY[modelRunnability(a)].rank - RUNNABILITY[modelRunnability(b)].rank
+      || (Number(a.measured_vram_bytes) || Infinity) - (Number(b.measured_vram_bytes) || Infinity)
+      || String(a.display_name).localeCompare(String(b.display_name)));
+  }
+  const table = document.createElement("table");
+  table.className = "catalog";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["モデル", "この機材", "状態", "採用", "容量", "VRAM", "ライセンス", ""]) {
+    const cell = document.createElement("th");
+    cell.textContent = label;
+    headRow.append(cell);
+  }
+  head.append(headRow);
+  const body = document.createElement("tbody");
+  body.append(...visible.map(modelTableRow));
+  table.append(head, body);
+  holder.replaceChildren(table);
+}
+
+/* ダウンロードは数十 GB かかることがあり、押したあとの行き先が要る。
+   進行中だけでなく、終わったもの・失敗したものも残す。何が落ちたのかを
+   後から確かめられないと、やり直してよいのかが分からない。 */
+function modelDownloadRow(operation) {
+  const model = state.modelCatalog.find((item) => item.model_id === operation.model_id);
+  const row = document.createElement("article");
+  row.className = "row";
+  row.dataset.status = MODEL_TERMINAL.has(operation.state)
+    ? (operation.state === "ready" ? "succeeded" : "failed") : "running";
+
+  const info = document.createElement("div");
+  const title = document.createElement("p");
+  title.className = "t";
+  title.textContent = model?.display_name || operation.model_id;
+  const sub = document.createElement("p");
+  sub.className = "s";
+  const done = formatBytes(operation.bytes_done);
+  const total = operation.bytes_total ? formatBytes(operation.bytes_total) : "?";
+  // 「ダウンロード · ダウンロードしています」と二重に出ていた。状態の言葉が
+  // 何をしているかを既に言っているので、そちらだけ残す。
+  const stateText = modelOperationStateLabel(operation);
+  const actionText = MODEL_OPERATION_ACTION_LABEL[operation.action] || operation.action;
+  sub.textContent = [
+    stateText.startsWith(actionText) ? "" : actionText,
+    stateText,
+    operation.bytes_total ? `${done} / ${total}` : done,
+    modelSpeedText(operation),
+    operation.error_code ? failureText(operation.error_code) : "",
+  ].filter(Boolean).join(" · ");
+  info.append(title, sub);
+
+  const side = document.createElement("div");
+  side.className = "row-side";
+  if (!MODEL_TERMINAL.has(operation.state)) {
+    const progress = document.createElement("progress");
+    progress.max = Math.max(operation.bytes_total, 1);
+    progress.value = operation.bytes_done;
+    progress.setAttribute("aria-label", modelOperationStateLabel(operation));
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.dataset.cancelModelOperation = operation.id;
+    cancel.textContent = "中止";
+    side.append(progress, cancel);
+  } else {
+    const done_ = document.createElement("span");
+    done_.className = "state";
+    done_.textContent = operation.state === "ready" ? "完了" : "失敗";
+    side.append(done_);
+    // 落ちた行にこそ次の一手が要る。一覧まで戻って同じモデルを探し直すのは、
+    // 失敗が何件か並んだ時点で現実的でなくなる。
+    if (operation.state !== "ready" && operation.action === "install") {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.dataset.retryModelOperation = operation.model_id;
+      retry.textContent = "再試行";
+      side.append(retry);
+    }
+  }
+  row.append(info, side);
+  return row;
+}
+
+async function clearModelDownloadHistory() {
+  try {
+    await call("models.operations.clear", {});
+  } catch { return; }
+  // 進行中は残る。手元の控えも同じ規則で間引き、次の一覧取得を待たない。
+  for (const [id, operation] of [...state.modelOperations]) {
+    if (MODEL_TERMINAL.has(operation.state)) state.modelOperations.delete(id);
+  }
+  renderModelDownloads();
+  await loadModelManagement();
+}
+
+function renderModelDownloads() {
+  const holder = byId("model-downloads");
+  if (!holder) return;
+  const operations = [...state.modelOperations.values()]
+    .filter((item) => item.action !== "remove")
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  holder.replaceChildren(...operations.map(modelDownloadRow));
+  byId("model-downloads-empty").hidden = operations.length > 0;
+  const running = operations.filter((item) => !MODEL_TERMINAL.has(item.state)).length;
+  byId("model-downloads-clear").hidden = operations.length === running;
+  byId("model-downloads-count").textContent = running
+    ? `進行中 ${running} 件` : operations.length ? `${operations.length} 件` : "";
+  // 進行中があるなら開いておく。押したのに何も見えないのが一番困る。
+  if (running) byId("model-downloads-block").open = true;
+}
+
+function renderModelManagement() {
+  if (!byId("model-table")) return;
   const visible = state.modelCatalog.filter((model) => {
     if (state.modelFilter === "installed") return model.installed;
     if (state.modelFilter === "recommended") return modelRecommended(model);
@@ -3235,99 +3767,9 @@ function renderModelManagement() {
     }
     return true;
   });
-  holder.replaceChildren(...visible.map((model) => {
-    const modelKey = String(state.modelCatalog.indexOf(model));
-    const card = document.createElement("article");
-    card.className = "model-card";
-    card.dataset.modelKey = modelKey;
-    const head = document.createElement("div");
-    head.className = "model-card-head";
-    const title = document.createElement("h3");
-    title.textContent = model.display_name;
-    const stateLabel = document.createElement("span");
-    stateLabel.className = "state";
-    stateLabel.textContent = model.installed ? (model.healthy ? "導入済み" : "要確認") : "未導入";
-    head.append(title, stateLabel);
-    const chips = document.createElement("div");
-    chips.className = "model-tags";
-    for (const label of [
-      ...(MODEL_ADOPTION_LABEL[model.state] ? [MODEL_ADOPTION_LABEL[model.state]] : []),
-      ...model.media_types.map((item) => MEDIA_TYPE_LABEL[item] || item),
-      ...model.domains.map((item) => DOMAIN_LABEL[item] || item),
-    ]) {
-      const chip = document.createElement("span");
-      chip.textContent = label;
-      chips.append(chip);
-    }
-    const description = document.createElement("p");
-    description.className = "s";
-    description.textContent = model.description || "この環境で利用できるモデルです。";
-    const foot = document.createElement("div");
-    foot.className = "model-card-foot";
-    const size = document.createElement("span");
-    size.className = "hint";
-    size.textContent = model.installed && model.reclaimable_bytes
-      ? `${formatBytes(model.reclaimable_bytes)} 使用中`
-      : `約 ${formatBytes(model.approx_download_bytes)}`;
-    foot.append(size);
-    const operation = latestModelOperation(model.model_id);
-    const active = operation && !MODEL_TERMINAL.has(operation.state);
-    if (active) {
-      const progress = document.createElement("progress");
-      progress.max = Math.max(operation.bytes_total, 1);
-      progress.value = operation.bytes_done;
-      progress.setAttribute("aria-label", modelOperationStateLabel(operation));
-      const status = document.createElement("span");
-      status.className = "model-operation-state";
-      status.textContent = `${modelOperationStateLabel(operation)} ${
-        operation.bytes_total ? Math.floor(operation.bytes_done / operation.bytes_total * 100) : 0}%`;
-      const cancel = document.createElement("button");
-      cancel.type = "button";
-      cancel.dataset.cancelModelOperation = operation.id;
-      cancel.textContent = "中止";
-      card.append(head, chips, description, progress, status, cancel);
-    } else {
-      const action = document.createElement("button");
-      action.type = "button";
-      if (!state.modelManagementAvailable) {
-        action.disabled = true;
-        action.textContent = "CLI で管理";
-      } else if (!model.installed && model.ownership === "managed" &&
-                 model.approx_download_bytes < MAX_MANAGED_MODEL_DOWNLOAD_BYTES) {
-        action.dataset.installModel = modelKey;
-        action.textContent = "ダウンロード";
-      } else if (!model.installed && model.ownership === "managed") {
-        action.disabled = true;
-        action.textContent = "32GB上限対象";
-      } else if (model.ownership === "managed" && model.removable) {
-        action.dataset.removeModel = modelKey;
-        action.textContent = "削除";
-      } else {
-        action.disabled = true;
-        action.textContent = model.installed ? "共有モデル" : "外部ランタイムで導入";
-      }
-      if (model.installed && state.modelEvaluationIds.has(model.model_id)) {
-        const evaluate = document.createElement("button");
-        evaluate.type = "button";
-        evaluate.dataset.evaluateModel = modelKey;
-        evaluate.textContent = "実機で評価";
-        foot.append(evaluate);
-      }
-      foot.append(action);
-      card.append(head, chips, description, foot);
-      if (operation?.action === "evaluate" && operation.state === "ready" && operation.result) {
-        const measured = document.createElement("p");
-        measured.className = "s model-evaluation-result";
-        measured.textContent = `実測 ${Number(operation.result.elapsed_sec || 0).toFixed(1)}秒 · ` +
-          `VRAM ${formatBytes(operation.result.execution_vram_delta_bytes || 0)} · ` +
-          `RAM ${formatBytes(operation.result.peak_rss_bytes || 0)}`;
-        card.append(measured);
-      }
-      if (operation?.state === "failed") card.append(modelFailureNode(operation.error_code, modelKey));
-    }
-    return card;
-  }));
-  byId("model-empty").hidden = visible.length !== 0;
+  renderModelDownloads();
+  renderModelTable(visible);
+  byId("model-table").hidden = visible.length === 0;
   renderAdvancedModels();
 }
 
@@ -3536,7 +3978,11 @@ async function loadAdvancedSettings() {
 
 byId("mode-simple").addEventListener("click", () => setMode("simple"));
 byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
-byId("nav-settings").addEventListener("click", () => activate("settings"));
+/* 開いた導線でそのまま閉じられるようにする。開くのと閉じるので押す場所が
+   違うのは、片手で使っているときに探すことになる。 */
+byId("nav-settings").addEventListener("click", () => {
+  activate(state.view === "settings" ? (state.lastNonSettingsView || "create") : "settings");
+});
 byId("model-filters").addEventListener("click", (event) => {
   const button = event.target.closest("[data-model-filter]");
   if (!button) return;
@@ -3559,7 +4005,7 @@ function handleModelExit(button) {
   else void loadModelManagement();
 }
 
-for (const holder of [byId("model-catalog"), byId("model-error")]) {
+for (const holder of [byId("model-table"), byId("model-error")]) {
   holder.addEventListener("click", (event) => {
     const install = event.target.closest("[data-install-model]");
     const installModel = install ? state.modelCatalog[Number(install.dataset.installModel)] : null;
@@ -3719,15 +4165,6 @@ byId("custom-ratios").addEventListener("click", (event) => {
   void savePreferences({last_custom_width: size.width, last_custom_height: size.height});
 });
 
-byId("library-kinds").addEventListener("click", (event) => {
-  const chip = event.target.closest("[data-kind]");
-  if (!chip) return;
-  state.libraryKind = chip.dataset.kind;
-  renderLibraryKinds();
-  void savePreferences({library_kind: state.libraryKind});
-  void loadLibrary({reset: true});
-});
-
 byId("edit-actions").addEventListener("click", (event) => {
   const button = event.target.closest("[data-edit-mode]");
   if (button && !button.disabled) selectEditMode(button.dataset.editMode);
@@ -3806,6 +4243,11 @@ function jobById(id) {
 
 byId("viewer-save").addEventListener("click", () => void saveAsset(viewer.assetId));
 
+byId("model-sort").addEventListener("change", (event) => {
+  state.modelSort = event.target.value;
+  renderModelManagement();
+});
+
 byId("catalog-search").addEventListener("click", () => void searchCatalog());
 byId("catalog-query").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); void searchCatalog(); }
@@ -3814,13 +4256,8 @@ byId("catalog-results").addEventListener("click", (event) => {
   const button = event.target.closest("[data-inspect-repo]");
   if (!button) return;
   // 表から直接は取り込まない。必ず中身とライセンスの確認を通す。
-  byId("custom-manual").open = true;
-  byId("custom-repo").value = button.dataset.inspectRepo;
-  byId("custom-revision").value = "main";
-  void resolveCustomModel();
+  void resolveCustomModel(button.dataset.inspectRepo);
 });
-
-byId("custom-resolve").addEventListener("click", () => void resolveCustomModel());
 byId("custom-result").addEventListener("click", (event) => {
   if (event.target.closest("#custom-add")) void addCustomModel();
 });
@@ -3879,6 +4316,13 @@ for (const holder of [byId("activity-list"), byId("create-error")]) {
 byId("library-more").addEventListener("click", () => void loadLibrary());
 byId("close-dialog").addEventListener("click", () => byId("detail-dialog").close());
 byId("viewer-close").addEventListener("click", () => byId("viewer").close());
+byId("viewer-prev").addEventListener("click", () => stepViewer(-1));
+byId("viewer-next").addEventListener("click", () => stepViewer(1));
+byId("viewer").addEventListener("keydown", (event) => {
+  // 拡大中は矢印でずらしたい、というほどの操作ではない。素直に送りに使う。
+  if (event.key === "ArrowLeft") { event.preventDefault(); stepViewer(-1); }
+  if (event.key === "ArrowRight") { event.preventDefault(); stepViewer(1); }
+});
 byId("viewer-detail").addEventListener("click", () => {
   byId("viewer").close();
   if (viewer.assetId) void openDetail(viewer.assetId);
@@ -3886,8 +4330,7 @@ byId("viewer-detail").addEventListener("click", () => {
 byId("viewer-edit").addEventListener("click", () => {
   byId("viewer").close();
   activate("create");
-  byId("create-status").textContent =
-    "編集したい画像を「画像を追加」から読み込ませてください。書き出しからの直接編集は次の段階で入ります。";
+  byId("create-status").textContent = "「画像を追加」から読み込ませてください。";
 });
 
 const viewerStage = byId("viewer-stage");
@@ -3938,6 +4381,35 @@ for (const name of ["pointerup", "pointercancel", "pointerleave"]) {
     }
   });
 }
+byId("library-select").addEventListener("click", () => setLibrarySelecting(!state.librarySelecting));
+byId("library-select-all").addEventListener("click", () => {
+  for (const item of state.libraryItems) state.librarySelected.add(item.asset_id);
+  renderLibrarySelection();
+});
+byId("library-select-none").addEventListener("click", () => {
+  state.librarySelected.clear();
+  renderLibrarySelection();
+});
+byId("library-delete").addEventListener("click", () => void deleteSelectedAssets());
+const catalogQuery = byId("catalog-query");
+const catalogClear = byId("catalog-clear");
+function syncCatalogClear() { catalogClear.hidden = !catalogQuery.value; }
+catalogQuery.addEventListener("input", syncCatalogClear);
+catalogClear.addEventListener("click", () => {
+  catalogQuery.value = "";
+  syncCatalogClear();
+  catalogQuery.focus();
+  void searchCatalog();
+});
+syncCatalogClear();
+byId("model-downloads-clear").addEventListener("click", () => void clearModelDownloadHistory());
+// ダウンロード一覧は行ごと作り直す。中止と再試行は委譲で受ける。
+byId("model-downloads").addEventListener("click", (event) => {
+  const cancel = event.target.closest("[data-cancel-model-operation]");
+  if (cancel) return void cancelModelOperation(cancel.dataset.cancelModelOperation);
+  const retry = event.target.closest("[data-retry-model-operation]");
+  if (retry) return void startModelInstall(retry.dataset.retryModelOperation);
+});
 byId("open-host-jobs").addEventListener("click", () => void callHost("host.route.open", {route: "/jobs"}).catch(() => {}));
 byId("result-image").addEventListener("click", () => {
   const assetId = byId("result-image").dataset.assetId;
@@ -4018,6 +4490,7 @@ function applySessionParts(snapshot) {
   if (usable(snapshot.capabilities)) {
     state.capabilities = snapshot.capabilities.capabilities || {};
     state.envelope = snapshot.capabilities.envelope || null;
+    state.deviceVramBytes = snapshot.capabilities.device?.vram_bytes || 0;
     state.presets = snapshot.capabilities.presets || [];
   }
   if (usable(snapshot.profiles)) state.profiles = snapshot.profiles.items || [];
@@ -4038,10 +4511,12 @@ function applyModelSession(snapshot) {
     const storage = catalog.storage || {};
     byId("model-storage").textContent = state.modelManagementAvailable
       ? `管理中 ${formatBytes(storage.managed_bytes)} · 空き ${formatBytes(storage.free_bytes)}`
-      : "単体表示ではモデル操作に CLI を使います";
+      : "この表示では一覧のみです。追加・削除は ControlDeck から開いてください。";
     byId("model-error").hidden = true;
   }
   if (usable(snapshot.model_operations)) {
+    // 単体表示では live event が来ない。取り直した一覧からも速度を出す。
+    for (const item of snapshot.model_operations.items || []) recordModelSpeed(item);
     state.modelOperations = new Map((snapshot.model_operations.items || []).map((item) => [item.id, item]));
   }
   if (usable(snapshot.model_catalog) || usable(snapshot.model_operations)) {
@@ -4050,20 +4525,6 @@ function applyModelSession(snapshot) {
     renderAdvancedModelChoices();
     renderModelChoice();
   }
-  if (usable(snapshot.models)) applyEstimate(snapshot.models.items || []);
-}
-
-function applyEstimate(models) {
-  const node = byId("create-estimate");
-  node.textContent = "";
-  const measured = models
-    .filter((model) => model.installed && model.healthy && model.measurement_confidence === "measured")
-    .map((model) => model.measured_runtime_sec)
-    .filter((value) => typeof value === "number" && value > 0);
-  if (!measured.length) return;
-  state.estimateSec = Math.min(...measured);
-  node.textContent =
-    `初回は約 ${Math.round(state.estimateSec)} 秒（モデルの読み込みを含む実測）。2 回目以降は短くなります。`;
 }
 
 async function applyRecent(page) {
@@ -4120,7 +4581,6 @@ async function boot() {
     catch { state.creativeTemplates = {domains: [], scenes: [], poses: [], compositions: [], cameras: [], variations: []}; }
   }
 
-  state.libraryKind = state.preferences.library_kind || "all";
   state.directorMode = directorAvailable()
     ? (state.preferences.director_mode || "refine")
     : "original";
@@ -4130,7 +4590,6 @@ async function boot() {
   renderPackProfiles();
   renderPresets();
   renderCounts();
-  renderLibraryKinds();
   setMode(state.preferences.mode || "simple", {persist: false});
   applyModelSession(snapshot);
   await refreshAttachment();

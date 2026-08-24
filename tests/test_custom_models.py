@@ -422,3 +422,103 @@ def test_an_unreachable_source_is_reported_with_a_code(tmp_path: Path):
         asyncio.run(store.search("sd"))
 
     assert exc.value.code == "custom_model_source_unreachable"
+
+
+def test_search_reports_the_weight_size_from_the_declared_dtypes():
+    """押す前に知りたいのは容量である。一覧 API は容量を返さないので、
+    safetensors の要素数と型から重みそのものの大きさを出す。"""
+    from mediaforge.custom_models import _weights_from_safetensors
+
+    assert _weights_from_safetensors(
+        {"total": 11901408320, "parameters": {"BF16": 11901408320}}
+    ) == (23802816640, "BF16")
+    assert _weights_from_safetensors(
+        {"parameters": {"F32": 1_000, "BF16": 2_000}}
+    ) == (8_000, "BF16")
+    # 知らない型を 0 バイトとして黙って足すと、総量が過少に出る。分からないと言う。
+    assert _weights_from_safetensors({"parameters": {"MX6": 1_000}}) == (0, "")
+    for missing in (None, {}, {"total": 5}, {"parameters": []}):
+        assert _weights_from_safetensors(missing) == (0, "")
+
+
+def test_gguf_repositories_report_their_distributed_size():
+    """GGUF 配布は safetensors を持たない。容量が空欄のままになっていた。"""
+    from mediaforge.custom_models import _weights_from_gguf
+
+    assert _weights_from_gguf(
+        {"total": 11901408320, "architecture": "flux", "totalFileSize": 23802870944}
+    ) == (23802870944, "GGUF")
+    for missing in (None, {}, {"total": 5}, {"totalFileSize": 0}, {"totalFileSize": "12"}):
+        assert _weights_from_gguf(missing) == (0, "")
+
+
+def _local_sdxl(root: Path, *, variant: str = "fp16") -> Path:
+    root.mkdir(parents=True)
+    (root / "model_index.json").write_text(
+        json.dumps({"_class_name": "StableDiffusionXLPipeline", "_diffusers_version": "0.40.0"}),
+        encoding="utf-8",
+    )
+    for component in ("unet", "vae"):
+        (root / component).mkdir()
+        (root / component / "config.json").write_text("{}", encoding="utf-8")
+        (root / component / f"diffusion_pytorch_model.{variant}.safetensors").write_bytes(
+            component.encode() * 32
+        )
+    return root
+
+
+def test_a_local_directory_can_be_described_without_touching_the_network(tmp_path: Path):
+    """既に手元にある重みが使えないと、別の道具で落としたものが死蔵される。"""
+    catalog = CustomModelCatalog(tmp_path / "custom.json")
+    resolved = catalog.resolve_local(str(_local_sdxl(tmp_path / "mine")), name="my-sdxl")
+
+    assert resolved.repo_id == "local/my-sdxl"
+    assert resolved.runtime_adapter == "diffusers.sdxl"
+    assert resolved.capabilities == ("image.text_to_image",)
+    assert [item.path for item in resolved.weights] == [
+        "unet/diffusion_pytorch_model.fp16.safetensors",
+        "vae/diffusion_pytorch_model.fp16.safetensors",
+    ]
+    assert all(len(item.sha256) == 64 for item in resolved.weights)
+    assert "model_index.json" in resolved.required_files
+    # 配布元 API が無いので digest の意味が変わる。黙って同じ顔をさせない。
+    assert any("この機械で読み取った値" in warning for warning in resolved.warnings)
+    # revision は中身から決める。フォルダは後から書き換わりうる。
+    assert len(resolved.revision) == 64
+
+
+def test_a_local_directory_that_is_not_a_pipeline_is_refused(tmp_path: Path):
+    catalog = CustomModelCatalog(tmp_path / "custom.json")
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(CustomModelError) as failure:
+        catalog.resolve_local(str(empty), name="nope")
+    assert failure.value.code == "custom_model_not_diffusers"
+
+    with pytest.raises(CustomModelError) as missing:
+        catalog.resolve_local(str(tmp_path / "absent"), name="nope")
+    assert missing.value.code == "custom_model_path_missing"
+
+    with pytest.raises(CustomModelError) as relative:
+        catalog.resolve_local("relative/path", name="nope")
+    assert relative.value.code == "custom_model_path_invalid"
+
+    for bad in ("", "has space", "a/b", "x" * 65):
+        with pytest.raises(CustomModelError) as name:
+            catalog.resolve_local(str(_local_sdxl(tmp_path / f"m{len(bad)}")), name=bad)
+        assert name.value.code == "custom_model_name_invalid"
+
+
+def test_an_unknown_pipeline_is_imported_but_not_claimed_to_be_runnable(tmp_path: Path):
+    """取り込めることと生成に使えることは別。推測で adapter を割り当てない。"""
+    catalog = CustomModelCatalog(tmp_path / "custom.json")
+    root = _local_sdxl(tmp_path / "odd")
+    (root / "model_index.json").write_text(
+        json.dumps({"_class_name": "SomeFuturePipeline"}), encoding="utf-8"
+    )
+    resolved = catalog.resolve_local(str(root), name="odd")
+
+    assert resolved.runtime_adapter == UNSUPPORTED_ADAPTER
+    assert resolved.capabilities == ()
+    assert not resolved.usable_for_generation
+    assert any("生成には使えません" in warning for warning in resolved.warnings)

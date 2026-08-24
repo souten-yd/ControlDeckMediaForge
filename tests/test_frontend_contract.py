@@ -41,26 +41,28 @@ DOM_IDS = (
     "profile-add-character", "profile-add-style", "profile-list", "profile-dialog",
     "profile-name", "profile-appearance", "profile-art-style", "profile-references",
     "pack-section", "pack-profile", "pack-open", "pack-dialog", "pack-slots", "pack-progress",
-    "custom-repo", "custom-revision", "custom-resolve", "custom-result", "custom-error",
+    "custom-result", "custom-error",
     # UX3: 書き出し導線と、重複を解消した詳細設定
     "viewer-save", "viewer-save-note",
-    "catalog-query", "catalog-sort", "catalog-pipeline", "catalog-search",
-    "catalog-results", "catalog-empty", "custom-manual",
+    "catalog-query", "catalog-sort", "catalog-style", "catalog-search",
+    "catalog-results", "catalog-empty",
+    "model-table", "model-sort",
+    "model-downloads", "model-downloads-empty", "model-downloads-count",
     "reference-intelligence", "reference-focuses", "reference-analysis-summary",
     "reference-analysis-note",
     "composition-options", "composition-title", "composition-caption",
     "composition-text-edit", "composition-edit-title", "composition-edit-caption",
     "composition-update-text", "composition-edit-status",
-    "create-error", "create-estimate",
+    "create-error",
     "mask-input", "mask-draw", "mask-preview", "mask-state",
     "mask-dialog", "mask-canvas", "mask-brush", "mask-eraser", "mask-undo", "mask-clear",
     "mask-apply", "mask-cancel",
     "outpaint-input", "outpaint-ratios", "outpaint-scales", "outpaint-preview", "outpaint-note",
     "stage", "stage-progress", "stage-result", "candidate-strip", "recent-strip",
     "result-evaluate", "result-evaluation",
-    "mini-progress", "library-grid", "library-kinds", "activity-list",
+    "mini-progress", "library-grid", "library-count", "activity-list",
     "detail-dialog",
-    "model-storage", "model-filters", "model-catalog", "model-empty", "model-error",
+    "model-storage", "model-filters", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
     "model-remove-dialog", "model-remove-summary", "model-remove-detail",
     "model-remove-cancel", "model-remove-confirm",
@@ -69,7 +71,7 @@ DOM_IDS = (
 )
 
 ADVANCED_IDS = (
-    "advanced-create", "advanced-width", "advanced-height", "advanced-format",
+    "advanced-create", "advanced-format",
     "advanced-count", "advanced-policy", "advanced-model", "advanced-semantic",
     "advanced-attempts", "advanced-settings", "advanced-models", "advanced-mask-file",
     "advanced-host-state", "advanced-capability-list",
@@ -91,25 +93,9 @@ def test_dom_contract_ids_exist():
         assert f'id="{name}"' in MARKUP, f"DOM 契約の id が無い: {name}"
 
 
-def test_advanced_controls_live_only_inside_templates():
-    """詳細モードの要素は hidden ではなく template に置く。
-
-    シンプルでは DOM に存在しないことが要件（設計 §3.1）なので、
-    静的には「template の外に advanced-* が無い」で担保する。
-    """
-    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
-    for name in ADVANCED_IDS:
-        assert f'id="{name}"' not in without_templates, f"{name} が template の外にある"
-    for name in ("advanced-create", "advanced-settings"):
-        assert f'id="{name}"' in MARKUP, f"{name} の template が無い"
-    for slot in ("create", "settings", "mask"):
-        assert f'data-adv-slot="{slot}"' in MARKUP
-        assert f'data-adv-template="{slot}"' in MARKUP
-
-
 def test_model_management_actions_are_simple_but_technical_details_are_advanced():
     without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
-    for name in ("model-filters", "model-catalog", "model-storage"):
+    for name in ("model-filters", "model-table", "model-storage"):
         assert f'id="{name}"' in without_templates
     assert 'id="advanced-models"' not in without_templates
     assert "models.install" in SCRIPT and "models.remove" in SCRIPT and "models.evaluate" in SCRIPT
@@ -119,8 +105,8 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert 'data-model-filter="image"' in MARKUP
     assert 'data-model-filter="video"' in MARKUP
     assert 'data-model-filter="all"' in MARKUP
-    assert 'model.ownership === "managed"' in SCRIPT
-    assert '"外部ランタイムで導入"' in SCRIPT
+    assert 'model.ownership !== "managed"' in SCRIPT
+    assert '"外部で管理"' in SCRIPT
     assert 'experimental: "実験的・未実測"' in SCRIPT
     assert "model.license_acceptance_id" in SCRIPT
     assert "window.confirm" not in SCRIPT
@@ -128,21 +114,12 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert "confirmModelAction" in SCRIPT
     assert "license_acceptance: licenseAcceptance" in SCRIPT
     assert "MAX_MANAGED_MODEL_DOWNLOAD_BYTES = 32_000_000_000" in SCRIPT
-    assert 'action.textContent = "32GB上限対象"' in SCRIPT
+    # 上限超過は操作ではなく状態なので、ボタンではなく理由として出す。
+    assert '"容量超過"' in SCRIPT
     assert 'evaluate.textContent = "実機で評価"' in SCRIPT
     assert "state.modelEvaluationIds.has(model.model_id)" in SCRIPT
     assert "card.dataset.modelId" not in SCRIPT
     assert "dataset.modelId =" not in SCRIPT
-
-
-def test_extension_about_and_capabilities_are_advanced_only():
-    without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
-    for name in ("advanced-host-state", "advanced-capability-list"):
-        assert f'id="{name}"' not in without_templates
-        assert f'id="{name}"' in MARKUP
-    assert "この拡張機能について" not in without_templates
-    assert "今できること" not in without_templates
-    assert 'byId("advanced-capability-list")' in SCRIPT
 
 
 def test_creative_controls_use_the_versioned_catalog_and_preserve_prompt_only_requests():
@@ -245,10 +222,25 @@ def capability_names() -> set[str]:
 OPERATIONS = {"image.generate", "image.edit", "media.inspect", "asset.pack"}
 
 
+def validator_names() -> set[str]:
+    """検証の記録名も image.* の形をしている。capability と混ぜて数えない。
+
+    固定表ではなく backend が実際に出している名前を読む。UI が存在しない
+    validator を訳している場合は、そちらを別の test が捕まえる。
+    """
+    names: set[str] = set()
+    for path in sorted(BACKEND.glob("*.py")):
+        names.update(re.findall(
+            r'"validator":\s*"([a-z_0-9.]+)"', path.read_text(encoding="utf-8")
+        ))
+    return names
+
+
 def test_every_capability_the_ui_reads_is_emitted_by_the_backend():
     emitted = capability_names()
     assert emitted, "capability document を読み取れなかった"
-    used = set(re.findall(r'"((?:image|video|3d)\.[a-z_0-9]+)"', SCRIPT)) - OPERATIONS
+    used = set(re.findall(r'"((?:image|video|3d)\.[a-z_0-9]+)"', SCRIPT))
+    used -= OPERATIONS | validator_names()
     assert used, "UI が capability 名を参照していない"
     assert used <= emitted, f"backend が出さない capability を UI が参照している: {sorted(used - emitted)}"
 
@@ -334,12 +326,12 @@ def test_addon_declares_a_real_mobile_view():
     assert ADDON["version"] == packaged, "addon.json と mediaforge.__version__ が食い違っている"
 
 
-@pytest.mark.parametrize("kind", ["all", "generated", "edited", "imported"])
-def test_library_kinds_match_the_backend_projection(kind: str):
-    from mediaforge import library
-
-    assert kind in library.KINDS
-    assert f'id: "{kind}"' in SCRIPT
+def test_the_library_has_no_kind_filter():
+    """4 つの札が見出しを 1 行占めていた。絞り込む価値のある分け方ではない。"""
+    assert 'id="library-kinds"' not in MARKUP
+    assert "libraryKind" not in SCRIPT
+    assert '"library.list", {kind: "all"' in SCRIPT, "全件を取っていない"
+    assert 'id="library-count"' in MARKUP, "何枚あるのかが見出しから消えた"
 
 
 def test_preference_keys_used_by_the_ui_are_allowlisted():
@@ -400,7 +392,8 @@ def test_every_failure_offers_one_exit():
 
 def test_library_cards_open_the_full_screen_viewer():
     """一覧のサムネイルは小さい。タップで原寸を見られる場所へ行く。"""
-    assert "openViewer(item.asset_id, item)" in SCRIPT, "一覧のタップがビューアへ行っていない"
+    assert "openViewer(item.asset_id, item, state.libraryItems)" in SCRIPT, \
+        "一覧のタップがビューアへ行っていない"
     assert "#viewer[open] { display: grid" in STYLES, "ビューアが全画面になっていない"
     # 12 MiB を超える素材は運べないので、代わりに何を出すかを決めてある
     viewer = SCRIPT.split("async function openViewer(", 1)[1].split("\nasync function ", 1)[0]
@@ -557,7 +550,7 @@ def test_search_results_never_install_without_the_confirmation_step():
     """探せることと入れてよいことは別。表から直接は取り込ませない。"""
     handler = SCRIPT[SCRIPT.index('byId("catalog-results").addEventListener'):][:600]
 
-    assert "resolveCustomModel()" in handler
+    assert "resolveCustomModel(" in handler
     assert 'call("models.custom.add"' not in handler
 
 
@@ -570,3 +563,318 @@ def test_the_table_keeps_numbers_comparable():
     """桁が揃わない表は比較に使えない。"""
     assert "tabular-nums" in STYLES
     assert "table.catalog" in STYLES
+
+
+def test_installed_models_can_be_listed_as_a_comparable_table():
+    """容量や状態を縦に揃えられないと、どれを消すかを決められない。"""
+    assert "renderModelTable" in SCRIPT
+    for column in ("状態", "採用", "容量", "VRAM", "ライセンス"):
+        assert column in SCRIPT
+
+
+def test_the_table_and_cards_offer_the_same_actions():
+    """見た目を変えたら操作が減った、では使えない。"""
+    start = SCRIPT.index("function modelActionCell")
+    action = SCRIPT[start:SCRIPT.index("function modelTableRow", start)]
+
+    for hook in ("installModel", "removeModel", "evaluateModel", "cancelModelOperation"):
+        assert hook in action
+
+
+def test_the_catalog_has_one_presentation_rather_than_two():
+    """カードと表で出すタグが食い違っていた。表示が 2 つあると、片方だけ直る。"""
+    assert 'id="model-catalog"' not in MARKUP
+    assert "data-model-layout" not in MARKUP
+    assert "renderModelTable" in SCRIPT
+
+
+def test_the_mobile_table_needs_no_horizontal_scrolling():
+    """横に伸ばすと、容量・VRAM・操作が画面の外へ出る。"""
+    assert "table.catalog thead { display: none; }" in STYLES
+    assert "content: attr(data-label)" in STYLES
+
+
+def test_a_disabled_action_says_what_cannot_be_done():
+    """「CLI で管理」は説明のない専門用語だった。"""
+    assert "CLI で管理" not in SCRIPT
+    assert "操作できません" in SCRIPT
+
+
+def test_the_catalog_says_whether_a_model_runs_on_this_machine():
+    """容量とライセンスが並んでいても「これは動くのか」は分からない。"""
+    assert "modelRunnability" in SCRIPT
+    for label in ("実行可能", "オフロード前提", "未計測", "起動不可"):
+        assert label in SCRIPT
+
+
+def test_an_unmeasured_model_is_never_called_runnable():
+    """実測していないものを「動く」と言わない。"""
+    fn = SCRIPT[SCRIPT.index("function modelRunnability"):][:900]
+
+    assert 'return "unknown"' in fn
+    assert "measured_vram_bytes" in fn
+
+
+def test_models_can_be_ordered_by_whether_they_run_here():
+    assert 'value="runnable"' in MARKUP
+    assert "RUNNABILITY[modelRunnability(a)].rank" in SCRIPT
+
+
+def test_a_started_download_has_somewhere_to_check_on_it():
+    """数十 GB かかることがある。押したあとの行き先が要る。"""
+    assert "renderModelDownloads" in SCRIPT
+    assert "model-downloads-block" in SCRIPT
+
+
+def test_finished_downloads_stay_visible_with_their_outcome():
+    """何が落ちたのかを後から確かめられないと、やり直してよいのか分からない。"""
+    start = SCRIPT.index("function modelDownloadRow")
+    fn = SCRIPT[start:SCRIPT.index("function renderModelDownloads", start)]
+
+    assert "error_code" in fn
+    assert "完了" in fn and "失敗" in fn
+
+
+def test_the_settings_view_no_longer_carries_static_diagnostics():
+    """静的な説明文と診断表示は、毎回読む価値がないのに毎回場所を取っていた。"""
+    assert 'id="advanced-host-integration"' not in MARKUP
+    assert 'id="advanced-capability-list"' not in MARKUP
+    assert 'data-adv-slot="settings"' not in MARKUP
+
+
+def test_the_advanced_create_pane_is_still_template_mounted():
+    """作る画面の詳細設定は残す。簡易モードへ漏れていないことを守る。"""
+    without_templates = MARKUP[:MARKUP.index("<template")]
+
+    assert 'data-adv-template="create"' in MARKUP
+    assert 'id="advanced-format"' not in without_templates
+
+
+def test_a_model_row_offers_download_and_delete():
+    """一覧から導入と削除ができないと、結局 CLI へ戻ることになる。"""
+    start = SCRIPT.index("function modelActionCell")
+    action = SCRIPT[start:SCRIPT.index("function modelTableRow", start)]
+
+    assert "installModel" in action and "ダウンロード" in action
+    assert "removeModel" in action and "削除" in action
+
+
+def test_searching_works_without_a_host():
+    """配布元の検索はホストを必要としない。単体表示で死んでいた。"""
+    assert "/workspace-api/models/search" in SCRIPT
+    backend = (BACKEND / "app.py").read_text(encoding="utf-8")
+    assert '"/workspace-api/models/search"' in backend
+
+
+def test_the_mobile_catalog_uses_two_columns():
+    # auto-fill に minmax(0, ...) を渡すと列が無限に増える（実測 13 列）。
+    # 最小幅は実数で与える。
+    assert "repeat(auto-fill, minmax(150px, 1fr))" in STYLES
+
+
+def test_search_results_are_labelled_like_the_catalog():
+    """積み上げたときに数字が何を指すのか分かること。検索結果だけ裸で並んでいた。"""
+    row = SCRIPT[SCRIPT.index("function catalogRow"):SCRIPT.index("function renderCatalogResults")]
+
+    for label in ("ダウンロード", "お気に入り", "更新", "ライセンス", "操作", "モデル"):
+        assert f'"{label}"' in row
+
+
+@pytest.mark.parametrize("control", ["advanced-width", "advanced-height"])
+def test_size_is_set_in_one_place_only(control: str):
+    """詳細側の幅高さが上のサイズ選択を上書きしており、どちらが効くのか
+    分からなかった。サイズは「サイズ」に 1 組だけ置く。"""
+    assert f'id="{control}"' not in MARKUP
+    assert f'byId("{control}")' not in SCRIPT
+
+
+def test_cards_in_the_same_row_share_a_height():
+    """名前が 2 行になった側だけ伸びると、全体が段差だらけに見える。"""
+    assert "align-items: stretch" in STYLES
+    assert 'table.catalog td[data-label="操作"] { margin-top: auto; }' in STYLES
+
+
+def test_the_name_area_reserves_room_so_the_facts_line_up():
+    """値の行が揃うよう名前に場所を先に取る。取りすぎると card が伸びるだけ。"""
+    name = STYLES[STYLES.index("table.catalog td.name > div {"):]
+    reserved = re.search(r"min-height: ([0-9.]+)em", name[:name.index("}")])
+    assert reserved, "名前の高さを確保していない"
+    assert 2.0 <= float(reserved.group(1)) <= 2.6
+
+
+def test_an_unavailable_action_is_not_rendered_as_a_button():
+    """押せる見た目なのに反応しないと、何が足りないのかを推測させる。"""
+    action = SCRIPT[SCRIPT.index("function modelActionCell"):SCRIPT.index("function modelTableRow")]
+
+    assert "const unavailable = (text, why)" in action
+    for reason in ("外部で管理", "容量超過", "共有", "使用中"):
+        assert f'"{reason}"' in action
+
+
+def test_the_search_action_says_where_it_leads():
+    """「中身を見る」では何が起きるか分からない。"""
+    assert "中身を見る" not in SCRIPT
+    assert "追加する" in SCRIPT
+
+
+def test_the_library_filter_row_stays_on_one_line():
+    """札が折り返すと一覧が押し下がり、何枚あるのかが画面から消える。"""
+    assert '<div class="view-head one-line">' in MARKUP
+    assert ".view-head.one-line { flex-wrap: nowrap; }" in STYLES
+    one_line = STYLES[STYLES.index(".view-head.one-line .chips {"):]
+    one_line = one_line[:one_line.index("}")]
+    assert "flex-wrap: nowrap" in one_line and "overflow-x: auto" in one_line
+
+
+def test_selection_mode_is_visible_before_it_changes_what_a_tap_does():
+    """選択中はカードの押し先が「開く」から「選ぶ」に変わる。同じ場所に
+    別の意味を重ねる以上、見た目でも区別が要る。"""
+    assert 'byId("library-grid").classList.toggle("selecting", active)' in SCRIPT
+    assert ".grid.selecting .card[aria-selected=\"true\"]" in STYLES
+    card = SCRIPT[SCRIPT.index("async function libraryCard"):]
+    assert "if (state.librarySelecting) return toggleLibrarySelection(item.asset_id);" in card
+
+
+def test_deleting_assets_asks_first_and_reports_what_survived():
+    """まとめ削除は取り返しがつかない。全部消えたとも限らない。"""
+    body = SCRIPT[SCRIPT.index("async function deleteSelectedAssets"):]
+    body = body[:body.index("\n}")]
+    assert "confirmModelAction" in body, "確認なしで消している"
+    assert "元には戻せません" in body
+    assert "asset_in_use" in body, "残った理由を伝えていない"
+    assert "deleted_count" in body
+
+
+def test_the_download_history_can_be_cleared_and_a_failure_retried():
+    """落ちた行から一覧へ戻って同じモデルを探し直させない。"""
+    assert 'id="model-downloads-clear"' in MARKUP
+    clear = SCRIPT[SCRIPT.index("async function clearModelDownloadHistory"):]
+    clear = clear[:clear.index("\n}")]
+    assert '"models.operations.clear"' in clear
+    assert "MODEL_TERMINAL.has(operation.state)" in clear, "進行中まで手元から消している"
+    assert "retry.dataset.retryModelOperation = operation.model_id;" in SCRIPT
+    assert "[data-retry-model-operation]" in SCRIPT, "再試行ボタンに受け手が無い"
+    assert "[data-cancel-model-operation]" in SCRIPT
+
+
+def test_the_viewer_can_step_through_the_list_it_was_opened_from():
+    """拡大したまま隣と見比べたい。毎回一覧へ戻らせない。"""
+    assert 'id="viewer-prev"' in MARKUP and 'id="viewer-next"' in MARKUP
+    # 右下の「閉じる」の誤爆を避けるため、送りは左下、つまり行の先頭に置く
+    bar = MARKUP[MARKUP.index('<div id="viewer-bar">'):MARKUP.index('id="viewer-close"')]
+    assert bar.index('class="viewer-nav"') < bar.index('class="viewer-meta"')
+    assert "order: -1;" in STYLES
+    # 送り・操作・閉じるが 2 段になると画像の見える高さがその分削られる
+    assert "flex-wrap: nowrap;" in STYLES[STYLES.index("#viewer-bar {"):STYLES.index("#viewer-caption")]
+    step = SCRIPT[SCRIPT.index("function stepViewer"):SCRIPT.index("async function openViewer")]
+    assert "keepList: true" in step, "送るたびに一覧を作り直している"
+    viewer = SCRIPT[SCRIPT.index("async function openViewer("):]
+    viewer = viewer[:viewer.index("\n/* 自動で選んだとき")]
+    assert "const token = ++viewer.token;" in viewer, "連打で古い応答が後から描かれる"
+    assert viewer.count("if (token !== viewer.token) return;") >= 3
+
+
+def test_the_search_results_say_how_big_the_model_is():
+    """何 GB 落ちてくるのかが分からないまま押させない。"""
+    row = SCRIPT[SCRIPT.index("function catalogRow"):SCRIPT.index("function renderCatalogResults")]
+    assert 'labelled(size, "容量")' in row
+    assert "item.weight_bytes ? `約 ${formatBytes(item.weight_bytes)}` : \"不明\"" in row
+    header = SCRIPT[SCRIPT.index("function renderCatalogResults"):]
+    assert '["モデル", "容量", "DL"' in header, "見出しと列がずれている"
+
+
+def test_the_view_head_actions_sit_at_the_right_edge():
+    """左の文字数でボタンの位置が動くと、押す場所が毎回ずれる。"""
+    assert ".view-head.one-line > :first-child { flex: 1 1 auto; min-width: 0; }" in STYLES
+
+
+def test_an_image_that_cannot_be_shown_is_folded_away():
+    """出せない絵の枠だけが正方形で残ると、一覧が読めない箱の列になる。"""
+    card = SCRIPT[SCRIPT.index("async function libraryCard"):SCRIPT.index("/* ── 全画面ビューア")]
+    assert 'image.addEventListener("error", () => { image.hidden = true; });' in card
+    assert "catch { image.hidden = true; }" in card
+    assert "表示できません" not in card, "壊れた枠に文字だけ残している"
+    assert ".card img[hidden] { display: none !important; }" in STYLES
+
+
+def test_the_close_button_is_not_painted_on_its_own_background():
+    """button.icon は .primary より詳細度が高い。accent の背景が当たらず、
+    濃い前景色が濃い背景に乗って閉じるボタンがほぼ見えなかった。"""
+    rule = STYLES[STYLES.index("#viewer .viewer-actions button.icon.primary {"):]
+    rule = rule[:rule.index("}")]
+    assert "background: var(--accent) !important;" in rule
+    assert "color: var(--accent-ink) !important;" in rule
+
+
+def test_the_viewer_bar_cannot_push_its_actions_off_screen():
+    """grid item の min-width は既定で auto。中身が縮まず操作が画面外へ出ていた。"""
+    bar = STYLES[STYLES.index("#viewer-bar {"):]
+    bar = bar[:bar.index("}")]
+    assert "min-width: 0;" in bar and "overflow: hidden;" in bar
+
+
+def test_a_gated_repository_says_so_before_the_button_is_pressed():
+    """「条件を確認」では何を確認するのか分からない。同意が要ることを名前の側で言う。"""
+    row = SCRIPT[SCRIPT.index("function catalogRow"):SCRIPT.index("function renderCatalogResults")]
+    assert '"条件を確認"' not in row, "押した先が分からない語がボタンに残っている"
+    assert 'button.textContent = "追加する";' in row, "gated だけ別の言葉になっている"
+    assert 'gate.textContent = "要同意";' in row
+    assert "配布元で利用条件に同意しないと取り込めません。" in row
+
+
+def test_registering_characters_and_styles_is_its_own_section():
+    """モデルの話と、覚えさせる素材の話は別。続けて並べると設定が 1 枚の帯になる。"""
+    settings = MARKUP[MARKUP.index('id="model-downloads-block"'):]
+    assert settings.index('class="settings-section"') < settings.index("キャラ・画風の登録")
+    assert MARKUP.index('id="model-downloads-block"') < MARKUP.index("キャラ・画風の登録")
+    assert ".settings-section {" in STYLES
+
+
+def test_the_detail_dialog_translates_the_validation_record():
+    """JSON の塊をそのまま出していた。読む人が知りたいのは通否だけである。"""
+    assert "JSON.stringify(provenance.validation)" not in SCRIPT
+    body = SCRIPT[SCRIPT.index("function validationList"):SCRIPT.index("async function openDetail")]
+    # 記録は status: "passed" と passed: true の二通りある。どちらも読む
+    assert 'record?.status ? record.status === "passed" : record?.passed === true' in body
+    labels = SCRIPT[SCRIPT.index("const VALIDATOR_LABEL"):SCRIPT.index("function validationList")]
+    for name in validator_names():
+        assert f'"{name}"' in labels, f"{name} に日本語が無い"
+
+
+def test_a_long_value_cannot_push_the_detail_dialog_off_screen():
+    """grid track の既定 min-width は auto。model ID が track を押し広げていた。"""
+    assert ".facts dt, .facts dd { min-width: 0; overflow-wrap: anywhere; }" in STYLES
+    narrow = STYLES[STYLES.index("@media (max-width: 560px) {"):]
+    assert ".facts div { grid-template-columns: 1fr;" in narrow[:narrow.index("\n}")]
+
+
+def test_the_create_form_does_not_explain_itself_before_the_button():
+    """押す前に所要時間を書いても、押すかどうかは変わらない。待っている最中に
+    出しても、当たらない秒数は不安にしかならない。経過時間だけ出す。"""
+    assert 'id="create-estimate"' not in MARKUP
+    assert "2 回目以降は短くなります" not in SCRIPT
+    assert "次の段階で入ります" not in SCRIPT
+    assert "estimateSec" not in SCRIPT and "applyEstimate" not in SCRIPT
+    assert "elapsedText(job)" in SCRIPT, "経過時間まで消している"
+
+
+def test_the_search_controls_do_not_stack_four_deep():
+    """検索・並び順・画風・ボタンを縦に積むと、結果が画面から押し出される。"""
+    assert '<div class="form-row search">' in MARKUP
+    form = MARKUP[MARKUP.index('<div class="form-row search">'):]
+    form = form[:form.index("</div>")]
+    assert 'id="catalog-search"' in form, "ボタンが格子の外にある"
+    # 狭い画面で 1 列に落とすと 4 段に戻る
+    assert ".form-row:not(.search) { grid-template-columns: 1fr; }" in STYLES
+
+
+def test_the_download_row_does_not_say_download_twice():
+    """「ダウンロード · ダウンロードしています」と二重に出ていた。"""
+    row = SCRIPT[SCRIPT.index("function modelDownloadRow"):SCRIPT.index("async function clearModelDownloadHistory")]
+    assert 'stateText.startsWith(actionText) ? "" : actionText' in row
+
+
+def test_the_validation_marks_do_not_reuse_the_checkbox_class():
+    """.check は既にチェックボックス付きラベルで使われている。"""
+    assert '"checkmark ok"' in SCRIPT and '"checkmark bad"' in SCRIPT
+    assert ".checkmark.ok { color: var(--accent); }" in STYLES
