@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import tarfile
@@ -68,7 +69,20 @@ def main() -> int:
         copy_file(dist / "mediaforge-core", bundle / "bin" / "mediaforge-core", 0o755)
         copy_file(ROOT / "scripts" / "bundle-launcher.sh", bundle / "bin" / "mediaforge", 0o755)
         addon = json.loads((ROOT / "addon.json").read_text(encoding="utf-8"))
-        addon["version"] = args.version
+        # --version で addon.json を黙って上書きしていた。結果、束ねた
+        # control-deck-addon.json と、同じ束の中の mediaforge.__version__ が
+        # 別の版を名乗ることになる。ControlDeck 側は前者を出すので、
+        # 一覧に出ている版と実際に動いている版が食い違う。名乗る版は 1 つにする。
+        packaged = re.search(
+            r'__version__ = "([^"]+)"',
+            (ROOT / "backend" / "mediaforge" / "__init__.py").read_text(encoding="utf-8"),
+        ).group(1)
+        if args.version != addon["version"] or args.version != packaged:
+            raise SystemExit(
+                f"version mismatch: --version={args.version} "
+                f"addon.json={addon['version']} mediaforge.__version__={packaged}. "
+                "リリース前に 3 つを揃えてください。"
+            )
         (bundle / "control-deck-addon.json").write_text(
             json.dumps(addon, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
