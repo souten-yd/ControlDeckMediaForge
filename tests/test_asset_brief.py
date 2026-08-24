@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 
+from mediaforge.domain import JobRequest
 from mediaforge.asset_brief import (
     AssetBrief,
     AssetBriefError,
@@ -375,3 +376,49 @@ def test_a_dont_care_role_accepts_either_transparency():
         assert inspect_against_brief(
             brief, resolved, width=resolved.width, height=resolved.height, has_alpha=has_alpha
         ) == []
+
+
+# ── 複数枚生成（output.count > 1） ──────────────────────────────────────
+
+
+def test_every_candidate_shares_the_resolved_canvas(client):
+    """count>1 でも幾何は 1 度だけ解決され、全候補が同じ面に収まる。"""
+    response = client.post("/api/v1/jobs", json={
+        "operation": "image.generate",
+        "intent": "game title background",
+        "constraints": {"asset_brief": {"role": "background"}},
+        "output": {"format": "png", "count": 4},
+        "local_only": True,
+    })
+
+    assert response.status_code == 202, response.text
+    request = response.json()["request"]
+    assert request["output"]["count"] == 4
+    assert request["constraints"]["width"] > request["constraints"]["height"]
+    assert request["constraints"]["resolved_layout"]["aspect_ratio"] == "16:9"
+
+
+def test_one_defective_candidate_does_not_discard_the_good_ones(tmp_path):
+    """複数枚を頼まれているのに 1 枚の defect で全部捨てたら、候補の意味が消える。"""
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    job = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="overlay emblem with a transparent background",
+        constraints={
+            "asset_brief": {"role": "emblem"},
+            "resolved_layout": {
+                "width": 512, "height": 512, "alpha": True,
+                "aspect_ratio": "1:1", "source": "role_default",
+            },
+        },
+    ))
+    opaque = [{"validator": "image.alpha", "has_transparency": False}]
+    clear = [{"validator": "image.alpha", "has_transparency": True}]
+
+    assert manager._brief_defects(job, 512, 512, clear) == []
+    assert [item.code for item in manager._brief_defects(job, 512, 512, opaque)] == ["alpha_missing"]
