@@ -56,6 +56,8 @@ class Evaluator:
         creative_plan: dict,
         reference_paths: tuple[Path, ...] = (),
         identity=None,
+        brief=None,
+        resolved_layout=None,
     ) -> EvaluatedCandidate:
         del identity, creative_plan, reference_paths, intent
         self.calls.append(path)

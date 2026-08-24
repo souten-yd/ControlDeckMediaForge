@@ -509,9 +509,20 @@ defect        objectively wrong against the brief or the validators
 finding       a subjective judgement from the evaluator
               "composition could be stronger", "palette slightly cool"
               -> bounded by the QA budget
-              -> exhaustion returns the best candidate WITH the unresolved
-                 findings attached, never a silent pass
+              -> exhaustion is reported explicitly, never a silent pass
 ```
+
+On exhaustion the existing contract fails the job with
+`semantic_review_exhausted`, and that is kept. `qa.semantic=true` with a retry
+budget is the caller opting in to "reject what is unsuitable"; quietly returning
+a rejected candidate would defeat the gate they asked for. The requirement in
+this section is that exhaustion is never hidden, not that it must succeed.
+
+Known cost, recorded rather than fixed here: the deterministically valid
+candidates are discarded along with the job, so real GPU work is thrown away
+over a subjective opinion. Preserving rejected candidates for inspection while
+still failing the quality gate is a candidate improvement; it changes the
+public meaning of a failed job carrying assets, so it is not folded into A3.
 
 The strongest protection is not a larger retry budget. It is making defects
 impossible before generation, which is what A1 does: a wrong canvas is no longer

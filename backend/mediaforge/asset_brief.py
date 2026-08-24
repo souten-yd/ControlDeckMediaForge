@@ -474,3 +474,99 @@ def inspect_against_brief(
             actual="contains transparent pixels",
         ))
     return defects
+
+
+# ── 用途に応じた評価の観点 ──────────────────────────────────────────────
+#
+# 「画像として綺麗か」を訊いても、タイトル背景として使えるかは分からない。
+# Hanabi の背景は単体では美しく、実際に指示どおり構図されていた。使えなかった
+# のは面の比が違ったからで、それは主観の問題ではない。
+#
+# ここが決めるのは「何を訊くか」だけである。決定的に判定できるもの（寸法・
+# alpha・面積）は VLM より先に inspect_against_brief が見る。
+
+_ROLE_DIMENSIONS: dict[str, tuple[str, ...]] = {
+    "background": ("composition", "palette"),
+    "key_visual": ("composition", "style"),
+    "character_portrait": ("subject_identity", "composition"),
+    "sprite": ("subject_identity",),
+    "icon": ("composition",),
+    "emblem": ("composition",),
+    "texture": ("style",),
+    "ui_element": ("composition",),
+    "general": (),
+}
+
+# 用途ごとに「使えるとはどういうことか」。評価器へそのまま渡す。
+_ROLE_SUITABILITY: dict[str, str] = {
+    "background": (
+        "This is a background that other content is drawn on top of. Judge whether it "
+        "stays readable behind overlaid UI and text, and whether it competes for "
+        "attention instead of supporting it."
+    ),
+    "key_visual": (
+        "This is a key visual that represents the whole product. Judge whether the "
+        "subject reads immediately and whether the framing suits a hero placement."
+    ),
+    "character_portrait": (
+        "This is a character portrait. Judge whether the character is the clear subject "
+        "and is framed as a portrait rather than a scene."
+    ),
+    "sprite": (
+        "This is a sprite drawn over other content. Judge silhouette readability at small "
+        "size and whether the subject is isolated rather than embedded in a scene."
+    ),
+    "icon": (
+        "This is an icon that must stay recognisable when small. Judge whether it survives "
+        "heavy downscaling and avoids fine detail that will disappear."
+    ),
+    "emblem": (
+        "This is a decorative emblem placed over other artwork. Judge whether it reads as an "
+        "isolated motif rather than a complete scene that would duplicate its background."
+    ),
+    "texture": "This is a texture. Judge evenness and whether it tiles or repeats acceptably.",
+    "ui_element": "This is a UI element. Judge clarity and neutrality against varied backgrounds.",
+}
+
+
+def brief_dimensions(brief: AssetBrief | None) -> tuple[str, ...]:
+    """Which evaluation dimensions this asset's purpose actually calls for."""
+    if brief is None:
+        return ()
+    dimensions = set(_ROLE_DIMENSIONS.get(brief.role, ()))
+    if brief.safe_areas:
+        # 空けておくべき領域があるなら、それは構図の話である。
+        dimensions.add("composition")
+    return tuple(sorted(dimensions))
+
+
+def brief_rubric(brief: AssetBrief | None, resolved: ResolvedLayout | None) -> str:
+    """Describe, for the evaluator, what "suitable" means for this asset.
+
+    Deliberately about fitness for a stated use, not taste. The evaluator is
+    never asked to judge dimensions, alpha, or anything else already settled
+    deterministically.
+    """
+    if brief is None:
+        return ""
+    parts: list[str] = []
+    suitability = _ROLE_SUITABILITY.get(brief.role)
+    if suitability:
+        parts.append(suitability)
+    if brief.target_surface:
+        parts.append(f"It will be shown on: {brief.target_surface}.")
+    for area in brief.safe_areas:
+        purpose = area.purpose or "other content"
+        percent = int(round(area.fraction * 100))
+        parts.append(
+            f"The {area.edge} {percent}% must stay visually clear for {purpose}; "
+            "report whether the subject intrudes into it."
+        )
+    for constraint in brief.hard_constraints:
+        parts.append(f"Hard requirement: {constraint}.")
+    if resolved is not None:
+        parts.append(
+            f"The canvas is already fixed at {resolved.width}x{resolved.height} "
+            f"({resolved.aspect_ratio}); do not comment on dimensions or file format."
+        )
+    return " ".join(parts)[:1500]

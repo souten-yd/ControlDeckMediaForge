@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from .asset_brief import AssetBrief, ResolvedLayout, brief_dimensions, brief_rubric
 from .creative_intelligence import EvaluationResult, EvaluationScores
 from .host.ai import HostAIError, HostAIGateway
 from .host.client import HostIdentity
@@ -133,13 +134,22 @@ class CreativeEvaluator(Protocol):
         creative_plan: dict[str, Any],
         reference_paths: tuple[Path, ...] = (),
         identity: HostIdentity | None = None,
+        brief: AssetBrief | None = None,
+        resolved_layout: ResolvedLayout | None = None,
     ) -> EvaluatedCandidate: ...
 
 
 def relevant_dimensions(
-    creative_plan: dict[str, Any], *, has_references: bool
+    creative_plan: dict[str, Any],
+    *,
+    has_references: bool,
+    brief: AssetBrief | None = None,
 ) -> tuple[EvaluationDimension, ...]:
     selected: set[EvaluationDimension] = {"intent", "visual_integrity"}
+    # 用途が要求する観点を足す。「綺麗か」ではなく「その用途に使えるか」を訊く。
+    selected.update(
+        name for name in brief_dimensions(brief) if name in EVALUATION_DIMENSIONS
+    )
     roles = creative_plan.get("reference_roles", [])
     if isinstance(roles, list):
         for value in roles:
@@ -224,12 +234,16 @@ class HostCreativeEvaluator:
         creative_plan: dict[str, Any],
         reference_paths: tuple[Path, ...] = (),
         identity: HostIdentity | None = None,
+        brief: AssetBrief | None = None,
+        resolved_layout: ResolvedLayout | None = None,
     ) -> EvaluatedCandidate:
         if identity is None or "ai.inference" not in identity.granted_capabilities:
             raise CreativeEvaluationError(
                 "host_ai_not_granted", "ControlDeck AI access is not granted"
             )
-        dimensions = relevant_dimensions(creative_plan, has_references=bool(reference_paths))
+        dimensions = relevant_dimensions(
+            creative_plan, has_references=bool(reference_paths), brief=brief
+        )
         plan = json.dumps(
             creative_plan, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         )[:4000]
@@ -243,6 +257,10 @@ class HostCreativeEvaluator:
             "validators already ran and are authoritative; do not claim to override them. "
             f"User intent: {intent}. Creative plan: {plan}"
         )
+        rubric = brief_rubric(brief, resolved_layout)
+        if rubric:
+            # 用途が分かっているなら、単体の美しさではなく用途への適合を訊く。
+            prompt = f"{prompt} Judge suitability for this specific use. {rubric}"
         try:
             response = await self.gateway.complete(
                 identity,

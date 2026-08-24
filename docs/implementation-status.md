@@ -3735,3 +3735,59 @@ Media Forge は path を受け取らない
 
 NOT TESTED: 実 agent harness（OpenCode / Codex）がこの description を提示して
 実際に purpose-level 要求を出すか。A5 の実機 E2E で確認する。
+
+## G4H A3 — 用途に応じた評価（2026-08-24）
+
+Hanabi の背景は単体では美しく、実際に prompt どおりに構図されていた。使えな
+かったのは面の比が違ったからで、それは主観の問題ではない。「良い画像か」と
+訊いていたら yes と答えていたはずである。
+
+評価を「綺麗か」から「その用途に使えるか」へ変えた。既存の Unified Evaluator と
+canonical `EvaluationResult` をそのまま使い、別系統は作っていない。
+
+```text
+brief_dimensions   用途が要求する観点だけを選ぶ
+                     background          composition / palette
+                     character_portrait  subject_identity / composition
+                     sprite              subject_identity
+                     texture             style
+                     safe_areas あり     composition を追加
+                     general             追加なし
+brief_rubric       その用途で「使える」とは何かを評価器へ渡す
+                     background  上に描かれる。UI や文字の背後で読めるか。
+                                 支えるのではなく主張しすぎていないか
+                     emblem      独立した紋章として読めるか。背景と重複する
+                                 完成シーンになっていないか
+                     safe_areas  「上 40% は title and menu のために空けること。
+                                 被写体が侵入していないか報告せよ」
+                     hard        「no text in the image」等をそのまま渡す
+```
+
+寸法・alpha・形式は決定的に解決済みなので、評価器には
+「canvas は 1024x576 (16:9) で確定済み。寸法や形式について述べるな」と明示する。
+VLM に蒸し返させない。
+
+brief を渡さない既存の呼び出しでは観点の選び方が一切変わらないことをテストで
+固定した。
+
+### 予算切れの扱いを実装に合わせて訂正した
+
+計画 §6.7 に「予算切れは最良候補を返す」と書いていたが、実装は
+`semantic_review_exhausted` で job を失敗させる。確認した結果、実装の側が
+正しい。`qa.semantic=true` と retry 予算は、呼び出し側が「不適合なら拒否せよ」と
+明示的に頼んでいる状態であり、拒否された候補を黙って返せばそのゲートを
+無意味にする。§6.7 の要件は「隠さないこと」であって「成功させること」ではない。
+
+既知の代償として記録した: 決定的には妥当な候補も job ごと捨てられるため、
+実 GPU 仕事が主観的判断で失われる。失敗した job が資産を持つ形は public な
+意味を変えるため、A3 には畳み込まない。
+
+defect の判定が QA 予算をまったく参照しないことも、経路の形でテストに固定した。
+参照させた瞬間に、予算を使い切った job が誤った資産を成功として返せるようになる。
+
+```text
+./mf.sh test   486 passed
+```
+
+NOT TESTED: 実 VLM がこの rubric で用途不一致を実際に指摘するか。A5 の実機
+E2E で、Hanabi 相当の資産に対して確認する。
