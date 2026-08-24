@@ -4257,3 +4257,62 @@ repository の直接指定          検索が入ったことで使われない�
 検索                anime で 3 件（実 API）
 ./mf.sh test        547 passed
 ```
+
+## G4H A5 — coding agent から build/test までの実機受け入れ（2026-08-25）
+
+`scripts/a5_agent_asset_path_e2e.py` が経路全体を 1 回で通す。実物は GPU・
+モデル・生成された画素・プロジェクト・その build と test。stub は ControlDeck
+の grant 配管だけで、commit されたバイトは実プロジェクトへ書く（メモリ内で
+済ませると、壊れた配置が誰にも気づかれず通ってしまう）。
+
+```text
+project analysis
+  -> purpose-level asset request   prompt / model / 画素数を一切書かない
+  -> real generation on the GPU
+  -> deterministic inspection against the brief
+  -> output grant requested late   バイトが在ってから頼む
+  -> placement receipt
+  -> code updated from the receipt 推測したパスではなく受領書の名前と digest
+  -> build
+  -> test
+```
+
+実測（2026-08-25、AMD Radeon AI PRO R9700）:
+
+```text
+agent が出した brief   role=background surface=game aspect_intent=landscape
+                      hard_constraints=["no text in the image"]
+                      safe_areas=[top 35% title and menu]
+Media Forge が決めた   1024x576（landscape を用途から解決）
+routing               black-forest-labs/FLUX.2-klein-4B（agent は指定していない）
+生成                   28.05 秒 / 730,468 bytes
+受領書                 committed=true sha256 が検査済み資産と一致
+project への commit    title-background.png 730,468 bytes
+build / test          0 / 0（3 passed）
+./mf.sh test          588 passed
+```
+
+### 実機でしか出なかったこと — 宣言された必須条件が検査されていない
+
+初回実行は緑で通ったが、生成物には文字が入っていた。`hard_constraints` に
+`"no text in the image"` を宣言していたにもかかわらずである。
+
+`hard_constraints` は評価器の rubric にしか渡っておらず、評価器は既定で回さ
+ない。回さないこと自体は意図した設計で、必須条件のために毎回 model 載せ替え
+を強いるのは高すぎる。問題は `warnings: []` を返していたことで、これは「確か
+めた、問題なかった」と読める。決定的検査が見ているのは幾何・mode・alpha まで
+で、絵の中身は読んでいない。
+
+確かめていないものは、確かめていないと言う。評価器は既定のまま回さず、
+warnings に未検査の必須条件を名指しで残す。
+
+```text
+before  warnings: []
+after   warnings: ["以下は宣言された必須条件ですが、この実行では検査して
+                   いません（qa.semantic を有効にすると検査します）:
+                   no text in the image"]
+```
+
+NOT TESTED: OpenCode の UI から人手で駆動した経路。ここでは coding agent の
+役を script が演じている。OpenCode 固有の部分（session、tool 呼び出しの形）は
+未検証で、Media Forge 側の入口は同じ `/addon/v1/agent/pack` を使っている。

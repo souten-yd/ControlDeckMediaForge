@@ -1,0 +1,65 @@
+{
+  "project": "/tmp/a5-agent-path-0f4c5c40/project",
+  "brief": {
+    "role": "background",
+    "target_surface": "game",
+    "subject": "title screen background for a small game",
+    "aspect_intent": "landscape",
+    "hard_constraints": [
+      "no text in the image"
+    ],
+    "safe_areas": [
+      {
+        "edge": "top",
+        "fraction": 0.35,
+        "purpose": "title and menu"
+      }
+    ]
+  },
+  "generation": {
+    "status": "succeeded",
+    "error": null,
+    "elapsed_sec": 15.04
+  },
+  "asset": {
+    "width": 1024,
+    "height": 576,
+    "mime_type": "image/png",
+    "size_bytes": 730468,
+    "sha256": "7daadafb8760487a6b87cd42fde6f579df6f3d3ad9762c915af2a10653cadc84"
+  },
+  "routed_model": "black-forest-labs/FLUX.2-klein-4B",
+  "warnings": [
+    "以下は宣言された必須条件ですが、この実行では検査していません（qa.semantic を有効にすると検査します）: no text in the image"
+  ],
+  "grant_requested_after_generation": true,
+  "placement": {
+    "receipts": [
+      {
+        "committed": true,
+        "source_asset_id": "asset_520da5e158644364996227cd3c8b2f33",
+        "filename": "title-background.png",
+        "media_type": "image/png",
+        "sha256": "7daadafb8760487a6b87cd42fde6f579df6f3d3ad9762c915af2a10653cadc84",
+        "size_bytes": 730468,
+        "host_asset_id": "asset:output-1",
+        "width": 1024,
+        "height": 576,
+        "role": "background",
+        "warnings": [],
+        "error": null
+      }
+    ],
+    "committed": {
+      "title-background.png": 730468
+    }
+  },
+  "build": {
+    "returncode": 0,
+    "stderr": ""
+  },
+  "tests": {
+    "returncode": 0,
+    "stdout": "...                                                                      [100%]\n3 passed in 0.01s\n"
+  }
+}
