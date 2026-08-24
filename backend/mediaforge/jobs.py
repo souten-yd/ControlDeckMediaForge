@@ -1431,11 +1431,6 @@ class JobManager:
         if path.stat().st_size > MAX_ARTIFACT_BYTES:
             raise ValueError("worker artifact exceeded the 64 MiB limit")
         width, height, validation = validate_png(path)
-        # brief に対して客観的に誤っているものは、主観的な改善案とは別に扱う。
-        # ここは QA 予算に縛られない。黙って成功として返さない。
-        defects = self._brief_defects(job, width, height, validation)
-        if defects:
-            raise BriefDefectError(defects)
         outpaint = (
             job.request.operation == "image.edit"
             and job.request.constraints.get("edit_mode") == "outpaint"
@@ -1580,6 +1575,29 @@ class JobManager:
         # Complete every deterministic validation before invoking a subjective
         # reviewer. A semantic pass can therefore never mask file/invariant failure.
         validated = [self._validate_output(job, output, job_root) for output in outputs]
+        # brief に対して客観的に誤っている候補を落とす。複数枚を頼まれている
+        # のに 1 枚の defect で全部を捨てるのは、候補を出す意味を消してしまう。
+        # ただし残りが 0 なら理由を名指しで失敗する。黙って返さない。
+        defects = [
+            self._brief_defects(job, width, height, validation)
+            for _path, width, height, validation in validated
+        ]
+        usable = [index for index, found in enumerate(defects) if not found]
+        if not usable:
+            raise BriefDefectError(defects[0] if defects else [])
+        dropped = len(validated) - len(usable)
+        if dropped:
+            logger.info(
+                "job %s dropped %d candidate(s) that did not satisfy the brief: %s",
+                job.id,
+                dropped,
+                [item.document() for found in defects for item in found],
+            )
+            outputs = [outputs[index] for index in usable]
+            validated = [validated[index] for index in usable]
+        brief_warnings = [
+            f"{dropped} candidate(s) did not satisfy the asset brief and were discarded"
+        ] if dropped else []
         selected, evaluations = await self._evaluation_selection(job, outputs, validated)
         asset_ids: list[str] = []
         self.store.update_job(job.id, phase="validate", progress=0.75)
@@ -1588,6 +1606,7 @@ class JobManager:
             path, width, height, validation = validated[candidate_index]
             sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
             review_validation, warnings, reviewer = evaluations.get(candidate_index, ({}, [], ""))
+            warnings = [*brief_warnings, *warnings]
             if review_validation:
                 validation.append(review_validation)
             now = utc_now()
