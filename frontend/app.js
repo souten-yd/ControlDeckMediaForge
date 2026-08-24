@@ -2337,15 +2337,31 @@ function showProgress(job) {
    「今どれを見ているか」を覚えていないだけなので、走っているものを拾い直す。 */
 function restoreProgressView() {
   if (!state.activeJob) {
-    const running = (state.jobs || []).find((item) => !TERMINAL.has(item.status));
-    if (!running) return;
-    state.activeJob = running.id;
+    // 迷いようがあるときは選ばない。複数走っているなら、状況タブで
+    // 「この実行を見る」を押してもらう。
+    const running = (state.jobs || []).filter((item) => !TERMINAL.has(item.status));
+    if (running.length !== 1) return;
+    state.activeJob = running[0].id;
     // 拾い直したものにも通知を張る。張らないと、完了しても画面が動かない。
-    void call("jobs.watch", {job_ids: [running.id]}).catch(() => {});
-    if (window.parent === window) void pollJob(running.id);
+    void call("jobs.watch", {job_ids: [running[0].id]}).catch(() => {});
+    if (window.parent === window) void pollJob(running[0].id);
   }
   const job = (state.jobs || []).find((item) => item.id === state.activeJob);
   if (job) showProgress(job);
+}
+
+/* 状況タブから、走っている実行へ戻る。指示と進捗の両方を復旧する:
+   進捗だけ戻しても、何を頼んだのかが画面から消えたままになる。 */
+function attachToJob(jobId) {
+  const job = (state.jobs || []).find((item) => item.id === jobId);
+  if (!job || TERMINAL.has(job.status)) return;
+  state.activeJob = job.id;
+  const intent = byId("create-intent");
+  if (intent && job.request?.intent) intent.value = job.request.intent;
+  void call("jobs.watch", {job_ids: [job.id]}).catch(() => {});
+  if (window.parent === window) void pollJob(job.id);
+  activate("create");
+  showProgress(job);
 }
 
 async function finishJob(job) {
@@ -3342,6 +3358,15 @@ function activityRow(job) {
 
   // 出口はここで作る。失敗を見せるだけで終わらせない。
   if (running) {
+    // 走っているものが複数あるとき、どれを見るかは利用者が決める。自動で
+    // 拾うと、見たかった方ではない実行の進捗が出る。
+    if (job.id !== state.activeJob) {
+      const attach = document.createElement("button");
+      attach.type = "button";
+      attach.dataset.attachJob = job.id;
+      attach.textContent = "この実行を見る";
+      side.append(attach);
+    }
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.dataset.cancelJob = job.id;
@@ -4308,6 +4333,8 @@ for (const holder of [byId("activity-list"), byId("create-error")]) {
   holder.addEventListener("click", (event) => {
     const exit = event.target.closest("[data-exit-action]");
     if (exit) return runExit(exit.dataset.exitAction, jobById(exit.dataset.exitJob));
+    const attach = event.target.closest("[data-attach-job]");
+    if (attach) return attachToJob(attach.dataset.attachJob);
     const cancel = event.target.closest("[data-cancel-job]");
     if (cancel) {
       void call("jobs.cancel", {job_id: cancel.dataset.cancelJob})

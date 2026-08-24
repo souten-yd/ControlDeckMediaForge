@@ -890,3 +890,27 @@ def test_progress_is_recovered_from_the_job_that_is_still_running():
     # boot でも view に依らず拾う。ミニ進捗は create 以外でも出る。
     boot = SCRIPT[SCRIPT.index('activate(state.preferences.last_view'):]
     assert "restoreProgressView();" in boot[:400], "起動時に拾い直していない"
+
+
+def test_a_running_job_can_be_reattached_from_the_activity_tab():
+    """走っているものが複数あるとき、どれを見るかは利用者が決める。自動で
+    拾うと、見たかった方ではない実行の進捗が出る。"""
+    body = SCRIPT[SCRIPT.index("function attachToJob"):]
+    body = body[:body.index("\n}")]
+    # 進捗だけ戻しても、何を頼んだのかが画面から消えたままになる
+    assert 'byId("create-intent")' in body, "指示を復旧していない"
+    assert 'call("jobs.watch"' in body and 'activate("create")' in body
+    assert "TERMINAL.has(job.status)" in body, "終わった job にも繋いでしまう"
+
+    row = SCRIPT[SCRIPT.index("function activityRow"):]
+    row = row[:row.index("\nfunction ", 10)]
+    assert "attach.dataset.attachJob = job.id;" in row
+    assert "job.id !== state.activeJob" in row, "今見ている実行にも接続を出している"
+    assert "[data-attach-job]" in SCRIPT, "接続ボタンに受け手が無い"
+
+
+def test_progress_is_adopted_only_when_there_is_no_choice_to_make():
+    """迷いようがあるときは選ばない。複数走っているなら利用者に選ばせる。"""
+    body = SCRIPT[SCRIPT.index("function restoreProgressView"):]
+    body = body[:body.index("\n}")]
+    assert "running.length !== 1" in body
