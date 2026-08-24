@@ -109,9 +109,11 @@ class RecordingGateway:
     def __init__(self, result: HostAIReleaseResult):
         self.result = result
         self.calls = 0
+        self.required_bytes: list[int] = []
 
-    async def release(self, _identity) -> HostAIReleaseResult:
+    async def release(self, _identity, *, required_bytes: int = 0) -> HostAIReleaseResult:
         self.calls += 1
+        self.required_bytes.append(required_bytes)
         return self.result
 
 
@@ -200,3 +202,27 @@ def test_a_release_failure_never_stops_generation(tmp_path: Path):
     asyncio.run(manager._release_host_ai(job, host_execution(), None))
 
     assert manager._admission_failure(job.id, "insufficient_vram").code == "resource_unavailable"
+
+
+def test_the_release_says_how_much_the_turn_needs_afterwards(tmp_path: Path):
+    """伝えないと Host は「LLM を降ろした」で終わる。実測: それでも 1.16GB の
+    embedding が残り、33.35GB を要る画像モデルが 34.2GB のカードに入らなかった。"""
+    from mediaforge.models import ModelDescriptor
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    gateway = RecordingGateway(HostAIReleaseResult(True, "released", 17_000_000_000))
+    manager = JobManager(store, ai_gateway=gateway)
+    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
+    selected = next(
+        item for item in manager.registry.all() if item.measured_vram_bytes
+    ) if hasattr(manager, "registry") else None
+
+    asyncio.run(manager._release_host_ai(job, host_execution(), None, selected))
+
+    assert gateway.calls == 1
+    if selected is not None:
+        assert gateway.required_bytes[0] == selected.measured_vram_bytes
+    # selected が無い経路（起動前など）では 0 を送る。嘘の数字は送らない。
+    asyncio.run(manager._release_host_ai(job, host_execution(), None, None))
+    assert gateway.required_bytes[-1] == 0

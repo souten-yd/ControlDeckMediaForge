@@ -107,20 +107,28 @@ class HostAIGateway:
         # part of Media Forge's behavioral contract even if a future Host adds it.
         return HostAIResult(content=content, capability=capability)
 
-    async def release(self, identity: HostIdentity) -> HostAIReleaseResult:
+    async def release(
+        self, identity: HostIdentity, *, required_bytes: int = 0
+    ) -> HostAIReleaseResult:
         """Declare that this add-on's AI turn is over.
 
         This is a request, never a preemption. Media Forge owns the ordering
         (analyze, release, generate) and the failure policy; ControlDeck owns
         the model lifetime and the decision. Ask once — retrying would starve
         the Host's own consumers.
+
+        ``required_bytes`` is how much this turn needs afterwards. Observed:
+        releasing the chat model was not enough, because a 1.16GB embedding
+        model stayed resident and the image model needs 33.35GB of a 34.2GB
+        card. Saying the number lets the Host decide whether its turn actually
+        freed enough; it is a byte count, not a description of the workload.
         """
         try:
             value = await self.host._request(  # same-package bounded Add-on Runtime transport
                 identity,
                 "POST",
                 f"/{identity.addon_id}/ai/release",
-                json={},
+                json={"required_bytes": max(0, int(required_bytes))},
             )
         except HostApiError as exc:
             if exc.status_code == 404:
