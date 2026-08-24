@@ -99,6 +99,8 @@ const state = {
   librarySelected: new Set(),
   modelCatalog: [],
   modelOperations: new Map(),
+  catalogResults: [],
+  catalogPage: 0,
   modelSpeeds: new Map(),
   modelFilter: "installed",
   modelSort: "runnable",
@@ -935,6 +937,34 @@ function catalogRow(item) {
   return row;
 }
 
+/* 30 件を一息に積むと、下まで送らないと何があるのか分からない。1 画面ぶんに
+   区切って、行き来できるようにする。件数は表示のためだけに持ち、検索の
+   往復は増やさない（結果は既に手元にある）。 */
+const CATALOG_PAGE_SIZE = 12;
+
+function renderCatalogPage() {
+  const items = state.catalogResults || [];
+  const pages = Math.max(1, Math.ceil(items.length / CATALOG_PAGE_SIZE));
+  state.catalogPage = Math.min(Math.max(0, state.catalogPage || 0), pages - 1);
+  const start = state.catalogPage * CATALOG_PAGE_SIZE;
+  renderCatalogResults(items.slice(start, start + CATALOG_PAGE_SIZE));
+  const pager = byId("catalog-pager");
+  pager.hidden = items.length <= CATALOG_PAGE_SIZE;
+  byId("catalog-prev").disabled = state.catalogPage === 0;
+  byId("catalog-next").disabled = state.catalogPage >= pages - 1;
+  byId("catalog-page").textContent =
+    `${start + 1}–${Math.min(items.length, start + CATALOG_PAGE_SIZE)} / ${items.length} 件`;
+}
+
+function clearCatalogResults() {
+  state.catalogResults = [];
+  state.catalogPage = 0;
+  byId("catalog-results").hidden = true;
+  byId("catalog-results").replaceChildren();
+  byId("catalog-pager").hidden = true;
+  byId("catalog-empty").hidden = true;
+}
+
 function renderCatalogResults(items) {
   const holder = byId("catalog-results");
   const empty = byId("catalog-empty");
@@ -978,7 +1008,9 @@ async function searchCatalog() {
     empty.textContent = error?.message || "検索できませんでした。";
     return;
   }
-  renderCatalogResults(found.items || []);
+  state.catalogResults = found.items || [];
+  state.catalogPage = 0;
+  renderCatalogPage();
 }
 
 /* ── HuggingFace からモデルを追加 ────────────────────────────────────── */
@@ -1967,7 +1999,11 @@ async function submitJob(event) {
   state.currentComposition = null;
 
   submit.disabled = true;
-  submit.textContent = "実行中…";
+  // ここはまだ送信前である。演出の整理も参照画像の解析もサーバへ問い合わせる
+  // が、結果を持っているのはこの画面で、job はまだ存在しない。だから離れると
+  // 本当に失われる（Host の「処理中」もそれを言っている）。
+  // 「実行中」と書くと、もうサーバ側の仕事だと読めてしまい、警告と食い違う。
+  submit.textContent = "準備しています…";
   status.textContent = "";
   setHostBusy(true);
   showPreparing("受け付けています", 0.05);
@@ -2086,6 +2122,8 @@ async function submitJob(event) {
     }
     showPreparing("受け付けています", 0.7);
     const job = await call("jobs.create", request);
+    // ここでサーバ側の仕事になった。離れても失われない。
+    submit.textContent = "実行中…";
     setHostBusy(false);
     state.activeJob = job.id;
     await call("jobs.watch", {job_ids: [job.id]}).catch(() => {});
@@ -3599,7 +3637,13 @@ function modelActionCell(model, modelKey) {
     );
   }
   if (model.installed && model.ownership !== "managed") {
-    return unavailable("共有", "共有のモデル置き場にあるため、ここからは削除しません。");
+    // ControlDeck 共有の置き場にある。Media Forge が Host のディレクトリを
+    // 消しに行くのは越権なので、消せないことと、その理由を書く。
+    return unavailable(
+      "共有の置き場",
+      "ControlDeck が共有するモデル置き場にあります。Media Forge の管理外なので、"
+      + "ここからは削除できません。ControlDeck 側で整理してください。",
+    );
   }
 
   const action = document.createElement("button");
@@ -3617,7 +3661,7 @@ function modelActionCell(model, modelKey) {
     const evaluate = document.createElement("button");
     evaluate.type = "button";
     evaluate.dataset.evaluateModel = modelKey;
-    evaluate.textContent = "実機で評価";
+    evaluate.textContent = "評価";
     cell.append(evaluate);
   }
   cell.append(action);
@@ -3771,7 +3815,11 @@ function modelDownloadRow(operation) {
 async function clearModelDownloadHistory() {
   try {
     await call("models.operations.clear", {});
-  } catch { return; }
+  } catch (error) {
+    // 黙って戻ると「押したのに消えない」だけが残り、原因が誰にも見えない。
+    showModelError(error?.code || "UNKNOWN_FAILURE", "");
+    return;
+  }
   // 進行中は残る。手元の控えも同じ規則で間引き、次の一覧取得を待たない。
   for (const [id, operation] of [...state.modelOperations]) {
     if (MODEL_TERMINAL.has(operation.state)) state.modelOperations.delete(id);
@@ -4444,6 +4492,21 @@ catalogClear.addEventListener("click", () => {
   void searchCatalog();
 });
 syncCatalogClear();
+byId("catalog-reset").addEventListener("click", () => {
+  clearCatalogResults();
+  byId("catalog-query").value = "";
+  syncCatalogClear();
+});
+byId("catalog-prev").addEventListener("click", () => {
+  state.catalogPage -= 1;
+  renderCatalogPage();
+  byId("catalog-results").scrollIntoView({block: "start"});
+});
+byId("catalog-next").addEventListener("click", () => {
+  state.catalogPage += 1;
+  renderCatalogPage();
+  byId("catalog-results").scrollIntoView({block: "start"});
+});
 byId("activity-clear").addEventListener("click", async () => {
   // 走っているものは消えない。消えるのは終わった記録だけで、資産の来歴は
   // 資産側に残る（一覧から下げるだけで、記録そのものは壊さない）。
@@ -4464,7 +4527,6 @@ byId("model-downloads").addEventListener("click", (event) => {
   const retry = event.target.closest("[data-retry-model-operation]");
   if (retry) return void startModelInstall(retry.dataset.retryModelOperation);
 });
-byId("open-host-jobs").addEventListener("click", () => void callHost("host.route.open", {route: "/jobs"}).catch(() => {}));
 byId("result-image").addEventListener("click", () => {
   const assetId = byId("result-image").dataset.assetId;
   if (assetId) void openViewer(assetId);
