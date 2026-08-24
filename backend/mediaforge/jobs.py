@@ -358,7 +358,7 @@ class JobManager:
                     # 生成の前に AI ターンを閉じる。lease は取らずに宣言だけ行う。
                     # 先に AI 常駐を落としてから受理を求めるので、以後の LLM 再
                     # ロードは broker の受理を通る。二重予約も deadlock も起きない。
-                    await self._release_host_ai(job, execution, reporter)
+                    await self._release_host_ai(job, execution, reporter, selected)
                 admitted = await self._acquire_host_lease(job, execution, reporter)
                 if not admitted:
                     return
@@ -1156,6 +1156,7 @@ class JobManager:
         job: Job,
         execution: HostExecution,
         reporter: HostJobReporter | None,
+        selected: ModelDescriptor | None = None,
     ) -> None:
         """Ask ControlDeck to end this add-on's AI turn before generation.
 
@@ -1169,7 +1170,13 @@ class JobManager:
             return
         await self._update(job.id, reporter, phase="release_ai", progress=0.02)
         try:
-            result = await self.ai_gateway.release(execution.identity)
+            # 何バイト要るのかを伝える。伝えないと、Host は「LLM を降ろした」
+            # で終わりにする。実測: それでも 1.16GB の embedding が残り、
+            # 33.35GB を要る画像モデルが 34.2GB のカードに入らなかった。
+            result = await self.ai_gateway.release(
+                execution.identity,
+                required_bytes=(selected.measured_vram_bytes or 0) if selected else 0,
+            )
         except Exception:  # noqa: BLE001 - 解放要求の失敗が生成を止めてはいけない
             logger.exception("failed to declare the AI turn finished for %s", job.id)
             return
