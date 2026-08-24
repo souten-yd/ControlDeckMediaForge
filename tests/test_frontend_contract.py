@@ -624,7 +624,8 @@ def test_a_started_download_has_somewhere_to_check_on_it():
 
 def test_finished_downloads_stay_visible_with_their_outcome():
     """何が落ちたのかを後から確かめられないと、やり直してよいのか分からない。"""
-    fn = SCRIPT[SCRIPT.index("function modelDownloadRow"):][:1600]
+    start = SCRIPT.index("function modelDownloadRow")
+    fn = SCRIPT[start:SCRIPT.index("function renderModelDownloads", start)]
 
     assert "error_code" in fn
     assert "完了" in fn and "失敗" in fn
