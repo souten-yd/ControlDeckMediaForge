@@ -1884,6 +1884,8 @@ def create_app(
                         result = (await manager.cancel(str(params.get("job_id", "")))).model_dump(mode="json")
                     elif method == "jobs.list":
                         result = {"items": [item.model_dump(mode="json") for item in store.list_jobs(100)]}
+                    elif method == "jobs.clear":
+                        result = {"cleared": store.clear_finished_jobs()}
                     elif method == "assets.list":
                         result = {"items": [item.model_dump(mode="json") for item in store.list_assets(100)]}
                     elif method == "assets.import":
@@ -2414,6 +2416,11 @@ def create_app(
                 root = upload.get("root")
                 if isinstance(root, Path) and root.exists():
                     shutil.rmtree(root)
+
+    @app.post("/workspace-api/jobs/clear", include_in_schema=False)
+    async def standalone_clear_jobs() -> dict[str, Any]:
+        """Same-origin workspace bridge for standalone mode; not a public API."""
+        return {"cleared": store.clear_finished_jobs()}
 
     @app.post("/workspace-api/assets/delete", include_in_schema=False)
     async def standalone_delete_assets(payload: dict[str, Any]) -> dict[str, Any]:

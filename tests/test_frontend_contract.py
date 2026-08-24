@@ -914,3 +914,17 @@ def test_progress_is_adopted_only_when_there_is_no_choice_to_make():
     body = SCRIPT[SCRIPT.index("function restoreProgressView"):]
     body = body[:body.index("\n}")]
     assert "running.length !== 1" in body
+
+
+def test_the_activity_tab_can_clear_its_history():
+    """終わった実行が積み上がると、走っているものが見えなくなる。"""
+    assert 'id="activity-clear"' in MARKUP
+    handler = SCRIPT[SCRIPT.index('byId("activity-clear").addEventListener'):]
+    handler = handler[:handler.index("\n});")]
+    assert "confirmModelAction" in handler, "確認なしで消している"
+    assert '"jobs.clear"' in handler
+    # 何が残るのかを言う。素材まで消えると読まれると押せない。
+    assert "作った素材とその来歴は残ります" in handler
+    render = SCRIPT[SCRIPT.index("function renderActivity"):]
+    render = render[:render.index("\n}")]
+    assert 'byId("activity-clear").hidden = finished.length === 0;' in render

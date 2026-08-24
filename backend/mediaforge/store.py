@@ -217,6 +217,8 @@ class Store:
                 connection.execute("ALTER TABLE jobs ADD COLUMN host_managed INTEGER NOT NULL DEFAULT 0")
             if "profile_snapshot_json" not in columns:
                 connection.execute("ALTER TABLE jobs ADD COLUMN profile_snapshot_json TEXT NOT NULL DEFAULT '{}'")
+            if "cleared_at" not in columns:
+                connection.execute("ALTER TABLE jobs ADD COLUMN cleared_at TEXT")
             model_operation_columns = {
                 str(row["name"]) for row in connection.execute("PRAGMA table_info(model_operations)")
             }
@@ -362,10 +364,35 @@ class Store:
             raise UnreadableJobRecord(job_id)
         return job
 
-    def list_jobs(self, limit: int = 100) -> list[Job]:
+    def list_jobs(self, limit: int = 100, *, include_cleared: bool = False) -> list[Job]:
+        query = "SELECT * FROM jobs"
+        if not include_cleared:
+            query += " WHERE cleared_at IS NULL"
+        query += " ORDER BY created_at DESC LIMIT ?"
         with self._connect() as connection:
-            rows = connection.execute("SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+            rows = connection.execute(query, (limit,)).fetchall()
         return [self._job(row) for row in rows]
+
+    def clear_finished_jobs(self) -> int:
+        """Drop settled runs from the activity list without destroying anything.
+
+        The rows are marked, not deleted. Assets reference their job by foreign
+        key, so removing the row would break the library's link back to how a
+        picture was made — and that link is the whole point of keeping
+        provenance. Running jobs are never cleared: hiding one would leave work
+        in progress with nothing pointing at it.
+        """
+        settled = (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED)
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                f"""UPDATE jobs SET cleared_at = ?
+                    WHERE cleared_at IS NULL AND status IN ({','.join('?' * len(settled))})""",
+                (utc_now(), *settled),
+            )
+        removed = int(cursor.rowcount or 0)
+        if removed:
+            self._notify_session("jobs")
+        return removed
 
     def queued_job_ids(self) -> list[str]:
         with self._connect() as connection:
