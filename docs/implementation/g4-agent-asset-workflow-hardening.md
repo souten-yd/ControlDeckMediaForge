@@ -436,6 +436,53 @@ No Media Forge direct LLM process control.
 
 ---
 
+## 6.6 Swap count is a first-class budget (2026-08-24)
+
+The user's constraint: model swapping is acceptable, but the number of swaps
+must be kept as low as possible. This is not a preference; it is the dominant
+latency term on a single GPU.
+
+```text
+measured   LLM load 4.0 - 12.1 s   release 0.146 - 0.371 s   FLUX load 10.6 - 14.9 s
+           one swap round trip is roughly 15 - 25 s
+```
+
+A per-asset pipeline pays that per asset:
+
+```text
+naive, N assets
+  for each asset: Director(LLM) -> release -> generate(FLUX) -> evaluate(LLM)
+  = 2N swaps        two assets already cost 30 - 50 s of pure loading
+```
+
+The phases must therefore be batched **across** assets, not nested inside each:
+
+```text
+adopted, N assets
+  1. plan every asset            LLM resident once
+  2. release the AI turn         once
+  3. generate every asset        FLUX resident once, stays warm across N images
+  4. evaluate every asset        LLM resident once, only if evaluation is wanted
+  = 2 swaps regardless of N
+```
+
+Consequences that bind later slices:
+
+```text
+A3  evaluation must not run inline after each image. An inline evaluator would
+    reintroduce a swap per image and silently undo this. Evaluation is deferred
+    and batched, or skipped entirely (the default).
+A3  bounded refinement regenerates in a batch too: collect the accepted deltas
+    for all candidates first, then re-enter generation once.
+7   consistency groups are the natural carrier for this batching. Their value is
+    not only visual coherence; a group is also the unit that makes the swap
+    count independent of asset count.
+```
+
+Do not treat a warm image model as a licence to skip Broker admission. Staying
+warm across a group is a scheduling choice inside one admitted turn, not a way
+to hold a lease indefinitely.
+
 ## 7. P1 — Related assets and consistency groups
 
 A coding task often needs a set rather than one image:
