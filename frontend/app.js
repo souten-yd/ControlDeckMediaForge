@@ -534,13 +534,10 @@ function renderCreative() {
 }
 
 function renderAdvancedCreative() {
-  if (!byId("advanced-domain")) return;
-  fillCreativeSelect("advanced-domain", "domains", state.creative.domain);
-  fillCreativeSelect("advanced-scene", "scenes", state.creative.scene);
-  fillCreativeSelect("advanced-pose", "poses", state.creative.pose);
-  fillCreativeSelect("advanced-composition", "compositions", state.creative.composition);
-  fillCreativeSelect("advanced-camera", "cameras", state.creative.camera);
-  fillCreativeSelect("advanced-variation", "variations", state.creative.variation);
+  // シーン・構図・カメラの選択は「シーンと見せ方」に 1 組だけ置く。詳細モードは
+  // 同じ選択を繰り返さず、言葉での補足だけを足す。同じ設定が 2 箇所にあると、
+  // どちらが効いているのか利用者に分からない。
+  if (!byId("advanced-scene-details")) return;
   byId("advanced-scene-details").value = state.creative.sceneDetails;
   byId("advanced-pose-details").value = state.creative.poseDetails;
   byId("advanced-composition-details").value = state.creative.compositionDetails;
@@ -2641,7 +2638,7 @@ async function libraryCard(item) {
 
 /* 一覧のサムネイルは小さい。タップしたら原寸で見られる場所が要る。
    ピンチ／ホイールで拡大し、拡大中はドラッグで動かせる。 */
-const viewer = {assetId: "", scale: 1, x: 0, y: 0, pointers: new Map(), pinch: 0, drag: null};
+const viewer = {assetId: "", filename: "", scale: 1, x: 0, y: 0, pointers: new Map(), pinch: 0, drag: null};
 
 function viewerApply() {
   byId("viewer-image").style.transform =
@@ -2666,6 +2663,8 @@ function viewerZoom(factor) {
 
 async function openViewer(assetId, item) {
   viewer.assetId = assetId;
+  viewer.filename = item?.suggested_filename || "";
+  byId("viewer-save-note").hidden = true;
   viewerReset();
   const image = byId("viewer-image");
   const caption = byId("viewer-caption");
@@ -2708,6 +2707,40 @@ function modelRouteText(route) {
     ? `${scene}に合うモデル`
     : `${scene}に合うモデルが無かったため、使えるモデル`;
   return `${matched} ${route.candidate_count} 件から${policy}で選びました。`;
+}
+
+/* 書き出し導線が 1 つも無かった（設計 §F4 保存A）。host files bridge は実装
+   済みで疎通実績もあるのに、UI から呼ばれていなかった。ここで繋ぐ。 */
+async function saveAsset(assetId) {
+  const note = byId("viewer-save-note");
+  note.hidden = false;
+  note.textContent = "保存先を選んでいます…";
+  let grant;
+  try {
+    grant = await callHost("host.files.export", {suggested_name: viewer.filename || ""});
+  } catch (error) {
+    // 単体表示にはホストがいない。できないことをできるように見せない。
+    note.textContent = error?.code === "bridge_unavailable"
+      ? "単体表示では保存できません。ControlDeck から開いてください。"
+      : "保存先を選べませんでした。";
+    return;
+  }
+  const grantId = grant?.grant_id || grant?.export_grant_id;
+  if (!grantId) {
+    note.textContent = "保存を取りやめました。";
+    return;
+  }
+  note.textContent = "保存しています…";
+  try {
+    const receipt = await call("assets.export", {
+      asset_id: assetId,
+      export_grant_id: grantId,
+      ...(viewer.filename ? {filename: viewer.filename} : {}),
+    });
+    note.textContent = `${receipt.filename} を保存しました（${formatBytes(receipt.size_bytes)}）。`;
+  } catch (error) {
+    note.textContent = failureText(error?.code) || "保存できませんでした。";
+  }
 }
 
 async function openDetail(assetId) {
@@ -3482,15 +3515,6 @@ byId("create-form").addEventListener("change", (event) => {
     clearError();
     return;
   }
-  const key = {
-    "advanced-domain": "domain",
-    "advanced-scene": "scene",
-    "advanced-pose": "pose",
-    "advanced-composition": "composition",
-    "advanced-camera": "camera",
-    "advanced-variation": "variation",
-  }[event.target.id];
-  if (key) setCreativeValue(key, event.target.value);
 });
 
 byId("size-presets").addEventListener("click", (event) => {
@@ -3622,6 +3646,8 @@ byId("create-form").addEventListener("submit", submitJob);
 function jobById(id) {
   return state.jobs.find((item) => item.id === id) || null;
 }
+
+byId("viewer-save").addEventListener("click", () => void saveAsset(viewer.assetId));
 
 byId("custom-resolve").addEventListener("click", () => void resolveCustomModel());
 byId("custom-result").addEventListener("click", (event) => {

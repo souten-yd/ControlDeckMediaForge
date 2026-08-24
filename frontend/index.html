@@ -399,8 +399,10 @@
         </div>
         <div id="viewer-bar">
           <p id="viewer-caption"></p>
+          <p id="viewer-save-note" class="hint" hidden></p>
           <div class="viewer-actions">
             <button type="button" id="viewer-detail">詳細</button>
+            <button type="button" id="viewer-save">保存</button>
             <button type="button" id="viewer-edit">これを編集</button>
             <button type="button" id="viewer-close" class="primary">閉じる</button>
           </div>
@@ -423,22 +425,11 @@
           <label>高さ<input id="advanced-height" type="number" step="16" inputmode="numeric"></label>
         </div>
         <p id="advanced-size-hint" class="hint"></p>
-        <p class="section-label">シーン設計</p>
-        <div class="form-row">
-          <label>ドメイン<select id="advanced-domain"></select></label>
-          <label>シーン<select id="advanced-scene"></select></label>
-        </div>
+        <p class="section-label">シーンの補足</p>
+        <p class="hint">シーン・構図・カメラは上の「シーンと見せ方」で選びます。ここでは言葉で補います。</p>
         <label>シーンの詳細<input id="advanced-scene-details" type="text" maxlength="500" placeholder="場所や状況の補足"></label>
-        <div class="form-row">
-          <label>ポーズ<select id="advanced-pose"></select></label>
-          <label>構図<select id="advanced-composition"></select></label>
-        </div>
         <label>ポーズの詳細<input id="advanced-pose-details" type="text" maxlength="500" placeholder="手足や視線の補足"></label>
         <label>構図の詳細<input id="advanced-composition-details" type="text" maxlength="500" placeholder="余白や配置の補足"></label>
-        <div class="form-row">
-          <label>カメラ・画角<select id="advanced-camera"></select></label>
-          <label>変化させるもの<select id="advanced-variation"></select></label>
-        </div>
         <label>カメラの詳細<input id="advanced-camera-details" type="text" maxlength="500" placeholder="焦点距離や視点の補足"></label>
         <div id="advanced-reference-block">
           <p class="section-label">参照画像の役割</p>

@@ -2184,6 +2184,51 @@ def create_app(
                             # 既定で同梱する。呼び出し側が明示的に切れる。
                             thumbnail=None if params.get("thumbnails") is False else grid_thumbnail,
                         )
+                    elif method == "assets.export":
+                        # 設計 §F4 保存A。実装済みの host files bridge を UI から
+                        # 使えるようにする。ここまで導線が 1 つも無かった。
+                        asset_id = str(params.get("asset_id", ""))
+                        asset = store.get_asset(asset_id)
+                        filename = placement_filename(
+                            requested=params.get("filename"),
+                            suggested=asset.suggested_filename,
+                            mime_type=asset.mime_type,
+                        )
+                        attached = await host.create_or_attach_job(
+                            identity, title="Media Forge export"
+                        )
+                        host_job = attached.get("job")
+                        if not isinstance(host_job, dict) or not isinstance(host_job.get("id"), str):
+                            raise HostApiError("invalid_host_response", "ControlDeck did not attach a job", 502)
+                        committed = await commit_file(
+                            host,
+                            identity,
+                            host_job_id=host_job["id"],
+                            grant_id=require_grant_id(str(params.get("export_grant_id", ""))),
+                            source=store.asset_path(asset_id),
+                            filename=filename,
+                            mime_type=asset.mime_type,
+                            sha256=asset.sha256,
+                        )
+                        if attached.get("created") is True:
+                            await host.update_job(identity, host_job["id"], {
+                                "phase": "package",
+                                "progress": {"completed": 1, "total": 1},
+                                "status": "succeeded",
+                                "result": {"asset_id": committed.get("asset_id")},
+                            })
+                        # 受領書と同じ形で返す。書き出したものを ls で確かめ直させない。
+                        result = PlacementReceipt(
+                            committed=True,
+                            source_asset_id=asset.id,
+                            host_asset_id=committed.get("asset_id"),
+                            filename=filename,
+                            media_type=asset.mime_type,
+                            sha256=asset.sha256,
+                            size_bytes=asset.size_bytes,
+                            width=asset.width,
+                            height=asset.height,
+                        ).model_dump(mode="json")
                     elif method == "assets.thumbnail":
                         asset_id = str(params.get("asset_id", ""))
                         asset = store.get_asset(asset_id)

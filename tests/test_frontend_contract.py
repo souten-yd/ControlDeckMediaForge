@@ -42,6 +42,8 @@ DOM_IDS = (
     "profile-name", "profile-appearance", "profile-art-style", "profile-references",
     "pack-section", "pack-profile", "pack-open", "pack-dialog", "pack-slots", "pack-progress",
     "custom-repo", "custom-revision", "custom-resolve", "custom-result", "custom-error",
+    # UX3: 書き出し導線と、重複を解消した詳細設定
+    "viewer-save", "viewer-save-note",
     "reference-intelligence", "reference-focuses", "reference-analysis-summary",
     "reference-analysis-note",
     "composition-options", "composition-title", "composition-caption",
@@ -458,3 +460,46 @@ def test_a_custom_model_cannot_be_added_without_showing_the_licence_first():
 
 def test_a_custom_model_over_the_download_cap_is_not_offered_for_adding():
     assert "within_download_cap" in SCRIPT
+
+
+# ── UX3: 設定の重複解消と書き出し導線 ───────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "control",
+    ["advanced-domain", "advanced-scene", "advanced-pose",
+     "advanced-composition", "advanced-camera", "advanced-variation"],
+)
+def test_the_advanced_pane_does_not_repeat_a_control_that_simple_mode_owns(control: str):
+    """同じ設定が 2 箇所にあると、どちらが効いているのか利用者に分からない。"""
+    assert f'id="{control}"' not in MARKUP
+
+
+@pytest.mark.parametrize(
+    "control",
+    ["creative-scene", "creative-pose", "creative-composition",
+     "creative-camera", "creative-variation", "domain-chips"],
+)
+def test_every_creative_control_still_exists_exactly_once(control: str):
+    assert MARKUP.count(f'id="{control}"') == 1
+
+
+@pytest.mark.parametrize(
+    "detail",
+    ["advanced-scene-details", "advanced-pose-details",
+     "advanced-composition-details", "advanced-camera-details"],
+)
+def test_the_advanced_pane_adds_wording_rather_than_repeating_selects(detail: str):
+    """詳細モードは同じ選択を繰り返さず、言葉での補足だけを足す。"""
+    assert f'id="{detail}"' in MARKUP
+
+
+def test_the_library_can_export_an_asset():
+    """設計 §F4 保存A。host files bridge は実装済みなのに導線が無かった。"""
+    assert 'call("assets.export"' in SCRIPT
+    assert "host.files.export" in SCRIPT
+
+
+def test_export_says_plainly_when_there_is_no_host():
+    """単体表示でできないことを、できるように見せない。"""
+    assert "単体表示では保存できません" in SCRIPT

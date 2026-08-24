@@ -38,6 +38,11 @@ def import_asset(client: TestClient, purpose: str = "source", size: tuple[int, i
     return response.json()
 
 
+def catalog_version() -> str:
+    root = Path(__file__).parents[1] / "creative/templates.json"
+    return json.loads(root.read_text(encoding="utf-8"))["catalog_version"]
+
+
 def call(socket, method: str, params: dict | None = None) -> dict:
     """Send one request and skip any pushed events that arrive first."""
     socket.send_json({"id": method, "method": method, "params": params or {}})
@@ -91,7 +96,9 @@ def test_creative_templates_and_validation_stay_on_private_transport(tmp_path: P
         })
 
     assert templates["ok"] is True
-    assert templates["result"]["catalog_version"] == "2026.08.22"
+    # 版そのものではなく、同梱カタログと一致することを見る。カタログを
+    # 増やすたびにテストを書き換えるのは、守っている性質ではない。
+    assert templates["result"]["catalog_version"] == catalog_version()
     assert unchanged["result"]["request"] == JobRequest.model_validate(original).model_dump(mode="json")
     assert unchanged["result"]["plan"]["active"] is False
     assert directed["ok"] is True
