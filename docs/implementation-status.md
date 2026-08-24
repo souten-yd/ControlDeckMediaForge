@@ -3791,3 +3791,58 @@ defect の判定が QA 予算をまったく参照しないことも、経路の
 
 NOT TESTED: 実 VLM がこの rubric で用途不一致を実際に指摘するか。A5 の実機
 E2E で、Hanabi 相当の資産に対して確認する。
+
+## G4H A4 — 配置マニフェストと受領書（2026-08-24）
+
+実使用では、関連する資産を 1 個ずつ `media.pack` へ渡していた。呼び出し側から
+見ると何が配置されたのか応答から確定できず、最後に shell の `ls` / `file` で
+確かめる必要があった。応答が受領書として不足していたためである。
+
+### 受領書
+
+単体形の応答へ加法的に `receipt` を足した。既存の呼び出し側が読んでいる欄
+（`asset_id` / `media_asset_id` / `name` / `mime_type` / `size` / `sha256`）は
+そのまま残る。
+
+```text
+PlacementReceipt
+  committed / source_asset_id / host_asset_id / filename / media_type
+  sha256 / size_bytes / width / height / role / warnings / error
+```
+
+project の path は入れない。呼び出し側が知るのは「どのバイト列がどの名前で
+置かれたか」だけで、project がどこにあるかは知らない。
+
+### 複数件配置
+
+`items[]` 形を追加した。単体形はそのまま維持し、応答の形も呼ばれた形に揃える。
+
+```text
+preflight   1 バイトも書く前に全件の宛先名を確定させる
+            重複名 / 欠落資産 / 拡張子と MIME の不一致はここで拒否し、
+            何も commit しない
+書き込み     1 件ずつ commit する。失敗したらそこで止め、残りは
+            not_attempted として報告する
+応答        committed_count / requested_count / partial / atomic:false
+```
+
+**`atomic: false` を明示する。** ControlDeck が原子的に扱えるのは 1 ファイルで
+あり、N 件をまとめて「全部か無か」と名乗ると、部分的に書かれた状態を呼び出し側が
+見落とす。Host に汎用 transaction primitive が入るまでこの表現は変えない
+（計画 §8.3 / H3）。
+
+### 実測
+
+```text
+3 件一括           committed_count 3 / partial false / 各 receipt の
+                   sha256・size・width・height が元資産と一致
+重複名             422 duplicate_placement_filename / outputs 0 件
+                   （大文字小文字を畳んで比較する）
+欠落資産           404 asset_not_found / outputs 0 件
+同一資産の二重指定  422 invalid_project_asset_placement
+受領書の path 漏れ  なし
+./mf.sh test       492 passed
+```
+
+NOT TESTED: 途中失敗して `partial: true` になる経路。stub host が commit を
+失敗させないため、実機 E2E（A5）で確認する。
