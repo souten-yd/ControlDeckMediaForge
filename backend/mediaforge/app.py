@@ -201,6 +201,38 @@ def create_app(
         creative_evaluator=evaluator,
         ai_gateway=ai_gateway,
     )
+
+    # 演出の立案と検証を job の中で行うための入口。画面が順番に呼んでいた頃は
+    # 途中結果がページにしか無く、タブを閉じると失われていた。
+    async def direct_for_job(job: Job, spec: dict[str, Any], mode: str) -> dict[str, Any] | None:
+        identity = manager.host_identity(job.id)
+        directed = await creative_director.direct(
+            identity, job.request.intent, spec,
+            mode=mode,
+            reference_context=job.request.constraints.get("reference_context") or [],
+        )
+        return directed.model_dump(mode="json") if hasattr(directed, "model_dump") else directed
+
+    async def validate_for_job(
+        job: Job, request: JobRequest, spec: dict[str, Any], plan: Any
+    ) -> JobRequest:
+        identity = manager.host_identity(job.id)
+        profile_snapshot = manager.resolve_profiles(request)
+        available_references = {item.asset_id for item in request.inputs} | set(
+            profile_snapshot.get("reference_asset_ids", [])
+        )
+        capability_value = await capability_document(identity)
+        return compile_creative(
+            request,
+            CreativeSpec.model_validate(spec),
+            capabilities=capability_value["capabilities"],
+            available_references=available_references,
+            director_plan=PromptPlan.model_validate(plan) if plan else None,
+            reference_context=job.request.constraints.get("reference_context") or [],
+        ).request
+
+    manager.creative_director = direct_for_job
+    manager.creative_validate = validate_for_job
     events = JobEventBus()
     store.observe(events.publish)
     model_events = ModelOperationEventBus()

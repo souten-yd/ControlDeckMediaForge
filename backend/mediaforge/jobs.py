@@ -16,7 +16,7 @@ from . import __version__
 from .config import REPOSITORY_ROOT
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
 from .evaluator import CreativeEvaluationError, CreativeEvaluator
-from .host.client import ControlDeckHostClient, HostApiError
+from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.jobs import HostExecution, HostJobReporter
 from .host.resources import fake_image_request, image_model_request
 from .image_edit import StrictEditError, strict_edit_plan, validate_strict_edit
@@ -116,6 +116,8 @@ class JobManager:
         image_runtime_python: Path | None = None,
         creative_evaluator: CreativeEvaluator | None = None,
         ai_gateway: HostAIGateway | None = None,
+        creative_director: Any | None = None,
+        creative_validate: Any | None = None,
     ):
         self.store = store
         self.worker_timeout_sec = worker_timeout_sec
@@ -128,6 +130,10 @@ class JobManager:
         self.image_runtime_python = image_runtime_python
         self.creative_evaluator = creative_evaluator
         self.ai_gateway = ai_gateway
+        # 演出の立案と検証。従来は画面が順番に呼び、途中結果をページが持って
+        # いた。タブを閉じると失われるので、job の phase として持たせる。
+        self.creative_director = creative_director
+        self.creative_validate = creative_validate
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
         # AI ターン終了の宣言結果。lease が取れなかったときに理由を添えるために持つ。
         self._ai_release: dict[str, HostAIReleaseResult] = {}
@@ -331,6 +337,17 @@ class JobManager:
                 )
                 return
             try:
+                job = await self._prepare_creative(job, reporter)
+            except WorkerFailure as exc:
+                await self._update(
+                    job_id,
+                    reporter,
+                    status=JobStatus.FAILED,
+                    phase="direct",
+                    error=ErrorDetail(code=exc.code, message=str(exc)[:300]),
+                )
+                return
+            try:
                 selected = self._select_real_model(job)
             except WorkerFailure as exc:
                 await self._update(
@@ -461,6 +478,15 @@ class JobManager:
             if job.request.constraints.get("strict_edit") is True
             else "image.single_reference_edit"
         )
+
+    def host_identity(self, job_id: str) -> HostIdentity | None:
+        """The Host identity this job runs under, when it has one.
+
+        Direction and evaluation both need it to reach the AI gateway. A local
+        job simply has none, and those steps degrade rather than fail.
+        """
+        execution = self._host_executions.get(job_id)
+        return execution.identity if execution is not None else None
 
     def resolve_profiles(self, request: JobRequest) -> dict[str, Any]:
         requested = {
@@ -1150,6 +1176,48 @@ class JobManager:
             shutil.copyfile(self.store.asset_path(mask_id), mask_destination)
             result["mask_path"] = str(mask_destination)
         return result
+
+    async def _prepare_creative(self, job: Job, reporter: HostJobReporter | None) -> Job:
+        """Run the direction and validation the browser used to orchestrate.
+
+        These were three separate calls from the page, with the results held
+        only in that page: the reference analysis, the director's plan, and the
+        validated request. Nothing durable owned the sequence until
+        `jobs.create` at the end, so closing the tab lost work that had already
+        cost a VLM and an LLM turn — and the Host's "busy" warning was telling
+        the truth about it.
+
+        The job record already survives the browser, so the same steps run here
+        as phases. Whatever the page still sends is honoured unchanged; this
+        only takes over when the request asks for direction.
+        """
+        constraints = job.request.constraints or {}
+        spec = constraints.get("creative_spec")
+        mode = str(constraints.get("director_mode") or "original")
+        if not isinstance(spec, dict) or self.creative_validate is None:
+            return job
+
+        request = job.request
+        plan = None
+        if mode != "original" and self.creative_director is not None:
+            await self._update(job.id, reporter, phase="direct", progress=0.015)
+            try:
+                directed = await self.creative_director(job, spec, mode)
+            except Exception:  # noqa: BLE001 - 演出が立たなくても生成は続ける
+                logger.exception("creative direction failed for %s", job.id)
+                directed = None
+            if directed is not None:
+                spec = directed.get("creative_spec", spec)
+                plan = directed.get("plan")
+
+        await self._update(job.id, reporter, phase="validate_request", progress=0.02)
+        try:
+            request = await self.creative_validate(job, request, spec, plan)
+        except WorkerFailure:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise WorkerFailure("creative_validation_failed", str(exc)[:200]) from exc
+        return self.store.replace_job_request(job.id, request)
 
     async def _release_host_ai(
         self,

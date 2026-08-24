@@ -226,3 +226,75 @@ def test_the_release_says_how_much_the_turn_needs_afterwards(tmp_path: Path):
     # selected が無い経路（起動前など）では 0 を送る。嘘の数字は送らない。
     asyncio.run(manager._release_host_ai(job, host_execution(), None, None))
     assert gateway.required_bytes[-1] == 0
+
+
+# ── 準備をサーバ側に置く ────────────────────────────────────────────────
+#
+# 演出と検証は画面が順番に呼び、途中結果はそのページだけが持っていた。VLM と
+# LLM を 1 回ずつ使った後にタブを閉じると、それが失われる。Host の「処理中」
+# 警告はその事実を言っていた。job の記録はブラウザより長く生きるので、同じ
+# 手順を phase として持たせる。
+
+def test_direction_and_validation_run_inside_the_job(tmp_path: Path):
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+
+    seen: dict[str, object] = {}
+
+    async def direct(job, spec, mode):
+        seen["mode"] = mode
+        return {"creative_spec": {**spec, "domain": "anime"}, "plan": None}
+
+    async def validate(job, request, spec, plan):
+        seen["spec"] = spec
+        return request.model_copy(update={"intent": f"{request.intent}／整えた"})
+
+    manager.creative_director = direct
+    manager.creative_validate = validate
+    job = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="青い目のライオン",
+        constraints={"creative_spec": {"domain": "auto"}, "director_mode": "refine"},
+    ))
+
+    prepared = asyncio.run(manager._prepare_creative(job, None))
+
+    assert seen["mode"] == "refine"
+    assert seen["spec"]["domain"] == "anime", "演出の結果が検証へ渡っていない"
+    # 書き換えた要求は保存される。保存しないと、ブラウザを閉じた時点で消える。
+    assert prepared.request.intent.endswith("／整えた")
+    assert store.get_job(job.id).request.intent.endswith("／整えた")
+
+
+def test_a_request_without_a_creative_spec_is_left_alone(tmp_path: Path):
+    """画面が既に用意して送ってくる経路（構図・差分）はそのまま通す。"""
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    manager.creative_validate = None
+    job = store.create_job(JobRequest(operation="image.generate", intent="そのまま"))
+
+    assert asyncio.run(manager._prepare_creative(job, None)).request.intent == "そのまま"
+
+
+def test_a_failed_direction_does_not_stop_the_job(tmp_path: Path):
+    """演出が立たなくても生成は続ける。飾りのために本体を落とさない。"""
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+
+    async def boom(job, spec, mode):
+        raise RuntimeError("director unavailable")
+
+    async def validate(job, request, spec, plan):
+        return request
+
+    manager.creative_director = boom
+    manager.creative_validate = validate
+    job = store.create_job(JobRequest(
+        operation="image.generate", intent="続ける",
+        constraints={"creative_spec": {"domain": "auto"}, "director_mode": "refine"},
+    ))
+
+    assert asyncio.run(manager._prepare_creative(job, None)).request.intent == "続ける"
