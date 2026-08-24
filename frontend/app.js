@@ -99,6 +99,7 @@ const state = {
   librarySelected: new Set(),
   modelCatalog: [],
   modelOperations: new Map(),
+  modelSpeeds: new Map(),
   modelFilter: "installed",
   modelSort: "runnable",
   lastNonSettingsView: "create",
@@ -195,10 +196,54 @@ function connectSocket() {
   return state.socketReady;
 }
 
+/* 何 GB あるかは出していたが、あと何分かかるのかは出していなかった。
+   backend は速度を持っていない（持たせると全接続に同じ数字を配ることになる）。
+   届いた bytes_done の差分から手元で出す。1 秒未満の差分は雑音なので捨て、
+   指数移動平均で均す。生の瞬間値は桁が跳ねて読めない。 */
+function recordModelSpeed(operation) {
+  if (!operation?.id) return;
+  if (MODEL_TERMINAL.has(operation.state)) {
+    state.modelSpeeds.delete(operation.id);
+    return;
+  }
+  const now = Date.now();
+  const previous = state.modelSpeeds.get(operation.id);
+  if (!previous) {
+    state.modelSpeeds.set(operation.id, {at: now, bytes: operation.bytes_done, bps: 0});
+    return;
+  }
+  const seconds = (now - previous.at) / 1000;
+  const gained = operation.bytes_done - previous.bytes;
+  if (seconds < 1 || gained < 0) return;
+  const sample = gained / seconds;
+  state.modelSpeeds.set(operation.id, {
+    at: now,
+    bytes: operation.bytes_done,
+    bps: previous.bps ? previous.bps * 0.7 + sample * 0.3 : sample,
+  });
+}
+
+function modelSpeedText(operation) {
+  const speed = state.modelSpeeds.get(operation?.id);
+  if (!speed?.bps || MODEL_TERMINAL.has(operation.state)) return "";
+  const parts = [`${formatBytes(Math.round(speed.bps))}/秒`];
+  const left = (operation.bytes_total || 0) - operation.bytes_done;
+  if (left > 0) parts.push(`残り ${formatDuration(left / speed.bps)}`);
+  return parts.join(" · ");
+}
+
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "-";
+  if (seconds < 90) return `約 ${Math.max(1, Math.round(seconds))} 秒`;
+  if (seconds < 5400) return `約 ${Math.round(seconds / 60)} 分`;
+  return `約 ${Math.round(seconds / 360) / 10} 時間`;
+}
+
 function handleEvent(message) {
   if (!message?.data) return;
   if (message.event === "model.operation.changed") {
     const operation = message.data;
+    recordModelSpeed(operation);
     state.modelOperations.set(operation.id, operation);
     renderModelManagement();
     renderModelMiniProgress();
@@ -3070,7 +3115,7 @@ function validationList(validation) {
     // 記録は status: "passed" と passed: true の二通りある。どちらも読む。
     const passed = record?.status ? record.status === "passed" : record?.passed === true;
     const item = document.createElement("span");
-    item.className = passed ? "check ok" : "check bad";
+    item.className = passed ? "checkmark ok" : "checkmark bad";
     item.textContent = `${passed ? "✓" : "✕"} ${
       VALIDATOR_LABEL[record?.validator] || record?.validator || "不明"}`;
     if (record?.reason) item.title = String(record.reason);
@@ -3639,10 +3684,15 @@ function modelDownloadRow(operation) {
   sub.className = "s";
   const done = formatBytes(operation.bytes_done);
   const total = operation.bytes_total ? formatBytes(operation.bytes_total) : "?";
+  // 「ダウンロード · ダウンロードしています」と二重に出ていた。状態の言葉が
+  // 何をしているかを既に言っているので、そちらだけ残す。
+  const stateText = modelOperationStateLabel(operation);
+  const actionText = MODEL_OPERATION_ACTION_LABEL[operation.action] || operation.action;
   sub.textContent = [
-    MODEL_OPERATION_ACTION_LABEL[operation.action] || operation.action,
-    modelOperationStateLabel(operation),
+    stateText.startsWith(actionText) ? "" : actionText,
+    stateText,
     operation.bytes_total ? `${done} / ${total}` : done,
+    modelSpeedText(operation),
     operation.error_code ? failureText(operation.error_code) : "",
   ].filter(Boolean).join(" · ");
   info.append(title, sub);
@@ -4341,6 +4391,17 @@ byId("library-select-none").addEventListener("click", () => {
   renderLibrarySelection();
 });
 byId("library-delete").addEventListener("click", () => void deleteSelectedAssets());
+const catalogQuery = byId("catalog-query");
+const catalogClear = byId("catalog-clear");
+function syncCatalogClear() { catalogClear.hidden = !catalogQuery.value; }
+catalogQuery.addEventListener("input", syncCatalogClear);
+catalogClear.addEventListener("click", () => {
+  catalogQuery.value = "";
+  syncCatalogClear();
+  catalogQuery.focus();
+  void searchCatalog();
+});
+syncCatalogClear();
 byId("model-downloads-clear").addEventListener("click", () => void clearModelDownloadHistory());
 // ダウンロード一覧は行ごと作り直す。中止と再試行は委譲で受ける。
 byId("model-downloads").addEventListener("click", (event) => {
@@ -4454,6 +4515,8 @@ function applyModelSession(snapshot) {
     byId("model-error").hidden = true;
   }
   if (usable(snapshot.model_operations)) {
+    // 単体表示では live event が来ない。取り直した一覧からも速度を出す。
+    for (const item of snapshot.model_operations.items || []) recordModelSpeed(item);
     state.modelOperations = new Map((snapshot.model_operations.items || []).map((item) => [item.id, item]));
   }
   if (usable(snapshot.model_catalog) || usable(snapshot.model_operations)) {

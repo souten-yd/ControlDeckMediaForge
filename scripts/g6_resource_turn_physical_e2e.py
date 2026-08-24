@@ -181,13 +181,26 @@ def loaded_aliases() -> list[str]:
     return control_deck(LOADED_SNIPPET, timeout=120)["loaded"]
 
 
+# 「同じ入口で、モデルを替えても同じ出口になる」ことを見るために、model だけ
+# 差し替えられるようにする。それ以外は 1 文字も変えない。変えると、通った理由が
+# モデルなのか手順なのか分からなくなる。
+REQUESTED_MODEL: dict[str, Any] = {"model_policy": "auto"}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-dir", required=True, type=Path)
     parser.add_argument(
+        "--model-id", default=None,
+        help="このモデルを名指しで使う（既定は routing に任せる）",
+    )
+    parser.add_argument(
         "--keep-data", action="store_true", help="生成物を残す（既定は一時ディレクトリごと削除）"
     )
     args = parser.parse_args()
+    if args.model_id:
+        global REQUESTED_MODEL
+        REQUESTED_MODEL = {"model_policy": "manual", "model_id": args.model_id}
     args.evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     # worker が何をしたのかを見えるようにする。緑だけでは証拠にならない。
     logging.basicConfig(level=logging.INFO, stream=sys.stderr,
@@ -303,7 +316,7 @@ def main() -> int:
                     "operation": "image.generate",
                     "intent": "an orange field robot folds its solar panels at dusk",
                     "inputs": [],
-                    "model_policy": "auto",
+                    **REQUESTED_MODEL,
                     "constraints": {"width": 256, "height": 256, "seed": 60601},
                     "output": {"format": "png", "count": 1},
                     "qa": {"semantic": False, "max_regeneration_attempts": 0},

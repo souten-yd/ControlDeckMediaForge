@@ -695,7 +695,11 @@ def test_cards_in_the_same_row_share_a_height():
 
 
 def test_the_name_area_reserves_room_so_the_facts_line_up():
-    assert "min-height: 2.5em" in STYLES
+    """値の行が揃うよう名前に場所を先に取る。取りすぎると card が伸びるだけ。"""
+    name = STYLES[STYLES.index("table.catalog td.name > div {"):]
+    reserved = re.search(r"min-height: ([0-9.]+)em", name[:name.index("}")])
+    assert reserved, "名前の高さを確保していない"
+    assert 2.0 <= float(reserved.group(1)) <= 2.6
 
 
 def test_an_unavailable_action_is_not_rendered_as_a_button():
@@ -852,3 +856,25 @@ def test_the_create_form_does_not_explain_itself_before_the_button():
     assert "次の段階で入ります" not in SCRIPT
     assert "estimateSec" not in SCRIPT and "applyEstimate" not in SCRIPT
     assert "elapsedText(job)" in SCRIPT, "経過時間まで消している"
+
+
+def test_the_search_controls_do_not_stack_four_deep():
+    """検索・並び順・画風・ボタンを縦に積むと、結果が画面から押し出される。"""
+    assert '<div class="form-row search">' in MARKUP
+    form = MARKUP[MARKUP.index('<div class="form-row search">'):]
+    form = form[:form.index("</div>")]
+    assert 'id="catalog-search"' in form, "ボタンが格子の外にある"
+    # 狭い画面で 1 列に落とすと 4 段に戻る
+    assert ".form-row:not(.search) { grid-template-columns: 1fr; }" in STYLES
+
+
+def test_the_download_row_does_not_say_download_twice():
+    """「ダウンロード · ダウンロードしています」と二重に出ていた。"""
+    row = SCRIPT[SCRIPT.index("function modelDownloadRow"):SCRIPT.index("async function clearModelDownloadHistory")]
+    assert 'stateText.startsWith(actionText) ? "" : actionText' in row
+
+
+def test_the_validation_marks_do_not_reuse_the_checkbox_class():
+    """.check は既にチェックボックス付きラベルで使われている。"""
+    assert '"checkmark ok"' in SCRIPT and '"checkmark bad"' in SCRIPT
+    assert ".checkmark.ok { color: var(--accent); }" in STYLES

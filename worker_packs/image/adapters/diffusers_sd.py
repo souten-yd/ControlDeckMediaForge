@@ -72,6 +72,9 @@ class DiffusersStableDiffusionAdapter:
             # コードを持ち込める経路を開かない。
             "trust_remote_code": False,
         }
+        variant = self._detect_variant()
+        if variant is not None:
+            load_options["variant"] = variant
         if self.disable_mmap:
             load_options["disable_mmap"] = True
         if self.device_mode == "direct_device_map":
@@ -86,6 +89,22 @@ class DiffusersStableDiffusionAdapter:
         self.placement = self._inspect_placement(pipeline)
         self.pipeline = pipeline
         self.load_sec = time.perf_counter() - started
+
+    def _detect_variant(self) -> str | None:
+        """Ask for the variant that is actually on disk, rather than assuming.
+
+        Measured on real hardware: the catalog deliberately fetches one variant
+        per component, and for SD checkpoints that is usually the fp16 one
+        (``unet/diffusion_pytorch_model.fp16.safetensors``). Diffusers will not
+        find those files unless it is told ``variant="fp16"`` — without it,
+        loading fails looking for ``model.safetensors``, a file the catalog
+        never downloaded. Reading the directory keeps plain repositories, which
+        have no variant suffix at all, working unchanged.
+        """
+        for suffix in ("fp16", "bf16"):
+            if any(self.model_path.rglob(f"*.{suffix}.safetensors")):
+                return suffix
+        return None
 
     def _inspect_placement(self, pipeline: Any) -> dict[str, Any]:
         """Record where each component actually landed.

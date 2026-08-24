@@ -308,9 +308,15 @@
 
           <p class="section-label">モデルを探して追加</p>
           <p class="hint">配布元を検索します。取り込む前に中身とライセンスを必ず確かめます。</p>
-          <div class="form-row">
-            <label>検索<input id="catalog-query" type="search" maxlength="200"
-              placeholder="stable diffusion / anime / pixel"></label>
+          <div class="form-row search">
+            <label>検索
+              <span class="input-clear">
+                <input id="catalog-query" type="search" maxlength="200"
+                       placeholder="stable diffusion / anime / pixel">
+                <button type="button" id="catalog-clear" aria-label="検索語を消す"
+                        title="検索語を消す" hidden>×</button>
+              </span>
+            </label>
             <label>並び順
               <select id="catalog-sort">
                 <option value="downloads">ダウンロード数</option>
@@ -331,8 +337,8 @@
                 <option value="landscape">風景</option>
               </select>
             </label>
+            <button type="button" id="catalog-search">検索</button>
           </div>
-          <button type="button" id="catalog-search">検索</button>
           <div id="catalog-results" class="table-wrap" hidden></div>
           <p id="catalog-empty" class="hint" hidden></p>
 

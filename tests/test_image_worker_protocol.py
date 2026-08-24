@@ -182,3 +182,65 @@ def test_image_worker_rejects_edit_source_and_mask_path_escape(monkeypatch, tmp_
     }
     with pytest.raises(ValueError, match="reference image is outside"):
         worker.handle(reference_escape)
+
+
+def test_every_routable_model_has_an_adapter_the_worker_implements():
+    """カタログが名乗る runtime_adapter と、worker が実装している名前が
+    食い違っていた。"diffusers.stable-diffusion" という誰も宣言しない名前で
+    実装され、カタログの "diffusers.sdxl" は実装が無いまま並んでいた。
+
+    experimental は測っていないという表明なので、まだ実装が無くてよい。
+    available は「これで作れる」という表明なので、無いと嘘になる。
+    """
+    import json
+
+    root = Path(__file__).parents[1]
+    manifest = json.loads(
+        (root / "worker_packs/image/models.json").read_text(encoding="utf-8")
+    )
+    implemented = set(image_worker.ADAPTERS)
+    routable = {
+        model["model_id"]: model["runtime_adapter"]
+        for model in manifest["models"]
+        if model.get("state") == "available"
+    }
+    assert routable, "available なモデルが 1 件も無い"
+    missing = {
+        model_id: adapter
+        for model_id, adapter in routable.items()
+        if adapter not in implemented
+    }
+    assert not missing, f"実装の無い adapter を available として出している: {missing}"
+
+
+def test_the_worker_refuses_an_adapter_it_does_not_implement(tmp_path: Path, monkeypatch):
+    """実装の無い adapter は、静かに何かで代用せず、その場で落ちる。"""
+    model_root = tmp_path / "models"
+    model = model_root / "model"
+    model.mkdir(parents=True)
+    work_root = tmp_path / "work"
+    (work_root / "job" / "outputs").mkdir(parents=True)
+    monkeypatch.setenv("MEDIA_FORGE_MODEL_ROOT", str(model_root))
+    monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(work_root))
+    body = payload(model, work_root / "job" / "outputs")
+    body["model"]["runtime_adapter"] = "diffusers.sdxl-single-file"
+    assert "diffusers.sdxl-single-file" not in image_worker.ADAPTERS
+    with pytest.raises(ValueError, match="unsupported"):
+        image_worker.ImageWorker().handle(body)
+
+
+def test_the_sd_adapter_asks_for_the_variant_that_is_on_disk(tmp_path: Path):
+    """実機で判明: カタログは fp16 の variant だけを落とす。variant を渡さないと
+    diffusers は model.safetensors を探し、落としていないファイルが無いと言って
+    落ちる。variant を持たない普通の repository は従来どおり動く必要がある。"""
+    from worker_packs.image.adapters.diffusers_sd import DiffusersStableDiffusionAdapter
+
+    plain = tmp_path / "plain"
+    (plain / "unet").mkdir(parents=True)
+    (plain / "unet" / "diffusion_pytorch_model.safetensors").write_bytes(b"x")
+    assert DiffusersStableDiffusionAdapter(plain)._detect_variant() is None
+
+    fp16 = tmp_path / "fp16"
+    (fp16 / "unet").mkdir(parents=True)
+    (fp16 / "unet" / "diffusion_pytorch_model.fp16.safetensors").write_bytes(b"x")
+    assert DiffusersStableDiffusionAdapter(fp16)._detect_variant() == "fp16"

@@ -133,6 +133,8 @@ class CustomModelResolution:
     capabilities: tuple[str, ...]
     max_download_bytes: int
     warnings: tuple[str, ...] = field(default=())
+    # 手元のフォルダから取り込んだときだけ入る。配布元から落とす経路では None。
+    local_root: Path | None = field(default=None)
 
     @property
     def within_download_cap(self) -> bool:
@@ -386,6 +388,67 @@ def _weights_from_gguf(value: Any) -> tuple[int, str]:
     return total, "GGUF"
 
 
+# ── 手元にある重みの取り込み ──────────────────────────────────────────────
+#
+# 配布元から落とすのが唯一の経路だと、既に手元にある重みが使えない。実際に
+# あるのは、別の道具で落とした、別の機械から持ってきた、配布元がもう無い、
+# といった場合である。取り込み自体は同じ規則を通す: どのコードも実行せず、
+# 重みの digest を自分で計算し、experimental として入れる。
+#
+# 配布元 API が無いので digest は「配布元がそう言った」ではなく「この機械で
+# こう読めた」になる。意味が違うので、その旨を warning に残す。
+
+_LOCAL_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+# model_index.json の _class_name から adapter を決める。推測はしない。
+# 名前が分からないものは取り込めても生成には使えない、として入れる。
+_PIPELINE_ADAPTERS = {
+    "StableDiffusionXLPipeline": "diffusers.sdxl",
+    "StableDiffusionXLImg2ImgPipeline": "diffusers.sdxl",
+    "StableDiffusionPipeline": "diffusers.sdxl",
+    "StableDiffusionImg2ImgPipeline": "diffusers.sdxl",
+}
+
+
+def _scan_local_directory(root: Path, *, limit_bytes: int) -> tuple[list[ResolvedWeight], list[str], int]:
+    """Walk one model directory, hashing weights and listing config files."""
+    weights: list[ResolvedWeight] = []
+    required: list[str] = []
+    total = 0
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise CustomModelError(
+                "custom_model_path_invalid", f"{path.name} は symlink です。実体だけを取り込みます"
+            )
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        name = path.name.lower()
+        if name.endswith(WEIGHT_SUFFIXES):
+            size = path.stat().st_size
+            total += size
+            if total > limit_bytes:
+                raise CustomModelError(
+                    "custom_model_too_large", "このフォルダは取り込み上限を超えています"
+                )
+            if len(weights) >= MAX_WEIGHT_FILES:
+                raise CustomModelError("custom_model_too_many_files", "ファイル数が多すぎます")
+            weights.append(ResolvedWeight(
+                path=relative, size_bytes=size, sha256=_sha256_file(path)
+            ))
+        elif name.endswith(REQUIRED_FILE_SUFFIXES) and len(required) < MAX_REQUIRED_FILES:
+            required.append(relative)
+    return weights, sorted(required), total
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 class CustomModelCatalog(CatalogSearchMixin):
     """Durable store of user-added catalog entries, and search over the source."""
 
@@ -541,6 +604,97 @@ class CustomModelCatalog(CatalogSearchMixin):
             capabilities=capabilities,
             max_download_bytes=self.max_download_bytes,
             warnings=warnings,
+        )
+
+    # ── 手元のフォルダ ──────────────────────────────────────────────────
+
+    def resolve_local(self, directory: str, *, name: str) -> CustomModelResolution:
+        """Describe a model that is already on this machine, without any network.
+
+        The verification story changes and the caller must be told: a digest
+        here means "this is what this machine read", not "this is what the
+        publisher published". Everything else stays the same — no repository
+        code runs, and the entry lands as experimental.
+        """
+        if not _LOCAL_MODEL_ID.fullmatch(name or ""):
+            raise CustomModelError(
+                "custom_model_name_invalid",
+                "名前は英数字と . _ - だけ、64 文字までにしてください",
+            )
+        try:
+            root = Path(directory).expanduser()
+        except (OSError, ValueError) as exc:
+            raise CustomModelError("custom_model_path_invalid", "場所を読み取れませんでした") from exc
+        if not root.is_absolute():
+            raise CustomModelError("custom_model_path_invalid", "場所は絶対パスで指定してください")
+        if root.is_symlink():
+            raise CustomModelError("custom_model_path_invalid", "symlink ではなく実体を指定してください")
+        try:
+            root = root.resolve(strict=True)
+        except OSError as exc:
+            raise CustomModelError("custom_model_path_missing", "その場所が見つかりません") from exc
+        if not root.is_dir():
+            raise CustomModelError("custom_model_path_invalid", "フォルダを指定してください")
+
+        index = root / "model_index.json"
+        if not index.is_file():
+            raise CustomModelError(
+                "custom_model_not_diffusers",
+                "model_index.json がありません。Diffusers 形式のフォルダを指定してください",
+            )
+        if index.stat().st_size > MAX_METADATA_BYTES:
+            raise CustomModelError("custom_model_metadata_invalid", "model_index.json が大きすぎます")
+        try:
+            document = json.loads(index.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise CustomModelError(
+                "custom_model_metadata_invalid", "model_index.json を読み取れませんでした"
+            ) from exc
+        pipeline = str((document or {}).get("_class_name") or "") if isinstance(document, dict) else ""
+
+        weights, required, total_bytes = _scan_local_directory(
+            root, limit_bytes=self.max_download_bytes
+        )
+        if not weights:
+            raise CustomModelError(
+                "custom_model_no_weights", "このフォルダに取り込める重みがありません"
+            )
+
+        adapter = _PIPELINE_ADAPTERS.get(pipeline, UNSUPPORTED_ADAPTER)
+        warnings = (
+            "digest はこの機械で読み取った値です。配布元が公表した値との照合はしていません。",
+        )
+        if adapter == UNSUPPORTED_ADAPTER:
+            warnings = warnings + (
+                f"pipeline {pipeline or '不明'} に対応する実行アダプタがありません。"
+                "取り込みと検証はできますが、生成には使えません。",
+            )
+        capabilities = () if adapter == UNSUPPORTED_ADAPTER else ("image.text_to_image",)
+
+        # revision は「この中身」を指す値にする。フォルダは後から書き換わりうるので、
+        # 読み取った時点の内容を identity にしておかないと来歴が嘘になる。
+        revision = hashlib.sha256(
+            "\n".join(f"{item.path}:{item.sha256}" for item in weights).encode("utf-8")
+        ).hexdigest()
+        return CustomModelResolution(
+            repo_id=f"local/{name}",
+            revision=revision,
+            requested_revision="local",
+            license="unknown",
+            license_notice=(
+                "手元のフォルダから取り込みます。配布元のライセンスは利用者が確認してください。"
+            ),
+            gated=False,
+            pipeline_tag="text-to-image",
+            library_name="diffusers",
+            weights=tuple(sorted(weights, key=lambda item: item.path)),
+            required_files=tuple(required),
+            total_bytes=total_bytes,
+            runtime_adapter=adapter,
+            capabilities=capabilities,
+            max_download_bytes=self.max_download_bytes,
+            warnings=warnings,
+            local_root=root,
         )
 
     # ── persistence ────────────────────────────────────────────────────────

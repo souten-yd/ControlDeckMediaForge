@@ -864,6 +864,11 @@ class JobManager:
                     "runtime_options": {
                         "device_mode": selected.device_mode,
                         "disable_mmap": selected.disable_mmap,
+                        # 系統ごとの既定。持たないモデルには送らない。
+                        **({"negative_prompt": selected.negative_prompt}
+                           if selected.negative_prompt else {}),
+                        **({"guidance_scale": selected.guidance_scale}
+                           if selected.guidance_scale is not None else {}),
                     },
                 },
                 "request": job.request.model_dump(mode="json"),
