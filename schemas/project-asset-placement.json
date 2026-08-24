@@ -4,21 +4,28 @@
   "title": "Place one Media Forge asset in a ControlDeck project output grant",
   "type": "object",
   "additionalProperties": false,
-  "required": ["asset_id", "output_grant_id"],
+  "required": [
+    "asset_id",
+    "output_grant_id"
+  ],
   "properties": {
     "asset_id": {
       "type": "string",
-      "pattern": "^asset_[0-9a-f]{32}$"
+      "pattern": "^asset_[0-9a-f]{32}$",
+      "description": "An existing Media Forge asset. Assets are immutable, so placement always commits exactly the bytes that were generated and inspected."
     },
     "output_grant_id": {
       "type": "string",
-      "pattern": "^grant:[A-Za-z0-9._:-]{1,256}$"
+      "pattern": "^grant:[A-Za-z0-9._:-]{1,256}$",
+      "description": "Opaque grant from ControlDeck. Obtain it directly before this call."
     },
     "filename": {
       "type": "string",
       "minLength": 1,
       "maxLength": 255,
-      "pattern": "^[^/\\\\]+$"
+      "pattern": "^[^/\\\\]+$",
+      "description": "Destination file name only, no directory separators. Choose it from the project's own conventions before requesting the grant."
     }
-  }
+  },
+  "description": "Commit one immutable Media Forge asset into a ControlDeck project output grant. Request the grant immediately before placing, not before generating: generation takes tens of seconds and a grant obtained early is likely to expire. If placement fails with an expired grant, acquire a new one and retry once. Media Forge never receives or accepts a filesystem path."
 }

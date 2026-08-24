@@ -3676,3 +3676,62 @@ NOT TESTED: defect 検出後の自動再生成（A3 の範囲。現時点では�
 ```
 
 結果として swap は資産数によらず 2 回のまま。
+
+## G4H A1c/A2 — 複数枚生成と agent への指針（2026-08-24）
+
+### 複数枚生成での defect の扱い（利用者指摘）
+
+「生成枚数は 1 枚だけじゃない場合も適用しているか」という指摘で、扱いの誤りを
+見つけた。`_validate_output` は候補ごとに走るが、最初の defect で全体を失敗させて
+いた。4 枚頼まれて 1 枚の alpha が欠けただけで、良い 3 枚まで捨てることになる。
+
+```text
+修正前   候補 1 枚の defect -> job 全体が失敗
+修正後   defect のある候補だけを落とす
+         残りが 0 なら理由を名指しで失敗する（黙って返さない）
+         落とした事実は warnings に残す
+```
+
+幾何は job 単位で 1 度だけ解決されるので、`output.count` が何枚でも全候補が
+同じ面に収まる（テストで固定）。
+
+### A2 — agent へ届く指針
+
+指針が確実に届く経路は **JSON Schema の `description`** である。どの agent
+harness でも提示されるため、OpenCode 専用の分岐を作らずに済む。
+`addon.json` の contribution 形は変えていない。
+
+`schemas/job-request.json` へ加法的に追記した。
+
+```text
+top level          用途を伝える。provider 向けの prompt を書かない。model を名指さない
+intent             構造要件は asset_brief へ。実使用で "wide landscape" が
+                   この欄にしか無く、正方形が返った事実を明記
+constraints        明示 width/height は常に推論に勝つ
+constraints.asset_brief   role / aspect / safe_areas / alpha / consistency_group
+                          role ごとの既定（emblem・sprite は alpha 必須、
+                          background は横長・不透明）を説明文に書いた
+model_policy       auto のままにする。quality / low_vram は必要なときだけ
+qa                 既定のまま。semantic=true は model swap を伴う。
+                   予算は主観的な再試行だけを縛り、brief への客観的な不一致は
+                   予算に関係なく修正または報告される
+examples           Hanabi の 2 資産（背景と emblem）を正しい形で載せた
+```
+
+`schemas/project-asset-placement.json` へは grant のタイミングを書いた。
+
+```text
+grant は配置の直前に取る。生成の前に取らない（生成は数十秒かかり期限切れになる）
+期限切れなら新しい grant を取り直して 1 度だけ再試行する
+Media Forge は path を受け取らない
+```
+
+例が古びて嘘になるのを防ぐため、schema の `examples` が自分自身の schema を
+通ること、かつ実サービスが 202 で受理することをテストで固定した。
+
+```text
+./mf.sh test   468 passed
+```
+
+NOT TESTED: 実 agent harness（OpenCode / Codex）がこの description を提示して
+実際に purpose-level 要求を出すか。A5 の実機 E2E で確認する。
