@@ -237,13 +237,35 @@
 
         <!-- ライブラリ -->
         <section id="view-library" class="view" data-view="library" hidden>
-          <div class="view-head">
-            <div id="library-kinds" class="chips" role="radiogroup" aria-label="種類"></div>
-            <button type="button" data-refresh="library">更新</button>
+          <div class="view-head one-line">
+            <p id="library-count" class="hint" role="status"></p>
+            <button type="button" data-refresh="library" class="icon"
+                    aria-label="一覧を更新" title="一覧を更新">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M20 12a8 8 0 1 1-2.6-5.9"/>
+                <path d="M20 4.2V9h-4.8"/>
+              </svg>
+            </button>
+            <button type="button" id="library-select" class="icon" aria-pressed="false"
+                    aria-label="選択して削除" title="選択して削除">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="3.4" y="3.4" width="17.2" height="17.2" rx="3.4"/>
+                <path d="m7.6 12.2 3 3 5.8-6"/>
+              </svg>
+            </button>
           </div>
           <div id="library-grid" class="grid"></div>
           <p id="library-empty" class="hint" hidden>まだ素材はありません。</p>
+          <p id="library-note" class="hint" role="status" hidden></p>
           <button type="button" id="library-more" hidden>もっと見る</button>
+          <div id="library-selection" class="selection-bar" hidden>
+            <span id="library-selection-count">0 件を選択</span>
+            <div class="selection-actions">
+              <button type="button" id="library-select-all">全部</button>
+              <button type="button" id="library-select-none">解除</button>
+              <button type="button" id="library-delete" class="danger" disabled>削除</button>
+            </div>
+          </div>
         </section>
 
         <!-- 状況 -->
@@ -318,16 +340,6 @@
           <div id="custom-result" class="rows" hidden></div>
           <div id="custom-error" class="error" role="alert" hidden></div>
 
-          <p class="section-label">キャラ・画風の登録</p>
-          <p class="hint">同じキャラや画風を何度も使うために覚えさせておけます。作成のときに選べます。</p>
-          <div>
-            <button type="button" id="profile-add-character">＋ キャラを登録</button>
-            <button type="button" id="profile-add-style">＋ 画風を登録</button>
-          </div>
-          <div id="profile-list" class="rows"></div>
-          <p id="profile-empty" class="hint" hidden>まだ登録がありません。</p>
-          <div id="profile-error" class="error" role="alert" hidden></div>
-
           <div id="pack-section" hidden>
             <p class="section-label">配布用にまとめる</p>
             <p class="hint">決まったスロットに素材を割り当てて、配布できる 1 つの ZIP にまとめます。</p>
@@ -341,9 +353,24 @@
 
           <details id="model-downloads-block">
             <summary>ダウンロードの状況 <span id="model-downloads-count"></span></summary>
+            <div class="downloads-head">
+              <button type="button" id="model-downloads-clear" hidden>履歴を消す</button>
+            </div>
             <div id="model-downloads" class="rows"></div>
             <p id="model-downloads-empty" class="hint" hidden>進行中・完了したダウンロードはありません。</p>
           </details>
+
+          <div class="settings-section">
+            <p class="section-label">キャラ・画風の登録</p>
+            <p class="hint">同じキャラや画風を何度も使うために覚えさせておけます。作成のときに選べます。</p>
+            <div>
+              <button type="button" id="profile-add-character">＋ キャラを登録</button>
+              <button type="button" id="profile-add-style">＋ 画風を登録</button>
+            </div>
+            <div id="profile-list" class="rows"></div>
+            <p id="profile-empty" class="hint" hidden>まだ登録がありません。</p>
+            <div id="profile-error" class="error" role="alert" hidden></div>
+          </div>
 
         </section>
       </main>
@@ -458,13 +485,43 @@
           <img id="viewer-image" alt="">
         </div>
         <div id="viewer-bar">
-          <p id="viewer-caption"></p>
-          <p id="viewer-save-note" class="hint" hidden></p>
+          <div class="viewer-nav">
+            <button type="button" id="viewer-prev" aria-label="前の画像">‹</button>
+            <span id="viewer-position" class="hint"></span>
+            <button type="button" id="viewer-next" aria-label="次の画像">›</button>
+          </div>
+          <div class="viewer-meta">
+            <p id="viewer-caption"></p>
+            <p id="viewer-save-note" class="hint" hidden></p>
+          </div>
           <div class="viewer-actions">
-            <button type="button" id="viewer-detail">詳細</button>
-            <button type="button" id="viewer-save">保存</button>
-            <button type="button" id="viewer-edit">これを編集</button>
-            <button type="button" id="viewer-close" class="primary">閉じる</button>
+            <button type="button" id="viewer-detail" class="icon" aria-label="詳細" title="詳細">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="8.6"/>
+                <path d="M12 11.2v5.2"/>
+                <circle cx="12" cy="8" r=".9" fill="currentColor" stroke="none"/>
+              </svg>
+            </button>
+            <button type="button" id="viewer-save" class="icon" aria-label="保存" title="保存">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 4v10.4"/>
+                <path d="m7.8 10.6 4.2 4.2 4.2-4.2"/>
+                <path d="M5 18.6h14"/>
+              </svg>
+            </button>
+            <button type="button" id="viewer-edit" class="icon" aria-label="これを編集" title="これを編集">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M16.4 4.6a2.2 2.2 0 0 1 3.1 3.1L9 18.2l-4.2 1.1 1.1-4.2z"/>
+                <path d="m14.6 6.4 3.1 3.1"/>
+              </svg>
+            </button>
+            <button type="button" id="viewer-close" class="icon primary"
+                    aria-label="閉じる" title="閉じる">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="m6.6 6.6 10.8 10.8"/>
+                <path d="M17.4 6.6 6.6 17.4"/>
+              </svg>
+            </button>
           </div>
         </div>
       </dialog>

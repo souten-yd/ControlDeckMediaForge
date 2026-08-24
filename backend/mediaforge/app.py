@@ -102,7 +102,7 @@ from .reference_intelligence import (
     ReferenceIntelligenceError,
     analysis_summary,
 )
-from .store import Store, utc_now
+from .store import AssetInUse, Store, utc_now
 from .thumbnails import ThumbnailError
 from .validators import validate_png
 
@@ -2074,6 +2074,8 @@ def create_app(
                         result = {
                             "items": [item.model_dump(mode="json") for item in store.list_model_operations()]
                         }
+                    elif method == "models.operations.clear":
+                        result = {"removed": store.clear_finished_model_operations()}
                     elif method == "models.operations.cancel":
                         if model_operations is None:
                             raise ModelOperationError("model_not_found", "model catalog is unavailable")
@@ -2231,6 +2233,32 @@ def create_app(
                             # 既定で同梱する。呼び出し側が明示的に切れる。
                             thumbnail=None if params.get("thumbnails") is False else grid_thumbnail,
                         )
+                    elif method == "assets.delete":
+                        # 複数選択できるので、1 件ずつの結果を返す。1 件の失敗で
+                        # 全部を消さなかったのか、どれが残ったのかを言えるようにする。
+                        asset_ids = params.get("asset_ids")
+                        if not isinstance(asset_ids, list) or not asset_ids or len(asset_ids) > 100:
+                            raise ValueError("asset_ids must be a list of 1..100 asset IDs")
+                        outcomes = []
+                        for value in asset_ids:
+                            asset_id = str(value)
+                            try:
+                                store.delete_asset(asset_id)
+                                outcomes.append({"asset_id": asset_id, "deleted": True})
+                            except AssetInUse as exc:
+                                outcomes.append({
+                                    "asset_id": asset_id, "deleted": False,
+                                    "code": exc.code, "message": str(exc)[:200],
+                                })
+                            except KeyError:
+                                outcomes.append({
+                                    "asset_id": asset_id, "deleted": False,
+                                    "code": "asset_not_found", "message": "already gone",
+                                })
+                        result = {
+                            "items": outcomes,
+                            "deleted_count": sum(1 for item in outcomes if item["deleted"]),
+                        }
                     elif method == "assets.export":
                         # 設計 §F4 保存A。実装済みの host files bridge を UI から
                         # 使えるようにする。ここまで導線が 1 つも無かった。
@@ -2369,6 +2397,30 @@ def create_app(
                 if isinstance(root, Path) and root.exists():
                     shutil.rmtree(root)
 
+    @app.post("/workspace-api/assets/delete", include_in_schema=False)
+    async def standalone_delete_assets(payload: dict[str, Any]) -> dict[str, Any]:
+        """Same-origin workspace bridge for standalone mode; not a public API."""
+        asset_ids = payload.get("asset_ids")
+        if not isinstance(asset_ids, list) or not asset_ids or len(asset_ids) > 100:
+            raise HTTPException(status_code=422, detail={"code": "invalid_asset_ids"})
+        outcomes = []
+        for value in asset_ids:
+            asset_id = str(value)
+            try:
+                store.delete_asset(asset_id)
+                outcomes.append({"asset_id": asset_id, "deleted": True})
+            except AssetInUse as exc:
+                outcomes.append({
+                    "asset_id": asset_id, "deleted": False,
+                    "code": exc.code, "message": str(exc)[:200],
+                })
+            except KeyError:
+                outcomes.append({
+                    "asset_id": asset_id, "deleted": False,
+                    "code": "asset_not_found", "message": "already gone",
+                })
+        return {"items": outcomes, "deleted_count": sum(1 for i in outcomes if i["deleted"])}
+
     @app.get("/workspace-api/models/catalog", include_in_schema=False)
     async def standalone_model_catalog() -> dict[str, Any]:
         """Same-origin workspace bridge for standalone mode; not a public API.
@@ -2407,6 +2459,8 @@ def create_app(
                 return model_operations.remove(model_id).model_dump(mode="json")
             if action == "cancel":
                 return model_operations.cancel(str(payload.get("operation_id", ""))).model_dump(mode="json")
+            if action == "clear":
+                return {"removed": store.clear_finished_model_operations()}
         except ModelOperationError as exc:
             raise HTTPException(
                 status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}

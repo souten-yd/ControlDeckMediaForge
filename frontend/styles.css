@@ -10,6 +10,9 @@
   --border: #d8dfdc;
   --accent: #087f73;
   --accent-ink: #fff;
+  --danger: #a4232a;
+  --danger-bg: #fdf0f0;
+  --danger-line: #e6b9bb;
   --radius: 12px;
   --safe-top: 0px;
   --safe-right: 0px;
@@ -32,6 +35,9 @@
     --border: #31413e;
     --accent: #62d6c6;
     --accent-ink: #0b1110;
+    --danger: #ffb4b4;
+    --danger-bg: #2a1414;
+    --danger-line: #7a3030;
   }
 }
 
@@ -220,6 +226,15 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .panel { padding: 16px; display: grid; gap: 10px; align-content: start; }
 
 .field-label { font-size: .85rem; font-weight: 700; }
+/* モデルの話と、覚えさせる素材の話は別。続けて並べると設定 1 枚が
+   延々と続く帯になり、どこまでが 1 つの話なのかが読めない。 */
+.settings-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
 .section-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
 .hint { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
 
@@ -454,6 +469,78 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
 
 /* ── ライブラリ ─────────────────────────────────────────────── */
 .view-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+
+/* 絞り込みと操作は 1 行に収める。狭い画面で種類の札が折り返すと、
+   すぐ下の一覧が押し下がって、何枚あるのかが見えなくなる。
+   札の側だけを横に送り、操作ボタンは常に右端に留める。 */
+.view-head.one-line { flex-wrap: nowrap; }
+.view-head.one-line .chips {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.view-head.one-line .chips::-webkit-scrollbar { display: none; }
+.view-head.one-line .chips > * { flex: 0 0 auto; }
+.view-head.one-line > button { flex: 0 0 auto; }
+/* 見出しの左は説明、右は操作。space-between に任せると、間に入った文字数で
+   ボタン同士の間隔が動き、押す場所が毎回ずれる。左側に余白を吸わせる。 */
+.view-head.one-line > :first-child { flex: 1 1 auto; min-width: 0; }
+.view-head.one-line { gap: 8px; }
+/* 送り先が残っていることを、切れた札そのもので示す。端で薄くしないと
+   ボタンの上に札が重なっているように見え、押す所を間違える。 */
+.view-head.one-line .chips {
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+
+.selection-bar {
+  position: sticky;
+  bottom: calc(8px + var(--safe-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgb(0 0 0 / .28);
+}
+.selection-actions { display: flex; gap: 8px; }
+.selection-bar .danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--danger); }
+.selection-bar .danger:disabled { opacity: .45; }
+
+.downloads-head { display: flex; justify-content: flex-end; margin: 6px 0; }
+
+/* 選択中は開くのではなく選ぶ。押した先が変わるので、見た目でも区別する。 */
+.grid.selecting .card { position: relative; }
+.grid.selecting .card::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 8px;
+  inset-block-start: 8px;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: rgb(0 0 0 / .45);
+}
+.grid.selecting .card[aria-selected="true"]::after {
+  content: "✓";
+  display: grid;
+  place-items: center;
+  font-size: .8rem;
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.grid.selecting .card[aria-selected="true"] { outline: 2px solid var(--accent); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .card {
   border: 1px solid var(--border);
@@ -465,6 +552,8 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
   text-align: left;
 }
 .card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--sunk); }
+.card img[hidden] { display: none !important; }
+#viewer-image[hidden] { display: none !important; }
 .card .meta { display: flex; justify-content: space-between; gap: 6px; font-size: .72rem; color: var(--muted); }
 .card .sum { font-size: .8rem; overflow-wrap: anywhere; }
 
@@ -571,18 +660,48 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .74rem; backgro
 #viewer-image.dragging { cursor: grabbing; }
 
 #viewer-bar {
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  /* 送り・操作・閉じるで 2 段になると、画像の見える高さがその分削られる。
+     文言で並べる余裕は無いので、閉じる以外はアイコンで 1 段に収める。 */
+  flex-wrap: nowrap;
   justify-content: space-between;
   padding: 10px 14px calc(10px + var(--safe-bottom));
   border-top: 1px solid #31413e;
   background: #101716;
 }
-#viewer-caption { font-size: .78rem; color: #9aaba7; overflow-wrap: anywhere; }
+/* 説明は 1 行に切る。ここが伸びると操作の並びが押し出される。 */
+#viewer-caption {
+  font-size: .78rem;
+  color: #9aaba7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .viewer-actions { display: flex; gap: 8px; margin-left: auto; }
-#viewer .primary { padding: 0 18px; }
+/* 一覧に戻ってから次を開くのは、拡大したまま見比べたいときに遠回りになる。
+   ビューアを閉じずに隣へ動けるようにする。左下に置くのは、右下の
+   「閉じる」を押そうとして誤って送ってしまわないため。 */
+/* 送りは行の先頭、つまり左下に置く。右下の「閉じる」を押そうとして
+   誤って隣の画像へ送ってしまうのを避けるため。 */
+.viewer-nav { display: flex; align-items: center; gap: 6px; order: -1; }
+.viewer-meta { flex: 1 1 auto; min-width: 0; }
+.viewer-nav button { min-width: 40px; font-size: 1.25rem; line-height: 1; }
+#viewer .viewer-actions button.icon { min-width: 40px; color: #eef5f3; }
+/* button.icon は .primary より詳細度が高く、accent の背景が当たっていなかった。
+   結果として濃い前景色が濃い背景に乗り、閉じるボタンがほぼ見えなかった。 */
+#viewer .viewer-actions button.icon.primary {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent-ink) !important;
+}
+#viewer .viewer-actions button.icon.primary svg { stroke-width: 2.2; }
+.viewer-nav button:disabled { opacity: .35; }
+#viewer-position { font-size: .74rem; color: #9aaba7; min-width: 3.5em; text-align: center; }
+#viewer .primary.icon { padding: 0; color: var(--accent-ink); }
 #viewer button:not(.primary) {
   border: 1px solid #31413e !important;
   background: #182220 !important;

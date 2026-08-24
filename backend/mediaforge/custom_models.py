@@ -224,6 +224,8 @@ class CatalogCandidate:
     gated: bool
     license: str
     tags: tuple[str, ...]
+    weight_bytes: int = 0
+    weight_precision: str = ""
 
     def document(self) -> dict[str, Any]:
         return {
@@ -237,6 +239,8 @@ class CatalogCandidate:
             "gated": self.gated,
             "license": self.license,
             "tags": list(self.tags),
+            "weight_bytes": self.weight_bytes,
+            "weight_precision": self.weight_precision,
         }
 
 
@@ -274,6 +278,12 @@ class CatalogSearchMixin:
             "sort": sort,
             "direction": -1,
             "limit": max(1, min(SEARCH_LIMIT, limit)),
+            # expand を使うと応答は要求した項目だけになる。今読んでいる列を
+            # 全部並べる必要があり、足すのを忘れると静かに空欄になる。
+            "expand[]": [
+                "author", "downloads", "likes", "lastModified", "pipeline_tag",
+                "library_name", "gated", "tags", "safetensors", "gguf",
+            ],
         }
         if SEARCH_STYLES[style]:
             params["filter"] = SEARCH_STYLES[style]
@@ -309,6 +319,9 @@ class CatalogSearchMixin:
             if _REPO_ID.fullmatch(repo_id) is None:
                 continue
             tags = item.get("tags") if isinstance(item.get("tags"), list) else []
+            weight_bytes, precision = _weights_from_safetensors(item.get("safetensors"))
+            if not weight_bytes:
+                weight_bytes, precision = _weights_from_gguf(item.get("gguf"))
             found.append(CatalogCandidate(
                 repo_id=repo_id,
                 author=str(item.get("author") or repo_id.split("/", 1)[0]),
@@ -320,8 +333,57 @@ class CatalogSearchMixin:
                 gated=item.get("gated") not in (False, None),
                 license=_license_from_tags(tags),
                 tags=tuple(str(tag) for tag in tags[:24] if isinstance(tag, str)),
+                weight_bytes=weight_bytes,
+                weight_precision=precision,
             ))
         return found
+
+
+# 重みの大きさは、押す前に一番知りたい 1 行である。落ちてくる量と、載るか
+# どうかが、ほぼこれで決まる。検索の一覧 API は容量を返さないが、safetensors
+# の要素数と型は返すので、そこから重み自体の大きさを出す。
+# 実配布物にはこれ以外（設定、tokenizer、複数版）も含まれるので、下限として扱う。
+_DTYPE_BYTES = {
+    "F64": 8, "I64": 8, "U64": 8,
+    "F32": 4, "I32": 4, "U32": 4,
+    "BF16": 2, "F16": 2, "I16": 2, "U16": 2,
+    "F8_E4M3": 1, "F8_E5M2": 1, "I8": 1, "U8": 1, "BOOL": 1,
+}
+
+
+def _weights_from_safetensors(value: Any) -> tuple[int, str]:
+    if not isinstance(value, dict):
+        return 0, ""
+    parameters = value.get("parameters")
+    if not isinstance(parameters, dict):
+        return 0, ""
+    total = 0
+    dominant = ("", 0)
+    for dtype, count in parameters.items():
+        if not isinstance(dtype, str) or not isinstance(count, int) or count < 0:
+            continue
+        width = _DTYPE_BYTES.get(dtype.upper())
+        if width is None:
+            # 知らない型を 0 バイトとして黙って足すと、総量が過少に出る。
+            return 0, ""
+        total += count * width
+        if count > dominant[1]:
+            dominant = (dtype.upper(), count)
+    return total, dominant[0]
+
+
+def _weights_from_gguf(value: Any) -> tuple[int, str]:
+    """GGUF 配布は safetensors を持たない。配布元が返す実バイト数を使う。
+
+    量子化の版を全部足した数なので、実際に落とす 1 本より必ず大きい。
+    見出しでそう言い分けられるよう、出所を区別して返す。
+    """
+    if not isinstance(value, dict):
+        return 0, ""
+    total = value.get("totalFileSize")
+    if not isinstance(total, int) or total <= 0:
+        return 0, ""
+    return total, "GGUF"
 
 
 class CustomModelCatalog(CatalogSearchMixin):

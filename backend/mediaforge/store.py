@@ -29,6 +29,16 @@ from .profiles import Profile, ProfileInput, ReferenceCollection, ReferenceColle
 logger = logging.getLogger("uvicorn.error")
 
 
+class AssetInUse(RuntimeError):
+    """Another asset still records this one as its parent."""
+
+    def __init__(self, asset_id: str, child_id: str):
+        super().__init__(f"{asset_id} is the parent of {child_id}")
+        self.asset_id = asset_id
+        self.child_id = child_id
+        self.code = "asset_in_use"
+
+
 class UnreadableJobRecord(RuntimeError):
     """現在の契約で厳格に読めない job 行を実行しようとした。"""
 
@@ -500,6 +510,48 @@ class Store:
             )
         return pairs
 
+    def delete_asset(self, asset_id: str) -> None:
+        """Remove one asset, its provenance sidecar, and its cached thumbnails.
+
+        Refused while another asset still lists it as a parent: deleting the
+        source of an edit would leave a lineage that points at nothing, and
+        provenance is the thing that makes a generated file trustworthy.
+        """
+        row = self._asset_row(asset_id)
+        with self._connect() as connection:
+            # LIKE で候補を絞ってから検証する。全行を Pydantic に通すと、
+            # 複数選択削除が蔵書数に比例して重くなる。
+            children = connection.execute(
+                "SELECT metadata_json FROM assets WHERE id != ? AND metadata_json LIKE ?",
+                (asset_id, f"%{asset_id}%"),
+            ).fetchall()
+        for child in children:
+            try:
+                metadata = Asset.model_validate_json(child["metadata_json"])
+            except ValidationError:
+                continue
+            if asset_id in metadata.parent_asset_ids:
+                raise AssetInUse(asset_id, metadata.id)
+
+        storage = contained(self.asset_dir, self.asset_dir / str(row["storage_name"]))
+        sidecar = contained(self.asset_dir, self.asset_dir / f"{asset_id}.provenance.json")
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
+            if cursor.rowcount != 1:
+                raise KeyError(asset_id)
+        for path in (storage, sidecar):
+            try:
+                path.unlink()
+            except OSError:
+                # 行は消えている。孤児ファイルで一覧を壊さない。
+                logger.warning("could not remove %s for deleted asset %s", path.name, asset_id)
+        for thumbnail in self.thumbnail_dir.glob(f"{asset_id}*"):
+            try:
+                thumbnail.unlink()
+            except OSError:
+                continue
+        self._notify_session("library")
+
     def get_preferences(self, subject: str) -> dict[str, Any]:
         with self._connect() as connection:
             row = connection.execute(
@@ -565,6 +617,20 @@ class Store:
                 "SELECT * FROM model_operations ORDER BY created_at DESC LIMIT ?", (limit,)
             ).fetchall()
         return [self._model_operation(row) for row in rows]
+
+    def clear_finished_model_operations(self) -> int:
+        """Drop the settled rows so the download list is only what still matters.
+
+        Running rows are kept whatever the caller asks: forgetting an operation
+        that is still writing to disk would leave a download nobody can cancel.
+        """
+        with self._lock, self._connect() as connection:
+            settled = sorted(state.value for state in TERMINAL_MODEL_OPERATION_STATES)
+            cursor = connection.execute(
+                f"DELETE FROM model_operations WHERE state IN ({','.join('?' * len(settled))})",
+                settled,
+            )
+        return int(cursor.rowcount or 0)
 
     def resumable_model_operation_ids(self) -> list[str]:
         with self._connect() as connection:

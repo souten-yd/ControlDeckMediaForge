@@ -60,7 +60,7 @@ DOM_IDS = (
     "outpaint-input", "outpaint-ratios", "outpaint-scales", "outpaint-preview", "outpaint-note",
     "stage", "stage-progress", "stage-result", "candidate-strip", "recent-strip",
     "result-evaluate", "result-evaluation",
-    "mini-progress", "library-grid", "library-kinds", "activity-list",
+    "mini-progress", "library-grid", "library-count", "activity-list",
     "detail-dialog",
     "model-storage", "model-filters", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
@@ -105,8 +105,8 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert 'data-model-filter="image"' in MARKUP
     assert 'data-model-filter="video"' in MARKUP
     assert 'data-model-filter="all"' in MARKUP
-    assert 'model.ownership === "managed"' in SCRIPT
-    assert '"外部ランタイムで導入"' in SCRIPT
+    assert 'model.ownership !== "managed"' in SCRIPT
+    assert '"外部で管理"' in SCRIPT
     assert 'experimental: "実験的・未実測"' in SCRIPT
     assert "model.license_acceptance_id" in SCRIPT
     assert "window.confirm" not in SCRIPT
@@ -114,7 +114,8 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert "confirmModelAction" in SCRIPT
     assert "license_acceptance: licenseAcceptance" in SCRIPT
     assert "MAX_MANAGED_MODEL_DOWNLOAD_BYTES = 32_000_000_000" in SCRIPT
-    assert 'action.textContent = "32GB上限対象"' in SCRIPT
+    # 上限超過は操作ではなく状態なので、ボタンではなく理由として出す。
+    assert '"容量超過"' in SCRIPT
     assert 'evaluate.textContent = "実機で評価"' in SCRIPT
     assert "state.modelEvaluationIds.has(model.model_id)" in SCRIPT
     assert "card.dataset.modelId" not in SCRIPT
@@ -310,12 +311,12 @@ def test_addon_declares_a_real_mobile_view():
     assert ADDON["version"] == packaged, "addon.json と mediaforge.__version__ が食い違っている"
 
 
-@pytest.mark.parametrize("kind", ["all", "generated", "edited", "imported"])
-def test_library_kinds_match_the_backend_projection(kind: str):
-    from mediaforge import library
-
-    assert kind in library.KINDS
-    assert f'id: "{kind}"' in SCRIPT
+def test_the_library_has_no_kind_filter():
+    """4 つの札が見出しを 1 行占めていた。絞り込む価値のある分け方ではない。"""
+    assert 'id="library-kinds"' not in MARKUP
+    assert "libraryKind" not in SCRIPT
+    assert '"library.list", {kind: "all"' in SCRIPT, "全件を取っていない"
+    assert 'id="library-count"' in MARKUP, "何枚あるのかが見出しから消えた"
 
 
 def test_preference_keys_used_by_the_ui_are_allowlisted():
@@ -376,7 +377,8 @@ def test_every_failure_offers_one_exit():
 
 def test_library_cards_open_the_full_screen_viewer():
     """一覧のサムネイルは小さい。タップで原寸を見られる場所へ行く。"""
-    assert "openViewer(item.asset_id, item)" in SCRIPT, "一覧のタップがビューアへ行っていない"
+    assert "openViewer(item.asset_id, item, state.libraryItems)" in SCRIPT, \
+        "一覧のタップがビューアへ行っていない"
     assert "#viewer[open] { display: grid" in STYLES, "ビューアが全画面になっていない"
     # 12 MiB を超える素材は運べないので、代わりに何を出すかを決めてある
     viewer = SCRIPT.split("async function openViewer(", 1)[1].split("\nasync function ", 1)[0]
@@ -557,7 +559,8 @@ def test_installed_models_can_be_listed_as_a_comparable_table():
 
 def test_the_table_and_cards_offer_the_same_actions():
     """見た目を変えたら操作が減った、では使えない。"""
-    action = SCRIPT[SCRIPT.index("function modelActionCell"):][:1800]
+    start = SCRIPT.index("function modelActionCell")
+    action = SCRIPT[start:SCRIPT.index("function modelTableRow", start)]
 
     for hook in ("installModel", "removeModel", "evaluateModel", "cancelModelOperation"):
         assert hook in action
@@ -634,7 +637,8 @@ def test_the_advanced_create_pane_is_still_template_mounted():
 
 def test_a_model_row_offers_download_and_delete():
     """一覧から導入と削除ができないと、結局 CLI へ戻ることになる。"""
-    action = SCRIPT[SCRIPT.index("function modelActionCell"):][:1800]
+    start = SCRIPT.index("function modelActionCell")
+    action = SCRIPT[start:SCRIPT.index("function modelTableRow", start)]
 
     assert "installModel" in action and "ダウンロード" in action
     assert "removeModel" in action and "削除" in action
@@ -677,3 +681,131 @@ def test_cards_in_the_same_row_share_a_height():
 
 def test_the_name_area_reserves_room_so_the_facts_line_up():
     assert "min-height: 2.5em" in STYLES
+
+
+def test_an_unavailable_action_is_not_rendered_as_a_button():
+    """押せる見た目なのに反応しないと、何が足りないのかを推測させる。"""
+    action = SCRIPT[SCRIPT.index("function modelActionCell"):SCRIPT.index("function modelTableRow")]
+
+    assert "const unavailable = (text, why)" in action
+    for reason in ("外部で管理", "容量超過", "共有", "使用中"):
+        assert f'"{reason}"' in action
+
+
+def test_the_search_action_says_where_it_leads():
+    """「中身を見る」では何が起きるか分からない。"""
+    assert "中身を見る" not in SCRIPT
+    assert "追加する" in SCRIPT
+
+
+def test_the_library_filter_row_stays_on_one_line():
+    """札が折り返すと一覧が押し下がり、何枚あるのかが画面から消える。"""
+    assert '<div class="view-head one-line">' in MARKUP
+    assert ".view-head.one-line { flex-wrap: nowrap; }" in STYLES
+    one_line = STYLES[STYLES.index(".view-head.one-line .chips {"):]
+    one_line = one_line[:one_line.index("}")]
+    assert "flex-wrap: nowrap" in one_line and "overflow-x: auto" in one_line
+
+
+def test_selection_mode_is_visible_before_it_changes_what_a_tap_does():
+    """選択中はカードの押し先が「開く」から「選ぶ」に変わる。同じ場所に
+    別の意味を重ねる以上、見た目でも区別が要る。"""
+    assert 'byId("library-grid").classList.toggle("selecting", active)' in SCRIPT
+    assert ".grid.selecting .card[aria-selected=\"true\"]" in STYLES
+    card = SCRIPT[SCRIPT.index("async function libraryCard"):]
+    assert "if (state.librarySelecting) return toggleLibrarySelection(item.asset_id);" in card
+
+
+def test_deleting_assets_asks_first_and_reports_what_survived():
+    """まとめ削除は取り返しがつかない。全部消えたとも限らない。"""
+    body = SCRIPT[SCRIPT.index("async function deleteSelectedAssets"):]
+    body = body[:body.index("\n}")]
+    assert "confirmModelAction" in body, "確認なしで消している"
+    assert "元には戻せません" in body
+    assert "asset_in_use" in body, "残った理由を伝えていない"
+    assert "deleted_count" in body
+
+
+def test_the_download_history_can_be_cleared_and_a_failure_retried():
+    """落ちた行から一覧へ戻って同じモデルを探し直させない。"""
+    assert 'id="model-downloads-clear"' in MARKUP
+    clear = SCRIPT[SCRIPT.index("async function clearModelDownloadHistory"):]
+    clear = clear[:clear.index("\n}")]
+    assert '"models.operations.clear"' in clear
+    assert "MODEL_TERMINAL.has(operation.state)" in clear, "進行中まで手元から消している"
+    assert "retry.dataset.retryModelOperation = operation.model_id;" in SCRIPT
+    assert "[data-retry-model-operation]" in SCRIPT, "再試行ボタンに受け手が無い"
+    assert "[data-cancel-model-operation]" in SCRIPT
+
+
+def test_the_viewer_can_step_through_the_list_it_was_opened_from():
+    """拡大したまま隣と見比べたい。毎回一覧へ戻らせない。"""
+    assert 'id="viewer-prev"' in MARKUP and 'id="viewer-next"' in MARKUP
+    # 右下の「閉じる」の誤爆を避けるため、送りは左下、つまり行の先頭に置く
+    bar = MARKUP[MARKUP.index('<div id="viewer-bar">'):MARKUP.index('id="viewer-close"')]
+    assert bar.index('class="viewer-nav"') < bar.index('class="viewer-meta"')
+    assert "order: -1;" in STYLES
+    # 送り・操作・閉じるが 2 段になると画像の見える高さがその分削られる
+    assert "flex-wrap: nowrap;" in STYLES[STYLES.index("#viewer-bar {"):STYLES.index("#viewer-caption")]
+    step = SCRIPT[SCRIPT.index("function stepViewer"):SCRIPT.index("async function openViewer")]
+    assert "keepList: true" in step, "送るたびに一覧を作り直している"
+    viewer = SCRIPT[SCRIPT.index("async function openViewer("):]
+    viewer = viewer[:viewer.index("\n/* 自動で選んだとき")]
+    assert "const token = ++viewer.token;" in viewer, "連打で古い応答が後から描かれる"
+    assert viewer.count("if (token !== viewer.token) return;") >= 3
+
+
+def test_the_search_results_say_how_big_the_model_is():
+    """何 GB 落ちてくるのかが分からないまま押させない。"""
+    row = SCRIPT[SCRIPT.index("function catalogRow"):SCRIPT.index("function renderCatalogResults")]
+    assert 'labelled(size, "容量")' in row
+    assert "item.weight_bytes ? `約 ${formatBytes(item.weight_bytes)}` : \"不明\"" in row
+    header = SCRIPT[SCRIPT.index("function renderCatalogResults"):]
+    assert '["モデル", "容量", "DL"' in header, "見出しと列がずれている"
+
+
+def test_the_view_head_actions_sit_at_the_right_edge():
+    """左の文字数でボタンの位置が動くと、押す場所が毎回ずれる。"""
+    assert ".view-head.one-line > :first-child { flex: 1 1 auto; min-width: 0; }" in STYLES
+
+
+def test_an_image_that_cannot_be_shown_is_folded_away():
+    """出せない絵の枠だけが正方形で残ると、一覧が読めない箱の列になる。"""
+    card = SCRIPT[SCRIPT.index("async function libraryCard"):SCRIPT.index("/* ── 全画面ビューア")]
+    assert 'image.addEventListener("error", () => { image.hidden = true; });' in card
+    assert "catch { image.hidden = true; }" in card
+    assert "表示できません" not in card, "壊れた枠に文字だけ残している"
+    assert ".card img[hidden] { display: none !important; }" in STYLES
+
+
+def test_the_close_button_is_not_painted_on_its_own_background():
+    """button.icon は .primary より詳細度が高い。accent の背景が当たらず、
+    濃い前景色が濃い背景に乗って閉じるボタンがほぼ見えなかった。"""
+    rule = STYLES[STYLES.index("#viewer .viewer-actions button.icon.primary {"):]
+    rule = rule[:rule.index("}")]
+    assert "background: var(--accent) !important;" in rule
+    assert "color: var(--accent-ink) !important;" in rule
+
+
+def test_the_viewer_bar_cannot_push_its_actions_off_screen():
+    """grid item の min-width は既定で auto。中身が縮まず操作が画面外へ出ていた。"""
+    bar = STYLES[STYLES.index("#viewer-bar {"):]
+    bar = bar[:bar.index("}")]
+    assert "min-width: 0;" in bar and "overflow: hidden;" in bar
+
+
+def test_a_gated_repository_says_so_before_the_button_is_pressed():
+    """「条件を確認」では何を確認するのか分からない。同意が要ることを名前の側で言う。"""
+    row = SCRIPT[SCRIPT.index("function catalogRow"):SCRIPT.index("function renderCatalogResults")]
+    assert '"条件を確認"' not in row, "押した先が分からない語がボタンに残っている"
+    assert 'button.textContent = "追加する";' in row, "gated だけ別の言葉になっている"
+    assert 'gate.textContent = "要同意";' in row
+    assert "配布元で利用条件に同意しないと取り込めません。" in row
+
+
+def test_registering_characters_and_styles_is_its_own_section():
+    """モデルの話と、覚えさせる素材の話は別。続けて並べると設定が 1 枚の帯になる。"""
+    settings = MARKUP[MARKUP.index('id="model-downloads-block"'):]
+    assert settings.index('class="settings-section"') < settings.index("キャラ・画風の登録")
+    assert MARKUP.index('id="model-downloads-block"') < MARKUP.index("キャラ・画風の登録")
+    assert ".settings-section {" in STYLES
