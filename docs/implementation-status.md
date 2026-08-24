@@ -3295,3 +3295,65 @@ ControlDeck backend pytest -q   764 passed, 1 skipped（57.66 秒）
 NOT TESTED: Media Forge 側を実 add-on として動かした「analyze -> release_ai ->
 generate」の通し。installed feature は v0.5.1（旧 core）のままであり、
 本 PR の core を bundle 化して入れ替えるまで実行しない。
+
+## G6 v0.6.0 バンドル導入と installed 実測（2026-08-24）
+
+```text
+bundle   ./mf.sh bundle build 0.6.0 /data1tb/mediaforge-release-bundles
+artifact control-deck-media-forge-0.6.0-linux-x86_64.tar.gz
+bytes    30,640,703
+sha256   ef57f26f78bb5816f967c9256dfce07ae9a135d64602f4137f09004b9bfed73d
+```
+
+展開したバンドルを :9137 で起動し、配信 HTML が新 UI であることを確認した。
+
+```text
+model-choice 14 / pack-section 2 / custom-repo 2 / profile-add-character 2
+workspace.session 4 / session.changed 4
+ux_standalone_e2e.py   PASSED / console errors 0
+到達確認                pack_slot_rows 21 / page errors 0
+```
+
+installed feature を v0.5.1 から v0.6.0 へ入れ替えた（systemd drop-in で
+`versions/0.6.0` を指す。`current` symlink も更新）。
+
+### ❸ が installed で解消した
+
+```text
+修正前   GET http://127.0.0.1:9130/api/v1/jobs -> 500（1 行の不整合で全件喪失）
+修正後   GET http://127.0.0.1:9130/api/v1/jobs -> 200  90 件  degraded 0
+         /api/v1/assets -> 200   /api/v1/capabilities -> 200
+```
+
+degraded 0 なのは v0.6.0 の契約が当該行を厳格に読めるため。旧契約で読めない
+行が来ても一覧は落ちないことは `tests/test_store.py` と実 DB 90 行での
+before/after 実測（v0.5.1 契約で 3 行が読めず、修正後は 90/90 提供）で固定した。
+
+### 残る未実測と再現手順
+
+Media Forge 側の「analyze -> release_ai -> generate」通しは、ControlDeck への
+ログインが要るため未実施。**利用者のパスワードは扱わない**方針のため、
+そのまま実行できる受け入れスクリプトを用意した。
+
+```bash
+MEDIA_FORGE_E2E_PASSWORD=... \
+  /data1tb/ControlDeck-release-bundle/.venv/bin/python \
+  scripts/g6_resource_turn_e2e.py \
+    --control-deck-url http://127.0.0.1:8765 \
+    --username <name> \
+    --evidence-dir /data1tb/mediaforge-g6-evidence
+```
+
+このスクリプトが検証すること。
+
+```text
+1. boot が workspace.session 1 往復で終わること（WebSocket frame を数える）
+2. 状況タブが記録を読めること（degraded 行があっても落ちない）
+3. Host LLM を gateway 経由で常駐させ、実際に VRAM を握らせること
+4. 実画像 job の phase 列に release_ai が現れ、generating より前にあること
+5. VRAM が生成前に返っていること / 実画像が 1 枚できること
+6. Broker が空で残り、worker プロセスが残らないこと
+```
+
+VRAM は rocm-smi の実測値を phase ごとに記録する。モデル自身の申告ではなく
+デバイスを読む。

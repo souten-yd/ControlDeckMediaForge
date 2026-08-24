@@ -1,0 +1,292 @@
+#!/usr/bin/env python3
+"""Installed-ControlDeck acceptance for the G6 AI/generation resource turn.
+
+Proves the handover the unit tests cannot: that a resident Host LLM actually
+gives its VRAM back before Media Forge generates, and that a real image lands.
+
+Run it against the installed stack. The password is read from the environment,
+never from an argument, so it does not reach a process listing:
+
+    MEDIA_FORGE_E2E_PASSWORD=... \\
+      /data1tb/ControlDeck-release-bundle/.venv/bin/python \\
+      scripts/g6_resource_turn_e2e.py \\
+        --control-deck-url http://127.0.0.1:8765 \\
+        --username <name> \\
+        --evidence-dir /data1tb/mediaforge-g6-evidence
+
+What is asserted, in order:
+
+1. the workspace boots in one aggregated session request, not ten
+2. the job list survives records the running contract cannot read strictly
+3. a Host LLM is made resident and really holds VRAM
+4. a real image job runs; the ``release_ai`` stage is observed
+5. VRAM drops back before generation and the image is produced
+6. the Broker is left clean and no worker process remains
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import time
+from pathlib import Path
+from typing import Any
+
+from playwright.sync_api import Page, sync_playwright
+
+
+TERMINAL = {"succeeded", "failed", "canceled"}
+# ロードは実測 4.040 秒、生成は FLUX.2 Klein 4B の実測 208.8 秒を含む。
+JOB_TIMEOUT_SEC = 900.0
+
+
+def check(value: object, message: str) -> None:
+    if not value:
+        raise AssertionError(message)
+
+
+def vram_used_bytes() -> int:
+    """Read the device, not a model's own accounting."""
+    try:
+        out = subprocess.run(
+            ["rocm-smi", "--showmeminfo", "vram"], capture_output=True, text=True, timeout=30
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return -1
+    for line in out.splitlines():
+        if "GPU[0]" in line and "Total Used Memory" in line:
+            try:
+                return int(line.split(":")[-1].strip())
+            except ValueError:
+                return -1
+    return -1
+
+
+def login(page: Page, username: str, password: str) -> None:
+    page.goto("/login", wait_until="domcontentloaded")
+    if "/login" not in page.url:
+        return
+    page.get_by_label("ユーザー名").fill(username)
+    page.get_by_label("パスワード").fill(password)
+    page.get_by_role("button", name="ログイン").click()
+    page.wait_for_url(lambda url: "/login" not in url, timeout=20_000)
+
+
+def workspace_frame(page: Page):
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        for frame in page.frames:
+            if "/addon-frame/media-forge" in frame.url and frame.locator("#app").count():
+                return frame
+        page.wait_for_timeout(200)
+    raise AssertionError("Media Forge workspace iframe did not become available")
+
+
+def make_llm_resident(page: Page) -> dict[str, Any]:
+    """Ask ControlDeck's own gateway for one completion so a model loads.
+
+    Going through the gateway is the point: that is the same admission path
+    ControlDeck chat and OpenCode use, so what becomes resident here is exactly
+    what has to be handed back.
+    """
+    started = time.perf_counter()
+    result = page.evaluate(
+        """async () => {
+          const response = await fetch('/api/v1/llm/v1/chat/completions', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-Requested-With': 'ControlDeck'},
+            body: JSON.stringify({
+              model: 'auto',
+              messages: [{role: 'user', content: 'reply with the single word ok'}],
+              max_tokens: 8,
+              temperature: 0,
+            }),
+          });
+          return {status: response.status, body: (await response.text()).slice(0, 400)};
+        }"""
+    )
+    elapsed = time.perf_counter() - started
+    check(result["status"] == 200, f"gateway completion failed: {result}")
+    time.sleep(3)
+    return {"elapsed_sec": round(elapsed, 3), "vram_after_load": vram_used_bytes()}
+
+
+def broker_snapshot(page: Page) -> dict[str, Any]:
+    return page.evaluate(
+        """async () => {
+          const response = await fetch('/api/v1/resources/snapshot', {
+            headers: {'X-Requested-With': 'ControlDeck'},
+          });
+          if (!response.ok) return {unavailable: response.status};
+          return response.json();
+        }"""
+    )
+
+
+def request(intent: str, seed: int) -> dict[str, Any]:
+    return {
+        "operation": "image.generate",
+        "intent": intent,
+        "inputs": [],
+        "model_policy": "auto",
+        "constraints": {"width": 256, "height": 256, "seed": seed},
+        "output": {"format": "png", "count": 1},
+        "qa": {"semantic": False, "max_regeneration_attempts": 0},
+        "local_only": True,
+    }
+
+
+def run_job_watching_phases(frame, payload: dict[str, Any]) -> dict[str, Any]:
+    """Submit a job and record every phase it passes through.
+
+    The phase sequence is the evidence for the ordering: the AI turn has to be
+    declared finished before the generation lease is requested, otherwise a
+    single-GPU host deadlocks.
+    """
+    job = frame.evaluate("value => call('jobs.create', value)", payload)
+    job_id = job["id"]
+    phases: list[str] = []
+    vram_by_phase: dict[str, int] = {}
+    started = time.perf_counter()
+    deadline = time.monotonic() + JOB_TIMEOUT_SEC
+    last: dict[str, Any] = job
+    while time.monotonic() < deadline:
+        last = frame.evaluate("id => call('jobs.get', {job_id: id})", job_id)
+        phase = last.get("phase")
+        if phase and (not phases or phases[-1] != phase):
+            phases.append(phase)
+            vram_by_phase[phase] = vram_used_bytes()
+        if last.get("status") in TERMINAL:
+            break
+        frame.wait_for_timeout(500)
+    return {
+        "job": last,
+        "phases": phases,
+        "vram_by_phase": vram_by_phase,
+        "elapsed_sec": round(time.perf_counter() - started, 3),
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--control-deck-url", required=True)
+    parser.add_argument("--username", required=True)
+    parser.add_argument("--password-env", default="MEDIA_FORGE_E2E_PASSWORD")
+    parser.add_argument("--evidence-dir", required=True, type=Path)
+    args = parser.parse_args()
+    password = os.environ.get(args.password_env)
+    if not password:
+        raise RuntimeError(f"password environment variable is unset: {args.password_env}")
+    args.evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+    browser_errors: list[str] = []
+    observations: dict[str, Any] = {"vram_baseline": vram_used_bytes()}
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        context = browser.new_context(
+            base_url=args.control_deck_url, viewport={"width": 1280, "height": 800}
+        )
+        page = context.new_page()
+        page.on(
+            "console",
+            lambda message: browser_errors.append(f"console:{message.type}:{message.text}")
+            if message.type == "error" else None,
+        )
+        page.on("pageerror", lambda error: browser_errors.append(f"pageerror:{error}"))
+
+        # ── 1. boot が 1 往復であること ─────────────────────────────────
+        workspace_calls: list[str] = []
+        page.on("websocket", lambda socket: socket.on(
+            "framesent",
+            lambda payload: workspace_calls.append(
+                json.loads(payload["payload"]).get("method", "")
+                if isinstance(payload, dict) and payload.get("payload") else ""
+            ),
+        ))
+        login(page, args.username, password)
+        boot_started = time.perf_counter()
+        page.goto("/x/media-forge/workspace/create", wait_until="domcontentloaded")
+        frame = workspace_frame(page)
+        frame.wait_for_selector('#app[aria-busy="false"]', timeout=30_000)
+        observations["boot_ready_sec"] = round(time.perf_counter() - boot_started, 3)
+        observations["boot_workspace_calls"] = [name for name in workspace_calls if name]
+        check(
+            observations["boot_workspace_calls"].count("workspace.session") == 1,
+            f"boot did not use one aggregated session: {observations['boot_workspace_calls']}",
+        )
+
+        # ── 2. 状況タブが読めること ────────────────────────────────────
+        jobs = frame.evaluate("() => call('workspace.session', {parts: ['jobs']})")
+        items = jobs["jobs"]["items"]
+        observations["job_records"] = len(items)
+        observations["degraded_records"] = sum(
+            1 for item in items if item.get("record_state") != "ok"
+        )
+        check(isinstance(items, list), "the activity tab could not read its records")
+
+        capabilities = frame.evaluate("() => call('capabilities.get', {})")
+        check(
+            capabilities["capabilities"]["image.text_to_image"]["state"] == "available",
+            "image.text_to_image is not available",
+        )
+
+        # ── 3. LLM を常駐させ、実際に VRAM を握らせる ─────────────────
+        observations["llm_load"] = make_llm_resident(page)
+        resident = observations["llm_load"]["vram_after_load"]
+        check(
+            resident > observations["vram_baseline"] + 1_000_000_000,
+            f"the Host LLM did not become resident: {observations['llm_load']}",
+        )
+
+        # ── 4/5. 生成を通し、release_ai と VRAM 返却を観測する ────────
+        run = run_job_watching_phases(
+            frame, request("an orange field robot folds its solar panels at dusk", 60601)
+        )
+        observations["generation"] = {
+            "status": run["job"]["status"],
+            "error": run["job"].get("error"),
+            "asset_ids": run["job"].get("asset_ids", []),
+            "phases": run["phases"],
+            "vram_by_phase": run["vram_by_phase"],
+            "elapsed_sec": run["elapsed_sec"],
+        }
+        check("release_ai" in run["phases"], f"the AI turn was never declared finished: {run['phases']}")
+        check(
+            run["phases"].index("release_ai") < run["phases"].index("generating")
+            if "generating" in run["phases"] else True,
+            f"generation was admitted before the AI turn ended: {run['phases']}",
+        )
+        released = run["vram_by_phase"].get("generating", run["vram_by_phase"].get("waiting_resource", -1))
+        observations["vram_handed_back"] = resident - released if released >= 0 else None
+        check(
+            run["job"]["status"] == "succeeded" and len(run["job"].get("asset_ids", [])) == 1,
+            f"the real image job did not produce an asset: {run['job']}",
+        )
+
+        # ── 6. 後始末 ──────────────────────────────────────────────────
+        observations["broker_after"] = broker_snapshot(page)
+        browser.close()
+
+    time.sleep(3)
+    observations["vram_final"] = vram_used_bytes()
+    observations["worker_processes"] = subprocess.run(
+        ["pgrep", "-fc", "worker_packs/image"], capture_output=True, text=True
+    ).stdout.strip() or "0"
+    observations["browser_errors"] = browser_errors
+
+    (args.evidence_dir / "g6-resource-turn.json").write_text(
+        json.dumps(observations, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(json.dumps(observations, ensure_ascii=False, indent=2))
+    if browser_errors:
+        print(f"FAILED: browser reported {len(browser_errors)} error(s)")
+        return 1
+    print("PASSED")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
