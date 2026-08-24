@@ -32,6 +32,14 @@ from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
 from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .profiles import profile_prompt
+from .asset_brief import (
+    AssetBriefError,
+    BriefDefect,
+    ResolvedLayout,
+    infer_brief_from_intent,
+    inspect_against_brief,
+    parse_brief,
+)
 from .routing import ModelRoute, ModelRouteError, route
 from .host.ai import HostAIGateway, HostAIReleaseResult
 from .store import Store, UnreadableJobRecord, utc_now
@@ -42,6 +50,19 @@ from .validators import validate_png
 # Add-on. Reuse its configured application logger so bounded worker telemetry
 # is visible without configuring a second handler or leaking worker stderr.
 logger = logging.getLogger("uvicorn.error")
+
+
+class BriefDefectError(RuntimeError):
+    """The produced asset is objectively wrong for what it was asked to be.
+
+    Separate from WorkerFailure because the cause is the brief contract, and
+    separate from evaluator findings because it is not a matter of taste.
+    """
+
+    def __init__(self, defects: list[BriefDefect]):
+        super().__init__("; ".join(item.detail for item in defects)[:300])
+        self.defects = defects
+        self.code = defects[0].code if defects else "brief_defect"
 
 # Broker が「VRAM が足りない/待たされる」と言ったときだけ、保持した解放理由を
 # 添える。それ以外の受理失敗（policy 拒否など）に AI 常駐の話を混ぜない。
@@ -1050,6 +1071,22 @@ class JobManager:
                 error=ErrorDetail(code=code, message=str(exc)[:300]),
             )
             return
+        except BriefDefectError as exc:
+            # 用途に対して客観的に誤っている。予算の話ではないので、成功として
+            # 返さず理由を名指しで失敗させる。作り直しは A3 の範囲。
+            logger.info(
+                "job %s does not satisfy its brief: %s",
+                job_id,
+                [item.document() for item in exc.defects],
+            )
+            await self._update(
+                job_id,
+                reporter,
+                status=JobStatus.FAILED,
+                phase="validate",
+                error=ErrorDetail(code=exc.code, message=str(exc)[:300]),
+            )
+            return
         except (KeyError, TypeError, ValueError, OSError) as exc:
             await self._update(
                 job_id,
@@ -1353,6 +1390,37 @@ class JobManager:
             await reporter.progress(phase, normalized_progress, wait_reason=wait_reason)
         return result
 
+    @staticmethod
+    def _brief_defects(
+        job: Job, width: int, height: int, validation: list[dict[str, Any]]
+    ) -> list[BriefDefect]:
+        """Compare the produced image against what the brief structurally required."""
+        try:
+            brief = parse_brief(job.request.constraints.get("asset_brief"))
+        except AssetBriefError:
+            # ingress で弾いているので、ここへ来た不正は記録だけして先へ進める。
+            logger.warning("job %s carries an unreadable asset_brief", job.id)
+            return []
+        if brief is None:
+            brief = infer_brief_from_intent(job.request.intent)
+        recorded = job.request.constraints.get("resolved_layout")
+        if brief is None or not isinstance(recorded, dict):
+            return []
+        resolved = ResolvedLayout(
+            width=int(recorded.get("width", width)),
+            height=int(recorded.get("height", height)),
+            alpha=bool(recorded.get("alpha", False)),
+            source=str(recorded.get("source", "")),
+            aspect_ratio=str(recorded.get("aspect_ratio", "")),
+        )
+        has_alpha = any(
+            item.get("validator") == "image.alpha" and item.get("has_transparency") is True
+            for item in validation
+        )
+        return inspect_against_brief(
+            brief, resolved, width=width, height=height, has_alpha=has_alpha
+        )
+
     def _validate_output(
         self,
         job: Job,
@@ -1363,6 +1431,11 @@ class JobManager:
         if path.stat().st_size > MAX_ARTIFACT_BYTES:
             raise ValueError("worker artifact exceeded the 64 MiB limit")
         width, height, validation = validate_png(path)
+        # brief に対して客観的に誤っているものは、主観的な改善案とは別に扱う。
+        # ここは QA 予算に縛られない。黙って成功として返さない。
+        defects = self._brief_defects(job, width, height, validation)
+        if defects:
+            raise BriefDefectError(defects)
         outpaint = (
             job.request.operation == "image.edit"
             and job.request.constraints.get("edit_mode") == "outpaint"

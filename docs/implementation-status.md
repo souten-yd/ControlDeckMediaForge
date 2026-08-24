@@ -3594,3 +3594,85 @@ A3 へ送り、本スライスでは実装しない。
 
 NOT TESTED: 解決後の寸法での実画像生成、および透過が必要な emblem 用途の
 実生成。A3 / A5 で実機確認する。
+
+## G4H A1b — defect と finding の分離（2026-08-24）
+
+利用者の指摘「予算を制限する場合、必要な生成が行われない可能性はないか」への
+対応。あり得るため、規則を明示して実体化した。
+
+```text
+予算は「任意の改善」を縛る
+予算は「必要な修正」を縛らない
+予算切れは報告する。黙って成功にしない
+```
+
+二つの階層を型で分けた。
+
+```text
+BriefDefect   用途に対して客観的に誤っている
+              canvas 不一致 / 必須 alpha の欠落 / 想定外の透過
+              -> 予算に関係なく修正するか、理由を名指しで失敗する
+finding       評価器の主観的な判断（A3 で実装）
+              -> QA 予算で縛る。予算切れは未解決事項を添えて返す
+```
+
+最良の守りは検査ではなく予防である。A1 で canvas を構造的に解決したため、
+寸法不一致は「検出して作り直す」対象ではなくなった。予防は swap 0 回、
+作り直しは 1 往復まるごと（実測 15〜25 秒）。
+
+### validator の主張を正直にした
+
+`validate_png` は `{"validator": "image.alpha", "alpha": true}` を返していたが、
+これは「mode が RGBA である」という意味でしかなかった。Hanabi の花火キーアートは
+完全不透明のままこの検査を通過していた。実際の最小 alpha を見るようにした。
+
+```text
+before  {"validator": "image.alpha", "status": "passed", "alpha": true}
+after   {"validator": "image.alpha", "status": "passed",
+         "mode_has_alpha_channel": true, "has_transparency": false, "minimum_alpha": 255}
+```
+
+### 実物での検出確認
+
+```text
+background-keyart.png  実物 1024x1024 透過=False  要求 1024x576
+  DEFECT canvas_mismatch  expected=1024x576  actual=1024x1024
+fireworks-keyart.png   実物 1024x1024 透過=False  要求 透過必須
+  DEFECT alpha_missing    expected=alpha channel with transparent regions  actual=fully opaque
+```
+
+alpha は required / forbidden / auto の三状態を保つ。bool へ潰すと「不要」と
+「禁止」が混ざり、片方が誤って defect になる。
+
+```text
+./mf.sh test   458 passed
+```
+
+NOT TESTED: defect 検出後の自動再生成（A3 の範囲。現時点では理由を名指しして失敗する）。
+
+## G4H — 資産生成の手順設計（2026-08-24）
+
+利用者提案「画像以外を全部実装してから資産をまとめて生成し、VLM で確認して
+コード修正か再生成をまとめる。逆も」を評価し、`g4-agent-asset-workflow-hardening.md`
+§6.8 に決定を記録した。
+
+```text
+採用    コード先行。Hanabi では必要な事実が既に CSS にあった
+          #title-bg object-fit: cover        -> 面は横長。正方形は切られる
+          #title-fw width: min(52vw, 300px)  -> 小さな重ね要素であって完成シーンではない
+                    filter: drop-shadow(...) -> 形のある被写体を期待する = 透過が要る
+        brief を「推測」から「実測」に変えられる
+
+不採用  検査前に全部まとめて生成する形。画風が外れると N 枚無駄になる
+        代わりに anchor 1 枚を先に作って確認する。同じ FLUX 常駐の中で
+        行うので追加 swap は 0
+
+不採用  資産を先に作ってからコードを書く順序
+        brief が測る対象を持たず、形容詞へ退行する。Hanabi の失敗の再現になる
+
+採用    「画像ではなくコードを直す」判断はしばしば正しく、再生成より安い
+        ただし Media Forge は project source を書き換えない。不一致と
+        どちら側で解決できるかを報告し、決めて直すのは coding agent
+```
+
+結果として swap は資産数によらず 2 回のまま。

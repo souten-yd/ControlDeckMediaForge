@@ -14,7 +14,9 @@ import pytest
 from mediaforge.asset_brief import (
     AssetBrief,
     AssetBriefError,
+    effective_alpha_intent,
     infer_brief_from_intent,
+    inspect_against_brief,
     parse_brief,
     resolve_layout,
 )
@@ -305,3 +307,71 @@ def test_inference_never_outranks_an_explicit_request_size():
     )
 
     assert (resolved.width, resolved.height) == (1024, 1024)
+
+
+# ── 予算に縛られない側（defect） ────────────────────────────────────────
+
+
+def resolved_for(**brief):
+    value = AssetBrief(**brief)
+    return value, resolve_layout(value, envelope=ENVELOPE)
+
+
+def test_a_correct_asset_reports_no_defect():
+    brief, resolved = resolved_for(role="background")
+
+    assert inspect_against_brief(
+        brief, resolved, width=resolved.width, height=resolved.height, has_alpha=False
+    ) == []
+
+
+def test_a_wrong_canvas_is_a_defect_not_a_matter_of_taste():
+    brief, resolved = resolved_for(role="background")
+
+    defects = inspect_against_brief(brief, resolved, width=1024, height=1024, has_alpha=False)
+
+    assert [item.code for item in defects] == ["canvas_mismatch"]
+    assert defects[0].expected == f"{resolved.width}x{resolved.height}"
+    assert defects[0].actual == "1024x1024"
+
+
+def test_an_opaque_overlay_is_a_defect():
+    """Hanabi の花火キーアートそのもの。重ね要素なのに完全不透明だった。"""
+    brief, resolved = resolved_for(role="emblem")
+
+    defects = inspect_against_brief(
+        brief, resolved, width=resolved.width, height=resolved.height, has_alpha=False
+    )
+
+    assert [item.code for item in defects] == ["alpha_missing"]
+
+
+def test_unexpected_transparency_is_also_reported():
+    brief, resolved = resolved_for(role="background")
+
+    defects = inspect_against_brief(
+        brief, resolved, width=resolved.width, height=resolved.height, has_alpha=True
+    )
+
+    assert [item.code for item in defects] == ["alpha_unexpected"]
+
+
+def test_without_a_brief_nothing_is_claimed():
+    """brief が無い呼び出しに新しい失敗理由を持ち込まない。"""
+    assert inspect_against_brief(None, None, width=1, height=1, has_alpha=False) == []
+
+
+def test_alpha_keeps_three_states_not_two():
+    """「不要」と「禁止」を混同すると、片方が誤って defect になる。"""
+    assert effective_alpha_intent(AssetBrief(role="emblem")) == "required"
+    assert effective_alpha_intent(AssetBrief(role="background")) == "forbidden"
+    assert effective_alpha_intent(AssetBrief(role="general")) == "auto"
+
+
+def test_a_dont_care_role_accepts_either_transparency():
+    brief, resolved = resolved_for(role="general", aspect_intent="square")
+
+    for has_alpha in (True, False):
+        assert inspect_against_brief(
+            brief, resolved, width=resolved.width, height=resolved.height, has_alpha=has_alpha
+        ) == []

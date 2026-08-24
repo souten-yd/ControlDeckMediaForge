@@ -285,15 +285,23 @@ def resolve_layout(
     )
 
 
-def _alpha_for(brief: AssetBrief | None) -> bool:
+def effective_alpha_intent(brief: AssetBrief | None) -> str:
+    """Resolve alpha to required / forbidden / auto.
+
+    Kept as three states on purpose. A boolean collapses "transparency is not
+    needed" into "transparency is not allowed", and those call for different
+    handling: the first is satisfied by any output, the second is a defect.
+    """
     if brief is None:
-        return False
-    if brief.alpha_intent == "required":
-        return True
-    if brief.alpha_intent == "forbidden":
-        return False
+        return "auto"
+    if brief.alpha_intent != "auto":
+        return brief.alpha_intent
     _ratio, default_alpha = _ROLE_DEFAULTS.get(brief.role, ("auto", "auto"))
-    return default_alpha == "required"
+    return default_alpha
+
+
+def _alpha_for(brief: AssetBrief | None) -> bool:
+    return effective_alpha_intent(brief) == "required"
 
 
 def _describe(width: int, height: int) -> str:
@@ -395,3 +403,74 @@ def infer_brief_from_intent(intent: str) -> AssetBrief | None:
         aspect_ratio=ratio,
         alpha_intent=alpha or "auto",
     )
+
+
+# ── brief に対する決定的な検査 ──────────────────────────────────────────
+#
+# ここが「予算に縛られない側」である。用途に対して客観的に誤っているものは、
+# 主観的な改善案とは別に扱う。retry 予算をここへ使わせない。
+#
+# ただし最良の守りは検査ではなく予防である。A1 で canvas を構造的に解決した
+# ので、寸法の不一致はもはや「検出して作り直す」対象ではなくなった。予防は
+# swap 0 回、作り直しは 1 往復まるごと。
+
+
+@dataclass(frozen=True)
+class BriefDefect:
+    """An objective mismatch against the brief. Never traded away for cost."""
+
+    code: str
+    detail: str
+    expected: str
+    actual: str
+
+    def document(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "detail": self.detail,
+            "expected": self.expected,
+            "actual": self.actual,
+        }
+
+
+def inspect_against_brief(
+    brief: AssetBrief | None,
+    resolved: ResolvedLayout | None,
+    *,
+    width: int,
+    height: int,
+    has_alpha: bool,
+) -> list[BriefDefect]:
+    """Check a produced image against what the brief structurally required.
+
+    Deterministic only. Nothing here is a matter of taste, so nothing here is
+    subject to the QA budget: a defect is corrected or the job fails saying so.
+    Subjective judgement belongs to the evaluator and its bounded budget.
+    """
+    if brief is None or resolved is None:
+        return []
+    defects: list[BriefDefect] = []
+    if (width, height) != (resolved.width, resolved.height):
+        defects.append(BriefDefect(
+            code="canvas_mismatch",
+            detail="the produced canvas is not the canvas the brief resolved to",
+            expected=f"{resolved.width}x{resolved.height}",
+            actual=f"{width}x{height}",
+        ))
+    alpha_intent = effective_alpha_intent(brief)
+    if alpha_intent == "required" and not has_alpha:
+        # Hanabi の花火キーアートがこれ。重ね要素なのに完全不透明だった。
+        defects.append(BriefDefect(
+            code="alpha_missing",
+            detail="the asset is used as an overlay but carries no transparency",
+            expected="an alpha channel with transparent regions",
+            actual="fully opaque",
+        ))
+    if alpha_intent == "forbidden" and has_alpha:
+        defects.append(BriefDefect(
+            code="alpha_unexpected",
+            detail="the asset declares no transparency but carries a partial alpha channel",
+            expected="fully opaque",
+            actual="contains transparent pixels",
+        ))
+    return defects
