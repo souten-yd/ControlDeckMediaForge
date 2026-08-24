@@ -13,6 +13,7 @@ const PHASE_TEXT = {
   starting: "準備しています",
   normalize_request: "準備しています",
   validate_request: "準備しています",
+  direct: "演出内容を整理しています",
   select_model: "使うモデルを選んでいます",
   release_ai: "文章・画像認識に使った GPU を空けています",
   waiting_resource: "GPU の空きを待っています",
@@ -2064,7 +2065,13 @@ async function submitJob(event) {
       && spec.variation.axis === "pose" && state.directorMode !== "original" && batchCount <= 4;
     let directorPlan = null;
     const referenceAnalysis = referenceAnalysisRequest();
-    if (state.directorMode !== "original" && !layout && !creativeBatch) {
+    // 単発生成では演出と検証を job に任せる。ここで呼ぶと、途中結果を持って
+    // いるのはこのページだけになり、タブを閉じた時点で失われる（VLM と LLM を
+    // 1 回ずつ使った後に、である）。job の記録はブラウザより長く生きる。
+    const serverPrepared = operation === "image.generate" && !layout && !creativeBatch;
+    if (serverPrepared) {
+      renderDirectorPlan(null);
+    } else if (state.directorMode !== "original" && !layout && !creativeBatch) {
       showPreparing("演出内容を整理しています", 0.6);
       const directed = await call("creative.direct", {
         intent: request.intent,
@@ -2113,7 +2120,15 @@ async function submitJob(event) {
       if (window.parent === window) void pollBatch(batch.id);
       return;
     }
-    if (creativeActive(spec) || directorPlan) {
+    if (serverPrepared) {
+      // 何をしてほしいかだけを渡す。演出と検証は job の phase で走る。
+      request.constraints = {
+        ...request.constraints,
+        creative_spec: spec,
+        director_mode: state.directorMode,
+        ...(referenceAnalysis.length ? {reference_context: referenceAnalysis} : {}),
+      };
+    } else if (creativeActive(spec) || directorPlan) {
       showPreparing("シーン指定を確認しています", 0.65);
       request = (await call("creative.validate", {
         request, creative_spec: spec, director_plan: directorPlan,

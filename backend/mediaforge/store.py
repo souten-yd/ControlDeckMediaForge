@@ -413,6 +413,23 @@ class Store:
             raise ValueError("stored profile snapshot is invalid")
         return value
 
+    def replace_job_request(self, job_id: str, request: JobRequest) -> Job:
+        """Persist the request the job will actually run.
+
+        Direction and validation rewrite the request before generation. Keeping
+        the rewritten version is what lets the record answer "what was actually
+        asked for" later — and it is why closing the browser no longer loses
+        the work, since the durable row now carries it.
+        """
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE jobs SET request_json = ?, updated_at = ? WHERE id = ?",
+                (request.model_dump_json(), utc_now(), job_id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(job_id)
+        return self._notify(self.get_job(job_id))
+
     def update_job(
         self,
         job_id: str,
