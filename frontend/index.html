@@ -83,6 +83,18 @@
               <p id="profile-choice-note" class="hint"></p>
             </div>
 
+            <div id="model-choice">
+              <p class="section-label">使うモデル</p>
+              <div class="chips" role="radiogroup" aria-label="使うモデルの決め方">
+                <button type="button" class="chip" data-model-choice="auto" aria-checked="true">おまかせ</button>
+                <button type="button" class="chip" data-model-choice="manual" aria-checked="false">指定する</button>
+              </div>
+              <label id="model-choice-row" hidden>モデル
+                <select id="model-choice-model"></select>
+              </label>
+              <p id="model-choice-note" class="hint"></p>
+            </div>
+
             <div id="composition-options" class="sub-field" hidden>
               <p class="section-label" id="composition-options-label">複数カットをまとめる</p>
               <label>タイトル<input id="composition-title" maxlength="120" placeholder="ORANGE COMPANION"></label>
@@ -240,6 +252,27 @@
           <div id="model-catalog" class="model-grid"></div>
           <p id="model-empty" class="hint" hidden>条件に合うモデルはありません。</p>
           <div id="model-error" class="error" role="alert" hidden></div>
+
+          <p class="section-label">キャラ・画風の登録</p>
+          <p class="hint">同じキャラや画風を何度も使うために覚えさせておけます。作成のときに選べます。</p>
+          <div>
+            <button type="button" id="profile-add-character">＋ キャラを登録</button>
+            <button type="button" id="profile-add-style">＋ 画風を登録</button>
+          </div>
+          <div id="profile-list" class="rows"></div>
+          <p id="profile-empty" class="hint" hidden>まだ登録がありません。</p>
+          <div id="profile-error" class="error" role="alert" hidden></div>
+
+          <div id="pack-section" hidden>
+            <p class="section-label">配布用にまとめる</p>
+            <p class="hint">決まったスロットに素材を割り当てて、配布できる 1 つの ZIP にまとめます。</p>
+            <div>
+              <label>まとめ方<select id="pack-profile"></select></label>
+              <button type="button" id="pack-open">素材を割り当てる</button>
+            </div>
+            <p id="pack-note" class="hint"></p>
+          </div>
+
           <div data-adv-slot="settings"></div>
         </section>
       </main>
@@ -272,6 +305,53 @@
           <div class="dialog-actions">
             <button type="button" id="model-confirm-cancel">戻る</button>
             <button type="button" id="model-confirm-submit" class="primary">続ける</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="pack-dialog">
+        <div class="mask-head">
+          <h2 id="pack-dialog-title">配布用にまとめる</h2>
+          <button type="button" id="pack-close" aria-label="閉じる">×</button>
+        </div>
+        <label>まとめの名前<input id="pack-name" type="text" maxlength="64" placeholder="companion"></label>
+        <p class="hint">スロットを選んでから、下の一覧で素材をタップして割り当てます。</p>
+        <div id="pack-slots" class="rows"></div>
+        <p class="section-label">素材を選ぶ</p>
+        <div id="pack-library" class="rows"></div>
+        <p id="pack-progress" class="hint"></p>
+        <div id="pack-error" class="error" role="alert" hidden></div>
+        <div class="dialog-actions">
+          <button type="button" id="pack-cancel">やめる</button>
+          <button type="button" id="pack-submit" class="primary">まとめる</button>
+        </div>
+      </dialog>
+
+      <dialog id="profile-dialog">
+        <form id="profile-form" method="dialog">
+          <h2 id="profile-dialog-title">キャラを登録</h2>
+          <label>名前<input id="profile-name" type="text" maxlength="120" required></label>
+          <label>説明（任意）<input id="profile-description" type="text" maxlength="1000"></label>
+          <div data-profile-kind="character">
+            <label>見た目<textarea id="profile-appearance" maxlength="2000" rows="3"
+              placeholder="髪や目の色、体格、年齢の印象など"></textarea></label>
+            <label>服装（任意）<input id="profile-clothing" type="text" maxlength="2000"></label>
+            <label>目印になる特徴（任意・読点区切り）
+              <input id="profile-features" type="text" maxlength="1000"></label>
+          </div>
+          <div data-profile-kind="style" hidden>
+            <label>画風<textarea id="profile-art-style" maxlength="2000" rows="3"
+              placeholder="水彩、セル画、厚塗りなど"></textarea></label>
+            <label>線（任意）<input id="profile-linework" type="text" maxlength="1000"></label>
+            <label>塗り（任意）<input id="profile-coloring" type="text" maxlength="1000"></label>
+          </div>
+          <p class="section-label">参照にする画像（任意・最大 4 枚）</p>
+          <p class="hint">選ぶと、その画像を参照として一緒に使います。</p>
+          <div id="profile-references" class="rows"></div>
+          <div id="profile-dialog-error" class="error" role="alert" hidden></div>
+          <div class="dialog-actions">
+            <button type="button" id="profile-cancel">やめる</button>
+            <button type="submit" id="profile-submit" class="primary">登録する</button>
           </div>
         </form>
       </dialog>

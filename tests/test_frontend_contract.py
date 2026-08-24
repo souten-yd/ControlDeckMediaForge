@@ -36,6 +36,11 @@ DOM_IDS = (
     "creative-simple", "domain-chips", "scene-framing", "scene-framing-summary",
     "creative-scene", "creative-pose", "creative-composition", "creative-camera", "creative-variation",
     "profile-choice", "character-profile", "style-profile", "profile-choice-note",
+    # G6 S4: 実装済みだが到達できなかった機能の入口
+    "model-choice", "model-choice-model", "model-choice-note",
+    "profile-add-character", "profile-add-style", "profile-list", "profile-dialog",
+    "profile-name", "profile-appearance", "profile-art-style", "profile-references",
+    "pack-section", "pack-profile", "pack-open", "pack-dialog", "pack-slots", "pack-progress",
     "reference-intelligence", "reference-focuses", "reference-analysis-summary",
     "reference-analysis-note",
     "composition-options", "composition-title", "composition-caption",
@@ -401,3 +406,39 @@ def test_library_cards_open_the_full_screen_viewer():
 def test_viewer_supports_touch_zoom():
     assert "pointerdown" in SCRIPT and "viewerZoom" in SCRIPT
     assert "touch-action: none" in STYLES
+
+
+# ── 到達性（G6 S4） ─────────────────────────────────────────────────────
+
+# backend にあるのに UI から呼ばれていなかった method。到達経路を消させない。
+REACHABLE_METHODS = (
+    "profiles.create",
+    "profiles.delete",
+    "reference_collections.create",
+    "jobs.create",
+)
+
+
+@pytest.mark.parametrize("method", REACHABLE_METHODS)
+def test_the_workspace_can_reach_the_method(method: str):
+    assert f'call("{method}"' in SCRIPT, f"{method} に到達する経路が無い"
+
+
+def test_asset_pack_slots_come_from_the_profile_document_not_from_the_ui():
+    """media 固有のスロット名を UI へ書き写さない。profile の宣言だけを根拠にする。"""
+    for slot in ("open_center", "sleepy_half", "smile_open"):
+        assert slot not in SCRIPT, f"{slot} が UI に直書きされている"
+    assert "profile.eye_slots" in SCRIPT or "eye_slots" in SCRIPT
+
+
+def test_model_choice_is_two_stage_and_reaches_every_policy_in_advanced_mode():
+    """段階開示で作り、機能削除で作らない。詳細から全 policy へ到達できること。"""
+    assert 'data-model-choice="auto"' in MARKUP
+    assert 'data-model-choice="manual"' in MARKUP
+    for policy in ("fast", "balanced", "quality", "low_vram", "manual"):
+        assert f'<option value="{policy}">' in MARKUP, f"{policy} へ到達できない"
+
+
+def test_an_automatic_model_choice_can_explain_itself():
+    assert "modelRouteText" in SCRIPT
+    assert "model_route" in SCRIPT

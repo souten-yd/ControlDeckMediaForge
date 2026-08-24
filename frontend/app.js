@@ -106,6 +106,8 @@ const state = {
   modelCatalog: [],
   modelOperations: new Map(),
   modelFilter: "installed",
+  modelChoice: "auto",
+  domainProfiles: [],
   modelManagementAvailable: false,
   modelEvaluationIds: new Set(),
   removeModelId: "",
@@ -226,6 +228,8 @@ async function standaloneCall(method, params) {
       const payload = await response.json().catch(() => ({}));
       throw payload.detail || {code: `http_${response.status}`};
     }
+    // 204 は本体を持たない。DELETE を成功として扱う。
+    if (response.status === 204) return {};
     return response.json();
   };
   if (method === "jobs.create") return json("/api/v1/jobs", {method: "POST", body: JSON.stringify(params)});
@@ -302,6 +306,21 @@ async function standaloneCall(method, params) {
   if (method === "preferences.set") return {values: {...state.preferences, ...params.values}};
   if (method === "profiles.list") return json("/api/v1/profiles");
   if (method === "reference_collections.list") return json("/api/v1/reference-collections");
+  if (method === "domain_profiles.list") return json("/api/v1/domain-profiles");
+  if (method === "profiles.create") {
+    return json("/api/v1/profiles", {method: "POST", body: JSON.stringify(params)});
+  }
+  if (method === "profiles.delete") {
+    await json(`/api/v1/profiles/${encodeURIComponent(params.profile_id)}`, {method: "DELETE"});
+    return {deleted: true};
+  }
+  if (method === "reference_collections.create") {
+    return json("/api/v1/reference-collections", {method: "POST", body: JSON.stringify(params)});
+  }
+  if (method === "reference_collections.delete") {
+    await json(`/api/v1/reference-collections/${encodeURIComponent(params.collection_id)}`, {method: "DELETE"});
+    return {deleted: true};
+  }
   if (method === "capabilities.get") {
     const document_ = await json("/api/v1/capabilities");
     const config = embeddedWorkspaceConfig();
@@ -347,6 +366,7 @@ async function standaloneCall(method, params) {
       part("capabilities", () => standaloneCall("capabilities.get", {})),
       part("profiles", () => standaloneCall("profiles.list", {})),
       part("reference_collections", () => standaloneCall("reference_collections.list", {})),
+      part("domain_profiles", () => standaloneCall("domain_profiles.list", {})),
       part("models", () => standaloneCall("models.list", {})),
       part("model_catalog", () => standaloneCall("models.catalog", {})),
       part("model_operations", () => standaloneCall("models.operations.list", {})),
@@ -380,6 +400,7 @@ function setMode(mode, {persist = true} = {}) {
   byId("mode-simple").setAttribute("aria-pressed", String(state.mode === "simple"));
   byId("mode-advanced").setAttribute("aria-pressed", String(state.mode === "advanced"));
   mountAdvanced();
+  renderPackProfiles();
   if (persist) void savePreferences({mode: state.mode});
 }
 
@@ -737,6 +758,301 @@ function renderProfileChoices() {
     : "登録済みのキャラ・画風はまだありません。";
   renderAdvancedReferenceRoles();
   renderReferenceIntelligence();
+  renderProfileList();
+}
+
+/* ── 配布用にまとめる（asset.pack） ──────────────────────────────────── */
+
+/* backend には asset.pack があるのに、画面から起動する経路が無かった。
+   スロットは profile が宣言しているので、その宣言だけを根拠に組む。
+   media 固有のスロット名をここに書き写さない。 */
+
+const pack = {profile: null, slots: [], assignments: new Map(), active: ""};
+
+function packSlots(profile) {
+  const slots = [];
+  for (const name of profile.base_names || []) slots.push({layer: "base", name});
+  for (const name of profile.eye_slots || []) slots.push({layer: "eyes", name});
+  for (const name of profile.mouth_slots || []) slots.push({layer: "mouth", name});
+  return slots;
+}
+
+const PACK_LAYER_LABEL = {base: "土台", eyes: "目", mouth: "口"};
+
+function slotKey(slot) {
+  return `${slot.layer}/${slot.name}`;
+}
+
+function renderPackProfiles() {
+  const select = byId("pack-profile");
+  const packs = state.domainProfiles.filter((profile) => packSlots(profile).length > 0);
+  byId("pack-section").hidden = state.mode !== "advanced" || packs.length === 0;
+  select.replaceChildren(...packs.map((profile) => {
+    const option = document.createElement("option");
+    option.value = profile.id;
+    option.textContent = profile.id;
+    return option;
+  }));
+  byId("pack-note").textContent = packs.length
+    ? `${packs.length} 種類のまとめ方が使えます。`
+    : "";
+}
+
+function renderPackSlots() {
+  const holder = byId("pack-slots");
+  holder.replaceChildren(...pack.slots.map((slot) => {
+    const key = slotKey(slot);
+    const row = document.createElement("article");
+    row.className = "row";
+    row.dataset.status = pack.assignments.has(key) ? "succeeded" : "queued";
+    const info = document.createElement("div");
+    const title = document.createElement("p");
+    title.className = "t";
+    title.textContent = `${PACK_LAYER_LABEL[slot.layer] || slot.layer} · ${slot.name}`;
+    const sub = document.createElement("p");
+    sub.className = "s";
+    sub.textContent = pack.assignments.get(key) || "未割り当て";
+    info.append(title, sub);
+    const side = document.createElement("div");
+    side.className = "row-side";
+    const choose = document.createElement("button");
+    choose.type = "button";
+    choose.dataset.packSlot = key;
+    choose.setAttribute("aria-pressed", String(pack.active === key));
+    choose.textContent = pack.active === key ? "選択中" : "選ぶ";
+    side.append(choose);
+    row.append(info, side);
+    return row;
+  }));
+  const done = pack.assignments.size;
+  byId("pack-progress").textContent = `${done}/${pack.slots.length} 割り当て済み`;
+}
+
+async function renderPackLibrary() {
+  const holder = byId("pack-library");
+  holder.replaceChildren();
+  let page;
+  try { page = await call("library.list", {limit: 60}); } catch { return; }
+  const strip = document.createElement("div");
+  strip.className = "strip";
+  for (const item of page.items || []) {
+    strip.append(await thumbnailButton(item.asset_id, () => {
+      if (!pack.active) return;
+      pack.assignments.set(pack.active, item.asset_id);
+      const next = pack.slots.find((slot) => !pack.assignments.has(slotKey(slot)));
+      pack.active = next ? slotKey(next) : "";
+      renderPackSlots();
+    }, item.thumbnail));
+  }
+  holder.append(strip);
+}
+
+async function openPackDialog() {
+  const profile = state.domainProfiles.find((item) => item.id === byId("pack-profile").value);
+  if (!profile) return;
+  pack.profile = profile;
+  pack.slots = packSlots(profile);
+  pack.assignments = new Map();
+  pack.active = pack.slots.length ? slotKey(pack.slots[0]) : "";
+  byId("pack-dialog-title").textContent = `配布用にまとめる · ${profile.id}`;
+  byId("pack-error").hidden = true;
+  byId("pack-name").value = "";
+  renderPackSlots();
+  byId("pack-dialog").showModal();
+  await renderPackLibrary();
+}
+
+async function submitPack() {
+  const error = byId("pack-error");
+  error.hidden = true;
+  const name = byId("pack-name").value.trim();
+  if (!name) {
+    error.hidden = false;
+    error.textContent = "まとめの名前を入れてください。";
+    return;
+  }
+  const missing = pack.slots.filter((slot) => !pack.assignments.has(slotKey(slot)));
+  if (missing.length) {
+    error.hidden = false;
+    error.textContent = `まだ ${missing.length} 個のスロットが空です。`;
+    return;
+  }
+  const entries = pack.slots.map((slot) => ({
+    asset_id: pack.assignments.get(slotKey(slot)), layer: slot.layer, name: slot.name,
+  }));
+  const seen = [...new Set(entries.map((entry) => entry.asset_id))];
+  try {
+    await call("jobs.create", {
+      operation: "asset.pack",
+      intent: `${pack.profile.id} を ${name} としてまとめる`,
+      profile: pack.profile.id,
+      inputs: seen.map((asset_id) => ({asset_id})),
+      constraints: {entries, pack_name: name},
+      output: {format: "zip", count: 1},
+      local_only: true,
+    });
+  } catch (failure) {
+    error.hidden = false;
+    error.textContent = failure?.message || "まとめられませんでした。";
+    return;
+  }
+  byId("pack-dialog").close();
+  activate("activity");
+  await loadActivity();
+}
+
+/* ── キャラ・画風の登録 ───────────────────────────────────────────────── */
+
+/* backend には profiles.create / reference_collections.create があるのに、
+   画面には「選ぶ」しか無く「作る」経路が無かった（G3 の UI が未着手）。
+   参照コレクションは profile と一体で作る。利用者に 2 段階を意識させない。 */
+
+const profileDraft = {kind: "character", assetIds: []};
+
+function renderProfileList() {
+  const list = byId("profile-list");
+  list.replaceChildren(...state.profiles.map((profile) => {
+    const row = document.createElement("article");
+    row.className = "row";
+    row.dataset.profileId = profile.id;
+    const info = document.createElement("div");
+    const title = document.createElement("p");
+    title.className = "t";
+    title.textContent = profile.name;
+    const sub = document.createElement("p");
+    sub.className = "s";
+    const collection = state.referenceCollections
+      .find((item) => item.id === profile.reference_collection_id);
+    sub.textContent = [
+      profile.kind === "character" ? "キャラ" : "画風",
+      collection ? `参照 ${collection.asset_ids.length} 枚` : "参照なし",
+      profile.description,
+    ].filter(Boolean).join(" · ");
+    info.append(title, sub);
+    const side = document.createElement("div");
+    side.className = "row-side";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.dataset.deleteProfile = profile.id;
+    remove.textContent = "削除";
+    side.append(remove);
+    row.append(info, side);
+    return row;
+  }));
+  byId("profile-empty").hidden = state.profiles.length > 0;
+}
+
+function openProfileDialog(kind) {
+  profileDraft.kind = kind;
+  profileDraft.assetIds = [];
+  byId("profile-dialog-title").textContent = kind === "character" ? "キャラを登録" : "画風を登録";
+  byId("profile-form").reset();
+  for (const holder of document.querySelectorAll("[data-profile-kind]")) {
+    holder.hidden = holder.dataset.profileKind !== kind;
+  }
+  byId("profile-dialog-error").hidden = true;
+  void renderProfileReferencePicker();
+  byId("profile-dialog").showModal();
+}
+
+async function renderProfileReferencePicker() {
+  const holder = byId("profile-references");
+  holder.replaceChildren();
+  let page;
+  try { page = await call("library.list", {limit: 24}); } catch { return; }
+  const strip = document.createElement("div");
+  strip.className = "strip";
+  for (const item of page.items || []) {
+    const button = await thumbnailButton(item.asset_id, () => {
+      const index = profileDraft.assetIds.indexOf(item.asset_id);
+      if (index >= 0) profileDraft.assetIds.splice(index, 1);
+      else if (profileDraft.assetIds.length < 4) profileDraft.assetIds.push(item.asset_id);
+      button.setAttribute("aria-pressed", String(profileDraft.assetIds.includes(item.asset_id)));
+    }, item.thumbnail);
+    button.setAttribute("aria-pressed", "false");
+    strip.append(button);
+  }
+  holder.append(strip);
+  if (!(page.items || []).length) {
+    const note = document.createElement("p");
+    note.className = "hint";
+    note.textContent = "参照に使える画像がまだありません。";
+    holder.append(note);
+  }
+}
+
+function splitTraits(value) {
+  return String(value || "").split(/[、,]/).map((item) => item.trim()).filter(Boolean).slice(0, 16);
+}
+
+function profileDefinition() {
+  if (profileDraft.kind === "character") {
+    return {character: {
+      appearance: byId("profile-appearance").value.trim(),
+      clothing: byId("profile-clothing").value.trim(),
+      distinguishing_features: splitTraits(byId("profile-features").value),
+    }};
+  }
+  return {style: {
+    art_style: byId("profile-art-style").value.trim(),
+    linework: byId("profile-linework").value.trim(),
+    coloring: byId("profile-coloring").value.trim(),
+  }};
+}
+
+async function submitProfile(event) {
+  event.preventDefault();
+  const error = byId("profile-dialog-error");
+  error.hidden = true;
+  const name = byId("profile-name").value.trim();
+  const definition = profileDefinition();
+  const required = profileDraft.kind === "character"
+    ? definition.character.appearance : definition.style.art_style;
+  if (!name || !required) {
+    error.hidden = false;
+    error.textContent = profileDraft.kind === "character"
+      ? "名前と見た目を入れてください。" : "名前と画風を入れてください。";
+    return;
+  }
+  try {
+    let collectionId = null;
+    if (profileDraft.assetIds.length) {
+      const collection = await call("reference_collections.create", {
+        name: `${name} の参照`,
+        asset_ids: profileDraft.assetIds,
+      });
+      collectionId = collection.id;
+    }
+    await call("profiles.create", {
+      kind: profileDraft.kind,
+      name,
+      description: byId("profile-description").value.trim(),
+      ...(collectionId ? {reference_collection_id: collectionId} : {}),
+      ...definition,
+    });
+  } catch (failure) {
+    error.hidden = false;
+    error.textContent = failure?.message || "登録できませんでした。";
+    return;
+  }
+  byId("profile-dialog").close();
+  // 一覧と選択肢はサーバの session.changed が運ぶが、操作直後は待たせない。
+  await refreshSession(["profiles", "reference_collections"]);
+}
+
+async function deleteProfile(profileId) {
+  const failure = byId("profile-error");
+  failure.hidden = true;
+  try {
+    await call("profiles.delete", {profile_id: profileId});
+  } catch (error) {
+    failure.hidden = false;
+    failure.textContent = error?.message || "削除できませんでした。";
+    return;
+  }
+  if (state.characterProfileId === profileId) state.characterProfileId = "";
+  if (state.styleProfileId === profileId) state.styleProfileId = "";
+  await refreshSession(["profiles", "reference_collections"]);
 }
 
 function referenceTarget() {
@@ -1279,6 +1595,10 @@ function requestProblem(constraints) {
     return "複数カットは2〜4枚を選んでください。";
   }
 
+  if (state.modelChoice === "manual" && !byId("model-choice-model").value) {
+    return "使うモデルを選んでください。";
+  }
+
   if (state.mode === "advanced" && byId("advanced-policy")) {
     if (byId("advanced-policy").value === "manual" && !byId("advanced-model").value) {
       return "manual を選んだときはモデルを指定してください。";
@@ -1473,11 +1793,46 @@ function qaOptions() {
   };
 }
 
+/* モデルは「おまかせ」と「指定する」の 2 段で出す。詳細モードでは
+   fast / balanced / quality / low_vram まで到達できる。段階開示で作り、
+   機能削除では作らない。 */
 function modelSelection() {
+  if (state.modelChoice === "manual") {
+    const modelId = byId("model-choice-model").value;
+    return modelId ? {model_policy: "manual", model_id: modelId} : {};
+  }
   if (state.mode !== "advanced" || !byId("advanced-policy")) return {};
   const policy = byId("advanced-policy").value;
   if (policy !== "manual") return {model_policy: policy};
-  return {model_policy: "manual", model_id: byId("advanced-model").value};
+  const modelId = byId("advanced-model").value;
+  return modelId ? {model_policy: "manual", model_id: modelId} : {};
+}
+
+function renderModelChoice() {
+  const manual = state.modelChoice === "manual";
+  for (const chip of document.querySelectorAll("[data-model-choice]")) {
+    chip.setAttribute("aria-checked", String(chip.dataset.modelChoice === state.modelChoice));
+  }
+  const row = byId("model-choice-row");
+  const select = byId("model-choice-model");
+  const usableModels = state.modelCatalog.filter((model) => model.installed && model.healthy);
+  const previous = select.value;
+  select.replaceChildren(...usableModels.map((model) => {
+    const option = document.createElement("option");
+    option.value = model.model_id;
+    option.textContent = model.display_name || model.model_id;
+    return option;
+  }));
+  if (usableModels.some((model) => model.model_id === previous)) select.value = previous;
+  row.hidden = !manual;
+  const note = byId("model-choice-note");
+  if (!usableModels.length) {
+    note.textContent = "使えるモデルがまだありません。設定から導入してください。";
+    return;
+  }
+  note.textContent = manual
+    ? "指定したモデルだけを使います。"
+    : `シーンに合うモデルを ${usableModels.length} 件から自動で選びます。`;
 }
 
 /* standalone には push が無いので、そこだけ従来どおり問い合わせる。
@@ -2221,6 +2576,24 @@ async function openViewer(assetId, item) {
   }
 }
 
+/* 自動で選んだときこそ根拠が要る。選ばれた理由が見えないと利用者は
+   毎回 manual にするしかなくなる。 */
+const MODEL_POLICY_TEXT = {
+  auto: "おまかせ", fast: "速さ優先", balanced: "つり合い",
+  quality: "品質優先", low_vram: "省メモリ", manual: "指定",
+};
+
+function modelRouteText(route) {
+  if (!route) return "記録なし";
+  if (route.policy === "manual") return "指定したモデルを使いました。";
+  const policy = MODEL_POLICY_TEXT[route.policy] || route.policy;
+  const scene = route.domain && route.domain !== "general" ? `シーン「${route.domain}」` : "シーン指定なし";
+  const matched = route.domain_matched
+    ? `${scene}に合うモデル`
+    : `${scene}に合うモデルが無かったため、使えるモデル`;
+  return `${matched} ${route.candidate_count} 件から${policy}で選びました。`;
+}
+
 async function openDetail(assetId) {
   const body = byId("detail-body");
   byId("detail-title").textContent = "詳細";
@@ -2231,6 +2604,8 @@ async function openDetail(assetId) {
     summary.className = "facts";
     const rows = [
       ["作った指示", provenance.intent],
+      ["使ったモデル", provenance.model_id || "記録なし"],
+      ["選んだ理由", modelRouteText(provenance.parameters?.model_route)],
       ["元になった素材", provenance.parent_asset_ids.length ? provenance.parent_asset_ids.join(", ") : "なし"],
       ["ライセンス", provenance.license],
       ["検証", provenance.validation.length ? JSON.stringify(provenance.validation) : "記録なし"],
@@ -3132,6 +3507,34 @@ function jobById(id) {
   return state.jobs.find((item) => item.id === id) || null;
 }
 
+byId("pack-open").addEventListener("click", () => void openPackDialog());
+byId("pack-close").addEventListener("click", () => byId("pack-dialog").close());
+byId("pack-cancel").addEventListener("click", () => byId("pack-dialog").close());
+byId("pack-submit").addEventListener("click", () => void submitPack());
+byId("pack-slots").addEventListener("click", (event) => {
+  const choose = event.target.closest("[data-pack-slot]");
+  if (!choose) return;
+  pack.active = choose.dataset.packSlot;
+  renderPackSlots();
+});
+
+byId("model-choice").addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-model-choice]");
+  if (!chip) return;
+  state.modelChoice = chip.dataset.modelChoice;
+  renderModelChoice();
+  clearError();
+});
+
+byId("profile-add-character").addEventListener("click", () => openProfileDialog("character"));
+byId("profile-add-style").addEventListener("click", () => openProfileDialog("style"));
+byId("profile-cancel").addEventListener("click", () => byId("profile-dialog").close());
+byId("profile-form").addEventListener("submit", submitProfile);
+byId("profile-list").addEventListener("click", (event) => {
+  const remove = event.target.closest("[data-delete-profile]");
+  if (remove) void deleteProfile(remove.dataset.deleteProfile);
+});
+
 byId("activity-empty").addEventListener("click", (event) => {
   if (event.target.closest("[data-retry-activity]")) void loadActivity();
 });
@@ -3303,6 +3706,7 @@ function applySessionParts(snapshot) {
   if (usable(snapshot.reference_collections)) {
     state.referenceCollections = snapshot.reference_collections.items || [];
   }
+  if (usable(snapshot.domain_profiles)) state.domainProfiles = snapshot.domain_profiles.items || [];
   if (usable(snapshot.creative_batches)) state.batches = snapshot.creative_batches.items || [];
   if (usable(snapshot.jobs)) state.jobs = snapshot.jobs.items || [];
 }
@@ -3326,6 +3730,7 @@ function applyModelSession(snapshot) {
     renderModelManagement();
     renderModelMiniProgress();
     renderAdvancedModelChoices();
+    renderModelChoice();
   }
   if (usable(snapshot.models)) applyEstimate(snapshot.models.items || []);
 }
@@ -3404,6 +3809,7 @@ async function boot() {
   renderCreative();
   renderDirectorControl();
   renderProfileChoices();
+  renderPackProfiles();
   renderPresets();
   renderCounts();
   renderLibraryKinds();

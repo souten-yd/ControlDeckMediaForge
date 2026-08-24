@@ -3036,3 +3036,86 @@ broker 受理が `queued` のまま止まることを実測で切り分けた。
 
 NOT TESTED: 実機での「LLM 常駐 -> 解放 -> 画像生成」通し。ControlDeck PR #238 を
 入れてから rocm-smi の VRAM 推移込みで 1 度に実測する。
+
+## G6 S4/S5 — 到達性とモデル選択（2026-08-24）
+
+backend の /ws method 48 件と frontend の呼び出しを突き合わせ、実装済みだが
+GUI から到達できない機能を洗い出した。
+
+```text
+到達できなかった
+  profiles.create / profiles.delete            G3 一貫性プロファイル（PR-U6 未着手）
+  reference_collections.create / .delete       参照コレクション
+  asset.pack                                   G5 M5 companion pack
+  creative.prompt_recipe                       H3 版固定 prompt recipe
+  assets.list                                  library.list が上位互換
+  jobs.unwatch / models.operations.unwatch     内部用。UI 機能ではない
+```
+
+### 追加した入口
+
+```text
+キャラ・画風の登録   設定画面に作成・削除を追加した
+                     参照コレクションは profile と一体で作る
+                     （利用者に 2 段階を意識させない）
+配布用にまとめる     詳細モードから asset.pack を起動できるようにした
+                     スロットは profile の宣言だけを根拠に組む
+                     media 固有のスロット名を UI へ書き写さない
+使うモデル           おまかせ / 指定する の 2 段。詳細モードで
+                     fast / balanced / quality / low_vram / manual へ到達できる
+選んだ理由           provenance の parameters.model_route から日本語で出す
+```
+
+### 出さなかったもの（理由付き）
+
+```text
+creative.prompt_recipe   H3 は experimental / healthy=no / unroutable のまま。
+                         完了できない機能を GUI に出さない。
+                         H3 の条件が改善したときに同じ PR で出す。
+media.inspect            operation としては未実装（G0 から capability_unavailable）。
+                         「実装済みだが到達できない」ではないため入口を作らない。
+                         agent 用 /addon/v1/agent/inspect は provenance 参照であり、
+                         workspace では assets.provenance から既に到達できる。
+assets.list              library.list が上位互換。二重の入口を作らない。
+```
+
+### domain 対応 routing
+
+catalog は各モデルに `domains` を持っていたのに routing が使っていなかった。
+`route()` が domain 一致を policy_rank より前段の候補絞りに使うようにした。
+一致 0 件なら全候補へ落とす（シーンを選んだだけで使えるモデルが消えない）。
+明示指定は自動判断より強く、domain で上書きしない。
+
+### 実ブラウザでの到達確認（読み取り + 実操作）
+
+```text
+model_choice_visible                     true
+model_choice_manual_reveals_select       true
+profile_add_buttons                      true
+profile_dialog_open / character_fields   true / true
+pack_hidden_in_simple                    true
+pack_visible_in_advanced                 true
+pack_profiles                            ["m5.companion.pack"]
+pack_slot_rows                           21   （base 1 + eyes 12 + mouth 8）
+pack_progress                            "0/21 割り当て済み"
+page_errors                              []
+```
+
+キャラ登録の往復も実操作で確認した。
+
+```text
+character_options_before                 1（「使わない」のみ）
+作成後 profile_rows                      1   "オレンジの子"
+作成後 character_options                 ["使わない", "オレンジの子"]
+削除後 profile_rows                      0
+削除後 character_options                 1
+page_errors                              []
+```
+
+```text
+./mf.sh test                 387 passed
+ux_standalone_e2e.py         PASSED / console errors 0
+boot ready                   0.081 秒 / 要求 15 件（機能追加後も退行なし）
+```
+
+NOT TESTED: installed ControlDeck の埋め込み iframe での操作。

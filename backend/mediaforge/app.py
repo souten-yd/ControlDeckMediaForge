@@ -1510,6 +1510,7 @@ def create_app(
         "capabilities",
         "profiles",
         "reference_collections",
+        "domain_profiles",
         "models",
         "model_catalog",
         "model_operations",
@@ -1576,6 +1577,7 @@ def create_app(
             "reference_collections": lambda: {"items": [
                 item.model_dump(mode="json") for item in store.list_reference_collections()
             ]},
+            "domain_profiles": lambda: {"items": m5_profile_documents()},
             "models": model_catalog,
             "model_catalog": model_catalog_part,
             "model_operations": lambda: {"items": [
