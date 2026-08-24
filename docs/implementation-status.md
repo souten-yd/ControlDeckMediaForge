@@ -3214,3 +3214,84 @@ ux_standalone_e2e.py         PASSED / console errors 0
 
 NOT TESTED: 追加したモデルの実ダウンロードと `models.evaluate` の実測。
 共通 adapter が無い状態で実行しても生成の証拠にならないため、別スライスへ送る。
+
+## G6 S3 実機検証 — LLM 常駐 / 解放 / 復帰（2026-08-24）
+
+ControlDeck を `infra/addon-ai-explicit-release` ブランチのまま再起動して実測した。
+
+```text
+経路の存在      POST /api/v1/addon-runtime/media-forge/ai/release
+                無効 token -> 401（404 ではない = 配線済み）
+runtime policy  llama.cpp / supervision=observed / gateway_only=true / yield_max=4
+対象            Qwen3.8-27B-UD-Q4_K_M + mmproj-BF16 / ctx 262144 / n_gpu_layers 999
+GPU             R9700 34,208,743,424 バイト
+```
+
+### ❷ の根本原因が数値で確定した
+
+```text
+LLM 常駐時の VRAM   59,912,192 -> 31,555,141,632（+31,495,229,440）
+```
+
+**34.2GB の GPU のうち 31.5GB を LLM が占有する。** FLUX.2 Klein 4B の
+実行 peak は 29,625,200,640 バイトなので、常駐したままでは絶対に入らない。
+`supervision=observed` では broker が降ろさないため、待っても解消しない。
+
+### 解放の実測
+
+```text
+実行中の要求がある間   released=False reason=drain_timeout（120.058 秒待って拒否）
+使用が終わったあと     released=True  reason=released  0.737 秒
+                       VRAM 31,555,141,632 -> 59,912,192（全量返却）
+推論を 1 回通した直後  released=True  reason=released  2.380 秒
+```
+
+### ❽ OpenCode 経由の生成（利用者指摘 2026-08-24）
+
+**最初の設計では成立しなかった。** 実測で判明した。
+
+```text
+integrations/opencode/settings.json  base_url = .../api/v1/llm/v1  use_gateway = true
+resolve_backend_port()               8096（LLM の実ポートと一致する）
+-> _opencode_session_uses は活動中の OpenCode セッションに True を返し続ける
+-> 解放は常に opencode_active で拒否される
+-> OpenCode から add-on へ生成を頼む経路が、この機能が必要な場面でだけ死ぬ
+```
+
+明示解放が idle unload の 30 分窓を引き継いでいたのが誤りだった。idle loop が
+「最近誰か触ったか」を見るのは**誰も要求していない**からで、その場合は暖めた
+まま保つのが安全側になる。明示解放は逆で、**要求した側が今その VRAM を必要と
+している**。実行中の推論を切らない保証は drain 側が持ち、降ろしたものは
+`ensure_ready` で自動復帰する。
+
+修正後、OpenCode セッションが活動中に見える状態を再現して測り直した。
+
+```text
+load              4.040 秒   VRAM 59,912,192 -> 31,555,141,632
+旧判定            _opencode_session_uses = True   （これを見ていたら解放できない）
+新判定            release_reason = ""             （解放可）
+解放要求          released=True reason=released 0.356 秒
+                  VRAM 31,555,141,632 -> 59,912,192（-31,495,229,440 全量返却）
+次の turn の復帰   ok=True 5.836 秒（ensure_ready による自動復帰）
+後片付け          VRAM 59,912,192（測定前と同じ）
+```
+
+残る保証は変えていない。
+
+```text
+実行中の推論を切らない      drain（実測 drain_timeout で拒否）
+streaming 中は降ろさない    _has_connected_clients
+運用者の明示除外            idle_exclude
+embedding / reranker        role で対象外
+```
+
+`freed_bytes` は降ろしたモデルファイルの大きさである。実際に空く VRAM は
+KV cache を含むため大きい（16,464,440,224 に対し 31,495,229,440）。
+
+```text
+ControlDeck backend pytest -q   764 passed, 1 skipped（57.66 秒）
+```
+
+NOT TESTED: Media Forge 側を実 add-on として動かした「analyze -> release_ai ->
+generate」の通し。installed feature は v0.5.1（旧 core）のままであり、
+本 PR の core を bundle 化して入れ替えるまで実行しない。
