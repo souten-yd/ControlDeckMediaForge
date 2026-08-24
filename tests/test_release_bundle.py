@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -102,3 +103,22 @@ def test_bundle_ships_what_the_worker_imports():
     missing = local - shipped
     assert not missing, f"worker が import するのに bundle へ入っていない: {sorted(missing)}"
     assert "mediaforge" not in shipped, "core source must not be shipped for the worker"
+
+
+def test_the_bundle_refuses_to_ship_two_different_versions():
+    """--version が addon.json を黙って上書きしていた。束ねた manifest と、
+    同じ束の中の mediaforge.__version__ が別の版を名乗り、ControlDeck の
+    一覧に出ている版と実際に動いている版が食い違う原因になる。"""
+    import re
+
+    root = Path(__file__).parents[1]
+    script = (root / "scripts" / "build_release_bundle.py").read_text(encoding="utf-8")
+    assert "version mismatch" in script, "版の食い違いを素通りさせている"
+    assert 'addon["version"] = args.version' not in script
+
+    packaged = re.search(
+        r'__version__ = "([^"]+)"',
+        (root / "backend" / "mediaforge" / "__init__.py").read_text(encoding="utf-8"),
+    ).group(1)
+    addon = json.loads((root / "addon.json").read_text(encoding="utf-8"))
+    assert addon["version"] == packaged
