@@ -58,8 +58,10 @@ class Reviewer:
         creative_plan: dict,
         reference_paths: tuple[Path, ...] = (),
         identity=None,
+        brief=None,
+        resolved_layout=None,
     ) -> EvaluatedCandidate:
-        del identity, reference_paths, intent, creative_plan
+        del identity, reference_paths, intent, creative_plan, brief, resolved_layout
         self.calls.append(path)
         accepted = self.decisions.popleft()
         return EvaluatedCandidate(

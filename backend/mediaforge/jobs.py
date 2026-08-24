@@ -33,6 +33,7 @@ from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .profiles import profile_prompt
 from .asset_brief import (
+    AssetBrief,
     AssetBriefError,
     BriefDefect,
     ResolvedLayout,
@@ -1391,6 +1392,27 @@ class JobManager:
         return result
 
     @staticmethod
+    def _brief_context(job: Job) -> tuple[AssetBrief | None, ResolvedLayout | None]:
+        """The brief this job was resolved against, for defect checks and evaluation."""
+        try:
+            brief = parse_brief(job.request.constraints.get("asset_brief"))
+        except AssetBriefError:
+            logger.warning("job %s carries an unreadable asset_brief", job.id)
+            return None, None
+        if brief is None:
+            brief = infer_brief_from_intent(job.request.intent)
+        recorded = job.request.constraints.get("resolved_layout")
+        if brief is None or not isinstance(recorded, dict):
+            return brief, None
+        return brief, ResolvedLayout(
+            width=int(recorded.get("width", 0)),
+            height=int(recorded.get("height", 0)),
+            alpha=bool(recorded.get("alpha", False)),
+            source=str(recorded.get("source", "")),
+            aspect_ratio=str(recorded.get("aspect_ratio", "")),
+        )
+
+    @staticmethod
     def _brief_defects(
         job: Job, width: int, height: int, validation: list[dict[str, Any]]
     ) -> list[BriefDefect]:
@@ -1495,6 +1517,8 @@ class JobManager:
         creative_plan = job.request.constraints.get("creative_plan", {})
         if not isinstance(creative_plan, dict):
             creative_plan = {}
+        # 用途が分かっているなら、単体の美しさではなく用途への適合を訊く。
+        brief, resolved_layout = self._brief_context(job)
         selected: list[int] = []
         reviews: dict[int, tuple[dict[str, Any], list[str], str]] = {}
         rejected = 0
@@ -1507,6 +1531,8 @@ class JobManager:
                     creative_plan=creative_plan,
                     reference_paths=reference_paths,
                     identity=identity,
+                    brief=brief,
+                    resolved_layout=resolved_layout,
                 )
             except CreativeEvaluationError as exc:
                 selected.extend(
