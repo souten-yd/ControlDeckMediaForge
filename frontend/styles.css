@@ -581,6 +581,21 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
 .facts div { display: grid; grid-template-columns: minmax(140px, 1fr) 2fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .facts dt { font-size: .82rem; font-weight: 600; }
 .facts dd { margin: 0; font-size: .82rem; color: var(--muted); }
+/* grid track の既定 min-width は auto。model ID のような切れ目の無い値が
+   track を押し広げ、値が画面の外へ出ていた。折り返す許可も要る。 */
+.facts dt, .facts dd { min-width: 0; overflow-wrap: anywhere; }
+.facts dd { text-align: right; }
+
+.checks { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: flex-end; }
+.check { white-space: nowrap; }
+.check.ok { color: var(--accent); }
+.check.bad { color: var(--danger); }
+
+@media (max-width: 560px) {
+  /* 140px の見出し列は狭い画面の半分近くを占める。上下に積む。 */
+  .facts div { grid-template-columns: 1fr; gap: 4px; }
+  .facts dd, .checks { text-align: left; justify-content: flex-start; }
+}
 
 .model-management-head {
   display: flex;

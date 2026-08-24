@@ -53,7 +53,7 @@ DOM_IDS = (
     "composition-options", "composition-title", "composition-caption",
     "composition-text-edit", "composition-edit-title", "composition-edit-caption",
     "composition-update-text", "composition-edit-status",
-    "create-error", "create-estimate",
+    "create-error",
     "mask-input", "mask-draw", "mask-preview", "mask-state",
     "mask-dialog", "mask-canvas", "mask-brush", "mask-eraser", "mask-undo", "mask-clear",
     "mask-apply", "mask-cancel",
@@ -222,10 +222,25 @@ def capability_names() -> set[str]:
 OPERATIONS = {"image.generate", "image.edit", "media.inspect", "asset.pack"}
 
 
+def validator_names() -> set[str]:
+    """検証の記録名も image.* の形をしている。capability と混ぜて数えない。
+
+    固定表ではなく backend が実際に出している名前を読む。UI が存在しない
+    validator を訳している場合は、そちらを別の test が捕まえる。
+    """
+    names: set[str] = set()
+    for path in sorted(BACKEND.glob("*.py")):
+        names.update(re.findall(
+            r'"validator":\s*"([a-z_0-9.]+)"', path.read_text(encoding="utf-8")
+        ))
+    return names
+
+
 def test_every_capability_the_ui_reads_is_emitted_by_the_backend():
     emitted = capability_names()
     assert emitted, "capability document を読み取れなかった"
-    used = set(re.findall(r'"((?:image|video|3d)\.[a-z_0-9]+)"', SCRIPT)) - OPERATIONS
+    used = set(re.findall(r'"((?:image|video|3d)\.[a-z_0-9]+)"', SCRIPT))
+    used -= OPERATIONS | validator_names()
     assert used, "UI が capability 名を参照していない"
     assert used <= emitted, f"backend が出さない capability を UI が参照している: {sorted(used - emitted)}"
 
@@ -809,3 +824,31 @@ def test_registering_characters_and_styles_is_its_own_section():
     assert settings.index('class="settings-section"') < settings.index("キャラ・画風の登録")
     assert MARKUP.index('id="model-downloads-block"') < MARKUP.index("キャラ・画風の登録")
     assert ".settings-section {" in STYLES
+
+
+def test_the_detail_dialog_translates_the_validation_record():
+    """JSON の塊をそのまま出していた。読む人が知りたいのは通否だけである。"""
+    assert "JSON.stringify(provenance.validation)" not in SCRIPT
+    body = SCRIPT[SCRIPT.index("function validationList"):SCRIPT.index("async function openDetail")]
+    # 記録は status: "passed" と passed: true の二通りある。どちらも読む
+    assert 'record?.status ? record.status === "passed" : record?.passed === true' in body
+    labels = SCRIPT[SCRIPT.index("const VALIDATOR_LABEL"):SCRIPT.index("function validationList")]
+    for name in validator_names():
+        assert f'"{name}"' in labels, f"{name} に日本語が無い"
+
+
+def test_a_long_value_cannot_push_the_detail_dialog_off_screen():
+    """grid track の既定 min-width は auto。model ID が track を押し広げていた。"""
+    assert ".facts dt, .facts dd { min-width: 0; overflow-wrap: anywhere; }" in STYLES
+    narrow = STYLES[STYLES.index("@media (max-width: 560px) {"):]
+    assert ".facts div { grid-template-columns: 1fr;" in narrow[:narrow.index("\n}")]
+
+
+def test_the_create_form_does_not_explain_itself_before_the_button():
+    """押す前に所要時間を書いても、押すかどうかは変わらない。待っている最中に
+    出しても、当たらない秒数は不安にしかならない。経過時間だけ出す。"""
+    assert 'id="create-estimate"' not in MARKUP
+    assert "2 回目以降は短くなります" not in SCRIPT
+    assert "次の段階で入ります" not in SCRIPT
+    assert "estimateSec" not in SCRIPT and "applyEstimate" not in SCRIPT
+    assert "elapsedText(job)" in SCRIPT, "経過時間まで消している"

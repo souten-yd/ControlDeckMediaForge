@@ -86,7 +86,6 @@ const state = {
   maskPainted: 0,
   outpaintRatio: "source",
   outpaintScale: 1.5,
-  estimateSec: null,
   activeJob: "",
   activeBatch: "",
   activeComposition: "",
@@ -2280,11 +2279,9 @@ function showProgress(job) {
     bar.style.width = unknown ? "" : `${percent}%`;
   }
   const elapsed = elapsedText(job);
-  const estimate = unknown && state.estimateSec
-    ? `目安 約 ${Math.round(state.estimateSec)} 秒（実測）` : "";
   byId("progress-detail").textContent = state.mode === "advanced"
     ? `${job.status} · ${unknown ? "所要不明" : `${percent}%`} · ${job.phase || "-"} · ${elapsed} · ${job.id}`
-    : [unknown ? elapsed : `${percent}%`, estimate].filter(Boolean).join(" · ");
+    : unknown ? elapsed : `${percent}%`;
   updateActivityBadge(running ? 1 : 0);
 }
 
@@ -3051,6 +3048,37 @@ async function saveAsset(assetId) {
   }
 }
 
+/* 検証の記録は、そのまま出すと JSON の塊が 1 行に並ぶ。読む人が知りたいのは
+   「何を見て、通ったのか」だけである。名前を訳し、通否だけを添える。 */
+const VALIDATOR_LABEL = {
+  "image.non_empty": "中身がある",
+  "image.dimensions": "大きさ",
+  "image.mode": "形式",
+  "image.alpha": "透過",
+  "image.outpaint.source_pixel_diff": "元の絵が変わっていない",
+  "image.strict_edit.unmasked_pixel_diff": "塗った所だけ変わっている",
+  "evaluation.unified": "内容の確認",
+  "m5.companion.profile": "機種の設定",
+  "m5.companion.edit_mask": "編集範囲",
+  "m5.companion.pack": "同梱物",
+};
+
+function validationList(validation) {
+  const holder = document.createElement("div");
+  holder.className = "checks";
+  for (const record of validation) {
+    // 記録は status: "passed" と passed: true の二通りある。どちらも読む。
+    const passed = record?.status ? record.status === "passed" : record?.passed === true;
+    const item = document.createElement("span");
+    item.className = passed ? "check ok" : "check bad";
+    item.textContent = `${passed ? "✓" : "✕"} ${
+      VALIDATOR_LABEL[record?.validator] || record?.validator || "不明"}`;
+    if (record?.reason) item.title = String(record.reason);
+    holder.append(item);
+  }
+  return holder;
+}
+
 async function openDetail(assetId) {
   const body = byId("detail-body");
   byId("detail-title").textContent = "詳細";
@@ -3065,14 +3093,16 @@ async function openDetail(assetId) {
       ["選んだ理由", modelRouteText(provenance.parameters?.model_route)],
       ["元になった素材", provenance.parent_asset_ids.length ? provenance.parent_asset_ids.join(", ") : "なし"],
       ["ライセンス", provenance.license],
-      ["検証", provenance.validation.length ? JSON.stringify(provenance.validation) : "記録なし"],
+      ["検証", provenance.validation.length
+        ? validationList(provenance.validation) : "記録なし"],
     ];
     for (const [term, value] of rows) {
       const wrap = document.createElement("div");
       const dt = document.createElement("dt");
       dt.textContent = term;
       const dd = document.createElement("dd");
-      dd.textContent = String(value);
+      if (value instanceof Node) dd.append(value);
+      else dd.textContent = String(value);
       wrap.append(dt, dd);
       summary.append(wrap);
     }
@@ -4250,8 +4280,7 @@ byId("viewer-detail").addEventListener("click", () => {
 byId("viewer-edit").addEventListener("click", () => {
   byId("viewer").close();
   activate("create");
-  byId("create-status").textContent =
-    "編集したい画像を「画像を追加」から読み込ませてください。書き出しからの直接編集は次の段階で入ります。";
+  byId("create-status").textContent = "「画像を追加」から読み込ませてください。";
 });
 
 const viewerStage = byId("viewer-stage");
@@ -4433,20 +4462,6 @@ function applyModelSession(snapshot) {
     renderAdvancedModelChoices();
     renderModelChoice();
   }
-  if (usable(snapshot.models)) applyEstimate(snapshot.models.items || []);
-}
-
-function applyEstimate(models) {
-  const node = byId("create-estimate");
-  node.textContent = "";
-  const measured = models
-    .filter((model) => model.installed && model.healthy && model.measurement_confidence === "measured")
-    .map((model) => model.measured_runtime_sec)
-    .filter((value) => typeof value === "number" && value > 0);
-  if (!measured.length) return;
-  state.estimateSec = Math.min(...measured);
-  node.textContent =
-    `初回は約 ${Math.round(state.estimateSec)} 秒（モデルの読み込みを含む実測）。2 回目以降は短くなります。`;
 }
 
 async function applyRecent(page) {
