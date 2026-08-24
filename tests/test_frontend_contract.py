@@ -44,6 +44,8 @@ DOM_IDS = (
     "custom-repo", "custom-revision", "custom-resolve", "custom-result", "custom-error",
     # UX3: 書き出し導線と、重複を解消した詳細設定
     "viewer-save", "viewer-save-note",
+    "catalog-query", "catalog-sort", "catalog-pipeline", "catalog-search",
+    "catalog-results", "catalog-empty", "custom-manual",
     "reference-intelligence", "reference-focuses", "reference-analysis-summary",
     "reference-analysis-note",
     "composition-options", "composition-title", "composition-caption",
@@ -542,3 +544,29 @@ def test_the_shell_uses_drawn_icons_rather_than_bare_text_tabs():
 
 def test_reduced_motion_users_do_not_get_a_looping_bar():
     assert "prefers-reduced-motion: reduce" in STYLES
+
+
+def test_models_can_be_found_by_searching_rather_than_by_knowing_the_id():
+    """repository ID の手入力だけでは、名前を既に知っている人にしか使えない。"""
+    assert 'call("models.custom.search"' in SCRIPT
+    for sort in ("downloads", "likes", "lastModified", "createdAt"):
+        assert f'value="{sort}"' in MARKUP
+
+
+def test_search_results_never_install_without_the_confirmation_step():
+    """探せることと入れてよいことは別。表から直接は取り込ませない。"""
+    handler = SCRIPT[SCRIPT.index('byId("catalog-results").addEventListener'):][:600]
+
+    assert "resolveCustomModel()" in handler
+    assert 'call("models.custom.add"' not in handler
+
+
+def test_already_installed_models_are_marked_in_the_results():
+    assert "already_added" in SCRIPT
+    assert "追加済み" in SCRIPT
+
+
+def test_the_table_keeps_numbers_comparable():
+    """桁が揃わない表は比較に使えない。"""
+    assert "tabular-nums" in STYLES
+    assert "table.catalog" in STYLES

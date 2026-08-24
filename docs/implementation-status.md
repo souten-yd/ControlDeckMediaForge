@@ -3976,3 +3976,81 @@ postprocess  0.65
 ```
 
 NOT TESTED: 実 ControlDeck 埋め込みでの見え方（ホストのタブバーとの重なり）。
+
+## SD 系共通 adapter と、配布元の検索カタログ（2026-08-24）
+
+### 系統ごとの薄い adapter（利用者質問への実装での回答）
+
+「Flux 系と Stable Diffusion 系で個別のローダー開発が必要か」への回答を実装で示した。
+**要るが、モデルごとに 1 から書くのではなく系統ごとの薄い adapter である。**
+
+```text
+worker_packs/image/adapters/
+  base.py            ImageAdapter Protocol（generate / edit）
+  diffusers_flux2.py FLUX.2 用。pipeline class と参照編集の意味論が固有
+  diffusers_sd.py    SD 1.5 / SDXL / SD 3 共通（新規）
+  native.py          Diffusers を使えない runtime 用の口（未実装）
+```
+
+SD 系が 1 個で足りるのは、Diffusers の `AutoPipelineForText2Image` が
+pipeline class の解決を既に引き受けているためである。実際に系統固有なのは
+次の 4 点だけだった。
+
+```text
+どの pipeline class を作るか        AutoPipeline が config から解決する
+この機材での dtype と offload 方針   SD 系は fp16。bf16 の FLUX とは別
+generate / img2img / inpaint の対応  1 つの Protocol へ寄せる
+negative prompt と guidance          FLUX.2 Klein は取らない
+```
+
+worker は `runtime_adapter` の名前で adapter を選ぶ。表は module 属性名を持ち、
+import 時にクラスを固めない（固めると試験が差し替えた偽 adapter が使われない）。
+
+`trust_remote_code` は明示的に `False` にしている。取り込んだ重みが任意の
+コードを持ち込める経路を開かない。
+
+`edit` は実装せず `NotImplementedError` で落とす。strict inpaint には
+protected-pixel 保証、outpaint には別の不変条件があり、実測していない経路が
+それらを名乗るのは、無いことより悪い。
+
+**実測していないため、この adapter を使う catalog エントリは `experimental` の
+ままである。** 実機での測定は別スライス。
+
+### 配布元の検索
+
+repository ID の手入力だけでは、名前を既に知っている人にしか使えなかった。
+検索を足した。
+
+```text
+models.custom.search
+  query / sort / pipeline_tag / limit
+  sort は downloads / likes / lastModified / createdAt
+  未知の並び順は黙って別の順で返さず拒否する
+    （黙って返すと、並べ替えたつもりのまま誤った表を読むことになる）
+  library=diffusers と使える pipeline に限って問い合わせる
+    （取り込めない形式ばかり並べても選べない）
+  壊れた要素は飛ばし、検索全体を失敗させない
+  導入済みは already_added として印を付ける
+```
+
+UI は表で出す。数値は等幅で縦に揃える（桁が揃わない表は比較に使えない）。
+**表から直接は取り込まない。** 「中身を見る」は既存の resolve へ渡し、
+版の固定・digest・ライセンス明示承諾を必ず通る。
+
+実 API 実測（`stable diffusion` で検索）:
+
+```text
+sort=downloads    1,605,410 DL  stabilityai/stable-diffusion-xl-base-1.0
+                  1,440,259 DL  stable-diffusion-v1-5/stable-diffusion-v1-5
+sort=likes        8,068 ★      stabilityai/stable-diffusion-xl-base-1.0
+                  7,054 ★      CompVis/stable-diffusion-v1-4
+sort=lastModified 2026-08-24    pruna-test/test-save-tiny-stable-diffusion-pipe-smashed
+```
+
+```text
+./mf.sh test   529 passed
+実ブラウザ      表 3 行を描画、page errors 0
+```
+
+NOT TESTED: SD adapter による実生成。実機測定まで `experimental` を維持する。
+LoRA は利用者指示どおり後続の計画とする。

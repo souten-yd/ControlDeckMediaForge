@@ -1986,6 +1986,33 @@ def create_app(
                             str(params.get("model_id", "")),
                             identity,
                         ).model_dump(mode="json")
+                    elif method == "models.custom.search":
+                        # 探せることと入れてよいことは別。ここは候補を返すだけで、
+                        # 取り込みは従来どおり resolve と明示承諾を通す。
+                        candidates = await custom_models.search(
+                            str(params.get("query", "")),
+                            sort=str(params.get("sort", "downloads")),
+                            pipeline_tag=str(params.get("pipeline_tag", "text-to-image")),
+                            limit=int(params.get("limit", 30) or 30),
+                        )
+                        installed = {
+                            item["registry"]["model_id"]
+                            for item in custom_models.entries()
+                            if isinstance(item.get("registry"), dict)
+                        }
+                        if model_operations is not None:
+                            installed.update(
+                                str(item.get("model_id"))
+                                for item in model_operations.catalog().get("items", [])
+                                if item.get("installed")
+                            )
+                        result = {
+                            "items": [
+                                {**item.document(), "already_added": item.repo_id in installed}
+                                for item in candidates
+                            ],
+                            "sort": str(params.get("sort", "downloads")),
+                        }
                     elif method == "models.custom.resolve":
                         # 取得前に必ず解決して見せる。承諾は本文の提示が先。
                         resolution = await custom_models.resolve(

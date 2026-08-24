@@ -278,14 +278,40 @@
           <p id="model-empty" class="hint" hidden>条件に合うモデルはありません。</p>
           <div id="model-error" class="error" role="alert" hidden></div>
 
-          <p class="section-label">HuggingFace からモデルを追加</p>
-          <p class="hint">一覧に無いモデルを、版を固定して取り込みます。取り込む前に中身とライセンスを確かめます。</p>
+          <p class="section-label">モデルを探して追加</p>
+          <p class="hint">配布元を検索します。取り込む前に中身とライセンスを必ず確かめます。</p>
           <div class="form-row">
-            <label>repository<input id="custom-repo" type="text" maxlength="200"
-              placeholder="stabilityai/stable-diffusion-xl-base-1.0"></label>
-            <label>revision<input id="custom-revision" type="text" maxlength="128" value="main"></label>
+            <label>検索<input id="catalog-query" type="search" maxlength="200"
+              placeholder="stable diffusion / anime / pixel"></label>
+            <label>並び順
+              <select id="catalog-sort">
+                <option value="downloads">ダウンロード数</option>
+                <option value="likes">お気に入り数</option>
+                <option value="lastModified">更新日</option>
+                <option value="createdAt">公開日</option>
+              </select>
+            </label>
+            <label>用途
+              <select id="catalog-pipeline">
+                <option value="text-to-image">文章から生成</option>
+                <option value="image-to-image">画像から生成</option>
+                <option value="inpainting">部分描き直し</option>
+              </select>
+            </label>
           </div>
-          <button type="button" id="custom-resolve">中身を確かめる</button>
+          <button type="button" id="catalog-search">検索</button>
+          <div id="catalog-results" class="table-wrap" hidden></div>
+          <p id="catalog-empty" class="hint" hidden></p>
+
+          <details id="custom-manual">
+            <summary>repository を直接指定する</summary>
+            <div class="form-row">
+              <label>repository<input id="custom-repo" type="text" maxlength="200"
+                placeholder="stabilityai/stable-diffusion-xl-base-1.0"></label>
+              <label>revision<input id="custom-revision" type="text" maxlength="128" value="main"></label>
+            </div>
+            <button type="button" id="custom-resolve">中身を確かめる</button>
+          </details>
           <div id="custom-result" class="rows" hidden></div>
           <div id="custom-error" class="error" role="alert" hidden></div>
 

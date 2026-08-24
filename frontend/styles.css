@@ -748,3 +748,39 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
 @media (prefers-reduced-motion: reduce) {
   .track > i.indeterminate { width: 100%; opacity: .45; animation: none; margin-left: 0; }
 }
+
+/* ── モデルの表 ─────────────────────────────────────────────── */
+/* 数値は等幅で縦に揃える。桁が揃わない表は比較に使えない。 */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+table.catalog { width: 100%; border-collapse: collapse; font-size: .82rem; }
+table.catalog th, table.catalog td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+table.catalog th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+table.catalog tr:last-child td { border-bottom: 0; }
+table.catalog td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.catalog td.name { white-space: normal; min-width: 16rem; }
+table.catalog .tag {
+  display: inline-block;
+  font-size: .68rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  margin-right: 4px;
+}
+@media (hover: hover) {
+  table.catalog tbody tr:hover { background: var(--sunk); }
+}
