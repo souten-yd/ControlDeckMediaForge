@@ -44,9 +44,9 @@ DOM_IDS = (
     "custom-repo", "custom-revision", "custom-resolve", "custom-result", "custom-error",
     # UX3: 書き出し導線と、重複を解消した詳細設定
     "viewer-save", "viewer-save-note",
-    "catalog-query", "catalog-sort", "catalog-pipeline", "catalog-search",
+    "catalog-query", "catalog-sort", "catalog-style", "catalog-search",
     "catalog-results", "catalog-empty", "custom-manual",
-    "model-layout", "model-table", "model-sort",
+    "model-table", "model-sort",
     "model-downloads", "model-downloads-empty", "model-downloads-count",
     "reference-intelligence", "reference-focuses", "reference-analysis-summary",
     "reference-analysis-note",
@@ -62,7 +62,7 @@ DOM_IDS = (
     "result-evaluate", "result-evaluation",
     "mini-progress", "library-grid", "library-kinds", "activity-list",
     "detail-dialog",
-    "model-storage", "model-filters", "model-catalog", "model-empty", "model-error",
+    "model-storage", "model-filters", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
     "model-remove-dialog", "model-remove-summary", "model-remove-detail",
     "model-remove-cancel", "model-remove-confirm",
@@ -111,7 +111,7 @@ def test_advanced_controls_live_only_inside_templates():
 
 def test_model_management_actions_are_simple_but_technical_details_are_advanced():
     without_templates = re.sub(r"<template[\s\S]*?</template>", "", MARKUP)
-    for name in ("model-filters", "model-catalog", "model-storage"):
+    for name in ("model-filters", "model-table", "model-storage"):
         assert f'id="{name}"' in without_templates
     assert 'id="advanced-models"' not in without_templates
     assert "models.install" in SCRIPT and "models.remove" in SCRIPT and "models.evaluate" in SCRIPT
@@ -589,11 +589,23 @@ def test_the_table_and_cards_offer_the_same_actions():
         assert hook in action
 
 
-def test_the_chosen_model_layout_survives_a_reload():
-    """状態はサーバ側に置く。ブラウザ保存領域は使えない。"""
-    assert "model_layout" in SCRIPT
-    preferences = (BACKEND / "preferences.py").read_text(encoding="utf-8")
-    assert '"model_layout"' in preferences
+def test_the_catalog_has_one_presentation_rather_than_two():
+    """カードと表で出すタグが食い違っていた。表示が 2 つあると、片方だけ直る。"""
+    assert 'id="model-catalog"' not in MARKUP
+    assert "data-model-layout" not in MARKUP
+    assert "renderModelTable" in SCRIPT
+
+
+def test_the_mobile_table_needs_no_horizontal_scrolling():
+    """横に伸ばすと、容量・VRAM・操作が画面の外へ出る。"""
+    assert "table.catalog thead { display: none; }" in STYLES
+    assert "content: attr(data-label)" in STYLES
+
+
+def test_a_disabled_action_says_what_cannot_be_done():
+    """「CLI で管理」は説明のない専門用語だった。"""
+    assert "CLI で管理" not in SCRIPT
+    assert "操作できません" in SCRIPT
 
 
 def test_the_catalog_says_whether_a_model_runs_on_this_machine():

@@ -592,11 +592,17 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .74rem; backgro
 dialog {
   width: min(720px, calc(100% - 24px));
   max-height: 82vh;
+  /* 高さを切るなら中を送れるようにする。片方だけだと、はみ出した入力欄に
+     指が届かない。実機で名前欄に入力できないという報告の原因がこれだった。 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
+  padding: 16px;
 }
+dialog > form { display: grid; gap: 10px; }
 dialog::backdrop { background: rgba(10, 18, 17, .68); }
 #close-dialog { float: right; }
 
@@ -802,3 +808,74 @@ table.catalog .tag {
 /* ダウンロードの進み具合。押した先で確かめられるようにする。 */
 #model-downloads .row-side { gap: 8px; }
 #model-downloads progress { width: 140px; }
+
+/* ── モバイルのダイアログ ───────────────────────────────────── */
+@media (max-width: 767px) {
+  /* 画面いっぱいに近い下からのシートにする。中央寄せの小窓は、
+     ソフトキーボードが出ると入力欄ごと隠れる。 */
+  dialog {
+    width: 100%;
+    max-width: 100%;
+    max-height: 88vh;
+    margin: auto 0 0;
+    border-radius: 16px 16px 0 0;
+    border-bottom: 0;
+    padding: 14px 14px calc(14px + var(--safe-bottom));
+  }
+  .dialog-actions {
+    position: sticky;
+    bottom: calc(-1 * var(--safe-bottom));
+    background: var(--surface);
+    padding: 10px 0 0;
+    margin-top: 14px;
+  }
+  #viewer { max-height: 100vh; height: 100vh; border-radius: 0; }
+}
+
+/* 参照の選択。上限が 4 枚なので、選んだものと選べないものを見て分かる形にする。 */
+.picker .strip { display: flex; flex-wrap: wrap; gap: 8px; }
+.picker .thumb[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.picker .thumb:disabled { opacity: .35; }
+
+/* ── モバイルの表 ───────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* 横に伸ばすと、肝心の容量・VRAM・操作が画面の外へ出てしまう。
+     1 行を積み上げて、必要な情報を横スクロールなしで読めるようにする。 */
+  .table-wrap { overflow-x: visible; border: 0; }
+  table.catalog, table.catalog tbody, table.catalog tr, table.catalog td { display: block; width: 100%; }
+  table.catalog thead { display: none; }
+  table.catalog tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  table.catalog td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 3px 0;
+    border-bottom: 0;
+    white-space: normal;
+    text-align: right;
+  }
+  /* 積んだ途端に「14.9 GB」が何の数字か分からなくなるので列名を添える。 */
+  table.catalog td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: var(--muted);
+    text-align: left;
+  }
+  /* 名前は見出しとして扱う。列名は要らない。 */
+  table.catalog td.name { display: block; text-align: left; padding-bottom: 6px; }
+  table.catalog td.name::before { content: none; }
+  table.catalog td.name > div { font-weight: 700; font-size: .95rem; margin-bottom: 4px; }
+  table.catalog td.num { text-align: right; }
+  table.catalog td[data-label="操作"] { padding-top: 8px; }
+  table.catalog td[data-label="操作"] button { min-height: 40px; }
+}

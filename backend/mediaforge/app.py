@@ -2011,6 +2011,7 @@ def create_app(
                             str(params.get("query", "")),
                             sort=str(params.get("sort", "downloads")),
                             pipeline_tag=str(params.get("pipeline_tag", "text-to-image")),
+                            style=str(params.get("style", "any")),
                             limit=int(params.get("limit", 30) or 30),
                         )
                         installed = {

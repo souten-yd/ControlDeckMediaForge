@@ -272,10 +272,6 @@
                 <option value="catalog">カタログ順</option>
               </select>
             </label>
-            <div id="model-layout" class="chips" role="radiogroup" aria-label="モデルの表示形式">
-              <button type="button" class="chip" data-model-layout="table" aria-checked="true">表</button>
-              <button type="button" class="chip" data-model-layout="cards" aria-checked="false">カード</button>
-            </div>
             <div id="model-filters" class="chips" role="radiogroup" aria-label="モデルの絞り込み">
               <button type="button" class="chip" data-model-filter="installed" aria-checked="true">導入済み</button>
               <button type="button" class="chip" data-model-filter="recommended" aria-checked="false">おすすめ</button>
@@ -284,14 +280,8 @@
               <button type="button" class="chip" data-model-filter="all" aria-checked="false">すべて</button>
             </div>
           </div>
-          <div id="model-catalog" class="model-grid"></div>
           <div id="model-table" class="table-wrap" hidden></div>
 
-          <details id="model-downloads-block">
-            <summary>ダウンロードの状況 <span id="model-downloads-count"></span></summary>
-            <div id="model-downloads" class="rows"></div>
-            <p id="model-downloads-empty" class="hint" hidden>進行中・完了したダウンロードはありません。</p>
-          </details>
           <p id="model-empty" class="hint" hidden>条件に合うモデルはありません。</p>
           <div id="model-error" class="error" role="alert" hidden></div>
 
@@ -308,11 +298,16 @@
                 <option value="createdAt">公開日</option>
               </select>
             </label>
-            <label>用途
-              <select id="catalog-pipeline">
-                <option value="text-to-image">文章から生成</option>
-                <option value="image-to-image">画像から生成</option>
-                <option value="inpainting">部分描き直し</option>
+            <label>画風
+              <select id="catalog-style">
+                <option value="any">すべて</option>
+                <option value="anime">アニメ</option>
+                <option value="art">イラスト・アート</option>
+                <option value="realistic">写実</option>
+                <option value="pixel-art">ドット絵</option>
+                <option value="3d">3D</option>
+                <option value="character">キャラクター</option>
+                <option value="landscape">風景</option>
               </select>
             </label>
           </div>
@@ -320,15 +315,6 @@
           <div id="catalog-results" class="table-wrap" hidden></div>
           <p id="catalog-empty" class="hint" hidden></p>
 
-          <details id="custom-manual">
-            <summary>repository を直接指定する</summary>
-            <div class="form-row">
-              <label>repository<input id="custom-repo" type="text" maxlength="200"
-                placeholder="stabilityai/stable-diffusion-xl-base-1.0"></label>
-              <label>revision<input id="custom-revision" type="text" maxlength="128" value="main"></label>
-            </div>
-            <button type="button" id="custom-resolve">中身を確かめる</button>
-          </details>
           <div id="custom-result" class="rows" hidden></div>
           <div id="custom-error" class="error" role="alert" hidden></div>
 
@@ -351,6 +337,22 @@
             </div>
             <p id="pack-note" class="hint"></p>
           </div>
+
+
+          <details id="model-downloads-block">
+            <summary>ダウンロードの状況 <span id="model-downloads-count"></span></summary>
+            <div id="model-downloads" class="rows"></div>
+            <p id="model-downloads-empty" class="hint" hidden>進行中・完了したダウンロードはありません。</p>
+          </details>
+          <details id="custom-manual">
+            <summary>repository を直接指定する</summary>
+            <div class="form-row">
+              <label>repository<input id="custom-repo" type="text" maxlength="200"
+                placeholder="stabilityai/stable-diffusion-xl-base-1.0"></label>
+              <label>revision<input id="custom-revision" type="text" maxlength="128" value="main"></label>
+            </div>
+            <button type="button" id="custom-resolve">中身を確かめる</button>
+          </details>
 
           <div data-adv-slot="settings"></div>
         </section>
@@ -424,9 +426,9 @@
             <label>線（任意）<input id="profile-linework" type="text" maxlength="1000"></label>
             <label>塗り（任意）<input id="profile-coloring" type="text" maxlength="1000"></label>
           </div>
-          <p class="section-label">参照にする画像（任意・最大 4 枚）</p>
-          <p class="hint">選ぶと、その画像を参照として一緒に使います。</p>
-          <div id="profile-references" class="rows"></div>
+          <p class="section-label">参照にする画像（任意）</p>
+          <p class="hint">最大 4 枚まで選べます。<span id="profile-reference-count">0 枚選択中</span></p>
+          <div id="profile-references" class="picker"></div>
           <div id="profile-dialog-error" class="error" role="alert" hidden></div>
           <div class="dialog-actions">
             <button type="button" id="profile-cancel">やめる</button>

@@ -196,6 +196,21 @@ SEARCH_SORTS = ("downloads", "likes", "lastModified", "createdAt")
 # 画像生成として扱える組み合わせだけを既定で探す。使えないものを既定で出さない。
 SEARCH_PIPELINES = ("text-to-image", "image-to-image", "inpainting")
 
+# 探す人が実際に決めているのは「どんな絵を作るモデルか」であって、
+# text-to-image か image-to-image かではない。後者は配布元の技術的な分類で、
+# SD 系はほぼ全部が text-to-image なので絞り込みの役に立たない。
+# 配布元のタグで、選ぶ基準そのもので絞れるようにする。
+SEARCH_STYLES: dict[str, str] = {
+    "any": "",
+    "anime": "anime",
+    "art": "art",
+    "realistic": "realistic",
+    "pixel-art": "pixel-art",
+    "3d": "3d",
+    "character": "character",
+    "landscape": "landscape",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class CatalogCandidate:
@@ -241,12 +256,15 @@ class CatalogSearchMixin:
         *,
         sort: str = "downloads",
         pipeline_tag: str = "text-to-image",
+        style: str = "any",
         limit: int = SEARCH_LIMIT,
     ) -> list[CatalogCandidate]:
         if sort not in SEARCH_SORTS:
             raise CustomModelError("custom_model_sort_invalid", "並び順が正しくありません")
         if pipeline_tag not in SEARCH_PIPELINES:
             raise CustomModelError("custom_model_pipeline_invalid", "用途が正しくありません")
+        if style not in SEARCH_STYLES:
+            raise CustomModelError("custom_model_style_invalid", "画風の指定が正しくありません")
         if not isinstance(query, str) or len(query) > 200:
             raise CustomModelError("custom_model_query_invalid", "検索語が長すぎます")
         params: dict[str, Any] = {
@@ -257,6 +275,8 @@ class CatalogSearchMixin:
             "direction": -1,
             "limit": max(1, min(SEARCH_LIMIT, limit)),
         }
+        if SEARCH_STYLES[style]:
+            params["filter"] = SEARCH_STYLES[style]
         if query.strip():
             params["search"] = query.strip()
         try:

@@ -106,8 +106,8 @@ const state = {
   modelCatalog: [],
   modelOperations: new Map(),
   modelFilter: "installed",
-  modelLayout: "table",
   modelSort: "runnable",
+  lastNonSettingsView: "create",
   deviceVramBytes: 0,
   modelChoice: "auto",
   domainProfiles: [],
@@ -468,6 +468,8 @@ async function savePreferences(values) {
 
 function activate(name, {sync = true} = {}) {
   const view = VIEWS.includes(name) ? name : "create";
+  // 設定を閉じたときに戻る先。設定の前にいた画面へ返す。
+  if (state.view && state.view !== "settings") state.lastNonSettingsView = state.view;
   state.view = view;
   app().dataset.view = view;
   for (const section of document.querySelectorAll(".view")) {
@@ -870,7 +872,7 @@ async function searchCatalog() {
     found = await call("models.custom.search", {
       query: byId("catalog-query").value,
       sort: byId("catalog-sort").value,
-      pipeline_tag: byId("catalog-pipeline").value,
+      style: byId("catalog-style").value,
     });
   } catch (error) {
     empty.textContent = error?.message || "検索できませんでした。";
@@ -1191,17 +1193,27 @@ async function renderProfileReferencePicker() {
   try { page = await call("library.list", {limit: 24}); } catch { return; }
   const strip = document.createElement("div");
   strip.className = "strip";
+  const update = () => {
+    const chosen = profileDraft.assetIds.length;
+    byId("profile-reference-count").textContent = `${chosen} 枚選択中`;
+    // 上限に達したら、押せない枠を並べたままにせず選べないことを示す。
+    for (const button of strip.children) {
+      const selected = profileDraft.assetIds.includes(button.dataset.assetId);
+      button.setAttribute("aria-pressed", String(selected));
+      button.disabled = !selected && chosen >= 4;
+    }
+  };
   for (const item of page.items || []) {
     const button = await thumbnailButton(item.asset_id, () => {
       const index = profileDraft.assetIds.indexOf(item.asset_id);
       if (index >= 0) profileDraft.assetIds.splice(index, 1);
       else if (profileDraft.assetIds.length < 4) profileDraft.assetIds.push(item.asset_id);
-      button.setAttribute("aria-pressed", String(profileDraft.assetIds.includes(item.asset_id)));
+      update();
     }, item.thumbnail);
-    button.setAttribute("aria-pressed", "false");
     strip.append(button);
   }
   holder.append(strip);
+  update();
   if (!(page.items || []).length) {
     const note = document.createElement("p");
     note.className = "hint";
@@ -2389,7 +2401,7 @@ function runExit(action, job) {
   if (action === "open_model_management") {
     state.modelFilter = "recommended";
     activate("settings");
-    return byId("model-catalog").scrollIntoView({block: "start"});
+    return byId("model-table").scrollIntoView({block: "start"});
   }
   if (action === "edit_intent") {
     activate("create");
@@ -3299,7 +3311,8 @@ function modelActionCell(model, modelKey) {
   action.type = "button";
   if (!state.modelManagementAvailable) {
     action.disabled = true;
-    action.textContent = "CLI で管理";
+    action.textContent = "操作できません";
+    action.title = "この表示ではモデルの追加・削除ができません。ControlDeck から開いてください。";
   } else if (!model.installed && model.ownership === "managed" &&
              model.approx_download_bytes < MAX_MANAGED_MODEL_DOWNLOAD_BYTES) {
     action.dataset.installModel = modelKey;
@@ -3312,7 +3325,7 @@ function modelActionCell(model, modelKey) {
     action.textContent = "削除";
   } else {
     action.disabled = true;
-    action.textContent = model.installed ? "共有モデル" : "外部で導入";
+    action.textContent = model.installed ? "共有モデル" : "外部ランタイムで導入";
   }
   if (model.installed && state.modelEvaluationIds.has(model.model_id)) {
     const evaluate = document.createElement("button");
@@ -3322,6 +3335,13 @@ function modelActionCell(model, modelKey) {
     cell.append(evaluate);
   }
   cell.append(action);
+  return cell;
+}
+
+/* モバイルでは横に伸ばさず積み上げる。列名がないと、積んだ途端に
+   「14.9 GB」が何の数字なのか分からなくなるので、各セルに持たせる。 */
+function labelled(cell, label) {
+  cell.dataset.label = label;
   return cell;
 }
 
@@ -3337,7 +3357,7 @@ function modelTableRow(model) {
   name.append(title);
   for (const label of [
     ...model.media_types.map((item) => MEDIA_TYPE_LABEL[item] || item),
-    ...model.domains.slice(0, 2).map((item) => DOMAIN_LABEL[item] || item),
+    ...model.domains.map((item) => DOMAIN_LABEL[item] || item),
   ]) {
     const chip = document.createElement("span");
     chip.className = "tag";
@@ -3365,8 +3385,14 @@ function modelTableRow(model) {
   license.textContent = model.license || "-";
 
   row.append(
-    name, runnabilityCell(model), stateCell, adoption, size, vram, license,
-    modelActionCell(model, modelKey),
+    labelled(name, "モデル"),
+    labelled(runnabilityCell(model), "この機材"),
+    labelled(stateCell, "状態"),
+    labelled(adoption, "採用"),
+    labelled(size, "容量"),
+    labelled(vram, "VRAM"),
+    labelled(license, "ライセンス"),
+    labelled(modelActionCell(model, modelKey), "操作"),
   );
   return row;
 }
@@ -3461,8 +3487,7 @@ function renderModelDownloads() {
 }
 
 function renderModelManagement() {
-  const holder = byId("model-catalog");
-  if (!holder) return;
+  if (!byId("model-table")) return;
   const visible = state.modelCatalog.filter((model) => {
     if (state.modelFilter === "installed") return model.installed;
     if (state.modelFilter === "recommended") return modelRecommended(model);
@@ -3472,107 +3497,9 @@ function renderModelManagement() {
     }
     return true;
   });
-  holder.replaceChildren(...visible.map((model) => {
-    const modelKey = String(state.modelCatalog.indexOf(model));
-    const card = document.createElement("article");
-    card.className = "model-card";
-    card.dataset.modelKey = modelKey;
-    const head = document.createElement("div");
-    head.className = "model-card-head";
-    const title = document.createElement("h3");
-    title.textContent = model.display_name;
-    const stateLabel = document.createElement("span");
-    stateLabel.className = "state";
-    stateLabel.textContent = model.installed ? (model.healthy ? "導入済み" : "要確認") : "未導入";
-    head.append(title, stateLabel);
-    const chips = document.createElement("div");
-    chips.className = "model-tags";
-    for (const label of [
-      ...(MODEL_ADOPTION_LABEL[model.state] ? [MODEL_ADOPTION_LABEL[model.state]] : []),
-      ...model.media_types.map((item) => MEDIA_TYPE_LABEL[item] || item),
-      ...model.domains.map((item) => DOMAIN_LABEL[item] || item),
-    ]) {
-      const chip = document.createElement("span");
-      chip.textContent = label;
-      chips.append(chip);
-    }
-    const description = document.createElement("p");
-    description.className = "s";
-    description.textContent = model.description || "この環境で利用できるモデルです。";
-    const foot = document.createElement("div");
-    foot.className = "model-card-foot";
-    const size = document.createElement("span");
-    size.className = "hint";
-    size.textContent = model.installed && model.reclaimable_bytes
-      ? `${formatBytes(model.reclaimable_bytes)} 使用中`
-      : `約 ${formatBytes(model.approx_download_bytes)}`;
-    foot.append(size);
-    const operation = latestModelOperation(model.model_id);
-    const active = operation && !MODEL_TERMINAL.has(operation.state);
-    if (active) {
-      const progress = document.createElement("progress");
-      progress.max = Math.max(operation.bytes_total, 1);
-      progress.value = operation.bytes_done;
-      progress.setAttribute("aria-label", modelOperationStateLabel(operation));
-      const status = document.createElement("span");
-      status.className = "model-operation-state";
-      status.textContent = `${modelOperationStateLabel(operation)} ${
-        operation.bytes_total ? Math.floor(operation.bytes_done / operation.bytes_total * 100) : 0}%`;
-      const cancel = document.createElement("button");
-      cancel.type = "button";
-      cancel.dataset.cancelModelOperation = operation.id;
-      cancel.textContent = "中止";
-      card.append(head, chips, description, progress, status, cancel);
-    } else {
-      const action = document.createElement("button");
-      action.type = "button";
-      if (!state.modelManagementAvailable) {
-        action.disabled = true;
-        action.textContent = "CLI で管理";
-      } else if (!model.installed && model.ownership === "managed" &&
-                 model.approx_download_bytes < MAX_MANAGED_MODEL_DOWNLOAD_BYTES) {
-        action.dataset.installModel = modelKey;
-        action.textContent = "ダウンロード";
-      } else if (!model.installed && model.ownership === "managed") {
-        action.disabled = true;
-        action.textContent = "32GB上限対象";
-      } else if (model.ownership === "managed" && model.removable) {
-        action.dataset.removeModel = modelKey;
-        action.textContent = "削除";
-      } else {
-        action.disabled = true;
-        action.textContent = model.installed ? "共有モデル" : "外部ランタイムで導入";
-      }
-      if (model.installed && state.modelEvaluationIds.has(model.model_id)) {
-        const evaluate = document.createElement("button");
-        evaluate.type = "button";
-        evaluate.dataset.evaluateModel = modelKey;
-        evaluate.textContent = "実機で評価";
-        foot.append(evaluate);
-      }
-      foot.append(action);
-      card.append(head, chips, description, foot);
-      if (operation?.action === "evaluate" && operation.state === "ready" && operation.result) {
-        const measured = document.createElement("p");
-        measured.className = "s model-evaluation-result";
-        measured.textContent = `実測 ${Number(operation.result.elapsed_sec || 0).toFixed(1)}秒 · ` +
-          `VRAM ${formatBytes(operation.result.execution_vram_delta_bytes || 0)} · ` +
-          `RAM ${formatBytes(operation.result.peak_rss_bytes || 0)}`;
-        card.append(measured);
-      }
-      if (operation?.state === "failed") card.append(modelFailureNode(operation.error_code, modelKey));
-    }
-    return card;
-  }));
-  byId("model-empty").hidden = visible.length !== 0;
   renderModelDownloads();
-  const table = state.modelLayout === "table";
   renderModelTable(visible);
-  byId("model-table").hidden = !table || visible.length === 0;
-  holder.hidden = table;
-  for (const chip of document.querySelectorAll("[data-model-layout]")) {
-    chip.setAttribute("aria-checked", String(chip.dataset.modelLayout === state.modelLayout));
-  }
+  byId("model-table").hidden = visible.length === 0;
   renderAdvancedModels();
 }
 
@@ -3781,7 +3708,11 @@ async function loadAdvancedSettings() {
 
 byId("mode-simple").addEventListener("click", () => setMode("simple"));
 byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
-byId("nav-settings").addEventListener("click", () => activate("settings"));
+/* 開いた導線でそのまま閉じられるようにする。開くのと閉じるので押す場所が
+   違うのは、片手で使っているときに探すことになる。 */
+byId("nav-settings").addEventListener("click", () => {
+  activate(state.view === "settings" ? (state.lastNonSettingsView || "create") : "settings");
+});
 byId("model-filters").addEventListener("click", (event) => {
   const button = event.target.closest("[data-model-filter]");
   if (!button) return;
@@ -3804,7 +3735,7 @@ function handleModelExit(button) {
   else void loadModelManagement();
 }
 
-for (const holder of [byId("model-catalog"), byId("model-error")]) {
+for (const holder of [byId("model-table"), byId("model-error")]) {
   holder.addEventListener("click", (event) => {
     const install = event.target.closest("[data-install-model]");
     const installModel = install ? state.modelCatalog[Number(install.dataset.installModel)] : null;
@@ -4056,14 +3987,6 @@ byId("model-sort").addEventListener("change", (event) => {
   renderModelManagement();
 });
 
-byId("model-layout").addEventListener("click", (event) => {
-  const chip = event.target.closest("[data-model-layout]");
-  if (!chip) return;
-  state.modelLayout = chip.dataset.modelLayout;
-  renderModelManagement();
-  void savePreferences({model_layout: state.modelLayout});
-});
-
 byId("catalog-search").addEventListener("click", () => void searchCatalog());
 byId("catalog-query").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); void searchCatalog(); }
@@ -4297,7 +4220,7 @@ function applyModelSession(snapshot) {
     const storage = catalog.storage || {};
     byId("model-storage").textContent = state.modelManagementAvailable
       ? `管理中 ${formatBytes(storage.managed_bytes)} · 空き ${formatBytes(storage.free_bytes)}`
-      : "単体表示ではモデル操作に CLI を使います";
+      : "この表示では一覧のみです。追加・削除は ControlDeck から開いてください。";
     byId("model-error").hidden = true;
   }
   if (usable(snapshot.model_operations)) {
@@ -4380,7 +4303,6 @@ async function boot() {
   }
 
   state.libraryKind = state.preferences.library_kind || "all";
-  state.modelLayout = state.preferences.model_layout === "cards" ? "cards" : "table";
   state.directorMode = directorAvailable()
     ? (state.preferences.director_mode || "refine")
     : "original";
