@@ -236,6 +236,22 @@ main { flex: 1; min-height: 0; padding: 16px; }
   border-top: 1px solid var(--border);
 }
 .section-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+/* 節の見出しが前の塊に貼り付くと、どこで話が変わったのか分からない。
+   詰まって見えていたのは行間ではなく、ここの区切りが無かったため。 */
+.section-label:not(:first-child) { margin-top: 22px; }
+.section-label + .hint { margin-top: 2px; }
+
+/* 送りは前後どちらの塊にも属さない。両側を空けて独立させる。 */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 14px 0 4px;
+}
+.pager button { min-width: 44px; }
+.pager button:disabled { opacity: .35; }
+#catalog-page { font-size: .76rem; color: var(--muted); }
 .hint { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
 
 textarea, input[type="number"], input[type="text"], select {
@@ -416,7 +432,8 @@ textarea { resize: vertical; min-height: 96px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 /* 検索・並び順・画風・ボタンを縦に 4 段積むと、結果が画面から押し出される。
    同じ格子に入れて 2 段に畳む。ボタンは入力と底を揃える。 */
-.form-row.search { align-items: end; }
+.form-row.search { align-items: end; margin-bottom: 4px; }
+#catalog-results { margin-top: 10px; }
 /* type=search の × はブラウザ任せで、環境によっては出ない。実機では出ず、
    打ち直すのに全選択が要った。自前で置いて、入力欄の中に重ねる。 */
 .input-clear { position: relative; display: block; }
@@ -539,7 +556,13 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
 .selection-bar .danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--danger); }
 .selection-bar .danger:disabled { opacity: .45; }
 
-.downloads-head { display: flex; justify-content: flex-end; margin: 6px 0; }
+#model-downloads-block {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+#model-downloads-block > summary { padding: 4px 0; }
+.downloads-head { display: flex; justify-content: flex-end; margin: 8px 0; }
 /* 2 つで 1 組の操作。右が実行、左が取りやめ。半分ずつにして押し分けやすくする。 */
 /* 進行中のセルは「状態の文言」と「中止」が並ぶ。狭い枠で文言が幅を取ると
    ボタン側が潰れ、「中」「止」が縦に割れる。ボタンは折らず、文言を縮める。 */

@@ -981,3 +981,18 @@ def test_the_import_panel_can_be_dismissed():
     assert 'cancel.id = "custom-cancel";' in SCRIPT
     assert '#custom-cancel' in SCRIPT
     assert ".split-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }" in STYLES
+
+
+def test_sections_are_separated_from_what_precedes_them():
+    """詰まって見えていたのは行間ではなく、節の区切りが無かったため。
+    見出しが前の塊に貼り付くと、どこで話が変わったのか読み取れない。"""
+    assert ".section-label:not(:first-child) { margin-top: 22px; }" in STYLES
+    # 送りは前後どちらの塊にも属さない
+    pager = STYLES[STYLES.index(".pager {"):]
+    pager = pager[:pager.index("}")]
+    assert "margin: 14px 0 4px;" in pager
+    assert "justify-content: center;" in pager
+    # ダウンロードの状況は独立した塊
+    block = STYLES[STYLES.index("#model-downloads-block {"):]
+    block = block[:block.index("}")]
+    assert "border-top:" in block and "margin-top:" in block
