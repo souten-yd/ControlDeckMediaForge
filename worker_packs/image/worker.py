@@ -135,7 +135,9 @@ class ImageWorker:
             family_options["negative_prompt"] = value
         if "guidance_scale" in runtime_options:
             value = runtime_options["guidance_scale"]
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < value <= 30:
+            # 0 は「CFG を使わない」という指示である。Turbo 系はそれを前提に
+            # 蒸留されているので、0 を弾くとそのモデルを正しく回せない。
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 30:
                 raise ValueError("worker model runtime options are invalid")
             family_options["guidance_scale"] = float(value)
         constraints = request.get("constraints", {})

@@ -88,14 +88,62 @@ def pipeline_class_from_config(root: Path) -> str:
     return str(_read_json(root / "model_index.json").get("_class_name") or "")
 
 
+# 歩数がどこから来たか。利用者に「これは分かっている値か、置いた値か」を
+# 言えるようにする。分からないまま既定を出すと、絵が眠いときに何を触れば
+# よいのかが分からない。
+STEPS_FROM_MODEL = "model"      # scheduler か pipeline クラスが名乗った
+STEPS_ASSUMED = "assumed"       # 判別できないので多い側に倒した
+STEPS_DECLARED = "declared"     # 手元で実測して宣言してある
+
+
 def steps_for(pipeline_class: str, root: Path | None = None) -> int:
     """歩数。scheduler が少歩数だと名乗ればそれに従う。"""
+    return resolve_steps(pipeline_class, root)[0]
+
+
+def resolve_steps(pipeline_class: str, root: Path | None = None) -> tuple[int, str]:
+    """歩数と、その根拠。"""
     if root is not None:
         scheduler = _read_json(root / "scheduler" / "scheduler_config.json")
         distilled = _FEW_STEP_SCHEDULERS.get(str(scheduler.get("_class_name") or ""))
         if distilled is not None:
-            return distilled
-    return _FEW_STEP_PIPELINES.get(pipeline_class, DEFAULT_DIFFUSION_STEPS)
+            return distilled, STEPS_FROM_MODEL
+    if pipeline_class in _FEW_STEP_PIPELINES:
+        return _FEW_STEP_PIPELINES[pipeline_class], STEPS_FROM_MODEL
+    return DEFAULT_DIFFUSION_STEPS, STEPS_ASSUMED
+
+
+def presets(steps: int, source: str, guidance_scale: float | None) -> tuple[dict, ...]:
+    """詳細設定に出す組み合わせ。
+
+    蒸留版（Turbo / Lightning / LCM）は素の親と同じ pipeline クラスと
+    scheduler を名乗るので、自動では見分けられない。見分けられなかったときに
+    利用者が 1 押しで切り替えられるように、その組み合わせをここで示す。
+    数値は各配布元がモデルカードで示している値である。
+
+    ガイダンス 0 は「CFG を使わない」という指示で、Turbo 系はそれを前提に
+    蒸留されている。7.0 のまま 4 歩で回すと焼けた絵になる。
+    """
+    items = [{
+        "id": "model_default",
+        "label": "モデルの既定",
+        "steps": steps,
+        "guidance_scale": guidance_scale,
+        "detail": "自動で判定した設定" if source != STEPS_ASSUMED else "判定できなかったので多い側に置いた値",
+    }]
+    if source == STEPS_ASSUMED:
+        # 見分けられなかったときだけ出す。素のモデルにこれを勧めても崩れる。
+        items.extend([
+            {"id": "turbo", "label": "Turbo 系", "steps": 4, "guidance_scale": 0.0,
+             "detail": "SDXL Turbo など。CFG を使わない前提で蒸留されている"},
+            {"id": "lightning", "label": "Lightning / LCM", "steps": 8, "guidance_scale": 1.5,
+             "detail": "少歩数で回す蒸留版。ガイダンスも低めにする"},
+        ])
+    items.append({
+        "id": "quality", "label": "高品質", "steps": 50, "guidance_scale": guidance_scale,
+        "detail": "時間を使って歩数を増やす。素のモデル向け",
+    })
+    return tuple(items)
 
 
 def resolution_buckets(native_side: int) -> tuple[tuple[int, int], ...]:
@@ -144,3 +192,87 @@ def snap_to_native(
             abs(size[0] * size[1] - native_side * native_side),
         ),
     )
+
+
+def summary(
+    *,
+    steps: int | None,
+    steps_source: str,
+    native_width: int | None,
+    native_height: int | None,
+    guidance_scale: float | None,
+) -> dict[str, Any]:
+    """このモデルの設定のうち、何が決まっていて何が決まっていないか。
+
+    利用者に見せる文面をここで作る。UI 側で組み立てると、同じ判断が 2 か所に
+    分かれて片方だけ直る。決まった項目と確認が要る項目を 1 つの表にして返す
+    ので、画面はそのまま並べればよい。
+    """
+    settled: list[dict[str, str]] = []
+    check: list[dict[str, str]] = []
+
+    if native_width and native_height:
+        settled.append({
+            "item": "画面寸法",
+            "value": f"{native_width}×{native_height}",
+            "source": "モデル自身の config から読み取り（sample_size × VAE 縮小率）",
+        })
+        settled.append({
+            "item": "縦横比",
+            "value": "学習時の面積に合わせて自動で寄せる",
+            "source": f"{native_width}×{native_height} と同じ面積・64 の倍数の組み合わせ",
+        })
+    else:
+        check.append({
+            "item": "画面寸法",
+            "value": "不明",
+            "reason": "この配布物の config から学習寸法を読み取れませんでした。",
+            "action": "配布元が示す寸法を詳細設定で指定してください。",
+        })
+
+    if steps is None:
+        check.append({
+            "item": "歩数",
+            "value": "未設定",
+            "reason": "この形式の歩数が分かりません。",
+            "action": "配布元が示す歩数を詳細設定で指定してください。",
+        })
+    elif steps_source == STEPS_ASSUMED:
+        check.append({
+            "item": "歩数",
+            "value": str(steps),
+            "reason": (
+                "蒸留版（Turbo / Lightning / LCM）かどうかは配布物から判別できません。"
+                "蒸留版も素のモデルと同じ pipeline クラスと scheduler を名乗ります。"
+            ),
+            "action": (
+                f"素のモデルなら {steps} 歩のままで問題ありません。"
+                "蒸留版なら下のプリセットで切り替えてください（多すぎる歩数は"
+                "時間を損するだけですが、ガイダンスが合わないと絵が焼けます）。"
+            ),
+        })
+    else:
+        settled.append({
+            "item": "歩数",
+            "value": str(steps),
+            "source": (
+                "手元で実測して宣言済み" if steps_source == STEPS_DECLARED
+                else "モデルの scheduler / pipeline クラスが少歩数だと名乗っている"
+            ),
+        })
+
+    if guidance_scale is not None:
+        settled.append({
+            "item": "ガイダンス",
+            "value": f"{guidance_scale:g}",
+            "source": "カタログで宣言済み",
+        })
+    elif steps_source == STEPS_ASSUMED:
+        check.append({
+            "item": "ガイダンス",
+            "value": "既定（7.0）",
+            "reason": "蒸留版はこの値では絵が焼けます。判別できていません。",
+            "action": "蒸留版ならプリセットで 0〜1.5 に下げてください。",
+        })
+
+    return {"settled": settled, "needs_check": check}

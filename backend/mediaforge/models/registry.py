@@ -11,8 +11,9 @@ from typing import Any
 from .generation_defaults import (  # noqa: F401
     native_side_from_config,
     pipeline_class_from_config,
+    resolution_buckets,
+    resolve_steps,
     snap_to_native,
-    steps_for,
 )
 
 
@@ -84,6 +85,8 @@ class ModelDescriptor:
     # ステップ数はモデル固有である。FLUX.2 Klein は蒸留済みで 4 歩で絵になるが、
     # SDXL 系を 4 歩で回すと像を結ばない。共通の既定を置くと、片方が必ず壊れる。
     default_steps: int | None = None
+    # 歩数がどこから来たか。宣言・モデルが名乗った・判別できず置いた、の別。
+    default_steps_source: str = "assumed"
     # そのモデルが学習された画面寸法。宣言が無ければ導入時に repository の
     # config から読む。None は「まだ分かっていない」で、1024 とは違う。
     native_width: int | None = None
@@ -233,10 +236,12 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     if not isinstance(negative_prompt, str) or len(negative_prompt) > 2000:
         raise ModelRegistryError("model registry runtime_options are invalid")
     guidance_scale = runtime_options.get("guidance_scale")
+    # 0 は「CFG を使わない」という指示である。Turbo 系はそれを前提に蒸留されて
+    # いるので、0 を弾くとそのモデルを正しく回せない。
     if guidance_scale is not None and (
         isinstance(guidance_scale, bool)
         or not isinstance(guidance_scale, (int, float))
-        or not 0 < guidance_scale <= 30
+        or not 0 <= guidance_scale <= 30
     ):
         raise ModelRegistryError("model registry runtime_options are invalid")
     default_steps = runtime_options.get("default_steps")
@@ -293,6 +298,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         negative_prompt=negative_prompt,
         guidance_scale=float(guidance_scale) if guidance_scale is not None else None,
         default_steps=default_steps,
+        **({"default_steps_source": "declared"} if default_steps is not None else {}),
         **native_size,
         **limits,
         **measurement_values,
@@ -502,7 +508,7 @@ class ModelRegistry:
         return ModelRegistry(tuple(detected))
 
     @classmethod
-    def _observed_defaults(cls, descriptor: ModelDescriptor, snapshot: Path) -> dict[str, int]:
+    def _observed_defaults(cls, descriptor: ModelDescriptor, snapshot: Path) -> dict[str, Any]:
         """宣言が無いものだけ、置いてある repository 自身から読む。
 
         Hub から落とすモデルは追加した時点でまだ手元に無いので、そこでは
@@ -520,9 +526,9 @@ class ModelRegistry:
                 observed["native_width"] = side
                 observed["native_height"] = side
         if descriptor.default_steps is None:
-            observed["default_steps"] = steps_for(
-                pipeline_class_from_config(snapshot), snapshot
-            )
+            steps, source = resolve_steps(pipeline_class_from_config(snapshot), snapshot)
+            observed["default_steps"] = steps
+            observed["default_steps_source"] = source
         return observed
 
     @classmethod

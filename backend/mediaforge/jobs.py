@@ -96,6 +96,18 @@ class ProfileResolutionError(ValueError):
         self.code = code
 
 
+def requested_guidance(job: Job, selected: ModelDescriptor) -> float | None:
+    """要求が指定したガイダンス。指定が無ければモデルの宣言。
+
+    0 は「CFG を使わない」という指示で、蒸留版はそれを前提に作られている。
+    未指定と区別する必要があるので、真偽値ではなく None で判定する。
+    """
+    value = job.request.constraints.get("guidance_scale")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return selected.guidance_scale
+    return float(value)
+
+
 class JobManager:
     """Durable queue with a single worker-local execution guard.
 
@@ -855,6 +867,20 @@ class JobManager:
         return request
 
     def _validate_generation_limits(self, job: Job, selected: ModelDescriptor) -> None:
+        # 詳細設定から来る値。範囲を外れたものは、worker が読み込みを終えて
+        # から落ちるより、ここで理由を付けて返す方がよい。
+        steps = job.request.constraints.get("steps")
+        if steps is not None and (
+            isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= 50
+        ):
+            raise WorkerFailure("invalid_steps", "歩数は 1〜50 で指定してください")
+        guidance = job.request.constraints.get("guidance_scale")
+        if guidance is not None and (
+            isinstance(guidance, bool)
+            or not isinstance(guidance, (int, float))
+            or not 0 <= guidance <= 30
+        ):
+            raise WorkerFailure("invalid_guidance_scale", "ガイダンスは 0〜30 で指定してください")
         source = None
         if job.request.operation == "image.edit":
             try:
@@ -935,8 +961,8 @@ class JobManager:
                         # 系統ごとの既定。持たないモデルには送らない。
                         **({"negative_prompt": selected.negative_prompt}
                            if selected.negative_prompt else {}),
-                        **({"guidance_scale": selected.guidance_scale}
-                           if selected.guidance_scale is not None else {}),
+                        **({"guidance_scale": requested_guidance(job, selected)}
+                           if requested_guidance(job, selected) is not None else {}),
                         # core が要求に埋めるので通常は使われない。worker を
                         # 単体で回す経路（評価・benchmark）のための控えである。
                         **({"default_steps": selected.default_steps}

@@ -562,6 +562,7 @@ function syncAdvancedCreate() {
     ? `constraints.edit_mode = ${state.editMode}`
     : "constraints.width / height を直接指定できます";
   renderAdvancedCreative();
+  renderModelSettings();
 }
 
 async function savePreferences(values) {
@@ -1975,7 +1976,112 @@ function buildConstraints(preset) {
     const target = outpaintTarget();
     if (target) return target;
   }
-  return constraints;
+  /* 詳細設定で触った項目だけ送る。触っていない項目を送ると、モデル側の
+     既定を上書きしてしまい、自動判定の意味が無くなる。 */
+  return {...constraints, ...manualModelSettings()};
+}
+
+/* 歩数とガイダンスは、利用者が既定から変えたときだけ要求に載せる。 */
+function manualModelSettings() {
+  if (state.mode !== "advanced") return {};
+  const settings = currentModelSettings();
+  if (!settings) return {};
+  const values = {};
+  const steps = Number(byId("advanced-steps")?.value);
+  if (Number.isFinite(steps) && steps > 0 && steps !== settings.steps) values.steps = steps;
+  const guidance = Number(byId("advanced-guidance")?.value);
+  const declared = settings.guidance_scale;
+  if (
+    byId("advanced-guidance")?.value !== ""
+    && Number.isFinite(guidance)
+    && (declared === null || declared === undefined || guidance !== declared)
+  ) {
+    values.guidance_scale = guidance;
+  }
+  return values;
+}
+
+/* 詳細設定が対象にしているモデル。方針が manual ならその 1 つ、そうでなければ
+   選べるものが 1 つに定まるときだけ。定まらないものの設定を見せると、実際に
+   使われるモデルの設定と食い違う。 */
+function currentModelSettings() {
+  const usable = state.modelCatalog.filter(
+    (model) => model.installed && model.healthy && model.generation
+  );
+  const chosen = state.modelChoice === "manual"
+    ? byId("model-choice-model")?.value
+    : (byId("advanced-policy")?.value === "manual" ? byId("advanced-model")?.value : "");
+  if (chosen) return usable.find((model) => model.model_id === chosen)?.generation || null;
+  return usable.length === 1 ? usable[0].generation : null;
+}
+
+function renderModelSettings() {
+  const block = byId("model-settings");
+  if (!block) return;
+  const settings = currentModelSettings();
+  block.hidden = !settings;
+  if (!settings) return;
+
+  const usable = state.modelCatalog.filter(
+    (model) => model.installed && model.healthy && model.generation
+  );
+  const owner = usable.find((model) => model.generation === settings);
+  byId("model-settings-model").textContent = owner
+    ? `${owner.display_name || owner.model_id} の設定です。`
+    : "";
+
+  const check = byId("model-settings-check");
+  const checkItems = settings.needs_check || [];
+  check.hidden = checkItems.length === 0;
+  byId("model-settings-check-list").replaceChildren(...checkItems.map((entry) => {
+    const item = document.createElement("li");
+    const name = document.createElement("strong");
+    name.textContent = `${entry.item}：${entry.value}`;
+    const reason = document.createElement("span");
+    reason.className = "settings-reason";
+    reason.textContent = entry.reason;
+    const action = document.createElement("span");
+    action.className = "settings-action";
+    action.textContent = entry.action;
+    item.append(name, reason, action);
+    return item;
+  }));
+
+  byId("model-settings-settled-list").replaceChildren(...(settings.settled || []).map((entry) => {
+    const item = document.createElement("li");
+    const name = document.createElement("strong");
+    name.textContent = `${entry.item}：${entry.value}`;
+    const source = document.createElement("span");
+    source.className = "settings-reason";
+    source.textContent = entry.source;
+    item.append(name, source);
+    return item;
+  }));
+
+  byId("model-settings-presets").replaceChildren(...(settings.presets || []).map((preset) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chip";
+    button.dataset.settingPreset = preset.id;
+    button.dataset.steps = preset.steps;
+    if (preset.guidance_scale !== null && preset.guidance_scale !== undefined) {
+      button.dataset.guidance = preset.guidance_scale;
+    }
+    button.title = preset.detail;
+    button.textContent = `${preset.label} ${preset.steps}歩`;
+    return button;
+  }));
+
+  const steps = byId("advanced-steps");
+  if (steps && !steps.value) steps.value = settings.steps || "";
+  const guidance = byId("advanced-guidance");
+  if (guidance && !guidance.value && settings.guidance_scale !== null
+      && settings.guidance_scale !== undefined) {
+    guidance.value = settings.guidance_scale;
+  }
+  byId("model-settings-note").textContent = settings.native_width
+    ? `サイズは ${settings.native_width}×${settings.native_height} と同じ面積に自動で寄せます。`
+    : "";
 }
 
 const FALLBACK_ENVELOPE = {min_side: 256, max_side: 1024, multiple_of: 16};
@@ -4155,6 +4261,18 @@ async function loadAdvancedSettings() {
 
 byId("mode-simple").addEventListener("click", () => setMode("simple"));
 byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
+
+/* プリセットは歩数とガイダンスを一緒に入れる。片方だけ合わせると、
+   4 歩なのにガイダンス 7.0 のような組み合わせになり、絵が焼ける。 */
+document.addEventListener("click", (event) => {
+  const chip = event.target.closest?.("[data-setting-preset]");
+  if (!chip) return;
+  byId("advanced-steps").value = chip.dataset.steps;
+  if (chip.dataset.guidance !== undefined) byId("advanced-guidance").value = chip.dataset.guidance;
+  for (const other of byId("model-settings-presets").children) {
+    other.setAttribute("aria-pressed", String(other === chip));
+  }
+});
 /* 開いた導線でそのまま閉じられるようにする。開くのと閉じるので押す場所が
    違うのは、片手で使っているときに探すことになる。 */
 byId("nav-settings").addEventListener("click", () => {
@@ -4793,6 +4911,7 @@ function applyModelSession(snapshot) {
     renderModelMiniProgress();
     renderAdvancedModelChoices();
     renderModelChoice();
+    renderModelSettings();
   }
 }
 

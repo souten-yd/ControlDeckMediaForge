@@ -90,6 +90,11 @@ from .models import (
     ModelRegistryError,
     TERMINAL_MODEL_OPERATION_STATES,
 )
+from .models.generation_defaults import (
+    presets as generation_presets,
+    resolution_buckets,
+    summary as generation_summary,
+)
 from .paths import contained
 from .prompt_recipes import H3PromptRecipe, PromptRecipeError, PromptRecipeRequest
 from .profiles import ProfileInput, ReferenceCollectionInput
@@ -349,6 +354,33 @@ def create_app(
             "measured_runtime_sec": item.measured_runtime_sec,
             "measurement_confidence": item.measurement_confidence,
         }
+        if item.runtime_adapter.startswith("diffusers.") and item.installed:
+            # 何が決まっていて何が決まっていないかは、判定した側が言う。
+            # UI で組み立てると同じ判断が 2 か所に分かれて片方だけ直る。
+            value["generation"] = {
+                "steps": item.default_steps,
+                "steps_source": item.default_steps_source,
+                "native_width": item.native_width,
+                "native_height": item.native_height,
+                "guidance_scale": item.guidance_scale,
+                "sizes": [
+                    list(size) for size in resolution_buckets(item.native_width)
+                ] if item.native_width else [],
+                "presets": [
+                    dict(preset) for preset in generation_presets(
+                        item.default_steps or 30,
+                        item.default_steps_source,
+                        item.guidance_scale,
+                    )
+                ],
+                **generation_summary(
+                    steps=item.default_steps,
+                    steps_source=item.default_steps_source,
+                    native_width=item.native_width,
+                    native_height=item.native_height,
+                    guidance_scale=item.guidance_scale,
+                ),
+            }
         if item.source is not None:
             value.update({
                 "hardware_backends": list(item.hardware_backends),
