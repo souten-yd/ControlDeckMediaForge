@@ -13,7 +13,7 @@ slice       G7 V0 additive video contract + deterministic FFmpeg boundary
 baseline    683 passed, 1 warning in 50.24s
 installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy
 GPU         R9700 idle、KFD process 0（V0 は GPU を使わない）
-PR          未作成
+PR          Media Forge #119 作成済み
 ```
 
 `origin/main` の最新は Media Forge #118 merge。旧 handoff に残っていた #72/#73 と
@@ -40,10 +40,9 @@ ControlDeck #238 は merge 済みで、resource-turn 物理受け入れも statu
 ## 次にやること（1つだけ）
 
 ```text
-1. この branch を commit / push し Media Forge PR を作成する
-2. PR head で focused/full gate と diff を再確認して merge する
-3. origin/main から G7 V1 branch を切る
-4. 公式 primary source で Wan2.2 TI2V-5B の revision/license/runtime を再確認し、
+1. Media Forge #119 の exact head / diff / mergeability を再確認して merge する
+2. origin/main から G7 V1 branch を切る
+3. 公式 primary source で Wan2.2 TI2V-5B の revision/license/runtime を再確認し、
    base-plan §24 の10項目を埋めた bounded R9700 probe を設計する
 ```
 

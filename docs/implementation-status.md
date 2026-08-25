@@ -4613,3 +4613,5 @@ LLM 退避/復帰、SonicForge job との同時 admission、installed bundle/bro
 V1 の revision-pinned candidate probe と V2〜V4 の範囲であり、video capability は
 それらが通るまで unavailable のままにする。release bundle 上の system FFmpeg 検出/
 provision も V2 前提として未実施。ControlDeck の変更は 0 件。
+
+実装 PR: Media Forge #119。
