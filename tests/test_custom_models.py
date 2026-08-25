@@ -526,23 +526,76 @@ def test_an_unknown_pipeline_is_imported_but_not_claimed_to_be_runnable(tmp_path
 
 def test_the_sd_family_maps_to_the_measured_adapter():
     """diffusers.sdxl は AutoPipelineForText2Image の上に載っており、
-    SD 1.x / 2.x / XL / 3.x を同じ入口で扱える。実測は SSD-1B（SDXL 系）。"""
+    その mapping が構築できる形式は全部読める。実測は SSD-1B（SDXL 系）だけ
+    なので、他は取り込めても experimental のまま入る。"""
     from mediaforge.custom_models import _PIPELINE_ADAPTERS
 
     for pipeline in (
         "StableDiffusionPipeline",          # SD 1.x / 2.x
         "StableDiffusionXLPipeline",        # SDXL
         "StableDiffusion3Pipeline",         # SD 3.x
-        "StableDiffusionInpaintPipeline",
-        "StableDiffusionXLImg2ImgPipeline",
+        "FluxPipeline",                     # FLUX.1
+        "QwenImagePipeline",
+        "PixArtSigmaPipeline",
     ):
         assert _PIPELINE_ADAPTERS[pipeline] == "diffusers.sdxl", pipeline
 
 
-def test_another_family_is_not_swept_into_the_sd_adapter():
-    """タグ（diffusers + text-to-image）だけで決めると、FLUX や Qwen-Image まで
-    巻き込んで「入るが生成で落ちる」ものを作る。クラス名で見る。"""
+def test_a_format_the_runtime_cannot_build_is_not_claimed():
+    """読めるものは全部読む。読めないものは黙って通さない。
+    動画系（Wan）は AutoPipelineForText2Image が構築できないので対象外。"""
     from mediaforge.custom_models import _PIPELINE_ADAPTERS
 
-    for pipeline in ("FluxPipeline", "QwenImagePipeline", "WanPipeline", "SomeFuturePipeline"):
+    for pipeline in ("WanPipeline", "WanAnimatePipeline", "SomeFuturePipeline"):
         assert pipeline not in _PIPELINE_ADAPTERS, pipeline
+
+
+def test_the_supported_pipelines_match_what_the_runtime_can_build():
+    """一覧は diffusers の AUTO_TEXT2IMAGE_PIPELINES_MAPPING を写したもの。
+    diffusers が更新されて増減したら、写しの側が黙って古くなる。image runtime
+    がある環境では実物と突き合わせ、無い環境では素通りする。"""
+    import subprocess
+    from pathlib import Path
+
+    from mediaforge.custom_models import AUTO_TEXT2IMAGE_CLASSES
+
+    runtime = Path(
+        "/data1tb/ControlDeck/data/feature-data/media-forge/runtimes/rocm-torch/.venv/bin/python"
+    )
+    if not runtime.is_file():
+        pytest.skip("image runtime が無い環境ではこの照合はできない")
+    result = subprocess.run(
+        [str(runtime), "-c",
+         "from diffusers.pipelines.auto_pipeline import AUTO_TEXT2IMAGE_PIPELINES_MAPPING as M;"
+         "import json;print(json.dumps(sorted({c.__name__ for c in M.values()})))"],
+        capture_output=True, text=True, timeout=180,
+    )
+    if result.returncode != 0:
+        pytest.skip("image runtime から mapping を読めなかった")
+    actual = set(json.loads(result.stdout.strip().splitlines()[-1]))
+    listed = set(AUTO_TEXT2IMAGE_CLASSES) | {"Flux2KleinPipeline"}
+    assert listed == actual, (
+        "対応表が runtime とずれている。"
+        f"増えた: {sorted(actual - listed)} / 消えた: {sorted(listed - actual)}"
+    )
+
+
+def test_an_unsupported_format_is_named_in_the_message():
+    """「使えません」だけでは、何が使えないのか分からない。形式を名指しする。"""
+    from mediaforge.custom_models import UNSUPPORTED_ADAPTER, _adapter_for
+
+    adapter, capabilities, warnings = _adapter_for("diffusers", "text-to-image", "WanPipeline")
+    assert adapter == UNSUPPORTED_ADAPTER
+    assert any("WanPipeline" in warning for warning in warnings), warnings
+
+    # クラスすら読めなかったときも、黙って通さない
+    adapter, _caps, warnings = _adapter_for("diffusers", "text-to-image", "")
+    assert adapter == UNSUPPORTED_ADAPTER
+    assert any("不明" in warning for warning in warnings)
+
+
+def test_a_dedicated_adapter_wins_over_the_generic_one():
+    from mediaforge.custom_models import _adapter_for
+
+    adapter, _caps, _warnings = _adapter_for("diffusers", "text-to-image", "Flux2KleinPipeline")
+    assert adapter == "diffusers.flux2-klein"

@@ -23,7 +23,16 @@ ALLOWED: dict[str, tuple[type, tuple[Any, ...] | None]] = {
     "library_kind": (str, ("all", "generated", "edited", "imported")),
     "director_mode": (str, ("original", "refine", "art_direct")),
     "model_layout": (str, ("table", "cards")),
+    # 作りかけの設定。画面を離れても、次に開いたときに続きから始められる。
+    # 中身は creative_spec の一部（domain / scene / 構図など）で、どれも
+    # templates.json の id なので、鍵ごとの列挙ではなく形と大きさで縛る。
+    "last_creative_spec": (dict, None),
 }
+
+# 自由形式の設定は、鍵の数と値の長さで縛る。列挙できないものを無制限に
+# 受けると、preferences が任意の入れ物になる。
+MAX_SPEC_KEYS = 24
+MAX_SPEC_VALUE_LENGTH = 128
 
 DEFAULTS: dict[str, Any] = {
     "mode": "simple",
@@ -36,6 +45,7 @@ DEFAULTS: dict[str, Any] = {
     "director_mode": "refine",
     # 見比べる用途が多いので既定は表。カードは 1 件ずつの説明向け。
     "model_layout": "table",
+    "last_creative_spec": {},
 }
 
 
@@ -58,8 +68,31 @@ def validate(values: object) -> dict[str, Any]:
             raise PreferenceError("invalid_preference_value", f"preference {key} has an unsupported type")
         if choices is not None and value not in choices:
             raise PreferenceError("invalid_preference_value", f"preference {key} has an unsupported value")
+        if expected is dict:
+            value = _bounded_spec(key, value)
         result[key] = value
     return result
+
+
+def _bounded_spec(key: str, value: dict[str, Any]) -> dict[str, Any]:
+    """Accept a small, flat map of short strings and nothing else.
+
+    The values are template identifiers, so there is no reason for nesting or
+    for long strings. Without a bound here, preferences becomes a place to store
+    arbitrary data under a name that sounds harmless.
+    """
+    if len(value) > MAX_SPEC_KEYS:
+        raise PreferenceError("invalid_preference_value", f"preference {key} has too many entries")
+    bounded: dict[str, Any] = {}
+    for name, item in value.items():
+        if not isinstance(name, str) or len(name) > 64:
+            raise PreferenceError("invalid_preference_value", f"preference {key} has an unsupported entry")
+        if isinstance(item, bool) or not isinstance(item, (str, int)):
+            raise PreferenceError("invalid_preference_value", f"preference {key} has an unsupported entry")
+        if isinstance(item, str) and len(item) > MAX_SPEC_VALUE_LENGTH:
+            raise PreferenceError("invalid_preference_value", f"preference {key} has an oversized entry")
+        bounded[name] = item
+    return bounded
 
 
 def merged(stored: dict[str, Any]) -> dict[str, Any]:

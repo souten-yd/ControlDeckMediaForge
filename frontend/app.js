@@ -6,6 +6,14 @@
    （保存 API の名前をこのファイルに 1 度も書かないこと自体を試験で守っている） */
 
 const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
+
+/* 作りかけの設定は覚えておく。毎回ドメインから選び直させるほどの理由が無い。
+   戻したいときのために、初期値は 1 か所に置いてクリアから使えるようにする。 */
+const CREATIVE_DEFAULTS = {
+  domain: "auto", scene: "auto", pose: "auto", composition: "auto",
+  camera: "auto", variation: "auto",
+  sceneDetails: "", poseDetails: "", compositionDetails: "", cameraDetails: "",
+};
 const MODEL_TERMINAL = new Set(["ready", "failed", "canceled"]);
 const VIEWS = ["create", "library", "activity", "settings"];
 
@@ -64,11 +72,7 @@ const state = {
   envelope: null,
   presets: [],
   creativeTemplates: null,
-  creative: {
-    domain: "auto", scene: "auto", pose: "auto", composition: "auto",
-    camera: "auto", variation: "auto",
-    sceneDetails: "", poseDetails: "", compositionDetails: "", cameraDetails: "",
-  },
+  creative: {...CREATIVE_DEFAULTS},
   directorMode: "original",
   directorPlan: null,
   profiles: [],
@@ -671,6 +675,21 @@ function updateCreativeSummary() {
   byId("scene-framing-summary").textContent = chosen.length ? chosen.join(" / ") : "自動";
 }
 
+/* 打鍵のたびに保存すると往復が増えるだけなので、手が止まってからまとめる。 */
+let creativeSaveTimer = 0;
+
+function rememberCreative() {
+  window.clearTimeout(creativeSaveTimer);
+  creativeSaveTimer = window.setTimeout(() => {
+    // 既定のままの項目は送らない。既定を保存しても復元は同じで、
+    // 保存できる大きさの上限だけを食う。
+    const changed = Object.fromEntries(
+      Object.entries(state.creative).filter(([key, value]) => value !== CREATIVE_DEFAULTS[key]),
+    );
+    void savePreferences({last_creative_spec: changed});
+  }, 600);
+}
+
 function setCreativeValue(key, value) {
   state.creative[key] = value;
   if (key === "domain") {
@@ -684,6 +703,7 @@ function setCreativeValue(key, value) {
   const advanced = byId(`advanced-${key}`);
   if (advanced) advanced.value = value;
   updateCreativeSummary();
+  rememberCreative();
   updateCompositionOptions();
   renderDirectorControl();
   clearError();
@@ -4256,7 +4276,10 @@ byId("create-form").addEventListener("input", (event) => {
     "advanced-composition-details": "compositionDetails",
     "advanced-camera-details": "cameraDetails",
   }[event.target.id];
-  if (detail) state.creative[detail] = event.target.value;
+  if (detail) {
+    state.creative[detail] = event.target.value;
+    rememberCreative();
+  }
   clearError();
 });
 
@@ -4613,6 +4636,30 @@ window.addEventListener("pageshow", (event) => {
   if (event.persisted) void resumeAfterInterruption();
 });
 
+/* 覚えていることの逆。積み上がった指定を 1 つずつ「自動」に戻すのは面倒で、
+   結局タブを開き直すことになっていた。1 押しで最初の状態へ戻す。 */
+byId("create-reset").addEventListener("click", async () => {
+  const accepted = await confirmModelAction({
+    title: "初期に戻す",
+    detail: "入力した内容と、選んだドメイン・シーン・見せ方を消して最初の状態に戻します。",
+    confirmLabel: "戻す",
+  });
+  if (!accepted) return;
+  byId("create-intent").value = "";
+  state.creative = {...CREATIVE_DEFAULTS};
+  state.characterProfileId = "";
+  state.styleProfileId = "";
+  clearError();
+  byId("create-status").textContent = "";
+  renderCreative();
+  renderProfileChoices();
+  updateCreativeSummary();
+  // 覚えている分も消す。残すと次に開いたときに戻ってくる。
+  window.clearTimeout(creativeSaveTimer);
+  void savePreferences({last_creative_spec: {}});
+  byId("create-intent").focus();
+});
+
 byId("activity-clear").addEventListener("click", async () => {
   // 走っているものは消えない。消えるのは終わった記録だけで、資産の来歴は
   // 資産側に残る（一覧から下げるだけで、記録そのものは壊さない）。
@@ -4803,6 +4850,13 @@ async function boot() {
     catch { state.creativeTemplates = {domains: [], scenes: [], poses: [], compositions: [], cameras: [], variations: []}; }
   }
 
+  // 前回の続きから始める。毎回ドメインから選び直させるほどの理由が無い。
+  const rememberedSpec = state.preferences.last_creative_spec;
+  if (rememberedSpec && typeof rememberedSpec === "object") {
+    for (const [key, value] of Object.entries(rememberedSpec)) {
+      if (key in CREATIVE_DEFAULTS) state.creative[key] = value;
+    }
+  }
   state.directorMode = directorAvailable()
     ? (state.preferences.director_mode || "refine")
     : "original";
