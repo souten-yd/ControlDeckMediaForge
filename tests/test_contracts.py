@@ -5,6 +5,8 @@ from pathlib import Path
 
 import jsonschema
 
+from conftest import wait_terminal
+
 
 ROOT = Path(__file__).parents[1]
 
@@ -29,6 +31,23 @@ def test_job_schema_does_not_require_model_id():
     schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
     assert schema["required"] == ["operation", "intent"]
     jsonschema.validate({"operation": "image.generate", "intent": "a blue robot"}, schema)
+
+
+def test_g7_video_contract_is_additive_and_does_not_claim_a_runtime(client):
+    schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
+    request = {
+        "operation": "video.generate",
+        "intent": "a blue robot turns toward the camera",
+        "output": {"format": "mp4", "count": 1},
+    }
+    jsonschema.validate(request, schema)
+    response = client.post("/api/v1/jobs", json=request)
+    assert response.status_code == 202
+    job = wait_terminal(client, response.json()["id"])
+    assert job["error"] == {
+        "code": "capability_unavailable",
+        "message": "video.generate has no measured local runtime",
+    }
 
 
 def test_model_catalog_matches_public_schema_without_local_path(client):

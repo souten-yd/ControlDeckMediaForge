@@ -4549,3 +4549,67 @@ v0.9.0 の導入が「信頼できる publisher の鍵に一致しない」で�
 
 v0.7.3 と v0.8.0 も同じ形で配ってある。既に導入済みで、downgrade は拒まれる
 ので影響は無いが、それらを今から検証し直すことはできない。
+
+## G7 V0 — additive video contract と FFmpeg 正規化境界（2026-08-26）
+
+G7 を `docs/implementation/g7-video-runtime.md` の V0〜V4 に分けた。V0 はモデルを
+動かさず、既存の汎用 `video.generate` / `video.edit` 設計を公開 JobRequest へ加法的に
+載せ、生成物を公開する前の決定的 FFmpeg 境界を worker pack に置くスライスである。
+
+契約:
+
+```text
+video.generate inputs 0 / 1 / 2..8   T2V / I2V / multi-keyframe の将来 routing
+video.edit     inputs 1..8            入力なしと 9 件以上を ingress で拒否
+output                                mp4 / webm のみ
+Asset MIME                            video/mp4 / video/webm を加法追加
+Asset metadata                        duration_sec / frame_rate を任意追加
+capability                            unavailable / planned_for_g7 を維持
+runtime 未実測 job                    capability_unavailable で fail-closed
+```
+
+FFmpeg worker 境界は配列 subprocess、timeout、1 video stream、偶数寸法、fps 1..120、
+尺 300 秒以下を強制する。MP4 は H.264/AAC、WebM は VP9/Opus。ffprobe で codec、
+container、寸法、fps、frame count、audio を再検証し、失敗時は partial output を消す。
+
+実ファイルでの単体実測（Ubuntu system FFmpeg 6.1.1、保存先
+`/data1tb/mediaforge-g7-v0-evidence/2026-08-26/`）:
+
+```text
+source.mkv       160x90 / 24fps / 2秒 / video+audio   251,768 bytes
+normalized.mp4   128x72 / 12fps / 1.25秒 / 15 frames / H.264 / audioなし
+                 0.07秒、max RSS 61,564 KiB、6,259 bytes
+                 sha256 45052db72a23d29525aecb028a84056e27a61a9044b46a045999f33d4e755daf
+normalized.webm   96x64 / 24fps / 0.508秒 / 12 frames / VP9 / Opus audio
+                 0.09秒、max RSS 72,752 KiB、18,194 bytes
+                 sha256 6a8495a0033d2f67c63aecee0d19beb20a4185480a5cfeb1055aca75bf081ed5
+GPU               use 0%、KFD process 0、R9700 VRAM used 59,912,192 bytes
+```
+
+branch core を `127.0.0.1:9160` で実起動し、実 HTTP でも確認した。
+
+```text
+POST /api/v1/jobs video.generate/mp4
+  202 Location /api/v1/jobs/job_a9756b1cd48a4dd0966d7294967d8fc8
+GET 同 job
+  failed / capability_unavailable / "video.generate has no measured local runtime"
+GET /api/v1/capabilities
+  video.image_to_video = unavailable / planned_for_g7
+installed v0.9.0 GET :9130/health
+  healthy / R9700 gfx1201 / torch 2.10.0+rocm7.2.1.gitb07cec22 / HIP 7.2.53211
+```
+
+検証:
+
+```text
+focused + store + bundle   61 passed
+./mf.sh test               683 passed, 1 warning in 50.24s
+git diff --check           PASS
+compileall                 PASS
+```
+
+NOT TESTED: 動画モデルの import/generation/quality、R9700 VRAM、Broker lease/wait/cancel、
+LLM 退避/復帰、SonicForge job との同時 admission、installed bundle/browser playback。
+V1 の revision-pinned candidate probe と V2〜V4 の範囲であり、video capability は
+それらが通るまで unavailable のままにする。release bundle 上の system FFmpeg 検出/
+provision も V2 前提として未実施。ControlDeck の変更は 0 件。

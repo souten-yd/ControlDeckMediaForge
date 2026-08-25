@@ -484,6 +484,7 @@ class Store:
     def register_asset(self, metadata: Asset, provenance: Provenance, source: Path) -> Asset:
         suffix = {
             "image/png": ".png", "image/webp": ".webp", "image/jpeg": ".jpg",
+            "video/mp4": ".mp4", "video/webm": ".webm",
             "application/zip": ".zip",
         }[metadata.mime_type]
         storage_name = f"{metadata.id}{suffix}"

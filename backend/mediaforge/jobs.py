@@ -317,7 +317,10 @@ class JobManager:
             self.store.update_job(
                 job_id,
                 status=JobStatus.FAILED,
-                error=ErrorDetail(code="capability_unavailable", message=f"{job.request.operation} is unavailable in G0"),
+                error=ErrorDetail(
+                    code="capability_unavailable",
+                    message=f"{job.request.operation} has no measured local runtime",
+                ),
             )
             return
         execution = self._host_executions.get(job_id)

@@ -14,10 +14,12 @@
       "enum": [
         "image.generate",
         "image.edit",
+        "video.generate",
+        "video.edit",
         "media.inspect",
         "asset.pack"
       ],
-      "description": "image.generate creates a new asset. image.edit changes an existing one and keeps its geometry. asset.pack bundles existing assets."
+      "description": "image.generate creates a new image. image.edit changes an existing image. video.generate creates video from text or bounded key images. video.edit changes existing video. asset.pack bundles existing assets."
     },
     "intent": {
       "type": "string",
@@ -92,6 +94,46 @@
       "default": true
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {"enum": ["video.generate", "video.edit"]}
+        },
+        "required": ["operation"]
+      },
+      "then": {
+        "required": ["output"],
+        "properties": {
+          "inputs": {"maxItems": 8},
+          "output": {
+            "properties": {
+              "format": {"enum": ["mp4", "webm"]}
+            },
+            "required": ["format"]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "output": {
+            "properties": {
+              "format": {"not": {"enum": ["mp4", "webm"]}}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"operation": {"const": "video.edit"}},
+        "required": ["operation"]
+      },
+      "then": {
+        "properties": {"inputs": {"minItems": 1}}
+      }
+    }
+  ],
   "$defs": {
     "assetInput": {
       "type": "object",
@@ -116,6 +158,8 @@
             "png",
             "webp",
             "jpeg",
+            "mp4",
+            "webm",
             "zip"
           ],
           "default": "png"

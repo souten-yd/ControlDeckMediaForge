@@ -112,6 +112,16 @@ OpenAPI and accepts no path.
 `variation`, `inpaint`, or `outpaint`. Reference and variation may change the
 whole image; inpaint requires strict editing and an asset mask:
 
+G7 adds `video.generate` and `video.edit` without making a model name part of
+the contract. `video.generate` accepts zero to eight input assets: zero routes
+to text-to-video, one to image-to-video, and multiple inputs require a
+multi-keyframe-capable runtime. Video output must be `mp4` or `webm`; image and
+pack operations cannot request those formats. Until a local runtime passes the
+R9700 adoption gate, video requests fail with `capability_unavailable` and the
+capability document remains unavailable. Video assets add `video/mp4` and
+`video/webm` MIME types plus optional `duration_sec` and `frame_rate`; existing
+required asset fields are unchanged.
+
 ```json
 {
   "edit_mode": "inpaint",
@@ -363,3 +373,6 @@ breaking change still requires impact, migration, and version-bump documentation
 G5 keeps the same contract version and adds only a ZIP output enum/MIME, a higher
 input bound, domain-profile discovery, and a manifest schema. Existing requests
 and required fields are unchanged.
+G7 V0 likewise keeps contract version `1.0`: the two generic video operations,
+two output formats/MIME types, and optional video metadata are additive. A
+measured runtime is deliberately not advertised by this contract-only slice.

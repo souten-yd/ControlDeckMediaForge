@@ -127,6 +127,31 @@ def test_local_only_remote_request_is_rejected_by_backend(client):
     assert client.get("/api/v1/jobs").json()["items"] == []
 
 
+def test_video_request_shape_is_bounded_before_runtime_admission(client):
+    base = {
+        "operation": "video.generate",
+        "intent": "turn toward the camera",
+        "output": {"format": "mp4"},
+    }
+    assert client.post("/api/v1/jobs", json=base).status_code == 202
+
+    wrong_format = {**base, "output": {"format": "png"}}
+    assert client.post("/api/v1/jobs", json=wrong_format).status_code == 422
+
+    image_as_video = request()
+    image_as_video["output"] = {"format": "mp4"}
+    assert client.post("/api/v1/jobs", json=image_as_video).status_code == 422
+
+    edit_without_input = {**base, "operation": "video.edit"}
+    assert client.post("/api/v1/jobs", json=edit_without_input).status_code == 422
+
+    too_many_keyframes = {
+        **base,
+        "inputs": [{"asset_id": f"asset_{index:032x}"} for index in range(9)],
+    }
+    assert client.post("/api/v1/jobs", json=too_many_keyframes).status_code == 422
+
+
 def test_capability_discovery_does_not_expose_model_names(client):
     response = client.get("/api/v1/capabilities")
 
