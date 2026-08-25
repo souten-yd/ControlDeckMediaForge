@@ -276,3 +276,41 @@ def summary(
         })
 
     return {"settled": settled, "needs_check": check}
+
+
+# 単一ファイルの checkpoint と LoRA が名乗る base model を、系統として揃える。
+# worker pack 側の同名関数と同じ判断でなければならない。core は worker を
+# import できないので写しになっており、ずれたら test_lora が気づく。
+_FAMILY_PREFIXES = (
+    ("sd35", "sd35"), ("sd3", "sd3"),
+    ("sdxl", "sdxl"), ("pony", "pony"),
+    ("illustrious", "illustrious"), ("noobai", "noobai"),
+    ("sd15", "sd15"), ("sd20", "sd20"), ("sd21", "sd21"),
+    ("sd1", "sd15"), ("sd2", "sd21"),
+)
+# pipeline クラスから見た系統。Hugging Face から入れた diffusers 形式は
+# base model を名乗らないので、LoRA を載せられるかを判断する材料が無い。
+_PIPELINE_FAMILIES = {
+    "StableDiffusionXLPipeline": "SDXL 1.0",
+    "StableDiffusionXLPAGPipeline": "SDXL 1.0",
+    "StableDiffusionPipeline": "SD 1.5",
+    "StableDiffusionPAGPipeline": "SD 1.5",
+    "StableDiffusion3Pipeline": "SD 3",
+}
+
+
+def normalize_base_model(value: str) -> str:
+    folded = "".join(character for character in (value or "").lower() if character.isalnum())
+    for prefix, key in _FAMILY_PREFIXES:
+        if folded.startswith(prefix):
+            return key
+    return ""
+
+
+def base_model_from_config(root: Path) -> str:
+    """その repository が名乗る pipeline から、系統名を決める。
+
+    宣言が無いものに LoRA を載せられるかを判断する材料になる。分からない
+    ものは空にする。当てると、載らない組み合わせを載せられると言うことになる。
+    """
+    return _PIPELINE_FAMILIES.get(pipeline_class_from_config(root), "")

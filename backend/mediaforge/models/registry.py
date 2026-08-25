@@ -10,6 +10,7 @@ from typing import Any
 
 from .generation_defaults import (  # noqa: F401
     native_side_from_config,
+    base_model_from_config,
     pipeline_class_from_config,
     resolution_buckets,
     resolve_steps,
@@ -103,6 +104,12 @@ class ModelDescriptor:
     # 単一ファイルの checkpoint が、どの系統として配られているか。ファイル
     # 自身は名乗らないので、配布元の申告をそのまま持つ。
     base_model: str = ""
+    # LoRA が効くために prompt へ入れる必要のある語。持たない LoRA もある。
+    trigger_words: tuple[str, ...] = ()
+
+    @property
+    def is_lora(self) -> bool:
+        return "image.lora" in self.capabilities
     # そのモデルが学習された画面寸法。宣言が無ければ導入時に repository の
     # config から読む。None は「まだ分かっていない」で、1024 とは違う。
     native_width: int | None = None
@@ -245,6 +252,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     if not isinstance(runtime_options, dict) or set(runtime_options) - {
         "device_mode", "disable_mmap", "negative_prompt", "guidance_scale",
         "default_steps", "native_width", "native_height", "base_model",
+        "trigger_words",
     }:
         raise ModelRegistryError("model registry runtime_options are invalid")
     negative_prompt = runtime_options.get("negative_prompt", "")
@@ -277,6 +285,13 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         raise ModelRegistryError("model registry runtime_options are invalid")
     base_model = runtime_options.get("base_model", "")
     if not isinstance(base_model, str) or len(base_model) > 64:
+        raise ModelRegistryError("model registry runtime_options are invalid")
+    trigger_words = runtime_options.get("trigger_words", [])
+    if (
+        not isinstance(trigger_words, list)
+        or len(trigger_words) > 12
+        or any(not isinstance(word, str) or not word or len(word) > 80 for word in trigger_words)
+    ):
         raise ModelRegistryError("model registry runtime_options are invalid")
     generation_limits = value.get("generation_limits", {})
     if not isinstance(generation_limits, dict) or set(generation_limits) - {
@@ -317,6 +332,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         guidance_scale=float(guidance_scale) if guidance_scale is not None else None,
         default_steps=default_steps,
         base_model=base_model,
+        trigger_words=tuple(trigger_words),
         **({"default_steps_source": "declared"} if default_steps is not None else {}),
         **native_size,
         **limits,
@@ -545,6 +561,8 @@ class ModelRegistry:
             if side is not None:
                 observed["native_width"] = side
                 observed["native_height"] = side
+        if not descriptor.base_model:
+            observed["base_model"] = base_model_from_config(snapshot)
         if descriptor.default_steps is None:
             steps, source = resolve_steps(pipeline_class_from_config(snapshot), snapshot)
             observed["default_steps"] = steps

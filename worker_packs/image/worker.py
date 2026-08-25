@@ -69,6 +69,13 @@ ADAPTERS = {
 class ImageWorker:
     def __init__(self):
         self.model_root = Path(os.environ["MEDIA_FORGE_MODEL_ROOT"])
+        # LoRA は選んだモデルとは別の repository に入る。モデルの境界は
+        # そのモデル 1 つ分に絞ってあるので、同じ境界では必ず外に出る。
+        # 広げるのではなく、LoRA 用の境界を別に受け取る。
+        self.lora_roots = tuple(
+            Path(value) for value in
+            os.environ.get("MEDIA_FORGE_LORA_ROOTS", "").split(os.pathsep) if value
+        )
         self.work_root = Path(os.environ["MEDIA_FORGE_WORK_ROOT"])
         self.device_mode_override = os.environ.get("MEDIA_FORGE_IMAGE_DEVICE_MODE")
         if self.device_mode_override is not None and self.device_mode_override not in {
@@ -82,6 +89,42 @@ class ImageWorker:
             raise ValueError("MEDIA_FORGE_IMAGE_DISABLE_MMAP must be 0 or 1")
         self.disable_mmap_override = None if disable_mmap is None else disable_mmap == "1"
         self.adapters: dict[str, Any] = {}
+
+    def _contained_lora(self, value: object) -> Path:
+        """LoRA の経路を、許された根のいずれかの中に収める。
+
+        根が渡されていなければ載せない。境界の無い経路を通すと、任意の
+        safetensors を読み込ませられる。
+        """
+        for root in self.lora_roots:
+            try:
+                path = _contained(root, value, "LoRA file")
+            except ValueError:
+                continue
+            if path.is_file():
+                return path
+        raise ValueError("LoRA file is outside the worker boundary")
+
+    def _loras(self, value: Any) -> list[dict[str, Any]]:
+        """core が解決した LoRA の一覧。経路は必ず work root の中に収める。"""
+        if not isinstance(value, list):
+            raise ValueError("worker LoRA list is invalid")
+        if len(value) > 4:
+            raise ValueError("worker LoRA count exceeds the bounded limit")
+        resolved: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                raise ValueError("worker LoRA entry is invalid")
+            weight = item.get("weight")
+            if isinstance(weight, bool) or not isinstance(weight, (int, float)) or not 0 <= weight <= 2:
+                raise ValueError("worker LoRA weight is outside the bounded range")
+            path = self._contained_lora(item.get("path"))
+            resolved.append({
+                "id": str(item.get("id") or "")[:200],
+                "path": str(path),
+                "weight": float(weight),
+            })
+        return resolved
 
     def handle(self, payload: object) -> dict[str, Any]:
         if not isinstance(payload, dict):
@@ -221,6 +264,9 @@ class ImageWorker:
         # candidates are internal-only for semantic retry selection.
         if not 1 <= steps <= 50 or not 1 <= count <= 11:
             raise ValueError("image steps or output count is outside the bounded range")
+        # LoRA は core が解決して渡す。worker は載せるだけで、どれを載せるかは
+        # 決めない。系統の照合や枚数の上限は core 側にある。
+        loras = self._loras(worker_inputs.get("loras", []) if isinstance(worker_inputs, dict) else [])
         prompt = request.get("intent")
         if not isinstance(prompt, str) or not prompt:
             raise ValueError("image prompt is required")
@@ -230,6 +276,8 @@ class ImageWorker:
         adapter = self.adapters.get(model_id)
         if adapter is None:
             # 1 度に 1 つだけ常駐させる。単一 GPU では並べられない。
+            if loras and not hasattr(globals()[ADAPTERS[runtime_adapter]], "apply_loras"):
+                raise ValueError("this image adapter cannot take LoRAs")
             adapter = globals()[ADAPTERS[runtime_adapter]](
                 model_path,
                 device_mode=device_mode,
@@ -237,6 +285,12 @@ class ImageWorker:
                 **family_options,
             )
             self.adapters = {model_id: adapter}
+        if loras:
+            adapter.load()
+            adapter.apply_loras(loras)
+        elif getattr(adapter, "_applied_loras", None):
+            # 前の要求の LoRA を外す。外さないと、指定していないのに効き続ける。
+            adapter.apply_loras([])
         outputs = []
         generation_sec = 0.0
         if operation == "image.edit" and strict_edit and edit_mode != "outpaint" and mask_path is None:
