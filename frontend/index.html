@@ -338,8 +338,21 @@
               </select>
             </label>
             <div class="split-actions">
-              <button type="button" id="catalog-reset">結果を消す</button>
-              <button type="button" id="catalog-search">検索</button>
+              <button type="button" id="catalog-reset" class="icon"
+                      aria-label="結果を消す" title="結果を消す">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 7h16"/>
+                  <path d="M9.5 7V5.4a1.4 1.4 0 0 1 1.4-1.4h2.2a1.4 1.4 0 0 1 1.4 1.4V7"/>
+                  <path d="M6.4 7.5 7.3 19a1.4 1.4 0 0 0 1.4 1.3h6.6a1.4 1.4 0 0 0 1.4-1.3l.9-11.5"/>
+                </svg>
+              </button>
+              <button type="button" id="catalog-search" class="icon primary"
+                      aria-label="検索" title="検索">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <circle cx="10.8" cy="10.8" r="6.4"/>
+                  <path d="m15.6 15.6 4.2 4.2"/>
+                </svg>
+              </button>
             </div>
           </div>
           <div id="catalog-results" class="table-wrap" hidden></div>

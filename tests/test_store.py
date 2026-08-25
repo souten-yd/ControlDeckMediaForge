@@ -286,3 +286,47 @@ def test_a_cleared_job_still_backs_its_assets(tmp_path: Path):
 
     assert store.get_asset(asset_id).job_id == job_id
     assert store.get_job(job_id).id == job_id
+
+
+def test_cancelling_a_queued_download_settles_it_immediately(tmp_path: Path):
+    """走っていないものに旗を立てても、誰も見に来ない。実測: cancel_requested=1
+    のまま queued で止まり、押しても何も起きないように見えていた。"""
+    from mediaforge.models.operations import ModelOperationState
+
+    store = Store(tmp_path / "state")
+    store.initialize()
+    queued = store.create_model_operation("m/one", "install", bytes_total=10)
+    assert store.get_model_operation(queued.id).state == ModelOperationState.QUEUED
+
+    store.request_model_operation_cancel(queued.id)
+
+    assert store.get_model_operation(queued.id).state == ModelOperationState.CANCELED
+
+
+def test_cancelling_a_running_download_only_raises_the_flag(tmp_path: Path):
+    """走っているものは、書きかけを片付ける必要がある。その場で終わらせない。"""
+    from mediaforge.models.operations import ModelOperationState
+
+    store = Store(tmp_path / "state")
+    store.initialize()
+    running = store.create_model_operation("m/two", "install", bytes_total=10)
+    store.update_model_operation(running.id, state=ModelOperationState.DOWNLOADING)
+
+    store.request_model_operation_cancel(running.id)
+
+    current = store.get_model_operation(running.id)
+    assert current.state == ModelOperationState.DOWNLOADING
+    assert current.cancel_requested is True
+
+
+def test_cancelling_a_finished_download_changes_nothing(tmp_path: Path):
+    from mediaforge.models.operations import ModelOperationState
+
+    store = Store(tmp_path / "state")
+    store.initialize()
+    done = store.create_model_operation("m/three", "install", bytes_total=10)
+    store.update_model_operation(done.id, state=ModelOperationState.READY)
+
+    store.request_model_operation_cancel(done.id)
+
+    assert store.get_model_operation(done.id).state == ModelOperationState.READY
