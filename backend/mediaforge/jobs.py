@@ -118,6 +118,7 @@ class JobManager:
         ai_gateway: HostAIGateway | None = None,
         creative_director: Any | None = None,
         creative_validate: Any | None = None,
+        extra_manifests: Any | None = None,
     ):
         self.store = store
         self.worker_timeout_sec = worker_timeout_sec
@@ -134,6 +135,9 @@ class JobManager:
         # いた。タブを閉じると失われるので、job の phase として持たせる。
         self.creative_director = creative_director
         self.creative_validate = creative_validate
+        # 自作モデルは shipped manifest に居ない。routing がそれを知らないと、
+        # 利用者が選べる状態にしても「使えるモデルがありません」で落ちる。
+        self.extra_manifests = extra_manifests
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
         # AI ターン終了の宣言結果。lease が取れなかったときに理由を添えるために持つ。
         self._ai_release: dict[str, HostAIReleaseResult] = {}
@@ -404,11 +408,16 @@ class JobManager:
         if self.model_manifest is None or self.hf_home is None:
             return None
         try:
+            extra_models, extra_catalog = (
+                self.extra_manifests() if self.extra_manifests is not None else ([], [])
+            )
             models = ModelRegistry.load(
                 self.model_manifest,
                 hf_home=self.hf_home,
                 catalog_manifest=self.model_catalog_manifest,
                 model_store_root=self.model_store_root,
+                extra_models=extra_models,
+                extra_catalog=extra_catalog,
             ).all()
         except ModelRegistryError as exc:
             raise WorkerFailure("model_registry_invalid", str(exc)) from exc
