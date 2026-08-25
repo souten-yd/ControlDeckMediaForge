@@ -863,6 +863,34 @@ class CustomModelCatalog(CatalogSearchMixin):
         self._write(entries)
         return entry
 
+    def record_measurement(self, model_id: str, measurements: dict[str, Any]) -> dict[str, Any]:
+        """Promote an entry from "nobody has run this" to "this is what it costs".
+
+        Until a model has been run here it stays experimental and routing will
+        not pick it, because choosing one would mean guessing its VRAM and
+        finding out during someone's work. Once there are real numbers from
+        this machine, the guess is gone and the model can be routed.
+
+        Only entries this catalog owns are touched — the shipped manifest is
+        not rewritten at runtime.
+        """
+        entries = self.entries()
+        for entry in entries:
+            registry = entry.get("registry")
+            if not isinstance(registry, dict) or registry.get("model_id") != model_id:
+                continue
+            if registry.get("runtime_adapter") == UNSUPPORTED_ADAPTER:
+                raise CustomModelError(
+                    "custom_model_unsupported",
+                    "実行アダプタが無いモデルは、測っても使えるようにはなりません",
+                )
+            registry["measurements"] = measurements
+            registry["measurement_confidence"] = "measured"
+            registry["state"] = "available"
+            self._write(entries)
+            return entry
+        raise CustomModelError("custom_model_not_added", "そのモデルは追加されていません")
+
     def remove(self, model_id: str) -> None:
         entries = self.entries()
         remaining = [

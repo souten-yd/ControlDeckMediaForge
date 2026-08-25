@@ -102,6 +102,7 @@ from .reference_intelligence import (
     ReferenceIntelligenceError,
     analysis_summary,
 )
+from .image_evaluation import measure_image_model
 from .store import AssetInUse, Store, utc_now
 from .thumbnails import ThumbnailError
 from .validators import validate_png
@@ -278,6 +279,15 @@ def create_app(
             runtime_root=native_runtime_root,
             lease_renew_sec=resolved.host_lease_renew_sec,
             timeout_sec=resolved.model_evaluation_timeout_sec,
+            # 自作モデルも測れるようにする。shipped manifest に居ないので、
+            # custom entry を含んだ一覧を渡す。
+            registry_loader=(
+                (lambda: list(model_operations._registry().all()))
+                if model_operations is not None else None
+            ),
+            image_runtime_python=resolved.image_runtime_python,
+            image_measure=measure_image_model,
+            record_measurement=custom_models.record_measurement,
         )
         if resolved.model_catalog_manifest is not None
         else None
