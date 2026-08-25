@@ -174,15 +174,38 @@ function setHostBusy(value) {
 
 /* ── workspace transport ──────────────────────────────────────────────── */
 
+/* 接続は切れるものとして扱う。携帯では画面を離れただけで socket は閉じられ、
+   戻ってきた頁が bfcache から復元されると JS の状態だけが生き残る。
+   以前は解決済みの promise を握ったままだったので、閉じた socket へ send を
+   続け、画面は空のままになった（再読込するまで直らない）。 */
+function socketOpen() {
+  return state.socket && state.socket.readyState === WebSocket.OPEN;
+}
+
+function dropSocket() {
+  state.socketReady = null;
+  state.socket = null;
+}
+
 function connectSocket() {
-  if (state.socketReady) return state.socketReady;
+  if (state.socketReady && socketOpen()) return state.socketReady;
+  if (state.socketReady && state.socket && state.socket.readyState === WebSocket.CONNECTING) {
+    return state.socketReady;
+  }
+  dropSocket();
   state.socketReady = new Promise((resolve, reject) => {
     const frameRoot = location.pathname.split("/").slice(0, 3).join("/").replace(/\/+$/, "");
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     state.socket = new WebSocket(`${scheme}://${location.host}${frameRoot}/ws`, [`control-deck-bridge.${state.nonce}`]);
     state.socket.onopen = () => resolve();
-    state.socket.onerror = () => reject({code: "workspace_transport_unavailable"});
+    state.socket.onerror = () => {
+      dropSocket();
+      reject({code: "workspace_transport_unavailable"});
+    };
     state.socket.onclose = () => {
+      // 次の呼び出しで張り直せるようにする。持ったままにすると、以後の
+      // すべての要求が閉じた socket へ送られて黙って失敗する。
+      dropSocket();
       for (const pending of state.pending.values()) pending.reject({code: "workspace_transport_closed"});
       state.pending.clear();
     };
@@ -471,10 +494,22 @@ async function standaloneCall(method, params) {
 async function call(method, params = {}) {
   if (window.parent === window) return standaloneCall(method, params);
   await connectSocket();
+  if (!socketOpen()) {
+    // connectSocket の直後でも閉じていることがある。閉じた socket への send は
+    // 例外にならず、応答が永遠に来ないだけなので、ここで気づく。
+    dropSocket();
+    await connectSocket();
+  }
   return new Promise((resolve, reject) => {
     const id = `media-forge-workspace-${++state.sequence}`;
     state.pending.set(id, {resolve, reject});
-    state.socket.send(JSON.stringify({id, method, params}));
+    try {
+      state.socket.send(JSON.stringify({id, method, params}));
+    } catch (error) {
+      state.pending.delete(id);
+      dropSocket();
+      reject({code: "workspace_transport_closed"});
+    }
   });
 }
 
@@ -920,10 +955,20 @@ function catalogRow(item) {
   labelled(size, "容量");
   updated.classList.add("secondary");
   const action = document.createElement("td");
-  if (item.already_added) {
+  if (item.catalog_state === "installed") {
     const note = document.createElement("span");
     note.className = "tag";
-    note.textContent = "追加済み";
+    note.textContent = "導入済み";
+    note.title = "この端末に落として使える状態です。";
+    action.append(note);
+  } else if (item.catalog_state === "listed" || item.already_added) {
+    // 「一覧に登録した」と「実際に落とした」は別である。1 語にまとめていた
+    // ので、登録しただけの repository が「追加済み」と出て、ダウンロードが
+    // 始まらない理由が画面から読み取れなかった。
+    const note = document.createElement("span");
+    note.className = "hint";
+    note.textContent = "一覧にあります";
+    note.title = "上のモデル一覧に登録済みです。まだ落としていないなら、そこから導入してください。";
     action.append(note);
   } else {
     const button = document.createElement("button");
@@ -1072,7 +1117,15 @@ function renderCustomResolution(resolution) {
   add.id = "custom-add";
   add.className = "primary";
   add.textContent = "取り込む";
-  holder.append(accept, add);
+  // 確認だけして止める道を残す。閉じ方が無いと、中身を見た後に検索へ戻れない。
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.id = "custom-cancel";
+  cancel.textContent = "やめる";
+  const actions = document.createElement("div");
+  actions.className = "split-actions";
+  actions.append(cancel, add);
+  holder.append(accept, actions);
 }
 
 /* 検索結果から選んだものを、中身とライセンスの確認へ渡す。
@@ -4363,6 +4416,12 @@ byId("catalog-results").addEventListener("click", (event) => {
 });
 byId("custom-result").addEventListener("click", (event) => {
   if (event.target.closest("#custom-add")) void addCustomModel();
+  if (event.target.closest("#custom-cancel")) {
+    customResolution = null;
+    byId("custom-result").hidden = true;
+    byId("custom-result").replaceChildren();
+    byId("custom-error").hidden = true;
+  }
 });
 
 byId("pack-open").addEventListener("click", () => void openPackDialog());
@@ -4522,6 +4581,26 @@ byId("catalog-next").addEventListener("click", () => {
   renderCatalogPage();
   byId("catalog-results").scrollIntoView({block: "start"});
 });
+/* 画面に戻ったときに、切れていた間の分を取り直す。socket が生きていれば
+   何もしない（張り直しも取り直しも要らない）ので、常時 polling にはしない。
+   携帯で頁を離れるたびに socket は閉じられるので、ここが実質の復帰点である。 */
+async function resumeAfterInterruption() {
+  if (window.parent === window || document.visibilityState !== "visible") return;
+  if (socketOpen()) return;
+  try {
+    await connectSocket();
+  } catch { return; }
+  await refreshSession(["jobs", "library", "model_operations", "creative_batches"]);
+  restoreProgressView();
+  renderActivity();
+}
+
+document.addEventListener("visibilitychange", () => void resumeAfterInterruption());
+// bfcache から戻った頁は JS の状態だけが生き残り、socket は閉じている。
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) void resumeAfterInterruption();
+});
+
 byId("activity-clear").addEventListener("click", async () => {
   // 走っているものは消えない。消えるのは終わった記録だけで、資産の来歴は
   // 資産側に残る（一覧から下げるだけで、記録そのものは壊さない）。
@@ -4766,9 +4845,20 @@ window.addEventListener("message", (event) => {
     }
   };
   state.bridgePort.start();
-  void connectSocket()
-    .then(boot)
-    .catch(() => { document.documentElement.dataset.bridge = "error"; });
+  // 1 度きりにしない。最初の接続が失敗しただけで画面が永久に空のままになる。
+  void (async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        await connectSocket();
+        await boot();
+        return;
+      } catch {
+        document.documentElement.dataset.bridge = "error";
+        // 落ちている相手を叩き続けない。間隔を広げながら数回だけ試す。
+        await new Promise((wake) => setTimeout(wake, 500 * 2 ** attempt));
+      }
+    }
+  })();
   void callHost("host.title.set", {title: "Media Forge"}).catch(() => {});
 });
 

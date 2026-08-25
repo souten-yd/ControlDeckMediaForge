@@ -540,6 +540,9 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
 .selection-bar .danger:disabled { opacity: .45; }
 
 .downloads-head { display: flex; justify-content: flex-end; margin: 6px 0; }
+/* 2 つで 1 組の操作。右が実行、左が取りやめ。半分ずつにして押し分けやすくする。 */
+.split-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.split-actions > button { width: 100%; }
 
 /* 選択中は開くのではなく選ぶ。押した先が変わるので、見た目でも区別する。 */
 .grid.selecting .card { position: relative; }

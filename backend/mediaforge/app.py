@@ -2066,20 +2066,32 @@ def create_app(
                             style=str(params.get("style", "any")),
                             limit=int(params.get("limit", 30) or 30),
                         )
-                        installed = {
+                        # 「一覧に登録した」と「実際に落とした」は別である。
+                        # 1 つの語にまとめていたので、登録しただけの repository が
+                        # 「追加済み」と出て、ダウンロードが始まらない理由が
+                        # 画面から読み取れなかった。
+                        listed = {
                             item["registry"]["model_id"]
                             for item in custom_models.entries()
                             if isinstance(item.get("registry"), dict)
                         }
+                        installed = set()
                         if model_operations is not None:
-                            installed.update(
+                            installed = {
                                 str(item.get("model_id"))
                                 for item in model_operations.catalog().get("items", [])
                                 if item.get("installed")
-                            )
+                            }
                         result = {
                             "items": [
-                                {**item.document(), "already_added": item.repo_id in installed}
+                                {
+                                    **item.document(),
+                                    "already_added": item.repo_id in listed | installed,
+                                    "catalog_state": (
+                                        "installed" if item.repo_id in installed
+                                        else "listed" if item.repo_id in listed else None
+                                    ),
+                                }
                                 for item in candidates
                             ],
                             "sort": str(params.get("sort", "downloads")),
@@ -2544,13 +2556,25 @@ def create_app(
             raise HTTPException(
                 status_code=502, detail={"code": exc.code, "message": str(exc)[:300]}
             ) from exc
-        installed = {
+        listed = {
             item["registry"]["model_id"]
             for item in custom_models.entries()
             if isinstance(item.get("registry"), dict)
         }
+        installed = {
+            str(item.get("model_id"))
+            for item in (model_operations.catalog().get("items", []) if model_operations else [])
+            if item.get("installed")
+        }
         return {"items": [
-            {**item.document(), "already_added": item.repo_id in installed}
+            {
+                **item.document(),
+                "already_added": item.repo_id in listed | installed,
+                "catalog_state": (
+                    "installed" if item.repo_id in installed
+                    else "listed" if item.repo_id in listed else None
+                ),
+            }
             for item in candidates
         ]}
 
