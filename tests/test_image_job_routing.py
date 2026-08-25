@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from dataclasses import replace
 from pathlib import Path
 
@@ -320,6 +321,9 @@ def test_routing_sees_the_models_the_picker_offers(tmp_path: Path):
         extra_manifests=manifests,
     )
     job = store.create_job(JobRequest(operation="image.generate", intent="test"))
-    manager._select_real_model(job)
+    # 何も導入されていないので選べないのは正しい。見たいのは、選ぶ前に
+    # 自作モデルの一覧まで読みに行っているかである。
+    with contextlib.suppress(WorkerFailure):
+        manager._select_real_model(job)
 
     assert asked["calls"] == 1, "routing が自作モデルの一覧を読んでいない"
