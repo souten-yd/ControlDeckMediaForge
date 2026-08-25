@@ -400,13 +400,26 @@ def _weights_from_gguf(value: Any) -> tuple[int, str]:
 
 _LOCAL_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
-# model_index.json の _class_name から adapter を決める。推測はしない。
-# 名前が分からないものは取り込めても生成には使えない、として入れる。
+# model_index.json の _class_name から adapter を決める。タグ（diffusers +
+# text-to-image）だけで決めると、FLUX や Qwen-Image のような別系統まで
+# 巻き込んで「入るが生成で落ちる」ものを作る。クラス名は配布物自身の申告
+# なので、推測にならない。
+#
+# diffusers.sdxl は AutoPipelineForText2Image の上に載っており、SD 1.x /
+# 2.x / XL / 3.x を同じ入口で扱える。実測は SSD-1B（SDXL 系）で取っており、
+# 他は同じ経路を通るが未実測なので state は experimental のままにする。
 _PIPELINE_ADAPTERS = {
-    "StableDiffusionXLPipeline": "diffusers.sdxl",
-    "StableDiffusionXLImg2ImgPipeline": "diffusers.sdxl",
+    # SD 1.x / 2.x
     "StableDiffusionPipeline": "diffusers.sdxl",
     "StableDiffusionImg2ImgPipeline": "diffusers.sdxl",
+    "StableDiffusionInpaintPipeline": "diffusers.sdxl",
+    # SDXL
+    "StableDiffusionXLPipeline": "diffusers.sdxl",
+    "StableDiffusionXLImg2ImgPipeline": "diffusers.sdxl",
+    "StableDiffusionXLInpaintPipeline": "diffusers.sdxl",
+    # SD 3.x
+    "StableDiffusion3Pipeline": "diffusers.sdxl",
+    "StableDiffusion3Img2ImgPipeline": "diffusers.sdxl",
 }
 
 

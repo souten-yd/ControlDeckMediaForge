@@ -962,14 +962,15 @@ function catalogRow(item) {
     note.title = "この端末に落として使える状態です。";
     action.append(note);
   } else if (item.catalog_state === "listed" || item.already_added) {
-    // 「一覧に登録した」と「実際に落とした」は別である。1 語にまとめていた
-    // ので、登録しただけの repository が「追加済み」と出て、ダウンロードが
-    // 始まらない理由が画面から読み取れなかった。
-    const note = document.createElement("span");
-    note.className = "hint";
-    note.textContent = "一覧にあります";
-    note.title = "上のモデル一覧に登録済みです。まだ落としていないなら、そこから導入してください。";
-    action.append(note);
+    // 登録しただけでは何も落ちてこない。「一覧にあります」と書いても、
+    // その一覧は既定で「導入済み」に絞られていて見つからない。取り込んだ人が
+    // 次にしたいのは落とすことなので、ここから直接できるようにする。
+    const download = document.createElement("button");
+    download.type = "button";
+    download.dataset.installRepo = item.repo_id;
+    download.textContent = "ダウンロード";
+    download.title = "一覧に登録済みです。この端末へ落とします。";
+    action.append(download);
   } else {
     const button = document.createElement("button");
     button.type = "button";
@@ -4409,6 +4410,17 @@ byId("catalog-query").addEventListener("keydown", (event) => {
   if (event.key === "Enter") { event.preventDefault(); void searchCatalog(); }
 });
 byId("catalog-results").addEventListener("click", (event) => {
+  const install = event.target.closest("[data-install-repo]");
+  if (install) {
+    // 既にライセンスを承諾して取り込んだものなので、落とすだけで足りる。
+    void startModelInstall(install.dataset.installRepo).then(() => {
+      // 落とし始めたことが見えるように、状況の欄を開いて上へ運ぶ。
+      const block = byId("model-downloads-block");
+      block.open = true;
+      block.scrollIntoView({block: "start"});
+    });
+    return;
+  }
   const button = event.target.closest("[data-inspect-repo]");
   if (!button) return;
   // 表から直接は取り込まない。必ず中身とライセンスの確認を通す。

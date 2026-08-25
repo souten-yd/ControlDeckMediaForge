@@ -556,7 +556,7 @@ def test_search_results_never_install_without_the_confirmation_step():
 
 def test_already_installed_models_are_marked_in_the_results():
     assert "already_added" in SCRIPT
-    assert "追加済み" in SCRIPT
+    assert "導入済み" in SCRIPT
 
 
 def test_the_table_keeps_numbers_comparable():
@@ -968,7 +968,9 @@ def test_being_listed_is_not_reported_as_being_installed():
     """一覧に登録しただけの repository が「追加済み」と出て、ダウンロードが
     始まらない理由が画面から読み取れなかった。"""
     row = SCRIPT[SCRIPT.index("function catalogRow"):SCRIPT.index("function renderCatalogPage")]
-    assert '"導入済み"' in row and '"一覧にあります"' in row
+    assert '"導入済み"' in row, "落とし終えたものが分からない"
+    # 登録しただけでは何も落ちてこない。次にできることを出す。
+    assert 'download.dataset.installRepo = item.repo_id;' in row
     assert 'item.catalog_state === "installed"' in row
     backend = (BACKEND / "app.py").read_text(encoding="utf-8")
     assert '"catalog_state"' in backend, "backend が 2 つの状態を区別していない"

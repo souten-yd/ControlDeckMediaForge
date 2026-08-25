@@ -541,8 +541,21 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
 
 .downloads-head { display: flex; justify-content: flex-end; margin: 6px 0; }
 /* 2 つで 1 組の操作。右が実行、左が取りやめ。半分ずつにして押し分けやすくする。 */
+/* 進行中のセルは「状態の文言」と「中止」が並ぶ。狭い枠で文言が幅を取ると
+   ボタン側が潰れ、「中」「止」が縦に割れる。ボタンは折らず、文言を縮める。 */
+.model-operation-state { min-width: 0; overflow-wrap: anywhere; }
+table.catalog td[data-label="操作"] > button { white-space: nowrap; flex: 0 0 auto; }
+
 .split-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .split-actions > button { width: 100%; }
+/* 文言だと 2 行に折り返して、隣の入力欄と高さが揃わなくなる。記号にする。 */
+.form-row.search .split-actions { grid-template-columns: auto auto; justify-content: end; }
+.form-row.search .split-actions > button.icon { width: 44px; }
+.form-row.search .split-actions > button.icon.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
 
 /* 選択中は開くのではなく選ぶ。押した先が変わるので、見た目でも区別する。 */
 .grid.selecting .card { position: relative; }

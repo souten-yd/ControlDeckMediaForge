@@ -726,10 +726,21 @@ class Store:
             if row is None:
                 raise KeyError(operation_id)
             if row["state"] not in {state.value for state in TERMINAL_MODEL_OPERATION_STATES}:
-                connection.execute(
-                    "UPDATE model_operations SET cancel_requested = 1, updated_at = ? WHERE id = ?",
-                    (utc_now(), operation_id),
-                )
+                # まだ順番を待っているだけなら、止めるものが無い。旗を立てても
+                # 走り出すまで誰も見ないので、押しても何も起きないように見える
+                # （実測: cancel_requested=1 のまま queued で止まっていた）。
+                # 走っていないものは、その場で終わらせる。
+                if row["state"] == ModelOperationState.QUEUED:
+                    connection.execute(
+                        """UPDATE model_operations SET cancel_requested = 1, state = ?,
+                           updated_at = ? WHERE id = ?""",
+                        (ModelOperationState.CANCELED, utc_now(), operation_id),
+                    )
+                else:
+                    connection.execute(
+                        "UPDATE model_operations SET cancel_requested = 1, updated_at = ? WHERE id = ?",
+                        (utc_now(), operation_id),
+                    )
         return self._notify_model_operation(self.get_model_operation(operation_id))
 
     def model_operation_cancel_requested(self, operation_id: str) -> bool:

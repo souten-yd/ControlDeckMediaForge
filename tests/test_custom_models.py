@@ -522,3 +522,27 @@ def test_an_unknown_pipeline_is_imported_but_not_claimed_to_be_runnable(tmp_path
     assert resolved.capabilities == ()
     assert not resolved.usable_for_generation
     assert any("生成には使えません" in warning for warning in resolved.warnings)
+
+
+def test_the_sd_family_maps_to_the_measured_adapter():
+    """diffusers.sdxl は AutoPipelineForText2Image の上に載っており、
+    SD 1.x / 2.x / XL / 3.x を同じ入口で扱える。実測は SSD-1B（SDXL 系）。"""
+    from mediaforge.custom_models import _PIPELINE_ADAPTERS
+
+    for pipeline in (
+        "StableDiffusionPipeline",          # SD 1.x / 2.x
+        "StableDiffusionXLPipeline",        # SDXL
+        "StableDiffusion3Pipeline",         # SD 3.x
+        "StableDiffusionInpaintPipeline",
+        "StableDiffusionXLImg2ImgPipeline",
+    ):
+        assert _PIPELINE_ADAPTERS[pipeline] == "diffusers.sdxl", pipeline
+
+
+def test_another_family_is_not_swept_into_the_sd_adapter():
+    """タグ（diffusers + text-to-image）だけで決めると、FLUX や Qwen-Image まで
+    巻き込んで「入るが生成で落ちる」ものを作る。クラス名で見る。"""
+    from mediaforge.custom_models import _PIPELINE_ADAPTERS
+
+    for pipeline in ("FluxPipeline", "QwenImagePipeline", "WanPipeline", "SomeFuturePipeline"):
+        assert pipeline not in _PIPELINE_ADAPTERS, pipeline
