@@ -52,9 +52,29 @@ def test_the_probe_uses_the_same_envelope_as_a_real_generation(tmp_path: Path):
 
     assert payload["request"]["operation"] == "image.generate"
     assert payload["model"]["runtime_adapter"] == "diffusers.sdxl"
-    # 測りたいのは絵の出来ではないので、小さく短く
-    assert payload["request"]["constraints"]["width"] <= 512
-    assert payload["request"]["constraints"]["steps"] <= 8
+
+
+def test_the_probe_runs_at_the_model_s_own_settings(tmp_path: Path):
+    """小さく短く測ると、実使用とは別のものを測ることになる。
+
+    実測: SDXL を 512x512 / 8 歩で測ると 8.45GB / 6.07 秒と記録されるが、
+    その設定では指示した被写体すら描かれない。動かない設定で「動いた」と
+    記録し、その数字で routing が VRAM を確保することになる。
+    """
+    payload = worker_payload(
+        descriptor(native_width=1024, native_height=1024, default_steps=30), tmp_path
+    )
+
+    assert payload["request"]["constraints"]["width"] == 1024
+    assert payload["request"]["constraints"]["height"] == 1024
+    assert payload["request"]["constraints"]["steps"] == 30
+
+
+def test_a_distilled_model_is_measured_at_its_own_step_count(tmp_path: Path):
+    """FLUX.2 Klein を 30 歩で測ると、要りもしない時間を costs として記録する。"""
+    payload = worker_payload(descriptor(default_steps=4), tmp_path)
+
+    assert payload["request"]["constraints"]["steps"] == 4
 
 
 def test_family_options_reach_the_worker(tmp_path: Path):

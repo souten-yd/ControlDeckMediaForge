@@ -29,6 +29,7 @@ from .m5_companion import (
     validate_image as validate_m5_image,
 )
 from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
+from .models.generation_defaults import snap_to_native
 from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .profiles import profile_prompt
@@ -821,6 +822,38 @@ class JobManager:
             asset_ids=[asset.id],
         )
 
+    def _resolved_request(self, job: Job, selected: ModelDescriptor) -> dict[str, Any]:
+        """要求に、そのモデル本来の設定を埋めてから worker に渡す。
+
+        worker は寸法も歩数も決めない。決めるのはここである。埋めないと
+        worker 側の固定既定が全モデルに掛かり、蒸留済みでないモデルは必ず
+        崩れる（SDXL を 4 歩で回した絵がそれだった）。
+
+        利用者が指定した値は動かさない。指定が無かったところだけを埋める。
+        寸法は、比を保ったままそのモデルが学習した面積に寄せる。総画素を
+        増やすと、モデルが見たことのない広さになり同じ被写体が 2 つ並ぶ。
+        """
+        request = job.request.model_dump(mode="json")
+        constraints = dict(request.get("constraints") or {})
+        if constraints.get("steps") is None and selected.default_steps is not None:
+            constraints["steps"] = selected.default_steps
+        native = selected.native_width, selected.native_height
+        width, height = constraints.get("width"), constraints.get("height")
+        strict = (
+            job.request.operation == "image.edit"
+            and constraints.get("strict_edit") is True
+        )
+        if all(isinstance(side, int) for side in native) and not strict:
+            # 編集は元画像の画面をそのまま使う。寄せると元と重ならなくなる。
+            if width is None or height is None:
+                constraints["width"], constraints["height"] = native
+            elif isinstance(width, int) and isinstance(height, int):
+                constraints["width"], constraints["height"] = snap_to_native(
+                    width, height, int(native[0])
+                )
+        request["constraints"] = constraints
+        return request
+
     def _validate_generation_limits(self, job: Job, selected: ModelDescriptor) -> None:
         source = None
         if job.request.operation == "image.edit":
@@ -904,9 +937,13 @@ class JobManager:
                            if selected.negative_prompt else {}),
                         **({"guidance_scale": selected.guidance_scale}
                            if selected.guidance_scale is not None else {}),
+                        # core が要求に埋めるので通常は使われない。worker を
+                        # 単体で回す経路（評価・benchmark）のための控えである。
+                        **({"default_steps": selected.default_steps}
+                           if selected.default_steps is not None else {}),
                     },
                 },
-                "request": job.request.model_dump(mode="json"),
+                "request": self._resolved_request(job, selected),
                 "worker_output_dir": str(output_dir),
                 "worker_inputs": worker_inputs,
             }

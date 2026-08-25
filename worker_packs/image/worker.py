@@ -105,7 +105,17 @@ class ImageWorker:
         # 利用者やエージェントに書かせない、という routing の方針と同じ扱いである。
         if not isinstance(runtime_options, dict) or set(runtime_options) - {
             "device_mode", "disable_mmap", "negative_prompt", "guidance_scale",
+            # 歩数は本来 core が要求に埋める。ここに来るのは worker を単体で
+            # 回す経路（評価・benchmark）のための控えである。
+            "default_steps",
         }:
+            raise ValueError("worker model runtime options are invalid")
+        declared_steps = runtime_options.get("default_steps")
+        if declared_steps is not None and (
+            isinstance(declared_steps, bool)
+            or not isinstance(declared_steps, int)
+            or not 1 <= declared_steps <= 50
+        ):
             raise ValueError("worker model runtime options are invalid")
         device_mode = self.device_mode_override or runtime_options.get("device_mode", "full_device")
         disable_mmap = (
@@ -175,7 +185,15 @@ class ImageWorker:
         height_default = source_size[1] if source_size is not None else 1024
         width = _integer(constraints.get("width", width_default), "image width")
         height = _integer(constraints.get("height", height_default), "image height")
-        steps = _integer(constraints.get("steps", 4), "image steps")
+        # 歩数を決めるのは core である。ここに全モデル共通の既定を置くと、
+        # 蒸留済みの 1 モデルに合わせた数が他の全形式に掛かる（4 歩で回した
+        # SDXL は像を結ばなかった）。要求が持っていなければ、そのモデルが
+        # 宣言した値を使い、それも無ければ拒む。黙って絵にならない歩数で
+        # 回すより、何が決まっていないかを言う方がよい。
+        declared = constraints.get("steps", runtime_options.get("default_steps"))
+        if declared is None:
+            raise ValueError("image steps were not resolved for this model")
+        steps = _integer(declared, "image steps")
         count = _integer(output.get("count", 1), "image count")
         strict_edit = constraints.get("strict_edit", False)
         edit_mode = constraints.get("edit_mode", "reference")

@@ -11,7 +11,10 @@
       "runtime_adapter": "diffusers.flux2-klein",
       "runtime_options": {
         "device_mode": "direct_device_map",
-        "disable_mmap": true
+        "disable_mmap": true,
+        "default_steps": 4,
+        "native_width": 1024,
+        "native_height": 1024
       },
       "generation_limits": {
         "max_width": 1024,
@@ -191,7 +194,12 @@
           "size_bytes": 253806966,
           "sha256": "0c8bc8b758c649abef9ea407b95408389a3b2f610d0d10fcb054fe171d0a8344"
         }
-      ]
+      ],
+      "runtime_options": {
+        "default_steps": 30,
+        "native_width": 1024,
+        "native_height": 1024
+      }
     },
     {
       "model_id": "OnomaAIResearch/Illustrious-XL-v2.0",
@@ -225,7 +233,12 @@
           "size_bytes": 6938040674,
           "sha256": "c2a1a3eaa13d4c107dc7e00c3fe830cab427aa026362740ea094745b3422a331"
         }
-      ]
+      ],
+      "runtime_options": {
+        "default_steps": 30,
+        "native_width": 1024,
+        "native_height": 1024
+      }
     },
     {
       "model_id": "segmind/SSD-1B",
@@ -292,7 +305,10 @@
       "runtime_options": {
         "device_mode": "full_device",
         "disable_mmap": false,
-        "guidance_scale": 7.0
+        "guidance_scale": 7.0,
+        "default_steps": 30,
+        "native_width": 1024,
+        "native_height": 1024
       },
       "measurements": {
         "resident_vram_bytes": 0,
