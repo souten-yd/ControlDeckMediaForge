@@ -298,3 +298,28 @@ def test_a_failed_direction_does_not_stop_the_job(tmp_path: Path):
     ))
 
     assert asyncio.run(manager._prepare_creative(job, None)).request.intent == "続ける"
+
+
+def test_routing_sees_the_models_the_picker_offers(tmp_path: Path):
+    """自作モデルは shipped manifest に居ない。routing がそれを知らないと、
+    選べる状態にしてあるのに「使えるモデルがありません」で落ちる（実測）。"""
+    store = Store(tmp_path / "data")
+    store.initialize()
+    asked: dict[str, int] = {"calls": 0}
+
+    def manifests():
+        asked["calls"] += 1
+        return [], []
+
+    manager = JobManager(
+        store,
+        model_manifest=Path(__file__).parents[1] / "worker_packs/image/models.json",
+        model_catalog_manifest=Path(__file__).parents[1] / "worker_packs/image/catalog.json",
+        hf_home=tmp_path / "hf",
+        model_store_root=tmp_path / "models",
+        extra_manifests=manifests,
+    )
+    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
+    manager._select_real_model(job)
+
+    assert asked["calls"] == 1, "routing が自作モデルの一覧を読んでいない"

@@ -189,6 +189,13 @@ def create_app(
     evaluator = creative_evaluator or HostCreativeEvaluator(
         ai_gateway, timeout_sec=resolved.host_ai_timeout_sec
     )
+    custom_models = CustomModelCatalog(
+        resolved.data_dir / "custom-models.json",
+        origin=model_download_origin,
+        transport=model_download_transport,
+        max_download_bytes=MAX_MANAGED_MODEL_DOWNLOAD_BYTES,
+    )
+
     manager = JobManager(
         store,
         worker_timeout_sec=resolved.worker_timeout_sec,
@@ -201,6 +208,7 @@ def create_app(
         image_runtime_python=resolved.image_runtime_python,
         creative_evaluator=evaluator,
         ai_gateway=ai_gateway,
+        extra_manifests=custom_models.manifests,
     )
 
     # 演出の立案と検証を job の中で行うための入口。画面が順番に呼んでいた頃は
@@ -245,12 +253,6 @@ def create_app(
     layout_catalog = LayoutCatalog.load(resolved.creative_layout_manifest)
     multi_cut_planner = MultiCutPlanner(creative_compiler, layout_catalog)
     deterministic_composer = DeterministicComposer()
-    custom_models = CustomModelCatalog(
-        resolved.data_dir / "custom-models.json",
-        origin=model_download_origin,
-        transport=model_download_transport,
-        max_download_bytes=MAX_MANAGED_MODEL_DOWNLOAD_BYTES,
-    )
     model_operations = (
         ModelOperationManager(
             store,
@@ -371,14 +373,26 @@ def create_app(
             })
         return value
 
+    def load_all_models() -> list[ModelDescriptor]:
+        """The one list everything reads.
+
+        Three call sites used to load this separately, and the custom entries
+        were added to some of them. A model could then be offered in the
+        picker and refused by routing in the same breath.
+        """
+        extra_models, extra_catalog = custom_models.manifests()
+        return list(ModelRegistry.load(
+            resolved.model_manifest,
+            hf_home=resolved.hf_home,
+            catalog_manifest=resolved.model_catalog_manifest,
+            model_store_root=resolved.model_store_root,
+            extra_models=extra_models,
+            extra_catalog=extra_catalog,
+        ).all())
+
     def model_catalog() -> dict[str, Any]:
         try:
-            models = ModelRegistry.load(
-                resolved.model_manifest,
-                hf_home=resolved.hf_home,
-                catalog_manifest=resolved.model_catalog_manifest,
-                model_store_root=resolved.model_store_root,
-            ).all()
+            models = load_all_models()
         except ModelRegistryError as exc:
             raise HTTPException(status_code=503, detail={"code": "model_registry_invalid"}) from exc
         return {
@@ -387,12 +401,7 @@ def create_app(
 
     def image_capability(capability: str, *, fake_fallback: bool = False) -> dict[str, Any]:
         try:
-            models = ModelRegistry.load(
-                resolved.model_manifest,
-                hf_home=resolved.hf_home,
-                catalog_manifest=resolved.model_catalog_manifest,
-                model_store_root=resolved.model_store_root,
-            ).all()
+            models = load_all_models()
         except ModelRegistryError:
             return {"state": "unavailable", "reason": "model_registry_invalid", "local_only": True}
         if any(
@@ -722,12 +731,7 @@ def create_app(
             "envelope_source": "fallback",
         }
         try:
-            models = ModelRegistry.load(
-                resolved.model_manifest,
-                hf_home=resolved.hf_home,
-                catalog_manifest=resolved.model_catalog_manifest,
-                model_store_root=resolved.model_store_root,
-            ).all()
+            models = load_all_models()
         except ModelRegistryError:
             return fallback
         usable = [
