@@ -31,12 +31,19 @@ from typing import Any
 
 from .models import ModelDescriptor
 
-# 小さく、短く。測りたいのは「この機材で動くか」と「どれだけ要るか」であって、
-# 絵の出来ではない。大きくすると、確かめるためだけに数分 GPU を占有する。
-EVALUATION_WIDTH = 512
-EVALUATION_HEIGHT = 512
-EVALUATION_STEPS = 8
+# そのモデル本来の設定で回す。小さく短く済ませると測るのは速いが、測った値が
+# 実使用と違うものになる。実測: SDXL を 512x512 / 8 歩で測ると 8.45GB / 6.07 秒
+# と記録され、その数字で routing が VRAM を確保する。本来の 1024x1024 / 30 歩で
+# 回すと実際にはもっと要るので、確保が足りない。
+#
+# 絵そのものも別物になる。同じ SDXL が 512x512 / 8 歩では指示した被写体を
+# 描かず、1024x1024 / 30 歩では描く。前者で「通った」と記録すると、動かない
+# 設定を動くものとして登録することになる。
 EVALUATION_SEED = 7
+# そのモデルが寸法も歩数も名乗らなかったときだけ使う。
+FALLBACK_WIDTH = 1024
+FALLBACK_HEIGHT = 1024
+FALLBACK_STEPS = 30
 EVALUATION_PROMPT = "a small blue robot on a wooden desk, soft light"
 # 実測より上振れする分の余裕。FLUX の catalog と同じ値を使う。
 HEADROOM_BYTES = 1024 * 1024 * 1024
@@ -153,9 +160,9 @@ def worker_payload(model: ModelDescriptor, output_dir: Path) -> dict[str, Any]:
             "operation": "image.generate",
             "intent": EVALUATION_PROMPT,
             "constraints": {
-                "width": EVALUATION_WIDTH,
-                "height": EVALUATION_HEIGHT,
-                "steps": EVALUATION_STEPS,
+                "width": model.native_width or FALLBACK_WIDTH,
+                "height": model.native_height or FALLBACK_HEIGHT,
+                "steps": model.default_steps or FALLBACK_STEPS,
                 "seed": EVALUATION_SEED,
             },
             "output": {"format": "png", "count": 1},
@@ -256,7 +263,7 @@ async def measure_image_model(
         # GPU を倍使う。同じ値を入れて、それが同じ観測だと分かるようにする。
         cold_load_peak_vram_bytes=peak,
         measured_runtime_sec=elapsed,
-        width=int(outputs[0].get("width") or EVALUATION_WIDTH),
-        height=int(outputs[0].get("height") or EVALUATION_HEIGHT),
+        width=int(outputs[0].get("width") or model.native_width or FALLBACK_WIDTH),
+        height=int(outputs[0].get("height") or model.native_height or FALLBACK_HEIGHT),
         output_bytes=produced.stat().st_size,
     )

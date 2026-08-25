@@ -8,6 +8,13 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from .generation_defaults import (  # noqa: F401
+    native_side_from_config,
+    pipeline_class_from_config,
+    snap_to_native,
+    steps_for,
+)
+
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
@@ -74,6 +81,13 @@ class ModelDescriptor:
     # SD 系だけが取る。FLUX.2 Klein では常に既定のままになる。
     negative_prompt: str = ""
     guidance_scale: float | None = None
+    # ステップ数はモデル固有である。FLUX.2 Klein は蒸留済みで 4 歩で絵になるが、
+    # SDXL 系を 4 歩で回すと像を結ばない。共通の既定を置くと、片方が必ず壊れる。
+    default_steps: int | None = None
+    # そのモデルが学習された画面寸法。宣言が無ければ導入時に repository の
+    # config から読む。None は「まだ分かっていない」で、1024 とは違う。
+    native_width: int | None = None
+    native_height: int | None = None
     max_width: int = 2048
     max_height: int = 2048
     max_pixels: int = 2048 * 2048
@@ -212,6 +226,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     # どちらも取らない。系統ごとの既定なので、要求ではなくカタログに置く。
     if not isinstance(runtime_options, dict) or set(runtime_options) - {
         "device_mode", "disable_mmap", "negative_prompt", "guidance_scale",
+        "default_steps", "native_width", "native_height",
     }:
         raise ModelRegistryError("model registry runtime_options are invalid")
     negative_prompt = runtime_options.get("negative_prompt", "")
@@ -222,6 +237,22 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         isinstance(guidance_scale, bool)
         or not isinstance(guidance_scale, (int, float))
         or not 0 < guidance_scale <= 30
+    ):
+        raise ModelRegistryError("model registry runtime_options are invalid")
+    default_steps = runtime_options.get("default_steps")
+    if default_steps is not None and (
+        isinstance(default_steps, bool) or not isinstance(default_steps, int)
+        or not 1 <= default_steps <= 50
+    ):
+        raise ModelRegistryError("model registry runtime_options are invalid")
+    native_size = {
+        key: runtime_options[key]
+        for key in ("native_width", "native_height")
+        if key in runtime_options
+    }
+    if any(
+        isinstance(side, bool) or not isinstance(side, int) or not 256 <= side <= 2048 or side % 16
+        for side in native_size.values()
     ):
         raise ModelRegistryError("model registry runtime_options are invalid")
     generation_limits = value.get("generation_limits", {})
@@ -261,6 +292,8 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         disable_mmap=disable_mmap,
         negative_prompt=negative_prompt,
         guidance_scale=float(guidance_scale) if guidance_scale is not None else None,
+        default_steps=default_steps,
+        **native_size,
         **limits,
         **measurement_values,
     )
@@ -464,8 +497,33 @@ class ModelRegistry:
                 healthy=installed and descriptor.state == ModelState.AVAILABLE,
                 local_path=snapshot,
                 ownership=ownership,
+                **(self._observed_defaults(descriptor, snapshot) if installed else {}),
             ))
         return ModelRegistry(tuple(detected))
+
+    @classmethod
+    def _observed_defaults(cls, descriptor: ModelDescriptor, snapshot: Path) -> dict[str, int]:
+        """宣言が無いものだけ、置いてある repository 自身から読む。
+
+        Hub から落とすモデルは追加した時点でまだ手元に無いので、そこでは
+        読めない。導入が済んだここが、モデルの中身を初めて見られる場所である。
+        宣言があるならそれを尊重する。実測して直した値を上書きしない。
+        """
+        observed: dict[str, int] = {}
+        # diffusers の repository の形をしているものだけ。動画系の native ランタイムは
+        # 別の設定体系を持つので、読めた気になって埋めない。
+        if not descriptor.runtime_adapter.startswith("diffusers."):
+            return {}
+        if descriptor.native_width is None or descriptor.native_height is None:
+            side = native_side_from_config(snapshot)
+            if side is not None:
+                observed["native_width"] = side
+                observed["native_height"] = side
+        if descriptor.default_steps is None:
+            observed["default_steps"] = steps_for(
+                pipeline_class_from_config(snapshot), snapshot
+            )
+        return observed
 
     @classmethod
     def _installation(cls, descriptor: ModelDescriptor, root: Path) -> Path | None:

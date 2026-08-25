@@ -12,6 +12,14 @@ For each installed diffusers model:
   picture, because a model that was measured months ago can be broken by a
   runtime upgrade and nothing else would notice
 
+Each model runs at its own settings, read from its own repository. Running
+everything at one small size was what made this report untrustworthy before:
+SDXL at 512x512 / 8 steps returns a PNG of the right size containing something
+that is not what was asked for, and this script called that "verified".
+
+NOT CHECKED: whether the picture is right. This only proves the model ran to
+completion and what it cost. Looking at the output is still a person's job.
+
 Run it after downloading a batch. Models on other adapters (the GGUF video
 runtimes) are listed and skipped rather than silently omitted, so the report
 accounts for everything installed.
@@ -107,22 +115,30 @@ async def main() -> int:
                 "detail": f"{exc.code}: {exc}"[:160],
             })
             continue
-        promoted = False
-        if not measured:
-            try:
-                catalog.record_measurement(model.model_id, measurement.catalog_measurements())
-                promoted = True
-            except Exception as exc:  # noqa: BLE001 - shipped entry は書き換えない
-                rows.append({
-                    "model": model.model_id, "outcome": "generated",
-                    "detail": f"生成はできたが記録は据置: {str(exc)[:80]}",
-                    "vram_bytes": measurement.execution_peak_vram_bytes,
-                    "seconds": round(time.perf_counter() - started, 2),
-                })
-                continue
+        # 実測済みでも書き戻す。設定が直れば costs も変わる（SDXL は 512x512
+        # で測って 8.45GB と記録されていたが、本来の 1024x1024 では 12.28GB
+        # 要る）。古い値を残すと routing がその差だけ少なく確保する。
+        promoted = not measured
+        try:
+            catalog.record_measurement(model.model_id, measurement.catalog_measurements())
+        except Exception as exc:  # noqa: BLE001 - shipped entry は書き換えない
+            rows.append({
+                "model": model.model_id, "outcome": "generated",
+                "detail": f"生成はできたが記録は据置: {str(exc)[:80]}",
+                "settings": f"{model.native_width or 1024}x{model.native_height or 1024}"
+                            f" / {model.default_steps or 30} 歩",
+                "vram_bytes": measurement.execution_peak_vram_bytes,
+                "seconds": round(measurement.measured_runtime_sec, 2),
+            })
+            continue
         rows.append({
             "model": model.model_id,
-            "outcome": "promoted" if promoted else "verified",
+            # 「絵が正しい」ではなく「そのモデル本来の設定で最後まで走った」。
+            # PNG が返ったことしか見ていないので、ここを verified と呼ぶと
+            # 崩れた絵を通したときに報告が嘘になる（実際にそうなった）。
+            "outcome": "promoted" if promoted else "generated",
+            "settings": f"{model.native_width or 1024}x{model.native_height or 1024}"
+                        f" / {model.default_steps or 30} 歩",
             "vram_bytes": measurement.execution_peak_vram_bytes,
             "seconds": round(measurement.measured_runtime_sec, 2),
             "output": f"{measurement.width}x{measurement.height}",
@@ -132,7 +148,7 @@ async def main() -> int:
     print(json.dumps({"models": rows}, ensure_ascii=False, indent=2))
     failed = [row for row in rows if row["outcome"] == "failed"]
     print(
-        f"\n通った {sum(1 for r in rows if r['outcome'] in ('promoted', 'verified'))} / "
+        f"\n走った {sum(1 for r in rows if r['outcome'] in ('promoted', 'generated'))} / "
         f"失敗 {len(failed)} / 対象外 {sum(1 for r in rows if r['outcome'] == 'skipped')}",
         file=sys.stderr,
     )
