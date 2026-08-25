@@ -24,6 +24,7 @@ from .models import (
     ModelRegistry,
     ModelRegistryError,
 )
+from .config import REPOSITORY_ROOT
 from .paths import contained
 from .store import Store
 
@@ -81,6 +82,10 @@ class H3ModelEvaluator:
         artifact_validator: Callable[[Path], dict[str, Any]] | None = None,
         vram_probe: Callable[[], int] | None = None,
         model_resolver: Callable[[str], ModelDescriptor] | None = None,
+        registry_loader: Callable[[], list[ModelDescriptor]] | None = None,
+        image_runtime_python: Path | None = None,
+        image_measure: Callable[..., Any] | None = None,
+        record_measurement: Callable[[str, dict[str, Any]], Any] | None = None,
     ) -> None:
         self.store = store
         self.host = host
@@ -96,6 +101,12 @@ class H3ModelEvaluator:
         self.artifact_validator = artifact_validator or self._validate_artifact
         self.vram_probe = vram_probe or self._r9700_vram_used
         self.model_resolver = model_resolver
+        # 自作モデルは shipped manifest に居ないので、custom entry まで含めた
+        # 一覧を持っている側から渡してもらう。
+        self.registry_loader = registry_loader
+        self.image_runtime_python = image_runtime_python
+        self.image_measure = image_measure
+        self.record_measurement = record_measurement
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._processes: dict[str, asyncio.subprocess.Process] = {}
         self._host_failures: dict[str, HostApiError] = {}
@@ -114,18 +125,51 @@ class H3ModelEvaluator:
         self._tasks.clear()
 
     def available_model_ids(self) -> list[str]:
+        """Every installed model that can actually be measured here.
+
+        Was a single hardcoded entry, which meant the workspace told people to
+        "評価で確かめてください" while offering the control on one model. Any
+        installed diffusers model can be run once and measured; that is the
+        whole procedure.
+        """
+        found: list[str] = []
         try:
             model = self._model(H3_MODEL_ID)
             self._preflight(model)
+            found.append(H3_MODEL_ID)
         except (ModelOperationError, OSError):
+            pass
+        for model in self._image_candidates():
+            found.append(model.model_id)
+        return found
+
+    def _image_candidates(self) -> list[ModelDescriptor]:
+        if self.image_measure is None or self.image_runtime_python is None:
             return []
-        return [H3_MODEL_ID]
+        if not self.image_runtime_python.is_file():
+            return []
+        if self.registry_loader is None:
+            return []
+        try:
+            models = self.registry_loader()
+        except (ModelRegistryError, OSError):
+            return []
+        return [
+            model for model in models
+            if model.installed
+            and model.local_path is not None
+            and model.runtime_adapter.startswith("diffusers.")
+            # 既に測ってあるものを測り直す道は、ここでは出さない。
+            and model.measurement_confidence != "measured"
+        ]
 
     def evaluate(self, model_id: str, identity: HostIdentity) -> ModelOperation:
         missing = {"jobs.write", "resources.acquire"} - identity.granted_capabilities
         if missing:
             raise ModelOperationError("host_capability_not_granted", "Host evaluation capabilities are unavailable")
-        if model_id != H3_MODEL_ID:
+        if model_id != H3_MODEL_ID and model_id not in {
+            model.model_id for model in self._image_candidates()
+        }:
             raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
         active = next(
             (
@@ -174,6 +218,11 @@ class H3ModelEvaluator:
                     await self._finish_canceled(operation_id, None)
                     return
                 model = self._model(operation.model_id)
+                if model.runtime_adapter.startswith("diffusers."):
+                    # 画像モデルは普段の生成と同じワーカーで 1 回走らせて測る。
+                    # 別経路で測ると、実際に使う経路ではないものを測ることになる。
+                    await self._run_image_evaluation(operation_id, model)
+                    return
                 self._preflight(model)
                 attached = await self.host.create_or_attach_job(
                     identity,
@@ -413,6 +462,60 @@ class H3ModelEvaluator:
                 await self.host.cancel_resource(execution.identity, execution.request_id)
         except HostApiError:
             logger.exception("failed to release model evaluation resource state")
+
+    async def _run_image_evaluation(self, operation_id: str, model: ModelDescriptor) -> None:
+        """Run it once, write down what it cost, and let routing use it.
+
+        No Host lease is taken here. The measurement is a normal generation of
+        one small picture, and the ordinary admission path already governs real
+        work; adding a second reservation route for a 512x512 probe would be
+        more machinery than the thing it protects.
+        """
+        assert self.image_measure is not None and self.image_runtime_python is not None
+        self.store.update_model_operation(operation_id, state=ModelOperationState.GENERATING)
+        try:
+            measurement = await self.image_measure(
+                model,
+                runtime_python=self.image_runtime_python,
+                work_root=self.output_root,
+                repository_root=REPOSITORY_ROOT,
+                timeout_sec=self.timeout_sec,
+            )
+        except Exception as exc:  # noqa: BLE001 - 失敗の理由をそのまま伝える
+            code = getattr(exc, "code", "model_evaluation_failed")
+            self.store.update_model_operation(
+                operation_id,
+                state=ModelOperationState.FAILED,
+                error_code=code,
+                error_message=str(exc)[:300],
+            )
+            return
+        self.store.update_model_operation(operation_id, state=ModelOperationState.VALIDATING)
+        measurements = measurement.catalog_measurements()
+        if self.record_measurement is not None:
+            try:
+                self.record_measurement(model.model_id, measurements)
+            except Exception as exc:  # noqa: BLE001
+                # 測れたのに書き残せないなら、成功と言ってはいけない。次に
+                # 開いたとき、また「未計測」に戻っている。
+                self.store.update_model_operation(
+                    operation_id,
+                    state=ModelOperationState.FAILED,
+                    error_code=getattr(exc, "code", "model_evaluation_failed"),
+                    error_message=str(exc)[:300],
+                )
+                return
+        self.store.update_model_operation(
+            operation_id,
+            state=ModelOperationState.READY,
+            result={
+                "kind": "image",
+                "measurements": measurements,
+                "width": measurement.width,
+                "height": measurement.height,
+                "output_bytes": measurement.output_bytes,
+            },
+        )
 
     def _model(self, model_id: str) -> ModelDescriptor:
         if self.model_resolver is not None:
