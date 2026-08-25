@@ -148,8 +148,11 @@ def sign(args: argparse.Namespace) -> int:
 
     manifest_path = artifact.with_name(f"{artifact.name}.manifest.json")
     signature_path = artifact.with_name(f"{artifact.name}.manifest.json.sig")
-    # 署名した通りのバイト列を書く。整形し直すと検証側と食い違う。
-    manifest_path.write_bytes(message + b"\n")
+    # 署名した通りのバイト列を書く。末尾に改行 1 つでも足すと、検証側が
+    # 受け取るバイト列は署名したものと別になる。検証側が改行を落として
+    # くれることに頼らない: 落とす処理が無くなった瞬間に、正しい署名が
+    # 「信頼できる鍵に一致しない」として拒まれる（実測: v0.9.0）。
+    manifest_path.write_bytes(message)
     manifest_path.chmod(0o644)
     signature_path.write_text(base64.b64encode(signature).decode("ascii") + "\n", encoding="ascii")
     signature_path.chmod(0o644)
