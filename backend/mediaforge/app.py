@@ -353,6 +353,11 @@ def create_app(
             "measured_vram_bytes": item.measured_vram_bytes,
             "measured_runtime_sec": item.measured_runtime_sec,
             "measurement_confidence": item.measurement_confidence,
+            # LoRA は「使えるモデル」ではない。画面が本体と混ぜて出さないよう、
+            # 種別と、どの系統に載せられるかをここで言う。
+            "kind": "lora" if item.is_lora else "model",
+            "base_model": item.base_model,
+            "trigger_words": list(item.trigger_words),
         }
         if item.runtime_adapter.startswith("diffusers.") and item.installed:
             # 何が決まっていて何が決まっていないかは、判定した側が言う。
@@ -724,6 +729,23 @@ def create_app(
                 if isinstance(total, int) and not isinstance(total, bool) and total > 0:
                     return total
         return 0
+
+    def installed_families() -> set[str]:
+        """導入済みの checkpoint が属する系統。
+
+        LoRA を載せられる先があるかを、この集合で判断する。
+        """
+        from .models.generation_defaults import normalize_base_model
+
+        try:
+            models = load_all_models()
+        except ModelRegistryError:
+            return set()
+        return {
+            normalize_base_model(item.base_model)
+            for item in models
+            if item.installed and not item.is_lora and item.base_model
+        } - {""}
 
     def annotate_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """検索結果に、こちら側で既にどうなっているかを添える。
@@ -2139,10 +2161,21 @@ def create_app(
                                 str(params.get("source", DEFAULT_MODEL_SOURCE)),
                                 str(params.get("query", "")),
                                 sort=str(params.get("sort", "downloads")),
+                                model_type=str(params.get("model_type", "checkpoint")),
                             )),
                             "sort": str(params.get("sort", "downloads")),
                             "source": str(params.get("source", DEFAULT_MODEL_SOURCE)),
+                            "model_type": str(params.get("model_type", "checkpoint")),
+                            # 画面がここから「手元に載せられるか」を出せるようにする。
+                            "installed_families": sorted(installed_families()),
                         }
+                    elif method == "models.custom.lora_base":
+                        # LoRA だけ落としても絵は作れない。押す前に、載せる先が
+                        # 手元にあるか、無ければ何をいくら落とすことになるかを返す。
+                        result = await custom_models.lora_base_requirement(
+                            str(params.get("base_model", "")),
+                            installed_families(),
+                        )
                     elif method == "models.custom.resolve":
                         # 取得前に必ず解決して見せる。承諾は本文の提示が先。
                         resolution = await custom_models.resolve_source(
@@ -2601,12 +2634,16 @@ def create_app(
                 str(payload.get("source", DEFAULT_MODEL_SOURCE)),
                 str(payload.get("query", "")),
                 sort=str(payload.get("sort", "downloads")),
+                model_type=str(payload.get("model_type", "checkpoint")),
             )
         except CustomModelError as exc:
             raise HTTPException(
                 status_code=502, detail={"code": exc.code, "message": str(exc)[:300]}
             ) from exc
-        return {"items": annotate_candidates(rows)}
+        return {
+            "items": annotate_candidates(rows),
+            "installed_families": sorted(installed_families()),
+        }
 
     @app.post("/workspace-api/creative/batches", include_in_schema=False)
     async def standalone_creative_batch(payload: dict[str, Any]) -> dict[str, Any]:

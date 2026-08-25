@@ -9,3 +9,5 @@ accelerate==1.14.0
 safetensors==0.8.0
 huggingface-hub==1.28.0
 sentencepiece==0.2.2
+# LoRA の適用に要る。diffusers の load_lora_weights は PEFT backend を通す。
+peft==0.19.0

@@ -13,9 +13,10 @@ Measured against the live API (2026-08-25):
   browser-shaped ``User-Agent``. The default one from an HTTP client is
   refused with 403, which looks like an authorization problem and is not.
 
-Only Checkpoints are searched. Civitai is mostly LoRAs, and Media Forge has no
-LoRA path yet: listing them would fill the results with things that install and
-then cannot be used.
+Checkpoints and LoRAs are both searchable. A LoRA is not a model — it is
+something laid on top of a checkpoint — so it carries its own base family and
+its trigger words, and neither is optional: the wrong family will not load, and
+a LoRA whose trigger word is missing from the prompt does nothing at all.
 """
 
 from __future__ import annotations
@@ -33,6 +34,10 @@ SEARCH_LIMIT = 30
 MAX_METADATA_BYTES = 4_000_000
 
 # Civitai の sort 名。Media Forge 側の並び順から引く。
+# Civitai の種別。LoRA は checkpoint と同じ endpoint で引ける。
+MODEL_TYPES = {"checkpoint": "Checkpoint", "lora": "LORA"}
+DEFAULT_MODEL_TYPE = "checkpoint"
+
 SORTS = {
     "downloads": "Most Downloaded",
     "likes": "Most Liked",
@@ -62,6 +67,23 @@ class CivitaiVersion:
     name: str
     base_model: str
     file: CivitaiFile
+    model_type: str = DEFAULT_MODEL_TYPE
+    trigger_words: tuple[str, ...] = ()
+
+
+def _trigger_words(value: Any) -> list[str]:
+    """``trainedWords``。1 つの文字列に複数まとめて書かれることがある。"""
+    if not isinstance(value, list):
+        return []
+    words: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        for part in item.split(","):
+            cleaned = part.strip()
+            if cleaned and cleaned not in words:
+                words.append(cleaned[:80])
+    return words[:12]
 
 
 def repo_id_for(model_id: int) -> str:
@@ -147,15 +169,24 @@ class CivitaiSource:
         self.timeout_sec = timeout_sec
 
     async def search(
-        self, query: str, *, sort: str = "downloads", limit: int = SEARCH_LIMIT
+        self,
+        query: str,
+        *,
+        sort: str = "downloads",
+        limit: int = SEARCH_LIMIT,
+        model_type: str = DEFAULT_MODEL_TYPE,
+        base_model: str = "",
     ) -> list[dict[str, Any]]:
+        if model_type not in MODEL_TYPES:
+            raise CivitaiError("custom_model_type_invalid", "種別の指定が正しくありません")
         params: dict[str, Any] = {
-            # LoRA は取り込めても使えない。並べない。
-            "types": "Checkpoint",
+            "types": MODEL_TYPES[model_type],
             "sort": SORTS.get(sort, "Most Downloaded"),
             "limit": max(1, min(SEARCH_LIMIT, limit)),
             "nsfw": "false",
         }
+        if base_model:
+            params["baseModels"] = base_model
         if query.strip():
             params["query"] = query.strip()
         try:
@@ -205,19 +236,30 @@ class CivitaiSource:
                 # 取り込むときに要る。version を選び直させないための控え。
                 "revision": str(version.get("id") or ""),
                 "base_model": str(version.get("baseModel") or ""),
+                "model_type": model_type,
+                # 起動語を入れない LoRA は何も起こさない。候補の段階で見せる。
+                "trigger_words": _trigger_words(version.get("trainedWords")),
             })
         return found
 
     async def version(self, model_id: int, version_id: int | None = None) -> CivitaiVersion:
         """Resolve one version, or the newest one when none is named."""
+        declared_type = ""
         try:
             async with _client(self.transport, self.timeout_sec) as client:
                 if version_id is not None:
                     document = _payload(
                         await client.get(f"{self.origin}/api/v1/model-versions/{int(version_id)}")
                     )
+                    # 版の応答は親を model として抱えている。
+                    parent = document.get("model")
+                    declared_type = str((parent or {}).get("type") or "")
                 else:
                     model = _payload(await client.get(f"{self.origin}/api/v1/models/{int(model_id)}"))
+                    # 一覧から取るときは、親の応答そのものが種別を持っている。
+                    # 版の側には入っていないので、ここで拾わないと LoRA が
+                    # checkpoint として取り込まれる。
+                    declared_type = str(model.get("type") or "")
                     versions = model.get("modelVersions")
                     if not isinstance(versions, list) or not versions:
                         raise CivitaiError("custom_model_not_found", "取り込める版がありません")
@@ -245,4 +287,16 @@ class CivitaiSource:
             name=str(document.get("name") or "")[:120],
             base_model=base_model,
             file=checkpoint,
+            model_type="lora" if declared_type.lower() == "lora" else "checkpoint",
+            trigger_words=tuple(_trigger_words(document.get("trainedWords"))),
         )
+
+
+    async def base_candidate(self, base_model: str) -> dict[str, Any] | None:
+        """その系統で最も使われている checkpoint を 1 つ。
+
+        LoRA だけ落としても絵は作れない。載せる先が手元に無いとき、何を
+        一緒に落とすことになるのかを、押す前に見せるために引く。
+        """
+        rows = await self.search("", limit=1, model_type="checkpoint", base_model=base_model)
+        return rows[0] if rows else None

@@ -54,6 +54,7 @@ class DiffusersStableDiffusionAdapter:
         self.load_sec: float | None = None
         self.last_generation_sec: float | None = None
         self.placement: dict[str, Any] = {}
+        self._applied_loras: list[tuple[str, float]] = []
 
     # ── load ────────────────────────────────────────────────────────────
 
@@ -129,6 +130,32 @@ class DiffusersStableDiffusionAdapter:
             "offload_hooks": [],
             "non_gpu_map_targets": [],
         }
+
+
+    # ── LoRA ────────────────────────────────────────────────────────────
+
+    def apply_loras(self, requested: list[dict]) -> list[str]:
+        """Lay the requested LoRAs on the loaded pipeline.
+
+        The previous set is removed first. Without that they stack: a second
+        generation would carry the first request's LoRAs as well, and the
+        difference would look like the model behaving inconsistently rather
+        than like a bug.
+        """
+        from .lora import apply as apply_loras
+
+        assert self.pipeline is not None
+        wanted = [(item["id"], float(item["weight"])) for item in requested]
+        if self._applied_loras == wanted:
+            return [item["id"] for item in requested]
+        if self._applied_loras:
+            self.pipeline.unload_lora_weights()
+            self._applied_loras = []
+        if not requested:
+            return []
+        apply_loras(self.pipeline, requested)
+        self._applied_loras = wanted
+        return [item["id"] for item in requested]
 
     # ── generate ────────────────────────────────────────────────────────
 

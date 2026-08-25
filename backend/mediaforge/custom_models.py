@@ -598,7 +598,8 @@ class CustomModelCatalog(CatalogSearchMixin):
     # ── 配布元 ─────────────────────────────────────────────────────────────
 
     async def search_source(
-        self, source: str, query: str, *, sort: str = "downloads", **options: Any
+        self, source: str, query: str, *, sort: str = "downloads",
+        model_type: str = "checkpoint", **options: Any
     ) -> list[dict[str, Any]]:
         """配布元を選んで検索する。
 
@@ -608,10 +609,17 @@ class CustomModelCatalog(CatalogSearchMixin):
         """
         if source == "civitai":
             try:
-                return await self.civitai.search(query, sort=sort)
+                return await self.civitai.search(query, sort=sort, model_type=model_type)
             except CivitaiError as exc:
                 raise CustomModelError(exc.code, str(exc)) from exc
         if source == "huggingface":
+            if model_type != "checkpoint":
+                # Hugging Face 側に LoRA の取り込み経路がまだ無い。空を返して
+                # 「無い」ように見せると、探し方が悪いのだと思わせる。
+                raise CustomModelError(
+                    "custom_model_type_unsupported",
+                    "Hugging Face からの LoRA 取り込みには未対応です。Civitai を選んでください",
+                )
             return [item.document() for item in await self.search(query, sort=sort, **options)]
         raise CustomModelError("custom_model_source_invalid", "配布元の指定が正しくありません")
 
@@ -650,6 +658,8 @@ class CustomModelCatalog(CatalogSearchMixin):
         weight = ResolvedWeight(
             path=version.file.name, size_bytes=version.file.size_bytes, sha256=version.file.sha256
         )
+        if version.model_type == "lora":
+            return self._lora_resolution(repo_id, revision, version, weight)
         return CustomModelResolution(
             repo_id=repo_id,
             revision=str(version.version_id),
@@ -673,6 +683,72 @@ class CustomModelCatalog(CatalogSearchMixin):
                 "実行経路は未計測なので、使う前に「評価」で確かめてください。",
             ),
         )
+
+
+    def _lora_resolution(
+        self, repo_id: str, revision: str, version: Any, weight: ResolvedWeight
+    ) -> CustomModelResolution:
+        """LoRA は単体では絵を作れない。
+
+        capability を `image.lora` にしておくと、routing は最初から候補に
+        入れない（`capability in item.capabilities` で絞るため）。旗を立てて
+        後から除外する作りにすると、除外を書き忘れた経路が 1 つでもあれば
+        LoRA が本体として選ばれる。
+        """
+        from worker_packs.image.adapters.diffusers_single_file import normalize_base_model
+
+        family = normalize_base_model(version.base_model)
+        if not family:
+            raise CustomModelError(
+                "custom_model_family_unknown",
+                f"{version.base_model} 用の LoRA を載せられる系統が分かりません",
+            )
+        return CustomModelResolution(
+            repo_id=repo_id,
+            revision=str(version.version_id),
+            requested_revision=str(revision or ""),
+            license="配布元の表記に従う",
+            license_notice="Civitai の配布物です。利用条件は配布元のページで確認してください。",
+            gated=False,
+            pipeline_tag="text-to-image",
+            library_name="lora",
+            weights=(weight,),
+            required_files=(),
+            total_bytes=weight.size_bytes,
+            runtime_adapter="lora.diffusers",
+            capabilities=("image.lora",),
+            max_download_bytes=self.max_download_bytes,
+            runtime_options={
+                "base_model": version.base_model,
+                **({"trigger_words": list(version.trigger_words)}
+                   if version.trigger_words else {}),
+            },
+            warnings=(
+                f"{version.base_model} の checkpoint に載せる LoRA です。"
+                + ("起動語を prompt に入れないと効きません。"
+                   if version.trigger_words else "起動語の指定はありません。"),
+            ),
+        )
+
+    async def lora_base_requirement(self, base_model: str, installed_families: set[str]) -> dict[str, Any]:
+        """その LoRA を載せられる checkpoint が手元にあるか。
+
+        無いなら、何を一緒に落とすことになるのかを押す前に見せる。LoRA は
+        40MB 前後だが土台は 2〜7GB あるので、黙って始めると 40MB のつもりが
+        7GB 落ちてくる。
+        """
+        from worker_packs.image.adapters.diffusers_single_file import normalize_base_model
+
+        family = normalize_base_model(base_model)
+        if family and family in installed_families:
+            return {"satisfied": True, "family": family, "candidate": None}
+        candidate = None
+        try:
+            candidate = await self.civitai.base_candidate(base_model)
+        except CivitaiError:
+            # 候補が引けないことは、土台が無いという事実を変えない。
+            candidate = None
+        return {"satisfied": False, "family": family, "candidate": candidate}
 
     # ── resolve ────────────────────────────────────────────────────────────
 

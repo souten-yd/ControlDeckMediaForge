@@ -4467,3 +4467,71 @@ Hugging Face の token を Civitai に送らない。他所の資格情報を、
 
 やらないこと: LoRA。Civitai の多くは LoRA だが Media Forge に経路が無い。
 検索を Checkpoint に絞ってある。NSFW は既定で外す。
+
+## LoRA を使えるようにする（2026-08-25）
+
+LoRA は「モデル」ではない。選んだ checkpoint に載せるもので、単体では絵を
+作れない。registry には別の capability（`image.lora`）で載せた。routing は
+`capability in item.capabilities` で候補を絞るので、`image.text_to_image` を
+求める経路には最初から現れない。旗を立てて後から除外する作りにすると、除外を
+書き忘れた経路が 1 つでもあれば LoRA が本体として選ばれる。
+
+### 読み込めるまでに 2 つ詰まった。どちらもエラーからは分からない
+
+**transformers 5 で CLIP のモジュール名が変わっていた。** 今は
+`encoder.layers.0.mlp.fc1` で、以前は `text_model.encoder.layers.0.mlp.fc1`
+だった。diffusers 0.40 は encoder にモジュール名を訊いて、それを変換済みの
+state dict から引いて rank 表を作る。state dict 側には古い接頭辞が残っている
+ので全部外れ、空の表を持って `IndexError: list index out of range` で落ちる。
+場所も理由も示さないし、LoRA 側は壊れていない（実測: add_detail.safetensors は
+text encoder 216 個・UNet 576 個のテンソルを持つ）。読み込んだ encoder の形に
+合わせて鍵を書き換える。逆方向には触らないので、古い transformers でも動く。
+text encoder 側を捨てて UNet だけ載せる手もあるが、それは黙って別の絵になる。
+
+**SDXL の LoRA は SGM のブロック番号で保存されている。** `load_lora_weights`
+は unet の config を `lora_state_dict` に渡して変換している。こちらで state
+dict を作るなら同じものを渡す必要があり、渡さないと「該当する層が無い」と
+延々並べて落ちる。
+
+**LoRA は選んだモデルとは別の repository に入る。** モデルの境界は
+そのモデル 1 つ分に絞ってあるので、同じ境界で見ると必ず外に出る。境界を
+広げるのではなく、LoRA 用の根（導入先）を別に渡す。
+
+`peft` をランタイムの依存に追加した。無いと `load_lora_weights` が拒む。
+
+### 実機で確かめたこと（AMD Radeon AI PRO R9700）
+
+```text
+SD 1.5   midjourneyanime を DreamShaper 8（単一ファイル）に  絵が変わった
+SDXL 1.0 Detail Tweaker XL を SDXL base（ディレクトリ）に      絵が変わった
+```
+
+adapter の経路が別なので、両方通して初めて「LoRA が動く」と言える。同じ seed
+で前後を並べて目視した。
+
+Civitai の一部の LoRA は 401 を返す（早期公開など）。鍵が要る配布物なので、
+そう伝える。UA 不足の 403 とは別の理由である。
+
+### 土台が無ければ、先に知らせる
+
+LoRA は 40MB 前後だが土台は 2〜7GB ある。黙って始めると 40MB のつもりが 7GB
+落ちてくる。取り込む前に、載せる先が手元にあるかを調べ、無ければその系統で
+最も使われている checkpoint を大きさ付きで見せて確認を取る。
+
+土台は LoRA が入ってから取り込む。先に落として LoRA 側が失敗すると、頼んで
+いない 7GB だけが残る。
+
+### UI
+
+* 検索行に種別（モデル本体 / LoRA）。Hugging Face には LoRA の経路が無いので、
+  そちらを選んだときは種別を出さない
+* 「手元のモデルに載せられるものだけ」の絞り込み
+* 結果に系統と起動語。系統は載るなら緑、載らないなら黄で出す
+* 生成画面に LoRA の選択と強さ（0〜2、4 個まで）。選んだモデルに載せられる
+  ものだけを出す
+* モデルの選択肢から LoRA を除く。混ぜると、選んでから断られる
+
+起動語は prompt に自動で足す。足したことは job に残る。既に入っている語は
+足さない（二重に入れても効きは強くならず、他の語の重みが薄まる）。
+
+やらないこと: LoRA の学習。動画モデルへの適用（経路が別で未計測）。

@@ -129,6 +129,12 @@
               <p id="model-choice-note" class="hint"></p>
             </div>
 
+            <div id="lora-picker" hidden>
+              <p class="section-label">LoRA</p>
+              <p id="lora-picker-note" class="hint"></p>
+              <div id="lora-list" class="lora-list"></div>
+            </div>
+
             <div id="composition-options" class="sub-field" hidden>
               <p class="section-label" id="composition-options-label">複数カットをまとめる</p>
               <label>タイトル<input id="composition-title" maxlength="120" placeholder="ORANGE COMPANION"></label>
@@ -317,13 +323,24 @@
 
           <p class="section-label">モデルを探して追加</p>
           <p class="hint">配布元を検索します。取り込む前に中身とライセンスを必ず確かめます。</p>
-          <div id="catalog-source" class="chips" role="radiogroup" aria-label="配布元">
-            <button type="button" class="chip" data-source="civitai" role="radio"
-                    aria-checked="true">Civitai</button>
-            <button type="button" class="chip" data-source="huggingface" role="radio"
-                    aria-checked="false">Hugging Face</button>
+          <div class="catalog-scope">
+            <div id="catalog-source" class="chips" role="radiogroup" aria-label="配布元">
+              <button type="button" class="chip" data-source="civitai" role="radio"
+                      aria-checked="true">Civitai</button>
+              <button type="button" class="chip" data-source="huggingface" role="radio"
+                      aria-checked="false">Hugging Face</button>
+            </div>
+            <div id="catalog-type" class="chips" role="radiogroup" aria-label="種別">
+              <button type="button" class="chip" data-model-type="checkpoint" role="radio"
+                      aria-checked="true">モデル本体</button>
+              <button type="button" class="chip" data-model-type="lora" role="radio"
+                      aria-checked="false">LoRA</button>
+            </div>
           </div>
           <p id="catalog-source-note" class="hint"></p>
+          <label id="catalog-fit" class="check" hidden>
+            <input type="checkbox" id="catalog-fit-only">手元のモデルに載せられるものだけ
+          </label>
           <div class="form-row search">
             <label>検索
               <span class="input-clear">
@@ -380,6 +397,7 @@
           <p id="catalog-empty" class="hint" hidden></p>
 
           <div id="custom-result" class="rows" hidden></div>
+          <div id="lora-base-note" hidden></div>
           <div id="custom-error" class="error" role="alert" hidden></div>
 
           <div id="pack-section" hidden>

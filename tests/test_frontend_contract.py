@@ -87,7 +87,10 @@ ADVANCED_IDS = (
 )
 
 # 配布元の切り替え。モデル管理タブにあり、詳細モードとは無関係。
-CATALOG_IDS = ("catalog-source", "catalog-source-note")
+CATALOG_IDS = (
+    "catalog-source", "catalog-source-note", "catalog-type", "catalog-fit",
+    "catalog-fit-only", "lora-base-note", "lora-picker", "lora-picker-note", "lora-list",
+)
 
 
 def test_the_frame_never_touches_browser_storage():
@@ -1064,3 +1067,40 @@ def test_a_filter_that_the_site_does_not_have_is_hidden():
     """効かない絞り込みを出すと、絞ったつもりの結果を見ることになる。
     Civitai の検索は画風タグを持たない。"""
     assert "styles: false" in SCRIPT
+
+
+
+def test_the_catalog_can_look_for_loras():
+    assert 'data-model-type="lora"' in MARKUP
+    assert 'data-model-type="checkpoint"' in MARKUP
+    assert "model_type: catalogType()" in SCRIPT
+
+
+def test_a_lora_is_never_offered_as_a_model_to_generate_with():
+    """LoRA は単体では絵を作れない。選択肢に混ぜると、選んでから断られる。"""
+    for line in SCRIPT.splitlines():
+        if "model.installed && model.healthy" in line and "kind" not in line:
+            following = SCRIPT[SCRIPT.index(line):SCRIPT.index(line) + 200]
+            assert 'kind !== "lora"' in following, line
+
+
+def test_the_base_model_is_reported_before_a_lora_is_taken():
+    """LoRA は 40MB 前後だが土台は 2〜7GB ある。黙って始めない。"""
+    assert "models.custom.lora_base" in SCRIPT
+    assert "lora-base-together" in SCRIPT
+    backend = (BACKEND / "app.py").read_text(encoding="utf-8")
+    assert "models.custom.lora_base" in backend
+
+
+def test_the_base_is_taken_after_the_lora_not_before():
+    """先に土台を落として LoRA 側が失敗すると、頼んでいない 7GB だけが残る。"""
+    add = SCRIPT[SCRIPT.index("async function addCustomModel"):]
+    lora_add = add.index('call("models.custom.add"')
+    base_add = add.index("state.pendingLoraBase")
+    assert lora_add < base_add
+
+
+def test_the_trigger_words_are_shown_where_the_lora_is_chosen():
+    """起動語を入れない LoRA は何も起こさない。"""
+    assert "trigger_words" in SCRIPT
+    assert "自動で足します" in SCRIPT

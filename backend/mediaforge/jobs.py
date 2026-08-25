@@ -29,7 +29,7 @@ from .m5_companion import (
     validate_image as validate_m5_image,
 )
 from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
-from .models.generation_defaults import snap_to_native
+from .models.generation_defaults import normalize_base_model, snap_to_native
 from .outpaint import outpaint_plan, validate_outpaint
 from .paths import contained
 from .profiles import profile_prompt
@@ -834,6 +834,102 @@ class JobManager:
             asset_ids=[asset.id],
         )
 
+    def _all_models(self) -> list[ModelDescriptor]:
+        """自作分を含む全一覧。LoRA もここに載っている。
+
+        routing と同じ一覧を使う。別に読むと、片方だけが知っている entry が
+        できて「選べるのに使えない」が再発する（実測: 自作モデルがそうなった）。
+        """
+        if self.model_manifest is None or self.hf_home is None:
+            return []
+        extra_models, extra_catalog = (
+            self.extra_manifests() if self.extra_manifests is not None else ([], [])
+        )
+        try:
+            return list(ModelRegistry.load(
+                self.model_manifest,
+                hf_home=self.hf_home,
+                catalog_manifest=self.model_catalog_manifest,
+                model_store_root=self.model_store_root,
+                extra_models=extra_models,
+                extra_catalog=extra_catalog,
+            ).all())
+        except ModelRegistryError as exc:
+            raise WorkerFailure("model_registry_invalid", str(exc)) from exc
+
+    MAX_LORAS = 4
+
+    def _requested_loras(self, job: Job) -> list[dict[str, Any]]:
+        value = job.request.constraints.get("loras") or []
+        if not isinstance(value, list):
+            raise WorkerFailure("invalid_loras", "LoRA の指定が正しくありません")
+        if len(value) > self.MAX_LORAS:
+            raise WorkerFailure(
+                "invalid_loras", f"LoRA は {self.MAX_LORAS} 個までです"
+            )
+        rows: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict) or not isinstance(item.get("model_id"), str):
+                raise WorkerFailure("invalid_loras", "LoRA の指定が正しくありません")
+            weight = item.get("weight", 1.0)
+            if isinstance(weight, bool) or not isinstance(weight, (int, float)) or not 0 <= weight <= 2:
+                raise WorkerFailure("invalid_loras", "LoRA の強さは 0〜2 で指定してください")
+            rows.append({"model_id": item["model_id"], "weight": float(weight)})
+        return rows
+
+    def _resolved_loras(self, job: Job, selected: ModelDescriptor) -> list[dict[str, Any]]:
+        """要求された LoRA を、載せられるものだけに絞って経路に変える。
+
+        系統が合わない LoRA は次元が合わずに落ちるか、運が悪いと形だけ通って
+        絵が崩れる。落ちる方がまだよいが、どちらも起きる前にここで断る。
+        """
+        requested = self._requested_loras(job)
+        if not requested:
+            return []
+        available = {item.model_id: item for item in self._all_models() if item.is_lora}
+        target = normalize_base_model(selected.base_model)
+        resolved: list[dict[str, Any]] = []
+        for row in requested:
+            lora = available.get(row["model_id"])
+            if lora is None or not lora.installed or lora.local_path is None:
+                raise WorkerFailure("lora_not_installed", f"{row['model_id']} が導入されていません")
+            family = normalize_base_model(lora.base_model)
+            if not target or family != target:
+                raise WorkerFailure(
+                    "lora_incompatible",
+                    f"{lora.display_name or lora.model_id} は {lora.base_model} 用です。"
+                    f"選んだモデルの系統（{selected.base_model or '不明'}）には載せられません",
+                )
+            path = lora.local_path if lora.local_path.is_file() else next(
+                iter(sorted(lora.local_path.rglob("*.safetensors"))), None
+            )
+            if path is None:
+                raise WorkerFailure("lora_not_installed", f"{row['model_id']} の本体が見つかりません")
+            resolved.append({"id": lora.model_id, "path": str(path), "weight": row["weight"]})
+        return resolved
+
+    def _lora_trigger_words(self, job: Job, selected: ModelDescriptor) -> str:
+        """載せる LoRA が要求する語をまとめる。
+
+        既に prompt に入っている語は足さない。二重に入れても効きは強く
+        ならないが、他の語の重みが薄まる。
+        """
+        try:
+            rows = self._requested_loras(job)
+        except WorkerFailure:
+            return ""
+        if not rows:
+            return ""
+        available = {item.model_id: item for item in self._all_models() if item.is_lora}
+        existing = job.request.intent.lower()
+        words: list[str] = []
+        for row in rows:
+            lora = available.get(row["model_id"])
+            for word in (lora.trigger_words if lora else ()):
+                if word.lower() not in existing and word not in words:
+                    words.append(word)
+        return ", ".join(words)
+
     def _resolved_request(self, job: Job, selected: ModelDescriptor) -> dict[str, Any]:
         """要求に、そのモデル本来の設定を埋めてから worker に渡す。
 
@@ -971,8 +1067,13 @@ class JobManager:
                 },
                 "request": self._resolved_request(job, selected),
                 "worker_output_dir": str(output_dir),
-                "worker_inputs": worker_inputs,
+                "worker_inputs": {**worker_inputs, "loras": self._resolved_loras(job, selected)},
             }
+        trigger = self._lora_trigger_words(job, selected) if selected is not None else ""
+        if trigger:
+            # 起動語を入れない LoRA は何も起こさない。足したことは job に残る。
+            target = payload["request"]
+            target["intent"] = f"{target.get('intent') or job.request.intent}, {trigger}"
         snapshot = self.store.job_profile_snapshot(job.id)
         if snapshot.get("prompt"):
             target = payload["request"] if selected is not None else payload
@@ -999,6 +1100,11 @@ class JobManager:
             # PYTHONPATH that can accidentally expose core implementations.
             environment["PYTHONPATH"] = str(REPOSITORY_ROOT)
             environment["MEDIA_FORGE_MODEL_ROOT"] = str(selected.local_path.parents[1])
+            # LoRA は別の repository に入るので、モデルの境界には収まらない。
+            # 導入先として使っている根だけを許す。
+            environment["MEDIA_FORGE_LORA_ROOTS"] = os.pathsep.join(
+                str(root) for root in (self.model_store_root, self.hf_home) if root is not None
+            )
             environment["MEDIA_FORGE_WORK_ROOT"] = str(self.store.work_dir.resolve())
             stdin_payload += b"\n"
             timeout_sec = max(self.worker_timeout_sec, float(selected.measured_runtime_sec or 0) * 3 + 30)
