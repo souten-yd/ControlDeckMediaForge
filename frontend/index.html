@@ -64,7 +64,16 @@
           <!-- 検証は requestProblem() が行う。ブラウザ既定の吹き出しは文言を持てず、
                モバイルで見落としやすいので novalidate にする。 -->
           <form id="create-form" class="panel" novalidate>
-            <label class="field-label" for="create-intent">何を作りますか？</label>
+            <div class="field-head">
+              <label class="field-label" for="create-intent">何を作りますか？</label>
+              <button type="button" id="create-reset" class="icon"
+                      aria-label="設定を初期に戻す" title="入力と設定を初期に戻す">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M20 12a8 8 0 1 1-2.6-5.9"/>
+                  <path d="M20 4.2V9h-4.8"/>
+                </svg>
+              </button>
+            </div>
             <textarea id="create-intent" required maxlength="8000" rows="4"
               placeholder="夜の机に置かれた、小さな青いロボット"></textarea>
 

@@ -164,11 +164,17 @@ class CustomModelResolution:
         }
 
 
-def _adapter_for(library_name: str, pipeline_tag: str) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
-    """Map the Hub's own labels onto an adapter Media Forge actually ships.
+def _adapter_for(
+    library_name: str, pipeline_tag: str, pipeline_class: str = ""
+) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
+    """Map the repository's own declaration onto an adapter Media Forge ships.
 
     Guessing an adapter would produce a model that installs and then fails at
     generation time. Say so at add time instead.
+
+    The deciding fact is the pipeline class from ``model_index.json``, not the
+    Hub's tags: ``diffusers`` + ``text-to-image`` also describes FLUX and
+    Qwen-Image, which this adapter cannot run.
     """
     if library_name != "diffusers":
         return UNSUPPORTED_ADAPTER, (), (
@@ -179,11 +185,17 @@ def _adapter_for(library_name: str, pipeline_tag: str) -> tuple[str, tuple[str, 
         return UNSUPPORTED_ADAPTER, (), (
             f"この repository の用途は {pipeline_tag or '不明'} です。画像生成として扱えません。",
         )
-    # Stable Diffusion 系の共通 adapter はまだ実測していない。取り込みと検証は
-    # できるが生成には使えない、と明示する。推測で adapter を割り当てない。
+    adapter = _PIPELINE_ADAPTERS.get(pipeline_class)
+    if adapter is not None:
+        # SSD-1B（SDXL 系）で実測済みの経路。同じ AutoPipeline を通るが、
+        # この repository 自体は測っていないので experimental のまま入る。
+        return adapter, ("image.text_to_image",), (
+            f"{pipeline_class} として取り込みます。実行経路は実測済みですが、"
+            "この repository 自体は未計測なので、使う前に「評価」で確かめてください。",
+        )
     return UNSUPPORTED_ADAPTER, ("image.text_to_image",), (
-        "この形式に対応する実行アダプタはまだ実測されていません。"
-        "取り込みと検証はできますが、生成にはまだ使えません。",
+        f"pipeline {pipeline_class or '不明'} に対応する実行アダプタがありません。"
+        "取り込みと検証はできますが、生成には使えません。",
     )
 
 
@@ -400,26 +412,82 @@ def _weights_from_gguf(value: Any) -> tuple[int, str]:
 
 _LOCAL_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
-# model_index.json の _class_name から adapter を決める。タグ（diffusers +
-# text-to-image）だけで決めると、FLUX や Qwen-Image のような別系統まで
-# 巻き込んで「入るが生成で落ちる」ものを作る。クラス名は配布物自身の申告
-# なので、推測にならない。
+# model_index.json の _class_name から adapter を決める。Hub のタグでは
+# FLUX も Qwen-Image も「diffusers + text-to-image」で同じ顔になるので、
+# repository 自身の申告を見る。
 #
-# diffusers.sdxl は AutoPipelineForText2Image の上に載っており、SD 1.x /
-# 2.x / XL / 3.x を同じ入口で扱える。実測は SSD-1B（SDXL 系）で取っており、
-# 他は同じ経路を通るが未実測なので state は experimental のままにする。
+# 下の一覧は diffusers の AUTO_TEXT2IMAGE_PIPELINES_MAPPING をそのまま写した
+# もので、AutoPipelineForText2Image が構築できるクラスである。つまり
+# diffusers.sdxl（AutoPipeline の上に載っている）が読み込める形式の全部で、
+# 推測ではない。実測は SSD-1B（SDXL 系）だけなので、他は取り込めても
+# experimental のまま入り、使う前に「評価」を通す必要がある。
+#
+# ここが実体とずれたら test_custom_models が気づく（image runtime がある
+# 環境では、実行時の mapping と突き合わせる）。
+AUTO_TEXT2IMAGE_CLASSES = (
+    "AuraFlowPipeline",
+    "ChromaPipeline",
+    "CogView3PlusPipeline",
+    "CogView4ControlPipeline",
+    "CogView4Pipeline",
+    "Flux2Pipeline",
+    "FluxControlNetPipeline",
+    "FluxControlPipeline",
+    "FluxKontextPipeline",
+    "FluxPipeline",
+    "GlmImagePipeline",
+    "HeliosPipeline",
+    "HeliosPyramidPipeline",
+    "HunyuanDiTPAGPipeline",
+    "HunyuanDiTPipeline",
+    "IFPipeline",
+    "Ideogram4Pipeline",
+    "Kandinsky3Pipeline",
+    "KandinskyCombinedPipeline",
+    "KandinskyV22CombinedPipeline",
+    "KolorsPAGPipeline",
+    "KolorsPipeline",
+    "Krea2Pipeline",
+    "LatentConsistencyModelPipeline",
+    "Lumina2Pipeline",
+    "LuminaPipeline",
+    "NucleusMoEImagePipeline",
+    "OvisImagePipeline",
+    "PRXPipeline",
+    "PixArtAlphaPipeline",
+    "PixArtSigmaPAGPipeline",
+    "PixArtSigmaPipeline",
+    "QwenImageControlNetPipeline",
+    "QwenImagePipeline",
+    "SanaPAGPipeline",
+    "SanaPipeline",
+    "StableCascadeCombinedPipeline",
+    "StableDiffusion3ControlNetPipeline",
+    "StableDiffusion3PAGPipeline",
+    "StableDiffusion3Pipeline",
+    "StableDiffusionControlNetPAGPipeline",
+    "StableDiffusionControlNetPipeline",
+    "StableDiffusionPAGPipeline",
+    "StableDiffusionPipeline",
+    "StableDiffusionXLControlNetPAGPipeline",
+    "StableDiffusionXLControlNetPipeline",
+    "StableDiffusionXLControlNetUnionPipeline",
+    "StableDiffusionXLPAGPipeline",
+    "StableDiffusionXLPipeline",
+    "WuerstchenCombinedPipeline",
+    "ZImageControlNetInpaintPipeline",
+    "ZImageControlNetPipeline",
+    "ZImageOmniPipeline",
+    "ZImagePipeline",
+)
+
+# 専用の adapter を持つものはそちらへ。Flux2KleinPipeline は
+# DiffusersFlux2KleinAdapter が text encoder ごと面倒を見る。
+_DEDICATED_ADAPTERS = {"Flux2KleinPipeline": "diffusers.flux2-klein"}
+
 _PIPELINE_ADAPTERS = {
-    # SD 1.x / 2.x
-    "StableDiffusionPipeline": "diffusers.sdxl",
-    "StableDiffusionImg2ImgPipeline": "diffusers.sdxl",
-    "StableDiffusionInpaintPipeline": "diffusers.sdxl",
-    # SDXL
-    "StableDiffusionXLPipeline": "diffusers.sdxl",
-    "StableDiffusionXLImg2ImgPipeline": "diffusers.sdxl",
-    "StableDiffusionXLInpaintPipeline": "diffusers.sdxl",
-    # SD 3.x
-    "StableDiffusion3Pipeline": "diffusers.sdxl",
-    "StableDiffusion3Img2ImgPipeline": "diffusers.sdxl",
+    **_DEDICATED_ADAPTERS,
+    **{name: "diffusers.sdxl" for name in AUTO_TEXT2IMAGE_CLASSES},
 }
 
 
@@ -489,7 +557,35 @@ class CustomModelCatalog(CatalogSearchMixin):
         if not isinstance(revision, str) or _REVISION_REF.fullmatch(revision) is None:
             raise CustomModelError("custom_model_revision_invalid", "revision の形式が正しくありません")
         payload = await self._metadata(repo_id, revision)
-        return self._resolution(repo_id, revision, payload)
+        # どの系統かは repository 自身の model_index.json が持っている。
+        # Hub のタグでは FLUX と Qwen-Image まで同じ顔になる。
+        pipeline_class = await self._pipeline_class(repo_id, str(payload.get("sha") or ""))
+        return self._resolution(repo_id, revision, payload, pipeline_class)
+
+    async def _pipeline_class(self, repo_id: str, revision: str) -> str:
+        """Read `_class_name` from the repository's own model_index.json.
+
+        One small extra fetch, and the only way to know which family this is.
+        Failing to read it is not fatal — it simply means we cannot claim an
+        adapter, which is the same position as before.
+        """
+        if _COMMIT.fullmatch(revision) is None:
+            return ""
+        url = f"{self.origin}/{repo_id}/resolve/{revision}/model_index.json"
+        try:
+            async with httpx.AsyncClient(
+                transport=self.transport, timeout=self.timeout_sec, follow_redirects=True
+            ) as client:
+                response = await client.get(url)
+            if response.status_code != 200 or len(response.content) > MAX_METADATA_BYTES:
+                return ""
+            document = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError):
+            return ""
+        if not isinstance(document, dict):
+            return ""
+        name = document.get("_class_name")
+        return name[:128] if isinstance(name, str) else ""
 
     async def _metadata(self, repo_id: str, revision: str) -> dict[str, Any]:
         url = f"{self.origin}/api/models/{repo_id}/revision/{revision}"
@@ -530,7 +626,8 @@ class CustomModelCatalog(CatalogSearchMixin):
         return payload
 
     def _resolution(
-        self, repo_id: str, requested: str, payload: dict[str, Any]
+        self, repo_id: str, requested: str, payload: dict[str, Any],
+        pipeline_class: str = "",
     ) -> CustomModelResolution:
         commit = str(payload.get("sha") or "")
         if _COMMIT.fullmatch(commit) is None:
@@ -584,7 +681,9 @@ class CustomModelCatalog(CatalogSearchMixin):
         card = payload.get("cardData")
         license_name = str((card or {}).get("license") or "") if isinstance(card, dict) else ""
         adapter, capabilities, warnings = _adapter_for(
-            str(payload.get("library_name") or ""), str(payload.get("pipeline_tag") or "")
+            str(payload.get("library_name") or ""),
+            str(payload.get("pipeline_tag") or ""),
+            pipeline_class,
         )
         gated = payload.get("gated") not in (False, None)
         if gated:
@@ -742,11 +841,24 @@ class CustomModelCatalog(CatalogSearchMixin):
                 "この repository は取り込み上限を超えています",
             )
         entries = self.entries()
-        if any(item.get("registry", {}).get("model_id") == resolution.repo_id for item in entries):
-            raise CustomModelError("custom_model_exists", "そのモデルは既に追加されています")
+        entry = self._entry(resolution, display_name=display_name, domains=domains)
+        existing = next(
+            (index for index, item in enumerate(entries)
+             if item.get("registry", {}).get("model_id") == resolution.repo_id),
+            None,
+        )
+        if existing is not None:
+            # 拒むのではなく置き換える。同じ repository を確認し直して入れ直す
+            # のは「もう一度やり直したい」という意味で、拒否すると、古い判定で
+            # 入った entry を直す方法が無くなる（実測: adapter を後から実装
+            # しても、既に入っている分は unsupported のままだった）。
+            if entries[existing] == entry:
+                raise CustomModelError("custom_model_exists", "そのモデルは既に追加されています")
+            entries[existing] = entry
+            self._write(entries)
+            return entry
         if len(entries) >= MAX_CUSTOM_MODELS:
             raise CustomModelError("custom_model_limit", "追加できるモデルの数を超えています")
-        entry = self._entry(resolution, display_name=display_name, domains=domains)
         entries.append(entry)
         self._write(entries)
         return entry
