@@ -1150,3 +1150,50 @@ table.catalog .tag {
     text-align: center;
   }
 }
+
+/* 自動で決められなかった項目。押し出しではなく、目を留められる程度に。
+   分からないことを隠すと、絵が眠いときに何を触ればよいか分からない。 */
+.settings-check {
+  border: 1px solid var(--warn-border, #b8860b);
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  margin: 0.6rem 0;
+  background: var(--warn-bg, rgba(184, 134, 11, 0.08));
+}
+.settings-check-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.settings-check ul,
+#model-settings-settled ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.settings-check li,
+#model-settings-settled li {
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.85rem;
+}
+.settings-reason,
+.settings-action {
+  font-size: 0.8rem;
+  opacity: 0.82;
+  line-height: 1.45;
+}
+.settings-action { opacity: 1; }
+#model-settings-settled {
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+#model-settings-settled summary {
+  cursor: pointer;
+  padding: 0.3rem 0;
+}
+#model-settings-presets .chip[aria-pressed="true"] {
+  outline: 2px solid var(--accent, #4c8dff);
+  outline-offset: 1px;
+}

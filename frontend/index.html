@@ -573,6 +573,31 @@
       <div class="advanced" id="advanced-create">
         <p class="section-label">詳細設定</p>
         <p id="advanced-size-hint" class="hint"></p>
+
+        <div id="model-settings" hidden>
+          <p class="section-label">モデルの設定</p>
+          <p id="model-settings-model" class="hint"></p>
+          <div id="model-settings-check" class="settings-check" hidden>
+            <p class="settings-check-title">確認が必要な項目</p>
+            <ul id="model-settings-check-list"></ul>
+          </div>
+          <details id="model-settings-settled">
+            <summary>自動で決まった項目</summary>
+            <ul id="model-settings-settled-list"></ul>
+          </details>
+          <p class="section-label">プリセット</p>
+          <div id="model-settings-presets" class="chips" role="group" aria-label="設定プリセット"></div>
+          <div class="form-row">
+            <label>歩数（1〜50）
+              <input id="advanced-steps" type="number" min="1" max="50" inputmode="numeric">
+            </label>
+            <label>ガイダンス（0〜30）
+              <input id="advanced-guidance" type="number" min="0" max="30" step="0.5" inputmode="decimal">
+            </label>
+          </div>
+          <p id="model-settings-note" class="hint"></p>
+        </div>
+
         <p class="section-label">シーンの補足</p>
         <p class="hint">シーン・構図・カメラは上の「シーンと見せ方」で選びます。ここでは言葉で補います。</p>
         <label>シーンの詳細<input id="advanced-scene-details" type="text" maxlength="500" placeholder="場所や状況の補足"></label>

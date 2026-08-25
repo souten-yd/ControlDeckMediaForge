@@ -79,6 +79,11 @@ ADVANCED_IDS = (
     "advanced-pose-details", "advanced-composition", "advanced-composition-details",
     "advanced-camera", "advanced-camera-details", "advanced-variation",
     "advanced-reference-block", "advanced-reference-roles", "advanced-reference-reason",
+    # 自動で決められなかった項目を、確認すべきものとしてまとめて出す場所。
+    "model-settings", "model-settings-model", "model-settings-check",
+    "model-settings-check-list", "model-settings-settled", "model-settings-settled-list",
+    "model-settings-presets", "model-settings-note",
+    "advanced-steps", "advanced-guidance",
 )
 
 
@@ -996,3 +1001,37 @@ def test_sections_are_separated_from_what_precedes_them():
     block = STYLES[STYLES.index("#model-downloads-block {"):]
     block = block[:block.index("}")]
     assert "border-top:" in block and "margin-top:" in block
+
+
+def test_the_ui_reads_the_settings_report_the_backend_emits():
+    """自動で決められなかった項目の名前が片方だけ変わると、画面から警告が
+    黙って消える。消えたことは誰も気づけない。"""
+    defaults = (BACKEND / "models" / "generation_defaults.py").read_text(encoding="utf-8")
+    app = (BACKEND / "app.py").read_text(encoding="utf-8")
+
+    for key in ("needs_check", "settled", "presets"):
+        assert key in defaults or key in app, f"backend が {key} を出していない"
+        assert key in SCRIPT, f"UI が {key} を読んでいない"
+    # 判断は判定した側が持つ。UI が steps_source を見て自分で文面を組み立てると、
+    # 同じ判断が 2 か所に分かれて片方だけ直る。
+    assert "steps_source" in defaults
+    assert "steps_source" not in SCRIPT, "UI が判定をやり直している"
+    # 各項目は理由と対処を持って初めて役に立つ。値だけ出しても何もできない。
+    for field in ("reason", "action"):
+        assert f'entry.{field}' in SCRIPT, f"UI が {field} を表示していない"
+
+
+def test_the_advanced_settings_do_not_leak_into_simple_mode():
+    """簡単モードで歩数を見せない。触るべき人にだけ見せる。"""
+    assert 'data-adv-template="create"' in MARKUP
+    settings = MARKUP.index('id="model-settings"')
+    template = MARKUP.index('data-adv-template="create"')
+    closing = MARKUP.index("</template>", template)
+    assert template < settings < closing, "model-settings が詳細モードの外にある"
+
+
+def test_the_preset_sets_guidance_together_with_steps():
+    """歩数だけ合わせてガイダンスを据え置くと、4 歩で 7.0 のような組み合わせに
+    なり絵が焼ける。"""
+    assert "chip.dataset.guidance" in SCRIPT
+    assert "chip.dataset.steps" in SCRIPT

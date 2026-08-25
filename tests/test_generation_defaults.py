@@ -8,6 +8,8 @@ FLUX.2 Klein（蒸留済み）の値で、SDXL 系をその歩数で回すと像
 from __future__ import annotations
 
 import json
+
+import pytest
 from pathlib import Path
 
 from mediaforge.models.generation_defaults import (
@@ -155,3 +157,178 @@ def test_an_explicit_step_count_is_not_overwritten(tmp_path: Path):
     )
 
     assert resolved["constraints"]["steps"] == 12
+
+
+def test_a_model_that_declares_its_steps_needs_no_checking():
+    """判定できたものまで「確認してください」と並べると、本当に確認が要る
+    ものが埋もれる。"""
+    from mediaforge.models.generation_defaults import STEPS_DECLARED, summary
+
+    report = summary(
+        steps=4, steps_source=STEPS_DECLARED,
+        native_width=1024, native_height=1024, guidance_scale=7.0,
+    )
+
+    assert report["needs_check"] == []
+    assert {entry["item"] for entry in report["settled"]} >= {"歩数", "画面寸法", "ガイダンス"}
+
+
+def test_an_undecidable_step_count_says_so_and_says_what_to_do():
+    """分からないことを黙って既定で埋めると、絵が眠いときに何を触ればよいのか
+    が分からない。"""
+    from mediaforge.models.generation_defaults import STEPS_ASSUMED, summary
+
+    report = summary(
+        steps=30, steps_source=STEPS_ASSUMED,
+        native_width=1024, native_height=1024, guidance_scale=None,
+    )
+    items = {entry["item"]: entry for entry in report["needs_check"]}
+
+    assert "歩数" in items
+    assert items["歩数"]["reason"], "なぜ決められなかったのかを言っていない"
+    assert items["歩数"]["action"], "何をすればよいのかを言っていない"
+    # 寸法は読めているので、確認の側に混ぜない。
+    assert "画面寸法" not in items
+
+
+def test_a_repository_that_hides_its_size_is_listed_for_checking():
+    from mediaforge.models.generation_defaults import STEPS_DECLARED, summary
+
+    report = summary(
+        steps=30, steps_source=STEPS_DECLARED,
+        native_width=None, native_height=None, guidance_scale=7.0,
+    )
+
+    assert "画面寸法" in {entry["item"] for entry in report["needs_check"]}
+
+
+def test_the_distilled_presets_appear_only_when_the_family_is_undecided():
+    """素のモデルに 4 歩を勧めると崩れる。分からないときにだけ出す。"""
+    from mediaforge.models.generation_defaults import STEPS_ASSUMED, STEPS_DECLARED, presets
+
+    undecided = {item["id"] for item in presets(30, STEPS_ASSUMED, 7.0)}
+    decided = {item["id"] for item in presets(30, STEPS_DECLARED, 7.0)}
+
+    assert {"turbo", "lightning"} <= undecided
+    assert not ({"turbo", "lightning"} & decided)
+
+
+def test_the_turbo_preset_turns_guidance_off():
+    """歩数だけ合わせてガイダンスを 7.0 のままにすると、絵が焼ける。"""
+    from mediaforge.models.generation_defaults import STEPS_ASSUMED, presets
+
+    turbo = next(item for item in presets(30, STEPS_ASSUMED, 7.0) if item["id"] == "turbo")
+
+    assert turbo["steps"] == 4
+    assert turbo["guidance_scale"] == 0.0
+
+
+def test_guidance_zero_survives_the_whole_path(tmp_path: Path):
+    """0 は「CFG を使わない」という指示で、Turbo 系はそれを前提に蒸留されて
+    いる。0 を「未指定」と同じに扱うと、そのモデルを正しく回せない。"""
+    from mediaforge.domain import JobRequest
+    from mediaforge.jobs import requested_guidance
+    from mediaforge.store import Store
+    from tests.test_image_evaluation import descriptor
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    job = store.create_job(JobRequest(
+        operation="image.generate", intent="test", constraints={"guidance_scale": 0},
+    ))
+
+    assert requested_guidance(store.get_job(job.id), descriptor(guidance_scale=7.0)) == 0.0
+
+
+def test_an_unspecified_guidance_keeps_the_model_s_own(tmp_path: Path):
+    from mediaforge.domain import JobRequest
+    from mediaforge.jobs import requested_guidance
+    from mediaforge.store import Store
+    from tests.test_image_evaluation import descriptor
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
+
+    assert requested_guidance(store.get_job(job.id), descriptor(guidance_scale=7.0)) == 7.0
+
+
+def test_the_worker_runs_a_distilled_model_at_guidance_zero(monkeypatch, tmp_path):
+    """core が 0 を通しても worker が弾いたら、経路として通っていない。"""
+    from worker_packs.image import worker as image_worker
+    from worker_packs.image.adapters import ImageGenerationResult
+
+    model_root = tmp_path / "models"
+    work_root = tmp_path / "work"
+    model = model_root / "model"
+    output_dir = work_root / "job" / "outputs"
+    model.mkdir(parents=True)
+    output_dir.parent.mkdir(parents=True)
+    monkeypatch.setenv("MEDIA_FORGE_MODEL_ROOT", str(model_root))
+    monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(work_root))
+    seen: dict[str, object] = {}
+
+    class Adapter:
+        def __init__(self, _path, *, device_mode, disable_mmap, **family):
+            seen.update(family)
+            self.load_sec = 0.1
+            self.last_generation_sec = None
+            self.placement = {
+                "component_devices": {}, "non_gpu_devices": {},
+                "offload_hooks": [], "non_gpu_map_targets": [],
+            }
+
+        def generate(self, request):
+            seen["steps"] = request.steps
+            request.output_path.write_bytes(b"png")
+            self.last_generation_sec = 0.1
+            return ImageGenerationResult(request.output_path, request.seed)
+
+    monkeypatch.setattr(image_worker, "DiffusersStableDiffusionAdapter", Adapter)
+    monkeypatch.setattr(image_worker.importlib.metadata, "version", lambda _name: "test-runtime")
+    image_worker.ImageWorker().handle({
+        "model": {
+            "id": "owner/turbo", "path": str(model), "version": "1",
+            "weights_hash": "sha256:" + "a" * 64, "license": "Apache-2.0",
+            "runtime_adapter": "diffusers.sdxl",
+            "runtime_options": {"guidance_scale": 0, "default_steps": 4},
+        },
+        "request": {
+            "operation": "image.generate", "intent": "a blue robot",
+            "constraints": {"width": 512, "height": 512, "seed": 7},
+            "output": {"format": "png", "count": 1},
+        },
+        "worker_output_dir": str(output_dir),
+    })
+
+    assert seen["guidance_scale"] == 0.0
+    # 歩数を要求が持っていないときは、そのモデルが宣言した値を使う。
+    assert seen["steps"] == 4
+
+
+def test_the_worker_refuses_to_invent_a_step_count(monkeypatch, tmp_path):
+    """共通の既定を置くと、蒸留済みの 1 モデルの値が全形式に掛かる。"""
+    from worker_packs.image import worker as image_worker
+
+    model_root = tmp_path / "models"
+    work_root = tmp_path / "work"
+    model = model_root / "model"
+    model.mkdir(parents=True)
+    (work_root / "job").mkdir(parents=True)
+    monkeypatch.setenv("MEDIA_FORGE_MODEL_ROOT", str(model_root))
+    monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(work_root))
+
+    with pytest.raises(ValueError, match="steps"):
+        image_worker.ImageWorker().handle({
+            "model": {
+                "id": "owner/model", "path": str(model), "version": "1",
+                "weights_hash": "sha256:" + "a" * 64, "license": "Apache-2.0",
+                "runtime_adapter": "diffusers.sdxl",
+            },
+            "request": {
+                "operation": "image.generate", "intent": "a blue robot",
+                "constraints": {"width": 512, "height": 512, "seed": 7},
+                "output": {"format": "png", "count": 1},
+            },
+            "worker_output_dir": str(work_root / "job" / "outputs"),
+        })
