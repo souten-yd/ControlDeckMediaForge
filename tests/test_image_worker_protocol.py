@@ -223,10 +223,47 @@ def test_the_worker_refuses_an_adapter_it_does_not_implement(tmp_path: Path, mon
     monkeypatch.setenv("MEDIA_FORGE_MODEL_ROOT", str(model_root))
     monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(work_root))
     body = payload(model, work_root / "job" / "outputs")
-    body["model"]["runtime_adapter"] = "diffusers.sdxl-single-file"
-    assert "diffusers.sdxl-single-file" not in image_worker.ADAPTERS
+    body["model"]["runtime_adapter"] = "diffusers.qwen-image"
+    assert "diffusers.qwen-image" not in image_worker.ADAPTERS
     with pytest.raises(ValueError, match="unsupported"):
         image_worker.ImageWorker().handle(body)
+
+
+def test_a_single_file_checkpoint_needs_its_family_declared(tmp_path: Path):
+    """1 つの safetensors は自分がどの系統か名乗らない。当てて読むと、落ちるか、
+    もっと悪いことに静かに違う絵が出る。"""
+    from worker_packs.image.adapters.diffusers_single_file import DiffusersSingleFileAdapter
+
+    checkpoint = tmp_path / "model.safetensors"
+    checkpoint.write_bytes(b"weights")
+
+    with pytest.raises(ValueError, match="base model"):
+        DiffusersSingleFileAdapter(checkpoint)._pipeline_class()
+    assert DiffusersSingleFileAdapter(
+        checkpoint, base_model="SDXL 1.0"
+    )._pipeline_class() == "StableDiffusionXLPipeline"
+
+
+def test_the_declared_family_survives_the_ways_a_site_writes_it():
+    """Civitai は同じ系統を "SD 1.5" とも "SD 1.5 Hyper" とも書く。"""
+    from worker_packs.image.adapters.diffusers_single_file import normalize_base_model
+
+    assert normalize_base_model("SD 1.5") == normalize_base_model("SD 1.5 Hyper") == "sd15"
+    assert normalize_base_model("SDXL 1.0") == "sdxl"
+    # 知らない系統を既定に丸めない。丸めると違う pipeline で読むことになる。
+    assert normalize_base_model("Flux.1 D") == ""
+
+
+def test_a_directory_with_two_checkpoints_is_refused(tmp_path: Path):
+    """どれが本体か分からないものを当てて読むと、VAE や refiner を本体として
+    読み込むことになる。"""
+    from worker_packs.image.adapters.diffusers_single_file import DiffusersSingleFileAdapter
+
+    (tmp_path / "a.safetensors").write_bytes(b"a")
+    (tmp_path / "b.safetensors").write_bytes(b"b")
+
+    with pytest.raises(ValueError, match="identifiable"):
+        DiffusersSingleFileAdapter(tmp_path, base_model="SDXL 1.0")._checkpoint()
 
 
 def test_the_sd_adapter_asks_for_the_variant_that_is_on_disk(tmp_path: Path):

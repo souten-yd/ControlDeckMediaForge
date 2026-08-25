@@ -32,6 +32,13 @@ CHUNK_BYTES = 4 * 1024 * 1024
 PROGRESS_BYTES = 16 * 1024 * 1024
 MINIMUM_DISK_MARGIN_BYTES = 1024 * 1024 * 1024
 MAX_MANAGED_MODEL_DOWNLOAD_BYTES = 32_000_000_000
+# 配布元ごとの取得元。片方を直書きしていたので、もう片方を足すと必ず
+# Hugging Face の経路に流れる。
+DOWNLOAD_ORIGINS = {"huggingface", "civitai"}
+CIVITAI_ORIGIN = "https://civitai.com"
+# Civitai は既定の User-Agent を 403 で弾く。認証の問題ではないので鍵を
+# 求めない。ここを省くと「許可が要ります」と嘘の理由を出すことになる。
+CIVITAI_USER_AGENT = "MediaForge/1.0 (+https://github.com/souten-yd/ControlDeckMediaForge)"
 DOWNLOAD_RETRIES = 5
 logger = logging.getLogger("uvicorn.error")
 
@@ -49,6 +56,7 @@ class ModelOperationManager:
         hf_home: Path,
         model_in_use: Callable[[str], bool] | None = None,
         download_origin: str = "https://huggingface.co",
+        civitai_origin: str = CIVITAI_ORIGIN,
         transport: httpx.AsyncBaseTransport | None = None,
         custom_models: "CustomModelCatalog | None" = None,
     ):
@@ -59,6 +67,7 @@ class ModelOperationManager:
         self.hf_home = hf_home.resolve()
         self.model_in_use = model_in_use or (lambda _model_id: False)
         self.download_origin = download_origin.rstrip("/")
+        self.civitai_origin = civitai_origin.rstrip("/")
         self.transport = transport
         self.custom_models = custom_models
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -106,7 +115,7 @@ class ModelOperationManager:
             raise ModelOperationError(
                 "external_model_owned", "external model must be installed by its runtime owner"
             )
-        if model.source is None or model.source.kind != "huggingface":
+        if model.source is None or model.source.kind not in DOWNLOAD_ORIGINS:
             raise ModelOperationError("model_not_found", "model has no supported catalog source")
         if model.approx_download_bytes >= MAX_MANAGED_MODEL_DOWNLOAD_BYTES:
             raise ModelOperationError(
@@ -242,10 +251,7 @@ class ModelOperationManager:
         self.store.update_model_operation(
             operation.id, state=ModelOperationState.DOWNLOADING, bytes_done=completed
         )
-        headers = {"Accept-Encoding": "identity"}
-        token = os.environ.get("HF_TOKEN")
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        headers = self._download_headers(model.source)
         async with httpx.AsyncClient(
             transport=self.transport,
             follow_redirects=True,
@@ -311,6 +317,37 @@ class ModelOperationManager:
             bytes_done=operation.bytes_total,
         )
 
+    def _download_url(self, source: ModelSource, relative: str) -> str:
+        """その配布元での、そのファイルの場所。
+
+        Hugging Face は repository の中の経路で引く。Civitai は version の
+        番号 1 つで引き、ファイル名は URL に入らない。
+        """
+        if source.kind == "civitai":
+            return f"{self.civitai_origin}/api/download/models/{source.revision}"
+        return (
+            f"{self.download_origin}/{quote(source.repo_id, safe='/')}/resolve/"
+            f"{source.revision}/{quote(relative, safe='/')}?download=true"
+        )
+
+    def _download_headers(self, source: ModelSource | None) -> dict[str, str]:
+        """その配布元に出す header。
+
+        Hugging Face の token を Civitai に送らない。他所の資格情報を、要求
+        されてもいない相手に渡すことになる。
+        """
+        headers = {"Accept-Encoding": "identity"}
+        if source is not None and source.kind == "civitai":
+            headers["User-Agent"] = CIVITAI_USER_AGENT
+            token = os.environ.get("CIVITAI_TOKEN")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            return headers
+        token = os.environ.get("HF_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
+
     async def _download_file(
         self,
         client: httpx.AsyncClient,
@@ -330,10 +367,7 @@ class ModelOperationManager:
             target.unlink()
             existing = 0
         headers = {"Range": f"bytes={existing}-"} if existing else {}
-        url = (
-            f"{self.download_origin}/{quote(source.repo_id, safe='/')}/resolve/"
-            f"{source.revision}/{quote(relative, safe='/')}?download=true"
-        )
+        url = self._download_url(source, relative)
         async with client.stream("GET", url, headers=headers) as response:
             if response.status_code in {401, 403}:
                 raise ModelOperationError("model_gated", "model source requires authorization")

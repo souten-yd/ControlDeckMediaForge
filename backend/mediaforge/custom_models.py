@@ -28,6 +28,8 @@ from typing import Any
 
 import httpx
 
+from .civitai import CivitaiError, CivitaiSource
+
 
 _REPO_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
@@ -132,6 +134,9 @@ class CustomModelResolution:
     runtime_adapter: str
     capabilities: tuple[str, ...]
     max_download_bytes: int
+    # 配布元が単一ファイルを配る場合、寸法も歩数も config から読めない。
+    # 系統の申告から決めた値をここに載せて、entry に書き出す。
+    runtime_options: dict[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = field(default=())
     # 手元のフォルダから取り込んだときだけ入る。配布元から落とす経路では None。
     local_root: Path | None = field(default=None)
@@ -206,6 +211,16 @@ def _adapter_for(
 # 結果は候補のままで、取り込みは従来どおり resolve と明示承諾を通す。
 
 SEARCH_LIMIT = 30
+# 配布元。既定は Civitai にしてある。実際に絵を作るのに使われている調整済みの
+# モデルはそちらに集まっていて、Hugging Face 側には基盤モデルが並ぶ。
+MODEL_SOURCES = ("civitai", "huggingface")
+DEFAULT_MODEL_SOURCE = "civitai"
+_CIVITAI_REPO = re.compile(r"^civitai/[0-9]{1,12}$")
+
+
+def source_of(repo_id: str) -> str:
+    """その ID がどの配布元のものか。形で決まるので、宣言に頼らない。"""
+    return "civitai" if _CIVITAI_REPO.fullmatch(repo_id or "") else "huggingface"
 SEARCH_SORTS = ("downloads", "likes", "lastModified", "createdAt")
 # 画像生成として扱える組み合わせだけを既定で探す。使えないものを既定で出さない。
 SEARCH_PIPELINES = ("text-to-image", "image-to-image", "inpainting")
@@ -530,6 +545,36 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+
+
+# 単一ファイルの checkpoint を、どの寸法・歩数で回すか。ディレクトリ形式と
+# 違って config が無いので、系統の申告から決めるしかない。SD 1.5 は 512 で
+# 学習されており、1024 で回すと構図が二重になる。
+_SINGLE_FILE_NATIVE = {
+    "sd15": 512, "sd20": 512, "sd21": 512,
+    "sdxl": 1024, "pony": 1024, "illustrious": 1024, "noobai": 1024,
+    "sd3": 1024, "sd35": 1024,
+}
+
+
+def single_file_runtime_options(base_model: str) -> dict[str, Any]:
+    from worker_packs.image.adapters.diffusers_single_file import normalize_base_model
+
+    side = _SINGLE_FILE_NATIVE.get(normalize_base_model(base_model))
+    if side is None:
+        raise CustomModelError(
+            "custom_model_family_unknown",
+            f"{base_model} を読む pipeline が分かりません",
+        )
+    return {
+        "base_model": base_model,
+        "native_width": side,
+        "native_height": side,
+        # 蒸留版かどうかは配布元の表記からは分からない。多い側に倒す。
+        "default_steps": 30,
+    }
+
+
 class CustomModelCatalog(CatalogSearchMixin):
     """Durable store of user-added catalog entries, and search over the source."""
 
@@ -544,10 +589,90 @@ class CustomModelCatalog(CatalogSearchMixin):
     ):
         self.path = path
         self.origin = origin.rstrip("/")
+        self.civitai = CivitaiSource(transport=transport, timeout_sec=timeout_sec)
         self.transport = transport
         self.timeout_sec = timeout_sec
         # installer と同じ上限。取得を始めてから落とすより先に伝える。
         self.max_download_bytes = max_download_bytes
+
+    # ── 配布元 ─────────────────────────────────────────────────────────────
+
+    async def search_source(
+        self, source: str, query: str, *, sort: str = "downloads", **options: Any
+    ) -> list[dict[str, Any]]:
+        """配布元を選んで検索する。
+
+        Hugging Face は diffusers 形式の基盤モデルが並ぶ。Civitai は実際に
+        絵を作るのに使われている調整済みのものが並ぶ。どちらか一方しか
+        引けないと、探しているものが「存在しない」ことになる。
+        """
+        if source == "civitai":
+            try:
+                return await self.civitai.search(query, sort=sort)
+            except CivitaiError as exc:
+                raise CustomModelError(exc.code, str(exc)) from exc
+        if source == "huggingface":
+            return [item.document() for item in await self.search(query, sort=sort, **options)]
+        raise CustomModelError("custom_model_source_invalid", "配布元の指定が正しくありません")
+
+    async def resolve_source(
+        self, source: str, repo_id: str, revision: str
+    ) -> CustomModelResolution:
+        """取り込む。配布元が指定されていなければ ID の形から決める。
+
+        検索の既定は Civitai だが、取り込みでその既定を当てると、
+        Hugging Face の repository を Civitai に問い合わせることになる。
+        ``civitai/123`` は他の配布元の ID と衝突しない形なので、迷わない。
+        """
+        source = source or source_of(repo_id)
+        if source == "civitai":
+            return await self.resolve_civitai(repo_id, revision)
+        if source == "huggingface":
+            return await self.resolve(repo_id, revision)
+        raise CustomModelError("custom_model_source_invalid", "配布元の指定が正しくありません")
+
+    async def resolve_civitai(self, repo_id: str, revision: str) -> CustomModelResolution:
+        """Civitai の 1 つの版を、取り込める形にする。
+
+        digest は配布元が公表しているものを使う。手元で計算した値では
+        「落ちてきたものが壊れていない」しか言えず、配布元の意図した中身か
+        どうかは言えない。
+        """
+        prefix, _, number = repo_id.partition("/")
+        if prefix != "civitai" or not number.isdigit():
+            raise CustomModelError("custom_model_repo_invalid", "Civitai の model ID ではありません")
+        try:
+            version = await self.civitai.version(
+                int(number), int(revision) if str(revision).isdigit() else None
+            )
+        except CivitaiError as exc:
+            raise CustomModelError(exc.code, str(exc)) from exc
+        weight = ResolvedWeight(
+            path=version.file.name, size_bytes=version.file.size_bytes, sha256=version.file.sha256
+        )
+        return CustomModelResolution(
+            repo_id=repo_id,
+            revision=str(version.version_id),
+            requested_revision=str(revision or ""),
+            license="配布元の表記に従う",
+            license_notice=(
+                "Civitai の配布物です。利用条件は配布元のページで確認してください。"
+            ),
+            gated=False,
+            pipeline_tag="text-to-image",
+            library_name="single-file",
+            weights=(weight,),
+            required_files=(),
+            total_bytes=version.file.size_bytes,
+            runtime_adapter="diffusers.sdxl-single-file",
+            capabilities=("image.text_to_image",),
+            max_download_bytes=self.max_download_bytes,
+            runtime_options=single_file_runtime_options(version.base_model),
+            warnings=(
+                f"{version.base_model} として読み込みます。"
+                "実行経路は未計測なので、使う前に「評価」で確かめてください。",
+            ),
+        )
 
     # ── resolve ────────────────────────────────────────────────────────────
 
@@ -930,6 +1055,8 @@ class CustomModelCatalog(CatalogSearchMixin):
                 "weights_hash": f"sha256:{digest}",
                 "license": resolution.license,
                 "runtime_adapter": resolution.runtime_adapter,
+                **({"runtime_options": dict(resolution.runtime_options)}
+                   if resolution.runtime_options else {}),
                 "capabilities": list(resolution.capabilities),
                 "hardware_backends": ["rocm", "cuda"],
                 # 実測するまで routing 対象にしない。experimental は unroutable。

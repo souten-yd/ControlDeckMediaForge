@@ -1060,6 +1060,42 @@ function renderCatalogResults(items) {
   holder.replaceChildren(table);
 }
 
+
+/* ── 配布元の切り替え ────────────────────────────────────────────────── */
+
+/* 既定は Civitai。実際に絵を作るのに使われている調整済みのモデルはそちらに
+   集まっていて、Hugging Face 側には基盤モデルが並ぶ。 */
+const CATALOG_SOURCES = {
+  civitai: {
+    note: "調整済みの checkpoint が並びます。1 モデル = 1 ファイルで、使う前に「評価」が要ります。",
+    // Civitai の検索は画風タグを持たない。使えない絞り込みを出さない。
+    styles: false,
+  },
+  huggingface: {
+    note: "diffusers 形式の基盤モデルが並びます。",
+    styles: true,
+  },
+};
+
+function catalogSource() {
+  const chosen = byId("catalog-source")?.querySelector('[aria-checked="true"]');
+  return chosen?.dataset.source || "civitai";
+}
+
+function renderCatalogSource() {
+  const holder = byId("catalog-source");
+  if (!holder) return;
+  const chosen = state.preferences.model_source || "civitai";
+  for (const chip of holder.children) {
+    chip.setAttribute("aria-checked", String(chip.dataset.source === chosen));
+  }
+  const shape = CATALOG_SOURCES[chosen] || CATALOG_SOURCES.civitai;
+  byId("catalog-source-note").textContent = shape.note;
+  // 効かない絞り込みを出しておくと、絞ったつもりの結果を見ることになる。
+  const style = byId("catalog-style");
+  if (style?.parentElement) style.parentElement.hidden = !shape.styles;
+}
+
 async function searchCatalog() {
   const empty = byId("catalog-empty");
   empty.hidden = false;
@@ -1068,6 +1104,7 @@ async function searchCatalog() {
   let found;
   try {
     found = await call("models.custom.search", {
+      source: catalogSource(),
       query: byId("catalog-query").value,
       sort: byId("catalog-sort").value,
       style: byId("catalog-style").value,
@@ -4041,6 +4078,7 @@ function renderModelDownloads() {
 
 function renderModelManagement() {
   if (!byId("model-table")) return;
+  renderCatalogSource();
   const visible = state.modelCatalog.filter((model) => {
     if (state.modelFilter === "installed") return model.installed;
     if (state.modelFilter === "recommended") return modelRecommended(model);
@@ -4261,6 +4299,21 @@ async function loadAdvancedSettings() {
 
 byId("mode-simple").addEventListener("click", () => setMode("simple"));
 byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
+
+byId("catalog-source")?.addEventListener("click", (event) => {
+  const chip = event.target.closest?.("[data-source]");
+  if (!chip) return;
+  void savePreferences({model_source: chip.dataset.source});
+  state.preferences.model_source = chip.dataset.source;
+  renderCatalogSource();
+  // 配布元が変われば結果は別物になる。前の配布元の一覧を残さない。
+  state.catalogResults = [];
+  state.catalogPage = 0;
+  byId("catalog-results").hidden = true;
+  byId("catalog-pager").hidden = true;
+  byId("catalog-empty").hidden = false;
+  byId("catalog-empty").textContent = "配布元を変えました。もう一度検索してください。";
+});
 
 /* プリセットは歩数とガイダンスを一緒に入れる。片方だけ合わせると、
    4 歩なのにガイダンス 7.0 のような組み合わせになり、絵が焼ける。 */
