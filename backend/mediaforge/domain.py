@@ -21,7 +21,7 @@ class AssetInput(BaseModel):
 
 class OutputOptions(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    format: Literal["png", "webp", "jpeg", "zip"] = "png"
+    format: Literal["png", "webp", "jpeg", "zip", "mp4", "webm"] = "png"
     count: int = Field(default=1, ge=1, le=8)
 
 
@@ -35,7 +35,14 @@ class QAOptions(BaseModel):
 class JobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    operation: Literal["image.generate", "image.edit", "media.inspect", "asset.pack"]
+    operation: Literal[
+        "image.generate",
+        "image.edit",
+        "video.generate",
+        "video.edit",
+        "media.inspect",
+        "asset.pack",
+    ]
     intent: str = Field(min_length=1, max_length=8000)
     inputs: list[AssetInput] = Field(default_factory=list, max_length=32)
     profile: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9._-]{0,127}$")
@@ -56,10 +63,21 @@ class JobRequest(BaseModel):
             raise ValueError("image.generate does not accept input assets")
         if self.operation == "image.edit" and not self.inputs:
             raise ValueError("image.edit requires at least one input asset")
+        if self.operation == "video.generate" and len(self.inputs) > 8:
+            raise ValueError("video.generate accepts at most eight key images")
+        if self.operation == "video.edit" and not self.inputs:
+            raise ValueError("video.edit requires at least one input asset")
+        if self.operation == "video.edit" and len(self.inputs) > 8:
+            raise ValueError("video.edit accepts at most eight input assets")
         if self.operation == "asset.pack" and not self.inputs:
             raise ValueError("asset.pack requires input assets")
         if self.operation != "asset.pack" and self.output.format == "zip":
             raise ValueError("zip output is accepted only by asset.pack")
+        is_video = self.operation in {"video.generate", "video.edit"}
+        if is_video and self.output.format not in {"mp4", "webm"}:
+            raise ValueError("video operations require mp4 or webm output")
+        if not is_video and self.output.format in {"mp4", "webm"}:
+            raise ValueError("mp4 and webm output are accepted only by video operations")
         return self
 
 
@@ -117,7 +135,7 @@ class Job(BaseModel):
     # SerializeAsAny: StoredJobRequest で読んだ行を宣言型で切り詰めない。
     # 未知フィールドを黙って落とすと、新しい版が書いた記録を古い版が
     # 静かに破壊してしまう。
-    request: SerializeAsAny[JobRequest]
+    request: SerializeAsAny[JobRequest | StoredJobRequest]
     asset_ids: list[str] = Field(default_factory=list)
     error: ErrorDetail | None = None
     # 現在の版で request を厳格に読めなかった行は degraded として残す。
@@ -155,9 +173,13 @@ class Asset(BaseModel):
     id: str
     job_id: str
     parent_asset_ids: list[str]
-    mime_type: Literal["image/png", "image/webp", "image/jpeg", "application/zip"]
+    mime_type: Literal[
+        "image/png", "image/webp", "image/jpeg", "video/mp4", "video/webm", "application/zip"
+    ]
     width: int | None = None
     height: int | None = None
+    duration_sec: float | None = Field(default=None, gt=0)
+    frame_rate: float | None = Field(default=None, gt=0)
     size_bytes: int
     sha256: str
     suggested_filename: str

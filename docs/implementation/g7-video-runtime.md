@@ -1,0 +1,125 @@
+# G7 — video runtime and deterministic packaging
+
+設計の正: `docs/base-plan.md` §11 / `docs/implementation/goal-roadmap.md` G7  
+前提: G1 で凍結した公開契約へ加法的に載せ、画像 worker や ControlDeck 本体へ動画依存を漏らさない。
+
+## 0. 利用者に届ける状態
+
+普通の chat / workspace から短い動画を作り、待機理由・進捗・cancel を確認できる。
+出力はモデルが書いたファイルをそのまま公開せず、FFmpeg で codec、container、寸法、
+fps、frame 数、尺を正規化してから asset / provenance / lineage に登録する。
+
+G7 は次の全スライスが実機で通るまで未完了である。
+
+```text
+V0  additive public contract + deterministic FFmpeg boundary
+V1  revision-pinned candidate probe and model adoption gate
+V2  video worker adapter + routing + Broker lease/progress/cancel
+V3  workspace/chat/library playback and animation profile
+V4  installed ControlDeck / R9700 / SonicForge coexistence acceptance
+```
+
+## 1. V0 — contract and FFmpeg boundary
+
+### 1.1 公開 operation
+
+既存設計どおり `video.generate` と `video.edit` を追加する。モデル名を公開引数にしない。
+
+```text
+video.generate + inputs 0      video.text_to_video
+video.generate + inputs 1      video.image_to_video
+video.generate + inputs 2..8   video.multi_keyframe（対応 runtime のみ）
+video.edit     + inputs 1..8   video edit / extend（V2 で constraints を型付け）
+```
+
+出力は `mp4` または `webm`。image/pack operation は動画形式を受理せず、video operation
+も image/zip 形式を受理しない。Asset の既存必須 field は変えず、MIME に
+`video/mp4` / `video/webm`、任意 metadata に `duration_sec` / `frame_rate` を加える。
+
+V0 では capability document の `video.image_to_video=unavailable/planned_for_g7` を維持する。
+API ingress は将来の要求を保存できるが、実行は `capability_unavailable` で fail-closed にする。
+モデル未実測の状態で fake 動画や画像 sequence を成功として返さない。
+
+### 1.2 worker 境界
+
+FFmpeg 実装は `worker_packs/video/` が所有する。core は worker 実装を import しない。
+呼び出し元は job root 内へ realpath containment 済みの source/output だけを渡す。
+subprocess は配列引数、`shell=True` なし、timeout 付きとする。
+
+V0 の正規化範囲:
+
+```text
+入力 video stream      ちょうど 1
+出力寸法                偶数、16px 以上
+fps                     1..120
+尺                      0 < seconds <= 300
+MP4                     H.264 / yuv420p / faststart、任意 AAC
+WebM                    VP9 / yuv420p、任意 Opus
+検証                    ffprobe で stream/codec/container/dimensions/fps/frame count/audio
+失敗時                  partial output を削除し、理由を握り潰さない
+```
+
+V0 はモデル出力を作らないため GPU lease を取らない。V2 では生成 worker が lease を所有し、
+FFmpeg stage は同じ durable job の CPU-only `normalize` phase として生成後に走る。
+
+## 2. V1 — model adoption gate
+
+候補は `Wan2.2 TI2V-5B` を最初の軽量 T2V/I2V probe、Wan A14B と LTX-2.x を比較候補とする。
+候補名は routing 契約ではなく評価対象であり、置換可能でなければならない。
+
+実行前に公式 repository / model card / license / pinned revision を確認し、base-plan §24 の
+10 項目を埋める。snapshot が取得済みでも available にはしない。R9700 / gfx1201 で次を実測する。
+
+```text
+runtime build/import/preflight
+最小 1-frame または最短 clip smoke
+実用最短 clip の cold/warm wall time
+VRAM resident/execution_peak/cold_load_peak/headroom
+host RAM / process swap / cancellation latency
+出力の decode、frame 数、fps、寸法、尺
+```
+
+動かない、VRAM が収まらない、Host watchdog を巻き込む、または出力が壊れる候補は延期する。
+カーネル自作や ControlDeck への動画固有依存追加には進まない。
+
+## 3. V2 — execution
+
+private runtime adapter が raw frames/video を job root に書き、V0 の FFmpeg stage が公開 asset
+へ正規化する。router は required capability、local-only、policy、実測 resource envelope だけで
+選ぶ。`model_id` は manual opt-in 以外で public request に要求しない。
+
+GPU job は ControlDeck Broker へ実測値と `estimated_runtime_sec` を申告し、lease acquire / renew /
+cancel / release を通す。待機中は Broker の reason を job phase と Host Jobs に伝える。
+Media Forge 内にグローバル GPU scheduler を作らない。
+
+動画 asset の上限は画像用 64 MiB を流用せず、V1 の実測から operation 別に bounded に決める。
+推定だけで上限を拡大しない。
+
+## 4. V3 — user surface
+
+Create の段階開示へ video を追加し、capability unavailable の間は既定表示しない。
+Library は poster/thumbnail を先に読み、動画本体を一覧で自動再生しない。Activity は queued、
+waiting、generating、normalizing、validating、registering を復元できる。cancel は tab を閉じても
+durable job へ届く。animation profile は generic operation の profile であり専用 API にしない。
+
+## 5. V4 — installed acceptance
+
+SonicForge が並行稼働する実 host で Broker を唯一の調停経路として次を実測する。
+
+```text
+text-to-video と image-to-video を chat/workspace から各 1 本
+待機理由、見込み、進捗、cancel と再接続復元
+LLM 退避回数、抑止理由、warm reload sample、生成後の LLM 復帰
+lease 全解放、残存 worker なし、core healthy
+出力 MP4/WebM の codec/container/dimensions/fps/frame count/duration
+asset lineage/provenance と installed browser playback
+SonicForge job と競合した場合の queue/admission（同時に VRAM を直接取り合わない）
+```
+
+Host 変更が必要なら Media Forge 側で解けない理由を 1 行で記録し、汎用機能だけを ControlDeck
+の別 PR にする。Media 固有 route、依存、文言は Host へ入れない。
+
+## 6. 完了判定
+
+V0〜V4、focused/full gate、実 R9700、installed ControlDeck browser、Broker/VRAM/worker cleanup の
+証拠が揃ったときだけ G7 完了。未実測候補や壊れた smoke は capability unavailable のまま記録する。
