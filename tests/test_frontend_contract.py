@@ -928,3 +928,54 @@ def test_the_activity_tab_can_clear_its_history():
     render = SCRIPT[SCRIPT.index("function renderActivity"):]
     render = render[:render.index("\n}")]
     assert 'byId("activity-clear").hidden = finished.length === 0;' in render
+
+
+def test_a_dead_socket_is_replaced_rather_than_reused():
+    """携帯では頁を離れるだけで socket は閉じられ、戻った頁が bfcache から
+    復元されると JS の状態だけが生き残る。解決済みの promise を握ったままだと、
+    閉じた socket へ送り続けて画面が空のままになる（再読込するまで直らない）。"""
+    connect = SCRIPT[SCRIPT.index("function connectSocket"):]
+    connect = connect[:connect.index("\n/* 何 GB")]
+    assert "if (state.socketReady && socketOpen()) return state.socketReady;" in connect
+    assert "dropSocket();" in connect, "閉じたときに握ったままになっている"
+
+    caller = SCRIPT[SCRIPT.index("async function call(method"):]
+    caller = caller[:caller.index("\n}")]
+    assert "if (!socketOpen())" in caller, "送る前に生きているか見ていない"
+    # 閉じた socket への send は例外にならず、応答が来ないだけになる
+    assert "catch (error)" in caller
+
+
+def test_the_workspace_recovers_when_it_comes_back():
+    resume = SCRIPT[SCRIPT.index("async function resumeAfterInterruption"):]
+    resume = resume[:resume.index("\n}")]
+    # 生きているなら何もしない。常時 polling にはしない。
+    assert "if (socketOpen()) return;" in resume
+    assert "refreshSession(" in resume
+    assert 'document.addEventListener("visibilitychange"' in SCRIPT
+    assert 'window.addEventListener("pageshow"' in SCRIPT
+
+
+def test_boot_retries_instead_of_leaving_an_empty_screen():
+    """最初の接続が失敗しただけで画面が永久に空のままになっていた。"""
+    boot = SCRIPT[SCRIPT.index("  void (async () => {"):]
+    boot = boot[:boot.index("  })();")]
+    assert "attempt < 5" in boot
+    assert "500 * 2 ** attempt" in boot, "落ちている相手を等間隔で叩き続けている"
+
+
+def test_being_listed_is_not_reported_as_being_installed():
+    """一覧に登録しただけの repository が「追加済み」と出て、ダウンロードが
+    始まらない理由が画面から読み取れなかった。"""
+    row = SCRIPT[SCRIPT.index("function catalogRow"):SCRIPT.index("function renderCatalogPage")]
+    assert '"導入済み"' in row and '"一覧にあります"' in row
+    assert 'item.catalog_state === "installed"' in row
+    backend = (BACKEND / "app.py").read_text(encoding="utf-8")
+    assert '"catalog_state"' in backend, "backend が 2 つの状態を区別していない"
+
+
+def test_the_import_panel_can_be_dismissed():
+    """中身を見た後に検索へ戻れないと、確認だけして止める道が無い。"""
+    assert 'cancel.id = "custom-cancel";' in SCRIPT
+    assert '#custom-cancel' in SCRIPT
+    assert ".split-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }" in STYLES
