@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import asyncio
 from dataclasses import replace
 from pathlib import Path
@@ -300,26 +301,119 @@ def test_a_failed_direction_does_not_stop_the_job(tmp_path: Path):
     assert asyncio.run(manager._prepare_creative(job, None)).request.intent == "続ける"
 
 
-def test_routing_sees_the_models_the_picker_offers(tmp_path: Path):
+def installed_custom_model(root: Path, model_id: str, revision: str) -> tuple[dict, dict]:
+    """自作モデルが 1 つ導入済みで、実測済みという状態を作る。
+
+    registry は snapshot の中身まで見る（重みは blob への symlink で、名前が
+    digest と一致すること）。そこを省いて「導入済み」と言い張ると、routing が
+    実際に見ているものとは別のものを試すことになる。
+    """
+    repo = root / "hub" / ("models--" + model_id.replace("/", "--"))
+    weight = b"weights"
+    digest = hashlib.sha256(weight).hexdigest()
+    (repo / "blobs").mkdir(parents=True)
+    (repo / "blobs" / digest).write_bytes(weight)
+    snapshot = repo / "snapshots" / revision
+    snapshot.mkdir(parents=True)
+    (repo / "blobs" / ("f" * 64)).write_text("{}", encoding="utf-8")
+    (snapshot / "model.safetensors").symlink_to(repo / "blobs" / digest)
+    (snapshot / "model_index.json").symlink_to(repo / "blobs" / ("f" * 64))
+    registry = {
+        "model_id": model_id,
+        "family": "custom",
+        "version": "1",
+        "revision": revision,
+        "weights_hash": "sha256:" + "e" * 64,
+        "license": "Apache-2.0",
+        "runtime_adapter": "diffusers.sdxl",
+        "capabilities": ["image.text_to_image"],
+        "hardware_backends": ["rocm", "cuda"],
+        "state": "available",
+        "measurement_confidence": "measured",
+        "policy_rank": {"auto": 1},
+        "required_files": ["model_index.json"],
+        "weights": [
+            {"path": "model.safetensors", "size_bytes": len(weight), "sha256": digest}
+        ],
+        "measurements": {
+            "resident_vram_bytes": 0,
+            "execution_peak_vram_bytes": 1024,
+            "cold_load_peak_vram_bytes": 1024,
+            "headroom_vram_bytes": 1024,
+            "measured_runtime_sec": 1.0,
+        },
+    }
+    catalog = {
+        "model_id": model_id,
+        "display_name": model_id,
+        "domains": ["general"],
+        "media_types": ["image"],
+        "description": "利用者が追加したモデル。",
+        "approx_download_bytes": len(weight),
+        "source": {"kind": "huggingface", "repo_id": model_id, "revision": revision},
+        "ownership": "managed",
+        "supports_lora": False,
+        "max_references": 0,
+        "reference_roles": [],
+        "supports_reference_strength": False,
+        "recommended_profiles": [],
+        "gated": False,
+        "license_notice": "テスト用の記載。",
+    }
+    return registry, catalog
+
+
+def test_routing_offers_the_model_the_picker_offers(tmp_path: Path):
     """自作モデルは shipped manifest に居ない。routing がそれを知らないと、
     選べる状態にしてあるのに「使えるモデルがありません」で落ちる（実測）。"""
     store = Store(tmp_path / "data")
     store.initialize()
+    model_store = tmp_path / "models"
+    registry, catalog = installed_custom_model(model_store, "owner/model", "d" * 40)
     asked: dict[str, int] = {"calls": 0}
 
     def manifests():
         asked["calls"] += 1
-        return [], []
+        return [registry], [catalog]
 
     manager = JobManager(
         store,
         model_manifest=Path(__file__).parents[1] / "worker_packs/image/models.json",
         model_catalog_manifest=Path(__file__).parents[1] / "worker_packs/image/catalog.json",
         hf_home=tmp_path / "hf",
-        model_store_root=tmp_path / "models",
+        model_store_root=model_store,
         extra_manifests=manifests,
     )
     job = store.create_job(JobRequest(operation="image.generate", intent="test"))
-    manager._select_real_model(job)
+
+    selected = manager._select_real_model(job)
 
     assert asked["calls"] == 1, "routing が自作モデルの一覧を読んでいない"
+    assert selected.model_id == "owner/model"
+
+
+def test_routing_without_the_extra_models_finds_nothing(tmp_path: Path):
+    """一覧を読まなければ「使えるモデルがありません」に戻る、を固定する。
+
+    上のテストだけだと、routing が extras を読まずに別の理由で通っても
+    気づけない。読まない側の結果を並べて初めて、読んでいることの証拠になる。
+    """
+    store = Store(tmp_path / "data")
+    store.initialize()
+    model_store = tmp_path / "models"
+    installed_custom_model(model_store, "owner/model", "d" * 40)
+
+    manager = JobManager(
+        store,
+        model_manifest=Path(__file__).parents[1] / "worker_packs/image/models.json",
+        model_catalog_manifest=Path(__file__).parents[1] / "worker_packs/image/catalog.json",
+        hf_home=tmp_path / "hf",
+        model_store_root=model_store,
+        extra_manifests=lambda: ([], []),
+    )
+    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
+
+    with pytest.raises(WorkerFailure) as failure:
+        manager._select_real_model(job)
+
+    assert failure.value.code == "capability_unavailable"
