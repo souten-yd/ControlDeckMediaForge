@@ -41,7 +41,7 @@ from .asset_brief import (
     resolve_layout,
 )
 from .config import Settings
-from .custom_models import CustomModelCatalog, CustomModelError
+from .custom_models import DEFAULT_MODEL_SOURCE, MODEL_SOURCES, CustomModelCatalog, CustomModelError
 from .composer import (
     CreativeCompositionRecord,
     DeterministicComposer,
@@ -724,6 +724,35 @@ def create_app(
                 if isinstance(total, int) and not isinstance(total, bool) and total > 0:
                     return total
         return 0
+
+    def annotate_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """検索結果に、こちら側で既にどうなっているかを添える。
+
+        「一覧に登録した」と「実際に落とした」は別である。1 つの語にまとめて
+        いたので、登録しただけの repository が「追加済み」と出て、ダウンロード
+        が始まらない理由が画面から読み取れなかった。
+        """
+        listed = {
+            item["registry"]["model_id"]
+            for item in custom_models.entries()
+            if isinstance(item.get("registry"), dict)
+        }
+        installed = {
+            str(item.get("model_id"))
+            for item in (model_operations.catalog().get("items", []) if model_operations else [])
+            if item.get("installed")
+        }
+        return [
+            {
+                **row,
+                "already_added": row["repo_id"] in listed | installed,
+                "catalog_state": (
+                    "installed" if row["repo_id"] in installed
+                    else "listed" if row["repo_id"] in listed else None
+                ),
+            }
+            for row in rows
+        ]
 
     def host_setup_item(item: Any) -> dict[str, Any]:
         """Emit only what the Host contract defines for a setup checklist item.
@@ -2105,52 +2134,28 @@ def create_app(
                     elif method == "models.custom.search":
                         # 探せることと入れてよいことは別。ここは候補を返すだけで、
                         # 取り込みは従来どおり resolve と明示承諾を通す。
-                        candidates = await custom_models.search(
-                            str(params.get("query", "")),
-                            sort=str(params.get("sort", "downloads")),
-                            pipeline_tag=str(params.get("pipeline_tag", "text-to-image")),
-                            style=str(params.get("style", "any")),
-                            limit=int(params.get("limit", 30) or 30),
-                        )
-                        # 「一覧に登録した」と「実際に落とした」は別である。
-                        # 1 つの語にまとめていたので、登録しただけの repository が
-                        # 「追加済み」と出て、ダウンロードが始まらない理由が
-                        # 画面から読み取れなかった。
-                        listed = {
-                            item["registry"]["model_id"]
-                            for item in custom_models.entries()
-                            if isinstance(item.get("registry"), dict)
-                        }
-                        installed = set()
-                        if model_operations is not None:
-                            installed = {
-                                str(item.get("model_id"))
-                                for item in model_operations.catalog().get("items", [])
-                                if item.get("installed")
-                            }
                         result = {
-                            "items": [
-                                {
-                                    **item.document(),
-                                    "already_added": item.repo_id in listed | installed,
-                                    "catalog_state": (
-                                        "installed" if item.repo_id in installed
-                                        else "listed" if item.repo_id in listed else None
-                                    ),
-                                }
-                                for item in candidates
-                            ],
+                            "items": annotate_candidates(await custom_models.search_source(
+                                str(params.get("source", DEFAULT_MODEL_SOURCE)),
+                                str(params.get("query", "")),
+                                sort=str(params.get("sort", "downloads")),
+                            )),
                             "sort": str(params.get("sort", "downloads")),
+                            "source": str(params.get("source", DEFAULT_MODEL_SOURCE)),
                         }
                     elif method == "models.custom.resolve":
                         # 取得前に必ず解決して見せる。承諾は本文の提示が先。
-                        resolution = await custom_models.resolve(
-                            str(params.get("repo_id", "")), str(params.get("revision", "main"))
+                        resolution = await custom_models.resolve_source(
+                            str(params.get("source", "")),
+                            str(params.get("repo_id", "")),
+                            str(params.get("revision", "main")),
                         )
                         result = resolution.document()
                     elif method == "models.custom.add":
-                        resolution = await custom_models.resolve(
-                            str(params.get("repo_id", "")), str(params.get("revision", "main"))
+                        resolution = await custom_models.resolve_source(
+                            str(params.get("source", "")),
+                            str(params.get("repo_id", "")),
+                            str(params.get("revision", "main")),
                         )
                         domains = params.get("domains", ["general"])
                         if not isinstance(domains, list) or not all(
@@ -2592,37 +2597,16 @@ def create_app(
         """
         try:
             reject_host_paths(payload)
-            candidates = await custom_models.search(
+            rows = await custom_models.search_source(
+                str(payload.get("source", DEFAULT_MODEL_SOURCE)),
                 str(payload.get("query", "")),
                 sort=str(payload.get("sort", "downloads")),
-                style=str(payload.get("style", "any")),
-                limit=int(payload.get("limit", 30) or 30),
             )
         except CustomModelError as exc:
             raise HTTPException(
                 status_code=502, detail={"code": exc.code, "message": str(exc)[:300]}
             ) from exc
-        listed = {
-            item["registry"]["model_id"]
-            for item in custom_models.entries()
-            if isinstance(item.get("registry"), dict)
-        }
-        installed = {
-            str(item.get("model_id"))
-            for item in (model_operations.catalog().get("items", []) if model_operations else [])
-            if item.get("installed")
-        }
-        return {"items": [
-            {
-                **item.document(),
-                "already_added": item.repo_id in listed | installed,
-                "catalog_state": (
-                    "installed" if item.repo_id in installed
-                    else "listed" if item.repo_id in listed else None
-                ),
-            }
-            for item in candidates
-        ]}
+        return {"items": annotate_candidates(rows)}
 
     @app.post("/workspace-api/creative/batches", include_in_schema=False)
     async def standalone_creative_batch(payload: dict[str, Any]) -> dict[str, Any]:

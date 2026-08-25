@@ -4426,3 +4426,44 @@ SDXL base     30 歩 assumed   確認が必要: 歩数・ガイダンス   プ�
 
 描画は jsdom に実物の template を載せて確認した。NOT TESTED: 実ブラウザでの
 見た目（playwright がこの環境に無い）。
+
+## 配布元として Civitai を選べるようにし、既定にする（2026-08-25）
+
+Hugging Face には diffusers 形式の基盤モデルが並ぶが、実際に絵を作るときに
+使われている調整済みのものは Civitai にある。検索できないものは存在しない
+のと同じなので、切り替えられるようにし、既定を Civitai にした。
+
+**検索だけ足すと「見つかるが動かない」ものが既定で並ぶ。** Civitai が配るのは
+単一の safetensors で、`diffusers.sdxl` は `from_pretrained` でディレクトリを
+読む。`diffusers.sdxl-single-file` は models.json に名前だけあって実装が無かった。
+単一ファイルの読み込みまで含めて 1 つの作業とした。
+
+系統は safetensors の中身から判定しない。判定には UNet の次元を読むことになり、
+Pony や Illustrious のような派生で外す。配布元が `baseModel` として名乗って
+いるものを使い、名乗っていなければ取り込まない。
+
+実測して分かったこと:
+
+```text
+検索    GET /api/v1/models      認証不要
+形式    1 version = 1 .safetensors
+系統    version.baseModel が "SD 1.5" / "SDXL 1.0" / "Pony" などを名乗る
+digest  file.hashes.SHA256 が付く。手元計算ではなく配布元の公表値を使う
+取得    /api/download/models/{versionId} が署名付き URL へ転送する
+UA      既定の User-Agent は 403。認証の問題ではないので鍵を求めない
+```
+
+Hugging Face の token を Civitai に送らない。他所の資格情報を、要求されても
+いない相手に渡すことになる。
+
+実機で通した経路（2026-08-25）:
+
+```text
+検索      civitai/4384 DreamShaper 8      SD 1.5   1.99GB
+解決      base_model=SD 1.5 → 512x512 / 30 歩、diffusers.sdxl-single-file
+取得      2,132,625,894 バイト、sha256 が API の公表値と一致
+生成      512x512 / 30 歩 / 60.7 秒 → 指示どおりの絵（目視）
+```
+
+やらないこと: LoRA。Civitai の多くは LoRA だが Media Forge に経路が無い。
+検索を Checkpoint に絞ってある。NSFW は既定で外す。

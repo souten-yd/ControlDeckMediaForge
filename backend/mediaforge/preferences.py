@@ -23,6 +23,8 @@ ALLOWED: dict[str, tuple[type, tuple[Any, ...] | None]] = {
     "library_kind": (str, ("all", "generated", "edited", "imported")),
     "director_mode": (str, ("original", "refine", "art_direct")),
     "model_layout": (str, ("table", "cards")),
+    # どの配布元を検索するか。既定は Civitai。
+    "model_source": (str, ("civitai", "huggingface")),
     # 作りかけの設定。画面を離れても、次に開いたときに続きから始められる。
     # 中身は creative_spec の一部（domain / scene / 構図など）で、どれも
     # templates.json の id なので、鍵ごとの列挙ではなく形と大きさで縛る。
@@ -45,6 +47,7 @@ DEFAULTS: dict[str, Any] = {
     "director_mode": "refine",
     # 見比べる用途が多いので既定は表。カードは 1 件ずつの説明向け。
     "model_layout": "table",
+    "model_source": "civitai",
     "last_creative_spec": {},
 }
 

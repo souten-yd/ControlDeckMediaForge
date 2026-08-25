@@ -317,6 +317,13 @@
 
           <p class="section-label">モデルを探して追加</p>
           <p class="hint">配布元を検索します。取り込む前に中身とライセンスを必ず確かめます。</p>
+          <div id="catalog-source" class="chips" role="radiogroup" aria-label="配布元">
+            <button type="button" class="chip" data-source="civitai" role="radio"
+                    aria-checked="true">Civitai</button>
+            <button type="button" class="chip" data-source="huggingface" role="radio"
+                    aria-checked="false">Hugging Face</button>
+          </div>
+          <p id="catalog-source-note" class="hint"></p>
           <div class="form-row search">
             <label>検索
               <span class="input-clear">

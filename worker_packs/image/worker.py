@@ -13,6 +13,7 @@ from PIL import Image
 
 from .adapters import (
     DiffusersFlux2KleinAdapter,
+    DiffusersSingleFileAdapter,
     DiffusersStableDiffusionAdapter,
     ImageEditRequest,
     ImageGenerationRequest,
@@ -59,6 +60,9 @@ def _integer(value: object, label: str) -> int:
 ADAPTERS = {
     "diffusers.flux2-klein": "DiffusersFlux2KleinAdapter",
     "diffusers.sdxl": "DiffusersStableDiffusionAdapter",
+    # 単一 safetensors。Civitai などが配る形。ディレクトリを読む
+    # from_pretrained では開けないので、別の adapter が要る。
+    "diffusers.sdxl-single-file": "DiffusersSingleFileAdapter",
 }
 
 
@@ -108,6 +112,8 @@ class ImageWorker:
             # 歩数は本来 core が要求に埋める。ここに来るのは worker を単体で
             # 回す経路（評価・benchmark）のための控えである。
             "default_steps",
+            # 単一ファイルは自分がどの系統か名乗らない。配布元の申告を渡す。
+            "base_model",
         }:
             raise ValueError("worker model runtime options are invalid")
         declared_steps = runtime_options.get("default_steps")
@@ -133,6 +139,11 @@ class ImageWorker:
             if not isinstance(value, str) or len(value) > 2000:
                 raise ValueError("worker model runtime options are invalid")
             family_options["negative_prompt"] = value
+        if "base_model" in runtime_options:
+            value = runtime_options["base_model"]
+            if not isinstance(value, str) or len(value) > 64:
+                raise ValueError("worker model runtime options are invalid")
+            family_options["base_model"] = value
         if "guidance_scale" in runtime_options:
             value = runtime_options["guidance_scale"]
             # 0 は「CFG を使わない」という指示である。Turbo 系はそれを前提に

@@ -19,6 +19,19 @@ from .generation_defaults import (  # noqa: F401
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
+# 配布元ごとに、revision が何を指すかが違う。Hugging Face は commit、
+# Civitai は version の番号である。片方の形を両方に当てると、取り込めるはずの
+# ものを弾くか、指していないものを指せるようになる。
+_SOURCE_REVISIONS = {
+    "huggingface": re.compile(r"^[0-9a-f]{40}$"),
+    "civitai": re.compile(r"^[0-9]{1,12}$"),
+}
+_SOURCE_KINDS = frozenset(_SOURCE_REVISIONS)
+
+
+def _source_revision_valid(source: "ModelSource") -> bool:
+    pattern = _SOURCE_REVISIONS.get(source.kind)
+    return pattern is not None and pattern.fullmatch(source.revision) is not None
 _DOMAINS = {"general", "anime", "illustration", "photoreal", "game2d", "poster", "character_sheet", "background"}
 _MEDIA_TYPES = {"image", "video", "audio_video"}
 
@@ -87,6 +100,9 @@ class ModelDescriptor:
     default_steps: int | None = None
     # 歩数がどこから来たか。宣言・モデルが名乗った・判別できず置いた、の別。
     default_steps_source: str = "assumed"
+    # 単一ファイルの checkpoint が、どの系統として配られているか。ファイル
+    # 自身は名乗らないので、配布元の申告をそのまま持つ。
+    base_model: str = ""
     # そのモデルが学習された画面寸法。宣言が無ければ導入時に repository の
     # config から読む。None は「まだ分かっていない」で、1024 とは違う。
     native_width: int | None = None
@@ -173,9 +189,8 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
                 revision=_required_string(source_value, "revision"),
             )
             if (
-                source.kind != "huggingface"
-                or _MODEL_ID.fullmatch(source.repo_id) is None
-                or re.fullmatch(r"[0-9a-f]{40}", source.revision) is None
+                _MODEL_ID.fullmatch(source.repo_id) is None
+                or not _source_revision_valid(source)
             ):
                 raise ModelRegistryError("model registry weight source is invalid")
         weights.append(WeightFile(path=path, size_bytes=size, sha256=digest, source=source))
@@ -229,7 +244,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     # どちらも取らない。系統ごとの既定なので、要求ではなくカタログに置く。
     if not isinstance(runtime_options, dict) or set(runtime_options) - {
         "device_mode", "disable_mmap", "negative_prompt", "guidance_scale",
-        "default_steps", "native_width", "native_height",
+        "default_steps", "native_width", "native_height", "base_model",
     }:
         raise ModelRegistryError("model registry runtime_options are invalid")
     negative_prompt = runtime_options.get("negative_prompt", "")
@@ -259,6 +274,9 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         isinstance(side, bool) or not isinstance(side, int) or not 256 <= side <= 2048 or side % 16
         for side in native_size.values()
     ):
+        raise ModelRegistryError("model registry runtime_options are invalid")
+    base_model = runtime_options.get("base_model", "")
+    if not isinstance(base_model, str) or len(base_model) > 64:
         raise ModelRegistryError("model registry runtime_options are invalid")
     generation_limits = value.get("generation_limits", {})
     if not isinstance(generation_limits, dict) or set(generation_limits) - {
@@ -298,6 +316,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         negative_prompt=negative_prompt,
         guidance_scale=float(guidance_scale) if guidance_scale is not None else None,
         default_steps=default_steps,
+        base_model=base_model,
         **({"default_steps_source": "declared"} if default_steps is not None else {}),
         **native_size,
         **limits,
@@ -355,8 +374,9 @@ def _catalog_metadata(value: dict[str, Any]) -> dict[str, Any]:
         repo_id=_required_string(source_value, "repo_id"),
         revision=_required_string(source_value, "revision"),
     )
-    if source.kind != "huggingface" or source.repo_id != model_id or not re.fullmatch(
-        r"[0-9a-f]{40}", source.revision
+    if (
+        source.repo_id != model_id
+        or not _source_revision_valid(source)
     ):
         raise ModelRegistryError("model catalog source is invalid")
     try:

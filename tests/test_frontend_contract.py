@@ -86,6 +86,9 @@ ADVANCED_IDS = (
     "advanced-steps", "advanced-guidance",
 )
 
+# 配布元の切り替え。モデル管理タブにあり、詳細モードとは無関係。
+CATALOG_IDS = ("catalog-source", "catalog-source-note")
+
 
 def test_the_frame_never_touches_browser_storage():
     for forbidden in ("localStorage", "sessionStorage", "document.cookie", "indexedDB"):
@@ -1035,3 +1038,29 @@ def test_the_preset_sets_guidance_together_with_steps():
     なり絵が焼ける。"""
     assert "chip.dataset.guidance" in SCRIPT
     assert "chip.dataset.steps" in SCRIPT
+
+
+
+def test_the_catalog_offers_both_distribution_sites():
+    for identifier in CATALOG_IDS:
+        assert f'id="{identifier}"' in MARKUP, identifier
+    assert 'data-source="civitai"' in MARKUP
+    assert 'data-source="huggingface"' in MARKUP
+
+
+def test_civitai_is_the_default_distribution_site():
+    civitai = MARKUP.index('data-source="civitai"')
+    assert 'aria-checked="true"' in MARKUP[civitai:civitai + 120]
+    defaults = (BACKEND / "custom_models.py").read_text(encoding="utf-8")
+    assert 'DEFAULT_MODEL_SOURCE = "civitai"' in defaults
+
+
+def test_the_search_says_which_site_it_is_asking():
+    """配布元を送らないと、既定の側だけを検索し続ける。"""
+    assert "source: catalogSource()" in SCRIPT
+
+
+def test_a_filter_that_the_site_does_not_have_is_hidden():
+    """効かない絞り込みを出すと、絞ったつもりの結果を見ることになる。
+    Civitai の検索は画風タグを持たない。"""
+    assert "styles: false" in SCRIPT
