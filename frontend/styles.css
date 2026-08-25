@@ -1197,3 +1197,56 @@ table.catalog .tag {
   outline: 2px solid var(--accent, #4c8dff);
   outline-offset: 1px;
 }
+
+/* 配布元と種別を 1 行に。別々の行にすると、検索の前に 3 行使う。 */
+.catalog-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  margin: 0.4rem 0;
+}
+
+/* 系統は名前の次に効く 1 行。LoRA では載るかどうかがこれで決まる。 */
+.tag.base { font-variant-numeric: tabular-nums; }
+.tag.base.fits {
+  border-color: var(--ok-border, #2f7d4f);
+  color: var(--ok-text, #2f7d4f);
+}
+.tag.base.unfit {
+  border-color: var(--warn-border, #b8860b);
+  color: var(--warn-text, #8a6508);
+}
+.tag.trigger { font-style: italic; opacity: 0.9; }
+
+.lora-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.35rem 0;
+}
+.lora-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(88px, 30%) 3.2rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+.lora-row .check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.lora-weight {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  text-align: right;
+  opacity: 0.85;
+}
+@media (max-width: 520px) {
+  /* 幅が無いときは強さを下の行へ。3 列のまま詰めると名前が 1 文字ずつ折れる。 */
+  .lora-row {
+    grid-template-columns: 1fr 3.2rem;
+  }
+  .lora-row input[type="range"] { grid-column: 1 / -1; }
+}

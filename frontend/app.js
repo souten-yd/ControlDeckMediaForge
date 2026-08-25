@@ -563,6 +563,7 @@ function syncAdvancedCreate() {
     : "constraints.width / height を直接指定できます";
   renderAdvancedCreative();
   renderModelSettings();
+  renderLoraPicker();
 }
 
 async function savePreferences(values) {
@@ -924,6 +925,27 @@ function formatDay(value) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+
+/* その LoRA を載せられる系統が手元にあるか。無いものを黙って並べると、
+   40MB のつもりで押した先で 7GB の土台が要ると知ることになる。 */
+function catalogFits(item) {
+  if (item.model_type !== "lora") return true;
+  const family = normalizeFamily(item.base_model);
+  return !family || (state.installedFamilies || []).includes(family);
+}
+
+/* 系統の正規化は backend が持っている判断で、ここでは同じ結果を出すための
+   最小限だけを見る。判定そのものは取り込みのときに backend が行う。 */
+function normalizeFamily(value) {
+  const folded = String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const [prefix, key] of [["sd35","sd35"],["sd3","sd3"],["sdxl","sdxl"],["pony","pony"],
+      ["illustrious","illustrious"],["noobai","noobai"],["sd15","sd15"],["sd20","sd20"],
+      ["sd21","sd21"],["sd1","sd15"],["sd2","sd21"]]) {
+    if (folded.startsWith(prefix)) return key;
+  }
+  return "";
+}
+
 function catalogRow(item) {
   const row = document.createElement("tr");
   const name = document.createElement("td");
@@ -939,6 +961,28 @@ function catalogRow(item) {
     gate.textContent = "要同意";
     gate.title = "配布元で利用条件に同意しないと取り込めません。";
     name.append(gate);
+  }
+  /* LoRA は載せる先が要る。どの系統のものかは、名前の次に効く 1 行なので
+     タグより前に出す。載せられないものは押す前に分かるようにする。 */
+  if (item.base_model) {
+    const base = document.createElement("span");
+    base.className = "tag base";
+    base.textContent = item.base_model;
+    if (item.model_type === "lora") {
+      const fits = catalogFits(item);
+      base.classList.add(fits ? "fits" : "unfit");
+      base.title = fits
+        ? "この系統のモデルが手元にあります。そのまま載せられます。"
+        : "この系統のモデルが手元にありません。取り込むときに土台も要ります。";
+    }
+    name.append(base);
+  }
+  for (const word of (item.trigger_words || []).slice(0, 2)) {
+    const trigger = document.createElement("span");
+    trigger.className = "tag trigger";
+    trigger.textContent = word;
+    trigger.title = "この語を prompt に入れないと効きません。自動で足します。";
+    name.append(trigger);
   }
   for (const tag of (item.tags || []).filter((value) => !value.includes(":")).slice(0, 3)) {
     const chip = document.createElement("span");
@@ -1061,6 +1105,91 @@ function renderCatalogResults(items) {
 }
 
 
+
+/* ── LoRA の選択 ──────────────────────────────────────────────────────── */
+
+/* LoRA は選んだモデルに載せるもの。載せられないものを並べると、選んでから
+   断られる。系統が合うものだけを出す。 */
+function loraCandidates() {
+  const target = targetModelFamily();
+  return state.modelCatalog.filter((model) =>
+    model.kind === "lora" && model.installed
+    && (!target || normalizeFamily(model.base_model) === target));
+}
+
+/* どのモデルに載る前提で見せているか。指定があればそれ、無ければ選べるものが
+   1 つに定まるときだけ。定まらないなら系統で絞らず、全部出して警告する。 */
+function targetModelFamily() {
+  const chosen = state.modelChoice === "manual"
+    ? byId("model-choice-model")?.value
+    : (byId("advanced-policy")?.value === "manual" ? byId("advanced-model")?.value : "");
+  const usable = state.modelCatalog.filter(
+    (model) => model.kind !== "lora" && model.installed && model.healthy);
+  const model = chosen
+    ? usable.find((item) => item.model_id === chosen)
+    : (usable.length === 1 ? usable[0] : null);
+  return model ? normalizeFamily(model.base_model) : "";
+}
+
+function renderLoraPicker() {
+  const block = byId("lora-picker");
+  if (!block) return;
+  const installed = state.modelCatalog.filter((model) => model.kind === "lora" && model.installed);
+  block.hidden = installed.length === 0;
+  if (block.hidden) return;
+  const candidates = loraCandidates();
+  const target = targetModelFamily();
+  byId("lora-picker-note").textContent = candidates.length
+    ? (target
+        ? "選んだモデルに載せられるものだけを出しています。"
+        : "使うモデルが決まっていないので、全部出しています。系統が合わないものは生成時に断ります。")
+    : "選んだモデルに載せられる LoRA がありません。";
+  byId("lora-list").replaceChildren(...candidates.map((lora) => {
+    const row = document.createElement("div");
+    row.className = "lora-row";
+    const label = document.createElement("label");
+    label.className = "check";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.dataset.loraId = lora.model_id;
+    box.checked = (state.selectedLoras || []).some((item) => item.model_id === lora.model_id);
+    const name = document.createElement("span");
+    name.textContent = lora.display_name || lora.model_id;
+    label.append(box, name);
+    const base = document.createElement("span");
+    base.className = "tag base";
+    base.textContent = lora.base_model || "系統不明";
+    label.append(base);
+    for (const word of (lora.trigger_words || []).slice(0, 2)) {
+      const trigger = document.createElement("span");
+      trigger.className = "tag trigger";
+      trigger.textContent = word;
+      trigger.title = "この語を prompt に自動で足します。";
+      label.append(trigger);
+    }
+    const weight = document.createElement("input");
+    weight.type = "range";
+    weight.min = "0";
+    weight.max = "2";
+    weight.step = "0.05";
+    weight.value = String(
+      (state.selectedLoras || []).find((item) => item.model_id === lora.model_id)?.weight ?? 1);
+    weight.dataset.loraWeight = lora.model_id;
+    weight.setAttribute("aria-label", `${lora.display_name || lora.model_id} の強さ`);
+    const shown = document.createElement("span");
+    shown.className = "lora-weight";
+    shown.textContent = Number(weight.value).toFixed(2);
+    row.append(label, weight, shown);
+    return row;
+  }));
+}
+
+/* 選んだ LoRA を要求の形にする。強さ 0 は「載せない」ではなく「効かせない」
+   なので、選ばれている限り送る。外したいなら選択を外す。 */
+function selectedLoras() {
+  return (state.selectedLoras || []).slice(0, 4);
+}
+
 /* ── 配布元の切り替え ────────────────────────────────────────────────── */
 
 /* 既定は Civitai。実際に絵を作るのに使われている調整済みのモデルはそちらに
@@ -1077,6 +1206,28 @@ const CATALOG_SOURCES = {
   },
 };
 
+function catalogType() {
+  const chosen = byId("catalog-type")?.querySelector('[aria-checked="true"]');
+  return chosen?.dataset.modelType || "checkpoint";
+}
+
+function renderCatalogType() {
+  const holder = byId("catalog-type");
+  if (!holder) return;
+  // Hugging Face 側に LoRA の取り込み経路が無い。押せる形で出しておくと、
+  // 押した先で断られる。
+  const civitai = catalogSource() === "civitai";
+  holder.hidden = !civitai;
+  if (!civitai) {
+    for (const chip of holder.children) {
+      chip.setAttribute("aria-checked", String(chip.dataset.modelType === "checkpoint"));
+    }
+  }
+  const lora = civitai && catalogType() === "lora";
+  const fit = byId("catalog-fit");
+  if (fit) fit.hidden = !lora;
+}
+
 function catalogSource() {
   const chosen = byId("catalog-source")?.querySelector('[aria-checked="true"]');
   return chosen?.dataset.source || "civitai";
@@ -1090,7 +1241,10 @@ function renderCatalogSource() {
     chip.setAttribute("aria-checked", String(chip.dataset.source === chosen));
   }
   const shape = CATALOG_SOURCES[chosen] || CATALOG_SOURCES.civitai;
-  byId("catalog-source-note").textContent = shape.note;
+  renderCatalogType();
+  byId("catalog-source-note").textContent = catalogType() === "lora"
+    ? "LoRA はモデル本体に載せて使います。載せる先が手元に無ければ、取り込むときに知らせます。"
+    : shape.note;
   // 効かない絞り込みを出しておくと、絞ったつもりの結果を見ることになる。
   const style = byId("catalog-style");
   if (style?.parentElement) style.parentElement.hidden = !shape.styles;
@@ -1105,6 +1259,7 @@ async function searchCatalog() {
   try {
     found = await call("models.custom.search", {
       source: catalogSource(),
+      model_type: catalogType(),
       query: byId("catalog-query").value,
       sort: byId("catalog-sort").value,
       style: byId("catalog-style").value,
@@ -1113,8 +1268,17 @@ async function searchCatalog() {
     empty.textContent = error?.message || "検索できませんでした。";
     return;
   }
-  state.catalogResults = found.items || [];
+  state.installedFamilies = found.installed_families || [];
+  const rows = (found.items || []).map((item) => ({...item, model_type: catalogType()}));
+  state.catalogResults = byId("catalog-fit-only")?.checked
+    ? rows.filter(catalogFits)
+    : rows;
   state.catalogPage = 0;
+  if (!state.catalogResults.length && rows.length) {
+    empty.hidden = false;
+    empty.textContent = "手元のモデルに載せられるものはありませんでした。絞り込みを外すと全部出ます。";
+    return;
+  }
   renderCatalogPage();
 }
 
@@ -1202,6 +1366,54 @@ async function resolveCustomModel(repoId, revision = "main") {
     return;
   }
   renderCustomResolution(customResolution);
+  await renderLoraBaseRequirement(customResolution);
+}
+
+/* LoRA だけ落としても絵は作れない。載せる先が手元に無ければ、押す前に
+   何をいくら落とすことになるかを見せる。LoRA は 40MB 前後だが土台は
+   2〜7GB あるので、黙って始めると 40MB のつもりが 7GB 落ちてくる。 */
+async function renderLoraBaseRequirement(resolution) {
+  const holder = byId("lora-base-note");
+  if (!holder) return;
+  holder.hidden = true;
+  holder.replaceChildren();
+  state.pendingLoraBase = null;
+  if (!resolution || resolution.runtime_adapter !== "lora.diffusers") return;
+  const base = String(resolution.runtime_options?.base_model || "");
+  let report;
+  try {
+    report = await call("models.custom.lora_base", {base_model: base});
+  } catch { return; }
+  if (report.satisfied) {
+    holder.hidden = false;
+    holder.className = "hint";
+    holder.textContent = `${base} のモデルが手元にあります。この LoRA はそのまま載せられます。`;
+    return;
+  }
+  holder.hidden = false;
+  holder.className = "settings-check";
+  const title = document.createElement("p");
+  title.className = "settings-check-title";
+  title.textContent = "載せる先のモデルがありません";
+  const body = document.createElement("p");
+  body.className = "settings-reason";
+  const candidate = report.candidate;
+  body.textContent = candidate
+    ? `この LoRA は ${base} 用です。手元に ${base} のモデルがないので、`
+      + `「${candidate.display_name}」（${formatBytes(candidate.weight_bytes)}）も一緒に取り込みます。`
+    : `この LoRA は ${base} 用です。手元に ${base} のモデルがありません。`;
+  holder.append(title, body);
+  if (!candidate) return;
+  const together = document.createElement("label");
+  together.className = "check";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.id = "lora-base-together";
+  box.checked = true;
+  together.append(box, document.createTextNode(
+    `土台も一緒に取り込む（追加で ${formatBytes(candidate.weight_bytes)}）`));
+  holder.append(together);
+  state.pendingLoraBase = candidate;
 }
 
 async function addCustomModel() {
@@ -1225,6 +1437,27 @@ async function addCustomModel() {
     error.textContent = failure?.message || "取り込めませんでした。";
     return;
   }
+  /* 土台は LoRA が入ってから取り込む。先に落として LoRA 側が失敗すると、
+     頼んでいない 7GB だけが残る。 */
+  const base = state.pendingLoraBase;
+  if (base && byId("lora-base-together")?.checked) {
+    try {
+      const resolved = await call("models.custom.resolve", {
+        repo_id: base.repo_id, revision: base.revision,
+      });
+      await call("models.custom.add", {
+        repo_id: resolved.repo_id,
+        revision: resolved.revision,
+        display_name: base.display_name || resolved.repo_id,
+        license_acceptance: resolved.license,
+      });
+    } catch (failure) {
+      error.hidden = false;
+      error.textContent = `LoRA は取り込みました。土台の取り込みに失敗しました: ${
+        failure?.message || "原因不明"}`;
+    }
+  }
+  state.pendingLoraBase = null;
   byId("custom-result").hidden = true;
   customResolution = null;
   await refreshSession(["models", "model_catalog"]);
@@ -2015,7 +2248,12 @@ function buildConstraints(preset) {
   }
   /* 詳細設定で触った項目だけ送る。触っていない項目を送ると、モデル側の
      既定を上書きしてしまい、自動判定の意味が無くなる。 */
-  return {...constraints, ...manualModelSettings()};
+  const loras = selectedLoras();
+  return {
+    ...constraints,
+    ...manualModelSettings(),
+    ...(loras.length ? {loras} : {}),
+  };
 }
 
 /* 歩数とガイダンスは、利用者が既定から変えたときだけ要求に載せる。 */
@@ -2043,7 +2281,7 @@ function manualModelSettings() {
    使われるモデルの設定と食い違う。 */
 function currentModelSettings() {
   const usable = state.modelCatalog.filter(
-    (model) => model.installed && model.healthy && model.generation
+    (model) => model.installed && model.healthy && model.generation && model.kind !== "lora"
   );
   const chosen = state.modelChoice === "manual"
     ? byId("model-choice-model")?.value
@@ -2060,7 +2298,7 @@ function renderModelSettings() {
   if (!settings) return;
 
   const usable = state.modelCatalog.filter(
-    (model) => model.installed && model.healthy && model.generation
+    (model) => model.installed && model.healthy && model.generation && model.kind !== "lora"
   );
   const owner = usable.find((model) => model.generation === settings);
   byId("model-settings-model").textContent = owner
@@ -2415,7 +2653,8 @@ function renderModelChoice() {
   }
   const row = byId("model-choice-row");
   const select = byId("model-choice-model");
-  const usableModels = state.modelCatalog.filter((model) => model.installed && model.healthy);
+  const usableModels = state.modelCatalog.filter(
+    (model) => model.installed && model.healthy && model.kind !== "lora");
   const previous = select.value;
   select.replaceChildren(...usableModels.map((model) => {
     const option = document.createElement("option");
@@ -4143,7 +4382,8 @@ function renderAdvancedModelChoices() {
   const select = byId("advanced-model");
   if (!select) return;
   const previous = select.value;
-  const usableModels = state.modelCatalog.filter((model) => model.installed && model.healthy);
+  const usableModels = state.modelCatalog.filter(
+    (model) => model.installed && model.healthy && model.kind !== "lora");
   select.replaceChildren(...usableModels.map((model) => {
     const option = document.createElement("option");
     option.value = model.model_id;
@@ -4299,6 +4539,48 @@ async function loadAdvancedSettings() {
 
 byId("mode-simple").addEventListener("click", () => setMode("simple"));
 byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
+
+document.addEventListener("change", (event) => {
+  const box = event.target.closest?.("[data-lora-id]");
+  if (box) {
+    const id = box.dataset.loraId;
+    const rest = (state.selectedLoras || []).filter((item) => item.model_id !== id);
+    if (box.checked) {
+      const weight = Number(
+        byId("lora-list")?.querySelector(`[data-lora-weight="${id}"]`)?.value ?? 1);
+      if (rest.length >= 4) {
+        box.checked = false;
+        showError("LoRA は 4 個までです。");
+        return;
+      }
+      rest.push({model_id: id, weight});
+    }
+    state.selectedLoras = rest;
+  }
+});
+
+document.addEventListener("input", (event) => {
+  const slider = event.target.closest?.("[data-lora-weight]");
+  if (!slider) return;
+  const id = slider.dataset.loraWeight;
+  slider.parentElement.querySelector(".lora-weight").textContent =
+    Number(slider.value).toFixed(2);
+  const chosen = (state.selectedLoras || []).find((item) => item.model_id === id);
+  if (chosen) chosen.weight = Number(slider.value);
+});
+
+byId("catalog-type")?.addEventListener("click", (event) => {
+  const chip = event.target.closest?.("[data-model-type]");
+  if (!chip) return;
+  for (const other of byId("catalog-type").children) {
+    other.setAttribute("aria-checked", String(other === chip));
+  }
+  renderCatalogSource();
+  // 種別が変われば結果は別物になる。前の種別の一覧を残さない。
+  clearCatalogResults();
+});
+
+byId("catalog-fit-only")?.addEventListener("change", () => { void searchCatalog(); });
 
 byId("catalog-source")?.addEventListener("click", (event) => {
   const chip = event.target.closest?.("[data-source]");
@@ -4965,6 +5247,7 @@ function applyModelSession(snapshot) {
     renderAdvancedModelChoices();
     renderModelChoice();
     renderModelSettings();
+    renderLoraPicker();
   }
 }
 
