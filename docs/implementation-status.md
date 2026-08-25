@@ -4316,3 +4316,31 @@ after   warnings: ["以下は宣言された必須条件ですが、この実行
 NOT TESTED: OpenCode の UI から人手で駆動した経路。ここでは coding agent の
 役を script が演じている。OpenCode 固有の部分（session、tool 呼び出しの形）は
 未検証で、Media Forge 側の入口は同じ `/addon/v1/agent/pack` を使っている。
+
+## 導入済み画像モデルの一括検証（2026-08-25）
+
+`scripts/verify_installed_models.py` が、導入済みの画像モデルを 1 つずつ実際に
+走らせて確かめる。カタログが並べている 55 の pipeline クラスは「ランタイムが
+構築できる形式」であって「全部この機材で動く」ではない。後者を証明するには
+55 個落とすことになるので、証明できるのは手元にあるものだけである。
+
+未実測なら測って昇格し、実測済みでも 1 回走らせる。数か月前に測ったモデルが
+ランタイム更新で壊れても、走らせなければ誰も気づかないためである。画像ワーカー
+の経路でないモデル（GGUF 動画系）は、黙って省かず「対象外」として並べる。省くと
+報告が「全部通った」に見える。
+
+実測（2026-08-25、AMD Radeon AI PRO R9700 / 512x512 / 8 steps）:
+
+```text
+black-forest-labs/FLUX.2-klein-4B     20.7 GB   45.34 秒   333,821 bytes
+segmind/SSD-1B                         5.8 GB    6.93 秒   278,849 bytes
+stabilityai/stable-diffusion-xl-base    8.5 GB    7.78 秒   411,811 bytes
+Wan-AI/Wan2.2-TI2V-5B                 対象外（native.wan2.2）
+unsloth/MiniMax-H3-GGUF               対象外（native.stable-diffusion-cpp）
+
+通った 3 / 失敗 0 / 対象外 2
+```
+
+NOT TESTED: 落としていない 52 形式。構築できることは runtime の mapping から
+分かるが、この機材で動くことは落として走らせるまで分からない。新しく入れたら
+このスクリプトを回す。
