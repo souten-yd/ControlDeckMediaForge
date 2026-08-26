@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g8-glb-import（origin/main 05e0e05 から作成）
-slice       G8 B1 bounded GLB import / independent validation
-状態        B0 merged / B1 implementation・実HTTP・full gate PASS
-baseline    focused GLB 10 passed / full 731 passed / 1 warning / 47.16s
+branch      ux1/g8-b1-handoff（origin/main f0bf8a3 から作成）
+slice       G8 B1 handoff close / B2 preparation
+状態        B0-B1 merged / B2未着手
+baseline    focused GLB 10 passed / full 731 passed / 1 warning / 49.15s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #134 merged / B1 PR未作成
+PR          Media Forge #135 merged / handoff PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -35,6 +35,9 @@ G7 V1i は Media Forge #130、exact head
 G8 B0 は Media Forge #133、exact head
 `17e7b2f1842928676101806f828bb91c911714c5`、merge commit
 `9dc903445721abfacc2342a5c916dc88647826f0` で main へ入った。
+G8 B1 は Media Forge #135、exact head
+`e3e1d5e9f6c2fb5c9859eb5f57f942ca5bd9f05f`、merge commit
+`f0bf8a3d4a2d23db931b1539ed970de59e606319` で main へ入った。
 
 ## この slice の結果
 
@@ -54,8 +57,8 @@ NOT TESTED Blender re-import / Host grant read / installed browser / B2〜B5
 ## 次にやること（1つだけ）
 
 ```text
-1. G8 B1 full gate、PR、merge、handoffを閉じる
-2. G8 B2 deterministic compile ZIPを実装する
+1. G8 B2 deterministic compile ZIPを実装する
+2. B2の実Blender 2回compile hash / cleanup / failureを評価する
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
