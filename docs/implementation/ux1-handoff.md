@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/wan21-vace-lifecycle-handoff（origin/main 9d486d8 から作成）
-slice       G7 V1h Wan 2.1 VACE prompt/model lifecycle follow-up
-状態        component直列化でprocess swap 0 / system swap-out 401 pages / DEFERRED維持
-baseline    focused 32 passed / full 711 passed / compileall・diff check PASS
+branch      ux1/g7-v1i-offload-rejection（origin/main 485af85 から作成）
+slice       G7 V1i VACE VAE delayed-load comparison / G7 deferral
+状態        delayed-load不採用 / V1 adoption DEFERRED / V2〜V4未着手
+baseline    focused runner 6 passed / full 711 passed / 1 warning / 48.01s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #128 merged / merge commit 9d486d86986fdbf06d29830432f835d2aacac679
+PR          Media Forge #129 merged / V1i PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -33,15 +33,13 @@ G7 V1h は Media Forge #128、exact head
 ## この slice の結果
 
 ```text
-PASS       prompt embedsをGPU生成後にUMT5/tokenizerを破棄
-PASS       VAE/scheduler/tokenizer/text encoder/transformerのcomponent直列ロード
-PASS       best smoke 110.622s / peak RSS 10,251,010,048 B / process swap 0
-PASS       同一H.264 SHA-256 / determinism / Broker grant・renew・release
-PASS       V1g比 latency約53%減 / peak RSS約51%減 / process swap 100%減
-PASS       focused 32 tests / full 711 tests / compileall / diff check
-FAIL       best smoke system swap in 70 / out 401 pages
-NOT TESTED candidate quality / cancel / public Asset/provenance
-DEFERRED   VACE production adoption / candidate profile / G7 V2 promotion
+PASS       delayed/controlとも同一H.264 SHA / process swap 0 / Broker lifecycle
+FAIL       delayed RSS 10.430GB > control 10.245GB
+FAIL       delayed VRAM 22.180GB > control 19.462GB
+FAIL       delayed swap-out 3,597 > control 2,977 pages
+REJECTED   VAE delayed-load code差分は全てrevert
+NOT TESTED G7 V2〜V4 / candidate quality / cancel / public Asset/provenance
+DEFERRED   G7 V1 adoption / production video capability
 ```
 
 通常の video capability/routing state は変更していない。両 candidate は catalog で external /
@@ -50,9 +48,9 @@ DEFERRED   VACE production adoption / candidate profile / G7 V2 promotion
 ## 次にやること（1つだけ）
 
 ```text
-1. G7の次候補はlicense条件とzero-swap見込みを先に評価し、weight取得前に明示判断する
-2. VACEはsystem swap 0を実測できる追加改善までcandidate profileへ進めない
-3. LTX/Hunyuan/SkyReels weightは明示license acceptanceなしに取得しない
+1. V1i docs/full test/PR mergeを閉じる
+2. G8のimplementation planを設計正から起こし、deterministic import/validationから進める
+3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South

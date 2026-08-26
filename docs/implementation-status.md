@@ -5163,3 +5163,38 @@ candidate quality/cancel/public assetは **NOT TESTED**、VACEは **DEFERRED** �
 Media Forge / ControlDeck / SonicForge はすべてactive、実 `/health` はhealthy / contract 2.0、
 VACE/KFD process 0、R9700 VRAM 59,912,192 Bを確認した。ControlDeck変更は0で、既存
 `frontend/tsconfig.tsbuildinfo` の変更1件を保全した。
+
+## G7 V1i — VACE VAE delayed-load comparison / G7 deferral（2026-08-26）
+
+V1hの残存system swapに対し、追加weight、custom kernel、Host変更なしでVAEのロード順だけを比較した。
+installed Media Forge v0.9.0を一時停止し、branch coreを同じ9130/data directoryで起動した。実
+installed iframe identity、Host Job、Broker、R9700、SonicForge activeの経路を使った。
+
+```text
+                              VAE delayed load                   V1h control
+operation                     modelop_2caa9d49a5f24be69d69f8bb49a36d1f
+                                                                modelop_1954e9cd95c94d6fa612a6f7c5038acd
+Host Job                      8697762eb240                      d50b0d07bda3
+core elapsed                  111.829 sec                       110.931 sec
+peak RSS / process swap       10,430,042,112 / 0 B              10,245,021,696 / 0 B
+peak VRAM / delta             22,179,917,824 / 22,120,005,632 B 19,462,152,192 / 19,402,240,000 B
+system swap in / out          123 / 3,597 pages                 9,748 / 2,977 pages
+output                        14,494 B / H.264 / 5 frames       same
+SHA-256                       9a5bebd61075b14d854d232d6fd1bb3f2590c180330faf3aeaff242246fdac4e
+```
+
+遅延loadはRSS、VRAM、swap-outの全てで対照より悪く、コード差分を戻した。Diffusers 0.40.0の
+group/disk offloadは利用可能だが、1-step denoiseが約51秒のVACEで各blockを30 steps再転送する経路は
+実用latencyを改善しない。専用runtimeにはTorchAO / bitsandbytesがなく、ROCm/gfx1201で検証済みの
+量子化backendも確認できないため追加しなかった。
+
+判定は **DEFERRED**。V2〜V4、candidate quality、cancel、公開Asset/provenanceは **NOT TESTED**。
+通常video capability、catalog state、recommended profileは変更しない。再開条件は明示license acceptance
+済みの軽量候補、またはzero-swapと実用latencyを同時に満たす別のpermissive候補。評価後はbranch coreを
+正常停止し、installed v0.9.0を復元した。Media Forge / ControlDeck / SonicForgeはactive、実healthは
+healthy / contract 2.0、VACE/KFD process 0、R9700 VRAM 59,912,192 B。試験用`mf-e2e` password hashは
+各run後に元値へ復元し、新規browser sessionをrevokeした。ControlDeck code/manifest変更0、既存
+`frontend/tsconfig.tsbuildinfo`変更1件は保全した。
+
+最終 gate はVACE runner focused `6 passed, 1 warning`、`./mf.sh test`が
+`711 passed, 1 warning in 48.01s`、`git diff --check`がPASS。採用コード差分は0件。
