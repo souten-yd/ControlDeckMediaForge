@@ -13,7 +13,7 @@ slice       G7 V1f Wan 2.1 1.3B T2V/I2V candidate preflight
 baseline    focused 9 passed / 1 warning、full 702 passed / 2 warnings / 48.88s
 installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         preflight後 KFD process 0 / R9700 baseline 59,912,192 B
-PR          未作成
+PR          Media Forge #125 open / exact head・CI・mergeability確認中
 ```
 
 G7 V1c は Media Forge #122、merge commit
