@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g8-typed-options（origin/main 90ded9b から作成）
-slice       G8 B3 typed production options
-状態        B0-B2 merged / B3実装・実Blender golden・full gate PASS
-baseline    focused B3 9 passed / full 740 passed / 1 warning / 54.70s
+branch      ux1/g8-b3-handoff（origin/main dd94ab1 から作成）
+slice       G8 B3 handoff close / B4 preparation
+状態        B0-B3 merged / B4未着手
+baseline    focused B3 9 passed / full 740 passed / 1 warning / 56.97s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #138 merged / B3 PR未作成
+PR          Media Forge #139 merged / handoff PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -41,6 +41,9 @@ G8 B1 は Media Forge #135、exact head
 G8 B2 は Media Forge #137、exact head
 `cc554a50f7df2f5508fa536fff58b1fcd7ea2b53`、merge commit
 `84a231eaae4a69855580d204dbe6220897a514e0` で main へ入った。
+G8 B3 は Media Forge #139、exact head
+`aa322ea0e03e64c72f22fdc93d9ae30ade91df1d`、merge commit
+`dd94ab13388ab8f5aa6b3855d8d89054383ab504` で main へ入った。
 
 ## この slice の結果
 
@@ -60,8 +63,8 @@ NOT TESTED installed Host/browser/agent options / real cancel/timeout / rig+anim
 ## 次にやること（1つだけ）
 
 ```text
-1. G8 B3 full gate、PR、merge、handoffを閉じる
-2. G8 B4 workspace / agent / project placementを実装する
+1. G8 B4 workspace / agent / project placementを実装する
+2. B4のstandalone / embedded transportとZIP preview到達性を実測する
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
