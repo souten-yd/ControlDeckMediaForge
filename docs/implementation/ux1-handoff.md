@@ -13,7 +13,7 @@ slice       G7 V1b Wan evaluator host-memory lifecycle / practical profile compa
 baseline    focused 17 passed、full 686 passed / 1 warning / 51.30s
 installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy に復元済み
 GPU         Wan process 0、Media Forge lease 0。SonicForge は別管理
-PR          未作成
+PR          Media Forge #121 open / mergeable確認待ち
 ```
 
 G7 V1 は Media Forge #120、merge commit
@@ -41,9 +41,9 @@ DEFERRED   Wan production adapter/default/available への採用
 ## 次にやること（1つだけ）
 
 ```text
-1. current diff/status と installed process を最終確認する
-2. commit/push、V1b PR、exact head/mergeability を確認して merge する
-3. origin/main から別候補比較 slice を開始する
+1. Media Forge #121 の exact head / diff / mergeability を確認して merge する
+2. origin/main から別候補比較 slice を開始する
+3. prompt coherence と zero-process-swap を同時に満たすまで V2 へ進まない
 ```
 
 V2 production execution へ直接進まない。V1 adoption gate が deferred なので、次は Wan の
