@@ -266,6 +266,7 @@ doctor() {
   printf 'gpu_tool_rocm_smi=%s\n' "$(command -v rocm-smi || printf missing)"
   printf 'gpu_tool_rocminfo=%s\n' "$(command -v rocminfo || printf missing)"
   printf 'model_library=%s\n' "$model"
+  printf 'blender_runtime=%s\n' "$(blender_runtime_state)"
   printf 'media_data_dir=%s\n' "$(media_data_dir)"
   printf 'model_store_root=%s\n' "$(model_store_root)"
   printf 'control_deck_config=%s\n' "${config_path:-unavailable}"
@@ -517,6 +518,11 @@ list_envs() {
   for root in "$RUNTIME_ROOT"/*; do
     [ -d "$root" ] || continue
     refs="$(awk 'NF && $1 !~ /^#/' "$root/.refs" 2>/dev/null | paste -sd, -)"
+    if [ "$(basename "$root")" = "blender-4.5.9" ]; then
+      printf 'blender-4.5.9\tstate=%s\tsize_bytes=%s\trefs=%s\n' \
+        "$(blender_runtime_state)" "$(directory_bytes "$root")" "${refs:--}"
+      continue
+    fi
     printf '%s\tstate=%s\tsize_bytes=%s\trefs=%s\n' \
       "$(basename "$root")" "$(stamp_state "$root/.venv" "$root/requirements.txt")" \
       "$(directory_bytes "$root/.venv")" "${refs:--}"
@@ -545,6 +551,17 @@ prune_envs() {
   done
 }
 
+blender_runtime() {
+  local action="$1"
+  "$PYTHON_BIN" "$REPO_ROOT/scripts/blender_runtime.py" "$action" \
+    --manifest "$REPO_ROOT/config/blender-runtime.json" \
+    --runtime-root "$RUNTIME_ROOT/blender-4.5.9"
+}
+
+blender_runtime_state() {
+  blender_runtime status >/dev/null 2>&1 && printf 'ready' || printf 'missing'
+}
+
 serve() {
   ensure_env "$VENV" "$REPO_ROOT/requirements.txt" "core"
   write_environment_status
@@ -564,6 +581,8 @@ Usage:
   ./mf.sh env build <name>
   ./mf.sh env list
   ./mf.sh env prune
+  ./mf.sh blender build
+  ./mf.sh blender status
   ./mf.sh model list
   ./mf.sh model download flux2-klein-4b
   ./mf.sh model download minimax-h3-gguf --accept-license
@@ -586,6 +605,12 @@ main() {
         build) [ "$#" -eq 3 ] || die "env build requires one runtime name"; build_runtime "$3" ;;
         list) [ "$#" -eq 2 ] || die "env list takes no arguments"; list_envs ;;
         prune) [ "$#" -eq 2 ] || die "env prune takes no arguments"; prune_envs ;;
+        *) usage; exit 2 ;;
+      esac
+      ;;
+    blender)
+      case "${2:-}" in
+        build|status) [ "$#" -eq 2 ] || die "blender ${2:-action} takes no arguments"; blender_runtime "$2" ;;
         *) usage; exit 2 ;;
       esac
       ;;

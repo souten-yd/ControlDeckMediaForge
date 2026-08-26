@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "version": "4.5.9",
+  "archive_name": "blender-4.5.9-linux-x64.tar.xz",
+  "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.9-linux-x64.tar.xz",
+  "archive_size_bytes": 377929956,
+  "archive_sha256": "dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d",
+  "top_level_directory": "blender-4.5.9-linux-x64",
+  "executable": "blender",
+  "license": "GPL-3.0-or-later",
+  "source_url": "https://projects.blender.org/blender/blender"
+}

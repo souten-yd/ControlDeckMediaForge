@@ -3,6 +3,12 @@ runtimes/*/.venv/
 runtimes/*/.req-stamp
 runtimes/*/.gpu-check.json
 runtimes/*/.build.lock
+runtimes/blender-*/downloads/
+runtimes/blender-*/install/
+runtimes/blender-*/.runtime.json
+runtimes/blender-*/.runtime.json.tmp
+runtimes/blender-*/.extract-*/
+runtimes/blender-*/.previous-*/
 config/environment-status.json
 config/environment-status.tmp
 .local-data/

@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g8-import-validation-plan（origin/main f4197be から作成）
-slice       G8 B0 deterministic Blender production implementation plan
-状態        G7 DEFERREDを維持 / G8 plan作成中 / Blender未導入
-baseline    full 711 passed / 1 warning / 48.10s / diff check PASS
+branch      ux1/g8-blender-runtime（origin/main 38863f9 から作成）
+slice       G8 B0 pinned Blender runtime / license / preflight boundary
+状態        Blender 4.5.9 exact runtime ready / B1未着手
+baseline    focused 10 passed / full 721 passed / 1 warning / 46.48s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #131 merged / G8 plan PR未作成
+PR          Media Forge #132 merged / B0 PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -36,13 +36,13 @@ G7 V1i は Media Forge #130、exact head
 ## この slice の結果
 
 ```text
-PASS       delayed/controlとも同一H.264 SHA / process swap 0 / Broker lifecycle
-FAIL       delayed RSS 10.430GB > control 10.245GB
-FAIL       delayed VRAM 22.180GB > control 19.462GB
-FAIL       delayed swap-out 3,597 > control 2,977 pages
-REJECTED   VAE delayed-load code差分は全てrevert
-NOT TESTED G7 V2〜V4 / candidate quality / cancel / public Asset/provenance
-DEFERRED   G7 V1 adoption / production video capability
+PASS       official archive 377,929,956 B / exact SHA-256
+PASS       6,510 members / 1,168,332,002 B / safe tar boundary
+PASS       Blender 4.5.9 / Python 3.11.11 / background / glTF import+export
+PASS       runtime 1,546,263,669 B / status・reused build各0.21s
+PASS       GPL worker分離 / bundle同梱0 / arbitrary script経路0
+PASS       focused 10 tests / shell・Python syntax / diff check
+NOT TESTED B1〜B5 / GLB asset / compile / preview / cancel / installed browser
 ```
 
 通常の video capability/routing state は変更していない。両 candidate は catalog で external /
@@ -51,8 +51,8 @@ DEFERRED   G7 V1 adoption / production video capability
 ## 次にやること（1つだけ）
 
 ```text
-1. G8 planをreview/mergeする
-2. G8 B0でBlender 4.5.9 exact archiveのprovision/preflightを実装する
+1. G8 B0 full test、PR、merge、handoffを閉じる
+2. G8 B1 bounded GLB importとindependent validatorを実装する
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
@@ -83,4 +83,5 @@ SonicForge は `sonicforge-acceptance.service` でactive。Qwen3.8-27B llama.cpp
 G7 実装指示     docs/implementation/g7-video-runtime.md
 実測            docs/implementation-status.md
 model catalog   docs/models.md / worker_packs/image/models.json
+G8実装指示      docs/implementation/g8-blender-production.md
 ```

@@ -37,6 +37,7 @@ See `docs/implementation-status.md`.
 ./mf.sh doctor
 ./mf.sh serve
 ./mf.sh model list
+./mf.sh blender status
 ```
 
 Open <http://127.0.0.1:9130/>. The service binds to loopback only in G0.
@@ -52,6 +53,11 @@ Model downloads are explicit. The adopted local model can
 be fetched to the shared Hugging Face cache with
 `./mf.sh model download flux2-klein-4b`. The command pins the repository revision
 and excludes the redundant single-file checkpoint.
+
+G8 uses a separately provisioned, revision-pinned Blender runtime. It is never
+installed into the core venv or ControlDeck. Build it explicitly with
+`./mf.sh blender build`; inspect it without changing state with
+`./mf.sh blender status`.
 
 ## Test
 

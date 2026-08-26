@@ -5204,3 +5204,36 @@ healthy / contract 2.0、VACE/KFD process 0、R9700 VRAM 59,912,192 B。試験�
 
 最終 gate はVACE runner focused `6 passed, 1 warning`、`./mf.sh test`が
 `711 passed, 1 warning in 48.01s`、`git diff --check`がPASS。採用コード差分は0件。
+
+## G8 B0 — pinned Blender runtime / license boundary（2026-08-26）
+
+実機にはsystem Blenderが無かったため、ControlDeck、core venv、ML runtimeへ依存を追加せず、公式
+Blender 4.5.9 LTS Linux x64 portable archiveを専用runtimeへ明示provisionした。
+
+```text
+archive                     blender-4.5.9-linux-x64.tar.xz
+download / SHA-256          377,929,956 B / dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d
+archive safety              6,510 members / extracted payload 1,168,332,002 B
+runtime total               1,546,263,669 B
+Blender / embedded Python   4.5.9 / 3.11.11
+real preflight              background=true / glTF import=true / export=true
+status                      0.21 sec / max RSS 264,380 KiB
+ready build                 0.21 sec / max RSS 272,104 KiB / reused=true
+```
+
+installerはexact HTTPS host/name/size/hash、単一top-level root、relative contained link、member count、
+展開sizeを強制し、device/FIFO/escapeを拒否する。stagingで実preflight後だけatomic installし、runtime rootは
+repository `runtimes/`配下に限定する。preflightは固定 `--background --factory-startup --disable-autoexec
+--python <trusted-file>` のみで、temporary HOME/XDG/Blender user dirsを終了時に削除する。`--python-expr`、
+chat script、root installは実装していない。
+
+Blender/bpy workerはGPL-3.0-or-later境界として分離した。Blender binaryはrelease bundleへ同梱せず、
+生成assetのlicenseをGPLと記録しない。focused installer testsは10件PASS。B1以降のGLB import、compile、
+asset/provenance、preview、timeout/cancel、installed browser/agentは **NOT TESTED**。
+
+実行後Blender process 0、R9700 VRAM 59,912,192 B、Media Forge / ControlDeck / SonicForge active、
+installed healthはhealthy / contract 2.0。ControlDeck code/manifest変更0、既存
+`frontend/tsconfig.tsbuildinfo`変更1件を保全した。
+
+最終 gateはfocused `10 passed, 1 warning`、full `721 passed, 1 warning in 46.48s`、Python
+`compileall`、`bash -n mf.sh`、`git diff --check`がPASS。
