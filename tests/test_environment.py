@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from mediaforge.config import Settings
 from mediaforge.environment import setup_snapshot
 
@@ -40,3 +42,14 @@ def test_image_runtime_launcher_keeps_venv_path_instead_of_resolving_python_syml
 
     assert settings.image_runtime_python == launcher.absolute()
     assert settings.image_runtime_python != launcher.resolve()
+
+
+def test_blender_timeout_env_is_bounded_for_acceptance(monkeypatch, tmp_path):
+    monkeypatch.setenv("MEDIA_FORGE_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MEDIA_FORGE_BLENDER_TIMEOUT_SEC", "0.25")
+
+    assert Settings.from_env().blender_timeout_sec == 0.25
+
+    monkeypatch.setenv("MEDIA_FORGE_BLENDER_TIMEOUT_SEC", "181")
+    with pytest.raises(ValueError, match="Blender timeout"):
+        Settings.from_env()

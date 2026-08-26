@@ -202,6 +202,7 @@ async def _run_blender(
     job_root: Path,
     request_path: Path,
     cancel_requested: Callable[[], bool] | None,
+    process_timeout_sec: float = PROCESS_TIMEOUT_SEC,
 ) -> dict[str, Any]:
     executable = BLENDER_EXECUTABLE.resolve()
     worker = TRUSTED_WORKER.resolve()
@@ -262,7 +263,7 @@ async def _run_blender(
         try:
             stdout, stderr, returncode = await asyncio.wait_for(
                 asyncio.gather(stdout_task, stderr_task, _wait_process(process, cancel_requested)),
-                timeout=PROCESS_TIMEOUT_SEC,
+                timeout=process_timeout_sec,
             )
         except BaseException:
             await _stop_process(process)
@@ -289,7 +290,9 @@ async def _run_blender(
             raise BlenderCompileError("Blender compiler result is not an object")
         return result
     except TimeoutError as exc:
-        raise BlenderCompileError("Blender compiler exceeded the 180 second timeout") from exc
+        raise BlenderCompileError(
+            f"Blender compiler exceeded the {process_timeout_sec:g} second timeout"
+        ) from exc
     finally:
         if sandbox.exists():
             shutil.rmtree(sandbox)
@@ -395,6 +398,7 @@ async def compile_project_package(
     *,
     options: CompileOptions | None = None,
     cancel_requested: Callable[[], bool] | None = None,
+    process_timeout_sec: float = PROCESS_TIMEOUT_SEC,
 ) -> tuple[Path, dict[str, Any], list[dict[str, Any]]]:
     job_root = job_root.resolve()
     source_content = source.read_bytes()
@@ -408,7 +412,7 @@ async def compile_project_package(
     source_sha256 = hashlib.sha256(source_content).hexdigest()
     options = options or CompileOptions(schema_version="3d.compile-options@1")
     request_path = _fixed_request(job_root, source_sha256, options)
-    result = await _run_blender(job_root, request_path, cancel_requested)
+    result = await _run_blender(job_root, request_path, cancel_requested, process_timeout_sec)
 
     glb_path = contained(job_root, job_root / GLB_NAME)
     preview_path = contained(job_root, job_root / PREVIEW_NAME)

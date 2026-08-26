@@ -395,6 +395,19 @@ triangle budget `12..200000`, up to three strictly descending LOD ratios in
 results, and warnings in manifest order. Omitting `compile_options` preserves
 the B2 defaults.
 
+The opaque-origin workspace can import the same GLB either from browser bytes
+or through the ControlDeck file picker. The picker returns an opaque `grant:`
+identifier to the workspace; the private `assets.import_grant` WebSocket method
+then reads at most 64 MiB through the scoped-files bridge and accepts only
+`purpose=source` plus `media_type=model/gltf-binary`. Neither the workspace nor
+the response exposes a Host filesystem path. This is an internal workspace
+transport and does not add a public Asset API.
+
+Blender compilation has a hard upper timeout of 180 seconds. Operators may set
+`MEDIA_FORGE_BLENDER_TIMEOUT_SEC` to a positive value no greater than 180; a
+timeout terminates the process group, records `blender_compile_failed`, and
+registers no partial asset.
+
 ## Contract evolution
 
 G1 froze public schemas, manifest contributions, agent tools, workflow executor

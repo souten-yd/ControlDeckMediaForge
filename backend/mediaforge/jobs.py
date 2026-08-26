@@ -128,6 +128,7 @@ class JobManager:
         store: Store,
         *,
         worker_timeout_sec: float = 30.0,
+        blender_timeout_sec: float = 180.0,
         host_client: ControlDeckHostClient | None = None,
         lease_renew_sec: float = 10.0,
         model_manifest: Path | None = None,
@@ -143,6 +144,7 @@ class JobManager:
     ):
         self.store = store
         self.worker_timeout_sec = worker_timeout_sec
+        self.blender_timeout_sec = blender_timeout_sec
         self.host_client = host_client
         self.lease_renew_sec = lease_renew_sec
         self.model_manifest = model_manifest
@@ -338,7 +340,13 @@ class JobManager:
             else None
         )
         if job.request.operation == "asset.pack":
+            control: asyncio.Task[None] | None = None
             try:
+                if execution is not None:
+                    control = asyncio.create_task(
+                        self._maintain_host_control(job_id, execution),
+                        name=f"media-forge-host-control-{job_id}",
+                    )
                 self._validate_input_assets(job)
                 if job.request.profile == "3d.project.glb":
                     await self._execute_3d_pack(job, reporter)
@@ -353,6 +361,10 @@ class JobManager:
                     progress=1,
                     error=ErrorDetail(code=exc.code, message=str(exc)[:300]),
                 )
+            finally:
+                if control is not None:
+                    control.cancel()
+                    await asyncio.gather(control, return_exceptions=True)
             return
         maintenance: asyncio.Task[None] | None = None
         try:
@@ -888,15 +900,10 @@ class JobManager:
                 root,
                 options=options,
                 cancel_requested=lambda: self.store.cancel_requested(job.id),
+                process_timeout_sec=self.blender_timeout_sec,
             )
         except BlenderCompileCanceled:
-            await self._update(
-                job.id,
-                reporter,
-                status=JobStatus.CANCELED,
-                phase="canceled",
-                progress=1,
-            )
+            await self._finish_canceled(job.id, reporter)
             return
         except BlenderCompileError as exc:
             raise WorkerFailure("blender_compile_failed", str(exc)) from exc
@@ -1706,6 +1713,19 @@ class JobManager:
             process = self._processes.get(job_id)
             if process is not None and process.returncode is None:
                 process.terminate()
+
+    async def _maintain_host_control(self, job_id: str, execution: HostExecution) -> None:
+        """Propagate Host cancellation for CPU-only work that has no GPU lease task."""
+        try:
+            while True:
+                await asyncio.sleep(0.25)
+                if await self._host_or_local_cancel_requested(job_id, execution):
+                    return
+        except asyncio.CancelledError:
+            raise
+        except HostApiError as exc:
+            self._host_failures[job_id] = exc
+            self.store.request_cancel(job_id)
 
     async def _host_or_local_cancel_requested(self, job_id: str, execution: HostExecution) -> bool:
         if self.store.cancel_requested(job_id):

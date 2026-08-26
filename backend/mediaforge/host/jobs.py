@@ -72,7 +72,10 @@ class HostJobReporter:
                 HOST_PROGRESS_INTERVAL_SEC - (time.monotonic() - self.gate.last_sent_at),
             )
             if delay:
-                await asyncio.sleep(delay)
+                # Waking on the exact boundary can still measure a few
+                # microseconds early on the next monotonic read. Keep the
+                # forced terminal/attached update safely outside the gate.
+                await asyncio.sleep(delay + 0.01)
         if not self.gate.accept(progress=progress, phase=phase):
             return False
         payload: dict[str, Any] = {
