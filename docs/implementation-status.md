@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-26
-Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0-B1 complete, B2 in progress
+Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0-B2 complete
 
 G8 planning started on 2026-08-26. The current host has no `blender` executable. The implementation order,
 license/process boundary, GLB-only first import, deterministic compiler/package, typed options, and installed
