@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/wan21-vace-evaluation（origin/main 245a5e2 から作成）
+branch      ux1/wan21-vace-merge-handoff（origin/main 1bbfbd4 から作成）
 slice       G7 V1g Wan 2.1 VACE 1.3B I2V evaluation
 状態        VACE実測完了 / latency・RAM/swap gate FAIL / adoption DEFERRED
 baseline    focused 32 passed / 1 warning、full 711 passed / 1 warning / 48.38s
 installed   Media Forge v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #126 draft / head acc7c07（final docs committed）
+PR          Media Forge #126 merged / merge commit 1bbfbd43d784a2d03a34eafdc9a189d1c28a5e6b
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -24,6 +24,8 @@ G7 V1e は Media Forge #124、merge commit
 `af15cd2eced1b3046b588eb9b663aaad4f106631` で main へ入った。
 G7 V1f は Media Forge #125、merge commit
 `245a5e2b8a17a4cac196db67cf70945083136624` で main へ入った。
+G7 V1g は Media Forge #126、merge commit
+`1bbfbd43d784a2d03a34eafdc9a189d1c28a5e6b` で main へ入った。
 
 ## この slice の結果
 
@@ -50,9 +52,9 @@ DEFERRED   VACE production adoption / candidate profile / G7 V2 promotion
 ## 次にやること（1つだけ）
 
 ```text
-1. PR #126をready化し、remote exact head / checks / mergeability確認後にmergeする
+1. 次のG7候補を別sliceで選ぶ。T2V 1.3B downloadはVACE FAILを踏まえ再判断する
 2. VACEはprocess/system swap 0を実測できる保守可能なoffload/RAM改善まで再実行しない
-3. merge後に次のG7候補を別sliceで選ぶ。T2V 1.3B downloadはVACE FAILを踏まえ再判断する
+3. Hunyuan weightは明示license acceptanceなしに取得しない
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South
