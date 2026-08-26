@@ -187,6 +187,10 @@ LibraryはZIP package cardにpreviewを表示し、内容を自動展開しな�
 `asset.pack` + `3d.project.glb`を実行し、既存 `media.pack` でoutput `grant:`へZIPを置く。raw project
 path、Blender path、script bodyをpublic input/outputへ出さない。
 
+`3d.project.glb` は計画済みのcanonical profile名だが、G1時点のprofile patternが先頭英字のみで
+受理できなかった。既存profileを壊さない加法的変更として、先頭にASCII小文字または数字を
+許可する。それ以外の文字、path、任意operator名は引き続き受理しない。
+
 ## 7. B5 — installed acceptance
 
 実installed ControlDeckで次を測る。

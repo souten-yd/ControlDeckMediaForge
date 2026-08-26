@@ -32,6 +32,7 @@ const PHASE_TEXT = {
   validate: "保証を検証しています",
   package: "保存しています",
   register_asset: "保存しています",
+  canceled: "中止しました",
 };
 
 /* 操作は capability で出し分ける。ここが UI の可用性の唯一の根拠。 */
@@ -3643,6 +3644,8 @@ const VALIDATOR_LABEL = {
   "image.outpaint.source_pixel_diff": "元の絵が変わっていない",
   "image.strict_edit.unmasked_pixel_diff": "塗った所だけ変わっている",
   "glb.structure": "3Dファイルの構造",
+  "glb.output_structure": "書き出した3Dファイルの構造",
+  "package.deterministic_zip": "3Dパッケージの再現性",
   "evaluation.unified": "内容の確認",
   "m5.companion.profile": "機種の設定",
   "m5.companion.edit_mask": "編集範囲",

@@ -42,6 +42,13 @@ from .asset_brief import (
     inspect_against_brief,
     parse_brief,
 )
+from .blender_compile import (
+    BLENDER_VERSION,
+    COMPILER_VERSION,
+    BlenderCompileCanceled,
+    BlenderCompileError,
+    compile_project_package,
+)
 from .routing import ModelRoute, ModelRouteError, route
 from .host.ai import HostAIGateway, HostAIReleaseResult
 from .store import Store, UnreadableJobRecord, utc_now
@@ -332,7 +339,10 @@ class JobManager:
         if job.request.operation == "asset.pack":
             try:
                 self._validate_input_assets(job)
-                await self._execute_m5_pack(job, reporter)
+                if job.request.profile == "3d.project.glb":
+                    await self._execute_3d_pack(job, reporter)
+                else:
+                    await self._execute_m5_pack(job, reporter)
             except WorkerFailure as exc:
                 await self._update(
                     job_id,
@@ -630,6 +640,28 @@ class JobManager:
 
     def _validate_input_assets(self, job: Job) -> None:
         if job.request.operation == "asset.pack":
+            if job.request.profile == "3d.project.glb":
+                if (
+                    job.request.output.format != "zip"
+                    or job.request.output.count != 1
+                    or job.request.model_policy != "auto"
+                    or job.request.qa.semantic
+                    or job.request.qa.max_regeneration_attempts != 0
+                    or job.request.constraints
+                ):
+                    raise WorkerFailure(
+                        "unsupported_pack_profile",
+                        "3d.project.glb requires one deterministic ZIP output and no B2 options",
+                    )
+                if len(job.request.inputs) != 1:
+                    raise WorkerFailure("invalid_pack", "3d.project.glb requires exactly one input asset")
+                try:
+                    source = self.store.get_asset(job.request.inputs[0].asset_id)
+                except KeyError as exc:
+                    raise WorkerFailure("asset_not_found", "3D source asset was not found") from exc
+                if source.mime_type != "model/gltf-binary":
+                    raise WorkerFailure("unsupported_reference", "3d.project.glb requires one GLB input")
+                return
             if (
                 job.request.profile != "m5.companion.pack"
                 or job.request.output.format != "zip"
@@ -828,6 +860,85 @@ class JobManager:
             created_at=now,
         )
         self.store.register_asset(asset, provenance, output)
+        await self._update(
+            job.id,
+            reporter,
+            status=JobStatus.SUCCEEDED,
+            phase="package",
+            progress=1,
+            asset_ids=[asset.id],
+        )
+
+    async def _execute_3d_pack(self, job: Job, reporter: HostJobReporter | None) -> None:
+        await self._update(job.id, reporter, status=JobStatus.RUNNING, phase="validate", progress=0.1)
+        root = contained(self.store.work_dir, self.store.work_dir / job.id)
+        root.mkdir(mode=0o700)
+        source = self.store.get_asset(job.request.inputs[0].asset_id)
+        try:
+            package, manifest, validation = await compile_project_package(
+                self.store.asset_path(source.id),
+                root,
+                cancel_requested=lambda: self.store.cancel_requested(job.id),
+            )
+        except BlenderCompileCanceled:
+            await self._update(
+                job.id,
+                reporter,
+                status=JobStatus.CANCELED,
+                phase="canceled",
+                progress=1,
+            )
+            return
+        except BlenderCompileError as exc:
+            raise WorkerFailure("blender_compile_failed", str(exc)) from exc
+        if package.stat().st_size > MAX_ARTIFACT_BYTES:
+            raise WorkerFailure("artifact_too_large", "3D project package exceeded the 64 MiB artifact bound")
+        await self._update(job.id, reporter, phase="register_asset", progress=0.9)
+        digest = hashlib.sha256(package.read_bytes()).hexdigest()
+        now = utc_now()
+        asset_id = f"asset_{uuid.uuid4().hex}"
+        provenance_id = f"prov_{uuid.uuid4().hex}"
+        asset = Asset(
+            id=asset_id,
+            job_id=job.id,
+            parent_asset_ids=[source.id],
+            mime_type="application/zip",
+            width=None,
+            height=None,
+            size_bytes=package.stat().st_size,
+            sha256=digest,
+            suggested_filename=f"media-forge-project-{job.id[4:12]}.zip",
+            provenance_id=provenance_id,
+            created_at=now,
+        )
+        provenance = Provenance(
+            id=provenance_id,
+            asset_id=asset_id,
+            parent_asset_ids=[source.id],
+            operation="asset.pack",
+            intent=job.request.intent,
+            model_id="media-forge/blender-project-compiler",
+            model_version=COMPILER_VERSION,
+            weights_hash="sha256:" + "0" * 64,
+            license="derived-from-parent-assets",
+            runtime_adapter="blender.project-compiler",
+            runtime_version=BLENDER_VERSION,
+            tool_versions={
+                "media-forge": __version__,
+                "blender": BLENDER_VERSION,
+                "compiler.3d-project": COMPILER_VERSION,
+                "validator.glb": str(manifest["asset"]["validation_version"]),
+            },
+            seed=0,
+            parameters={"profile": job.request.profile, "manifest": manifest},
+            reference_asset_hashes={source.id: source.sha256},
+            postprocessing=[str(item) for item in manifest["operations"]],
+            validation=validation,
+            warnings=[str(item) for item in manifest["warnings"]],
+            output_sha256=digest,
+            created_at=now,
+        )
+        self.store.register_asset(asset, provenance, package)
         await self._update(
             job.id,
             reporter,

@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g8-b1-handoff（origin/main f0bf8a3 から作成）
-slice       G8 B1 handoff close / B2 preparation
-状態        B0-B1 merged / B2未着手
-baseline    focused GLB 10 passed / full 731 passed / 1 warning / 49.15s
+branch      ux1/g8-deterministic-compile（origin/main d758dce から作成）
+slice       G8 B2 deterministic Blender compile ZIP
+状態        B0-B1 merged / B2実装・実process・実Job API・full gate PASS
+baseline    focused B2 5 passed / full 736 passed / 1 warning / 50.77s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #135 merged / handoff PR未作成
+PR          Media Forge #136 merged / B2 PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -42,13 +42,13 @@ G8 B1 は Media Forge #135、exact head
 ## この slice の結果
 
 ```text
-PASS       generated triangle GLB 620 B / validator.glb 1.0.0
-PASS       header/chunk/JSON/count/range/reference/URI/extension bounds
-PASS       public HTTP 201 / exact original SHA-256 / Asset+provenance
-PASS       invalid GLB 422 / failed work entry 0 / symlink reject
-PASS       workspace chunk transport / model/gltf-binary Asset enum
-PASS       source filename/path input 0 / ControlDeck変更0
-NOT TESTED Blender re-import / Host grant read / installed browser / B2〜B5
+PASS       fixed trusted Blender 4.5.9 process / software Workbench
+PASS       GLB+preview+ZIP 2 process byte identity / assertion緩和0
+PASS       ZIP 3 entries / fixed order・timestamp・permission・compression
+PASS       real Job API 2 runs succeeded / same ZIP hash
+PASS       Asset/provenance/manifest / work 0 / Blender child 0
+PASS       arbitrary option/script/path 0 / failure・cancel partial asset 0
+NOT TESTED real cancel/timeout / installed Host Job / browser/agent/grant / B3〜B5
 ```
 
 通常の video capability/routing state は変更していない。両 candidate は catalog で external /
@@ -57,8 +57,8 @@ NOT TESTED Blender re-import / Host grant read / installed browser / B2〜B5
 ## 次にやること（1つだけ）
 
 ```text
-1. G8 B2 deterministic compile ZIPを実装する
-2. B2の実Blender 2回compile hash / cleanup / failureを評価する
+1. G8 B2 full gate、PR、merge、handoffを閉じる
+2. G8 B3 typed production optionsを実装する
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
