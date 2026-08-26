@@ -45,6 +45,9 @@ class Settings:
     cogvideox2b_runtime_python: Path | None = None
     cogvideox2b_snapshot_root: Path | None = None
     cogvideox2b_evaluation_preset: str = "smoke"
+    wan21_vace_runtime_python: Path | None = None
+    wan21_vace_snapshot_root: Path | None = None
+    wan21_vace_evaluation_preset: str = "smoke"
     model_evaluation_timeout_sec: float = 3600.0
     host_ai_timeout_sec: float = 120.0
 
@@ -100,6 +103,18 @@ class Settings:
                 "cogvideox2b_snapshot_root",
                 self.cogvideox2b_snapshot_root.resolve(),
             )
+        if self.wan21_vace_runtime_python is not None:
+            object.__setattr__(
+                self,
+                "wan21_vace_runtime_python",
+                Path(os.path.abspath(self.wan21_vace_runtime_python)),
+            )
+        if self.wan21_vace_snapshot_root is not None:
+            object.__setattr__(
+                self,
+                "wan21_vace_snapshot_root",
+                self.wan21_vace_snapshot_root.resolve(),
+            )
         if self.wan_evaluation_preset not in {
             "smoke", "quality-frame", "short-clip", "practical-clip", "candidate-clip",
             "candidate-hq-clip"
@@ -109,6 +124,8 @@ class Settings:
             raise ValueError("Hunyuan evaluation preset is invalid")
         if self.cogvideox2b_evaluation_preset not in {"smoke", "official-clip"}:
             raise ValueError("CogVideoX-2B evaluation preset is invalid")
+        if self.wan21_vace_evaluation_preset not in {"smoke", "candidate-clip", "official-clip"}:
+            raise ValueError("Wan 2.1 VACE evaluation preset is invalid")
         if (
             self.worker_timeout_sec <= 0
             or self.host_request_timeout_sec <= 0
@@ -173,6 +190,14 @@ class Settings:
             if "MEDIA_FORGE_COGVIDEOX2B_SNAPSHOT_ROOT" in os.environ else None,
             cogvideox2b_evaluation_preset=os.environ.get(
                 "MEDIA_FORGE_COGVIDEOX2B_EVALUATION_PRESET",
+                "smoke",
+            ),
+            wan21_vace_runtime_python=Path(os.environ["MEDIA_FORGE_WAN21_VACE_RUNTIME_PYTHON"])
+            if "MEDIA_FORGE_WAN21_VACE_RUNTIME_PYTHON" in os.environ else None,
+            wan21_vace_snapshot_root=Path(os.environ["MEDIA_FORGE_WAN21_VACE_SNAPSHOT_ROOT"])
+            if "MEDIA_FORGE_WAN21_VACE_SNAPSHOT_ROOT" in os.environ else None,
+            wan21_vace_evaluation_preset=os.environ.get(
+                "MEDIA_FORGE_WAN21_VACE_EVALUATION_PRESET",
                 "smoke",
             ),
             model_evaluation_timeout_sec=float(

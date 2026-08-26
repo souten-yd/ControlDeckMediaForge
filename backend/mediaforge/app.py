@@ -293,6 +293,9 @@ def create_app(
             cogvideox2b_runtime_python=resolved.cogvideox2b_runtime_python,
             cogvideox2b_snapshot_root=resolved.cogvideox2b_snapshot_root,
             cogvideox2b_evaluation_preset=resolved.cogvideox2b_evaluation_preset,
+            wan21_vace_runtime_python=resolved.wan21_vace_runtime_python,
+            wan21_vace_snapshot_root=resolved.wan21_vace_snapshot_root,
+            wan21_vace_evaluation_preset=resolved.wan21_vace_evaluation_preset,
             lease_renew_sec=resolved.host_lease_renew_sec,
             timeout_sec=resolved.model_evaluation_timeout_sec,
             # 自作モデルも測れるようにする。shipped manifest に居ないので、
