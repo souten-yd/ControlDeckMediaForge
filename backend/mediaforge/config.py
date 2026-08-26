@@ -42,6 +42,9 @@ class Settings:
     hunyuan_runtime_python: Path | None = None
     hunyuan_snapshot_root: Path | None = None
     hunyuan_evaluation_preset: str = "smoke"
+    cogvideox2b_runtime_python: Path | None = None
+    cogvideox2b_snapshot_root: Path | None = None
+    cogvideox2b_evaluation_preset: str = "smoke"
     model_evaluation_timeout_sec: float = 3600.0
     host_ai_timeout_sec: float = 120.0
 
@@ -85,6 +88,18 @@ class Settings:
             )
         if self.hunyuan_snapshot_root is not None:
             object.__setattr__(self, "hunyuan_snapshot_root", self.hunyuan_snapshot_root.resolve())
+        if self.cogvideox2b_runtime_python is not None:
+            object.__setattr__(
+                self,
+                "cogvideox2b_runtime_python",
+                Path(os.path.abspath(self.cogvideox2b_runtime_python)),
+            )
+        if self.cogvideox2b_snapshot_root is not None:
+            object.__setattr__(
+                self,
+                "cogvideox2b_snapshot_root",
+                self.cogvideox2b_snapshot_root.resolve(),
+            )
         if self.wan_evaluation_preset not in {
             "smoke", "quality-frame", "short-clip", "practical-clip", "candidate-clip",
             "candidate-hq-clip"
@@ -92,6 +107,8 @@ class Settings:
             raise ValueError("Wan evaluation preset is invalid")
         if self.hunyuan_evaluation_preset not in {"smoke", "candidate-clip", "official-clip"}:
             raise ValueError("Hunyuan evaluation preset is invalid")
+        if self.cogvideox2b_evaluation_preset not in {"smoke", "official-clip"}:
+            raise ValueError("CogVideoX-2B evaluation preset is invalid")
         if (
             self.worker_timeout_sec <= 0
             or self.host_request_timeout_sec <= 0
@@ -148,6 +165,14 @@ class Settings:
             if "MEDIA_FORGE_HUNYUAN_SNAPSHOT_ROOT" in os.environ else None,
             hunyuan_evaluation_preset=os.environ.get(
                 "MEDIA_FORGE_HUNYUAN_EVALUATION_PRESET",
+                "smoke",
+            ),
+            cogvideox2b_runtime_python=Path(os.environ["MEDIA_FORGE_COGVIDEOX2B_RUNTIME_PYTHON"])
+            if "MEDIA_FORGE_COGVIDEOX2B_RUNTIME_PYTHON" in os.environ else None,
+            cogvideox2b_snapshot_root=Path(os.environ["MEDIA_FORGE_COGVIDEOX2B_SNAPSHOT_ROOT"])
+            if "MEDIA_FORGE_COGVIDEOX2B_SNAPSHOT_ROOT" in os.environ else None,
+            cogvideox2b_evaluation_preset=os.environ.get(
+                "MEDIA_FORGE_COGVIDEOX2B_EVALUATION_PRESET",
                 "smoke",
             ),
             model_evaluation_timeout_sec=float(

@@ -4611,6 +4611,7 @@ git diff --check           PASS
 compileall                 PASS
 ```
 
+
 NOT TESTED: 動画モデルの import/generation/quality、R9700 VRAM、Broker lease/wait/cancel、
 LLM 退避/復帰、SonicForge job との同時 admission、installed bundle/browser playback。
 V1 の revision-pinned candidate probe と V2〜V4 の範囲であり、video capability は
@@ -4913,4 +4914,84 @@ installed /health          healthy / contract 2.0
 ROCm process cleanup       KFD process 0
 git diff --check           PASS
 compileall                 PASS
+```
+
+## G7 V1e — CogVideoX-2B Apache fallback evaluation（2026-08-26）
+
+HunyuanVideo 1.5 は Tencent Hunyuan Community License の明示同意待ちを維持し、先に
+Apache-2.0 の T2V-only 候補 `zai-org/CogVideoX-2b` を評価した。model revision は
+`1137dacfc2c9c012bed6a0793f4ecf2ca8e7ba01`。19 files / 13,775,572,738 bytes の exact
+snapshot を取得し、5 LFS object の size と SHA-256 を全件照合した。取得中に Xet route が
+connection struggling で停止したため、partial を削除せず `HF_HUB_DISABLE_XET=1` の公式 Range
+route へ切り替えて完了した。
+
+core/image/Wan/Hunyuan と分離した `/data1tb/mediaforge-g7-cogvideox2b/runtime` を使った。
+torch 2.10.0+rocm7.2.1、HIP 7.2.53211、Diffusers 0.40.0、Transformers 5.15.1。
+weight-free preflight は R9700/gfx1201、CogVideoX pipeline/transformer/VAE import、PyTorch SDPA
+を確認した。runner は exact local snapshot、offline-only、FP16、sequential CPU offload、VAE
+slicing/tiling、固定 prompt/negative prompt/seed、H.264 MP4 を強制する。公式外の低解像度を品質
+証拠にせず、720x480 を維持した。
+
+最初の 5-frame smoke は Diffusers の temporal compression 条件と一致せず、6分42.98秒後に
+frame-count validation で FAIL した。partial output は残らず、GPU は baseline へ復帰した。
+通常 frame count は4の倍数、公式 profile は48生成frames + conditioning frameの49であることを
+runtime source/configから確認し、smokeを8 framesへ修正した。修正後 smoke:
+
+```text
+preset / network             720x480 / 8 frames / 1 step / offline
+elapsed / wall               53.316 / 57.85 sec
+load / generate              0.893 / 52.077 sec
+max RSS / process swap       19,452,981,248 / 0 B（/usr/bin/time: 18,997,052 KiB / swaps 0）
+output                       H.264 / 8fps / 11,443 B
+SHA-256                      8c9aefea092a9efef17ea7794d0a98c097f9bf4b01a8f325ecbd40214a47d0f4
+system swap pages delta      in 612 / out 19,540
+```
+
+公式 quality run は installed v0.9.0 を一時停止し、branch core を同じ9130/data
+directoryで起動して、短命 Host service identityから実行した。このsliceによるControlDeck
+code/DB/manifest変更は0。Host worktreeには今回触れていない既存
+`frontend/tsconfig.tsbuildinfo`変更1件がある。
+
+```text
+operation                    modelop_eea78a015e9c45aab311a6e14b6424ba
+Host Job                     bf25a3d596be
+Broker request / lease       52c974fe-c64f-4145-bda0-0e4c5b813553 /
+                             6aaa9ab9-09f7-476a-bc95-4326ef3a0cf6
+preset                       720x480 / 49 frames / 50 steps / 8fps
+elapsed                      930.861 sec（denoise 282 sec、decode支配）
+peak VRAM                    14,996,635,648 B（delta 14,936,723,456 B）
+peak RSS / process swap      19,315,003,392 / 0 B
+system swap pages delta      in 29,888 / out 29,985
+output                       H.264 / 6.125 sec / 235,251 B
+SHA-256                      a0932382761efe621e8b30c03be59ddb1ed70c78acff44f3ba87e00f8aceb857
+```
+
+Host audit は request `granted`、lease `active`、約10秒ごとの renew、10分時点の短命 credential
+refresh、最終 `released` を記録した。完了後 Cog process 0、KFD process 0、R9700 VRAM
+59,912,192 B。branch coreを正常停止し、installed Media Forge v0.9.0を再起動した。実 `/health`
+は `healthy` / contract 2.0。
+
+frame 0/24/48 の目視では orange field robot、solar panel、dusk field、locked camera を一貫して
+維持し、SSIM は0→24が0.724、24→48が0.810だった。被写体・構図品質は **PASS**。一方、要求した
+「solar panels を折り畳む」動作は明瞭でなく action adherence は **FAIL**。system swap activityと
+930.861秒のlatencyも実用gateを満たさない。process swap 0、Broker lifecycle、artifact boundsは
+**PASS**。deterministic repeat、Cog固有cancel、SonicForge active residencyとの同時要求、公開
+Asset/provenance、I2Vは **NOT TESTED**（I2Vは本modelのcapability外）。
+
+判定: CogVideoX-2BはR9700 backendを実証したが、`experimental` / low-confidence / recommended
+profile 0のまま **DEFERRED**。T2V production routeへ採用せず、V2へ昇格しない。Apache-2.0候補
+なのでHunyuanのterritory/MAU/AUP制約はないが、再配布時のLICENSE/NOTICE、変更表示、特許・商標
+条件は維持する。次の再開条件は、zero system-swapと明確なaction adherenceを短いruntimeで満たす
+別T2V候補、またはCogの保守可能なdecode/RAM lifecycle改善である。
+
+最終 gate:
+
+```text
+focused                    33 passed / 1 warning
+full                       700 passed / 1 warning / 49.15 s
+git diff --check           PASS
+compileall                 PASS
+installed /health          healthy / contract 2.0
+ROCm process cleanup       KFD process 0 / VRAM 59,912,192 B
+ControlDeck slice changes  0（既存 frontend/tsconfig.tsbuildinfo 変更1件は保全）
 ```

@@ -13,6 +13,13 @@ import pytest
 
 from mediaforge.host.client import HostIdentity
 from mediaforge.model_evaluator import (
+    COGVIDEOX2B_COLD_LOAD_PEAK_BYTES,
+    COGVIDEOX2B_ESTIMATED_RUNTIME_SEC,
+    COGVIDEOX2B_EXECUTION_PEAK_BYTES,
+    COGVIDEOX2B_HEADROOM_BYTES,
+    COGVIDEOX2B_MODEL_ID,
+    COGVIDEOX2B_MODEL_REVISION,
+    COGVIDEOX2B_RUNTIME_ADAPTER,
     H3_MODEL_ID,
     H3_RUNTIME_ADAPTER,
     H3_RUNTIME_COMMIT,
@@ -596,3 +603,127 @@ def test_hunyuan_validator_requires_exact_silent_h264_bounds(
     codec = "vp9"
     with pytest.raises(ModelOperationError, match="encoding differs"):
         service._validate_hunyuan_artifact(artifact)
+
+
+def test_cogvideox2b_probe_is_hidden_until_complete_exact_snapshot_is_configured(
+    tmp_path: Path,
+) -> None:
+    store = Store(tmp_path / "data")
+    store.initialize()
+    runtime_python = tmp_path / "cog-runtime" / "bin" / "python"
+    runtime_python.parent.mkdir(parents=True)
+    runtime_python.write_text("", encoding="utf-8")
+    model = replace(
+        descriptor(tmp_path / "unused"),
+        model_id=COGVIDEOX2B_MODEL_ID,
+        family="cogvideox",
+        revision=COGVIDEOX2B_MODEL_REVISION,
+        runtime_adapter=COGVIDEOX2B_RUNTIME_ADAPTER,
+        required_files=("LICENSE", "model_index.json"),
+        weights=(WeightFile(path="transformer/model.safetensors", size_bytes=1, sha256="3" * 64),),
+        installed=False,
+        local_path=None,
+        ownership=ModelOwnership.EXTERNAL,
+    )
+    repository = tmp_path / "models--zai-org--CogVideoX-2b"
+    snapshot = repository / "snapshots" / COGVIDEOX2B_MODEL_REVISION
+    snapshot.mkdir(parents=True)
+    (snapshot / "model_index.json").write_text(
+        json.dumps({"_class_name": "CogVideoXPipeline"}), encoding="utf-8"
+    )
+    (snapshot / "LICENSE").write_text("Apache-2.0", encoding="utf-8")
+
+    unavailable = H3ModelEvaluator(
+        store,
+        FakeHost(),  # type: ignore[arg-type]
+        model_manifest=tmp_path / "models.json",
+        catalog_manifest=tmp_path / "catalog.json",
+        model_store_root=tmp_path / "models",
+        hf_home=tmp_path / "hf",
+        runtime_root=runtime_root(tmp_path),
+        cogvideox2b_runtime_python=runtime_python,
+        cogvideox2b_snapshot_root=snapshot,
+        lease_renew_sec=1,
+        timeout_sec=10,
+        model_resolver=lambda model_id: model if model_id == COGVIDEOX2B_MODEL_ID else (_ for _ in ()).throw(
+            ModelOperationError("model_not_found", "not configured")
+        ),
+    )
+    assert unavailable.available_model_ids() == []
+
+    weight = snapshot / "transformer" / "model.safetensors"
+    weight.parent.mkdir()
+    weight.write_bytes(b"x")
+    available = H3ModelEvaluator(
+        store,
+        FakeHost(),  # type: ignore[arg-type]
+        model_manifest=tmp_path / "models.json",
+        catalog_manifest=tmp_path / "catalog.json",
+        model_store_root=tmp_path / "models",
+        hf_home=tmp_path / "hf",
+        runtime_root=runtime_root(tmp_path / "available"),
+        cogvideox2b_runtime_python=runtime_python,
+        cogvideox2b_snapshot_root=snapshot,
+        cogvideox2b_evaluation_preset="official-clip",
+        lease_renew_sec=1,
+        timeout_sec=10,
+        model_resolver=lambda model_id: model if model_id == COGVIDEOX2B_MODEL_ID else (_ for _ in ()).throw(
+            ModelOperationError("model_not_found", "not configured")
+        ),
+    )
+    assert available.available_model_ids() == [COGVIDEOX2B_MODEL_ID]
+    command_value = available._command(model, tmp_path / "smoke.mp4", Path("/unused"))
+    assert command_value[0] == str(runtime_python)
+    assert command_value[2:4] == ["run", "--snapshot"]
+    assert command_value[-2:] == ["--preset", "official-clip"]
+    request = available._resource_request("host-cog", model)
+    assert request["estimated_runtime_sec"] == COGVIDEOX2B_ESTIMATED_RUNTIME_SEC
+    assert request["vram"] == {
+        "resident_bytes": 0,
+        "execution_peak_bytes": COGVIDEOX2B_EXECUTION_PEAK_BYTES,
+        "cold_load_peak_bytes": COGVIDEOX2B_COLD_LOAD_PEAK_BYTES,
+        "headroom_bytes": COGVIDEOX2B_HEADROOM_BYTES,
+        "confidence": "low",
+    }
+
+
+def test_cogvideox2b_validator_requires_exact_silent_h264_bounds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact = tmp_path / "smoke.mp4"
+    artifact.write_bytes(b"video")
+    frame_count = "8"
+
+    def fake_run(args: list[str], **kwargs):
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout=json.dumps({
+                "streams": [{
+                    "codec_type": "video",
+                    "width": 720,
+                    "height": 480,
+                    "codec_name": "h264",
+                    "avg_frame_rate": "8/1",
+                    "nb_frames": frame_count,
+                }],
+                "format": {"duration": "0.625", "format_name": "mov,mp4,m4a,3gp,3g2,mj2"},
+            }),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    service = evaluator(tmp_path, FakeHost(), delay=0)
+    assert service._validate_cogvideox2b_artifact(artifact) == {
+        "width": 720,
+        "height": 480,
+        "video_codec": "h264",
+        "frame_rate": "8/1",
+        "duration_sec": 0.625,
+        "audio_present": False,
+    }
+
+    frame_count = "4"
+    with pytest.raises(ModelOperationError, match="bounds differ"):
+        service._validate_cogvideox2b_artifact(artifact)

@@ -16,6 +16,7 @@ VIDEO_IDS = {
     "Wan-AI/Wan2.2-T2V-A14B",
     "Wan-AI/Wan2.2-Animate-14B",
     "Lightricks/LTX-2.3",
+    "zai-org/CogVideoX-2b",
     "tencent/HunyuanVideo-1.5",
     "MiniMaxAI/MiniMax-H3",
     "DiffSynth-Studio/MiniMax-H3-NF4",
@@ -41,13 +42,16 @@ def test_video_candidates_are_pinned_and_never_recommended() -> None:
     assert wan.execution_peak_vram_bytes == 30_700_000_000
     assert wan.headroom_vram_bytes == 1024 * 1024 * 1024
     assert wan.measured_runtime_sec == 75.955
+    cog = candidates["zai-org/CogVideoX-2b"]
+    assert cog.measurement_confidence == "low"
+    assert cog.hardware_backends == ("cuda", "rocm")
     assert all(
         model.measurement_confidence == "low"
         and model.measured_runtime_sec is None
         and model.measured_vram_bytes is None
         and model.hardware_backends == ("cuda",)
         for model_id, model in candidates.items()
-        if model_id != wan.model_id
+        if model_id not in {wan.model_id, cog.model_id}
     )
     assert all(not model.recommended_profiles for model in candidates.values())
     assert all(model.approx_download_bytes >= sum(weight.size_bytes for weight in model.weights)
@@ -77,6 +81,7 @@ def test_only_bounded_complete_video_snapshots_are_managed() -> None:
     assert {model_id for model_id, model in candidates.items() if model.ownership == ModelOwnership.EXTERNAL} == {
         "Wan-AI/Wan2.2-Animate-14B",
         "Lightricks/LTX-2.3",
+        "zai-org/CogVideoX-2b",
         "tencent/HunyuanVideo-1.5",
         "MiniMaxAI/MiniMax-H3",
         "DiffSynth-Studio/MiniMax-H3-NF4",
