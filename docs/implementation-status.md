@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-26
-Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred
+Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0 complete, B1 in progress
 
 G8 planning started on 2026-08-26. The current host has no `blender` executable. The implementation order,
 license/process boundary, GLB-only first import, deterministic compiler/package, typed options, and installed
@@ -5237,3 +5237,25 @@ installed healthはhealthy / contract 2.0。ControlDeck code/manifest変更0、�
 
 最終 gateはfocused `10 passed, 1 warning`、full `721 passed, 1 warning in 46.48s`、Python
 `compileall`、`bash -n mf.sh`、`git diff --check`がPASS。
+
+## G8 B1 — bounded GLB import / independent validation（2026-08-26）
+
+public Asset MIMEへ `model/gltf-binary` を加法的に追加し、`purpose=source` の browser / workspace
+byte transportから単一GLB 2.0をimportできるようにした。filenameやpathは入力せず、元bytesを変更せず
+hash/storeする。Blenderと独立したcore validatorはmagic/version/declared length、JSON/BIN chunk、
+UTF-8/finite JSON/depth/value count、top-level count、bufferView/accessor range、mesh/node/scene reference、
+external buffer/image URI、required extensionをboundedに検査する。未計測のrequired extensionとsparse
+accessorはB1ではfail-closed。
+
+コード生成した第三者asset非依存のtriangle GLBは620 B。一時data rootと実Uvicorn
+`127.0.0.1:9160`に対するHTTP importは201を返し、Asset/contentのSHA-256はともに
+`29e22906825ae044e2b37aee45e767f6f253227e9f5b8e2f50b281fbddec4e5f`。provenanceは
+`asset.import` / `user-provided` / `validator.glb=1.0.0`、scene/node/mesh/primitives=1、
+accessor/bufferView=2を返し、source filename/pathは含まなかった。破損bodyは422
+`invalid_glb_import`、失敗後work entry 0。サーバ停止後に一時data rootを削除し、port 9160の
+listenerも0。
+
+focused GLB tests 10件はPASS。Blender re-import、Host `grant:` read、installed-host browser、B2 compile /
+preview / package / cancelは **NOT TESTED**。ControlDeck code/DB/manifestは変更していない。
+最終gateは `./mf.sh test` が `731 passed, 1 warning in 47.16s`、Python `compileall`、
+`node --check frontend/app.js`、`git diff --check` がPASS。

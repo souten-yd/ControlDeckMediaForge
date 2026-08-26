@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g8-b0-handoff（origin/main 9dc9034 から作成）
-slice       G8 B0 handoff close / B1 preparation
-状態        B0 merged / Blender 4.5.9 exact runtime ready / B1未着手
-baseline    focused 10 passed / full 721 passed / 1 warning / 47.01s
+branch      ux1/g8-glb-import（origin/main 05e0e05 から作成）
+slice       G8 B1 bounded GLB import / independent validation
+状態        B0 merged / B1 implementation・実HTTP・full gate PASS
+baseline    focused GLB 10 passed / full 731 passed / 1 warning / 47.16s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #133 merged / handoff PR未作成
+PR          Media Forge #134 merged / B1 PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -39,13 +39,13 @@ G8 B0 は Media Forge #133、exact head
 ## この slice の結果
 
 ```text
-PASS       official archive 377,929,956 B / exact SHA-256
-PASS       6,510 members / 1,168,332,002 B / safe tar boundary
-PASS       Blender 4.5.9 / Python 3.11.11 / background / glTF import+export
-PASS       runtime 1,546,263,669 B / status・reused build各0.21s
-PASS       GPL worker分離 / bundle同梱0 / arbitrary script経路0
-PASS       focused 10 tests / shell・Python syntax / diff check
-NOT TESTED B1〜B5 / GLB asset / compile / preview / cancel / installed browser
+PASS       generated triangle GLB 620 B / validator.glb 1.0.0
+PASS       header/chunk/JSON/count/range/reference/URI/extension bounds
+PASS       public HTTP 201 / exact original SHA-256 / Asset+provenance
+PASS       invalid GLB 422 / failed work entry 0 / symlink reject
+PASS       workspace chunk transport / model/gltf-binary Asset enum
+PASS       source filename/path input 0 / ControlDeck変更0
+NOT TESTED Blender re-import / Host grant read / installed browser / B2〜B5
 ```
 
 通常の video capability/routing state は変更していない。両 candidate は catalog で external /
@@ -54,8 +54,8 @@ NOT TESTED B1〜B5 / GLB asset / compile / preview / cancel / installed browser
 ## 次にやること（1つだけ）
 
 ```text
-1. G8 B1 bounded GLB importとindependent validatorを実装する
-2. G8 B2 deterministic compile ZIPの設計前提をB1実測で固定する
+1. G8 B1 full gate、PR、merge、handoffを閉じる
+2. G8 B2 deterministic compile ZIPを実装する
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 

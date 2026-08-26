@@ -13,6 +13,7 @@ MIME_SUFFIXES = {
     "image/webp": {".webp"},
     "image/jpeg": {".jpg", ".jpeg"},
     "application/zip": {".zip"},
+    "model/gltf-binary": {".glb"},
 }
 
 
