@@ -132,6 +132,22 @@ parameter storage を meta tensor へ破棄し、GPU storage を解放して CPU
 2,501,005,312 / 346,812,416 bytes で zero-swap gate を満たさなかった。host RAM lifecycle の
 改善と品質は PASS、運用 reliability は FAIL とし、V2 adoption gate は閉じたままとする。
 
+### 2.3 replacement candidate preflight（2026-08-26）
+
+Wan practical profile が zero-swap gate を落としたため、次の比較候補は HunyuanVideo-1.5
+480p T2V distilled とする。公式 HunyuanVideo-1.5 は 8.3B、offload 有効時の公称最小 VRAM
+14GB で、LTX-2.x の 22B transformer + 12B text encoder より先に R9700 で測る根拠がある。
+
+weight 取得前に専用 ROCm runtime を分離構築した。fixed Diffusers conversion revision は
+`1abb14f0`、公式 model identity は `tencent/HunyuanVideo-1.5@9b49404b`。Diffusers 0.40.0 の
+`HunyuanVideo15Pipeline` / transformer / VAE import、gfx1201、PyTorch SDPA default backend は
+PASS した。CUDA-only Flash/Sage/Flex/SGL kernel は導入しない。
+
+候補 bundle は 13 weight files / 53,367,753,676 bytes で、Tencent Hunyuan Community License
+Agreement が適用される。利用開始自体が同意となり、地域、acceptable use、配布・表示条件を含むため、
+明示同意なしに weight download を開始しない。runtime preflight は PASS、weight/inference は
+**BLOCKED PENDING LICENSE ACCEPTANCE / NOT TESTED** とする。
+
 ## 3. V2 — execution
 
 private runtime adapter が raw frames/video を job root に書き、V0 の FFmpeg stage が公開 asset

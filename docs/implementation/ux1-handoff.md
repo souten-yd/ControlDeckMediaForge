@@ -7,57 +7,54 @@
 
 ```text
 最終更新    2026-08-26
-branch      g7/wan-practical-profile（origin/main d883702 から作成）
-slice       G7 V1b Wan evaluator host-memory lifecycle / practical profile comparison
-状態        512x320 quality PASS / zero-swap FAIL、adoption DEFERRED
-baseline    focused 17 passed、full 686 passed / 1 warning / 51.30s
-installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy に復元済み
-GPU         Wan process 0、Media Forge lease 0。SonicForge は別管理
-PR          Media Forge #121 open / mergeable確認待ち
+branch      g7/hunyuan15-probe（origin/main b528884 から作成）
+slice       G7 V1c HunyuanVideo-1.5 weight-free R9700 preflight
+状態        runtime/import/SDPA PASS、weight/inference は license acceptance 待ち
+baseline    full 686 passed / 2 warnings / 51.28s、compile/diff PASS
+installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy
+GPU         preflight 後 process 0。SonicForge は別管理
+PR          Media Forge #122 open / exact head・mergeability 確認待ち
 ```
 
-G7 V1 は Media Forge #120、merge commit
-`d8837026b4563cf3b94168629725d158ff3753bb` で main へ入った。V1 の probe を
+G7 V1b は Media Forge #121、merge commit
+`b528884d6799b3571799fae064f2ffaab3110308` で main へ入った。Wan practical profile を
 production adapter へ昇格させない。
 
 ## この slice の結果
 
 ```text
-PASS       meta-discard smoke / process swap 0
-PASS       384x256 / 33-frame process swap 0
-FAIL       384x256 / 33-frame prompt coherence
-PASS       512x320 / 33-frame prompt coherence / deterministic SHA
-FAIL       512x320 process swap 2,501,005,312 / 346,812,416 bytes
-PASS       SonicForge hold 中 fail-closed、自然 release 後 admission
-PASS       installed v0.9.0 復元 / healthy / worker・lease cleanup
-DEFERRED   Wan production adapter/default/available への採用
+PASS       Hunyuan 480p distilled を次候補に選定
+PASS       dedicated ROCm runtime / pip check / gfx1201 enumeration
+PASS       Diffusers pipeline / transformer / VAE / PyTorch SDPA import
+PASS       custom CUDA kernel 0 / GPU process cleanup
+PASS       installed v0.9.0 healthy / full 686 passed
+NOT TESTED 53,367,753,676-byte weight download / hash
+NOT TESTED generation / Broker / cancel / quality / installed browser
+BLOCKED    Tencent Hunyuan Community License の明示同意待ち
 ```
 
-主要実測は `docs/implementation-status.md` の G7 V1b 節を正とする。外部証跡は
-`/data1tb/mediaforge-g7-v1/`、operation artifact/log は installed data directory の
-`model-evaluations/<operation_id>/` にある。512x320/33-frame 2回は同じ SHA-256 と品質を
-再現したが、process swap が0にならず operational gate を落とした。
+主要実測は `docs/implementation-status.md` の G7 V1c 節を正とする。専用 runtime は
+`/data1tb/mediaforge-g7-hunyuan15/runtime`（4,688,976,346 bytes）。weight は未取得。
 
 ## 次にやること（1つだけ）
 
 ```text
-1. Media Forge #121 の exact head / diff / mergeability を確認して merge する
-2. origin/main から別候補比較 slice を開始する
-3. prompt coherence と zero-process-swap を同時に満たすまで V2 へ進まない
+1. commit/push、V1c PR、exact head/mergeability、merge を完了する
+2. 利用者へ exact license 条件と 53GB download の明示同意を求める
+3. 同意後だけ pinned sequential download と hash verification を開始する
 ```
 
-V2 production execution へ直接進まない。V1 adoption gate が deferred なので、次は Wan の
-品質 profile 改善または LTX-2.x 等との bounded 比較である。カーネル自作、ControlDeck への
-動画固有依存、public contract の変更は行わない。
+license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South
+Korea を除く Territory、acceptable-use、distribution/notice、第三者提供時表示、100M MAU 条件を
+含む。ユーザーの「計画を進める」という一般指示を license acceptance と解釈しない。
 
 ## 境界と外部状態
 
 ```text
-ControlDeck 変更 0。Host は read-only のまま。
-評価用 branch core は停止済み。installed v0.9.0 service を再起動済み。
-Wan runtime/source は /data1tb/mediaforge-g7-v1/ の外部評価環境。
-モデル snapshot は installed NVMe model store。移動・削除しない。
-テスト account password hash は exact 元値へ復元済み。秘密値は記録しない。
+ControlDeck 変更 0。Host は read-only。
+installed v0.9.0 service は healthy。評価用 branch core は起動していない。
+Hunyuan weight/snapshot/partial download は 0。runtime だけ外部構築済み。
+Wan runtime/model は移動・削除しない。
 SonicForge は独立 service。競合時は Broker を唯一の調停経路にする。
 ```
 
