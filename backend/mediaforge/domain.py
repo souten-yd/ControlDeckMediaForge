@@ -45,7 +45,7 @@ class JobRequest(BaseModel):
     ]
     intent: str = Field(min_length=1, max_length=8000)
     inputs: list[AssetInput] = Field(default_factory=list, max_length=32)
-    profile: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9._-]{0,127}$")
+    profile: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9._-]{0,127}$")
     model_policy: Literal["auto", "fast", "balanced", "quality", "low_vram", "manual"] = "auto"
     model_id: str | None = Field(default=None, min_length=1, max_length=200)
     constraints: dict[str, Any] = Field(default_factory=dict)

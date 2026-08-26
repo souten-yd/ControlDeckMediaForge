@@ -368,6 +368,17 @@ ZIP output. ZIP placement uses the same
 `media.pack` output grant as images; no path field or M5-specific Host route is
 added.
 
+`asset.pack` with `profile=3d.project.glb` accepts exactly one
+`model/gltf-binary` input, no free-form B2 constraints, and one ZIP output. It
+runs the pinned Blender compiler as a separate factory/background process with
+autoexec disabled and a fixed trusted request/result contract. The ZIP contains
+`asset.glb`, `manifest.json`, and `preview.png` in fixed order with fixed entry
+metadata. The manifest records parent/output hashes, bounded scene statistics,
+removed unsafe data, ordered operations, compiler versions, and warnings. The
+exported GLB and PNG are independently revalidated before the immutable ZIP is
+registered. No Blender path, script, operator name, or project path is a public
+input.
+
 ## Contract evolution
 
 G1 froze public schemas, manifest contributions, agent tools, workflow executor

@@ -40,7 +40,7 @@
         "string",
         "null"
       ],
-      "pattern": "^[a-z][a-z0-9._-]{0,127}$",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$",
       "default": null
     },
     "model_policy": {

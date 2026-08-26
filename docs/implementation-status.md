@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-26
-Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0-B1 complete
+Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0-B1 complete, B2 in progress
 
 G8 planning started on 2026-08-26. The current host has no `blender` executable. The implementation order,
 license/process boundary, GLB-only first import, deterministic compiler/package, typed options, and installed
@@ -5258,4 +5258,47 @@ listenerも0。
 focused GLB tests 10件はPASS。Blender re-import、Host `grant:` read、installed-host browser、B2 compile /
 preview / package / cancelは **NOT TESTED**。ControlDeck code/DB/manifestは変更していない。
 最終gateは `./mf.sh test` が `731 passed, 1 warning in 47.16s`、Python `compileall`、
+`node --check frontend/app.js`、`git diff --check` がPASS。
+
+## G8 B2 — deterministic Blender compile package（2026-08-26）
+
+既存 `asset.pack` にcanonical `profile=3d.project.glb` を加法し、1件のGLB Assetから
+`asset.glb` / `manifest.json` / `preview.png` の3 entry ZIPを作る固定経路を実装した。
+G1のprofile regexは先頡英字だけで計画済みIDを受理できなかったため、既存値を壊さない
+加法的変更として先頭数字を許可した。それ以外のpattern、path、operator、scriptは許可しない。
+
+coreが起動できる子processは次の固定形だけ。request/resultもjob root内の固定名で、
+workerは入出力filenameとexact fieldを再検査する。
+
+```text
+blender --background --factory-startup --disable-autoexec \
+  --python worker_packs/blender/compile_asset.py -- \
+  --request request.json --result result.json
+```
+
+temporary HOME/XDG/Blender user dirs、`LIBGL_ALWAYS_SOFTWARE=1`、GPU visibility空、process group
+timeout/cancel、stdout/stderr各256 KiB上限をcoreで強制する。workerはcamera/light/text/driver/
+custom propertyを除去し、MESH/EMPTY/ARMATURE以外をreject、meter/Y-up・finite transform・
+transform apply・normal inspection・orphan purge後にGLBを書き出す。previewは固定Workbenchで描画し、
+Blenderが付けるDate/RenderTimeなどのancillary PNG metadataを除いてから独立検査する。
+
+最終CPU-only設定の別process 2回は1.19 / 1.01 sec、max RSS 652,092 / 658,288 KiB。
+生成triangleのhashは次の3件で完全一致した。Eeveeとmetadata未正規化Workbenchはpreview
+hash不一致のため不採用。assertionは緩めていない。
+
+```text
+asset.glb    8135b0ea92cdfa047a8eeaf11bbd8a5ff634f0086696d40aaf1e05438c450868
+preview.png  6dc759022f4cc116e0ce216483962c4db63efb844ad06f0b320352ac357b046f
+ZIP          aaa87f7fe6fdb5873360e60749208b68c0f9fad1d52bce8042a9013edf3740e3
+```
+
+最終コードの実Uvicorn `127.0.0.1:9160` でJob APIを2回実行し、job
+`job_7af008abcb38430fbff26fc2ed3548cb` / `job_1b30c0e07fb64a238b864f18201ce306` は両方
+succeeded、ZIP hashも上記と一致しbyte-identical。実行後work entry 0、Blender process 0、
+R9700 VRAM 59,912,192 B。一時data rootはtrashへ移動し、port 9160 listenerも0。
+
+focused B2 tests 5件はpackage metadata/order、2回hash、Asset/provenance、任意option reject、
+failure/cancel partial asset 0、trusted commandをPASS。実process cancel/timeout、installed Host Job phase、
+browser/agent/grant、B3 optionは **NOT TESTED**。
+最終gateは `./mf.sh test` が `736 passed, 1 warning in 50.77s`、Python `compileall`、
 `node --check frontend/app.js`、`git diff --check` がPASS。
