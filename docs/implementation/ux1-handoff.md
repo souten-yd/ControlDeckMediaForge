@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g8-deterministic-compile（origin/main d758dce から作成）
-slice       G8 B2 deterministic Blender compile ZIP
-状態        B0-B1 merged / B2実装・実process・実Job API・full gate PASS
-baseline    focused B2 5 passed / full 736 passed / 1 warning / 50.77s
+branch      ux1/g8-b2-handoff（origin/main 84a231e から作成）
+slice       G8 B2 handoff close / B3 preparation
+状態        B0-B2 merged / B3未着手
+baseline    focused B2 5 passed / full 736 passed / 1 warning / 48.34s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #136 merged / B2 PR未作成
+PR          Media Forge #137 merged / handoff PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -38,6 +38,9 @@ G8 B0 は Media Forge #133、exact head
 G8 B1 は Media Forge #135、exact head
 `e3e1d5e9f6c2fb5c9859eb5f57f942ca5bd9f05f`、merge commit
 `f0bf8a3d4a2d23db931b1539ed970de59e606319` で main へ入った。
+G8 B2 は Media Forge #137、exact head
+`cc554a50f7df2f5508fa536fff58b1fcd7ea2b53`、merge commit
+`84a231eaae4a69855580d204dbe6220897a514e0` で main へ入った。
 
 ## この slice の結果
 
@@ -57,8 +60,8 @@ NOT TESTED real cancel/timeout / installed Host Job / browser/agent/grant / B3�
 ## 次にやること（1つだけ）
 
 ```text
-1. G8 B2 full gate、PR、merge、handoffを閉じる
-2. G8 B3 typed production optionsを実装する
+1. G8 B3 typed production optionsを実装する
+2. B3のgolden fixture / error bound / manifest差分を実測する
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
