@@ -13,7 +13,7 @@ slice       G7 V1c HunyuanVideo-1.5 weight-free R9700 preflight
 baseline    full 686 passed / 2 warnings / 51.28s、compile/diff PASS
 installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy
 GPU         preflight 後 process 0。SonicForge は別管理
-PR          未作成
+PR          Media Forge #122 open / exact head・mergeability 確認待ち
 ```
 
 G7 V1b は Media Forge #121、merge commit
