@@ -39,6 +39,13 @@ from mediaforge.model_evaluator import (
     WAN_MODEL_ID,
     WAN_MODEL_REVISION,
     WAN_RUNTIME_ADAPTER,
+    WAN21_VACE_COLD_LOAD_PEAK_BYTES,
+    WAN21_VACE_ESTIMATED_RUNTIME_SEC,
+    WAN21_VACE_EXECUTION_PEAK_BYTES,
+    WAN21_VACE_HEADROOM_BYTES,
+    WAN21_VACE_MODEL_ID,
+    WAN21_VACE_MODEL_REVISION,
+    WAN21_VACE_RUNTIME_ADAPTER,
 )
 from mediaforge.models import (
     ModelDescriptor,
@@ -727,3 +734,128 @@ def test_cogvideox2b_validator_requires_exact_silent_h264_bounds(
     frame_count = "4"
     with pytest.raises(ModelOperationError, match="bounds differ"):
         service._validate_cogvideox2b_artifact(artifact)
+
+
+def test_wan21_vace_probe_is_hidden_until_complete_exact_snapshot_is_configured(
+    tmp_path: Path,
+) -> None:
+    store = Store(tmp_path / "data")
+    store.initialize()
+    runtime_python = tmp_path / "vace-runtime" / "bin" / "python"
+    runtime_python.parent.mkdir(parents=True)
+    runtime_python.write_text("", encoding="utf-8")
+    model = replace(
+        descriptor(tmp_path / "unused"),
+        model_id=WAN21_VACE_MODEL_ID,
+        family="wan2.1-vace",
+        revision=WAN21_VACE_MODEL_REVISION,
+        runtime_adapter=WAN21_VACE_RUNTIME_ADAPTER,
+        capabilities=("video.image_to_video",),
+        required_files=("README.md", "model_index.json"),
+        weights=(WeightFile(path="transformer/model.safetensors", size_bytes=1, sha256="4" * 64),),
+        installed=False,
+        local_path=None,
+        ownership=ModelOwnership.EXTERNAL,
+    )
+    repository = tmp_path / "models--Wan-AI--Wan2.1-VACE-1.3B-diffusers"
+    snapshot = repository / "snapshots" / WAN21_VACE_MODEL_REVISION
+    snapshot.mkdir(parents=True)
+    (snapshot / "model_index.json").write_text(
+        json.dumps({"_class_name": "WanVACEPipeline"}), encoding="utf-8"
+    )
+    (snapshot / "README.md").write_text("Apache-2.0", encoding="utf-8")
+
+    unavailable = H3ModelEvaluator(
+        store,
+        FakeHost(),  # type: ignore[arg-type]
+        model_manifest=tmp_path / "models.json",
+        catalog_manifest=tmp_path / "catalog.json",
+        model_store_root=tmp_path / "models",
+        hf_home=tmp_path / "hf",
+        runtime_root=runtime_root(tmp_path),
+        wan21_vace_runtime_python=runtime_python,
+        wan21_vace_snapshot_root=snapshot,
+        lease_renew_sec=1,
+        timeout_sec=10,
+        model_resolver=lambda model_id: model if model_id == WAN21_VACE_MODEL_ID else (_ for _ in ()).throw(
+            ModelOperationError("model_not_found", "not configured")
+        ),
+    )
+    assert unavailable.available_model_ids() == []
+
+    weight = snapshot / "transformer" / "model.safetensors"
+    weight.parent.mkdir()
+    weight.write_bytes(b"x")
+    available = H3ModelEvaluator(
+        store,
+        FakeHost(),  # type: ignore[arg-type]
+        model_manifest=tmp_path / "models.json",
+        catalog_manifest=tmp_path / "catalog.json",
+        model_store_root=tmp_path / "models",
+        hf_home=tmp_path / "hf",
+        runtime_root=runtime_root(tmp_path / "available"),
+        wan21_vace_runtime_python=runtime_python,
+        wan21_vace_snapshot_root=snapshot,
+        wan21_vace_evaluation_preset="candidate-clip",
+        lease_renew_sec=1,
+        timeout_sec=10,
+        model_resolver=lambda model_id: model if model_id == WAN21_VACE_MODEL_ID else (_ for _ in ()).throw(
+            ModelOperationError("model_not_found", "not configured")
+        ),
+    )
+    assert available.available_model_ids() == [WAN21_VACE_MODEL_ID]
+    command_value = available._command(model, tmp_path / "smoke.mp4", Path("/unused"))
+    assert command_value[0] == str(runtime_python)
+    assert command_value[2:4] == ["run", "--snapshot"]
+    assert command_value[-2:] == ["--preset", "candidate-clip"]
+    request = available._resource_request("host-vace", model)
+    assert request["estimated_runtime_sec"] == WAN21_VACE_ESTIMATED_RUNTIME_SEC
+    assert request["vram"] == {
+        "resident_bytes": 0,
+        "execution_peak_bytes": WAN21_VACE_EXECUTION_PEAK_BYTES,
+        "cold_load_peak_bytes": WAN21_VACE_COLD_LOAD_PEAK_BYTES,
+        "headroom_bytes": WAN21_VACE_HEADROOM_BYTES,
+        "confidence": "low",
+    }
+
+
+def test_wan21_vace_validator_requires_exact_silent_h264_bounds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact = tmp_path / "smoke.mp4"
+    artifact.write_bytes(b"video")
+    frame_count = "5"
+
+    def fake_run(args: list[str], **kwargs):
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout=json.dumps({
+                "streams": [{
+                    "codec_type": "video",
+                    "width": 256,
+                    "height": 256,
+                    "codec_name": "h264",
+                    "avg_frame_rate": "16/1",
+                    "nb_frames": frame_count,
+                }],
+                "format": {"duration": "0.313", "format_name": "mov,mp4,m4a,3gp,3g2,mj2"},
+            }),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    service = evaluator(tmp_path, FakeHost(), delay=0)
+    assert service._validate_wan21_vace_artifact(artifact) == {
+        "width": 256,
+        "height": 256,
+        "video_codec": "h264",
+        "frame_rate": "16/1",
+        "duration_sec": 0.313,
+        "audio_present": False,
+    }
+
+    frame_count = "4"
+    with pytest.raises(ModelOperationError, match="bounds differ"):
+        service._validate_wan21_vace_artifact(artifact)

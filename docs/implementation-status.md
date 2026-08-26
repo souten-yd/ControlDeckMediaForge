@@ -5055,3 +5055,80 @@ SonicForge                 sonicforge-acceptance.service active
 ROCm cleanup               KFD process 0 / R9700 VRAM 59,912,192 bytes
 ControlDeck slice changes  0（既存 frontend/tsconfig.tsbuildinfo 変更1件は保全）
 ```
+
+## G7 V1g — Wan 2.1 VACE 1.3B bounded I2V evaluation（2026-08-26）
+
+exact snapshot `Wan-AI/Wan2.1-VACE-1.3B-diffusers@ec4d2cb062b548996b179d493fdd05340de702a1`
+を `/data1tb/mediaforge-g7-wan21-vace/hf` へ取得した。27 files / 19,043,130,596 bytes、incomplete
+0件。8 inference LFS objects / 19,036,896,776 bytes は全件でsize/SHA-256が一致し、aggregate identityは
+`sha256:2c488c292438aaa2914e96dea0b8cb929eda504adfb6bb583f721ea63d1be315`。
+
+pinned Diffusers snapshotにLICENSE/NOTICEはない。official original VACE
+`@574e6a744642ce3bee319afc31496b88bde8aac4` の `LICENSE.txt` は11,357 bytes、SHA-256
+`c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`でApache License 2.0本文。
+これをDiffusers snapshot内への同梱証拠とは扱わない。
+
+exact local snapshot/offline-only、内部生成first-frame/mask、固定prompt/seed/preset、BF16 transformer、
+FP32 VAE、model CPU offload、VAE slicing/tiling、PyTorch SDPA、silent H.264 MP4のprivate runnerと、
+complete-snapshot-onlyのHost Job/Broker evaluatorを実装した。通常routing/recommended profileは変えない。
+
+最初のload smokeはDiffusers prompt cleanerの`ftfy`不足を実検出してFAIL。partial output、lease、GPU
+processは残らなかった。専用runtimeへ`ftfy==6.3.1`をpinして再buildし、size 4,691,289,880 bytes、
+`pip check` broken requirements 0、R9700/gfx1201 preflight PASSを確認した。
+
+installed v0.9.0を一時停止し、branch coreを同じ127.0.0.1:9130/data directoryで実行した。ControlDeck
+code/DB/manifest変更0。Hostの既存`frontend/tsconfig.tsbuildinfo`変更は保全した。
+
+```text
+first operation / Host Job  modelop_1cc631a2db6d4feb8a12797981c23ac8 / 765f6c654597
+Broker request / lease      4e3c79f5-4001-4a6d-b3a4-8d42bc0c7e5d / 234e804e-1c51-48e1-a11a-6966f4cc2b8a
+preset                      256x256 / 5 frames / 1 step / 16fps / offline
+core / runner / generate    264.045 / 260.206 / 258.718 sec
+peak VRAM / delta           15,692,148,736 / 15,632,236,544 B
+peak RSS / process swap     22,964,568,064 / 0 B
+system swap page delta      in 2,890 / out 24,510
+output / SHA-256            12,745 B / f216c929e95fde9aec4e99a7c10c1ef1061d9f934f232d64435db65244765077
+Broker lifecycle            granted / active / renew 26 / released
+```
+
+lease release後、Qwen3.8-27B llama.cppが約30.3GB VRAM residentの状態で再要求するとoperation
+`modelop_04311ee8578b4b3590997067b713ffae` / Host Job `762746655151` / request
+`51e03af2-b510-4d17-b9b2-52c866b88554` は `insufficient_capacity`。worker未起動・直接競合なしで
+Broker fail-closed **PASS**。実LLMを停止せず、最終利用12:22:43からControlDeckの30-minute policyを
+待ち、12:53:19の自然解放後にだけ再実行した。
+
+```text
+optimized operation / Job   modelop_0c6d098f7b5e4b0981faea6206ae8c89 / 5dadb1a12ac9
+Broker request / lease      58a6b7e6-0a84-42c3-afc2-da05767dce81 / 956e199a-e74f-4abc-b42a-35d6f35c55e2
+bound                       max_sequence_length=128
+core / runner / generate    234.486 / 213.310 / 209.625 sec（denoise 136.06 sec）
+peak VRAM / delta           15,686,881,280 / 15,626,969,088 B
+peak RSS / process swap     20,991,193,088 / 3,891,077,120 B
+system swap page delta      in 965,924 / out 1,066,354
+output / SHA-256            14,494 B / 9a5bebd61075b14d854d232d6fd1bb3f2590c180330faf3aeaff242246fdac4e
+artifact                    H.264 / 256x256 / 16fps / 5 frames / 0.3125 sec
+Broker lifecycle            granted / active / renew 22 / released
+```
+
+frame 0/2/4はblue panel、orange body、arms、wheels、green fieldとlocked compositionを保持し、smoke
+subject stabilityは **PASS**。ただし1-step/5-frameで234.486秒、3.89GB process swap、100万超の
+system swap-out pagesとなりlatency/RAM gateは **FAIL**。512x320 / 33 frames / 30 steps candidateは
+採用判定を変えずswapを悪化させるため実行しない。
+
+判定: ROCm/offline boundary、Host Job/Broker lifecycle、artifact bounds、LLM優先coexistenceは
+**PASS**。candidate quality、repeat、cancel、公開Asset/provenanceは **NOT TESTED**。VACEはexternal /
+experimental / low-confidence / recommended profile 0のまま **DEFERRED**、G7 V2へ昇格しない。
+再開条件はprocess/system swap 0を実測できる保守可能なoffload/RAM改善または別I2V候補。T2V 1.3B
+weights/partial snapshotは0を維持する。
+
+最終 gate:
+
+```text
+focused                    32 passed / 1 warning
+full                       711 passed / 1 warning / 48.38 sec
+compileall / diff check    PASS / PASS
+installed /health          healthy / contract 2.0 / Media Forge v0.9.0
+services                   Media Forge / ControlDeck / SonicForge active
+ROCm cleanup               VACE/KFD process 0 / R9700 VRAM 59,912,192 B
+ControlDeck slice changes  0（既存 frontend/tsconfig.tsbuildinfo 変更1件は保全）
+```

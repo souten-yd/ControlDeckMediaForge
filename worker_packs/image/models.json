@@ -876,7 +876,8 @@
         "video.video_to_video"
       ],
       "hardware_backends": [
-        "cuda"
+        "cuda",
+        "rocm"
       ],
       "state": "experimental",
       "measurement_confidence": "low",

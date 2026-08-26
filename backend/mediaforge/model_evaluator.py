@@ -73,6 +73,13 @@ COGVIDEOX2B_ESTIMATED_RUNTIME_SEC = 3600.0
 COGVIDEOX2B_EXECUTION_PEAK_BYTES = 30_700_000_000
 COGVIDEOX2B_COLD_LOAD_PEAK_BYTES = 32_000_000_000
 COGVIDEOX2B_HEADROOM_BYTES = 1024 * 1024 * 1024
+WAN21_VACE_MODEL_ID = "Wan-AI/Wan2.1-VACE-1.3B-diffusers"
+WAN21_VACE_RUNTIME_ADAPTER = "diffusers.wan2.1-vace"
+WAN21_VACE_MODEL_REVISION = "ec4d2cb062b548996b179d493fdd05340de702a1"
+WAN21_VACE_ESTIMATED_RUNTIME_SEC = 3600.0
+WAN21_VACE_EXECUTION_PEAK_BYTES = 30_700_000_000
+WAN21_VACE_COLD_LOAD_PEAK_BYTES = 32_000_000_000
+WAN21_VACE_HEADROOM_BYTES = 1024 * 1024 * 1024
 logger = logging.getLogger("uvicorn.error")
 
 
@@ -109,6 +116,9 @@ class H3ModelEvaluator:
         cogvideox2b_runtime_python: Path | None = None,
         cogvideox2b_snapshot_root: Path | None = None,
         cogvideox2b_evaluation_preset: str = "smoke",
+        wan21_vace_runtime_python: Path | None = None,
+        wan21_vace_snapshot_root: Path | None = None,
+        wan21_vace_evaluation_preset: str = "smoke",
         lease_renew_sec: float,
         timeout_sec: float,
         command_builder: Callable[[ModelDescriptor, Path, Path], list[str]] | None = None,
@@ -157,6 +167,16 @@ class H3ModelEvaluator:
         if cogvideox2b_evaluation_preset not in {"smoke", "official-clip"}:
             raise ValueError("CogVideoX-2B evaluation preset is invalid")
         self.cogvideox2b_evaluation_preset = cogvideox2b_evaluation_preset
+        self.wan21_vace_runtime_python = (
+            Path(os.path.abspath(wan21_vace_runtime_python))
+            if wan21_vace_runtime_python is not None else None
+        )
+        self.wan21_vace_snapshot_root = (
+            wan21_vace_snapshot_root.resolve() if wan21_vace_snapshot_root is not None else None
+        )
+        if wan21_vace_evaluation_preset not in {"smoke", "candidate-clip", "official-clip"}:
+            raise ValueError("Wan 2.1 VACE evaluation preset is invalid")
+        self.wan21_vace_evaluation_preset = wan21_vace_evaluation_preset
         self.output_root = (store.data_dir / "model-evaluations").resolve()
         self.lease_renew_sec = lease_renew_sec
         self.timeout_sec = timeout_sec
@@ -221,6 +241,12 @@ class H3ModelEvaluator:
             found.append(HUNYUAN_MODEL_ID)
         except (ModelOperationError, OSError):
             pass
+        try:
+            model = self._model(WAN21_VACE_MODEL_ID)
+            self._preflight(model)
+            found.append(WAN21_VACE_MODEL_ID)
+        except (ModelOperationError, OSError):
+            pass
         for model in self._image_candidates():
             found.append(model.model_id)
         return found
@@ -250,7 +276,9 @@ class H3ModelEvaluator:
         missing = {"jobs.write", "resources.acquire"} - identity.granted_capabilities
         if missing:
             raise ModelOperationError("host_capability_not_granted", "Host evaluation capabilities are unavailable")
-        if model_id not in {H3_MODEL_ID, WAN_MODEL_ID, HUNYUAN_MODEL_ID, COGVIDEOX2B_MODEL_ID} and model_id not in {
+        if model_id not in {
+            H3_MODEL_ID, WAN_MODEL_ID, HUNYUAN_MODEL_ID, COGVIDEOX2B_MODEL_ID, WAN21_VACE_MODEL_ID
+        } and model_id not in {
             model.model_id for model in self._image_candidates()
         }:
             raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
@@ -360,7 +388,7 @@ class H3ModelEvaluator:
                 output_dir = contained(self.output_root, self.output_root / operation_id)
                 output_dir.mkdir(mode=0o700)
                 suffix = ".mp4" if model.model_id in {
-                    WAN_MODEL_ID, HUNYUAN_MODEL_ID, COGVIDEOX2B_MODEL_ID
+                    WAN_MODEL_ID, HUNYUAN_MODEL_ID, COGVIDEOX2B_MODEL_ID, WAN21_VACE_MODEL_ID
                 } else ".webm"
                 output_path = contained(output_dir, output_dir / f"smoke{suffix}")
                 log_path = contained(output_dir, output_dir / "runtime.log")
@@ -411,6 +439,8 @@ class H3ModelEvaluator:
                     validator = self._validate_hunyuan_artifact
                 elif model.model_id == COGVIDEOX2B_MODEL_ID and not self._custom_artifact_validator:
                     validator = self._validate_cogvideox2b_artifact
+                elif model.model_id == WAN21_VACE_MODEL_ID and not self._custom_artifact_validator:
+                    validator = self._validate_wan21_vace_artifact
                 else:
                     validator = self.artifact_validator
                 media = await asyncio.to_thread(validator, output_path)
@@ -661,6 +691,9 @@ class H3ModelEvaluator:
         if model.model_id == COGVIDEOX2B_MODEL_ID:
             self._cogvideox2b_preflight(model)
             return
+        if model.model_id == WAN21_VACE_MODEL_ID:
+            self._wan21_vace_preflight(model)
+            return
         if model.model_id != H3_MODEL_ID or model.runtime_adapter != H3_RUNTIME_ADAPTER:
             raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
         if not model.installed or model.local_path is None:
@@ -715,6 +748,18 @@ class H3ModelEvaluator:
                 "--work-root", str(self.output_root),
                 "--output", str(output_path),
                 "--preset", self.cogvideox2b_evaluation_preset,
+            ]
+        if model.model_id == WAN21_VACE_MODEL_ID:
+            assert self.wan21_vace_runtime_python is not None
+            assert self.wan21_vace_snapshot_root is not None
+            return [
+                str(self.wan21_vace_runtime_python),
+                str(REPOSITORY_ROOT / "worker_packs/video/wan21_vace_probe.py"),
+                "run",
+                "--snapshot", str(self.wan21_vace_snapshot_root),
+                "--work-root", str(self.output_root),
+                "--output", str(output_path),
+                "--preset", self.wan21_vace_evaluation_preset,
             ]
         assert model.local_path is not None
         snapshot = model.local_path
@@ -785,6 +830,12 @@ class H3ModelEvaluator:
             cold_peak = COGVIDEOX2B_COLD_LOAD_PEAK_BYTES
             headroom = COGVIDEOX2B_HEADROOM_BYTES
             runtime = COGVIDEOX2B_ESTIMATED_RUNTIME_SEC
+            confidence = "low"
+        elif model.model_id == WAN21_VACE_MODEL_ID:
+            execution_peak = WAN21_VACE_EXECUTION_PEAK_BYTES
+            cold_peak = WAN21_VACE_COLD_LOAD_PEAK_BYTES
+            headroom = WAN21_VACE_HEADROOM_BYTES
+            runtime = WAN21_VACE_ESTIMATED_RUNTIME_SEC
             confidence = "low"
         else:
             execution_peak = H3_EXECUTION_PEAK_BYTES
@@ -869,6 +920,8 @@ class H3ModelEvaluator:
                 if model and model.model_id == HUNYUAN_MODEL_ID
                 else f"cogvideox2b_{self.cogvideox2b_evaluation_preset}"
                 if model and model.model_id == COGVIDEOX2B_MODEL_ID
+                else f"wan21_vace_{self.wan21_vace_evaluation_preset}"
+                if model and model.model_id == WAN21_VACE_MODEL_ID
                 else H3_EVALUATION_PRESET
             ),
             "runtime_commit": (
@@ -878,6 +931,8 @@ class H3ModelEvaluator:
                 if model and model.model_id == HUNYUAN_MODEL_ID
                 else COGVIDEOX2B_MODEL_REVISION
                 if model and model.model_id == COGVIDEOX2B_MODEL_ID
+                else WAN21_VACE_MODEL_REVISION
+                if model and model.model_id == WAN21_VACE_MODEL_ID
                 else H3_RUNTIME_COMMIT
             ),
             "elapsed_sec": round(time.monotonic() - metrics.started_at, 3),
@@ -1001,6 +1056,28 @@ class H3ModelEvaluator:
         media.pop("frame_count")
         return media
 
+    def _validate_wan21_vace_artifact(self, path: Path) -> dict[str, Any]:
+        expected = {
+            "smoke": (256, 256, 5),
+            "candidate-clip": (512, 320, 33),
+            "official-clip": (832, 480, 81),
+        }[self.wan21_vace_evaluation_preset]
+        media = self._validate_silent_mp4(
+            path,
+            label="Wan 2.1 VACE",
+            expected_fps="16/1",
+        )
+        if (
+            media["width"] != expected[0]
+            or media["height"] != expected[1]
+            or media["frame_count"] != expected[2]
+        ):
+            raise ModelOperationError(
+                "model_evaluation_invalid_output", "Wan 2.1 VACE video bounds differ"
+            )
+        media.pop("frame_count")
+        return media
+
     @staticmethod
     def _validate_silent_mp4(
         path: Path,
@@ -1080,6 +1157,39 @@ class H3ModelEvaluator:
             raise ModelOperationError("model_verify_failed", "CogVideoX-2B model index is unreadable") from exc
         if value.get("_class_name") != "CogVideoXPipeline":
             raise ModelOperationError("model_verify_failed", "CogVideoX-2B pipeline differs")
+
+    def _wan21_vace_preflight(self, model: ModelDescriptor) -> None:
+        if (
+            model.runtime_adapter != WAN21_VACE_RUNTIME_ADAPTER
+            or model.revision != WAN21_VACE_MODEL_REVISION
+        ):
+            raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
+        if self.wan21_vace_runtime_python is None or not self.wan21_vace_runtime_python.is_file():
+            raise ModelOperationError("model_runtime_unavailable", "pinned Wan VACE runtime is unavailable")
+        snapshot = self.wan21_vace_snapshot_root
+        if snapshot is None or not snapshot.is_dir():
+            raise ModelOperationError("model_not_found", "pinned Wan VACE snapshot is unavailable")
+        if snapshot.name != WAN21_VACE_MODEL_REVISION or snapshot.parent.name != "snapshots":
+            raise ModelOperationError("model_verify_failed", "Wan VACE snapshot revision differs")
+        try:
+            repository = snapshot.parent.parent.resolve(strict=True)
+            model_index = (snapshot / "model_index.json").resolve(strict=True)
+            required = [
+                (snapshot / relative).resolve(strict=True)
+                for relative in (*model.required_files, *(weight.path for weight in model.weights))
+            ]
+        except OSError as exc:
+            raise ModelOperationError("model_verify_failed", "Wan VACE snapshot is incomplete") from exc
+        if not model_index.is_file() or model_index.stat().st_size > 64 * 1024:
+            raise ModelOperationError("model_verify_failed", "Wan VACE model index is invalid")
+        if any(not item.is_file() or not item.is_relative_to(repository) for item in required):
+            raise ModelOperationError("model_verify_failed", "Wan VACE snapshot is incomplete")
+        try:
+            value = json.loads(model_index.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ModelOperationError("model_verify_failed", "Wan VACE model index is unreadable") from exc
+        if value.get("_class_name") != "WanVACEPipeline":
+            raise ModelOperationError("model_verify_failed", "Wan VACE pipeline differs")
 
     def _validate_wan_artifact(self, path: Path) -> dict[str, Any]:
         if not path.is_file() or path.stat().st_size <= 0:

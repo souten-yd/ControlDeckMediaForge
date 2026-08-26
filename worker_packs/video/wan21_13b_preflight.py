@@ -20,6 +20,7 @@ VACE_WEIGHT_BYTES = 19_036_896_776
 
 def main() -> None:
     import diffusers
+    import ftfy
     import torch
     import transformers
     from diffusers import (
@@ -49,6 +50,7 @@ def main() -> None:
                 "hip": torch.version.hip,
                 "diffusers": diffusers.__version__,
                 "transformers": transformers.__version__,
+                "ftfy": ftfy.__version__,
                 "gpu": torch.cuda.get_device_name(0),
                 "architecture": architecture,
                 "attention": "pytorch_sdpa",

@@ -201,6 +201,43 @@ recommended profile 0 のままにする。
 applicable notice を bundle へ含める。次の slice は小さい VACE を先に download/hash/load し、I2V
 adoption gate を評価する。PASS した場合だけ T2V 1.3B の実測へ進む。
 
+### 2.6 Wan 2.1 VACE 1.3B bounded I2V evaluation（2026-08-26）
+
+VACE exact snapshot 27 files / 19,043,130,596 bytes を revision `ec4d2cb0` へ固定し、8 inference
+LFS objects / 19,036,896,776 bytes の size と SHA-256 を全件照合した。runner は repository ID や
+外部画像 path を受けず、内部生成した first-frame と mask、固定 prompt / seed / preset だけを使う。
+`local_files_only=True` と offline env、BF16 transformer、FP32 VAE、model CPU offload、VAE
+slicing/tiling、PyTorch SDPA を強制する。
+
+最初の model-load smoke は Diffusers prompt cleaner の runtime dependency `ftfy` 不足を実検出して
+FAIL。専用 runtime へ `ftfy==6.3.1` を pin し、preflight に import/version assertion を追加した。
+再実行した 256x256 / 5 frames / 1 step smoke は real Host Job / Broker lease 経由で完了した。
+
+```text
+runner elapsed / generate  260.206 / 258.718 sec
+peak VRAM / delta          15,692,148,736 / 15,632,236,544 bytes
+peak RSS / process swap    22,964,568,064 / 0 bytes
+system swap page delta     in 2,890 / out 24,510
+artifact                   H.264 / 16fps / 5 frames / 12,745 bytes
+SHA-256                     f216c929e95fde9aec4e99a7c10c1ef1061d9f934f232d64435db65244765077
+```
+
+frame 0/2/4 は robot body、panel、ground と大まかな構図を保持したが、1-step smoke は品質証拠では
+ない。短い prompt に対する既定512-token paddingを避けるため、runnerを固定
+`max_sequence_length=128`へ限定して再測定した。234.486秒へ29.559秒短縮した一方、peak process
+swapは3,891,077,120 bytes、system swap page deltaはin 965,924 / out 1,066,354へ悪化した。
+
+このためcandidate profile 512x320 / 33 frames / 30 stepsは実行しない。1-step、5-frameでもhost RAM /
+offload lifecycleが実用gateを明確に落としており、長いquality runはマシンをさらにswapさせるだけで採用
+判定を変えない。VACEはexternal / experimental / low-confidence / recommended profile 0のまま
+**DEFERRED**。再開条件はprocess/system swap 0を実測できる保守可能なCPU offload/RAM改善、または
+同じI2V gateを満たす別候補である。
+
+SonicForge/LLM coexistence は Broker だけで調停する。smoke lease release後に約30.3GB VRAMを使う
+llama.cppがresidentになった状態で同一要求を送ると、Brokerはworker起動前に
+`insufficient_capacity`で拒否した。実推論中またはresidency保持中のLLMをMedia Forgeから停止せず、
+idle policyによる解放後にだけ再実行する。
+
 ## 3. V2 — execution
 
 private runtime adapter が raw frames/video を job root に書き、V0 の FFmpeg stage が公開 asset
