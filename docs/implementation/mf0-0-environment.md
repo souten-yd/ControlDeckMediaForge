@@ -293,6 +293,8 @@ mf.sh doctor           環境診断。何が足りないかを一覧表示。変
 mf.sh env build <name> runtime を明示構築
 mf.sh env list         core / runtime の一覧、サイズ、.refs、stamp 状態
 mf.sh env prune        参照ゼロの runtime を確認付きで削除
+mf.sh blender build    pinned Blender portable runtimeを明示構築
+mf.sh blender status   Blender version/glTF preflightを読み取り専用で確認
 mf.sh test             テスト実行
 ```
 

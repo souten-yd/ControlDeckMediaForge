@@ -69,6 +69,20 @@ Python APIのlicense条件に従い、`worker_packs/blender/` にcoreと分離�
 upstream attributionを置く。生成した利用者assetへGPLを転嫁したと記録しない。配布物へBlenderを
 含める判断は、対応sourceとthird-party noticeを揃える別release sliceまで行わない。
 
+### 2.3 B0 result（2026-08-26）
+
+`config/blender-runtime.json`、`scripts/blender_runtime.py`、`./mf.sh blender build/status` とtrusted
+`worker_packs/blender/preflight.py`を実装した。archiveはexact size/hash、member root、link target、
+device/FIFO、member count、展開sizeを検査してからdata filterでstagingへ展開し、実preflight成功後だけ
+atomic installする。runtime rootはrepositoryの`runtimes/`配下へ限定した。
+
+実archiveはSHA-256一致、6,510 members / 1,168,332,002 extracted bytes。実Blender 4.5.9 / embedded
+Python 3.11.11 / background / glTF import/exportがPASSした。runtime総量は1,546,263,669 bytes。
+`status`とready後のidempotent `build`はいずれも0.21秒で、後者は`reused=true`。Blender binaryは
+release bundleへ入れず、GPL worker境界を別directoryへ分離した。
+
+B1以降のGLB import、compile、asset、preview、cancel、installed browserは **NOT TESTED**。
+
 ### 2.2 fixed subprocess
 
 coreはBlender moduleをimportしない。呼べるcommandは次の固定形だけとする。
