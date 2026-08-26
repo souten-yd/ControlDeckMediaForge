@@ -181,9 +181,12 @@ and all eight inference LFS objects passed size and SHA-256 verification. Its
 first offline R9700 smoke completed through a real Host Job and Broker lease at
 256x256, 5 frames, and 1 step. It took 260.206 seconds inside the runner, peaked
 at 15,692,148,736 bytes VRAM and 22,964,568,064 bytes process RSS, and retained
-zero process swap, but caused system swap activity. This proves the ROCm backend
-and boundary lifecycle only; candidate-profile quality, latency, memory,
-determinism, and cancellation remain **NOT TESTED**. Both entries remain
+zero process swap, but caused system swap activity. A fixed 128-token rerun took
+234.486 seconds end-to-end and peaked at 15,686,881,280 bytes VRAM and
+20,991,193,088 bytes process RSS, but incurred 3,891,077,120 bytes process swap
+and over one million system swap-out pages. This proves the ROCm backend and
+boundary lifecycle but fails the practical latency/RAM gate. Candidate-profile
+quality, determinism, and cancellation remain **NOT TESTED**. Both entries remain
 external, experimental, low-confidence, and unroutable.
 
 Both model cards declare Apache-2.0, but neither pinned Diffusers snapshot

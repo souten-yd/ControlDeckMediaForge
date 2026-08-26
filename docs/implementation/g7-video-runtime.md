@@ -224,9 +224,14 @@ SHA-256                     f216c929e95fde9aec4e99a7c10c1ef1061d9f934f232d64435d
 
 frame 0/2/4 は robot body、panel、ground と大まかな構図を保持したが、1-step smoke は品質証拠では
 ない。短い prompt に対する既定512-token paddingを避けるため、runnerを固定
-`max_sequence_length=128`へ限定して再測定する。candidate profileは 512x320 / 33 frames / 30 steps。
-smokeのsystem swapまたはlatencyが実用gateを外れたままなら、candidateを無理に実行せず理由と再開
-条件を記録して延期する。
+`max_sequence_length=128`へ限定して再測定した。234.486秒へ29.559秒短縮した一方、peak process
+swapは3,891,077,120 bytes、system swap page deltaはin 965,924 / out 1,066,354へ悪化した。
+
+このためcandidate profile 512x320 / 33 frames / 30 stepsは実行しない。1-step、5-frameでもhost RAM /
+offload lifecycleが実用gateを明確に落としており、長いquality runはマシンをさらにswapさせるだけで採用
+判定を変えない。VACEはexternal / experimental / low-confidence / recommended profile 0のまま
+**DEFERRED**。再開条件はprocess/system swap 0を実測できる保守可能なCPU offload/RAM改善、または
+同じI2V gateを満たす別候補である。
 
 SonicForge/LLM coexistence は Broker だけで調停する。smoke lease release後に約30.3GB VRAMを使う
 llama.cppがresidentになった状態で同一要求を送ると、Brokerはworker起動前に

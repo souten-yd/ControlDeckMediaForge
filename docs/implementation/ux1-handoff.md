@@ -9,11 +9,11 @@
 最終更新    2026-08-26
 branch      ux1/wan21-vace-evaluation（origin/main 245a5e2 から作成）
 slice       G7 V1g Wan 2.1 VACE 1.3B I2V evaluation
-状態        exact snapshot/hashと初回Broker smoke完了、128-token最適化後smoke待ち
-baseline    focused 32 passed / 1 warning、full 711 passed / 2 warnings / 49.27s
-installed   一時停止中 / branch coreが127.0.0.1:9130でhealthy / contract 2.0
-GPU         Qwen3.8-27Bを優先してresident保持中 / VACE worker 0
-PR          Media Forge #125 merged / V1g PR未作成
+状態        VACE実測完了 / latency・RAM/swap gate FAIL / adoption DEFERRED
+baseline    focused 32 passed / 1 warning、full 711 passed / 1 warning / 48.38s
+installed   Media Forge v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
+GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
+PR          Media Forge #126 draft / head bd259e7（final docs commit前）
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -36,10 +36,12 @@ PASS       optional settings / complete-snapshot-only visibility / Broker envelo
 PASS       real Host Job/Broker grant/activate/renew/release / H.264 artifact
 PASS       R9700 smoke 256x256 / 5 frames / 1 step / process swap 0
 PASS       LLM resident時のinsufficient_capacity / worker未起動 / direct競合なし
-FAIL       smoke 260.206s / system swap in 2,890・out 24,510 pages
+FAIL       first smoke 260.206s / system swap in 2,890・out 24,510 pages
+FAIL       128-token smoke 234.486s / process swap 3,891,077,120 B
+FAIL       optimized system swap in 965,924・out 1,066,354 pages
 PASS       focused 32 tests / full 711 tests / diff check
-NOT TESTED 128-token最適化後smoke / candidate quality / cancel / determinism
-DEFERRED   production adoption / G7 V2 promotion
+NOT TESTED candidate quality / cancel / determinism / public Asset/provenance
+DEFERRED   VACE production adoption / candidate profile / G7 V2 promotion
 ```
 
 通常の video capability/routing state は変更していない。両 candidate は catalog で external /
@@ -48,9 +50,9 @@ DEFERRED   production adoption / G7 V2 promotion
 ## 次にやること（1つだけ）
 
 ```text
-1. 実LLMを止めずidle policyの自然解放を待ち、128-token smokeを再測定する
-2. latency/system swap gateを満たした場合だけBroker経由candidate I2Vを実測する
-3. adoption gate判定・docs/full test・PR merge後だけT2V 1.3Bへ進む
+1. V1g final docsをcommit/pushし、PR #126をready化してexact-head mergeする
+2. VACEはprocess/system swap 0を実測できる保守可能なoffload/RAM改善まで再実行しない
+3. merge後に次のG7候補を別sliceで選ぶ。T2V 1.3B downloadはVACE FAILを踏まえ再判断する
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South
@@ -61,14 +63,15 @@ Korea を除く Territory、acceptable-use、distribution/notice、第三者提�
 
 ```text
 ControlDeck slice code/DB/manifest変更0。既存`frontend/tsconfig.tsbuildinfo`変更1件は保全。Hostはread-only。
-installed v0.9.0 service は一時停止中。評価用branch coreは127.0.0.1:9130で起動中。
+評価用branch coreは正常停止。installed v0.9.0 serviceを復元し、実`/health`はhealthy / contract 2.0。
 Cog runtime/snapshot/evidenceは `/data1tb/mediaforge-g7-cogvideox2b` に外部保持。
 Hunyuan weight/snapshot/partial download は0。dedicated runtimeだけ外部構築済み。
 Wan runtime/model は移動・削除しない。
 Wan VACE downloadは `/data1tb/mediaforge-g7-wan21-vace/hf` に外部保持し、partialを消さない。
 Wan T2V 1.3B weights/partial snapshotは0。runtimeはrepo内ignored `.venv`へ構築済み。
-SonicForge は `sonicforge-acceptance.service` でactive。Qwen3.8-27B llama.cppも実利用後のresidencyを
-保持中。どちらもMedia Forgeから停止せず、競合時は Broker を唯一の調停経路にする。
+SonicForge は `sonicforge-acceptance.service` でactive。Qwen3.8-27B llama.cppは実利用を優先して
+停止せず、ControlDeck idle policyにより12:53:19に自然解放された。競合時は Broker を唯一の調停
+経路にする。
 ```
 
 ## 参照
