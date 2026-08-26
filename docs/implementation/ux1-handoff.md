@@ -13,7 +13,7 @@ slice       G7 V1e CogVideoX-2B Apache fallback evaluation
 baseline    focused 33 passed、full 700 passed / 1 warning / 49.15s
 installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy
 GPU         quality run後 KFD process 0 / R9700 baseline 59,912,192 B
-PR          未作成
+PR          Media Forge #124 open / exact head・CI・mergeability確認中
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -45,7 +45,7 @@ DEFERRED   CogVideoX-2B production adoption / G7 V2 promotion
 ## 次にやること（1つだけ）
 
 ```text
-1. 最終 full gate、status/handoff、commit/push、V1e PR、exact head/CI、merge を完了する
+1. V1e PR #124 の exact head/CI/mergeabilityを確認してmergeする
 2. action adherence / zero system-swap / shorter latency を満たす次の Apache系 T2V候補を選ぶ
 3. T2Vとは別にI2V候補を固定し、両方のadoption gate通過後だけG7 V2へ進む
 ```
