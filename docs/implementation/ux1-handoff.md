@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g8-b2-handoff（origin/main 84a231e から作成）
-slice       G8 B2 handoff close / B3 preparation
-状態        B0-B2 merged / B3未着手
-baseline    focused B2 5 passed / full 736 passed / 1 warning / 48.34s
+branch      ux1/g8-typed-options（origin/main 90ded9b から作成）
+slice       G8 B3 typed production options
+状態        B0-B2 merged / B3実装・実Blender golden・full gate PASS
+baseline    focused B3 9 passed / full 740 passed / 1 warning / 54.70s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #137 merged / handoff PR未作成
+PR          Media Forge #138 merged / B3 PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -45,13 +45,13 @@ G8 B2 は Media Forge #137、exact head
 ## この slice の結果
 
 ```text
-PASS       fixed trusted Blender 4.5.9 process / software Workbench
-PASS       GLB+preview+ZIP 2 process byte identity / assertion緩和0
-PASS       ZIP 3 entries / fixed order・timestamp・permission・compression
-PASS       real Job API 2 runs succeeded / same ZIP hash
-PASS       Asset/provenance/manifest / work 0 / Blender child 0
-PASS       arbitrary option/script/path 0 / failure・cancel partial asset 0
-NOT TESTED real cancel/timeout / installed Host Job / browser/agent/grant / B3〜B5
+PASS       3d.compile-options@1 exact typed boundary / unknown field reject
+PASS       material cube all options / 2 process GLB+preview+ZIP identity
+PASS       LOD 12→6 / box collision 12 / basic_pbr changed 1
+PASS       merge+degenerate+normal repair 4→3 vertices / 2→1 triangles
+PASS       convex hull 8 vertices / 12 triangles
+PASS       measured 200,978→199,999 triangle budget / 2 process identity
+NOT TESTED installed Host/browser/agent options / real cancel/timeout / rig+animation / B4〜B5
 ```
 
 通常の video capability/routing state は変更していない。両 candidate は catalog で external /
@@ -60,8 +60,8 @@ NOT TESTED real cancel/timeout / installed Host Job / browser/agent/grant / B3�
 ## 次にやること（1つだけ）
 
 ```text
-1. G8 B3 typed production optionsを実装する
-2. B3のgolden fixture / error bound / manifest差分を実測する
+1. G8 B3 full gate、PR、merge、handoffを閉じる
+2. G8 B4 workspace / agent / project placementを実装する
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
@@ -79,9 +79,11 @@ Hunyuan weight/snapshot/partial download は0。dedicated runtimeだけ外部構
 Wan runtime/model は移動・削除しない。
 Wan VACE downloadは `/data1tb/mediaforge-g7-wan21-vace/hf` に外部保持し、partialを消さない。
 Wan T2V 1.3B weights/partial snapshotは0。runtimeはrepo内ignored `.venv`へ構築済み。
-SonicForge は `sonicforge-acceptance.service` でactive。Qwen3.8-27B llama.cppは実利用を優先して
-停止せず、ControlDeck idle policyにより12:53:19に自然解放された。競合時は Broker を唯一の調停
-経路にする。
+`sonicforge-acceptance.service` はexternal操作で14:52:03にsuccess停止・transient unit削除済み。
+現在はPID 2116151/2116153の `/tmp/cd-sf-catalog-v010-acceptance/.../sonicforge-core serve`
+が127.0.0.1:9140で稼働し、healthはsetup_required / contract 2.0。Qwen/llama process 0。
+B3はsoftware rendering + GPU visibility空でこのexternal環境を変更していない。競合時は Broker を
+唯一の調停経路にする。
 ```
 
 ## 参照

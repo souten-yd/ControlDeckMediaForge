@@ -48,6 +48,7 @@ from .blender_compile import (
     BlenderCompileCanceled,
     BlenderCompileError,
     compile_project_package,
+    parse_compile_options,
 )
 from .routing import ModelRoute, ModelRouteError, route
 from .host.ai import HostAIGateway, HostAIReleaseResult
@@ -647,12 +648,15 @@ class JobManager:
                     or job.request.model_policy != "auto"
                     or job.request.qa.semantic
                     or job.request.qa.max_regeneration_attempts != 0
-                    or job.request.constraints
                 ):
                     raise WorkerFailure(
                         "unsupported_pack_profile",
-                        "3d.project.glb requires one deterministic ZIP output and no B2 options",
+                        "3d.project.glb requires one deterministic ZIP output with automatic routing",
                     )
+                try:
+                    parse_compile_options(job.request.constraints)
+                except BlenderCompileError as exc:
+                    raise WorkerFailure("invalid_compile_options", str(exc)) from exc
                 if len(job.request.inputs) != 1:
                     raise WorkerFailure("invalid_pack", "3d.project.glb requires exactly one input asset")
                 try:
@@ -875,9 +879,14 @@ class JobManager:
         root.mkdir(mode=0o700)
         source = self.store.get_asset(job.request.inputs[0].asset_id)
         try:
+            options = parse_compile_options(job.request.constraints)
+        except BlenderCompileError as exc:
+            raise WorkerFailure("invalid_compile_options", str(exc)) from exc
+        try:
             package, manifest, validation = await compile_project_package(
                 self.store.asset_path(source.id),
                 root,
+                options=options,
                 cancel_requested=lambda: self.store.cancel_requested(job.id),
             )
         except BlenderCompileCanceled:
@@ -932,7 +941,7 @@ class JobManager:
             seed=0,
             parameters={"profile": job.request.profile, "manifest": manifest},
             reference_asset_hashes={source.id: source.sha256},
-            postprocessing=[str(item) for item in manifest["operations"]],
+            postprocessing=[str(item["id"]) for item in manifest["operations"]],
             validation=validation,
             warnings=[str(item) for item in manifest["warnings"]],
             output_sha256=digest,

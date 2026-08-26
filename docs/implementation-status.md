@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-26
-Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0-B2 complete
+Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0-B2 complete, B3 in progress
 
 G8 planning started on 2026-08-26. The current host has no `blender` executable. The implementation order,
 license/process boundary, GLB-only first import, deterministic compiler/package, typed options, and installed
@@ -5302,3 +5302,52 @@ failure/cancel partial asset 0、trusted commandをPASS。実process cancel/time
 browser/agent/grant、B3 optionは **NOT TESTED**。
 最終gateは `./mf.sh test` が `736 passed, 1 warning in 50.77s`、Python `compileall`、
 `node --check frontend/app.js`、`git diff --check` がPASS。
+
+## G8 B3 — typed production options（2026-08-26）
+
+`constraints.compile_options` にprivate versioned `3d.compile-options@1` を追加した。Pydanticとtrusted
+Blender workerの両方がexact fields/type/boundsを検査し、unknown field、`apply_transforms=false`、
+非降順LOD、budget 12未満、任意operator/script/pathをrejectする。compile optionを省略した
+B2 requestは既存の固定defaultと同じ。
+
+```text
+apply_transforms       true固定
+repair_normals         bool
+remove_degenerate      bool
+merge_by_distance_m    null or 0.0000001..1.0
+triangle_budget        null or 12..200,000
+lod_ratios             0..3件 / 0.05..0.95 / strict descending
+collision              none / box / convex_hull
+materials              preserve / basic_pbr
+preview                fixed_workbench固定
+```
+
+workerはmesh edit、triangle budget、material単純化、LOD mesh、collision proxyを明示option時だけ
+実行し、manifestの固定10 operationそれぞれに `parameters/results/warnings` を保存する。
+コード生成material cubeで全optionを別process 2回実行し、base 12 triangles、LOD 6、box
+collision 12、material changed 1、最終scene 30 triangles / 21 vertices / 3 meshes。hashは次の3件で
+byte-identical。
+
+```text
+asset.glb    908d3fb060e268c9b1321aca2eb7e476b91cad4d27b4e59aba2b6a15155ba48e
+preview.png  3832e4195bf68fb6a8af843102e3ac48319a345177028699b921b7c78292411a
+ZIP          e2b9994cde08796f5d51b7f057c7be832cb2ea4b3f3632f8a4e79cece987e3f2
+```
+
+repair fixtureはmerge 1e-6 m + degenerate removal + normal repairで4→3 vertices、2→1 triangles、warning 0。
+cube convex hullは8 vertices / 12 triangles。triangle budget上限はコード生成3,625,792 B gridで
+推測でなく測定した。200,978→199,999 triangles、別process 2回は2.09 / 2.03 sec、max RSS
+880,552 / 887,708 KiB、GLB SHA
+`d19346f5f044dc9eca525d75958264ae53bea7b8a937e89a896a87b46a20e853`、ZIP SHA
+`f98ef70872f2dd40983016f62b5b5b43a57b41f0592f845a4f806be6d128c99b`で完全一致。
+
+focused B3/schema/job testsは9件PASS。実installed Host/browser/agentのoption入力、real cancel/timeout、
+rig/animation付きassetは **NOT TESTED**。
+最終gateは `./mf.sh test` が `740 passed, 1 warning in 54.70s`、Python `compileall`、
+`node --check frontend/app.js`、`git diff --check` がPASS。
+
+B3はsoftware rendering + GPU visibility空で実行し、Qwen/llama processには触れていない。最終確認時、
+先行していたtransient `sonicforge-acceptance.service` は14:52:03にexternal操作でsuccess停止・unit削除済み。
+代わりにPID 2116151/2116153が `/tmp/cd-sf-catalog-v010-acceptance/.../sonicforge-core serve`
+としてport 9140で稼働し、healthは `setup_required` / contract 2.0、Qwen/llama process 0。
+このexternal SonicForge acceptance環境は変更・停止していない。

@@ -13,8 +13,10 @@ import shutil
 import signal
 import tempfile
 from collections.abc import Callable
-from typing import Any
+from typing import Annotated, Any, Literal
 import zipfile
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from . import __version__
 from .config import REPOSITORY_ROOT
@@ -38,8 +40,20 @@ PACKAGE_NAME = "project-ready-glb.zip"
 MAX_PROCESS_OUTPUT_BYTES = 256 * 1024
 PROCESS_TIMEOUT_SEC = 180
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
-COMPILER_VERSION = "1.0.0"
+COMPILER_VERSION = "1.1.0"
 logger = logging.getLogger("uvicorn.error")
+OPERATION_IDS = (
+    "sanitize.scene",
+    "normalize.unit-meters",
+    "edit.mesh",
+    "budget.triangles",
+    "materials.normalize",
+    "lod.generate",
+    "collision.generate",
+    "validate.normals",
+    "export.glb-embedded-y-up",
+    "preview.fixed-workbench",
+)
 
 
 class BlenderCompileError(RuntimeError):
@@ -48,6 +62,49 @@ class BlenderCompileError(RuntimeError):
 
 class BlenderCompileCanceled(BlenderCompileError):
     pass
+
+
+class CompileOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["3d.compile-options@1"]
+    apply_transforms: Literal[True] = True
+    repair_normals: Annotated[bool, Field(strict=True)] = False
+    remove_degenerate: Annotated[bool, Field(strict=True)] = False
+    merge_by_distance_m: Annotated[float, Field(strict=True, ge=0.000_000_1, le=1.0)] | None = None
+    triangle_budget: Annotated[int, Field(strict=True, ge=12, le=200_000)] | None = None
+    lod_ratios: list[Annotated[float, Field(strict=True)]] = Field(default_factory=list, max_length=3)
+    collision: Literal["none", "box", "convex_hull"] = "none"
+    materials: Literal["preserve", "basic_pbr"] = "preserve"
+    preview: Literal["fixed_workbench"] = "fixed_workbench"
+
+    @field_validator("apply_transforms")
+    @classmethod
+    def transforms_are_fixed(cls, value: bool) -> bool:
+        if value is not True:
+            raise ValueError("apply_transforms must remain true")
+        return value
+
+    @field_validator("lod_ratios")
+    @classmethod
+    def bounded_descending_lods(cls, value: list[float]) -> list[float]:
+        if any(isinstance(item, bool) or not 0.05 <= item <= 0.95 for item in value):
+            raise ValueError("lod ratios must be between 0.05 and 0.95")
+        if any(left <= right for left, right in zip(value, value[1:], strict=False)):
+            raise ValueError("lod ratios must be strictly descending")
+        return value
+
+
+def parse_compile_options(constraints: dict[str, Any]) -> CompileOptions:
+    value: object = {"schema_version": "3d.compile-options@1"}
+    if constraints:
+        if set(constraints) != {"compile_options"}:
+            raise BlenderCompileError("3D constraints accept compile_options only")
+        value = constraints["compile_options"]
+    try:
+        return CompileOptions.model_validate(value)
+    except ValidationError as exc:
+        raise BlenderCompileError("3d.compile-options@1 is invalid") from exc
 
 
 async def _read_bounded(stream: asyncio.StreamReader | None, label: str) -> bytes:
@@ -80,7 +137,7 @@ async def _stop_process(process: asyncio.subprocess.Process) -> None:
         await process.wait()
 
 
-def _fixed_request(job_root: Path, source_sha256: str) -> Path:
+def _fixed_request(job_root: Path, source_sha256: str, options: CompileOptions) -> Path:
     request = {
         "schema_version": 1,
         "expected_blender_version": BLENDER_VERSION,
@@ -88,6 +145,7 @@ def _fixed_request(job_root: Path, source_sha256: str) -> Path:
         "output": GLB_NAME,
         "preview": PREVIEW_NAME,
         "source_sha256": source_sha256,
+        "options": options.model_dump(mode="json"),
     }
     path = contained(job_root, job_root / REQUEST_NAME)
     path.write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
@@ -222,7 +280,7 @@ def _zip_entry(archive: zipfile.ZipFile, name: str, content: bytes) -> None:
 def _validated_result(result: dict[str, Any], *, source_sha256: str, glb_sha256: str, preview_sha256: str) -> dict[str, Any]:
     expected_fields = {
         "schema_version", "blender_version", "input_sha256", "output_sha256", "preview_sha256",
-        "statistics", "removed", "warnings",
+        "statistics", "removed", "warnings", "operations",
     }
     if set(result) != expected_fields or result.get("schema_version") != 1:
         raise BlenderCompileError("Blender compiler result fields differ")
@@ -237,7 +295,13 @@ def _validated_result(result: dict[str, Any], *, source_sha256: str, glb_sha256:
     statistics = result.get("statistics")
     removed = result.get("removed")
     warnings = result.get("warnings")
-    if not isinstance(statistics, dict) or not isinstance(removed, dict) or not isinstance(warnings, list):
+    operations = result.get("operations")
+    if (
+        not isinstance(statistics, dict)
+        or not isinstance(removed, dict)
+        or not isinstance(warnings, list)
+        or not isinstance(operations, list)
+    ):
         raise BlenderCompileError("Blender compiler facts are invalid")
     count_fields = {"objects", "meshes", "vertices", "edges", "triangles", "materials", "textures"}
     if set(statistics) != {*count_fields, "bounds_min", "bounds_max"}:
@@ -268,19 +332,34 @@ def _validated_result(result: dict[str, Any], *, source_sha256: str, glb_sha256:
         or any(not isinstance(item, str) or len(item) > 300 for item in warnings)
     ):
         raise BlenderCompileError("Blender compiler warnings are invalid")
+    if (
+        len(operations) != len(OPERATION_IDS)
+        or any(not isinstance(item, dict) for item in operations)
+        or tuple(item.get("id") for item in operations) != OPERATION_IDS
+        or any(set(item) != {"id", "parameters", "results", "warnings"} for item in operations)
+        or any(
+            not isinstance(item["parameters"], dict)
+            or not isinstance(item["results"], dict)
+            or not isinstance(item["warnings"], list)
+            or any(not isinstance(warning, str) or len(warning) > 300 for warning in item["warnings"])
+            for item in operations
+        )
+    ):
+        raise BlenderCompileError("Blender compiler operations are invalid")
     serialized = json.dumps(
-        {"statistics": statistics, "removed": removed, "warnings": warnings},
+        {"statistics": statistics, "removed": removed, "warnings": warnings, "operations": operations},
         allow_nan=False,
     )
     if len(serialized.encode()) > 64 * 1024:
         raise BlenderCompileError("Blender compiler facts exceed their bound")
-    return {"statistics": statistics, "removed": removed, "warnings": warnings}
+    return {"statistics": statistics, "removed": removed, "warnings": warnings, "operations": operations}
 
 
 async def compile_project_package(
     source: Path,
     job_root: Path,
     *,
+    options: CompileOptions | None = None,
     cancel_requested: Callable[[], bool] | None = None,
 ) -> tuple[Path, dict[str, Any], list[dict[str, Any]]]:
     job_root = job_root.resolve()
@@ -293,7 +372,8 @@ async def compile_project_package(
     source_copy.write_bytes(source_content)
     source_copy.chmod(0o600)
     source_sha256 = hashlib.sha256(source_content).hexdigest()
-    request_path = _fixed_request(job_root, source_sha256)
+    options = options or CompileOptions(schema_version="3d.compile-options@1")
+    request_path = _fixed_request(job_root, source_sha256, options)
     result = await _run_blender(job_root, request_path, cancel_requested)
 
     glb_path = contained(job_root, job_root / GLB_NAME)
@@ -331,19 +411,7 @@ async def compile_project_package(
             "sha256": preview_sha256,
         },
         "compiler": {"blender_version": BLENDER_VERSION, "compiler_version": COMPILER_VERSION},
-        "operations": [
-            "remove.camera-light-script-driver-custom-properties",
-            "validate.object-allowlist",
-            "normalize.unit-meters",
-            "validate.finite-transforms",
-            "apply.transforms",
-            "inspect.normals",
-            "purge.orphans",
-            "export.glb-embedded-y-up",
-            "render.preview",
-            "normalize.preview-metadata",
-            "validate.glb-independent",
-        ],
+        "options": options.model_dump(mode="json"),
         **facts,
     }
     manifest_content = json.dumps(

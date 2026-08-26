@@ -379,6 +379,16 @@ exported GLB and PNG are independently revalidated before the immutable ZIP is
 registered. No Blender path, script, operator name, or project path is a public
 input.
 
+The optional private `constraints.compile_options` object is versioned as
+`3d.compile-options@1` and rejects unknown fields. `apply_transforms=true` and
+`preview=fixed_workbench` are fixed. Typed additions are
+`repair_normals`/`remove_degenerate` booleans, merge distance `1e-7..1.0` m,
+triangle budget `12..200000`, up to three strictly descending LOD ratios in
+`0.05..0.95`, collision `none|box|convex_hull`, and materials
+`preserve|basic_pbr`. Every operation records bounded parameters, measured
+results, and warnings in manifest order. Omitting `compile_options` preserves
+the B2 defaults.
+
 ## Contract evolution
 
 G1 froze public schemas, manifest contributions, agent tools, workflow executor
