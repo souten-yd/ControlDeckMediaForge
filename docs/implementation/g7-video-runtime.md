@@ -238,6 +238,22 @@ llama.cppがresidentになった状態で同一要求を送ると、Brokerはwor
 `insufficient_capacity`で拒否した。実推論中またはresidency保持中のLLMをMedia Forgeから停止せず、
 idle policyによる解放後にだけ再実行する。
 
+### 2.7 VACE prompt/model lifecycle follow-up（2026-08-26）
+
+V1gの3.89GB process swapを、公開Diffusers component境界だけで改善できるか比較した。UMT5で固定
+prompt embedsをGPU上に一度生成し、text encoder/tokenizerを破棄してからtransformerへmodel CPU
+offloadを適用すると、同一出力SHAでprocess swap 0、core 118.146 / 111.319秒を再現した。ただし
+system swap-outは5,639 / 1,921 pages残った。
+
+さらにVAE/scheduler/tokenizer/text encoder/transformerをcomponent単位で直列ロードし、text encoderを
+破棄してからtransformerをロードした。最良smokeはcore 110.622秒、peak RSS 10,251,010,048 bytes、
+process swap 0、system swap-out 401 pages。`device_map` direct-GPU loadはpeak RSS 12,437,766,144 bytes、
+swap-out 14,940 pagesへ悪化したため不採用とした。
+
+V1g比でlatency、RSS、process swapは大幅改善したが、要求したzero system-swapは未達。このため
+candidate profileには進まずVACEは **DEFERRED** のまま。直列component lifecycleだけを保守可能な
+private evaluator改善として保持し、再開条件を緩めない。
+
 ## 3. V2 — execution
 
 private runtime adapter が raw frames/video を job root に書き、V0 の FFmpeg stage が公開 asset

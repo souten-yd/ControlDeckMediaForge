@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import gc
 import hashlib
 import json
 import os
@@ -75,7 +76,16 @@ def _offline_environment() -> None:
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
 
-def _load_pipeline(snapshot: Path, torch: Any, vae_type: Any, pipeline_type: Any, scheduler_type: Any) -> Any:
+def _load_pipeline(
+    snapshot: Path,
+    torch: Any,
+    vae_type: Any,
+    pipeline_type: Any,
+    scheduler_type: Any,
+    text_encoder_type: Any,
+    tokenizer_type: Any,
+    transformer_type: Any,
+) -> tuple[Any, Any, Any]:
     vae = vae_type.from_pretrained(
         snapshot,
         subfolder="vae",
@@ -83,18 +93,63 @@ def _load_pipeline(snapshot: Path, torch: Any, vae_type: Any, pipeline_type: Any
         low_cpu_mem_usage=True,
         local_files_only=True,
     )
-    pipeline = pipeline_type.from_pretrained(
+    scheduler = scheduler_type.from_pretrained(
         snapshot,
-        vae=vae,
+        subfolder="scheduler",
+        local_files_only=True,
+    )
+    scheduler = scheduler_type.from_config(scheduler.config, flow_shift=3.0)
+    tokenizer = tokenizer_type.from_pretrained(
+        snapshot,
+        subfolder="tokenizer",
+        local_files_only=True,
+    )
+    text_encoder = text_encoder_type.from_pretrained(
+        snapshot,
+        subfolder="text_encoder",
         dtype=torch.bfloat16,
         low_cpu_mem_usage=True,
         local_files_only=True,
     )
-    pipeline.scheduler = scheduler_type.from_config(pipeline.scheduler.config, flow_shift=3.0)
+    text_encoder.to("cuda:0")
+    prompt_pipeline = pipeline_type(
+        tokenizer=tokenizer,
+        text_encoder=text_encoder,
+        vae=vae,
+        scheduler=scheduler,
+        transformer=None,
+    )
+    prompt_embeds, negative_prompt_embeds = prompt_pipeline.encode_prompt(
+        prompt=PROMPT,
+        negative_prompt=NEGATIVE_PROMPT,
+        do_classifier_free_guidance=True,
+        num_videos_per_prompt=1,
+        max_sequence_length=128,
+        device=torch.device("cuda:0"),
+        dtype=torch.bfloat16,
+    )
+    prompt_pipeline.register_modules(text_encoder=None, tokenizer=None)
+    del prompt_pipeline, text_encoder, tokenizer
+    gc.collect()
+    torch.cuda.empty_cache()
+    transformer = transformer_type.from_pretrained(
+        snapshot,
+        subfolder="transformer",
+        dtype=torch.bfloat16,
+        low_cpu_mem_usage=True,
+        local_files_only=True,
+    )
+    pipeline = pipeline_type(
+        tokenizer=None,
+        text_encoder=None,
+        vae=vae,
+        scheduler=scheduler,
+        transformer=transformer,
+    )
     pipeline.enable_model_cpu_offload(device="cuda:0")
     pipeline.vae.enable_slicing()
     pipeline.vae.enable_tiling()
-    return pipeline
+    return pipeline, prompt_embeds, negative_prompt_embeds
 
 
 def _source_image(preset: ProbePreset) -> Any:
@@ -173,13 +228,19 @@ def _conditioning(preset: ProbePreset) -> tuple[list[Any], list[Any]]:
     return video, mask
 
 
-def _invoke_pipeline(pipeline: Any, torch: Any, preset: ProbePreset) -> Any:
+def _invoke_pipeline(
+    pipeline: Any,
+    torch: Any,
+    preset: ProbePreset,
+    prompt_embeds: Any,
+    negative_prompt_embeds: Any,
+) -> Any:
     video, mask = _conditioning(preset)
     result = pipeline(
         video=video,
         mask=mask,
-        prompt=PROMPT,
-        negative_prompt=NEGATIVE_PROMPT,
+        prompt_embeds=prompt_embeds,
+        negative_prompt_embeds=negative_prompt_embeds,
         width=preset.width,
         height=preset.height,
         num_frames=preset.frames,
@@ -234,8 +295,9 @@ def _sha256(path: Path) -> str:
 def _generate(snapshot: Path, output: Path, preset_name: str) -> dict[str, Any]:
     _offline_environment()
     import torch
-    from diffusers import AutoencoderKLWan, WanVACEPipeline
+    from diffusers import AutoencoderKLWan, WanVACEPipeline, WanVACETransformer3DModel
     from diffusers.schedulers import UniPCMultistepScheduler
+    from transformers import AutoTokenizer, UMT5EncoderModel
 
     if not torch.cuda.is_available() or torch.version.hip is None:
         raise RuntimeError("Wan VACE probe requires ROCm")
@@ -246,10 +308,19 @@ def _generate(snapshot: Path, output: Path, preset_name: str) -> dict[str, Any]:
 
     preset = PRESETS[preset_name]
     started = time.monotonic()
-    pipeline = _load_pipeline(snapshot, torch, AutoencoderKLWan, WanVACEPipeline, UniPCMultistepScheduler)
+    pipeline, prompt_embeds, negative_prompt_embeds = _load_pipeline(
+        snapshot,
+        torch,
+        AutoencoderKLWan,
+        WanVACEPipeline,
+        UniPCMultistepScheduler,
+        UMT5EncoderModel,
+        AutoTokenizer,
+        WanVACETransformer3DModel,
+    )
     loaded_sec = time.monotonic() - started
     generated_started = time.monotonic()
-    frames = _invoke_pipeline(pipeline, torch, preset)
+    frames = _invoke_pipeline(pipeline, torch, preset, prompt_embeds, negative_prompt_embeds)
     generated_sec = time.monotonic() - generated_started
     _encode_frames(frames, output, preset)
     return {
@@ -274,6 +345,7 @@ def _generate(snapshot: Path, output: Path, preset_name: str) -> dict[str, Any]:
         "transformer_dtype": "bfloat16",
         "vae_dtype": "float32",
         "offload": "model_cpu",
+        "text_encoder_lifecycle": "gpu_encode_then_discard",
         "attention": "pytorch_sdpa",
         "network": "offline",
         "conditioning": "first_frame_mask",

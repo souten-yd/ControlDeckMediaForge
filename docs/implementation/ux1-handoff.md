@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/wan21-vace-merge-handoff（origin/main 1bbfbd4 から作成）
-slice       G7 V1g Wan 2.1 VACE 1.3B I2V evaluation
-状態        VACE実測完了 / latency・RAM/swap gate FAIL / adoption DEFERRED
-baseline    focused 32 passed / 1 warning、full 711 passed / 1 warning / 48.38s
-installed   Media Forge v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
+branch      ux1/wan21-vace-prompt-lifecycle（origin/main bc30f53 から作成）
+slice       G7 V1h Wan 2.1 VACE prompt/model lifecycle follow-up
+状態        component直列化でprocess swap 0 / system swap-out 401 pages / DEFERRED維持
+baseline    focused 32 passed / full 711 passed / compileall・diff check PASS
+installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #126 merged / merge commit 1bbfbd43d784a2d03a34eafdc9a189d1c28a5e6b
+PR          Media Forge #127 merged / V1h PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -30,19 +30,14 @@ G7 V1g は Media Forge #126、merge commit
 ## この slice の結果
 
 ```text
-PASS       exact snapshot 27 files / 19,043,130,596 B / 8 LFS size+SHA-256
-PASS       exact revision / local-only snapshot containment / offline runner boundary
-PASS       fixed first-frame+mask conditioning / smoke/candidate/official presets
-PASS       BF16 transformer + FP32 VAE / model CPU offload / VAE slicing+tiling
-PASS       optional settings / complete-snapshot-only visibility / Broker envelope
-PASS       real Host Job/Broker grant/activate/renew/release / H.264 artifact
-PASS       R9700 smoke 256x256 / 5 frames / 1 step / process swap 0
-PASS       LLM resident時のinsufficient_capacity / worker未起動 / direct競合なし
-FAIL       first smoke 260.206s / system swap in 2,890・out 24,510 pages
-FAIL       128-token smoke 234.486s / process swap 3,891,077,120 B
-FAIL       optimized system swap in 965,924・out 1,066,354 pages
-PASS       focused 32 tests / full 711 tests / diff check
-NOT TESTED candidate quality / cancel / determinism / public Asset/provenance
+PASS       prompt embedsをGPU生成後にUMT5/tokenizerを破棄
+PASS       VAE/scheduler/tokenizer/text encoder/transformerのcomponent直列ロード
+PASS       best smoke 110.622s / peak RSS 10,251,010,048 B / process swap 0
+PASS       同一H.264 SHA-256 / determinism / Broker grant・renew・release
+PASS       V1g比 latency約53%減 / peak RSS約51%減 / process swap 100%減
+PASS       focused 32 tests / full 711 tests / compileall / diff check
+FAIL       best smoke system swap in 70 / out 401 pages
+NOT TESTED candidate quality / cancel / public Asset/provenance
 DEFERRED   VACE production adoption / candidate profile / G7 V2 promotion
 ```
 
@@ -52,9 +47,9 @@ DEFERRED   VACE production adoption / candidate profile / G7 V2 promotion
 ## 次にやること（1つだけ）
 
 ```text
-1. 次のG7候補を別sliceで選ぶ。T2V 1.3B downloadはVACE FAILを踏まえ再判断する
-2. VACEはprocess/system swap 0を実測できる保守可能なoffload/RAM改善まで再実行しない
-3. Hunyuan weightは明示license acceptanceなしに取得しない
+1. V1h PRをexact headでmergeし、handoffをmerged stateへ更新する
+2. VACEはsystem swap 0を実測できる追加改善までcandidate profileへ進めない
+3. LTX/Hunyuan/SkyReels weightは明示license acceptanceなしに取得しない
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South
@@ -65,7 +60,7 @@ Korea を除く Territory、acceptable-use、distribution/notice、第三者提�
 
 ```text
 ControlDeck slice code/DB/manifest変更0。既存`frontend/tsconfig.tsbuildinfo`変更1件は保全。Hostはread-only。
-評価用branch coreは正常停止。installed v0.9.0 serviceを復元し、実`/health`はhealthy / contract 2.0。
+installed v0.9.0は復元済み。127.0.0.1:9130でhealthy / contract 2.0。
 Cog runtime/snapshot/evidenceは `/data1tb/mediaforge-g7-cogvideox2b` に外部保持。
 Hunyuan weight/snapshot/partial download は0。dedicated runtimeだけ外部構築済み。
 Wan runtime/model は移動・削除しない。
