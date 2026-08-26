@@ -49,6 +49,15 @@ H3_EVALUATION_PROMPT = (
     "stable background, restrained natural motion, no camera shake, no text. Overall soundscape: a quiet indoor "
     "room with a faint natural clothing rustle synchronized to the wave. Non-diegetic music: none."
 )
+WAN_MODEL_ID = "Wan-AI/Wan2.2-TI2V-5B"
+WAN_RUNTIME_ADAPTER = "native.wan2.2"
+WAN_MODEL_REVISION = "921dbaf3f1674a56f47e83fb80a34bac8a8f203e"
+WAN_SOURCE_REVISION = "42bf4cfaa384bc21833865abc2f9e6c0e67233dc"
+WAN_SOURCE_PATCH_SHA256 = "4fd9b36b24f3385057445de8551c79b947498f253c061f56a457dc42a21afb93"
+WAN_ESTIMATED_RUNTIME_SEC = 1800.0
+WAN_EXECUTION_PEAK_BYTES = 30_700_000_000
+WAN_COLD_LOAD_PEAK_BYTES = 30_700_000_000
+WAN_HEADROOM_BYTES = 1024 * 1024 * 1024
 logger = logging.getLogger("uvicorn.error")
 
 
@@ -76,6 +85,9 @@ class H3ModelEvaluator:
         model_store_root: Path,
         hf_home: Path,
         runtime_root: Path,
+        wan_runtime_python: Path | None = None,
+        wan_source_root: Path | None = None,
+        wan_evaluation_preset: str = "smoke",
         lease_renew_sec: float,
         timeout_sec: float,
         command_builder: Callable[[ModelDescriptor, Path, Path], list[str]] | None = None,
@@ -94,10 +106,20 @@ class H3ModelEvaluator:
         self.model_store_root = model_store_root.resolve()
         self.hf_home = hf_home.resolve()
         self.runtime_root = runtime_root.resolve()
+        self.wan_runtime_python = (
+            Path(os.path.abspath(wan_runtime_python)) if wan_runtime_python is not None else None
+        )
+        self.wan_source_root = wan_source_root.resolve() if wan_source_root is not None else None
+        if wan_evaluation_preset not in {
+            "smoke", "quality-frame", "short-clip", "practical-clip"
+        }:
+            raise ValueError("Wan evaluation preset is invalid")
+        self.wan_evaluation_preset = wan_evaluation_preset
         self.output_root = (store.data_dir / "model-evaluations").resolve()
         self.lease_renew_sec = lease_renew_sec
         self.timeout_sec = timeout_sec
         self.command_builder = command_builder or self._command
+        self._custom_artifact_validator = artifact_validator is not None
         self.artifact_validator = artifact_validator or self._validate_artifact
         self.vram_probe = vram_probe or self._r9700_vram_used
         self.model_resolver = model_resolver
@@ -139,6 +161,12 @@ class H3ModelEvaluator:
             found.append(H3_MODEL_ID)
         except (ModelOperationError, OSError):
             pass
+        try:
+            model = self._model(WAN_MODEL_ID)
+            self._preflight(model)
+            found.append(WAN_MODEL_ID)
+        except (ModelOperationError, OSError):
+            pass
         for model in self._image_candidates():
             found.append(model.model_id)
         return found
@@ -167,7 +195,7 @@ class H3ModelEvaluator:
         missing = {"jobs.write", "resources.acquire"} - identity.granted_capabilities
         if missing:
             raise ModelOperationError("host_capability_not_granted", "Host evaluation capabilities are unavailable")
-        if model_id != H3_MODEL_ID and model_id not in {
+        if model_id not in {H3_MODEL_ID, WAN_MODEL_ID} and model_id not in {
             model.model_id for model in self._image_candidates()
         }:
             raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
@@ -276,7 +304,8 @@ class H3ModelEvaluator:
 
                 output_dir = contained(self.output_root, self.output_root / operation_id)
                 output_dir.mkdir(mode=0o700)
-                output_path = contained(output_dir, output_dir / "smoke.webm")
+                suffix = ".mp4" if model.model_id == WAN_MODEL_ID else ".webm"
+                output_path = contained(output_dir, output_dir / f"smoke{suffix}")
                 log_path = contained(output_dir, output_dir / "runtime.log")
                 command = self.command_builder(model, output_path, self._runtime_executable())
                 metrics = self._new_metrics()
@@ -319,8 +348,13 @@ class H3ModelEvaluator:
                     )
                 self.store.update_model_operation(operation_id, state=ModelOperationState.VALIDATING)
                 await reporter.progress("evaluation_validating", 0.92, force=True)
-                media = await asyncio.to_thread(self.artifact_validator, output_path)
-                result = self._result(output_path, media, metrics)
+                validator = (
+                    self._validate_wan_artifact
+                    if model.model_id == WAN_MODEL_ID and not self._custom_artifact_validator
+                    else self.artifact_validator
+                )
+                media = await asyncio.to_thread(validator, output_path)
+                result = self._result(output_path, media, metrics, model=model)
                 if len(json.dumps(result, separators=(",", ":")).encode("utf-8")) > 16 * 1024:
                     raise ModelOperationError(
                         "model_evaluation_invalid_output",
@@ -374,9 +408,35 @@ class H3ModelEvaluator:
                     lease_task.cancel()
                     await asyncio.gather(lease_task, return_exceptions=True)
                 await self._terminate(operation_id)
+                try:
+                    self._cleanup_probe_intermediates(operation_id)
+                except (OSError, ValueError):
+                    logger.exception("failed to clean model evaluation intermediates")
                 if execution is not None:
                     await self._release(execution)
                 self._host_failures.pop(operation_id, None)
+
+    def _cleanup_probe_intermediates(self, operation_id: str) -> None:
+        try:
+            operation = self.store.get_model_operation(operation_id)
+            output_dir = contained(self.output_root, self.output_root / operation_id)
+        except (KeyError, OSError, ValueError):
+            return
+        contained(output_dir, output_dir / "prompt.safetensors").unlink(missing_ok=True)
+        if operation.state == ModelOperationState.READY:
+            return
+        for name in ("smoke.mp4", "smoke.webm", "probe.json"):
+            contained(output_dir, output_dir / name).unlink(missing_ok=True)
+        frames = contained(output_dir, output_dir / "frames")
+        if frames.is_dir():
+            for item in frames.iterdir():
+                candidate = contained(frames, item)
+                if candidate.is_file() and not candidate.is_symlink():
+                    candidate.unlink()
+            try:
+                frames.rmdir()
+            except OSError:
+                pass
 
     async def _maintain(
         self,
@@ -532,6 +592,9 @@ class H3ModelEvaluator:
             raise ModelOperationError("model_not_found", "model is not in the trusted catalog") from exc
 
     def _preflight(self, model: ModelDescriptor) -> None:
+        if model.model_id == WAN_MODEL_ID:
+            self._wan_preflight(model)
+            return
         if model.model_id != H3_MODEL_ID or model.runtime_adapter != H3_RUNTIME_ADAPTER:
             raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
         if not model.installed or model.local_path is None:
@@ -551,6 +614,18 @@ class H3ModelEvaluator:
         return contained(self.runtime_root, self.runtime_root / "build" / "bin" / "sd-cli")
 
     def _command(self, model: ModelDescriptor, output_path: Path, executable: Path) -> list[str]:
+        if model.model_id == WAN_MODEL_ID:
+            assert model.local_path is not None
+            assert self.wan_runtime_python is not None
+            return [
+                str(self.wan_runtime_python),
+                str(REPOSITORY_ROOT / "worker_packs/video/wan_ti2v_probe.py"),
+                "run",
+                "--snapshot", str(model.local_path),
+                "--work-root", str(self.output_root),
+                "--output", str(output_path),
+                "--preset", self.wan_evaluation_preset,
+            ]
         assert model.local_path is not None
         snapshot = model.local_path
         files = {item.path: self._model_file(snapshot, item.path) for item in model.weights}
@@ -595,25 +670,41 @@ class H3ModelEvaluator:
         env["LD_LIBRARY_PATH"] = f"{rocm_libs}:{existing}" if existing else rocm_libs
         env["ROCR_VISIBLE_DEVICES"] = "0"
         env["HIP_VISIBLE_DEVICES"] = "0"
+        if self.wan_source_root is not None:
+            existing_pythonpath = env.get("PYTHONPATH")
+            source = str(self.wan_source_root)
+            env["PYTHONPATH"] = f"{source}:{existing_pythonpath}" if existing_pythonpath else source
         return env
 
     @staticmethod
     def _resource_request(host_job_id: str, model: ModelDescriptor) -> dict[str, Any]:
+        if model.model_id == WAN_MODEL_ID:
+            execution_peak = WAN_EXECUTION_PEAK_BYTES
+            cold_peak = WAN_COLD_LOAD_PEAK_BYTES
+            headroom = WAN_HEADROOM_BYTES
+            runtime = WAN_ESTIMATED_RUNTIME_SEC
+            confidence = "measured"
+        else:
+            execution_peak = H3_EXECUTION_PEAK_BYTES
+            cold_peak = H3_COLD_LOAD_PEAK_BYTES
+            headroom = H3_HEADROOM_BYTES
+            runtime = H3_ESTIMATED_RUNTIME_SEC
+            confidence = "low"
         return {
             "job_id": host_job_id,
             "device": "auto",
             "vram": {
                 "resident_bytes": 0,
-                "execution_peak_bytes": H3_EXECUTION_PEAK_BYTES,
-                "cold_load_peak_bytes": H3_COLD_LOAD_PEAK_BYTES,
-                "headroom_bytes": H3_HEADROOM_BYTES,
-                "confidence": "low",
+                "execution_peak_bytes": execution_peak,
+                "cold_load_peak_bytes": cold_peak,
+                "headroom_bytes": headroom,
+                "confidence": confidence,
             },
             "compute_mode": "exclusive-preferred",
             "priority": 0,
             "class": "batch",
             "residency_key": f"mediaforge:{model.model_id}:{model.revision}",
-            "estimated_runtime_sec": H3_ESTIMATED_RUNTIME_SEC,
+            "estimated_runtime_sec": runtime,
             "max_wait_sec": 3600,
             "on_insufficient": "queue",
         }
@@ -630,10 +721,7 @@ class H3ModelEvaluator:
         )
 
     def _sample_metrics(self, pid: int, metrics: RuntimeMetrics) -> None:
-        try:
-            values = self._proc_status(pid)
-        except OSError:
-            values = {}
+        values = self._process_group_status(pid)
         metrics.peak_rss_bytes = max(metrics.peak_rss_bytes, values.get("VmRSS", 0) * 1024)
         metrics.peak_process_swap_bytes = max(
             metrics.peak_process_swap_bytes,
@@ -644,12 +732,36 @@ class H3ModelEvaluator:
         except OSError:
             pass
 
-    def _result(self, output_path: Path, media: dict[str, Any], metrics: RuntimeMetrics) -> dict[str, Any]:
+    @classmethod
+    def _process_group_status(cls, group_id: int) -> dict[str, int]:
+        """Sum evaluator RSS/swap across its isolated process group."""
+        totals = {"VmRSS": 0, "VmSwap": 0}
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                if os.getpgid(int(entry.name)) != group_id:
+                    continue
+                values = cls._proc_status(int(entry.name))
+            except (OSError, ProcessLookupError, PermissionError, ValueError):
+                continue
+            for name in totals:
+                totals[name] += values.get(name, 0)
+        return totals
+
+    def _result(
+        self,
+        output_path: Path,
+        media: dict[str, Any],
+        metrics: RuntimeMetrics,
+        *,
+        model: ModelDescriptor | None = None,
+    ) -> dict[str, Any]:
         pswpin, pswpout = self._vmstat_swap()
         return {
             "evaluation_id": output_path.parent.name,
-            "preset": H3_EVALUATION_PRESET,
-            "runtime_commit": H3_RUNTIME_COMMIT,
+            "preset": f"wan_ti2v_{self.wan_evaluation_preset}" if model and model.model_id == WAN_MODEL_ID else H3_EVALUATION_PRESET,
+            "runtime_commit": WAN_SOURCE_REVISION if model and model.model_id == WAN_MODEL_ID else H3_RUNTIME_COMMIT,
             "elapsed_sec": round(time.monotonic() - metrics.started_at, 3),
             "peak_rss_bytes": metrics.peak_rss_bytes,
             "peak_process_swap_bytes": metrics.peak_process_swap_bytes,
@@ -661,6 +773,87 @@ class H3ModelEvaluator:
             "output_bytes": output_path.stat().st_size,
             "output_sha256": self._sha256(output_path),
             "media": media,
+        }
+
+    def _wan_preflight(self, model: ModelDescriptor) -> None:
+        if model.runtime_adapter != WAN_RUNTIME_ADAPTER or model.revision != WAN_MODEL_REVISION:
+            raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
+        if not model.installed or model.local_path is None:
+            raise ModelOperationError("model_not_found", "model must be installed before evaluation")
+        if self.wan_runtime_python is None or not self.wan_runtime_python.is_file():
+            raise ModelOperationError("model_runtime_unavailable", "pinned Wan runtime is unavailable")
+        if self.wan_source_root is None:
+            raise ModelOperationError("model_runtime_unavailable", "pinned Wan source is unavailable")
+        completed = subprocess.run(
+            ["git", "-C", str(self.wan_source_root), "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if completed.returncode != 0 or completed.stdout.strip() != WAN_SOURCE_REVISION:
+            raise ModelOperationError("model_runtime_unavailable", "Wan source revision differs from the pinned commit")
+        source_diff = subprocess.run(
+            ["git", "-C", str(self.wan_source_root), "diff", "--binary", "--", "wan/__init__.py"],
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+        if (
+            source_diff.returncode != 0
+            or hashlib.sha256(source_diff.stdout).hexdigest() != WAN_SOURCE_PATCH_SHA256
+        ):
+            raise ModelOperationError("model_runtime_unavailable", "Wan evaluator source patch differs")
+        source_status = subprocess.run(
+            ["git", "-C", str(self.wan_source_root), "status", "--porcelain", "--untracked-files=all"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if source_status.returncode != 0 or source_status.stdout != " M wan/__init__.py\n":
+            raise ModelOperationError("model_runtime_unavailable", "Wan evaluator source tree has other changes")
+
+    def _validate_wan_artifact(self, path: Path) -> dict[str, Any]:
+        if not path.is_file() or path.stat().st_size <= 0:
+            raise ModelOperationError("model_evaluation_invalid_output", "Wan runtime produced no video")
+        completed = subprocess.run(
+            ["/usr/bin/ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if completed.returncode != 0 or len(completed.stdout.encode("utf-8")) > 256 * 1024:
+            raise ModelOperationError("model_evaluation_invalid_output", "ffprobe rejected the Wan video")
+        try:
+            value = json.loads(completed.stdout)
+            streams = value["streams"]
+            video = next(item for item in streams if item.get("codec_type") == "video")
+            duration = float(value["format"]["duration"])
+            frame_count = int(video["nb_frames"])
+        except (json.JSONDecodeError, KeyError, StopIteration, TypeError, ValueError) as exc:
+            raise ModelOperationError("model_evaluation_invalid_output", "Wan video metadata is invalid") from exc
+        expected = {
+            "smoke": (256, 256, 1),
+            "quality-frame": (256, 256, 1),
+            "short-clip": (512, 320, 17),
+            "practical-clip": (256, 256, 49),
+        }[self.wan_evaluation_preset]
+        if (
+            video.get("width") != expected[0]
+            or video.get("height") != expected[1]
+            or frame_count != expected[2]
+            or not 0 < duration <= 3
+        ):
+            raise ModelOperationError("model_evaluation_invalid_output", "Wan video bounds differ")
+        return {
+            "width": expected[0],
+            "height": expected[1],
+            "video_codec": str(video.get("codec_name") or "unknown")[:32],
+            "frame_rate": str(video.get("avg_frame_rate") or "unknown")[:32],
+            "duration_sec": round(duration, 3),
+            "audio_present": False,
         }
 
     @staticmethod

@@ -30,14 +30,25 @@ def registry() -> ModelRegistry:
     )
 
 
-def test_video_candidates_are_pinned_unmeasured_and_never_recommended() -> None:
+def test_video_candidates_are_pinned_and_never_recommended() -> None:
     candidates = {model.model_id: model for model in registry().all() if "video" in model.media_types}
 
     assert set(candidates) == VIDEO_IDS
     assert all(model.state == "experimental" for model in candidates.values())
-    assert all(model.measurement_confidence == "low" for model in candidates.values())
-    assert all(model.measured_runtime_sec is None and model.measured_vram_bytes is None for model in candidates.values())
-    assert all(model.hardware_backends == ("cuda",) for model in candidates.values())
+    wan = candidates["Wan-AI/Wan2.2-TI2V-5B"]
+    assert wan.measurement_confidence == "measured"
+    assert wan.hardware_backends == ("cuda", "rocm")
+    assert wan.execution_peak_vram_bytes == 30_700_000_000
+    assert wan.headroom_vram_bytes == 1024 * 1024 * 1024
+    assert wan.measured_runtime_sec == 75.955
+    assert all(
+        model.measurement_confidence == "low"
+        and model.measured_runtime_sec is None
+        and model.measured_vram_bytes is None
+        and model.hardware_backends == ("cuda",)
+        for model_id, model in candidates.items()
+        if model_id != wan.model_id
+    )
     assert all(not model.recommended_profiles for model in candidates.values())
     assert all(model.approx_download_bytes >= sum(weight.size_bytes for weight in model.weights)
                for model in candidates.values())

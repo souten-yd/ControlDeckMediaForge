@@ -331,10 +331,11 @@
         "video.image_to_video"
       ],
       "hardware_backends": [
-        "cuda"
+        "cuda",
+        "rocm"
       ],
       "state": "experimental",
-      "measurement_confidence": "low",
+      "measurement_confidence": "measured",
       "policy_rank": {
         "auto": 10,
         "fast": 10,
@@ -377,7 +378,14 @@
           "size_bytes": 11361920418,
           "sha256": "7cace0da2b446bbbbc57d031ab6cf163a3d59b366da94e5afe36745b746fd81d"
         }
-      ]
+      ],
+      "measurements": {
+        "resident_vram_bytes": 0,
+        "execution_peak_vram_bytes": 30700000000,
+        "cold_load_peak_vram_bytes": 30700000000,
+        "headroom_vram_bytes": 1073741824,
+        "measured_runtime_sec": 75.955
+      }
     },
     {
       "model_id": "Wan-AI/Wan2.2-I2V-A14B",

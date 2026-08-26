@@ -284,6 +284,9 @@ def create_app(
             model_store_root=resolved.model_store_root,
             hf_home=resolved.hf_home,
             runtime_root=native_runtime_root,
+            wan_runtime_python=resolved.wan_runtime_python,
+            wan_source_root=resolved.wan_source_root,
+            wan_evaluation_preset=resolved.wan_evaluation_preset,
             lease_renew_sec=resolved.host_lease_renew_sec,
             timeout_sec=resolved.model_evaluation_timeout_sec,
             # 自作モデルも測れるようにする。shipped manifest に居ないので、

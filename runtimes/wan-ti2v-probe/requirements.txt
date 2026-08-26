@@ -1,0 +1,16 @@
+# Wan 2.2 TI2V evaluator only. Keep it separate from core and image runtime.
+--find-links https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.1/
+numpy==1.26.4
+torch==2.10.0
+torchvision==0.25.0
+diffusers==0.33.1
+transformers==4.51.3
+huggingface-hub==0.30.2
+accelerate==1.14.0
+safetensors==0.5.3
+sentencepiece==0.2.0
+opencv-python-headless==4.11.0.86
+pillow==12.3.0
+easydict==1.13
+ftfy==6.3.1
+tqdm==4.67.1
