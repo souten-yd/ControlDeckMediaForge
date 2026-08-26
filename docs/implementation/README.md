@@ -24,6 +24,7 @@ docs/implementation/                 実装の指示（どの順で・何を確�
 |---|---|---|---|
 | 1 | [goal-roadmap.md](goal-roadmap.md) | MediaForge | 全体像。G0〜G10 のゴール機能と進め方の原則 |
 | G7 | [g7-video-runtime.md](g7-video-runtime.md) | MediaForge | 動画契約、FFmpeg 境界、候補評価、Broker 共存、installed 受け入れ |
+| G8 | [g8-blender-production.md](g8-blender-production.md) | MediaForge | Blender runtime、bounded GLB import、deterministic compile/package、agent/installed受け入れ |
 | 2 | [mf0-0-environment.md](mf0-0-environment.md) | MediaForge | 実行環境の分離・自動整備・削除安全性。**最初に実施** |
 | 3 | [mf0-addon-core.md](mf0-addon-core.md) | MediaForge | G0。Add-on として成立させる（fake worker） |
 | 4 | [ux1-workspace.md](ux1-workspace.md) | MediaForge | G0〜G3 の機能を使える形にする workspace UI。設計は `../design-workspace-ux.md` |

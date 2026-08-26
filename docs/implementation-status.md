@@ -2,6 +2,12 @@
 
 Date: 2026-08-26
 Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred
+
+G8 planning started on 2026-08-26. The current host has no `blender` executable. The implementation order,
+license/process boundary, GLB-only first import, deterministic compiler/package, typed options, and installed
+acceptance are fixed in `docs/implementation/g8-blender-production.md`. Blender execution, GLB import, worker,
+workspace, agent placement, and installed acceptance are **NOT TESTED** at this point.
+Planning gate: `./mf.sh test` reported `711 passed, 1 warning in 48.10s`; `git diff --check` passed.
 Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
 Repository head released and verified for G1: `1e88472e753fd484638f072f7c4b327c8010ab60` (`v0.1.2`)
 
