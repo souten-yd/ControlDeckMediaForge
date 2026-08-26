@@ -5472,3 +5472,42 @@ focused frontend/API/schema/video testsはPASS。最終gateは`./mf.sh test`が
 `git diff --check`がPASS。実動画runtime、weight取得、GPU動画生成、出力再生品質、timeline編集は
 **NOT TESTED**。Tencent licenseへの同意・利用開始は行っていない。ControlDeck code/DB変更0、既存
 `frontend/tsconfig.tsbuildinfo`変更1件は保全した。
+
+## v0.9.1 release / installed video-screen reachability（2026-08-26）
+
+利用者が実ControlDeckから動画生成面へ到達できないことを報告した。稼働processは
+`versions/0.9.0/bin/mediaforge-core`、配信HTMLに`create-media-switch`は無く、原因はmerged UIを含まない
+旧bundleへ復元したままだったことであり、Host routeやcapability gatingの不具合ではなかった。
+
+versionを`addon.json`と`mediaforge.__version__`で0.9.1へ揃え、Media Forge #147（exact head
+`f7f42c7af6e34420d2dba4017f733a6f4d58c8c7`、merge commit
+`cc3f342d77a20e98d95fcc43d276e1aafdcd8d94`）をmergeした。同じmerge commitをtag `v0.9.1`として
+bundleを構築・署名・公開した。
+
+```text
+artifact   control-deck-media-forge-0.9.1-linux-x86_64.tar.gz
+bytes      30,954,097
+SHA-256    ae9087ca6f1548260dd69f980face65cde003f380f8fa74488e68b4d8d098bf2
+manifest   275 B / signature 89 B
+release    https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.9.1
+```
+
+公開releaseから別fileへ再downloadし、30,954,097 Bと同じSHA-256を確認した。展開した配布binaryの
+`doctor`は`version=0.9.1 / packaged=true`。別port 9166で起動したbundleはHTMLに切り替えを含み、
+両video capabilityを`unavailable / video_runtime_not_adopted`として返した。
+
+実ControlDeckの標準`./deck.sh feature update media-forge`は11.89秒、max RSS 783,412 KiBで成功し、
+結果は`version=0.9.1 / previous_version=0.9.0 / healthy`。`current`は`versions/0.9.1`を指し、
+rollback用0.9.0も保持した。0.9.0 / 0.9.1 version treeは31,082,798 B / 31,222,710 B、永続
+feature-dataは78,755,964,188 B、Asset APIは18件。終了時service PID 2325466/2325471、9130 healthは
+`healthy / contract 2.0`。
+
+実ControlDeckへ短命test identityでloginし、route `/x/media-forge/workspace/create`のopaque iframe内で
+「動画を作る」を押して動画面へ到達した。390px / 320pxの各touch targetは176x44px / 141x44px、
+horizontal overflow 0、browser console/page error 0。理由は「実用条件を満たす動画モデルがまだありません。」、
+submitはdisabledだった。これは導線のPASSであり、実動画runtime/weight/GPU生成/品質/timeline編集は引き続き
+**NOT TESTED**。license同意・モデル取得は0。ControlDeck code/DB schema変更0、既存
+`frontend/tsconfig.tsbuildinfo`変更1件は保全した。
+
+release前gateはfocused 199件と`./mf.sh test` 751件がPASS（既知warning 1件 / 53.52s）。GitHubの
+required checkは設定0件だった。
