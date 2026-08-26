@@ -169,6 +169,7 @@ def test_pipeline_call_uses_only_fixed_bounded_i2v_preset() -> None:
         "num_frames": 33,
         "num_inference_steps": 30,
         "guidance_scale": 5.0,
+        "max_sequence_length": 128,
         "generator": ANY,
         "output_type": "pil",
     }

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from worker_packs.video.wan21_13b_preflight import (
     T2V_REPOSITORY,
     T2V_REVISION,
@@ -12,6 +14,17 @@ from worker_packs.video.wan21_13b_preflight import (
     VACE_WEIGHT_BYTES,
     VACE_WEIGHT_FILES,
 )
+
+
+def test_probe_runtime_pins_prompt_cleaner_dependency() -> None:
+    requirements = (
+        Path(__file__).parents[1]
+        / "runtimes"
+        / "wan21-1.3b-probe"
+        / "requirements.txt"
+    ).read_text(encoding="utf-8").splitlines()
+
+    assert "ftfy==6.3.1" in requirements
 
 
 def test_wan21_candidates_are_exact_public_apache_diffusers_snapshots() -> None:

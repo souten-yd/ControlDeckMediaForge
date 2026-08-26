@@ -127,6 +127,38 @@ def _source_image(preset: ProbePreset) -> Any:
         ),
         fill=(245, 216, 83),
     )
+    arm_width = max(5, preset.width // 48)
+    draw.line(
+        (
+            body[0],
+            preset.height * 3 // 5,
+            preset.width * 5 // 16,
+            preset.height * 7 // 10,
+        ),
+        fill=(194, 72, 19),
+        width=arm_width,
+    )
+    draw.line(
+        (
+            body[2],
+            preset.height * 3 // 5,
+            preset.width * 11 // 16,
+            preset.height * 11 // 20,
+        ),
+        fill=(194, 72, 19),
+        width=arm_width,
+    )
+    wheel_radius = max(7, preset.width // 40)
+    for center_x in (preset.width * 7 // 16, preset.width * 9 // 16):
+        draw.ellipse(
+            (
+                center_x - wheel_radius,
+                body[3] - wheel_radius,
+                center_x + wheel_radius,
+                body[3] + wheel_radius,
+            ),
+            fill=(44, 47, 53),
+        )
     return image
 
 
@@ -153,6 +185,7 @@ def _invoke_pipeline(pipeline: Any, torch: Any, preset: ProbePreset) -> Any:
         num_frames=preset.frames,
         num_inference_steps=preset.steps,
         guidance_scale=5.0,
+        max_sequence_length=128,
         generator=torch.Generator(device="cuda:0").manual_seed(SEED),
         output_type="pil",
     )

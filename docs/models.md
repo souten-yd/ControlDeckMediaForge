@@ -109,9 +109,10 @@ The following exact revisions are discoverable in Model Management as
 `experimental`. None is an adopted default or an available runtime. Wan TI2V-5B
 now has a bounded ROCm measurement; every other entry remains
 `measurement_confidence=low` and advertises only `cuda` until a real
-ROCm/gfx1201 run succeeds. CogVideoX-2B now advertises ROCm because its bounded
-official profile completed, but remains low-confidence and unadopted after one
-quality run.
+ROCm/gfx1201 run succeeds. CogVideoX-2B advertises ROCm because its bounded
+official profile completed. Wan 2.1 VACE also advertises ROCm after a bounded
+256x256, 5-frame, 1-step smoke completed, but that smoke is not candidate-profile
+quality evidence. Both remain low-confidence and unadopted.
 
 ```text
 general/lightweight T2V+I2V     Wan-AI/Wan2.2-TI2V-5B @ 921dbaf3 (34,201,521,212 B)
@@ -175,8 +176,15 @@ The T2V snapshot is 28,935,653,511 bytes; its float32 UMT5 accounts for about
 reference-image conditioning for image/video-to-video evaluation. A dedicated
 Diffusers 0.40.0 runtime imported both pipelines, both transformers, the Wan
 VAE, and the default PyTorch SDPA path on R9700/gfx1201. This is weight-free
-preflight evidence only; both entries remain external, experimental,
-low-confidence, and unroutable.
+preflight evidence for T2V. The exact VACE snapshot was subsequently downloaded
+and all eight inference LFS objects passed size and SHA-256 verification. Its
+first offline R9700 smoke completed through a real Host Job and Broker lease at
+256x256, 5 frames, and 1 step. It took 260.206 seconds inside the runner, peaked
+at 15,692,148,736 bytes VRAM and 22,964,568,064 bytes process RSS, and retained
+zero process swap, but caused system swap activity. This proves the ROCm backend
+and boundary lifecycle only; candidate-profile quality, latency, memory,
+determinism, and cancellation remain **NOT TESTED**. Both entries remain
+external, experimental, low-confidence, and unroutable.
 
 Both model cards declare Apache-2.0, but neither pinned Diffusers snapshot
 contains the `LICENSE.txt` linked by the card or a NOTICE file. Evaluation does

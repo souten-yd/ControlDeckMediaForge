@@ -47,13 +47,16 @@ def test_video_candidates_are_pinned_and_never_recommended() -> None:
     cog = candidates["zai-org/CogVideoX-2b"]
     assert cog.measurement_confidence == "low"
     assert cog.hardware_backends == ("cuda", "rocm")
+    vace = candidates["Wan-AI/Wan2.1-VACE-1.3B-diffusers"]
+    assert vace.measurement_confidence == "low"
+    assert vace.hardware_backends == ("cuda", "rocm")
     assert all(
         model.measurement_confidence == "low"
         and model.measured_runtime_sec is None
         and model.measured_vram_bytes is None
         and model.hardware_backends == ("cuda",)
         for model_id, model in candidates.items()
-        if model_id not in {wan.model_id, cog.model_id}
+        if model_id not in {wan.model_id, cog.model_id, vace.model_id}
     )
     assert all(not model.recommended_profiles for model in candidates.values())
     assert all(model.approx_download_bytes >= sum(weight.size_bytes for weight in model.weights)
@@ -92,7 +95,7 @@ def test_only_bounded_complete_video_snapshots_are_managed() -> None:
     }
 
 
-def test_wan21_13b_candidates_remain_external_and_unmeasured() -> None:
+def test_wan21_13b_candidates_remain_external_and_unroutable() -> None:
     candidates = {model.model_id: model for model in registry().all()}
     t2v = candidates["Wan-AI/Wan2.1-T2V-1.3B-Diffusers"]
     vace = candidates["Wan-AI/Wan2.1-VACE-1.3B-diffusers"]
@@ -110,7 +113,7 @@ def test_wan21_13b_candidates_remain_external_and_unmeasured() -> None:
         "video.multi_keyframe",
         "video.video_to_video",
     )
-    assert vace.hardware_backends == ("cuda",)
+    assert vace.hardware_backends == ("cuda", "rocm")
     assert len(vace.weights) == 8
 
 
