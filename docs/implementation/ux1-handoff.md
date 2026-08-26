@@ -9,11 +9,11 @@
 最終更新    2026-08-26
 branch      ux1/g8-workspace-agent（origin/main bdf6a77 から作成）
 slice       G8 B4 workspace / agent / project placement
-状態        B0-B3 merged / B4 implemented and evaluated / PR未作成
+状態        B0-B3 merged / B4 implemented and evaluated / PR #141 open
 baseline    focused B4 200 passed / full 746 passed / 1 warning / 48.51s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #140 merged / B4 PR未作成
+PR          Media Forge #141 open / merge待ち
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -66,7 +66,7 @@ NOT TESTED installed Host browser/identity/real grant / reconnect / real cancel/
 ## 次にやること（1つだけ）
 
 ```text
-1. B4をcommit/pushし、PR review/CI後にmergeする
+1. PR #141のreview/CIを確認しmergeする
 2. G8 B5 installed ControlDeck browser / Agent / grant / cancel / recoveryを実測する
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```

@@ -5374,7 +5374,8 @@ job `job_a90bb3d8adee4db79b6e3265e60b2386` は0.727 secでsucceededし、40,603 
 `asset_393d4c4a6db44bdeb217e9b621647539`、SHA-256
 `adb22b8daadd6aae5c14b79460d4d774dcc8588ff213afdf5bd7b7b696d7ae3e` を登録した。Library cardは
 `data:image/webp;base64,` preview、viewerは `ZIP · プレビュー`、console/page errorは0。スクリーンショットは
-15,144 B。終了時core healthはhealthy / contract 2.0、work entry 0、Blender child 0、port 9162 listener 0。
+15,144 B。GLB選択後のSimple表示は320px viewportでhorizontal overflow 0。終了時core healthはhealthy /
+contract 2.0、work entry 0、Blender child 0、port 9162 listener 0。
 
 Host stubを使うfocused contractでは、同じ3D requestを既存Agent generateへ渡し、embedded WebSocket
 Library cardのWebPを取得後、既存Agent packで `project-ready.zip` を `grant:export-1`へcommitした。

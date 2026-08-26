@@ -227,6 +227,12 @@ It reports text generation, single-reference edit, multi-reference edit,
 inpaint, outpaint, variation, and strict edit independently from installed measured model capabilities and never
 exposes the automatically selected model ID.
 
+`asset.3d_project_pack` is available only when the exact pinned Blender runtime
+stamp, executable, and trusted compiler are present. Its `profile` is
+`3d.project.glb`; otherwise it is unavailable with `runtime_not_installed`.
+Capability discovery does not start Blender and exposes no runtime or project
+path.
+
 `image.semantic_review` is the frozen compatibility capability for the unified
 evaluator. It is available only for a Host-authenticated execution when
 ControlDeck grants `ai.inference` and its provider-neutral `vision.analyze`

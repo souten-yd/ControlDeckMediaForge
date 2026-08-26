@@ -65,6 +65,12 @@ def main() -> int:
 
         page.set_input_files("#project-3d-file", str(args.glb))
         check(page.locator("#project-3d-submit").is_visible(), "3D action did not appear after GLB selection")
+        page.set_viewport_size({"width": 320, "height": 640})
+        observations["simple_overflow_320"] = page.evaluate(
+            "() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth"
+        )
+        check(observations["simple_overflow_320"] == 0, "3D Simple flow overflows at 320px")
+        page.set_viewport_size({"width": 1280, "height": 900})
         page.click("#mode-advanced")
         check(page.locator("#project-3d-options").is_visible(), "typed options are unreachable in Advanced mode")
         page.check("#project-3d-repair-normals")
