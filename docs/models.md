@@ -1,6 +1,6 @@
 # Model registry and adoption gates
 
-Date: 2026-08-21
+Date: 2026-08-26
 
 ## Catalog ownership and storage
 
@@ -109,7 +109,9 @@ The following exact revisions are discoverable in Model Management as
 `experimental`. None is an adopted default or an available runtime. Wan TI2V-5B
 now has a bounded ROCm measurement; every other entry remains
 `measurement_confidence=low` and advertises only `cuda` until a real
-ROCm/gfx1201 run succeeds.
+ROCm/gfx1201 run succeeds. CogVideoX-2B now advertises ROCm because its bounded
+official profile completed, but remains low-confidence and unadopted after one
+quality run.
 
 ```text
 general/lightweight T2V+I2V     Wan-AI/Wan2.2-TI2V-5B @ 921dbaf3 (34,201,521,212 B)
@@ -117,8 +119,8 @@ high-quality I2V                Wan-AI/Wan2.2-I2V-A14B @ 206a9ee1 (126,202,610,0
 high-quality T2V                Wan-AI/Wan2.2-T2V-A14B @ c8c270b1 (126,199,333,288 B)
 character/companion animation   Wan-AI/Wan2.2-Animate-14B @ cb93a225 (51,213,260,089 B main set)
 high-feature synchronized audio Lightricks/LTX-2.3 @ 6b5a83e3 (46,149,373,312 B distilled 1.1)
+Apache lightweight T2V          zai-org/CogVideoX-2b @ 1137dacf (13,775,572,738 B)
 quality comparison              tencent/HunyuanVideo-1.5 @ 9b49404b (71,655,871,264 B selected 720p set)
-lightweight fallback            select only after R9700 measurements
 audio-video comparison          MiniMaxAI/MiniMax-H3 FL2VA @ 42ed227e (144,051,182,625 B)
 ```
 
@@ -143,7 +145,7 @@ runtime-owned dependencies outside the selected primary checkpoint set. The UI
 shows this distinction and the backend rejects an install request for external
 candidates before creating an operation.
 
-The pinned Wan repositories declare Apache-2.0. LTX-2.3 uses the LTX-2
+The pinned Wan repositories and CogVideoX-2B declare Apache-2.0. LTX-2.3 uses the LTX-2
 Community License Agreement dated 2026-01-05. HunyuanVideo 1.5 uses the Tencent
 Hunyuan Community License, including territorial and acceptable-use terms;
 its LICENSE and NOTICE must be reviewed rather than treating it as Apache-2.0.
@@ -153,7 +155,14 @@ Wan TI2V-5B passed bounded ROCm execution, Broker isolation, and cancellation,
 but failed the practical adoption gate: a 256x256, 49-frame probe took 235.053
 seconds, used 1,754,775,552 bytes of process swap, and did not preserve the
 prompt subject. I2V, native 720p, and the official 121-frame/50-step default are
-**NOT TESTED**. All other candidates are **NOT TESTED** on the R9700. Before
+**NOT TESTED**. CogVideoX-2B also completed its official 720x480, 49-frame,
+50-step profile through a real Host Job and Broker lease. It took 930.861
+seconds, peaked at 14,996,635,648 bytes VRAM and 19,315,003,392 bytes process
+RSS, and kept process swap at zero, but caused system swap activity. The three
+inspected frames preserved the orange robot, solar panel, dusk field, and
+locked camera; the requested panel-folding action was not clear. Its T2V
+adoption is therefore **DEFERRED**, and it provides no I2V capability. All
+remaining candidates are **NOT TESTED** on the R9700. Before
 marking any candidate Available or Recommended, verify the authoritative
 source, license, capabilities, ROCm operation, resource envelope, reliability,
 quality, and all ten adoption-gate answers from `base-plan.md` §24. Removal must

@@ -711,6 +711,70 @@
       ]
     },
     {
+      "model_id": "zai-org/CogVideoX-2b",
+      "family": "cogvideox",
+      "version": "2b-fp16",
+      "revision": "1137dacfc2c9c012bed6a0793f4ecf2ca8e7ba01",
+      "weights_hash": "sha256:2159c3742e3e35d079b70b7b616c6aab8831cabfeb17e89f40de6ecf915c531e",
+      "license": "Apache-2.0",
+      "runtime_adapter": "diffusers.cogvideox",
+      "capabilities": [
+        "video.text_to_video"
+      ],
+      "hardware_backends": [
+        "cuda",
+        "rocm"
+      ],
+      "state": "experimental",
+      "measurement_confidence": "low",
+      "policy_rank": {
+        "auto": 0,
+        "fast": 0,
+        "balanced": 0,
+        "quality": 10,
+        "low_vram": 0
+      },
+      "required_files": [
+        "LICENSE",
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "text_encoder/config.json",
+        "text_encoder/model.safetensors.index.json",
+        "tokenizer/special_tokens_map.json",
+        "tokenizer/spiece.model",
+        "tokenizer/tokenizer_config.json",
+        "transformer/config.json",
+        "vae/config.json"
+      ],
+      "weights": [
+        {
+          "path": "text_encoder/model-00001-of-00002.safetensors",
+          "size_bytes": 4994582104,
+          "sha256": "4f2751ceeb2a96edd693e539dc5d6bba0b8d3814f49a9b3798403a0cec4b2e3d"
+        },
+        {
+          "path": "text_encoder/model-00002-of-00002.safetensors",
+          "size_bytes": 4530066248,
+          "sha256": "f63154532130422309532ff56f11945fbea8266c958e3133e8e5aef85c6293c7"
+        },
+        {
+          "path": "tokenizer/spiece.model",
+          "size_bytes": 791656,
+          "sha256": "d60acb128cf7b7f2536e8f38a5b18a05535c9e14c7a355904270e15b0945ea86"
+        },
+        {
+          "path": "transformer/diffusion_pytorch_model.safetensors",
+          "size_bytes": 3387650264,
+          "sha256": "8fbb6a5e67c70885a8ed8e33df144ac61253e45977be5035fa18cfdf77d386c7"
+        },
+        {
+          "path": "vae/diffusion_pytorch_model.safetensors",
+          "size_bytes": 862388596,
+          "sha256": "a410e48d988c8224cef392b68db0654485cfd41f345f4a3a81d3e6b765bb995e"
+        }
+      ]
+    },
+    {
       "model_id": "tencent/HunyuanVideo-1.5",
       "family": "hunyuan-video-1.5",
       "version": "720p-t2v-i2v-distilled",

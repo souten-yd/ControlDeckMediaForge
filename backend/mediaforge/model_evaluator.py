@@ -66,6 +66,13 @@ HUNYUAN_ESTIMATED_RUNTIME_SEC = 3600.0
 HUNYUAN_EXECUTION_PEAK_BYTES = 30_700_000_000
 HUNYUAN_COLD_LOAD_PEAK_BYTES = 32_000_000_000
 HUNYUAN_HEADROOM_BYTES = 1024 * 1024 * 1024
+COGVIDEOX2B_MODEL_ID = "zai-org/CogVideoX-2b"
+COGVIDEOX2B_RUNTIME_ADAPTER = "diffusers.cogvideox"
+COGVIDEOX2B_MODEL_REVISION = "1137dacfc2c9c012bed6a0793f4ecf2ca8e7ba01"
+COGVIDEOX2B_ESTIMATED_RUNTIME_SEC = 3600.0
+COGVIDEOX2B_EXECUTION_PEAK_BYTES = 30_700_000_000
+COGVIDEOX2B_COLD_LOAD_PEAK_BYTES = 32_000_000_000
+COGVIDEOX2B_HEADROOM_BYTES = 1024 * 1024 * 1024
 logger = logging.getLogger("uvicorn.error")
 
 
@@ -99,6 +106,9 @@ class H3ModelEvaluator:
         hunyuan_runtime_python: Path | None = None,
         hunyuan_snapshot_root: Path | None = None,
         hunyuan_evaluation_preset: str = "smoke",
+        cogvideox2b_runtime_python: Path | None = None,
+        cogvideox2b_snapshot_root: Path | None = None,
+        cogvideox2b_evaluation_preset: str = "smoke",
         lease_renew_sec: float,
         timeout_sec: float,
         command_builder: Callable[[ModelDescriptor, Path, Path], list[str]] | None = None,
@@ -137,6 +147,16 @@ class H3ModelEvaluator:
         if hunyuan_evaluation_preset not in {"smoke", "candidate-clip", "official-clip"}:
             raise ValueError("Hunyuan evaluation preset is invalid")
         self.hunyuan_evaluation_preset = hunyuan_evaluation_preset
+        self.cogvideox2b_runtime_python = (
+            Path(os.path.abspath(cogvideox2b_runtime_python))
+            if cogvideox2b_runtime_python is not None else None
+        )
+        self.cogvideox2b_snapshot_root = (
+            cogvideox2b_snapshot_root.resolve() if cogvideox2b_snapshot_root is not None else None
+        )
+        if cogvideox2b_evaluation_preset not in {"smoke", "official-clip"}:
+            raise ValueError("CogVideoX-2B evaluation preset is invalid")
+        self.cogvideox2b_evaluation_preset = cogvideox2b_evaluation_preset
         self.output_root = (store.data_dir / "model-evaluations").resolve()
         self.lease_renew_sec = lease_renew_sec
         self.timeout_sec = timeout_sec
@@ -184,6 +204,12 @@ class H3ModelEvaluator:
         except (ModelOperationError, OSError):
             pass
         try:
+            model = self._model(COGVIDEOX2B_MODEL_ID)
+            self._preflight(model)
+            found.append(COGVIDEOX2B_MODEL_ID)
+        except (ModelOperationError, OSError):
+            pass
+        try:
             model = self._model(WAN_MODEL_ID)
             self._preflight(model)
             found.append(WAN_MODEL_ID)
@@ -214,6 +240,7 @@ class H3ModelEvaluator:
             model for model in models
             if model.installed
             and model.local_path is not None
+            and "image" in model.media_types
             and model.runtime_adapter.startswith("diffusers.")
             # 既に測ってあるものを測り直す道は、ここでは出さない。
             and model.measurement_confidence != "measured"
@@ -223,7 +250,7 @@ class H3ModelEvaluator:
         missing = {"jobs.write", "resources.acquire"} - identity.granted_capabilities
         if missing:
             raise ModelOperationError("host_capability_not_granted", "Host evaluation capabilities are unavailable")
-        if model_id not in {H3_MODEL_ID, WAN_MODEL_ID, HUNYUAN_MODEL_ID} and model_id not in {
+        if model_id not in {H3_MODEL_ID, WAN_MODEL_ID, HUNYUAN_MODEL_ID, COGVIDEOX2B_MODEL_ID} and model_id not in {
             model.model_id for model in self._image_candidates()
         }:
             raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
@@ -274,7 +301,7 @@ class H3ModelEvaluator:
                     await self._finish_canceled(operation_id, None)
                     return
                 model = self._model(operation.model_id)
-                if model.runtime_adapter.startswith("diffusers."):
+                if model.runtime_adapter.startswith("diffusers.") and "image" in model.media_types:
                     # 画像モデルは普段の生成と同じワーカーで 1 回走らせて測る。
                     # 別経路で測ると、実際に使う経路ではないものを測ることになる。
                     await self._run_image_evaluation(operation_id, model)
@@ -332,7 +359,9 @@ class H3ModelEvaluator:
 
                 output_dir = contained(self.output_root, self.output_root / operation_id)
                 output_dir.mkdir(mode=0o700)
-                suffix = ".mp4" if model.model_id in {WAN_MODEL_ID, HUNYUAN_MODEL_ID} else ".webm"
+                suffix = ".mp4" if model.model_id in {
+                    WAN_MODEL_ID, HUNYUAN_MODEL_ID, COGVIDEOX2B_MODEL_ID
+                } else ".webm"
                 output_path = contained(output_dir, output_dir / f"smoke{suffix}")
                 log_path = contained(output_dir, output_dir / "runtime.log")
                 command = self.command_builder(model, output_path, self._runtime_executable())
@@ -380,6 +409,8 @@ class H3ModelEvaluator:
                     validator = self._validate_wan_artifact
                 elif model.model_id == HUNYUAN_MODEL_ID and not self._custom_artifact_validator:
                     validator = self._validate_hunyuan_artifact
+                elif model.model_id == COGVIDEOX2B_MODEL_ID and not self._custom_artifact_validator:
+                    validator = self._validate_cogvideox2b_artifact
                 else:
                     validator = self.artifact_validator
                 media = await asyncio.to_thread(validator, output_path)
@@ -627,6 +658,9 @@ class H3ModelEvaluator:
         if model.model_id == HUNYUAN_MODEL_ID:
             self._hunyuan_preflight(model)
             return
+        if model.model_id == COGVIDEOX2B_MODEL_ID:
+            self._cogvideox2b_preflight(model)
+            return
         if model.model_id != H3_MODEL_ID or model.runtime_adapter != H3_RUNTIME_ADAPTER:
             raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
         if not model.installed or model.local_path is None:
@@ -669,6 +703,18 @@ class H3ModelEvaluator:
                 "--work-root", str(self.output_root),
                 "--output", str(output_path),
                 "--preset", self.hunyuan_evaluation_preset,
+            ]
+        if model.model_id == COGVIDEOX2B_MODEL_ID:
+            assert self.cogvideox2b_runtime_python is not None
+            assert self.cogvideox2b_snapshot_root is not None
+            return [
+                str(self.cogvideox2b_runtime_python),
+                str(REPOSITORY_ROOT / "worker_packs/video/cogvideox2b_probe.py"),
+                "run",
+                "--snapshot", str(self.cogvideox2b_snapshot_root),
+                "--work-root", str(self.output_root),
+                "--output", str(output_path),
+                "--preset", self.cogvideox2b_evaluation_preset,
             ]
         assert model.local_path is not None
         snapshot = model.local_path
@@ -733,6 +779,12 @@ class H3ModelEvaluator:
             cold_peak = HUNYUAN_COLD_LOAD_PEAK_BYTES
             headroom = HUNYUAN_HEADROOM_BYTES
             runtime = HUNYUAN_ESTIMATED_RUNTIME_SEC
+            confidence = "low"
+        elif model.model_id == COGVIDEOX2B_MODEL_ID:
+            execution_peak = COGVIDEOX2B_EXECUTION_PEAK_BYTES
+            cold_peak = COGVIDEOX2B_COLD_LOAD_PEAK_BYTES
+            headroom = COGVIDEOX2B_HEADROOM_BYTES
+            runtime = COGVIDEOX2B_ESTIMATED_RUNTIME_SEC
             confidence = "low"
         else:
             execution_peak = H3_EXECUTION_PEAK_BYTES
@@ -815,6 +867,8 @@ class H3ModelEvaluator:
                 if model and model.model_id == WAN_MODEL_ID
                 else f"hunyuan15_{self.hunyuan_evaluation_preset}"
                 if model and model.model_id == HUNYUAN_MODEL_ID
+                else f"cogvideox2b_{self.cogvideox2b_evaluation_preset}"
+                if model and model.model_id == COGVIDEOX2B_MODEL_ID
                 else H3_EVALUATION_PRESET
             ),
             "runtime_commit": (
@@ -822,6 +876,8 @@ class H3ModelEvaluator:
                 if model and model.model_id == WAN_MODEL_ID
                 else HUNYUAN_CONVERSION_REVISION
                 if model and model.model_id == HUNYUAN_MODEL_ID
+                else COGVIDEOX2B_MODEL_REVISION
+                if model and model.model_id == COGVIDEOX2B_MODEL_ID
                 else H3_RUNTIME_COMMIT
             ),
             "elapsed_sec": round(time.monotonic() - metrics.started_at, 3),
@@ -913,7 +969,7 @@ class H3ModelEvaluator:
             "candidate-clip": (640, 384, 33),
             "official-clip": (848, 480, 121),
         }[self.hunyuan_evaluation_preset]
-        media = self._validate_silent_mp4(path, label="Hunyuan")
+        media = self._validate_silent_mp4(path, label="Hunyuan", expected_fps="24/1")
         if (
             media["width"] != expected[0]
             or media["height"] != expected[1]
@@ -923,8 +979,36 @@ class H3ModelEvaluator:
         media.pop("frame_count")
         return media
 
+    def _validate_cogvideox2b_artifact(self, path: Path) -> dict[str, Any]:
+        expected = {
+            "smoke": (720, 480, 8),
+            "official-clip": (720, 480, 49),
+        }[self.cogvideox2b_evaluation_preset]
+        media = self._validate_silent_mp4(
+            path,
+            label="CogVideoX-2B",
+            expected_fps="8/1",
+            max_duration_sec=7,
+        )
+        if (
+            media["width"] != expected[0]
+            or media["height"] != expected[1]
+            or media["frame_count"] != expected[2]
+        ):
+            raise ModelOperationError(
+                "model_evaluation_invalid_output", "CogVideoX-2B video bounds differ"
+            )
+        media.pop("frame_count")
+        return media
+
     @staticmethod
-    def _validate_silent_mp4(path: Path, *, label: str) -> dict[str, Any]:
+    def _validate_silent_mp4(
+        path: Path,
+        *,
+        label: str,
+        expected_fps: str,
+        max_duration_sec: float = 6,
+    ) -> dict[str, Any]:
         if not path.is_file() or path.stat().st_size <= 0:
             raise ModelOperationError("model_evaluation_invalid_output", f"{label} runtime produced no video")
         completed = subprocess.run(
@@ -948,9 +1032,9 @@ class H3ModelEvaluator:
         except (json.JSONDecodeError, KeyError, StopIteration, TypeError, ValueError) as exc:
             raise ModelOperationError("model_evaluation_invalid_output", f"{label} video metadata is invalid") from exc
         if (
-            not 0 < duration <= 6
+            not 0 < duration <= max_duration_sec
             or video.get("codec_name") != "h264"
-            or video.get("avg_frame_rate") != "24/1"
+            or video.get("avg_frame_rate") != expected_fps
             or "mp4" not in containers
         ):
             raise ModelOperationError("model_evaluation_invalid_output", f"{label} video encoding differs")
@@ -963,6 +1047,39 @@ class H3ModelEvaluator:
             "duration_sec": round(duration, 3),
             "audio_present": False,
         }
+
+    def _cogvideox2b_preflight(self, model: ModelDescriptor) -> None:
+        if (
+            model.runtime_adapter != COGVIDEOX2B_RUNTIME_ADAPTER
+            or model.revision != COGVIDEOX2B_MODEL_REVISION
+        ):
+            raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
+        if self.cogvideox2b_runtime_python is None or not self.cogvideox2b_runtime_python.is_file():
+            raise ModelOperationError("model_runtime_unavailable", "pinned CogVideoX-2B runtime is unavailable")
+        snapshot = self.cogvideox2b_snapshot_root
+        if snapshot is None or not snapshot.is_dir():
+            raise ModelOperationError("model_not_found", "pinned CogVideoX-2B snapshot is unavailable")
+        if snapshot.name != COGVIDEOX2B_MODEL_REVISION or snapshot.parent.name != "snapshots":
+            raise ModelOperationError("model_verify_failed", "CogVideoX-2B snapshot revision differs")
+        try:
+            repository = snapshot.parent.parent.resolve(strict=True)
+            model_index = (snapshot / "model_index.json").resolve(strict=True)
+            required = [
+                (snapshot / relative).resolve(strict=True)
+                for relative in (*model.required_files, *(weight.path for weight in model.weights))
+            ]
+        except OSError as exc:
+            raise ModelOperationError("model_verify_failed", "CogVideoX-2B snapshot is incomplete") from exc
+        if not model_index.is_file() or model_index.stat().st_size > 64 * 1024:
+            raise ModelOperationError("model_verify_failed", "CogVideoX-2B model index is invalid")
+        if any(not item.is_file() or not item.is_relative_to(repository) for item in required):
+            raise ModelOperationError("model_verify_failed", "CogVideoX-2B snapshot is incomplete")
+        try:
+            value = json.loads(model_index.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ModelOperationError("model_verify_failed", "CogVideoX-2B model index is unreadable") from exc
+        if value.get("_class_name") != "CogVideoXPipeline":
+            raise ModelOperationError("model_verify_failed", "CogVideoX-2B pipeline differs")
 
     def _validate_wan_artifact(self, path: Path) -> dict[str, Any]:
         if not path.is_file() or path.stat().st_size <= 0:

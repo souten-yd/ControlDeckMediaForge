@@ -290,6 +290,9 @@ def create_app(
             hunyuan_runtime_python=resolved.hunyuan_runtime_python,
             hunyuan_snapshot_root=resolved.hunyuan_snapshot_root,
             hunyuan_evaluation_preset=resolved.hunyuan_evaluation_preset,
+            cogvideox2b_runtime_python=resolved.cogvideox2b_runtime_python,
+            cogvideox2b_snapshot_root=resolved.cogvideox2b_snapshot_root,
+            cogvideox2b_evaluation_preset=resolved.cogvideox2b_evaluation_preset,
             lease_renew_sec=resolved.host_lease_renew_sec,
             timeout_sec=resolved.model_evaluation_timeout_sec,
             # 自作モデルも測れるようにする。shipped manifest に居ないので、

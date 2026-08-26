@@ -191,6 +191,27 @@
       "license_notice": "LTX-2 Community License Agreement, dated 2026-01-05; review the upstream terms before use. ROCm/gfx1201 is NOT TESTED."
     },
     {
+      "model_id": "zai-org/CogVideoX-2b",
+      "display_name": "CogVideoX-2B",
+      "domains": ["general"],
+      "media_types": ["video"],
+      "description": "Apache-2.0 text-to-video comparison candidate at its fixed 720x480, 49-frame profile. R9700 generation passed, but latency, system swap activity, and action adherence prevent adoption.",
+      "approx_download_bytes": 13775572738,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "zai-org/CogVideoX-2b",
+        "revision": "1137dacfc2c9c012bed6a0793f4ecf2ca8e7ba01"
+      },
+      "ownership": "external",
+      "supports_lora": false,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "Apache-2.0; retain the license and notices when redistributing. This candidate is T2V-only and remains experimental after a bounded R9700 evaluation."
+    },
+    {
       "model_id": "tencent/HunyuanVideo-1.5",
       "display_name": "HunyuanVideo 1.5 720p",
       "domains": ["general", "illustration", "photoreal"],
