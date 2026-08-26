@@ -13,6 +13,7 @@ import sys
 from typing import Any
 
 import bpy
+import bmesh
 from mathutils import Vector
 
 
@@ -59,7 +60,7 @@ def normalize_render_png(path: Path) -> None:
 def load_request(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict) or set(value) != {
-        "schema_version", "expected_blender_version", "source", "output", "preview", "source_sha256"
+        "schema_version", "expected_blender_version", "source", "output", "preview", "source_sha256", "options"
     }:
         raise RuntimeError("compiler request fields differ")
     if value["schema_version"] != 1 or value["expected_blender_version"] != ".".join(map(str, bpy.app.version[:3])):
@@ -68,7 +69,40 @@ def load_request(path: Path) -> dict[str, Any]:
         raise RuntimeError("compiler request file names differ")
     if not isinstance(value["source_sha256"], str) or len(value["source_sha256"]) != 64:
         raise RuntimeError("compiler request source hash is invalid")
+    value["options"] = validate_options(value["options"])
     return value
+
+
+def validate_options(raw: object) -> dict[str, Any]:
+    if not isinstance(raw, dict) or set(raw) != {
+        "schema_version", "apply_transforms", "repair_normals", "remove_degenerate",
+        "merge_by_distance_m", "triangle_budget", "lod_ratios", "collision", "materials", "preview",
+    }:
+        raise RuntimeError("compiler option fields differ")
+    if raw["schema_version"] != "3d.compile-options@1" or raw["apply_transforms"] is not True:
+        raise RuntimeError("compiler option version or fixed transform differs")
+    for name in ("repair_normals", "remove_degenerate"):
+        if not isinstance(raw[name], bool):
+            raise RuntimeError(f"compiler option {name} is invalid")
+    merge = raw["merge_by_distance_m"]
+    if merge is not None and (isinstance(merge, bool) or not isinstance(merge, (int, float)) or not 1e-7 <= merge <= 1.0):
+        raise RuntimeError("compiler merge distance is invalid")
+    budget = raw["triangle_budget"]
+    if budget is not None and (isinstance(budget, bool) or not isinstance(budget, int) or not 12 <= budget <= 200_000):
+        raise RuntimeError("compiler triangle budget is invalid")
+    ratios = raw["lod_ratios"]
+    if (
+        not isinstance(ratios, list)
+        or len(ratios) > 3
+        or any(isinstance(item, bool) or not isinstance(item, (int, float)) or not 0.05 <= item <= 0.95 for item in ratios)
+        or any(left <= right for left, right in zip(ratios, ratios[1:], strict=False))
+    ):
+        raise RuntimeError("compiler LOD ratios are invalid")
+    if raw["collision"] not in {"none", "box", "convex_hull"}:
+        raise RuntimeError("compiler collision mode is invalid")
+    if raw["materials"] not in {"preserve", "basic_pbr"} or raw["preview"] != "fixed_workbench":
+        raise RuntimeError("compiler material or preview mode is invalid")
+    return raw
 
 
 def remove_custom_properties(value: Any) -> int:
@@ -119,7 +153,135 @@ def statistics(objects: list[Any]) -> dict[str, Any]:
     }
 
 
-def normalize_scene() -> tuple[dict[str, Any], dict[str, int], list[str]]:
+def triangle_count(objects: list[Any]) -> int:
+    total = 0
+    for value in objects:
+        if value.type == "MESH":
+            value.data.calc_loop_triangles()
+            total += len(value.data.loop_triangles)
+    return total
+
+
+def mesh_edits(objects: list[Any], options: dict[str, Any]) -> dict[str, int]:
+    before_vertices = sum(len(value.data.vertices) for value in objects if value.type == "MESH")
+    before_triangles = triangle_count(objects)
+    for value in objects:
+        if value.type != "MESH":
+            continue
+        mesh = value.data
+        editable = bmesh.new()
+        editable.from_mesh(mesh)
+        try:
+            if options["repair_normals"] and editable.faces:
+                bmesh.ops.recalc_face_normals(editable, faces=list(editable.faces))
+            if options["remove_degenerate"] and editable.edges:
+                bmesh.ops.dissolve_degenerate(editable, dist=1e-12, edges=list(editable.edges))
+            if options["merge_by_distance_m"] is not None and editable.verts:
+                bmesh.ops.remove_doubles(
+                    editable,
+                    verts=list(editable.verts),
+                    dist=float(options["merge_by_distance_m"]),
+                )
+            editable.to_mesh(mesh)
+            mesh.update()
+        finally:
+            editable.free()
+    return {
+        "vertices_before": before_vertices,
+        "vertices_after": sum(len(value.data.vertices) for value in objects if value.type == "MESH"),
+        "triangles_before": before_triangles,
+        "triangles_after": triangle_count(objects),
+    }
+
+
+def apply_triangle_budget(objects: list[Any], budget: int | None) -> dict[str, Any]:
+    before = triangle_count(objects)
+    if budget is None or before <= budget:
+        return {"requested": budget, "triangles_before": before, "triangles_after": before, "applied": False}
+    ratio = budget / before
+    for value in objects:
+        if value.type != "MESH":
+            continue
+        bpy.context.view_layer.objects.active = value
+        value.select_set(True)
+        modifier = value.modifiers.new(name="MediaForgeTriangleBudget", type="DECIMATE")
+        modifier.decimate_type = "COLLAPSE"
+        modifier.ratio = ratio
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
+        value.select_set(False)
+    after = triangle_count(objects)
+    if after > budget:
+        raise RuntimeError(f"triangle budget was not met: {after} > {budget}")
+    return {"requested": budget, "triangles_before": before, "triangles_after": after, "applied": True}
+
+
+def create_lods(objects: list[Any], ratios: list[float]) -> dict[str, Any]:
+    source_objects = [value for value in objects if value.type == "MESH"]
+    created: list[dict[str, Any]] = []
+    for level, ratio in enumerate(ratios, start=1):
+        for source in source_objects:
+            duplicate = source.copy()
+            duplicate.data = source.data.copy()
+            duplicate.name = f"{source.name}_LOD{level}"
+            bpy.context.scene.collection.objects.link(duplicate)
+            bpy.context.view_layer.objects.active = duplicate
+            duplicate.select_set(True)
+            modifier = duplicate.modifiers.new(name=f"MediaForgeLOD{level}", type="DECIMATE")
+            modifier.decimate_type = "COLLAPSE"
+            modifier.ratio = float(ratio)
+            bpy.ops.object.modifier_apply(modifier=modifier.name)
+            duplicate.select_set(False)
+            created.append({"name": duplicate.name, "level": level, "ratio": ratio, "triangles": triangle_count([duplicate])})
+    return {"requested_ratios": ratios, "created": created}
+
+
+def create_collision(objects: list[Any], mode: str) -> dict[str, Any]:
+    if mode == "none":
+        return {"mode": mode, "created": False}
+    points = [value.matrix_world @ vertex.co for value in objects if value.type == "MESH" for vertex in value.data.vertices]
+    if not points:
+        raise RuntimeError("collision generation has no vertices")
+    mesh = bpy.data.meshes.new("UCX_MediaForge")
+    collision = bpy.data.objects.new("UCX_MediaForge", mesh)
+    bpy.context.scene.collection.objects.link(collision)
+    if mode == "box":
+        minimum = [min(point[axis] for point in points) for axis in range(3)]
+        maximum = [max(point[axis] for point in points) for axis in range(3)]
+        vertices = [(x, y, z) for x in (minimum[0], maximum[0]) for y in (minimum[1], maximum[1]) for z in (minimum[2], maximum[2])]
+        faces = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+        mesh.from_pydata(vertices, [], faces)
+    else:
+        editable = bmesh.new()
+        try:
+            vertices = [editable.verts.new(point) for point in points]
+            editable.verts.ensure_lookup_table()
+            bmesh.ops.convex_hull(editable, input=vertices, use_existing_faces=False)
+            editable.to_mesh(mesh)
+        finally:
+            editable.free()
+    mesh.update()
+    return {"mode": mode, "created": True, "vertices": len(mesh.vertices), "triangles": triangle_count([collision])}
+
+
+def simplify_materials(mode: str) -> dict[str, Any]:
+    if mode == "preserve":
+        return {"mode": mode, "materials": len(bpy.data.materials), "changed": 0}
+    changed = 0
+    for material in bpy.data.materials:
+        color = tuple(material.diffuse_color)
+        material.use_nodes = True
+        nodes = material.node_tree.nodes
+        nodes.clear()
+        output = nodes.new("ShaderNodeOutputMaterial")
+        shader = nodes.new("ShaderNodeBsdfPrincipled")
+        shader.inputs["Base Color"].default_value = color
+        shader.inputs["Roughness"].default_value = 0.5
+        material.node_tree.links.new(shader.outputs["BSDF"], output.inputs["Surface"])
+        changed += 1
+    return {"mode": mode, "materials": len(bpy.data.materials), "changed": changed}
+
+
+def normalize_scene(options: dict[str, Any]) -> tuple[dict[str, Any], dict[str, int], list[str], list[dict[str, Any]]]:
     removed = {"camera_light_objects": 0, "text_blocks": 0, "drivers": 0, "custom_properties": 0}
     for value in list(bpy.data.objects):
         if value.type in {"CAMERA", "LIGHT"}:
@@ -131,6 +293,21 @@ def normalize_scene() -> tuple[dict[str, Any], dict[str, int], list[str]]:
         raise RuntimeError(f"unsupported object type: {unsupported[0]}")
     if not any(value.type == "MESH" for value in objects):
         raise RuntimeError("scene contains no mesh")
+    has_rig_or_animation = (
+        any(value.type == "ARMATURE" for value in objects)
+        or bool(bpy.data.actions)
+        or any(getattr(value, "animation_data", None) is not None for value in objects)
+    )
+    destructive_options = (
+        options["repair_normals"]
+        or options["remove_degenerate"]
+        or options["merge_by_distance_m"] is not None
+        or options["triangle_budget"] is not None
+        or bool(options["lod_ratios"])
+        or options["materials"] != "preserve"
+    )
+    if has_rig_or_animation and destructive_options:
+        raise RuntimeError("geometry or material options are not accepted for rigged or animated input")
     for text in list(bpy.data.texts):
         bpy.data.texts.remove(text)
         removed["text_blocks"] += 1
@@ -155,6 +332,29 @@ def normalize_scene() -> tuple[dict[str, Any], dict[str, int], list[str]]:
         value.select_set(True)
     bpy.context.view_layer.objects.active = objects[0]
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    operations: list[dict[str, Any]] = [
+        {"id": "sanitize.scene", "parameters": {}, "results": removed, "warnings": []},
+        {"id": "normalize.unit-meters", "parameters": {"apply_transforms": True}, "results": {"objects": len(objects)}, "warnings": []},
+    ]
+    edit_results = mesh_edits(objects, options)
+    operations.append({
+        "id": "edit.mesh",
+        "parameters": {
+            "repair_normals": options["repair_normals"],
+            "remove_degenerate": options["remove_degenerate"],
+            "merge_by_distance_m": options["merge_by_distance_m"],
+        },
+        "results": edit_results,
+        "warnings": [],
+    })
+    budget_results = apply_triangle_budget(objects, options["triangle_budget"])
+    operations.append({"id": "budget.triangles", "parameters": {"triangle_budget": options["triangle_budget"]}, "results": budget_results, "warnings": []})
+    material_results = simplify_materials(options["materials"])
+    operations.append({"id": "materials.normalize", "parameters": {"mode": options["materials"]}, "results": material_results, "warnings": []})
+    lod_results = create_lods(objects, options["lod_ratios"])
+    operations.append({"id": "lod.generate", "parameters": {"ratios": options["lod_ratios"]}, "results": lod_results, "warnings": []})
+    collision_results = create_collision(objects, options["collision"])
+    operations.append({"id": "collision.generate", "parameters": {"mode": options["collision"]}, "results": collision_results, "warnings": []})
     warnings: list[str] = []
     for mesh in bpy.data.meshes:
         mesh.calc_loop_triangles()
@@ -163,7 +363,8 @@ def normalize_scene() -> tuple[dict[str, Any], dict[str, int], list[str]]:
         if any(not all(math.isfinite(component) for component in polygon.normal) for polygon in mesh.polygons):
             raise RuntimeError("mesh contains a non-finite normal")
     bpy.ops.outliner.orphans_purge(do_recursive=True)
-    return statistics(list(bpy.context.scene.objects)), removed, warnings
+    operations.append({"id": "validate.normals", "parameters": {"repair": options["repair_normals"]}, "results": {"warnings": len(warnings)}, "warnings": list(warnings)})
+    return statistics(list(bpy.context.scene.objects)), removed, warnings, operations
 
 
 def render_preview(path: Path, bounds: tuple[list[float], list[float]]) -> None:
@@ -209,7 +410,7 @@ def main() -> None:
         raise RuntimeError("compiler source hash differs")
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=str(source))
-    stats, removed, warnings = normalize_scene()
+    stats, removed, warnings, operations = normalize_scene(request["options"])
     bpy.ops.export_scene.gltf(
         filepath=str(output),
         export_format="GLB",
@@ -220,6 +421,10 @@ def main() -> None:
         export_apply=True,
     )
     render_preview(preview, (stats["bounds_min"], stats["bounds_max"]))
+    operations.extend([
+        {"id": "export.glb-embedded-y-up", "parameters": {}, "results": {"sha256": sha256(output)}, "warnings": []},
+        {"id": "preview.fixed-workbench", "parameters": {}, "results": {"sha256": sha256(preview)}, "warnings": []},
+    ])
     result = {
         "schema_version": 1,
         "blender_version": ".".join(map(str, bpy.app.version[:3])),
@@ -229,6 +434,7 @@ def main() -> None:
         "statistics": stats,
         "removed": removed,
         "warnings": warnings,
+        "operations": operations,
     }
     Path(args.result).write_text(json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
 

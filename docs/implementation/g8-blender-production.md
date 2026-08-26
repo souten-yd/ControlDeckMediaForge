@@ -175,6 +175,10 @@ preview                    fixed_workbench
 自動UV unwrap、texture bake、decimateは入力品質を壊し得るため、各々golden fixture、error bound、manifest
 差分が定義できるまで既定off。入力rig/animationを壊すoptionは静的meshと同じprofileへ混ぜない。
 
+B3実測でtriangle budgetの受理上限を200,000とした。コード生成200,978-triangle gridの
+200,000 budgetは199,999 trianglesへ収束し、2回のGLB/ZIP hashが一致した。未計測のそれ以上は
+受理しない。UV unwrapとtexture bakeは引き続き実装しない。
+
 各処理はmanifestのordered operation listへparameters/results/warningsを残す。triangle budget未達、
 non-manifold、missing texture、unsupported extensionをwarningとfailureに分類し、握り潰さない。
 
