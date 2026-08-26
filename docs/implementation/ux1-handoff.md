@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/wan21-vace-prompt-lifecycle（origin/main bc30f53 から作成）
+branch      ux1/wan21-vace-lifecycle-handoff（origin/main 9d486d8 から作成）
 slice       G7 V1h Wan 2.1 VACE prompt/model lifecycle follow-up
 状態        component直列化でprocess swap 0 / system swap-out 401 pages / DEFERRED維持
 baseline    focused 32 passed / full 711 passed / compileall・diff check PASS
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #127 merged / V1h PR未作成
+PR          Media Forge #128 merged / merge commit 9d486d86986fdbf06d29830432f835d2aacac679
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -26,6 +26,9 @@ G7 V1f は Media Forge #125、merge commit
 `245a5e2b8a17a4cac196db67cf70945083136624` で main へ入った。
 G7 V1g は Media Forge #126、merge commit
 `1bbfbd43d784a2d03a34eafdc9a189d1c28a5e6b` で main へ入った。
+G7 V1h は Media Forge #128、exact head
+`e5a527c4c7e8c903627d1acbcb74e2b6ff3f72b3`、merge commit
+`9d486d86986fdbf06d29830432f835d2aacac679` で main へ入った。
 
 ## この slice の結果
 
@@ -47,7 +50,7 @@ DEFERRED   VACE production adoption / candidate profile / G7 V2 promotion
 ## 次にやること（1つだけ）
 
 ```text
-1. V1h PRをexact headでmergeし、handoffをmerged stateへ更新する
+1. G7の次候補はlicense条件とzero-swap見込みを先に評価し、weight取得前に明示判断する
 2. VACEはsystem swap 0を実測できる追加改善までcandidate profileへ進めない
 3. LTX/Hunyuan/SkyReels weightは明示license acceptanceなしに取得しない
 ```
