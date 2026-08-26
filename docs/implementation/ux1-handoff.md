@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/mobile-media-switch（origin/main b9a8878 から作成）
-slice       user-requested mobile Create media switch
-状態        実装・standalone/installed mobile browser評価完了 / PR前
+branch      ux1/mobile-media-switch-handoff（origin/main cc64bd3 から作成）
+slice       mobile Create media switch handoff close
+状態        実装・standalone/installed mobile browser評価・merge完了
 baseline    focused PASS / full 751 passed / 1 warning / 54.86s
 installed   v0.9.0復元 / PID 2279825,2279852 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         動画runtime/weight/GPU生成はNOT TESTED / license同意0
-PR          ControlDeck変更0 / Media Forge PR前
+PR          ControlDeck変更0 / Media Forge #145 merged / handoff PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -59,6 +59,9 @@ G8 B5 は Media Forge #143、exact head
 G8 B5 handoff は Media Forge #144、exact head
 `0ec084951e32576622ff7a4eb79bb961a105c49e`、merge commit
 `b9a8878a2a4b51076a32546ce49632ca34db295e` で main へ入った。
+Mobile Create media switch は Media Forge #145、exact head
+`bd9a06517d2dbbd678a9ed48391f4bfaa4c092b3`、merge commit
+`cc64bd32b6d7d27718bbef21771acafd13a191d7` で main へ入った。
 
 ## この slice の結果
 
@@ -79,10 +82,9 @@ submitしない。既存`video.generate`契約、candidate catalog、routing/ado
 ## 次にやること（1つだけ）
 
 ```text
-1. このsliceのPRをreview/mergeし、exact headとmerge commitをここへ記録する
-2. 次の正規goalはG9。実装前に候補、license、gfx1201/ROCm、VRAM、G8境界の調査計画を作る
-3. Hunyuan3D等のweight取得・利用開始はlicense条項を提示し、利用者の明示同意後だけ行う
-4. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
+1. 次の正規goalはG9。実装前に候補、license、gfx1201/ROCm、VRAM、G8境界の調査計画を作る
+2. Hunyuan3D等のweight取得・利用開始はlicense条項を提示し、利用者の明示同意後だけ行う
+3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South
