@@ -4995,3 +4995,63 @@ installed /health          healthy / contract 2.0
 ROCm process cleanup       KFD process 0 / VRAM 59,912,192 B
 ControlDeck slice changes  0（既存 frontend/tsconfig.tsbuildinfo 変更1件は保全）
 ```
+
+## G7 V1f — Wan 2.1 1.3B T2V/I2V candidate preflight（2026-08-26）
+
+CogVideoX-2B が action adherence、latency、system swap の gate を落としたため、次の Apache-2.0
+候補を official Hugging Face metadata / model card / Diffusers 実装から固定した。T2V は
+`Wan-AI/Wan2.1-T2V-1.3B-Diffusers@0fad780a534b6463e45facd96134c9f345acfa5b`、I2V は
+`Wan-AI/Wan2.1-VACE-1.3B-diffusers@ec4d2cb062b548996b179d493fdd05340de702a1`。
+両方とも public / non-gated、model card の license tag は Apache-2.0。
+
+official tree API の全件を revision 固定で列挙した。
+
+```text
+T2V snapshot / weights      28,935,653,511 / 28,928,720,056 bytes
+T2V files / LFS inference   31 / 10
+T2V weights identity        sha256:5ae5898aacc245296343d129de399f7dcc153900dbbdf882da12a4b18b162569
+VACE snapshot / weights     19,043,130,596 / 19,036,896,776 bytes
+VACE files / LFS inference  27 / 8
+VACE weights identity       sha256:2c488c292438aaa2914e96dea0b8cb929eda504adfb6bb583f721ea63d1be315
+```
+
+T2V の text encoder は float32 約22.7GB、VACE は bfloat16 約11.4GB。VACE official card と
+Diffusers 0.40.0 の call signature は video / mask / reference_images conditioning を持ち、first-last-
+frame-to-video と image/video-to-video を明示する。このため VACE を I2V 候補、T2V 1.3B を T2V
+候補として別々に実測する。
+
+専用 `wan21-1.3b-probe` runtime を `./mf.sh env build` で構築した。
+
+```text
+runtime size               4,686,651,246 bytes
+build elapsed              26 sec / pip cache delta 160 bytes
+pip check                  broken requirements 0
+torch / HIP                2.10.0+rocm7.2.1 / 7.2.53211
+Diffusers / Transformers   0.40.0 / 5.15.1
+preflight                  PASS / 2.15 sec / max RSS 959,360 KiB / swaps 0
+GPU                        AMD Radeon AI PRO R9700 / gfx1201
+attention                  PyTorch SDPA default / custom kernel 0
+cleanup                    KFD process 0 / VRAM 59,912,192 bytes
+```
+
+exact snapshots には model card がリンクする `LICENSE.txt`、LICENSE、NOTICE がいずれも存在せず、
+revision 固定 HTTP は全て404だった。model card の Apache-2.0 宣言は記録するが、managed promotion /
+再配布前に authoritative license text と applicable notices を bundle へ含める。
+
+判定: source/license identity、bundle bounds、dedicated runtime、R9700 imports/default attention は
+**PASS**。weight download/hash/model load/generation、VRAM/RSS/swap、quality、determinism、cancel、
+Broker、installed browser、SonicForge coexistence は **NOT TESTED**。catalog は external /
+experimental / low-confidence / recommended profile 0、公開 capability は unavailable のまま。
+次は小さい VACE snapshot を先に download/hash し、Broker 経由 I2V gate を評価する。
+
+最終 gate:
+
+```text
+focused                    9 passed / 1 warning
+full                       702 passed / 2 warnings / 48.88 sec
+compileall / diff check    PASS / PASS
+installed /health          healthy / contract 2.0 / Media Forge v0.9.0
+SonicForge                 sonicforge-acceptance.service active
+ROCm cleanup               KFD process 0 / R9700 VRAM 59,912,192 bytes
+ControlDeck slice changes  0（既存 frontend/tsconfig.tsbuildinfo 変更1件は保全）
+```

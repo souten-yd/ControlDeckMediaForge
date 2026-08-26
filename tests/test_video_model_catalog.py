@@ -17,6 +17,8 @@ VIDEO_IDS = {
     "Wan-AI/Wan2.2-Animate-14B",
     "Lightricks/LTX-2.3",
     "zai-org/CogVideoX-2b",
+    "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
+    "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
     "tencent/HunyuanVideo-1.5",
     "MiniMaxAI/MiniMax-H3",
     "DiffSynth-Studio/MiniMax-H3-NF4",
@@ -82,10 +84,34 @@ def test_only_bounded_complete_video_snapshots_are_managed() -> None:
         "Wan-AI/Wan2.2-Animate-14B",
         "Lightricks/LTX-2.3",
         "zai-org/CogVideoX-2b",
+        "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
+        "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
         "tencent/HunyuanVideo-1.5",
         "MiniMaxAI/MiniMax-H3",
         "DiffSynth-Studio/MiniMax-H3-NF4",
     }
+
+
+def test_wan21_13b_candidates_remain_external_and_unmeasured() -> None:
+    candidates = {model.model_id: model for model in registry().all()}
+    t2v = candidates["Wan-AI/Wan2.1-T2V-1.3B-Diffusers"]
+    vace = candidates["Wan-AI/Wan2.1-VACE-1.3B-diffusers"]
+
+    assert t2v.ownership == ModelOwnership.EXTERNAL
+    assert t2v.approx_download_bytes == 28_935_653_511
+    assert t2v.capabilities == ("video.text_to_video",)
+    assert t2v.hardware_backends == ("cuda",)
+    assert len(t2v.weights) == 10
+
+    assert vace.ownership == ModelOwnership.EXTERNAL
+    assert vace.approx_download_bytes == 19_043_130_596
+    assert vace.capabilities == (
+        "video.image_to_video",
+        "video.multi_keyframe",
+        "video.video_to_video",
+    )
+    assert vace.hardware_backends == ("cuda",)
+    assert len(vace.weights) == 8
 
 
 def test_minimax_h3_is_license_gated_and_never_claims_r9700_support() -> None:
