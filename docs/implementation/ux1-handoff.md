@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g7-v1i-offload-rejection（origin/main 485af85 から作成）
+branch      ux1/g7-v1i-merge-handoff（origin/main 7e8d231 から作成）
 slice       G7 V1i VACE VAE delayed-load comparison / G7 deferral
 状態        delayed-load不採用 / V1 adoption DEFERRED / V2〜V4未着手
 baseline    focused runner 6 passed / full 711 passed / 1 warning / 48.01s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #129 merged / V1i PR未作成
+PR          Media Forge #130 merged / merge commit 7e8d2313d2543ee0b0df444eacc5c2d2f92f619f
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -29,6 +29,9 @@ G7 V1g は Media Forge #126、merge commit
 G7 V1h は Media Forge #128、exact head
 `e5a527c4c7e8c903627d1acbcb74e2b6ff3f72b3`、merge commit
 `9d486d86986fdbf06d29830432f835d2aacac679` で main へ入った。
+G7 V1i は Media Forge #130、exact head
+`77b15513981e0d8a6f06b65b6d0fa25cdf36858d`、merge commit
+`7e8d2313d2543ee0b0df444eacc5c2d2f92f619f` で main へ入った。
 
 ## この slice の結果
 
@@ -48,9 +51,8 @@ DEFERRED   G7 V1 adoption / production video capability
 ## 次にやること（1つだけ）
 
 ```text
-1. V1i docs/full test/PR mergeを閉じる
-2. G8のimplementation planを設計正から起こし、deterministic import/validationから進める
-3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
+1. G8のimplementation planを設計正から起こし、deterministic import/validationから進める
+2. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South
