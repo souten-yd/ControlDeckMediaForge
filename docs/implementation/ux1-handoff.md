@@ -13,7 +13,7 @@ slice       G7 V1g Wan 2.1 VACE 1.3B I2V evaluation
 baseline    focused 32 passed / 1 warning、full 711 passed / 1 warning / 48.38s
 installed   Media Forge v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #126 draft / head bd259e7（final docs commit前）
+PR          Media Forge #126 draft / head acc7c07（final docs committed）
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -50,7 +50,7 @@ DEFERRED   VACE production adoption / candidate profile / G7 V2 promotion
 ## 次にやること（1つだけ）
 
 ```text
-1. V1g final docsをcommit/pushし、PR #126をready化してexact-head mergeする
+1. PR #126をready化し、remote exact head / checks / mergeability確認後にmergeする
 2. VACEはprocess/system swap 0を実測できる保守可能なoffload/RAM改善まで再実行しない
 3. merge後に次のG7候補を別sliceで選ぶ。T2V 1.3B downloadはVACE FAILを踏まえ再判断する
 ```
