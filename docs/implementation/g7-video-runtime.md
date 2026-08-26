@@ -254,6 +254,23 @@ V1g比でlatency、RSS、process swapは大幅改善したが、要求したzero
 candidate profileには進まずVACEは **DEFERRED** のまま。直列component lifecycleだけを保守可能な
 private evaluator改善として保持し、再開条件を緩めない。
 
+### 2.8 VAE delayed-load comparison and G7 deferral（2026-08-26）
+
+V1h後も残るsystem swapがprompt encode中のFP32 VAE常駐に起因するか、同じ実Host Job / Broker /
+R9700で対照比較した。VAEをUMT5破棄後まで遅延ロードしたrunは同一出力SHA、process swap 0を維持したが、
+peak RSS 10,430,042,112 bytes、peak VRAM 22,179,917,824 bytes、system swap-out 3,597 pagesへ悪化した。
+変更を戻したV1h対照runはpeak RSS 10,245,021,696 bytes、peak VRAM 19,462,152,192 bytes、system
+swap-out 2,977 pagesだった。遅延ロードを採用しない。
+
+公式Diffusersのgroup/disk offloadはhost RAMを減らせるが、denoiseの各stepでblock weightを再転送する。
+現runは1 stepだけで約51秒を要し、30-step candidateへ適用しても実用latencyを満たさない。専用runtimeに
+TorchAO / bitsandbytesは存在せず、ROCm/gfx1201で検証済みの量子化経路もないため、依存や未検証backendを
+追加しない。
+
+G7はV1 adoption gateで **DEFERRED**。V2〜V4、candidate quality/cancel/public assetは未着手のまま、
+通常capabilityをunavailableに保つ。再開条件は、明示license acceptance済みの軽量候補、または
+zero-swapと実用latencyを同時に満たす別のpermissive I2V/T2V候補である。
+
 ## 3. V2 — execution
 
 private runtime adapter が raw frames/video を job root に書き、V0 の FFmpeg stage が公開 asset
