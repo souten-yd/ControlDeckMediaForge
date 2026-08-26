@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
+from io import BytesIO
 from pathlib import Path
 import struct
 import time
@@ -13,10 +15,17 @@ from PIL import Image
 import pytest
 
 from conftest import wait_terminal
-from mediaforge import blender_compile
-from mediaforge.blender_compile import compile_project_package
-from mediaforge.blender_compile import BlenderCompileCanceled, BlenderCompileError, OPERATION_IDS, parse_compile_options
+from mediaforge import blender_compile, thumbnails
+from mediaforge.blender_compile import (
+    BlenderCompileCanceled,
+    BlenderCompileError,
+    OPERATION_IDS,
+    compile_project_package,
+    parse_compile_options,
+)
+from mediaforge.thumbnails import ThumbnailError
 from test_glb_import import glb_bytes
+from test_host_execution import host_client
 
 
 def generated_mesh_glb(
@@ -119,6 +128,59 @@ def test_compile_package_has_fixed_entries_metadata_and_bytes(tmp_path: Path, mo
     assert packages[0] == packages[1]
 
 
+def test_project_preview_never_extracts_archive_members(tmp_path: Path) -> None:
+    archive_path = tmp_path / "hostile.zip"
+    preview = BytesIO()
+    Image.new("RGBA", (16, 16), (1, 2, 3, 255)).save(preview, format="PNG")
+    content = preview.getvalue()
+    manifest = {
+        "schema_version": "media-forge.3d-project@1",
+        "profile": "3d.project.glb",
+        "preview": {
+            "filename": "preview.png",
+            "mime_type": "image/png",
+            "size_bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        },
+    }
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("asset.glb", b"glTF")
+        archive.writestr("manifest.json", json.dumps(manifest))
+        archive.writestr("preview.png", content)
+        archive.writestr("../escaped", b"must not be written")
+    with pytest.raises(ThumbnailError):
+        thumbnails.render(archive_path, 256, "application/zip")
+    assert not (tmp_path.parent / "escaped").exists()
+
+
+def test_runtime_capability_requires_exact_stamp_and_trusted_files(tmp_path: Path, monkeypatch) -> None:
+    runtime = tmp_path / "runtime"
+    executable = runtime / "install" / "blender"
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"#!/bin/sh\n")
+    executable.chmod(0o700)
+    worker = tmp_path / "compile_asset.py"
+    worker.write_text("# trusted\n", encoding="utf-8")
+    manifest = tmp_path / "config" / "blender-runtime.json"
+    manifest.parent.mkdir()
+    manifest.write_text(json.dumps({"archive_sha256": "a" * 64}), encoding="utf-8")
+    monkeypatch.setattr(blender_compile, "RUNTIME_ROOT", runtime)
+    monkeypatch.setattr(blender_compile, "BLENDER_EXECUTABLE", executable)
+    monkeypatch.setattr(blender_compile, "TRUSTED_WORKER", worker)
+    monkeypatch.setattr(blender_compile, "REPOSITORY_ROOT", tmp_path)
+
+    assert blender_compile.runtime_available() is False
+    (runtime / ".runtime.json").write_text(json.dumps({
+        "schema_version": 1,
+        "version": "4.5.9",
+        "archive_sha256": "a" * 64,
+        "executable": "blender",
+    }), encoding="utf-8")
+    assert blender_compile.runtime_available() is True
+    worker.unlink()
+    assert blender_compile.runtime_available() is False
+
+
 def test_asset_pack_3d_profile_registers_deterministic_zip_and_provenance(client, monkeypatch) -> None:
     monkeypatch.setattr(blender_compile, "_run_blender", fake_blender)
     imported = client.post(
@@ -166,6 +228,69 @@ def test_asset_pack_3d_profile_registers_deterministic_zip_and_provenance(client
         assert provenance["postprocessing"] == list(OPERATION_IDS)
     assert hashes[0] == hashes[1]
     assert list(client.app.state.store.work_dir.iterdir()) == []
+
+
+def test_3d_package_crosses_agent_library_preview_and_pack_without_paths(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(blender_compile, "_run_blender", fake_blender)
+    client, headers, state = host_client(tmp_path, token="valid-job")
+    with client:
+        imported = client.post(
+            "/api/v1/assets/import?purpose=source",
+            content=glb_bytes(),
+            headers={"content-type": "model/gltf-binary"},
+        ).json()
+        request = {
+            "operation": "asset.pack",
+            "intent": "Prepare agent GLB",
+            "inputs": [{"asset_id": imported["id"]}],
+            "profile": "3d.project.glb",
+            "constraints": {"compile_options": {"schema_version": "3d.compile-options@1"}},
+            "output": {"format": "zip", "count": 1},
+            "local_only": True,
+        }
+        generated = client.post(
+            "/addon/v1/agent/generate",
+            json={"input": request, "correlation": {"job_id": "host-job"}},
+            headers=headers,
+        )
+        assert generated.status_code == 200, generated.text
+        asset_id = generated.json()["asset_id"]
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            socket.send_json({"id": "library", "method": "library.list", "params": {"limit": 20}})
+            while True:
+                message = socket.receive_json()
+                if message.get("id") == "library":
+                    break
+            item = next(value for value in message["result"]["items"] if value["asset_id"] == asset_id)
+            assert item["mime_type"] == "application/zip"
+            assert item["preview_kind"] == "project_3d"
+            assert item["suggested_filename"].endswith(".zip")
+            assert base64.b64decode(item["thumbnail"]["base64"]).startswith(b"RIFF")
+
+        standalone = client.post(
+            f"/workspace-api/assets/{asset_id}/thumbnail", json={"max_side": 512}
+        )
+        assert standalone.status_code == 200
+        assert standalone.json()["mime_type"] == "image/webp"
+        placed = client.post(
+            "/addon/v1/agent/pack",
+            json={
+                "input": {
+                    "asset_id": asset_id,
+                    "output_grant_id": "grant:export-1",
+                    "filename": "project-ready.zip",
+                },
+                "correlation": {"job_id": "host-agent"},
+            },
+            headers=headers,
+        )
+    assert placed.status_code == 200, placed.text
+    receipt = placed.json()
+    assert receipt["mime_type"] == "application/zip"
+    assert receipt["name"] == "project-ready.zip"
+    assert state["outputs"]["output-1"]["content"].startswith(b"PK")
+    serialized = json.dumps({"generated": generated.json(), "receipt": receipt})
+    assert str(tmp_path) not in serialized and "path" not in serialized
 
 
 def test_3d_profile_rejects_options_and_non_glb_input(client) -> None:

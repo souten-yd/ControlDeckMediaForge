@@ -57,6 +57,7 @@ const CAPABILITY_REASON = {
   planned_for_g7: "これからの対応予定です",
   planned_for_g9: "これからの対応予定です",
   text_generator_unavailable: "ControlDeck の文章による演出補助をいま使えません",
+  runtime_not_installed: "3D整形ランタイムが導入されていません",
 };
 
 const state = {
@@ -84,6 +85,7 @@ const state = {
   referenceAnalysis: null,
   referenceFocus: "overall",
   sourceAsset: null,
+  project3dAsset: null,
   editMode: "",
   source: null,
   upload: null,
@@ -441,15 +443,14 @@ async function standaloneCall(method, params) {
     return {...document_, envelope: config?.envelope || null, presets: config?.presets || []};
   }
   if (method === "library.list") {
-    const {items} = await json("/api/v1/assets");
-    const limited = typeof params.limit === "number" ? items.slice(0, params.limit) : items;
-    return {items: limited.map((asset) => ({
-      asset_id: asset.id, width: asset.width, height: asset.height, mime_type: asset.mime_type,
-      created_at: asset.created_at, kind: asset.parent_asset_ids.length ? "edited" : "generated",
-      summary: asset.suggested_filename, parent_asset_ids: asset.parent_asset_ids,
-    })), next_before: null};
+    return json("/workspace-api/library", {method: "POST", body: JSON.stringify(params)});
   }
-  if (method === "assets.thumbnail" || method === "assets.content") {
+  if (method === "assets.thumbnail") {
+    return json(`/workspace-api/assets/${encodeURIComponent(params.asset_id)}/thumbnail`, {
+      method: "POST", body: JSON.stringify({max_side: params.max_side}),
+    });
+  }
+  if (method === "assets.content") {
     const response = await fetch(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/content`);
     if (!response.ok) throw {code: `http_${response.status}`};
     const bytes = new Uint8Array(await response.arrayBuffer());
@@ -527,6 +528,7 @@ function setMode(mode, {persist = true} = {}) {
   byId("mode-advanced").setAttribute("aria-pressed", String(state.mode === "advanced"));
   mountAdvanced();
   renderPackProfiles();
+  render3dProject();
   if (persist) void savePreferences({mode: state.mode});
 }
 
@@ -1466,6 +1468,109 @@ async function addCustomModel() {
 
 /* ── 配布用にまとめる（asset.pack） ──────────────────────────────────── */
 
+function project3dFile() {
+  return byId("project-3d-file").files[0] || null;
+}
+
+function render3dProject() {
+  const capability = state.capabilities["asset.3d_project_pack"] || {};
+  const available = capability.state === "available";
+  const file = project3dFile();
+  byId("project-3d-section").hidden = !available;
+  byId("project-3d-file-text").textContent = file ? `GLB: ${file.name}` : "＋ GLBを選ぶ";
+  byId("project-3d-file-label").classList.toggle("filled", Boolean(file));
+  byId("project-3d-clear").hidden = !file;
+  // 実行操作は runtime と入力の両方がそろったときだけ見せる。
+  byId("project-3d-submit").hidden = !available || !file;
+  byId("project-3d-options").hidden = !available || !file || state.mode !== "advanced";
+  if (!available) {
+    byId("project-3d-status").textContent = CAPABILITY_REASON[capability.reason] || "3D整形を利用できません";
+  } else if (!file) {
+    byId("project-3d-status").textContent = "";
+  }
+}
+
+function optionalProjectNumber(id) {
+  const text = byId(id).value.trim();
+  return text === "" ? null : Number(text);
+}
+
+function project3dOptions() {
+  if (state.mode !== "advanced") return {schema_version: "3d.compile-options@1"};
+  const lodRatios = [1, 2, 3]
+    .map((index) => optionalProjectNumber(`project-3d-lod-${index}`))
+    .filter((value) => value !== null);
+  if (lodRatios.some((value) => !Number.isFinite(value) || value < 0.05 || value > 0.95)
+      || lodRatios.some((value, index) => index > 0 && lodRatios[index - 1] <= value)) {
+    throw new Error("LOD比率は0.05〜0.95で、大きい順に指定してください。");
+  }
+  const merge = optionalProjectNumber("project-3d-merge-distance");
+  const budget = optionalProjectNumber("project-3d-triangle-budget");
+  if (merge !== null && (!Number.isFinite(merge) || merge < 0.0000001 || merge > 1)) {
+    throw new Error("近接頂点の距離は0.0000001〜1mで指定してください。");
+  }
+  if (budget !== null && (!Number.isInteger(budget) || budget < 12 || budget > 200000)) {
+    throw new Error("三角形の上限は12〜200000で指定してください。");
+  }
+  return {
+    schema_version: "3d.compile-options@1",
+    apply_transforms: true,
+    repair_normals: byId("project-3d-repair-normals").checked,
+    remove_degenerate: byId("project-3d-remove-degenerate").checked,
+    merge_by_distance_m: merge,
+    triangle_budget: budget,
+    lod_ratios: lodRatios,
+    collision: byId("project-3d-collision").value,
+    materials: byId("project-3d-materials").value,
+    preview: "fixed_workbench",
+  };
+}
+
+async function submit3dProject() {
+  const file = project3dFile();
+  const error = byId("project-3d-error");
+  const status = byId("project-3d-status");
+  const button = byId("project-3d-submit");
+  error.hidden = true;
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith(".glb") || file.size < 1 || file.size > 64 * 1024 * 1024) {
+    error.hidden = false;
+    error.textContent = "64MiB以下のGLBを選んでください。";
+    return;
+  }
+  let options;
+  try { options = project3dOptions(); }
+  catch (failure) {
+    error.hidden = false;
+    error.textContent = failure.message;
+    return;
+  }
+  button.disabled = true;
+  status.textContent = "GLBを取り込んでいます…";
+  try {
+    state.project3dAsset = state.project3dAsset
+      || await importFile(file, "source", null, "model/gltf-binary");
+    status.textContent = "3Dプロジェクトを受け付けています…";
+    await call("jobs.create", {
+      operation: "asset.pack",
+      intent: `${file.name} をプロジェクト用GLBに整える`,
+      profile: "3d.project.glb",
+      inputs: [{asset_id: state.project3dAsset.id}],
+      constraints: {compile_options: options},
+      output: {format: "zip", count: 1},
+      local_only: true,
+    });
+    status.textContent = "受け付けました。状況で進み具合を確認できます。";
+    activate("activity");
+    await loadActivity();
+  } catch (failure) {
+    error.hidden = false;
+    error.textContent = failure?.message || "3Dプロジェクトを作れませんでした。";
+  } finally {
+    button.disabled = false;
+  }
+}
+
 /* backend には asset.pack があるのに、画面から起動する経路が無かった。
    スロットは profile が宣言しているので、その宣言だけを根拠に組む。
    media 固有のスロット名をここに書き写さない。 */
@@ -2224,12 +2329,12 @@ async function fileBase64(file) {
   return btoa(binary);
 }
 
-async function importFile(file, purpose, onProgress) {
+async function importFile(file, purpose, onProgress, mediaType = file?.type) {
   if (!file || file.size < 1 || file.size > 64 * 1024 * 1024) throw {code: "invalid_import_size"};
   if (window.parent === window) {
-    return call("assets.import", {purpose, media_type: file.type, base64: await fileBase64(file)});
+    return call("assets.import", {purpose, media_type: mediaType, base64: await fileBase64(file)});
   }
-  const upload = await call("assets.import.begin", {purpose, media_type: file.type, size: file.size});
+  const upload = await call("assets.import.begin", {purpose, media_type: mediaType, size: file.size});
   for (let offset = 0; offset < file.size; offset += upload.chunk_bytes) {
     const slice = file.slice(offset, Math.min(file.size, offset + upload.chunk_bytes));
     await call("assets.import.chunk", {upload_id: upload.upload_id, offset, base64: await fileBase64(slice)});
@@ -3469,7 +3574,9 @@ async function libraryCard(item) {
   const kind = document.createElement("span");
   kind.textContent = KIND_LABEL[item.kind] || item.kind;
   const size = document.createElement("span");
-  size.textContent = item.width && item.height ? `${item.width}×${item.height}` : "";
+  size.textContent = item.mime_type === "application/zip"
+    ? "ZIP"
+    : (item.width && item.height ? `${item.width}×${item.height}` : "");
   meta.append(kind, size);
   image.loading = "lazy";
   image.decoding = "async";
@@ -3482,6 +3589,10 @@ async function libraryCard(item) {
   // 一覧に同梱された小さな版を使う。1 枚 1 往復にしない。
   if (item.thumbnail?.base64) {
     image.src = `data:${item.thumbnail.mime_type};base64,${item.thumbnail.base64}`;
+    return card;
+  }
+  if (!item.preview_kind) {
+    image.hidden = true;
     return card;
   }
   try {
@@ -3560,6 +3671,13 @@ async function openViewer(assetId, item, list, {keepList = false} = {}) {
   // 送り先を連打されると、遅い方の応答が後から上書きする。最後の要求だけ描く。
   const token = ++viewer.token;
   try {
+    if (item?.preview_kind === "project_3d") {
+      const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 512});
+      if (token !== viewer.token) return;
+      image.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
+      caption.textContent = "ZIP · プレビュー";
+      return;
+    }
     const content = await call("assets.content", {asset_id: assetId});
     if (token !== viewer.token) return;
     image.src = `data:${content.mime_type};base64,${content.base64}`;
@@ -4855,6 +4973,19 @@ byId("attach-clear").addEventListener("click", () => {
   byId("source-file").value = "";
   void refreshAttachment();
 });
+byId("project-3d-file").addEventListener("change", () => {
+  state.project3dAsset = null;
+  byId("project-3d-error").hidden = true;
+  render3dProject();
+});
+byId("project-3d-clear").addEventListener("click", () => {
+  byId("project-3d-file").value = "";
+  state.project3dAsset = null;
+  byId("project-3d-error").hidden = true;
+  byId("project-3d-status").textContent = "";
+  render3dProject();
+});
+byId("project-3d-submit").addEventListener("click", () => void submit3dProject());
 
 const dropzone = byId("attach-image");
 for (const name of ["dragenter", "dragover"]) {
@@ -5220,6 +5351,7 @@ function applySessionParts(snapshot) {
     state.envelope = snapshot.capabilities.envelope || null;
     state.deviceVramBytes = snapshot.capabilities.device?.vram_bytes || 0;
     state.presets = snapshot.capabilities.presets || [];
+    render3dProject();
   }
   if (usable(snapshot.profiles)) state.profiles = snapshot.profiles.items || [];
   if (usable(snapshot.reference_collections)) {
@@ -5258,7 +5390,7 @@ function applyModelSession(snapshot) {
 }
 
 async function applyRecent(page) {
-  const items = page.items || [];
+  const items = (page.items || []).filter((item) => item.preview_kind);
   const strip = byId("recent-strip");
   strip.replaceChildren();
   byId("recent-empty").hidden = items.length > 0;

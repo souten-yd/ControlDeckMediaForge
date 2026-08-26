@@ -50,6 +50,15 @@ def _protected_pixel_diff(provenance: Provenance) -> int | None:
 
 
 def entry(asset: Asset, provenance: Provenance) -> dict[str, Any]:
+    preview_kind: str | None = None
+    if asset.mime_type in {"image/png", "image/jpeg", "image/webp"}:
+        preview_kind = "image"
+    elif (
+        asset.mime_type == "application/zip"
+        and provenance.operation == "asset.pack"
+        and provenance.parameters.get("profile") == "3d.project.glb"
+    ):
+        preview_kind = "project_3d"
     item: dict[str, Any] = {
         "asset_id": asset.id,
         "job_id": asset.job_id,
@@ -58,10 +67,12 @@ def entry(asset: Asset, provenance: Provenance) -> dict[str, Any]:
         "width": asset.width,
         "height": asset.height,
         "size_bytes": asset.size_bytes,
+        "suggested_filename": asset.suggested_filename,
         "created_at": asset.created_at,
         "summary": summarize(provenance),
         "parent_asset_ids": list(asset.parent_asset_ids),
         "operation": provenance.operation,
+        "preview_kind": preview_kind,
         "warnings": list(provenance.warnings),
     }
     diff = _protected_pixel_diff(provenance)

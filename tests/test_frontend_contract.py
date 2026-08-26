@@ -41,6 +41,8 @@ DOM_IDS = (
     "profile-add-character", "profile-add-style", "profile-list", "profile-dialog",
     "profile-name", "profile-appearance", "profile-art-style", "profile-references",
     "pack-section", "pack-profile", "pack-open", "pack-dialog", "pack-slots", "pack-progress",
+    "project-3d-section", "project-3d-file", "project-3d-clear", "project-3d-submit",
+    "project-3d-options", "project-3d-error", "project-3d-status",
     "custom-result", "custom-error",
     # UX3: 書き出し導線と、重複を解消した詳細設定
     "viewer-save", "viewer-save-note",
@@ -102,6 +104,35 @@ def test_the_frame_never_touches_browser_storage():
 def test_dom_contract_ids_exist():
     for name in DOM_IDS:
         assert f'id="{name}"' in MARKUP, f"DOM 契約の id が無い: {name}"
+
+
+def test_3d_project_action_is_capability_and_selection_gated_and_typed():
+    body = SCRIPT[SCRIPT.index("function render3dProject"):SCRIPT.index("function submit3dProject")]
+    assert 'state.capabilities["asset.3d_project_pack"]' in body
+    assert 'byId("project-3d-submit").hidden = !available || !file;' in body
+    assert 'state.mode !== "advanced"' in body
+    submit = SCRIPT[SCRIPT.index("async function submit3dProject"):SCRIPT.index("/* backend には asset.pack")]
+    assert 'operation: "asset.pack"' in submit
+    assert 'profile: "3d.project.glb"' in submit
+    assert 'schema_version: "3d.compile-options@1"' in SCRIPT
+    for forbidden in ("--python", "bpy.", "blender_path", "project_path", "script_body"):
+        assert forbidden not in submit
+
+
+def test_3d_zip_viewer_uses_preview_instead_of_rendering_the_archive():
+    viewer = SCRIPT[SCRIPT.index("async function openViewer("):SCRIPT.index("/* 自動で選んだとき")]
+    package = viewer[viewer.index('item?.preview_kind === "project_3d"'):]
+    assert 'call("assets.thumbnail"' in package
+    assert package.index('call("assets.thumbnail"') < package.index('call("assets.content"')
+    assert "ZIP · プレビュー" in package
+
+
+def test_library_does_not_request_a_thumbnail_for_non_preview_assets():
+    card = SCRIPT[SCRIPT.index("async function libraryCard"):SCRIPT.index("/* ── 全画面ビューア")]
+    gate = card[card.index("if (!item.preview_kind)"):]
+    assert gate.index("return card") < gate.index('call("assets.thumbnail"')
+    recent = SCRIPT[SCRIPT.index("async function applyRecent"):SCRIPT.index("/* サーバから")]
+    assert ".filter((item) => item.preview_kind)" in recent
 
 
 def test_model_management_actions_are_simple_but_technical_details_are_advanced():

@@ -40,6 +40,7 @@ from .asset_brief import (
     parse_brief,
     resolve_layout,
 )
+from .blender_compile import runtime_available as blender_runtime_available
 from .config import Settings
 from .custom_models import DEFAULT_MODEL_SOURCE, MODEL_SOURCES, CustomModelCatalog, CustomModelError
 from .composer import (
@@ -910,6 +911,11 @@ def create_app(
                     "semantic_reason": None if semantic_available else "vision_analyzer_unavailable",
                 },
                 "asset.m5_companion_pack": {"state": "available"},
+                "asset.3d_project_pack": (
+                    {"state": "available", "profile": "3d.project.glb"}
+                    if blender_runtime_available()
+                    else {"state": "unavailable", "reason": "runtime_not_installed"}
+                ),
                 "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },
@@ -1440,6 +1446,48 @@ def create_app(
     async def list_assets(limit: int = Query(default=100, ge=1, le=500)) -> dict[str, Any]:
         return {"items": [item.model_dump(mode="json") for item in store.list_assets(limit)]}
 
+    @app.post("/workspace-api/assets/{asset_id}/thumbnail", include_in_schema=False)
+    async def standalone_asset_thumbnail(asset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            asset = store.get_asset(asset_id)
+            if not thumbnails.is_thumbnailable(asset.mime_type):
+                raise ThumbnailError()
+            thumbnail = thumbnails.cached(
+                store.asset_path(asset_id),
+                store.thumbnail_dir,
+                asset_id,
+                thumbnails.clamp_max_side(payload.get("max_side")),
+                asset.mime_type,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        except (ThumbnailError, OSError) as exc:
+            raise HTTPException(status_code=422, detail={"code": "thumbnail_unavailable"}) from exc
+        return {
+            "mime_type": thumbnail.mime_type,
+            "width": thumbnail.width,
+            "height": thumbnail.height,
+            "base64": base64.b64encode(thumbnail.content).decode("ascii"),
+        }
+
+    @app.post("/workspace-api/library", include_in_schema=False)
+    async def standalone_library(payload: dict[str, Any]) -> dict[str, Any]:
+        kind = str(payload.get("kind", "all"))
+        if kind not in library.KINDS:
+            raise HTTPException(status_code=422, detail={"code": "workspace_request_rejected"})
+        limit = library.clamp_limit(payload.get("limit"))
+        before = payload.get("before")
+        if before is not None and not isinstance(before, str):
+            raise HTTPException(status_code=422, detail={"code": "workspace_request_rejected"})
+        records = store.list_asset_records(limit, before)
+        return library.page(
+            records,
+            kind=kind,
+            include_masks=payload.get("include_masks") is True,
+            limit=limit,
+            thumbnail=grid_thumbnail,
+        )
+
     @app.get("/api/v1/reference-collections")
     async def list_reference_collections() -> dict[str, Any]:
         return {"items": [item.model_dump(mode="json") for item in store.list_reference_collections()]}
@@ -1864,6 +1912,7 @@ def create_app(
                 store.thumbnail_dir,
                 asset.id,
                 library.GRID_THUMBNAIL_MAX_SIDE,
+                asset.mime_type,
             )
         except (ThumbnailError, KeyError, OSError):
             return None
@@ -2509,6 +2558,7 @@ def create_app(
                             store.thumbnail_dir,
                             asset_id,
                             thumbnails.clamp_max_side(params.get("max_side")),
+                            asset.mime_type,
                         )
                         result = {
                             "mime_type": thumbnail.mime_type,
