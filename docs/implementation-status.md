@@ -4791,3 +4791,63 @@ focused evaluator/catalog    17 passed
 git diff --check             PASS
 compileall                   PASS
 ```
+
+## G7 V1c — HunyuanVideo-1.5 weight-free R9700 preflight（2026-08-26）
+
+Wan 512x320 practical profile が prompt quality は通った一方で2回とも process swap を残したため、
+別候補を一次資料から比較した。LTX-2.3/2.5 は 22B transformer に別の 12B text encoder を要し、
+公式 quick start bundle は約66GiB、low-memory route は FP8/offload 前提である。HunyuanVideo-1.5
+は公式に 8.3B、offload 有効時の minimum GPU memory 14GB、480p T2V と Diffusers default
+attention route を公開しているため、次の bounded candidate に選んだ。
+
+評価 identity:
+
+```text
+official model       tencent/HunyuanVideo-1.5
+official revision    9b49404b3f5df2a8f0b31df27a0c7ab872e7b038
+Diffusers conversion hunyuanvideo-community/HunyuanVideo-1.5-Diffusers-480p_t2v_distilled
+conversion revision  1abb14f06518f37448dcf3a6917dd086dd7045c7
+bundle               13 weight files / 53,367,753,676 bytes
+all snapshot files   53,384,320,234 bytes
+```
+
+core/image/Wan runtime と分離した `/data1tb/mediaforge-g7-hunyuan15/runtime` を exact package
+versions で構築した。size は 4,688,976,346 bytes、`pip check` は broken requirements 0。
+最終 weight-free preflight は 2.34 秒、max RSS 832,056 KiB、OS swap 0 で完了した。
+
+```text
+torch          2.10.0+rocm7.2.1.gitb07cec22 / HIP 7.2.53211
+GPU            AMD Radeon AI PRO R9700 / gfx1201
+diffusers      0.40.0
+transformers   5.15.1
+imports        HunyuanVideo15Pipeline / HunyuanVideo15Transformer3DModel /
+               AutoencoderKLHunyuanVideo15
+attention      PyTorch SDPA default / custom kernel 0
+GPU process    preflight 後 0
+```
+
+公式 runtime が挙げる Flash Attention、Flex-Block-Attention、SageAttention、SGL-Kernel は
+CUDA/H-series向け最適化であり、この probe には入れない。standard PyTorch SDPA で gfx1201 を
+先に評価する。
+
+license は Tencent Hunyuan Community License Agreement（HunyuanVideo 1.5 release
+2025-11-21）。利用開始が同意となり、EU/UK/South Korea を除く Territory、acceptable-use、
+distribution/notice、第三者提供時の表示条件、100M MAU 条件などを含む。conversion repository
+の `license: other` 表示だけで単純化しない。利用者の明示同意なしに 53GB weight を取得しない。
+
+判定: isolated runtime build/import、R9700 enumeration、default SDPA は **PASS**。weight download、
+hash verification、model load、generation、VRAM/RSS/swap、quality、cancel、Broker、installed browser は
+**NOT TESTED**。次の操作は license acceptance 後の bounded sequential download であり、現在は
+**BLOCKED PENDING LICENSE ACCEPTANCE**。ControlDeck 変更は0件。
+
+最終 gate:
+
+```text
+dedicated pip check        broken requirements 0
+weight-free preflight      PASS / 2.34 s / max RSS 832,056 KiB / OS swap 0
+installed /health          healthy / contract 2.0
+ROCm process cleanup       KFD process 0
+full                       686 passed / 2 warnings / 51.28 s
+git diff --check           PASS
+compileall                 PASS
+```

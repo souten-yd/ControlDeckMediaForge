@@ -159,6 +159,15 @@ source, license, capabilities, ROCm operation, resource envelope, reliability,
 quality, and all ten adoption-gate answers from `base-plan.md` §24. Removal must
 not change the public API.
 
+After the Wan practical profile retained process swap, the next bounded
+comparison candidate is HunyuanVideo 1.5 480p T2V distilled. The official model
+is 8.3B and documents a 14 GB minimum GPU-memory route with offloading. A pinned
+Diffusers 0.40.0 runtime imports its pipeline, transformer, VAE, and default
+PyTorch SDPA backend on R9700/gfx1201. This is weight-free preflight evidence,
+not inference evidence. The conversion bundle is revision `1abb14f0`, 13 weight
+files and 53,367,753,676 bytes; it remains external and **NOT TESTED** until the
+Tencent Hunyuan Community License is explicitly accepted.
+
 ### MiniMax H3 FL2VA evaluation gate
 
 The catalog records the publisher's BF16 FL2VA snapshot at revision
