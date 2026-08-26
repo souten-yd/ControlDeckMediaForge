@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/mobile-media-switch-handoff（origin/main cc64bd3 から作成）
-slice       mobile Create media switch handoff close
-状態        実装・standalone/installed mobile browser評価・merge完了
-baseline    focused PASS / full 751 passed / 1 warning / 54.86s
-installed   v0.9.0復元 / PID 2279825,2279852 / 127.0.0.1:9130 / healthy / contract 2.0
+branch      release/v091-installed-handoff（origin/main cc3f342 から作成）
+slice       v0.9.1 release / installed video-screen reachability
+状態        release・標準update・installed browser到達評価完了 / 証跡PR前
+baseline    focused 199 passed / full 751 passed / 1 warning / 53.52s
+installed   v0.9.1 / PID 2325466,2325471 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         動画runtime/weight/GPU生成はNOT TESTED / license同意0
-PR          ControlDeck変更0 / Media Forge #145 merged / handoff PR前
+PR          ControlDeck変更0 / Media Forge #145,#146,#147 merged / 証跡PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -62,6 +62,11 @@ G8 B5 handoff は Media Forge #144、exact head
 Mobile Create media switch は Media Forge #145、exact head
 `bd9a06517d2dbbd678a9ed48391f4bfaa4c092b3`、merge commit
 `cc64bd32b6d7d27718bbef21771acafd13a191d7` で main へ入った。
+そのhandoffはMedia Forge #146、exact head
+`0d6d22b12aa58037f92e960926b77bc421d24225`、merge commit
+`5810f7fdcccd2eb7c8208a98e037ac8437fb8917`。v0.9.1 releaseはMedia Forge #147、exact head
+`f7f42c7af6e34420d2dba4017f733a6f4d58c8c7`、merge commit/tag
+`cc3f342d77a20e98d95fcc43d276e1aafdcd8d94`。
 
 ## この slice の結果
 
@@ -72,6 +77,8 @@ PASS       390px/320px、44px touch target、horizontal overflow 0
 PASS       standalone/installed ControlDeck real Chromium、browser errors 0
 PASS       experimental capability時のtext/image-to-video exact request捕捉
 PASS       focused tests / full 751 / static checks
+PASS       signed v0.9.1 release / public redownload hash / ControlDeck standard update
+PASS       installed routeから動画面へ到達 / current v0.9.1 / rollback v0.9.0保持
 NOT TESTED 実動画runtime / weight / GPU生成 / 出力品質 / timeline編集
 ```
 
@@ -96,7 +103,9 @@ Korea を除く Territory、acceptable-use、distribution/notice、第三者提�
 ```text
 ControlDeckはgeneric grant publishだけ別PR #246で修正・merge。Media固有route/dependency/文言は0。
 既存`frontend/tsconfig.tsbuildinfo`変更1件は保全。ControlDeck server PID 2231760は15:53:09起動。
-installed v0.9.0は復元済み。PID 2279825/2279852、127.0.0.1:9130でhealthy / contract 2.0。
+installed v0.9.1へ標準update済み。PID 2325466/2325471、127.0.0.1:9130でhealthy / contract 2.0。
+`current`はversions/0.9.1、rollback用versions/0.9.0を保持。公開bundleは30,954,097 B、SHA-256
+`ae9087ca6f1548260dd69f980face65cde003f380f8fa74488e68b4d8d098bf2`。
 Cog runtime/snapshot/evidenceは `/data1tb/mediaforge-g7-cogvideox2b` に外部保持。
 Hunyuan weight/snapshot/partial download は0。dedicated runtimeだけ外部構築済み。
 Wan runtime/model は移動・削除しない。
