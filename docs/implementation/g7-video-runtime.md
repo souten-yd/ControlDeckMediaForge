@@ -115,6 +115,23 @@ profile は空、公開 capability は unavailable のままにする。V2 へ�
 clip が prompt を維持し、process swap 0 で完走する profile または別候補を見つけること。
 候補比較をせず、この probe を production adapter に昇格させない。
 
+### 2.2 host-memory lifecycle follow-up（2026-08-26）
+
+upstream の `offload_model=True` は denoise 後の transformer を CPU に materialize してから
+VAE decode する。短命 evaluator は decode 後に transformer を再利用しないため、この境界で
+parameter storage を meta tensor へ破棄し、GPU storage を解放して CPU copy を作らない方式を
+比較した。これは evaluator lifecycle の変更であり、kernel、public contract、Host の変更ではない。
+
+実 browser/Broker smoke は process swap 0、peak VRAM 13,752,025,088 bytes で成功した。
+384x256 / 33 frames / 30 steps も process swap 0、peak VRAM 14,045,294,592 bytes で完走したが、
+284.677 秒のうち VAE decode が 210.810 秒を占め、被写体の形状崩れが残った。
+
+512x320 / 33 frames は SonicForge が使う non-yieldable LLM residency 中の2要求を
+`insufficient_capacity` で fail-closed にした後、自然 release 後に2回完走した。固定 prompt
+の robot / solar panel / dusk と同じ SHA-256 を再現し品質は PASS したが、process swap は
+2,501,005,312 / 346,812,416 bytes で zero-swap gate を満たさなかった。host RAM lifecycle の
+改善と品質は PASS、運用 reliability は FAIL とし、V2 adoption gate は閉じたままとする。
+
 ## 3. V2 — execution
 
 private runtime adapter が raw frames/video を job root に書き、V0 の FFmpeg stage が公開 asset

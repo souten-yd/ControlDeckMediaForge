@@ -7,45 +7,43 @@
 
 ```text
 最終更新    2026-08-26
-branch      g7/wan-ti2v-probe（origin/main d58ec9e から作成）
-slice       G7 V1 revision-pinned Wan2.2 TI2V-5B adoption probe
-状態        実装・実 R9700/ControlDeck/Broker probe 完了、adoption DEFERRED
-baseline    focused 17 passed、full 686 passed / 1 warning / 48.38s
+branch      g7/wan-practical-profile（origin/main d883702 から作成）
+slice       G7 V1b Wan evaluator host-memory lifecycle / practical profile comparison
+状態        512x320 quality PASS / zero-swap FAIL、adoption DEFERRED
+baseline    focused 17 passed、full 686 passed / 1 warning / 51.30s
 installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy に復元済み
-GPU         Wan process 0、Media Forge lease 0。SonicForge の通常 process は別管理
-PR          Media Forge #120 open / mergeable、hosted check なし
+GPU         Wan process 0、Media Forge lease 0。SonicForge は別管理
+PR          未作成
 ```
 
-G7 V0 は Media Forge #119、merge commit
-`d58ec9e3565b7e5d9e7f203deb55d8f79cb707e1` で main へ入った。V0 の完了作業を
-繰り返さない。
+G7 V1 は Media Forge #120、merge commit
+`d8837026b4563cf3b94168629725d158ff3753bb` で main へ入った。V1 の probe を
+production adapter へ昇格させない。
 
 ## この slice の結果
 
 ```text
-PASS       pinned Wan source/model/runtime preflight
-PASS       R9700 512x320 / 17-frame cold + 3 warm deterministic samples
-PASS       real installed browser identity / Host Job / Broker lease / cancel
-PASS       SonicForge/LLM hold 中の fail-closed と release 後の admission
-PASS       cancel 1.007 sec、lease/worker/partial cleanup
-FAIL       256x256 / 49-frame 実用 clip の prompt coherence
-FAIL       同 clip の process swap 1,754,775,552 bytes
-NOT TESTED I2V / native 720p / 121 frames / 50 steps / public asset path
+PASS       meta-discard smoke / process swap 0
+PASS       384x256 / 33-frame process swap 0
+FAIL       384x256 / 33-frame prompt coherence
+PASS       512x320 / 33-frame prompt coherence / deterministic SHA
+FAIL       512x320 process swap 2,501,005,312 / 346,812,416 bytes
+PASS       SonicForge hold 中 fail-closed、自然 release 後 admission
+PASS       installed v0.9.0 復元 / healthy / worker・lease cleanup
 DEFERRED   Wan production adapter/default/available への採用
 ```
 
-主要実測は `docs/implementation-status.md` の G7 V1 節を正とする。外部証跡は
+主要実測は `docs/implementation-status.md` の G7 V1b 節を正とする。外部証跡は
 `/data1tb/mediaforge-g7-v1/`、operation artifact/log は installed data directory の
-`model-evaluations/<operation_id>/` にある。固定 17-frame warm 3 回は 75.955 / 71.972 /
-71.221 秒、peak VRAM 約 30.612 GB、process swap 0、同じ SHA-256。49-frame は
-235.053 秒で完走したが品質と swap gate を落とした。
+`model-evaluations/<operation_id>/` にある。512x320/33-frame 2回は同じ SHA-256 と品質を
+再現したが、process swap が0にならず operational gate を落とした。
 
 ## 次にやること（1つだけ）
 
 ```text
-1. Media Forge #120 の exact head / diff / mergeability を再確認して merge する
-2. origin/main から候補比較 branch を切る
-3. V1 の再開条件を満たす profile または別候補を bounded 評価する
+1. current diff/status と installed process を最終確認する
+2. commit/push、V1b PR、exact head/mergeability を確認して merge する
+3. origin/main から別候補比較 slice を開始する
 ```
 
 V2 production execution へ直接進まない。V1 adoption gate が deferred なので、次は Wan の
