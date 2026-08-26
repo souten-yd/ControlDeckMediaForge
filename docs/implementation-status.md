@@ -4725,3 +4725,69 @@ focused evaluator/catalog    17 passed
 git diff --check             PASS
 compileall                   PASS
 ```
+
+## G7 V1b — Wan evaluator host-memory lifecycle 比較（2026-08-26）
+
+V1 の 49-frame probe で観測した process swap を、transformer offload と VAE decode に分離した。
+upstream `offload_model=True` は denoise 後に約10GBの transformer を CPU へ移してから decode
+する。1 job で終了する evaluator は transformer を再利用しないため、同じ offload 境界で
+parameter storage を meta tensor 化して GPU storage を破棄し、CPU copy を作らないようにした。
+custom kernel、upstream source patch、ControlDeck 変更は追加していない。
+
+実 installed browser identity / Host Job / Broker route:
+
+```text
+discard smoke operation     modelop_5b67d9512287455e8919e1aa994a1c62
+elapsed                     25.307 sec
+peak VRAM / RSS / swap      13,752,025,088 / 19,181,559,808 / 0 B
+output                      256x256 / 1 frame / H.264 / 24fps / 2,411 B
+SonicForge hold wait        acquiring_resource 35.4 sec、release 後に生成
+
+candidate operation         modelop_2adb1fff80bb4c8397f639c8c9885f0e
+profile                     384x256 / 33 frames / 30 steps / guide 5.0
+elapsed                     284.677 sec（VAE decode 210.810 sec）
+peak VRAM / RSS / swap      14,045,294,592 / 20,670,320,640 / 0 B
+system swap pages delta     in 55,845 / out 63,443
+output                      H.264 / 24fps / 1.375 sec / 115,130 B
+SHA-256                     db3188a464db34aa1a6b5196897061df78e495f6ef56be116d6c323c549f14f5
+```
+
+384x256 の frame 0/16/32 は robot / panel / landscape に近い構造を持つが、形状崩れが大きく
+採用品質ではない。RAM lifecycle は **PASS**、この profile の実用品質は **FAIL**。
+
+より高解像度の 512x320 / 33 frames は、約30.239GBの SonicForge/LLM residency 中の
+operation `modelop_d3703e07a74949dcab9622e8ceb96cf1` と直後の再試行を Broker が
+`insufficient_capacity` で fail-closed にした。worker/GPU process は起動せず、test account
+hash は復元した。その residency が自然 release した後、同じ profile を2回実行した。
+
+```text
+operation                   modelop_389b17382055448f9fc36300599387f2
+elapsed                     185.270 sec
+peak VRAM / RSS / swap      20,762,644,480 / 17,313,533,952 / 2,501,005,312 B
+
+operation                   modelop_bcc4b8bf3672437e986905bcfc1a3291
+elapsed                     129.742 sec
+peak VRAM / RSS / swap      25,293,598,720 / 19,265,691,648 / 346,812,416 B
+
+both outputs                512x320 / 33 frames / H.264 / 24fps / 1.375 sec / 143,262 B
+both SHA-256                744c4f85f0b52bc29cba9cd4a423e5ac95b93fdf53ec8c9e23e6073907e95d6a
+```
+
+frame 0/16/32 は orange robot、前面 solar panel、dusk field を維持し、時間方向も一貫した。
+品質と deterministic output は **PASS**。ただし process swap が2回とも0ではなく、改善後も
+346,812,416 bytes 残ったため zero-swap / operational reliability は **FAIL** とする。
+
+結論: meta-discard lifecycle と 512x320/33-frame 品質は有望だが、Wan の production adoption は
+引き続き **DEFERRED**。別候補またはさらに単純な maintainable lifecycle が prompt coherence と
+zero-process-swap を同時に満たすまで V2 へ進まない。評価終了後は branch core を停止し、installed
+Media Forge v0.9.0 を再起動した。実 health は `healthy`、contract 2.0、R9700 gfx1201、
+torch 2.10.0+rocm7.2.1、HIP 7.2.53211。Wan worker は0、ControlDeck変更は0件。
+
+検証:
+
+```text
+focused evaluator/catalog    17 passed
+./mf.sh test                 686 passed, 1 warning in 51.30s
+git diff --check             PASS
+compileall                   PASS
+```

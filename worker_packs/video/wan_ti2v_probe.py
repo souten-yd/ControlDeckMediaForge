@@ -38,6 +38,8 @@ PRESETS = {
     "quality-frame": ProbePreset(width=256, height=256, frames=1, steps=30),
     "short-clip": ProbePreset(width=512, height=320, frames=17, steps=30),
     "practical-clip": ProbePreset(width=256, height=256, frames=49, steps=30),
+    "candidate-clip": ProbePreset(width=384, height=256, frames=33, steps=30),
+    "candidate-hq-clip": ProbePreset(width=512, height=320, frames=33, steps=30),
 }
 
 
@@ -170,6 +172,16 @@ def _generate(
     )
     transformer_load_sec = time.monotonic() - transformer_started
 
+    # The evaluator process exits after one decode, so retaining the transformer
+    # on CPU only creates about 10 GiB of avoidable host-memory pressure.  Keep
+    # upstream's offload boundary, but discard parameter storage to meta tensors
+    # there instead of materializing a reusable CPU copy.
+    def discard_transformer() -> Any:
+        pipeline.model.to_empty(device=torch.device("meta"))
+        return pipeline.model
+
+    pipeline.model.cpu = discard_transformer  # type: ignore[method-assign]
+
     decode_sec = 0.0
     original_decode = pipeline.vae.decode
 
@@ -191,7 +203,7 @@ def _generate(
         guide_scale=5.0,
         n_prompt=NEGATIVE_PROMPT,
         seed=260826,
-        offload_model=False,
+        offload_model=True,
     )
     sample_sec = time.monotonic() - sample_started
     if frames is None or tuple(frames.shape) != (
