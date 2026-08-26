@@ -118,7 +118,11 @@ to text-to-video, one to image-to-video, and multiple inputs require a
 multi-keyframe-capable runtime. Video output must be `mp4` or `webm`; image and
 pack operations cannot request those formats. Until a local runtime passes the
 R9700 adoption gate, video requests fail with `capability_unavailable` and the
-capability document remains unavailable. Video assets add `video/mp4` and
+capability document reports both `video.text_to_video` and
+`video.image_to_video` as unavailable with reason `video_runtime_not_adopted`.
+The workspace may expose the video form while those capabilities are unavailable,
+but it must keep submission disabled and show the reason; visibility is not
+runtime availability. Video assets add `video/mp4` and
 `video/webm` MIME types plus optional `duration_sec` and `frame_rate`; existing
 required asset fields are unchanged.
 

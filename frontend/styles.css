@@ -218,6 +218,43 @@ main { flex: 1; min-height: 0; padding: 16px; }
 /* ── 作る ───────────────────────────────────────────────────── */
 #view-create { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 18px; align-items: start; }
 
+#create-media-picker { grid-column: 1 / -1; display: grid; gap: 6px; }
+.media-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  width: min(420px, 100%);
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.media-switch button {
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+.media-switch button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.media-switch button:disabled { opacity: .55; cursor: progress; }
+.switch-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: .64rem;
+}
+#video-create-fields { display: grid; gap: 7px; }
+#video-create-settings { justify-self: start; }
+#app[data-create-media="image"] [data-video-create],
+#app[data-create-media="video"] [data-image-create] { display: none !important; }
+
 .panel, #stage > div, .row, .info {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -468,8 +505,15 @@ textarea { resize: vertical; min-height: 96px; }
   min-height: 46px;
 }
 .primary[disabled] { opacity: .6; cursor: progress; }
+#create-submit[data-unavailable="true"] {
+  background: var(--sunk);
+  border-color: var(--border);
+  color: var(--muted);
+  opacity: 1;
+  cursor: not-allowed;
+}
 
-button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch button):not(#shell-nav button) {
+button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch button):not(.media-switch button):not(#shell-nav button) {
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: 10px;
@@ -485,7 +529,7 @@ button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch but
 .track i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s linear; }
 @media (prefers-reduced-motion: reduce) { .track i { transition: none; } }
 
-#result-image {
+#result-image, #result-video {
   width: 100%;
   max-height: 52vh;
   object-fit: contain;
@@ -862,6 +906,8 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
   .model-management-head { align-items: stretch; flex-direction: column; }
 
   #shell-header .pill { display: none; }
+  #create-media-picker { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-bottom: 2px; }
+  .media-switch { width: 100%; }
 
   #shell-nav {
     position: fixed;
@@ -926,7 +972,7 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
   }
   #model-remove-dialog { margin: auto 12px 12px; width: calc(100% - 24px); max-height: 76vh; }
 
-  #result-image { max-height: 44vh; }
+  #result-image, #result-video { max-height: 44vh; }
   .thumb { width: 72px; height: 72px; }
 }
 

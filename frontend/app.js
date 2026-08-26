@@ -56,6 +56,7 @@ const CAPABILITY_REASON = {
   model_registry_invalid: "モデル一覧を読み込めません",
   planned_for_g7: "これからの対応予定です",
   planned_for_g9: "これからの対応予定です",
+  video_runtime_not_adopted: "実用条件を満たす動画モデルがまだありません",
   text_generator_unavailable: "ControlDeck の文章による演出補助をいま使えません",
   runtime_not_installed: "3D整形ランタイムが導入されていません",
 };
@@ -69,6 +70,7 @@ const state = {
   visible: true,
   view: "create",
   mode: "simple",
+  createMedia: "image",
   preferences: {},
   capabilities: {},
   envelope: null,
@@ -174,9 +176,14 @@ function callHost(method, params = {}) {
    実行中の作業はサーバ側の job として残るので、入力しただけでは立てない。
    実際に失うものがある間（取り込み中・受付中）だけ立てる。 */
 function setHostBusy(value) {
-  if (!state.bridgePort || state.hostBusy === value) return;
+  if (state.hostBusy === value) return;
   state.hostBusy = value;
-  void callHost("host.busy.set", {busy: value}).catch(() => { state.hostBusy = !value; });
+  for (const id of ["create-media-image", "create-media-video"]) byId(id).disabled = value;
+  if (!state.bridgePort) return;
+  void callHost("host.busy.set", {busy: value}).catch(() => {
+    state.hostBusy = !value;
+    for (const id of ["create-media-image", "create-media-video"]) byId(id).disabled = !value;
+  });
 }
 
 /* ── workspace transport ──────────────────────────────────────────────── */
@@ -530,6 +537,59 @@ function setMode(mode, {persist = true} = {}) {
   renderPackProfiles();
   render3dProject();
   if (persist) void savePreferences({mode: state.mode});
+}
+
+function videoCapabilityName() {
+  return attachedFile() ? "video.image_to_video" : "video.text_to_video";
+}
+
+function videoCapabilityUsable(name = videoCapabilityName()) {
+  return ["available", "experimental"].includes(capabilityState(name));
+}
+
+function renderCreateMedia() {
+  const video = state.createMedia === "video";
+  app().dataset.createMedia = video ? "video" : "image";
+  byId("create-media-image").setAttribute("aria-pressed", String(!video));
+  byId("create-media-video").setAttribute("aria-pressed", String(video));
+  byId("video-create-fields").hidden = !video;
+  byId("create-intent-label").textContent = video ? "どんな動画を作りますか？" : "何を作りますか？";
+  byId("create-intent").placeholder = video
+    ? "静かな机の上で、小さなロボットが手を振る短い動画"
+    : "夜の机に置かれた、小さな青いロボット";
+
+  const file = attachedFile();
+  byId("attach-label").textContent = file
+    ? `画像: ${file.name}`
+    : (video ? "＋ 動かす画像を追加（任意）" : "＋ 画像を追加");
+  const capability = videoCapabilityName();
+  const value = state.capabilities[capability] || {};
+  const usable = videoCapabilityUsable(capability);
+  const anyExperimental = ["video.text_to_video", "video.image_to_video"]
+    .some((name) => capabilityState(name) === "experimental");
+  byId("create-media-video-badge").hidden = !anyExperimental;
+  byId("video-create-summary").textContent = file
+    ? "追加した画像を始点に短い動画を作ります。"
+    : "文章から短い動画を作ります。画像を足すと、その画像を動かします。";
+  byId("video-create-note").textContent = usable
+    ? (value.state === "experimental" ? "試験中の動画機能です。結果の品質は保証されません。" : "")
+    : `${CAPABILITY_REASON[value.reason] || "この動画機能はいま使えません"}。`;
+  byId("video-create-settings").hidden = usable;
+
+  const submit = byId("create-submit");
+  submit.dataset.unavailable = String(video && !usable);
+  if (!state.hostBusy) submit.disabled = video && !usable;
+  if (!state.hostBusy) {
+    submit.textContent = video ? (usable ? "動画を作る" : "動画は現在利用できません") : "作る";
+  }
+}
+
+function setCreateMedia(media, {persist = true} = {}) {
+  state.createMedia = media === "video" ? "video" : "image";
+  clearError();
+  renderCreateMedia();
+  void refreshAttachment();
+  if (persist) void savePreferences({create_media: state.createMedia});
 }
 
 /* 詳細モードの断片は hidden にせず DOM から外す。
@@ -2327,9 +2387,8 @@ async function refreshAttachment() {
   const file = attachedFile();
   const zone = byId("attach-image");
   zone.classList.toggle("filled", Boolean(file));
-  byId("attach-label").textContent = file ? `画像: ${file.name}` : "＋ 画像を追加";
   byId("attach-clear").hidden = !file;
-  byId("edit-block").hidden = !file;
+  byId("edit-block").hidden = state.createMedia === "video" || !file;
   if (!file) maskReset();
   state.upload = null;
   state.sourceAsset = null;
@@ -2348,10 +2407,11 @@ async function refreshAttachment() {
     state.source = measured;
     byId("attach-size").textContent = measured ? `${measured.width}×${measured.height}` : "";
   }
-  if (file) renderEditActions();
+  if (file && state.createMedia === "image") renderEditActions();
   else selectEditMode("");
   renderSizeSection();
   renderReferenceIntelligence();
+  renderCreateMedia();
   clearError();
 }
 
@@ -2550,6 +2610,14 @@ function clearError() {
 function requestProblem(constraints) {
   const file = attachedFile();
   if (!byId("create-intent").value.trim()) return "作りたいものを書いてください。";
+  if (state.createMedia === "video") {
+    if (!videoCapabilityUsable()) {
+      return file
+        ? "画像から動画を作れる実用モデルがありません。"
+        : "文章から動画を作れる実用モデルがありません。";
+    }
+    return "";
+  }
   const directedProblem = creativeProblem();
   if (directedProblem) return directedProblem;
   const referenceProblem = profileReferenceProblem();
@@ -2585,9 +2653,58 @@ function requestProblem(constraints) {
   return "";
 }
 
+async function submitVideoJob() {
+  const status = byId("create-status");
+  const submit = byId("create-submit");
+  const problem = requestProblem({});
+  if (problem) { showError(problem); return; }
+  clearError();
+  submit.disabled = true;
+  submit.textContent = "準備しています…";
+  status.textContent = "";
+  setHostBusy(true);
+  showPreparing("受け付けています", 0.05);
+  try {
+    const file = attachedFile();
+    const inputs = [];
+    if (file) {
+      showPreparing("画像を取り込んでいます", 0.2);
+      const source = state.sourceAsset || await importFile(
+        state.upload || file, "source", (ratio) => {
+          showPreparing("画像を取り込んでいます", 0.2 + ratio * 0.4);
+        },
+      );
+      state.sourceAsset = source;
+      inputs.push({asset_id: source.id});
+    }
+    showPreparing("動画を受け付けています", 0.7);
+    const job = await call("jobs.create", {
+      operation: "video.generate",
+      intent: byId("create-intent").value,
+      inputs,
+      constraints: {},
+      output: {format: "mp4", count: 1},
+      local_only: true,
+    });
+    submit.textContent = "実行中…";
+    setHostBusy(false);
+    state.activeJob = job.id;
+    await call("jobs.watch", {job_ids: [job.id]}).catch(() => {});
+    showProgress(job);
+    if (window.parent === window) void pollJob(job.id);
+  } catch (error) {
+    showError(error?.message || failureText(error?.code));
+    hidePreparing();
+  } finally {
+    setHostBusy(false);
+    renderCreateMedia();
+  }
+}
+
 async function submitJob(event) {
   event.preventDefault();
   if (state.disabled) return;
+  if (state.createMedia === "video") return submitVideoJob();
   const status = byId("create-status");
   const submit = byId("create-submit");
   const preset = currentPreset();
@@ -3201,8 +3318,23 @@ async function showAsset(assetId) {
   try {
     const content = await call("assets.content", {asset_id: assetId});
     const image = byId("result-image");
-    image.src = `data:${content.mime_type};base64,${content.base64}`;
-    image.dataset.assetId = assetId;
+    const video = byId("result-video");
+    const isVideo = String(content.mime_type).startsWith("video/");
+    image.hidden = isVideo;
+    video.hidden = !isVideo;
+    byId("result-edit").hidden = isVideo;
+    if (isVideo) {
+      image.removeAttribute("src");
+      image.removeAttribute("data-asset-id");
+      video.src = `data:${content.mime_type};base64,${content.base64}`;
+      video.dataset.assetId = assetId;
+    } else {
+      video.pause();
+      video.removeAttribute("src");
+      video.removeAttribute("data-asset-id");
+      image.src = `data:${content.mime_type};base64,${content.base64}`;
+      image.dataset.assetId = assetId;
+    }
   } catch { /* 表示できなくても以降の操作は続けられる */ }
 }
 
@@ -4700,6 +4832,18 @@ async function loadAdvancedSettings() {
 
 byId("mode-simple").addEventListener("click", () => setMode("simple"));
 byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
+byId("create-media-image").addEventListener("click", () => {
+  if (!state.hostBusy) setCreateMedia("image");
+});
+byId("create-media-video").addEventListener("click", () => {
+  if (!state.hostBusy) setCreateMedia("video");
+});
+byId("video-create-settings").addEventListener("click", () => {
+  state.modelFilter = "video";
+  activate("settings");
+  renderModelManagement();
+  byId("model-table").scrollIntoView({block: "start"});
+});
 
 document.addEventListener("change", (event) => {
   const box = event.target.closest?.("[data-lora-id]");
@@ -5392,6 +5536,7 @@ function applySessionParts(snapshot) {
     state.deviceVramBytes = snapshot.capabilities.device?.vram_bytes || 0;
     state.presets = snapshot.capabilities.presets || [];
     render3dProject();
+    renderCreateMedia();
   }
   if (usable(snapshot.profiles)) state.profiles = snapshot.profiles.items || [];
   if (usable(snapshot.reference_collections)) {
@@ -5500,6 +5645,7 @@ async function boot() {
   renderPresets();
   renderCounts();
   setMode(state.preferences.mode || "simple", {persist: false});
+  setCreateMedia(state.preferences.create_media || "image", {persist: false});
   applyModelSession(snapshot);
   await refreshAttachment();
   if (usable(snapshot.library)) await applyRecent(snapshot.library);

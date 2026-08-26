@@ -5445,3 +5445,30 @@ healthy / contract 2.0。SonicForge 9140は変更せずhealthy（Speech Essentia
 
 最終gateはfocused 200件、`./mf.sh test` 750件がPASS（既知のStarlette warning 1件 / 50.23s）。
 Python `compileall`、`node --check frontend/app.js`、`git diff --check`もPASSした。
+
+## Mobile Create media switch（2026-08-26）
+
+利用者の明示要求により、Create最上部へ「画像を作る／動画を作る」の2択segmented controlを追加した。
+390pxと320pxでは全幅2列、各touch target高さ44pxで、server-side preference `create_media` に選択を
+保存する。画像側の既存挙動は維持し、動画側はpromptと任意の元画像を表示する。これはtimeline型の動画編集器では
+なく、元画像なしは`video.text_to_video`、1件ありは`video.image_to_video`へ対応する生成面である。
+
+現在の公開capabilityは両方とも`unavailable / video_runtime_not_adopted`。動画面への切り替えと入力は可能だが、
+実行ボタンを「動画は現在利用できません」として無効化し、理由と設定へのexitを表示する。capabilityを
+`experimental`または`available`として受け取った場合だけ、既存公開契約`video.generate`、MP4、count 1、
+`local_only=true`を送る。元画像ありではimport済みopaque asset IDをinputsへ1件入れ、pathやmodel名は送らない。
+
+実standalone Chromiumで390px / 320pxを確認した。horizontal overflowは両方0、390pxの各切り替えは
+176x44px、320pxは141x44px、browser console/page errorは0。unavailable時の理由表示、実行不可、設定exitを
+assertした。テスト内でcapability documentだけを`experimental`へ置き換え、text-to-videoではinputs 0件、
+image-to-videoではinputs 1件となるexact requestを捕捉した。
+
+導入済みControlDeckの実mobile shellでも、branch coreを一時的に127.0.0.1:9130へ接続して同じUIを確認した。
+390px / 320pxのhorizontal overflowは0、touch targetは176x44px / 141x44px、console/page errorは0。
+終了後はbranch coreを停止し、導入済みMedia Forge v0.9.0を127.0.0.1:9130へ復元した。
+
+focused frontend/API/schema/video testsはPASS。最終gateは`./mf.sh test`が
+`751 passed, 1 warning in 54.86s`、Python `compileall`、`node --check frontend/app.js`、
+`git diff --check`がPASS。実動画runtime、weight取得、GPU動画生成、出力再生品質、timeline編集は
+**NOT TESTED**。Tencent licenseへの同意・利用開始は行っていない。ControlDeck code/DB変更0、既存
+`frontend/tsconfig.tsbuildinfo`変更1件は保全した。

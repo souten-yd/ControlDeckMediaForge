@@ -8,7 +8,7 @@
     <!-- MEDIA_FORGE_INLINE_STYLE -->
   </head>
   <body>
-    <div id="app" data-mode="simple" data-view="create" aria-busy="true">
+    <div id="app" data-mode="simple" data-view="create" data-create-media="image" aria-busy="true">
 
       <div id="skeleton" aria-hidden="true">
         <div class="sk sk-title"></div>
@@ -61,11 +61,19 @@
       <main>
         <!-- 作る -->
         <section id="view-create" class="view" data-view="create">
+          <div id="create-media-picker">
+            <div id="create-media-switch" class="media-switch" role="group" aria-label="作る素材">
+              <button type="button" id="create-media-image" aria-pressed="true">画像を作る</button>
+              <button type="button" id="create-media-video" aria-pressed="false">
+                動画を作る<span id="create-media-video-badge" class="switch-badge" hidden>試験中</span>
+              </button>
+            </div>
+          </div>
           <!-- 検証は requestProblem() が行う。ブラウザ既定の吹き出しは文言を持てず、
                モバイルで見落としやすいので novalidate にする。 -->
           <form id="create-form" class="panel" novalidate>
             <div class="field-head">
-              <label class="field-label" for="create-intent">何を作りますか？</label>
+              <label class="field-label" id="create-intent-label" for="create-intent">何を作りますか？</label>
               <button type="button" id="create-reset" class="icon"
                       aria-label="設定を初期に戻す" title="入力と設定を初期に戻す">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -77,7 +85,13 @@
             <textarea id="create-intent" required maxlength="8000" rows="4"
               placeholder="夜の机に置かれた、小さな青いロボット"></textarea>
 
-            <div id="director-control" class="director-control">
+            <div id="video-create-fields" class="sub-field" data-video-create hidden>
+              <p id="video-create-summary">文章から短い動画を作ります。</p>
+              <p id="video-create-note" class="hint" role="status"></p>
+              <button type="button" id="video-create-settings">設定で動画候補を見る</button>
+            </div>
+
+            <div id="director-control" class="director-control" data-image-create>
               <label for="director-mode">演出</label>
               <select id="director-mode">
                 <option value="original">そのまま</option>
@@ -87,13 +101,13 @@
               <p id="director-reason" class="hint"></p>
             </div>
 
-            <details id="director-understanding" class="sub-field" hidden>
+            <details id="director-understanding" class="sub-field" data-image-create hidden>
               <summary>理解した内容</summary>
               <dl id="director-plan-summary" class="facts"></dl>
               <p id="director-plan-note" class="hint"></p>
             </details>
 
-            <div id="creative-simple">
+            <div id="creative-simple" data-image-create>
               <p class="section-label">ドメイン</p>
               <div id="domain-chips" class="chips" role="radiogroup" aria-label="作る絵の種類"></div>
               <details id="scene-framing">
@@ -108,7 +122,7 @@
               </details>
             </div>
 
-            <div id="profile-choice">
+            <div id="profile-choice" data-image-create>
               <p class="section-label">キャラ・画風を使う</p>
               <div class="form-row">
                 <label>キャラ<select id="character-profile"><option value="">使わない</option></select></label>
@@ -117,7 +131,7 @@
               <p id="profile-choice-note" class="hint"></p>
             </div>
 
-            <div id="model-choice">
+            <div id="model-choice" data-image-create>
               <p class="section-label">使うモデル</p>
               <div class="chips" role="radiogroup" aria-label="使うモデルの決め方">
                 <button type="button" class="chip" data-model-choice="auto" aria-checked="true">おまかせ</button>
@@ -129,20 +143,20 @@
               <p id="model-choice-note" class="hint"></p>
             </div>
 
-            <div id="lora-picker" hidden>
+            <div id="lora-picker" data-image-create hidden>
               <p class="section-label">LoRA</p>
               <p id="lora-picker-note" class="hint"></p>
               <div id="lora-list" class="lora-list"></div>
             </div>
 
-            <div id="composition-options" class="sub-field" hidden>
+            <div id="composition-options" class="sub-field" data-image-create hidden>
               <p class="section-label" id="composition-options-label">複数カットをまとめる</p>
               <label>タイトル<input id="composition-title" maxlength="120" placeholder="ORANGE COMPANION"></label>
               <label>説明<input id="composition-caption" maxlength="500" placeholder="同じキャラの見せ方を1枚にまとめます"></label>
               <p class="hint">2〜4枚のカットを個別に作り、文字とレイアウトは正確に合成します。</p>
             </div>
 
-            <div id="project-3d-section" class="sub-field" hidden>
+            <div id="project-3d-section" class="sub-field" data-image-create hidden>
               <p class="section-label">3Dプロジェクト用に整える</p>
               <p class="hint">GLBを安全な固定工程で整え、プレビューと記録を含むZIPにまとめます。</p>
               <label id="project-3d-file-label" class="dropzone">
@@ -198,7 +212,7 @@
               <button type="button" id="attach-clear" hidden>使わない</button>
             </div>
 
-            <div id="reference-intelligence" class="sub-field" hidden>
+            <div id="reference-intelligence" class="sub-field" data-image-create hidden>
               <p class="section-label">画像から読み取る</p>
               <div id="reference-focuses" class="chips" role="radiogroup" aria-label="画像から読み取る内容">
                 <button type="button" data-reference-focus="overall">全体</button>
@@ -212,7 +226,7 @@
               <p id="reference-analysis-note" class="hint">画像があるときだけ解析します。</p>
             </div>
 
-            <div id="edit-block" hidden>
+            <div id="edit-block" data-image-create hidden>
               <p class="section-label">この画像を…</p>
               <div id="edit-actions" role="radiogroup" aria-label="編集方法"></div>
               <p id="guarantee-badge" class="guarantee"></p>
@@ -240,7 +254,7 @@
               </label>
             </div>
 
-            <div id="size-block">
+            <div id="size-block" data-image-create>
               <p class="section-label" id="size-label">サイズ</p>
               <div id="size-presets" class="chips" role="radiogroup" aria-label="サイズ"></div>
               <div id="size-custom" hidden>
@@ -253,10 +267,10 @@
               <p id="size-note" class="hint"></p>
             </div>
 
-            <p class="section-label">枚数</p>
-            <div id="count-chips" class="chips" role="radiogroup" aria-label="枚数"></div>
+            <p id="count-label" class="section-label" data-image-create>枚数</p>
+            <div id="count-chips" class="chips" data-image-create role="radiogroup" aria-label="枚数"></div>
 
-            <div data-adv-slot="create"></div>
+            <div data-adv-slot="create" data-image-create></div>
 
             <p id="create-error" class="error" role="alert" hidden></p>
             <button class="primary" type="submit" id="create-submit">作る</button>
@@ -273,6 +287,7 @@
 
             <div id="stage-result" hidden>
               <img id="result-image" alt="生成された画像">
+              <video id="result-video" controls playsinline preload="metadata" hidden></video>
               <div id="candidate-strip" class="strip"></div>
               <div class="actions">
                 <button type="button" id="result-edit">これを編集</button>

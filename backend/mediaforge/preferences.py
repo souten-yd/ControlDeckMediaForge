@@ -15,6 +15,7 @@ STANDALONE_SUBJECT = "local"
 
 ALLOWED: dict[str, tuple[type, tuple[Any, ...] | None]] = {
     "mode": (str, ("simple", "advanced")),
+    "create_media": (str, ("image", "video")),
     "last_preset": (str, ("square", "landscape", "portrait", "wide", "tall", "cinema", "custom")),
     "last_count": (int, (1, 2, 3, 4, 5, 6, 7, 8)),
     "last_custom_width": (int, None),
@@ -38,6 +39,7 @@ MAX_SPEC_VALUE_LENGTH = 128
 
 DEFAULTS: dict[str, Any] = {
     "mode": "simple",
+    "create_media": "image",
     "last_custom_width": 0,
     "last_custom_height": 0,
     "last_preset": "square",
