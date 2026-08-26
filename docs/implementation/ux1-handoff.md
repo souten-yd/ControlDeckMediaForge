@@ -13,7 +13,7 @@ slice       G7 V1d Hunyuan license-gated evaluator preparation
 baseline    focused 20 passed、full 693 passed / 1 warning / 46.96s
 installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy
 GPU         weight-free preflight 後 KFD process 0。SonicForge は別管理
-PR          未作成
+PR          Media Forge #123 open / exact head・mergeability 確認待ち
 ```
 
 G7 V1c は Media Forge #122、merge commit
