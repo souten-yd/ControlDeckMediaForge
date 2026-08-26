@@ -4851,3 +4851,66 @@ full                       686 passed / 2 warnings / 51.28 s
 git diff --check           PASS
 compileall                 PASS
 ```
+
+## G7 V1d — Hunyuan license-gated evaluator preparation（2026-08-26）
+
+V1c merge 後も weight / partial snapshot 0 を維持したまま、同意後の実測で使う private evaluator
+runner と core admission 経路を実装した。公式推奨では 480p T2V CFG-distilled は 50 steps が必要で、
+8/12 steps は 480p I2V step-distilled 向けであるため、T2V quality preset を短縮推測値へ置換しない。
+
+runner invariant:
+
+```text
+model identity       tencent/HunyuanVideo-1.5@9b49404b
+conversion identity  hunyuanvideo-community/...480p_t2v_distilled@1abb14f0
+snapshot ingress     local path only / exact revision / HF cache containment
+network              local_files_only / HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE
+runtime              dedicated Python / torch BF16 / model CPU offload / VAE tiling
+attention            PyTorch SDPA / custom kernel 0
+input                 fixed prompt / negative prompt / seed 260826 / fixed presets
+artifact              H.264 yuv420p MP4 / exact dimensions, fps, frame count
+failure               partial MP4 and temporary frame directory cleanup
+```
+
+core へ optional runtime/snapshot/preset 設定を追加した。両 path と revision containment が通らない
+限り model evaluation control に現れない。設定後の操作も既存 Host Job → Broker queue/lease/renew/
+cancel/release → process-group metrics → ffprobe validation を通す。実測前の request は
+`execution_peak=30,700,000,000`、`cold_load_peak=32,000,000,000`、
+`headroom=1,073,741,824 bytes`、`estimated_runtime_sec=3600`、`confidence=low` とし、採用値ではない。
+Wan source `PYTHONPATH` は Hunyuan subprocess へ漏らさない。
+
+実 runtime で runner CLI import と既存 weight-free R9700 preflight を再実行した。
+
+```text
+runner --help              PASS / heavy import・network なし
+weight-free preflight      PASS / R9700 gfx1201 / PyTorch SDPA
+ROCm process cleanup       KFD process 0
+focused                    20 passed / 1 warning
+full                       693 passed / 1 warning / 46.96 s
+model load / generation    NOT TESTED
+weight / partial snapshot  0 / license acceptance 待ち
+ControlDeck changes        0
+```
+
+判定: evaluator/admission/evidence preparation は **PASS**。model load、Host Broker 実要求、cancel、
+artifact、VRAM/RSS/swap、quality/determinism は weight 不在のため **NOT TESTED**。通常の video
+capability は unavailable、catalog は experimental/unmeasured のまま。
+
+isolated data directory / `127.0.0.1:9162` で branch core を実起動した。`GET /health` は
+`setup_required`（空の isolated data なので正しい）/ contract 2.0、model catalog は
+`evaluation.available_model_ids=[]` を返した。Hunyuan entry は `experimental`、`installed=false`、
+`measurement_confidence=low`、recommended profile 0。`video.image_to_video` は
+`unavailable/planned_for_g7` のままで、設定なしの evaluator 準備が capability を誤昇格させないことを
+確認した。branch core は正常 shutdown、installed v0.9.0 は `healthy`、KFD process は0。
+
+最終 gate:
+
+```text
+focused                    20 passed / 1 warning
+full                       693 passed / 1 warning / 46.96 s
+branch core real HTTP      PASS / hidden-until-configured / capability unavailable
+installed /health          healthy / contract 2.0
+ROCm process cleanup       KFD process 0
+git diff --check           PASS
+compileall                 PASS
+```
