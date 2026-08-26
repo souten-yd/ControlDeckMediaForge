@@ -148,6 +148,28 @@ Agreement が適用される。利用開始自体が同意となり、地域、a
 明示同意なしに weight download を開始しない。runtime preflight は PASS、weight/inference は
 **BLOCKED PENDING LICENSE ACCEPTANCE / NOT TESTED** とする。
 
+### 2.4 license-gated evaluator preparation（2026-08-26）
+
+weight 取得前に、Hunyuan 候補の private evaluator runner と Host admission 境界を実装する。
+runner は repository ID を受け取らず、exact revision 名のローカル Hugging Face snapshot だけを
+受理する。`local_files_only=True`、Hub/Transformers offline、telemetry off を強制し、固定 prompt / seed /
+preset 以外を public input にしない。
+
+```text
+smoke           256x256 / 5 frames / 1 step（load/ROCm のみ。品質証拠ではない）
+candidate-clip  640x384 / 33 frames / 50 steps（bounded 比較）
+official-clip   848x480 / 121 frames / 50 steps（公式 cfg-distilled step数）
+```
+
+core は専用 runtime と conversion snapshot が両方明示設定され、revision/model index の containment
+検証を通った場合だけ評価操作を提示する。通常の capability router / recommended profile / available
+state は変えない。評価操作は既存 Host Job と Broker lease、renew、cancel、release、VRAM/RSS/swap
+metrics、ffprobe validation を再利用する。実測前の Broker envelope は `confidence=low` の保守値であり、
+catalog measurement や production routing へ転記しない。
+
+この準備コード自体は license acceptance や weight download を行わない。実 runner の model load /
+generation は引き続き **BLOCKED PENDING LICENSE ACCEPTANCE / NOT TESTED** とする。
+
 ## 3. V2 — execution
 
 private runtime adapter が raw frames/video を job root に書き、V0 の FFmpeg stage が公開 asset

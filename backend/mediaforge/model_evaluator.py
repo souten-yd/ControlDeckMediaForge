@@ -58,6 +58,14 @@ WAN_ESTIMATED_RUNTIME_SEC = 1800.0
 WAN_EXECUTION_PEAK_BYTES = 30_700_000_000
 WAN_COLD_LOAD_PEAK_BYTES = 30_700_000_000
 WAN_HEADROOM_BYTES = 1024 * 1024 * 1024
+HUNYUAN_MODEL_ID = "tencent/HunyuanVideo-1.5"
+HUNYUAN_RUNTIME_ADAPTER = "native.hunyuan-video-1.5"
+HUNYUAN_MODEL_REVISION = "9b49404b3f5df2a8f0b31df27a0c7ab872e7b038"
+HUNYUAN_CONVERSION_REVISION = "1abb14f06518f37448dcf3a6917dd086dd7045c7"
+HUNYUAN_ESTIMATED_RUNTIME_SEC = 3600.0
+HUNYUAN_EXECUTION_PEAK_BYTES = 30_700_000_000
+HUNYUAN_COLD_LOAD_PEAK_BYTES = 32_000_000_000
+HUNYUAN_HEADROOM_BYTES = 1024 * 1024 * 1024
 logger = logging.getLogger("uvicorn.error")
 
 
@@ -73,7 +81,7 @@ class RuntimeMetrics:
 
 
 class H3ModelEvaluator:
-    """Private, bounded H3 smoke evaluator backed by a real Host Job and lease."""
+    """Private, bounded native-model evaluator backed by a real Host Job and lease."""
 
     def __init__(
         self,
@@ -88,6 +96,9 @@ class H3ModelEvaluator:
         wan_runtime_python: Path | None = None,
         wan_source_root: Path | None = None,
         wan_evaluation_preset: str = "smoke",
+        hunyuan_runtime_python: Path | None = None,
+        hunyuan_snapshot_root: Path | None = None,
+        hunyuan_evaluation_preset: str = "smoke",
         lease_renew_sec: float,
         timeout_sec: float,
         command_builder: Callable[[ModelDescriptor, Path, Path], list[str]] | None = None,
@@ -116,6 +127,16 @@ class H3ModelEvaluator:
         }:
             raise ValueError("Wan evaluation preset is invalid")
         self.wan_evaluation_preset = wan_evaluation_preset
+        self.hunyuan_runtime_python = (
+            Path(os.path.abspath(hunyuan_runtime_python))
+            if hunyuan_runtime_python is not None else None
+        )
+        self.hunyuan_snapshot_root = (
+            hunyuan_snapshot_root.resolve() if hunyuan_snapshot_root is not None else None
+        )
+        if hunyuan_evaluation_preset not in {"smoke", "candidate-clip", "official-clip"}:
+            raise ValueError("Hunyuan evaluation preset is invalid")
+        self.hunyuan_evaluation_preset = hunyuan_evaluation_preset
         self.output_root = (store.data_dir / "model-evaluations").resolve()
         self.lease_renew_sec = lease_renew_sec
         self.timeout_sec = timeout_sec
@@ -168,6 +189,12 @@ class H3ModelEvaluator:
             found.append(WAN_MODEL_ID)
         except (ModelOperationError, OSError):
             pass
+        try:
+            model = self._model(HUNYUAN_MODEL_ID)
+            self._preflight(model)
+            found.append(HUNYUAN_MODEL_ID)
+        except (ModelOperationError, OSError):
+            pass
         for model in self._image_candidates():
             found.append(model.model_id)
         return found
@@ -196,7 +223,7 @@ class H3ModelEvaluator:
         missing = {"jobs.write", "resources.acquire"} - identity.granted_capabilities
         if missing:
             raise ModelOperationError("host_capability_not_granted", "Host evaluation capabilities are unavailable")
-        if model_id not in {H3_MODEL_ID, WAN_MODEL_ID} and model_id not in {
+        if model_id not in {H3_MODEL_ID, WAN_MODEL_ID, HUNYUAN_MODEL_ID} and model_id not in {
             model.model_id for model in self._image_candidates()
         }:
             raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
@@ -305,7 +332,7 @@ class H3ModelEvaluator:
 
                 output_dir = contained(self.output_root, self.output_root / operation_id)
                 output_dir.mkdir(mode=0o700)
-                suffix = ".mp4" if model.model_id == WAN_MODEL_ID else ".webm"
+                suffix = ".mp4" if model.model_id in {WAN_MODEL_ID, HUNYUAN_MODEL_ID} else ".webm"
                 output_path = contained(output_dir, output_dir / f"smoke{suffix}")
                 log_path = contained(output_dir, output_dir / "runtime.log")
                 command = self.command_builder(model, output_path, self._runtime_executable())
@@ -315,7 +342,7 @@ class H3ModelEvaluator:
                         *command,
                         stdout=log_stream,
                         stderr=asyncio.subprocess.STDOUT,
-                        env=self._runtime_env(),
+                        env=self._runtime_env(model),
                         start_new_session=True,
                     )
                     self._processes[operation_id] = process
@@ -349,11 +376,12 @@ class H3ModelEvaluator:
                     )
                 self.store.update_model_operation(operation_id, state=ModelOperationState.VALIDATING)
                 await reporter.progress("evaluation_validating", 0.92, force=True)
-                validator = (
-                    self._validate_wan_artifact
-                    if model.model_id == WAN_MODEL_ID and not self._custom_artifact_validator
-                    else self.artifact_validator
-                )
+                if model.model_id == WAN_MODEL_ID and not self._custom_artifact_validator:
+                    validator = self._validate_wan_artifact
+                elif model.model_id == HUNYUAN_MODEL_ID and not self._custom_artifact_validator:
+                    validator = self._validate_hunyuan_artifact
+                else:
+                    validator = self.artifact_validator
                 media = await asyncio.to_thread(validator, output_path)
                 result = self._result(output_path, media, metrics, model=model)
                 if len(json.dumps(result, separators=(",", ":")).encode("utf-8")) > 16 * 1024:
@@ -596,6 +624,9 @@ class H3ModelEvaluator:
         if model.model_id == WAN_MODEL_ID:
             self._wan_preflight(model)
             return
+        if model.model_id == HUNYUAN_MODEL_ID:
+            self._hunyuan_preflight(model)
+            return
         if model.model_id != H3_MODEL_ID or model.runtime_adapter != H3_RUNTIME_ADAPTER:
             raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
         if not model.installed or model.local_path is None:
@@ -626,6 +657,18 @@ class H3ModelEvaluator:
                 "--work-root", str(self.output_root),
                 "--output", str(output_path),
                 "--preset", self.wan_evaluation_preset,
+            ]
+        if model.model_id == HUNYUAN_MODEL_ID:
+            assert self.hunyuan_runtime_python is not None
+            assert self.hunyuan_snapshot_root is not None
+            return [
+                str(self.hunyuan_runtime_python),
+                str(REPOSITORY_ROOT / "worker_packs/video/hunyuan15_probe.py"),
+                "run",
+                "--snapshot", str(self.hunyuan_snapshot_root),
+                "--work-root", str(self.output_root),
+                "--output", str(output_path),
+                "--preset", self.hunyuan_evaluation_preset,
             ]
         assert model.local_path is not None
         snapshot = model.local_path
@@ -664,14 +707,14 @@ class H3ModelEvaluator:
             raise ModelOperationError("model_verify_failed", "evaluation weight escapes the managed repository")
         return resolved
 
-    def _runtime_env(self) -> dict[str, str]:
+    def _runtime_env(self, model: ModelDescriptor) -> dict[str, str]:
         env = os.environ.copy()
         rocm_libs = "/opt/rocm/lib/llvm/lib:/opt/rocm/lib"
         existing = env.get("LD_LIBRARY_PATH")
         env["LD_LIBRARY_PATH"] = f"{rocm_libs}:{existing}" if existing else rocm_libs
         env["ROCR_VISIBLE_DEVICES"] = "0"
         env["HIP_VISIBLE_DEVICES"] = "0"
-        if self.wan_source_root is not None:
+        if model.model_id == WAN_MODEL_ID and self.wan_source_root is not None:
             existing_pythonpath = env.get("PYTHONPATH")
             source = str(self.wan_source_root)
             env["PYTHONPATH"] = f"{source}:{existing_pythonpath}" if existing_pythonpath else source
@@ -685,6 +728,12 @@ class H3ModelEvaluator:
             headroom = WAN_HEADROOM_BYTES
             runtime = WAN_ESTIMATED_RUNTIME_SEC
             confidence = "measured"
+        elif model.model_id == HUNYUAN_MODEL_ID:
+            execution_peak = HUNYUAN_EXECUTION_PEAK_BYTES
+            cold_peak = HUNYUAN_COLD_LOAD_PEAK_BYTES
+            headroom = HUNYUAN_HEADROOM_BYTES
+            runtime = HUNYUAN_ESTIMATED_RUNTIME_SEC
+            confidence = "low"
         else:
             execution_peak = H3_EXECUTION_PEAK_BYTES
             cold_peak = H3_COLD_LOAD_PEAK_BYTES
@@ -761,8 +810,20 @@ class H3ModelEvaluator:
         pswpin, pswpout = self._vmstat_swap()
         return {
             "evaluation_id": output_path.parent.name,
-            "preset": f"wan_ti2v_{self.wan_evaluation_preset}" if model and model.model_id == WAN_MODEL_ID else H3_EVALUATION_PRESET,
-            "runtime_commit": WAN_SOURCE_REVISION if model and model.model_id == WAN_MODEL_ID else H3_RUNTIME_COMMIT,
+            "preset": (
+                f"wan_ti2v_{self.wan_evaluation_preset}"
+                if model and model.model_id == WAN_MODEL_ID
+                else f"hunyuan15_{self.hunyuan_evaluation_preset}"
+                if model and model.model_id == HUNYUAN_MODEL_ID
+                else H3_EVALUATION_PRESET
+            ),
+            "runtime_commit": (
+                WAN_SOURCE_REVISION
+                if model and model.model_id == WAN_MODEL_ID
+                else HUNYUAN_CONVERSION_REVISION
+                if model and model.model_id == HUNYUAN_MODEL_ID
+                else H3_RUNTIME_COMMIT
+            ),
             "elapsed_sec": round(time.monotonic() - metrics.started_at, 3),
             "peak_rss_bytes": metrics.peak_rss_bytes,
             "peak_process_swap_bytes": metrics.peak_process_swap_bytes,
@@ -814,6 +875,94 @@ class H3ModelEvaluator:
         )
         if source_status.returncode != 0 or source_status.stdout != " M wan/__init__.py\n":
             raise ModelOperationError("model_runtime_unavailable", "Wan evaluator source tree has other changes")
+
+    def _hunyuan_preflight(self, model: ModelDescriptor) -> None:
+        if (
+            model.runtime_adapter != HUNYUAN_RUNTIME_ADAPTER
+            or model.revision != HUNYUAN_MODEL_REVISION
+        ):
+            raise ModelOperationError("model_evaluation_unsupported", "model has no bounded evaluation preset")
+        if self.hunyuan_runtime_python is None or not self.hunyuan_runtime_python.is_file():
+            raise ModelOperationError("model_runtime_unavailable", "pinned Hunyuan runtime is unavailable")
+        if self.hunyuan_snapshot_root is None or not self.hunyuan_snapshot_root.is_dir():
+            raise ModelOperationError("model_not_found", "pinned Hunyuan conversion snapshot is unavailable")
+        if (
+            self.hunyuan_snapshot_root.name != HUNYUAN_CONVERSION_REVISION
+            or self.hunyuan_snapshot_root.parent.name != "snapshots"
+        ):
+            raise ModelOperationError("model_verify_failed", "Hunyuan conversion revision differs")
+        try:
+            repository = self.hunyuan_snapshot_root.parent.parent.resolve(strict=True)
+            model_index = (self.hunyuan_snapshot_root / "model_index.json").resolve(strict=True)
+        except OSError as exc:
+            raise ModelOperationError("model_verify_failed", "Hunyuan conversion snapshot is incomplete") from exc
+        if not model_index.is_file() or not model_index.is_relative_to(repository):
+            raise ModelOperationError("model_verify_failed", "Hunyuan conversion snapshot is incomplete")
+        if model_index.stat().st_size > 64 * 1024:
+            raise ModelOperationError("model_verify_failed", "Hunyuan conversion model index is unbounded")
+        try:
+            value = json.loads(model_index.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ModelOperationError("model_verify_failed", "Hunyuan conversion model index is unreadable") from exc
+        if value.get("_class_name") != "HunyuanVideo15Pipeline":
+            raise ModelOperationError("model_verify_failed", "Hunyuan conversion pipeline differs")
+
+    def _validate_hunyuan_artifact(self, path: Path) -> dict[str, Any]:
+        expected = {
+            "smoke": (256, 256, 5),
+            "candidate-clip": (640, 384, 33),
+            "official-clip": (848, 480, 121),
+        }[self.hunyuan_evaluation_preset]
+        media = self._validate_silent_mp4(path, label="Hunyuan")
+        if (
+            media["width"] != expected[0]
+            or media["height"] != expected[1]
+            or media["frame_count"] != expected[2]
+        ):
+            raise ModelOperationError("model_evaluation_invalid_output", "Hunyuan video bounds differ")
+        media.pop("frame_count")
+        return media
+
+    @staticmethod
+    def _validate_silent_mp4(path: Path, *, label: str) -> dict[str, Any]:
+        if not path.is_file() or path.stat().st_size <= 0:
+            raise ModelOperationError("model_evaluation_invalid_output", f"{label} runtime produced no video")
+        completed = subprocess.run(
+            ["/usr/bin/ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if completed.returncode != 0 or len(completed.stdout.encode("utf-8")) > 256 * 1024:
+            raise ModelOperationError("model_evaluation_invalid_output", f"ffprobe rejected the {label} video")
+        try:
+            value = json.loads(completed.stdout)
+            streams = value["streams"]
+            video = next(item for item in streams if item.get("codec_type") == "video")
+            if any(item.get("codec_type") == "audio" for item in streams):
+                raise ValueError("unexpected audio")
+            duration = float(value["format"]["duration"])
+            frame_count = int(video["nb_frames"])
+            containers = str(value["format"]["format_name"]).split(",")
+        except (json.JSONDecodeError, KeyError, StopIteration, TypeError, ValueError) as exc:
+            raise ModelOperationError("model_evaluation_invalid_output", f"{label} video metadata is invalid") from exc
+        if (
+            not 0 < duration <= 6
+            or video.get("codec_name") != "h264"
+            or video.get("avg_frame_rate") != "24/1"
+            or "mp4" not in containers
+        ):
+            raise ModelOperationError("model_evaluation_invalid_output", f"{label} video encoding differs")
+        return {
+            "width": int(video["width"]),
+            "height": int(video["height"]),
+            "video_codec": str(video.get("codec_name") or "unknown")[:32],
+            "frame_rate": str(video.get("avg_frame_rate") or "unknown")[:32],
+            "frame_count": frame_count,
+            "duration_sec": round(duration, 3),
+            "audio_present": False,
+        }
 
     def _validate_wan_artifact(self, path: Path) -> dict[str, Any]:
         if not path.is_file() or path.stat().st_size <= 0:

@@ -7,53 +7,54 @@
 
 ```text
 最終更新    2026-08-26
-branch      g7/hunyuan15-probe（origin/main b528884 から作成）
-slice       G7 V1c HunyuanVideo-1.5 weight-free R9700 preflight
-状態        runtime/import/SDPA PASS、weight/inference は license acceptance 待ち
-baseline    full 686 passed / 2 warnings / 51.28s、compile/diff PASS
+branch      ux1/hunyuan-evaluator-prep（origin/main 41eee86 から作成）
+slice       G7 V1d Hunyuan license-gated evaluator preparation
+状態        runner/core admission PASS、weight/model load は license acceptance 待ち
+baseline    focused 20 passed、full 693 passed / 1 warning / 46.96s
 installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy
-GPU         preflight 後 process 0。SonicForge は別管理
-PR          Media Forge #122 open / exact head・mergeability 確認待ち
+GPU         weight-free preflight 後 KFD process 0。SonicForge は別管理
+PR          Media Forge #123 open / exact head・mergeability 確認待ち
 ```
 
-G7 V1b は Media Forge #121、merge commit
-`b528884d6799b3571799fae064f2ffaab3110308` で main へ入った。Wan practical profile を
-production adapter へ昇格させない。
+G7 V1c は Media Forge #122、merge commit
+`41eee86efc97db285c6717c3f482834604442816` で main へ入った。Hunyuan weight は取得していない。
 
 ## この slice の結果
 
 ```text
-PASS       Hunyuan 480p distilled を次候補に選定
-PASS       dedicated ROCm runtime / pip check / gfx1201 enumeration
-PASS       Diffusers pipeline / transformer / VAE / PyTorch SDPA import
-PASS       custom CUDA kernel 0 / GPU process cleanup
-PASS       installed v0.9.0 healthy / full 686 passed
-NOT TESTED 53,367,753,676-byte weight download / hash
-NOT TESTED generation / Broker / cancel / quality / installed browser
+PASS       exact local snapshot / offline-only runner boundary
+PASS       fixed smoke/candidate/official presets and deterministic seed
+PASS       H.264 output bounds / temporary and partial cleanup tests
+PASS       optional core configuration / hidden-until-configured behavior
+PASS       Host Job + conservative Broker request + metrics/validator wiring
+PASS       dedicated runtime CLI / weight-free R9700 preflight / KFD cleanup
+PASS       branch core real HTTP / hidden evaluation / capability unavailable
+NOT TESTED 53,367,753,676-byte weight download / hash / model load
+NOT TESTED real Broker lease/cancel / VRAM/RSS/swap / video quality
 BLOCKED    Tencent Hunyuan Community License の明示同意待ち
 ```
 
-主要実測は `docs/implementation-status.md` の G7 V1c 節を正とする。専用 runtime は
-`/data1tb/mediaforge-g7-hunyuan15/runtime`（4,688,976,346 bytes）。weight は未取得。
+通常の video capability/routing/catalog state は変更していない。実測前 envelope は
+`confidence=low` であり採用値ではない。
 
 ## 次にやること（1つだけ）
 
 ```text
-1. commit/push、V1c PR、exact head/mergeability、merge を完了する
-2. 利用者へ exact license 条件と 53GB download の明示同意を求める
-3. 同意後だけ pinned sequential download と hash verification を開始する
+1. full gate、commit/push、V1d PR、exact head/mergeability、merge を完了する
+2. 利用者の明示同意後だけ pinned sequential download と hash verification を開始する
+3. smoke → candidate clip の順に Broker/metrics/cancel/quality を実測する
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South
 Korea を除く Territory、acceptable-use、distribution/notice、第三者提供時表示、100M MAU 条件を
-含む。ユーザーの「計画を進める」という一般指示を license acceptance と解釈しない。
+含む。ユーザーの一般的な継続指示を license acceptance と解釈しない。
 
 ## 境界と外部状態
 
 ```text
 ControlDeck 変更 0。Host は read-only。
 installed v0.9.0 service は healthy。評価用 branch core は起動していない。
-Hunyuan weight/snapshot/partial download は 0。runtime だけ外部構築済み。
+Hunyuan weight/snapshot/partial download は 0。dedicated runtime だけ外部構築済み。
 Wan runtime/model は移動・削除しない。
 SonicForge は独立 service。競合時は Broker を唯一の調停経路にする。
 ```

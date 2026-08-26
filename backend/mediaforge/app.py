@@ -287,6 +287,9 @@ def create_app(
             wan_runtime_python=resolved.wan_runtime_python,
             wan_source_root=resolved.wan_source_root,
             wan_evaluation_preset=resolved.wan_evaluation_preset,
+            hunyuan_runtime_python=resolved.hunyuan_runtime_python,
+            hunyuan_snapshot_root=resolved.hunyuan_snapshot_root,
+            hunyuan_evaluation_preset=resolved.hunyuan_evaluation_preset,
             lease_renew_sec=resolved.host_lease_renew_sec,
             timeout_sec=resolved.model_evaluation_timeout_sec,
             # 自作モデルも測れるようにする。shipped manifest に居ないので、

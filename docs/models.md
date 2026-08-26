@@ -168,6 +168,13 @@ not inference evidence. The conversion bundle is revision `1abb14f0`, 13 weight
 files and 53,367,753,676 bytes; it remains external and **NOT TESTED** until the
 Tencent Hunyuan Community License is explicitly accepted.
 
+The private evaluator path is prepared but remains fail-closed. It accepts only
+an explicitly configured local snapshot whose directory matches revision
+`1abb14f0`, forces Hugging Face and Transformers offline mode, and requests a
+ControlDeck Broker lease with low-confidence conservative bounds. Without that
+snapshot and its dedicated runtime, the model is absent from the evaluation
+control. This does not make the model routable, installed, or supported.
+
 ### MiniMax H3 FL2VA evaluation gate
 
 The catalog records the publisher's BF16 FL2VA snapshot at revision
