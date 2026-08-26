@@ -17,6 +17,14 @@ from mediaforge.model_evaluator import (
     H3_RUNTIME_ADAPTER,
     H3_RUNTIME_COMMIT,
     H3ModelEvaluator,
+    HUNYUAN_COLD_LOAD_PEAK_BYTES,
+    HUNYUAN_CONVERSION_REVISION,
+    HUNYUAN_ESTIMATED_RUNTIME_SEC,
+    HUNYUAN_EXECUTION_PEAK_BYTES,
+    HUNYUAN_HEADROOM_BYTES,
+    HUNYUAN_MODEL_ID,
+    HUNYUAN_MODEL_REVISION,
+    HUNYUAN_RUNTIME_ADAPTER,
     WAN_COLD_LOAD_PEAK_BYTES,
     WAN_ESTIMATED_RUNTIME_SEC,
     WAN_EXECUTION_PEAK_BYTES,
@@ -373,6 +381,7 @@ def test_wan_probe_is_pinned_and_uses_separate_runtime(tmp_path: Path) -> None:
     runtime_python = tmp_path / "wan-runtime" / "bin" / "python"
     runtime_python.parent.mkdir(parents=True)
     runtime_python.write_text("", encoding="utf-8")
+    native_runtime = runtime_root(tmp_path)
     source = tmp_path / "wan-source"
     source.mkdir()
     service = H3ModelEvaluator(
@@ -382,7 +391,7 @@ def test_wan_probe_is_pinned_and_uses_separate_runtime(tmp_path: Path) -> None:
         catalog_manifest=tmp_path / "catalog.json",
         model_store_root=tmp_path / "models",
         hf_home=tmp_path / "hf",
-        runtime_root=runtime_root(tmp_path),
+        runtime_root=native_runtime,
         wan_runtime_python=runtime_python,
         wan_source_root=source,
         lease_renew_sec=1,
@@ -408,6 +417,7 @@ def test_wan_probe_is_pinned_and_uses_separate_runtime(tmp_path: Path) -> None:
         "headroom_bytes": WAN_HEADROOM_BYTES,
         "confidence": "measured",
     }
+    assert str(source) in service._runtime_env(model)["PYTHONPATH"]
 
 
 def test_wan_validator_accepts_one_frame_video_without_audio(
@@ -462,3 +472,127 @@ def test_wan_failed_probe_removes_sensitive_and_partial_outputs(tmp_path: Path) 
     service._cleanup_probe_intermediates(operation.id)
 
     assert sorted(item.name for item in output_dir.iterdir()) == []
+
+
+def test_hunyuan_probe_is_hidden_until_exact_external_snapshot_is_configured(
+    tmp_path: Path,
+) -> None:
+    store = Store(tmp_path / "data")
+    store.initialize()
+    runtime_python = tmp_path / "hunyuan-runtime" / "bin" / "python"
+    runtime_python.parent.mkdir(parents=True)
+    runtime_python.write_text("", encoding="utf-8")
+    native_runtime = runtime_root(tmp_path)
+    model = replace(
+        descriptor(tmp_path / "unused-official-snapshot"),
+        model_id=HUNYUAN_MODEL_ID,
+        family="hunyuan-video-1.5",
+        revision=HUNYUAN_MODEL_REVISION,
+        runtime_adapter=HUNYUAN_RUNTIME_ADAPTER,
+        installed=False,
+        local_path=None,
+    )
+
+    unavailable = H3ModelEvaluator(
+        store,
+        FakeHost(),  # type: ignore[arg-type]
+        model_manifest=tmp_path / "models.json",
+        catalog_manifest=tmp_path / "catalog.json",
+        model_store_root=tmp_path / "models",
+        hf_home=tmp_path / "hf",
+        runtime_root=native_runtime,
+        hunyuan_runtime_python=runtime_python,
+        lease_renew_sec=1,
+        timeout_sec=10,
+        model_resolver=lambda model_id: model if model_id == HUNYUAN_MODEL_ID else (_ for _ in ()).throw(
+            ModelOperationError("model_not_found", "not configured")
+        ),
+    )
+    assert unavailable.available_model_ids() == []
+
+    repository = tmp_path / "models--hunyuanvideo-community--candidate"
+    blobs = repository / "blobs"
+    snapshot = repository / "snapshots" / HUNYUAN_CONVERSION_REVISION
+    blobs.mkdir(parents=True)
+    snapshot.mkdir(parents=True)
+    model_index = blobs / "model-index"
+    model_index.write_text(
+        json.dumps({"_class_name": "HunyuanVideo15Pipeline"}),
+        encoding="utf-8",
+    )
+    (snapshot / "model_index.json").symlink_to(model_index)
+    available = H3ModelEvaluator(
+        store,
+        FakeHost(),  # type: ignore[arg-type]
+        model_manifest=tmp_path / "models.json",
+        catalog_manifest=tmp_path / "catalog.json",
+        model_store_root=tmp_path / "models",
+        hf_home=tmp_path / "hf",
+        runtime_root=native_runtime,
+        hunyuan_runtime_python=runtime_python,
+        hunyuan_snapshot_root=snapshot,
+        hunyuan_evaluation_preset="candidate-clip",
+        lease_renew_sec=1,
+        timeout_sec=10,
+        model_resolver=lambda model_id: model if model_id == HUNYUAN_MODEL_ID else (_ for _ in ()).throw(
+            ModelOperationError("model_not_found", "not configured")
+        ),
+    )
+    assert available.available_model_ids() == [HUNYUAN_MODEL_ID]
+    command_value = available._command(model, tmp_path / "smoke.mp4", Path("/unused"))
+    assert command_value[0] == str(runtime_python)
+    assert command_value[2:4] == ["run", "--snapshot"]
+    assert command_value[-2:] == ["--preset", "candidate-clip"]
+    request = available._resource_request("host-hunyuan", model)
+    assert request["estimated_runtime_sec"] == HUNYUAN_ESTIMATED_RUNTIME_SEC
+    assert request["vram"] == {
+        "resident_bytes": 0,
+        "execution_peak_bytes": HUNYUAN_EXECUTION_PEAK_BYTES,
+        "cold_load_peak_bytes": HUNYUAN_COLD_LOAD_PEAK_BYTES,
+        "headroom_bytes": HUNYUAN_HEADROOM_BYTES,
+        "confidence": "low",
+    }
+    available.wan_source_root = tmp_path / "unrelated-wan-source"
+    assert str(available.wan_source_root) not in available._runtime_env(model).get("PYTHONPATH", "")
+
+
+def test_hunyuan_validator_requires_exact_silent_h264_bounds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact = tmp_path / "smoke.mp4"
+    artifact.write_bytes(b"video")
+    codec = "h264"
+
+    def fake_run(args: list[str], **kwargs):
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout=json.dumps({
+                "streams": [{
+                    "codec_type": "video",
+                    "width": 256,
+                    "height": 256,
+                    "codec_name": codec,
+                    "avg_frame_rate": "24/1",
+                    "nb_frames": "5",
+                }],
+                "format": {"duration": "0.209", "format_name": "mov,mp4,m4a,3gp,3g2,mj2"},
+            }),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    service = evaluator(tmp_path, FakeHost(), delay=0)
+    assert service._validate_hunyuan_artifact(artifact) == {
+        "width": 256,
+        "height": 256,
+        "video_codec": "h264",
+        "frame_rate": "24/1",
+        "duration_sec": 0.209,
+        "audio_present": False,
+    }
+
+    codec = "vp9"
+    with pytest.raises(ModelOperationError, match="encoding differs"):
+        service._validate_hunyuan_artifact(artifact)
