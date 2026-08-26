@@ -64,6 +64,40 @@ class BlenderCompileCanceled(BlenderCompileError):
     pass
 
 
+def runtime_available() -> bool:
+    """Cheap capability check for the exact provisioned runtime.
+
+    Capability discovery must not launch Blender. The build-time preflight writes
+    a fixed stamp, so request-time discovery only verifies that stamp and the two
+    trusted executables it names indirectly.
+    """
+    stamp_path = RUNTIME_ROOT / ".runtime.json"
+    manifest_path = REPOSITORY_ROOT / "config" / "blender-runtime.json"
+    try:
+        if stamp_path.is_symlink() or not stamp_path.is_file():
+            return False
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            return False
+        stamp = json.loads(stamp_path.read_text(encoding="utf-8"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    expected = {
+        "schema_version": 1,
+        "version": BLENDER_VERSION,
+        "archive_sha256": manifest.get("archive_sha256"),
+        "executable": "blender",
+    }
+    return (
+        stamp == expected
+        and BLENDER_EXECUTABLE.is_file()
+        and not BLENDER_EXECUTABLE.is_symlink()
+        and os.access(BLENDER_EXECUTABLE, os.X_OK)
+        and TRUSTED_WORKER.is_file()
+        and not TRUSTED_WORKER.is_symlink()
+    )
+
+
 class CompileOptions(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

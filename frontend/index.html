@@ -142,6 +142,52 @@
               <p class="hint">2〜4枚のカットを個別に作り、文字とレイアウトは正確に合成します。</p>
             </div>
 
+            <div id="project-3d-section" class="sub-field" hidden>
+              <p class="section-label">3Dプロジェクト用に整える</p>
+              <p class="hint">GLBを安全な固定工程で整え、プレビューと記録を含むZIPにまとめます。</p>
+              <label id="project-3d-file-label" class="dropzone">
+                <span id="project-3d-file-text">＋ GLBを選ぶ</span>
+                <input id="project-3d-file" type="file" accept="model/gltf-binary,.glb">
+              </label>
+              <button type="button" id="project-3d-clear" hidden>使わない</button>
+              <div id="project-3d-options" hidden>
+                <p class="section-label">3Dの詳細設定</p>
+                <label class="check"><input id="project-3d-repair-normals" type="checkbox">法線を修復</label>
+                <label class="check"><input id="project-3d-remove-degenerate" type="checkbox">面積のない面を除去</label>
+                <div class="form-row">
+                  <label>近接頂点を結合（m）
+                    <input id="project-3d-merge-distance" type="number" min="0.0000001" max="1" step="0.0000001" placeholder="変更しない">
+                  </label>
+                  <label>三角形の上限
+                    <input id="project-3d-triangle-budget" type="number" min="12" max="200000" step="1" placeholder="変更しない">
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label>LOD 1 比率<input id="project-3d-lod-1" type="number" min="0.05" max="0.95" step="0.05" placeholder="なし"></label>
+                  <label>LOD 2 比率<input id="project-3d-lod-2" type="number" min="0.05" max="0.95" step="0.05" placeholder="なし"></label>
+                  <label>LOD 3 比率<input id="project-3d-lod-3" type="number" min="0.05" max="0.95" step="0.05" placeholder="なし"></label>
+                </div>
+                <div class="form-row">
+                  <label>当たり判定
+                    <select id="project-3d-collision">
+                      <option value="none">作らない</option>
+                      <option value="box">箱</option>
+                      <option value="convex_hull">凸包</option>
+                    </select>
+                  </label>
+                  <label>マテリアル
+                    <select id="project-3d-materials">
+                      <option value="preserve">保持</option>
+                      <option value="basic_pbr">基本PBRへ整理</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <p id="project-3d-error" class="error" role="alert" hidden></p>
+              <button type="button" id="project-3d-submit" class="cta-secondary" hidden>プロジェクト用ZIPを作る</button>
+              <p id="project-3d-status" class="hint" role="status"></p>
+            </div>
+
             <div id="attach-row">
               <label id="attach-image" class="dropzone">
                 <span id="attach-label">＋ 画像を追加</span>

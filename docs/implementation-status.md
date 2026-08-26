@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
 Date: 2026-08-26
-Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0-B3 complete
+Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0-B4 complete
 
 G8 planning started on 2026-08-26. The current host has no `blender` executable. The implementation order,
 license/process boundary, GLB-only first import, deterministic compiler/package, typed options, and installed
@@ -5351,3 +5351,40 @@ B3はsoftware rendering + GPU visibility空で実行し、Qwen/llama processに�
 代わりにPID 2116151/2116153が `/tmp/cd-sf-catalog-v010-acceptance/.../sonicforge-core serve`
 としてport 9140で稼働し、healthは `setup_required` / contract 2.0、Qwen/llama process 0。
 このexternal SonicForge acceptance環境は変更・停止していない。
+
+## G8 B4 — workspace / agent / project placement（2026-08-26）
+
+Blenderをrequest時に起動しないexact stamp / executable / trusted worker確認をcapability
+`asset.3d_project_pack`へ追加した。Createはruntime ready時だけGLB選択を表示し、Simpleではasset選択後だけ
+「プロジェクト用ZIPを作る」を表示する。AdvancedはB3の型付きfieldだけへ到達し、Simpleへ戻した場合は
+hiddenだったAdvanced値を送らず固定defaultへ戻る。公開jobは既存 `asset.pack` +
+`profile=3d.project.glb`、Agentは既存 `media.generate`、配置は既存 `media.pack` のままで、raw project /
+Blender path、operator、script bodyは追加していない。
+
+Library投影へpreview種別とsuggested filenameを加えた。3D packageはZIPをfilesystemへ展開せず、entry順を
+`asset.glb` / `manifest.json` / `preview.png` に固定し、暗号化、member count、展開後合計128 MiB、manifest
+1 MiB、preview 8 MiB、manifest schema/profile/preview size/hashを検査してからpreview bytesだけをWebPへ
+変換する。`../escaped` を含むarchiveはrejectされ、外部file作成0。画像でも3D packageでもないassetは
+thumbnail HTTPを要求しない。単体表示もembedded transportと同じLibrary投影を使う。
+
+実Uvicorn `127.0.0.1:9162`、一時data root、実Blender 4.5.9、実Chromiumで620 B triangle GLBを選択した。
+Simpleで未選択時action非表示、選択後表示、Advancedでnormal repair / degenerate removal / merge 1e-6 m /
+triangle budget 12 / box collision / basic PBRを入力し、browserが送ったexact typed requestをassertした。
+job `job_a90bb3d8adee4db79b6e3265e60b2386` は0.727 secでsucceededし、40,603 B ZIP Asset
+`asset_393d4c4a6db44bdeb217e9b621647539`、SHA-256
+`adb22b8daadd6aae5c14b79460d4d774dcc8588ff213afdf5bd7b7b696d7ae3e` を登録した。Library cardは
+`data:image/webp;base64,` preview、viewerは `ZIP · プレビュー`、console/page errorは0。スクリーンショットは
+15,144 B。終了時core healthはhealthy / contract 2.0、work entry 0、Blender child 0、port 9162 listener 0。
+
+Host stubを使うfocused contractでは、同じ3D requestを既存Agent generateへ渡し、embedded WebSocket
+Library cardのWebPを取得後、既存Agent packで `project-ready.zip` を `grant:export-1`へcommitした。
+receiptは `application/zip`、payloadはZIP magic、tmp/repository path leak 0。hostile ZIP、capability
+stamp fail-closed、Simple/Advanced disclosure、Agent/Library/placementを含むfocused 200 testsはPASS。
+実installed ControlDeck browser/identity/Host Job/real grant、real Agent Blender execution、reconnect、
+cancel/timeout、rig/animation付きassetはB5として **NOT TESTED**。
+
+最終gateは `./mf.sh test` が `746 passed, 1 warning in 48.51s`、Python `compileall`、
+`node --check frontend/app.js`、`git diff --check` がPASS。ControlDeck code/DB/manifest変更0、既存
+`frontend/tsconfig.tsbuildinfo`変更1件は保全した。installed Media Forgeは127.0.0.1:9130でhealthy /
+contract 2.0、R9700 VRAM 59,912,192 B、Qwen/llama process 0。SonicForge 9140はexternal変更により現在
+healthy / contract 2.0（Speech Essentials/Music ok、Game Audio missing）であり、このsliceでは変更していない。
