@@ -36,6 +36,9 @@ class Settings:
     hf_home: Path = Path.home() / ".cache/huggingface"
     image_runtime_python: Path = REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python"
     native_media_runtime_root: Path | None = None
+    wan_runtime_python: Path | None = None
+    wan_source_root: Path | None = None
+    wan_evaluation_preset: str = "smoke"
     model_evaluation_timeout_sec: float = 3600.0
     host_ai_timeout_sec: float = 120.0
 
@@ -63,6 +66,18 @@ class Settings:
             self.data_dir.parent / "runtimes" / "stable-diffusion-cpp-97d2990"
         )
         object.__setattr__(self, "native_media_runtime_root", native_runtime.resolve())
+        if self.wan_runtime_python is not None:
+            object.__setattr__(
+                self,
+                "wan_runtime_python",
+                Path(os.path.abspath(self.wan_runtime_python)),
+            )
+        if self.wan_source_root is not None:
+            object.__setattr__(self, "wan_source_root", self.wan_source_root.resolve())
+        if self.wan_evaluation_preset not in {
+            "smoke", "quality-frame", "short-clip", "practical-clip"
+        }:
+            raise ValueError("Wan evaluation preset is invalid")
         if (
             self.worker_timeout_sec <= 0
             or self.host_request_timeout_sec <= 0
@@ -108,6 +123,11 @@ class Settings:
             ),
             native_media_runtime_root=Path(os.environ["MEDIA_FORGE_NATIVE_RUNTIME_ROOT"])
             if "MEDIA_FORGE_NATIVE_RUNTIME_ROOT" in os.environ else None,
+            wan_runtime_python=Path(os.environ["MEDIA_FORGE_WAN_RUNTIME_PYTHON"])
+            if "MEDIA_FORGE_WAN_RUNTIME_PYTHON" in os.environ else None,
+            wan_source_root=Path(os.environ["MEDIA_FORGE_WAN_SOURCE_ROOT"])
+            if "MEDIA_FORGE_WAN_SOURCE_ROOT" in os.environ else None,
+            wan_evaluation_preset=os.environ.get("MEDIA_FORGE_WAN_EVALUATION_PRESET", "smoke"),
             model_evaluation_timeout_sec=float(
                 os.environ.get("MEDIA_FORGE_MODEL_EVALUATION_TIMEOUT_SEC", "3600")
             ),

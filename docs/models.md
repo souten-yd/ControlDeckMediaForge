@@ -103,12 +103,13 @@ on 2026-08-22.
 The answer to #10 is Yes, but the other missing evidence prevents any candidate
 from becoming Available or Recommended.
 
-### G7 candidate catalog (not adopted)
+### G7 candidate catalog
 
 The following exact revisions are discoverable in Model Management as
-`experimental` / `measurement_confidence=low`. None is an adopted default or
-an available runtime. The current official runtimes are CUDA-first; therefore
-the descriptors advertise only `cuda` until a real ROCm/gfx1201 run succeeds.
+`experimental`. None is an adopted default or an available runtime. Wan TI2V-5B
+now has a bounded ROCm measurement; every other entry remains
+`measurement_confidence=low` and advertises only `cuda` until a real
+ROCm/gfx1201 run succeeds.
 
 ```text
 general/lightweight T2V+I2V     Wan-AI/Wan2.2-TI2V-5B @ 921dbaf3 (34,201,521,212 B)
@@ -124,8 +125,14 @@ audio-video comparison          MiniMaxAI/MiniMax-H3 FL2VA @ 42ed227e (144,051,1
 Wan 2.2 TI2V-5B is the first R9700 evaluation candidate: its primary use is
 both Text-to-Video and Image-to-Video, its parameter scale is 5B, and its
 single-model shape is materially smaller than the separate 14B expert pairs.
-The verified local snapshot does not itself prove ROCm execution, so this
-priority does not change its experimental/unmeasured adoption state.
+The verified local snapshot was subsequently exercised on R9700 through the
+real installed ControlDeck browser identity, Host Job, and Broker lease. Three
+direct-BF16 warm 512x320, 17-frame, 30-step runs completed in 75.955, 71.972,
+and 71.221 seconds. Incremental peak VRAM was at most 30,552,207,360 bytes,
+peak process RSS at most 20,525,383,680 bytes, process swap was zero, and all
+three outputs had the same SHA-256. The catalog therefore records measured
+ROCm resource confidence while retaining `experimental`, no recommended
+profile, and no routable availability.
 
 The three bounded Wan generation repositories are eligible for explicit
 Media-Forge-managed download. Animate remains external because its official
@@ -142,11 +149,15 @@ Hunyuan Community License, including territorial and acceptable-use terms;
 its LICENSE and NOTICE must be reviewed rather than treating it as Apache-2.0.
 Source identities are the official Hugging Face repositories named above.
 
-All are **NOT TESTED** on the R9700. Before marking one Available or
-Recommended, verify the authoritative model/runtime source, license, exact
-capabilities, ROCm/gfx1201 operation, VRAM phases, runtime, failure rate, and
-all ten adoption-gate answers from `base-plan.md` §24. A candidate that is
-removed later must not change the public API.
+Wan TI2V-5B passed bounded ROCm execution, Broker isolation, and cancellation,
+but failed the practical adoption gate: a 256x256, 49-frame probe took 235.053
+seconds, used 1,754,775,552 bytes of process swap, and did not preserve the
+prompt subject. I2V, native 720p, and the official 121-frame/50-step default are
+**NOT TESTED**. All other candidates are **NOT TESTED** on the R9700. Before
+marking any candidate Available or Recommended, verify the authoritative
+source, license, capabilities, ROCm operation, resource envelope, reliability,
+quality, and all ten adoption-gate answers from `base-plan.md` §24. Removal must
+not change the public API.
 
 ### MiniMax H3 FL2VA evaluation gate
 

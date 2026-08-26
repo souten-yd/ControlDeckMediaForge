@@ -1,7 +1,7 @@
 # Media Forge implementation status
 
-Date: 2026-08-22
-Scope: MF0-0 through MF0-7 and G0 through G2 complete
+Date: 2026-08-26
+Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred
 Repository head at final MF0-7 verification: `8c6ab98382f43db8a58ff1dcf7dc6fcde113968a` (`origin/main`)
 Repository head released and verified for G1: `1e88472e753fd484638f072f7c4b327c8010ab60` (`v0.1.2`)
 
@@ -9,8 +9,10 @@ Repository head released and verified for G1: `1e88472e753fd484638f072f7c4b327c8
 
 Wan 2.2 TI2V-5B／I2V-A14B／T2V-A14B／Animate-14B、LTX-2.3、HunyuanVideo-1.5の
 exact revisionとbounded checkpoint identityを、既存Model Registry／Model Managementへ追加した。
-全候補は`experimental`、measurement confidence `low`、ROCm未実測、recommended profileなしであり、
-R9700向けavailable/defaultや動画worker実装を主張しない。runtime packageまでsnapshotが閉じるWan生成3件だけを
+全候補は`experimental`、recommended profileなしであり、R9700向けavailable/defaultや動画worker実装を
+主張しない。Wan TI2V-5B だけは 2026-08-26 の bounded R9700 probe 後に resource measurement
+confidence を `measured` としたが、品質 gate は不合格で unavailable のままである。その他は
+measurement confidence `low`、ROCm未実測。runtime packageまでsnapshotが閉じるWan生成3件だけを
 managed download対象とし、Animate／LTX／Hunyuanはexternal ownerとしてbackendでもdownloadを拒否する。
 UIは動画候補filter、実験的表示、外部runtime所有表示を追加し、別の動画モデル管理APIは作っていない。
 
@@ -33,10 +35,11 @@ partialが`.downloads/<operation_id>`内だけにあり、全取得後に`verify
 root filesystem使用率は89%から77%へ戻った。誤配置元の同一copyは削除せず
 `/data1tb/mediaforge-recovery/root-misplaced-Wan2.2-TI2V-5B-20260822`へ退避している。
 
-Wanの主用途はText-to-Video／Image-to-Video、規模は5B、R9700の第一評価候補である。ただしsnapshot取得は
-ROCm runtime動作の証拠ではないため、stateは`experimental`、measurement confidenceは`low`、hardware backendは
-CUDA-only、healthy=false、recommended profileなしを維持する。R9700 runtime実行、VRAM、生成時間、失敗率は
-CI-1〜CI-6優先のためNOT TESTEDとして延期する。
+Wanの主用途はText-to-Video／Image-to-Video、規模は5B、R9700の第一評価候補である。snapshot取得時点では
+ROCm runtime動作は NOT TESTED だったが、2026-08-26 の G7 V1 で bounded T2V を実測した。
+現在は hardware backend に ROCm、resource measurement confidence `measured` を記録する。一方、
+stateは`experimental`、healthy=false、recommended profileなし、公開 capability unavailable を維持する。
+詳細と不採用理由は末尾の G7 V1 節を正とする。
 
 ## MF0-0 — COMPLETE for the requested environment slice
 
@@ -4615,3 +4618,110 @@ V1 の revision-pinned candidate probe と V2〜V4 の範囲であり、video ca
 provision も V2 前提として未実施。ControlDeck の変更は 0 件。
 
 実装 PR: Media Forge #119。
+
+## G7 V1 — Wan2.2 TI2V-5B revision-pinned R9700 probe（2026-08-26）
+
+V1 は production video worker を作らず、既存の private Model Management evaluator へ
+fixed preset を追加して候補採否を測るスライスとした。公式 model revision は
+`921dbaf3f1674a56f47e83fb80a34bac8a8f203e`、weight は 34,201,521,212 bytes、
+Wan2.2 source は commit `42bf4cfaa384bc21833865abc2f9e6c0e67233dc`、license は
+Apache-2.0。source は unrelated S2V/Animate の eager import だけを除く固定 patch
+（diff SHA-256 `4fd9b36b24f3385057445de8551c79b947498f253c061f56a457dc42a21afb93`）を
+preflight で検証する。モデル本体の FlashAttention 呼び出しは upstream に既存の PyTorch
+SDPA fallback へ置換し、custom kernel は追加していない。
+
+runtime は外部 `/data1tb/mediaforge-g7-v1/runtime` に分離し、torch 2.10.0 / ROCm 7.2.1、
+diffusers 0.33.1、transformers 4.51.3 ほかを exact version で構築した。core と image runtime
+は共有していない。最初の diffusers 0.40 組合せは Hugging Face Hub dependency bounds が
+衝突したため不採用とし、採用した runtime は `pip check` が成功した。UMT5 は meta device
+構築、mmap weight、`assign=True` で CPU process に読み、GPU generation process と重ねない。
+実 encode は 8.37 秒、max RSS 10,455,924 KiB、process swap 0 だった。
+
+実 ControlDeck の installed iframe から短命 browser identity を取得し、Host Job、Broker
+request/activate/renew/release を通して評価した。導入済み manifest は変えず、評価中だけ branch
+core を同じ 9130 port / data directory で起動した。テスト account の password hash は実行中だけ
+置換し、各 run の `finally` で元の exact hash に復元した。秘密値は証跡・log に出していない。
+
+固定 prompt / seed、guide 5.0 の 512x320 / 17 frames / 30 steps:
+
+```text
+cold operation modelop_6a8a15fa02884ec29ad315c3e1d31fab
+  elapsed 412.790 sec / peak VRAM 30,612,889,600 B / peak RSS 20,501,524,480 B
+  process swap 0 / H.264 24fps / 0.708 sec / 117,318 B
+
+direct-BF16 warm 3 samples
+  elapsed                    75.955 / 71.972 / 71.221 sec
+  peak VRAM                  30,611,857,408 / 30,612,119,552 / 30,611,984,384 B
+  peak RSS                   20,525,383,680 / 19,526,950,912 / 20,201,570,304 B
+  process swap               0 / 0 / 0 B
+  output                     512x320 / 17 frames / H.264 / 24fps / 0.708 sec / 97,849 B
+  SHA-256                    6b0e0d22ea349394cc4436fd84bed19f67b70739ab8aca83b7bd43c2ad9fe90a
+```
+
+3 warm sample は同一 hash で、抽出 frame では orange robot、solar panel、landscape を識別でき、
+短尺比較候補としての prompt coherence があった。cold 412.790 秒は初回 kernel/cache compile を
+含む観測で、warm runtime と混同しない。resource request は最大実測 30,700,000,000 bytes と
+1 GiB headroom に更新した。
+
+実用最短を狙った 256x256 / 49 frames / 30 steps は operation
+`modelop_73cade3efa7546ad89807e115321a4d3`、Host Job `c59e40978822` で完走した。
+
+```text
+elapsed                    235.053 sec
+peak VRAM                  20,528,300,032 B（incremental 20,468,387,840 B）
+peak RSS / process swap    19,341,029,376 / 1,754,775,552 B
+system swap pages delta    in 540,476 / out 539,847
+output                     256x256 / 49 frames / H.264 / 24fps / 2.042 sec / 130,960 B
+SHA-256                    9b7ec4eca742b20783597803aa94cf2f762d833f9dbc7e1017ac5014e9c9dfd2
+```
+
+decode と container は正常だったが、frame 0/24/48 の目視では被写体が崩れ、orange robot / solar
+panel / dusk を維持しなかった。さらに process swap が 0 でない。したがって「実用 clip quality /
+host RAM safety」は **FAIL** とし、Wan を Available/Recommended/production route に採用しない。
+catalog の `measured` は bounded resource envelope の confidence だけを意味し、品質採用ではない。
+
+Broker / cancellation / 共存:
+
+```text
+SonicForge/LLM hold 中     30.239 GB request は insufficient_capacity で fail-closed
+hold 解放後                同じ browser route が granted、Wan process が開始
+cancel                     modelop_65ac98568fa541378a70a38a8e8e6f48
+                           VRAM 11,342,323,712 B 時点から 1.007 sec で canceled
+                           lease release、Wan process 0、VRAM 59,912,192 B
+SonicForge 後続 request    Media Forge release の 0.717 sec 後に activate
+completed cleanup          lease 0、Wan process 0、baseline VRAM 59,912,192 B
+```
+
+cancel run で最初に prompt embedding が残ることを発見し、terminal state に関係なく削除し、
+failed/canceled では partial video/frame/probe も削除するよう修正した。回帰 test を追加した。
+評価後は branch core を停止し、installed Media Forge v0.9.0 service を再起動した。実 health は
+`healthy`、R9700 gfx1201、torch 2.10.0+rocm7.2.1、HIP 7.2.53211、GPU memory
+34,208,743,424 bytes と応答した。ControlDeck の変更は 0 件。
+
+`base-plan.md` §24:
+
+1. T2V/I2V の軽量候補だが、今回証明したのは bounded T2V だけ。
+2. isolated Wan runtime と private evaluator が必要。既存 image adapter は使わない。
+3. gfx1201 で smoke/短尺/49-frame は完走したが、実用 gate は swap/quality で不合格。
+4. 上記に cold/warm、VRAM/RSS/swap/runtime を記録。resource envelope は measured。
+5. weight/source は Apache-2.0。
+6. 公開 asset/provenance は V2 未実装のため **NOT TESTED**。
+7. 17-frame は有望だが、実用 clip は installed alternatives を正当化する品質でない。
+8. process group cancel、Host Job、Broker release は実測 PASS。
+9. upstream SDPA fallback のみ。custom kernel はない。固定 source patch は evaluator import 用。
+10. generic video capability の裏側なので catalog/runtime を削除しても公開 API は変わらない。
+
+判定: runtime/import、bounded short generation、Broker isolation、cancel は **PASS**。実用 clip
+品質と zero-swap は **FAIL**。I2V、native 720p、公式既定 121 frames / 50 steps、V0 FFmpeg
+normalizer との production 接続、公開 Asset/provenance、installed release bundle の動画再生は
+**NOT TESTED**。V1 model adoption は **DEFERRED**。再開条件は、prompt を維持し process swap 0
+で完走する実用最短 profile、または別候補の比較結果である。V2 へは昇格させない。
+
+検証:
+
+```text
+focused evaluator/catalog    17 passed
+./mf.sh test                 686 passed, 1 warning in 48.38s
+git diff --check             PASS
+compileall                   PASS
+```

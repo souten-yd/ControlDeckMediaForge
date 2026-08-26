@@ -17,6 +17,13 @@ from mediaforge.model_evaluator import (
     H3_RUNTIME_ADAPTER,
     H3_RUNTIME_COMMIT,
     H3ModelEvaluator,
+    WAN_COLD_LOAD_PEAK_BYTES,
+    WAN_ESTIMATED_RUNTIME_SEC,
+    WAN_EXECUTION_PEAK_BYTES,
+    WAN_HEADROOM_BYTES,
+    WAN_MODEL_ID,
+    WAN_MODEL_REVISION,
+    WAN_RUNTIME_ADAPTER,
 )
 from mediaforge.models import (
     ModelDescriptor,
@@ -356,3 +363,102 @@ def test_h3_command_is_fixed_and_uses_mixed_ram_vram_placement(tmp_path: Path) -
     assert command_value[command_value.index("--video-frames") + 1] == "5"
     assert command_value[command_value.index("--steps") + 1] == "1"
     assert command_value[-1] == str(output)
+
+
+def test_wan_probe_is_pinned_and_uses_separate_runtime(tmp_path: Path) -> None:
+    store = Store(tmp_path / "data")
+    store.initialize()
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    runtime_python = tmp_path / "wan-runtime" / "bin" / "python"
+    runtime_python.parent.mkdir(parents=True)
+    runtime_python.write_text("", encoding="utf-8")
+    source = tmp_path / "wan-source"
+    source.mkdir()
+    service = H3ModelEvaluator(
+        store,
+        FakeHost(),  # type: ignore[arg-type]
+        model_manifest=tmp_path / "models.json",
+        catalog_manifest=tmp_path / "catalog.json",
+        model_store_root=tmp_path / "models",
+        hf_home=tmp_path / "hf",
+        runtime_root=runtime_root(tmp_path),
+        wan_runtime_python=runtime_python,
+        wan_source_root=source,
+        lease_renew_sec=1,
+        timeout_sec=10,
+    )
+    model = replace(
+        descriptor(snapshot),
+        model_id=WAN_MODEL_ID,
+        family="wan2.2",
+        revision=WAN_MODEL_REVISION,
+        runtime_adapter=WAN_RUNTIME_ADAPTER,
+    )
+    command_value = service._command(model, tmp_path / "smoke.mp4", Path("/unused"))
+    assert command_value[0] == str(runtime_python)
+    assert command_value[2:4] == ["run", "--snapshot"]
+    assert command_value[-2:] == ["--preset", "smoke"]
+    request = service._resource_request("host-wan", model)
+    assert request["estimated_runtime_sec"] == WAN_ESTIMATED_RUNTIME_SEC
+    assert request["vram"] == {
+        "resident_bytes": 0,
+        "execution_peak_bytes": WAN_EXECUTION_PEAK_BYTES,
+        "cold_load_peak_bytes": WAN_COLD_LOAD_PEAK_BYTES,
+        "headroom_bytes": WAN_HEADROOM_BYTES,
+        "confidence": "measured",
+    }
+
+
+def test_wan_validator_accepts_one_frame_video_without_audio(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact = tmp_path / "smoke.mp4"
+    artifact.write_bytes(b"video")
+
+    def fake_run(args: list[str], **kwargs):
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout=json.dumps({
+                "streams": [{
+                    "codec_type": "video", "width": 256, "height": 256,
+                    "codec_name": "h264", "avg_frame_rate": "24/1", "nb_frames": "1",
+                }],
+                "format": {"duration": "0.042"},
+            }),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    service = evaluator(tmp_path, FakeHost(), delay=0)
+    assert service._validate_wan_artifact(artifact) == {
+        "width": 256,
+        "height": 256,
+        "video_codec": "h264",
+        "frame_rate": "24/1",
+        "duration_sec": 0.042,
+        "audio_present": False,
+    }
+
+
+def test_wan_failed_probe_removes_sensitive_and_partial_outputs(tmp_path: Path) -> None:
+    service = evaluator(tmp_path, FakeHost(), delay=0)
+    operation = service.store.create_model_operation(
+        WAN_MODEL_ID,
+        ModelOperationAction.EVALUATE,
+        bytes_total=0,
+    )
+    service.store.update_model_operation(operation.id, state=ModelOperationState.FAILED)
+    output_dir = service.output_root / operation.id
+    frames = output_dir / "frames"
+    frames.mkdir(parents=True)
+    (output_dir / "prompt.safetensors").write_bytes(b"prompt")
+    (output_dir / "smoke.mp4").write_bytes(b"partial")
+    (output_dir / "probe.json").write_text("{}", encoding="utf-8")
+    (frames / "000000.png").write_bytes(b"frame")
+
+    service._cleanup_probe_intermediates(operation.id)
+
+    assert sorted(item.name for item in output_dir.iterdir()) == []
