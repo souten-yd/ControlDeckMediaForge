@@ -29,6 +29,9 @@ DOM_IDS = (
     "app", "skeleton", "shell-header", "shell-nav",
     "nav-create", "nav-library", "nav-activity", "nav-settings",
     "mode-simple", "mode-advanced",
+    "create-media-picker", "create-media-switch", "create-media-image", "create-media-video",
+    "create-media-video-badge", "create-intent-label", "video-create-fields",
+    "video-create-summary", "video-create-note", "video-create-settings", "result-video",
     "create-form", "create-intent", "create-submit", "create-status",
     "attach-image", "attach-size", "source-file", "edit-actions", "guarantee-badge",
     "size-block", "size-label", "size-note", "size-presets", "count-chips",
@@ -265,7 +268,9 @@ def capability_names() -> set[str]:
 
 
 # operation は capability ではない。UI は両方を文字列で持つので明示的に分ける。
-OPERATIONS = {"image.generate", "image.edit", "media.inspect", "asset.pack"}
+OPERATIONS = {
+    "image.generate", "image.edit", "video.generate", "video.edit", "media.inspect", "asset.pack",
+}
 
 
 def validator_names() -> set[str]:
@@ -297,6 +302,25 @@ def test_operations_the_ui_submits_are_valid_schema_values():
     used = set(re.findall(r'"((?:image|video|3d|media|asset)\.[a-z_0-9]+)"', SCRIPT)) & OPERATIONS
     assert used, "UI が operation を指定していない"
     assert used <= allowed
+
+
+def test_create_media_switch_is_mobile_safe_and_video_is_capability_gated():
+    assert 'data-create-media="image"' in MARKUP
+    assert 'role="group" aria-label="作る素材"' in MARKUP
+    render = SCRIPT[SCRIPT.index("function renderCreateMedia"):SCRIPT.index("function setCreateMedia")]
+    assert '"video.text_to_video"' in render
+    assert '"video.image_to_video"' in SCRIPT
+    assert 'submit.disabled = video && !usable' in render
+    submit = SCRIPT[SCRIPT.index("async function submitVideoJob"):SCRIPT.index("async function submitJob")]
+    assert 'operation: "video.generate"' in submit
+    assert 'output: {format: "mp4", count: 1}' in submit
+    problem = SCRIPT[SCRIPT.index("function requestProblem"):SCRIPT.index("async function submitVideoJob")]
+    assert 'videoCapabilityUsable()' in problem
+    switch = STYLES[STYLES.index(".media-switch {"):STYLES.index(".switch-badge")]
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in switch
+    assert "min-height: 44px" in switch
+    mobile = STYLES.split("@media (max-width: 767px)", 1)[1]
+    assert ".media-switch { width: 100%; }" in mobile
 
 
 # 失敗コードは複数の形で書かれる: HTTPException の detail、WorkerFailure の第 1 引数、

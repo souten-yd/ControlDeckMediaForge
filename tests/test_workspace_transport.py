@@ -66,6 +66,12 @@ def test_capabilities_get_matches_the_public_document_and_bounds_presets(tmp_pat
     result = answer["result"]
     assert result["capabilities"] == public["capabilities"]
     assert result["contract_version"] == public["contract_version"]
+    assert result["capabilities"]["video.text_to_video"] == {
+        "state": "unavailable", "reason": "video_runtime_not_adopted",
+    }
+    assert result["capabilities"]["video.image_to_video"] == {
+        "state": "unavailable", "reason": "video_runtime_not_adopted",
+    }
 
     envelope = result["envelope"]
     assert envelope["multiple_of"] == 16
@@ -583,7 +589,9 @@ def test_preferences_round_trip_and_reject_unknown_keys(tmp_path: Path):
     client, headers, _state = host_client(tmp_path, token="valid-user")
     with client, client.websocket_connect("/ws", headers=headers) as socket:
         defaults = call(socket, "preferences.get")["result"]["values"]
-        stored = call(socket, "preferences.set", {"values": {"mode": "advanced", "last_count": 4}})
+        stored = call(socket, "preferences.set", {
+            "values": {"mode": "advanced", "create_media": "video", "last_count": 4},
+        })
         reloaded = call(socket, "preferences.get")["result"]["values"]
         unknown = call(socket, "preferences.set", {"values": {"api_token": "secret"}})
         bad_value = call(socket, "preferences.set", {"values": {"mode": "expert"}})
@@ -591,7 +599,8 @@ def test_preferences_round_trip_and_reject_unknown_keys(tmp_path: Path):
 
     assert defaults == preferences.DEFAULTS
     assert stored["ok"] is True
-    assert reloaded["mode"] == "advanced" and reloaded["last_count"] == 4
+    assert reloaded["mode"] == "advanced" and reloaded["create_media"] == "video"
+    assert reloaded["last_count"] == 4
     assert reloaded["last_preset"] == preferences.DEFAULTS["last_preset"]
     assert unknown["ok"] is False and unknown["error"]["code"] == "invalid_preference_key"
     assert bad_value["ok"] is False and bad_value["error"]["code"] == "invalid_preference_value"

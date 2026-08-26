@@ -917,7 +917,14 @@ def create_app(
                     if blender_runtime_available()
                     else {"state": "unavailable", "reason": "runtime_not_installed"}
                 ),
-                "video.image_to_video": {"state": "unavailable", "reason": "planned_for_g7"},
+                "video.text_to_video": {
+                    "state": "unavailable",
+                    "reason": "video_runtime_not_adopted",
+                },
+                "video.image_to_video": {
+                    "state": "unavailable",
+                    "reason": "video_runtime_not_adopted",
+                },
                 "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
             },
         }

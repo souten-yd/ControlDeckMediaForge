@@ -286,7 +286,10 @@ Media Forge 内にグローバル GPU scheduler を作らない。
 
 ## 4. V3 — user surface
 
-Create の段階開示へ video を追加し、capability unavailable の間は既定表示しない。
+Create の先頭へ画像 / 動画の媒体切替を追加する。G7の公開operationと候補管理が既に存在するため、
+動画切替自体は常に操作できるが、`video.text_to_video` / `video.image_to_video` が両方unavailableの間は
+実行をdisabled + 理由 + 設定への出口とし、失敗すると分かっているjobを作らない。片方でも
+available / experimentalになった場合だけ、intentと任意の入力画像から`video.generate`へ到達させる。
 Library は poster/thumbnail を先に読み、動画本体を一覧で自動再生しない。Activity は queued、
 waiting、generating、normalizing、validating、registering を復元できる。cancel は tab を閉じても
 durable job へ届く。animation profile は generic operation の profile であり専用 API にしない。
