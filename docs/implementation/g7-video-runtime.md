@@ -170,6 +170,37 @@ catalog measurement や production routing へ転記しない。
 この準備コード自体は license acceptance や weight download を行わない。実 runner の model load /
 generation は引き続き **BLOCKED PENDING LICENSE ACCEPTANCE / NOT TESTED** とする。
 
+### 2.5 Apache-2.0 Wan 2.1 1.3B candidate preflight（2026-08-26）
+
+Hunyuan の license gate を回避して採用条件を緩めるのではなく、同じ採用 gate を permissive な候補へ
+適用する。T2V は `Wan-AI/Wan2.1-T2V-1.3B-Diffusers@0fad780a`、I2V は
+`Wan-AI/Wan2.1-VACE-1.3B-diffusers@ec4d2cb0` を次の比較対象に固定した。両 repository は公開・
+non-gated で、official model card は Apache-2.0 を宣言する。VACE は video / mask /
+reference-images conditioning を持ち、first/last-frame を含む image/video-to-video を公式に例示する。
+
+```text
+T2V snapshot      31 files / 28,935,653,511 bytes
+T2V weights       10 LFS files / 28,928,720,056 bytes
+VACE snapshot     27 files / 19,043,130,596 bytes
+VACE weights      8 LFS files / 19,036,896,776 bytes
+runtime           torch 2.10.0 ROCm 7.2.1 / Diffusers 0.40.0
+imports           WanPipeline / WanVACEPipeline / both transformers / AutoencoderKLWan
+attention         PyTorch SDPA default / custom kernel 0
+target            R9700 / gfx1201
+```
+
+T2V conversion の UMT5 は float32 で約22.7GB、VACE の UMT5 は bfloat16 で約11.4GB である。
+公称 VRAM だけから host RAM / swap 安全性を推定せず、各候補を別々に Broker 経由で実測する。
+weight-free preflight は 2.15秒、max RSS 959,360KiB、OS swap 0、終了後 KFD process 0 で PASS。
+weight download、hash、load、generation、quality、cancel、Broker、SonicForge coexistence は
+**NOT TESTED**。通常 capability は unavailable、catalog は external / experimental / low-confidence /
+recommended profile 0 のままにする。
+
+なお、両 exact Diffusers snapshot には model card がリンクする `LICENSE.txt` と NOTICE が存在しない。
+評価 download は進められるが、再配布・managed promotion 前に authoritative Apache-2.0 text と
+applicable notice を bundle へ含める。次の slice は小さい VACE を先に download/hash/load し、I2V
+adoption gate を評価する。PASS した場合だけ T2V 1.3B の実測へ進む。
+
 ## 3. V2 — execution
 
 private runtime adapter が raw frames/video を job root に書き、V0 の FFmpeg stage が公開 asset

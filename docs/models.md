@@ -168,6 +168,22 @@ source, license, capabilities, ROCm operation, resource envelope, reliability,
 quality, and all ten adoption-gate answers from `base-plan.md` §24. Removal must
 not change the public API.
 
+The next Apache-2.0 comparison pair is pinned to the official Wan 2.1 1.3B
+Diffusers repositories: T2V revision `0fad780a` and VACE revision `ec4d2cb0`.
+The T2V snapshot is 28,935,653,511 bytes; its float32 UMT5 accounts for about
+22.7 GB. The VACE snapshot is 19,043,130,596 bytes and exposes video, mask, and
+reference-image conditioning for image/video-to-video evaluation. A dedicated
+Diffusers 0.40.0 runtime imported both pipelines, both transformers, the Wan
+VAE, and the default PyTorch SDPA path on R9700/gfx1201. This is weight-free
+preflight evidence only; both entries remain external, experimental,
+low-confidence, and unroutable.
+
+Both model cards declare Apache-2.0, but neither pinned Diffusers snapshot
+contains the `LICENSE.txt` linked by the card or a NOTICE file. Evaluation does
+not silently convert that packaging gap into a managed redistribution right.
+Before promotion, Media Forge must include an authoritative Apache-2.0 license
+copy and any applicable notices in the bounded bundle.
+
 After the Wan practical profile retained process swap, the next bounded
 comparison candidate is HunyuanVideo 1.5 480p T2V distilled. The official model
 is 8.3B and documents a 14 GB minimum GPU-memory route with offloading. A pinned

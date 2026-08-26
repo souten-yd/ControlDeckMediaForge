@@ -212,6 +212,48 @@
       "license_notice": "Apache-2.0; retain the license and notices when redistributing. This candidate is T2V-only and remains experimental after a bounded R9700 evaluation."
     },
     {
+      "model_id": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
+      "display_name": "Wan 2.1 T2V 1.3B",
+      "domains": ["general", "illustration", "photoreal"],
+      "media_types": ["video"],
+      "description": "Apache-2.0 480p text-to-video comparison candidate. The exact Diffusers snapshot and R9700 runtime imports are pinned, but inference is not yet measured.",
+      "approx_download_bytes": 28935653511,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
+        "revision": "0fad780a534b6463e45facd96134c9f345acfa5b"
+      },
+      "ownership": "external",
+      "supports_lora": false,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "The official model card declares Apache-2.0. The pinned Diffusers snapshot does not contain the LICENSE.txt linked by its card, so retain an authoritative Apache-2.0 license copy and applicable notices before redistribution. ROCm/gfx1201 inference is NOT TESTED."
+    },
+    {
+      "model_id": "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
+      "display_name": "Wan 2.1 VACE 1.3B",
+      "domains": ["general", "illustration", "photoreal"],
+      "media_types": ["video"],
+      "description": "Apache-2.0 480p image/video-conditioned comparison candidate. The exact Diffusers snapshot and R9700 runtime imports are pinned, but inference is not yet measured.",
+      "approx_download_bytes": 19043130596,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
+        "revision": "ec4d2cb062b548996b179d493fdd05340de702a1"
+      },
+      "ownership": "external",
+      "supports_lora": false,
+      "max_references": 8,
+      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "supports_reference_strength": true,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "The official model card declares Apache-2.0. The pinned Diffusers snapshot does not contain the LICENSE.txt linked by its card, so retain an authoritative Apache-2.0 license copy and applicable notices before redistribution. ROCm/gfx1201 inference is NOT TESTED."
+    },
+    {
       "model_id": "tencent/HunyuanVideo-1.5",
       "display_name": "HunyuanVideo 1.5 720p",
       "domains": ["general", "illustration", "photoreal"],

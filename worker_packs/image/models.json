@@ -775,6 +775,174 @@
       ]
     },
     {
+      "model_id": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
+      "family": "wan2.1",
+      "version": "t2v-1.3b-diffusers",
+      "revision": "0fad780a534b6463e45facd96134c9f345acfa5b",
+      "weights_hash": "sha256:5ae5898aacc245296343d129de399f7dcc153900dbbdf882da12a4b18b162569",
+      "license": "Apache-2.0",
+      "runtime_adapter": "diffusers.wan2.1-t2v",
+      "capabilities": [
+        "video.text_to_video"
+      ],
+      "hardware_backends": [
+        "cuda"
+      ],
+      "state": "experimental",
+      "measurement_confidence": "low",
+      "policy_rank": {
+        "auto": 0,
+        "fast": 0,
+        "balanced": 0,
+        "quality": 10,
+        "low_vram": 0
+      },
+      "required_files": [
+        "README.md",
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "text_encoder/config.json",
+        "text_encoder/model.safetensors.index.json",
+        "tokenizer/special_tokens_map.json",
+        "tokenizer/tokenizer_config.json",
+        "transformer/config.json",
+        "transformer/diffusion_pytorch_model.safetensors.index.json",
+        "vae/config.json"
+      ],
+      "weights": [
+        {
+          "path": "text_encoder/model-00001-of-00005.safetensors",
+          "size_bytes": 4972389712,
+          "sha256": "c0ef3a140898e228a3520c9adec60743d2e8e5b3d229651bb37f1a3921919f99"
+        },
+        {
+          "path": "text_encoder/model-00002-of-00005.safetensors",
+          "size_bytes": 4899225672,
+          "sha256": "481c7b2b39771c44df6dd8d13ee12ed072d731b4a650bd092885d4d52db229ad"
+        },
+        {
+          "path": "text_encoder/model-00003-of-00005.safetensors",
+          "size_bytes": 4966309504,
+          "sha256": "f93148bcc04052a169e1e49bfcf6125df6cf9bf243cb9c627da75266cf8e35c3"
+        },
+        {
+          "path": "text_encoder/model-00004-of-00005.safetensors",
+          "size_bytes": 4999880704,
+          "sha256": "a451792c739c05bca4606190cc2dd16731411bac03b4cf6aacc5767321f857c9"
+        },
+        {
+          "path": "text_encoder/model-00005-of-00005.safetensors",
+          "size_bytes": 2885866152,
+          "sha256": "7e76e18d224531b8197a46231cb53daf7f2f6ca707130252becf933026ac4eea"
+        },
+        {
+          "path": "tokenizer/spiece.model",
+          "size_bytes": 4548313,
+          "sha256": "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458"
+        },
+        {
+          "path": "tokenizer/tokenizer.json",
+          "size_bytes": 16837459,
+          "sha256": "20a46ac256746594ed7e1e3ef733b83fbc5a6f0922aa7480eda961743de080ef"
+        },
+        {
+          "path": "transformer/diffusion_pytorch_model-00001-of-00002.safetensors",
+          "size_bytes": 4998781576,
+          "sha256": "6d011927dbd2cc8afe53d57abab04a8fd86f615d83324770d985fb058ece3a24"
+        },
+        {
+          "path": "transformer/diffusion_pytorch_model-00002-of-00002.safetensors",
+          "size_bytes": 677289072,
+          "sha256": "b92ec2309b1f239af6f746431815a881afcc938abb26a4f08d9a2fd6c892f872"
+        },
+        {
+          "path": "vae/diffusion_pytorch_model.safetensors",
+          "size_bytes": 507591892,
+          "sha256": "d6e524b3fffede1787a74e81b30976dce5400c4439ba64222168e607ed19e793"
+        }
+      ]
+    },
+    {
+      "model_id": "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
+      "family": "wan2.1-vace",
+      "version": "vace-1.3b-diffusers",
+      "revision": "ec4d2cb062b548996b179d493fdd05340de702a1",
+      "weights_hash": "sha256:2c488c292438aaa2914e96dea0b8cb929eda504adfb6bb583f721ea63d1be315",
+      "license": "Apache-2.0",
+      "runtime_adapter": "diffusers.wan2.1-vace",
+      "capabilities": [
+        "video.image_to_video",
+        "video.multi_keyframe",
+        "video.video_to_video"
+      ],
+      "hardware_backends": [
+        "cuda"
+      ],
+      "state": "experimental",
+      "measurement_confidence": "low",
+      "policy_rank": {
+        "auto": 0,
+        "fast": 0,
+        "balanced": 0,
+        "quality": 10,
+        "low_vram": 0
+      },
+      "required_files": [
+        "README.md",
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "text_encoder/config.json",
+        "text_encoder/model.safetensors.index.json",
+        "tokenizer/special_tokens_map.json",
+        "tokenizer/tokenizer_config.json",
+        "transformer/config.json",
+        "transformer/diffusion_pytorch_model.safetensors.index.json",
+        "vae/config.json"
+      ],
+      "weights": [
+        {
+          "path": "text_encoder/model-00001-of-00003.safetensors",
+          "size_bytes": 4935812536,
+          "sha256": "a8e861969c7433e707cc5a74065d795d36cca07ec96eb6763eb4083df7248f58"
+        },
+        {
+          "path": "text_encoder/model-00002-of-00003.safetensors",
+          "size_bytes": 4983103192,
+          "sha256": "d57d948ece4837d850b7a859a4415121d57cacf8b9ee1d4db200c67f592902d7"
+        },
+        {
+          "path": "text_encoder/model-00003-of-00003.safetensors",
+          "size_bytes": 1442935480,
+          "sha256": "0da9ee284e21d1406df708788db1d502d95d75f69faa25cd26151bf8829b7c5f"
+        },
+        {
+          "path": "tokenizer/spiece.model",
+          "size_bytes": 4548313,
+          "sha256": "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458"
+        },
+        {
+          "path": "tokenizer/tokenizer.json",
+          "size_bytes": 16837459,
+          "sha256": "20a46ac256746594ed7e1e3ef733b83fbc5a6f0922aa7480eda961743de080ef"
+        },
+        {
+          "path": "transformer/diffusion_pytorch_model-00001-of-00002.safetensors",
+          "size_bytes": 4999964504,
+          "sha256": "192804a4e10b5bb0a13f5c224bc4ec9707b3b8cc0def8eea005dbce7c9d6752a"
+        },
+        {
+          "path": "transformer/diffusion_pytorch_model-00002-of-00002.safetensors",
+          "size_bytes": 2146103400,
+          "sha256": "dadaf1d5e9ccf826e2c497aa9fc2756a044f606d0aa919e5405a734a121bcf7e"
+        },
+        {
+          "path": "vae/diffusion_pytorch_model.safetensors",
+          "size_bytes": 507591892,
+          "sha256": "d6e524b3fffede1787a74e81b30976dce5400c4439ba64222168e607ed19e793"
+        }
+      ]
+    },
+    {
       "model_id": "tencent/HunyuanVideo-1.5",
       "family": "hunyuan-video-1.5",
       "version": "720p-t2v-i2v-distilled",
