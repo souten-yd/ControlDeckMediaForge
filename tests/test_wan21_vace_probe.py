@@ -77,50 +77,88 @@ def test_pipeline_load_is_local_only_mixed_dtype_offloaded_and_uses_480p_shift()
             calls["tiling"] = True
 
     class Scheduler:
+        config = "base-config"
+
+        @classmethod
+        def from_pretrained(cls, snapshot_path: Path, **kwargs: object) -> "Scheduler":
+            calls["scheduler_load"] = (snapshot_path, kwargs)
+            return cls()
+
         @classmethod
         def from_config(cls, config: object, **kwargs: object) -> object:
             calls["scheduler"] = (config, kwargs)
             return "480p-scheduler"
 
     class Pipeline:
-        scheduler: object = SimpleNamespace(config="base-config")
+        def __init__(self, **kwargs: object) -> None:
+            calls.setdefault("pipelines", []).append(kwargs)
+            self.vae = kwargs["vae"]
 
-        @classmethod
-        def from_pretrained(cls, snapshot_path: Path, **kwargs: object) -> "Pipeline":
-            calls["pipeline_snapshot"] = snapshot_path
-            calls["pipeline_load"] = kwargs
-            instance = cls()
-            instance.vae = kwargs["vae"]
-            return instance
+        def encode_prompt(self, **kwargs: object) -> tuple[str, str]:
+            calls["encode"] = kwargs
+            return "prompt-embeds", "negative-embeds"
+
+        def register_modules(self, **kwargs: object) -> None:
+            calls["register"] = kwargs
 
         def enable_model_cpu_offload(self, *, device: str) -> None:
             calls["offload"] = device
 
-    torch = SimpleNamespace(float32="fp32", bfloat16="bf16")
-    path = Path("/trusted/snapshot")
-    pipeline = _load_pipeline(path, torch, Vae, Pipeline, Scheduler)
+    class Loadable:
+        @classmethod
+        def from_pretrained(cls, snapshot_path: Path, **kwargs: object) -> "Loadable":
+            calls.setdefault(cls.__name__, []).append((snapshot_path, kwargs))
+            return cls()
 
-    assert pipeline.scheduler == "480p-scheduler"
-    assert calls == {
-        "vae_snapshot": path,
-        "vae_load": {
-            "subfolder": "vae",
-            "dtype": "fp32",
-            "low_cpu_mem_usage": True,
-            "local_files_only": True,
-        },
-        "pipeline_snapshot": path,
-        "pipeline_load": {
-            "vae": ANY,
-            "dtype": "bf16",
-            "low_cpu_mem_usage": True,
-            "local_files_only": True,
-        },
-        "scheduler": ("base-config", {"flow_shift": 3.0}),
-        "offload": "cuda:0",
-        "slicing": True,
-        "tiling": True,
+        def to(self, device: str) -> None:
+            calls["text_encoder_device"] = device
+
+    class Tokenizer(Loadable):
+        pass
+
+    class TextEncoder(Loadable):
+        pass
+
+    class Transformer(Loadable):
+        pass
+
+    class Cuda:
+        @staticmethod
+        def empty_cache() -> None:
+            calls["empty_cache"] = True
+
+    torch = SimpleNamespace(
+        float32="fp32",
+        bfloat16="bf16",
+        cuda=Cuda(),
+        device=lambda value: f"device:{value}",
+    )
+    path = Path("/trusted/snapshot")
+    pipeline, prompt_embeds, negative_embeds = _load_pipeline(
+        path, torch, Vae, Pipeline, Scheduler, TextEncoder, Tokenizer, Transformer
+    )
+
+    assert isinstance(pipeline, Pipeline)
+    assert (prompt_embeds, negative_embeds) == ("prompt-embeds", "negative-embeds")
+    assert calls["encode"] == {
+        "prompt": PROMPT,
+        "negative_prompt": NEGATIVE_PROMPT,
+        "do_classifier_free_guidance": True,
+        "num_videos_per_prompt": 1,
+        "max_sequence_length": 128,
+        "device": "device:cuda:0",
+        "dtype": "bf16",
     }
+    assert calls["register"] == {"text_encoder": None, "tokenizer": None}
+    assert calls["text_encoder_device"] == "cuda:0"
+    assert calls["empty_cache"] is True
+    assert calls["offload"] == "cuda:0"
+    assert calls["slicing"] is True and calls["tiling"] is True
+    assert calls["scheduler_load"] == (path, {"subfolder": "scheduler", "local_files_only": True})
+    assert calls["scheduler"] == ("base-config", {"flow_shift": 3.0})
+    assert calls["TextEncoder"][0][1]["subfolder"] == "text_encoder"
+    assert calls["Tokenizer"][0][1] == {"subfolder": "tokenizer", "local_files_only": True}
+    assert calls["Transformer"][0][1]["subfolder"] == "transformer"
 
 
 def test_conditioning_locks_first_frame_and_generates_remaining_frames() -> None:
@@ -152,7 +190,15 @@ def test_pipeline_call_uses_only_fixed_bounded_i2v_preset() -> None:
             return SimpleNamespace(frames=[["frame"]])
 
     preset = PRESETS["candidate-clip"]
-    frames = _invoke_pipeline(Pipeline(), SimpleNamespace(Generator=Generator), preset)
+    prompt_embeds = object()
+    negative_prompt_embeds = object()
+    frames = _invoke_pipeline(
+        Pipeline(),
+        SimpleNamespace(Generator=Generator),
+        preset,
+        prompt_embeds,
+        negative_prompt_embeds,
+    )
     invoke = calls["invoke"]
 
     assert frames == ["frame"]
@@ -162,8 +208,8 @@ def test_pipeline_call_uses_only_fixed_bounded_i2v_preset() -> None:
     assert len(invoke.pop("video")) == preset.frames
     assert len(invoke.pop("mask")) == preset.frames
     assert invoke == {
-        "prompt": PROMPT,
-        "negative_prompt": NEGATIVE_PROMPT,
+        "prompt_embeds": prompt_embeds,
+        "negative_prompt_embeds": negative_prompt_embeds,
         "width": 512,
         "height": 320,
         "num_frames": 33,

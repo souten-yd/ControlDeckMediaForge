@@ -5132,3 +5132,34 @@ services                   Media Forge / ControlDeck / SonicForge active
 ROCm cleanup               VACE/KFD process 0 / R9700 VRAM 59,912,192 B
 ControlDeck slice changes  0（既存 frontend/tsconfig.tsbuildinfo 変更1件は保全）
 ```
+
+## G7 V1h — VACE prompt/model lifecycle follow-up（2026-08-26）
+
+V1gの3,891,077,120 B process swapを追加weight/custom kernel/Host変更なしで改善した。固定prompt embedsを
+GPUで生成し、UMT5/tokenizerを破棄してからmodel CPU offloadを適用すると同一SHA、process swap 0を
+2回再現したが、system swap-outは5,639 / 1,921 pages残った。
+
+VAE/scheduler/tokenizer/text encoder/transformerを公式component loaderで直列化し、text encoder破棄後に
+transformerをロードした最良値:
+
+```text
+operation / Host Job         modelop_c50d8aa2472440d9b126450f67cd750f / eedcdf7b2887
+Broker request / lease       7f3cfff0-c1a8-4fe3-9d20-add9c0edc9e4 / 67a50ea4-d7cd-44cd-bb35-da728fffba0a
+core / runner / generate     110.622 / 108.069 / 103.037 sec
+peak VRAM / delta            19,462,033,408 / 19,402,121,216 B
+peak RSS / process swap      10,251,010,048 / 0 B
+system swap page delta       in 70 / out 401
+output / SHA-256             14,494 B / 9a5bebd61075b14d854d232d6fd1bb3f2590c180330faf3aeaff242246fdac4e
+```
+
+`device_map` direct GPU loadはpeak RSS 12,437,766,144 B、swap-out 14,940 pagesへ悪化したため除外。
+V1g比でlatency/RSS/process swapは改善しdeterminismも **PASS** だが、zero system-swapは **FAIL**。
+candidate quality/cancel/public assetは **NOT TESTED**、VACEは **DEFERRED** のまま。LTX-Video 2B
+0.9.8、SkyReels 1.3B、Hunyuanはいずれも独自licenseの明示acceptanceなしにweight取得しない。
+
+最終 gate は lifecycle/preflight/catalog/evaluator の focused が `32 passed, 1 warning in 5.85s`、
+`./mf.sh test` が `711 passed, 1 warning in 48.28s`。対象2ファイルの `compileall` と
+`git diff --check` も通過した。branch core停止後、installed Media Forge v0.9.0を復元し、
+Media Forge / ControlDeck / SonicForge はすべてactive、実 `/health` はhealthy / contract 2.0、
+VACE/KFD process 0、R9700 VRAM 59,912,192 Bを確認した。ControlDeck変更は0で、既存
+`frontend/tsconfig.tsbuildinfo` の変更1件を保全した。
