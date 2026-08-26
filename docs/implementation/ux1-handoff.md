@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g8-installed-acceptance（origin/main 48d7caf から作成）
-slice       G8 B5 installed acceptance
-状態        B0-B4 merged / B5実装・実機評価完了 / PR前
+branch      ux1/g8-b5-handoff（origin/main a6c37e2 から作成）
+slice       G8 B5 handoff close / G9 preparation
+状態        G8 B0-B5実装・実機評価・merge完了
 baseline    focused B5 200 passed / full 750 passed / 1 warning / 50.23s
 installed   v0.9.0復元 / PID 2237186,2237197 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         B5 resource request増分0 / real Blender process 0
-PR          ControlDeck #246 merged / Media Forge B5 PR未作成
+PR          ControlDeck #246 merged / Media Forge #143 merged / handoff PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -53,6 +53,9 @@ G8 B4 は Media Forge #141、exact head
 G8 B4 handoff は Media Forge #142、exact head
 `36314efa61c4dd1c32ef43fd4cc8efa02167b485`、merge commit
 `48d7caf02eec59c72a44cfb4811ce1f15d437ba6` で main へ入った。
+G8 B5 は Media Forge #143、exact head
+`f20f9517c7c79574c0980c0019ea52b288e40dc2`、merge commit
+`a6c37e28bcc5471102a9e13fe7b4e1cc9b47e552` で main へ入った。
 
 ## この slice の結果
 
@@ -74,8 +77,8 @@ NOT TESTED rig/animation付きasset（静的mesh profileの保証外）
 ## 次にやること（1つだけ）
 
 ```text
-1. G8 B5をMedia Forgeの1 PRとしてreview / mergeし、exact headをここへ記録する
-2. G8完了後はgoal-roadmapの次sliceを設計正とstatusから選ぶ
+1. 次の正規goalはG9。実装前に候補、license、gfx1201/ROCm、VRAM、G8境界の調査計画を作る
+2. Hunyuan3D等のweight取得・利用開始はlicense条項を提示し、利用者の明示同意後だけ行う
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
