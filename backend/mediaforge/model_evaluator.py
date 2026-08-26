@@ -111,7 +111,8 @@ class H3ModelEvaluator:
         )
         self.wan_source_root = wan_source_root.resolve() if wan_source_root is not None else None
         if wan_evaluation_preset not in {
-            "smoke", "quality-frame", "short-clip", "practical-clip"
+            "smoke", "quality-frame", "short-clip", "practical-clip", "candidate-clip",
+            "candidate-hq-clip"
         }:
             raise ValueError("Wan evaluation preset is invalid")
         self.wan_evaluation_preset = wan_evaluation_preset
@@ -839,6 +840,8 @@ class H3ModelEvaluator:
             "quality-frame": (256, 256, 1),
             "short-clip": (512, 320, 17),
             "practical-clip": (256, 256, 49),
+            "candidate-clip": (384, 256, 33),
+            "candidate-hq-clip": (512, 320, 33),
         }[self.wan_evaluation_preset]
         if (
             video.get("width") != expected[0]

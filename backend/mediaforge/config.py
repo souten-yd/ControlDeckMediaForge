@@ -75,7 +75,8 @@ class Settings:
         if self.wan_source_root is not None:
             object.__setattr__(self, "wan_source_root", self.wan_source_root.resolve())
         if self.wan_evaluation_preset not in {
-            "smoke", "quality-frame", "short-clip", "practical-clip"
+            "smoke", "quality-frame", "short-clip", "practical-clip", "candidate-clip",
+            "candidate-hq-clip"
         }:
             raise ValueError("Wan evaluation preset is invalid")
         if (
