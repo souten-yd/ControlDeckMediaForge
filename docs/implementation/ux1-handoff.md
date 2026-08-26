@@ -13,7 +13,7 @@ slice       G7 V1 revision-pinned Wan2.2 TI2V-5B adoption probe
 baseline    focused 17 passed、full 686 passed / 1 warning / 48.38s
 installed   Media Forge v0.9.0 / 127.0.0.1:9130 / healthy に復元済み
 GPU         Wan process 0、Media Forge lease 0。SonicForge の通常 process は別管理
-PR          未作成
+PR          Media Forge #120 open / mergeable、hosted check なし
 ```
 
 G7 V0 は Media Forge #119、merge commit
@@ -43,9 +43,9 @@ DEFERRED   Wan production adapter/default/available への採用
 ## 次にやること（1つだけ）
 
 ```text
-1. current diff と docs を最終確認する
-2. commit、push、Media Forge V1 PR を作成し CI/exact head を確認して merge する
-3. origin/main から候補比較 branch を切り、V1 の再開条件を満たす profile/別候補を評価する
+1. Media Forge #120 の exact head / diff / mergeability を再確認して merge する
+2. origin/main から候補比較 branch を切る
+3. V1 の再開条件を満たす profile または別候補を bounded 評価する
 ```
 
 V2 production execution へ直接進まない。V1 adoption gate が deferred なので、次は Wan の
