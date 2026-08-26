@@ -3,6 +3,7 @@
   "$id": "https://media-forge.local/schemas/project-asset-placement.json",
   "title": "Place Media Forge assets in a ControlDeck project output grant",
   "description": "Commit one immutable Media Forge asset into a ControlDeck project output grant. Request the grant immediately before placing, not before generating: generation takes tens of seconds and a grant obtained early is likely to expire. If placement fails with an expired grant, acquire a new one and retry once. Media Forge never receives or accepts a filesystem path.",
+  "type": "object",
   "oneOf": [
     {
       "type": "object",

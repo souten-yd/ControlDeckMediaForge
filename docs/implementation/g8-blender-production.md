@@ -220,3 +220,17 @@ Host機能だけを別PRにする。
 B0〜B5、focused/full gate、実Blender process、installed browser/agent/grant、deterministic hashes、
 timeout/cancel/cleanupの証拠が揃ったときだけG8完了。Blender未導入、fixture-only、schema/test成功だけを
 「3Dが動く」と記録しない。
+
+### 8.1 B5 result（2026-08-26）
+
+B5は実installed ControlDeckでPASSした。browser bytes / Host scoped-file picker、workspace / Agentの
+実Blender compile、実行中reload後のreconnect、Host Job最終phase/progress、別process 2回の同一hash、
+独立GLB/PNG/ZIP/manifest検査、実grant commitとcommitted byte hash、実process cancel、0.05秒timeout、
+queued/running restart recovery、work cleanup、CPU-only resource request 0を確認した。
+
+Hostのcross-filesystem output commitだけはMedia Forge境界内では解けなかった。raw pathを受けずatomic
+no-overwrite契約を維持するため、generic Host修正をControlDeck PR #246として別mergeした。G8側の公開経路は
+既存`asset.pack` / `media.generate` / `media.pack`、opaque `asset:` / `grant:`のままである。
+
+B0-B5の完了条件はすべて満たした。rig/animation fixtureは未評価なので、`3d.project.glb`は引き続き
+実測済み静的meshの範囲だけを保証し、別profileまたは追加評価なしに対応を主張しない。

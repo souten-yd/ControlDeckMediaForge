@@ -5389,3 +5389,59 @@ cancel/timeout、rig/animation付きassetはB5として **NOT TESTED**。
 `frontend/tsconfig.tsbuildinfo`変更1件は保全した。installed Media Forgeは127.0.0.1:9130でhealthy /
 contract 2.0、R9700 VRAM 59,912,192 B、Qwen/llama process 0。SonicForge 9140はexternal変更により現在
 healthy / contract 2.0（Speech Essentials/Music ok、Game Audio missing）であり、このsliceでは変更していない。
+
+## G8 B5 — installed ControlDeck acceptance（2026-08-26）
+
+実installed ControlDeck、branch core、実Chromium、実Blender 4.5.9でB5を完了した。workspaceへ
+browser bytesとHost file pickerの両方から3,625,792 B / 200,978-triangle GLBをimportし、Asset
+`asset_ecbc752b93624c31a19b7434a32fbb89` / `asset_6ce100e79154436199748fd798788674` は入力と同じ
+SHA-256 `4e4e65714e409e34d18b3be5e21cc39eddee6e3eca6467e292846801ca13c04c`。Host picker経路は
+opaque `grant:` IDだけをprivate workspace transportへ渡し、Host pathを送受信しなかった。
+
+workspace job `job_2eed58a192c149ea92dab25c57a23f38` は実行中reload後の再接続でも`running`を観測して
+succeeded。Agent Host Job `c43db95ba470` もsucceededし、Host最終phaseは`package`、progressは
+1000/1000、event 1件。両経路の別Blender processが作ったZIPはbyte-identicalだった。独立検査値は次の通り。
+
+```text
+source GLB     3,625,792 B  4e4e65714e409e34d18b3be5e21cc39eddee6e3eca6467e292846801ca13c04c
+package ZIP      919,412 B  8568abd66b538f543b2a9a95993e5caa07a841b7f0a68f4696fe0c4debc5424e
+asset.glb      4,815,840 B  0b1e065062f160a4f668dc000e0d860a08226da6b039f7134931b01e782f775a
+preview.png       36,338 B  26d07b3311c80ab56feb2dda838e033a7c347d4eb2a02528543a1143867e6cc0
+manifest facts  triangles=200,000 / vertices=100,627 / bounds=[0,0,0]..[317,0,317]
+```
+
+Libraryは実previewを表示し、browser console/page errorは0、screenshotは108,791 B。Agent packは
+Host asset `asset:fe47805b-72ea-49dd-b882-16415862f24e`へ919,412 Bをcommitし、receiptと実committed
+bytesのSHA-256はZIPと一致した。
+
+Host cancel job `64c1e07551e5` は実Blender child PID 2235001を観測後canceledへ収束し、child 0、partial
+asset/work 0。CPU-only `asset.pack`中のHost cancelをGPU lease taskに依存せずpollするよう修正し、実行中の
+ControlDeck resource request増分は0だった。`MEDIA_FORGE_BLENDER_TIMEOUT_SEC=0.05`の別processではjob
+`job_d7ef5e588ea04ea489db073afe9b5bdf` が0.070 secでfailed、errorは`blender_compile_failed` /
+`Blender compiler exceeded the 0.05 second timeout`、asset/work 0、coreはhealthy。
+
+永続store `/tmp/mediaforge-g8-b5-recovery-R3jDf5` では、core停止中にqueuedだった実Blender job
+`job_1d07586985694ff786a95d0fcf506129` が再起動後succeeded。別job
+`job_7b8a1398f19d4ce898a3ab22a7ec0056` は`running` / phase `validate`で、service cgroup内の実Blender
+PID 2236235をsystemdのkill記録で確認して
+service cgroupをSIGKILLし、DBにrunningのまま残ることを確認した。同じstoreで再起動するとfailed /
+`service_restarted` / asset 0へ収束し、work file 0、health healthy。
+
+実project placementでHostの中央stagingとgrant先が別filesystemの場合に`os.replace`が`EXDEV`となる
+generic境界不具合を観測した。Media Forge側ではraw pathを受けず、Hostのatomic commit契約も弱めず解けないため、
+ControlDeck別PR #246でgrant先directory内tempへのcopy、fsync、同一directory内no-overwrite atomic publishへ修正した。
+exact head `2cdc1cd264ed777651c5c0ba8af9ffbf2a473261`、merge commit
+`8a6fc31d748c789b131282911e49a131ae03ff8d`。ControlDeck focused 31件はPASS。fullは814 passed / 1 skipped /
+5 failedで、4件は共有Host Job active-limit状態、1件は固定1秒のresource timingであり、各該当testはclean
+processまたは単独実行でPASSした。Media固有route/dependency/文言はHostへ追加していない。
+
+schema discoveryでroot `type`を要求する実Hostに合わせ、placement schemaへ`type: object`を追加した。
+各`oneOf` branchは既にobject限定のため受理集合は変わらない。Host progressのforced final updateがrate gate
+境界で自己rejectした実raceは10 ms safety marginで修正した。
+
+終了時、導入済みMedia Forge v0.9.0をsystemd PID 2237186/2237197で127.0.0.1:9130へ復元しhealth
+healthy / contract 2.0。SonicForge 9140は変更せずhealthy（Speech Essentials/Music ok、Game Audio missing）。
+実Blender process 0。rig/animation付きassetは **NOT TESTED** であり、静的mesh profileの対応範囲へ含めない。
+
+最終gateはfocused 200件、`./mf.sh test` 750件がPASS（既知のStarlette warning 1件 / 50.23s）。
+Python `compileall`、`node --check frontend/app.js`、`git diff --check`もPASSした。

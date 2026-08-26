@@ -41,7 +41,7 @@ DOM_IDS = (
     "profile-add-character", "profile-add-style", "profile-list", "profile-dialog",
     "profile-name", "profile-appearance", "profile-art-style", "profile-references",
     "pack-section", "pack-profile", "pack-open", "pack-dialog", "pack-slots", "pack-progress",
-    "project-3d-section", "project-3d-file", "project-3d-clear", "project-3d-submit",
+    "project-3d-section", "project-3d-file", "project-3d-host-file", "project-3d-clear", "project-3d-submit",
     "project-3d-options", "project-3d-error", "project-3d-status",
     "custom-result", "custom-error",
     # UX3: 書き出し導線と、重複を解消した詳細設定
@@ -109,7 +109,7 @@ def test_dom_contract_ids_exist():
 def test_3d_project_action_is_capability_and_selection_gated_and_typed():
     body = SCRIPT[SCRIPT.index("function render3dProject"):SCRIPT.index("function submit3dProject")]
     assert 'state.capabilities["asset.3d_project_pack"]' in body
-    assert 'byId("project-3d-submit").hidden = !available || !file;' in body
+    assert 'byId("project-3d-submit").hidden = !available || !selection;' in body
     assert 'state.mode !== "advanced"' in body
     submit = SCRIPT[SCRIPT.index("async function submit3dProject"):SCRIPT.index("/* backend には asset.pack")]
     assert 'operation: "asset.pack"' in submit
@@ -117,6 +117,10 @@ def test_3d_project_action_is_capability_and_selection_gated_and_typed():
     assert 'schema_version: "3d.compile-options@1"' in SCRIPT
     for forbidden in ("--python", "bpy.", "blender_path", "project_path", "script_body"):
         assert forbidden not in submit
+    picker = SCRIPT[SCRIPT.index("async function pickHost3dProject"):SCRIPT.index("/* backend には asset.pack")]
+    assert 'callHost("host.file.pick"' in picker
+    assert 'call("assets.import_grant"' in picker
+    assert 'media_type: "model/gltf-binary"' in picker
 
 
 def test_3d_zip_viewer_uses_preview_instead_of_rendering_the_archive():

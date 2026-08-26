@@ -1472,20 +1472,30 @@ function project3dFile() {
   return byId("project-3d-file").files[0] || null;
 }
 
+function project3dSelection() {
+  const file = project3dFile();
+  if (file) return {file, name: file.name, asset: null};
+  if (state.project3dAsset) {
+    return {file: null, name: state.project3dName || "ControlDeckのGLB", asset: state.project3dAsset};
+  }
+  return null;
+}
+
 function render3dProject() {
   const capability = state.capabilities["asset.3d_project_pack"] || {};
   const available = capability.state === "available";
-  const file = project3dFile();
+  const selection = project3dSelection();
   byId("project-3d-section").hidden = !available;
-  byId("project-3d-file-text").textContent = file ? `GLB: ${file.name}` : "＋ GLBを選ぶ";
-  byId("project-3d-file-label").classList.toggle("filled", Boolean(file));
-  byId("project-3d-clear").hidden = !file;
+  byId("project-3d-file-text").textContent = selection ? `GLB: ${selection.name}` : "＋ GLBを選ぶ";
+  byId("project-3d-file-label").classList.toggle("filled", Boolean(selection));
+  byId("project-3d-host-file").hidden = !state.bridgePort;
+  byId("project-3d-clear").hidden = !selection;
   // 実行操作は runtime と入力の両方がそろったときだけ見せる。
-  byId("project-3d-submit").hidden = !available || !file;
-  byId("project-3d-options").hidden = !available || !file || state.mode !== "advanced";
+  byId("project-3d-submit").hidden = !available || !selection;
+  byId("project-3d-options").hidden = !available || !selection || state.mode !== "advanced";
   if (!available) {
     byId("project-3d-status").textContent = CAPABILITY_REASON[capability.reason] || "3D整形を利用できません";
-  } else if (!file) {
+  } else if (!selection) {
     byId("project-3d-status").textContent = "";
   }
 }
@@ -1527,13 +1537,15 @@ function project3dOptions() {
 }
 
 async function submit3dProject() {
-  const file = project3dFile();
+  const selection = project3dSelection();
   const error = byId("project-3d-error");
   const status = byId("project-3d-status");
   const button = byId("project-3d-submit");
   error.hidden = true;
-  if (!file) return;
-  if (!file.name.toLowerCase().endsWith(".glb") || file.size < 1 || file.size > 64 * 1024 * 1024) {
+  if (!selection) return;
+  if (selection.file && (
+      !selection.name.toLowerCase().endsWith(".glb")
+      || selection.file.size < 1 || selection.file.size > 64 * 1024 * 1024)) {
     error.hidden = false;
     error.textContent = "64MiB以下のGLBを選んでください。";
     return;
@@ -1548,12 +1560,12 @@ async function submit3dProject() {
   button.disabled = true;
   status.textContent = "GLBを取り込んでいます…";
   try {
-    state.project3dAsset = state.project3dAsset
-      || await importFile(file, "source", null, "model/gltf-binary");
+    state.project3dAsset = selection.asset || state.project3dAsset
+      || await importFile(selection.file, "source", null, "model/gltf-binary");
     status.textContent = "3Dプロジェクトを受け付けています…";
     await call("jobs.create", {
       operation: "asset.pack",
-      intent: `${file.name} をプロジェクト用GLBに整える`,
+      intent: `${selection.name} をプロジェクト用GLBに整える`,
       profile: "3d.project.glb",
       inputs: [{asset_id: state.project3dAsset.id}],
       constraints: {compile_options: options},
@@ -1568,6 +1580,31 @@ async function submit3dProject() {
     error.textContent = failure?.message || "3Dプロジェクトを作れませんでした。";
   } finally {
     button.disabled = false;
+  }
+}
+
+async function pickHost3dProject() {
+  const error = byId("project-3d-error");
+  const status = byId("project-3d-status");
+  error.hidden = true;
+  status.textContent = "ControlDeckでGLBを選んでください。";
+  try {
+    const picked = await callHost("host.file.pick", {mode: "file", title: "GLBを選択"});
+    if (!picked?.grant_id) return;
+    const imported = await call("assets.import_grant", {
+      grant_id: picked.grant_id,
+      media_type: "model/gltf-binary",
+      purpose: "source",
+    });
+    state.project3dAsset = imported;
+    state.project3dName = picked.name || imported.suggested_filename || "ControlDeckのGLB";
+    byId("project-3d-file").value = "";
+    status.textContent = "ControlDeckのGLBを取り込みました。";
+    render3dProject();
+  } catch (failure) {
+    error.hidden = false;
+    error.textContent = failure?.message || "ControlDeckからGLBを取り込めませんでした。";
+    status.textContent = "";
   }
 }
 
@@ -4975,16 +5012,19 @@ byId("attach-clear").addEventListener("click", () => {
 });
 byId("project-3d-file").addEventListener("change", () => {
   state.project3dAsset = null;
+  state.project3dName = "";
   byId("project-3d-error").hidden = true;
   render3dProject();
 });
 byId("project-3d-clear").addEventListener("click", () => {
   byId("project-3d-file").value = "";
   state.project3dAsset = null;
+  state.project3dName = "";
   byId("project-3d-error").hidden = true;
   byId("project-3d-status").textContent = "";
   render3dProject();
 });
+byId("project-3d-host-file").addEventListener("click", () => void pickHost3dProject());
 byId("project-3d-submit").addEventListener("click", () => void submit3dProject());
 
 const dropzone = byId("attach-image");

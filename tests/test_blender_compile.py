@@ -77,7 +77,7 @@ def cube_glb_bytes() -> bytes:
     return generated_mesh_glb(positions, indices, material=True)
 
 
-async def fake_blender(job_root: Path, _request: Path, _cancel) -> dict:
+async def fake_blender(job_root: Path, _request: Path, _cancel, _timeout=180) -> dict:
     source = job_root / "source.glb"
     output = job_root / "asset.glb"
     preview = job_root / "preview.png"
@@ -293,6 +293,79 @@ def test_3d_package_crosses_agent_library_preview_and_pack_without_paths(tmp_pat
     assert str(tmp_path) not in serialized and "path" not in serialized
 
 
+def test_workspace_imports_glb_from_opaque_host_read_grant(tmp_path: Path) -> None:
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    state["grant_content"] = glb_bytes()
+    with client, client.websocket_connect("/ws", headers=headers) as socket:
+        socket.send_json({
+            "id": "import",
+            "method": "assets.import_grant",
+            "params": {
+                "grant_id": "grant:read-1",
+                "purpose": "source",
+                "media_type": "model/gltf-binary",
+            },
+        })
+        while True:
+            message = socket.receive_json()
+            if message.get("id") == "import":
+                break
+
+    assert message["ok"] is True
+    imported = message["result"]
+    assert imported["mime_type"] == "model/gltf-binary"
+    assert imported["sha256"] == hashlib.sha256(state["grant_content"]).hexdigest()
+    serialized = json.dumps(imported)
+    assert str(tmp_path) not in serialized and "grant:read-1" not in serialized
+
+
+def test_host_cancel_reaches_cpu_only_blender_without_gpu_lease(
+    tmp_path: Path, monkeypatch
+) -> None:
+    async def cancellable(_root: Path, _request: Path, cancel_requested, _timeout=180) -> dict:
+        while not cancel_requested():
+            await asyncio.sleep(0.01)
+        raise BlenderCompileCanceled("canceled")
+
+    monkeypatch.setattr(blender_compile, "_run_blender", cancellable)
+    client, headers, state = host_client(tmp_path, token="valid-user")
+    with client:
+        imported = client.post(
+            "/api/v1/assets/import?purpose=source",
+            content=glb_bytes(),
+            headers={"content-type": "model/gltf-binary"},
+        ).json()
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            socket.send_json({
+                "id": "create",
+                "method": "jobs.create",
+                "params": {
+                    "operation": "asset.pack",
+                    "intent": "Cancel the CPU-only Blender compile",
+                    "inputs": [{"asset_id": imported["id"]}],
+                    "profile": "3d.project.glb",
+                    "constraints": {},
+                    "output": {"format": "zip", "count": 1},
+                },
+            })
+            while True:
+                message = socket.receive_json()
+                if message.get("id") == "create":
+                    break
+            job_id = message["result"]["id"]
+            deadline = time.monotonic() + 2
+            while client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "queued":
+                assert time.monotonic() < deadline
+                time.sleep(0.01)
+            state["jobs"]["host-created-1"]["status"] = "canceled"
+            terminal = wait_terminal(client, job_id)
+
+    assert terminal["status"] == "canceled"
+    assert terminal["asset_ids"] == []
+    assert state["resource_requests"] == []
+    assert list(client.app.state.store.work_dir.iterdir()) == []
+
+
 def test_3d_profile_rejects_options_and_non_glb_input(client) -> None:
     imported = client.post(
         "/api/v1/assets/import?purpose=source",
@@ -317,6 +390,12 @@ def test_trusted_worker_contract_has_no_expression_shell_or_free_script_argument
     assert "--python-expr" not in core + worker
     assert "shell=True" not in core + worker
     assert 'choices=("request.json",)' in worker and 'choices=("result.json",)' in worker
+
+
+def test_agent_placement_schema_declares_an_object_root_for_host_discovery() -> None:
+    schema = json.loads(Path("schemas/project-asset-placement.json").read_text(encoding="utf-8"))
+    assert schema["type"] == "object"
+    assert all(branch["type"] == "object" for branch in schema["oneOf"])
 
 
 @pytest.mark.parametrize(
@@ -348,7 +427,7 @@ def test_blender_failure_and_cancel_register_no_partial_package(client, monkeypa
         "output": {"format": "zip", "count": 1},
     }
 
-    async def failed(_root: Path, _request: Path, _cancel) -> dict:
+    async def failed(_root: Path, _request: Path, _cancel, _timeout=180) -> dict:
         raise BlenderCompileError("bounded worker failure")
 
     monkeypatch.setattr(blender_compile, "_run_blender", failed)
@@ -356,7 +435,7 @@ def test_blender_failure_and_cancel_register_no_partial_package(client, monkeypa
     assert failed_job["error"]["code"] == "blender_compile_failed"
     assert failed_job["asset_ids"] == []
 
-    async def canceled(_root: Path, _request: Path, cancel_requested) -> dict:
+    async def canceled(_root: Path, _request: Path, cancel_requested, _timeout=180) -> dict:
         while not cancel_requested():
             await asyncio.sleep(0.01)
         raise BlenderCompileCanceled("canceled")

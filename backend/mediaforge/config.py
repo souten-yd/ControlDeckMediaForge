@@ -25,6 +25,7 @@ def _control_deck_origin(value: str) -> str:
 class Settings:
     data_dir: Path
     worker_timeout_sec: float = 30.0
+    blender_timeout_sec: float = 180.0
     control_deck_url: str = "http://127.0.0.1:8765"
     host_request_timeout_sec: float = 10.0
     host_lease_renew_sec: float = 10.0
@@ -128,12 +129,15 @@ class Settings:
             raise ValueError("Wan 2.1 VACE evaluation preset is invalid")
         if (
             self.worker_timeout_sec <= 0
+            or not 0 < self.blender_timeout_sec <= 180
             or self.host_request_timeout_sec <= 0
             or self.host_lease_renew_sec <= 0
             or self.model_evaluation_timeout_sec <= 0
             or self.host_ai_timeout_sec <= 0
         ):
-            raise ValueError("worker and host timeouts must be positive")
+            raise ValueError(
+                "worker and host timeouts must be positive and Blender timeout must be at most 180 seconds"
+            )
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -143,6 +147,7 @@ class Settings:
         return cls(
             data_dir=data_dir.resolve(),
             worker_timeout_sec=timeout,
+            blender_timeout_sec=float(os.environ.get("MEDIA_FORGE_BLENDER_TIMEOUT_SEC", "180")),
             control_deck_url=os.environ.get("MEDIA_FORGE_CONTROLDECK_URL", "http://127.0.0.1:8765"),
             host_request_timeout_sec=float(os.environ.get("MEDIA_FORGE_CONTROLDECK_TIMEOUT_SEC", "10")),
             host_lease_renew_sec=float(os.environ.get("MEDIA_FORGE_CONTROLDECK_RENEW_SEC", "10")),

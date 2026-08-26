@@ -205,6 +205,7 @@ def create_app(
     manager = JobManager(
         store,
         worker_timeout_sec=resolved.worker_timeout_sec,
+        blender_timeout_sec=resolved.blender_timeout_sec,
         host_client=host,
         lease_renew_sec=resolved.host_lease_renew_sec,
         model_manifest=resolved.model_manifest,
@@ -2110,6 +2111,24 @@ def create_app(
                             purpose=str(purpose),
                             media_type=media_type if isinstance(media_type, str) else None,
                         ).model_dump(mode="json")
+                    elif method == "assets.import_grant":
+                        if identity is None:
+                            raise ValueError("Host identity is required for scoped import")
+                        if params.get("purpose") != "source" or params.get("media_type") != "model/gltf-binary":
+                            raise ValueError("scoped import accepts a source GLB only")
+                        metadata, content = await read_grant(
+                            host,
+                            identity,
+                            require_grant_id(str(params.get("grant_id", ""))),
+                            max_bytes=MAX_IMPORT_BYTES,
+                        )
+                        result = import_asset_bytes(
+                            store,
+                            content,
+                            purpose="source",
+                            media_type="model/gltf-binary",
+                        ).model_dump(mode="json")
+                        result["source_name"] = str(metadata.get("name", ""))[:255]
                     elif method == "assets.import.begin":
                         size = params.get("size")
                         purpose = params.get("purpose")
