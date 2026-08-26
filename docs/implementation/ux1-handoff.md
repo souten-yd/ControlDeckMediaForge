@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g8-workspace-agent（origin/main bdf6a77 から作成）
-slice       G8 B4 workspace / agent / project placement
-状態        B0-B3 merged / B4 implemented and evaluated / PR #141 open
+branch      ux1/g8-b4-handoff（origin/main c06ec86 から作成）
+slice       G8 B4 handoff close / B5 preparation
+状態        B0-B4 merged / B5未着手
 baseline    focused B4 200 passed / full 746 passed / 1 warning / 48.51s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #141 open / merge待ち
+PR          Media Forge #141 merged / handoff PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -47,6 +47,9 @@ G8 B3 は Media Forge #139、exact head
 G8 B3 handoff は Media Forge #140、exact head
 `96feb1938825c4455f978a11bf637a393ecb2d42`、merge commit
 `bdf6a770203ad6d069847d9eb0e814d9515005f9` で main へ入った。
+G8 B4 は Media Forge #141、exact head
+`123db996d90a34dbc6933ded3ce943bf2348a91c`、merge commit
+`c06ec865778f3d81a9102340ab3725bf6d3f3a76` で main へ入った。
 
 ## この slice の結果
 
@@ -66,8 +69,8 @@ NOT TESTED installed Host browser/identity/real grant / reconnect / real cancel/
 ## 次にやること（1つだけ）
 
 ```text
-1. PR #141のreview/CIを確認しmergeする
-2. G8 B5 installed ControlDeck browser / Agent / grant / cancel / recoveryを実測する
+1. G8 B5 installed ControlDeck browser / Agent / grant / cancel / recoveryを実測する
+2. 実Blender別process 2回hash、reconnect、queued recovery、running restartを閉じる
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
