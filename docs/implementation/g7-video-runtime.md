@@ -82,6 +82,39 @@ host RAM / process swap / cancellation latency
 動かない、VRAM が収まらない、Host watchdog を巻き込む、または出力が壊れる候補は延期する。
 カーネル自作や ControlDeck への動画固有依存追加には進まない。
 
+### 2.1 Wan2.2 TI2V-5B の V1 判定（2026-08-26）
+
+公式 Wan2.2 repository commit `42bf4cfa` と model revision `921dbaf3` を固定し、
+Apache-2.0 の TI2V-5B を R9700/gfx1201 で評価した。core/image 環境から分離した ROCm
+runtime を使い、UMT5 CPU phase と GPU generation phase を別 process にした。upstream の
+CUDA-only FlashAttention 呼び出しは upstream 自身の PyTorch SDPA fallback へ固定した。
+独自 kernel は追加していない。
+
+実測した 512x320 / 17 frames / 30 steps は cold 412.790 秒、warm 3 回は
+75.955 / 71.972 / 71.221 秒、incremental peak VRAM は最大 30,552,207,360 bytes、
+process peak RSS は最大 20,525,383,680 bytes、process swap は 3 回とも 0 bytes だった。
+同一 seed の warm 出力 SHA-256 は 3 回一致し、固定 prompt の robot / solar panel / landscape
+を識別できた。ControlDeck Broker の queue、activate/renew/release と 1.007 秒の cancel、
+SonicForge lease の後続取得も実測した。
+
+一方、より長い 256x256 / 49 frames / 30 steps は完走したが 235.053 秒、process swap
+1,754,775,552 bytes となり、映像も固定 prompt の被写体を維持できなかった。I2V、native
+720p、公式既定 121 frames / 50 steps は未実測である。このため V1 の採用ゲートは次の判定とする。
+
+```text
+ROCm runtime / bounded short smoke     PASS
+Broker admission / lease / cancel      PASS
+512x320 / 17-frame bounded quality     PASS（比較用の短尺候補）
+実用 clip quality / host RAM safety    FAIL
+I2V / native 720p / upstream default   NOT TESTED
+supported/default runtime adoption     DEFERRED
+```
+
+catalog の resource measurement は実測値へ更新するが、state は `experimental`、recommended
+profile は空、公開 capability は unavailable のままにする。V2 へ進む再開条件は、実用最短
+clip が prompt を維持し、process swap 0 で完走する profile または別候補を見つけること。
+候補比較をせず、この probe を production adapter に昇格させない。
+
 ## 3. V2 — execution
 
 private runtime adapter が raw frames/video を job root に書き、V0 の FFmpeg stage が公開 asset
