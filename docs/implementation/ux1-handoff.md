@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-26
-branch      ux1/g8-blender-runtime（origin/main 38863f9 から作成）
-slice       G8 B0 pinned Blender runtime / license / preflight boundary
-状態        Blender 4.5.9 exact runtime ready / B1未着手
-baseline    focused 10 passed / full 721 passed / 1 warning / 46.48s
+branch      ux1/g8-b0-handoff（origin/main 9dc9034 から作成）
+slice       G8 B0 handoff close / B1 preparation
+状態        B0 merged / Blender 4.5.9 exact runtime ready / B1未着手
+baseline    focused 10 passed / full 721 passed / 1 warning / 47.01s
 installed   v0.9.0復元 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         VACE worker 0 / KFD process 0 / R9700 baseline 59,912,192 B
-PR          Media Forge #132 merged / B0 PR未作成
+PR          Media Forge #133 merged / handoff PR未作成
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -32,6 +32,9 @@ G7 V1h は Media Forge #128、exact head
 G7 V1i は Media Forge #130、exact head
 `77b15513981e0d8a6f06b65b6d0fa25cdf36858d`、merge commit
 `7e8d2313d2543ee0b0df444eacc5c2d2f92f619f` で main へ入った。
+G8 B0 は Media Forge #133、exact head
+`17e7b2f1842928676101806f828bb91c911714c5`、merge commit
+`9dc903445721abfacc2342a5c916dc88647826f0` で main へ入った。
 
 ## この slice の結果
 
@@ -51,8 +54,8 @@ NOT TESTED B1〜B5 / GLB asset / compile / preview / cancel / installed browser
 ## 次にやること（1つだけ）
 
 ```text
-1. G8 B0 full test、PR、merge、handoffを閉じる
-2. G8 B1 bounded GLB importとindependent validatorを実装する
+1. G8 B1 bounded GLB importとindependent validatorを実装する
+2. G8 B2 deterministic compile ZIPの設計前提をB1実測で固定する
 3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
 ```
 
