@@ -486,6 +486,7 @@ class Store:
             "image/png": ".png", "image/webp": ".webp", "image/jpeg": ".jpg",
             "video/mp4": ".mp4", "video/webm": ".webm",
             "application/zip": ".zip",
+            "model/gltf-binary": ".glb",
         }[metadata.mime_type]
         storage_name = f"{metadata.id}{suffix}"
         destination = contained(self.asset_dir, self.asset_dir / storage_name)

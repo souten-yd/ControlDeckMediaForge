@@ -272,10 +272,15 @@ routing.
 - `GET /api/v1/assets/{asset_id}/provenance`
 - `POST /api/v1/assets/import?purpose=source|edit_mask`
 
-The additive import endpoint accepts a raw PNG or JPEG request body, converts it
-to the canonical RGBA PNG representation, and returns an Asset document. Input
-is bounded to 64 MiB and 4,194,304 decoded pixels. It accepts no filename or
-filesystem path. Imported assets carry `asset.import` provenance with
+The additive import endpoint accepts a raw PNG/JPEG request body, converts it
+to the canonical RGBA PNG representation, and returns an Asset document. With
+`Content-Type: model/gltf-binary`, `purpose=source` instead accepts one GLB 2.0
+file, validates its bounded embedded structure independently of Blender, and
+stores the original bytes unchanged. GLB external URIs, unknown required
+extensions, and sparse accessors are rejected by the initial fail-closed
+boundary. Input is bounded to 64 MiB; images are additionally bounded to
+4,194,304 decoded pixels. The endpoint accepts no filename or filesystem path.
+Imported assets carry `asset.import` provenance with
 `license=user-provided`; import does not imply permission to train a model.
 
 Asset and provenance documents conform to [`schemas/asset.json`](../schemas/asset.json) and [`schemas/provenance.json`](../schemas/provenance.json). A provenance sidecar is stored next to every immutable asset copy. The SQLite index can be rebuilt in a future maintenance operation without losing the producing facts.

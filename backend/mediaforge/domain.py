@@ -174,7 +174,8 @@ class Asset(BaseModel):
     job_id: str
     parent_asset_ids: list[str]
     mime_type: Literal[
-        "image/png", "image/webp", "image/jpeg", "video/mp4", "video/webm", "application/zip"
+        "image/png", "image/webp", "image/jpeg", "video/mp4", "video/webm", "application/zip",
+        "model/gltf-binary",
     ]
     width: int | None = None
     height: int | None = None

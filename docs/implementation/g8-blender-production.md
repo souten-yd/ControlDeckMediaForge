@@ -119,6 +119,10 @@ Blenderとは独立したcore validatorでheader/chunk/range/countを検査す�
 bounded factsとvalidation versionを保存する。raw Host pathは受け取らず、browser uploadまたはHost
 scoped-files bridgeの `grant:` bytesだけを読む。
 
+B1の初期allowlistはrequired extension 0件とする。`extensionsUsed`だけのoptional declarationは記録するが、
+required extensionはB2で実Blender re-importを個別に確認してから追加する。sparse accessorも同じ理由で
+B1ではfail-closedとし、未検証のlayoutを通過扱いにしない。
+
 B1 fixtureはrepository内でコード生成した小さいtriangle/cube GLBとする。第三者modelをtest fixtureへ
 持ち込まず、licenseを曖昧にしない。truncated header、declared-length mismatch、chunk escape、external URI、
 oversized count、symlink escapeをnegative testに含める。

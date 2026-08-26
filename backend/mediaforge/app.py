@@ -24,7 +24,7 @@ from PIL import Image, UnidentifiedImageError, __version__ as PILLOW_VERSION
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from . import __version__, library, preferences, thumbnails
-from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_image_asset
+from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_asset_bytes, import_image_asset
 from .asset_placement import (
     PlacementItem,
     PlacementManifest,
@@ -1489,17 +1489,26 @@ def create_app(
         request: Request,
         purpose: Literal["source", "edit_mask"] = Query(default="source"),
     ) -> dict[str, Any]:
+        media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
         content = bytearray()
         async for chunk in request.stream():
             if len(content) + len(chunk) > MAX_IMPORT_BYTES:
                 raise HTTPException(status_code=413, detail={"code": "asset_import_too_large"})
             content.extend(chunk)
         try:
-            return import_image_asset(store, bytes(content), purpose=purpose).model_dump(mode="json")
+            return import_asset_bytes(
+                store,
+                bytes(content),
+                purpose=purpose,
+                media_type=media_type,
+            ).model_dump(mode="json")
         except AssetImportError as exc:
             raise HTTPException(
                 status_code=422,
-                detail={"code": "invalid_image_import", "message": str(exc)[:300]},
+                detail={
+                    "code": "invalid_glb_import" if media_type == "model/gltf-binary" else "invalid_image_import",
+                    "message": str(exc)[:300],
+                },
             ) from exc
 
     @app.get("/api/v1/assets/{asset_id}")
@@ -2032,21 +2041,45 @@ def create_app(
                     elif method == "assets.import":
                         encoded = params.get("base64")
                         purpose = params.get("purpose", "source")
+                        media_type = params.get("media_type")
+                        if media_type is not None and (
+                            not isinstance(media_type, str)
+                            or media_type not in {
+                                "application/octet-stream", "image/png", "image/jpeg", "model/gltf-binary"
+                            }
+                        ):
+                            raise ValueError("asset import media type is invalid")
                         if not isinstance(encoded, str) or len(encoded) > (MAX_IMPORT_BYTES * 4 // 3 + 8):
                             raise ValueError("asset import payload exceeds the transport bound")
                         try:
                             content = base64.b64decode(encoded, validate=True)
                         except ValueError as exc:
                             raise ValueError("asset import payload is not valid base64") from exc
-                        result = import_image_asset(store, content, purpose=str(purpose)).model_dump(mode="json")
+                        result = import_asset_bytes(
+                            store,
+                            content,
+                            purpose=str(purpose),
+                            media_type=media_type if isinstance(media_type, str) else None,
+                        ).model_dump(mode="json")
                     elif method == "assets.import.begin":
                         size = params.get("size")
                         purpose = params.get("purpose")
+                        media_type = params.get("media_type")
                         if (
                             not isinstance(size, int)
                             or isinstance(size, bool)
                             or not 1 <= size <= MAX_IMPORT_BYTES
                             or purpose not in {"source", "edit_mask"}
+                            or (media_type == "model/gltf-binary" and purpose != "source")
+                            or (
+                                media_type is not None
+                                and (
+                                    not isinstance(media_type, str)
+                                    or media_type not in {
+                                        "application/octet-stream", "image/png", "image/jpeg", "model/gltf-binary"
+                                    }
+                                )
+                            )
                             or len(uploads) >= 2
                         ):
                             raise ValueError("asset import declaration is invalid")
@@ -2061,6 +2094,7 @@ def create_app(
                             "size": size,
                             "received": 0,
                             "purpose": purpose,
+                            "media_type": media_type,
                         }
                         result = {"upload_id": upload_id, "chunk_bytes": 512 * 1024}
                     elif method == "assets.import.chunk":
@@ -2095,10 +2129,11 @@ def create_app(
                         uploads.pop(upload_id)
                         try:
                             content = upload["path"].read_bytes()
-                            result = import_image_asset(
+                            result = import_asset_bytes(
                                 store,
                                 content,
                                 purpose=upload["purpose"],
+                                media_type=upload["media_type"],
                             ).model_dump(mode="json")
                         finally:
                             shutil.rmtree(upload["root"])

@@ -461,7 +461,7 @@ async function standaloneCall(method, params) {
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
     const response = await fetch(`/api/v1/assets/import?purpose=${encodeURIComponent(params.purpose)}`, {
-      method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: bytes,
+      method: "POST", headers: {"Content-Type": params.media_type || "application/octet-stream"}, body: bytes,
     });
     if (!response.ok) throw {code: `http_${response.status}`};
     return response.json();
@@ -2225,8 +2225,10 @@ async function fileBase64(file) {
 
 async function importFile(file, purpose, onProgress) {
   if (!file || file.size < 1 || file.size > 64 * 1024 * 1024) throw {code: "invalid_import_size"};
-  if (window.parent === window) return call("assets.import", {purpose, base64: await fileBase64(file)});
-  const upload = await call("assets.import.begin", {purpose, size: file.size});
+  if (window.parent === window) {
+    return call("assets.import", {purpose, media_type: file.type, base64: await fileBase64(file)});
+  }
+  const upload = await call("assets.import.begin", {purpose, media_type: file.type, size: file.size});
   for (let offset = 0; offset < file.size; offset += upload.chunk_bytes) {
     const slice = file.slice(offset, Math.min(file.size, offset + upload.chunk_bytes));
     await call("assets.import.chunk", {upload_id: upload.upload_id, offset, base64: await fileBase64(slice)});
@@ -3640,6 +3642,7 @@ const VALIDATOR_LABEL = {
   "image.alpha": "透過",
   "image.outpaint.source_pixel_diff": "元の絵が変わっていない",
   "image.strict_edit.unmasked_pixel_diff": "塗った所だけ変わっている",
+  "glb.structure": "3Dファイルの構造",
   "evaluation.unified": "内容の確認",
   "m5.companion.profile": "機種の設定",
   "m5.companion.edit_mask": "編集範囲",
