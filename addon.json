@@ -2,7 +2,7 @@
   "api_version": "2",
   "id": "media-forge",
   "name": "Media Forge",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Local-first media generation and asset library",
   "publisher": "souten-yd",
   "requires": {
@@ -60,7 +60,7 @@
     "settings": [
       {
         "id": "settings",
-        "label": "Media Forge",
+        "label": "Media Forge モデル管理",
         "route": "/x/media-forge/workspace/settings",
         "permission": "settings.manage"
       }

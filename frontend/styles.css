@@ -145,6 +145,13 @@ button.icon {
   padding: 0;
 }
 button.icon svg { width: 1.15rem; height: 1.15rem; }
+button.icon.settings-entry {
+  gap: 6px;
+  width: auto;
+  padding: 0 12px;
+  color: var(--text);
+}
+.settings-label { font-size: .76rem; font-weight: 700; white-space: nowrap; }
 button.icon[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
 @media (hover: hover) {
   button.icon:hover { color: var(--text); }
@@ -720,6 +727,26 @@ table.catalog td[data-label="操作"] > button { white-space: nowrap; flex: 0 0 
   margin-top: 22px;
 }
 .model-management-head .section-label { margin-bottom: 3px; }
+.model-management-note {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.55;
+}
+.model-action-status { font-size: .78rem; font-weight: 700; }
+.model-action-note {
+  display: block;
+  max-width: 22rem;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: .72rem;
+  line-height: 1.45;
+  white-space: normal;
+}
 .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 .model-card {
   min-width: 0;
@@ -906,6 +933,8 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
   .model-management-head { align-items: stretch; flex-direction: column; }
 
   #shell-header .pill { display: none; }
+  .settings-label { display: none; }
+  button.icon.settings-entry { width: 38px; padding: 0; }
   #create-media-picker { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-bottom: 2px; }
   .media-switch { width: 100%; }
 

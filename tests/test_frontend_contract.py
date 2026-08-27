@@ -67,7 +67,7 @@ DOM_IDS = (
     "result-evaluate", "result-evaluation",
     "mini-progress", "library-grid", "library-count", "activity-list",
     "detail-dialog",
-    "model-storage", "model-filters", "model-table", "model-empty", "model-error",
+    "model-storage", "model-filters", "model-management-note", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
     "model-remove-dialog", "model-remove-summary", "model-remove-detail",
     "model-remove-cancel", "model-remove-confirm",
@@ -156,6 +156,10 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert 'data-model-filter="all"' in MARKUP
     assert 'model.ownership !== "managed"' in SCRIPT
     assert '"外部で管理"' in SCRIPT
+    assert '"導入済み・利用不可"' in SCRIPT
+    assert "ライセンス同意とは別の実用品質・メモリ安全性" in SCRIPT
+    assert "ダウンロードだけでは動画生成は有効になりません" in SCRIPT
+    assert 'className = "model-action-note"' in SCRIPT
     assert 'experimental: "実験的・未実測"' in SCRIPT
     assert "model.license_acceptance_id" in SCRIPT
     assert "window.confirm" not in SCRIPT

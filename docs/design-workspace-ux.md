@@ -99,6 +99,9 @@ before                      after
 
 - **Models は独立タブをやめる**。導入・削除・進捗は設定内で両モードに現れ、
   model ID・hash・runtime・生 capability などの技術詳細だけを詳細モードに置く。
+- ヘッダと ControlDeck の設定 contribution は入口を「モデル管理」と明記する。歯車だけに
+  意味を隠さない。候補の操作可否（追加可能・削除可能・外部管理・容量超過）と理由は、
+  hover を前提にせず設定画面の本文へ常時表示する。
 - **状況**は実行中があるときだけバッジが付く。空でもタブは消さない
   （UX ガイドライン「状態は消さずに説明する」）。
 - route は host へ同期する（`host.route.sync`）:
@@ -368,6 +371,8 @@ Createの画像 / 動画切替は、利用者が媒体を選ぶ安定したL1操
 実行ボタンをdisabledにして理由と「設定で動画候補を見る」を表示する。片方でもavailable / experimentalなら
 動画フォームを開け、入力画像の有無から実行capabilityを導出する。使えないcapabilityのjobを
 試しに送らない。`3d.image_to_3d` は引き続き空画面を作らず非表示とする。
+導入済み動画モデルがある場合は「モデルが無い」と表示せず、license acceptance と production
+runtime 採用を区別して、実用品質・メモリ安全性の gate が未達であることを説明する。
 
 ### 7.2 phase → 日本語
 

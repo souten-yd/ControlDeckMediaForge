@@ -202,7 +202,7 @@
         "repo_id": "zai-org/CogVideoX-2b",
         "revision": "1137dacfc2c9c012bed6a0793f4ecf2ca8e7ba01"
       },
-      "ownership": "external",
+      "ownership": "managed",
       "supports_lora": false,
       "max_references": 0,
       "reference_roles": [],
