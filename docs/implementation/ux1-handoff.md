@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-27
-branch      release/v093（origin/main 963f267 から作成）
+branch      release/v093-publish（origin/main db4eddd から作成）
 slice       LoRA-only selection with automatic base download/routing/evaluation
-状態        実装PR #151 merge・live Civitai resolve・full test完了 / v0.9.3 release前
+状態        実装・PR merge・v0.9.3 release・標準update・installed browser完了 / 証跡PR前
 baseline    focused 6 files passed / final full 757 passed / 1 warning / 64.13s
-installed   v0.9.2 / PID 46572 / 127.0.0.1:9130 / healthy / contract 2.0
+installed   v0.9.3 / PID 159617,159621 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         生成再評価0。既存G7不採用証跡を維持
-PR          ControlDeck変更0 / Media Forge #151 merged / release PR前
+PR          ControlDeck変更0 / Media Forge #151/#152 merged / 証跡PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -77,7 +77,8 @@ PASS       managed catalogからCreateへkind/base/triggerを渡し、LoRA選択
 PASS       LoRA familyで自動routingを拘束し、異系統混在をworker前に拒否
 PASS       base install後の自動評価を同じ要求の後続処理にした
 PASS       focused tests / full 757 / static checks
-NOT TESTED 実ControlDeck install/browser
+PASS       signed v0.9.3 release / public redownload署名検証 / ControlDeck標準update
+PASS       installed browser: LoRA検索／base自動表示／単一確認／旧checkbox 0／overflow 0／errors 0
 NOT TESTED 新規LoRA weight download（個別配布条件の利用者同意前）
 NOT TESTED 実LoRA適用の同seed比較（2026-08-25のSD1.5/SDXL実測は維持）
 ```
@@ -90,9 +91,9 @@ ownershipだけをmanagedへ変更した。
 ## 次にやること（1つだけ）
 
 ```text
-1. commit/push/PR/review/merge
-2. version bump、signed release、ControlDeck標準update、installed browser評価
-3. 利用者が特定LoRAの配布条件へ同意した場合のみ実weight downloadとsame-seed比較
+1. 証跡をcommit/push/PR/mergeしてhandoffを閉じる
+2. 利用者が特定LoRAの配布条件へ同意した場合のみ実weight downloadとsame-seed比較
+3. production動画生成はzero-swapと実用品質を満たす候補までDEFERREDを維持する
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South
@@ -103,9 +104,9 @@ Korea を除く Territory、acceptable-use、distribution/notice、第三者提�
 
 ```text
 ControlDeck変更0。既存`frontend/tsconfig.tsbuildinfo`変更1件は保全。ControlDeck server PID 22486。
-installed v0.9.2はPID 46572、127.0.0.1:9130でhealthy / contract 2.0。
-`current`はversions/0.9.2、rollback用versions/0.9.1を保持。公開bundleは30,866,305 B、SHA-256
-`61a0a41ef3a068625ca3068634fa4bdb3d3b655005a00d6cda571d707d490c55`。
+installed v0.9.3はPID 159617/159621、127.0.0.1:9130でhealthy / contract 2.0。
+`current`はversions/0.9.3、rollback用versions/0.9.2を保持。公開bundleは30,957,893 B、SHA-256
+`41d7d392dba52527bfa8a11506eaeb0c83489926a01ea196085275389d70d397`。
 Cog runtime/snapshot/evidenceは `/data1tb/mediaforge-g7-cogvideox2b` に外部保持。
 Hunyuan weight/snapshot/partial download は0。dedicated runtimeだけ外部構築済み。
 Wan runtime/model は移動・削除しない。
