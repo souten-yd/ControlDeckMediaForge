@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-27
-branch      ux1/video-model-management-clarity（origin/main 02f1ac1 から作成）
+branch      release/v092-installed-handoff（origin/main 0d69a24 から作成）
 slice       v0.9.2 video model add/remove management and runtime-gate clarity
-状態        実装・source browser評価完了 / PR・release・installed acceptance前
-baseline    focused 211 + 155 passed / full 751 passed / 1 warning / 51.73s
-installed   v0.9.1 / PID 9724,9728 / 127.0.0.1:9130 / healthy / contract 2.0
+状態        実装・PR merge・release・標準update・installed browser評価完了 / 証跡PR前
+baseline    focused 211 + 155 passed / final full 751 passed / 1 warning / 54.52s
+installed   v0.9.2 / PID 46572 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         生成再評価0。既存G7不採用証跡を維持
-PR          ControlDeck変更0 / Media Forge PR前
+PR          ControlDeck変更0 / Media Forge #149 merged / 証跡PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -77,20 +77,23 @@ PASS       license acceptanceとruntime採用gateの分離表示
 PASS       CogVideoX-2Bをbounded managed checkpointへ変更。追加可能1
 PASS       standalone 1280px/320px、horizontal overflow 0、browser errors 0
 PASS       focused tests / full 751 / static checks
-NOT TESTED CogVideoX実download/remove、v0.9.2 release/install、installed v0.9.2 browser
+PASS       signed v0.9.2 release / public redownload hash / ControlDeck standard update
+PASS       installed v0.9.2 browser: 追加1／削除2／理由本文／overflow 0／errors 0
+NOT TESTED CogVideoX実13.8GB download/remove
 NOT TESTED production動画生成。capability unavailableを維持
 ```
 
 公開video capabilityは`video.text_to_video`と`video.image_to_video`の両方を
 `unavailable / video_runtime_not_adopted`として明示した。UIは入力面を表示するが、利用可能性を偽らず
-submitしない。既存`video.generate`契約、candidate catalog、routing/adoption stateは変更していない。
+submitしない。既存`video.generate`契約とrouting/adoption stateは変更せず、CogVideoXのcheckpoint
+ownershipだけをmanagedへ変更した。
 
 ## 次にやること（1つだけ）
 
 ```text
-1. このsliceをcommit/push/PR/mergeし、v0.9.2 signed bundleを公開する
-2. ControlDeck標準update後、installed browserで追加1／削除2と理由表示を確認する
-3. 13.8GB CogVideoX実download/removeは既存snapshotを壊さない隔離storeで評価する
+1. 証跡をcommit/push/PR/mergeしてhandoffを閉じる
+2. 13.8GB CogVideoX実download/removeは利用者が取得を選んだ時、既存snapshotを壊さず評価する
+3. production動画生成はzero-swapと実用品質を同時に満たす候補までDEFERREDを維持する
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South
@@ -100,11 +103,10 @@ Korea を除く Territory、acceptable-use、distribution/notice、第三者提�
 ## 境界と外部状態
 
 ```text
-ControlDeckはgeneric grant publishだけ別PR #246で修正・merge。Media固有route/dependency/文言は0。
-既存`frontend/tsconfig.tsbuildinfo`変更1件は保全。ControlDeck server PID 2231760は15:53:09起動。
-installed v0.9.1へ標準update済み。PID 2325466/2325471、127.0.0.1:9130でhealthy / contract 2.0。
-`current`はversions/0.9.1、rollback用versions/0.9.0を保持。公開bundleは30,954,097 B、SHA-256
-`ae9087ca6f1548260dd69f980face65cde003f380f8fa74488e68b4d8d098bf2`。
+ControlDeck変更0。既存`frontend/tsconfig.tsbuildinfo`変更1件は保全。ControlDeck server PID 22486。
+installed v0.9.2はPID 46572、127.0.0.1:9130でhealthy / contract 2.0。
+`current`はversions/0.9.2、rollback用versions/0.9.1を保持。公開bundleは30,866,305 B、SHA-256
+`61a0a41ef3a068625ca3068634fa4bdb3d3b655005a00d6cda571d707d490c55`。
 Cog runtime/snapshot/evidenceは `/data1tb/mediaforge-g7-cogvideox2b` に外部保持。
 Hunyuan weight/snapshot/partial download は0。dedicated runtimeだけ外部構築済み。
 Wan runtime/model は移動・削除しない。
