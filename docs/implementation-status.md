@@ -5536,5 +5536,30 @@ healthy=false、recommended 0、公開video capability unavailableは維持す�
 focused frontend/catalog/manager/transportは211件、その後catalog/manager/frontendは155件がPASSした。
 最終`./mf.sh test`は751 passed / warning 1件 / 51.73秒。branch coreを実feature-dataへread-only相当で
 別port 9131起動し、standalone Chromium 1280px/320pxで上記件数、CogVideoX download表示、理由本文、横overflow 0、
-console/page error 0を確認した。実download（13.8GB）、remove、signed v0.9.2 bundle、標準ControlDeck update、
-installed-host browserはこの時点では **NOT TESTED**。既存Wan/H3 modelは削除していない。
+console/page error 0を確認した。既存Wan/H3 modelは削除していない。
+
+Media Forge #149（exact head `cb3e760d9e1e7339e1ae921568a9cd025c79181b`、merge
+`0d69a24abfc7389424cc09901e7de760bd1b7af7`）をmergeし、同じmerge commitをtag `v0.9.2`として
+bundleを構築・署名・公開した。署名はmanifestのexact bytesに対してEd25519検証した。公開Releaseを
+別のtemporary directoryへ再downloadし、local buildと同じ30,866,305 bytes、SHA-256
+`61a0a41ef3a068625ca3068634fa4bdb3d3b655005a00d6cda571d707d490c55`を確認した。manifestは275 bytes、
+signatureは89 bytes。展開binaryの`doctor`は`version=0.9.2 / packaged=true`。別port 9166のbundleは
+CogVideoXを`managed / installed=false / experimental`として返し、320px Chromiumで追加可能表示、
+横overflow 0、console/page error 0だった。
+
+実ControlDeckの標準`./deck.sh feature update media-forge`は14.22秒、max RSS 786,400 KiBで成功した。
+`version=0.9.2 / previous_version=0.9.1 / healthy`、`current`は`versions/0.9.2`、rollback v0.9.1を保持。
+version treeはv0.9.1が31,222,710 bytes、v0.9.2が31,133,110 bytes、永続feature-dataは
+78,755,927,268 bytes。9130の実processはPID 46572、exact v0.9.2 binary、health healthy / contract 2.0。
+
+短命test identityで実ControlDeckのopaque iframeを1280px/320pxで操作した。Createは「動画モデルは
+導入済みだが実用品質とメモリ安全性を満たす実行環境が未採用」と表示し、設定exit後は動画候補12、
+導入済み2、追加可能1、削除可能2を表示した。CogVideoXにはダウンロードbuttonと「取得だけでは生成は
+有効にならない」の本文、Wan TI2V／H3 GGUFには`導入済み・利用不可`と削除buttonを確認した。
+320pxの横overflow 0、両幅console/page error 0。公開capabilityはT2V/I2Vとも
+`unavailable / video_runtime_not_adopted`のまま。
+
+CogVideoX 13.8GBの実managed download/removeは、既存外部evaluation snapshotを変更しないため
+**NOT TESTED**。既存snapshot 18,734,841,514 bytesとpartialを移動・削除していない。production動画生成も
+不採用gateを維持して **NOT TESTED**。Release: https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.9.2
+証跡更新後のexact main gateは`./mf.sh test` 751 passed / warning 1件 / 54.52秒、`git diff --check` PASS。
