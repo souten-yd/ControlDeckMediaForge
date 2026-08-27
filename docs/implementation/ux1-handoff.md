@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-27
-branch      fix/civitai-numeric-revision（origin/main b3751a2 から作成）
+branch      release/v094（origin/main 0965efe から作成）
 slice       Civitai numeric runtime revision and single-file registry repair
-状態        実再現・実装修正・live metadata registry・full test完了 / PR・release前
+状態        実再現・実装修正・PR #154 merge・full test完了 / v0.9.4 release前
 baseline    focused 6 files passed / final full 759 passed / 1 warning / 51.13s
 installed   v0.9.3 / PID 159617,159621 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         生成再評価0。既存G7不採用証跡を維持
-PR          ControlDeck変更0 / Media Forge PR前
+PR          ControlDeck変更0 / Media Forge #154 merged / release PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
