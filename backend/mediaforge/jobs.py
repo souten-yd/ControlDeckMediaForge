@@ -460,6 +460,15 @@ class JobManager:
             ).all()
         except ModelRegistryError as exc:
             raise WorkerFailure("model_registry_invalid", str(exc)) from exc
+        lora_family = self._required_lora_family(job, models)
+        if lora_family:
+            # LoRA is the user's selection.  Its family becomes a hard routing
+            # constraint; choosing a checkpoint first would expose an internal
+            # dependency and can select a model whose tensor shapes do not fit.
+            models = tuple(
+                item for item in models
+                if item.is_lora or normalize_base_model(item.base_model) == lora_family
+            )
         capability = self._model_capability(job)
         available = any(
             item.state.value == "available"
@@ -488,7 +497,14 @@ class JobManager:
             self._routes[job.id] = decision
             return decision.model
         except ModelRouteError as exc:
-            raise WorkerFailure(exc.code, str(exc)) from exc
+            code = "lora_base_unavailable" if lora_family and exc.code in {
+                "capability_unavailable", "model_unavailable"
+            } else exc.code
+            message = (
+                "選んだ LoRA に互換する評価済みの土台がありません"
+                if code == "lora_base_unavailable" else str(exc)
+            )
+            raise WorkerFailure(code, message) from exc
 
     def _route_summary(self, job_id: str) -> dict[str, Any]:
         decision = self._routes[job_id]
@@ -988,6 +1004,33 @@ class JobManager:
             raise WorkerFailure("model_registry_invalid", str(exc)) from exc
 
     MAX_LORAS = 4
+
+    def _required_lora_family(
+        self, job: Job, models: tuple[ModelDescriptor, ...]
+    ) -> str:
+        """Resolve the one base family implied by the user's LoRA choices."""
+        requested = self._requested_loras(job)
+        if not requested:
+            return ""
+        available = {item.model_id: item for item in models if item.is_lora}
+        families: set[str] = set()
+        for row in requested:
+            lora = available.get(row["model_id"])
+            if lora is None or not lora.installed or lora.local_path is None:
+                raise WorkerFailure(
+                    "lora_not_installed", f"{row['model_id']} が導入されていません"
+                )
+            family = normalize_base_model(lora.base_model)
+            if not family:
+                raise WorkerFailure(
+                    "lora_family_unknown", f"{lora.display_name or lora.model_id} の系統が不明です"
+                )
+            families.add(family)
+        if len(families) != 1:
+            raise WorkerFailure(
+                "lora_incompatible", "異なる系統の LoRA は同時に使えません"
+            )
+        return next(iter(families))
 
     def _requested_loras(self, job: Job) -> list[dict[str, Any]]:
         value = job.request.constraints.get("loras") or []

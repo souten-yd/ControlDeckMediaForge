@@ -313,6 +313,31 @@ def create_app(
         if resolved.model_catalog_manifest is not None
         else None
     )
+    dependency_tasks: set[asyncio.Task[None]] = set()
+
+    async def evaluate_installed_lora_base(
+        install_operation_id: str,
+        model_id: str,
+        identity: HostIdentity,
+    ) -> None:
+        """Continue a confirmed LoRA download through base evaluation."""
+        while True:
+            operation = store.get_model_operation(install_operation_id)
+            if operation.state.value == "ready":
+                break
+            if operation.state.value in {"failed", "canceled"}:
+                return
+            await asyncio.sleep(0.5)
+        if model_evaluations is None:
+            return
+        try:
+            model_evaluations.evaluate(model_id, identity)
+        except ModelOperationError:
+            # The durable install remains visible.  Evaluation exposes its own
+            # actionable failure when it can start; never mark the model ready
+            # without a measurement.
+            return
+        session_events.publish("model_operations")
     workspace_test_delay_pending = True
 
     @asynccontextmanager
@@ -324,6 +349,9 @@ def create_app(
         if model_evaluations is not None:
             await model_evaluations.start()
         yield
+        for task in dependency_tasks:
+            task.cancel()
+        await asyncio.gather(*dependency_tasks, return_exceptions=True)
         if model_evaluations is not None:
             await model_evaluations.stop()
         if model_operations is not None:
@@ -758,7 +786,7 @@ def create_app(
         return {
             normalize_base_model(item.base_model)
             for item in models
-            if item.installed and not item.is_lora and item.base_model
+            if item.installed and item.healthy and not item.is_lora and item.base_model
         } - {""}
 
     def annotate_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -2306,6 +2334,25 @@ def create_app(
                             str(params.get("revision", "main")),
                         )
                         result = resolution.document()
+                        if resolution.runtime_adapter == "lora.diffusers":
+                            report = await custom_models.lora_base_requirement(
+                                str(resolution.runtime_options.get("base_model", "")),
+                                installed_families(),
+                            )
+                            result["base_satisfied"] = report["satisfied"]
+                            candidate = report.get("candidate")
+                            if not report["satisfied"] and isinstance(candidate, dict):
+                                dependency = await custom_models.resolve_source(
+                                    "civitai",
+                                    str(candidate.get("repo_id", "")),
+                                    str(candidate.get("revision", "main")),
+                                )
+                                result["dependency"] = {
+                                    **dependency.document(),
+                                    "display_name": str(
+                                        candidate.get("display_name") or dependency.repo_id
+                                    ),
+                                }
                     elif method == "models.custom.add":
                         resolution = await custom_models.resolve_source(
                             str(params.get("source", "")),
@@ -2317,11 +2364,47 @@ def create_app(
                             isinstance(value, str) for value in domains
                         ):
                             raise ValueError("custom model domains must be a list of strings")
-                        entry = custom_models.add(
+                        bundle = [(
                             resolution,
-                            display_name=str(params.get("display_name", "")),
-                            license_acceptance=str(params.get("license_acceptance", "")),
-                            domains=tuple(domains) or ("general",),
+                            str(params.get("display_name", "")),
+                            str(params.get("license_acceptance", "")),
+                        )]
+                        dependency = None
+                        if resolution.runtime_adapter == "lora.diffusers":
+                            report = await custom_models.lora_base_requirement(
+                                str(resolution.runtime_options.get("base_model", "")),
+                                installed_families(),
+                            )
+                            if not report["satisfied"]:
+                                dependency_params = params.get("dependency")
+                                if not isinstance(dependency_params, dict):
+                                    raise CustomModelError(
+                                        "lora_base_required",
+                                        "この LoRA に必要な土台を解決し直してください",
+                                    )
+                                dependency = await custom_models.resolve_source(
+                                    "civitai",
+                                    str(dependency_params.get("repo_id", "")),
+                                    str(dependency_params.get("revision", "main")),
+                                )
+                                from .models.generation_defaults import normalize_base_model
+
+                                if normalize_base_model(str(
+                                    dependency.runtime_options.get("base_model", "")
+                                )) != normalize_base_model(str(
+                                    resolution.runtime_options.get("base_model", "")
+                                )):
+                                    raise CustomModelError(
+                                        "lora_base_incompatible",
+                                        "解決した土台はこの LoRA の系統と一致しません",
+                                    )
+                                bundle.append((
+                                    dependency,
+                                    str(dependency_params.get("display_name", dependency.repo_id)),
+                                    str(dependency_params.get("license_acceptance", "")),
+                                ))
+                        entries = custom_models.add_bundle(
+                            tuple(bundle), domains=tuple(domains) or ("general",)
                         )
                         # 追加分も shipped catalog と同じ parser で検証してから返す。
                         # ここで通らない entry を残さない。
@@ -2329,11 +2412,53 @@ def create_app(
                             if model_operations is not None:
                                 model_operations.catalog()
                         except ModelRegistryError:
-                            custom_models.remove(entry["registry"]["model_id"])
+                            for entry in entries:
+                                custom_models.remove(entry["registry"]["model_id"])
                             raise
+                        operations = []
+                        install_ids: dict[str, str] = {}
+                        if model_operations is not None:
+                            # 小さい LoRA を先に確定し、その同じ要求で土台も取得する。
+                            # installer 自体は直列なので同時に巨大ファイルを競合させない。
+                            for entry in entries:
+                                model_id = entry["registry"]["model_id"]
+                                try:
+                                    operation = model_operations.install(model_id)
+                                except ModelOperationError as exc:
+                                    if exc.code != "model_already_installed":
+                                        raise
+                                else:
+                                    operations.append(operation.model_dump(mode="json"))
+                                    install_ids[model_id] = operation.id
+                        if dependency is not None:
+                            dependency_id = entries[1]["registry"]["model_id"]
+                            install_id = install_ids.get(dependency_id)
+                            if install_id is not None:
+                                task = asyncio.create_task(
+                                    evaluate_installed_lora_base(
+                                        install_id, dependency_id, identity
+                                    ),
+                                    name=f"lora-base-evaluation-{install_id}",
+                                )
+                                dependency_tasks.add(task)
+                                task.add_done_callback(dependency_tasks.discard)
+                            elif model_evaluations is not None:
+                                try:
+                                    evaluation = model_evaluations.evaluate(
+                                        dependency_id, identity
+                                    )
+                                except ModelOperationError:
+                                    pass
+                                else:
+                                    operations.append(
+                                        evaluation.model_dump(mode="json")
+                                    )
                         result = {
-                            "model_id": entry["registry"]["model_id"],
+                            "model_id": entries[0]["registry"]["model_id"],
                             **resolution.document(),
+                            "operations": operations,
+                            **({"dependency_model_id": entries[1]["registry"]["model_id"]}
+                               if len(entries) > 1 else {}),
                         }
                         session_events.publish("model_catalog")
                     elif method == "models.custom.remove":

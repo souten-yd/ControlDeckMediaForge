@@ -198,6 +198,26 @@ def test_gated_install_requires_acceptance_bound_to_exact_catalog_entry(tmp_path
     asyncio.run(scenario())
 
 
+def test_managed_catalog_preserves_lora_identity_for_the_create_picker(tmp_path: Path):
+    runtime, catalog = manifests(tmp_path)
+    value = json.loads(runtime.read_text(encoding="utf-8"))
+    model = value["models"][0]
+    model["runtime_adapter"] = "lora.diffusers"
+    model["capabilities"] = ["image.lora"]
+    model["runtime_options"] = {
+        "base_model": "SDXL 1.0", "trigger_words": ["detail style"],
+    }
+    runtime.write_text(json.dumps(value), encoding="utf-8")
+    store = Store(tmp_path / "data")
+    store.initialize()
+
+    item = manager(tmp_path, store, runtime, catalog).catalog()["items"][0]
+
+    assert item["kind"] == "lora"
+    assert item["base_model"] == "SDXL 1.0"
+    assert item["trigger_words"] == ["detail style"]
+
+
 def test_managed_download_at_or_above_32gb_fails_before_operation(tmp_path: Path):
     runtime, catalog = manifests(tmp_path, approx_download_bytes=32_000_000_000)
     store = Store(tmp_path / "data")

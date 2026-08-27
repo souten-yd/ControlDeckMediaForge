@@ -4521,23 +4521,24 @@ adapter の経路が別なので、両方通して初めて「LoRA が動く」�
 Civitai の一部の LoRA は 401 を返す（早期公開など）。鍵が要る配布物なので、
 そう伝える。UA 不足の 403 とは別の理由である。
 
-### 土台が無ければ、先に知らせる
+### 土台は同じ操作で自動解決する（2026-08-27 更新）
 
-LoRA は 40MB 前後だが土台は 2〜7GB ある。黙って始めると 40MB のつもりが 7GB
-落ちてくる。取り込む前に、載せる先が手元にあるかを調べ、無ければその系統で
-最も使われている checkpoint を大きさ付きで見せて確認を取る。
+LoRA は 40MB 前後だが土台は 2〜7GB ある。取り込む前に、載せる先が手元に
+あるかを調べる。無ければその系統の checkpoint を依存として解決し、LoRA と
+合わせた容量・双方のライセンスを 1 回の確認にまとめる。利用者が土台を選ぶ、
+別のチェックを入れる、別のダウンロードを押す、という操作は要求しない。
 
-土台は LoRA が入ってから取り込む。先に落として LoRA 側が失敗すると、頼んで
-いない 7GB だけが残る。
+登録は LoRA と土台を 1 回の durable 更新で行い、ダウンロードも同じ要求から
+開始する。生成時は LoRA の系統で routing 候補を絞る。UI の手動モデル選択に
+互換性判定を委ねない。
 
 ### UI
 
 * 検索行に種別（モデル本体 / LoRA）。Hugging Face には LoRA の経路が無いので、
   そちらを選んだときは種別を出さない
-* 「手元のモデルに載せられるものだけ」の絞り込み
-* 結果に系統と起動語。系統は載るなら緑、載らないなら黄で出す
-* 生成画面に LoRA の選択と強さ（0〜2、4 個まで）。選んだモデルに載せられる
-  ものだけを出す
+* 結果に系統と起動語。系統は詳細情報であり、土台を選ばせる操作にはしない
+* 生成画面に LoRA の選択と強さ（0〜2、4 個まで）。最初に選んだ LoRA と同じ
+  系統だけを追加選択でき、土台は自動 routing する
 * モデルの選択肢から LoRA を除く。混ぜると、選んでから断られる
 
 起動語は prompt に自動で足す。足したことは job に残る。既に入っている語は
@@ -5562,4 +5563,27 @@ version treeはv0.9.1が31,222,710 bytes、v0.9.2が31,133,110 bytes、永続fea
 CogVideoX 13.8GBの実managed download/removeは、既存外部evaluation snapshotを変更しないため
 **NOT TESTED**。既存snapshot 18,734,841,514 bytesとpartialを移動・削除していない。production動画生成も
 不採用gateを維持して **NOT TESTED**。Release: https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.9.2
+
+## LoRA zero-config base routing（2026-08-27）
+
+LoRA は単体生成モデルではなく、互換する base checkpoint が必要である。旧UIは不足時に
+「土台も一緒に取り込む」チェックと別downloadを要求し、生成時も手動checkpoint選択へ
+候補を従属させていた。さらにcustom Civitai entryのsourceを`huggingface`と保存していたため、
+登録後の実download URLが誤っていた。
+
+LoRA resolveは不足するbaseをexact revision・license・bytes込みのdependencyとして返す。
+UIはLoRAとdependencyの条件・合計容量を1回で確認し、1回の`models.custom.add`でcatalogを
+atomic更新して両方のmanaged downloadを開始する。baseはinstall後に同じ要求の後続処理で
+自動評価する。Createはinstalled LoRAをmanaged catalogでも`kind=lora`として認識し、LoRAを
+選ぶと手動model指定をautoへ戻す。core routingは選択LoRAの正規化familyをhard constraintにし、
+異系統混在をworker起動前に拒否する。trigger word自動追加とprovenance上のresolved modelは維持した。
+
+実Civitai APIで`civitai/58390`をread-only resolveした結果、revision `62833`、
+`lora.diffusers`、base `SD 1.5`、37,861,176 bytesと観測した。手元にbaseが無い条件では
+DreamShaper `civitai/4384` revision `128713`、2,132,625,894 bytesをdependencyとして解決した。
+検索APIではDetail Tweaker XL `civitai/122359` revision `135867`、base `SDXL 1.0`、
+228,452,344 bytesも観測した。重みdownloadは利用者による当該配布条件の同意前なので開始していない。
+
+focused 6 filesはPASS。最終`./mf.sh test`は757 passed / warning 1件 / 64.13秒。
+実ControlDeck install/browser、実LoRA weight適用の再生成比較、releaseはこの時点で **NOT TESTED**。
 証跡更新後のexact main gateは`./mf.sh test` 751 passed / warning 1件 / 54.52秒、`git diff --check` PASS。

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -168,6 +169,38 @@ def test_an_added_model_is_not_routable_until_it_is_measured(tmp_path: Path):
     assert entry["registry"]["state"] == "experimental"
     assert entry["registry"]["measurement_confidence"] == "low"
     assert entry["catalog"]["source"]["revision"] == COMMIT
+
+
+def test_a_civitai_entry_keeps_its_download_origin(tmp_path: Path):
+    """Civitai の ID を Hugging Face URL へ送ると、登録後の download が必ず失敗する。"""
+    store = catalog(tmp_path, hub_payload())
+    resolution = replace(resolve(store), repo_id="civitai/123", revision="456")
+
+    entry = store.add(
+        resolution, display_name="LoRA", license_acceptance="openrail++"
+    )
+
+    assert entry["catalog"]["source"]["kind"] == "civitai"
+
+
+def test_a_lora_bundle_is_one_durable_catalog_update(tmp_path: Path):
+    store = catalog(tmp_path, hub_payload())
+    lora = replace(resolve(store), repo_id="civitai/1", revision="11")
+    base = replace(resolve(store), repo_id="civitai/2", revision="22")
+
+    with pytest.raises(CustomModelError):
+        store.add_bundle((
+            (lora, "LoRA", "openrail++"),
+            (base, "Base", "wrong-license"),
+        ))
+
+    assert store.entries() == []
+
+    entries = store.add_bundle((
+        (lora, "LoRA", "openrail++"),
+        (base, "Base", "openrail++"),
+    ))
+    assert [item["registry"]["model_id"] for item in entries] == ["civitai/1", "civitai/2"]
 
 
 def test_the_same_model_cannot_be_added_twice(tmp_path: Path):

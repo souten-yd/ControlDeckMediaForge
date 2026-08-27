@@ -214,7 +214,9 @@ The current advanced panel remains the container. Add fields there rather than a
 
 - full domain list;
 - existing `model_policy` and manual model selector;
-- optional LoRA list compatible with the selected model;
+- optional LoRA list. Selecting a LoRA constrains automatic routing to a
+  compatible base-model family; the user does not select or apply that base
+  model separately;
 - structured SceneSpec / PoseSpec / CompositionSpec values;
 - explicit reference roles and strengths;
 - seed and compatible engine options when supported;
@@ -281,6 +283,18 @@ license_notice / gated flag
 ```
 
 Domain tags are advisory. Routing still verifies normalized capabilities, installed/healthy state, hardware support, measured resource envelope and selected quality policy.
+
+LoRA is a routing constraint, not a standalone generation model. In the normal
+flow the LoRA is the only model-like item the user chooses. Media Forge must:
+
+- install a compatible base checkpoint as part of the same confirmed download
+  when none is installed;
+- present the LoRA and dependency licenses, total download size, and disk
+  effect in one confirmation rather than silently accepting a dependency;
+- constrain automatic routing to the LoRA family and apply its trigger words;
+- reject mixed-family LoRAs before generation; and
+- keep the resolved base model in provenance/details without requiring a
+  separate base-model choice in the primary UI.
 
 Initial catalog targets are non-binding and must pass the existing R9700/ROCm adoption gate before becoming recommended/default:
 

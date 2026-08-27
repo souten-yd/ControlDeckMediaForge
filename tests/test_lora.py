@@ -166,6 +166,70 @@ def test_the_weight_and_the_count_are_bounded(tmp_path: Path):
             manager._requested_loras(store.get_job(job.id))
 
 
+def test_lora_choices_resolve_one_base_family_without_a_user_model_choice(tmp_path: Path):
+    from mediaforge.domain import JobRequest
+    from mediaforge.jobs import JobManager
+    from mediaforge.models import ModelDescriptor, ModelState
+    from mediaforge.models.registry import WeightFile
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    path = tmp_path / "lora.safetensors"
+    path.write_bytes(b"x")
+    lora = ModelDescriptor(
+        model_id="civitai/1", family="custom", version="1", revision="1",
+        weights_hash="sha256:" + "a" * 64, license="x",
+        runtime_adapter="lora.diffusers", capabilities=("image.lora",),
+        hardware_backends=("rocm",), state=ModelState.EXPERIMENTAL,
+        policy_rank={"auto": 1}, required_files=(),
+        weights=(WeightFile(path=path.name, size_bytes=1, sha256="b" * 64),),
+        installed=True, local_path=path, base_model="SDXL 1.0",
+    )
+    job = store.create_job(JobRequest(
+        operation="image.generate", intent="test",
+        constraints={"loras": [{"model_id": lora.model_id}]},
+    ))
+
+    assert manager._required_lora_family(store.get_job(job.id), (lora,)) == "sdxl"
+
+
+def test_mixed_lora_families_are_refused_before_routing(tmp_path: Path):
+    from dataclasses import replace
+
+    from mediaforge.domain import JobRequest
+    from mediaforge.jobs import JobManager, WorkerFailure
+    from mediaforge.models import ModelDescriptor, ModelState
+    from mediaforge.models.registry import WeightFile
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    path = tmp_path / "lora.safetensors"
+    path.write_bytes(b"x")
+    first = ModelDescriptor(
+        model_id="civitai/1", family="custom", version="1", revision="1",
+        weights_hash="sha256:" + "a" * 64, license="x",
+        runtime_adapter="lora.diffusers", capabilities=("image.lora",),
+        hardware_backends=("rocm",), state=ModelState.EXPERIMENTAL,
+        policy_rank={"auto": 1}, required_files=(),
+        weights=(WeightFile(path=path.name, size_bytes=1, sha256="b" * 64),),
+        installed=True, local_path=path, base_model="SDXL 1.0",
+    )
+    second = replace(first, model_id="civitai/2", base_model="SD 1.5")
+    job = store.create_job(JobRequest(
+        operation="image.generate", intent="test",
+        constraints={"loras": [{"model_id": first.model_id}, {"model_id": second.model_id}]},
+    ))
+
+    with pytest.raises(WorkerFailure) as failure:
+        manager._required_lora_family(store.get_job(job.id), (first, second))
+
+    assert failure.value.code == "lora_incompatible"
+
+
 def test_a_lora_path_outside_the_allowed_roots_is_refused(tmp_path: Path, monkeypatch):
     """境界の無い経路を通すと、任意の safetensors を読み込ませられる。"""
     from worker_packs.image import worker as image_worker
