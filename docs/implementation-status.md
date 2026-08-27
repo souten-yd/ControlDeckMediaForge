@@ -5585,5 +5585,28 @@ DreamShaper `civitai/4384` revision `128713`、2,132,625,894 bytesをdependency�
 228,452,344 bytesも観測した。重みdownloadは利用者による当該配布条件の同意前なので開始していない。
 
 focused 6 filesはPASS。最終`./mf.sh test`は757 passed / warning 1件 / 64.13秒。
-実ControlDeck install/browser、実LoRA weight適用の再生成比較、releaseはこの時点で **NOT TESTED**。
+release bump後の再実行も757 passed / warning 1件 / 55.35秒。
+
+Media Forge #151（exact head `e321755890fd013acf14b90263d5e77fa8cd1e18`、merge
+`963f26712e513515ef02b75aa249c4bab34e392c`）とv0.9.3 release #152（exact head
+`7c80970267521b69910f17495e3444d1717c1898`、merge/tag
+`db4eddd77cde5c2349b5ba80872832ce815f2495`）をmergeした。bundleは30,957,893 bytes、
+SHA-256 `41d7d392dba52527bfa8a11506eaeb0c83489926a01ea196085275389d70d397`。
+公開Releaseを別temporary directoryへ再取得してhash一致、manifest 275 bytes、signature 89 bytes、
+trusted publisher公開鍵によるEd25519検証成功を確認した。
+
+実ControlDeckの標準`./deck.sh feature update media-forge`は13.15秒、max RSS 786,640 KiB、
+swap 0で成功した。`version=0.9.3 / previous_version=0.9.2 / healthy`、`current`は
+`versions/0.9.3`。実process PID 159617/159621のうち159621が127.0.0.1:9130をlistenし、
+healthはhealthy / contract 2.0。v0.9.3 version treeは31,225,870 bytes、永続feature-dataは
+78,755,927,268 bytesで変更していない。
+
+短命identityで実ControlDeck opaque iframeを操作した。1280pxでLoRA検索結果
+`civitai/58390`、不足baseの「必要な土台も自動でダウンロードします」、単一の
+「同意してダウンロード」、旧`lora-base-together` 0件を確認した。1280px/320pxとも
+horizontal overflow 0、console/page error 0。短命sessionは終了時にrevokeした。
+
+当該配布条件の同意ボタンは押していないため、実LoRA weight downloadとsame-seed適用比較は
+**NOT TESTED**。これはライセンス未同意を成功扱いしない境界である。2026-08-25のSD1.5/SDXL
+実weight適用証跡は維持する。Release: https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.9.3
 証跡更新後のexact main gateは`./mf.sh test` 751 passed / warning 1件 / 54.52秒、`git diff --check` PASS。
