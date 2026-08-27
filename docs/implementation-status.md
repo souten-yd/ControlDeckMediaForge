@@ -5630,5 +5630,23 @@ metadataから組んだtemporary registryはLoRA `62833 / lora.diffusers / SD 1.
 重みdownloadは行っていない。
 
 focused 6 filesはPASS。最終`./mf.sh test`は759 passed / warning 1件 / 51.13秒。
-release、ControlDeck update、installed browser再試行はこの時点で **NOT TESTED**。
+release bump後の再実行も759 passed / warning 1件 / 52.19秒。
+
+Media Forge #154（exact head `240beeaccac8730d49b2af5bdf696f95a0f3dc07`、merge
+`0965efe5f51daa7869a338c6ddcedcb2304c36d5`）とv0.9.4 release #155（exact head
+`4e9629c`、merge/tag `9fc7793a1dc7e1a7c673aecc35dfad090ef25c98`）をmergeした。
+bundleは30,959,024 bytes、SHA-256
+`cec0920bb79dd0179965d2ecc6f220fbed477348c8a4c915b719ec77e5d59093`。公開Releaseを
+別temporary directoryへ再取得してhash一致、manifest 275 bytes、signature 89 bytes、Ed25519
+検証成功を確認した。
+
+実ControlDeckの標準updateは16.68秒、max RSS 786,880 KiB、swap 0で成功した。
+`version=0.9.4 / previous_version=0.9.3 / healthy`、`current=versions/0.9.4`、PID
+181500/181506、127.0.0.1:9130、contract 2.0。v0.9.4 treeは31,226,582 bytes。
+
+短命identityで実installed iframeを再確認した。1280pxで`civitai/58390`を検索・resolveし、
+DreamShaper dependency、自動base本文、単一の「同意してダウンロード」を確認した。1280px/320px
+ともhorizontal overflow 0、console/page error 0。sessionはrevokeした。同意ボタンは押しておらず、
+07:00 UTC以降のmodel operationは0件、weight download 0。利用者がUIから再同意して初めて実取得を
+開始する。Release: https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.9.4
 証跡更新後のexact main gateは`./mf.sh test` 751 passed / warning 1件 / 54.52秒、`git diff --check` PASS。
