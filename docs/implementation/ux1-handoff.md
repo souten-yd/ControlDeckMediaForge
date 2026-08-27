@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-27
-branch      ux1/lora-zero-config（origin/main c9388f0 から作成）
+branch      release/v093（origin/main 963f267 から作成）
 slice       LoRA-only selection with automatic base download/routing/evaluation
-状態        実装・live Civitai resolve・full test完了 / PR・release・installed browser前
+状態        実装PR #151 merge・live Civitai resolve・full test完了 / v0.9.3 release前
 baseline    focused 6 files passed / final full 757 passed / 1 warning / 64.13s
 installed   v0.9.2 / PID 46572 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         生成再評価0。既存G7不採用証跡を維持
-PR          ControlDeck変更0 / Media Forge PR前
+PR          ControlDeck変更0 / Media Forge #151 merged / release PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
