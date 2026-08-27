@@ -6,14 +6,14 @@
 ## 現在地
 
 ```text
-最終更新    2026-08-26
-branch      release/v091-installed-handoff（origin/main cc3f342 から作成）
-slice       v0.9.1 release / installed video-screen reachability
-状態        release・標準update・installed browser到達評価完了 / 証跡PR前
-baseline    focused 199 passed / full 751 passed / 1 warning / 53.52s
-installed   v0.9.1 / PID 2325466,2325471 / 127.0.0.1:9130 / healthy / contract 2.0
-GPU         動画runtime/weight/GPU生成はNOT TESTED / license同意0
-PR          ControlDeck変更0 / Media Forge #145,#146,#147 merged / 証跡PR前
+最終更新    2026-08-27
+branch      ux1/video-model-management-clarity（origin/main 02f1ac1 から作成）
+slice       v0.9.2 video model add/remove management and runtime-gate clarity
+状態        実装・source browser評価完了 / PR・release・installed acceptance前
+baseline    focused 211 + 155 passed / full 751 passed / 1 warning / 51.73s
+installed   v0.9.1 / PID 9724,9728 / 127.0.0.1:9130 / healthy / contract 2.0
+GPU         生成再評価0。既存G7不採用証跡を維持
+PR          ControlDeck変更0 / Media Forge PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -71,15 +71,14 @@ Mobile Create media switch は Media Forge #145、exact head
 ## この slice の結果
 
 ```text
-PASS       Create最上部の画像／動画切り替えとserver-side preference復元
-PASS       unavailable動画面の理由、disabled submit、設定exit
-PASS       390px/320px、44px touch target、horizontal overflow 0
-PASS       standalone/installed ControlDeck real Chromium、browser errors 0
-PASS       experimental capability時のtext/image-to-video exact request捕捉
+PASS       実ControlDeck v0.9.1で現象再現。動画候補12／追加可能0／削除可能2
+PASS       モデル管理入口、管理件数、常時表示の操作不能理由
+PASS       license acceptanceとruntime採用gateの分離表示
+PASS       CogVideoX-2Bをbounded managed checkpointへ変更。追加可能1
+PASS       standalone 1280px/320px、horizontal overflow 0、browser errors 0
 PASS       focused tests / full 751 / static checks
-PASS       signed v0.9.1 release / public redownload hash / ControlDeck standard update
-PASS       installed routeから動画面へ到達 / current v0.9.1 / rollback v0.9.0保持
-NOT TESTED 実動画runtime / weight / GPU生成 / 出力品質 / timeline編集
+NOT TESTED CogVideoX実download/remove、v0.9.2 release/install、installed v0.9.2 browser
+NOT TESTED production動画生成。capability unavailableを維持
 ```
 
 公開video capabilityは`video.text_to_video`と`video.image_to_video`の両方を
@@ -89,9 +88,9 @@ submitしない。既存`video.generate`契約、candidate catalog、routing/ado
 ## 次にやること（1つだけ）
 
 ```text
-1. 次の正規goalはG9。実装前に候補、license、gfx1201/ROCm、VRAM、G8境界の調査計画を作る
-2. Hunyuan3D等のweight取得・利用開始はlicense条項を提示し、利用者の明示同意後だけ行う
-3. G7は明示license acceptanceまたは別の実用候補が現れるまでDEFERREDを維持する
+1. このsliceをcommit/push/PR/mergeし、v0.9.2 signed bundleを公開する
+2. ControlDeck標準update後、installed browserで追加1／削除2と理由表示を確認する
+3. 13.8GB CogVideoX実download/removeは既存snapshotを壊さない隔離storeで評価する
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South

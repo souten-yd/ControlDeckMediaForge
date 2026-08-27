@@ -137,8 +137,11 @@ three outputs had the same SHA-256. The catalog therefore records measured
 ROCm resource confidence while retaining `experimental`, no recommended
 profile, and no routable availability.
 
-The three bounded Wan generation repositories are eligible for explicit
-Media-Forge-managed download. Animate remains external because its official
+The three bounded Wan generation repositories and the self-contained,
+license-complete CogVideoX-2B checkpoint are eligible for explicit
+Media-Forge-managed download. CogVideoX remains experimental and unavailable
+after download because its production runtime gate failed; managed checkpoint
+ownership is not runtime adoption. Animate remains external because its official
 preprocessing package contains separately structured detection, pose and
 segmentation assets that are not yet a bounded worker bundle. LTX-2.3 and
 HunyuanVideo 1.5 also remain external because their runnable package includes

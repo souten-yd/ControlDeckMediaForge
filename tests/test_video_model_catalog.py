@@ -81,12 +81,12 @@ def test_only_bounded_complete_video_snapshots_are_managed() -> None:
         "Wan-AI/Wan2.2-TI2V-5B",
         "Wan-AI/Wan2.2-I2V-A14B",
         "Wan-AI/Wan2.2-T2V-A14B",
+        "zai-org/CogVideoX-2b",
         "unsloth/MiniMax-H3-GGUF",
     }
     assert {model_id for model_id, model in candidates.items() if model.ownership == ModelOwnership.EXTERNAL} == {
         "Wan-AI/Wan2.2-Animate-14B",
         "Lightricks/LTX-2.3",
-        "zai-org/CogVideoX-2b",
         "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
         "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
         "tencent/HunyuanVideo-1.5",

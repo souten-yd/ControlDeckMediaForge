@@ -56,7 +56,7 @@ const CAPABILITY_REASON = {
   model_registry_invalid: "モデル一覧を読み込めません",
   planned_for_g7: "これからの対応予定です",
   planned_for_g9: "これからの対応予定です",
-  video_runtime_not_adopted: "実用条件を満たす動画モデルがまだありません",
+  video_runtime_not_adopted: "実用条件を満たす動画の実行環境がまだありません",
   text_generator_unavailable: "ControlDeck の文章による演出補助をいま使えません",
   runtime_not_installed: "3D整形ランタイムが導入されていません",
 };
@@ -547,6 +547,21 @@ function videoCapabilityUsable(name = videoCapabilityName()) {
   return ["available", "experimental"].includes(capabilityState(name));
 }
 
+function installedVideoModels() {
+  return state.modelCatalog.filter((model) => model.installed &&
+    (model.media_types.includes("video") || model.media_types.includes("audio_video")));
+}
+
+function unavailableVideoReason(value) {
+  if (value.reason !== "video_runtime_not_adopted") {
+    return `${CAPABILITY_REASON[value.reason] || "この動画機能はいま使えません"}。`;
+  }
+  if (installedVideoModels().length) {
+    return "動画モデルは導入済みですが、実用品質とメモリ安全性を満たした実行環境がまだ採用されていません。";
+  }
+  return "動画モデルがまだ導入されていません。モデル管理で候補を確認してください。";
+}
+
 function renderCreateMedia() {
   const video = state.createMedia === "video";
   app().dataset.createMedia = video ? "video" : "image";
@@ -573,7 +588,7 @@ function renderCreateMedia() {
     : "文章から短い動画を作ります。画像を足すと、その画像を動かします。";
   byId("video-create-note").textContent = usable
     ? (value.state === "experimental" ? "試験中の動画機能です。結果の品質は保証されません。" : "")
-    : `${CAPABILITY_REASON[value.reason] || "この動画機能はいま使えません"}。`;
+    : unavailableVideoReason(value);
   byId("video-create-settings").hidden = usable;
 
   const submit = byId("create-submit");
@@ -4353,7 +4368,7 @@ function runnabilityCell(model) {
    検索結果と同じ表の言葉づかいに揃える。 */
 function modelStateLabel(model) {
   if (!model.installed) return "未導入";
-  return model.healthy ? "導入済み" : "要確認";
+  return model.healthy ? "導入済み・利用可" : "導入済み・利用不可";
 }
 
 function modelActionCell(model, modelKey) {
@@ -4374,11 +4389,13 @@ function modelActionCell(model, modelKey) {
   // 押せないものをボタンにしない。押せる見た目なのに反応しないと、何が
   // 足りないのかを利用者が推測することになる。できないときは理由を書く。
   const unavailable = (text, why) => {
+    const status = document.createElement("span");
+    status.className = "model-action-status";
+    status.textContent = text;
     const note = document.createElement("span");
-    note.className = "hint";
-    note.textContent = text;
-    note.title = why;
-    cell.append(note);
+    note.className = "model-action-note";
+    note.textContent = why;
+    cell.append(status, note);
     return cell;
   };
   if (!state.modelManagementAvailable) {
@@ -4425,10 +4442,16 @@ function modelActionCell(model, modelKey) {
     const evaluate = document.createElement("button");
     evaluate.type = "button";
     evaluate.dataset.evaluateModel = modelKey;
-    evaluate.textContent = "評価";
-    cell.append(evaluate);
+      evaluate.textContent = "評価";
+      cell.append(evaluate);
   }
   cell.append(action);
+  if (!model.installed && model.media_types.some((item) => item === "video" || item === "audio_video")) {
+    const note = document.createElement("span");
+    note.className = "model-action-note";
+    note.textContent = "ダウンロードだけでは動画生成は有効になりません。実機評価と実行環境の採用が別に必要です。";
+    cell.append(note);
+  }
   return cell;
 }
 
@@ -4620,6 +4643,24 @@ function renderModelManagement() {
     }
     return true;
   });
+  const videoModels = state.modelCatalog.filter((model) =>
+    model.media_types.includes("video") || model.media_types.includes("audio_video"));
+  const installedVideo = videoModels.filter((model) => model.installed);
+  const downloadableVideo = videoModels.filter((model) => !model.installed &&
+    model.ownership === "managed" && model.approx_download_bytes < MAX_MANAGED_MODEL_DOWNLOAD_BYTES);
+  const removableVideo = videoModels.filter((model) => model.installed && model.removable);
+  const note = byId("model-management-note");
+  if (state.modelFilter === "video") {
+    note.textContent = `動画候補 ${videoModels.length} 件中、導入済み ${installedVideo.length} 件、` +
+      `追加可能 ${downloadableVideo.length} 件、削除可能 ${removableVideo.length} 件。` +
+      (installedVideo.length && !installedVideo.some((model) => model.healthy)
+        ? "導入済みモデルはありますが、ライセンス同意とは別の実用品質・メモリ安全性の評価を満たしていないため、動画生成にはまだ使えません。"
+        : "追加・削除は各行の操作欄から行えます。");
+    note.hidden = false;
+  } else {
+    note.textContent = "モデルの追加・削除は各行の操作欄から行えます。操作できない候補には理由を表示します。";
+    note.hidden = false;
+  }
   renderModelDownloads();
   renderModelTable(visible);
   byId("model-table").hidden = visible.length === 0;

@@ -24,11 +24,13 @@
           <button type="button" id="mode-simple" aria-pressed="true">シンプル</button>
           <button type="button" id="mode-advanced" aria-pressed="false">詳細</button>
         </div>
-        <button type="button" id="nav-settings" class="icon" data-view="settings" aria-label="設定" title="設定">
+        <button type="button" id="nav-settings" class="icon settings-entry" data-view="settings"
+                aria-label="モデル管理と設定" title="モデル管理と設定">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="3.2"/>
             <path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.8-1.4-1.9-3.2-2.2.9a7.6 7.6 0 0 0-2.6-1.5L14.2 3H9.8l-.3 2.3a7.6 7.6 0 0 0-2.6 1.5l-2.2-.9L2.8 9.1l1.8 1.4a7.6 7.6 0 0 0 0 3l-1.8 1.4 1.9 3.2 2.2-.9a7.6 7.6 0 0 0 2.6 1.5l.3 2.3h4.4l.3-2.3a7.6 7.6 0 0 0 2.6-1.5l2.2.9 1.9-3.2z"/>
           </svg>
+          <span class="settings-label">モデル管理</span>
         </button>
       </header>
 
@@ -378,6 +380,7 @@
               <button type="button" class="chip" data-model-filter="all" aria-checked="false">すべて</button>
             </div>
           </div>
+          <p id="model-management-note" class="model-management-note" role="status"></p>
           <div id="model-table" class="table-wrap" hidden></div>
 
           <p id="model-empty" class="hint" hidden>条件に合うモデルはありません。</p>

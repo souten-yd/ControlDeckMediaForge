@@ -482,6 +482,10 @@ not authorize a video worker. Only a bounded, revision-pinned checkpoint set
 may use the Media-Forge-managed installer. Repositories whose runnable package
 still depends on separately managed preprocessing/runtime assets remain
 external until that package boundary is specified.
+The standard runtime library may remain unadopted while a self-contained,
+license-complete checkpoint set is managed; in that case Model Management must
+state that download/removal does not enable generation. CogVideoX-2B is such a
+bounded comparison checkpoint, not an adopted production route.
 
 **3D**
 

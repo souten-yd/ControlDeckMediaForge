@@ -5511,3 +5511,30 @@ submitはdisabledだった。これは導線のPASSであり、実動画runtime/
 
 release前gateはfocused 199件と`./mf.sh test` 751件がPASS（既知warning 1件 / 53.52s）。GitHubの
 required checkは設定0件だった。
+
+## v0.9.2 video model management clarity（2026-08-27）
+
+実ControlDeck v0.9.1の`/x/media-forge/workspace/create`から動画面、設定exit、動画候補filterまでを
+短命test identityで再現した。候補12件は表示されたが、導入済みWan TI2V／MiniMax H3 GGUFだけが削除可能、
+未導入候補は外部管理または容量超過であり、操作不能理由がhover titleに隠れていた。また導入済み未採用状態を
+「要確認」、Create側を「実用条件を満たす動画モデルがまだありません」と表示していたため、利用者からは
+追加・削除機能が無く、license acceptance不足で生成不可に見える状態だった。
+
+設定contributionとPCヘッダの入口を「モデル管理」と明記し、動画filterで候補／導入済み／追加可能／削除可能の
+件数を表示する。各行は`導入済み・利用可/利用不可`を区別し、外部管理・容量超過の理由をtouchでも常時読める
+本文にした。Createは導入済み動画モデルを検出した場合、モデル不足とは言わず「実用品質とメモリ安全性を
+満たした実行環境が未採用」と説明する。license acceptanceはexact checkpointのdownload許可であり、runtime
+採用ではないことも動画filterへ明記した。
+
+CogVideoX-2Bは13,775,572,738 bytes、exact revision、LICENSE、必須file、全weight size/SHA-256が閉じ、
+32,000,000,000 bytes未満のmanaged installer条件を満たすため、checkpoint ownershipだけを`managed`へ変更した。
+これにより現在の動画filterは候補12／導入済み2／追加可能1／削除可能2となる。CogVideoXのdownload/removeは
+可能になるが、R9700評価でaction adherence、latency、system swap gateを落としているため`experimental`、
+healthy=false、recommended 0、公開video capability unavailableは維持する。download操作の横にも、取得だけで
+動画生成は有効にならないと表示する。
+
+focused frontend/catalog/manager/transportは211件、その後catalog/manager/frontendは155件がPASSした。
+最終`./mf.sh test`は751 passed / warning 1件 / 51.73秒。branch coreを実feature-dataへread-only相当で
+別port 9131起動し、standalone Chromium 1280px/320pxで上記件数、CogVideoX download表示、理由本文、横overflow 0、
+console/page error 0を確認した。実download（13.8GB）、remove、signed v0.9.2 bundle、標準ControlDeck update、
+installed-host browserはこの時点では **NOT TESTED**。既存Wan/H3 modelは削除していない。
