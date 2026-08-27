@@ -5609,4 +5609,26 @@ horizontal overflow 0、console/page error 0。短命sessionは終了時にrevok
 当該配布条件の同意ボタンは押していないため、実LoRA weight downloadとsame-seed適用比較は
 **NOT TESTED**。これはライセンス未同意を成功扱いしない境界である。2026-08-25のSD1.5/SDXL
 実weight適用証跡は維持する。Release: https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.9.3
+
+## Civitai LoRA/DreamShaper registration repair（2026-08-27）
+
+利用者が実ControlDeck v0.9.3でCivitaiのLoRAと自動base DreamShaperを導入しようとすると、
+「導入できない」と表示された。永続状態をread-only調査したところ、16:25の試行後も新規
+model operationは0件で、custom catalogにもCivitai entryは残っていなかった。download開始前の
+catalog parser rollbackである。
+
+実Civitai exact revision `civitai/58390@62833`（LoRA）と`civitai/4384@128713`
+（DreamShaper）をtemporary catalogへ組むと、最初に`model registry identity is invalid`を再現した。
+source parserはCivitaiの数値versionを許可していたが、runtime descriptorだけ40桁Git commit固定だった。
+`civitai/<number>` namespaceに限って1〜12桁の数値versionをimmutable runtime identityとして許可した。
+generic repositoryの40-hex制約は維持する。
+
+続いて単一SafeTensor配布の`required_files=[]`を拒否する不整合も再現した。weightsは従来どおり
+非空、正のsize、公開SHA-256必須のまま、追加config fileだけ空を許可した。修正後、live Civitai
+metadataから組んだtemporary registryはLoRA `62833 / lora.diffusers / SD 1.5`とDreamShaper
+`128713 / diffusers.sdxl-single-file / SD 1.5`の2件をparseし、installed=falseとして返した。
+重みdownloadは行っていない。
+
+focused 6 filesはPASS。最終`./mf.sh test`は759 passed / warning 1件 / 51.13秒。
+release、ControlDeck update、installed browser再試行はこの時点で **NOT TESTED**。
 証跡更新後のexact main gateは`./mf.sh test` 751 passed / warning 1件 / 54.52秒、`git diff --check` PASS。
