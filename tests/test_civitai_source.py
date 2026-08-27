@@ -14,6 +14,7 @@ import pytest
 
 from mediaforge.civitai import CivitaiError, CivitaiSource, repo_id_for
 from mediaforge.custom_models import CustomModelCatalog, CustomModelError, source_of
+from mediaforge.models import ModelRegistry
 
 
 def version_document(**overrides) -> dict:
@@ -155,6 +156,61 @@ def test_the_options_reach_the_stored_entry(tmp_path: Path):
     options = stored["entries"][0]["registry"]["runtime_options"]
     assert options["base_model"] == "SD 1.5"
     assert entry["registry"]["runtime_adapter"] == "diffusers.sdxl-single-file"
+
+
+def test_lora_and_dreamshaper_numeric_versions_pass_the_shared_registry(tmp_path: Path):
+    """実再現: resolve後の共通parserだけがCivitaiの数値versionを拒否していた。"""
+    def handler(request: httpx.Request) -> httpx.Response:
+        version_id = int(request.url.path.rsplit("/", 1)[-1])
+        if version_id == 62833:
+            document = version_document(
+                id=62833,
+                name="Detail Tweaker",
+                baseModel="SD 1.5",
+                model={"type": "LORA"},
+                files=[{
+                    "name": "add_detail.safetensors", "type": "Model", "sizeKB": 36974,
+                    "metadata": {"format": "SafeTensor", "fp": "fp16"},
+                    "hashes": {"SHA256": "a" * 64},
+                    "downloadUrl": "https://civitai.com/api/download/models/62833",
+                }],
+            )
+        else:
+            document = version_document(id=128713, model={"type": "Checkpoint"})
+        return httpx.Response(200, json=document)
+
+    custom = CustomModelCatalog(
+        tmp_path / "custom.json", transport=httpx.MockTransport(handler)
+    )
+    lora = asyncio.run(custom.resolve_source("civitai", "civitai/58390", "62833"))
+    base = asyncio.run(custom.resolve_source("civitai", "civitai/4384", "128713"))
+    custom.add_bundle((
+        (lora, "Detail Tweaker", lora.license),
+        (base, "DreamShaper", base.license),
+    ))
+    extra_models, extra_catalog = custom.manifests()
+
+    registry = ModelRegistry.load(
+        Path(__file__).parents[1] / "worker_packs/image/models.json",
+        catalog_manifest=Path(__file__).parents[1] / "worker_packs/image/catalog.json",
+        hf_home=tmp_path / "hf",
+        model_store_root=tmp_path / "models",
+        extra_models=extra_models,
+        extra_catalog=extra_catalog,
+    )
+
+    found = {item.model_id: item for item in registry.all()}
+    assert found["civitai/58390"].revision == "62833"
+    assert found["civitai/58390"].is_lora
+    assert found["civitai/4384"].revision == "128713"
+
+
+def test_numeric_runtime_revision_is_limited_to_the_civitai_namespace():
+    from mediaforge.models.registry import _model_revision_valid
+
+    assert _model_revision_valid("civitai/58390", "62833")
+    assert not _model_revision_valid("owner/model", "62833")
+    assert not _model_revision_valid("civitai/not-a-number", "62833")
 
 
 def test_an_unknown_site_is_refused(tmp_path: Path):

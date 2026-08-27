@@ -20,6 +20,9 @@ from .generation_defaults import (  # noqa: F401
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
+_GIT_REVISION = re.compile(r"^[0-9a-f]{40}$")
+_CIVITAI_MODEL_ID = re.compile(r"^civitai/[0-9]{1,12}$")
+_CIVITAI_REVISION = re.compile(r"^[0-9]{1,12}$")
 # 配布元ごとに、revision が何を指すかが違う。Hugging Face は commit、
 # Civitai は version の番号である。片方の形を両方に当てると、取り込めるはずの
 # ものを弾くか、指していないものを指せるようになる。
@@ -33,6 +36,20 @@ _SOURCE_KINDS = frozenset(_SOURCE_REVISIONS)
 def _source_revision_valid(source: "ModelSource") -> bool:
     pattern = _SOURCE_REVISIONS.get(source.kind)
     return pattern is not None and pattern.fullmatch(source.revision) is not None
+
+
+def _model_revision_valid(model_id: str, revision: str) -> bool:
+    """Validate the immutable identity used for the installed snapshot.
+
+    Hugging Face names an immutable commit. Civitai has no Git commit in its
+    public contract; its immutable identity is the numeric model-version ID.
+    Only the explicit ``civitai/<number>`` namespace gets that exception, so a
+    generic repository cannot weaken the 40-hex requirement.
+    """
+    return _GIT_REVISION.fullmatch(revision) is not None or (
+        _CIVITAI_MODEL_ID.fullmatch(model_id) is not None
+        and _CIVITAI_REVISION.fullmatch(revision) is not None
+    )
 _DOMAINS = {"general", "anime", "illustration", "photoreal", "game2d", "poster", "character_sheet", "background"}
 _MEDIA_TYPES = {"image", "video", "audio_video"}
 
@@ -217,9 +234,20 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         raise ModelRegistryError("model registry state is invalid") from exc
     model_id = _required_string(value, "model_id")
     revision = _required_string(value, "revision")
-    if _MODEL_ID.fullmatch(model_id) is None or re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+    if _MODEL_ID.fullmatch(model_id) is None or not _model_revision_valid(model_id, revision):
         raise ModelRegistryError("model registry identity is invalid")
-    required_files = _string_tuple(value, "required_files")
+    required_value = value.get("required_files")
+    if (
+        not isinstance(required_value, list)
+        or any(not isinstance(path, str) or not path for path in required_value)
+    ):
+        raise ModelRegistryError(
+            "model registry field required_files must be a string array"
+        )
+    # A Civitai single-file model has no config files beside its one verified
+    # weight.  The weights array remains non-empty and digest-bound; requiring
+    # an unrelated extra file would make every valid single-file entry fail.
+    required_files = tuple(required_value)
     if any(Path(path).is_absolute() or ".." in Path(path).parts for path in required_files):
         raise ModelRegistryError("model registry required file path must be relative and contained")
     measurements = value.get("measurements")
