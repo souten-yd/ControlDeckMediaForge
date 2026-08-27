@@ -1186,27 +1186,16 @@ function renderCatalogResults(items) {
 
 /* ── LoRA の選択 ──────────────────────────────────────────────────────── */
 
-/* LoRA は選んだモデルに載せるもの。載せられないものを並べると、選んでから
-   断られる。系統が合うものだけを出す。 */
+/* LoRA が土台を決める。利用者に先に checkpoint を選ばせるのではなく、最初に
+   選んだ LoRA と同じ系統だけを追加候補にして backend の自動 routing へ渡す。 */
 function loraCandidates() {
-  const target = targetModelFamily();
+  const selected = (state.selectedLoras || [])[0];
+  const target = selected
+    ? normalizeFamily(state.modelCatalog.find((item) => item.model_id === selected.model_id)?.base_model)
+    : "";
   return state.modelCatalog.filter((model) =>
     model.kind === "lora" && model.installed
     && (!target || normalizeFamily(model.base_model) === target));
-}
-
-/* どのモデルに載る前提で見せているか。指定があればそれ、無ければ選べるものが
-   1 つに定まるときだけ。定まらないなら系統で絞らず、全部出して警告する。 */
-function targetModelFamily() {
-  const chosen = state.modelChoice === "manual"
-    ? byId("model-choice-model")?.value
-    : (byId("advanced-policy")?.value === "manual" ? byId("advanced-model")?.value : "");
-  const usable = state.modelCatalog.filter(
-    (model) => model.kind !== "lora" && model.installed && model.healthy);
-  const model = chosen
-    ? usable.find((item) => item.model_id === chosen)
-    : (usable.length === 1 ? usable[0] : null);
-  return model ? normalizeFamily(model.base_model) : "";
 }
 
 function renderLoraPicker() {
@@ -1216,12 +1205,11 @@ function renderLoraPicker() {
   block.hidden = installed.length === 0;
   if (block.hidden) return;
   const candidates = loraCandidates();
-  const target = targetModelFamily();
   byId("lora-picker-note").textContent = candidates.length
-    ? (target
-        ? "選んだモデルに載せられるものだけを出しています。"
-        : "使うモデルが決まっていないので、全部出しています。系統が合わないものは生成時に断ります。")
-    : "選んだモデルに載せられる LoRA がありません。";
+    ? ((state.selectedLoras || []).length
+        ? "同じ系統の LoRA だけを追加できます。土台は自動で選びます。"
+        : "LoRA を選ぶだけで、互換する土台と起動語を自動適用します。")
+    : "一緒に使える LoRA がありません。";
   byId("lora-list").replaceChildren(...candidates.map((lora) => {
     const row = document.createElement("div");
     row.className = "lora-row";
@@ -1301,9 +1289,6 @@ function renderCatalogType() {
       chip.setAttribute("aria-checked", String(chip.dataset.modelType === "checkpoint"));
     }
   }
-  const lora = civitai && catalogType() === "lora";
-  const fit = byId("catalog-fit");
-  if (fit) fit.hidden = !lora;
 }
 
 function catalogSource() {
@@ -1321,7 +1306,7 @@ function renderCatalogSource() {
   const shape = CATALOG_SOURCES[chosen] || CATALOG_SOURCES.civitai;
   renderCatalogType();
   byId("catalog-source-note").textContent = catalogType() === "lora"
-    ? "LoRA はモデル本体に載せて使います。載せる先が手元に無ければ、取り込むときに知らせます。"
+    ? "LoRA を選ぶと、必要な土台と起動語も自動で準備します。"
     : shape.note;
   // 効かない絞り込みを出しておくと、絞ったつもりの結果を見ることになる。
   const style = byId("catalog-style");
@@ -1348,9 +1333,7 @@ async function searchCatalog() {
   }
   state.installedFamilies = found.installed_families || [];
   const rows = (found.items || []).map((item) => ({...item, model_type: catalogType()}));
-  state.catalogResults = byId("catalog-fit-only")?.checked
-    ? rows.filter(catalogFits)
-    : rows;
+  state.catalogResults = rows;
   state.catalogPage = 0;
   if (!state.catalogResults.length && rows.length) {
     empty.hidden = false;
@@ -1407,17 +1390,35 @@ function renderCustomResolution(resolution) {
     return;
   }
 
+  const dependency = resolution.dependency;
+  if (dependency) {
+    const title = document.createElement("p");
+    title.className = "settings-check-title";
+    title.textContent = "必要な土台も自動でダウンロードします";
+    const body = document.createElement("p");
+    body.className = "settings-reason";
+    body.textContent = `${dependency.display_name} · ${formatBytes(dependency.total_bytes)} · ${dependency.license}`;
+    const total = document.createElement("p");
+    total.className = "hint";
+    total.textContent = `合計ダウンロード: ${formatBytes(
+      Number(resolution.total_bytes || 0) + Number(dependency.total_bytes || 0))}`;
+    holder.append(title, body, total);
+  }
+
   const accept = document.createElement("label");
   accept.className = "check";
   const box = document.createElement("input");
   box.type = "checkbox";
   box.id = "custom-accept";
-  accept.append(box, document.createTextNode(`「${resolution.license}」の条件を確認して承諾します`));
+  const licenses = dependency
+    ? `LoRA「${resolution.license}」と土台「${dependency.license}」`
+    : `「${resolution.license}」`;
+  accept.append(box, document.createTextNode(`${licenses}の条件を確認して承諾します`));
   const add = document.createElement("button");
   add.type = "button";
   add.id = "custom-add";
   add.className = "primary";
-  add.textContent = "取り込む";
+  add.textContent = "同意してダウンロード";
   // 確認だけして止める道を残す。閉じ方が無いと、中身を見た後に検索へ戻れない。
   const cancel = document.createElement("button");
   cancel.type = "button";
@@ -1444,54 +1445,6 @@ async function resolveCustomModel(repoId, revision = "main") {
     return;
   }
   renderCustomResolution(customResolution);
-  await renderLoraBaseRequirement(customResolution);
-}
-
-/* LoRA だけ落としても絵は作れない。載せる先が手元に無ければ、押す前に
-   何をいくら落とすことになるかを見せる。LoRA は 40MB 前後だが土台は
-   2〜7GB あるので、黙って始めると 40MB のつもりが 7GB 落ちてくる。 */
-async function renderLoraBaseRequirement(resolution) {
-  const holder = byId("lora-base-note");
-  if (!holder) return;
-  holder.hidden = true;
-  holder.replaceChildren();
-  state.pendingLoraBase = null;
-  if (!resolution || resolution.runtime_adapter !== "lora.diffusers") return;
-  const base = String(resolution.runtime_options?.base_model || "");
-  let report;
-  try {
-    report = await call("models.custom.lora_base", {base_model: base});
-  } catch { return; }
-  if (report.satisfied) {
-    holder.hidden = false;
-    holder.className = "hint";
-    holder.textContent = `${base} のモデルが手元にあります。この LoRA はそのまま載せられます。`;
-    return;
-  }
-  holder.hidden = false;
-  holder.className = "settings-check";
-  const title = document.createElement("p");
-  title.className = "settings-check-title";
-  title.textContent = "載せる先のモデルがありません";
-  const body = document.createElement("p");
-  body.className = "settings-reason";
-  const candidate = report.candidate;
-  body.textContent = candidate
-    ? `この LoRA は ${base} 用です。手元に ${base} のモデルがないので、`
-      + `「${candidate.display_name}」（${formatBytes(candidate.weight_bytes)}）も一緒に取り込みます。`
-    : `この LoRA は ${base} 用です。手元に ${base} のモデルがありません。`;
-  holder.append(title, body);
-  if (!candidate) return;
-  const together = document.createElement("label");
-  together.className = "check";
-  const box = document.createElement("input");
-  box.type = "checkbox";
-  box.id = "lora-base-together";
-  box.checked = true;
-  together.append(box, document.createTextNode(
-    `土台も一緒に取り込む（追加で ${formatBytes(candidate.weight_bytes)}）`));
-  holder.append(together);
-  state.pendingLoraBase = candidate;
 }
 
 async function addCustomModel() {
@@ -1504,38 +1457,31 @@ async function addCustomModel() {
     return;
   }
   try {
-    await call("models.custom.add", {
+    const added = await call("models.custom.add", {
       repo_id: customResolution.repo_id,
       revision: customResolution.revision,
       display_name: customResolution.repo_id,
       license_acceptance: customResolution.license,
+      ...(customResolution.dependency ? {dependency: {
+        repo_id: customResolution.dependency.repo_id,
+        revision: customResolution.dependency.revision,
+        display_name: customResolution.dependency.display_name,
+        license_acceptance: customResolution.dependency.license,
+      }} : {}),
     });
+    for (const operation of added.operations || []) {
+      state.modelOperations.set(operation.id, operation);
+    }
+    if ((added.operations || []).length) {
+      await call("models.operations.watch", {
+        operation_ids: added.operations.map((operation) => operation.id),
+      });
+    }
   } catch (failure) {
     error.hidden = false;
     error.textContent = failure?.message || "取り込めませんでした。";
     return;
   }
-  /* 土台は LoRA が入ってから取り込む。先に落として LoRA 側が失敗すると、
-     頼んでいない 7GB だけが残る。 */
-  const base = state.pendingLoraBase;
-  if (base && byId("lora-base-together")?.checked) {
-    try {
-      const resolved = await call("models.custom.resolve", {
-        repo_id: base.repo_id, revision: base.revision,
-      });
-      await call("models.custom.add", {
-        repo_id: resolved.repo_id,
-        revision: resolved.revision,
-        display_name: base.display_name || resolved.repo_id,
-        license_acceptance: resolved.license,
-      });
-    } catch (failure) {
-      error.hidden = false;
-      error.textContent = `LoRA は取り込みました。土台の取り込みに失敗しました: ${
-        failure?.message || "原因不明"}`;
-    }
-  }
-  state.pendingLoraBase = null;
   byId("custom-result").hidden = true;
   customResolution = null;
   await refreshSession(["models", "model_catalog"]);
@@ -2912,6 +2858,12 @@ function qaOptions() {
    fast / balanced / quality / low_vram まで到達できる。段階開示で作り、
    機能削除では作らない。 */
 function modelSelection() {
+  /* LoRA 自身が互換 family を指定する。以前の手動 checkpoint 選択が残っていても
+     それを利用者に直させず、同じ family 内の measured model を自動 routing する。 */
+  if (selectedLoras().length) {
+    const policy = state.mode === "advanced" ? byId("advanced-policy")?.value : "auto";
+    return {model_policy: policy && policy !== "manual" ? policy : "auto"};
+  }
   if (state.modelChoice === "manual") {
     const modelId = byId("model-choice-model").value;
     return modelId ? {model_policy: "manual", model_id: modelId} : {};
@@ -4902,6 +4854,7 @@ document.addEventListener("change", (event) => {
       rest.push({model_id: id, weight});
     }
     state.selectedLoras = rest;
+    renderLoraPicker();
   }
 });
 
@@ -4925,8 +4878,6 @@ byId("catalog-type")?.addEventListener("click", (event) => {
   // 種別が変われば結果は別物になる。前の種別の一覧を残さない。
   clearCatalogResults();
 });
-
-byId("catalog-fit-only")?.addEventListener("change", () => { void searchCatalog(); });
 
 byId("catalog-source")?.addEventListener("click", (event) => {
   const chip = event.target.closest?.("[data-source]");

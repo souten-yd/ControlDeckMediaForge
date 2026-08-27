@@ -1064,6 +1064,50 @@ class CustomModelCatalog(CatalogSearchMixin):
         self._write(entries)
         return entry
 
+    def add_bundle(
+        self,
+        items: tuple[tuple[CustomModelResolution, str, str], ...],
+        *,
+        domains: tuple[str, ...] = ("general",),
+    ) -> list[dict[str, Any]]:
+        """Register a LoRA and its base dependency in one durable write.
+
+        A partially written catalog would leave the UI claiming that a LoRA
+        can be downloaded while its required base is unknown.  Validate every
+        license and limit first, then replace the catalog once.
+        """
+        if not items:
+            raise CustomModelError("custom_model_bundle_empty", "取り込むモデルがありません")
+        entries = self.entries()
+        additions: list[dict[str, Any]] = []
+        for resolution, display_name, acceptance in items:
+            if acceptance != resolution.license:
+                raise CustomModelError(
+                    "custom_model_license_not_accepted",
+                    "表示したライセンスをそのまま承諾してください",
+                )
+            if not resolution.within_download_cap:
+                raise CustomModelError(
+                    "custom_model_too_large", "この repository は取り込み上限を超えています"
+                )
+            entry = self._entry(resolution, display_name=display_name, domains=domains)
+            existing = next(
+                (index for index, item in enumerate(entries)
+                 if item.get("registry", {}).get("model_id") == resolution.repo_id),
+                None,
+            )
+            if existing is None:
+                if len(entries) >= MAX_CUSTOM_MODELS:
+                    raise CustomModelError(
+                        "custom_model_limit", "追加できるモデルの数を超えています"
+                    )
+                entries.append(entry)
+            elif entries[existing] != entry:
+                entries[existing] = entry
+            additions.append(entry)
+        self._write(entries)
+        return additions
+
     def record_measurement(self, model_id: str, measurements: dict[str, Any]) -> dict[str, Any]:
         """Promote an entry from "nobody has run this" to "this is what it costs".
 
@@ -1153,7 +1197,7 @@ class CustomModelCatalog(CatalogSearchMixin):
                 "description": " ".join(resolution.warnings) or "利用者が追加したモデル。",
                 "approx_download_bytes": resolution.total_bytes,
                 "source": {
-                    "kind": "huggingface",
+                    "kind": source_of(resolution.repo_id),
                     "repo_id": resolution.repo_id,
                     "revision": resolution.revision,
                 },

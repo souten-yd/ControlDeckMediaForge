@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-27
-branch      release/v092-installed-handoff（origin/main 0d69a24 から作成）
-slice       v0.9.2 video model add/remove management and runtime-gate clarity
-状態        実装・PR merge・release・標準update・installed browser評価完了 / 証跡PR前
-baseline    focused 211 + 155 passed / final full 751 passed / 1 warning / 54.52s
+branch      ux1/lora-zero-config（origin/main c9388f0 から作成）
+slice       LoRA-only selection with automatic base download/routing/evaluation
+状態        実装・live Civitai resolve・full test完了 / PR・release・installed browser前
+baseline    focused 6 files passed / final full 757 passed / 1 warning / 64.13s
 installed   v0.9.2 / PID 46572 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         生成再評価0。既存G7不採用証跡を維持
-PR          ControlDeck変更0 / Media Forge #149 merged / 証跡PR前
+PR          ControlDeck変更0 / Media Forge PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -68,19 +68,18 @@ Mobile Create media switch は Media Forge #145、exact head
 `f7f42c7af6e34420d2dba4017f733a6f4d58c8c7`、merge commit/tag
 `cc3f342d77a20e98d95fcc43d276e1aafdcd8d94`。
 
-## この slice の結果
+## 現在の slice の結果
 
 ```text
-PASS       実ControlDeck v0.9.1で現象再現。動画候補12／追加可能0／削除可能2
-PASS       モデル管理入口、管理件数、常時表示の操作不能理由
-PASS       license acceptanceとruntime採用gateの分離表示
-PASS       CogVideoX-2Bをbounded managed checkpointへ変更。追加可能1
-PASS       standalone 1280px/320px、horizontal overflow 0、browser errors 0
-PASS       focused tests / full 751 / static checks
-PASS       signed v0.9.2 release / public redownload hash / ControlDeck standard update
-PASS       installed v0.9.2 browser: 追加1／削除2／理由本文／overflow 0／errors 0
-NOT TESTED CogVideoX実13.8GB download/remove
-NOT TESTED production動画生成。capability unavailableを維持
+PASS       LoRAとbase dependencyを1回のlicense確認・atomic catalog更新・download要求へ統合
+PASS       Civitai source kind誤記を修正。実APIでLoRA 37,861,176 B／base 2,132,625,894 B解決
+PASS       managed catalogからCreateへkind/base/triggerを渡し、LoRA選択を表示可能にした
+PASS       LoRA familyで自動routingを拘束し、異系統混在をworker前に拒否
+PASS       base install後の自動評価を同じ要求の後続処理にした
+PASS       focused tests / full 757 / static checks
+NOT TESTED 実ControlDeck install/browser
+NOT TESTED 新規LoRA weight download（個別配布条件の利用者同意前）
+NOT TESTED 実LoRA適用の同seed比較（2026-08-25のSD1.5/SDXL実測は維持）
 ```
 
 公開video capabilityは`video.text_to_video`と`video.image_to_video`の両方を
@@ -91,9 +90,9 @@ ownershipだけをmanagedへ変更した。
 ## 次にやること（1つだけ）
 
 ```text
-1. 証跡をcommit/push/PR/mergeしてhandoffを閉じる
-2. 13.8GB CogVideoX実download/removeは利用者が取得を選んだ時、既存snapshotを壊さず評価する
-3. production動画生成はzero-swapと実用品質を同時に満たす候補までDEFERREDを維持する
+1. commit/push/PR/review/merge
+2. version bump、signed release、ControlDeck標準update、installed browser評価
+3. 利用者が特定LoRAの配布条件へ同意した場合のみ実weight downloadとsame-seed比較
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South

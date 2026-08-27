@@ -487,6 +487,12 @@ class ModelOperationManager:
         return {
             "model_id": model.model_id,
             "display_name": model.display_name,
+            # The workspace's effective catalog comes from this managed view.
+            # Without these fields an installed LoRA exists in the registry but
+            # the Create picker cannot distinguish it from a checkpoint.
+            "kind": "lora" if model.is_lora else "model",
+            "base_model": model.base_model,
+            "trigger_words": list(model.trigger_words),
             "domains": list(model.domains),
             "media_types": list(model.media_types),
             "description": model.description,

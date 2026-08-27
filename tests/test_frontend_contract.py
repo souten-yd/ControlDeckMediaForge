@@ -93,8 +93,8 @@ ADVANCED_IDS = (
 
 # 配布元の切り替え。モデル管理タブにあり、詳細モードとは無関係。
 CATALOG_IDS = (
-    "catalog-source", "catalog-source-note", "catalog-type", "catalog-fit",
-    "catalog-fit-only", "lora-base-note", "lora-picker", "lora-picker-note", "lora-list",
+    "catalog-source", "catalog-source-note", "catalog-type",
+    "lora-picker", "lora-picker-note", "lora-list",
 )
 
 
@@ -1148,19 +1148,27 @@ def test_a_lora_is_never_offered_as_a_model_to_generate_with():
 
 
 def test_the_base_model_is_reported_before_a_lora_is_taken():
-    """LoRA は 40MB 前後だが土台は 2〜7GB ある。黙って始めない。"""
-    assert "models.custom.lora_base" in SCRIPT
-    assert "lora-base-together" in SCRIPT
+    """容量とライセンスは見せるが、土台を別操作で選ばせない。"""
+    assert "必要な土台も自動でダウンロードします" in SCRIPT
+    assert "customResolution.dependency" in SCRIPT
+    assert "lora-base-together" not in SCRIPT
     backend = (BACKEND / "app.py").read_text(encoding="utf-8")
-    assert "models.custom.lora_base" in backend
+    assert 'result["dependency"]' in backend
 
 
-def test_the_base_is_taken_after_the_lora_not_before():
-    """先に土台を落として LoRA 側が失敗すると、頼んでいない 7GB だけが残る。"""
+def test_the_base_and_lora_are_one_confirmed_download_request():
+    """LoRA の後に土台を別追加する操作を残さない。"""
     add = SCRIPT[SCRIPT.index("async function addCustomModel"):]
-    lora_add = add.index('call("models.custom.add"')
-    base_add = add.index("state.pendingLoraBase")
-    assert lora_add < base_add
+    assert 'call("models.custom.add"' in add
+    assert "license_acceptance: customResolution.dependency.license" in add
+    assert add.count('call("models.custom.add"') == 1
+
+
+def test_lora_selection_owns_automatic_base_routing():
+    assert "LoRA 自身が互換 family を指定する" in SCRIPT
+    selection = SCRIPT[SCRIPT.index("function modelSelection()"):]
+    assert "if (selectedLoras().length)" in selection
+    assert 'policy !== "manual" ? policy : "auto"' in selection
 
 
 def test_the_trigger_words_are_shown_where_the_lora_is_chosen():
