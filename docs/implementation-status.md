@@ -5866,3 +5866,10 @@ operation 行すら作られないので、画面にも記録にも何も残ら�
 
 `./mf.sh test` は 765 passed / 1 warning / 68.32 秒（新規 4 件）、`git diff --check` PASS。
 新規テストは修正を戻すと `model_evaluation_unsupported` で落ちることを確認済みである。
+
+v0.9.6 を実機へ入れた直後、追従の掛け先を間違えていたことが分かった。帳尻合わせを
+bridge の `models.list` にだけ置いていたが、埋め込みの boot は個別 method を呼ばず
+集約の `workspace.session` を通る（`models.list` を呼ぶのは詳細モードの再描画だけ）。
+つまり ControlDeck の中では一度も走らない。15 分待っても評価は始まらず、実機ログにも
+`/ws` 接続が無かった。`session_snapshot()` の `models` を作るところへ移し、
+そこを外すと落ちるテストを足した。766 passed / 1 warning / 61.45 秒。
