@@ -8,7 +8,7 @@ import os
 import signal
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -81,6 +81,36 @@ WAN21_VACE_EXECUTION_PEAK_BYTES = 30_700_000_000
 WAN21_VACE_COLD_LOAD_PEAK_BYTES = 32_000_000_000
 WAN21_VACE_HEADROOM_BYTES = 1024 * 1024 * 1024
 logger = logging.getLogger("uvicorn.error")
+
+
+def unmeasured_lora_bases(models: Iterable[ModelDescriptor]) -> list[str]:
+    """LoRA が要るのに、まだ測っていないので選べない土台を挙げる。
+
+    LoRA は載せるだけなので、測らなくても使える。土台は違う。routing は
+    measured でない土台を manual でも auto でも選ばないので、測るまでは
+    その LoRA を載せられる先が 1 つも無い、という状態になる。導入済みの
+    LoRA が持つ系統だけを見るので、関係のないモデルを勝手に測りはしない。
+    """
+    from .models.generation_defaults import normalize_base_model
+
+    models = list(models)
+    families = {
+        normalize_base_model(item.base_model)
+        for item in models
+        if item.is_lora and item.installed and item.local_path is not None
+    }
+    families.discard("")
+    if not families:
+        return []
+    return [
+        item.model_id
+        for item in models
+        if not item.is_lora
+        and item.installed
+        and item.local_path is not None
+        and item.measurement_confidence != "measured"
+        and normalize_base_model(item.base_model) in families
+    ]
 
 
 @dataclass
@@ -251,6 +281,18 @@ class H3ModelEvaluator:
             found.append(model.model_id)
         return found
 
+    @staticmethod
+    def _runs_as_image_evaluation(model: ModelDescriptor) -> bool:
+        """普段の生成ワーカーで測るモデルか。
+
+        この判定は evaluate() と _run() の両方が使う。以前は _run() だけが
+        画像を先に振り分け、evaluate() は素通しで _preflight() を呼んでいた。
+        _preflight() は動画と H3 の preset しか知らないので、画像モデルは
+        operation を作る前に model_evaluation_unsupported で落ちていた。
+        押しても何も起きず、記録も残らない。判定を分けて持たない。
+        """
+        return model.runtime_adapter.startswith("diffusers.") and "image" in model.media_types
+
     def _image_candidates(self) -> list[ModelDescriptor]:
         if self.image_measure is None or self.image_runtime_python is None:
             return []
@@ -298,7 +340,8 @@ class H3ModelEvaluator:
         if active is not None:
             return active
         model = self._model(model_id)
-        self._preflight(model)
+        if not self._runs_as_image_evaluation(model):
+            self._preflight(model)
         try:
             operation = self.store.create_model_operation(
                 model_id,
@@ -329,7 +372,7 @@ class H3ModelEvaluator:
                     await self._finish_canceled(operation_id, None)
                     return
                 model = self._model(operation.model_id)
-                if model.runtime_adapter.startswith("diffusers.") and "image" in model.media_types:
+                if self._runs_as_image_evaluation(model):
                     # 画像モデルは普段の生成と同じワーカーで 1 回走らせて測る。
                     # 別経路で測ると、実際に使う経路ではないものを測ることになる。
                     await self._run_image_evaluation(operation_id, model)

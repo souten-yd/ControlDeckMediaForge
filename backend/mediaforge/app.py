@@ -83,7 +83,7 @@ from .host.files import GrantContentTooLarge, commit_file, read_grant, require_g
 from .host.jobs import HostExecution
 from .jobs import JobManager, ProfileResolutionError
 from .m5_companion import profile_documents as m5_profile_documents
-from .model_evaluator import H3ModelEvaluator
+from .model_evaluator import H3ModelEvaluator, unmeasured_lora_bases
 from .model_manager import MAX_MANAGED_MODEL_DOWNLOAD_BYTES, ModelOperationManager
 from .models import (
     ModelOperationError,
@@ -315,6 +315,48 @@ def create_app(
     )
     dependency_tasks: set[asyncio.Task[None]] = set()
 
+    def pending_lora_base_ids() -> list[str]:
+        if model_operations is None or model_evaluations is None:
+            return []
+        try:
+            return unmeasured_lora_bases(model_operations._registry().all())
+        except (ModelRegistryError, OSError):
+            return []
+
+    def start_pending_lora_base_evaluations(identity: HostIdentity) -> None:
+        """測れていない土台の評価を始める。既に一度試したものは触らない。
+
+        以前は download 直後の in-process task だけが評価を始めていた。
+        task は再起動で消えるので、数分かかる download が再起動を跨ぐと
+        土台は永久に未計測のまま残った。要求のたびに帳尻を合わせれば、
+        いつ落ちても次に開いたときに追いつく。
+
+        失敗を自動で繰り返さない。一度 failed になった評価は、利用者が
+        モデル管理から明示的に押し直すまで再開しない。
+        """
+        if model_evaluations is None:
+            return
+        attempted = {
+            operation.model_id
+            for operation in store.list_model_operations()
+            if operation.action.value == "evaluate"
+        }
+        started = False
+        for model_id in pending_lora_base_ids():
+            if model_id in attempted:
+                continue
+            try:
+                model_evaluations.evaluate(model_id, identity)
+            except ModelOperationError as exc:
+                # 握り潰さない。押しても何も起きない状態を作った原因がこれだった。
+                logger.warning(
+                    "could not start the base evaluation for %s: %s", model_id, exc.code
+                )
+                continue
+            started = True
+        if started:
+            session_events.publish("model_operations")
+
     async def evaluate_installed_lora_base(
         install_operation_id: str,
         model_id: str,
@@ -328,16 +370,7 @@ def create_app(
             if operation.state.value in {"failed", "canceled"}:
                 return
             await asyncio.sleep(0.5)
-        if model_evaluations is None:
-            return
-        try:
-            model_evaluations.evaluate(model_id, identity)
-        except ModelOperationError:
-            # The durable install remains visible.  Evaluation exposes its own
-            # actionable failure when it can start; never mark the model ready
-            # without a measurement.
-            return
-        session_events.publish("model_operations")
+        start_pending_lora_base_evaluations(identity)
     workspace_test_delay_pending = True
 
     @asynccontextmanager
@@ -2268,6 +2301,8 @@ def create_app(
                         store.delete_profile(str(params.get("profile_id", "")))
                         result = {"deleted": True}
                     elif method == "models.list":
+                        # 開くたびに帳尻を合わせる。再起動で消えた評価をここで拾う。
+                        start_pending_lora_base_evaluations(identity)
                         result = model_catalog()
                     elif method == "models.catalog":
                         if model_operations is None:

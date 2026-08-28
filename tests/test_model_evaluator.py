@@ -46,6 +46,7 @@ from mediaforge.model_evaluator import (
     WAN21_VACE_MODEL_ID,
     WAN21_VACE_MODEL_REVISION,
     WAN21_VACE_RUNTIME_ADAPTER,
+    unmeasured_lora_bases,
 )
 from mediaforge.models import (
     ModelDescriptor,
@@ -859,3 +860,157 @@ def test_wan21_vace_validator_requires_exact_silent_h264_bounds(
     frame_count = "4"
     with pytest.raises(ModelOperationError, match="bounds differ"):
         service._validate_wan21_vace_artifact(artifact)
+
+
+# ── 画像モデルの評価 ──────────────────────────────────────────────────
+# evaluate() は operation を作る前に _preflight() を呼ぶ。_preflight() は
+# 動画と H3 の preset しか知らないので、画像モデルは「押しても何も起きず、
+# 記録も残らない」状態だった。実機では、LoRA が自動で連れてきた土台が
+# 永久に未計測のまま残り、その LoRA を載せられる土台が 1 つも無くなる。
+
+
+class FakeImageMeasurement:
+    width = 512
+    height = 512
+    output_bytes = 4096
+
+    def catalog_measurements(self) -> dict[str, Any]:
+        return {"vram_bytes": 8, "runtime_sec": 0.5}
+
+
+def image_descriptor(snapshot: Path) -> ModelDescriptor:
+    return ModelDescriptor(
+        model_id="civitai/4384",
+        family="custom",
+        version="128713",
+        revision="128713",
+        weights_hash="sha256:" + "3" * 64,
+        license="test",
+        runtime_adapter="diffusers.sdxl-single-file",
+        capabilities=("image.text_to_image",),
+        hardware_backends=("rocm",),
+        state=ModelState.EXPERIMENTAL,
+        policy_rank={"auto": 1_000_000},
+        required_files=(),
+        weights=(WeightFile(path="model.safetensors", size_bytes=1, sha256="4" * 64),),
+        installed=True,
+        healthy=False,
+        local_path=snapshot,
+        ownership=ModelOwnership.MANAGED,
+        measurement_confidence="low",
+        media_types=("image",),
+        base_model="SD 1.5",
+    )
+
+
+def image_evaluator(tmp_path: Path, host: FakeHost, recorded: dict[str, Any]) -> H3ModelEvaluator:
+    store = Store(tmp_path / "data")
+    store.initialize()
+    snapshot = tmp_path / "image-snapshot"
+    snapshot.mkdir()
+    model = image_descriptor(snapshot)
+    runtime_python = tmp_path / "image-runtime-python"
+    runtime_python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+
+    async def measure(_model: ModelDescriptor, **_kwargs: Any) -> FakeImageMeasurement:
+        return FakeImageMeasurement()
+
+    return H3ModelEvaluator(
+        store,
+        host,  # type: ignore[arg-type]
+        model_manifest=tmp_path / "unused-models.json",
+        catalog_manifest=tmp_path / "unused-catalog.json",
+        model_store_root=tmp_path / "models",
+        hf_home=tmp_path / "hf",
+        runtime_root=runtime_root(tmp_path),
+        lease_renew_sec=0.05,
+        timeout_sec=10,
+        command_builder=command(0.0),
+        artifact_validator=validator,
+        vram_probe=lambda: 1024,
+        model_resolver=lambda model_id: model,
+        registry_loader=lambda: [model],
+        image_runtime_python=runtime_python,
+        image_measure=measure,
+        record_measurement=lambda model_id, measurements: recorded.update(
+            {"model_id": model_id, "measurements": measurements}
+        ),
+    )
+
+
+def test_an_image_model_can_start_its_evaluation(tmp_path: Path) -> None:
+    """画像モデルは preset を持たないが、普段の生成ワーカーで測れる。
+
+    evaluate() が _preflight() で弾いていた頃は operation すら作られず、
+    利用者にも記録にも何も残らなかった。
+    """
+    recorded: dict[str, Any] = {}
+
+    async def scenario() -> tuple[Any, Any]:
+        host = FakeHost()
+        service = image_evaluator(tmp_path, host, recorded)
+        await service.start()
+        try:
+            operation = service.evaluate("civitai/4384", identity())
+            return operation, await wait_terminal(service.store, operation.id)
+        finally:
+            await service.stop()
+
+    operation, finished = asyncio.run(scenario())
+    assert operation.action.value == "evaluate"
+    assert finished.state.value == "ready", finished.error_message
+    # 測っただけで終わらせない。routing が使うのは記録された値である。
+    assert recorded["model_id"] == "civitai/4384"
+    assert recorded["measurements"] == {"vram_bytes": 8, "runtime_sec": 0.5}
+
+
+def test_an_image_model_is_offered_for_evaluation(tmp_path: Path) -> None:
+    """一覧に出す条件と、実際に始められる条件を食い違わせない。"""
+
+    async def scenario() -> list[str]:
+        service = image_evaluator(tmp_path, FakeHost(), {})
+        await service.start()
+        try:
+            return service.available_model_ids()
+        finally:
+            await service.stop()
+
+    assert "civitai/4384" in asyncio.run(scenario())
+
+
+# ── 測り直しが要る土台の選び方 ────────────────────────────────────────
+# LoRA は載せるだけなので測らなくても使えるが、土台は measured でないと
+# routing が manual でも auto でも選ばない。download 直後の in-process task
+# だけが評価を始めていた頃は、再起動を跨いだ download の土台が永久に
+# 未計測で残り、その LoRA を載せられる先が 1 つも無くなった。
+
+
+def lora_descriptor(snapshot: Path, *, base_model: str = "SD 1.5") -> ModelDescriptor:
+    return replace(
+        image_descriptor(snapshot),
+        model_id="civitai/16014",
+        runtime_adapter="lora.diffusers",
+        capabilities=("image.lora",),
+        base_model=base_model,
+    )
+
+
+def test_the_base_a_lora_needs_is_listed_until_it_is_measured(tmp_path: Path) -> None:
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    base = image_descriptor(snapshot)
+    lora = lora_descriptor(snapshot)
+    assert unmeasured_lora_bases([base, lora]) == ["civitai/4384"]
+    # 測り終えたものを測り直す道はここでは出さない。
+    assert unmeasured_lora_bases([replace(base, measurement_confidence="measured"), lora]) == []
+
+
+def test_a_base_no_installed_lora_needs_is_left_alone(tmp_path: Path) -> None:
+    """関係のないモデルを勝手に測り始めない。"""
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    base = image_descriptor(snapshot)
+    assert unmeasured_lora_bases([base]) == []
+    assert unmeasured_lora_bases([base, lora_descriptor(snapshot, base_model="SDXL 1.0")]) == []
+    # 落としきっていない LoRA は、まだ土台を必要としていない。
+    assert unmeasured_lora_bases([base, replace(lora_descriptor(snapshot), installed=False)]) == []
