@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-28
-branch      fix/derive-supports-lora（origin/main c89bb80 から作成）
-slice       載せられるかを宣言ではなく実際で決める
-状態        DreamShaper実評価ready・実Chromeで残る壁を発見して修正 / v0.9.10 release前
-baseline    full 770 passed / 1 warning / 59.67s（新規1件）
-installed   v0.9.9 / 127.0.0.1:9130 / healthy / contract 2.0
-GPU         Lykon/DreamShaper評価ready。peak VRAM 3,939,438,592 B / 13.0s / 512x512
-PR          ControlDeck変更0 / Media Forge #157-#166 merged / release PR前
+branch      fix/timeout-counts-the-images（origin/main 1f65a38 から作成）
+slice       打ち切りの予算が枚数を数えていなかった / ヘッダーの寄せ方
+状態        LoRA実機成功を確認・timeoutの原因特定と修正 / v0.9.11 release前
+baseline    full 771 passed / 1 warning / 62.93s（新規2件）
+installed   v0.9.10 / 127.0.0.1:9130 / healthy / contract 2.0
+GPU         LoRA実機成功 job_8838a3c7 / 4枚 512x512 / DreamShaper + civitai/16014
+PR          ControlDeck変更0 / Media Forge #157-#167 merged / release PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit

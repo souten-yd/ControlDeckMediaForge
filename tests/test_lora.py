@@ -364,3 +364,23 @@ def test_a_self_added_checkpoint_can_take_a_lora(tmp_path: Path):
     # diffusers 以外は読めた気にならない。
     native = replace(checkpoint, runtime_adapter="native.h3")
     assert ModelRegistry._observed_defaults(native, snapshot) == {}
+
+
+def test_the_timeout_budget_counts_the_images_that_were_asked_for(tmp_path: Path):
+    """実測は 1 枚ぶん。頼まれた枚数を数えないと、枚数のぶんだけ落ちる。
+
+    実機では measured_runtime_sec=13.0 の DreamShaper に 4 枚頼み、予算は
+    13*3+30=69 秒のままだった。同じ設定が通ったり worker_timeout で落ちたりして
+    いたのはこれである（2026-08-28、job_8838a3c7 成功 / job_d1f45685 失敗）。
+    """
+    source = (Path(__file__).parents[1] / "backend/mediaforge/jobs.py").read_text(encoding="utf-8")
+    budget = source[
+        source.index("            wanted = 1"):source.index("        process = await asyncio.create_subprocess_exec")
+    ]
+    assert 'payload.get("request", {}).get("output", {}).get("count")' in budget
+    assert "* 3 * wanted + 30" in budget
+
+    # 実機の数字で確かめる。1 枚ぶんの予算では 4 枚は収まらない。
+    measured, count, floor = 13.0, 4, 30.0
+    assert max(floor, measured * 3 + 30) < 80.0          # 成功に 80.0 秒かかった
+    assert max(floor, measured * 3 * count + 30) > 106.5  # 失敗は 106.5 秒で切られた

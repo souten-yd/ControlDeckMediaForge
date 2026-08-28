@@ -5973,3 +5973,35 @@ checkpoint は worker なら載せられるのに、画面が必ず隠してい�
 FLUX.2 Klein 4B は false のまま残り、宣言で立っている SSD-1B は触らない。
 
 `./mf.sh test` は 769 passed / 1 warning / 53.30 秒（新規 1 件）、`git diff --check` PASS。
+
+## 打ち切りの予算が枚数を数えていなかった（2026-08-28）
+
+利用者から「そんなに長い時間動かしていないのに失敗した」との報告。実機の job を見ると、
+同じ設定が通ったり落ちたりしていた。
+
+```text
+job_8838a3c7  succeeded  80.0s   count=4 1024x1024 lora あり
+job_d1f45685  failed     103.4s  count=4 1024x1024 lora あり  worker_timeout
+job_9a482525  failed     106.5s  count=4 1024x768  lora あり  worker_timeout
+```
+
+`jobs.py` の打ち切りは `max(worker_timeout_sec, measured_runtime_sec * 3 + 30)` で、
+`measured_runtime_sec` は評価で 1 枚だけ作ったときの値である（DreamShaper は 13.0 秒）。
+つまり 4 枚頼まれていても予算は 13*3+30 = 69 秒のままで、モデルが遅いのではなく
+枚数のぶんだけ落ちていた。ぎりぎり通ったのが 80.0 秒の 1 件である。
+
+worker へ渡す枚数を見て予算を掛けるようにした。意味レビューを付けると枚数は
+`count + max_regeneration_attempts` へ増えるので、request の値ではなく payload の値を見る。
+実機の数字では 13*3*4+30 = 186 秒となり、106.5 秒で切られていた実行は収まる。
+
+成功した job の実測も記録しておく。4 枚とも 512x512 で出ており、SD 1.5 の native へ
+正しく寄せられている（要求は 1024x1024）。`Lykon/DreamShaper` に `civitai/16014` が
+載り、provenance に model_id と LoRA が残っている。**LoRA は実機で動いた。**
+
+## ヘッダーの寄せ方（2026-08-28）
+
+利用者の指示により、作る素材の切り替えと表示モードの切り替えを左へ、設定だけを右端へ
+逃がした。余白（`.grow`）を 2 つの切り替えの後ろへ移すだけで済む。実 Chrome（390x844）で
+左端からの余白 16px、右端までの余白 16px、horizontal overflow 0 を確認した。
+
+`./mf.sh test` は 771 passed / 1 warning / 62.93 秒（新規 2 件）、`git diff --check` PASS。
