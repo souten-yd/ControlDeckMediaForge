@@ -5766,3 +5766,60 @@ ControlDeck の `app/frontend/src/features/addons/EmbeddedAddonView.tsx:403-408`
 埋め込み add-on 共通ヘッダーで、`{title}` と `{addon.name} · {routePath}` に加えて
 `/settings?extension=<id>` へ飛ぶ 詳細 ボタンを常に描く。add-on 側から header へ
 操作を出す拡張点は contract 2.0 に存在しない。**NOT IMPLEMENTED**。
+
+## v0.9.5 の署名リリースと実 ControlDeck 反映（2026-08-28）
+
+Media Forge #157（exact head `891601f`、merge `d7fae4f`）、#158（`7d2305e` /
+`1a97074`）、#159（`8430a4d` `e42df1f` / `d9aa5e1`）、#160（`4823347` /
+`e8fb0d1`）を main へ merge した。#160 は自分の `git add -A` が `dist/` を巻き込み、
+30MB の tarball と署名が main まで入った件の後始末である。`dist/` を追跡から外し
+`.gitignore` へ足した。履歴の blob は残す（push 済み main の書き換えは割に合わない）。
+
+先に tag と本文だけ作った asset 0 件の v0.9.5 は、#159 / #160 を含まないため削除し、
+`e8fb0d1dfb38f900b5f7477bb80fcf09d8b94213` から作り直した。bundle は 30,961,873 bytes、
+SHA-256 `167b1b924b4f65e798d173c5de5d1658783660213e994a18099c5f1342645f2a`。
+manifest 275 bytes、signature 89 bytes。公開 Release を別 directory へ再取得して
+`sha256sum -c` 一致、manifest の feature_id / version / platform / architecture /
+size_bytes / sha256 が bundle と一致することを確認した。
+
+実 ControlDeck の標準 `./deck.sh feature update media-forge` は 11.88 秒、max RSS
+784,320 KiB、swap 0、exit 0 で成功した。`version=0.9.5 / previous_version=0.9.4 /
+healthy`、`current` は `versions/0.9.5`、rollback 用に `versions/0.9.4` を保持。実 process は
+PID 726119/726123 で 726123 が 127.0.0.1:9130 を listen し、health は healthy /
+contract 2.0。v0.9.5 version tree は 31,229,870 bytes。
+
+実 installed instance（127.0.0.1:9130）を実 Chrome（390x844）で操作した観測。
+
+```text
+ヘッダー  : H1 | ローカルのみ | grow | create-media-switch | modeswitch | nav-settings
+           高さ 52px、絵 2 択は表示モードの左、当たり判定 40x32、horizontal overflow 0
+           動画アイコン押下で aria-pressed 入替・「どんな動画を作りますか？」・動画欄表示
+使うモデル: 非 hidden。おまかせ + 導入済み 3 件
+           （FLUX.2 Klein 4B / Segmind SSD-1B / stabilityai SDXL base）
+LoRA      : 導入済みは civitai/16014（SD 1.5）1 件
+  おまかせ            → 行 1 件・未チェック・スライダー無し
+  FLUX.2 Klein 4B     → 行 0 件「LoRA を載せられません。導入済みの LoRA は SD 1.5 用です。」
+  Segmind SSD-1B      → 行 0 件「（SDXL 1.0）に載せられる LoRA がありません。」
+  stabilityai SDXL    → 行 0 件「LoRA を載せられません。」
+  おまかせでチェック  → 同じ行にスライダー、selectedLoras [{civitai/16014, 1}]
+```
+
+利用者のスクリーンショットにあった「FLUX.2 Klein 4B なのに SD 1.5 LoRA と強さの
+スライダーが出ている」状態は、実機で再現しなくなった。
+
+この確認中に、今回の slice の外にある実データの問題を 2 件観測した。どちらも未修正である。
+
+```text
+1. LoRA civitai/16014 が要る SD 1.5 の土台 civitai/4384（DreamShaper）は healthy=false で、
+   土台の一覧に出ない。state も experimental なので auto でも選ばれない。つまり実機では
+   この LoRA を載せられる土台が 1 つも無い。おまかせでチェックはできるが、
+   生成まで進めば backend が拒否する見込みである（実行は未実施）。
+2. loraCandidates() は installed だけを見て healthy を見ないため、healthy=false の
+   civitai/16014 が候補に出ている。土台側は healthy で絞っており、扱いが揃っていない。
+```
+
+利用者が追加した `stabilityai/stable-diffusion-xl-base-1.0` は base_model が SDXL 1.0 でも
+`supports_lora=false` として登録されており、LoRA を載せられない。custom model の既定値である。
+
+host header の 詳細 削除と 2 段ヘッダーの 1 行化は利用者が別タスクで進めるため、
+この slice では **NOT IMPLEMENTED** のままとする。

@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-28
-branch      ux1/header-media-icons（origin/main 1a97074 から作成）
+branch      release/v095-publish（origin/main e8fb0d1 から作成）
 slice       Always-visible model choice, LoRA gate, header media icons
-状態        実装・実Chrome確認・PR #157/#158 merge完了 / v0.9.5 再ビルド前
+状態        実装・実Chrome確認・#157〜#160 merge・v0.9.5 release・標準update完了 / 証跡PR前
 baseline    full 761 passed / 2 warnings / 59.69s
-installed   v0.9.4 / PID 181500,181506 / 127.0.0.1:9130 / healthy / contract 2.0
+installed   v0.9.5 / PID 726119,726123 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         生成再評価0。既存G7不採用証跡を維持
-PR          ControlDeck変更0 / Media Forge #156/#157 merged / release PR前
+PR          ControlDeck変更0 / Media Forge #157-#160 merged / 証跡PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -82,8 +82,13 @@ PASS       hostBusy中は2つとも無効。押しても素材は変わらない
 FIXED      総称ボタン規則の:not()内idが勝ち押下accentが出ない件。実描画で発見
 PASS       full 761 / 2 warnings / 59.69s、git diff --check
 NOT TESTED 実LoRA weightを載せた生成の見た目差分（実機installedへ未反映のため）
+PASS       signed v0.9.5 / 公開Release再取得でsha256一致 / ControlDeck標準update 11.88s
+PASS       installed v0.9.5でFLUX.2指定時にSD 1.5 LoRAと強さが出ないことを実機確認
+FOUND      civitai/16014が載る土台が実機に無い（civitai/4384 healthy=false・experimental）
+FOUND      loraCandidates()はinstalledのみ判定しhealthyを見ていない。土台側と不揃い
 NOT IMPL   host headerの詳細削除と1行化。EmbeddedAddonView.tsx:403-408のホスト共通
            ヘッダーで、add-onからheaderへ操作を出す拡張点がcontract 2.0に無い。別タスク
+DEBT       dist/を一度main へ入れた。#160で追跡解除。履歴のblobは残す
 
 （前 slice / v0.9.4 の結果）
 PASS       実試行はdownload前、model operation 0件、catalog rollbackと特定
@@ -105,9 +110,10 @@ ownershipだけをmanagedへ変更した。
 ## 次にやること（1つだけ）
 
 ```text
-1. v0.9.5を再build/sign/publishし、実ControlDeckの標準updateで反映して証跡を残す
-2. 利用者が配布条件へ再同意した場合のみ実weight downloadとsame-seed比較
-3. production動画生成はzero-swapと実用品質を満たす候補までDEFERREDを維持する
+1. 証跡をcommit/push/PR/mergeしてhandoffを閉じる
+2. LoRA civitai/16014が載る土台が実機に1つも無い件（civitai/4384がhealthy=false・
+   experimental）と、loraCandidates()がhealthyを見ていない件を別sliceで扱う
+3. host headerの詳細削除と1行化は利用者が別タスクで進行中。こちらからは触らない
 ```
 
 license は利用開始を同意とみなす Tencent Hunyuan Community License Agreement。EU/UK/South
