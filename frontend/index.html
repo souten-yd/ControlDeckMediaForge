@@ -20,6 +20,15 @@
         <h1>Media Forge</h1>
         <span class="pill" title="推論はこの端末の中だけで実行されます">ローカルのみ</span>
         <span class="grow"></span>
+        <label class="function-switch" id="create-media-switch" aria-label="作る素材">
+          <select id="create-media-select">
+            <option value="image">画像を作る</option>
+            <option value="video">動画を作る</option>
+          </select>
+          <svg class="function-switch-caret" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="m8 10.5 4 4 4-4"/>
+          </svg>
+        </label>
         <div class="modeswitch" role="group" aria-label="表示モード">
           <button type="button" id="mode-simple" aria-pressed="true">シンプル</button>
           <button type="button" id="mode-advanced" aria-pressed="false">詳細</button>
@@ -63,14 +72,6 @@
       <main>
         <!-- 作る -->
         <section id="view-create" class="view" data-view="create">
-          <div id="create-media-picker">
-            <div id="create-media-switch" class="media-switch" role="group" aria-label="作る素材">
-              <button type="button" id="create-media-image" aria-pressed="true">画像を作る</button>
-              <button type="button" id="create-media-video" aria-pressed="false">
-                動画を作る<span id="create-media-video-badge" class="switch-badge" hidden>試験中</span>
-              </button>
-            </div>
-          </div>
           <!-- 検証は requestProblem() が行う。ブラウザ既定の吹き出しは文言を持てず、
                モバイルで見落としやすいので novalidate にする。 -->
           <form id="create-form" class="panel" novalidate>
@@ -135,12 +136,10 @@
 
             <div id="model-choice" data-image-create>
               <p class="section-label">使うモデル</p>
-              <div class="chips" role="radiogroup" aria-label="使うモデルの決め方">
-                <button type="button" class="chip" data-model-choice="auto" aria-checked="true">おまかせ</button>
-                <button type="button" class="chip" data-model-choice="manual" aria-checked="false">指定する</button>
-              </div>
-              <label id="model-choice-row" hidden>モデル
-                <select id="model-choice-model"></select>
+              <label id="model-choice-row">モデル
+                <select id="model-choice-model">
+                  <option value="">おまかせ（自動で選ぶ）</option>
+                </select>
               </label>
               <p id="model-choice-note" class="hint"></p>
             </div>

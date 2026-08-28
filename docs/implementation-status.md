@@ -5650,3 +5650,84 @@ DreamShaper dependency、自動base本文、単一の「同意してダウンロ
 07:00 UTC以降のmodel operationは0件、weight download 0。利用者がUIから再同意して初めて実取得を
 開始する。Release: https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.9.4
 証跡更新後のexact main gateは`./mf.sh test` 751 passed / warning 1件 / 54.52秒、`git diff --check` PASS。
+
+## 使うモデルの常時表示と LoRA 互換ゲート（2026-08-28）
+
+利用者から実機 v0.9.4 の「画像を作る」で、モデルが FLUX.2 Klein 4B のまま LORA 欄に
+`civitai/16014 SD 1.5 lineart monochrome` が並び、未チェックなのに強さのスライダーが 1.00 で
+出ている、という指摘を受けた。FLUX.2 Klein 4B は catalog 上 `supports_lora=false` で LoRA 系統も
+持たないため、この組み合わせは成立しない。
+
+まず「おまかせ」が実際に変わるのかを read-only で確認した。`routing/router.py` の `route()` は
+capability → hardware backend → installed/local path → `state==available` かつ healthy →
+`measured_vram_bytes <= free_vram_bytes` → 要求 domain 一致（fail-soft）→ `policy_rank[policy]` →
+model_id の順で絞る。仕組みとしては変わるが、`worker_packs/image/models.json` で image の
+`available` は `black-forest-labs/FLUX.2-klein-4B`（auto 10）と `segmind/SSD-1B`（auto 50）の
+2 件だけである。さらに `custom_models.py` は利用者追加モデルへ
+`policy_rank {"auto": 1000000}` を与え、`record_measurement()` は `state` を `available` へ上げても
+`policy_rank` を更新しない。よって利用者が自分で入れたモデルは auto で選ばれ得ない。
+「おまかせは事実上ほぼ固定」であり、選択を常時出すという利用者の条件が成立する。
+
+frontend だけを変更した。使うモデルは常時見える単一 select（先頭が「おまかせ（自動で選ぶ）」、
+以降は導入済み・healthy・`kind != lora` の image 土台）にした。LoRA 選択中に手動指定を黙って
+auto へ落とす旧挙動をやめた（`jobs.py` の `_resolved_loras()` が既に系統不一致を
+`lora_incompatible` で日本語表示する）。LoRA 一覧は `loraTargetFamily()` で絞り、土台指定時は
+`supports_lora=false` なら候補 0 件、それ以外は `normalizeFamily` 一致のみ。強さのスライダーは
+チェック済みの行にだけ描画し、未使用行は 1 列 grid にした。土台変更で載らなくなった選択は外し、
+外した件数を 1 行で知らせる。backend/API/契約は変更していない。
+
+実 Chrome（Chrome/151.0.7922.169、headless、CDP、390x844 mobile emulation）で
+`http://127.0.0.1:9131/` の実 build を操作し、SD 1.5 / SDXL 1.0 の LoRA を catalog へ足して
+実機の状況を再現した。観測は以下のとおり。
+
+```text
+おまかせ    : select=(auto) 非 hidden、候補 3（おまかせ / FLUX.2 Klein 4B / Segmind SSD-1B）
+              LoRA 2 行とも未チェック・スライダー無し、payload {}
+FLUX.2 指定 : payload {"model_policy":"manual","model_id":"black-forest-labs/FLUX.2-klein-4B"}
+              LoRA 行 0 件、「FLUX.2 Klein 4B は LoRA を載せられません。導入済みの LoRA は
+              SD 1.5 / SDXL 1.0 用です。」
+SSD-1B 指定 : LoRA 行は SDXL 1.0 の 1 件のみ（SD 1.5 は消える）、未チェックでスライダー無し
+チェック後  : 同じ行にスライダー出現、0.75 へ動かすと表示 0.75 /
+              state.selectedLoras [{"model_id":"civitai/99999","weight":0.75}]
+FLUX.2 へ戻す: 行 0 件、状況欄「選んだモデルに載せられない LoRA 1 件の選択を外しました。」
+```
+
+`./mf.sh test` は 761 passed / warning 1 件 / 58.62 秒、`git diff --check` PASS。
+frontend contract に、モデルが常時見えて auto に戻れること、LoRA 選択が手動土台を捨てないこと、
+強さが載る組み合わせにだけ出ることの 3 件を追加した。
+
+実 ControlDeck（`/data1tb/ControlDeck/data/features/media-forge/versions/0.9.4`、PID 181506、
+127.0.0.1:9130）へはまだ入れていない。実 LoRA weight を載せた生成での見た目差分は
+**NOT TESTED**。導入済み instance での確認は release 時に行う。
+
+## 機能切り替えのヘッダー移設と題名の重複解消（2026-08-28）
+
+利用者から、MediaForge と SonicForge の両方で機能切り替えを「詳細」の左のヘッダーへ移し、
+題名が二重に出ているので下側を消す、切り替えは「シンプルスマート」に、という指示を受けた。
+
+`画像を作る / 動画を作る` の 2 ボタンは `#create-media-picker` として本文の先頭にあり、モバイルでは
+横幅いっぱいの sticky で 1 行を丸ごと使っていた。これをヘッダー常駐の単一 select
+（`.function-switch`、SonicForge と同じ形）に置き換え、`.modeswitch` の直前に置いた。試験中バッジは
+select の項目に入れられないので、`video.*` が experimental のときだけ項目名を「動画を作る（試験中）」に
+する。`#create-media-picker`・`.media-switch`・`.switch-badge` の CSS と、`create-media-image` /
+`create-media-video` / `create-media-video-badge` の参照は消えた。backend/API/契約は変更していない。
+
+題名は ControlDeck の host ヘッダーが同じ文字列を出すので二重に見える。DOM から消すと読み上げが
+題名を失うため、`html:not([data-bridge="standalone"])` のときだけ視覚的に隠す（1x1 + `clip-path`）。
+スタンドアロンでは従来どおり見える。モバイルでは幅を切り替えの側に回すため常に隠す。
+
+実 Chrome（Chrome/151.0.7922.169、headless、CDP）で `MEDIA_FORGE_PORT=9131 ./mf.sh serve` の実 build を
+1440x900 と 390x844 で操作した。観測は以下のとおり。
+
+```text
+1440 画像 : 切り替えは header 内、右端 1145 <= modeswitch 左端 1155、header 高 <= 72、横溢れ無し
+1440 動画 : select=video、#app[data-create-media]=video、題名は standalone なので表示
+390  画像 : 切り替え x=75 w=109、modeswitch x=194 w=132、1 行に収まり縦書きに潰れない、題名は非表示
+390  動画 : 同上で value=video
+埋め込み  : data-bridge="ready" にすると題名は 1x1 / clip-path: inset(50%)、DOM には残る
+例外      : JavaScript 例外 0 件、console error は favicon.ico の 404 のみ
+```
+
+`./mf.sh test` は 761 passed。frontend contract は、切り替えが header 内で `.modeswitch` より左に
+あること、`.function-switch select` が押せる高さと `appearance: none` を保つことを検証する。
+実 ControlDeck 導入済み instance での確認は release 時に行う。

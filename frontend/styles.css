@@ -98,7 +98,33 @@ html[data-bridge="waiting"] #mini-progress { visibility: hidden; }
   padding: 0 16px;
   border-bottom: 1px solid var(--border);
 }
-#shell-header h1 { font-size: 1rem; font-weight: 700; letter-spacing: -.01em; }
+#shell-header h1 {
+  font-size: 1rem; font-weight: 700; letter-spacing: -.01em;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* ControlDeck の中では host のヘッダーが同じ題名を出す。二重に見えるので、
+   スタンドアロンのときだけ見せ、埋め込み時は読み上げ用に残して視覚的に隠す。 */
+html:not([data-bridge="standalone"]) #shell-header h1 {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+/* 作る素材の切り替え。ヘッダーに置くので、面積を取らない一つのプルダウンにする。 */
+.function-switch { position: relative; display: inline-flex; align-items: center; min-width: 0; flex: 0 1 auto; }
+.function-switch select {
+  width: auto; max-width: min(40vw, 200px); min-height: 34px;
+  padding: 0 30px 0 13px;
+  border: 1px solid var(--accent); border-radius: 999px;
+  background: var(--surface); color: var(--accent);
+  font-size: .8rem; font-weight: 700;
+  appearance: none; -webkit-appearance: none;
+}
+.function-switch select:disabled { opacity: .55; cursor: progress; }
+.function-switch-caret {
+  position: absolute; inset-inline-end: 9px;
+  width: 1rem; height: 1rem; color: var(--accent); pointer-events: none;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
 .grow { flex: 1; }
 
 .pill {
@@ -113,6 +139,7 @@ html[data-bridge="waiting"] #mini-progress { visibility: hidden; }
 }
 
 .modeswitch {
+  flex: none;
   display: inline-flex;
   gap: 2px;
   padding: 3px;
@@ -122,6 +149,7 @@ html[data-bridge="waiting"] #mini-progress { visibility: hidden; }
 }
 .modeswitch button {
   border: 0;
+  white-space: nowrap;
   background: none;
   color: var(--muted);
   font-size: .78rem;
@@ -133,6 +161,7 @@ html[data-bridge="waiting"] #mini-progress { visibility: hidden; }
 .modeswitch button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
 button.icon {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -225,38 +254,6 @@ main { flex: 1; min-height: 0; padding: 16px; }
 /* ── 作る ───────────────────────────────────────────────────── */
 #view-create { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 18px; align-items: start; }
 
-#create-media-picker { grid-column: 1 / -1; display: grid; gap: 6px; }
-.media-switch {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-  width: min(420px, 100%);
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-}
-.media-switch button {
-  min-width: 0;
-  min-height: 44px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--muted);
-  font-weight: 700;
-}
-.media-switch button[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-.media-switch button:disabled { opacity: .55; cursor: progress; }
-.switch-badge {
-  margin-left: 6px;
-  padding: 1px 6px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  font-size: .64rem;
-}
 #video-create-fields { display: grid; gap: 7px; }
 #video-create-settings { justify-self: start; }
 #app[data-create-media="image"] [data-video-create],
@@ -520,7 +517,7 @@ textarea { resize: vertical; min-height: 96px; }
   cursor: not-allowed;
 }
 
-button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch button):not(.media-switch button):not(#shell-nav button) {
+button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch button):not(#shell-nav button) {
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: 10px;
@@ -933,10 +930,9 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
   .model-management-head { align-items: stretch; flex-direction: column; }
 
   #shell-header .pill { display: none; }
+  #shell-header h1 { display: none; }
   .settings-label { display: none; }
   button.icon.settings-entry { width: 38px; padding: 0; }
-  #create-media-picker { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-bottom: 2px; }
-  .media-switch { width: 100%; }
 
   #shell-nav {
     position: fixed;
@@ -1305,6 +1301,10 @@ table.catalog .tag {
   align-items: center;
   gap: 0.5rem;
 }
+.lora-row.unused {
+  /* 強さを出していない行は 1 列。3 列のままだと右に空の桁が残る。 */
+  grid-template-columns: 1fr;
+}
 .lora-row .check {
   display: flex;
   align-items: center;
@@ -1323,5 +1323,6 @@ table.catalog .tag {
   .lora-row {
     grid-template-columns: 1fr 3.2rem;
   }
+  .lora-row.unused { grid-template-columns: 1fr; }
   .lora-row input[type="range"] { grid-column: 1 / -1; }
 }

@@ -178,11 +178,11 @@ function callHost(method, params = {}) {
 function setHostBusy(value) {
   if (state.hostBusy === value) return;
   state.hostBusy = value;
-  for (const id of ["create-media-image", "create-media-video"]) byId(id).disabled = value;
+  byId("create-media-select").disabled = value;
   if (!state.bridgePort) return;
   void callHost("host.busy.set", {busy: value}).catch(() => {
     state.hostBusy = !value;
-    for (const id of ["create-media-image", "create-media-video"]) byId(id).disabled = !value;
+    byId("create-media-select").disabled = !value;
   });
 }
 
@@ -402,6 +402,10 @@ async function standaloneCall(method, params) {
       profile_reference_count: 0, source: model.source || null, ownership: "external",
       installed: model.installed, healthy: model.healthy, removable: false,
       state: model.state, supports_lora: model.supports_lora || false,
+      // 種別と系統を落とすと、単体表示では LoRA が土台の一覧に混ざり、
+      // 載せられるかどうかも判定できなくなる。
+      kind: model.kind || "model", base_model: model.base_model || "",
+      trigger_words: model.trigger_words || [],
       max_references: model.max_references || 0,
       reference_roles: model.reference_roles || [],
       supports_reference_strength: model.supports_reference_strength || false,
@@ -565,8 +569,7 @@ function unavailableVideoReason(value) {
 function renderCreateMedia() {
   const video = state.createMedia === "video";
   app().dataset.createMedia = video ? "video" : "image";
-  byId("create-media-image").setAttribute("aria-pressed", String(!video));
-  byId("create-media-video").setAttribute("aria-pressed", String(video));
+  byId("create-media-select").value = state.createMedia;
   byId("video-create-fields").hidden = !video;
   byId("create-intent-label").textContent = video ? "どんな動画を作りますか？" : "何を作りますか？";
   byId("create-intent").placeholder = video
@@ -582,7 +585,9 @@ function renderCreateMedia() {
   const usable = videoCapabilityUsable(capability);
   const anyExperimental = ["video.text_to_video", "video.image_to_video"]
     .some((name) => capabilityState(name) === "experimental");
-  byId("create-media-video-badge").hidden = !anyExperimental;
+  /* ヘッダーの選択肢はバッジを持てないので、試験中であることは項目名で伝える。 */
+  byId("create-media-select").options[1].textContent =
+    anyExperimental ? "動画を作る（試験中）" : "動画を作る";
   byId("video-create-summary").textContent = file
     ? "追加した画像を始点に短い動画を作ります。"
     : "文章から短い動画を作ります。画像を足すと、その画像を動かします。";
@@ -1186,16 +1191,61 @@ function renderCatalogResults(items) {
 
 /* ── LoRA の選択 ──────────────────────────────────────────────────────── */
 
-/* LoRA が土台を決める。利用者に先に checkpoint を選ばせるのではなく、最初に
-   選んだ LoRA と同じ系統だけを追加候補にして backend の自動 routing へ渡す。 */
-function loraCandidates() {
+/* いま LoRA を載せられる系統。土台を指定していればそれが決め、指定していなければ
+   最初に選んだ LoRA が決める。載せられないときは null を返す。空文字（制約なし）と
+   区別できないと、載らない組み合わせに強さのつまみを出すことになる。 */
+function loraTargetFamily() {
+  const base = chosenBaseModel();
+  if (base) return base.supports_lora ? (normalizeFamily(base.base_model) || null) : null;
   const selected = (state.selectedLoras || [])[0];
-  const target = selected
-    ? normalizeFamily(state.modelCatalog.find((item) => item.model_id === selected.model_id)?.base_model)
-    : "";
+  if (!selected) return "";
+  return normalizeFamily(
+    state.modelCatalog.find((item) => item.model_id === selected.model_id)?.base_model);
+}
+
+/* LoRA が土台を決める。利用者に先に checkpoint を選ばせるのではなく、最初に
+   選んだ LoRA と同じ系統だけを追加候補にする。土台を自分で指定したときは
+   その系統が先に決まるので、載せられるものだけを候補にする。 */
+function loraCandidates() {
+  const target = loraTargetFamily();
+  if (target === null) return [];
   return state.modelCatalog.filter((model) =>
     model.kind === "lora" && model.installed
     && (!target || normalizeFamily(model.base_model) === target));
+}
+
+/* 土台を変えたら、載らなくなった LoRA の選択は残さない。残すと、画面に出て
+   いない選択のまま生成して backend に断られる。 */
+function dropIncompatibleLoras() {
+  const usable = new Set(loraCandidates().map((lora) => lora.model_id));
+  const kept = (state.selectedLoras || []).filter((item) => usable.has(item.model_id));
+  const dropped = (state.selectedLoras || []).length - kept.length;
+  state.selectedLoras = kept;
+  return dropped;
+}
+
+function loraPickerNote(installed, candidates) {
+  const base = chosenBaseModel();
+  if (candidates.length) {
+    if ((state.selectedLoras || []).length) {
+      return base
+        ? `${base.display_name || base.model_id} に載せられる LoRA だけを追加できます。`
+        : "同じ系統の LoRA だけを追加できます。土台は自動で選びます。";
+    }
+    return base
+      ? "起動語は自動で足します。"
+      : "LoRA を選ぶだけで、互換する土台と起動語を自動適用します。";
+  }
+  const families = [...new Set(installed.map((lora) => lora.base_model).filter(Boolean))];
+  const forWhat = families.length ? `導入済みの LoRA は ${families.join(" / ")} 用です。` : "";
+  if (base && !base.supports_lora) {
+    return `${base.display_name || base.model_id} は LoRA を載せられません。${forWhat}`;
+  }
+  if (base) {
+    return `${base.display_name || base.model_id}（${base.base_model || "系統不明"}）`
+      + `に載せられる LoRA がありません。${forWhat}`;
+  }
+  return `一緒に使える LoRA がありません。${forWhat}`;
 }
 
 function renderLoraPicker() {
@@ -1205,11 +1255,7 @@ function renderLoraPicker() {
   block.hidden = installed.length === 0;
   if (block.hidden) return;
   const candidates = loraCandidates();
-  byId("lora-picker-note").textContent = candidates.length
-    ? ((state.selectedLoras || []).length
-        ? "同じ系統の LoRA だけを追加できます。土台は自動で選びます。"
-        : "LoRA を選ぶだけで、互換する土台と起動語を自動適用します。")
-    : "一緒に使える LoRA がありません。";
+  byId("lora-picker-note").textContent = loraPickerNote(installed, candidates);
   byId("lora-list").replaceChildren(...candidates.map((lora) => {
     const row = document.createElement("div");
     row.className = "lora-row";
@@ -1232,6 +1278,13 @@ function renderLoraPicker() {
       trigger.textContent = word;
       trigger.title = "この語を prompt に自動で足します。";
       label.append(trigger);
+    }
+    /* 強さは、載せると決めた LoRA にしか意味が無い。選ぶ前から出しても
+       動かす先が無く、載らない組み合わせにも出ているように見える。 */
+    if (!box.checked) {
+      row.classList.add("unused");
+      row.append(label);
+      return row;
     }
     const weight = document.createElement("input");
     weight.type = "range";
@@ -2854,16 +2907,13 @@ function qaOptions() {
   };
 }
 
-/* モデルは「おまかせ」と「指定する」の 2 段で出す。詳細モードでは
-   fast / balanced / quality / low_vram まで到達できる。段階開示で作り、
-   機能削除では作らない。 */
+/* モデルは常に見える 1 つの選択にする。「おまかせ」は選択肢の先頭に残すが、
+   既定で隠さない。auto の順位は catalog の policy_rank で決まり、利用者が
+   自分で足したモデルは既定順位のまま最後に回る。何が使われるか見えない状態を
+   既定にしない。詳細モードでは fast / balanced / quality / low_vram へ到達できる。 */
 function modelSelection() {
-  /* LoRA 自身が互換 family を指定する。以前の手動 checkpoint 選択が残っていても
-     それを利用者に直させず、同じ family 内の measured model を自動 routing する。 */
-  if (selectedLoras().length) {
-    const policy = state.mode === "advanced" ? byId("advanced-policy")?.value : "auto";
-    return {model_policy: policy && policy !== "manual" ? policy : "auto"};
-  }
+  /* LoRA を選んでいても土台の指定は捨てない。載るかどうかは backend が
+     系統で判定する。ここで auto へ戻すと、選んだ土台が黙って変わる。 */
   if (state.modelChoice === "manual") {
     const modelId = byId("model-choice-model").value;
     return modelId ? {model_policy: "manual", model_id: modelId} : {};
@@ -2875,32 +2925,45 @@ function modelSelection() {
   return modelId ? {model_policy: "manual", model_id: modelId} : {};
 }
 
+/* 画像を作るための土台だけを並べる。LoRA は単体では絵を作れないので混ぜない。 */
+function imageBaseModels() {
+  return state.modelCatalog.filter(
+    (model) => model.installed && model.healthy && model.kind !== "lora"
+      && (model.media_types || ["image"]).includes("image"));
+}
+
+/* 手で指定している土台。おまかせのときは null。 */
+function chosenBaseModel() {
+  if (state.modelChoice !== "manual") return null;
+  const modelId = byId("model-choice-model")?.value;
+  if (!modelId) return null;
+  return state.modelCatalog.find((model) => model.model_id === modelId) || null;
+}
+
 function renderModelChoice() {
-  const manual = state.modelChoice === "manual";
-  for (const chip of document.querySelectorAll("[data-model-choice]")) {
-    chip.setAttribute("aria-checked", String(chip.dataset.modelChoice === state.modelChoice));
-  }
-  const row = byId("model-choice-row");
   const select = byId("model-choice-model");
-  const usableModels = state.modelCatalog.filter(
-    (model) => model.installed && model.healthy && model.kind !== "lora");
+  const usableModels = imageBaseModels();
   const previous = select.value;
-  select.replaceChildren(...usableModels.map((model) => {
+  const auto = document.createElement("option");
+  auto.value = "";
+  auto.textContent = "おまかせ（自動で選ぶ）";
+  select.replaceChildren(auto, ...usableModels.map((model) => {
     const option = document.createElement("option");
     option.value = model.model_id;
     option.textContent = model.display_name || model.model_id;
     return option;
   }));
-  if (usableModels.some((model) => model.model_id === previous)) select.value = previous;
-  row.hidden = !manual;
+  select.value = usableModels.some((model) => model.model_id === previous) ? previous : "";
+  state.modelChoice = select.value ? "manual" : "auto";
   const note = byId("model-choice-note");
   if (!usableModels.length) {
     note.textContent = "使えるモデルがまだありません。設定から導入してください。";
     return;
   }
-  note.textContent = manual
+  note.textContent = select.value
     ? "指定したモデルだけを使います。"
-    : `シーンに合うモデルを ${usableModels.length} 件から自動で選びます。`;
+    : `評価済みの ${usableModels.length} 件から自動で選びます。`
+      + "自分で追加したモデルは既定の順位で後ろに回るので、使いたいときは指定してください。";
 }
 
 /* standalone には push が無いので、そこだけ従来どおり問い合わせる。
@@ -4825,11 +4888,9 @@ async function loadAdvancedSettings() {
 
 byId("mode-simple").addEventListener("click", () => setMode("simple"));
 byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
-byId("create-media-image").addEventListener("click", () => {
-  if (!state.hostBusy) setCreateMedia("image");
-});
-byId("create-media-video").addEventListener("click", () => {
-  if (!state.hostBusy) setCreateMedia("video");
+byId("create-media-select").addEventListener("change", (event) => {
+  if (state.hostBusy) return;
+  setCreateMedia(event.target.value);
 });
 byId("video-create-settings").addEventListener("click", () => {
   state.modelFilter = "video";
@@ -5236,12 +5297,17 @@ byId("pack-slots").addEventListener("click", (event) => {
   renderPackSlots();
 });
 
-byId("model-choice").addEventListener("click", (event) => {
-  const chip = event.target.closest("[data-model-choice]");
-  if (!chip) return;
-  state.modelChoice = chip.dataset.modelChoice;
+byId("model-choice-model").addEventListener("change", () => {
+  state.modelChoice = byId("model-choice-model").value ? "manual" : "auto";
+  const dropped = dropIncompatibleLoras();
   renderModelChoice();
+  renderLoraPicker();
+  renderModelSettings();
   clearError();
+  if (dropped) {
+    byId("create-status").textContent =
+      `選んだモデルに載せられない LoRA ${dropped} 件の選択を外しました。`;
+  }
 });
 
 byId("profile-add-character").addEventListener("click", () => openProfileDialog("character"));

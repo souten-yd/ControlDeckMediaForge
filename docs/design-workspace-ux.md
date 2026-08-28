@@ -146,8 +146,10 @@ before                      after
 | 幅・高さの直接入力 | L3 | 16 の倍数・envelope 検証つき |
 | 出力形式 png/webp/jpeg | L3 | 既定 png |
 | 枚数 5〜8 | L3 | VRAM と待ち時間の実害 |
-| model_policy 全 6 種 | L3 | 既定 auto |
-| model_id 指定（manual） | L3 | **唯一モデル名が出る場所** |
+| 使うモデル（おまかせ + 導入済み土台の一覧） | L1 | 既定は「おまかせ」。auto の順位は `policy_rank` 固定で、利用者が自分で足したモデルは既定順位のまま最後に回る。何が使われるか見えない状態を既定にしない |
+| LoRA の選択 | L2 | LoRA を 1 件でも導入したときだけ出る。土台を指定していればその `supports_lora` と系統に合うものだけ、指定していなければ最初に選んだ LoRA が系統を決める |
+| LoRA の強さ | L2 | 載せると決めた行にだけ出す。選ぶ前のスライダーは動かす先が無く、載らない組み合わせにも効いているように見える |
+| model_policy 全 6 種（fast / balanced / quality / low_vram） | L3 | 既定 auto。L1 の一覧はおまかせと manual だけを扱う |
 | 意味レビュー（qa.semantic）とリトライ上限 | L3 | 既定 OFF。unavailable なら理由付き無効 |
 | strict_edit / edit_mode の生指定 | L3 | 通常はアクション選択から導出 |
 | domain/scene/pose/composition/camera の全 template と自由補足 | L3 | versioned CreativeSpec template から表示 |
