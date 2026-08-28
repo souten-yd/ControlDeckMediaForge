@@ -6,14 +6,14 @@
 ## 現在地
 
 ```text
-最終更新    2026-08-27
-branch      release/v094-publish（origin/main 9fc7793 から作成）
-slice       Civitai numeric runtime revision and single-file registry repair
-状態        修正・PR merge・v0.9.4 release・標準update・installed browser完了 / 証跡PR前
-baseline    focused 6 files passed / final full 759 passed / 1 warning / 51.13s
+最終更新    2026-08-28
+branch      release/v095（origin/main d7fae4f から作成）
+slice       Always-visible model choice, LoRA compatibility gate, header media switch
+状態        実装・実Chrome確認・PR #157 merge・full test完了 / v0.9.5 release前
+baseline    full 761 passed / 1 warning / 65.61s（merge後の origin/main で再実行）
 installed   v0.9.4 / PID 181500,181506 / 127.0.0.1:9130 / healthy / contract 2.0
 GPU         生成再評価0。既存G7不採用証跡を維持
-PR          ControlDeck変更0 / Media Forge #154/#155 merged / 証跡PR前
+PR          ControlDeck変更0 / Media Forge #156/#157 merged / release PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -71,6 +71,15 @@ Mobile Create media switch は Media Forge #145、exact head
 ## 現在の slice の結果
 
 ```text
+PASS       おまかせの実態を router/models.json/custom_models.pyで確認。auto候補は2件固定
+PASS       使うモデルを常時表示。先頭「おまかせ」、以降は導入済みhealthyな画像土台
+PASS       FLUX.2 Klein 4B指定でLoRA候補0件・理由1行。SSD-1B指定でSDXL 1件だけ
+PASS       強さはチェック済みの行だけに描画。0.75操作でstate反映を実Chromeで確認
+PASS       土台変更で載らないLoRAを外し、件数を状況欄へ1行表示
+PASS       full 761 / 1 warning / 65.61s、git diff --check
+NOT TESTED 実LoRA weightを載せた生成の見た目差分（実機installedへ未反映のため）
+
+（前 slice / v0.9.4 の結果）
 PASS       実試行はdownload前、model operation 0件、catalog rollbackと特定
 PASS       exact LoRA 62833 + DreamShaper 128713でidentity invalidを再現
 PASS       Civitai namespaceだけ数値runtime revisionを許可。generic 40-hexは維持
@@ -90,7 +99,7 @@ ownershipだけをmanagedへ変更した。
 ## 次にやること（1つだけ）
 
 ```text
-1. 証跡をcommit/push/PR/mergeしてhandoffを閉じる
+1. v0.9.5をbuild/sign/publishし、実ControlDeckの標準updateで反映して証跡を残す
 2. 利用者が配布条件へ再同意した場合のみ実weight downloadとsame-seed比較
 3. production動画生成はzero-swapと実用品質を満たす候補までDEFERREDを維持する
 ```
