@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-28
-branch      release/v095-publish（origin/main e8fb0d1 から作成）
-slice       Always-visible model choice, LoRA gate, header media icons
-状態        実装・実Chrome確認・#157〜#160 merge・v0.9.5 release・標準update完了 / 証跡PR前
-baseline    full 761 passed / 2 warnings / 59.69s
+branch      release/v096（origin/main 1479276 から作成）
+slice       LoRA base auto-evaluation repair
+状態        原因特定・修正・PR #162 merge・full test完了 / v0.9.6 release前
+baseline    full 765 passed / 1 warning / 68.32s（新規4件）
 installed   v0.9.5 / PID 726119,726123 / 127.0.0.1:9130 / healthy / contract 2.0
-GPU         生成再評価0。既存G7不採用証跡を維持
-PR          ControlDeck変更0 / Media Forge #157-#160 merged / 証跡PR前
+GPU         生成再評価0。DreamShaper実評価はv0.9.6反映後に行う
+PR          ControlDeck変更0 / Media Forge #157-#162 merged / release PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -84,8 +84,10 @@ PASS       full 761 / 2 warnings / 59.69s、git diff --check
 NOT TESTED 実LoRA weightを載せた生成の見た目差分（実機installedへ未反映のため）
 PASS       signed v0.9.5 / 公開Release再取得でsha256一致 / ControlDeck標準update 11.88s
 PASS       installed v0.9.5でFLUX.2指定時にSD 1.5 LoRAと強さが出ないことを実機確認
-FOUND      civitai/16014が載る土台が実機に無い（civitai/4384 healthy=false・experimental）
-FOUND      loraCandidates()はinstalledのみ判定しhealthyを見ていない。土台側と不揃い
+FIXED      civitai/16014が載る土台が実機に無い件。原因はevaluate()と_run()の判定不一致で、
+           画像モデルは評価を開始できずoperation行すら残らなかった
+FIXED      追従がin-process task頼みで再起動に耐えなかった件。models.listで帳尻を合わせる
+NOTE       loraCandidates()はinstalledのみ判定。LoRA自体は測らなくても載るので不整合ではない
 NOT IMPL   host headerの詳細削除と1行化。EmbeddedAddonView.tsx:403-408のホスト共通
            ヘッダーで、add-onからheaderへ操作を出す拡張点がcontract 2.0に無い。別タスク
 DEBT       dist/を一度main へ入れた。#160で追跡解除。履歴のblobは残す
@@ -110,9 +112,8 @@ ownershipだけをmanagedへ変更した。
 ## 次にやること（1つだけ）
 
 ```text
-1. 証跡をcommit/push/PR/mergeしてhandoffを閉じる
-2. LoRA civitai/16014が載る土台が実機に1つも無い件（civitai/4384がhealthy=false・
-   experimental）と、loraCandidates()がhealthyを見ていない件を別sliceで扱う
+1. v0.9.6をbuild/sign/publishし、実ControlDeckへ反映してDreamShaperの自動評価を実測する
+2. 評価が通ったらcivitai/16014を実際に載せたsame-seed比較まで進める
 3. host headerの詳細削除と1行化は利用者が別タスクで進行中。こちらからは触らない
 ```
 
