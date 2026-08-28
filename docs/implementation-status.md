@@ -5949,3 +5949,27 @@ ControlDeck 本体（PID 851488、15:24:47 起動）は正常で、`/health` は
 192.168.68.67 と Tailscale 100.82.8.44 のいずれからも 200 を返した。原因は iPhone 側の
 Tailscale が offline（`last seen 5m ago`、relay "tok" 経由）だったことである。
 Media Forge 側の変更とは無関係で、13:51:52 起動の 0.9.8 process は稼働を続けていた。
+
+## 載せられるかを宣言ではなく実際で決める（2026-08-28）
+
+`Lykon/DreamShaper` の自動評価は動いた。06:48:42→06:48:56 の 14 秒で ready、
+execution peak VRAM 3,939,438,592 bytes、runtime 13.0 秒、512x512、出力 325,726 bytes。
+記録後は `state=available / healthy=true / measured_vram_bytes=5,013,180,416` となり、
+「使うモデル」の候補が 3 件から 4 件へ増えた。
+
+それでも LoRA は載せられなかった。実 Chrome（installed 127.0.0.1:9130、390x844）で
+DreamShaper を指定すると LoRA 行は 0 件、説明は
+「Lykon/DreamShaper は LoRA を載せられません。導入済みの LoRA は SD 1.5 用です。」だった。
+
+原因は `custom_models.py:1205` が、利用者の追加したモデルを常に
+`"supports_lora": False` で登録することである。一方 backend はこの旗を一切見ておらず、
+`_resolved_loras()` は系統の一致だけで判定する（`jobs.py` / `router.py` に
+`supports_lora` の参照は 0 件）。つまり旗は画面専用のゲートで、自分で足した
+checkpoint は worker なら載せられるのに、画面が必ず隠していた。
+
+載る条件は「diffusers の checkpoint であること」と「系統が分かること」の 2 つで、
+これは導入後に repository 自身を読めば決まる。`_observed_defaults()` で
+`base_model` を読む場所に寄せ、立てる方向にだけ動かすようにした。系統を持たない
+FLUX.2 Klein 4B は false のまま残り、宣言で立っている SSD-1B は触らない。
+
+`./mf.sh test` は 769 passed / 1 warning / 53.30 秒（新規 1 件）、`git diff --check` PASS。

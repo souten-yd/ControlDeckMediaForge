@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-28
-branch      fix/evaluate-after-any-install（origin/main 56c5f7a から作成）
-slice       落とし終えた土台を、人が画面を開くまで放置しない
-状態        follow_installへ統合・full test完了 / v0.9.9 release前
-baseline    full 769 passed / 1 warning / 63.09s（新規1件）
-installed   v0.9.8 / PID 807184 / 127.0.0.1:9130 / healthy / contract 2.0
-GPU         生成再評価0。Lykon/DreamShaperの実評価は未実施
-PR          ControlDeck変更0 / Media Forge #157-#165 merged / release PR前
+branch      fix/derive-supports-lora（origin/main c89bb80 から作成）
+slice       載せられるかを宣言ではなく実際で決める
+状態        DreamShaper実評価ready・実Chromeで残る壁を発見して修正 / v0.9.10 release前
+baseline    full 770 passed / 1 warning / 59.67s（新規1件）
+installed   v0.9.9 / 127.0.0.1:9130 / healthy / contract 2.0
+GPU         Lykon/DreamShaper評価ready。peak VRAM 3,939,438,592 B / 13.0s / 512x512
+PR          ControlDeck変更0 / Media Forge #157-#166 merged / release PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit

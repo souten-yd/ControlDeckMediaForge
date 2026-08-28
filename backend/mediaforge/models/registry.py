@@ -11,6 +11,7 @@ from typing import Any
 from .generation_defaults import (  # noqa: F401
     native_side_from_config,
     base_model_from_config,
+    normalize_base_model,
     pipeline_class_from_config,
     resolution_buckets,
     resolve_steps,
@@ -579,7 +580,7 @@ class ModelRegistry:
         読めない。導入が済んだここが、モデルの中身を初めて見られる場所である。
         宣言があるならそれを尊重する。実測して直した値を上書きしない。
         """
-        observed: dict[str, int] = {}
+        observed: dict[str, Any] = {}
         # diffusers の repository の形をしているものだけ。動画系の native ランタイムは
         # 別の設定体系を持つので、読めた気になって埋めない。
         if not descriptor.runtime_adapter.startswith("diffusers."):
@@ -595,6 +596,17 @@ class ModelRegistry:
             steps, source = resolve_steps(pipeline_class_from_config(snapshot), snapshot)
             observed["default_steps"] = steps
             observed["default_steps_source"] = source
+        # LoRA を載せられるかは、宣言ではなく実際に載せられるかで決まる。
+        # 載る条件は diffusers の checkpoint であることと、系統が分かることの
+        # 2 つで、_resolved_loras() もそれしか見ていない。利用者が自分で足した
+        # モデルは常に supports_lora=false で登録されるため、この旗を信じている
+        # 画面だけが、worker なら載せられる組み合わせを隠していた。
+        # 立てる方向にしか動かさない。宣言で false にした本当に載らないものは、
+        # 系統を持たないので、ここでも false のままになる。
+        if not descriptor.supports_lora:
+            family = observed.get("base_model") or descriptor.base_model
+            if normalize_base_model(str(family)):
+                observed["supports_lora"] = True
         return observed
 
     @classmethod
