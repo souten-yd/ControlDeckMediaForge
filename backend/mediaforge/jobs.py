@@ -481,6 +481,15 @@ class JobManager:
                     "capability_unavailable",
                     f"no installed model provides {capability}",
                 )
+            if lora_family:
+                # LoRA は利用者が明示的に選んだものである。載せる先が無いことを
+                # 黙って「本物のモデルが無い開発環境」の経路へ落とすと、model を
+                # 持たない payload でワーカーが起動し、exit code 2 で落ちる。
+                # 実機ではこれが理由の分からない worker_crash に見えていた。
+                raise WorkerFailure(
+                    "lora_base_unavailable",
+                    "選んだ LoRA に互換する評価済みの土台がありません",
+                )
             return None
         try:
             decision = route(

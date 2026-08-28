@@ -719,10 +719,21 @@ class H3ModelEvaluator:
             hf_home=self.hf_home,
             model_store_root=self.model_store_root,
         )
-        try:
-            return next(item for item in registry.all() if item.model_id == model_id)
-        except StopIteration as exc:
-            raise ModelOperationError("model_not_found", "model is not in the trusted catalog") from exc
+        for item in registry.all():
+            if item.model_id == model_id:
+                return item
+        # shipped manifest には利用者が自分で足したモデルが居ない。候補として
+        # 挙げる側（_image_candidates）は custom を含む loader を見ているので、
+        # ここだけ見ないと「一覧には出るのに始められない」になる。実機では
+        # これで LoRA が連れてきた土台の評価が model_not_found で止まっていた。
+        if self.registry_loader is not None:
+            try:
+                for item in self.registry_loader():
+                    if item.model_id == model_id:
+                        return item
+            except (ModelRegistryError, OSError):
+                pass
+        raise ModelOperationError("model_not_found", "model is not in the trusted catalog")
 
     def _preflight(self, model: ModelDescriptor) -> None:
         if model.model_id == WAN_MODEL_ID:

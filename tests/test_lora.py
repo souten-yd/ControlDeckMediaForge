@@ -269,3 +269,60 @@ def test_a_lora_beside_the_model_is_accepted(tmp_path: Path, monkeypatch):
     )
 
     assert resolved[0]["weight"] == 0.8
+
+
+def test_a_lora_without_a_measured_base_is_refused_instead_of_running_without_one(
+    tmp_path: Path, monkeypatch
+):
+    """載せる先が無いことを、黙って「モデル無し」の経路へ落とさない。
+
+    落とすと model を持たない payload でワーカーが起動し、exit code 2 で死ぬ。
+    実機ではこれが理由の分からない worker_crash に見えていた（job_e4a1b7cf、
+    2026-08-28）。ついでに AI ターンの終了宣言も飛ばされ、LLM が居座った。
+    """
+    from dataclasses import replace
+
+    from mediaforge.domain import JobRequest
+    from mediaforge import jobs as jobs_module
+    from mediaforge.jobs import JobManager, WorkerFailure
+    from mediaforge.models import ModelDescriptor, ModelState
+    from mediaforge.models.registry import WeightFile
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    manager.model_manifest = tmp_path / "models.json"
+    manager.hf_home = tmp_path / "hf"
+    path = tmp_path / "lora.safetensors"
+    path.write_bytes(b"x")
+    lora = ModelDescriptor(
+        model_id="civitai/1", family="custom", version="1", revision="1",
+        weights_hash="sha256:" + "a" * 64, license="x",
+        runtime_adapter="lora.diffusers", capabilities=("image.lora",),
+        hardware_backends=("rocm",), state=ModelState.EXPERIMENTAL,
+        policy_rank={"auto": 1}, required_files=(),
+        weights=(WeightFile(path=path.name, size_bytes=1, sha256="b" * 64),),
+        installed=True, local_path=path, base_model="SD 1.5",
+    )
+    # 同じ系統の土台はあるが、まだ measured でないので available にならない。
+    base = replace(
+        lora, model_id="civitai/4384", runtime_adapter="diffusers.sdxl-single-file",
+        capabilities=("image.text_to_image",), base_model="SD 1.5",
+    )
+
+    class Loaded:
+        @staticmethod
+        def all() -> tuple[ModelDescriptor, ...]:
+            return (lora, base)
+
+    monkeypatch.setattr(jobs_module.ModelRegistry, "load", staticmethod(lambda *a, **k: Loaded))
+    job = store.create_job(JobRequest(
+        operation="image.generate", intent="test", model_policy="auto",
+        constraints={"loras": [{"model_id": lora.model_id}]},
+    ))
+
+    with pytest.raises(WorkerFailure) as failure:
+        manager._select_real_model(store.get_job(job.id))
+
+    assert failure.value.code == "lora_base_unavailable"
