@@ -326,3 +326,41 @@ def test_a_lora_without_a_measured_base_is_refused_instead_of_running_without_on
         manager._select_real_model(store.get_job(job.id))
 
     assert failure.value.code == "lora_base_unavailable"
+
+
+def test_a_self_added_checkpoint_can_take_a_lora(tmp_path: Path):
+    """載せられるかは、宣言ではなく実際に載せられるかで決める。
+
+    利用者が自分で足したモデルは常に supports_lora=false で登録される
+    (custom_models.py)。backend は旗を見ずに系統だけで判定するので、画面だけが
+    worker なら載せられる組み合わせを隠していた。実機では、評価まで通した
+    Lykon/DreamShaper (SD 1.5) に SD 1.5 の LoRA を載せられなかった。
+    """
+    from dataclasses import replace
+
+    from mediaforge.models import ModelDescriptor, ModelState
+    from mediaforge.models.registry import ModelRegistry, WeightFile
+
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    checkpoint = ModelDescriptor(
+        model_id="Lykon/DreamShaper", family="custom", version="1", revision="1",
+        weights_hash="sha256:" + "a" * 64, license="x",
+        runtime_adapter="diffusers.sdxl", capabilities=("image.text_to_image",),
+        hardware_backends=("rocm",), state=ModelState.EXPERIMENTAL,
+        policy_rank={"auto": 1}, required_files=(),
+        weights=(WeightFile(path="w.safetensors", size_bytes=1, sha256="b" * 64),),
+        installed=True, local_path=snapshot, base_model="SD 1.5",
+        supports_lora=False, default_steps=30, native_width=512, native_height=512,
+    )
+
+    assert ModelRegistry._observed_defaults(checkpoint, snapshot).get("supports_lora") is True
+    # 系統が分からないものは、載せられると言わない。
+    unknown = replace(checkpoint, base_model="")
+    assert ModelRegistry._observed_defaults(unknown, snapshot).get("supports_lora") is None
+    # 宣言で立っているものを触らない。
+    declared = replace(checkpoint, supports_lora=True)
+    assert "supports_lora" not in ModelRegistry._observed_defaults(declared, snapshot)
+    # diffusers 以外は読めた気にならない。
+    native = replace(checkpoint, runtime_adapter="native.h3")
+    assert ModelRegistry._observed_defaults(native, snapshot) == {}
