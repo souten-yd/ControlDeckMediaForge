@@ -982,3 +982,19 @@ def test_the_workspace_boot_catches_up_the_base_evaluations_it_owes() -> None:
     ]
     assert "start_pending_lora_base_evaluations(identity)" in session
     assert '"models": model_catalog,' in session
+
+
+def test_a_finished_download_is_followed_up_without_waiting_for_a_person() -> None:
+    """落とし終えた土台を、誰かが画面を開くまで放置しない。
+
+    追従を LoRA 依存の経路だけに掛けていたので、checkpoint を単体で入れた
+    ときは何も起きなかった。実機では Lykon/DreamShaper が 05:56 に落ち終えて
+    そのまま未計測で残り、使える土台が無いままだった（2026-08-28）。
+    """
+    source = (Path(__file__).parents[1] / "backend/mediaforge/app.py").read_text(encoding="utf-8")
+    install = source[
+        source.index('elif method == "models.install":'):source.index('elif method == "models.remove":')
+    ]
+    assert "follow_install(installed.id, identity)" in install
+    # 依存の経路も同じ追従を使う。2 つ持つとまた片方だけ直すことになる。
+    assert source.count("follow_install(") >= 3

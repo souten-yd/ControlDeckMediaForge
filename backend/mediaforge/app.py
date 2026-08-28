@@ -357,12 +357,19 @@ def create_app(
         if started:
             session_events.publish("model_operations")
 
-    async def evaluate_installed_lora_base(
+    async def evaluate_after_install(
         install_operation_id: str,
-        model_id: str,
         identity: HostIdentity,
     ) -> None:
-        """Continue a confirmed LoRA download through base evaluation."""
+        """Finish what a download started: measure the base a LoRA now has.
+
+        A base only becomes selectable once it has been measured here, and the
+        model that needs it may have arrived by any route — a LoRA pulling its
+        base down with it, or someone adding the checkpoint on its own. Waiting
+        for the next time a person opens the workspace leaves a download that
+        finished unattended sitting unusable, which is what happened with
+        Lykon/DreamShaper on 2026-08-28.
+        """
         while True:
             operation = store.get_model_operation(install_operation_id)
             if operation.state.value == "ready":
@@ -371,6 +378,14 @@ def create_app(
                 return
             await asyncio.sleep(0.5)
         start_pending_lora_base_evaluations(identity)
+
+    def follow_install(operation_id: str, identity: HostIdentity) -> None:
+        task = asyncio.create_task(
+            evaluate_after_install(operation_id, identity),
+            name=f"install-follow-up-{operation_id}",
+        )
+        dependency_tasks.add(task)
+        task.add_done_callback(dependency_tasks.discard)
     workspace_test_delay_pending = True
 
     @asynccontextmanager
@@ -2322,10 +2337,14 @@ def create_app(
                         acceptance = params.get("license_acceptance")
                         if acceptance is not None and not isinstance(acceptance, str):
                             raise ValueError("license_acceptance must be a string")
-                        result = model_operations.install(
+                        installed = model_operations.install(
                             str(params.get("model_id", "")),
                             license_acceptance=acceptance,
-                        ).model_dump(mode="json")
+                        )
+                        # 落とした先が、導入済み LoRA の待っていた土台かもしれない。
+                        # 誰かが画面を開くまで待たない。
+                        follow_install(installed.id, identity)
+                        result = installed.model_dump(mode="json")
                     elif method == "models.remove":
                         if model_operations is None:
                             raise ModelOperationError("model_not_found", "model catalog is unavailable")
@@ -2473,14 +2492,7 @@ def create_app(
                             dependency_id = entries[1]["registry"]["model_id"]
                             install_id = install_ids.get(dependency_id)
                             if install_id is not None:
-                                task = asyncio.create_task(
-                                    evaluate_installed_lora_base(
-                                        install_id, dependency_id, identity
-                                    ),
-                                    name=f"lora-base-evaluation-{install_id}",
-                                )
-                                dependency_tasks.add(task)
-                                task.add_done_callback(dependency_tasks.discard)
+                                follow_install(install_id, identity)
                             elif model_evaluations is not None:
                                 try:
                                     evaluation = model_evaluations.evaluate(
