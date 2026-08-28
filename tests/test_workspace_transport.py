@@ -967,3 +967,18 @@ def test_custom_model_add_is_refused_without_accepting_the_shown_licence(tmp_pat
 
     assert answer["ok"] is False
     assert answer["error"]["code"] == "custom_model_license_not_accepted"
+
+
+def test_the_workspace_boot_catches_up_the_base_evaluations_it_owes() -> None:
+    """埋め込みの boot は models.list を呼ばない。集約の session を通る。
+
+    追従を models.list だけに掛けると、ControlDeck の中では一度も走らない。
+    実機ではそれで、LoRA が連れてきた土台が未計測のまま残り続けた。
+    session の models を作るところに置く理由がこれである。
+    """
+    source = (Path(__file__).parents[1] / "backend/mediaforge/app.py").read_text(encoding="utf-8")
+    session = source[
+        source.index("    async def session_snapshot("):source.index("        async def produce(")
+    ]
+    assert "start_pending_lora_base_evaluations(identity)" in session
+    assert '"models": model_catalog,' in session

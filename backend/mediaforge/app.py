@@ -2021,6 +2021,10 @@ def create_app(
         """
         wanted = set(parts)
         snapshot: dict[str, Any] = {"session_version": 1, "parts": sorted(wanted)}
+        # 画面を開くたびに帳尻を合わせる。埋め込みの boot はここを通り、
+        # 個別の models.list は呼ばない。再起動で消えた評価をここで拾う。
+        if identity is not None and "models" in wanted:
+            start_pending_lora_base_evaluations(identity)
 
         async def capabilities_part() -> dict[str, Any]:
             envelope = size_envelope()
