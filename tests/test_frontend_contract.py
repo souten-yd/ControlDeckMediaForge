@@ -324,6 +324,9 @@ def test_create_media_switch_is_mobile_safe_and_video_is_capability_gated():
     # 指で押せる大きさを保つこと。絵だけなので、読み上げには言葉を残す。
     header = MARKUP[MARKUP.index("<header id=\"shell-header\""):MARKUP.index("</header>")]
     assert header.index('id="create-media-switch"') < header.index('class="modeswitch"')
+    # 切り替えは左に寄せ、設定だけを右端へ逃がす。余白は 2 つの切り替えの後ろに置く。
+    assert header.index('class="modeswitch"') < header.index('class="grow"')
+    assert header.index('class="grow"') < header.index('id="nav-settings"')
     assert 'aria-label="画像を作る"' in header and 'aria-label="動画を作る"' in header
     switch = STYLES[STYLES.index(".mediaswitch button {"):STYLES.index(".mediaswitch button svg")]
     assert "min-width: 40px" in switch and "min-height: 32px" in switch

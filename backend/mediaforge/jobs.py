@@ -1289,7 +1289,18 @@ class JobManager:
             )
             environment["MEDIA_FORGE_WORK_ROOT"] = str(self.store.work_dir.resolve())
             stdin_payload += b"\n"
-            timeout_sec = max(self.worker_timeout_sec, float(selected.measured_runtime_sec or 0) * 3 + 30)
+            # 実測は 1 枚ぶんである。頼まれた枚数を数えずに打ち切ると、モデルが
+            # 遅いのではなく枚数のぶんだけ落ちる。実機では 13.0 秒の実測に対して
+            # 4 枚が 69 秒で切られ、同じ設定が通ったり落ちたりしていた。
+            # 意味レビューを付けると枚数はさらに増えるので、worker へ渡す数を見る。
+            wanted = 1
+            requested = payload.get("request", {}).get("output", {}).get("count")
+            if isinstance(requested, int) and requested > 0:
+                wanted = requested
+            timeout_sec = max(
+                self.worker_timeout_sec,
+                float(selected.measured_runtime_sec or 0) * 3 * wanted + 30,
+            )
         process = await asyncio.create_subprocess_exec(
             str(executable),
             "-m",
