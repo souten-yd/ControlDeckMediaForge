@@ -5823,3 +5823,46 @@ LoRA      : 導入済みは civitai/16014（SD 1.5）1 件
 
 host header の 詳細 削除と 2 段ヘッダーの 1 行化は利用者が別タスクで進めるため、
 この slice では **NOT IMPLEMENTED** のままとする。
+
+## LoRA が連れてきた土台が使えるようになるまで（2026-08-28）
+
+利用者から「生成まで進んでバックエンドで断られるのは嫌なので、必要な土台は
+ダウンロード時に自動で導入して動くようにしてほしい」という指示があった。実機の
+`civitai/16014`（SD 1.5 LoRA）は導入済みだが、載せられる土台が 1 つも無い状態だった。
+
+実機の永続状態を read-only で調べ、原因を特定した。
+
+```text
+model_operations   civitai/16014 install ready 18,986,312/18,986,312   22:13:43→22:13:47
+                   civitai/4384  install ready 2,132,625,894/同        22:13:43→22:17:03
+                   civitai/4384 の evaluate 操作は 0 件
+custom-models.json civitai/4384  state=experimental / confidence=low
+```
+
+土台の自動ダウンロード自体は動いていた。止まっていたのは、その次の自動評価である。
+`ModelEvaluator.evaluate()` は operation を作る前に `_preflight()` を呼ぶが、
+`_preflight()` は Wan / Hunyuan / CogVideoX / VACE / H3 の 5 preset しか知らず、
+それ以外は `model_evaluation_unsupported` を送出する。一方 `_run()` は画像モデルを
+`_preflight()` の**前**に `_run_image_evaluation()` へ振り分けていた。判定が 2 か所に
+分かれて食い違っていたため、画像モデルは「評価を始めることだけができない」。
+operation 行すら作られないので、画面にも記録にも何も残らなかった。
+`evaluate_installed_lora_base` はその `ModelOperationError` を握り潰していた。
+
+`stabilityai/stable-diffusion-xl-base-1.0` が measured なのは、UI ではなく
+`scripts/verify_installed_models.py`（CLI）で測ったためである。UI からの画像モデル
+評価は一度も成立していなかった。
+
+直したのは 3 点である。
+
+```text
+1. 画像評価かどうかの判定を _runs_as_image_evaluation() 1 か所に集約し、
+   evaluate() と _run() の両方がそれを使う。画像モデルは _preflight() を通さない
+2. 追従を in-process task 頼みにしない。unmeasured_lora_bases() が「導入済み LoRA が
+   要る系統で、まだ measured でない土台」を挙げ、models.list のたびに評価を始める。
+   再起動で task が消えても次に開いたときに追いつく
+3. 失敗を握り潰さない。始められなかった評価は理由付きで log へ出す。
+   一度 failed になった評価は自動で繰り返さず、利用者が押し直すまで再開しない
+```
+
+`./mf.sh test` は 765 passed / 1 warning / 68.32 秒（新規 4 件）、`git diff --check` PASS。
+新規テストは修正を戻すと `model_evaluation_unsupported` で落ちることを確認済みである。
