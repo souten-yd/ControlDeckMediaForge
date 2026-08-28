@@ -20,15 +20,23 @@
         <h1>Media Forge</h1>
         <span class="pill" title="推論はこの端末の中だけで実行されます">ローカルのみ</span>
         <span class="grow"></span>
-        <label class="function-switch" id="create-media-switch" aria-label="作る素材">
-          <select id="create-media-select">
-            <option value="image">画像を作る</option>
-            <option value="video">動画を作る</option>
-          </select>
-          <svg class="function-switch-caret" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="m8 10.5 4 4 4-4"/>
-          </svg>
-        </label>
+        <div class="mediaswitch" id="create-media-switch" role="group" aria-label="作る素材">
+          <button type="button" id="create-media-image" data-create-media="image" aria-pressed="true"
+                  aria-label="画像を作る" title="画像を作る">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="3" y="5" width="18" height="14" rx="2.5"/>
+              <circle cx="8.5" cy="10" r="1.6"/>
+              <path d="m4 17 4.5-4.5 3.5 3.5 3-2.5L20 18"/>
+            </svg>
+          </button>
+          <button type="button" id="create-media-video" data-create-media="video" aria-pressed="false"
+                  aria-label="動画を作る" title="動画を作る">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="3" y="6" width="12" height="12" rx="2.5"/>
+              <path d="M15 10.5 21 7.5v9L15 13.5z"/>
+            </svg>
+          </button>
+        </div>
         <div class="modeswitch" role="group" aria-label="表示モード">
           <button type="button" id="mode-simple" aria-pressed="true">シンプル</button>
           <button type="button" id="mode-advanced" aria-pressed="false">詳細</button>
