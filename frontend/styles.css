@@ -109,21 +109,41 @@ html:not([data-bridge="standalone"]) #shell-header h1 {
   overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 
-/* 作る素材の切り替え。ヘッダーに置くので、面積を取らない一つのプルダウンにする。 */
-.function-switch { position: relative; display: inline-flex; align-items: center; min-width: 0; flex: 0 1 auto; }
-.function-switch select {
-  width: auto; max-width: min(40vw, 200px); min-height: 34px;
-  padding: 0 30px 0 13px;
-  border: 1px solid var(--accent); border-radius: 999px;
-  background: var(--surface); color: var(--accent);
-  font-size: .8rem; font-weight: 700;
-  appearance: none; -webkit-appearance: none;
+/* 作る素材の切り替え。ヘッダーの 1 行に表示モードと並べるので、文字ではなく
+   絵で示す。選択肢が 2 つしか無く、どちらも一目で分かる形を持つため、
+   プルダウンより押す手数が 1 つ減る。 */
+.mediaswitch {
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
 }
-.function-switch select:disabled { opacity: .55; cursor: progress; }
-.function-switch-caret {
-  position: absolute; inset-inline-end: 9px;
-  width: 1rem; height: 1rem; color: var(--accent); pointer-events: none;
-  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+.mediaswitch button {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  min-width: 40px; min-height: 32px;
+  padding: 0 8px;
+  border-radius: 999px;
+}
+.mediaswitch button svg {
+  width: 1.15rem; height: 1.15rem;
+  fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.mediaswitch button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.mediaswitch button:disabled { opacity: .55; cursor: progress; }
+/* 絵は文字を持てない。試験中であることは印と、読み上げ・長押しに出る説明で伝える。 */
+.mediaswitch button[data-experimental="true"]::after {
+  content: ""; position: absolute; top: 4px; inset-inline-end: 6px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--warn, #d98324);
+  border: 1px solid var(--surface);
 }
 .grow { flex: 1; }
 
@@ -517,7 +537,7 @@ textarea { resize: vertical; min-height: 96px; }
   cursor: not-allowed;
 }
 
-button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch button):not(#shell-nav button) {
+button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch button):not(.mediaswitch button):not(#shell-nav button) {
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: 10px;
@@ -1006,6 +1026,7 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
   .form-row:not(.search) { grid-template-columns: 1fr; }
   #shell-header { gap: 6px; padding: 0 10px; }
   .modeswitch button { padding: 5px 8px; }
+  .mediaswitch button { min-width: 34px; padding: 0 5px; }
   .creative-selects { grid-template-columns: 1fr; }
   .creative-selects label:last-child { grid-column: auto; }
   .director-control { grid-template-columns: auto 1fr; }

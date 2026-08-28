@@ -5731,3 +5731,38 @@ select の項目に入れられないので、`video.*` が experimental のと�
 `./mf.sh test` は 761 passed。frontend contract は、切り替えが header 内で `.modeswitch` より左に
 あること、`.function-switch select` が押せる高さと `appearance: none` を保つことを検証する。
 実 ControlDeck 導入済み instance での確認は release 時に行う。
+
+## 作る素材の切替をヘッダーの絵 2 択にする（2026-08-28）
+
+v0.9.5 の時点では、作る素材の切替はヘッダーのプルダウン 1 個だった。利用者から
+「動画を作る／画像を作るはアイコンにしてシンプル／詳細の左に置いてほしい」という指示があり、
+`.mediaswitch` として `.modeswitch` と同じ丸みの分割ボタンへ置き換えた。選択肢が 2 つしか無く
+どちらも一目で分かる形を持つため、開いてから選ぶ手数が 1 つ減る。絵は文字を持てないので、
+試験中であることは印（`[data-experimental="true"]::after`）と `aria-label` / `title` の
+両方で伝える。
+
+実装中に、既存の総称ボタン規則
+`button:not(.primary):not(.chip):not(.icon):not(.edit-action):not(.modeswitch button):not(#shell-nav button)`
+が `.mediaswitch button` にも当たり、`:not()` 内の id によって特異度が勝つため押下中の
+accent 背景が出ないことを実ブラウザの描画で見つけた。除外へ `.mediaswitch button` を足して直した。
+テストは通ったままだったので、これは実機描画でしか出なかった不具合である。
+
+実 Chrome（Chrome/151.0.7922.169、headless、CDP、390x844 mobile emulation）での観測。
+
+```text
+ヘッダー並び : H1 | ローカルのみ | grow | create-media-switch | modeswitch | nav-settings
+              高さ 52px、horizontal overflow 0
+当たり判定  : 画像 44x38 / 動画 44x38（狭幅 359px 以下は min-width 34px へ）
+画像→動画    : aria-pressed が入れ替わり、createMedia=video、
+              「どんな動画を作りますか？」、動画欄 hidden=false
+動画→画像    : 元へ戻る。overflow は常に 0
+取り込み中   : setHostBusy(true) で 2 つとも disabled、押しても素材は変わらない
+```
+
+`./mf.sh test` 761 passed / 2 warnings / 59.69 秒、`git diff --check` PASS。
+
+host header の 詳細 ボタンと 2 段ヘッダーは Media Forge 側では消せない。実体は
+ControlDeck の `app/frontend/src/features/addons/EmbeddedAddonView.tsx:403-408` にある
+埋め込み add-on 共通ヘッダーで、`{title}` と `{addon.name} · {routePath}` に加えて
+`/settings?extension=<id>` へ飛ぶ 詳細 ボタンを常に描く。add-on 側から header へ
+操作を出す拡張点は contract 2.0 に存在しない。**NOT IMPLEMENTED**。

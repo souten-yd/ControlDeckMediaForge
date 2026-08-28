@@ -29,7 +29,7 @@ DOM_IDS = (
     "app", "skeleton", "shell-header", "shell-nav",
     "nav-create", "nav-library", "nav-activity", "nav-settings",
     "mode-simple", "mode-advanced",
-    "create-media-switch", "create-media-select",
+    "create-media-switch", "create-media-image", "create-media-video",
     "create-intent-label", "video-create-fields",
     "video-create-summary", "video-create-note", "video-create-settings", "result-video",
     "create-form", "create-intent", "create-submit", "create-status",
@@ -320,12 +320,16 @@ def test_create_media_switch_is_mobile_safe_and_video_is_capability_gated():
     assert 'output: {format: "mp4", count: 1}' in submit
     problem = SCRIPT[SCRIPT.index("function requestProblem"):SCRIPT.index("async function submitVideoJob")]
     assert 'videoCapabilityUsable()' in problem
-    # 切り替えはヘッダーに常駐する。狭い画面でも折り返さず、指で押せる高さを保つこと。
+    # 切り替えはヘッダーに常駐し、表示モードのすぐ左に並ぶ。狭い画面でも折り返さず、
+    # 指で押せる大きさを保つこと。絵だけなので、読み上げには言葉を残す。
     header = MARKUP[MARKUP.index("<header id=\"shell-header\""):MARKUP.index("</header>")]
     assert header.index('id="create-media-switch"') < header.index('class="modeswitch"')
-    switch = STYLES[STYLES.index(".function-switch select {"):STYLES.index(".function-switch-caret")]
-    assert "min-height: 34px" in switch
-    assert "appearance: none" in switch
+    assert 'aria-label="画像を作る"' in header and 'aria-label="動画を作る"' in header
+    switch = STYLES[STYLES.index(".mediaswitch button {"):STYLES.index(".mediaswitch button svg")]
+    assert "min-width: 40px" in switch and "min-height: 32px" in switch
+    # 試験中は絵の上の印と、読み上げ・長押しに出る言葉の両方で伝える。
+    assert '.mediaswitch button[data-experimental="true"]::after' in STYLES
+    assert 'videoButton.setAttribute("aria-label", videoLabel)' in SCRIPT
 
 
 # 失敗コードは複数の形で書かれる: HTTPException の detail、WorkerFailure の第 1 引数、

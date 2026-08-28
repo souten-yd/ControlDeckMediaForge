@@ -172,17 +172,25 @@ function callHost(method, params = {}) {
   });
 }
 
+function mediaSwitchButtons() {
+  return [byId("create-media-image"), byId("create-media-video")];
+}
+
+function setMediaSwitchDisabled(value) {
+  for (const button of mediaSwitchButtons()) button.disabled = value;
+}
+
 /* host の「未保存」は離脱を警告する。Media Forge には保存の概念が無く、
    実行中の作業はサーバ側の job として残るので、入力しただけでは立てない。
    実際に失うものがある間（取り込み中・受付中）だけ立てる。 */
 function setHostBusy(value) {
   if (state.hostBusy === value) return;
   state.hostBusy = value;
-  byId("create-media-select").disabled = value;
+  setMediaSwitchDisabled(value);
   if (!state.bridgePort) return;
   void callHost("host.busy.set", {busy: value}).catch(() => {
     state.hostBusy = !value;
-    byId("create-media-select").disabled = !value;
+    setMediaSwitchDisabled(!value);
   });
 }
 
@@ -569,7 +577,9 @@ function unavailableVideoReason(value) {
 function renderCreateMedia() {
   const video = state.createMedia === "video";
   app().dataset.createMedia = video ? "video" : "image";
-  byId("create-media-select").value = state.createMedia;
+  for (const button of mediaSwitchButtons()) {
+    button.setAttribute("aria-pressed", String(button.dataset.createMedia === state.createMedia));
+  }
   byId("video-create-fields").hidden = !video;
   byId("create-intent-label").textContent = video ? "どんな動画を作りますか？" : "何を作りますか？";
   byId("create-intent").placeholder = video
@@ -585,9 +595,12 @@ function renderCreateMedia() {
   const usable = videoCapabilityUsable(capability);
   const anyExperimental = ["video.text_to_video", "video.image_to_video"]
     .some((name) => capabilityState(name) === "experimental");
-  /* ヘッダーの選択肢はバッジを持てないので、試験中であることは項目名で伝える。 */
-  byId("create-media-select").options[1].textContent =
-    anyExperimental ? "動画を作る（試験中）" : "動画を作る";
+  /* 絵は文字を持てない。試験中であることは印と、読み上げ・長押しに出る説明で伝える。 */
+  const videoButton = byId("create-media-video");
+  const videoLabel = anyExperimental ? "動画を作る（試験中）" : "動画を作る";
+  videoButton.dataset.experimental = String(anyExperimental);
+  videoButton.setAttribute("aria-label", videoLabel);
+  videoButton.title = videoLabel;
   byId("video-create-summary").textContent = file
     ? "追加した画像を始点に短い動画を作ります。"
     : "文章から短い動画を作ります。画像を足すと、その画像を動かします。";
@@ -4888,9 +4901,10 @@ async function loadAdvancedSettings() {
 
 byId("mode-simple").addEventListener("click", () => setMode("simple"));
 byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
-byId("create-media-select").addEventListener("change", (event) => {
-  if (state.hostBusy) return;
-  setCreateMedia(event.target.value);
+byId("create-media-switch").addEventListener("click", (event) => {
+  const button = event.target.closest?.("[data-create-media]");
+  if (!button || state.hostBusy) return;
+  setCreateMedia(button.dataset.createMedia);
 });
 byId("video-create-settings").addEventListener("click", () => {
   state.modelFilter = "video";
