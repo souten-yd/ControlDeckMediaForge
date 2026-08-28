@@ -29,8 +29,8 @@ DOM_IDS = (
     "app", "skeleton", "shell-header", "shell-nav",
     "nav-create", "nav-library", "nav-activity", "nav-settings",
     "mode-simple", "mode-advanced",
-    "create-media-picker", "create-media-switch", "create-media-image", "create-media-video",
-    "create-media-video-badge", "create-intent-label", "video-create-fields",
+    "create-media-switch", "create-media-select",
+    "create-intent-label", "video-create-fields",
     "video-create-summary", "video-create-note", "video-create-settings", "result-video",
     "create-form", "create-intent", "create-submit", "create-status",
     "attach-image", "attach-size", "source-file", "edit-actions", "guarantee-badge",
@@ -310,7 +310,7 @@ def test_operations_the_ui_submits_are_valid_schema_values():
 
 def test_create_media_switch_is_mobile_safe_and_video_is_capability_gated():
     assert 'data-create-media="image"' in MARKUP
-    assert 'role="group" aria-label="作る素材"' in MARKUP
+    assert 'aria-label="作る素材"' in MARKUP
     render = SCRIPT[SCRIPT.index("function renderCreateMedia"):SCRIPT.index("function setCreateMedia")]
     assert '"video.text_to_video"' in render
     assert '"video.image_to_video"' in SCRIPT
@@ -320,11 +320,12 @@ def test_create_media_switch_is_mobile_safe_and_video_is_capability_gated():
     assert 'output: {format: "mp4", count: 1}' in submit
     problem = SCRIPT[SCRIPT.index("function requestProblem"):SCRIPT.index("async function submitVideoJob")]
     assert 'videoCapabilityUsable()' in problem
-    switch = STYLES[STYLES.index(".media-switch {"):STYLES.index(".switch-badge")]
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in switch
-    assert "min-height: 44px" in switch
-    mobile = STYLES.split("@media (max-width: 767px)", 1)[1]
-    assert ".media-switch { width: 100%; }" in mobile
+    # 切り替えはヘッダーに常駐する。狭い画面でも折り返さず、指で押せる高さを保つこと。
+    header = MARKUP[MARKUP.index("<header id=\"shell-header\""):MARKUP.index("</header>")]
+    assert header.index('id="create-media-switch"') < header.index('class="modeswitch"')
+    switch = STYLES[STYLES.index(".function-switch select {"):STYLES.index(".function-switch-caret")]
+    assert "min-height: 34px" in switch
+    assert "appearance: none" in switch
 
 
 # 失敗コードは複数の形で書かれる: HTTPException の detail、WorkerFailure の第 1 引数、
@@ -505,12 +506,36 @@ def test_asset_pack_slots_come_from_the_profile_document_not_from_the_ui():
     assert "profile.eye_slots" in SCRIPT or "eye_slots" in SCRIPT
 
 
-def test_model_choice_is_two_stage_and_reaches_every_policy_in_advanced_mode():
-    """段階開示で作り、機能削除で作らない。詳細から全 policy へ到達できること。"""
-    assert 'data-model-choice="auto"' in MARKUP
-    assert 'data-model-choice="manual"' in MARKUP
+def test_the_model_in_use_is_always_visible_and_auto_stays_reachable():
+    """使うモデルは常に見える 1 つの選択にする。おまかせは消さず先頭に残す。
+
+    隠すと、何が使われるか分からないまま作ることになる。おまかせを消すのは
+    機能削除なので、選択肢として残して段階開示は詳細モードの policy が担う。
+    """
+    row = MARKUP[MARKUP.index('id="model-choice-row"'):]
+    assert "hidden" not in row[: row.index("</label>")], "モデルの選択を隠している"
+    assert '<option value="">おまかせ' in MARKUP
     for policy in ("fast", "balanced", "quality", "low_vram", "manual"):
         assert f'<option value="{policy}">' in MARKUP, f"{policy} へ到達できない"
+
+
+def test_a_manual_base_model_is_not_discarded_when_a_lora_is_selected():
+    """LoRA を選んでも土台の指定を auto へ戻さない。黙って別のモデルにしない。"""
+    body = SCRIPT[SCRIPT.index("function modelSelection()"):]
+    body = body[: body.index("\nfunction ")]
+    assert "selectedLoras()" not in body, "LoRA を理由に手動指定を捨てている"
+
+
+def test_the_lora_strength_is_offered_only_where_the_lora_can_load():
+    """載せられない LoRA につまみを出さない。強さは載せると決めてから。"""
+    assert "function loraTargetFamily()" in SCRIPT
+    assert "supports_lora" in SCRIPT
+    assert "dropIncompatibleLoras" in SCRIPT
+    body = SCRIPT[SCRIPT.index("function renderLoraPicker()"):]
+    body = body[: body.index("\nfunction ")]
+    assert body.index("box.checked") < body.index('weight.type = "range"'), (
+        "選ぶ前から強さのつまみを出している"
+    )
 
 
 def test_an_automatic_model_choice_can_explain_itself():
@@ -1165,10 +1190,18 @@ def test_the_base_and_lora_are_one_confirmed_download_request():
 
 
 def test_lora_selection_owns_automatic_base_routing():
-    assert "LoRA 自身が互換 family を指定する" in SCRIPT
+    """土台を指定していないときは、LoRA の系統だけで backend に選ばせる。
+
+    UI 側で checkpoint を推測しない。指定したときはその指定を送る（別テスト）。
+    """
     selection = SCRIPT[SCRIPT.index("function modelSelection()"):]
-    assert "if (selectedLoras().length)" in selection
-    assert 'policy !== "manual" ? policy : "auto"' in selection
+    selection = selection[: selection.index("\nfunction ")]
+    assert 'if (state.modelChoice === "manual")' in selection
+    assert "model_id: modelId" in selection
+    picker = SCRIPT[SCRIPT.index("function loraTargetFamily()"):]
+    picker = picker[: picker.index("\nfunction ")]
+    assert "chosenBaseModel()" in picker
+    assert "state.selectedLoras" in picker
 
 
 def test_the_trigger_words_are_shown_where_the_lora_is_chosen():
