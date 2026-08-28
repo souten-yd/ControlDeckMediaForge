@@ -832,6 +832,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .74rem; backgro
   -webkit-user-drag: none;
 }
 #viewer-image.dragging { cursor: grabbing; }
+/* 動画は台の中に収める。拡大縮小は画像側の操作なので持ち込まない。 */
+#viewer-video { max-width: 100%; max-height: 100%; }
+#viewer-video[hidden] { display: none !important; }
 
 #viewer-bar {
   min-width: 0;

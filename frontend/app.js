@@ -3864,6 +3864,20 @@ function stepViewer(offset) {
   void openViewer(item.asset_id, item, viewer.list, {keepList: true});
 }
 
+/* 動画と静止画は同じ台の上で入れ替える。両方出したままにすると、
+   閉じたつもりの動画が裏で鳴り続ける。 */
+function showViewerVideo(active) {
+  const image = byId("viewer-image");
+  const video = byId("viewer-video");
+  if (!video) return;
+  image.hidden = active;
+  video.hidden = !active;
+  if (active) return;
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+}
+
 async function openViewer(assetId, item, list, {keepList = false} = {}) {
   viewer.assetId = assetId;
   viewer.filename = item?.suggested_filename || "";
@@ -3875,9 +3889,12 @@ async function openViewer(assetId, item, list, {keepList = false} = {}) {
   byId("viewer-save-note").hidden = true;
   viewerReset();
   const image = byId("viewer-image");
+  const video = byId("viewer-video");
   const caption = byId("viewer-caption");
   image.removeAttribute("src");
   image.hidden = false;
+  // 送り先を変えたのに前の動画が鳴り続けると、見ているものと音がずれる。
+  showViewerVideo(false);
   caption.textContent = "読み込んでいます…";
   if (!byId("viewer").open) byId("viewer").showModal();
   // 送り先を連打されると、遅い方の応答が後から上書きする。最後の要求だけ描く。
@@ -3892,8 +3909,14 @@ async function openViewer(assetId, item, list, {keepList = false} = {}) {
     }
     const content = await call("assets.content", {asset_id: assetId});
     if (token !== viewer.token) return;
-    image.src = `data:${content.mime_type};base64,${content.base64}`;
-    image.alt = "";
+    const source = `data:${content.mime_type};base64,${content.base64}`;
+    if (String(content.mime_type).startsWith("video/")) {
+      showViewerVideo(true);
+      video.src = source;
+    } else {
+      image.src = source;
+      image.alt = "";
+    }
     // ファイル名は原寸を見ている最中に使わない。行を専有すると操作が押し出される。
     caption.textContent = item?.width && item?.height ? `${item.width}×${item.height}` : "";
   } catch {
@@ -5361,6 +5384,9 @@ for (const holder of [byId("activity-list"), byId("create-error")]) {
 byId("library-more").addEventListener("click", () => void loadLibrary());
 byId("close-dialog").addEventListener("click", () => byId("detail-dialog").close());
 byId("viewer-close").addEventListener("click", () => byId("viewer").close());
+/* 閉じ方は 1 つではない。Esc でも背景でも閉じるので、要素そのものの
+   close を捉えて止める。押した場所ごとに止め忘れを作らない。 */
+byId("viewer").addEventListener("close", () => showViewerVideo(false));
 byId("viewer-prev").addEventListener("click", () => stepViewer(-1));
 byId("viewer-next").addEventListener("click", () => stepViewer(1));
 byId("viewer").addEventListener("keydown", (event) => {
