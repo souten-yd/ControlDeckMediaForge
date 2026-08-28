@@ -5918,3 +5918,34 @@ freed_bytes=16,464,440,224`）。
 
 `./mf.sh test` は 768 passed / 1 warning / 66.15 秒（新規 2 件）、`git diff --check` PASS。
 どちらの新規テストも、修正を戻すと `model_not_found` と `DID NOT RAISE` で落ちる。
+
+
+## 落とし終えたものを、人が開くまで放置しない（2026-08-28）
+
+利用者が `civitai/4384` を削除し、HuggingFace の `Lykon/DreamShaper` を入れ直した。
+download は 05:47:29→05:56:22 の 8 分 53 秒、5,481,450,296 bytes で ready になった。
+系統は落とした `model_index.json` の pipeline class（`StableDiffusionPipeline`）から
+`SD 1.5` に解決され、LoRA `civitai/16014` を載せられる土台がやっと揃った。
+v0.9.8 の修正も効いており、評価候補に `Lykon/DreamShaper` が載る。
+
+```text
+評価できる候補 : ["unsloth/MiniMax-H3-GGUF", "Lykon/DreamShaper"]
+導入済みLoRAの系統: {"sd15"}
+評価待ちの土台  : ["Lykon/DreamShaper"]
+```
+
+しかし評価は始まらなかった。帳尻合わせは workspace の boot でしか走らず、download が
+終わった 05:56 以降、誰も画面を開いていなかったためである。追従を LoRA 依存の経路だけに
+掛けていたので、checkpoint を単体で入れたときは何も起きない。落とし終えたものが、人が
+開くまで使えないまま残る。
+
+`follow_install()` に寄せ、`models.install` からも同じ追従に乗せた。依存の経路と 2 つ
+持たない。boot での帳尻合わせは、再起動を跨いだ取りこぼしの受け皿として残す。
+
+`./mf.sh test` は 769 passed / 1 warning / 63.09 秒（新規 1 件）、`git diff --check` PASS。
+
+途中、利用者から「ControlDeck に接続できない」との報告があった。実機を確認すると
+ControlDeck 本体（PID 851488、15:24:47 起動）は正常で、`/health` は LAN 192.168.68.200 /
+192.168.68.67 と Tailscale 100.82.8.44 のいずれからも 200 を返した。原因は iPhone 側の
+Tailscale が offline（`last seen 5m ago`、relay "tok" 経由）だったことである。
+Media Forge 側の変更とは無関係で、13:51:52 起動の 0.9.8 process は稼働を続けていた。

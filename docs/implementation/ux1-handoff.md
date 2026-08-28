@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-28
-branch      fix/custom-model-evaluation-and-lora-base（origin/main edd5abd から作成）
-slice       LoRA base auto-evaluation repair（3段目と、土台が無いときの失敗の形）
-状態        実機ログで_model()のmodel_not_foundと worker_crash の原因を特定・修正 / v0.9.8 release前
-baseline    full 768 passed / 1 warning / 66.15s（新規2件）
-installed   v0.9.7 / 127.0.0.1:9130 / healthy / contract 2.0
-GPU         生成再評価0。DreamShaper実評価はv0.9.8反映後に行う
-PR          ControlDeck変更0 / Media Forge #157-#164 merged / release PR前
+branch      fix/evaluate-after-any-install（origin/main 56c5f7a から作成）
+slice       落とし終えた土台を、人が画面を開くまで放置しない
+状態        follow_installへ統合・full test完了 / v0.9.9 release前
+baseline    full 769 passed / 1 warning / 63.09s（新規1件）
+installed   v0.9.8 / PID 807184 / 127.0.0.1:9130 / healthy / contract 2.0
+GPU         生成再評価0。Lykon/DreamShaperの実評価は未実施
+PR          ControlDeck変更0 / Media Forge #157-#165 merged / release PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
