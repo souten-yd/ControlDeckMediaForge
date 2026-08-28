@@ -366,21 +366,75 @@ def test_a_self_added_checkpoint_can_take_a_lora(tmp_path: Path):
     assert ModelRegistry._observed_defaults(native, snapshot) == {}
 
 
-def test_the_timeout_budget_counts_the_images_that_were_asked_for(tmp_path: Path):
-    """実測は 1 枚ぶん。頼まれた枚数を数えないと、枚数のぶんだけ落ちる。
+def test_a_worker_that_keeps_producing_is_not_cut_off(tmp_path: Path):
+    """止まったかで打ち切る。総時間を予測して切らない。
 
-    実機では measured_runtime_sec=13.0 の DreamShaper に 4 枚頼み、予算は
-    13*3+30=69 秒のままだった。同じ設定が通ったり worker_timeout で落ちたりして
-    いたのはこれである（2026-08-28、job_8838a3c7 成功 / job_d1f45685 失敗）。
+    実測は 1 枚ぶんで、頼まれる枚数も解像度もそのつど変わるので、総時間の
+    予算は必ず外れる。実機ではその外れ方で、同じ設定が 80.0 秒で通ったり
+    103.4 秒で切られたりしていた（2026-08-28、job_8838a3c7 / job_d1f45685）。
     """
-    source = (Path(__file__).parents[1] / "backend/mediaforge/jobs.py").read_text(encoding="utf-8")
-    budget = source[
-        source.index("            wanted = 1"):source.index("        process = await asyncio.create_subprocess_exec")
-    ]
-    assert 'payload.get("request", {}).get("output", {}).get("count")' in budget
-    assert "* 3 * wanted + 30" in budget
+    import asyncio
 
-    # 実機の数字で確かめる。1 枚ぶんの予算では 4 枚は収まらない。
-    measured, count, floor = 13.0, 4, 30.0
-    assert max(floor, measured * 3 + 30) < 80.0          # 成功に 80.0 秒かかった
-    assert max(floor, measured * 3 * count + 30) > 106.5  # 失敗は 106.5 秒で切られた
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+
+    class SlowButWorking:
+        """1 猶予より長くかかるが、その間ずっと 1 枚ずつ出し続ける。"""
+
+        def __init__(self, images: int):
+            self.images = images
+
+        async def communicate(self, _payload: bytes) -> tuple[bytes, bytes]:
+            for index in range(self.images):
+                await asyncio.sleep(0.06)
+                (outputs / f"output-{index}.png").write_bytes(b"x")
+            return b'{"ok": true}', b""
+
+    finished = asyncio.run(manager._communicate_while_progressing(
+        SlowButWorking(images=6), b"", outputs, 0.1,
+    ))
+    assert finished[0] == b'{"ok": true}'
+    # 予算を総時間で組んでいたら、6 枚ぶんは 1 猶予に収まらず切られていた。
+    assert len(list(outputs.iterdir())) == 6
+
+
+def test_a_worker_that_stops_producing_is_cut_off(tmp_path: Path):
+    """1 枚も増えない猶予が 1 回続いたら止まったと見なす。
+
+    予算を枚数ぶん積み増す作りだと、本当に固まった worker をその枚数ぶん
+    待つことになる。増えていないことを見れば 1 猶予で気づける。
+    """
+    import asyncio
+
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+
+    class Wedged:
+        def __init__(self):
+            self.canceled = False
+
+        async def communicate(self, _payload: bytes) -> tuple[bytes, bytes]:
+            try:
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:
+                self.canceled = True
+                raise
+            return b"", b""
+
+    process = Wedged()
+    with pytest.raises(TimeoutError):
+        asyncio.run(manager._communicate_while_progressing(process, b"", outputs, 0.05))
+    # 打ち切ったなら、読み取りも畳んでおく。放っておくと呼び出し側が待ち続ける。
+    assert process.canceled is True

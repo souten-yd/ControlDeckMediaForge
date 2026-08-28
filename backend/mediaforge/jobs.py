@@ -9,6 +9,7 @@ import shutil
 import sys
 import time
 import uuid
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -1199,6 +1200,46 @@ class JobManager:
                 "requested image dimensions exceed this model's measured generation envelope",
             )
 
+    @staticmethod
+    def _produced_count(output_dir: Path) -> int:
+        """今までに何枚できているか。数えられなければ 0 として扱う。"""
+        try:
+            return sum(1 for item in output_dir.iterdir() if item.is_file())
+        except OSError:
+            return 0
+
+    async def _communicate_while_progressing(
+        self,
+        process: asyncio.subprocess.Process,
+        payload: bytes,
+        output_dir: Path,
+        idle_sec: float,
+    ) -> tuple[bytes, bytes]:
+        """止まったかどうかで打ち切る。総時間を予測して切らない。
+
+        予測は外れる。実測は 1 枚ぶんで、頼まれる枚数も解像度もそのつど変わる。
+        実機では 13.0 秒の実測から組んだ 69 秒の予算に 4 枚を通そうとして、
+        同じ設定が 80 秒で通ったり 103 秒で切られたりしていた。
+
+        見るべきは進んでいるかである。出来上がった枚数が増えている間は待ち、
+        増えなくなってからの時間だけを数える。最初の 1 回ぶんの猶予はモデルの
+        読み込みに使われる。止まった worker はそれでも 1 猶予で落ちるので、
+        予算を枚数ぶん積み増すより早く気づける。
+        """
+        communicate = asyncio.create_task(process.communicate(payload))
+        produced = -1
+        while True:
+            done, _ = await asyncio.wait({communicate}, timeout=idle_sec)
+            if communicate in done:
+                return communicate.result()
+            advanced = self._produced_count(output_dir)
+            if advanced <= produced:
+                communicate.cancel()
+                with suppress(asyncio.CancelledError):
+                    await communicate
+                raise TimeoutError
+            produced = advanced
+
     async def _execute_worker(
         self,
         job_id: str,
@@ -1289,17 +1330,12 @@ class JobManager:
             )
             environment["MEDIA_FORGE_WORK_ROOT"] = str(self.store.work_dir.resolve())
             stdin_payload += b"\n"
-            # 実測は 1 枚ぶんである。頼まれた枚数を数えずに打ち切ると、モデルが
-            # 遅いのではなく枚数のぶんだけ落ちる。実機では 13.0 秒の実測に対して
-            # 4 枚が 69 秒で切られ、同じ設定が通ったり落ちたりしていた。
-            # 意味レビューを付けると枚数はさらに増えるので、worker へ渡す数を見る。
-            wanted = 1
-            requested = payload.get("request", {}).get("output", {}).get("count")
-            if isinstance(requested, int) and requested > 0:
-                wanted = requested
+            # 総時間の見積りではなく、1 枚ぶんが止まったと判断するまでの猶予。
+            # 実測は 1 枚ぶんで、枚数も解像度も要求ごとに変わるので、総時間は
+            # 必ず外れる。実機ではその外れ方で同じ設定が通ったり落ちたりした。
             timeout_sec = max(
                 self.worker_timeout_sec,
-                float(selected.measured_runtime_sec or 0) * 3 * wanted + 30,
+                float(selected.measured_runtime_sec or 0) * 3 + 30,
             )
         process = await asyncio.create_subprocess_exec(
             str(executable),
@@ -1313,8 +1349,8 @@ class JobManager:
         )
         self._processes[job_id] = process
         try:
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(stdin_payload), timeout=timeout_sec
+            stdout, stderr = await self._communicate_while_progressing(
+                process, stdin_payload, output_dir, timeout_sec
             )
         except TimeoutError:
             process.kill()
