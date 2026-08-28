@@ -7,13 +7,13 @@
 
 ```text
 最終更新    2026-08-28
-branch      fix/session-boot-base-evaluation（origin/main 30d735a から作成）
-slice       LoRA base auto-evaluation repair
-状態        原因特定・修正・v0.9.6反映・追従の掛け先誤りを実機で発見して修正 / v0.9.7 release前
-baseline    full 766 passed / 1 warning / 61.45s（新規5件）
-installed   v0.9.6 / PID 755474,755478 / 127.0.0.1:9130 / healthy / contract 2.0
-GPU         生成再評価0。DreamShaper実評価はv0.9.7反映後に行う
-PR          ControlDeck変更0 / Media Forge #157-#163 merged / release PR前
+branch      fix/custom-model-evaluation-and-lora-base（origin/main edd5abd から作成）
+slice       LoRA base auto-evaluation repair（3段目と、土台が無いときの失敗の形）
+状態        実機ログで_model()のmodel_not_foundと worker_crash の原因を特定・修正 / v0.9.8 release前
+baseline    full 768 passed / 1 warning / 66.15s（新規2件）
+installed   v0.9.7 / 127.0.0.1:9130 / healthy / contract 2.0
+GPU         生成再評価0。DreamShaper実評価はv0.9.8反映後に行う
+PR          ControlDeck変更0 / Media Forge #157-#164 merged / release PR前
 ```
 
 G7 V1c は Media Forge #122、merge commit
@@ -112,7 +112,7 @@ ownershipだけをmanagedへ変更した。
 ## 次にやること（1つだけ）
 
 ```text
-1. v0.9.7を反映し、画面を開いてDreamShaperの自動評価が実際に始まることを実測する
+1. v0.9.8を反映し、画面を開いてDreamShaperの自動評価が ready まで行くことを実測する
 2. 評価が通ったらcivitai/16014を実際に載せたsame-seed比較まで進める
 3. host headerの詳細削除と1行化は利用者が別タスクで進行中。こちらからは触らない
 ```

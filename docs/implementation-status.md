@@ -5873,3 +5873,48 @@ bridge の `models.list` にだけ置いていたが、埋め込みの boot は�
 つまり ControlDeck の中では一度も走らない。15 分待っても評価は始まらず、実機ログにも
 `/ws` 接続が無かった。`session_snapshot()` の `models` を作るところへ移し、
 そこを外すと落ちるテストを足した。766 passed / 1 warning / 61.45 秒。
+
+## 実機が出した次の 2 段（2026-08-28）
+
+v0.9.7 を入れた後、利用者が画面を開き、実機ログに帳尻合わせの実行と、その失敗理由が出た。
+
+```text
+INFO:     WebSocket /ws [accepted]
+WARNING:  could not start the base evaluation for civitai/4384: model_not_found
+```
+
+握り潰しをやめたことで理由が出た。追従の掛け先（session_snapshot）は正しく動いている。
+止まっていたのは、同じ種類のずれの 3 段目である。`_image_candidates()` は custom を含む
+`registry_loader` を見るのに、`_model()` は shipped manifest しか見ないため、
+`civitai/4384` を「信頼カタログに無い」として拒否していた。`_model()` に custom loader への
+フォールバックを足した。
+
+同じ時刻に利用者が実行した生成 job も失敗していた。
+
+```text
+job_e4a1b7cf6ab544978f7e25ed6069deda  host_managed=1  failed
+  created 2026-08-28T04:32:37Z / updated 04:34:10Z
+  model_policy=auto  loras=[{civitai/16014, weight 1}]
+  intent  "ロボット. indoor. standing; idle; front-facing; …"（演出が動いた＝LLMを使った）
+  error   worker_crash / worker exited with code 2
+```
+
+経路はこうである。演出で LLM がロードされる → LoRA を選んでいるので routing は SD 1.5 系に
+絞る → SD 1.5 の土台は `civitai/4384` だけで未計測、`available` 0 件 → `_select_real_model()`
+が例外ではなく `None` を返す（本物のモデルが 1 つも無い開発環境向けのフォールバック）→
+`selected is None` なので `_release_host_ai()` が飛ばされ、**AI ターンの終了宣言が行われない**
+→ model を持たない payload でワーカーが起動し exit code 2 で落ちる。
+
+「LLM が降りない」と「理由の分からない worker_crash」は同じ 1 つの分岐から出ていた。
+LoRA を選んでいるのに載せる先が無い場合は、既にある `lora_base_unavailable`
+（「選んだ LoRA に互換する評価済みの土台がありません」）で断るようにした。LoRA を
+選んでいない場合の `None` は開発経路として残す。
+
+AI ターンの解放方針そのもの（使ったら必ず閉じるか、VRAM が要るときだけ要求するか）は
+利用者の判断で**現状維持**とした。モデルの寿命は ControlDeck が持つ、という境界を変えない。
+
+過去の成功 job では解放は正しく効いている（`released=True reason=released
+freed_bytes=16,464,440,224`）。
+
+`./mf.sh test` は 768 passed / 1 warning / 66.15 秒（新規 2 件）、`git diff --check` PASS。
+どちらの新規テストも、修正を戻すと `model_not_found` と `DID NOT RAISE` で落ちる。

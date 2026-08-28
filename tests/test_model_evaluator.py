@@ -964,6 +964,32 @@ def test_an_image_model_can_start_its_evaluation(tmp_path: Path) -> None:
     assert recorded["measurements"] == {"vram_bytes": 8, "runtime_sec": 0.5}
 
 
+def test_a_self_added_model_is_resolved_from_the_same_list_that_offered_it(tmp_path: Path) -> None:
+    """挙げる側と引く側で見る一覧を変えない。
+
+    _image_candidates() は custom を含む loader を見るのに、_model() は shipped
+    manifest だけを見ていた。実機ではこれで「一覧には出るのに始められない」
+    となり、LoRA が連れてきた土台の評価が model_not_found で止まった。
+    """
+    recorded: dict[str, Any] = {}
+
+    async def scenario() -> Any:
+        service = image_evaluator(tmp_path, FakeHost(), recorded)
+        # 出荷 manifest は実物を読む。そこに civitai/4384 は居らず、
+        # custom loader だけが知っている、という実機と同じ形にする。
+        root = Path(__file__).parents[1]
+        service.model_resolver = None
+        service.model_manifest = root / "worker_packs/image/models.json"
+        service.catalog_manifest = root / "worker_packs/image/catalog.json"
+        await service.start()
+        try:
+            return service._model("civitai/4384")
+        finally:
+            await service.stop()
+
+    assert asyncio.run(scenario()).model_id == "civitai/4384"
+
+
 def test_an_image_model_is_offered_for_evaluation(tmp_path: Path) -> None:
     """一覧に出す条件と、実際に始められる条件を食い違わせない。"""
 
