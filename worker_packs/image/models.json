@@ -868,6 +868,11 @@
         "cold_load_peak_vram_bytes": 18610000000,
         "headroom_vram_bytes": 1073741824,
         "measured_runtime_sec": 144.64
+      },
+      "runtime_options": {
+        "native_width": 512,
+        "native_height": 320,
+        "default_steps": 30
       }
     },
     {

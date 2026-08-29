@@ -6241,3 +6241,19 @@ identity を持つ経路だけが実行できる。画面からの実行は **NO
 作るボタンは `video && !usable` のときだけ無効になるので、いまは押せる状態にある。
 
 installed v0.10.2 / healthy / contract 2.0。`./mf.sh test` 785 passed。
+
+## 画面から動画を作ると即失敗した（2026-08-29）
+
+実機で 2 件、0.9〜1.2 秒で `worker_error: width must be an integer` として落ちた
+（job_6bfb298d / job_d92ab004）。画面は `constraints: {}` を送っており、これは正しい。
+どのモデルが選ばれるか画面は知らないのだから、公開要求に寸法を持ち込ませない設計である。
+埋める場所を worker に求めていたのが誤りだった。worker 側に既定を置くと、モデルを増やす
+たびにその固定値が全部へ掛かる。
+
+`_resolved_video_request()` を core に置き、選んだモデルの実測既定から埋めるようにした。
+画像側の `_resolved_request()` と同じ考え方である。指定された値は動かさない。正規化は
+偶数しか受けないので、奇数は生成の前に落とす。catalog には実測した設定
+（native 512x320 / steps 30）を入れ、frames 33 / fps 16 は 2.06 秒のクリップとして
+144.6 秒で作れた設定を core の既定に置いた。
+
+`./mf.sh test` 786 passed。
