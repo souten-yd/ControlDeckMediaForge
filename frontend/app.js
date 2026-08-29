@@ -4013,6 +4013,7 @@ const VALIDATOR_LABEL = {
   "m5.companion.profile": "機種の設定",
   "m5.companion.edit_mask": "編集範囲",
   "m5.companion.pack": "同梱物",
+  "video.normalized": "動画の形式",
 };
 
 function validationList(validation) {

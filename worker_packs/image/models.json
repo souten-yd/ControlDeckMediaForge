@@ -786,10 +786,11 @@
         "video.text_to_video"
       ],
       "hardware_backends": [
-        "cuda"
+        "cuda",
+        "rocm"
       ],
-      "state": "experimental",
-      "measurement_confidence": "low",
+      "state": "available",
+      "measurement_confidence": "measured",
       "policy_rank": {
         "auto": 0,
         "fast": 0,
@@ -860,7 +861,14 @@
           "size_bytes": 507591892,
           "sha256": "d6e524b3fffede1787a74e81b30976dce5400c4439ba64222168e607ed19e793"
         }
-      ]
+      ],
+      "measurements": {
+        "resident_vram_bytes": 0,
+        "execution_peak_vram_bytes": 18610000000,
+        "cold_load_peak_vram_bytes": 18610000000,
+        "headroom_vram_bytes": 1073741824,
+        "measured_runtime_sec": 144.64
+      }
     },
     {
       "model_id": "Wan-AI/Wan2.1-VACE-1.3B-diffusers",

@@ -34,7 +34,7 @@ def request_for(tmp_path: Path, **constraints) -> dict:
             "version": "1",
             "weights_hash": "sha256:" + "0" * 64,
             "license": "apache-2.0",
-            "runtime_adapter": "diffusers.wan-t2v",
+            "runtime_adapter": "diffusers.wan2.1-t2v",
         },
         "request": {"intent": "a small robot waves", "constraints": base},
         "worker_output_dir": str(tmp_path / "work" / "job"),

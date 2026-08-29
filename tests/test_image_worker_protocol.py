@@ -198,7 +198,11 @@ def test_every_routable_model_has_an_adapter_the_worker_implements():
     manifest = json.loads(
         (root / "worker_packs/image/models.json").read_text(encoding="utf-8")
     )
-    implemented = set(image_worker.ADAPTERS)
+    # available は「これで作れる」という表明である。作るのが画像 worker とは
+    # 限らないので、実装している側を全部足して見る。
+    from worker_packs.video import worker as video_worker
+
+    implemented = set(image_worker.ADAPTERS) | set(video_worker.ADAPTERS)
     routable = {
         model["model_id"]: model["runtime_adapter"]
         for model in manifest["models"]

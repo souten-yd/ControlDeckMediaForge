@@ -213,6 +213,7 @@ def create_app(
         model_store_root=resolved.model_store_root,
         hf_home=resolved.hf_home,
         image_runtime_python=resolved.image_runtime_python,
+        video_runtime_python=resolved.video_runtime_python,
         creative_evaluator=evaluator,
         ai_gateway=ai_gateway,
         extra_manifests=custom_models.manifests,
@@ -525,6 +526,16 @@ def create_app(
         return {
             "items": [public_model(item) for item in models]
         }
+
+    def video_capability(capability: str) -> dict[str, Any]:
+        """動画は runtime も別なので、モデルだけ揃っても走らない。
+
+        以前はここを `video_runtime_not_adopted` で固定していた。実測で
+        latency も VRAM も相場どおりと分かったので、固定をやめて実態から出す。
+        """
+        if not resolved.video_runtime_python.is_file():
+            return {"state": "unavailable", "reason": "video_runtime_not_installed", "local_only": True}
+        return image_capability(capability)
 
     def image_capability(capability: str, *, fake_fallback: bool = False) -> dict[str, Any]:
         try:
@@ -993,10 +1004,10 @@ def create_app(
                     if blender_runtime_available()
                     else {"state": "unavailable", "reason": "runtime_not_installed"}
                 ),
-                "video.text_to_video": {
-                    "state": "unavailable",
-                    "reason": "video_runtime_not_adopted",
-                },
+                # 旗を立てて回るのではなく、実際に走らせられるかで決める。
+                # 実測済みの動画モデルと動画 runtime の両方が揃ったときだけ出す。
+                "video.text_to_video": video_capability("video.text_to_video"),
+                # 入力画像から動かす経路は worker にまだ無い。
                 "video.image_to_video": {
                     "state": "unavailable",
                     "reason": "video_runtime_not_adopted",

@@ -66,9 +66,14 @@ def test_capabilities_get_matches_the_public_document_and_bounds_presets(tmp_pat
     result = answer["result"]
     assert result["capabilities"] == public["capabilities"]
     assert result["contract_version"] == public["contract_version"]
-    assert result["capabilities"]["video.text_to_video"] == {
-        "state": "unavailable", "reason": "video_runtime_not_adopted",
+    # 動画は旗で固定せず実態から出す。動くモデルが登録されるまでは、
+    # 「採用していない」ではなく「まだ入っていない」と言う。
+    text_to_video = result["capabilities"]["video.text_to_video"]
+    assert text_to_video["state"] == "unavailable"
+    assert text_to_video["reason"] in {
+        "video_runtime_not_installed", "capability_not_installed", "model_not_installed",
     }
+    # 入力画像から動かす経路は worker にまだ無い。
     assert result["capabilities"]["video.image_to_video"] == {
         "state": "unavailable", "reason": "video_runtime_not_adopted",
     }
@@ -1055,7 +1060,7 @@ def test_a_video_entry_says_it_is_a_clip_and_how_long(tmp_path: Path):
         operation="video.generate", intent="a small robot waves",
         model_id="Wan-AI/Wan2.1-T2V-1.3B-Diffusers", model_version="1",
         weights_hash="sha256:" + "0" * 64, license="apache-2.0",
-        runtime_adapter="diffusers.wan-t2v", runtime_version="0.40.0",
+        runtime_adapter="diffusers.wan2.1-t2v", runtime_version="0.40.0",
         tool_versions={}, seed=0, parameters={}, output_sha256="c" * 64, created_at=now,
         reference_asset_hashes={}, postprocessing=[], validation=[], warnings=[],
     )

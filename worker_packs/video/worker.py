@@ -30,7 +30,7 @@ from .ffmpeg import NormalizeRequest, VideoToolError, normalize, probe
 
 
 MAX_MESSAGE_BYTES = 1024 * 1024
-ADAPTERS = {"diffusers.wan-t2v"}
+ADAPTERS = {"diffusers.wan2.1-t2v"}
 MAX_FRAMES = 161
 MAX_STEPS = 50
 DEFAULT_FPS = 16

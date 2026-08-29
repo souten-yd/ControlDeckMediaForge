@@ -6183,3 +6183,30 @@ test は GPU を要さない部分（境界・検証・規約の一致）で 10 
 
 残りは core 側である。`video.generate` の実行経路（worker 起動・phase・asset 登録）と
 routing / capability がまだ無い。
+
+## V2-b（2/2）と V2-c — core 側の実行経路と採用（2026-08-29）
+
+core に `video.generate` の経路を作り、capability の固定をやめた。
+
+```text
+capability     video.text_to_video を実態から出す。runtime が無ければ
+               video_runtime_not_installed、モデルが無ければ model_not_installed。
+               入力画像から動かす経路は worker に無いので image_to_video は据置
+runtime        画像と別 venv。MEDIA_FORGE_VIDEO_RUNTIME_PYTHON で差し替えられる。
+               同じ venv に載せると片方の pin を動かしたときもう片方が黙って壊れる
+worker 選択    adapter が動画のものなら動画 worker を起動する
+asset 登録     _register_video_outputs。画像側の検証（brief defect、意味レビュー）は
+               絵を見る前提なので当てない。形の検証だけを行い、中身が動画かは
+               worker の probe が見ている。video/mp4 / 寸法 / 尺 / fps を asset へ残す
+catalog        Wan-AI/Wan2.1-T2V-1.3B-Diffusers を available / managed / measured へ。
+               既存 entry を置き換えではなくその場で更新した（revision と weight hash は
+               取得済みのものと一致）。measurements は実測値をそのまま入れた
+```
+
+旧方針を守っていた test 5 件を更新した。守る値は残し、「動画候補は routable にしない」
+という前提だけを外した。available な adapter は画像 worker が実装しているものに限る、
+という不変条件は、実装している worker を全部足す形へ広げた。
+
+重みは同一 filesystem 上のハードリンクで実機の置き場へ配置した（27 GB、空き容量の変化なし）。
+
+`./mf.sh test` は 785 passed / 1 warning / 63.70 秒、`git diff --check` PASS。
