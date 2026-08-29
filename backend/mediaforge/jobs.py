@@ -326,7 +326,7 @@ class JobManager:
             return
         if job.status != JobStatus.QUEUED or self.store.cancel_requested(job_id):
             return
-        if job.request.operation not in {"image.generate", "image.edit", "asset.pack"}:
+        if job.request.operation not in {"image.generate", "image.edit", "asset.pack", "video.generate"}:
             self.store.update_job(
                 job_id,
                 status=JobStatus.FAILED,
@@ -483,6 +483,13 @@ class JobManager:
                 raise WorkerFailure(
                     "capability_unavailable",
                     f"no installed model provides {capability}",
+                )
+            if job.request.operation == "video.generate":
+                # 動画に fake worker は無い。落とすと「PNG しか出せない」と
+                # 言われることになり、何が足りないのか分からなくなる。
+                raise WorkerFailure(
+                    "capability_unavailable",
+                    "video.generate has no measured local runtime",
                 )
             if lora_family:
                 # LoRA は利用者が明示的に選んだものである。載せる先が無いことを
