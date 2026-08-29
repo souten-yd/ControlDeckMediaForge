@@ -6157,3 +6157,29 @@ frontend     カードに ▶ と尺の印。一覧では自動再生しない�
 256x160 の webp ポスターを 2,154 B で生成できた。
 
 `./mf.sh test` は 775 passed / 1 warning / 64.82 秒（新規 2 件）、`git diff --check` PASS。
+
+## V2-b（1/2）— 動画 worker（2026-08-29）
+
+`worker_packs/video/worker.py` を追加した。core はこの実装を import せず、やり取りは
+画像 worker と同じ行ごとの JSON である（`ok` / `error`、`resource_oom` の区別、
+`MAX_MESSAGE_BYTES`）。
+
+実測にもとづく既定を worker へ固定した。
+
+```text
+VAE dtype        float32。bfloat16 は符号化 2.4 倍・復号 18 倍の悪化を実測
+device 配置      収まる限り退避しない。退避しても生成は 5% しか変わらず読み込みが倍
+pipeline 保持    process が生きている間 1 度きり。コールド 162.8 秒を要求ごとに払わない
+出力             frames -> ffmpeg で組み立て -> ffmpeg.normalize -> probe で検証
+                 公開する形は正規化済みの 1 つに揃え、生成器の書き出しをそのまま出さない
+```
+
+外から来る値は信じない。model path は境界内に限り、adapter は既知のものだけ、
+寸法は偶数かつ 16..1024、frames 5..161、steps 1..50、fps 1..120、intent は非空。
+境界の外や範囲外は GPU を動かす前に断る。
+
+test は GPU を要さない部分（境界・検証・規約の一致）で 10 件。生成そのものは V1 の実測で
+裏付けている。`./mf.sh test` は 785 passed / 1 warning / 66.88 秒。
+
+残りは core 側である。`video.generate` の実行経路（worker 起動・phase・asset 登録）と
+routing / capability がまだ無い。
