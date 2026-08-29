@@ -36,6 +36,9 @@ class Settings:
     creative_layout_manifest: Path = REPOSITORY_ROOT / "creative/layouts.json"
     hf_home: Path = Path.home() / ".cache/huggingface"
     image_runtime_python: Path = REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python"
+    # 動画は画像と別の runtime を使う。同じ venv に載せると、片方の pin を
+    # 動かしたときにもう片方が黙って壊れる。
+    video_runtime_python: Path = REPOSITORY_ROOT / "runtimes/wan21-1.3b-probe/.venv/bin/python"
     native_media_runtime_root: Path | None = None
     wan_runtime_python: Path | None = None
     wan_source_root: Path | None = None
@@ -71,6 +74,11 @@ class Settings:
             self,
             "image_runtime_python",
             Path(os.path.abspath(self.image_runtime_python)),
+        )
+        object.__setattr__(
+            self,
+            "video_runtime_python",
+            Path(os.path.abspath(self.video_runtime_python)),
         )
         native_runtime = self.native_media_runtime_root or (
             self.data_dir.parent / "runtimes" / "stable-diffusion-cpp-97d2990"
@@ -172,6 +180,12 @@ class Settings:
                 os.environ.get(
                     "MEDIA_FORGE_IMAGE_RUNTIME_PYTHON",
                     REPOSITORY_ROOT / "runtimes/rocm-torch/.venv/bin/python",
+                )
+            ),
+            video_runtime_python=Path(
+                os.environ.get(
+                    "MEDIA_FORGE_VIDEO_RUNTIME_PYTHON",
+                    REPOSITORY_ROOT / "runtimes/wan21-1.3b-probe/.venv/bin/python",
                 )
             ),
             native_media_runtime_root=Path(os.environ["MEDIA_FORGE_NATIVE_RUNTIME_ROOT"])

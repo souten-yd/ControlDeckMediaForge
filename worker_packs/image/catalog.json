@@ -4,8 +4,15 @@
     {
       "model_id": "black-forest-labs/FLUX.2-klein-4B",
       "display_name": "FLUX.2 Klein 4B",
-      "domains": ["general", "illustration", "poster", "background"],
-      "media_types": ["image"],
+      "domains": [
+        "general",
+        "illustration",
+        "poster",
+        "background"
+      ],
+      "media_types": [
+        "image"
+      ],
       "description": "Fast local image generation and reference editing model.",
       "approx_download_bytes": 15975681525,
       "source": {
@@ -16,7 +23,16 @@
       "ownership": "managed",
       "supports_lora": false,
       "max_references": 4,
-      "reference_roles": ["identity", "style", "pose", "composition", "clothing", "palette", "prop", "environment"],
+      "reference_roles": [
+        "identity",
+        "style",
+        "pose",
+        "composition",
+        "clothing",
+        "palette",
+        "prop",
+        "environment"
+      ],
       "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": false,
@@ -25,8 +41,15 @@
     {
       "model_id": "Qwen/Qwen-Image-2512",
       "display_name": "Qwen Image 2512",
-      "domains": ["general", "illustration", "poster", "background"],
-      "media_types": ["image"],
+      "domains": [
+        "general",
+        "illustration",
+        "poster",
+        "background"
+      ],
+      "media_types": [
+        "image"
+      ],
       "description": "General high-quality and text-rendering comparison candidate. Its 57.7GB runtime remains externally managed and R9700 is not measured.",
       "approx_download_bytes": 57704574910,
       "source": {
@@ -46,8 +69,14 @@
     {
       "model_id": "OnomaAIResearch/Illustrious-XL-v2.0",
       "display_name": "Illustrious XL v2.0",
-      "domains": ["anime", "illustration", "game2d"],
-      "media_types": ["image"],
+      "domains": [
+        "anime",
+        "illustration",
+        "game2d"
+      ],
+      "media_types": [
+        "image"
+      ],
       "description": "Anime and illustration candidate distributed as a bounded SDXL single-file checkpoint. Its Media Forge runtime is not implemented or measured.",
       "approx_download_bytes": 6938042078,
       "source": {
@@ -67,8 +96,15 @@
     {
       "model_id": "segmind/SSD-1B",
       "display_name": "Segmind SSD-1B (FP16)",
-      "domains": ["general", "illustration", "photoreal", "background"],
-      "media_types": ["image"],
+      "domains": [
+        "general",
+        "illustration",
+        "photoreal",
+        "background"
+      ],
+      "media_types": [
+        "image"
+      ],
       "description": "Lightweight 1.3B SDXL-derived text-to-image fallback candidate using the bounded FP16 Diffusers files. R9700 is not measured.",
       "approx_download_bytes": 4468829801,
       "source": {
@@ -88,8 +124,15 @@
     {
       "model_id": "Wan-AI/Wan2.2-TI2V-5B",
       "display_name": "Wan 2.2 TI2V 5B",
-      "domains": ["general", "anime", "illustration", "game2d"],
-      "media_types": ["video"],
+      "domains": [
+        "general",
+        "anime",
+        "illustration",
+        "game2d"
+      ],
+      "media_types": [
+        "video"
+      ],
       "description": "General lightweight candidate for both text-to-video and image-to-video at 720p/24fps. R9700 runtime is not measured.",
       "approx_download_bytes": 34201521212,
       "source": {
@@ -100,7 +143,12 @@
       "ownership": "managed",
       "supports_lora": false,
       "max_references": 1,
-      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "reference_roles": [
+        "identity",
+        "pose",
+        "composition",
+        "environment"
+      ],
       "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": false,
@@ -109,8 +157,15 @@
     {
       "model_id": "Wan-AI/Wan2.2-I2V-A14B",
       "display_name": "Wan 2.2 I2V A14B",
-      "domains": ["general", "anime", "illustration", "photoreal"],
-      "media_types": ["video"],
+      "domains": [
+        "general",
+        "anime",
+        "illustration",
+        "photoreal"
+      ],
+      "media_types": [
+        "video"
+      ],
       "description": "High-quality image-to-video comparison candidate with separate high/low-noise experts. R9700 runtime is not measured.",
       "approx_download_bytes": 126202610088,
       "source": {
@@ -121,7 +176,12 @@
       "ownership": "managed",
       "supports_lora": false,
       "max_references": 1,
-      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "reference_roles": [
+        "identity",
+        "pose",
+        "composition",
+        "environment"
+      ],
       "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": false,
@@ -130,8 +190,15 @@
     {
       "model_id": "Wan-AI/Wan2.2-T2V-A14B",
       "display_name": "Wan 2.2 T2V A14B",
-      "domains": ["general", "anime", "illustration", "photoreal"],
-      "media_types": ["video"],
+      "domains": [
+        "general",
+        "anime",
+        "illustration",
+        "photoreal"
+      ],
+      "media_types": [
+        "video"
+      ],
       "description": "High-quality text-to-video comparison candidate with separate high/low-noise experts. R9700 runtime is not measured.",
       "approx_download_bytes": 126199333288,
       "source": {
@@ -151,8 +218,15 @@
     {
       "model_id": "Wan-AI/Wan2.2-Animate-14B",
       "display_name": "Wan 2.2 Animate 14B",
-      "domains": ["general", "anime", "illustration", "game2d"],
-      "media_types": ["video"],
+      "domains": [
+        "general",
+        "anime",
+        "illustration",
+        "game2d"
+      ],
+      "media_types": [
+        "video"
+      ],
       "description": "Character and companion animation/replacement candidate. Its preprocessing bundle remains runtime-managed.",
       "approx_download_bytes": 51213260089,
       "source": {
@@ -163,7 +237,10 @@
       "ownership": "external",
       "supports_lora": true,
       "max_references": 2,
-      "reference_roles": ["identity", "pose"],
+      "reference_roles": [
+        "identity",
+        "pose"
+      ],
       "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": false,
@@ -172,8 +249,15 @@
     {
       "model_id": "Lightricks/LTX-2.3",
       "display_name": "LTX 2.3 Distilled 1.1",
-      "domains": ["general", "illustration", "photoreal"],
-      "media_types": ["video", "audio_video"],
+      "domains": [
+        "general",
+        "illustration",
+        "photoreal"
+      ],
+      "media_types": [
+        "video",
+        "audio_video"
+      ],
       "description": "High-feature candidate for synchronized audio and video. Official runtime requirements are CUDA-first; R9700 is not measured.",
       "approx_download_bytes": 46149373312,
       "source": {
@@ -184,7 +268,12 @@
       "ownership": "external",
       "supports_lora": true,
       "max_references": 1,
-      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "reference_roles": [
+        "identity",
+        "pose",
+        "composition",
+        "environment"
+      ],
       "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": false,
@@ -193,8 +282,12 @@
     {
       "model_id": "zai-org/CogVideoX-2b",
       "display_name": "CogVideoX-2B",
-      "domains": ["general"],
-      "media_types": ["video"],
+      "domains": [
+        "general"
+      ],
+      "media_types": [
+        "video"
+      ],
       "description": "Apache-2.0 text-to-video comparison candidate at its fixed 720x480, 49-frame profile. R9700 generation passed, but latency, system swap activity, and action adherence prevent adoption.",
       "approx_download_bytes": 13775572738,
       "source": {
@@ -214,29 +307,41 @@
     {
       "model_id": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
       "display_name": "Wan 2.1 T2V 1.3B",
-      "domains": ["general", "illustration", "photoreal"],
-      "media_types": ["video"],
-      "description": "Apache-2.0 480p text-to-video comparison candidate. The exact Diffusers snapshot and R9700 runtime imports are pinned, but inference is not yet measured.",
+      "domains": [
+        "general",
+        "illustration",
+        "photoreal"
+      ],
+      "media_types": [
+        "video"
+      ],
+      "description": "文章から短い動画を作ります。R9700 / gfx1201 で 512x320 33 フレーム 30 ステップを実測 144.6 秒。",
       "approx_download_bytes": 28935653511,
       "source": {
         "kind": "huggingface",
         "repo_id": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
         "revision": "0fad780a534b6463e45facd96134c9f345acfa5b"
       },
-      "ownership": "external",
+      "ownership": "managed",
       "supports_lora": false,
       "max_references": 0,
       "reference_roles": [],
       "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": false,
-      "license_notice": "The official model card declares Apache-2.0. The pinned Diffusers snapshot does not contain the LICENSE.txt linked by its card, so retain an authoritative Apache-2.0 license copy and applicable notices before redistribution. ROCm/gfx1201 inference is NOT TESTED."
+      "license_notice": "The official model card declares Apache-2.0. The pinned Diffusers snapshot does not contain the LICENSE.txt linked by its card, so retain an authoritative Apache-2.0 license copy and applicable notices before redistribution. Measured on ROCm/gfx1201."
     },
     {
       "model_id": "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
       "display_name": "Wan 2.1 VACE 1.3B",
-      "domains": ["general", "illustration", "photoreal"],
-      "media_types": ["video"],
+      "domains": [
+        "general",
+        "illustration",
+        "photoreal"
+      ],
+      "media_types": [
+        "video"
+      ],
       "description": "Apache-2.0 480p image/video-conditioned comparison candidate. A bounded smoke inference completed on R9700/ROCm, but candidate-profile quality, latency, and memory remain unmeasured.",
       "approx_download_bytes": 19043130596,
       "source": {
@@ -247,7 +352,12 @@
       "ownership": "external",
       "supports_lora": false,
       "max_references": 8,
-      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "reference_roles": [
+        "identity",
+        "pose",
+        "composition",
+        "environment"
+      ],
       "supports_reference_strength": true,
       "recommended_profiles": [],
       "gated": false,
@@ -256,8 +366,14 @@
     {
       "model_id": "tencent/HunyuanVideo-1.5",
       "display_name": "HunyuanVideo 1.5 720p",
-      "domains": ["general", "illustration", "photoreal"],
-      "media_types": ["video"],
+      "domains": [
+        "general",
+        "illustration",
+        "photoreal"
+      ],
+      "media_types": [
+        "video"
+      ],
       "description": "8.3B quality-comparison candidate using pinned 720p T2V and distilled I2V checkpoints. Runtime dependencies remain external.",
       "approx_download_bytes": 71655871264,
       "source": {
@@ -268,7 +384,12 @@
       "ownership": "external",
       "supports_lora": false,
       "max_references": 1,
-      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "reference_roles": [
+        "identity",
+        "pose",
+        "composition",
+        "environment"
+      ],
       "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": false,
@@ -311,8 +432,16 @@
     {
       "model_id": "DiffSynth-Studio/MiniMax-H3-NF4",
       "display_name": "MiniMax H3 FL2VA Pruned NF4",
-      "domains": ["general", "anime", "illustration", "photoreal"],
-      "media_types": ["video", "audio_video"],
+      "domains": [
+        "general",
+        "anime",
+        "illustration",
+        "photoreal"
+      ],
+      "media_types": [
+        "video",
+        "audio_video"
+      ],
       "description": "27.71GB selected NF4 bundle for single-GPU evaluation. It remains experimental and unroutable until the isolated DiffSynth runtime succeeds on R9700/ROCm.",
       "approx_download_bytes": 27705875746,
       "source": {
@@ -323,7 +452,12 @@
       "ownership": "external",
       "supports_lora": false,
       "max_references": 2,
-      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "reference_roles": [
+        "identity",
+        "pose",
+        "composition",
+        "environment"
+      ],
       "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": true,
@@ -332,8 +466,16 @@
     {
       "model_id": "unsloth/MiniMax-H3-GGUF",
       "display_name": "MiniMax H3 FL2VA UD-Q2 GGUF",
-      "domains": ["general", "anime", "illustration", "photoreal"],
-      "media_types": ["video", "audio_video"],
+      "domains": [
+        "general",
+        "anime",
+        "illustration",
+        "photoreal"
+      ],
+      "media_types": [
+        "video",
+        "audio_video"
+      ],
       "description": "26.98GB four-component GGUF bundle selected for one-R9700 evaluation through an isolated stable-diffusion.cpp HIP runtime.",
       "approx_download_bytes": 26978277946,
       "source": {
@@ -344,7 +486,12 @@
       "ownership": "managed",
       "supports_lora": false,
       "max_references": 2,
-      "reference_roles": ["identity", "pose", "composition", "environment"],
+      "reference_roles": [
+        "identity",
+        "pose",
+        "composition",
+        "environment"
+      ],
       "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": true,

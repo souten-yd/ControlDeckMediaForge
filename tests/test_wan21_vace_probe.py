@@ -135,7 +135,8 @@ def test_pipeline_load_is_local_only_mixed_dtype_offloaded_and_uses_480p_shift()
     )
     path = Path("/trusted/snapshot")
     pipeline, prompt_embeds, negative_embeds = _load_pipeline(
-        path, torch, Vae, Pipeline, Scheduler, TextEncoder, Tokenizer, Transformer
+        path, torch, Vae, Pipeline, Scheduler, TextEncoder, Tokenizer, Transformer,
+        "model_cpu", "tiled", "float32",
     )
 
     assert isinstance(pipeline, Pipeline)
@@ -245,3 +246,26 @@ def test_frame_encoder_rejects_wrong_count_without_partial_output(tmp_path: Path
     with pytest.raises(RuntimeError, match="frame count"):
         _encode_frames([], output, PRESETS["smoke"])
     assert not output.exists()
+
+
+def test_the_probe_can_leave_the_model_on_the_card_and_skip_vae_tiling() -> None:
+    """節約の設定を外して測れるようにする。
+
+    退避もタイリングも VRAM と引き換えに速度を捨てる設定で、収まっている
+    ときは代金だけが残る。既定は従来どおり両方入れるが、外して比べられないと
+    「遅いのはモデルのせい」と「遅いのは設定のせい」を切り分けられない。
+    """
+    from pathlib import Path
+
+    source = (Path(__file__).parents[1] / "worker_packs/video/wan21_vace_probe.py").read_text(
+        encoding="utf-8"
+    )
+    load = source[source.index("def _load_pipeline("):source.index("def _install_trace(")]
+    assert 'if offload == "model_cpu":' in load
+    assert 'if vae_memory == "tiled":' in load
+    # どこで時間が消えるかは、外から眺めていても分からない。
+    trace = source[source.index("def _install_trace("):source.index("def _invoke_pipeline(")]
+    for label in ('"vae.encode"', '"vae.decode"', '"transformer.forward"'):
+        assert label in trace
+    # GPU は非同期なので、測る前後で待たないと隣の呼び出しへ時間がずれる。
+    assert trace.count("torch.cuda.synchronize()") == 2

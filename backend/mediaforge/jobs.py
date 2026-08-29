@@ -137,6 +137,7 @@ class JobManager:
         model_store_root: Path | None = None,
         hf_home: Path | None = None,
         image_runtime_python: Path | None = None,
+        video_runtime_python: Path | None = None,
         creative_evaluator: CreativeEvaluator | None = None,
         ai_gateway: HostAIGateway | None = None,
         creative_director: Any | None = None,
@@ -153,6 +154,7 @@ class JobManager:
         self.model_store_root = model_store_root
         self.hf_home = hf_home
         self.image_runtime_python = image_runtime_python
+        self.video_runtime_python = video_runtime_python
         self.creative_evaluator = creative_evaluator
         self.ai_gateway = ai_gateway
         # 演出の立案と検証。従来は画面が順番に呼び、途中結果をページが持って
@@ -536,7 +538,17 @@ class JobManager:
             return str(domain.get("id") or "general")
         return "general"
 
+    VIDEO_ADAPTERS = frozenset({"diffusers.wan2.1-t2v"})
+
+    @classmethod
+    def _is_video_model(cls, selected: ModelDescriptor | None) -> bool:
+        return selected is not None and selected.runtime_adapter in cls.VIDEO_ADAPTERS
+
     def _model_capability(self, job: Job) -> str:
+        if job.request.operation == "video.generate":
+            # 入力画像から動かす経路はまだ無い。持っていない capability を
+            # 名乗ると、routing が通してから worker が断ることになる。
+            return "video.text_to_video"
         if self.store.job_profile_snapshot(job.id).get("reference_asset_ids"):
             return "image.multi_reference_edit"
         if job.request.operation == "image.generate":
@@ -1313,11 +1325,17 @@ class JobManager:
         stdin_payload = json.dumps(payload).encode("utf-8")
         timeout_sec = self.worker_timeout_sec
         if selected is not None:
-            assert self.image_runtime_python is not None and selected.local_path is not None
-            if not self.image_runtime_python.is_file():
-                raise WorkerFailure("worker_not_installed", "image runtime is not installed")
-            executable = self.image_runtime_python
-            module = "worker_packs.image.worker"
+            assert selected.local_path is not None
+            if self._is_video_model(selected):
+                if self.video_runtime_python is None or not self.video_runtime_python.is_file():
+                    raise WorkerFailure("worker_not_installed", "video runtime is not installed")
+                executable = self.video_runtime_python
+                module = "worker_packs.video.worker"
+            else:
+                if self.image_runtime_python is None or not self.image_runtime_python.is_file():
+                    raise WorkerFailure("worker_not_installed", "image runtime is not installed")
+                executable = self.image_runtime_python
+                module = "worker_packs.image.worker"
             # The heavyweight process may import only the worker pack and its
             # own runtime dependencies. Do not inherit a development
             # PYTHONPATH that can accidentally expose core implementations.
@@ -2100,7 +2118,101 @@ class JobManager:
             f"semantic review rejected all candidates within retry budget {retry_budget}",
         )
 
+    async def _register_video_outputs(
+        self, job: Job, response: dict[str, Any], job_root: Path
+    ) -> list[str]:
+        """Register a clip the worker already normalized and probed.
+
+        画像側の検証は絵を見る前提で組んである（brief の defect、意味レビュー）。
+        動画にそのまま当てても答えが出ないので、ここは形の検証だけを行う。
+        中身が本当に動画かは worker 側の probe が見ており、そこを通ったものだけが
+        来る。core は job root の外を指されていないことと、寸法・尺・fps が
+        worker の申告どおりであることを確かめる。
+        """
+        outputs = response["outputs"]
+        if not isinstance(outputs, list) or len(outputs) != 1:
+            raise WorkerFailure("worker_error", "the video worker returned an unexpected output count")
+        output = outputs[0]
+        if not isinstance(output, dict) or output.get("mime_type") != "video/mp4":
+            raise WorkerFailure("worker_error", "the video worker returned an unexpected media type")
+        path = contained(job_root, Path(str(output.get("path"))))
+        if not path.is_file() or path.stat().st_size <= 0:
+            raise WorkerFailure("worker_error", "the video worker produced no file")
+        if path.stat().st_size > MAX_ARTIFACT_BYTES:
+            raise WorkerFailure("artifact_too_large", "the clip exceeded the 64 MiB artifact bound")
+        width = output.get("width")
+        height = output.get("height")
+        duration = output.get("duration_sec")
+        frame_rate = output.get("frame_rate")
+        if not all(isinstance(value, int) and value > 0 for value in (width, height)):
+            raise WorkerFailure("worker_error", "the clip has no usable dimensions")
+        if not all(
+            isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+            for value in (duration, frame_rate)
+        ):
+            raise WorkerFailure("worker_error", "the clip has no usable duration")
+
+        model = response["model"]
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        now = utc_now()
+        asset_id = f"asset_{uuid.uuid4().hex}"
+        provenance_id = f"prov_{uuid.uuid4().hex}"
+        asset = Asset(
+            id=asset_id,
+            job_id=job.id,
+            parent_asset_ids=[],
+            mime_type="video/mp4",
+            width=int(width),
+            height=int(height),
+            duration_sec=float(duration),
+            frame_rate=float(frame_rate),
+            size_bytes=path.stat().st_size,
+            sha256=digest,
+            suggested_filename=f"media-forge-{job.id[4:12]}.mp4",
+            provenance_id=provenance_id,
+            created_at=now,
+        )
+        provenance = Provenance(
+            id=provenance_id,
+            asset_id=asset_id,
+            parent_asset_ids=[],
+            operation=job.request.operation,
+            intent=job.request.intent,
+            model_id=str(model["id"]),
+            model_version=str(model["version"]),
+            weights_hash=str(model["weights_hash"]),
+            license=str(model["license"]),
+            runtime_adapter=str(model["runtime_adapter"]),
+            runtime_version=str(model["runtime_version"]),
+            tool_versions={"media-forge": __version__, "ffmpeg.normalize": "1.0.0"},
+            seed=int(response.get("seed", 0)),
+            parameters={
+                "model_policy": job.request.model_policy,
+                "constraints": dict(job.request.constraints),
+                "output": job.request.output.model_dump(mode="json"),
+                **({"model_route": self._route_summary(job.id)} if job.id in self._routes else {}),
+            },
+            reference_asset_hashes={},
+            postprocessing=[str(item) for item in response.get("postprocessing", [])],
+            validation=[{
+                "validator": "video.normalized",
+                "status": "passed",
+                "width": int(width),
+                "height": int(height),
+                "duration_sec": float(duration),
+                "frame_rate": float(frame_rate),
+                "frame_count": output.get("frame_count"),
+            }],
+            warnings=[],
+            output_sha256=digest,
+            created_at=now,
+        )
+        self.store.register_asset(asset, provenance, path)
+        return [asset_id]
+
     async def _register_outputs(self, job: Job, response: dict[str, Any], job_root: Path) -> list[str]:
+        if job.request.operation == "video.generate":
+            return await self._register_video_outputs(job, response, job_root)
         outputs = response["outputs"]
         expected = job.request.output.count + (
             job.request.qa.max_regeneration_attempts if job.request.qa.semantic else 0

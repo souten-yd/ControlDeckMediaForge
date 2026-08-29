@@ -3,7 +3,7 @@ from __future__ import annotations
 """Local-only, bounded Wan 2.1 VACE 1.3B image-to-video probe."""
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import gc
 import hashlib
 import json
@@ -85,11 +85,14 @@ def _load_pipeline(
     text_encoder_type: Any,
     tokenizer_type: Any,
     transformer_type: Any,
+    offload: str,
+    vae_memory: str,
+    vae_dtype: str,
 ) -> tuple[Any, Any, Any]:
     vae = vae_type.from_pretrained(
         snapshot,
         subfolder="vae",
-        dtype=torch.float32,
+        dtype=torch.float32 if vae_dtype == "float32" else torch.bfloat16,
         low_cpu_mem_usage=True,
         local_files_only=True,
     )
@@ -146,9 +149,20 @@ def _load_pipeline(
         scheduler=scheduler,
         transformer=transformer,
     )
-    pipeline.enable_model_cpu_offload(device="cuda:0")
-    pipeline.vae.enable_slicing()
-    pipeline.vae.enable_tiling()
+    # 34.2GB のカードに 1.3B を載せるのに CPU へ退避させる必要は無い。退避は
+    # 毎 step ごとに CPU と GPU を往復するので、収まっているときは値段だけが残る。
+    # どちらが速いかは測って決める。既定は従来どおり退避する。
+    if offload == "model_cpu":
+        pipeline.enable_model_cpu_offload(device="cuda:0")
+    else:
+        pipeline.to("cuda:0")
+    # タイリングとスライシングは VRAM を節約するために小片へ分けて逐次処理する。
+    # メモリと引き換えに速度を捨てる設定であり、収まっているなら代金だけが残る。
+    # 実測: 256x256 5 フレームの固定費が 101.7 秒あり、1 step の限界費用 0.19 秒に
+    # 対して桁が違っていた。効いているのが本当にここかを測って決める。
+    if vae_memory == "tiled":
+        pipeline.vae.enable_slicing()
+        pipeline.vae.enable_tiling()
     return pipeline, prompt_embeds, negative_prompt_embeds
 
 
@@ -228,6 +242,32 @@ def _conditioning(preset: ProbePreset) -> tuple[list[Any], list[Any]]:
     return video, mask
 
 
+def _install_trace(pipeline: Any, torch: Any, sink: dict[str, list[float]]) -> None:
+    """呼び出しごとの実時間を数える。GPU は非同期なので、測る前に同期する。
+
+    同期しないと、待ち時間が次の呼び出しへずれて記録され、どこが重いのかが
+    そのぶん動いてしまう。
+    """
+
+    def timed(owner: Any, method: str, label: str) -> None:
+        original = getattr(owner, method)
+
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            torch.cuda.synchronize()
+            started = time.monotonic()
+            try:
+                return original(*args, **kwargs)
+            finally:
+                torch.cuda.synchronize()
+                sink.setdefault(label, []).append(time.monotonic() - started)
+
+        setattr(owner, method, wrapper)
+
+    timed(pipeline.vae, "encode", "vae.encode")
+    timed(pipeline.vae, "decode", "vae.decode")
+    timed(pipeline.transformer, "forward", "transformer.forward")
+
+
 def _invoke_pipeline(
     pipeline: Any,
     torch: Any,
@@ -292,7 +332,13 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _generate(snapshot: Path, output: Path, preset_name: str) -> dict[str, Any]:
+def _generate(
+    snapshot: Path, output: Path, preset_name: str, offload: str, steps: int = 0,
+    vae_memory: str = "tiled",
+    repeat: int = 1,
+    traced: bool = False,
+    vae_dtype: str = "float32",
+) -> dict[str, Any]:
     _offline_environment()
     import torch
     from diffusers import AutoencoderKLWan, WanVACEPipeline, WanVACETransformer3DModel
@@ -307,6 +353,8 @@ def _generate(snapshot: Path, output: Path, preset_name: str) -> dict[str, Any]:
         raise RuntimeError("Wan VACE probe requires the target gfx1201 GPU")
 
     preset = PRESETS[preset_name]
+    if steps > 0:
+        preset = replace(preset, steps=steps)
     started = time.monotonic()
     pipeline, prompt_embeds, negative_prompt_embeds = _load_pipeline(
         snapshot,
@@ -317,10 +365,25 @@ def _generate(snapshot: Path, output: Path, preset_name: str) -> dict[str, Any]:
         UMT5EncoderModel,
         AutoTokenizer,
         WanVACETransformer3DModel,
+        offload,
+        vae_memory,
+        vae_dtype,
     )
     loaded_sec = time.monotonic() - started
-    generated_started = time.monotonic()
-    frames = _invoke_pipeline(pipeline, torch, preset, prompt_embeds, negative_prompt_embeds)
+    # どこで時間が消えているかは、外から見ていても分からない。VAE の符号化・
+    # 復号と transformer の呼び出しを数えて、固定費の在処を名指しする。
+    trace: dict[str, list[float]] = {}
+    if traced:
+        _install_trace(pipeline, torch, trace)
+    # 同じ process で 2 回目を測ると、初回だけの支度（HIP kernel の用意など）を
+    # 恒常的な費用と取り違えずに済む。長く生きる worker が払うのは 2 回目の方である。
+    passes: list[float] = []
+    frames = None
+    for _ in range(max(repeat, 1)):
+        pass_started = time.monotonic()
+        frames = _invoke_pipeline(pipeline, torch, preset, prompt_embeds, negative_prompt_embeds)
+        passes.append(round(time.monotonic() - pass_started, 3))
+    generated_started = time.monotonic() - passes[-1]
     generated_sec = time.monotonic() - generated_started
     _encode_frames(frames, output, preset)
     return {
@@ -343,8 +406,15 @@ def _generate(snapshot: Path, output: Path, preset_name: str) -> dict[str, Any]:
         "gpu": torch.cuda.get_device_name(0),
         "architecture": architecture,
         "transformer_dtype": "bfloat16",
-        "vae_dtype": "float32",
-        "offload": "model_cpu",
+        "vae_dtype": vae_dtype,
+        "offload": offload,
+        "vae_memory": vae_memory,
+        "pass_sec": passes,
+        **({"trace_sec": {
+            name: {"calls": len(values), "total": round(sum(values), 3),
+                   "slowest": round(max(values), 3)}
+            for name, values in trace.items()
+        }} if traced else {}),
         "text_encoder_lifecycle": "gpu_encode_then_discard",
         "attention": "pytorch_sdpa",
         "network": "offline",
@@ -359,6 +429,13 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--work-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--preset", choices=tuple(PRESETS), default="smoke")
+    parser.add_argument("--offload", choices=("model_cpu", "none"), default="model_cpu")
+    # 固定費と 1 step の限界費用を切り分けるための上書き。既定は preset のまま。
+    parser.add_argument("--steps", type=int, default=0)
+    parser.add_argument("--vae-memory", choices=("tiled", "full"), default="tiled")
+    parser.add_argument("--repeat", type=int, default=1)
+    parser.add_argument("--trace", action="store_true")
+    parser.add_argument("--vae-dtype", choices=("float32", "bfloat16"), default="float32")
     return parser.parse_args()
 
 
@@ -368,7 +445,10 @@ def main() -> None:
     output = _contained(work_root, args.output)
     snapshot = _snapshot(args.snapshot)
     try:
-        print(json.dumps(_generate(snapshot, output, args.preset), sort_keys=True))
+        print(json.dumps(_generate(
+            snapshot, output, args.preset, args.offload, args.steps,
+            args.vae_memory, args.repeat, args.trace, args.vae_dtype,
+        ), sort_keys=True))
     except Exception:
         output.unlink(missing_ok=True)
         raise

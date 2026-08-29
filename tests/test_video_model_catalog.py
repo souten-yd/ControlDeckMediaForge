@@ -37,7 +37,16 @@ def test_video_candidates_are_pinned_and_never_recommended() -> None:
     candidates = {model.model_id: model for model in registry().all() if "video" in model.media_types}
 
     assert set(candidates) == VIDEO_IDS
-    assert all(model.state == "experimental" for model in candidates.values())
+    # 実測した候補だけが available になる。測っていないものは experimental のまま。
+    adopted = {"Wan-AI/Wan2.1-T2V-1.3B-Diffusers"}
+    assert all(
+        model.state == ("available" if model_id in adopted else "experimental")
+        for model_id, model in candidates.items()
+    )
+    t2v = candidates["Wan-AI/Wan2.1-T2V-1.3B-Diffusers"]
+    assert t2v.measurement_confidence == "measured"
+    assert t2v.measured_runtime_sec == 144.64
+    assert t2v.execution_peak_vram_bytes == 18_610_000_000
     wan = candidates["Wan-AI/Wan2.2-TI2V-5B"]
     assert wan.measurement_confidence == "measured"
     assert wan.hardware_backends == ("cuda", "rocm")
@@ -56,7 +65,8 @@ def test_video_candidates_are_pinned_and_never_recommended() -> None:
         and model.measured_vram_bytes is None
         and model.hardware_backends == ("cuda",)
         for model_id, model in candidates.items()
-        if model_id not in {wan.model_id, cog.model_id, vace.model_id}
+        # 実測した候補はここでは見ない。測った値を持っているのが正しい。
+        if model_id not in {wan.model_id, cog.model_id, vace.model_id, t2v.model_id}
     )
     assert all(not model.recommended_profiles for model in candidates.values())
     assert all(model.approx_download_bytes >= sum(weight.size_bytes for weight in model.weights)
@@ -78,6 +88,7 @@ def test_only_bounded_complete_video_snapshots_are_managed() -> None:
     candidates = {model.model_id: model for model in registry().all() if model.model_id in VIDEO_IDS}
 
     assert {model_id for model_id, model in candidates.items() if model.ownership == ModelOwnership.MANAGED} == {
+        "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
         "Wan-AI/Wan2.2-TI2V-5B",
         "Wan-AI/Wan2.2-I2V-A14B",
         "Wan-AI/Wan2.2-T2V-A14B",
@@ -87,7 +98,6 @@ def test_only_bounded_complete_video_snapshots_are_managed() -> None:
     assert {model_id for model_id, model in candidates.items() if model.ownership == ModelOwnership.EXTERNAL} == {
         "Wan-AI/Wan2.2-Animate-14B",
         "Lightricks/LTX-2.3",
-        "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
         "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
         "tencent/HunyuanVideo-1.5",
         "MiniMaxAI/MiniMax-H3",
@@ -95,15 +105,22 @@ def test_only_bounded_complete_video_snapshots_are_managed() -> None:
     }
 
 
-def test_wan21_13b_candidates_remain_external_and_unroutable() -> None:
+def test_the_measured_t2v_candidate_is_routable_and_the_rest_are_not() -> None:
+    """実測した候補だけを通す。測っていないものを通すと、VRAM を当てずっぽうで
+    確保して利用者の作業中に判明することになる。
+
+    T2V 1.3B は 2026-08-29 に R9700 / gfx1201 で実測した（512x320 33 フレーム
+    30 ステップ 144.6 秒、peak VRAM 18.6 GB）。VACE は同条件で条件付けの符号化に
+    100 秒を払うため、文章から作る用途では選ばない。
+    """
     candidates = {model.model_id: model for model in registry().all()}
     t2v = candidates["Wan-AI/Wan2.1-T2V-1.3B-Diffusers"]
     vace = candidates["Wan-AI/Wan2.1-VACE-1.3B-diffusers"]
 
-    assert t2v.ownership == ModelOwnership.EXTERNAL
+    assert t2v.ownership == ModelOwnership.MANAGED
     assert t2v.approx_download_bytes == 28_935_653_511
     assert t2v.capabilities == ("video.text_to_video",)
-    assert t2v.hardware_backends == ("cuda",)
+    assert t2v.hardware_backends == ("cuda", "rocm")
     assert len(t2v.weights) == 10
 
     assert vace.ownership == ModelOwnership.EXTERNAL

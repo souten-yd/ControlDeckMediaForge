@@ -53,6 +53,10 @@ def entry(asset: Asset, provenance: Provenance) -> dict[str, Any]:
     preview_kind: str | None = None
     if asset.mime_type in {"image/png", "image/jpeg", "image/webp"}:
         preview_kind = "image"
+    elif asset.mime_type.startswith("video/"):
+        # 一覧に出るのは 1 枚目の静止画である。画面がそれを動くものとして
+        # 扱えるよう、静止画と別の種別として名指しする。
+        preview_kind = "video"
     elif (
         asset.mime_type == "application/zip"
         and provenance.operation == "asset.pack"
@@ -66,6 +70,8 @@ def entry(asset: Asset, provenance: Provenance) -> dict[str, Any]:
         "mime_type": asset.mime_type,
         "width": asset.width,
         "height": asset.height,
+        "duration_sec": asset.duration_sec,
+        "frame_rate": asset.frame_rate,
         "size_bytes": asset.size_bytes,
         "suggested_filename": asset.suggested_filename,
         "created_at": asset.created_at,

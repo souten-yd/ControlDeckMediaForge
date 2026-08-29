@@ -6012,3 +6012,201 @@ worker には 1 猶予で気づける。
 左端からの余白 16px、右端までの余白 16px、horizontal overflow 0 を確認した。
 
 `./mf.sh test` は 771 passed / 1 warning / 62.93 秒（新規 2 件）、`git diff --check` PASS。
+
+## G7 の不採用理由を実測で訂正する（2026-08-28〜29）
+
+利用者から「Reddit などで ROCm の動画生成の相場を調べてほしい。2 分で 5 フレームは
+普通ではないか」との指摘を受けた。調べたところ相場は次のとおりで、指摘は正しかった。
+
+```text
+AMD Radeon AI PRO R9700 (32GB, gfx1201) / ROCm 7.2
+  Wan 2.2 i2v 1024x576 81 frames        初回 約 300 秒（2 回目以降は既知の不具合で 45 分超）
+RX 7900 XTX
+  Wan 2.1 1.3B 832x480 25 steps         約 24 分
+  14B FP8 480P 81 frames 30 steps       20 分弱（TeaCache + torch.compile 後）
+```
+
+出典: ComfyUI issue #12672、Wan2.1-T2V-1.3B の AMD support discussion。
+
+そのうえで V1 をやり直した。まず判明したのは、DEFERRED の根拠だった「111.8 秒で 5 フレーム」
+が `smoke` プリセット（256x256・**1 step**）の値で、生成性能を測っていなかったことである。
+実用プリセットは一度も走っていなかった。
+
+実用プリセット（512x320・33 frames・30 steps）を RAM オフロード可の条件で完走させた。
+
+```text
+elapsed 3408.2s（56.8 分） / generate 3401.3s / load 6.1s
+peak VRAM 18.61 GB / 34.2 GB      max RSS 11.0 GB
+swap in +127 MB / out +96 MB
+出力 h264 512x320 33 frames 2.06 秒 54,568 B / デコード正常 / exit 0
+```
+
+**メモリは合格である。** 不採用理由の半分だった zero-swap は、GPU が空いた状態では
+実質的に満たしている。以前の測定は GPU に 26 GB が常駐した状態のものだった可能性が高い。
+
+残る 56.8 分の内訳を切り分けた。仮説を 4 つ潰してから、pipeline 内部を計測して特定した。
+
+```text
+CPU オフロード on/off        107.9s → 102.2s        影響なし
+ステップ 1 → 3              +0.4 秒                0.19 秒/step。健全
+VAE タイリング on/off        101.68 / 101.71s       影響なし（256x256 では発動しない。比較は無効）
+同一 process で 2・3 回目     101.774 / 101.591 / 101.710s   初回限定の支度ではない
+
+内部計測（256x256 5 frames 1 step、float32、オフロードなし）
+  vae.encode           2 回  100.21s   最遅 50.12s   ← 固定費のほぼ全部
+  vae.decode           1 回    1.20s
+  transformer.forward  2 回    0.22s   ← ノイズ除去は速い
+```
+
+VAE を bfloat16 にすると悪化した（encode 239.50s / decode 22.22s）。ROCm/RDNA4 では
+この 3D 畳み込みは float32 の方が速い経路に乗る。現状の float32 は正しい。
+
+**符号化 100.2 秒に対して復号 1.2 秒**という 83 倍の非対称が残る。そしてこの符号化は
+VACE 固有である。VACE は参照映像とマスクを条件に取るモデルなので、生成前にそれらを
+潜在空間へ通す（だから 2 回）。素の text-to-video にはこの処理が無い。
+
+公開している文言は「文章から短い動画を作ります」であり、主用途は T2V である。条件付け
+専用の重い前処理を持つ VACE を評価候補の中心に据えていたことが、そもそもの取り違えだった。
+ノイズ除去そのものは 0.22 秒で、モデルもハードも問題を示していない。
+
+したがって G7 の DEFERRED 理由「実用 latency を満たさない」は、実測に照らして正しくない。
+Wan 2.2 TI2V-5B での再計測へ進む。
+
+probe には計測手段を追加した（`--offload` / `--vae-memory` / `--vae-dtype` / `--steps` /
+`--repeat` / `--trace`）。既定は従来の挙動のままである。
+
+## ライブラリで動画を見られるようにする（2026-08-29）
+
+ビューアは `<img>` しか持たず、動画 asset を開いても再生できなかった。`<video>` を足し、
+mime が `video/` のときはそちらへ渡す。閉じ方は閉じるボタン・Esc・背景と複数あるので、
+要素の `close` イベントで停止と解放を行い、押した場所ごとの止め忘れを作らない。
+
+## V1 合格 — Wan 2.1 T2V 1.3B（2026-08-29）
+
+VACE の 100 秒が条件付け符号化であるという見立てを、条件付けを持たない候補で確かめた。
+`Wan-AI/Wan2.1-T2V-1.3B-Diffusers` の固定 revision `0fad780a534b6463e45facd96134c9f345acfa5b`
+（Apache-2.0）を利用者の明示同意のうえ取得した（2,514.9 秒、27 GB、incomplete 0）。
+preflight が既に pin していた revision をそのまま使い、専用 runtime
+`runtimes/wan21-1.3b-probe`（torch 2.10.0+rocm7.2.1 / diffusers 0.40.0 / ftfy 6.3.1）で測った。
+
+同一条件（256x256・5 frames・1 step）の比較。
+
+```text
+                       VACE            T2V
+vae.encode        2 回 100.21s        0 回      ← 条件付けが無い
+vae.decode        1 回   1.20s        1 回 1.23s
+transformer       2 回   0.22s        2 回 0.39s
+generate 合計         101.78s             3.87s
+```
+
+`vae.encode` は 1 度も呼ばれない。101.7 秒の固定費は VACE 固有の条件付けであった。
+
+実用プリセット（512x320・33 frames・30 steps）。
+
+```text
+generate 144.64s（2.4 分）   load 162.77s（コールド、process 1 回きり）
+wall 321.05s（5.4 分、mp4 書き出し込み）   max RSS 24,699,984 KiB
+  transformer.forward  60 回   24.16s   0.8 秒/step
+  vae.decode            1 回  118.20s   ← 生成の 82%。現在の最大費目
+  vae.encode            0 回
+出力 h264 512x320 33 frames 2.06 秒 29,629 B / デコード正常 / exit 0
+swap out +1,226,210 ページ (4.68 GB) / in +1,142,815 ページ (4.36 GB)
+```
+
+同じ R9700 の公開報告は 1024x576・81 frames で約 300 秒であり、今回の 512x320・33 frames
+生成 144.6 秒／全体 321 秒は同等の水準である。**latency は相場どおりで、不採用の理由に
+ならない。** G7 の DEFERRED 判定は、評価候補の取り違え（T2V の用途に対して条件付け
+専用の VACE を中心に据えた）と、性能を測っていない数字（smoke = 1 step）に基づいていた。
+
+正直に残す点が 2 つある。swap は 4.68 GB 書き出しており、max RSS 24.7 GB は本機 30 GB に
+対して小さくない。同時に重いものを動かせば影響が出る。もう 1 つは VAE 復号が 118.2 秒で
+生成の 82% を占めることで、今回はタイリングを切って測った。ここは詰める余地がある。
+
+なお background で起動した probe は 2 回とも読み込み中に停止された（利用者の操作では
+ないことを確認済み、OOM の記録は権限の都合で未確認）。前景では完走する。原因は未特定。
+
+## 生成した動画をライブラリへ出す道は、まだ無い（2026-08-29）
+
+利用者の「生成した動画はライブラリから見れるようにして」に対し、ビューアは `<video>` を
+持つようにした。しかしその先が繋がっていない。
+
+```text
+asset import   PNG / JPEG / GLB のみ。video/mp4 は受け付けない（asset_import.py）
+asset 登録     operation ごとに image/png か application/zip を直書き（jobs.py）
+thumbnail      is_thumbnailable は image/png,jpeg,webp,application/zip のみ
+```
+
+つまり動画 asset を作る経路が core に無く、V1 で作った mp4 を見せる手段が現時点で存在
+しない。これは G7 V2（本番実行）の範囲であり、V1 合格を受けて次に作るものである。
+
+## V2-a — 動画 asset をライブラリが扱えるようにする（2026-08-29）
+
+V1 合格を受けて、動画を一覧と拡大表示で扱える土台を作った。生成経路（V2-b）はまだ無いので、
+この段階では「動画 asset があれば正しく出せる」ところまでである。
+
+```text
+thumbnails   video/mp4 を is_thumbnailable へ追加し、1 枚目を取り出して静止画の経路に乗せる
+             worker の FFmpeg 実装は import せず、system binary を配列引数・timeout 20 秒・
+             使い捨て directory の中だけで呼ぶ。壊れた入力は枠を作らず ThumbnailError
+library      preview_kind に "video" を足し、duration_sec / frame_rate を entry へ出す
+frontend     カードに ▶ と尺の印。一覧では自動再生しない。viewer は video 要素で再生し、
+             dialog の close で停止・解放する（閉じ方が 3 通りあるため押下箇所ごとに書かない）
+```
+
+実クリップでの確認: V1 で作った 512x320 33 frames 2.06 秒 29,629 B の mp4 から、
+256x160 の webp ポスターを 2,154 B で生成できた。
+
+`./mf.sh test` は 775 passed / 1 warning / 64.82 秒（新規 2 件）、`git diff --check` PASS。
+
+## V2-b（1/2）— 動画 worker（2026-08-29）
+
+`worker_packs/video/worker.py` を追加した。core はこの実装を import せず、やり取りは
+画像 worker と同じ行ごとの JSON である（`ok` / `error`、`resource_oom` の区別、
+`MAX_MESSAGE_BYTES`）。
+
+実測にもとづく既定を worker へ固定した。
+
+```text
+VAE dtype        float32。bfloat16 は符号化 2.4 倍・復号 18 倍の悪化を実測
+device 配置      収まる限り退避しない。退避しても生成は 5% しか変わらず読み込みが倍
+pipeline 保持    process が生きている間 1 度きり。コールド 162.8 秒を要求ごとに払わない
+出力             frames -> ffmpeg で組み立て -> ffmpeg.normalize -> probe で検証
+                 公開する形は正規化済みの 1 つに揃え、生成器の書き出しをそのまま出さない
+```
+
+外から来る値は信じない。model path は境界内に限り、adapter は既知のものだけ、
+寸法は偶数かつ 16..1024、frames 5..161、steps 1..50、fps 1..120、intent は非空。
+境界の外や範囲外は GPU を動かす前に断る。
+
+test は GPU を要さない部分（境界・検証・規約の一致）で 10 件。生成そのものは V1 の実測で
+裏付けている。`./mf.sh test` は 785 passed / 1 warning / 66.88 秒。
+
+残りは core 側である。`video.generate` の実行経路（worker 起動・phase・asset 登録）と
+routing / capability がまだ無い。
+
+## V2-b（2/2）と V2-c — core 側の実行経路と採用（2026-08-29）
+
+core に `video.generate` の経路を作り、capability の固定をやめた。
+
+```text
+capability     video.text_to_video を実態から出す。runtime が無ければ
+               video_runtime_not_installed、モデルが無ければ model_not_installed。
+               入力画像から動かす経路は worker に無いので image_to_video は据置
+runtime        画像と別 venv。MEDIA_FORGE_VIDEO_RUNTIME_PYTHON で差し替えられる。
+               同じ venv に載せると片方の pin を動かしたときもう片方が黙って壊れる
+worker 選択    adapter が動画のものなら動画 worker を起動する
+asset 登録     _register_video_outputs。画像側の検証（brief defect、意味レビュー）は
+               絵を見る前提なので当てない。形の検証だけを行い、中身が動画かは
+               worker の probe が見ている。video/mp4 / 寸法 / 尺 / fps を asset へ残す
+catalog        Wan-AI/Wan2.1-T2V-1.3B-Diffusers を available / managed / measured へ。
+               既存 entry を置き換えではなくその場で更新した（revision と weight hash は
+               取得済みのものと一致）。measurements は実測値をそのまま入れた
+```
+
+旧方針を守っていた test 5 件を更新した。守る値は残し、「動画候補は routable にしない」
+という前提だけを外した。available な adapter は画像 worker が実装しているものに限る、
+という不変条件は、実装している worker を全部足す形へ広げた。
+
+重みは同一 filesystem 上のハードリンクで実機の置き場へ配置した（27 GB、空き容量の変化なし）。
+
+`./mf.sh test` は 785 passed / 1 warning / 63.70 秒、`git diff --check` PASS。

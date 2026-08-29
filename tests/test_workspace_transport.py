@@ -66,9 +66,14 @@ def test_capabilities_get_matches_the_public_document_and_bounds_presets(tmp_pat
     result = answer["result"]
     assert result["capabilities"] == public["capabilities"]
     assert result["contract_version"] == public["contract_version"]
-    assert result["capabilities"]["video.text_to_video"] == {
-        "state": "unavailable", "reason": "video_runtime_not_adopted",
+    # 動画は旗で固定せず実態から出す。動くモデルが登録されるまでは、
+    # 「採用していない」ではなく「まだ入っていない」と言う。
+    text_to_video = result["capabilities"]["video.text_to_video"]
+    assert text_to_video["state"] == "unavailable"
+    assert text_to_video["reason"] in {
+        "video_runtime_not_installed", "capability_not_installed", "model_not_installed",
     }
+    # 入力画像から動かす経路は worker にまだ無い。
     assert result["capabilities"]["video.image_to_video"] == {
         "state": "unavailable", "reason": "video_runtime_not_adopted",
     }
@@ -568,7 +573,7 @@ def test_thumbnail_clamps_requested_size_and_reports_unsupported_media(tmp_path:
     assert thumbnails.clamp_max_side(1) == thumbnails.MIN_MAX_SIDE
     assert thumbnails.clamp_max_side("256") == thumbnails.DEFAULT_MAX_SIDE
     assert thumbnails.clamp_max_side(True) == thumbnails.DEFAULT_MAX_SIDE
-    assert not thumbnails.is_thumbnailable("video/mp4")
+    assert not thumbnails.is_thumbnailable("video/webm")
 
     client, headers, _state = host_client(tmp_path, token="valid-user")
     with client:
@@ -998,3 +1003,71 @@ def test_a_finished_download_is_followed_up_without_waiting_for_a_person() -> No
     assert "follow_install(installed.id, identity)" in install
     # 依存の経路も同じ追従を使う。2 つ持つとまた片方だけ直すことになる。
     assert source.count("follow_install(") >= 3
+
+
+def test_a_clip_shows_its_first_frame_in_a_grid_of_stills(tmp_path: Path):
+    """動画 1 本ぶんを一覧へ運ぶことはできない。1 枚目だけを静止画の経路に乗せる。
+
+    ここが無いと、作った動画がライブラリで空の枠になる。
+    """
+    import subprocess
+
+    from mediaforge import thumbnails
+
+    assert thumbnails.is_thumbnailable("video/mp4")
+    clip = tmp_path / "clip.mp4"
+    built = subprocess.run(
+        [
+            "/usr/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc=size=128x96:rate=8:duration=1",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip),
+        ],
+        check=False, capture_output=True, timeout=60,
+    )
+    if built.returncode != 0:
+        pytest.skip("ffmpeg is unavailable in this environment")
+
+    poster = thumbnails.render(clip, 256, "video/mp4")
+    assert poster.mime_type == thumbnails.MIME_TYPE
+    assert poster.width > 0 and poster.height > 0
+    assert len(poster.content) <= thumbnails.THUMBNAIL_BYTE_LIMIT
+
+    # 中身が動画でないものを動画として渡されても、枠だけ作って通さない。
+    broken = tmp_path / "broken.mp4"
+    broken.write_bytes(b"not a clip")
+    with pytest.raises(thumbnails.ThumbnailError):
+        thumbnails.render(broken, 256, "video/mp4")
+
+
+def test_a_video_entry_says_it_is_a_clip_and_how_long(tmp_path: Path):
+    """一覧のカードは 1 枚目の静止画で、そのままでは動くものだと分からない。
+
+    画面が印を出せるよう、種別と尺を entry が名指しする。
+    """
+    from mediaforge.domain import Asset, Provenance
+    from mediaforge import library
+    from mediaforge.store import utc_now
+
+    now = utc_now()
+    asset = Asset(
+        id="asset_clip", job_id="job_clip", parent_asset_ids=[], mime_type="video/mp4",
+        width=512, height=320, duration_sec=2.0625, frame_rate=16.0,
+        size_bytes=29629, sha256="c" * 64,
+        suggested_filename="media-forge-clip.mp4", provenance_id="prov_clip", created_at=now,
+    )
+    provenance = Provenance(
+        id="prov_clip", asset_id="asset_clip", parent_asset_ids=[],
+        operation="video.generate", intent="a small robot waves",
+        model_id="Wan-AI/Wan2.1-T2V-1.3B-Diffusers", model_version="1",
+        weights_hash="sha256:" + "0" * 64, license="apache-2.0",
+        runtime_adapter="diffusers.wan2.1-t2v", runtime_version="0.40.0",
+        tool_versions={}, seed=0, parameters={}, output_sha256="c" * 64, created_at=now,
+        reference_asset_hashes={}, postprocessing=[], validation=[], warnings=[],
+    )
+
+    item = library.entry(asset, provenance)
+    assert item["preview_kind"] == "video"
+    assert item["duration_sec"] == 2.0625
+    assert item["frame_rate"] == 16.0
+    # 静止画と同じ種別にすると、画面が印を出す手がかりを失う。
+    assert item["preview_kind"] != "image"
