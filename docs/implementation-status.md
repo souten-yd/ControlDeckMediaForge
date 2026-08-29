@@ -6210,3 +6210,34 @@ catalog        Wan-AI/Wan2.1-T2V-1.3B-Diffusers を available / managed / measur
 重みは同一 filesystem 上のハードリンクで実機の置き場へ配置した（27 GB、空き容量の変化なし）。
 
 `./mf.sh test` は 785 passed / 1 warning / 63.70 秒、`git diff --check` PASS。
+
+## V2-c / V2-d — 実機で video.generate が通るまで（2026-08-29）
+
+0.10.0 を入れた直後は `video_runtime_not_installed` だった。bundle launcher が画像 runtime しか
+feature data へ向けておらず、installed な Media Forge が repository の中を探していた。
+`MEDIA_FORGE_VIDEO_RUNTIME_PYTHON` を feature data 配下（`runtimes/wan21-t2v`）へ向け、
+runtime と重みを同一 filesystem のハードリンクで配置した（venv は複製せず、
+`sys.prefix` が配置先を指すことと torch 2.10.0+rocm7.2.1 / diffusers 0.40.0 / ftfy 6.3.1 の
+import を実機で確認）。
+
+0.10.1 で capability が変わった。
+
+```text
+video.text_to_video  -> available / implementation local / confidence measured / local_only
+video.image_to_video -> unavailable / video_runtime_not_adopted（worker に経路が無い）
+```
+
+次に job を投げると `capability_unavailable` で落ちた。dispatcher が
+`image.generate` / `image.edit` / `asset.pack` の 3 つしか知らず、runtime が揃っていても
+video を弾いていた。通すようにしたうえで、動かせる動画モデルが無いときは fake worker へ
+落とさず理由を名指しするようにした（落とすと「PNG しか出せない」と言われ、何が足りないのか
+分からなくなる。LoRA で直したのと同じ形である）。0.10.2 で反映。
+
+REST の `/api/v1/jobs` から投げた job は `host_lease_required` で落ちる。これは正しい。
+GPU job は ControlDeck の lease を通す必要があり（AGENTS.md 規約 8）、workspace 経由の
+identity を持つ経路だけが実行できる。画面からの実行は **NOT TESTED**。
+
+画面側の条件は満たしている。`videoCapabilityUsable()` は available / experimental を通し、
+作るボタンは `video && !usable` のときだけ無効になるので、いまは押せる状態にある。
+
+installed v0.10.2 / healthy / contract 2.0。`./mf.sh test` 785 passed。
