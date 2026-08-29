@@ -1132,6 +1132,37 @@ class JobManager:
                     words.append(word)
         return ", ".join(words)
 
+    # 動画の既定。frames と fps は catalog が持たないので、実測した長さから置く。
+    # 33 フレーム / 16 fps は 2.06 秒で、512x320 30 steps を 144.6 秒で作れた設定である。
+    DEFAULT_VIDEO_FRAMES = 33
+    DEFAULT_VIDEO_FPS = 16
+
+    def _resolved_video_request(self, job: Job, selected: ModelDescriptor) -> dict[str, Any]:
+        """公開要求にモデルの寸法を持ち込ませない。埋めるのはここである。
+
+        画面は `constraints: {}` を送る。どのモデルが選ばれるか知らないのだから
+        それが正しい。worker 側で既定を持つと、モデルを増やすたびに worker の
+        固定値が全部に掛かる。選んだモデルの実測既定から、ここで決める。
+        指定された値は動かさない。
+        """
+        request = job.request.model_dump(mode="json")
+        constraints = dict(request.get("constraints") or {})
+        if constraints.get("width") is None:
+            constraints["width"] = selected.native_width or 512
+        if constraints.get("height") is None:
+            constraints["height"] = selected.native_height or 320
+        # 正規化が偶数しか受けない。奇数のまま渡すと生成の後で断られる。
+        constraints["width"] = int(constraints["width"]) - int(constraints["width"]) % 2
+        constraints["height"] = int(constraints["height"]) - int(constraints["height"]) % 2
+        if constraints.get("steps") is None:
+            constraints["steps"] = selected.default_steps or 30
+        if constraints.get("frames") is None:
+            constraints["frames"] = self.DEFAULT_VIDEO_FRAMES
+        if constraints.get("fps") is None:
+            constraints["fps"] = self.DEFAULT_VIDEO_FPS
+        request["constraints"] = constraints
+        return request
+
     def _resolved_request(self, job: Job, selected: ModelDescriptor) -> dict[str, Any]:
         """要求に、そのモデル本来の設定を埋めてから worker に渡す。
 
@@ -1307,7 +1338,11 @@ class JobManager:
                            if selected.default_steps is not None else {}),
                     },
                 },
-                "request": self._resolved_request(job, selected),
+                "request": (
+                    self._resolved_video_request(job, selected)
+                    if self._is_video_model(selected)
+                    else self._resolved_request(job, selected)
+                ),
                 "worker_output_dir": str(output_dir),
                 "worker_inputs": {**worker_inputs, "loras": self._resolved_loras(job, selected)},
             }

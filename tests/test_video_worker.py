@@ -95,3 +95,63 @@ def test_the_worker_speaks_the_same_protocol_as_the_image_worker():
     # 公開する形は正規化を通したものだけ。生成器の書き出しをそのまま出さない。
     assert "normalize(NormalizeRequest(" in source
     assert "probe(output)" in source
+
+
+def test_core_fills_the_geometry_the_screen_does_not_send(tmp_path: Path):
+    """画面は constraints: {} を送る。どのモデルが選ばれるか知らないのだから正しい。
+
+    実機ではこれが worker の「width must be an integer」で 0.9 秒で落ちていた
+    （2026-08-29、job_6bfb298d）。埋めるのは worker ではなく core である。
+    worker 側に既定を置くと、モデルを増やすたびにその固定値が全部へ掛かる。
+    """
+    from dataclasses import replace as dataclass_replace
+
+    from mediaforge.domain import JobRequest
+    from mediaforge.jobs import JobManager
+    from mediaforge.models import ModelDescriptor, ModelState
+    from mediaforge.models.registry import WeightFile
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    model = ModelDescriptor(
+        model_id="Wan-AI/Wan2.1-T2V-1.3B-Diffusers", family="wan2.1", version="1", revision="1",
+        weights_hash="sha256:" + "a" * 64, license="apache-2.0",
+        runtime_adapter="diffusers.wan2.1-t2v", capabilities=("video.text_to_video",),
+        hardware_backends=("rocm",), state=ModelState.AVAILABLE, policy_rank={"auto": 10},
+        required_files=(), weights=(WeightFile(path="w.safetensors", size_bytes=1, sha256="b" * 64),),
+        installed=True, native_width=512, native_height=320, default_steps=30,
+    )
+    job = store.get_job(store.create_job(JobRequest(
+        operation="video.generate", intent="a small robot waves", constraints={},
+        output={"format": "mp4", "count": 1},
+    )).id)
+
+    resolved = manager._resolved_video_request(job, model)["constraints"]
+    assert resolved["width"] == 512 and resolved["height"] == 320
+    assert resolved["steps"] == 30
+    assert resolved["frames"] == JobManager.DEFAULT_VIDEO_FRAMES
+    assert resolved["fps"] == JobManager.DEFAULT_VIDEO_FPS
+
+    # 指定された値は動かさない。
+    asked = store.get_job(store.create_job(JobRequest(
+        operation="video.generate", intent="x", constraints={"width": 384, "steps": 12},
+        output={"format": "mp4", "count": 1},
+    )).id)
+    chosen = manager._resolved_video_request(asked, model)["constraints"]
+    assert chosen["width"] == 384 and chosen["steps"] == 12
+    assert chosen["height"] == 320
+
+    # 正規化は偶数しか受けない。奇数を渡されたら生成の前に落としておく。
+    odd = store.get_job(store.create_job(JobRequest(
+        operation="video.generate", intent="x", constraints={"width": 385, "height": 321},
+        output={"format": "mp4", "count": 1},
+    )).id)
+    even = manager._resolved_video_request(odd, model)["constraints"]
+    assert even["width"] % 2 == 0 and even["height"] % 2 == 0
+
+    # 寸法を持たないモデルでも、worker が落ちる値は渡さない。
+    bare = dataclass_replace(model, native_width=None, native_height=None, default_steps=None)
+    fallback = manager._resolved_video_request(job, bare)["constraints"]
+    assert all(isinstance(fallback[key], int) for key in ("width", "height", "steps", "frames", "fps"))
