@@ -13,6 +13,8 @@ import io
 import json
 from dataclasses import dataclass
 from pathlib import Path
+import subprocess
+import tempfile
 import zipfile
 
 from PIL import Image, UnidentifiedImageError
@@ -59,7 +61,9 @@ def clamp_max_side(value: object) -> int:
 
 def is_thumbnailable(mime_type: str) -> bool:
     """Kept in one place so future media types extend here, not at call sites."""
-    return mime_type in {"image/png", "image/jpeg", "image/webp", "application/zip"}
+    return mime_type in {
+        "image/png", "image/jpeg", "image/webp", "application/zip", "video/mp4",
+    }
 
 
 def _render_content(source: Path | io.BytesIO, max_side: int, quality: int) -> tuple[bytes, int, int]:
@@ -70,6 +74,39 @@ def _render_content(source: Path | io.BytesIO, max_side: int, quality: int) -> t
     buffer = io.BytesIO()
     prepared.save(buffer, format="WEBP", quality=quality, method=4)
     return buffer.getvalue(), prepared.width, prepared.height
+
+
+# 動画 1 本ぶんを一覧へ運ぶことはできない。1 枚目だけを取り出して、
+# 以降は静止画と同じ経路に乗せる。worker の FFmpeg 実装は import しない。
+# ここが呼ぶのは system の binary であり、配列引数・timeout 付き・出力先は
+# 使い捨ての directory の中だけである。
+_VIDEO_POSTER_LIMIT = 8 * 1024 * 1024
+_VIDEO_POSTER_TIMEOUT_SEC = 20
+
+
+def _video_poster(source: Path) -> bytes:
+    """Take the first frame so a clip can sit in a grid of stills."""
+    if source.is_symlink() or not source.is_file():
+        raise ThumbnailError()
+    with tempfile.TemporaryDirectory(prefix="mediaforge-poster-") as temporary:
+        frame = Path(temporary) / "poster.png"
+        try:
+            completed = subprocess.run(
+                [
+                    "/usr/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+                    "-i", str(source), "-frames:v", "1", "-f", "image2", str(frame),
+                ],
+                check=False,
+                capture_output=True,
+                timeout=_VIDEO_POSTER_TIMEOUT_SEC,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ThumbnailError() from exc
+        if completed.returncode != 0 or not frame.is_file():
+            raise ThumbnailError()
+        if frame.stat().st_size <= 0 or frame.stat().st_size > _VIDEO_POSTER_LIMIT:
+            raise ThumbnailError()
+        return frame.read_bytes()
 
 
 def _project_preview(source: Path) -> bytes:
@@ -115,7 +152,12 @@ def render(source: Path, max_side: int, mime_type: str = "image/png") -> Thumbna
     content = b""
     width = height = 0
     try:
-        preview = _project_preview(source) if mime_type == "application/zip" else None
+        if mime_type == "application/zip":
+            preview = _project_preview(source)
+        elif mime_type == "video/mp4":
+            preview = _video_poster(source)
+        else:
+            preview = None
     except ThumbnailError:
         raise
     for side in (max_side, *[value for value in _FALLBACK_SIDES if value < max_side]):

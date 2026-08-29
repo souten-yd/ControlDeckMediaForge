@@ -3786,9 +3786,19 @@ async function libraryCard(item) {
   const kind = document.createElement("span");
   kind.textContent = KIND_LABEL[item.kind] || item.kind;
   const size = document.createElement("span");
+  const isVideo = String(item.mime_type || "").startsWith("video/");
   size.textContent = item.mime_type === "application/zip"
     ? "ZIP"
     : (item.width && item.height ? `${item.width}×${item.height}` : "");
+  if (isVideo) {
+    // 一覧に出るのは 1 枚目の静止画なので、動くものだと分からない。
+    // 一覧で勝手に再生はしない。押せば動く、と印で伝える。
+    card.classList.add("clip");
+    const badge = document.createElement("span");
+    badge.className = "clip-badge";
+    badge.textContent = item.duration_sec ? `▶ ${item.duration_sec.toFixed(1)}秒` : "▶";
+    card.append(badge);
+  }
   meta.append(kind, size);
   image.loading = "lazy";
   image.decoding = "async";

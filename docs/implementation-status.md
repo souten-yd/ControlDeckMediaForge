@@ -6138,3 +6138,22 @@ thumbnail      is_thumbnailable は image/png,jpeg,webp,application/zip のみ
 
 つまり動画 asset を作る経路が core に無く、V1 で作った mp4 を見せる手段が現時点で存在
 しない。これは G7 V2（本番実行）の範囲であり、V1 合格を受けて次に作るものである。
+
+## V2-a — 動画 asset をライブラリが扱えるようにする（2026-08-29）
+
+V1 合格を受けて、動画を一覧と拡大表示で扱える土台を作った。生成経路（V2-b）はまだ無いので、
+この段階では「動画 asset があれば正しく出せる」ところまでである。
+
+```text
+thumbnails   video/mp4 を is_thumbnailable へ追加し、1 枚目を取り出して静止画の経路に乗せる
+             worker の FFmpeg 実装は import せず、system binary を配列引数・timeout 20 秒・
+             使い捨て directory の中だけで呼ぶ。壊れた入力は枠を作らず ThumbnailError
+library      preview_kind に "video" を足し、duration_sec / frame_rate を entry へ出す
+frontend     カードに ▶ と尺の印。一覧では自動再生しない。viewer は video 要素で再生し、
+             dialog の close で停止・解放する（閉じ方が 3 通りあるため押下箇所ごとに書かない）
+```
+
+実クリップでの確認: V1 で作った 512x320 33 frames 2.06 秒 29,629 B の mp4 から、
+256x160 の webp ポスターを 2,154 B で生成できた。
+
+`./mf.sh test` は 775 passed / 1 warning / 64.82 秒（新規 2 件）、`git diff --check` PASS。
