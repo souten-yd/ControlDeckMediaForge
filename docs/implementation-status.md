@@ -6080,3 +6080,61 @@ probe には計測手段を追加した（`--offload` / `--vae-memory` / `--vae-
 ビューアは `<img>` しか持たず、動画 asset を開いても再生できなかった。`<video>` を足し、
 mime が `video/` のときはそちらへ渡す。閉じ方は閉じるボタン・Esc・背景と複数あるので、
 要素の `close` イベントで停止と解放を行い、押した場所ごとの止め忘れを作らない。
+
+## V1 合格 — Wan 2.1 T2V 1.3B（2026-08-29）
+
+VACE の 100 秒が条件付け符号化であるという見立てを、条件付けを持たない候補で確かめた。
+`Wan-AI/Wan2.1-T2V-1.3B-Diffusers` の固定 revision `0fad780a534b6463e45facd96134c9f345acfa5b`
+（Apache-2.0）を利用者の明示同意のうえ取得した（2,514.9 秒、27 GB、incomplete 0）。
+preflight が既に pin していた revision をそのまま使い、専用 runtime
+`runtimes/wan21-1.3b-probe`（torch 2.10.0+rocm7.2.1 / diffusers 0.40.0 / ftfy 6.3.1）で測った。
+
+同一条件（256x256・5 frames・1 step）の比較。
+
+```text
+                       VACE            T2V
+vae.encode        2 回 100.21s        0 回      ← 条件付けが無い
+vae.decode        1 回   1.20s        1 回 1.23s
+transformer       2 回   0.22s        2 回 0.39s
+generate 合計         101.78s             3.87s
+```
+
+`vae.encode` は 1 度も呼ばれない。101.7 秒の固定費は VACE 固有の条件付けであった。
+
+実用プリセット（512x320・33 frames・30 steps）。
+
+```text
+generate 144.64s（2.4 分）   load 162.77s（コールド、process 1 回きり）
+wall 321.05s（5.4 分、mp4 書き出し込み）   max RSS 24,699,984 KiB
+  transformer.forward  60 回   24.16s   0.8 秒/step
+  vae.decode            1 回  118.20s   ← 生成の 82%。現在の最大費目
+  vae.encode            0 回
+出力 h264 512x320 33 frames 2.06 秒 29,629 B / デコード正常 / exit 0
+swap out +1,226,210 ページ (4.68 GB) / in +1,142,815 ページ (4.36 GB)
+```
+
+同じ R9700 の公開報告は 1024x576・81 frames で約 300 秒であり、今回の 512x320・33 frames
+生成 144.6 秒／全体 321 秒は同等の水準である。**latency は相場どおりで、不採用の理由に
+ならない。** G7 の DEFERRED 判定は、評価候補の取り違え（T2V の用途に対して条件付け
+専用の VACE を中心に据えた）と、性能を測っていない数字（smoke = 1 step）に基づいていた。
+
+正直に残す点が 2 つある。swap は 4.68 GB 書き出しており、max RSS 24.7 GB は本機 30 GB に
+対して小さくない。同時に重いものを動かせば影響が出る。もう 1 つは VAE 復号が 118.2 秒で
+生成の 82% を占めることで、今回はタイリングを切って測った。ここは詰める余地がある。
+
+なお background で起動した probe は 2 回とも読み込み中に停止された（利用者の操作では
+ないことを確認済み、OOM の記録は権限の都合で未確認）。前景では完走する。原因は未特定。
+
+## 生成した動画をライブラリへ出す道は、まだ無い（2026-08-29）
+
+利用者の「生成した動画はライブラリから見れるようにして」に対し、ビューアは `<video>` を
+持つようにした。しかしその先が繋がっていない。
+
+```text
+asset import   PNG / JPEG / GLB のみ。video/mp4 は受け付けない（asset_import.py）
+asset 登録     operation ごとに image/png か application/zip を直書き（jobs.py）
+thumbnail      is_thumbnailable は image/png,jpeg,webp,application/zip のみ
+```
+
+つまり動画 asset を作る経路が core に無く、V1 で作った mp4 を見せる手段が現時点で存在
+しない。これは G7 V2（本番実行）の範囲であり、V1 合格を受けて次に作るものである。
