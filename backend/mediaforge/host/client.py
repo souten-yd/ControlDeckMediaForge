@@ -9,6 +9,8 @@ import httpx
 
 
 ADDON_ID = "media-forge"
+# 受理は VRAM を空けることを含む。共通の timeout では足りない。
+ADMISSION_TIMEOUT_SEC = 120.0
 MAX_JSON_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_GRANT_BYTES = 1024 * 1024 * 1024
 
@@ -98,7 +100,17 @@ class ControlDeckHostClient:
         return await self._request(identity, "GET", f"/{ADDON_ID}/jobs/{host_job_id}/control")
 
     async def request_resource(self, identity: HostIdentity, payload: dict[str, Any]) -> dict[str, Any]:
-        return await self._request(identity, "POST", f"/{ADDON_ID}/resources/requests", json=payload)
+        # 受理は場所を空けることを含む。実測では 16.5 GB の常駐を降ろしてから
+        # でないと通らない要求があり、共通の 10 秒では足りずに timeout が
+        # 「Host に繋がらない」として返っていた。待つのは 1 度きりで、以後の
+        # 待機は resource_status の速い poll が引き受ける。
+        return await self._request(
+            identity,
+            "POST",
+            f"/{ADDON_ID}/resources/requests",
+            json=payload,
+            timeout_sec=ADMISSION_TIMEOUT_SEC,
+        )
 
     async def resource_status(self, identity: HostIdentity, request_id: str) -> dict[str, Any]:
         return await self._request(identity, "GET", f"/{ADDON_ID}/resources/requests/{request_id}")
@@ -166,7 +178,10 @@ class ControlDeckHostClient:
                         )
                     chunks.append(chunk)
         except httpx.HTTPError as exc:
-            raise HostApiError("host_unreachable", "ControlDeck Host API is unreachable") from exc
+            raise HostApiError(
+                "host_unreachable",
+                f"ControlDeck Host API is unreachable ({type(exc).__name__}: {str(exc)[:120]})",
+            ) from exc
         return b"".join(chunks)
 
     async def create_output(self, identity: HostIdentity, payload: dict[str, Any]) -> dict[str, Any]:
@@ -267,7 +282,13 @@ class ControlDeckHostClient:
                 request_kwargs["timeout"] = timeout_sec
             response = await self._client.request(method, path, **request_kwargs)
         except httpx.HTTPError as exc:
-            raise HostApiError("host_unreachable", "ControlDeck Host API is unreachable") from exc
+            # どの失敗も同じ 1 文にすると、繋がっていないのか、待たされて
+            # 切ったのかが区別できない。実機で動画の受理が 22 秒で落ちた
+            # ときに、それが timeout なのかどうかを判別できなかった。
+            raise HostApiError(
+                "host_unreachable",
+                f"ControlDeck Host API is unreachable ({type(exc).__name__}: {str(exc)[:120]})",
+            ) from exc
         if response.status_code >= 400:
             raise HostApiError(
                 "host_request_rejected",
