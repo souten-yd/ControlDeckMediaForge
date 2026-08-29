@@ -6257,3 +6257,25 @@ installed v0.10.2 / healthy / contract 2.0。`./mf.sh test` 785 passed。
 144.6 秒で作れた設定を core の既定に置いた。
 
 `./mf.sh test` 786 passed。
+
+## 受理が 10 秒で切れていた（2026-08-29〜30）
+
+寸法の修正後、画面からの動画 job は `width must be an integer` を出さなくなった。次に
+出たのは 22〜27 秒後の `host_unreachable: ControlDeck Host API is unreachable`
+（job_65751f36 / job_e2b2afa2）。ControlDeck 本体は稼働しており、`/health` も
+`/api/v1/health` も 200 を返していた。AI ターンの解放も成功している。
+
+原因は 2 つ重なっていた。
+
+```text
+1. host client の共通 timeout が 10 秒。受理は VRAM を空けることを含むので足りない。
+   実測では 16.5 GB の常駐を降ろしてからでないと通らない要求がある
+2. httpx のあらゆる失敗を "ControlDeck Host API is unreachable" の 1 文へ潰していた。
+   timeout なのか接続不能なのかが区別できず、切り分けに 1 往復ぶん余計にかかった
+```
+
+受理の POST だけ 120 秒へ広げた。待機そのものは `resource_status` の速い poll が
+引き受けるので、長く待つのは最初の 1 度きりである。エラーは例外の型と本文を添えるように
+した。これで次に落ちたときは理由が残る。
+
+`./mf.sh test` 787 passed。

@@ -1051,3 +1051,21 @@ def test_the_same_asset_cannot_be_listed_twice(tmp_path: Path):
 
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "invalid_project_asset_placement"
+
+
+def test_the_host_error_says_what_actually_went_wrong():
+    """どの失敗も同じ 1 文にすると、繋がっていないのか待たされたのかが分からない。
+
+    実機で動画の受理が 22 秒で落ちたとき、それが timeout かどうかを判別できず、
+    原因の切り分けに 1 往復ぶん余計にかかった。
+    """
+    from pathlib import Path
+
+    source = (Path(__file__).parents[1] / "backend/mediaforge/host/client.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'f"ControlDeck Host API is unreachable ({type(exc).__name__}: {str(exc)[:120]})"' in source
+    # 受理は場所を空けることを含む。共通の 10 秒では足りない。
+    assert "ADMISSION_TIMEOUT_SEC" in source
+    request = source[source.index("async def request_resource("):source.index("async def resource_status(")]
+    assert "timeout_sec=ADMISSION_TIMEOUT_SEC" in request
