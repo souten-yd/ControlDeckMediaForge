@@ -102,6 +102,14 @@
               <button type="button" id="video-create-settings">設定で動画候補を見る</button>
             </div>
 
+            <div id="video-settings" data-video-create hidden>
+              <p class="section-label">画質</p>
+              <div id="video-quality" class="chips" role="radiogroup" aria-label="画質"></div>
+              <p class="section-label">長さ</p>
+              <div id="video-length" class="chips" role="radiogroup" aria-label="長さ"></div>
+              <p id="video-cost" class="hint" role="status"></p>
+            </div>
+
             <div id="director-control" class="director-control" data-image-create>
               <label for="director-mode">演出</label>
               <select id="director-mode">
@@ -142,7 +150,7 @@
               <p id="profile-choice-note" class="hint"></p>
             </div>
 
-            <div id="model-choice" data-image-create>
+            <div id="model-choice">
               <p class="section-label">使うモデル</p>
               <label id="model-choice-row">モデル
                 <select id="model-choice-model">
@@ -280,6 +288,7 @@
             <div id="count-chips" class="chips" data-image-create role="radiogroup" aria-label="枚数"></div>
 
             <div data-adv-slot="create" data-image-create></div>
+            <div data-adv-slot="video" data-video-create></div>
 
             <p id="create-error" class="error" role="alert" hidden></p>
             <button class="primary" type="submit" id="create-submit">作る</button>
@@ -736,6 +745,33 @@
           <input id="advanced-attempts" type="number" min="0" max="3" value="0">
         </label>
         <p class="hint" id="advanced-constraints"></p>
+      </div>
+    </template>
+
+    <template data-adv-template="video">
+      <div class="advanced" id="advanced-video">
+        <p class="section-label">詳細設定</p>
+        <div class="form-row">
+          <label>歩数（1〜50）
+            <input id="advanced-video-steps" type="number" min="1" max="50" inputmode="numeric">
+          </label>
+          <label>ガイダンス（0〜20）
+            <input id="advanced-video-guidance" type="number" min="0" max="20" step="0.5" inputmode="decimal">
+          </label>
+        </div>
+        <div class="form-row">
+          <label>フレーム数（5〜161）
+            <input id="advanced-video-frames" type="number" min="5" max="161" inputmode="numeric">
+          </label>
+          <label>fps（1〜60）
+            <input id="advanced-video-fps" type="number" min="1" max="60" inputmode="numeric">
+          </label>
+        </div>
+        <label>打ち消したい要素
+          <input id="advanced-video-negative" type="text" maxlength="500"
+                 placeholder="ぶれ、文字、透かし、カメラの揺れ">
+        </label>
+        <p id="advanced-video-note" class="hint"></p>
       </div>
     </template>
 

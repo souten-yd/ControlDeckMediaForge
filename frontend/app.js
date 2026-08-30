@@ -590,6 +590,9 @@ function renderCreateMedia() {
   byId("attach-label").textContent = file
     ? `画像: ${file.name}`
     : (video ? "＋ 動かす画像を追加（任意）" : "＋ 画像を追加");
+  // 一覧に載るモデルは媒体で変わる。切り替えたまま前の一覧を残さない。
+  renderModelChoice();
+  renderVideoSettings();
   const capability = videoCapabilityName();
   const value = state.capabilities[capability] || {};
   const usable = videoCapabilityUsable(capability);
@@ -2709,9 +2712,10 @@ async function submitVideoJob() {
       operation: "video.generate",
       intent: byId("create-intent").value,
       inputs,
-      constraints: {},
+      constraints: videoConstraints(),
       output: {format: "mp4", count: 1},
       local_only: true,
+      ...modelSelection(),
     });
     submit.textContent = "実行中…";
     setHostBusy(false);
@@ -2938,11 +2942,13 @@ function modelSelection() {
   return modelId ? {model_policy: "manual", model_id: modelId} : {};
 }
 
-/* 画像を作るための土台だけを並べる。LoRA は単体では絵を作れないので混ぜない。 */
+/* いま作るものを作れる土台だけを並べる。LoRA は単体では絵を作れないので混ぜない。
+   画像の一覧に動画モデルが混ざると、選んでも作れないものを見せることになる。 */
 function imageBaseModels() {
+  const wanted = state.createMedia === "video" ? "video" : "image";
   return state.modelCatalog.filter(
     (model) => model.installed && model.healthy && model.kind !== "lora"
-      && (model.media_types || ["image"]).includes("image"));
+      && (model.media_types || ["image"]).includes(wanted));
 }
 
 /* 手で指定している土台。おまかせのときは null。 */
@@ -2951,6 +2957,89 @@ function chosenBaseModel() {
   const modelId = byId("model-choice-model")?.value;
   if (!modelId) return null;
   return state.modelCatalog.find((model) => model.model_id === modelId) || null;
+}
+
+/* 動画の画質と長さ。数字ではなく、意味の分かる選択肢で出す。
+
+   面積は注意機構に効くので二乗で重くなる。長さはフレーム数に比例する。
+   実測（R9700 / Wan 2.1 T2V 1.3B）: 512x320 33 フレーム 30 歩で生成 144.6 秒。
+   目安時間はその実測から比例で出す。当たらないと分かっている数字は出さない。 */
+const VIDEO_QUALITY = [
+  {id: "standard", label: "標準", width: 512, height: 320},
+  {id: "wide", label: "横長", width: 640, height: 384},
+  {id: "square", label: "正方形", width: 448, height: 448},
+];
+const VIDEO_LENGTH = [
+  {id: "short", label: "2秒", frames: 33},
+  {id: "medium", label: "3秒", frames: 49},
+  {id: "long", label: "5秒", frames: 81},
+];
+const VIDEO_BASELINE = {width: 512, height: 320, frames: 33, seconds: 144.64};
+
+function videoChoice(list, chosen) {
+  return list.find((item) => item.id === chosen) || list[0];
+}
+
+/* 目安時間。面積は二乗、フレーム数は比例で効く。 */
+function videoCostSeconds() {
+  const quality = videoChoice(VIDEO_QUALITY, state.videoQuality);
+  const length = videoChoice(VIDEO_LENGTH, state.videoLength);
+  const area = (quality.width * quality.height) / (VIDEO_BASELINE.width * VIDEO_BASELINE.height);
+  return VIDEO_BASELINE.seconds * area * area * (length.frames / VIDEO_BASELINE.frames);
+}
+
+function renderVideoSettings() {
+  const block = byId("video-settings");
+  if (!block) return;
+  block.hidden = state.createMedia !== "video";
+  if (block.hidden) return;
+  const draw = (holder, list, chosen, pick) => {
+    holder.replaceChildren(...list.map((item) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.setAttribute("role", "radio");
+      chip.setAttribute("aria-checked", String(item.id === chosen));
+      chip.textContent = item.label;
+      chip.addEventListener("click", () => { pick(item.id); renderVideoSettings(); });
+      return chip;
+    }));
+  };
+  draw(byId("video-quality"), VIDEO_QUALITY, videoChoice(VIDEO_QUALITY, state.videoQuality).id,
+       (id) => { state.videoQuality = id; });
+  draw(byId("video-length"), VIDEO_LENGTH, videoChoice(VIDEO_LENGTH, state.videoLength).id,
+       (id) => { state.videoLength = id; });
+  const quality = videoChoice(VIDEO_QUALITY, state.videoQuality);
+  const length = videoChoice(VIDEO_LENGTH, state.videoLength);
+  const minutes = videoCostSeconds() / 60;
+  byId("video-cost").textContent =
+    `${quality.width}×${quality.height} / ${length.frames} フレーム。`
+    + `作るのにおよそ ${minutes < 1 ? "1 分未満" : `${Math.round(minutes)} 分`}かかります。`
+    + "初回はモデルの読み込みに 3 分ほど足してください。";
+}
+
+/* 画面が送る値。指定していないものは送らない。埋めるのは backend の役目で、
+   選ばれたモデル本来の設定から決まる。 */
+function videoConstraints() {
+  const quality = videoChoice(VIDEO_QUALITY, state.videoQuality);
+  const length = videoChoice(VIDEO_LENGTH, state.videoLength);
+  const constraints = {
+    width: quality.width, height: quality.height, frames: length.frames,
+  };
+  const advanced = {
+    steps: byId("advanced-video-steps"),
+    guidance_scale: byId("advanced-video-guidance"),
+    frames: byId("advanced-video-frames"),
+    fps: byId("advanced-video-fps"),
+  };
+  for (const [key, field] of Object.entries(advanced)) {
+    if (!field || field.value === "") continue;
+    const value = Number(field.value);
+    if (Number.isFinite(value)) constraints[key] = value;
+  }
+  const negative = byId("advanced-video-negative");
+  if (negative && negative.value.trim()) constraints.negative_prompt = negative.value.trim();
+  return constraints;
 }
 
 function renderModelChoice() {

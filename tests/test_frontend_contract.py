@@ -1215,3 +1215,43 @@ def test_the_trigger_words_are_shown_where_the_lora_is_chosen():
     """起動語を入れない LoRA は何も起こさない。"""
     assert "trigger_words" in SCRIPT
     assert "自動で足します" in SCRIPT
+
+
+def test_video_can_be_set_up_without_leaving_the_simple_screen():
+    """モデル・画質・長さは、簡易でも詳細でも触れる。
+
+    実機で動画は作れたが、設定が 1 つも無かった。作れるだけで、どう作るかを
+    選べない状態だった。段階開示は「簡単にするために削る」ことではない。
+    """
+    assert 'id="video-settings"' in MARKUP
+    for element in ('id="video-quality"', 'id="video-length"', 'id="video-cost"'):
+        assert element in MARKUP, element
+    # 使うモデルは媒体を問わず出す。画像専用にすると動画で選べなくなる。
+    choice = MARKUP[MARKUP.index('id="model-choice"'):MARKUP.index('id="model-choice-note"')]
+    assert "data-image-create" not in choice
+    # 一覧は作るものに合わせる。画像の一覧に動画モデルを混ぜない。
+    assert 'const wanted = state.createMedia === "video" ? "video" : "image";' in SCRIPT
+
+    # 詳細は簡易の上に足す。簡易で選んだものを詳細が奪わない。
+    template = MARKUP[MARKUP.index('data-adv-template="video"'):MARKUP.index('data-adv-template="mask"')]
+    for element in (
+        'id="advanced-video-steps"', 'id="advanced-video-guidance"',
+        'id="advanced-video-frames"', 'id="advanced-video-fps"',
+        'id="advanced-video-negative"',
+    ):
+        assert element in template, element
+
+
+def test_the_video_cost_is_shown_before_it_is_spent():
+    """13 分かかるものを、押してから知るのでは遅い。
+
+    面積は注意機構に効くので二乗、長さはフレーム数に比例する。実測
+    （512x320 33 フレーム 30 歩で 144.6 秒）からの外挿であることを明示する。
+    """
+    assert "function videoCostSeconds()" in SCRIPT
+    cost = SCRIPT[SCRIPT.index("function videoCostSeconds()"):SCRIPT.index("function renderVideoSettings()")]
+    assert "area * area" in cost, "面積は二乗で効く"
+    assert "length.frames / VIDEO_BASELINE.frames" in cost
+    assert "VIDEO_BASELINE = {width: 512, height: 320, frames: 33, seconds: 144.64}" in SCRIPT
+    # 初回はモデルの読み込みが乗る。触れずに済ませない。
+    assert "初回はモデルの読み込み" in SCRIPT
