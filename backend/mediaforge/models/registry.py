@@ -472,11 +472,17 @@ class ModelRegistry:
         model_store_root: Path | None = None,
         extra_models: list[dict[str, Any]] | None = None,
         extra_catalog: list[dict[str, Any]] | None = None,
+        measurements: dict[str, dict[str, Any]] | None = None,
     ) -> "ModelRegistry":
         """Load the shipped registry, optionally extended by user-added entries.
 
         The extra halves are validated by exactly the same parsers as the shipped
         manifests. A user-added model gets no weaker checks than a shipped one.
+
+        `measurements` は、この機械で実際に測った値を出荷 manifest の上へ重ねる。
+        出荷 manifest を実行時に書き換えない、という決まりは守る。測った値と、
+        使ってよいと決めることは別なので、state は動かさない。測っただけで
+        routing に載るなら、評価を押すことが採用を意味してしまう。
         """
         try:
             value = json.loads(manifest.read_text(encoding="utf-8"))
@@ -488,6 +494,13 @@ class ModelRegistry:
         if not isinstance(models, list):
             raise ModelRegistryError("model registry models must be an array")
         models = [*models, *(extra_models or [])]
+        if measurements:
+            models = [
+                {**item, "measurements": measurements[item["model_id"]]}
+                if isinstance(item, dict) and item.get("model_id") in measurements
+                else item
+                for item in models
+            ]
         descriptors = tuple(_descriptor(item) for item in models if isinstance(item, dict))
         if len(descriptors) != len(models):
             raise ModelRegistryError("model registry entry must be an object")

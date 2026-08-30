@@ -1040,3 +1040,56 @@ def test_a_base_no_installed_lora_needs_is_left_alone(tmp_path: Path) -> None:
     assert unmeasured_lora_bases([base, lora_descriptor(snapshot, base_model="SDXL 1.0")]) == []
     # 落としきっていない LoRA は、まだ土台を必要としていない。
     assert unmeasured_lora_bases([base, replace(lora_descriptor(snapshot), installed=False)]) == []
+
+
+def test_a_native_evaluation_keeps_what_it_measured(tmp_path: Path) -> None:
+    """測っただけで終わらせない。
+
+    実機で MiniMax の評価が 150 秒かけて ready になったのに、モデルは
+    未計測のままだった（2026-08-30、modelop_fc571456）。画面は何も変わらず、
+    利用者からは「押しても終わらない」ように見える。記録するのは画像経路
+    だけだった。
+    """
+    from pathlib import Path as _Path
+
+    source = (_Path(__file__).parents[1] / "backend/mediaforge/model_evaluator.py").read_text(
+        encoding="utf-8"
+    )
+    native = source[source.index("                media = await asyncio.to_thread(validator"):
+                    source.index("    def _record_native_measurement(")]
+    assert "self._record_native_measurement(model, metrics, media)" in native
+
+    keeper = source[source.index("    def _record_native_measurement("):
+                    source.index("    async def _run_image_evaluation(")]
+    # 測ることと、使ってよいと決めることは別。state を動かすと評価が採用になる。
+    code = "\n".join(
+        line for line in keeper.splitlines()
+        if line.strip() and not line.strip().startswith("#") and '"""' not in line
+    )
+    assert "state" not in code
+    # 書き残せなくても評価そのものは成功している。job を失敗させない。
+    assert "except Exception:" in keeper
+
+
+def test_a_shipped_model_can_keep_a_measurement_without_rewriting_its_manifest(tmp_path: Path) -> None:
+    """出荷 manifest は実行時に書き換えない。測った値は重ねる側に置く。"""
+    from mediaforge.custom_models import CustomModelCatalog
+
+    catalog = CustomModelCatalog(tmp_path / "custom-models.json")
+    measured = {
+        "resident_vram_bytes": 0,
+        "execution_peak_vram_bytes": 14_763_892_736,
+        "cold_load_peak_vram_bytes": 14_763_892_736,
+        "headroom_vram_bytes": 1024 * 1024 * 1024,
+        "measured_runtime_sec": 149.28,
+    }
+    catalog.record_measurement("unsloth/MiniMax-H3-GGUF", measured)
+
+    assert catalog.measurements()["unsloth/MiniMax-H3-GGUF"] == measured
+    # 出荷 manifest そのものには触れない。
+    assert not (tmp_path / "custom-models.json").exists() or "MiniMax" not in (
+        tmp_path / "custom-models.json"
+    ).read_text(encoding="utf-8")
+    # 読む側は追加分と測定値を 1 か所で受け取る。渡し忘れる経路を作らない。
+    extra_models, extra_catalog, measurements = catalog.overlay()
+    assert measurements["unsloth/MiniMax-H3-GGUF"]["measured_runtime_sec"] == 149.28

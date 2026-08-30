@@ -1134,7 +1134,44 @@ class CustomModelCatalog(CatalogSearchMixin):
             registry["state"] = "available"
             self._write(entries)
             return entry
-        raise CustomModelError("custom_model_not_added", "そのモデルは追加されていません")
+        # 出荷 manifest のモデルもこの機械で測れる。測った値は捨てない。
+        # 出荷 manifest そのものは書き換えず、重ねる側に置く。
+        self._record_shipped_measurement(model_id, measurements)
+        return {"registry": {"model_id": model_id, "measurements": measurements}}
+
+    def _record_shipped_measurement(
+        self, model_id: str, measurements: dict[str, Any]
+    ) -> None:
+        overlay = self.measurements_path
+        try:
+            current = json.loads(overlay.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            current = {}
+        if not isinstance(current, dict):
+            current = {}
+        current[model_id] = measurements
+        overlay.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        temporary = overlay.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.chmod(0o600)
+        temporary.replace(overlay)
+
+    @property
+    def measurements_path(self) -> Path:
+        return self.path.with_name("measurements.json")
+
+    def measurements(self) -> dict[str, dict[str, Any]]:
+        """この機械で測った値。読めなければ空で返し、出荷分だけで進む。"""
+        try:
+            value = json.loads(self.measurements_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(value, dict):
+            return {}
+        return {
+            key: item for key, item in value.items()
+            if isinstance(key, str) and isinstance(item, dict)
+        }
 
     def remove(self, model_id: str) -> None:
         entries = self.entries()
@@ -1219,3 +1256,11 @@ class CustomModelCatalog(CatalogSearchMixin):
             [item["registry"] for item in entries if isinstance(item.get("registry"), dict)],
             [item["catalog"] for item in entries if isinstance(item.get("catalog"), dict)],
         )
+
+    def overlay(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, dict[str, Any]]]:
+        """追加分と、この機械で測った値。読む側が 1 か所で揃うようにする。
+
+        測定値だけ別経路で渡すと、渡し忘れた読み手が「未計測」と言い続ける。
+        """
+        extra_models, extra_catalog = self.manifests()
+        return extra_models, extra_catalog, self.measurements()
