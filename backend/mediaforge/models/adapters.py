@@ -24,6 +24,9 @@ IMAGE_ADAPTERS = frozenset({
 VIDEO_ADAPTERS = frozenset({
     "diffusers.wan2.1-t2v",
     "native.stable-diffusion-cpp-minimax-h3",
+    # 上流の wan package を使う。テキスト符号化と生成を別 process にする作りで、
+    # 評価がその形で実際に動かしている。
+    "native.wan2.2",
 })
 
 RUNNABLE_ADAPTERS = IMAGE_ADAPTERS | VIDEO_ADAPTERS

@@ -217,6 +217,7 @@ def create_app(
         image_runtime_python=resolved.image_runtime_python,
         video_runtime_python=resolved.video_runtime_python,
         native_media_runtime_root=resolved.native_media_runtime_root,
+        wan_source_root=resolved.wan_source_root,
         creative_evaluator=evaluator,
         ai_gateway=ai_gateway,
         extra_manifests=custom_models.overlay,

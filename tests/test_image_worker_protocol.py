@@ -322,8 +322,10 @@ def test_a_model_without_a_runtime_is_not_called_usable():
     assert is_runnable(by_id["Wan-AI/Wan2.1-T2V-1.3B-Diffusers"])
     # MiniMax H3 は pinned build の sd-cli で動く。駆動系がある側である。
     assert is_runnable(by_id["unsloth/MiniMax-H3-GGUF"])
-    # upstream の package を要する候補は、まだ動かせない側のまま。
-    assert not is_runnable(by_id["Wan-AI/Wan2.2-TI2V-5B"])
+    # Wan 2.2 も上流の package を組み込んで動かせるようにした。
+    assert is_runnable(by_id["Wan-AI/Wan2.2-TI2V-5B"])
+    # 実行系を持たない候補はまだある。ここが全部 True になると意味を失う。
+    assert not is_runnable(by_id["Lightricks/LTX-2.3"])
     # available なものは必ず走らせられる。ここが崩れると「使える」が嘘になる。
     for model in manifest["models"]:
         if model.get("state") == "available":

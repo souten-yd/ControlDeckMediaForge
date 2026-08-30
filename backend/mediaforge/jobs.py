@@ -140,6 +140,7 @@ class JobManager:
         image_runtime_python: Path | None = None,
         video_runtime_python: Path | None = None,
         native_media_runtime_root: Path | None = None,
+        wan_source_root: Path | None = None,
         creative_evaluator: CreativeEvaluator | None = None,
         ai_gateway: HostAIGateway | None = None,
         creative_director: Any | None = None,
@@ -158,6 +159,7 @@ class JobManager:
         self.image_runtime_python = image_runtime_python
         self.video_runtime_python = video_runtime_python
         self.native_media_runtime_root = native_media_runtime_root
+        self.wan_source_root = wan_source_root
         self.creative_evaluator = creative_evaluator
         self.ai_gateway = ai_gateway
         # 演出の立案と検証。従来は画面が順番に呼び、途中結果をページが持って
@@ -1382,6 +1384,8 @@ class JobManager:
                     environment["MEDIA_FORGE_NATIVE_RUNTIME_ROOT"] = str(
                         self.native_media_runtime_root
                     )
+                if self.wan_source_root is not None:
+                    environment["MEDIA_FORGE_WAN22_SOURCE_ROOT"] = str(self.wan_source_root)
             else:
                 if self.image_runtime_python is None or not self.image_runtime_python.is_file():
                     raise WorkerFailure("worker_not_installed", "image runtime is not installed")

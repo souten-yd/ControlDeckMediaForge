@@ -32,7 +32,8 @@ from .ffmpeg import NormalizeRequest, VideoToolError, normalize, probe
 MAX_MESSAGE_BYTES = 1024 * 1024
 DIFFUSERS_ADAPTER = "diffusers.wan2.1-t2v"
 NATIVE_H3_ADAPTER = "native.stable-diffusion-cpp-minimax-h3"
-ADAPTERS = {DIFFUSERS_ADAPTER, NATIVE_H3_ADAPTER}
+NATIVE_WAN22_ADAPTER = "native.wan2.2"
+ADAPTERS = {DIFFUSERS_ADAPTER, NATIVE_H3_ADAPTER, NATIVE_WAN22_ADAPTER}
 MAX_FRAMES = 161
 MAX_STEPS = 50
 DEFAULT_FPS = 16
@@ -72,6 +73,8 @@ class VideoWorker:
         # native の駆動系。pinned build の sd-cli をここから起動する。
         native_root = os.environ.get("MEDIA_FORGE_NATIVE_RUNTIME_ROOT")
         self.native_runtime_root = Path(native_root) if native_root else None
+        wan22 = os.environ.get("MEDIA_FORGE_WAN22_SOURCE_ROOT")
+        self.wan22_source_root = Path(wan22) if wan22 else None
         self._pipeline: Any = None
         self._pipeline_path: Path | None = None
         self.load_sec = 0.0
@@ -214,6 +217,101 @@ class VideoWorker:
             detail = completed.stderr.decode("utf-8", "replace")[-300:]
             raise VideoToolError(f"the native video runtime failed: {detail}")
 
+    def _generate_wan22(
+        self, model: dict[str, Any], model_path: Path, output_dir: Path, output: Path,
+        *, prompt: str, negative: str, width: int, height: int,
+        frames: int, steps: int, fps: int, seed: int,
+    ) -> dict[str, Any]:
+        """上流の wan package に作らせる。符号化と生成は別 process のまま。
+
+        text encoder を CPU、生成を GPU に置くために process を分けてある。
+        1 つに畳むと両方が同じ device を掴み、5B が載らなくなる。評価が使って
+        いる probe をそのまま呼ぶので、評価と本番で 2 通りの起動を持たない。
+        """
+        if self.wan22_source_root is None:
+            raise ValueError("the Wan 2.2 source is not configured")
+        started = time.monotonic()
+        with tempfile.TemporaryDirectory(prefix="mediaforge-wan22-", dir=output_dir) as temporary:
+            work = Path(temporary)
+            raw = work / "raw.mp4"
+            probe_script = Path(__file__).resolve().parent / "wan_ti2v_probe.py"
+            environment = os.environ.copy()
+            source = str(self.wan22_source_root)
+            existing = environment.get("PYTHONPATH")
+            environment["PYTHONPATH"] = f"{source}:{existing}" if existing else source
+            rocm_libs = "/opt/rocm/lib/llvm/lib:/opt/rocm/lib"
+            libs = environment.get("LD_LIBRARY_PATH")
+            environment["LD_LIBRARY_PATH"] = f"{rocm_libs}:{libs}" if libs else rocm_libs
+            completed = subprocess.run(
+                [
+                    sys.executable, str(probe_script), "run",
+                    "--snapshot", str(model_path),
+                    "--work-root", str(work),
+                    "--output", str(raw),
+                    "--preset", self._wan22_preset(width, height, frames, steps),
+                ],
+                check=False, capture_output=True, timeout=3600, env=environment,
+            )
+            if completed.returncode != 0 or not raw.is_file() or raw.stat().st_size <= 0:
+                detail = completed.stderr.decode("utf-8", "replace")[-300:]
+                raise VideoToolError(f"the Wan 2.2 runtime failed: {detail}")
+            generation_sec = time.monotonic() - started
+            info = normalize(NormalizeRequest(
+                source_path=raw,
+                output_path=output,
+                width=width,
+                height=height,
+                frame_rate=fps,
+                duration_sec=frames / fps,
+            ))
+        verified = probe(output)
+        return {
+            "outputs": [{
+                "path": str(output),
+                "mime_type": "video/mp4",
+                "width": verified.width,
+                "height": verified.height,
+                "duration_sec": verified.duration_sec,
+                "frame_rate": verified.frame_rate,
+                "frame_count": verified.frame_count,
+                "seed": seed,
+            }],
+            "model": {
+                "id": str(model["id"]),
+                "version": str(model["version"]),
+                "weights_hash": str(model["weights_hash"]),
+                "license": str(model["license"]),
+                "runtime_adapter": str(model["runtime_adapter"]),
+                "runtime_version": importlib.metadata.version("diffusers"),
+            },
+            "seed": seed,
+            "postprocessing": ["ffmpeg.normalize.mp4"],
+            "runtime_metrics": {
+                "load_sec": 0.0,
+                "generation_sec": generation_sec,
+                "normalized_codec": info.codec,
+            },
+        }
+
+    @staticmethod
+    def _wan22_preset(width: int, height: int, frames: int, steps: int) -> str:
+        """probe が持つ preset のうち、要求に一番近いものを選ぶ。
+
+        preset を新設せず既にあるものから選ぶ。評価で実測した組み合わせだけを
+        使い、測っていない寸法で本番を回さない。
+        """
+        from .wan_ti2v_probe import PRESETS
+
+        wanted = (width * height, frames, steps)
+        return min(
+            PRESETS,
+            key=lambda name: (
+                abs(PRESETS[name].width * PRESETS[name].height - wanted[0]) / max(wanted[0], 1)
+                + abs(PRESETS[name].frames - wanted[1]) / max(wanted[1], 1)
+                + abs(PRESETS[name].steps - wanted[2]) / max(wanted[2], 1)
+            ),
+        )
+
     def _generate_native(
         self, model: dict[str, Any], model_path: Path, output_dir: Path, output: Path,
         *, prompt: str, negative: str, width: int, height: int,
@@ -318,6 +416,12 @@ class VideoWorker:
 
         adapter = str(model.get("runtime_adapter"))
         output = output_dir / "output-0.mp4"
+        if adapter == NATIVE_WAN22_ADAPTER:
+            return self._generate_wan22(
+                model, model_path, output_dir, output,
+                prompt=prompt, negative=negative, width=width, height=height,
+                frames=frames, steps=steps, fps=fps, seed=seed,
+            )
         if adapter == NATIVE_H3_ADAPTER:
             return self._generate_native(
                 model, model_path, output_dir, output,

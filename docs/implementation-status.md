@@ -6468,3 +6468,49 @@ peak VRAM 14,763,892,736 B、149.28 秒）。宣言に rocm が無いと、測�
 routing の候補にならない。
 
 `./mf.sh test` 795 passed（新規 2 件）。
+
+## Wan 2.2 TI2V-5B の実行環境を復元して生成まで通す（2026-08-30）
+
+上流の駆動系（`wan` package）は `/data1tb/mediaforge-g7-v1/Wan2.2-source` に残っていた。
+消えていたのは venv だけである。`runtimes/wan-ti2v-probe/requirements.txt` から作り直したが、
+そのままでは `wan.configs` が読めなかった。
+
+```text
+不足していた依存   einops / imageio（requirements から抜けていた）
+追記               imageio==2.37.4 / einops==0.8.1 を pin
+```
+
+実機で通した実測（text encoder は CPU、生成は GPU の 2 process）。
+
+```text
+smoke          256x256 1 フレーム 1 歩    encode 24.37s + generate 24.57s / wall 61.52s
+quality-frame  256x256 1 フレーム 30 歩   encode 27.74s + generate 28.36s / wall 109.52s
+candidate-clip 384x256 33 フレーム 30 歩  encode 14.01s + generate 73.48s / wall 100.51s
+               出力 h264 384x256 33 フレーム 1.375 秒 115,130 B / max RSS 19.4 GB / exit 0
+```
+
+30 歩は 1 歩に対して +3.79 秒（0.13 秒/歩）で、費用の大半は読み込みである。
+
+本番 worker に `native.wan2.2` を足し、評価が使っている probe をそのまま呼ぶ形にした。
+評価と本番で 2 通りの起動を持たない。text encoder と生成を別 process に保つのは
+device の取り合いを避けるためで、1 つに畳むと 5B が載らない。
+
+registry は available / native 384x256 30 歩、`measured_runtime_sec` を 100.51 へ更新した。
+VRAM は G7 V1 の実測（30.7 GB）を据え置く。今回は採取していないので上書きしない。
+
+### 実機の runtime を一度壊し、復旧した
+
+実機の動画 runtime へ `wan` の依存を足すとき、索引を指定せずに pip を走らせたため
+torch が CUDA 版 2.13.0 へ入れ替わり、`Found no NVIDIA driver` で動かなくなった。
+repository 側の venv は無事だったので、実機側を消して hardlink で作り直し、ROCm の
+find-links を明示して入れ直した。
+
+```text
+復旧後  torch 2.10.0+rocm7.2.1.gitb07cec22 / torchvision 0.25.0+rocm7.2.1.git82df5f59
+        wan.configs 読み込み OK（ti2v-5B を含む 5 構成）/ diffusers 経路も健全
+```
+
+ROCm の venv へ何かを足すときは、常に `--find-links` を付ける。付けないと pip は
+CUDA 版で上書きする。
+
+`./mf.sh test` 797 passed。

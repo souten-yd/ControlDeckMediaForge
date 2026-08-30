@@ -11,6 +11,8 @@ export MEDIA_FORGE_IMAGE_RUNTIME_PYTHON="${MEDIA_FORGE_IMAGE_RUNTIME_PYTHON:-$FE
 # 動画は画像と別の venv を使う。同じものに載せると、片方の pin を動かした
 # ときにもう片方が黙って壊れる。
 export MEDIA_FORGE_VIDEO_RUNTIME_PYTHON="${MEDIA_FORGE_VIDEO_RUNTIME_PYTHON:-$FEATURE_DATA/runtimes/wan21-t2v/.venv/bin/python}"
+# Wan 2.2 は上流の wan package を要する。場所を渡さないと本番では動かせない。
+export MEDIA_FORGE_WAN_SOURCE_ROOT="${MEDIA_FORGE_WAN_SOURCE_ROOT:-$FEATURE_DATA/runtimes/wan2.2-source}"
 export MEDIA_FORGE_ENV_STATUS_FILE="${MEDIA_FORGE_ENV_STATUS_FILE:-$FEATURE_DATA/environment-status.json}"
 export HF_HOME="${HF_HOME:-$SHARED_CACHE/huggingface}"
 export PIP_CACHE_DIR="${PIP_CACHE_DIR:-$SHARED_CACHE/pip}"
