@@ -6427,3 +6427,44 @@ operation へ残すのと同じ `result` から読むようにした。加えて
 してよい）。available なモデルは必ず実行できる、という条件も同じ test で守る。
 
 `./mf.sh test` 795 passed / 2 warnings / 53.72 秒（新規 3 件）、`git diff --check` PASS。
+
+## MiniMax H3 FL2VA を本番経路へ載せる（2026-08-30）
+
+利用者の指示は「MiniMax H3 FL2VA と Wan の実行環境を準備し、既に開発済みの
+ドライバーがあれば組み込む方針で調査・導入・検証・生成まで」。調べると、駆動系は
+**既に完成していた**。評価が使っている `stable-diffusion.cpp` の pinned build
+（`97d2990`、`build/bin/sd-cli`）がそれで、実際に 640x384 の動画を作れている。
+
+```text
+重み（実機に導入済み、4 点）
+  minimax_h3_fl2va_pruned-UD-Q2_K_XL.gguf   拡散本体（FL2VA）
+  qwen3vl_32b_minimax_h3-Q2_K_M.gguf        言語モデル
+  vae/minimax_h3_video_vae_fp16.safetensors 映像 VAE
+  vae/minimax_h3_audio_vae_fp32.safetensors 音声 VAE
+起動          sd-cli -M vid_gen / te=cpu,diffusion=ROCm0,vae=ROCm0 / --mmap / --diffusion-fa
+```
+
+本番の動画 worker に adapter を足し、同じ組み合わせで起動するようにした。評価と本番で
+2 通りの起動を持たない。実機で通すまでに 3 つ塞いだ。
+
+```text
+1. 重みが blobs/ への symlink である。snapshot だけを境界にすると正しい重みが
+   「外」と判定される。境界を repository の根に置く（評価側と同じ扱い）
+2. LD_LIBRARY_PATH が無いと libomp.so が見つからず sd-cli が起動しない。
+   評価が使っているのと同じ環境を worker にも持たせる
+3. MiniMax H3 は音も作る。正規化で include_audio を落とさない
+```
+
+実機での生成（本番 worker を直接叩いた）。
+
+```text
+生成 57.11 秒 / wall 57.50 秒 / max RSS 23,985,892 KiB / exit 0
+出力 h264 640x384 5 フレーム 24fps 0.208 秒 39,070 B + aac 音声
+runtime_version 97d2990807fe6d558e395f8764198d7c7e7b411c
+```
+
+registry では available / measured / rocm 対応にした（2026-08-30 の評価から
+peak VRAM 14,763,892,736 B、149.28 秒）。宣言に rocm が無いと、測ってあっても
+routing の候補にならない。
+
+`./mf.sh test` 795 passed（新規 2 件）。

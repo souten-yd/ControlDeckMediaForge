@@ -38,7 +38,7 @@ def test_video_candidates_are_pinned_and_never_recommended() -> None:
 
     assert set(candidates) == VIDEO_IDS
     # 実測した候補だけが available になる。測っていないものは experimental のまま。
-    adopted = {"Wan-AI/Wan2.1-T2V-1.3B-Diffusers"}
+    adopted = {"Wan-AI/Wan2.1-T2V-1.3B-Diffusers", "unsloth/MiniMax-H3-GGUF"}
     assert all(
         model.state == ("available" if model_id in adopted else "experimental")
         for model_id, model in candidates.items()
@@ -66,7 +66,9 @@ def test_video_candidates_are_pinned_and_never_recommended() -> None:
         and model.hardware_backends == ("cuda",)
         for model_id, model in candidates.items()
         # 実測した候補はここでは見ない。測った値を持っているのが正しい。
-        if model_id not in {wan.model_id, cog.model_id, vace.model_id, t2v.model_id}
+        if model_id not in {
+            wan.model_id, cog.model_id, vace.model_id, t2v.model_id, "unsloth/MiniMax-H3-GGUF",
+        }
     )
     assert all(not model.recommended_profiles for model in candidates.values())
     assert all(model.approx_download_bytes >= sum(weight.size_bytes for weight in model.weights)
@@ -140,6 +142,7 @@ def test_minimax_h3_is_license_gated_and_never_claims_r9700_support() -> None:
     assert model.version == "fl2va-bf16"
     assert model.gated is True
     assert model.ownership == ModelOwnership.EXTERNAL
+    # 上流の本体は取得していない。測っていないものを rocm 対応とは言わない。
     assert model.hardware_backends == ("cuda",)
     assert model.state == "experimental"
     assert model.approx_download_bytes == 144_051_182_625
@@ -176,8 +179,11 @@ def test_minimax_h3_gguf_composite_bundle_is_bounded_and_pinned() -> None:
     assert {item.source.repo_id for item in model.weights if item.source is not None} == {
         "Comfy-Org/MiniMax-H3"
     }
-    assert model.hardware_backends == ("cuda",)
-    assert model.state == "experimental"
+    # 2026-08-30 に R9700 / gfx1201 で実測した（149.28 秒、peak VRAM 14.76 GB）。
+    # 宣言に rocm が無いと、測ってあっても routing の候補にならない。
+    assert model.hardware_backends == ("cuda", "rocm")
+    assert model.state == "available"
+    assert model.measured_runtime_sec == 149.28
 
 
 def test_unmeasured_video_candidates_cannot_route_on_r9700() -> None:

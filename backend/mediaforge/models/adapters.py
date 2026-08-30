@@ -19,7 +19,12 @@ IMAGE_ADAPTERS = frozenset({
 })
 
 # 動画 worker（worker_packs/video/worker.py）が実装するもの。
-VIDEO_ADAPTERS = frozenset({"diffusers.wan2.1-t2v"})
+# native の方は stable-diffusion.cpp の pinned build（sd-cli）を叩く。python の
+# 重い依存を必要とせず、評価で実際に 640x384 の動画を作れている駆動系である。
+VIDEO_ADAPTERS = frozenset({
+    "diffusers.wan2.1-t2v",
+    "native.stable-diffusion-cpp-minimax-h3",
+})
 
 RUNNABLE_ADAPTERS = IMAGE_ADAPTERS | VIDEO_ADAPTERS
 

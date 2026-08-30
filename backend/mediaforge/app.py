@@ -216,6 +216,7 @@ def create_app(
         hf_home=resolved.hf_home,
         image_runtime_python=resolved.image_runtime_python,
         video_runtime_python=resolved.video_runtime_python,
+        native_media_runtime_root=resolved.native_media_runtime_root,
         creative_evaluator=evaluator,
         ai_gateway=ai_gateway,
         extra_manifests=custom_models.overlay,

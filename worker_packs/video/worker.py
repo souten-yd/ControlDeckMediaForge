@@ -30,7 +30,9 @@ from .ffmpeg import NormalizeRequest, VideoToolError, normalize, probe
 
 
 MAX_MESSAGE_BYTES = 1024 * 1024
-ADAPTERS = {"diffusers.wan2.1-t2v"}
+DIFFUSERS_ADAPTER = "diffusers.wan2.1-t2v"
+NATIVE_H3_ADAPTER = "native.stable-diffusion-cpp-minimax-h3"
+ADAPTERS = {DIFFUSERS_ADAPTER, NATIVE_H3_ADAPTER}
 MAX_FRAMES = 161
 MAX_STEPS = 50
 DEFAULT_FPS = 16
@@ -67,6 +69,9 @@ class VideoWorker:
     def __init__(self) -> None:
         self.model_root = Path(os.environ["MEDIA_FORGE_MODEL_ROOT"])
         self.work_root = Path(os.environ["MEDIA_FORGE_WORK_ROOT"])
+        # native の駆動系。pinned build の sd-cli をここから起動する。
+        native_root = os.environ.get("MEDIA_FORGE_NATIVE_RUNTIME_ROOT")
+        self.native_runtime_root = Path(native_root) if native_root else None
         self._pipeline: Any = None
         self._pipeline_path: Path | None = None
         self.load_sec = 0.0
@@ -120,6 +125,163 @@ class VideoWorker:
         if completed.returncode != 0 or not raw.is_file() or raw.stat().st_size <= 0:
             raise VideoToolError("ffmpeg could not assemble the generated frames")
 
+    # MiniMax H3 は 1 つの gguf では動かない。拡散本体・言語モデル・映像 VAE・
+    # 音声 VAE の 4 つを渡す。名前は評価が実際に動かしている組み合わせと同じで、
+    # 別のものを掴まないよう snapshot の内側に収まることを確かめてから渡す。
+    NATIVE_H3_FILES = (
+        ("--diffusion-model", "minimax_h3_fl2va_pruned-UD-Q2_K_XL.gguf"),
+        ("--llm", "qwen3vl_32b_minimax_h3-Q2_K_M.gguf"),
+        ("--vae", "vae/minimax_h3_video_vae_fp16.safetensors"),
+        ("--audio-vae", "vae/minimax_h3_audio_vae_fp32.safetensors"),
+    )
+
+    def _native_command(
+        self, model_path: Path, output: Path, prompt: str, negative: str,
+        width: int, height: int, frames: int, steps: int, fps: int, seed: int,
+    ) -> list[str]:
+        if self.native_runtime_root is None:
+            raise ValueError("the native media runtime is not configured")
+        executable = _contained(
+            self.native_runtime_root, self.native_runtime_root / "build" / "bin" / "sd-cli",
+            "native runtime executable",
+        )
+        if not os.access(executable, os.X_OK):
+            raise ValueError("the native media runtime is not executable")
+        command = [str(executable), "-M", "vid_gen"]
+        for flag, relative in self.NATIVE_H3_FILES:
+            command += [flag, str(self._native_model_file(model_path, relative))]
+        command += [
+            "--prompt", prompt,
+            "--cfg-scale", "1.0",
+            "--width", str(width),
+            "--height", str(height),
+            "--steps", str(steps),
+            "--video-frames", str(frames),
+            "--fps", str(fps),
+            "--rng", "cpu",
+            "--threads", "8",
+            # 言語モデルは CPU、拡散と VAE は GPU。評価がこの配分で通っている。
+            "--backend", "te=cpu,diffusion=ROCm0,vae=ROCm0",
+            "--params-backend", "te=cpu",
+            "--mmap",
+            "--diffusion-fa",
+            "--seed", str(seed),
+            "--output", str(output),
+        ]
+        if negative:
+            command += ["--negative-prompt", negative]
+        return command
+
+    @staticmethod
+    def _native_model_file(snapshot: Path, relative: str) -> Path:
+        """snapshot 内の名前を、実体まで辿ってから境界で確かめる。
+
+        Hub の置き方では snapshot の中身は blobs/ への symlink である。
+        snapshot だけを境界にすると、正しい重みが「外にある」と判定される。
+        境界はその repository の根（snapshots/ と blobs/ を含む階層）に置く。
+        """
+        candidate = snapshot / relative
+        try:
+            resolved = candidate.resolve(strict=True)
+            repo_root = snapshot.parent.parent.resolve(strict=True)
+        except OSError as exc:
+            raise ValueError(f"model file {relative} is missing") from exc
+        if not resolved.is_relative_to(repo_root):
+            raise ValueError(f"model file {relative} is outside the model repository")
+        return resolved
+
+    @staticmethod
+    def _native_env() -> dict[str, str]:
+        """駆動系が要る場所を渡す。無いと libomp.so が見つからず起動しない。
+
+        評価が使っているのと同じ設定である。2 つに分けると、片方だけ直して
+        もう片方が動かなくなる。
+        """
+        env = os.environ.copy()
+        rocm_libs = "/opt/rocm/lib/llvm/lib:/opt/rocm/lib"
+        existing = env.get("LD_LIBRARY_PATH")
+        env["LD_LIBRARY_PATH"] = f"{rocm_libs}:{existing}" if existing else rocm_libs
+        env["ROCR_VISIBLE_DEVICES"] = "0"
+        env["HIP_VISIBLE_DEVICES"] = "0"
+        return env
+
+    def _run_native(self, command: list[str], output: Path, timeout_sec: float) -> None:
+        completed = subprocess.run(
+            command, check=False, capture_output=True, timeout=timeout_sec,
+            env=self._native_env(),
+        )
+        if completed.returncode != 0 or not output.is_file() or output.stat().st_size <= 0:
+            detail = completed.stderr.decode("utf-8", "replace")[-300:]
+            raise VideoToolError(f"the native video runtime failed: {detail}")
+
+    def _generate_native(
+        self, model: dict[str, Any], model_path: Path, output_dir: Path, output: Path,
+        *, prompt: str, negative: str, width: int, height: int,
+        frames: int, steps: int, fps: int, seed: int,
+    ) -> dict[str, Any]:
+        """sd-cli に作らせ、公開する形へ正規化する。
+
+        駆動系は webm（vp8 + 音声）を書く。MiniMax H3 は音も作るので、
+        正規化でそれを落とさない。公開する形は 1 つに揃えるが、中身は捨てない。
+        """
+        started = time.monotonic()
+        with tempfile.TemporaryDirectory(prefix="mediaforge-native-", dir=output_dir) as temporary:
+            raw = Path(temporary) / "raw.webm"
+            command = self._native_command(
+                model_path, raw, prompt, negative, width, height, frames, steps, fps, seed,
+            )
+            # 打ち切りは呼び出し側が持つ。ここは進まなくなった場合の最後の砦で、
+            # 実測（5 フレーム 149 秒）から余裕を見た上限に置く。
+            self._run_native(command, raw, timeout_sec=3600)
+            generation_sec = time.monotonic() - started
+            info = normalize(NormalizeRequest(
+                source_path=raw,
+                output_path=output,
+                width=width,
+                height=height,
+                frame_rate=fps,
+                duration_sec=frames / fps,
+                include_audio=True,
+            ))
+        verified = probe(output)
+        return {
+            "outputs": [{
+                "path": str(output),
+                "mime_type": "video/mp4",
+                "width": verified.width,
+                "height": verified.height,
+                "duration_sec": verified.duration_sec,
+                "frame_rate": verified.frame_rate,
+                "frame_count": verified.frame_count,
+                "seed": seed,
+            }],
+            "model": {
+                "id": str(model["id"]),
+                "version": str(model["version"]),
+                "weights_hash": str(model["weights_hash"]),
+                "license": str(model["license"]),
+                "runtime_adapter": str(model["runtime_adapter"]),
+                "runtime_version": self._native_runtime_version(),
+            },
+            "seed": seed,
+            "postprocessing": ["ffmpeg.normalize.mp4"],
+            "runtime_metrics": {
+                "load_sec": 0.0,
+                "generation_sec": generation_sec,
+                "normalized_codec": info.codec,
+            },
+        }
+
+    def _native_runtime_version(self) -> str:
+        """pinned build がどれかを記録に残す。版が動けば結果も動く。"""
+        if self.native_runtime_root is None:
+            return "unknown"
+        head = self.native_runtime_root / ".git" / "HEAD"
+        try:
+            return head.read_text(encoding="utf-8").strip()[:40]
+        except OSError:
+            return "unknown"
+
     def handle(self, payload: object) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise ValueError("worker request must be an object")
@@ -154,6 +316,15 @@ class VideoWorker:
             raise ValueError("video generation needs an intent")
         negative = str(constraints.get("negative_prompt") or "").strip()
 
+        adapter = str(model.get("runtime_adapter"))
+        output = output_dir / "output-0.mp4"
+        if adapter == NATIVE_H3_ADAPTER:
+            return self._generate_native(
+                model, model_path, output_dir, output,
+                prompt=prompt, negative=negative, width=width, height=height,
+                frames=frames, steps=steps, fps=fps, seed=seed,
+            )
+
         import torch
 
         pipeline = self._load(model_path)
@@ -174,7 +345,6 @@ class VideoWorker:
         if len(produced) != frames:
             raise ValueError("the video runtime returned an unexpected frame count")
 
-        output = output_dir / "output-0.mp4"
         with tempfile.TemporaryDirectory(prefix="mediaforge-frames-", dir=output_dir) as temporary:
             frame_root = Path(temporary)
             self._write_frames(produced, frame_root, width, height)
