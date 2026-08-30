@@ -216,7 +216,7 @@ def create_app(
         video_runtime_python=resolved.video_runtime_python,
         creative_evaluator=evaluator,
         ai_gateway=ai_gateway,
-        extra_manifests=custom_models.manifests,
+        extra_manifests=custom_models.overlay,
     )
 
     # 演出の立案と検証を job の中で行うための入口。画面が順番に呼んでいた頃は
@@ -508,7 +508,7 @@ def create_app(
         were added to some of them. A model could then be offered in the
         picker and refused by routing in the same breath.
         """
-        extra_models, extra_catalog = custom_models.manifests()
+        extra_models, extra_catalog, measurements = custom_models.overlay()
         return list(ModelRegistry.load(
             resolved.model_manifest,
             hf_home=resolved.hf_home,
@@ -516,6 +516,7 @@ def create_app(
             model_store_root=resolved.model_store_root,
             extra_models=extra_models,
             extra_catalog=extra_catalog,
+            measurements=measurements,
         ).all())
 
     def model_catalog() -> dict[str, Any]:

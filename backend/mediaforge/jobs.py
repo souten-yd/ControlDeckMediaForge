@@ -450,8 +450,8 @@ class JobManager:
         if self.model_manifest is None or self.hf_home is None:
             return None
         try:
-            extra_models, extra_catalog = (
-                self.extra_manifests() if self.extra_manifests is not None else ([], [])
+            extra_models, extra_catalog, measurements = (
+                self.extra_manifests() if self.extra_manifests is not None else ([], [], {})
             )
             models = ModelRegistry.load(
                 self.model_manifest,
@@ -460,6 +460,7 @@ class JobManager:
                 model_store_root=self.model_store_root,
                 extra_models=extra_models,
                 extra_catalog=extra_catalog,
+                measurements=measurements,
             ).all()
         except ModelRegistryError as exc:
             raise WorkerFailure("model_registry_invalid", str(exc)) from exc
@@ -1017,8 +1018,8 @@ class JobManager:
         """
         if self.model_manifest is None or self.hf_home is None:
             return []
-        extra_models, extra_catalog = (
-            self.extra_manifests() if self.extra_manifests is not None else ([], [])
+        extra_models, extra_catalog, measurements = (
+            self.extra_manifests() if self.extra_manifests is not None else ([], [], {})
         )
         try:
             return list(ModelRegistry.load(
@@ -1028,6 +1029,7 @@ class JobManager:
                 model_store_root=self.model_store_root,
                 extra_models=extra_models,
                 extra_catalog=extra_catalog,
+                measurements=measurements,
             ).all())
         except ModelRegistryError as exc:
             raise WorkerFailure("model_registry_invalid", str(exc)) from exc

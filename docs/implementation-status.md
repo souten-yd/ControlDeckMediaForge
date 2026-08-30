@@ -6312,3 +6312,39 @@ installed v0.10.2 / healthy / contract 2.0。`./mf.sh test` 785 passed。
 画面の数字に出ている。押してから知らせない。
 
 `./mf.sh test` 789 passed / 1 warning / 61.34 秒（新規 2 件）、`git diff --check` PASS。
+
+## 評価は終わっていたが、何も変わっていなかった（2026-08-30）
+
+利用者から「MiniMax の評価ボタンを押しても評価が終わらない。ブラウザを閉じたからか」との
+問い合わせ。実機を見ると評価は**成功して終わっていた**。
+
+```text
+modelop_fc571456  unsloth/MiniMax-H3-GGUF  evaluate  ready
+  03:37:45 → 03:40:15（149.28 秒）  host_job=2cfdf9cb277f
+  peak VRAM 14,763,892,736 B / peak RSS 23,699,308,544 B / process swap 0
+  出力 640x384 vp8 0.167 秒 122,118 B
+```
+
+ブラウザを閉じたことは関係ない。job も model operation も server 側の durable な記録で、
+閉じても走り続ける。
+
+止まっていたのは記録の方だった。`record_measurement` は `_run_image_evaluation` にしか
+無く、MiniMax のような native 経路は結果を operation に残すだけでモデルの計測値を
+更新しない。150 秒かけて測っても `measurement_confidence` は low、
+`measured_vram_bytes` は None のまま。画面は何も変わらないので「終わらない」ように見える。
+
+画像経路には既に正しい注記があった。「測れたのに書き残せないなら、成功と言っては
+いけない。次に開いたとき、また未計測に戻っている」。同じことが native 経路で起きていた。
+
+```text
+native 経路      _record_native_measurement() を完了直前に呼ぶ。書き残せなくても
+                 評価そのものは成功しているので job は失敗させない
+出荷モデル       出荷 manifest は実行時に書き換えない。測った値は runtime 側の
+                 measurements.json へ重ねる。ModelRegistry.load が上から被せる
+state           動かさない。測ることと使ってよいと決めることは別で、測っただけで
+                 routing に載るなら評価を押すことが採用を意味してしまう
+読む側          custom_models.overlay() が追加分と測定値を 1 組で返す。測定値だけ
+                 別経路で渡すと、渡し忘れた読み手が「未計測」と言い続ける
+```
+
+`./mf.sh test` 791 passed / 1 warning / 53.10 秒（新規 2 件）、`git diff --check` PASS。

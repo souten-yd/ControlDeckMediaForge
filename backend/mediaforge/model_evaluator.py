@@ -493,6 +493,10 @@ class H3ModelEvaluator:
                         "model_evaluation_invalid_output",
                         "evaluation result exceeds the bounded metadata limit",
                     )
+                # 測っただけで終わらせない。記録に残さないと、画面は何も変わらず
+                # 「押しても終わらない」ように見える。実機で MiniMax の評価が
+                # 150 秒かけて ready になったのに、モデルは未計測のままだった。
+                self._record_native_measurement(model, metrics, media)
                 self.store.update_model_operation(
                     operation_id,
                     state=ModelOperationState.READY,
@@ -655,6 +659,31 @@ class H3ModelEvaluator:
                 await self.host.cancel_resource(execution.identity, execution.request_id)
         except HostApiError:
             logger.exception("failed to release model evaluation resource state")
+
+    def _record_native_measurement(
+        self, model: ModelDescriptor, metrics: Any, media: dict[str, Any]
+    ) -> None:
+        """測った値を残す。使ってよいと決めることとは別なので state は動かさない。
+
+        測っただけで routing に載るなら、評価を押すことが採用を意味してしまう。
+        書き残せなくても評価そのものは成功している。ここで job を失敗させない。
+        """
+        if self.record_measurement is None:
+            return
+        peak = int(getattr(metrics, "peak_vram_bytes", 0) or 0)
+        elapsed = float(getattr(metrics, "elapsed_sec", 0) or 0)
+        if peak <= 0 or elapsed <= 0:
+            return
+        try:
+            self.record_measurement(model.model_id, {
+                "resident_vram_bytes": 0,
+                "execution_peak_vram_bytes": peak,
+                "cold_load_peak_vram_bytes": peak,
+                "headroom_vram_bytes": 1024 * 1024 * 1024,
+                "measured_runtime_sec": round(elapsed, 3),
+            })
+        except Exception:  # noqa: BLE001 - 記録できないことが評価の失敗ではない
+            logger.warning("could not record the measurement for %s", model.model_id)
 
     async def _run_image_evaluation(self, operation_id: str, model: ModelDescriptor) -> None:
         """Run it once, write down what it cost, and let routing use it.

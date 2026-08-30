@@ -374,7 +374,8 @@ def test_routing_offers_the_model_the_picker_offers(tmp_path: Path):
 
     def manifests():
         asked["calls"] += 1
-        return [registry], [catalog]
+        # 追加分と、この機械で測った値。読む側は 1 か所で受け取る。
+        return [registry], [catalog], {}
 
     manager = JobManager(
         store,
@@ -409,7 +410,7 @@ def test_routing_without_the_extra_models_finds_nothing(tmp_path: Path):
         model_catalog_manifest=Path(__file__).parents[1] / "worker_packs/image/catalog.json",
         hf_home=tmp_path / "hf",
         model_store_root=model_store,
-        extra_manifests=lambda: ([], []),
+        extra_manifests=lambda: ([], [], {}),
     )
     job = store.create_job(JobRequest(operation="image.generate", intent="test"))
 
