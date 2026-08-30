@@ -6348,3 +6348,37 @@ state           動かさない。測ることと使ってよいと決めるこ�
 ```
 
 `./mf.sh test` 791 passed / 1 warning / 53.10 秒（新規 2 件）、`git diff --check` PASS。
+
+## workspace の配信が無圧縮だった（2026-08-30）
+
+利用者から「Media Forge への接続にめっちゃ時間がかかる。軽量化してほしい」との指摘。
+測ると、workspace の文書だけが無圧縮で出ていた。
+
+```text
+配信          356,733 B / content-encoding なし / cache-control: no-store
+gzip -9 相当   91,349 B（74% 減）
+内訳          <script> 253,108 B（app.js） / <style> 48,623 B / markup 他
+```
+
+workspace は markup と style と script を 1 応答へ畳んで返す作りなので、この 1 本が
+そのまま接続の待ち時間になる。手元は 15 ms でも、実機は Tailscale の relay 経由である
+（`relay "tok"` を 2026-08-28 に観測済み）。
+
+WebSocket は無関係だった。uvicorn の `ws_per_message_deflate` が既定 True で、boot の
+session snapshot は既に圧縮されている。無圧縮で残っていたのは HTTP の文書だけである。
+
+`GZipMiddleware(minimum_size=1024)` を入れた。実測。
+
+```text
+/                            356,733 B -> 91,376 B  (74% 減)
+/api/v1/models                24,158 B ->  5,190 B  (79% 減)
+/workspace-api/models/catalog 22,919 B ->  5,180 B  (77% 減)
+/api/v1/capabilities           1,602 B ->    372 B  (77% 減)
+```
+
+小さな応答まで圧縮しても CPU を使うだけなので下限を 1 KB に置いた。
+
+boot のうち thumbnail は 4 件で base64 12,368 B（160px webp）であり、重い側ではない。
+文書が全体の 74% を占めていた。
+
+`./mf.sh test` 792 passed / 1 warning / 66.15 秒（新規 1 件）、`git diff --check` PASS。

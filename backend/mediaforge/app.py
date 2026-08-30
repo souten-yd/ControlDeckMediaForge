@@ -18,6 +18,7 @@ from typing import Any, Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
+from starlette.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError, __version__ as PILLOW_VERSION
@@ -409,6 +410,11 @@ def create_app(
         await host.close()
 
     app = FastAPI(title="ControlDeck Media Forge", version=__version__, lifespan=lifespan)
+    # workspace は 1 応答に markup と style と script を全部畳んで返すので
+    # 356 KB あった。手元では 15 ms でも、Tailscale の relay 越しではその差が
+    # そのまま待ち時間になる。gzip で 91 KB（74% 減）。
+    # 最小値は 1 KB。小さな JSON まで圧縮しても、CPU を使うだけで速くならない。
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.state.health_override = None
     app.state.store = store
     app.state.jobs = manager
