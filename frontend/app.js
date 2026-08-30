@@ -2948,6 +2948,8 @@ function imageBaseModels() {
   const wanted = state.createMedia === "video" ? "video" : "image";
   return state.modelCatalog.filter(
     (model) => model.installed && model.healthy && model.kind !== "lora"
+      // 走らせる worker が無いものは、選べても作れない。
+      && model.has_runtime !== false
       && (model.media_types || ["image"]).includes(wanted));
 }
 
@@ -4483,12 +4485,16 @@ const RUNNABILITY = {
   fits: {label: "実行可能", rank: 0, tone: "ok"},
   offload: {label: "オフロード前提", rank: 1, tone: "warn"},
   unknown: {label: "未計測", rank: 2, tone: "muted"},
-  blocked: {label: "起動不可", rank: 3, tone: "bad"},
+  noruntime: {label: "実行環境なし", rank: 3, tone: "bad"},
+  blocked: {label: "起動不可", rank: 4, tone: "bad"},
 };
 
 function modelRunnability(model) {
   const device = Number(state.deviceVramBytes) || 0;
   if (!model.capabilities || !model.capabilities.length) return "blocked";
+  // VRAM に載るかを問う前に、起動する手段があるかを見る。実行環境の無い
+  // モデルは、どれだけ空いていても始まらない。
+  if (model.has_runtime === false) return "noruntime";
   const measured = Number(model.measured_vram_bytes) || 0;
   if (!device) return "unknown";
   if (!measured) {
@@ -4588,6 +4594,15 @@ function modelActionCell(model, modelKey) {
     action.textContent = "削除";
   } else {
     return unavailable("使用中", "実行中の処理がこのモデルを使っています。");
+  }
+  if (model.installed && model.has_runtime === false) {
+    // 測れることと使えることは別。走らせる worker が居ないモデルを評価しても、
+    // 数字が残るだけで選べるようにはならない。押す前に言う。
+    const note = document.createElement("span");
+    note.className = "model-action-note";
+    note.textContent = "このモデルを動かす実行環境がまだありません。"
+      + "評価すると必要な量と時間は分かりますが、作るときには選べません。";
+    cell.append(note);
   }
   if (model.installed && state.modelEvaluationIds.has(model.model_id)) {
     const evaluate = document.createElement("button");

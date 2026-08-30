@@ -496,7 +496,7 @@ class H3ModelEvaluator:
                 # 測っただけで終わらせない。記録に残さないと、画面は何も変わらず
                 # 「押しても終わらない」ように見える。実機で MiniMax の評価が
                 # 150 秒かけて ready になったのに、モデルは未計測のままだった。
-                self._record_native_measurement(model, metrics, media)
+                self._record_native_measurement(model, result)
                 self.store.update_model_operation(
                     operation_id,
                     state=ModelOperationState.READY,
@@ -660,19 +660,25 @@ class H3ModelEvaluator:
         except HostApiError:
             logger.exception("failed to release model evaluation resource state")
 
-    def _record_native_measurement(
-        self, model: ModelDescriptor, metrics: Any, media: dict[str, Any]
-    ) -> None:
+    def _record_native_measurement(self, model: ModelDescriptor, result: dict[str, Any]) -> None:
         """測った値を残す。使ってよいと決めることとは別なので state は動かさない。
 
         測っただけで routing に載るなら、評価を押すことが採用を意味してしまう。
         書き残せなくても評価そのものは成功している。ここで job を失敗させない。
+
+        読むのは operation へ残すのと同じ result である。RuntimeMetrics から
+        getattr で拾おうとして `elapsed_sec` を取り違え、0 のまま黙って
+        抜けていた（実機で 161 秒の評価が 3 回、何も残さずに終わっていた）。
+        同じ 1 つの出所から読む。
         """
         if self.record_measurement is None:
             return
-        peak = int(getattr(metrics, "peak_vram_bytes", 0) or 0)
-        elapsed = float(getattr(metrics, "elapsed_sec", 0) or 0)
+        peak = int(result.get("peak_vram_bytes") or 0)
+        elapsed = float(result.get("elapsed_sec") or 0)
         if peak <= 0 or elapsed <= 0:
+            logger.warning(
+                "the evaluation of %s produced no usable measurement", model.model_id
+            )
             return
         try:
             self.record_measurement(model.model_id, {
