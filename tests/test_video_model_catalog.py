@@ -38,7 +38,11 @@ def test_video_candidates_are_pinned_and_never_recommended() -> None:
 
     assert set(candidates) == VIDEO_IDS
     # 実測した候補だけが available になる。測っていないものは experimental のまま。
-    adopted = {"Wan-AI/Wan2.1-T2V-1.3B-Diffusers", "unsloth/MiniMax-H3-GGUF"}
+    adopted = {
+        "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
+        "unsloth/MiniMax-H3-GGUF",
+        "Wan-AI/Wan2.2-TI2V-5B",
+    }
     assert all(
         model.state == ("available" if model_id in adopted else "experimental")
         for model_id, model in candidates.items()
@@ -50,9 +54,11 @@ def test_video_candidates_are_pinned_and_never_recommended() -> None:
     wan = candidates["Wan-AI/Wan2.2-TI2V-5B"]
     assert wan.measurement_confidence == "measured"
     assert wan.hardware_backends == ("cuda", "rocm")
+    # VRAM は G7 V1 の実測を据え置く。2026-08-30 は時間だけを測り直した
+    # （384x256 33 フレーム 30 歩を wall 100.51 秒）。採っていない値は上書きしない。
     assert wan.execution_peak_vram_bytes == 30_700_000_000
     assert wan.headroom_vram_bytes == 1024 * 1024 * 1024
-    assert wan.measured_runtime_sec == 75.955
+    assert wan.measured_runtime_sec == 100.51
     cog = candidates["zai-org/CogVideoX-2b"]
     assert cog.measurement_confidence == "low"
     assert cog.hardware_backends == ("cuda", "rocm")
