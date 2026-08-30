@@ -1071,3 +1071,22 @@ def test_a_video_entry_says_it_is_a_clip_and_how_long(tmp_path: Path):
     assert item["frame_rate"] == 16.0
     # 静止画と同じ種別にすると、画面が印を出す手がかりを失う。
     assert item["preview_kind"] != "image"
+
+
+def test_the_workspace_document_is_compressed(tmp_path: Path):
+    """workspace は markup と style と script を 1 応答へ畳んで返す。
+
+    実機で 356,733 B を無圧縮で送っていた。手元では 15 ms でも、Tailscale の
+    relay 越しではその差がそのまま待ち時間になる（2026-08-30 の指摘）。
+    WebSocket は uvicorn の permessage-deflate が既定で効いているので、
+    無圧縮で残っていたのはこの文書だけだった。
+    """
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        plain = client.get("/")
+        packed = client.get("/", headers={"Accept-Encoding": "gzip"})
+
+    assert plain.status_code == 200 and packed.status_code == 200
+    assert packed.headers.get("content-encoding") == "gzip"
+    # 畳んだ分がそのまま効く。半分以下にならないなら効いていない。
+    assert int(packed.headers["content-length"]) * 2 < len(plain.content)
