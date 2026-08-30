@@ -694,7 +694,14 @@ def test_workspace_websocket_chunk_import_exceeds_single_message_bound_and_clean
             assert rejected["ok"] is False
             assert "incomplete" in rejected["error"]["message"]
 
-        assert list(client.app.state.store.work_dir.iterdir()) == []
+        # 後始末は socket 側の finally で走る。閉じた瞬間に終わっている保証は
+        # 無いので、終わるのを待って見る。待たずに見ると、機械が忙しいときだけ
+        # 落ちるテストになる（実際そうなっていた）。
+        work_dir = client.app.state.store.work_dir
+        deadline = time.monotonic() + 5
+        while list(work_dir.iterdir()) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert list(work_dir.iterdir()) == []
 
 
 def test_scoped_file_bridge_reads_and_commits_without_host_paths(tmp_path: Path):

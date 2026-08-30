@@ -155,3 +155,70 @@ def test_core_fills_the_geometry_the_screen_does_not_send(tmp_path: Path):
     bare = dataclass_replace(model, native_width=None, native_height=None, default_steps=None)
     fallback = manager._resolved_video_request(job, bare)["constraints"]
     assert all(isinstance(fallback[key], int) for key in ("width", "height", "steps", "frames", "fps"))
+
+
+def test_the_native_driver_is_invoked_the_way_the_evaluation_proved(tmp_path: Path, monkeypatch):
+    """MiniMax H3 は既にある駆動系（stable-diffusion.cpp の pinned build）で動く。
+
+    評価が実際に 640x384 の動画を作れている組み合わせを、本番でも同じに保つ。
+    ここがずれると「評価は通るのに作れない」に戻る。
+    """
+    from worker_packs.video import worker as module
+
+    models = tmp_path / "models"
+    snapshot = models / "hub" / "models--x--y" / "snapshots" / "rev"
+    snapshot.mkdir(parents=True)
+    (snapshot / "vae").mkdir()
+    for _, relative in module.VideoWorker.NATIVE_H3_FILES:
+        (snapshot / relative).write_bytes(b"x")
+    runtime = tmp_path / "runtime"
+    (runtime / "build" / "bin").mkdir(parents=True)
+    executable = runtime / "build" / "bin" / "sd-cli"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    (tmp_path / "work").mkdir()
+    monkeypatch.setenv("MEDIA_FORGE_MODEL_ROOT", str(models))
+    monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(tmp_path / "work"))
+    monkeypatch.setenv("MEDIA_FORGE_NATIVE_RUNTIME_ROOT", str(runtime))
+
+    subject = module.VideoWorker()
+    command = subject._native_command(
+        snapshot, tmp_path / "out.webm", "a robot waves", "",
+        width=640, height=384, frames=5, steps=1, fps=24, seed=7,
+    )
+
+    assert command[0] == str(executable)
+    assert command[1:3] == ["-M", "vid_gen"]
+    for flag, _ in module.VideoWorker.NATIVE_H3_FILES:
+        assert flag in command, flag
+    # 言語モデルは CPU、拡散と VAE は GPU。評価がこの配分で通っている。
+    assert "te=cpu,diffusion=ROCm0,vae=ROCm0" in command
+    assert "--seed" in command and "7" in command
+
+    # 駆動系が要る場所を渡さないと libomp.so が見つからず起動しない。
+    env = module.VideoWorker._native_env()
+    assert "/opt/rocm/lib/llvm/lib" in env["LD_LIBRARY_PATH"]
+
+
+def test_a_weight_reached_through_the_hub_layout_is_still_bounded(tmp_path: Path, monkeypatch):
+    """Hub では snapshot の中身が blobs/ への symlink である。
+
+    snapshot だけを境界にすると正しい重みが「外」と判定される。境界は
+    repository の根に置く。逆に、そこからも外れるものは通さない。
+    """
+    from worker_packs.video import worker as module
+
+    repo = tmp_path / "models" / "hub" / "models--x--y"
+    snapshot = repo / "snapshots" / "rev"
+    blobs = repo / "blobs"
+    snapshot.mkdir(parents=True)
+    blobs.mkdir()
+    (blobs / "sha").write_bytes(b"weights")
+    (snapshot / "weight.gguf").symlink_to(blobs / "sha")
+    outside = tmp_path / "elsewhere.gguf"
+    outside.write_bytes(b"x")
+    (snapshot / "escape.gguf").symlink_to(outside)
+
+    assert module.VideoWorker._native_model_file(snapshot, "weight.gguf") == (blobs / "sha").resolve()
+    with pytest.raises(ValueError, match="outside the model repository"):
+        module.VideoWorker._native_model_file(snapshot, "escape.gguf")

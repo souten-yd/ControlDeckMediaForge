@@ -334,7 +334,7 @@
         "cuda",
         "rocm"
       ],
-      "state": "experimental",
+      "state": "available",
       "measurement_confidence": "measured",
       "policy_rank": {
         "auto": 10,
@@ -384,7 +384,12 @@
         "execution_peak_vram_bytes": 30700000000,
         "cold_load_peak_vram_bytes": 30700000000,
         "headroom_vram_bytes": 1073741824,
-        "measured_runtime_sec": 75.955
+        "measured_runtime_sec": 100.51
+      },
+      "runtime_options": {
+        "native_width": 384,
+        "native_height": 256,
+        "default_steps": 30
       }
     },
     {
@@ -1307,10 +1312,11 @@
         "video.image_to_video"
       ],
       "hardware_backends": [
-        "cuda"
+        "cuda",
+        "rocm"
       ],
-      "state": "experimental",
-      "measurement_confidence": "low",
+      "state": "available",
+      "measurement_confidence": "measured",
       "policy_rank": {
         "auto": 0,
         "fast": 10,
@@ -1359,7 +1365,19 @@
             "revision": "0f7fb980293fcc4d55c1158cbda920806682ed5d"
           }
         }
-      ]
+      ],
+      "measurements": {
+        "resident_vram_bytes": 0,
+        "execution_peak_vram_bytes": 14763892736,
+        "cold_load_peak_vram_bytes": 14763892736,
+        "headroom_vram_bytes": 1073741824,
+        "measured_runtime_sec": 149.28
+      },
+      "runtime_options": {
+        "native_width": 640,
+        "native_height": 384,
+        "default_steps": 1
+      }
     }
   ]
 }

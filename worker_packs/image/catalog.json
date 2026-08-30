@@ -476,7 +476,7 @@
         "video",
         "audio_video"
       ],
-      "description": "26.98GB four-component GGUF bundle selected for one-R9700 evaluation through an isolated stable-diffusion.cpp HIP runtime.",
+      "description": "文章から短い動画と音声を作ります。stable-diffusion.cpp の pinned build で動き、R9700 / gfx1201 で 640x384 5 フレームを実測 149.3 秒。",
       "approx_download_bytes": 26978277946,
       "source": {
         "kind": "huggingface",

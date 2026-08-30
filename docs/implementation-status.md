@@ -6427,3 +6427,90 @@ operation へ残すのと同じ `result` から読むようにした。加えて
 してよい）。available なモデルは必ず実行できる、という条件も同じ test で守る。
 
 `./mf.sh test` 795 passed / 2 warnings / 53.72 秒（新規 3 件）、`git diff --check` PASS。
+
+## MiniMax H3 FL2VA を本番経路へ載せる（2026-08-30）
+
+利用者の指示は「MiniMax H3 FL2VA と Wan の実行環境を準備し、既に開発済みの
+ドライバーがあれば組み込む方針で調査・導入・検証・生成まで」。調べると、駆動系は
+**既に完成していた**。評価が使っている `stable-diffusion.cpp` の pinned build
+（`97d2990`、`build/bin/sd-cli`）がそれで、実際に 640x384 の動画を作れている。
+
+```text
+重み（実機に導入済み、4 点）
+  minimax_h3_fl2va_pruned-UD-Q2_K_XL.gguf   拡散本体（FL2VA）
+  qwen3vl_32b_minimax_h3-Q2_K_M.gguf        言語モデル
+  vae/minimax_h3_video_vae_fp16.safetensors 映像 VAE
+  vae/minimax_h3_audio_vae_fp32.safetensors 音声 VAE
+起動          sd-cli -M vid_gen / te=cpu,diffusion=ROCm0,vae=ROCm0 / --mmap / --diffusion-fa
+```
+
+本番の動画 worker に adapter を足し、同じ組み合わせで起動するようにした。評価と本番で
+2 通りの起動を持たない。実機で通すまでに 3 つ塞いだ。
+
+```text
+1. 重みが blobs/ への symlink である。snapshot だけを境界にすると正しい重みが
+   「外」と判定される。境界を repository の根に置く（評価側と同じ扱い）
+2. LD_LIBRARY_PATH が無いと libomp.so が見つからず sd-cli が起動しない。
+   評価が使っているのと同じ環境を worker にも持たせる
+3. MiniMax H3 は音も作る。正規化で include_audio を落とさない
+```
+
+実機での生成（本番 worker を直接叩いた）。
+
+```text
+生成 57.11 秒 / wall 57.50 秒 / max RSS 23,985,892 KiB / exit 0
+出力 h264 640x384 5 フレーム 24fps 0.208 秒 39,070 B + aac 音声
+runtime_version 97d2990807fe6d558e395f8764198d7c7e7b411c
+```
+
+registry では available / measured / rocm 対応にした（2026-08-30 の評価から
+peak VRAM 14,763,892,736 B、149.28 秒）。宣言に rocm が無いと、測ってあっても
+routing の候補にならない。
+
+`./mf.sh test` 795 passed（新規 2 件）。
+
+## Wan 2.2 TI2V-5B の実行環境を復元して生成まで通す（2026-08-30）
+
+上流の駆動系（`wan` package）は `/data1tb/mediaforge-g7-v1/Wan2.2-source` に残っていた。
+消えていたのは venv だけである。`runtimes/wan-ti2v-probe/requirements.txt` から作り直したが、
+そのままでは `wan.configs` が読めなかった。
+
+```text
+不足していた依存   einops / imageio（requirements から抜けていた）
+追記               imageio==2.37.4 / einops==0.8.1 を pin
+```
+
+実機で通した実測（text encoder は CPU、生成は GPU の 2 process）。
+
+```text
+smoke          256x256 1 フレーム 1 歩    encode 24.37s + generate 24.57s / wall 61.52s
+quality-frame  256x256 1 フレーム 30 歩   encode 27.74s + generate 28.36s / wall 109.52s
+candidate-clip 384x256 33 フレーム 30 歩  encode 14.01s + generate 73.48s / wall 100.51s
+               出力 h264 384x256 33 フレーム 1.375 秒 115,130 B / max RSS 19.4 GB / exit 0
+```
+
+30 歩は 1 歩に対して +3.79 秒（0.13 秒/歩）で、費用の大半は読み込みである。
+
+本番 worker に `native.wan2.2` を足し、評価が使っている probe をそのまま呼ぶ形にした。
+評価と本番で 2 通りの起動を持たない。text encoder と生成を別 process に保つのは
+device の取り合いを避けるためで、1 つに畳むと 5B が載らない。
+
+registry は available / native 384x256 30 歩、`measured_runtime_sec` を 100.51 へ更新した。
+VRAM は G7 V1 の実測（30.7 GB）を据え置く。今回は採取していないので上書きしない。
+
+### 実機の runtime を一度壊し、復旧した
+
+実機の動画 runtime へ `wan` の依存を足すとき、索引を指定せずに pip を走らせたため
+torch が CUDA 版 2.13.0 へ入れ替わり、`Found no NVIDIA driver` で動かなくなった。
+repository 側の venv は無事だったので、実機側を消して hardlink で作り直し、ROCm の
+find-links を明示して入れ直した。
+
+```text
+復旧後  torch 2.10.0+rocm7.2.1.gitb07cec22 / torchvision 0.25.0+rocm7.2.1.git82df5f59
+        wan.configs 読み込み OK（ti2v-5B を含む 5 構成）/ diffusers 経路も健全
+```
+
+ROCm の venv へ何かを足すときは、常に `--find-links` を付ける。付けないと pip は
+CUDA 版で上書きする。
+
+`./mf.sh test` 797 passed。
