@@ -1042,6 +1042,36 @@ def test_a_base_no_installed_lora_needs_is_left_alone(tmp_path: Path) -> None:
     assert unmeasured_lora_bases([base, replace(lora_descriptor(snapshot), installed=False)]) == []
 
 
+def test_the_measurement_is_read_from_the_result_that_is_kept(tmp_path: Path) -> None:
+    """文字列ではなく実際に呼んで確かめる。
+
+    最初の実装は RuntimeMetrics から `elapsed_sec` を getattr で拾おうとして
+    いた。その属性は存在せず 0 が返り、ガードが黙って抜けていた。実機で
+    161 秒の評価が 3 回走って何も残らなかったのはこれである。ソース文字列を
+    見るだけのテストはそれを通してしまった。
+    """
+    recorded: dict[str, Any] = {}
+    service = image_evaluator(tmp_path, FakeHost(), {})
+    service.record_measurement = lambda model_id, values: recorded.update(
+        {"model_id": model_id, "values": values}
+    )
+    model = image_descriptor(tmp_path / "image-snapshot")
+
+    service._record_native_measurement(model, {
+        "elapsed_sec": 149.28,
+        "peak_vram_bytes": 14_763_892_736,
+    })
+
+    assert recorded["model_id"] == model.model_id
+    assert recorded["values"]["measured_runtime_sec"] == 149.28
+    assert recorded["values"]["execution_peak_vram_bytes"] == 14_763_892_736
+
+    # 測れていない結果は書かない。0 を「測った」として残さない。
+    recorded.clear()
+    service._record_native_measurement(model, {"elapsed_sec": 0, "peak_vram_bytes": 0})
+    assert recorded == {}
+
+
 def test_a_native_evaluation_keeps_what_it_measured(tmp_path: Path) -> None:
     """測っただけで終わらせない。
 
@@ -1057,7 +1087,7 @@ def test_a_native_evaluation_keeps_what_it_measured(tmp_path: Path) -> None:
     )
     native = source[source.index("                media = await asyncio.to_thread(validator"):
                     source.index("    def _record_native_measurement(")]
-    assert "self._record_native_measurement(model, metrics, media)" in native
+    assert "self._record_native_measurement(model, result)" in native
 
     keeper = source[source.index("    def _record_native_measurement("):
                     source.index("    async def _run_image_evaluation(")]

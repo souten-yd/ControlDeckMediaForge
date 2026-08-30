@@ -24,6 +24,7 @@ from .models import (
     ModelRegistryError,
     ModelSource,
 )
+from .models.adapters import is_runnable
 from .paths import contained
 from .store import Store
 
@@ -510,6 +511,8 @@ class ModelOperationManager:
             "healthy": model.healthy,
             "removable": model.removable,
             "state": model.state,
+            # 走らせる worker が居るか。居ないものは測っても選べるようにならない。
+            "has_runtime": is_runnable(model.runtime_adapter),
             "supports_lora": model.supports_lora,
             "max_references": model.max_references,
             "reference_roles": list(model.reference_roles),

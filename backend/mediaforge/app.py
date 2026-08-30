@@ -85,6 +85,7 @@ from .host.jobs import HostExecution
 from .jobs import JobManager, ProfileResolutionError
 from .m5_companion import profile_documents as m5_profile_documents
 from .model_evaluator import H3ModelEvaluator, unmeasured_lora_bases
+from .models.adapters import is_runnable
 from .model_manager import MAX_MANAGED_MODEL_DOWNLOAD_BYTES, ModelOperationManager
 from .models import (
     ModelOperationError,
@@ -497,7 +498,10 @@ def create_app(
                     "revision": item.source.revision,
                 },
                 "ownership": item.ownership,
-                "supports_lora": item.supports_lora,
+                # 測れることと使えることは別。走らせる worker が居ないモデルは、
+            # 評価しても選べるようにはならない。画面がそれを言えるようにする。
+            "has_runtime": is_runnable(item.runtime_adapter),
+            "supports_lora": item.supports_lora,
                 "max_references": item.max_references,
                 "reference_roles": list(item.reference_roles),
                 "supports_reference_strength": item.supports_reference_strength,

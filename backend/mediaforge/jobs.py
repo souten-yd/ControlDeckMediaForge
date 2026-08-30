@@ -32,6 +32,7 @@ from .m5_companion import (
 from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
 from .models.generation_defaults import normalize_base_model, snap_to_native
 from .outpaint import outpaint_plan, validate_outpaint
+from .models.adapters import VIDEO_ADAPTERS
 from .paths import contained
 from .profiles import profile_prompt
 from .asset_brief import (
@@ -546,11 +547,10 @@ class JobManager:
             return str(domain.get("id") or "general")
         return "general"
 
-    VIDEO_ADAPTERS = frozenset({"diffusers.wan2.1-t2v"})
 
     @classmethod
     def _is_video_model(cls, selected: ModelDescriptor | None) -> bool:
-        return selected is not None and selected.runtime_adapter in cls.VIDEO_ADAPTERS
+        return selected is not None and selected.runtime_adapter in VIDEO_ADAPTERS
 
     def _model_capability(self, job: Job) -> str:
         if job.request.operation == "video.generate":

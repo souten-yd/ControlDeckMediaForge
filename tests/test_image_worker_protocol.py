@@ -285,3 +285,43 @@ def test_the_sd_adapter_asks_for_the_variant_that_is_on_disk(tmp_path: Path):
     (fp16 / "unet").mkdir(parents=True)
     (fp16 / "unet" / "diffusion_pytorch_model.fp16.safetensors").write_bytes(b"x")
     assert DiffusersStableDiffusionAdapter(fp16)._detect_variant() == "fp16"
+
+
+def test_core_and_the_workers_agree_on_what_can_run():
+    """core は worker の実装を import しない。だから 2 か所に同じ知識が置かれる。
+
+    ずれると、実行環境の無いモデルを「使える」と言うか、動くモデルを
+    一覧から落とすかのどちらかになる。実機では MiniMax が前者だった
+    （評価に 161 秒使えるのに、作るときには選べない。2026-08-30）。
+    """
+    from worker_packs.image import worker as image_side
+    from worker_packs.video import worker as video_side
+
+    from mediaforge.models.adapters import IMAGE_ADAPTERS, RUNNABLE_ADAPTERS, VIDEO_ADAPTERS
+
+    assert set(IMAGE_ADAPTERS) == set(image_side.ADAPTERS)
+    assert set(VIDEO_ADAPTERS) == set(video_side.ADAPTERS)
+    assert RUNNABLE_ADAPTERS == IMAGE_ADAPTERS | VIDEO_ADAPTERS
+
+
+def test_a_model_without_a_runtime_is_not_called_usable():
+    """測れることと使えることは別。
+
+    出荷カタログには実行環境の無い候補が並ぶ。それ自体は正しい（調べる対象
+    である）。誤っていたのは、その差を画面へ出していなかったことである。
+    """
+    import json
+    from pathlib import Path
+
+    from mediaforge.models.adapters import is_runnable
+
+    root = Path(__file__).parents[1]
+    manifest = json.loads((root / "worker_packs/image/models.json").read_text(encoding="utf-8"))
+    by_id = {model["model_id"]: model["runtime_adapter"] for model in manifest["models"]}
+
+    assert is_runnable(by_id["Wan-AI/Wan2.1-T2V-1.3B-Diffusers"])
+    assert not is_runnable(by_id["unsloth/MiniMax-H3-GGUF"])
+    # available なものは必ず走らせられる。ここが崩れると「使える」が嘘になる。
+    for model in manifest["models"]:
+        if model.get("state") == "available":
+            assert is_runnable(model["runtime_adapter"]), model["model_id"]

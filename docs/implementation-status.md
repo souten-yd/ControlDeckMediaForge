@@ -6382,3 +6382,48 @@ boot のうち thumbnail は 4 件で base64 12,368 B（160px webp）であり�
 文書が全体の 74% を占めていた。
 
 `./mf.sh test` 792 passed / 1 warning / 66.15 秒（新規 1 件）、`git diff --check` PASS。
+
+## 評価が記録されず、実行環境の無いモデルが候補に見えていた（2026-08-30）
+
+利用者から「MiniMax を評価したが終わらなかったし、動画生成 AI の候補としても
+選択できない」との指摘。別々の 2 件だった。
+
+### 1. 記録が効いていなかった（私の取り違え）
+
+0.11.1 で native 経路にも `record_measurement` を足したはずが、15:36 の評価
+（161 秒、ready）でも `measurements.json` は作られず、`measurement_confidence` は
+low のままだった。原因は `RuntimeMetrics` に `elapsed_sec` が無いのに
+`getattr(metrics, "elapsed_sec", 0)` で拾おうとしていたことで、0 が返って
+ガードが黙って抜けていた。
+
+```text
+RuntimeMetrics  started_at / baseline_* / peak_rss_bytes / peak_process_swap_bytes / peak_vram_bytes
+result          elapsed_sec / peak_vram_bytes / peak_rss_bytes / ...
+```
+
+operation へ残すのと同じ `result` から読むようにした。加えて、前のテストが
+ソース文字列しか見ておらず壊れた実装を通していたので、実際に関数を呼ぶテストへ
+差し替えた。旧実装では落ちることを確認済みである。
+
+### 2. MiniMax は動画候補になり得ない
+
+`unsloth/MiniMax-H3-GGUF` が名乗る adapter は
+`native.stable-diffusion-cpp-minimax-h3` で、これを実装する worker が無い。
+
+```text
+画像 worker  diffusers.flux2-klein / diffusers.sdxl / diffusers.sdxl-single-file
+動画 worker  diffusers.wan2.1-t2v
+出荷カタログの動画候補 12 件のうち、実行できるのは Wan 2.1 T2V 1.3B のみ
+```
+
+候補として並ぶこと自体は正しい（調べる対象である）。誤っていたのは、その差を
+画面に出していなかったことで、実行できないモデルの評価に GPU を 161 秒使っても
+選べるようにならない、と押す前に分からなかった。
+
+`models/adapters.py` に core が起動できる adapter を置き、公開文書へ
+`has_runtime` を足した。画面は「実行環境なし」として一覧の判定に組み込み、
+モデル管理では押す前に理由を書く。core は worker を import しないので知識が
+2 か所に分かれる。食い違わないことは test が見張る（test は worker を import
+してよい）。available なモデルは必ず実行できる、という条件も同じ test で守る。
+
+`./mf.sh test` 795 passed / 2 warnings / 53.72 秒（新規 3 件）、`git diff --check` PASS。
