@@ -25,7 +25,14 @@ from PIL import Image, UnidentifiedImageError, __version__ as PILLOW_VERSION
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from . import __version__, library, preferences, thumbnails
-from .asset_import import AssetImportError, MAX_IMPORT_BYTES, import_asset_bytes, import_image_asset
+from .asset_import import (
+    MAX_IMPORT_BYTES,
+    MAX_VIDEO_IMPORT_BYTES,
+    VIDEO_MEDIA_TYPES,
+    AssetImportError,
+    import_asset_bytes,
+    import_image_asset,
+)
 from .asset_placement import (
     PlacementItem,
     PlacementManifest,
@@ -1649,9 +1656,12 @@ def create_app(
         purpose: Literal["source", "edit_mask"] = Query(default="source"),
     ) -> dict[str, Any]:
         media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        # 動画は画像と別の上限を持つ。共通の 64 MiB で切ると、実測した 15 秒の
+        # clip（17.2 MB）は通っても、少し大きいものが理由なく弾かれる。
+        limit = MAX_VIDEO_IMPORT_BYTES if media_type in VIDEO_MEDIA_TYPES else MAX_IMPORT_BYTES
         content = bytearray()
         async for chunk in request.stream():
-            if len(content) + len(chunk) > MAX_IMPORT_BYTES:
+            if len(content) + len(chunk) > limit:
                 raise HTTPException(status_code=413, detail={"code": "asset_import_too_large"})
             content.extend(chunk)
         try:
@@ -1665,7 +1675,11 @@ def create_app(
             raise HTTPException(
                 status_code=422,
                 detail={
-                    "code": "invalid_glb_import" if media_type == "model/gltf-binary" else "invalid_image_import",
+                    "code": (
+                        "invalid_glb_import" if media_type == "model/gltf-binary"
+                        else "invalid_video_import" if media_type in VIDEO_MEDIA_TYPES
+                        else "invalid_image_import"
+                    ),
                     "message": str(exc)[:300],
                 },
             ) from exc

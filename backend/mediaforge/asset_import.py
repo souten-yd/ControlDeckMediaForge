@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import shutil
+import subprocess
+from fractions import Fraction
 import uuid
 from pathlib import Path
 
@@ -25,10 +28,171 @@ class AssetImportError(ValueError):
     pass
 
 
+VIDEO_MEDIA_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
+# 動画の上限は画像と分ける。実測: 640x384 の 15 秒（360 フレーム）で 17.2 MB。
+# 余裕を見て 4 倍に置く。artifact の 64 MiB とは別の理由で決まる値である。
+MAX_VIDEO_IMPORT_BYTES = 96 * 1024 * 1024
+_VIDEO_TOOL_TIMEOUT_SEC = 600
+
+
 def import_asset_bytes(store: Store, content: bytes, *, purpose: str, media_type: str | None = None) -> Asset:
     if media_type == "model/gltf-binary":
         return import_glb_asset(store, content, purpose=purpose)
+    if media_type in VIDEO_MEDIA_TYPES:
+        return import_video_asset(store, content, purpose=purpose, media_type=media_type)
     return import_image_asset(store, content, purpose=purpose)
+
+
+def _probe_video(path: Path) -> dict[str, Any]:
+    """中身が本当に動画かを確かめ、寸法と尺を読む。
+
+    worker の FFmpeg 実装は import しない（AGENTS.md）。呼ぶのは system の
+    binary で、配列引数・timeout 付きである。
+    """
+    completed = subprocess.run(
+        [
+            "/usr/bin/ffprobe", "-v", "error", "-show_streams", "-show_format",
+            "-of", "json", str(path),
+        ],
+        check=False, capture_output=True, timeout=_VIDEO_TOOL_TIMEOUT_SEC,
+    )
+    if completed.returncode != 0:
+        raise AssetImportError("video import is not decodable")
+    try:
+        document = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise AssetImportError("video import is not decodable") from exc
+    streams = [s for s in document.get("streams", []) if s.get("codec_type") == "video"]
+    if len(streams) != 1:
+        raise AssetImportError("video import must carry exactly one video stream")
+    video = streams[0]
+    try:
+        width, height = int(video["width"]), int(video["height"])
+        duration = float(document["format"]["duration"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise AssetImportError("video import has no usable dimensions or duration") from exc
+    if width < 16 or height < 16 or width * height > MAX_IMPORT_PIXELS:
+        raise AssetImportError("video import dimensions are out of bounds")
+    if not 0 < duration <= 300:
+        raise AssetImportError("video import must be between 0 and 300 seconds")
+    rate = str(video.get("avg_frame_rate") or video.get("r_frame_rate") or "0/1")
+    try:
+        frame_rate = float(Fraction(rate))
+    except (ValueError, ZeroDivisionError):
+        frame_rate = 0.0
+    if not 0 < frame_rate <= 120:
+        raise AssetImportError("video import frame rate is out of bounds")
+    return {
+        "width": width, "height": height,
+        "duration_sec": duration, "frame_rate": frame_rate,
+        "codec": str(video.get("codec_name") or ""),
+        "audio": any(s.get("codec_type") == "audio" for s in document.get("streams", [])),
+    }
+
+
+def import_video_asset(
+    store: Store, content: bytes, *, purpose: str, media_type: str | None = None
+) -> Asset:
+    """取り込んだ動画を、どの端末でも再生できる 1 つの形に揃えて登録する。
+
+    駆動系は webm/vp8 を書くものもあるが、iOS はそれを再生しない。取り込んだ
+    ものをそのまま置くと、作った端末でだけ見える asset ができる。h264/aac の
+    mp4 へ揃えるのは、見られないものを library に置かないためである。
+    """
+    if purpose != "source":
+        raise AssetImportError("video import purpose must be source")
+    if not content or len(content) > MAX_VIDEO_IMPORT_BYTES:
+        raise AssetImportError("video import must be between 1 byte and 96 MiB")
+
+    job = store.create_job(JobRequest(
+        operation="media.inspect", intent="Import local video asset",
+    ))
+    work_root = contained(store.work_dir, store.work_dir / job.id)
+    try:
+        work_root.mkdir(mode=0o700)
+        source = contained(work_root, work_root / "source.bin")
+        source.write_bytes(content)
+        probed = _probe_video(source)
+        normalized = contained(work_root, work_root / "normalized.mp4")
+        completed = subprocess.run(
+            [
+                "/usr/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+                "-i", str(source),
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                *(("-c:a", "aac") if probed["audio"] else ("-an",)),
+                str(normalized),
+            ],
+            check=False, capture_output=True, timeout=_VIDEO_TOOL_TIMEOUT_SEC,
+        )
+        if completed.returncode != 0 or not normalized.is_file() or normalized.stat().st_size <= 0:
+            raise AssetImportError("video import could not be normalized")
+        final = _probe_video(normalized)
+        digest = hashlib.sha256(normalized.read_bytes()).hexdigest()
+        now = utc_now()
+        asset_id = f"asset_{uuid.uuid4().hex}"
+        provenance_id = f"prov_{uuid.uuid4().hex}"
+        asset = Asset(
+            id=asset_id,
+            job_id=job.id,
+            parent_asset_ids=[],
+            mime_type="video/mp4",
+            width=final["width"],
+            height=final["height"],
+            duration_sec=final["duration_sec"],
+            frame_rate=final["frame_rate"],
+            size_bytes=normalized.stat().st_size,
+            sha256=digest,
+            suggested_filename=f"media-forge-import-{asset_id[6:14]}.mp4",
+            provenance_id=provenance_id,
+            created_at=now,
+        )
+        provenance = Provenance(
+            id=provenance_id,
+            asset_id=asset_id,
+            parent_asset_ids=[],
+            operation="asset.import",
+            intent=job.request.intent,
+            model_id="media-forge/local-import",
+            model_version="1.0.0",
+            weights_hash="sha256:" + "0" * 64,
+            license="user-provided",
+            runtime_adapter="deterministic.video-import",
+            runtime_version="1.0.0",
+            tool_versions={"media-forge": __version__, "ffmpeg.normalize": "1.0.0"},
+            seed=0,
+            parameters={
+                "purpose": purpose,
+                "source_size_bytes": len(content),
+                "source_media_type": media_type or "",
+                "source_codec": probed["codec"],
+            },
+            reference_asset_hashes={},
+            postprocessing=["ffmpeg.normalize.mp4"],
+            validation=[{
+                "validator": "video.normalized",
+                "status": "passed",
+                "width": final["width"],
+                "height": final["height"],
+                "duration_sec": final["duration_sec"],
+                "frame_rate": final["frame_rate"],
+            }],
+            warnings=[],
+            output_sha256=digest,
+            created_at=now,
+        )
+        store.register_asset(asset, provenance, normalized)
+        store.update_job(job.id, status=JobStatus.SUCCEEDED, progress=1, asset_ids=[asset.id])
+        return asset
+    except Exception as exc:
+        store.update_job(
+            job.id,
+            status=JobStatus.FAILED,
+            error=ErrorDetail(code="asset_import_failed", message=str(exc)[:300]),
+        )
+        raise
+    finally:
+        if work_root.exists():
+            shutil.rmtree(work_root)
 
 
 def import_image_asset(store: Store, content: bytes, *, purpose: str) -> Asset:
