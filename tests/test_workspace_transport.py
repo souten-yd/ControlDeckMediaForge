@@ -1090,3 +1090,48 @@ def test_the_workspace_document_is_compressed(tmp_path: Path):
     assert packed.headers.get("content-encoding") == "gzip"
     # 畳んだ分がそのまま効く。半分以下にならないなら効いていない。
     assert int(packed.headers["content-length"]) * 2 < len(plain.content)
+
+
+def test_an_imported_clip_is_normalized_so_every_device_can_play_it(tmp_path: Path):
+    """駆動系は webm/vp8 を書くものもあるが、iOS はそれを再生しない。
+
+    取り込んだものをそのまま置くと、作った端末でだけ見える asset ができる。
+    library に置くものは見られる形に揃える。
+    """
+    import subprocess
+
+    from mediaforge.asset_import import import_video_asset
+
+    source = tmp_path / "clip.webm"
+    built = subprocess.run(
+        [
+            "/usr/bin/ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc=size=128x96:rate=12:duration=1",
+            "-c:v", "libvpx", "-pix_fmt", "yuv420p", str(source),
+        ],
+        check=False, capture_output=True, timeout=120,
+    )
+    if built.returncode != 0:
+        pytest.skip("ffmpeg cannot build a webm fixture here")
+
+    client, _headers, _state = host_client(tmp_path / "instance", token="valid-user")
+    with client:
+        store = client.app.state.store
+        asset = import_video_asset(store, source.read_bytes(), purpose="source",
+                                   media_type="video/webm")
+
+        assert asset.mime_type == "video/mp4"
+        assert asset.width == 128 and asset.height == 96
+        assert asset.duration_sec and asset.duration_sec > 0
+        assert asset.frame_rate and asset.frame_rate > 0
+        # 取り込んだ中間物を残さない。
+        assert list(store.work_dir.iterdir()) == []
+
+    # 中身が動画でないものは、枠だけ作って通さない。
+    from mediaforge.asset_import import AssetImportError
+
+    client2, _h2, _s2 = host_client(tmp_path / "other", token="valid-user")
+    with client2:
+        with pytest.raises(AssetImportError):
+            import_video_asset(client2.app.state.store, b"not a clip", purpose="source",
+                               media_type="video/mp4")
