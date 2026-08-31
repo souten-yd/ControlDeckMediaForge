@@ -1263,7 +1263,9 @@ def test_the_video_cost_is_shown_before_it_is_spent():
     assert "function videoCostSeconds()" in SCRIPT
     cost = SCRIPT[SCRIPT.index("function videoCostSeconds()"):SCRIPT.index("function renderVideoSettings()")]
     assert "area * area" in cost, "面積は二乗で効く"
-    assert "videoFrames() / base.frames" in cost
+    # 1 点からの比例では、読み込みの固定費が大きいモデルで大きく外れる。
+    assert "profile.fixed_sec" in cost and "profile.per_frame_sec" in cost
+    assert "perFrame * videoFrames() * area * area" in cost
     # 目安はモデルごとの実測から出す。共通の 1 つに丸めない。
     assert "Number(chosen?.measured_runtime_sec)" in SCRIPT
     # 初回はモデルの読み込みが乗る。触れずに済ませない。

@@ -322,6 +322,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         if not isinstance(video, dict) or set(video) - {
             "fps", "frame_step", "frame_min", "frame_max", "sizes",
             "measured_width", "measured_height", "measured_frames",
+            "fixed_sec", "per_frame_sec",
         }:
             raise ModelRegistryError("model registry video options are invalid")
         for key in ("fps", "frame_step", "frame_min", "frame_max"):
@@ -329,6 +330,16 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
             bound = video.get(key)
             if bound is not None and (
                 isinstance(bound, bool) or not isinstance(bound, int) or not 1 <= bound <= 600
+            ):
+                raise ModelRegistryError("model registry video options are invalid")
+        # 目安時間は 1 点からの比例では出せない。読み込みの固定費が大きく、
+        # 短い clip では比例が過小に、長い clip では過大になる。実測から
+        # 固定費と 1 フレーム単価に分けて持つ。
+        for key in ("fixed_sec", "per_frame_sec"):
+            cost = video.get(key)
+            if cost is not None and (
+                isinstance(cost, bool) or not isinstance(cost, (int, float))
+                or not 0 <= cost <= 3600
             ):
                 raise ModelRegistryError("model registry video options are invalid")
         sizes = video.get("sizes")
