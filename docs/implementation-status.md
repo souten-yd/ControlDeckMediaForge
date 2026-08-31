@@ -6562,3 +6562,49 @@ MiniMax 指定  画質 640×384 / 長さ 0..44（1 刻み）→ 0.2 秒 / 送信
 `kind` や `base_model` で以前起きたのと同じ形である。
 
 `./mf.sh test` 797 passed、`git diff --check` PASS。
+
+## 最長の長さが誤っていた／FastH3 LoRA は当たらない（2026-08-31）
+
+利用者から「最大でも 5.1 秒、H3 は 2 秒と表示されるが、生成最大時間は正しいか」との指摘。
+表示は私が入れた値どおりだったが、その値が上流の定義と合っていなかった。
+
+```text
+Wan 2.1 T2V   81 フレーム / 16fps = 5.06 秒   diffusers の既定と一致。正しかった
+Wan 2.2 TI2V  上流 wan/configs/wan_ti2v_5B.py の frame_num = 121 / 24fps = 5.04 秒
+              入れていたのは 81（3.4 秒）。低すぎた
+MiniMax H3    sd.cpp のドキュメントが 3 例とも --video-frames 56（24fps で 2.33 秒）
+              入れていたのは 49（2.0 秒）。根拠のない当て推量だった
+```
+
+上流の定義に合わせて直した。H3 はモデル自体が 15 秒まで作れると公表されているが、
+この駆動系での上限は未確認なので、ドキュメントが実際に使っている 56 を上限に置く。
+
+### FastH3 / Turbo LoRA は現在の駆動系に当たらない
+
+利用者の「MiniMax H3 Flash は使えるか」を調べた。MiniMax の Fast H3 v1（2026-08-29 発表）は
+NVIDIA Blackwell 上で約 14 倍という数字で、重みの配布形態も技術報告も未公開である。
+一方 open weight 側では高速化 LoRA として実物が出ている。
+
+```text
+lightx2v/Minimax-h3-Turbo          4step / 8step、Apache-2.0、DL 884,976
+alibaba-pai/MiniMax-H3-Acc-LoRAs   8step、other
+drozbay/MiniMax-H3-FastH3-Preview-LoRA  FastH3 preview、other
+```
+
+`sd-cli` は `--lora-model-dir` を持つので、当てられるはずだった。Apache-2.0 の
+`minimax_h3_fl2v_turbo_4step_v1.1_768p_bf16.safetensors`（1,383,677,808 B）を取得して
+実機で試した結果、**当たらなかった**。
+
+```text
+[WARN] Only (0 / 600) LoRA tensors have been applied
+unused lora tensor |lora.model.diffusion_model.transformer_blocks.22.attn.to_out.0.weight.lora_down|
+4 歩 LoRA なし  63.12 秒
+4 歩 LoRA あり  89.31 秒（1.38 GB を読んで 0 個適用。遅くなるだけ）
+```
+
+テンソル名の規約が gguf 側と噛み合わない。ComfyUI 版も同じ系統の命名なので見込みは薄い。
+
+なお H3 は読み込みが支配的で、1 歩 57 秒に対し 4 歩 63 秒（1 歩あたり約 2 秒）である。
+仮に LoRA が当たっても、速度への効きは小さい。効くのは低歩数での品質の方である。
+
+`./mf.sh test` 797 passed。
