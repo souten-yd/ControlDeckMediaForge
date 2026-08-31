@@ -394,7 +394,7 @@
           "fps": 24,
           "frame_step": 4,
           "frame_min": 9,
-          "frame_max": 81,
+          "frame_max": 121,
           "sizes": [
             [
               384,
@@ -1427,7 +1427,7 @@
           "fps": 24,
           "frame_step": 1,
           "frame_min": 5,
-          "frame_max": 49,
+          "frame_max": 56,
           "sizes": [
             [
               640,
