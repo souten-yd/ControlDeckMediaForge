@@ -3033,18 +3033,29 @@ function videoFrames() {
 }
 
 /* 目安時間。面積は二乗、フレーム数は比例で効く。 */
+/* 目安時間。1 点からの比例では出せない。読み込みの固定費が大きいので、短い
+   clip では比例が過小に、長い clip では過大になる。実測から固定費と 1 フレーム
+   単価に分けて持ち、面積の効き（注意機構は二乗）だけを掛ける。
+
+   H3 の実測（640x384・4 歩）: 5 フレーム 63.1 秒 / 121 フレーム 594.7 秒 /
+   360 フレーム 1889.5 秒。比例だけで出すと 15 秒の clip を 3 時間と言い、
+   使えない案内になる。 */
 function videoCostSeconds() {
   const profile = videoProfile();
   const chosen = chosenBaseModel();
   const quality = videoChoice(videoSizes(), state.videoQuality);
-  const base = {
-    width: profile.measured_width || VIDEO_FALLBACK.measured_width,
-    height: profile.measured_height || VIDEO_FALLBACK.measured_height,
-    frames: profile.measured_frames || VIDEO_FALLBACK.measured_frames,
-    seconds: Number(chosen?.measured_runtime_sec) || VIDEO_BASELINE.seconds,
-  };
-  const area = (quality.width * quality.height) / (base.width * base.height);
-  return base.seconds * area * area * (videoFrames() / base.frames);
+  const width = profile.measured_width || VIDEO_FALLBACK.measured_width;
+  const height = profile.measured_height || VIDEO_FALLBACK.measured_height;
+  const area = (quality.width * quality.height) / (width * height);
+  const fixed = Number(profile.fixed_sec);
+  const perFrame = Number(profile.per_frame_sec);
+  if (Number.isFinite(fixed) && Number.isFinite(perFrame)) {
+    return fixed + perFrame * videoFrames() * area * area;
+  }
+  // 単価を持たないモデルは、1 点からの比例で出すしかない。
+  const frames = profile.measured_frames || VIDEO_FALLBACK.measured_frames;
+  const seconds = Number(chosen?.measured_runtime_sec) || VIDEO_BASELINE.seconds;
+  return seconds * area * area * (videoFrames() / frames);
 }
 
 function renderVideoSettings() {

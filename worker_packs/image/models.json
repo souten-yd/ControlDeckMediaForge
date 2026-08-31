@@ -411,7 +411,9 @@
           ],
           "measured_width": 384,
           "measured_height": 256,
-          "measured_frames": 33
+          "measured_frames": 33,
+          "fixed_sec": 20.0,
+          "per_frame_sec": 2.4
         }
       }
     },
@@ -922,7 +924,9 @@
           ],
           "measured_width": 512,
           "measured_height": 320,
-          "measured_frames": 33
+          "measured_frames": 33,
+          "fixed_sec": 25.0,
+          "per_frame_sec": 3.6
         }
       }
     },
@@ -1422,12 +1426,12 @@
       "runtime_options": {
         "native_width": 640,
         "native_height": 384,
-        "default_steps": 1,
+        "default_steps": 4,
         "video": {
           "fps": 24,
           "frame_step": 1,
           "frame_min": 5,
-          "frame_max": 56,
+          "frame_max": 360,
           "sizes": [
             [
               640,
@@ -1444,7 +1448,9 @@
           ],
           "measured_width": 640,
           "measured_height": 384,
-          "measured_frames": 5
+          "measured_frames": 5,
+          "fixed_sec": 40.0,
+          "per_frame_sec": 5.0
         }
       }
     }
