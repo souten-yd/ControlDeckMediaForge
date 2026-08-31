@@ -189,7 +189,9 @@ def test_minimax_h3_gguf_composite_bundle_is_bounded_and_pinned() -> None:
     # 宣言に rocm が無いと、測ってあっても routing の候補にならない。
     assert model.hardware_backends == ("cuda", "rocm")
     assert model.state == "available"
-    assert model.measured_runtime_sec == 149.28
+    # 評価は 1 歩で測る（動くかを見るため）。lease へ申告するのは実用の設定で
+    # 測った値である。2026-08-31 実測: 640x384・121 フレーム・20 歩で 2647.52 秒。
+    assert model.measured_runtime_sec == 2647.52
 
 
 def test_unmeasured_video_candidates_cannot_route_on_r9700() -> None:
