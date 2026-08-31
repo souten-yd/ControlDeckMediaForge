@@ -3040,6 +3040,18 @@ function videoFrames() {
    H3 の実測（640x384・4 歩）: 5 フレーム 63.1 秒 / 121 フレーム 594.7 秒 /
    360 フレーム 1889.5 秒。比例だけで出すと 15 秒の clip を 3 時間と言い、
    使えない案内になる。 */
+/* いま使う歩数。詳細で指定していればそれ、無ければモデルの既定。
+   既定は駆動系が要求する値であって、測定に使った値ではない。 */
+function videoSteps() {
+  const field = byId("advanced-video-steps");
+  if (field && field.value !== "") {
+    const value = Number(field.value);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  const chosen = chosenBaseModel();
+  return Number(chosen?.generation?.steps) || Number(videoProfile().measured_steps) || 20;
+}
+
 function videoCostSeconds() {
   const profile = videoProfile();
   const chosen = chosenBaseModel();
@@ -3050,7 +3062,11 @@ function videoCostSeconds() {
   const fixed = Number(profile.fixed_sec);
   const perFrame = Number(profile.per_frame_sec);
   if (Number.isFinite(fixed) && Number.isFinite(perFrame)) {
-    return fixed + perFrame * videoFrames() * area * area;
+    // 歩数を無視すると、既定より多く回したときに大きく外れる。実測では
+    // H3 の 1 歩が 7.2 秒あり、4 歩と 20 歩で所要が 3 倍近く違った。
+    const measuredSteps = Number(profile.measured_steps) || 1;
+    const steps = Number(videoSteps()) || measuredSteps;
+    return fixed + perFrame * videoFrames() * area * area * (steps / measuredSteps);
   }
   // 単価を持たないモデルは、1 点からの比例で出すしかない。
   const frames = profile.measured_frames || VIDEO_FALLBACK.measured_frames;

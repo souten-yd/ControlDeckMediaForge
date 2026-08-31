@@ -413,7 +413,8 @@
           "measured_height": 256,
           "measured_frames": 33,
           "fixed_sec": 20.0,
-          "per_frame_sec": 2.4
+          "per_frame_sec": 2.4,
+          "measured_steps": 30
         }
       }
     },
@@ -926,7 +927,8 @@
           "measured_height": 320,
           "measured_frames": 33,
           "fixed_sec": 25.0,
-          "per_frame_sec": 3.6
+          "per_frame_sec": 3.6,
+          "measured_steps": 30
         }
       }
     },
@@ -1421,12 +1423,12 @@
         "execution_peak_vram_bytes": 14763892736,
         "cold_load_peak_vram_bytes": 14763892736,
         "headroom_vram_bytes": 1073741824,
-        "measured_runtime_sec": 149.28
+        "measured_runtime_sec": 2647.52
       },
       "runtime_options": {
         "native_width": 640,
         "native_height": 384,
-        "default_steps": 4,
+        "default_steps": 20,
         "video": {
           "fps": 24,
           "frame_step": 1,
@@ -1448,9 +1450,10 @@
           ],
           "measured_width": 640,
           "measured_height": 384,
-          "measured_frames": 5,
-          "fixed_sec": 40.0,
-          "per_frame_sec": 5.0
+          "measured_frames": 121,
+          "fixed_sec": 71.2,
+          "per_frame_sec": 21.29,
+          "measured_steps": 20
         }
       }
     }

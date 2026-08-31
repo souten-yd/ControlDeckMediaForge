@@ -322,10 +322,10 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         if not isinstance(video, dict) or set(video) - {
             "fps", "frame_step", "frame_min", "frame_max", "sizes",
             "measured_width", "measured_height", "measured_frames",
-            "fixed_sec", "per_frame_sec",
+            "fixed_sec", "per_frame_sec", "measured_steps",
         }:
             raise ModelRegistryError("model registry video options are invalid")
-        for key in ("fps", "frame_step", "frame_min", "frame_max"):
+        for key in ("fps", "frame_step", "frame_min", "frame_max", "measured_steps"):
             # 外側の value は model の中身そのものである。潰さない。
             bound = video.get(key)
             if bound is not None and (
