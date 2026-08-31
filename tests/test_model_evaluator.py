@@ -1063,6 +1063,8 @@ def test_the_measurement_is_read_from_the_result_that_is_kept(tmp_path: Path) ->
     })
 
     assert recorded["model_id"] == model.model_id
+    # 出荷 manifest に実測が無いモデルなので、probe の時間で埋まる。
+    assert model.measured_runtime_sec is None
     assert recorded["values"]["measured_runtime_sec"] == 149.28
     assert recorded["values"]["execution_peak_vram_bytes"] == 14_763_892_736
 
@@ -1070,6 +1072,34 @@ def test_the_measurement_is_read_from_the_result_that_is_kept(tmp_path: Path) ->
     recorded.clear()
     service._record_native_measurement(model, {"elapsed_sec": 0, "peak_vram_bytes": 0})
     assert recorded == {}
+
+
+def test_the_probe_does_not_overwrite_a_measured_runtime(tmp_path: Path) -> None:
+    """評価が測った時間で、実用の設定の実測を潰さない。
+
+    評価は 1 歩 5 フレームで回す。動くかを見るための最小の実行であって、
+    実用の設定で払う時間ではない。overlay は manifest の measurements を
+    丸ごと置き換えるため、時間の欄まで probe の値で埋めると出荷の実測が
+    消える。実機では H3 の 158 秒（1 歩）が 2647.52 秒（20 歩 121 フレーム）を
+    上書きし、lease はその 17 分の 1 で確保されていた。
+    """
+    recorded: dict[str, Any] = {}
+    service = image_evaluator(tmp_path, FakeHost(), {})
+    service.record_measurement = lambda model_id, values: recorded.update(
+        {"model_id": model_id, "values": values}
+    )
+    measured = replace(
+        image_descriptor(tmp_path / "image-snapshot"), measured_runtime_sec=2647.52
+    )
+
+    service._record_native_measurement(measured, {
+        "elapsed_sec": 158.409,
+        "peak_vram_bytes": 14_614_740_992,
+    })
+
+    # VRAM は probe が測ったもの。時間は出荷の実測が残る。
+    assert recorded["values"]["execution_peak_vram_bytes"] == 14_614_740_992
+    assert recorded["values"]["measured_runtime_sec"] == 2647.52
 
 
 def test_a_native_evaluation_keeps_what_it_measured(tmp_path: Path) -> None:
