@@ -8,7 +8,7 @@ host never has to retain UMT5 while loading the diffusion model.
 """
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import os
 from pathlib import Path
@@ -247,7 +247,10 @@ def _generate(
     }
 
 
-def _run(snapshot: Path, work_root: Path, output: Path, preset_name: str) -> None:
+def _run(
+    snapshot: Path, work_root: Path, output: Path, preset_name: str,
+    overrides: dict[str, int] | None = None,
+) -> None:
     work_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     work = _contained(work_root, output.parent)
     embeddings = _contained(work, work / "prompt.safetensors")
@@ -259,7 +262,13 @@ def _run(snapshot: Path, work_root: Path, output: Path, preset_name: str) -> Non
         ("encode", ["--output", str(embeddings)], 600),
         (
             "generate",
-            ["--embeddings", str(embeddings), "--output", str(output), "--preset", preset_name],
+            [
+                "--embeddings", str(embeddings), "--output", str(output),
+                "--preset", preset_name,
+                # 上書きは生成の段だけに効く。符号化は文章だけを見るので関係ない。
+                *[arg for key, value in (overrides or {}).items()
+                  for arg in (f"--{key}", str(value))],
+            ],
             1800,
         ),
     ):
@@ -290,6 +299,12 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--embeddings", type=Path)
     parser.add_argument("--preset", choices=tuple(PRESETS), default="smoke")
+    # preset は評価用の決め打ちである。本番は利用者が選んだ寸法と長さで作るので、
+    # 上書きできるようにする。preset へ丸めると、頼んだものと違う長さが返る。
+    parser.add_argument("--width", type=int, default=0)
+    parser.add_argument("--height", type=int, default=0)
+    parser.add_argument("--frames", type=int, default=0)
+    parser.add_argument("--steps", type=int, default=0)
     return parser.parse_args()
 
 
@@ -299,8 +314,16 @@ def main() -> None:
     work_root = args.work_root.resolve(strict=True)
     output = _contained(work_root, args.output)
     preset = PRESETS[args.preset]
+    overrides = {
+        key: value for key, value in (
+            ("width", args.width), ("height", args.height),
+            ("frames", args.frames), ("steps", args.steps),
+        ) if value > 0
+    }
+    if overrides:
+        preset = replace(preset, **overrides)
     if args.mode == "run":
-        _run(snapshot, work_root, output, args.preset)
+        _run(snapshot, work_root, output, args.preset, overrides)
     elif args.mode == "encode":
         print(json.dumps(_encode(snapshot, output), sort_keys=True))
     else:

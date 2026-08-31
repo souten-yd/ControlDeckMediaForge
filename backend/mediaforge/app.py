@@ -503,6 +503,9 @@ def create_app(
                 # 測れることと使えることは別。走らせる worker が居ないモデルは、
             # 評価しても選べるようにはならない。画面がそれを言えるようにする。
             "has_runtime": is_runnable(item.runtime_adapter),
+            # 動画の作り方はモデルごとに違う。画面が共通の決め打ちを持つと、
+            # どれかのモデルで「選べるのに作れない」値を出すことになる。
+            **({"video": dict(item.video)} if item.video else {}),
             "supports_lora": item.supports_lora,
                 "max_references": item.max_references,
                 "reference_roles": list(item.reference_roles),

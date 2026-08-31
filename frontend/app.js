@@ -414,6 +414,11 @@ async function standaloneCall(method, params) {
       // 載せられるかどうかも判定できなくなる。
       kind: model.kind || "model", base_model: model.base_model || "",
       trigger_words: model.trigger_words || [],
+      // 動画の作り方と実行環境の有無も落とさない。落とすと、どのモデルを
+      // 選んでも同じ選択肢が出て、実行環境の無いものが一覧に残る。
+      video: model.video || null, has_runtime: model.has_runtime !== false,
+      measured_runtime_sec: model.measured_runtime_sec ?? null,
+      measured_vram_bytes: model.measured_vram_bytes ?? null,
       max_references: model.max_references || 0,
       reference_roles: model.reference_roles || [],
       supports_reference_strength: model.supports_reference_strength || false,
@@ -2966,28 +2971,80 @@ function chosenBaseModel() {
    面積は注意機構に効くので二乗で重くなる。長さはフレーム数に比例する。
    実測（R9700 / Wan 2.1 T2V 1.3B）: 512x320 33 フレーム 30 歩で生成 144.6 秒。
    目安時間はその実測から比例で出す。当たらないと分かっている数字は出さない。 */
-const VIDEO_QUALITY = [
-  {id: "standard", label: "標準", width: 512, height: 320},
-  {id: "wide", label: "横長", width: 640, height: 384},
-  {id: "square", label: "正方形", width: 448, height: 448},
-];
-const VIDEO_LENGTH = [
-  {id: "short", label: "2秒", frames: 33},
-  {id: "medium", label: "3秒", frames: 49},
-  {id: "long", label: "5秒", frames: 81},
-];
-const VIDEO_BASELINE = {width: 512, height: 320, frames: 33, seconds: 144.64};
+/* 画質と長さはモデルが決める。共通の決め打ちを持つと、どれかのモデルで
+   「選べるのに作れない」値を出すことになる。カタログの実測プロファイルを読み、
+   持たないモデルには最初に測った Wan 2.1 T2V の値を当てる。 */
+const VIDEO_FALLBACK = {
+  fps: 16, frame_step: 4, frame_min: 9, frame_max: 81,
+  sizes: [[512, 320], [640, 384], [448, 448]],
+  measured_width: 512, measured_height: 320, measured_frames: 33,
+};
+
+function videoProfile() {
+  const chosen = chosenBaseModel();
+  if (chosen && chosen.video) return chosen.video;
+  const usable = imageBaseModels().find((model) => model.video);
+  return usable ? usable.video : VIDEO_FALLBACK;
+}
+
+/* 寸法には名前を付ける。640×384 を「欲しくて」選ぶ人はいない。 */
+function videoQualityLabel(width, height, index) {
+  if (width === height) return "正方形";
+  return index === 0 ? "標準" : (width > height * 1.5 ? "横長" : "大きめ");
+}
+
+function videoSizes() {
+  const sizes = videoProfile().sizes || VIDEO_FALLBACK.sizes;
+  return sizes.map(([width, height], index) => ({
+    id: `${width}x${height}`,
+    label: videoQualityLabel(width, height, index),
+    width, height,
+  }));
+}
+/* 長さは連続に選ばせる。ただしモデルが受け付ける値は飛び飛びで、Wan は
+   「4 の倍数 + 1」フレームしか取らない（外すと diffusers が黙って丸める。
+   頼んだ長さと返る長さが食い違う）。刻みをその並びに合わせ、選べない値を
+   持たせない。上限は Wan の既定である 81 フレーム。 */
+const VIDEO_FRAME_STEP = 4;
+
+function videoFrameChoices() {
+  const profile = videoProfile();
+  const step = profile.frame_step || VIDEO_FALLBACK.frame_step;
+  const first = profile.frame_min || VIDEO_FALLBACK.frame_min;
+  const last = profile.frame_max || VIDEO_FALLBACK.frame_max;
+  const frames = [];
+  for (let value = first; value <= last; value += step) frames.push(value);
+  return frames;
+}
+const VIDEO_BASELINE = {width: 512, height: 320, frames: 33, seconds: 144.64, fps: 16};
 
 function videoChoice(list, chosen) {
   return list.find((item) => item.id === chosen) || list[0];
 }
 
+/* いま選ばれているフレーム数。既定は 2 秒ぶん（33）に一番近い刻み。 */
+function videoFrames() {
+  const choices = videoFrameChoices();
+  const wanted = Number(state.videoFrames) || videoProfile().measured_frames || 33;
+  return choices.includes(wanted)
+    ? wanted
+    : choices.reduce((best, item) =>
+        Math.abs(item - wanted) < Math.abs(best - wanted) ? item : best);
+}
+
 /* 目安時間。面積は二乗、フレーム数は比例で効く。 */
 function videoCostSeconds() {
-  const quality = videoChoice(VIDEO_QUALITY, state.videoQuality);
-  const length = videoChoice(VIDEO_LENGTH, state.videoLength);
-  const area = (quality.width * quality.height) / (VIDEO_BASELINE.width * VIDEO_BASELINE.height);
-  return VIDEO_BASELINE.seconds * area * area * (length.frames / VIDEO_BASELINE.frames);
+  const profile = videoProfile();
+  const chosen = chosenBaseModel();
+  const quality = videoChoice(videoSizes(), state.videoQuality);
+  const base = {
+    width: profile.measured_width || VIDEO_FALLBACK.measured_width,
+    height: profile.measured_height || VIDEO_FALLBACK.measured_height,
+    frames: profile.measured_frames || VIDEO_FALLBACK.measured_frames,
+    seconds: Number(chosen?.measured_runtime_sec) || VIDEO_BASELINE.seconds,
+  };
+  const area = (quality.width * quality.height) / (base.width * base.height);
+  return base.seconds * area * area * (videoFrames() / base.frames);
 }
 
 function renderVideoSettings() {
@@ -3007,15 +3064,29 @@ function renderVideoSettings() {
       return chip;
     }));
   };
-  draw(byId("video-quality"), VIDEO_QUALITY, videoChoice(VIDEO_QUALITY, state.videoQuality).id,
+  draw(byId("video-quality"), videoSizes(), videoChoice(videoSizes(), state.videoQuality).id,
        (id) => { state.videoQuality = id; });
-  draw(byId("video-length"), VIDEO_LENGTH, videoChoice(VIDEO_LENGTH, state.videoLength).id,
-       (id) => { state.videoLength = id; });
-  const quality = videoChoice(VIDEO_QUALITY, state.videoQuality);
-  const length = videoChoice(VIDEO_LENGTH, state.videoLength);
+  if (!byId("video-length-slider").dataset.wired) {
+    // 描き直すたびに購読を積むと、1 回動かしただけで何度も反応する。
+    byId("video-length-slider").dataset.wired = "1";
+    byId("video-length-slider").addEventListener("input", (event) => {
+      state.videoFrames = videoFrameChoices()[Number(event.target.value)];
+      renderVideoSettings();
+    });
+  }
+  const choices = videoFrameChoices();
+  const slider = byId("video-length-slider");
+  slider.min = "0";
+  slider.max = String(choices.length - 1);
+  slider.value = String(choices.indexOf(videoFrames()));
+  const fps = videoProfile().fps || VIDEO_FALLBACK.fps;
+  const seconds = videoFrames() / fps;
+  slider.setAttribute("aria-valuetext", `${seconds.toFixed(1)}秒`);
+  byId("video-length-value").textContent = `${seconds.toFixed(1)}秒`;
+  const quality = videoChoice(videoSizes(), state.videoQuality);
   const minutes = videoCostSeconds() / 60;
   byId("video-cost").textContent =
-    `${quality.width}×${quality.height} / ${length.frames} フレーム。`
+    `${quality.width}×${quality.height} / ${videoFrames()} フレーム。`
     + `作るのにおよそ ${minutes < 1 ? "1 分未満" : `${Math.round(minutes)} 分`}かかります。`
     + "初回はモデルの読み込みに 3 分ほど足してください。";
 }
@@ -3023,10 +3094,10 @@ function renderVideoSettings() {
 /* 画面が送る値。指定していないものは送らない。埋めるのは backend の役目で、
    選ばれたモデル本来の設定から決まる。 */
 function videoConstraints() {
-  const quality = videoChoice(VIDEO_QUALITY, state.videoQuality);
-  const length = videoChoice(VIDEO_LENGTH, state.videoLength);
+  const quality = videoChoice(videoSizes(), state.videoQuality);
   const constraints = {
-    width: quality.width, height: quality.height, frames: length.frames,
+    width: quality.width, height: quality.height, frames: videoFrames(),
+    fps: videoProfile().fps || VIDEO_FALLBACK.fps,
   };
   const advanced = {
     steps: byId("advanced-video-steps"),
@@ -5454,6 +5525,11 @@ byId("model-choice-model").addEventListener("change", () => {
   const dropped = dropIncompatibleLoras();
   renderModelChoice();
   renderLoraPicker();
+  // 画質と長さはモデルが決める。選び直したら作り直す。前のモデルの寸法を
+  // 残すと、選べるのに作れない値が画面に残る。
+  state.videoQuality = null;
+  state.videoFrames = null;
+  renderVideoSettings();
   renderModelSettings();
   clearError();
   if (dropped) {

@@ -106,7 +106,11 @@
               <p class="section-label">画質</p>
               <div id="video-quality" class="chips" role="radiogroup" aria-label="画質"></div>
               <p class="section-label">長さ</p>
-              <div id="video-length" class="chips" role="radiogroup" aria-label="長さ"></div>
+              <div id="video-length" class="length-row">
+                <input id="video-length-slider" type="range" min="0" max="0" step="1"
+                       aria-label="長さ">
+                <span id="video-length-value" class="length-value"></span>
+              </div>
               <p id="video-cost" class="hint" role="status"></p>
             </div>
 

@@ -1224,8 +1224,20 @@ def test_video_can_be_set_up_without_leaving_the_simple_screen():
     選べない状態だった。段階開示は「簡単にするために削る」ことではない。
     """
     assert 'id="video-settings"' in MARKUP
-    for element in ('id="video-quality"', 'id="video-length"', 'id="video-cost"'):
+    for element in (
+        'id="video-quality"', 'id="video-length-slider"', 'id="video-cost"',
+    ):
         assert element in MARKUP, element
+    # 長さは決め打ちの数個ではなく連続で選ばせる。ただしモデルが取る値は
+    # 飛び飛びなので、刻みはモデルの実測プロファイルから採る。
+    assert "function videoFrameChoices()" in SCRIPT
+    assert "profile.frame_step" in SCRIPT
+    # 画質も同じ。共通の決め打ちを持つと、どれかのモデルで作れない値が出る。
+    assert "function videoSizes()" in SCRIPT
+    assert "function videoProfile()" in SCRIPT
+    assert "chosen.video" in SCRIPT
+    # モデルを選び直したら選択肢を作り直す。前のモデルの寸法を残さない。
+    assert "state.videoQuality = null;" in SCRIPT
     # 使うモデルは媒体を問わず出す。画像専用にすると動画で選べなくなる。
     choice = MARKUP[MARKUP.index('id="model-choice"'):MARKUP.index('id="model-choice-note"')]
     assert "data-image-create" not in choice
@@ -1251,7 +1263,8 @@ def test_the_video_cost_is_shown_before_it_is_spent():
     assert "function videoCostSeconds()" in SCRIPT
     cost = SCRIPT[SCRIPT.index("function videoCostSeconds()"):SCRIPT.index("function renderVideoSettings()")]
     assert "area * area" in cost, "面積は二乗で効く"
-    assert "length.frames / VIDEO_BASELINE.frames" in cost
-    assert "VIDEO_BASELINE = {width: 512, height: 320, frames: 33, seconds: 144.64}" in SCRIPT
+    assert "videoFrames() / base.frames" in cost
+    # 目安はモデルごとの実測から出す。共通の 1 つに丸めない。
+    assert "Number(chosen?.measured_runtime_sec)" in SCRIPT
     # 初回はモデルの読み込みが乗る。触れずに済ませない。
     assert "初回はモデルの読み込み" in SCRIPT

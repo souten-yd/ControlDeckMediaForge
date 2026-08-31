@@ -1359,3 +1359,13 @@ table.catalog .tag {
   background: rgba(0, 0, 0, .66); color: #fff;
   font-size: .68rem; font-weight: 700; letter-spacing: .02em;
 }
+
+/* 長さのつまみ。数字は右に固定幅で置く。動かすたびに桁が変わって
+   スライダーの幅が伸び縮みすると、狙った値に止められない。 */
+.length-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; }
+.length-row input[type="range"] { width: 100%; }
+.length-value {
+  min-width: 4.5em; text-align: end;
+  font-size: .84rem; font-weight: 700; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}

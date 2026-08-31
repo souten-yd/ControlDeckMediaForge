@@ -513,6 +513,9 @@ class ModelOperationManager:
             "state": model.state,
             # 走らせる worker が居るか。居ないものは測っても選べるようにならない。
             "has_runtime": is_runnable(model.runtime_adapter),
+            # 画面が画質と長さの選択肢を組むのに要る。落とすと、どのモデルを
+            # 選んでも同じ選択肢が出る。
+            **({"video": dict(model.video)} if model.video else {}),
             "supports_lora": model.supports_lora,
             "max_references": model.max_references,
             "reference_roles": list(model.reference_roles),

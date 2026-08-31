@@ -248,7 +248,11 @@ class VideoWorker:
                     "--snapshot", str(model_path),
                     "--work-root", str(work),
                     "--output", str(raw),
-                    "--preset", self._wan22_preset(width, height, frames, steps),
+                    # 頼まれた寸法と長さで作る。preset へ丸めると、選んだ長さと
+                    # 返ってくる長さが食い違う。preset は下敷きとしてだけ使う。
+                    "--preset", "candidate-clip",
+                    "--width", str(width), "--height", str(height),
+                    "--frames", str(frames), "--steps", str(steps),
                 ],
                 check=False, capture_output=True, timeout=3600, env=environment,
             )
@@ -292,25 +296,6 @@ class VideoWorker:
                 "normalized_codec": info.codec,
             },
         }
-
-    @staticmethod
-    def _wan22_preset(width: int, height: int, frames: int, steps: int) -> str:
-        """probe が持つ preset のうち、要求に一番近いものを選ぶ。
-
-        preset を新設せず既にあるものから選ぶ。評価で実測した組み合わせだけを
-        使い、測っていない寸法で本番を回さない。
-        """
-        from .wan_ti2v_probe import PRESETS
-
-        wanted = (width * height, frames, steps)
-        return min(
-            PRESETS,
-            key=lambda name: (
-                abs(PRESETS[name].width * PRESETS[name].height - wanted[0]) / max(wanted[0], 1)
-                + abs(PRESETS[name].frames - wanted[1]) / max(wanted[1], 1)
-                + abs(PRESETS[name].steps - wanted[2]) / max(wanted[2], 1)
-            ),
-        )
 
     def _generate_native(
         self, model: dict[str, Any], model_path: Path, output_dir: Path, output: Path,
