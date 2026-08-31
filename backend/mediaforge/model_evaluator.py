@@ -670,6 +670,12 @@ class H3ModelEvaluator:
         getattr で拾おうとして `elapsed_sec` を取り違え、0 のまま黙って
         抜けていた（実機で 161 秒の評価が 3 回、何も残さずに終わっていた）。
         同じ 1 つの出所から読む。
+
+        **かかった時間は書かない。** 評価は 1 歩・5 フレームで回す。動くかを
+        見るための最小の実行であって、実用の設定で払う時間ではない。実機では
+        H3 の 1 歩の probe（158 秒）が、20 歩 121 フレームの実測（2648 秒）を
+        上書きしていた。lease はその 17 分の 1 で確保され、途中で切れる。
+        測った VRAM は残し、時間は出荷 manifest の実測を通す。
         """
         if self.record_measurement is None:
             return
@@ -680,13 +686,16 @@ class H3ModelEvaluator:
                 "the evaluation of %s produced no usable measurement", model.model_id
             )
             return
+        # overlay は manifest の measurements を丸ごと置き換える。時間の欄を
+        # probe の値で埋めると出荷の実測が消えるので、そこは持ち越す。
+        runtime = model.measured_runtime_sec
         try:
             self.record_measurement(model.model_id, {
                 "resident_vram_bytes": 0,
                 "execution_peak_vram_bytes": peak,
                 "cold_load_peak_vram_bytes": peak,
                 "headroom_vram_bytes": 1024 * 1024 * 1024,
-                "measured_runtime_sec": round(elapsed, 3),
+                "measured_runtime_sec": round(runtime, 3) if runtime else round(elapsed, 3),
             })
         except Exception:  # noqa: BLE001 - 記録できないことが評価の失敗ではない
             logger.warning("could not record the measurement for %s", model.model_id)

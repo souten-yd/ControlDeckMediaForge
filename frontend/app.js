@@ -3049,7 +3049,13 @@ function videoSteps() {
     if (Number.isFinite(value) && value > 0) return value;
   }
   const chosen = chosenBaseModel();
-  return Number(chosen?.generation?.steps) || Number(videoProfile().measured_steps) || 20;
+  const profile = videoProfile();
+  // `measured_steps` は「その実測が何歩だったか」であって、生成に使う歩数では
+  // ない。ここで代用すると、測り直した歩数が黙って既定になる。
+  return Number(profile.default_steps)
+    || Number(chosen?.generation?.steps)
+    || Number(profile.measured_steps)
+    || 20;
 }
 
 function videoCostSeconds() {

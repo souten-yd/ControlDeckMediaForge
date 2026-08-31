@@ -512,7 +512,14 @@ def create_app(
             "has_runtime": is_runnable(item.runtime_adapter),
             # 動画の作り方はモデルごとに違う。画面が共通の決め打ちを持つと、
             # どれかのモデルで「選べるのに作れない」値を出すことになる。
-            **({"video": dict(item.video)} if item.video else {}),
+            # 歩数もここへ入れる。`generation` は diffusers 経路にしか付かず、
+            # native の動画モデルには届かない。画面が測定基準の `measured_steps`
+            # で代用すると、測り直した歩数がそのまま既定にすり替わる。
+            **({"video": {
+                **dict(item.video),
+                **({"default_steps": item.default_steps}
+                   if item.default_steps is not None else {}),
+            }} if item.video else {}),
             "supports_lora": item.supports_lora,
                 "max_references": item.max_references,
                 "reference_roles": list(item.reference_roles),

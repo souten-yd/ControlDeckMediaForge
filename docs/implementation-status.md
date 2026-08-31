@@ -6703,3 +6703,34 @@ lease へ申告する `measured_runtime_sec` も、評価の 1 歩（149.28 秒�
 Wan 2.1 / 2.2 は上流の既定 30 歩を使っており、この問題は無い。
 
 `./mf.sh test` 798 passed。
+
+## 評価が測った時間で、実用の実測を潰していた（2026-08-31）
+
+前項の 20 歩の実測を出荷しても、実機では効かなかった。overlay が勝っていた。
+
+```text
+manifest        measured_runtime_sec 2647.52   （20 歩 121 フレーム）
+overlay が上書き                      158.409   （評価の 1 歩 5 フレーム）
+実機の API が返す値                    158.409
+```
+
+`ModelRegistry.load(measurements=)` は manifest の `measurements` を**丸ごと**
+置き換える。評価の記録は VRAM を測るためのものだが、時間の欄まで probe の値で
+埋めていたため、出荷した実測が毎回の評価で消えていた。lease は 17 分の 1 で
+確保され、実用の設定で回すと途中で切れる。
+
+VRAM は probe が測ったものを残し、時間は manifest の実測を通す。評価は「動くか」を
+見る最小の実行であって、実用の設定で払う時間ではない。実機の overlay も直した。
+
+### 宣言した歩数が画面に届いていなかった
+
+`generation` block は `diffusers.` 経路にしか付かない。native の動画モデル
+（H3 / Wan 2.2）には届かず、画面は `measured_steps` で代用していた。今日は
+両方 20 と 30 で一致しているが、`measured_steps` は「その実測が何歩だったか」で
+あって生成に使う歩数ではない。測り直した歩数がそのまま既定にすり替わる。
+`video` profile に `default_steps` を入れ、画面はそれを見る。
+
+生成そのものは `_resolved_video_request` が `selected.default_steps` を入れており、
+最初から 20 歩で回っていた。ずれていたのは画面の目安時間の方である。
+
+`./mf.sh test` 799 passed（新規 1 件）。
