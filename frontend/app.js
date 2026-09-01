@@ -3407,13 +3407,32 @@ function isBaseModel(model) {
   return capabilities.some((name) => !REPAIR_ONLY_CAPABILITIES.has(name));
 }
 
+/* いま頼もうとしている操作が要る capability。
+
+   モデルによって、できることは違う。FLUX.2-dev は文章から作ることしかできず、
+   編集は宣言していない。それを編集のときにも一覧へ並べると、選んだ利用者は
+   押した瞬間に model_unavailable を受け取る（実機で「使えるモデルがありません」
+   と出た）。並べる前に、その操作ができるかを見る。
+
+   まだ何も選んでいないとき（写真はあるが直し方が決まっていない）は絞らない。
+   絞る根拠が無いのに一覧を減らすと、選べたはずのものが消える。 */
+function requiredCapability() {
+  if (state.createMedia === "video") return null;
+  if (!attachedFile()) return "image.text_to_image";
+  const action = EDIT_ACTIONS.find((item) => item.mode === state.editMode);
+  return action ? action.capability : null;
+}
+
 function imageBaseModels() {
   const wanted = state.createMedia === "video" ? "video" : "image";
+  const needed = requiredCapability();
   return state.modelCatalog.filter(
     (model) => model.installed && model.healthy && model.kind !== "lora"
       // 走らせる worker が無いものは、選べても作れない。
       && model.has_runtime !== false
       && isBaseModel(model)
+      // その操作ができないものも、同じく選べても作れない。
+      && (!needed || (model.capabilities || []).includes(needed))
       && (model.media_types || ["image"]).includes(wanted));
 }
 
@@ -3607,8 +3626,25 @@ function videoConstraints() {
   return constraints;
 }
 
+/* 何かしら導入されているか。ここで訊いているのは「まだ何も入れていない」のか
+   「入れてはあるがこの操作ができない」のかであって、土台に選べるかではない。
+   LoRA も数える（土台の一覧を組むのは imageBaseModels の仕事である）。 */
+function anythingInstalled() {
+  return state.modelCatalog.some((model) => model.installed);
+}
+
 function renderModelChoice() {
   const select = byId("model-choice-model");
+  // 直すだけの操作は、使うモデルが capability で 1 つに決まる。選ばせる意味が
+  // 無いうえ、前に指定したモデルが残っていると、それが直せないモデルなので
+  // model_unavailable になる。出さず、指定も外す。
+  const repairing = REPAIR_MODES.has(state.editMode) && Boolean(attachedFile());
+  byId("model-choice").hidden = repairing;
+  if (repairing) {
+    select.value = "";
+    state.modelChoice = "auto";
+    return;
+  }
   const usableModels = imageBaseModels();
   const previous = select.value;
   const auto = document.createElement("option");
@@ -3624,7 +3660,11 @@ function renderModelChoice() {
   state.modelChoice = select.value ? "manual" : "auto";
   const note = byId("model-choice-note");
   if (!usableModels.length) {
-    note.textContent = "使えるモデルがまだありません。設定から導入してください。";
+    // 1 件も無い理由は 2 つある。まだ何も入れていないのか、入れてはあるが
+    // この操作ができないのか。どちらかで、次にやることが違う。
+    note.textContent = anythingInstalled()
+      ? "この操作ができるモデルがありません。別の直し方を選ぶか、モデルを追加してください。"
+      : "使えるモデルがまだありません。設定から導入してください。";
     return;
   }
   note.textContent = select.value
