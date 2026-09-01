@@ -1135,3 +1135,79 @@ def test_an_imported_clip_is_normalized_so_every_device_can_play_it(tmp_path: Pa
         with pytest.raises(AssetImportError):
             import_video_asset(client2.app.state.store, b"not a clip", purpose="source",
                                media_type="video/mp4")
+
+
+def test_a_photo_too_large_to_send_is_shown_reduced_rather_than_refused(tmp_path: Path):
+    """原寸で預かった写真を、見られないままにしない。
+
+    workspace は base64 でしか運べない。実測では 12.2MP の写真が PNG で
+    13.6MiB になり、12MiB の転送上限を超える。断ると「透かしは消せたが
+    見られない」で終わる。見るための縮小版を返し、縮めたことを言う。
+    原寸は保存で取り出せる（export は host へファイルのまま渡る）。
+    """
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        small = import_asset(client, "source", size=(64, 48))
+        # 転送上限を超える資産を作る。乱数の PNG は圧縮が効かない。
+        import os
+        big_path = client.app.state.store.asset_path(small["id"])
+        noise = Image.frombytes("RGBA", (2048, 1600), os.urandom(2048 * 1600 * 4))
+        noise.save(big_path, format="PNG")
+        assert big_path.stat().st_size > 12 * 1024 * 1024
+
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            reduced = call(socket, "assets.content", {"asset_id": small["id"]})["result"]
+
+    assert reduced["reduced"] is True
+    assert reduced["mime_type"] == "image/webp"
+    assert reduced["original_mime_type"] == "image/png"
+    assert reduced["original_size_bytes"] > 12 * 1024 * 1024
+    content = base64.b64decode(reduced["base64"])
+    assert len(content) <= thumbnails.PREVIEW_BYTE_LIMIT
+    # 一覧の 64KiB では拡大に耐えない。見るための予算は別に持つ。
+    # 乱数の PNG は写真より圧縮が効かず、1600px では 2MiB に入らない。段を
+    # 下りたことまで含めて正しい（実際の写真は 1600px / 220KiB で収まる）。
+    assert thumbnails.DEFAULT_MAX_SIDE < max(reduced["width"], reduced["height"])
+    assert max(reduced["width"], reduced["height"]) <= thumbnails.PREVIEW_MAX_SIDE
+
+
+def test_an_asset_within_the_bound_is_still_sent_whole(tmp_path: Path):
+    """縮小は上限を超えたときだけ。普通の生成物を毎回作り直さない。"""
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        asset = import_asset(client, "source", size=(64, 48))
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            whole = call(socket, "assets.content", {"asset_id": asset["id"]})["result"]
+
+    assert whole["reduced"] is False
+    assert whole["mime_type"] == "image/png"
+    assert base64.b64decode(whole["base64"]) == png_bytes((64, 48))
+
+
+def test_a_photo_keeps_its_resolution_but_a_clip_keeps_the_old_bound(tmp_path: Path):
+    """写真は撮ったままの寸法で預かる。動画は尺のぶんだけ復号するので別。
+
+    2048x2048 は strict edit を入れたときの丸い数で、根拠は残っていなかった。
+    「一部だけ直す」は塗った範囲＋64px しか生成せず、元画像の解像度はモデルに
+    渡らない。縮めるのは、透かしを消すために写真全体の解像度を捨てることである。
+    """
+    from mediaforge.asset_import import MAX_IMPORT_PIXELS, MAX_VIDEO_IMPORT_PIXELS
+
+    # 携帯の標準（12.2MP）も一眼の標準（24MP）も通る。
+    assert 4032 * 3024 <= MAX_IMPORT_PIXELS
+    assert 6000 * 4000 <= MAX_IMPORT_PIXELS
+    # 1 ジョブが 1.6GB を抱える 48MP は取らない。
+    assert 8000 * 6000 > MAX_IMPORT_PIXELS
+    assert MAX_VIDEO_IMPORT_PIXELS == 2048 * 2048
+
+    client, _headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        buffer = BytesIO()
+        Image.new("RGBA", (4032, 3024), (20, 30, 40, 255)).save(buffer, format="PNG")
+        response = client.post(
+            "/api/v1/assets/import?purpose=source",
+            content=buffer.getvalue(),
+            headers={"Content-Type": "application/octet-stream"},
+        )
+    assert response.status_code == 201, response.text
+    assert (response.json()["width"], response.json()["height"]) == (4032, 3024)

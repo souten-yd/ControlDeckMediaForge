@@ -21,7 +21,19 @@ from .validators import validate_png
 
 
 MAX_IMPORT_BYTES = 64 * 1024 * 1024
-MAX_IMPORT_PIXELS = 2048 * 2048
+# 端末の写真を、撮ったままの解像度で預かれる大きさに置く。2048x2048 は strict edit を
+# 入れたときの丸い数で、根拠は記録されていなかった。実際に何が縛るかを測った
+# （合成 + 検証、原寸 RGBA を数枚持つ）。
+#
+#    3.1MP  合成 0.81s  検証 0.24s  PNG  4.6MiB  peak RSS  139MiB
+#   12.2MP       2.90s       0.91s      13.6MiB           433MiB   ← 携帯の標準
+#   24.4MP       5.22s       1.71s      22.2MiB           828MiB   ← 一眼の標準
+#   48.0MP       9.16s       3.27s      35.6MiB          1607MiB
+#
+# VRAM は使わない。縛るのは core の RAM である。24MP までなら 1 枚あたり 0.8GB で
+# 収まり、携帯の 12MP も一眼の 24MP もそのまま通る。48MP は 1.6GB を 1 ジョブが
+# 抱えるので取らない。超える写真は画面が縮めて送る（今までと同じ）。
+MAX_IMPORT_PIXELS = 24_000_000
 
 
 class AssetImportError(ValueError):
@@ -32,6 +44,9 @@ VIDEO_MEDIA_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
 # 動画の上限は画像と分ける。実測: 640x384 の 15 秒（360 フレーム）で 17.2 MB。
 # 余裕を見て 4 倍に置く。artifact の 64 MiB とは別の理由で決まる値である。
 MAX_VIDEO_IMPORT_BYTES = 96 * 1024 * 1024
+# 画素の上限も分ける。画像は原寸で預かるために上げたが、動画は 1 フレームでは
+# なく尺のぶんだけ復号する。同じ数を当てると桁が変わる。
+MAX_VIDEO_IMPORT_PIXELS = 2048 * 2048
 _VIDEO_TOOL_TIMEOUT_SEC = 600
 
 
@@ -71,7 +86,7 @@ def _probe_video(path: Path) -> dict[str, Any]:
         duration = float(document["format"]["duration"])
     except (KeyError, TypeError, ValueError) as exc:
         raise AssetImportError("video import has no usable dimensions or duration") from exc
-    if width < 16 or height < 16 or width * height > MAX_IMPORT_PIXELS:
+    if width < 16 or height < 16 or width * height > MAX_VIDEO_IMPORT_PIXELS:
         raise AssetImportError("video import dimensions are out of bounds")
     if not 0 < duration <= 300:
         raise AssetImportError("video import must be between 0 and 300 seconds")
@@ -206,7 +221,9 @@ def import_image_asset(store: Store, content: bytes, *, purpose: str) -> Asset:
             if opened.format not in {"PNG", "JPEG"}:
                 raise AssetImportError("image import supports PNG and JPEG only")
             if opened.width < 1 or opened.height < 1 or opened.width * opened.height > MAX_IMPORT_PIXELS:
-                raise AssetImportError("image import dimensions exceed the 4,194,304 pixel bound")
+                raise AssetImportError(
+                    f"image import dimensions exceed the {MAX_IMPORT_PIXELS:,} pixel bound"
+                )
             image = opened.convert("RGBA")
     except AssetImportError:
         raise

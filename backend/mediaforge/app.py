@@ -120,6 +120,9 @@ from .reference_intelligence import (
 from .image_evaluation import measure_image_model
 from .store import AssetInUse, Store, utc_now
 from .thumbnails import ThumbnailError
+
+# workspace は base64 でしか運べない。これを超えるものは縮小版を返す。
+WORKSPACE_TRANSPORT_LIMIT = 12 * 1024 * 1024
 from .validators import validate_png
 
 
@@ -2343,12 +2346,32 @@ def create_app(
                     elif method == "assets.provenance":
                         result = store.get_provenance(str(params.get("asset_id", ""))).model_dump(mode="json")
                     elif method == "assets.content":
+                        # 原寸で預かった写真は転送上限を超える（実測: 12.2MP の
+                        # 写真が PNG で 13.6MiB）。断ると「透かしは消せたが見られ
+                        # ない」になるので、見るためだけの縮小版を返し、縮めたこと
+                        # を言う。原寸は保存で取り出せる（export は host へファイル
+                        # のまま渡すので、この上限に縛られない）。
                         asset_id = str(params.get("asset_id", ""))
                         asset = store.get_asset(asset_id)
-                        content = store.asset_path(asset_id).read_bytes()
-                        if len(content) > 12 * 1024 * 1024:
-                            raise ValueError("asset preview exceeds the workspace transport bound")
-                        result = {"mime_type": asset.mime_type, "base64": base64.b64encode(content).decode("ascii")}
+                        path = store.asset_path(asset_id)
+                        size_bytes = path.stat().st_size
+                        if size_bytes > WORKSPACE_TRANSPORT_LIMIT:
+                            reduced = thumbnails.preview(path, asset.mime_type)
+                            result = {
+                                "mime_type": reduced.mime_type,
+                                "base64": base64.b64encode(reduced.content).decode("ascii"),
+                                "reduced": True,
+                                "original_mime_type": asset.mime_type,
+                                "original_size_bytes": size_bytes,
+                                "width": reduced.width,
+                                "height": reduced.height,
+                            }
+                        else:
+                            result = {
+                                "mime_type": asset.mime_type,
+                                "base64": base64.b64encode(path.read_bytes()).decode("ascii"),
+                                "reduced": False,
+                            }
                     elif method == "reference_collections.list":
                         result = {"items": [
                             item.model_dump(mode="json") for item in store.list_reference_collections()

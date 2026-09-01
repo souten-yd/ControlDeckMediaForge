@@ -256,8 +256,15 @@ class ImageWorker:
         if not isinstance(strict_edit, bool):
             raise ValueError("strict_edit must be a boolean")
         if strict_edit:
-            if not 1 <= width <= 2048 or not 1 <= height <= 2048:
-                raise ValueError("strict edit dimensions must be in the range 1..2048")
+            # ここの width/height は画布（元画像）の寸法である。生成されるのは
+            # 塗った範囲＋64px の切り抜きだけで、この値はモデルに渡らない。
+            # 2048 は根拠の残っていない丸い数で、写真を原寸で直せなくしていた。
+            # core の取り込み上限（MAX_IMPORT_PIXELS = 24,000,000）に合わせる。
+            # 境界の都合で core は import できないため、同じ値をここに置く。
+            if not 1 <= width <= 8192 or not 1 <= height <= 8192:
+                raise ValueError("strict edit dimensions must be in the range 1..8192")
+            if width * height > 24_000_000:
+                raise ValueError("strict edit canvas exceeds the 24,000,000 pixel bound")
         elif not 256 <= width <= 2048 or not 256 <= height <= 2048 or width % 16 or height % 16:
             raise ValueError("image dimensions must be multiples of 16 in the range 256..2048")
         # Public output count remains capped at eight. Three additional bounded
