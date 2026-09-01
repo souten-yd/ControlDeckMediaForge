@@ -128,7 +128,23 @@ class SpandrelUpscaleAdapter:
             raise ValueError("upscale snapshot must hold exactly one checkpoint")
         return found[0]
 
-    def upscale(self, source_path: Path, output_path: Path) -> ImageGenerationResult:
+    def upscale(
+        self,
+        source_path: Path,
+        output_path: Path,
+        target_scale: int | None = None,
+    ) -> ImageGenerationResult:
+        """Run the weights over the whole picture and hand back the size asked for.
+
+        重みは 1 つの倍率しか持たない。それを唯一の出す寸法にすると、荒い写真を
+        持ってきた人は「4 倍にする」しか選べない。もう十分に大きい写真の荒さだけ
+        取りたいときに、4 倍は要らないものである。
+
+        欲しい倍率が重みの倍率より小さいときは、網には元の写真をそのまま通し、
+        出てきたものを面積平均で落とす。荒さを取るのは網の側なので、落としても
+        直った結果は残る（むしろ、平均が残った粒を消す）。網に縮小した写真を
+        入れる形にはしない。それでは元の細部を捨ててから直すことになる。
+        """
         import torch
 
         self.load()
@@ -140,12 +156,23 @@ class SpandrelUpscaleAdapter:
         except (OSError, SyntaxError) as exc:
             raise ValueError("source image is not decodable") from exc
 
+        scale = self.scale
+        target = scale if target_scale is None else int(target_scale)
+        # 割り切れる倍率だけを受ける。割り切れれば画素の格子が整数で合うので、
+        # 補間の種類を選ぶ余地が無く、同じ絵を入れれば同じ絵が出る。
+        if target < 1 or scale % target:
+            raise ValueError("this scale is not a divisor of the weights' own scale")
+        reduce = scale // target
+
         started = time.perf_counter()
         tensor = self._to_tensor(source)
         _, _, height, width = tensor.shape
-        scale = self.scale
-        total = torch.zeros(1, 3, height * scale, width * scale)
-        counts = torch.zeros_like(total)
+        # 溜めるのは出す寸法の側である。網の倍率で溜めてから縮めると、原寸を
+        # 頼まれたときにも 16 倍の面積を抱えることになる。
+        total = torch.zeros(1, 3, height * target, width * target)
+        # 重なった回数を数えるだけなので 1 面でよい。3 面持つと 24MP の出力で
+        # 192MB を余分に確保する。
+        counts = torch.zeros(1, 1, height * target, width * target)
         step = self.TILE - self.OVERLAP
         device = next(self.model.model.parameters()).device
         for top in range(0, height, step):
@@ -157,9 +184,11 @@ class SpandrelUpscaleAdapter:
                 patch = tensor[:, :, top_edge:bottom, left_edge:right].to(device)
                 with torch.no_grad():
                     produced = self.model(patch).clamp(0, 1).float().cpu()
+                if reduce > 1:
+                    produced = self._box_reduce(produced, reduce)
                 box = (
-                    slice(top_edge * scale, bottom * scale),
-                    slice(left_edge * scale, right * scale),
+                    slice(top_edge * target, bottom * target),
+                    slice(left_edge * target, right * target),
                 )
                 total[:, :, box[0], box[1]] += produced
                 counts[:, :, box[0], box[1]] += 1
@@ -172,6 +201,18 @@ class SpandrelUpscaleAdapter:
         self.last_generation_sec = time.perf_counter() - started
         # 拡大に乱数は入らない。同じ絵を入れれば同じ絵が出る。
         return ImageGenerationResult(output_path=output_path, seed=0)
+
+    @staticmethod
+    def _box_reduce(tensor, factor: int):
+        """Average square blocks — the exact way to shrink by a whole number.
+
+        面積平均は整数倍の縮小に対する正しい平滑化で、標本化ではない。どの画素も
+        同じ重みで 1 度だけ数えられるので、位置がずれず、模様も出ない。
+        """
+        _, channels, height, width = tensor.shape
+        return tensor.reshape(
+            1, channels, height // factor, factor, width // factor, factor
+        ).mean(dim=(3, 5))
 
     # 塗った所の周りをどれだけ見せるか。埋める内容はここから決まるので、
     # 狭いと continuation が取れない。塗った範囲と同じだけ、最低 128px。

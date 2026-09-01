@@ -52,7 +52,8 @@ const EDIT_ACTIONS = [
        + "きれいに仕上がります。",
    guarantee: "塗っていない場所は 1px も変わりません", preserving: true},
   {mode: "upscale", capability: "image.upscale", label: "画質を上げる", kind: "retouch",
-   hint: "ぼけさせずに大きくします。作り直さないので、写っているものは変わりません。",
+   hint: "粗さ・にじみ・圧縮の跡を取ります。大きさは原寸のままにも、大きくにも"
+       + "できます。作り直さないので、写っているものは変わりません。",
    guarantee: "写っているものは変わりません"},
   {mode: "deblur", capability: "image.deblur", label: "ブレを直す", kind: "retouch",
    hint: "手ブレ・被写体ブレを取ります。寸法は変わりません。",
@@ -136,6 +137,12 @@ const state = {
   maskPainted: 0,
   outpaintRatio: "source",
   outpaintScale: 1.5,
+  // 出す大きさ。null は「まだ選んでいない」で、そのときは入る中でいちばん
+  // 大きい倍率を使う。写真を替えたら選び直せるよう null へ戻す。
+  upscaleScale: null,
+  // 添付そのものが読めていないときの断り。出したそばから消されないよう、
+  // 一度きりの表示ではなく状態として持つ。
+  attachProblem: "",
   activeJob: "",
   activeBatch: "",
   activeComposition: "",
@@ -2453,7 +2460,7 @@ function selectEditMode(mode) {
   byId("mask-input").hidden = !MASKED_MODES.has(mode);
   // 拡大は指示を取らない。書ける欄を出すと、書いた言葉が効くように見える。
   byId("upscale-input").hidden = !REPAIR_MODES.has(mode);
-  if (REPAIR_MODES.has(mode)) renderUpscaleNote();
+  if (REPAIR_MODES.has(mode)) renderRepairControls();
   // 指示欄を出すかは編集の種類で変わる。ここを通さないと、拡大を選んでも
   // 「どう直しますか？」が残る。
   renderCreateMedia();
@@ -2486,7 +2493,8 @@ async function prepareUpload() {
     // 実機で、写真を選んでも何も起きないように見えていた。
     state.source = null;
     label.textContent = "この画像を読み込めませんでした";
-    showError("この画像を読み込めませんでした。PNG か JPEG で選び直してください。");
+    state.attachProblem = "この画像を読み込めませんでした。別の画像を選び直してください。";
+    showError(state.attachProblem);
     return;
   }
   const shrinking = needsResize(measured, state.editMode);
@@ -2510,7 +2518,8 @@ async function prepareUpload() {
     } catch {
       state.source = null;
       label.textContent = "";
-      showError("この画像を読み込めませんでした。PNG か JPEG で選び直してください。");
+      state.attachProblem = "この画像を読み込めませんでした。別の画像を選び直してください。";
+      showError(state.attachProblem);
     }
   } else {
     state.upload = file;
@@ -2523,51 +2532,140 @@ async function prepareUpload() {
 
 /* 何倍になって、どのくらい待つのかを、モデルが宣言した値から書く。画面が
    倍率を決め打ちすると、別の倍率の重みを足したとき黙って外れる。 */
-/* 直せる大きさを超えていないか。案内と同じ根拠から出す。 */
+/* 直せる大きさを超えていないか。案内と同じ根拠から出す。
+
+   断りは 2 つある。通せる大きさを超えているか、どの倍率でも出せる画素数に
+   収まらないか。倍率が選べるようになったので、前者はもう倍率に依らない。 */
 function repairBoundProblem() {
-  const profile = repairProfile();
-  const bound = Number(profile.max_source_pixels);
   const size = state.source;
-  if (!size || !Number.isFinite(bound)) return "";
-  if (size.width * size.height <= bound) return "";
-  const scale = Number(profile.scale) || 1;
-  return scale === 1
-    ? `この画像は大きすぎます。${bound.toLocaleString()} 画素までを直せます。`
-    : `この画像は大きすぎます。${bound.toLocaleString()} 画素までを ${scale} 倍にできます。`;
+  if (!size) return "";
+  const bound = Number(repairProfile().max_source_pixels);
+  if (Number.isFinite(bound) && size.width * size.height > bound) {
+    return `この画像は大きすぎます。${bound.toLocaleString()} 画素までを直せます。`;
+  }
+  if (upscaleDeclaredTargets().length && !upscaleTargets().length) {
+    return `この画像はどの大きさでも ${MAX_OUTPUT_PIXELS.toLocaleString()} 画素を超えます。`;
+  }
+  return "";
 }
 
-/* いま選んでいる直し方のモデルの申告。 */
+/* いま選んでいる直し方のモデルの申告。
+
+   直し方ごとに別のモデルである。1 つに寄せると、消して埋めるを選んでいるのに
+   拡大の倍率と単価が出る。 */
+const REPAIR_CAPABILITY = {
+  upscale: "image.upscale",
+  deblur: "image.deblur",
+  erase: "image.erase",
+};
+
 function repairProfile() {
-  const capability = state.editMode === "deblur" ? "image.deblur" : "image.upscale";
+  const capability = REPAIR_CAPABILITY[state.editMode];
+  if (!capability) return {};
   return (state.modelCatalog || [])
     .filter((item) => item.installed && (item.capabilities || []).includes(capability))
     .map((item) => item.upscale).find(Boolean) || {};
 }
 
+/* 出せる画素数の上限。core の取り込みと同じ値で、backend の MAX_OUTPUT_PIXELS
+   と同じ根拠である。 */
+const MAX_OUTPUT_PIXELS = 24000000;
+
+/* この写真に対して本当に選べる倍率。
+
+   モデルが宣言した倍率のうち、出力が上限に収まるものだけを出す。収まらない
+   ものを並べると、選べるのに作れない値が並ぶ。 */
+function upscaleDeclaredTargets() {
+  const profile = repairProfile();
+  const declared = Array.isArray(profile.target_scales) && profile.target_scales.length
+    ? profile.target_scales
+    : [Number(profile.scale)];
+  const targets = declared.map(Number).filter((value) => Number.isFinite(value) && value >= 1);
+  return targets.sort((left, right) => left - right);
+}
+
+function upscaleTargets() {
+  const declared = upscaleDeclaredTargets();
+  const size = state.source;
+  if (!size) return declared;
+  return declared.filter(
+    (value) => size.width * size.height * value * value <= MAX_OUTPUT_PIXELS,
+  );
+}
+
+/* 実際に送る倍率。選んでいなければ、入る中でいちばん大きいものを使う。
+
+   小さい写真では今までどおり 4 倍が既定になり、もう大きい写真では原寸が既定に
+   なる。どちらの用事で来ても、最初の 1 回が作れる値で始まる。 */
+function upscaleScale() {
+  const targets = upscaleTargets();
+  if (!targets.length) return null;
+  return targets.includes(state.upscaleScale) ? state.upscaleScale : targets[targets.length - 1];
+}
+
+function upscaleScaleLabel(value) {
+  return value === 1 ? "原寸のまま" : `${value}倍`;
+}
+
+/* 直しの選択肢と案内は同じ根拠から出る。片方だけ描き直すと、選んだ倍率と
+   書かれた寸法が食い違う。 */
+function renderRepairControls() {
+  renderUpscaleScales();
+  renderUpscaleNote();
+}
+
+function renderUpscaleScales() {
+  const field = byId("upscale-scale-field");
+  const targets = upscaleTargets();
+  // 倍率が 1 つしか無いものに選択肢は要らない（ブレ補正も消して埋めるも
+  // 寸法を変えない）。1 つだけの組を出すと、選べるように見えて選べない。
+  field.hidden = targets.length < 2;
+  const chosen = upscaleScale();
+  byId("upscale-scales").replaceChildren(...targets.map((value) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chip";
+    button.dataset.upscaleScale = String(value);
+    button.setAttribute("role", "radio");
+    button.setAttribute("aria-checked", String(value === chosen));
+    button.textContent = upscaleScaleLabel(value);
+    return button;
+  }));
+}
+
 function renderUpscaleNote() {
   const note = byId("upscale-note");
   if (!note) return;
-  // 直し方ごとに別のモデルである。最初に見つかったものを使うと、ブレ補正を
-  // 選んでいるのに拡大の倍率と単価を出すことになる。
   const profile = repairProfile();
-  const scale = Number(profile.scale);
-  const size = state.measured;
-  if (!Number.isFinite(scale) || !size) { note.textContent = ""; return; }
-  const bound = Number(profile.max_source_pixels);
-  if (Number.isFinite(bound) && size.width * size.height > bound) {
-    note.textContent = `この画像は大きすぎます。${bound.toLocaleString()} 画素までを ${scale} 倍にできます。`;
-    return;
-  }
+  // 送るのは取り込みに収まるよう用意した方であって、選ばれたファイルの寸法では
+  // ない。測った方を書くと、24,000,000 画素を超える写真で出る寸法とずれる。
+  const size = state.source;
+  if (!size) { note.textContent = ""; return; }
+  // 断りが先である。どの倍率も出せない写真では倍率が決まらないので、倍率で
+  // 打ち切ると理由が出ないまま空欄になる。
+  const problem = repairBoundProblem();
+  if (problem) { note.textContent = problem; return; }
+  const scale = upscaleScale();
+  if (!Number.isFinite(scale)) { note.textContent = ""; return; }
+  // 待ち時間は元画像の面積で決まる。網には倍率に関わらず元の写真をそのまま
+  // 通すので、原寸を選んでも 4 倍と同じだけ掛かる。
   const perMegapixel = Number(profile.per_source_megapixel_sec);
   const seconds = Number.isFinite(perMegapixel)
     ? Math.round(perMegapixel * (size.width * size.height) / 1e6) : null;
   const wait = seconds === null ? ""
     : `およそ ${seconds < 60 ? `${seconds} 秒` : `${Math.round(seconds / 60)} 分`}`;
   // 倍率 1 のものは寸法が変わらない。矢印を出すと変わるように見える。
-  note.textContent = scale === 1
+  const line = scale === 1
     ? `${size.width}×${size.height} のまま${wait ? `（${wait}）` : ""}`
     : `${size.width}×${size.height} → ${size.width * scale}×${size.height * scale}`
       + (wait ? `（${wait}）` : "");
+  // 選択肢から落ちた倍率があるなら、消えた理由を書く。黙って減らすと、前は
+  // 出ていた 4 倍がどこへ行ったのか分からない。
+  const dropped = upscaleDeclaredTargets().filter((value) => !upscaleTargets().includes(value));
+  note.textContent = dropped.length
+    ? `${line}｜${dropped.map(upscaleScaleLabel).join("・")}`
+      + `は ${MAX_OUTPUT_PIXELS.toLocaleString()} 画素を超えるので選べません`
+    : line;
 }
 
 function attachedFile() {
@@ -2580,8 +2678,37 @@ function attachedFile() {
    ブラウザとサーバで食い違う。測った寸法と取り込んだ寸法がずれ、
    「一部だけ直す」は寸法の一致を要求するので受付で断られる。
    加工して向きの付いた写真が添付できない、という形で表に出る。 */
-function openBitmap(file) {
-  return createImageBitmap(file, {imageOrientation: "from-image"});
+async function openBitmap(file) {
+  try {
+    return await createImageBitmap(file, {imageOrientation: "from-image"});
+  } catch {
+    // `createImageBitmap` が断る形式でも、端末自身は表示できることがある
+    // （iPhone の HEIC がそれで、Safari は <img> なら復号する）。ここで
+    // 諦めると「写真を選んだのに何も起きない」になる。
+    return decodeWithElement(file);
+  }
+}
+
+/* 端末の復号器に読ませる。<img> は EXIF の向きを既定で適用するので、
+   `imageOrientation: "from-image"` と同じ見え方になる。 */
+function decodeWithElement(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      if (!image.naturalWidth || !image.naturalHeight) {
+        reject(new Error("image decoded to nothing"));
+        return;
+      }
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("this device cannot decode the image"));
+    };
+    image.src = url;
+  });
 }
 
 /* 寸法はアップロード前にブラウザ側で測る。
@@ -2590,7 +2717,7 @@ async function measure(file) {
   try {
     const bitmap = await openBitmap(file);
     const size = {width: bitmap.width, height: bitmap.height};
-    bitmap.close();
+    bitmap.close?.();
     return size;
   } catch { return null; }
 }
@@ -2689,7 +2816,7 @@ async function resized(file, size, mode) {
     }
     throw new Error("canvas could not encode this image");
   } finally {
-    bitmap.close();
+    bitmap.close?.();
   }
 }
 
@@ -2700,8 +2827,14 @@ async function refreshAttachment() {
   byId("attach-clear").hidden = !file;
   byId("edit-block").hidden = state.createMedia === "video" || !file;
   if (!file) maskReset();
+  // 前の写真で選んだ倍率は、次の写真では出せないことがある。持ち越さず、
+  // 入る中でいちばん大きいものから選び直させる。
+  state.upscaleScale = null;
   state.referenceAnalysis = null;
   state.referenceFocus = "overall";
+  // 前の写真の断りは持ち越さない。下ろしてから測り直す。
+  state.attachProblem = "";
+  clearError();
   state.measured = file ? await measure(file) : null;
   await prepareUpload();
   if (file && state.createMedia !== "video") {
@@ -2713,9 +2846,9 @@ async function refreshAttachment() {
     selectEditMode("");
   }
   renderSizeSection();
+  if (REPAIR_MODES.has(state.editMode)) renderRepairControls();
   renderReferenceIntelligence();
   renderCreateMedia();
-  clearError();
 }
 
 async function fileBase64(file) {
@@ -2905,7 +3038,9 @@ function showError(message, exit) {
 }
 
 function clearError() {
-  showError("");
+  // 添付が読めていないあいだは消さない。編集の種類を選び直すたびに消えると、
+  // 「写真を選んでも何も起きない」ように見える（iPhone の写真がそうだった）。
+  showError(state.attachProblem || "");
 }
 
 /* GPU を取りに行く前に落とせるものはすべてここで落とす。
@@ -3061,6 +3196,10 @@ async function submitJob(event) {
         delete constraints.width;
         delete constraints.height;
         constraints.edit_mode = state.editMode;
+        // 倍率は送る。核が既定を持っているが、画面が出した寸法と別の値を
+        // 埋められると、書いてあった寸法と返る寸法が食い違う。
+        const scale = upscaleScale();
+        if (Number.isFinite(scale)) constraints.upscale_scale = scale;
       }
       const preserving = state.editMode === "inpaint" || state.editMode === "outpaint";
       if (REPAIR_MODES.has(state.editMode)) {
@@ -5852,6 +5991,13 @@ byId("outpaint-scales").addEventListener("click", (event) => {
   if (!chip) return;
   state.outpaintScale = Number(chip.dataset.scale);
   renderOutpaintControls();
+  clearError();
+});
+byId("upscale-scales").addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-upscale-scale]");
+  if (!chip) return;
+  state.upscaleScale = Number(chip.dataset.upscaleScale);
+  renderRepairControls();
   clearError();
 });
 

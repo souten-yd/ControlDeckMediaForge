@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .asset_import import MAX_IMPORT_PIXELS
 from .config import REPOSITORY_ROOT
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
 from .evaluator import CreativeEvaluationError, CreativeEvaluator
@@ -1249,37 +1250,115 @@ class JobManager:
         request["constraints"] = constraints
         return request
 
+    # 出せる画素数の上限。取り込みの上限と同じ値を使う（別に持つと片方だけ動く）。
+    # ここを超えたものは保存も検証もできないので、作らせてから断るのではなく
+    # 受付で断る。
+    MAX_OUTPUT_PIXELS = MAX_IMPORT_PIXELS
+
     def _resolved_upscale_request(
         self, job: Job, selected: ModelDescriptor, request: dict[str, Any],
         constraints: dict[str, Any],
     ) -> dict[str, Any]:
-        """Fill the output size from the weights' own scale, and refuse early.
+        """Fill the output size from the weights' scale and the size that was asked for.
 
-        拡大は標本化しない。歩数も seed も持たず、出力の寸法は元画像と倍率だけで
-        決まる。利用者が寸法を選べるようにすると、選べるのに作れない値が並ぶ。
+        直しは標本化しない。歩数も seed も持たず、出す寸法は元画像と倍率だけで
+        決まる。決めるのはここで、worker でも画面でもない。
+
+        重みは 1 つの倍率しか持たないが、それを唯一の出す寸法にすると、もう十分に
+        大きい荒い写真を持ってきた人に「4 倍にする」以外の道が無くなる。重みの
+        倍率の約数までを受ける。約数に限るのは、割り切れる縮小だけが画素の格子を
+        保つからである。
         """
         profile = selected.upscale or {}
         scale = int(profile.get("scale") or 0)
-        if scale < 2:
-            raise WorkerFailure("capability_unavailable", "この拡大モデルは倍率を宣言していません")
+        # 1 は「寸法を変えずに直す」である（ブレ補正・消して埋める）。2 以上を
+        # 求めると、拡大と同じ経路を通るその 2 つがここで断られる。
+        if scale < 1:
+            raise WorkerFailure("capability_unavailable", "この直しモデルは倍率を宣言していません")
         try:
             source = self.store.get_asset(job.request.inputs[0].asset_id)
         except (IndexError, KeyError) as exc:
-            raise WorkerFailure("invalid_dimensions", "拡大する画像がありません") from exc
+            raise WorkerFailure("invalid_dimensions", "直す画像がありません") from exc
         if not source.width or not source.height:
-            raise WorkerFailure("invalid_dimensions", "拡大する画像の寸法が分かりません")
+            raise WorkerFailure("invalid_dimensions", "直す画像の寸法が分かりません")
+        pixels = source.width * source.height
         bound = profile.get("max_source_pixels")
-        if bound is not None and source.width * source.height > int(bound):
+        if bound is not None and pixels > int(bound):
             raise WorkerFailure(
                 "resource_limit",
-                f"この画像は拡大には大きすぎます（{int(bound):,} 画素までを {scale} 倍にできます）",
+                f"この画像は大きすぎます（{int(bound):,} 画素までを直せます）",
             )
-        constraints["width"] = source.width * scale
-        constraints["height"] = source.height * scale
+        target = self._upscale_target(constraints, profile, scale, pixels)
+        constraints["width"] = source.width * target
+        constraints["height"] = source.height * target
+        constraints["upscale_scale"] = target
         # 標本化しないものに歩数を渡すと、worker が使わない値を検査することになる。
         constraints.pop("steps", None)
         request["constraints"] = constraints
         return request
+
+    def _upscale_target(
+        self, constraints: dict[str, Any], profile: dict[str, Any], scale: int, pixels: int,
+    ) -> int:
+        """Pick the multiplier to hand the worker, and say why a request cannot have one.
+
+        頼まれた倍率を黙って別の値に読み替えない。作れないなら、代わりに何が
+        作れるかを言って断る。読み替えると、頼んだ寸法と返る寸法が違う。
+        """
+        declared = profile.get("target_scales") or [scale]
+        offered = sorted({int(value) for value in declared})
+        # 出力の上限に収まるものだけが本当に選べる。画面もここと同じ根拠で出す。
+        fits = [value for value in offered if pixels * value * value <= self.MAX_OUTPUT_PIXELS]
+        requested = constraints.get("upscale_scale")
+        if requested is None:
+            # 宣言が無ければ重みの倍率そのまま。今までの動きを変えない。
+            # ただし、その倍率では出せない大きさの写真は断る（黙って縮めない）。
+            requested = scale
+        if isinstance(requested, bool) or not isinstance(requested, int):
+            raise WorkerFailure("invalid_constraint", "upscale_scale は整数で指定してください")
+        if requested not in offered:
+            choices = "・".join(f"{value} 倍" for value in offered)
+            raise WorkerFailure(
+                "invalid_constraint", f"このモデルで選べるのは {choices} です",
+            )
+        if requested not in fits:
+            if not fits:
+                raise WorkerFailure(
+                    "resource_limit",
+                    f"この画像はどの倍率でも {self.MAX_OUTPUT_PIXELS:,} 画素を超えます",
+                )
+            choices = "・".join(f"{value} 倍" for value in fits)
+            raise WorkerFailure(
+                "resource_limit",
+                f"この大きさでは {choices} までです"
+                f"（{requested} 倍は {self.MAX_OUTPUT_PIXELS:,} 画素を超えます）",
+            )
+        return requested
+
+    def _expected_runtime_sec(self, job: Job, selected: ModelDescriptor) -> float:
+        """How long this particular request should take, where that is knowable.
+
+        たいていの生成では、根拠は 1 枚ぶんの実測しか無い。枚数も解像度も要求ごとに
+        変わるので総時間は予測できない。直し（拡大・ブレ補正）だけは違って、費用は
+        元画像の面積にほぼ比例し、その係数をモデルが実測値として宣言している。
+
+        宣言があるならそれで見積もる。1 枚ぶんの実測だけで打ち切りを組むと、大きな
+        写真は必ず途中で切られる（35.6 秒で測った SwinIR に 12MP を通せば 4 分を
+        超える。上限を上げただけでは、受け付けた job が時間切れで落ちる）。
+        """
+        measured = float(selected.measured_runtime_sec or 0)
+        profile = selected.upscale or {}
+        cost = profile.get("per_source_megapixel_sec")
+        if cost is None or job.request.constraints.get("edit_mode") not in {"upscale", "deblur"}:
+            return measured
+        try:
+            source = self.store.get_asset(job.request.inputs[0].asset_id)
+        except (IndexError, KeyError):
+            return measured
+        pixels = (source.width or 0) * (source.height or 0)
+        if pixels <= 0:
+            return measured
+        return max(measured, float(cost) * pixels / 1_000_000)
 
     def _validate_generation_limits(self, job: Job, selected: ModelDescriptor) -> None:
         # 詳細設定から来る値。範囲を外れたものは、worker が読み込みを終えて
@@ -1471,6 +1550,12 @@ class JobManager:
                     raise WorkerFailure("worker_not_installed", "image runtime is not installed")
                 executable = self.image_runtime_python
                 module = "worker_packs.image.worker"
+                # 画像にも native の駆動系を使うものがある（FLUX.2-dev は GGUF を
+                # sd-cli で回す）。場所を渡さないと、adapter は起動できない。
+                if self.native_media_runtime_root is not None:
+                    environment["MEDIA_FORGE_NATIVE_RUNTIME_ROOT"] = str(
+                        self.native_media_runtime_root
+                    )
             # The heavyweight process may import only the worker pack and its
             # own runtime dependencies. Do not inherit a development
             # PYTHONPATH that can accidentally expose core implementations.
@@ -1484,11 +1569,12 @@ class JobManager:
             environment["MEDIA_FORGE_WORK_ROOT"] = str(self.store.work_dir.resolve())
             stdin_payload += b"\n"
             # 総時間の見積りではなく、1 枚ぶんが止まったと判断するまでの猶予。
-            # 実測は 1 枚ぶんで、枚数も解像度も要求ごとに変わるので、総時間は
-            # 必ず外れる。実機ではその外れ方で同じ設定が通ったり落ちたりした。
+            # 枚数も解像度も要求ごとに変わるので、生成の総時間は必ず外れる。
+            # 実機ではその外れ方で同じ設定が通ったり落ちたりした。1 枚ぶんの
+            # 見積りは、面積で決まる直しだけモデルの宣言から引き直す。
             timeout_sec = max(
                 self.worker_timeout_sec,
-                float(selected.measured_runtime_sec or 0) * 3 + 30,
+                self._expected_runtime_sec(job, selected) * 3 + 30,
             )
         process = await asyncio.create_subprocess_exec(
             str(executable),
@@ -1918,7 +2004,12 @@ class JobManager:
         fake_runtime_sec: float,
     ) -> dict[str, Any]:
         request = (
-            image_model_request(execution.host_job_id, selected, workload_class=execution.workload_class)
+            image_model_request(
+                execution.host_job_id,
+                selected,
+                workload_class=execution.workload_class,
+                estimated_runtime_sec=self._expected_runtime_sec(job, selected),
+            )
             if selected is not None
             else fake_image_request(
                 execution.host_job_id, runtime_sec=fake_runtime_sec, workload_class=execution.workload_class

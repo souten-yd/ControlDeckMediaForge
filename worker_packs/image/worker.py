@@ -17,6 +17,7 @@ from .adapters import (
     DiffusersStableDiffusionAdapter,
     ImageEditRequest,
     ImageGenerationRequest,
+    NativeFlux2Adapter,
     SpandrelUpscaleAdapter,
 )
 
@@ -67,6 +68,9 @@ ADAPTERS = {
     # 拡大は生成ではない。prompt も seed も無く、同じ絵からは同じ絵が出る。
     # 拡散モデルに「良くして」と頼むと写真を描き直すので、別の adapter を置く。
     "spandrel.upscale": "SpandrelUpscaleAdapter",
+    # 32B は python の拡散スタックに載らない。GGUF を、動画側が既に使っている
+    # pinned build（sd-cli）で回す。駆動系を 2 つ持たない。
+    "native.stable-diffusion-cpp-flux2": "NativeFlux2Adapter",
 }
 
 
@@ -257,6 +261,13 @@ class ImageWorker:
         upscaling = constraints.get("edit_mode") in {"upscale", "deblur", "erase"}
         # 消して埋めるのは塗った所を要る。拡大・ブレ補正は要らない。
         erasing = constraints.get("edit_mode") == "erase"
+        # 出す倍率は核が決めて渡す。ここで既定を置くと、核が決めた寸法と
+        # worker が使う倍率が食い違い、寸法の検査を通ってから別の大きさが出る。
+        target_scale = constraints.get("upscale_scale")
+        if target_scale is not None:
+            target_scale = _integer(target_scale, "upscale scale")
+            if not 1 <= target_scale <= 8:
+                raise ValueError("upscale scale must be in the range 1..8")
         declared = constraints.get("steps", runtime_options.get("default_steps"))
         if declared is None and not upscaling:
             raise ValueError("image steps were not resolved for this model")
@@ -336,7 +347,7 @@ class ImageWorker:
                 result = adapter.erase(source_path, mask_path, output_path)
             elif upscaling:
                 assert source_path is not None
-                result = adapter.upscale(source_path, output_path)
+                result = adapter.upscale(source_path, output_path, target_scale)
             elif operation == "image.edit":
                 assert source_path is not None
                 result = adapter.edit(ImageEditRequest(
@@ -379,7 +390,12 @@ class ImageWorker:
                 "weights_hash": str(model["weights_hash"]),
                 "license": str(model["license"]),
                 "runtime_adapter": str(model["runtime_adapter"]),
-                "runtime_version": importlib.metadata.version("diffusers"),
+                # 何で作ったかは adapter が知っている。native の経路は diffusers を
+                # 通らないので、その版を記録すると嘘になる。
+                "runtime_version": (
+                    getattr(adapter, "runtime_version", None)
+                    or importlib.metadata.version("diffusers")
+                ),
             },
             "seed": seed,
             "postprocessing": (
