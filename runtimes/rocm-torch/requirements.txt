@@ -11,3 +11,15 @@ huggingface-hub==1.28.0
 sentencepiece==0.2.2
 # LoRA の適用に要る。diffusers の load_lora_weights は PEFT backend を通す。
 peft==0.19.0
+# 拡大に要る。spandrel は重みから網の形を読むので、系統ごとに実装を書かずに
+# 済む。torchvision は 2 つの architecture でしか使われないが、宣言された依存
+# なので入れないと import できない。
+#
+# **版を固定すること。** 固定せずに `pip install torchvision` を打つと、pip が
+# PyPI の最新を選び、それが要求する CUDA 版 torch で ROCm の torch を置き換える
+# （実機で 2026-09-01 に起こした。torch 2.13.0+cu130 になり `cuda.is_available()`
+# が False、transformers の遅延 import まで壊れた）。固定すれば find-links の
+# ROCm wheel が選ばれ、torch は触られない。
+torchvision==0.25.0
+einops==0.8.2
+spandrel==0.4.2

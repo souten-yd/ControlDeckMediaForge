@@ -1211,3 +1211,37 @@ def test_a_photo_keeps_its_resolution_but_a_clip_keeps_the_old_bound(tmp_path: P
         )
     assert response.status_code == 201, response.text
     assert (response.json()["width"], response.json()["height"]) == (4032, 3024)
+
+
+def test_an_upscale_takes_no_mask_and_no_chosen_size(tmp_path: Path):
+    """拡大は塗る所も広げる所も無く、寸法も選べない。
+
+    マスクを受けると「守られる所がある」ように見え、寸法を受けると倍率と
+    食い違った値を選ばせることになる。出力は元画像と、重みが持つ倍率だけで
+    決まる。掛け算は核が一度だけ行い、画面にも worker にもさせない。
+    """
+    client, _headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        asset = import_asset(client, "source", size=(64, 48))
+        mask = import_asset(client, "edit_mask", size=(64, 48))
+
+        def submit(constraints: dict) -> dict:
+            response = client.post("/api/v1/jobs", json={
+                "operation": "image.edit", "local_only": True, "intent": "画質を上げる",
+                "inputs": [{"asset_id": asset["id"]}],
+                "constraints": {"edit_mode": "upscale", **constraints},
+            })
+            assert response.status_code == 202, response.text
+            return wait_terminal(client, response.json()["id"])
+
+        refused = submit({"editable_mask_asset_id": mask["id"]})
+        assert refused["error"]["code"] == "invalid_constraint"
+        assert "edit mask" in refused["error"]["message"]
+
+        sized = submit({"width": 256, "height": 192})
+        assert sized["error"]["code"] == "invalid_constraint"
+        assert "scale" in sized["error"]["message"]
+
+        protected = submit({"strict_edit": True})
+        assert protected["error"]["code"] == "invalid_constraint"
+        assert "strict_edit" in protected["error"]["message"]

@@ -384,3 +384,50 @@ def test_a_photo_sized_canvas_is_accepted_for_a_masked_edit(monkeypatch, tmp_pat
         worker.handle(masked(8000, 6000))
     with pytest.raises(ValueError, match="range 1..8192"):
         worker.handle(masked(9000, 100))
+
+
+def test_an_upscale_takes_no_steps_and_produces_exactly_one_image(monkeypatch, tmp_path):
+    """拡大は標本化しない。歩数も seed も持たない。
+
+    歩数を要求すると、持っていない値を核が埋めることになり、「4 歩で回した絵」と
+    同じ種類の間違いを作る。乱数が無いので、何枚頼まれても同じ絵にしかならない。
+
+    出力寸法は元画像と倍率で決まる。16 の倍数は求めない（4 倍にすると、元の
+    寸法が 4 の倍数であることを強いることになる）。
+    """
+    model_root = tmp_path / "models"
+    work_root = tmp_path / "work"
+    model = model_root / "model"
+    model.mkdir(parents=True)
+    work_root.mkdir()
+    source = work_root / "source.png"
+    Image.new("RGBA", (64, 64), "black").save(source, format="PNG")
+    monkeypatch.setenv("MEDIA_FORGE_MODEL_ROOT", str(model_root))
+    monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(work_root))
+    worker = image_worker.ImageWorker()
+
+    def upscaling(width: int, height: int, count: int = 1, steps: object = None) -> dict:
+        value = payload(model, work_root / "outputs")
+        value["model"]["runtime_adapter"] = "spandrel.upscale"
+        value["request"]["operation"] = "image.edit"
+        value["request"]["constraints"] = {
+            "edit_mode": "upscale", "width": width, "height": height,
+            **({"steps": steps} if steps is not None else {}),
+        }
+        value["request"]["output"] = {"format": "png", "count": count}
+        value["worker_inputs"] = {"source_path": str(source)}
+        return value
+
+    # 歩数が無くても断らない。adapter の手前まで進む。
+    with pytest.raises(Exception) as raised:
+        worker.handle(upscaling(4096, 3072))
+    assert "steps were not resolved" not in str(raised.value)
+
+    # 出力は取り込みの上限で切る。作れないものを選ばせない。
+    with pytest.raises(ValueError, match="24,000,000 pixel bound"):
+        worker.handle(upscaling(6000, 4500))
+    with pytest.raises(ValueError, match="range 1..8192"):
+        worker.handle(upscaling(9000, 100))
+    # 乱数が無いので複数枚は同じ絵にしかならない。
+    with pytest.raises(ValueError, match="exactly one image"):
+        worker.handle(upscaling(4096, 3072, count=4))

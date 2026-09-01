@@ -565,6 +565,8 @@ class JobManager:
             return "image.multi_reference_edit"
         if job.request.operation == "image.generate":
             return "image.text_to_image"
+        if job.request.constraints.get("edit_mode") == "upscale":
+            return "image.upscale"
         if job.request.constraints.get("edit_mode") == "outpaint":
             return "image.outpaint"
         if job.request.constraints.get("edit_mode") == "multi_reference":
@@ -800,8 +802,23 @@ class JobManager:
         strict = job.request.constraints.get("strict_edit", False)
         if not isinstance(strict, bool):
             raise WorkerFailure("invalid_constraint", "strict_edit must be a boolean")
-        if edit_mode not in {"reference", "variation", "inpaint", "outpaint", "multi_reference"}:
+        if edit_mode not in {
+            "reference", "variation", "inpaint", "outpaint", "multi_reference", "upscale",
+        }:
             raise WorkerFailure("invalid_constraint", "edit_mode is unsupported")
+        if edit_mode == "upscale":
+            # 拡大は塗る所も広げる所も無い。マスクを受けると、守られるものが
+            # あるように見える。出す寸法は倍率だけで決まるので指定も受けない。
+            if strict:
+                raise WorkerFailure("invalid_constraint", "upscale does not take strict_edit")
+            if "editable_mask_asset_id" in job.request.constraints:
+                raise WorkerFailure("invalid_constraint", "upscale does not take an edit mask")
+            for key in ("width", "height"):
+                if key in job.request.constraints:
+                    raise WorkerFailure(
+                        "invalid_constraint", "upscale derives its size from the model's scale",
+                    )
+            return
         if strict and edit_mode == "variation":
             raise WorkerFailure("invalid_constraint", "variation cannot request strict_edit")
         if edit_mode == "inpaint" and not strict:
@@ -1184,6 +1201,10 @@ class JobManager:
         constraints = dict(request.get("constraints") or {})
         if constraints.get("steps") is None and selected.default_steps is not None:
             constraints["steps"] = selected.default_steps
+        if constraints.get("edit_mode") == "upscale":
+            # 倍率は重みが持っている。掛け算をここでやらないと、画面と worker の
+            # 二か所に同じ計算が現れて、別の倍率の重みを足したとき片方だけ直る。
+            return self._resolved_upscale_request(job, selected, request, constraints)
         native = selected.native_width, selected.native_height
         width, height = constraints.get("width"), constraints.get("height")
         strict = (
@@ -1198,6 +1219,38 @@ class JobManager:
                 constraints["width"], constraints["height"] = snap_to_native(
                     width, height, int(native[0])
                 )
+        request["constraints"] = constraints
+        return request
+
+    def _resolved_upscale_request(
+        self, job: Job, selected: ModelDescriptor, request: dict[str, Any],
+        constraints: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Fill the output size from the weights' own scale, and refuse early.
+
+        拡大は標本化しない。歩数も seed も持たず、出力の寸法は元画像と倍率だけで
+        決まる。利用者が寸法を選べるようにすると、選べるのに作れない値が並ぶ。
+        """
+        profile = selected.upscale or {}
+        scale = int(profile.get("scale") or 0)
+        if scale < 2:
+            raise WorkerFailure("capability_unavailable", "この拡大モデルは倍率を宣言していません")
+        try:
+            source = self.store.get_asset(job.request.inputs[0].asset_id)
+        except (IndexError, KeyError) as exc:
+            raise WorkerFailure("invalid_dimensions", "拡大する画像がありません") from exc
+        if not source.width or not source.height:
+            raise WorkerFailure("invalid_dimensions", "拡大する画像の寸法が分かりません")
+        bound = profile.get("max_source_pixels")
+        if bound is not None and source.width * source.height > int(bound):
+            raise WorkerFailure(
+                "resource_limit",
+                f"この画像は拡大には大きすぎます（{int(bound):,} 画素までを {scale} 倍にできます）",
+            )
+        constraints["width"] = source.width * scale
+        constraints["height"] = source.height * scale
+        # 標本化しないものに歩数を渡すと、worker が使わない値を検査することになる。
+        constraints.pop("steps", None)
         request["constraints"] = constraints
         return request
 

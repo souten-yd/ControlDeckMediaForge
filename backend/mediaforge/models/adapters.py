@@ -16,6 +16,9 @@ IMAGE_ADAPTERS = frozenset({
     "diffusers.flux2-klein",
     "diffusers.sdxl",
     "diffusers.sdxl-single-file",
+    # 拡大は標本化しない。prompt も seed も無く、同じ絵からは同じ絵が出る。
+    # 生成ではないが、core が起動する画像 worker の経路としては同じである。
+    "spandrel.upscale",
 })
 
 # 動画 worker（worker_packs/video/worker.py）が実装するもの。

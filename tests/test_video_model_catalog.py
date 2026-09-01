@@ -203,3 +203,36 @@ def test_unmeasured_video_candidates_cannot_route_on_r9700() -> None:
             hardware_backend="rocm",
             free_vram_bytes=34_208_743_424,
         )
+
+
+def test_the_upscaler_cannot_be_asked_for_more_than_it_can_hold() -> None:
+    """拡大は作り直さない。倍率は重みが持っていて、核が掛け算をする。
+
+    出力は元画像の 16 倍の画素数になる（4 倍拡大）。取り込みの上限
+    （24,000,000 画素）を超える設定を許すと、選べるのに作れない値が並ぶ。
+
+    2026-09-01 実測（R9700 / gfx1201、256px タイル・32px 重なり）:
+      0.31MP ->  4.9MP   6.3s / 0.79MP -> 12.6MP  20.0s
+      1.12MP -> 18.0MP  24.7s / 1.50MP -> 24.0MP  35.6s
+    VRAM はタイルで決まるので寸法に依らない（0.82 GiB 一定）。
+    """
+    model = next(item for item in registry().all() if item.model_id == "mikestealth/SwinIR")
+
+    assert model.capabilities == ("image.upscale",)
+    assert model.runtime_adapter == "spandrel.upscale"
+    assert model.state == "available"
+    assert model.hardware_backends == ("rocm", "cuda")
+    assert model.ownership == ModelOwnership.MANAGED
+    assert model.gated is False
+
+    profile = model.upscale or {}
+    assert profile["scale"] == 4
+    # 入力の上限 x 倍率^2 が、core が合成・検証できる画素数を超えない。
+    assert profile["max_source_pixels"] * profile["scale"] ** 2 <= 24_000_000
+    # 生成の枠も宣言する。既定の 2048x2048 のままだと、作れるのに断られる。
+    assert (model.max_width, model.max_height) == (8192, 8192)
+    assert model.max_pixels == 24_000_000
+    # 歩数は持たない。標本化しないものに既定を持たせない。
+    assert model.default_steps is None
+    assert model.measured_runtime_sec == 35.6
+    assert model.execution_peak_vram_bytes == 879_555_072

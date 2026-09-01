@@ -145,6 +145,7 @@ class ModelDescriptor:
     supports_lora: bool = False
     # 実測にもとづく動画の作り方。持たないモデルは None。
     video: dict[str, Any] | None = None
+    upscale: dict[str, Any] | None = None
     max_references: int = 0
     reference_roles: tuple[str, ...] = ()
     supports_reference_strength: bool = False
@@ -283,7 +284,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     if not isinstance(runtime_options, dict) or set(runtime_options) - {
         "device_mode", "disable_mmap", "negative_prompt", "guidance_scale",
         "default_steps", "native_width", "native_height", "base_model",
-        "trigger_words", "video",
+        "trigger_words", "video", "upscale",
     }:
         raise ModelRegistryError("model registry runtime_options are invalid")
     negative_prompt = runtime_options.get("negative_prompt", "")
@@ -353,6 +354,35 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         ):
             raise ModelRegistryError("model registry video options are invalid")
 
+    # 拡大は倍率を重みが持っている。核が掛け算をするので、その値と、どこまでを
+    # 受けるかをモデルの側から言う。画面が共通の決め打ちを持つと、別の倍率の
+    # 重みを足したときに黙って外れる。
+    upscale = runtime_options.get("upscale")
+    if upscale is not None:
+        if not isinstance(upscale, dict) or set(upscale) - {
+            "scale", "max_source_pixels", "per_source_megapixel_sec", "measured_source_pixels",
+        }:
+            raise ModelRegistryError("model registry upscale options are invalid")
+        scale = upscale.get("scale")
+        if isinstance(scale, bool) or not isinstance(scale, int) or not 2 <= scale <= 8:
+            raise ModelRegistryError("model registry upscale options are invalid")
+        for key in ("max_source_pixels", "measured_source_pixels"):
+            bound = upscale.get(key)
+            if bound is not None and (
+                isinstance(bound, bool) or not isinstance(bound, int)
+                or not 1 <= bound <= 24_000_000
+            ):
+                raise ModelRegistryError("model registry upscale options are invalid")
+        # 出力が取り込みの上限を超える設定は、作れないものを選ばせることになる。
+        source_bound = upscale.get("max_source_pixels")
+        if source_bound is not None and source_bound * scale * scale > 24_000_000:
+            raise ModelRegistryError("model registry upscale options are invalid")
+        cost = upscale.get("per_source_megapixel_sec")
+        if cost is not None and (
+            isinstance(cost, bool) or not isinstance(cost, (int, float)) or not 0 < cost <= 3600
+        ):
+            raise ModelRegistryError("model registry upscale options are invalid")
+
     base_model = runtime_options.get("base_model", "")
     if not isinstance(base_model, str) or len(base_model) > 64:
         raise ModelRegistryError("model registry runtime_options are invalid")
@@ -403,6 +433,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         default_steps=default_steps,
         base_model=base_model,
         video=video,
+        upscale=upscale,
         trigger_words=tuple(trigger_words),
         **({"default_steps_source": "declared"} if default_steps is not None else {}),
         **native_size,

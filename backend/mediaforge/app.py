@@ -518,6 +518,9 @@ def create_app(
             # 歩数もここへ入れる。`generation` は diffusers 経路にしか付かず、
             # native の動画モデルには届かない。画面が測定基準の `measured_steps`
             # で代用すると、測り直した歩数がそのまま既定にすり替わる。
+            # 倍率と、どこまで受けるかはモデルが言う。画面が決め打ちすると、
+            # 別の倍率の重みを足したとき黙って外れる。
+            **({"upscale": dict(item.upscale)} if item.upscale else {}),
             **({"video": {
                 **dict(item.video),
                 **({"default_steps": item.default_steps}
@@ -1011,6 +1014,8 @@ def create_app(
                 "image.variation": image_capability("image.variation"),
                 "image.multi_reference_edit": image_capability("image.multi_reference_edit"),
                 "image.strict_edit": image_capability("image.strict_edit"),
+                # 拡大は作り直さない。同じ絵からは同じ絵が出る。
+                "image.upscale": image_capability("image.upscale"),
                 "image.semantic_review": (
                     {"state": "available"}
                     if semantic_available
