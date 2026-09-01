@@ -68,8 +68,14 @@ def image_model_request(
     model: ModelDescriptor,
     *,
     workload_class: str = "interactive",
+    estimated_runtime_sec: float | None = None,
 ) -> dict[str, Any]:
-    """Build a measured request without exposing model selection publicly."""
+    """Build a measured request without exposing model selection publicly.
+
+    `estimated_runtime_sec` は、その要求の見積りが分かっているときだけ渡す。
+    分かるのは費用が入力の面積に比例する直しの場合で、そこでは 1 枚ぶんの実測を
+    渡すと broker に申告する占有時間が実際の数分の一になる。
+    """
     values = (
         model.resident_vram_bytes,
         model.execution_peak_vram_bytes,
@@ -84,7 +90,11 @@ def image_model_request(
         execution_peak_bytes=int(model.execution_peak_vram_bytes or 0),
         cold_load_peak_bytes=int(model.cold_load_peak_vram_bytes or 0),
         headroom_bytes=int(model.headroom_vram_bytes or 0),
-        estimated_runtime_sec=float(model.measured_runtime_sec or 0),
+        estimated_runtime_sec=(
+            float(model.measured_runtime_sec or 0)
+            if estimated_runtime_sec is None
+            else max(float(estimated_runtime_sec), 0.0)
+        ),
     )
     return {
         "job_id": job_id,

@@ -1499,7 +1499,12 @@
         "disable_mmap": false,
         "upscale": {
           "scale": 4,
-          "max_source_pixels": 1500000,
+          "target_scales": [
+            1,
+            2,
+            4
+          ],
+          "max_source_pixels": 24000000,
           "per_source_megapixel_sec": 21.5,
           "measured_source_pixels": 1498840
         }
