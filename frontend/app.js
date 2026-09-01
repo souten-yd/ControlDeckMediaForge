@@ -59,10 +59,20 @@ const EDIT_ACTIONS = [
    kind: "generate", guarantee: "画像全体が変わることがあります"},
 ];
 
-/* いまの媒体で出す編集。写真は保つもの、画像は作り直すもの。 */
+/* いまの媒体で出す編集。
+
+   写真モードは「直す」だけに絞る。生成側は**減らさない** — 写真モードを足す前と
+   同じ一式を出す。絞ると、以前そこでできていたことができなくなる（実機で
+   「以前は複数あったのに 2 つになっている」と言われた）。写真モードは入口を
+   増やすものであって、既にある道を塞ぐものではない。
+
+   拡大だけは生成側に置かない。元の解像度を要するのに、生成側は添付を envelope
+   まで縮めるので、縮めた絵を拡大することになる。 */
 function editActionsForMedia() {
-  const wanted = state.createMedia === "photo" ? "retouch" : "generate";
-  return EDIT_ACTIONS.filter((action) => action.kind === wanted);
+  if (state.createMedia === "photo") {
+    return EDIT_ACTIONS.filter((action) => action.kind === "retouch");
+  }
+  return EDIT_ACTIONS.filter((action) => action.mode !== "upscale");
 }
 
 const CAPABILITY_REASON = {
@@ -190,7 +200,9 @@ function callHost(method, params = {}) {
 }
 
 function mediaSwitchButtons() {
-  return [byId("create-media-image"), byId("create-media-video")];
+  // 追加した媒体をここに足し忘れると、選んでいるのに押されて見えない。
+  // 実機で「写真モードを選択しても選択されていないように見える」となった。
+  return [byId("create-media-image"), byId("create-media-photo"), byId("create-media-video")];
 }
 
 function setMediaSwitchDisabled(value) {
@@ -642,6 +654,7 @@ function renderCreateMedia() {
     : photo ? "＋ 直したい写真を選ぶ" : "＋ 画像を追加";
   // 写真は添付が先。無いと何も選べないので、そこだけを見せる。
   byId("edit-block").hidden = video || !file;
+  byId("edit-block-label").textContent = photo ? "この写真を…" : "この画像を…";
   // 一覧に載るモデルは媒体で変わる。切り替えたまま前の一覧を残さない。
   renderModelChoice();
   renderVideoSettings();
