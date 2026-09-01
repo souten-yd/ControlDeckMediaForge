@@ -574,6 +574,35 @@
       "recommended_profiles": [],
       "gated": false,
       "license_notice": "Apache-2.0 (LaMa, Suvorov et al.). Weights mirrored from the upstream release; review the model card before redistribution."
+    },
+    {
+      "model_id": "city96/FLUX.2-dev-gguf",
+      "display_name": "FLUX.2 dev 32B (GGUF Q4_K_M)",
+      "domains": [
+        "general",
+        "illustration",
+        "poster",
+        "background",
+        "photoreal"
+      ],
+      "media_types": [
+        "image"
+      ],
+      "description": "文章から画像を作る 32B のモデル。Klein 4B より作りが細かい代わりに、1024x1024 を 20 歩で実測 181.9 秒かかる。R9700 / gfx1201 で計測。",
+      "approx_download_bytes": 34665856500,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "city96/FLUX.2-dev-gguf",
+        "revision": "ade5d688ddab0d9cf4a5b01bf4321e01c115020d"
+      },
+      "ownership": "managed",
+      "supports_lora": false,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": true,
+      "license_notice": "FLUX.1 [dev] Non-Commercial License。**商用利用はできない。** 出力物の扱いを含め、利用前に上流のライセンスを確認すること。拡散本体は city96 による GGUF 量子化で、上流は black-forest-labs/FLUX.2-dev。文章符号化に使う Mistral-Small-3.2-24B-Instruct-2506（Apache-2.0）と VAE の FLUX.2-small-decoder（Apache-2.0）は別ライセンスだが、組として使う限り非商用の条件が掛かる。ROCm/gfx1201 で実測済み。"
     }
   ]
 }

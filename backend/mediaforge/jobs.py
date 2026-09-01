@@ -1550,6 +1550,12 @@ class JobManager:
                     raise WorkerFailure("worker_not_installed", "image runtime is not installed")
                 executable = self.image_runtime_python
                 module = "worker_packs.image.worker"
+                # 画像にも native の駆動系を使うものがある（FLUX.2-dev は GGUF を
+                # sd-cli で回す）。場所を渡さないと、adapter は起動できない。
+                if self.native_media_runtime_root is not None:
+                    environment["MEDIA_FORGE_NATIVE_RUNTIME_ROOT"] = str(
+                        self.native_media_runtime_root
+                    )
             # The heavyweight process may import only the worker pack and its
             # own runtime dependencies. Do not inherit a development
             # PYTHONPATH that can accidentally expose core implementations.

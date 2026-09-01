@@ -273,3 +273,78 @@ def test_the_deblur_model_repairs_without_changing_the_size() -> None:
     assert model.default_steps is None
     assert model.execution_peak_vram_bytes == 405_778_944
     assert model.measured_runtime_sec == 24.5
+
+
+def test_the_32b_model_runs_through_the_native_runtime_not_diffusers() -> None:
+    """32B は python の拡散スタックに載らない。BF16 の実体は 64GB ある。
+
+    GGUF へ量子化したものを、動画側が既に使っている stable-diffusion.cpp の
+    pinned build で回す。駆動系を 2 つ持たない。
+
+    2026-09-01 実測（R9700 / gfx1201、te=cpu,diffusion=ROCm0,vae=ROCm0）:
+      512x512   4 歩   条件付け  7.14s / 標本化  21.39s / 全体  31.48s
+      1024x1024 20 歩  条件付け 13.01s / 標本化 161.76s / 全体 181.91s
+      peak VRAM 26,395,885,568 B、最大 RSS 26,911,692 KiB、Swaps 0
+
+    `--offload-to-cpu`（重みを RAM に置いて VRAM へ流す）はこの機械では成立
+    しない。拡散 19.15GB を RAM へ展開する段で RAM 30GB を使い切り、GPU が 3%
+    のまま 11 分進まなかった。
+    """
+    model = next(item for item in registry().all() if item.model_id == "city96/FLUX.2-dev-gguf")
+
+    assert model.runtime_adapter == "native.stable-diffusion-cpp-flux2"
+    assert model.capabilities == ("image.text_to_image",)
+    assert model.state == "available"
+    assert model.hardware_backends == ("rocm", "cuda")
+    assert model.execution_peak_vram_bytes == 26_395_885_568
+    assert model.measured_runtime_sec == 181.91
+    # 32,624 MiB の card に収まっている。収まらない値を measured で置かない。
+    assert model.execution_peak_vram_bytes < 32_624 * 1024 * 1024
+
+    # dev は蒸留された歩数モデルではない。4 歩では網目状のムラが残る。
+    assert model.default_steps == 20
+    assert (model.max_width, model.max_height) == (1024, 1024)
+
+    # 順位は小さいほど優先である（router は昇順に並べる）。速さで選ぶ方針では
+    # 4B に譲り、質で選ぶ方針では勝つ。1 枚 3 分は「おまかせ」で出す速さでは
+    # ないので、そこは必ず 4B が先に来ること。
+    klein = next(
+        item for item in registry().all()
+        if item.model_id == "black-forest-labs/FLUX.2-klein-4B"
+    )
+    for policy in ("auto", "fast", "balanced", "low_vram"):
+        assert model.policy_rank[policy] > klein.policy_rank[policy], policy
+    assert model.policy_rank["quality"] < klein.policy_rank["quality"]
+
+
+def test_the_32b_model_gathers_its_weights_from_three_repositories() -> None:
+    """FLUX.2 は CLIP+T5 をやめ、汎用の言語モデルを文章符号化器に据えている。
+
+    拡散本体だけでは動かない。文章モデルと VAE が要り、それぞれ別のリポジトリ
+    から来る。導入判定は実体が主リポジトリ配下にあることを求めるので、宣言は
+    主リポジトリ内の置き場所で書き、取得元だけを weight ごとに上書きする
+    （MiniMax H3 が別リポジトリの VAE を抱えているのと同じ形）。
+    """
+    model = next(item for item in registry().all() if item.model_id == "city96/FLUX.2-dev-gguf")
+
+    weights = {item.path: item for item in model.weights}
+    assert set(weights) == {
+        "flux2-dev-Q4_K_M.gguf",
+        "text_encoder/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+        "vae/full_encoder_small_decoder.safetensors",
+    }
+    # 拡散本体は主リポジトリのもの。取得元の上書きを持たない。
+    assert weights["flux2-dev-Q4_K_M.gguf"].source is None
+    # 残り 2 つは別のリポジトリから来る。
+    encoder = weights["text_encoder/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf"]
+    assert encoder.source is not None
+    assert encoder.source.repo_id == "unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF"
+    decoder = weights["vae/full_encoder_small_decoder.safetensors"]
+    assert decoder.source is not None
+    assert decoder.source.repo_id == "black-forest-labs/FLUX.2-small-decoder"
+    # 文章モデルは飾りではない。拡散本体に匹敵する大きさを占める。
+    assert encoder.size_bytes > weights["flux2-dev-Q4_K_M.gguf"].size_bytes * 0.6
+
+    # 非商用である。既定のモデルは Apache-2.0 のままにしてある。
+    assert model.license == "FLUX-1-dev-Non-Commercial-License"
+    assert model.gated is True

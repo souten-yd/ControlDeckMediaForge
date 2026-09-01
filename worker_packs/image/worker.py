@@ -17,6 +17,7 @@ from .adapters import (
     DiffusersStableDiffusionAdapter,
     ImageEditRequest,
     ImageGenerationRequest,
+    NativeFlux2Adapter,
     SpandrelUpscaleAdapter,
 )
 
@@ -67,6 +68,9 @@ ADAPTERS = {
     # 拡大は生成ではない。prompt も seed も無く、同じ絵からは同じ絵が出る。
     # 拡散モデルに「良くして」と頼むと写真を描き直すので、別の adapter を置く。
     "spandrel.upscale": "SpandrelUpscaleAdapter",
+    # 32B は python の拡散スタックに載らない。GGUF を、動画側が既に使っている
+    # pinned build（sd-cli）で回す。駆動系を 2 つ持たない。
+    "native.stable-diffusion-cpp-flux2": "NativeFlux2Adapter",
 }
 
 
@@ -386,7 +390,12 @@ class ImageWorker:
                 "weights_hash": str(model["weights_hash"]),
                 "license": str(model["license"]),
                 "runtime_adapter": str(model["runtime_adapter"]),
-                "runtime_version": importlib.metadata.version("diffusers"),
+                # 何で作ったかは adapter が知っている。native の経路は diffusers を
+                # 通らないので、その版を記録すると嘘になる。
+                "runtime_version": (
+                    getattr(adapter, "runtime_version", None)
+                    or importlib.metadata.version("diffusers")
+                ),
             },
             "seed": seed,
             "postprocessing": (
