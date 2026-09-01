@@ -330,3 +330,57 @@ def test_a_model_without_a_runtime_is_not_called_usable():
     for model in manifest["models"]:
         if model.get("state") == "available":
             assert is_runnable(model["runtime_adapter"]), model["model_id"]
+
+
+def test_a_photo_sized_canvas_is_accepted_for_a_masked_edit(monkeypatch, tmp_path):
+    """写真を原寸のまま直せるようにする。
+
+    strict edit で渡る width/height は画布（元画像）の寸法である。生成されるのは
+    塗った範囲＋64px の切り抜きだけで、この値はモデルに渡らない。2048 で切ると、
+    透かしを消すために写真全体の解像度を捨てることになる。実機で 4032x3024 の
+    写真を通し、生成 1.69 秒・出力 4032x3024・保護画素の差 0 を確認した。
+
+    上限は core の取り込み（24,000,000 画素）に合わせる。境界の都合で core を
+    import できないので、食い違ったら気づけるよう両方から確かめる。
+    """
+    from mediaforge.asset_import import MAX_IMPORT_PIXELS
+
+    model_root = tmp_path / "models"
+    work_root = tmp_path / "work"
+    model = model_root / "model"
+    model.mkdir(parents=True)
+    work_root.mkdir()
+    source = work_root / "source.png"
+    mask = work_root / "mask.png"
+    Image.new("RGBA", (64, 64), "black").save(source, format="PNG")
+    Image.new("RGBA", (64, 64), "white").save(mask, format="PNG")
+    monkeypatch.setenv("MEDIA_FORGE_MODEL_ROOT", str(model_root))
+    monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(work_root))
+    worker = image_worker.ImageWorker()
+
+    def masked(width: int, height: int) -> dict:
+        value = payload(model, work_root / "outputs")
+        value["request"]["operation"] = "image.edit"
+        value["request"]["constraints"].update({
+            "strict_edit": True, "edit_mode": "inpaint",
+            "width": width, "height": height,
+        })
+        value["worker_inputs"] = {"source_path": str(source), "mask_path": str(mask)}
+        return value
+
+    # 携帯の標準（12.2MP）と一眼の標準（24MP）は寸法で断らない。ここでは
+    # torch を持たないので adapter の手前までしか進めないが、寸法の検査を
+    # 抜けたことは、返る失敗が寸法のものでないことで分かる。
+    for width, height in ((4032, 3024), (6000, 4000)):
+        assert width * height <= MAX_IMPORT_PIXELS
+        with pytest.raises(Exception) as raised:
+            worker.handle(masked(width, height))
+        assert "pixel bound" not in str(raised.value)
+        assert "range 1..8192" not in str(raised.value)
+
+    # 1 ジョブが 1.6GB を抱える 48MP は取らない。core の取り込みと同じ線で切る。
+    assert 8000 * 6000 > MAX_IMPORT_PIXELS
+    with pytest.raises(ValueError, match="24,000,000 pixel bound"):
+        worker.handle(masked(8000, 6000))
+    with pytest.raises(ValueError, match="range 1..8192"):
+        worker.handle(masked(9000, 100))

@@ -25,11 +25,21 @@ MIN_MAX_SIDE = 64
 MAX_MAX_SIDE = 512
 DEFAULT_MAX_SIDE = 256
 THUMBNAIL_BYTE_LIMIT = 64 * 1024
+# 原寸で預かった写真は、workspace の転送上限（12 MiB）を超えて運べない。断ると
+# 「消せたが見られない」になるので、見るためだけの縮小版を作る。一覧の 64 KiB
+# では拡大に耐えないため、別の予算を持つ。実測: 12.2MP の写真が PNG で 13.6MiB、
+# ここでは 1600px / 2 MiB に収まる。原寸は保存で取り出す（export は転送上限に
+# 縛られず、host へファイルのまま渡る）。
+PREVIEW_MAX_SIDE = 1600
+PREVIEW_BYTE_LIMIT = 2 * 1024 * 1024
 MIME_TYPE = "image/webp"
 # Quality is spent before resolution: a noisy 256px PNG measured 220 KB and had
 # to shrink to 128px to fit the bound, while WebP holds 256px at 41 KB.
 _QUALITY_LADDER = (80, 65, 50)
-_FALLBACK_SIDES = (192, 128, 96)
+# 一覧（256px）から見ると今までと同じ 3 段である（`value < max_side` で絞る）。
+# 大きい方は preview のために足した。無いと 1600px が入らなかったとき
+# 一気に 192px まで落ちる。
+_FALLBACK_SIDES = (1280, 1024, 768, 512, 384, 192, 128, 96)
 _PROJECT_ENTRIES = ["asset.glb", "manifest.json", "preview.png"]
 _PROJECT_MANIFEST_LIMIT = 1024 * 1024
 _PROJECT_PREVIEW_LIMIT = 8 * 1024 * 1024
@@ -147,7 +157,13 @@ def _project_preview(source: Path) -> bytes:
     return preview
 
 
-def render(source: Path, max_side: int, mime_type: str = "image/png") -> Thumbnail:
+def render(
+    source: Path,
+    max_side: int,
+    mime_type: str = "image/png",
+    *,
+    byte_limit: int = THUMBNAIL_BYTE_LIMIT,
+) -> Thumbnail:
     """Render within the byte bound, spending quality before resolution."""
     content = b""
     width = height = 0
@@ -167,9 +183,14 @@ def render(source: Path, max_side: int, mime_type: str = "image/png") -> Thumbna
                 content, width, height = _render_content(opened, side, quality)
             except (OSError, UnidentifiedImageError, ValueError) as exc:
                 raise ThumbnailError() from exc
-            if len(content) <= THUMBNAIL_BYTE_LIMIT:
+            if len(content) <= byte_limit:
                 return Thumbnail(MIME_TYPE, width, height, content)
     raise ThumbnailError()
+
+
+def preview(source: Path, mime_type: str = "image/png") -> Thumbnail:
+    """Render a viewable stand-in for an asset too large to send whole."""
+    return render(source, PREVIEW_MAX_SIDE, mime_type, byte_limit=PREVIEW_BYTE_LIMIT)
 
 
 def cached(

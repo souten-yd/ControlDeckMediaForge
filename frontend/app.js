@@ -92,6 +92,7 @@ const state = {
   source: null,
   upload: null,
   sourceUrl: "",
+  measured: null,
   maskFile: null,
   maskPainted: 0,
   outpaintRatio: "source",
@@ -2351,7 +2352,18 @@ function outpaintProblem(target) {
 }
 
 function selectEditMode(mode) {
+  const previous = state.editMode;
   state.editMode = mode;
+  if (previous !== mode && attachedFile() && state.measured) {
+    // 寸法が変わると、それに対して塗った範囲は使えない。
+    const before = state.source;
+    void prepareUpload().then(() => {
+      if (before && state.source
+          && (before.width !== state.source.width || before.height !== state.source.height)) {
+        maskReset();
+      }
+    });
+  }
   for (const button of document.querySelectorAll(".edit-action")) {
     button.setAttribute("aria-checked", String(button.dataset.editMode === mode));
   }
@@ -2369,6 +2381,35 @@ function selectEditMode(mode) {
   if (state.mode === "advanced") syncAdvancedCreate();
 }
 
+/* 送るものを用意する。縮小先は選んだモードで変わるので、モードを選び直したら
+   ここを通し直す。塗った範囲は元の寸法に対して作るため、寸法が変われば捨てる。 */
+async function prepareUpload() {
+  const file = attachedFile();
+  const measured = state.measured;
+  state.upload = null;
+  state.sourceAsset = null;
+  const label = byId("attach-size");
+  if (!file || !measured) {
+    state.source = measured;
+    label.textContent = measured ? `${measured.width}×${measured.height}` : "";
+    return;
+  }
+  if (needsResize(measured, state.editMode)) {
+    label.textContent = "読み込んでいます…";
+    const prepared = await resized(file, measured, state.editMode);
+    state.upload = prepared.file;
+    state.source = prepared.size;
+    label.textContent =
+      `${measured.width}×${measured.height} → ${prepared.size.width}×${prepared.size.height} に縮小して使います`;
+  } else {
+    state.upload = file;
+    state.source = measured;
+    label.textContent = preservesResolution(state.editMode)
+      ? `${measured.width}×${measured.height}（原寸のまま）`
+      : `${measured.width}×${measured.height}`;
+  }
+}
+
 function attachedFile() {
   return byId("source-file").files[0] || null;
 }
@@ -2384,9 +2425,15 @@ async function measure(file) {
   } catch { return null; }
 }
 
-/* 端末の写真は 12 メガピクセル級で、取り込みの画素数上限（2048×2048）を超える。
-   出力はどのみち envelope に収まる寸法なので、送る前にここで縮める。
-   これをしないと「大きすぎます」で落ちるか、無駄に長いアップロードになる。 */
+/* 取り込みが受ける画素数の上限。core の MAX_IMPORT_PIXELS と同じ値である。 */
+const MAX_IMPORT_PIXELS = 24000000;
+
+/* 画像全体を作り直すモードは、モデルが出せる寸法に収める必要がある。写真を
+   そのまま渡すと「大きすぎます」で落ちるか、無駄に長いアップロードになる。
+
+   「一部だけ直す」は別である。生成されるのは塗った範囲＋64px の切り抜きだけで、
+   元画像の解像度はモデルに渡らない。縮めると、透かしを消すために写真全体の
+   解像度を捨てることになる。取り込みの上限まではそのまま送る。 */
 function fitToEnvelope(width, height) {
   const envelope = sizeEnvelope();
   const multiple = envelope.multiple_of;
@@ -2399,13 +2446,35 @@ function fitToEnvelope(width, height) {
   return {width: round(width), height: round(height)};
 }
 
-function needsResize(size) {
-  const target = fitToEnvelope(size.width, size.height);
+/* 原寸のまま。上限を超えるぶんだけ、比を保って縮める。 */
+function fitToImportBound(width, height) {
+  const pixels = width * height;
+  if (pixels <= MAX_IMPORT_PIXELS) return {width, height};
+  const scale = Math.sqrt(MAX_IMPORT_PIXELS / pixels);
+  return {
+    width: Math.max(16, Math.floor(width * scale)),
+    height: Math.max(16, Math.floor(height * scale)),
+  };
+}
+
+/* 塗った所以外を 1px も変えないモードは、元の解像度を保つ。 */
+function preservesResolution(mode) {
+  return mode === "inpaint";
+}
+
+function targetSize(size, mode) {
+  return preservesResolution(mode)
+    ? fitToImportBound(size.width, size.height)
+    : fitToEnvelope(size.width, size.height);
+}
+
+function needsResize(size, mode) {
+  const target = targetSize(size, mode);
   return target.width !== size.width || target.height !== size.height;
 }
 
-async function resized(file, size) {
-  const target = fitToEnvelope(size.width, size.height);
+async function resized(file, size, mode) {
+  const target = targetSize(size, mode);
   const bitmap = await createImageBitmap(file);
   const canvas = document.createElement("canvas");
   canvas.width = target.width;
@@ -2425,23 +2494,10 @@ async function refreshAttachment() {
   byId("attach-clear").hidden = !file;
   byId("edit-block").hidden = state.createMedia === "video" || !file;
   if (!file) maskReset();
-  state.upload = null;
-  state.sourceAsset = null;
   state.referenceAnalysis = null;
   state.referenceFocus = "overall";
-  const measured = file ? await measure(file) : null;
-  if (file && measured && needsResize(measured)) {
-    byId("attach-size").textContent = "読み込んでいます…";
-    const prepared = await resized(file, measured);
-    state.upload = prepared.file;
-    state.source = prepared.size;
-    byId("attach-size").textContent =
-      `${measured.width}×${measured.height} → ${prepared.size.width}×${prepared.size.height} に縮小して使います`;
-  } else {
-    state.upload = file;
-    state.source = measured;
-    byId("attach-size").textContent = measured ? `${measured.width}×${measured.height}` : "";
-  }
+  state.measured = file ? await measure(file) : null;
+  await prepareUpload();
   if (file && state.createMedia === "image") renderEditActions();
   else selectEditMode("");
   renderSizeSection();
@@ -3573,6 +3629,8 @@ async function showAsset(assetId) {
       image.src = `data:${content.mime_type};base64,${content.base64}`;
       image.dataset.assetId = assetId;
     }
+    // 原寸で預かった写真は転送上限を超える。縮んで見えている理由を書く。
+    byId("result-reduced").hidden = content.reduced !== true;
   } catch { /* 表示できなくても以降の操作は続けられる */ }
 }
 
@@ -4123,10 +4181,13 @@ async function openViewer(assetId, item, list, {keepList = false} = {}) {
       image.alt = "";
     }
     // ファイル名は原寸を見ている最中に使わない。行を専有すると操作が押し出される。
-    caption.textContent = item?.width && item?.height ? `${item.width}×${item.height}` : "";
+    const size = item?.width && item?.height ? `${item.width}×${item.height}` : "";
+    // 縮小版を見せているなら黙らない。原寸を見たと思われる方が困る。
+    caption.textContent = content.reduced
+      ? `${size}${size ? " · " : ""}表示は縮小版です。原寸は保存で取り出せます。`
+      : size;
   } catch {
     if (token !== viewer.token) return;
-    // 12 MiB を超える素材は運べない。小さい版で見せて理由を書く。
     try {
       const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 512});
       if (token !== viewer.token) return;
