@@ -296,10 +296,16 @@ def test_the_32b_model_runs_through_the_native_runtime_not_diffusers() -> None:
     assert model.default_steps == 20
     assert (model.max_width, model.max_height) == (1024, 1024)
 
-    # Klein 4B の 8.7 倍遅い。1 枚 3 分は「おまかせ」で出す速さではない。
-    assert model.policy_rank["auto"] == 0
-    assert model.policy_rank["fast"] == 0
-    assert model.policy_rank["quality"] > 0
+    # 順位は小さいほど優先である（router は昇順に並べる）。速さで選ぶ方針では
+    # 4B に譲り、質で選ぶ方針では勝つ。1 枚 3 分は「おまかせ」で出す速さでは
+    # ないので、そこは必ず 4B が先に来ること。
+    klein = next(
+        item for item in registry().all()
+        if item.model_id == "black-forest-labs/FLUX.2-klein-4B"
+    )
+    for policy in ("auto", "fast", "balanced", "low_vram"):
+        assert model.policy_rank[policy] > klein.policy_rank[policy], policy
+    assert model.policy_rank["quality"] < klein.policy_rank["quality"]
 
 
 def test_the_32b_model_gathers_its_weights_from_three_repositories() -> None:

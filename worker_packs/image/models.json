@@ -1639,11 +1639,11 @@
       "state": "available",
       "measurement_confidence": "measured",
       "policy_rank": {
-        "auto": 0,
-        "fast": 0,
-        "balanced": 0,
-        "quality": 30,
-        "low_vram": 0
+        "auto": 100,
+        "fast": 100,
+        "balanced": 100,
+        "quality": 10,
+        "low_vram": 100
       },
       "required_files": [],
       "weights": [
