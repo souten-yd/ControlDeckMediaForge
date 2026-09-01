@@ -2664,8 +2664,14 @@ async function refreshAttachment() {
   state.referenceFocus = "overall";
   state.measured = file ? await measure(file) : null;
   await prepareUpload();
-  if (file && state.createMedia !== "video") renderEditActions();
-  else selectEditMode("");
+  if (file && state.createMedia !== "video") {
+    renderEditActions();
+  } else {
+    // 出さないものを DOM に残さない。隠れているだけの前の選択肢は、
+    // 見えていないことの確認を素通りする。
+    byId("edit-actions").replaceChildren();
+    selectEditMode("");
+  }
   renderSizeSection();
   renderReferenceIntelligence();
   renderCreateMedia();
@@ -5987,9 +5993,8 @@ async function editFromLibrary(assetId) {
   transfer.items.add(new File([fetched.blob], fetched.filename || "source.png", {type: fetched.mime}));
   byId("source-file").files = transfer.files;
   byId("viewer").close();
-  // 「これを編集」は直しに来た人の操作である。生成側へ落とすと、作り直す
-  // 選択肢しか出ないうえ、元画像がモデルの寸法まで縮められる。
-  setCreateMedia("photo");
+  // 媒体は変えない。いま選んでいるモードへ入れる。こちらで「写真を直す」へ
+  // 移していたが、それは利用者が選んだ場所を勝手に捨てることだった。
   activate("create");
   await refreshAttachment();
   byId("create-status").textContent = state.source
