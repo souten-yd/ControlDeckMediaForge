@@ -49,6 +49,9 @@ const EDIT_ACTIONS = [
   {mode: "upscale", capability: "image.upscale", label: "画質を上げる", kind: "retouch",
    hint: "ぼけさせずに大きくします。作り直さないので、写っているものは変わりません。",
    guarantee: "写っているものは変わりません"},
+  {mode: "deblur", capability: "image.deblur", label: "ブレを直す", kind: "retouch",
+   hint: "手ブレ・被写体ブレを取ります。寸法は変わりません。",
+   guarantee: "大きさも写っているものも変わりません"},
   {mode: "outpaint", capability: "image.outpaint", label: "外側を広げる", kind: "retouch",
    guarantee: "元の画像は 1px も変わりません", preserving: true},
   {mode: "reference", capability: "image.single_reference_edit", label: "全体を直す",
@@ -58,6 +61,9 @@ const EDIT_ACTIONS = [
   {mode: "multi_reference", capability: "image.multi_reference_edit", label: "参考を足して直す",
    kind: "generate", guarantee: "画像全体が変わることがあります"},
 ];
+
+/* 言葉を取らない直し方。標本化しないので、書いても効かない。 */
+const REPAIR_MODES = new Set(["upscale", "deblur"]);
 
 /* いまの媒体で出す編集。
 
@@ -72,7 +78,7 @@ function editActionsForMedia() {
   if (state.createMedia === "photo") {
     return EDIT_ACTIONS.filter((action) => action.kind === "retouch");
   }
-  return EDIT_ACTIONS.filter((action) => action.mode !== "upscale");
+  return EDIT_ACTIONS.filter((action) => !REPAIR_MODES.has(action.mode));
 }
 
 const CAPABILITY_REASON = {
@@ -644,8 +650,9 @@ function renderCreateMedia() {
     : photo ? "塗った所に何があってほしいか（例: 芝生、空、壁）"
     : "夜の机に置かれた、小さな青いロボット";
   // 拡大は指示を取らない。書ける欄を出すと、書いた言葉が効くように見える。
-  byId("create-intent-label").hidden = photo && state.editMode === "upscale";
-  byId("create-intent").hidden = photo && state.editMode === "upscale";
+  const wordless = REPAIR_MODES.has(state.editMode);
+  byId("create-intent-label").hidden = photo && wordless;
+  byId("create-intent").hidden = photo && wordless;
 
   const file = attachedFile();
   byId("attach-label").textContent = file
@@ -2438,8 +2445,8 @@ function selectEditMode(mode) {
   byId("guarantee-badge").textContent = action ? action.guarantee : "";
   byId("mask-input").hidden = mode !== "inpaint";
   // 拡大は指示を取らない。書ける欄を出すと、書いた言葉が効くように見える。
-  byId("upscale-input").hidden = mode !== "upscale";
-  if (mode === "upscale") renderUpscaleNote();
+  byId("upscale-input").hidden = !REPAIR_MODES.has(mode);
+  if (REPAIR_MODES.has(mode)) renderUpscaleNote();
   // 指示欄を出すかは編集の種類で変わる。ここを通さないと、拡大を選んでも
   // 「どう直しますか？」が残る。
   renderCreateMedia();
@@ -2509,12 +2516,33 @@ async function prepareUpload() {
 
 /* 何倍になって、どのくらい待つのかを、モデルが宣言した値から書く。画面が
    倍率を決め打ちすると、別の倍率の重みを足したとき黙って外れる。 */
+/* 直せる大きさを超えていないか。案内と同じ根拠から出す。 */
+function repairBoundProblem() {
+  const profile = repairProfile();
+  const bound = Number(profile.max_source_pixels);
+  const size = state.source;
+  if (!size || !Number.isFinite(bound)) return "";
+  if (size.width * size.height <= bound) return "";
+  const scale = Number(profile.scale) || 1;
+  return scale === 1
+    ? `この画像は大きすぎます。${bound.toLocaleString()} 画素までを直せます。`
+    : `この画像は大きすぎます。${bound.toLocaleString()} 画素までを ${scale} 倍にできます。`;
+}
+
+/* いま選んでいる直し方のモデルの申告。 */
+function repairProfile() {
+  const capability = state.editMode === "deblur" ? "image.deblur" : "image.upscale";
+  return (state.modelCatalog || [])
+    .filter((item) => item.installed && (item.capabilities || []).includes(capability))
+    .map((item) => item.upscale).find(Boolean) || {};
+}
+
 function renderUpscaleNote() {
   const note = byId("upscale-note");
   if (!note) return;
-  const profile = (state.modelCatalog || [])
-    .filter((item) => item.installed)
-    .map((item) => item.upscale).find(Boolean) || {};
+  // 直し方ごとに別のモデルである。最初に見つかったものを使うと、ブレ補正を
+  // 選んでいるのに拡大の倍率と単価を出すことになる。
+  const profile = repairProfile();
   const scale = Number(profile.scale);
   const size = state.measured;
   if (!Number.isFinite(scale) || !size) { note.textContent = ""; return; }
@@ -2526,8 +2554,13 @@ function renderUpscaleNote() {
   const perMegapixel = Number(profile.per_source_megapixel_sec);
   const seconds = Number.isFinite(perMegapixel)
     ? Math.round(perMegapixel * (size.width * size.height) / 1e6) : null;
-  note.textContent = `${size.width}×${size.height} → ${size.width * scale}×${size.height * scale}`
-    + (seconds === null ? "" : `（およそ ${seconds < 60 ? `${seconds} 秒` : `${Math.round(seconds / 60)} 分`}）`);
+  const wait = seconds === null ? ""
+    : `およそ ${seconds < 60 ? `${seconds} 秒` : `${Math.round(seconds / 60)} 分`}`;
+  // 倍率 1 のものは寸法が変わらない。矢印を出すと変わるように見える。
+  note.textContent = scale === 1
+    ? `${size.width}×${size.height} のまま${wait ? `（${wait}）` : ""}`
+    : `${size.width}×${size.height} → ${size.width * scale}×${size.height * scale}`
+      + (wait ? `（${wait}）` : "");
 }
 
 function attachedFile() {
@@ -2874,7 +2907,7 @@ function requestProblem(constraints) {
   const file = attachedFile();
   // 拡大は指示を取らない。書かせると、書いた言葉が効くように見えるうえ、
   // 空のまま押しても理由の分からないまま止まる。
-  if (state.editMode !== "upscale" && !byId("create-intent").value.trim()) {
+  if (!REPAIR_MODES.has(state.editMode) && !byId("create-intent").value.trim()) {
     return state.createMedia === "photo"
       ? "どう直すかを書いてください。"
       : "作りたいものを書いてください。";
@@ -2914,7 +2947,10 @@ function requestProblem(constraints) {
   if (state.editMode === "inpaint" && !maskAsset()) {
     return "変えたい場所を塗ってください。";
   }
-  if (state.editMode === "upscale") return "";
+  if (REPAIR_MODES.has(state.editMode)) {
+    // 案内には出しているのに押せてしまい、受付まで行って断られていた。
+    return repairBoundProblem();
+  }
   if (state.editMode === "multi_reference") {
     const count = byId("reference-files").files.length;
     if (count < 1 || count > 3) return "参考にする画像は 1〜3 枚にしてください。";
@@ -3012,15 +3048,15 @@ async function submitJob(event) {
       );
       state.sourceAsset = source;
       inputs = [{asset_id: source.id}];
-      if (state.editMode === "upscale") {
+      if (REPAIR_MODES.has(state.editMode)) {
         // 出す寸法は倍率だけで決まる。送ると「倍率から決めます」と断られる。
         // 塗る所も広げる所も無いので、マスクも strict_edit も付けない。
         delete constraints.width;
         delete constraints.height;
-        constraints.edit_mode = "upscale";
+        constraints.edit_mode = state.editMode;
       }
       const preserving = state.editMode === "inpaint" || state.editMode === "outpaint";
-      if (state.editMode === "upscale") {
+      if (REPAIR_MODES.has(state.editMode)) {
         // 何も足さない。
       } else if (state.editMode !== "outpaint") {
         constraints.width = source.width;
@@ -3029,7 +3065,7 @@ async function submitJob(event) {
         // 添付時の計測とサーバの正規化がずれた場合の保険。受付前に止める。
         throw {code: "invalid_dimensions"};
       }
-      if (state.editMode !== "upscale") {
+      if (!REPAIR_MODES.has(state.editMode)) {
         constraints.strict_edit = preserving;
         constraints.edit_mode = state.editMode;
       }
@@ -3051,14 +3087,15 @@ async function submitJob(event) {
       operation,
       // 拡大は指示を取らない。空で送ると受付が 422 で返す。何をした job か
       // 後から分かるように、ここで名前だけ付ける。
-      intent: state.editMode === "upscale"
-        ? "画質を上げる" : byId("create-intent").value,
+      intent: REPAIR_MODES.has(state.editMode)
+        ? (state.editMode === "deblur" ? "ブレを直す" : "画質を上げる")
+        : byId("create-intent").value,
       inputs,
       constraints,
       output: {
         format: outputFormat(),
         // 乱数が無いので、何枚頼んでも同じ絵にしかならない。
-        count: state.editMode === "upscale" ? 1 : requestedCount(),
+        count: REPAIR_MODES.has(state.editMode) ? 1 : requestedCount(),
       },
       qa: qaOptions(),
       local_only: true,

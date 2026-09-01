@@ -522,6 +522,32 @@
       "recommended_profiles": [],
       "gated": false,
       "license_notice": "Apache-2.0 (SwinIR, Liang et al.). Weights mirrored from the upstream release; review the model card before redistribution."
+    },
+    {
+      "model_id": "tog/nafnet-models",
+      "display_name": "NAFNet ブレ補正",
+      "domains": [
+        "general",
+        "photoreal"
+      ],
+      "media_types": [
+        "image"
+      ],
+      "description": "手ブレ・被写体ブレを取る。寸法は変わらず、写っているものも変わらない。",
+      "approx_download_bytes": 271778961,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "tog/nafnet-models",
+        "revision": "a0cb4f040b03d82f955482e1b5dd97116eece1c9"
+      },
+      "ownership": "managed",
+      "supports_lora": false,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "MIT (NAFNet, Chen et al.). Weights mirrored from the upstream release; review the model card before redistribution."
     }
   ]
 }

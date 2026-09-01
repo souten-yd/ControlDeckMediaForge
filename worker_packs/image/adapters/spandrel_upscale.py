@@ -21,7 +21,7 @@ from .base import ImageGenerationResult
 
 
 class SpandrelUpscaleAdapter:
-    """Enlarge an image in tiles, so cost follows area instead of exploding.
+    """Enlarge or repair an image in tiles, so cost follows area instead of exploding.
 
     Whole-image inference measured 8.61 GiB of card for a 512x384 picture:
     attention is quadratic in the tile, so a photograph would not fit at any
@@ -60,8 +60,11 @@ class SpandrelUpscaleAdapter:
         descriptor = ModelLoader().load_from_state_dict(state)
         if not isinstance(descriptor, ImageModelDescriptor):
             raise ValueError("upscale weights are not an image model")
-        if descriptor.purpose != "SR":
-            raise ValueError("upscale weights are not a super-resolution model")
+        # 拡大（SR）と、寸法を変えない補正（Restoration）を同じ経路で扱う。
+        # どちらも「作り直さずに直す」もので、タイルの回し方も同じである。
+        # 倍率は重みが持っているので、1 倍なら寸法は変わらない。
+        if descriptor.purpose not in {"SR", "Restoration"}:
+            raise ValueError("these weights neither enlarge nor restore an image")
         if descriptor.input_channels != 3 or descriptor.output_channels != 3:
             raise ValueError("upscale weights must take and return RGB")
         descriptor.eval()

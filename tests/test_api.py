@@ -201,8 +201,9 @@ def test_model_catalog_adds_trusted_presentation_metadata(tmp_path: Path):
         "Qwen Image 2512",
         "Illustrious XL v2.0",
         "Segmind SSD-1B (FP16)",
-        # 拡大は生成ではないが、画像を作る道具として同じ一覧に並ぶ。
+        # 直す道具も、画像を扱う道具として同じ一覧に並ぶ。
         "SwinIR 実写 4倍",
+        "NAFNet ブレ補正",
     ]
     assert all(item["source"]["revision"] == item["revision"] for item in images)
     assert all("path" not in item for item in response.json()["items"])

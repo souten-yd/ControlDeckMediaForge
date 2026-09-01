@@ -1511,6 +1511,61 @@
         "headroom_vram_bytes": 1073741824,
         "measured_runtime_sec": 35.6
       }
+    },
+    {
+      "model_id": "tog/nafnet-models",
+      "family": "nafnet",
+      "version": "gopro-width64",
+      "revision": "a0cb4f040b03d82f955482e1b5dd97116eece1c9",
+      "weights_hash": "sha256:3269d57fcd7e2680dbd70256b98a3bff4ab89e18542ac2f23a385bb65f31dd89",
+      "license": "MIT",
+      "runtime_adapter": "spandrel.upscale",
+      "capabilities": [
+        "image.deblur"
+      ],
+      "hardware_backends": [
+        "rocm",
+        "cuda"
+      ],
+      "state": "available",
+      "measurement_confidence": "measured",
+      "policy_rank": {
+        "auto": 50,
+        "fast": 50,
+        "balanced": 50,
+        "quality": 50,
+        "low_vram": 90
+      },
+      "required_files": [],
+      "weights": [
+        {
+          "path": "NAFNet-GoPro-width64.pth",
+          "size_bytes": 271778961,
+          "sha256": "329d3ab4077b8d6b7ff61de376e483714667960bf85be027bf4335cda701196f"
+        }
+      ],
+      "generation_limits": {
+        "max_width": 8192,
+        "max_height": 8192,
+        "max_pixels": 24000000
+      },
+      "runtime_options": {
+        "device_mode": "full_device",
+        "disable_mmap": false,
+        "upscale": {
+          "scale": 1,
+          "max_source_pixels": 24000000,
+          "per_source_megapixel_sec": 1.02,
+          "measured_source_pixels": 7680000
+        }
+      },
+      "measurements": {
+        "resident_vram_bytes": 0,
+        "execution_peak_vram_bytes": 405778944,
+        "cold_load_peak_vram_bytes": 271561216,
+        "headroom_vram_bytes": 1073741824,
+        "measured_runtime_sec": 24.5
+      }
     }
   ]
 }

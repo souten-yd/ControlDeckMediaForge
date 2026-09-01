@@ -252,7 +252,9 @@ class ImageWorker:
         # 回すより、何が決まっていないかを言う方がよい。
         # 拡大は標本化しない。歩数を要求すると、持っていない値を核が埋める
         # ことになり、「4 歩で回した絵」と同じ種類の間違いを作る。
-        upscaling = constraints.get("edit_mode") == "upscale"
+        # 拡大とブレ補正は同じ道を通る。どちらも標本化せず、prompt も seed も
+        # 持たない。違いは重みが持つ倍率だけである（ブレ補正は 1 倍）。
+        upscaling = constraints.get("edit_mode") in {"upscale", "deblur"}
         declared = constraints.get("steps", runtime_options.get("default_steps"))
         if declared is None and not upscaling:
             raise ValueError("image steps were not resolved for this model")

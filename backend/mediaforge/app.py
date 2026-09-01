@@ -1019,6 +1019,8 @@ def create_app(
                 "image.strict_edit": image_capability("image.strict_edit"),
                 # 拡大は作り直さない。同じ絵からは同じ絵が出る。
                 "image.upscale": image_capability("image.upscale"),
+                # ブレ補正も作り直さない。寸法も変わらない。
+                "image.deblur": image_capability("image.deblur"),
                 "image.semantic_review": (
                     {"state": "available"}
                     if semantic_available

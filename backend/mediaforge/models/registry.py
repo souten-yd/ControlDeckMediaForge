@@ -364,7 +364,9 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         }:
             raise ModelRegistryError("model registry upscale options are invalid")
         scale = upscale.get("scale")
-        if isinstance(scale, bool) or not isinstance(scale, int) or not 2 <= scale <= 8:
+        # 1 は「寸法を変えずに直す」である（ブレ補正など）。作り直さずに直す
+        # という点は拡大と同じで、経路もタイルの回し方も共通なのでここに置く。
+        if isinstance(scale, bool) or not isinstance(scale, int) or not 1 <= scale <= 8:
             raise ModelRegistryError("model registry upscale options are invalid")
         for key in ("max_source_pixels", "measured_source_pixels"):
             bound = upscale.get(key)
