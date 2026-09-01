@@ -1021,6 +1021,8 @@ def create_app(
                 "image.upscale": image_capability("image.upscale"),
                 # ブレ補正も作り直さない。寸法も変わらない。
                 "image.deblur": image_capability("image.deblur"),
+                # 塗った所を周りから埋める。描き直さないので境目が出ない。
+                "image.erase": image_capability("image.erase"),
                 "image.semantic_review": (
                     {"state": "available"}
                     if semantic_available

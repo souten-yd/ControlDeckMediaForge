@@ -204,6 +204,7 @@ def test_model_catalog_adds_trusted_presentation_metadata(tmp_path: Path):
         # 直す道具も、画像を扱う道具として同じ一覧に並ぶ。
         "SwinIR 実写 4倍",
         "NAFNet ブレ補正",
+        "LaMa 消して埋める",
     ]
     assert all(item["source"]["revision"] == item["revision"] for item in images)
     assert all("path" not in item for item in response.json()["items"])

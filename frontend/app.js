@@ -43,8 +43,13 @@ const PHASE_TEXT = {
    線は「元の絵が残るか」で引く。retouch は写っているものを保ち、generate は
    作り直す。`preserving` は 1px も変わらない保証で、それより広い区別である。 */
 const EDIT_ACTIONS = [
-  {mode: "inpaint", capability: "image.inpaint", label: "一部だけ直す", kind: "retouch",
-   hint: "透かしや写り込みを消すのはここです。消したい所を塗ってください。",
+  {mode: "erase", capability: "image.erase", label: "消して埋める", kind: "retouch",
+   hint: "透かしや写り込みを消すのはここです。消したい所を塗ってください。"
+       + "周りの続きで埋めるので、境目が出ません。",
+   guarantee: "塗っていない場所は 1px も変わりません", preserving: true},
+  {mode: "inpaint", capability: "image.inpaint", label: "塗った所に描き足す", kind: "retouch",
+   hint: "塗った所に、書いたものを描きます。消すだけなら「消して埋める」の方が"
+       + "きれいに仕上がります。",
    guarantee: "塗っていない場所は 1px も変わりません", preserving: true},
   {mode: "upscale", capability: "image.upscale", label: "画質を上げる", kind: "retouch",
    hint: "ぼけさせずに大きくします。作り直さないので、写っているものは変わりません。",
@@ -63,7 +68,9 @@ const EDIT_ACTIONS = [
 ];
 
 /* 言葉を取らない直し方。標本化しないので、書いても効かない。 */
-const REPAIR_MODES = new Set(["upscale", "deblur"]);
+const REPAIR_MODES = new Set(["upscale", "deblur", "erase"]);
+/* そのうち、塗った所を要るもの。 */
+const MASKED_MODES = new Set(["inpaint", "erase"]);
 
 /* いまの媒体で出す編集。
 
@@ -2443,7 +2450,7 @@ function selectEditMode(mode) {
   }
   const action = EDIT_ACTIONS.find((item) => item.mode === mode);
   byId("guarantee-badge").textContent = action ? action.guarantee : "";
-  byId("mask-input").hidden = mode !== "inpaint";
+  byId("mask-input").hidden = !MASKED_MODES.has(mode);
   // 拡大は指示を取らない。書ける欄を出すと、書いた言葉が効くように見える。
   byId("upscale-input").hidden = !REPAIR_MODES.has(mode);
   if (REPAIR_MODES.has(mode)) renderUpscaleNote();
@@ -2454,7 +2461,7 @@ function selectEditMode(mode) {
   byId("reference-files").required = mode === "multi_reference";
   byId("outpaint-input").hidden = mode !== "outpaint";
   if (mode === "outpaint") renderOutpaintControls();
-  if (mode !== "inpaint") maskReset();
+  if (!MASKED_MODES.has(mode)) maskReset();
   mountAdvanced();
   renderSizeSection();
   clearError();
@@ -2944,8 +2951,8 @@ function requestProblem(constraints) {
   }
 
   if (!state.editMode) return "この画像をどうするか選んでください。";
-  if (state.editMode === "inpaint" && !maskAsset()) {
-    return "変えたい場所を塗ってください。";
+  if (MASKED_MODES.has(state.editMode) && !maskAsset()) {
+    return state.editMode === "erase" ? "消したい場所を塗ってください。" : "変えたい場所を塗ってください。";
   }
   if (REPAIR_MODES.has(state.editMode)) {
     // 案内には出しているのに押せてしまい、受付まで行って断られていた。
@@ -3069,7 +3076,7 @@ async function submitJob(event) {
         constraints.strict_edit = preserving;
         constraints.edit_mode = state.editMode;
       }
-      if (state.editMode === "inpaint") {
+      if (MASKED_MODES.has(state.editMode)) {
         showPreparing("塗った範囲を取り込んでいます", 0.55);
         const imported = await importFile(maskAsset(), "edit_mask");
         constraints.editable_mask_asset_id = imported.id;
@@ -3088,7 +3095,7 @@ async function submitJob(event) {
       // 拡大は指示を取らない。空で送ると受付が 422 で返す。何をした job か
       // 後から分かるように、ここで名前だけ付ける。
       intent: REPAIR_MODES.has(state.editMode)
-        ? (state.editMode === "deblur" ? "ブレを直す" : "画質を上げる")
+        ? {deblur: "ブレを直す", erase: "消して埋める"}[state.editMode] || "画質を上げる"
         : byId("create-intent").value,
       inputs,
       constraints,

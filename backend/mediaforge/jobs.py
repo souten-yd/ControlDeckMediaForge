@@ -569,6 +569,8 @@ class JobManager:
             return "image.upscale"
         if job.request.constraints.get("edit_mode") == "deblur":
             return "image.deblur"
+        if job.request.constraints.get("edit_mode") == "erase":
+            return "image.erase"
         if job.request.constraints.get("edit_mode") == "outpaint":
             return "image.outpaint"
         if job.request.constraints.get("edit_mode") == "multi_reference":
@@ -806,9 +808,31 @@ class JobManager:
             raise WorkerFailure("invalid_constraint", "strict_edit must be a boolean")
         if edit_mode not in {
             "reference", "variation", "inpaint", "outpaint", "multi_reference",
-            "upscale", "deblur",
+            "upscale", "deblur", "erase",
         }:
             raise WorkerFailure("invalid_constraint", "edit_mode is unsupported")
+        if edit_mode == "erase":
+            # 塗った所を周りから埋める。何を描くかの指示は取らないが、
+            # どこを消すかは要る。寸法も倍率も動かない。
+            if strict:
+                raise WorkerFailure("invalid_constraint", "erasing does not take strict_edit")
+            mask_id = job.request.constraints.get("editable_mask_asset_id")
+            if not isinstance(mask_id, str) or not mask_id.startswith("asset_"):
+                raise WorkerFailure("invalid_edit_mask", "erasing requires editable_mask_asset_id")
+            try:
+                mask = self.store.get_asset(mask_id)
+            except KeyError as exc:
+                raise WorkerFailure("invalid_edit_mask", "edit mask asset was not found") from exc
+            if mask.mime_type != "image/png":
+                raise WorkerFailure("invalid_edit_mask", "edit mask must be a PNG asset")
+            if (mask.width, mask.height) != (source.width, source.height):
+                raise WorkerFailure("invalid_edit_mask", "edit mask must match the source dimensions")
+            for key in ("width", "height"):
+                if key in job.request.constraints:
+                    raise WorkerFailure(
+                        "invalid_constraint", "erasing keeps the size it was given",
+                    )
+            return
         if edit_mode in {"upscale", "deblur"}:
             # 拡大もブレ補正も塗る所も広げる所も無い。マスクを受けると、守られるものが
             # あるように見える。出す寸法は倍率だけで決まるので指定も受けない。
@@ -1204,7 +1228,7 @@ class JobManager:
         constraints = dict(request.get("constraints") or {})
         if constraints.get("steps") is None and selected.default_steps is not None:
             constraints["steps"] = selected.default_steps
-        if constraints.get("edit_mode") in {"upscale", "deblur"}:
+        if constraints.get("edit_mode") in {"upscale", "deblur", "erase"}:
             # 倍率は重みが持っている。掛け算をここでやらないと、画面と worker の
             # 二か所に同じ計算が現れて、別の倍率の重みを足したとき片方だけ直る。
             return self._resolved_upscale_request(job, selected, request, constraints)

@@ -1566,6 +1566,60 @@
         "headroom_vram_bytes": 1073741824,
         "measured_runtime_sec": 24.5
       }
+    },
+    {
+      "model_id": "AEmotionStudio/lama-inpainting",
+      "family": "lama",
+      "version": "big-lama",
+      "revision": "d194c0932b1b022f0e34b9e574dc25e24db27c27",
+      "weights_hash": "sha256:b457eab741be99bf1840df84b3a9ec0bcf9338657960e4602f85413a1bc09d53",
+      "license": "Apache-2.0",
+      "runtime_adapter": "spandrel.upscale",
+      "capabilities": [
+        "image.erase"
+      ],
+      "hardware_backends": [
+        "rocm",
+        "cuda"
+      ],
+      "state": "available",
+      "measurement_confidence": "measured",
+      "policy_rank": {
+        "auto": 50,
+        "fast": 90,
+        "balanced": 50,
+        "quality": 50,
+        "low_vram": 50
+      },
+      "required_files": [],
+      "weights": [
+        {
+          "path": "big-lama.safetensors",
+          "size_bytes": 204348820,
+          "sha256": "12cb5eb5d515400f262b48d4e7c1994183e170aedb4b86699d9a55b770038e16"
+        }
+      ],
+      "generation_limits": {
+        "max_width": 8192,
+        "max_height": 8192,
+        "max_pixels": 24000000
+      },
+      "runtime_options": {
+        "device_mode": "full_device",
+        "disable_mmap": false,
+        "upscale": {
+          "scale": 1,
+          "max_source_pixels": 24000000,
+          "measured_source_pixels": 21332000
+        }
+      },
+      "measurements": {
+        "resident_vram_bytes": 0,
+        "execution_peak_vram_bytes": 3421194752,
+        "cold_load_peak_vram_bytes": 204013568,
+        "headroom_vram_bytes": 1073741824,
+        "measured_runtime_sec": 115.9
+      }
     }
   ]
 }
