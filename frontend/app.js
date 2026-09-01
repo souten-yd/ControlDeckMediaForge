@@ -491,6 +491,26 @@ async function standaloneCall(method, params) {
       method: "POST", body: JSON.stringify({max_side: params.max_side}),
     });
   }
+  if (method === "assets.bytes") {
+    // 単体表示では HTTP が直接使える。分割の形だけ埋め込み側と合わせて、
+    // 呼ぶ側が経路を意識しなくて済むようにする。
+    const response = await fetch(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/content`);
+    if (!response.ok) throw {code: `http_${response.status}`};
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    const offset = Number(params.offset) || 0;
+    const chunk = buffer.subarray(offset);
+    let binary = "";
+    chunk.forEach((value) => { binary += String.fromCharCode(value); });
+    const disposition = response.headers.get("content-disposition") || "";
+    const named = /filename="?([^";]+)"?/.exec(disposition);
+    return {
+      mime_type: response.headers.get("content-type") || "application/octet-stream",
+      filename: named ? named[1] : "",
+      total_bytes: buffer.length,
+      offset,
+      base64: btoa(binary),
+    };
+  }
   if (method === "assets.content") {
     const response = await fetch(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/content`);
     if (!response.ok) throw {code: `http_${response.status}`};
@@ -2554,8 +2574,15 @@ function fitToImportBound(width, height) {
   };
 }
 
-/* 塗った所以外を 1px も変えないモードは、元の解像度を保つ。 */
+/* 元の絵をそのまま使うものは、元の解像度を保つ。
+
+   「写真を直す」は直しに来た人の場所なので、まだ何を選んでいなくても縮めない。
+   縮めてから選び直させると、canvas を 2 度通すことになり、携帯では目に見えて
+   待たされる。例外は「外側を広げる」で、これは画布ぜんぶをモデルが描くため、
+   モデルが出せる寸法に収める必要がある。 */
 function preservesResolution(mode) {
+  if (mode === "outpaint") return false;
+  if (state.createMedia === "photo") return true;
   return mode === "inpaint";
 }
 
@@ -4386,7 +4413,79 @@ function modelRouteText(route) {
 
 /* 書き出し導線が 1 つも無かった（設計 §F4 保存A）。host files bridge は実装
    済みで疎通実績もあるのに、UI から呼ばれていなかった。ここで繋ぐ。 */
+/* 原寸を分割で取り、1 つの Blob に戻す。
+
+   表示用の縮小版とは別の経路である。縮小版を保存すると、小さくなったことに
+   気づかないまま原寸を失う。 */
+async function assetBlob(assetId, onProgress) {
+  let offset = 0;
+  let total = null;
+  let mime = "application/octet-stream";
+  let filename = "";
+  const parts = [];
+  while (total === null || offset < total) {
+    const piece = await call("assets.bytes", {asset_id: assetId, offset});
+    total = piece.total_bytes;
+    mime = piece.mime_type || mime;
+    filename = piece.filename || filename;
+    const binary = atob(piece.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    parts.push(bytes);
+    offset += bytes.length;
+    if (!bytes.length) break;
+    if (onProgress && total) onProgress(offset / total);
+  }
+  return {blob: new Blob(parts, {type: mime}), filename, mime};
+}
+
+/* ControlDeck が動いている機械ではなく、いま見ている端末へ保存する。
+
+   これまでの保存は host のファイル選択だった。手元が携帯だと、選ばせる相手が
+   別の機械なので「保存先を選べませんでした」で終わる（実機の iPhone でそうなった）。
+   共有シートがあればそれを使う（iOS はここから「画像を保存」で写真に入る）。
+   無ければ普通のダウンロードにする。 */
+async function saveToDevice(assetId) {
+  const note = byId("viewer-save-note");
+  note.hidden = false;
+  note.textContent = "取り出しています…";
+  let fetched;
+  try {
+    fetched = await assetBlob(assetId, (ratio) => {
+      note.textContent = `取り出しています… ${Math.round(ratio * 100)}%`;
+    });
+  } catch (error) {
+    note.textContent = failureText(error?.code) || "取り出せませんでした。";
+    return false;
+  }
+  const name = viewer.filename || fetched.filename || "media-forge";
+  const file = new File([fetched.blob], name, {type: fetched.mime});
+  if (navigator.canShare && navigator.canShare({files: [file]})) {
+    try {
+      await navigator.share({files: [file]});
+      note.textContent = `${name} を渡しました。`;
+      return true;
+    } catch (error) {
+      // 利用者が閉じただけなら、失敗として扱わない。
+      if (error?.name === "AbortError") { note.textContent = "保存を取りやめました。"; return true; }
+    }
+  }
+  const url = URL.createObjectURL(fetched.blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  note.textContent = `${name}（${formatBytes(fetched.blob.size)}）を保存しました。`;
+  return true;
+}
+
 async function saveAsset(assetId) {
+  // 手元の端末を先に試す。ここが本命で、host のファイル選択は
+  // 同じ機械で使っているときの控えである。
+  if (await saveToDevice(assetId)) return;
   const note = byId("viewer-save-note");
   note.hidden = false;
   note.textContent = "保存先を選んでいます…";
@@ -5848,11 +5947,42 @@ byId("viewer-detail").addEventListener("click", () => {
   byId("viewer").close();
   if (viewer.assetId) void openDetail(viewer.assetId);
 });
-byId("viewer-edit").addEventListener("click", () => {
+/* ライブラリの「これを編集」。押しても何も起きず、案内文だけが出ていた。
+   利用者からは添付されない不具合に見える。実際に添付する。
+
+   原寸を取ってから入れる（表示用の縮小版を入れると、直した写真が黙って
+   小さくなる）。取り込み直しになるが、それで普段の添付とまったく同じ道を
+   通るので、ここだけ別扱いの経路を作らずに済む。 */
+byId("viewer-edit").addEventListener("click", () => void editFromLibrary(viewer.assetId));
+
+async function editFromLibrary(assetId) {
+  const note = byId("viewer-save-note");
+  note.hidden = false;
+  note.textContent = "読み込んでいます…";
+  let fetched;
+  try {
+    fetched = await assetBlob(assetId);
+  } catch (error) {
+    note.textContent = failureText(error?.code) || "読み込めませんでした。";
+    return;
+  }
+  if (!String(fetched.mime).startsWith("image/")) {
+    note.textContent = "これは画像ではないので編集できません。";
+    return;
+  }
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([fetched.blob], fetched.filename || "source.png", {type: fetched.mime}));
+  byId("source-file").files = transfer.files;
   byId("viewer").close();
+  // 「これを編集」は直しに来た人の操作である。生成側へ落とすと、作り直す
+  // 選択肢しか出ないうえ、元画像がモデルの寸法まで縮められる。
+  setCreateMedia("photo");
   activate("create");
-  byId("create-status").textContent = "「画像を追加」から読み込ませてください。";
-});
+  await refreshAttachment();
+  byId("create-status").textContent = state.source
+    ? `ライブラリの画像を読み込みました（${state.source.width}×${state.source.height}）。`
+    : "";
+}
 
 const viewerStage = byId("viewer-stage");
 viewerStage.addEventListener("wheel", (event) => {

@@ -123,6 +123,9 @@ from .thumbnails import ThumbnailError
 
 # workspace は base64 でしか運べない。これを超えるものは縮小版を返す。
 WORKSPACE_TRANSPORT_LIMIT = 12 * 1024 * 1024
+# 1 度に運ぶ生の量。base64 で 4/3 に膨らむので、socket の message 上限に
+# 収まるところに置く。
+ASSET_CHUNK_BYTES = 4 * 1024 * 1024
 from .validators import validate_png
 
 
@@ -2377,6 +2380,33 @@ def create_app(
                                 "base64": base64.b64encode(path.read_bytes()).decode("ascii"),
                                 "reduced": False,
                             }
+                    elif method == "assets.bytes":
+                        # 原寸を端末へ持ち出すための経路。表示用の縮小版とは別で
+                        # ある（縮小版を保存すると、小さくなったことに気づかない
+                        # まま原寸を失う）。1 度に運ぶ量を区切るのは、base64 が
+                        # 4/3 に膨らんだうえで 1 つの socket message に載るため。
+                        asset_id = str(params.get("asset_id", ""))
+                        asset = store.get_asset(asset_id)
+                        path = store.asset_path(asset_id)
+                        total = path.stat().st_size
+                        offset = params.get("offset", 0)
+                        length = params.get("length", ASSET_CHUNK_BYTES)
+                        if (
+                            isinstance(offset, bool) or not isinstance(offset, int)
+                            or isinstance(length, bool) or not isinstance(length, int)
+                            or offset < 0 or offset > total or not 1 <= length <= ASSET_CHUNK_BYTES
+                        ):
+                            raise ValueError("asset byte range is out of bounds")
+                        with path.open("rb") as stream:
+                            stream.seek(offset)
+                            chunk = stream.read(length)
+                        result = {
+                            "mime_type": asset.mime_type,
+                            "filename": asset.suggested_filename,
+                            "total_bytes": total,
+                            "offset": offset,
+                            "base64": base64.b64encode(chunk).decode("ascii"),
+                        }
                     elif method == "reference_collections.list":
                         result = {"items": [
                             item.model_dump(mode="json") for item in store.list_reference_collections()
