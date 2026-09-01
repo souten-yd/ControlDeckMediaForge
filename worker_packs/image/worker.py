@@ -254,7 +254,9 @@ class ImageWorker:
         # ことになり、「4 歩で回した絵」と同じ種類の間違いを作る。
         # 拡大とブレ補正は同じ道を通る。どちらも標本化せず、prompt も seed も
         # 持たない。違いは重みが持つ倍率だけである（ブレ補正は 1 倍）。
-        upscaling = constraints.get("edit_mode") in {"upscale", "deblur"}
+        upscaling = constraints.get("edit_mode") in {"upscale", "deblur", "erase"}
+        # 消して埋めるのは塗った所を要る。拡大・ブレ補正は要らない。
+        erasing = constraints.get("edit_mode") == "erase"
         declared = constraints.get("steps", runtime_options.get("default_steps"))
         if declared is None and not upscaling:
             raise ValueError("image steps were not resolved for this model")
@@ -327,7 +329,12 @@ class ImageWorker:
         for index in range(count):
             output_seed = seed + index
             output_path = output_dir / f"output-{index}.png"
-            if upscaling:
+            if erasing:
+                assert source_path is not None
+                if mask_path is None:
+                    raise ValueError("erasing requires an edit mask")
+                result = adapter.erase(source_path, mask_path, output_path)
+            elif upscaling:
                 assert source_path is not None
                 result = adapter.upscale(source_path, output_path)
             elif operation == "image.edit":

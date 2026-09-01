@@ -548,6 +548,32 @@
       "recommended_profiles": [],
       "gated": false,
       "license_notice": "MIT (NAFNet, Chen et al.). Weights mirrored from the upstream release; review the model card before redistribution."
+    },
+    {
+      "model_id": "AEmotionStudio/lama-inpainting",
+      "display_name": "LaMa 消して埋める",
+      "domains": [
+        "general",
+        "photoreal"
+      ],
+      "media_types": [
+        "image"
+      ],
+      "description": "塗った所を周りの続きで埋める。描き直さないので、絵柄も明るさも変わらず境目が出ない。",
+      "approx_download_bytes": 204348820,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "AEmotionStudio/lama-inpainting",
+        "revision": "d194c0932b1b022f0e34b9e574dc25e24db27c27"
+      },
+      "ownership": "managed",
+      "supports_lora": false,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "Apache-2.0 (LaMa, Suvorov et al.). Weights mirrored from the upstream release; review the model card before redistribution."
     }
   ]
 }

@@ -38,6 +38,7 @@ class SpandrelUpscaleAdapter:
     def __init__(self, model_path: Path, **_options: object):
         self.model_path = Path(model_path)
         self.model = None
+        self.takes_mask = False
         self.scale = 1
         self.load_sec = 0.0
         self.last_generation_sec: float | None = None
@@ -49,22 +50,34 @@ class SpandrelUpscaleAdapter:
         if self.model is not None:
             return
         import torch
-        from spandrel import ImageModelDescriptor, ModelLoader
+        from spandrel import ImageModelDescriptor, MaskedImageModelDescriptor, ModelLoader
 
         started = time.perf_counter()
         # 拡張子では読まない。Hub の snapshot は blob への symlink で、辿った先の
         # 名前は sha256 だけである（実機で "Unsupported model file extension ."
-        # になった）。重みそのものから読み、包み（params_ema など）は spandrel が
-        # 解く。weights_only で任意コードの復元は許さない。
-        state = torch.load(self._weights(), map_location="cpu", weights_only=True)
-        descriptor = ModelLoader().load_from_state_dict(state)
-        if not isinstance(descriptor, ImageModelDescriptor):
-            raise ValueError("upscale weights are not an image model")
-        # 拡大（SR）と、寸法を変えない補正（Restoration）を同じ経路で扱う。
-        # どちらも「作り直さずに直す」もので、タイルの回し方も同じである。
-        # 倍率は重みが持っているので、1 倍なら寸法は変わらない。
-        if descriptor.purpose not in {"SR", "Restoration"}:
-            raise ValueError("these weights neither enlarge nor restore an image")
+        # になった）。中身で見分ける。包み（params_ema など）は spandrel が解く。
+        state = self._state_dict(self._weights())
+        # 配布によっては全体をもう 1 段包んでいる（big-lama は
+        # `model.generator.model.*` で、spandrel は `generator.model.*` を探す）。
+        # 包みを剥がすのは、鍵の名前で系統を見分ける仕組みだからである。
+        if state and all(key.startswith("model.") for key in state):
+            unwrapped = {key[len("model."):]: value for key, value in state.items()}
+            try:
+                descriptor = ModelLoader().load_from_state_dict(unwrapped)
+            except Exception:
+                descriptor = ModelLoader().load_from_state_dict(state)
+        else:
+            descriptor = ModelLoader().load_from_state_dict(state)
+        # 塗った所を埋めるものは、絵と一緒にマスクを取る（別の descriptor に
+        # なる）。どちらも「絵を入れて絵が返る」点は同じなので、同じ経路に置く。
+        if not isinstance(descriptor, (ImageModelDescriptor, MaskedImageModelDescriptor)):
+            raise ValueError("these weights do not take an image")
+        self.takes_mask = isinstance(descriptor, MaskedImageModelDescriptor)
+        # 拡大（SR）、寸法を変えない補正（Restoration）、塗った所を周りから
+        # 埋めるもの（Inpainting）を同じ経路で扱う。どれも標本化せず、prompt も
+        # seed も持たない。倍率は重みが持っていて、1 倍なら寸法は変わらない。
+        if descriptor.purpose not in {"SR", "Restoration", "Inpainting"}:
+            raise ValueError("these weights neither enlarge nor repair an image")
         if descriptor.input_channels != 3 or descriptor.output_channels != 3:
             raise ValueError("upscale weights must take and return RGB")
         descriptor.eval()
@@ -78,6 +91,24 @@ class SpandrelUpscaleAdapter:
             "non_gpu_devices": {}, "non_gpu_map_targets": [],
         }
         self.load_sec = time.perf_counter() - started
+
+    @staticmethod
+    def _state_dict(path: Path) -> dict:
+        """Read the weights, whichever of the two formats they came in.
+
+        safetensors は先頭 8 byte が header の長さ（little endian）で、その次が
+        JSON の `{` である。zip（torch の保存形式）は `PK` で始まる。名前ではなく
+        これで見分ける。torch 側は weights_only で任意コードの復元を許さない。
+        """
+        import torch
+
+        with path.open("rb") as stream:
+            head = stream.read(9)
+        if len(head) == 9 and head[8:9] == b"{":
+            from safetensors.torch import load_file
+
+            return load_file(str(path))
+        return torch.load(path, map_location="cpu", weights_only=True)
 
     def _weights(self) -> Path:
         """Take the single checkpoint in the snapshot, and say so if it is not one.
@@ -141,6 +172,94 @@ class SpandrelUpscaleAdapter:
         self.last_generation_sec = time.perf_counter() - started
         # 拡大に乱数は入らない。同じ絵を入れれば同じ絵が出る。
         return ImageGenerationResult(output_path=output_path, seed=0)
+
+    # 塗った所の周りをどれだけ見せるか。埋める内容はここから決まるので、
+    # 狭いと continuation が取れない。塗った範囲と同じだけ、最低 128px。
+    ERASE_CONTEXT = 128
+    # 一度に通す画素数の上限。切り抜きは塗った範囲の 3 倍角になるので、
+    # 広く塗ると跳ね上がる（実測: 21.3MP の写真に 2000x900 を塗ると
+    # 切り抜きが 6000x2700 になり 339 秒・14.3 GiB）。超えたら縮めて通し、
+    # 埋めた所だけを元の大きさへ戻す。LaMa の出力はもともと滑らかなので、
+    # ここで細部を失うことはない。
+    ERASE_MAX_PIXELS = 2_500_000
+
+    def erase(self, source_path: Path, mask_path: Path, output_path: Path) -> ImageGenerationResult:
+        """Fill the painted area from what surrounds it.
+
+        塗った所だけを、周りの続きで埋める。描き直さないので、絵柄も明るさも
+        変わらない（拡散モデルに同じことをさせると、塗った範囲に別のものを描き、
+        帯になって残る）。
+
+        画像ぜんぶを一度に通さない。VRAM は面積に比例するので、塗った所の周りを
+        切り出して回し、元の画布へ戻す。塗っていない所は元から複製する。
+        """
+        import torch
+
+        self.load()
+        assert self.model is not None
+        try:
+            with Image.open(source_path) as opened:
+                opened.load()
+                source = opened.convert("RGB")
+            with Image.open(mask_path) as opened:
+                opened.load()
+                mask = opened.convert("L")
+        except (OSError, SyntaxError) as exc:
+            raise ValueError("source image or mask is not decodable") from exc
+        if mask.size != source.size:
+            raise ValueError("edit mask dimensions must match the source image")
+        box = mask.point(lambda value: 255 if value > 127 else 0).getbbox()
+        if box is None:
+            raise ValueError("edit mask must contain at least one painted pixel")
+
+        started = time.perf_counter()
+        margin = max(self.ERASE_CONTEXT, box[2] - box[0], box[3] - box[1])
+        crop = (
+            max(0, box[0] - margin), max(0, box[1] - margin),
+            min(source.width, box[2] + margin), min(source.height, box[3] + margin),
+        )
+        patch = source.crop(crop)
+        patch_mask = mask.crop(crop)
+        full = patch.size
+        pixels = patch.width * patch.height
+        if pixels > self.ERASE_MAX_PIXELS:
+            ratio = (self.ERASE_MAX_PIXELS / pixels) ** 0.5
+            reduced = (max(16, round(patch.width * ratio)), max(16, round(patch.height * ratio)))
+            patch = patch.resize(reduced, Image.Resampling.LANCZOS)
+            patch_mask = patch_mask.resize(reduced, Image.Resampling.NEAREST)
+        device = next(self.model.model.parameters()).device
+        image = self._to_tensor(patch).to(device)
+        binary = self._to_tensor(patch_mask.convert("RGB"))[:, :1].to(device)
+        binary = (binary > 0.5).float()
+        with torch.no_grad():
+            filled = self.model(image, binary).clamp(0, 1).float().cpu()
+
+        # 塗っていない所は、モデルの出力ではなく元から取る。網は画布ぜんぶを
+        # 返すので、そのまま採ると塗っていない所まで通したものになる。混ぜるのは
+        # 元の大きさに戻してから。マスクは原寸のものを使う。
+        produced = self._as_image(filled)
+        if produced.size != full:
+            produced = produced.resize(full, Image.Resampling.LANCZOS)
+        original = source.crop(crop)
+        keep = mask.crop(crop).point(lambda value: 255 if value > 127 else 0)
+        blended = Image.composite(produced, original, keep)
+        composed = source.copy()
+        composed.paste(blended, crop[:2])
+        self._save_rgb(composed, output_path)
+        self.last_generation_sec = time.perf_counter() - started
+        return ImageGenerationResult(output_path=output_path, seed=0)
+
+    @staticmethod
+    def _as_image(tensor) -> Image.Image:
+        import numpy
+
+        array = tensor[0].permute(1, 2, 0).numpy()
+        return Image.fromarray((array * 255.0).round().astype(numpy.uint8))
+
+    @staticmethod
+    def _save_rgb(image: Image.Image, output_path: Path) -> None:
+        output_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        image.convert("RGBA").save(output_path, format="PNG")
 
     @staticmethod
     def _to_tensor(image: Image.Image):
