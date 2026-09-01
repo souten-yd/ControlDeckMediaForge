@@ -496,6 +496,32 @@
       "recommended_profiles": [],
       "gated": true,
       "license_notice": "Unsloth GGUF Model Derivative under the MiniMax H3 Community License Agreement. This bundle uses the pruned UD-Q2_K_XL FL2VA denoiser, Q2_K_M text encoder, and Comfy-Org video/audio VAEs. Review the pinned LICENSE and NOTICE before accepting. ROCm/gfx1201 is NOT TESTED."
+    },
+    {
+      "model_id": "mikestealth/SwinIR",
+      "display_name": "SwinIR 実写 4倍",
+      "domains": [
+        "general",
+        "photoreal"
+      ],
+      "media_types": [
+        "image"
+      ],
+      "description": "写真をぼけさせずに 4 倍へ拡大する。作り直さないので、写っているものは変わらない。",
+      "approx_download_bytes": 67129861,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "mikestealth/SwinIR",
+        "revision": "96347f89c1d05f2eb1a7a95da688b6e888d1c9a2"
+      },
+      "ownership": "managed",
+      "supports_lora": false,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "Apache-2.0 (SwinIR, Liang et al.). Weights mirrored from the upstream release; review the model card before redistribution."
     }
   ]
 }

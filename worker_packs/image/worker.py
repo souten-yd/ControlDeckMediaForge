@@ -17,6 +17,7 @@ from .adapters import (
     DiffusersStableDiffusionAdapter,
     ImageEditRequest,
     ImageGenerationRequest,
+    SpandrelUpscaleAdapter,
 )
 
 
@@ -63,6 +64,9 @@ ADAPTERS = {
     # 単一 safetensors。Civitai などが配る形。ディレクトリを読む
     # from_pretrained では開けないので、別の adapter が要る。
     "diffusers.sdxl-single-file": "DiffusersSingleFileAdapter",
+    # 拡大は生成ではない。prompt も seed も無く、同じ絵からは同じ絵が出る。
+    # 拡散モデルに「良くして」と頼むと写真を描き直すので、別の adapter を置く。
+    "spandrel.upscale": "SpandrelUpscaleAdapter",
 }
 
 
@@ -246,10 +250,13 @@ class ImageWorker:
         # SDXL は像を結ばなかった）。要求が持っていなければ、そのモデルが
         # 宣言した値を使い、それも無ければ拒む。黙って絵にならない歩数で
         # 回すより、何が決まっていないかを言う方がよい。
+        # 拡大は標本化しない。歩数を要求すると、持っていない値を核が埋める
+        # ことになり、「4 歩で回した絵」と同じ種類の間違いを作る。
+        upscaling = constraints.get("edit_mode") == "upscale"
         declared = constraints.get("steps", runtime_options.get("default_steps"))
-        if declared is None:
+        if declared is None and not upscaling:
             raise ValueError("image steps were not resolved for this model")
-        steps = _integer(declared, "image steps")
+        steps = _integer(declared, "image steps") if declared is not None else 0
         count = _integer(output.get("count", 1), "image count")
         strict_edit = constraints.get("strict_edit", False)
         edit_mode = constraints.get("edit_mode", "reference")
@@ -265,12 +272,25 @@ class ImageWorker:
                 raise ValueError("strict edit dimensions must be in the range 1..8192")
             if width * height > 24_000_000:
                 raise ValueError("strict edit canvas exceeds the 24,000,000 pixel bound")
+        elif upscaling:
+            # ここの width/height は拡大後の寸法である。倍率は重みが持っている
+            # ので core が掛け算をして渡す。16 の倍数は要求しない（4 倍すると
+            # 元の寸法が 4 の倍数であることを強いることになる）。
+            if not 1 <= width <= 8192 or not 1 <= height <= 8192:
+                raise ValueError("upscale dimensions must be in the range 1..8192")
+            if width * height > 24_000_000:
+                raise ValueError("upscale output exceeds the 24,000,000 pixel bound")
         elif not 256 <= width <= 2048 or not 256 <= height <= 2048 or width % 16 or height % 16:
             raise ValueError("image dimensions must be multiples of 16 in the range 256..2048")
         # Public output count remains capped at eight. Three additional bounded
         # candidates are internal-only for semantic retry selection.
-        if not 1 <= steps <= 50 or not 1 <= count <= 11:
+        if not upscaling and not 1 <= steps <= 50:
             raise ValueError("image steps or output count is outside the bounded range")
+        if not 1 <= count <= 11:
+            raise ValueError("image steps or output count is outside the bounded range")
+        if upscaling and count != 1:
+            # 乱数が無いので、何枚頼まれても同じ絵にしかならない。
+            raise ValueError("an upscale produces exactly one image")
         # LoRA は core が解決して渡す。worker は載せるだけで、どれを載せるかは
         # 決めない。系統の照合や枚数の上限は core 側にある。
         loras = self._loras(worker_inputs.get("loras", []) if isinstance(worker_inputs, dict) else [])
@@ -305,7 +325,10 @@ class ImageWorker:
         for index in range(count):
             output_seed = seed + index
             output_path = output_dir / f"output-{index}.png"
-            if operation == "image.edit":
+            if upscaling:
+                assert source_path is not None
+                result = adapter.upscale(source_path, output_path)
+            elif operation == "image.edit":
                 assert source_path is not None
                 result = adapter.edit(ImageEditRequest(
                     prompt=prompt,
@@ -336,6 +359,7 @@ class ImageWorker:
                 "mime_type": "image/png",
                 "width": source_size[0] if strict_edit and edit_mode != "outpaint" and source_size is not None else width,
                 "height": source_size[1] if strict_edit and edit_mode != "outpaint" and source_size is not None else height,
+                **({"scale": adapter.scale} if upscaling else {}),
                 "seed": result.seed,
             })
         return {

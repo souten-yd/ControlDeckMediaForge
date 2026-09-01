@@ -3,6 +3,7 @@ from .diffusers_flux2 import DiffusersFlux2KleinAdapter
 from .diffusers_sd import DiffusersStableDiffusionAdapter
 from .diffusers_single_file import DiffusersSingleFileAdapter
 from .native import NativeImageAdapter
+from .spandrel_upscale import SpandrelUpscaleAdapter
 
 __all__ = [
     "DiffusersFlux2KleinAdapter",
@@ -13,4 +14,5 @@ __all__ = [
     "ImageGenerationRequest",
     "ImageGenerationResult",
     "NativeImageAdapter",
+    "SpandrelUpscaleAdapter",
 ]

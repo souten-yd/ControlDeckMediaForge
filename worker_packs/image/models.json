@@ -1456,6 +1456,61 @@
           "measured_steps": 20
         }
       }
+    },
+    {
+      "model_id": "mikestealth/SwinIR",
+      "family": "swinir",
+      "version": "m-realsr-x4-gan",
+      "revision": "96347f89c1d05f2eb1a7a95da688b6e888d1c9a2",
+      "weights_hash": "sha256:eab3e58c98ba87cb97bb4202089c3a9d0cc4fcbabaadf32a83aa0dbd236cedc4",
+      "license": "Apache-2.0",
+      "runtime_adapter": "spandrel.upscale",
+      "capabilities": [
+        "image.upscale"
+      ],
+      "hardware_backends": [
+        "rocm",
+        "cuda"
+      ],
+      "state": "available",
+      "measurement_confidence": "measured",
+      "policy_rank": {
+        "auto": 50,
+        "fast": 50,
+        "balanced": 50,
+        "quality": 50,
+        "low_vram": 90
+      },
+      "required_files": [],
+      "weights": [
+        {
+          "path": "003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth",
+          "size_bytes": 67129861,
+          "sha256": "b9afb61e65e04eb7f8aba5095d070bbe9af28df76acd0c9405aeb33b814bcfc6"
+        }
+      ],
+      "generation_limits": {
+        "max_width": 8192,
+        "max_height": 8192,
+        "max_pixels": 24000000
+      },
+      "runtime_options": {
+        "device_mode": "full_device",
+        "disable_mmap": false,
+        "upscale": {
+          "scale": 4,
+          "max_source_pixels": 1500000,
+          "per_source_megapixel_sec": 21.5,
+          "measured_source_pixels": 1498840
+        }
+      },
+      "measurements": {
+        "resident_vram_bytes": 0,
+        "execution_peak_vram_bytes": 879555072,
+        "cold_load_peak_vram_bytes": 64424509,
+        "headroom_vram_bytes": 1073741824,
+        "measured_runtime_sec": 35.6
+      }
     }
   ]
 }

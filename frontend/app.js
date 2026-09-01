@@ -45,6 +45,8 @@ const EDIT_ACTIONS = [
    guarantee: "画像全体が変わることがあります"},
   {mode: "outpaint", capability: "image.outpaint", label: "外側を広げる",
    guarantee: "元の画像は 1px も変わりません", preserving: true},
+  {mode: "upscale", capability: "image.upscale", label: "画質を上げる",
+   guarantee: "写っているものは変わりません。大きく作り直します"},
   {mode: "multi_reference", capability: "image.multi_reference_edit", label: "参考を足して直す",
    guarantee: "画像全体が変わることがあります"},
 ];
@@ -2370,6 +2372,9 @@ function selectEditMode(mode) {
   const action = EDIT_ACTIONS.find((item) => item.mode === mode);
   byId("guarantee-badge").textContent = action ? action.guarantee : "";
   byId("mask-input").hidden = mode !== "inpaint";
+  // 拡大は指示を取らない。書ける欄を出すと、書いた言葉が効くように見える。
+  byId("upscale-input").hidden = mode !== "upscale";
+  if (mode === "upscale") renderUpscaleNote();
   byId("reference-input").hidden = mode !== "multi_reference";
   byId("reference-files").required = mode === "multi_reference";
   byId("outpaint-input").hidden = mode !== "outpaint";
@@ -2408,6 +2413,29 @@ async function prepareUpload() {
       ? `${measured.width}×${measured.height}（原寸のまま）`
       : `${measured.width}×${measured.height}`;
   }
+}
+
+/* 何倍になって、どのくらい待つのかを、モデルが宣言した値から書く。画面が
+   倍率を決め打ちすると、別の倍率の重みを足したとき黙って外れる。 */
+function renderUpscaleNote() {
+  const note = byId("upscale-note");
+  if (!note) return;
+  const profile = (state.modelCatalog || [])
+    .filter((item) => item.installed)
+    .map((item) => item.upscale).find(Boolean) || {};
+  const scale = Number(profile.scale);
+  const size = state.measured;
+  if (!Number.isFinite(scale) || !size) { note.textContent = ""; return; }
+  const bound = Number(profile.max_source_pixels);
+  if (Number.isFinite(bound) && size.width * size.height > bound) {
+    note.textContent = `この画像は大きすぎます。${bound.toLocaleString()} 画素までを ${scale} 倍にできます。`;
+    return;
+  }
+  const perMegapixel = Number(profile.per_source_megapixel_sec);
+  const seconds = Number.isFinite(perMegapixel)
+    ? Math.round(perMegapixel * (size.width * size.height) / 1e6) : null;
+  note.textContent = `${size.width}×${size.height} → ${size.width * scale}×${size.height * scale}`
+    + (seconds === null ? "" : `（およそ ${seconds < 60 ? `${seconds} 秒` : `${Math.round(seconds / 60)} 分`}）`);
 }
 
 function attachedFile() {
