@@ -3388,14 +3388,23 @@ function modelSelection() {
 
 /* いま作るものを作れる土台だけを並べる。LoRA は単体では絵を作れないので混ぜない。
    画像の一覧に動画モデルが混ざると、選んでも作れないものを見せることになる。 */
-/* 土台になれないもの。拡大は絵を大きくするだけで、絵を作れない。
-   ここに並ぶと、選んだ利用者のあらゆる「作る」が model_unavailable で落ちる
-   （実機でそうなった）。「選べても作れない」ものを出さない、という
-   has_runtime と同じ理由である。 */
+/* 直すだけの道具。絵を大きくする・ブレを取る・塗った所を埋める、のどれも
+   「無から絵を作る」ことはできない。 */
+const REPAIR_ONLY_CAPABILITIES = new Set([
+  "image.upscale", "image.deblur", "image.erase",
+]);
+
+/* 土台になれないもの。ここに並ぶと、選んだ利用者のあらゆる「作る」が
+   model_unavailable で落ちる（実機でそうなった）。「選べても作れない」ものを
+   出さない、という has_runtime と同じ理由である。
+
+   拡大 1 つを名指しで除いていたので、ブレ補正と消して埋めるを足したときに
+   追随せず、その 2 つが土台の一覧に並んでいた。実測でどちらも
+   model_unavailable になる。除くのは名前ではなく「直すだけ」という性質である。 */
 function isBaseModel(model) {
   const capabilities = model.capabilities || [];
   if (!capabilities.length) return true;
-  return capabilities.some((name) => name !== "image.upscale");
+  return capabilities.some((name) => !REPAIR_ONLY_CAPABILITIES.has(name));
 }
 
 function imageBaseModels() {

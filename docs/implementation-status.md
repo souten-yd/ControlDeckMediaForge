@@ -7521,3 +7521,43 @@ ControlDeck の埋め込み下  standalone で確認した。iframe 越しは未
 ```
 
 `./mf.sh test` 808 passed（画面のみの変更で、新規テストは実ブラウザ側）。
+
+## 直すだけの道具が、土台のモデルとして並んでいた（2026-09-01）
+
+利用者から「Flux がモデル選択に出ない」。出ない理由は稼働中がリリース版で PR が
+未 merge だったからだが、確認の途中で**別の不具合**が見つかった。
+
+土台の一覧に「NAFNet ブレ補正」と「LaMa 消して埋める」が並んでいた。どちらも
+「無から絵を作る」ことはできない。実測でどれも落ちる。
+
+```text
+model_policy=manual で 512x512 の生成を投げた
+  tog/nafnet-models               failed  model_unavailable
+  AEmotionStudio/lama-inpainting  failed  model_unavailable
+  mikestealth/SwinIR              failed  model_unavailable
+```
+
+`isBaseModel` が**拡大 1 つを名指しで除いていた**のが原因である。
+
+```js
+return capabilities.some((name) => name !== "image.upscale");
+```
+
+この関数のコメント自身が「ここに並ぶと、選んだ利用者のあらゆる『作る』が
+model_unavailable で落ちる（実機でそうなった）」と書いている。拡大を足したときに
+書かれた規則が、ブレ補正と消して埋めるを足したときに追随していなかった。
+
+除く根拠を名前から性質へ変えた。「直すだけ」の capability しか宣言していないものは
+土台になれない。次に直す道具を足しても、その集合へ 1 行足すだけで済む。
+
+### 実ブラウザ（`scripts/ux_base_model_choices_e2e.py`）
+
+```text
+前  おまかせ / FLUX.2 Klein 4B / Segmind SSD-1B / NAFNet ブレ補正 / LaMa 消して埋める
+後  おまかせ / FLUX.2 Klein 4B / Segmind SSD-1B
+```
+
+一覧に並ぶ数と選択肢の数が一致すること、直すだけの道具が並ばないこと、作れるものが
+落ちていないことを、カタログの宣言から導いて確かめている。
+
+`./mf.sh test` 808 passed（画面のみの変更で、証跡は実ブラウザ側）。
