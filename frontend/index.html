@@ -90,7 +90,7 @@
           <!-- 検証は requestProblem() が行う。ブラウザ既定の吹き出しは文言を持てず、
                モバイルで見落としやすいので novalidate にする。 -->
           <form id="create-form" class="panel" novalidate>
-            <div class="field-head">
+            <div class="field-head" id="create-intent-head">
               <label class="field-label" id="create-intent-label" for="create-intent">何を作りますか？</label>
               <button type="button" id="create-reset" class="icon"
                       aria-label="設定を初期に戻す" title="入力と設定を初期に戻す">
@@ -254,8 +254,8 @@
               <p id="reference-analysis-note" class="hint">画像があるときだけ解析します。</p>
             </div>
 
-            <div id="edit-block" data-image-create hidden>
-              <p class="section-label">この画像を…</p>
+            <div id="edit-block" hidden>
+              <p id="edit-block-label" class="section-label">この画像を…</p>
               <div id="edit-actions" role="radiogroup" aria-label="編集方法"></div>
               <p id="guarantee-badge" class="guarantee"></p>
 

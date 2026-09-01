@@ -283,6 +283,14 @@ main { flex: 1; min-height: 0; padding: 16px; }
 #app[data-create-media="photo"] [data-video-create],
 #app[data-create-media="photo"] [data-image-create],
 #app[data-create-media="photo"] [data-generate-only] { display: none !important; }
+/* 写真は添付が先で、次に何をするか、指示はその後である。作る画面の並び
+   （指示 → 添付）のままだと、写真を直しに来た人が最初に文章を求められる。
+   実機で「高画質化だけしたいのに指示欄しか見えない」となった。 */
+#app[data-create-media="photo"] #create-form { display: flex; flex-direction: column; }
+#app[data-create-media="photo"] #attach-row { order: -3; }
+#app[data-create-media="photo"] #edit-block { order: -2; }
+#app[data-create-media="photo"] #create-intent-head { order: -1; }
+#app[data-create-media="photo"] #create-intent { order: -1; }
 
 .panel, #stage > div, .row, .info {
   background: var(--surface);
