@@ -221,8 +221,11 @@ def test_strict_edit_generates_only_bounded_patch_then_preserves_protected_pixel
             return self
 
     class Pipeline:
+        def __init__(self, key):
+            self.key = key
+
         def __call__(self, **kwargs):
-            calls["pipeline"] = kwargs
+            calls[self.key] = kwargs
             return SimpleNamespace(images=[Image.new("RGBA", (kwargs["width"], kwargs["height"]), "orange")])
 
     fake_torch = SimpleNamespace(
@@ -231,7 +234,8 @@ def test_strict_edit_generates_only_bounded_patch_then_preserves_protected_pixel
     )
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     adapter = DiffusersFlux2KleinAdapter(model, device_mode="direct_device_map")
-    adapter.pipeline = Pipeline()
+    adapter.pipeline = Pipeline("pipeline")
+    adapter.inpaint_pipeline = Pipeline("inpaint")
 
     result = adapter.edit(ImageEditRequest(
         prompt="make the eyes orange",
@@ -246,9 +250,19 @@ def test_strict_edit_generates_only_bounded_patch_then_preserves_protected_pixel
     ))
 
     assert result.output_path == output_path
-    pipeline_call = calls["pipeline"]
+    # 塗った所がある編集は、塗った所を取る経路を通る。取らない経路へ行くと、
+    # model は切り抜きを丸ごと描き直し、それが塗った形に切り抜かれる。
+    assert "pipeline" not in calls, "masked edit went to the pipeline that cannot take a mask"
+    pipeline_call = calls["inpaint"]
     assert pipeline_call["image"].size == (256, 256)
     assert pipeline_call["width"] == 256 and pipeline_call["height"] == 256
+    # 塗った所そのものが渡る。切り抜きと同じ寸法で、白黒の 2 値である。
+    painted = pipeline_call["mask_image"]
+    assert painted.size == (256, 256)
+    assert {value for _count, value in painted.convert("L").getcolors()} <= {0, 255}
+    assert painted.getbbox() is not None
+    # 塗った所は作り直す。残したいなら塗らない、が操作の意味である。
+    assert pipeline_call["strength"] == 1.0
     assert calls["generator_device"] == "cuda" and calls["seed"] == 17
     assert Image.open(output_path).size == source.size
     assert validate_strict_edit(source_path, mask_path, output_path)["protected_pixel_difference"] == 0
@@ -403,3 +417,47 @@ def test_outpaint_uses_expanded_reference_then_recopies_source(monkeypatch, tmp_
     assert pipeline_call["image"].getpixel((0, 0))[3] == 0
     assert calls["generator_device"] == "cuda" and calls["seed"] == 29
     assert validate_outpaint(source_path, output_path, width=512, height=384)["source_pixel_difference"] == 0
+
+
+def test_the_context_shown_around_a_painted_area_grows_with_it():
+    """効くのは周りの幅そのものではなく、切り抜きに対する塗った所の割合である。
+
+    固定幅だと、広く塗ったときに切り抜きのほとんどが塗った所になり、model は周りを
+    見ないまま埋める。実機では元の空とは別の青空が描かれ、塗った形が縁として残った。
+
+    2026-09-01 実測（1024x1024、480x380 の塗り、"a large red hot air balloon"）:
+        周り  64px  切り抜き 568x504（塗り 63%）  18.0s  楕円の縁が見える
+        周り 160px  切り抜き 664x600（塗り 43%）  87.3s  曇り空に馴染む
+        周り 320px  切り抜き 824x760（塗り 29%） 154.6s  馴染む。費用 8.6 倍
+    """
+    crop = DiffusersFlux2KleinAdapter._edit_crop_box
+
+    # 小さな塗りは下限が効く。透かし程度の塗りの費用は変わらない。
+    assert crop((100, 100, 130, 136), 1024, 1024) == (36, 36, 194, 200)
+    # 広い塗りは、長辺の 1/3 だけ周りを見せる（480 -> 160）。
+    assert crop((520, 60, 1000, 440), 1024, 1024) == (360, 0, 1024, 600)
+    # 端は画布で止まる。外へはみ出した切り抜きは作れない。
+    assert crop((0, 0, 900, 60), 1024, 1024) == (0, 0, 1024, 360)
+
+
+def test_a_patch_never_grows_past_what_the_model_holds():
+    """切り抜きは元画像の大きさと塗った範囲で決まるので、際限なく伸びる。
+
+    attention は面積の二乗で効くので、上限を持たないと card に載らなくなる。
+    比を保ったまま学習した面積へ収める。上限が掛かるのは切り抜きだけで、生成
+    そのものには掛からない（掛けると、いま 2048 まで通る参考編集が黙って縮む）。
+    """
+    size = DiffusersFlux2KleinAdapter._patch_generation_size
+    assert DiffusersFlux2KleinAdapter._generation_size(4000, 3000) == (4000, 3008)
+
+    # 収まるものは 16 の倍数へ切り上げるだけ。切り下げると切り抜きの端が落ちる。
+    assert size(568, 504) == (576, 512)
+    assert size(329, 299) == (336, 304)
+    assert size(1024, 1024) == (1024, 1024)
+    # 小さすぎるものは、model が扱える下限まで上げる。
+    assert size(30, 30) == (256, 256)
+    # 超えるものは比を保ったまま収める。
+    wide = size(4000, 3000)
+    assert wide[0] * wide[1] <= 1024 * 1024
+    assert wide[0] % 16 == 0 and wide[1] % 16 == 0
+    assert abs(wide[0] / wide[1] - 4000 / 3000) < 0.02

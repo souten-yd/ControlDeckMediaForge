@@ -208,8 +208,9 @@ def test_unmeasured_video_candidates_cannot_route_on_r9700() -> None:
 def test_the_upscaler_cannot_be_asked_for_more_than_it_can_hold() -> None:
     """拡大は作り直さない。倍率は重みが持っていて、核が掛け算をする。
 
-    出力は元画像の 16 倍の画素数になる（4 倍拡大）。取り込みの上限
-    （24,000,000 画素）を超える設定を許すと、選べるのに作れない値が並ぶ。
+    出す大きさは、重みの倍率の約数から選ぶ。約数に限るのは、割り切れる縮小
+    だけが画素の格子を保つからである。原寸を選んでも網には元の写真をそのまま
+    通すので、荒さを取る働きは残る（費用も 4 倍と同じだけ掛かる）。
 
     2026-09-01 実測（R9700 / gfx1201、256px タイル・32px 重なり）:
       0.31MP ->  4.9MP   6.3s / 0.79MP -> 12.6MP  20.0s
@@ -227,8 +228,16 @@ def test_the_upscaler_cannot_be_asked_for_more_than_it_can_hold() -> None:
 
     profile = model.upscale or {}
     assert profile["scale"] == 4
-    # 入力の上限 x 倍率^2 が、core が合成・検証できる画素数を超えない。
-    assert profile["max_source_pixels"] * profile["scale"] ** 2 <= 24_000_000
+    assert profile["target_scales"] == [1, 2, 4]
+    # 選べる倍率は、重みの倍率を割り切るものだけである。
+    assert all(profile["scale"] % value == 0 for value in profile["target_scales"])
+    # いちばん小さい倍率で、受ける入力の上限が出力の上限に収まる。大きい倍率が
+    # 入らない写真は、収まる倍率を名指して要求ごとに断る（写真ごと断らない）。
+    smallest = min(profile["target_scales"])
+    assert profile["max_source_pixels"] * smallest ** 2 <= 24_000_000
+    # 手元のスマホ写真（4032x3024 = 12.2MP）が通る大きさを受ける。前は
+    # 1,500,000 画素までで、荒い写真の大半が受付で断られていた。
+    assert profile["max_source_pixels"] >= 4032 * 3024
     # 生成の枠も宣言する。既定の 2048x2048 のままだと、作れるのに断られる。
     assert (model.max_width, model.max_height) == (8192, 8192)
     assert model.max_pixels == 24_000_000

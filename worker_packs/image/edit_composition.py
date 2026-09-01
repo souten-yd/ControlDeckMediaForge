@@ -37,7 +37,7 @@ def _rgba(path: Path, label: str) -> Image.Image:
         raise WorkerCompositionError(f"{label} is not a decodable image") from exc
 
 
-def _editable_mask(path: Path) -> Image.Image:
+def editable_mask(path: Path) -> Image.Image:
     mask = _rgba(path, "edit mask")
     luminance = mask.convert("RGB").convert("L")
     return ImageChops.multiply(luminance, mask.getchannel("A"))
@@ -45,7 +45,7 @@ def _editable_mask(path: Path) -> Image.Image:
 
 def strict_edit_plan(source_path: Path, mask_path: Path) -> WorkerStrictEditPlan:
     source = _rgba(source_path, "source image")
-    mask = _editable_mask(mask_path)
+    mask = editable_mask(mask_path)
     if mask.size != source.size:
         raise WorkerCompositionError("edit mask dimensions must match the source image")
     crop_box = mask.getbbox()
@@ -65,7 +65,7 @@ def compose_strict_edit(
     patch_box: tuple[int, int, int, int],
 ) -> None:
     source = _rgba(source_path, "source image")
-    mask = _editable_mask(mask_path)
+    mask = editable_mask(mask_path)
     plan = strict_edit_plan(source_path, mask_path)
     left, top, right, bottom = patch_box
     if (
