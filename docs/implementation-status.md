@@ -7107,3 +7107,112 @@ big-lama はさらに全体が `model.` で包まれており、spandrel が探�
 剥がしてから渡す。
 
 `./mf.sh test` 808 passed。
+
+## FLUX.2-dev 32B を GGUF で載せる（2026-09-01）
+
+利用者から「Flux で、私の環境で動くより大きなモデルを下さい」「FLUX.2 dev 32B で
+別ランタイム含め用意して」「Gguf」。
+
+### 駆動系は既にあった
+
+`stable-diffusion.cpp` の pinned build（`97d2990`、2026-08-19）に `docs/flux2.md` が
+入っている。**MiniMax H3 で既に使っている pin がそのまま FLUX.2 に対応していた**ので、
+新しい commit を立てる必要は無かった。同じ commit を gfx1201 / HIPBLAS / Release で
+建て直した（Ninja、-j8）。
+
+```text
+sd-cli sha256 7d4b5a3577db1785158d2feab3a10f55fcde42b1e4c036908991d6aaedc27494
+--list-devices  ROCm0 = AMD Radeon AI PRO R9700 / gfx1201 / 32,624 MiB
+                ROCm1 = 統合 GPU gfx1036 / 15,547 MiB（掴ませない）
+```
+
+前回記録の `7c2aebea…` とは異なるが、同じ commit である（前回は Unix Makefiles で
+-j1、今回は Ninja で -j8）。
+
+### 重みは 3 つのリポジトリから来る
+
+```text
+拡散  flux2-dev-Q4_K_M.gguf                     20,082,414,560 B  city96/FLUX.2-dev-gguf
+文章  Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M 14,333,922,848 B  unsloth（Apache-2.0）
+VAE   full_encoder_small_decoder.safetensors        249,519,092 B  BFL small-decoder（Apache-2.0）
+                                            合計 34,665,856,500 B
+```
+
+**3 つとも gated ではない。** 本体の `black-forest-labs/FLUX.2-dev` は gated だが、
+VAE は上流の文書が代替として案内している別リポジトリの Apache-2.0 版で足りる。
+HF のトークンは要らなかった。
+
+FLUX.2 は CLIP+T5 をやめて汎用の言語モデルを文章符号化器に据えた設計である。Klein 4B
+でも同じ形で、実測すると text_encoder 8.05GB（Qwen3）/ transformer 7.75GB / vae 0.17GB。
+「4B」のリポジトリが 16GB あるのはそのためで、dev ではここが Mistral 24B になる。
+
+registry の導入判定は、weight の実体が**主リポジトリの配下**にあることを求める
+（`_weight_matches`）。MiniMax H3 が別リポジトリの VAE を抱えているのと同じ形に
+組み、blob 名は宣言した sha256 に一致させた。
+
+### `--offload-to-cpu` はこの機械では成立しない
+
+上流の例に従って `--offload-to-cpu` で回すと、**11 分進まなかった**。
+
+```text
+文章符号化まで  正常（12,057.93 MB を ROCm0 へ展開 → 10.16 秒 → 解放）
+拡散本体        19,152.06 MB を RAM へ展開する段階で停止
+                CPU 87.7%（1 コア）/ GPU 3% / RSS 25.53 GB / swap 2→4 GB
+```
+
+重みを RAM に置いて VRAM へ流し込む方式なので、RAM 30GB を使い切って swap と往復
+していた。計算ではなくメモリ移動で詰まっている（GPU が遊んでいる）。
+
+拡散を直接 VRAM に置き、文章モデルだけ RAM に残す配分に変えたら通った。動画側の
+MiniMax H3 と同じ `te=cpu,diffusion=ROCm0,vae=ROCm0` である。
+
+### 実測（R9700 / gfx1201）
+
+```text
+配置   総計 34,608.50 MB = VRAM 19,271.14 MB（拡散）+ RAM 15,337.36 MB（文章）
+       作業領域 flux 656.00 MB + vae 1,248.50 MB（VRAM）
+
+512x512   4 歩   条件付け  7.14s  標本化  21.39s  復号 0.80s  全体  31.48s
+1024x1024 20 歩  条件付け 13.01s  標本化 161.76s  復号 1.91s  全体 181.91s
+
+peak VRAM 26,395,885,568 B（84 サンプル、2 秒ごと）/ 31.86 GiB
+最大 RSS  26,911,692 KiB   Swaps 0
+```
+
+4 歩では網目状のムラが残る。dev は蒸留された歩数モデルではないので、既定を 20 歩に
+した。20 歩の 1024x1024 は写真として通る出来だった。
+
+Klein 4B（1024x1024、4 歩、20.8 秒）に対して **8.7 倍遅い**。`policy_rank` は
+`quality` だけに置き、おまかせの候補には入れない。1 枚 3 分は既定にする速さではない。
+
+### 本番の worker を実プロセスで通した
+
+評価用の経路ではなく、`worker_packs.image.worker` に本番と同じ payload を渡した。
+
+```text
+outputs        1024x1024 RGBA PNG 1,851,581 B
+generation_sec 179.02
+runtime_version 97d2990807fe6d558e395f8764198d7c7e7b411c
+placement      text_encoder=cpu / diffusion=ROCm0 / vae=ROCm0
+```
+
+`runtime_version` は diffusers の版を返していた。native の経路は diffusers を通らない
+ので、そのまま記録すると嘘になる。adapter が名乗る値を優先し、無いときだけ diffusers
+の版に落ちるようにした。
+
+画像側にも native の駆動系を使うものが出たので、核は画像 worker にも
+`MEDIA_FORGE_NATIVE_RUNTIME_ROOT` を渡すようにした。渡さないと adapter は起動できない。
+
+### 未実施
+
+```text
+ControlDeck 統合下での end-to-end   dev の service は host lease を要求する。
+                                    本番 worker の実プロセスまでで確認した
+参照画像による編集                  sd-cli は `-r` を持つが測っていない。
+                                    adapter は受けたら断る
+Klein 4B との画質比較               同じ prompt・同じ seed での並べ比べはしていない
+歩数の詰め                          20 歩で採った。28〜50 は測っていない
+実ブラウザ                          画面側は変えていない（一覧に 1 つ増えるだけ）
+```
+
+`./mf.sh test` 810 passed（新規 2 件）。
