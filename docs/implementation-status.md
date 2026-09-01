@@ -7463,3 +7463,61 @@ Klein 4B との画質比較               同じ prompt・同じ seed での並�
 ```
 
 `./mf.sh test` 810 passed（新規 2 件）。
+
+## iPhone の写真が投入できなかった（2026-09-01）
+
+利用者から「写真だが定型のサイズしか入らないの？」「任意のサイズに切り取った画像を
+iPhone で選択しても投入されない」。
+
+### 変換する仕組みはあったのに、選択でそこまで届いていなかった
+
+```html
+frontend/index.html:238
+  <input id="source-file" type="file" accept="image/png,image/jpeg">
+```
+
+iPhone の写真は既定で HEIC である。画面には HEIC を canvas で PNG へ直す経路が
+**既にあった**（`converting = !IMPORTABLE_TYPES.has(file.type)`、コメントにも
+「端末の写真は HEIC のことがある」と書いてある）。届いていなかっただけである。
+選択の絞り込みを `image/*` にした。参考画像の入口も同じだったので揃えた。
+
+塗った範囲の入口（`#mask-file`）は画面が作る PNG しか受けないので、そのままにした。
+
+### 復号を端末に任せる経路を足した
+
+`createImageBitmap` が HEIC を断る版がある。そこで諦めると「選んだのに何も
+起きない」になるので、断られたら `<img>` へ落とすようにした。Safari は `<img>`
+なら HEIC を復号する。EXIF の向きは、どちらの経路でも見えているとおりに開く。
+
+`ImageBitmap` 以外は `close()` を持たないので、呼び出しを `close?.()` にした。
+
+### 断りが、出したそばから消えていた
+
+読めない画像を選ぶと `showError` は出ていたが、その後 `refreshAttachment` の末尾と
+`selectEditMode` の 2 か所が `clearError()` を呼んで消していた。**画面に残るのは
+添付欄の小さな文字だけ**で、これも「選んでも何も起きない」の一因だった。
+
+添付が読めていない状態を `state.attachProblem` として持ち、`clearError()` は立って
+いる断りを残すようにした。次の写真を選んだときに下ろす。
+
+### 実ブラウザ（`scripts/ux_phone_photo_e2e.py`、Chromium headless、390x844）
+
+```text
+accept              source / reference とも image/*
+IMG_0001.HEIC       1007x661 のまま載る。送るのは image/png へ変換したもの
+IMG_0002（type 空） 同上。形式を名乗らない端末でも通る
+shot.png            そのまま送る。余分な canvas を通さない
+notes.txt           載せない。「読み込めませんでした」が画面に残る
+```
+
+**Chromium は HEIC を復号しない。** ここで確かめられるのは「PNG / JPEG 以外が選択を
+通り、変換されて原寸のまま載るか」までで、実際の HEIC 復号は端末側の仕事である。
+
+### 未実施
+
+```text
+実機の iPhone            HEIC の復号そのものは Chromium では測れない
+ControlDeck の埋め込み下  standalone で確認した。iframe 越しは未確認
+```
+
+`./mf.sh test` 808 passed（画面のみの変更で、新規テストは実ブラウザ側）。

@@ -140,6 +140,9 @@ const state = {
   // 出す大きさ。null は「まだ選んでいない」で、そのときは入る中でいちばん
   // 大きい倍率を使う。写真を替えたら選び直せるよう null へ戻す。
   upscaleScale: null,
+  // 添付そのものが読めていないときの断り。出したそばから消されないよう、
+  // 一度きりの表示ではなく状態として持つ。
+  attachProblem: "",
   activeJob: "",
   activeBatch: "",
   activeComposition: "",
@@ -2490,7 +2493,8 @@ async function prepareUpload() {
     // 実機で、写真を選んでも何も起きないように見えていた。
     state.source = null;
     label.textContent = "この画像を読み込めませんでした";
-    showError("この画像を読み込めませんでした。PNG か JPEG で選び直してください。");
+    state.attachProblem = "この画像を読み込めませんでした。別の画像を選び直してください。";
+    showError(state.attachProblem);
     return;
   }
   const shrinking = needsResize(measured, state.editMode);
@@ -2514,7 +2518,8 @@ async function prepareUpload() {
     } catch {
       state.source = null;
       label.textContent = "";
-      showError("この画像を読み込めませんでした。PNG か JPEG で選び直してください。");
+      state.attachProblem = "この画像を読み込めませんでした。別の画像を選び直してください。";
+      showError(state.attachProblem);
     }
   } else {
     state.upload = file;
@@ -2673,8 +2678,37 @@ function attachedFile() {
    ブラウザとサーバで食い違う。測った寸法と取り込んだ寸法がずれ、
    「一部だけ直す」は寸法の一致を要求するので受付で断られる。
    加工して向きの付いた写真が添付できない、という形で表に出る。 */
-function openBitmap(file) {
-  return createImageBitmap(file, {imageOrientation: "from-image"});
+async function openBitmap(file) {
+  try {
+    return await createImageBitmap(file, {imageOrientation: "from-image"});
+  } catch {
+    // `createImageBitmap` が断る形式でも、端末自身は表示できることがある
+    // （iPhone の HEIC がそれで、Safari は <img> なら復号する）。ここで
+    // 諦めると「写真を選んだのに何も起きない」になる。
+    return decodeWithElement(file);
+  }
+}
+
+/* 端末の復号器に読ませる。<img> は EXIF の向きを既定で適用するので、
+   `imageOrientation: "from-image"` と同じ見え方になる。 */
+function decodeWithElement(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      if (!image.naturalWidth || !image.naturalHeight) {
+        reject(new Error("image decoded to nothing"));
+        return;
+      }
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("this device cannot decode the image"));
+    };
+    image.src = url;
+  });
 }
 
 /* 寸法はアップロード前にブラウザ側で測る。
@@ -2683,7 +2717,7 @@ async function measure(file) {
   try {
     const bitmap = await openBitmap(file);
     const size = {width: bitmap.width, height: bitmap.height};
-    bitmap.close();
+    bitmap.close?.();
     return size;
   } catch { return null; }
 }
@@ -2782,7 +2816,7 @@ async function resized(file, size, mode) {
     }
     throw new Error("canvas could not encode this image");
   } finally {
-    bitmap.close();
+    bitmap.close?.();
   }
 }
 
@@ -2798,6 +2832,9 @@ async function refreshAttachment() {
   state.upscaleScale = null;
   state.referenceAnalysis = null;
   state.referenceFocus = "overall";
+  // 前の写真の断りは持ち越さない。下ろしてから測り直す。
+  state.attachProblem = "";
+  clearError();
   state.measured = file ? await measure(file) : null;
   await prepareUpload();
   if (file && state.createMedia !== "video") {
@@ -2812,7 +2849,6 @@ async function refreshAttachment() {
   if (REPAIR_MODES.has(state.editMode)) renderRepairControls();
   renderReferenceIntelligence();
   renderCreateMedia();
-  clearError();
 }
 
 async function fileBase64(file) {
@@ -3002,7 +3038,9 @@ function showError(message, exit) {
 }
 
 function clearError() {
-  showError("");
+  // 添付が読めていないあいだは消さない。編集の種類を選び直すたびに消えると、
+  // 「写真を選んでも何も起きない」ように見える（iPhone の写真がそうだった）。
+  showError(state.attachProblem || "");
 }
 
 /* GPU を取りに行く前に落とせるものはすべてここで落とす。
