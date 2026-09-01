@@ -567,6 +567,8 @@ class JobManager:
             return "image.text_to_image"
         if job.request.constraints.get("edit_mode") == "upscale":
             return "image.upscale"
+        if job.request.constraints.get("edit_mode") == "deblur":
+            return "image.deblur"
         if job.request.constraints.get("edit_mode") == "outpaint":
             return "image.outpaint"
         if job.request.constraints.get("edit_mode") == "multi_reference":
@@ -803,11 +805,12 @@ class JobManager:
         if not isinstance(strict, bool):
             raise WorkerFailure("invalid_constraint", "strict_edit must be a boolean")
         if edit_mode not in {
-            "reference", "variation", "inpaint", "outpaint", "multi_reference", "upscale",
+            "reference", "variation", "inpaint", "outpaint", "multi_reference",
+            "upscale", "deblur",
         }:
             raise WorkerFailure("invalid_constraint", "edit_mode is unsupported")
-        if edit_mode == "upscale":
-            # 拡大は塗る所も広げる所も無い。マスクを受けると、守られるものが
+        if edit_mode in {"upscale", "deblur"}:
+            # 拡大もブレ補正も塗る所も広げる所も無い。マスクを受けると、守られるものが
             # あるように見える。出す寸法は倍率だけで決まるので指定も受けない。
             if strict:
                 raise WorkerFailure("invalid_constraint", "upscale does not take strict_edit")
@@ -816,7 +819,7 @@ class JobManager:
             for key in ("width", "height"):
                 if key in job.request.constraints:
                     raise WorkerFailure(
-                        "invalid_constraint", "upscale derives its size from the model's scale",
+                        "invalid_constraint", "this repair derives its size from the model's scale",
                     )
             return
         if strict and edit_mode == "variation":
@@ -1201,7 +1204,7 @@ class JobManager:
         constraints = dict(request.get("constraints") or {})
         if constraints.get("steps") is None and selected.default_steps is not None:
             constraints["steps"] = selected.default_steps
-        if constraints.get("edit_mode") == "upscale":
+        if constraints.get("edit_mode") in {"upscale", "deblur"}:
             # 倍率は重みが持っている。掛け算をここでやらないと、画面と worker の
             # 二か所に同じ計算が現れて、別の倍率の重みを足したとき片方だけ直る。
             return self._resolved_upscale_request(job, selected, request, constraints)

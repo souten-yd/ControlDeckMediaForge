@@ -236,3 +236,31 @@ def test_the_upscaler_cannot_be_asked_for_more_than_it_can_hold() -> None:
     assert model.default_steps is None
     assert model.measured_runtime_sec == 35.6
     assert model.execution_peak_vram_bytes == 879_555_072
+
+
+def test_the_deblur_model_repairs_without_changing_the_size() -> None:
+    """ブレ補正は作り直さないし、大きさも変えない。
+
+    倍率 1 は「寸法を変えずに直す」である。拡大と同じ経路に置くのは、どちらも
+    標本化せず（prompt も seed も持たない）、タイルの回し方も同じだからである。
+
+    2026-09-01 実測（R9700 / gfx1201、256px タイル・32px 重なり）:
+      1.40MP 1.65s / 3.00MP 3.14s / 7.68MP 7.55s、peak VRAM 405,778,944 B 一定。
+      合成した動きブレで PSNR 23.10 dB -> 24.11 dB。
+    """
+    model = next(item for item in registry().all() if item.model_id == "tog/nafnet-models")
+
+    assert model.capabilities == ("image.deblur",)
+    assert model.runtime_adapter == "spandrel.upscale"
+    assert model.state == "available"
+    assert model.license == "MIT"
+    assert model.gated is False
+
+    profile = model.upscale or {}
+    # 寸法が変わらないので、入力の上限は取り込みの上限そのものでよい。
+    assert profile["scale"] == 1
+    assert profile["max_source_pixels"] == 24_000_000
+    assert profile["max_source_pixels"] * profile["scale"] ** 2 <= 24_000_000
+    assert model.default_steps is None
+    assert model.execution_peak_vram_bytes == 405_778_944
+    assert model.measured_runtime_sec == 24.5
