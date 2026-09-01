@@ -360,13 +360,28 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     upscale = runtime_options.get("upscale")
     if upscale is not None:
         if not isinstance(upscale, dict) or set(upscale) - {
-            "scale", "max_source_pixels", "per_source_megapixel_sec", "measured_source_pixels",
+            "scale", "target_scales", "max_source_pixels",
+            "per_source_megapixel_sec", "measured_source_pixels",
         }:
             raise ModelRegistryError("model registry upscale options are invalid")
         scale = upscale.get("scale")
         # 1 は「寸法を変えずに直す」である（ブレ補正など）。作り直さずに直す
         # という点は拡大と同じで、経路もタイルの回し方も共通なのでここに置く。
         if isinstance(scale, bool) or not isinstance(scale, int) or not 1 <= scale <= 8:
+            raise ModelRegistryError("model registry upscale options are invalid")
+        # 重みの倍率より小さい寸法でも出せる。網には元の写真をそのまま通し、
+        # 出てきたものを整数で落とすためで、約数でなければ画素の格子が合わない。
+        # 宣言が無ければ重みの倍率だけを出す（今までと同じ動き）。
+        targets = upscale.get("target_scales")
+        if targets is not None and (
+            not isinstance(targets, list) or not targets
+            or any(
+                isinstance(value, bool) or not isinstance(value, int)
+                or not 1 <= value <= scale or scale % value
+                for value in targets
+            )
+            or len(set(targets)) != len(targets)
+        ):
             raise ModelRegistryError("model registry upscale options are invalid")
         for key in ("max_source_pixels", "measured_source_pixels"):
             bound = upscale.get(key)
@@ -375,9 +390,12 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
                 or not 1 <= bound <= 24_000_000
             ):
                 raise ModelRegistryError("model registry upscale options are invalid")
-        # 出力が取り込みの上限を超える設定は、作れないものを選ばせることになる。
+        # どの倍率でも出せない入力しか受けない設定は、選べるのに作れない値だけを
+        # 並べることになる。いちばん小さい倍率で上限に収まることを求める。
+        # 大きい倍率が入らない写真は、収まる倍率を名指して要求ごとに断る。
         source_bound = upscale.get("max_source_pixels")
-        if source_bound is not None and source_bound * scale * scale > 24_000_000:
+        smallest = min(targets) if targets else scale
+        if source_bound is not None and source_bound * smallest * smallest > 24_000_000:
             raise ModelRegistryError("model registry upscale options are invalid")
         cost = upscale.get("per_source_megapixel_sec")
         if cost is not None and (

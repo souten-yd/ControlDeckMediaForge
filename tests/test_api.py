@@ -205,6 +205,9 @@ def test_model_catalog_adds_trusted_presentation_metadata(tmp_path: Path):
         "SwinIR 実写 4倍",
         "NAFNet ブレ補正",
         "LaMa 消して埋める",
+        # 32B は python の拡散スタックに載らないので GGUF を native の駆動系で
+        # 回す。経路が違っても、選べる道具として同じ一覧に並ぶ。
+        "FLUX.2 dev 32B (GGUF Q4_K_M)",
     ]
     assert all(item["source"]["revision"] == item["revision"] for item in images)
     assert all("path" not in item for item in response.json()["items"])

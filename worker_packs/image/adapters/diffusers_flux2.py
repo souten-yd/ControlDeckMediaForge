@@ -11,6 +11,7 @@ from .base import ImageEditRequest, ImageGenerationRequest, ImageGenerationResul
 from ..edit_composition import (
     compose_outpaint,
     compose_strict_edit,
+    editable_mask,
     outpaint_reference,
     strict_edit_plan,
 )
@@ -32,6 +33,8 @@ class DiffusersFlux2KleinAdapter:
         self.device_mode = device_mode
         self.disable_mmap = disable_mmap
         self.pipeline: Any | None = None
+        # 塗った所を渡せる経路。重みは base と共有するので、載せ直しは起きない。
+        self.inpaint_pipeline: Any | None = None
         self.load_sec: float | None = None
         self.last_generation_sec: float | None = None
         self.placement: dict[str, Any] = {}
@@ -200,6 +203,35 @@ class DiffusersFlux2KleinAdapter:
         self.pipeline = pipeline
         self.load_sec = time.perf_counter() - started
 
+    def _inpainter(self) -> Any:
+        """The pipeline that takes the painted area, over the weights already loaded.
+
+        描き足すには、塗った所を model へ渡さなければならない。渡さずに切り抜きを
+        描き直して塗った所だけ採ると、model は「どこへ描くか」を知らないまま自分の
+        再構成を作り、それが塗った形に切り抜かれる。書き足しではなく書き換えになる。
+
+        構成要素は base と同じものを渡すので、重みはもう card の上にあり、載せ直しも
+        追加の常駐も起きない。
+
+        `is_distilled` は構成要素ではないので `components` には入らない。既定の
+        False のまま作ると、pipeline は classifier-free guidance を前提にする。
+        klein は蒸留済みで guidance が焼き込まれており、そこへ 1.0 を渡すと prompt が
+        ほとんど効かない（実機で、塗った所が周りの続きで埋まるだけになった）。
+        base が宣言している値をそのまま引き継ぐ。
+        """
+        if self.inpaint_pipeline is not None:
+            return self.inpaint_pipeline
+        from diffusers import Flux2KleinInpaintPipeline
+
+        assert self.pipeline is not None
+        pipeline = Flux2KleinInpaintPipeline(
+            **self.pipeline.components,
+            is_distilled=bool(getattr(self.pipeline.config, "is_distilled", False)),
+        )
+        pipeline.set_progress_bar_config(disable=True)
+        self.inpaint_pipeline = pipeline
+        return pipeline
+
     def generate(self, request: ImageGenerationRequest) -> ImageGenerationResult:
         import torch
 
@@ -240,15 +272,36 @@ class DiffusersFlux2KleinAdapter:
         image.save(request.output_path, format="PNG")
         return ImageGenerationResult(output_path=request.output_path, seed=request.seed)
 
+    # 塗った所の周りを最低どれだけ見せるか。これを下回ると、小さな塗りでは
+    # 切り抜きが塗った所とほぼ同じになり、model は周りを見ずに描くことになる。
+    EDIT_CONTEXT = 64
+
     @staticmethod
     def _edit_crop_box(
         mask_box: tuple[int, int, int, int],
         width: int,
         height: int,
         *,
-        context_pixels: int = 64,
+        context_pixels: int | None = None,
     ) -> tuple[int, int, int, int]:
+        """How much of the surroundings the model is shown around the painted area.
+
+        効くのは幅そのものではなく、切り抜きに対して塗った所が占める割合である。
+        固定幅だと、広く塗ったときに切り抜きのほとんどが塗った所になり、model は
+        周りをほとんど見ないまま塗った所を埋める。実機では、そこに元の空とは別の
+        青空が描かれ、塗った楕円の形が縁として残った。
+
+        2026-09-01 実測（480x380 の塗り、"a large red hot air balloon"）:
+            周り  64px  切り抜き 568x504（塗り 63%）  18.0s  楕円の縁が見える
+            周り 160px  切り抜き 664x600（塗り 43%）  87.3s  曇り空に馴染む
+            周り 320px  切り抜き 824x760（塗り 29%） 154.6s  馴染む。費用 8.6 倍
+        塗った所の長辺の 1/3 を取ると、480 に対して 160 になる。小さな塗りでは
+        下限の 64 が効くので、透かし程度の塗りの費用はほとんど変わらない。
+        """
         left, top, right, bottom = mask_box
+        if context_pixels is None:
+            longest = max(right - left, bottom - top)
+            context_pixels = max(DiffusersFlux2KleinAdapter.EDIT_CONTEXT, longest // 3)
         return (
             max(0, left - context_pixels),
             max(0, top - context_pixels),
@@ -261,6 +314,31 @@ class DiffusersFlux2KleinAdapter:
         return (
             max(256, (width + 15) // 16 * 16),
             max(256, (height + 15) // 16 * 16),
+        )
+
+    # 塗った所の切り抜きを 1 度に通す画素数の上限。FLUX.2 Klein が学習した面積
+    # （1024x1024）である。切り抜きは元画像の大きさと塗った範囲で決まるので、
+    # 大きな写真に広く塗ると際限なく伸びる。attention は面積の二乗で効くため、
+    # 上限を持たないと card に載らなくなる。
+    #
+    # 生成そのものの枠ではない。ここを他の編集にも掛けると、いま 2048 まで
+    # 通っている参考編集が黙って縮む。掛けるのは切り抜きだけである。
+    MAX_PATCH_PIXELS = 1024 * 1024
+
+    @classmethod
+    def _patch_generation_size(cls, width: int, height: int) -> tuple[int, int]:
+        """The size to run the painted-area crop at, bounded by what the model holds.
+
+        比を保ったまま上限へ収める。合成は原寸の切り抜きへ戻すので、縮めた分は
+        塗った所の細かさに出る（塗っていない所は元のままである）。
+        """
+        if width * height <= cls.MAX_PATCH_PIXELS:
+            return cls._generation_size(width, height)
+        ratio = (cls.MAX_PATCH_PIXELS / (width * height)) ** 0.5
+        # 収めたものは切り下げる。ここで切り上げると上限を越え直す。
+        return (
+            max(256, int(width * ratio) // 16 * 16),
+            max(256, int(height * ratio) // 16 * 16),
         )
 
     def edit(self, request: ImageEditRequest) -> ImageGenerationResult:
@@ -289,7 +367,7 @@ class DiffusersFlux2KleinAdapter:
             generation_size = self._generation_size(request.width, request.height)
         elif request.strict_edit:
             assert isinstance(reference, Image.Image)
-            generation_size = self._generation_size(reference.width, reference.height)
+            generation_size = self._patch_generation_size(reference.width, reference.height)
         else:
             generation_size = self._generation_size(source.width, source.height)
         if request.edit_mode == "multi_reference" or request.reference_paths:
@@ -311,18 +389,50 @@ class DiffusersFlux2KleinAdapter:
         elif reference.size != generation_size:
             reference = reference.resize(generation_size, Image.Resampling.LANCZOS)
 
+        # 塗った所があるなら、それを model へ渡す経路を通す。切り抜きを描き直して
+        # 塗った形に切り抜くのと違い、塗っていない所は model の中でも動かないので、
+        # 描かれたものは塗った所へ入り、境目に帯も出ない。
+        painting = (
+            request.strict_edit
+            and request.mask_path is not None
+            and request.edit_mode != "outpaint"
+            and not request.reference_paths
+            and request.edit_mode != "multi_reference"
+        )
         generator = torch.Generator(device="cuda").manual_seed(request.seed)
         started = time.perf_counter()
         try:
-            result = self.pipeline(
-                image=reference,
-                prompt=request.prompt,
-                width=generation_size[0],
-                height=generation_size[1],
-                num_inference_steps=request.steps,
-                guidance_scale=1.0,
-                generator=generator,
-            )
+            if painting:
+                assert request.mask_path is not None
+                assert isinstance(reference, Image.Image)
+                painted = editable_mask(request.mask_path).crop(patch_box)
+                if painted.size != generation_size:
+                    painted = painted.resize(generation_size, Image.Resampling.LANCZOS)
+                # 縮小で付いた半端な縁を落とす。塗った形そのものを渡す。最終的な
+                # 合成は原寸のマスクで行うので、ここが厳密さの根拠ではない。
+                painted = painted.point(lambda value: 255 if value > 127 else 0)
+                result = self._inpainter()(
+                    image=reference,
+                    mask_image=painted,
+                    prompt=request.prompt,
+                    width=generation_size[0],
+                    height=generation_size[1],
+                    num_inference_steps=request.steps,
+                    # 塗った所は作り直す。残したいなら塗らない、が操作の意味である。
+                    strength=1.0,
+                    guidance_scale=1.0,
+                    generator=generator,
+                )
+            else:
+                result = self.pipeline(
+                    image=reference,
+                    prompt=request.prompt,
+                    width=generation_size[0],
+                    height=generation_size[1],
+                    num_inference_steps=request.steps,
+                    guidance_scale=1.0,
+                    generator=generator,
+                )
             generated = result.images[0].convert("RGBA")
         finally:
             torch.cuda.synchronize()

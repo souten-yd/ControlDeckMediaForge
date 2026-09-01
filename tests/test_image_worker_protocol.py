@@ -406,13 +406,17 @@ def test_an_upscale_takes_no_steps_and_produces_exactly_one_image(monkeypatch, t
     monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(work_root))
     worker = image_worker.ImageWorker()
 
-    def upscaling(width: int, height: int, count: int = 1, steps: object = None) -> dict:
+    def upscaling(
+        width: int, height: int, count: int = 1, steps: object = None,
+        scale: object = None,
+    ) -> dict:
         value = payload(model, work_root / "outputs")
         value["model"]["runtime_adapter"] = "spandrel.upscale"
         value["request"]["operation"] = "image.edit"
         value["request"]["constraints"] = {
             "edit_mode": "upscale", "width": width, "height": height,
             **({"steps": steps} if steps is not None else {}),
+            **({"upscale_scale": scale} if scale is not None else {}),
         }
         value["request"]["output"] = {"format": "png", "count": count}
         value["worker_inputs"] = {"source_path": str(source)}
@@ -431,3 +435,9 @@ def test_an_upscale_takes_no_steps_and_produces_exactly_one_image(monkeypatch, t
     # 乱数が無いので複数枚は同じ絵にしかならない。
     with pytest.raises(ValueError, match="exactly one image"):
         worker.handle(upscaling(4096, 3072, count=4))
+    # 出す倍率は核が決めて渡す。worker は範囲だけ見て、既定は置かない。置くと
+    # 核が決めた寸法と worker が使う倍率が食い違い、寸法の検査を通ってから
+    # 別の大きさが出る。
+    for bad in (0, 9, "2", 2.0, True):
+        with pytest.raises(ValueError, match="upscale scale"):
+            worker.handle(upscaling(2048, 1536, scale=bad))

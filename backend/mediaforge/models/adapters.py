@@ -19,6 +19,9 @@ IMAGE_ADAPTERS = frozenset({
     # 拡大は標本化しない。prompt も seed も無く、同じ絵からは同じ絵が出る。
     # 生成ではないが、core が起動する画像 worker の経路としては同じである。
     "spandrel.upscale",
+    # FLUX.2-dev 32B。GGUF を stable-diffusion.cpp の pinned build で回す。
+    # 動画側の MiniMax H3 と同じ駆動系・同じ commit である。
+    "native.stable-diffusion-cpp-flux2",
 })
 
 # 動画 worker（worker_packs/video/worker.py）が実装するもの。
