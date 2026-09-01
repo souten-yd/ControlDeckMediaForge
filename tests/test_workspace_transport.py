@@ -1245,3 +1245,55 @@ def test_an_upscale_takes_no_mask_and_no_chosen_size(tmp_path: Path):
         protected = submit({"strict_edit": True})
         assert protected["error"]["code"] == "invalid_constraint"
         assert "strict_edit" in protected["error"]["message"]
+
+
+def test_the_original_can_be_carried_out_in_pieces(tmp_path: Path):
+    """原寸を端末へ持ち出す経路。表示用の縮小版とは別である。
+
+    見るための経路は 12MiB を超えると縮小版を返す。それを保存すると、小さく
+    なったことに気づかないまま原寸を失う。持ち出しは分割で全部を運ぶ。
+    1 度に運ぶ量を区切るのは、base64 が 4/3 に膨らんだうえで 1 つの socket
+    message に載るためである。
+    """
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        asset = import_asset(client, "source", size=(64, 48))
+        import os
+        path = client.app.state.store.asset_path(asset["id"])
+        noise = Image.frombytes("RGBA", (2048, 1600), os.urandom(2048 * 1600 * 4))
+        noise.save(path, format="PNG")
+        total = path.stat().st_size
+        assert total > 12 * 1024 * 1024
+
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            # 見るための経路は縮めて返す。
+            assert call(socket, "assets.content", {"asset_id": asset["id"]})["result"]["reduced"] is True
+
+            carried = bytearray()
+            offset = 0
+            rounds = 0
+            while offset < total:
+                piece = call(socket, "assets.bytes", {"asset_id": asset["id"], "offset": offset})["result"]
+                assert piece["total_bytes"] == total
+                assert piece["offset"] == offset
+                assert piece["mime_type"] == "image/png"
+                assert piece["filename"]
+                chunk = base64.b64decode(piece["base64"])
+                assert chunk
+                carried += chunk
+                offset += len(chunk)
+                rounds += 1
+
+            # 端まで運びきる。1 度で運びきれない大きさであることも確かめる。
+            assert rounds > 1
+            assert bytes(carried) == path.read_bytes()
+
+            # 範囲の外は断る。読める場所を要求側に決めさせない。
+            for params in (
+                {"offset": total + 1},
+                {"offset": -1},
+                {"length": 0},
+                {"length": 64 * 1024 * 1024},
+            ):
+                refused = call(socket, "assets.bytes", {"asset_id": asset["id"], **params})
+                assert "error" in refused, params
