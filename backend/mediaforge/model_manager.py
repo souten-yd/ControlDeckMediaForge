@@ -516,6 +516,9 @@ class ModelOperationManager:
             # 画面が画質と長さの選択肢を組むのに要る。落とすと、どのモデルを
             # 選んでも同じ選択肢が出る。
             **({"video": dict(model.video)} if model.video else {}),
+            # 倍率と、どこまで受けるか。画面が決め打ちすると、別の倍率の重みを
+            # 足したとき黙って外れる。
+            **({"upscale": dict(model.upscale)} if model.upscale else {}),
             "supports_lora": model.supports_lora,
             "max_references": model.max_references,
             "reference_roles": list(model.reference_roles),

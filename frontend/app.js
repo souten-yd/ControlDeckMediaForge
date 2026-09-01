@@ -36,20 +36,34 @@ const PHASE_TEXT = {
 };
 
 /* 操作は capability で出し分ける。ここが UI の可用性の唯一の根拠。 */
+/* 加工と生成は別の用事である。混ぜると、写真を直しに来た人が「作る」画面の
+   中で自分の用事を探すことになる（実機で「完全に画像生成しかできないように
+   見える」と言われた）。
+
+   線は「元の絵が残るか」で引く。retouch は写っているものを保ち、generate は
+   作り直す。`preserving` は 1px も変わらない保証で、それより広い区別である。 */
 const EDIT_ACTIONS = [
-  {mode: "inpaint", capability: "image.inpaint", label: "一部だけ直す",
+  {mode: "inpaint", capability: "image.inpaint", label: "一部だけ直す", kind: "retouch",
+   hint: "透かしや写り込みを消すのはここです。消したい所を塗ってください。",
    guarantee: "塗っていない場所は 1px も変わりません", preserving: true},
-  {mode: "reference", capability: "image.single_reference_edit", label: "全体を直す",
-   guarantee: "画像全体が変わることがあります"},
-  {mode: "variation", capability: "image.variation", label: "似た別案を作る",
-   guarantee: "画像全体が変わることがあります"},
-  {mode: "outpaint", capability: "image.outpaint", label: "外側を広げる",
+  {mode: "upscale", capability: "image.upscale", label: "画質を上げる", kind: "retouch",
+   hint: "ぼけさせずに大きくします。作り直さないので、写っているものは変わりません。",
+   guarantee: "写っているものは変わりません"},
+  {mode: "outpaint", capability: "image.outpaint", label: "外側を広げる", kind: "retouch",
    guarantee: "元の画像は 1px も変わりません", preserving: true},
-  {mode: "upscale", capability: "image.upscale", label: "画質を上げる",
-   guarantee: "写っているものは変わりません。大きく作り直します"},
+  {mode: "reference", capability: "image.single_reference_edit", label: "全体を直す",
+   kind: "generate", guarantee: "画像全体が変わることがあります"},
+  {mode: "variation", capability: "image.variation", label: "似た別案を作る",
+   kind: "generate", guarantee: "画像全体が変わることがあります"},
   {mode: "multi_reference", capability: "image.multi_reference_edit", label: "参考を足して直す",
-   guarantee: "画像全体が変わることがあります"},
+   kind: "generate", guarantee: "画像全体が変わることがあります"},
 ];
+
+/* いまの媒体で出す編集。写真は保つもの、画像は作り直すもの。 */
+function editActionsForMedia() {
+  const wanted = state.createMedia === "photo" ? "retouch" : "generate";
+  return EDIT_ACTIONS.filter((action) => action.kind === wanted);
+}
 
 const CAPABILITY_REASON = {
   vision_analyzer_unavailable: "ControlDeck の画像確認機能をいま使えません",
@@ -584,20 +598,30 @@ function unavailableVideoReason(value) {
 
 function renderCreateMedia() {
   const video = state.createMedia === "video";
-  app().dataset.createMedia = video ? "video" : "image";
+  const photo = state.createMedia === "photo";
+  app().dataset.createMedia = state.createMedia || "image";
   for (const button of mediaSwitchButtons()) {
     button.setAttribute("aria-pressed", String(button.dataset.createMedia === state.createMedia));
   }
   byId("video-create-fields").hidden = !video;
-  byId("create-intent-label").textContent = video ? "どんな動画を作りますか？" : "何を作りますか？";
+  byId("create-intent-label").textContent = video
+    ? "どんな動画を作りますか？"
+    : photo ? "どう直しますか？" : "何を作りますか？";
   byId("create-intent").placeholder = video
     ? "静かな机の上で、小さなロボットが手を振る短い動画"
+    : photo ? "塗った所に何があってほしいか（例: 芝生、空、壁）"
     : "夜の机に置かれた、小さな青いロボット";
+  // 拡大は指示を取らない。書ける欄を出すと、書いた言葉が効くように見える。
+  byId("create-intent-label").hidden = photo && state.editMode === "upscale";
+  byId("create-intent").hidden = photo && state.editMode === "upscale";
 
   const file = attachedFile();
   byId("attach-label").textContent = file
     ? `画像: ${file.name}`
-    : (video ? "＋ 動かす画像を追加（任意）" : "＋ 画像を追加");
+    : video ? "＋ 動かす画像を追加（任意）"
+    : photo ? "＋ 直したい写真を選ぶ" : "＋ 画像を追加";
+  // 写真は添付が先。無いと何も選べないので、そこだけを見せる。
+  byId("edit-block").hidden = video || !file;
   // 一覧に載るモデルは媒体で変わる。切り替えたまま前の一覧を残さない。
   renderModelChoice();
   renderVideoSettings();
@@ -624,12 +648,19 @@ function renderCreateMedia() {
   submit.dataset.unavailable = String(video && !usable);
   if (!state.hostBusy) submit.disabled = video && !usable;
   if (!state.hostBusy) {
-    submit.textContent = video ? (usable ? "動画を作る" : "動画は現在利用できません") : "作る";
+    submit.textContent = video
+      ? (usable ? "動画を作る" : "動画は現在利用できません")
+      : photo ? "直す" : "作る";
   }
 }
 
+const CREATE_MEDIA = new Set(["image", "photo", "video"]);
+
 function setCreateMedia(media, {persist = true} = {}) {
-  state.createMedia = media === "video" ? "video" : "image";
+  state.createMedia = CREATE_MEDIA.has(media) ? media : "image";
+  // 媒体で出せる編集が変わる。前の媒体の選択を持ち越すと、一覧に無いものが
+  // 選ばれたままになる。
+  selectEditMode("");
   clearError();
   renderCreateMedia();
   void refreshAttachment();
@@ -2285,7 +2316,8 @@ function capabilityState(name) {
 function renderEditActions() {
   const holder = byId("edit-actions");
   const advanced = state.mode === "advanced";
-  const usable = EDIT_ACTIONS.filter((action) => advanced || capabilityState(action.capability) !== "unavailable");
+  const usable = editActionsForMedia()
+    .filter((action) => advanced || capabilityState(action.capability) !== "unavailable");
   holder.replaceChildren(...usable.map((action) => {
     const available = capabilityState(action.capability) !== "unavailable";
     const button = document.createElement("button");
@@ -2375,6 +2407,9 @@ function selectEditMode(mode) {
   // 拡大は指示を取らない。書ける欄を出すと、書いた言葉が効くように見える。
   byId("upscale-input").hidden = mode !== "upscale";
   if (mode === "upscale") renderUpscaleNote();
+  // 指示欄を出すかは編集の種類で変わる。ここを通さないと、拡大を選んでも
+  // 「どう直しますか？」が残る。
+  renderCreateMedia();
   byId("reference-input").hidden = mode !== "multi_reference";
   byId("reference-files").required = mode === "multi_reference";
   byId("outpaint-input").hidden = mode !== "outpaint";
@@ -2394,18 +2429,42 @@ async function prepareUpload() {
   state.upload = null;
   state.sourceAsset = null;
   const label = byId("attach-size");
-  if (!file || !measured) {
-    state.source = measured;
-    label.textContent = measured ? `${measured.width}×${measured.height}` : "";
+  if (!file) {
+    state.source = null;
+    label.textContent = "";
     return;
   }
-  if (needsResize(measured, state.editMode)) {
+  if (!measured) {
+    // 選べたのに使えない、を黙って「選んでいない」と同じ見た目にしない。
+    // 実機で、写真を選んでも何も起きないように見えていた。
+    state.source = null;
+    label.textContent = "この画像を読み込めませんでした";
+    showError("この画像を読み込めませんでした。PNG か JPEG で選び直してください。");
+    return;
+  }
+  const shrinking = needsResize(measured, state.editMode);
+  // 端末の写真は HEIC のことがある。読めていても、そのまま送ると受付で
+  // 断られる。寸法が足りていても形式が違えば canvas を通す。以前は大きい
+  // 写真が必ず縮小され、その途中で PNG に直っていたので表に出なかった。
+  const converting = !IMPORTABLE_TYPES.has(file.type);
+  if (shrinking || converting) {
     label.textContent = "読み込んでいます…";
-    const prepared = await resized(file, measured, state.editMode);
-    state.upload = prepared.file;
-    state.source = prepared.size;
-    label.textContent =
-      `${measured.width}×${measured.height} → ${prepared.size.width}×${prepared.size.height} に縮小して使います`;
+    try {
+      const prepared = await resized(file, measured, state.editMode);
+      state.upload = prepared.file;
+      state.source = prepared.size;
+      // 端末の canvas に入らず落としたときも同じ表示になる。狙った寸法では
+      // なく、実際に用意できた寸法を言う。
+      const reduced = prepared.size.width !== measured.width
+        || prepared.size.height !== measured.height;
+      label.textContent = reduced
+        ? `${measured.width}×${measured.height} → ${prepared.size.width}×${prepared.size.height} に縮小して使います`
+        : `${measured.width}×${measured.height}`;
+    } catch {
+      state.source = null;
+      label.textContent = "";
+      showError("この画像を読み込めませんでした。PNG か JPEG で選び直してください。");
+    }
   } else {
     state.upload = file;
     state.source = measured;
@@ -2442,11 +2501,21 @@ function attachedFile() {
   return byId("source-file").files[0] || null;
 }
 
+/* 端末が向きを持つ写真を、見えているとおりに開く。
+
+   `imageOrientation` を渡さないと、EXIF で回している写真の縦横が
+   ブラウザとサーバで食い違う。測った寸法と取り込んだ寸法がずれ、
+   「一部だけ直す」は寸法の一致を要求するので受付で断られる。
+   加工して向きの付いた写真が添付できない、という形で表に出る。 */
+function openBitmap(file) {
+  return createImageBitmap(file, {imageOrientation: "from-image"});
+}
+
 /* 寸法はアップロード前にブラウザ側で測る。
    これが無いと「外側を広げる」の可否が GPU 受付後にしか分からない。 */
 async function measure(file) {
   try {
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await openBitmap(file);
     const size = {width: bitmap.width, height: bitmap.height};
     bitmap.close();
     return size;
@@ -2501,18 +2570,47 @@ function needsResize(size, mode) {
   return target.width !== size.width || target.height !== size.height;
 }
 
+/* 取り込みが受ける形。これ以外は canvas を通して PNG に直してから送る。
+   直さないと、端末が読めていても「PNG と JPEG だけです」で断られる。 */
+const IMPORTABLE_TYPES = new Set(["image/png", "image/jpeg"]);
+
+/* canvas に描いて PNG に直す。
+
+   携帯の canvas には面積の上限があり、超えると `toBlob` が null を返す。
+   投げるのではなく null なので、そのまま File を作ると壊れたものが送られる。
+   実機で「加工した写真だけ添付できない」ように見えていた。入らなければ
+   半分ずつ落として、どこまで入ったかを呼び出し側に返す。 */
+async function drawToPng(bitmap, width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(bitmap, 0, 0, width, height);
+  const blob = await new Promise((resolve) => {
+    try { canvas.toBlob(resolve, "image/png"); } catch { resolve(null); }
+  });
+  if (!blob || !blob.size) return null;
+  return {file: new File([blob], "source.png", {type: "image/png"}), size: {width, height}};
+}
+
 async function resized(file, size, mode) {
   const target = targetSize(size, mode);
-  const bitmap = await createImageBitmap(file);
-  const canvas = document.createElement("canvas");
-  canvas.width = target.width;
-  canvas.height = target.height;
-  const context = canvas.getContext("2d");
-  context.imageSmoothingQuality = "high";
-  context.drawImage(bitmap, 0, 0, target.width, target.height);
-  bitmap.close();
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-  return {file: new File([blob], "source.png", {type: "image/png"}), size: target};
+  const bitmap = await openBitmap(file);
+  try {
+    let width = target.width;
+    let height = target.height;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const drawn = await drawToPng(bitmap, width, height);
+      if (drawn) return drawn;
+      width = Math.max(16, Math.round(width / 2));
+      height = Math.max(16, Math.round(height / 2));
+    }
+    throw new Error("canvas could not encode this image");
+  } finally {
+    bitmap.close();
+  }
 }
 
 async function refreshAttachment() {
@@ -2526,7 +2624,7 @@ async function refreshAttachment() {
   state.referenceFocus = "overall";
   state.measured = file ? await measure(file) : null;
   await prepareUpload();
-  if (file && state.createMedia === "image") renderEditActions();
+  if (file && state.createMedia !== "video") renderEditActions();
   else selectEditMode("");
   renderSizeSection();
   renderReferenceIntelligence();
@@ -2728,7 +2826,13 @@ function clearError() {
    backend も同じ規則で fail-closed するが、受付後に落ちると待ち時間が無駄になる。 */
 function requestProblem(constraints) {
   const file = attachedFile();
-  if (!byId("create-intent").value.trim()) return "作りたいものを書いてください。";
+  // 拡大は指示を取らない。書かせると、書いた言葉が効くように見えるうえ、
+  // 空のまま押しても理由の分からないまま止まる。
+  if (state.editMode !== "upscale" && !byId("create-intent").value.trim()) {
+    return state.createMedia === "photo"
+      ? "どう直すかを書いてください。"
+      : "作りたいものを書いてください。";
+  }
   if (state.createMedia === "video") {
     if (!videoCapabilityUsable()) {
       return file
@@ -2755,12 +2859,16 @@ function requestProblem(constraints) {
     }
   }
 
-  if (!file) return validateSize(constraints);
+  if (!file) {
+    if (state.createMedia === "photo") return "直したい写真を選んでください。";
+    return validateSize(constraints);
+  }
 
   if (!state.editMode) return "この画像をどうするか選んでください。";
   if (state.editMode === "inpaint" && !maskAsset()) {
     return "変えたい場所を塗ってください。";
   }
+  if (state.editMode === "upscale") return "";
   if (state.editMode === "multi_reference") {
     const count = byId("reference-files").files.length;
     if (count < 1 || count > 3) return "参考にする画像は 1〜3 枚にしてください。";
@@ -2858,16 +2966,27 @@ async function submitJob(event) {
       );
       state.sourceAsset = source;
       inputs = [{asset_id: source.id}];
+      if (state.editMode === "upscale") {
+        // 出す寸法は倍率だけで決まる。送ると「倍率から決めます」と断られる。
+        // 塗る所も広げる所も無いので、マスクも strict_edit も付けない。
+        delete constraints.width;
+        delete constraints.height;
+        constraints.edit_mode = "upscale";
+      }
       const preserving = state.editMode === "inpaint" || state.editMode === "outpaint";
-      if (state.editMode !== "outpaint") {
+      if (state.editMode === "upscale") {
+        // 何も足さない。
+      } else if (state.editMode !== "outpaint") {
         constraints.width = source.width;
         constraints.height = source.height;
       } else if (source.width > constraints.width || source.height > constraints.height) {
         // 添付時の計測とサーバの正規化がずれた場合の保険。受付前に止める。
         throw {code: "invalid_dimensions"};
       }
-      constraints.strict_edit = preserving;
-      constraints.edit_mode = state.editMode;
+      if (state.editMode !== "upscale") {
+        constraints.strict_edit = preserving;
+        constraints.edit_mode = state.editMode;
+      }
       if (state.editMode === "inpaint") {
         showPreparing("塗った範囲を取り込んでいます", 0.55);
         const imported = await importFile(maskAsset(), "edit_mask");
@@ -2884,10 +3003,17 @@ async function submitJob(event) {
 
     let request = {
       operation,
-      intent: byId("create-intent").value,
+      // 拡大は指示を取らない。空で送ると受付が 422 で返す。何をした job か
+      // 後から分かるように、ここで名前だけ付ける。
+      intent: state.editMode === "upscale"
+        ? "画質を上げる" : byId("create-intent").value,
       inputs,
       constraints,
-      output: {format: outputFormat(), count: requestedCount()},
+      output: {
+        format: outputFormat(),
+        // 乱数が無いので、何枚頼んでも同じ絵にしかならない。
+        count: state.editMode === "upscale" ? 1 : requestedCount(),
+      },
       qa: qaOptions(),
       local_only: true,
       ...modelSelection(),
@@ -3033,12 +3159,23 @@ function modelSelection() {
 
 /* いま作るものを作れる土台だけを並べる。LoRA は単体では絵を作れないので混ぜない。
    画像の一覧に動画モデルが混ざると、選んでも作れないものを見せることになる。 */
+/* 土台になれないもの。拡大は絵を大きくするだけで、絵を作れない。
+   ここに並ぶと、選んだ利用者のあらゆる「作る」が model_unavailable で落ちる
+   （実機でそうなった）。「選べても作れない」ものを出さない、という
+   has_runtime と同じ理由である。 */
+function isBaseModel(model) {
+  const capabilities = model.capabilities || [];
+  if (!capabilities.length) return true;
+  return capabilities.some((name) => name !== "image.upscale");
+}
+
 function imageBaseModels() {
   const wanted = state.createMedia === "video" ? "video" : "image";
   return state.modelCatalog.filter(
     (model) => model.installed && model.healthy && model.kind !== "lora"
       // 走らせる worker が無いものは、選べても作れない。
       && model.has_runtime !== false
+      && isBaseModel(model)
       && (model.media_types || ["image"]).includes(wanted));
 }
 

@@ -278,6 +278,11 @@ main { flex: 1; min-height: 0; padding: 16px; }
 #video-create-settings { justify-self: start; }
 #app[data-create-media="image"] [data-video-create],
 #app[data-create-media="video"] [data-image-create] { display: none !important; }
+/* 写真を直す。作る道具は一切出さない。出すと「作る」画面に見え、写真を
+   直しに来た人が自分の用事を見つけられない。 */
+#app[data-create-media="photo"] [data-video-create],
+#app[data-create-media="photo"] [data-image-create],
+#app[data-create-media="photo"] [data-generate-only] { display: none !important; }
 
 .panel, #stage > div, .row, .info {
   background: var(--surface);
