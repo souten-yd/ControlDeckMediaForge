@@ -588,7 +588,7 @@
       "media_types": [
         "image"
       ],
-      "description": "文章から画像を作る 32B のモデル。Klein 4B より作りが細かい代わりに、1024x1024 を 20 歩で実測 181.9 秒かかる。R9700 / gfx1201 で計測。",
+      "description": "文章から画像を作り、参照画像から編集もする 32B のモデル。Klein 4B より作りが細かい代わりに遅い。R9700 / gfx1201 で 1024x1024 を実測: 生成 181.9 秒、参照 1 枚の編集 436.1 秒、2 枚 724.0 秒。",
       "approx_download_bytes": 34665856500,
       "source": {
         "kind": "huggingface",
@@ -597,8 +597,14 @@
       },
       "ownership": "managed",
       "supports_lora": false,
-      "max_references": 0,
-      "reference_roles": [],
+      "max_references": 10,
+      "reference_roles": [
+        "identity",
+        "style",
+        "composition",
+        "environment",
+        "prop"
+      ],
       "supports_reference_strength": false,
       "recommended_profiles": [],
       "gated": true,

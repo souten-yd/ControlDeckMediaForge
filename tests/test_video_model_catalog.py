@@ -293,7 +293,22 @@ def test_the_32b_model_runs_through_the_native_runtime_not_diffusers() -> None:
     model = next(item for item in registry().all() if item.model_id == "city96/FLUX.2-dev-gguf")
 
     assert model.runtime_adapter == "native.stable-diffusion-cpp-flux2"
-    assert model.capabilities == ("image.text_to_image",)
+    # 作るだけのモデルではない。モデルカードは「generating, editing and
+    # combining images」と言い、実機でもそのとおり動く（2026-09-03 実測、
+    # 1024x1024）: 参照 1 枚の編集 436.1 秒、2 枚の合成 724.0 秒。
+    #
+    # `image.inpaint` は宣言しない。塗った所を渡しても model は絵全体を描き直し、
+    # 塗っていない所の最大差が 224 になる（1px も変わらない、を満たさない）。
+    # 貼り戻せば差は 0 になるが、model の描いた空と元の空で露出が違うため塗った
+    # 形が縁として出る。守れない保証を名乗るより、守らないと言う方を選んだ。
+    assert model.capabilities == (
+        "image.text_to_image",
+        "image.single_reference_edit",
+        "image.multi_reference_edit",
+        "image.masked_edit",
+    )
+    assert "image.inpaint" not in model.capabilities
+    assert "image.strict_edit" not in model.capabilities
     assert model.state == "available"
     assert model.hardware_backends == ("rocm", "cuda")
     assert model.execution_peak_vram_bytes == 26_395_885_568

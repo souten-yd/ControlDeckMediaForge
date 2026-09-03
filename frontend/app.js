@@ -58,6 +58,11 @@ const EDIT_ACTIONS = [
   {mode: "deblur", capability: "image.deblur", label: "ブレを直す", kind: "retouch",
    hint: "手ブレ・被写体ブレを取ります。寸法は変わりません。",
    guarantee: "大きさも写っているものも変わりません"},
+  {mode: "masked_edit", capability: "image.masked_edit", label: "塗った所を指して直す",
+   kind: "generate",
+   hint: "塗った所に何を描くかを書いてください。塗った所は「守る範囲」ではなく"
+       + "「指す場所」です。絵全体が描き直されるので、周りも少し変わります。",
+   guarantee: "画像全体が変わることがあります"},
   {mode: "outpaint", capability: "image.outpaint", label: "外側を広げる", kind: "retouch",
    guarantee: "元の画像は 1px も変わりません", preserving: true},
   {mode: "reference", capability: "image.single_reference_edit", label: "全体を直す",
@@ -71,7 +76,7 @@ const EDIT_ACTIONS = [
 /* 言葉を取らない直し方。標本化しないので、書いても効かない。 */
 const REPAIR_MODES = new Set(["upscale", "deblur", "erase"]);
 /* そのうち、塗った所を要るもの。 */
-const MASKED_MODES = new Set(["inpaint", "erase"]);
+const MASKED_MODES = new Set(["inpaint", "erase", "masked_edit"]);
 
 /* いまの媒体で出す編集。
 

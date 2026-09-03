@@ -7616,3 +7616,106 @@ image.edit      manual=city96/FLUX.2-dev-gguf  -> model_unavailable
 ```
 
 `./mf.sh test` 827 passed。
+
+## FLUX.2-dev は編集できる。私が測らずに「できない」と書いていた（2026-09-03）
+
+利用者から「本当に画像変更できないの？改めて Flux dev の仕様書や Reddit などを
+チェックして」。**指摘のとおりで、私の誤りだった。**
+
+### 何を間違えたか
+
+FLUX.2-dev を入れたとき、`image.text_to_image` だけを宣言した。参照編集を測って
+いなかったからである。そこまでは正しい。誤りはその後で、**自分が書いた宣言を根拠に
+「モデル側の制約でできない」と説明した**ことである。循環している。
+
+モデルカードには最初からこう書いてある。
+
+```text
+"a 32 billion parameter rectified flow transformer capable of generating,
+ editing and combining images based on text instructions"
+"excels in single-reference editing and multi-reference editing"
+参照画像は最大 10 枚、4 メガピクセルまで
+```
+
+自分で引用した sd.cpp の `docs/flux2.md` にも「All variants support image editing
+with the `-r` flag for context inputs」とあった。読んでいたのに、宣言の方を信じた。
+
+なお**ライセンスは非商用のままである**（`flux-non-commercial-license`）。検索結果に
+Apache-2.0 とあったのは Klein との取り違えで、Hub の API で確認した。
+
+### 実測（R9700 / gfx1201、1024x1024、20 歩）
+
+```text
+生成のみ              181.9 秒
+参照 1 枚の編集       436.1 秒（7:16）   最大 RSS 18.8 GB  Swaps 0
+参照 2 枚の合成       724.0 秒（12:04）  最大 RSS 21.4 GB  Swaps 0
+塗った所を指す編集    212.9 秒（3:33）   最大 RSS 22.0 GB  Swaps 0
+```
+
+参照 1 枚で 2.4 倍、2 枚で 4.0 倍。条件付けの系列が参照ごとに伸びるので素直に
+比例する。2 枚の合成では「image 1 の杭を image 2 の納屋の前に」という**番号での
+指定が効いた**（`--increase-ref-index`）。
+
+単一参照編集は、元の杭のひび割れ・樹皮・節・垂れた草の茎まで保ったまま季節だけを
+冬に変えた。参照編集として期待どおりに働く。
+
+### 塗った所は「守る範囲」ではなく「指す場所」
+
+`--mask` を渡すと、頼んだ鳥の群れは塗った楕円の中に出た。ただし**塗っていない所も
+描き直されている**。
+
+```text
+塗った所の外  最大差 224  平均 3.52   ← 1px も変わらない、ではない
+塗った所の中  最大差 246  平均 53.88
+```
+
+この repo の strict edit は「塗っていない所は 1px も変わらない」を不変条件にして
+いる。貼り戻せば差は 0 になり `validate_strict_edit` も passed になる（GPU を使わず
+確かめた）。**しかしそれをすると塗った形が縁として出る。** model が描いた空と元の
+写真の空とで露出が違うためで、PR #195 で Klein 4B について直したのと同じ現象である。
+あのときは塗った所を model へ渡すことで解いたが、この経路では `--mask` を渡しても
+model は絵全体を描き直して返すので、同じ手が効かない。
+
+守れない保証を名乗るより、守らないと言う方を選んだ。`image.inpaint` は宣言しない。
+代わりに `image.masked_edit` を足した。**塗った所は指す場所である**、という別の
+capability である。画面では「塗った所を指して直す」、保証欄は「画像全体が変わる
+ことがあります」。Klein 4B の「塗った所に描き足す」（1px も変わらない）はそのまま残る。
+
+`strict_edit` を真で受けたら断る。名乗らせると、核が後段で守れたことを検証して
+しまう。
+
+### 本番の worker を実プロセスで通した
+
+```text
+参照編集        1024x1024  生成 406.5 秒  postprocessing ['pil.convert.rgba']
+塗った所を指す  1024x1024  生成 250.5 秒  同上
+```
+
+`postprocessing` に strict の合成が入っていない。保証を名乗らない経路なので、
+入っていたら誤りである。塗った所を指す編集では、合成しないぶん縁が出ない。
+
+### 未実施
+
+```text
+参照 3 枚以上          モデルカードは 10 枚までと言う。2 枚までしか測っていない
+image.variation        宣言していない。測っていない
+ControlDeck 統合下     本番 worker の実プロセスまでで確認した
+実ブラウザ             「塗った所を指して直す」の画面は未確認
+```
+
+`./mf.sh test` 827 passed。
+
+### 触っていない不安定なテスト
+
+`test_workspace_websocket_chunk_import_exceeds_single_message_bound_and_cleans_up` が
+ときどき落ちる。websocket を閉じた後の後始末を 5 秒待って見る作りで、機械が忙しいと
+間に合わない。**このスライスとは無関係である。** 負荷を揃えて交互に 10 回ずつ回した:
+
+```text
+origin/main    passed=4  failed=6
+このブランチ    passed=5  failed=5
+```
+
+手を触れていない main の方が多く落ちる。テスト自身のコメントも「待たずに見ると、
+機械が忙しいときだけ落ちるテストになる（実際そうなっていた）」と書いており、5 秒では
+足りていない。直すなら別のスライスにする。

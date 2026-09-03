@@ -572,6 +572,8 @@ class JobManager:
             return "image.deblur"
         if job.request.constraints.get("edit_mode") == "erase":
             return "image.erase"
+        if job.request.constraints.get("edit_mode") == "masked_edit":
+            return "image.masked_edit"
         if job.request.constraints.get("edit_mode") == "outpaint":
             return "image.outpaint"
         if job.request.constraints.get("edit_mode") == "multi_reference":
@@ -809,9 +811,32 @@ class JobManager:
             raise WorkerFailure("invalid_constraint", "strict_edit must be a boolean")
         if edit_mode not in {
             "reference", "variation", "inpaint", "outpaint", "multi_reference",
-            "upscale", "deblur", "erase",
+            "upscale", "deblur", "erase", "masked_edit",
         }:
             raise WorkerFailure("invalid_constraint", "edit_mode is unsupported")
+        if edit_mode == "masked_edit":
+            # 塗った所は「指す場所」であって守る範囲ではない。守る保証を
+            # 名乗らせない — 名乗ると、核が後段で守れたことを検証してしまう。
+            if strict:
+                raise WorkerFailure(
+                    "invalid_constraint", "masked_edit does not keep the unpainted pixels",
+                )
+            mask_id = job.request.constraints.get("editable_mask_asset_id")
+            if not isinstance(mask_id, str) or not mask_id.startswith("asset_"):
+                raise WorkerFailure(
+                    "invalid_edit_mask", "masked_edit requires editable_mask_asset_id",
+                )
+            try:
+                mask = self.store.get_asset(mask_id)
+            except KeyError as exc:
+                raise WorkerFailure("invalid_edit_mask", "edit mask asset was not found") from exc
+            if mask.mime_type != "image/png":
+                raise WorkerFailure("invalid_edit_mask", "edit mask must be a PNG asset")
+            if (mask.width, mask.height) != (source.width, source.height):
+                raise WorkerFailure(
+                    "invalid_edit_mask", "edit mask must match the source dimensions",
+                )
+            return
         if edit_mode == "erase":
             # 塗った所を周りから埋める。何を描くかの指示は取らないが、
             # どこを消すかは要る。寸法も倍率も動かない。
