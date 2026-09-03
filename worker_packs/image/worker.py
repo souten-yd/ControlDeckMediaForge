@@ -337,6 +337,10 @@ class ImageWorker:
         generation_sec = 0.0
         if operation == "image.edit" and strict_edit and edit_mode != "outpaint" and mask_path is None:
             raise ValueError("strict edit requires an edit mask")
+        if edit_mode == "masked_edit" and mask_path is None:
+            # 塗った所が無ければ、これは参照編集であって別の用事である。
+            # 黙って別のものを作らない。
+            raise ValueError("a masked edit requires an edit mask")
         for index in range(count):
             output_seed = seed + index
             output_path = output_dir / f"output-{index}.png"

@@ -115,50 +115,110 @@ class NativeFlux2Adapter:
         environment["HIP_VISIBLE_DEVICES"] = "0"
         return environment
 
-    def _command(self, request: ImageGenerationRequest) -> list[str]:
+    def _command(
+        self,
+        prompt: str,
+        width: int,
+        height: int,
+        steps: int,
+        seed: int,
+        output_path: Path,
+        *,
+        references: tuple[Path, ...] = (),
+        canvas: Path | None = None,
+        mask: Path | None = None,
+    ) -> list[str]:
         command = [str(self._executable()), "-M", "img_gen"]
         for flag, relative in self.FILES:
             command += [flag, str(self._model_file(relative))]
+        if canvas is not None:
+            # 塗った所を指して直す経路。元の絵を画布として渡し、塗った所を
+            # 添える。参照として渡すのとは別で、model は塗った所へ描く。
+            command += ["--init-img", str(canvas)]
+        if mask is not None:
+            # 全部を作り直させる。0.75 のままだと元の絵が透けて残る。
+            command += ["--mask", str(mask), "--strength", "1.0"]
+        for reference in references:
+            command += ["--ref-image", str(reference)]
+        if len(references) > 1:
+            # 何枚目を指すかを prompt から言えるようにする。付けないと参照は
+            # すべて 1 番になり、「image 2 の〜」が効かない。
+            command.append("--increase-ref-index")
         command += [
             # VAE の潜在表現の形は名前からは決まらない。auto に任せると別の
             # 系統として読まれる。
             "--vae-format", "flux2",
-            "--prompt", request.prompt,
+            "--prompt", prompt,
             # dev は guidance を焼き込んである。真の CFG を掛けると二重になる。
             "--cfg-scale", "1.0",
             "--sampling-method", "euler",
-            "--steps", str(request.steps),
-            "-W", str(request.width),
-            "-H", str(request.height),
-            "--seed", str(request.seed),
+            "--steps", str(steps),
+            "-W", str(width),
+            "-H", str(height),
+            "--seed", str(seed),
             "--backend", self.BACKEND,
             "--diffusion-fa",
             "--mmap",
-            "--output", str(request.output_path),
+            "--output", str(output_path),
         ]
         return command
 
-    def generate(self, request: ImageGenerationRequest) -> ImageGenerationResult:
-        if request.reference_paths:
-            # sd-cli は `-r` で参照を取れるが、この経路では測っていない。
-            # 受けられるように見せて別のものを返すより、断る方がよい。
-            raise ValueError("this model does not take reference images yet")
-        request.output_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        command = self._command(request)
+    def _run(self, command: list[str], output_path: Path, seed: int) -> ImageGenerationResult:
+        output_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         started = time.perf_counter()
         completed = subprocess.run(
             command, check=False, capture_output=True, env=self._environment(),
         )
         self.last_generation_sec = time.perf_counter() - started
-        if completed.returncode != 0 or not request.output_path.is_file():
+        if completed.returncode != 0 or not output_path.is_file():
             detail = completed.stderr.decode("utf-8", "replace")[-300:]
             raise ValueError(f"the native image runtime failed: {detail}")
         # 核は 8bit RGBA を求める。sd-cli は RGB の PNG を書く。
-        with Image.open(request.output_path) as opened:
+        with Image.open(output_path) as opened:
             opened.load()
             produced = opened.convert("RGBA")
-        produced.save(request.output_path, format="PNG")
-        return ImageGenerationResult(output_path=request.output_path, seed=request.seed)
+        produced.save(output_path, format="PNG")
+        return ImageGenerationResult(output_path=output_path, seed=seed)
 
-    def edit(self, _request: ImageEditRequest) -> ImageGenerationResult:
-        raise ValueError("this model does not edit images yet")
+    def generate(self, request: ImageGenerationRequest) -> ImageGenerationResult:
+        return self._run(
+            self._command(
+                request.prompt, request.width, request.height, request.steps,
+                request.seed, request.output_path,
+                references=tuple(request.reference_paths),
+            ),
+            request.output_path,
+            request.seed,
+        )
+
+    def edit(self, request: ImageEditRequest) -> ImageGenerationResult:
+        """Edit from references, or from a painted area used as a pointer.
+
+        FLUX.2 は参照から編集する形で作られている（モデルカードは
+        「generating, editing and combining images」と書き、参照は 10 枚まで
+        取れるとしている）。元の絵は `--ref-image` で渡し、prompt でどう変える
+        かを言う。
+
+        塗った所を渡す経路もあるが、**守る範囲ではなく指す場所**である。実測で
+        塗っていない所の最大差は 224 だった（1px も変わらない、ではない）。
+        貼り戻せば差は 0 になるが、model が描いた空と元の空の露出が違うので
+        塗った形が縁として出る。保証を名乗らず、描かれたものをそのまま返す。
+        """
+        masked = request.mask_path is not None
+        if masked and request.strict_edit:
+            # 守る保証はこの経路では出せない。名乗らせない。
+            raise ValueError("this model cannot keep the unpainted pixels")
+        references = tuple(request.reference_paths) if masked else (
+            request.source_path, *request.reference_paths
+        )
+        return self._run(
+            self._command(
+                request.prompt, request.width, request.height, request.steps,
+                request.seed, request.output_path,
+                references=references,
+                canvas=request.source_path if masked else None,
+                mask=request.mask_path if masked else None,
+            ),
+            request.output_path,
+            request.seed,
+        )

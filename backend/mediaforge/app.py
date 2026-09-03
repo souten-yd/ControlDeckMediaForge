@@ -1023,6 +1023,9 @@ def create_app(
                 "image.deblur": image_capability("image.deblur"),
                 # 塗った所を周りから埋める。描き直さないので境目が出ない。
                 "image.erase": image_capability("image.erase"),
+                # 塗った所を「指して」直す。守る範囲ではないので、絵全体が
+                # 変わる。保証が違うので inpaint とは別の capability である。
+                "image.masked_edit": image_capability("image.masked_edit"),
                 "image.semantic_review": (
                     {"state": "available"}
                     if semantic_available
