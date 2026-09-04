@@ -461,3 +461,48 @@ def test_a_patch_never_grows_past_what_the_model_holds():
     assert wide[0] * wide[1] <= 1024 * 1024
     assert wide[0] % 16 == 0 and wide[1] % 16 == 0
     assert abs(wide[0] / wide[1] - 4000 / 3000) < 0.02
+
+
+def test_host_placement_loads_on_cpu_and_does_not_touch_the_gpu(monkeypatch, tmp_path: Path):
+    """broker が host を割り当てたら VRAM を確保しない。
+
+    契約は docs/design-ai-resource-broker.md §0 の 3 で、守れない Add-on は
+    host 配置を要求してはならない。`torch.cuda` を触らないことまでを見る。
+    初期化されていない GPU に synchronize を投げると、そこで落ちる。
+    """
+    model = tmp_path / "model"
+    model.mkdir()
+    calls: dict[str, object] = {}
+
+    class Pipeline:
+        @classmethod
+        def from_pretrained(cls, path, **kwargs):
+            calls["pipeline"] = (path, kwargs)
+            return cls()
+
+        def to(self, device):
+            calls["to"] = device
+
+        def enable_model_cpu_offload(self):
+            calls["offload"] = True
+
+        def set_progress_bar_config(self, **kwargs):
+            calls["progress"] = kwargs
+
+    def forbidden():
+        raise AssertionError("host placement must not touch the GPU")
+
+    fake_torch = SimpleNamespace(
+        bfloat16=object(),
+        cuda=SimpleNamespace(synchronize=forbidden, empty_cache=forbidden),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "diffusers", SimpleNamespace(Flux2KleinPipeline=Pipeline))
+
+    adapter = DiffusersFlux2KleinAdapter(model, device_mode="cpu", disable_mmap=False)
+    adapter.load()
+
+    assert calls["to"] == "cpu"
+    assert "offload" not in calls
+    assert "device_map" not in calls["pipeline"][1]
+    assert adapter.torch_device == "cpu"

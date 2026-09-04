@@ -20,7 +20,7 @@ from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
 from .evaluator import CreativeEvaluationError, CreativeEvaluator
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.jobs import HostExecution, HostJobReporter
-from .host.resources import fake_image_request, image_model_request
+from .host.resources import HOST_DEVICE, fake_image_request, image_model_request
 from .image_edit import StrictEditError, strict_edit_plan, validate_strict_edit
 from .m5_companion import (
     M5CompanionError,
@@ -181,7 +181,7 @@ class JobManager:
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._processes: dict[str, asyncio.subprocess.Process] = {}
         # model を載せたまま次の job を受ける worker。queue が空になったら畳む。
-        self._warm_worker: tuple[asyncio.subprocess.Process, tuple[str, str, str]] | None = None
+        self._warm_worker: tuple[asyncio.subprocess.Process, tuple[str, str, str, str]] | None = None
         self._host_executions: dict[str, HostExecution] = {}
         self._host_failures: dict[str, HostApiError] = {}
         self._selected_models: dict[str, ModelDescriptor] = {}
@@ -1469,7 +1469,7 @@ class JobManager:
 
     async def _reuse_or_spawn_worker(
         self,
-        signature: tuple[str, str, str],
+        signature: tuple[str, str, str, str],
         executable: Path,
         module: str,
         environment: dict[str, str],
@@ -1604,6 +1604,19 @@ class JobManager:
                 sink.append(chunk)
                 total += len(chunk)
 
+
+    @staticmethod
+    def _device_mode(selected: ModelDescriptor, execution: HostExecution | None) -> str:
+        """置き場所に合わせた載せ方。
+
+        broker が `host` を割り当てたら、VRAM を確保せずシステムRAMで走らせる
+        （docs/design-ai-resource-broker.md §0 の Add-on 側の契約 3）。カタログの
+        device_mode は GPU 前提の値なので、そのまま使うと VRAM を取りにいく。
+        """
+        if execution is not None and execution.device_id == HOST_DEVICE:
+            return "cpu"
+        return selected.device_mode
+
     async def _execute_worker(
         self,
         job_id: str,
@@ -1639,7 +1652,7 @@ class JobManager:
                     "license": selected.license,
                     "runtime_adapter": selected.runtime_adapter,
                     "runtime_options": {
-                        "device_mode": selected.device_mode,
+                        "device_mode": self._device_mode(selected, execution),
                         "disable_mmap": selected.disable_mmap,
                         # 系統ごとの既定。持たないモデルには送らない。
                         **({"negative_prompt": selected.negative_prompt}
@@ -1727,10 +1740,15 @@ class JobManager:
             )
         # 同じ worker を続けて使うときだけ使い回す。環境変数は model や配置の指定を
         # 含むので、署名に入れて違えば作り直す。
+        # 置き場所も署名に入れる。VRAM に載せたままのプロセスを host 配置の
+        # job へ使い回すと、broker が「VRAM を取らない」と見なした要求が
+        # 前の job の 20GB を抱えたまま走る。
+        placement = execution.device_id if execution is not None else None
         signature = (
             str(executable),
             module,
             json.dumps(sorted(environment.items()), separators=(",", ":")),
+            placement or "",
         )
         process = await self._reuse_or_spawn_worker(signature, executable, module, environment)
         self._processes[job_id] = process
@@ -2153,6 +2171,9 @@ class JobManager:
                 )
                 return False
             execution.lease_id = status["lease_id"]
+            # どこを割り当てられたかは grant が返す。要求の順序ではない。
+            device_id = status.get("device_id")
+            execution.device_id = device_id if isinstance(device_id, str) and device_id else None
             await self.host_client.lease_action(execution.identity, execution.lease_id, "activate")
             await self._update(job.id, reporter, phase="starting", progress=0.04)
             return True

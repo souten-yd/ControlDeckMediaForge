@@ -45,3 +45,19 @@ def is_runnable(runtime_adapter: str) -> bool:
     ものであって、採用の手続きではない。
     """
     return runtime_adapter in RUNNABLE_ADAPTERS
+
+
+# CPU（システムRAM）だけで走らせられる adapter。ControlDeck の broker が
+# `host` を割り当てたときはこの形で動かす。VRAM を確保しないことが host 配置の
+# 条件なので（docs/design-ai-resource-broker.md §0）、GPU を前提にした駆動系は
+# ここへ入れない。sd-cli 系と拡大は GPU 前提のまま。
+CPU_CAPABLE_ADAPTERS = frozenset({
+    "diffusers.flux2-klein",
+    "diffusers.sdxl",
+    "diffusers.sdxl-single-file",
+})
+
+
+def runs_on_cpu(runtime_adapter: str) -> bool:
+    """VRAM を取らずに走らせられるか。host 配置を要求してよいかの判断に使う。"""
+    return runtime_adapter in CPU_CAPABLE_ADAPTERS

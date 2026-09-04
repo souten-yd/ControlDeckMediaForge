@@ -28,7 +28,7 @@ from .base import ImageEditRequest, ImageGenerationRequest, ImageGenerationResul
 
 
 # 実測していない設定を既定にしない。ここは「この系統をどう読むか」だけを持つ。
-_SUPPORTED_DEVICE_MODES = {"full_device", "direct_device_map", "cpu_offload"}
+_SUPPORTED_DEVICE_MODES = {"full_device", "direct_device_map", "cpu_offload", "cpu"}
 
 
 class DiffusersStableDiffusionAdapter:
@@ -54,6 +54,21 @@ class DiffusersStableDiffusionAdapter:
         self.load_sec: float | None = None
         self.last_generation_sec: float | None = None
         self.placement: dict[str, Any] = {}
+
+    @property
+    def torch_device(self) -> str:
+        """置き場所。broker が host を割り当てた要求は VRAM を取らない。"""
+        return "cpu" if self.device_mode == "cpu" else "cuda"
+
+    def _settle(self) -> None:
+        """GPU の後始末。CPU 実行では触らない（初期化されていないこともある）。"""
+        import torch
+
+        if self.device_mode == "cpu":
+            return
+        torch.cuda.synchronize()
+        if self.device_mode == "cpu_offload":
+            torch.cuda.empty_cache()
         self._applied_loras: list[tuple[str, float]] = []
 
     # ── load ────────────────────────────────────────────────────────────
@@ -85,8 +100,10 @@ class DiffusersStableDiffusionAdapter:
             pipeline.enable_model_cpu_offload()
         elif self.device_mode == "full_device":
             pipeline.to("cuda")
+        elif self.device_mode == "cpu":
+            pipeline.to("cpu")
         pipeline.set_progress_bar_config(disable=True)
-        torch.cuda.synchronize()
+        self._settle()
         self.placement = self._inspect_placement(pipeline)
         self.pipeline = pipeline
         self.load_sec = time.perf_counter() - started
@@ -164,7 +181,7 @@ class DiffusersStableDiffusionAdapter:
 
         self.load()
         assert self.pipeline is not None
-        generator = torch.Generator(device="cuda").manual_seed(request.seed)
+        generator = torch.Generator(device=self.torch_device).manual_seed(request.seed)
         started = time.perf_counter()
         try:
             arguments: dict[str, Any] = dict(
@@ -179,9 +196,7 @@ class DiffusersStableDiffusionAdapter:
                 arguments["negative_prompt"] = self.negative_prompt
             image = self.pipeline(**arguments).images[0].convert("RGBA")
         finally:
-            torch.cuda.synchronize()
-            if self.device_mode == "cpu_offload":
-                torch.cuda.empty_cache()
+            self._settle()
         self.last_generation_sec = time.perf_counter() - started
         request.output_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         image.save(request.output_path, format="PNG")

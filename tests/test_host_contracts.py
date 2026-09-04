@@ -305,3 +305,53 @@ def test_the_local_environment_file_still_carries_the_number_for_runnability():
     assert '"total_bytes": int(gpu.get("total_memory_bytes") or 0)' in entrypoint
     app_source = (BACKEND / "app.py").read_text(encoding="utf-8")
     assert 'item.get("total_bytes")' in app_source, "実行可否の判定が数値を読まなくなっている"
+
+
+def _descriptor(runtime_adapter: str) -> ModelDescriptor:
+    return ModelDescriptor(
+        model_id="owner/model",
+        family="test",
+        version="1",
+        revision="a" * 40,
+        weights_hash="sha256:" + "b" * 64,
+        license="Apache-2.0",
+        runtime_adapter=runtime_adapter,
+        capabilities=("image.text_to_image",),
+        hardware_backends=("rocm",),
+        state=ModelState.AVAILABLE,
+        policy_rank={"auto": 1},
+        required_files=("config.json",),
+        weights=(),
+        installed=True,
+        healthy=True,
+        local_path=Path("/model"),
+        resident_vram_bytes=11,
+        execution_peak_vram_bytes=22,
+        cold_load_peak_vram_bytes=33,
+        headroom_vram_bytes=44,
+        measured_runtime_sec=55.5,
+    )
+
+
+def test_a_cpu_capable_model_offers_ram_as_a_second_place():
+    """順序が「空いていれば VRAM、無ければ RAM」を表す。
+
+    host は opt-in で、挙げなければ VRAM だけが候補になる
+    （docs/design-ai-resource-broker.md §0）。
+    """
+    payload = image_model_request("job_123", _descriptor("diffusers.flux2-klein"))
+
+    assert payload["preferred_devices"] == ["gpu0", "host"]
+
+
+def test_a_gpu_only_model_does_not_ask_for_ram():
+    """VRAM を確保しないことが host 配置の条件である。守れない駆動系は要求しない。"""
+    payload = image_model_request("job_123", _descriptor("native.stable-diffusion-cpp-flux2"))
+
+    assert payload["preferred_devices"] == []
+
+
+def test_generation_shares_the_device_with_the_llm():
+    """exclusive だと、LLM が載っている間は VRAM の空きに関係なく断られる。"""
+    assert image_model_request("job_123", _descriptor("diffusers.sdxl"))["compute_mode"] == "shared-safe"
+    assert fake_image_request("job_123", runtime_sec=1)["compute_mode"] == "shared-safe"

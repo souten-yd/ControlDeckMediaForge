@@ -27,7 +27,7 @@ class DiffusersFlux2KleinAdapter:
         device_mode: str = "full_device",
         disable_mmap: bool = False,
     ):
-        if device_mode not in {"full_device", "direct_device_map", "cpu_offload"}:
+        if device_mode not in {"full_device", "direct_device_map", "cpu_offload", "cpu"}:
             raise ValueError("unsupported image device mode")
         self.model_path = model_path.resolve(strict=True)
         self.device_mode = device_mode
@@ -38,6 +38,21 @@ class DiffusersFlux2KleinAdapter:
         self.load_sec: float | None = None
         self.last_generation_sec: float | None = None
         self.placement: dict[str, Any] = {}
+
+    @property
+    def torch_device(self) -> str:
+        """置き場所。broker が host を割り当てた要求は VRAM を取らない。"""
+        return "cpu" if self.device_mode == "cpu" else "cuda"
+
+    def _settle(self) -> None:
+        """GPU の後始末。CPU 実行では触らない（初期化されていないこともある）。"""
+        import torch
+
+        if self.device_mode == "cpu":
+            return
+        torch.cuda.synchronize()
+        if self.device_mode == "cpu_offload":
+            torch.cuda.empty_cache()
 
     @staticmethod
     def _hook_uses_offload(hook: object, *, depth: int = 0) -> bool:
@@ -196,8 +211,10 @@ class DiffusersFlux2KleinAdapter:
             pipeline.enable_model_cpu_offload()
         elif self.device_mode == "full_device":
             pipeline.to("cuda")
+        elif self.device_mode == "cpu":
+            pipeline.to("cpu")
         pipeline.set_progress_bar_config(disable=True)
-        torch.cuda.synchronize()
+        self._settle()
         self.placement = self._inspect_placement(pipeline)
         self._verify_direct_placement()
         self.pipeline = pipeline
@@ -237,7 +254,7 @@ class DiffusersFlux2KleinAdapter:
 
         self.load()
         assert self.pipeline is not None
-        generator = torch.Generator(device="cuda").manual_seed(request.seed)
+        generator = torch.Generator(device=self.torch_device).manual_seed(request.seed)
         references: list[Image.Image] = []
         for path in request.reference_paths:
             try:
@@ -264,9 +281,7 @@ class DiffusersFlux2KleinAdapter:
             result = self.pipeline(**arguments)
             image = result.images[0].convert("RGBA")
         finally:
-            torch.cuda.synchronize()
-            if self.device_mode == "cpu_offload":
-                torch.cuda.empty_cache()
+            self._settle()
         self.last_generation_sec = time.perf_counter() - started
         request.output_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         image.save(request.output_path, format="PNG")
@@ -399,7 +414,7 @@ class DiffusersFlux2KleinAdapter:
             and not request.reference_paths
             and request.edit_mode != "multi_reference"
         )
-        generator = torch.Generator(device="cuda").manual_seed(request.seed)
+        generator = torch.Generator(device=self.torch_device).manual_seed(request.seed)
         started = time.perf_counter()
         try:
             if painting:
@@ -435,9 +450,7 @@ class DiffusersFlux2KleinAdapter:
                 )
             generated = result.images[0].convert("RGBA")
         finally:
-            torch.cuda.synchronize()
-            if self.device_mode == "cpu_offload":
-                torch.cuda.empty_cache()
+            self._settle()
         self.last_generation_sec = time.perf_counter() - started
 
         if request.edit_mode == "outpaint":

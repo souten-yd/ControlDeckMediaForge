@@ -45,6 +45,8 @@ class HostExecution:
     owns_terminal: bool
     request_id: str | None = None
     lease_id: str | None = None
+    # broker が割り当てた置き場所。"host" ならシステムRAMで走らせる。
+    device_id: str | None = None
 
 
 class HostJobReporter:

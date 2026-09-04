@@ -114,7 +114,7 @@ def test_image_worker_has_no_process_override_and_rejects_unknown_mode(monkeypat
     assert worker.device_mode_override is None
     assert worker.disable_mmap_override is None
     monkeypatch.setenv("MEDIA_FORGE_IMAGE_DEVICE_MODE", "dynamic")
-    with pytest.raises(ValueError, match="must be full_device, direct_device_map, or cpu_offload"):
+    with pytest.raises(ValueError, match="must be one of cpu, cpu_offload, direct_device_map, full_device"):
         image_worker.ImageWorker()
     monkeypatch.setenv("MEDIA_FORGE_IMAGE_DEVICE_MODE", "full_device")
     monkeypatch.setenv("MEDIA_FORGE_IMAGE_DISABLE_MMAP", "yes")
@@ -441,3 +441,47 @@ def test_an_upscale_takes_no_steps_and_produces_exactly_one_image(monkeypatch, t
     for bad in (0, 9, "2", 2.0, True):
         with pytest.raises(ValueError, match="upscale scale"):
             worker.handle(upscaling(2048, 1536, scale=bad))
+
+
+def test_a_cached_adapter_is_not_reused_for_a_different_placement(monkeypatch, tmp_path):
+    """VRAM に載せた adapter を host 配置の要求へ渡さない。
+
+    ImageWorker は model_id で adapter を持ち続ける。置き場所は要求ごとに
+    変わる（broker が gpu0 と host のどちらを割り当てたか）ので、model_id
+    だけを鍵にすると、VRAM を確保しない約束の要求が VRAM の pipeline を使う。
+    """
+    model_root = tmp_path / "models"
+    work_root = tmp_path / "work"
+    model = model_root / "model"
+    output_dir = work_root / "job" / "outputs"
+    model.mkdir(parents=True)
+    output_dir.parent.mkdir(parents=True)
+    monkeypatch.setenv("MEDIA_FORGE_MODEL_ROOT", str(model_root))
+    monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(work_root))
+    built: list[str] = []
+
+    class Adapter:
+        def __init__(self, _path, *, device_mode, disable_mmap):
+            built.append(device_mode)
+            self.load_sec = 0.1
+            self.last_generation_sec = None
+            self.placement = {}
+
+        def load(self):
+            return None
+
+        def generate(self, request):
+            request.output_path.write_bytes(b"png")
+            self.last_generation_sec = 0.1
+            return ImageGenerationResult(request.output_path, request.seed)
+
+    monkeypatch.setattr(image_worker, "DiffusersFlux2KleinAdapter", Adapter)
+    monkeypatch.setattr(image_worker.importlib.metadata, "version", lambda _name: "test-runtime")
+    worker = image_worker.ImageWorker()
+
+    for device_mode in ("direct_device_map", "direct_device_map", "cpu"):
+        request = payload(model, output_dir)
+        request["model"]["runtime_options"] = {"device_mode": device_mode, "disable_mmap": True}
+        worker.handle(request)
+
+    assert built == ["direct_device_map", "cpu"]

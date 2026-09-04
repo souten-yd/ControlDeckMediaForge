@@ -7768,3 +7768,59 @@ print の buffer   pipe 相手の print はブロックバッファで、書い�
 worker が残る、という形でも出ていた。取り消されても pipe だけは同期で畳む。
 
 `./mf.sh test` 829 passed（warning は 25 件から 1 件に減った）。
+
+## host 配置（システムRAM）への追従
+
+ControlDeck の broker は 2026-09-04 に「誰を追い出すか」から「どこへ載せるか」へ
+変わった（`docs/design-ai-resource-broker.md` §0）。LLM の KV が RAM へ落ちると
+デコードが致命的に遅くなる（実測 75.4 → 32.6 tok/s）一方、画像生成のような
+計算律速の処理は RAM 配置の劣化が桁違いに小さい、という非対称からである。
+
+Add-on 側の契約は 3 つ。
+
+```text
+1  CPU で走らせられるなら preferred_devices: ["gpu0", "host"] を送る
+2  実際の配置は grant の RequestStatus.device_id が返す
+3  device_id == "host" なら VRAM を確保せず RAM で実行する
+```
+
+3 を守れないものは host を要求してはならない。要求しなければ従来どおり VRAM だけが
+候補になる（`_eligible_devices` の opt-in）。
+
+### 送る側
+
+`image_model_request` は、CPU で走らせられる adapter のときだけ host を候補に挙げる。
+`native.stable-diffusion-cpp-*` と `spandrel.upscale` は GPU 前提の駆動系なので挙げない。
+
+`compute_mode` を `exclusive-preferred` から `shared-safe` に変えた。exclusive は
+「その device に他の lease も provider 予約も無いこと」を求めるので、LLM が載って
+いる限り VRAM の空きに関係なく `device_busy_exclusive` で断られ、共存にならない。
+バイトの勘定は `admitted_free_bytes`（observed と予約の大きい方を使う）が見ている。
+
+### 受ける側
+
+grant の `device_id` を `HostExecution` に持ち、`host` なら worker へ渡す
+`device_mode` を `cpu` にする。adapter は `pipeline.to("cpu")` で載せ、`torch.cuda`
+には触らない。初期化されていない GPU に `synchronize` を投げるとそこで落ちる。
+
+置き場所は 2 か所の鍵に入れた。どちらも「VRAM に載せたものを host 配置の要求へ
+渡さない」ためである。
+
+```text
+warm worker の署名     置き場所が違えばプロセスを作り直す
+adapter cache の鍵     (model_id, device_mode)。model_id だけだと使い回す
+```
+
+乱数の器も置き場所に合わせた（`torch.Generator(device=...)`）。CPU と CUDA の
+generator は同じ seed でも違う雑音を出すので、**配置が変わると同じ seed でも絵が
+変わる**。これは避けられない。
+
+### 測っていないこと
+
+CPU 実行の所要時間は測っていない。GPU を llama-server が 22.6 GB 使用中で、
+FLUX.2 Klein（15 GB）を載せると OpenCode 側の LLM を壊すためである。
+既知の近い実測は `docs/models.md` の SD 512x512 / 4 歩の比較で、
+`direct_device_map` 15.0 秒に対し `cpu_offload`（RAM 常駐・GPU へ逐次転送）が
+18.1 秒、ピーク VRAM は 21.8 GB から 8.9 GB だった。`cpu` はそれよりさらに遅い。
+
+`./mf.sh test` 838 passed。
