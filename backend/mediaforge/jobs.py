@@ -54,7 +54,6 @@ from .blender_compile import (
     parse_compile_options,
 )
 from .routing import ModelRoute, ModelRouteError, route
-from .host.ai import HostAIGateway, HostAIReleaseResult
 from .store import Store, UnreadableJobRecord, utc_now
 from .validators import validate_png
 
@@ -77,20 +76,7 @@ class BriefDefectError(RuntimeError):
         self.defects = defects
         self.code = defects[0].code if defects else "brief_defect"
 
-# Broker が「VRAM が足りない/待たされる」と言ったときだけ、保持した解放理由を
-# 添える。それ以外の受理失敗（policy 拒否など）に AI 常駐の話を混ぜない。
-_VRAM_WAIT_REASONS = frozenset({
-    "insufficient_vram",
-    "device_busy",
-    "timeout",
-    "yield_thrash_cost",
-    "yield_load_cost_unknown",
-    "yield_runtime_unknown",
-    "yield_minimum_uptime",
-    "yield_thrash_window",
-    "yield_drain_timeout",
-    "waiting",
-})
+
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 
@@ -147,7 +133,6 @@ class JobManager:
         native_media_runtime_root: Path | None = None,
         wan_source_root: Path | None = None,
         creative_evaluator: CreativeEvaluator | None = None,
-        ai_gateway: HostAIGateway | None = None,
         creative_director: Any | None = None,
         creative_validate: Any | None = None,
         extra_manifests: Any | None = None,
@@ -166,7 +151,6 @@ class JobManager:
         self.native_media_runtime_root = native_media_runtime_root
         self.wan_source_root = wan_source_root
         self.creative_evaluator = creative_evaluator
-        self.ai_gateway = ai_gateway
         # 演出の立案と検証。従来は画面が順番に呼び、途中結果をページが持って
         # いた。タブを閉じると失われるので、job の phase として持たせる。
         self.creative_director = creative_director
@@ -176,7 +160,6 @@ class JobManager:
         self.extra_manifests = extra_manifests
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
         # AI ターン終了の宣言結果。lease が取れなかったときに理由を添えるために持つ。
-        self._ai_release: dict[str, HostAIReleaseResult] = {}
         self._runner: asyncio.Task[None] | None = None
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._processes: dict[str, asyncio.subprocess.Process] = {}
@@ -442,11 +425,10 @@ class JobManager:
                     return
                 self._selected_models[job_id] = selected
             if execution is not None:
-                if selected is not None:
-                    # 生成の前に AI ターンを閉じる。lease は取らずに宣言だけ行う。
-                    # 先に AI 常駐を落としてから受理を求めるので、以後の LLM 再
-                    # ロードは broker の受理を通る。二重予約も deadlock も起きない。
-                    await self._release_host_ai(job, execution, reporter, selected)
+                # 生成の前に LLM を降ろさせない。broker は VRAM が空いていなければ
+                # host（システムRAM）を割り当てるので、場所を空けてもらう必要が
+                # 無くなった。降ろさせると、使っている最中の OpenCode や chat の
+                # モデルを画像 1 枚のために落とすことになる。
                 admitted = await self._acquire_host_lease(job, execution, reporter)
                 if not admitted:
                     return
@@ -2053,44 +2035,6 @@ class JobManager:
             raise WorkerFailure("creative_validation_failed", str(exc)[:200]) from exc
         return self.store.replace_job_request(job.id, request)
 
-    async def _release_host_ai(
-        self,
-        job: Job,
-        execution: HostExecution,
-        reporter: HostJobReporter | None,
-        selected: ModelDescriptor | None = None,
-    ) -> None:
-        """Ask ControlDeck to end this add-on's AI turn before generation.
-
-        Asking once is deliberate. ControlDeck's own chat, an OpenCode session,
-        or another add-on may still be using the shared model, and retrying
-        would starve them. A refusal is recorded, not fought: Broker admission
-        still decides, and the reason only surfaces if admission then fails.
-        """
-        self._ai_release.pop(job.id, None)
-        if self.ai_gateway is None:
-            return
-        await self._update(job.id, reporter, phase="release_ai", progress=0.02)
-        try:
-            # 何バイト要るのかを伝える。伝えないと、Host は「LLM を降ろした」
-            # で終わりにする。実測: それでも 1.16GB の embedding が残り、
-            # 33.35GB を要る画像モデルが 34.2GB のカードに入らなかった。
-            result = await self.ai_gateway.release(
-                execution.identity,
-                required_bytes=(selected.measured_vram_bytes or 0) if selected else 0,
-            )
-        except Exception:  # noqa: BLE001 - 解放要求の失敗が生成を止めてはいけない
-            logger.exception("failed to declare the AI turn finished for %s", job.id)
-            return
-        self._ai_release[job.id] = result
-        logger.info(
-            "ai turn released job=%s released=%s reason=%s freed_bytes=%d",
-            job.id,
-            result.released,
-            result.reason,
-            result.freed_bytes,
-        )
-
     def _unverified_hard_constraints(self, job: Job) -> list[str]:
         """Hard constraints nobody in this run was in a position to check.
 
@@ -2110,17 +2054,8 @@ class JobManager:
             return []
         return [str(item)[:200] for item in constraints if isinstance(item, str) and item.strip()]
 
-    def _admission_failure(self, job_id: str, reason: str) -> ErrorDetail:
-        """Name the retained AI residency instead of an anonymous admission failure."""
-        release = self._ai_release.get(job_id)
-        if release is not None and not release.released and reason in _VRAM_WAIT_REASONS:
-            return ErrorDetail(
-                code="host_ai_residency_retained",
-                message=(
-                    "ControlDeck kept its AI model resident, so no GPU capacity was "
-                    f"admitted for generation (reason: {release.reason})"
-                )[:300],
-            )
+    @staticmethod
+    def _admission_failure(reason: str) -> ErrorDetail:
         return ErrorDetail(
             code="resource_unavailable",
             message=f"ControlDeck admission failed: {reason}"[:300],
@@ -2167,7 +2102,7 @@ class JobManager:
                     reporter,
                     status=JobStatus.FAILED,
                     phase="waiting_resource",
-                    error=self._admission_failure(job.id, reason),
+                    error=self._admission_failure(reason),
                 )
                 return False
             execution.lease_id = status["lease_id"]

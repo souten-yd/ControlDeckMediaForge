@@ -23,7 +23,6 @@ const PHASE_TEXT = {
   validate_request: "準備しています",
   direct: "演出内容を整理しています",
   select_model: "使うモデルを選んでいます",
-  release_ai: "文章・画像認識に使った GPU を空けています",
   waiting_resource: "GPU の空きを待っています",
   generating: "生成しています",
   release_resource: "GPU リソースを解放しています",
@@ -3815,7 +3814,7 @@ function hidePreparing() {
 
    ここで嘘の割合を動かすことはしない。分からないものは分からないまま、
    動いていることと経過時間を見せる。所要の目安は実測値から別に出している。 */
-const INDETERMINATE_PHASES = new Set(["generating", "waiting_resource", "release_ai"]);
+const INDETERMINATE_PHASES = new Set(["generating", "waiting_resource"]);
 
 function elapsedText(job) {
   const started = Date.parse(job.created_at || "");

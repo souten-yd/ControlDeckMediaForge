@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Installed-ControlDeck acceptance for the G6 AI/generation resource turn.
 
-Proves the handover the unit tests cannot: that a resident Host LLM actually
-gives its VRAM back before Media Forge generates, and that a real image lands.
+Proves what the unit tests cannot: that a resident Host LLM keeps its VRAM
+while Media Forge generates, and that a real image still lands. The broker
+places generation on whichever device has room, so the LLM is not asked to
+step aside (docs/design-ai-resource-broker.md §0).
 
 Run it against the installed stack. It asks for the password itself, so nothing
 secret reaches the command line, the shell history, or a process listing:
@@ -20,8 +22,8 @@ What is asserted, in order:
 1. the workspace boots in one aggregated session request, not ten
 2. the job list survives records the running contract cannot read strictly
 3. a Host LLM is made resident and really holds VRAM
-4. a real image job runs; the ``release_ai`` stage is observed
-5. VRAM drops back before generation and the image is produced
+4. a real image job runs while the LLM stays resident
+5. the grant names the device it ran on and the image is produced
 6. the Broker is left clean and no worker process remains
 """
 
@@ -333,7 +335,7 @@ def main() -> int:
             f"the Host LLM did not become resident: {observations['llm_load']}",
         )
 
-        # ── 4/5. 生成を通し、release_ai と VRAM 返却を観測する ────────
+        # ── 4/5. LLM を載せたまま生成を通す ──────────────────────────
         run = run_job_watching_phases(
             frame, request("an orange field robot folds its solar panels at dusk", 60601)
         )
@@ -345,14 +347,16 @@ def main() -> int:
             "vram_by_phase": run["vram_by_phase"],
             "elapsed_sec": run["elapsed_sec"],
         }
-        check("release_ai" in run["phases"], f"the AI turn was never declared finished: {run['phases']}")
         check(
-            run["phases"].index("release_ai") < run["phases"].index("generating")
-            if "generating" in run["phases"] else True,
-            f"generation was admitted before the AI turn ended: {run['phases']}",
+            "release_ai" not in run["phases"],
+            f"generation still unloads the language model: {run['phases']}",
         )
-        released = run["vram_by_phase"].get("generating", run["vram_by_phase"].get("waiting_resource", -1))
-        observations["vram_handed_back"] = resident - released if released >= 0 else None
+        during = run["vram_by_phase"].get("generating", run["vram_by_phase"].get("waiting_resource", -1))
+        check(
+            during < 0 or during >= observations["vram_baseline"] + 1_000_000_000,
+            f"the Host LLM lost its VRAM to generation: {run['vram_by_phase']}",
+        )
+        observations["vram_during_generation"] = during
         check(
             run["job"]["status"] == "succeeded" and len(run["job"].get("asset_ids", [])) == 1,
             f"the real image job did not produce an asset: {run['job']}",
