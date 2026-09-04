@@ -40,7 +40,8 @@
         "execution_peak_vram_bytes": 29625200640,
         "cold_load_peak_vram_bytes": 32275578880,
         "headroom_vram_bytes": 1073741824,
-        "measured_runtime_sec": 208.820067
+        "measured_runtime_sec": 208.820067,
+        "host_resident_bytes": 19209719808
       },
       "measurement_confidence": "measured",
       "policy_rank": {

@@ -105,15 +105,21 @@ def image_model_request(
             else max(float(estimated_runtime_sec), 0.0)
         ),
     )
+    # CPU で走らせられる系統だけが host を候補にしてよい。VRAM を確保しない
+    # ことが host 配置の条件で、守れない adapter が要求すると LLM の側から
+    # 見えないまま VRAM を取ることになる。
+    offers_ram = runs_on_cpu(model.runtime_adapter)
     return {
         "job_id": job_id,
         "device": "auto",
-        # CPU で走らせられる系統だけが host を候補にしてよい。VRAM を確保しない
-        # ことが host 配置の条件で、守れない adapter が要求すると LLM の側から
-        # 見えないまま VRAM を取ることになる。
-        "preferred_devices": (
-            list(COEXISTING_PLACEMENT) if runs_on_cpu(model.runtime_adapter) else []
-        ),
+        "preferred_devices": list(COEXISTING_PLACEMENT) if offers_ram else [],
+        # RAM に載せたときに要る量。vram の見積りは device_map で段階的に載せる
+        # ときの GPU 側ピークで、RAM 配置の実態とは別物である。実測: FLUX.2
+        # Klein 4B は vram 31.1GB の申告に対し CPU 実行の RSS が 18.8GB
+        # （1024x1024/4歩）。VRAM の数字を RAM に当てると、30GB の機械では
+        # host が永久に grant されない。測っていないモデルには送らない。
+        **({"host_bytes": int(model.host_resident_bytes) + estimate.headroom_bytes}
+           if offers_ram and model.host_resident_bytes else {}),
         "vram": {
             "resident_bytes": estimate.resident_bytes,
             "execution_peak_bytes": estimate.execution_peak_bytes,

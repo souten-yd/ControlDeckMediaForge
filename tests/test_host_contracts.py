@@ -307,7 +307,7 @@ def test_the_local_environment_file_still_carries_the_number_for_runnability():
     assert 'item.get("total_bytes")' in app_source, "実行可否の判定が数値を読まなくなっている"
 
 
-def _descriptor(runtime_adapter: str) -> ModelDescriptor:
+def _descriptor(runtime_adapter: str, host_resident_bytes: int | None = None) -> ModelDescriptor:
     return ModelDescriptor(
         model_id="owner/model",
         family="test",
@@ -330,6 +330,7 @@ def _descriptor(runtime_adapter: str) -> ModelDescriptor:
         cold_load_peak_vram_bytes=33,
         headroom_vram_bytes=44,
         measured_runtime_sec=55.5,
+        host_resident_bytes=host_resident_bytes,
     )
 
 
@@ -355,3 +356,36 @@ def test_generation_shares_the_device_with_the_llm():
     """exclusive だと、LLM が載っている間は VRAM の空きに関係なく断られる。"""
     assert image_model_request("job_123", _descriptor("diffusers.sdxl"))["compute_mode"] == "shared-safe"
     assert fake_image_request("job_123", runtime_sec=1)["compute_mode"] == "shared-safe"
+
+
+def test_ram_placement_declares_what_it_actually_costs():
+    """VRAM の見積りを RAM に当てない。
+
+    vram は device_map で段階的に載せるときの GPU 側ピークで、RAM 配置の実態とは
+    別物である。実測: FLUX.2 Klein 4B は vram 31.1GB の申告に対し CPU 実行の RSS が
+    18.8GB（1024x1024/4歩、2026-09-04）。VRAM の数字を当てると、30GB の機械では
+    host が永久に grant されない。
+    """
+    payload = image_model_request(
+        "job_123", _descriptor("diffusers.flux2-klein", host_resident_bytes=19_209_719_808)
+    )
+
+    assert payload["host_bytes"] == 19_209_719_808 + payload["vram"]["headroom_bytes"]
+
+
+def test_an_unmeasured_model_does_not_guess_what_ram_costs():
+    """測っていない量を送らない。小さすぎれば OOM、大きすぎれば載らない。"""
+    payload = image_model_request("job_123", _descriptor("diffusers.flux2-klein"))
+
+    assert "host_bytes" not in payload
+    assert payload["preferred_devices"] == ["gpu0", "host"]
+
+
+def test_a_gpu_only_model_never_declares_a_ram_figure():
+    """host を挙げない要求の host_bytes は broker に拒否される。"""
+    payload = image_model_request(
+        "job_123",
+        _descriptor("native.stable-diffusion-cpp-flux2", host_resident_bytes=19_209_719_808),
+    )
+
+    assert "host_bytes" not in payload
