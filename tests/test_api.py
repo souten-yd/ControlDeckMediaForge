@@ -388,3 +388,40 @@ def test_workspace_asset_delete_reports_each_outcome_separately(client):
 def test_workspace_asset_delete_is_not_a_public_api(client):
     assert "/workspace-api/assets/delete" not in client.get("/openapi.json").json()["paths"]
     assert client.post("/workspace-api/assets/delete", json={"asset_ids": []}).status_code == 422
+
+
+def test_a_batch_loads_the_model_once(tmp_path: Path, monkeypatch):
+    """続けて来る job は worker を使い回す。
+
+    差分を 4 枚作る creative batch は count=1 の job 4 本に展開される。
+    worker の main() は stdin を1行ずつ読む loop で、ImageWorker は
+    読み込んだ adapter を持ち続ける作りなのに、呼び出し側が communicate() で
+    stdin を閉じてプロセスごと捨てていた。実機では 1 本ごとに載せ直して
+    load_sec=13.15 / 12.78 を続けて払っていた（service.log, 2026-09-04）。
+    """
+    import asyncio
+
+    spawned = 0
+    real = asyncio.create_subprocess_exec
+
+    async def counting(*args, **kwargs):
+        nonlocal spawned
+        spawned += 1
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", counting)
+    app = create_app(fake_settings(tmp_path / "batch"))
+    with TestClient(app) as client:
+        created = [client.post("/api/v1/jobs", json=request()).json()["id"] for _ in range(4)]
+        for job_id in created:
+            assert wait_terminal(client, job_id, timeout=15)["status"] == "succeeded"
+    assert spawned == 1
+
+
+def test_a_finished_batch_does_not_keep_the_model_loaded(tmp_path: Path):
+    """続きが無くなったら下ろす。載せたままにするのは待っている job がある間だけ。"""
+    app = create_app(fake_settings(tmp_path / "release"))
+    with TestClient(app) as client:
+        created = client.post("/api/v1/jobs", json=request()).json()["id"]
+        assert wait_terminal(client, created)["status"] == "succeeded"
+        assert client.app.state.jobs._warm_worker is None

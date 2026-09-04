@@ -7719,3 +7719,52 @@ origin/main    passed=4  failed=6
 手を触れていない main の方が多く落ちる。テスト自身のコメントも「待たずに見ると、
 機械が忙しいときだけ落ちるテストになる（実際そうなっていた）」と書いており、5 秒では
 足りていない。直すなら別のスライスにする。
+
+## UX1 差分の 4 枚で model を 4 回載せ直していた
+
+`creative_batches.py` は 4 枚の差分を `count=1` の job 4 本に展開する。worker の
+`main()` は stdin を 1 行ずつ読む loop で、`ImageWorker` は読み込んだ adapter を
+`model_id` で持ち続ける。つまり載せたまま次の要求を受けられる作りである。ところが
+呼び出し側が `process.communicate(payload)` を使っていた。`communicate` は stdin を
+閉じるので、worker は 1 本ごとに終わり、次の job はまた最初から載せていた。
+
+実機の log に残っていた、続けて走った job の載せ直し:
+
+```text
+data/features/media-forge/logs/service.log
+load_sec=12.637492 generation_sec=16.041516
+load_sec=13.154964 generation_sec=15.535938
+load_sec=12.775642 generation_sec=15.543959
+```
+
+生成が 15.5 秒の要求に、載せ直しが 12.6〜13.2 秒付いていた。
+
+### 直した後
+
+`_exchange_while_progressing` で 1 要求 1 応答を交換し、プロセスは残す。続きの job が
+無くなったときだけ下ろす。4 枚ぶんの job で worker を何回起こすかを数えた:
+
+```text
+jobs=4  worker_spawns=4   変更前
+jobs=4  worker_spawns=1   変更後
+```
+
+`fake_settings` の JobManager に 4 本投入し、`asyncio.create_subprocess_exec` を数えた。
+実測の載せ直し時間は GPU を llama-server が 22.6 GB 使用中のため測っていない。
+
+### 一緒に直した 4 件
+
+```text
+先読みバッファ    `for raw in sys.stdin.buffer` は EOF まで 1 行目を返さない。
+                  stdin を開いたまま待つ使い方では止まる。readline にした
+print の buffer   pipe 相手の print はブロックバッファで、書いても届かない
+返り値の判定      `returncode != 0` は、残してある worker を crash と見なす。
+                  失敗は応答の形（`error`）で見る
+後始末            communicate は pipe を畳んでいた。使い回しでは自分で畳まないと
+                  transport が GC 任せになり、loop を閉じた後に落ちる
+```
+
+最後の 1 件は、`stop()` が job task を cancel すると片付けの途中で取り消されて
+worker が残る、という形でも出ていた。取り消されても pipe だけは同期で畳む。
+
+`./mf.sh test` 829 passed（warning は 25 件から 1 件に減った）。

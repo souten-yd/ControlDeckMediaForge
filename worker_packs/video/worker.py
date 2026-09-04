@@ -481,7 +481,13 @@ class VideoWorker:
 def main() -> int:
     _terminate_with_parent()
     worker = VideoWorker()
-    for raw in sys.stdin.buffer:
+    # readline を使う。`for raw in sys.stdin.buffer` は先読みバッファが
+    # 埋まるか EOF まで1行目を返さないので、stdin を開いたまま次の要求を
+    # 待つ使い方（model を載せたままの常駐）だと止まる。
+    while True:
+        raw = sys.stdin.buffer.readline()
+        if not raw:
+            return 0
         if len(raw) > MAX_MESSAGE_BYTES:
             return 2
         try:
@@ -505,7 +511,6 @@ def main() -> int:
         sys.stdout.flush()
         if not response["ok"]:
             return 3
-    return 0
 
 
 if __name__ == "__main__":

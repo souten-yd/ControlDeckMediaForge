@@ -52,7 +52,20 @@ def _png(width: int, height: int, digest: bytes) -> bytes:
 
 def main() -> int:
     _terminate_with_parent()
-    request = json.loads(sys.stdin.buffer.read(1024 * 1024))
+    # 1行1要求。呼び出し側は model を載せたまま次を送れるようプロセスを残すので、
+    # EOF まで読み切る形にはできない。返したら flush する。pipe 相手の print は
+    # ブロックバッファになり、書いただけでは相手に届かない。
+    while True:
+        raw = sys.stdin.buffer.readline()
+        if not raw:
+            return 0
+        code = _handle(json.loads(raw))
+        sys.stdout.flush()
+        if code:
+            return code
+
+
+def _handle(request: dict) -> int:
     constraints = request.get("constraints", {})
     delay = float(constraints.get("_fake_delay_sec", 0))
     if delay:

@@ -366,6 +366,29 @@ def test_a_self_added_checkpoint_can_take_a_lora(tmp_path: Path):
     assert ModelRegistry._observed_defaults(native, snapshot) == {}
 
 
+class _Stdin:
+    """worker へ書く側。使い回しの経路では閉じずに残る。"""
+
+    def __init__(self) -> None:
+        self.written = b""
+
+    def write(self, payload: bytes) -> None:
+        self.written += payload
+
+    async def drain(self) -> None:
+        return None
+
+    def is_closing(self) -> bool:
+        return False
+
+
+class _ClosedPipe:
+    """stderr は読み切って EOF を返すだけ。"""
+
+    async def readline(self) -> bytes:
+        return b""
+
+
 def test_a_worker_that_keeps_producing_is_not_cut_off(tmp_path: Path):
     """止まったかで打ち切る。総時間を予測して切らない。
 
@@ -389,14 +412,18 @@ def test_a_worker_that_keeps_producing_is_not_cut_off(tmp_path: Path):
 
         def __init__(self, images: int):
             self.images = images
+            self.returncode = None
+            self.stdin = _Stdin()
+            self.stdout = self
+            self.stderr = _ClosedPipe()
 
-        async def communicate(self, _payload: bytes) -> tuple[bytes, bytes]:
+        async def readline(self) -> bytes:
             for index in range(self.images):
                 await asyncio.sleep(0.06)
                 (outputs / f"output-{index}.png").write_bytes(b"x")
-            return b'{"ok": true}', b""
+            return b'{"ok": true}'
 
-    finished = asyncio.run(manager._communicate_while_progressing(
+    finished = asyncio.run(manager._exchange_while_progressing(
         SlowButWorking(images=6), b"", outputs, 0.1,
     ))
     assert finished[0] == b'{"ok": true}'
@@ -424,17 +451,21 @@ def test_a_worker_that_stops_producing_is_cut_off(tmp_path: Path):
     class Wedged:
         def __init__(self):
             self.canceled = False
+            self.returncode = None
+            self.stdin = _Stdin()
+            self.stdout = self
+            self.stderr = _ClosedPipe()
 
-        async def communicate(self, _payload: bytes) -> tuple[bytes, bytes]:
+        async def readline(self) -> bytes:
             try:
                 await asyncio.sleep(30)
             except asyncio.CancelledError:
                 self.canceled = True
                 raise
-            return b"", b""
+            return b""
 
     process = Wedged()
     with pytest.raises(TimeoutError):
-        asyncio.run(manager._communicate_while_progressing(process, b"", outputs, 0.05))
+        asyncio.run(manager._exchange_while_progressing(process, b"", outputs, 0.05))
     # 打ち切ったなら、読み取りも畳んでおく。放っておくと呼び出し側が待ち続ける。
     assert process.canceled is True
