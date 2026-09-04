@@ -119,6 +119,10 @@ def requested_guidance(job: Job, selected: ModelDescriptor) -> float | None:
     return float(value)
 
 
+# worker との1メッセージの上限。worker 側 MAX_MESSAGE_BYTES と揃える。
+WORKER_MESSAGE_LIMIT_BYTES = 1024 * 1024
+
+
 class JobManager:
     """Durable queue with a single worker-local execution guard.
 
@@ -176,6 +180,8 @@ class JobManager:
         self._runner: asyncio.Task[None] | None = None
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._processes: dict[str, asyncio.subprocess.Process] = {}
+        # model を載せたまま次の job を受ける worker。queue が空になったら畳む。
+        self._warm_worker: tuple[asyncio.subprocess.Process, tuple[str, str, str]] | None = None
         self._host_executions: dict[str, HostExecution] = {}
         self._host_failures: dict[str, HostApiError] = {}
         self._selected_models: dict[str, ModelDescriptor] = {}
@@ -223,6 +229,8 @@ class JobManager:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        # job を畳んでから下ろす。先に下ろすと、走っている job が次を起こす。
+        await self._retire_warm_worker()
         for _, process in processes:
             if process.returncode is None:
                 try:
@@ -259,6 +267,10 @@ class JobManager:
         job = self.store.request_cancel(job_id)
         process = self._processes.get(job_id)
         if process is not None and process.returncode is None:
+            # 落としたプロセスは使い回さない。忘れると次の job が死体へ書き込む。
+            warm = self._warm_worker
+            if warm is not None and warm[0] is process:
+                self._warm_worker = None
             process.terminate()
         return self.store.get_job(job_id)
 
@@ -314,6 +326,13 @@ class JobManager:
             self._routes.pop(job_id, None)
             self._job_tasks.pop(job_id, None)
             self._queue.task_done()
+            # 続けて処理する job が無いなら model を抱えたままにしない。
+            # 差分生成のように続きがある間だけ載せたままにする。
+            # queue は _run が即座に汲み出すので、待っている job は queue では
+            # なく _job_tasks に居る。queue だけ見ると常に空に見えて、続きが
+            # あっても毎回下ろしてしまう。
+            if self._queue.empty() and not self._job_tasks:
+                await self._retire_warm_worker()
 
     async def _execute(self, job_id: str) -> None:
         try:
@@ -1448,37 +1467,142 @@ class JobManager:
         except OSError:
             return 0
 
-    async def _communicate_while_progressing(
+    async def _reuse_or_spawn_worker(
+        self,
+        signature: tuple[str, str, str],
+        executable: Path,
+        module: str,
+        environment: dict[str, str],
+    ) -> asyncio.subprocess.Process:
+        """同じ worker なら前のプロセスを使い回す。
+
+        worker の main() は stdin を1行ずつ読む loop で、ImageWorker は
+        読み込んだ adapter を model_id で持ち続ける。つまり model を載せたまま
+        次の要求を受けられる作りになっている。ところが呼び出し側が
+        communicate() で stdin を閉じてプロセスごと捨てていたため、差分を
+        4枚作ると毎回 13 秒の読み込みを払っていた。プロセスを残せば
+        載せ直さずに済む。
+        """
+        warm = self._warm_worker
+        if warm is not None:
+            process, warm_signature = warm
+            if warm_signature == signature and process.returncode is None:
+                return process
+            await self._retire_warm_worker()
+        process = await asyncio.create_subprocess_exec(
+            str(executable),
+            "-m",
+            module,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=environment,
+            start_new_session=True,
+            # 応答は1行。既定の 64KiB では枚数が多いと readline が溢れる。
+            # 上限は worker 側の MAX_MESSAGE_BYTES と、受け側の検査に合わせる。
+            limit=WORKER_MESSAGE_LIMIT_BYTES,
+        )
+        self._warm_worker = (process, signature)
+        return process
+
+    async def _retire_warm_worker(self) -> None:
+        """常駐 worker を終わらせる。stdin を閉じれば main() の loop が抜ける。"""
+        warm = self._warm_worker
+        self._warm_worker = None
+        if warm is None:
+            return
+        process, _ = warm
+        if process.returncode is None:
+            try:
+                if process.stdin is not None and not process.stdin.is_closing():
+                    process.stdin.close()
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except asyncio.CancelledError:
+                # 終了中に取り消されても、worker を残さない。pipe を畳めば
+                # transport が生きているプロセスを終わらせる。
+                self._close_pipes(process)
+                raise
+            except (TimeoutError, asyncio.TimeoutError, ConnectionResetError, BrokenPipeError):
+                await self._kill(process)
+            except Exception:  # noqa: BLE001 - 後片付けで job を落とさない
+                await self._kill(process)
+        self._close_pipes(process)
+
+    @staticmethod
+    async def _kill(process: asyncio.subprocess.Process) -> None:
+        with suppress(ProcessLookupError):
+            process.kill()
+        with suppress(Exception):
+            await process.wait()
+
+    @staticmethod
+    def _close_pipes(process: asyncio.subprocess.Process) -> None:
+        """worker の pipe を畳む。まだ生きていれば transport が終わらせる。
+
+        communicate() を使っていた頃は、その中で pipe が閉じられていた。
+        使い回しでは呼ばないので、明示的に畳まないと後始末が GC 任せになり、
+        loop を閉じた後に "Event loop is closed" として現れる。
+        待てる状況とは限らないので、同期でできることだけをやる。
+        """
+        if process.stdin is not None and not process.stdin.is_closing():
+            with suppress(Exception):
+                process.stdin.close()
+        transport = getattr(process, "_transport", None)
+        if transport is not None:
+            with suppress(Exception):
+                transport.close()
+
+    async def _exchange_while_progressing(
         self,
         process: asyncio.subprocess.Process,
         payload: bytes,
         output_dir: Path,
         idle_sec: float,
     ) -> tuple[bytes, bytes]:
-        """止まったかどうかで打ち切る。総時間を予測して切らない。
+        """1 要求を送り、1 応答行を受け取る。プロセスは残す。
 
-        予測は外れる。実測は 1 枚ぶんで、頼まれる枚数も解像度もそのつど変わる。
-        実機では 13.0 秒の実測から組んだ 69 秒の予算に 4 枚を通そうとして、
-        同じ設定が 80 秒で通ったり 103 秒で切られたりしていた。
-
-        見るべきは進んでいるかである。出来上がった枚数が増えている間は待ち、
-        増えなくなってからの時間だけを数える。最初の 1 回ぶんの猶予はモデルの
-        読み込みに使われる。止まった worker はそれでも 1 猶予で落ちるので、
-        予算を枚数ぶん積み増すより早く気づける。
+        打ち切りの数え方は communicate 版と同じで、出来上がった枚数が増えている
+        間は待つ。stderr は溜め込むと詰まるので、応答を待つ間に読み出す。
         """
-        communicate = asyncio.create_task(process.communicate(payload))
-        produced = -1
+        assert process.stdin is not None and process.stdout is not None
+        errors: list[bytes] = []
+        drain = asyncio.create_task(self._drain_stderr(process, errors))
+        try:
+            process.stdin.write(payload if payload.endswith(b"\n") else payload + b"\n")
+            await process.stdin.drain()
+            reply = asyncio.create_task(process.stdout.readline())
+            produced = -1
+            while True:
+                done, _ = await asyncio.wait({reply}, timeout=idle_sec)
+                if reply in done:
+                    return reply.result(), b"".join(errors)  # noqa: TRY300
+                advanced = self._produced_count(output_dir)
+                if advanced <= produced:
+                    reply.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await reply
+                    raise TimeoutError
+                produced = advanced
+        finally:
+            drain.cancel()
+            with suppress(asyncio.CancelledError):
+                await drain
+
+    @staticmethod
+    async def _drain_stderr(
+        process: asyncio.subprocess.Process, sink: list[bytes]
+    ) -> None:
+        """stderr を読み続ける。読まないとパイプが詰まって worker が止まる。"""
+        if process.stderr is None:
+            return
+        total = 0
         while True:
-            done, _ = await asyncio.wait({communicate}, timeout=idle_sec)
-            if communicate in done:
-                return communicate.result()
-            advanced = self._produced_count(output_dir)
-            if advanced <= produced:
-                communicate.cancel()
-                with suppress(asyncio.CancelledError):
-                    await communicate
-                raise TimeoutError
-            produced = advanced
+            chunk = await process.stderr.readline()
+            if not chunk:
+                return
+            if total < 64 * 1024:
+                sink.append(chunk)
+                total += len(chunk)
 
     async def _execute_worker(
         self,
@@ -1601,24 +1725,26 @@ class JobManager:
                 self.worker_timeout_sec,
                 self._expected_runtime_sec(job, selected) * 3 + 30,
             )
-        process = await asyncio.create_subprocess_exec(
+        # 同じ worker を続けて使うときだけ使い回す。環境変数は model や配置の指定を
+        # 含むので、署名に入れて違えば作り直す。
+        signature = (
             str(executable),
-            "-m",
             module,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=environment,
-            start_new_session=True,
+            json.dumps(sorted(environment.items()), separators=(",", ":")),
         )
+        process = await self._reuse_or_spawn_worker(signature, executable, module, environment)
         self._processes[job_id] = process
         try:
-            stdout, stderr = await self._communicate_while_progressing(
+            stdout, stderr = await self._exchange_while_progressing(
                 process, stdin_payload, output_dir, timeout_sec
             )
         except TimeoutError:
-            process.kill()
-            await process.wait()
+            # retire が既に始末していることもあるので、取りこぼしだけ止める。
+            await self._retire_warm_worker()
+            with suppress(ProcessLookupError):
+                process.kill()
+            with suppress(Exception):
+                await process.wait()
             await self._update(
                 job_id,
                 reporter,
@@ -1627,8 +1753,22 @@ class JobManager:
                 error=ErrorDetail(code="worker_timeout", message="image worker exceeded its timeout"),
             )
             return
+        except (BrokenPipeError, ConnectionResetError):
+            # 使い回そうとした相手が既に死んでいた。作り直して次の job で拾う。
+            await self._retire_warm_worker()
+            await self._update(
+                job_id,
+                reporter,
+                status=JobStatus.FAILED,
+                phase="generating",
+                error=ErrorDetail(code="worker_error", message="the worker exited before it answered"),
+            )
+            return
         finally:
             self._processes.pop(job_id, None)
+        if not stdout:
+            # 応答が無いまま stdout が閉じた = worker が落ちている。
+            await self._retire_warm_worker()
         if self._stopping:
             return
         host_failure = self._host_failures.get(job_id)
@@ -1677,8 +1817,13 @@ class JobManager:
                     ),
                 )
                 return
-        if process.returncode != 0:
-            detail = response.get("error", {}) if isinstance(response, dict) else {}
+        # 失敗は応答の形で分かる。worker を残している間は returncode がまだ無いので、
+        # 終了コードだけを見ると、error を返して抜けた worker を成功と取り違える。
+        reported = response.get("error") if isinstance(response, dict) else None
+        if isinstance(reported, dict) or process.returncode not in (None, 0):
+            # error を返した worker はその場で抜ける。使い回しの相手から外す。
+            await self._retire_warm_worker()
+            detail = reported if isinstance(reported, dict) else {}
             code = str(detail.get("code", "worker_crash"))
             message = str(detail.get("message", f"worker exited with code {process.returncode}"))
             await self._update(
