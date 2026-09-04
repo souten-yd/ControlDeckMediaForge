@@ -232,7 +232,6 @@ def create_app(
         native_media_runtime_root=resolved.native_media_runtime_root,
         wan_source_root=resolved.wan_source_root,
         creative_evaluator=evaluator,
-        ai_gateway=ai_gateway,
         extra_manifests=custom_models.overlay,
     )
 

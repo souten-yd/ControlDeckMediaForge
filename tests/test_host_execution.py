@@ -47,9 +47,7 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
         "ai_responses": [],
         "ai_calls": [],
         "ai_reserved_lease_snapshots": [],
-        "ai_releases": [],
         # 既定は「使用中でなかったので降ろした」。テストごとに書き換える。
-        "ai_release_result": {"released": True, "reason": "released", "freed_bytes": 17_000_000_000},
     }
 
     def subject(authorization: str | None) -> str | None:
@@ -128,14 +126,6 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
     async def control(host_job_id: str) -> dict[str, Any]:
         job = state["jobs"].setdefault(host_job_id, {"id": host_job_id, "status": "running"})
         return {"host_job_id": host_job_id, "cancel_requested": job["status"] == "canceled", "status": job["status"], "revision": 1}
-
-    @app.post("/api/v1/addon-runtime/media-forge/ai/release")
-    async def ai_release() -> dict[str, Any]:
-        if state["ai_release_result"] is None:
-            # 旧 Host には明示解放が無い。
-            raise HTTPException(status_code=404)
-        state["ai_releases"].append({"reserved_leases": sorted(state["reserved_leases"])})
-        return state["ai_release_result"]
 
     @app.post("/api/v1/addon-runtime/media-forge/resources/requests", status_code=202)
     async def request_resource(payload: dict[str, Any]) -> dict[str, Any]:

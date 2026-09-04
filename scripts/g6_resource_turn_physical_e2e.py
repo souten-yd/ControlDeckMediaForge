@@ -104,19 +104,16 @@ class VramSampler:
         self._stop.set()
         self._thread.join(timeout=5)
 
-    def summary(self, released_at: float | None) -> dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         if not self.samples:
             return {"samples": 0}
         values = [value for _at, value in self.samples]
-        after = [value for at, value in self.samples if released_at and at >= released_at]
         return {
             "samples": len(values),
             "interval_sec": self.interval_sec,
+            # LLM を載せたままの区間なので、この山は両方ぶんである。
             "peak_bytes": max(values),
             "min_bytes": min(values),
-            "samples_after_release": len(after),
-            # これが画像 worker の実占有。LLM に支配されない区間で見る。
-            "peak_after_release_bytes": max(after) if after else None,
         }
 
 
@@ -235,7 +232,6 @@ def main() -> int:
         f"the Host LLM is not holding VRAM: {observations['llm']}",
     )
 
-    released_at: dict[str, Any] = {}
 
     # ── 2. Media Forge を実 model store と実 worker で起動する ────────
     from fastapi import FastAPI
@@ -251,25 +247,6 @@ def main() -> int:
     from mediaforge.host.client import ControlDeckHostClient
 
     host_app, state = control_deck_stub()
-
-    # stub の ai/release は「本物の解放」を行う。ここを模擬したら、この試験が
-    # 確かめたい物理現象そのものが消える。
-    for route in list(host_app.router.routes):
-        if getattr(route, "path", "") == "/api/v1/addon-runtime/media-forge/ai/release":
-            host_app.router.routes.remove(route)
-
-    @host_app.post("/api/v1/addon-runtime/media-forge/ai/release")
-    async def ai_release() -> dict[str, Any]:
-        outcome = await asyncio.to_thread(control_deck, RELEASE_SNIPPET)
-        await asyncio.sleep(2)
-        outcome["vram_after_release"] = vram_used_bytes()
-        outcome["monotonic_at"] = time.monotonic()
-        released_at.update(outcome)
-        return {
-            "released": outcome["released"],
-            "reason": outcome["reason"],
-            "freed_bytes": outcome["model_bytes"],
-        }
 
     work = Path(subprocess.run(["mktemp", "-d"], capture_output=True, text=True).stdout.strip())
     settings = Settings(
@@ -340,9 +317,7 @@ def main() -> int:
                         break
                     time.sleep(0.2)
                 sampler.__exit__()
-                observations["vram_during_job"] = sampler.summary(
-                    released_at.get("monotonic_at")
-                )
+                observations["vram_during_job"] = sampler.summary()
                 observations["generation"] = {
                     "status": last.get("status"),
                     "error": last.get("error"),
@@ -386,7 +361,6 @@ def main() -> int:
                         placement["device_mode"] = part.split("=", 1)[1]
                 placement["component_devices"] = line.split("component_devices=", 1)[-1]
         observations["worker_placement"] = placement
-        observations["ai_release"] = released_at
         observations["vram_final_before_cleanup"] = vram_used_bytes()
         # 後片付け。測定前の状態へ戻す。
         control_deck(RELEASE_SNIPPET, timeout=300)
@@ -397,17 +371,15 @@ def main() -> int:
         observations["loaded_after"] = loaded_aliases()
 
     generation = observations["generation"]
-    check("release_ai" in phases, f"the AI turn was never declared finished: {phases}")
-    for later in ("waiting_resource", "starting", "generating"):
-        if later in phases:
-            check(
-                phases.index("release_ai") < phases.index(later),
-                f"the AI turn ended after {later}: {phases}",
-            )
-    check(released_at.get("released") is True, f"the release was refused: {released_at}")
     check(
-        released_at["vram_after_release"] < observations["llm"]["vram_resident"] - 1_000_000_000,
-        f"VRAM was not actually returned: {released_at}",
+        "release_ai" not in phases,
+        f"generation still unloads the language model: {phases}",
+    )
+    check(
+        observations["vram_final_before_cleanup"]
+        >= observations["llm"]["vram_resident"] - 1_000_000_000,
+        "the Host LLM lost its VRAM to generation: "
+        f"{observations['vram_final_before_cleanup']}",
     )
     check(
         generation["status"] == "succeeded" and len(generation["asset_ids"]) == 1,

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import asyncio
+import inspect
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from mediaforge.domain import JobRequest
-from mediaforge.host.ai import HostAIReleaseResult
 from mediaforge.host.client import HostIdentity
 from mediaforge.host.jobs import HostExecution
 from mediaforge.jobs import JobManager, OOM_FLOOR_INCREMENT_BYTES, WorkerFailure
@@ -106,127 +106,22 @@ def host_execution() -> HostExecution:
     )
 
 
-class RecordingGateway:
-    def __init__(self, result: HostAIReleaseResult):
-        self.result = result
-        self.calls = 0
-        self.required_bytes: list[int] = []
+def test_generation_does_not_unload_the_language_model(tmp_path: Path):
+    """画像 1 枚のために、使っている最中の LLM を降ろさせない。
 
-    async def release(self, _identity, *, required_bytes: int = 0) -> HostAIReleaseResult:
-        self.calls += 1
-        self.required_bytes.append(required_bytes)
-        return self.result
-
-
-def test_ai_turn_is_declared_finished_before_generation(tmp_path: Path):
-    """生成 lease を取る前に AI ターンを閉じること。順序が逆だと deadlock する。"""
-    store = Store(tmp_path / "data")
-    store.initialize()
-    gateway = RecordingGateway(HostAIReleaseResult(True, "released", 17_000_000_000))
-    manager = JobManager(store, ai_gateway=gateway)
-    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
-
-    asyncio.run(manager._release_host_ai(job, host_execution(), None))
-
-    assert gateway.calls == 1
-    assert store.get_job(job.id).phase == "release_ai"
+    broker は VRAM が空いていなければ host（システムRAM）を割り当てるので、
+    場所を空けてもらう必要が無くなった（design-ai-resource-broker.md §0）。
+    以前は生成の前に毎回 ControlDeck へ AI ターンの終了を宣言していた。
+    """
+    assert not hasattr(JobManager, "_release_host_ai")
+    assert "ai_gateway" not in inspect.signature(JobManager.__init__).parameters
 
 
-def test_a_refused_release_is_asked_only_once(tmp_path: Path):
-    """chat / OpenCode を飢えさせないため、リトライループを作らない。"""
-    store = Store(tmp_path / "data")
-    store.initialize()
-    gateway = RecordingGateway(HostAIReleaseResult(False, "opencode_active"))
-    manager = JobManager(store, ai_gateway=gateway)
-    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
-
-    asyncio.run(manager._release_host_ai(job, host_execution(), None))
-
-    assert gateway.calls == 1
-
-
-def test_a_refused_release_names_the_retained_residency_on_vram_failure(tmp_path: Path):
-    """匿名の OOM ではなく、なぜ空きが取れなかったのかを返すこと。"""
-    store = Store(tmp_path / "data")
-    store.initialize()
-    gateway = RecordingGateway(HostAIReleaseResult(False, "opencode_active"))
-    manager = JobManager(store, ai_gateway=gateway)
-    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
-    asyncio.run(manager._release_host_ai(job, host_execution(), None))
-
-    failure = manager._admission_failure(job.id, "insufficient_vram")
-
-    assert failure.code == "host_ai_residency_retained"
-    assert "opencode_active" in failure.message
-
-
-def test_a_non_vram_admission_failure_does_not_blame_the_ai_residency(tmp_path: Path):
-    """VRAM 以外の受理失敗に AI 常駐の話を混ぜない。"""
-    store = Store(tmp_path / "data")
-    store.initialize()
-    gateway = RecordingGateway(HostAIReleaseResult(False, "opencode_active"))
-    manager = JobManager(store, ai_gateway=gateway)
-    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
-    asyncio.run(manager._release_host_ai(job, host_execution(), None))
-
-    failure = manager._admission_failure(job.id, "policy_denied")
+def test_admission_failure_names_the_broker_reason(tmp_path: Path):
+    failure = JobManager._admission_failure("insufficient_vram")
 
     assert failure.code == "resource_unavailable"
-
-
-def test_a_successful_release_does_not_blame_the_ai_residency(tmp_path: Path):
-    """解放できたのに VRAM が足りないなら、それは AI 常駐のせいではない。"""
-    store = Store(tmp_path / "data")
-    store.initialize()
-    gateway = RecordingGateway(HostAIReleaseResult(True, "released", 17_000_000_000))
-    manager = JobManager(store, ai_gateway=gateway)
-    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
-    asyncio.run(manager._release_host_ai(job, host_execution(), None))
-
-    failure = manager._admission_failure(job.id, "insufficient_vram")
-
-    assert failure.code == "resource_unavailable"
-
-
-def test_a_release_failure_never_stops_generation(tmp_path: Path):
-    """解放要求そのものの失敗で生成を止めない。broker の受理判断に委ねる。"""
-    store = Store(tmp_path / "data")
-    store.initialize()
-
-    class BrokenGateway:
-        async def release(self, _identity):
-            raise RuntimeError("host is unreachable")
-
-    manager = JobManager(store, ai_gateway=BrokenGateway())
-    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
-
-    asyncio.run(manager._release_host_ai(job, host_execution(), None))
-
-    assert manager._admission_failure(job.id, "insufficient_vram").code == "resource_unavailable"
-
-
-def test_the_release_says_how_much_the_turn_needs_afterwards(tmp_path: Path):
-    """伝えないと Host は「LLM を降ろした」で終わる。実測: それでも 1.16GB の
-    embedding が残り、33.35GB を要る画像モデルが 34.2GB のカードに入らなかった。"""
-    from mediaforge.models import ModelDescriptor
-
-    store = Store(tmp_path / "data")
-    store.initialize()
-    gateway = RecordingGateway(HostAIReleaseResult(True, "released", 17_000_000_000))
-    manager = JobManager(store, ai_gateway=gateway)
-    job = store.create_job(JobRequest(operation="image.generate", intent="test"))
-    selected = next(
-        item for item in manager.registry.all() if item.measured_vram_bytes
-    ) if hasattr(manager, "registry") else None
-
-    asyncio.run(manager._release_host_ai(job, host_execution(), None, selected))
-
-    assert gateway.calls == 1
-    if selected is not None:
-        assert gateway.required_bytes[0] == selected.measured_vram_bytes
-    # selected が無い経路（起動前など）では 0 を送る。嘘の数字は送らない。
-    asyncio.run(manager._release_host_ai(job, host_execution(), None, None))
-    assert gateway.required_bytes[-1] == 0
+    assert "insufficient_vram" in failure.message
 
 
 # ── 準備をサーバ側に置く ────────────────────────────────────────────────

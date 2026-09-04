@@ -206,23 +206,22 @@ model name.
 
 ## Resource turn
 
-A hosted job that needs real GPU capacity runs in ordered stages so that Host AI
-residency and image generation never contend for the same VRAM:
+A hosted job that needs real GPU capacity runs in ordered stages. ControlDeck's
+AI residency and image generation coexist: the Broker places generation on
+whichever device has room.
 
 ```text
 analyze       Host AI (text.generate / vision.analyze). No GPU lease is held.
-release_ai    Media Forge declares its AI turn finished to ControlDeck.
 generate      Broker lease with estimated_runtime_sec, then the image worker.
 review        The generation lease is released before any vision evaluation.
 ```
 
-`release_ai` is a request, asked once. ControlDeck refuses whenever its own
-chat, an OpenCode session, or another add-on is still using the shared model,
-and Media Forge never retries — retrying would starve those consumers. A refusal
-is recorded, not fought: Broker admission still decides. Only if admission then
-fails for lack of VRAM does the job fail with `host_ai_residency_retained`,
-carrying the reason ControlDeck gave. A Host without the explicit release
-behaves exactly as before.
+The lease request carries `preferred_devices: ["gpu0", "host"]` for models that
+can run on the CPU, and the grant's `device_id` says where the job actually
+runs. `host` means system RAM: the worker loads on the CPU and reserves no
+VRAM. Media Forge no longer asks ControlDeck to unload its language model
+before generating — with RAM as a fallback there is no need to take the GPU
+away from a chat or OpenCode session for one image.
 
 ## Capabilities
 

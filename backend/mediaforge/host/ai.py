@@ -21,21 +21,6 @@ class HostAIResult:
     capability: HostAICapability
 
 
-@dataclass(frozen=True, slots=True)
-class HostAIReleaseResult:
-    """Outcome of asking ControlDeck to end this add-on's AI turn.
-
-    ControlDeck stays the authority: it may refuse because its own chat, an
-    OpenCode session, or another add-on is still using the shared model. The
-    reason is carried through so a later admission failure can say why instead
-    of surfacing an anonymous out-of-memory.
-    """
-
-    released: bool
-    reason: str
-    freed_bytes: int = 0
-
-
 class HostAIGateway:
     """Scoped Media Forge client for ControlDeck-owned AI inference.
 
@@ -106,48 +91,6 @@ class HostAIGateway:
         # Deliberately ignore every other field. Provider/model identity is not
         # part of Media Forge's behavioral contract even if a future Host adds it.
         return HostAIResult(content=content, capability=capability)
-
-    async def release(
-        self, identity: HostIdentity, *, required_bytes: int = 0
-    ) -> HostAIReleaseResult:
-        """Declare that this add-on's AI turn is over.
-
-        This is a request, never a preemption. Media Forge owns the ordering
-        (analyze, release, generate) and the failure policy; ControlDeck owns
-        the model lifetime and the decision. Ask once — retrying would starve
-        the Host's own consumers.
-
-        ``required_bytes`` is how much this turn needs afterwards. Observed:
-        releasing the chat model was not enough, because a 1.16GB embedding
-        model stayed resident and the image model needs 33.35GB of a 34.2GB
-        card. Saying the number lets the Host decide whether its turn actually
-        freed enough; it is a byte count, not a description of the workload.
-        """
-        try:
-            value = await self.host._request(  # same-package bounded Add-on Runtime transport
-                identity,
-                "POST",
-                f"/{identity.addon_id}/ai/release",
-                json={"required_bytes": max(0, int(required_bytes))},
-            )
-        except HostApiError as exc:
-            if exc.status_code == 404:
-                # An older Host has no explicit release. That is a known state,
-                # not an error: fall through to Broker admission as before.
-                return HostAIReleaseResult(released=False, reason="host_release_unsupported")
-            if exc.status_code == 403:
-                return HostAIReleaseResult(released=False, reason="host_ai_not_granted")
-            return HostAIReleaseResult(released=False, reason="host_release_failed")
-        released = value.get("released") is True
-        reason = value.get("reason")
-        freed = value.get("freed_bytes")
-        return HostAIReleaseResult(
-            released=released,
-            reason=str(reason) if isinstance(reason, str) and reason else (
-                "released" if released else "host_release_refused"
-            ),
-            freed_bytes=int(freed) if isinstance(freed, int) and not isinstance(freed, bool) else 0,
-        )
 
     @staticmethod
     def _normalize_host_error(

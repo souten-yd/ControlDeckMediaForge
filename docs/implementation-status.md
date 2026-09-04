@@ -7824,3 +7824,41 @@ FLUX.2 Klein（15 GB）を載せると OpenCode 側の LLM を壊すためであ
 18.1 秒、ピーク VRAM は 21.8 GB から 8.9 GB だった。`cpu` はそれよりさらに遅い。
 
 `./mf.sh test` 838 passed。
+
+## 生成のたびに LLM を降ろさせるのをやめる
+
+`_release_host_ai` は、実モデルの生成に入る前に毎回 ControlDeck へ「AI ターンを
+終える」と宣言していた。画像モデルが 34.2 GB のカードに 33.35 GB を要り、
+場所を空けてもらう以外に載せる方法が無かった頃の作りである。
+
+broker が host 配置を持つようになって前提が変わった。VRAM が空いていなければ
+生成は RAM へ載る。場所を空けてもらう必要が無い一方、降ろさせる側の代償は
+そのまま残っていた ── 使っている最中の OpenCode や chat のモデルを、画像 1 枚の
+ために落とすことになる。
+
+消したもの:
+
+```text
+_release_host_ai              生成前の宣言そのもの
+phase="release_ai"            それを表示するための段階と、UI の不確定表示
+_ai_release / _VRAM_WAIT_REASONS
+                              拒否理由を握って、後の受理失敗に添えるための保持
+host_ai_residency_retained    その言い換え。降ろさせないので起きない
+HostAIGateway.release         上を消すと呼び手が居なくなる
+HostAIReleaseResult
+JobManager(ai_gateway=...)    release 以外に使っていなかった
+```
+
+`HostAIGateway` 自体は残る。演出の立案・prompt・評価が `ai.inference` を使う。
+ControlDeck 側の `POST /{addon_id}/ai/release` も残る。あれは利用者が「AI の番を
+終えた」と宣言する経路で、add-on が job ごとに叩くものではない。
+
+受理の待ちそのもの（`waiting` の 0.5 秒間隔の照会、`max_wait_sec` 300）は残す。
+broker の受理は非同期で、照会以外に知る方法が無い。
+
+acceptance script（`g6_resource_turn_e2e.py` / `_physical_e2e.py`）は、
+「LLM が VRAM を返したこと」を確かめる形から「LLM が VRAM を持ったまま生成が
+通ること」を確かめる形へ変えた。物理側の `ai/release` stub は呼ばれなくなるので
+消した。
+
+`./mf.sh test` 833 passed。
