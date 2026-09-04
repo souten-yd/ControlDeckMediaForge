@@ -104,6 +104,9 @@ class ModelDescriptor:
     healthy: bool = False
     local_path: Path | None = None
     resident_vram_bytes: int | None = None
+    # RAM（host）へ載せたときの実測常駐量。VRAM の見積りは device_map で段階的に
+    # 載せるときの GPU 側ピークで、RAM 配置の実態とは別物である。
+    host_resident_bytes: int | None = None
     execution_peak_vram_bytes: int | None = None
     cold_load_peak_vram_bytes: int | None = None
     headroom_vram_bytes: int | None = None
@@ -262,9 +265,20 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         "headroom_vram_bytes": None,
         "measured_runtime_sec": None,
     }
+    # RAM 配置の実測。VRAM の見積りとは別物なので、別の名前で持つ。持たない
+    # モデルもある（GPU 前提の駆動系、まだ測っていないもの）ので任意である。
+    host_resident_bytes: int | None = None
     if measurements is not None:
-        if not isinstance(measurements, dict) or set(measurements) != set(measurement_values):
+        extra = set(measurements) - set(measurement_values)
+        if not isinstance(measurements, dict) or extra - {"host_resident_bytes"}:
             raise ModelRegistryError("model registry measurements are invalid")
+        if set(measurement_values) - set(measurements):
+            raise ModelRegistryError("model registry measurements are invalid")
+        if "host_resident_bytes" in measurements:
+            measured = measurements["host_resident_bytes"]
+            if not isinstance(measured, int) or isinstance(measured, bool) or measured <= 0:
+                raise ModelRegistryError("model registry host measurement is invalid")
+            host_resident_bytes = measured
         for key in measurement_values:
             measured = measurements[key]
             if key == "measured_runtime_sec":
@@ -459,6 +473,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         **native_size,
         **limits,
         **measurement_values,
+        host_resident_bytes=host_resident_bytes,
     )
 
 

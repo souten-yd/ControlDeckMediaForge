@@ -7862,3 +7862,36 @@ acceptance script（`g6_resource_turn_e2e.py` / `_physical_e2e.py`）は、
 消した。
 
 `./mf.sh test` 833 passed。
+
+## RAM 配置の必要量を VRAM の見積りと分ける
+
+host 配置は宣言だけあって、**一度も効いていなかった**。broker の `_required_bytes`
+は device を問わず `vram.required_bytes` を返す。`vram` の見積りは `device_map` で
+段階的に載せるときの GPU 側ピークで、RAM 配置の実態とは別物である。
+
+CPU 実行を実測した（2026-09-04、FLUX.2 Klein 4B、`device_mode: cpu`）。
+llama-server が VRAM 22.6GB を使ったまま、GPU を一切触らずに測れる。
+
+```text
+                       generation_sec   最大RSS      VRAM
+512x512  / 4歩              40.26      16.26 GB    変化なし
+1024x1024 / 4歩            113.44      18.76 GB    変化なし
+placement: pipeline / text_encoder / transformer / vae すべて cpu
+```
+
+申告している `vram.required_bytes` は 31.1 GB で、実態の約 2 倍である。この機械の
+RAM は 30 GB なので、31.1 GB の要求は host device の総容量を超え、必ず落ちる。
+`admitted_free_bytes` との比較で弾かれて gpu0 が空くまで待ち続ける ── つまり
+「VRAM が空いていなければ RAM へ」が成立していなかった。
+
+ControlDeck 側に `ResourceRequest.host_bytes` を足し（PR #254）、MediaForge は
+実測した常駐量に headroom を足して送る。測っていないモデルには送らない。小さすぎ
+れば OOM、大きすぎれば載らない。どちらも推測で決めてよい数字ではない。
+
+カタログの `measurements.host_resident_bytes` は任意である。GPU 前提の駆動系や、
+まだ測っていないモデルは持たない。
+
+参考として、カタログの GPU 経路は `measured_runtime_sec` 208.8 秒である。CPU の
+113.4 秒はそれより速いが、測り方（cold load を含むか）が違うので直接は比べられない。
+
+`./mf.sh test` 836 passed。
