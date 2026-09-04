@@ -4,9 +4,17 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from ..models import ModelDescriptor
+from ..models.adapters import runs_on_cpu
 
 
 MIB = 1024 * 1024
+
+GPU_DEVICE = "gpu0"
+HOST_DEVICE = "host"
+# 順序が意味を持つ。「空いていれば VRAM、無ければ RAM」である
+# （docs/design-ai-resource-broker.md §0）。host は opt-in で、挙げなければ
+# 従来どおり VRAM だけが候補になる。
+COEXISTING_PLACEMENT = [GPU_DEVICE, HOST_DEVICE]
 
 
 @dataclass(frozen=True)
@@ -46,6 +54,7 @@ def fake_image_request(
     return {
         "job_id": job_id,
         "device": "auto",
+        "preferred_devices": list(COEXISTING_PLACEMENT),
         "vram": {
             "resident_bytes": estimate.resident_bytes,
             "execution_peak_bytes": estimate.execution_peak_bytes,
@@ -53,7 +62,7 @@ def fake_image_request(
             "headroom_bytes": estimate.headroom_bytes,
             "confidence": "low",
         },
-        "compute_mode": "exclusive-preferred",
+        "compute_mode": "shared-safe",
         "priority": {"interactive": 20, "agent-interactive": 20, "workflow": 10}.get(workload_class, 0),
         "class": workload_class,
         "residency_key": "mediaforge:fake-image-v1",
@@ -99,6 +108,12 @@ def image_model_request(
     return {
         "job_id": job_id,
         "device": "auto",
+        # CPU で走らせられる系統だけが host を候補にしてよい。VRAM を確保しない
+        # ことが host 配置の条件で、守れない adapter が要求すると LLM の側から
+        # 見えないまま VRAM を取ることになる。
+        "preferred_devices": (
+            list(COEXISTING_PLACEMENT) if runs_on_cpu(model.runtime_adapter) else []
+        ),
         "vram": {
             "resident_bytes": estimate.resident_bytes,
             "execution_peak_bytes": estimate.execution_peak_bytes,
@@ -106,7 +121,9 @@ def image_model_request(
             "headroom_bytes": estimate.headroom_bytes,
             "confidence": model.measurement_confidence,
         },
-        "compute_mode": "exclusive-preferred",
+        # LLM と場所を分け合う。exclusive だと、LLM が載っている間は VRAM の
+        # 空きに関係なく断られ、共存にならない。
+        "compute_mode": "shared-safe",
         "priority": {"interactive": 20, "agent-interactive": 20, "workflow": 10}.get(workload_class, 0),
         "class": workload_class,
         "residency_key": f"mediaforge:{model.model_id}:{model.revision}",

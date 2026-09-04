@@ -24,6 +24,11 @@ from .adapters import (
 
 MAX_MESSAGE_BYTES = 1024 * 1024
 
+# 載せ方。`cpu` は ControlDeck の broker が host（システムRAM）を割り当てたときの
+# もので、VRAM を確保しない（docs/design-ai-resource-broker.md §0）。カタログは
+# GPU 前提の値しか宣言しない。`cpu` は要求ごとに core が入れる。
+DEVICE_MODES = frozenset({"full_device", "direct_device_map", "cpu_offload", "cpu"})
+
 
 def _terminate_with_parent() -> None:
     libc = ctypes.CDLL(None, use_errno=True)
@@ -86,17 +91,15 @@ class ImageWorker:
         )
         self.work_root = Path(os.environ["MEDIA_FORGE_WORK_ROOT"])
         self.device_mode_override = os.environ.get("MEDIA_FORGE_IMAGE_DEVICE_MODE")
-        if self.device_mode_override is not None and self.device_mode_override not in {
-            "full_device", "direct_device_map", "cpu_offload"
-        }:
+        if self.device_mode_override is not None and self.device_mode_override not in DEVICE_MODES:
             raise ValueError(
-                "MEDIA_FORGE_IMAGE_DEVICE_MODE must be full_device, direct_device_map, or cpu_offload"
+                "MEDIA_FORGE_IMAGE_DEVICE_MODE must be one of " + ", ".join(sorted(DEVICE_MODES))
             )
         disable_mmap = os.environ.get("MEDIA_FORGE_IMAGE_DISABLE_MMAP")
         if disable_mmap is not None and disable_mmap not in {"0", "1"}:
             raise ValueError("MEDIA_FORGE_IMAGE_DISABLE_MMAP must be 0 or 1")
         self.disable_mmap_override = None if disable_mmap is None else disable_mmap == "1"
-        self.adapters: dict[str, Any] = {}
+        self.adapters: dict[tuple[str, str], Any] = {}
 
     def _contained_lora(self, value: object) -> Path:
         """LoRA の経路を、許された根のいずれかの中に収める。
@@ -180,9 +183,7 @@ class ImageWorker:
             if self.disable_mmap_override is not None
             else runtime_options.get("disable_mmap", False)
         )
-        if device_mode not in {"full_device", "direct_device_map", "cpu_offload"} or not isinstance(
-            disable_mmap, bool
-        ):
+        if device_mode not in DEVICE_MODES or not isinstance(disable_mmap, bool):
             raise ValueError("worker model runtime options are invalid")
         family_options: dict[str, Any] = {}
         if "negative_prompt" in runtime_options:
@@ -315,7 +316,11 @@ class ImageWorker:
         seed = _integer(constraints.get("seed", 0), "image seed")
         if not 0 <= seed <= 2**63 - count:
             raise ValueError("image seed is outside the supported range")
-        adapter = self.adapters.get(model_id)
+        # 置き場所は要求ごとに変わる（broker が gpu0 と host のどちらを割り当てたか）。
+        # model_id だけを鍵にすると、VRAM に載せた adapter を host 配置の要求へ
+        # そのまま使ってしまう。
+        key = (model_id, device_mode)
+        adapter = self.adapters.get(key)
         if adapter is None:
             # 1 度に 1 つだけ常駐させる。単一 GPU では並べられない。
             if loras and not hasattr(globals()[ADAPTERS[runtime_adapter]], "apply_loras"):
@@ -326,7 +331,7 @@ class ImageWorker:
                 disable_mmap=disable_mmap,
                 **family_options,
             )
-            self.adapters = {model_id: adapter}
+            self.adapters = {key: adapter}
         if loras:
             adapter.load()
             adapter.apply_loras(loras)
