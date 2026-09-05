@@ -1,6 +1,6 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: PLANNED / 文書のみ  
+Status: 3DS-0 VERIFIED / 3DS-1以降は未実装
 Date: 2026-09-05  
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
@@ -11,6 +11,9 @@ G9生成3Dモデル採用とは分離し、画像生成モデルの変更やSoni
 すべての変更はControlDeckMediaForgeで行う。必要な汎用Host変更だけ別PRにする。
 
 ## 1. 現状とギャップ
+
+3DS-0の対象commit・fixture・実機互換性表は
+[`3ds-compatibility.md`](3ds-compatibility.md) に固定した。
 
 | 項目 | 調査で確認した現状 | 追加するもの |
 |---|---|---|

@@ -1,0 +1,52 @@
+{
+  "schema_version": "media-forge.3ds-baseline-contract@1",
+  "addon": {
+    "api_version": "2",
+    "id": "media-forge",
+    "requires_addon_contract": ">=2.0 <3.0",
+    "embedded_view_id": "workspace",
+    "mobile": "embedded",
+    "workflow_executors": [
+      "media.generate"
+    ],
+    "agent_tools": [
+      "media.capabilities",
+      "media.generate",
+      "media.inspect",
+      "media.pack"
+    ]
+  },
+  "public_contract": {
+    "job_operations": [
+      "image.generate",
+      "image.edit",
+      "video.generate",
+      "video.edit",
+      "media.inspect",
+      "asset.pack"
+    ],
+    "asset_mime_types": [
+      "image/png",
+      "image/webp",
+      "image/jpeg",
+      "video/mp4",
+      "video/webm",
+      "application/zip",
+      "model/gltf-binary"
+    ],
+    "g8_profile": "3d.project.glb",
+    "g8_package_entries": [
+      "asset.glb",
+      "manifest.json",
+      "preview.png"
+    ],
+    "g8_compile_options_schema": "3d.compile-options@1"
+  },
+  "legacy_blender_runtime": {
+    "version": "4.5.9",
+    "relative_root": "runtimes/blender-4.5.9",
+    "manifest": "config/blender-runtime.json",
+    "archive_sha256": "dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d",
+    "license": "GPL-3.0-or-later"
+  }
+}

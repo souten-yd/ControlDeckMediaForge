@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3DS-0 baseline
+
+PR #213はmerge commit `9469d8e4e4980752082f5081da7ba6e95d184622`でmainへ入った。
+`ux1/3ds-0-baseline`で既存Add-on/public/G8契約fixtureと
+`docs/implementation/3ds-compatibility.md`を追加した。source runtimeはBlender 4.5.9 ready、
+実Uvicorn/実Blenderで同じGLBを2回加工したZIPはbyte-identical。installed 0.27.0は画像availableだが
+bundle外runtimeを解決できずG8は`runtime_not_installed`で、3DS-1のresolver対象。
+最終gateはfocused 176件、full 851件、static/link checksがPASS。
+次は3DS-1 runtime resolver、legacy登録、read-only設定診断を独立PRで実装する。
+Web Blender、scene、viewer、材質、OpenCode制作、runtime lifecycleは未実装・未検証。
+
 ## 2026-09-05 3D Studio設計の引き継ぎ（文書のみ）
 
 利用者の決定: 画像と3DをMediaForgeへ実装・管理・配布まで統合する。
