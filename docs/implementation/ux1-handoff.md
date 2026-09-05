@@ -3,6 +3,31 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 child credential acceptance / Host interruption
+
+branch `ux1/3d-credential-refresh-acceptance`、基準main `9ff49ac`。導入済みv0.28.16は変更なし。
+`scripts/3ds_credential_refresh_e2e.py`を追加。専用mf-e2eの正規service identityをメモリ内で扱い、
+installed Agent APIへCPU recipeを6件投入。自分のchildをmarker/pidfdで固定して各160秒SIGSTOP、
+167秒自動再開。後続Jobを600秒超まで待ちrefresh/取消/成功/Host終端を検査する試験であり、
+自然な長時間computeやOpenCode制作ではない。Host TTL600 / margin120 / worker timeout180は変更しない。
+
+結果は **FAILED / refresh NOT TESTED**。初回はonefile bootloaderの子孫探索不足で捕捉失敗、そのJobはsucceeded。
+探索修正後retry1は251.002秒までrunning、その後照会502 `host_unreachable`。
+Hostログは08:39:04〜08:39:17 JSTに約13秒途切れ、1 succeeded / 5 failed `host_context_lost`。
+test群を並走させないretry2も150.297秒で6件すべてfailed。Hostは08:42:17 watchdog timeout、
+08:42:24再開、08:45:11停止、08:45:15再開を記録。本試験が要求したHost再起動ではない。
+retry2はlocal failed / Host DB interrupted、`host_terminal_sent=false`、refresh監査0件。
+cleanup後はactive Job 0 / Blender recipe child 0、両service active。
+
+次は未送信outboxとHost履歴照会。managerは3回送信後にidentityを捨て、永続outbox再送consumerが見当たらない。
+Host runtime `host_job`はmemoryの`jobs.get`だけを使い、再起動後DB履歴へ到達しない。
+正規identity復帰時の再送/照合を詰め、Host既存終端を勝手に書換えない。必要なHost修正は汎用Job契約の別PR。
+Host既存dirty tsconfig.tsbuildinfoを保持する。証拠は
+`/data1tb/mf-credential-refresh-installed-0.28.16{,-retry1,-retry2}/events.json`。
+scriptは一時観測失敗で同じJobを再照会し、失敗時にlocal DB状態を記録する。
+最終`./mf.sh test`は993 passed / 既知Starlette warning 1件 / 106.33秒。
+これは回帰検査であり、FAILEDの長時間受入を成功へ変更する証拠ではない。
+
 ## 2026-09-06 installed recovery fork / v0.28.16
 
 PR #247 merged `53faaeb52770b1f151f0000fa73dc02566a99acb`。同commitから正式v0.28.16を再構築・署名公開した。

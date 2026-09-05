@@ -9078,3 +9078,39 @@ source/candidateの隔離HTTP serverはすべて停止、exact release用worktre
 今回作成したcandidate/release展開directory各61 MiBと隔離fixture各2.6 MiBの計4 directoryは
 `gio trash`で退避した。ごみ箱から復元可能。公開再取得4 assetと観測JSON/screenshotは保持した。
 installed acceptance script追加後の最終`./mf.sh test`は993 passed / 既知warning1件 / 101.74秒。
+
+## 2026-09-06 — child credential acceptance / Host interruption
+
+基準main `9ff49ac`、branch `ux1/3d-credential-refresh-acceptance`。導入済みv0.28.16に対し、
+正規Host service identity（既存mf-e2e、秘密値はメモリ内のみ）でAgent APIへCPU recipeを投入する
+`scripts/3ds_credential_refresh_e2e.py`を追加。4件の試験Blender childをrecipe markerとpidfdで識別し、
+各160秒停止/167秒自動再開、後続2件の600秒超待機・refresh・取消・成功・Host同期を検査する。
+Host TTL600秒・refresh margin120秒・worker timeout180秒は変更しない。自然なcompute時間や
+OpenCode言語制作の証拠とはしない。試験はHost diagnostic venvとPYTHONPATH=Host/backendで実行し、
+productのHost importは追加していない。
+
+実行コマンドは`PYTHONPATH=/data1tb/ControlDeck/app/backend /data1tb/ControlDeck/app/.venv/bin/python
+scripts/3ds_credential_refresh_e2e.py --evidence-dir <専用directory>`。
+初回`/data1tb/mf-credential-refresh-installed-0.28.16`はbootloaderの直接childだけを探索したため
+workerを捕捉できなかった。Job `job_b42151196e26470ab33ee4d35040e646`はsucceededで終了した。
+子孫探索修正後の`-retry1`ではchild PID2293568を160.069秒保持し再開、次のchild PID2295744を停止。
+後続`job_f9862fc65fb848ebad38e563ddb0e3ca` / Host `b77c9525e2dc`は251.002秒までrunning。
+次の照会が502 `host_unreachable`、1件succeeded / 5件`host_context_lost`でfailedになった。
+Host PID2292673のaccess logは08:39:04〜08:39:17 JSTに約13秒途切れた。原因は未特定であり、
+同時刻のmetrics timezone warningだけから因果を断定しない。
+
+test群を並走させない`-retry2`でも150.297秒で6件すべて`host_context_lost`。
+対象は`job_2fda5a66d266464cb3702f3c5d3f7071`、`job_e955c6ac272346d6b73b07708a4b7170`、
+`job_66eb332aef20483e952ecdedfef597a2`、`job_2bf2e25572b342b0b992cd972cfb42a9`、
+`job_7ce07de1334b4595b059afb3b79e3e12`、`job_a2a5b1a3e9fb43d7bbcfab750ebbe7b0`。
+Host journalは08:42:17 watchdog timeout/ABRT、08:42:24再開、08:45:11停止、08:45:15再開を記録した。
+本試験はHost restartを要求していない。HostはPID2299189でactive、MediaForgeはPID2286511のままactive。
+全対象のlocalはfailed、Host DBはinterrupted、refresh監査は各0件、terminal_sentは6件ともfalse。
+finally cleanup後のactive local Jobは0、実Blender recipe childは0。対象外Job/既存sceneは操作していない。
+
+試験結果は **FAILED / credential refresh NOT TESTED**。現在コードには終端payloadの永続化と3回の即時送信は
+あるが、その後のoutbox再送consumerが見当たらない。またHost runtimeの`host_job`は`jobs.get`のmemoryのみで
+DB履歴には到達せず、再起動後の終端照合を妨げる。次は正規identityに基づく再送/照合を解決する。
+Hostが確定したinterruptedを無断でfailedへ上書きしたり、未送信を送信済みと表示したりしない。
+証拠は3 directoryのevents.json、今回のread-only SQLとsystemd journal。全体3DS-8はPARTIAL。
+最終`./mf.sh test`: 993 passed / 既知Starlette warning 1件 / 106.33秒。
