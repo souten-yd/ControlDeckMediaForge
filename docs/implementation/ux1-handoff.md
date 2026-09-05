@@ -5,7 +5,7 @@
 
 ## 2026-09-05 3DS-4b browser scene import / revision UI
 
-branch `ux1/3d-scene-import-ui`、実装commit `573b610`。作る媒体へ3D Studioを追加し、incremental
+PR #226、branch `ux1/3d-scene-import-ui`、実装commit `573b610`。作る媒体へ3D Studioを追加し、incremental
 SHA-256、512 KiB chunk、256 MiB上限の`.blend` file input、scene一覧、immutable revision履歴、既存の
 validated GLB viewerによる各版previewを実装した。path/raw `.blend`/working leaseはbrowserへ出さない。
 

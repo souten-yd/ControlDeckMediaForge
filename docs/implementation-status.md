@@ -8389,7 +8389,7 @@ Web Blenderは3DS-5。ControlDeck変更は0件。次はbrowser import/scene UI�
 
 ## 2026-09-05 — 3DS-4b browser scene import / revision UI
 
-branch `ux1/3d-scene-import-ui`、実装commit `573b610`。既存workspaceの作る媒体へ3D Studioを追加した。
+PR #226、branch `ux1/3d-scene-import-ui`、実装commit `573b610`。既存workspaceの作る媒体へ3D Studioを追加した。
 `.blend`はbrowserでも256 MiB上限、512 KiB単位でincremental SHA-256を計算し、宣言後に同じ上限の
 sequential chunkとして送る。全fileを一括`arrayBuffer`へ載せない。scene一覧、保存済みrevision履歴、
 Blender版、dependency件数、validation済み状態を表示し、各revisionのGLB previewを3DS-3と同じvalidated
