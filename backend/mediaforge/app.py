@@ -692,7 +692,11 @@ def create_app(
             profile_snapshot=profile_snapshot,
         ).model_dump(mode="json")
 
-    async def wait_for_terminal(job_id: str, timeout: float = 110.0) -> dict[str, Any]:
+    # LLM が VRAM を占めていると、空きに合わせた置き直しを挟むぶん生成が伸びる。
+    # 実測（R9700 / LLM 25GB 常駐）では 110 秒に収まる回と収まらない回があり、
+    # 収まらないと job は動いているのに 504 を返して捨てていた。ControlDeck 側の
+    # 上限（600 秒）に合わせる。
+    async def wait_for_terminal(job_id: str, timeout: float = 600.0) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + timeout
         while asyncio.get_running_loop().time() < deadline:
             job = store.get_job(job_id)

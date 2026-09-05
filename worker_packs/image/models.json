@@ -11,7 +11,7 @@
       "runtime_adapter": "diffusers.flux2-klein",
       "runtime_options": {
         "device_mode": "direct_device_map",
-        "disable_mmap": true,
+        "disable_mmap": false,
         "default_steps": 4,
         "native_width": 1024,
         "native_height": 1024
