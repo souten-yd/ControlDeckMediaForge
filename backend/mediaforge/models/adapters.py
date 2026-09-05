@@ -51,11 +51,19 @@ def is_runnable(runtime_adapter: str) -> bool:
 # `host` を割り当てたときはこの形で動かす。VRAM を確保しないことが host 配置の
 # 条件なので（docs/design-ai-resource-broker.md §0）、GPU を前提にした駆動系は
 # ここへ入れない。sd-cli 系と拡大は GPU 前提のまま。
-CPU_CAPABLE_ADAPTERS = frozenset({
-    "diffusers.flux2-klein",
-    "diffusers.sdxl",
-    "diffusers.sdxl-single-file",
-})
+# 画像生成は host（システムRAM）へ置かない。CPU 実行は実測で 1 枚 100 秒、GPU の
+# 3.5 秒に対して 28 倍で、待つより LLM を退けたほうが速い。
+#
+# 「VRAM を少しだけ使って残りは RAM」も測ったが成立しなかった。FLUX.2 Klein 4B /
+# 1024² で、group offload の粒度をどれだけ細かくしても VRAM の山は 8.3GB より
+# 下がらず（blocks=4: 9.6GB, blocks=2: 8.6GB, blocks=1: 8.3GB）、時間だけが
+# 18秒→33秒に伸びた。device_map="balanced" + max_memory は複数 GPU 用で、CPU と
+# 混ぜると推論時に device 不一致で落ちる（2026-09-05 実測）。
+#
+# 空にすると minimum_bytes を宣言しなくなり、broker から見た下限が「全常駐量」に
+# なる。入らなければ broker は LLM へ退去を頼み、断られればこの要求は待つ。
+# 中途半端な枠で CPU へ落ちるより、退くのを待つほうが速い。
+CPU_CAPABLE_ADAPTERS: frozenset[str] = frozenset()
 
 
 def runs_on_cpu(runtime_adapter: str) -> bool:
