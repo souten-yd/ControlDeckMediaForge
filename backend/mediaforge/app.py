@@ -579,7 +579,6 @@ def create_app(
             path,
             media_type="text/javascript",
             headers={
-                "Access-Control-Allow-Origin": "*",
                 "Cross-Origin-Resource-Policy": "cross-origin",
                 "Cache-Control": "public, max-age=31536000, immutable",
                 "X-Content-Type-Options": "nosniff",
@@ -593,7 +592,6 @@ def create_app(
             FRONTEND_DIR / "blender-rfb-loader.js",
             media_type="text/javascript",
             headers={
-                "Access-Control-Allow-Origin": "*",
                 "Cross-Origin-Resource-Policy": "cross-origin",
                 "Cache-Control": "public, max-age=31536000, immutable",
                 "X-Content-Type-Options": "nosniff",

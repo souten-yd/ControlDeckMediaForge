@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-8 opaque iframe CORS authority
+
+branch `ux1/3d-web-client-cors-header`。PR #242はmerge commit
+`0fbed474262111836fa1bd25b2ca19a41a74aef2`でmergedし、正式v0.28.13を公開・標準updateした。正式bundleは
+31,617,052 B / SHA-256 `57be1e3fb1b740515cb40f40ec1f09d67a2ac4444c40051699e098b014e43c8a`、公開再取得hash一致。
+updateは10.54秒 / 最大RSS 788,980 KiB、health healthy。
+
+credentialed loaderで認証は通ったが、Media Forgeの`Access-Control-Allow-Origin: *`とHostがopaque frameへ付ける
+`Access-Control-Allow-Origin: null`が同じresponseに残り、Chromeが`multiple values '*, null'`で拒否した。
+private noVNC/loader routeからorigin authorityを除き、利用者認証とframe originを知るHostだけにCORS判断を任せる。
+standaloneはsame-originのため追加header不要。版は0.28.14。focused Media Forge群とHost opaque subresource回帰1件は
+PASS。exact head `./mf.sh test`は979件 / warning 1件 / 99.40秒PASS。candidate bundleは31,619,226 B / SHA-256
+`17a28d98ffe8cd3afaf71b8b8e66aea902675f423708db00602b45f366d7ab42`、展開binary doctorは
+`ok / 0.28.14 / packaged=true`。PR/release/installed再実測は未実施。
+
 ## 2026-09-06 3DS-8 opaque iframe noVNC module loading
 
 branch `ux1/3d-web-client-cors`。正式v0.28.12を実ControlDeckへ標準updateし、10.56秒 / 最大RSS

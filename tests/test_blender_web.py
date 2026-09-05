@@ -241,7 +241,7 @@ def test_client_file_serves_only_pinned_javascript_and_rechecks_hash(tmp_path: P
     assert tampered.value.code == "blender_web_client_unavailable"
 
 
-def test_private_client_route_is_cors_readable_immutable_and_not_public(tmp_path: Path) -> None:
+def test_private_client_route_defers_frame_cors_and_is_immutable(tmp_path: Path) -> None:
     manifest, contents = fixture_manifest(tmp_path)
     store = Store(tmp_path / "data")
     store.initialize()
@@ -270,13 +270,13 @@ def test_private_client_route_is_cors_readable_immutable_and_not_public(tmp_path
         response = client.get("/blender-web-client/core/rfb.js")
         assert response.status_code == 200
         assert response.content == b"export default class RFB {}\n"
-        assert response.headers["access-control-allow-origin"] == "*"
+        assert "access-control-allow-origin" not in response.headers
         assert response.headers["cross-origin-resource-policy"] == "cross-origin"
         assert response.headers["cache-control"].endswith("immutable")
         loader = client.get("/blender-rfb-loader.js")
         assert loader.status_code == 200
         assert b'import RFB from "./blender-web-client/core/rfb.js"' in loader.content
-        assert loader.headers["access-control-allow-origin"] == "*"
+        assert "access-control-allow-origin" not in loader.headers
         assert loader.headers["cross-origin-resource-policy"] == "cross-origin"
         assert client.get("/blender-web-client/package.json").status_code == 404
         assert "/blender-web-client" not in client.get("/openapi.json").text
