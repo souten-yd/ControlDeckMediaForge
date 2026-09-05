@@ -8477,3 +8477,33 @@ OpenAPIの`/workspace-api` path 0。別uploadは524,288 B受信後にcancelし�
 exact code headの`./mf.sh test`は920 passed / 既知Starlette warning 1件 / 85.02秒。browser UI、packaged
 bundle、実ControlDeck opaque iframeは **NOT IMPLEMENTED / NOT TESTED**。ControlDeck変更は0件。次は
 backup/restore browser UIを独立PRにする。
+
+## 2026-09-06 — 3DS-4c browser backup / restore UI
+
+Branch `ux1/3d-scene-backup-ui`。選択したsceneのexact backupをprivate transportから512 KiBずつ読み、
+browser側でも総SHA-256とbyte数を検査して`.zip`として保存する。復元はfile全体を一括読込せずsliceごとに
+SHA-256を計算し、同じ512 KiB単位で送信してからserver側の全revision/file検証とatomic restoreを呼ぶ。
+2 GiB上限、import/download/restoreの相互排他、途中cancel、Host `disable.pending`、日英再描画、
+standalone private mirrorを実装した。入力/応答にserver pathを追加せず、公開OpenAPI、Agent tool、workflow
+executor、addon contributionは変更していない。bundle identityは0.28.1へ更新した。
+
+3DS-4bの実Blender 4.5.9由来2 revision sceneを隔離data rootの実Uvicorn `127.0.0.1:9175`と実Chromeで
+操作した。backupは1,225,331 B / SHA-256
+`ee9996ad02530c300c7b6e28ad46d33d6ac628b062ceb34b72d9b8ced4dd36ba`、download 0.220815秒、restore
+0.175584秒。download/upload各3 chunk、最大upload request 699,218 Bで、scene 3→4、復元revision 2。
+別restoreは最初の524,288 Bをserverが受けた状態で中止し、scene 4のまま、transfer staging 0。
+日本語完了、英語再描画/中止、320pxでviewport/document/client各320と単一列を確認し、JS heap増分
+2,591,176 B、console/page error 0だった。
+
+`./mf.sh bundle build 0.28.1`は31,429,467 B、SHA-256
+`25486a75002e70641e26318b4df9dfa14eb16e945f4994359288501c9499c2ef`。展開binaryのdoctorは
+`ok / 0.28.1 / packaged=true`。同binaryの実process `127.0.0.1:9176`でも1,225,378 Bを3 chunkで
+download 0.222907秒、restore 0.192467秒、復元revision 2、cancel後scene増分0、staging 0、320px横overflow
+0、console/page error 0だった。最初のpackage browser呼出しはscriptのport指定方法を取り違えて停止済み
+9175へ接続し、`ERR_CONNECTION_REFUSED`で終了したため受入には数えていない。
+
+focused scene/frontend/transport 239件とexact code headの`./mf.sh test`は921 passed / 既知Starlette
+warning 1件 / 83.09秒。稼働ControlDeckは0.28.0 / healthyであることをread-only確認した。既存browser
+sessionの一時copyはloginへ遷移し、0.28.1をinstalled状態にしていないため実ControlDeck opaque iframeは
+**NOT TESTED**。一時profileはtrashへ退避し、ControlDeck source/service/installed filesは変更0。
+3DS-4のsource/package経路を完了し、次は3DS-5 Web Blender、installed release通し受入は3DS-8で行う。

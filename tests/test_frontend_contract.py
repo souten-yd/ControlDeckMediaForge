@@ -77,6 +77,8 @@ DOM_IDS = (
     "scene-studio", "scene-import-form", "scene-import-file", "scene-import-name",
     "scene-import-submit", "scene-import-cancel", "scene-import-progress", "scene-import-status",
     "scene-list", "scene-list-count", "scene-list-refresh", "scene-detail", "scene-revisions",
+    "scene-backup-tools", "scene-restore-file", "scene-restore-submit", "scene-backup-download",
+    "scene-backup-cancel", "scene-backup-progress", "scene-backup-status",
     "detail-dialog",
     "model-storage", "model-filters", "model-management-note", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
@@ -452,6 +454,41 @@ def test_scene_studio_lists_immutable_revisions_and_reuses_the_3d_viewer():
     assert "openViewer(" in preview
     assert '#app[data-create-media="3d"] #scene-studio' in STYLES
     assert "@media (max-width: 760px)" in STYLES
+
+
+def test_scene_backup_ui_streams_exact_bytes_and_has_standalone_parity():
+    assert 'accept=".zip,application/zip"' in MARKUP
+    assert "const SCENE_BACKUP_MAX_BYTES = 2 * 1024 * 1024 * 1024;" in SCRIPT
+    backup = SCRIPT[
+        SCRIPT.index("async function sceneBackupFileHash"):SCRIPT.index("/* ── library")
+    ]
+    for method in (
+        "scenes.backup.open",
+        "scenes.backup.read",
+        "scenes.backup.close",
+        "scenes.restore.begin",
+        "scenes.restore.chunk",
+        "scenes.restore.commit",
+        "scenes.restore.cancel",
+    ):
+        assert method in backup
+    assert "new ReadableStream" in backup and "new Response(stream" in backup
+    assert "hash.hex() !== opened.sha256" in backup
+    assert "file.slice(" in backup and "file.arrayBuffer(" not in backup
+    assert "anchor.download" in backup and "URL.revokeObjectURL" in backup
+    for forbidden in ("path:", "file.path", "runtime_path", "working_path"):
+        assert forbidden not in backup
+    standalone = SCRIPT[SCRIPT.index("async function standaloneCall"):SCRIPT.index("async function call(")]
+    for path in (
+        "/backup/open",
+        "/workspace-api/scenes/backups/",
+        "/workspace-api/scenes/restore/begin",
+        "/workspace-api/scenes/restore/chunk",
+        "/workspace-api/scenes/restore/commit",
+        "/workspace-api/scenes/restore/cancel",
+    ):
+        assert path in standalone
+    assert 'if (state.sceneBackup?.phase !== "validating") void cancelSceneBackup();' in SCRIPT
 
 
 # 失敗コードは複数の形で書かれる: HTTPException の detail、WorkerFailure の第 1 引数、

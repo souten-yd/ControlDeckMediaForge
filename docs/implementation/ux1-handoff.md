@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-4c browser backup / restore UI
+
+Branch `ux1/3d-scene-backup-ui`。3DS-4c private transportを使い、選択sceneのbackupを512 KiBずつ
+読みながらSHA-256を再計算して`.zip`保存し、復元fileも全体SHA-256をincremental計算して512 KiBずつ
+送るUIを追加した。2 GiB上限、download/restore/importの相互排他、cancel、`disable.pending`、日英、
+standalone mirrorを扱い、pathはbrowserとの契約へ追加していない。版は0.28.1。
+
+実Chrome/sourceで実Blender由来2 revision sceneを1,225,331 B、packaged 0.28.1で1,225,378 BのZIPとして
+各3 chunkで保存・復元した。sourceはdownload 0.220815秒 / restore 0.175584秒、packageは0.222907秒 /
+0.192467秒。両runで復元revision 2、cancel後scene増分0、transfer staging 0、console/page error 0。
+320pxはscroll/clientとも320、単一列。packageは31,429,467 B、SHA-256
+`25486a75002e70641e26318b4df9dfa14eb16e945f4994359288501c9499c2ef`、doctorは0.28.1 / packaged=true。
+fullは921 passed / 1 warning / 83.09秒。
+
+稼働ControlDeckはinstalled 0.28.0 / healthy。既存browser sessionの一時copyはloginへ遷移したため、
+0.28.1 installed opaque iframeは **NOT TESTED**。一時profileはtrashへ退避し、ControlDeck source/service/
+installed filesは変更0。PR/merge後は3DS-5 Web Blender、installed releaseは3DS-8で通し確認する。
+
 ## 2026-09-05 3DS-4c private backup transport
 
 PR #229、branch `ux1/3d-scene-backup-transport`、実装commit `d159731`。認証WSとstandalone private mirrorへ
