@@ -334,15 +334,17 @@ def _descriptor(runtime_adapter: str, host_resident_bytes: int | None = None) ->
     )
 
 
-def test_a_cpu_capable_model_offers_ram_as_a_second_place():
-    """順序が「空いていれば VRAM、無ければ RAM」を表す。
+def test_no_image_model_offers_ram_as_a_second_place():
+    """画像生成は RAM を second place にしない。
 
     host は opt-in で、挙げなければ VRAM だけが候補になる
-    （docs/design-ai-resource-broker.md §0）。
+    （docs/design-ai-resource-broker.md §0）。挙げないのは、RAM 配置の実行が
+    実測で 1 枚 100 秒（GPU 3.5 秒の 28 倍）で、待つより LLM を退けたほうが
+    速いためである。
     """
-    payload = image_model_request("job_123", _descriptor("diffusers.flux2-klein"))
-
-    assert payload["preferred_devices"] == ["gpu0", "host"]
+    for adapter in ("diffusers.flux2-klein", "diffusers.sdxl", "diffusers.sdxl-single-file"):
+        payload = image_model_request("job_123", _descriptor(adapter))
+        assert payload["preferred_devices"] == [], adapter
 
 
 def test_a_gpu_only_model_does_not_ask_for_ram():
@@ -358,19 +360,17 @@ def test_generation_shares_the_device_with_the_llm():
     assert fake_image_request("job_123", runtime_sec=1)["compute_mode"] == "shared-safe"
 
 
-def test_ram_placement_declares_what_it_actually_costs():
-    """VRAM の見積りを RAM に当てない。
+def test_a_measured_ram_figure_is_still_not_sent_for_image_models():
+    """RAM の実測値を持っていても、host を挙げない以上は送らない。
 
-    vram は device_map で段階的に載せるときの GPU 側ピークで、RAM 配置の実態とは
-    別物である。実測: FLUX.2 Klein 4B は vram 31.1GB の申告に対し CPU 実行の RSS が
-    18.8GB（1024x1024/4歩、2026-09-04）。VRAM の数字を当てると、30GB の機械では
-    host が永久に grant されない。
+    host を挙げない要求に host_bytes を付けると broker に 422 で拒否される。
     """
     payload = image_model_request(
         "job_123", _descriptor("diffusers.flux2-klein", host_resident_bytes=19_209_719_808)
     )
 
-    assert payload["host_bytes"] == 19_209_719_808 + payload["vram"]["headroom_bytes"]
+    assert "host_bytes" not in payload
+    assert payload["preferred_devices"] == []
 
 
 def test_an_unmeasured_model_does_not_guess_what_ram_costs():
@@ -378,7 +378,7 @@ def test_an_unmeasured_model_does_not_guess_what_ram_costs():
     payload = image_model_request("job_123", _descriptor("diffusers.flux2-klein"))
 
     assert "host_bytes" not in payload
-    assert payload["preferred_devices"] == ["gpu0", "host"]
+    assert payload["preferred_devices"] == []
 
 
 def test_a_gpu_only_model_never_declares_a_ram_figure():
@@ -391,19 +391,23 @@ def test_a_gpu_only_model_never_declares_a_ram_figure():
     assert "host_bytes" not in payload
 
 
-def test_the_floor_is_not_declared_per_model():
-    """モデルごとに下限を宣言しない。
+def test_image_models_ask_for_the_whole_card_or_wait():
+    """画像生成は切り詰めた枠を受け取らない。
 
-    宣言すると、測っていないモデルは枠を貸してもらえず、測った値が少しでも
-    足りなければそのモデルだけ突然使えなくなる。実際 FLUX.2 Klein 4B で 1 枚ぶんの
-    実測 8GiB を宣言したところ、連続生成の 2 枚目が OOM した（2026-09-05）。
-    必要量は解像度・枚数・参照画像で変わるので、事前に 1 つの数字で言い当てられない。
+    下限を宣言すると broker は「その額なら置ける」と判断して貸してしまう。実際
+    6.7GB を渡され、cpu_offload に要る 8.5GB に届かず CPU 実行へ落ちて、4 枚に
+    20 分かけた末に打ち切られた（2026-09-05）。宣言しなければ下限は全常駐量に
+    なり、入らなければ broker が LLM へ退去を頼む。CPU で 28 倍の時間をかけるより、
+    退くのを待つほうが速い。
+
+    host も候補にしない。VRAM を少しだけ使って残りを RAM に置く形は、group offload
+    の粒度を変えても VRAM の山が 8.3GB より下がらず成立しなかった。
     """
-    from mediaforge.host.resources import MINIMUM_USABLE_VRAM_BYTES
-
     for adapter in ("diffusers.flux2-klein", "diffusers.sdxl", "diffusers.sdxl-single-file"):
         payload = image_model_request("job_123", _descriptor(adapter))
-        assert payload["vram"]["minimum_bytes"] == MINIMUM_USABLE_VRAM_BYTES, adapter
+        assert "minimum_bytes" not in payload["vram"], adapter
+        assert payload["preferred_devices"] == [], adapter
+        assert "host_bytes" not in payload, adapter
 
 
 def test_a_gpu_only_model_declares_no_floor():

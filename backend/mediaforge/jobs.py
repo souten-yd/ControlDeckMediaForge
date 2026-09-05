@@ -84,10 +84,12 @@ OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 
 
 # 枠が足りなかったときに落とす順。RAM のみは VRAM の空きに左右されない。
+# 枠に負けたときに落とす先。cpu は入れない。CPU 実行は 28 倍遅く、待ち時間内に
+# 終わらないまま資源だけ使う（実測: 4枚で 20 分かけて打ち切られた）。
+# cpu_offload でも駄目なら、枠が足りていないということなので失敗させて broker へ返す。
 _LIGHTER_MODE = {
     "direct_device_map": "cpu_offload",
     "full_device": "cpu_offload",
-    "cpu_offload": "cpu",
 }
 
 
