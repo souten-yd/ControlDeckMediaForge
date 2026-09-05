@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3DS-4c private backup transport
+
+PR #229、branch `ux1/3d-scene-backup-transport`、実装commit `d159731`。認証WSとstandalone private mirrorへ
+backup open/read/close、restore begin/chunk/commit/cancelを追加した。connection-scoped各1件、512 KiB、
+10分activity TTL、chunk/total SHAとoffsetを強制し、切断/shutdownでstagingを回収する。公開契約変更0。
+
+実Uvicornで実Blender由来2 revisionを1,225,070 Bへexportし、download/upload各3 chunkでscene 1→2へ
+restore。open 0.120567秒、upload+commit 0.045491秒、最大JSON 699,218 B、path field 0、cancel後/停止後
+staging 0。初回実測で1 MiB誤配線を検出し512 KiBへ修正・契約test追加済み。fullは920 passed / 1 warning /
+85.02秒。隔離起動で生じた983 MiB部分runtimeはtrashへ退避し、元checkout/service変更0。
+
+browser/package/実ControlDeckは **NOT IMPLEMENTED / NOT TESTED**、ControlDeck変更0。次は別PRで
+backup/restore browser UIを実装する。
+
 ## 2026-09-05 3DS-4c exact scene backup core
 
 PR #228、branch `ux1/3d-scene-backup`、実装commit `175ea31`。`media-forge.scene-backup@1`の固定entry順、

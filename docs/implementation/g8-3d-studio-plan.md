@@ -1,6 +1,6 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: 3DS-0〜3、3DS-4a、4b、4c backup core VERIFIED / 次はbackup transport/UI
+Status: 3DS-0〜3、3DS-4a、4b、4c backup core/transport VERIFIED / 次はbackup UI
 Date: 2026-09-05  
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
@@ -16,7 +16,7 @@ G9生成3Dモデル採用とは分離し、画像生成モデルの変更やSoni
 [`3ds-compatibility.md`](3ds-compatibility.md) に固定した。
 3DS-1は同表へruntime resolver、legacy登録、設定診断、G8同一hashの実測を追記した。
 scene/revision/working copyへ進んだ。3DS-4a persistence、3DS-4b core/transport/browser UI、3DS-4c
-exact backup coreまで完了し、次はowner-scoped private transport/browser UIを独立PRにする。
+exact backup core/private transportまで完了し、次はbrowser UIを独立PRにする。
 
 | 項目 | 調査で確認した現状 | 追加するもの |
 |---|---|---|
@@ -62,7 +62,8 @@ scene/revision/working copyへ進む。
 | ux1/3d-scene-revisions | scene table/migration、immutable revision、依存、optimistic commit |
 | ux1/3d-scene-working-copy | bounded .blend import、single-writer working copy、実Blender検査/保存 |
 | ux1/3d-scene-backup | exact backup/restore core、missing/tamper/partial失敗、旧版保持 |
-| ux1/3d-scene-backup-ui | owner-scoped private upload/download transport、browser backup/restore UI |
+| ux1/3d-scene-backup-transport | owner-scoped private upload/download transport、切断回収 |
+| ux1/3d-scene-backup-ui | browser backup download/restore upload UI、実Chrome/opaque iframe |
 | ux1/3d-web-blender | 1 session software GUI起動/入力/保存/終了、OS隔離 |
 | ux1/3d-session-recovery | 切断/再認証/idle/crash/Host disable |
 | ux1/3d-texture-binding | 既存画像の材質割当て→revision |

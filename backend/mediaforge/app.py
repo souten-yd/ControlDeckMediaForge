@@ -111,6 +111,7 @@ from .models.generation_defaults import (
 from .paths import contained
 from .prompt_recipes import H3PromptRecipe, PromptRecipeError, PromptRecipeRequest
 from .profiles import ProfileInput, ReferenceCollectionInput
+from .scene_backup_transport import SceneBackupSession
 from .scenes import SceneCatalog, SceneError
 from .scene_workspace import SceneWorkspace
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
@@ -215,6 +216,7 @@ def create_app(
     store = Store(resolved.data_dir)
     scenes = SceneCatalog(store)
     standalone_model_viewer = ModelViewerSession(store)
+    standalone_scene_backups = SceneBackupSession(store)
     host = host_client or ControlDeckHostClient(
         resolved.control_deck_url,
         timeout_sec=resolved.host_request_timeout_sec,
@@ -457,6 +459,7 @@ def create_app(
     async def lifespan(_: FastAPI):
         store.initialize()
         scene_workspace.initialize()
+        standalone_scene_backups.initialize()
         await manager.start()
         await blender_runtime_operations.start()
         if model_operations is not None:
@@ -474,6 +477,7 @@ def create_app(
         await blender_runtime_operations.stop()
         await manager.stop()
         await asyncio.to_thread(standalone_model_viewer.cleanup)
+        await asyncio.to_thread(standalone_scene_backups.shutdown_cleanup)
         await host.close()
 
     app = FastAPI(title="ControlDeck Media Forge", version=__version__, lifespan=lifespan)
@@ -486,6 +490,7 @@ def create_app(
     app.state.store = store
     app.state.scenes = scenes
     app.state.scene_workspace = scene_workspace
+    app.state.scene_backups = standalone_scene_backups
     app.state.jobs = manager
     app.state.job_events = events
     app.state.model_operations = model_operations
@@ -2392,6 +2397,7 @@ def create_app(
         uploads: dict[str, dict[str, Any]] = {}
         scene_upload_ids: set[str] = set()
         model_viewer = ModelViewerSession(store)
+        scene_backups = SceneBackupSession(store)
         subscription = events.subscribe(asyncio.get_running_loop())
         sender = asyncio.create_task(push_job_events(websocket, subscription))
         model_subscription = model_events.subscribe(asyncio.get_running_loop())
@@ -3056,6 +3062,82 @@ def create_app(
                         result = await scene_workspace.commit_working_copy(
                             preferences.subject_of(identity), str(params.get("working_id", ""))
                         )
+                    elif method == "scenes.backup.open":
+                        if set(params) != {"scene_id"}:
+                            raise ValueError("scene backup open accepts only scene_id")
+                        result = await asyncio.to_thread(
+                            scene_backups.open_download,
+                            preferences.subject_of(identity),
+                            str(params.get("scene_id", "")),
+                        )
+                    elif method == "scenes.backup.read":
+                        if not {"handle", "offset"} <= set(params) or set(params) - {
+                            "handle",
+                            "offset",
+                            "length",
+                        }:
+                            raise ValueError(
+                                "scene backup read accepts handle, offset, and length"
+                            )
+                        result = await asyncio.to_thread(
+                            scene_backups.read_download,
+                            preferences.subject_of(identity),
+                            str(params.get("handle", "")),
+                            params.get("offset"),
+                            params.get("length", 512 * 1024),
+                        )
+                    elif method == "scenes.backup.close":
+                        if set(params) != {"handle"}:
+                            raise ValueError("scene backup close accepts only handle")
+                        result = {
+                            "closed": await asyncio.to_thread(
+                                scene_backups.close_download,
+                                preferences.subject_of(identity),
+                                str(params.get("handle", "")),
+                            )
+                        }
+                    elif method == "scenes.restore.begin":
+                        if set(params) != {"size", "sha256"}:
+                            raise ValueError("scene restore begin accepts size and sha256")
+                        result = scene_backups.begin_restore(
+                            preferences.subject_of(identity),
+                            size=params.get("size"),
+                            sha256=params.get("sha256"),
+                        )
+                    elif method == "scenes.restore.chunk":
+                        if set(params) != {"upload_id", "offset", "sha256", "base64"}:
+                            raise ValueError("scene restore chunk fields differ")
+                        encoded = params.get("base64")
+                        if not isinstance(encoded, str) or len(encoded) > 700_000:
+                            raise ValueError("scene restore chunk encoding is invalid")
+                        try:
+                            content = base64.b64decode(encoded, validate=True)
+                        except ValueError as exc:
+                            raise ValueError("scene restore chunk is not valid base64") from exc
+                        result = scene_backups.append_restore(
+                            preferences.subject_of(identity),
+                            str(params.get("upload_id", "")),
+                            params.get("offset"),
+                            content,
+                            params.get("sha256"),
+                        )
+                    elif method == "scenes.restore.commit":
+                        if set(params) != {"upload_id"}:
+                            raise ValueError("scene restore commit accepts only upload_id")
+                        result = await asyncio.to_thread(
+                            scene_backups.commit_restore,
+                            preferences.subject_of(identity),
+                            str(params.get("upload_id", "")),
+                        )
+                    elif method == "scenes.restore.cancel":
+                        if set(params) != {"upload_id"}:
+                            raise ValueError("scene restore cancel accepts only upload_id")
+                        result = {
+                            "canceled": scene_backups.cancel_restore(
+                                preferences.subject_of(identity),
+                                str(params.get("upload_id", "")),
+                            )
+                        }
                     elif method == "workspace.session":
                         # 状態の正はサーバにある。boot も更新もこの 1 メソッドで足りる。
                         result = await session_snapshot(
@@ -3328,6 +3410,7 @@ def create_app(
                 except SceneError:
                     continue
             await asyncio.to_thread(model_viewer.cleanup)
+            await asyncio.to_thread(scene_backups.cleanup)
 
     @app.post("/workspace-api/jobs/clear", include_in_schema=False)
     async def standalone_clear_jobs() -> dict[str, Any]:
@@ -3428,6 +3511,131 @@ def create_app(
             ).model_dump(mode="json")
         except SceneError as exc:
             raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
+
+    @app.post("/workspace-api/scenes/{scene_id}/backup/open", include_in_schema=False)
+    async def standalone_scene_backup_open(scene_id: str) -> dict[str, Any]:
+        try:
+            return await asyncio.to_thread(
+                standalone_scene_backups.open_download,
+                preferences.STANDALONE_SUBJECT,
+                scene_id,
+            )
+        except SceneError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
+
+    @app.post("/workspace-api/scenes/backups/{handle}/read", include_in_schema=False)
+    async def standalone_scene_backup_read(
+        handle: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) - {"offset", "length"} or "offset" not in payload:
+                raise SceneError("scene_backup_range_invalid", "scene backup read fields differ")
+            return await asyncio.to_thread(
+                standalone_scene_backups.read_download,
+                preferences.STANDALONE_SUBJECT,
+                handle,
+                payload.get("offset"),
+                payload.get("length", 512 * 1024),
+            )
+        except SceneError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
+
+    @app.post("/workspace-api/scenes/backups/{handle}/close", include_in_schema=False)
+    async def standalone_scene_backup_close(handle: str) -> dict[str, bool]:
+        return {
+            "closed": await asyncio.to_thread(
+                standalone_scene_backups.close_download,
+                preferences.STANDALONE_SUBJECT,
+                handle,
+            )
+        }
+
+    @app.post("/workspace-api/scenes/restore/begin", include_in_schema=False)
+    async def standalone_scene_restore_begin(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"size", "sha256"}:
+                raise SceneError(
+                    "scene_backup_upload_invalid", "scene restore declaration fields differ"
+                )
+            return standalone_scene_backups.begin_restore(
+                preferences.STANDALONE_SUBJECT,
+                size=payload.get("size"),
+                sha256=payload.get("sha256"),
+            )
+        except SceneError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
+
+    @app.post("/workspace-api/scenes/restore/chunk", include_in_schema=False)
+    async def standalone_scene_restore_chunk(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"upload_id", "offset", "sha256", "base64"}:
+                raise SceneError(
+                    "scene_backup_chunk_invalid", "scene restore chunk fields differ"
+                )
+            encoded = payload.get("base64")
+            if not isinstance(encoded, str) or len(encoded) > 700_000:
+                raise SceneError(
+                    "scene_backup_chunk_invalid", "scene restore chunk encoding is invalid"
+                )
+            content = base64.b64decode(encoded, validate=True)
+            return standalone_scene_backups.append_restore(
+                preferences.STANDALONE_SUBJECT,
+                str(payload.get("upload_id", "")),
+                payload.get("offset"),
+                content,
+                payload.get("sha256"),
+            )
+        except (SceneError, ValueError) as exc:
+            code = getattr(exc, "code", "scene_backup_chunk_invalid")
+            raise HTTPException(
+                status_code=422, detail={"code": code, "message": str(exc)}
+            ) from exc
+
+    @app.post("/workspace-api/scenes/restore/commit", include_in_schema=False)
+    async def standalone_scene_restore_commit(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"upload_id"}:
+                raise SceneError(
+                    "scene_backup_upload_invalid", "scene restore commit fields differ"
+                )
+            return await asyncio.to_thread(
+                standalone_scene_backups.commit_restore,
+                preferences.STANDALONE_SUBJECT,
+                str(payload.get("upload_id", "")),
+            )
+        except SceneError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
+
+    @app.post("/workspace-api/scenes/restore/cancel", include_in_schema=False)
+    async def standalone_scene_restore_cancel(payload: dict[str, Any]) -> dict[str, bool]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"upload_id"}:
+                raise SceneError(
+                    "scene_backup_upload_invalid", "scene restore cancel fields differ"
+                )
+            return {
+                "canceled": standalone_scene_backups.cancel_restore(
+                    preferences.STANDALONE_SUBJECT,
+                    str(payload.get("upload_id", "")),
+                )
+            }
+        except SceneError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
 
     @app.post("/workspace-api/scenes/working/{working_id}", include_in_schema=False)
     async def standalone_scene_working_action(
