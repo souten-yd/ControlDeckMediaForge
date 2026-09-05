@@ -8282,7 +8282,7 @@ WebGLは`WebGL 2.0 (OpenGL ES 3.0 Chromium)`、rendererは
 43.995 px。最終runのcold 89.155 ms、warm 63.734〜68.990 ms、5回close後heap増分450,592 B、
 5 context解放、console/page error 0。
 
-`./mf.sh test`は891 passed / 既知Starlette warning 1件 / 71.66秒。PyInstaller 6.22.0の候補
+`./mf.sh test`は891 passed / 既知Starlette warning 1件 / 68.16秒。PyInstaller 6.22.0の候補
 0.27.0 bundleは31,346,609 B / SHA-256
 `a0b24e41e7af790e6dbc1993c6655e13a88cf03122b85f4b8abaa2a820b9cd78`。packaged doctorは
 `ok / 0.27.0 / packaged=true`、packaged process `127.0.0.1:9168`はviewer module 643,367 B /
