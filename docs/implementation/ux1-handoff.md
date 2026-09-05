@@ -5,6 +5,7 @@
 
 ## 2026-09-05 3DS-2a durable Blender install / cancel / restart
 
+PR #216、実装commit `48ac9c9d3d3542a93b547ad64b3c2d79d4099bfc`。
 `ux1/3d-runtime-install`でBlender専用journal/manager、trusted catalog限定download、size/hash/archive
 検証、atomic install、probe、opaque登録、cancel、Range/ETag restart、private transport、Settings
 進捗を実装した。正規377,929,956 B archiveのclean installは25.659秒、managed 1,605,023,227 B、

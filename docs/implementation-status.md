@@ -8117,6 +8117,7 @@ Python compileall、frontend JavaScript構文、shell構文、Markdown相対link
 
 ## 2026-09-05 — 3DS-2a durable Blender install / cancel / restart
 
+PR #216、実装commit `48ac9c9d3d3542a93b547ad64b3c2d79d4099bfc`。
 Blender専用のdurable operation table/type/managerを追加した。ブラウザ入力はtrusted catalogの
 install、またはopaque operation IDのcancelだけで、URL/path/version/executable/commandを受けない。
 exact archive size/SHA-256、member数、展開size、traversal、link、device/FIFO、空き容量、実Blender
