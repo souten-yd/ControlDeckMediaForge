@@ -82,6 +82,14 @@ OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 
 
 
+# 枠が足りなかったときに落とす順。RAM のみは VRAM の空きに左右されない。
+_LIGHTER_MODE = {
+    "direct_device_map": "cpu_offload",
+    "full_device": "cpu_offload",
+    "cpu_offload": "cpu",
+}
+
+
 def _full_residency_bytes(model: ModelDescriptor) -> int:
     """全部 VRAM に載せるのに要る量。要求で申告している値と同じ勘定にする。"""
     peak = max(
@@ -182,6 +190,8 @@ class JobManager:
         # 選択の根拠。provenance と UI に「なぜこのモデルか」を出すために持つ。
         self._routes: dict[str, ModelRoute] = {}
         self._admission_floor_bytes: dict[str, int] = {}
+        # 枠が足りずに落とした job。1 段だけ落として走り直す。
+        self._downgraded: dict[str, str] = {}
         self._execution_guard = asyncio.Semaphore(1)
         self._stopping = False
 
@@ -317,6 +327,7 @@ class JobManager:
             self._host_executions.pop(job_id, None)
             self._host_failures.pop(job_id, None)
             self._selected_models.pop(job_id, None)
+            self._downgraded.pop(job_id, None)
             self._routes.pop(job_id, None)
             self._job_tasks.pop(job_id, None)
             self._queue.task_done()
@@ -1620,6 +1631,12 @@ class JobManager:
             return "cpu_offload"
         return selected.device_mode
 
+    def _resolved_device_mode(
+        self, job_id: str, selected: ModelDescriptor, execution: HostExecution | None
+    ) -> str:
+        """一度枠に負けた job は、落とした載せ方のまま走らせる。"""
+        return self._downgraded.get(job_id) or self._device_mode(selected, execution)
+
     async def _execute_worker(
         self,
         job_id: str,
@@ -1655,7 +1672,7 @@ class JobManager:
                     "license": selected.license,
                     "runtime_adapter": selected.runtime_adapter,
                     "runtime_options": {
-                        "device_mode": self._device_mode(selected, execution),
+                        "device_mode": self._resolved_device_mode(job_id, selected, execution),
                         "disable_mmap": selected.disable_mmap,
                         # 系統ごとの既定。持たないモデルには送らない。
                         **({"negative_prompt": selected.negative_prompt}
@@ -1834,6 +1851,18 @@ class JobManager:
                 error_code = str(detail.get("code", "worker_error"))
                 if error_code == "resource_oom":
                     self._record_oom(selected)
+                    lighter = _LIGHTER_MODE.get(payload["model"]["runtime_options"]["device_mode"])
+                    if lighter is not None and not self._downgraded.get(job_id):
+                        # 枠が足りなかった。必要量は解像度・枚数・参照画像で変わる
+                        # ので、事前に言い当てられない。落ちたら軽い載せ方で
+                        # 走り直す。RAM のみなら VRAM の空きに左右されない。
+                        self._downgraded[job_id] = lighter
+                        await self._retire_warm_worker()
+                        await self._update(job_id, reporter, phase="generating", progress=0.06)
+                        await self._execute_worker(
+                            job_id, reporter, execution=execution, maintenance=maintenance
+                        )
+                        return
                 await self._update(
                     job_id,
                     reporter,

@@ -7995,3 +7995,37 @@ LLM が居なければ従来どおり全常駐で最速になる。速度を落�
 そもそも走れない場合だけである。
 
 `./mf.sh test` 846 passed。
+
+## 空いているぶんを使う（モデルごとの下限をやめる）
+
+`measurements.minimum_vram_bytes` を撤回した。モデル固有の値を宣言すると、測って
+いないモデルは枠を貸してもらえず、測った値が少しでも足りなければ**そのモデルだけ
+突然使えなくなる**。実際 FLUX.2 Klein 4B で 1 枚ぶんの実測 8 GiB を宣言したところ、
+連続生成の 2 枚目が OOM した。
+
+```text
+枠  7.92 GiB   1枚目 成功（ピーク 7.83）→ 2枚目 resource_oom
+枠 10.44 GiB   4 枚とも成功  22.05 / 35.23 / 5.36 / 5.17 秒
+```
+
+必要量は解像度・枚数・参照画像で変わるので、事前に 1 つの数字で言い当てられない。
+`PYTORCH_HIP_ALLOC_CONF=expandable_segments:True` でも改善しなかったので、断片化では
+なく offload の残留分である。
+
+代わりに「これ未満では何をやっても動かない」線（2 GiB）だけを共通で置き、足りるか
+どうかは実行が決める。外したら軽い載せ方へ落として走り直す。
+
+```text
+direct_device_map  →  cpu_offload  →  cpu（RAM のみ）
+```
+
+実機で確認（2026-09-05、llama-server 常駐のまま）:
+
+```text
+枠 2GiB / cpu_offload   resource_oom（worker だけが落ちる）
+降格して cpu            成功 105.45 秒
+llama-server            22.95 GB を保持したまま無傷
+```
+
+RAM のみなら VRAM の空きに左右されないので、必ずどこかで着地する。broker も
+`residency_key` ごとに OOM 後の下限を学習する（`oom_recommendation`）。

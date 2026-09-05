@@ -389,3 +389,25 @@ def test_a_gpu_only_model_never_declares_a_ram_figure():
     )
 
     assert "host_bytes" not in payload
+
+
+def test_the_floor_is_not_declared_per_model():
+    """モデルごとに下限を宣言しない。
+
+    宣言すると、測っていないモデルは枠を貸してもらえず、測った値が少しでも
+    足りなければそのモデルだけ突然使えなくなる。実際 FLUX.2 Klein 4B で 1 枚ぶんの
+    実測 8GiB を宣言したところ、連続生成の 2 枚目が OOM した（2026-09-05）。
+    必要量は解像度・枚数・参照画像で変わるので、事前に 1 つの数字で言い当てられない。
+    """
+    from mediaforge.host.resources import MINIMUM_USABLE_VRAM_BYTES
+
+    for adapter in ("diffusers.flux2-klein", "diffusers.sdxl", "diffusers.sdxl-single-file"):
+        payload = image_model_request("job_123", _descriptor(adapter))
+        assert payload["vram"]["minimum_bytes"] == MINIMUM_USABLE_VRAM_BYTES, adapter
+
+
+def test_a_gpu_only_model_declares_no_floor():
+    """枠を切り詰めて貸せない駆動系に下限は要らない。"""
+    payload = image_model_request("job_123", _descriptor("native.stable-diffusion-cpp-flux2"))
+
+    assert "minimum_bytes" not in payload["vram"]

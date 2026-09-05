@@ -16,6 +16,19 @@ HOST_DEVICE = "host"
 # 従来どおり VRAM だけが候補になる。
 COEXISTING_PLACEMENT = [GPU_DEVICE, HOST_DEVICE]
 
+# 空いているぶんを使う、の下限。モデルごとに宣言しない。
+#
+# モデル固有の値を宣言すると、測っていないモデルは枠を貸してもらえず、測った値が
+# 少しでも足りなければそのモデルだけ突然使えなくなる。実際 FLUX.2 Klein 4B で
+# 1 枚ぶんの実測 8GiB を宣言したところ、連続生成の 2 枚目が OOM した
+# （2026-09-05）。必要量は解像度・枚数・参照画像で変わるので、事前に 1 つの数字で
+# 言い当てられない。
+#
+# 代わりに「これ未満では何をやっても動かない」線だけを共通で置き、足りるかどうかは
+# 実行が決める。外したときは worker だけが OOM で落ち、次はより軽い載せ方
+# （RAM のみ）で走り直す。broker も residency_key ごとに下限を学習する。
+MINIMUM_USABLE_VRAM_BYTES = 2 * 1024**3
+
 
 @dataclass(frozen=True)
 class LeaseEstimate:
@@ -126,10 +139,8 @@ def image_model_request(
             "cold_load_peak_bytes": estimate.cold_load_peak_bytes,
             "headroom_bytes": estimate.headroom_bytes,
             "confidence": model.measurement_confidence,
-            # 全常駐できないときの下限。broker はここまで枠を切り詰めて貸す。
-            # 測っていないモデルには送らない（推測で下限を名乗ると OOM する）。
-            **({"minimum_bytes": int(model.minimum_vram_bytes)}
-               if model.minimum_vram_bytes else {}),
+            # 空いているぶんを使う。足りるかどうかは実行が決める。
+            **({"minimum_bytes": MINIMUM_USABLE_VRAM_BYTES} if offers_ram else {}),
         },
         # LLM と場所を分け合う。exclusive だと、LLM が載っている間は VRAM の
         # 空きに関係なく断られ、共存にならない。
