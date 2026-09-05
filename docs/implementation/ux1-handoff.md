@@ -5,7 +5,7 @@
 
 ## 2026-09-05 3DS-4c private backup transport
 
-branch `ux1/3d-scene-backup-transport`、実装commit `d159731`。認証WSとstandalone private mirrorへ
+PR #229、branch `ux1/3d-scene-backup-transport`、実装commit `d159731`。認証WSとstandalone private mirrorへ
 backup open/read/close、restore begin/chunk/commit/cancelを追加した。connection-scoped各1件、512 KiB、
 10分activity TTL、chunk/total SHAとoffsetを強制し、切断/shutdownでstagingを回収する。公開契約変更0。
 

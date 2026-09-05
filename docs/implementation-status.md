@@ -8449,7 +8449,7 @@ transport、browser UI、packaged bundle、実ControlDeck opaque iframe、
 
 ## 2026-09-05 — 3DS-4c private backup transport
 
-branch `ux1/3d-scene-backup-transport`、実装commit `d159731`。認証済みWebSocketへ
+PR #229、branch `ux1/3d-scene-backup-transport`、実装commit `d159731`。認証済みWebSocketへ
 `scenes.backup.open/read/close`と`scenes.restore.begin/chunk/commit/cancel`を追加し、standalone private
 mirrorも同じ`SceneBackupSession`を通す。download handleとrestore uploadは接続内だけで有効、各1件、
 512 KiB chunk、10分activity TTL、offset/chunk SHA-256/total SHA-256を強制する。ファイル名以外のpathを
