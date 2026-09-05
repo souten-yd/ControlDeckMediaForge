@@ -5,7 +5,7 @@
 
 ## 2026-09-05 3DS-4c exact scene backup core
 
-branch `ux1/3d-scene-backup`、実装commit `175ea31`。`media-forge.scene-backup@1`の固定entry順、
+PR #228、branch `ux1/3d-scene-backup`、実装commit `175ea31`。`media-forge.scene-backup@1`の固定entry順、
 manifest/entry size・SHA-256、member/展開量/path/link/device/重複検証と、全Asset/revisionを新ID・新sceneへ
 atomic restoreするcoreを実装した。no-replace file publishとtransaction rollbackにより、tamper/途中失敗/
 同時衝突は既存fileを上書きせず追加0件になる。

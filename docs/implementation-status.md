@@ -8420,7 +8420,7 @@ exact code headの`./mf.sh test`は904 passed / 既知Starlette warning 1件 / 7
 
 ## 2026-09-05 — 3DS-4c exact scene backup core
 
-branch `ux1/3d-scene-backup`、実装commit `175ea31`。`media-forge.scene-backup@1` ZIP codecと、
+PR #228、branch `ux1/3d-scene-backup`、実装commit `175ea31`。`media-forge.scene-backup@1` ZIP codecと、
 全Asset/job/document/revisionを一つのSQLite transactionで新sceneとして復元するStore境界を追加した。
 ZIP entry順は`manifest.json`、revision sequence順の`.blend`/`preview.glb`、Asset ID順のdependency blobに
 固定し、manifest identityと各entryのsize/SHA-256を検証する。archive/member/manifest/展開量、`.blend`
