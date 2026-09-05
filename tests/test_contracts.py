@@ -47,6 +47,23 @@ def test_job_schema_does_not_require_model_id():
     jsonschema.validate({"operation": "image.generate", "intent": "a blue robot"}, schema)
 
 
+def test_agent_tool_schemas_are_self_contained_for_model_decoders():
+    manifest = json.loads((ROOT / "addon.json").read_text(encoding="utf-8"))
+    for contribution in manifest["contributions"]["agent_tools"]:
+        schema = json.loads(
+            (ROOT / contribution["schema_path"].removeprefix("/")).read_text(encoding="utf-8")
+        )
+        external_refs = [
+            node["$ref"]
+            for node in _walk_dicts(schema)
+            if isinstance(node.get("$ref"), str) and not str(node["$ref"]).startswith("#/")
+        ]
+        assert external_refs == [], (
+            contribution["id"],
+            external_refs,
+        )
+
+
 def test_scene_texture_job_context_is_bounded_and_only_valid_for_image_generation(client):
     schema = json.loads((ROOT / "schemas/scene-texture-request.json").read_text(encoding="utf-8"))
     context = {
@@ -59,6 +76,15 @@ def test_scene_texture_job_context_is_bounded_and_only_valid_for_image_generatio
         "uv_map": "UVMap",
     }
     jsonschema.validate(context, schema)
+    job_schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
+    jsonschema.validate(
+        {
+            "operation": "image.generate",
+            "intent": "seamless worn green painted metal",
+            "constraints": {"scene_texture": context},
+        },
+        job_schema,
+    )
     request = JobRequest(
         operation="image.generate",
         intent="seamless worn green painted metal",
