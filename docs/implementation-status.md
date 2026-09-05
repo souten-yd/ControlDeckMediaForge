@@ -8955,3 +8955,44 @@ focused workspace/session 27件、exact head `./mf.sh test`は980 passed / 既�
 100.41秒。candidate bundleは31,618,953 B / SHA-256
 `f95701cb35c609ad3cf8b0ed75323ad4eb9940171e72b1a20b29f58124f5a02f`、展開binary doctorは
 `ok / 0.28.15 / packaged=true`。正式releaseとinstalled競合再確認は **NOT TESTED**。
+
+## 2026-09-06 — 3DS-8 completion / v0.28.15 release
+
+PR #244はmerge commit `aa054bc804dbcce4cb1262cc40188f8db9b01fd0`でmerged。exact mainから再構築した正式
+v0.28.15 bundleは31,463,968 B / SHA-256
+`6944b24677d40ca176b460f6590f6167780cfb5fd79f1e76995688913526f75d`。manifest 279 B、signature 89 B、
+tag target一致、公開4 asset再取得hash一致。Host consumer verifierでpublisher署名、artifact size/hash、safe extract、
+package/add-on identity、capability上限を通し、展開binary doctorは`ok / 0.28.15 / packaged=true`。
+
+ControlDeck標準updateはv0.28.14→v0.28.15を10.73秒 / 最大RSS 772,524 KiB / swap 0で完了した。
+`current=versions/0.28.15`、previous v0.28.14保持。rollback再起動後の最終PIDは2264346、service active/running、
+drop-inなし、health healthy。
+実installed opaque iframeでGUI sessionをrevision 11から開始し、並行restoreでrevision 12へ進めて保存した。
+結果は`failed / scene_revision_conflict`、scene head/revision countは12のまま、responseはcandidate
+`working_0a35fec723ae491bb9abf93c6e533077`を返した。実`scene.blend`は1,438,783 B / SHA-256
+`11ff0e65eeec0f33ffb1d7e35dc2b82319b0dd467de964b493ee7b1e3151dcaa`、browser error 0。
+
+Host LLM `requests_processing=0`、VRAM 27,383,910,400 Bからtexture生成を開始すると、BrokerはLLMを停止して
+画像workerを実行した。Job `job_e22d39271e7c46da9c306f7c0cf94a0b`は57.869秒でsucceeded。
+FLUX.2 Klein 4B / diffusers 0.40.0、1,024x1,024 PNG 1,737,483 B / SHA-256
+`a3cb9e4f70eb8a396307576cfccef57e721ac50fa10f7f73a62d671f6276494d`、画像validator 4件passed、
+weights hashとApache-2.0 provenanceを保持した。opaque iframeで明示選択してBlade/base colorへ適用し、
+revision 12→13、同Asset dependency、scene/GLB validator passed、browser error 0。終了時VRAM 2,625,077,248 B。
+
+120秒超のdetached lifecycleは、実Blender 4.5.13 child PID 2262210だけへSIGSTOPするfault injectionで測定した。
+Job `job_650645314a624fe788d04f4e87462055` / Host child `96d2c1faa327`はdetached受付後、
+`running / blender_recipe / progress 0.25`を121.996秒と132.033秒に再照会できた。132.085秒に公開
+`media.job.cancel`を送り、133.122秒で`canceled / host_terminal_sent=true`。Host Jobもcanceled、対象childは消滅、
+残存background Blender 0。別の64 sphere完走試行はGLB 64 MiB上限を`scene_preview_invalid`で拒否したため、
+これを長時間成功へ読み替えなかった。
+
+live rollbackは一時Ed25519鍵で署名した隔離v0.28.16を実ControlDeck updaterへ渡した。署名・展開・provision・
+doctor・service healthまで通り、`current=0.28.16`とpackaged doctorを観測後にhealth failureを注入した。
+9.656秒で例外を返し、`current=0.28.15`、service、Add-on登録、doctor、health healthyへ復帰した。
+一時candidate version/download、worktree、秘密鍵は確認後に削除した。正式公開v0.28.15は不変。
+
+`./mf.sh test`はPR #244 exact headで980 passed / 既知Starlette warning 1件 / 100.41秒。既存画像、G8、
+OpenCode制作、opaque UI、lifecycle、GPU/Broker、signed release/update/rollbackを実installed Hostで確認し、
+3DS-8をVERIFIED、統合3D Studio初期提供を完了とする。GPU GUI表示、失効後credential refresh、実installed環境への
+容量不足再注入は **NOT TESTED**。interactive GUIはsoftware displayとして提供し、個別Eevee/Cycles GPU probeを
+GPU GUIの証拠へ読み替えない。Expert scriptは別capability 3DS-X。
