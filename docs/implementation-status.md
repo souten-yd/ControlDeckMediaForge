@@ -8588,7 +8588,8 @@ ControlDeck source/service/installed files変更0で、既存`frontend/tsconfig.
 
 ## 2026-09-06 — 3DS-5c authenticated RFB gateway / noVNC
 
-private Host/standalone WebSocketからsession所有のUnix RFB socketへbinary frameだけを中継するgatewayを
+PR #233、branch `ux1/3d-session-gateway`、実装commit `72db176`。private Host/standalone WebSocketから
+session所有のUnix RFB socketへbinary frameだけを中継するgatewayを
 追加した。接続時にowner、READY state、systemd unit active、実socketを再確認し、1 sessionに1 controllerだけを
 許可する。browserからの1 messageは1 MiB上限、text/余分なsubprotocolを拒否する。Host経路は既存service tokenを
 15秒ごとに再introspectionし、addon/subjectが一致しないかtokenが無効なら切断する。standaloneは同一loopback

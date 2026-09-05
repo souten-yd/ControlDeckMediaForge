@@ -5,7 +5,7 @@
 
 ## 2026-09-06 3DS-5c authenticated RFB gateway / noVNC
 
-branch `ux1/3d-session-gateway`。private Host/standalone WebSocketからsession所有のUnix RFB socketへ
+PR #233、branch `ux1/3d-session-gateway`、実装commit `72db176`。private Host/standalone WebSocketからsession所有のUnix RFB socketへ
 binaryだけを中継し、owner照合、READY/実unit/実socket再確認、全体1 controller、browser message 1 MiB
 上限を強制した。Host経路は既存service tokenを15秒ごとに再introspectionし、subjectが変わるか無効なら切断する。
 standaloneは同一loopback Originと`binary` subprotocolを必須にした。socket/path/PID/unit/display/tokenはbrowserへ
