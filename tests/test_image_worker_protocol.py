@@ -92,6 +92,8 @@ def test_image_worker_returns_bounded_model_metadata_and_per_output_seed(monkeyp
         "generation_sec": 1.0,
         "device_mode": "cpu_offload",
         "disable_mmap": True,
+        # 枠を渡されていない実行。渡されたぶんは worker が自分を縛る。
+        "vram_budget_bytes": 0,
         "placement": {
             "component_devices": {"transformer": "cuda:0"},
             "device_maps": {"pipeline": {"": "cuda"}},

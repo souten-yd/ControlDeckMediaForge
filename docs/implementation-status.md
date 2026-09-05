@@ -7952,3 +7952,46 @@ job では worker を残すので、差分の 4 枚で載せ直さない利点�
 OOM したので 8 GiB を宣言する。測っていないモデルには送らない。
 
 `./mf.sh test` 840 passed。
+
+## 貸してもらった枠の中で走る
+
+ControlDeck が空き状況から枠を決め（#256）、worker はその枠に自分を縛る。add-on は
+他に何が載っているか知らないので、固定値を名乗ると LLM の構成が変わるたびに破綻する。
+
+```text
+grant の granted_bytes         →  HostExecution.granted_bytes
+  ↓
+枠 ≧ 全常駐   direct_device_map   カタログどおり VRAM に載せる
+枠 < 全常駐   cpu_offload         重みは RAM、実行するモジュールだけ VRAM へ
+device_id=host                cpu  VRAM を取らない
+枠が返らない（旧 Host）        カタログの値のまま（後方互換）
+  ↓
+MEDIA_FORGE_VRAM_BUDGET_BYTES →  torch.cuda.set_per_process_memory_fraction
+```
+
+### 実機の通し確認（2026-09-05、llama-server 常駐のまま）
+
+```text
+枠 7.92 GiB を渡す      実ピーク 7.83 GiB（枠内に収まった）
+device_mode             cpu_offload（自動で切り替わった）
+生成 1024²/4歩          38.88 秒（初回。2 枚目以降は 6.7 秒）
+llama-server            22.95 GB を保持したまま無傷
+```
+
+枠を割ったときは、この process だけが HIP の OOM で落ちる。実測で枠 7/6/4/3 GiB の
+いずれでもカードには 24.5〜28.5 GiB の空きが残り、LLM は無傷だった。**見積りを
+外しても被害が add-on 側に閉じる**ので、管理側が枠を決める形が安全に成立する。
+
+### LLM が居ない場合
+
+```text
+LLM が居ない              gpu0  枠 24.26 GiB  → direct_device_map（全常駐・最速）
+LLM 常駐・使用していない   gpu0  枠 10.44 GiB  → cpu_offload
+LLM 常駐・使用中           gpu0  枠 10.44 GiB  → cpu_offload
+大きい LLM 常駐・使用中     host  枠 18.89 GiB  → cpu
+```
+
+LLM が居なければ従来どおり全常駐で最速になる。速度を落とすのは、落とさなければ
+そもそも走れない場合だけである。
+
+`./mf.sh test` 846 passed。

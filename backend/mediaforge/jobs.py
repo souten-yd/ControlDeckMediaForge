@@ -81,6 +81,17 @@ MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 
 
+
+def _full_residency_bytes(model: ModelDescriptor) -> int:
+    """全部 VRAM に載せるのに要る量。要求で申告している値と同じ勘定にする。"""
+    peak = max(
+        int(model.resident_vram_bytes or 0),
+        int(model.execution_peak_vram_bytes or 0),
+        int(model.cold_load_peak_vram_bytes or 0),
+    )
+    return peak + int(model.headroom_vram_bytes or 0)
+
+
 class WorkerFailure(RuntimeError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -1589,14 +1600,24 @@ class JobManager:
 
     @staticmethod
     def _device_mode(selected: ModelDescriptor, execution: HostExecution | None) -> str:
-        """置き場所に合わせた載せ方。
+        """置き場所と枠に合わせた載せ方。
 
         broker が `host` を割り当てたら、VRAM を確保せずシステムRAMで走らせる
         （docs/design-ai-resource-broker.md §0 の Add-on 側の契約 3）。カタログの
         device_mode は GPU 前提の値なので、そのまま使うと VRAM を取りにいく。
+
+        gpu0 でも、全常駐ぶんを貸してもらえたとは限らない。LLM が載っていれば
+        残りだけが枠になる。足りないときは重みを RAM に置き、実行するモジュール
+        だけを VRAM へ送る形へ切り替える。実測（FLUX.2 Klein 4B / 1024²）:
+        全常駐 2.98秒、枠 8GiB で 6.7秒、RAM のみ 113秒。
         """
-        if execution is not None and execution.device_id == HOST_DEVICE:
+        if execution is None:
+            return selected.device_mode
+        if execution.device_id == HOST_DEVICE:
             return "cpu"
+        granted = execution.granted_bytes
+        if granted is not None and granted < _full_residency_bytes(selected):
+            return "cpu_offload"
         return selected.device_mode
 
     async def _execute_worker(
@@ -1711,6 +1732,13 @@ class JobManager:
                 str(root) for root in (self.model_store_root, self.hf_home) if root is not None
             )
             environment["MEDIA_FORGE_WORK_ROOT"] = str(self.store.work_dir.resolve())
+            # 貸してもらった枠。worker はこれを超えて確保しない。超えそうなときは
+            # その process だけが OOM で落ち、同じカードに載っている LLM は無傷で
+            # 済む（実測、枠 7/6/4/3 GiB のいずれでも LLM は無傷だった）。
+            if execution is not None and execution.granted_bytes:
+                environment["MEDIA_FORGE_VRAM_BUDGET_BYTES"] = str(int(execution.granted_bytes))
+            else:
+                environment.pop("MEDIA_FORGE_VRAM_BUDGET_BYTES", None)
             stdin_payload += b"\n"
             # 総時間の見積りではなく、1 枚ぶんが止まったと判断するまでの猶予。
             # 枚数も解像度も要求ごとに変わるので、生成の総時間は必ず外れる。
@@ -2116,6 +2144,13 @@ class JobManager:
             # どこを割り当てられたかは grant が返す。要求の順序ではない。
             device_id = status.get("device_id")
             execution.device_id = device_id if isinstance(device_id, str) and device_id else None
+            # 枠も grant が返す。全常駐に足りないぶんは自分で締める。
+            granted = status.get("granted_bytes")
+            execution.granted_bytes = (
+                int(granted)
+                if isinstance(granted, int) and not isinstance(granted, bool) and granted > 0
+                else None
+            )
             await self.host_client.lease_action(execution.identity, execution.lease_id, "activate")
             await self._update(job.id, reporter, phase="starting", progress=0.04)
             return True

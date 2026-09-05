@@ -420,11 +420,43 @@ class ImageWorker:
                 "device_mode": device_mode,
                 "disable_mmap": disable_mmap,
                 "placement": adapter.placement,
+                "vram_budget_bytes": int(os.environ.get("MEDIA_FORGE_VRAM_BUDGET_BYTES") or 0),
                 # この process が実際に確保した量。外から カード全体を見ると、
                 # 同時に載っている LLM のぶんまで数えてしまう。
                 **_own_vram_peak(),
             },
         }
+
+
+def _apply_vram_budget() -> int:
+    """貸してもらった枠を超えないよう、この process を縛る。
+
+    枠は ControlDeck が空き状況から決める。add-on は他に何が載っているか知らない
+    ので、固定値を名乗ると LLM の構成が変わるたびに破綻する。縛っておけば、
+    見積りを外しても落ちるのはこの process だけで、同じカードに載っている LLM は
+    無傷で済む（実測 2026-09-05、枠 7/6/4/3 GiB のいずれでも LLM は無傷だった）。
+    """
+    raw = os.environ.get("MEDIA_FORGE_VRAM_BUDGET_BYTES")
+    if not raw:
+        return 0
+    try:
+        budget = int(raw)
+    except ValueError:
+        raise ValueError("MEDIA_FORGE_VRAM_BUDGET_BYTES must be an integer") from None
+    if budget <= 0:
+        raise ValueError("MEDIA_FORGE_VRAM_BUDGET_BYTES must be positive")
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return 0
+        total = torch.cuda.get_device_properties(0).total_memory
+    except Exception:  # noqa: BLE001 - GPU が無い経路では縛るものが無い
+        return 0
+    if total <= 0:
+        return 0
+    torch.cuda.set_per_process_memory_fraction(min(1.0, budget / total), 0)
+    return budget
 
 
 def _own_vram_peak() -> dict[str, int]:
@@ -450,6 +482,7 @@ def _own_vram_peak() -> dict[str, int]:
 
 def main() -> int:
     _terminate_with_parent()
+    _apply_vram_budget()
     worker = ImageWorker()
     # readline を使う。`for raw in sys.stdin.buffer` は先読みバッファが
     # 埋まるか EOF まで1行目を返さないので、stdin を開いたまま次の要求を

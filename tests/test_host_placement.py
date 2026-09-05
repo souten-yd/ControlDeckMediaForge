@@ -119,3 +119,87 @@ def test_the_worker_is_gone_before_the_host_is_asked_for_its_vlm(tmp_path: Path)
     # 直前が qa.semantic の条件つき retire であること。
     assert "job.request.qa.semantic" in source[:retire]
     assert "_release_host_resource" not in between
+
+
+def _granted(device_id: str, granted_bytes: int | None) -> HostExecution:
+    value = execution(device_id)
+    value.granted_bytes = granted_bytes
+    return value
+
+
+def _measured() -> ModelDescriptor:
+    """FLUX.2 Klein 4B の実測値（2026-09-05）。"""
+    import dataclasses
+
+    return dataclasses.replace(
+        descriptor(),
+        resident_vram_bytes=0,
+        execution_peak_vram_bytes=22_397_755_392,
+        cold_load_peak_vram_bytes=15_965_057_843,
+        headroom_vram_bytes=3_650_722_201,
+        minimum_vram_bytes=8_589_934_592,
+    )
+
+
+def test_a_full_budget_keeps_the_fast_route():
+    """全常駐ぶんを貸してもらえたなら、そのまま VRAM に載せる。"""
+    model = _measured()
+    full = 22_397_755_392 + 3_650_722_201
+
+    assert JobManager._device_mode(model, _granted("gpu0", full)) == "direct_device_map"
+
+
+def test_a_partial_budget_switches_to_streaming():
+    """残りしか無いなら、重みを RAM に置いて実行するモジュールだけ VRAM へ送る。
+
+    実測（FLUX.2 Klein 4B / 1024²）: 全常駐 2.98秒、枠 8GiB で 6.7秒、
+    RAM のみ 113秒。枠を使えないと 113秒側に落ちる。
+    """
+    model = _measured()
+
+    assert JobManager._device_mode(model, _granted("gpu0", 8_589_934_592)) == "cpu_offload"
+
+
+def test_ram_placement_still_wins_over_the_budget():
+    """host を割り当てられたなら VRAM は取らない。枠の話ではない。"""
+    model = _measured()
+
+    assert JobManager._device_mode(model, _granted("host", 8_589_934_592)) == "cpu"
+
+
+def test_no_budget_keeps_the_catalog_route():
+    """枠を返さない Host（旧版）では、従来どおりカタログの値で動く。"""
+    model = _measured()
+
+    assert JobManager._device_mode(model, _granted("gpu0", None)) == "direct_device_map"
+
+
+def test_the_worker_binds_itself_to_the_budget(monkeypatch, tmp_path: Path):
+    """枠を渡されたら torch を縛る。縛らないと、はみ出したときに LLM を巻き込む。"""
+    import sys
+    from types import SimpleNamespace
+
+    from worker_packs.image import worker as image_worker
+
+    calls: list[tuple[float, int]] = []
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(
+            is_available=lambda: True,
+            get_device_properties=lambda _index: SimpleNamespace(total_memory=32 * 1024**3),
+            set_per_process_memory_fraction=lambda fraction, index: calls.append((fraction, index)),
+        )
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setenv("MEDIA_FORGE_VRAM_BUDGET_BYTES", str(8 * 1024**3))
+
+    assert image_worker._apply_vram_budget() == 8 * 1024**3
+    assert calls == [(0.25, 0)]
+
+
+def test_a_worker_without_a_budget_binds_nothing(monkeypatch):
+    """枠が無いときに勝手に縛らない。カード全部を使ってよい場合がある。"""
+    from worker_packs.image import worker as image_worker
+
+    monkeypatch.delenv("MEDIA_FORGE_VRAM_BUDGET_BYTES", raising=False)
+
+    assert image_worker._apply_vram_budget() == 0
