@@ -3,6 +3,30 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-5b isolated Blender GUI runner
+
+branch `ux1/3d-web-blender-runner`。durable `blender_sessions`、全体1件/single-writer排他、
+systemd user transient unit、Unix-only Xvnc、Blender 4.5.9 GUI bootstrap、明示save/discard、再起動時の
+ready unit再接続、失敗時recovery working copyを実装した。private session/WS/standalone入力はScene IDか
+session IDだけで、path/PID/unit/socket/display番号を返さない。software GUIはWaylandとGPU visibilityを
+無効化し、Mesa Lavapipe/Vulkan、autoexec無効をready条件にした。systemd mount保護が追加`/data1tb`への
+書込を拒否しない実測を受け、Blender子孫へLandlock ABI 3以上の3-root write allowlistを必須化した。版は0.28.3。
+
+sourceのLandlock導入probeは0.584秒でready、実RFB 1280x720、unit Memory 540.6 MiB / peak 571.4 MiB / 94 tasks、
+TCP RFB listener 0。Landlock外部writeはerrno 13、AF_INETはerrno 97、Blender childはNoNewPrivs 1 / seccomp 2。
+exact候補bundleでも434,663 B `.blend`をimportし、commit開始からGUI readyまで1.019088秒、click + Shift+D + Enter、
+save/stop 0.732258秒。510,540 B / SHA-256
+`cdb4c7061e8b8490dae51f910bc59b28cafc221ade00a6ba65719d34cc428bdb`へ保存され、revision 1→2、
+objects 3→4、meshes 1→2、triangles 12→24、vertices 8→16、unit/socket/process 0を確認した。
+bundleは31,489,331 B / SHA-256
+`d345481457c0f4bce16d00b564c4c940d3e26f81956b80cdf6da9c4f76c50769`、doctorは0.28.3 / packaged=true。
+focused session 8件とfullは936 passed / 1 warning / 88.01秒。
+
+認証付きRFB gateway/noVNC browser、接続heartbeat/再接続/idle、disable/revocation、実ControlDeck opaque
+iframe、GPU/Cyclesは **NOT IMPLEMENTED / NOT TESTED**。稼働ControlDeckは0.28.0 / healthyのまま、
+source/service/installed files変更0（既存`frontend/tsconfig.tsbuildinfo`だけdirty）。次は別sliceの
+3DS-5c RFB gateway/noVNC。
+
 ## 2026-09-06 3DS-5a Web Blender pack manager
 
 branch `ux1/3d-web-blender-session`。TigerVNC 1.16.2とnoVNC 1.7.0を公式URL、archive size/SHA-256、

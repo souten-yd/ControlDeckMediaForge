@@ -99,6 +99,23 @@ no installed path or VNC credential. This operation installs the software-displa
 pack only. A `ready` pack does not claim that a GUI session, RFB relay, GPU path,
 or authenticated browser connection is available.
 
+3DS-5b adds the private `blender_sessions` session part and
+`blender.sessions.list`, `.start`, `.save`, and `.stop` methods. The standalone
+development mirror is `GET/POST /workspace-api/blender/sessions`. Start accepts
+only a Scene ID; save and stop accept only an opaque session ID. The projection
+contains bounded state, fixed runtime/Web-pack identities, a software-display
+descriptor, timestamps, error/result fields, and action availability. It never
+contains a filesystem path, PID, systemd unit, display number, or RFB socket.
+States are `queued`, `preparing`, `starting`, `ready`, `saving`, `stopping`, then
+`stopped`, `failed`, or `interrupted`. One active session is allowed across the
+service and the existing scene working-copy lock remains the single-writer
+authority. Save first asks the live GUI to persist the working `.blend`, stops
+the isolated process group, then uses the existing independent Blender/GLB
+validation and immutable revision commit. Stop discards a healthy working copy;
+a startup, save, runner, or service-reconciliation failure retains it as a
+recovery copy. This slice exposes no RFB endpoint: a ready session is not yet a
+claim that noVNC, Host proxying, reconnect, idle expiry, or revocation works.
+
 3DS-3 keeps model viewing on the same private workspace boundary. `library.list`
 accepts an allowlisted `media_kind` (`all`, `image`, `video`, or `3d`) and returns
 that classification with each card. `assets.model.open` accepts only an Asset ID,

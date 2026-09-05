@@ -1,7 +1,7 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: 3DS-0〜4・3DS-5a source/package VERIFIED / 次は3DS-5b session runner
-Date: 2026-09-05  
+Status: 3DS-0〜4・3DS-5a source/package VERIFIED、3DS-5b source VERIFIED / 次は3DS-5c RFB gateway
+Date: 2026-09-06
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
 ## 0. この計画の位置づけ
@@ -16,8 +16,9 @@ G9生成3Dモデル採用とは分離し、画像生成モデルの変更やSoni
 [`3ds-compatibility.md`](3ds-compatibility.md) に固定した。
 3DS-1は同表へruntime resolver、legacy登録、設定診断、G8同一hashの実測を追記した。
 scene/revision/working copyへ進んだ。3DS-4a persistence、3DS-4b core/transport/browser UI、3DS-4c
-exact backup core/private transport/browser UI、3DS-5a Web操作pack管理まで完了した。installed
-ControlDeck opaque iframeでの再確認は3DS-8 release acceptanceへ残し、次は3DS-5b session runnerへ進む。
+exact backup core/private transport/browser UI、3DS-5a Web操作pack管理、3DS-5bの隔離GUI runner・
+保存/終了まで完了した。installed ControlDeck opaque iframeでの再確認は3DS-8 release acceptanceへ残し、
+次は3DS-5cで認証付きRFB gateway/noVNC接続・再接続を実装する。
 
 | 項目 | 調査で確認した現状 | 追加するもの |
 |---|---|---|
@@ -49,8 +50,8 @@ ControlDeck opaque iframeでの再確認は3DS-8 release acceptanceへ残し、�
 一つのフェーズが大きければ機能と失敗経路を保つ小PRへ分ける。
 3DS-0→3DS-1と3DS-2のdurable install/cancel/restart、side-by-side更新/切替/修復、
 参照保護付き削除とCLI共通化、3DS-3 Library GLB viewer、3DS-4 scene/revision/working copyと
-exact backup/restoreとWeb操作packの固定・導入・実display probeは完了した。次は3DS-5bで
-session runner、Blender GUI、保存・終了を実装する。
+exact backup/restore、Web操作packの固定・導入・実display probe、隔離session runner、実Blender GUI入力、
+保存・終了は完了した。次は3DS-5cで専用RFB gateway、noVNC接続、再接続を実装する。
 
 ## 3. PRスライスの候補
 
@@ -66,8 +67,9 @@ session runner、Blender GUI、保存・終了を実装する。
 | ux1/3d-scene-backup | exact backup/restore core、missing/tamper/partial失敗、旧版保持 |
 | ux1/3d-scene-backup-transport | owner-scoped private upload/download transport、切断回収 |
 | ux1/3d-scene-backup-ui | browser backup download/restore upload UI、実Chrome/opaque iframe |
-| ux1/3d-web-blender | 1 session software GUI起動/入力/保存/終了、OS隔離 |
-| ux1/3d-session-recovery | 切断/再認証/idle/crash/Host disable |
+| ux1/3d-web-blender | 1 session software GUI起動/入力/保存/終了、OS隔離（3DS-5b完了） |
+| ux1/3d-session-gateway | 認証付きRFB relay/noVNC、接続・切断・再接続 |
+| ux1/3d-session-recovery | 再認証/idle/crash/Host disable |
 | ux1/3d-texture-binding | 既存画像の材質割当て→revision |
 | ux1/3d-texture-generation | 画像jobとの工程連携・cancel/retry |
 | ux1/3d-agent-recipes | 型付き生成/修正とOpenCode durable経路 |
