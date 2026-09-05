@@ -70,20 +70,24 @@ and same-origin development bridge `GET /workspace-api/blender/runtime` return
 the resolver state, required version, opaque runtime IDs, ownership, bounded
 integrity checks, separate browser-pack state, and a diagnostic fingerprint.
 They never return a runtime, registry, manifest, worker, or executable path.
-The status surface is read-only from the client: 3DS-1 performs no download,
-update, repair, switch, or removal operation. The development bridge is
-excluded from OpenAPI and none of these additions change the frozen public API.
+The development bridge is excluded from OpenAPI and none of these additions
+change the frozen public API.
 
-3DS-2 adds private `blender.runtime.install` and
-`blender.runtime.operations.cancel` methods. The standalone development mirror
-is `POST /workspace-api/blender/runtime/operations` with only `install`, or
-`cancel` plus an opaque operation ID. Install accepts no URL, path, executable,
-version, or shell command from the browser: the checked-in trusted catalog fixes
+3DS-2 adds private `blender.runtime.install`, `.update`, `.switch`, `.repair`,
+`.remove.preview`, `.remove`, and `.operations.cancel` methods. The standalone
+development mirror is `POST /workspace-api/blender/runtime/operations` with the
+same actions. Install/update accept no source parameters; switch/repair/preview
+accept one opaque catalog runtime ID; remove also requires the exact fingerprint
+returned by its latest preview. No operation accepts a URL, path, executable,
+version, or shell command from the browser. The checked-in trusted catalog fixes
 the Blender archive identity, size, SHA-256, license, platform, and version.
 Operation states are `queued`, `preflight`, `downloading`, `verifying`,
-`installing`, `probing`, then `ready`, `failed`, or `canceled`; the status
+`installing`, `probing`, or `deleting`, then `ready`, `failed`, or `canceled`; the status
 projection includes the durable operation journal for reconnect. These private
-additions do not modify the frozen public job/model operation schemas.
+additions do not modify the frozen public job/model operation schemas. Removal
+is limited to managed-root realpaths, refuses the active runtime and live pinned
+G8 references, revalidates the preview under the same reference lock, and keeps
+assets, scenes, history, external runtimes, and download cache out of scope.
 
 Creative planning also remains private. `creative.templates` returns the
 versioned trusted template catalog. `creative.validate` accepts an existing

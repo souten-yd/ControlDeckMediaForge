@@ -8193,3 +8193,52 @@ local full gateは`./mf.sh test` 875 passed / 既知Starlette warning 1件 / 64.
 base 4.5.9 / recommended 4.5.13を確認した。実ControlDeck opaque
 iframe、installed release、GPU/Cycles、稼働中Web Blender sessionの版pin、remove、Web Blender、
 scene/revision、viewer、材質、OpenCode制作は **NOT TESTED / NOT IMPLEMENTED**。ControlDeck変更は0件。
+
+## 2026-09-05 — 3DS-2c protected Blender remove / shared CLI
+
+PR #218、実装commit `4b5cdbb3c2b37978d17f3226d0012e4364adef3c`。
+managed Blender削除を既存のdurable operationへ追加した。削除前にopaque runtime ID、version、
+logical reclaimable bytes、live/project参照数、block理由、確認fingerprintを返す。remove要求は同じ
+fingerprintを必須にし、operation実行直前に同じ参照lock下で再計算する。active版、実行中G8 jobが
+pinした版、変更後の古いpreview、catalog外ID、raw path注入、external legacyはfail-closed。
+project referenceはscene table未導入の現段階では実測0として返し、将来値を推測していない。
+
+削除対象はmanaged root直下のcatalog IDだけ。directoryを`.removing/<operation-id>`へatomic renameし、
+registry record削除後に実体を消す。registry更新失敗は元directoryを復元する。service停止がrename後、
+registry commit後のどちらで起きても、残ったjournal/registry/stagingの組合せから再開するfixtureを通した。
+asset、scene、履歴、external runtime、再取得可能download cacheは削除範囲外。G8 JobManagerはresolverの
+runtime reference contextをBlender child終了まで保持し、既存のdeterministic G8 testでもlive count 1を
+観測した。
+
+private WSへ`blender.runtime.remove.preview/remove`、standalone mirrorへ`remove_preview/remove`を追加。
+Settingsは各managed版に削除導線、日英preview dialog、容量/実行中参照/制作物参照、active時の確認拒否、
+terminal追従を表示する。`./mf.sh blender managed-status/install/update/switch/repair/remove-preview/remove`
+はloopback Media Forge serviceの同じorchestratorを呼ぶ。既存source runtime用
+`./mf.sh blender build/status`は互換維持。CLIは外部originを拒否し、removeはpreview表示後に対話確認、
+または明示`--yes`を要求する。
+
+一時rootで正規4.5.9/4.5.13をside-by-side導入した。inactive 4.5.9 previewは1,168,332,155 B、
+live `g8_reference`保持中はcount 1 / `blender_runtime_in_use`、preview後にファイルを加えた要求は
+`blender_runtime_remove_changed`で実体無変更。解放後、実ChromeのSettings確認から4.5.9を削除し、
+operationは約0.110秒で`deleting → ready`、registry/runtime一覧から4.5.9だけが消えた。active 4.5.13は
+readyのまま、G8は正直にmissingとなり再導入ボタンを表示した。active 4.5.13のpreviewは
+`active_runtime`でconfirm非表示。
+
+削除前後で一時asset SHA-256
+`f37528de73ab4612822894bb8f5e39987a0a43381b7b9c9f397dea7e0059fd00`、scene SHA-256
+`1f24b4e82d1251c5021c4e7be4717f8b6c4c8aadc29ea5f26ad2c74d128f2596`は同一。4.5.9 archive cacheも
+残った。CLIからcache済み4.5.9を再導入、active切替後、1,167,187,993 Bの4.5.13をpreviewして
+`--yes`削除し、最終active/G8 4.5.9 ready、asset/scene hash同一を再確認した。
+
+Chromeは日本語/英語dialog、320 px clientWidth/scrollWidthとも320、console/page error 0。
+一時runtime/data/Chrome profileはゴミ箱へ移し、試験Uvicorn/Chrome/Blender childは停止した。
+local full gateは`./mf.sh test` 884 passed / 既知Starlette warning 1件 / 66.35秒。
+PyInstaller 6.22.0でversion 0.27.0 bundleを再構築し、31,163,397 B、SHA-256
+`c3baa20ea6adabc0390ba012a04ed0d39a70477bd99c9870b054e582bc1f3ae0`。展開後のpackaged
+`doctor`は`status=ok / packaged=true / version=0.27.0`、port 9166の実processでhealth/runtime statusは
+HTTP 200、未導入4.5.9のremove previewは意図どおり`blender_runtime_not_found` / HTTP 422だった。
+試験processはgraceful shutdownした。
+
+実ControlDeck opaque
+iframe、installed release、GPU/Cycles、Web Blender、scene/revision、viewer、材質、OpenCode制作は
+**NOT TESTED / NOT IMPLEMENTED**。ControlDeck変更は0件。3DS-2は完了し、次は3DS-3。

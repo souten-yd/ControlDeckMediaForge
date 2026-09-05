@@ -1,6 +1,6 @@
 # Blender環境管理とサーバーGUIのブラウザ操作
 
-Status: 3D Studio実装目標 / 未実装  
+Status: 3DS-2 runtime lifecycle実装済み / Web GUI未実装
 Date: 2026-09-05  
 上位設計: [統合3D Studio](design-3d-studio.md)
 
@@ -74,7 +74,8 @@ OSで導入したBlenderや他アドオンのruntimeを、勝手にScene用と�
 「Web Blenderを使う」で両者の必要分を一度に計画できる。画像モデルの全導入を要求しない。
 重いBlender downloadを通常のMediaForge起動やbundle更新で暗黙実行しない。
 UIと `mf.sh` のCLIサブコマンドは同じorchestratorを呼ぶ。doctor/statusは読み取り専用。
-将来CLI案 `blender install/update/switch/repair/remove` は実装後にREADMEへ正式掲載する。
+`blender install/update/switch/repair/remove` CLIは稼働中MediaForgeの同じorchestratorを呼び、
+READMEへ正式掲載する。source runtime互換用の既存`blender build/status`は変更しない。
 
 ## 5. durable setup operation
 

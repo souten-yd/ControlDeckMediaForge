@@ -692,6 +692,7 @@ class Store:
         action: BlenderRuntimeOperationAction,
         *,
         bytes_total: int,
+        result: dict[str, Any] | None = None,
     ) -> BlenderRuntimeOperation:
         now = utc_now()
         operation_id = f"blenderop_{uuid.uuid4().hex}"
@@ -708,10 +709,13 @@ class Store:
                 """INSERT INTO blender_runtime_operations
                    (id, runtime_id, version, action, state, bytes_total, bytes_done,
                     error_code, error_message, result_json, cancel_requested, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 0, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?, 0, ?, ?)""",
                 (
                     operation_id, runtime_id, version, action,
-                    BlenderRuntimeOperationState.QUEUED, bytes_total, now, now,
+                    BlenderRuntimeOperationState.QUEUED, bytes_total,
+                    json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+                    if result is not None else None,
+                    now, now,
                 ),
             )
         operation = self.get_blender_runtime_operation(operation_id)

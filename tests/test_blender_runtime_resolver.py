@@ -4,8 +4,11 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from mediaforge.blender_runtime import (
     G8_RUNTIME_ID,
+    BlenderRuntimeRegistryError,
     BlenderRuntimeResolver,
 )
 
@@ -162,3 +165,14 @@ def test_workspace_status_is_read_only_and_never_returns_server_paths(client) ->
     assert len(payload["fingerprint"]) == 64
     serialized = json.dumps(payload)
     assert "/tmp" not in serialized and "/home" not in serialized and "path" not in serialized
+
+
+def test_unregister_never_deletes_or_detaches_the_external_legacy_runtime(tmp_path: Path) -> None:
+    legacy = tmp_path / "external-blender"
+    ready_runtime(legacy)
+    runtimes = resolver(tmp_path, legacy)
+    assert runtimes.register_legacy() is True
+    with pytest.raises(BlenderRuntimeRegistryError, match="external"):
+        runtimes.unregister_managed(G8_RUNTIME_ID)
+    assert (legacy / "install/blender").is_file()
+    assert runtimes.resolve_g8() is not None

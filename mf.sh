@@ -562,6 +562,12 @@ blender_runtime_state() {
   blender_runtime status >/dev/null 2>&1 && printf 'ready' || printf 'missing'
 }
 
+blender_manager() {
+  local port="${MEDIA_FORGE_PORT:-9130}"
+  "$PYTHON_BIN" "$REPO_ROOT/scripts/blender_manager_cli.py" \
+    --base-url "http://127.0.0.1:$port" "$@"
+}
+
 serve() {
   ensure_env "$VENV" "$REPO_ROOT/requirements.txt" "core"
   write_environment_status
@@ -583,6 +589,13 @@ Usage:
   ./mf.sh env prune
   ./mf.sh blender build
   ./mf.sh blender status
+  ./mf.sh blender managed-status
+  ./mf.sh blender install
+  ./mf.sh blender update
+  ./mf.sh blender switch <runtime-id>
+  ./mf.sh blender repair <runtime-id>
+  ./mf.sh blender remove-preview <runtime-id>
+  ./mf.sh blender remove <runtime-id> [--yes]
   ./mf.sh model list
   ./mf.sh model download flux2-klein-4b
   ./mf.sh model download minimax-h3-gguf --accept-license
@@ -611,6 +624,18 @@ main() {
     blender)
       case "${2:-}" in
         build|status) [ "$#" -eq 2 ] || die "blender ${2:-action} takes no arguments"; blender_runtime "$2" ;;
+        managed-status) [ "$#" -eq 2 ] || die "blender managed-status takes no arguments"; blender_manager status ;;
+        install|update) [ "$#" -eq 2 ] || die "blender ${2:-action} takes no arguments"; blender_manager "$2" ;;
+        switch|repair|remove-preview) [ "$#" -eq 3 ] || die "blender ${2:-action} requires one runtime ID"; blender_manager "$2" "$3" ;;
+        remove)
+          [ "$#" -eq 3 ] || { [ "$#" -eq 4 ] && [ "$4" = "--yes" ]; } || \
+            die "blender remove requires one runtime ID and optional --yes"
+          if [ "$#" -eq 4 ]; then
+            blender_manager remove "$3" "$4"
+          else
+            blender_manager remove "$3"
+          fi
+          ;;
         *) usage; exit 2 ;;
       esac
       ;;

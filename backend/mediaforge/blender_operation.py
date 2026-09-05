@@ -11,6 +11,7 @@ class BlenderRuntimeOperationAction(StrEnum):
     UPDATE = "update"
     REPAIR = "repair"
     SWITCH = "switch"
+    REMOVE = "remove"
 
 
 class BlenderRuntimeOperationState(StrEnum):
@@ -20,6 +21,7 @@ class BlenderRuntimeOperationState(StrEnum):
     VERIFYING = "verifying"
     INSTALLING = "installing"
     PROBING = "probing"
+    DELETING = "deleting"
     READY = "ready"
     FAILED = "failed"
     CANCELED = "canceled"

@@ -1041,18 +1041,21 @@ class JobManager:
         except BlenderCompileError as exc:
             raise WorkerFailure("invalid_compile_options", str(exc)) from exc
         try:
-            package, manifest, validation = await compile_project_package(
-                self.store.asset_path(source.id),
-                root,
-                options=options,
-                cancel_requested=lambda: self.store.cancel_requested(job.id),
-                process_timeout_sec=self.blender_timeout_sec,
-                runtime=(
-                    self.blender_runtime_resolver.resolve_g8()
-                    if self.blender_runtime_resolver is not None else None
-                ),
-                resolved_runtime_required=self.blender_runtime_resolver is not None,
-            )
+            if self.blender_runtime_resolver is None:
+                package, manifest, validation = await compile_project_package(
+                    self.store.asset_path(source.id), root, options=options,
+                    cancel_requested=lambda: self.store.cancel_requested(job.id),
+                    process_timeout_sec=self.blender_timeout_sec,
+                )
+            else:
+                with self.blender_runtime_resolver.g8_reference() as runtime:
+                    package, manifest, validation = await compile_project_package(
+                        self.store.asset_path(source.id), root, options=options,
+                        cancel_requested=lambda: self.store.cancel_requested(job.id),
+                        process_timeout_sec=self.blender_timeout_sec,
+                        runtime=runtime,
+                        resolved_runtime_required=True,
+                    )
         except BlenderCompileCanceled:
             await self._finish_canceled(job.id, reporter)
             return

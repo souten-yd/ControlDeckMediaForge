@@ -794,6 +794,30 @@ def test_workspace_session_returns_the_whole_boot_state_in_one_request(tmp_path:
     assert "watching" in result
 
 
+def test_blender_remove_transport_accepts_only_an_opaque_catalog_identity(tmp_path: Path):
+    client, headers, _state = host_client(tmp_path, token="valid-user")
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            unknown = call(
+                socket,
+                "blender.runtime.remove.preview",
+                {"runtime_id": "attacker-runtime"},
+            )
+            injected = call(
+                socket,
+                "blender.runtime.remove",
+                {
+                    "runtime_id": "attacker-runtime",
+                    "confirmation_fingerprint": "0" * 64,
+                    "path": "/tmp/runtime",
+                },
+            )
+    assert unknown["ok"] is False
+    assert unknown["error"]["code"] == "blender_runtime_not_found"
+    assert injected["ok"] is False
+    assert injected["error"]["code"] == "unscoped_host_path"
+
+
 def test_workspace_session_returns_only_the_requested_parts(tmp_path: Path):
     """session.changed を受けたら変わった部分だけ読み直せること。"""
     client, headers, _state = host_client(tmp_path, token="valid-user")

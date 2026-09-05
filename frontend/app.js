@@ -173,6 +173,7 @@ const state = {
   modelEvaluationIds: new Set(),
   blenderRuntime: null,
   blenderPollId: "",
+  blenderRemovePreview: null,
   removeModelId: "",
   socket: null,
   socketReady: null,
@@ -443,6 +444,21 @@ async function standaloneCall(method, params) {
       method: "POST", body: JSON.stringify({
         action: method.slice("blender.runtime.".length),
         ...(params.runtime_id ? {runtime_id: params.runtime_id} : {}),
+      }),
+    });
+  }
+  if (method === "blender.runtime.remove.preview") {
+    return json("/workspace-api/blender/runtime/operations", {
+      method: "POST", body: JSON.stringify({
+        action: "remove_preview", runtime_id: params.runtime_id,
+      }),
+    });
+  }
+  if (method === "blender.runtime.remove") {
+    return json("/workspace-api/blender/runtime/operations", {
+      method: "POST", body: JSON.stringify({
+        action: "remove", runtime_id: params.runtime_id,
+        confirmation_fingerprint: params.confirmation_fingerprint,
       }),
     });
   }
@@ -5712,12 +5728,16 @@ const BLENDER_TEXT = {
     webMissing: "未導入（基本環境とは別です）",
     action: "Blender 4.5.9 · GPL-3.0-or-later · blender.org · 約378 MB",
     install: "基本環境を導入", update: "推奨版へ更新", repair: "修復",
-    useVersion: "この版を使用", cancel: "処理を中止", active: "使用中",
+    useVersion: "この版を使用", remove: "削除", cancel: "処理を中止", active: "使用中",
+    removeTitle: "Blender環境を削除", removeConfirm: "削除する", back: "戻る",
+    removeReady: "この管理環境だけを削除します。画像・制作物・履歴は削除しません。",
+    removeBlocked: "この環境は使用中のため削除できません。",
+    liveRefs: "実行中の参照", projectRefs: "制作物の参照",
     operation: "環境処理", failed: "環境処理に失敗しました",
     operationStates: {
       queued: "待機中", preflight: "容量確認中", downloading: "ダウンロード中",
       verifying: "検証中", installing: "展開中", probing: "動作確認中",
-      ready: "完了", failed: "失敗", canceled: "中止",
+      deleting: "削除中", ready: "完了", failed: "失敗", canceled: "中止",
     },
     fingerprint: "診断ID",
   },
@@ -5734,12 +5754,16 @@ const BLENDER_TEXT = {
     webMissing: "Not installed (separate from the base runtime)",
     action: "Blender 4.5.9 · GPL-3.0-or-later · blender.org · about 378 MB",
     install: "Install base runtime", update: "Update to recommended", repair: "Repair",
-    useVersion: "Use this version", cancel: "Cancel operation", active: "Active",
+    useVersion: "Use this version", remove: "Remove", cancel: "Cancel operation", active: "Active",
+    removeTitle: "Remove Blender runtime", removeConfirm: "Remove", back: "Back",
+    removeReady: "Only this managed runtime will be removed. Images, projects, and history are kept.",
+    removeBlocked: "This runtime cannot be removed while it is in use.",
+    liveRefs: "Live references", projectRefs: "Project references",
     operation: "Runtime operation", failed: "Runtime operation failed",
     operationStates: {
       queued: "Queued", preflight: "Checking capacity", downloading: "Downloading",
       verifying: "Verifying", installing: "Installing", probing: "Probing",
-      ready: "Ready", failed: "Failed", canceled: "Canceled",
+      deleting: "Deleting", ready: "Ready", failed: "Failed", canceled: "Canceled",
     },
     fingerprint: "Diagnostic ID",
   },
@@ -5770,6 +5794,18 @@ function watchStandaloneBlenderOperation(operationId) {
   void pollStandaloneBlenderOperation(operationId);
 }
 
+function renderBlenderRemovalPreview() {
+  const preview = state.blenderRemovePreview;
+  if (!preview) return;
+  const text = blenderText();
+  byId("blender-remove-summary").textContent = preview.can_remove
+    ? text.removeReady : text.removeBlocked;
+  byId("blender-remove-detail").textContent = `Blender ${preview.version} · ${
+    formatBytes(preview.reclaimable_bytes)} · ${text.liveRefs} ${
+    preview.live_reference_count} · ${text.projectRefs} ${preview.project_reference_count}`;
+  byId("blender-remove-confirm").hidden = !preview.can_remove;
+}
+
 function renderBlenderRuntime() {
   const value = state.blenderRuntime;
   const text = blenderText();
@@ -5786,6 +5822,10 @@ function renderBlenderRuntime() {
   byId("blender-runtime-update").textContent = text.update;
   byId("blender-runtime-cancel").textContent = text.cancel;
   byId("blender-runtime-details-label").textContent = text.details;
+  byId("blender-remove-title").textContent = text.removeTitle;
+  byId("blender-remove-cancel").textContent = text.back;
+  byId("blender-remove-confirm").textContent = text.removeConfirm;
+  renderBlenderRemovalPreview();
   if (!value) {
     byId("blender-runtime-state").textContent = text.checking;
     return;
@@ -5867,6 +5907,11 @@ function renderBlenderRuntime() {
         use.dataset.blenderSwitch = runtime.runtime_id;
         controls.append(use);
       }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = text.remove;
+      remove.dataset.blenderRemove = runtime.runtime_id;
+      controls.append(remove);
     }
     row.append(info, controls);
     return row;
@@ -6074,6 +6119,21 @@ byId("blender-runtime-update").addEventListener("click", async () => {
   }
 });
 byId("blender-runtime-list").addEventListener("click", async (event) => {
+  const remove = event.target.closest("[data-blender-remove]");
+  if (remove) {
+    try {
+      const preview = await call("blender.runtime.remove.preview", {
+        runtime_id: remove.dataset.blenderRemove,
+      });
+      state.blenderRemovePreview = preview;
+      renderBlenderRemovalPreview();
+      byId("blender-remove-dialog").showModal();
+    } catch (error) {
+      byId("blender-runtime-progress-label").hidden = false;
+      byId("blender-runtime-progress-label").textContent = error?.code || "remove_preview_failed";
+    }
+    return;
+  }
   const repair = event.target.closest("[data-blender-repair]");
   const use = event.target.closest("[data-blender-switch]");
   const method = repair ? "blender.runtime.repair" : (use ? "blender.runtime.switch" : null);
@@ -6085,6 +6145,26 @@ byId("blender-runtime-list").addEventListener("click", async (event) => {
   } catch (error) {
     byId("blender-runtime-progress-label").hidden = false;
     byId("blender-runtime-progress-label").textContent = error?.code || "runtime_action_failed";
+  }
+});
+byId("blender-remove-cancel").addEventListener("click", () => {
+  state.blenderRemovePreview = null;
+  byId("blender-remove-dialog").close();
+});
+byId("blender-remove-confirm").addEventListener("click", async () => {
+  const preview = state.blenderRemovePreview;
+  if (!preview?.can_remove) return;
+  byId("blender-remove-dialog").close();
+  state.blenderRemovePreview = null;
+  try {
+    await call("blender.runtime.remove", {
+      runtime_id: preview.runtime_id,
+      confirmation_fingerprint: preview.confirmation_fingerprint,
+    });
+    await refreshSession(["blender_runtime"]);
+  } catch (error) {
+    byId("blender-runtime-progress-label").hidden = false;
+    byId("blender-runtime-progress-label").textContent = error?.code || "remove_failed";
   }
 });
 byId("blender-runtime-cancel").addEventListener("click", async () => {
