@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import json
 import logging
 import os
@@ -19,6 +20,7 @@ from scripts.blender_runtime import (
     load_spec,
     preflight,
     validate_archive,
+    validate_spec,
 )
 
 from .blender_operation import (
@@ -28,7 +30,11 @@ from .blender_operation import (
     BlenderRuntimeOperationError,
     BlenderRuntimeOperationState,
 )
-from .blender_runtime import BlenderRuntimeRegistryError, BlenderRuntimeResolver
+from .blender_runtime import (
+    RUNTIME_ID_PATTERN,
+    BlenderRuntimeRegistryError,
+    BlenderRuntimeResolver,
+)
 from .paths import contained
 from .store import Store
 
@@ -36,9 +42,16 @@ from .store import Store
 MINIMUM_DISK_MARGIN_BYTES = 1024 * 1024 * 1024
 DOWNLOAD_RETRIES = 3
 RUNTIME_ID = "blender-4.5.9-linux-x64"
-RUNTIME_LOCATION = RUNTIME_ID
+MAX_CATALOG_BYTES = 128 * 1024
 USER_AGENT = "ControlDeck-Media-Forge/Blender-Runtime-Manager"
 logger = logging.getLogger("uvicorn.error")
+
+
+@dataclass(frozen=True)
+class BlenderRuntimeCatalog:
+    base_runtime_id: str
+    recommended_studio_runtime_id: str
+    specs: dict[str, RuntimeSpec]
 
 
 class BlenderRuntimeManager:
@@ -52,6 +65,7 @@ class BlenderRuntimeManager:
         manifest_path: Path,
         preflight_script: Path,
         download_root: Path,
+        catalog_path: Path | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.store = store
@@ -59,13 +73,15 @@ class BlenderRuntimeManager:
         self.manifest_path = manifest_path.resolve()
         self.preflight_script = preflight_script.resolve()
         self.download_root = download_root.resolve()
+        self.catalog_path = Path(os.path.abspath(catalog_path)) if catalog_path is not None else None
         self.transport = transport
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._guard = asyncio.Semaphore(1)
 
     @property
     def spec(self) -> RuntimeSpec:
-        return load_spec(self.manifest_path)
+        catalog = self._catalog()
+        return catalog.specs[catalog.base_runtime_id]
 
     async def start(self) -> None:
         self.resolver.managed_root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -81,38 +97,170 @@ class BlenderRuntimeManager:
         self._tasks.clear()
 
     def catalog(self) -> dict[str, Any]:
-        spec = self.spec
+        catalog = self._catalog()
+        base = catalog.specs[catalog.base_runtime_id]
+        active = self.resolver.resolve_active()
+        status = self.resolver.status()
+        ready_ids = {
+            str(row["runtime_id"])
+            for row in status.get("runtimes", [])
+            if row.get("state") == "ready"
+        }
         return {
-            "runtime_id": RUNTIME_ID,
-            "version": spec.version,
-            "archive_size_bytes": spec.archive_size_bytes,
-            "license": spec.license,
+            # Keep the 3DS-2a read-only fields additive for older workspaces.
+            "version": base.version,
+            "archive_size_bytes": base.archive_size_bytes,
+            "license": base.license,
             "source": "blender.org",
-            "install_available": True,
+            "base_runtime_id": catalog.base_runtime_id,
+            "recommended_studio_runtime_id": catalog.recommended_studio_runtime_id,
+            "active_runtime_id": active.runtime_id if active is not None else None,
+            "update_available": (
+                active is not None
+                and active.runtime_id != catalog.recommended_studio_runtime_id
+            ),
+            "items": [
+                {
+                    "runtime_id": runtime_id,
+                    "version": spec.version,
+                    "archive_size_bytes": spec.archive_size_bytes,
+                    "license": spec.license,
+                    "source": "blender.org",
+                }
+                for runtime_id, spec in catalog.specs.items()
+            ],
+            "install_available": catalog.base_runtime_id not in ready_ids,
         }
 
+    def _catalog(self) -> BlenderRuntimeCatalog:
+        try:
+            base_spec = load_spec(self.manifest_path)
+        except BlenderRuntimeError as exc:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_catalog_invalid", "trusted Blender manifest is invalid"
+            ) from exc
+        if self.catalog_path is None:
+            return BlenderRuntimeCatalog(RUNTIME_ID, RUNTIME_ID, {RUNTIME_ID: base_spec})
+        path = self.catalog_path
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_CATALOG_BYTES:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_catalog_invalid", "trusted Blender catalog is unavailable"
+            )
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_catalog_invalid", "trusted Blender catalog is invalid"
+            ) from exc
+        if (
+            not isinstance(value, dict)
+            or set(value) != {
+                "schema_version", "base_runtime_id", "recommended_studio_runtime_id", "runtimes"
+            }
+            or value["schema_version"] != 1
+            or not isinstance(value["runtimes"], list)
+            or not 1 <= len(value["runtimes"]) <= 16
+        ):
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_catalog_invalid", "trusted Blender catalog is invalid"
+            )
+        specs: dict[str, RuntimeSpec] = {}
+        try:
+            for row in value["runtimes"]:
+                if (
+                    not isinstance(row, dict)
+                    or set(row) != {"runtime_id", "spec"}
+                    or not isinstance(row["runtime_id"], str)
+                    or not RUNTIME_ID_PATTERN.fullmatch(row["runtime_id"])
+                    or row["runtime_id"] in specs
+                ):
+                    raise BlenderRuntimeOperationError(
+                        "blender_runtime_catalog_invalid", "trusted Blender catalog is invalid"
+                    )
+                specs[row["runtime_id"]] = validate_spec(row["spec"])
+        except BlenderRuntimeError as exc:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_catalog_invalid", "trusted Blender catalog is invalid"
+            ) from exc
+        base_id = value["base_runtime_id"]
+        recommended_id = value["recommended_studio_runtime_id"]
+        if (
+            not isinstance(base_id, str)
+            or not isinstance(recommended_id, str)
+            or base_id not in specs
+            or recommended_id not in specs
+            or specs[base_id] != base_spec
+        ):
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_catalog_invalid", "trusted Blender catalog is invalid"
+            )
+        return BlenderRuntimeCatalog(base_id, recommended_id, specs)
+
     def install(self) -> BlenderRuntimeOperation:
+        return self._start(self._catalog().base_runtime_id, BlenderRuntimeOperationAction.INSTALL)
+
+    def update(self) -> BlenderRuntimeOperation:
+        catalog = self._catalog()
+        active = self.resolver.resolve_active()
+        if active is None:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_not_installed", "install the base Blender runtime first"
+            )
+        if active.runtime_id == catalog.recommended_studio_runtime_id:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_already_current", "Blender Studio runtime is already current"
+            )
+        return self._start(
+            catalog.recommended_studio_runtime_id, BlenderRuntimeOperationAction.UPDATE
+        )
+
+    def repair(self, runtime_id: str) -> BlenderRuntimeOperation:
+        if runtime_id not in self._catalog().specs:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_not_found", "Blender runtime is not in the trusted catalog"
+            )
+        row = next((
+            item for item in self.resolver.status().get("runtimes", [])
+            if item.get("runtime_id") == runtime_id and item.get("ownership") == "managed"
+        ), None)
+        if row is None:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_not_found", "managed Blender runtime was not found"
+            )
+        return self._start(runtime_id, BlenderRuntimeOperationAction.REPAIR)
+
+    def switch(self, runtime_id: str) -> BlenderRuntimeOperation:
+        if runtime_id not in self._catalog().specs:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_not_found", "Blender runtime is not in the trusted catalog"
+            )
+        return self._start(runtime_id, BlenderRuntimeOperationAction.SWITCH)
+
+    def _start(
+        self, runtime_id: str, action: BlenderRuntimeOperationAction
+    ) -> BlenderRuntimeOperation:
         active = next((
             item for item in self.store.list_blender_runtime_operations()
-            if item.runtime_id == RUNTIME_ID
-            and item.action == BlenderRuntimeOperationAction.INSTALL
+            if item.runtime_id == runtime_id
+            and item.action == action
             and item.state not in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES
         ), None)
         if active is not None:
             return active
-        if any(
-            row.get("runtime_id") == RUNTIME_ID and row.get("state") == "ready"
+        if action == BlenderRuntimeOperationAction.INSTALL and any(
+            row.get("runtime_id") == runtime_id and row.get("state") == "ready"
             for row in self.resolver.status().get("runtimes", [])
         ):
             raise BlenderRuntimeOperationError(
                 "blender_runtime_already_installed", "Blender runtime is already installed"
             )
         try:
+            spec = self._catalog().specs[runtime_id]
             operation = self.store.create_blender_runtime_operation(
-                RUNTIME_ID,
-                self.spec.version,
-                BlenderRuntimeOperationAction.INSTALL,
-                bytes_total=self.spec.archive_size_bytes,
+                runtime_id,
+                spec.version,
+                action,
+                bytes_total=0 if action == BlenderRuntimeOperationAction.SWITCH else spec.archive_size_bytes,
             )
         except ValueError as exc:
             raise BlenderRuntimeOperationError(
@@ -128,7 +276,7 @@ class BlenderRuntimeManager:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_operation_not_found", "Blender runtime operation was not found"
             ) from exc
-        if operation.runtime_id != RUNTIME_ID:
+        if operation.runtime_id not in self._catalog().specs:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_operation_not_found", "Blender runtime operation was not found"
             )
@@ -149,7 +297,10 @@ class BlenderRuntimeManager:
                 await self._finish_canceled(operation)
                 return
             try:
-                await self._install(operation)
+                if operation.action == BlenderRuntimeOperationAction.SWITCH:
+                    await self._switch(operation)
+                else:
+                    await self._install(operation)
             except asyncio.CancelledError:
                 # Store.initialize() queues the journal again. Partial bytes stay
                 # in the trusted download cache and must pass ETag/hash checks.
@@ -183,8 +334,33 @@ class BlenderRuntimeManager:
                     error_message=str(exc)[:300],
                 )
 
+    async def _switch(self, operation: BlenderRuntimeOperation) -> None:
+        self.store.update_blender_runtime_operation(
+            operation.id, state=BlenderRuntimeOperationState.PREFLIGHT
+        )
+        self._raise_if_canceled(operation.id)
+        self.store.update_blender_runtime_operation(
+            operation.id, state=BlenderRuntimeOperationState.PROBING
+        )
+        runtime = self.resolver.activate(operation.runtime_id)
+        self._raise_if_canceled(operation.id)
+        self.store.update_blender_runtime_operation(
+            operation.id,
+            state=BlenderRuntimeOperationState.READY,
+            result={"runtime_id": runtime.runtime_id, "version": runtime.version},
+        )
+
     async def _install(self, operation: BlenderRuntimeOperation) -> None:
-        spec = self.spec
+        try:
+            spec = self._catalog().specs[operation.runtime_id]
+        except KeyError as exc:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_not_found", "Blender runtime is not in the trusted catalog"
+            ) from exc
+        if spec.version != operation.version:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_catalog_changed", "Blender runtime catalog changed"
+            )
         self.store.update_blender_runtime_operation(
             operation.id, state=BlenderRuntimeOperationState.PREFLIGHT
         )
@@ -197,13 +373,13 @@ class BlenderRuntimeManager:
             )
         destination = contained(
             self.resolver.managed_root,
-            self.resolver.managed_root / RUNTIME_LOCATION,
+            self.resolver.managed_root / operation.runtime_id,
         )
         if destination.is_symlink():
             raise BlenderRuntimeOperationError(
                 "blender_runtime_destination_exists", "managed Blender destination already exists"
             )
-        if destination.is_dir():
+        if destination.is_dir() and operation.action != BlenderRuntimeOperationAction.REPAIR:
             self.store.update_blender_runtime_operation(
                 operation.id, state=BlenderRuntimeOperationState.PROBING,
                 bytes_done=spec.archive_size_bytes,
@@ -213,18 +389,20 @@ class BlenderRuntimeManager:
                 self.preflight_script, spec,
             )
             self.resolver.register_managed(
-                runtime_id=RUNTIME_ID,
+                runtime_id=operation.runtime_id,
                 version=spec.version,
-                location=RUNTIME_LOCATION,
+                location=operation.runtime_id,
                 archive_sha256=spec.archive_sha256,
             )
+            if operation.action == BlenderRuntimeOperationAction.UPDATE:
+                self.resolver.activate(operation.runtime_id)
             await self._clean_stage(operation.id)
             self.store.update_blender_runtime_operation(
                 operation.id,
                 state=BlenderRuntimeOperationState.READY,
                 bytes_done=spec.archive_size_bytes,
                 result={
-                    "runtime_id": RUNTIME_ID,
+                    "runtime_id": operation.runtime_id,
                     "version": spec.version,
                     "archive_sha256": spec.archive_sha256,
                     "preflight": facts,
@@ -232,7 +410,7 @@ class BlenderRuntimeManager:
                 },
             )
             return
-        if destination.exists():
+        if destination.exists() and operation.action != BlenderRuntimeOperationAction.REPAIR:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_destination_exists", "managed Blender destination already exists"
             )
@@ -301,25 +479,46 @@ class BlenderRuntimeManager:
         )
         self._raise_if_canceled(operation.id)
         destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.replace(candidate, destination)
+        previous = contained(
+            self.resolver.managed_root,
+            self.resolver.managed_root / ".staging" / f"previous-{operation.id}",
+        )
+        replacing = operation.action == BlenderRuntimeOperationAction.REPAIR
+        if replacing:
+            self._ensure_managed_destination(destination)
+            try:
+                os.replace(destination, previous)
+                os.replace(candidate, destination)
+            except Exception:
+                if previous.exists() and not destination.exists():
+                    os.replace(previous, destination)
+                raise
+        else:
+            os.replace(candidate, destination)
         try:
             self.resolver.register_managed(
-                runtime_id=RUNTIME_ID,
+                runtime_id=operation.runtime_id,
                 version=spec.version,
-                location=RUNTIME_LOCATION,
+                location=operation.runtime_id,
                 archive_sha256=spec.archive_sha256,
             )
+            if operation.action == BlenderRuntimeOperationAction.UPDATE:
+                self.resolver.activate(operation.runtime_id)
         except Exception:
             self._ensure_managed_destination(destination)
             await asyncio.to_thread(shutil.rmtree, destination)
+            if replacing and previous.exists():
+                os.replace(previous, destination)
             raise
+        if previous.exists():
+            await asyncio.to_thread(shutil.rmtree, previous)
         await self._clean_stage(operation.id)
         self.store.update_blender_runtime_operation(
             operation.id,
             state=BlenderRuntimeOperationState.READY,
             bytes_done=spec.archive_size_bytes,
             result={
-                "runtime_id": RUNTIME_ID,
+                "runtime_id": operation.runtime_id,
                 "version": spec.version,
                 "archive_sha256": spec.archive_sha256,
                 "archive": archive_facts,

@@ -32,7 +32,7 @@ DOM_IDS = (
     "blender-runtime-state", "blender-basic-value", "blender-web-value",
     "blender-version-value", "blender-runtime-refresh", "blender-runtime-details",
     "blender-runtime-list", "blender-runtime-fingerprint", "blender-runtime-install",
-    "blender-runtime-cancel", "blender-runtime-progress", "blender-runtime-progress-label",
+    "blender-runtime-update", "blender-runtime-cancel", "blender-runtime-progress", "blender-runtime-progress-label",
     "mode-simple", "mode-advanced",
     "create-media-switch", "create-media-image", "create-media-video",
     "create-intent-label", "video-create-fields",
@@ -79,6 +79,19 @@ DOM_IDS = (
     "viewer", "viewer-stage", "viewer-image", "viewer-caption",
     "viewer-detail", "viewer-edit", "viewer-close",
 )
+
+
+def test_blender_runtime_lifecycle_has_embedded_and_standalone_receivers() -> None:
+    for method in (
+        "blender.runtime.install",
+        "blender.runtime.update",
+        "blender.runtime.repair",
+        "blender.runtime.switch",
+        "blender.runtime.operations.cancel",
+    ):
+        assert method in SCRIPT
+    assert "/workspace-api/blender/runtime/operations" in SCRIPT
+    assert "watchStandaloneBlenderOperation" in SCRIPT
 
 ADVANCED_IDS = (
     "advanced-create", "advanced-format",

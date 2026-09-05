@@ -172,6 +172,7 @@ const state = {
   modelManagementAvailable: false,
   modelEvaluationIds: new Set(),
   blenderRuntime: null,
+  blenderPollId: "",
   removeModelId: "",
   socket: null,
   socketReady: null,
@@ -435,6 +436,14 @@ async function standaloneCall(method, params) {
   if (method === "blender.runtime.install") {
     return json("/workspace-api/blender/runtime/operations", {
       method: "POST", body: JSON.stringify({action: "install"}),
+    });
+  }
+  if (["blender.runtime.update", "blender.runtime.repair", "blender.runtime.switch"].includes(method)) {
+    return json("/workspace-api/blender/runtime/operations", {
+      method: "POST", body: JSON.stringify({
+        action: method.slice("blender.runtime.".length),
+        ...(params.runtime_id ? {runtime_id: params.runtime_id} : {}),
+      }),
     });
   }
   if (method === "blender.runtime.operations.cancel") {
@@ -5702,8 +5711,9 @@ const BLENDER_TEXT = {
     invalidSummary: "Blenderの登録情報を安全に確認できないため、3D加工を停止しています。",
     webMissing: "未導入（基本環境とは別です）",
     action: "Blender 4.5.9 · GPL-3.0-or-later · blender.org · 約378 MB",
-    install: "基本環境を導入", cancel: "導入を中止",
-    operation: "導入処理", failed: "導入に失敗しました",
+    install: "基本環境を導入", update: "推奨版へ更新", repair: "修復",
+    useVersion: "この版を使用", cancel: "処理を中止", active: "使用中",
+    operation: "環境処理", failed: "環境処理に失敗しました",
     operationStates: {
       queued: "待機中", preflight: "容量確認中", downloading: "ダウンロード中",
       verifying: "検証中", installing: "展開中", probing: "動作確認中",
@@ -5723,8 +5733,9 @@ const BLENDER_TEXT = {
     invalidSummary: "3D processing is disabled because the runtime registry could not be verified.",
     webMissing: "Not installed (separate from the base runtime)",
     action: "Blender 4.5.9 · GPL-3.0-or-later · blender.org · about 378 MB",
-    install: "Install base runtime", cancel: "Cancel install",
-    operation: "Installation", failed: "Installation failed",
+    install: "Install base runtime", update: "Update to recommended", repair: "Repair",
+    useVersion: "Use this version", cancel: "Cancel operation", active: "Active",
+    operation: "Runtime operation", failed: "Runtime operation failed",
     operationStates: {
       queued: "Queued", preflight: "Checking capacity", downloading: "Downloading",
       verifying: "Verifying", installing: "Installing", probing: "Probing",
@@ -5737,6 +5748,26 @@ const BLENDER_TEXT = {
 function blenderText() {
   return document.documentElement.lang.toLowerCase().startsWith("en")
     ? BLENDER_TEXT.en : BLENDER_TEXT.ja;
+}
+
+async function pollStandaloneBlenderOperation(operationId) {
+  try {
+    for (let attempt = 0; attempt < 7200 && !state.disabled; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await refreshSession(["blender_runtime"]);
+      const operation = (state.blenderRuntime?.operations || []).find(
+        (item) => item.id === operationId);
+      if (!operation || ["ready", "failed", "canceled"].includes(operation.state)) return;
+    }
+  } finally {
+    if (state.blenderPollId === operationId) state.blenderPollId = "";
+  }
+}
+
+function watchStandaloneBlenderOperation(operationId) {
+  if (window.parent !== window || !operationId || state.blenderPollId === operationId) return;
+  state.blenderPollId = operationId;
+  void pollStandaloneBlenderOperation(operationId);
 }
 
 function renderBlenderRuntime() {
@@ -5752,6 +5783,7 @@ function renderBlenderRuntime() {
   byId("blender-version-label").textContent = text.version;
   byId("blender-runtime-refresh").textContent = text.refresh;
   byId("blender-runtime-install").textContent = text.install;
+  byId("blender-runtime-update").textContent = text.update;
   byId("blender-runtime-cancel").textContent = text.cancel;
   byId("blender-runtime-details-label").textContent = text.details;
   if (!value) {
@@ -5759,7 +5791,7 @@ function renderBlenderRuntime() {
     return;
   }
   const selected = (value.runtimes || []).find(
-    (runtime) => runtime.runtime_id === value.g8_runtime_id);
+    (runtime) => runtime.runtime_id === value.active_runtime_id);
   const labels = {
     ready: text.ready, missing: text.missing, damaged: text.damaged,
     invalid: text.invalid, unsupported: text.unsupported,
@@ -5776,8 +5808,13 @@ function renderBlenderRuntime() {
     : text.action;
   const terminal = new Set(["ready", "failed", "canceled"]);
   const operation = (value.operations || []).find((item) => !terminal.has(item.state));
+  if (operation) watchStandaloneBlenderOperation(operation.id);
   const lastFailed = (value.operations || []).find((item) => item.state === "failed");
   byId("blender-runtime-install").hidden = ["ready", "invalid"].includes(value.state)
+    || Boolean(operation)
+    || value.management_available === false
+    || value.catalog?.install_available === false;
+  byId("blender-runtime-update").hidden = !value.catalog?.update_available
     || Boolean(operation)
     || value.management_available === false;
   byId("blender-runtime-cancel").hidden = !operation;
@@ -5809,10 +5846,29 @@ function renderBlenderRuntime() {
     detail.textContent = Object.entries(checks).map(([key, label]) =>
       `${label}: ${runtime.checks?.[key] ? "OK" : "NG"}`).join(" · ");
     info.append(title, detail);
+    const controls = document.createElement("div");
+    controls.className = "runtime-row-controls";
     const status = document.createElement("span");
     status.className = "state";
-    status.textContent = labels[runtime.state] || runtime.state;
-    row.append(info, status);
+    status.textContent = runtime.active ? text.active : (labels[runtime.state] || runtime.state);
+    controls.append(status);
+    const catalogIds = new Set((value.catalog?.items || []).map((item) => item.runtime_id));
+    if (!operation && runtime.ownership === "managed" && catalogIds.has(runtime.runtime_id)) {
+      if (runtime.state === "damaged") {
+        const repair = document.createElement("button");
+        repair.type = "button";
+        repair.textContent = text.repair;
+        repair.dataset.blenderRepair = runtime.runtime_id;
+        controls.append(repair);
+      } else if (runtime.state === "ready" && !runtime.active) {
+        const use = document.createElement("button");
+        use.type = "button";
+        use.textContent = text.useVersion;
+        use.dataset.blenderSwitch = runtime.runtime_id;
+        controls.append(use);
+      }
+    }
+    row.append(info, controls);
     return row;
   }));
   byId("blender-runtime-fingerprint").textContent = value.fingerprint
@@ -6006,6 +6062,29 @@ byId("blender-runtime-install").addEventListener("click", async () => {
   } catch (error) {
     byId("blender-runtime-progress-label").hidden = false;
     byId("blender-runtime-progress-label").textContent = error?.code || "install_failed";
+  }
+});
+byId("blender-runtime-update").addEventListener("click", async () => {
+  try {
+    await call("blender.runtime.update", {});
+    await refreshSession(["blender_runtime"]);
+  } catch (error) {
+    byId("blender-runtime-progress-label").hidden = false;
+    byId("blender-runtime-progress-label").textContent = error?.code || "update_failed";
+  }
+});
+byId("blender-runtime-list").addEventListener("click", async (event) => {
+  const repair = event.target.closest("[data-blender-repair]");
+  const use = event.target.closest("[data-blender-switch]");
+  const method = repair ? "blender.runtime.repair" : (use ? "blender.runtime.switch" : null);
+  const runtimeId = repair?.dataset.blenderRepair || use?.dataset.blenderSwitch;
+  if (!method || !runtimeId) return;
+  try {
+    await call(method, {runtime_id: runtimeId});
+    await refreshSession(["blender_runtime"]);
+  } catch (error) {
+    byId("blender-runtime-progress-label").hidden = false;
+    byId("blender-runtime-progress-label").textContent = error?.code || "runtime_action_failed";
   }
 });
 byId("blender-runtime-cancel").addEventListener("click", async () => {

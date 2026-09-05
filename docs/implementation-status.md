@@ -8145,3 +8145,50 @@ local full gateは867 passed / 既知warning 1件 / 64.39秒、focused 240件も
 展開後launcher doctorは`ok / 0.27.0 / packaged=true`。一時runtime/bundle/UI領域はゴミ箱へ移した。
 update/switch/repair/remove、公開release、installed Host browser、GPU Blenderは
 **NOT IMPLEMENTED / NOT TESTED**。ControlDeck変更は0件。
+
+## 2026-09-05 — 3DS-2b side-by-side Blender update / switch / repair
+
+official Blender 4.5 LTS catalogへ4.5.13をexact entryとして追加した。archiveは
+378,033,952 B、SHA-256
+`da4e69b06b75b9e642d106496c50e7e240218b411d2f6e18271c1d1d819cef91`、取得元は
+`download.blender.org/release/Blender4.5/`、licenseはGPL-3.0-or-later。既存G8契約の4.5.9
+entryは変更していない。UI/WS/standalone APIはURL/path/version/commandを受けず、サーバーが
+検証したopaque runtime ID、または引数なしのrecommended updateだけを受ける。
+
+更新は新版を別directoryへdownload、size/hash/archive検証、展開、実probeしてからregistryのactiveを
+切り替える。旧版と失敗時activeは保持する。switchは登録済みready runtimeだけ、repairはcatalog内の
+managed runtimeだけを別stagingへ再構築し、旧directoryを退避してatomic交換する。Settingsへ更新、
+修復、検証済み版の選択、操作進捗を日英で追加した。standaloneは操作中だけ500 msで状態を再読込し、
+終端後に停止する。埋め込みは既存`session.changed`を使いpollingしない。
+
+一時data/runtime rootで既存の正規4.5.9 archiveからbaseを19.989秒で導入後、正規4.5.13を直接取得した
+side-by-side updateは54.507秒でreadyとなった。4.5.13のarchive検証はmember 6,512 / extracted
+1,167,187,839 B、実probeはBlender 4.5.13 / Python 3.11.15 / background / GLTF import/exportすべてtrue。
+managed runtime実ファイル量は4.5.9が1,605,023,227 B、4.5.13が1,601,081,665 B。registryは488 B /
+mode 0600 / raw pathなし。update直後のactiveは`blender-4.5.13-linux-x64`、G8 resolverは
+`blender-4.5.9-linux-x64`を選んだ。4.5.13→4.5.9の明示switchもreadyとなった。
+
+activeを4.5.13へ戻した実Uvicorn `127.0.0.1:9165`へ796 B cubeをimportし、実HTTP
+`asset.pack + 3d.project.glb` jobは0.779秒でsucceededした。出力は44,292 B、SHA-256
+`c78ef18d6c4da0334a9e3e2c451519d4b9bd2541ead1022cfa3979b0ef3a468b`、entryは
+`asset.glb / manifest.json / preview.png`で3DS-0〜2a baselineと同一。したがってStudio active版を
+上げても、既存G8 compilerは固定4.5.9から変わっていない。
+
+4.5.13の実executableを一時root内で削除するとstatusは`damaged`、executable checkだけfalse、
+active resolveはfail-closedになった。cached exact archiveからrepairし、20.091秒で
+`queued → verifying → installing → probing → ready`、executable SHAは削除前と同一、active ID維持、
+previous staging残留0を確認。fixtureでは4.5.13が4.5.12を報告するprobe失敗で4.5.9 activeを保持し、
+新版destinationを残さない。未知runtime ID、任意URL付きupdateも422で拒否した。
+
+実Chromeでは日本語「推奨版へ更新」、英語`Update to recommended`、2版のready/active/switch表示を確認。
+ボタン操作後は4.5.13 activeへ自動追従し、320 pxでclientWidth/scrollWidthとも320、button 39 px、
+console/page error 0。最初の実測でstandalone method不足を`workspace_method_unsupported`として検出し、
+standalone mappingと操作中だけの追従を追加後に再試験した。一時runtime/data/Chrome profileはゴミ箱へ
+移し、試験Uvicorn/Chrome/Blender childは停止した。
+
+local full gateは`./mf.sh test` 875 passed / 既知Starlette warning 1件 / 64.08秒。PyInstaller bundleは
+31,157,120 B / SHA-256 `2b7ce206d48bc6c6ffebe23b94857dff333924cc135b6b40452738fe5e48de3b`、
+展開後doctorは`ok / 0.27.0 / packaged=true`。packaged serveのprivate statusから同梱catalogの
+base 4.5.9 / recommended 4.5.13を確認した。実ControlDeck opaque
+iframe、installed release、GPU/Cycles、稼働中Web Blender sessionの版pin、remove、Web Blender、
+scene/revision、viewer、材質、OpenCode制作は **NOT TESTED / NOT IMPLEMENTED**。ControlDeck変更は0件。

@@ -26,33 +26,61 @@ from mediaforge.store import Store
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def archive_fixture(tmp_path: Path) -> tuple[bytes, Path]:
-    executable = b"#!/bin/sh\nprintf 'MEDIA_FORGE_BLENDER_PREFLIGHT={\"version\":\"4.5.9\",\"background\":true}\n'\n"
+def archive_content(version: str, *, reported_version: str | None = None) -> bytes:
+    reported = reported_version or version
+    executable = (
+        "#!/bin/sh\nprintf 'MEDIA_FORGE_BLENDER_PREFLIGHT="
+        f"{{\"version\":\"{reported}\",\"background\":true}}\\n'\\n"
+    ).encode()
     payload = io.BytesIO()
     with tarfile.open(fileobj=payload, mode="w:xz") as archive:
-        directory = tarfile.TarInfo("blender-4.5.9-linux-x64")
+        directory = tarfile.TarInfo(f"blender-{version}-linux-x64")
         directory.type = tarfile.DIRTYPE
         directory.mode = 0o700
         archive.addfile(directory)
-        binary = tarfile.TarInfo("blender-4.5.9-linux-x64/blender")
+        binary = tarfile.TarInfo(f"blender-{version}-linux-x64/blender")
         binary.size = len(executable)
         binary.mode = 0o755
         archive.addfile(binary, io.BytesIO(executable))
-    content = payload.getvalue()
-    manifest = tmp_path / "blender-runtime.json"
-    manifest.write_text(json.dumps({
+    return payload.getvalue()
+
+
+def spec_value(version: str, content: bytes) -> dict[str, object]:
+    return {
         "schema_version": 1,
-        "version": "4.5.9",
-        "archive_name": "blender-4.5.9-linux-x64.tar.xz",
-        "archive_url": "https://download.blender.org/release/Blender4.5/blender-4.5.9-linux-x64.tar.xz",
+        "version": version,
+        "archive_name": f"blender-{version}-linux-x64.tar.xz",
+        "archive_url": f"https://download.blender.org/release/Blender4.5/blender-{version}-linux-x64.tar.xz",
         "archive_size_bytes": len(content),
         "archive_sha256": hashlib.sha256(content).hexdigest(),
-        "top_level_directory": "blender-4.5.9-linux-x64",
+        "top_level_directory": f"blender-{version}-linux-x64",
         "executable": "blender",
         "license": "GPL-3.0-or-later",
         "source_url": "https://projects.blender.org/blender/blender",
-    }), encoding="utf-8")
+    }
+
+
+def archive_fixture(tmp_path: Path) -> tuple[bytes, Path]:
+    content = archive_content("4.5.9")
+    manifest = tmp_path / "blender-runtime.json"
+    manifest.write_text(json.dumps(spec_value("4.5.9", content)), encoding="utf-8")
     return content, manifest
+
+
+def catalog_fixture(
+    tmp_path: Path, base_content: bytes, recommended_content: bytes
+) -> Path:
+    catalog = tmp_path / "blender-runtime-catalog.json"
+    catalog.write_text(json.dumps({
+        "schema_version": 1,
+        "base_runtime_id": "blender-4.5.9-linux-x64",
+        "recommended_studio_runtime_id": "blender-4.5.13-linux-x64",
+        "runtimes": [
+            {"runtime_id": "blender-4.5.9-linux-x64", "spec": spec_value("4.5.9", base_content)},
+            {"runtime_id": "blender-4.5.13-linux-x64", "spec": spec_value("4.5.13", recommended_content)},
+        ],
+    }), encoding="utf-8")
+    return catalog
 
 
 def runtime_manager(
@@ -60,6 +88,8 @@ def runtime_manager(
     store: Store,
     manifest: Path,
     transport: httpx.AsyncBaseTransport,
+    *,
+    catalog: Path | None = None,
 ) -> tuple[BlenderRuntimeManager, BlenderRuntimeResolver]:
     resolver = BlenderRuntimeResolver(
         registry_path=tmp_path / "data/runtime-state/blender-runtimes.json",
@@ -67,6 +97,7 @@ def runtime_manager(
         legacy_root=tmp_path / "missing-legacy",
         manifest_path=manifest,
         trusted_worker=ROOT / "worker_packs/blender/compile_asset.py",
+        catalog_path=catalog,
     )
     manager = BlenderRuntimeManager(
         store,
@@ -74,6 +105,7 @@ def runtime_manager(
         manifest_path=manifest,
         preflight_script=ROOT / "worker_packs/blender/preflight.py",
         download_root=tmp_path / "downloads",
+        catalog_path=catalog,
         transport=transport,
     )
     return manager, resolver
@@ -96,6 +128,19 @@ def response_transport(content: bytes) -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
         start = int(request.headers.get("range", "bytes=0-").removeprefix("bytes=").removesuffix("-"))
         headers = {"ETag": '"fixture-v1"', "Content-Length": str(len(content) - start)}
+        if start:
+            headers["Content-Range"] = f"bytes {start}-{len(content) - 1}/{len(content)}"
+        return httpx.Response(206 if start else 200, content=content[start:], headers=headers, request=request)
+    return httpx.MockTransport(handler)
+
+
+def catalog_transport(contents: dict[str, bytes]) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        version = next((item for item in contents if f"blender-{item}-" in request.url.path), None)
+        assert version is not None
+        content = contents[version]
+        start = int(request.headers.get("range", "bytes=0-").removeprefix("bytes=").removesuffix("-"))
+        headers = {"ETag": f'"fixture-{version}"', "Content-Length": str(len(content) - start)}
         if start:
             headers["Content-Range"] = f"bytes {start}-{len(content) - 1}/{len(content)}"
         return httpx.Response(206 if start else 200, content=content[start:], headers=headers, request=request)
@@ -379,3 +424,169 @@ def test_private_workspace_install_uses_only_the_trusted_catalog(tmp_path: Path)
         assert status["state"] == "ready"
         serialized = json.dumps(status)
         assert str(tmp_path) not in serialized and "path" not in serialized
+
+
+def test_update_installs_side_by_side_then_switches_without_changing_g8(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        base, manifest = archive_fixture(tmp_path)
+        recommended = archive_content("4.5.13")
+        catalog = catalog_fixture(tmp_path, base, recommended)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(
+            tmp_path, store, manifest,
+            catalog_transport({"4.5.9": base, "4.5.13": recommended}),
+            catalog=catalog,
+        )
+        await manager.start()
+        installed = await wait_terminal(store, manager.install().id)
+        assert installed.state == BlenderRuntimeOperationState.READY
+        updated = await wait_terminal(store, manager.update().id)
+        assert updated.state == BlenderRuntimeOperationState.READY
+        assert resolver.resolve_active().runtime_id == "blender-4.5.13-linux-x64"
+        assert resolver.resolve_g8().runtime_id == "blender-4.5.9-linux-x64"
+        assert (resolver.managed_root / "blender-4.5.9-linux-x64/install/blender").is_file()
+        assert (resolver.managed_root / "blender-4.5.13-linux-x64/install/blender").is_file()
+        switched = await wait_terminal(
+            store, manager.switch("blender-4.5.9-linux-x64").id
+        )
+        assert switched.state == BlenderRuntimeOperationState.READY
+        assert resolver.resolve_active().runtime_id == "blender-4.5.9-linux-x64"
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_failed_update_probe_preserves_previous_active_runtime(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        base, manifest = archive_fixture(tmp_path)
+        bad_recommended = archive_content("4.5.13", reported_version="4.5.12")
+        catalog = catalog_fixture(tmp_path, base, bad_recommended)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(
+            tmp_path, store, manifest,
+            catalog_transport({"4.5.9": base, "4.5.13": bad_recommended}),
+            catalog=catalog,
+        )
+        await manager.start()
+        assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
+        failed = await wait_terminal(store, manager.update().id)
+        assert failed.state == BlenderRuntimeOperationState.FAILED
+        assert resolver.resolve_active().runtime_id == "blender-4.5.9-linux-x64"
+        assert resolver.resolve_g8().runtime_id == "blender-4.5.9-linux-x64"
+        assert not (resolver.managed_root / "blender-4.5.13-linux-x64").exists()
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_repair_replaces_damaged_managed_runtime_and_keeps_active_id(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        base, manifest = archive_fixture(tmp_path)
+        recommended = archive_content("4.5.13")
+        catalog = catalog_fixture(tmp_path, base, recommended)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(
+            tmp_path, store, manifest,
+            catalog_transport({"4.5.9": base, "4.5.13": recommended}),
+            catalog=catalog,
+        )
+        await manager.start()
+        assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
+        assert (await wait_terminal(store, manager.update().id)).state == BlenderRuntimeOperationState.READY
+        executable = resolver.managed_root / "blender-4.5.13-linux-x64/install/blender"
+        executable.unlink()
+        assert next(row for row in resolver.status()["runtimes"] if row["runtime_id"].endswith("4.5.13-linux-x64"))["state"] == "damaged"
+        repaired = await wait_terminal(
+            store, manager.repair("blender-4.5.13-linux-x64").id
+        )
+        assert repaired.state == BlenderRuntimeOperationState.READY
+        assert executable.is_file()
+        assert resolver.resolve_active().runtime_id == "blender-4.5.13-linux-x64"
+        assert not any((resolver.managed_root / ".staging").glob("previous-*"))
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_repair_registry_failure_rolls_back_the_original_directory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    async def scenario() -> None:
+        base, manifest = archive_fixture(tmp_path)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(
+            tmp_path, store, manifest, response_transport(base)
+        )
+        await manager.start()
+        assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
+        destination = resolver.managed_root / RUNTIME_ID
+        marker = destination / "preserve-on-rollback.txt"
+        marker.write_text("old directory", encoding="utf-8")
+        (destination / "install/blender").unlink()
+
+        def reject_registration(**_kwargs):
+            raise RuntimeError("injected registry failure")
+
+        monkeypatch.setattr(resolver, "register_managed", reject_registration)
+        failed = await wait_terminal(store, manager.repair(RUNTIME_ID).id)
+        assert failed.state == BlenderRuntimeOperationState.FAILED
+        assert marker.read_text(encoding="utf-8") == "old directory"
+        assert not any((resolver.managed_root / ".staging").glob("previous-*"))
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_update_repair_and_switch_reject_untrusted_runtime_identity(tmp_path: Path) -> None:
+    content, manifest = archive_fixture(tmp_path)
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        blender_legacy_runtime_root=tmp_path / "missing-legacy",
+        blender_managed_runtime_root=tmp_path / "managed",
+        blender_runtime_registry=tmp_path / "data/runtime-state/blender-runtimes.json",
+        blender_download_root=tmp_path / "downloads",
+    )
+    app = create_app(
+        settings,
+        blender_download_transport=response_transport(content),
+        blender_manifest_path=manifest,
+    )
+    with TestClient(app) as client:
+        for action in ("repair", "switch"):
+            response = client.post(
+                "/workspace-api/blender/runtime/operations",
+                json={"action": action, "runtime_id": "attacker-runtime"},
+            )
+            assert response.status_code == 422
+            assert response.json()["detail"]["code"] == "blender_runtime_not_found"
+        response = client.post(
+            "/workspace-api/blender/runtime/operations",
+            json={"action": "update", "url": "https://attacker.invalid/blender.tar.xz"},
+        )
+        assert response.status_code == 422
+
+
+def test_invalid_catalog_disables_management_without_hiding_runtime_status(tmp_path: Path) -> None:
+    content, manifest = archive_fixture(tmp_path)
+    target = tmp_path / "catalog-target.json"
+    target.write_text("{}", encoding="utf-8")
+    catalog = tmp_path / "catalog.json"
+    catalog.symlink_to(target)
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        blender_legacy_runtime_root=tmp_path / "missing-legacy",
+        blender_managed_runtime_root=tmp_path / "managed",
+        blender_runtime_registry=tmp_path / "data/runtime-state/blender-runtimes.json",
+        blender_download_root=tmp_path / "downloads",
+    )
+    app = create_app(
+        settings,
+        blender_download_transport=response_transport(content),
+        blender_manifest_path=manifest,
+        blender_catalog_path=catalog,
+    )
+    with TestClient(app) as client:
+        response = client.get("/workspace-api/blender/runtime")
+        assert response.status_code == 200
+        assert response.json()["management_available"] is False
+        assert response.json()["management_reason"] == "blender_runtime_catalog_invalid"

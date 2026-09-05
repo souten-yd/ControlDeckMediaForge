@@ -196,12 +196,16 @@ def create_app(
     model_download_transport: httpx.AsyncBaseTransport | None = None,
     blender_download_transport: httpx.AsyncBaseTransport | None = None,
     blender_manifest_path: Path | None = None,
+    blender_catalog_path: Path | None = None,
     blender_preflight_script: Path | None = None,
 ) -> FastAPI:
     resolved = settings or Settings.from_env()
     trusted_blender_manifest = blender_manifest_path or (
         REPOSITORY_ROOT / "config/blender-runtime.json"
     )
+    trusted_blender_catalog = blender_catalog_path
+    if trusted_blender_catalog is None and blender_manifest_path is None:
+        trusted_blender_catalog = REPOSITORY_ROOT / "config/blender-runtime-catalog.json"
     trusted_blender_preflight = blender_preflight_script or (
         REPOSITORY_ROOT / "worker_packs/blender/preflight.py"
     )
@@ -233,6 +237,7 @@ def create_app(
         legacy_root=resolved.blender_legacy_runtime_root,
         manifest_path=trusted_blender_manifest,
         trusted_worker=REPOSITORY_ROOT / "worker_packs/blender/compile_asset.py",
+        catalog_path=trusted_blender_catalog,
     )
     try:
         blender_runtimes.register_legacy()
@@ -244,6 +249,7 @@ def create_app(
         manifest_path=trusted_blender_manifest,
         preflight_script=trusted_blender_preflight,
         download_root=resolved.blender_download_root,
+        catalog_path=trusted_blender_catalog,
         transport=blender_download_transport,
     )
 
@@ -2124,11 +2130,19 @@ def create_app(
     )
 
     def blender_runtime_part() -> dict[str, Any]:
+        try:
+            catalog = blender_runtime_operations.catalog()
+            management = {"management_available": True, "catalog": catalog}
+        except BlenderRuntimeOperationError as exc:
+            management = {
+                "management_available": False,
+                "management_reason": exc.code,
+                "catalog": None,
+            }
         return {
             **blender_runtimes.status(),
             "fingerprint": blender_runtimes.fingerprint(),
-            "management_available": True,
-            "catalog": blender_runtime_operations.catalog(),
+            **management,
             "operations": [
                 item.model_dump(mode="json")
                 for item in store.list_blender_runtime_operations()
@@ -2830,6 +2844,22 @@ def create_app(
                         if params:
                             raise ValueError("Blender install accepts no client-selected source")
                         result = blender_runtime_operations.install().model_dump(mode="json")
+                    elif method == "blender.runtime.update":
+                        if params:
+                            raise ValueError("Blender update accepts no client-selected source")
+                        result = blender_runtime_operations.update().model_dump(mode="json")
+                    elif method == "blender.runtime.repair":
+                        if set(params) != {"runtime_id"}:
+                            raise ValueError("Blender repair accepts only runtime_id")
+                        result = blender_runtime_operations.repair(
+                            str(params.get("runtime_id", ""))
+                        ).model_dump(mode="json")
+                    elif method == "blender.runtime.switch":
+                        if set(params) != {"runtime_id"}:
+                            raise ValueError("Blender switch accepts only runtime_id")
+                        result = blender_runtime_operations.switch(
+                            str(params.get("runtime_id", ""))
+                        ).model_dump(mode="json")
                     elif method == "blender.runtime.operations.cancel":
                         if set(params) != {"operation_id"}:
                             raise ValueError("Blender cancel accepts only operation_id")
@@ -3077,6 +3107,16 @@ def create_app(
         try:
             if payload == {"action": "install"}:
                 return blender_runtime_operations.install().model_dump(mode="json")
+            if payload == {"action": "update"}:
+                return blender_runtime_operations.update().model_dump(mode="json")
+            if set(payload) == {"action", "runtime_id"} and payload["action"] == "repair":
+                return blender_runtime_operations.repair(
+                    str(payload["runtime_id"])
+                ).model_dump(mode="json")
+            if set(payload) == {"action", "runtime_id"} and payload["action"] == "switch":
+                return blender_runtime_operations.switch(
+                    str(payload["runtime_id"])
+                ).model_dump(mode="json")
             if set(payload) == {"action", "operation_id"} and payload["action"] == "cancel":
                 return blender_runtime_operations.cancel(
                     str(payload["operation_id"])

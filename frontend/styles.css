@@ -323,6 +323,8 @@ main { flex: 1; min-height: 0; padding: 16px; }
 #blender-runtime-progress { width: min(100%, 420px); }
 #blender-runtime-list .row { grid-template-columns: minmax(0, 1fr) auto; }
 #blender-runtime-list .s { overflow-wrap: anywhere; }
+.runtime-row-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: end; }
+.runtime-row-controls button { min-height: 34px; }
 .section-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
 /* 節の見出しが前の塊に貼り付くと、どこで話が変わったのか分からない。
    詰まって見えていたのは行間ではなく、ここの区切りが無かったため。 */

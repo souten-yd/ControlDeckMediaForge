@@ -8,6 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class BlenderRuntimeOperationAction(StrEnum):
     INSTALL = "install"
+    UPDATE = "update"
+    REPAIR = "repair"
+    SWITCH = "switch"
 
 
 class BlenderRuntimeOperationState(StrEnum):
