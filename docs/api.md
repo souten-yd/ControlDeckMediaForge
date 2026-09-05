@@ -403,6 +403,15 @@ can recover, cancel, or retry the job after reload, preview its first output,
 and explicitly select it. Only the separate current-revision MaterialBinding
 operation can commit that selected Asset as a new SceneRevision.
 
+3DS-6c adds private workspace method `scenes.revisions.restore` and its same-origin
+mirror `POST /workspace-api/scenes/{scene_id}/revisions/restore`. The only input is
+`scene_id`, the expected current `base_revision_id`, and an older
+`target_revision_id` from that scene. Media Forge rechecks the immutable source,
+preview, and dependency identities, clones them under new Asset/provenance IDs,
+and advances the head with a new linear SceneRevision. It never rewrites history
+or aliases the old source/preview Asset as the new output. This remains excluded
+from OpenAPI, Agent tools, workflow executors, and `addon.json` until 3DS-7.
+
 ## Reference collections and profiles
 
 - `GET /api/v1/reference-collections`

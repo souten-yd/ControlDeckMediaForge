@@ -90,6 +90,8 @@ DOM_IDS = (
     "scene-texture-title", "scene-texture-prompt", "scene-texture-progress",
     "scene-texture-preview", "scene-texture-status", "scene-texture-generate",
     "scene-texture-cancel", "scene-texture-retry", "scene-texture-use",
+    "scene-revision-status", "scene-compare-dialog", "scene-compare-old-canvas",
+    "scene-compare-current-canvas", "scene-compare-restore", "scene-compare-cancel",
     "detail-dialog",
     "model-storage", "model-filters", "model-management-note", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
@@ -537,6 +539,27 @@ def test_scene_texture_generation_is_durable_separate_and_explicitly_adopted():
     imported = SCRIPT[SCRIPT.index("async function importScene"):SCRIPT.index("async function cancelSceneImport")]
     final = imported[imported.index("finally"):]
     assert "renderSceneMaterialControls" in final and "renderBlenderSessionControls" in final
+
+
+def test_scene_revision_compare_loads_two_bounded_previews_before_explicit_restore():
+    compare = SCRIPT[
+        SCRIPT.index("async function disposeSceneCompare"):SCRIPT.index("function materialOption")
+    ]
+    assert compare.count('call("assets.model.open"') == 1
+    assert 'opened.total_bytes > 64 * 1024 * 1024' in compare
+    assert 'Math.min(opened.chunk_bytes, content.length - offset)' in compare
+    assert 'Promise.allSettled([' in compare
+    assert 'loadSceneComparePane(target' in compare
+    assert 'loadSceneComparePane(current' in compare
+    assert 'state.sceneCompareReady !== 2' in compare
+    assert 'call("scenes.revisions.restore"' in compare
+    assert "base_revision_id: current.id" in compare
+    assert "target_revision_id: target.id" in compare
+    assert "await closeSceneCompare()" in compare
+    standalone = SCRIPT[SCRIPT.index("async function standaloneCall"):SCRIPT.index("async function call(")]
+    assert "/revisions/restore" in standalone
+    assert "path:" not in compare and "working_path" not in compare
+    assert ".scene-compare-grid { grid-template-columns: 1fr; }" in STYLES
 
 
 def test_scene_backup_ui_streams_exact_bytes_and_has_standalone_parity():

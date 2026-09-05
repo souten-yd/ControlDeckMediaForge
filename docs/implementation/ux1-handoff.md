@@ -3,6 +3,25 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-6c revision compare/restore
+
+branch `ux1/3d-revision-restore`。旧版/currentのGLBを各64 MiB上限のprivate handle/chunkで同時表示する比較dialogと、
+両preview ready後だけ有効になる明示復元を追加した。backendはscene ID、期待current、旧revisionだけを受け、
+旧`.blend`/GLB/dependencyをsize/hash再検査して新Asset/provenanceへexact cloneする。currentを巻き戻さず、現currentを
+parentとする新しいimmutable revisionをcommitする。競合/current自身/missing/tamperはfail-closed。版は0.28.8。
+
+source Uvicorn + 実Chromeは材質dependency 1件の旧版をrevision 5→6へ復元し、比較0.126秒、復元0.069秒。
+`.blend` 459,632 B / SHA-256 `6e2aca40cfbe90a9ebdfbf10948c52cc0aca3de2aa49aade57971bfae1a58054`、
+GLB 18,600 B / SHA-256 `cc354349853152769a41aa3452321f51da35c4af65047d85f841c9771bb19405`は
+復元元とbyte一致し、新Asset ID/provenance、linear parent、dependency保持を確認した。Blender 4.5.9と独立GLB
+validator passed、日英、390px overflow 0、browser error 0。
+
+final full testは963 passed / 既知Starlette warning 1件 / 95.87秒。0.28.8 exact bundleは31,570,669 B /
+SHA-256 `672533021c2170d9233ac56892381ec52b63f81d2ac02371897dfe2b20920f87`、doctor成功。exact package +
+実Chromeもdependency 1件をrevision 8→9へ復元し、比較0.129秒、復元0.075秒、desktop/390pxの2画面WebGL、
+overflow 0、console/page error 0、両validator passed。実ControlDeck opaque iframeは **NOT TESTED** で3DS-8へ残す。
+3DS-6 exit条件はsource/packageで完了。次は別sliceの3DS-7 typed Agent recipes。
+
 ## 2026-09-06 3DS-6b texture generation orchestration
 
 branch `ux1/3d-texture-generation`。既存durable `image.generate`へ

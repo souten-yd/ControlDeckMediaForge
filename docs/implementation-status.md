@@ -8732,3 +8732,29 @@ ControlDeck broker外GPU実行をfail-closedにした。ControlDeckはread-only�
 browser認証が失効して`/login`へ戻ったため、資格情報を迂回せずHost-managed R9700生成と実opaque iframeは
 **NOT TESTED**。前後版比較と旧版からのcurrent復元も **NOT IMPLEMENTED / NOT TESTED**。次は別sliceの
 3DS-6c revision compare/restoreで3DS-6 exit条件を閉じる。
+
+## 2026-09-06 — 3DS-6c revision compare/restore
+
+branch `ux1/3d-revision-restore`。private workspace/standaloneへscene ID、期待するcurrent revision、同scene内の
+旧revisionだけを受ける復元操作を追加した。旧`.blend`、GLB preview、全dependencyのsize/SHA-256とprovenance
+identityを再検査し、新しいAsset IDと`scene.revision.restore` provenanceへexact cloneする。scene head自体を
+巻き戻さず、現currentをparentにした新しいimmutable revisionをatomic commitするため、旧履歴/Assetは不変。
+optimistic conflict、current自身、別scene/missing/tampered assetはfail-closedで、途中登録Assetはrollbackする。
+公開OpenAPI、Agent tool、workflow executor、addon contributionは変更していない。版は0.28.8。
+
+UIは旧版とcurrentのGLBを各64 MiB上限、connection-scoped handle、512 KiB以下chunkで同時に読み、独立した
+WebGL canvasで比較する。両previewがreadyになるまで復元buttonを無効にし、閉じる/scene切替/disable時はviewerと
+handleをdisposeする。隔離data rootのsource Uvicorn + 実Chromeで、材質dependency 1件を持つ旧版を
+revision 5→6へ復元した。比較表示0.126秒、復元0.069秒、`.blend` 459,632 B / SHA-256
+`6e2aca40cfbe90a9ebdfbf10948c52cc0aca3de2aa49aade57971bfae1a58054`、GLB 18,600 B / SHA-256
+`cc354349853152769a41aa3452321f51da35c4af65047d85f841c9771bb19405`は復元元とbyte一致し、新Asset ID、
+new provenance、parent=current、dependency保持を確認した。実Blender 4.5.9はobjects 3 / meshes 1 /
+materials 2 / images 2 / external images 0 / autoexec disabled、独立GLB validatorはtextures 1でpassed。
+日英、390px overflow 0、console/page error 0。final `./mf.sh test`は963 passed / 既知warning 1件 / 95.87秒。
+
+0.28.8 exact bundleは31,570,669 B / SHA-256
+`672533021c2170d9233ac56892381ec52b63f81d2ac02371897dfe2b20920f87`、展開binary doctorは
+`ok / 0.28.8 / packaged=true`。exact package + 実Chromeでもdependency 1件をrevision 8→9へ復元し、
+比較0.129秒、復元0.075秒、desktop/390pxの2画面WebGL、overflow 0、console/page error 0。同じsource/GLB
+hash、Blender/GLB validator passed。実ControlDeck opaque iframeは **NOT TESTED** のまま3DS-8 acceptanceへ残す。
+3DS-6 exit条件はsource/packageで完了し、次は別sliceの3DS-7 typed Agent recipes。

@@ -232,6 +232,70 @@ def test_bounded_upload_creates_scene_and_working_commit_preserves_old_revision(
     assert not (workspace.working_root / released.id).exists()
 
 
+def test_restore_revision_clones_validated_assets_and_preserves_linear_history(
+    tmp_path: Path,
+) -> None:
+    store, workspace, _resolver = fake_scene_workspace(tmp_path)
+    first_bytes = b"BLENDER" + b"first-version" * 100
+    imported = upload_scene(workspace, first_bytes)
+    scene_id = imported["scene"]["id"]
+    first = imported["revision"]
+    working = workspace.acquire_working_copy("user:1", scene_id)
+    second_bytes = b"BLENDER" + b"second-version" * 100
+    workspace.working_path_for_runtime("user:1", working.id).write_bytes(second_bytes)
+    second = asyncio.run(workspace.commit_working_copy("user:1", working.id))["revision"]
+
+    restored = workspace.restore_revision("user:1", scene_id, second["id"], first["id"])
+    third = restored["revision"]
+    assert restored["restored_from_revision_id"] == first["id"]
+    assert third["sequence"] == 3 and third["parent_revision_id"] == second["id"]
+    assert third["source_asset_id"] not in {first["source_asset_id"], second["source_asset_id"]}
+    assert third["preview_asset_id"] not in {first["preview_asset_id"], second["preview_asset_id"]}
+    assert store.asset_path(third["source_asset_id"]).read_bytes() == first_bytes
+    assert store.asset_path(second["source_asset_id"]).read_bytes() == second_bytes
+    provenance = store.get_provenance(third["source_asset_id"])
+    assert provenance.operation == "scene.revision.restore"
+    assert provenance.parameters == {
+        "scene_id": scene_id,
+        "base_revision_id": second["id"],
+        "restored_revision_id": first["id"],
+    }
+    assert first["source_asset_id"] in provenance.parent_asset_ids
+    assert second["source_asset_id"] in provenance.parent_asset_ids
+    document, revisions = workspace.catalog.get("user:1", scene_id)
+    assert document.current_revision_id == third["id"]
+    assert [item.sequence for item in revisions] == [1, 2, 3]
+
+    with pytest.raises(SceneError) as stale:
+        workspace.restore_revision("user:1", scene_id, second["id"], first["id"])
+    assert stale.value.code == "scene_revision_conflict"
+    with pytest.raises(SceneError) as current:
+        workspace.restore_revision("user:1", scene_id, third["id"], third["id"])
+    assert current.value.code == "scene_revision_restore_invalid"
+
+
+def test_restore_revision_rejects_changed_immutable_asset_without_advancing(
+    tmp_path: Path,
+) -> None:
+    store, workspace, _resolver = fake_scene_workspace(tmp_path)
+    imported = upload_scene(workspace, b"BLENDER" + b"first" * 100)
+    scene_id = imported["scene"]["id"]
+    first = imported["revision"]
+    working = workspace.acquire_working_copy("user:1", scene_id)
+    workspace.working_path_for_runtime("user:1", working.id).write_bytes(
+        b"BLENDER" + b"second" * 100
+    )
+    second = asyncio.run(workspace.commit_working_copy("user:1", working.id))["revision"]
+    store.asset_path(first["preview_asset_id"]).write_bytes(b"changed")
+
+    with pytest.raises(SceneError) as changed:
+        workspace.restore_revision("user:1", scene_id, second["id"], first["id"])
+    assert changed.value.code == "scene_revision_restore_changed"
+    document, revisions = workspace.catalog.get("user:1", scene_id)
+    assert document.current_revision_id == second["id"]
+    assert len(revisions) == 2
+
+
 def test_upload_hash_offset_size_owner_and_timeout_fail_closed(tmp_path: Path) -> None:
     _store, workspace, _resolver = fake_scene_workspace(tmp_path)
     content = b"BLENDER-scene"

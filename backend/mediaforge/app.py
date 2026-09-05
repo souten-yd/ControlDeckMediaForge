@@ -3143,6 +3143,18 @@ def create_app(
                             str(params.get("scene_id", "")),
                             params.get("binding", {}),
                         )
+                    elif method == "scenes.revisions.restore":
+                        if set(params) != {
+                            "scene_id", "base_revision_id", "target_revision_id"
+                        }:
+                            raise ValueError("scene revision restore fields differ")
+                        result = await asyncio.to_thread(
+                            scene_workspace.restore_revision,
+                            preferences.subject_of(identity),
+                            str(params.get("scene_id", "")),
+                            str(params.get("base_revision_id", "")),
+                            str(params.get("target_revision_id", "")),
+                        )
                     elif method == "scenes.import.begin":
                         if set(params) - {"size", "sha256", "name", "tags", "collection"} or not {
                             "size", "sha256", "name"
@@ -3666,6 +3678,31 @@ def create_app(
                 )
             return await scene_workspace.apply_material_binding(
                 preferences.STANDALONE_SUBJECT, scene_id, payload.get("binding", {})
+            )
+        except SceneError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
+
+    @app.post(
+        "/workspace-api/scenes/{scene_id}/revisions/restore", include_in_schema=False
+    )
+    async def standalone_scene_revision_restore(
+        scene_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"base_revision_id", "target_revision_id"}:
+                raise SceneError(
+                    "scene_revision_restore_invalid",
+                    "scene revision restore fields differ",
+                )
+            return await asyncio.to_thread(
+                scene_workspace.restore_revision,
+                preferences.STANDALONE_SUBJECT,
+                scene_id,
+                str(payload.get("base_revision_id", "")),
+                str(payload.get("target_revision_id", "")),
             )
         except SceneError as exc:
             raise HTTPException(

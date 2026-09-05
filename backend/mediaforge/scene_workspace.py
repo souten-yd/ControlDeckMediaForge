@@ -551,6 +551,214 @@ class SceneWorkspace:
         self.store.expire_scene_working_copies(_iso(self._now()))
         return self.store.list_scene_working_copies(owner)
 
+    def restore_revision(
+        self,
+        owner: str,
+        scene_id: str,
+        base_revision_id: str,
+        target_revision_id: str,
+    ) -> dict[str, Any]:
+        """Adopt an older validated revision as a new immutable scene head."""
+        owner = validate_scene_owner(owner)
+        document, revisions = self.catalog.get(owner, scene_id)
+        if document.current_revision_id != base_revision_id:
+            raise SceneError("scene_revision_conflict", "scene current revision changed")
+        if target_revision_id == base_revision_id:
+            raise SceneError("scene_revision_restore_invalid", "current revision cannot be restored")
+        by_id = {item.id: item for item in revisions}
+        target = by_id.get(target_revision_id)
+        current = by_id.get(base_revision_id)
+        if target is None or current is None:
+            raise SceneError("scene_revision_not_found", "scene revision is unavailable")
+
+        source, source_provenance, source_path = self._verified_revision_asset(
+            target.source_asset_id, "application/x-blender"
+        )
+        preview, preview_provenance, preview_path = self._verified_revision_asset(
+            target.preview_asset_id, "model/gltf-binary"
+        )
+        for dependency in target.dependencies:
+            try:
+                asset = self.store.get_asset(dependency.asset_id)
+                provenance = self.store.get_provenance(dependency.asset_id)
+                path = self.store.asset_path(dependency.asset_id)
+            except KeyError as exc:
+                raise SceneError(
+                    "scene_revision_not_found",
+                    "scene revision dependency is unavailable",
+                ) from exc
+            if (
+                path.is_symlink()
+                or not path.is_file()
+                or asset.sha256 != dependency.sha256
+                or path.stat().st_size != asset.size_bytes
+                or self._sha256(path) != dependency.sha256
+                or provenance.asset_id != asset.id
+                or provenance.output_sha256 != dependency.sha256
+            ):
+                raise SceneError(
+                    "scene_revision_restore_changed",
+                    "scene revision dependency identity changed",
+                )
+
+        registered: list[str] = []
+        job_id: str | None = None
+        try:
+            job = self.store.create_job(
+                JobRequest(operation="media.inspect", intent="Restore validated scene revision")
+            )
+            job_id = job.id
+            self.store.update_job(
+                job.id, status=JobStatus.RUNNING, phase="restoring", progress=0.2
+            )
+            now = utc_now()
+            source_id = f"asset_{uuid.uuid4().hex}"
+            source_provenance_id = f"prov_{uuid.uuid4().hex}"
+            source_parents = list(dict.fromkeys([
+                current.source_asset_id,
+                target.source_asset_id,
+                *(item.asset_id for item in target.dependencies),
+            ]))
+            source_copy = source.model_copy(update={
+                "id": source_id,
+                "job_id": job.id,
+                "parent_asset_ids": source_parents,
+                "provenance_id": source_provenance_id,
+                "suggested_filename": f"media-forge-scene-{source_id[6:14]}.blend",
+                "created_at": now,
+            })
+            source_copy_provenance = source_provenance.model_copy(update={
+                "id": source_provenance_id,
+                "asset_id": source_id,
+                "parent_asset_ids": source_parents,
+                "operation": "scene.revision.restore",
+                "intent": "Restore a validated scene revision as a new revision",
+                "runtime_adapter": "scene.revision-restore",
+                "runtime_version": __version__,
+                "tool_versions": {**source_provenance.tool_versions, "media-forge": __version__},
+                "parameters": {
+                    "scene_id": scene_id,
+                    "base_revision_id": base_revision_id,
+                    "restored_revision_id": target_revision_id,
+                },
+                "reference_asset_hashes": {
+                    current.source_asset_id: self.store.get_asset(current.source_asset_id).sha256,
+                    target.source_asset_id: source.sha256,
+                    **{item.asset_id: item.sha256 for item in target.dependencies},
+                },
+                "postprocessing": [*source_provenance.postprocessing, "scene-revision-restore"],
+                "created_at": now,
+            })
+            self.store.register_asset(source_copy, source_copy_provenance, source_path)
+            registered.append(source_copy.id)
+
+            preview_id = f"asset_{uuid.uuid4().hex}"
+            preview_provenance_id = f"prov_{uuid.uuid4().hex}"
+            preview_parents = [source_copy.id, target.preview_asset_id]
+            preview_copy = preview.model_copy(update={
+                "id": preview_id,
+                "job_id": job.id,
+                "parent_asset_ids": preview_parents,
+                "provenance_id": preview_provenance_id,
+                "suggested_filename": f"media-forge-scene-preview-{preview_id[6:14]}.glb",
+                "created_at": now,
+            })
+            preview_copy_provenance = preview_provenance.model_copy(update={
+                "id": preview_provenance_id,
+                "asset_id": preview_id,
+                "parent_asset_ids": preview_parents,
+                "operation": "scene.preview.restore",
+                "intent": "Reuse the validated preview for a restored scene revision",
+                "runtime_adapter": "scene.revision-restore",
+                "runtime_version": __version__,
+                "tool_versions": {**preview_provenance.tool_versions, "media-forge": __version__},
+                "parameters": {
+                    "scene_id": scene_id,
+                    "base_revision_id": base_revision_id,
+                    "restored_revision_id": target_revision_id,
+                },
+                "reference_asset_hashes": {
+                    source_copy.id: source_copy.sha256,
+                    target.preview_asset_id: preview.sha256,
+                },
+                "postprocessing": [*preview_provenance.postprocessing, "scene-revision-restore"],
+                "created_at": now,
+            })
+            self.store.register_asset(preview_copy, preview_copy_provenance, preview_path)
+            registered.append(preview_copy.id)
+
+            restored_document, revision = self.catalog.commit(
+                owner,
+                scene_id,
+                base_revision_id,
+                SceneRevisionInput(
+                    source_asset_id=source_copy.id,
+                    preview_asset_id=preview_copy.id,
+                    dependencies=target.dependencies,
+                    runtime_id=target.runtime_id,
+                    runtime_version=target.runtime_version,
+                    validation=target.validation,
+                ),
+            )
+            self.store.update_job(
+                job.id,
+                status=JobStatus.SUCCEEDED,
+                progress=1,
+                asset_ids=[source_copy.id, preview_copy.id],
+            )
+            return {
+                **self._scene_projection(restored_document, revision),
+                "restored_from_revision_id": target_revision_id,
+            }
+        except SceneError as exc:
+            self._rollback_assets(registered)
+            if job_id is not None:
+                self.store.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    error=ErrorDetail(code=exc.code, message=str(exc)[:300]),
+                )
+            raise
+        except Exception as exc:
+            self._rollback_assets(registered)
+            if job_id is not None:
+                self.store.update_job(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    error=ErrorDetail(code="scene_revision_restore_failed", message=str(exc)[:300]),
+                )
+            raise SceneError(
+                "scene_revision_restore_failed", "scene revision could not be restored"
+            ) from exc
+
+    def _verified_revision_asset(
+        self, asset_id: str, expected_mime: str
+    ) -> tuple[Asset, Provenance, Path]:
+        try:
+            asset = self.store.get_asset(asset_id)
+            provenance = self.store.get_provenance(asset_id)
+            path = self.store.asset_path(asset_id)
+        except KeyError as exc:
+            raise SceneError(
+                "scene_revision_not_found", "scene revision asset is unavailable"
+            ) from exc
+        if asset.mime_type != expected_mime:
+            raise SceneError(
+                "scene_revision_restore_invalid", "scene revision asset type differs"
+            )
+        if (
+            path.is_symlink()
+            or not path.is_file()
+            or path.stat().st_size != asset.size_bytes
+            or self._sha256(path) != asset.sha256
+            or provenance.asset_id != asset.id
+            or provenance.output_sha256 != asset.sha256
+        ):
+            raise SceneError(
+                "scene_revision_restore_changed", "scene revision asset identity changed"
+            )
+        return asset, provenance, path
+
     async def material_targets(self, owner: str, scene_id: str) -> dict[str, Any]:
         owner = validate_scene_owner(owner)
         document, revisions = self.catalog.get(owner, scene_id)

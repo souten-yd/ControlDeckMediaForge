@@ -44,6 +44,15 @@ def test_authenticated_workspace_transport_imports_and_locks_without_paths(tmp_p
             locked = call(socket, "scenes.working.acquire", {"scene_id": scene_id})
             renewed = call(socket, "scenes.working.renew", {"working_id": working_id})
             committed = call(socket, "scenes.working.commit", {"working_id": working_id})
+            restored = call(
+                socket,
+                "scenes.revisions.restore",
+                {
+                    "scene_id": scene_id,
+                    "base_revision_id": committed["result"]["revision"]["id"],
+                    "target_revision_id": imported["result"]["revision"]["id"],
+                },
+            )
         with client.websocket_connect("/ws", headers=headers) as abandoned_socket:
             abandoned = call(
                 abandoned_socket,
@@ -69,6 +78,11 @@ def test_authenticated_workspace_transport_imports_and_locks_without_paths(tmp_p
     assert locked["ok"] is False and locked["error"]["code"] == "scene_working_locked"
     assert renewed["ok"] is True
     assert committed["ok"] is True and committed["result"]["revision"]["sequence"] == 2
+    assert restored["ok"] is True
+    assert restored["result"]["revision"]["sequence"] == 3
+    assert restored["result"]["revision"]["parent_revision_id"] == committed["result"]["revision"]["id"]
+    assert restored["result"]["restored_from_revision_id"] == imported["result"]["revision"]["id"]
+    assert "path" not in json.dumps(restored)
     assert abandoned["ok"] is True and resumed["ok"] is True
     assert canceled["result"] == {"canceled": True}
 
