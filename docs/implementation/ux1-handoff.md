@@ -5,7 +5,7 @@
 
 ## 2026-09-05 3DS-4b core bounded working copy
 
-branch `ux1/3d-scene-working-core`、実装commit `c03c8dc`。256 MiB `.blend` / 512 KiB chunk / 10分upload、
+PR #224、branch `ux1/3d-scene-working-core`、実装commit `c03c8dc`。256 MiB `.blend` / 512 KiB chunk / 10分upload、
 owner同時1件、single-writer WorkingCopy lease、runtime pin、trusted Blender validation/export、独立GLB検査、
 immutable Asset/revision commitを実装した。working leaseとbase/current revisionは同じtransactionで再検証し、
 競合・期限切れbytesはrecoveryとして残す。raw `.blend`はLibraryに直接出さない。

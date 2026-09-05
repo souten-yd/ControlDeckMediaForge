@@ -8333,7 +8333,7 @@ installed release、GPU/Cycles、Web Blender、材質差替え、OpenCode制作�
 
 ## 2026-09-05 — 3DS-4b core bounded working copy
 
-branch `ux1/3d-scene-working-core`、実装commit `c03c8dc`。`.blend` uploadを256 MiB、chunk 512 KiB、
+PR #224、branch `ux1/3d-scene-working-core`、実装commit `c03c8dc`。`.blend` uploadを256 MiB、chunk 512 KiB、
 owner同時1件、10分期限、offset/chunk/total SHA-256一致に制限するdomain serviceを追加した。
 active Studio runtimeをlive pinし、専用processのBlenderを`--background --factory-startup
 --disable-autoexec`で起動する。trusted workerはversion/background/autoexec、object/mesh/vertex/triangle数、
