@@ -8363,7 +8363,7 @@ exact core headの`./mf.sh test`は897 passed / 3 environment-dependent skipped 
 
 ## 2026-09-05 — 3DS-4b private working-copy transport
 
-branch `ux1/3d-scene-working-copy`、実装commit `5a95a21`。3DS-4b coreをapp lifespanへ接続し、認証済み
+PR #225、branch `ux1/3d-scene-working-copy`、実装commit `5a95a21`。3DS-4b coreをapp lifespanへ接続し、認証済み
 WebSocketへ`scenes.import.begin/chunk/commit/cancel`と
 `scenes.working.acquire/renew/release/commit`、sessionのworking copy一覧を追加した。standalone開発用にも
 同じdomain serviceを通るprivate mirrorを追加した。Host path、runtime path、working pathは入力・応答に
