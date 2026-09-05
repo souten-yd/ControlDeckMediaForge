@@ -3,6 +3,33 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-8 completion / v0.28.15
+
+PR #244はmerge commit `aa054bc804dbcce4cb1262cc40188f8db9b01fd0`でmerged。正式v0.28.15は同commitを
+targetに公開した。bundleは31,463,968 B / SHA-256
+`6944b24677d40ca176b460f6590f6167780cfb5fd79f1e76995688913526f75d`、公開4 asset再取得hash一致、
+Host consumer verifierとpackaged doctor成功。標準updateは10.73秒 / 最大RSS 772,524 KiB / swap 0、
+`current=0.28.15`、previous 0.28.14、health healthy。
+
+修正後のinstalled opaque iframe保存競合はrevision 11→12のconcurrent restore後に
+`scene_revision_conflict`でfail-closedし、revisionは12のまま、responseにrecovery candidate
+`working_0a35fec723ae491bb9abf93c6e533077`を返した。実`scene.blend`は1,438,783 B / SHA-256
+`11ff0e65eeec0f33ffb1d7e35dc2b82319b0dd467de964b493ee7b1e3151dcaa`、browser error 0。
+
+LLM idle後の実Brokerは27.4 GB resident LLMを停止し、FLUX.2 Klein 4Bで1,024x1,024 PNG
+1,737,483 B / SHA-256 `a3cb9e4f70eb8a396307576cfccef57e721ac50fa10f7f73a62d671f6276494d`を
+57.869秒で生成した。opaque iframeで明示選択してBlade/base colorへ適用、revision 12→13、
+dependency/provenance/validators、browser error 0を確認した。
+
+実Blender 4.5.13 childへの対象PID限定SIGSTOP fault injectionでdetached Jobを132.033秒までrunningとして
+再照会し、132.085秒に公開cancel、133.122秒で`canceled / host_terminal_sent=true`、Host childもcanceled、
+残存Blender child 0。live rollbackは一時鍵・隔離v0.28.16を実updaterへ渡し、候補health/doctor後の失敗注入から
+9.656秒でv0.28.15 current/service/Add-on登録へ復帰した。一時candidate/version/download/keyは削除した。
+
+`docs/implementation/g8-3d-studio-plan.md`とcompatibilityを3DS-8 VERIFIEDへ更新し、統合3D Studio初期提供を完了。
+次の予定sliceはない。Expert scriptは別3DS-X。GPU GUI表示、失効後credential refresh、installed容量不足再注入は
+**NOT TESTED**であり、software GUIや自動testをその証拠へ読み替えない。
+
 ## 2026-09-06 3DS-8 release acceptance / recovery conflict
 
 branch `ux1/3d-release-acceptance`。正式v0.28.14を実ControlDeckへ標準updateし、installed opaque iframe、

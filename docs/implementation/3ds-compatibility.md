@@ -1,6 +1,6 @@
 # 3D Studio compatibility baseline
 
-Status: 3DS-0〜4・3DS-5a/6a〜6c/7 source/package VERIFIED / 3DS-5b〜5d source VERIFIED
+Status: 3DS-0〜8 VERIFIED / 統合3D Studio初期提供完了
 Date: 2026-09-06
 
 この表は統合3D Studio着手時の互換性基準である。既存画像・G8・公開契約を、後続実装の
@@ -298,3 +298,41 @@ autoexec disabled。fullは977 passed / warning 1件 / 96.24秒。0.28.9 bundle�
 
 実installed OpenCodeの指示→shape→texture→GLB→grant配置、opaque iframe、長時間credential refresh、
 restart/update/rollbackは **NOT TESTED** で3DS-8へ残す。
+
+## 3DS-8 installed-host / GPU / release互換性
+
+実ControlDeckと正式Media Forge v0.28.14〜0.28.15で通し受入れを行った。実OpenCode 1.18.27 /
+Qwen3.8-27Bはtyped scene作成、durable status、snapshot、GLB export、project output grant、`media.pack`を完走した。
+opaque iframeはorigin `null`のまま、実noVNC入力、reload/reconnect、別browser writer拒否、desktop/mobile表示、
+既存Library画像の材質適用を確認した。sessionは621.451秒維持してrevision 2→3を保存し、390pxは
+client/scrollとも390、browser error 0だった。
+
+Blender SIGKILLは2.846秒で検出し1,438,783 Bのworking copyをcandidateへ保持、idle 5秒設定は接続から
+8.695秒で終了して候補を保持、MediaForge再起動は0.933秒でhealth復帰して同sessionへ再接続、実Host token
+20秒TTLは25.038秒後にRFB code 4403で終了した。各候補は実Blenderで開いて正式revisionへ保存した。
+Host disableは2.017秒でservice停止、sessionは`blender_session_host_disabled`とcandidateになり、再enable後も
+sceneを確認した。通常設定はidle 1,800秒 / disconnect 300秒へ戻し、session unit/socket/processは残していない。
+
+R9700/gfx1201 / VRAM 34,208,743,424 BでEevee 64x64は2.7709秒、Cycles HIP 4 samplesは0.26939秒、
+最大RSS 3,002,844 KiB。LLM処理中のtexture jobはBroker `waiting_resource`となり同時GPU実行を避けた。
+LLM idle後はBrokerが27.4 GB resident LLMを停止し、FLUX.2 Klein 4Bで1,024x1,024 PNG 1,737,483 B /
+SHA-256 `a3cb9e4f70eb8a396307576cfccef57e721ac50fa10f7f73a62d671f6276494d`を57.869秒で生成した。
+opaque iframeでAssetを明示選択してBlade/base colorへ適用し、revision 12→13、dependency/provenance/
+validatorを確認した。interactive GUIは設計どおりsoftware displayで、GPU表示へ読み替えない。
+
+detached Job `job_650645314a624fe788d04f4e87462055`は実Blender 4.5.13 childを対象PID限定SIGSTOPする
+fault injection下で`blender_recipe`を121.996秒と132.033秒に再照会できた。132.085秒に公開cancelを送り、
+133.122秒で`canceled / host_terminal_sent=true`、Host child Jobもcanceled、Blender child消滅を確認した。
+64 sphere出力が64 MiB上限を超えた別実測は`scene_preview_invalid`でfail-closedした。
+
+PR #244はmerge commit `aa054bc804dbcce4cb1262cc40188f8db9b01fd0`。正式v0.28.15 bundleは
+31,463,968 B / SHA-256 `6944b24677d40ca176b460f6590f6167780cfb5fd79f1e76995688913526f75d`。
+tag target、公開4 asset再取得、publisher署名、Host consumerのsafe extract/package/capability検査を通した。
+標準updateは10.73秒 / 最大RSS 772,524 KiB / swap 0でv0.28.14→v0.28.15、health healthy、旧版保持。
+一時鍵で署名した隔離v0.28.16を実updaterへ渡し、候補health/doctor後に失敗を注入すると9.656秒で
+`current`、service、Add-on登録がv0.28.15 healthyへ戻った。候補version/downloadと秘密鍵は確認後に削除した。
+manifest/artifact改ざん、wrong key、downgradeも拒否した。
+
+GPU GUI表示そのもの、資格情報が失効した後のrefresh、容量不足を実installed v0.28.15へ再注入する試験は
+**NOT TESTED**。software GUI、使用中credential、容量/hash/cancelの自動・過去実機証拠は成功しており、
+これらを未実施項目の証拠へ読み替えない。公開契約、既存画像、G8、scene dataは保持され、3DS-8 exit gateを満たした。
