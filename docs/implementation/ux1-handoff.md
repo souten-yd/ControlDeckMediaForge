@@ -3,6 +3,25 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-6a existing Library image material binding
+
+branch `ux1/3d-texture-binding`。source revision、Library画像Asset、object/material slot、5 channel、UV、
+wrap、色空間、normal conventionを持つ型付きMaterialBindingとtrusted Blender workerを追加した。
+private Host/standalone経路と日英UIはpath/任意Pythonを受けず、画像identityとsource revision競合を
+fail-closed検査する。適用結果は画像をpackした新しいimmutable scene revision、GLB preview、dependency、
+`scene.material.bind` provenanceになる。版は0.28.6。
+
+実Blender 4.5.9でbase color / roughness / metallic / DirectX normal / emissionを各0.701〜0.770秒で適用し、
+revision 7→12、依存5件、external images 0、Blender/GLB validator passed。実Chromeはtarget 3件、Library画像、
+roughness適用revision 8→9、日英、390x844単一列、exception 0を確認した。stale revisionは1.964 msで
+`scene_revision_conflict`。full testは957 passed / 1 warning / 93.63秒。
+
+0.28.6 exact bundleは31,554,828 B / SHA-256
+`b03135ac28483fe93c4cdaf2744acbecb32a3a555fdf1a0f1948fc51b4b7cec9`、packaged doctor成功。exact packageも
+実DirectX normalを0.712秒でrevision 7→8へ適用し、836,127 B `.blend`、external images 0、両validator
+passed、終了後active working/material staging 0。新規画像生成・編集からの採用、前後版比較/旧版採用、
+実ControlDeck opaque iframeは **NOT IMPLEMENTED / NOT TESTED**。次は3DS-6b texture generation。
+
 ## 2026-09-06 3DS-5d session lifecycle / recovery
 
 PR #234、branch `ux1/3d-session-recovery`、実装commit `746bc12`。既定の切断猶予300秒、controller idle 1,800秒、bounded server設定、

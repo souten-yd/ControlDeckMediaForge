@@ -8662,3 +8662,33 @@ Starlette warning 1件 / 91.17秒。`./mf.sh bundle build 0.28.5`は31,509,192 B
 sessionをreadyにした。private interrupt受付は2.780 msでinterrupted / recovery candidateとなり、終了後
 unit/session root/socket/process 0。実ControlDeck opaque iframe、10分超credential rotation、
 実Host revoke、GPU/Cycles、packaged Chromeは **NOT TESTED**。次は別PRの3DS-6 material binding。
+
+## 2026-09-06 — 3DS-6a existing Library image material binding
+
+branch `ux1/3d-texture-binding`。`media-forge.material-binding@1`へsource revision、既存画像Asset、object/
+material slot、base color / roughness / metallic / normal / emission、UV、wrap、色空間、normal conventionを
+固定した。private Host/standalone bridgeと日英UIはscene IDとbindingだけを扱い、path/任意Pythonを受けない。
+画像blobはmetadataのsize/SHA-256と再照合し、stale source revisionはcurrentへ暗黙追従せず競合にする。
+trusted Blender workerは固定stage、background/factory-startup/autoexec無効/GPU不可視で画像をpackし、既存の
+Blender/GLB検査後だけimmutable revisionへする。source asset provenanceは元scene sourceと画像をparent、
+画像hashをreference、operationを`scene.material.bind`として記録する。版は0.28.6。
+
+隔離data rootの実UvicornとBlender 4.5.9で、既存sceneのtarget 3件とUVMapを0.252秒で列挙した。実PNG
+1,280x720 / 292,693 B / SHA-256 `9707a06cca10bedd8c710d0ad7a1c2f2b887bc18b0ffd0d2e584186aa3f56a06`
+をbase color / roughness / metallic / DirectX normal / emissionへ順に適用し、各0.700883〜0.770455秒、
+revision 7→12、dependency 5件となった。最終`.blend`は1,141,499 B / SHA-256
+`9e55783af878a6c2c54332dee0dee9c049b882da931499bdcf5266a9b71618db`、objects 5 / meshes 3 /
+materials 2 / images 3 / external images 0、GLB 285,508 B / textures 4で両validator passed。最新revisionを
+bindingへ必須化した後の再適用は0.781秒、stale再送は1.964 msで`scene_revision_conflict`だった。
+
+実Chrome/CDPはLibrary画像1件、target 3件を表示し、roughness適用でrevision 8→9、日英文言、390x844
+単一列とbody scroll width 390 / inner width 390、browser exception 0。exact head `./mf.sh test`は
+957 passed / 既知Starlette warning 1件 / 93.63秒。`./mf.sh bundle build 0.28.6`は31,554,828 B /
+SHA-256 `b03135ac28483fe93c4cdaf2744acbecb32a3a555fdf1a0f1948fc51b4b7cec9`、展開binary doctorは
+`ok / 0.28.6 / packaged=true`。exact package processでもtarget 3件を列挙し、DirectX normalを0.712秒で
+revision 7→8へ適用した。`.blend`は836,127 B / SHA-256
+`6e865cc4fa021a24140f306c82cc8bd8376f624718b5e5b6bd60d4fd35dfe8ac`、external images 0、両validator
+passed、終了後active working/material staging 0。
+
+新しい画像生成・編集jobからの採用、前後版同時比較・旧版へのcurrent切替、実ControlDeck opaque iframeは
+**NOT IMPLEMENTED / NOT TESTED**。次は別sliceの3DS-6b texture generation orchestration。

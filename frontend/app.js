@@ -168,6 +168,11 @@ const state = {
   sceneStatusKey: "",
   sceneBackup: null,
   sceneBackupStatusKey: "",
+  sceneMaterialTargets: [],
+  sceneMaterialImages: [],
+  sceneMaterialRevisionId: "",
+  sceneMaterialBusy: false,
+  sceneMaterialStatusKey: "",
   blenderSessions: [],
   blenderRfb: null,
   blenderRfbSessionId: "",
@@ -644,6 +649,14 @@ async function standaloneCall(method, params) {
   if (method === "scenes.list") return json("/workspace-api/scenes");
   if (method === "scenes.get") {
     return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}`);
+  }
+  if (method === "scenes.material.targets") {
+    return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/material-targets`);
+  }
+  if (method === "scenes.material.apply") {
+    return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/materials`, {
+      method: "POST", body: JSON.stringify({binding: params.binding}),
+    });
   }
   if (method === "scenes.import.begin") {
     return json("/workspace-api/scenes/import/begin", {
@@ -4700,6 +4713,19 @@ const SCENE_TEXT = {
     blenderDisconnectedStopped: "切断猶予を過ぎたため終了しました。未保存内容は復旧候補に残しました。",
     blenderRevoked: "Hostの権限が終了したため停止しました。未保存内容は復旧候補に残しました。",
     blenderDisabled: "Add-onの停止に備えて終了しました。未保存内容は復旧候補に残しました。",
+    materialTitle: "画像素材を割り当て", materialObject: "対象", materialSlot: "マテリアル",
+    materialImage: "ライブラリ画像", materialChannel: "用途", materialAdvanced: "詳細設定",
+    materialUv: "UVマップ", materialWrap: "画像の繰り返し", materialNormal: "法線形式",
+    materialSafety: "画像はシーン内へ格納され、元のライブラリ素材との関係を記録します。",
+    materialApply: "割り当てて新しい版を保存", materialLoading: "割り当て先を確認しています…",
+    materialApplying: "画像を割り当て、シーンを検証しています…",
+    materialComplete: "画像を割り当てた検証済みの版を保存しました。",
+    materialFailed: "画像素材を割り当てられませんでした。",
+    materialNoTargets: "UVマップのあるメッシュがありません。",
+    materialNoImages: "先にライブラリへ画像を追加してください。",
+    materialChoose: "選択してください",
+    materialChannels: {base_color: "ベースカラー", roughness: "粗さ", metallic: "メタリック", normal: "法線", emission: "発光"},
+    materialWraps: {repeat: "繰り返す", extend: "端を伸ばす", clip: "範囲外を透明にする"},
   },
   en: {
     switchLabel: "Create 3D", title: "3D Studio",
@@ -4744,6 +4770,18 @@ const SCENE_TEXT = {
     blenderDisconnectedStopped: "The disconnected grace period ended. Unsaved bytes were retained as a recovery candidate.",
     blenderRevoked: "Host authorization ended. Unsaved bytes were retained as a recovery candidate.",
     blenderDisabled: "The session ended for add-on disable. Unsaved bytes were retained as a recovery candidate.",
+    materialTitle: "Assign image material", materialObject: "Target", materialSlot: "Material",
+    materialImage: "Library image", materialChannel: "Use", materialAdvanced: "Advanced settings",
+    materialUv: "UV map", materialWrap: "Image wrapping", materialNormal: "Normal convention",
+    materialSafety: "The image is packed into the scene and its relationship to the Library source is recorded.",
+    materialApply: "Assign and save new revision", materialLoading: "Inspecting material targets…",
+    materialApplying: "Assigning the image and validating the scene…",
+    materialComplete: "Saved a validated revision with the image assigned.",
+    materialFailed: "The image material could not be assigned.",
+    materialNoTargets: "No mesh with a UV map is available.",
+    materialNoImages: "Add an image to the Library first.", materialChoose: "Choose…",
+    materialChannels: {base_color: "Base color", roughness: "Roughness", metallic: "Metallic", normal: "Normal", emission: "Emission"},
+    materialWraps: {repeat: "Repeat", extend: "Extend edge", clip: "Transparent outside"},
   },
 };
 
@@ -4765,7 +4803,8 @@ function setSceneBackupStatus(key) {
 
 function renderSceneBackupControls() {
   const active = Boolean(state.sceneBackup);
-  const busy = active || Boolean(state.sceneImport) || Boolean(activeBlenderSession());
+  const busy = active || Boolean(state.sceneImport) || Boolean(activeBlenderSession())
+    || state.sceneMaterialBusy;
   byId("scene-backup-download").disabled = busy || !state.selectedSceneId;
   byId("scene-restore-submit").disabled = busy;
   byId("scene-restore-file").disabled = busy;
@@ -4804,6 +4843,17 @@ function renderSceneText() {
   byId("scene-restore-submit").textContent = text.restore;
   byId("scene-backup-cancel").textContent = text.backupCancel;
   byId("scene-revisions-title").textContent = text.revisions;
+  byId("scene-material-title").textContent = text.materialTitle;
+  byId("scene-material-object-label").textContent = text.materialObject;
+  byId("scene-material-slot-label").textContent = text.materialSlot;
+  byId("scene-material-image-label").textContent = text.materialImage;
+  byId("scene-material-channel-label").textContent = text.materialChannel;
+  byId("scene-material-advanced-title").textContent = text.materialAdvanced;
+  byId("scene-material-uv-label").textContent = text.materialUv;
+  byId("scene-material-wrap-label").textContent = text.materialWrap;
+  byId("scene-material-normal-label").textContent = text.materialNormal;
+  byId("scene-material-safety").textContent = text.materialSafety;
+  byId("scene-material-apply").textContent = text.materialApply;
   const submit = byId("scene-import-submit");
   submit.disabled = Boolean(state.sceneImport) || Boolean(state.sceneBackup) || !sceneRuntimeReady();
   if (state.sceneStatusKey) setSceneStatus(state.sceneStatusKey);
@@ -4812,6 +4862,7 @@ function renderSceneText() {
   if (state.sceneBackupStatusKey) setSceneBackupStatus(state.sceneBackupStatusKey);
   renderSceneBackupControls();
   renderBlenderSessionControls();
+  renderSceneMaterialControls();
   renderScenes();
   if (state.selectedSceneId) void openScene(state.selectedSceneId);
 }
@@ -4895,8 +4946,164 @@ async function openScene(sceneId) {
     byId("scene-detail").hidden = false;
     renderSceneBackupControls();
     renderBlenderSessionControls();
+    await loadSceneMaterialData(sceneId, scene.current_revision_id);
   } catch {
     byId("scene-list-count").textContent = sceneText().detailFailed;
+  }
+}
+
+function materialOption(value, label) {
+  const option = document.createElement("option");
+  option.value = String(value);
+  option.textContent = label;
+  return option;
+}
+
+function replaceMaterialOptions(select, values, previous, placeholder = "") {
+  const options = values.map((item) => materialOption(item.value, item.label));
+  if (placeholder) options.unshift(materialOption("", placeholder));
+  select.replaceChildren(...options);
+  if ([...select.options].some((item) => item.value === String(previous))) {
+    select.value = String(previous);
+  }
+}
+
+function selectedMaterialTarget() {
+  return state.sceneMaterialTargets.find((item) => item.object_name === byId("scene-material-object").value)
+    || null;
+}
+
+function renderSceneMaterialControls({targetsChanged = true} = {}) {
+  const form = byId("scene-material-form");
+  if (!form) return;
+  const text = sceneText();
+  const objectSelect = byId("scene-material-object");
+  const slotSelect = byId("scene-material-slot");
+  const imageSelect = byId("scene-material-image");
+  const uvSelect = byId("scene-material-uv");
+  const oldObject = objectSelect.value;
+  const oldSlot = slotSelect.value;
+  const oldImage = imageSelect.value;
+  const oldUv = uvSelect.value;
+  const usableTargets = state.sceneMaterialTargets.filter((item) => (
+    Array.isArray(item.uv_maps) && item.uv_maps.length
+  ));
+  if (targetsChanged) {
+    replaceMaterialOptions(objectSelect, usableTargets.map((item) => ({
+      value: item.object_name, label: item.object_name,
+    })), oldObject, text.materialChoose);
+  }
+  const target = selectedMaterialTarget();
+  replaceMaterialOptions(slotSelect, (target?.material_slots || []).map((item) => ({
+    value: item.index, label: `${item.index + 1}: ${item.name || text.materialSlot}`,
+  })), oldSlot);
+  replaceMaterialOptions(uvSelect, (target?.uv_maps || []).map((name) => ({
+    value: name, label: name,
+  })), oldUv);
+  replaceMaterialOptions(imageSelect, state.sceneMaterialImages.map((item) => ({
+    value: item.asset_id,
+    label: item.suggested_filename || item.summary || item.asset_id,
+  })), oldImage, text.materialChoose);
+  for (const option of byId("scene-material-channel").options) {
+    option.textContent = text.materialChannels[option.value];
+  }
+  for (const option of byId("scene-material-wrap").options) {
+    option.textContent = text.materialWraps[option.value];
+  }
+  const normal = byId("scene-material-channel").value === "normal";
+  byId("scene-material-normal-row").hidden = !normal;
+  const blocked = state.sceneMaterialBusy || Boolean(state.sceneImport)
+    || Boolean(state.sceneBackup) || Boolean(activeBlenderSession());
+  const ready = Boolean(target && slotSelect.value && uvSelect.value && imageSelect.value);
+  for (const control of form.querySelectorAll("select,button")) control.disabled = blocked;
+  byId("scene-material-apply").disabled = blocked || !ready;
+  let status = state.sceneMaterialStatusKey ? text[state.sceneMaterialStatusKey] : "";
+  if (!status && state.sceneMaterialRevisionId && !usableTargets.length) status = text.materialNoTargets;
+  else if (!status && state.sceneMaterialRevisionId && !state.sceneMaterialImages.length) status = text.materialNoImages;
+  byId("scene-material-status").textContent = status || "";
+}
+
+async function loadSceneMaterialData(sceneId, revisionId) {
+  state.sceneMaterialStatusKey = "materialLoading";
+  const cachedTargets = state.sceneMaterialRevisionId === revisionId;
+  if (!cachedTargets) {
+    state.sceneMaterialTargets = [];
+    state.sceneMaterialRevisionId = "";
+  }
+  renderSceneMaterialControls();
+  try {
+    const [targets, images] = await Promise.all([
+      cachedTargets
+        ? Promise.resolve({targets: state.sceneMaterialTargets})
+        : call("scenes.material.targets", {scene_id: sceneId}),
+      loadSceneMaterialImages(),
+    ]);
+    if (state.selectedSceneId !== sceneId) return;
+    state.sceneMaterialTargets = targets.targets || [];
+    state.sceneMaterialImages = images;
+    state.sceneMaterialRevisionId = revisionId;
+    state.sceneMaterialStatusKey = "";
+  } catch {
+    if (state.selectedSceneId !== sceneId) return;
+    state.sceneMaterialStatusKey = "materialFailed";
+  }
+  renderSceneMaterialControls();
+}
+
+async function loadSceneMaterialImages() {
+  const items = [];
+  let before = null;
+  for (let page = 0; page < 10 && items.length < 120; page += 1) {
+    const params = {media_kind: "image", limit: 120, thumbnails: false};
+    if (before) params.before = before;
+    const result = await call("library.list", params);
+    items.push(...(result.items || []).slice(0, 120 - items.length));
+    before = result.next_before || null;
+    if (!before) break;
+  }
+  return items;
+}
+
+async function applySceneMaterial() {
+  if (!state.selectedSceneId || state.sceneMaterialBusy) return;
+  const target = selectedMaterialTarget();
+  const assetId = byId("scene-material-image").value;
+  const uvMap = byId("scene-material-uv").value;
+  if (!target || !assetId || !uvMap) return;
+  const sceneId = state.selectedSceneId;
+  const channel = byId("scene-material-channel").value;
+  state.sceneMaterialBusy = true;
+  state.sceneMaterialStatusKey = "materialApplying";
+  setHostBusy(true);
+  renderSceneMaterialControls({targetsChanged: false});
+  renderSceneBackupControls();
+  renderBlenderSessionControls();
+  try {
+    const binding = {
+      schema_version: "media-forge.material-binding@1",
+      source_revision_id: state.sceneMaterialRevisionId,
+      image_asset_id: assetId,
+      object_name: target.object_name,
+      material_slot: Number(byId("scene-material-slot").value),
+      channel,
+      uv_map: uvMap,
+      wrap: byId("scene-material-wrap").value,
+      color_space: ["base_color", "emission"].includes(channel) ? "srgb" : "non_color",
+      normal_convention: channel === "normal" ? byId("scene-material-normal").value : "open_gl",
+    };
+    await call("scenes.material.apply", {scene_id: sceneId, binding});
+    state.sceneMaterialRevisionId = "";
+    await loadScenes();
+    await openScene(sceneId);
+    state.sceneMaterialStatusKey = "materialComplete";
+  } catch {
+    state.sceneMaterialStatusKey = "materialFailed";
+  } finally {
+    state.sceneMaterialBusy = false;
+    setHostBusy(false);
+    renderSceneMaterialControls();
+    renderSceneBackupControls();
+    renderBlenderSessionControls();
   }
 }
 
@@ -7200,9 +7407,23 @@ byId("scene-list").addEventListener("click", (event) => {
 });
 byId("scene-detail-close").addEventListener("click", () => {
   state.selectedSceneId = "";
+  state.sceneMaterialStatusKey = "";
   byId("scene-detail").hidden = true;
   renderScenes();
 });
+byId("scene-material-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  void applySceneMaterial();
+});
+byId("scene-material-object").addEventListener("change", () => {
+  renderSceneMaterialControls({targetsChanged: false});
+});
+for (const id of [
+  "scene-material-slot", "scene-material-image", "scene-material-channel",
+  "scene-material-uv", "scene-material-wrap", "scene-material-normal",
+]) {
+  byId(id).addEventListener("change", () => renderSceneMaterialControls({targetsChanged: false}));
+}
 byId("scene-blender-open").addEventListener("click", () => void startOrOpenBlender());
 byId("scene-blender-recover").addEventListener("click", () => {
   const recovery = selectedRecoveryCandidate();

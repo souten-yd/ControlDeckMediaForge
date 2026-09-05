@@ -259,6 +259,7 @@ def create_app(
         store,
         blender_runtimes,
         REPOSITORY_ROOT / "worker_packs/blender/scene_document.py",
+        material_worker=REPOSITORY_ROOT / "worker_packs/blender/material_binding.py",
         process_timeout_sec=resolved.blender_timeout_sec,
     )
     try:
@@ -3128,6 +3129,20 @@ def create_app(
                             "scene": document.model_dump(mode="json"),
                             "revisions": [item.model_dump(mode="json") for item in revisions],
                         }
+                    elif method == "scenes.material.targets":
+                        if set(params) != {"scene_id"}:
+                            raise ValueError("scene material targets accepts only scene_id")
+                        result = await scene_workspace.material_targets(
+                            preferences.subject_of(identity), str(params.get("scene_id", ""))
+                        )
+                    elif method == "scenes.material.apply":
+                        if set(params) != {"scene_id", "binding"}:
+                            raise ValueError("scene material apply fields differ")
+                        result = await scene_workspace.apply_material_binding(
+                            preferences.subject_of(identity),
+                            str(params.get("scene_id", "")),
+                            params.get("binding", {}),
+                        )
                     elif method == "scenes.import.begin":
                         if set(params) - {"size", "sha256", "name", "tags", "collection"} or not {
                             "size", "sha256", "name"
@@ -3623,6 +3638,39 @@ def create_app(
             "scene": document.model_dump(mode="json"),
             "revisions": [item.model_dump(mode="json") for item in revisions],
         }
+
+    @app.get(
+        "/workspace-api/scenes/{scene_id}/material-targets", include_in_schema=False
+    )
+    async def standalone_scene_material_targets(scene_id: str) -> dict[str, Any]:
+        try:
+            return await scene_workspace.material_targets(
+                preferences.STANDALONE_SUBJECT, scene_id
+            )
+        except SceneError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
+
+    @app.post(
+        "/workspace-api/scenes/{scene_id}/materials", include_in_schema=False
+    )
+    async def standalone_scene_material_apply(
+        scene_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"binding"}:
+                raise SceneError(
+                    "scene_material_binding_invalid", "scene material apply fields differ"
+                )
+            return await scene_workspace.apply_material_binding(
+                preferences.STANDALONE_SUBJECT, scene_id, payload.get("binding", {})
+            )
+        except SceneError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
 
     @app.post("/workspace-api/scenes/import/begin", include_in_schema=False)
     async def standalone_scene_import_begin(payload: dict[str, Any]) -> dict[str, Any]:

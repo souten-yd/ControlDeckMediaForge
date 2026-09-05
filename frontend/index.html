@@ -420,6 +420,57 @@
                   <button type="button" id="scene-blender-recover" hidden>復旧候補をBlenderで開く</button>
                   <p id="scene-blender-status" class="hint" role="status"></p>
                 </div>
+                <details id="scene-material-tools" class="scene-material-tools">
+                  <summary id="scene-material-title">画像素材を割り当て</summary>
+                  <form id="scene-material-form">
+                    <div class="scene-material-grid">
+                      <label><span id="scene-material-object-label">対象</span>
+                        <select id="scene-material-object" required></select>
+                      </label>
+                      <label><span id="scene-material-slot-label">マテリアル</span>
+                        <select id="scene-material-slot" required></select>
+                      </label>
+                      <label><span id="scene-material-image-label">ライブラリ画像</span>
+                        <select id="scene-material-image" required></select>
+                      </label>
+                      <label><span id="scene-material-channel-label">用途</span>
+                        <select id="scene-material-channel">
+                          <option value="base_color">ベースカラー</option>
+                          <option value="roughness">粗さ</option>
+                          <option value="metallic">メタリック</option>
+                          <option value="normal">法線</option>
+                          <option value="emission">発光</option>
+                        </select>
+                      </label>
+                    </div>
+                    <details class="scene-material-advanced">
+                      <summary id="scene-material-advanced-title">詳細設定</summary>
+                      <div class="scene-material-grid">
+                        <label><span id="scene-material-uv-label">UVマップ</span>
+                          <select id="scene-material-uv" required></select>
+                        </label>
+                        <label><span id="scene-material-wrap-label">画像の繰り返し</span>
+                          <select id="scene-material-wrap">
+                            <option value="repeat">繰り返す</option>
+                            <option value="extend">端を伸ばす</option>
+                            <option value="clip">範囲外を透明にする</option>
+                          </select>
+                        </label>
+                        <label id="scene-material-normal-row" hidden><span id="scene-material-normal-label">法線形式</span>
+                          <select id="scene-material-normal">
+                            <option value="open_gl">OpenGL</option>
+                            <option value="direct_x">DirectX</option>
+                          </select>
+                        </label>
+                      </div>
+                    </details>
+                    <p id="scene-material-safety" class="hint">画像はシーン内へ格納され、元のライブラリ素材との関係を記録します。</p>
+                    <div class="split-actions">
+                      <span id="scene-material-status" class="hint" role="status"></span>
+                      <button type="submit" id="scene-material-apply" class="primary">割り当てて新しい版を保存</button>
+                    </div>
+                  </form>
+                </details>
                 <p id="scene-revisions-title" class="section-label">保存した版</p>
                 <div id="scene-revisions" class="rows"></div>
               </article>

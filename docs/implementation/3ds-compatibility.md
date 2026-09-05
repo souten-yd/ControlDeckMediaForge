@@ -1,6 +1,6 @@
 # 3D Studio compatibility baseline
 
-Status: 3DS-0〜4・3DS-5a VERIFIED / 3DS-5b〜5d source VERIFIED
+Status: 3DS-0〜4・3DS-5a/6a VERIFIED / 3DS-5b〜5d source VERIFIED
 Date: 2026-09-06
 
 この表は統合3D Studio着手時の互換性基準である。既存画像・G8・公開契約を、後続実装の
@@ -196,3 +196,32 @@ exact codeのfull testは952 passed / 既知Starlette warning 1件 / 91.17秒。
 
 実ControlDeck opaque iframe、10分超credential rotation、実Host revoke、GPU/Cycles、packaged Chromeは
 **NOT TESTED**。
+
+## 3DS-6a 既存画像の材質binding互換性
+
+`media-forge.material-binding@1`は選択時のsource revision、既存Library画像Asset、object名、material
+slot、base color / roughness / metallic / normal / emission、UV map、wrap、色空間、normal conventionを
+型付きで固定する。private Host/standalone bridgeはscene IDとbindingだけを受け、pathや任意Pythonを受けない。
+source revisionが変わった適用はcurrentへ追従せず`scene_revision_conflict`で拒否する。画像blobのsize/hashを
+適用前に再検査し、Blender workerは固定名のstageだけを読み、autoexec/GPUを無効化したbackground 4.5.9で
+画像を`.blend`へpackする。新revisionは元scene sourceと画像Assetをparentに持ち、dependency role/hashと
+`scene.material.bind` provenanceを保持して既存Blender/GLB独立検査を通る。
+
+複製した実scene `scene_8175220d68ed41cc9e90697ffd5e534a`と1,280x720 PNG 292,693 Bを使い、実Blender
+4.5.9で5 channelを順に適用した。各回0.700883〜0.770455秒、revision 7→12、最終`.blend`は
+1,141,499 B / SHA-256 `9e55783af878a6c2c54332dee0dee9c049b882da931499bdcf5266a9b71618db`。
+dependencyは5 role、Blender検査はobjects 5 / meshes 3 / materials 2 / images 3 / external images 0、
+GLBは285,508 B / textures 4、両validator passedだった。最新source revisionを必須化した後の再適用は
+0.781秒でrevision 13、古いrevisionの再送は1.964 msでprivate `scene_revision_conflict`となった。
+
+実Chrome/CDPはLibrary画像1件とmaterial target 3件を表示し、UIからroughnessを適用してrevision 8→9、
+日英表示、390x844でbody scroll width 390 / inner width 390、単一列、browser exception 0を確認した。
+exact codeのfull testは957 passed / 既知Starlette warning 1件 / 93.63秒。0.28.6 exact bundleは
+31,554,828 B / SHA-256 `b03135ac28483fe93c4cdaf2744acbecb32a3a555fdf1a0f1948fc51b4b7cec9`、展開binary
+doctorは`ok / 0.28.6 / packaged=true`。exact package processでもtarget 3件を列挙し、DirectX normalを
+0.712秒でrevision 7→8へ適用した。`.blend`は836,127 B / SHA-256
+`6e865cc4fa021a24140f306c82cc8bd8376f624718b5e5b6bd60d4fd35dfe8ac`、external images 0、GLB validator
+passed、終了後active working/material stagingはいずれも0。
+
+新しい画像の生成・編集からの自動採用、前後版の同時比較・旧版へのcurrent切替、実ControlDeck opaque
+iframeは **NOT IMPLEMENTED / NOT TESTED**。次は3DS-6b texture generation orchestration。

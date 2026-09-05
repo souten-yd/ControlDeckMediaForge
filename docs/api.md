@@ -379,6 +379,19 @@ then lists the owner-scoped scene documents and immutable revision history. A
 revision preview opens through the same validated GLB viewer used by Library;
 the raw `.blend` bytes are not exposed to the browser after import.
 
+3DS-6a adds the typed
+[`media-forge.material-binding@1`](../schemas/material-binding.json) document.
+It fixes the selected source revision, Library image Asset, object/material
+slot, channel, UV map, wrap, color space, and normal convention. Private
+`scenes.material.targets` inspects the current revision; private
+`scenes.material.apply` accepts only a scene ID and one binding. The server
+rejects stale revisions and changed image bytes, packs the normalized image
+into a trusted Blender working copy, then runs the existing Blender and GLB
+validators before committing a new immutable revision. The standalone mirrors
+are `GET /workspace-api/scenes/{scene_id}/material-targets` and
+`POST /workspace-api/scenes/{scene_id}/materials`. These remain excluded from
+OpenAPI, Agent tools, workflow executors, and `addon.json` until the 3DS-7 gate.
+
 ## Reference collections and profiles
 
 - `GET /api/v1/reference-collections`
