@@ -8480,7 +8480,7 @@ backup/restore browser UIを独立PRにする。
 
 ## 2026-09-06 — 3DS-4c browser backup / restore UI
 
-Branch `ux1/3d-scene-backup-ui`。選択したsceneのexact backupをprivate transportから512 KiBずつ読み、
+PR #230、branch `ux1/3d-scene-backup-ui`、実装commit `de0cd4e`。選択したsceneのexact backupをprivate transportから512 KiBずつ読み、
 browser側でも総SHA-256とbyte数を検査して`.zip`として保存する。復元はfile全体を一括読込せずsliceごとに
 SHA-256を計算し、同じ512 KiB単位で送信してからserver側の全revision/file検証とatomic restoreを呼ぶ。
 2 GiB上限、import/download/restoreの相互排他、途中cancel、Host `disable.pending`、日英再描画、

@@ -5,7 +5,7 @@
 
 ## 2026-09-06 3DS-4c browser backup / restore UI
 
-Branch `ux1/3d-scene-backup-ui`。3DS-4c private transportを使い、選択sceneのbackupを512 KiBずつ
+PR #230、branch `ux1/3d-scene-backup-ui`、実装commit `de0cd4e`。3DS-4c private transportを使い、選択sceneのbackupを512 KiBずつ
 読みながらSHA-256を再計算して`.zip`保存し、復元fileも全体SHA-256をincremental計算して512 KiBずつ
 送るUIを追加した。2 GiB上限、download/restore/importの相互排他、cancel、`disable.pending`、日英、
 standalone mirrorを扱い、pathはbrowserとの契約へ追加していない。版は0.28.1。
