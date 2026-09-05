@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 完了監査再開 / standalone recovery transport
+
+branch `ux1/3d-standalone-recovery`、基準main `1f4392a2d426a742046d0c03c99272ffb5e41c87`。
+下記の「初期提供完了」判定は撤回し、3DS-8をPARTIALへ戻した。過去の実測や公開v0.28.15は変更しない。
+最新判定は[`3ds-completion-audit.md`](3ds-completion-audit.md)。GOAL-01〜10/シナリオA〜Fを
+一項目ずつ照合する。132秒fault injectionはchild credential refreshの証拠ではない。
+必要なのは失効前の正規refreshであり、失効tokenから自己再発行することではない。
+
+standalone session POSTで`recovery_working_id`が脱落する不具合を修正した。
+`/data1tb/ControlDeck/app/.venv/bin/python scripts/3ds_standalone_session_transport_smoke.py`で
+実Chromium→隔離loopback HTTPの復旧start/通常start/save/stopの4 body一致、browser error 0。
+HTTP記録器によるtransport検証であり、修正後の実Blender復旧・署名bundle受入は **NOT TESTED**。
+競合candidateはbackendのbase revision検査で再openを拒否するため、bytes保持だけで復旧完了とはしない。
+次はこのsliceのtest/PRを閉じ、競合candidateの分岐救出経路と期限内credential refresh実測を進める。
+最終`./mf.sh test`は981 passed / 既知Starlette warning 1件 / 102.21秒。
+初回は追加testの文字列切出しミスで1 failed / 980 passed。範囲を修正後、frontend 149件と全体を再実行した。
+
 ## 2026-09-06 3DS-8 completion / v0.28.15
 
 PR #244はmerge commit `aa054bc804dbcce4cb1262cc40188f8db9b01fd0`でmerged。正式v0.28.15は同commitを

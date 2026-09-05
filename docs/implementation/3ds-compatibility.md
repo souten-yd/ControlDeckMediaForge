@@ -1,6 +1,6 @@
 # 3D Studio compatibility baseline
 
-Status: 3DS-0〜8 VERIFIED / 統合3D Studio初期提供完了
+Status: 3DS-0〜7実装済み / 3DS-8 PARTIAL（必須受入を再監査中）
 Date: 2026-09-06
 
 この表は統合3D Studio着手時の互換性基準である。既存画像・G8・公開契約を、後続実装の
@@ -333,6 +333,7 @@ tag target、公開4 asset再取得、publisher署名、Host consumerのsafe ext
 `current`、service、Add-on登録がv0.28.15 healthyへ戻った。候補version/downloadと秘密鍵は確認後に削除した。
 manifest/artifact改ざん、wrong key、downgradeも拒否した。
 
-GPU GUI表示そのもの、資格情報が失効した後のrefresh、容量不足を実installed v0.28.15へ再注入する試験は
+GPU GUI表示そのもの、期限内のchild credential refresh、容量不足を実installed v0.28.15へ再注入する試験は
 **NOT TESTED**。software GUI、使用中credential、容量/hash/cancelの自動・過去実機証拠は成功しており、
-これらを未実施項目の証拠へ読み替えない。公開契約、既存画像、G8、scene dataは保持され、3DS-8 exit gateを満たした。
+これらを未実施項目の証拠へ読み替えない。3DS-8 exit gateを満たしたという判定は撤回する。
+残件と証拠範囲は[`3ds-completion-audit.md`](3ds-completion-audit.md)。失効後のtokenから自己再発行する要件ではない。
