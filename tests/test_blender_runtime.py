@@ -18,6 +18,7 @@ from scripts.blender_runtime import (
     load_spec,
     runtime_status,
     validate_archive,
+    validate_spec,
 )
 
 
@@ -50,6 +51,22 @@ def test_checked_in_manifest_is_exact_official_lts_archive() -> None:
     assert spec.archive_size_bytes == 377_929_956
     assert spec.archive_sha256 == "dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d"
     assert spec.license == "GPL-3.0-or-later"
+
+
+def test_runtime_catalog_pins_supported_and_recommended_lts_versions() -> None:
+    value = json.loads(Path("config/blender-runtime-catalog.json").read_text(encoding="utf-8"))
+    assert set(value) == {
+        "schema_version", "base_runtime_id", "recommended_studio_runtime_id", "runtimes"
+    }
+    assert value["schema_version"] == 1
+    entries = {row["runtime_id"]: validate_spec(row["spec"]) for row in value["runtimes"]}
+    assert entries[value["base_runtime_id"]].version == "4.5.9"
+    recommended = entries[value["recommended_studio_runtime_id"]]
+    assert recommended.version == "4.5.13"
+    assert recommended.archive_size_bytes == 378_033_952
+    assert recommended.archive_sha256 == (
+        "da4e69b06b75b9e642d106496c50e7e240218b411d2f6e18271c1d1d819cef91"
+    )
 
 
 def test_manifest_rejects_unpinned_host(tmp_path: Path) -> None:

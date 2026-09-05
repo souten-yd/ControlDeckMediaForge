@@ -12,10 +12,13 @@ import re
 import tempfile
 from typing import Any
 
+from scripts.blender_runtime import BlenderRuntimeError, RuntimeSpec, load_spec, validate_spec
+
 
 REGISTRY_SCHEMA_VERSION = 1
 STATUS_SCHEMA_VERSION = "media-forge.blender-runtime-status@1"
 G8_RUNTIME_ID = "legacy-blender-4.5.9"
+G8_MANAGED_RUNTIME_ID = "blender-4.5.9-linux-x64"
 G8_VERSION = "4.5.9"
 G8_PROFILE = "3d.project.glb"
 RUNTIME_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
@@ -49,12 +52,14 @@ class BlenderRuntimeResolver:
         legacy_root: Path,
         manifest_path: Path,
         trusted_worker: Path,
+        catalog_path: Path | None = None,
     ) -> None:
         self.registry_path = Path(os.path.abspath(registry_path))
         self.managed_root = managed_root.resolve()
         self.legacy_root = legacy_root.resolve()
         self.manifest_path = Path(os.path.abspath(manifest_path))
         self.trusted_worker = Path(os.path.abspath(trusted_worker))
+        self.catalog_path = Path(os.path.abspath(catalog_path)) if catalog_path else None
 
     def _manifest(self) -> dict[str, Any]:
         if self.manifest_path.is_symlink() or not self.manifest_path.is_file():
@@ -73,6 +78,55 @@ class BlenderRuntimeResolver:
         ):
             raise BlenderRuntimeRegistryError("trusted Blender manifest is invalid")
         return value
+
+    def _catalog_specs(self) -> dict[str, RuntimeSpec]:
+        legacy = self._manifest()
+        try:
+            fallback = load_spec(self.manifest_path)
+        except BlenderRuntimeError as exc:
+            raise BlenderRuntimeRegistryError("trusted Blender manifest is invalid") from exc
+        if self.catalog_path is None:
+            return {G8_RUNTIME_ID: fallback, G8_MANAGED_RUNTIME_ID: fallback}
+        if (
+            self.catalog_path.is_symlink()
+            or not self.catalog_path.is_file()
+            or self.catalog_path.stat().st_size > 128 * 1024
+        ):
+            raise BlenderRuntimeRegistryError("trusted Blender catalog is unavailable")
+        try:
+            value = json.loads(self.catalog_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise BlenderRuntimeRegistryError("trusted Blender catalog is invalid") from exc
+        if not isinstance(value, dict) or set(value) != {
+            "schema_version", "base_runtime_id", "recommended_studio_runtime_id", "runtimes"
+        } or value["schema_version"] != 1 or not isinstance(value["runtimes"], list):
+            raise BlenderRuntimeRegistryError("trusted Blender catalog is invalid")
+        if not 1 <= len(value["runtimes"]) <= 16:
+            raise BlenderRuntimeRegistryError("trusted Blender catalog is invalid")
+        specs: dict[str, RuntimeSpec] = {}
+        try:
+            for row in value["runtimes"]:
+                if (
+                    not isinstance(row, dict)
+                    or set(row) != {"runtime_id", "spec"}
+                    or not isinstance(row["runtime_id"], str)
+                    or not RUNTIME_ID_PATTERN.fullmatch(row["runtime_id"])
+                    or row["runtime_id"] in specs
+                ):
+                    raise BlenderRuntimeRegistryError("trusted Blender catalog is invalid")
+                specs[row["runtime_id"]] = validate_spec(row["spec"])
+        except BlenderRuntimeError as exc:
+            raise BlenderRuntimeRegistryError("trusted Blender catalog is invalid") from exc
+        base = value["base_runtime_id"]
+        recommended = value["recommended_studio_runtime_id"]
+        if (
+            base not in specs
+            or recommended not in specs
+            or specs[base] != fallback
+            or specs[base].archive_sha256 != legacy["archive_sha256"]
+        ):
+            raise BlenderRuntimeRegistryError("trusted Blender catalog is invalid")
+        return specs
 
     @staticmethod
     def _empty_registry() -> dict[str, Any]:
@@ -212,11 +266,22 @@ class BlenderRuntimeResolver:
         worker_ok = runtime.trusted_worker.is_file() and not runtime.trusted_worker.is_symlink()
         manifest_ok = False
         try:
-            manifest = self._manifest()
-            manifest_ok = (
-                runtime.version == manifest["version"]
-                and runtime.archive_sha256 == manifest["archive_sha256"]
-            )
+            if runtime.ownership == "legacy":
+                manifest = self._manifest()
+                manifest_ok = (
+                    runtime.version == manifest["version"]
+                    and runtime.archive_sha256 == manifest["archive_sha256"]
+                )
+            else:
+                specs = self._catalog_specs()
+                spec = specs.get(runtime.runtime_id)
+                if spec is None and self.catalog_path is None and runtime.version == G8_VERSION:
+                    # Compatibility for registries created before the catalog existed.
+                    spec = specs[G8_MANAGED_RUNTIME_ID]
+                manifest_ok = spec is not None and (
+                    runtime.version == spec.version
+                    and runtime.archive_sha256 == spec.archive_sha256
+                )
         except BlenderRuntimeRegistryError:
             pass
         return {
@@ -308,6 +373,29 @@ class BlenderRuntimeResolver:
                 self._write_registry(registry)
         return resolved
 
+    def activate(self, runtime_id: str) -> ResolvedBlenderRuntime:
+        self.registry_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        lock_path = self.registry_path.with_suffix(self.registry_path.suffix + ".lock")
+        if lock_path.is_symlink():
+            raise BlenderRuntimeRegistryError("Blender runtime registry lock must not be a symlink")
+        with lock_path.open("a", encoding="ascii") as lock:
+            lock_path.chmod(0o600)
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            registry = self._read_registry()
+            try:
+                record = next(
+                    row for row in registry["runtimes"] if row["runtime_id"] == runtime_id
+                )
+            except StopIteration as exc:
+                raise BlenderRuntimeRegistryError("Blender runtime is not registered") from exc
+            runtime = self._resolved(record)
+            if not self._ready(runtime):
+                raise BlenderRuntimeRegistryError("Blender runtime is not ready")
+            if registry["active_runtime_id"] != runtime_id:
+                registry["active_runtime_id"] = runtime_id
+                self._write_registry(registry)
+        return runtime
+
     def resolve_g8(self) -> ResolvedBlenderRuntime | None:
         try:
             registry = self._read_registry()
@@ -323,6 +411,16 @@ class BlenderRuntimeResolver:
             compatible[0] if compatible else None
         )
 
+    def resolve_active(self) -> ResolvedBlenderRuntime | None:
+        try:
+            registry = self._read_registry()
+            active = registry["active_runtime_id"]
+            record = next(row for row in registry["runtimes"] if row["runtime_id"] == active)
+            runtime = self._resolved(record)
+            return runtime if self._ready(runtime) else None
+        except (BlenderRuntimeRegistryError, StopIteration):
+            return None
+
     def status(self) -> dict[str, Any]:
         try:
             # A legacy runtime may be built while the service is running. A status
@@ -333,17 +431,18 @@ class BlenderRuntimeResolver:
             for record in registry["runtimes"]:
                 runtime = self._resolved(record)
                 checks = self._checks(runtime)
-                compatible = runtime.version == G8_VERSION and checks["manifest"]
+                supported = checks["manifest"]
+                g8_compatible = runtime.version == G8_VERSION and supported
                 rows.append({
                     "runtime_id": runtime.runtime_id,
                     "version": runtime.version,
                     "ownership": runtime.ownership,
                     "state": "ready" if all(checks.values()) else (
-                        "unsupported" if not compatible else "damaged"
+                        "unsupported" if not supported else "damaged"
                     ),
                     "active": runtime.runtime_id == registry["active_runtime_id"],
                     "removable": runtime.ownership == "managed",
-                    "compatible_profiles": [G8_PROFILE] if compatible else [],
+                    "compatible_profiles": [G8_PROFILE] if g8_compatible else [],
                     "checks": checks,
                 })
             selected = self.resolve_g8()

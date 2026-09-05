@@ -9,11 +9,11 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import subprocess
 import tarfile
 import tempfile
-from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 import uuid
 
@@ -47,28 +47,24 @@ class RuntimeSpec:
     source_url: str
 
 
-def load_spec(path: Path) -> RuntimeSpec:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise BlenderRuntimeError("Blender runtime manifest is unreadable") from exc
+def validate_spec(value: object) -> RuntimeSpec:
     if not isinstance(value, dict) or set(value) != set(RuntimeSpec.__dataclass_fields__):
         raise BlenderRuntimeError("Blender runtime manifest fields differ")
     try:
         spec = RuntimeSpec(**value)
     except TypeError as exc:
         raise BlenderRuntimeError("Blender runtime manifest is invalid") from exc
-    parsed = urlsplit(spec.archive_url)
     if (
         spec.schema_version != 1
-        or spec.version != "4.5.9"
-        or parsed.scheme != "https"
-        or parsed.hostname != "download.blender.org"
-        or Path(parsed.path).name != spec.archive_name
-        or not spec.archive_name.endswith("-linux-x64.tar.xz")
+        or not re.fullmatch(r"4\.5\.[0-9]+", spec.version)
+        or spec.archive_url != (
+            f"https://download.blender.org/release/Blender4.5/{spec.archive_name}"
+        )
+        or spec.archive_name != f"blender-{spec.version}-linux-x64.tar.xz"
         or spec.top_level_directory != spec.archive_name.removesuffix(".tar.xz")
         or spec.executable != "blender"
         or spec.license != "GPL-3.0-or-later"
+        or spec.source_url != "https://projects.blender.org/blender/blender"
         or not isinstance(spec.archive_size_bytes, int)
         or isinstance(spec.archive_size_bytes, bool)
         or spec.archive_size_bytes <= 0
@@ -77,6 +73,14 @@ def load_spec(path: Path) -> RuntimeSpec:
     ):
         raise BlenderRuntimeError("Blender runtime manifest violates the pinned boundary")
     return spec
+
+
+def load_spec(path: Path) -> RuntimeSpec:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise BlenderRuntimeError("Blender runtime manifest is unreadable") from exc
+    return validate_spec(value)
 
 
 def _safe_member_path(name: str, top_level: str) -> PurePosixPath:

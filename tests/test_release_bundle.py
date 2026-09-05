@@ -33,6 +33,7 @@ def test_bundle_builder_excludes_heavy_runtime_and_binds_package_identity():
     assert "runtimes/rocm-torch/.venv" not in builder
     assert 'f"{ROOT / \'creative\'}:creative"' in builder
     assert "blender-runtime.json'}:config" in builder
+    assert "blender-runtime-catalog.json'}:config" in builder
 
 
 def test_bundle_provision_writes_health_only_after_runtime_gpu_and_model(monkeypatch, tmp_path):
