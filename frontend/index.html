@@ -488,6 +488,7 @@
                   </form>
                 </details>
                 <p id="scene-revisions-title" class="section-label">保存した版</p>
+                <p id="scene-revision-status" class="hint" role="status"></p>
                 <div id="scene-revisions" class="rows"></div>
               </article>
             </div>
@@ -893,6 +894,41 @@
                 <path d="M17.4 6.6 6.6 17.4"/>
               </svg>
             </button>
+          </div>
+        </div>
+      </dialog>
+
+      <dialog id="scene-compare-dialog">
+        <div class="dialog-body scene-compare-body">
+          <div class="view-head one-line">
+            <div>
+              <h2 id="scene-compare-title">保存した版を比較</h2>
+              <p id="scene-compare-summary" class="hint"></p>
+            </div>
+            <button type="button" id="scene-compare-close">閉じる</button>
+          </div>
+          <div class="scene-compare-grid">
+            <section class="scene-compare-pane">
+              <h3 id="scene-compare-old-label">戻したい版</h3>
+              <div class="scene-compare-stage">
+                <canvas id="scene-compare-old-canvas" aria-label="戻したい3D版"></canvas>
+                <p id="scene-compare-old-status" role="status">読み込んでいます…</p>
+              </div>
+              <button type="button" id="scene-compare-old-fit">全体を表示</button>
+            </section>
+            <section class="scene-compare-pane">
+              <h3 id="scene-compare-current-label">現在の版</h3>
+              <div class="scene-compare-stage">
+                <canvas id="scene-compare-current-canvas" aria-label="現在の3D版"></canvas>
+                <p id="scene-compare-current-status" role="status">読み込んでいます…</p>
+              </div>
+              <button type="button" id="scene-compare-current-fit">全体を表示</button>
+            </section>
+          </div>
+          <p id="scene-compare-status" class="hint" role="status"></p>
+          <div class="dialog-actions">
+            <button type="button" id="scene-compare-cancel">そのまま戻る</button>
+            <button type="button" id="scene-compare-restore" class="primary" disabled>左の内容を新しい版として復元</button>
           </div>
         </div>
       </dialog>

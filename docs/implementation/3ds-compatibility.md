@@ -249,5 +249,30 @@ external images 0、GLB 18,600 B / textures 1、両validator passed、390px over
 
 同じexact sourceからR9700へstandalone実要求した結果は37 msで`host_lease_required`となり、broker外GPU実行を
 fail-closedにした。実ControlDeck browserは保存済み認証が失効して`/login`へ戻ったため、資格情報を迂回せず
-Host-managed R9700生成とopaque iframeは **NOT TESTED** とした。前後版同時比較・旧版からのcurrent復元も
-**NOT IMPLEMENTED / NOT TESTED**。Host実機は3DS-8 release acceptance、比較/復元は次の3DS-6cで扱う。
+Host-managed R9700生成とopaque iframeは **NOT TESTED** とした。3DS-6b時点では前後版同時比較・旧版からの
+current復元も **NOT IMPLEMENTED / NOT TESTED** であり、次の3DS-6cで扱った。
+
+## 3DS-6c revision compare/restore互換性
+
+private workspaceとstandalone mirrorへ、scene ID、期待するcurrent revision、同scene内の旧revisionだけを受ける
+復元操作を追加した。旧版の`.blend`、GLB preview、全dependencyをsize/SHA-256で再検査し、新しいAsset IDと
+`scene.revision.restore` provenanceへbyte-exact cloneする。currentを直接巻き戻さず、現currentをparentにした
+新しいlinear revisionをatomic commitするため、履歴と旧Assetは不変。競合、current自身、別scene/missing/tampered
+assetはfail-closedにし、登録途中の新Assetをrollbackする。公開OpenAPI、Agent tool、workflow executor、addon
+contributionは変更していない。
+
+UIは旧版とcurrentのGLBを各64 MiB上限/512 KiB以下chunkのconnection-scoped handleで同時に読み、独立した
+WebGL canvasでorbit/zoomできる。両方の実previewがreadyになるまで復元buttonを無効にし、閉じる/切替時は
+viewerとhandleをdisposeする。source Uvicorn + 実Chromeでは材質dependency 1件を持つ版をrevision 5→6へ復元。
+比較表示0.126秒、復元0.069秒、`.blend` 459,632 B / SHA-256
+`6e2aca40cfbe90a9ebdfbf10948c52cc0aca3de2aa49aade57971bfae1a58054`、GLB 18,600 B / SHA-256
+`cc354349853152769a41aa3452321f51da35c4af65047d85f841c9771bb19405`で復元元とbyte一致し、新Asset ID、
+new provenance、parent=currentを確認した。Blender 4.5.9はobjects 3 / meshes 1 / materials 2 / images 2 /
+external images 0 / autoexec disabled、独立GLB validatorはtextures 1でpassed。日英、390px overflow 0、
+console/page error 0。
+
+0.28.8 exact bundleは31,570,669 B / SHA-256
+`672533021c2170d9233ac56892381ec52b63f81d2ac02371897dfe2b20920f87`、doctorは
+`ok / 0.28.8 / packaged=true`。exact package + 実Chromeでもdependency 1件をrevision 8→9へ復元し、
+比較0.129秒、復元0.075秒、desktop/390pxの2画面WebGL、overflow 0、browser error 0、同じsource/GLB
+hash、Blender/GLB validator passed。実ControlDeck opaque iframeは **NOT TESTED** のまま3DS-8へ残す。

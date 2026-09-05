@@ -164,6 +164,15 @@ const state = {
   scenes: [],
   sceneWorkingCopies: [],
   selectedSceneId: "",
+  sceneDocument: null,
+  sceneRevisions: [],
+  sceneCompareToken: 0,
+  sceneCompareTarget: null,
+  sceneCompareCurrent: null,
+  sceneCompareInstances: new Map(),
+  sceneCompareHandles: new Set(),
+  sceneCompareReady: 0,
+  sceneRestoreBusy: false,
   sceneImport: null,
   sceneStatusKey: "",
   sceneBackup: null,
@@ -662,6 +671,14 @@ async function standaloneCall(method, params) {
   if (method === "scenes.material.apply") {
     return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/materials`, {
       method: "POST", body: JSON.stringify({binding: params.binding}),
+    });
+  }
+  if (method === "scenes.revisions.restore") {
+    return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/revisions/restore`, {
+      method: "POST", body: JSON.stringify({
+        base_revision_id: params.base_revision_id,
+        target_revision_id: params.target_revision_id,
+      }),
     });
   }
   if (method === "scenes.import.begin") {
@@ -4695,6 +4712,14 @@ const SCENE_TEXT = {
     empty: "まだシーンはありません。", close: "閉じる", revisions: "保存した版",
     count: (value) => `${value} 件`, version: (value) => `版 ${value}`,
     revision: (value) => `版 ${value}`, preview: "3Dで見る", validated: "検証済み",
+    currentRevision: "現在", compareRevision: "現在と比較", compareTitle: "保存した版を比較",
+    compareOld: (value) => `戻したい版 ${value}`, compareCurrent: (value) => `現在の版 ${value}`,
+    compareSummary: "左右を回転・拡大して確認できます。復元しても履歴は消えません。",
+    compareLoading: "読み込んでいます…", compareFailed: "3D版を読み込めませんでした。",
+    compareFit: "全体を表示", compareClose: "閉じる", compareCancel: "そのまま戻る",
+    compareRestore: "左の内容を新しい版として復元", compareReady: "両方の検証済みプレビューを読み込みました。",
+    compareRestoring: "旧版の内容を新しい版として復元しています…", compareRestored: "旧版の内容を新しい版として復元しました。",
+    compareRestoreFailed: "版を復元できませんでした。現在の版を読み直してください。",
     runtime: (version) => `Blender ${version}`, dependencies: (value) => `依存 ${value} 件`,
     hashing: "ファイルを確認しています…", uploading: "取り込んでいます…",
     validating: "Blenderで検査し、プレビューを作っています…",
@@ -4759,7 +4784,16 @@ const SCENE_TEXT = {
     empty: "No scenes yet.", close: "Close", revisions: "Saved revisions",
     count: (value) => `${value} scene${value === 1 ? "" : "s"}`,
     version: (value) => `v${value}`, revision: (value) => `Revision ${value}`,
-    preview: "View in 3D", validated: "Validated", runtime: (version) => `Blender ${version}`,
+    preview: "View in 3D", validated: "Validated", currentRevision: "Current",
+    compareRevision: "Compare with current", compareTitle: "Compare saved revisions",
+    compareOld: (value) => `Revision ${value} to restore`, compareCurrent: (value) => `Current revision ${value}`,
+    compareSummary: "Rotate and zoom each side. Restoring creates a new revision and keeps the history.",
+    compareLoading: "Loading…", compareFailed: "The 3D revision could not be loaded.",
+    compareFit: "Fit", compareClose: "Close", compareCancel: "Keep current revision",
+    compareRestore: "Restore the left side as a new revision", compareReady: "Both validated previews are loaded.",
+    compareRestoring: "Restoring the older content as a new revision…", compareRestored: "Restored the older content as a new revision.",
+    compareRestoreFailed: "The revision could not be restored. Reload the current revision.",
+    runtime: (version) => `Blender ${version}`,
     dependencies: (value) => `${value} dependenc${value === 1 ? "y" : "ies"}`,
     hashing: "Checking the file…", uploading: "Uploading…",
     validating: "Validating in Blender and building the preview…",
@@ -4891,6 +4925,19 @@ function renderSceneText() {
   byId("scene-texture-cancel").textContent = text.textureCancel;
   byId("scene-texture-retry").textContent = text.textureRetry;
   byId("scene-texture-use").textContent = text.textureUse;
+  byId("scene-compare-title").textContent = text.compareTitle;
+  byId("scene-compare-summary").textContent = text.compareSummary;
+  byId("scene-compare-close").textContent = text.compareClose;
+  byId("scene-compare-cancel").textContent = text.compareCancel;
+  byId("scene-compare-restore").textContent = text.compareRestore;
+  byId("scene-compare-old-fit").textContent = text.compareFit;
+  byId("scene-compare-current-fit").textContent = text.compareFit;
+  if (state.sceneCompareTarget) {
+    byId("scene-compare-old-label").textContent = text.compareOld(state.sceneCompareTarget.sequence);
+  }
+  if (state.sceneCompareCurrent) {
+    byId("scene-compare-current-label").textContent = text.compareCurrent(state.sceneCompareCurrent.sequence);
+  }
   const submit = byId("scene-import-submit");
   submit.disabled = Boolean(state.sceneImport) || Boolean(state.sceneBackup) || !sceneRuntimeReady();
   if (state.sceneStatusKey) setSceneStatus(state.sceneStatusKey);
@@ -4949,14 +4996,17 @@ async function loadScenes() {
 
 async function openScene(sceneId) {
   state.selectedSceneId = sceneId;
+  byId("scene-revision-status").textContent = "";
   renderScenes();
   try {
     const result = await call("scenes.get", {scene_id: sceneId});
     if (state.selectedSceneId !== sceneId) return;
     const scene = result.scene;
+    state.sceneDocument = scene;
     byId("scene-detail-name").textContent = scene.name;
     byId("scene-detail-summary").textContent = `${sceneText().count(scene.revision_count)} · ${sceneDay(scene.updated_at)}`;
     const revisions = [...(result.revisions || [])].sort((left, right) => right.sequence - left.sequence);
+    state.sceneRevisions = revisions;
     byId("scene-revisions").replaceChildren(...revisions.map((revision) => {
       const row = document.createElement("div");
       row.className = "row";
@@ -4977,6 +5027,18 @@ async function openScene(sceneId) {
       preview.dataset.sceneName = scene.name;
       preview.textContent = sceneText().preview;
       actions.append(preview);
+      if (revision.id === scene.current_revision_id) {
+        const current = document.createElement("span");
+        current.className = "state current";
+        current.textContent = sceneText().currentRevision;
+        actions.append(current);
+      } else {
+        const compare = document.createElement("button");
+        compare.type = "button";
+        compare.dataset.sceneCompare = revision.id;
+        compare.textContent = sceneText().compareRevision;
+        actions.append(compare);
+      }
       row.append(info, actions);
       return row;
     }));
@@ -4986,6 +5048,159 @@ async function openScene(sceneId) {
     await loadSceneMaterialData(sceneId, scene.current_revision_id);
   } catch {
     byId("scene-list-count").textContent = sceneText().detailFailed;
+  }
+}
+
+async function disposeSceneCompare() {
+  const instances = [...state.sceneCompareInstances.values()];
+  state.sceneCompareInstances.clear();
+  for (const instance of instances) {
+    try { instance.dispose(); } catch { /* an already lost WebGL context is harmless */ }
+  }
+  const handles = [...state.sceneCompareHandles];
+  state.sceneCompareHandles.clear();
+  await Promise.all(handles.map((handle) => (
+    call("assets.model.close", {handle}).catch(() => {})
+  )));
+  for (const id of ["scene-compare-old-canvas", "scene-compare-current-canvas"]) {
+    const canvas = byId(id);
+    canvas.replaceWith(canvas.cloneNode(false));
+  }
+}
+
+async function closeSceneCompare() {
+  state.sceneCompareToken += 1;
+  state.sceneCompareReady = 0;
+  state.sceneCompareTarget = null;
+  state.sceneCompareCurrent = null;
+  state.sceneRestoreBusy = false;
+  const dialog = byId("scene-compare-dialog");
+  if (dialog.open) dialog.close();
+  await disposeSceneCompare();
+}
+
+async function loadSceneComparePane(revision, canvasId, statusId, token) {
+  const status = byId(statusId);
+  status.textContent = sceneText().compareLoading;
+  let handle = "";
+  try {
+    const opened = await call("assets.model.open", {asset_id: revision.preview_asset_id});
+    handle = opened.handle;
+    state.sceneCompareHandles.add(handle);
+    if (opened.total_bytes > 64 * 1024 * 1024) throw new Error("model exceeds browser bound");
+    const content = new Uint8Array(opened.total_bytes);
+    let offset = 0;
+    while (offset < content.length) {
+      if (token !== state.sceneCompareToken) throw new Error("scene comparison changed");
+      const piece = await call("assets.model.bytes", {
+        handle,
+        offset,
+        length: Math.min(opened.chunk_bytes, content.length - offset),
+      });
+      const chunk = decodeBase64(piece.base64);
+      if (piece.offset !== offset || piece.total_bytes !== content.length || !chunk.length) {
+        throw new Error("model byte sequence changed");
+      }
+      content.set(chunk, offset);
+      offset += chunk.length;
+      status.textContent = `${sceneText().compareLoading} ${Math.round(offset / content.length * 100)}%`;
+    }
+    await call("assets.model.close", {handle});
+    state.sceneCompareHandles.delete(handle);
+    handle = "";
+    const modulePromise = modelViewerModulePromise || (
+      modelViewerModulePromise = import(
+        new URL(`/viewer-runtime.js?v=${MODEL_VIEWER_BUNDLE}`, location.href).href
+      )
+    );
+    const module = await modulePromise;
+    if (token !== state.sceneCompareToken) throw new Error("scene comparison changed");
+    const instance = await module.createModelViewer({
+      canvas: byId(canvasId),
+      bytes: content,
+      background: "#0b1110",
+      onContextState: (value) => {
+        if (token === state.sceneCompareToken && value !== "restored") {
+          status.textContent = viewer3dText().contextLost;
+        }
+      },
+    });
+    if (token !== state.sceneCompareToken) {
+      instance.dispose();
+      throw new Error("scene comparison changed");
+    }
+    state.sceneCompareInstances.set(canvasId, instance);
+    status.textContent = viewer3dText().stats(instance.stats);
+    state.sceneCompareReady += 1;
+    byId("scene-compare-restore").disabled = state.sceneCompareReady !== 2
+      || state.sceneRestoreBusy || state.disabled;
+  } catch (error) {
+    if (handle) {
+      await call("assets.model.close", {handle}).catch(() => {});
+      state.sceneCompareHandles.delete(handle);
+    }
+    if (token === state.sceneCompareToken) status.textContent = sceneText().compareFailed;
+    throw error;
+  }
+}
+
+async function openSceneCompare(targetRevisionId) {
+  if (!state.sceneDocument || state.disabled || state.hostActionLocked) return;
+  const target = state.sceneRevisions.find((item) => item.id === targetRevisionId);
+  const current = state.sceneRevisions.find(
+    (item) => item.id === state.sceneDocument.current_revision_id
+  );
+  if (!target || !current || target.id === current.id) return;
+  state.sceneCompareToken += 1;
+  await disposeSceneCompare();
+  const token = state.sceneCompareToken;
+  state.sceneCompareTarget = target;
+  state.sceneCompareCurrent = current;
+  state.sceneCompareReady = 0;
+  state.sceneRestoreBusy = false;
+  const text = sceneText();
+  byId("scene-compare-old-label").textContent = text.compareOld(target.sequence);
+  byId("scene-compare-current-label").textContent = text.compareCurrent(current.sequence);
+  byId("scene-compare-old-status").textContent = text.compareLoading;
+  byId("scene-compare-current-status").textContent = text.compareLoading;
+  byId("scene-compare-status").textContent = "";
+  byId("scene-compare-restore").disabled = true;
+  const dialog = byId("scene-compare-dialog");
+  if (!dialog.open) dialog.showModal();
+  const loaded = await Promise.allSettled([
+    loadSceneComparePane(target, "scene-compare-old-canvas", "scene-compare-old-status", token),
+    loadSceneComparePane(current, "scene-compare-current-canvas", "scene-compare-current-status", token),
+  ]);
+  if (token === state.sceneCompareToken && loaded.every((item) => item.status === "fulfilled")) {
+    byId("scene-compare-status").textContent = text.compareReady;
+  }
+}
+
+async function restoreComparedSceneRevision() {
+  const target = state.sceneCompareTarget;
+  const current = state.sceneCompareCurrent;
+  const sceneId = state.selectedSceneId;
+  if (!target || !current || state.sceneCompareReady !== 2 || state.sceneRestoreBusy) return;
+  state.sceneRestoreBusy = true;
+  const button = byId("scene-compare-restore");
+  button.disabled = true;
+  byId("scene-compare-status").textContent = sceneText().compareRestoring;
+  try {
+    await call("scenes.revisions.restore", {
+      scene_id: sceneId,
+      base_revision_id: current.id,
+      target_revision_id: target.id,
+    });
+    await closeSceneCompare();
+    await loadScenes();
+    await openScene(sceneId);
+    byId("scene-revision-status").textContent = sceneText().compareRestored;
+  } catch (error) {
+    state.sceneRestoreBusy = false;
+    if (byId("scene-compare-dialog").open) {
+      byId("scene-compare-status").textContent = error?.message || sceneText().compareRestoreFailed;
+      button.disabled = state.sceneCompareReady !== 2 || state.disabled;
+    }
   }
 }
 
@@ -7630,7 +7845,10 @@ byId("scene-list").addEventListener("click", (event) => {
   if (scene) void openScene(scene.dataset.sceneId);
 });
 byId("scene-detail-close").addEventListener("click", () => {
+  void closeSceneCompare();
   state.selectedSceneId = "";
+  state.sceneDocument = null;
+  state.sceneRevisions = [];
   state.sceneMaterialStatusKey = "";
   byId("scene-detail").hidden = true;
   renderScenes();
@@ -7676,6 +7894,11 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 byId("scene-revisions").addEventListener("click", (event) => {
+  const compare = event.target.closest?.("[data-scene-compare]");
+  if (compare) {
+    void openSceneCompare(compare.dataset.sceneCompare);
+    return;
+  }
   const preview = event.target.closest?.("[data-scene-preview]");
   if (!preview) return;
   void openViewer(preview.dataset.scenePreview, {
@@ -7685,6 +7908,19 @@ byId("scene-revisions").addEventListener("click", (event) => {
     preview_kind: "model_3d",
     summary: preview.dataset.sceneName,
   }, []);
+});
+byId("scene-compare-close").addEventListener("click", () => void closeSceneCompare());
+byId("scene-compare-cancel").addEventListener("click", () => void closeSceneCompare());
+byId("scene-compare-restore").addEventListener("click", () => void restoreComparedSceneRevision());
+byId("scene-compare-old-fit").addEventListener("click", () => {
+  state.sceneCompareInstances.get("scene-compare-old-canvas")?.fit();
+});
+byId("scene-compare-current-fit").addEventListener("click", () => {
+  state.sceneCompareInstances.get("scene-compare-current-canvas")?.fit();
+});
+byId("scene-compare-dialog").addEventListener("cancel", (event) => {
+  event.preventDefault();
+  void closeSceneCompare();
 });
 byId("video-create-settings").addEventListener("click", () => {
   state.modelFilter = "video";
@@ -8746,6 +8982,7 @@ window.addEventListener("message", (event) => {
     }
     if (message.event === "disable.pending") {
       state.disabled = true;
+      void closeSceneCompare();
       const active = activeBlenderSession();
       if (active) {
         void call("blender.sessions.interrupt", {session_id: active.id}).catch(() => {});
