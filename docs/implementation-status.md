@@ -9048,3 +9048,33 @@ commit失敗asset rollback、restart後idempotency、両transportを追加。`./
 v0.28.16 candidateは31,623,524 B / SHA-256
 `5eeb7e510233bdc06e35db3aaf0b0c1a92c8da9abe3a1218a53e040edfeca2b5`、doctorは`ok / 0.28.16 / packaged=true`。
 正式署名公開・標準update・installed候補の分岐救出は **NOT TESTED**。3DS-8全体はPARTIALのまま。
+
+## 2026-09-06 — installed recovery fork / 正式v0.28.16
+
+PR #247 merged `53faaeb52770b1f151f0000fa73dc02566a99acb`からdetached worktreeで正式bundleを再構築。
+31,468,656 B / SHA-256 `8ae198224aa361d31406d2fce151ca4a1eda2ecd0892bd0259bafc97e1b810df`、
+packaged doctor `ok / 0.28.16 / packaged=true`、正規publisher署名を自己検証。
+https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.28.16 を公開し、
+公開4 assetを`gh release download`で再取得、artifact hash一致・tag target一致。
+manifest279 B、signature89 B、sha256119 B。標準`registry.update('media-forge')`で実Host consumerの
+署名/integrity/provision/health経路を実行し、11.277秒で0.28.15→0.28.16、managed/enabled/healthy。
+計測したPython親processのmaxRSSは48,464 KiBで、childを含む全体peakとはしない。
+最終serviceはPID2286511、active/running、drop-inなし。更新前に実行中Job/sessionが0であることをDBで確認した。
+
+`scripts/3ds_recovery_installed_e2e.py`をHost Playwright環境で実行。
+以前保存競合で残った`working_0a35fec723ae491bb9abf93c6e533077`を、installed opaque iframeの明示buttonで
+`scene_3ac2b7089a3b5cc3b7b1a95ffd96594f` / `revision_aa65c326dc4f454bab24c96b9282ab9c`へ救出した。
+元`scene_ca920fd634b14dfea8215567e930bb7a`の13版は完全一致、candidate bytesは1,438,783 B /
+SHA-256 `11ff0e65eeec0f33ffb1d7e35dc2b82319b0dd467de964b493ee7b1e3151dcaa`で不変、保存source assetも同hash。
+pinned Blender4.5.9でautoexec無効、4 objects/236 triangles、独立GLB validator passed、GLB891,224 B。
+元版の画像dependency `asset_0daea4caf7c74cd49ed85bbef9fba0d6`とhashを継承し、source scene/revisionを
+provenanceへ保持。再送は同scene。所要0.978秒、origin null、console/page error0。
+mf-e2eのpassword/login metadataはfinallyで復元し、この試験が作ったHost認証sessionだけ失効した。
+証拠: `/data1tb/mf-recovery-fork-installed-evidence-0.28.16/observations.json` と screenshot。
+
+source/candidateの隔離HTTP serverはすべて停止、exact release用worktreeも削除した。
+正式導入への変更は標準updateと利用者向けforkのみ。元scene/candidate/runtimeを消していない。
+長時間child credential refreshなどの残件はNOT TESTEDのまま、全体3DS-8はPARTIAL。
+今回作成したcandidate/release展開directory各61 MiBと隔離fixture各2.6 MiBの計4 directoryは
+`gio trash`で退避した。ごみ箱から復元可能。公開再取得4 assetと観測JSON/screenshotは保持した。
+installed acceptance script追加後の最終`./mf.sh test`は993 passed / 既知warning1件 / 101.74秒。

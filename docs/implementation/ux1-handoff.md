@@ -3,6 +3,28 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 installed recovery fork / v0.28.16
+
+PR #247 merged `53faaeb52770b1f151f0000fa73dc02566a99acb`。同commitから正式v0.28.16を再構築・署名公開した。
+bundleは31,468,656 B / SHA-256 `8ae198224aa361d31406d2fce151ca4a1eda2ecd0892bd0259bafc97e1b810df`。
+公開4 asset再取得hash・tag target一致、packaged doctor成功。標準Host updaterの署名/consumer/provision/
+health経路で11.277秒、0.28.15→0.28.16、healthy。最終PID 2286511、active/running、drop-inなし。
+
+`scripts/3ds_recovery_installed_e2e.py`で既存mf-e2eを一時認証し、installed opaque iframeから
+保存競合candidate `working_0a35fec723ae491bb9abf93c6e533077`を別scene
+`scene_3ac2b7089a3b5cc3b7b1a95ffd96594f`へ救出した。1,438,783 B / SHA-256
+`11ff0e65eeec0f33ffb1d7e35dc2b82319b0dd467de964b493ee7b1e3151dcaa`、0.978秒、pinned Blender 4.5.9。
+元sceneの13版は不変、candidate/source asset hash一致、元版の画像dependency継承、再送同scene、
+GLB 891,224 B / 236 triangles、browser error 0。mf-e2e認証はfinallyで元へ戻し、この試験sessionのみ失効。
+証拠: `/data1tb/mf-recovery-fork-installed-evidence-0.28.16/observations.json`。
+今回の隔離fixtureとcandidate/release展開物4 directoryは受入後にgio trashで退避した。
+公開物再取得コピーと観測JSON/screenshotは保持。exact release worktreeはGitから再作成可能。
+installed acceptance script追加後の`./mf.sh test`は993 passed / 既知warning1件 / 101.74秒。
+
+3DS-8全体はPARTIAL。次は期限内child credential refreshの実測。
+現行Host TTL600秒、manager margin120秒、worker timeout180秒を前提に、132秒fault injectionを
+更新成功へ読み替えない。競合救出の不足は解消したが、他の全GOALは監査表どおり個別照合を続ける。
+
 ## 2026-09-06 recovery fork / v0.28.16 candidate
 
 branch `ux1/3d-recovery-fork`、基準main `911f154`（PR #246 merged）。
