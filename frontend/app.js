@@ -501,6 +501,7 @@ async function standaloneCall(method, params) {
         action: method.slice("blender.sessions.".length),
         ...(params.scene_id ? {scene_id: params.scene_id} : {}),
         ...(params.session_id ? {session_id: params.session_id} : {}),
+        ...(params.recovery_working_id ? {recovery_working_id: params.recovery_working_id} : {}),
       }),
     });
   }

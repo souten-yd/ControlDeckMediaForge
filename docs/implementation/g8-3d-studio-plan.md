@@ -1,6 +1,6 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: 3DS-0〜8 VERIFIED / 統合3D Studio初期提供完了
+Status: 3DS-0〜7実装済み / 3DS-8 PARTIAL（必須受入を再監査中）
 Date: 2026-09-06
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
@@ -24,7 +24,8 @@ exact backup core/private transport/browser UI、3DS-5a Web操作pack管理、3D
 MaterialBinding commitまでをsource/packageで実装・確認した。3DS-6cは現行版/旧版の2画面比較と、旧版を
 新しいimmutable current revisionへ復元する工程をsource/packageで確認し、3DS-6のexit条件を閉じた。
 3DS-7はtyped Agent recipe、durable detached child Job、stable actor ownerをsource/packageで確認した。
-3DS-8でinstalled-host/OpenCode/GPU/release acceptanceを完了した。Expert scriptは別capabilityの3DS-Xであり、
+3DS-8でinstalled-host/OpenCode/GPU/releaseの個別証拠を取得したが、必須受入全体の完了判定を撤回した。
+残件は[`3ds-completion-audit.md`](3ds-completion-audit.md)。Expert scriptは別capabilityの3DS-Xであり、
 初期提供の完了条件には含めない。
 
 | 項目 | 調査で確認した現状 | 追加するもの |
@@ -63,7 +64,8 @@ fail-closed終了、復旧候補からの検証済みrevision化、既存Library
 3DS-6bの画像生成jobからの採用、取消、再試行はsource/packageで完了した。画像編集jobからの採用は既存Library
 Asset選択で同じMaterialBindingへ到達する。3DS-6cのrevision compare/restore、3DS-7のtyped recipesと
 durable child job orchestrationも完了した。3DS-8は実installed Hostで制作一巡、opaque iframe、session lifecycle、
-GPU/Broker競合、120秒超Job、署名release/update/rollbackを確認し、初期提供を完了した。
+GPU/Broker競合、120秒超Job、署名release/update/rollbackの個別動作を確認した。
+120秒超のfault injectionをcredential refreshや長時間制作完走の証拠へ読み替えず、初期提供は未完了とする。
 
 ## 3. PRスライスの候補
 

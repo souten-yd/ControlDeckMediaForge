@@ -8993,6 +8993,32 @@ doctor・service healthまで通り、`current=0.28.16`とpackaged doctorを観�
 
 `./mf.sh test`はPR #244 exact headで980 passed / 既知Starlette warning 1件 / 100.41秒。既存画像、G8、
 OpenCode制作、opaque UI、lifecycle、GPU/Broker、signed release/update/rollbackを実installed Hostで確認し、
-3DS-8をVERIFIED、統合3D Studio初期提供を完了とする。GPU GUI表示、失効後credential refresh、実installed環境への
+当時は3DS-8をVERIFIED、統合3D Studio初期提供を完了と判定したが、以下の完了監査で撤回した。GPU GUI表示、期限内child credential refresh、実installed環境への
 容量不足再注入は **NOT TESTED**。interactive GUIはsoftware displayとして提供し、個別Eevee/Cycles GPU probeを
 GPU GUIの証拠へ読み替えない。Expert scriptは別capability 3DS-X。
+
+## 2026-09-06 — 完了監査再開 / standalone recovery transport
+
+基準main `1f4392a2d426a742046d0c03c99272ffb5e41c87`からbranch `ux1/3d-standalone-recovery`。
+PR #213の必須条件との再照合により3DS-8をPARTIALへ戻し、初期提供の完了判定を撤回する。
+過去の個別実測は維持する。全GOALと必須scenarioの判定・残件を
+[`3ds-completion-audit.md`](implementation/3ds-completion-audit.md)へ記録した。
+
+コード確認でstandalone session startが`recovery_working_id`を落として通常startへ変える不具合を特定し、
+session POSTへ転送する修正と、そのbody内にfieldがあることを検査する回帰を追加した。
+`/data1tb/ControlDeck/app/.venv/bin/python scripts/3ds_standalone_session_transport_smoke.py`は
+実ChromiumでproductionのstandaloneCallを実行し、隔離loopback HTTP記録器が受け取った
+復旧start/通常start/save/stopの4件のbodyをassert、browser error 0。認証/既存データは使用しない。
+HTTP記録器は本番backendではなく、実Blender復旧やinstalled受入の証拠にはしない。
+修正後の実Blender復旧・署名bundle受入は **NOT TESTED**。
+
+`acquire_recovery_working_copy`のbase revision不一致拒否も確認した。競合candidateのbytes保持は
+確認済みだが、分岐救出の利用者経路は未確認。上書き防止を外して解決したことにしない。
+長時間credentialは失効**前**のrefreshが必要。132秒Job維持と621秒GUI接続だけから
+child credentialが更新されたと推測しない。次の実測と設計照合を継続する。
+Hostコードの既定TTLは600秒、recipe managerのrefresh marginは120秒、worker timeoutは180秒。
+実Host DBへのread-only SQLで`audit_logs`の`username=addon:media-forge`かつ
+`action=addon.runtime.job.credential.refresh`を検索すると0件だった。現在残る記録の観測として扱う。
+
+最終`./mf.sh test`は981 passed / 既知Starlette warning 1件 / 102.21秒。
+初回は追加testの文字列切出しミスで1 failed / 980 passed。範囲修正後にfrontend 149件と全体を再実行した。

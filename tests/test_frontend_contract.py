@@ -145,6 +145,17 @@ def test_blender_session_gateway_is_private_reauthenticating_and_desktop_only() 
     assert "localStorage" not in SCRIPT
 
 
+def test_standalone_session_start_forwards_the_selected_recovery_candidate() -> None:
+    standalone = SCRIPT[SCRIPT.index("async function standaloneCall"):SCRIPT.index("async function call(")]
+    session_request = standalone[
+        standalone.index('return json("/workspace-api/blender/sessions", {'):
+        standalone.index('if (method === "blender.runtime.install")')
+    ]
+    assert "{recovery_working_id: params.recovery_working_id}" in session_request
+    assert "{scene_id: params.scene_id}" in session_request
+    assert "{session_id: params.session_id}" in session_request
+
+
 def test_vendored_3d_viewer_is_reproducible_lazy_and_disposable() -> None:
     lock = json.loads((FRONTEND / "three-viewer.lock.json").read_text(encoding="utf-8"))
     source = FRONTEND / "model-viewer-source.js"
