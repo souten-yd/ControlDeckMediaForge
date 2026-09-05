@@ -1,0 +1,14 @@
+{
+  "name": "control-deck-media-forge-frontend",
+  "private": true,
+  "scripts": {
+    "build:viewer": "esbuild frontend/model-viewer-source.js --bundle --format=esm --minify --legal-comments=inline --outfile=frontend/three-viewer.js"
+  },
+  "dependencies": {
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright-core": "1.63.0"
+  }
+}

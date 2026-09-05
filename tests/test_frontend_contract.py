@@ -9,6 +9,7 @@ behaviour are observed in a real browser (PR-U7).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -72,13 +73,16 @@ DOM_IDS = (
     "outpaint-input", "outpaint-ratios", "outpaint-scales", "outpaint-preview", "outpaint-note",
     "stage", "stage-progress", "stage-result", "candidate-strip", "recent-strip",
     "result-evaluate", "result-evaluation",
-    "mini-progress", "library-grid", "library-count", "activity-list",
+    "mini-progress", "library-grid", "library-count", "library-media-kinds", "activity-list",
     "detail-dialog",
     "model-storage", "model-filters", "model-management-note", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
     "model-remove-dialog", "model-remove-summary", "model-remove-detail",
     "model-remove-cancel", "model-remove-confirm",
     "viewer", "viewer-stage", "viewer-image", "viewer-caption",
+    "viewer-3d", "viewer-3d-canvas", "viewer-3d-loading", "viewer-3d-tools",
+    "viewer-3d-fit", "viewer-3d-shading", "viewer-3d-light", "viewer-3d-background",
+    "viewer-3d-bounds", "viewer-3d-animation", "viewer-3d-stats",
     "viewer-detail", "viewer-edit", "viewer-close",
 )
 
@@ -96,6 +100,29 @@ def test_blender_runtime_lifecycle_has_embedded_and_standalone_receivers() -> No
         assert method in SCRIPT
     assert "/workspace-api/blender/runtime/operations" in SCRIPT
     assert "watchStandaloneBlenderOperation" in SCRIPT
+
+
+def test_vendored_3d_viewer_is_reproducible_lazy_and_disposable() -> None:
+    lock = json.loads((FRONTEND / "three-viewer.lock.json").read_text(encoding="utf-8"))
+    source = FRONTEND / "model-viewer-source.js"
+    bundle = FRONTEND / "three-viewer.js"
+    package_lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
+    assert lock["three_version"] == "0.185.1"
+    assert package_lock["packages"]["node_modules/three"]["integrity"] == lock["three_npm_integrity"]
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == lock["source_sha256"]
+    assert hashlib.sha256(bundle.read_bytes()).hexdigest() == lock["bundle_sha256"]
+    assert bundle.stat().st_size == lock["bundle_bytes"]
+    assert "Copyright 2010-2026 Three.js Authors" in bundle.read_text(encoding="utf-8")[:300]
+    assert 'from "three"' in source.read_text(encoding="utf-8")
+    viewer_source = source.read_text(encoding="utf-8")
+    for required in (
+        "OrbitControls", "GLTFLoader", "toggleBounds", "toggleAnimation",
+        "setShading", "setLight", "setBackground", "forceContextLoss",
+        "ResizeObserver", "texture.dispose()", "image?.close",
+    ):
+        assert required in viewer_source
+    assert f'const MODEL_VIEWER_BUNDLE = "{lock["bundle_sha256"][:16]}"' in SCRIPT
+    assert "new URL(`/viewer-runtime.js?v=${MODEL_VIEWER_BUNDLE}`" in SCRIPT
 
 ADVANCED_IDS = (
     "advanced-create", "advanced-format",
@@ -148,12 +175,17 @@ def test_3d_project_action_is_capability_and_selection_gated_and_typed():
     assert 'media_type: "model/gltf-binary"' in picker
 
 
-def test_3d_zip_viewer_uses_preview_instead_of_rendering_the_archive():
+def test_3d_assets_use_the_validated_chunk_viewer_with_a_project_preview_fallback():
     viewer = SCRIPT[SCRIPT.index("async function openViewer("):SCRIPT.index("/* 自動で選んだとき")]
     package = viewer[viewer.index('item?.preview_kind === "project_3d"'):]
+    assert "openModelViewer(assetId, item, token)" in package
+    model = SCRIPT[SCRIPT.index("async function openModelViewer"):SCRIPT.index("async function openViewer")]
+    assert 'call("assets.model.open"' in model
+    assert 'call("assets.model.bytes"' in model
+    assert 'call("assets.model.close"' in model
+    assert "new URL(`/viewer-runtime.js?v=${MODEL_VIEWER_BUNDLE}`" in model
     assert 'call("assets.thumbnail"' in package
-    assert package.index('call("assets.thumbnail"') < package.index('call("assets.content"')
-    assert "ZIP · プレビュー" in package
+    assert package.index("openModelViewer") < package.index('call("assets.content"')
 
 
 def test_library_does_not_request_a_thumbnail_for_non_preview_assets():
@@ -161,7 +193,7 @@ def test_library_does_not_request_a_thumbnail_for_non_preview_assets():
     gate = card[card.index("if (!item.preview_kind)"):]
     assert gate.index("return card") < gate.index('call("assets.thumbnail"')
     recent = SCRIPT[SCRIPT.index("async function applyRecent"):SCRIPT.index("/* サーバから")]
-    assert ".filter((item) => item.preview_kind)" in recent
+    assert 'item.preview_kind !== "model_3d" || item.thumbnail' in recent
 
 
 def test_model_management_actions_are_simple_but_technical_details_are_advanced():
@@ -450,11 +482,14 @@ def test_addon_declares_a_real_mobile_view():
     assert ADDON["version"] == packaged, "addon.json と mediaforge.__version__ が食い違っている"
 
 
-def test_the_library_has_no_kind_filter():
-    """4 つの札が見出しを 1 行占めていた。絞り込む価値のある分け方ではない。"""
+def test_the_library_filters_by_media_without_restoring_the_old_origin_filter():
+    """3D操作を探せる媒体filterだけを足し、価値の薄い来歴filterは戻さない。"""
     assert 'id="library-kinds"' not in MARKUP
     assert "libraryKind" not in SCRIPT
-    assert '"library.list", {kind: "all"' in SCRIPT, "全件を取っていない"
+    assert 'id="library-media-kinds"' in MARKUP
+    for kind in ("all", "image", "video", "3d"):
+        assert f'data-library-media="{kind}"' in MARKUP
+    assert 'kind: "all", media_kind: state.libraryMedia' in SCRIPT
     assert 'id="library-count"' in MARKUP, "何枚あるのかが見出しから消えた"
 
 

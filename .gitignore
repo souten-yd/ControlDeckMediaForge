@@ -20,6 +20,7 @@ __pycache__/
 *.sqlite3-shm
 *.sqlite3-wal
 frontend/dist/
+node_modules/
 # リリース成果物。30MB の tarball と署名で、公開先は GitHub Release である。
 # 一度 git add -A で取り込んで main まで運んでしまったので、名指しで止める。
 dist/

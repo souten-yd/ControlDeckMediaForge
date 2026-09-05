@@ -89,6 +89,20 @@ is limited to managed-root realpaths, refuses the active runtime and live pinned
 G8 references, revalidates the preview under the same reference lock, and keeps
 assets, scenes, history, external runtimes, and download cache out of scope.
 
+3DS-3 keeps model viewing on the same private workspace boundary. `library.list`
+accepts an allowlisted `media_kind` (`all`, `image`, `video`, or `3d`) and returns
+that classification with each card. `assets.model.open` accepts only an Asset ID,
+validates raw GLB or the exact `3d.project.glb` ZIP entries and manifest hash, and
+returns a connection-scoped opaque handle. `assets.model.bytes` reads at most
+512 KiB per call; `.close` releases it, and socket disconnect removes any project
+staging. `assets.model.thumbnail` stores only a validated raw-GLB WebP capture up
+to 512 px and 256 KiB. The standalone development mirrors apply the same model
+validation. The immutable `/viewer-runtime.js` module is CORS-readable by the
+opaque iframe and contains no asset URL or server path. Models are capped at
+64 MiB, individual texture sides at 8,192 px, and total texture pixels at
+67,108,864. These are private presentation methods and do not change OpenAPI,
+`schemas/`, `addon.json`, Agent tools, or workflow executors.
+
 Creative planning also remains private. `creative.templates` returns the
 versioned trusted template catalog. `creative.validate` accepts an existing
 JobRequest-shaped object plus an internal CreativeSpec and returns a

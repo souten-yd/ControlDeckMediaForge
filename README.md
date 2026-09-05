@@ -67,8 +67,10 @@ existing G8 profile remains pinned to 4.5.9. With `./mf.sh serve` running, the
 same server orchestrator is available from `./mf.sh blender managed-status`,
 `install`, `update`, `switch <runtime-id>`, `repair <runtime-id>`,
 `remove-preview <runtime-id>`, and `remove <runtime-id>`; removal prompts unless
-`--yes` is explicit. The browser GUI pack remains planned work, and its absence
-does not disable image features.
+`--yes` is explicit. Library now filters Images, Videos, and 3D assets and opens
+validated raw GLB or existing G8 project ZIP output in a lazy, locally bundled
+interactive viewer. The browser GUI pack remains planned work, and its absence
+does not disable image or Library features.
 
 ## Test
 
@@ -80,7 +82,7 @@ Public contracts are documented in [`docs/api.md`](docs/api.md). Current evidenc
 
 ## Planning documents
 
-- [Integrated 3D Studio](docs/design-3d-studio.md) — phased extension of MediaForge's shared image/3D workspace. The compatibility baseline, runtime resolver/diagnostics, and durable Blender install/cancel/restart path are implemented; remaining lifecycle operations, asset viewer, texture workflows, OpenCode authoring, and server-side Blender GUI remain planned. Implementation and releases stay in this repository; Blender runs in isolated runtime/session environments.
+- [Integrated 3D Studio](docs/design-3d-studio.md) — phased extension of MediaForge's shared image/3D workspace. The compatibility baseline, Blender runtime lifecycle, and shared Library GLB viewer are implemented; scene revisions, texture workflows, OpenCode authoring, and server-side Blender GUI remain planned. Implementation and releases stay in this repository; Blender runs in isolated runtime/session environments.
 - [3D implementation plan](docs/implementation/g8-3d-studio-plan.md) — phased work, compatibility gates, real-machine acceptance and coding-agent handoff.
 - [3D development and release rules](docs/development-release-3d-studio.md) — existing MediaForge distribution/signing, reference practices from ControlDeck/SonicForge and evidence requirements.
 

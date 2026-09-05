@@ -717,6 +717,20 @@ table.catalog td[data-label="操作"] > button { white-space: nowrap; flex: 0 0 
 }
 .card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--sunk); }
 .card img[hidden] { display: none !important; }
+.card .model-placeholder {
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(145deg, var(--sunk), var(--surface));
+  color: var(--muted);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.library-media-kinds { margin: 0 0 12px; flex-wrap: nowrap; overflow-x: auto; }
+.library-media-kinds button { flex: 0 1 auto; min-width: 58px; }
 #viewer-image[hidden] { display: none !important; }
 .card .meta { display: flex; justify-content: space-between; gap: 6px; font-size: .72rem; color: var(--muted); }
 .card .sum { font-size: .8rem; overflow-wrap: anywhere; }
@@ -864,6 +878,45 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .74rem; backgro
 /* 動画は台の中に収める。拡大縮小は画像側の操作なので持ち込まない。 */
 #viewer-video { max-width: 100%; max-height: 100%; }
 #viewer-video[hidden] { display: none !important; }
+#viewer-3d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+#viewer-3d[hidden] { display: none !important; }
+#viewer-3d-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+#viewer-3d-loading, #viewer-3d-stats {
+  position: absolute;
+  left: 12px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: rgb(11 17 16 / 78%);
+  color: #d8e4e1;
+  font-size: .72rem;
+  pointer-events: none;
+}
+#viewer-3d-loading { top: 12px; }
+#viewer-3d-stats { right: 12px; top: 12px; left: auto; margin: 0; }
+#viewer-3d-tools {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+#viewer-3d-tools button {
+  height: 44px;
+  min-height: 44px;
+  padding: 7px 10px;
+  border-color: #52615e !important;
+  background: rgb(16 23 22 / 88%) !important;
+  color: #eef5f3 !important;
+}
 
 #viewer-bar {
   min-width: 0;

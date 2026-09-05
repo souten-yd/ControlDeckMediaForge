@@ -38,12 +38,17 @@ def main() -> int:
     parser.add_argument("--media-forge-url", required=True)
     parser.add_argument("--glb", required=True, type=Path)
     parser.add_argument("--evidence-dir", required=True, type=Path)
+    parser.add_argument("--chrome", type=Path, default=Path("/usr/bin/google-chrome"))
     args = parser.parse_args()
     args.evidence_dir.mkdir(parents=True, exist_ok=True)
     observations: dict[str, Any] = {}
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(
+            executable_path=str(args.chrome),
+            headless=False,
+            args=["--enable-webgl", "--ignore-gpu-blocklist"],
+        )
         page = browser.new_page(viewport={"width": 1280, "height": 900})
         console_errors: list[str] = []
         page_errors: list[str] = []
@@ -117,13 +122,15 @@ def main() -> int:
         card.click()
         page.wait_for_selector("#viewer[open]")
         page.wait_for_function(
-            "() => document.querySelector('#viewer-caption')?.textContent === 'ZIP · プレビュー'",
+            "id => document.querySelector('#viewer-3d-canvas')?.dataset.modelAssetId === id",
+            arg=job["asset_ids"][0],
             timeout=10_000,
         )
-        check(page.locator("#viewer-caption").inner_text() == "ZIP · プレビュー",
-              "viewer did not identify the package preview")
-        check(page.locator("#viewer-image").evaluate("image => image.naturalWidth > 0"),
-              "viewer preview did not decode")
+        check(page.locator("#viewer-3d").is_visible(), "ZIP package did not open in the GLB viewer")
+        check(page.locator("#viewer-caption").inner_text().startswith("3D ZIP ·"),
+              "viewer did not identify the interactive package")
+        check("三角形" in page.locator("#viewer-3d-stats").inner_text(),
+              "interactive viewer did not report model geometry")
         page.screenshot(path=str(args.evidence_dir / "g8-b4-library-preview.png"), full_page=True)
 
         observations.update({
@@ -132,6 +139,7 @@ def main() -> int:
             "request": request,
             "card_preview_prefix": (image.get_attribute("src") or "")[:28],
             "viewer_caption": page.locator("#viewer-caption").inner_text(),
+            "viewer_stats": page.locator("#viewer-3d-stats").inner_text(),
             "console_errors": console_errors,
             "page_errors": page_errors,
         })

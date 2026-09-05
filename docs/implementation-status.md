@@ -8242,3 +8242,54 @@ HTTP 200、未導入4.5.9のremove previewは意図どおり`blender_runtime_not
 実ControlDeck opaque
 iframe、installed release、GPU/Cycles、Web Blender、scene/revision、viewer、材質、OpenCode制作は
 **NOT TESTED / NOT IMPLEMENTED**。ControlDeck変更は0件。3DS-2は完了し、次は3DS-3。
+
+## 2026-09-05 — 3DS-3 shared Library GLB viewer
+
+PR #219、実装commit `b5a73824030b5506e409e7f6b0cc9e0a3b5c8a98`。画像・動画・3Dを同じLibraryから
+媒体別に絞り込むprivate projectionと、
+raw `model/gltf-binary` / 既存G8 `3d.project.glb` ZIPのinteractive viewerを追加した。公開schema、
+`addon.json`、Agent tool、workflow executor、画像生成routeは変更していない。Three.js 0.185.1の
+`WebGLRenderer` / `GLTFLoader` / `OrbitControls`だけをnpm lockfileからbundleし、registry integrity、
+source SHA-256、bundle SHA-256、MIT noticeを固定した。外部CDN、DRACO、KTX2、Meshopt decoderはない。
+viewer moduleは最初の3D assetを開くまで取得しない。
+
+opaque workspaceはAsset IDだけを受け、connection-scoped `modelview_*` handleを返す。GLBは既存の
+Blender非依存validationを再実行し、64 MiB以下、texture 1辺8,192 px以下、合計67,108,864 px以下を
+強制する。G8 ZIPは`asset.glb / manifest.json / preview.png`のexact entry、manifest profile/size/hashを
+検証してsession専用rootへstream展開する。bytesは1要求512 KiB以下、同時handleは2個以下で、close、
+asset切替、socket切断、app shutdownにstagingを回収する。応答にserver pathはない。raw GLBは最初の
+描画から512 px / 256 KiB以下のWebPをcacheし、以降のgridはGLB本体を読まない。
+
+UIはorbit/pan/zoom、fit、material/neutral/wireframe、3 light/background preset、bounding box、
+triangle/material/animation数、animation play/pause、3D asset間の前後移動を提供する。画像viewerの
+pointer操作はimage modeだけで維持した。非表示時はanimation frameを止め、復帰、WebGL context
+loss/restoreを扱い、切替/終了時はgeometry/material/texture/ImageBitmap、control、renderer、contextを
+disposeする。日本語/英語はreloadなしでvisible textとARIAを切り替える。
+
+一時data rootの実Uvicorn `127.0.0.1:9167`へ796 B cubeをimportし、実Blender 4.5.9によるG8 job
+`job_9062c76d510c4c12b2b36d1c1800fc5c`はsucceeded、ZIP Asset
+`asset_86ea614724c0469c9155f07a41e1fe2b`を生成した。viewerは24 triangles / 2 materialsを描画し、
+raw Asset `asset_875a59ae8214470fbf5d9e1505e6f85c`との前後移動後もviewer module取得は1回、7個の旧WebGL
+contextはすべてlost、5回開閉後のheap増分は316,496 B、console/page errorは0だった。
+
+さらに実Blender 4.5.9からanimation付きcube 3,116 B / SHA-256
+`43c30e4303f0c66667e49257db53fc1597ee7d545e181f5e1ca5ca77bb10bf3b`を書き出し、実Chromeで
+12 triangles / 1 material / 1 animation、play/pauseを確認した。表示中のanimation frameは10、
+visibility hidden中も10、visible復帰後17。`WEBGL_lose_context`でloss→restore後も描画復旧した。
+WebGLは`WebGL 2.0 (OpenGL ES 3.0 Chromium)`、rendererは
+`ANGLE (AMD Radeon Graphics radeonsi raphael_mendocino LLVM 20.1.2)`。既存画像640x360も同じrunで
+開き、3D moduleの先行fetchなし。320 pxではviewport 320 / document client=scroll 305、操作最小高
+43.995 px。最終runのcold 89.155 ms、warm 63.734〜68.990 ms、5回close後heap増分450,592 B、
+5 context解放、console/page error 0。
+
+`./mf.sh test`は891 passed / 既知Starlette warning 1件 / 68.16秒。PyInstaller 6.22.0の候補
+0.27.0 bundleは31,346,609 B / SHA-256
+`a0b24e41e7af790e6dbc1993c6655e13a88cf03122b85f4b8abaa2a820b9cd78`。packaged doctorは
+`ok / 0.27.0 / packaged=true`、packaged process `127.0.0.1:9168`はviewer module 643,367 B /
+SHA-256 `99935b9427ddad9aa892a8046376da55eaa3e5fe8873d3cdaafbabb6f530b843`をCORS/CORP/immutableで
+配信し、同じanimation GLBを12 triangles / 1 animationとして描画した。試験processは停止し、
+終了時の`workspace-model-*`とBlender childは0。
+
+実ControlDeck opaque iframe、外部提供のtexture付き実モデル、64 MiB上限付近、driver crash、
+material slot選択/画像差替えpreview/Blender edit、scene/revisionは **NOT TESTED / NOT IMPLEMENTED**。
+これらは3DS-4〜6のscopeであり3DS-3の実績へ読み替えない。ControlDeck変更は0件。次は3DS-4。

@@ -3,6 +3,28 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3DS-3 shared Library GLB viewer
+
+PR #219、実装commit `b5a73824030b5506e409e7f6b0cc9e0a3b5c8a98`。
+LibraryをAll/Images/Videos/3Dの共通filterへ拡張し、raw GLBと既存G8
+`3d.project.glb` ZIPを同じinteractive viewerで表示する。Three.js 0.185.1はnpm integrity、
+source/bundle SHA-256、MIT noticeを固定し、CDNを使わず最初のモデルを開くまで読み込まない。
+opaque iframeはconnection-scoped handleから512 KiB chunkだけを受け、ZIP stagingはclose/socket切断で
+回収する。64 MiB GLB、8,192 px/辺、67,108,864 texture pixel、同時2 handleをfail-closedで強制する。
+
+実Blender 4.5.9で3,116 Bのanimation付きcubeを生成し、実Chromeで12 triangles / 1 material /
+1 animation、play/pause、hidden時frame 10→10、復帰後17、WebGL context loss/restoreを確認した。
+実G8 job `job_9062c76d510c4c12b2b36d1c1800fc5c`のZIPは24 triangles / 2 materialsで、raw GLBとの
+前後比較と7 contextの解放を確認。320 pxは横溢れ0、操作高43.995 px、最終console/page error 0。
+5回開閉後のheap増分は450,592 B。候補bundle 31,346,609 B / SHA-256
+`a0b24e41e7af790e6dbc1993c6655e13a88cf03122b85f4b8abaa2a820b9cd78`でも同じanimation GLBを
+描画し、module 643,367 B / SHA-256 `99935b9427ddad9aa892a8046376da55eaa3e5fe8873d3cdaafbabb6f530b843`
+を配信した。full gateは891件PASS。
+
+実ControlDeck opaque iframe、texture付き実モデル、64 MiB上限付近、context lossを伴う破損GPU、
+material slot/画像差替え、Blender edit、scene/revisionは **NOT TESTED / NOT IMPLEMENTED**。
+ControlDeck変更は0件。次は3DS-4 scene/revision/working copy。
+
 ## 2026-09-05 3DS-2c protected remove / shared CLI
 
 PR #218、実装commit `4b5cdbb3c2b37978d17f3226d0012e4364adef3c`。
