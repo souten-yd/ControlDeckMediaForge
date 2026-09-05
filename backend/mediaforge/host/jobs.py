@@ -47,6 +47,8 @@ class HostExecution:
     lease_id: str | None = None
     # broker が割り当てた置き場所。"host" ならシステムRAMで走らせる。
     device_id: str | None = None
+    # 貸してもらった枠。全常駐に足りなければ、その中で動く形へ切り替える。
+    granted_bytes: int | None = None
 
 
 class HostJobReporter:
