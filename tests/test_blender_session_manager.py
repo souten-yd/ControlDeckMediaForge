@@ -17,6 +17,7 @@ from mediaforge.blender_session_manager import BlenderSessionError, BlenderSessi
 from mediaforge.blender_session_record import BlenderSessionState
 from mediaforge.blender_web import BlenderWebPack, load_web_pack_spec
 from mediaforge.config import Settings
+from mediaforge.scenes import SceneRevisionInput
 from test_blender_web import fixture_manifest
 from test_scene_workspace import fake_scene_workspace, upload_scene
 
@@ -436,6 +437,41 @@ def test_crash_and_save_failure_both_retain_unvalidated_bytes(tmp_path: Path) ->
         assert failed["result"]["recovery"]["state"] == "candidate"
         assert not (manager.root / second["id"]).exists()
         assert len([item for item in store.list_scene_working_copies(OWNER) if item.state == "recovery"]) == 2
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_revision_conflict_save_projects_the_existing_recovery_candidate(tmp_path: Path) -> None:
+    store, workspace, scene_id, controller, manager = session_fixture(tmp_path)
+
+    async def scenario() -> None:
+        await manager.start()
+        created = manager.create(OWNER, scene_id)
+        await wait_state(manager, created["id"], "ready")
+        document, revisions = workspace.catalog.get(OWNER, scene_id)
+        current = next(item for item in revisions if item.id == document.current_revision_id)
+        workspace.catalog.commit(
+            OWNER,
+            scene_id,
+            current.id,
+            SceneRevisionInput(
+                source_asset_id=current.source_asset_id,
+                preview_asset_id=current.preview_asset_id,
+                dependencies=current.dependencies,
+                runtime_id=current.runtime_id,
+                runtime_version=current.runtime_version,
+                validation=current.validation,
+            ),
+        )
+
+        manager.save_and_stop(OWNER, created["id"])
+        failed = await wait_state(manager, created["id"], "failed")
+        assert failed["error_code"] == "scene_revision_conflict"
+        assert failed["result"]["recovery"]["state"] == "candidate"
+        candidate_id = failed["result"]["recovery"]["working_id"]
+        assert store.get_scene_working_copy(OWNER, candidate_id).state == "recovery"
+        assert controller.units == {}
         await manager.stop()
 
     asyncio.run(scenario())
