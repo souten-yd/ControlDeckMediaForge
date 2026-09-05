@@ -2340,16 +2340,25 @@ class JobManager:
         normalized_progress = current.progress if progress is None else progress
         terminal = status in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
         if reporter is not None and terminal:
-            if reporter.execution.owns_terminal:
-                await reporter.terminal(
-                    status.value,
-                    phase=phase,
-                    progress=normalized_progress,
-                    result={"asset_ids": asset_ids} if status == JobStatus.SUCCEEDED else None,
-                    error=error.message if error is not None else None,
+            # Host への最終通知が失敗しても、job の結末は必ず自分の store に残す。
+            # ここで例外を上げると update_job まで届かず、worker の本当の失敗理由が
+            # 通知側の都合（進捗ゲートに弾かれた等）で上書きされ、原因が追えなくなる。
+            try:
+                if reporter.execution.owns_terminal:
+                    await reporter.terminal(
+                        status.value,
+                        phase=phase,
+                        progress=normalized_progress,
+                        result={"asset_ids": asset_ids} if status == JobStatus.SUCCEEDED else None,
+                        error=error.message if error is not None else None,
+                    )
+                else:
+                    await reporter.finish_attached(phase=phase, progress=normalized_progress)
+            except Exception:
+                logger.exception(
+                    "host job final update failed job=%s status=%s phase=%s progress=%s",
+                    job_id, status.value if status else None, phase, normalized_progress,
                 )
-            else:
-                await reporter.finish_attached(phase=phase, progress=normalized_progress)
         result = self.store.update_job(
             job_id,
             status=status,
