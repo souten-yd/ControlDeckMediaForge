@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3DS-4b core bounded working copy
+
+branch `ux1/3d-scene-working-core`、実装commit `c03c8dc`。256 MiB `.blend` / 512 KiB chunk / 10分upload、
+owner同時1件、single-writer WorkingCopy lease、runtime pin、trusted Blender validation/export、独立GLB検査、
+immutable Asset/revision commitを実装した。working leaseとbase/current revisionは同じtransactionで再検証し、
+競合・期限切れbytesはrecoveryとして残す。raw `.blend`はLibraryに直接出さない。
+
+実Blender 4.5.9で1,247,112 Bのsphereを3 chunkでimport 0.268493秒、working commit 0.267828秒。
+8,066 vertices / 16,128 triangles / preview 1,138,160 B、revision 2件、runtime参照1。悪意あるtext blockは
+保持して検査したがautoexec sentinelは生成されなかった。fullは897 passed / 3 skipped / 1 warning /
+78.17秒。private transport/browser/ControlDeck/packageは **NOT TESTED**、ControlDeck変更0。
+次は`ux1/3d-scene-working-copy`のprivate WS/standalone transportを独立PRにする。
+
 ## 2026-09-05 3DS-4a immutable scene revision persistence
 
 PR #222、branch `ux1/3d-scene-revisions`、実装commit `9d053fb`。owner-scoped SceneDocument、append-only

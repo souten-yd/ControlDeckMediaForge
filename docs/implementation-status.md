@@ -8330,3 +8330,33 @@ source processと同じ応答hashだった。試験Uvicorn/packaged process/Blen
 bounded `.blend` upload、single-writer working copy/lease、隔離runnerによるimport・検査・保存は3DS-4b、
 exact backup/restoreは3DS-4cで **NOT IMPLEMENTED / NOT TESTED**。browser UI、実ControlDeck opaque iframe、
 installed release、GPU/Cycles、Web Blender、材質差替え、OpenCode制作も **NOT TESTED**。ControlDeck変更は0件。
+
+## 2026-09-05 — 3DS-4b core bounded working copy
+
+branch `ux1/3d-scene-working-core`、実装commit `c03c8dc`。`.blend` uploadを256 MiB、chunk 512 KiB、
+owner同時1件、10分期限、offset/chunk/total SHA-256一致に制限するdomain serviceを追加した。
+active Studio runtimeをlive pinし、専用processのBlenderを`--background --factory-startup
+--disable-autoexec`で起動する。trusted workerはversion/background/autoexec、object/mesh/vertex/triangle数、
+finite transform/座標、unit=1 m、外部library/image不在を検査し、GLBをexportする。coreはそのGLBを既存の
+独立validatorで再検査してから`.blend` sourceとGLB previewをimmutable Asset/revisionへ登録する。
+任意script/operator/pathは入力に持たず、subprocessは配列引数、専用HOME、180秒timeout、process group
+停止、stdout/stderr各128 KiB上限で実行する。
+
+WorkingCopyはscene/current revision/runtimeを固定して専用rootへcopyし、scene単位single-writer leaseを
+10分で保持する。renew/release/commitはownerを再確認する。commitはworking lease、期限、base revision、
+current headを同じ`BEGIN IMMEDIATE` transactionで再検証し、revision/head/working terminal化をatomicに
+書く。競合時はheadを変えずworkingを`recovery`として保持する。期限切れもbytesを保持し、新writerは取得
+できる。scene revision参照中のruntime/Asset保護は維持する。raw `.blend`はbrowser Library projectionへ
+出さず、viewer用GLBだけを3D assetとして表示する。
+
+実Blender 4.5.9でtext block 1件（実行されれば外部sentinelを作る内容）を含むsphere `.blend`
+1,247,112 B / SHA-256
+`2eb41fa6750fbe82c884678655c3752d4e81663ba144f9b9da1934a9971ed6c6`を3 chunkで取り込んだ。
+import 0.268493秒、working commit 0.267828秒、revision 2件、runtime参照1件。worker実測は8,066 vertices /
+16,128 triangles / text block 1、preview GLB 1,138,160 B。autoexec sentinelは生成されず、2 revisionの
+`.blend`/GLB bytesとSHA-256、旧Assetはいずれも保持された。unit/fake workerではupload bound/hash/offset/
+owner、lock、renew/release、timeout cleanup、期限切れrecovery、base競合時のatomic rollbackを確認した。
+
+exact core headの`./mf.sh test`は897 passed / 3 environment-dependent skipped / 既知Starlette warning 1件 /
+78.17秒。private WS/standalone transportとbrowser UI、実ControlDeck opaque iframe、packaged bundleは
+このcore sliceでは **NOT IMPLEMENTED / NOT TESTED**。ControlDeck変更は0件。次はtransportを独立PRにする。
