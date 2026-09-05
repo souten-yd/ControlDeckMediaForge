@@ -35,6 +35,11 @@ def is_mask(provenance: Provenance) -> bool:
     return provenance.parameters.get("purpose") == "edit_mask"
 
 
+def is_internal_scene_source(asset: Asset) -> bool:
+    """The browser opens a scene's GLB derivative, never raw `.blend` bytes."""
+    return asset.mime_type == "application/x-blender"
+
+
 def summarize(provenance: Provenance) -> str:
     text = " ".join(provenance.intent.split())
     return text if len(text) <= SUMMARY_LIMIT else f"{text[:SUMMARY_LIMIT]}…"
@@ -125,7 +130,7 @@ def page(
     """
     items: list[dict[str, Any]] = []
     for asset, provenance in records:
-        if is_mask(provenance) and not include_masks:
+        if is_internal_scene_source(asset) or (is_mask(provenance) and not include_masks):
             continue
         value = entry(asset, provenance)
         if kind != "all" and value["kind"] != kind:

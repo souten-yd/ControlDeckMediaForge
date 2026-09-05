@@ -30,7 +30,7 @@ from .models.operations import (
 )
 from .paths import contained
 from .profiles import Profile, ProfileInput, ReferenceCollection, ReferenceCollectionInput
-from .scenes import SceneDocument, SceneError, SceneRevision
+from .scenes import SceneDocument, SceneError, SceneRevision, SceneWorkingCopy
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -268,6 +268,22 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_scene_revision_dependencies_asset
                     ON scene_revision_dependencies(asset_id);
+                CREATE TABLE IF NOT EXISTS scene_working_copies (
+                    id TEXT PRIMARY KEY,
+                    scene_id TEXT NOT NULL REFERENCES scene_documents(id),
+                    owner TEXT NOT NULL,
+                    base_revision_id TEXT NOT NULL REFERENCES scene_revisions(id),
+                    runtime_id TEXT NOT NULL,
+                    value_json TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_scene_working_copies_active_scene
+                    ON scene_working_copies(scene_id) WHERE state = 'active';
+                CREATE INDEX IF NOT EXISTS idx_scene_working_copies_owner_updated
+                    ON scene_working_copies(owner, updated_at DESC);
                 """
             )
             columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(jobs)")}
@@ -823,6 +839,75 @@ class Store:
         self._notify_session("scenes")
         return document
 
+    def commit_scene_from_working_copy(
+        self,
+        owner: str,
+        working_id: str,
+        base_revision_id: str,
+        document: SceneDocument,
+        revision: SceneRevision,
+        *,
+        now: str,
+    ) -> SceneDocument:
+        """Advance a scene head only while its writer lease and base are still current."""
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            working_row = connection.execute(
+                """SELECT scene_id, owner, base_revision_id, state, expires_at, value_json
+                   FROM scene_working_copies WHERE id = ?""",
+                (working_id,),
+            ).fetchone()
+            if working_row is None or working_row["owner"] != owner:
+                raise SceneError("scene_working_not_found", "working copy is unavailable")
+            if working_row["state"] != "active" or working_row["expires_at"] <= now:
+                raise SceneError("scene_working_expired", "working copy lease expired")
+            if (
+                working_row["scene_id"] != document.id
+                or working_row["base_revision_id"] != base_revision_id
+            ):
+                raise SceneError("scene_working_invalid", "working copy identity differs")
+            scene_row = connection.execute(
+                "SELECT owner, value_json, current_revision_id FROM scene_documents WHERE id = ?",
+                (document.id,),
+            ).fetchone()
+            if scene_row is None or scene_row["owner"] != owner:
+                raise SceneError("scene_not_found", "scene is unavailable")
+            try:
+                current = SceneDocument.model_validate_json(scene_row["value_json"])
+                working = SceneWorkingCopy.model_validate_json(working_row["value_json"])
+            except ValidationError as exc:
+                raise SceneError("scene_record_invalid", "scene or working record is unreadable") from exc
+            if scene_row["current_revision_id"] != base_revision_id:
+                raise SceneError("scene_revision_conflict", "scene current revision changed")
+            if (
+                revision.scene_id != current.id
+                or revision.parent_revision_id != base_revision_id
+                or revision.sequence != current.revision_count + 1
+                or document.current_revision_id != revision.id
+                or document.revision_count != revision.sequence
+                or document.id != current.id
+                or document.name != current.name
+                or document.tags != current.tags
+                or document.collection != current.collection
+                or document.unit_meters != current.unit_meters
+                or document.created_at != current.created_at
+            ):
+                raise SceneError("scene_record_invalid", "scene revision transition is invalid")
+            self._insert_scene_revision(connection, revision)
+            connection.execute(
+                """UPDATE scene_documents SET value_json = ?, current_revision_id = ?, updated_at = ?
+                   WHERE id = ?""",
+                (document.model_dump_json(), revision.id, document.updated_at, document.id),
+            )
+            committed = working.model_copy(update={"state": "committed", "updated_at": now})
+            connection.execute(
+                """UPDATE scene_working_copies SET value_json = ?, state = 'committed', updated_at = ?
+                   WHERE id = ?""",
+                (committed.model_dump_json(), now, working_id),
+            )
+        self._notify_session("scenes")
+        return document
+
     def get_scene(self, scene_id: str, owner: str) -> SceneDocument:
         with self._connect() as connection:
             row = connection.execute(
@@ -862,6 +947,178 @@ class Store:
                 (runtime_id,),
             ).fetchone()
         return int(row["count"])
+
+    def acquire_scene_working_copy(
+        self, owner: str, value: SceneWorkingCopy, *, now: str
+    ) -> SceneWorkingCopy:
+        if value.state != "active":
+            raise SceneError("scene_working_invalid", "new working copy must be active")
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            scene = connection.execute(
+                "SELECT owner, current_revision_id FROM scene_documents WHERE id = ?",
+                (value.scene_id,),
+            ).fetchone()
+            if scene is None or scene["owner"] != owner:
+                raise SceneError("scene_not_found", "scene is unavailable")
+            if scene["current_revision_id"] != value.base_revision_id:
+                raise SceneError("scene_revision_conflict", "scene current revision changed")
+            expired = connection.execute(
+                """SELECT id, value_json FROM scene_working_copies
+                   WHERE scene_id = ? AND state = 'active' AND expires_at <= ?""",
+                (value.scene_id, now),
+            ).fetchall()
+            for row in expired:
+                try:
+                    record = SceneWorkingCopy.model_validate_json(row["value_json"])
+                except ValidationError:
+                    connection.execute(
+                        "UPDATE scene_working_copies SET state = 'expired', updated_at = ? WHERE id = ?",
+                        (now, row["id"]),
+                    )
+                    continue
+                record = record.model_copy(
+                    update={"state": "expired", "updated_at": now}
+                )
+                connection.execute(
+                    """UPDATE scene_working_copies
+                       SET value_json = ?, state = 'expired', updated_at = ? WHERE id = ?""",
+                    (record.model_dump_json(), now, record.id),
+                )
+            active = connection.execute(
+                """SELECT id FROM scene_working_copies
+                   WHERE scene_id = ? AND state = 'active' LIMIT 1""",
+                (value.scene_id,),
+            ).fetchone()
+            if active is not None:
+                raise SceneError("scene_working_locked", "scene already has an active writer")
+            connection.execute(
+                """INSERT INTO scene_working_copies
+                   (id, scene_id, owner, base_revision_id, runtime_id, value_json, state,
+                    expires_at, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    value.id,
+                    value.scene_id,
+                    owner,
+                    value.base_revision_id,
+                    value.runtime_id,
+                    value.model_dump_json(),
+                    value.state,
+                    value.expires_at,
+                    value.created_at,
+                    value.updated_at,
+                ),
+            )
+        self._notify_session("scenes")
+        return value
+
+    def get_scene_working_copy(self, owner: str, working_id: str) -> SceneWorkingCopy:
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT value_json FROM scene_working_copies
+                   WHERE id = ? AND owner = ?""",
+                (working_id, owner),
+            ).fetchone()
+        if row is None:
+            raise SceneError("scene_working_not_found", "working copy is unavailable")
+        try:
+            return SceneWorkingCopy.model_validate_json(row["value_json"])
+        except ValidationError as exc:
+            raise SceneError("scene_working_invalid", "working copy is unreadable") from exc
+
+    def renew_scene_working_copy(
+        self, owner: str, value: SceneWorkingCopy, *, now: str
+    ) -> SceneWorkingCopy:
+        with self._lock, self._connect() as connection:
+            current = connection.execute(
+                "SELECT owner, state, expires_at FROM scene_working_copies WHERE id = ?",
+                (value.id,),
+            ).fetchone()
+            if current is None or current["owner"] != owner:
+                raise SceneError("scene_working_not_found", "working copy is unavailable")
+            if current["state"] != "active" or current["expires_at"] <= now:
+                raise SceneError("scene_working_expired", "working copy lease expired")
+            cursor = connection.execute(
+                """UPDATE scene_working_copies
+                   SET value_json = ?, expires_at = ?, updated_at = ?
+                   WHERE id = ? AND owner = ? AND state = 'active' AND expires_at > ?""",
+                (
+                    value.model_dump_json(),
+                    value.expires_at,
+                    value.updated_at,
+                    value.id,
+                    owner,
+                    now,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise SceneError("scene_working_expired", "working copy lease expired")
+        self._notify_session("scenes")
+        return value
+
+    def finish_scene_working_copy(
+        self, owner: str, working_id: str, state: str, *, now: str
+    ) -> SceneWorkingCopy:
+        if state not in {"released", "committed", "recovery"}:
+            raise ValueError("working copy terminal state is invalid")
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                """SELECT owner, state, value_json FROM scene_working_copies
+                   WHERE id = ?""",
+                (working_id,),
+            ).fetchone()
+            if row is None or row["owner"] != owner:
+                raise SceneError("scene_working_not_found", "working copy is unavailable")
+            if row["state"] != "active":
+                raise SceneError("scene_working_not_active", "working copy is not active")
+            try:
+                current = SceneWorkingCopy.model_validate_json(row["value_json"])
+            except ValidationError as exc:
+                raise SceneError("scene_working_invalid", "working copy is unreadable") from exc
+            value = current.model_copy(update={"state": state, "updated_at": now})
+            connection.execute(
+                """UPDATE scene_working_copies SET value_json = ?, state = ?, updated_at = ?
+                   WHERE id = ?""",
+                (value.model_dump_json(), state, now, working_id),
+            )
+        self._notify_session("scenes")
+        return value
+
+    def list_scene_working_copies(self, owner: str) -> list[SceneWorkingCopy]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT value_json FROM scene_working_copies WHERE owner = ?
+                   ORDER BY updated_at DESC LIMIT 100""",
+                (owner,),
+            ).fetchall()
+        return readable_rows(rows, SceneWorkingCopy, "value_json", kind="scene working copy")
+
+    def expire_scene_working_copies(self, now: str) -> int:
+        changed = 0
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                """SELECT id, value_json FROM scene_working_copies
+                   WHERE state = 'active' AND expires_at <= ?""",
+                (now,),
+            ).fetchall()
+            for row in rows:
+                try:
+                    current = SceneWorkingCopy.model_validate_json(row["value_json"])
+                    value_json = current.model_copy(
+                        update={"state": "expired", "updated_at": now}
+                    ).model_dump_json()
+                except ValidationError:
+                    value_json = row["value_json"]
+                connection.execute(
+                    """UPDATE scene_working_copies
+                       SET value_json = ?, state = 'expired', updated_at = ? WHERE id = ?""",
+                    (value_json, now, row["id"]),
+                )
+                changed += 1
+        if changed:
+            self._notify_session("scenes")
+        return changed
 
     def get_preferences(self, subject: str) -> dict[str, Any]:
         with self._connect() as connection:
