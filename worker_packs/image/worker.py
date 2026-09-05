@@ -420,8 +420,32 @@ class ImageWorker:
                 "device_mode": device_mode,
                 "disable_mmap": disable_mmap,
                 "placement": adapter.placement,
+                # この process が実際に確保した量。外から カード全体を見ると、
+                # 同時に載っている LLM のぶんまで数えてしまう。
+                **_own_vram_peak(),
             },
         }
+
+
+def _own_vram_peak() -> dict[str, int]:
+    """この process の VRAM ピーク。
+
+    カード全体の使用量を外から見る測り方だと、同時に載っている LLM のぶんが
+    そのまま加算される。実際それで FLUX.2 Klein 4B（重み 15GB）に 30.1GB の
+    読み込みピークが記録され、32GB のカードに載らないモデルとして扱われていた。
+    確保した本人に聞けば、他人のぶんは混ざらない。
+    """
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return {}
+        return {
+            "peak_vram_bytes": int(torch.cuda.max_memory_allocated()),
+            "reserved_vram_bytes": int(torch.cuda.max_memory_reserved()),
+        }
+    except Exception:  # noqa: BLE001 - 測れないことは生成の失敗ではない
+        return {}
 
 
 def main() -> int:

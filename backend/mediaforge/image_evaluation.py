@@ -128,7 +128,21 @@ class DeviceSampler:
         self._thread.join(timeout=5)
 
     def peak(self) -> int:
+        """カード全体の使用量の最大。診断用で、必要量の申告には使わない。"""
         return max(self.samples) if self.samples else -1
+
+    def increment(self, baseline: int) -> int:
+        """測り始めからの増分。これが worker の要る量である。
+
+        絶対値を申告すると、測ったときに同時に載っていた LLM のぶんまで
+        「このモデルに要る量」として記録される。実際それで FLUX.2 Klein 4B
+        （重み 15GB）に 30.1GB が記録され、32GB のカードに載らないモデルとして
+        扱われていた。同じファイルの GpuMemoryMonitor は増分を持っている。
+        """
+        top = self.peak()
+        if top < 0 or baseline < 0:
+            return -1
+        return max(0, top - baseline)
 
 
 def worker_payload(model: ModelDescriptor, output_dir: Path) -> dict[str, Any]:
@@ -249,7 +263,15 @@ async def measure_image_model(
     if not produced.is_file():
         raise ImageEvaluationError("model_evaluation_invalid_output", "返された画像が見つかりません")
 
-    peak = sampler.peak()
+    # 確保した本人の申告を優先する。外から見た増分は、測っている間に他の
+    # process が伸びた分まで拾ってしまう。申告が無いときだけ増分に落とす。
+    metrics = result.get("runtime_metrics") or {}
+    reported = metrics.get("peak_vram_bytes")
+    peak = (
+        int(reported)
+        if isinstance(reported, int) and not isinstance(reported, bool) and reported > 0
+        else sampler.increment(baseline)
+    )
     if peak < 0 or baseline < 0:
         # 読めなかったものを 0 として記録すると、「何も使わないモデル」として
         # routing に採用される。測れなかったなら昇格させない。

@@ -107,6 +107,8 @@ class ModelDescriptor:
     # RAM（host）へ載せたときの実測常駐量。VRAM の見積りは device_map で段階的に
     # 載せるときの GPU 側ピークで、RAM 配置の実態とは別物である。
     host_resident_bytes: int | None = None
+    # 全常駐できないときの下限。この枠を割ると OOM する。
+    minimum_vram_bytes: int | None = None
     execution_peak_vram_bytes: int | None = None
     cold_load_peak_vram_bytes: int | None = None
     headroom_vram_bytes: int | None = None
@@ -268,12 +270,20 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     # RAM 配置の実測。VRAM の見積りとは別物なので、別の名前で持つ。持たない
     # モデルもある（GPU 前提の駆動系、まだ測っていないもの）ので任意である。
     host_resident_bytes: int | None = None
+    # 全常駐できないときの下限。重みをRAMに置き、実行するモジュールだけをVRAMへ
+    # 送る形で走れる系統だけが持つ。
+    minimum_vram_bytes: int | None = None
     if measurements is not None:
         extra = set(measurements) - set(measurement_values)
-        if not isinstance(measurements, dict) or extra - {"host_resident_bytes"}:
+        if not isinstance(measurements, dict) or extra - {"host_resident_bytes", "minimum_vram_bytes"}:
             raise ModelRegistryError("model registry measurements are invalid")
         if set(measurement_values) - set(measurements):
             raise ModelRegistryError("model registry measurements are invalid")
+        if "minimum_vram_bytes" in measurements:
+            measured = measurements["minimum_vram_bytes"]
+            if not isinstance(measured, int) or isinstance(measured, bool) or measured <= 0:
+                raise ModelRegistryError("model registry minimum VRAM measurement is invalid")
+            minimum_vram_bytes = measured
         if "host_resident_bytes" in measurements:
             measured = measurements["host_resident_bytes"]
             if not isinstance(measured, int) or isinstance(measured, bool) or measured <= 0:
@@ -474,6 +484,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         **limits,
         **measurement_values,
         host_resident_bytes=host_resident_bytes,
+        minimum_vram_bytes=minimum_vram_bytes,
     )
 
 

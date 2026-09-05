@@ -7895,3 +7895,60 @@ ControlDeck 側に `ResourceRequest.host_bytes` を足し（PR #254）、MediaFo
 113.4 秒はそれより速いが、測り方（cold load を含むか）が違うので直接は比べられない。
 
 `./mf.sh test` 836 passed。
+
+## VRAM の測り方が間違っていた
+
+`DeviceSampler.peak()` がカード全体の使用量の**絶対値**を返し、`baseline` を引いて
+いなかった。同じファイルの `GpuMemoryMonitor` は `incremental_peak_bytes` を持って
+いるのに、評価側だけが絶対値を採っていた。測定時に載っていた LLM の VRAM が丸ごと
+「このモデルに要る量」として記録されていた。
+
+```text
+FLUX.2 Klein 4B（重み 15GB）      申告        実測（2026-09-05）
+読み込みピーク                 30.1 GiB     14.87 GiB
+実行ピーク                     27.6 GiB     20.86 GiB
+required_bytes                 31.1 GiB     21.9 GiB
+生成 1024²/4歩（2枚目）        208.82 秒     2.98 秒
+```
+
+32GB のカードに載らないモデルとして扱われ、「~33GB が確保できません」で拒否されて
+いた。RAM 配置（host_bytes）が 30GB の機械に永久に載らなかったのも同じ数字が原因。
+
+直しは 2 段構えにした。
+
+```text
+DeviceSampler.increment(baseline)   外から見るなら増分を使う
+worker が自分の確保量を申告        torch.cuda.max_memory_allocated()
+```
+
+増分でも、測っている間に他の process が伸びれば混ざる。確保した本人に聞けば混ざら
+ない。申告があるときはそちらを使い、無いときだけ増分に落とす。
+
+## lease を返しても VRAM は空いていなかった
+
+生成の lease は評価の前に返す。exclusive な画像 lease を持ったまま Host に VLM を
+載せさせると単一 GPU で deadlock するからである。ところが差分の 4 枚で載せ直さない
+ために worker を残す作りにしたぶん（`_reuse_or_spawn_worker`）、**lease を返しても
+VRAM は空かない**。broker から見て「空いた」のに物理的には埋まったままになり、
+入らないはずの VLM が admit される。
+
+```text
+jobs.py  _release_host_resource()   lease を返す。broker は空いたと見る
+         ↓ worker は生きていて 21GiB を握ったまま
+         postprocess → vision.analyze   VLM の読み込みを要求
+         ↓
+         worker を終わらせるのは job queue が空になったとき（もっと後）
+```
+
+救っていたのは `observed_used_bytes`（2 秒間隔で更新）だけだった。
+
+評価を行う job では、lease を返す前に worker を終わらせるようにした。評価を行わない
+job では worker を残すので、差分の 4 枚で載せ直さない利点は保たれる。
+
+## 全常駐できないときの下限を申告する
+
+`measurements.minimum_vram_bytes` を足した。broker はここまで枠を切り詰めて貸し、
+利用者はその枠に自分を縛る（ControlDeck #256）。実測で 8 GiB では成立し、7 GiB では
+OOM したので 8 GiB を宣言する。測っていないモデルには送らない。
+
+`./mf.sh test` 840 passed。
