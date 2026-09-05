@@ -347,6 +347,10 @@ copies use `scenes.working.acquire/renew/release/commit`; their ten-minute lease
 owner, and base revision are enforced by the server. The standalone development
 mirror lives below `/workspace-api/scenes/**`. None of these private routes are
 included in OpenAPI, `addon.json`, Agent tools, or workflow executors.
+The workspace 3D Studio sends the declared upload in sequential 512 KiB chunks,
+then lists the owner-scoped scene documents and immutable revision history. A
+revision preview opens through the same validated GLB viewer used by Library;
+the raw `.blend` bytes are not exposed to the browser after import.
 
 ## Reference collections and profiles
 

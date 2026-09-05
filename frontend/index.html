@@ -43,6 +43,13 @@
               <path d="M15 10.5 21 7.5v9L15 13.5z"/>
             </svg>
           </button>
+          <button type="button" id="create-media-3d" data-create-media="3d" aria-pressed="false"
+                  aria-label="3Dを作る" title="3Dを作る">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/>
+              <path d="m4.4 7.7 7.6 4.2 7.6-4.2M12 12v8.5"/>
+            </svg>
+          </button>
         </div>
         <div class="modeswitch" role="group" aria-label="表示モード">
           <button type="button" id="mode-simple" aria-pressed="true">シンプル</button>
@@ -347,6 +354,53 @@
               <p id="recent-empty" class="hint">まだ何もありません。作りたいものを書いて「作る」を押してください。</p>
             </div>
           </div>
+
+          <section id="scene-studio" aria-labelledby="scene-studio-title">
+            <form id="scene-import-form" class="panel" novalidate>
+              <div class="field-head">
+                <div>
+                  <p id="scene-studio-title" class="section-label">3D Studio</p>
+                  <p id="scene-import-note" class="hint">Blender制作ファイルを取り込み、検証済みの版として保存します。</p>
+                </div>
+              </div>
+              <label class="scene-file-picker" for="scene-import-file">
+                <span id="scene-import-file-label">Blenderファイル（.blend、最大256 MiB）</span>
+                <input id="scene-import-file" type="file" accept=".blend,application/x-blender">
+              </label>
+              <label for="scene-import-name" id="scene-import-name-label">シーン名</label>
+              <input id="scene-import-name" maxlength="120" autocomplete="off">
+              <p id="scene-import-safety" class="hint">ファイル内のscriptは実行せず、隔離したBlenderで検査します。</p>
+              <progress id="scene-import-progress" max="100" value="0" hidden></progress>
+              <p id="scene-import-status" class="hint" role="status"></p>
+              <div class="split-actions">
+                <button type="button" id="scene-import-cancel" hidden>取り込みを中止</button>
+                <button type="submit" id="scene-import-submit" class="primary">取り込む</button>
+              </div>
+            </form>
+
+            <div class="panel scene-browser">
+              <div class="view-head one-line">
+                <div>
+                  <p id="scene-list-title" class="section-label">シーン</p>
+                  <p id="scene-list-count" class="hint" role="status"></p>
+                </div>
+                <button type="button" id="scene-list-refresh">更新</button>
+              </div>
+              <div id="scene-list" class="scene-list"></div>
+              <p id="scene-list-empty" class="hint">まだシーンはありません。</p>
+              <article id="scene-detail" class="scene-detail" hidden>
+                <div class="view-head">
+                  <div>
+                    <h2 id="scene-detail-name"></h2>
+                    <p id="scene-detail-summary" class="hint"></p>
+                  </div>
+                  <button type="button" id="scene-detail-close">閉じる</button>
+                </div>
+                <p id="scene-revisions-title" class="section-label">保存した版</p>
+                <div id="scene-revisions" class="rows"></div>
+              </article>
+            </div>
+          </section>
         </section>
 
         <!-- ライブラリ -->

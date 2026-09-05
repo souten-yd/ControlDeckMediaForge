@@ -8386,3 +8386,34 @@ autoexec sentinel 0を確認して停止した。
 
 browser UIと実ControlDeck opaque iframeは **NOT IMPLEMENTED / NOT TESTED**。exact backup/restoreは3DS-4c、
 Web Blenderは3DS-5。ControlDeck変更は0件。次はbrowser import/scene UIを独立PRにする。
+
+## 2026-09-05 — 3DS-4b browser scene import / revision UI
+
+PR #226、branch `ux1/3d-scene-import-ui`、実装commit `573b610`。既存workspaceの作る媒体へ3D Studioを追加した。
+`.blend`はbrowserでも256 MiB上限、512 KiB単位でincremental SHA-256を計算し、宣言後に同じ上限の
+sequential chunkとして送る。全fileを一括`arrayBuffer`へ載せない。scene一覧、保存済みrevision履歴、
+Blender版、dependency件数、validation済み状態を表示し、各revisionのGLB previewを3DS-3と同じvalidated
+viewerで開く。raw `.blend`、filesystem path、runtime path、working leaseはbrowserへ渡さない。
+standaloneと認証WebSocketは同じUIから各private transportを使う。3D媒体選択はowner-scoped server
+preferenceへ保存し、Cookie/localStorage/sessionStorageは追加していない。
+
+実Chrome headedでsource Uvicornへ1,247,112 B / SHA-256
+`2eb41fa6750fbe82c884678655c3752d4e81663ba144f9b9da1934a9971ed6c6`をfile inputから3 chunkで送った。
+hashingからBlender検査、scene/revision保存まで1.447298秒、previewは16,128 triangles / 1 material /
+animation 0として表示した。最大JSON chunk requestは699,216 B。日本語完了表示から英語へreloadなしで
+切替え、statusは`Saved as a validated revision.`、revisionは`Revision 1 · Validated`となった。320 pxは
+viewport/document/headerすべて320 px、Studioは1列、主操作45.994 px、横溢れ0。1 import＋viewer
+open/close後のJS heap増分は3,516,038 B、console/page error 0。
+
+2 MiBのbrowser uploadを最初のchunk送信前で遅延させてcancelし、`取り込みを中止しました。`、submit再有効、
+同ownerの次begin/cancel HTTP 200、upload/validation staging 0、Blender child 0を確認した。実file内の
+autoexec probe sentinelも0。
+
+exact code headの`./mf.sh test`は904 passed / 既知Starlette warning 1件 / 78.00秒。PyInstaller 6.22.0の
+0.27.4 bundleは31,397,686 B / SHA-256
+`1bbb21f0bf06db3a19fb250fa31dccaf69d3b35ed1a4f2fe5da6734b10f4cb81`、doctorは
+`ok / 0.27.4 / packaged=true`。packaged processでも同じ1,247,112 Bを3 chunk、1.163959秒で保存し、
+16,128 trianglesを表示。日英、320/320 px、console/page error 0、staging 0、autoexec sentinel 0で停止した。
+
+実ControlDeck opaque iframe、installed release、working copyを使う編集、backup/restoreは
+**NOT TESTED / NOT IMPLEMENTED**。ControlDeck変更は0件。次は3DS-4c exact backup/restore。

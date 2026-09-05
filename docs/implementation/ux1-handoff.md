@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3DS-4b browser scene import / revision UI
+
+PR #226、branch `ux1/3d-scene-import-ui`、実装commit `573b610`。作る媒体へ3D Studioを追加し、incremental
+SHA-256、512 KiB chunk、256 MiB上限の`.blend` file input、scene一覧、immutable revision履歴、既存の
+validated GLB viewerによる各版previewを実装した。path/raw `.blend`/working leaseはbrowserへ出さない。
+
+実Chromeのsource processで1,247,112 Bを3 chunk、1.447298秒で取り込み、16,128 triangles / 1 materialの
+previewを表示。upload中cancel後のstaging 0と同owner再beginも確認した。日英再描画、320/320 px、主操作
+45.994 px、console/page error 0。fullは904 passed / 1 warning / 78.00秒。0.27.4 bundleは
+31,397,686 B / SHA-256 `1bbb21f0bf06db3a19fb250fa31dccaf69d3b35ed1a4f2fe5da6734b10f4cb81`、
+doctor ok。packaged browserでも同じfileを3 chunk、1.163959秒で保存・表示した。
+
+実ControlDeck opaque iframeは **NOT TESTED**、ControlDeck変更0。次は`ux1/3d-scene-backup`でexact
+backup/restoreを実装する。
+
 ## 2026-09-05 3DS-4b private working-copy transport
 
 PR #225、branch `ux1/3d-scene-working-copy`、実装commit `5a95a21`。3DS-4b coreをlifespanへ接続し、owner-scoped

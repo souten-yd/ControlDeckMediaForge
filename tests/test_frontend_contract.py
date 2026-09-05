@@ -37,7 +37,7 @@ DOM_IDS = (
     "blender-remove-dialog", "blender-remove-title", "blender-remove-summary",
     "blender-remove-detail", "blender-remove-cancel", "blender-remove-confirm",
     "mode-simple", "mode-advanced",
-    "create-media-switch", "create-media-image", "create-media-video",
+    "create-media-switch", "create-media-image", "create-media-video", "create-media-3d",
     "create-intent-label", "video-create-fields",
     "video-create-summary", "video-create-note", "video-create-settings", "result-video",
     "create-form", "create-intent", "create-submit", "create-status",
@@ -74,6 +74,9 @@ DOM_IDS = (
     "stage", "stage-progress", "stage-result", "candidate-strip", "recent-strip",
     "result-evaluate", "result-evaluation",
     "mini-progress", "library-grid", "library-count", "library-media-kinds", "activity-list",
+    "scene-studio", "scene-import-form", "scene-import-file", "scene-import-name",
+    "scene-import-submit", "scene-import-cancel", "scene-import-progress", "scene-import-status",
+    "scene-list", "scene-list-count", "scene-list-refresh", "scene-detail", "scene-revisions",
     "detail-dialog",
     "model-storage", "model-filters", "model-management-note", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
@@ -407,6 +410,48 @@ def test_create_media_switch_is_mobile_safe_and_video_is_capability_gated():
     # 試験中は絵の上の印と、読み上げ・長押しに出る言葉の両方で伝える。
     assert '.mediaswitch button[data-experimental="true"]::after' in STYLES
     assert 'videoButton.setAttribute("aria-label", videoLabel)' in SCRIPT
+
+
+def test_scene_studio_import_is_bounded_path_free_and_has_standalone_parity():
+    assert 'data-create-media="3d"' in MARKUP
+    assert 'accept=".blend,application/x-blender"' in MARKUP
+    assert 'const SCENE_CHUNK_BYTES = 512 * 1024;' in SCRIPT
+    assert 'const SCENE_MAX_BYTES = 256 * 1024 * 1024;' in SCRIPT
+    assert "class SceneSha256" in SCRIPT
+    scene_import = SCRIPT[SCRIPT.index("async function sceneFileHash"):SCRIPT.index("async function cancelSceneImport")]
+    for method in (
+        "scenes.import.begin", "scenes.import.chunk", "scenes.import.commit", "scenes.import.cancel",
+    ):
+        assert method in scene_import
+    assert "file.slice(" in scene_import
+    assert "file.arrayBuffer(" not in scene_import
+    for forbidden in ("path:", "file.path", "runtime_path", "working_path"):
+        assert forbidden not in scene_import
+    standalone = SCRIPT[SCRIPT.index("async function standaloneCall"):SCRIPT.index("async function call(")]
+    for path in (
+        "/workspace-api/scenes", "/workspace-api/scenes/import/begin",
+        "/workspace-api/scenes/import/chunk", "/workspace-api/scenes/import/commit",
+        "/workspace-api/scenes/import/cancel",
+    ):
+        assert path in standalone
+
+
+def test_scene_studio_lists_immutable_revisions_and_reuses_the_3d_viewer():
+    from mediaforge import preferences
+
+    assert "3d" in preferences.ALLOWED["create_media"][1]
+    section = MARKUP[MARKUP.index('id="scene-studio"'):MARKUP.index("</section>", MARKUP.index('id="scene-studio"'))]
+    for identifier in ("scene-list", "scene-detail", "scene-revisions"):
+        assert f'id="{identifier}"' in section
+    detail = SCRIPT[SCRIPT.index("async function openScene"):SCRIPT.index("async function sceneFileHash")]
+    assert "right.sequence - left.sequence" in detail
+    assert "revision.preview_asset_id" in detail
+    preview = SCRIPT[SCRIPT.index('byId("scene-revisions").addEventListener'):]
+    assert 'media_kind: "3d"' in preview
+    assert 'preview_kind: "model_3d"' in preview
+    assert "openViewer(" in preview
+    assert '#app[data-create-media="3d"] #scene-studio' in STYLES
+    assert "@media (max-width: 760px)" in STYLES
 
 
 # 失敗コードは複数の形で書かれる: HTTPException の detail、WorkerFailure の第 1 引数、
