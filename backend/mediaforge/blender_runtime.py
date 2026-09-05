@@ -426,6 +426,48 @@ class BlenderRuntimeResolver:
                         self._live_references.pop(runtime.runtime_id, None)
 
     @contextmanager
+    def active_reference(self) -> Iterator[ResolvedBlenderRuntime | None]:
+        """Pin the active Studio runtime while a trusted scene worker is running."""
+        runtime: ResolvedBlenderRuntime | None
+        with self._reference_guard:
+            runtime = self.resolve_active()
+            if runtime is not None:
+                self._live_references[runtime.runtime_id] = (
+                    self._live_references.get(runtime.runtime_id, 0) + 1
+                )
+        try:
+            yield runtime
+        finally:
+            if runtime is not None:
+                with self._reference_guard:
+                    remaining = self._live_references.get(runtime.runtime_id, 0) - 1
+                    if remaining > 0:
+                        self._live_references[runtime.runtime_id] = remaining
+                    else:
+                        self._live_references.pop(runtime.runtime_id, None)
+
+    @contextmanager
+    def runtime_reference(self, runtime_id: str) -> Iterator[ResolvedBlenderRuntime | None]:
+        """Pin one exact registered runtime for a versioned working copy."""
+        runtime: ResolvedBlenderRuntime | None
+        with self._reference_guard:
+            runtime = self.resolve_registered(runtime_id)
+            if runtime is not None:
+                self._live_references[runtime.runtime_id] = (
+                    self._live_references.get(runtime.runtime_id, 0) + 1
+                )
+        try:
+            yield runtime
+        finally:
+            if runtime is not None:
+                with self._reference_guard:
+                    remaining = self._live_references.get(runtime.runtime_id, 0) - 1
+                    if remaining > 0:
+                        self._live_references[runtime.runtime_id] = remaining
+                    else:
+                        self._live_references.pop(runtime.runtime_id, None)
+
+    @contextmanager
     def removal_guard(self) -> Iterator[None]:
         """Serialize reference acquisition with remove revalidation and rename."""
         with self._reference_guard:
@@ -486,6 +528,17 @@ class BlenderRuntimeResolver:
             registry = self._read_registry()
             active = registry["active_runtime_id"]
             record = next(row for row in registry["runtimes"] if row["runtime_id"] == active)
+            runtime = self._resolved(record)
+            return runtime if self._ready(runtime) else None
+        except (BlenderRuntimeRegistryError, StopIteration):
+            return None
+
+    def resolve_registered(self, runtime_id: str) -> ResolvedBlenderRuntime | None:
+        try:
+            registry = self._read_registry()
+            record = next(
+                row for row in registry["runtimes"] if row["runtime_id"] == runtime_id
+            )
             runtime = self._resolved(record)
             return runtime if self._ready(runtime) else None
         except (BlenderRuntimeRegistryError, StopIteration):

@@ -20,6 +20,16 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def validate_scene_owner(value: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not 1 <= len(value) <= 256
+        or any(ord(char) < 32 for char in value)
+    ):
+        raise SceneError("scene_owner_invalid", "scene owner is invalid")
+    return value
+
+
 class SceneError(ValueError):
     def __init__(self, code: str, message: str):
         self.code = code
@@ -115,6 +125,23 @@ class SceneRevisionInput(BaseModel):
     validation: list[SceneValidationCheck] = Field(min_length=2, max_length=64)
 
 
+class SceneWorkingCopy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["media-forge.scene-working-copy@1"] = (
+        "media-forge.scene-working-copy@1"
+    )
+    id: str = Field(pattern=r"^working_[0-9a-f]{32}$")
+    scene_id: str = Field(pattern=r"^scene_[0-9a-f]{32}$")
+    base_revision_id: str = Field(pattern=r"^revision_[0-9a-f]{32}$")
+    runtime_id: str = Field(min_length=1, max_length=128, pattern=r"^[a-z0-9][a-z0-9._-]*$")
+    runtime_version: str = Field(min_length=1, max_length=64, pattern=r"^[0-9]+(?:\.[0-9]+){1,3}$")
+    state: Literal["active", "expired", "released", "committed", "recovery"] = "active"
+    expires_at: str
+    created_at: str
+    updated_at: str
+
+
 class SceneCatalog:
     """Create and advance owner-scoped scene heads without exposing storage paths."""
 
@@ -123,13 +150,7 @@ class SceneCatalog:
 
     @staticmethod
     def _owner(value: str) -> str:
-        if (
-            not isinstance(value, str)
-            or not 1 <= len(value) <= 256
-            or any(ord(char) < 32 for char in value)
-        ):
-            raise SceneError("scene_owner_invalid", "scene owner is invalid")
-        return value
+        return validate_scene_owner(value)
 
     def create(
         self,
@@ -190,6 +211,44 @@ class SceneCatalog:
             }
         )
         self.store.commit_scene(owner, base_revision_id, document, record)
+        return document, record
+
+    def commit_working_copy(
+        self,
+        owner: str,
+        working_id: str,
+        scene_id: str,
+        base_revision_id: str,
+        revision: SceneRevisionInput,
+        *,
+        committed_at: str | None = None,
+    ) -> tuple[SceneDocument, SceneRevision]:
+        owner = self._owner(owner)
+        current = self.store.get_scene(scene_id, owner)
+        now = committed_at or _utc_now()
+        record = SceneRevision(
+            id=f"revision_{uuid.uuid4().hex}",
+            scene_id=scene_id,
+            sequence=current.revision_count + 1,
+            parent_revision_id=base_revision_id,
+            created_at=now,
+            **revision.model_dump(),
+        )
+        document = current.model_copy(
+            update={
+                "current_revision_id": record.id,
+                "revision_count": record.sequence,
+                "updated_at": now,
+            }
+        )
+        self.store.commit_scene_from_working_copy(
+            owner,
+            working_id,
+            base_revision_id,
+            document,
+            record,
+            now=now,
+        )
         return document, record
 
     def get(self, owner: str, scene_id: str) -> tuple[SceneDocument, list[SceneRevision]]:
