@@ -42,6 +42,7 @@ class Settings:
     blender_legacy_runtime_root: Path = REPOSITORY_ROOT / "runtimes/blender-4.5.9"
     blender_managed_runtime_root: Path | None = None
     blender_runtime_registry: Path | None = None
+    blender_download_root: Path | None = None
     native_media_runtime_root: Path | None = None
     wan_runtime_python: Path | None = None
     wan_source_root: Path | None = None
@@ -98,6 +99,10 @@ class Settings:
             "blender_runtime_registry",
             Path(os.path.abspath(blender_registry)),
         )
+        blender_download = self.blender_download_root or (
+            self.data_dir / "runtime-state/blender-downloads"
+        )
+        object.__setattr__(self, "blender_download_root", blender_download.resolve())
         native_runtime = self.native_media_runtime_root or (
             self.data_dir.parent / "runtimes" / "stable-diffusion-cpp-97d2990"
         )
@@ -216,6 +221,8 @@ class Settings:
             if "MEDIA_FORGE_BLENDER_MANAGED_ROOT" in os.environ else None,
             blender_runtime_registry=Path(os.environ["MEDIA_FORGE_BLENDER_REGISTRY"])
             if "MEDIA_FORGE_BLENDER_REGISTRY" in os.environ else None,
+            blender_download_root=Path(os.environ["MEDIA_FORGE_BLENDER_DOWNLOAD_ROOT"])
+            if "MEDIA_FORGE_BLENDER_DOWNLOAD_ROOT" in os.environ else None,
             native_media_runtime_root=Path(os.environ["MEDIA_FORGE_NATIVE_RUNTIME_ROOT"])
             if "MEDIA_FORGE_NATIVE_RUNTIME_ROOT" in os.environ else None,
             wan_runtime_python=Path(os.environ["MEDIA_FORGE_WAN_RUNTIME_PYTHON"])

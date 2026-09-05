@@ -31,7 +31,8 @@ DOM_IDS = (
     "settings-page-title", "blender-settings", "blender-runtime-summary",
     "blender-runtime-state", "blender-basic-value", "blender-web-value",
     "blender-version-value", "blender-runtime-refresh", "blender-runtime-details",
-    "blender-runtime-list", "blender-runtime-fingerprint",
+    "blender-runtime-list", "blender-runtime-fingerprint", "blender-runtime-install",
+    "blender-runtime-cancel", "blender-runtime-progress", "blender-runtime-progress-label",
     "mode-simple", "mode-advanced",
     "create-media-switch", "create-media-image", "create-media-video",
     "create-intent-label", "video-create-fields",
@@ -187,12 +188,16 @@ def test_settings_show_read_only_blender_diagnostics_without_server_paths():
     assert 'call("workspace.session", {parts})' in SCRIPT
     assert 'refreshSession(["blender_runtime"])' in SCRIPT
     assert 'if (method === "blender.runtime.status")' in SCRIPT
+    assert 'if (method === "blender.runtime.install")' in SCRIPT
+    assert 'if (method === "blender.runtime.operations.cancel")' in SCRIPT
     assert "BLENDER_TEXT" in SCRIPT
     assert 'settings: "Settings"' in SCRIPT and 'settings: "設定"' in SCRIPT
     renderer = SCRIPT[SCRIPT.index("function renderBlenderRuntime"):
                       SCRIPT.index("function renderExtensionDetails")]
     assert "runtime.root" not in renderer and "runtime.path" not in renderer
     assert "value.fingerprint.slice(0, 16)" in renderer
+    assert 'value.operations || []' in renderer
+    assert 'value.catalog.archive_size_bytes' in renderer
 
 
 def test_creative_controls_use_the_versioned_catalog_and_preserve_prompt_only_requests():

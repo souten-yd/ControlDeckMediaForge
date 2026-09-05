@@ -8114,3 +8114,34 @@ scene/revision、viewer、材質、OpenCode制作も **NOT TESTED / NOT IMPLEMEN
 local gateは`./mf.sh test` 859 passed / 既知Starlette warning 1件 / 70.27秒。
 Python compileall、frontend JavaScript構文、shell構文、Markdown相対link、`git diff --check`を
 最終差分でも再実行する。ControlDeck変更は0件で、既存dirty `frontend/tsconfig.tsbuildinfo`を保持した。
+
+## 2026-09-05 — 3DS-2a durable Blender install / cancel / restart
+
+PR #216、実装commit `48ac9c9d3d3542a93b547ad64b3c2d79d4099bfc`。
+Blender専用のdurable operation table/type/managerを追加した。ブラウザ入力はtrusted catalogの
+install、またはopaque operation IDのcancelだけで、URL/path/version/executable/commandを受けない。
+exact archive size/SHA-256、member数、展開size、traversal、link、device/FIFO、空き容量、実Blender
+probeを検証してからmanaged rootへatomic配置し、opaque registryを更新する。ETag一致Rangeだけ
+partialを再開し、cancel/失敗はstagingと未登録destinationを残さない。service restartは非終端journalを
+queuedへ戻し、配置後registry前の停止も再probeして復旧する。private WS/standalone transportと
+Settingsへ導入、進捗、cancel、日英表示を加え、画像model operation schemaは変更していない。
+
+正規archive 377,929,956 B / SHA-256
+`dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d`をローカル配信した実機
+clean installは25.659秒でready、状態列はqueued/downloading/verifying/installing/probing/ready、
+managed files 1,605,023,227 B。probeは4.5.9 / Python 3.11.11 / background / GLTF import/export true。
+registryは282 B / mode 0600 / raw pathなし。managed runtimeで同じ796 B cubeをG8加工し、1.312秒、
+ZIP 44,292 B / SHA-256
+`c78ef18d6c4da0334a9e3e2c451519d4b9bd2541ead1022cfa3979b0ef3a468b`で3DS-0/1と同一。
+
+実archiveを8,388,608 Bでservice停止したoperationはdownloadingから再初期化でqueuedとなり、
+同一ETagと`Range: bytes=8388608-`で再開、25.546秒後ready。別cancel実測はcanceled、partial
+8,388,608 Bを再開用に保持、staging/destinationなし、runtime unavailable。standalone Chromeは
+日英missing、catalog/license/容量、install buttonを表示し、320 px client/scrollとも320、button
+39 px、console/page/HTTP error 0件。実ControlDeck opaque iframeは **NOT TESTED**。
+
+local full gateは867 passed / 既知warning 1件 / 64.39秒、focused 240件もPASS。PyInstaller bundleは
+31,147,576 B / SHA-256 `fd532fe17949eaf184a5f93697fda2bc8ec2921c289305a6b9c1b8c3516c8264`、
+展開後launcher doctorは`ok / 0.27.0 / packaged=true`。一時runtime/bundle/UI領域はゴミ箱へ移した。
+update/switch/repair/remove、公開release、installed Host browser、GPU Blenderは
+**NOT IMPLEMENTED / NOT TESTED**。ControlDeck変更は0件。

@@ -15,6 +15,12 @@ from pydantic import BaseModel, ValidationError
 
 from .composer import CreativeCompositionRecord
 from .creative_batches import CreativeBatchRecord
+from .blender_operation import (
+    TERMINAL_BLENDER_RUNTIME_OPERATION_STATES,
+    BlenderRuntimeOperation,
+    BlenderRuntimeOperationAction,
+    BlenderRuntimeOperationState,
+)
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance, StoredJobRequest
 from .models.operations import (
     TERMINAL_MODEL_OPERATION_STATES,
@@ -194,6 +200,23 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_model_operations_created
                     ON model_operations(created_at DESC);
+                CREATE TABLE IF NOT EXISTS blender_runtime_operations (
+                    id TEXT PRIMARY KEY,
+                    runtime_id TEXT NOT NULL,
+                    version TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    bytes_total INTEGER NOT NULL,
+                    bytes_done INTEGER NOT NULL,
+                    error_code TEXT,
+                    error_message TEXT,
+                    result_json TEXT,
+                    cancel_requested INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_blender_runtime_operations_created
+                    ON blender_runtime_operations(created_at DESC);
                 CREATE TABLE IF NOT EXISTS creative_batches (
                     id TEXT PRIMARY KEY,
                     value_json TEXT NOT NULL,
@@ -235,6 +258,20 @@ class Store:
                     utc_now(),
                     JobStatus.RUNNING,
                 ),
+            )
+            blender_terminal = tuple(
+                state.value for state in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES
+            )
+            connection.execute(
+                f"""UPDATE blender_runtime_operations SET state = ?, error_code = NULL,
+                    error_message = NULL, updated_at = ?
+                    WHERE cancel_requested = 0 AND state NOT IN ({','.join('?' * len(blender_terminal))})""",
+                (BlenderRuntimeOperationState.QUEUED, utc_now(), *blender_terminal),
+            )
+            connection.execute(
+                f"""UPDATE blender_runtime_operations SET state = ?, updated_at = ?
+                    WHERE cancel_requested = 1 AND state NOT IN ({','.join('?' * len(blender_terminal))})""",
+                (BlenderRuntimeOperationState.CANCELED, utc_now(), *blender_terminal),
             )
             connection.execute(
                 """UPDATE model_operations SET state = ?, error_code = ?,
@@ -648,6 +685,133 @@ class Store:
             )
         return self._notify_model_operation(self.get_model_operation(operation_id))
 
+    def create_blender_runtime_operation(
+        self,
+        runtime_id: str,
+        version: str,
+        action: BlenderRuntimeOperationAction,
+        *,
+        bytes_total: int,
+    ) -> BlenderRuntimeOperation:
+        now = utc_now()
+        operation_id = f"blenderop_{uuid.uuid4().hex}"
+        terminal = tuple(state.value for state in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES)
+        with self._lock, self._connect() as connection:
+            active = connection.execute(
+                f"""SELECT id FROM blender_runtime_operations WHERE runtime_id = ?
+                    AND state NOT IN ({','.join('?' * len(terminal))}) LIMIT 1""",
+                (runtime_id, *terminal),
+            ).fetchone()
+            if active is not None:
+                raise ValueError("a Blender runtime operation is already active")
+            connection.execute(
+                """INSERT INTO blender_runtime_operations
+                   (id, runtime_id, version, action, state, bytes_total, bytes_done,
+                    error_code, error_message, result_json, cancel_requested, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 0, ?, ?)""",
+                (
+                    operation_id, runtime_id, version, action,
+                    BlenderRuntimeOperationState.QUEUED, bytes_total, now, now,
+                ),
+            )
+        operation = self.get_blender_runtime_operation(operation_id)
+        self._notify_session("blender_runtime")
+        return operation
+
+    def get_blender_runtime_operation(self, operation_id: str) -> BlenderRuntimeOperation:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(operation_id)
+        return self._blender_runtime_operation(row)
+
+    def list_blender_runtime_operations(self, limit: int = 50) -> list[BlenderRuntimeOperation]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM blender_runtime_operations ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [self._blender_runtime_operation(row) for row in rows]
+
+    def resumable_blender_runtime_operation_ids(self) -> list[str]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT id FROM blender_runtime_operations
+                   WHERE state = ? AND cancel_requested = 0 ORDER BY created_at""",
+                (BlenderRuntimeOperationState.QUEUED,),
+            ).fetchall()
+        return [str(row["id"]) for row in rows]
+
+    def update_blender_runtime_operation(
+        self,
+        operation_id: str,
+        *,
+        state: BlenderRuntimeOperationState | None = None,
+        bytes_done: int | None = None,
+        error_code: str | None = None,
+        error_message: str | None = None,
+        result: dict[str, Any] | None = None,
+    ) -> BlenderRuntimeOperation:
+        values: dict[str, Any] = {"updated_at": utc_now()}
+        if state is not None:
+            values["state"] = state
+        if bytes_done is not None:
+            values["bytes_done"] = bytes_done
+        values["error_code"] = error_code
+        values["error_message"] = error_message
+        if result is not None:
+            values["result_json"] = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+        assignments = ", ".join(f"{name} = ?" for name in values)
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                f"UPDATE blender_runtime_operations SET {assignments} WHERE id = ?",  # noqa: S608
+                (*values.values(), operation_id),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(operation_id)
+        operation = self.get_blender_runtime_operation(operation_id)
+        self._notify_session("blender_runtime")
+        return operation
+
+    def request_blender_runtime_operation_cancel(
+        self, operation_id: str
+    ) -> BlenderRuntimeOperation:
+        terminal = {state.value for state in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES}
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT state FROM blender_runtime_operations WHERE id = ?", (operation_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(operation_id)
+            if row["state"] not in terminal:
+                if row["state"] == BlenderRuntimeOperationState.QUEUED:
+                    connection.execute(
+                        """UPDATE blender_runtime_operations
+                           SET cancel_requested = 1, state = ?, updated_at = ? WHERE id = ?""",
+                        (BlenderRuntimeOperationState.CANCELED, utc_now(), operation_id),
+                    )
+                else:
+                    connection.execute(
+                        """UPDATE blender_runtime_operations
+                           SET cancel_requested = 1, updated_at = ? WHERE id = ?""",
+                        (utc_now(), operation_id),
+                    )
+        operation = self.get_blender_runtime_operation(operation_id)
+        self._notify_session("blender_runtime")
+        return operation
+
+    def blender_runtime_operation_cancel_requested(self, operation_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT cancel_requested FROM blender_runtime_operations WHERE id = ?",
+                (operation_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(operation_id)
+        return bool(row["cancel_requested"])
+
     def get_model_operation(self, operation_id: str) -> ModelOperation:
         with self._connect() as connection:
             row = connection.execute(
@@ -966,6 +1130,18 @@ class Store:
             bytes_total=row["bytes_total"], bytes_done=row["bytes_done"],
             error_code=row["error_code"], error_message=row["error_message"],
             host_job_id=row["host_job_id"],
+            result=json.loads(row["result_json"]) if row["result_json"] else None,
+            cancel_requested=bool(row["cancel_requested"]), created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _blender_runtime_operation(row: sqlite3.Row) -> BlenderRuntimeOperation:
+        return BlenderRuntimeOperation(
+            id=row["id"], runtime_id=row["runtime_id"], version=row["version"],
+            action=row["action"], state=row["state"], bytes_total=row["bytes_total"],
+            bytes_done=row["bytes_done"], error_code=row["error_code"],
+            error_message=row["error_message"],
             result=json.loads(row["result_json"]) if row["result_json"] else None,
             cancel_requested=bool(row["cancel_requested"]), created_at=row["created_at"],
             updated_at=row["updated_at"],

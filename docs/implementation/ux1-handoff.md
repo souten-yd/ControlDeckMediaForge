@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3DS-2a durable Blender install / cancel / restart
+
+PR #216、実装commit `48ac9c9d3d3542a93b547ad64b3c2d79d4099bfc`。
+`ux1/3d-runtime-install`でBlender専用journal/manager、trusted catalog限定download、size/hash/archive
+検証、atomic install、probe、opaque登録、cancel、Range/ETag restart、private transport、Settings
+進捗を実装した。正規377,929,956 B archiveのclean installは25.659秒、managed 1,605,023,227 B、
+probe全true。G8 ZIPは44,292 B / SHA `c78ef18d...a468b`でbaseline同一。8 MiB停止→Range再開と
+8 MiB cancelも実測。full 867件、focused 240件、bundle build/doctor、日英/320 px ChromeがPASS。
+実Host opaque iframeは未認証のため未検証。次は3DS-2b update/switch/repair、その後remove。
+Web Blender、scene、viewer、材質、OpenCode制作、GPU Blender、release公開は未実装・未検証。
+
 ## 2026-09-05 3DS-1 runtime resolver / Settings diagnostics
 
 PR #215、実装commit `4c7c6f793f2c6936b74bfc755fe5f3a29e14def6`。
