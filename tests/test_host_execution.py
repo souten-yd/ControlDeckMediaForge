@@ -56,6 +56,7 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
             "Bearer valid-job": "job:host-agent",
             "Bearer valid-workflow": "workflow:42",
             "Bearer valid-context": "context:7",
+            "Bearer valid-other": "8",
             "Bearer expired-active": "7",
             "Bearer valid-refreshed": "7",
         }.get(authorization)
@@ -83,6 +84,8 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
         }
         if token_subject in {"7", "job:host-agent", "workflow:42", "context:7"}:
             result["actor_subject"] = "user:7"
+        elif token_subject == "8":
+            result["actor_subject"] = "user:8"
         return result
 
     @app.get("/api/v1/addon-runtime/media-forge/ai/capabilities")
