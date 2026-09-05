@@ -768,7 +768,7 @@ def test_binary_payloads_are_not_mistaken_for_host_paths(tmp_path: Path):
 SESSION_PARTS = {
     "preferences", "capabilities", "profiles", "reference_collections",
     "models", "model_catalog", "model_operations", "library",
-    "creative_batches", "creative_compositions", "jobs",
+    "creative_batches", "creative_compositions", "jobs", "blender_runtime",
 }
 
 
@@ -788,6 +788,8 @@ def test_workspace_session_returns_the_whole_boot_state_in_one_request(tmp_path:
     assert "capabilities" in result["capabilities"]
     assert "envelope" in result["capabilities"]
     assert isinstance(result["jobs"]["items"], list)
+    assert result["blender_runtime"]["schema_version"] == "media-forge.blender-runtime-status@1"
+    assert "path" not in json.dumps(result["blender_runtime"])
     # watch はサーバが張る。client から jobs.watch を送らせない。
     assert "watching" in result
 

@@ -39,6 +39,9 @@ class Settings:
     # 動画は画像と別の runtime を使う。同じ venv に載せると、片方の pin を
     # 動かしたときにもう片方が黙って壊れる。
     video_runtime_python: Path = REPOSITORY_ROOT / "runtimes/wan21-1.3b-probe/.venv/bin/python"
+    blender_legacy_runtime_root: Path = REPOSITORY_ROOT / "runtimes/blender-4.5.9"
+    blender_managed_runtime_root: Path | None = None
+    blender_runtime_registry: Path | None = None
     native_media_runtime_root: Path | None = None
     wan_runtime_python: Path | None = None
     wan_source_root: Path | None = None
@@ -79,6 +82,21 @@ class Settings:
             self,
             "video_runtime_python",
             Path(os.path.abspath(self.video_runtime_python)),
+        )
+        object.__setattr__(
+            self,
+            "blender_legacy_runtime_root",
+            self.blender_legacy_runtime_root.resolve(),
+        )
+        blender_managed = self.blender_managed_runtime_root or self.data_dir / "runtimes/blender"
+        object.__setattr__(self, "blender_managed_runtime_root", blender_managed.resolve())
+        blender_registry = self.blender_runtime_registry or (
+            self.data_dir / "runtime-state/blender-runtimes.json"
+        )
+        object.__setattr__(
+            self,
+            "blender_runtime_registry",
+            Path(os.path.abspath(blender_registry)),
         )
         native_runtime = self.native_media_runtime_root or (
             self.data_dir.parent / "runtimes" / "stable-diffusion-cpp-97d2990"
@@ -188,6 +206,16 @@ class Settings:
                     REPOSITORY_ROOT / "runtimes/wan21-1.3b-probe/.venv/bin/python",
                 )
             ),
+            blender_legacy_runtime_root=Path(
+                os.environ.get(
+                    "MEDIA_FORGE_BLENDER_LEGACY_ROOT",
+                    REPOSITORY_ROOT / "runtimes/blender-4.5.9",
+                )
+            ),
+            blender_managed_runtime_root=Path(os.environ["MEDIA_FORGE_BLENDER_MANAGED_ROOT"])
+            if "MEDIA_FORGE_BLENDER_MANAGED_ROOT" in os.environ else None,
+            blender_runtime_registry=Path(os.environ["MEDIA_FORGE_BLENDER_REGISTRY"])
+            if "MEDIA_FORGE_BLENDER_REGISTRY" in os.environ else None,
             native_media_runtime_root=Path(os.environ["MEDIA_FORGE_NATIVE_RUNTIME_ROOT"])
             if "MEDIA_FORGE_NATIVE_RUNTIME_ROOT" in os.environ else None,
             wan_runtime_python=Path(os.environ["MEDIA_FORGE_WAN_RUNTIME_PYTHON"])

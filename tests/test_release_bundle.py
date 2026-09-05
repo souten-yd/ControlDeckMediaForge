@@ -15,6 +15,7 @@ def test_release_launcher_uses_managed_persistent_roots_without_source_build():
     assert "CONTROL_DECK_FEATURE_DATA_DIR" in launcher
     assert "CONTROL_DECK_SHARED_CACHE_DIR" in launcher
     assert "MEDIA_FORGE_IMAGE_RUNTIME_PYTHON" in launcher
+    assert "MEDIA_FORGE_BLENDER_MANAGED_ROOT" in launcher
     assert "MEDIA_FORGE_ENV_STATUS_FILE" in launcher
     assert "git clone" not in launcher
     assert "pip install" not in launcher
@@ -31,6 +32,7 @@ def test_bundle_builder_excludes_heavy_runtime_and_binds_package_identity():
     assert '"health_url": "http://127.0.0.1:9130/health"' in builder
     assert "runtimes/rocm-torch/.venv" not in builder
     assert 'f"{ROOT / \'creative\'}:creative"' in builder
+    assert "blender-runtime.json'}:config" in builder
 
 
 def test_bundle_provision_writes_health_only_after_runtime_gpu_and_model(monkeypatch, tmp_path):

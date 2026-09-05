@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <meta name="color-scheme" content="light dark">
+    <link rel="icon" href="data:,">
     <title>Media Forge</title>
     <!-- MEDIA_FORGE_INLINE_STYLE -->
   </head>
@@ -49,12 +50,12 @@
         </div>
         <span class="grow"></span>
         <button type="button" id="nav-settings" class="icon settings-entry" data-view="settings"
-                aria-label="モデル管理と設定" title="モデル管理と設定">
+                aria-label="設定" title="設定">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="3.2"/>
             <path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.8-1.4-1.9-3.2-2.2.9a7.6 7.6 0 0 0-2.6-1.5L14.2 3H9.8l-.3 2.3a7.6 7.6 0 0 0-2.6 1.5l-2.2-.9L2.8 9.1l1.8 1.4a7.6 7.6 0 0 0 0 3l-1.8 1.4 1.9 3.2 2.2-.9a7.6 7.6 0 0 0 2.6 1.5l.3 2.3h4.4l.3-2.3a7.6 7.6 0 0 0 2.6-1.5l2.2.9 1.9-3.2z"/>
           </svg>
-          <span class="settings-label">モデル管理</span>
+          <span class="settings-label">設定</span>
         </button>
       </header>
 
@@ -396,9 +397,36 @@
 
         <!-- 設定 -->
         <section id="view-settings" class="view" data-view="settings" hidden>
+          <div class="settings-page-head">
+            <p id="settings-page-title" class="section-label">設定</p>
+            <p id="settings-page-note" class="hint">実行環境と保存状態を確認・管理します。</p>
+          </div>
+
+          <section id="blender-settings" class="settings-section" aria-labelledby="blender-settings-title">
+            <div class="runtime-heading">
+              <div>
+                <p id="blender-settings-title" class="section-label">Blender</p>
+                <p id="blender-runtime-summary" class="hint">状態を確認しています…</p>
+              </div>
+              <span id="blender-runtime-state" class="state">確認中</span>
+            </div>
+            <dl class="facts runtime-facts">
+              <div><dt id="blender-basic-label">基本環境</dt><dd id="blender-basic-value">—</dd></div>
+              <div><dt id="blender-web-label">ブラウザ操作</dt><dd id="blender-web-value">—</dd></div>
+              <div><dt id="blender-version-label">使用する版</dt><dd id="blender-version-value">—</dd></div>
+            </dl>
+            <p id="blender-runtime-action" class="hint"></p>
+            <button type="button" id="blender-runtime-refresh">状態を更新</button>
+            <details id="blender-runtime-details">
+              <summary id="blender-runtime-details-label">診断の詳細</summary>
+              <div id="blender-runtime-list" class="rows"></div>
+              <p id="blender-runtime-fingerprint" class="hint"></p>
+            </details>
+          </section>
+
           <div class="model-management-head">
             <div>
-              <p class="section-label">モデル管理</p>
+              <p id="model-management-title" class="section-label">画像・動画モデル</p>
               <p id="model-storage" class="hint">保存容量を確認しています…</p>
             </div>
             <label id="model-sort-row">並び順

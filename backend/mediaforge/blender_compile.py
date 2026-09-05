@@ -19,6 +19,7 @@ import zipfile
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from . import __version__
+from .blender_runtime import ResolvedBlenderRuntime
 from .config import REPOSITORY_ROOT
 from .glb import VALIDATION_VERSION as GLB_VALIDATION_VERSION
 from .glb import GlbValidationError, validate_glb
@@ -64,15 +65,32 @@ class BlenderCompileCanceled(BlenderCompileError):
     pass
 
 
-def runtime_available() -> bool:
+def _runtime_paths(
+    runtime: ResolvedBlenderRuntime | None,
+) -> tuple[str, Path, Path, Path, str | None]:
+    if runtime is None:
+        return BLENDER_VERSION, RUNTIME_ROOT, BLENDER_EXECUTABLE, TRUSTED_WORKER, None
+    return (
+        runtime.version,
+        runtime.root,
+        runtime.executable,
+        runtime.trusted_worker,
+        runtime.archive_sha256,
+    )
+
+
+def runtime_available(runtime: ResolvedBlenderRuntime | None = None) -> bool:
     """Cheap capability check for the exact provisioned runtime.
 
     Capability discovery must not launch Blender. The build-time preflight writes
     a fixed stamp, so request-time discovery only verifies that stamp and the two
     trusted executables it names indirectly.
     """
-    stamp_path = RUNTIME_ROOT / ".runtime.json"
-    manifest_path = REPOSITORY_ROOT / "config" / "blender-runtime.json"
+    version, root, executable, trusted_worker, registered_digest = _runtime_paths(runtime)
+    stamp_path = root / ".runtime.json"
+    manifest_path = runtime.manifest_path if runtime is not None else (
+        REPOSITORY_ROOT / "config" / "blender-runtime.json"
+    )
     try:
         if stamp_path.is_symlink() or not stamp_path.is_file():
             return False
@@ -84,17 +102,18 @@ def runtime_available() -> bool:
         return False
     expected = {
         "schema_version": 1,
-        "version": BLENDER_VERSION,
-        "archive_sha256": manifest.get("archive_sha256"),
+        "version": version,
+        "archive_sha256": registered_digest or manifest.get("archive_sha256"),
         "executable": "blender",
     }
     return (
         stamp == expected
-        and BLENDER_EXECUTABLE.is_file()
-        and not BLENDER_EXECUTABLE.is_symlink()
-        and os.access(BLENDER_EXECUTABLE, os.X_OK)
-        and TRUSTED_WORKER.is_file()
-        and not TRUSTED_WORKER.is_symlink()
+        and expected["archive_sha256"] == manifest.get("archive_sha256")
+        and executable.is_file()
+        and not executable.is_symlink()
+        and os.access(executable, os.X_OK)
+        and trusted_worker.is_file()
+        and not trusted_worker.is_symlink()
     )
 
 
@@ -171,10 +190,16 @@ async def _stop_process(process: asyncio.subprocess.Process) -> None:
         await process.wait()
 
 
-def _fixed_request(job_root: Path, source_sha256: str, options: CompileOptions) -> Path:
+def _fixed_request(
+    job_root: Path,
+    source_sha256: str,
+    options: CompileOptions,
+    *,
+    expected_blender_version: str = BLENDER_VERSION,
+) -> Path:
     request = {
         "schema_version": 1,
-        "expected_blender_version": BLENDER_VERSION,
+        "expected_blender_version": expected_blender_version,
         "source": SOURCE_NAME,
         "output": GLB_NAME,
         "preview": PREVIEW_NAME,
@@ -203,15 +228,18 @@ async def _run_blender(
     request_path: Path,
     cancel_requested: Callable[[], bool] | None,
     process_timeout_sec: float = PROCESS_TIMEOUT_SEC,
+    *,
+    runtime: ResolvedBlenderRuntime | None = None,
 ) -> dict[str, Any]:
-    executable = BLENDER_EXECUTABLE.resolve()
-    worker = TRUSTED_WORKER.resolve()
+    _, _, configured_executable, configured_worker, _ = _runtime_paths(runtime)
+    executable = configured_executable.resolve()
+    worker = configured_worker.resolve()
     if (
-        not BLENDER_EXECUTABLE.is_file()
-        or BLENDER_EXECUTABLE.is_symlink()
+        not configured_executable.is_file()
+        or configured_executable.is_symlink()
         or not os.access(executable, os.X_OK)
-        or not TRUSTED_WORKER.is_file()
-        or TRUSTED_WORKER.is_symlink()
+        or not configured_worker.is_file()
+        or configured_worker.is_symlink()
     ):
         raise BlenderCompileError("pinned Blender runtime or trusted compiler is unavailable")
     result_path = contained(job_root, job_root / RESULT_NAME)
@@ -314,14 +342,21 @@ def _zip_entry(archive: zipfile.ZipFile, name: str, content: bytes) -> None:
     archive.writestr(info, content, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
 
-def _validated_result(result: dict[str, Any], *, source_sha256: str, glb_sha256: str, preview_sha256: str) -> dict[str, Any]:
+def _validated_result(
+    result: dict[str, Any],
+    *,
+    source_sha256: str,
+    glb_sha256: str,
+    preview_sha256: str,
+    expected_blender_version: str = BLENDER_VERSION,
+) -> dict[str, Any]:
     expected_fields = {
         "schema_version", "blender_version", "input_sha256", "output_sha256", "preview_sha256",
         "statistics", "removed", "warnings", "operations",
     }
     if set(result) != expected_fields or result.get("schema_version") != 1:
         raise BlenderCompileError("Blender compiler result fields differ")
-    if result.get("blender_version") != BLENDER_VERSION:
+    if result.get("blender_version") != expected_blender_version:
         raise BlenderCompileError("Blender compiler version differs")
     if (
         result.get("input_sha256") != source_sha256
@@ -399,7 +434,11 @@ async def compile_project_package(
     options: CompileOptions | None = None,
     cancel_requested: Callable[[], bool] | None = None,
     process_timeout_sec: float = PROCESS_TIMEOUT_SEC,
+    runtime: ResolvedBlenderRuntime | None = None,
+    resolved_runtime_required: bool = False,
 ) -> tuple[Path, dict[str, Any], list[dict[str, Any]]]:
+    if resolved_runtime_required and runtime is None:
+        raise BlenderCompileError("registered Blender runtime is unavailable")
     job_root = job_root.resolve()
     source_content = source.read_bytes()
     try:
@@ -411,8 +450,20 @@ async def compile_project_package(
     source_copy.chmod(0o600)
     source_sha256 = hashlib.sha256(source_content).hexdigest()
     options = options or CompileOptions(schema_version="3d.compile-options@1")
-    request_path = _fixed_request(job_root, source_sha256, options)
-    result = await _run_blender(job_root, request_path, cancel_requested, process_timeout_sec)
+    runtime_version = runtime.version if runtime is not None else BLENDER_VERSION
+    request_path = _fixed_request(
+        job_root,
+        source_sha256,
+        options,
+        expected_blender_version=runtime_version,
+    )
+    result = await _run_blender(
+        job_root,
+        request_path,
+        cancel_requested,
+        process_timeout_sec,
+        runtime=runtime,
+    )
 
     glb_path = contained(job_root, job_root / GLB_NAME)
     preview_path = contained(job_root, job_root / PREVIEW_NAME)
@@ -430,6 +481,7 @@ async def compile_project_package(
         source_sha256=source_sha256,
         glb_sha256=glb_sha256,
         preview_sha256=preview_sha256,
+        expected_blender_version=runtime_version,
     )
     manifest = {
         "schema_version": "media-forge.3d-project@1",
@@ -448,7 +500,7 @@ async def compile_project_package(
             "size_bytes": preview_path.stat().st_size,
             "sha256": preview_sha256,
         },
-        "compiler": {"blender_version": BLENDER_VERSION, "compiler_version": COMPILER_VERSION},
+        "compiler": {"blender_version": runtime_version, "compiler_version": COMPILER_VERSION},
         "options": options.model_dump(mode="json"),
         **facts,
     }

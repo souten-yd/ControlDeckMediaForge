@@ -64,6 +64,16 @@ Catalog items also carry validated `media_types` for Settings classification,
 `reclaimable_bytes`, and `profile_reference_count`. Routing never reads
 `media_types`; runtime capability remains authoritative.
 
+Blender runtime diagnostics also remain private workspace presentation data.
+The `blender_runtime` session part, `blender.runtime.status` WebSocket method,
+and same-origin development bridge `GET /workspace-api/blender/runtime` return
+the resolver state, required version, opaque runtime IDs, ownership, bounded
+integrity checks, separate browser-pack state, and a diagnostic fingerprint.
+They never return a runtime, registry, manifest, worker, or executable path.
+The status surface is read-only from the client: 3DS-1 performs no download,
+update, repair, switch, or removal operation. The development bridge is
+excluded from OpenAPI and none of these additions change the frozen public API.
+
 Creative planning also remains private. `creative.templates` returns the
 versioned trusted template catalog. `creative.validate` accepts an existing
 JobRequest-shaped object plus an internal CreativeSpec and returns a

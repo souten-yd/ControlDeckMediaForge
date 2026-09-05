@@ -171,6 +171,7 @@ const state = {
   domainProfiles: [],
   modelManagementAvailable: false,
   modelEvaluationIds: new Set(),
+  blenderRuntime: null,
   removeModelId: "",
   socket: null,
   socketReady: null,
@@ -430,6 +431,7 @@ async function standaloneCall(method, params) {
     try { return await json("/workspace-api/models/catalog"); } catch { /* 旧 core は shim へ落ちる */ }
   }
   if (method === "models.operations.list") return json("/workspace-api/models/operations");
+  if (method === "blender.runtime.status") return json("/workspace-api/blender/runtime");
   if (method === "models.install") {
     return json("/workspace-api/models/operations", {method: "POST", body: JSON.stringify(
       {action: "install", model_id: params.model_id, license_acceptance: params.license_acceptance})});
@@ -582,6 +584,7 @@ async function standaloneCall(method, params) {
       part("models", () => standaloneCall("models.list", {})),
       part("model_catalog", () => standaloneCall("models.catalog", {})),
       part("model_operations", () => standaloneCall("models.operations.list", {})),
+      part("blender_runtime", () => standaloneCall("blender.runtime.status", {})),
       part("library", () => standaloneCall("library.list", {limit: 4})),
       part("creative_batches", () => standaloneCall("creative.batches.list", {})),
       part("creative_compositions", () => standaloneCall("creative.compositions.list", {})),
@@ -5670,7 +5673,101 @@ function openModelRemove(modelId) {
 
 async function loadSettings() {
   renderExtensionDetails();
+  await refreshSession(["blender_runtime"]);
   await loadModelManagement();
+}
+
+const BLENDER_TEXT = {
+  ja: {
+    settings: "設定", settingsNote: "実行環境と保存状態を確認・管理します。",
+    basic: "基本環境", web: "ブラウザ操作", version: "使用する版",
+    refresh: "状態を更新", details: "診断の詳細", checking: "確認中",
+    ready: "利用できます", missing: "未導入", damaged: "修復が必要",
+    invalid: "状態を読めません", unsupported: "この版には未対応",
+    legacy: "既存環境", managed: "Media Forge管理",
+    readySummary: "既存のG8加工に使うBlenderを確認できました。",
+    missingSummary: "Blender基本環境がまだありません。画像機能はそのまま利用できます。",
+    invalidSummary: "Blenderの登録情報を安全に確認できないため、3D加工を停止しています。",
+    webMissing: "未導入（基本環境とは別です）",
+    action: "導入・更新・修復・削除は次の実装段階で有効になります。",
+    fingerprint: "診断ID",
+  },
+  en: {
+    settings: "Settings", settingsNote: "Inspect and manage runtimes and stored data.",
+    basic: "Base runtime", web: "Browser control", version: "Selected version",
+    refresh: "Refresh status", details: "Diagnostic details", checking: "Checking",
+    ready: "Available", missing: "Not installed", damaged: "Repair required",
+    invalid: "Status unavailable", unsupported: "Unsupported version",
+    legacy: "Existing runtime", managed: "Managed by Media Forge",
+    readySummary: "The Blender runtime used by the existing G8 pipeline is ready.",
+    missingSummary: "The Blender base runtime is not installed. Image features remain available.",
+    invalidSummary: "3D processing is disabled because the runtime registry could not be verified.",
+    webMissing: "Not installed (separate from the base runtime)",
+    action: "Install, update, repair, and remove become available in the next implementation phase.",
+    fingerprint: "Diagnostic ID",
+  },
+};
+
+function blenderText() {
+  return document.documentElement.lang.toLowerCase().startsWith("en")
+    ? BLENDER_TEXT.en : BLENDER_TEXT.ja;
+}
+
+function renderBlenderRuntime() {
+  const value = state.blenderRuntime;
+  const text = blenderText();
+  byId("settings-page-title").textContent = text.settings;
+  byId("settings-page-note").textContent = text.settingsNote;
+  byId("nav-settings").setAttribute("aria-label", text.settings);
+  byId("nav-settings").title = text.settings;
+  byId("nav-settings").querySelector(".settings-label").textContent = text.settings;
+  byId("blender-basic-label").textContent = text.basic;
+  byId("blender-web-label").textContent = text.web;
+  byId("blender-version-label").textContent = text.version;
+  byId("blender-runtime-refresh").textContent = text.refresh;
+  byId("blender-runtime-details-label").textContent = text.details;
+  if (!value) {
+    byId("blender-runtime-state").textContent = text.checking;
+    return;
+  }
+  const selected = (value.runtimes || []).find(
+    (runtime) => runtime.runtime_id === value.g8_runtime_id);
+  const labels = {
+    ready: text.ready, missing: text.missing, damaged: text.damaged,
+    invalid: text.invalid, unsupported: text.unsupported,
+  };
+  byId("blender-runtime-state").textContent = labels[value.state] || value.state;
+  byId("blender-basic-value").textContent = labels[value.state] || value.state;
+  byId("blender-web-value").textContent = value.web_pack?.state === "missing"
+    ? text.webMissing : (labels[value.web_pack?.state] || value.web_pack?.state || "—");
+  byId("blender-version-value").textContent = selected?.version || value.required_version || "—";
+  byId("blender-runtime-summary").textContent = value.state === "ready"
+    ? text.readySummary : (value.state === "invalid" ? text.invalidSummary : text.missingSummary);
+  byId("blender-runtime-action").textContent = value.management_available ? "" : text.action;
+  const checks = {
+    manifest: "manifest", stamp: "stamp", executable: "executable", trusted_worker: "worker",
+  };
+  byId("blender-runtime-list").replaceChildren(...(value.runtimes || []).map((runtime) => {
+    const row = document.createElement("article");
+    row.className = "row";
+    const info = document.createElement("div");
+    const title = document.createElement("p");
+    title.className = "t";
+    title.textContent = `Blender ${runtime.version} · ${
+      runtime.ownership === "managed" ? text.managed : text.legacy}`;
+    const detail = document.createElement("p");
+    detail.className = "s";
+    detail.textContent = Object.entries(checks).map(([key, label]) =>
+      `${label}: ${runtime.checks?.[key] ? "OK" : "NG"}`).join(" · ");
+    info.append(title, detail);
+    const status = document.createElement("span");
+    status.className = "state";
+    status.textContent = labels[runtime.state] || runtime.state;
+    row.append(info, status);
+    return row;
+  }));
+  byId("blender-runtime-fingerprint").textContent = value.fingerprint
+    ? `${text.fingerprint}: ${value.fingerprint.slice(0, 16)}` : "";
 }
 
 function renderExtensionDetails() {
@@ -5849,6 +5946,9 @@ for (const holder of [byId("model-table"), byId("model-error")]) {
 
 byId("model-mini-cancel").addEventListener("click", () => {
   void cancelModelOperation(byId("model-mini-cancel").dataset.operationId);
+});
+byId("blender-runtime-refresh").addEventListener("click", () => {
+  void refreshSession(["blender_runtime"]);
 });
 byId("model-remove-cancel").addEventListener("click", () => byId("model-remove-dialog").close());
 byId("model-remove-confirm").addEventListener("click", async () => {
@@ -6484,6 +6584,10 @@ function applySessionParts(snapshot) {
   if (usable(snapshot.domain_profiles)) state.domainProfiles = snapshot.domain_profiles.items || [];
   if (usable(snapshot.creative_batches)) state.batches = snapshot.creative_batches.items || [];
   if (usable(snapshot.jobs)) state.jobs = snapshot.jobs.items || [];
+  if (usable(snapshot.blender_runtime)) {
+    state.blenderRuntime = snapshot.blender_runtime;
+    renderBlenderRuntime();
+  }
 }
 
 function applyModelSession(snapshot) {
@@ -6610,7 +6714,10 @@ window.addEventListener("message", (event) => {
     const message = messageEvent.data;
     if (message?.type !== "event") return;
     if (message.event === "theme.changed") applyTheme(message.data);
-    if (message.event === "locale.changed" && message.data?.locale) document.documentElement.lang = message.data.locale;
+    if (message.event === "locale.changed" && message.data?.locale) {
+      document.documentElement.lang = message.data.locale;
+      renderBlenderRuntime();
+    }
     if (message.event === "safe_area.changed") applySafeArea(message.data);
     if (message.event === "visibility.changed") state.visible = message.data?.visible !== false;
     if (message.event === "route.changed") activate(String(message.data?.path || "/").split("/")[1] || "create", {sync: false});

@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3DS-1 runtime resolver / Settings diagnostics
+
+`ux1/3d-runtime-status`でversioned registry/resolver、legacy 4.5.9登録、G8 runtime解決、
+private status transport、read-only Settings診断を実装した。実Uvicorn/Blenderで3DS-0と同じ
+796 B cubeから44,292 B / SHA-256 `c78ef18d...a468b`の同一ZIPを得た。registryは258 B /
+mode 0600 / raw pathなし。standalone Chromeでready/missing、診断、日英、320 pxを確認した。
+実ControlDeck opaque iframeは未認証で`/login`へ遷移したため **NOT TESTED**。
+次は3DS-2の最初の小PRとしてdurable install/cancel/restart復帰を実装する。その後に
+update/switch/repair、参照保護付きremoveを別sliceで行う。Web Blender、scene、viewer、材質、
+OpenCode制作、GPU Blenderは未実装・未検証。
+
 ## 2026-09-05 3DS-0 baseline
 
 PR #213はmerge commit `9469d8e4e4980752082f5081da7ba6e95d184622`でmainへ入った。

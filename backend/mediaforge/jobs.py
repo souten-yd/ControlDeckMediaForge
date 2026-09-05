@@ -53,6 +53,7 @@ from .blender_compile import (
     compile_project_package,
     parse_compile_options,
 )
+from .blender_runtime import BlenderRuntimeResolver
 from .routing import ModelRoute, ModelRouteError, route
 from .store import Store, UnreadableJobRecord, utc_now
 from .validators import validate_png
@@ -155,6 +156,7 @@ class JobManager:
         creative_director: Any | None = None,
         creative_validate: Any | None = None,
         extra_manifests: Any | None = None,
+        blender_runtime_resolver: BlenderRuntimeResolver | None = None,
     ):
         self.store = store
         self.worker_timeout_sec = worker_timeout_sec
@@ -177,6 +179,7 @@ class JobManager:
         # 自作モデルは shipped manifest に居ない。routing がそれを知らないと、
         # 利用者が選べる状態にしても「使えるモデルがありません」で落ちる。
         self.extra_manifests = extra_manifests
+        self.blender_runtime_resolver = blender_runtime_resolver
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
         # AI ターン終了の宣言結果。lease が取れなかったときに理由を添えるために持つ。
         self._runner: asyncio.Task[None] | None = None
@@ -1044,6 +1047,11 @@ class JobManager:
                 options=options,
                 cancel_requested=lambda: self.store.cancel_requested(job.id),
                 process_timeout_sec=self.blender_timeout_sec,
+                runtime=(
+                    self.blender_runtime_resolver.resolve_g8()
+                    if self.blender_runtime_resolver is not None else None
+                ),
+                resolved_runtime_required=self.blender_runtime_resolver is not None,
             )
         except BlenderCompileCanceled:
             await self._finish_canceled(job.id, reporter)
