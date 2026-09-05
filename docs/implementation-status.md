@@ -8293,3 +8293,40 @@ SHA-256 `99935b9427ddad9aa892a8046376da55eaa3e5fe8873d3cdaafbabb6f530b843`をCOR
 実ControlDeck opaque iframe、外部提供のtexture付き実モデル、64 MiB上限付近、driver crash、
 material slot選択/画像差替えpreview/Blender edit、scene/revisionは **NOT TESTED / NOT IMPLEMENTED**。
 これらは3DS-4〜6のscopeであり3DS-3の実績へ読み替えない。ControlDeck変更は0件。次は3DS-4。
+
+## 2026-09-05 — 3DS-4a immutable scene revision persistence
+
+branch `ux1/3d-scene-revisions`、実装commit
+`9d053fb`。`SceneDocument`とappend-only `SceneRevision`、revision dependencyをSQLiteへ加法的に
+導入した。sceneはHost subjectまたはstandalone ownerで分離し、応答へowner/path/DB keyを返さない。
+revisionは`.blend` source、そこから派生したGLB preview、依存AssetのID/SHA-256、Blender
+runtime ID/version、Blender/GLB validationを固定する。依存hash不一致、必須validation未通過、異なる
+owner、stale base revisionはfail-closedで、transaction失敗時はdocument/revisionを残さない。
+Asset公開schemaへ`application/x-blender`を加法的に追加したが、公開import、Agent tool、workflow
+executorは追加していない。private workspaceの`scenes.list/get`とsession part、standalone mirrorだけを
+追加した。
+
+過去revisionが参照するruntimeはdistinct scene数を`project_reference_count`へ反映し、1件以上なら
+managed Blender removeを`project_reference`で拒否する。source/preview/dependency Assetもrevision参照中は
+削除できない。migration fixture、owner分離、2 revisionのparent/sequence保持、stale commit、hash tamper、
+atomic rollback、runtime/remove連携、private transportをfocused 7件で確認した。
+
+実Blender 4.5.9を`--background --factory-startup --disable-autoexec`で起動し、1 object / unit 1.0 mの
+`.blend` 426,550 B / SHA-256
+`f51ae0111484d8bc7a06c062ae3540482d34bc2e5a78a2ef2f7a89ee2f6e913d`とGLB 1,748 B /
+SHA-256 `bc4f4dca1c895d18e066a48b1191b26064118390dc041baedbcd34590fa01077`を生成した。
+GLB validatorはmesh/node/primitive各1、external image/texture 0でpassed。scene
+`scene_45ab90f346b14112acfaf3a990f3d423`を保存し、別Uvicorn processのprivate HTTP getは1,354 B /
+1.096 ms、再起動前後の応答SHA-256はともに
+`511e636c46dbfc1846cdc06da54962c8fb3079a05018097abdebd29e4d3e6b09`。runtime参照数1、preview削除は
+revision IDを示す`asset_in_use`で拒否した。sourceは派生previewのlineage参照でも拒否された。
+
+最新`origin/main`（v0.27.2）へrebase後の`./mf.sh test`は896 passed / 既知Starlette warning 1件 /
+74.83秒。PyInstaller 6.22.0候補bundleは31,357,017 B / SHA-256
+`c4d020a530449f9620c4b193b34e5bc77d2cf44475646c06f5f658640ffe644b`。展開後doctorは
+`ok / 0.27.2 / packaged=true`、packaged processのscene getはHTTP 200 / 1.877 ms / 1,354 Bで、
+source processと同じ応答hashだった。試験Uvicorn/packaged process/Blender childは停止した。
+
+bounded `.blend` upload、single-writer working copy/lease、隔離runnerによるimport・検査・保存は3DS-4b、
+exact backup/restoreは3DS-4cで **NOT IMPLEMENTED / NOT TESTED**。browser UI、実ControlDeck opaque iframe、
+installed release、GPU/Cycles、Web Blender、材質差替え、OpenCode制作も **NOT TESTED**。ControlDeck変更は0件。

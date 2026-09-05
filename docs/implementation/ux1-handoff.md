@@ -3,6 +3,25 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3DS-4a immutable scene revision persistence
+
+branch `ux1/3d-scene-revisions`、実装commit `9d053fb`。owner-scoped SceneDocument、append-only
+SceneRevision、依存Asset hash、Blender runtime identity、validation report、optimistic commitをSQLiteへ
+追加した。`.blend`は公開Asset MIMEへ加法的に追加したがpublic import/tool/executorは未追加。
+private `scenes.list/get`、session part、standalone mirrorだけを提供する。過去revisionのruntime参照は
+managed removeを拒否し、revisionが参照するAsset削除も拒否する。
+
+実Blender 4.5.9の`.blend` 426,550 BとGLB 1,748 Bを保存し、別Uvicornの再起動前後および0.27.2
+packaged processでscene応答1,354 B / SHA-256
+`511e636c46dbfc1846cdc06da54962c8fb3079a05018097abdebd29e4d3e6b09`が同一。runtime参照数1、
+preview削除はrevision参照で拒否。full gateは896 passed / 1 warning / 74.83秒。候補bundleは
+31,357,017 B / SHA-256 `c4d020a530449f9620c4b193b34e5bc77d2cf44475646c06f5f658640ffe644b`、
+doctorは`ok / 0.27.2 / packaged=true`。
+
+bounded upload、working copy/lease、実Blender隔離import/saveは **NOT IMPLEMENTED** で3DS-4b、
+backup/restoreは3DS-4c。browser/ControlDeck installed/GPU/Web Blenderも **NOT TESTED**。
+ControlDeck変更は0件。次は`ux1/3d-scene-working-copy`。
+
 ## 2026-09-05 3DS-3 shared Library GLB viewer
 
 PR #219、実装commit `b5a73824030b5506e409e7f6b0cc9e0a3b5c8a98`。
