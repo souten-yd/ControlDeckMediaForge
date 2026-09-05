@@ -7,6 +7,12 @@
 先行指示: [`mf0-addon-core.md`](mf0-addon-core.md)（G0 に相当。本書はその続きを含む全体）
 環境: [`mf0-0-environment.md`](mf0-0-environment.md)
 
+2026-09-05追加方針: 画像・3D制作・材質・ビューワー・Web BlenderはMediaForgeへ統合する。
+G8の既存成果へ追加する3DS-0〜8は [`g8-3d-studio-plan.md`](g8-3d-studio-plan.md) を参照。
+これは既存G8の完了履歴を変更せず、G9の生成モデル採用とも独立した追加計画である。
+別のSceneForgeリポジトリ・アドオンは使わない。設計の正は
+[`design-3d-studio.md`](../design-3d-studio.md) と既存base/integration/UX文書。
+
 ---
 
 ## 0. 進め方の原則

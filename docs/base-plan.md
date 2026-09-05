@@ -720,6 +720,15 @@ For 2D games, a video model is not automatically the correct tool. Some animatio
 
 ## 12. Blender and 3D subsystem
 
+2026-09-05 product decision: extend **MediaForge itself** with a unified image/3D Studio,
+asset viewer, texture workflows, OpenCode authoring, Settings-based Blender lifecycle management,
+and browser control of a dedicated server-side Blender GUI. Do not create a separate SceneForge
+add-on, repository, service, database or release line. See [Integrated 3D Studio](design-3d-studio.md)
+and [implementation plan](implementation/g8-3d-studio-plan.md).
+The new GUI and authoring paths are planned additions; the existing deterministic G8 compiler
+contract stays unchanged. Shared product/data management does not imply shared core/Blender/ML
+execution environments. Generative 3D model adoption remains a separate experimental G9 gate.
+
 Blender should be treated as a deterministic asset compiler/toolchain, not merely a GUI application controlled by an agent.
 
 Stable Blender operations may include:

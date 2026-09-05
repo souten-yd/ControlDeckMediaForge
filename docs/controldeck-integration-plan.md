@@ -801,3 +801,30 @@ Add without changing ControlDeck public integration primitives.
 If a proposed change requires ControlDeck to understand a specific Media model, prompt format, sprite recipe, diffusion step, Blender operator, or manga parser, the boundary is probably wrong.
 
 If a proposed Media Forge feature bypasses ControlDeck's generic identity, project/file boundary, Jobs, or resource coordination when used as an add-on, the integration is probably too weak.
+
+## 18. Integrated 3D Studio boundary (2026-09-05)
+
+The 3D Studio, texture authoring and server-side Web Blender are MediaForge features.
+Implementation, docs, shared assets/Jobs and release packaging remain in this repository.
+Keep the existing `media-forge` identity, service and workspace; do not register a second add-on.
+See [3D Studio](design-3d-studio.md), [runtime/Web](design-blender-runtime-and-web.md),
+[assets/OpenCode](design-3d-assets-and-opencode.md) and [release rules](development-release-3d-studio.md).
+
+- Reuse Host Agent MCP projection; do not install a separate OpenCode or edit its global config.
+- Keep existing image/G8 tools unchanged. New scene tools require additive schemas and current Host validation.
+- Long authoring/render operations return durable job references. Validate the current detached Host Job
+  and job credential refresh path; do not extend a synchronous agent call indefinitely.
+- Browser GUI traffic uses the existing authenticated binary WebSocket relay with a session-owned gateway.
+  The presence of a relay is not proof of noVNC compatibility or post-connect revocation: test both.
+- GPU GUI sessions must account for retained VRAM. Release GPU processes before returning their lease;
+  coordinate image/LLM/Blender stages without holding competing leases across waits.
+- Browser disconnect is not batch cancellation. GUI disconnect has explicit save/grace/idle/stop policy.
+- Blender and display processes are non-root isolated runners, managed independently of HTTP request lifetime.
+- Blender install/update/remove are MediaForge setup operations; OS drivers and privileged dependencies
+  are diagnosed, not silently installed. Runtime removal preserves user assets and scene history.
+- ControlDeck signature verification is already present at the referenced current commit. Use the existing
+  MediaForge publisher/capability trust; do not add a new feature ID or per-release Host checksum pin.
+- If a generic Host facility is insufficient, document the exact gap and use a separate generic Host PR.
+
+These are target requirements. This documentation change does not register new tools, modify Host,
+install Blender, or claim the new GUI/session integration has passed acceptance.

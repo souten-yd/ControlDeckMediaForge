@@ -16,6 +16,11 @@ docs/implementation/ux1-handoff.md    UX1 の引き継ぎ状態。**再開時に
 docs/implementation-status.md         現在の進捗。必ず確認・更新する
 ```
 
+3D Studioを開発するときは `docs/design-3d-studio.md` と、そのリンク先のruntime/Web、
+asset/OpenCode、開発・release設計、`docs/implementation/g8-3d-studio-plan.md` も読む。
+3DはMediaForge内へ統合する。別アドオン・別リポジトリ・第二asset/Jobs基盤を作らない。
+新しい設計は実装目標であり、既存G8と新機能の実機受入を混同しない。
+
 設計判断を変えるときは `base-plan.md` / `controldeck-integration-plan.md` を先に更新する。
 実装指示だけを書き換えて設計を変えないこと。`base-plan.md` §3（却下した案）は消さない。
 
@@ -127,7 +132,9 @@ asset / provenance の必須フィールド
 - `theme.changed` / `locale.changed` / `safe_area.changed` を購読し、reload せず反映
 - `route.sync` で内部ルートをホスト URL へ反映（戻る/進む/共有が壊れる）
 - `disable.pending` を受けたら 2 秒以内に保存・中断処理
-- mobile は `companion` 宣言。320px に workspace を押し込まない
+- mobile は現行 `addon.json` の `embedded` を維持し、320px向けに専用レイアウトを作る。
+  3D追加の都合で状態カードだけの `companion` に退行させない。Web BlenderのフルGUIはPC推奨とし、
+  モバイルのLibrary・ビューワー・依頼・状況・停止・設定管理を維持する。
 - node graph を作らない。`Create` は chat/prompt 指向
 - 機能の出し分けは capability document から導出する。使えないものを既定で出さない
 - 簡単さは段階開示で作る。機能削除で作らない。詳細モードから全機能へ到達できること

@@ -69,6 +69,10 @@ Public contracts are documented in [`docs/api.md`](docs/api.md). Current evidenc
 
 ## Planning documents
 
+- [Integrated 3D Studio](docs/design-3d-studio.md) — planned extension of MediaForge's shared image/3D workspace: asset viewer, texture workflows, OpenCode authoring, server-side Blender GUI in the browser, and Settings-based Blender install/update/remove. Implementation and releases stay in this repository; Blender runs in isolated runtime/session environments. This is a design, not a claim that the new features are implemented.
+- [3D implementation plan](docs/implementation/g8-3d-studio-plan.md) — phased work, compatibility gates, real-machine acceptance and coding-agent handoff.
+- [3D development and release rules](docs/development-release-3d-studio.md) — existing MediaForge distribution/signing, reference practices from ControlDeck/SonicForge and evidence requirements.
+
 - [Base plan](docs/base-plan.md) — general Media Forge product/runtime architecture and implementation phases.
 - [ControlDeck integration plan](docs/controldeck-integration-plan.md) — **normative for add-on integration, enabled-only UI/UX, ControlDeck Jobs integration, and shared AI/GPU resource management**. Where the older base plan describes a Media-Forge-owned global resource scheduler, this integration plan supersedes it: ControlDeck's shared AI Resource Broker is the platform-level admission/queue/lease authority, while Media Forge workers retain only local safety/concurrency guards.
 
