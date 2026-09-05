@@ -8196,6 +8196,7 @@ scene/revision、viewer、材質、OpenCode制作は **NOT TESTED / NOT IMPLEMEN
 
 ## 2026-09-05 — 3DS-2c protected Blender remove / shared CLI
 
+PR #218、実装commit `4b5cdbb3c2b37978d17f3226d0012e4364adef3c`。
 managed Blender削除を既存のdurable operationへ追加した。削除前にopaque runtime ID、version、
 logical reclaimable bytes、live/project参照数、block理由、確認fingerprintを返す。remove要求は同じ
 fingerprintを必須にし、operation実行直前に同じ参照lock下で再計算する。active版、実行中G8 jobが

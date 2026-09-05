@@ -5,6 +5,7 @@
 
 ## 2026-09-05 3DS-2c protected remove / shared CLI
 
+PR #218、実装commit `4b5cdbb3c2b37978d17f3226d0012e4364adef3c`。
 `ux1/3d-runtime-remove`でmanaged runtimeの削除preview/確認fingerprint、active/live G8参照拒否、
 atomic staging、registry失敗rollback、service restart後cleanup、UI日英ダイアログを実装した。
 source互換の`blender build/status`を保ち、稼働serviceの同じmanagerを呼ぶmanaged CLIも追加した。
@@ -13,7 +14,7 @@ source互換の`blender build/status`を保ち、稼働serviceの同じmanager�
 Chrome日英/320 px/active拒否/自動終端追従、console/page error 0。full 884件がPASS。
 0.27.0 bundle 31,163,397 B / SHA-256 `c3baa20ea6adabc0390ba012a04ed0d39a70477bd99c9870b054e582bc1f3ae0`を
 packaged processで起動し、doctor、health、runtime status、未導入remove previewのfail-closedを確認。
-最終commit/PRはsliceを閉じる際に追記する。3DS-2は完了、次は3DS-3 Library GLB viewer。
+3DS-2は完了、次は3DS-3 Library GLB viewer。
 実ControlDeck opaque iframe、公開release、GPU/Cycles、Web Blender以降は **NOT TESTED**。
 
 ## 2026-09-05 3DS-2b side-by-side update / switch / repair
