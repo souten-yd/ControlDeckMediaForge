@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-8 OpenCode model-schema compatibility
+
+branch `ux1/3d-opencode-schema`。正式 v0.28.9 を実ControlDeckへ標準updateし、実OpenCode 1.18.27 /
+Qwen3.8-27Bへ全Add-on toolを渡したところ、制作開始前に
+`JSON schema conversion failed: Unsupported ref: scene-texture-request.json` を実測した。原因は
+`media.generate` の公開 `job-request.json` が3DS-6bで追加したscene texture contextだけを外部file `$ref` にし、
+個別schema/API検証は通る一方、Hostのmodel-facing schemaとllama.cpp制約decodeへ解決されない参照を渡したこと。
+
+公開fieldや意味は変えず、同じ定義を `job-request.json#/$defs/sceneTextureRequest` に内包してlocal `$ref` にした。
+全agent tool schemaに外部 `$ref` が無いことと、scene texture付きjob全体をDraft 2020-12で検証する回帰を追加。
+focused contract/baseline/agent 23件、exact head full 978件 / warning 1件 / 99.02秒はPASS。版は0.28.10。
+exact 0.28.10 bundleは31,618,956 B / SHA-256
+`00cfb8011802ccdb55341ef5845e6a3e1507394e616d004017f6e03d22c636c2`、展開binary doctorは
+`ok / 0.28.10 / packaged=true`。正式署名bundle、installed update、同じOpenCode制作一巡はこのsliceの残りで
+再実測する。3DS-8のopaque iframe/GPU共存/long-lived/rollbackは **NOT TESTED**。
+
 ## 2026-09-06 3DS-7 typed Agent recipes
 
 branch `ux1/3d-agent-recipes`。closed vocabularyのscene create/edit、既存MaterialBinding、snapshot/export、

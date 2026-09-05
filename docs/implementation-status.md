@@ -8808,3 +8808,26 @@ environment snapshotを置いていない隔離data rootなのでhealth全体は
 実installed ControlDeckでのOpenCode指示→shape→texture→GLB→grant配置、opaque iframe、120秒超job、
 10分超credential refresh、実process restart/rollbackは **NOT TESTED**。3DS-7のsource/package surfaceを完了し、
 これらは次の3DS-8 release acceptanceで通し確認する。
+
+## 2026-09-06 — 3DS-8 OpenCode model-schema compatibility
+
+branch `ux1/3d-opencode-schema`。Media Forge v0.28.9をControlDeck標準updaterで0.28.0から更新した。
+公開bundleの再取得SHA-256は
+`1e788487a2a8aba2b4e80220f2597ce8e438841a753f03f06ee41917b2d68237`、updateは10.56秒 / 最大RSS
+782,884 KiB。`current=versions/0.28.9`、旧0.28.0保持、新PID 2143032、health healthy、永続data rootは同一。
+Blender 4.5.9は公式377,929,956 B / SHA-256
+`dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d`を54.18秒で導入し、version/Python/
+GLTF import/export probe成功。Web pack 1.0.0は15,769,716 Bを5.33秒で導入し、TigerVNC 1.16.2、noVNC 1.7.0、
+全必須hash、software display probeに成功した。
+
+ControlDeck発行のstable actor/project-scoped token、実OpenCode 1.18.27、Qwen3.8-27Bでtyped制作を開始したが、
+最初のLLM requestはHTTP 400
+`JSON schema conversion failed: Unsupported ref: scene-texture-request.json`でtool call前に停止した。
+原因は3DS-6bの`job-request.json`だけがscene textureを外部file `$ref` にしており、Hostのmodel-facing schemaから
+llama.cppへ未解決参照が渡ったため。公開field/意味を変えず同一定義をlocal `$defs`へ内包した。全agent tool schemaの
+外部 `$ref` 禁止とscene texture付きjob全体のDraft 2020-12検証を回帰化し、focused contract/baseline/agent 23件、
+exact head full 978件 / warning 1件 / 99.02秒PASS。exact 0.28.10 bundleは31,618,956 B / SHA-256
+`00cfb8011802ccdb55341ef5845e6a3e1507394e616d004017f6e03d22c636c2`、展開binary doctorは
+`ok / 0.28.10 / packaged=true`。
+版は0.28.10。正式署名bundle・installed update・同じOpenCode再試行はこのsliceで続ける。opaque iframe、GPU共存、
+120秒超job、10分超credential、rollbackは **NOT TESTED**。
