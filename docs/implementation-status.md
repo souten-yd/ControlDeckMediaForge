@@ -8029,3 +8029,28 @@ llama-server            22.95 GB を保持したまま無傷
 
 RAM のみなら VRAM の空きに左右されないので、必ずどこかで着地する。broker も
 `residency_key` ごとに OOM 後の下限を学習する（`oom_recommendation`）。
+
+
+## 2026-09-05 — 統合3D Studio設計・実装計画（文書のみ）
+
+利用者は画像/3DをMediaForgeへ実装まで統合する方針を選択し、設計もMediaForgeへ置くよう指定した。
+別SceneForgeリポジトリ/アドオン/配布系統は使わない。
+
+追加文書:
+
+- `docs/design-3d-studio.md`: 設計ゴール、責務、共通Library/UI、初期提供範囲。
+- `docs/design-blender-runtime-and-web.md`: 設定から導入/更新/修復/切替/削除、サーバーBlender GUI、保存/再接続/GPU/隔離。
+- `docs/design-3d-assets-and-opencode.md`: scene revision、材質/画像、GLB viewer、typed OpenCode制作、durable job。
+- `docs/development-release-3d-studio.md`: 既存MediaForgeの開発/管理/署名配布と実機品質gate。
+- `docs/implementation/g8-3d-studio-plan.md`: 3DS-0〜8、条件付きExpert、PR単位、受入、開始指示。
+- `docs/reference-3d-studio.md`: ControlDeck/MediaForge/SonicForgeの参照commitと確認事項。
+
+AGENTS/README/base-plan/integration/workspace UX/goal-roadmap/handoffから導線を追加した。
+AGENTSの古いmobile=companion指示は現行addon.jsonのembeddedへ合わせ、3D追加で退行させない規則とした。
+現行ControlDeckにはpublisher署名検証、binary WS relay、detached Jobs、CPU-only job credential refreshの
+コードが存在することを確認。noVNC実機、GPU GUI、長時間再接続の動作証拠にはしていない。
+
+検証対象は文書リンク、変更差分、参照commit、既存契約との整合性。実装コード・公開schema・
+addon.json・release version・OS/runtime・他リポジトリはこのMediaForge PRでは変更しない。
+新規3DS機能: NOT IMPLEMENTED。unit/integration/GPU/Blender/browser/release実機受入: NOT TESTED。
+次: 現行mainと対象機を再確認する3DS-0、その後3DS-1を独立PRで実装。

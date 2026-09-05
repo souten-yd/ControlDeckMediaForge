@@ -8,6 +8,14 @@ Date: 2026-08-22
 本書は `base-plan.md` §16「UI」を具体化した設計の正である。
 UI に関する設計判断を変えるときは、実装より先に本書を更新する。
 
+2026-09-05追補: 3D StudioはMediaForge内に統合する。画像 / 動画 / 3Dの制作文脈を切り替え、
+LibraryとActivityは共通。設定入口は「設定 / Settings」、その内部に画像・動画モデル、
+Blender、保存・診断を置く。以下の旧「入口をモデル管理に固定する」記述は、3D対応sliceで
+この設定構成へ置き換える。既存画像画面の操作は維持する。
+現行mobile=embeddedを維持し、旧companion状態へ戻さない。
+詳細の正は [3D Studio §5](design-3d-studio.md#5-画面仕様) と
+[Blender管理・Web操作](design-blender-runtime-and-web.md)。新機能は実装前の設計である。
+
 ---
 
 ## 1. なぜ作り直すか（現状の批判的評価）

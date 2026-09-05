@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3D Studio設計の引き継ぎ（文書のみ）
+
+利用者の決定: 画像と3DをMediaForgeへ実装・管理・配布まで統合する。
+設計も本リポジトリへ置き、別SceneForgeリポジトリは使わない。
+`docs/design-3d-studio.md` と関連runtime/Web、asset/OpenCode、開発/release設計、
+`docs/implementation/g8-3d-studio-plan.md` を追加した。
+次の3D作業は最新main/実機状態を照合する3DS-0、その後runtime resolver/設定診断の3DS-1。
+この計画追加ではruntime/API/UIコード、addon manifest、版数、Host、稼働環境を変更していない。
+新しい3D機能はNOT IMPLEMENTED、Blender/GPU/ブラウザ受入はNOT TESTED。
+以下の旧引き継ぎは履歴として保持する。古いbranch/版数を現在状態とみなさず最新を確認する。
+
 ## 現在地
 
 ```text
