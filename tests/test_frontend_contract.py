@@ -87,6 +87,9 @@ DOM_IDS = (
     "scene-material-slot", "scene-material-image", "scene-material-channel",
     "scene-material-uv", "scene-material-wrap", "scene-material-normal",
     "scene-material-apply", "scene-material-status",
+    "scene-texture-title", "scene-texture-prompt", "scene-texture-progress",
+    "scene-texture-preview", "scene-texture-status", "scene-texture-generate",
+    "scene-texture-cancel", "scene-texture-retry", "scene-texture-use",
     "detail-dialog",
     "model-storage", "model-filters", "model-management-note", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
@@ -508,6 +511,32 @@ def test_scene_material_binding_uses_library_assets_and_private_path_free_bridge
     assert "/materials" in standalone
     assert 'id="scene-material-advanced-title"' in MARKUP
     assert "@media (max-width: 520px)" in STYLES
+
+
+def test_scene_texture_generation_is_durable_separate_and_explicitly_adopted():
+    texture = SCRIPT[
+        SCRIPT.index("const SCENE_TEXTURE_SCHEMA"):SCRIPT.index("async function loadSceneMaterialData")
+    ]
+    assert '"media-forge.scene-texture-request@1"' in texture
+    assert 'operation: "image.generate"' in texture
+    assert 'asset_brief: {role: "texture", target_surface: "3d"}' in texture
+    assert 'call("jobs.create"' in texture and 'call("jobs.cancel"' in texture
+    assert 'call("jobs.watch"' in texture and "pollJob(job.id)" in texture
+    assert "sceneTexturePollingJobs" in texture and "watchSceneTextureJob(job)" in texture
+    assert 'call("assets.thumbnail"' in texture and "loadSceneMaterialImages()" in texture
+    assert 'byId("scene-material-image")' in texture
+    assert 'context?.source_revision_id === state.sceneMaterialRevisionId' in texture
+    assert 'call("scenes.material.apply"' not in texture, "生成成功だけで scene を変更しない"
+    assert "source_revision_id: state.sceneMaterialRevisionId" in texture
+    restore = SCRIPT[SCRIPT.index("function restoreProgressView"):]
+    restore = restore[:restore.index("\n}")]
+    assert "!sceneTextureContext(item)" in restore, "texture job が通常 Create の進捗を奪っている"
+    disable = SCRIPT[SCRIPT.index('if (message.event === "disable.pending")'):]
+    disable = disable[:disable.index("setHostBusy(false);")]
+    assert "sceneTextureContext(job)" in disable and 'call("jobs.cancel"' in disable
+    imported = SCRIPT[SCRIPT.index("async function importScene"):SCRIPT.index("async function cancelSceneImport")]
+    final = imported[imported.index("finally"):]
+    assert "renderSceneMaterialControls" in final and "renderBlenderSessionControls" in final
 
 
 def test_scene_backup_ui_streams_exact_bytes_and_has_standalone_parity():

@@ -223,5 +223,31 @@ doctorは`ok / 0.28.6 / packaged=true`。exact package processでもtarget 3件�
 `6e865cc4fa021a24140f306c82cc8bd8376f624718b5e5b6bd60d4fd35dfe8ac`、external images 0、GLB validator
 passed、終了後active working/material stagingはいずれも0。
 
-新しい画像の生成・編集からの自動採用、前後版の同時比較・旧版へのcurrent切替、実ControlDeck opaque
-iframeは **NOT IMPLEMENTED / NOT TESTED**。次は3DS-6b texture generation orchestration。
+## 3DS-6b texture generation orchestration互換性
+
+`constraints.scene_texture`へ`media-forge.scene-texture-request@1`を加法追加した。scene/source revision、
+object/material slot/channel/UVを厳格検証し、`image.generate`以外では拒否する。通常のdurable job、Library
+Asset、provenance、ControlDeck broker authorityを再利用し、別queueやGPU schedulerは追加しない。job成功は
+sceneを変更せず、bounded thumbnailを確認して「この画像を選ぶ」、さらに既存MaterialBindingの「新しい版を保存」
+を押したときだけcommitする。reload後もjob requestからsceneへ復元し、standaloneはpoll、embeddedはpushを
+再接続する。texture jobは通常Createのactive progressへ採用しない。
+
+隔離data rootのsource Uvicorn、決定的image worker、実Blender 4.5.9、実Chromeで、生成中reload後もjobを
+復元し、通常Create mini progressがhiddenのまま中止した。元jobは`canceled` / progress 0.05、同じdurable
+intent/contextで再試行したjobは1,024x1,024 PNG 23,489 B / SHA-256
+`bc5228bec807cab277aa591bce8c746c5c6313fd3708c7c4287db13744f1823a`を作った。プレビュー後の明示選択とcommitで
+revision 1→2、dependency 1、`.blend` 459,632 B / SHA-256
+`61b25bb9f20b3bfc62a4d270a4aa34aa9ca9c1e6319e0eb87d4aad367757fabf`、external images 0、GLB 18,600 B /
+textures 1となり、Blender/GLB validator passed。日英切替、390x844横overflow 0、console/page error 0。
+
+0.28.7 exact bundleは31,565,375 B / SHA-256
+`653caa562b7f86d4f27577927f1949fac03c59f0035eb9477546323ed9c83423`、doctorは
+`ok / 0.28.7 / packaged=true`。exact package processと実Chromeでもreload→cancel→同一文脈retry→preview→
+明示選択→MaterialBinding commitを再実行し、revision 1→2、1,024x1,024 PNG 23,489 B / 同一SHA、dependency 1、
+`.blend` 459,632 B / SHA-256 `9665cbf1100455b73b3ed36d8a5720d428bceb18ea4b03bb3c5a11e8629ab1`、
+external images 0、GLB 18,600 B / textures 1、両validator passed、390px overflow 0、console/page error 0。
+
+同じexact sourceからR9700へstandalone実要求した結果は37 msで`host_lease_required`となり、broker外GPU実行を
+fail-closedにした。実ControlDeck browserは保存済み認証が失効して`/login`へ戻ったため、資格情報を迂回せず
+Host-managed R9700生成とopaque iframeは **NOT TESTED** とした。前後版同時比較・旧版からのcurrent復元も
+**NOT IMPLEMENTED / NOT TESTED**。Host実機は3DS-8 release acceptance、比較/復元は次の3DS-6cで扱う。

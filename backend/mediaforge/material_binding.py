@@ -11,6 +11,22 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 MaterialChannel = Literal["base_color", "roughness", "metallic", "normal", "emission"]
 
 
+class SceneTextureRequest(BaseModel):
+    """Durable job context used to return a generated image to 3D Studio."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["media-forge.scene-texture-request@1"] = (
+        "media-forge.scene-texture-request@1"
+    )
+    scene_id: str = Field(pattern=r"^scene_[0-9a-f]{32}$")
+    source_revision_id: str = Field(pattern=r"^revision_[0-9a-f]{32}$")
+    object_name: str = Field(min_length=1, max_length=128, pattern=r"^[^\x00-\x1f]+$")
+    material_slot: int = Field(ge=0, le=255)
+    channel: MaterialChannel = "base_color"
+    uv_map: str = Field(min_length=1, max_length=128, pattern=r"^[^\x00-\x1f]+$")
+
+
 class MaterialBinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

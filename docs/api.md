@@ -392,6 +392,17 @@ are `GET /workspace-api/scenes/{scene_id}/material-targets` and
 `POST /workspace-api/scenes/{scene_id}/materials`. These remain excluded from
 OpenAPI, Agent tools, workflow executors, and `addon.json` until the 3DS-7 gate.
 
+3DS-6b reuses the existing durable `image.generate` job for new scene images.
+`constraints.scene_texture` is the typed `media-forge.scene-texture-request@1`
+return context: scene ID, source revision ID, object, material slot, channel,
+and UV map. It is valid only on `image.generate`, is bounded by
+`schemas/scene-texture-request.json`, and grants no scene mutation authority.
+The request also carries `constraints.asset_brief.role = texture`; the resolved
+image is an ordinary immutable Library Asset with normal provenance. 3D Studio
+can recover, cancel, or retry the job after reload, preview its first output,
+and explicitly select it. Only the separate current-revision MaterialBinding
+operation can commit that selected Asset as a new SceneRevision.
+
 ## Reference collections and profiles
 
 - `GET /api/v1/reference-collections`

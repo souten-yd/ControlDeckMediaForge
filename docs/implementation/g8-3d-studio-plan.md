@@ -1,6 +1,6 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: 3DS-0〜4・3DS-5a/6a source/package VERIFIED、3DS-5b〜5d source VERIFIED / 次は3DS-6b texture generation
+Status: 3DS-0〜4・3DS-5a/6a/6b source/package VERIFIED、3DS-5b〜5d source VERIFIED / 次は3DS-6c revision compare/restore
 Date: 2026-09-06
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
@@ -20,7 +20,9 @@ exact backup core/private transport/browser UI、3DS-5a Web操作pack管理、3D
 保存/終了まで完了した。installed ControlDeck opaque iframeでの再確認は3DS-8 release acceptanceへ残し、
 3DS-5cで認証付きRFB gateway/noVNC接続・再接続、3DS-5dでidle、crash、Host disable/revocationと
 復旧候補のpolicyと3DS-6aの既存Library画像から検証済みrevisionを作る材質bindingまで実装した。
-次は3DS-6bの画像生成・編集jobとの工程連携へ進む。
+3DS-6bはdurable image jobのscene文脈、reload復元、cancel/retry、preview、明示選択から既存
+MaterialBinding commitまでをsource/packageで実装・確認した。次は3DS-6cで前後版比較と旧版からの
+新しいcurrent revision復元を実装し、3DS-6のexit条件を閉じる。
 
 | 項目 | 調査で確認した現状 | 追加するもの |
 |---|---|---|
@@ -55,7 +57,9 @@ exact backup core/private transport/browser UI、3DS-5a Web操作pack管理、3D
 exact backup/restore、Web操作packの固定・導入・実display probe、隔離session runner、実Blender GUI入力、
 保存・終了、専用RFB gateway、noVNC接続、明示切断後の再接続、idle/crash/disable/revocation時の
 fail-closed終了、復旧候補からの検証済みrevision化、既存Library画像の型付き材質bindingは完了した。
-次は3DS-6bの画像生成・編集jobからの採用、取消、再試行を実装する。
+3DS-6bの画像生成jobからの採用、取消、再試行はsource/packageで完了した。画像編集jobからの採用は既存Library
+Asset選択で同じMaterialBindingへ到達する。次は3DS-6cのrevision compare/restore、その後3DS-7のtyped recipesと
+durable child job orchestrationを実装する。
 
 ## 3. PRスライスの候補
 

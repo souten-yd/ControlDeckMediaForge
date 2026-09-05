@@ -3,6 +3,33 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-6b texture generation orchestration
+
+branch `ux1/3d-texture-generation`。既存durable `image.generate`へ
+`media-forge.scene-texture-request@1`のscene/source revision/object/material slot/channel/UV文脈を加法追加した。
+job成功は通常のimmutable Library Assetを作るだけでsceneを変更しない。3D Studioは通常Createとは別に
+reload後の進捗復元、cancel、同一文脈retry、bounded preview、明示選択を行い、既存MaterialBindingの保存を
+押したときだけ新revisionへcommitする。`disable.pending`は実行中texture jobをcancelする。版は0.28.7。
+
+source Uvicorn、決定的image worker、実Blender 4.5.9、実Chromeでreload→cancel→retry→preview→選択→commitを
+通し、revision 1→2、生成PNG 1,024x1,024 / 23,489 B / SHA-256
+`bc5228bec807cab277aa591bce8c746c5c6313fd3708c7c4287db13744f1823a`、dependency 1、external images 0、
+GLB 18,600 B / textures 1、両validator passed。日英、390px overflow 0、console/page error 0。
+実測でimport後controls再描画、reload後poll再接続、exact-context retry、選択後form復元、420px未満header overflowを
+検出して修正した。
+
+final full testは960 passed / 既知Starlette warning 1件 / 94.96秒。0.28.7 exact bundleは31,565,375 B /
+SHA-256 `653caa562b7f86d4f27577927f1949fac03c59f0035eb9477546323ed9c83423`、doctor成功。最初のpackaged実測で
+frozen executableがfake workerの`-m` argvを処理できずexit 2となる不具合を検出し、exact internal dispatchと
+release regression testを追加してbundleを再構築した。最終exact packageの実Chromeも全工程を通し、revision 1→2、
+`.blend` 459,632 B、GLB 18,600 B、validator passed、390px overflow 0、browser error 0。
+
+exact sourceからの実R9700 standalone要求は37 msで`host_lease_required`となりbroker外実行をfail-closedにした。
+稼働ControlDeckはcommit `34bda2f14c2c00e4ead8251bf30d830b2e3bf7a5`、既存dirty
+`frontend/tsconfig.tsbuildinfo`だけ、installed 0.28.0 / PID 1827940 / health healthy。保存済みbrowser認証が
+`/login`へ戻ったためHost-managed R9700とopaque iframeは **NOT TESTED**。前後版比較と旧版からのcurrent復元も
+**NOT IMPLEMENTED / NOT TESTED**。次は別sliceの3DS-6c revision compare/restore。
+
 ## 2026-09-06 3DS-6a existing Library image material binding
 
 branch `ux1/3d-texture-binding`。source revision、Library画像Asset、object/material slot、5 channel、UV、

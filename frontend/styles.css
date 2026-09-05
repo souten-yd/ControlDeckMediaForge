@@ -338,9 +338,17 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .scene-material-advanced > summary { cursor: pointer; color: var(--muted); font-size: .82rem; }
 .scene-material-advanced .scene-material-grid { margin-top: 10px; }
 #scene-material-status { align-self: center; }
+.scene-texture-generator { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.scene-texture-generator h3 { margin: 0; font-size: .88rem; }
+.scene-texture-prompt-label { display: grid; gap: 5px; font-size: .78rem; font-weight: 700; }
+.scene-texture-prompt-label textarea { resize: vertical; min-height: 4.5rem; }
+.scene-texture-generator progress { width: 100%; }
+.scene-texture-preview { display: block; max-width: min(100%, 320px); max-height: 240px; border-radius: 8px; object-fit: contain; background: #101412; }
+.scene-texture-actions { justify-content: flex-end; }
 @media (max-width: 520px) {
   .scene-material-grid { grid-template-columns: 1fr; }
   .scene-material-tools .split-actions { align-items: stretch; }
+  .scene-texture-actions { display: grid; grid-template-columns: 1fr; }
 }
 #scene-blender-dialog {
   width: min(1400px, calc(100% - 24px));
@@ -1182,7 +1190,7 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
   .thumb { width: 72px; height: 72px; }
 }
 
-@media (max-width: 359px) {
+@media (max-width: 420px) {
   .grid { grid-template-columns: 1fr; }
   .form-row:not(.search) { grid-template-columns: 1fr; }
   #shell-header { gap: 4px; padding: 0 8px; }

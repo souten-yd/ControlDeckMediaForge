@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://control-deck.local/schemas/scene-texture-request.json",
+  "title": "Media Forge Scene Texture Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "scene_id", "source_revision_id", "object_name", "material_slot", "channel", "uv_map"
+  ],
+  "properties": {
+    "schema_version": {"const": "media-forge.scene-texture-request@1"},
+    "scene_id": {"type": "string", "pattern": "^scene_[0-9a-f]{32}$"},
+    "source_revision_id": {"type": "string", "pattern": "^revision_[0-9a-f]{32}$"},
+    "object_name": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001f]+$"},
+    "material_slot": {"type": "integer", "minimum": 0, "maximum": 255},
+    "channel": {"enum": ["base_color", "roughness", "metallic", "normal", "emission"]},
+    "uv_map": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001f]+$"}
+  }
+}

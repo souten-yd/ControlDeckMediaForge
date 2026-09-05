@@ -464,6 +464,22 @@
                         </label>
                       </div>
                     </details>
+                    <div class="scene-texture-generator" aria-labelledby="scene-texture-title">
+                      <h3 id="scene-texture-title">この場所の画像を新しく作る</h3>
+                      <label class="scene-texture-prompt-label">
+                        <span id="scene-texture-prompt-label">作りたい模様や質感</span>
+                        <textarea id="scene-texture-prompt" rows="3" maxlength="8000"></textarea>
+                      </label>
+                      <progress id="scene-texture-progress" max="1" value="0" hidden></progress>
+                      <img id="scene-texture-preview" class="scene-texture-preview" alt="" hidden>
+                      <p id="scene-texture-status" class="hint" role="status"></p>
+                      <div class="split-actions scene-texture-actions">
+                        <button type="button" id="scene-texture-cancel" hidden>中止</button>
+                        <button type="button" id="scene-texture-retry" hidden>同じ指示でもう一度</button>
+                        <button type="button" id="scene-texture-use" hidden>この画像を選ぶ</button>
+                        <button type="button" id="scene-texture-generate">画像を作る</button>
+                      </div>
+                    </div>
                     <p id="scene-material-safety" class="hint">画像はシーン内へ格納され、元のライブラリ素材との関係を記録します。</p>
                     <div class="split-actions">
                       <span id="scene-material-status" class="hint" role="status"></span>
