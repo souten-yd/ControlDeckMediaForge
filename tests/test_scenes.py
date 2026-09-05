@@ -270,7 +270,7 @@ def test_dependency_hash_and_required_validation_are_fail_closed(tmp_path: Path)
         )
 
 
-def test_private_scene_reads_use_the_authenticated_subject_and_standalone_owner(
+def test_private_scene_reads_use_the_stable_actor_and_standalone_owner(
     tmp_path: Path,
 ) -> None:
     client, headers, _state = host_client(tmp_path, token="valid-user")
@@ -278,7 +278,7 @@ def test_private_scene_reads_use_the_authenticated_subject_and_standalone_owner(
         store = client.app.state.store
         source, preview, dependency = _revision_assets(store, tmp_path)
         document, revision = client.app.state.scenes.create(
-            "7",
+            "user:7",
             name="Authenticated scene",
             revision=_revision_input(source, preview, dependency),
         )
@@ -293,7 +293,15 @@ def test_private_scene_reads_use_the_authenticated_subject_and_standalone_owner(
                 "X-Control-Deck-Addon-ID": "media-forge",
             },
         ) as other_socket:
-            hidden = call(other_socket, "scenes.get", {"scene_id": document.id})
+            shared = call(other_socket, "scenes.get", {"scene_id": document.id})
+        with client.websocket_connect(
+            "/ws",
+            headers={
+                "Authorization": "Bearer valid-other",
+                "X-Control-Deck-Addon-ID": "media-forge",
+            },
+        ) as other_actor_socket:
+            hidden = call(other_actor_socket, "scenes.get", {"scene_id": document.id})
 
         assert listed["result"]["items"] == [document.model_dump(mode="json")]
         assert fetched["result"] == {
@@ -301,6 +309,7 @@ def test_private_scene_reads_use_the_authenticated_subject_and_standalone_owner(
             "revisions": [revision.model_dump(mode="json")],
         }
         assert session["result"]["scenes"]["items"] == [document.model_dump(mode="json")]
+        assert shared["result"] == fetched["result"]
         assert hidden["ok"] is False and hidden["error"]["code"] == "scene_not_found"
 
         standalone_source, standalone_preview, standalone_dependency = _revision_assets(

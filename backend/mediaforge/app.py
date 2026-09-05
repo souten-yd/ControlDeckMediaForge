@@ -627,7 +627,7 @@ def create_app(
         def revoke_session() -> None:
             try:
                 blender_sessions.interrupt(
-                    preferences.subject_of(identity),
+                    scene_owner(identity),
                     session_id,
                     code="blender_session_host_revoked",
                 )
@@ -640,13 +640,17 @@ def create_app(
             except HostApiError:
                 revoke_session()
                 return False
-            valid = current.addon_id == identity.addon_id and current.subject == identity.subject
+            valid = (
+                current.addon_id == identity.addon_id
+                and current.subject == identity.subject
+                and current.actor_subject == identity.actor_subject
+            )
             if not valid:
                 revoke_session()
             return valid
 
         await serve_blender_rfb(
-            websocket, preferences.subject_of(identity), session_id, revalidate=revalidate
+            websocket, scene_owner(identity), session_id, revalidate=revalidate
         )
 
     @app.websocket("/workspace-api/blender/sessions/{session_id}/rfb")
@@ -2677,16 +2681,16 @@ def create_app(
                 item.model_dump(mode="json") for item in store.list_model_operations()
             ]},
             "blender_runtime": blender_runtime_part,
-            "blender_sessions": lambda: blender_sessions.list(preferences.subject_of(identity)),
+            "blender_sessions": lambda: blender_sessions.list(scene_owner(identity)),
             "scenes": lambda: {
                 "items": [
                     item.model_dump(mode="json")
-                    for item in scenes.list(preferences.subject_of(identity))
+                    for item in scenes.list(scene_owner(identity))
                 ],
                 "working_copies": [
                     item.model_dump(mode="json")
                     for item in scene_workspace.list_working_copies(
-                        preferences.subject_of(identity)
+                        scene_owner(identity)
                     )
                 ],
             },
@@ -3320,13 +3324,13 @@ def create_app(
                             raise ValueError("scene list accepts no parameters")
                         result = {"items": [
                             item.model_dump(mode="json")
-                            for item in scenes.list(preferences.subject_of(identity))
+                            for item in scenes.list(scene_owner(identity))
                         ]}
                     elif method == "scenes.get":
                         if set(params) != {"scene_id"}:
                             raise ValueError("scene get accepts only scene_id")
                         document, revisions = scenes.get(
-                            preferences.subject_of(identity), str(params.get("scene_id", ""))
+                            scene_owner(identity), str(params.get("scene_id", ""))
                         )
                         result = {
                             "scene": document.model_dump(mode="json"),
@@ -3336,13 +3340,13 @@ def create_app(
                         if set(params) != {"scene_id"}:
                             raise ValueError("scene material targets accepts only scene_id")
                         result = await scene_workspace.material_targets(
-                            preferences.subject_of(identity), str(params.get("scene_id", ""))
+                            scene_owner(identity), str(params.get("scene_id", ""))
                         )
                     elif method == "scenes.material.apply":
                         if set(params) != {"scene_id", "binding"}:
                             raise ValueError("scene material apply fields differ")
                         result = await scene_workspace.apply_material_binding(
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             str(params.get("scene_id", "")),
                             params.get("binding", {}),
                         )
@@ -3353,7 +3357,7 @@ def create_app(
                             raise ValueError("scene revision restore fields differ")
                         result = await asyncio.to_thread(
                             scene_workspace.restore_revision,
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             str(params.get("scene_id", "")),
                             str(params.get("base_revision_id", "")),
                             str(params.get("target_revision_id", "")),
@@ -3364,7 +3368,7 @@ def create_app(
                         } <= set(params):
                             raise ValueError("scene import declaration fields differ")
                         result = scene_workspace.begin_upload(
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             size=params.get("size"),
                             sha256=params.get("sha256"),
                             name=params.get("name"),
@@ -3383,7 +3387,7 @@ def create_app(
                         except ValueError as exc:
                             raise ValueError("scene import chunk is not valid base64") from exc
                         result = scene_workspace.append_upload(
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             str(params.get("upload_id", "")),
                             params.get("offset"),
                             content,
@@ -3395,7 +3399,7 @@ def create_app(
                         upload_id = str(params.get("upload_id", ""))
                         try:
                             result = await scene_workspace.commit_upload(
-                                preferences.subject_of(identity), upload_id
+                                scene_owner(identity), upload_id
                             )
                         finally:
                             scene_upload_ids.discard(upload_id)
@@ -3404,39 +3408,39 @@ def create_app(
                             raise ValueError("scene import cancel accepts only upload_id")
                         upload_id = str(params.get("upload_id", ""))
                         result = {"canceled": scene_workspace.cancel_upload(
-                            preferences.subject_of(identity), upload_id
+                            scene_owner(identity), upload_id
                         )}
                         scene_upload_ids.discard(upload_id)
                     elif method == "scenes.working.acquire":
                         if set(params) != {"scene_id"}:
                             raise ValueError("working copy acquire accepts only scene_id")
                         result = scene_workspace.acquire_working_copy(
-                            preferences.subject_of(identity), str(params.get("scene_id", ""))
+                            scene_owner(identity), str(params.get("scene_id", ""))
                         ).model_dump(mode="json")
                     elif method == "scenes.working.renew":
                         if set(params) != {"working_id"}:
                             raise ValueError("working copy renew accepts only working_id")
                         result = scene_workspace.renew_working_copy(
-                            preferences.subject_of(identity), str(params.get("working_id", ""))
+                            scene_owner(identity), str(params.get("working_id", ""))
                         ).model_dump(mode="json")
                     elif method == "scenes.working.release":
                         if set(params) != {"working_id"}:
                             raise ValueError("working copy release accepts only working_id")
                         result = scene_workspace.release_working_copy(
-                            preferences.subject_of(identity), str(params.get("working_id", ""))
+                            scene_owner(identity), str(params.get("working_id", ""))
                         ).model_dump(mode="json")
                     elif method == "scenes.working.commit":
                         if set(params) != {"working_id"}:
                             raise ValueError("working copy commit accepts only working_id")
                         result = await scene_workspace.commit_working_copy(
-                            preferences.subject_of(identity), str(params.get("working_id", ""))
+                            scene_owner(identity), str(params.get("working_id", ""))
                         )
                     elif method == "scenes.backup.open":
                         if set(params) != {"scene_id"}:
                             raise ValueError("scene backup open accepts only scene_id")
                         result = await asyncio.to_thread(
                             scene_backups.open_download,
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             str(params.get("scene_id", "")),
                         )
                     elif method == "scenes.backup.read":
@@ -3450,7 +3454,7 @@ def create_app(
                             )
                         result = await asyncio.to_thread(
                             scene_backups.read_download,
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             str(params.get("handle", "")),
                             params.get("offset"),
                             params.get("length", 512 * 1024),
@@ -3461,7 +3465,7 @@ def create_app(
                         result = {
                             "closed": await asyncio.to_thread(
                                 scene_backups.close_download,
-                                preferences.subject_of(identity),
+                                scene_owner(identity),
                                 str(params.get("handle", "")),
                             )
                         }
@@ -3469,7 +3473,7 @@ def create_app(
                         if set(params) != {"size", "sha256"}:
                             raise ValueError("scene restore begin accepts size and sha256")
                         result = scene_backups.begin_restore(
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             size=params.get("size"),
                             sha256=params.get("sha256"),
                         )
@@ -3484,7 +3488,7 @@ def create_app(
                         except ValueError as exc:
                             raise ValueError("scene restore chunk is not valid base64") from exc
                         result = scene_backups.append_restore(
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             str(params.get("upload_id", "")),
                             params.get("offset"),
                             content,
@@ -3495,7 +3499,7 @@ def create_app(
                             raise ValueError("scene restore commit accepts only upload_id")
                         result = await asyncio.to_thread(
                             scene_backups.commit_restore,
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             str(params.get("upload_id", "")),
                         )
                     elif method == "scenes.restore.cancel":
@@ -3503,7 +3507,7 @@ def create_app(
                             raise ValueError("scene restore cancel accepts only upload_id")
                         result = {
                             "canceled": scene_backups.cancel_restore(
-                                preferences.subject_of(identity),
+                                scene_owner(identity),
                                 str(params.get("upload_id", "")),
                             )
                         }
@@ -3586,7 +3590,7 @@ def create_app(
                     elif method == "blender.sessions.list":
                         if params:
                             raise ValueError("Blender session list accepts no parameters")
-                        result = blender_sessions.list(preferences.subject_of(identity))
+                        result = blender_sessions.list(scene_owner(identity))
                     elif method == "blender.sessions.start":
                         if "scene_id" not in params or set(params) - {"scene_id", "recovery_working_id"}:
                             raise ValueError("Blender session start fields differ")
@@ -3594,7 +3598,7 @@ def create_app(
                         if recovery_working_id is not None and not isinstance(recovery_working_id, str):
                             raise ValueError("Blender recovery identity is invalid")
                         result = blender_sessions.create(
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             str(params.get("scene_id", "")),
                             recovery_working_id=recovery_working_id,
                         )
@@ -3602,19 +3606,19 @@ def create_app(
                         if set(params) != {"session_id"}:
                             raise ValueError("Blender session save accepts only session_id")
                         result = blender_sessions.save_and_stop(
-                            preferences.subject_of(identity), str(params.get("session_id", ""))
+                            scene_owner(identity), str(params.get("session_id", ""))
                         )
                     elif method == "blender.sessions.stop":
                         if set(params) != {"session_id"}:
                             raise ValueError("Blender session stop accepts only session_id")
                         result = blender_sessions.discard_and_stop(
-                            preferences.subject_of(identity), str(params.get("session_id", ""))
+                            scene_owner(identity), str(params.get("session_id", ""))
                         )
                     elif method == "blender.sessions.interrupt":
                         if set(params) != {"session_id"}:
                             raise ValueError("Blender session interrupt accepts only session_id")
                         result = blender_sessions.interrupt(
-                            preferences.subject_of(identity),
+                            scene_owner(identity),
                             str(params.get("session_id", "")),
                             code="blender_session_host_disabled",
                         )
@@ -3815,7 +3819,7 @@ def create_app(
                     shutil.rmtree(root)
             for upload_id in scene_upload_ids:
                 try:
-                    scene_workspace.cancel_upload(preferences.subject_of(identity), upload_id)
+                    scene_workspace.cancel_upload(scene_owner(identity), upload_id)
                 except SceneError:
                     continue
             await asyncio.to_thread(model_viewer.cleanup)

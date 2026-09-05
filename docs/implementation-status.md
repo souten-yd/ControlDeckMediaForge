@@ -8848,6 +8848,30 @@ autoexec disabled、Blender/GLB validator passed。GLB Asset
 top-levelへ移して`oneOf`を排他条件だけにした。single/batch valid、両形態混在invalid、model-visible fieldsを回帰化し、
 focused contract/baseline 22件、final full 979件 / warning 1件 / 97.94秒PASS。最初のfull 1件は既存の
 branch object宣言assertで、各branchの`type=object`を維持して解消した。版は0.28.11。
-exact bundleは31,618,189 B / SHA-256
+pre-release candidate bundleは31,618,189 B / SHA-256
 `2253835678bca317a5cdf5757520f60063a3faa79da9973224619c0d4eb999db`、展開binary doctorは
-`ok / 0.28.11 / packaged=true`。release/installed再試行は続行中。
+`ok / 0.28.11 / packaged=true`。正式release/installed再試行の結果は次節へ記録する。
+
+## 2026-09-06 — 3DS-8 stable scene owner
+
+PR #239 / #240はmerge済み。正式v0.28.11 bundleは31,618,928 B / SHA-256
+`fc1ce4c04d26a29a68ca0a9e527eba6d0786de017629d5cb9f82b73783d9a1f8`で、署名assets公開後の再取得hash一致を確認した。
+ControlDeck標準updateは10.54秒、installed health healthy。実OpenCode 1.18.27 / Qwen3.8-27Bはscene create、
+durable status、snapshot、GLB export、project output grant取得と`media.pack`を完走した。scene
+`scene_ca920fd634b14dfea8215567e930bb7a`はrevision
+`revision_0140264e6a024ea78f8ec2c251b2c899`、objects 4 / meshes 4 / vertices 126 / triangles 236、autoexec disabled、
+Blender/GLB validator passed。GLB Asset `asset_6e3d24cb8e62453e841db3e3f2c72a19`は20,256 B / SHA-256
+`2afac7d44d23335cc31776bb8036ac63b957fc1f4b5a292df73d4c8ead8791ad`、Host asset化とgrant配置receipt committedを確認した。
+
+installed opaque iframeを実Chromeから開いた次の実測ではscene rowが現れず、同connectionから直接呼んだ
+`scenes.list`も空配列だった。SQLiteのscene ownerは`user:16`。Agent REST routeはHost署名済み
+`actor_subject`をownerに使う一方、workspaceのscene catalog、working copy、backup/restore、Blender session、RFBは
+短命browser tokenの`subject`をownerにしており、同じ利用者の実行経路間で永続sceneを共有できなかった。
+
+branch `ux1/3d-stable-scene-owner`で3D永続資産routeだけを既存`scene_owner()`へ統一した。RFB再認証はaddon、execution
+subjectに加えてactor不変も検査する。preferencesはtoken subject単位を維持した。同じ`actor_subject=user:7`を持つ
+user/job tokenから同じsceneを読め、`user:8`からは`scene_not_found`になる回帰を追加。版は0.28.12。focused
+scene/workspace/backup/Blender/Host transport群はPASS。exact head `./mf.sh test`は979 passed / 既知Starlette
+warning 1件 / 100.56秒。0.28.12 candidate bundleは
+31,618,636 B / SHA-256 `e4a7b1963e2d81e75055a45b8d843708758a0bc54642fab0e147f0226b6a946e`、
+隔離data/cacheへ展開したbinary doctorは`ok / 0.28.12 / packaged=true`。PR/release/installed browser再実測は未実施。

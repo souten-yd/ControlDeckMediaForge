@@ -3,21 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
-## 2026-09-06 3DS-8 OpenCode pack schema compatibility
+## 2026-09-06 3DS-8 stable scene owner
 
-branch `ux1/3d-opencode-pack-schema`。v0.28.10で実OpenCodeのscene create、status、snapshot、GLB export、
-project output grantまでは成功した。sceneはobjects 4 / meshes 4 / vertices 126 / triangles 236、Blender/GLB
-validator passed、GLBは20,256 B / SHA-256
-`2afac7d44d23335cc31776bb8036ac63b957fc1f4b5a292df73d4c8ead8791ad`。しかし`media.pack`だけQwen3.8-27Bが
-引数を毎回空objectにし、OpenCode doom-loop保護で停止した。限定した別runでも同じためauto runを明示停止した。
+branch `ux1/3d-stable-scene-owner`。PR #239（model schema）とPR #240（pack schema）はmerge済み。
+正式v0.28.11 bundleは31,618,928 B / SHA-256
+`fc1ce4c04d26a29a68ca0a9e527eba6d0786de017629d5cb9f82b73783d9a1f8`で、公開再取得hash一致、標準update
+10.54秒、installed health healthy。実OpenCode 1.18.27 / Qwen3.8-27Bはscene create、durable status、snapshot、
+GLB export、project grantへの`media.pack`を完走した。scene
+`scene_ca920fd634b14dfea8215567e930bb7a`はobjects 4 / meshes 4 / vertices 126 / triangles 236、GLBは20,256 B /
+SHA-256 `2afac7d44d23335cc31776bb8036ac63b957fc1f4b5a292df73d4c8ead8791ad`、配置receiptはcommitted。
 
-`project-asset-placement.json`だけがtop-levelにpropertiesを持たず、単一/batchの各`oneOf`枝内に持っていた。
-公開の2入力形態、field、検証意味を維持して共通propertiesをtop-levelへ移し、`oneOf`は排他条件だけにした。
-single/batch valid、混在invalid、model-visible top-level fieldsを回帰化。最初のfullで既存branch object宣言assertを
-1件検出し、各branchの`type=object`を維持してfocused 22件、final full 979件 / warning 1件 / 97.94秒PASS。
-版は0.28.11。exact bundleは31,618,189 B / SHA-256
-`2253835678bca317a5cdf5757520f60063a3faa79da9973224619c0d4eb999db`、展開binary doctorは
-`ok / 0.28.11 / packaged=true`。release/installed OpenCode再試行はこのsliceで続ける。
+続くinstalled opaque iframe実測では、UIの`scenes.list`が空を返した。SQLiteの同scene ownerは`user:16`だが、
+workspace scene/working/backup/Blender session/RFB routeが短命browser tokenの`subject`をownerに使い、Agent routeだけが
+stable `actor_subject`を使っていたことを特定した。3D永続資産routeを既存`scene_owner()`へ統一し、同じactorの
+user/job token間共有と別actor隔離を回帰化中。preferencesは従来どおりtoken subject単位。版は0.28.12。
+focused scene/workspace/backup/Blender/Host transport群はPASS。exact head `./mf.sh test`は979件 / warning 1件 /
+100.56秒PASS。0.28.12 candidate bundleは31,618,636 B /
+SHA-256 `e4a7b1963e2d81e75055a45b8d843708758a0bc54642fab0e147f0226b6a946e`、展開binary doctorは
+`ok / 0.28.12 / packaged=true`。PR、正式release、installed再実測は未実施。
 
 
 ## 2026-09-06 3DS-8 OpenCode model-schema compatibility
