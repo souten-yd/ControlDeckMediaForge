@@ -333,6 +333,12 @@ Imported assets carry `asset.import` provenance with
 
 Asset and provenance documents conform to [`schemas/asset.json`](../schemas/asset.json) and [`schemas/provenance.json`](../schemas/provenance.json). A provenance sidecar is stored next to every immutable asset copy. The SQLite index can be rebuilt in a future maintenance operation without losing the producing facts.
 
+`application/x-blender` is an additive Asset MIME used for immutable, validated
+3D scene revisions. The public import endpoint does not accept `.blend` bytes:
+3DS-4 stages them only through the bounded private workspace flow and a trusted
+Blender worker. Scene/revision operations remain private until the 3DS-7 Agent
+tool and workflow compatibility gate.
+
 ## Reference collections and profiles
 
 - `GET /api/v1/reference-collections`

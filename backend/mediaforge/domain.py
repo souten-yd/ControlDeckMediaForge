@@ -175,7 +175,7 @@ class Asset(BaseModel):
     parent_asset_ids: list[str]
     mime_type: Literal[
         "image/png", "image/webp", "image/jpeg", "video/mp4", "video/webm", "application/zip",
-        "model/gltf-binary",
+        "model/gltf-binary", "application/x-blender",
     ]
     width: int | None = None
     height: int | None = None

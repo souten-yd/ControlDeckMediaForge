@@ -30,16 +30,17 @@ from .models.operations import (
 )
 from .paths import contained
 from .profiles import Profile, ProfileInput, ReferenceCollection, ReferenceCollectionInput
+from .scenes import SceneDocument, SceneError, SceneRevision
 
 
 logger = logging.getLogger("uvicorn.error")
 
 
 class AssetInUse(RuntimeError):
-    """Another asset still records this one as its parent."""
+    """Another immutable asset or scene revision still references this asset."""
 
     def __init__(self, asset_id: str, child_id: str):
-        super().__init__(f"{asset_id} is the parent of {child_id}")
+        super().__init__(f"{asset_id} is referenced by {child_id}")
         self.asset_id = asset_id
         self.child_id = child_id
         self.code = "asset_in_use"
@@ -233,6 +234,40 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_creative_compositions_created
                     ON creative_compositions(created_at DESC);
+                CREATE TABLE IF NOT EXISTS scene_documents (
+                    id TEXT PRIMARY KEY,
+                    owner TEXT NOT NULL,
+                    value_json TEXT NOT NULL,
+                    current_revision_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_scene_documents_owner_updated
+                    ON scene_documents(owner, updated_at DESC);
+                CREATE TABLE IF NOT EXISTS scene_revisions (
+                    id TEXT PRIMARY KEY,
+                    scene_id TEXT NOT NULL REFERENCES scene_documents(id),
+                    sequence INTEGER NOT NULL,
+                    source_asset_id TEXT NOT NULL REFERENCES assets(id),
+                    preview_asset_id TEXT NOT NULL REFERENCES assets(id),
+                    runtime_id TEXT NOT NULL,
+                    value_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(scene_id, sequence)
+                );
+                CREATE INDEX IF NOT EXISTS idx_scene_revisions_scene_sequence
+                    ON scene_revisions(scene_id, sequence);
+                CREATE INDEX IF NOT EXISTS idx_scene_revisions_runtime
+                    ON scene_revisions(runtime_id);
+                CREATE TABLE IF NOT EXISTS scene_revision_dependencies (
+                    revision_id TEXT NOT NULL REFERENCES scene_revisions(id),
+                    asset_id TEXT NOT NULL REFERENCES assets(id),
+                    role TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    PRIMARY KEY(revision_id, role, asset_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_scene_revision_dependencies_asset
+                    ON scene_revision_dependencies(asset_id);
                 """
             )
             columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(jobs)")}
@@ -524,6 +559,7 @@ class Store:
             "video/mp4": ".mp4", "video/webm": ".webm",
             "application/zip": ".zip",
             "model/gltf-binary": ".glb",
+            "application/x-blender": ".blend",
         }[metadata.mime_type]
         storage_name = f"{metadata.id}{suffix}"
         destination = contained(self.asset_dir, self.asset_dir / storage_name)
@@ -615,6 +651,20 @@ class Store:
                 continue
             if asset_id in metadata.parent_asset_ids:
                 raise AssetInUse(asset_id, metadata.id)
+        with self._connect() as connection:
+            scene_reference = connection.execute(
+                """SELECT id FROM scene_revisions
+                   WHERE source_asset_id = ? OR preview_asset_id = ? LIMIT 1""",
+                (asset_id, asset_id),
+            ).fetchone()
+            if scene_reference is None:
+                scene_reference = connection.execute(
+                    """SELECT revision_id AS id FROM scene_revision_dependencies
+                       WHERE asset_id = ? LIMIT 1""",
+                    (asset_id,),
+                ).fetchone()
+        if scene_reference is not None:
+            raise AssetInUse(asset_id, str(scene_reference["id"]))
 
         storage = contained(self.asset_dir, self.asset_dir / str(row["storage_name"]))
         sidecar = contained(self.asset_dir, self.asset_dir / f"{asset_id}.provenance.json")
@@ -634,6 +684,184 @@ class Store:
             except OSError:
                 continue
         self._notify_session("library")
+
+    @staticmethod
+    def _validate_scene_assets(
+        connection: sqlite3.Connection, revision: SceneRevision
+    ) -> None:
+        def asset(asset_id: str) -> Asset:
+            row = connection.execute(
+                "SELECT metadata_json FROM assets WHERE id = ?", (asset_id,)
+            ).fetchone()
+            if row is None:
+                raise SceneError("scene_asset_not_found", "scene revision asset is unavailable")
+            try:
+                return Asset.model_validate_json(row["metadata_json"])
+            except ValidationError as exc:
+                raise SceneError("scene_asset_invalid", "scene revision asset is unreadable") from exc
+
+        source = asset(revision.source_asset_id)
+        preview = asset(revision.preview_asset_id)
+        if source.mime_type != "application/x-blender":
+            raise SceneError("scene_source_invalid", "scene source must be an immutable Blender asset")
+        if preview.mime_type != "model/gltf-binary" or source.id not in preview.parent_asset_ids:
+            raise SceneError(
+                "scene_preview_invalid", "scene preview must be a GLB derived from the Blender source"
+            )
+        for dependency in revision.dependencies:
+            record = asset(dependency.asset_id)
+            if record.sha256 != dependency.sha256:
+                raise SceneError("scene_dependency_changed", "scene dependency identity changed")
+
+    @staticmethod
+    def _insert_scene_revision(
+        connection: sqlite3.Connection, revision: SceneRevision
+    ) -> None:
+        Store._validate_scene_assets(connection, revision)
+        connection.execute(
+            """INSERT INTO scene_revisions
+               (id, scene_id, sequence, source_asset_id, preview_asset_id, runtime_id,
+                value_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                revision.id,
+                revision.scene_id,
+                revision.sequence,
+                revision.source_asset_id,
+                revision.preview_asset_id,
+                revision.runtime_id,
+                revision.model_dump_json(),
+                revision.created_at,
+            ),
+        )
+        connection.executemany(
+            """INSERT INTO scene_revision_dependencies
+               (revision_id, asset_id, role, sha256) VALUES (?, ?, ?, ?)""",
+            [
+                (revision.id, item.asset_id, item.role, item.sha256)
+                for item in revision.dependencies
+            ],
+        )
+
+    def create_scene(
+        self, owner: str, document: SceneDocument, revision: SceneRevision
+    ) -> SceneDocument:
+        if (
+            revision.scene_id != document.id
+            or revision.sequence != 1
+            or revision.parent_revision_id is not None
+            or document.current_revision_id != revision.id
+            or document.revision_count != 1
+        ):
+            raise SceneError("scene_record_invalid", "initial scene revision identity is invalid")
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """INSERT INTO scene_documents
+                   (id, owner, value_json, current_revision_id, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    document.id,
+                    owner,
+                    document.model_dump_json(),
+                    document.current_revision_id,
+                    document.created_at,
+                    document.updated_at,
+                ),
+            )
+            self._insert_scene_revision(connection, revision)
+        self._notify_session("scenes")
+        return document
+
+    def commit_scene(
+        self,
+        owner: str,
+        base_revision_id: str,
+        document: SceneDocument,
+        revision: SceneRevision,
+    ) -> SceneDocument:
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT owner, value_json, current_revision_id FROM scene_documents WHERE id = ?",
+                (document.id,),
+            ).fetchone()
+            if row is None or row["owner"] != owner:
+                raise SceneError("scene_not_found", "scene is unavailable")
+            try:
+                current = SceneDocument.model_validate_json(row["value_json"])
+            except ValidationError as exc:
+                raise SceneError("scene_record_invalid", "scene record is unreadable") from exc
+            if row["current_revision_id"] != base_revision_id:
+                raise SceneError("scene_revision_conflict", "scene current revision changed")
+            if (
+                revision.scene_id != current.id
+                or revision.parent_revision_id != base_revision_id
+                or revision.sequence != current.revision_count + 1
+                or document.current_revision_id != revision.id
+                or document.revision_count != revision.sequence
+                or document.id != current.id
+                or document.name != current.name
+                or document.tags != current.tags
+                or document.collection != current.collection
+                or document.unit_meters != current.unit_meters
+                or document.created_at != current.created_at
+            ):
+                raise SceneError("scene_record_invalid", "scene revision transition is invalid")
+            self._insert_scene_revision(connection, revision)
+            cursor = connection.execute(
+                """UPDATE scene_documents SET value_json = ?, current_revision_id = ?, updated_at = ?
+                   WHERE id = ? AND owner = ? AND current_revision_id = ?""",
+                (
+                    document.model_dump_json(),
+                    revision.id,
+                    document.updated_at,
+                    document.id,
+                    owner,
+                    base_revision_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise SceneError("scene_revision_conflict", "scene current revision changed")
+        self._notify_session("scenes")
+        return document
+
+    def get_scene(self, scene_id: str, owner: str) -> SceneDocument:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT value_json FROM scene_documents WHERE id = ? AND owner = ?",
+                (scene_id, owner),
+            ).fetchone()
+        if row is None:
+            raise SceneError("scene_not_found", "scene is unavailable")
+        try:
+            return SceneDocument.model_validate_json(row["value_json"])
+        except ValidationError as exc:
+            raise SceneError("scene_record_invalid", "scene record is unreadable") from exc
+
+    def list_scenes(self, owner: str, limit: int = 100) -> list[SceneDocument]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT value_json FROM scene_documents WHERE owner = ?
+                   ORDER BY updated_at DESC LIMIT ?""",
+                (owner, max(1, min(100, limit))),
+            ).fetchall()
+        return readable_rows(rows, SceneDocument, "value_json", kind="scene document")
+
+    def list_scene_revisions(self, scene_id: str, owner: str) -> list[SceneRevision]:
+        self.get_scene(scene_id, owner)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT value_json FROM scene_revisions WHERE scene_id = ?
+                   ORDER BY sequence""",
+                (scene_id,),
+            ).fetchall()
+        return readable_rows(rows, SceneRevision, "value_json", kind="scene revision")
+
+    def scene_runtime_reference_count(self, runtime_id: str) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT COUNT(DISTINCT scene_id) AS count FROM scene_revisions WHERE runtime_id = ?",
+                (runtime_id,),
+            ).fetchone()
+        return int(row["count"])
 
     def get_preferences(self, subject: str) -> dict[str, Any]:
         with self._connect() as connection:
