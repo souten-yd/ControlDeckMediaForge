@@ -8083,7 +8083,7 @@ Python compileall、frontend JavaScript構文、shell構文、変更Markdownの�
 
 ## 2026-09-05 — 3DS-1 Blender runtime resolver / read-only Settings diagnostics
 
-PR #215、実装commit `4c7c6f7603733ee65fb28463feded1cb94066668`。
+PR #215、実装commit `4c7c6f793f2c6936b74bfc755fe5f3a29e14def6`。
 MediaForge-ownedのversioned registry/resolverを追加し、既存4.5.9 runtimeを
 `legacy-blender-4.5.9`としてopaque登録した。registryは258 B / mode 0600で、JSONに
 `/data1tb`、`/home`、`/tmp`は含まれない。symlink registry/managed runtime、root脱出、
