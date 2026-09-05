@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import jsonschema
@@ -12,6 +13,16 @@ from mediaforge.domain import JobRequest
 
 
 ROOT = Path(__file__).parents[1]
+
+
+def _walk_dicts(value: object) -> Iterator[dict[str, object]]:
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _walk_dicts(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_dicts(child)
 
 
 def test_public_schemas_are_valid_draft_2020_12():
@@ -72,6 +83,83 @@ def test_scene_texture_job_context_is_bounded_and_only_valid_for_image_generatio
             intent="invalid",
             constraints={"scene_texture": context},
         )
+
+
+def test_3ds7_scene_tools_are_additive_strict_and_keep_job_request_frozen():
+    manifest = json.loads((ROOT / "addon.json").read_text(encoding="utf-8"))
+    agent_tools = manifest["contributions"]["agent_tools"]
+    agent_ids = {item["id"] for item in agent_tools}
+    assert {
+        "media.scene.create",
+        "media.scene.edit",
+        "media.scene.material",
+        "media.scene.snapshot",
+        "media.scene.export",
+        "media.job.status",
+        "media.job.cancel",
+    }.issubset(agent_ids)
+    workflow_ids = {
+        item["id"] for item in manifest["contributions"]["workflow_executors"]
+    }
+    assert "media.scene" in workflow_ids
+
+    scene_schema_paths = {
+        item["schema_path"]
+        for item in agent_tools
+        if item["id"] in {
+            "media.scene.create",
+            "media.scene.edit",
+            "media.scene.material",
+            "media.scene.snapshot",
+            "media.scene.export",
+            "media.job.status",
+            "media.job.cancel",
+        }
+    }
+    scene_schema_paths.add("/schemas/scene-workflow-request.json")
+    assert len(scene_schema_paths) == 7
+    for schema_path in scene_schema_paths:
+        schema = json.loads((ROOT / schema_path.removeprefix("/")).read_text(encoding="utf-8"))
+        jsonschema.Draft202012Validator.check_schema(schema)
+        references = [
+            item["$ref"]
+            for item in _walk_dicts(schema)
+            if isinstance(item.get("$ref"), str)
+        ]
+        assert all(reference.startswith("#/") for reference in references)
+
+    create_schema = json.loads(
+        (ROOT / "schemas/scene-create-request.json").read_text(encoding="utf-8")
+    )
+    example = {
+        "name": "Sword",
+        "recipe": {"operations": [{
+            "type": "primitive.add",
+            "object_id": "blade",
+            "primitive": "cube",
+            "name": "Blade",
+            "dimensions": [0.1, 0.02, 1.2],
+        }]},
+    }
+    jsonschema.validate(example, create_schema)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            {"name": "unsafe", "recipe": {"operations": [{
+                "type": "python.exec", "code": "import os",
+            }]}},
+            create_schema,
+        )
+    operation_properties = []
+    for definition in create_schema["$defs"].values():
+        if isinstance(definition, dict) and "properties" in definition:
+            operation_properties.extend(definition["properties"])
+    assert not {"code", "script", "operator", "path", "url"}.intersection(
+        operation_properties
+    )
+    job_schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
+    assert not {"scene.create", "scene.edit", "scene.material"}.intersection(
+        job_schema["properties"]["operation"]["enum"]
+    )
 
 
 def test_g7_video_contract_is_additive_and_does_not_claim_a_runtime(client):

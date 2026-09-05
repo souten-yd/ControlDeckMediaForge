@@ -363,8 +363,8 @@ Asset and provenance documents conform to [`schemas/asset.json`](../schemas/asse
 `application/x-blender` is an additive Asset MIME used for immutable, validated
 3D scene revisions. The public import endpoint does not accept `.blend` bytes:
 3DS-4 stages them only through the bounded private workspace flow and a trusted
-Blender worker. Scene/revision operations remain private until the 3DS-7 Agent
-tool and workflow compatibility gate.
+Blender worker. Raw import, working-copy and restore operations remain private;
+3DS-7 exposes only the bounded typed recipe surface described below.
 
 The private workspace transport accepts `.blend` only as a declared upload:
 `scenes.import.begin`, sequential `scenes.import.chunk` calls, then
@@ -390,7 +390,8 @@ into a trusted Blender working copy, then runs the existing Blender and GLB
 validators before committing a new immutable revision. The standalone mirrors
 are `GET /workspace-api/scenes/{scene_id}/material-targets` and
 `POST /workspace-api/scenes/{scene_id}/materials`. These remain excluded from
-OpenAPI, Agent tools, workflow executors, and `addon.json` until the 3DS-7 gate.
+OpenAPI and workflow executors. 3DS-7 publishes the same binding through the
+dedicated `media.scene.material` Agent tool.
 
 3DS-6b reuses the existing durable `image.generate` job for new scene images.
 `constraints.scene_texture` is the typed `media-forge.scene-texture-request@1`
@@ -410,7 +411,38 @@ mirror `POST /workspace-api/scenes/{scene_id}/revisions/restore`. The only input
 preview, and dependency identities, clones them under new Asset/provenance IDs,
 and advances the head with a new linear SceneRevision. It never rewrites history
 or aliases the old source/preview Asset as the new output. This remains excluded
-from OpenAPI, Agent tools, workflow executors, and `addon.json` until 3DS-7.
+from OpenAPI and the public mutation tools. The Agent snapshot tool can inspect
+the resulting immutable current revision but cannot invoke restore.
+
+### Typed 3D scene Agent and workflow tools
+
+3DS-7 adds `media.scene.create`, `media.scene.edit`, `media.scene.material`,
+`media.scene.snapshot`, `media.scene.export`, `media.job.status`, and
+`media.job.cancel`, plus the `media.scene` workflow executor. Their self-contained
+Draft 2020-12 schemas are `schemas/scene-*.json`. Create/edit recipes accept at
+most 64 sequential operations from a closed vocabulary: primitive creation,
+meter-based dimensions/transform, stable object IDs, bounded bevel, Principled
+material, smart-project UV, light, and camera. No schema accepts Python, a
+Blender operator name, shell text, URL, or filesystem path.
+
+Create, edit, and image MaterialBinding return a local durable Job reference
+immediately after ControlDeck creates a `detached=true` child Job. Media Forge
+switches to the returned child credential for progress/control, refreshes it
+before expiry, polls Host cancel, and never persists the bearer token. SQLite
+persists the local/Host Job IDs, stable owner, exact input and idempotency hashes,
+pinned Blender runtime/version, base revision, stage, result, retry parent, and
+terminal outbox state. A restart without the short-lived identity fails closed
+as `service_restarted` or `host_context_lost`; it does not replay Blender work.
+Retry is a new Job and must carry byte-equivalent typed input through
+`retry_job_id`. Successful revisions require the same independent Blender and
+GLB validators as UI work.
+
+ControlDeck Agent calls use a different execution `job:` subject for each tool.
+When current Host introspection returns its signed optional `actor_subject`, it
+is the scene owner key across those calls; the execution/child subject remains
+the only Host-operation authority. On older Hosts, ownership remains scoped to
+the individual subject instead of guessing a user. Status/cancel/snapshot/export
+recheck this owner and expose only opaque Scene/Revision/Asset/Job IDs.
 
 ## Reference collections and profiles
 

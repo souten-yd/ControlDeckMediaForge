@@ -150,6 +150,10 @@ Conceptual manifest:
       {
         "name": "media.generate",
         "schema_url": "/addon/v1/tools/media.generate/schema"
+      },
+      {
+        "name": "media.scene.create",
+        "schema_url": "/schemas/scene-create-request.json"
       }
     ]
   },
@@ -336,6 +340,10 @@ nonce/session binding
 For the current Add-on Runtime HTTP contract, Media Forge validates this
 credential through Host token introspection. It does not receive ControlDeck's
 signing key and does not validate by importing Host internals.
+The execution `subject` remains the authority for each Host operation. When
+introspection supplies the additive signed `actor_subject`, Media Forge uses it
+only as the stable owner key for durable scenes across per-call Agent Job
+subjects; older Hosts safely retain subject-scoped ownership.
 
 ### Namespaced permissions
 

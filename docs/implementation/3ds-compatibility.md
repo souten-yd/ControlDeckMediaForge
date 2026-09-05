@@ -1,6 +1,6 @@
 # 3D Studio compatibility baseline
 
-Status: 3DS-0〜4・3DS-5a/6a VERIFIED / 3DS-5b〜5d source VERIFIED
+Status: 3DS-0〜4・3DS-5a/6a〜6c/7 source/package VERIFIED / 3DS-5b〜5d source VERIFIED
 Date: 2026-09-06
 
 この表は統合3D Studio着手時の互換性基準である。既存画像・G8・公開契約を、後続実装の
@@ -276,3 +276,25 @@ console/page error 0。
 `ok / 0.28.8 / packaged=true`。exact package + 実Chromeでもdependency 1件をrevision 8→9へ復元し、
 比較0.129秒、復元0.075秒、desktop/390pxの2画面WebGL、overflow 0、browser error 0、同じsource/GLB
 hash、Blender/GLB validator passed。実ControlDeck opaque iframeは **NOT TESTED** のまま3DS-8へ残す。
+
+## 3DS-7 typed Agent recipe互換性
+
+既存4 Agent toolと`media.generate` workflowを変えず、scene create/edit/material/snapshot/export、durable
+status/cancelと`media.scene` workflowを加法追加した。schemaとruntime validationはいずれもextraを拒否し、
+最大64件の固定操作だけをtrusted Blender workerへ渡す。path、URL、shell、Python、任意operatorは入力に無い。
+成果物は既存SceneRevision、Asset、provenance、Blender/GLB validatorを再利用し、material dependencyと親source
+hashを保持する。
+
+Host child Jobはdetachedで開始し、child credentialのrefresh/control/terminalだけを使う。SQLiteはbearerを
+保存せず、restartはfail-closed。per-call execution subjectをownerへ流用せず、merged ControlDeck PR #270の
+signed optional `actor_subject`をownerだけへ使う。待機中Host cancel、local cancel、shutdown、exact-input retry、
+restart recoveryは自動testで確認した。
+
+実Blender manager create→edit→materialはrevision 3、`.blend` 501,758 B、GLB 62,136 B、triangles 644、
+texture dependency 1件、両validator passed。全10操作probeは0.22秒、507,364 B、stable object 6件、
+autoexec disabled。fullは977 passed / warning 1件 / 96.24秒。0.28.9 bundleは31,619,208 B / SHA-256
+`ec24a51465e952929239f822ac7f33f971ee5d7230ef3f91527884edea9d3c07`、packaged doctor成功、実processから
+8 routeと7 schemaを取得した。
+
+実installed OpenCodeの指示→shape→texture→GLB→grant配置、opaque iframe、長時間credential refresh、
+restart/update/rollbackは **NOT TESTED** で3DS-8へ残す。

@@ -44,8 +44,9 @@ Blender runtime ID/version、validation report、作成時刻を固定し、後�
 最初のrevisionも`.blend`とGLBの両方が独立検査を通るまでcurrentにしない。
 
 `.blend` AssetのMIMEは`application/x-blender`として既存Asset契約へ加法的に追加する。
-scene/revision/lock操作は3DS-4ではprivate workspaceだけに置き、Agent tool / workflow executorは
-3DS-7の互換試験まで公開しない。応答へowner文字列、DB key、runtime path、working pathを返さない。
+scene/revision/lock操作は3DS-4ではprivate workspaceだけに置く。3DS-7では互換試験後、同じdomain
+orchestrationの型付きAgent tool / workflow executorだけを加法公開する。応答へowner文字列、DB key、
+runtime path、working pathを返さない。
 
 WorkingCopyは`working_<32 hex>`で識別し、scene単位のsingle-writer lock、owner、base revision、
 runtime pin、期限をDBへ保持する。lock leaseは初期10分、正規ownerだけがrenew/releaseできる。
@@ -147,7 +148,7 @@ OpenCode → ControlDeck `controldeck_addons` stdio MCP → MediaForge agent con
 既存の `media.capabilities`、`media.generate`、`media.inspect`、`media.pack` は継続。
 画像生成・既存G8加工は現在のschemaで呼ぶ。新しい制作コマンドは加法的schemaの設計・互換試験後に公開。
 
-提案する追加surface（名前は公開前に衝突検査し固定。現時点で利用不可）:
+3DS-7で固定した追加surface:
 
 | 提案tool | 入力と役割 |
 |---|---|

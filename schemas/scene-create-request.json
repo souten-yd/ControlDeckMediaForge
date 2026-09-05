@@ -1,0 +1,711 @@
+{
+  "$defs": {
+    "BevelModifier": {
+      "additionalProperties": false,
+      "description": "Add a bounded non-destructive bevel modifier to a mesh object.",
+      "properties": {
+        "type": {
+          "const": "modifier.bevel",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Width",
+          "type": "number"
+        },
+        "segments": {
+          "default": 2,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Segments",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "width"
+      ],
+      "title": "BevelModifier",
+      "type": "object"
+    },
+    "CameraAdd": {
+      "additionalProperties": false,
+      "description": "Add and activate one camera with transforms expressed in degrees.",
+      "properties": {
+        "type": {
+          "const": "camera.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "location": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Location",
+          "type": "array"
+        },
+        "rotation_degrees": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Degrees",
+          "type": "array"
+        },
+        "focal_length_mm": {
+          "default": 50,
+          "maximum": 300,
+          "minimum": 1,
+          "title": "Focal Length Mm",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "name",
+        "location",
+        "rotation_degrees"
+      ],
+      "title": "CameraAdd",
+      "type": "object"
+    },
+    "LightAdd": {
+      "additionalProperties": false,
+      "description": "Add one local light preset with a stable object ID.",
+      "properties": {
+        "type": {
+          "const": "light.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "light": {
+          "enum": [
+            "area",
+            "point",
+            "sun"
+          ],
+          "title": "Light",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "energy": {
+          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "title": "Energy",
+          "type": "number"
+        },
+        "location": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Location",
+          "type": "array"
+        },
+        "rotation_degrees": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Degrees",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "light",
+        "name",
+        "energy"
+      ],
+      "title": "LightAdd",
+      "type": "object"
+    },
+    "MaterialSet": {
+      "additionalProperties": false,
+      "description": "Assign a simple Principled BSDF material without external textures.",
+      "properties": {
+        "type": {
+          "const": "material.set",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "name": {
+          "default": "Material",
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "base_color": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            }
+          ],
+          "title": "Base Color",
+          "type": "array"
+        },
+        "metallic": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Metallic",
+          "type": "number"
+        },
+        "roughness": {
+          "default": 0.5,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Roughness",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "base_color"
+      ],
+      "title": "MaterialSet",
+      "type": "object"
+    },
+    "PrimitiveAdd": {
+      "additionalProperties": false,
+      "description": "Add one bounded mesh primitive; dimensions and location are in meters.",
+      "properties": {
+        "type": {
+          "const": "primitive.add",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "primitive": {
+          "enum": [
+            "cube",
+            "cylinder",
+            "cone",
+            "uv_sphere"
+          ],
+          "title": "Primitive",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "dimensions": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1000,
+              "type": "number"
+            },
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1000,
+              "type": "number"
+            },
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 1000,
+              "type": "number"
+            }
+          ],
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "location": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Location",
+          "type": "array"
+        },
+        "rotation_degrees": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Degrees",
+          "type": "array"
+        },
+        "vertices": {
+          "default": 32,
+          "maximum": 128,
+          "minimum": 3,
+          "title": "Vertices",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "primitive",
+        "name",
+        "dimensions"
+      ],
+      "title": "PrimitiveAdd",
+      "type": "object"
+    },
+    "SceneRecipe": {
+      "additionalProperties": false,
+      "description": "Operations applied sequentially by a fixed worker; scripts and operator names are forbidden.",
+      "properties": {
+        "schema_version": {
+          "const": "media-forge.scene-recipe@1",
+          "default": "media-forge.scene-recipe@1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "operations": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "camera.add": "#/$defs/CameraAdd",
+                "light.add": "#/$defs/LightAdd",
+                "material.set": "#/$defs/MaterialSet",
+                "modifier.bevel": "#/$defs/BevelModifier",
+                "primitive.add": "#/$defs/PrimitiveAdd",
+                "transform.set": "#/$defs/TransformSet",
+                "uv.smart_project": "#/$defs/UvSmartProject"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/PrimitiveAdd"
+              },
+              {
+                "$ref": "#/$defs/TransformSet"
+              },
+              {
+                "$ref": "#/$defs/BevelModifier"
+              },
+              {
+                "$ref": "#/$defs/MaterialSet"
+              },
+              {
+                "$ref": "#/$defs/UvSmartProject"
+              },
+              {
+                "$ref": "#/$defs/LightAdd"
+              },
+              {
+                "$ref": "#/$defs/CameraAdd"
+              }
+            ]
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Operations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "operations"
+      ],
+      "title": "SceneRecipe",
+      "type": "object"
+    },
+    "TransformSet": {
+      "additionalProperties": false,
+      "description": "Replace one or more transforms on an existing stable object ID.",
+      "properties": {
+        "type": {
+          "const": "transform.set",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "dimensions": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1000,
+                  "type": "number"
+                },
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1000,
+                  "type": "number"
+                },
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1000,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dimensions"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                },
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                },
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "rotation_degrees": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                },
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                },
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rotation Degrees"
+        }
+      },
+      "required": [
+        "type",
+        "object_id"
+      ],
+      "title": "TransformSet",
+      "type": "object"
+    },
+    "UvSmartProject": {
+      "additionalProperties": false,
+      "description": "Create a bounded smart-project UV map on a mesh object.",
+      "properties": {
+        "type": {
+          "const": "uv.smart_project",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "island_margin": {
+          "default": 0.02,
+          "maximum": 0.25,
+          "minimum": 0,
+          "title": "Island Margin",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "object_id"
+      ],
+      "title": "UvSmartProject",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Create a new immutable 3D scene and return a detached durable Job immediately.",
+  "properties": {
+    "name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+      "title": "Name",
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Tags",
+      "type": "array"
+    },
+    "collection": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Collection"
+    },
+    "recipe": {
+      "$ref": "#/$defs/SceneRecipe"
+    },
+    "retry_job_id": {
+      "anyOf": [
+        {
+          "pattern": "^job_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retry Job Id"
+    }
+  },
+  "required": [
+    "name",
+    "recipe"
+  ],
+  "title": "SceneCreateRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/scene-create-request.json"
+}

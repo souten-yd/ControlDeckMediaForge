@@ -118,6 +118,15 @@ from .profiles import ProfileInput, ReferenceCollectionInput
 from .scene_backup_transport import SceneBackupSession
 from .scenes import SceneCatalog, SceneError
 from .scene_workspace import SceneWorkspace
+from .scene_recipe_jobs import SceneRecipeJobManager
+from .scene_recipes import (
+    SceneCreateRequest,
+    SceneEditRequest,
+    SceneExportRequest,
+    SceneJobReferenceRequest,
+    SceneMaterialRequest,
+    SceneReferenceRequest,
+)
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .preferences import PreferenceError
 from .reference_intelligence import (
@@ -260,8 +269,10 @@ def create_app(
         blender_runtimes,
         REPOSITORY_ROOT / "worker_packs/blender/scene_document.py",
         material_worker=REPOSITORY_ROOT / "worker_packs/blender/material_binding.py",
+        recipe_worker=REPOSITORY_ROOT / "worker_packs/blender/scene_recipe.py",
         process_timeout_sec=resolved.blender_timeout_sec,
     )
+    scene_recipe_jobs = SceneRecipeJobManager(store, scene_workspace, host)
     try:
         blender_runtimes.register_legacy()
     except BlenderRuntimeRegistryError as exc:
@@ -489,6 +500,7 @@ def create_app(
         scene_workspace.initialize()
         standalone_scene_backups.initialize()
         await manager.start()
+        await scene_recipe_jobs.start()
         await blender_runtime_operations.start()
         await blender_sessions.start()
         if model_operations is not None:
@@ -503,6 +515,7 @@ def create_app(
             await model_evaluations.stop()
         if model_operations is not None:
             await model_operations.stop()
+        await scene_recipe_jobs.stop()
         await blender_sessions.stop()
         await blender_runtime_operations.stop()
         await manager.stop()
@@ -520,6 +533,7 @@ def create_app(
     app.state.store = store
     app.state.scenes = scenes
     app.state.scene_workspace = scene_workspace
+    app.state.scene_recipe_jobs = scene_recipe_jobs
     app.state.scene_backups = standalone_scene_backups
     app.state.jobs = manager
     app.state.job_events = events
@@ -655,6 +669,9 @@ def create_app(
 
     async def authorize_host(request: Request) -> HostIdentity:
         return await require_host_service(request, host)
+
+    def scene_owner(identity: HostIdentity) -> str:
+        return identity.actor_subject or preferences.subject_of(identity)
 
     def public_model(item: ModelDescriptor) -> dict[str, Any]:
         value: dict[str, Any] = {
@@ -980,10 +997,18 @@ def create_app(
                 "command:create-media": token_state,
                 "settings:settings": "available",
                 "workflow_executor:media.generate": token_state,
+                "workflow_executor:media.scene": token_state,
                 "agent_tool:media.capabilities": token_state,
                 "agent_tool:media.generate": token_state,
                 "agent_tool:media.inspect": token_state,
                 "agent_tool:media.pack": token_state,
+                "agent_tool:media.scene.create": token_state,
+                "agent_tool:media.scene.edit": token_state,
+                "agent_tool:media.scene.material": token_state,
+                "agent_tool:media.scene.snapshot": token_state,
+                "agent_tool:media.scene.export": token_state,
+                "agent_tool:media.job.status": token_state,
+                "agent_tool:media.job.cancel": token_state,
                 "context_action:edit-image": token_state,
             },
             "setup": (
@@ -1260,6 +1285,16 @@ def create_app(
                     {"state": "available", "profile": "3d.project.glb"}
                     if blender_runtimes.resolve_g8() is not None
                     else {"state": "unavailable", "reason": "runtime_not_installed"}
+                ),
+                "3d.scene_recipe": (
+                    {
+                        "state": "available",
+                        "implementation": "typed_blender_worker",
+                        "schema_version": "media-forge.scene-recipe@1",
+                        "local_only": True,
+                    }
+                    if blender_runtimes.resolve_g8() is not None
+                    else {"state": "unavailable", "reason": "runtime_not_installed", "local_only": True}
                 ),
                 # 旗を立てて回るのではなく、実際に走らせられるかで決める。
                 # 実測済みの動画モデルと動画 runtime の両方が揃ったときだけ出す。
@@ -2073,6 +2108,174 @@ def create_app(
         result = submitted_reference(terminal)
         result["asset_id"] = terminal["asset_ids"][0] if terminal["asset_ids"] else None
         return result
+
+    def scene_tool_input(payload: object) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=422, detail={"code": "invalid_execution_envelope"})
+        reject_host_paths(payload)
+        value = payload.get("input", {})
+        if not isinstance(value, dict):
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_request"})
+        return value
+
+    async def submit_scene_tool(
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        identity: HostIdentity,
+    ) -> dict[str, Any]:
+        try:
+            job, task = await scene_recipe_jobs.submit(
+                value, identity, retry_of=value.retry_job_id
+            )
+        except HostApiError as exc:
+            raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from exc
+        except (SceneError, KeyError) as exc:
+            code = getattr(exc, "code", "scene_job_not_found")
+            status = 404 if isinstance(exc, KeyError) else 422
+            raise HTTPException(status_code=status, detail={"code": code}) from exc
+        return {
+            "job_id": job.id,
+            "status": job.status.value,
+            "asset_ids": job.asset_ids,
+            "detached": True,
+            "host_job_id": task.host_job_id,
+            "input_sha256": task.input_sha256,
+        }
+
+    @app.post("/addon/v1/agent/scene/create")
+    async def agent_scene_create(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneCreateRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_recipe"}) from exc
+        return await submit_scene_tool(value, identity)
+
+    @app.post("/addon/v1/agent/scene/edit")
+    async def agent_scene_edit(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneEditRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_recipe"}) from exc
+        return await submit_scene_tool(value, identity)
+
+    @app.post("/addon/v1/agent/scene/material")
+    async def agent_scene_material(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneMaterialRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "invalid_scene_material_binding"}
+            ) from exc
+        return await submit_scene_tool(value, identity)
+
+    @app.post("/addon/v1/workflow/media.scene/execute")
+    async def workflow_scene_execute(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        value = scene_tool_input(await request.json())
+        action = value.pop("action", None)
+        try:
+            parsed = (
+                SceneCreateRequest.model_validate(value)
+                if action == "create"
+                else SceneEditRequest.model_validate(value)
+                if action == "edit"
+                else SceneMaterialRequest.model_validate(value)
+                if action == "material"
+                else None
+            )
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_recipe"}) from exc
+        if parsed is None:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_action"})
+        submitted = await submit_scene_tool(parsed, identity)
+        return {
+            "job_id": submitted["job_id"],
+            "status": submitted["status"],
+            "asset_ids": submitted["asset_ids"],
+        }
+
+    @app.post("/addon/v1/agent/scene/snapshot")
+    async def agent_scene_snapshot(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneReferenceRequest.model_validate(
+                scene_tool_input(await request.json())
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "invalid_scene_id"}
+            ) from exc
+        try:
+            document, revisions = scenes.get(scene_owner(identity), value.scene_id)
+        except (KeyError, SceneError) as exc:
+            raise HTTPException(status_code=404, detail={"code": "scene_not_found"}) from exc
+        current = next(item for item in revisions if item.id == document.current_revision_id)
+        return {
+            "scene": document.model_dump(mode="json"),
+            "revision": current.model_dump(mode="json"),
+        }
+
+    @app.post("/addon/v1/agent/scene/export")
+    async def agent_scene_export(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneExportRequest.model_validate(
+                scene_tool_input(await request.json())
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "invalid_scene_export"}
+            ) from exc
+        try:
+            document, revisions = scenes.get(scene_owner(identity), value.scene_id)
+        except (KeyError, SceneError) as exc:
+            raise HTTPException(status_code=404, detail={"code": "scene_not_found"}) from exc
+        current = next(item for item in revisions if item.id == document.current_revision_id)
+        asset_id = (
+            current.preview_asset_id
+            if value.format == "glb"
+            else current.source_asset_id
+        )
+        asset = store.get_asset(asset_id)
+        return {
+            "scene_id": value.scene_id,
+            "revision_id": current.id,
+            "asset": asset.model_dump(mode="json"),
+        }
+
+    @app.post("/addon/v1/agent/job/status")
+    async def agent_scene_job_status(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneJobReferenceRequest.model_validate(
+                scene_tool_input(await request.json())
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "invalid_job_id"}
+            ) from exc
+        try:
+            return scene_recipe_jobs.projection(value.job_id, scene_owner(identity))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "job_not_found"}) from exc
+
+    @app.post("/addon/v1/agent/job/cancel")
+    async def agent_scene_job_cancel(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneJobReferenceRequest.model_validate(
+                scene_tool_input(await request.json())
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "invalid_job_id"}
+            ) from exc
+        try:
+            return await scene_recipe_jobs.cancel(value.job_id, scene_owner(identity))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "job_not_found"}) from exc
 
     @app.post("/addon/v1/agent/inspect")
     async def agent_inspect(request: Request) -> dict[str, Any]:

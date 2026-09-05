@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "MaterialBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "media-forge.material-binding@1",
+          "default": "media-forge.material-binding@1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_revision_id": {
+          "pattern": "^revision_[0-9a-f]{32}$",
+          "title": "Source Revision Id",
+          "type": "string"
+        },
+        "image_asset_id": {
+          "pattern": "^asset_[0-9a-f]{32}$",
+          "title": "Image Asset Id",
+          "type": "string"
+        },
+        "object_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f]+$",
+          "title": "Object Name",
+          "type": "string"
+        },
+        "material_slot": {
+          "maximum": 255,
+          "minimum": 0,
+          "title": "Material Slot",
+          "type": "integer"
+        },
+        "channel": {
+          "default": "base_color",
+          "enum": [
+            "base_color",
+            "roughness",
+            "metallic",
+            "normal",
+            "emission"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "uv_map": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[^\\x00-\\x1f]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uv Map"
+        },
+        "wrap": {
+          "default": "repeat",
+          "enum": [
+            "repeat",
+            "extend",
+            "clip"
+          ],
+          "title": "Wrap",
+          "type": "string"
+        },
+        "color_space": {
+          "default": "srgb",
+          "enum": [
+            "srgb",
+            "non_color"
+          ],
+          "title": "Color Space",
+          "type": "string"
+        },
+        "normal_convention": {
+          "default": "open_gl",
+          "enum": [
+            "open_gl",
+            "direct_x"
+          ],
+          "title": "Normal Convention",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_revision_id",
+        "image_asset_id",
+        "object_name",
+        "material_slot"
+      ],
+      "title": "MaterialBinding",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Bind an existing Media Forge image Asset to an exact scene revision.",
+  "properties": {
+    "scene_id": {
+      "pattern": "^scene_[0-9a-f]{32}$",
+      "title": "Scene Id",
+      "type": "string"
+    },
+    "binding": {
+      "$ref": "#/$defs/MaterialBinding"
+    },
+    "retry_job_id": {
+      "anyOf": [
+        {
+          "pattern": "^job_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retry Job Id"
+    }
+  },
+  "required": [
+    "scene_id",
+    "binding"
+  ],
+  "title": "SceneMaterialRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/scene-material-request.json"
+}

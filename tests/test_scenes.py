@@ -167,6 +167,7 @@ def test_scene_schema_migrates_and_create_is_owner_scoped_and_immutable(tmp_path
         "scene_revisions",
         "scene_revision_dependencies",
         "scene_working_copies",
+        "scene_recipe_tasks",
     }
 
     for asset in (source, preview, dependency):
