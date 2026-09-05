@@ -99,3 +99,23 @@ def test_a_warm_worker_is_not_reused_across_placements(tmp_path: Path):
 
     assert first == again
     assert moved != first
+
+
+def test_the_worker_is_gone_before_the_host_is_asked_for_its_vlm(tmp_path: Path):
+    """lease を返す前に worker を終わらせる。
+
+    生成の lease を持ったまま Host に VLM を載せさせると単一 GPU で deadlock
+    する。そのため lease は評価の前に返す。ところが worker を残す作りにした
+    ぶん（差分の 4 枚で載せ直さないため）、lease を返しただけでは VRAM は
+    空かない。broker から見て「空いた」のに物理的には埋まったままになる。
+    """
+    import inspect
+
+    source = inspect.getsource(JobManager._execute_worker)
+    release = source.index("_release_host_resource")
+    retire = source.rindex("_retire_warm_worker", 0, release)
+    between = source[retire:release]
+
+    # 直前が qa.semantic の条件つき retire であること。
+    assert "job.request.qa.semantic" in source[:retire]
+    assert "_release_host_resource" not in between

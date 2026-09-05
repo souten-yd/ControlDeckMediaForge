@@ -156,3 +156,41 @@ def test_a_model_with_no_adapter_is_not_promoted_by_measuring_it(tmp_path: Path)
     with pytest.raises(CustomModelError) as failure:
         catalog.record_measurement("owner/odd", {"execution_peak_vram_bytes": 1})
     assert failure.value.code == "custom_model_unsupported"
+
+
+def test_the_measurement_is_what_this_worker_added_not_what_the_card_holds():
+    """同時に載っている LLM のぶんを「このモデルに要る量」として記録しない。
+
+    実際それで FLUX.2 Klein 4B（重み 15GB）に読み込みピーク 30.1GB が記録され、
+    32GB のカードに載らないモデルとして扱われていた。要求は 31.1GiB になり、
+    RAM 30GB の機械では host 配置も永久に成立しなかった。
+    """
+    from mediaforge.image_evaluation import DeviceSampler
+
+    sampler = DeviceSampler()
+    # 20GB を他人が使っている状態で、worker が 8GB 足した。
+    sampler.samples = [20_000_000_000, 28_000_000_000, 24_000_000_000]
+
+    assert sampler.peak() == 28_000_000_000
+    assert sampler.increment(20_000_000_000) == 8_000_000_000
+
+
+def test_an_unreadable_device_is_not_reported_as_zero_need():
+    """読めなかったものを 0 にすると「何も使わないモデル」として採用される。"""
+    from mediaforge.image_evaluation import DeviceSampler
+
+    sampler = DeviceSampler()
+
+    assert sampler.peak() == -1
+    assert sampler.increment(0) == -1
+    assert DeviceSampler().increment(-1) == -1
+
+
+def test_a_shrinking_card_never_reports_a_negative_need():
+    """測っている間に他の process が降りると、増分が負になりうる。"""
+    from mediaforge.image_evaluation import DeviceSampler
+
+    sampler = DeviceSampler()
+    sampler.samples = [5_000_000_000]
+
+    assert sampler.increment(20_000_000_000) == 0

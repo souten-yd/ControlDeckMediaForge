@@ -1872,6 +1872,13 @@ class JobManager:
             if maintenance is not None:
                 maintenance.cancel()
                 await asyncio.gather(maintenance, return_exceptions=True)
+            if job.request.qa.semantic:
+                # lease を返す前に worker を終わらせる。返しただけでは VRAM は
+                # 空かない（worker は次の job のために残っている）。broker から
+                # 見て「空いた」のに物理的には埋まったまま Host に VLM を
+                # 載せさせると、単一 GPU では入らない。上の deadlock 回避が
+                # 効くのは、lease と VRAM の寿命が揃っているときだけである。
+                await self._retire_warm_worker()
             if not await self._release_host_resource(execution):
                 await self._update(
                     job_id,

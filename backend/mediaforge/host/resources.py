@@ -126,6 +126,10 @@ def image_model_request(
             "cold_load_peak_bytes": estimate.cold_load_peak_bytes,
             "headroom_bytes": estimate.headroom_bytes,
             "confidence": model.measurement_confidence,
+            # 全常駐できないときの下限。broker はここまで枠を切り詰めて貸す。
+            # 測っていないモデルには送らない（推測で下限を名乗ると OOM する）。
+            **({"minimum_bytes": int(model.minimum_vram_bytes)}
+               if model.minimum_vram_bytes else {}),
         },
         # LLM と場所を分け合う。exclusive だと、LLM が載っている間は VRAM の
         # 空きに関係なく断られ、共存にならない。
