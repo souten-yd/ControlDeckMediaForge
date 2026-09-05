@@ -661,8 +661,12 @@ class SceneWorkspace:
 
     def retain_working_copy_for_recovery(self, owner: str, working_id: str) -> SceneWorkingCopy:
         """End the writer lease without deleting bytes after a GUI/session failure."""
+        owner = validate_scene_owner(owner)
+        current = self.store.get_scene_working_copy(owner, working_id)
+        if current.state == "recovery":
+            return current
         return self.store.finish_scene_working_copy(
-            validate_scene_owner(owner), working_id, "recovery", now=_iso(self._now())
+            owner, working_id, "recovery", now=_iso(self._now())
         )
 
     async def commit_working_copy(

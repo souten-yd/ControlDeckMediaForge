@@ -8912,3 +8912,46 @@ Media Forgeはprivate noVNC/loader routeからorigin headerを除く。standalon
 979 passed / 既知Starlette warning 1件 / 99.40秒。candidate bundleは31,619,226 B / SHA-256
 `17a28d98ffe8cd3afaf71b8b8e66aea902675f423708db00602b45f366d7ab42`、展開binary doctorは
 `ok / 0.28.14 / packaged=true`。PR/release/installed browser再実測は未実施。
+
+## 2026-09-06 — 3DS-8 installed lifecycle / recovery conflict
+
+正式v0.28.14 bundleは31,619,593 B / SHA-256
+`b4c8b6eae43e9e290339b30522081f388f40c3e8e8d3299e4dd1cda5cf27bd2b`。公開4 assetを再取得しhash一致、
+ControlDeck標準updateは10.67秒 / 最大RSS 789,092 KiB、health healthyだった。実OpenCode 1.18.27 /
+Qwen3.8-27Bはtyped scene作成、status、snapshot、GLB export、project grant、`media.pack`を完走した。
+
+実installed opaque iframeのscene `scene_ca920fd634b14dfea8215567e930bb7a`では、621.451秒のsessionを維持して
+reload/reconnect、別browserの`blender_session_busy`、noVNC入力、revision 2→3保存を確認した。desktopは
+inner/client/scroll 1056、mobileは390/390/390で、mobileのBlender操作はdisabled、browser error 0。
+既存Library画像Asset `asset_0daea4caf7c74cd49ed85bbef9fba0d6`をBlade/base colorへ明示適用し、
+revision 3→4となった。
+
+Blender unitのSIGKILLは2.846秒で`blender_session_runner_lost`となり、working copy 1,438,783 B /
+SHA-256 `a5a462671e1607780bed2cfd37d8f3757dcd722fd79a54873905bdd2215cfe45`をcandidateへ保持し、
+新sessionからrevision 6へ保存した。idle/disconnectを一時5秒にした実sessionは接続から8.695秒で
+`blender_session_idle_timeout`となり、candidateをrevision 8へ保存した。設定drop-inは削除し、installed serviceは
+既定1800/300秒へ戻した。MediaForge core再起動中の実RFB sessionは0.933秒でhealth復帰し、同sessionへ再接続して
+revision 9へ保存した。再起動で切れた旧WebSocketの403/1006だけを観測し、再接続後は成功した。
+
+実Host署名service tokenをTTL 20秒で発行してRFB bannerまで接続し、15秒周期再検査がexpiryを検出して
+25.038秒後にcode 4403 / `host service token expired`で閉じた。sessionは
+`blender_session_host_revoked`、candidateをrevision 10へ保存した。秘密tokenは出力・保存していない。
+
+R9700/gfx1201の実VRAMは34,208,743,424 B。Eevee GPU 64x64は2.7709秒、Cycles HIP 4 samplesは
+0.26939秒、最大RSS 3,002,844 KiB。Host LLMが27 GB級VRAMを使用中にtexture image jobを投入すると
+Brokerが`waiting_resource`へ置き、LLMをunload/reloadしても画像workerと同時実行せずcancelできた。
+Host watchdog再起動中のdetached scene jobは`host_context_lost`へfail-closedした。これは120秒超の成功証拠ではなく、
+画像生成成功・採用と120秒超detached jobは **NOT TESTED**。
+
+ControlDeckのrelease verifier focused 37件はPASS。正式v0.28.14に対しtrusted署名は受理し、signed manifest改ざん、
+wrong key、artifact改ざん、v0.28.13 downgradeはすべて拒否した。live update失敗を注入したrollbackは
+**NOT TESTED**。
+
+GUI編集中にscene headを進めてから保存した実競合は正式revisionを上書きせず`scene_revision_conflict`となった。
+一方、commitがworking copyをrecoveryへ遷移した後の失敗処理が同じ遷移を再要求し、保存されているcandidateを
+responseへ投影できず`result.recovery=null`となる不具合を検出した。`retain_working_copy_for_recovery`を
+owner検証付きidempotent操作へ変更し、既存recovery recordをそのまま返す回帰を追加した。版は0.28.15。
+focused workspace/session 27件、exact head `./mf.sh test`は980 passed / 既知Starlette warning 1件 /
+100.41秒。candidate bundleは31,618,953 B / SHA-256
+`f95701cb35c609ad3cf8b0ed75323ad4eb9940171e72b1a20b29f58124f5a02f`、展開binary doctorは
+`ok / 0.28.15 / packaged=true`。正式releaseとinstalled競合再確認は **NOT TESTED**。

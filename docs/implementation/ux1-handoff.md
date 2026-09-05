@@ -3,6 +3,31 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-8 release acceptance / recovery conflict
+
+branch `ux1/3d-release-acceptance`。正式v0.28.14を実ControlDeckへ標準updateし、installed opaque iframe、
+OpenCode、Blender、Host lifecycleを通し確認した。10分超GUIは621.451秒接続を維持し、reload/reconnect、
+別browser writer拒否、noVNC入力、revision 2→3保存、390px横overflow 0、browser error 0。既存Library画像は
+revision 3→4へ材質適用した。Blender crashは2.846秒で検出して1,438,783 Bのrecoveryを保持し保存、idleは
+5秒設定時に接続から8.695秒で終了してrecovery保存、MediaForge再起動は0.933秒でhealth復帰後に同sessionへ
+再接続してrevision保存、実Host token 20秒TTLはRFBを25.038秒後に4403で閉じrecovery保存した。既定
+idle/disconnect値1800/300秒へ戻した。
+
+R9700/gfx1201はVRAM 34,208,743,424 B。Eevee 64x64は2.7709秒、Cycles HIP 4 samplesは0.26939秒、
+最大RSS 3,002,844 KiB。LLM処理中の画像jobはBrokerで`waiting_resource`となり、LLM unload/reload後も
+同時GPU実行せずcancelできた。正式bundle 31,619,593 B / SHA-256
+`b4c8b6eae43e9e290339b30522081f388f40c3e8e8d3299e4dd1cda5cf27bd2b`は署名、公開再取得、manifest/artifact
+改ざん、wrong key、downgrade拒否を実測した。
+
+同sceneのGUI編集中にcurrent revisionを進める保存競合では正式版を上書きせず
+`scene_revision_conflict`となったが、commit処理がすでにworking copyをrecoveryへ遷移した後、失敗projectionが
+同じ遷移を再要求して`result.recovery=null`にした。recovery保持をowner検証付きidempotent操作へ修正し、
+既存candidateを返す回帰を追加、版は0.28.15。focused 27 passed、exact head `./mf.sh test`は980 passed /
+既知warning 1件 / 100.41秒。candidate bundleは31,618,953 B / SHA-256
+`f95701cb35c609ad3cf8b0ed75323ad4eb9940171e72b1a20b29f58124f5a02f`、doctorは
+`ok / 0.28.15 / packaged=true`。次はPR merge、正式v0.28.15公開/標準update、installed保存競合の再実測、
+LLM負荷終了後の画像生成・採用と長時間detached Job。live rollback fault injectionは **NOT TESTED**。
+
 ## 2026-09-06 3DS-8 opaque iframe CORS authority
 
 branch `ux1/3d-web-client-cors-header`。PR #242はmerge commit
