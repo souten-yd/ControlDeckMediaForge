@@ -8896,3 +8896,19 @@ release bundle群はPASS。exact head `./mf.sh test`は979 passed / 既知Starle
 candidate bundleは31,619,516 B / SHA-256
 `55d567cb14dcad501730b0ae3e9c7b11953292c756255c167bbeccb4ab25e624`、展開binary doctorは
 `ok / 0.28.13 / packaged=true`。PR/release、installed browser再実測は未実施。
+
+## 2026-09-06 — 3DS-8 opaque iframe CORS authority
+
+PR #242はmerge commit `0fbed474262111836fa1bd25b2ca19a41a74aef2`でmerged。main exact sourceから再構築した正式
+v0.28.13 bundleは31,617,052 B / SHA-256
+`57be1e3fb1b740515cb40f40ec1f09d67a2ac4444c40051699e098b014e43c8a`。署名self-check、tag target一致、公開4 assetの
+再取得hash一致を確認した。ControlDeck標準updateは10.54秒 / 最大RSS 788,980 KiB、health healthy。
+
+credentialed loaderへ替えたinstalled Chromeでは認証が通った後、Media Forgeの
+`Access-Control-Allow-Origin: *`とHost proxyがopaque origin向けに付ける`Access-Control-Allow-Origin: null`が併存し、
+Chromeは`multiple values '*, null'`としてmoduleを拒否した。Hostはuser/frame credentialを知るCORS authorityであり、
+Media Forgeはprivate noVNC/loader routeからorigin headerを除く。standalone routeはsame-origin。公開API/contributionは
+不変。版は0.28.14。focused Media Forge群とHost opaque subresource回帰1件はPASS。exact head `./mf.sh test`は
+979 passed / 既知Starlette warning 1件 / 99.40秒。candidate bundleは31,619,226 B / SHA-256
+`17a28d98ffe8cd3afaf71b8b8e66aea902675f423708db00602b45f366d7ab42`、展開binary doctorは
+`ok / 0.28.14 / packaged=true`。PR/release/installed browser再実測は未実施。
