@@ -22,7 +22,29 @@ def fake_settings(tmp_path: Path, **overrides) -> Settings:
     manifest_path = tmp_path / "test-models.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    values = {"data_dir": tmp_path / "data", "model_manifest": manifest_path, **overrides}
+    blender = tmp_path / "test-blender-runtime"
+    executable = blender / "install/blender"
+    executable.parent.mkdir(parents=True, exist_ok=True)
+    executable.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    executable.chmod(0o700)
+    runtime_manifest = json.loads(
+        (root / "config/blender-runtime.json").read_text(encoding="utf-8")
+    )
+    (blender / ".runtime.json").write_text(
+        json.dumps({
+            "schema_version": 1,
+            "version": runtime_manifest["version"],
+            "archive_sha256": runtime_manifest["archive_sha256"],
+            "executable": "blender",
+        }),
+        encoding="utf-8",
+    )
+    values = {
+        "data_dir": tmp_path / "data",
+        "model_manifest": manifest_path,
+        "blender_legacy_runtime_root": blender,
+        **overrides,
+    }
     return Settings(**values)
 
 

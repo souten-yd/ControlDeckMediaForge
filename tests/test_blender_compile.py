@@ -77,7 +77,7 @@ def cube_glb_bytes() -> bytes:
     return generated_mesh_glb(positions, indices, material=True)
 
 
-async def fake_blender(job_root: Path, _request: Path, _cancel, _timeout=180) -> dict:
+async def fake_blender(job_root: Path, _request: Path, _cancel, _timeout=180, **_kwargs) -> dict:
     source = job_root / "source.glb"
     output = job_root / "asset.glb"
     preview = job_root / "preview.png"
@@ -322,7 +322,7 @@ def test_workspace_imports_glb_from_opaque_host_read_grant(tmp_path: Path) -> No
 def test_host_cancel_reaches_cpu_only_blender_without_gpu_lease(
     tmp_path: Path, monkeypatch
 ) -> None:
-    async def cancellable(_root: Path, _request: Path, cancel_requested, _timeout=180) -> dict:
+    async def cancellable(_root: Path, _request: Path, cancel_requested, _timeout=180, **_kwargs) -> dict:
         while not cancel_requested():
             await asyncio.sleep(0.01)
         raise BlenderCompileCanceled("canceled")
@@ -427,7 +427,7 @@ def test_blender_failure_and_cancel_register_no_partial_package(client, monkeypa
         "output": {"format": "zip", "count": 1},
     }
 
-    async def failed(_root: Path, _request: Path, _cancel, _timeout=180) -> dict:
+    async def failed(_root: Path, _request: Path, _cancel, _timeout=180, **_kwargs) -> dict:
         raise BlenderCompileError("bounded worker failure")
 
     monkeypatch.setattr(blender_compile, "_run_blender", failed)
@@ -435,7 +435,7 @@ def test_blender_failure_and_cancel_register_no_partial_package(client, monkeypa
     assert failed_job["error"]["code"] == "blender_compile_failed"
     assert failed_job["asset_ids"] == []
 
-    async def canceled(_root: Path, _request: Path, cancel_requested, _timeout=180) -> dict:
+    async def canceled(_root: Path, _request: Path, cancel_requested, _timeout=180, **_kwargs) -> dict:
         while not cancel_requested():
             await asyncio.sleep(0.01)
         raise BlenderCompileCanceled("canceled")

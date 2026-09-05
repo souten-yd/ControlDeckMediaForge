@@ -57,7 +57,10 @@ and excludes the redundant single-file checkpoint.
 G8 uses a separately provisioned, revision-pinned Blender runtime. It is never
 installed into the core venv or ControlDeck. Build it explicitly with
 `./mf.sh blender build`; inspect it without changing state with
-`./mf.sh blender status`.
+`./mf.sh blender status`. Media Forge now resolves that existing runtime through
+its own versioned registry and shows read-only Blender diagnostics in Settings.
+Settings-based install/update/repair/remove and the browser GUI pack remain
+planned work; their absence does not disable image features.
 
 ## Test
 
@@ -69,7 +72,7 @@ Public contracts are documented in [`docs/api.md`](docs/api.md). Current evidenc
 
 ## Planning documents
 
-- [Integrated 3D Studio](docs/design-3d-studio.md) — planned extension of MediaForge's shared image/3D workspace: asset viewer, texture workflows, OpenCode authoring, server-side Blender GUI in the browser, and Settings-based Blender install/update/remove. Implementation and releases stay in this repository; Blender runs in isolated runtime/session environments. This is a design, not a claim that the new features are implemented.
+- [Integrated 3D Studio](docs/design-3d-studio.md) — phased extension of MediaForge's shared image/3D workspace. The compatibility baseline and read-only Blender runtime resolver/diagnostics are implemented; asset viewer, texture workflows, OpenCode authoring, server-side Blender GUI, and Settings-based lifecycle operations remain planned. Implementation and releases stay in this repository; Blender runs in isolated runtime/session environments.
 - [3D implementation plan](docs/implementation/g8-3d-studio-plan.md) — phased work, compatibility gates, real-machine acceptance and coding-agent handoff.
 - [3D development and release rules](docs/development-release-3d-studio.md) — existing MediaForge distribution/signing, reference practices from ControlDeck/SonicForge and evidence requirements.
 

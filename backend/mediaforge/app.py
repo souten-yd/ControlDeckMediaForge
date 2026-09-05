@@ -48,7 +48,7 @@ from .asset_brief import (
     parse_brief,
     resolve_layout,
 )
-from .blender_compile import runtime_available as blender_runtime_available
+from .blender_runtime import BlenderRuntimeRegistryError, BlenderRuntimeResolver
 from .config import Settings
 from .custom_models import DEFAULT_MODEL_SOURCE, MODEL_SOURCES, CustomModelCatalog, CustomModelError
 from .composer import (
@@ -216,6 +216,17 @@ def create_app(
         transport=model_download_transport,
         max_download_bytes=MAX_MANAGED_MODEL_DOWNLOAD_BYTES,
     )
+    blender_runtimes = BlenderRuntimeResolver(
+        registry_path=resolved.blender_runtime_registry,
+        managed_root=resolved.blender_managed_runtime_root,
+        legacy_root=resolved.blender_legacy_runtime_root,
+        manifest_path=REPOSITORY_ROOT / "config/blender-runtime.json",
+        trusted_worker=REPOSITORY_ROOT / "worker_packs/blender/compile_asset.py",
+    )
+    try:
+        blender_runtimes.register_legacy()
+    except BlenderRuntimeRegistryError as exc:
+        logger.warning("Blender runtime registration is unavailable: %s", exc.code)
 
     manager = JobManager(
         store,
@@ -233,6 +244,7 @@ def create_app(
         wan_source_root=resolved.wan_source_root,
         creative_evaluator=evaluator,
         extra_manifests=custom_models.overlay,
+        blender_runtime_resolver=blender_runtimes,
     )
 
     # 演出の立案と検証を job の中で行うための入口。画面が順番に呼んでいた頃は
@@ -445,6 +457,7 @@ def create_app(
     app.state.creative_director = creative_director
     app.state.reference_intelligence = reference_intelligence
     app.state.host = host
+    app.state.blender_runtimes = blender_runtimes
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
     async def authorize_host(request: Request) -> HostIdentity:
@@ -1048,7 +1061,7 @@ def create_app(
                 "asset.m5_companion_pack": {"state": "available"},
                 "asset.3d_project_pack": (
                     {"state": "available", "profile": "3d.project.glb"}
-                    if blender_runtime_available()
+                    if blender_runtimes.resolve_g8() is not None
                     else {"state": "unavailable", "reason": "runtime_not_installed"}
                 ),
                 # 旗を立てて回るのではなく、実際に走らせられるかで決める。
@@ -2081,6 +2094,7 @@ def create_app(
         "models",
         "model_catalog",
         "model_operations",
+        "blender_runtime",
         "library",
         "creative_batches",
         "creative_compositions",
@@ -2155,6 +2169,10 @@ def create_app(
             "model_operations": lambda: {"items": [
                 item.model_dump(mode="json") for item in store.list_model_operations()
             ]},
+            "blender_runtime": lambda: {
+                **blender_runtimes.status(),
+                "fingerprint": blender_runtimes.fingerprint(),
+            },
             "library": library_part,
             "creative_batches": lambda: {"items": [
                 batch_projection(item) for item in store.list_creative_batches()
@@ -2775,6 +2793,11 @@ def create_app(
                             "presets": size_presets(envelope),
                             "device": {"vram_bytes": device_vram_bytes()},
                         }
+                    elif method == "blender.runtime.status":
+                        result = {
+                            **blender_runtimes.status(),
+                            "fingerprint": blender_runtimes.fingerprint(),
+                        }
                     elif method == "library.list":
                         kind = params.get("kind", "all")
                         if kind not in library.KINDS:
@@ -3005,6 +3028,13 @@ def create_app(
     @app.get("/workspace-api/models/operations", include_in_schema=False)
     async def standalone_model_operations() -> dict[str, Any]:
         return {"items": [item.model_dump(mode="json") for item in store.list_model_operations()]}
+
+    @app.get("/workspace-api/blender/runtime", include_in_schema=False)
+    async def standalone_blender_runtime_status() -> dict[str, Any]:
+        return {
+            **blender_runtimes.status(),
+            "fingerprint": blender_runtimes.fingerprint(),
+        }
 
     @app.post("/workspace-api/models/operations", include_in_schema=False)
     async def standalone_model_operation(payload: dict[str, Any]) -> dict[str, Any]:

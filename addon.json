@@ -60,7 +60,10 @@
     "settings": [
       {
         "id": "settings",
-        "label": "Media Forge モデル管理",
+        "label": {
+          "en": "Media Forge Settings",
+          "ja": "Media Forge 設定"
+        },
         "route": "/x/media-forge/workspace/settings",
         "permission": "settings.manage"
       }

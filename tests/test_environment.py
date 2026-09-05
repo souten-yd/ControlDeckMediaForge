@@ -53,3 +53,16 @@ def test_blender_timeout_env_is_bounded_for_acceptance(monkeypatch, tmp_path):
     monkeypatch.setenv("MEDIA_FORGE_BLENDER_TIMEOUT_SEC", "181")
     with pytest.raises(ValueError, match="Blender timeout"):
         Settings.from_env()
+
+
+def test_blender_runtime_paths_are_server_config_not_browser_input(monkeypatch, tmp_path):
+    monkeypatch.setenv("MEDIA_FORGE_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MEDIA_FORGE_BLENDER_LEGACY_ROOT", str(tmp_path / "legacy"))
+    monkeypatch.setenv("MEDIA_FORGE_BLENDER_MANAGED_ROOT", str(tmp_path / "managed"))
+    monkeypatch.setenv("MEDIA_FORGE_BLENDER_REGISTRY", str(tmp_path / "state/registry.json"))
+
+    settings = Settings.from_env()
+
+    assert settings.blender_legacy_runtime_root == (tmp_path / "legacy").resolve()
+    assert settings.blender_managed_runtime_root == (tmp_path / "managed").resolve()
+    assert settings.blender_runtime_registry == (tmp_path / "state/registry.json").resolve()

@@ -28,6 +28,10 @@ ADDON = json.loads((ROOT / "addon.json").read_text(encoding="utf-8"))
 DOM_IDS = (
     "app", "skeleton", "shell-header", "shell-nav",
     "nav-create", "nav-library", "nav-activity", "nav-settings",
+    "settings-page-title", "blender-settings", "blender-runtime-summary",
+    "blender-runtime-state", "blender-basic-value", "blender-web-value",
+    "blender-version-value", "blender-runtime-refresh", "blender-runtime-details",
+    "blender-runtime-list", "blender-runtime-fingerprint",
     "mode-simple", "mode-advanced",
     "create-media-switch", "create-media-image", "create-media-video",
     "create-intent-label", "video-create-fields",
@@ -173,6 +177,22 @@ def test_model_management_actions_are_simple_but_technical_details_are_advanced(
     assert "state.modelEvaluationIds.has(model.model_id)" in SCRIPT
     assert "card.dataset.modelId" not in SCRIPT
     assert "dataset.modelId =" not in SCRIPT
+
+
+def test_settings_show_read_only_blender_diagnostics_without_server_paths():
+    settings = MARKUP[MARKUP.index('id="view-settings"'):MARKUP.index('</main>')]
+    assert settings.index('id="blender-settings"') < settings.index('id="model-table"')
+    assert '<span class="settings-label">設定</span>' in MARKUP
+    assert 'id="model-management-title"' in settings and "画像・動画モデル" in settings
+    assert 'call("workspace.session", {parts})' in SCRIPT
+    assert 'refreshSession(["blender_runtime"])' in SCRIPT
+    assert 'if (method === "blender.runtime.status")' in SCRIPT
+    assert "BLENDER_TEXT" in SCRIPT
+    assert 'settings: "Settings"' in SCRIPT and 'settings: "設定"' in SCRIPT
+    renderer = SCRIPT[SCRIPT.index("function renderBlenderRuntime"):
+                      SCRIPT.index("function renderExtensionDetails")]
+    assert "runtime.root" not in renderer and "runtime.path" not in renderer
+    assert "value.fingerprint.slice(0, 16)" in renderer
 
 
 def test_creative_controls_use_the_versioned_catalog_and_preserve_prompt_only_requests():

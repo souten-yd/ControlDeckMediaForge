@@ -8080,3 +8080,37 @@ Web Blender、scene/revision、viewer、材質、OpenCode制作、setup/update/r
 最終gateはfocused 176件、`./mf.sh test` 851件がPASS（既知Starlette warning 1件 / 62.14秒）。
 Python compileall、frontend JavaScript構文、shell構文、変更Markdownの相対link、
 `git diff --check`もPASSした。
+
+## 2026-09-05 — 3DS-1 Blender runtime resolver / read-only Settings diagnostics
+
+PR #215、実装commit `4c7c6f793f2c6936b74bfc755fe5f3a29e14def6`。
+MediaForge-ownedのversioned registry/resolverを追加し、既存4.5.9 runtimeを
+`legacy-blender-4.5.9`としてopaque登録した。registryは258 B / mode 0600で、JSONに
+`/data1tb`、`/home`、`/tmp`は含まれない。symlink registry/managed runtime、root脱出、
+不正record、壊れたmanifest/stamp/executable/trusted workerをfail-closedにした。
+active runtimeと既存G8用4.5.9解決を分け、設定refresh時は既存runtimeの固定identityだけを
+再確認・登録し、移動、削除、download、operator指定activeの上書きをしない。
+
+private workspaceへ`blender_runtime` session part、`blender.runtime.status`、同一origin開発用
+`GET /workspace-api/blender/runtime`を追加した。応答はopaque ID、版、ownership、4 integrity check、
+別管理のWeb操作pack状態、fingerprintだけでraw pathを返さない。Settingsの先頭へread-only Blender
+診断を置き、ready/missing/damaged/invalid/unsupported、legacy/managed、日英locale変更、320 pxを
+扱う。3DS-1ではdownload/update/repair/switch/removeを提供せず、画像機能の状態と分離表示する。
+
+一時data rootと実Uvicorn `127.0.0.1:9164`でstatusはready、required 4.5.9、active/G8は
+`legacy-blender-4.5.9`、4検査true、fingerprint
+`c5015f19e7a0fb8228e426386d0e7aee19be7501852d814da1c08c0f163ebcd9`。
+同じ796 B cubeをresolver経由で実Blender加工したjob
+`job_23d828f247fa420995b451d07b0a5246`は1.462秒でsucceededし、ZIP 44,292 B / SHA-256
+`c78ef18d6c4da0334a9e3e2c451519d4b9bd2541ead1022cfa3979b0ef3a468b`は3DS-0とbyte-identical。
+entry 3件、終了後work entry 0 / Blender child 0。
+
+standalone Chromeで日本語ready/診断、英語rerender、別serverのmissing表示を操作した。320 pxで
+clientWidth/scrollWidthはともに320、更新ボタン39 px、最終console/page/HTTP errorは0件。
+実ControlDeck URLは未認証browserが`/login`へ遷移したため、installed opaque iframe操作は
+**NOT TESTED**。installed 0.27.0へのsource変更deployment、GPU Blender、lifecycle操作、Web Blender、
+scene/revision、viewer、材質、OpenCode制作も **NOT TESTED / NOT IMPLEMENTED**。
+
+local gateは`./mf.sh test` 859 passed / 既知Starlette warning 1件 / 70.27秒。
+Python compileall、frontend JavaScript構文、shell構文、Markdown相対link、`git diff --check`を
+最終差分でも再実行する。ControlDeck変更は0件で、既存dirty `frontend/tsconfig.tsbuildinfo`を保持した。
