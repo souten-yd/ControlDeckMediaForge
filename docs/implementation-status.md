@@ -8417,3 +8417,32 @@ exact code headの`./mf.sh test`は904 passed / 既知Starlette warning 1件 / 7
 
 実ControlDeck opaque iframe、installed release、working copyを使う編集、backup/restoreは
 **NOT TESTED / NOT IMPLEMENTED**。ControlDeck変更は0件。次は3DS-4c exact backup/restore。
+
+## 2026-09-05 — 3DS-4c exact scene backup core
+
+branch `ux1/3d-scene-backup`、実装commit `175ea31`。`media-forge.scene-backup@1` ZIP codecと、
+全Asset/job/document/revisionを一つのSQLite transactionで新sceneとして復元するStore境界を追加した。
+ZIP entry順は`manifest.json`、revision sequence順の`.blend`/`preview.glb`、Asset ID順のdependency blobに
+固定し、manifest identityと各entryのsize/SHA-256を検証する。archive/member/manifest/展開量、`.blend`
+256 MiB、GLB 64 MiBをboundedにし、absolute/traversal、重複名、symlink/device、暗号化entry、private root外を
+fail-closedにした。復元時は全IDを新規発行し、旧scene/Assetを上書きしない。file publishはno-replaceで、
+DB/ファイルの途中失敗時は追加0件に戻す。公開OpenAPI、addon contribution、Agent tool、workflow executorは
+変更していない。
+
+unit/integrationでは2 revisionと共有dependencyのexact bytes、新ID/owner分離、固定entry順、missing/tamper/
+manifest identity/traversal/duplicate/link/device/member上限、private path、export元hash変更、2件目revision insert
+失敗、publish同時衝突を21件で確認した。同時衝突では競合側が作った既存fileを保持し、restore側のDB rowと
+temporary fileは0件だった。
+
+3DS-4bの実Blender 4.5.9で作成した2 revision sceneの隔離copyを用い、各`.blend` 1,247,112 B、各GLB
+1,138,160 Bを1,225,068 BのZIPへ0.113988秒でexportした。archive SHA-256は
+`e07c055d19efca0fce0e0a8d97f1364e3f342354e90542ff09c4c020b1dcf287`、manifest content SHA-256は
+`c84ddba3b08274e4b528f39a9d082a69b73d98ea959ccad89fc74540d3ed1da9`。全5 memberのsize/hashをZIPから
+再計算して一致した。別ownerへのrestoreは0.018701秒で、scene 1→2、revision 2→4、Asset 4→8、job 2→3。
+全4復元Assetのbytesは元と一致し、旧scene不変、別ownerからnot found、staging 0だった。実GLB末尾を1 byte
+変更したZIPは`scene_backup_hash_changed`で拒否され、job/Asset/scene/revision追加はいずれも0、staging 0。
+
+exact code headの`./mf.sh test`は916 passed / 既知Starlette warning 1件 / 77.71秒。private WS/standalone
+transport、browser UI、packaged bundle、実ControlDeck opaque iframe、
+実texture dependency付きsceneは **NOT IMPLEMENTED / NOT TESTED**。dependency blob自体はunitでexact byte
+復元済み。ControlDeck変更は0件。次はbackup private transport/browser UIを独立PRにする。

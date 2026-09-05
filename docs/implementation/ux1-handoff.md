@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3DS-4c exact scene backup core
+
+branch `ux1/3d-scene-backup`、実装commit `175ea31`。`media-forge.scene-backup@1`の固定entry順、
+manifest/entry size・SHA-256、member/展開量/path/link/device/重複検証と、全Asset/revisionを新ID・新sceneへ
+atomic restoreするcoreを実装した。no-replace file publishとtransaction rollbackにより、tamper/途中失敗/
+同時衝突は既存fileを上書きせず追加0件になる。
+
+実Blender 4.5.9由来の2 revision（`.blend`各1,247,112 B、GLB各1,138,160 B）を1,225,068 Bへ
+export 0.113988秒、別ownerへrestore 0.018701秒。全member hashと復元byte一致、旧scene不変、owner分離、
+staging 0。1 byte改ざんは`scene_backup_hash_changed`、全DB追加0件。fullは916 passed / 1 warning / 77.71秒。
+
+private transport/browser/package/実ControlDeckは **NOT IMPLEMENTED / NOT TESTED**、ControlDeck変更0。
+次は別PRでowner-scoped backup upload/download transportとbrowser UIを実装する。
+
 ## 2026-09-05 3DS-4b browser scene import / revision UI
 
 PR #226、branch `ux1/3d-scene-import-ui`、実装commit `573b610`。作る媒体へ3D Studioを追加し、incremental
