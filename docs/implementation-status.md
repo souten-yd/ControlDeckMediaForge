@@ -8446,3 +8446,34 @@ exact code headの`./mf.sh test`は916 passed / 既知Starlette warning 1件 / 7
 transport、browser UI、packaged bundle、実ControlDeck opaque iframe、
 実texture dependency付きsceneは **NOT IMPLEMENTED / NOT TESTED**。dependency blob自体はunitでexact byte
 復元済み。ControlDeck変更は0件。次はbackup private transport/browser UIを独立PRにする。
+
+## 2026-09-05 — 3DS-4c private backup transport
+
+branch `ux1/3d-scene-backup-transport`、実装commit `d159731`。認証済みWebSocketへ
+`scenes.backup.open/read/close`と`scenes.restore.begin/chunk/commit/cancel`を追加し、standalone private
+mirrorも同じ`SceneBackupSession`を通す。download handleとrestore uploadは接続内だけで有効、各1件、
+512 KiB chunk、10分activity TTL、offset/chunk SHA-256/total SHA-256を強制する。ファイル名以外のpathを
+入力・応答せず、切断時cleanupに加えてshutdown時は孤児transferも回収する。公開OpenAPI、addon contribution、
+Agent tool、workflow executorは変更していない。
+
+unit/transport 18件でexact ZIP往復、別owner/別connectionからのhandle不可視、upload/download同時上限、
+offset/hash/総量/期限、cancel、切断task終了とshutdown cleanup、standalone mirror、Host path拒否を確認した。
+最初の実HTTP runでcore内部用1 MiB chunkをtransportへ誤って流用し、base64上限700,000文字で最初のuploadが
+422になる不整合を検出した。このrunはscene追加0件で、停止時staging 0。transport専用512 KiBへ分離し、
+契約assertionを追加してから全受入を再実行した。
+
+3DS-4bの実Blender 4.5.9由来2 revision sceneを隔離data rootの実Uvicorn `127.0.0.1:9174`で開いた。
+現在稼働機のhealthy environment snapshotを明示してhealth `healthy`を確認し、1,225,070 B / SHA-256
+`ae94a4c1b75ba8e31080c4ede469fc5c754639c6e93806bd6d57b252f8757f75`のbackupを0.120567秒で作成した。
+download/uploadは各3 chunk、最大read JSON応答699,154 B、最大upload JSON request 699,218 B。
+upload開始からatomic restore完了まで0.045491秒でscene 1→2、復元revision 2。応答path field 0、公開
+OpenAPIの`/workspace-api` path 0。別uploadは524,288 B受信後にcancelし、transfer staging 0、process停止後も
+0だった。
+
+`./mf.sh serve`をそのまま使った最初の起動は、この隔離worktreeに無いROCm runtimeのauto provisionを開始した
+ため受入に使わず即時停止した。そのrunが作った983 MiBの部分`.venv`だけをtrashへ退避し、以後は直接Uvicornと
+既存healthy snapshotで検証した。元checkoutと稼働中serviceは変更していない。
+
+exact code headの`./mf.sh test`は920 passed / 既知Starlette warning 1件 / 85.02秒。browser UI、packaged
+bundle、実ControlDeck opaque iframeは **NOT IMPLEMENTED / NOT TESTED**。ControlDeck変更は0件。次は
+backup/restore browser UIを独立PRにする。
