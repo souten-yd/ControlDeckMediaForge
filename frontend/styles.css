@@ -327,9 +327,32 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .scene-detail h2 { margin: 0; font-size: 1rem; }
 .scene-detail-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .scene-revision-actions { display: flex; align-items: center; gap: 8px; }
+.scene-blender-tools { display: grid; gap: 6px; padding: 10px 0; }
+.scene-blender-tools .hint { margin: 0; }
+#scene-blender-dialog {
+  width: min(1400px, calc(100% - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: hidden;
+}
+#scene-blender-dialog h2 { margin: 0; }
+#scene-blender-screen {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: calc(100vh - 180px);
+  overflow: hidden;
+  background: #050706;
+  outline: 0;
+}
+#scene-blender-screen canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+}
+.blender-session-actions { flex-wrap: wrap; }
 
 @media (max-width: 760px) {
   #app[data-create-media="3d"] #scene-studio { grid-template-columns: 1fr; }
+  #scene-blender-dialog { display: none; }
 }
 
 .panel, #stage > div, .row, .info {

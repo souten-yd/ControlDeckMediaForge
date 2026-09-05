@@ -1,6 +1,6 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: 3DS-0〜4・3DS-5a source/package VERIFIED、3DS-5b source VERIFIED / 次は3DS-5c RFB gateway
+Status: 3DS-0〜4・3DS-5a source/package VERIFIED、3DS-5b/5c source VERIFIED / 次は3DS-5d recovery policy
 Date: 2026-09-06
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
@@ -18,7 +18,8 @@ G9生成3Dモデル採用とは分離し、画像生成モデルの変更やSoni
 scene/revision/working copyへ進んだ。3DS-4a persistence、3DS-4b core/transport/browser UI、3DS-4c
 exact backup core/private transport/browser UI、3DS-5a Web操作pack管理、3DS-5bの隔離GUI runner・
 保存/終了まで完了した。installed ControlDeck opaque iframeでの再確認は3DS-8 release acceptanceへ残し、
-次は3DS-5cで認証付きRFB gateway/noVNC接続・再接続を実装する。
+3DS-5cで認証付きRFB gateway/noVNC接続・再接続まで実装した。次は3DS-5dでidle、crash、Host
+disable/revocationと復旧候補のpolicyを閉じる。
 
 | 項目 | 調査で確認した現状 | 追加するもの |
 |---|---|---|
@@ -51,7 +52,8 @@ exact backup core/private transport/browser UI、3DS-5a Web操作pack管理、3D
 3DS-0→3DS-1と3DS-2のdurable install/cancel/restart、side-by-side更新/切替/修復、
 参照保護付き削除とCLI共通化、3DS-3 Library GLB viewer、3DS-4 scene/revision/working copyと
 exact backup/restore、Web操作packの固定・導入・実display probe、隔離session runner、実Blender GUI入力、
-保存・終了は完了した。次は3DS-5cで専用RFB gateway、noVNC接続、再接続を実装する。
+保存・終了、専用RFB gateway、noVNC接続、明示切断後の再接続は完了した。次は3DS-5dで
+idle/crash/disable/revocationを実装する。
 
 ## 3. PRスライスの候補
 

@@ -8585,3 +8585,45 @@ Starlette warning 1件 / 88.01秒。候補processはenvironment snapshotを意�
 iframe、GPU GUI/Cyclesは **NOT IMPLEMENTED / NOT TESTED**。稼働ControlDeckは0.28.0 / healthy / PID 1827940、
 ControlDeck source/service/installed files変更0で、既存`frontend/tsconfig.tsbuildinfo`だけdirty。次は別PRの
 3DS-5c RFB gateway/noVNC。
+
+## 2026-09-06 — 3DS-5c authenticated RFB gateway / noVNC
+
+PR #233、branch `ux1/3d-session-gateway`、実装commit `72db176`。private Host/standalone WebSocketから
+session所有のUnix RFB socketへbinary frameだけを中継するgatewayを
+追加した。接続時にowner、READY state、systemd unit active、実socketを再確認し、1 sessionに1 controllerだけを
+許可する。browserからの1 messageは1 MiB上限、text/余分なsubprotocolを拒否する。Host経路は既存service tokenを
+15秒ごとに再introspectionし、addon/subjectが一致しないかtokenが無効なら切断する。standaloneは同一loopback
+Originを必須にした。入力/応答へsocket path、PID、unit、display番号、tokenを追加せず、公開OpenAPI、Agent tool、
+workflow executor、addon contributionは変更していない。
+
+noVNC 1.7.0の`core/**/*.js`と`vendor/pako/lib/**/*.js`の実行依存54 files / 579,832 Bをすべて固定manifestへ
+追加した。private module routeはその一覧にあるJavaScriptだけを許し、各応答前にsize/symlink/SHA-256を再検査し、
+opaque sandbox iframeからのES module importに必要なCORS/CORPだけを付ける。UIはdesktopだけに1280x720を
+scale表示し、start/return、表示だけ閉じる、保存終了、破棄終了を分けた。sessionはserver stateから復元し、
+切断をbatch cancelへ読み替えず、Host nonce更新時と予期しない切断時はbounded reconnectする。mobileはworkspaceを
+押し込まずdesktop案内を返す。版は0.28.4。
+
+隔離data rootのsource Uvicorn `127.0.0.1:9181`、実Blender 4.5.9、実Xvnc、実Chromeから、manifest掲載JSの
+取得と`binary` WebSocketを通し、1280x720 framebufferを表示した。「表示だけ閉じる」後もsessionはreadyのまま
+停止せず、同じsessionへ2本目を接続して再び1280x720を取得した。browser側noVNC入力でF3 `Add Cube`を送り、
+保存後はrevision 5→6、working `.blend` 515,688 B / SHA-256
+`7afe139e407c33711b12e0989cf5492ed5294580535e809509ed76b969a43ee1`、objects 4→5、meshes 2→3、
+triangles 24→36、vertices 16→24。Blender/GLB validatorはpassed、GLBは4,772 B / nodes 3 / meshes 3、
+browser exception 0。終了後systemd unit、Unix socket、Xvnc/Blender process、TCP RFB listenerはいずれも0。
+実測でBlender sessionをhost busyにすると3D scene自体へ戻れなくなるUI lockを検出し、Hostの離脱警告と
+workspace内navigation lockを分離して修正した。
+
+focused gateway/frontend testは全件通過し、exact codeの`./mf.sh test`は943 passed / 既知Starlette warning
+1件 / 89.66秒。ControlDeckはread-onlyでcommit `34bda2f14c2c00e4ead8251bf30d830b2e3bf7a5`、既存dirty
+`frontend/tsconfig.tsbuildinfo`だけ、installed 0.28.0 / PID 1827940 / health healthyを確認し、変更0。
+
+`./mf.sh bundle build 0.28.4`は31,503,501 B / SHA-256
+`9c1644a40962cf742f5f884203d0d2918d4bee0b195f0db515c82944cbfc9089`。展開binary doctorは
+`ok / 0.28.4 / packaged=true`。exact candidate process `127.0.0.1:9182`のrootはweb pack fingerprint付き
+`rfb.js?v=...` importを配信した。候補binaryから配信した`rfb.js`はmanifest SHA-256と一致し、同じgateway実装の
+実GUI sessionはsubprotocol `binary` / `RFB 003.008`を14.337 msで
+返した。WebSocket切断後もsessionはready / disconnected / reconnectable、明示discard後stopped、終了後
+unit/socket/process 0。
+
+実ControlDeck opaque iframe、10分超token rotation、Host revoke/disable、idle/crash/recovery policy、GPU/Cycles、
+packaged Chromeは **NOT TESTED**。次は別PRの3DS-5d session recovery。

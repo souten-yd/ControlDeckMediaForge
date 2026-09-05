@@ -151,6 +151,8 @@ class BlenderSessionManager:
         self.command_timeout_sec = command_timeout_sec
         self._now = now or _now
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._gateway_sessions: set[str] = set()
+        self._gateway_lock = asyncio.Lock()
         self.software_vulkan_icd = (
             Path(os.path.abspath(software_vulkan_icd)) if software_vulkan_icd is not None else None
         )
@@ -169,6 +171,8 @@ class BlenderSessionManager:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
+        async with self._gateway_lock:
+            self._gateway_sessions.clear()
 
     def create(self, owner: str, scene_id: str) -> dict[str, Any]:
         owner = validate_scene_owner(owner)
@@ -208,6 +212,36 @@ class BlenderSessionManager:
             return self._projection(self.store.get_blender_web_session(owner, session_id))
         except SceneError as exc:
             raise BlenderSessionError(exc.code, str(exc)) from exc
+
+    async def acquire_gateway(self, owner: str, session_id: str) -> Path:
+        """Reserve the sole browser control channel and return its internal socket."""
+        owner = validate_scene_owner(owner)
+        try:
+            session = self.store.get_blender_web_session(owner, session_id)
+        except SceneError as exc:
+            raise BlenderSessionError(exc.code, str(exc)) from exc
+        if session.state != BlenderSessionState.READY:
+            raise BlenderSessionError("blender_session_not_ready", "Blender session is not ready")
+        async with self._gateway_lock:
+            if session_id in self._gateway_sessions:
+                raise BlenderSessionError(
+                    "blender_session_already_connected", "Blender session already has a controller"
+                )
+            if not await self.controller.active(session.unit_id):
+                raise BlenderSessionError(
+                    "blender_session_runner_lost", "isolated session unit is no longer active"
+                )
+            # Re-read after the await so a concurrent save/stop cannot attach a stale session.
+            current = self.store.get_blender_web_session(owner, session_id)
+            socket_path = self._session_socket(session_id)
+            if current.state != BlenderSessionState.READY or not self._is_socket(socket_path):
+                raise BlenderSessionError("blender_session_not_ready", "Blender session is not ready")
+            self._gateway_sessions.add(session_id)
+            return socket_path
+
+    async def release_gateway(self, session_id: str) -> None:
+        async with self._gateway_lock:
+            self._gateway_sessions.discard(session_id)
 
     def save_and_stop(self, owner: str, session_id: str) -> dict[str, Any]:
         return self._begin_finish(owner, session_id, save=True)
@@ -536,8 +570,8 @@ class BlenderSessionManager:
                 raise BlenderSessionError("blender_session_root_unsafe", "session root is unsafe")
             shutil.rmtree(root)
 
-    @staticmethod
-    def _projection(session: BlenderWebSession) -> dict[str, Any]:
+    def _projection(self, session: BlenderWebSession) -> dict[str, Any]:
+        connected = session.id in self._gateway_sessions
         return {
             "schema_version": session.schema_version,
             "id": session.id,
@@ -549,6 +583,12 @@ class BlenderSessionManager:
             "web_pack_version": session.web_pack_version,
             "display": {"mode": "software", "width": 1280, "height": 720, "depth": 24},
             "can_save": session.state == BlenderSessionState.READY,
+            "connection_state": (
+                "connected" if connected else
+                "disconnected" if session.state == BlenderSessionState.READY else
+                "unavailable"
+            ),
+            "can_connect": session.state == BlenderSessionState.READY and not connected,
             "can_stop": session.state in {
                 BlenderSessionState.QUEUED,
                 BlenderSessionState.PREPARING,

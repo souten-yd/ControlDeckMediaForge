@@ -9,6 +9,7 @@ import tarfile
 import time
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from mediaforge.app import create_app
@@ -210,6 +211,70 @@ def test_install_is_atomic_probed_and_detects_required_file_tamper(tmp_path: Pat
         assert manager.web_status()["state"] == "damaged"
         await manager.stop()
     asyncio.run(scenario())
+
+
+def test_client_file_serves_only_pinned_javascript_and_rechecks_hash(tmp_path: Path) -> None:
+    manifest, contents = fixture_manifest(tmp_path)
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager, web_pack = manager_fixture(
+        tmp_path, store, manifest, response_transport(contents)
+    )
+
+    async def install() -> None:
+        await manager.start()
+        operation = manager.install_web()
+        assert (await wait_terminal(store, operation.id)).state == BlenderRuntimeOperationState.READY
+        await manager.stop()
+
+    asyncio.run(install())
+    resolved = web_pack.client_file("core/rfb.js")
+    assert resolved.read_text(encoding="utf-8") == "export default class RFB {}\n"
+    with pytest.raises(BlenderWebPackError) as traversal:
+        web_pack.client_file("../package.json")
+    assert traversal.value.code == "blender_web_client_unavailable"
+    with pytest.raises(BlenderWebPackError):
+        web_pack.client_file("package.json")
+    resolved.write_text("tampered", encoding="utf-8")
+    with pytest.raises(BlenderWebPackError) as tampered:
+        web_pack.client_file("core/rfb.js")
+    assert tampered.value.code == "blender_web_client_unavailable"
+
+
+def test_private_client_route_is_cors_readable_immutable_and_not_public(tmp_path: Path) -> None:
+    manifest, contents = fixture_manifest(tmp_path)
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager, _web_pack = manager_fixture(
+        tmp_path, store, manifest, response_transport(contents)
+    )
+
+    async def install() -> None:
+        await manager.start()
+        operation = manager.install_web()
+        assert (await wait_terminal(store, operation.id)).state == BlenderRuntimeOperationState.READY
+        await manager.stop()
+
+    asyncio.run(install())
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        blender_legacy_runtime_root=tmp_path / "missing-blender",
+        blender_managed_runtime_root=tmp_path / "managed-blender",
+        blender_runtime_registry=tmp_path / "data/runtime-state/blender-runtimes.json",
+        blender_download_root=tmp_path / "downloads",
+        blender_web_runtime_root=tmp_path / "web",
+        blender_web_download_root=tmp_path / "web-downloads",
+    )
+    app = create_app(settings, blender_web_manifest_path=manifest)
+    with TestClient(app) as client:
+        response = client.get("/blender-web-client/core/rfb.js")
+        assert response.status_code == 200
+        assert response.content == b"export default class RFB {}\n"
+        assert response.headers["access-control-allow-origin"] == "*"
+        assert response.headers["cross-origin-resource-policy"] == "cross-origin"
+        assert response.headers["cache-control"].endswith("immutable")
+        assert client.get("/blender-web-client/package.json").status_code == 404
+        assert "/blender-web-client" not in client.get("/openapi.json").text
 
 
 def test_private_workspace_installs_only_the_pinned_web_pack(tmp_path: Path) -> None:

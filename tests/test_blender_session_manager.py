@@ -279,6 +279,34 @@ def test_service_restart_reattaches_active_unit_then_stops_it(tmp_path: Path) ->
     asyncio.run(scenario())
 
 
+def test_gateway_is_owner_scoped_single_controller_and_releasable(tmp_path: Path) -> None:
+    _store, _workspace, scene_id, _controller, manager = session_fixture(tmp_path)
+
+    async def scenario() -> None:
+        await manager.start()
+        created = manager.create(OWNER, scene_id)
+        ready = await wait_state(manager, created["id"], "ready")
+        assert ready["connection_state"] == "disconnected"
+        assert ready["can_connect"] is True
+        socket_path = await manager.acquire_gateway(OWNER, created["id"])
+        assert socket_path.is_socket()
+        connected = manager.get(OWNER, created["id"])
+        assert connected["connection_state"] == "connected"
+        assert connected["can_connect"] is False
+        with pytest.raises(BlenderSessionError) as duplicate:
+            await manager.acquire_gateway(OWNER, created["id"])
+        assert duplicate.value.code == "blender_session_already_connected"
+        with pytest.raises(BlenderSessionError):
+            await manager.acquire_gateway("user:2", created["id"])
+        await manager.release_gateway(created["id"])
+        assert manager.get(OWNER, created["id"])["can_connect"] is True
+        manager.discard_and_stop(OWNER, created["id"])
+        await wait_state(manager, created["id"], "stopped")
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
 def test_private_standalone_session_transport_is_bounded_and_not_public(tmp_path: Path) -> None:
     settings = Settings(
         data_dir=tmp_path / "data",
