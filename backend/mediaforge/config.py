@@ -24,7 +24,12 @@ def _control_deck_origin(value: str) -> str:
 @dataclass(frozen=True)
 class Settings:
     data_dir: Path
-    worker_timeout_sec: float = 30.0
+    # worker が「無音のまま」でいてよい時間。総時間の上限ではない。
+    # LLM が VRAM を占めていると画像生成は cpu_offload に落ち、実測（R9700）で
+    # 1 枚 33 秒かかる。単独なら 3.5 秒で終わるので 30 秒でも足りていたが、
+    # 同居させると毎回わずかに超えて切られていた。止まった worker を捨てる役目は
+    # 残しつつ、同居時の生成が収まる幅を取る。
+    worker_timeout_sec: float = 600.0
     blender_timeout_sec: float = 180.0
     control_deck_url: str = "http://127.0.0.1:8765"
     host_request_timeout_sec: float = 10.0
@@ -174,7 +179,7 @@ class Settings:
     def from_env(cls) -> "Settings":
         configured = os.environ.get("MEDIA_FORGE_DATA_DIR")
         data_dir = Path(configured) if configured else Path.home() / ".local/share/control-deck-media-forge"
-        timeout = float(os.environ.get("MEDIA_FORGE_WORKER_TIMEOUT_SEC", "30"))
+        timeout = float(os.environ.get("MEDIA_FORGE_WORKER_TIMEOUT_SEC", "600"))
         return cls(
             data_dir=data_dir.resolve(),
             worker_timeout_sec=timeout,
