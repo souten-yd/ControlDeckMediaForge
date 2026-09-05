@@ -17,7 +17,7 @@ moduleだけをhash再検査してopaque iframe向けCORSで配信する。版�
 revision 5→6、working `.blend` 515,688 B / SHA-256
 `7afe139e407c33711b12e0989cf5492ed5294580535e809509ed76b969a43ee1`、objects 4→5、meshes 2→3、
 triangles 24→36、vertices 16→24、Blender/GLB validator passed、browser exception 0。停止後unit/socket/
-Xvnc/Blender process 0。focused gateway/frontendは全件通過し、fullは943 passed / 1 warning / 87.41秒。
+Xvnc/Blender process 0。focused gateway/frontendは全件通過し、fullは943 passed / 1 warning / 89.66秒。
 
 `./mf.sh bundle build 0.28.4`は31,503,051 B / SHA-256
 `b0013dacd20cf5f501c09dcc0c2ea637443f3fc73513d184275b3cb2d1e8bff9`、展開binary doctorは

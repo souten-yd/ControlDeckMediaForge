@@ -120,6 +120,8 @@ def test_blender_session_gateway_is_private_reauthenticating_and_desktop_only() 
         assert method in SCRIPT
     assert "/workspace-api/blender/sessions" in SCRIPT
     assert "/blender-web-client/core/rfb.js" in SCRIPT
+    assert "web_pack?.fingerprint?.slice(0, 16)" in SCRIPT
+    assert "rfb.js?v=${encodeURIComponent(webIdentity)}" in SCRIPT
     assert "wsProtocols: blenderRfbProtocols()" in SCRIPT
     assert '`control-deck-bridge.${state.nonce}`' in SCRIPT
     assert 'window.matchMedia("(max-width: 767px)")' in SCRIPT

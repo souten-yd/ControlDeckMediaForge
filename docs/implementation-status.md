@@ -8614,7 +8614,7 @@ browser exception 0。終了後systemd unit、Unix socket、Xvnc/Blender process
 workspace内navigation lockを分離して修正した。
 
 focused gateway/frontend testは全件通過し、exact codeの`./mf.sh test`は943 passed / 既知Starlette warning
-1件 / 87.41秒。ControlDeckはread-onlyでcommit `34bda2f14c2c00e4ead8251bf30d830b2e3bf7a5`、既存dirty
+1件 / 89.66秒。ControlDeckはread-onlyでcommit `34bda2f14c2c00e4ead8251bf30d830b2e3bf7a5`、既存dirty
 `frontend/tsconfig.tsbuildinfo`だけ、installed 0.28.0 / PID 1827940 / health healthyを確認し、変更0。
 
 `./mf.sh bundle build 0.28.4`は31,503,051 B / SHA-256

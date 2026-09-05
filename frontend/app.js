@@ -4981,7 +4981,10 @@ async function connectBlenderRfb(session) {
   state.blenderRfbManual = false;
   byId("scene-blender-connection").textContent = sceneText().blenderConnecting;
   try {
-    state.blenderRfbModule ||= import(`${workspaceFrameRoot()}/blender-web-client/core/rfb.js`);
+    const webIdentity = state.blenderRuntime?.web_pack?.fingerprint?.slice(0, 16) || "unavailable";
+    state.blenderRfbModule ||= import(
+      `${workspaceFrameRoot()}/blender-web-client/core/rfb.js?v=${encodeURIComponent(webIdentity)}`,
+    );
     const {default: RFB} = await state.blenderRfbModule;
     if (!byId("scene-blender-dialog").open || state.blenderRfbSessionId !== session.id) return;
     const rfb = new RFB(byId("scene-blender-screen"), blenderRfbLocation(session.id), {
@@ -8083,7 +8086,11 @@ function applySessionParts(snapshot) {
   if (usable(snapshot.creative_batches)) state.batches = snapshot.creative_batches.items || [];
   if (usable(snapshot.jobs)) state.jobs = snapshot.jobs.items || [];
   if (usable(snapshot.blender_runtime)) {
+    const previousWebIdentity = state.blenderRuntime?.web_pack?.fingerprint;
     state.blenderRuntime = snapshot.blender_runtime;
+    if (previousWebIdentity && previousWebIdentity !== state.blenderRuntime?.web_pack?.fingerprint) {
+      state.blenderRfbModule = null;
+    }
     renderBlenderRuntime();
     renderSceneText();
   }
