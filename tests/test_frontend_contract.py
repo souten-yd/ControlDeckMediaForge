@@ -139,6 +139,11 @@ def test_blender_session_gateway_is_private_reauthenticating_and_desktop_only() 
     assert "selectedRecoveryCandidate" in SCRIPT
     assert "recovery_working_id" in SCRIPT
     assert 'id="scene-blender-recover"' in MARKUP
+    assert 'id="scene-recovery-fork"' in MARKUP
+    assert 'call("scenes.recovery.fork", {' in SCRIPT
+    assert 'recovery_working_id: candidate.id' in SCRIPT
+    assert 'await openScene(result.scene.id)' in SCRIPT
+    assert 'recovery.base_revision_id !== state.sceneDocument?.current_revision_id' in SCRIPT
     assert "rfb.scaleViewport = true" in SCRIPT
     assert "rfb.resizeSession = false" in SCRIPT
     assert "rfb?.blur()" in SCRIPT

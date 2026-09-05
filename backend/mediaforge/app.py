@@ -3337,6 +3337,9 @@ def create_app(
                         result = {"items": [
                             item.model_dump(mode="json")
                             for item in scenes.list(scene_owner(identity))
+                        ], "working_copies": [
+                            item.model_dump(mode="json")
+                            for item in scene_workspace.list_working_copies(scene_owner(identity))
                         ]}
                     elif method == "scenes.get":
                         if set(params) != {"scene_id"}:
@@ -3348,6 +3351,13 @@ def create_app(
                             "scene": document.model_dump(mode="json"),
                             "revisions": [item.model_dump(mode="json") for item in revisions],
                         }
+                    elif method == "scenes.recovery.fork":
+                        if set(params) != {"scene_id", "recovery_working_id"}:
+                            raise ValueError("scene recovery fork fields differ")
+                        result = await scene_workspace.fork_recovery(
+                            scene_owner(identity), str(params.get("scene_id", "")),
+                            str(params.get("recovery_working_id", "")),
+                        )
                     elif method == "scenes.material.targets":
                         if set(params) != {"scene_id"}:
                             raise ValueError("scene material targets accepts only scene_id")
@@ -3869,6 +3879,18 @@ def create_app(
             "scene": document.model_dump(mode="json"),
             "revisions": [item.model_dump(mode="json") for item in revisions],
         }
+
+    @app.post("/workspace-api/scenes/{scene_id}/recovery/fork", include_in_schema=False)
+    async def standalone_scene_recovery_fork(scene_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"recovery_working_id"} or not isinstance(payload["recovery_working_id"], str):
+                raise SceneError("scene_recovery_invalid", "scene recovery fork fields differ")
+            return await scene_workspace.fork_recovery(
+                preferences.STANDALONE_SUBJECT, scene_id, payload["recovery_working_id"]
+            )
+        except SceneError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
 
     @app.get(
         "/workspace-api/scenes/{scene_id}/material-targets", include_in_schema=False

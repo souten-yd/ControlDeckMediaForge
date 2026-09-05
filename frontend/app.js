@@ -181,6 +181,8 @@ const state = {
   sceneMaterialImages: [],
   sceneMaterialRevisionId: "",
   sceneMaterialBusy: false,
+  sceneRecoveryBusy: false,
+  sceneRecoveryStatusKey: "",
   sceneMaterialStatusKey: "",
   sceneTexturePreviewJobId: "",
   sceneTexturePreviewAssetId: "",
@@ -665,6 +667,11 @@ async function standaloneCall(method, params) {
   if (method === "scenes.list") return json("/workspace-api/scenes");
   if (method === "scenes.get") {
     return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}`);
+  }
+  if (method === "scenes.recovery.fork") {
+    return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/recovery/fork`, {
+      method: "POST", body: JSON.stringify({recovery_working_id: params.recovery_working_id}),
+    });
   }
   if (method === "scenes.material.targets") {
     return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/material-targets`);
@@ -4749,6 +4756,10 @@ const SCENE_TEXT = {
     blenderConnected: "接続しました", blenderDisconnected: "Blender画面との接続が切れました。再接続します…",
     blenderClose: "表示だけ閉じる", blenderSave: "新しい版として保存して終了", blenderDiscard: "変更を破棄して終了",
     blenderRecover: "復旧候補をBlenderで開く",
+    recoveryFork: "復旧内容を別シーンとして保存",
+    recoveryForkBusy: "復旧内容を検証し、別シーンとして保存しています…",
+    recoveryForkFailed: "復旧内容を保存できませんでした。元シーンと復旧候補は保持しています。",
+    recoveryConflict: "元シーンが更新されています。復旧内容は別シーンとして保存できます。元版は上書きしません。",
     blenderRecovery: "未検証の復旧候補があります。開いて確認し、保存すると新しい正式版になります。",
     blenderIdleStopped: "操作がないため終了しました。未保存内容は復旧候補に残しました。",
     blenderDisconnectedStopped: "切断猶予を過ぎたため終了しました。未保存内容は復旧候補に残しました。",
@@ -4823,6 +4834,10 @@ const SCENE_TEXT = {
     blenderConnected: "Connected", blenderDisconnected: "The Blender display disconnected. Reconnecting…",
     blenderClose: "Close view only", blenderSave: "Save new revision and finish", blenderDiscard: "Discard changes and finish",
     blenderRecover: "Open recovery candidate in Blender",
+    recoveryFork: "Save recovery as a separate scene",
+    recoveryForkBusy: "Validating recovery and saving it as a separate scene…",
+    recoveryForkFailed: "Recovery could not be saved. The original scene and candidate are retained.",
+    recoveryConflict: "The original scene has changed. Save recovery as a separate scene without overwriting it.",
     blenderRecovery: "An unvalidated recovery candidate is available. Review it and save to create a formal revision.",
     blenderIdleStopped: "The idle session ended. Unsaved bytes were retained as a recovery candidate.",
     blenderDisconnectedStopped: "The disconnected grace period ended. Unsaved bytes were retained as a recovery candidate.",
@@ -4870,7 +4885,7 @@ function setSceneBackupStatus(key) {
 function renderSceneBackupControls() {
   const active = Boolean(state.sceneBackup);
   const busy = active || Boolean(state.sceneImport) || Boolean(activeBlenderSession())
-    || state.sceneMaterialBusy;
+    || state.sceneMaterialBusy || state.sceneRecoveryBusy;
   byId("scene-backup-download").disabled = busy || !state.selectedSceneId;
   byId("scene-restore-submit").disabled = busy;
   byId("scene-restore-file").disabled = busy;
@@ -4902,6 +4917,7 @@ function renderSceneText() {
   byId("scene-blender-save").textContent = text.blenderSave;
   byId("scene-blender-discard").textContent = text.blenderDiscard;
   byId("scene-blender-recover").textContent = text.blenderRecover;
+  byId("scene-recovery-fork").textContent = text.recoveryFork;
   byId("scene-backup-title").textContent = text.backupTitle;
   byId("scene-restore-file-label").textContent = text.restoreFile;
   byId("scene-backup-safety").textContent = text.backupSafety;
@@ -4996,6 +5012,7 @@ async function loadScenes() {
 }
 
 async function openScene(sceneId) {
+  if (state.selectedSceneId !== sceneId) state.sceneRecoveryStatusKey = "";
   state.selectedSceneId = sceneId;
   byId("scene-revision-status").textContent = "";
   renderScenes();
@@ -5356,7 +5373,7 @@ function renderSceneMaterialControls({targetsChanged = true} = {}) {
   }
   const normal = byId("scene-material-channel").value === "normal";
   byId("scene-material-normal-row").hidden = !normal;
-  const blocked = state.sceneMaterialBusy || Boolean(state.sceneImport)
+  const blocked = state.sceneMaterialBusy || state.sceneRecoveryBusy || Boolean(state.sceneImport)
     || Boolean(state.sceneBackup) || Boolean(activeBlenderSession());
   const ready = Boolean(target && slotSelect.value && uvSelect.value && imageSelect.value);
   for (const control of form.querySelectorAll("select,button,textarea")) control.disabled = blocked;
@@ -5568,6 +5585,8 @@ function renderBlenderSessionControls() {
   const latest = state.blenderSessions.find((item) => item.scene_id === state.selectedSceneId) || null;
   const recovery = selectedRecoveryCandidate();
   const recover = byId("scene-blender-recover");
+  const fork = byId("scene-recovery-fork");
+  const conflict = recovery && recovery.base_revision_id !== state.sceneDocument?.current_revision_id;
   const mobile = window.matchMedia("(max-width: 767px)").matches;
   let status = "";
   if (mobile) status = text.blenderDesktop;
@@ -5586,20 +5605,50 @@ function renderBlenderSessionControls() {
     })[latest.error_code] || text.blenderRecovery;
   } else if (latest?.state === "failed") status = recovery ? text.blenderRecovery : text.blenderFailed;
   else if (recovery) status = text.blenderRecovery;
+  if (conflict && !selected) status = text.recoveryConflict;
+  if (state.sceneRecoveryStatusKey) status = text[state.sceneRecoveryStatusKey];
   button.textContent = selected?.state === "ready" ? text.blenderOpen : text.blenderStart;
   button.disabled = mobile || Boolean(active && !selected) || Boolean(selected && selected.state !== "ready")
     || !sceneRuntimeReady() || state.blenderRuntime?.web_pack?.state !== "ready"
-    || Boolean(state.sceneImport) || Boolean(state.sceneBackup);
+    || Boolean(state.sceneImport) || Boolean(state.sceneBackup) || state.sceneRecoveryBusy;
   recover.hidden = !recovery || Boolean(selected);
-  recover.disabled = mobile || Boolean(active) || !sceneRuntimeReady()
+  recover.disabled = mobile || Boolean(active) || !sceneRuntimeReady() || Boolean(conflict) || state.sceneRecoveryBusy
     || state.blenderRuntime?.web_pack?.state !== "ready"
     || Boolean(state.sceneImport) || Boolean(state.sceneBackup);
+  fork.hidden = !recovery || Boolean(selected);
+  fork.disabled = state.sceneRecoveryBusy || Boolean(active) || !sceneRuntimeReady()
+    || Boolean(state.sceneImport) || Boolean(state.sceneBackup) || state.sceneMaterialBusy;
   byId("scene-blender-status").textContent = status;
   setBlenderSessionBusy(Boolean(active));
   renderSceneBackupControls();
   if (state.blenderRfbSessionId) {
     const current = state.blenderSessions.find((item) => item.id === state.blenderRfbSessionId);
     if (!current || current.state !== "ready") closeBlenderView();
+  }
+}
+
+async function forkSceneRecovery() {
+  const candidate = selectedRecoveryCandidate();
+  if (!candidate || state.sceneRecoveryBusy || activeBlenderSession()) return;
+  state.sceneRecoveryBusy = true;
+  state.sceneRecoveryStatusKey = "recoveryForkBusy";
+  setHostBusy(true);
+  renderBlenderSessionControls();
+  renderSceneMaterialControls({targetsChanged: false});
+  try {
+    const result = await call("scenes.recovery.fork", {
+      scene_id: candidate.scene_id, recovery_working_id: candidate.id,
+    });
+    state.sceneRecoveryStatusKey = "";
+    await loadScenes();
+    await openScene(result.scene.id);
+  } catch {
+    state.sceneRecoveryStatusKey = "recoveryForkFailed";
+  } finally {
+    state.sceneRecoveryBusy = false;
+    setHostBusy(false);
+    renderBlenderSessionControls();
+    renderSceneMaterialControls({targetsChanged: false});
   }
 }
 
@@ -7900,6 +7949,7 @@ for (const id of [
   byId(id).addEventListener("change", () => renderSceneMaterialControls({targetsChanged: false}));
 }
 byId("scene-blender-open").addEventListener("click", () => void startOrOpenBlender());
+byId("scene-recovery-fork").addEventListener("click", () => void forkSceneRecovery());
 byId("scene-blender-recover").addEventListener("click", () => {
   const recovery = selectedRecoveryCandidate();
   if (recovery) void startOrOpenBlender(recovery.id);

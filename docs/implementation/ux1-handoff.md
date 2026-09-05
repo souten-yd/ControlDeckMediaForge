@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 recovery fork / v0.28.16 candidate
+
+branch `ux1/3d-recovery-fork`、基準main `911f154`（PR #246 merged）。
+保存競合candidateを現行headへ無条件rebaseせず、明示操作で別sceneへ救出するprivate
+`scenes.recovery.fork`と日英UIを追加した。pinned runtime・独立GLB検査・依存blob hash確認後にだけ
+確定し、元headとcandidate bytes/stateを保持。元revision/asset lineageをprovenanceに記録する。
+同candidate再送は同sceneを返す。embedded `scenes.list`のworking_copies欠落も修正した。
+
+隔離source/packaged実HTTP + Chromium + Blender 4.5.9で、位置を変えた434,663 Bの.blendを救出。
+source 0.534秒、candidate package 0.540秒、package再送0.287秒、320px overflow 0。
+package source asset hashは`a6b1792d203085cd76299aae51aeaa471b6e534b033dbd0df042a8f979b4a3c3`。
+元head、candidate、source assetの同一性と再送の同sceneをassert。再送時はconsole/page errorとも0。
+証拠: `/data1tb/mf-recovery-fork-{source,package,package-retry}-evidence-20260906/observations.json`。
+source/packaged隔離serverは受入後に停止する。installed service/dataにはまだ触れていない。
+
+`./mf.sh test`: 993 passed / 既知warning 1件 / 102.15秒。候補bundleは31,623,524 B / SHA-256
+`5eeb7e510233bdc06e35db3aaf0b0c1a92c8da9abe3a1218a53e040edfeca2b5`、doctor `ok / 0.28.16 / packaged=true`。
+次はPR merge・exact main正式bundle署名公開・標準update・installed候補の分岐救出。
+これらは現時点で **NOT TESTED**。全体の3DS-8はPARTIAL、長時間credential等の残件は監査表に維持する。
+
 ## 2026-09-06 完了監査再開 / standalone recovery transport
 
 branch `ux1/3d-standalone-recovery`、基準main `1f4392a2d426a742046d0c03c99272ffb5e41c87`。

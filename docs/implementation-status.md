@@ -9022,3 +9022,29 @@ Hostコードの既定TTLは600秒、recipe managerのrefresh marginは120秒、
 
 最終`./mf.sh test`は981 passed / 既知Starlette warning 1件 / 102.21秒。
 初回は追加testの文字列切出しミスで1 failed / 980 passed。範囲修正後にfrontend 149件と全体を再実行した。
+
+## 2026-09-06 — recovery fork / v0.28.16 candidate
+
+main `911f154`から`ux1/3d-recovery-fork`。競合candidateを別sceneへ救出するprivate
+`scenes.recovery.fork`を追加した。元head/candidateは変更せず、snapshotをpinned BlenderとGLB validatorで
+検証、依存blob hashを照合して初版へ確定。元版・candidate・source asset lineageをprovenanceへ保持する。
+再送は同candidateに対応する同sceneを返す。埋め込み/standaloneの同じdomain経路と日英・mobile UIを実装した。
+embedded `scenes.list`がworking_copiesを返さず再読込で候補を失う点も修正した。
+
+`PYTHONPATH=backend:. .venv/bin/python scripts/3ds_recovery_fork_e2e.py --serve`に新しい隔離data dirと
+既存4.5.9 legacy rootを渡し、実BlenderでCube位置を変更した.blendを作成、candidateを残して元headを進めた。
+Playwright環境から同scriptの`--url` modeで実HTTP/browser操作を行った。
+source: scene `scene_d2204e713dd44887809379aa650d4070` → recovery `scene_f21a1cac27295a5da0f5f39955dbebeb`、
+434,663 B / SHA-256 `fab9c6d090accf82d9a6cfde872fe2f9f9299f60908acf5c8ec3a7148d3d5e0c`、0.534秒。
+候補bundleの実process: scene `scene_2a9a84e4a9494f648dde816d295ea46b` → recovery
+`scene_ef8430a81ec05914a8e4fa6234cb130f`、434,663 B / SHA-256
+`a6b1792d203085cd76299aae51aeaa471b6e534b033dbd0df042a8f979b4a3c3`、0.540秒。再送0.287秒。
+両方で元head不変、candidate/source asset hash一致、320px overflow 0、再送は同sceneをassert。
+package再送はconsole/page error 0。証拠は`/data1tb/mf-recovery-fork-{source,package,package-retry}-evidence-20260906`。
+
+回帰はowner違い、scene違い、欠落/不正/symlink、runtime不一致、依存hash不一致、同時要求、取消後再試行、
+commit失敗asset rollback、restart後idempotency、両transportを追加。`./mf.sh test`は993 passed /
+既知Starlette warning 1件 / 102.15秒。
+v0.28.16 candidateは31,623,524 B / SHA-256
+`5eeb7e510233bdc06e35db3aaf0b0c1a92c8da9abe3a1218a53e040edfeca2b5`、doctorは`ok / 0.28.16 / packaged=true`。
+正式署名公開・標準update・installed候補の分岐救出は **NOT TESTED**。3DS-8全体はPARTIALのまま。
