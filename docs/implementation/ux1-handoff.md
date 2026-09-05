@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-8 opaque iframe noVNC module loading
+
+branch `ux1/3d-web-client-cors`。正式v0.28.12を実ControlDeckへ標準updateし、10.56秒 / 最大RSS
+788,948 KiB、`current=0.28.12`、旧0.28.11保持、新PID 2174325、health healthyを確認した。owner修正後の
+installed browserはAgent作成sceneを取得でき、Blender sessionも`ready`、TigerVNC/Blender process稼働まで進んだ。
+しかしopaque origin `null`からのnative `import()`はHost frame cookieを送らず、noVNC `rfb.js`が401/CORSで拒否された。
+consoleは`No 'Access-Control-Allow-Origin' header`、画面はreconnect表示。sessionは明示stopした。
+
+noVNC module graphを`crossorigin=use-credentials`の外部module entrypointから遅延ロードし、opaque iframeでもHostの
+frame cookieを全依存へ送るよう変更した。loaderは同梱固定fileで、既存のmanifest-pinned noVNC routeだけをimportする。
+公開API/contributionは変更しない。版は0.28.13。focused frontend/Blender web/release bundle群はPASS。
+exact head `./mf.sh test`は979件 / warning 1件 / 99.39秒PASS。candidate bundleは31,619,516 B / SHA-256
+`55d567cb14dcad501730b0ae3e9c7b11953292c756255c167bbeccb4ab25e624`、展開binary doctorは
+`ok / 0.28.13 / packaged=true`。PR/release、installed browser再実測は未実施。
+
 ## 2026-09-06 3DS-8 stable scene owner
 
 branch `ux1/3d-stable-scene-owner`。PR #239（model schema）とPR #240（pack schema）はmerge済み。

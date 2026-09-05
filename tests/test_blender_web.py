@@ -273,8 +273,14 @@ def test_private_client_route_is_cors_readable_immutable_and_not_public(tmp_path
         assert response.headers["access-control-allow-origin"] == "*"
         assert response.headers["cross-origin-resource-policy"] == "cross-origin"
         assert response.headers["cache-control"].endswith("immutable")
+        loader = client.get("/blender-rfb-loader.js")
+        assert loader.status_code == 200
+        assert b'import RFB from "./blender-web-client/core/rfb.js"' in loader.content
+        assert loader.headers["access-control-allow-origin"] == "*"
+        assert loader.headers["cross-origin-resource-policy"] == "cross-origin"
         assert client.get("/blender-web-client/package.json").status_code == 404
         assert "/blender-web-client" not in client.get("/openapi.json").text
+        assert "/blender-rfb-loader.js" not in client.get("/openapi.json").text
 
 
 def test_private_workspace_installs_only_the_pinned_web_pack(tmp_path: Path) -> None:

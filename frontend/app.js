@@ -5655,6 +5655,34 @@ function scheduleBlenderRfbReconnect(session) {
   state.blenderRfbReconnect = window.setTimeout(() => void connectBlenderRfb(current), delay);
 }
 
+function loadBlenderRfb(webIdentity) {
+  if (typeof globalThis.__mediaForgeBlenderRfb === "function") {
+    return Promise.resolve(globalThis.__mediaForgeBlenderRfb);
+  }
+  if (state.blenderRfbModule) return state.blenderRfbModule;
+  state.blenderRfbModule = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.type = "module";
+    // The iframe has an opaque origin. Native import() uses same-origin
+    // credentials and omits the Host frame cookie, while a module graph loaded
+    // with use-credentials keeps authentication on every noVNC dependency.
+    script.crossOrigin = "use-credentials";
+    script.src = `${workspaceFrameRoot()}/blender-rfb-loader.js?v=${encodeURIComponent(webIdentity)}`;
+    script.onload = () => {
+      script.remove();
+      const RFB = globalThis.__mediaForgeBlenderRfb;
+      if (typeof RFB === "function") resolve(RFB);
+      else reject(new Error("Blender RFB module did not register"));
+    };
+    script.onerror = () => {
+      script.remove();
+      reject(new Error("Blender RFB module could not be loaded"));
+    };
+    document.head.append(script);
+  });
+  return state.blenderRfbModule;
+}
+
 async function connectBlenderRfb(session) {
   if (!byId("scene-blender-dialog").open || state.disabled || session.state !== "ready") return;
   disconnectBlenderRfb({manual: false, clearTarget: true});
@@ -5663,10 +5691,7 @@ async function connectBlenderRfb(session) {
   byId("scene-blender-connection").textContent = sceneText().blenderConnecting;
   try {
     const webIdentity = state.blenderRuntime?.web_pack?.fingerprint?.slice(0, 16) || "unavailable";
-    state.blenderRfbModule ||= import(
-      `${workspaceFrameRoot()}/blender-web-client/core/rfb.js?v=${encodeURIComponent(webIdentity)}`,
-    );
-    const {default: RFB} = await state.blenderRfbModule;
+    const RFB = await loadBlenderRfb(webIdentity);
     if (!byId("scene-blender-dialog").open || state.blenderRfbSessionId !== session.id) return;
     const rfb = new RFB(byId("scene-blender-screen"), blenderRfbLocation(session.id), {
       wsProtocols: blenderRfbProtocols(),
