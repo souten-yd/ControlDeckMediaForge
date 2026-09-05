@@ -58,8 +58,12 @@ Blenderの成功終了だけで検証済みにせず、既存独立GLB/PNG検査
 
 ## 4. 軽量3Dビューワー
 
-ブラウザWebGLのGLB viewerを遅延ロードする。候補はThree.jsのGLTFLoader。
-採用版・extension/decoderは実装時に公式資料と既存frontend build方針へ合わせて固定する。
+ブラウザWebGLのGLB viewerを遅延ロードする。初期実装はThree.js 0.185.1の
+`WebGLRenderer` / `GLTFLoader` / `OrbitControls`をMIT license notice付きでMediaForge bundleへ固定する。
+npm registry integrityは
+`sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==`。
+外部CDNへ依存せず、bundle生成はlockfileから再現し、生成済みviewer moduleのhashも検査する。
+DRACO/KTX2/Meshopt decoderは同梱せず、required extensionをbackend検証が受理した場合だけ追加する。
 外部CDN・外部texture URIを自動取得しない。認証付きasset deliveryから必要なbytesだけを読む。
 
 必須: orbit/pan/zoom、fit、背景・light preset、material/wireframe、bounding box、triangle数、
@@ -71,6 +75,11 @@ GPU/browser memory予算とtexture総画素を制限し、大型sceneは低LOD�
 非表示タブは描画loopを止め、WebGL context loss/recoveryを扱う。
 同一assetのimmutable hashでcacheを再利用する。Libraryはthumbnailとmetadataを先に取得する。
 viewer上の材質previewは未保存と表示し、採用操作でserver revisionへ確定する。
+
+opaque iframeではGLB bytesを生URLやserver pathで渡さない。既存認証WebSocket上でconnection-scopedな
+opaque viewer handleを発行し、512 KiB以下のchunkとして読む。project ZIPはexact entry/hashを検証して
+session専用stagingへ一度だけ展開し、close・asset切替・socket切断で回収する。standalone development
+mirrorも同じdomain validationを通す。Library 50件の表示はGLB本体を一括取得しない。
 
 ## 5. 画像から材質への流れ
 
