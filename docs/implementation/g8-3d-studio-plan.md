@@ -1,6 +1,6 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: 3DS-0〜3 VERIFIED / 次は3DS-4
+Status: 3DS-0〜3、3DS-4a、4b core/transport VERIFIED / 次は3DS-4 UI・backup
 Date: 2026-09-05  
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
@@ -15,6 +15,8 @@ G9生成3Dモデル採用とは分離し、画像生成モデルの変更やSoni
 3DS-0の対象commit・fixture・実機互換性表は
 [`3ds-compatibility.md`](3ds-compatibility.md) に固定した。
 3DS-1は同表へruntime resolver、legacy登録、設定診断、G8同一hashの実測を追記した。
+scene/revision/working copyへ進んだ。3DS-4a persistenceと3DS-4b core/transportまで完了し、
+次はbrowser import UIとbackup/restoreを小PRに分ける。
 
 | 項目 | 調査で確認した現状 | 追加するもの |
 |---|---|---|

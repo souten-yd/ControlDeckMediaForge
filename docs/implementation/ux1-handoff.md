@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-05 3DS-4b private working-copy transport
+
+branch `ux1/3d-scene-working-copy`、実装commit `5a95a21`。3DS-4b coreをlifespanへ接続し、owner-scoped
+WebSocket/standalone private transport、session working list、socket切断時upload回収を追加した。
+公開OpenAPI/addon/tool/executorは未変更。実Uvicornの1,247,112 B / 3 chunk importは0.343030秒、
+working commit 0.252321秒、二重writerは422。packaged 0.27.3でもimport 0.296297秒、commit
+0.274779秒、revision 2件、autoexec sentinel 0。fullは902 passed / 1 warning / 79.74秒。
+候補bundle 31,392,211 B / SHA-256
+`197099156662638de8bd122bec4a30dc35a69ca06b55efe0d73a7c95628c2323`、doctor ok。
+
+browser UI/ControlDeck installedは **NOT IMPLEMENTED / NOT TESTED**、ControlDeck変更0。次は
+`ux1/3d-scene-import-ui`でbrowser import/scene表示、その後`ux1/3d-scene-backup`。
+
 ## 2026-09-05 3DS-4b core bounded working copy
 
 PR #224、branch `ux1/3d-scene-working-core`、実装commit `c03c8dc`。256 MiB `.blend` / 512 KiB chunk / 10分upload、

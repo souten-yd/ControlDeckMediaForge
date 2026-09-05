@@ -339,6 +339,15 @@ Asset and provenance documents conform to [`schemas/asset.json`](../schemas/asse
 Blender worker. Scene/revision operations remain private until the 3DS-7 Agent
 tool and workflow compatibility gate.
 
+The private workspace transport accepts `.blend` only as a declared upload:
+`scenes.import.begin`, sequential `scenes.import.chunk` calls, then
+`scenes.import.commit` or `scenes.import.cancel`. Each chunk is at most 512 KiB;
+the declaration is at most 256 MiB and carries the whole-file SHA-256. Working
+copies use `scenes.working.acquire/renew/release/commit`; their ten-minute lease,
+owner, and base revision are enforced by the server. The standalone development
+mirror lives below `/workspace-api/scenes/**`. None of these private routes are
+included in OpenAPI, `addon.json`, Agent tools, or workflow executors.
+
 ## Reference collections and profiles
 
 - `GET /api/v1/reference-collections`
