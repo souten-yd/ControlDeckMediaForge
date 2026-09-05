@@ -1,6 +1,6 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: 3DS-0〜1 VERIFIED / 3DS-2 IN PROGRESS（install/cancel/restart/update/switch/repair VERIFIED）
+Status: 3DS-0〜2 VERIFIED / 次は3DS-3
 Date: 2026-09-05  
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
@@ -44,8 +44,8 @@ G9生成3Dモデル採用とは分離し、画像生成モデルの変更やSoni
 
 3DS-3は3DS-1/2と独立に開発可能だが、この表は並列agent実行を要求するものではない。
 一つのフェーズが大きければ機能と失敗経路を保つ小PRへ分ける。
-3DS-0→3DS-1と3DS-2のdurable install/cancel/restart、side-by-side更新/切替/修復sliceは
-完了した。次は3DS-2の参照保護付き削除を独立PRにする。
+3DS-0→3DS-1と3DS-2のdurable install/cancel/restart、side-by-side更新/切替/修復、
+参照保護付き削除とCLI共通化は完了した。次は3DS-3 Library GLB viewerへ進む。
 
 ## 3. PRスライスの候補
 

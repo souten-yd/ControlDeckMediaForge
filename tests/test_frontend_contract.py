@@ -33,6 +33,8 @@ DOM_IDS = (
     "blender-version-value", "blender-runtime-refresh", "blender-runtime-details",
     "blender-runtime-list", "blender-runtime-fingerprint", "blender-runtime-install",
     "blender-runtime-update", "blender-runtime-cancel", "blender-runtime-progress", "blender-runtime-progress-label",
+    "blender-remove-dialog", "blender-remove-title", "blender-remove-summary",
+    "blender-remove-detail", "blender-remove-cancel", "blender-remove-confirm",
     "mode-simple", "mode-advanced",
     "create-media-switch", "create-media-image", "create-media-video",
     "create-intent-label", "video-create-fields",
@@ -87,6 +89,8 @@ def test_blender_runtime_lifecycle_has_embedded_and_standalone_receivers() -> No
         "blender.runtime.update",
         "blender.runtime.repair",
         "blender.runtime.switch",
+        "blender.runtime.remove.preview",
+        "blender.runtime.remove",
         "blender.runtime.operations.cancel",
     ):
         assert method in SCRIPT

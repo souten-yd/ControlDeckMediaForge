@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import hashlib
 import json
 import logging
 import os
@@ -236,6 +237,77 @@ class BlenderRuntimeManager:
             )
         return self._start(runtime_id, BlenderRuntimeOperationAction.SWITCH)
 
+    def removal_preview(self, runtime_id: str) -> dict[str, Any]:
+        if runtime_id not in self._catalog().specs:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_not_found", "Blender runtime is not in the trusted catalog"
+            )
+        row = next((
+            item for item in self.resolver.status().get("runtimes", [])
+            if item.get("runtime_id") == runtime_id
+        ), None)
+        if row is None:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_not_found", "Blender runtime was not found"
+            )
+        if row.get("ownership") != "managed":
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_external", "external Blender runtime cannot be removed"
+            )
+        destination = contained(
+            self.resolver.managed_root, self.resolver.managed_root / runtime_id
+        )
+        reclaimable = self._directory_bytes(destination)
+        live_references = self.resolver.live_reference_count(runtime_id)
+        blocked: list[str] = []
+        if row.get("active") is True:
+            blocked.append("active_runtime")
+        if live_references:
+            blocked.append("live_reference")
+        identity = {
+            "runtime_id": runtime_id,
+            "version": str(row["version"]),
+            "active": row.get("active") is True,
+            "state": str(row["state"]),
+            "reclaimable_bytes": reclaimable,
+            "live_reference_count": live_references,
+            "project_reference_count": 0,
+            "blocked_reasons": blocked,
+        }
+        fingerprint = hashlib.sha256(
+            json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return {
+            **identity,
+            "can_remove": not blocked,
+            "confirmation_fingerprint": fingerprint,
+        }
+
+    def remove(self, runtime_id: str, confirmation_fingerprint: str) -> BlenderRuntimeOperation:
+        preview = self.removal_preview(runtime_id)
+        if confirmation_fingerprint != preview["confirmation_fingerprint"]:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_remove_changed", "Blender runtime removal preview changed"
+            )
+        if not preview["can_remove"]:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_in_use", "Blender runtime is still in use"
+            )
+        try:
+            operation = self.store.create_blender_runtime_operation(
+                runtime_id,
+                str(preview["version"]),
+                BlenderRuntimeOperationAction.REMOVE,
+                bytes_total=int(preview["reclaimable_bytes"]),
+                result={"removal_preview": preview},
+            )
+        except ValueError as exc:
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_operation_active", "another Blender runtime operation is active"
+            ) from exc
+        self._spawn(operation.id)
+        return operation
+
     def _start(
         self, runtime_id: str, action: BlenderRuntimeOperationAction
     ) -> BlenderRuntimeOperation:
@@ -299,6 +371,8 @@ class BlenderRuntimeManager:
             try:
                 if operation.action == BlenderRuntimeOperationAction.SWITCH:
                     await self._switch(operation)
+                elif operation.action == BlenderRuntimeOperationAction.REMOVE:
+                    await self._remove(operation)
                 else:
                     await self._install(operation)
             except asyncio.CancelledError:
@@ -348,6 +422,110 @@ class BlenderRuntimeManager:
             operation.id,
             state=BlenderRuntimeOperationState.READY,
             result={"runtime_id": runtime.runtime_id, "version": runtime.version},
+        )
+
+    async def _remove(self, operation: BlenderRuntimeOperation) -> None:
+        preview = (operation.result or {}).get("removal_preview")
+        if not isinstance(preview, dict) or not isinstance(
+            preview.get("confirmation_fingerprint"), str
+        ):
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_remove_changed", "Blender runtime removal preview is unavailable"
+            )
+        self.store.update_blender_runtime_operation(
+            operation.id, state=BlenderRuntimeOperationState.PREFLIGHT
+        )
+        self._raise_if_canceled(operation.id)
+        destination = contained(
+            self.resolver.managed_root,
+            self.resolver.managed_root / operation.runtime_id,
+        )
+        removing = contained(
+            self.resolver.managed_root,
+            self.resolver.managed_root / ".removing" / operation.id,
+        )
+        removed_bytes = int(preview.get("reclaimable_bytes", 0))
+        with self.resolver.removal_guard():
+            registered = any(
+                row.get("runtime_id") == operation.runtime_id
+                for row in self.resolver.status().get("runtimes", [])
+            )
+            if not registered:
+                if removing.exists():
+                    if removing.is_symlink() or not removing.is_dir():
+                        raise BlenderRuntimeOperationError(
+                            "blender_runtime_remove_unsafe", "Blender removal staging is unsafe"
+                        )
+                    await asyncio.to_thread(shutil.rmtree, removing)
+                self.store.update_blender_runtime_operation(
+                    operation.id,
+                    state=BlenderRuntimeOperationState.READY,
+                    bytes_done=removed_bytes,
+                    result={
+                        "runtime_id": operation.runtime_id,
+                        "version": operation.version,
+                        "removed_bytes": removed_bytes,
+                        "recovered": True,
+                    },
+                )
+                return
+            if removing.exists():
+                if removing.is_symlink() or not removing.is_dir():
+                    raise BlenderRuntimeOperationError(
+                        "blender_runtime_remove_unsafe", "Blender removal staging is unsafe"
+                    )
+                if registered:
+                    if destination.exists() or destination.is_symlink():
+                        raise BlenderRuntimeOperationError(
+                            "blender_runtime_remove_unsafe", "Blender removal state conflicts"
+                        )
+                    os.replace(removing, destination)
+            current = self.removal_preview(operation.runtime_id)
+            if current["confirmation_fingerprint"] != preview["confirmation_fingerprint"]:
+                raise BlenderRuntimeOperationError(
+                    "blender_runtime_remove_changed", "Blender runtime removal preview changed"
+                )
+            if not current["can_remove"]:
+                raise BlenderRuntimeOperationError(
+                    "blender_runtime_in_use", "Blender runtime is still in use"
+                )
+            self.store.update_blender_runtime_operation(
+                operation.id, state=BlenderRuntimeOperationState.DELETING
+            )
+            removing.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            moved = False
+            if destination.exists() or destination.is_symlink():
+                self._ensure_managed_destination(destination)
+                os.replace(destination, removing)
+                moved = True
+            try:
+                if not self.resolver.unregister_managed(operation.runtime_id):
+                    raise BlenderRuntimeOperationError(
+                        "blender_runtime_not_found", "Blender runtime was not found"
+                    )
+                if moved:
+                    await asyncio.to_thread(shutil.rmtree, removing)
+            except Exception:
+                if moved and removing.exists() and not destination.exists():
+                    os.replace(removing, destination)
+                    self.resolver.register_managed(
+                        runtime_id=operation.runtime_id,
+                        version=operation.version,
+                        location=operation.runtime_id,
+                        archive_sha256=self._catalog().specs[
+                            operation.runtime_id
+                        ].archive_sha256,
+                    )
+                raise
+        self.store.update_blender_runtime_operation(
+            operation.id,
+            state=BlenderRuntimeOperationState.READY,
+            bytes_done=removed_bytes,
+            result={
+                "runtime_id": operation.runtime_id,
+                "version": operation.version,
+                "removed_bytes": removed_bytes,
+            },
         )
 
     async def _install(self, operation: BlenderRuntimeOperation) -> None:
@@ -697,3 +875,20 @@ class BlenderRuntimeManager:
                 "blender_runtime_destination_unsafe", "managed Blender destination is unsafe"
             )
         destination.resolve().relative_to(self.resolver.managed_root)
+
+    @staticmethod
+    def _directory_bytes(root: Path) -> int:
+        if root.is_symlink() or not root.is_dir():
+            return 0
+        total = 0
+        for directory, names, files in os.walk(root, followlinks=False):
+            current = Path(directory)
+            names[:] = [name for name in names if not (current / name).is_symlink()]
+            for name in files:
+                path = current / name
+                try:
+                    if not path.is_symlink() and path.is_file():
+                        total += path.stat().st_size
+                except OSError:
+                    continue
+        return total

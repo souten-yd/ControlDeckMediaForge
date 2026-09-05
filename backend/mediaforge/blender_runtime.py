@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 import fcntl
 import hashlib
@@ -10,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import threading
 from typing import Any
 
 from scripts.blender_runtime import BlenderRuntimeError, RuntimeSpec, load_spec, validate_spec
@@ -60,6 +63,8 @@ class BlenderRuntimeResolver:
         self.manifest_path = Path(os.path.abspath(manifest_path))
         self.trusted_worker = Path(os.path.abspath(trusted_worker))
         self.catalog_path = Path(os.path.abspath(catalog_path)) if catalog_path else None
+        self._reference_guard = threading.RLock()
+        self._live_references: dict[str, int] = {}
 
     def _manifest(self) -> dict[str, Any]:
         if self.manifest_path.is_symlink() or not self.manifest_path.is_file():
@@ -374,27 +379,92 @@ class BlenderRuntimeResolver:
         return resolved
 
     def activate(self, runtime_id: str) -> ResolvedBlenderRuntime:
-        self.registry_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        lock_path = self.registry_path.with_suffix(self.registry_path.suffix + ".lock")
-        if lock_path.is_symlink():
-            raise BlenderRuntimeRegistryError("Blender runtime registry lock must not be a symlink")
-        with lock_path.open("a", encoding="ascii") as lock:
-            lock_path.chmod(0o600)
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            registry = self._read_registry()
-            try:
-                record = next(
-                    row for row in registry["runtimes"] if row["runtime_id"] == runtime_id
+        with self._reference_guard:
+            self.registry_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            lock_path = self.registry_path.with_suffix(self.registry_path.suffix + ".lock")
+            if lock_path.is_symlink():
+                raise BlenderRuntimeRegistryError(
+                    "Blender runtime registry lock must not be a symlink"
                 )
-            except StopIteration as exc:
-                raise BlenderRuntimeRegistryError("Blender runtime is not registered") from exc
-            runtime = self._resolved(record)
-            if not self._ready(runtime):
-                raise BlenderRuntimeRegistryError("Blender runtime is not ready")
-            if registry["active_runtime_id"] != runtime_id:
-                registry["active_runtime_id"] = runtime_id
-                self._write_registry(registry)
+            with lock_path.open("a", encoding="ascii") as lock:
+                lock_path.chmod(0o600)
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                registry = self._read_registry()
+                try:
+                    record = next(
+                        row for row in registry["runtimes"] if row["runtime_id"] == runtime_id
+                    )
+                except StopIteration as exc:
+                    raise BlenderRuntimeRegistryError("Blender runtime is not registered") from exc
+                runtime = self._resolved(record)
+                if not self._ready(runtime):
+                    raise BlenderRuntimeRegistryError("Blender runtime is not ready")
+                if registry["active_runtime_id"] != runtime_id:
+                    registry["active_runtime_id"] = runtime_id
+                    self._write_registry(registry)
         return runtime
+
+    @contextmanager
+    def g8_reference(self) -> Iterator[ResolvedBlenderRuntime | None]:
+        """Pin the resolved G8 runtime until its child process has finished."""
+        runtime: ResolvedBlenderRuntime | None
+        with self._reference_guard:
+            runtime = self.resolve_g8()
+            if runtime is not None:
+                self._live_references[runtime.runtime_id] = (
+                    self._live_references.get(runtime.runtime_id, 0) + 1
+                )
+        try:
+            yield runtime
+        finally:
+            if runtime is not None:
+                with self._reference_guard:
+                    remaining = self._live_references.get(runtime.runtime_id, 0) - 1
+                    if remaining > 0:
+                        self._live_references[runtime.runtime_id] = remaining
+                    else:
+                        self._live_references.pop(runtime.runtime_id, None)
+
+    @contextmanager
+    def removal_guard(self) -> Iterator[None]:
+        """Serialize reference acquisition with remove revalidation and rename."""
+        with self._reference_guard:
+            yield
+
+    def live_reference_count(self, runtime_id: str) -> int:
+        with self._reference_guard:
+            return self._live_references.get(runtime_id, 0)
+
+    def unregister_managed(self, runtime_id: str) -> bool:
+        """Remove only a non-active managed registry record; never delete files."""
+        with self._reference_guard:
+            if self._live_references.get(runtime_id, 0):
+                raise BlenderRuntimeRegistryError("Blender runtime has live references")
+            self.registry_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            lock_path = self.registry_path.with_suffix(self.registry_path.suffix + ".lock")
+            if lock_path.is_symlink():
+                raise BlenderRuntimeRegistryError(
+                    "Blender runtime registry lock must not be a symlink"
+                )
+            with lock_path.open("a", encoding="ascii") as lock:
+                lock_path.chmod(0o600)
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                registry = self._read_registry()
+                record = next(
+                    (row for row in registry["runtimes"] if row["runtime_id"] == runtime_id),
+                    None,
+                )
+                if record is None:
+                    return False
+                if record["ownership"] != "managed":
+                    raise BlenderRuntimeRegistryError("external Blender runtime cannot be removed")
+                if registry["active_runtime_id"] == runtime_id:
+                    raise BlenderRuntimeRegistryError("active Blender runtime cannot be removed")
+                registry["runtimes"] = [
+                    row for row in registry["runtimes"] if row["runtime_id"] != runtime_id
+                ]
+                self._write_registry(registry)
+        return True
 
     def resolve_g8(self) -> ResolvedBlenderRuntime | None:
         try:

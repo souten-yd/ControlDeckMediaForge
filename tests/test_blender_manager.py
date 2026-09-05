@@ -5,17 +5,20 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import shutil
 import tarfile
 import time
 from types import SimpleNamespace
 
 import httpx
 from fastapi.testclient import TestClient
+import pytest
 
 from mediaforge.app import create_app
 from mediaforge.blender_manager import BlenderRuntimeManager, RUNTIME_ID
 from mediaforge.blender_operation import (
     BlenderRuntimeOperationAction,
+    BlenderRuntimeOperationError,
     BlenderRuntimeOperationState,
 )
 from mediaforge.blender_runtime import BlenderRuntimeResolver
@@ -424,6 +427,23 @@ def test_private_workspace_install_uses_only_the_trusted_catalog(tmp_path: Path)
         assert status["state"] == "ready"
         serialized = json.dumps(status)
         assert str(tmp_path) not in serialized and "path" not in serialized
+        preview = client.post(
+            "/workspace-api/blender/runtime/operations",
+            json={"action": "remove_preview", "runtime_id": RUNTIME_ID},
+        )
+        assert preview.status_code == 200
+        assert preview.json()["can_remove"] is False
+        assert preview.json()["blocked_reasons"] == ["active_runtime"]
+        blocked = client.post(
+            "/workspace-api/blender/runtime/operations",
+            json={
+                "action": "remove",
+                "runtime_id": RUNTIME_ID,
+                "confirmation_fingerprint": preview.json()["confirmation_fingerprint"],
+            },
+        )
+        assert blocked.status_code == 422
+        assert blocked.json()["detail"]["code"] == "blender_runtime_in_use"
 
 
 def test_update_installs_side_by_side_then_switches_without_changing_g8(tmp_path: Path) -> None:
@@ -590,3 +610,140 @@ def test_invalid_catalog_disables_management_without_hiding_runtime_status(tmp_p
         assert response.status_code == 200
         assert response.json()["management_available"] is False
         assert response.json()["management_reason"] == "blender_runtime_catalog_invalid"
+
+
+def test_remove_requires_inactive_unreferenced_runtime_and_current_preview(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        base, manifest = archive_fixture(tmp_path)
+        recommended = archive_content("4.5.13")
+        catalog = catalog_fixture(tmp_path, base, recommended)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(
+            tmp_path, store, manifest,
+            catalog_transport({"4.5.9": base, "4.5.13": recommended}),
+            catalog=catalog,
+        )
+        await manager.start()
+        assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
+        with pytest.raises(BlenderRuntimeOperationError) as active_error:
+            manager.remove(RUNTIME_ID, manager.removal_preview(RUNTIME_ID)["confirmation_fingerprint"])
+        assert active_error.value.code == "blender_runtime_in_use"
+        assert (await wait_terminal(store, manager.update().id)).state == BlenderRuntimeOperationState.READY
+
+        with resolver.g8_reference() as pinned:
+            assert pinned is not None and pinned.runtime_id == RUNTIME_ID
+            blocked = manager.removal_preview(RUNTIME_ID)
+            assert blocked["can_remove"] is False
+            assert blocked["live_reference_count"] == 1
+            assert "live_reference" in blocked["blocked_reasons"]
+
+        preview = manager.removal_preview(RUNTIME_ID)
+        assert preview["can_remove"] is True and preview["reclaimable_bytes"] > 0
+        marker = resolver.managed_root / RUNTIME_ID / "changed-after-preview"
+        marker.write_text("change", encoding="utf-8")
+        with pytest.raises(BlenderRuntimeOperationError) as stale:
+            manager.remove(RUNTIME_ID, preview["confirmation_fingerprint"])
+        assert stale.value.code == "blender_runtime_remove_changed"
+        marker.unlink()
+
+        preserved = tmp_path / "data/assets/preserved.txt"
+        preserved.parent.mkdir(parents=True, exist_ok=True)
+        preserved.write_text("scene and assets are outside the runtime", encoding="utf-8")
+        current = manager.removal_preview(RUNTIME_ID)
+        removed = await wait_terminal(
+            store,
+            manager.remove(RUNTIME_ID, current["confirmation_fingerprint"]).id,
+        )
+        assert removed.state == BlenderRuntimeOperationState.READY
+        assert removed.result is not None
+        assert removed.result["removed_bytes"] == current["reclaimable_bytes"]
+        assert not (resolver.managed_root / RUNTIME_ID).exists()
+        assert resolver.resolve_g8() is None
+        assert resolver.resolve_active().runtime_id == "blender-4.5.13-linux-x64"
+        assert preserved.read_text(encoding="utf-8") == "scene and assets are outside the runtime"
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_remove_registry_failure_restores_runtime_directory(tmp_path: Path, monkeypatch) -> None:
+    async def scenario() -> None:
+        base, manifest = archive_fixture(tmp_path)
+        recommended = archive_content("4.5.13")
+        catalog = catalog_fixture(tmp_path, base, recommended)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(
+            tmp_path, store, manifest,
+            catalog_transport({"4.5.9": base, "4.5.13": recommended}),
+            catalog=catalog,
+        )
+        await manager.start()
+        assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
+        assert (await wait_terminal(store, manager.update().id)).state == BlenderRuntimeOperationState.READY
+        preview = manager.removal_preview(RUNTIME_ID)
+
+        def fail_unregister(_runtime_id: str) -> bool:
+            raise RuntimeError("injected unregister failure")
+
+        monkeypatch.setattr(resolver, "unregister_managed", fail_unregister)
+        failed = await wait_terminal(
+            store, manager.remove(RUNTIME_ID, preview["confirmation_fingerprint"]).id
+        )
+        assert failed.state == BlenderRuntimeOperationState.FAILED
+        assert (resolver.managed_root / RUNTIME_ID / "install/blender").is_file()
+        assert resolver.resolve_g8() is not None
+        assert not any((resolver.managed_root / ".removing").glob("*"))
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("stage_present", [True, False])
+def test_remove_restart_finishes_after_registry_commit(
+    tmp_path: Path, stage_present: bool
+) -> None:
+    async def scenario() -> None:
+        base, manifest = archive_fixture(tmp_path)
+        recommended = archive_content("4.5.13")
+        catalog = catalog_fixture(tmp_path, base, recommended)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(
+            tmp_path, store, manifest,
+            catalog_transport({"4.5.9": base, "4.5.13": recommended}),
+            catalog=catalog,
+        )
+        await manager.start()
+        assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
+        assert (await wait_terminal(store, manager.update().id)).state == BlenderRuntimeOperationState.READY
+        preview = manager.removal_preview(RUNTIME_ID)
+        operation = store.create_blender_runtime_operation(
+            RUNTIME_ID, "4.5.9", BlenderRuntimeOperationAction.REMOVE,
+            bytes_total=preview["reclaimable_bytes"], result={"removal_preview": preview},
+        )
+        removing = resolver.managed_root / ".removing" / operation.id
+        removing.parent.mkdir(parents=True)
+        (resolver.managed_root / RUNTIME_ID).replace(removing)
+        assert resolver.unregister_managed(RUNTIME_ID) is True
+        if not stage_present:
+            shutil.rmtree(removing)
+        store.update_blender_runtime_operation(
+            operation.id, state=BlenderRuntimeOperationState.DELETING
+        )
+        await manager.stop()
+
+        restarted_store = Store(tmp_path / "data")
+        restarted_store.initialize()
+        restarted, restarted_resolver = runtime_manager(
+            tmp_path, restarted_store, manifest,
+            catalog_transport({"4.5.9": base, "4.5.13": recommended}),
+            catalog=catalog,
+        )
+        await restarted.start()
+        recovered = await wait_terminal(restarted_store, operation.id)
+        assert recovered.state == BlenderRuntimeOperationState.READY
+        assert recovered.result is not None and recovered.result["recovered"] is True
+        assert not removing.exists()
+        assert restarted_resolver.resolve_active().runtime_id == "blender-4.5.13-linux-x64"
+        await restarted.stop()
+    asyncio.run(scenario())

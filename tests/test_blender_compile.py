@@ -182,7 +182,17 @@ def test_runtime_capability_requires_exact_stamp_and_trusted_files(tmp_path: Pat
 
 
 def test_asset_pack_3d_profile_registers_deterministic_zip_and_provenance(client, monkeypatch) -> None:
-    monkeypatch.setattr(blender_compile, "_run_blender", fake_blender)
+    reference_counts: list[int] = []
+
+    async def reference_checked_blender(*args, **kwargs):
+        runtime = kwargs.get("runtime")
+        assert runtime is not None
+        reference_counts.append(
+            client.app.state.blender_runtimes.live_reference_count(runtime.runtime_id)
+        )
+        return await fake_blender(*args, **kwargs)
+
+    monkeypatch.setattr(blender_compile, "_run_blender", reference_checked_blender)
     imported = client.post(
         "/api/v1/assets/import?purpose=source",
         content=glb_bytes(),
@@ -227,6 +237,7 @@ def test_asset_pack_3d_profile_registers_deterministic_zip_and_provenance(client
         assert provenance["parameters"]["manifest"]["options"]["collision"] == "box"
         assert provenance["postprocessing"] == list(OPERATION_IDS)
     assert hashes[0] == hashes[1]
+    assert reference_counts == [1, 1]
     assert list(client.app.state.store.work_dir.iterdir()) == []
 
 

@@ -60,8 +60,15 @@ installed into the core venv or ControlDeck. Build it explicitly with
 `./mf.sh blender status`. Media Forge now resolves that existing runtime through
 its own versioned registry and shows read-only Blender diagnostics in Settings.
 Settings can now start, resume, and cancel a durable install of the exact
-trusted Blender 4.5.9 archive. Update/switch/repair/remove and the browser GUI
-pack remain planned work; their absence does not disable image features.
+trusted Blender 4.5.9 archive. It can also install the recommended 4.5.13
+side-by-side, switch or repair a verified managed version, and remove only an
+inactive, unreferenced managed runtime after a size/reference preview. The
+existing G8 profile remains pinned to 4.5.9. With `./mf.sh serve` running, the
+same server orchestrator is available from `./mf.sh blender managed-status`,
+`install`, `update`, `switch <runtime-id>`, `repair <runtime-id>`,
+`remove-preview <runtime-id>`, and `remove <runtime-id>`; removal prompts unless
+`--yes` is explicit. The browser GUI pack remains planned work, and its absence
+does not disable image features.
 
 ## Test
 
