@@ -159,6 +159,11 @@ const state = {
   libraryMedia: "all",
   librarySelecting: false,
   librarySelected: new Set(),
+  scenes: [],
+  sceneWorkingCopies: [],
+  selectedSceneId: "",
+  sceneImport: null,
+  sceneStatusKey: "",
   modelCatalog: [],
   modelOperations: new Map(),
   catalogResults: [],
@@ -230,7 +235,10 @@ function callHost(method, params = {}) {
 function mediaSwitchButtons() {
   // 追加した媒体をここに足し忘れると、選んでいるのに押されて見えない。
   // 実機で「写真モードを選択しても選択されていないように見える」となった。
-  return [byId("create-media-image"), byId("create-media-photo"), byId("create-media-video")];
+  return [
+    byId("create-media-image"), byId("create-media-photo"), byId("create-media-video"),
+    byId("create-media-3d"),
+  ];
 }
 
 function setMediaSwitchDisabled(value) {
@@ -587,6 +595,30 @@ async function standaloneCall(method, params) {
       method: "POST", body: JSON.stringify({base64: params.base64}),
     });
   }
+  if (method === "scenes.list") return json("/workspace-api/scenes");
+  if (method === "scenes.get") {
+    return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}`);
+  }
+  if (method === "scenes.import.begin") {
+    return json("/workspace-api/scenes/import/begin", {
+      method: "POST", body: JSON.stringify(params),
+    });
+  }
+  if (method === "scenes.import.chunk") {
+    return json("/workspace-api/scenes/import/chunk", {
+      method: "POST", body: JSON.stringify(params),
+    });
+  }
+  if (method === "scenes.import.commit") {
+    return json("/workspace-api/scenes/import/commit", {
+      method: "POST", body: JSON.stringify(params),
+    });
+  }
+  if (method === "scenes.import.cancel") {
+    return json("/workspace-api/scenes/import/cancel", {
+      method: "POST", body: JSON.stringify(params),
+    });
+  }
   if (method === "assets.bytes") {
     // 単体表示では HTTP が直接使える。分割の形だけ埋め込み側と合わせて、
     // 呼ぶ側が経路を意識しなくて済むようにする。
@@ -643,6 +675,7 @@ async function standaloneCall(method, params) {
       part("model_catalog", () => standaloneCall("models.catalog", {})),
       part("model_operations", () => standaloneCall("models.operations.list", {})),
       part("blender_runtime", () => standaloneCall("blender.runtime.status", {})),
+      part("scenes", () => standaloneCall("scenes.list", {})),
       part("library", () => standaloneCall("library.list", {limit: 4})),
       part("creative_batches", () => standaloneCall("creative.batches.list", {})),
       part("creative_compositions", () => standaloneCall("creative.compositions.list", {})),
@@ -773,7 +806,7 @@ function renderCreateMedia() {
   }
 }
 
-const CREATE_MEDIA = new Set(["image", "photo", "video"]);
+const CREATE_MEDIA = new Set(["image", "photo", "video", "3d"]);
 
 function setCreateMedia(media, {persist = true} = {}) {
   state.createMedia = CREATE_MEDIA.has(media) ? media : "image";
@@ -783,6 +816,7 @@ function setCreateMedia(media, {persist = true} = {}) {
   clearError();
   renderCreateMedia();
   void refreshAttachment();
+  if (state.createMedia === "3d") void loadScenes();
   if (persist) void savePreferences({create_media: state.createMedia});
 }
 
@@ -4044,6 +4078,7 @@ const FAILURES = {
   invalid_import_size: {text: "この画像は取り込めません。", exit: "別の画像を選ぶ", action: "open_create"},
   invalid_image_import: {text: "この画像は取り込めません。", exit: "別の画像を選ぶ", action: "open_create"},
   asset_import_too_large: {text: "この画像は大きすぎます。", exit: "別の画像を選ぶ", action: "open_create"},
+  scene_import_canceled: {text: "シーンの取り込みを中止しました。", exit: "別のファイルを選ぶ", action: "open_create"},
 };
 
 const UNKNOWN_FAILURE = {
@@ -4426,6 +4461,357 @@ function renderOutpaintPreview() {
   note.textContent = problem
     ? problem
     : `${state.source.width}×${state.source.height} を中央に置いて ${target.width}×${target.height} へ広げます。`;
+}
+
+/* ── 3D Studio scenes ────────────────────────────────────────────────── */
+
+const SCENE_CHUNK_BYTES = 512 * 1024;
+const SCENE_MAX_BYTES = 256 * 1024 * 1024;
+const SCENE_SHA256_K = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+]);
+
+class SceneSha256 {
+  constructor() {
+    this.words = new Uint32Array([
+      0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+      0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    ]);
+    this.buffer = new Uint8Array(64);
+    this.bufferLength = 0;
+    this.bytesHashed = 0;
+  }
+
+  update(value) {
+    const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+    this.bytesHashed += bytes.length;
+    let offset = 0;
+    if (this.bufferLength) {
+      const take = Math.min(64 - this.bufferLength, bytes.length);
+      this.buffer.set(bytes.subarray(0, take), this.bufferLength);
+      this.bufferLength += take;
+      offset += take;
+      if (this.bufferLength === 64) {
+        this.compress(this.buffer);
+        this.bufferLength = 0;
+      }
+    }
+    while (offset + 64 <= bytes.length) {
+      this.compress(bytes.subarray(offset, offset + 64));
+      offset += 64;
+    }
+    if (offset < bytes.length) {
+      this.buffer.set(bytes.subarray(offset), 0);
+      this.bufferLength = bytes.length - offset;
+    }
+    return this;
+  }
+
+  compress(block) {
+    const schedule = new Uint32Array(64);
+    for (let index = 0; index < 16; index += 1) {
+      const offset = index * 4;
+      schedule[index] = (
+        (block[offset] << 24) | (block[offset + 1] << 16)
+        | (block[offset + 2] << 8) | block[offset + 3]
+      ) >>> 0;
+    }
+    const rotate = (value, bits) => (value >>> bits) | (value << (32 - bits));
+    for (let index = 16; index < 64; index += 1) {
+      const left = schedule[index - 15];
+      const right = schedule[index - 2];
+      const small0 = rotate(left, 7) ^ rotate(left, 18) ^ (left >>> 3);
+      const small1 = rotate(right, 17) ^ rotate(right, 19) ^ (right >>> 10);
+      schedule[index] = (schedule[index - 16] + small0 + schedule[index - 7] + small1) >>> 0;
+    }
+    let [a, b, c, d, e, f, g, h] = this.words;
+    for (let index = 0; index < 64; index += 1) {
+      const sum1 = rotate(e, 6) ^ rotate(e, 11) ^ rotate(e, 25);
+      const choose = (e & f) ^ (~e & g);
+      const first = (h + sum1 + choose + SCENE_SHA256_K[index] + schedule[index]) >>> 0;
+      const sum0 = rotate(a, 2) ^ rotate(a, 13) ^ rotate(a, 22);
+      const majority = (a & b) ^ (a & c) ^ (b & c);
+      const second = (sum0 + majority) >>> 0;
+      h = g; g = f; f = e; e = (d + first) >>> 0;
+      d = c; c = b; b = a; a = (first + second) >>> 0;
+    }
+    const next = [a, b, c, d, e, f, g, h];
+    for (let index = 0; index < 8; index += 1) {
+      this.words[index] = (this.words[index] + next[index]) >>> 0;
+    }
+  }
+
+  hex() {
+    const tail = new Uint8Array(this.bufferLength < 56 ? 64 : 128);
+    tail.set(this.buffer.subarray(0, this.bufferLength));
+    tail[this.bufferLength] = 0x80;
+    const bitHigh = Math.floor(this.bytesHashed / 0x20000000);
+    const bitLow = (this.bytesHashed << 3) >>> 0;
+    const end = tail.length;
+    tail[end - 8] = bitHigh >>> 24;
+    tail[end - 7] = bitHigh >>> 16;
+    tail[end - 6] = bitHigh >>> 8;
+    tail[end - 5] = bitHigh;
+    tail[end - 4] = bitLow >>> 24;
+    tail[end - 3] = bitLow >>> 16;
+    tail[end - 2] = bitLow >>> 8;
+    tail[end - 1] = bitLow;
+    for (let offset = 0; offset < tail.length; offset += 64) {
+      this.compress(tail.subarray(offset, offset + 64));
+    }
+    return [...this.words].map((word) => word.toString(16).padStart(8, "0")).join("");
+  }
+}
+
+const SCENE_TEXT = {
+  ja: {
+    switchLabel: "3Dを作る", title: "3D Studio",
+    note: "Blender制作ファイルを取り込み、検証済みの版として保存します。",
+    file: "Blenderファイル（.blend、最大256 MiB）", name: "シーン名",
+    safety: "ファイル内のscriptは実行せず、隔離したBlenderで検査します。",
+    import: "取り込む", cancel: "取り込みを中止", scenes: "シーン", refresh: "更新",
+    empty: "まだシーンはありません。", close: "閉じる", revisions: "保存した版",
+    count: (value) => `${value} 件`, version: (value) => `版 ${value}`,
+    revision: (value) => `版 ${value}`, preview: "3Dで見る", validated: "検証済み",
+    runtime: (version) => `Blender ${version}`, dependencies: (value) => `依存 ${value} 件`,
+    hashing: "ファイルを確認しています…", uploading: "取り込んでいます…",
+    validating: "Blenderで検査し、プレビューを作っています…",
+    complete: "検証済みの版として保存しました。", canceled: "取り込みを中止しました。",
+    runtimeMissing: "Blender基本環境を設定すると取り込めます。",
+    invalidFile: ".blendファイルを選んでください。", tooLarge: "256 MiB以下のファイルを選んでください。",
+    nameRequired: "シーン名を入力してください。", failed: "シーンを取り込めませんでした。",
+    listFailed: "シーンを読み込めませんでした。", detailFailed: "保存した版を読み込めませんでした。",
+    active: "編集中", recovery: "復旧候補",
+  },
+  en: {
+    switchLabel: "Create 3D", title: "3D Studio",
+    note: "Import a Blender project and save it as a validated revision.",
+    file: "Blender file (.blend, up to 256 MiB)", name: "Scene name",
+    safety: "Scripts in the file are not run; an isolated Blender process validates it.",
+    import: "Import", cancel: "Cancel import", scenes: "Scenes", refresh: "Refresh",
+    empty: "No scenes yet.", close: "Close", revisions: "Saved revisions",
+    count: (value) => `${value} scene${value === 1 ? "" : "s"}`,
+    version: (value) => `v${value}`, revision: (value) => `Revision ${value}`,
+    preview: "View in 3D", validated: "Validated", runtime: (version) => `Blender ${version}`,
+    dependencies: (value) => `${value} dependenc${value === 1 ? "y" : "ies"}`,
+    hashing: "Checking the file…", uploading: "Uploading…",
+    validating: "Validating in Blender and building the preview…",
+    complete: "Saved as a validated revision.", canceled: "Import canceled.",
+    runtimeMissing: "Set up the basic Blender environment to import scenes.",
+    invalidFile: "Choose a .blend file.", tooLarge: "Choose a file no larger than 256 MiB.",
+    nameRequired: "Enter a scene name.", failed: "The scene could not be imported.",
+    listFailed: "Scenes could not be loaded.", detailFailed: "Saved revisions could not be loaded.",
+    active: "Editing", recovery: "Recovery candidate",
+  },
+};
+
+function sceneText() {
+  return document.documentElement.lang.toLowerCase().startsWith("en") ? SCENE_TEXT.en : SCENE_TEXT.ja;
+}
+
+function sceneRuntimeReady() { return state.blenderRuntime?.state === "ready"; }
+
+function setSceneStatus(key) {
+  state.sceneStatusKey = key;
+  byId("scene-import-status").textContent = key ? (sceneText()[key] || sceneText().failed) : "";
+}
+
+function renderSceneText() {
+  const text = sceneText();
+  const switcher = byId("create-media-3d");
+  switcher.setAttribute("aria-label", text.switchLabel);
+  switcher.title = text.switchLabel;
+  byId("scene-studio-title").textContent = text.title;
+  byId("scene-import-note").textContent = text.note;
+  byId("scene-import-file-label").textContent = text.file;
+  byId("scene-import-name-label").textContent = text.name;
+  byId("scene-import-safety").textContent = text.safety;
+  byId("scene-import-submit").textContent = text.import;
+  byId("scene-import-cancel").textContent = text.cancel;
+  byId("scene-list-title").textContent = text.scenes;
+  byId("scene-list-refresh").textContent = text.refresh;
+  byId("scene-list-empty").textContent = text.empty;
+  byId("scene-detail-close").textContent = text.close;
+  byId("scene-revisions-title").textContent = text.revisions;
+  const submit = byId("scene-import-submit");
+  submit.disabled = Boolean(state.sceneImport) || !sceneRuntimeReady();
+  if (state.sceneStatusKey) setSceneStatus(state.sceneStatusKey);
+  else if (!state.sceneImport && !sceneRuntimeReady()) byId("scene-import-status").textContent = text.runtimeMissing;
+  else if (!state.sceneImport) byId("scene-import-status").textContent = "";
+  renderScenes();
+  if (state.selectedSceneId) void openScene(state.selectedSceneId);
+}
+
+function sceneDay(value) {
+  const parsed = Date.parse(value || "");
+  if (!Number.isFinite(parsed)) return "—";
+  return new Intl.DateTimeFormat(document.documentElement.lang || "ja", {dateStyle: "medium"}).format(parsed);
+}
+
+function renderScenes() {
+  const text = sceneText();
+  const list = byId("scene-list");
+  list.replaceChildren(...state.scenes.map((scene) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.sceneId = scene.id;
+    button.setAttribute("aria-current", String(scene.id === state.selectedSceneId));
+    const name = document.createElement("span");
+    name.className = "scene-name";
+    name.textContent = scene.name;
+    const meta = document.createElement("span");
+    meta.className = "scene-meta";
+    const working = state.sceneWorkingCopies.find((item) => item.scene_id === scene.id
+      && ["active", "recovery"].includes(item.state));
+    meta.textContent = [sceneDay(scene.updated_at), working ? text[working.state] : ""].filter(Boolean).join(" · ");
+    const version = document.createElement("span");
+    version.className = "scene-version state";
+    version.textContent = text.version(scene.revision_count);
+    button.append(name, meta, version);
+    return button;
+  }));
+  byId("scene-list-empty").hidden = state.scenes.length > 0;
+  byId("scene-list-count").textContent = state.scenes.length ? text.count(state.scenes.length) : "";
+}
+
+async function loadScenes() {
+  try {
+    const result = await call("scenes.list");
+    state.scenes = result.items || [];
+    renderScenes();
+  } catch {
+    byId("scene-list-count").textContent = sceneText().listFailed;
+  }
+}
+
+async function openScene(sceneId) {
+  state.selectedSceneId = sceneId;
+  renderScenes();
+  try {
+    const result = await call("scenes.get", {scene_id: sceneId});
+    if (state.selectedSceneId !== sceneId) return;
+    const scene = result.scene;
+    byId("scene-detail-name").textContent = scene.name;
+    byId("scene-detail-summary").textContent = `${sceneText().count(scene.revision_count)} · ${sceneDay(scene.updated_at)}`;
+    const revisions = [...(result.revisions || [])].sort((left, right) => right.sequence - left.sequence);
+    byId("scene-revisions").replaceChildren(...revisions.map((revision) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const info = document.createElement("div");
+      const title = document.createElement("p");
+      title.className = "t";
+      title.textContent = `${sceneText().revision(revision.sequence)} · ${sceneText().validated}`;
+      const detail = document.createElement("p");
+      detail.className = "s";
+      detail.textContent = [sceneDay(revision.created_at), sceneText().runtime(revision.runtime_version),
+        sceneText().dependencies((revision.dependencies || []).length)].join(" · ");
+      info.append(title, detail);
+      const actions = document.createElement("div");
+      actions.className = "scene-revision-actions";
+      const preview = document.createElement("button");
+      preview.type = "button";
+      preview.dataset.scenePreview = revision.preview_asset_id;
+      preview.dataset.sceneName = scene.name;
+      preview.textContent = sceneText().preview;
+      actions.append(preview);
+      row.append(info, actions);
+      return row;
+    }));
+    byId("scene-detail").hidden = false;
+  } catch {
+    byId("scene-list-count").textContent = sceneText().detailFailed;
+  }
+}
+
+async function sceneFileHash(file, token) {
+  const hash = new SceneSha256();
+  for (let offset = 0; offset < file.size; offset += SCENE_CHUNK_BYTES) {
+    if (token.canceled) return "";
+    hash.update(new Uint8Array(await file.slice(offset, offset + SCENE_CHUNK_BYTES).arrayBuffer()));
+    byId("scene-import-progress").value = Math.round(Math.min(file.size, offset + SCENE_CHUNK_BYTES) / file.size * 20);
+    if ((offset / SCENE_CHUNK_BYTES) % 8 === 7) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+  }
+  return hash.hex();
+}
+
+async function importScene() {
+  const file = byId("scene-import-file").files?.[0];
+  const name = byId("scene-import-name").value.trim();
+  if (!file || !file.name.toLowerCase().endsWith(".blend") || file.size < 1) {
+    setSceneStatus("invalidFile"); return;
+  }
+  if (file.size > SCENE_MAX_BYTES) { setSceneStatus("tooLarge"); return; }
+  if (!name) { setSceneStatus("nameRequired"); return; }
+  if (!sceneRuntimeReady()) { setSceneStatus("runtimeMissing"); return; }
+  const token = {canceled: false, uploadId: "", phase: "hashing"};
+  state.sceneImport = token;
+  setHostBusy(true);
+  byId("scene-import-submit").disabled = true;
+  byId("scene-import-cancel").hidden = false;
+  byId("scene-import-progress").hidden = false;
+  byId("scene-import-progress").value = 0;
+  setSceneStatus("hashing");
+  try {
+    const digest = await sceneFileHash(file, token);
+    if (token.canceled || !digest) return;
+    const upload = await call("scenes.import.begin", {size: file.size, sha256: digest, name});
+    token.uploadId = upload.upload_id;
+    token.phase = "uploading";
+    setSceneStatus("uploading");
+    for (let offset = 0; offset < file.size; offset += SCENE_CHUNK_BYTES) {
+      if (token.canceled) throw {code: "scene_import_canceled"};
+      const bytes = new Uint8Array(await file.slice(offset, offset + SCENE_CHUNK_BYTES).arrayBuffer());
+      const chunkHash = new SceneSha256().update(bytes).hex();
+      await call("scenes.import.chunk", {
+        upload_id: token.uploadId, offset, sha256: chunkHash, base64: encodeBase64(bytes),
+      });
+      byId("scene-import-progress").value = 20 + Math.round((offset + bytes.length) / file.size * 60);
+    }
+    token.phase = "validating";
+    byId("scene-import-cancel").hidden = true;
+    setSceneStatus("validating");
+    const result = await call("scenes.import.commit", {upload_id: token.uploadId});
+    token.uploadId = "";
+    byId("scene-import-progress").value = 100;
+    setSceneStatus("complete");
+    byId("scene-import-file").value = "";
+    byId("scene-import-name").value = "";
+    await loadScenes();
+    await openScene(result.scene.id);
+    await loadLibrary({reset: true});
+  } catch (error) {
+    if (token.uploadId && token.phase !== "validating") {
+      await call("scenes.import.cancel", {upload_id: token.uploadId}).catch(() => {});
+    }
+    setSceneStatus(token.canceled || error?.code === "scene_import_canceled" ? "canceled" : "failed");
+  } finally {
+    state.sceneImport = null;
+    setHostBusy(false);
+    byId("scene-import-submit").disabled = !sceneRuntimeReady();
+    byId("scene-import-cancel").hidden = true;
+  }
+}
+
+async function cancelSceneImport() {
+  const token = state.sceneImport;
+  if (!token || token.phase === "validating") return;
+  token.canceled = true;
+  byId("scene-import-cancel").disabled = true;
+  if (token.uploadId) {
+    await call("scenes.import.cancel", {upload_id: token.uploadId}).catch(() => {});
+    token.uploadId = "";
+  }
+  setSceneStatus("canceled");
+  byId("scene-import-cancel").disabled = false;
 }
 
 /* ── library ──────────────────────────────────────────────────────────── */
@@ -6155,6 +6541,7 @@ function renderBlenderRuntime() {
   }));
   byId("blender-runtime-fingerprint").textContent = value.fingerprint
     ? `${text.fingerprint}: ${value.fingerprint.slice(0, 16)}` : "";
+  renderSceneText();
 }
 
 function renderExtensionDetails() {
@@ -6211,6 +6598,39 @@ byId("create-media-switch").addEventListener("click", (event) => {
   const button = event.target.closest?.("[data-create-media]");
   if (!button || state.hostBusy) return;
   setCreateMedia(button.dataset.createMedia);
+});
+byId("scene-import-file").addEventListener("change", (event) => {
+  const file = event.target.files?.[0];
+  if (file && !byId("scene-import-name").value.trim()) {
+    byId("scene-import-name").value = file.name.replace(/\.blend$/i, "").slice(0, 120);
+  }
+  byId("scene-import-status").textContent = sceneRuntimeReady() ? "" : sceneText().runtimeMissing;
+});
+byId("scene-import-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!state.sceneImport) void importScene();
+});
+byId("scene-import-cancel").addEventListener("click", () => void cancelSceneImport());
+byId("scene-list-refresh").addEventListener("click", () => void loadScenes());
+byId("scene-list").addEventListener("click", (event) => {
+  const scene = event.target.closest?.("[data-scene-id]");
+  if (scene) void openScene(scene.dataset.sceneId);
+});
+byId("scene-detail-close").addEventListener("click", () => {
+  state.selectedSceneId = "";
+  byId("scene-detail").hidden = true;
+  renderScenes();
+});
+byId("scene-revisions").addEventListener("click", (event) => {
+  const preview = event.target.closest?.("[data-scene-preview]");
+  if (!preview) return;
+  void openViewer(preview.dataset.scenePreview, {
+    asset_id: preview.dataset.scenePreview,
+    media_kind: "3d",
+    mime_type: "model/gltf-binary",
+    preview_kind: "model_3d",
+    summary: preview.dataset.sceneName,
+  }, []);
 });
 byId("video-create-settings").addEventListener("click", () => {
   state.modelFilter = "video";
@@ -6946,7 +7366,7 @@ async function resumeAfterInterruption() {
   try {
     await connectSocket();
   } catch { return; }
-  await refreshSession(["jobs", "library", "model_operations", "creative_batches"]);
+  await refreshSession(["jobs", "library", "scenes", "model_operations", "creative_batches"]);
   restoreProgressView();
   renderActivity();
 }
@@ -7098,6 +7518,12 @@ function applySessionParts(snapshot) {
   if (usable(snapshot.blender_runtime)) {
     state.blenderRuntime = snapshot.blender_runtime;
     renderBlenderRuntime();
+    renderSceneText();
+  }
+  if (usable(snapshot.scenes)) {
+    state.scenes = snapshot.scenes.items || [];
+    state.sceneWorkingCopies = snapshot.scenes.working_copies || [];
+    renderScenes();
   }
 }
 
@@ -7150,6 +7576,7 @@ async function refreshSession(parts) {
     applyModelSession(snapshot);
   }
   if (parts.includes("library") && usable(snapshot.library)) await applyRecent(snapshot.library);
+  if (parts.includes("scenes") && state.selectedSceneId) void openScene(state.selectedSceneId);
   if (parts.includes("creative_batches")) {
     const active = (state.batches || []).find((batch) => batch.id === state.activeBatch);
     if (active) {
@@ -7198,6 +7625,7 @@ async function boot() {
   renderDirectorControl();
   renderProfileChoices();
   renderPackProfiles();
+  renderSceneText();
   renderPresets();
   renderCounts();
   setMode(state.preferences.mode || "simple", {persist: false});
@@ -7232,6 +7660,7 @@ window.addEventListener("message", (event) => {
       renderBlenderRuntime();
       renderLibraryMediaFilter();
       renderViewer3dText();
+      renderSceneText();
     }
     if (message.event === "safe_area.changed") applySafeArea(message.data);
     if (message.event === "visibility.changed") state.visible = message.data?.visible !== false;
@@ -7239,6 +7668,7 @@ window.addEventListener("message", (event) => {
     if (message.event === "session.updated") state.nonce = message.data.session_nonce;
     if (message.event === "disable.pending") {
       state.disabled = true;
+      if (state.sceneImport?.phase !== "validating") void cancelSceneImport();
       if (state.activeComposition) {
         void call("creative.compositions.cancel", {composition_id: state.activeComposition}).catch(() => {});
       }
