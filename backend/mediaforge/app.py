@@ -94,6 +94,7 @@ from .host.jobs import HostExecution
 from .jobs import JobManager, ProfileResolutionError
 from .m5_companion import profile_documents as m5_profile_documents
 from .model_evaluator import H3ModelEvaluator, unmeasured_lora_bases
+from .model_viewer import ModelViewerError, ModelViewerSession
 from .models.adapters import is_runnable
 from .model_manager import MAX_MANAGED_MODEL_DOWNLOAD_BYTES, ModelOperationManager
 from .models import (
@@ -210,6 +211,7 @@ def create_app(
         REPOSITORY_ROOT / "worker_packs/blender/preflight.py"
     )
     store = Store(resolved.data_dir)
+    standalone_model_viewer = ModelViewerSession(store)
     host = host_client or ControlDeckHostClient(
         resolved.control_deck_url,
         timeout_sec=resolved.host_request_timeout_sec,
@@ -461,6 +463,7 @@ def create_app(
             await model_operations.stop()
         await blender_runtime_operations.stop()
         await manager.stop()
+        await asyncio.to_thread(standalone_model_viewer.cleanup)
         await host.close()
 
     app = FastAPI(title="ControlDeck Media Forge", version=__version__, lifespan=lifespan)
@@ -486,7 +489,21 @@ def create_app(
     app.state.host = host
     app.state.blender_runtimes = blender_runtimes
     app.state.blender_runtime_operations = blender_runtime_operations
+    app.state.standalone_model_viewer = standalone_model_viewer
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+    @app.get("/viewer-runtime.js", include_in_schema=False)
+    async def viewer_runtime() -> FileResponse:
+        """Lazy CORS-readable module for an opaque sandboxed workspace."""
+        return FileResponse(
+            FRONTEND_DIR / "three-viewer.js",
+            media_type="text/javascript",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cross-Origin-Resource-Policy": "cross-origin",
+                "Cache-Control": "public, max-age=31536000, immutable",
+            },
+        )
 
     async def authorize_host(request: Request) -> HostIdentity:
         return await require_host_service(request, host)
@@ -1633,15 +1650,20 @@ def create_app(
     async def standalone_asset_thumbnail(asset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             asset = store.get_asset(asset_id)
-            if not thumbnails.is_thumbnailable(asset.mime_type):
+            if asset.mime_type == "model/gltf-binary":
+                thumbnail = thumbnails.model_cached(
+                    store.thumbnail_dir, asset_id, thumbnails.clamp_max_side(payload.get("max_side"))
+                )
+            elif not thumbnails.is_thumbnailable(asset.mime_type):
                 raise ThumbnailError()
-            thumbnail = thumbnails.cached(
-                store.asset_path(asset_id),
-                store.thumbnail_dir,
-                asset_id,
-                thumbnails.clamp_max_side(payload.get("max_side")),
-                asset.mime_type,
-            )
+            else:
+                thumbnail = thumbnails.cached(
+                    store.asset_path(asset_id),
+                    store.thumbnail_dir,
+                    asset_id,
+                    thumbnails.clamp_max_side(payload.get("max_side")),
+                    asset.mime_type,
+                )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
         except (ThumbnailError, OSError) as exc:
@@ -1653,10 +1675,74 @@ def create_app(
             "base64": base64.b64encode(thumbnail.content).decode("ascii"),
         }
 
+    def save_model_thumbnail(asset_id: str, encoded: object) -> dict[str, Any]:
+        try:
+            asset = store.get_asset(asset_id)
+        except KeyError as exc:
+            raise ModelViewerError("model_viewer_not_found", "3D model asset is unavailable") from exc
+        if asset.mime_type != "model/gltf-binary":
+            raise ModelViewerError(
+                "model_viewer_unsupported", "thumbnail target is not a raw GLB model"
+            )
+        if not isinstance(encoded, str) or len(encoded) > 360_000:
+            raise ModelViewerError("model_thumbnail_invalid", "model thumbnail exceeds its bound")
+        try:
+            content = base64.b64decode(encoded, validate=True)
+        except ValueError as exc:
+            raise ModelViewerError("model_thumbnail_invalid", "model thumbnail is invalid") from exc
+        captured = thumbnails.store_model_capture(store.thumbnail_dir, asset_id, content)
+        return {
+            "asset_id": asset_id,
+            "mime_type": captured.mime_type,
+            "width": captured.width,
+            "height": captured.height,
+            "size_bytes": len(captured.content),
+        }
+
+    @app.post("/workspace-api/assets/{asset_id}/model/open", include_in_schema=False)
+    async def standalone_model_open(asset_id: str) -> dict[str, Any]:
+        try:
+            return await asyncio.to_thread(standalone_model_viewer.open, asset_id)
+        except ModelViewerError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+
+    @app.post("/workspace-api/models/{handle}/bytes", include_in_schema=False)
+    async def standalone_model_bytes(handle: str, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return await asyncio.to_thread(
+                standalone_model_viewer.read,
+                handle,
+                payload.get("offset", 0),
+                payload.get("length", 512 * 1024),
+            )
+        except ModelViewerError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+
+    @app.post("/workspace-api/models/{handle}/close", include_in_schema=False)
+    async def standalone_model_close(handle: str) -> dict[str, Any]:
+        return {"closed": await asyncio.to_thread(standalone_model_viewer.close, handle)}
+
+    @app.post("/workspace-api/assets/{asset_id}/model/thumbnail", include_in_schema=False)
+    async def standalone_model_thumbnail(asset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return await asyncio.to_thread(save_model_thumbnail, asset_id, payload.get("base64"))
+        except (ModelViewerError, ThumbnailError) as exc:
+            code = getattr(exc, "code", "model_thumbnail_invalid")
+            raise HTTPException(
+                status_code=422, detail={"code": code, "message": str(exc)[:300]}
+            ) from exc
+
     @app.post("/workspace-api/library", include_in_schema=False)
     async def standalone_library(payload: dict[str, Any]) -> dict[str, Any]:
         kind = str(payload.get("kind", "all"))
         if kind not in library.KINDS:
+            raise HTTPException(status_code=422, detail={"code": "workspace_request_rejected"})
+        media_kind = str(payload.get("media_kind", "all"))
+        if media_kind not in library.MEDIA_KINDS:
             raise HTTPException(status_code=422, detail={"code": "workspace_request_rejected"})
         limit = library.clamp_limit(payload.get("limit"))
         before = payload.get("before")
@@ -1668,6 +1754,7 @@ def create_app(
             kind=kind,
             include_masks=payload.get("include_masks") is True,
             limit=limit,
+            media_kind=media_kind,
             thumbnail=grid_thumbnail,
         )
 
@@ -2094,18 +2181,26 @@ def create_app(
 
     def grid_thumbnail(asset: Asset) -> dict[str, Any] | None:
         """一覧カード用の小さな版。1 枚でも失敗したら None を返して一覧は続ける。"""
-        if not thumbnails.is_thumbnailable(asset.mime_type):
+        if asset.mime_type == "model/gltf-binary":
+            try:
+                rendered = thumbnails.model_cached(
+                    store.thumbnail_dir, asset.id, library.GRID_THUMBNAIL_MAX_SIDE
+                )
+            except (ThumbnailError, KeyError, OSError):
+                return None
+        elif not thumbnails.is_thumbnailable(asset.mime_type):
             return None
-        try:
-            rendered = thumbnails.cached(
-                store.asset_path(asset.id),
-                store.thumbnail_dir,
-                asset.id,
-                library.GRID_THUMBNAIL_MAX_SIDE,
-                asset.mime_type,
-            )
-        except (ThumbnailError, KeyError, OSError):
-            return None
+        else:
+            try:
+                rendered = thumbnails.cached(
+                    store.asset_path(asset.id),
+                    store.thumbnail_dir,
+                    asset.id,
+                    library.GRID_THUMBNAIL_MAX_SIDE,
+                    asset.mime_type,
+                )
+            except (ThumbnailError, KeyError, OSError):
+                return None
         return {
             "mime_type": rendered.mime_type,
             "width": rendered.width,
@@ -2266,6 +2361,7 @@ def create_app(
             return
         await websocket.accept()
         uploads: dict[str, dict[str, Any]] = {}
+        model_viewer = ModelViewerSession(store)
         subscription = events.subscribe(asyncio.get_running_loop())
         sender = asyncio.create_task(push_job_events(websocket, subscription))
         model_subscription = model_events.subscribe(asyncio.get_running_loop())
@@ -2422,6 +2518,37 @@ def create_app(
                             shutil.rmtree(upload["root"])
                     elif method == "assets.provenance":
                         result = store.get_provenance(str(params.get("asset_id", ""))).model_dump(mode="json")
+                    elif method == "assets.model.open":
+                        if set(params) != {"asset_id"}:
+                            raise ValueError("model viewer open accepts only asset_id")
+                        result = await asyncio.to_thread(
+                            model_viewer.open, str(params.get("asset_id", ""))
+                        )
+                    elif method == "assets.model.bytes":
+                        if not {"handle", "offset"} <= set(params) or set(params) - {
+                            "handle", "offset", "length"
+                        }:
+                            raise ValueError("model viewer bytes accepts handle, offset, and length")
+                        result = await asyncio.to_thread(
+                            model_viewer.read,
+                            str(params.get("handle", "")),
+                            params.get("offset"),
+                            params.get("length", 512 * 1024),
+                        )
+                    elif method == "assets.model.close":
+                        if set(params) != {"handle"}:
+                            raise ValueError("model viewer close accepts only handle")
+                        result = {"closed": await asyncio.to_thread(
+                            model_viewer.close, str(params.get("handle", ""))
+                        )}
+                    elif method == "assets.model.thumbnail":
+                        if set(params) != {"asset_id", "base64"}:
+                            raise ValueError("model thumbnail accepts asset_id and base64")
+                        result = await asyncio.to_thread(
+                            save_model_thumbnail,
+                            str(params.get("asset_id", "")),
+                            params.get("base64"),
+                        )
                     elif method == "assets.content":
                         # 原寸で預かった写真は転送上限を超える（実測: 12.2MP の
                         # 写真が PNG で 13.6MiB）。断ると「透かしは消せたが見られ
@@ -2885,6 +3012,9 @@ def create_app(
                         kind = params.get("kind", "all")
                         if kind not in library.KINDS:
                             raise ValueError("library kind is not supported")
+                        media_kind = params.get("media_kind", "all")
+                        if media_kind not in library.MEDIA_KINDS:
+                            raise ValueError("library media kind is not supported")
                         before = params.get("before")
                         if before is not None and not isinstance(before, str):
                             raise ValueError("library cursor must be a string")
@@ -2894,6 +3024,7 @@ def create_app(
                             kind=str(kind),
                             include_masks=params.get("include_masks") is True,
                             limit=limit,
+                            media_kind=str(media_kind),
                             # 既定で同梱する。呼び出し側が明示的に切れる。
                             thumbnail=None if params.get("thumbnails") is False else grid_thumbnail,
                         )
@@ -2971,15 +3102,22 @@ def create_app(
                     elif method == "assets.thumbnail":
                         asset_id = str(params.get("asset_id", ""))
                         asset = store.get_asset(asset_id)
-                        if not thumbnails.is_thumbnailable(asset.mime_type):
+                        if asset.mime_type == "model/gltf-binary":
+                            thumbnail = thumbnails.model_cached(
+                                store.thumbnail_dir,
+                                asset_id,
+                                thumbnails.clamp_max_side(params.get("max_side")),
+                            )
+                        elif not thumbnails.is_thumbnailable(asset.mime_type):
                             raise ThumbnailError()
-                        thumbnail = thumbnails.cached(
-                            store.asset_path(asset_id),
-                            store.thumbnail_dir,
-                            asset_id,
-                            thumbnails.clamp_max_side(params.get("max_side")),
-                            asset.mime_type,
-                        )
+                        else:
+                            thumbnail = thumbnails.cached(
+                                store.asset_path(asset_id),
+                                store.thumbnail_dir,
+                                asset_id,
+                                thumbnails.clamp_max_side(params.get("max_side")),
+                                asset.mime_type,
+                            )
                         result = {
                             "mime_type": thumbnail.mime_type,
                             "width": thumbnail.width,
@@ -3017,6 +3155,7 @@ def create_app(
                     await websocket.send_json({"id": request_id, "ok": True, "result": result})
                 except (
                     ThumbnailError,
+                    ModelViewerError,
                     PreferenceError,
                     ModelOperationError,
                     BlenderRuntimeOperationError,
@@ -3062,6 +3201,7 @@ def create_app(
                 root = upload.get("root")
                 if isinstance(root, Path) and root.exists():
                     shutil.rmtree(root)
+            await asyncio.to_thread(model_viewer.cleanup)
 
     @app.post("/workspace-api/jobs/clear", include_in_schema=False)
     async def standalone_clear_jobs() -> dict[str, Any]:

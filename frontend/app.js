@@ -156,6 +156,7 @@ const state = {
   jobs: [],
   libraryCursor: null,
   libraryItems: [],
+  libraryMedia: "all",
   librarySelecting: false,
   librarySelected: new Set(),
   modelCatalog: [],
@@ -564,6 +565,26 @@ async function standaloneCall(method, params) {
   if (method === "assets.thumbnail") {
     return json(`/workspace-api/assets/${encodeURIComponent(params.asset_id)}/thumbnail`, {
       method: "POST", body: JSON.stringify({max_side: params.max_side}),
+    });
+  }
+  if (method === "assets.model.open") {
+    return json(`/workspace-api/assets/${encodeURIComponent(params.asset_id)}/model/open`, {
+      method: "POST", body: "{}",
+    });
+  }
+  if (method === "assets.model.bytes") {
+    return json(`/workspace-api/models/${encodeURIComponent(params.handle)}/bytes`, {
+      method: "POST", body: JSON.stringify({offset: params.offset, length: params.length}),
+    });
+  }
+  if (method === "assets.model.close") {
+    return json(`/workspace-api/models/${encodeURIComponent(params.handle)}/close`, {
+      method: "POST", body: "{}",
+    });
+  }
+  if (method === "assets.model.thumbnail") {
+    return json(`/workspace-api/assets/${encodeURIComponent(params.asset_id)}/model/thumbnail`, {
+      method: "POST", body: JSON.stringify({base64: params.base64}),
     });
   }
   if (method === "assets.bytes") {
@@ -4414,7 +4435,9 @@ async function loadLibrary({reset = false} = {}) {
   if (reset) { grid.replaceChildren(); state.libraryCursor = null; }
   let page;
   try {
-    page = await call("library.list", {kind: "all", limit: 24, before: state.libraryCursor});
+    page = await call("library.list", {
+      kind: "all", media_kind: state.libraryMedia, limit: 24, before: state.libraryCursor,
+    });
   } catch {
     byId("library-empty").hidden = false;
     byId("library-empty").textContent = "ライブラリを読み込めませんでした。";
@@ -4508,14 +4531,32 @@ async function deleteSelectedAssets() {
 }
 
 const KIND_LABEL = {generated: "作った", edited: "直した", imported: "取り込み"};
+const LIBRARY_MEDIA_TEXT = {
+  ja: {label: "素材の種類", all: "すべて", image: "画像", video: "動画", "3d": "3D"},
+  en: {label: "Media type", all: "All", image: "Images", video: "Videos", "3d": "3D"},
+};
+
+function renderLibraryMediaFilter() {
+  const language = document.documentElement.lang.toLowerCase().startsWith("en") ? "en" : "ja";
+  byId("library-media-kinds").setAttribute("aria-label", LIBRARY_MEDIA_TEXT[language].label);
+  for (const button of byId("library-media-kinds").querySelectorAll("[data-library-media]")) {
+    button.textContent = LIBRARY_MEDIA_TEXT[language][button.dataset.libraryMedia];
+    button.setAttribute("aria-pressed", String(button.dataset.libraryMedia === state.libraryMedia));
+  }
+}
 
 async function libraryCard(item) {
   const card = document.createElement("button");
   card.type = "button";
   card.className = "card";
   card.dataset.assetId = item.asset_id;
+  card.dataset.mediaKind = item.media_kind;
   const image = document.createElement("img");
   image.alt = "";
+  const modelPlaceholder = document.createElement("span");
+  modelPlaceholder.className = "model-placeholder";
+  modelPlaceholder.textContent = "3D";
+  modelPlaceholder.hidden = true;
   // 出せない絵の枠だけが正方形で残ると、一覧が読めない箱の列になる。畳む。
   image.addEventListener("error", () => { image.hidden = true; });
   const summary = document.createElement("span");
@@ -4527,8 +4568,10 @@ async function libraryCard(item) {
   kind.textContent = KIND_LABEL[item.kind] || item.kind;
   const size = document.createElement("span");
   const isVideo = String(item.mime_type || "").startsWith("video/");
-  size.textContent = item.mime_type === "application/zip"
-    ? "ZIP"
+  size.textContent = item.media_kind === "3d"
+    ? (item.mime_type === "application/zip" ? "3D ZIP" : "GLB")
+    : item.mime_type === "application/zip"
+      ? "ZIP"
     : (item.width && item.height ? `${item.width}×${item.height}` : "");
   if (isVideo) {
     // 一覧に出るのは 1 枚目の静止画なので、動くものだと分からない。
@@ -4542,7 +4585,7 @@ async function libraryCard(item) {
   meta.append(kind, size);
   image.loading = "lazy";
   image.decoding = "async";
-  card.append(image, summary, meta);
+  card.append(image, modelPlaceholder, summary, meta);
   card.setAttribute("aria-selected", String(state.librarySelected.has(item.asset_id)));
   card.addEventListener("click", () => {
     if (state.librarySelecting) return toggleLibrarySelection(item.asset_id);
@@ -4551,6 +4594,11 @@ async function libraryCard(item) {
   // 一覧に同梱された小さな版を使う。1 枚 1 往復にしない。
   if (item.thumbnail?.base64) {
     image.src = `data:${item.thumbnail.mime_type};base64,${item.thumbnail.base64}`;
+    return card;
+  }
+  if (item.preview_kind === "model_3d") {
+    image.hidden = true;
+    modelPlaceholder.hidden = false;
     return card;
   }
   if (!item.preview_kind) {
@@ -4572,7 +4620,54 @@ const viewer = {
   assetId: "", filename: "", scale: 1, x: 0, y: 0, pointers: new Map(), pinch: 0, drag: null,
   // 一覧から開いたときだけ隣が存在する。単発で開いた素材には送り先がない。
   list: [], index: -1, token: 0,
+  mode: "image", modelHandle: "", modelInstance: null,
+  modelStats: null,
+  shading: "material", light: "studio", background: 0, bounds: false, animation: false,
 };
+
+let modelViewerModulePromise = null;
+const MODEL_VIEWER_BUNDLE = "99935b9427ddad9a";
+
+const VIEWER_3D_TEXT = {
+  ja: {
+    loading: "3Dモデルを読み込んでいます…", failed: "3Dモデルを表示できません",
+    canvas: "3Dモデル", toolbar: "3D表示", previous: "前の素材", next: "次の素材",
+    fit: "全体", shading: {material: "材質", neutral: "形状", wireframe: "ワイヤー"},
+    light: {studio: "照明", flat: "均一光", dramatic: "強調光"},
+    background: "背景", boundsOn: "範囲を隠す", boundsOff: "範囲",
+    play: "再生", pause: "停止", contextLost: "3D表示を復旧しています…",
+    stats: (value) => `${value.triangles.toLocaleString()} 三角形 · 材質 ${value.materials} · アニメ ${value.animations}`,
+  },
+  en: {
+    loading: "Loading 3D model…", failed: "The 3D model cannot be displayed",
+    canvas: "3D model", toolbar: "3D view controls", previous: "Previous asset", next: "Next asset",
+    fit: "Fit", shading: {material: "Material", neutral: "Shape", wireframe: "Wireframe"},
+    light: {studio: "Light", flat: "Flat light", dramatic: "Dramatic"},
+    background: "Background", boundsOn: "Hide bounds", boundsOff: "Bounds",
+    play: "Play", pause: "Pause", contextLost: "Restoring the 3D view…",
+    stats: (value) => `${value.triangles.toLocaleString()} triangle${value.triangles === 1 ? "" : "s"} · ${value.materials} material${value.materials === 1 ? "" : "s"} · ${value.animations} animation${value.animations === 1 ? "" : "s"}`,
+  },
+};
+
+function viewer3dText() {
+  return document.documentElement.lang.toLowerCase().startsWith("en")
+    ? VIEWER_3D_TEXT.en : VIEWER_3D_TEXT.ja;
+}
+
+function renderViewer3dText() {
+  const text = viewer3dText();
+  byId("viewer-3d-canvas").setAttribute("aria-label", text.canvas);
+  byId("viewer-3d-tools").setAttribute("aria-label", text.toolbar);
+  byId("viewer-prev").setAttribute("aria-label", text.previous);
+  byId("viewer-next").setAttribute("aria-label", text.next);
+  byId("viewer-3d-fit").textContent = text.fit;
+  byId("viewer-3d-shading").textContent = text.shading[viewer.shading];
+  byId("viewer-3d-light").textContent = text.light[viewer.light];
+  byId("viewer-3d-background").textContent = text.background;
+  byId("viewer-3d-bounds").textContent = viewer.bounds ? text.boundsOn : text.boundsOff;
+  byId("viewer-3d-animation").textContent = viewer.animation ? text.pause : text.play;
+  if (viewer.modelStats) byId("viewer-3d-stats").textContent = text.stats(viewer.modelStats);
+}
 
 function viewerApply() {
   byId("viewer-image").style.transform =
@@ -4619,20 +4714,166 @@ function stepViewer(offset) {
 function showViewerVideo(active) {
   const image = byId("viewer-image");
   const video = byId("viewer-video");
-  if (!video) return;
+  const model = byId("viewer-3d");
+  if (!video || !model) return;
+  viewer.mode = active ? "video" : "image";
   image.hidden = active;
   video.hidden = !active;
+  model.hidden = true;
   if (active) return;
   video.pause();
   video.removeAttribute("src");
   video.load();
 }
 
+function showViewerModel() {
+  const video = byId("viewer-video");
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+  viewer.mode = "model";
+  byId("viewer-image").hidden = true;
+  video.hidden = true;
+  byId("viewer-3d").hidden = false;
+}
+
+async function disposeModelViewer() {
+  const instance = viewer.modelInstance;
+  const handle = viewer.modelHandle;
+  viewer.modelInstance = null;
+  viewer.modelHandle = "";
+  viewer.modelStats = null;
+  if (instance) instance.dispose();
+  if (handle) await call("assets.model.close", {handle}).catch(() => {});
+  const canvas = byId("viewer-3d-canvas");
+  const fresh = canvas.cloneNode(false);
+  delete fresh.dataset.modelAssetId;
+  canvas.replaceWith(fresh);
+}
+
+function decodeBase64(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function encodeBase64(bytes) {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+async function saveModelThumbnail(assetId, instance, token) {
+  try {
+    const blob = await instance.snapshot();
+    if (token !== viewer.token || blob.size > 256 * 1024) return;
+    const encoded = encodeBase64(new Uint8Array(await blob.arrayBuffer()));
+    await call("assets.model.thumbnail", {asset_id: assetId, base64: encoded});
+    if (token === viewer.token) await loadLibrary({reset: true});
+  } catch { /* A thumbnail is a cache; the live viewer remains usable. */ }
+}
+
+async function openModelViewer(assetId, item, token) {
+  showViewerModel();
+  const loading = byId("viewer-3d-loading");
+  const stats = byId("viewer-3d-stats");
+  loading.hidden = false;
+  loading.textContent = viewer3dText().loading;
+  stats.textContent = "";
+  byId("viewer-3d-tools").hidden = true;
+  let opened;
+  try {
+    const modulePromise = modelViewerModulePromise || (
+      modelViewerModulePromise = import(
+        new URL(`/viewer-runtime.js?v=${MODEL_VIEWER_BUNDLE}`, location.href).href
+      )
+    );
+    opened = await call("assets.model.open", {asset_id: assetId});
+    viewer.modelHandle = opened.handle;
+    if (opened.total_bytes > 64 * 1024 * 1024) throw new Error("model exceeds browser bound");
+    const content = new Uint8Array(opened.total_bytes);
+    let offset = 0;
+    while (offset < content.length) {
+      if (token !== viewer.token) throw new Error("model view changed");
+      const piece = await call("assets.model.bytes", {
+        handle: opened.handle, offset, length: Math.min(opened.chunk_bytes, content.length - offset),
+      });
+      const chunk = decodeBase64(piece.base64);
+      if (piece.offset !== offset || piece.total_bytes !== content.length || !chunk.length) {
+        throw new Error("model byte sequence changed");
+      }
+      content.set(chunk, offset);
+      offset += chunk.length;
+      loading.textContent = `${viewer3dText().loading} ${Math.round(offset / content.length * 100)}%`;
+    }
+    await call("assets.model.close", {handle: opened.handle});
+    viewer.modelHandle = "";
+    if (token !== viewer.token) return;
+    const module = await modulePromise;
+    if (token !== viewer.token) return;
+    const instance = await module.createModelViewer({
+      canvas: byId("viewer-3d-canvas"),
+      bytes: content,
+      background: "#0b1110",
+      onContextState: (value) => {
+        if (token !== viewer.token) return;
+        loading.hidden = value === "restored";
+        loading.textContent = viewer3dText().contextLost;
+      },
+    });
+    if (token !== viewer.token) { instance.dispose(); return; }
+    viewer.modelInstance = instance;
+    viewer.modelStats = instance.stats;
+    byId("viewer-3d-canvas").dataset.modelAssetId = assetId;
+    viewer.shading = "material";
+    viewer.light = "studio";
+    viewer.background = 0;
+    viewer.bounds = false;
+    viewer.animation = false;
+    loading.hidden = true;
+    byId("viewer-3d-tools").hidden = false;
+    byId("viewer-3d-animation").hidden = instance.stats.animations === 0;
+    stats.textContent = viewer3dText().stats(instance.stats);
+    byId("viewer-caption").textContent = `${item?.mime_type === "application/zip" ? "3D ZIP" : "GLB"} · ${formatBytes(opened.total_bytes)}`;
+    renderViewer3dText();
+    if (item?.preview_kind === "model_3d" && !item?.thumbnail) {
+      void saveModelThumbnail(assetId, instance, token);
+    }
+  } catch {
+    if (opened?.handle && viewer.modelHandle === opened.handle) {
+      await call("assets.model.close", {handle: opened.handle}).catch(() => {});
+      viewer.modelHandle = "";
+    }
+    if (token !== viewer.token) return;
+    loading.hidden = false;
+    loading.textContent = viewer3dText().failed;
+    byId("viewer-caption").textContent = viewer3dText().failed;
+    if (item?.preview_kind === "project_3d") {
+      try {
+        const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 512});
+        if (token !== viewer.token) return;
+        showViewerVideo(false);
+        byId("viewer-image").src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
+        byId("viewer-caption").textContent = "3D ZIP · preview";
+      } catch { /* Keep the explicit model viewer error. */ }
+    }
+  }
+}
+
 async function openViewer(assetId, item, list, {keepList = false} = {}) {
+  const token = ++viewer.token;
+  await disposeModelViewer();
+  if (token !== viewer.token) return;
   viewer.assetId = assetId;
   viewer.filename = item?.suggested_filename || "";
+  byId("viewer-edit").hidden = item?.media_kind === "3d";
   if (!keepList) {
-    viewer.list = Array.isArray(list) ? list : [];
+    viewer.list = Array.isArray(list)
+      ? (item?.media_kind === "3d" ? list.filter((entry) => entry.media_kind === "3d") : list)
+      : [];
     viewer.index = viewer.list.findIndex((entry) => entry.asset_id === assetId);
   }
   renderViewerNav();
@@ -4648,13 +4889,9 @@ async function openViewer(assetId, item, list, {keepList = false} = {}) {
   caption.textContent = "読み込んでいます…";
   if (!byId("viewer").open) byId("viewer").showModal();
   // 送り先を連打されると、遅い方の応答が後から上書きする。最後の要求だけ描く。
-  const token = ++viewer.token;
   try {
-    if (item?.preview_kind === "project_3d") {
-      const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 512});
-      if (token !== viewer.token) return;
-      image.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
-      caption.textContent = "ZIP · プレビュー";
+    if (item?.preview_kind === "project_3d" || item?.preview_kind === "model_3d") {
+      await openModelViewer(assetId, item, token);
       return;
     }
     const content = await call("assets.content", {asset_id: assetId});
@@ -6520,11 +6757,23 @@ for (const holder of [byId("activity-list"), byId("create-error")]) {
 }
 
 byId("library-more").addEventListener("click", () => void loadLibrary());
+byId("library-media-kinds").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-library-media]");
+  if (!button || button.dataset.libraryMedia === state.libraryMedia) return;
+  state.libraryMedia = button.dataset.libraryMedia;
+  renderLibraryMediaFilter();
+  void loadLibrary({reset: true});
+});
+renderLibraryMediaFilter();
 byId("close-dialog").addEventListener("click", () => byId("detail-dialog").close());
 byId("viewer-close").addEventListener("click", () => byId("viewer").close());
 /* 閉じ方は 1 つではない。Esc でも背景でも閉じるので、要素そのものの
    close を捉えて止める。押した場所ごとに止め忘れを作らない。 */
-byId("viewer").addEventListener("close", () => showViewerVideo(false));
+byId("viewer").addEventListener("close", () => {
+  viewer.token += 1;
+  showViewerVideo(false);
+  void disposeModelViewer();
+});
 byId("viewer-prev").addEventListener("click", () => stepViewer(-1));
 byId("viewer-next").addEventListener("click", () => stepViewer(1));
 byId("viewer").addEventListener("keydown", (event) => {
@@ -6543,6 +6792,33 @@ byId("viewer-detail").addEventListener("click", () => {
    小さくなる）。取り込み直しになるが、それで普段の添付とまったく同じ道を
    通るので、ここだけ別扱いの経路を作らずに済む。 */
 byId("viewer-edit").addEventListener("click", () => void editFromLibrary(viewer.assetId));
+byId("viewer-3d-fit").addEventListener("click", () => viewer.modelInstance?.fit());
+byId("viewer-3d-shading").addEventListener("click", () => {
+  if (!viewer.modelInstance) return;
+  viewer.shading = viewer.modelInstance.setShading();
+  renderViewer3dText();
+});
+byId("viewer-3d-light").addEventListener("click", () => {
+  if (!viewer.modelInstance) return;
+  viewer.light = viewer.modelInstance.setLight();
+  renderViewer3dText();
+});
+byId("viewer-3d-background").addEventListener("click", () => {
+  if (!viewer.modelInstance) return;
+  viewer.background = viewer.modelInstance.setBackground();
+});
+byId("viewer-3d-bounds").addEventListener("click", () => {
+  if (!viewer.modelInstance) return;
+  viewer.bounds = viewer.modelInstance.toggleBounds();
+  byId("viewer-3d-bounds").setAttribute("aria-pressed", String(viewer.bounds));
+  renderViewer3dText();
+});
+byId("viewer-3d-animation").addEventListener("click", () => {
+  if (!viewer.modelInstance) return;
+  viewer.animation = viewer.modelInstance.toggleAnimation();
+  byId("viewer-3d-animation").setAttribute("aria-pressed", String(viewer.animation));
+  renderViewer3dText();
+});
 
 async function editFromLibrary(assetId) {
   const note = byId("viewer-save-note");
@@ -6574,13 +6850,17 @@ async function editFromLibrary(assetId) {
 
 const viewerStage = byId("viewer-stage");
 viewerStage.addEventListener("wheel", (event) => {
+  if (viewer.mode !== "image") return;
   event.preventDefault();
   viewerZoom(event.deltaY < 0 ? 1.15 : 0.87);
 }, {passive: false});
 
-viewerStage.addEventListener("dblclick", () => viewerZoom(viewer.scale > 1 ? 0.01 : 2.5));
+viewerStage.addEventListener("dblclick", () => {
+  if (viewer.mode === "image") viewerZoom(viewer.scale > 1 ? 0.01 : 2.5);
+});
 
 viewerStage.addEventListener("pointerdown", (event) => {
+  if (viewer.mode !== "image") return;
   viewer.pointers.set(event.pointerId, event);
   if (viewer.pointers.size === 2) {
     const [first, second] = [...viewer.pointers.values()];
@@ -6595,6 +6875,7 @@ viewerStage.addEventListener("pointerdown", (event) => {
 });
 
 viewerStage.addEventListener("pointermove", (event) => {
+  if (viewer.mode !== "image") return;
   if (!viewer.pointers.has(event.pointerId)) return;
   viewer.pointers.set(event.pointerId, event);
   if (viewer.pointers.size === 2 && viewer.pinch) {
@@ -6670,7 +6951,10 @@ async function resumeAfterInterruption() {
   renderActivity();
 }
 
-document.addEventListener("visibilitychange", () => void resumeAfterInterruption());
+document.addEventListener("visibilitychange", () => {
+  viewer.modelInstance?.setVisible(document.visibilityState === "visible");
+  void resumeAfterInterruption();
+});
 // bfcache から戻った頁は JS の状態だけが生き残り、socket は閉じている。
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) void resumeAfterInterruption();
@@ -6845,7 +7129,9 @@ function applyModelSession(snapshot) {
 }
 
 async function applyRecent(page) {
-  const items = (page.items || []).filter((item) => item.preview_kind);
+  const items = (page.items || []).filter(
+    (item) => item.preview_kind && (item.preview_kind !== "model_3d" || item.thumbnail)
+  );
   const strip = byId("recent-strip");
   strip.replaceChildren();
   byId("recent-empty").hidden = items.length > 0;
@@ -6944,6 +7230,8 @@ window.addEventListener("message", (event) => {
     if (message.event === "locale.changed" && message.data?.locale) {
       document.documentElement.lang = message.data.locale;
       renderBlenderRuntime();
+      renderLibraryMediaFilter();
+      renderViewer3dText();
     }
     if (message.event === "safe_area.changed") applySafeArea(message.data);
     if (message.event === "visibility.changed") state.visible = message.data?.visible !== false;

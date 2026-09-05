@@ -70,7 +70,8 @@ DRACO/KTX2/Meshopt decoderは同梱せず、required extensionをbackend検証�
 animation play/pause、前後版比較、材質slot選択、画像差替えpreview、Blenderで編集。
 追加: normals/UV表示、LOD比較。unsupported extensionは理由を出して検証済みpreviewへ戻る。
 
-GPU/browser memory予算とtexture総画素を制限し、大型sceneは低LOD派生物を使う。
+viewerへ渡すGLBは64 MiB以下、textureは1辺8,192 px以下かつ合計67,108,864 px以下とし、
+展開後RGBA textureの上限を256 MiB相当に固定する。大型sceneは低LOD派生物を使う。
 モデル切替・画面退出時にgeometry/material/textureをdisposeし、不要なfetchをabortする。
 非表示タブは描画loopを止め、WebGL context loss/recoveryを扱う。
 同一assetのimmutable hashでcacheを再利用する。Libraryはthumbnailとmetadataを先に取得する。

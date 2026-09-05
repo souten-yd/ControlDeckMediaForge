@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "three_version": "0.185.1",
+  "three_npm_integrity": "sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==",
+  "esbuild_version": "0.28.2",
+  "source_sha256": "e6f1f11b0a8c3f6b534ac6f8460e8fb9c470e3b0a001b36ad526ed6f3a86798a",
+  "bundle_sha256": "99935b9427ddad9aa892a8046376da55eaa3e5fe8873d3cdaafbabb6f530b843",
+  "bundle_bytes": 643367
+}

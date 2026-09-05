@@ -368,6 +368,13 @@
               </svg>
             </button>
           </div>
+          <div id="library-media-kinds" class="chips library-media-kinds" role="radiogroup"
+               aria-label="素材の種類">
+            <button type="button" data-library-media="all" aria-pressed="true">すべて</button>
+            <button type="button" data-library-media="image" aria-pressed="false">画像</button>
+            <button type="button" data-library-media="video" aria-pressed="false">動画</button>
+            <button type="button" data-library-media="3d" aria-pressed="false">3D</button>
+          </div>
           <div id="library-grid" class="grid"></div>
           <p id="library-empty" class="hint" hidden>まだ素材はありません。</p>
           <p id="library-note" class="hint" role="status" hidden></p>
@@ -687,12 +694,25 @@
         <div id="viewer-stage">
           <img id="viewer-image" alt="">
           <video id="viewer-video" controls playsinline preload="metadata" hidden></video>
+          <div id="viewer-3d" hidden>
+            <canvas id="viewer-3d-canvas" aria-label="3Dモデル"></canvas>
+            <div id="viewer-3d-loading" role="status">3Dモデルを読み込んでいます…</div>
+            <div id="viewer-3d-tools" role="toolbar" aria-label="3D表示">
+              <button type="button" id="viewer-3d-fit">全体</button>
+              <button type="button" id="viewer-3d-shading">材質</button>
+              <button type="button" id="viewer-3d-light">照明</button>
+              <button type="button" id="viewer-3d-background">背景</button>
+              <button type="button" id="viewer-3d-bounds" aria-pressed="false">範囲</button>
+              <button type="button" id="viewer-3d-animation" aria-pressed="false" hidden>再生</button>
+            </div>
+            <p id="viewer-3d-stats" aria-live="polite"></p>
+          </div>
         </div>
         <div id="viewer-bar">
           <div class="viewer-nav">
-            <button type="button" id="viewer-prev" aria-label="前の画像">‹</button>
+            <button type="button" id="viewer-prev" aria-label="前の素材">‹</button>
             <span id="viewer-position" class="hint"></span>
-            <button type="button" id="viewer-next" aria-label="次の画像">›</button>
+            <button type="button" id="viewer-next" aria-label="次の素材">›</button>
           </div>
           <div class="viewer-meta">
             <p id="viewer-caption"></p>

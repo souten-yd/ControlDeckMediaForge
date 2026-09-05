@@ -14,6 +14,7 @@ from .domain import Asset, Provenance
 
 Kind = Literal["generated", "edited", "imported"]
 KINDS: tuple[str, ...] = ("all", "generated", "edited", "imported")
+MEDIA_KINDS: tuple[str, ...] = ("all", "image", "video", "3d")
 
 SUMMARY_LIMIT = 80
 MAX_LIMIT = 120
@@ -51,18 +52,25 @@ def _protected_pixel_diff(provenance: Provenance) -> int | None:
 
 def entry(asset: Asset, provenance: Provenance) -> dict[str, Any]:
     preview_kind: str | None = None
+    media_kind = "other"
     if asset.mime_type in {"image/png", "image/jpeg", "image/webp"}:
         preview_kind = "image"
+        media_kind = "image"
     elif asset.mime_type.startswith("video/"):
         # 一覧に出るのは 1 枚目の静止画である。画面がそれを動くものとして
         # 扱えるよう、静止画と別の種別として名指しする。
         preview_kind = "video"
+        media_kind = "video"
+    elif asset.mime_type == "model/gltf-binary":
+        preview_kind = "model_3d"
+        media_kind = "3d"
     elif (
         asset.mime_type == "application/zip"
         and provenance.operation == "asset.pack"
         and provenance.parameters.get("profile") == "3d.project.glb"
     ):
         preview_kind = "project_3d"
+        media_kind = "3d"
     item: dict[str, Any] = {
         "asset_id": asset.id,
         "job_id": asset.job_id,
@@ -79,6 +87,7 @@ def entry(asset: Asset, provenance: Provenance) -> dict[str, Any]:
         "parent_asset_ids": list(asset.parent_asset_ids),
         "operation": provenance.operation,
         "preview_kind": preview_kind,
+        "media_kind": media_kind,
         "warnings": list(provenance.warnings),
     }
     diff = _protected_pixel_diff(provenance)
@@ -106,6 +115,7 @@ def page(
     kind: str,
     include_masks: bool,
     limit: int,
+    media_kind: str = "all",
     thumbnail: Callable[[Asset], dict[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
     """Filter a fetched page, keeping pagination anchored on real asset rows.
@@ -119,6 +129,8 @@ def page(
             continue
         value = entry(asset, provenance)
         if kind != "all" and value["kind"] != kind:
+            continue
+        if media_kind != "all" and value["media_kind"] != media_kind:
             continue
         if thumbnail is not None and len(items) < MAX_INLINE_THUMBNAILS:
             rendered = thumbnail(asset)

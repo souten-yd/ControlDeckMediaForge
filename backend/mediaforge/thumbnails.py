@@ -25,6 +25,7 @@ MIN_MAX_SIDE = 64
 MAX_MAX_SIDE = 512
 DEFAULT_MAX_SIDE = 256
 THUMBNAIL_BYTE_LIMIT = 64 * 1024
+MODEL_CAPTURE_BYTE_LIMIT = 256 * 1024
 # 原寸で預かった写真は、workspace の転送上限（12 MiB）を超えて運べない。断ると
 # 「消せたが見られない」になるので、見るためだけの縮小版を作る。一覧の 64 KiB
 # では拡大に耐えないため、別の予算を持つ。実測: 12.2MP の写真が PNG で 13.6MiB、
@@ -214,4 +215,53 @@ def cached(
     temporary.write_bytes(thumbnail.content)
     temporary.chmod(0o600)
     temporary.replace(path)
+    return thumbnail
+
+
+def store_model_capture(cache_dir: Path, asset_id: str, content: bytes) -> Thumbnail:
+    """Validate a browser-rendered GLB capture and retain only a bounded derivative."""
+    if not content or len(content) > MODEL_CAPTURE_BYTE_LIMIT:
+        raise ThumbnailError()
+    try:
+        with Image.open(io.BytesIO(content)) as image:
+            image.load()
+            if image.format != "WEBP" or image.width < 1 or image.height < 1:
+                raise ThumbnailError()
+            if max(image.width, image.height) > MAX_MAX_SIDE:
+                raise ThumbnailError()
+            width, height = image.width, image.height
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise ThumbnailError() from exc
+    cache_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    destination = contained(cache_dir, cache_dir / f"{asset_id}_model.webp")
+    temporary = contained(cache_dir, cache_dir / f".{asset_id}_model.tmp")
+    temporary.write_bytes(content)
+    temporary.chmod(0o600)
+    temporary.replace(destination)
+    for side in (MIN_MAX_SIDE, 96, 128, 160, 192, DEFAULT_MAX_SIDE, 384, MAX_MAX_SIDE):
+        derived = contained(cache_dir, cache_dir / f"{asset_id}_{side}.webp")
+        if derived.is_file() and not derived.is_symlink():
+            derived.unlink()
+    return Thumbnail(MIME_TYPE, width, height, content)
+
+
+def model_cached(cache_dir: Path, asset_id: str, max_side: int) -> Thumbnail:
+    """Read a captured model thumbnail without ever parsing GLB in the grid path."""
+    cache_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    destination = contained(cache_dir, cache_dir / f"{asset_id}_{max_side}.webp")
+    if destination.is_file() and not destination.is_symlink():
+        try:
+            with Image.open(destination) as image:
+                image.load()
+                return Thumbnail(MIME_TYPE, image.width, image.height, destination.read_bytes())
+        except (OSError, UnidentifiedImageError) as exc:
+            raise ThumbnailError() from exc
+    capture = contained(cache_dir, cache_dir / f"{asset_id}_model.webp")
+    if capture.is_symlink() or not capture.is_file():
+        raise ThumbnailError()
+    thumbnail = render(capture, max_side, MIME_TYPE)
+    temporary = contained(cache_dir, cache_dir / f".{asset_id}_{max_side}.tmp")
+    temporary.write_bytes(thumbnail.content)
+    temporary.chmod(0o600)
+    temporary.replace(destination)
     return thumbnail
