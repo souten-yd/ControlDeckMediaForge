@@ -5,6 +5,7 @@
 
 ## 2026-09-05 3DS-1 runtime resolver / Settings diagnostics
 
+PR #215、実装commit `4c7c6f7603733ee65fb28463feded1cb94066668`。
 `ux1/3d-runtime-status`でversioned registry/resolver、legacy 4.5.9登録、G8 runtime解決、
 private status transport、read-only Settings診断を実装した。実Uvicorn/Blenderで3DS-0と同じ
 796 B cubeから44,292 B / SHA-256 `c78ef18d...a468b`の同一ZIPを得た。registryは258 B /
