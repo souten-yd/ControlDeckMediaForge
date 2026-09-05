@@ -3,6 +3,28 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-5d session lifecycle / recovery
+
+PR #234、branch `ux1/3d-session-recovery`、実装commit `746bc12`。既定の切断猶予300秒、controller idle 1,800秒、bounded server設定、
+input activityの書込throttleを追加した。timeout、実unit crash、Host disable/revokeはsessionをinterruptedにし、
+unit/root/socketを回収してworking bytesを未検証のowner-scoped復旧候補として残す。復旧候補は新writerへcopyし、
+Blender/GLB検証とrevision commit成功後だけ旧候補をreleasedにして削除する。UIはfresh editと復旧を分け、
+日英の終了理由を表示する。版は0.28.5。
+
+実Blender/Xvncの2秒切断猶予はreadyから5.270秒でinterrupted、515,688 B / SHA-256
+`7afe139e407c33711b12e0989cf5492ed5294580535e809509ed76b969a43ee1`を候補に保持した。候補からのsaveは
+revision 6→7、working 515,496 B / SHA-256
+`cddc910ddfe056542990e0d669d240f1bddbbc0642da75724c215e597d270d6d`、両validator passed、旧root 0。
+別sessionのSIGKILLはrunner_lost / recoveryとなり、unit/root/socket/process 0。Host disable相当interruptは
+受付2.397 ms、終端まで91.9 ms、resource 0。実Chromeはdesktop日英、390x844案内、横scroll 0、exception 0。
+focused testは全件通過し、fullは952 passed / 1 warning / 91.17秒。
+0.28.5 exact bundleは31,509,192 B / SHA-256
+`352efcfbf6f7ee3566ec530ea01ee7b76534c8bbe397d346bed0f72907d65693`、packaged doctor成功。exact packageの
+実Blender sessionもready→private interrupt→interrupted/recoveryとなり、受付2.780 ms、残存resource 0。
+
+実ControlDeck opaque iframe、10分超credential rotation、実Host revoke、GPU/Cycles、packaged Chromeは
+**NOT TESTED**。次は別sliceの3DS-6 material binding。
+
 ## 2026-09-06 3DS-5c authenticated RFB gateway / noVNC
 
 PR #233、branch `ux1/3d-session-gateway`、実装commit `72db176` + cache identity修正`f94ab59`。private Host/standalone WebSocketからsession所有のUnix RFB socketへ

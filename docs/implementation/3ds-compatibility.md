@@ -1,6 +1,6 @@
 # 3D Studio compatibility baseline
 
-Status: 3DS-0〜4・3DS-5a VERIFIED / 3DS-5b source VERIFIED
+Status: 3DS-0〜4・3DS-5a VERIFIED / 3DS-5b〜5d source VERIFIED
 Date: 2026-09-06
 
 この表は統合3D Studio着手時の互換性基準である。既存画像・G8・公開契約を、後続実装の
@@ -169,3 +169,30 @@ objects 5 / meshes 3 / triangles 36 / vertices 24、両validator passed。停止
 fingerprint付きimport配信を確認した。同じgateway実装の候補processによる実RFB bannerは14.337 ms。実ControlDeck
 opaque iframe、token rotation/revoke、disable、idle/crash
 recovery、packaged Chrome、GPU/Cyclesは **NOT TESTED**。
+
+## 3DS-5d lifecycle / recovery互換性
+
+private session recordへ接続・切断・最終操作時刻とrecovery source IDを追加したが、既存recordはdefault値で
+読める。既定は切断猶予300秒、controller idle 1,800秒で、上限付きserver設定だけが変更できる。timeout、
+Blender unit消失、Host disable、15秒周期のHost credential再検査失敗はunitを停止し、working `.blend`を
+正式revisionへせずowner-scoped復旧候補にする。候補を開くと新writerへbyte copyし、元候補はimmutableのまま。
+Blender/GLB検証とcommitが成功した後だけ元候補をreleasedにしてbytesを回収する。
+
+実Blender 4.5.9/Xvncで切断猶予を2秒へ短縮したsessionはreadyから5.270秒で
+`blender_session_disconnected_timeout`となり、515,688 B / SHA-256
+`7afe139e407c33711b12e0989cf5492ed5294580535e809509ed76b969a43ee1`を復旧候補に保持した。同候補を
+新sessionで開いて保存するとrevision 6→7、working 515,496 B / SHA-256
+`cddc910ddfe056542990e0d669d240f1bddbbc0642da75724c215e597d270d6d`、objects 5 / meshes 3 /
+triangles 36 / vertices 24、Blender/GLB validator passedとなり、旧候補recordはreleased、旧rootは0。
+
+別の実sessionをsystemd経由SIGKILLすると`blender_session_runner_lost` / recovery candidateとなり、修正後は
+unit、session root、Unix socket、Xvnc/runner processが0になった。Host disable相当のprivate interruptは受付
+2.397 ms、stopping→interrupted 91.9 msで、同じく候補を保持し残存resource 0。実Chromeではdesktopの日英
+復旧ボタン/説明、390x844のdesktop案内、横scroll 0、browser exception 0を確認した。
+exact codeのfull testは952 passed / 既知Starlette warning 1件 / 91.17秒。
+0.28.5 exact bundleは31,509,192 B / SHA-256
+`352efcfbf6f7ee3566ec530ea01ee7b76534c8bbe397d346bed0f72907d65693`、packaged doctor成功。exact packageでも
+実Blender ready、interrupt/recovery、unit/root/socket/process 0を確認した。
+
+実ControlDeck opaque iframe、10分超credential rotation、実Host revoke、GPU/Cycles、packaged Chromeは
+**NOT TESTED**。

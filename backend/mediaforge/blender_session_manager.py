@@ -29,6 +29,10 @@ from .store import Store
 START_TIMEOUT_SEC = 90.0
 COMMAND_TIMEOUT_SEC = 30.0
 UNIT_COMMAND_TIMEOUT_SEC = 15.0
+MONITOR_INTERVAL_SEC = 5.0
+DISCONNECT_GRACE_SEC = 300.0
+IDLE_TIMEOUT_SEC = 1800.0
+ACTIVITY_PERSIST_INTERVAL_SEC = 15.0
 MAX_UNIT_OUTPUT_BYTES = 64 * 1024
 LAVAPIPE_ICD_CANDIDATES = (
     Path("/usr/share/vulkan/icd.d/lvp_icd.json"),
@@ -132,6 +136,9 @@ class BlenderSessionManager:
         controller: SystemdUserSessionController | None = None,
         start_timeout_sec: float = START_TIMEOUT_SEC,
         command_timeout_sec: float = COMMAND_TIMEOUT_SEC,
+        monitor_interval_sec: float = MONITOR_INTERVAL_SEC,
+        disconnect_grace_sec: float = DISCONNECT_GRACE_SEC,
+        idle_timeout_sec: float = IDLE_TIMEOUT_SEC,
         now: Callable[[], str] | None = None,
         socket_root: Path | None = None,
         software_vulkan_icd: Path | None = None,
@@ -149,9 +156,14 @@ class BlenderSessionManager:
         self.controller = controller or SystemdUserSessionController()
         self.start_timeout_sec = start_timeout_sec
         self.command_timeout_sec = command_timeout_sec
+        self.monitor_interval_sec = monitor_interval_sec
+        self.disconnect_grace_sec = disconnect_grace_sec
+        self.idle_timeout_sec = idle_timeout_sec
         self._now = now or _now
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._gateway_sessions: set[str] = set()
+        self._gateway_activity: dict[str, float] = {}
+        self._gateway_activity_saved: dict[str, float] = {}
         self._gateway_lock = asyncio.Lock()
         self.software_vulkan_icd = (
             Path(os.path.abspath(software_vulkan_icd)) if software_vulkan_icd is not None else None
@@ -173,12 +185,22 @@ class BlenderSessionManager:
         self._tasks.clear()
         async with self._gateway_lock:
             self._gateway_sessions.clear()
+            self._gateway_activity.clear()
+            self._gateway_activity_saved.clear()
 
-    def create(self, owner: str, scene_id: str) -> dict[str, Any]:
+    def create(
+        self, owner: str, scene_id: str, *, recovery_working_id: str | None = None
+    ) -> dict[str, Any]:
         owner = validate_scene_owner(owner)
         web_status = self.web_pack.status()
         if web_status.get("state") != "ready":
             raise BlenderSessionError("blender_web_runtime_unavailable", "browser-operation pack is unavailable")
+        if recovery_working_id is not None and (
+            not recovery_working_id.startswith("working_")
+            or len(recovery_working_id) != 40
+            or any(character not in "0123456789abcdef" for character in recovery_working_id[8:])
+        ):
+            raise BlenderSessionError("scene_recovery_unavailable", "recovery candidate is unavailable")
         self._validate_lavapipe_icd(self.software_vulkan_icd)
         self._ensure_socket_root()
         if not isinstance(scene_id, str):
@@ -194,6 +216,7 @@ class BlenderSessionManager:
             web_pack_version=str(web_status["version"]),
             unit_id=f"mediaforge-blender-{session_id.removeprefix('blendersession_')}.service",
             state=BlenderSessionState.QUEUED,
+            recovery_source_id=recovery_working_id,
             created_at=now,
             updated_at=now,
         )
@@ -237,11 +260,80 @@ class BlenderSessionManager:
             if current.state != BlenderSessionState.READY or not self._is_socket(socket_path):
                 raise BlenderSessionError("blender_session_not_ready", "Blender session is not ready")
             self._gateway_sessions.add(session_id)
+            moment = asyncio.get_running_loop().time()
+            self._gateway_activity[session_id] = moment
+            self._gateway_activity_saved[session_id] = moment
+            self._update(
+                owner,
+                current,
+                connected_at=self._now(),
+                disconnected_at=None,
+                last_activity_at=self._now(),
+            )
             return socket_path
 
-    async def release_gateway(self, session_id: str) -> None:
+    async def release_gateway(self, owner: str, session_id: str) -> None:
         async with self._gateway_lock:
             self._gateway_sessions.discard(session_id)
+            self._gateway_activity.pop(session_id, None)
+            self._gateway_activity_saved.pop(session_id, None)
+            try:
+                current = self.store.get_blender_web_session(owner, session_id)
+            except SceneError:
+                return
+            if current.state == BlenderSessionState.READY:
+                self._update(owner, current, connected_at=None, disconnected_at=self._now())
+
+    def note_gateway_activity(self, owner: str, session_id: str) -> None:
+        """Record controller activity without writing SQLite for every pointer event."""
+        if session_id not in self._gateway_sessions:
+            return
+        moment = asyncio.get_running_loop().time()
+        self._gateway_activity[session_id] = moment
+        previous = self._gateway_activity_saved.get(session_id, 0.0)
+        if moment - previous < ACTIVITY_PERSIST_INTERVAL_SEC:
+            return
+        try:
+            current = self.store.get_blender_web_session(owner, session_id)
+            if current.state == BlenderSessionState.READY:
+                self._update(owner, current, last_activity_at=self._now())
+                self._gateway_activity_saved[session_id] = moment
+        except SceneError:
+            return
+
+    def interrupt(self, owner: str, session_id: str, *, code: str) -> dict[str, Any]:
+        """Stop an active GUI and retain its working bytes as an unvalidated candidate."""
+        owner = validate_scene_owner(owner)
+        allowed = {
+            "blender_session_host_disabled": "Host disabled the Blender session",
+            "blender_session_host_revoked": "Host authorization for the Blender session expired",
+        }
+        if code not in allowed:
+            raise BlenderSessionError("blender_session_interrupt_invalid", "session interruption is invalid")
+        try:
+            current = self.store.get_blender_web_session(owner, session_id)
+        except SceneError as exc:
+            raise BlenderSessionError(exc.code, str(exc)) from exc
+        if current.state not in ACTIVE_BLENDER_SESSION_STATES:
+            return self._projection(current)
+        if current.state == BlenderSessionState.STOPPING and current.error_code in allowed:
+            return self._projection(current)
+        current = self._update(
+            owner,
+            current,
+            state=BlenderSessionState.STOPPING,
+            error_code=code,
+            error_message=allowed[code],
+        )
+        existing = self._tasks.pop(session_id, None)
+        if existing is not None:
+            existing.cancel()
+        task = asyncio.create_task(
+            self._interrupt(owner, session_id, code, allowed[code]),
+            name=f"blender-interrupt-{session_id}",
+        )
+        self._track(session_id, task)
+        return self._projection(current)
 
     def save_and_stop(self, owner: str, session_id: str) -> dict[str, Any]:
         return self._begin_finish(owner, session_id, save=True)
@@ -294,7 +386,13 @@ class BlenderSessionManager:
         working_id: str | None = None
         try:
             session = self._update(owner, session, state=BlenderSessionState.PREPARING)
-            working = self.scene_workspace.acquire_working_copy(owner, session.scene_id)
+            working = (
+                self.scene_workspace.acquire_recovery_working_copy(
+                    owner, session.scene_id, session.recovery_source_id
+                )
+                if session.recovery_source_id is not None
+                else self.scene_workspace.acquire_working_copy(owner, session.scene_id)
+            )
             working_id = working.id
             runtime = self.resolver.resolve_registered(working.runtime_id)
             if runtime is None or runtime.version != working.runtime_version:
@@ -342,6 +440,13 @@ class BlenderSessionManager:
         if session.state in {BlenderSessionState.PREPARING, BlenderSessionState.STARTING}:
             await self._await_ready(owner, session)
             return
+        if session.state == BlenderSessionState.READY and session.disconnected_at is None:
+            session = self._update(
+                owner,
+                session,
+                connected_at=None,
+                disconnected_at=self._now(),
+            )
         await self._monitor(owner, session.id)
 
     async def _await_ready(self, owner: str, session: BlenderWebSession) -> None:
@@ -371,7 +476,14 @@ class BlenderSessionManager:
                     or "llvmpipe" not in value["gpu_renderer"].lower()
                 ):
                     raise BlenderSessionError("blender_session_probe_failed", "Blender GUI identity differs")
-                self._update(owner, session, state=BlenderSessionState.READY)
+                now = self._now()
+                self._update(
+                    owner,
+                    session,
+                    state=BlenderSessionState.READY,
+                    disconnected_at=now,
+                    last_activity_at=now,
+                )
                 await self._monitor(owner, session.id)
                 return
             await asyncio.sleep(0.1)
@@ -379,7 +491,7 @@ class BlenderSessionManager:
 
     async def _monitor(self, owner: str, session_id: str) -> None:
         while True:
-            await asyncio.sleep(30)
+            await asyncio.sleep(self.monitor_interval_sec)
             session = self.store.get_blender_web_session(owner, session_id)
             if session.state != BlenderSessionState.READY:
                 return
@@ -390,8 +502,52 @@ class BlenderSessionManager:
                     interrupted=True,
                 )
                 return
+            loop_now = asyncio.get_running_loop().time()
+            if session.id in self._gateway_sessions:
+                last_activity = self._gateway_activity.get(session.id, loop_now)
+                if loop_now - last_activity >= self.idle_timeout_sec:
+                    message = "Blender session reached its controller idle timeout"
+                    session = self._update(
+                        owner,
+                        session,
+                        state=BlenderSessionState.STOPPING,
+                        error_code="blender_session_idle_timeout",
+                        error_message=message,
+                    )
+                    await self._interrupt(
+                        owner, session.id, "blender_session_idle_timeout", message
+                    )
+                    return
+            else:
+                disconnected = self._parse_time(session.disconnected_at or session.updated_at)
+                if (self._parse_time(self._now()) - disconnected).total_seconds() >= self.disconnect_grace_sec:
+                    message = "Blender session reached its disconnected grace timeout"
+                    session = self._update(
+                        owner,
+                        session,
+                        state=BlenderSessionState.STOPPING,
+                        error_code="blender_session_disconnected_timeout",
+                        error_message=message,
+                    )
+                    await self._interrupt(
+                        owner, session.id, "blender_session_disconnected_timeout", message
+                    )
+                    return
             if session.working_id is not None:
                 self.scene_workspace.renew_working_copy(owner, session.working_id)
+
+    async def _interrupt(self, owner: str, session_id: str, code: str, message: str) -> None:
+        session = self.store.get_blender_web_session(owner, session_id)
+        try:
+            await self.controller.stop(session.unit_id)
+        finally:
+            await self._fail(
+                owner,
+                session.id,
+                session.working_id,
+                BlenderSessionError(code, message),
+                interrupted=True,
+            )
 
     async def _finish(self, owner: str, session_id: str, *, save: bool) -> None:
         session = self.store.get_blender_web_session(owner, session_id)
@@ -404,6 +560,15 @@ class BlenderSessionManager:
                     raise BlenderSessionError("blender_session_invalid", "session working copy is unavailable")
                 result = await self.scene_workspace.commit_working_copy(owner, session.working_id)
                 result = {"saved": True, "scene": result, "working_file": save_result}
+                if session.recovery_source_id is not None:
+                    try:
+                        self.scene_workspace.retire_recovery_working_copy(
+                            owner, session.recovery_source_id
+                        )
+                    except (SceneError, OSError):
+                        # The validated revision is already committed. A stale recovery
+                        # marker must not rewrite that successful outcome as a failure.
+                        pass
             else:
                 if session.working_id is not None:
                     self.scene_workspace.release_working_copy(owner, session.working_id)
@@ -446,7 +611,22 @@ class BlenderSessionManager:
     async def _fail(
         self, owner: str, session_id: str, working_id: str | None, exc: Exception, *, interrupted: bool = False
     ) -> None:
+        recovery: dict[str, Any] | None = None
         try:
+            if working_id is not None:
+                try:
+                    retained = self.scene_workspace.retain_working_copy_for_recovery(owner, working_id)
+                    recovery = {
+                        "state": "candidate",
+                        "working_id": retained.id,
+                        "scene_id": retained.scene_id,
+                    }
+                except SceneError:
+                    pass
+            try:
+                await asyncio.to_thread(self._remove_session_root, session_id)
+            except BlenderSessionError:
+                pass
             current = self.store.get_blender_web_session(owner, session_id)
             if current.state in ACTIVE_BLENDER_SESSION_STATES:
                 self._update(
@@ -454,13 +634,13 @@ class BlenderSessionManager:
                     state=BlenderSessionState.INTERRUPTED if interrupted else BlenderSessionState.FAILED,
                     error_code=getattr(exc, "code", "blender_session_failed"),
                     error_message=str(exc)[:300],
+                    result={"saved": False, "recovery": recovery},
                 )
         finally:
-            if working_id is not None:
-                try:
-                    self.scene_workspace.retain_working_copy_for_recovery(owner, working_id)
-                except SceneError:
-                    pass
+            async with self._gateway_lock:
+                self._gateway_sessions.discard(session_id)
+                self._gateway_activity.pop(session_id, None)
+                self._gateway_activity_saved.pop(session_id, None)
 
     def _write_spec(self, session: BlenderWebSession, blender: Path, scene: Path) -> Path:
         trusted_files = (self.runner, self.bootstrap, self.preferences_bootstrap)
@@ -595,9 +775,23 @@ class BlenderSessionManager:
                 BlenderSessionState.STARTING,
                 BlenderSessionState.READY,
             },
+            "idle_timeout_sec": self.idle_timeout_sec,
+            "disconnect_grace_sec": self.disconnect_grace_sec,
+            "connected_at": session.connected_at,
+            "disconnected_at": session.disconnected_at,
+            "last_activity_at": session.last_activity_at,
+            "recovery_source_id": session.recovery_source_id,
             "error_code": session.error_code,
             "error_message": session.error_message,
             "result": session.result,
             "created_at": session.created_at,
             "updated_at": session.updated_at,
         }
+
+    @staticmethod
+    def _parse_time(value: str) -> datetime:
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise BlenderSessionError("blender_session_invalid", "session time is invalid") from exc
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)

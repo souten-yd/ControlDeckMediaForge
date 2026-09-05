@@ -125,6 +125,10 @@ def test_blender_session_gateway_is_private_reauthenticating_and_desktop_only() 
     assert "wsProtocols: blenderRfbProtocols()" in SCRIPT
     assert '`control-deck-bridge.${state.nonce}`' in SCRIPT
     assert 'window.matchMedia("(max-width: 767px)")' in SCRIPT
+    assert 'call("blender.sessions.interrupt", {session_id: active.id})' in SCRIPT
+    assert "selectedRecoveryCandidate" in SCRIPT
+    assert "recovery_working_id" in SCRIPT
+    assert 'id="scene-blender-recover"' in MARKUP
     assert "rfb.scaleViewport = true" in SCRIPT
     assert "rfb.resizeSession = false" in SCRIPT
     assert "rfb?.blur()" in SCRIPT

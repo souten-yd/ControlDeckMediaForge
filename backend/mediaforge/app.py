@@ -289,6 +289,8 @@ def create_app(
         bootstrap=REPOSITORY_ROOT / "worker_packs/blender/gui_session_bootstrap.py",
         preferences_bootstrap=REPOSITORY_ROOT / "worker_packs/blender/gui_preferences.py",
         controller=blender_session_controller,
+        disconnect_grace_sec=resolved.blender_disconnect_grace_sec,
+        idle_timeout_sec=resolved.blender_idle_timeout_sec,
     )
 
     manager = JobManager(
@@ -580,7 +582,12 @@ def create_app(
         try:
             socket_path = await blender_sessions.acquire_gateway(owner, session_id)
             reserved = True
-            await relay_rfb(websocket, socket_path, revalidate=revalidate)
+            await relay_rfb(
+                websocket,
+                socket_path,
+                revalidate=revalidate,
+                on_activity=lambda: blender_sessions.note_gateway_activity(owner, session_id),
+            )
         except BlenderSessionError as exc:
             await websocket.close(
                 code=4409 if exc.code == "blender_session_already_connected" else 4404,
@@ -588,7 +595,7 @@ def create_app(
             )
         finally:
             if reserved:
-                await blender_sessions.release_gateway(session_id)
+                await blender_sessions.release_gateway(owner, session_id)
 
     @app.websocket("/blender/sessions/{session_id}/rfb")
     async def host_blender_rfb(websocket: WebSocket, session_id: str) -> None:
@@ -602,12 +609,26 @@ def create_app(
             "X-Control-Deck-Addon-ID": identity.addon_id,
         }
 
+        def revoke_session() -> None:
+            try:
+                blender_sessions.interrupt(
+                    preferences.subject_of(identity),
+                    session_id,
+                    code="blender_session_host_revoked",
+                )
+            except BlenderSessionError:
+                pass
+
         async def revalidate() -> bool:
             try:
                 current = await host.authenticate(credential_headers)
             except HostApiError:
+                revoke_session()
                 return False
-            return current.addon_id == identity.addon_id and current.subject == identity.subject
+            valid = current.addon_id == identity.addon_id and current.subject == identity.subject
+            if not valid:
+                revoke_session()
+            return valid
 
         await serve_blender_rfb(
             websocket, preferences.subject_of(identity), session_id, revalidate=revalidate
@@ -3337,10 +3358,15 @@ def create_app(
                             raise ValueError("Blender session list accepts no parameters")
                         result = blender_sessions.list(preferences.subject_of(identity))
                     elif method == "blender.sessions.start":
-                        if set(params) != {"scene_id"}:
-                            raise ValueError("Blender session start accepts only scene_id")
+                        if "scene_id" not in params or set(params) - {"scene_id", "recovery_working_id"}:
+                            raise ValueError("Blender session start fields differ")
+                        recovery_working_id = params.get("recovery_working_id")
+                        if recovery_working_id is not None and not isinstance(recovery_working_id, str):
+                            raise ValueError("Blender recovery identity is invalid")
                         result = blender_sessions.create(
-                            preferences.subject_of(identity), str(params.get("scene_id", ""))
+                            preferences.subject_of(identity),
+                            str(params.get("scene_id", "")),
+                            recovery_working_id=recovery_working_id,
                         )
                     elif method == "blender.sessions.save":
                         if set(params) != {"session_id"}:
@@ -3353,6 +3379,14 @@ def create_app(
                             raise ValueError("Blender session stop accepts only session_id")
                         result = blender_sessions.discard_and_stop(
                             preferences.subject_of(identity), str(params.get("session_id", ""))
+                        )
+                    elif method == "blender.sessions.interrupt":
+                        if set(params) != {"session_id"}:
+                            raise ValueError("Blender session interrupt accepts only session_id")
+                        result = blender_sessions.interrupt(
+                            preferences.subject_of(identity),
+                            str(params.get("session_id", "")),
+                            code="blender_session_host_disabled",
                         )
                     elif method == "library.list":
                         kind = params.get("kind", "all")
@@ -3568,7 +3602,13 @@ def create_app(
             "items": [
                 item.model_dump(mode="json")
                 for item in scenes.list(preferences.STANDALONE_SUBJECT)
-            ]
+            ],
+            "working_copies": [
+                item.model_dump(mode="json")
+                for item in scene_workspace.list_working_copies(
+                    preferences.STANDALONE_SUBJECT
+                )
+            ],
         }
 
     @app.get("/workspace-api/scenes/{scene_id}", include_in_schema=False)
@@ -3896,9 +3936,20 @@ def create_app(
     async def standalone_blender_session_action(payload: dict[str, Any]) -> dict[str, Any]:
         try:
             reject_host_paths(payload)
-            if set(payload) == {"action", "scene_id"} and payload["action"] == "start":
+            if (
+                payload.get("action") == "start"
+                and "scene_id" in payload
+                and set(payload) <= {"action", "scene_id", "recovery_working_id"}
+            ):
+                recovery_working_id = payload.get("recovery_working_id")
+                if recovery_working_id is not None and not isinstance(recovery_working_id, str):
+                    raise BlenderSessionError(
+                        "blender_session_invalid", "recovery identity is invalid"
+                    )
                 return blender_sessions.create(
-                    preferences.STANDALONE_SUBJECT, str(payload["scene_id"])
+                    preferences.STANDALONE_SUBJECT,
+                    str(payload["scene_id"]),
+                    recovery_working_id=recovery_working_id,
                 )
             if set(payload) == {"action", "session_id"} and payload["action"] == "save":
                 return blender_sessions.save_and_stop(
@@ -3907,6 +3958,12 @@ def create_app(
             if set(payload) == {"action", "session_id"} and payload["action"] == "stop":
                 return blender_sessions.discard_and_stop(
                     preferences.STANDALONE_SUBJECT, str(payload["session_id"])
+                )
+            if set(payload) == {"action", "session_id"} and payload["action"] == "interrupt":
+                return blender_sessions.interrupt(
+                    preferences.STANDALONE_SUBJECT,
+                    str(payload["session_id"]),
+                    code="blender_session_host_disabled",
                 )
         except BlenderSessionError as exc:
             raise HTTPException(

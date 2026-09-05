@@ -39,6 +39,11 @@ def test_relay_requires_exact_binary_subprotocol_without_opening_socket(tmp_path
 def test_relay_moves_binary_both_directions_over_unix_socket(tmp_path: Path) -> None:
     async def scenario() -> None:
         path = tmp_path / "rfb.sock"
+        activity = 0
+
+        def touched() -> None:
+            nonlocal activity
+            activity += 1
 
         async def echo(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
             writer.write(b"RFB 003.008\n")
@@ -53,7 +58,7 @@ def test_relay_moves_binary_both_directions_over_unix_socket(tmp_path: Path) -> 
         websocket = FakeWebSocket("binary", [{"type": "websocket.receive", "bytes": b"test"}])
         try:
             await asyncio.wait_for(
-                relay_rfb(websocket, path), timeout=2  # type: ignore[arg-type]
+                relay_rfb(websocket, path, on_activity=touched), timeout=2  # type: ignore[arg-type]
             )
         finally:
             server.close()
@@ -61,6 +66,7 @@ def test_relay_moves_binary_both_directions_over_unix_socket(tmp_path: Path) -> 
         assert websocket.accepted == "binary"
         assert b"".join(websocket.sent) == b"RFB 003.008\nTEST"
         assert websocket.closed is None
+        assert activity == 1
 
     asyncio.run(scenario())
 
@@ -90,5 +96,34 @@ def test_relay_rejects_text_and_oversized_browser_messages(tmp_path: Path) -> No
             {"type": "websocket.receive", "bytes": b"x" * (MAX_BROWSER_MESSAGE_BYTES + 1)},
             4409,
         )
+
+    asyncio.run(scenario())
+
+
+def test_relay_closes_when_periodic_host_revalidation_fails(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("mediaforge.blender_rfb.REVALIDATE_INTERVAL_SEC", 0.01)
+
+    async def scenario() -> None:
+        path = tmp_path / "rfb-revoked.sock"
+
+        async def hold(_reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            await asyncio.sleep(1)
+            writer.close()
+
+        async def revoked() -> bool:
+            return False
+
+        server = await asyncio.start_unix_server(hold, path=str(path))
+        websocket = FakeWebSocket("binary")
+        try:
+            await asyncio.wait_for(
+                relay_rfb(websocket, path, revalidate=revoked),  # type: ignore[arg-type]
+                timeout=2,
+            )
+        finally:
+            server.close()
+            await server.wait_closed()
+        assert websocket.accepted == "binary"
+        assert websocket.closed == (4403, "host service token expired")
 
     asyncio.run(scenario())

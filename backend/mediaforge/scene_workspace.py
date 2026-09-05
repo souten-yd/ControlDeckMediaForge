@@ -340,6 +340,59 @@ class SceneWorkspace:
                 "scene_working_copy_failed", "working copy could not be created"
             ) from exc
 
+    def acquire_recovery_working_copy(
+        self, owner: str, scene_id: str, recovery_working_id: str
+    ) -> SceneWorkingCopy:
+        """Copy retained GUI bytes into a new writer lease; keep the candidate immutable."""
+        owner = validate_scene_owner(owner)
+        candidate = self.store.get_scene_working_copy(owner, recovery_working_id)
+        if candidate.state != "recovery" or candidate.scene_id != scene_id:
+            raise SceneError("scene_recovery_unavailable", "recovery candidate is unavailable")
+        document, _ = self.catalog.get(owner, scene_id)
+        if document.current_revision_id != candidate.base_revision_id:
+            raise SceneError("scene_recovery_conflict", "scene changed after the recovery candidate was created")
+        runtime = self.resolver.resolve_registered(candidate.runtime_id)
+        if runtime is None or runtime.version != candidate.runtime_version:
+            raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
+        source_root = contained(self.working_root, self.working_root / candidate.id)
+        source = contained(source_root, source_root / "scene.blend")
+        if source.is_symlink() or not source.is_file() or not 1 <= source.stat().st_size <= MAX_BLEND_BYTES:
+            raise SceneError("scene_recovery_missing", "recovery candidate bytes are unavailable")
+        with source.open("rb") as stream:
+            if stream.read(7) != b"BLENDER":
+                raise SceneError("scene_recovery_invalid", "recovery candidate is not a Blender file")
+        now = self._now()
+        working = candidate.model_copy(update={
+            "id": f"working_{uuid.uuid4().hex}",
+            "state": "active",
+            "expires_at": _iso(now + WORKING_TTL),
+            "created_at": _iso(now),
+            "updated_at": _iso(now),
+        })
+        root = contained(self.working_root, self.working_root / working.id)
+        try:
+            root.mkdir(mode=0o700)
+            target = contained(root, root / "scene.blend")
+            shutil.copyfile(source, target)
+            target.chmod(0o600)
+            if self._sha256(target) != self._sha256(source):
+                raise SceneError("scene_recovery_changed", "recovery candidate identity changed")
+            return self.store.acquire_scene_working_copy(owner, working, now=_iso(now))
+        except Exception as exc:
+            if root.exists():
+                self._remove_tree(root, self.working_root)
+            if isinstance(exc, SceneError):
+                raise
+            raise SceneError("scene_recovery_failed", "recovery candidate could not be opened") from exc
+
+    def retire_recovery_working_copy(self, owner: str, working_id: str) -> None:
+        """Retire and remove a candidate only after its replacement revision committed."""
+        owner = validate_scene_owner(owner)
+        self.store.retire_scene_recovery(owner, working_id, now=_iso(self._now()))
+        root = contained(self.working_root, self.working_root / working_id)
+        if root.exists():
+            self._remove_tree(root, self.working_root)
+
     def renew_working_copy(self, owner: str, working_id: str) -> SceneWorkingCopy:
         owner = validate_scene_owner(owner)
         self.store.expire_scene_working_copies(_iso(self._now()))

@@ -1316,6 +1316,32 @@ class Store:
         self._notify_session("scenes")
         return value
 
+    def retire_scene_recovery(self, owner: str, working_id: str, *, now: str) -> SceneWorkingCopy:
+        """Mark one consumed recovery candidate released without touching its bytes."""
+        owner = validate_scene_owner(owner)
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                """SELECT owner, state, value_json FROM scene_working_copies
+                   WHERE id = ?""",
+                (working_id,),
+            ).fetchone()
+            if row is None or row["owner"] != owner:
+                raise SceneError("scene_working_not_found", "working copy is unavailable")
+            if row["state"] != "recovery":
+                raise SceneError("scene_recovery_unavailable", "recovery candidate is unavailable")
+            try:
+                current = SceneWorkingCopy.model_validate_json(row["value_json"])
+            except ValidationError as exc:
+                raise SceneError("scene_working_invalid", "working copy is unreadable") from exc
+            value = current.model_copy(update={"state": "released", "updated_at": now})
+            connection.execute(
+                """UPDATE scene_working_copies SET value_json = ?, state = 'released', updated_at = ?
+                   WHERE id = ?""",
+                (value.model_dump_json(), now, working_id),
+            )
+        self._notify_session("scenes")
+        return value
+
     def list_scene_working_copies(self, owner: str) -> list[SceneWorkingCopy]:
         with self._connect() as connection:
             rows = connection.execute(

@@ -496,6 +496,15 @@ Blender compilation has a hard upper timeout of 180 seconds. Operators may set
 timeout terminates the process group, records `blender_compile_failed`, and
 registers no partial asset.
 
+Private Blender GUI sessions use a 300-second disconnected grace period and a
+1,800-second controller-idle timeout by default. Operators may set
+`MEDIA_FORGE_BLENDER_DISCONNECT_GRACE_SEC` up to 3,600 seconds and
+`MEDIA_FORGE_BLENDER_IDLE_TIMEOUT_SEC` up to 86,400 seconds. Expiry, runner
+crash, Host disable, and Host credential revocation stop the isolated unit and
+retain the unvalidated working bytes as an owner-scoped recovery candidate.
+Opening that candidate copies it into a new writer lease; only a successful
+validation and save creates a formal scene revision.
+
 ## Contract evolution
 
 G1 froze public schemas, manifest contributions, agent tools, workflow executor

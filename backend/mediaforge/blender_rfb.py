@@ -31,6 +31,7 @@ async def relay_rfb(
     socket_path: Path,
     *,
     revalidate: Callable[[], Awaitable[bool]] | None = None,
+    on_activity: Callable[[], None] | None = None,
 ) -> None:
     """Relay binary frames only. Authentication and reservation happen upstream."""
     if requested_protocols(websocket) != ("binary",):
@@ -56,6 +57,8 @@ async def relay_rfb(
                 raise BlenderRfbError(4400, "binary frames required")
             if len(content) > MAX_BROWSER_MESSAGE_BYTES:
                 raise BlenderRfbError(4409, "RFB frame too large")
+            if on_activity is not None:
+                on_activity()
             writer.write(content)
             await writer.drain()
 
