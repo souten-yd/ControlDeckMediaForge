@@ -8875,3 +8875,24 @@ scene/workspace/backup/Blender/Host transport群はPASS。exact head `./mf.sh te
 warning 1件 / 100.56秒。0.28.12 candidate bundleは
 31,618,636 B / SHA-256 `e4a7b1963e2d81e75055a45b8d843708758a0bc54642fab0e147f0226b6a946e`、
 隔離data/cacheへ展開したbinary doctorは`ok / 0.28.12 / packaged=true`。PR/release/installed browser再実測は未実施。
+
+## 2026-09-06 — 3DS-8 opaque iframe noVNC module loading
+
+stable owner PR #241はmerge commit `01d10866b1de1392aa894a89361418ffc2041c3e`でmerged。main exact sourceから再構築した
+正式v0.28.12 bundleは31,618,328 B / SHA-256
+`f2a9623e73833219bd85194b5d545ceec36e67ff4a398b9afa4d25a2c70124fa`。manifest 279 B、signature 89 Bで自己検証し、
+tag targetは同merge commit。公開面から4 assetを再取得して全hash一致を確認した。ControlDeck標準updateは10.56秒 /
+最大RSS 788,948 KiB、`current=versions/0.28.12`、旧0.28.11保持、新PID 2174325、health healthy。
+
+owner修正後のinstalled Chromeでは、Agent作成sceneの`scenes.list/get`とdetail表示が成功し、Blender Web session
+`blendersession_b88b1e11b0654e5997bc0acdc1b862db`は`ready`、software display 1280x720、TigerVNC/Blender実process稼働。
+一方、opaque origin `null`からnative `import()`したnoVNC `rfb.js`はHost frame cookieを送らず、HTTP認証前に401となり、
+consoleは`No 'Access-Control-Allow-Origin' header` / `ERR_FAILED`、接続表示はreconnectingのまま。sessionは明示stopした。
+
+branch `ux1/3d-web-client-cors`で、同梱`blender-rfb-loader.js`を`crossorigin=use-credentials`の外部moduleとして遅延ロードし、
+そのmodule graphにだけHost frame cookieを送るよう修正した。loaderはmanifest-pinned noVNC `core/rfb.js`だけをimportし、
+remote URLや利用者入力を受けない。公開API/contributionは不変。版は0.28.13。focused frontend contract、Blender web、
+release bundle群はPASS。exact head `./mf.sh test`は979 passed / 既知Starlette warning 1件 / 99.39秒。
+candidate bundleは31,619,516 B / SHA-256
+`55d567cb14dcad501730b0ae3e9c7b11953292c756255c167bbeccb4ab25e624`、展開binary doctorは
+`ok / 0.28.13 / packaged=true`。PR/release、installed browser再実測は未実施。
