@@ -1,6 +1,6 @@
 # 3D Studio compatibility baseline
 
-Status: 3DS-0〜1 VERIFIED / 3DS-2 IN PROGRESS（install/cancel/restart VERIFIED）
+Status: 3DS-0〜4・3DS-5a VERIFIED / 3DS-5 session runner IN PROGRESS
 Date: 2026-09-05
 
 この表は統合3D Studio着手時の互換性基準である。既存画像・G8・公開契約を、後続実装の
@@ -105,3 +105,31 @@ mode 0600 / raw pathなし。そのruntimeによるcube G8は1.312秒、ZIP 44,2
 未導入表示、exact catalog/license/容量、導入button、320 px client/scroll 320、button 39 px、
 console/page/HTTP error 0件。update/switch/repair/removeと実Host opaque iframeは
 **NOT IMPLEMENTED / NOT TESTED**。
+
+## 3DS-5a Web操作pack管理
+
+Web操作環境を基本Blenderと別のimmutable packとして管理する。TigerVNC 1.16.2の
+[公式generic Linux archive](https://sourceforge.net/projects/tigervnc/files/stable/1.16.2/)と、
+noVNC 1.7.0の[固定commit](https://github.com/novnc/noVNC/tree/63107bd06d9e1f6136ff21aeda8cd62cbf0d433e)を
+HTTPS URL、archive byte数/SHA-256、展開root、必須file SHA-256、licenseで固定した。
+TigerVNCは15,042,988 B / SHA-256
+`5b70c84baefc09a030cfc78315c34ccb55b2a0dde4092b7da67a1962c5f0dea6`、noVNCは
+726,728 B / SHA-256 `b1003a11b6e6e8d8f7f5e5586daae7f8ca651d8aee0aa155ff9ac841c48f52c6`。
+symlink/device/FIFO、重複・脱出path、member数、展開量、hash不一致を拒否し、候補を実行probeしてから
+no-replaceで公開する。ブラウザ・CLIは`web_install`だけを指定し、URL/path/commandを入力しない。
+
+隔離data rootの実Uvicornで公式2 archiveを取得したoperationは6.153秒でready。TigerVNCは165 member /
+35,067,968展開B、noVNCは244 member / 2,471,032展開B、pack実体は283 files / 37,539,247 B、
+staging entry 0だった。同梱Xvncを1280x720 / depth 24 / security none / loopback限定で実起動し、
+listenはIPv4 `127.0.0.1` とIPv6 `::1`だけ、`RFB 003.008` bannerは2.207 ms、停止後process 0。
+これはsoftware display probeであり、認証済み製品sessionやGPU GUIの証拠ではない。
+
+実ChromeのSettingsは「利用できます（ソフトウェア表示）」、TigerVNC/noVNCの版・license・15.0 MBを
+表示した。mobile emulationはinner/client/scroll widthがすべて320、browser error 0。0.28.2 bundleは
+31,447,404 B / SHA-256 `04d28d0293dc249d1c2dc42e328d2ccf379d7ed184782d334dd0f37328f16759`、
+packaged doctorは`ok / 0.28.2 / packaged=true`。packaged実processも既存packをready、path token 0と判定し、
+同じ320px/browser結果だった。focused 172件、full 928件PASS / 既知warning 1件 / 82.35秒。
+
+切断中partial保持・cancel・fresh retry、archive改ざん/脱出/link/重複は自動testで確認した。
+systemd user隔離runner、Blender GUI保存、RFB gateway/noVNC接続、再接続、idle/disable/revocation、
+実ControlDeck opaque iframe、GPU GUIは **NOT IMPLEMENTED / NOT TESTED**。次は3DS-5b session runner。

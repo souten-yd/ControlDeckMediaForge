@@ -450,6 +450,11 @@ async function standaloneCall(method, params) {
       method: "POST", body: JSON.stringify({action: "install"}),
     });
   }
+  if (method === "blender.web.install") {
+    return json("/workspace-api/blender/runtime/operations", {
+      method: "POST", body: JSON.stringify({action: "web_install"}),
+    });
+  }
   if (["blender.runtime.update", "blender.runtime.repair", "blender.runtime.switch"].includes(method)) {
     return json("/workspace-api/blender/runtime/operations", {
       method: "POST", body: JSON.stringify({
@@ -6634,9 +6639,10 @@ const BLENDER_TEXT = {
     readySummary: "既存のG8加工に使うBlenderを確認できました。",
     missingSummary: "Blender基本環境がまだありません。画像機能はそのまま利用できます。",
     invalidSummary: "Blenderの登録情報を安全に確認できないため、3D加工を停止しています。",
-    webMissing: "未導入（基本環境とは別です）",
+    webMissing: "未導入（基本環境とは別です）", webReady: "利用できます（ソフトウェア表示）",
+    webDamaged: "修復が必要", webInvalid: "配布情報を確認できません",
     action: "Blender 4.5.9 · GPL-3.0-or-later · blender.org · 約378 MB",
-    install: "基本環境を導入", update: "推奨版へ更新", repair: "修復",
+    install: "基本環境を導入", webInstall: "ブラウザ操作環境を導入", update: "推奨版へ更新", repair: "修復",
     useVersion: "この版を使用", remove: "削除", cancel: "処理を中止", active: "使用中",
     removeTitle: "Blender環境を削除", removeConfirm: "削除する", back: "戻る",
     removeReady: "この管理環境だけを削除します。画像・制作物・履歴は削除しません。",
@@ -6660,9 +6666,10 @@ const BLENDER_TEXT = {
     readySummary: "The Blender runtime used by the existing G8 pipeline is ready.",
     missingSummary: "The Blender base runtime is not installed. Image features remain available.",
     invalidSummary: "3D processing is disabled because the runtime registry could not be verified.",
-    webMissing: "Not installed (separate from the base runtime)",
+    webMissing: "Not installed (separate from the base runtime)", webReady: "Available (software display)",
+    webDamaged: "Repair required", webInvalid: "Distribution metadata unavailable",
     action: "Blender 4.5.9 · GPL-3.0-or-later · blender.org · about 378 MB",
-    install: "Install base runtime", update: "Update to recommended", repair: "Repair",
+    install: "Install base runtime", webInstall: "Install browser control", update: "Update to recommended", repair: "Repair",
     useVersion: "Use this version", remove: "Remove", cancel: "Cancel operation", active: "Active",
     removeTitle: "Remove Blender runtime", removeConfirm: "Remove", back: "Back",
     removeReady: "Only this managed runtime will be removed. Images, projects, and history are kept.",
@@ -6728,6 +6735,7 @@ function renderBlenderRuntime() {
   byId("blender-version-label").textContent = text.version;
   byId("blender-runtime-refresh").textContent = text.refresh;
   byId("blender-runtime-install").textContent = text.install;
+  byId("blender-web-install").textContent = text.webInstall;
   byId("blender-runtime-update").textContent = text.update;
   byId("blender-runtime-cancel").textContent = text.cancel;
   byId("blender-runtime-details-label").textContent = text.details;
@@ -6747,14 +6755,19 @@ function renderBlenderRuntime() {
   };
   byId("blender-runtime-state").textContent = labels[value.state] || value.state;
   byId("blender-basic-value").textContent = labels[value.state] || value.state;
-  byId("blender-web-value").textContent = value.web_pack?.state === "missing"
-    ? text.webMissing : (labels[value.web_pack?.state] || value.web_pack?.state || "—");
+  const webState = value.web_pack?.state;
+  byId("blender-web-value").textContent = {
+    missing: text.webMissing, ready: text.webReady, damaged: text.webDamaged, invalid: text.webInvalid,
+  }[webState] || webState || "—";
   byId("blender-version-value").textContent = selected?.version || value.required_version || "—";
   byId("blender-runtime-summary").textContent = value.state === "ready"
     ? text.readySummary : (value.state === "invalid" ? text.invalidSummary : text.missingSummary);
   byId("blender-runtime-action").textContent = value.catalog
     ? `${value.catalog.version} · ${value.catalog.license} · ${value.catalog.source} · ${formatBytes(value.catalog.archive_size_bytes)}`
     : text.action;
+  byId("blender-web-action").textContent = value.web_pack?.components?.length
+    ? `${value.web_pack.components.map((item) => `${item.id} ${item.version} · ${item.license}`).join(" / ")} · ${formatBytes(value.web_pack.archive_size_bytes || 0)}`
+    : "";
   const terminal = new Set(["ready", "failed", "canceled"]);
   const operation = (value.operations || []).find((item) => !terminal.has(item.state));
   if (operation) watchStandaloneBlenderOperation(operation.id);
@@ -6763,6 +6776,9 @@ function renderBlenderRuntime() {
     || Boolean(operation)
     || value.management_available === false
     || value.catalog?.install_available === false;
+  byId("blender-web-install").hidden = webState !== "missing"
+    || Boolean(operation)
+    || value.web_pack?.install_available !== true;
   byId("blender-runtime-update").hidden = !value.catalog?.update_available
     || Boolean(operation)
     || value.management_available === false;
@@ -7059,6 +7075,15 @@ byId("blender-runtime-install").addEventListener("click", async () => {
   } catch (error) {
     byId("blender-runtime-progress-label").hidden = false;
     byId("blender-runtime-progress-label").textContent = error?.code || "install_failed";
+  }
+});
+byId("blender-web-install").addEventListener("click", async () => {
+  try {
+    await call("blender.web.install", {});
+    await refreshSession(["blender_runtime"]);
+  } catch (error) {
+    byId("blender-runtime-progress-label").hidden = false;
+    byId("blender-runtime-progress-label").textContent = error?.code || "web_install_failed";
   }
 });
 byId("blender-runtime-update").addEventListener("click", async () => {

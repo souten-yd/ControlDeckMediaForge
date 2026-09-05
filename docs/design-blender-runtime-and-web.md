@@ -1,6 +1,6 @@
 # Blender環境管理とサーバーGUIのブラウザ操作
 
-Status: 3DS-2 runtime lifecycle実装済み / Web GUI未実装
+Status: 3DS-2 runtime lifecycle・3DS-5a Web pack実装済み / Web GUI session未実装
 Date: 2026-09-05  
 上位設計: [統合3D Studio](design-3d-studio.md)
 

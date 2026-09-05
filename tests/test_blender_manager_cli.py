@@ -69,6 +69,17 @@ def test_cli_update_uses_server_orchestrator_and_waits_for_terminal(capsys) -> N
     assert '"state": "ready"' in capsys.readouterr().out
 
 
+def test_cli_web_install_uses_the_web_pack_action(capsys) -> None:
+    RuntimeHandler.actions = []
+    server, base_url = server_url()
+    try:
+        assert blender_manager_cli.main(["--base-url", base_url, "web-install"]) == 0
+    finally:
+        server.shutdown()
+    assert RuntimeHandler.actions == [{"action": "web_install"}]
+    assert '"state": "ready"' in capsys.readouterr().out
+
+
 def test_cli_remove_prints_preview_and_sends_its_exact_fingerprint(capsys) -> None:
     RuntimeHandler.actions = []
     server, base_url = server_url()

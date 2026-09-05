@@ -591,6 +591,7 @@ Usage:
   ./mf.sh blender status
   ./mf.sh blender managed-status
   ./mf.sh blender install
+  ./mf.sh blender web-install
   ./mf.sh blender update
   ./mf.sh blender switch <runtime-id>
   ./mf.sh blender repair <runtime-id>
@@ -625,7 +626,7 @@ main() {
       case "${2:-}" in
         build|status) [ "$#" -eq 2 ] || die "blender ${2:-action} takes no arguments"; blender_runtime "$2" ;;
         managed-status) [ "$#" -eq 2 ] || die "blender managed-status takes no arguments"; blender_manager status ;;
-        install|update) [ "$#" -eq 2 ] || die "blender ${2:-action} takes no arguments"; blender_manager "$2" ;;
+        install|web-install|update) [ "$#" -eq 2 ] || die "blender ${2:-action} takes no arguments"; blender_manager "$2" ;;
         switch|repair|remove-preview) [ "$#" -eq 3 ] || die "blender ${2:-action} requires one runtime ID"; blender_manager "$2" "$3" ;;
         remove)
           [ "$#" -eq 3 ] || { [ "$#" -eq 4 ] && [ "$4" = "--yes" ]; } || \

@@ -105,7 +105,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", default="http://127.0.0.1:9130")
     parser.add_argument(
         "action",
-        choices=("status", "install", "update", "switch", "repair", "remove-preview", "remove"),
+        choices=(
+            "status", "install", "web-install", "update", "switch", "repair",
+            "remove-preview", "remove",
+        ),
     )
     parser.add_argument("runtime_id", nargs="?")
     parser.add_argument("--yes", action="store_true", help="confirm a removal after printing preview")
@@ -120,10 +123,10 @@ def main(argv: list[str] | None = None) -> int:
                 ensure_ascii=False, sort_keys=True,
             ))
             return 0
-        if args.action in {"install", "update"}:
+        if args.action in {"install", "web-install", "update"}:
             if args.runtime_id:
                 raise BlenderManagerCLIError(f"{args.action} accepts no runtime ID")
-            payload = {"action": args.action}
+            payload = {"action": "web_install" if args.action == "web-install" else args.action}
         elif args.action in {"switch", "repair"}:
             if not args.runtime_id:
                 raise BlenderManagerCLIError(f"{args.action} requires one opaque runtime ID")

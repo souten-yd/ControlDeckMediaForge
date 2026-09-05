@@ -61,6 +61,7 @@ def main() -> int:
                 "--add-data", f"{ROOT / 'profiles'}:profiles",
                 "--add-data", f"{ROOT / 'config' / 'blender-runtime.json'}:config",
                 "--add-data", f"{ROOT / 'config' / 'blender-runtime-catalog.json'}:config",
+                "--add-data", f"{ROOT / 'config' / 'blender-web-runtime.json'}:config",
                 "--add-data", f"{ROOT / 'runtimes' / 'rocm-torch' / 'requirements.txt'}:runtimes/rocm-torch",
                 str(ROOT / "scripts" / "bundle_entrypoint.py"),
             ],

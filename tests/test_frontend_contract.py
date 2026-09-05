@@ -33,6 +33,7 @@ DOM_IDS = (
     "blender-runtime-state", "blender-basic-value", "blender-web-value",
     "blender-version-value", "blender-runtime-refresh", "blender-runtime-details",
     "blender-runtime-list", "blender-runtime-fingerprint", "blender-runtime-install",
+    "blender-web-install", "blender-web-action",
     "blender-runtime-update", "blender-runtime-cancel", "blender-runtime-progress", "blender-runtime-progress-label",
     "blender-remove-dialog", "blender-remove-title", "blender-remove-summary",
     "blender-remove-detail", "blender-remove-cancel", "blender-remove-confirm",
@@ -95,6 +96,7 @@ DOM_IDS = (
 def test_blender_runtime_lifecycle_has_embedded_and_standalone_receivers() -> None:
     for method in (
         "blender.runtime.install",
+        "blender.web.install",
         "blender.runtime.update",
         "blender.runtime.repair",
         "blender.runtime.switch",
@@ -243,6 +245,7 @@ def test_settings_show_read_only_blender_diagnostics_without_server_paths():
     assert 'refreshSession(["blender_runtime"])' in SCRIPT
     assert 'if (method === "blender.runtime.status")' in SCRIPT
     assert 'if (method === "blender.runtime.install")' in SCRIPT
+    assert 'if (method === "blender.web.install")' in SCRIPT
     assert 'if (method === "blender.runtime.operations.cancel")' in SCRIPT
     assert "BLENDER_TEXT" in SCRIPT
     assert 'settings: "Settings"' in SCRIPT and 'settings: "設定"' in SCRIPT
