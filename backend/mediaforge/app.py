@@ -112,6 +112,7 @@ from .paths import contained
 from .prompt_recipes import H3PromptRecipe, PromptRecipeError, PromptRecipeRequest
 from .profiles import ProfileInput, ReferenceCollectionInput
 from .scenes import SceneCatalog, SceneError
+from .scene_workspace import SceneWorkspace
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .preferences import PreferenceError
 from .reference_intelligence import (
@@ -242,6 +243,12 @@ def create_app(
         manifest_path=trusted_blender_manifest,
         trusted_worker=REPOSITORY_ROOT / "worker_packs/blender/compile_asset.py",
         catalog_path=trusted_blender_catalog,
+    )
+    scene_workspace = SceneWorkspace(
+        store,
+        blender_runtimes,
+        REPOSITORY_ROOT / "worker_packs/blender/scene_document.py",
+        process_timeout_sec=resolved.blender_timeout_sec,
     )
     try:
         blender_runtimes.register_legacy()
@@ -449,6 +456,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         store.initialize()
+        scene_workspace.initialize()
         await manager.start()
         await blender_runtime_operations.start()
         if model_operations is not None:
@@ -477,6 +485,7 @@ def create_app(
     app.state.health_override = None
     app.state.store = store
     app.state.scenes = scenes
+    app.state.scene_workspace = scene_workspace
     app.state.jobs = manager
     app.state.job_events = events
     app.state.model_operations = model_operations
@@ -2321,10 +2330,18 @@ def create_app(
                 item.model_dump(mode="json") for item in store.list_model_operations()
             ]},
             "blender_runtime": blender_runtime_part,
-            "scenes": lambda: {"items": [
-                item.model_dump(mode="json")
-                for item in scenes.list(preferences.subject_of(identity))
-            ]},
+            "scenes": lambda: {
+                "items": [
+                    item.model_dump(mode="json")
+                    for item in scenes.list(preferences.subject_of(identity))
+                ],
+                "working_copies": [
+                    item.model_dump(mode="json")
+                    for item in scene_workspace.list_working_copies(
+                        preferences.subject_of(identity)
+                    )
+                ],
+            },
             "library": library_part,
             "creative_batches": lambda: {"items": [
                 batch_projection(item) for item in store.list_creative_batches()
@@ -2373,6 +2390,7 @@ def create_app(
             return
         await websocket.accept()
         uploads: dict[str, dict[str, Any]] = {}
+        scene_upload_ids: set[str] = set()
         model_viewer = ModelViewerSession(store)
         subscription = events.subscribe(asyncio.get_running_loop())
         sender = asyncio.create_task(push_job_events(websocket, subscription))
@@ -2965,6 +2983,79 @@ def create_app(
                             "scene": document.model_dump(mode="json"),
                             "revisions": [item.model_dump(mode="json") for item in revisions],
                         }
+                    elif method == "scenes.import.begin":
+                        if set(params) - {"size", "sha256", "name", "tags", "collection"} or not {
+                            "size", "sha256", "name"
+                        } <= set(params):
+                            raise ValueError("scene import declaration fields differ")
+                        result = scene_workspace.begin_upload(
+                            preferences.subject_of(identity),
+                            size=params.get("size"),
+                            sha256=params.get("sha256"),
+                            name=params.get("name"),
+                            tags=params.get("tags"),
+                            collection=params.get("collection"),
+                        )
+                        scene_upload_ids.add(result["upload_id"])
+                    elif method == "scenes.import.chunk":
+                        if set(params) != {"upload_id", "offset", "sha256", "base64"}:
+                            raise ValueError("scene import chunk fields differ")
+                        encoded = params.get("base64")
+                        if not isinstance(encoded, str) or len(encoded) > 700_000:
+                            raise ValueError("scene import chunk encoding is invalid")
+                        try:
+                            content = base64.b64decode(encoded, validate=True)
+                        except ValueError as exc:
+                            raise ValueError("scene import chunk is not valid base64") from exc
+                        result = scene_workspace.append_upload(
+                            preferences.subject_of(identity),
+                            str(params.get("upload_id", "")),
+                            params.get("offset"),
+                            content,
+                            str(params.get("sha256", "")),
+                        )
+                    elif method == "scenes.import.commit":
+                        if set(params) != {"upload_id"}:
+                            raise ValueError("scene import commit accepts only upload_id")
+                        upload_id = str(params.get("upload_id", ""))
+                        try:
+                            result = await scene_workspace.commit_upload(
+                                preferences.subject_of(identity), upload_id
+                            )
+                        finally:
+                            scene_upload_ids.discard(upload_id)
+                    elif method == "scenes.import.cancel":
+                        if set(params) != {"upload_id"}:
+                            raise ValueError("scene import cancel accepts only upload_id")
+                        upload_id = str(params.get("upload_id", ""))
+                        result = {"canceled": scene_workspace.cancel_upload(
+                            preferences.subject_of(identity), upload_id
+                        )}
+                        scene_upload_ids.discard(upload_id)
+                    elif method == "scenes.working.acquire":
+                        if set(params) != {"scene_id"}:
+                            raise ValueError("working copy acquire accepts only scene_id")
+                        result = scene_workspace.acquire_working_copy(
+                            preferences.subject_of(identity), str(params.get("scene_id", ""))
+                        ).model_dump(mode="json")
+                    elif method == "scenes.working.renew":
+                        if set(params) != {"working_id"}:
+                            raise ValueError("working copy renew accepts only working_id")
+                        result = scene_workspace.renew_working_copy(
+                            preferences.subject_of(identity), str(params.get("working_id", ""))
+                        ).model_dump(mode="json")
+                    elif method == "scenes.working.release":
+                        if set(params) != {"working_id"}:
+                            raise ValueError("working copy release accepts only working_id")
+                        result = scene_workspace.release_working_copy(
+                            preferences.subject_of(identity), str(params.get("working_id", ""))
+                        ).model_dump(mode="json")
+                    elif method == "scenes.working.commit":
+                        if set(params) != {"working_id"}:
+                            raise ValueError("working copy commit accepts only working_id")
+                        result = await scene_workspace.commit_working_copy(
+                            preferences.subject_of(identity), str(params.get("working_id", ""))
+                        )
                     elif method == "workspace.session":
                         # 状態の正はサーバにある。boot も更新もこの 1 メソッドで足りる。
                         result = await session_snapshot(
@@ -3231,6 +3322,11 @@ def create_app(
                 root = upload.get("root")
                 if isinstance(root, Path) and root.exists():
                     shutil.rmtree(root)
+            for upload_id in scene_upload_ids:
+                try:
+                    scene_workspace.cancel_upload(preferences.subject_of(identity), upload_id)
+                except SceneError:
+                    continue
             await asyncio.to_thread(model_viewer.cleanup)
 
     @app.post("/workspace-api/jobs/clear", include_in_schema=False)
@@ -3259,6 +3355,100 @@ def create_app(
             "scene": document.model_dump(mode="json"),
             "revisions": [item.model_dump(mode="json") for item in revisions],
         }
+
+    @app.post("/workspace-api/scenes/import/begin", include_in_schema=False)
+    async def standalone_scene_import_begin(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) - {"size", "sha256", "name", "tags", "collection"} or not {
+                "size", "sha256", "name"
+            } <= set(payload):
+                raise SceneError("scene_upload_invalid", "scene import declaration fields differ")
+            return scene_workspace.begin_upload(
+                preferences.STANDALONE_SUBJECT,
+                size=payload.get("size"),
+                sha256=payload.get("sha256"),
+                name=payload.get("name"),
+                tags=payload.get("tags"),
+                collection=payload.get("collection"),
+            )
+        except SceneError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
+
+    @app.post("/workspace-api/scenes/import/chunk", include_in_schema=False)
+    async def standalone_scene_import_chunk(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"upload_id", "offset", "sha256", "base64"}:
+                raise SceneError("scene_upload_chunk_invalid", "scene import chunk fields differ")
+            encoded = payload.get("base64")
+            if not isinstance(encoded, str) or len(encoded) > 700_000:
+                raise SceneError("scene_upload_chunk_invalid", "scene upload encoding is invalid")
+            content = base64.b64decode(encoded, validate=True)
+            return scene_workspace.append_upload(
+                preferences.STANDALONE_SUBJECT,
+                str(payload.get("upload_id", "")),
+                payload.get("offset"),
+                content,
+                str(payload.get("sha256", "")),
+            )
+        except (SceneError, ValueError) as exc:
+            code = getattr(exc, "code", "scene_upload_chunk_invalid")
+            raise HTTPException(status_code=422, detail={"code": code, "message": str(exc)}) from exc
+
+    @app.post("/workspace-api/scenes/import/commit", include_in_schema=False)
+    async def standalone_scene_import_commit(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"upload_id"}:
+                raise SceneError("scene_upload_invalid", "scene import commit fields differ")
+            return await scene_workspace.commit_upload(
+                preferences.STANDALONE_SUBJECT, str(payload.get("upload_id", ""))
+            )
+        except SceneError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
+
+    @app.post("/workspace-api/scenes/import/cancel", include_in_schema=False)
+    async def standalone_scene_import_cancel(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"upload_id"}:
+                raise SceneError("scene_upload_invalid", "scene import cancel fields differ")
+            return {"canceled": scene_workspace.cancel_upload(
+                preferences.STANDALONE_SUBJECT, str(payload.get("upload_id", ""))
+            )}
+        except SceneError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
+
+    @app.post("/workspace-api/scenes/{scene_id}/working", include_in_schema=False)
+    async def standalone_scene_working_acquire(scene_id: str) -> dict[str, Any]:
+        try:
+            return scene_workspace.acquire_working_copy(
+                preferences.STANDALONE_SUBJECT, scene_id
+            ).model_dump(mode="json")
+        except SceneError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
+
+    @app.post("/workspace-api/scenes/working/{working_id}", include_in_schema=False)
+    async def standalone_scene_working_action(
+        working_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        try:
+            if payload == {"action": "renew"}:
+                return scene_workspace.renew_working_copy(
+                    preferences.STANDALONE_SUBJECT, working_id
+                ).model_dump(mode="json")
+            if payload == {"action": "release"}:
+                return scene_workspace.release_working_copy(
+                    preferences.STANDALONE_SUBJECT, working_id
+                ).model_dump(mode="json")
+            if payload == {"action": "commit"}:
+                return await scene_workspace.commit_working_copy(
+                    preferences.STANDALONE_SUBJECT, working_id
+                )
+            raise SceneError("scene_working_action_invalid", "working copy action is invalid")
+        except SceneError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
 
     @app.post("/workspace-api/assets/delete", include_in_schema=False)
     async def standalone_delete_assets(payload: dict[str, Any]) -> dict[str, Any]:
