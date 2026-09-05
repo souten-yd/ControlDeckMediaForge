@@ -190,6 +190,9 @@ unit、session root、Unix socket、Xvnc/runner processが0になった。Host d
 2.397 ms、stopping→interrupted 91.9 msで、同じく候補を保持し残存resource 0。実Chromeではdesktopの日英
 復旧ボタン/説明、390x844のdesktop案内、横scroll 0、browser exception 0を確認した。
 exact codeのfull testは952 passed / 既知Starlette warning 1件 / 91.17秒。
+0.28.5 exact bundleは31,509,192 B / SHA-256
+`352efcfbf6f7ee3566ec530ea01ee7b76534c8bbe397d346bed0f72907d65693`、packaged doctor成功。exact packageでも
+実Blender ready、interrupt/recovery、unit/root/socket/process 0を確認した。
 
 実ControlDeck opaque iframe、10分超credential rotation、実Host revoke、GPU/Cycles、packaged Chromeは
 **NOT TESTED**。

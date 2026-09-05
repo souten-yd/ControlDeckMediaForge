@@ -8656,5 +8656,9 @@ Xvnc/runner processはいずれも0。Host disable相当のprivate interruptはH
 実Chromeはdesktopで日英の復旧ボタン/理由、390x844でdesktop案内と横scroll 0、browser exception 0を確認した。
 
 focused lifecycle/recovery/frontend testは全件通過し、exact codeの`./mf.sh test`は952 passed / 既知
-Starlette warning 1件 / 91.17秒。実ControlDeck opaque iframe、10分超credential rotation、
+Starlette warning 1件 / 91.17秒。`./mf.sh bundle build 0.28.5`は31,509,192 B / SHA-256
+`352efcfbf6f7ee3566ec530ea01ee7b76534c8bbe397d346bed0f72907d65693`、展開binary doctorは
+`ok / 0.28.5 / packaged=true`。exact package processは既存scene 5件 / working record 18件を読み、実Blender
+sessionをreadyにした。private interrupt受付は2.780 msでinterrupted / recovery candidateとなり、終了後
+unit/session root/socket/process 0。実ControlDeck opaque iframe、10分超credential rotation、
 実Host revoke、GPU/Cycles、packaged Chromeは **NOT TESTED**。次は別PRの3DS-6 material binding。
