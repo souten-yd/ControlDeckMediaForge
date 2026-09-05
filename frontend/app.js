@@ -164,6 +164,8 @@ const state = {
   selectedSceneId: "",
   sceneImport: null,
   sceneStatusKey: "",
+  sceneBackup: null,
+  sceneBackupStatusKey: "",
   modelCatalog: [],
   modelOperations: new Map(),
   catalogResults: [],
@@ -616,6 +618,41 @@ async function standaloneCall(method, params) {
   }
   if (method === "scenes.import.cancel") {
     return json("/workspace-api/scenes/import/cancel", {
+      method: "POST", body: JSON.stringify(params),
+    });
+  }
+  if (method === "scenes.backup.open") {
+    return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/backup/open`, {
+      method: "POST", body: "{}",
+    });
+  }
+  if (method === "scenes.backup.read") {
+    return json(`/workspace-api/scenes/backups/${encodeURIComponent(params.handle)}/read`, {
+      method: "POST", body: JSON.stringify({offset: params.offset, length: params.length}),
+    });
+  }
+  if (method === "scenes.backup.close") {
+    return json(`/workspace-api/scenes/backups/${encodeURIComponent(params.handle)}/close`, {
+      method: "POST", body: "{}",
+    });
+  }
+  if (method === "scenes.restore.begin") {
+    return json("/workspace-api/scenes/restore/begin", {
+      method: "POST", body: JSON.stringify(params),
+    });
+  }
+  if (method === "scenes.restore.chunk") {
+    return json("/workspace-api/scenes/restore/chunk", {
+      method: "POST", body: JSON.stringify(params),
+    });
+  }
+  if (method === "scenes.restore.commit") {
+    return json("/workspace-api/scenes/restore/commit", {
+      method: "POST", body: JSON.stringify(params),
+    });
+  }
+  if (method === "scenes.restore.cancel") {
+    return json("/workspace-api/scenes/restore/cancel", {
       method: "POST", body: JSON.stringify(params),
     });
   }
@@ -4079,6 +4116,10 @@ const FAILURES = {
   invalid_image_import: {text: "この画像は取り込めません。", exit: "別の画像を選ぶ", action: "open_create"},
   asset_import_too_large: {text: "この画像は大きすぎます。", exit: "別の画像を選ぶ", action: "open_create"},
   scene_import_canceled: {text: "シーンの取り込みを中止しました。", exit: "別のファイルを選ぶ", action: "open_create"},
+  scene_backup_canceled: {text: "バックアップ処理を中止しました。", exit: "シーンへ戻る", action: "open_create"},
+  scene_backup_download_invalid: {text: "バックアップを正しく受け取れませんでした。", exit: "もう一度やる", action: "open_create"},
+  scene_backup_hash_changed: {text: "バックアップの内容が途中で変わりました。", exit: "別のファイルを選ぶ", action: "open_create"},
+  scene_backup_upload_invalid: {text: "このバックアップは送れません。", exit: "別のファイルを選ぶ", action: "open_create"},
 };
 
 const UNKNOWN_FAILURE = {
@@ -4467,6 +4508,7 @@ function renderOutpaintPreview() {
 
 const SCENE_CHUNK_BYTES = 512 * 1024;
 const SCENE_MAX_BYTES = 256 * 1024 * 1024;
+const SCENE_BACKUP_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const SCENE_SHA256_K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
   0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -4589,6 +4631,15 @@ const SCENE_TEXT = {
     nameRequired: "シーン名を入力してください。", failed: "シーンを取り込めませんでした。",
     listFailed: "シーンを読み込めませんでした。", detailFailed: "保存した版を読み込めませんでした。",
     active: "編集中", recovery: "復旧候補",
+    backupTitle: "バックアップと復元", restoreFile: "シーンバックアップ（.zip、最大2 GiB）",
+    backupSafety: "復元前にすべての版とファイルの整合性を検査し、新しいシーンとして追加します。",
+    backupDownload: "バックアップを保存", restore: "バックアップから復元", backupCancel: "中止",
+    backupBuilding: "バックアップを作っています…", backupDownloading: "バックアップを取り出しています…",
+    backupComplete: "バックアップを保存しました。", backupCanceled: "バックアップ処理を中止しました。",
+    backupFailed: "バックアップを保存できませんでした。", restoreHashing: "バックアップを確認しています…",
+    restoreUploading: "バックアップを送っています…", restoreValidating: "すべての版とファイルを検査しています…",
+    restoreComplete: "新しいシーンとして復元しました。", restoreFailed: "バックアップを復元できませんでした。",
+    restoreInvalid: ".zipバックアップを選んでください。", restoreTooLarge: "2 GiB以下のバックアップを選んでください。",
   },
   en: {
     switchLabel: "Create 3D", title: "3D Studio",
@@ -4609,6 +4660,15 @@ const SCENE_TEXT = {
     nameRequired: "Enter a scene name.", failed: "The scene could not be imported.",
     listFailed: "Scenes could not be loaded.", detailFailed: "Saved revisions could not be loaded.",
     active: "Editing", recovery: "Recovery candidate",
+    backupTitle: "Backup and restore", restoreFile: "Scene backup (.zip, up to 2 GiB)",
+    backupSafety: "Every revision and file is verified before a new scene is added.",
+    backupDownload: "Save backup", restore: "Restore from backup", backupCancel: "Cancel",
+    backupBuilding: "Building the backup…", backupDownloading: "Downloading the backup…",
+    backupComplete: "Backup saved.", backupCanceled: "Backup operation canceled.",
+    backupFailed: "The backup could not be saved.", restoreHashing: "Checking the backup…",
+    restoreUploading: "Uploading the backup…", restoreValidating: "Validating every revision and file…",
+    restoreComplete: "Restored as a new scene.", restoreFailed: "The backup could not be restored.",
+    restoreInvalid: "Choose a .zip backup.", restoreTooLarge: "Choose a backup no larger than 2 GiB.",
   },
 };
 
@@ -4621,6 +4681,24 @@ function sceneRuntimeReady() { return state.blenderRuntime?.state === "ready"; }
 function setSceneStatus(key) {
   state.sceneStatusKey = key;
   byId("scene-import-status").textContent = key ? (sceneText()[key] || sceneText().failed) : "";
+}
+
+function setSceneBackupStatus(key) {
+  state.sceneBackupStatusKey = key;
+  byId("scene-backup-status").textContent = key ? (sceneText()[key] || sceneText().backupFailed) : "";
+}
+
+function renderSceneBackupControls() {
+  const active = Boolean(state.sceneBackup);
+  const busy = active || Boolean(state.sceneImport);
+  byId("scene-backup-download").disabled = busy || !state.selectedSceneId;
+  byId("scene-restore-submit").disabled = busy;
+  byId("scene-restore-file").disabled = busy;
+  byId("scene-backup-cancel").hidden = !active || state.sceneBackup?.phase === "validating";
+  byId("scene-list-refresh").disabled = busy;
+  byId("scene-import-file").disabled = active;
+  byId("scene-import-name").disabled = active;
+  byId("scene-import-submit").disabled = busy || !sceneRuntimeReady();
 }
 
 function renderSceneText() {
@@ -4639,12 +4717,20 @@ function renderSceneText() {
   byId("scene-list-refresh").textContent = text.refresh;
   byId("scene-list-empty").textContent = text.empty;
   byId("scene-detail-close").textContent = text.close;
+  byId("scene-backup-title").textContent = text.backupTitle;
+  byId("scene-restore-file-label").textContent = text.restoreFile;
+  byId("scene-backup-safety").textContent = text.backupSafety;
+  byId("scene-backup-download").textContent = text.backupDownload;
+  byId("scene-restore-submit").textContent = text.restore;
+  byId("scene-backup-cancel").textContent = text.backupCancel;
   byId("scene-revisions-title").textContent = text.revisions;
   const submit = byId("scene-import-submit");
-  submit.disabled = Boolean(state.sceneImport) || !sceneRuntimeReady();
+  submit.disabled = Boolean(state.sceneImport) || Boolean(state.sceneBackup) || !sceneRuntimeReady();
   if (state.sceneStatusKey) setSceneStatus(state.sceneStatusKey);
   else if (!state.sceneImport && !sceneRuntimeReady()) byId("scene-import-status").textContent = text.runtimeMissing;
   else if (!state.sceneImport) byId("scene-import-status").textContent = "";
+  if (state.sceneBackupStatusKey) setSceneBackupStatus(state.sceneBackupStatusKey);
+  renderSceneBackupControls();
   renderScenes();
   if (state.selectedSceneId) void openScene(state.selectedSceneId);
 }
@@ -4725,6 +4811,7 @@ async function openScene(sceneId) {
       return row;
     }));
     byId("scene-detail").hidden = false;
+    renderSceneBackupControls();
   } catch {
     byId("scene-list-count").textContent = sceneText().detailFailed;
   }
@@ -4744,6 +4831,7 @@ async function sceneFileHash(file, token) {
 }
 
 async function importScene() {
+  if (state.sceneBackup) return;
   const file = byId("scene-import-file").files?.[0];
   const name = byId("scene-import-name").value.trim();
   if (!file || !file.name.toLowerCase().endsWith(".blend") || file.size < 1) {
@@ -4760,6 +4848,7 @@ async function importScene() {
   byId("scene-import-progress").hidden = false;
   byId("scene-import-progress").value = 0;
   setSceneStatus("hashing");
+  renderSceneBackupControls();
   try {
     const digest = await sceneFileHash(file, token);
     if (token.canceled || !digest) return;
@@ -4798,6 +4887,7 @@ async function importScene() {
     setHostBusy(false);
     byId("scene-import-submit").disabled = !sceneRuntimeReady();
     byId("scene-import-cancel").hidden = true;
+    renderSceneBackupControls();
   }
 }
 
@@ -4812,6 +4902,201 @@ async function cancelSceneImport() {
   }
   setSceneStatus("canceled");
   byId("scene-import-cancel").disabled = false;
+}
+
+async function sceneBackupFileHash(file, token) {
+  const hash = new SceneSha256();
+  for (let offset = 0; offset < file.size; offset += SCENE_CHUNK_BYTES) {
+    if (token.canceled) return "";
+    const bytes = new Uint8Array(
+      await file.slice(offset, offset + SCENE_CHUNK_BYTES).arrayBuffer(),
+    );
+    hash.update(bytes);
+    byId("scene-backup-progress").value = Math.round(
+      Math.min(file.size, offset + bytes.length) / file.size * 20,
+    );
+    if ((offset / SCENE_CHUNK_BYTES) % 8 === 7) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+  }
+  return hash.hex();
+}
+
+function saveSceneBackupBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename || "media-forge-scene-backup.zip";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+async function readSceneBackup(opened, token) {
+  let offset = 0;
+  const hash = new SceneSha256();
+  const stream = new ReadableStream({
+    async pull(controller) {
+      try {
+        if (token.canceled) throw {code: "scene_backup_canceled"};
+        if (offset >= opened.total_bytes) {
+          controller.close();
+          return;
+        }
+        const piece = await call("scenes.backup.read", {
+          handle: opened.handle,
+          offset,
+          length: Math.min(opened.chunk_bytes, opened.total_bytes - offset),
+        });
+        const bytes = decodeBase64(piece.base64);
+        if (piece.handle !== opened.handle || piece.offset !== offset
+            || piece.total_bytes !== opened.total_bytes || !bytes.length
+            || bytes.length > SCENE_CHUNK_BYTES
+            || offset + bytes.length > opened.total_bytes) {
+          throw {code: "scene_backup_download_invalid"};
+        }
+        hash.update(bytes);
+        offset += bytes.length;
+        byId("scene-backup-progress").value = Math.round(offset / opened.total_bytes * 100);
+        controller.enqueue(bytes);
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
+  const blob = await new Response(stream, {
+    headers: {"Content-Type": "application/zip"},
+  }).blob();
+  if (blob.size !== opened.total_bytes || hash.hex() !== opened.sha256) {
+    throw {code: "scene_backup_hash_changed"};
+  }
+  return blob;
+}
+
+async function downloadSceneBackup() {
+  if (!state.selectedSceneId || state.sceneBackup || state.sceneImport) return;
+  const token = {kind: "download", phase: "opening", canceled: false, handle: "", uploadId: ""};
+  state.sceneBackup = token;
+  setHostBusy(true);
+  byId("scene-backup-tools").open = true;
+  byId("scene-backup-progress").hidden = false;
+  byId("scene-backup-progress").value = 0;
+  setSceneBackupStatus("backupBuilding");
+  renderSceneBackupControls();
+  try {
+    const opened = await call("scenes.backup.open", {scene_id: state.selectedSceneId});
+    token.handle = opened.handle;
+    token.phase = "downloading";
+    if (token.canceled) throw {code: "scene_backup_canceled"};
+    if (opened.chunk_bytes !== SCENE_CHUNK_BYTES || opened.total_bytes < 1
+        || opened.total_bytes > SCENE_BACKUP_MAX_BYTES) {
+      throw {code: "scene_backup_download_invalid"};
+    }
+    setSceneBackupStatus("backupDownloading");
+    const blob = await readSceneBackup(opened, token);
+    if (token.canceled) throw {code: "scene_backup_canceled"};
+    saveSceneBackupBlob(blob, opened.filename);
+    byId("scene-backup-progress").value = 100;
+    setSceneBackupStatus("backupComplete");
+  } catch (error) {
+    setSceneBackupStatus(
+      token.canceled || error?.code === "scene_backup_canceled" ? "backupCanceled" : "backupFailed",
+    );
+  } finally {
+    if (token.handle) {
+      await call("scenes.backup.close", {handle: token.handle}).catch(() => {});
+    }
+    state.sceneBackup = null;
+    setHostBusy(false);
+    renderSceneBackupControls();
+  }
+}
+
+async function restoreSceneBackup() {
+  if (state.sceneBackup || state.sceneImport) return;
+  const file = byId("scene-restore-file").files?.[0];
+  if (!file || !file.name.toLowerCase().endsWith(".zip") || file.size < 1) {
+    setSceneBackupStatus("restoreInvalid");
+    return;
+  }
+  if (file.size > SCENE_BACKUP_MAX_BYTES) {
+    setSceneBackupStatus("restoreTooLarge");
+    return;
+  }
+  const token = {kind: "restore", phase: "hashing", canceled: false, handle: "", uploadId: ""};
+  state.sceneBackup = token;
+  setHostBusy(true);
+  byId("scene-backup-tools").open = true;
+  byId("scene-backup-progress").hidden = false;
+  byId("scene-backup-progress").value = 0;
+  setSceneBackupStatus("restoreHashing");
+  renderSceneBackupControls();
+  try {
+    const digest = await sceneBackupFileHash(file, token);
+    if (token.canceled || !digest) return;
+    const upload = await call("scenes.restore.begin", {size: file.size, sha256: digest});
+    token.uploadId = upload.upload_id;
+    token.phase = "uploading";
+    if (upload.chunk_bytes !== SCENE_CHUNK_BYTES) {
+      throw {code: "scene_backup_upload_invalid"};
+    }
+    setSceneBackupStatus("restoreUploading");
+    for (let offset = 0; offset < file.size; offset += SCENE_CHUNK_BYTES) {
+      if (token.canceled) throw {code: "scene_backup_canceled"};
+      const bytes = new Uint8Array(
+        await file.slice(offset, offset + SCENE_CHUNK_BYTES).arrayBuffer(),
+      );
+      await call("scenes.restore.chunk", {
+        upload_id: token.uploadId,
+        offset,
+        sha256: new SceneSha256().update(bytes).hex(),
+        base64: encodeBase64(bytes),
+      });
+      byId("scene-backup-progress").value = 20 + Math.round(
+        (offset + bytes.length) / file.size * 70,
+      );
+    }
+    token.phase = "validating";
+    renderSceneBackupControls();
+    setSceneBackupStatus("restoreValidating");
+    const result = await call("scenes.restore.commit", {upload_id: token.uploadId});
+    token.uploadId = "";
+    byId("scene-backup-progress").value = 100;
+    byId("scene-restore-file").value = "";
+    setSceneBackupStatus("restoreComplete");
+    await loadScenes();
+    await openScene(result.scene.id);
+    await loadLibrary({reset: true});
+  } catch (error) {
+    if (token.uploadId && token.phase !== "validating") {
+      await call("scenes.restore.cancel", {upload_id: token.uploadId}).catch(() => {});
+    }
+    setSceneBackupStatus(
+      token.canceled || error?.code === "scene_backup_canceled" ? "backupCanceled" : "restoreFailed",
+    );
+  } finally {
+    state.sceneBackup = null;
+    setHostBusy(false);
+    renderSceneBackupControls();
+  }
+}
+
+async function cancelSceneBackup() {
+  const token = state.sceneBackup;
+  if (!token || token.phase === "validating") return;
+  token.canceled = true;
+  byId("scene-backup-cancel").disabled = true;
+  if (token.handle) {
+    await call("scenes.backup.close", {handle: token.handle}).catch(() => {});
+    token.handle = "";
+  }
+  if (token.uploadId) {
+    await call("scenes.restore.cancel", {upload_id: token.uploadId}).catch(() => {});
+    token.uploadId = "";
+  }
+  setSceneBackupStatus("backupCanceled");
+  byId("scene-backup-cancel").disabled = false;
 }
 
 /* ── library ──────────────────────────────────────────────────────────── */
@@ -6612,8 +6897,17 @@ byId("scene-import-form").addEventListener("submit", (event) => {
   if (!state.sceneImport) void importScene();
 });
 byId("scene-import-cancel").addEventListener("click", () => void cancelSceneImport());
+byId("scene-backup-download").addEventListener("click", () => void downloadSceneBackup());
+byId("scene-restore-submit").addEventListener("click", () => void restoreSceneBackup());
+byId("scene-backup-cancel").addEventListener("click", () => void cancelSceneBackup());
+byId("scene-restore-file").addEventListener("change", () => {
+  setSceneBackupStatus("");
+  byId("scene-backup-progress").hidden = true;
+  byId("scene-backup-progress").value = 0;
+});
 byId("scene-list-refresh").addEventListener("click", () => void loadScenes());
 byId("scene-list").addEventListener("click", (event) => {
+  if (state.hostBusy) return;
   const scene = event.target.closest?.("[data-scene-id]");
   if (scene) void openScene(scene.dataset.sceneId);
 });
@@ -7670,6 +7964,7 @@ window.addEventListener("message", (event) => {
     if (message.event === "disable.pending") {
       state.disabled = true;
       if (state.sceneImport?.phase !== "validating") void cancelSceneImport();
+      if (state.sceneBackup?.phase !== "validating") void cancelSceneBackup();
       if (state.activeComposition) {
         void call("creative.compositions.cancel", {composition_id: state.activeComposition}).catch(() => {});
       }

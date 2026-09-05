@@ -386,6 +386,22 @@
                 </div>
                 <button type="button" id="scene-list-refresh">更新</button>
               </div>
+              <details id="scene-backup-tools">
+                <summary id="scene-backup-title">バックアップと復元</summary>
+                <div class="scene-backup-body">
+                  <label class="scene-file-picker" for="scene-restore-file">
+                    <span id="scene-restore-file-label">シーンバックアップ（.zip、最大2 GiB）</span>
+                    <input id="scene-restore-file" type="file" accept=".zip,application/zip">
+                  </label>
+                  <p id="scene-backup-safety" class="hint">復元前にすべての版とファイルの整合性を検査し、新しいシーンとして追加します。</p>
+                  <progress id="scene-backup-progress" max="100" value="0" hidden></progress>
+                  <p id="scene-backup-status" class="hint" role="status"></p>
+                  <div class="split-actions">
+                    <button type="button" id="scene-backup-cancel" hidden>中止</button>
+                    <button type="button" id="scene-restore-submit">バックアップから復元</button>
+                  </div>
+                </div>
+              </details>
               <div id="scene-list" class="scene-list"></div>
               <p id="scene-list-empty" class="hint">まだシーンはありません。</p>
               <article id="scene-detail" class="scene-detail" hidden>
@@ -394,7 +410,10 @@
                     <h2 id="scene-detail-name"></h2>
                     <p id="scene-detail-summary" class="hint"></p>
                   </div>
-                  <button type="button" id="scene-detail-close">閉じる</button>
+                  <div class="scene-detail-actions">
+                    <button type="button" id="scene-backup-download">バックアップを保存</button>
+                    <button type="button" id="scene-detail-close">閉じる</button>
+                  </div>
                 </div>
                 <p id="scene-revisions-title" class="section-label">保存した版</p>
                 <div id="scene-revisions" class="rows"></div>

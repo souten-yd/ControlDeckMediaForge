@@ -307,7 +307,11 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .scene-file-picker { display: grid; gap: 6px; font-size: .82rem; font-weight: 700; }
 .scene-file-picker input { min-width: 0; }
 #scene-import-progress { width: 100%; }
+#scene-backup-progress { width: 100%; }
 .scene-browser { min-height: 260px; }
+#scene-backup-tools { border: 1px solid var(--border); border-radius: 10px; }
+#scene-backup-tools > summary { cursor: pointer; padding: 10px 12px; font-weight: 700; }
+.scene-backup-body { display: grid; gap: 10px; padding: 0 12px 12px; }
 .scene-list { display: grid; gap: 8px; }
 .scene-list > button {
   width: 100%;
@@ -321,6 +325,7 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .scene-list > button .scene-version { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
 .scene-detail { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
 .scene-detail h2 { margin: 0; font-size: 1rem; }
+.scene-detail-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .scene-revision-actions { display: flex; align-items: center; gap: 8px; }
 
 @media (max-width: 760px) {
