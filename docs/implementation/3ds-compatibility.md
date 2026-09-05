@@ -1,7 +1,7 @@
 # 3D Studio compatibility baseline
 
-Status: 3DS-0〜4・3DS-5a VERIFIED / 3DS-5 session runner IN PROGRESS
-Date: 2026-09-05
+Status: 3DS-0〜4・3DS-5a VERIFIED / 3DS-5b source VERIFIED
+Date: 2026-09-06
 
 この表は統合3D Studio着手時の互換性基準である。既存画像・G8・公開契約を、後続実装の
 「動いたはず」ではなくfixtureと実測で比較する。固定fixtureは
@@ -46,13 +46,33 @@ shell構文、変更Markdownの相対link、`git diff --check`もPASSした。
 | ID | 2026-09-05 baseline | 次の証拠 |
 |---|---|---|
 | CHECK-01 | Hostにbinary WS relayのコードはあるがnoVNC往復は未実測 | opaque iframe、nonce/subprotocol、長時間、取消 |
-| CHECK-02 | systemd userで現行serviceは動くがGUI runner隔離は未実装 | filesystem/network/process脱出negative |
-| CHECK-03 | GPU型番・VRAMは実測。GUI/Cyclesは未実測 | display/OpenGL/Cyclesを別々にprobe |
+| CHECK-02 | systemd user unit + AF_UNIX限定 + Landlock書込allowlistで実GUIを隔離し、filesystem/network/process negativeを実測 | gateway接続中の継続negative、対象kernel更新後の再確認 |
+| CHECK-03 | Lavapipe/Vulkan software GUIとRFB入力・保存は実測。GPU/Cyclesは未実測 | GPU display/OpenGL/Cyclesを別々にprobe |
 | CHECK-04 | durable setupを8 MiBで停止し再起動後Range/ETag再開、cancelも実測。3DS制作jobは未実装 | 120秒超の制作job、Host credential refresh |
 | CHECK-05 | GLB 64 MiBとworkspace JSON上限は既存どおり | bounded .blend chunk/grant transport |
 | CHECK-06 | frozen契約fixtureを追加し既存値を固定 | 新schemaごとにold fixture + Host parser |
 | CHECK-07 | managed clean install/cancel/restart、opaque登録、resolver経由G8同一hashまで実測 | side-by-side更新、失敗rollback、参照保護 |
 | CHECK-08 | 単一4.5.9だけ。新旧保存互換は未実測 | revision分離、実.blend比較 |
+
+## 3DS-5b software GUI runner互換性
+
+Blender 4.5.9のX11/OpenGL経路はXvncのGLXに必要なcontext extensionが無く起動できなかった。
+Wayland環境変数を残すと個人の実Waylandへ接続したため、sessionでは`WAYLAND_DISPLAY`を空に固定した。
+system Mesa Lavapipe ICDを明示したVulkan経路では`background=false`、autoexec無効、backend `VULKAN`、
+renderer `llvmpipe`を実GUIから取得できた。これはsoftware表示の互換性でありGPU対応の証拠ではない。
+
+systemd userの一部kernel保護propertyは対象環境でunit起動時に`218/CAPABILITIES`となったため採用しなかった。
+採用したunitは`NoNewPrivileges`、`PrivateNetwork`、`RestrictAddressFamilies=AF_UNIX`、
+`ProtectSystem=strict`、`ProtectHome=yes`、MemoryMax 8 GiB、TasksMax 128を持つ。追加mountの
+`/data1tb`は`ProtectSystem`/`ReadOnlyPaths`だけでは書込可能だった実測を受け、Landlock ABI 3以上の
+write allowlistを必須にした。同じhelperからallowlist外`/data1tb/mf-landlock-escape`への作成はerrno 13、
+許可rootへの作成は成功し、AF_INET socketはerrno 97だった。RFBはmode 0600 Unix socketだけでTCP listener 0。
+
+Landlock導入probeのsource sessionは0.584秒でready、Memory 540.6 MiB（peak 571.4 MiB）、94 tasks、
+Blender childは`NoNewPrivs=1` / seccomp mode 2だった。候補bundle 0.28.3でも実RFB 1280x720へ接続し、
+click + Shift+D + Enterでcubeを複製して保存した。revision 1→2、objects 3→4、meshes 1→2、
+triangles 12→24、vertices 8→16を独立validatorが確認し、停止後unit inactive、socket/process 0。
+noVNC/gateway、opaque iframe、再接続、idle、disable/revocation、GPU/Cyclesは **NOT TESTED**。
 
 ## 3DS-0判定
 

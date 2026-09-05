@@ -23,6 +23,11 @@ from .blender_operation import (
     BlenderRuntimeOperationAction,
     BlenderRuntimeOperationState,
 )
+from .blender_session_record import (
+    ACTIVE_BLENDER_SESSION_STATES,
+    BlenderSessionState,
+    BlenderWebSession,
+)
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance, StoredJobRequest
 from .models.operations import (
     TERMINAL_MODEL_OPERATION_STATES,
@@ -226,6 +231,21 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS idx_blender_runtime_operations_created
                     ON blender_runtime_operations(created_at DESC);
+                CREATE TABLE IF NOT EXISTS blender_web_sessions (
+                    id TEXT PRIMARY KEY,
+                    owner TEXT NOT NULL,
+                    scene_id TEXT NOT NULL REFERENCES scene_documents(id),
+                    runtime_id TEXT,
+                    state TEXT NOT NULL,
+                    value_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_blender_web_sessions_owner_updated
+                    ON blender_web_sessions(owner, updated_at DESC);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_blender_web_sessions_one_active
+                    ON blender_web_sessions((1))
+                    WHERE state IN ('queued', 'preparing', 'starting', 'ready', 'saving', 'stopping');
                 CREATE TABLE IF NOT EXISTS creative_batches (
                     id TEXT PRIMARY KEY,
                     value_json TEXT NOT NULL,
@@ -1380,6 +1400,98 @@ class Store:
                 (operation_id, model_id, action, ModelOperationState.QUEUED, bytes_total, now, now),
             )
         return self._notify_model_operation(self.get_model_operation(operation_id))
+
+    def create_blender_web_session(self, owner: str, value: BlenderWebSession) -> BlenderWebSession:
+        owner = validate_scene_owner(owner)
+        if value.state != BlenderSessionState.QUEUED:
+            raise ValueError("new Blender web session must be queued")
+        active = tuple(state.value for state in ACTIVE_BLENDER_SESSION_STATES)
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            scene = connection.execute(
+                "SELECT owner FROM scene_documents WHERE id = ?", (value.scene_id,)
+            ).fetchone()
+            if scene is None or scene["owner"] != owner:
+                raise SceneError("scene_not_found", "scene is unavailable")
+            existing = connection.execute(
+                f"""SELECT id FROM blender_web_sessions
+                    WHERE state IN ({','.join('?' * len(active))}) LIMIT 1""",
+                active,
+            ).fetchone()
+            if existing is not None:
+                raise SceneError("blender_session_busy", "another Blender session is active")
+            connection.execute(
+                """INSERT INTO blender_web_sessions
+                   (id, owner, scene_id, runtime_id, state, value_json, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    value.id, owner, value.scene_id, value.runtime_id, value.state,
+                    value.model_dump_json(), value.created_at, value.updated_at,
+                ),
+            )
+        self._notify_session("blender_sessions")
+        return value
+
+    def get_blender_web_session(self, owner: str, session_id: str) -> BlenderWebSession:
+        owner = validate_scene_owner(owner)
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT value_json FROM blender_web_sessions WHERE id = ? AND owner = ?",
+                (session_id, owner),
+            ).fetchone()
+        if row is None:
+            raise SceneError("blender_session_not_found", "Blender session is unavailable")
+        try:
+            return BlenderWebSession.model_validate_json(row["value_json"])
+        except ValidationError as exc:
+            raise SceneError("blender_session_invalid", "Blender session is unreadable") from exc
+
+    def list_blender_web_sessions(self, owner: str, limit: int = 20) -> list[BlenderWebSession]:
+        owner = validate_scene_owner(owner)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT value_json FROM blender_web_sessions WHERE owner = ?
+                   ORDER BY updated_at DESC LIMIT ?""",
+                (owner, max(1, min(100, limit))),
+            ).fetchall()
+        return readable_rows(rows, BlenderWebSession, "value_json", kind="Blender web session")
+
+    def list_active_blender_web_sessions(self) -> list[tuple[str, BlenderWebSession]]:
+        active = tuple(state.value for state in ACTIVE_BLENDER_SESSION_STATES)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""SELECT owner, value_json FROM blender_web_sessions
+                    WHERE state IN ({','.join('?' * len(active))}) ORDER BY created_at""",
+                active,
+            ).fetchall()
+        values: list[tuple[str, BlenderWebSession]] = []
+        for row in rows:
+            try:
+                values.append((str(row["owner"]), BlenderWebSession.model_validate_json(row["value_json"])))
+            except ValidationError:
+                logger.warning("skipping unreadable Blender web session record")
+        return values
+
+    def update_blender_web_session(
+        self,
+        owner: str,
+        value: BlenderWebSession,
+    ) -> BlenderWebSession:
+        owner = validate_scene_owner(owner)
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE blender_web_sessions
+                   SET runtime_id = ?, state = ?, value_json = ?, updated_at = ?
+                   WHERE id = ? AND owner = ?""",
+                (
+                    value.runtime_id, value.state, value.model_dump_json(), value.updated_at,
+                    value.id, owner,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise SceneError("blender_session_not_found", "Blender session is unavailable")
+        self._notify_session("blender_sessions")
+        return value
 
     def create_blender_runtime_operation(
         self,

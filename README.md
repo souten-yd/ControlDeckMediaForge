@@ -72,8 +72,12 @@ validated raw GLB or existing G8 project ZIP output in a lazy, locally bundled
 interactive viewer. The separately managed browser GUI pack pins TigerVNC and
 noVNC by archive size and SHA-256, shows their licenses before installation, and
 is installed explicitly from Settings or `web-install`. The session runner and
-browser connection are still unavailable until the next 3DS-5 slices; absence
-of this pack does not disable image, Library, or existing G8 features.
+software-rendered Blender GUI lifecycle are implemented: a scene is copied into
+an isolated single-writer session, the fixed Blender runtime is started behind
+a Unix-only RFB socket, and Save creates a validated immutable scene revision.
+The authenticated RFB gateway and browser/noVNC connection remain unavailable
+until the next 3DS-5 slice; absence of the pack or software renderer does not
+disable image, Library, or existing G8 features.
 
 ## Test
 
@@ -85,7 +89,7 @@ Public contracts are documented in [`docs/api.md`](docs/api.md). Current evidenc
 
 ## Planning documents
 
-- [Integrated 3D Studio](docs/design-3d-studio.md) — phased extension of MediaForge's shared image/3D workspace. The compatibility baseline, Blender runtime lifecycle, and shared Library GLB viewer are implemented; scene revisions, texture workflows, OpenCode authoring, and server-side Blender GUI remain planned. Implementation and releases stay in this repository; Blender runs in isolated runtime/session environments.
+- [Integrated 3D Studio](docs/design-3d-studio.md) — phased extension of MediaForge's shared image/3D workspace. The compatibility baseline, Blender/runtime lifecycle, Library GLB viewer, scene revisions, and isolated software GUI runner are implemented; the authenticated browser connection, texture workflows, and OpenCode authoring remain planned. Implementation and releases stay in this repository; Blender runs in isolated runtime/session environments.
 - [3D implementation plan](docs/implementation/g8-3d-studio-plan.md) — phased work, compatibility gates, real-machine acceptance and coding-agent handoff.
 - [3D development and release rules](docs/development-release-3d-studio.md) — existing MediaForge distribution/signing, reference practices from ControlDeck/SonicForge and evidence requirements.
 

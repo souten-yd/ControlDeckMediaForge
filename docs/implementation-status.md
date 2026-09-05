@@ -8536,3 +8536,52 @@ traversal・link・duplicate拒否を確認した。実session runner、Blender 
 再接続、idle/disable/revocation、実ControlDeck opaque iframe、GPU GUIは **NOT IMPLEMENTED / NOT TESTED**。
 このXvnc起動はsoftware display/package互換性の証拠だけである。ControlDeck source/service/installed filesは変更0。
 次は別PRの3DS-5b session runner。
+
+## 2026-09-06 — 3DS-5b isolated Blender GUI runner
+
+durable `blender_web_sessions` tableと全体1件のactive unique indexを追加し、Scene working copyの既存
+single-writer authorityと組み合わせた。private `blender_sessions` session part、
+`blender.sessions.list/start/save/stop`、standalone mirrorを追加したが、入力はScene ID/session IDだけ、
+応答はbounded state/runtime/Web pack/display/resultだけでpath、PID、unit、socket、display番号は含まない。
+状態はqueued→preparing→starting→ready→saving/stopping→stopped、失敗はfailed/interrupted。saveはGUIへ
+明示保存を要求してhash/sizeを受け、process group停止後に既存Blender/GLB独立検査とimmutable revision commitを
+通す。discardはworking copyを解放し、起動/保存/runner/reconcile失敗はrecovery working copyを保持する。
+
+session専用transient systemd user unitは`NoNewPrivileges`、`PrivateNetwork`、AF_UNIX限定、
+`ProtectSystem=strict`、`ProtectHome=yes`、MemoryMax 8 GiB、TasksMax 128、3 writable rootを設定する。
+Xvncは1280x720/24-bit、RFB TCP無効、mode 0600 Unix socketのみ。Blenderは個人Waylandを空にし、
+GPU visibilityを消し、system Mesa Lavapipe ICDだけを指定したVulkan GUIで起動する。readyは実Blender
+4.5.9、`background=false`、autoexec無効、VULKAN、llvmpipe、実socketがすべて一致した場合だけ成立する。
+
+最初の実機probeでは、systemdの一部kernel保護propertyがuser unitで`218/CAPABILITIES`、Wayland環境を
+残したBlenderが個人displayへ接続、Xvnc GLXに必要なcontext extensionが無くOpenGL GUI起動不能、初回設定popup、
+`ProtectSystem`/`ReadOnlyPaths`が追加mount `/data1tb`へのwriteを拒否しないことをそれぞれ観測した。
+採用不能propertyを外し、Wayland無効、Lavapipe/Vulkan、隔離user preference seedへ修正した。filesystemは
+systemdだけに依存せず、Blender起動前にLandlock ABI 3以上を必須化してsession control、working copy、
+RFB socket root以外のwriteを拒否する。Xvncは固定済みtrusted componentで`/tmp` X lockが必要なため先に起動し、
+sceneを読むBlenderとその子孫へLandlockを適用する。pre-open前は`/dev/null`が拒否されたため、適用前にfdを開く。
+
+sourceのLandlock導入probe `blendersession_f199db196fdb4b9284dc130b7d8aa1e1`は0.584秒でready。
+実RFB 3.8 / 1280x720を取得し、unitはMemory 540.6 MiB（peak 571.4 MiB）、94 tasks、Blender childは
+`NoNewPrivs=1` / seccomp mode 2、TCP 5999 listener 0。discard後unit inactive、Unix socket 0。
+同じLandlock helperでallowlist外`/data1tb/mf-landlock-escape`はerrno 13、allowlist内writeは成功し、
+AF_UNIX限定unitでAF_INET作成はerrno 97だった。
+
+inline評価を使わず同梱trusted Python fileだけを使う最終コードから候補bundleを再構築した。実process
+`127.0.0.1:9180`へ434,663 B `.blend`をimportし、commit開始からGUI readyまで1.019088秒。mode 0600
+Unix socketへ実RFB接続し、click + Shift+D + Enter後のscreenで`Cube.001`を確認した。save/stopは
+0.732258秒、working fileは510,540 B / SHA-256
+`cdb4c7061e8b8490dae51f910bc59b28cafc221ade00a6ba65719d34cc428bdb`。revision 1→2、objects 3→4、
+meshes 1→2、triangles 12→24、vertices 8→16でBlender/GLB validatorはいずれもpassed。停止後unit inactive、
+socket/process 0。package unitはMemoryCurrent 574,533,632 B / peak 578,682,880 B、94 tasksだった。
+
+`./mf.sh bundle build 0.28.3`は31,489,331 B / SHA-256
+`d345481457c0f4bce16d00b564c4c940d3e26f81956b80cdf6da9c4f76c50769`、展開binary doctorは
+`ok / 0.28.3 / packaged=true`。focused session 8件、exact head `./mf.sh test`は936 passed / 既知
+Starlette warning 1件 / 88.01秒。候補processはenvironment snapshotを意図的に置かなかったためhealthは
+`setup_required`であり、packaged session成立をcore全体のprovision成功へ読み替えない。
+
+認証付きRFB gateway/noVNC browser、接続heartbeat/再接続/idle、disable/revocation、実ControlDeck opaque
+iframe、GPU GUI/Cyclesは **NOT IMPLEMENTED / NOT TESTED**。稼働ControlDeckは0.28.0 / healthy / PID 1827940、
+ControlDeck source/service/installed files変更0で、既存`frontend/tsconfig.tsbuildinfo`だけdirty。次は別PRの
+3DS-5c RFB gateway/noVNC。

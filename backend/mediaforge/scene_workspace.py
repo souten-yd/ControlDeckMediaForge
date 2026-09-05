@@ -360,6 +360,12 @@ class SceneWorkspace:
             self._remove_tree(root, self.working_root)
         return value
 
+    def retain_working_copy_for_recovery(self, owner: str, working_id: str) -> SceneWorkingCopy:
+        """End the writer lease without deleting bytes after a GUI/session failure."""
+        return self.store.finish_scene_working_copy(
+            validate_scene_owner(owner), working_id, "recovery", now=_iso(self._now())
+        )
+
     async def commit_working_copy(self, owner: str, working_id: str) -> dict[str, Any]:
         owner = validate_scene_owner(owner)
         self.store.expire_scene_working_copies(_iso(self._now()))

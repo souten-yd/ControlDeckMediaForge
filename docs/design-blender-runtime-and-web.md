@@ -1,7 +1,7 @@
 # Blender環境管理とサーバーGUIのブラウザ操作
 
-Status: 3DS-2 runtime lifecycle・3DS-5a Web pack実装済み / Web GUI session未実装
-Date: 2026-09-05  
+Status: 3DS-2 runtime lifecycle・3DS-5a Web pack・3DS-5b GUI runner実装済み / RFB gateway未実装
+Date: 2026-09-06
 上位設計: [統合3D Studio](design-3d-studio.md)
 
 ## 1. Web Blenderの定義
@@ -113,28 +113,41 @@ HostのWeb processやMediaForge HTTP requestの生存期間を寿命の基準に
 Linuxではsystemd user unitでrunnerを所有する。権限・隔離要件を満たすrunnerを先に検証する。
 web APIがprocessを起動してすぐ忘れる方式や、個人の既存X11/Wayland sessionへの接続を採らない。
 
+3DS-5bではtransient systemd user unitをdurable session IDへ固定し、`NoNewPrivileges`、
+`PrivateNetwork`、`RestrictAddressFamilies=AF_UNIX`、memory/task上限を設定した。XvncはTCP RFBを
+無効化したmode 0600のsession専用Unix socketだけを開く。追加mountに対するsystemdの
+`ProtectSystem`/`ReadOnlyPaths`単独では書込を拒否できない実機結果だったため、Blender起動前に
+Landlock ABI 3以上を必須とし、session control、scene working copy、RFB socketの3 root以外への
+書込をkernelで拒否する。隔離を構成できなければsessionはfail-closedにする。Xvncは自身のX lockを
+作る必要がある固定済みtrusted componentなのでLandlock適用前に起動し、利用者sceneを読むBlenderと
+その子孫だけを追加のfilesystem sandboxへ入れる。
+
 初期software displayはGPUなしでも接続・保存を検証できることを優先する。
 Xvfb/VNCを起動しただけでGPUアクセラレーションが成立したとは記録しない。
 GPU display/VirtualGL/EGL等は候補を実機比較し、OpenGLとCycles HIPの結果を別々に残す。
+3DS-5bのsoftware sessionはWaylandを明示的に無効化し、固定X displayとsystem Mesa Lavapipe ICDだけを
+使うVulkan GUIである。ready条件は`background=false`、autoexec無効、VULKAN backend、llvmpipe renderer、
+実RFB socketの一致であり、GPU accelerationやCycles HIPをavailableとは扱わない。
 
 ## 7. session状態・再接続・排他
 
-提案状態: queued → preparing → starting → ready → disconnected → stopping → stopped。
-failed / interruptedは原因付き終端。readyとdisconnectedは同じサーバーsessionの接続状態。
-session ID、owner、project、working revision、runtime pin、runner ID、heartbeat、期限をDBへ保存する。
+実装状態: queued → preparing → starting → ready → saving/stopping → stopped。
+failed / interruptedは原因付き終端。disconnectedはRFB gatewayを追加する次sliceで接続状態として実装する。
+3DS-5bはsession ID、owner、scene、working copy、runtime/Web pack pin、systemd unit ID、結果、時刻をDBへ保存する。
+接続heartbeatと期限はgateway sliceで追加する。
 
-初期policy（設定範囲をboundedにし、実測で調整）:
+初期policy（3DS-5bで実装済みの項目と、gateway以降で実装する項目を区別する）:
 
 - 同時編集sessionは利用者1件、ホスト全体1件。上限拡大はRAM/VRAM実測後。
 - 同一working sceneはsingle writer lock。二つ目のタブは閲覧または明示takeover。
-- 接続断後10分猶予、入力なし30分で保存・終了を試行。期限をUIへ表示。
-- autosave間隔2分を目標、保存先を隔離working copyへ限定。
+- 接続断後10分猶予、入力なし30分で保存・終了を試行。期限をUIへ表示（未実装）。
+- autosave間隔2分を目標、保存先を隔離working copyへ限定（未実装）。
 - 保存後に独立した検証・asset commitでrevisionを確定。autosaveは正式版ではない。
 - 終了時は入力停止→保存要求→最大30秒待機→process group終了→予約・lock回収。
 - 保存に失敗した場合はrecovery copyと理由を保持し、「保存済み」と表示しない。
 - Host disableの2秒以内応答では新規受付停止と終了開始を返す。大きい.blendの保存完了を2秒と偽らない。
 
-ブラウザ切断はsessionをただちにkillしない。MediaForge再起動ではrunnerの生存とownershipを照合する。
+ブラウザ切断はsessionをただちにkillしない（gateway sliceで実装する）。MediaForge再起動ではrunnerの生存とownershipを照合する。
 Host再起動や認証失効時には新しい正規identityを得るまで編集再開しない。
 終了したプロセスのPID再利用を避けるためunit IDと起動時刻も照合する。
 

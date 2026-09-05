@@ -51,6 +51,7 @@ from .asset_brief import (
 from .blender_runtime import BlenderRuntimeRegistryError, BlenderRuntimeResolver
 from .blender_manager import BlenderRuntimeManager
 from .blender_operation import BlenderRuntimeOperationError
+from .blender_session_manager import BlenderSessionError, BlenderSessionManager
 from .blender_web import BlenderWebPack
 from .config import Settings
 from .custom_models import DEFAULT_MODEL_SOURCE, MODEL_SOURCES, CustomModelCatalog, CustomModelError
@@ -204,6 +205,7 @@ def create_app(
     blender_catalog_path: Path | None = None,
     blender_web_manifest_path: Path | None = None,
     blender_preflight_script: Path | None = None,
+    blender_session_controller: Any | None = None,
 ) -> FastAPI:
     resolved = settings or Settings.from_env()
     trusted_blender_manifest = blender_manifest_path or (
@@ -261,6 +263,10 @@ def create_app(
         blender_runtimes.register_legacy()
     except BlenderRuntimeRegistryError as exc:
         logger.warning("Blender runtime registration is unavailable: %s", exc.code)
+    blender_web_pack = BlenderWebPack(
+        trusted_blender_web_manifest,
+        resolved.blender_web_runtime_root,
+    )
     blender_runtime_operations = BlenderRuntimeManager(
         store,
         blender_runtimes,
@@ -268,12 +274,19 @@ def create_app(
         preflight_script=trusted_blender_preflight,
         download_root=resolved.blender_download_root,
         catalog_path=trusted_blender_catalog,
-        web_pack=BlenderWebPack(
-            trusted_blender_web_manifest,
-            resolved.blender_web_runtime_root,
-        ),
+        web_pack=blender_web_pack,
         web_download_root=resolved.blender_web_download_root,
         transport=blender_download_transport,
+    )
+    blender_sessions = BlenderSessionManager(
+        store,
+        scene_workspace,
+        blender_runtimes,
+        blender_web_pack,
+        runner=REPOSITORY_ROOT / "worker_packs/blender/web_session_runner.py",
+        bootstrap=REPOSITORY_ROOT / "worker_packs/blender/gui_session_bootstrap.py",
+        preferences_bootstrap=REPOSITORY_ROOT / "worker_packs/blender/gui_preferences.py",
+        controller=blender_session_controller,
     )
 
     manager = JobManager(
@@ -472,6 +485,7 @@ def create_app(
         standalone_scene_backups.initialize()
         await manager.start()
         await blender_runtime_operations.start()
+        await blender_sessions.start()
         if model_operations is not None:
             await model_operations.start()
         if model_evaluations is not None:
@@ -484,6 +498,7 @@ def create_app(
             await model_evaluations.stop()
         if model_operations is not None:
             await model_operations.stop()
+        await blender_sessions.stop()
         await blender_runtime_operations.stop()
         await manager.stop()
         await asyncio.to_thread(standalone_model_viewer.cleanup)
@@ -516,6 +531,7 @@ def create_app(
     app.state.host = host
     app.state.blender_runtimes = blender_runtimes
     app.state.blender_runtime_operations = blender_runtime_operations
+    app.state.blender_sessions = blender_sessions
     app.state.standalone_model_viewer = standalone_model_viewer
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -2249,6 +2265,7 @@ def create_app(
         "model_catalog",
         "model_operations",
         "blender_runtime",
+        "blender_sessions",
         "scenes",
         "library",
         "creative_batches",
@@ -2352,6 +2369,7 @@ def create_app(
                 item.model_dump(mode="json") for item in store.list_model_operations()
             ]},
             "blender_runtime": blender_runtime_part,
+            "blender_sessions": lambda: blender_sessions.list(preferences.subject_of(identity)),
             "scenes": lambda: {
                 "items": [
                     item.model_dump(mode="json")
@@ -3231,6 +3249,28 @@ def create_app(
                         result = blender_runtime_operations.cancel(
                             str(params.get("operation_id", ""))
                         ).model_dump(mode="json")
+                    elif method == "blender.sessions.list":
+                        if params:
+                            raise ValueError("Blender session list accepts no parameters")
+                        result = blender_sessions.list(preferences.subject_of(identity))
+                    elif method == "blender.sessions.start":
+                        if set(params) != {"scene_id"}:
+                            raise ValueError("Blender session start accepts only scene_id")
+                        result = blender_sessions.create(
+                            preferences.subject_of(identity), str(params.get("scene_id", ""))
+                        )
+                    elif method == "blender.sessions.save":
+                        if set(params) != {"session_id"}:
+                            raise ValueError("Blender session save accepts only session_id")
+                        result = blender_sessions.save_and_stop(
+                            preferences.subject_of(identity), str(params.get("session_id", ""))
+                        )
+                    elif method == "blender.sessions.stop":
+                        if set(params) != {"session_id"}:
+                            raise ValueError("Blender session stop accepts only session_id")
+                        result = blender_sessions.discard_and_stop(
+                            preferences.subject_of(identity), str(params.get("session_id", ""))
+                        )
                     elif method == "library.list":
                         kind = params.get("kind", "all")
                         if kind not in library.KINDS:
@@ -3382,6 +3422,7 @@ def create_app(
                     PreferenceError,
                     ModelOperationError,
                     BlenderRuntimeOperationError,
+                    BlenderSessionError,
                     CustomModelError,
                     CreativeValidationError,
                     ReferenceIntelligenceError,
@@ -3763,6 +3804,32 @@ def create_app(
                 status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
             ) from exc
         raise HTTPException(status_code=422, detail={"code": "invalid_blender_runtime_action"})
+
+    @app.get("/workspace-api/blender/sessions", include_in_schema=False)
+    async def standalone_blender_sessions() -> dict[str, Any]:
+        return blender_sessions.list(preferences.STANDALONE_SUBJECT)
+
+    @app.post("/workspace-api/blender/sessions", include_in_schema=False)
+    async def standalone_blender_session_action(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) == {"action", "scene_id"} and payload["action"] == "start":
+                return blender_sessions.create(
+                    preferences.STANDALONE_SUBJECT, str(payload["scene_id"])
+                )
+            if set(payload) == {"action", "session_id"} and payload["action"] == "save":
+                return blender_sessions.save_and_stop(
+                    preferences.STANDALONE_SUBJECT, str(payload["session_id"])
+                )
+            if set(payload) == {"action", "session_id"} and payload["action"] == "stop":
+                return blender_sessions.discard_and_stop(
+                    preferences.STANDALONE_SUBJECT, str(payload["session_id"])
+                )
+        except BlenderSessionError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+        raise HTTPException(status_code=422, detail={"code": "invalid_blender_session_action"})
 
     @app.post("/workspace-api/models/operations", include_in_schema=False)
     async def standalone_model_operation(payload: dict[str, Any]) -> dict[str, Any]:
