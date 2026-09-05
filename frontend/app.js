@@ -5447,6 +5447,7 @@ const VALIDATOR_LABEL = {
   "glb.structure": "3Dファイルの構造",
   "glb.output_structure": "書き出した3Dファイルの構造",
   "package.deterministic_zip": "3Dパッケージの再現性",
+  "scene.backup": "3Dシーンのバックアップ",
   "evaluation.unified": "内容の確認",
   "m5.companion.profile": "機種の設定",
   "m5.companion.edit_mask": "編集範囲",

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import shutil
 import sqlite3
 import threading
@@ -30,7 +32,13 @@ from .models.operations import (
 )
 from .paths import contained
 from .profiles import Profile, ProfileInput, ReferenceCollection, ReferenceCollectionInput
-from .scenes import SceneDocument, SceneError, SceneRevision, SceneWorkingCopy
+from .scenes import (
+    SceneDocument,
+    SceneError,
+    SceneRevision,
+    SceneWorkingCopy,
+    validate_scene_owner,
+)
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -836,6 +844,209 @@ class Store:
             )
             if cursor.rowcount != 1:
                 raise SceneError("scene_revision_conflict", "scene current revision changed")
+        self._notify_session("scenes")
+        return document
+
+    def restore_scene_snapshot(
+        self,
+        owner: str,
+        job: Job,
+        document: SceneDocument,
+        revisions: list[SceneRevision],
+        assets: list[tuple[Asset, Provenance, Path]],
+    ) -> SceneDocument:
+        """Make a fully validated backup snapshot visible in one DB transaction.
+
+        Asset bytes are copied to private temporary names before the transaction.
+        Final names are invisible to readers until their rows and every revision
+        commit together; a failed transaction removes both temporary and final
+        files.
+        """
+        owner = validate_scene_owner(owner)
+        if (
+            job.status != JobStatus.SUCCEEDED
+            or job.asset_ids != [asset.id for asset, _provenance, _source in assets]
+            or document.revision_count != len(revisions)
+            or not revisions
+            or document.current_revision_id != revisions[-1].id
+        ):
+            raise SceneError("scene_backup_invalid", "restored scene snapshot identity is invalid")
+        previous: str | None = None
+        for sequence, revision in enumerate(revisions, 1):
+            if (
+                revision.scene_id != document.id
+                or revision.sequence != sequence
+                or revision.parent_revision_id != previous
+            ):
+                raise SceneError("scene_backup_invalid", "restored revision chain is invalid")
+            previous = revision.id
+        asset_ids = {asset.id for asset, _provenance, _source in assets}
+        provenance_ids = {provenance.id for _asset, provenance, _source in assets}
+        if len(asset_ids) != len(assets) or len(provenance_ids) != len(assets):
+            raise SceneError("scene_backup_invalid", "restored asset identities are not unique")
+
+        suffixes = {
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/jpeg": ".jpg",
+            "video/mp4": ".mp4",
+            "video/webm": ".webm",
+            "application/zip": ".zip",
+            "model/gltf-binary": ".glb",
+            "application/x-blender": ".blend",
+        }
+        prepared: list[tuple[Asset, Provenance, Path, Path, Path, Path]] = []
+        published: list[Path] = []
+        committed = False
+        try:
+            for asset, provenance, source in assets:
+                unresolved_source = source
+                if (
+                    provenance.asset_id != asset.id
+                    or provenance.output_sha256 != asset.sha256
+                    or provenance.parent_asset_ids != asset.parent_asset_ids
+                    or asset.job_id != job.id
+                    or unresolved_source.is_symlink()
+                    or not unresolved_source.is_file()
+                ):
+                    raise SceneError("scene_backup_invalid", "restored asset metadata differs")
+                try:
+                    source = contained(self.data_dir, unresolved_source)
+                except ValueError as exc:
+                    raise SceneError(
+                        "scene_backup_invalid", "restored asset source is outside private storage"
+                    ) from exc
+                if source.stat().st_size != asset.size_bytes:
+                    raise SceneError("scene_backup_invalid", "restored asset metadata differs")
+                digest = hashlib.sha256()
+                with source.open("rb") as stream:
+                    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                if digest.hexdigest() != asset.sha256:
+                    raise SceneError("scene_backup_hash_changed", "restored asset bytes differ")
+                storage_name = f"{asset.id}{suffixes[asset.mime_type]}"
+                final_data = contained(self.asset_dir, self.asset_dir / storage_name)
+                final_sidecar = contained(
+                    self.asset_dir, self.asset_dir / f"{asset.id}.provenance.json"
+                )
+                temporary_data = contained(
+                    self.asset_dir, self.asset_dir / f".{asset.id}.{uuid.uuid4().hex}.restore"
+                )
+                temporary_sidecar = contained(
+                    self.asset_dir, self.asset_dir / f".{asset.id}.{uuid.uuid4().hex}.restore.json"
+                )
+                if final_data.exists() or final_sidecar.exists():
+                    raise SceneError("scene_backup_conflict", "restored asset identity already exists")
+                shutil.copyfile(source, temporary_data)
+                temporary_data.chmod(0o600)
+                temporary_sidecar.write_text(provenance.model_dump_json(indent=2), encoding="utf-8")
+                temporary_sidecar.chmod(0o600)
+                prepared.append(
+                    (asset, provenance, temporary_data, temporary_sidecar, final_data, final_sidecar)
+                )
+
+            with self._lock, self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                for (
+                    _asset,
+                    _provenance,
+                    temporary_data,
+                    temporary_sidecar,
+                    final_data,
+                    final_sidecar,
+                ) in prepared:
+                    # Hard links publish without replacing a colliding path. UUID
+                    # identities make collisions exceptional, but restore must
+                    # still preserve an existing asset byte-for-byte.
+                    os.link(temporary_data, final_data)
+                    published.append(final_data)
+                    temporary_data.unlink()
+                    os.link(temporary_sidecar, final_sidecar)
+                    published.append(final_sidecar)
+                    temporary_sidecar.unlink()
+                connection.execute(
+                    """INSERT INTO jobs
+                       (id, status, phase, progress, request_json, asset_ids_json, error_json,
+                        cancel_requested, host_managed, profile_snapshot_json, created_at, updated_at)
+                       VALUES (?, ?, NULL, 1, ?, ?, NULL, 0, 0, '{}', ?, ?)""",
+                    (
+                        job.id,
+                        job.status,
+                        job.request.model_dump_json(),
+                        json.dumps(job.asset_ids, separators=(",", ":")),
+                        job.created_at,
+                        job.updated_at,
+                    ),
+                )
+                for (
+                    asset,
+                    provenance,
+                    _temporary_data,
+                    _temporary_sidecar,
+                    _final_data,
+                    _final_sidecar,
+                ) in prepared:
+                    connection.execute(
+                        """INSERT INTO assets
+                           (id, job_id, metadata_json, provenance_json, storage_name, created_at)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        (
+                            asset.id,
+                            job.id,
+                            asset.model_dump_json(),
+                            provenance.model_dump_json(),
+                            f"{asset.id}{suffixes[asset.mime_type]}",
+                            asset.created_at,
+                        ),
+                    )
+                connection.execute(
+                    """INSERT INTO scene_documents
+                       (id, owner, value_json, current_revision_id, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (
+                        document.id,
+                        owner,
+                        document.model_dump_json(),
+                        document.current_revision_id,
+                        document.created_at,
+                        document.updated_at,
+                    ),
+                )
+                for revision in revisions:
+                    self._insert_scene_revision(connection, revision)
+            committed = True
+        except SceneError:
+            raise
+        except FileExistsError as exc:
+            raise SceneError(
+                "scene_backup_conflict", "restored asset identity already exists"
+            ) from exc
+        except Exception as exc:
+            raise SceneError("scene_backup_restore_failed", "scene backup restore failed") from exc
+        finally:
+            if not committed:
+                for (
+                    _asset,
+                    _provenance,
+                    temporary_data,
+                    temporary_sidecar,
+                    _final_data,
+                    _final_sidecar,
+                ) in prepared:
+                    for path in (temporary_data, temporary_sidecar):
+                        try:
+                            path.unlink()
+                        except FileNotFoundError:
+                            continue
+                for path in published:
+                    try:
+                        path.unlink()
+                    except FileNotFoundError:
+                        continue
+
+        self._notify(job)
+        self._notify_session("jobs")
+        self._notify_session("library")
         self._notify_session("scenes")
         return document
 
