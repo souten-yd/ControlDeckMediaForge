@@ -319,6 +319,8 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .runtime-heading .section-label { margin-bottom: 3px; }
 .runtime-facts { margin: 0; }
 #blender-runtime-refresh { justify-self: start; min-height: 38px; }
+.runtime-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#blender-runtime-progress { width: min(100%, 420px); }
 #blender-runtime-list .row { grid-template-columns: minmax(0, 1fr) auto; }
 #blender-runtime-list .s { overflow-wrap: anywhere; }
 .section-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }

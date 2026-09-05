@@ -49,6 +49,8 @@ from .asset_brief import (
     resolve_layout,
 )
 from .blender_runtime import BlenderRuntimeRegistryError, BlenderRuntimeResolver
+from .blender_manager import BlenderRuntimeManager
+from .blender_operation import BlenderRuntimeOperationError
 from .config import Settings
 from .custom_models import DEFAULT_MODEL_SOURCE, MODEL_SOURCES, CustomModelCatalog, CustomModelError
 from .composer import (
@@ -192,8 +194,17 @@ def create_app(
     native_model_evaluator: H3ModelEvaluator | None = None,
     model_download_origin: str = "https://huggingface.co",
     model_download_transport: httpx.AsyncBaseTransport | None = None,
+    blender_download_transport: httpx.AsyncBaseTransport | None = None,
+    blender_manifest_path: Path | None = None,
+    blender_preflight_script: Path | None = None,
 ) -> FastAPI:
     resolved = settings or Settings.from_env()
+    trusted_blender_manifest = blender_manifest_path or (
+        REPOSITORY_ROOT / "config/blender-runtime.json"
+    )
+    trusted_blender_preflight = blender_preflight_script or (
+        REPOSITORY_ROOT / "worker_packs/blender/preflight.py"
+    )
     store = Store(resolved.data_dir)
     host = host_client or ControlDeckHostClient(
         resolved.control_deck_url,
@@ -220,13 +231,21 @@ def create_app(
         registry_path=resolved.blender_runtime_registry,
         managed_root=resolved.blender_managed_runtime_root,
         legacy_root=resolved.blender_legacy_runtime_root,
-        manifest_path=REPOSITORY_ROOT / "config/blender-runtime.json",
+        manifest_path=trusted_blender_manifest,
         trusted_worker=REPOSITORY_ROOT / "worker_packs/blender/compile_asset.py",
     )
     try:
         blender_runtimes.register_legacy()
     except BlenderRuntimeRegistryError as exc:
         logger.warning("Blender runtime registration is unavailable: %s", exc.code)
+    blender_runtime_operations = BlenderRuntimeManager(
+        store,
+        blender_runtimes,
+        manifest_path=trusted_blender_manifest,
+        preflight_script=trusted_blender_preflight,
+        download_root=resolved.blender_download_root,
+        transport=blender_download_transport,
+    )
 
     manager = JobManager(
         store,
@@ -421,6 +440,7 @@ def create_app(
     async def lifespan(_: FastAPI):
         store.initialize()
         await manager.start()
+        await blender_runtime_operations.start()
         if model_operations is not None:
             await model_operations.start()
         if model_evaluations is not None:
@@ -433,6 +453,7 @@ def create_app(
             await model_evaluations.stop()
         if model_operations is not None:
             await model_operations.stop()
+        await blender_runtime_operations.stop()
         await manager.stop()
         await host.close()
 
@@ -458,6 +479,7 @@ def create_app(
     app.state.reference_intelligence = reference_intelligence
     app.state.host = host
     app.state.blender_runtimes = blender_runtimes
+    app.state.blender_runtime_operations = blender_runtime_operations
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
     async def authorize_host(request: Request) -> HostIdentity:
@@ -2101,6 +2123,18 @@ def create_app(
         "jobs",
     )
 
+    def blender_runtime_part() -> dict[str, Any]:
+        return {
+            **blender_runtimes.status(),
+            "fingerprint": blender_runtimes.fingerprint(),
+            "management_available": True,
+            "catalog": blender_runtime_operations.catalog(),
+            "operations": [
+                item.model_dump(mode="json")
+                for item in store.list_blender_runtime_operations()
+            ],
+        }
+
     async def session_snapshot(
         identity: HostIdentity | None, parts: tuple[str, ...]
     ) -> dict[str, Any]:
@@ -2169,10 +2203,7 @@ def create_app(
             "model_operations": lambda: {"items": [
                 item.model_dump(mode="json") for item in store.list_model_operations()
             ]},
-            "blender_runtime": lambda: {
-                **blender_runtimes.status(),
-                "fingerprint": blender_runtimes.fingerprint(),
-            },
+            "blender_runtime": blender_runtime_part,
             "library": library_part,
             "creative_batches": lambda: {"items": [
                 batch_projection(item) for item in store.list_creative_batches()
@@ -2794,10 +2825,17 @@ def create_app(
                             "device": {"vram_bytes": device_vram_bytes()},
                         }
                     elif method == "blender.runtime.status":
-                        result = {
-                            **blender_runtimes.status(),
-                            "fingerprint": blender_runtimes.fingerprint(),
-                        }
+                        result = blender_runtime_part()
+                    elif method == "blender.runtime.install":
+                        if params:
+                            raise ValueError("Blender install accepts no client-selected source")
+                        result = blender_runtime_operations.install().model_dump(mode="json")
+                    elif method == "blender.runtime.operations.cancel":
+                        if set(params) != {"operation_id"}:
+                            raise ValueError("Blender cancel accepts only operation_id")
+                        result = blender_runtime_operations.cancel(
+                            str(params.get("operation_id", ""))
+                        ).model_dump(mode="json")
                     elif method == "library.list":
                         kind = params.get("kind", "all")
                         if kind not in library.KINDS:
@@ -2936,6 +2974,7 @@ def create_app(
                     ThumbnailError,
                     PreferenceError,
                     ModelOperationError,
+                    BlenderRuntimeOperationError,
                     CustomModelError,
                     CreativeValidationError,
                     ReferenceIntelligenceError,
@@ -3031,10 +3070,22 @@ def create_app(
 
     @app.get("/workspace-api/blender/runtime", include_in_schema=False)
     async def standalone_blender_runtime_status() -> dict[str, Any]:
-        return {
-            **blender_runtimes.status(),
-            "fingerprint": blender_runtimes.fingerprint(),
-        }
+        return blender_runtime_part()
+
+    @app.post("/workspace-api/blender/runtime/operations", include_in_schema=False)
+    async def standalone_blender_runtime_operation(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            if payload == {"action": "install"}:
+                return blender_runtime_operations.install().model_dump(mode="json")
+            if set(payload) == {"action", "operation_id"} and payload["action"] == "cancel":
+                return blender_runtime_operations.cancel(
+                    str(payload["operation_id"])
+                ).model_dump(mode="json")
+        except BlenderRuntimeOperationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
+            ) from exc
+        raise HTTPException(status_code=422, detail={"code": "invalid_blender_runtime_action"})
 
     @app.post("/workspace-api/models/operations", include_in_schema=False)
     async def standalone_model_operation(payload: dict[str, Any]) -> dict[str, Any]:

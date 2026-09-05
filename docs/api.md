@@ -74,6 +74,17 @@ The status surface is read-only from the client: 3DS-1 performs no download,
 update, repair, switch, or removal operation. The development bridge is
 excluded from OpenAPI and none of these additions change the frozen public API.
 
+3DS-2 adds private `blender.runtime.install` and
+`blender.runtime.operations.cancel` methods. The standalone development mirror
+is `POST /workspace-api/blender/runtime/operations` with only `install`, or
+`cancel` plus an opaque operation ID. Install accepts no URL, path, executable,
+version, or shell command from the browser: the checked-in trusted catalog fixes
+the Blender archive identity, size, SHA-256, license, platform, and version.
+Operation states are `queued`, `preflight`, `downloading`, `verifying`,
+`installing`, `probing`, then `ready`, `failed`, or `canceled`; the status
+projection includes the durable operation journal for reconnect. These private
+additions do not modify the frozen public job/model operation schemas.
+
 Creative planning also remains private. `creative.templates` returns the
 versioned trusted template catalog. `creative.validate` accepts an existing
 JobRequest-shaped object plus an internal CreativeSpec and returns a

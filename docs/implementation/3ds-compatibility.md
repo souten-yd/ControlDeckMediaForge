@@ -1,6 +1,6 @@
 # 3D Studio compatibility baseline
 
-Status: 3DS-0〜1 VERIFIED / 3DS-2以降は未実装
+Status: 3DS-0〜1 VERIFIED / 3DS-2 IN PROGRESS（install/cancel/restart VERIFIED）
 Date: 2026-09-05
 
 この表は統合3D Studio着手時の互換性基準である。既存画像・G8・公開契約を、後続実装の
@@ -48,10 +48,10 @@ shell構文、変更Markdownの相対link、`git diff --check`もPASSした。
 | CHECK-01 | Hostにbinary WS relayのコードはあるがnoVNC往復は未実測 | opaque iframe、nonce/subprotocol、長時間、取消 |
 | CHECK-02 | systemd userで現行serviceは動くがGUI runner隔離は未実装 | filesystem/network/process脱出negative |
 | CHECK-03 | GPU型番・VRAMは実測。GUI/Cyclesは未実測 | display/OpenGL/Cyclesを別々にprobe |
-| CHECK-04 | current Host/OpenCode processは存在。3DS長時間jobは未実装 | 120秒超、refresh、restart、cancel |
+| CHECK-04 | durable setupを8 MiBで停止し再起動後Range/ETag再開、cancelも実測。3DS制作jobは未実装 | 120秒超の制作job、Host credential refresh |
 | CHECK-05 | GLB 64 MiBとworkspace JSON上限は既存どおり | bounded .blend chunk/grant transport |
 | CHECK-06 | frozen契約fixtureを追加し既存値を固定 | 新schemaごとにold fixture + Host parser |
-| CHECK-07 | legacy runtimeをopaque IDで登録しresolver経由G8がbaselineと同一hash。registryはmode 0600でraw pathなし | 3DS-2 side-by-side更新、失敗rollback、参照保護 |
+| CHECK-07 | managed clean install/cancel/restart、opaque登録、resolver経由G8同一hashまで実測 | side-by-side更新、失敗rollback、参照保護 |
 | CHECK-08 | 単一4.5.9だけ。新旧保存互換は未実測 | revision分離、実.blend比較 |
 
 ## 3DS-0判定
@@ -82,3 +82,26 @@ clientWidth/scrollWidthとも320、更新ボタン高さ39 px、最終console/pa
 実ControlDeck workspaceは未認証ブラウザが`/login`へ遷移したため、installed opaque iframeでの
 3DS-1操作は **NOT TESTED**。lifecycle操作、Web Blender、scene/revision、viewer、材質、
 OpenCode制作、GPU Blenderも **NOT IMPLEMENTED / NOT TESTED**。
+
+## 3DS-2a durable install / cancel / restart
+
+Blender専用operation journalを画像model operationとは別table/typeで追加した。状態は
+queued→preflight→downloading→verifying→installing→probing→ready、終端failed/canceled。
+ブラウザはinstallまたはopaque operation IDのcancelだけを渡し、URL/path/version/commandを
+指定できない。公式manifestのexact size/hash、展開member/size/path/link/device制約、空き容量、
+実Blender probeを通過したcandidateだけをmanaged rootへatomic配置してregistryへ登録する。
+partialはETag一致Rangeだけ再開し、stagingはcancel/失敗で除去する。配置とregistry更新の間で
+停止したjournalも再probeして完了できる。
+
+正規377,929,956 B archive（SHA-256 `dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d`）を
+ローカル配信源にしたclean installは25.659秒、managed filesは1,605,023,227 B。probeは
+Blender 4.5.9 / Python 3.11.11 / background / GLTF import/exportすべてtrue、registryは282 B /
+mode 0600 / raw pathなし。そのruntimeによるcube G8は1.312秒、ZIP 44,292 B / SHA-256
+`c78ef18d6c4da0334a9e3e2c451519d4b9bd2541ead1022cfa3979b0ef3a468b`でbaselineと同一だった。
+
+同archiveを8,388,608 Bでservice停止するとjournalはdownloadingのまま残り、再初期化でqueued、
+`Range: bytes=8388608-`と同一ETagで再開し25.546秒後ready。別実測cancelはcanceled、partial
+8,388,608 Bを保持、staging/destinationなし、runtime unavailableだった。Chromeでは日英の
+未導入表示、exact catalog/license/容量、導入button、320 px client/scroll 320、button 39 px、
+console/page/HTTP error 0件。update/switch/repair/removeと実Host opaque iframeは
+**NOT IMPLEMENTED / NOT TESTED**。

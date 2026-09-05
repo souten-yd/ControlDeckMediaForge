@@ -262,6 +262,52 @@ class BlenderRuntimeResolver:
                 self._write_registry(registry)
         return True
 
+    def register_managed(
+        self,
+        *,
+        runtime_id: str,
+        version: str,
+        location: str,
+        archive_sha256: str,
+    ) -> ResolvedBlenderRuntime:
+        """Register an already staged and probed runtime without accepting a path."""
+        candidate = {
+            "runtime_id": runtime_id,
+            "version": version,
+            "ownership": "managed",
+            "location": location,
+            "archive_sha256": archive_sha256,
+        }
+        self._validated_registry({
+            "schema_version": REGISTRY_SCHEMA_VERSION,
+            "active_runtime_id": runtime_id,
+            "runtimes": [candidate],
+        })
+        resolved = self._resolved(candidate)
+        if not self._ready(resolved):
+            raise BlenderRuntimeRegistryError("managed Blender runtime did not pass verification")
+        self.registry_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        lock_path = self.registry_path.with_suffix(self.registry_path.suffix + ".lock")
+        if lock_path.is_symlink():
+            raise BlenderRuntimeRegistryError("Blender runtime registry lock must not be a symlink")
+        with lock_path.open("a", encoding="ascii") as lock:
+            lock_path.chmod(0o600)
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            registry = self._read_registry()
+            existing = next(
+                (row for row in registry["runtimes"] if row["runtime_id"] == runtime_id), None
+            )
+            if existing is not None and existing != candidate:
+                raise BlenderRuntimeRegistryError("managed Blender runtime registration conflicts")
+            changed = existing is None or registry["active_runtime_id"] is None
+            if existing is None:
+                registry["runtimes"].append(candidate)
+            if registry["active_runtime_id"] is None:
+                registry["active_runtime_id"] = runtime_id
+            if changed:
+                self._write_registry(registry)
+        return resolved
+
     def resolve_g8(self) -> ResolvedBlenderRuntime | None:
         try:
             registry = self._read_registry()

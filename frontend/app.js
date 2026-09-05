@@ -432,6 +432,18 @@ async function standaloneCall(method, params) {
   }
   if (method === "models.operations.list") return json("/workspace-api/models/operations");
   if (method === "blender.runtime.status") return json("/workspace-api/blender/runtime");
+  if (method === "blender.runtime.install") {
+    return json("/workspace-api/blender/runtime/operations", {
+      method: "POST", body: JSON.stringify({action: "install"}),
+    });
+  }
+  if (method === "blender.runtime.operations.cancel") {
+    return json("/workspace-api/blender/runtime/operations", {
+      method: "POST", body: JSON.stringify({
+        action: "cancel", operation_id: params.operation_id,
+      }),
+    });
+  }
   if (method === "models.install") {
     return json("/workspace-api/models/operations", {method: "POST", body: JSON.stringify(
       {action: "install", model_id: params.model_id, license_acceptance: params.license_acceptance})});
@@ -5689,7 +5701,14 @@ const BLENDER_TEXT = {
     missingSummary: "Blender基本環境がまだありません。画像機能はそのまま利用できます。",
     invalidSummary: "Blenderの登録情報を安全に確認できないため、3D加工を停止しています。",
     webMissing: "未導入（基本環境とは別です）",
-    action: "導入・更新・修復・削除は次の実装段階で有効になります。",
+    action: "Blender 4.5.9 · GPL-3.0-or-later · blender.org · 約378 MB",
+    install: "基本環境を導入", cancel: "導入を中止",
+    operation: "導入処理", failed: "導入に失敗しました",
+    operationStates: {
+      queued: "待機中", preflight: "容量確認中", downloading: "ダウンロード中",
+      verifying: "検証中", installing: "展開中", probing: "動作確認中",
+      ready: "完了", failed: "失敗", canceled: "中止",
+    },
     fingerprint: "診断ID",
   },
   en: {
@@ -5703,7 +5722,14 @@ const BLENDER_TEXT = {
     missingSummary: "The Blender base runtime is not installed. Image features remain available.",
     invalidSummary: "3D processing is disabled because the runtime registry could not be verified.",
     webMissing: "Not installed (separate from the base runtime)",
-    action: "Install, update, repair, and remove become available in the next implementation phase.",
+    action: "Blender 4.5.9 · GPL-3.0-or-later · blender.org · about 378 MB",
+    install: "Install base runtime", cancel: "Cancel install",
+    operation: "Installation", failed: "Installation failed",
+    operationStates: {
+      queued: "Queued", preflight: "Checking capacity", downloading: "Downloading",
+      verifying: "Verifying", installing: "Installing", probing: "Probing",
+      ready: "Ready", failed: "Failed", canceled: "Canceled",
+    },
     fingerprint: "Diagnostic ID",
   },
 };
@@ -5725,6 +5751,8 @@ function renderBlenderRuntime() {
   byId("blender-web-label").textContent = text.web;
   byId("blender-version-label").textContent = text.version;
   byId("blender-runtime-refresh").textContent = text.refresh;
+  byId("blender-runtime-install").textContent = text.install;
+  byId("blender-runtime-cancel").textContent = text.cancel;
   byId("blender-runtime-details-label").textContent = text.details;
   if (!value) {
     byId("blender-runtime-state").textContent = text.checking;
@@ -5743,7 +5771,28 @@ function renderBlenderRuntime() {
   byId("blender-version-value").textContent = selected?.version || value.required_version || "—";
   byId("blender-runtime-summary").textContent = value.state === "ready"
     ? text.readySummary : (value.state === "invalid" ? text.invalidSummary : text.missingSummary);
-  byId("blender-runtime-action").textContent = value.management_available ? "" : text.action;
+  byId("blender-runtime-action").textContent = value.catalog
+    ? `${value.catalog.version} · ${value.catalog.license} · ${value.catalog.source} · ${formatBytes(value.catalog.archive_size_bytes)}`
+    : text.action;
+  const terminal = new Set(["ready", "failed", "canceled"]);
+  const operation = (value.operations || []).find((item) => !terminal.has(item.state));
+  const lastFailed = (value.operations || []).find((item) => item.state === "failed");
+  byId("blender-runtime-install").hidden = ["ready", "invalid"].includes(value.state)
+    || Boolean(operation)
+    || value.management_available === false;
+  byId("blender-runtime-cancel").hidden = !operation;
+  byId("blender-runtime-cancel").dataset.operationId = operation?.id || "";
+  byId("blender-runtime-progress").hidden = !operation;
+  byId("blender-runtime-progress-label").hidden = !operation && !lastFailed;
+  if (operation) {
+    const total = Math.max(1, operation.bytes_total || 0);
+    byId("blender-runtime-progress").max = total;
+    byId("blender-runtime-progress").value = Math.min(total, operation.bytes_done || 0);
+    byId("blender-runtime-progress-label").textContent = `${text.operation}: ${
+      text.operationStates[operation.state] || operation.state} · ${formatBytes(operation.bytes_done || 0)} / ${formatBytes(operation.bytes_total || 0)}`;
+  } else if (lastFailed) {
+    byId("blender-runtime-progress-label").textContent = `${text.failed}: ${lastFailed.error_code || "unknown"}`;
+  }
   const checks = {
     manifest: "manifest", stamp: "stamp", executable: "executable", trusted_worker: "worker",
   };
@@ -5949,6 +5998,25 @@ byId("model-mini-cancel").addEventListener("click", () => {
 });
 byId("blender-runtime-refresh").addEventListener("click", () => {
   void refreshSession(["blender_runtime"]);
+});
+byId("blender-runtime-install").addEventListener("click", async () => {
+  try {
+    await call("blender.runtime.install", {});
+    await refreshSession(["blender_runtime"]);
+  } catch (error) {
+    byId("blender-runtime-progress-label").hidden = false;
+    byId("blender-runtime-progress-label").textContent = error?.code || "install_failed";
+  }
+});
+byId("blender-runtime-cancel").addEventListener("click", async () => {
+  const operationId = byId("blender-runtime-cancel").dataset.operationId;
+  if (!operationId) return;
+  try {
+    await call("blender.runtime.operations.cancel", {operation_id: operationId});
+    await refreshSession(["blender_runtime"]);
+  } catch (error) {
+    byId("blender-runtime-progress-label").textContent = error?.code || "cancel_failed";
+  }
 });
 byId("model-remove-cancel").addEventListener("click", () => byId("model-remove-dialog").close());
 byId("model-remove-confirm").addEventListener("click", async () => {

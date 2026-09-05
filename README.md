@@ -59,8 +59,9 @@ installed into the core venv or ControlDeck. Build it explicitly with
 `./mf.sh blender build`; inspect it without changing state with
 `./mf.sh blender status`. Media Forge now resolves that existing runtime through
 its own versioned registry and shows read-only Blender diagnostics in Settings.
-Settings-based install/update/repair/remove and the browser GUI pack remain
-planned work; their absence does not disable image features.
+Settings can now start, resume, and cancel a durable install of the exact
+trusted Blender 4.5.9 archive. Update/switch/repair/remove and the browser GUI
+pack remain planned work; their absence does not disable image features.
 
 ## Test
 
@@ -72,7 +73,7 @@ Public contracts are documented in [`docs/api.md`](docs/api.md). Current evidenc
 
 ## Planning documents
 
-- [Integrated 3D Studio](docs/design-3d-studio.md) — phased extension of MediaForge's shared image/3D workspace. The compatibility baseline and read-only Blender runtime resolver/diagnostics are implemented; asset viewer, texture workflows, OpenCode authoring, server-side Blender GUI, and Settings-based lifecycle operations remain planned. Implementation and releases stay in this repository; Blender runs in isolated runtime/session environments.
+- [Integrated 3D Studio](docs/design-3d-studio.md) — phased extension of MediaForge's shared image/3D workspace. The compatibility baseline, runtime resolver/diagnostics, and durable Blender install/cancel/restart path are implemented; remaining lifecycle operations, asset viewer, texture workflows, OpenCode authoring, and server-side Blender GUI remain planned. Implementation and releases stay in this repository; Blender runs in isolated runtime/session environments.
 - [3D implementation plan](docs/implementation/g8-3d-studio-plan.md) — phased work, compatibility gates, real-machine acceptance and coding-agent handoff.
 - [3D development and release rules](docs/development-release-3d-studio.md) — existing MediaForge distribution/signing, reference practices from ControlDeck/SonicForge and evidence requirements.
 
