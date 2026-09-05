@@ -89,6 +89,16 @@ is limited to managed-root realpaths, refuses the active runtime and live pinned
 G8 references, revalidates the preview under the same reference lock, and keeps
 assets, scenes, history, external runtimes, and download cache out of scope.
 
+3DS-5a adds private `blender.web.install` and the standalone `web_install`
+action to the same durable operation journal. The browser cannot select a URL,
+version, path, executable, or command. The checked-in Web pack manifest pins
+TigerVNC 1.16.2 and noVNC 1.7.0 by HTTPS source, archive size, SHA-256, extracted
+root, required-file SHA-256, and license. The status projection reports only
+bounded component identities, checks, state, size, and fingerprint; it exposes
+no installed path or VNC credential. This operation installs the software-display
+pack only. A `ready` pack does not claim that a GUI session, RFB relay, GPU path,
+or authenticated browser connection is available.
+
 3DS-3 keeps model viewing on the same private workspace boundary. `library.list`
 accepts an allowlisted `media_kind` (`all`, `image`, `video`, or `3d`) and returns
 that classification with each card. `assets.model.open` accepts only an Asset ID,

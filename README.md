@@ -65,12 +65,15 @@ side-by-side, switch or repair a verified managed version, and remove only an
 inactive, unreferenced managed runtime after a size/reference preview. The
 existing G8 profile remains pinned to 4.5.9. With `./mf.sh serve` running, the
 same server orchestrator is available from `./mf.sh blender managed-status`,
-`install`, `update`, `switch <runtime-id>`, `repair <runtime-id>`,
+`install`, `web-install`, `update`, `switch <runtime-id>`, `repair <runtime-id>`,
 `remove-preview <runtime-id>`, and `remove <runtime-id>`; removal prompts unless
 `--yes` is explicit. Library now filters Images, Videos, and 3D assets and opens
 validated raw GLB or existing G8 project ZIP output in a lazy, locally bundled
-interactive viewer. The browser GUI pack remains planned work, and its absence
-does not disable image or Library features.
+interactive viewer. The separately managed browser GUI pack pins TigerVNC and
+noVNC by archive size and SHA-256, shows their licenses before installation, and
+is installed explicitly from Settings or `web-install`. The session runner and
+browser connection are still unavailable until the next 3DS-5 slices; absence
+of this pack does not disable image, Library, or existing G8 features.
 
 ## Test
 

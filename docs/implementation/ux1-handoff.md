@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-5a Web Blender pack manager
+
+branch `ux1/3d-web-blender-session`。TigerVNC 1.16.2とnoVNC 1.7.0を公式URL、archive size/SHA-256、
+展開root、必須file hash、licenseで固定した別packとして追加した。既存Blender operation journalを再利用し、
+明示download、Range/ETag再開、cancel、archive境界、atomic no-replace publish、実行probe、path-free status、
+Settings/WS/standalone/`mf.sh blender web-install`を実装した。版は0.28.2。
+
+隔離data rootの実Uvicornで公式15,769,716 Bを6.153秒で導入し、283 files / 37,539,247 B、staging 0。
+Xvncを1280x720 software displayとしてloopback限定で起動し、RFB 3.8 banner 2.207 ms、停止後process 0。
+実Chrome/packaged Chromeはready・両license・15.0 MBを表示し、320px client/scroll 320、browser error 0。
+bundleは31,447,404 B / SHA-256
+`04d28d0293dc249d1c2dc42e328d2ccf379d7ed184782d334dd0f37328f16759`、doctorは0.28.2 / packaged=true、
+fullは928 passed / 1 warning / 82.35秒。
+
+session runner、Blender GUI保存、RFB gateway/noVNC、再接続・idle・disable/revocation、実ControlDeck
+opaque iframe、GPU GUIは **NOT IMPLEMENTED / NOT TESTED**。ControlDeckは変更0。PR/merge後は
+別sliceの3DS-5b session runnerへ進む。
+
 ## 2026-09-06 3DS-4c browser backup / restore UI
 
 PR #230、branch `ux1/3d-scene-backup-ui`、実装commit `de0cd4e`。3DS-4c private transportを使い、選択sceneのbackupを512 KiBずつ

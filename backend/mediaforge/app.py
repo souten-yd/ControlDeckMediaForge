@@ -51,6 +51,7 @@ from .asset_brief import (
 from .blender_runtime import BlenderRuntimeRegistryError, BlenderRuntimeResolver
 from .blender_manager import BlenderRuntimeManager
 from .blender_operation import BlenderRuntimeOperationError
+from .blender_web import BlenderWebPack
 from .config import Settings
 from .custom_models import DEFAULT_MODEL_SOURCE, MODEL_SOURCES, CustomModelCatalog, CustomModelError
 from .composer import (
@@ -201,6 +202,7 @@ def create_app(
     blender_download_transport: httpx.AsyncBaseTransport | None = None,
     blender_manifest_path: Path | None = None,
     blender_catalog_path: Path | None = None,
+    blender_web_manifest_path: Path | None = None,
     blender_preflight_script: Path | None = None,
 ) -> FastAPI:
     resolved = settings or Settings.from_env()
@@ -212,6 +214,9 @@ def create_app(
         trusted_blender_catalog = REPOSITORY_ROOT / "config/blender-runtime-catalog.json"
     trusted_blender_preflight = blender_preflight_script or (
         REPOSITORY_ROOT / "worker_packs/blender/preflight.py"
+    )
+    trusted_blender_web_manifest = blender_web_manifest_path or (
+        REPOSITORY_ROOT / "config/blender-web-runtime.json"
     )
     store = Store(resolved.data_dir)
     scenes = SceneCatalog(store)
@@ -263,6 +268,11 @@ def create_app(
         preflight_script=trusted_blender_preflight,
         download_root=resolved.blender_download_root,
         catalog_path=trusted_blender_catalog,
+        web_pack=BlenderWebPack(
+            trusted_blender_web_manifest,
+            resolved.blender_web_runtime_root,
+        ),
+        web_download_root=resolved.blender_web_download_root,
         transport=blender_download_transport,
     )
 
@@ -2256,9 +2266,16 @@ def create_app(
                 "management_reason": exc.code,
                 "catalog": None,
             }
+        runtime_status = blender_runtimes.status()
+        web_status = blender_runtime_operations.web_status()
+        fingerprint = hashlib.sha256(json.dumps({
+            "runtime": blender_runtimes.fingerprint(),
+            "web": web_status.get("fingerprint"),
+        }, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
         return {
-            **blender_runtimes.status(),
-            "fingerprint": blender_runtimes.fingerprint(),
+            **runtime_status,
+            "web_pack": web_status,
+            "fingerprint": fingerprint,
             **management,
             "operations": [
                 item.model_dump(mode="json")
@@ -3173,6 +3190,10 @@ def create_app(
                         if params:
                             raise ValueError("Blender install accepts no client-selected source")
                         result = blender_runtime_operations.install().model_dump(mode="json")
+                    elif method == "blender.web.install":
+                        if params:
+                            raise ValueError("Blender web pack install accepts no client-selected source")
+                        result = blender_runtime_operations.install_web().model_dump(mode="json")
                     elif method == "blender.runtime.update":
                         if params:
                             raise ValueError("Blender update accepts no client-selected source")
@@ -3712,6 +3733,8 @@ def create_app(
         try:
             if payload == {"action": "install"}:
                 return blender_runtime_operations.install().model_dump(mode="json")
+            if payload == {"action": "web_install"}:
+                return blender_runtime_operations.install_web().model_dump(mode="json")
             if payload == {"action": "update"}:
                 return blender_runtime_operations.update().model_dump(mode="json")
             if set(payload) == {"action", "runtime_id"} and payload["action"] == "repair":

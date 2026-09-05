@@ -48,6 +48,8 @@ class Settings:
     blender_managed_runtime_root: Path | None = None
     blender_runtime_registry: Path | None = None
     blender_download_root: Path | None = None
+    blender_web_runtime_root: Path | None = None
+    blender_web_download_root: Path | None = None
     native_media_runtime_root: Path | None = None
     wan_runtime_python: Path | None = None
     wan_source_root: Path | None = None
@@ -108,6 +110,14 @@ class Settings:
             self.data_dir / "runtime-state/blender-downloads"
         )
         object.__setattr__(self, "blender_download_root", blender_download.resolve())
+        blender_web_runtime = self.blender_web_runtime_root or (
+            self.data_dir / "runtimes/blender-web"
+        )
+        object.__setattr__(self, "blender_web_runtime_root", blender_web_runtime.resolve())
+        blender_web_download = self.blender_web_download_root or (
+            self.data_dir / "runtime-state/blender-web-downloads"
+        )
+        object.__setattr__(self, "blender_web_download_root", blender_web_download.resolve())
         native_runtime = self.native_media_runtime_root or (
             self.data_dir.parent / "runtimes" / "stable-diffusion-cpp-97d2990"
         )
@@ -228,6 +238,10 @@ class Settings:
             if "MEDIA_FORGE_BLENDER_REGISTRY" in os.environ else None,
             blender_download_root=Path(os.environ["MEDIA_FORGE_BLENDER_DOWNLOAD_ROOT"])
             if "MEDIA_FORGE_BLENDER_DOWNLOAD_ROOT" in os.environ else None,
+            blender_web_runtime_root=Path(os.environ["MEDIA_FORGE_BLENDER_WEB_ROOT"])
+            if "MEDIA_FORGE_BLENDER_WEB_ROOT" in os.environ else None,
+            blender_web_download_root=Path(os.environ["MEDIA_FORGE_BLENDER_WEB_DOWNLOAD_ROOT"])
+            if "MEDIA_FORGE_BLENDER_WEB_DOWNLOAD_ROOT" in os.environ else None,
             native_media_runtime_root=Path(os.environ["MEDIA_FORGE_NATIVE_RUNTIME_ROOT"])
             if "MEDIA_FORGE_NATIVE_RUNTIME_ROOT" in os.environ else None,
             wan_runtime_python=Path(os.environ["MEDIA_FORGE_WAN_RUNTIME_PYTHON"])

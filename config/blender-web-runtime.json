@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "pack_id": "blender-web-1.0.0-linux-x64",
+  "version": "1.0.0",
+  "platform": "linux-x86_64",
+  "components": [
+    {
+      "id": "tigervnc",
+      "version": "1.16.2",
+      "archive_name": "tigervnc-1.16.2.x86_64.tar.gz",
+      "archive_url": "https://sourceforge.net/projects/tigervnc/files/stable/1.16.2/tigervnc-1.16.2.x86_64.tar.gz/download",
+      "archive_size_bytes": 15042988,
+      "archive_sha256": "5b70c84baefc09a030cfc78315c34ccb55b2a0dde4092b7da67a1962c5f0dea6",
+      "top_level_directory": "tigervnc-1.16.2.x86_64",
+      "license": "GPL-2.0-or-later",
+      "source_url": "https://github.com/TigerVNC/tigervnc/tree/v1.16.2"
+    },
+    {
+      "id": "novnc",
+      "version": "1.7.0",
+      "archive_name": "novnc-v1.7.0.tar.gz",
+      "archive_url": "https://github.com/novnc/noVNC/archive/refs/tags/v1.7.0.tar.gz",
+      "archive_size_bytes": 726728,
+      "archive_sha256": "b1003a11b6e6e8d8f7f5e5586daae7f8ca651d8aee0aa155ff9ac841c48f52c6",
+      "top_level_directory": "noVNC-1.7.0",
+      "license": "MPL-2.0",
+      "source_url": "https://github.com/novnc/noVNC/tree/63107bd06d9e1f6136ff21aeda8cd62cbf0d433e"
+    }
+  ],
+  "required_files": [
+    {
+      "path": "tigervnc/usr/bin/Xvnc",
+      "sha256": "3ebf20e36acf2611e67d8452b4ad6378116949cabc7360e846c18331d25cc08b",
+      "executable": true
+    },
+    {
+      "path": "tigervnc/usr/bin/vncpasswd",
+      "sha256": "b26021211ac01bc3d54301b303578f2db791ed2c9a4e62de2d2cf43f4c14107c",
+      "executable": true
+    },
+    {
+      "path": "tigervnc/usr/share/doc/tigervnc/LICENCE.TXT",
+      "sha256": "8cc6276097add7337b4f26de0a7efec1cbf827f1d23a0d1fdc24434b176e1094",
+      "executable": false
+    },
+    {
+      "path": "novnc/core/rfb.js",
+      "sha256": "c46dfefbf869eda0c6d06c5dd86c42e96fc8a77c125e91599a2cdf3841261564",
+      "executable": false
+    },
+    {
+      "path": "novnc/core/websock.js",
+      "sha256": "d1a96fc1316eaab9badcba9b0f1a7a55d748a4d4d26dc0263cc179dba2131cf4",
+      "executable": false
+    },
+    {
+      "path": "novnc/package.json",
+      "sha256": "f8c225592d43c9a63e1ed4cb1ba8e9abee222ad7da9f1108f43f556a6c9db5e7",
+      "executable": false
+    },
+    {
+      "path": "novnc/LICENSE.txt",
+      "sha256": "3ccd2242d7f5b6c5ae831a486f63cce1f18d8cd11c511f6a7a7251673763b2d1",
+      "executable": false
+    }
+  ]
+}

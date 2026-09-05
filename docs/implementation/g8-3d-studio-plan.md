@@ -1,6 +1,6 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: 3DS-0〜4 source/package VERIFIED / 次は3DS-5 Web Blender
+Status: 3DS-0〜4・3DS-5a source/package VERIFIED / 次は3DS-5b session runner
 Date: 2026-09-05  
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
@@ -16,8 +16,8 @@ G9生成3Dモデル採用とは分離し、画像生成モデルの変更やSoni
 [`3ds-compatibility.md`](3ds-compatibility.md) に固定した。
 3DS-1は同表へruntime resolver、legacy登録、設定診断、G8同一hashの実測を追記した。
 scene/revision/working copyへ進んだ。3DS-4a persistence、3DS-4b core/transport/browser UI、3DS-4c
-exact backup core/private transport/browser UIまで完了した。installed ControlDeck opaque iframeでの
-再確認は3DS-8 release acceptanceへ残し、次は3DS-5 Web Blenderへ進む。
+exact backup core/private transport/browser UI、3DS-5a Web操作pack管理まで完了した。installed
+ControlDeck opaque iframeでの再確認は3DS-8 release acceptanceへ残し、次は3DS-5b session runnerへ進む。
 
 | 項目 | 調査で確認した現状 | 追加するもの |
 |---|---|---|
@@ -49,7 +49,8 @@ exact backup core/private transport/browser UIまで完了した。installed Con
 一つのフェーズが大きければ機能と失敗経路を保つ小PRへ分ける。
 3DS-0→3DS-1と3DS-2のdurable install/cancel/restart、side-by-side更新/切替/修復、
 参照保護付き削除とCLI共通化、3DS-3 Library GLB viewer、3DS-4 scene/revision/working copyと
-exact backup/restoreは完了した。次は3DS-5 Web Blenderへ進む。
+exact backup/restoreとWeb操作packの固定・導入・実display probeは完了した。次は3DS-5bで
+session runner、Blender GUI、保存・終了を実装する。
 
 ## 3. PRスライスの候補
 

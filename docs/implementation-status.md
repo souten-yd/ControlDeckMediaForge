@@ -8507,3 +8507,32 @@ warning 1件 / 83.09秒。稼働ControlDeckは0.28.0 / healthyであることを
 sessionの一時copyはloginへ遷移し、0.28.1をinstalled状態にしていないため実ControlDeck opaque iframeは
 **NOT TESTED**。一時profileはtrashへ退避し、ControlDeck source/service/installed filesは変更0。
 3DS-4のsource/package経路を完了し、次は3DS-5 Web Blender、installed release通し受入は3DS-8で行う。
+
+## 2026-09-06 — 3DS-5a Web Blender pack manager
+
+TigerVNC 1.16.2とnoVNC 1.7.0を基本Blenderと別のimmutable Web操作packとして追加した。公式HTTPS URL、
+archive byte数/SHA-256、展開root、必須7 fileのSHA-256と実行bit、GPL-2.0-or-later/MPL-2.0を
+strict manifestへ固定した。既存Blender operation journalでpreflight→download→verify→install→probe→ready、
+Range/ETag再開、cancel、staging回収を扱う。archiveは256 MiB展開量/4,096 member上限、path脱出、重複、
+symlink/device/FIFOを拒否し、候補のXvnc/vncpasswd/noVNC版を実probeしてからno-replace publishする。
+private browser/CLI入力は`web_install`だけで、URL/path/version/commandを受けない。公開契約変更0、版は0.28.2。
+
+隔離data rootの実Uvicorn `127.0.0.1:9177`から公式archive合計15,769,716 Bをdownloadし、operation
+`blenderop_3965d2bda58a4705bfefc69166d1aed0`は6.153秒でready。TigerVNCは165 member /
+35,067,968展開B、noVNCは244 member / 2,471,032展開B。pack実体は283 files / 37,539,247 B、
+staging entry 0、必須Xvnc/rfb.js hashはmanifestと一致した。実Xvncを1280x720 / 24-bit / security noneで
+loopback限定起動し、IPv4 `127.0.0.1`とIPv6 `::1`だけがlisten、RFB 3.8 bannerは2.207 ms、停止後process 0。
+
+実Chrome Settingsは「利用できます（ソフトウェア表示）」、TigerVNC/noVNCの版・license・15.0 MBを表示。
+mobile emulationはinner/client/scroll widthすべて320、install button非表示、browser error 0。
+`./mf.sh bundle build 0.28.2`のartifactは31,447,404 B / SHA-256
+`04d28d0293dc249d1c2dc42e328d2ccf379d7ed184782d334dd0f37328f16759`、展開binary doctorは
+`ok / 0.28.2 / packaged=true`。packaged実process `127.0.0.1:9178`もhealth healthy、Web pack ready、
+status path token 0、同じ320px/browser error 0。focused 172件とexact headの`./mf.sh test`は
+928 passed / 既知Starlette warning 1件 / 82.35秒。
+
+fixtureでは16 B partialでcancel後staging/destination 0、再起動後fresh retry ready、archive hash改ざん・
+traversal・link・duplicate拒否を確認した。実session runner、Blender GUI保存、RFB gateway/noVNC接続、
+再接続、idle/disable/revocation、実ControlDeck opaque iframe、GPU GUIは **NOT IMPLEMENTED / NOT TESTED**。
+このXvnc起動はsoftware display/package互換性の証拠だけである。ControlDeck source/service/installed filesは変更0。
+次は別PRの3DS-5b session runner。
