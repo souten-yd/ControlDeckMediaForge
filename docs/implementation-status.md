@@ -8054,3 +8054,29 @@ AGENTSの古いmobile=companion指示は現行addon.jsonのembeddedへ合わせ�
 addon.json・release version・OS/runtime・他リポジトリはこのMediaForge PRでは変更しない。
 新規3DS機能: NOT IMPLEMENTED。unit/integration/GPU/Blender/browser/release実機受入: NOT TESTED。
 次: 現行mainと対象機を再確認する3DS-0、その後3DS-1を独立PRで実装。
+
+
+## 2026-09-05 — 3DS-0 current-state / compatibility baseline
+
+PR #213はmerge commit `9469d8e4e4980752082f5081da7ba6e95d184622`でmainへ入った。
+3DS-0では `tests/fixtures/3ds-baseline-contract.json` と
+`tests/test_3d_studio_baseline.py` に、既存Add-on identity/mobile、Agent/workflow contribution、
+public job operation/Asset MIME、G8 profile/package/runtimeを加法的互換性の基準として固定した。
+対象状態とCHECK-01〜08は `docs/implementation/3ds-compatibility.md` に記録した。
+
+実機のsource runtimeはBlender 4.5.9 / Python 3.11.11、background・GLTF import/export probeが
+すべてtrue。一時data rootと実Uvicorn `127.0.0.1:9164`へ796 Bのcube GLBをHTTP importし、
+実Blenderによる `asset.pack + 3d.project.glb` を2回実行した。両jobはsucceeded、44,292 BのZIPは
+SHA-256 `c78ef18d6c4da0334a9e3e2c451519d4b9bd2541ead1022cfa3979b0ef3a468b`でbyte-identical、
+2回目は受付から終端まで1,055 ms。entryは固定3件、終了後work entry 0 / Blender child 0。
+
+ControlDeck管理版は `current -> versions/0.27.0`、systemd PID 1241393、9130でhealthy / contract 2.0。
+live capabilityは画像を`available / local / measured / local_only`とし、live storeの最新画像Assetは
+704x1472 PNG / 7,262 B。一方G8は`unavailable / runtime_not_installed`で、bundle外runtimeをinstalled
+serviceから解決する3DS-1の実ギャップを確認した。新規画像GPU jobとbrowser操作は **NOT TESTED**。
+Web Blender、scene/revision、viewer、材質、OpenCode制作、setup/update/repair/removeは
+**NOT IMPLEMENTED / NOT TESTED**。3DS-0の証拠をこれらへ読み替えない。
+
+最終gateはfocused 176件、`./mf.sh test` 851件がPASS（既知Starlette warning 1件 / 62.14秒）。
+Python compileall、frontend JavaScript構文、shell構文、変更Markdownの相対link、
+`git diff --check`もPASSした。
