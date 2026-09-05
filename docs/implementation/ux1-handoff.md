@@ -5,13 +5,14 @@
 
 ## 2026-09-05 3DS-2b side-by-side update / switch / repair
 
+PR #217、実装commit `5d19897af20aabb18f218fed1ff5891e93973c79`。
 `ux1/3d-runtime-update`でofficial catalogへ4.5.13を追加し、4.5.9をG8互換版として残す
 side-by-side更新、probe後のactive切替、検証済み版への明示切替、同一版のatomic修復を実装した。
 正規4.5.13 archive 378,033,952 Bを取得し、更新54.507秒、実probe 4.5.13 / Python 3.11.15 / GLTF
 import/export true。active 4.5.13でもG8は4.5.9を解決し、実HTTP jobのZIPは44,292 B / baseline同一hash。
 実executable欠損からの修復は20.091秒で同一hashへ復元。Chrome更新操作、日英、320 pxもPASS。
-full gateは875件、packaged serveでも4.5.9/4.5.13 catalogを確認。最終commit/PRはこのsliceを
-閉じる際に追記する。次は3DS-2c参照保護付きremoveとCLI共通化。
+full gateは875件、packaged serveでも4.5.9/4.5.13 catalogを確認。次は3DS-2c参照保護付き
+removeとCLI共通化。
 実ControlDeck opaque iframe、公開release、GPU Blender、Web Blender以降は **NOT TESTED**。
 
 ## 2026-09-05 3DS-2a durable Blender install / cancel / restart

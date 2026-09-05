@@ -8148,6 +8148,7 @@ update/switch/repair/remove、公開release、installed Host browser、GPU Blend
 
 ## 2026-09-05 — 3DS-2b side-by-side Blender update / switch / repair
 
+PR #217、実装commit `5d19897af20aabb18f218fed1ff5891e93973c79`。
 official Blender 4.5 LTS catalogへ4.5.13をexact entryとして追加した。archiveは
 378,033,952 B、SHA-256
 `da4e69b06b75b9e642d106496c50e7e240218b411d2f6e18271c1d1d819cef91`、取得元は
