@@ -160,10 +160,11 @@ class SceneCatalog:
         revision: SceneRevisionInput,
         tags: list[str] | None = None,
         collection: str | None = None,
+        scene_id: str | None = None,
     ) -> tuple[SceneDocument, SceneRevision]:
         owner = self._owner(owner)
         now = _utc_now()
-        scene_id = f"scene_{uuid.uuid4().hex}"
+        scene_id = scene_id or f"scene_{uuid.uuid4().hex}"
         revision_record = SceneRevision(
             id=f"revision_{uuid.uuid4().hex}",
             scene_id=scene_id,

@@ -142,6 +142,7 @@ class SceneWorkspace:
         self.process_timeout_sec = process_timeout_sec
         self._guard = threading.RLock()
         self._uploads: dict[str, _Upload] = {}
+        self._recovery_forks: set[str] = set()
 
     def initialize(self) -> None:
         for root in (
@@ -630,6 +631,101 @@ class SceneWorkspace:
             if isinstance(exc, SceneError):
                 raise
             raise SceneError("scene_recovery_failed", "recovery candidate could not be opened") from exc
+
+    async def fork_recovery(
+        self, owner: str, scene_id: str, recovery_working_id: str
+    ) -> dict[str, Any]:
+        """Validate a recovery snapshot into a separate scene without rebasing its head."""
+        owner = validate_scene_owner(owner)
+        candidate = self.store.get_scene_working_copy(owner, recovery_working_id)
+        if candidate.scene_id != scene_id:
+            raise SceneError("scene_recovery_unavailable", "recovery candidate is unavailable")
+        document, revisions = self.catalog.get(owner, scene_id)
+        recovered_id = f"scene_{uuid.uuid5(uuid.NAMESPACE_URL, 'media-forge:recovery:' + candidate.id).hex}"
+        # Stable identity survives response loss and core restart. Owner checks precede lookup.
+        try:
+            recovered, recovered_revisions = self.catalog.get(owner, recovered_id)
+        except SceneError as exc:
+            if exc.code != "scene_not_found":
+                raise
+        else:
+            return self._scene_projection(
+                recovered, next(item for item in recovered_revisions if item.id == recovered.current_revision_id)
+            )
+        if candidate.state != "recovery":
+            raise SceneError("scene_recovery_unavailable", "recovery candidate is unavailable")
+        base = next(item for item in revisions if item.id == candidate.base_revision_id)
+        with self._guard:
+            if candidate.id in self._recovery_forks:
+                raise SceneError("scene_recovery_busy", "recovery candidate is already being validated")
+            self._recovery_forks.add(candidate.id)
+        root = contained(self.validation_root, self.validation_root / f"recovery_{uuid.uuid4().hex}")
+        registered: list[str] = []
+        job_id: str | None = None
+        committed = False
+        preview: Path | None = None
+        try:
+            source_root = contained(self.working_root, self.working_root / candidate.id)
+            raw_source = source_root / "scene.blend"
+            source = contained(source_root, raw_source)
+            if raw_source.is_symlink() or not source.is_file() or not 1 <= source.stat().st_size <= MAX_BLEND_BYTES:
+                raise SceneError("scene_recovery_missing", "recovery candidate bytes are unavailable")
+            root.mkdir(mode=0o700)
+            snapshot = root / "scene.blend"
+            digest = self._sha256(source)
+            shutil.copyfile(source, snapshot)
+            snapshot.chmod(0o600)
+            if self._sha256(snapshot) != digest or self._sha256(source) != digest:
+                raise SceneError("scene_recovery_changed", "recovery candidate identity changed")
+            with self.resolver.runtime_reference(candidate.runtime_id) as runtime:
+                if runtime is None or runtime.version != candidate.runtime_version:
+                    raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
+                for dependency in base.dependencies:
+                    dependency_path = self.store.asset_path(dependency.asset_id)
+                    if not dependency_path.is_file() or self._sha256(dependency_path) != dependency.sha256:
+                        raise SceneError("scene_dependency_changed", "recovery dependency bytes changed")
+                job = self.store.create_job(JobRequest(operation="media.inspect", intent="Recover Blender scene as a separate scene"))
+                job_id = job.id
+                self.store.update_job(job_id, status=JobStatus.RUNNING, phase="validating", progress=0.2)
+                preview, blender_facts, glb_facts = await self._validate(snapshot, runtime)
+                source_asset, preview_asset = self._register_assets(
+                    job_id, snapshot, preview, runtime, blender_facts, glb_facts,
+                    parent_revision=base, dependencies=base.dependencies,
+                    operation="scene.recovery.fork",
+                    parameters={"source_scene_id": scene_id, "source_revision_id": base.id,
+                                "recovery_working_id": candidate.id, "recovery_sha256": digest},
+                )
+                registered.extend([source_asset.id, preview_asset.id])
+                recovered, revision = self.catalog.create(
+                    owner, name=f"{document.name[:109]} (Recovery)",
+                    tags=document.tags, collection=document.collection, scene_id=recovered_id,
+                    revision=SceneRevisionInput(
+                        source_asset_id=source_asset.id, preview_asset_id=preview_asset.id,
+                        dependencies=base.dependencies, runtime_id=runtime.runtime_id,
+                        runtime_version=runtime.version, validation=self._validation(blender_facts, glb_facts),
+                    ),
+                )
+                committed = True
+                self.store.update_job(job_id, status=JobStatus.SUCCEEDED, progress=1, asset_ids=registered)
+                return self._scene_projection(recovered, revision)
+        except (Exception, asyncio.CancelledError) as exc:
+            if not committed:
+                self._rollback_assets(registered)
+            if job_id is not None and not committed:
+                self.store.update_job(
+                    job_id, status=JobStatus.CANCELED if isinstance(exc, asyncio.CancelledError) else JobStatus.FAILED,
+                    error=ErrorDetail(code=getattr(exc, "code", "scene_recovery_failed"), message="Recovery validation did not complete"),
+                )
+            if isinstance(exc, (SceneError, asyncio.CancelledError)):
+                raise
+            raise SceneError("scene_recovery_failed", "recovery validation did not complete") from exc
+        finally:
+            with self._guard:
+                self._recovery_forks.discard(candidate.id)
+            if preview is not None and preview.exists():
+                contained(self.validation_root, preview).unlink()
+            if root.exists():
+                self._remove_tree(root, self.validation_root)
 
     def retire_recovery_working_copy(self, owner: str, working_id: str) -> None:
         """Retire and remove a candidate only after its replacement revision committed."""
@@ -1565,6 +1661,7 @@ class SceneWorkspace:
                 "scene.material.bind": "Apply scene material binding",
                 "scene.recipe.create": "Create a Blender scene from a typed recipe",
                 "scene.recipe.edit": "Edit a Blender scene with a typed recipe",
+                "scene.recovery.fork": "Recover retained Blender bytes as a separate scene",
             }.get(
                 operation,
                 "Import Blender scene" if parent_revision is None else "Commit Blender scene revision",
@@ -1576,7 +1673,7 @@ class SceneWorkspace:
                 "generated-local"
                 if operation == "scene.recipe.create"
                 else "derived"
-                if operation in {"scene.recipe.edit", "scene.material.bind"}
+                if operation in {"scene.recipe.edit", "scene.material.bind", "scene.recovery.fork"}
                 else "user-provided"
             ),
             runtime_adapter=(

@@ -729,6 +729,12 @@ The new GUI and authoring paths are planned additions; the existing deterministi
 contract stays unchanged. Shared product/data management does not imply shared core/Blender/ML
 execution environments. Generative 3D model adoption remains a separate experimental G9 gate.
 
+Conflict recovery never rebases unsaved bytes onto a newer scene head. An explicit recovery-fork
+operation validates a retained candidate with its pinned Blender and creates a separate scene,
+preserving the original head, candidate bytes, dependencies and source-revision asset lineage.
+Repeated requests for the same candidate return the same recovered scene; they do not create
+duplicate branches or silently adopt the recovery into the original scene.
+
 Blender should be treated as a deterministic asset compiler/toolchain, not merely a GUI application controlled by an agent.
 
 Stable Blender operations may include:

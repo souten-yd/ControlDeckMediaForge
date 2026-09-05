@@ -54,6 +54,13 @@ working `.blend`は`data/scenes/working`配下の専用directoryにcopyし、rea
 commitはlockと`base_revision_id == current_revision_id`を同じtransactionで再検証する。
 競合時はcurrentを上書きせず、working/recoveryを保持して明示エラーにする。
 
+競合候補には「復旧内容を別シーンとして保存」を明示提供する。private workspaceの
+`scenes.recovery.fork(scene_id, recovery_working_id)`はownerを照合し、candidateのsnapshotを
+pinned runtimeと独立GLB検査に通して別SceneDocumentの初版へ確定する。新assetのlineageと
+provenanceへ元版/source asset・scene ID・candidate ID・入力hashを保持し、元版の依存も継承する。
+元シーンのheadとcandidate bytes/stateは変更しない。同candidateの再送は同じ分岐sceneを返す。
+失敗時は正式sceneを追加せずcandidateを保持する。これは既存scene headへのrebaseではない。
+
 backupは`media-forge.scene-backup@1`のZIPとし、entry順を`manifest.json`、revision番号順の
 `revisions/<revision-id>/scene.blend`、`preview.glb`、依存Asset blobに固定する。manifestは全entryの
 size/SHA-256、document/revision/runtime/dependency情報を持つ。restoreはmember数、合計展開量、

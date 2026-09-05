@@ -414,6 +414,16 @@ or aliases the old source/preview Asset as the new output. This remains excluded
 from OpenAPI and the public mutation tools. The Agent snapshot tool can inspect
 the resulting immutable current revision but cannot invoke restore.
 
+Private `scenes.recovery.fork` accepts only `scene_id` and `recovery_working_id`.
+Its standalone mirror is `POST /workspace-api/scenes/{scene_id}/recovery/fork`,
+with only `recovery_working_id` in the body. It returns `{scene, revision}` for
+a separate, validated scene. The retained candidate and original head remain
+unchanged, including on validation failure. Repeating a candidate returns the
+same recovered scene; owner checks apply before lookup. The original revision,
+candidate hash and source asset lineage are in the new source provenance.
+This private operation is excluded from OpenAPI and Agent/workflow tools.
+Both workspace scene lists include owner-scoped `working_copies` for recovery UI.
+
 ### Typed 3D scene Agent and workflow tools
 
 3DS-7 adds `media.scene.create`, `media.scene.edit`, `media.scene.material`,
