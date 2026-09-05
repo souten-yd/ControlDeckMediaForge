@@ -35,21 +35,49 @@ Hostへの配置は既存output commitとreceiptを使う。生pathをAPIへ持�
 `.blend`をブラウザで直接解釈しない。外部Blender読込時はembedded scriptを自動実行しない。
 元版を保存してから新しいBlender版で開く。新しい版の保存を旧版で開けるとは保証しない。
 
+### 2.1 3DS-4で固定する保存契約
+
+`SceneDocument`は`scene_<32 hex>`、`SceneRevision`は`revision_<32 hex>`で識別する。
+documentはowner、表示名、単位（初期値1 meter）、現在採用中revisionだけを可変に保持する。
+revisionは連番、親revision、immutable `.blend` Asset、viewer用GLB Asset、入力依存AssetとそのSHA-256、
+Blender runtime ID/version、validation report、作成時刻を固定し、後から上書きしない。
+最初のrevisionも`.blend`とGLBの両方が独立検査を通るまでcurrentにしない。
+
+`.blend` AssetのMIMEは`application/x-blender`として既存Asset契約へ加法的に追加する。
+scene/revision/lock操作は3DS-4ではprivate workspaceだけに置き、Agent tool / workflow executorは
+3DS-7の互換試験まで公開しない。応答へowner文字列、DB key、runtime path、working pathを返さない。
+
+WorkingCopyは`working_<32 hex>`で識別し、scene単位のsingle-writer lock、owner、base revision、
+runtime pin、期限をDBへ保持する。lock leaseは初期10分、正規ownerだけがrenew/releaseできる。
+working `.blend`は`data/scenes/working`配下の専用directoryにcopyし、realpath containmentを毎回確認する。
+commitはlockと`base_revision_id == current_revision_id`を同じtransactionで再検証する。
+競合時はcurrentを上書きせず、working/recoveryを保持して明示エラーにする。
+
+backupは`media-forge.scene-backup@1`のZIPとし、entry順を`manifest.json`、revision番号順の
+`revisions/<revision-id>/scene.blend`、`preview.glb`、依存Asset blobに固定する。manifestは全entryの
+size/SHA-256、document/revision/runtime/dependency情報を持つ。restoreはmember数、合計展開量、
+path/link/device、重複名、manifest identityを検証し、すべてのAssetとrevisionを新しいsceneとして
+transaction commitしてからavailableにする。既存scene/Assetを上書きせず、失敗時は0件追加とする。
+
 ## 3. import/exportと検証
 
 | 対象 | 初期方針 |
 |---|---|
 | GLB入力 | 既存64MiB制限・URI禁止・構造検証を維持 |
 | 画像 | 既存import/decoderとサイズ制限。材質用にも同じassetを参照 |
-| `.blend`入力 | 新機能。隔離runnerへstageし、autoexec無効で検査。初期上限256MiB案 |
+| `.blend`入力 | 隔離runnerへstageし、autoexec無効で検査。上限256MiB |
 | GLTF+外部ファイル、FBX、OBJ、USD | 現行G8入力へ暗黙追加しない。形式別の後続受入後 |
 | 出力 | 初期GLB・PNG/WebP・既存ZIP profile。制作版として.blendも保持 |
 
-256MiB等は新形式の設計値で、既存GLB/API上限を緩める値ではない。
+256MiBは`.blend`の固定上限で、既存GLB/API上限を緩める値ではない。
 現在のworkspace JSON request 1MiB、preview 12MiB、Host一般response上限があるため、
 大型.blendはbounded chunk uploadまたはHost scoped file streamとして別設計・試験する。
 base64で一枚のWebSocket JSONへ詰めて上限を一括解除しない。
 uploadはowner、upload ID、総量、chunk checksum、offset、期限、cancelを持ち、最終hash確認後にimportする。
+3DS-4のworkspace uploadは1 chunk 512 KiB以下、同時1件、期限10分とする。commit後は固定Blender
+runtimeを`--background --factory-startup --disable-autoexec`で起動し、trusted workerだけが
+`.blend`を開いて構造を調査しviewer用GLBを書き出す。file内driver、handler、text block、startup scriptを
+自動実行せず、任意Python、任意operator、外部URI、外部libraryをブラウザ入力として受けない。
 
 検査項目: finite座標、node/triangle数、accessor範囲、外部URI、texture寸法・総画素、
 UV有無、材質slot、単位・軸・原点、animation duration、許可extension、license/provenance。
