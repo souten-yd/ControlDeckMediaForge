@@ -4,32 +4,68 @@
   "title": "Place Media Forge assets in a ControlDeck project output grant",
   "description": "Commit one immutable Media Forge asset into a ControlDeck project output grant. Request the grant immediately before placing, not before generating: generation takes tens of seconds and a grant obtained early is likely to expire. If placement fails with an expired grant, acquire a new one and retry once. Media Forge never receives or accepts a filesystem path.",
   "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "asset_id": {
+      "type": "string",
+      "pattern": "^asset_[0-9a-f]{32}$",
+      "description": "An existing Media Forge asset. Assets are immutable, so placement always commits exactly the bytes that were generated and inspected."
+    },
+    "output_grant_id": {
+      "type": "string",
+      "pattern": "^grant:[A-Za-z0-9._:-]{1,256}$",
+      "description": "Opaque grant from ControlDeck. Obtain it directly before this call."
+    },
+    "filename": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^/\\\\]+$",
+      "description": "Destination file name only, no directory separators. Choose it from the project's own conventions before requesting the grant."
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_id"
+        ],
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "pattern": "^asset_[0-9a-f]{32}$",
+            "description": "An existing Media Forge asset. Assets are immutable, so placement always commits exactly the bytes that were generated and inspected."
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[^/\\\\]+$",
+            "description": "Destination file name only, no directory separators. Choose it from the project's own conventions before requesting the grant."
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Optional label echoed back in the receipt, such as 'background'."
+          }
+        }
+      }
+    }
+  },
   "oneOf": [
     {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "asset_id",
         "output_grant_id"
       ],
-      "properties": {
-        "asset_id": {
-          "type": "string",
-          "pattern": "^asset_[0-9a-f]{32}$",
-          "description": "An existing Media Forge asset. Assets are immutable, so placement always commits exactly the bytes that were generated and inspected."
-        },
-        "output_grant_id": {
-          "type": "string",
-          "pattern": "^grant:[A-Za-z0-9._:-]{1,256}$",
-          "description": "Opaque grant from ControlDeck. Obtain it directly before this call."
-        },
-        "filename": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 255,
-          "pattern": "^[^/\\\\]+$",
-          "description": "Destination file name only, no directory separators. Choose it from the project's own conventions before requesting the grant."
-        }
+      "not": {
+        "required": [
+          "items"
+        ]
       },
       "title": "One placement"
     },
@@ -37,48 +73,23 @@
       "type": "object",
       "title": "A batch of placements under one grant",
       "description": "Place several related assets in one call. Every destination name is settled before the first byte is written, so a duplicate name or a missing asset is refused with nothing committed. The batch is NOT all-or-nothing: ControlDeck commits one file atomically, so a batch of N is N separate commits and the response reports each outcome.",
-      "additionalProperties": false,
       "required": [
         "output_grant_id",
         "items"
       ],
-      "properties": {
-        "output_grant_id": {
-          "type": "string",
-          "pattern": "^grant:[A-Za-z0-9._:-]{1,256}$",
-          "description": "Opaque grant from ControlDeck. Obtain it directly before this call."
-        },
-        "items": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 32,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
+      "not": {
+        "anyOf": [
+          {
             "required": [
               "asset_id"
-            ],
-            "properties": {
-              "asset_id": {
-                "type": "string",
-                "pattern": "^asset_[0-9a-f]{32}$",
-                "description": "An existing Media Forge asset. Assets are immutable, so placement always commits exactly the bytes that were generated and inspected."
-              },
-              "filename": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 255,
-                "pattern": "^[^/\\\\]+$",
-                "description": "Destination file name only, no directory separators. Choose it from the project's own conventions before requesting the grant."
-              },
-              "role": {
-                "type": "string",
-                "maxLength": 64,
-                "description": "Optional label echoed back in the receipt, such as 'background'."
-              }
-            }
+            ]
+          },
+          {
+            "required": [
+              "filename"
+            ]
           }
-        }
+        ]
       }
     }
   ],
