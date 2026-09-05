@@ -224,12 +224,12 @@ def store_model_capture(cache_dir: Path, asset_id: str, content: bytes) -> Thumb
         raise ThumbnailError()
     try:
         with Image.open(io.BytesIO(content)) as image:
-            image.load()
             if image.format != "WEBP" or image.width < 1 or image.height < 1:
                 raise ThumbnailError()
             if max(image.width, image.height) > MAX_MAX_SIDE:
                 raise ThumbnailError()
             width, height = image.width, image.height
+            image.load()
     except (OSError, UnidentifiedImageError, ValueError) as exc:
         raise ThumbnailError() from exc
     cache_dir.mkdir(mode=0o700, parents=True, exist_ok=True)

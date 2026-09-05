@@ -8245,7 +8245,8 @@ iframe、installed release、GPU/Cycles、Web Blender、scene/revision、viewer�
 
 ## 2026-09-05 — 3DS-3 shared Library GLB viewer
 
-Branch `ux1/3d-library-viewer`で、画像・動画・3Dを同じLibraryから媒体別に絞り込むprivate projectionと、
+PR #219、実装commit `b5a73824030b5506e409e7f6b0cc9e0a3b5c8a98`。画像・動画・3Dを同じLibraryから
+媒体別に絞り込むprivate projectionと、
 raw `model/gltf-binary` / 既存G8 `3d.project.glb` ZIPのinteractive viewerを追加した。公開schema、
 `addon.json`、Agent tool、workflow executor、画像生成routeは変更していない。Three.js 0.185.1の
 `WebGLRenderer` / `GLTFLoader` / `OrbitControls`だけをnpm lockfileからbundleし、registry integrity、

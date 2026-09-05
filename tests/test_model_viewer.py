@@ -178,6 +178,10 @@ def test_browser_capture_is_bounded_and_becomes_a_grid_thumbnail(tmp_path: Path)
     assert len(grid.content) <= thumbnails.THUMBNAIL_BYTE_LIMIT
     with pytest.raises(thumbnails.ThumbnailError):
         thumbnails.store_model_capture(cache, "asset_" + "4" * 32, b"not webp")
+    oversized = io.BytesIO()
+    Image.new("RGB", (513, 1), (10, 20, 30)).save(oversized, format="WEBP")
+    with pytest.raises(thumbnails.ThumbnailError):
+        thumbnails.store_model_capture(cache, "asset_" + "5" * 32, oversized.getvalue())
 
 
 def test_workspace_model_transport_filters_and_reclaims_staging(tmp_path: Path) -> None:

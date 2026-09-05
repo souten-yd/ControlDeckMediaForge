@@ -60,8 +60,8 @@ class ModelViewerSession:
             raise ModelViewerError("model_viewer_limit", "too many model viewer handles are open")
 
         root: Path | None = None
-        source = self.store.asset_path(asset_id)
         try:
+            source = self.store.asset_path(asset_id)
             if asset.mime_type == "application/zip":
                 root = Path(tempfile.mkdtemp(prefix="workspace-model-", dir=self.store.work_dir))
                 model = contained(root, root / "model.glb")
@@ -136,12 +136,13 @@ class ModelViewerSession:
             return self._close(handle)
 
     def _close(self, handle: str) -> bool:
-        prepared = self._models.pop(handle, None)
+        prepared = self._models.get(handle)
         if prepared is None:
             return False
         root = prepared.get("root")
         if isinstance(root, Path) and root.exists():
             shutil.rmtree(root)
+        self._models.pop(handle)
         return True
 
     def cleanup(self) -> None:

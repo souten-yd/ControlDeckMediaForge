@@ -5,7 +5,7 @@
 
 ## 2026-09-05 3DS-3 shared Library GLB viewer
 
-Branch `ux1/3d-library-viewer`。PR作成前の最終状態。
+PR #219、実装commit `b5a73824030b5506e409e7f6b0cc9e0a3b5c8a98`。
 LibraryをAll/Images/Videos/3Dの共通filterへ拡張し、raw GLBと既存G8
 `3d.project.glb` ZIPを同じinteractive viewerで表示する。Three.js 0.185.1はnpm integrity、
 source/bundle SHA-256、MIT noticeを固定し、CDNを使わず最初のモデルを開くまで読み込まない。
