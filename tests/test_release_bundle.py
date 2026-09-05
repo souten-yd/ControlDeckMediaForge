@@ -81,6 +81,17 @@ def test_bundle_build_environment_contains_no_ml_runtime_dependencies():
     assert "transformers" not in requirements
 
 
+def test_frozen_entrypoint_dispatches_only_the_exact_core_fake_worker(monkeypatch):
+    from mediaforge.workers import fake
+    from scripts import bundle_entrypoint
+
+    monkeypatch.setattr(fake, "main", lambda: 17)
+    monkeypatch.setattr(bundle_entrypoint.sys, "argv", ["mediaforge-core", "-m", "mediaforge.workers.fake"])
+    assert bundle_entrypoint._dispatch_internal_worker() == 17
+    monkeypatch.setattr(bundle_entrypoint.sys, "argv", ["mediaforge-core", "-m", "anything.else"])
+    assert bundle_entrypoint._dispatch_internal_worker() is None
+
+
 def test_bundle_ships_what_the_worker_imports():
     """Worker-owned repository packages must be explicit bundle data."""
     import ast

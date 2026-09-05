@@ -80,6 +80,10 @@
         },
         "asset_brief": {
           "$ref": "#/$defs/assetBrief"
+        },
+        "scene_texture": {
+          "$ref": "scene-texture-request.json",
+          "description": "Durable 3D Studio return context for an image.generate job. It does not grant scene mutation authority; applying the resulting immutable image still requires MaterialBinding against the current revision."
         }
       }
     },

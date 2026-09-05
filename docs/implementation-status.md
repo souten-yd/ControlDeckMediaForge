@@ -8692,3 +8692,43 @@ passed、終了後active working/material staging 0。
 
 新しい画像生成・編集jobからの採用、前後版同時比較・旧版へのcurrent切替、実ControlDeck opaque iframeは
 **NOT IMPLEMENTED / NOT TESTED**。次は別sliceの3DS-6b texture generation orchestration。
+
+## 2026-09-06 — 3DS-6b texture generation orchestration
+
+branch `ux1/3d-texture-generation`。既存durable `image.generate`の`constraints.scene_texture`へ
+`media-forge.scene-texture-request@1`を加法追加し、scene ID、source revision、object、material slot、channel、
+UV mapを厳格検証する。これは`image.generate`だけに許可し、scene変更権限や別queue/GPU schedulerは持たない。
+成功物は通常のimmutable Library Assetとprovenanceになり、job成功時点ではsceneを変更しない。3D Studioは
+通常Createとは別にreload後のjobを復元し、cancel、同一durable contextでretry、bounded preview、明示選択を
+扱う。その後既存MaterialBindingの「新しい版を保存」を押した場合だけ新revisionへcommitする。
+`disable.pending`は実行中texture jobをcancelする。版は0.28.7。
+
+隔離data rootのsource Uvicorn、決定的image worker、実Blender 4.5.9、実Chromeで、生成中reload後もjobを
+復元してcancelし、同一文脈のretryを成功させた。job IDはcanceled
+`job_02adb3d5c09c493ca07767adcd83ee69`、succeeded `job_901321690c4d4a8c9b670a176479d807`。
+生成PNGは1,024x1,024 / 23,489 B / SHA-256
+`bc5228bec807cab277aa591bce8c746c5c6313fd3708c7c4287db13744f1823a`。明示選択とMaterialBinding commitで
+revision 1→2、dependency 1、最終`.blend` 459,632 B / SHA-256
+`61b25bb9f20b3bfc62a4d270a4aa34aa9ca9c1e6319e0eb87d4aad367757fabf`、external images 0、GLB
+18,600 B / SHA-256 `cc354349853152769a41aa3452321f51da35c4af65047d85f841c9771bb19405` / textures 1。
+Blender/GLB validator passed、日英切替、390x844 overflow 0、console/page error 0。実測中にimport完了後controlsの
+再描画漏れ、reload後poll再接続漏れ、reload後retryのform依存、選択後binding context復元漏れ、390px header
+overflow 14pxを検出して修正した。
+
+最初のexact package実測ではfrozen executableがfake worker childの`-m mediaforge.workers.fake`をCLI引数として
+処理してexit 2となる不具合を検出した。許可argvを完全一致させたinternal dispatchとrelease regression testを
+追加後に再構築した。最終`./mf.sh test`は960 passed / 既知Starlette warning 1件 / 94.96秒。
+0.28.7 exact bundleは31,565,375 B / SHA-256
+`653caa562b7f86d4f27577927f1949fac03c59f0035eb9477546323ed9c83423`、展開binary doctorは
+`ok / 0.28.7 / packaged=true`。最終exact packageの実Chromeでもreload→cancel→retry→preview→選択→commitを
+再実行し、revision 1→2、同じ23,489 B PNG、dependency 1、`.blend` 459,632 B / SHA-256
+`9665cbf1100455b73b3ed36d8a5720d428bceb18ea4b03bb3c5a11e8629ab1`、external images 0、同じ18,600 B
+GLB / textures 1、両validator passed、390px overflow 0、console/page error 0。
+
+exact sourceからavailable R9700へstandaloneで同じ型付き要求を送ると37 msで`host_lease_required`となり、
+ControlDeck broker外GPU実行をfail-closedにした。ControlDeckはread-onlyでcommit
+`34bda2f14c2c00e4ead8251bf30d830b2e3bf7a5`、既存dirty `frontend/tsconfig.tsbuildinfo`だけ、installed
+0.28.0 / PID 1827940 / health healthy（R9700 gfx1201 / torch 2.10.0+rocm7.2.1 / HIP 7.2）。保存済み
+browser認証が失効して`/login`へ戻ったため、資格情報を迂回せずHost-managed R9700生成と実opaque iframeは
+**NOT TESTED**。前後版比較と旧版からのcurrent復元も **NOT IMPLEMENTED / NOT TESTED**。次は別sliceの
+3DS-6c revision compare/restoreで3DS-6 exit条件を閉じる。

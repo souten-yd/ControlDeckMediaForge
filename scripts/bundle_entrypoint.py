@@ -20,6 +20,22 @@ RUNTIME_REQUIRED_FREE_BYTES = 8_589_934_592
 MODEL_REQUIRED_FREE_BYTES = 21_474_836_480
 
 
+def _dispatch_internal_worker() -> int | None:
+    """Run the one core-owned worker when this executable is its frozen Python.
+
+    Source installs launch ``sys.executable -m mediaforge.workers.fake``. In a
+    PyInstaller build ``sys.executable`` is this CLI, not a general Python
+    interpreter, so accepting only this exact internal module preserves that
+    process boundary without turning the packaged CLI into an arbitrary module
+    runner.
+    """
+    if sys.argv[1:] != ["-m", "mediaforge.workers.fake"]:
+        return None
+    from mediaforge.workers.fake import main as fake_worker_main
+
+    return fake_worker_main()
+
+
 def _managed_path(variable: str) -> Path:
     value = os.environ.get(variable)
     if not value:
@@ -184,6 +200,9 @@ def provision() -> dict[str, object]:
 
 
 def main() -> int:
+    internal = _dispatch_internal_worker()
+    if internal is not None:
+        return internal
     parser = argparse.ArgumentParser()
     parser.add_argument("operation", choices=("doctor", "provision", "serve"))
     args = parser.parse_args()

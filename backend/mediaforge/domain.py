@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator
 
+from .material_binding import SceneTextureRequest
+
 
 class JobStatus(StrEnum):
     QUEUED = "queued"
@@ -78,6 +80,15 @@ class JobRequest(BaseModel):
             raise ValueError("video operations require mp4 or webm output")
         if not is_video and self.output.format in {"mp4", "webm"}:
             raise ValueError("mp4 and webm output are accepted only by video operations")
+        texture = self.constraints.get("scene_texture")
+        if texture is not None:
+            if self.operation != "image.generate":
+                raise ValueError("scene_texture is accepted only by image.generate")
+            parsed = SceneTextureRequest.model_validate(texture)
+            self.constraints = {
+                **self.constraints,
+                "scene_texture": parsed.model_dump(mode="json"),
+            }
         return self
 
 

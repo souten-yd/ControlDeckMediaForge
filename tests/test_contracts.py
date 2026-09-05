@@ -4,8 +4,11 @@ import json
 from pathlib import Path
 
 import jsonschema
+import pytest
+from pydantic import ValidationError
 
 from conftest import wait_terminal
+from mediaforge.domain import JobRequest
 
 
 ROOT = Path(__file__).parents[1]
@@ -31,6 +34,44 @@ def test_job_schema_does_not_require_model_id():
     schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
     assert schema["required"] == ["operation", "intent"]
     jsonschema.validate({"operation": "image.generate", "intent": "a blue robot"}, schema)
+
+
+def test_scene_texture_job_context_is_bounded_and_only_valid_for_image_generation(client):
+    schema = json.loads((ROOT / "schemas/scene-texture-request.json").read_text(encoding="utf-8"))
+    context = {
+        "schema_version": "media-forge.scene-texture-request@1",
+        "scene_id": "scene_" + "1" * 32,
+        "source_revision_id": "revision_" + "2" * 32,
+        "object_name": "Body",
+        "material_slot": 0,
+        "channel": "base_color",
+        "uv_map": "UVMap",
+    }
+    jsonschema.validate(context, schema)
+    request = JobRequest(
+        operation="image.generate",
+        intent="seamless worn green painted metal",
+        constraints={"scene_texture": context},
+    )
+    assert request.constraints["scene_texture"] == context
+    response = client.post("/api/v1/jobs", json=request.model_dump(mode="json"))
+    assert response.status_code == 202
+    finished = wait_terminal(client, response.json()["id"])
+    assert finished["status"] == "succeeded"
+    assert finished["request"]["constraints"]["scene_texture"] == context
+    assert len(finished["asset_ids"]) == 1
+    with pytest.raises(ValidationError):
+        JobRequest(
+            operation="image.generate",
+            intent="invalid",
+            constraints={"scene_texture": {**context, "material_slot": -1}},
+        )
+    with pytest.raises(ValidationError):
+        JobRequest(
+            operation="media.inspect",
+            intent="invalid",
+            constraints={"scene_texture": context},
+        )
 
 
 def test_g7_video_contract_is_additive_and_does_not_claim_a_runtime(client):
