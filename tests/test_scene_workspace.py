@@ -214,6 +214,46 @@ def test_expired_writer_becomes_recovery_and_does_not_block_new_writer(tmp_path:
     assert workspace.release_working_copy("user:1", second.id).state == "released"
 
 
+def test_recovery_open_copies_bytes_and_retires_only_after_explicit_success(tmp_path: Path) -> None:
+    store, workspace, _resolver = fake_scene_workspace(tmp_path)
+    imported = upload_scene(workspace, b"BLENDER-recovery-source")
+    scene_id = imported["scene"]["id"]
+    original = workspace.acquire_working_copy("user:1", scene_id)
+    source = workspace.working_path_for_runtime("user:1", original.id)
+    source.write_bytes(b"BLENDER-unsaved-change")
+    workspace.retain_working_copy_for_recovery("user:1", original.id)
+
+    reopened = workspace.acquire_recovery_working_copy("user:1", scene_id, original.id)
+    reopened_path = workspace.working_path_for_runtime("user:1", reopened.id)
+    assert reopened_path.read_bytes() == source.read_bytes()
+    reopened_path.write_bytes(b"BLENDER-new-session-change")
+    assert source.read_bytes() == b"BLENDER-unsaved-change"
+    assert store.get_scene_working_copy("user:1", original.id).state == "recovery"
+
+    workspace.release_working_copy("user:1", reopened.id)
+    workspace.retire_recovery_working_copy("user:1", original.id)
+    assert store.get_scene_working_copy("user:1", original.id).state == "released"
+    assert not source.parent.exists()
+
+
+def test_recovery_open_rejects_wrong_owner_and_missing_bytes(tmp_path: Path) -> None:
+    _store, workspace, _resolver = fake_scene_workspace(tmp_path)
+    imported = upload_scene(workspace, b"BLENDER-recovery-negative")
+    scene_id = imported["scene"]["id"]
+    candidate = workspace.acquire_working_copy("user:1", scene_id)
+    workspace.retain_working_copy_for_recovery("user:1", candidate.id)
+
+    with pytest.raises(SceneError) as hidden:
+        workspace.acquire_recovery_working_copy("user:2", scene_id, candidate.id)
+    assert hidden.value.code == "scene_working_not_found"
+
+    source = workspace.working_root / candidate.id / "scene.blend"
+    source.unlink()
+    with pytest.raises(SceneError) as missing:
+        workspace.acquire_recovery_working_copy("user:1", scene_id, candidate.id)
+    assert missing.value.code == "scene_recovery_missing"
+
+
 def test_working_commit_checks_lease_and_base_in_the_same_transaction(tmp_path: Path) -> None:
     store, workspace, _resolver = fake_scene_workspace(tmp_path)
     imported = upload_scene(workspace, b"BLENDER-conflict")

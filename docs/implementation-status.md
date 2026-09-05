@@ -8627,3 +8627,34 @@ unit/socket/process 0。
 
 実ControlDeck opaque iframe、10分超token rotation、Host revoke/disable、idle/crash/recovery policy、GPU/Cycles、
 packaged Chromeは **NOT TESTED**。次は別PRの3DS-5d session recovery。
+
+## 2026-09-06 — 3DS-5d session lifecycle / recovery
+
+branch `ux1/3d-session-recovery`。Blender GUIに既定300秒の切断猶予と1,800秒のcontroller idle timeoutを
+追加し、server設定はそれぞれ最大3,600秒/86,400秒へ制限した。browser input activityはmemoryで追跡し、
+durable更新を15秒にthrottleする。timeout、Blender crash、Host disable、Host credentialの15秒周期再検査失敗は
+isolated unitを停止し、session root/socketを回収してworking `.blend`を正式revisionではなくowner-scoped
+復旧候補として保持する。候補は新しいwriter leaseへbyte copyし、元候補を変えない。新sessionの保存、
+Blender/GLB検証、revision commitがすべて成功してからだけ元候補をreleasedにしてrootを削除する。
+
+standalone scene transportにもworking copy一覧を追加してembedded snapshotとの差をなくし、UIはfresh editと
+「復旧候補をBlenderで開く」を分離した。idle / disconnect / Host revoke / disableを日英で区別し、未検証候補を
+正式版と表示しない。`disable.pending`は2秒以内に返るprivate interruptを開始してからRFBを閉じる。版は0.28.5。
+
+隔離data rootのsource Uvicorn `127.0.0.1:9183`、実Blender 4.5.9/Xvncで切断猶予を2秒にして起動したsessionは、
+ready `17:52:46.906103Z`からinterrupted `17:52:52.175633Z`まで5.270秒だった。errorは
+`blender_session_disconnected_timeout`、復旧候補は515,688 B / SHA-256
+`7afe139e407c33711b12e0989cf5492ed5294580535e809509ed76b969a43ee1`。その候補から新sessionを起動して保存し、
+revision 6→7、working 515,496 B / SHA-256
+`cddc910ddfe056542990e0d669d240f1bddbbc0642da75724c215e597d270d6d`、objects 5、meshes 3、triangles 36、
+vertices 24、Blender/GLB validator passedを得た。元候補はreleasedとなりroot 0。
+
+別の実session unitをsystemd経由でSIGKILLし、`blender_session_runner_lost`と復旧候補保持を確認した。初回実測で
+Unix socket残存を検出し、failure終端の共通cleanupへ修正して再試験した結果、unit、session root、Unix socket、
+Xvnc/runner processはいずれも0。Host disable相当のprivate interruptはHTTP受付2.397 ms、stopping
+`17:57:10.985471Z`からinterrupted `17:57:11.077835Z`まで91.9 msで復旧候補を保持し、残存resource 0。
+実Chromeはdesktopで日英の復旧ボタン/理由、390x844でdesktop案内と横scroll 0、browser exception 0を確認した。
+
+focused lifecycle/recovery/frontend testは全件通過し、exact codeの`./mf.sh test`は952 passed / 既知
+Starlette warning 1件 / 91.17秒。実ControlDeck opaque iframe、10分超credential rotation、
+実Host revoke、GPU/Cycles、packaged Chromeは **NOT TESTED**。次は別PRの3DS-6 material binding。

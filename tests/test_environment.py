@@ -55,6 +55,20 @@ def test_blender_timeout_env_is_bounded_for_acceptance(monkeypatch, tmp_path):
         Settings.from_env()
 
 
+def test_blender_session_lifecycle_timeouts_are_bounded(monkeypatch, tmp_path):
+    monkeypatch.setenv("MEDIA_FORGE_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MEDIA_FORGE_BLENDER_DISCONNECT_GRACE_SEC", "45")
+    monkeypatch.setenv("MEDIA_FORGE_BLENDER_IDLE_TIMEOUT_SEC", "900")
+
+    settings = Settings.from_env()
+    assert settings.blender_disconnect_grace_sec == 45
+    assert settings.blender_idle_timeout_sec == 900
+
+    monkeypatch.setenv("MEDIA_FORGE_BLENDER_IDLE_TIMEOUT_SEC", "86401")
+    with pytest.raises(ValueError, match="Blender timeouts"):
+        Settings.from_env()
+
+
 def test_blender_runtime_paths_are_server_config_not_browser_input(monkeypatch, tmp_path):
     monkeypatch.setenv("MEDIA_FORGE_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("MEDIA_FORGE_BLENDER_LEGACY_ROOT", str(tmp_path / "legacy"))

@@ -48,6 +48,10 @@ class BlenderWebSession(BaseModel):
     web_pack_version: str = Field(pattern=r"^[0-9]+(?:\.[0-9]+){1,3}$")
     unit_id: str = Field(pattern=r"^mediaforge-blender-[0-9a-f]{32}\.service$")
     state: BlenderSessionState
+    recovery_source_id: str | None = Field(default=None, pattern=r"^working_[0-9a-f]{32}$")
+    connected_at: str | None = None
+    disconnected_at: str | None = None
+    last_activity_at: str | None = None
     error_code: str | None = Field(default=None, max_length=128)
     error_message: str | None = Field(default=None, max_length=300)
     result: dict | None = None

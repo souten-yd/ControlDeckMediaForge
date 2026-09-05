@@ -31,6 +31,8 @@ class Settings:
     # 残しつつ、同居時の生成が収まる幅を取る。
     worker_timeout_sec: float = 600.0
     blender_timeout_sec: float = 180.0
+    blender_disconnect_grace_sec: float = 300.0
+    blender_idle_timeout_sec: float = 1800.0
     control_deck_url: str = "http://127.0.0.1:8765"
     host_request_timeout_sec: float = 10.0
     host_lease_renew_sec: float = 10.0
@@ -176,13 +178,15 @@ class Settings:
         if (
             self.worker_timeout_sec <= 0
             or not 0 < self.blender_timeout_sec <= 180
+            or not 0 < self.blender_disconnect_grace_sec <= 3600
+            or not 0 < self.blender_idle_timeout_sec <= 86400
             or self.host_request_timeout_sec <= 0
             or self.host_lease_renew_sec <= 0
             or self.model_evaluation_timeout_sec <= 0
             or self.host_ai_timeout_sec <= 0
         ):
             raise ValueError(
-                "worker and host timeouts must be positive and Blender timeout must be at most 180 seconds"
+                "worker and host timeouts must be positive and Blender timeouts exceed their bounds"
             )
 
     @classmethod
@@ -194,6 +198,12 @@ class Settings:
             data_dir=data_dir.resolve(),
             worker_timeout_sec=timeout,
             blender_timeout_sec=float(os.environ.get("MEDIA_FORGE_BLENDER_TIMEOUT_SEC", "180")),
+            blender_disconnect_grace_sec=float(
+                os.environ.get("MEDIA_FORGE_BLENDER_DISCONNECT_GRACE_SEC", "300")
+            ),
+            blender_idle_timeout_sec=float(
+                os.environ.get("MEDIA_FORGE_BLENDER_IDLE_TIMEOUT_SEC", "1800")
+            ),
             control_deck_url=os.environ.get("MEDIA_FORGE_CONTROLDECK_URL", "http://127.0.0.1:8765"),
             host_request_timeout_sec=float(os.environ.get("MEDIA_FORGE_CONTROLDECK_TIMEOUT_SEC", "10")),
             host_lease_renew_sec=float(os.environ.get("MEDIA_FORGE_CONTROLDECK_RENEW_SEC", "10")),

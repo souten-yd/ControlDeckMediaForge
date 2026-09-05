@@ -4694,6 +4694,12 @@ const SCENE_TEXT = {
     blenderDialog: "Blender編集", blenderConnecting: "Blender画面へ接続しています…",
     blenderConnected: "接続しました", blenderDisconnected: "Blender画面との接続が切れました。再接続します…",
     blenderClose: "表示だけ閉じる", blenderSave: "新しい版として保存して終了", blenderDiscard: "変更を破棄して終了",
+    blenderRecover: "復旧候補をBlenderで開く",
+    blenderRecovery: "未検証の復旧候補があります。開いて確認し、保存すると新しい正式版になります。",
+    blenderIdleStopped: "操作がないため終了しました。未保存内容は復旧候補に残しました。",
+    blenderDisconnectedStopped: "切断猶予を過ぎたため終了しました。未保存内容は復旧候補に残しました。",
+    blenderRevoked: "Hostの権限が終了したため停止しました。未保存内容は復旧候補に残しました。",
+    blenderDisabled: "Add-onの停止に備えて終了しました。未保存内容は復旧候補に残しました。",
   },
   en: {
     switchLabel: "Create 3D", title: "3D Studio",
@@ -4732,6 +4738,12 @@ const SCENE_TEXT = {
     blenderDialog: "Blender editor", blenderConnecting: "Connecting to Blender…",
     blenderConnected: "Connected", blenderDisconnected: "The Blender display disconnected. Reconnecting…",
     blenderClose: "Close view only", blenderSave: "Save new revision and finish", blenderDiscard: "Discard changes and finish",
+    blenderRecover: "Open recovery candidate in Blender",
+    blenderRecovery: "An unvalidated recovery candidate is available. Review it and save to create a formal revision.",
+    blenderIdleStopped: "The idle session ended. Unsaved bytes were retained as a recovery candidate.",
+    blenderDisconnectedStopped: "The disconnected grace period ended. Unsaved bytes were retained as a recovery candidate.",
+    blenderRevoked: "Host authorization ended. Unsaved bytes were retained as a recovery candidate.",
+    blenderDisabled: "The session ended for add-on disable. Unsaved bytes were retained as a recovery candidate.",
   },
 };
 
@@ -4784,6 +4796,7 @@ function renderSceneText() {
   byId("scene-blender-close").textContent = text.blenderClose;
   byId("scene-blender-save").textContent = text.blenderSave;
   byId("scene-blender-discard").textContent = text.blenderDiscard;
+  byId("scene-blender-recover").textContent = text.blenderRecover;
   byId("scene-backup-title").textContent = text.backupTitle;
   byId("scene-restore-file-label").textContent = text.restoreFile;
   byId("scene-backup-safety").textContent = text.backupSafety;
@@ -4839,6 +4852,7 @@ async function loadScenes() {
   try {
     const result = await call("scenes.list");
     state.scenes = result.items || [];
+    state.sceneWorkingCopies = result.working_copies || [];
     renderScenes();
   } catch {
     byId("scene-list-count").textContent = sceneText().listFailed;
@@ -4894,12 +4908,21 @@ function activeBlenderSession() {
   return state.blenderSessions.find((item) => ACTIVE_BLENDER_SESSION_STATES.has(item.state)) || null;
 }
 
+function selectedRecoveryCandidate() {
+  return state.sceneWorkingCopies.find((item) => (
+    item.scene_id === state.selectedSceneId && item.state === "recovery"
+  )) || null;
+}
+
 function renderBlenderSessionControls() {
   const button = byId("scene-blender-open");
   if (!button) return;
   const text = sceneText();
   const active = activeBlenderSession();
   const selected = active?.scene_id === state.selectedSceneId ? active : null;
+  const latest = state.blenderSessions.find((item) => item.scene_id === state.selectedSceneId) || null;
+  const recovery = selectedRecoveryCandidate();
+  const recover = byId("scene-blender-recover");
   const mobile = window.matchMedia("(max-width: 767px)").matches;
   let status = "";
   if (mobile) status = text.blenderDesktop;
@@ -4909,10 +4932,22 @@ function renderBlenderSessionControls() {
   else if (["queued", "preparing", "starting"].includes(selected?.state)) status = text.blenderStarting;
   else if (selected?.state === "saving") status = text.blenderSaving;
   else if (selected?.state === "stopping") status = text.blenderStopping;
-  else if (["failed", "interrupted"].includes(selected?.state)) status = text.blenderFailed;
+  else if (latest?.state === "interrupted") {
+    status = ({
+      blender_session_idle_timeout: text.blenderIdleStopped,
+      blender_session_disconnected_timeout: text.blenderDisconnectedStopped,
+      blender_session_host_revoked: text.blenderRevoked,
+      blender_session_host_disabled: text.blenderDisabled,
+    })[latest.error_code] || text.blenderRecovery;
+  } else if (latest?.state === "failed") status = recovery ? text.blenderRecovery : text.blenderFailed;
+  else if (recovery) status = text.blenderRecovery;
   button.textContent = selected?.state === "ready" ? text.blenderOpen : text.blenderStart;
   button.disabled = mobile || Boolean(active && !selected) || Boolean(selected && selected.state !== "ready")
     || !sceneRuntimeReady() || state.blenderRuntime?.web_pack?.state !== "ready"
+    || Boolean(state.sceneImport) || Boolean(state.sceneBackup);
+  recover.hidden = !recovery || Boolean(selected);
+  recover.disabled = mobile || Boolean(active) || !sceneRuntimeReady()
+    || state.blenderRuntime?.web_pack?.state !== "ready"
     || Boolean(state.sceneImport) || Boolean(state.sceneBackup);
   byId("scene-blender-status").textContent = status;
   setBlenderSessionBusy(Boolean(active));
@@ -4933,7 +4968,7 @@ async function pollStandaloneBlenderSession(sessionId) {
   }
 }
 
-async function startOrOpenBlender() {
+async function startOrOpenBlender(recoveryWorkingId = null) {
   const active = activeBlenderSession();
   if (active?.scene_id === state.selectedSceneId && active.state === "ready") {
     openBlenderView(active);
@@ -4943,7 +4978,9 @@ async function startOrOpenBlender() {
   byId("scene-blender-open").disabled = true;
   byId("scene-blender-status").textContent = sceneText().blenderStarting;
   try {
-    const created = await call("blender.sessions.start", {scene_id: state.selectedSceneId});
+    const params = {scene_id: state.selectedSceneId};
+    if (recoveryWorkingId) params.recovery_working_id = recoveryWorkingId;
+    const created = await call("blender.sessions.start", params);
     state.blenderSessions = [created, ...state.blenderSessions];
     renderBlenderSessionControls();
     void pollStandaloneBlenderSession(created.id);
@@ -7167,6 +7204,10 @@ byId("scene-detail-close").addEventListener("click", () => {
   renderScenes();
 });
 byId("scene-blender-open").addEventListener("click", () => void startOrOpenBlender());
+byId("scene-blender-recover").addEventListener("click", () => {
+  const recovery = selectedRecoveryCandidate();
+  if (recovery) void startOrOpenBlender(recovery.id);
+});
 byId("scene-blender-close").addEventListener("click", closeBlenderView);
 byId("scene-blender-save").addEventListener("click", () => void finishBlenderSession("save"));
 byId("scene-blender-discard").addEventListener("click", () => void finishBlenderSession("stop"));
@@ -8253,6 +8294,10 @@ window.addEventListener("message", (event) => {
     }
     if (message.event === "disable.pending") {
       state.disabled = true;
+      const active = activeBlenderSession();
+      if (active) {
+        void call("blender.sessions.interrupt", {session_id: active.id}).catch(() => {});
+      }
       closeBlenderView();
       setBlenderSessionBusy(false);
       if (state.sceneImport?.phase !== "validating") void cancelSceneImport();

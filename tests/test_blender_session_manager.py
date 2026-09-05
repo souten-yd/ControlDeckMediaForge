@@ -44,8 +44,9 @@ def ready_web_pack(tmp_path: Path) -> BlenderWebPack:
 
 
 class FakeController:
-    def __init__(self, *, fail_start: bool = False) -> None:
+    def __init__(self, *, fail_start: bool = False, fail_save: bool = False) -> None:
         self.fail_start = fail_start
+        self.fail_save = fail_save
         self.units: dict[str, tuple[socket.socket, Path, dict]] = {}
         self.starts = 0
         self.stops = 0
@@ -95,12 +96,12 @@ class FakeController:
             response = {
                 "schema_version": 1,
                 "request_id": payload["request_id"],
-                "ok": True,
-                "result": {
+                "ok": not self.fail_save,
+                "result": None if self.fail_save else {
                     "size_bytes": scene.stat().st_size,
                     "sha256": hashlib.sha256(scene.read_bytes()).hexdigest(),
                 },
-                "error": None,
+                "error": {"code": "fixture_save_failed"} if self.fail_save else None,
             }
             (root / f"response-{payload['request_id']}.json").write_text(
                 json.dumps(response), encoding="utf-8"
@@ -119,7 +120,13 @@ async def wait_state(manager: BlenderSessionManager, session_id: str, state: str
     raise AssertionError(f"session did not reach {state}")
 
 
-def session_fixture(tmp_path: Path, *, fail_start: bool = False):
+def session_fixture(
+    tmp_path: Path,
+    *,
+    fail_start: bool = False,
+    fail_save: bool = False,
+    **manager_options,
+):
     store, workspace, resolver = fake_scene_workspace(tmp_path)
     imported = upload_scene(workspace, b"BLENDER" + b"gui-scene" * 100)
     web = ready_web_pack(tmp_path)
@@ -129,7 +136,7 @@ def session_fixture(tmp_path: Path, *, fail_start: bool = False):
     bootstrap.write_text("# fixture", encoding="utf-8")
     preferences_bootstrap = tmp_path / "trusted-preferences.py"
     preferences_bootstrap.write_text("# fixture", encoding="utf-8")
-    controller = FakeController(fail_start=fail_start)
+    controller = FakeController(fail_start=fail_start, fail_save=fail_save)
     software_vulkan_icd = tmp_path / "lvp_icd.json"
     software_vulkan_icd.write_text(json.dumps({
         "file_format_version": "1.0.1",
@@ -148,6 +155,7 @@ def session_fixture(tmp_path: Path, *, fail_start: bool = False):
         command_timeout_sec=1,
         socket_root=tmp_path / "s",
         software_vulkan_icd=software_vulkan_icd,
+        **manager_options,
     )
     return store, workspace, imported["scene"]["id"], controller, manager
 
@@ -298,10 +306,136 @@ def test_gateway_is_owner_scoped_single_controller_and_releasable(tmp_path: Path
         assert duplicate.value.code == "blender_session_already_connected"
         with pytest.raises(BlenderSessionError):
             await manager.acquire_gateway("user:2", created["id"])
-        await manager.release_gateway(created["id"])
+        await manager.release_gateway(OWNER, created["id"])
         assert manager.get(OWNER, created["id"])["can_connect"] is True
         manager.discard_and_stop(OWNER, created["id"])
         await wait_state(manager, created["id"], "stopped")
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_disconnected_timeout_stops_unit_and_retains_recovery(tmp_path: Path) -> None:
+    store, _workspace, scene_id, controller, manager = session_fixture(
+        tmp_path, monitor_interval_sec=0.01, disconnect_grace_sec=0.03
+    )
+
+    async def scenario() -> None:
+        await manager.start()
+        created = manager.create(OWNER, scene_id)
+        interrupted = await wait_state(manager, created["id"], "interrupted")
+        assert interrupted["error_code"] == "blender_session_disconnected_timeout"
+        assert interrupted["result"]["recovery"]["state"] == "candidate"
+        recovery_id = interrupted["result"]["recovery"]["working_id"]
+        assert store.get_scene_working_copy(OWNER, recovery_id).state == "recovery"
+        assert controller.units == {}
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_connected_activity_delays_idle_timeout_then_session_is_retained(tmp_path: Path) -> None:
+    _store, _workspace, scene_id, controller, manager = session_fixture(
+        tmp_path,
+        monitor_interval_sec=0.01,
+        disconnect_grace_sec=1,
+        idle_timeout_sec=0.04,
+    )
+
+    async def scenario() -> None:
+        await manager.start()
+        created = manager.create(OWNER, scene_id)
+        await wait_state(manager, created["id"], "ready")
+        await manager.acquire_gateway(OWNER, created["id"])
+        for _ in range(4):
+            await asyncio.sleep(0.02)
+            manager.note_gateway_activity(OWNER, created["id"])
+            assert manager.get(OWNER, created["id"])["state"] == "ready"
+        interrupted = await wait_state(manager, created["id"], "interrupted")
+        assert interrupted["error_code"] == "blender_session_idle_timeout"
+        assert interrupted["result"]["recovery"]["state"] == "candidate"
+        assert controller.units == {}
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_host_disable_interrupts_and_recovery_can_become_a_revision(tmp_path: Path) -> None:
+    store, workspace, scene_id, controller, manager = session_fixture(tmp_path)
+
+    async def scenario() -> None:
+        await manager.start()
+        first = manager.create(OWNER, scene_id)
+        await wait_state(manager, first["id"], "ready")
+        stopping = manager.interrupt(
+            OWNER, first["id"], code="blender_session_host_disabled"
+        )
+        assert stopping["state"] == "stopping"
+        interrupted = await wait_state(manager, first["id"], "interrupted")
+        recovery_id = interrupted["result"]["recovery"]["working_id"]
+        assert store.get_scene_working_copy(OWNER, recovery_id).state == "recovery"
+
+        recovered = manager.create(
+            OWNER, scene_id, recovery_working_id=recovery_id
+        )
+        await wait_state(manager, recovered["id"], "ready")
+        manager.save_and_stop(OWNER, recovered["id"])
+        saved = await wait_state(manager, recovered["id"], "stopped")
+        assert saved["result"]["scene"]["revision"]["sequence"] == 2
+        assert store.get_scene_working_copy(OWNER, recovery_id).state == "released"
+        assert not (workspace.working_root / recovery_id).exists()
+        assert controller.units == {}
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_host_revocation_uses_the_same_fail_closed_recovery_path(tmp_path: Path) -> None:
+    _store, _workspace, scene_id, controller, manager = session_fixture(tmp_path)
+
+    async def scenario() -> None:
+        await manager.start()
+        created = manager.create(OWNER, scene_id)
+        await wait_state(manager, created["id"], "ready")
+        manager.interrupt(OWNER, created["id"], code="blender_session_host_revoked")
+        repeated = manager.interrupt(
+            OWNER, created["id"], code="blender_session_host_revoked"
+        )
+        assert repeated["state"] == "stopping"
+        interrupted = await wait_state(manager, created["id"], "interrupted")
+        assert interrupted["error_code"] == "blender_session_host_revoked"
+        assert interrupted["result"]["recovery"]["state"] == "candidate"
+        assert controller.units == {}
+        assert controller.stops == 1
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_crash_and_save_failure_both_retain_unvalidated_bytes(tmp_path: Path) -> None:
+    store, _workspace, scene_id, controller, manager = session_fixture(
+        tmp_path, fail_save=True, monitor_interval_sec=0.01
+    )
+
+    async def scenario() -> None:
+        await manager.start()
+        first = manager.create(OWNER, scene_id)
+        await wait_state(manager, first["id"], "ready")
+        unit = next(iter(controller.units))
+        await controller.stop(unit)
+        crashed = await wait_state(manager, first["id"], "interrupted")
+        assert crashed["error_code"] == "blender_session_runner_lost"
+        assert crashed["result"]["recovery"]["state"] == "candidate"
+        assert not (manager.root / first["id"]).exists()
+
+        second = manager.create(OWNER, scene_id)
+        await wait_state(manager, second["id"], "ready")
+        manager.save_and_stop(OWNER, second["id"])
+        failed = await wait_state(manager, second["id"], "failed")
+        assert failed["error_code"] == "blender_session_save_failed"
+        assert failed["result"]["recovery"]["state"] == "candidate"
+        assert not (manager.root / second["id"]).exists()
+        assert len([item for item in store.list_scene_working_copies(OWNER) if item.state == "recovery"]) == 2
         await manager.stop()
 
     asyncio.run(scenario())
@@ -319,6 +453,9 @@ def test_private_standalone_session_transport_is_bounded_and_not_public(tmp_path
     )
     app = create_app(settings, blender_session_controller=FakeController())
     with TestClient(app) as client:
+        scenes = client.get("/workspace-api/scenes")
+        assert scenes.status_code == 200
+        assert scenes.json() == {"items": [], "working_copies": []}
         listed = client.get("/workspace-api/blender/sessions")
         assert listed.status_code == 200 and listed.json() == {"items": []}
         rejected = client.post(
