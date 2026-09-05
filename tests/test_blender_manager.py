@@ -638,6 +638,14 @@ def test_remove_requires_inactive_unreferenced_runtime_and_current_preview(tmp_p
             assert blocked["live_reference_count"] == 1
             assert "live_reference" in blocked["blocked_reasons"]
 
+        reference_count = store.scene_runtime_reference_count
+        store.scene_runtime_reference_count = lambda _runtime_id: 1  # type: ignore[method-assign]
+        project_blocked = manager.removal_preview(RUNTIME_ID)
+        assert project_blocked["can_remove"] is False
+        assert project_blocked["project_reference_count"] == 1
+        assert "project_reference" in project_blocked["blocked_reasons"]
+        store.scene_runtime_reference_count = reference_count  # type: ignore[method-assign]
+
         preview = manager.removal_preview(RUNTIME_ID)
         assert preview["can_remove"] is True and preview["reclaimable_bytes"] > 0
         marker = resolver.managed_root / RUNTIME_ID / "changed-after-preview"

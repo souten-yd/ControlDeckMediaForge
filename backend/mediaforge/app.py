@@ -111,6 +111,7 @@ from .models.generation_defaults import (
 from .paths import contained
 from .prompt_recipes import H3PromptRecipe, PromptRecipeError, PromptRecipeRequest
 from .profiles import ProfileInput, ReferenceCollectionInput
+from .scenes import SceneCatalog, SceneError
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .preferences import PreferenceError
 from .reference_intelligence import (
@@ -211,6 +212,7 @@ def create_app(
         REPOSITORY_ROOT / "worker_packs/blender/preflight.py"
     )
     store = Store(resolved.data_dir)
+    scenes = SceneCatalog(store)
     standalone_model_viewer = ModelViewerSession(store)
     host = host_client or ControlDeckHostClient(
         resolved.control_deck_url,
@@ -474,6 +476,7 @@ def create_app(
     app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.state.health_override = None
     app.state.store = store
+    app.state.scenes = scenes
     app.state.jobs = manager
     app.state.job_events = events
     app.state.model_operations = model_operations
@@ -2222,6 +2225,7 @@ def create_app(
         "model_catalog",
         "model_operations",
         "blender_runtime",
+        "scenes",
         "library",
         "creative_batches",
         "creative_compositions",
@@ -2317,6 +2321,10 @@ def create_app(
                 item.model_dump(mode="json") for item in store.list_model_operations()
             ]},
             "blender_runtime": blender_runtime_part,
+            "scenes": lambda: {"items": [
+                item.model_dump(mode="json")
+                for item in scenes.list(preferences.subject_of(identity))
+            ]},
             "library": library_part,
             "creative_batches": lambda: {"items": [
                 batch_projection(item) for item in store.list_creative_batches()
@@ -2940,6 +2948,23 @@ def create_app(
                         )
                     elif method == "creative.evaluate":
                         result = await evaluate_creative_candidates(params, identity)
+                    elif method == "scenes.list":
+                        if params:
+                            raise ValueError("scene list accepts no parameters")
+                        result = {"items": [
+                            item.model_dump(mode="json")
+                            for item in scenes.list(preferences.subject_of(identity))
+                        ]}
+                    elif method == "scenes.get":
+                        if set(params) != {"scene_id"}:
+                            raise ValueError("scene get accepts only scene_id")
+                        document, revisions = scenes.get(
+                            preferences.subject_of(identity), str(params.get("scene_id", ""))
+                        )
+                        result = {
+                            "scene": document.model_dump(mode="json"),
+                            "revisions": [item.model_dump(mode="json") for item in revisions],
+                        }
                     elif method == "workspace.session":
                         # 状態の正はサーバにある。boot も更新もこの 1 メソッドで足りる。
                         result = await session_snapshot(
@@ -3167,6 +3192,7 @@ def create_app(
                     CreativeValidationError,
                     ReferenceIntelligenceError,
                     PromptRecipeError,
+                    SceneError,
                 ) as exc:
                     error = {"code": exc.code, "message": str(exc)[:300]}
                     if isinstance(exc, CreativeValidationError) and exc.field is not None:
@@ -3211,6 +3237,28 @@ def create_app(
     async def standalone_clear_jobs() -> dict[str, Any]:
         """Same-origin workspace bridge for standalone mode; not a public API."""
         return {"cleared": store.clear_finished_jobs()}
+
+    @app.get("/workspace-api/scenes", include_in_schema=False)
+    async def standalone_scenes() -> dict[str, Any]:
+        return {
+            "items": [
+                item.model_dump(mode="json")
+                for item in scenes.list(preferences.STANDALONE_SUBJECT)
+            ]
+        }
+
+    @app.get("/workspace-api/scenes/{scene_id}", include_in_schema=False)
+    async def standalone_scene(scene_id: str) -> dict[str, Any]:
+        try:
+            document, revisions = scenes.get(preferences.STANDALONE_SUBJECT, scene_id)
+        except SceneError as exc:
+            raise HTTPException(
+                status_code=404, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
+        return {
+            "scene": document.model_dump(mode="json"),
+            "revisions": [item.model_dump(mode="json") for item in revisions],
+        }
 
     @app.post("/workspace-api/assets/delete", include_in_schema=False)
     async def standalone_delete_assets(payload: dict[str, Any]) -> dict[str, Any]:

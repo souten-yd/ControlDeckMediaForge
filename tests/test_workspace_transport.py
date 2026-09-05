@@ -768,7 +768,7 @@ def test_binary_payloads_are_not_mistaken_for_host_paths(tmp_path: Path):
 SESSION_PARTS = {
     "preferences", "capabilities", "profiles", "reference_collections",
     "models", "model_catalog", "model_operations", "library",
-    "creative_batches", "creative_compositions", "jobs", "blender_runtime",
+    "creative_batches", "creative_compositions", "jobs", "blender_runtime", "scenes",
 }
 
 

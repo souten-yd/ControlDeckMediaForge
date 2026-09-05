@@ -57,7 +57,9 @@ scene/revision/working copyへ進む。
 | ux1/3d-runtime-update | side-by-side更新/切替/修復 + active参照保護 |
 | ux1/3d-runtime-remove | 削除preview/確認/managed保護/制作物保持 |
 | ux1/3d-library-viewer | 共通LibraryとGLB実表示、既存画像layout回帰 |
-| ux1/3d-scene-revisions | scene table/migration/版保存/依存とlock |
+| ux1/3d-scene-revisions | scene table/migration、immutable revision、依存、optimistic commit |
+| ux1/3d-scene-working-copy | bounded .blend import、single-writer working copy、実Blender検査/保存 |
+| ux1/3d-scene-backup | exact backup/restore、missing/tamper/partial失敗、旧版保持 |
 | ux1/3d-web-blender | 1 session software GUI起動/入力/保存/終了、OS隔離 |
 | ux1/3d-session-recovery | 切断/再認証/idle/crash/Host disable |
 | ux1/3d-texture-binding | 既存画像の材質割当て→revision |

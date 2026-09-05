@@ -259,11 +259,14 @@ class BlenderRuntimeManager:
         )
         reclaimable = self._directory_bytes(destination)
         live_references = self.resolver.live_reference_count(runtime_id)
+        project_references = self.store.scene_runtime_reference_count(runtime_id)
         blocked: list[str] = []
         if row.get("active") is True:
             blocked.append("active_runtime")
         if live_references:
             blocked.append("live_reference")
+        if project_references:
+            blocked.append("project_reference")
         identity = {
             "runtime_id": runtime_id,
             "version": str(row["version"]),
@@ -271,7 +274,7 @@ class BlenderRuntimeManager:
             "state": str(row["state"]),
             "reclaimable_bytes": reclaimable,
             "live_reference_count": live_references,
-            "project_reference_count": 0,
+            "project_reference_count": project_references,
             "blocked_reasons": blocked,
         }
         fingerprint = hashlib.sha256(
