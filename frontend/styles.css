@@ -329,6 +329,19 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .scene-revision-actions { display: flex; align-items: center; gap: 8px; }
 .scene-blender-tools { display: grid; gap: 6px; padding: 10px 0; }
 .scene-blender-tools .hint { margin: 0; }
+.scene-material-tools { margin: 4px 0 14px; border: 1px solid var(--border); border-radius: 10px; }
+.scene-material-tools > summary { cursor: pointer; padding: 10px 12px; font-weight: 700; }
+#scene-material-form { display: grid; gap: 10px; padding: 0 12px 12px; }
+.scene-material-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.scene-material-grid label { display: grid; gap: 5px; min-width: 0; font-size: .78rem; font-weight: 700; }
+.scene-material-grid select { min-width: 0; width: 100%; }
+.scene-material-advanced > summary { cursor: pointer; color: var(--muted); font-size: .82rem; }
+.scene-material-advanced .scene-material-grid { margin-top: 10px; }
+#scene-material-status { align-self: center; }
+@media (max-width: 520px) {
+  .scene-material-grid { grid-template-columns: 1fr; }
+  .scene-material-tools .split-actions { align-items: stretch; }
+}
 #scene-blender-dialog {
   width: min(1400px, calc(100% - 24px));
   max-height: calc(100vh - 24px);

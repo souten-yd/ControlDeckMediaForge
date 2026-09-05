@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://control-deck.local/schemas/material-binding.json",
+  "title": "Media Forge Material Binding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "source_revision_id", "image_asset_id", "object_name", "material_slot", "channel",
+    "uv_map", "wrap", "color_space", "normal_convention"
+  ],
+  "properties": {
+    "schema_version": {"const": "media-forge.material-binding@1"},
+    "source_revision_id": {"type": "string", "pattern": "^revision_[0-9a-f]{32}$"},
+    "image_asset_id": {"type": "string", "pattern": "^asset_[0-9a-f]{32}$"},
+    "object_name": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001f]+$"},
+    "material_slot": {"type": "integer", "minimum": 0, "maximum": 255},
+    "channel": {"enum": ["base_color", "roughness", "metallic", "normal", "emission"]},
+    "uv_map": {"type": ["string", "null"], "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001f]+$"},
+    "wrap": {"enum": ["repeat", "extend", "clip"]},
+    "color_space": {"enum": ["srgb", "non_color"]},
+    "normal_convention": {"enum": ["open_gl", "direct_x"]}
+  }
+}

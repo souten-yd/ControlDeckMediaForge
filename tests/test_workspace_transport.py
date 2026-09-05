@@ -702,6 +702,7 @@ def test_job_publication_survives_a_failing_listener(tmp_path: Path):
         "creative.compositions.list", "creative.compositions.update_text",
         "creative.compositions.cancel",
         "creative.evaluate",
+        "scenes.material.apply",
     ],
 )
 def test_new_methods_reject_host_path_strings(tmp_path: Path, method: str):

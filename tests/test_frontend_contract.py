@@ -83,6 +83,10 @@ DOM_IDS = (
     "scene-blender-open", "scene-blender-status", "scene-blender-dialog",
     "scene-blender-dialog-title", "scene-blender-connection", "scene-blender-screen",
     "scene-blender-close", "scene-blender-save", "scene-blender-discard",
+    "scene-material-tools", "scene-material-form", "scene-material-object",
+    "scene-material-slot", "scene-material-image", "scene-material-channel",
+    "scene-material-uv", "scene-material-wrap", "scene-material-normal",
+    "scene-material-apply", "scene-material-status",
     "detail-dialog",
     "model-storage", "model-filters", "model-management-note", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
@@ -483,6 +487,27 @@ def test_scene_studio_lists_immutable_revisions_and_reuses_the_3d_viewer():
     assert "openViewer(" in preview
     assert '#app[data-create-media="3d"] #scene-studio' in STYLES
     assert "@media (max-width: 760px)" in STYLES
+
+
+def test_scene_material_binding_uses_library_assets_and_private_path_free_bridges():
+    material = SCRIPT[
+        SCRIPT.index("function materialOption"):SCRIPT.index("const ACTIVE_BLENDER_SESSION_STATES")
+    ]
+    assert "loadSceneMaterialImages()" in material
+    assert 'const params = {media_kind: "image", limit: 120, thumbnails: false};' in material
+    assert "page < 10 && items.length < 120" in material
+    assert 'call("scenes.material.targets"' in material
+    assert 'call("scenes.material.apply"' in material
+    assert 'schema_version: "media-forge.material-binding@1"' in material
+    assert 'color_space: ["base_color", "emission"].includes(channel)' in material
+    assert 'normal_convention: channel === "normal"' in material
+    for forbidden in ("path:", "file.path", "runtime_path", "working_path"):
+        assert forbidden not in material
+    standalone = SCRIPT[SCRIPT.index("async function standaloneCall"):SCRIPT.index("async function call(")]
+    assert "/material-targets" in standalone
+    assert "/materials" in standalone
+    assert 'id="scene-material-advanced-title"' in MARKUP
+    assert "@media (max-width: 520px)" in STYLES
 
 
 def test_scene_backup_ui_streams_exact_bytes_and_has_standalone_parity():

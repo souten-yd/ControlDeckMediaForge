@@ -5,16 +5,21 @@ import base64
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 import hashlib
+import io
 from pathlib import Path
 from typing import Iterator
+import uuid
 
 import pytest
+from PIL import Image
 
 from mediaforge import library
 from mediaforge.blender_runtime import ResolvedBlenderRuntime
+from mediaforge.domain import Asset, JobRequest, Provenance
+from mediaforge.material_binding import MaterialBinding
 from mediaforge.scene_workspace import BLEND_CHUNK_BYTES, MAX_BLEND_BYTES, SceneWorkspace
 from mediaforge.scenes import SceneError, SceneRevisionInput
-from mediaforge.store import Store
+from mediaforge.store import AssetInUse, Store, utc_now
 from test_glb_import import glb_bytes
 
 
@@ -54,8 +59,25 @@ def fake_scene_workspace(
     executable = tmp_path / "fake-blender"
     executable.write_text(
         "#!/usr/bin/python3\n"
-        "import base64,json,pathlib,time\n"
+        "import base64,json,pathlib,shutil,sys,time\n"
         f"time.sleep({delay!r})\n"
+        "if '--action' in sys.argv:\n"
+        " action=sys.argv[sys.argv.index('--action')+1]\n"
+        " result={'schema_version':'media-forge.material-operation-result@1',"
+        "'blender_version':'4.5.9','background':True,'autoexec_disabled':True,'action':action}\n"
+        " if action=='inspect':\n"
+        "  result.update({'targets':[{'object_name':'Cube','material_slots':[{'index':0,'name':'Material'}],'uv_maps':['UVMap']}],'binding':None})\n"
+        " else:\n"
+        "  binding=json.loads(pathlib.Path('binding.json').read_text())\n"
+        "  if binding['object_name']!='Cube' or binding['uv_map']!='UVMap': sys.exit(3)\n"
+        "  shutil.copyfile('scene.blend','bound.blend')\n"
+        "  with pathlib.Path('bound.blend').open('ab') as stream: stream.write(b'-material-bound')\n"
+        "  result.update({'targets':None,'binding':{'object_name':binding['object_name'],"
+        "'material_slot':binding['material_slot'],'material_name':'Material · MediaForge',"
+        "'channel':binding['channel'],'uv_map':binding['uv_map'],'packed':True,"
+        "'texture_sha256':binding['texture_sha256']}})\n"
+        " pathlib.Path('result.json').write_text(json.dumps(result))\n"
+        " sys.exit(0)\n"
         f"pathlib.Path('preview.glb').write_bytes(base64.b64decode({preview!r}))\n"
         "pathlib.Path('result.json').write_text(json.dumps({"
         "'schema_version':'media-forge.blender-scene-validation@1',"
@@ -68,6 +90,8 @@ def fake_scene_workspace(
     executable.chmod(0o700)
     worker = tmp_path / "trusted-worker.py"
     worker.write_text("# test fixture\n", encoding="utf-8")
+    material_worker = tmp_path / "trusted-material-worker.py"
+    material_worker.write_text("# test fixture\n", encoding="utf-8")
     runtime = ResolvedBlenderRuntime(
         runtime_id=RUNTIME_ID,
         version="4.5.9",
@@ -86,11 +110,61 @@ def fake_scene_workspace(
         store,
         resolver,  # type: ignore[arg-type]
         worker,
+        material_worker=material_worker,
         now=lambda: clock[0],
         process_timeout_sec=0.2,
     )
     workspace.initialize()
     return store, workspace, resolver
+
+
+def register_image(store: Store, root: Path, *, mime_type: str = "image/png") -> Asset:
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 6), (80, 140, 210)).save(buffer, format="PNG")
+    content = buffer.getvalue()
+    source = root / f"texture-{uuid.uuid4().hex}.png"
+    source.write_bytes(content)
+    digest = hashlib.sha256(content).hexdigest()
+    asset_id = f"asset_{uuid.uuid4().hex}"
+    provenance_id = f"prov_{uuid.uuid4().hex}"
+    job = store.create_job(JobRequest(operation="media.inspect", intent="texture fixture"))
+    now = utc_now()
+    asset = Asset(
+        id=asset_id,
+        job_id=job.id,
+        parent_asset_ids=[],
+        mime_type=mime_type,
+        width=8,
+        height=6,
+        size_bytes=len(content),
+        sha256=digest,
+        suggested_filename="texture.png",
+        provenance_id=provenance_id,
+        created_at=now,
+    )
+    provenance = Provenance(
+        id=provenance_id,
+        asset_id=asset_id,
+        parent_asset_ids=[],
+        operation="asset.import",
+        intent="texture fixture",
+        model_id="none",
+        model_version="0",
+        weights_hash="none",
+        license="user-provided",
+        runtime_adapter="test",
+        runtime_version="1.0.0",
+        tool_versions={},
+        seed=0,
+        parameters={},
+        reference_asset_hashes={},
+        postprocessing=[],
+        validation=[],
+        warnings=[],
+        output_sha256=digest,
+        created_at=now,
+    )
+    return store.register_asset(asset, provenance, source)
 
 
 def upload_scene(workspace: SceneWorkspace, content: bytes, *, owner: str = "user:1") -> dict:
@@ -282,3 +356,185 @@ def test_working_commit_checks_lease_and_base_in_the_same_transaction(tmp_path: 
     assert store.get_scene_working_copy("user:1", working.id).state == "recovery"
     assert (workspace.working_root / working.id / "scene.blend").is_file()
     assert {item.id for item in store.list_assets()} == before_assets
+
+
+def test_material_binding_contract_rejects_channel_mismatches() -> None:
+    valid = {
+        "source_revision_id": "revision_" + "b" * 32,
+        "image_asset_id": "asset_" + "a" * 32,
+        "object_name": "Cube",
+        "material_slot": 0,
+        "channel": "base_color",
+        "uv_map": "UVMap",
+        "wrap": "repeat",
+        "color_space": "srgb",
+        "normal_convention": "open_gl",
+    }
+    assert MaterialBinding.model_validate(valid).dependency_role().startswith(
+        "material.base_color."
+    )
+    with pytest.raises(ValueError):
+        MaterialBinding.model_validate({**valid, "color_space": "non_color"})
+    with pytest.raises(ValueError):
+        MaterialBinding.model_validate({**valid, "normal_convention": "direct_x"})
+    assert MaterialBinding.model_validate({
+        **valid,
+        "channel": "normal",
+        "color_space": "non_color",
+        "normal_convention": "direct_x",
+    }).normal_convention == "direct_x"
+
+
+def test_material_targets_and_apply_create_validated_revision_with_lineage(
+    tmp_path: Path,
+) -> None:
+    store, workspace, resolver = fake_scene_workspace(tmp_path)
+    imported = upload_scene(workspace, b"BLENDER-material-source")
+    scene_id = imported["scene"]["id"]
+    texture = register_image(store, tmp_path)
+
+    inspected = asyncio.run(workspace.material_targets("user:1", scene_id))
+    assert inspected == {
+        "schema_version": "media-forge.material-operation-result@1",
+        "scene_id": scene_id,
+        "revision_id": imported["revision"]["id"],
+        "targets": [{
+            "object_name": "Cube",
+            "material_slots": [{"index": 0, "name": "Material"}],
+            "uv_maps": ["UVMap"],
+        }],
+    }
+
+    binding = MaterialBinding(
+        source_revision_id=imported["revision"]["id"],
+        image_asset_id=texture.id,
+        object_name="Cube",
+        material_slot=0,
+        channel="base_color",
+        uv_map="UVMap",
+    )
+    committed = asyncio.run(
+        workspace.apply_material_binding("user:1", scene_id, binding)
+    )
+
+    revision = committed["revision"]
+    assert revision["sequence"] == 2
+    assert revision["parent_revision_id"] == imported["revision"]["id"]
+    assert revision["dependencies"] == [{
+        "role": binding.dependency_role(),
+        "asset_id": texture.id,
+        "sha256": texture.sha256,
+    }]
+    assert committed["binding"] == {
+        "object_name": "Cube",
+        "material_slot": 0,
+        "material_name": "Material · MediaForge",
+        "channel": "base_color",
+        "uv_map": "UVMap",
+        "packed": True,
+        "texture_sha256": committed["binding"]["texture_sha256"],
+    }
+    assert store.asset_path(revision["source_asset_id"]).read_bytes().endswith(
+        b"-material-bound"
+    )
+    provenance = store.get_provenance(revision["source_asset_id"])
+    assert provenance.operation == "scene.material.bind"
+    assert provenance.parent_asset_ids == [
+        imported["revision"]["source_asset_id"], texture.id
+    ]
+    assert provenance.reference_asset_hashes == {texture.id: texture.sha256}
+    assert provenance.parameters["binding"]["image_asset_id"] == texture.id
+    with pytest.raises(AssetInUse):
+        store.delete_asset(texture.id)
+    assert store.get_scene_working_copy(
+        "user:1", next(item.id for item in store.list_scene_working_copies("user:1"))
+    ).state == "committed"
+    assert not any(workspace.material_root.iterdir())
+    assert not any(workspace.working_root.iterdir())
+    assert resolver.references == 0
+
+
+def test_material_replaces_same_target_channel_and_failures_release_writer(
+    tmp_path: Path,
+) -> None:
+    store, workspace, _resolver = fake_scene_workspace(tmp_path)
+    imported = upload_scene(workspace, b"BLENDER-material-replace")
+    scene_id = imported["scene"]["id"]
+    first = register_image(store, tmp_path)
+    second = register_image(store, tmp_path)
+
+    def value(
+        asset_id: str,
+        object_name: str = "Cube",
+        source_revision_id: str | None = None,
+    ) -> dict[str, object]:
+        document, _ = workspace.catalog.get("user:1", scene_id)
+        return {
+            "source_revision_id": source_revision_id or document.current_revision_id,
+            "image_asset_id": asset_id,
+            "object_name": object_name,
+            "material_slot": 0,
+            "channel": "roughness",
+            "uv_map": "UVMap",
+            "wrap": "extend",
+            "color_space": "non_color",
+            "normal_convention": "open_gl",
+        }
+
+    asyncio.run(workspace.apply_material_binding("user:1", scene_id, value(first.id)))
+    with pytest.raises(SceneError) as stale:
+        asyncio.run(
+            workspace.apply_material_binding(
+                "user:1",
+                scene_id,
+                value(
+                    second.id,
+                    source_revision_id=imported["revision"]["id"],
+                ),
+            )
+        )
+    assert stale.value.code == "scene_revision_conflict"
+    assert not any(
+        item.state == "active" for item in store.list_scene_working_copies("user:1")
+    )
+    replaced = asyncio.run(
+        workspace.apply_material_binding("user:1", scene_id, value(second.id))
+    )
+    assert replaced["revision"]["sequence"] == 3
+    assert [item["asset_id"] for item in replaced["revision"]["dependencies"]] == [
+        second.id
+    ]
+
+    with pytest.raises(SceneError) as rejected:
+        asyncio.run(
+            workspace.apply_material_binding(
+                "user:1", scene_id, value(second.id, "Missing")
+            )
+        )
+    assert rejected.value.code == "scene_material_rejected"
+    assert not any(
+        item.state == "active" for item in store.list_scene_working_copies("user:1")
+    )
+    assert not any(workspace.material_root.iterdir())
+    assert not any(workspace.working_root.iterdir())
+
+    archive = register_image(store, tmp_path, mime_type="application/zip")
+    with pytest.raises(SceneError) as wrong_type:
+        asyncio.run(
+            workspace.apply_material_binding("user:1", scene_id, value(archive.id))
+        )
+    assert wrong_type.value.code == "scene_material_asset_invalid"
+    assert not any(
+        item.state == "active" for item in store.list_scene_working_copies("user:1")
+    )
+
+    changed = register_image(store, tmp_path)
+    store.asset_path(changed.id).write_bytes(b"changed after registration")
+    with pytest.raises(SceneError) as identity:
+        asyncio.run(
+            workspace.apply_material_binding("user:1", scene_id, value(changed.id))
+        )
+    assert identity.value.code == "scene_dependency_changed"
+    assert not any(
+        item.state == "active" for item in store.list_scene_working_copies("user:1")
+    )

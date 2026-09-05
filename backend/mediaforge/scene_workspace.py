@@ -15,16 +15,19 @@ import threading
 from typing import Any, Callable
 import uuid
 
+from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import ValidationError
 
 from . import __version__
 from .blender_runtime import BlenderRuntimeResolver, ResolvedBlenderRuntime
 from .domain import Asset, ErrorDetail, JobRequest, JobStatus, Provenance
 from .glb import GlbValidationError, validate_glb_path
+from .material_binding import MaterialBinding
 from .paths import contained
 from .scenes import (
     SceneCatalog,
     SceneDocument,
+    SceneDependency,
     SceneError,
     SceneRevision,
     SceneRevisionInput,
@@ -41,6 +44,8 @@ UPLOAD_TTL = timedelta(minutes=10)
 WORKING_TTL = timedelta(minutes=10)
 SCENE_WORKER_TIMEOUT_SEC = 180.0
 MAX_PROCESS_OUTPUT_BYTES = 128 * 1024
+MAX_TEXTURE_SIDE = 8192
+MAX_TEXTURE_PIXELS = 67_108_864
 
 
 @dataclass
@@ -111,24 +116,35 @@ class SceneWorkspace:
         resolver: BlenderRuntimeResolver,
         worker: Path,
         *,
+        material_worker: Path | None = None,
         now: Callable[[], datetime] | None = None,
         process_timeout_sec: float = SCENE_WORKER_TIMEOUT_SEC,
     ) -> None:
         self.store = store
         self.resolver = resolver
         self.worker = Path(os.path.abspath(worker))
+        self.material_worker = (
+            Path(os.path.abspath(material_worker)) if material_worker is not None else None
+        )
         self.catalog = SceneCatalog(store)
         self.scene_root = contained(store.data_dir, store.data_dir / "scenes")
         self.upload_root = contained(self.scene_root, self.scene_root / "uploads")
         self.working_root = contained(self.scene_root, self.scene_root / "working")
         self.validation_root = contained(self.scene_root, self.scene_root / "validation")
+        self.material_root = contained(self.scene_root, self.scene_root / "materials")
         self._now = now or (lambda: datetime.now(UTC))
         self.process_timeout_sec = process_timeout_sec
         self._guard = threading.RLock()
         self._uploads: dict[str, _Upload] = {}
 
     def initialize(self) -> None:
-        for root in (self.scene_root, self.upload_root, self.working_root, self.validation_root):
+        for root in (
+            self.scene_root,
+            self.upload_root,
+            self.working_root,
+            self.validation_root,
+            self.material_root,
+        ):
             root.mkdir(mode=0o700, parents=True, exist_ok=True)
         for entry in self.upload_root.iterdir():
             bounded = contained(self.upload_root, entry)
@@ -138,6 +154,12 @@ class SceneWorkspace:
                 bounded.unlink()
         for entry in self.validation_root.iterdir():
             bounded = contained(self.validation_root, entry)
+            if bounded.is_dir() and not bounded.is_symlink():
+                shutil.rmtree(bounded)
+            else:
+                bounded.unlink()
+        for entry in self.material_root.iterdir():
+            bounded = contained(self.material_root, entry)
             if bounded.is_dir() and not bounded.is_symlink():
                 shutil.rmtree(bounded)
             else:
@@ -419,7 +441,15 @@ class SceneWorkspace:
             validate_scene_owner(owner), working_id, "recovery", now=_iso(self._now())
         )
 
-    async def commit_working_copy(self, owner: str, working_id: str) -> dict[str, Any]:
+    async def commit_working_copy(
+        self,
+        owner: str,
+        working_id: str,
+        *,
+        dependencies: list[SceneDependency] | None = None,
+        operation: str = "scene.commit",
+        parameters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         owner = validate_scene_owner(owner)
         self.store.expire_scene_working_copies(_iso(self._now()))
         working = self.store.get_scene_working_copy(owner, working_id)
@@ -444,6 +474,7 @@ class SceneWorkspace:
                 preview, blender_facts, glb_facts = await self._validate(source, runtime)
                 _, base_revisions = self.catalog.get(owner, working.scene_id)
                 base = next(item for item in base_revisions if item.id == working.base_revision_id)
+                revision_dependencies = dependencies if dependencies is not None else base.dependencies
                 source_asset, preview_asset = self._register_assets(
                     job.id,
                     source,
@@ -452,6 +483,9 @@ class SceneWorkspace:
                     blender_facts,
                     glb_facts,
                     parent_revision=base,
+                    dependencies=revision_dependencies,
+                    operation=operation,
+                    parameters=parameters,
                 )
                 registered.extend([source_asset.id, preview_asset.id])
                 document, revision = self.catalog.commit_working_copy(
@@ -462,7 +496,7 @@ class SceneWorkspace:
                     SceneRevisionInput(
                         source_asset_id=source_asset.id,
                         preview_asset_id=preview_asset.id,
-                        dependencies=base.dependencies,
+                        dependencies=revision_dependencies,
                         runtime_id=runtime.runtime_id,
                         runtime_version=runtime.version,
                         validation=self._validation(blender_facts, glb_facts),
@@ -516,6 +550,371 @@ class SceneWorkspace:
         owner = validate_scene_owner(owner)
         self.store.expire_scene_working_copies(_iso(self._now()))
         return self.store.list_scene_working_copies(owner)
+
+    async def material_targets(self, owner: str, scene_id: str) -> dict[str, Any]:
+        owner = validate_scene_owner(owner)
+        document, revisions = self.catalog.get(owner, scene_id)
+        revision = next(item for item in revisions if item.id == document.current_revision_id)
+        with self.resolver.runtime_reference(revision.runtime_id) as runtime:
+            if runtime is None or runtime.version != revision.runtime_version:
+                raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
+            result, _ = await self._material_operation(
+                self.store.asset_path(revision.source_asset_id), runtime, action="inspect"
+            )
+        return {
+            "schema_version": result["schema_version"],
+            "scene_id": scene_id,
+            "revision_id": revision.id,
+            "targets": result["targets"],
+        }
+
+    async def apply_material_binding(
+        self, owner: str, scene_id: str, value: MaterialBinding | dict[str, Any]
+    ) -> dict[str, Any]:
+        owner = validate_scene_owner(owner)
+        try:
+            binding = value if isinstance(value, MaterialBinding) else MaterialBinding.model_validate(value)
+        except ValidationError as exc:
+            raise SceneError("scene_material_binding_invalid", "material binding is invalid") from exc
+        document, _ = self.catalog.get(owner, scene_id)
+        if document.current_revision_id != binding.source_revision_id:
+            raise SceneError("scene_revision_conflict", "material source revision is no longer current")
+        try:
+            texture_asset = self.store.get_asset(binding.image_asset_id)
+            texture_path = self.store.asset_path(binding.image_asset_id)
+        except KeyError as exc:
+            raise SceneError("scene_material_asset_not_found", "material image is unavailable") from exc
+        if texture_asset.mime_type not in {"image/png", "image/jpeg", "image/webp"}:
+            raise SceneError("scene_material_asset_invalid", "material input must be an image")
+        if (
+            texture_path.is_symlink()
+            or not texture_path.is_file()
+            or texture_path.stat().st_size != texture_asset.size_bytes
+            or self._sha256(texture_path) != texture_asset.sha256
+        ):
+            raise SceneError("scene_dependency_changed", "material image identity changed")
+
+        working = self.acquire_working_copy(owner, scene_id)
+        try:
+            if working.base_revision_id != binding.source_revision_id:
+                raise SceneError(
+                    "scene_revision_conflict", "material source revision is no longer current"
+                )
+            runtime = self.resolver.resolve_registered(working.runtime_id)
+            if runtime is None or runtime.version != working.runtime_version:
+                raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
+            source = self.working_path_for_runtime(owner, working.id)
+            _, revisions = self.catalog.get(owner, scene_id)
+            base = next(item for item in revisions if item.id == working.base_revision_id)
+            role = binding.dependency_role()
+            dependencies = [item for item in base.dependencies if item.role != role]
+            dependencies.append(
+                SceneDependency(role=role, asset_id=texture_asset.id, sha256=texture_asset.sha256)
+            )
+            if len(dependencies) > 128:
+                raise SceneError(
+                    "scene_dependency_limit", "scene dependency count exceeds its bound"
+                )
+            result, output = await self._material_operation(
+                source,
+                runtime,
+                action="apply",
+                binding=binding,
+                texture=texture_path,
+            )
+            if output is None:
+                raise SceneError("scene_material_worker_invalid", "material output is unavailable")
+            try:
+                os.replace(output, source)
+            finally:
+                if output.exists():
+                    output.unlink()
+            committed = await self.commit_working_copy(
+                owner,
+                working.id,
+                dependencies=dependencies,
+                operation="scene.material.bind",
+                parameters={
+                    "binding": binding.model_dump(mode="json"),
+                    "material_result": result["binding"],
+                },
+            )
+            committed["binding"] = result["binding"]
+            return committed
+        except Exception:
+            try:
+                current = self.store.get_scene_working_copy(owner, working.id)
+                if current.state == "active":
+                    self.release_working_copy(owner, working.id)
+            except SceneError:
+                pass
+            raise
+
+    async def _material_operation(
+        self,
+        source: Path,
+        runtime: ResolvedBlenderRuntime,
+        *,
+        action: str,
+        binding: MaterialBinding | None = None,
+        texture: Path | None = None,
+    ) -> tuple[dict[str, Any], Path | None]:
+        if self.material_worker is None or self.material_worker.is_symlink() or not self.material_worker.is_file():
+            raise SceneError("scene_material_worker_unavailable", "trusted material worker is unavailable")
+        root = contained(self.material_root, self.material_root / f"material_{uuid.uuid4().hex}")
+        root.mkdir(mode=0o700)
+        try:
+            staged = contained(root, root / "scene.blend")
+            shutil.copyfile(source, staged)
+            staged.chmod(0o600)
+            result_path = contained(root, root / "result.json")
+            output = contained(root, root / "bound.blend")
+            sandbox = contained(root, root / "blender-user")
+            sandbox.mkdir(mode=0o700)
+        except BaseException:
+            self._remove_tree(root, self.material_root)
+            raise
+        command = [
+            str(runtime.executable),
+            "--background",
+            "--factory-startup",
+            "--disable-autoexec",
+            "--python",
+            str(self.material_worker),
+            "--",
+            "--action",
+            action,
+            "--source",
+            "scene.blend",
+            "--result",
+            "result.json",
+            "--expected-version",
+            runtime.version,
+        ]
+        if action == "apply":
+            if binding is None or texture is None:
+                self._remove_tree(root, self.material_root)
+                raise SceneError("scene_material_binding_invalid", "material input is incomplete")
+            staged_texture = contained(root, root / "texture.png")
+            try:
+                self._normalize_texture(texture, staged_texture)
+                digest = self._sha256(staged_texture)
+                binding_path = contained(root, root / "binding.json")
+                self._atomic_json(binding_path, binding.worker_value(texture_sha256=digest))
+            except BaseException:
+                self._remove_tree(root, self.material_root)
+                raise
+            command.extend([
+                "--texture", "texture.png", "--binding", "binding.json", "--output", "bound.blend",
+            ])
+        elif action != "inspect":
+            self._remove_tree(root, self.material_root)
+            raise SceneError("scene_material_action_invalid", "material action is invalid")
+        environment = {
+            "PATH": "/usr/bin:/bin",
+            "PYTHONNOUSERSITE": "1",
+            "HOME": str(sandbox),
+            "XDG_CACHE_HOME": str(sandbox / "cache"),
+            "XDG_CONFIG_HOME": str(sandbox / "config"),
+            "XDG_DATA_HOME": str(sandbox / "data"),
+            "BLENDER_USER_CONFIG": str(sandbox / "blender-config"),
+            "BLENDER_USER_SCRIPTS": str(sandbox / "blender-scripts"),
+            "BLENDER_USER_DATAFILES": str(sandbox / "blender-data"),
+            "LIBGL_ALWAYS_SOFTWARE": "1",
+            "CUDA_VISIBLE_DEVICES": "",
+            "HIP_VISIBLE_DEVICES": "",
+            "ROCR_VISIBLE_DEVICES": "",
+        }
+        retained: Path | None = None
+        try:
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    *command,
+                    cwd=root,
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=environment,
+                    start_new_session=True,
+                )
+            except OSError as exc:
+                raise SceneError(
+                    "scene_material_worker_unavailable", "Blender material worker could not start"
+                ) from exc
+            stdout_task = asyncio.create_task(_bounded_read(process.stdout))
+            stderr_task = asyncio.create_task(_bounded_read(process.stderr))
+            try:
+                _stdout, _stderr, returncode = await asyncio.wait_for(
+                    asyncio.gather(stdout_task, stderr_task, process.wait()),
+                    timeout=self.process_timeout_sec,
+                )
+            except BaseException as exc:
+                await _stop_process(process)
+                for task in (stdout_task, stderr_task):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+                if isinstance(exc, TimeoutError):
+                    raise SceneError("scene_material_timeout", "Blender material operation timed out") from exc
+                raise
+            if returncode != 0:
+                raise SceneError(
+                    "scene_material_rejected", "Blender rejected the material operation"
+                )
+            if result_path.is_symlink() or not result_path.is_file() or result_path.stat().st_size > MAX_PROCESS_OUTPUT_BYTES:
+                raise SceneError("scene_material_worker_invalid", "material worker result is unavailable")
+            try:
+                result = json.loads(result_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise SceneError("scene_material_worker_invalid", "material worker result is invalid") from exc
+            self._validate_material_result(
+                result,
+                runtime.version,
+                action,
+                expected_binding=(
+                    binding.worker_value(texture_sha256=digest)
+                    if action == "apply" and binding is not None
+                    else None
+                ),
+            )
+            if action == "apply":
+                if output.is_symlink() or not output.is_file() or not 1 <= output.stat().st_size <= MAX_BLEND_BYTES:
+                    raise SceneError("scene_material_worker_invalid", "material worker output is invalid")
+                with output.open("rb") as stream:
+                    if stream.read(7) != b"BLENDER":
+                        raise SceneError("scene_material_worker_invalid", "material output is not a Blender file")
+                retained = contained(
+                    self.material_root, self.material_root / f"bound_{uuid.uuid4().hex}.blend"
+                )
+                os.replace(output, retained)
+            return result, retained
+        finally:
+            if root.exists():
+                self._remove_tree(root, self.material_root)
+
+    @staticmethod
+    def _validate_material_result(
+        value: object,
+        version: str,
+        action: str,
+        expected_binding: dict[str, object] | None = None,
+    ) -> None:
+        expected = {
+            "schema_version", "blender_version", "background", "autoexec_disabled",
+            "action", "targets", "binding",
+        }
+        if (
+            not isinstance(value, dict)
+            or set(value) != expected
+            or value["schema_version"] != "media-forge.material-operation-result@1"
+            or value["blender_version"] != version
+            or value["background"] is not True
+            or value["autoexec_disabled"] is not True
+            or value["action"] != action
+        ):
+            raise SceneError("scene_material_worker_invalid", "material worker identity differs")
+        if action == "inspect":
+            if (
+                value["binding"] is not None
+                or not isinstance(value["targets"], list)
+                or len(value["targets"]) > 2_000
+            ):
+                raise SceneError("scene_material_worker_invalid", "material targets are invalid")
+            object_names: set[str] = set()
+            for target in value["targets"]:
+                if not isinstance(target, dict) or set(target) != {
+                    "object_name", "material_slots", "uv_maps"
+                }:
+                    raise SceneError("scene_material_worker_invalid", "material target fields differ")
+                if (
+                    not isinstance(target["object_name"], str)
+                    or not 1 <= len(target["object_name"]) <= 128
+                    or target["object_name"] in object_names
+                    or not isinstance(target["material_slots"], list)
+                    or not 1 <= len(target["material_slots"]) <= 256
+                    or not isinstance(target["uv_maps"], list)
+                    or len(target["uv_maps"]) > 64
+                ):
+                    raise SceneError("scene_material_worker_invalid", "material target exceeds its bound")
+                object_names.add(target["object_name"])
+                if any(
+                    not isinstance(slot, dict)
+                    or set(slot) != {"index", "name"}
+                    or isinstance(slot["index"], bool)
+                    or not isinstance(slot["index"], int)
+                    or slot["index"] < 0
+                    or slot["index"] > 255
+                    or not isinstance(slot["name"], str)
+                    or len(slot["name"]) > 128
+                    for slot in target["material_slots"]
+                ):
+                    raise SceneError("scene_material_worker_invalid", "material slots are invalid")
+                slot_indexes = [slot["index"] for slot in target["material_slots"]]
+                if len(slot_indexes) != len(set(slot_indexes)):
+                    raise SceneError("scene_material_worker_invalid", "material slots repeat")
+                if any(
+                    not isinstance(uv, str) or not 1 <= len(uv) <= 128
+                    for uv in target["uv_maps"]
+                ):
+                    raise SceneError("scene_material_worker_invalid", "UV maps are invalid")
+                if len(target["uv_maps"]) != len(set(target["uv_maps"])):
+                    raise SceneError("scene_material_worker_invalid", "UV maps repeat")
+        else:
+            binding = value["binding"]
+            fields = {
+                "object_name", "material_slot", "material_name", "channel",
+                "uv_map", "packed", "texture_sha256",
+            }
+            if (
+                value["targets"] is not None
+                or not isinstance(binding, dict)
+                or set(binding) != fields
+                or expected_binding is None
+                or binding["object_name"] != expected_binding["object_name"]
+                or isinstance(binding["material_slot"], bool)
+                or not isinstance(binding["material_slot"], int)
+                or binding["material_slot"] != expected_binding["material_slot"]
+                or binding["channel"] != expected_binding["channel"]
+                or binding["uv_map"] != expected_binding["uv_map"]
+                or binding["texture_sha256"] != expected_binding["texture_sha256"]
+                or binding["packed"] is not True
+                or not isinstance(binding["material_name"], str)
+                or not 1 <= len(binding["material_name"]) <= 128
+            ):
+                raise SceneError("scene_material_worker_invalid", "material binding result is invalid")
+
+    @staticmethod
+    def _normalize_texture(source: Path, destination: Path) -> None:
+        try:
+            with Image.open(source) as opened:
+                opened.load()
+                image = ImageOps.exif_transpose(opened)
+                width, height = image.size
+                if (
+                    width < 1
+                    or height < 1
+                    or width > MAX_TEXTURE_SIDE
+                    or height > MAX_TEXTURE_SIDE
+                    or width * height > MAX_TEXTURE_PIXELS
+                ):
+                    raise SceneError("scene_material_asset_invalid", "material image dimensions exceed limits")
+                mode = "RGBA" if "A" in image.getbands() else "RGB"
+                image.convert(mode).save(destination, format="PNG", compress_level=9)
+            destination.chmod(0o600)
+        except SceneError:
+            raise
+        except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
+            raise SceneError("scene_material_asset_invalid", "material image could not be decoded") from exc
+
+    @staticmethod
+    def _atomic_json(path: Path, value: dict[str, Any]) -> None:
+        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        temporary.write_text(
+            json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+        temporary.chmod(0o600)
+        os.replace(temporary, path)
 
     async def _validate(
         self, source: Path, runtime: ResolvedBlenderRuntime
@@ -667,12 +1066,23 @@ class SceneWorkspace:
         glb_facts: dict[str, Any],
         *,
         parent_revision: SceneRevision | None,
+        dependencies: list[SceneDependency] | None = None,
+        operation: str | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> tuple[Asset, Asset]:
         now = utc_now()
         source_hash = self._sha256(source)
         source_id = f"asset_{uuid.uuid4().hex}"
         source_provenance_id = f"prov_{uuid.uuid4().hex}"
-        parent_assets = [parent_revision.source_asset_id] if parent_revision is not None else []
+        provenance_dependencies = (
+            dependencies
+            if dependencies is not None
+            else parent_revision.dependencies if parent_revision is not None else []
+        )
+        parent_assets = list(dict.fromkeys([
+            *([parent_revision.source_asset_id] if parent_revision is not None else []),
+            *(dependency.asset_id for dependency in provenance_dependencies),
+        ]))
         source_asset = Asset(
             id=source_id,
             job_id=job_id,
@@ -688,8 +1098,12 @@ class SceneWorkspace:
             id=source_provenance_id,
             asset_id=source_id,
             parent_asset_ids=parent_assets,
-            operation="scene.import" if parent_revision is None else "scene.commit",
-            intent="Import Blender scene" if parent_revision is None else "Commit Blender scene revision",
+            operation=operation or ("scene.import" if parent_revision is None else "scene.commit"),
+            intent=(
+                "Apply scene material binding"
+                if operation == "scene.material.bind"
+                else "Import Blender scene" if parent_revision is None else "Commit Blender scene revision"
+            ),
             model_id="none",
             model_version="0",
             weights_hash="none",
@@ -698,10 +1112,10 @@ class SceneWorkspace:
             runtime_version=runtime.version,
             tool_versions={"media-forge": __version__, "blender": runtime.version},
             seed=0,
-            parameters={"runtime_id": runtime.runtime_id},
+            parameters={"runtime_id": runtime.runtime_id, **(parameters or {})},
             reference_asset_hashes={
                 dependency.asset_id: dependency.sha256
-                for dependency in (parent_revision.dependencies if parent_revision else [])
+                for dependency in provenance_dependencies
             },
             postprocessing=[],
             validation=[blender_facts],
