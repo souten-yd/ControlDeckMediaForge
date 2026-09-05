@@ -8296,7 +8296,7 @@ material slot選択/画像差替えpreview/Blender edit、scene/revisionは **NO
 
 ## 2026-09-05 — 3DS-4a immutable scene revision persistence
 
-branch `ux1/3d-scene-revisions`、実装commit
+PR #222、branch `ux1/3d-scene-revisions`、実装commit
 `9d053fb`。`SceneDocument`とappend-only `SceneRevision`、revision dependencyをSQLiteへ加法的に
 導入した。sceneはHost subjectまたはstandalone ownerで分離し、応答へowner/path/DB keyを返さない。
 revisionは`.blend` source、そこから派生したGLB preview、依存AssetのID/SHA-256、Blender

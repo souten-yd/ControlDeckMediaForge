@@ -5,7 +5,7 @@
 
 ## 2026-09-05 3DS-4a immutable scene revision persistence
 
-branch `ux1/3d-scene-revisions`、実装commit `9d053fb`。owner-scoped SceneDocument、append-only
+PR #222、branch `ux1/3d-scene-revisions`、実装commit `9d053fb`。owner-scoped SceneDocument、append-only
 SceneRevision、依存Asset hash、Blender runtime identity、validation report、optimistic commitをSQLiteへ
 追加した。`.blend`は公開Asset MIMEへ加法的に追加したがpublic import/tool/executorは未追加。
 private `scenes.list/get`、session part、standalone mirrorだけを提供する。過去revisionのruntime参照は
