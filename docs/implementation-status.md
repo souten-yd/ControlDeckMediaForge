@@ -8831,3 +8831,23 @@ exact head full 978件 / warning 1件 / 99.02秒PASS。exact 0.28.10 bundleは31
 `ok / 0.28.10 / packaged=true`。
 版は0.28.10。正式署名bundle・installed update・同じOpenCode再試行はこのsliceで続ける。opaque iframe、GPU共存、
 120秒超job、10分超credential、rollbackは **NOT TESTED**。
+
+## 2026-09-06 — 3DS-8 OpenCode pack schema compatibility
+
+v0.28.10の実ControlDeck/OpenCode 1.18.27 / Qwen3.8-27Bは、schema 400を越えてtyped scene作成を完了した。
+local Job `job_8ddb5be450e14369b2ffbe872f59bd96`、Host child `ae68f3b69b0b`はsucceeded / terminal sent。
+scene `scene_ca920fd634b14dfea8215567e930bb7a`、revision
+`revision_0140264e6a024ea78f8ec2c251b2c899`、objects 4 / meshes 4 / vertices 126 / triangles 236、
+autoexec disabled、Blender/GLB validator passed。GLB Asset
+`asset_6e3d24cb8e62453e841db3e3f2c72a19`は20,256 B / SHA-256
+`2afac7d44d23335cc31776bb8036ac63b957fc1f4b5a292df73d4c8ead8791ad`。project output grant取得も成功した。
+
+最後の`media.pack`だけ、モデルが引数を毎回`{}`にしてOpenCodeのdoom-loop保護で停止した。exact fieldを指定した
+限定runでも再現し、auto runは明示停止した。原因は`project-asset-placement.json`だけtop-levelにpropertiesがなく、
+単一/batchの各`oneOf`枝内にfieldを置いたmodel-decoder非互換。公開2形態とvalidationを維持し、共通propertiesを
+top-levelへ移して`oneOf`を排他条件だけにした。single/batch valid、両形態混在invalid、model-visible fieldsを回帰化し、
+focused contract/baseline 22件、final full 979件 / warning 1件 / 97.94秒PASS。最初のfull 1件は既存の
+branch object宣言assertで、各branchの`type=object`を維持して解消した。版は0.28.11。
+exact bundleは31,618,189 B / SHA-256
+`2253835678bca317a5cdf5757520f60063a3faa79da9973224619c0d4eb999db`、展開binary doctorは
+`ok / 0.28.11 / packaged=true`。release/installed再試行は続行中。

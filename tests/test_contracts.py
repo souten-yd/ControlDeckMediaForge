@@ -280,6 +280,33 @@ def test_the_placement_schema_tells_agents_to_request_the_grant_late():
 
     assert "immediately before placing" in schema["description"]
     assert "expire" in schema["description"]
+    assert {"asset_id", "output_grant_id", "filename", "items"}.issubset(
+        schema["properties"]
+    )
+
+
+def test_placement_schema_keeps_single_and_batch_inputs_exclusive():
+    schema = json.loads((ROOT / "schemas/project-asset-placement.json").read_text(encoding="utf-8"))
+    asset_id = "asset_" + "1" * 32
+    grant_id = "grant:acceptance"
+    jsonschema.validate(
+        {"asset_id": asset_id, "output_grant_id": grant_id, "filename": "asset.glb"},
+        schema,
+    )
+    jsonschema.validate(
+        {"output_grant_id": grant_id, "items": [{"asset_id": asset_id}]},
+        schema,
+    )
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            {"asset_id": asset_id, "output_grant_id": grant_id, "items": [{"asset_id": asset_id}]},
+            schema,
+        )
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            {"output_grant_id": grant_id, "filename": "asset.glb", "items": [{"asset_id": asset_id}]},
+            schema,
+        )
 
 
 def test_every_schema_example_validates_against_its_own_schema():
