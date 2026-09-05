@@ -29,6 +29,7 @@ class HostIdentity:
     subject: str
     expires_at: int
     granted_capabilities: frozenset[str]
+    actor_subject: str | None = None
 
 
 class ControlDeckHostClient:
@@ -68,6 +69,7 @@ class ControlDeckHostClient:
             addon_id=addon_id,
         )
         capabilities = value.get("granted_capabilities")
+        actor_subject = value.get("actor_subject")
         expires_at = value.get("expires_at")
         now = int(time.time())
         if (
@@ -80,6 +82,14 @@ class ControlDeckHostClient:
             or expires_at > now + 630
             or not isinstance(capabilities, list)
             or not all(isinstance(item, str) for item in capabilities)
+            or (
+                actor_subject is not None
+                and (
+                    not isinstance(actor_subject, str)
+                    or not actor_subject.startswith("user:")
+                    or len(actor_subject) > 128
+                )
+            )
         ):
             raise HostApiError("invalid_host_service_token", "ControlDeck service token is inactive", status_code=401)
         return HostIdentity(
@@ -88,16 +98,29 @@ class ControlDeckHostClient:
             subject=value["subject"],
             expires_at=expires_at,
             granted_capabilities=frozenset(capabilities),
+            actor_subject=actor_subject,
         )
 
-    async def create_or_attach_job(self, identity: HostIdentity, *, title: str) -> dict[str, Any]:
-        return await self._request(identity, "POST", f"/{ADDON_ID}/jobs", json={"title": title})
+    async def create_or_attach_job(
+        self, identity: HostIdentity, *, title: str, detached: bool = False
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"title": title}
+        if detached:
+            payload["detached"] = True
+        return await self._request(identity, "POST", f"/{ADDON_ID}/jobs", json=payload)
 
     async def update_job(self, identity: HostIdentity, host_job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return await self._request(identity, "PATCH", f"/{ADDON_ID}/jobs/{host_job_id}", json=payload)
 
     async def job_control(self, identity: HostIdentity, host_job_id: str) -> dict[str, Any]:
         return await self._request(identity, "GET", f"/{ADDON_ID}/jobs/{host_job_id}/control")
+
+    async def refresh_job_credential(
+        self, identity: HostIdentity, host_job_id: str
+    ) -> dict[str, Any]:
+        return await self._request(
+            identity, "POST", f"/{ADDON_ID}/jobs/{host_job_id}/credential/refresh"
+        )
 
     async def request_resource(self, identity: HostIdentity, payload: dict[str, Any]) -> dict[str, Any]:
         # 受理は場所を空けることを含む。実測では 16.5 GB の常駐を降ろしてから

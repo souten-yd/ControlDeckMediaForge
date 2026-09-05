@@ -35,6 +35,7 @@ from .scenes import (
     SceneWorkingCopy,
     validate_scene_owner,
 )
+from .scene_recipes import SceneCreateRequest, SceneEditRequest, SceneMaterialRequest, SceneRecipe
 from .store import Store, utc_now
 
 
@@ -117,6 +118,7 @@ class SceneWorkspace:
         worker: Path,
         *,
         material_worker: Path | None = None,
+        recipe_worker: Path | None = None,
         now: Callable[[], datetime] | None = None,
         process_timeout_sec: float = SCENE_WORKER_TIMEOUT_SEC,
     ) -> None:
@@ -126,12 +128,16 @@ class SceneWorkspace:
         self.material_worker = (
             Path(os.path.abspath(material_worker)) if material_worker is not None else None
         )
+        self.recipe_worker = (
+            Path(os.path.abspath(recipe_worker)) if recipe_worker is not None else None
+        )
         self.catalog = SceneCatalog(store)
         self.scene_root = contained(store.data_dir, store.data_dir / "scenes")
         self.upload_root = contained(self.scene_root, self.scene_root / "uploads")
         self.working_root = contained(self.scene_root, self.scene_root / "working")
         self.validation_root = contained(self.scene_root, self.scene_root / "validation")
         self.material_root = contained(self.scene_root, self.scene_root / "materials")
+        self.recipe_root = contained(self.scene_root, self.scene_root / "recipes")
         self._now = now or (lambda: datetime.now(UTC))
         self.process_timeout_sec = process_timeout_sec
         self._guard = threading.RLock()
@@ -144,6 +150,7 @@ class SceneWorkspace:
             self.working_root,
             self.validation_root,
             self.material_root,
+            self.recipe_root,
         ):
             root.mkdir(mode=0o700, parents=True, exist_ok=True)
         for entry in self.upload_root.iterdir():
@@ -164,6 +171,223 @@ class SceneWorkspace:
                 shutil.rmtree(bounded)
             else:
                 bounded.unlink()
+        for entry in self.recipe_root.iterdir():
+            bounded = contained(self.recipe_root, entry)
+            if bounded.is_dir() and not bounded.is_symlink():
+                shutil.rmtree(bounded)
+            else:
+                bounded.unlink()
+
+    async def apply_recipe(
+        self,
+        owner: str,
+        job_id: str,
+        value: SceneCreateRequest | SceneEditRequest,
+        *,
+        runtime_id: str,
+        runtime_version: str,
+    ) -> dict[str, Any]:
+        """Run a typed recipe and atomically publish a validated scene revision."""
+        owner = validate_scene_owner(owner)
+        registered: list[str] = []
+        with self.resolver.runtime_reference(runtime_id) as runtime:
+            if runtime is None or runtime.version != runtime_version:
+                raise SceneError("scene_runtime_unavailable", "pinned Blender runtime is unavailable")
+            parent: SceneRevision | None = None
+            source: Path | None = None
+            if isinstance(value, SceneEditRequest):
+                document, revisions = self.catalog.get(owner, value.scene_id)
+                if document.current_revision_id != value.base_revision_id:
+                    raise SceneError("scene_revision_conflict", "scene current revision changed")
+                parent = next(
+                    (item for item in revisions if item.id == value.base_revision_id), None
+                )
+                if parent is None:
+                    raise SceneError("scene_revision_not_found", "scene revision is unavailable")
+                if runtime.runtime_id != parent.runtime_id or runtime.version != parent.runtime_version:
+                    raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
+                _, _, source = self._verified_revision_asset(
+                    parent.source_asset_id, "application/x-blender"
+                )
+            generated, worker_facts = await self._apply_recipe_worker(
+                value.recipe, runtime, source=source
+            )
+            try:
+                preview, blender_facts, glb_facts = await self._validate(generated, runtime)
+                source_asset, preview_asset = self._register_assets(
+                    job_id,
+                    generated,
+                    preview,
+                    runtime,
+                    blender_facts,
+                    glb_facts,
+                    parent_revision=parent,
+                    dependencies=parent.dependencies if parent is not None else [],
+                    operation="scene.recipe.create" if parent is None else "scene.recipe.edit",
+                    parameters={
+                        "recipe_schema": value.recipe.schema_version,
+                        "recipe_sha256": hashlib.sha256(
+                            value.recipe.model_dump_json().encode("utf-8")
+                        ).hexdigest(),
+                        "operation_count": len(value.recipe.operations),
+                        "stable_object_ids": worker_facts["stable_object_ids"],
+                    },
+                )
+                registered.extend([source_asset.id, preview_asset.id])
+                revision_value = SceneRevisionInput(
+                    source_asset_id=source_asset.id,
+                    preview_asset_id=preview_asset.id,
+                    dependencies=parent.dependencies if parent is not None else [],
+                    runtime_id=runtime.runtime_id,
+                    runtime_version=runtime.version,
+                    validation=self._validation(blender_facts, glb_facts),
+                )
+                if isinstance(value, SceneCreateRequest):
+                    document, revision = self.catalog.create(
+                        owner,
+                        name=value.name,
+                        tags=value.tags,
+                        collection=value.collection,
+                        revision=revision_value,
+                    )
+                else:
+                    document, revision = self.catalog.commit(
+                        owner, value.scene_id, value.base_revision_id, revision_value
+                    )
+                return {
+                    **self._scene_projection(document, revision),
+                    "asset_ids": [source_asset.id, preview_asset.id],
+                    "recipe": worker_facts,
+                }
+            except BaseException:
+                self._rollback_assets(registered)
+                raise
+            finally:
+                if generated.exists():
+                    generated.unlink()
+
+    def recipe_runtime_pin(
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest
+    ) -> tuple[str, str, str | None]:
+        owner = validate_scene_owner(owner)
+        if isinstance(value, (SceneEditRequest, SceneMaterialRequest)):
+            document, revisions = self.catalog.get(owner, value.scene_id)
+            base_revision_id = (
+                value.base_revision_id
+                if isinstance(value, SceneEditRequest)
+                else value.binding.source_revision_id
+            )
+            if document.current_revision_id != base_revision_id:
+                raise SceneError("scene_revision_conflict", "scene current revision changed")
+            revision = next(
+                (item for item in revisions if item.id == base_revision_id), None
+            )
+            if revision is None:
+                raise SceneError("scene_revision_not_found", "scene revision is unavailable")
+            runtime = self.resolver.resolve_registered(revision.runtime_id)
+            if runtime is None or runtime.version != revision.runtime_version:
+                raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
+            return runtime.runtime_id, runtime.version, revision.id
+        runtime = self.resolver.resolve_active()
+        if runtime is None:
+            raise SceneError("scene_runtime_unavailable", "active Blender runtime is unavailable")
+        return runtime.runtime_id, runtime.version, None
+
+    async def _apply_recipe_worker(
+        self,
+        recipe: SceneRecipe,
+        runtime: ResolvedBlenderRuntime,
+        *,
+        source: Path | None,
+    ) -> tuple[Path, dict[str, Any]]:
+        if self.recipe_worker is None or self.recipe_worker.is_symlink() or not self.recipe_worker.is_file():
+            raise SceneError("scene_recipe_worker_unavailable", "trusted scene recipe worker is unavailable")
+        root = contained(self.recipe_root, self.recipe_root / f"recipe_{uuid.uuid4().hex}")
+        root.mkdir(mode=0o700)
+        recipe_path = contained(root, root / "recipe.json")
+        recipe_path.write_text(recipe.model_dump_json() + "\n", encoding="utf-8")
+        recipe_path.chmod(0o600)
+        mode = "edit" if source is not None else "create"
+        if source is not None:
+            staged = contained(root, root / "source.blend")
+            shutil.copyfile(source, staged)
+            staged.chmod(0o600)
+        output = contained(root, root / "scene.blend")
+        result_path = contained(root, root / "result.json")
+        sandbox = contained(root, root / "blender-user")
+        sandbox.mkdir(mode=0o700)
+        environment = {
+            "PATH": "/usr/bin:/bin",
+            "PYTHONNOUSERSITE": "1",
+            "HOME": str(sandbox),
+            "XDG_CACHE_HOME": str(sandbox / "cache"),
+            "XDG_CONFIG_HOME": str(sandbox / "config"),
+            "XDG_DATA_HOME": str(sandbox / "data"),
+            "BLENDER_USER_CONFIG": str(sandbox / "blender-config"),
+            "BLENDER_USER_SCRIPTS": str(sandbox / "blender-scripts"),
+            "BLENDER_USER_DATAFILES": str(sandbox / "blender-data"),
+            "LIBGL_ALWAYS_SOFTWARE": "1",
+            "CUDA_VISIBLE_DEVICES": "",
+            "HIP_VISIBLE_DEVICES": "",
+            "ROCR_VISIBLE_DEVICES": "",
+        }
+        command = [
+            str(runtime.executable), "--background", "--factory-startup", "--disable-autoexec",
+            "--python", str(self.recipe_worker), "--", "--mode", mode,
+            "--recipe", "recipe.json", "--output", "scene.blend", "--result", "result.json",
+            "--expected-version", runtime.version,
+        ]
+        if source is not None:
+            command.extend(["--source", "source.blend"])
+        retained = contained(self.recipe_root, self.recipe_root / f"scene_{uuid.uuid4().hex}.blend")
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command, cwd=root, stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                env=environment, start_new_session=True,
+            )
+            stdout_task = asyncio.create_task(_bounded_read(process.stdout))
+            stderr_task = asyncio.create_task(_bounded_read(process.stderr))
+            try:
+                _, _, returncode = await asyncio.wait_for(
+                    asyncio.gather(stdout_task, stderr_task, process.wait()),
+                    timeout=self.process_timeout_sec,
+                )
+            except BaseException as exc:
+                await _stop_process(process)
+                for task in (stdout_task, stderr_task):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+                if isinstance(exc, TimeoutError):
+                    raise SceneError("scene_recipe_timeout", "scene recipe timed out") from exc
+                raise
+            if returncode != 0:
+                raise SceneError("scene_recipe_failed", "Blender rejected the typed scene recipe")
+            if output.is_symlink() or not output.is_file() or result_path.is_symlink() or not result_path.is_file():
+                raise SceneError("scene_recipe_worker_invalid", "scene recipe worker output is missing")
+            try:
+                result = json.loads(result_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise SceneError("scene_recipe_worker_invalid", "scene recipe result is invalid") from exc
+            expected = {"schema_version", "blender_version", "autoexec_disabled", "operation_count", "stable_object_ids"}
+            if (
+                not isinstance(result, dict) or set(result) != expected
+                or result["schema_version"] != "media-forge.scene-recipe-result@1"
+                or result["blender_version"] != runtime.version
+                or result["autoexec_disabled"] is not True
+                or result["operation_count"] != len(recipe.operations)
+                or not isinstance(result["stable_object_ids"], list)
+                or not all(isinstance(item, str) for item in result["stable_object_ids"])
+            ):
+                raise SceneError("scene_recipe_worker_invalid", "scene recipe result differs")
+            os.replace(output, retained)
+            return retained, result
+        except OSError as exc:
+            raise SceneError("scene_recipe_worker_unavailable", "scene recipe worker could not start") from exc
+        finally:
+            if root.exists():
+                self._remove_tree(root, self.recipe_root)
 
     def begin_upload(
         self,
@@ -273,7 +497,7 @@ class SceneWorkspace:
                 self.store.update_job(job.id, status=JobStatus.RUNNING, phase="validating", progress=0.2)
                 preview, blender_facts, glb_facts = await self._validate(upload.path, runtime)
                 source_asset, preview_asset = self._register_assets(
-                    job.id,
+                    job_id,
                     upload.path,
                     preview,
                     runtime,
@@ -449,6 +673,7 @@ class SceneWorkspace:
         dependencies: list[SceneDependency] | None = None,
         operation: str = "scene.commit",
         parameters: dict[str, Any] | None = None,
+        external_job_id: str | None = None,
     ) -> dict[str, Any]:
         owner = validate_scene_owner(owner)
         self.store.expire_scene_working_copies(_iso(self._now()))
@@ -466,17 +691,20 @@ class SceneWorkspace:
             with self.resolver.runtime_reference(working.runtime_id) as runtime:
                 if runtime is None or runtime.version != working.runtime_version:
                     raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
-                job = self.store.create_job(
-                    JobRequest(operation="media.inspect", intent="Commit Blender scene revision")
-                )
-                job_id = job.id
-                self.store.update_job(job.id, status=JobStatus.RUNNING, phase="validating", progress=0.2)
+                if external_job_id is None:
+                    job = self.store.create_job(
+                        JobRequest(operation="media.inspect", intent="Commit Blender scene revision")
+                    )
+                    job_id = job.id
+                    self.store.update_job(job.id, status=JobStatus.RUNNING, phase="validating", progress=0.2)
+                else:
+                    job_id = external_job_id
                 preview, blender_facts, glb_facts = await self._validate(source, runtime)
                 _, base_revisions = self.catalog.get(owner, working.scene_id)
                 base = next(item for item in base_revisions if item.id == working.base_revision_id)
                 revision_dependencies = dependencies if dependencies is not None else base.dependencies
                 source_asset, preview_asset = self._register_assets(
-                    job.id,
+                    job_id,
                     source,
                     preview,
                     runtime,
@@ -503,12 +731,13 @@ class SceneWorkspace:
                     ),
                     committed_at=_iso(self._now()),
                 )
-                self.store.update_job(
-                    job.id,
-                    status=JobStatus.SUCCEEDED,
-                    progress=1,
-                    asset_ids=[source_asset.id, preview_asset.id],
-                )
+                if external_job_id is None:
+                    self.store.update_job(
+                        job_id,
+                        status=JobStatus.SUCCEEDED,
+                        progress=1,
+                        asset_ids=[source_asset.id, preview_asset.id],
+                    )
                 root = contained(self.working_root, self.working_root / working.id)
                 self._remove_tree(root, self.working_root)
                 return self._scene_projection(document, revision)
@@ -518,7 +747,7 @@ class SceneWorkspace:
                 self.store.finish_scene_working_copy(
                     owner, working.id, "recovery", now=utc_now()
                 )
-            if job_id is not None:
+            if job_id is not None and external_job_id is None:
                 self.store.update_job(
                     job_id,
                     status=JobStatus.FAILED,
@@ -527,7 +756,7 @@ class SceneWorkspace:
             raise
         except Exception as exc:
             self._rollback_assets(registered)
-            if job_id is not None:
+            if job_id is not None and external_job_id is None:
                 self.store.update_job(
                     job_id,
                     status=JobStatus.FAILED,
@@ -777,7 +1006,14 @@ class SceneWorkspace:
         }
 
     async def apply_material_binding(
-        self, owner: str, scene_id: str, value: MaterialBinding | dict[str, Any]
+        self,
+        owner: str,
+        scene_id: str,
+        value: MaterialBinding | dict[str, Any],
+        *,
+        external_job_id: str | None = None,
+        runtime_id: str | None = None,
+        runtime_version: str | None = None,
     ) -> dict[str, Any]:
         owner = validate_scene_owner(owner)
         try:
@@ -811,6 +1047,11 @@ class SceneWorkspace:
             runtime = self.resolver.resolve_registered(working.runtime_id)
             if runtime is None or runtime.version != working.runtime_version:
                 raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
+            if (
+                runtime_id is not None
+                and (runtime.runtime_id != runtime_id or runtime.version != runtime_version)
+            ):
+                raise SceneError("scene_runtime_unavailable", "pinned Blender runtime changed")
             source = self.working_path_for_runtime(owner, working.id)
             _, revisions = self.catalog.get(owner, scene_id)
             base = next(item for item in revisions if item.id == working.base_revision_id)
@@ -846,10 +1087,11 @@ class SceneWorkspace:
                     "binding": binding.model_dump(mode="json"),
                     "material_result": result["binding"],
                 },
+                external_job_id=external_job_id,
             )
             committed["binding"] = result["binding"]
             return committed
-        except Exception:
+        except BaseException:
             try:
                 current = self.store.get_scene_working_copy(owner, working.id)
                 if current.state == "active":
@@ -1291,6 +1533,14 @@ class SceneWorkspace:
             *([parent_revision.source_asset_id] if parent_revision is not None else []),
             *(dependency.asset_id for dependency in provenance_dependencies),
         ]))
+        reference_hashes = {
+            dependency.asset_id: dependency.sha256
+            for dependency in provenance_dependencies
+        }
+        if parent_revision is not None:
+            reference_hashes[parent_revision.source_asset_id] = self.store.get_asset(
+                parent_revision.source_asset_id
+            ).sha256
         source_asset = Asset(
             id=source_id,
             job_id=job_id,
@@ -1307,25 +1557,47 @@ class SceneWorkspace:
             asset_id=source_id,
             parent_asset_ids=parent_assets,
             operation=operation or ("scene.import" if parent_revision is None else "scene.commit"),
-            intent=(
-                "Apply scene material binding"
-                if operation == "scene.material.bind"
-                else "Import Blender scene" if parent_revision is None else "Commit Blender scene revision"
+            intent={
+                "scene.material.bind": "Apply scene material binding",
+                "scene.recipe.create": "Create a Blender scene from a typed recipe",
+                "scene.recipe.edit": "Edit a Blender scene with a typed recipe",
+            }.get(
+                operation,
+                "Import Blender scene" if parent_revision is None else "Commit Blender scene revision",
             ),
             model_id="none",
             model_version="0",
             weights_hash="none",
-            license="user-provided",
-            runtime_adapter="blender.scene-document",
+            license=(
+                "generated-local"
+                if operation == "scene.recipe.create"
+                else "derived"
+                if operation in {"scene.recipe.edit", "scene.material.bind"}
+                else "user-provided"
+            ),
+            runtime_adapter=(
+                "blender.scene-recipe"
+                if operation in {"scene.recipe.create", "scene.recipe.edit"}
+                else "blender.scene-document"
+            ),
             runtime_version=runtime.version,
-            tool_versions={"media-forge": __version__, "blender": runtime.version},
+            tool_versions={
+                "media-forge": __version__,
+                "blender": runtime.version,
+                **(
+                    {"scene-recipe": "1.0.0"}
+                    if operation in {"scene.recipe.create", "scene.recipe.edit"}
+                    else {}
+                ),
+            },
             seed=0,
             parameters={"runtime_id": runtime.runtime_id, **(parameters or {})},
-            reference_asset_hashes={
-                dependency.asset_id: dependency.sha256
-                for dependency in provenance_dependencies
-            },
-            postprocessing=[],
+            reference_asset_hashes=reference_hashes,
+            postprocessing=(
+                ["typed-scene-recipe"]
+                if operation in {"scene.recipe.create", "scene.recipe.edit"}
+                else []
+            ),
             validation=[blender_facts],
             warnings=[],
             output_sha256=source_hash,

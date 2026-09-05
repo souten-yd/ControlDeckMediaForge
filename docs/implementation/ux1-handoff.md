@@ -3,6 +3,29 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 3DS-7 typed Agent recipes
+
+branch `ux1/3d-agent-recipes`。closed vocabularyのscene create/edit、既存MaterialBinding、snapshot/export、
+owner-scoped durable status/cancelとworkflow `media.scene`を追加した。create/edit/materialはHostの
+`detached=true` child Jobと短命credentialを使い、refresh、Host/local cancel、Blender slot待ち中cancel、
+shutdown終端同期を行う。SQLiteはtokenを保存せず、exact input/hash/runtime/base/stage/result/retry/outboxを保持する。
+restart時はcredentialを捏造せずfail-closed。既存画像/G8/public `JobRequest`は変更していない。版は0.28.9。
+
+per-call `job:` subjectを跨ぐownerには、別ControlDeck PR #270で追加しmerged済みのsigned optional
+`actor_subject`だけを使う。Host focused 27 passed、merge commit
+`1c611d6d05d3e90a8b1b07073c9f93c7087faad1`。Host fullの935 passed / 1 skippedに残った5件は共有DBとGPU sensorの
+既存order-dependent failureで、focused変更範囲はgreen。
+
+実Blender managerのcreate→edit→materialは3 Job succeeded、revision 3、最終`.blend` 501,758 B、GLB
+62,136 B、triangles 644、texture dependency/provenance、両validator passed。closed vocabulary全10操作も
+0.22秒、507,364 B、stable object 6件、autoexec disabledで通した。final fullは977 passed / warning 1件 /
+96.24秒。0.28.9 exact bundleは31,619,208 B / SHA-256
+`ec24a51465e952929239f822ac7f33f971ee5d7230ef3f91527884edea9d3c07`、doctor成功。exact package processは
+scene/job 7 route、workflow 1 route、schema 7件を配信した。
+
+実installed ControlDeck/OpenCodeの指示→shape→texture→GLB→grant配置、opaque iframe、120秒超job、10分超refresh、
+restart/update/rollbackは **NOT TESTED**。次は別sliceの3DS-8 release acceptance。
+
 ## 2026-09-06 3DS-6c revision compare/restore
 
 branch `ux1/3d-revision-restore`。旧版/currentのGLBを各64 MiB上限のprivate handle/chunkで同時表示する比較dialogと、

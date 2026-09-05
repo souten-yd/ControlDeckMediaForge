@@ -44,6 +44,7 @@ from .scenes import (
     SceneWorkingCopy,
     validate_scene_owner,
 )
+from .scene_recipes import SceneTaskRecord
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -312,6 +313,27 @@ class Store:
                     ON scene_working_copies(scene_id) WHERE state = 'active';
                 CREATE INDEX IF NOT EXISTS idx_scene_working_copies_owner_updated
                     ON scene_working_copies(owner, updated_at DESC);
+                CREATE TABLE IF NOT EXISTS scene_recipe_tasks (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(id),
+                    operation TEXT NOT NULL,
+                    owner TEXT NOT NULL,
+                    host_job_id TEXT NOT NULL,
+                    runtime_id TEXT NOT NULL,
+                    runtime_version TEXT NOT NULL,
+                    base_revision_id TEXT,
+                    input_sha256 TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL,
+                    stage TEXT NOT NULL,
+                    request_json TEXT NOT NULL,
+                    result_json TEXT,
+                    host_terminal_json TEXT,
+                    host_terminal_sent INTEGER NOT NULL DEFAULT 0,
+                    retry_of TEXT REFERENCES scene_recipe_tasks(job_id),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_scene_recipe_tasks_owner_updated
+                    ON scene_recipe_tasks(owner, updated_at DESC);
                 """
             )
             columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(jobs)")}
@@ -321,6 +343,23 @@ class Store:
                 connection.execute("ALTER TABLE jobs ADD COLUMN profile_snapshot_json TEXT NOT NULL DEFAULT '{}'")
             if "cleared_at" not in columns:
                 connection.execute("ALTER TABLE jobs ADD COLUMN cleared_at TEXT")
+            scene_task_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(scene_recipe_tasks)")
+            }
+            for name, declaration in (
+                ("operation", "TEXT NOT NULL DEFAULT 'scene.create'"),
+                ("runtime_id", "TEXT NOT NULL DEFAULT 'unknown'"),
+                ("runtime_version", "TEXT NOT NULL DEFAULT '0.0'"),
+                ("base_revision_id", "TEXT"),
+                ("idempotency_key", "TEXT NOT NULL DEFAULT '" + "0" * 64 + "'"),
+                ("host_terminal_json", "TEXT"),
+                ("host_terminal_sent", "INTEGER NOT NULL DEFAULT 0"),
+            ):
+                if name not in scene_task_columns:
+                    connection.execute(
+                        f"ALTER TABLE scene_recipe_tasks ADD COLUMN {name} {declaration}"
+                    )
             model_operation_columns = {
                 str(row["name"]) for row in connection.execute("PRAGMA table_info(model_operations)")
             }
@@ -337,6 +376,15 @@ class Store:
                     utc_now(),
                     JobStatus.RUNNING,
                 ),
+            )
+            connection.execute(
+                """UPDATE scene_recipe_tasks SET stage = 'service_restarted', updated_at = ?
+                   WHERE job_id IN (
+                       SELECT id FROM jobs WHERE status = ?
+                       AND json_extract(error_json, '$.code') = 'service_restarted'
+                   )
+                   AND stage IN ('queued', 'validate_recipe', 'blender_recipe', 'publish_revision')""",
+                (utc_now(), JobStatus.FAILED),
             )
             blender_terminal = tuple(
                 state.value for state in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES
@@ -419,6 +467,14 @@ class Store:
                     utc_now(),
                     JobStatus.QUEUED,
                 ),
+            )
+            connection.execute(
+                """UPDATE scene_recipe_tasks SET stage = 'host_context_lost', updated_at = ?
+                   WHERE job_id IN (
+                       SELECT id FROM jobs WHERE status = ?
+                       AND json_extract(error_json, '$.code') = 'host_context_lost'
+                   ) AND stage = 'queued'""",
+                (utc_now(), JobStatus.FAILED),
             )
         for entry in self.work_dir.iterdir():
             bounded = contained(self.work_dir, entry)
@@ -516,6 +572,126 @@ class Store:
                 "SELECT id FROM jobs WHERE status = ? AND cancel_requested = 0 ORDER BY created_at", (JobStatus.QUEUED,)
             ).fetchall()
         return [str(row["id"]) for row in rows]
+
+    def create_scene_recipe_task(
+        self,
+        job_id: str,
+        *,
+        owner: str,
+        host_job_id: str,
+        operation: str,
+        runtime_id: str,
+        runtime_version: str,
+        base_revision_id: str | None,
+        input_sha256: str,
+        idempotency_key: str,
+        request: dict[str, Any],
+        retry_of: str | None = None,
+    ) -> SceneTaskRecord:
+        owner = validate_scene_owner(owner)
+        now = utc_now()
+        request_json = json.dumps(request, sort_keys=True, separators=(",", ":"))
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """INSERT INTO scene_recipe_tasks
+                   (job_id, operation, owner, host_job_id, runtime_id, runtime_version,
+                    base_revision_id, input_sha256, idempotency_key, stage, request_json,
+                    result_json, host_terminal_json, host_terminal_sent,
+                    retry_of, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, NULL, NULL, 0, ?, ?, ?)""",
+                (
+                    job_id, operation, owner, host_job_id, runtime_id, runtime_version,
+                    base_revision_id, input_sha256, idempotency_key,
+                    request_json, retry_of, now, now,
+                ),
+            )
+        return self.get_scene_recipe_task(job_id, owner=owner)
+
+    def get_scene_recipe_task(
+        self, job_id: str, *, owner: str | None = None
+    ) -> SceneTaskRecord:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM scene_recipe_tasks WHERE job_id = ?", (job_id,)
+            ).fetchone()
+        if row is None or (owner is not None and row["owner"] != validate_scene_owner(owner)):
+            raise KeyError(job_id)
+        return SceneTaskRecord(
+            job_id=row["job_id"],
+            operation=row["operation"],
+            owner=row["owner"],
+            host_job_id=row["host_job_id"],
+            runtime_id=row["runtime_id"],
+            runtime_version=row["runtime_version"],
+            base_revision_id=row["base_revision_id"],
+            input_sha256=row["input_sha256"],
+            idempotency_key=row["idempotency_key"],
+            stage=row["stage"],
+            request=json.loads(row["request_json"]),
+            result=json.loads(row["result_json"]) if row["result_json"] else None,
+            host_terminal=(
+                json.loads(row["host_terminal_json"])
+                if row["host_terminal_json"]
+                else None
+            ),
+            host_terminal_sent=bool(row["host_terminal_sent"]),
+            retry_of=row["retry_of"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def update_scene_recipe_task(
+        self,
+        job_id: str,
+        *,
+        stage: str,
+        result: dict[str, Any] | None = None,
+    ) -> SceneTaskRecord:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE scene_recipe_tasks SET stage = ?, result_json = ?, updated_at = ?
+                   WHERE job_id = ?""",
+                (
+                    stage,
+                    json.dumps(result, sort_keys=True, separators=(",", ":"))
+                    if result is not None
+                    else None,
+                    utc_now(),
+                    job_id,
+                ),
+            )
+        if cursor.rowcount != 1:
+            raise KeyError(job_id)
+        return self.get_scene_recipe_task(job_id)
+
+    def queue_scene_recipe_terminal(
+        self, job_id: str, payload: dict[str, Any]
+    ) -> SceneTaskRecord:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE scene_recipe_tasks
+                   SET host_terminal_json = ?, host_terminal_sent = 0, updated_at = ?
+                   WHERE job_id = ?""",
+                (
+                    json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    utc_now(),
+                    job_id,
+                ),
+            )
+        if cursor.rowcount != 1:
+            raise KeyError(job_id)
+        return self.get_scene_recipe_task(job_id)
+
+    def mark_scene_recipe_terminal_sent(self, job_id: str) -> SceneTaskRecord:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE scene_recipe_tasks SET host_terminal_sent = 1, updated_at = ?
+                   WHERE job_id = ? AND host_terminal_json IS NOT NULL""",
+                (utc_now(), job_id),
+            )
+        if cursor.rowcount != 1:
+            raise KeyError(job_id)
+        return self.get_scene_recipe_task(job_id)
 
     def job_profile_snapshot(self, job_id: str) -> dict[str, Any]:
         with self._connect() as connection:

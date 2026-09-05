@@ -1,0 +1,26 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "scene_id": {
+      "pattern": "^scene_[0-9a-f]{32}$",
+      "title": "Scene Id",
+      "type": "string"
+    },
+    "format": {
+      "default": "glb",
+      "enum": [
+        "glb",
+        "blend"
+      ],
+      "title": "Format",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scene_id"
+  ],
+  "title": "SceneExportRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/scene-export-request.json"
+}

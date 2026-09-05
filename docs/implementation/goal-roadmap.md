@@ -584,6 +584,9 @@ G7 の実機検証では、退避が起きた回数と抑止理由を記録す�
 
 Blender を**決定的なアセットコンパイラ**として扱う。GUI 自動操作ではない。
 
+統合3D Studio拡張は3DS-7までsource/packageで完了。typed recipeとdurable Agent Jobは既存の
+SceneRevision/Asset/provenanceへ接続済みで、installed-host/OpenCode/GPU/release受入れは3DS-8で行う。
+
 ```text
 Blender background worker
 typed operation: import / 変換正規化 / mesh検証・クリーンアップ /

@@ -506,7 +506,12 @@ def test_material_targets_and_apply_create_validated_revision_with_lineage(
     assert provenance.parent_asset_ids == [
         imported["revision"]["source_asset_id"], texture.id
     ]
-    assert provenance.reference_asset_hashes == {texture.id: texture.sha256}
+    assert provenance.reference_asset_hashes == {
+        imported["revision"]["source_asset_id"]: store.get_asset(
+            imported["revision"]["source_asset_id"]
+        ).sha256,
+        texture.id: texture.sha256,
+    }
     assert provenance.parameters["binding"]["image_asset_id"] == texture.id
     with pytest.raises(AssetInUse):
         store.delete_asset(texture.id)
@@ -516,6 +521,49 @@ def test_material_targets_and_apply_create_validated_revision_with_lineage(
     assert not any(workspace.material_root.iterdir())
     assert not any(workspace.working_root.iterdir())
     assert resolver.references == 0
+
+
+def test_material_cancel_releases_the_scene_writer(tmp_path: Path) -> None:
+    store, workspace, resolver = fake_scene_workspace(tmp_path, delay=0.1)
+    imported = upload_scene(workspace, b"BLENDER-material-cancel")
+    texture = register_image(store, tmp_path)
+
+    async def scenario() -> None:
+        task = asyncio.create_task(
+            workspace.apply_material_binding(
+                "user:1",
+                imported["scene"]["id"],
+                MaterialBinding(
+                    source_revision_id=imported["revision"]["id"],
+                    image_asset_id=texture.id,
+                    object_name="Cube",
+                    material_slot=0,
+                    channel="base_color",
+                    uv_map="UVMap",
+                ),
+            )
+        )
+        for _ in range(100):
+            if any(
+                item.state == "active"
+                for item in store.list_scene_working_copies("user:1")
+            ):
+                break
+            await asyncio.sleep(0.001)
+        else:
+            raise AssertionError("material worker did not acquire its scene writer")
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert not any(
+            item.state == "active"
+            for item in store.list_scene_working_copies("user:1")
+        )
+        assert not any(workspace.material_root.iterdir())
+        assert not any(workspace.working_root.iterdir())
+        assert resolver.references == 0
+
+    asyncio.run(scenario())
 
 
 def test_material_replaces_same_target_channel_and_failures_release_writer(

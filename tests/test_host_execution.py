@@ -68,7 +68,7 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
         token_subject = subject(authorization)
         if token_subject is None or addon_id != "media-forge":
             return {"active": False}
-        return {
+        result = {
             "active": True,
             "addon_id": "media-forge",
             "subject": token_subject,
@@ -81,6 +81,9 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
                 "jobs.write", "resources.acquire", "files.pick", "files.export", "ai.inference",
             ],
         }
+        if token_subject in {"7", "job:host-agent", "workflow:42", "context:7"}:
+            result["actor_subject"] = "user:7"
+        return result
 
     @app.get("/api/v1/addon-runtime/media-forge/ai/capabilities")
     async def ai_capabilities() -> dict[str, dict[str, bool]]:
@@ -708,6 +711,7 @@ def test_scoped_file_bridge_reads_and_commits_without_host_paths(tmp_path: Path)
             "Authorization": "Bearer valid-user",
             "X-Control-Deck-Addon-ID": "media-forge",
         })
+        assert identity.actor_subject == "user:7"
         metadata, content = await read_grant(bridge, identity, "grant:read-1")
         assert metadata["name"] == "reference.png"
         assert content == state["grant_content"]

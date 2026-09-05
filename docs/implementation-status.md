@@ -8758,3 +8758,53 @@ materials 2 / images 2 / external images 0 / autoexec disabled、独立GLB valid
 比較0.129秒、復元0.075秒、desktop/390pxの2画面WebGL、overflow 0、console/page error 0。同じsource/GLB
 hash、Blender/GLB validator passed。実ControlDeck opaque iframeは **NOT TESTED** のまま3DS-8 acceptanceへ残す。
 3DS-6 exit条件はsource/packageで完了し、次は別sliceの3DS-7 typed Agent recipes。
+
+## 2026-09-06 — 3DS-7 typed Agent recipes / durable child Jobs
+
+branch `ux1/3d-agent-recipes`。`media.scene.create/edit/material/snapshot/export`と
+`media.job.status/cancel`、workflow executor `media.scene`を加法追加した。create/editは最大64件の
+primitive、transform、bevel、simple PBR material、smart-project UV、light、cameraだけを受ける。
+objectは安定`media_forge_id`で参照し、Python、Blender operator名、shell、URL、pathを受けない。
+materialは既存`MaterialBinding`、snapshot/export/status/cancelも各Pydantic schemaで実行時に
+`extra=forbid`を強制する。既存`JobRequest`、画像/G8 tool、private workspace契約は変更していない。
+
+create/edit/materialはHostへ`detached=true`のchild Jobを作って即時local Job参照を返す。以後はchild
+credentialだけでprogress/control/terminalを行い、期限前refresh、Host cancel、Blender slot待ち中cancel、
+graceful stopを処理する。bearerは永続化せず、SQLiteにはlocal/Host Job ID、stable owner、exact input/
+idempotency hash、runtime/version pin、base revision、stage/result/retry parent、terminal outboxだけを保持する。
+restartでcredentialを失ったqueued/running taskは`host_context_lost`/`service_restarted`へfail-closedし、
+Blenderを暗黙replayしない。retryはfailed/canceled Jobとbyte-equivalent typed inputだけを新しいJobとして受ける。
+
+実HostのAgent tool callごとにexecution subjectが変わるため、Media Forgeだけではscene ownerを安全に安定化できない
+ことを確認した。汎用Host変更をControlDeck PR #270として分離し、署名済みactorがあるintrospectionだけへ
+optional `actor_subject=user:<opaque id>`を追加した。Host focused auth/jobsは27 passed。fullは935 passed / 1 skippedに
+加え、共有test DBのactive Job漏れ4件とGPU sensor subprocess call順1件の既存order-dependent failureで、
+本変更のfocused testはgreen。PR #270はmerge commit
+`1c611d6d05d3e90a8b1b07073c9f93c7087faad1`でmerged。Media Forgeはexecution `subject`をHost操作権限のまま保持し、
+optional `actor_subject`はowner keyにだけ使う。
+
+実Blender 4.5.9のmanager create→edit→materialは3 Jobすべてsucceeded、terminal送信済みで、submissionは
+0.002503 / 0.010185 / 0.001896秒。sceneはrevision 3となり、最終`.blend` 501,758 B / SHA-256
+`7fd17795cce0ae9db9d522b8395ffa86b0bacadefbe724362e6d0472989156e1`、GLB 62,136 B / SHA-256
+`6686309eb6dffab95aa355387d5f2878f6176cafd9479750fd314e1d3ecf768b`、画像dependency SHA-256
+`a97abcc3e51467ce0934adf54d076d3c3e95967437067eed5551cb081648e57f`。provenanceは
+`scene.material.bind` / `derived`、親sourceとtextureの両hashを保持した。Blender validatorはobjects 4 /
+meshes 4 / vertices 330 / triangles 644 / materials 2 / images 2 / external 0 / autoexec disabled、
+独立GLB validatorはimages 1 / textures 1 / materials 2でpassed。
+
+最終worker単体ではclosed vocabulary全10操作を実Blenderで実行し、0.22秒、最大RSS 308,880 KiB、
+`.blend` 507,364 B / SHA-256
+`4d1d9f9812e36ddd617675c6101f6757ff5067346bbf119c2a407a1a24aa7df6`、stable object 6件、
+autoexec disabledを確認した。focused agent/job/contract 28件とmaterial cancel 1件がpassed。exact head
+`./mf.sh test`は977 passed / 既知Starlette warning 1件 / 96.24秒。
+
+0.28.9 exact bundleは31,619,208 B / SHA-256
+`ec24a51465e952929239f822ac7f33f971ee5d7230ef3f91527884edea9d3c07`。展開binary doctorは
+`ok / 0.28.9 / packaged=true`。exact package process `127.0.0.1:9188`は新workflow/tool contributionを
+availableとして返し、OpenAPIのscene/job 7 tool routeとworkflow route、Draft 2020-12 schema 7件を実配信した。
+environment snapshotを置いていない隔離data rootなのでhealth全体は意図どおり`setup_required`であり、
+これをinstalled healthへ読み替えない。
+
+実installed ControlDeckでのOpenCode指示→shape→texture→GLB→grant配置、opaque iframe、120秒超job、
+10分超credential refresh、実process restart/rollbackは **NOT TESTED**。3DS-7のsource/package surfaceを完了し、
+これらは次の3DS-8 release acceptanceで通し確認する。
