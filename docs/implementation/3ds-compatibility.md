@@ -164,7 +164,8 @@ binaryだけを中継し、1 sessionのcontrollerを1本に限定する。Host�
 sourceの実Chromeで1280x720表示、明示切断後の同一session再接続、noVNC入力、保存を確認した。保存結果は
 515,688 B / SHA-256 `7afe139e407c33711b12e0989cf5492ed5294580535e809509ed76b969a43ee1`、
 objects 5 / meshes 3 / triangles 36 / vertices 24、両validator passed。停止後process/socket/listener 0。
-0.28.4 bundleは31,503,051 B / SHA-256
-`b0013dacd20cf5f501c09dcc0c2ea637443f3fc73513d184275b3cb2d1e8bff9`、packaged doctor成功、候補processの
-実RFB gateway bannerは14.337 ms。実ControlDeck opaque iframe、token rotation/revoke、disable、idle/crash
+0.28.4 bundleは31,503,501 B / SHA-256
+`9c1644a40962cf742f5f884203d0d2918d4bee0b195f0db515c82944cbfc9089`、packaged doctor成功、exact candidate rootの
+fingerprint付きimport配信を確認した。同じgateway実装の候補processによる実RFB bannerは14.337 ms。実ControlDeck
+opaque iframe、token rotation/revoke、disable、idle/crash
 recovery、packaged Chrome、GPU/Cyclesは **NOT TESTED**。

@@ -5,7 +5,7 @@
 
 ## 2026-09-06 3DS-5c authenticated RFB gateway / noVNC
 
-PR #233、branch `ux1/3d-session-gateway`、実装commit `72db176`。private Host/standalone WebSocketからsession所有のUnix RFB socketへ
+PR #233、branch `ux1/3d-session-gateway`、実装commit `72db176` + cache identity修正`f94ab59`。private Host/standalone WebSocketからsession所有のUnix RFB socketへ
 binaryだけを中継し、owner照合、READY/実unit/実socket再確認、全体1 controller、browser message 1 MiB
 上限を強制した。Host経路は既存service tokenを15秒ごとに再introspectionし、subjectが変わるか無効なら切断する。
 standaloneは同一loopback Originと`binary` subprotocolを必須にした。socket/path/PID/unit/display/tokenはbrowserへ
@@ -19,9 +19,10 @@ revision 5→6、working `.blend` 515,688 B / SHA-256
 triangles 24→36、vertices 16→24、Blender/GLB validator passed、browser exception 0。停止後unit/socket/
 Xvnc/Blender process 0。focused gateway/frontendは全件通過し、fullは943 passed / 1 warning / 89.66秒。
 
-`./mf.sh bundle build 0.28.4`は31,503,051 B / SHA-256
-`b0013dacd20cf5f501c09dcc0c2ea637443f3fc73513d184275b3cb2d1e8bff9`、展開binary doctorは
-`ok / 0.28.4 / packaged=true`。候補processでも`rfb.js` hash一致、実GUIへの`binary` / `RFB 003.008`
+`./mf.sh bundle build 0.28.4`は31,503,501 B / SHA-256
+`9c1644a40962cf742f5f884203d0d2918d4bee0b195f0db515c82944cbfc9089`、展開binary doctorは
+`ok / 0.28.4 / packaged=true`。exact candidate rootはfingerprint付き`rfb.js?v=...` importを配信し、候補processでも
+`rfb.js` hash一致、同じgateway実装の実GUIへの`binary` / `RFB 003.008`
 gateway応答14.337 ms、切断後ready、明示discard後stopped、残存process/socket 0。
 
 実ControlDeck opaque iframe、10分超token rotation、Host revoke/disable、idle/crash/recovery policy、GPU/Cycles、

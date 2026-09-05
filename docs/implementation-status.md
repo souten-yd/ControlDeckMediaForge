@@ -8617,10 +8617,11 @@ focused gateway/frontend testは全件通過し、exact codeの`./mf.sh test`は
 1件 / 89.66秒。ControlDeckはread-onlyでcommit `34bda2f14c2c00e4ead8251bf30d830b2e3bf7a5`、既存dirty
 `frontend/tsconfig.tsbuildinfo`だけ、installed 0.28.0 / PID 1827940 / health healthyを確認し、変更0。
 
-`./mf.sh bundle build 0.28.4`は31,503,051 B / SHA-256
-`b0013dacd20cf5f501c09dcc0c2ea637443f3fc73513d184275b3cb2d1e8bff9`。展開binary doctorは
-`ok / 0.28.4 / packaged=true`。候補binaryの実process `127.0.0.1:9182`から配信した`rfb.js`はmanifest
-SHA-256と一致し、実GUI sessionへのprivate gatewayはsubprotocol `binary` / `RFB 003.008`を14.337 msで
+`./mf.sh bundle build 0.28.4`は31,503,501 B / SHA-256
+`9c1644a40962cf742f5f884203d0d2918d4bee0b195f0db515c82944cbfc9089`。展開binary doctorは
+`ok / 0.28.4 / packaged=true`。exact candidate process `127.0.0.1:9182`のrootはweb pack fingerprint付き
+`rfb.js?v=...` importを配信した。候補binaryから配信した`rfb.js`はmanifest SHA-256と一致し、同じgateway実装の
+実GUI sessionはsubprotocol `binary` / `RFB 003.008`を14.337 msで
 返した。WebSocket切断後もsessionはready / disconnected / reconnectable、明示discard後stopped、終了後
 unit/socket/process 0。
 
