@@ -8360,3 +8360,29 @@ owner、lock、renew/release、timeout cleanup、期限切れrecovery、base競�
 exact core headの`./mf.sh test`は897 passed / 3 environment-dependent skipped / 既知Starlette warning 1件 /
 78.17秒。private WS/standalone transportとbrowser UI、実ControlDeck opaque iframe、packaged bundleは
 このcore sliceでは **NOT IMPLEMENTED / NOT TESTED**。ControlDeck変更は0件。次はtransportを独立PRにする。
+
+## 2026-09-05 — 3DS-4b private working-copy transport
+
+PR #225、branch `ux1/3d-scene-working-copy`、実装commit `5a95a21`。3DS-4b coreをapp lifespanへ接続し、認証済み
+WebSocketへ`scenes.import.begin/chunk/commit/cancel`と
+`scenes.working.acquire/renew/release/commit`、sessionのworking copy一覧を追加した。standalone開発用にも
+同じdomain serviceを通るprivate mirrorを追加した。Host path、runtime path、working pathは入力・応答に
+なく、ownerはintrospection subjectまたはstandalone固定値からだけ導出する。socket切断時はそのconnectionが
+開始した未完uploadを回収し、別connectionから同じownerで再開できる。公開OpenAPI、addon contribution、
+Agent tool、workflow executorは変更していない。
+
+実Uvicornへ1,247,112 B `.blend`を512 KiB以下の3 HTTP chunkで送り、実Blender 4.5.9によるimportは
+0.343030秒、working commitは0.252321秒。二重writerは
+`scene_working_locked` / HTTP 422、renewとcommitはHTTP 200、revision 2件を保持した。source/previewは
+各revisionで別Asset ID、bytes/hashは一致し、staging/validation/working残留0、Blender child 0。
+autoexec probe text block 1件は実行されずsentinel 0。応答内path 0。
+
+`./mf.sh test`は902 passed / 既知Starlette warning 1件 / 79.74秒。PyInstaller 6.22.0の0.27.3候補は
+31,392,211 B / SHA-256
+`197099156662638de8bd122bec4a30dc35a69ca06b55efe0d73a7c95628c2323`、doctorは
+`ok / 0.27.3 / packaged=true`。packaged processでも同じ実fileを3 chunkでimport 0.296297秒、commit
+0.274779秒、preview 1,138,160 B、8,066 vertices / 16,128 triangles、revision 2件、lock 422、
+autoexec sentinel 0を確認して停止した。
+
+browser UIと実ControlDeck opaque iframeは **NOT IMPLEMENTED / NOT TESTED**。exact backup/restoreは3DS-4c、
+Web Blenderは3DS-5。ControlDeck変更は0件。次はbrowser import/scene UIを独立PRにする。
