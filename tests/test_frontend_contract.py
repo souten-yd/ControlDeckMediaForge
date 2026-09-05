@@ -80,6 +80,9 @@ DOM_IDS = (
     "scene-list", "scene-list-count", "scene-list-refresh", "scene-detail", "scene-revisions",
     "scene-backup-tools", "scene-restore-file", "scene-restore-submit", "scene-backup-download",
     "scene-backup-cancel", "scene-backup-progress", "scene-backup-status",
+    "scene-blender-open", "scene-blender-status", "scene-blender-dialog",
+    "scene-blender-dialog-title", "scene-blender-connection", "scene-blender-screen",
+    "scene-blender-close", "scene-blender-save", "scene-blender-discard",
     "detail-dialog",
     "model-storage", "model-filters", "model-management-note", "model-table", "model-empty", "model-error",
     "model-mini-progress", "model-mini-phase", "model-mini-bar", "model-mini-cancel",
@@ -107,6 +110,23 @@ def test_blender_runtime_lifecycle_has_embedded_and_standalone_receivers() -> No
         assert method in SCRIPT
     assert "/workspace-api/blender/runtime/operations" in SCRIPT
     assert "watchStandaloneBlenderOperation" in SCRIPT
+
+
+def test_blender_session_gateway_is_private_reauthenticating_and_desktop_only() -> None:
+    for method in (
+        "blender.sessions.list", "blender.sessions.start",
+        "blender.sessions.save", "blender.sessions.stop",
+    ):
+        assert method in SCRIPT
+    assert "/workspace-api/blender/sessions" in SCRIPT
+    assert "/blender-web-client/core/rfb.js" in SCRIPT
+    assert "wsProtocols: blenderRfbProtocols()" in SCRIPT
+    assert '`control-deck-bridge.${state.nonce}`' in SCRIPT
+    assert 'window.matchMedia("(max-width: 767px)")' in SCRIPT
+    assert "rfb.scaleViewport = true" in SCRIPT
+    assert "rfb.resizeSession = false" in SCRIPT
+    assert "rfb?.blur()" in SCRIPT
+    assert "localStorage" not in SCRIPT
 
 
 def test_vendored_3d_viewer_is_reproducible_lazy_and_disposable() -> None:

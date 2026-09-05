@@ -19,6 +19,7 @@ WEB_PACK_STATUS_SCHEMA = "media-forge.blender-web-pack-status@1"
 MAX_WEB_PACK_MANIFEST_BYTES = 128 * 1024
 MAX_WEB_PACK_MEMBERS = 4096
 MAX_WEB_PACK_EXTRACTED_BYTES = 256 * 1024 * 1024
+MAX_CLIENT_MODULE_BYTES = 512 * 1024
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 PACK_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 
@@ -96,7 +97,7 @@ def load_web_pack_spec(path: Path) -> BlenderWebPackSpec:
         or not isinstance(value["components"], list)
         or not 1 <= len(value["components"]) <= 8
         or not isinstance(value["required_files"], list)
-        or not 1 <= len(value["required_files"]) <= 64
+        or not 1 <= len(value["required_files"]) <= 128
     ):
         raise BlenderWebPackError("blender_web_catalog_invalid", "web pack catalog is invalid")
     components: list[WebPackComponent] = []
@@ -305,6 +306,43 @@ class BlenderWebPack:
             }
         identity = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return {**payload, "fingerprint": hashlib.sha256(identity).hexdigest()}
+
+    def client_file(self, relative: str) -> Path:
+        """Resolve one integrity-checked noVNC module without exposing pack paths."""
+        try:
+            safe = _safe_relative(relative)
+            if not safe.endswith(".js") or not (
+                safe.startswith("core/") or safe.startswith("vendor/pako/lib/")
+            ):
+                raise BlenderWebPackError(
+                    "blender_web_client_unavailable", "browser client module is unavailable"
+                )
+            spec = self.spec()
+            expected = next(
+                (item for item in spec.required_files if item.path == f"novnc/{safe}"), None
+            )
+            if expected is None:
+                raise BlenderWebPackError(
+                    "blender_web_client_unavailable", "browser client module is unavailable"
+                )
+            root = self.destination(spec)
+            path = contained(root, root / "install" / expected.path)
+            if (
+                path.is_symlink()
+                or not path.is_file()
+                or not 0 < path.stat().st_size <= MAX_CLIENT_MODULE_BYTES
+                or _hash_file(path) != expected.sha256
+            ):
+                raise BlenderWebPackError(
+                    "blender_web_client_unavailable", "browser client module is unavailable"
+                )
+            return path
+        except (BlenderWebPackError, OSError, ValueError) as exc:
+            if isinstance(exc, BlenderWebPackError) and exc.code == "blender_web_client_unavailable":
+                raise
+            raise BlenderWebPackError(
+                "blender_web_client_unavailable", "browser client module is unavailable"
+            ) from exc
 
     def probe(self, root: Path, spec: BlenderWebPackSpec) -> dict[str, Any]:
         checks = self._required_checks(root, spec)

@@ -415,6 +415,10 @@
                     <button type="button" id="scene-detail-close">閉じる</button>
                   </div>
                 </div>
+                <div class="scene-blender-tools">
+                  <button type="button" id="scene-blender-open" class="primary">Blenderで編集</button>
+                  <p id="scene-blender-status" class="hint" role="status"></p>
+                </div>
                 <p id="scene-revisions-title" class="section-label">保存した版</p>
                 <div id="scene-revisions" class="rows"></div>
               </article>
@@ -822,6 +826,21 @@
               </svg>
             </button>
           </div>
+        </div>
+      </dialog>
+
+      <dialog id="scene-blender-dialog">
+        <div class="view-head one-line">
+          <div>
+            <h2 id="scene-blender-dialog-title">Blender編集</h2>
+            <p id="scene-blender-connection" class="hint" role="status"></p>
+          </div>
+          <button type="button" id="scene-blender-close">表示だけ閉じる</button>
+        </div>
+        <div id="scene-blender-screen" tabindex="0" aria-label="Blender remote desktop"></div>
+        <div class="dialog-actions blender-session-actions">
+          <button type="button" id="scene-blender-discard">変更を破棄して終了</button>
+          <button type="button" id="scene-blender-save" class="primary">新しい版として保存して終了</button>
         </div>
       </dialog>
 

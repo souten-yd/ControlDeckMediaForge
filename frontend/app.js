@@ -111,6 +111,8 @@ const state = {
   sequence: 0,
   disabled: false,
   hostBusy: false,
+  actionBusy: false,
+  hostActionLocked: false,
   visible: true,
   view: "create",
   mode: "simple",
@@ -166,6 +168,14 @@ const state = {
   sceneStatusKey: "",
   sceneBackup: null,
   sceneBackupStatusKey: "",
+  blenderSessions: [],
+  blenderRfb: null,
+  blenderRfbSessionId: "",
+  blenderRfbModule: null,
+  blenderRfbReconnect: 0,
+  blenderRfbAttempts: 0,
+  blenderRfbManual: false,
+  blenderSessionBusy: false,
   modelCatalog: [],
   modelOperations: new Map(),
   catalogResults: [],
@@ -250,15 +260,27 @@ function setMediaSwitchDisabled(value) {
 /* host の「未保存」は離脱を警告する。Media Forge には保存の概念が無く、
    実行中の作業はサーバ側の job として残るので、入力しただけでは立てない。
    実際に失うものがある間（取り込み中・受付中）だけ立てる。 */
-function setHostBusy(value) {
-  if (state.hostBusy === value) return;
+function updateHostBusy() {
+  const value = state.actionBusy || state.blenderSessionBusy;
+  const previousBusy = state.hostBusy;
   state.hostBusy = value;
-  setMediaSwitchDisabled(value);
+  state.hostActionLocked = state.actionBusy;
+  setMediaSwitchDisabled(state.hostActionLocked);
+  if (previousBusy === value) return;
   if (!state.bridgePort) return;
   void callHost("host.busy.set", {busy: value}).catch(() => {
-    state.hostBusy = !value;
-    setMediaSwitchDisabled(!value);
+    state.hostBusy = previousBusy;
   });
+}
+
+function setHostBusy(value) {
+  state.actionBusy = value;
+  updateHostBusy();
+}
+
+function setBlenderSessionBusy(value) {
+  state.blenderSessionBusy = value;
+  updateHostBusy();
 }
 
 /* ── workspace transport ──────────────────────────────────────────────── */
@@ -269,6 +291,12 @@ function setHostBusy(value) {
    続け、画面は空のままになった（再読込するまで直らない）。 */
 function socketOpen() {
   return state.socket && state.socket.readyState === WebSocket.OPEN;
+}
+
+function workspaceFrameRoot() {
+  return window.parent === window
+    ? ""
+    : location.pathname.split("/").slice(0, 3).join("/").replace(/\/+$/, "");
 }
 
 function dropSocket() {
@@ -283,7 +311,7 @@ function connectSocket() {
   }
   dropSocket();
   state.socketReady = new Promise((resolve, reject) => {
-    const frameRoot = location.pathname.split("/").slice(0, 3).join("/").replace(/\/+$/, "");
+    const frameRoot = workspaceFrameRoot();
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     state.socket = new WebSocket(`${scheme}://${location.host}${frameRoot}/ws`, [`control-deck-bridge.${state.nonce}`]);
     state.socket.onopen = () => resolve();
@@ -445,6 +473,17 @@ async function standaloneCall(method, params) {
   }
   if (method === "models.operations.list") return json("/workspace-api/models/operations");
   if (method === "blender.runtime.status") return json("/workspace-api/blender/runtime");
+  if (method === "blender.sessions.list") return json("/workspace-api/blender/sessions");
+  if (["blender.sessions.start", "blender.sessions.save", "blender.sessions.stop"].includes(method)) {
+    return json("/workspace-api/blender/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        action: method.slice("blender.sessions.".length),
+        ...(params.scene_id ? {scene_id: params.scene_id} : {}),
+        ...(params.session_id ? {session_id: params.session_id} : {}),
+      }),
+    });
+  }
   if (method === "blender.runtime.install") {
     return json("/workspace-api/blender/runtime/operations", {
       method: "POST", body: JSON.stringify({action: "install"}),
@@ -717,6 +756,7 @@ async function standaloneCall(method, params) {
       part("model_catalog", () => standaloneCall("models.catalog", {})),
       part("model_operations", () => standaloneCall("models.operations.list", {})),
       part("blender_runtime", () => standaloneCall("blender.runtime.status", {})),
+      part("blender_sessions", () => standaloneCall("blender.sessions.list", {})),
       part("scenes", () => standaloneCall("scenes.list", {})),
       part("library", () => standaloneCall("library.list", {limit: 4})),
       part("creative_batches", () => standaloneCall("creative.batches.list", {})),
@@ -840,8 +880,8 @@ function renderCreateMedia() {
 
   const submit = byId("create-submit");
   submit.dataset.unavailable = String(video && !usable);
-  if (!state.hostBusy) submit.disabled = video && !usable;
-  if (!state.hostBusy) {
+  if (!state.hostActionLocked) submit.disabled = video && !usable;
+  if (!state.hostActionLocked) {
     submit.textContent = video
       ? (usable ? "動画を作る" : "動画は現在利用できません")
       : photo ? "直す" : "作る";
@@ -4645,6 +4685,15 @@ const SCENE_TEXT = {
     restoreUploading: "バックアップを送っています…", restoreValidating: "すべての版とファイルを検査しています…",
     restoreComplete: "新しいシーンとして復元しました。", restoreFailed: "バックアップを復元できませんでした。",
     restoreInvalid: ".zipバックアップを選んでください。", restoreTooLarge: "2 GiB以下のバックアップを選んでください。",
+    blenderStart: "Blenderで編集", blenderOpen: "Blenderへ戻る", blenderStarting: "Blenderを準備しています…",
+    blenderReady: "Blenderは表示を閉じても動き続けます。保存または破棄で終了します。",
+    blenderSaving: "検証済みの新しい版として保存しています…", blenderStopping: "変更を破棄しています…",
+    blenderFailed: "Blenderセッションを開始できませんでした。", blenderBusy: "別のシーンを編集中です。",
+    blenderSetup: "設定でブラウザ操作環境を導入すると編集できます。",
+    blenderDesktop: "Blender操作はデスクトップ画面で利用できます。",
+    blenderDialog: "Blender編集", blenderConnecting: "Blender画面へ接続しています…",
+    blenderConnected: "接続しました", blenderDisconnected: "Blender画面との接続が切れました。再接続します…",
+    blenderClose: "表示だけ閉じる", blenderSave: "新しい版として保存して終了", blenderDiscard: "変更を破棄して終了",
   },
   en: {
     switchLabel: "Create 3D", title: "3D Studio",
@@ -4674,6 +4723,15 @@ const SCENE_TEXT = {
     restoreUploading: "Uploading the backup…", restoreValidating: "Validating every revision and file…",
     restoreComplete: "Restored as a new scene.", restoreFailed: "The backup could not be restored.",
     restoreInvalid: "Choose a .zip backup.", restoreTooLarge: "Choose a backup no larger than 2 GiB.",
+    blenderStart: "Edit in Blender", blenderOpen: "Return to Blender", blenderStarting: "Preparing Blender…",
+    blenderReady: "Blender keeps running when this view closes. Save or discard to end the session.",
+    blenderSaving: "Saving as a new validated revision…", blenderStopping: "Discarding changes…",
+    blenderFailed: "The Blender session could not start.", blenderBusy: "Another scene is being edited.",
+    blenderSetup: "Install the browser control runtime in Settings to edit.",
+    blenderDesktop: "Blender control is available on a desktop display.",
+    blenderDialog: "Blender editor", blenderConnecting: "Connecting to Blender…",
+    blenderConnected: "Connected", blenderDisconnected: "The Blender display disconnected. Reconnecting…",
+    blenderClose: "Close view only", blenderSave: "Save new revision and finish", blenderDiscard: "Discard changes and finish",
   },
 };
 
@@ -4695,7 +4753,7 @@ function setSceneBackupStatus(key) {
 
 function renderSceneBackupControls() {
   const active = Boolean(state.sceneBackup);
-  const busy = active || Boolean(state.sceneImport);
+  const busy = active || Boolean(state.sceneImport) || Boolean(activeBlenderSession());
   byId("scene-backup-download").disabled = busy || !state.selectedSceneId;
   byId("scene-restore-submit").disabled = busy;
   byId("scene-restore-file").disabled = busy;
@@ -4722,6 +4780,10 @@ function renderSceneText() {
   byId("scene-list-refresh").textContent = text.refresh;
   byId("scene-list-empty").textContent = text.empty;
   byId("scene-detail-close").textContent = text.close;
+  byId("scene-blender-dialog-title").textContent = text.blenderDialog;
+  byId("scene-blender-close").textContent = text.blenderClose;
+  byId("scene-blender-save").textContent = text.blenderSave;
+  byId("scene-blender-discard").textContent = text.blenderDiscard;
   byId("scene-backup-title").textContent = text.backupTitle;
   byId("scene-restore-file-label").textContent = text.restoreFile;
   byId("scene-backup-safety").textContent = text.backupSafety;
@@ -4736,6 +4798,7 @@ function renderSceneText() {
   else if (!state.sceneImport) byId("scene-import-status").textContent = "";
   if (state.sceneBackupStatusKey) setSceneBackupStatus(state.sceneBackupStatusKey);
   renderSceneBackupControls();
+  renderBlenderSessionControls();
   renderScenes();
   if (state.selectedSceneId) void openScene(state.selectedSceneId);
 }
@@ -4817,8 +4880,176 @@ async function openScene(sceneId) {
     }));
     byId("scene-detail").hidden = false;
     renderSceneBackupControls();
+    renderBlenderSessionControls();
   } catch {
     byId("scene-list-count").textContent = sceneText().detailFailed;
+  }
+}
+
+const ACTIVE_BLENDER_SESSION_STATES = new Set([
+  "queued", "preparing", "starting", "ready", "saving", "stopping",
+]);
+
+function activeBlenderSession() {
+  return state.blenderSessions.find((item) => ACTIVE_BLENDER_SESSION_STATES.has(item.state)) || null;
+}
+
+function renderBlenderSessionControls() {
+  const button = byId("scene-blender-open");
+  if (!button) return;
+  const text = sceneText();
+  const active = activeBlenderSession();
+  const selected = active?.scene_id === state.selectedSceneId ? active : null;
+  const mobile = window.matchMedia("(max-width: 767px)").matches;
+  let status = "";
+  if (mobile) status = text.blenderDesktop;
+  else if (!selected && active) status = text.blenderBusy;
+  else if (!selected && state.blenderRuntime?.web_pack?.state !== "ready") status = text.blenderSetup;
+  else if (selected?.state === "ready") status = text.blenderReady;
+  else if (["queued", "preparing", "starting"].includes(selected?.state)) status = text.blenderStarting;
+  else if (selected?.state === "saving") status = text.blenderSaving;
+  else if (selected?.state === "stopping") status = text.blenderStopping;
+  else if (["failed", "interrupted"].includes(selected?.state)) status = text.blenderFailed;
+  button.textContent = selected?.state === "ready" ? text.blenderOpen : text.blenderStart;
+  button.disabled = mobile || Boolean(active && !selected) || Boolean(selected && selected.state !== "ready")
+    || !sceneRuntimeReady() || state.blenderRuntime?.web_pack?.state !== "ready"
+    || Boolean(state.sceneImport) || Boolean(state.sceneBackup);
+  byId("scene-blender-status").textContent = status;
+  setBlenderSessionBusy(Boolean(active));
+  renderSceneBackupControls();
+  if (state.blenderRfbSessionId) {
+    const current = state.blenderSessions.find((item) => item.id === state.blenderRfbSessionId);
+    if (!current || current.state !== "ready") closeBlenderView();
+  }
+}
+
+async function pollStandaloneBlenderSession(sessionId) {
+  if (window.parent !== window) return;
+  for (let attempt = 0; attempt < 3600 && !state.disabled; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await refreshSession(["blender_sessions", "scenes"]);
+    const current = state.blenderSessions.find((item) => item.id === sessionId);
+    if (!current || !ACTIVE_BLENDER_SESSION_STATES.has(current.state) || current.state === "ready") return;
+  }
+}
+
+async function startOrOpenBlender() {
+  const active = activeBlenderSession();
+  if (active?.scene_id === state.selectedSceneId && active.state === "ready") {
+    openBlenderView(active);
+    return;
+  }
+  if (active || !state.selectedSceneId) return;
+  byId("scene-blender-open").disabled = true;
+  byId("scene-blender-status").textContent = sceneText().blenderStarting;
+  try {
+    const created = await call("blender.sessions.start", {scene_id: state.selectedSceneId});
+    state.blenderSessions = [created, ...state.blenderSessions];
+    renderBlenderSessionControls();
+    void pollStandaloneBlenderSession(created.id);
+  } catch {
+    byId("scene-blender-status").textContent = sceneText().blenderFailed;
+    await refreshSession(["blender_sessions"]);
+  }
+}
+
+function blenderRfbLocation(sessionId) {
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  const base = workspaceFrameRoot();
+  const route = window.parent === window
+    ? `/workspace-api/blender/sessions/${encodeURIComponent(sessionId)}/rfb`
+    : `/blender/sessions/${encodeURIComponent(sessionId)}/rfb`;
+  return `${scheme}://${location.host}${base}${route}`;
+}
+
+function blenderRfbProtocols() {
+  return window.parent === window ? ["binary"] : [`control-deck-bridge.${state.nonce}`, "binary"];
+}
+
+function scheduleBlenderRfbReconnect(session) {
+  const current = state.blenderSessions.find((item) => item.id === session.id);
+  if (current?.state !== "ready" || state.blenderRfbAttempts >= 5
+      || !byId("scene-blender-dialog").open || state.disabled) return;
+  const delay = Math.min(8000, 500 * 2 ** state.blenderRfbAttempts++);
+  state.blenderRfbReconnect = window.setTimeout(() => void connectBlenderRfb(current), delay);
+}
+
+async function connectBlenderRfb(session) {
+  if (!byId("scene-blender-dialog").open || state.disabled || session.state !== "ready") return;
+  disconnectBlenderRfb({manual: false, clearTarget: true});
+  state.blenderRfbSessionId = session.id;
+  state.blenderRfbManual = false;
+  byId("scene-blender-connection").textContent = sceneText().blenderConnecting;
+  try {
+    state.blenderRfbModule ||= import(`${workspaceFrameRoot()}/blender-web-client/core/rfb.js`);
+    const {default: RFB} = await state.blenderRfbModule;
+    if (!byId("scene-blender-dialog").open || state.blenderRfbSessionId !== session.id) return;
+    const rfb = new RFB(byId("scene-blender-screen"), blenderRfbLocation(session.id), {
+      wsProtocols: blenderRfbProtocols(),
+    });
+    state.blenderRfb = rfb;
+    rfb.scaleViewport = true;
+    rfb.resizeSession = false;
+    rfb.viewOnly = false;
+    rfb.addEventListener("connect", () => {
+      state.blenderRfbAttempts = 0;
+      byId("scene-blender-connection").textContent = sceneText().blenderConnected;
+      byId("scene-blender-screen").focus();
+    });
+    rfb.addEventListener("credentialsrequired", () => rfb.disconnect());
+    rfb.addEventListener("securityfailure", () => rfb.disconnect());
+    rfb.addEventListener("disconnect", () => {
+      if (state.blenderRfb !== rfb) return;
+      state.blenderRfb = null;
+      if (state.blenderRfbManual || !byId("scene-blender-dialog").open) return;
+      byId("scene-blender-connection").textContent = sceneText().blenderDisconnected;
+      scheduleBlenderRfbReconnect(session);
+    });
+  } catch {
+    state.blenderRfbModule = null;
+    byId("scene-blender-connection").textContent = sceneText().blenderDisconnected;
+    scheduleBlenderRfbReconnect(session);
+  }
+}
+
+function disconnectBlenderRfb({manual = true, clearTarget = false} = {}) {
+  window.clearTimeout(state.blenderRfbReconnect);
+  state.blenderRfbReconnect = 0;
+  state.blenderRfbManual = manual;
+  const rfb = state.blenderRfb;
+  state.blenderRfb = null;
+  try { rfb?.blur(); } catch { /* connection may already be closed */ }
+  try { rfb?.disconnect(); } catch { /* connection may already be closed */ }
+  if (clearTarget) byId("scene-blender-screen")?.replaceChildren();
+}
+
+function openBlenderView(session) {
+  if (window.matchMedia("(max-width: 767px)").matches) return;
+  state.blenderRfbSessionId = session.id;
+  state.blenderRfbAttempts = 0;
+  byId("scene-blender-dialog").showModal();
+  void connectBlenderRfb(session);
+}
+
+function closeBlenderView() {
+  disconnectBlenderRfb();
+  state.blenderRfbSessionId = "";
+  if (byId("scene-blender-dialog").open) byId("scene-blender-dialog").close();
+}
+
+async function finishBlenderSession(action) {
+  const sessionId = state.blenderRfbSessionId || activeBlenderSession()?.id;
+  if (!sessionId) return;
+  byId("scene-blender-save").disabled = true;
+  byId("scene-blender-discard").disabled = true;
+  try {
+    await call(`blender.sessions.${action}`, {session_id: sessionId});
+    closeBlenderView();
+    await refreshSession(["blender_sessions", "scenes"]);
+    void pollStandaloneBlenderSession(sessionId);
+  } finally {
+    byId("scene-blender-save").disabled = false;
+    byId("scene-blender-discard").disabled = false;
   }
 }
 
@@ -6898,7 +7129,7 @@ byId("mode-simple").addEventListener("click", () => setMode("simple"));
 byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
 byId("create-media-switch").addEventListener("click", (event) => {
   const button = event.target.closest?.("[data-create-media]");
-  if (!button || state.hostBusy) return;
+  if (!button || state.hostActionLocked) return;
   setCreateMedia(button.dataset.createMedia);
 });
 byId("scene-import-file").addEventListener("change", (event) => {
@@ -6923,7 +7154,7 @@ byId("scene-restore-file").addEventListener("change", () => {
 });
 byId("scene-list-refresh").addEventListener("click", () => void loadScenes());
 byId("scene-list").addEventListener("click", (event) => {
-  if (state.hostBusy) return;
+  if (state.hostActionLocked) return;
   const scene = event.target.closest?.("[data-scene-id]");
   if (scene) void openScene(scene.dataset.sceneId);
 });
@@ -6931,6 +7162,22 @@ byId("scene-detail-close").addEventListener("click", () => {
   state.selectedSceneId = "";
   byId("scene-detail").hidden = true;
   renderScenes();
+});
+byId("scene-blender-open").addEventListener("click", () => void startOrOpenBlender());
+byId("scene-blender-close").addEventListener("click", closeBlenderView);
+byId("scene-blender-save").addEventListener("click", () => void finishBlenderSession("save"));
+byId("scene-blender-discard").addEventListener("click", () => void finishBlenderSession("stop"));
+byId("scene-blender-dialog").addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeBlenderView();
+});
+window.addEventListener("blur", () => {
+  try { state.blenderRfb?.blur(); } catch { /* connection may already be closed */ }
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    try { state.blenderRfb?.blur(); } catch { /* connection may already be closed */ }
+  }
 });
 byId("scene-revisions").addEventListener("click", (event) => {
   const preview = event.target.closest?.("[data-scene-preview]");
@@ -7840,6 +8087,10 @@ function applySessionParts(snapshot) {
     renderBlenderRuntime();
     renderSceneText();
   }
+  if (usable(snapshot.blender_sessions)) {
+    state.blenderSessions = snapshot.blender_sessions.items || [];
+    renderBlenderSessionControls();
+  }
   if (usable(snapshot.scenes)) {
     state.scenes = snapshot.scenes.items || [];
     state.sceneWorkingCopies = snapshot.scenes.working_copies || [];
@@ -7985,9 +8236,18 @@ window.addEventListener("message", (event) => {
     if (message.event === "safe_area.changed") applySafeArea(message.data);
     if (message.event === "visibility.changed") state.visible = message.data?.visible !== false;
     if (message.event === "route.changed") activate(String(message.data?.path || "/").split("/")[1] || "create", {sync: false});
-    if (message.event === "session.updated") state.nonce = message.data.session_nonce;
+    if (message.event === "session.updated") {
+      state.nonce = message.data.session_nonce;
+      const current = state.blenderSessions.find((item) => item.id === state.blenderRfbSessionId);
+      if (current?.state === "ready" && byId("scene-blender-dialog").open) {
+        disconnectBlenderRfb({manual: false, clearTarget: true});
+        void connectBlenderRfb(current);
+      }
+    }
     if (message.event === "disable.pending") {
       state.disabled = true;
+      closeBlenderView();
+      setBlenderSessionBusy(false);
       if (state.sceneImport?.phase !== "validating") void cancelSceneImport();
       if (state.sceneBackup?.phase !== "validating") void cancelSceneBackup();
       if (state.activeComposition) {

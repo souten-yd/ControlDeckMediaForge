@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
@@ -52,7 +53,8 @@ from .blender_runtime import BlenderRuntimeRegistryError, BlenderRuntimeResolver
 from .blender_manager import BlenderRuntimeManager
 from .blender_operation import BlenderRuntimeOperationError
 from .blender_session_manager import BlenderSessionError, BlenderSessionManager
-from .blender_web import BlenderWebPack
+from .blender_rfb import relay_rfb
+from .blender_web import BlenderWebPack, BlenderWebPackError
 from .config import Settings
 from .custom_models import DEFAULT_MODEL_SOURCE, MODEL_SOURCES, CustomModelCatalog, CustomModelError
 from .composer import (
@@ -532,6 +534,7 @@ def create_app(
     app.state.blender_runtimes = blender_runtimes
     app.state.blender_runtime_operations = blender_runtime_operations
     app.state.blender_sessions = blender_sessions
+    app.state.blender_web_pack = blender_web_pack
     app.state.standalone_model_viewer = standalone_model_viewer
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -547,6 +550,86 @@ def create_app(
                 "Cache-Control": "public, max-age=31536000, immutable",
             },
         )
+
+    @app.get("/blender-web-client/{relative:path}", include_in_schema=False)
+    async def blender_web_client(relative: str) -> FileResponse:
+        """Serve only manifest-pinned noVNC modules to the opaque workspace."""
+        try:
+            path = blender_web_pack.client_file(relative)
+        except BlenderWebPackError as exc:
+            raise HTTPException(status_code=404, detail={"code": exc.code}) from exc
+        return FileResponse(
+            path,
+            media_type="text/javascript",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cross-Origin-Resource-Policy": "cross-origin",
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    async def serve_blender_rfb(
+        websocket: WebSocket,
+        owner: str,
+        session_id: str,
+        *,
+        revalidate: Callable[[], Awaitable[bool]] | None = None,
+    ) -> None:
+        reserved = False
+        try:
+            socket_path = await blender_sessions.acquire_gateway(owner, session_id)
+            reserved = True
+            await relay_rfb(websocket, socket_path, revalidate=revalidate)
+        except BlenderSessionError as exc:
+            await websocket.close(
+                code=4409 if exc.code == "blender_session_already_connected" else 4404,
+                reason="Blender session is unavailable",
+            )
+        finally:
+            if reserved:
+                await blender_sessions.release_gateway(session_id)
+
+    @app.websocket("/blender/sessions/{session_id}/rfb")
+    async def host_blender_rfb(websocket: WebSocket, session_id: str) -> None:
+        try:
+            identity = await require_host_service_headers(websocket.headers, host)
+        except HTTPException:
+            await websocket.close(code=4401, reason="invalid host service token")
+            return
+        credential_headers = {
+            "Authorization": identity.authorization,
+            "X-Control-Deck-Addon-ID": identity.addon_id,
+        }
+
+        async def revalidate() -> bool:
+            try:
+                current = await host.authenticate(credential_headers)
+            except HostApiError:
+                return False
+            return current.addon_id == identity.addon_id and current.subject == identity.subject
+
+        await serve_blender_rfb(
+            websocket, preferences.subject_of(identity), session_id, revalidate=revalidate
+        )
+
+    @app.websocket("/workspace-api/blender/sessions/{session_id}/rfb")
+    async def standalone_blender_rfb(websocket: WebSocket, session_id: str) -> None:
+        origin = websocket.headers.get("origin", "")
+        host_header = websocket.headers.get("host", "")
+        parsed_origin = urlsplit(origin)
+        parsed_host = urlsplit(f"//{host_header}")
+        if (
+            parsed_origin.scheme not in {"http", "https"}
+            or parsed_origin.netloc != host_header
+            or parsed_origin.path not in {"", "/"}
+            or parsed_origin.query
+            or parsed_origin.fragment
+            or parsed_host.hostname not in {"127.0.0.1", "::1", "localhost"}
+        ):
+            await websocket.close(code=4403, reason="same-loopback origin required")
+            return
+        await serve_blender_rfb(websocket, preferences.STANDALONE_SUBJECT, session_id)
 
     async def authorize_host(request: Request) -> HostIdentity:
         return await require_host_service(request, host)
