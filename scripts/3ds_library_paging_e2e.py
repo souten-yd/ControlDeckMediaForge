@@ -35,11 +35,12 @@ def seed(root: Path) -> None:
     print(json.dumps({"source": source.id, "parents": 65, "children": 63}))
 
 
-def browser(root: Path) -> None:
+def browser(root: Path, base_url: str, server_kind: str) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     fixture = json.loads((root / "fixture.json").read_text())
-    evidence: dict = {"mode": "source_http_synthetic_lineage", "checks": [], "errors": []}
+    evidence: dict = {"mode": f"{server_kind}_http_synthetic_lineage", "base_url": base_url,
+                      "checks": [], "errors": []}
     with sync_playwright() as pw:
         chrome = pw.chromium.launch(executable_path="/usr/bin/google-chrome", headless=False)
         try:
@@ -47,7 +48,7 @@ def browser(root: Path) -> None:
                 context = chrome.new_context(viewport={"width": 320, "height": 700}, locale=locale)
                 page = context.new_page()
                 page.on("pageerror", lambda error: evidence["errors"].append(str(error)[:200]))
-                page.goto("http://127.0.0.1:9163/library")
+                page.goto(f"{base_url.rstrip('/')}/library")
                 page.locator('#app[aria-busy="false"]').wait_for()
                 page.evaluate("locale => {applyTheme({locale}); renderLibraryMediaFilter();}", locale)
                 page.locator('[data-library-media="blend"]').click()
@@ -98,5 +99,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("seed", "browser"))
     parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--base-url", default="http://127.0.0.1:9163")
+    parser.add_argument("--server-kind", choices=("source", "bundle"), default="source")
     args = parser.parse_args()
-    (seed if args.mode == "seed" else browser)(args.evidence_dir)
+    if args.mode == "seed":
+        seed(args.evidence_dir)
+    else:
+        browser(args.evidence_dir, args.base_url, args.server_kind)
