@@ -171,7 +171,11 @@ transportはprepare taskの切断取消、connection cleanup、定期expire、sh
 private `/ws`の`scenes.material.preview.{prepare,read,adopt,discard}`は同じmanagerへ接続する。
 singleton/5秒周期expiry/shutdown cleanupをappが所有し、connection IDをクライアントから受け取らない。
 候補操作だけ1接続1要求の非同期dispatchにして、prepare中もreceiveを継続し切断時に取消・回収する。
-standalone mirrorと比較/採用UIは別の未完了sliceである。
+standalone mirrorは同一loopback Origin限定の`/workspace-api/material-preview/ws`で同じdispatchを使う。
+制作UIの「割り当てて比較」はcurrent版と「変更候補（未保存）」を並べ、採用だけで版を増やす。
+破棄・準備中の閉じる操作・期限・接続再作成で候補を回収/無効化する。接続が切り替わった候補は
+黙って再送せず、比較を作り直す案内と無効な採用ボタンを表示する。
+実source browserの日英/320px/採用/復元を確認したが、installed Hostでの受入は別途必要。
 
 ## 6. OpenCode経路
 

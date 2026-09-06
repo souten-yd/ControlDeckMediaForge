@@ -26,7 +26,8 @@ MaterialBinding commitまでをsource/packageで実装・確認した。3DS-6c�
 材質適用は比較前にcurrent revisionへcommitしていると判明した。設計の未保存preview→比較→採用を
 満たさないため、3DS-6のexit完了判定を撤回する。確定済み新旧版の比較・復元の実績は維持する。
 補完domainの未保存候補prepare/read/adopt/discardは実Blender4.5.9で確認し、private WebSocket経路の
-実TCP/Blender受入も追加した。standalone mirror/UIは未接続。採用前比較のinstalled受入まで
+実TCP/Blender受入も追加した。standalone mirror/UIを接続しsource browserの日英/320px・採用/復元を
+確認した。採用前比較のinstalled Host/生成画像経路の受入まで
 3DS-6はPARTIALのまま進める。
 3DS-7はtyped Agent recipe、durable detached child Job、stable actor ownerをsource/packageで確認した。
 3DS-8でinstalled-host/OpenCode/GPU/releaseの個別証拠を取得したが、必須受入全体の完了判定を撤回した。

@@ -534,7 +534,15 @@ def test_scene_material_binding_uses_library_assets_and_private_path_free_bridge
     assert 'const params = {media_kind: "image", limit: 120, thumbnails: false};' in material
     assert "page < 10 && items.length < 120" in material
     assert 'call("scenes.material.targets"' in material
-    assert 'call("scenes.material.apply"' in material
+    assert 'call("scenes.material.apply"' not in material
+    assert "await compareMaterialCandidate(sceneId, binding)" in material
+    assert 'call("scenes.material.preview.prepare"' in SCRIPT
+    assert 'call("scenes.material.preview.adopt"' in SCRIPT
+    assert 'call("scenes.material.preview.discard"' in SCRIPT
+    assert "invalidateMaterialCandidate" in SCRIPT
+    assert "state.sceneMaterialRevisionId !== state.sceneDocument?.current_revision_id" in SCRIPT
+    assert 'html:has(#scene-compare-dialog[open]) { overflow: hidden; }' in STYLES
+    assert '"/workspace-api/material-preview/ws"' in SCRIPT or "/workspace-api/material-preview/ws`" in SCRIPT
     assert 'schema_version: "media-forge.material-binding@1"' in material
     assert 'color_space: ["base_color", "emission"].includes(channel)' in material
     assert 'normal_convention: channel === "normal"' in material

@@ -402,7 +402,11 @@ identity. Prepare returns `candidate_id`, `scene_id`, `base_revision_id`,
 Read returns bounded base64 GLB bytes, offset and total size; it never exposes
 the Blender source or a path. Only adoption commits a revision. The existing
 direct apply API remains unchanged. These additions are not public Agent tools
-and do not yet have a standalone mirror or UI integration.
+and are used by the material comparison UI before explicit adoption.
+The standalone mirror is `/workspace-api/material-preview/ws`, requires the
+same loopback Origin (as standalone Blender RFB), and accepts only these candidate
+methods. Hosted `/ws` continues to require Host service authentication. Candidate
+IDs cannot transfer between the two connections or subjects.
 
 The server runs at most one candidate request per connection asynchronously,
 so disconnect can cancel preparation without blocking unrelated workspace calls.

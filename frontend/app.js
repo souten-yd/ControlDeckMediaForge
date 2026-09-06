@@ -172,6 +172,9 @@ const state = {
   sceneCompareInstances: new Map(),
   sceneCompareHandles: new Set(),
   sceneCompareReady: 0,
+  sceneMaterialCandidate: null,
+  sceneMaterialPreparing: false,
+  sceneMaterialExpiryTimer: null,
   sceneRestoreBusy: false,
   sceneImport: null,
   sceneStatusKey: "",
@@ -321,6 +324,9 @@ function workspaceFrameRoot() {
 }
 
 function dropSocket() {
+  invalidateMaterialCandidate();
+  for (const pending of state.pending.values()) pending.reject({code: "workspace_transport_closed"});
+  state.pending.clear();
   if (state.socket) {
     // 捨てる側で onclose を走らせない。走らせると pending を二重に落とす。
     state.socket.onopen = state.socket.onmessage = state.socket.onerror = state.socket.onclose = null;
@@ -370,7 +376,9 @@ function connectSocket() {
   state.socketReady = new Promise((resolve, reject) => {
     const frameRoot = workspaceFrameRoot();
     const scheme = location.protocol === "https:" ? "wss" : "ws";
-    state.socket = new WebSocket(`${scheme}://${location.host}${frameRoot}/ws`, [`control-deck-bridge.${state.nonce}`]);
+    state.socket = window.parent === window
+      ? new WebSocket(`${scheme}://${location.host}/workspace-api/material-preview/ws`)
+      : new WebSocket(`${scheme}://${location.host}${frameRoot}/ws`, [`control-deck-bridge.${state.nonce}`]);
     state.socket.onopen = () => { lastSocketMessageAt = Date.now(); resolve(); };
     state.socket.onerror = () => {
       dropSocket();
@@ -852,7 +860,7 @@ async function standaloneCall(method, params) {
 }
 
 async function call(method, params = {}) {
-  if (window.parent === window) return standaloneCall(method, params);
+  if (window.parent === window && !method.startsWith("scenes.material.preview.")) return standaloneCall(method, params);
   await connectSocket();
   if (!socketOpen()) {
     // connectSocket の直後でも閉じていることがある。閉じた socket への send は
@@ -4806,7 +4814,11 @@ const SCENE_TEXT = {
     materialImage: "ライブラリ画像", materialChannel: "用途", materialAdvanced: "詳細設定",
     materialUv: "UVマップ", materialWrap: "画像の繰り返し", materialNormal: "法線形式",
     materialSafety: "画像はシーン内へ格納され、元のライブラリ素材との関係を記録します。",
-    materialApply: "割り当てて新しい版を保存", materialLoading: "割り当て先を確認しています…",
+    materialApply: "割り当てて比較", materialLoading: "割り当て先を確認しています…",
+    candidateTitle: "材質の変更を比較", candidateLabel: "変更候補（未保存）",
+    candidateSummary: "現在の版は変わりません。比較してから採用してください。候補は10分で失効します。",
+    candidateAdopt: "候補を採用して新しい版を保存", candidateDiscard: "候補を破棄",
+    candidateExpired: "接続が切れたか候補が失効しました。閉じて比較を作り直してください。",
     materialApplying: "画像を割り当て、シーンを検証しています…",
     materialComplete: "画像を割り当てた検証済みの版を保存しました。",
     materialFailed: "画像素材を割り当てられませんでした。",
@@ -4884,7 +4896,11 @@ const SCENE_TEXT = {
     materialImage: "Library image", materialChannel: "Use", materialAdvanced: "Advanced settings",
     materialUv: "UV map", materialWrap: "Image wrapping", materialNormal: "Normal convention",
     materialSafety: "The image is packed into the scene and its relationship to the Library source is recorded.",
-    materialApply: "Assign and save new revision", materialLoading: "Inspecting material targets…",
+    materialApply: "Assign and compare", materialLoading: "Inspecting material targets…",
+    candidateTitle: "Compare material changes", candidateLabel: "Candidate (not saved)",
+    candidateSummary: "The current revision is unchanged. Compare before adopting. Candidates expire in 10 minutes.",
+    candidateAdopt: "Adopt candidate as a new revision", candidateDiscard: "Discard candidate",
+    candidateExpired: "The connection closed or the candidate expired. Close and prepare the comparison again.",
     materialApplying: "Assigning the image and validating the scene…",
     materialComplete: "Saved a validated revision with the image assigned.",
     materialFailed: "The image material could not be assigned.",
@@ -4983,6 +4999,8 @@ function renderSceneText() {
   byId("scene-compare-summary").textContent = text.compareSummary;
   byId("scene-compare-close").textContent = text.compareClose;
   byId("scene-compare-cancel").textContent = text.compareCancel;
+  byId("scene-compare-close").disabled = state.sceneRestoreBusy;
+  byId("scene-compare-cancel").disabled = state.sceneRestoreBusy;
   byId("scene-compare-restore").textContent = text.compareRestore;
   byId("scene-compare-old-fit").textContent = text.compareFit;
   byId("scene-compare-current-fit").textContent = text.compareFit;
@@ -4991,6 +5009,11 @@ function renderSceneText() {
   }
   if (state.sceneCompareCurrent) {
     byId("scene-compare-current-label").textContent = text.compareCurrent(state.sceneCompareCurrent.sequence);
+  }
+  renderMaterialCandidateText();
+  for (const [canvasId, instance] of state.sceneCompareInstances) {
+    const status = byId(canvasId.replace("-canvas", "-status"));
+    if (!status.dataset.contextLost) status.textContent = viewer3dText().stats(instance.stats);
   }
   const submit = byId("scene-import-submit");
   submit.disabled = Boolean(state.sceneImport) || Boolean(state.sceneBackup) || !sceneRuntimeReady();
@@ -5124,6 +5147,13 @@ async function disposeSceneCompare() {
 }
 
 async function closeSceneCompare() {
+  if (state.sceneRestoreBusy) return;
+  const candidate = state.sceneMaterialCandidate;
+  const preparing = state.sceneMaterialPreparing;
+  state.sceneMaterialCandidate = null;
+  state.sceneMaterialPreparing = false;
+  clearTimeout(state.sceneMaterialExpiryTimer);
+  if (preparing) dropSocket();
   state.sceneCompareToken += 1;
   state.sceneCompareReady = 0;
   state.sceneCompareTarget = null;
@@ -5132,6 +5162,14 @@ async function closeSceneCompare() {
   const dialog = byId("scene-compare-dialog");
   if (dialog.open) dialog.close();
   await disposeSceneCompare();
+  if (candidate && !candidate.invalid) {
+    try {
+      await call("scenes.material.preview.discard", {candidate_id: candidate.candidate_id});
+    } catch {
+      // Losing the connection also discards the server-side candidate.
+      dropSocket();
+    }
+  }
 }
 
 async function loadSceneComparePane(revision, canvasId, statusId, token) {
@@ -5139,16 +5177,17 @@ async function loadSceneComparePane(revision, canvasId, statusId, token) {
   status.textContent = sceneText().compareLoading;
   let handle = "";
   try {
-    const opened = await call("assets.model.open", {asset_id: revision.preview_asset_id});
-    handle = opened.handle;
-    state.sceneCompareHandles.add(handle);
+    const opened = revision.candidate_id ? revision
+      : await call("assets.model.open", {asset_id: revision.preview_asset_id});
+    handle = opened.handle || "";
+    if (handle) state.sceneCompareHandles.add(handle);
     if (opened.total_bytes > 64 * 1024 * 1024) throw new Error("model exceeds browser bound");
     const content = new Uint8Array(opened.total_bytes);
     let offset = 0;
     while (offset < content.length) {
       if (token !== state.sceneCompareToken) throw new Error("scene comparison changed");
-      const piece = await call("assets.model.bytes", {
-        handle,
+      const piece = await call(revision.candidate_id ? "scenes.material.preview.read" : "assets.model.bytes", {
+        ...(revision.candidate_id ? {candidate_id: revision.candidate_id} : {handle}),
         offset,
         length: Math.min(opened.chunk_bytes, content.length - offset),
       });
@@ -5160,7 +5199,7 @@ async function loadSceneComparePane(revision, canvasId, statusId, token) {
       offset += chunk.length;
       status.textContent = `${sceneText().compareLoading} ${Math.round(offset / content.length * 100)}%`;
     }
-    await call("assets.model.close", {handle});
+    if (handle) await call("assets.model.close", {handle});
     state.sceneCompareHandles.delete(handle);
     handle = "";
     const modulePromise = loadModelViewer();
@@ -5172,6 +5211,7 @@ async function loadSceneComparePane(revision, canvasId, statusId, token) {
       background: "#0b1110",
       onContextState: (value) => {
         if (token !== state.sceneCompareToken) return;
+        status.dataset.contextLost = value === "restored" ? "" : "true";
         const active = state.sceneCompareInstances.get(canvasId);
         status.textContent = value === "restored" && active
           ? viewer3dText().stats(active.stats) : viewer3dText().contextLost;
@@ -5182,10 +5222,11 @@ async function loadSceneComparePane(revision, canvasId, statusId, token) {
       throw new Error("scene comparison changed");
     }
     state.sceneCompareInstances.set(canvasId, instance);
+    status.dataset.contextLost = "";
     status.textContent = viewer3dText().stats(instance.stats);
     state.sceneCompareReady += 1;
     byId("scene-compare-restore").disabled = state.sceneCompareReady !== 2
-      || state.sceneRestoreBusy || state.disabled;
+      || state.sceneRestoreBusy || state.disabled || Boolean(state.sceneMaterialCandidate?.invalid);
   } catch (error) {
     if (handle) {
       await call("assets.model.close", {handle}).catch(() => {});
@@ -5197,6 +5238,7 @@ async function loadSceneComparePane(revision, canvasId, statusId, token) {
 }
 
 async function openSceneCompare(targetRevisionId) {
+  await closeSceneCompare();
   if (!state.sceneDocument || state.disabled || state.hostActionLocked) return;
   const target = state.sceneRevisions.find((item) => item.id === targetRevisionId);
   const current = state.sceneRevisions.find(
@@ -5218,6 +5260,7 @@ async function openSceneCompare(targetRevisionId) {
   byId("scene-compare-status").textContent = "";
   byId("scene-compare-restore").disabled = true;
   const dialog = byId("scene-compare-dialog");
+  renderSceneText();
   if (!dialog.open) dialog.showModal();
   const loaded = await Promise.allSettled([
     loadSceneComparePane(target, "scene-compare-old-canvas", "scene-compare-old-status", token),
@@ -5229,29 +5272,102 @@ async function openSceneCompare(targetRevisionId) {
 }
 
 async function restoreComparedSceneRevision() {
+  const adoptingCandidate = Boolean(state.sceneMaterialCandidate);
   const target = state.sceneCompareTarget;
   const current = state.sceneCompareCurrent;
   const sceneId = state.selectedSceneId;
   if (!target || !current || state.sceneCompareReady !== 2 || state.sceneRestoreBusy) return;
+  if (state.sceneMaterialCandidate?.invalid || state.disabled) return;
   state.sceneRestoreBusy = true;
   const button = byId("scene-compare-restore");
   button.disabled = true;
+  byId("scene-compare-close").disabled = true;
+  byId("scene-compare-cancel").disabled = true;
   byId("scene-compare-status").textContent = sceneText().compareRestoring;
   try {
-    await call("scenes.revisions.restore", {
-      scene_id: sceneId,
-      base_revision_id: current.id,
-      target_revision_id: target.id,
-    });
+    if (state.sceneMaterialCandidate) {
+      await call("scenes.material.preview.adopt", {candidate_id: state.sceneMaterialCandidate.candidate_id});
+      state.sceneMaterialCandidate = null;
+      state.sceneMaterialRevisionId = "";
+    } else {
+      await call("scenes.revisions.restore", {
+        scene_id: sceneId,
+        base_revision_id: current.id,
+        target_revision_id: target.id,
+      });
+    }
+    state.sceneRestoreBusy = false;
     await closeSceneCompare();
     await loadScenes();
     await openScene(sceneId);
-    byId("scene-revision-status").textContent = sceneText().compareRestored;
+    byId("scene-revision-status").textContent = adoptingCandidate ? sceneText().materialComplete : sceneText().compareRestored;
+    if (adoptingCandidate) {
+      state.sceneMaterialStatusKey = "materialComplete";
+      renderSceneMaterialControls({targetsChanged: false});
+    }
   } catch (error) {
     state.sceneRestoreBusy = false;
+    byId("scene-compare-close").disabled = false;
+    byId("scene-compare-cancel").disabled = false;
     if (byId("scene-compare-dialog").open) {
       byId("scene-compare-status").textContent = error?.message || sceneText().compareRestoreFailed;
-      button.disabled = state.sceneCompareReady !== 2 || state.disabled;
+      button.disabled = state.sceneCompareReady !== 2 || state.disabled || Boolean(state.sceneMaterialCandidate?.invalid);
+    }
+  }
+}
+
+function renderMaterialCandidateText() {
+  if (!state.sceneMaterialCandidate && !state.sceneMaterialPreparing) return;
+  const text = sceneText();
+  byId("scene-compare-title").textContent = text.candidateTitle;
+  byId("scene-compare-summary").textContent = text.candidateSummary;
+  byId("scene-compare-current-label").textContent = text.candidateLabel;
+  byId("scene-compare-old-label").textContent = text.compareCurrent(state.sceneCompareTarget?.sequence || "");
+  byId("scene-compare-restore").textContent = text.candidateAdopt;
+  byId("scene-compare-cancel").textContent = text.candidateDiscard;
+  if (state.sceneMaterialCandidate?.invalid) byId("scene-compare-status").textContent = text.candidateExpired;
+}
+
+function invalidateMaterialCandidate() {
+  if (!state.sceneMaterialCandidate) return;
+  state.sceneMaterialCandidate.invalid = true;
+  byId("scene-compare-restore").disabled = true;
+  renderMaterialCandidateText();
+}
+
+async function compareMaterialCandidate(sceneId, binding) {
+  await closeSceneCompare();
+  const token = ++state.sceneCompareToken;
+  state.sceneMaterialPreparing = true;
+  state.sceneCompareTarget = state.sceneRevisions.find(item => item.id === binding.source_revision_id);
+  state.sceneCompareReady = 0;
+  byId("scene-compare-status").textContent = sceneText().materialApplying;
+  byId("scene-compare-old-status").textContent = sceneText().compareLoading;
+  byId("scene-compare-current-status").textContent = sceneText().compareLoading;
+  byId("scene-compare-restore").disabled = true;
+  renderSceneText();
+  byId("scene-compare-dialog").showModal();
+  try {
+    const candidate = await call("scenes.material.preview.prepare", {scene_id: sceneId, binding});
+    if (token !== state.sceneCompareToken) return;
+    state.sceneMaterialPreparing = false;
+    state.sceneMaterialCandidate = candidate;
+    state.sceneCompareCurrent = candidate;
+    state.sceneMaterialExpiryTimer = setTimeout(invalidateMaterialCandidate,
+      Math.max(0, Date.parse(candidate.expires_at) - Date.now()));
+    await Promise.all([
+      loadSceneComparePane(state.sceneCompareTarget, "scene-compare-old-canvas", "scene-compare-old-status", token),
+      loadSceneComparePane(candidate, "scene-compare-current-canvas", "scene-compare-current-status", token),
+    ]);
+    if (token === state.sceneCompareToken) {
+      byId("scene-compare-status").textContent = sceneText().compareReady;
+      renderMaterialCandidateText();
+    }
+  } catch (error) {
+    if (token === state.sceneCompareToken) {
+      state.sceneMaterialPreparing = false;
+      byId("scene-compare-restore").disabled = true;
+      byId("scene-compare-status").textContent = error?.message || sceneText().materialFailed;
     }
   }
 }
@@ -5408,7 +5524,8 @@ function renderSceneMaterialControls({targetsChanged = true} = {}) {
   const normal = byId("scene-material-channel").value === "normal";
   byId("scene-material-normal-row").hidden = !normal;
   const blocked = state.sceneMaterialBusy || state.sceneRecoveryBusy || Boolean(state.sceneImport)
-    || Boolean(state.sceneBackup) || Boolean(activeBlenderSession());
+    || Boolean(state.sceneBackup) || Boolean(activeBlenderSession())
+    || !state.sceneMaterialRevisionId || state.sceneMaterialRevisionId !== state.sceneDocument?.current_revision_id;
   const ready = Boolean(target && slotSelect.value && uvSelect.value && imageSelect.value);
   for (const control of form.querySelectorAll("select,button,textarea")) control.disabled = blocked;
   byId("scene-material-apply").disabled = blocked || !ready;
@@ -5580,11 +5697,8 @@ async function applySceneMaterial() {
       color_space: ["base_color", "emission"].includes(channel) ? "srgb" : "non_color",
       normal_convention: channel === "normal" ? byId("scene-material-normal").value : "open_gl",
     };
-    await call("scenes.material.apply", {scene_id: sceneId, binding});
-    state.sceneMaterialRevisionId = "";
-    await loadScenes();
-    await openScene(sceneId);
-    state.sceneMaterialStatusKey = "materialComplete";
+    await compareMaterialCandidate(sceneId, binding);
+    state.sceneMaterialStatusKey = "";
   } catch {
     state.sceneMaterialStatusKey = "materialFailed";
   } finally {

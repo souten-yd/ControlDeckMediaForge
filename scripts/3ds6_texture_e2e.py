@@ -111,6 +111,10 @@ def main() -> int:
         )
         revisions_before = page.locator("#scene-revisions .row").count()
         page.click("#scene-material-apply")
+        page.wait_for_function("() => state.sceneCompareReady === 2 && state.sceneMaterialCandidate", timeout=30_000)
+        check(page.locator("#scene-revisions .row").count() == revisions_before,
+              "material preview committed before adoption")
+        page.click("#scene-compare-restore")
         page.wait_for_function(
             "count => document.querySelectorAll('#scene-revisions .row').length === count + 1",
             arg=revisions_before, timeout=30_000,

@@ -329,6 +329,7 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .scene-revision-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .scene-revision-actions .current { white-space: nowrap; }
 #scene-compare-dialog { width: min(1120px, calc(100% - 24px)); max-width: none; }
+html:has(#scene-compare-dialog[open]) { overflow: hidden; }
 .scene-compare-body { width: 100%; max-width: none; }
 .scene-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .scene-compare-pane { min-width: 0; display: grid; gap: 8px; }
