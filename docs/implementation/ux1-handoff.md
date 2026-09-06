@@ -5,6 +5,32 @@
 
 ## 2026-09-06 Release 0.28.29 preparation
 
+### Signed release / installed acceptance
+
+版数PR #287 merge/tag `a906cff03a67ce9ae9f325b62a775589659f1186`。
+exact worktree `/data1tb/ControlDeckMediaForge-release-0.28.29`から既存build_release_bundle.py、
+PyInstaller6.22.0/Python3.12.3で31,500,563 Bのbundleを構築し正式publisher keyで署名公開。
+SHA `20e247de72c90f6997eab2889aab7c4450eb7346688c4d58ce7d292d6d1edef8`。
+公開4 assetを`/data1tb/mf-0.28.29-public-20260906`へ再取得、checksum/Host publisher verifier/tag一致。
+packaged doctor ok/0.28.29。private DB backup `/data1tb/mf-0.28.29-pre-update-20260906.sqlite3`
+2,007,040 Bを保持。利用者の再開指示後、全制作Job/session/setup終端を確認して標準registry.update。
+10.166秒で0.28.28→0.28.29/healthy/enabled。MF PID13607、Host PID2196は不変。
+installed core SHA `c47a0d0c51e304fd6bb5838b815cb333c56936e652baa460abe3033579538d29`はbundleと一致。
+
+branch `ux1/3d-release-0.28.29-evidence`、新script `scripts/3ds_library_navigation_installed_e2e.py`。
+Host診断Python/PYTHONPATH=Host backend、既存専用mf-e2e scene、個別login作成/revoke、password不変。
+`--scene-id scene_a94df57d689d4636844b3586dd9fed7d --expected-version 0.28.29
+--evidence-dir /data1tb/mf-library-navigation-installed-0.28.29-20260906`でexit0。
+overlayなしの実opaque iframeで1280/320pxの4nav/設定復帰、画像/GLB/.blend filter、
+画像↔source↔GLB、明示GLB表示、scene不変、metadata移動中model read0、page error0。
+撮影した320px viewerには横scrollが見えるため全mobile layout合格とはしない。寸法観測を追加中。
+次はこのviewer横scrollの発生要素を確認する。日英切替/Host履歴/relationsの60件超pagingと
+全体3DS-8 A/C/D/E/F・長時間credentialはNOT TESTEDのまま。
+exact worktree/build/package展開物は調査用に保持。稼働実体へsourceをoverlayしていない。
+寸法追加runもexit0。`/data1tb/mf-library-navigation-installed-0.28.29-layout-20260906`に
+inner320/root client305/scroll319、viewer client320/scroll320を記録。viewer内部ではなく背景rootのoverflow。
+gate `./mf.sh test`: 1052 passed / 既知warning1 / 113.38秒、diff check成功。
+
 PR #285 navigation `ae9ed17`、PR #286 Library `05e556f`の通常mergeを確認。
 branch `ux1/release-0.28.29`でaddon/core版数を同期する。稼働版は0.28.28のまま。
 前段の実source受入/1052 testsは直下の記録。正式署名bundle公開とinstalled受入は次の段階で、

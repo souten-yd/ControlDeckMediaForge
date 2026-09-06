@@ -1,5 +1,28 @@
 # Media Forge implementation status
 
+## 2026-09-06 v0.28.29 signed / installed navigation and Library
+
+PR #287/tag target `a906cff03a67ce9ae9f325b62a775589659f1186`からexact bundleを構築・正式署名公開。
+31,500,563 B、SHA `20e247de72c90f6997eab2889aab7c4450eb7346688c4d58ce7d292d6d1edef8`。
+公開4 asset再取得/checksum/Host署名検証/tag一致、packaged doctor ok/0.28.29。
+全制作Job/session/setup終端とprivate DB backup 2,007,040 Bを確認後、標準registry.updateは
+10.166秒、0.28.28→0.28.29/healthy/enabled。Host PID2196不変、MF PID13607 active。
+installed/bundle core SHAはともに`c47a0d0c51e304fd6bb5838b815cb333c56936e652baa460abe3033579538d29`。
+公開再取得 `/data1tb/mf-0.28.29-public-20260906`、backup `/data1tb/mf-0.28.29-pre-update-20260906.sqlite3`。
+
+`scripts/3ds_library_navigation_installed_e2e.py`をHost診断Pythonで実行しexit0。
+既存専用scene `scene_a94df57d689d4636844b3586dd9fed7d`、password変更なし/個別session revoke、
+native headed Chromeから実Host opaque iframeへ接続。frontend overlay/scene authoringなし。
+1280/320pxの4nav・設定復帰・画像/GLB/.blend filter、画像↔source↔GLBの双方向移動、
+metadata移動中model read0、明示GLB表示、scene不変、page errors0。
+証拠 `/data1tb/mf-library-navigation-installed-0.28.29-20260906`。
+画像を目視したところ320px viewerに横scrollがあり、mobile layout全体の合格は記録しない。
+寸法観測を追加し、発生要素を次に確認する。日英切替/Host戻る進む/60件超relations paging、
+新releaseの全A/C/D/E/F・credential refreshはNOT TESTED。全体3DS-8はPARTIALを維持。
+寸法追加run `/data1tb/mf-library-navigation-installed-0.28.29-layout-20260906`もexit0。
+inner320/root client305/scroll319、viewer client320/scroll320。背景rootで14px overflowを実測した。
+gate `./mf.sh test`: 1052 passed / 既知warning1 / 113.38秒。diff check成功。
+
 ## 2026-09-06 Release 0.28.29 preparation
 
 PR #286 merge `05e556f1232d8bb943f2d519a6daa1e5e5be07c4`後、addon/core versionを0.28.29へ同期。
