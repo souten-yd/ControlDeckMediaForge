@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.19 source preparation
+
+PR #254はmerged `76a91b490ee1eee7daa08e1214da1697f319c5c6`。
+branch `ux1/3d-viewer-v02819`でaddon/coreの版を0.28.19に揃えた。viewer実装は同PRのまま。
+現行installedは0.28.18/healthy/enabled。初回確認でactive Host/local Job0、Web sessionは全て終端、
+runtime/model operationも全て終端。更新直前に再確認する。元checkout/Hostの並行作業は変更しない。
+次は版準備PRのgate/merge、exact mainから正式署名bundleを公開し、標準updaterで導入、
+`3ds_viewer_render_installed_e2e.py`のcandidate overlayなしで同じLibrary実操作を確認する。
+この段階では0.28.19の公開・導入はNOT TESTED。全体3DS-8はPARTIAL。
+版準備gate `./mf.sh test`: 1004 passed / 既知warning1件 / 110.52秒、diff check成功。
+
 ## 2026-09-06 Library viewer six-axis candidate
 
 利用者がLibrary viewerの必須操作を±X/±Y/±Z回転・拡大縮小に指定し、軸の意味も確認した。
