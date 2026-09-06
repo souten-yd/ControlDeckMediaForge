@@ -168,7 +168,7 @@ project確認後変更拒否はunit fixture。installed Host/英語/実project�
 |---|---|
 | A clean環境/表示 | 全操作、320px、日英、既存画像がBlender不在でも利用可能な証拠。390pxだけで320px成功とはしない |
 | B 制作一巡 | VERIFIED（再開/再試行を含む同一制作物）。OpenCode剣→既存画像2→3→新規生成/比較採用3→4→GUI入力保存6→7→第6版を第8版へ復元→元projectのrestored-exportsへGLB/PNG/manifest入りZIP配置。全8版不変、旧出力保持、新3 receipt/実bytes/manifest hash一致 |
-| C lifecycle | [原因別証拠表](3ds-lifecycle-evidence.md)へ照合。既存idle/restart/expiry、.38保存失敗/child crash/既定300秒切断終了のprocess回収と別scene復旧確定。さらにnative Chromeで15.0495秒hidden→visible、同session復帰後複製保存、実GLB node1→2/旧版不変を確認。PARTIAL: 未保存手編集の回収量、他原因の回収証拠は未完了 |
+| C lifecycle | [原因別証拠表](3ds-lifecycle-evidence.md)へ照合。既存idle/restart/expiry、.38保存失敗/child crash/既定300秒切断終了のprocess回収と別scene復旧確定。native Chrome背景復帰後の実入力保存、さらに保存競合時の未確定複製2→4 meshesを別sceneへ全回収/競合側1 mesh不変を実GLBで確認。PARTIAL: 定期autosave実装・save以前のcrash回収量、他原因の回収証拠は未完了 |
 | D 更新/削除 | 稼働A中にB導入、B probe失敗、A削除拒否、停止後Aのみ削除と資産hash保持、External解除、容量不足/中断を個別照合 |
 | E GPU/長時間 | installed0.28.30の644.700秒CPU queue fault injectionでchild refresh4件/元期限後取消/終端一致。さらに既存GUIの480.340秒RFB再接続・同一session660.433秒継続・実入力保存を672.072秒runで確認（PR #293）。自然な120秒超演算・setup自身の10分超credentialとGPU組合せ評価は残る |
 | F release | 署名公開/update/改ざん拒否証拠は維持。rollbackは候補health成功後の例外注入であり、migration失敗や自然なhealth不良の証拠へ読み替えない。clean install等も個別照合 |

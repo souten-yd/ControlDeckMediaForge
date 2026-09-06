@@ -1,5 +1,40 @@
 # Media Forge implementation status
 
+## 2026-09-07 unsaved GUI edit retained on save conflict
+
+PR #347 merge `9758cb581c4756b89493baf58a8a87e91f44796d`から
+branch `ux1/3d-unsaved-recovery`。既存診断
+`scripts/3ds_save_conflict_cleanup_installed_e2e.py`へ--manual-editを追加。
+save-conflictだけで許可し、他modeとの組合せは引数段階で拒否する。
+Host診断Pythonで--scene-id scene_3f3b5f1e97e94b268722ea45cc811c50
+--expected-version 0.28.38 --manual-edit
+--evidence-dir /data1tb/mf-unsaved-save-conflict-installed-20260907 を実行、passed=true/exit0。
+
+実Host opaque frameで正規GUI start、Blender描画を確認してcanvas click/A/Shift+D/Escape。
+元第5版の2 meshesを複製し、保存要求前のworking scene.blend hashと確定sceneは不変。
+この段階ではGUIメモリ内の編集であり、新revisionやworking fileへの保存はしていない。
+通常revision restore APIで同専用sceneの第6版（1 mesh）を先に確定して競合を作る。
+正規blender.sessions.save APIは実Blender保存後にscene_revision_conflict、5.037秒でfailed。
+
+session blendersession_0a1a24fa5ce247678d5bb2a16b1c8f7e、開始時PID980386/980390/980439。
+failed後のprocess/cgroup/root/socket消滅、元scene第6版全投影不変をassert。
+480,198 Bの未検証候補、SHA757fbbda9e75337ba4675946c4480dd910bb8bb08637a90445b20a90acdbbf92を
+正規recovery.forkで別scene_23451e30760d594399312c56c2380789の初版へ確定。
+新sourceと候補hash一致、復旧先は実Blender検証4 meshes、元の5版JSONとsource/GLB hash不変。
+追加のread-only実GLB JSON検査も元2 node/競合側1 node/復旧先4 nodeと一致。
+復旧GLB asset_c097bda35acf4ecdb51c24588261fed1、5,968 B、
+SHA4bf808b729a8fe9f06ebf61106cbb89807accfcabf505242d853d131bcdc32fb。
+確認対象GLBのprovenance sidecar/DB一致。active GUI0、開始時3 PID不在、
+Host849052/MF905518/905522はPID不変。元第6版・復旧scene・候補は保持する。
+
+この故障では追加した2 meshesを全て回収できた。保存API以前にBlender自体が落ちた場合の
+メモリ内容の回収やautosaveの成功へ読み替えない。runtime/Web設計§7の2分autosaveは
+未実装と明記され、gui_session_bootstrap.pyもsave command時の保存だけであることを確認。
+次の実装sliceで隔離working copyへの定期autosaveと故障後回収を扱う。
+C/GOAL-09全体はPARTIAL。service restart/runtime/global設定変更なし。
+全 `./mf.sh test`: 1135 passed/既知warning1/167.73秒、exit0。
+診断py_compile/diff check成功、終端unit not-found/inactive/MainPID0。
+
 ## 2026-09-07 installed native background return
 
 PR #346 merge `19924bee14f80ec04d6be7427ca1da117ad62e8b`から
