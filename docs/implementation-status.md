@@ -9629,3 +9629,26 @@ source SHA一致、押下中のrefreshでもbutton保持/比較open、切断時�
 最終native viewport1280x835/DPR1.508333。実日本語比較画像も確認。JSで比較を開く代用はしていない。
 試験ログインは個別作成/revoke、password不変。生成画像/mobile touch/長時間credential/全A〜Fは未完了。
 gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 112.99秒。diff check成功。
+
+## 2026-09-06 installed generated texture candidate adoption
+
+installed0.28.26の実UIから既存専用scene `scene_a94df57d689d4636844b3586dd9fed7d`で画像生成。
+Host/local Job全終端を確認して開始。新script `scripts/3ds_generated_material_installed_e2e.py`を
+Host診断venv/PYTHONPATH=Host backendで`--scene-id <同ID> --expected-version 0.28.26
+--evidence-dir /data1tb/mf-generated-material-installed-0.28.26-20260906`として実行した。
+Job `job_cfd0e32824284a59b909bb907ae76a52` succeeded/11.110秒。
+FLUX.2 Klein4B、diffusers0.40.0、Apache-2.0、weights hash
+`sha256:f3fcfa8fdaf5ebcd26c33cd53b485ec5ebe54939b5ace585b3f488278dfae278`。
+画像 `asset_bd5a2cabd39a4e12b3682049a1a16946`、1024x1024 RGBA PNG 2,232,149 B、
+SHA `51097d8edb6b8babdba9277d31912094e3e901870a1d569d598810ff4b91669b`、validator4件passed。
+生成/候補比較/破棄でhead不変。明示採用だけ3→4版、旧3版不変、dependencyとsource provenanceの
+parent/reference hashが生成画像に一致。白いcube/青いタイル候補を実画像で確認。
+Blender4.5.13/base_color/UVMap/packed=true/external_images0、page error0。
+
+Host DB read-only: Host Job `ffe974bcc230` succeededのresultは同画像Asset。
+request `7f668961-e15e-486a-bbc4-9bc68c305182`、lease `2d9d2bec-0c72-4d4e-8593-8ed25b991104`の
+activate/renew/releaseは同Job/gpu0でsuccess、終了state=released。
+モデル取得/Host変更/service restart/overlayなし。ログインは個別作成/revoke、password不変。
+gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 115.64秒。diff check成功。
+GOAL-06は既存/生成画像base color比較採用を受入。OpenCode自然言語一巡、全PBR channel、
+mobile touch、長時間credential、全release A〜Fはこの実測の範囲外。全体3DS-8/scenario BはPARTIAL。
