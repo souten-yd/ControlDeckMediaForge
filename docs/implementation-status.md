@@ -1,5 +1,42 @@
 # Media Forge implementation status
 
+## 2026-09-06 v0.28.32 signed release / installed touch targets verified
+
+branch `ux1/3d-release-0.28.32-acceptance`。PR #303 merge/tag
+`b0ecc255116cb26d8aa153a4fb7713fdb238264b`からexact detached worktreeでbundle構築。
+`python3 scripts/build_release_bundle.py --version 0.28.32 --output-dir /data1tb/mf-0.28.32-build-20260906
+--pyinstaller /data1tb/ControlDeckMediaForge-3ds4/runtimes/bundle-build/.venv/bin/pyinstaller` exit0。
+tar 31,499,396 B、SHA `228adcd9287db3bd970a16a2e598182e605d139ca71e781fc0210e02d7f50812`。
+外側6 entriesはlauncher/core/addon/featureのみ。addon/feature/core doctorの版数一致。
+`/data1tb/mf-0.28.32-package-iYzsMs` 配下の専用data/cacheでpackaged doctor ok。
+既存正式publisher鍵で署名・自己検証しv0.28.32へ4 assets公開、
+`/data1tb/mf-0.28.32-public-20260906`へ再取得。Host trusted catalogの
+`_verify_signed_release`とtar実size/SHA一致を確認した。新鍵・Hostコード変更なし。
+
+更新前は0.28.31/healthy/enabled、local Job396件・GUI23件・runtime操作3件すべて終端。
+online DB backup `/data1tb/mf-0.28.32-pre-update-20260906.sqlite3`（0600、2,076,672 B）後、
+Host診断Pythonの標準 `registry.update('media-forge')`で0.28.31→0.28.32、10.059秒。
+healthy/enabled/requested_enabled=true、MF user service PID60180 active、Host PID2078不変。
+installed/package core SHA共に
+`07dba6ea0312d1281da6cf85a1cdde90e7b629ac9cd49f0c24f3a8ab4ed22b3d`。
+
+installed受入command: Host診断venv/PYTHONPATH/configと実DISPLAY=:0/XAUTHORITYで
+`scripts/3ds_settings_protection_installed_e2e.py --expected-version 0.28.32
+--require-readable-layout --require-touch-targets --probe-geometry --locale <ja|en>
+--evidence-dir /data1tb/mf-settings-touch-<ja|en>-installed-0.28.32-20260906`。
+日英とも**headed Chrome / overlayなし / exit0**。Host/子locale一致。
+320pxのruntime3 buttons全44px/minHeight44px、説明255px/root305/305、desktopは39pxを維持。
+各runは両幅/両runtimeのpreview4件、project参照2/23による削除不可、確認button非表示、
+戻る操作、子BUTTONへのpointer3種到達、runtime前後一致/page errors0。
+個別login revoke/password不変、削除送信/scene変更なし。日本語320px screenshot目視確認。
+
+44px不足のsource negative/修正/installed negative/署名installed positiveが揃った。
+事前trial/撮影も含む今回の成功を、断続的iframe入力不達の原因確定や全条件の修正とはしない。
+本sliceは配布/実機記録のみ、コード追加なし。diff check成功。
+1054 tests/115.02秒は版数PRのgateであり、文書PRでの再実行ではない。
+全体3DS-8/GOAL-03/必須A〜Fの残件は維持。
+次は隔離したpackaged環境の空runtimeから、Settingsの初回導入を実ブラウザで検証する。
+
 ## 2026-09-06 release 0.28.32 preparation
 
 PR #302 merged `b9cf655d113a4a58df9df60f79091fa2471f287c`確認。
