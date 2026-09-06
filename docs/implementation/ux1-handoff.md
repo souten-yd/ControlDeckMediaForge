@@ -22,6 +22,9 @@ standaloneは同一loopback Originだけの専用WS。candidate以外のmethod/�
 同修正後の再実行も成功: `/data1tb/mf-material-preview-ui-browser-final-status-20260906`（4→5→6版）。
 root320/320・dialog280/280、全assert/page error0を再確認。隔離source server9047は停止済み。
 gate `./mf.sh test`: 1026 passed / 既知Starlette warning1件 / 121.80秒。構文/diff check成功。
+並行main #265（nonce前の接続抑制）/#266（version0.28.22）を`20ebd9b`で取り込んで保持した。
+source UIのstandalone分岐とhost nonce待ちの条件は両立し、無認証mirrorをhost経路の代用にはしていない。
+main取込後gate `./mf.sh test`: 1026 passed / 既知warning1件 / 126.61秒。diff check成功。
 初回は復元直後の材質情報読み込み中の再比較でtimeout。ready条件修正後は成功した。
 初回の弱い幅assertも実画像で見抜き、client/scrollの等値検査へ変更した。
 

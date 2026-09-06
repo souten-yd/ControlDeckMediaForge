@@ -9500,6 +9500,9 @@ socket切断後のadopt disabled、日英文言とstats切替、page error0をas
 同修正後の最終実行 `/data1tb/mf-material-preview-ui-browser-final-status-20260906`も成功。
 既存fixtureの履歴を残して4→5→6版、全assert/page error0、root320/320・dialog280/280を再確認。
 隔離source server9047は停止済み。gate `./mf.sh test`: 1026 passed / 既知warning1件 / 121.80秒。
+並行main #265のnonce前接続抑制と#266の0.28.22版更新をmerge `20ebd9b`で取り込み、元変更を保持した。
+この版更新・公開・導入作業をこちらが実行したとは記録しない。
+main取込後gate `./mf.sh test`: 1026 passed / 既知Starlette warning1件 / 126.61秒。diff check成功。
 
 NOT TESTED: installed Host/署名新版、生成画像GPU経路を含む全制作一巡。既存画像のsource fixture受入を
 生成画像/installed成功へ読み替えない。GOAL-06/3DS-6/3DS-8はPARTIAL。
