@@ -1,5 +1,42 @@
 # Media Forge implementation status
 
+## 2026-09-06 clean package G8 ZIP continuation
+
+PR #306 merged `517673ce442484adabba9c7b3e1efca5db3a8ad1`確認。
+branch `ux1/3d-clean-g8-package`。新 `scripts/3ds_clean_g8_package_e2e.py` と
+synthetic verifier negative tests。製品/Host/公開契約変更なし。
+前2sliceの専用data `/data1tb/mf-clean-packaged-0.28.32-QBvHfm` と
+署名package0.28.32を同じfeature/cache/absent-legacy/port9161で再起動（PID74790）。
+最初のHost診断venv実行はPillow不在でimport時exit1、副作用なし。
+既存MediaForge core venv（httpx/Pillow）で実行し、Hostへ依存を追加していない。
+
+command: `.venv/bin/python scripts/3ds_clean_g8_package_e2e.py
+--evidence-dir /data1tb/mf-clean-g8-package-0.28.32-20260906`、exit0/1.065秒。
+同scene `scene_2642c93f480d427d920267ac790405e2` の既存GLB
+`asset_d8548f7e2e3548359b4656b9dddc4781` を入力に、
+実HTTP POST /api/v1/jobs（202）、operation=asset.pack/profile=3d.project.glb、
+triangle_budget12/output zip/local_only=true。Job `job_d4575fd7aab440f5945c87ecfa117f9f` succeeded。
+生成Asset `asset_0ec65313251048e9bf8b12fabd31d426`、ZIP44,745 B、
+SHA `f46afc3ea12d599396b7ce95502dac6416d7ef9267453e34f2d2bffac14f20ae`。
+
+実ZIP3 entries、CRC、GLB/PNG/manifest size/hash、Asset/Provenance/元GLB参照hash、
+compiler Blender4.5.9/1.1.0、PNG decode、GLB header/lengthを照合。
+元GLBとZIP内GLBは共に1,936 B/SHA
+`d6d61e731d1936825b450a527474864bd3df086ef4e8a3379907386f7d52c3ea`。
+preview43,414 B/SHA `f46fa6e1e269705a6cea9de2370e3a5bf6f65543a1864dd38bce4a681d2424de`。
+previewを展開してキューブを目視確認。manifestはmesh1/triangles12/vertices24、
+bounds[-1,-1,-1]〜[1,1,1]。scene全体API前後一致、元GLB bytes不変。
+read-only DBでもG8 Job succeeded、既存import Job succeeded。package PID74790はSIGINT後exit0。
+本番Host/MFサービス、ユーザーglobal Blender/configは変更していない。
+
+verifierはZIP bytes改ざん、parent欠落、reference hash不一致、manifest不一致の4 negativeを拒否、
+整合するsynthetic fixture1件を受理する。これらは実機証拠とは分離する。
+空Blender導入→web pack→GUI表示/終了→同素材G8 ZIPまで専用package環境で受入が進んだ。
+scenario AのBlender不在での実画像生成/Library利用、installed Host初回導入はこのrunの範囲外。
+次はBlender不在時の画像実行・Libraryの残条件と、Host Broker認証経路を確認する。
+全体3DS-8/残る必須シナリオはPARTIAL。専用data/生成ZIPは証拠として保持。
+gate `./mf.sh test`: 1059 passed / 既知Starlette warning1 / 111.70秒。diff check成功。
+
 ## 2026-09-06 clean package Web pack / real GUI continuation
 
 PR #305 merged `04388c98a2b16ae8871a34e0a74cd85de5bd6302`確認。

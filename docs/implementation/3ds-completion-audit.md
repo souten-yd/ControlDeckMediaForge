@@ -56,6 +56,10 @@ web pack/GUIを含むscenario A全体の成功には拡大しない。
 実RFB画面表示と破棄終了/プロセス回収を確認した。初回試験のopen操作不足による失敗後、
 同sessionへ再接続して成功。証拠 `/data1tb/mf-clean-web-pack-{browser,resume}-0.28.32-20260906`。
 これはsoftware表示。画像生成/G8 ZIP/installed Host clean installはまだ未確認。
+続く同じ専用package0.28.32のG8実HTTPでは、同cube GLBからJob成功/ZIP44,745 B、
+3 entriesのsize/hash/CRC、Provenanceと元素材の対応、PNG、GLB、12 trianglesを照合した。
+証拠 `/data1tb/mf-clean-g8-package-0.28.32-20260906/observations.json` と実ZIP。
+元scene/GLB不変。scenario AのBlender不在時画像実行/Library・Host初回導入は残る。
 PR #294でsetupの隔離source HTTP/低速archive fixtureを実行。631.247秒取消、652.011秒再導入ready、
 実Blender4.5.9/glTF入出力probe成功、終端2 operation/空stagingを確認した。
 実archive/hash/展開は実物だが転送はfixture。実Host認証/外部回線/設定browserの残件は閉じない。
