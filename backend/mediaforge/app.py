@@ -3707,6 +3707,20 @@ def create_app(
                         result = blender_runtime_operations.switch(
                             str(params.get("runtime_id", ""))
                         ).model_dump(mode="json")
+                    elif method == "blender.runtime.unregister.preview":
+                        if set(params) != {"runtime_id"}:
+                            raise ValueError("External removal preview accepts only runtime_id")
+                        result = await blender_runtime_operations.external_removal_preview(str(params["runtime_id"]))
+                    elif method == "blender.runtime.unregister":
+                        if set(params) != {"runtime_id", "confirmation_fingerprint"}:
+                            raise ValueError("External unregister fields differ")
+                        result = await blender_runtime_operations.external_registration(
+                            register=False, runtime_id=str(params["runtime_id"]),
+                            confirmation_fingerprint=str(params["confirmation_fingerprint"]))
+                    elif method == "blender.runtime.register_legacy":
+                        if params:
+                            raise ValueError("External registration accepts no client-selected path")
+                        result = await blender_runtime_operations.external_registration(register=True)
                     elif method == "blender.runtime.remove.preview":
                         if set(params) != {"runtime_id"}:
                             raise ValueError("Blender removal preview accepts only runtime_id")
@@ -4344,6 +4358,14 @@ def create_app(
     @app.post("/workspace-api/blender/runtime/operations", include_in_schema=False)
     async def standalone_blender_runtime_operation(payload: dict[str, Any]) -> dict[str, Any]:
         try:
+            if payload == {"action": "register_legacy"}:
+                return await blender_runtime_operations.external_registration(register=True)
+            if set(payload) == {"action", "runtime_id"} and payload["action"] == "unregister_preview":
+                return await blender_runtime_operations.external_removal_preview(str(payload["runtime_id"]))
+            if set(payload) == {"action", "runtime_id", "confirmation_fingerprint"} and payload["action"] == "unregister":
+                return await blender_runtime_operations.external_registration(register=False,
+                    runtime_id=str(payload["runtime_id"]),
+                    confirmation_fingerprint=str(payload["confirmation_fingerprint"]))
             if payload == {"action": "install"}:
                 return blender_runtime_operations.install().model_dump(mode="json")
             if payload == {"action": "web_install"}:

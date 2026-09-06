@@ -32,6 +32,7 @@ from .blender_operation import (
     BlenderRuntimeOperationState,
 )
 from .blender_runtime import (
+    G8_RUNTIME_ID,
     RUNTIME_ID_PATTERN,
     BlenderRuntimeRegistryError,
     BlenderRuntimeResolver,
@@ -346,6 +347,66 @@ class BlenderRuntimeManager:
             "can_remove": not blocked,
             "confirmation_fingerprint": fingerprint,
         }
+
+    def _external_removal_preview(self, runtime_id: str) -> dict[str, Any]:
+        if runtime_id != G8_RUNTIME_ID:
+            raise BlenderRuntimeOperationError("blender_runtime_external_invalid", "unknown external runtime")
+        status = self.resolver.status()
+        row = next((r for r in status["runtimes"] if r["runtime_id"] == runtime_id), None)
+        if row is None or row["ownership"] != "legacy":
+            raise BlenderRuntimeOperationError("blender_runtime_not_found", "external runtime is not registered")
+        live = self.resolver.live_reference_count(runtime_id) + sum(
+            session.runtime_id == runtime_id for _, session in self.store.list_active_blender_web_sessions()
+        )
+        projects = self.store.scene_runtime_reference_count(runtime_id)
+        blocked = (["active_runtime"] if row["active"] else [])
+        blocked += ["live_reference"] if live else []
+        blocked += ["project_reference"] if projects else []
+        identity = {"operation": "unregister", "runtime_id": runtime_id, "version": row["version"],
+                    "active": row["active"], "state": row["state"], "reclaimable_bytes": 0,
+                    "live_reference_count": live, "project_reference_count": projects,
+                    "blocked_reasons": blocked}
+        fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return {**identity, "can_remove": not blocked, "confirmation_fingerprint": fingerprint}
+
+    async def external_removal_preview(self, runtime_id: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self._external_removal_preview, runtime_id)
+
+    async def external_registration(
+        self, *, register: bool, runtime_id: str = G8_RUNTIME_ID, confirmation_fingerprint: str = ""
+    ) -> dict[str, Any]:
+        """Short atomic registration change; never delete external files.
+
+        Do not abandon a registry-writing thread when its request disconnects.
+        The registry remains authoritative after response loss or restart.
+        """
+        if runtime_id != G8_RUNTIME_ID:
+            raise BlenderRuntimeOperationError("blender_runtime_external_invalid", "unknown external runtime")
+
+        def change() -> dict[str, Any]:
+            with self.resolver.removal_guard():
+                if register:
+                    if not self.resolver.register_legacy(explicit=True):
+                        raise BlenderRuntimeOperationError(
+                            "blender_runtime_external_unavailable", "configured external runtime failed verification")
+                    return {"registered": True, "runtime_id": runtime_id}
+                preview = self._external_removal_preview(runtime_id)
+                if confirmation_fingerprint != preview["confirmation_fingerprint"]:
+                    raise BlenderRuntimeOperationError("blender_runtime_remove_changed", "external runtime preview changed")
+                if not preview["can_remove"]:
+                    raise BlenderRuntimeOperationError("blender_runtime_in_use", "external runtime is still in use")
+                self.resolver.unregister_legacy()
+                return {"unregistered": True, "runtime_id": runtime_id, "removed_bytes": 0}
+
+        if self._guard.locked():
+            raise BlenderRuntimeOperationError("blender_runtime_operation_active", "another runtime operation is active")
+        async with self._guard:
+            task = asyncio.create_task(asyncio.to_thread(change))
+            try:
+                return await asyncio.shield(task)
+            except asyncio.CancelledError:
+                await task
+                raise
 
     def remove(self, runtime_id: str, confirmation_fingerprint: str) -> BlenderRuntimeOperation:
         preview = self.removal_preview(runtime_id)

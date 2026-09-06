@@ -3,6 +3,44 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 external registration Settings and guarded management
+
+PR #317 merged `22800333d2866c3616c1c57fcfba7828756f2d35` をfetch確認。
+branch `ux1/3d-external-registration-settings`。
+BlenderRuntimeManagerにexternal preview/登録解除/再登録を追加し、private WSと
+standalone HTTP双方へ接続。新メソッドはblender.runtime.unregister.preview/unregister/register_legacy。
+任意path/URL/versionは受け取らず、固定configured legacy IDのみ。
+確認fingerprintとactive/live/session/project参照を実行直前に再検査する。
+他のruntime operation稼働中は拒否。同期DB/registry処理はasyncio.to_thread内、
+取消でも開始したatomic writeの終端を待つ。外部実体のremove/repair/installを呼ばない。
+登録変更は短いatomic操作でdownload journalを新設しない。応答喪失時はregistry statusで復元する。
+
+設定のlegacy行へ「登録解除」、確認dialogへ外部ファイル/画像/制作物/履歴を変更しない説明を追加。
+解除中だけ「既存環境を再登録」を表示。日英文字列/既存dialog/320px layoutを再利用。
+managed削除・公開agent/workflow/schema・Hostコードは変更なし。docs/api.mdへprivate操作を記録。
+
+受入専用source root `/data1tb/mf-external-settings-QEvrmA`、port9161/PID222538。
+core Pythonのinline setupで新しいdata/registryを作り、前sliceと同じ二つの既存受入runtimeを
+読み取り参照。外部inventoryをexternal-before.jsonへ保存後、uvicornを起動。
+実行: HostのPlaywright可能な診断Pythonで
+`scripts/3ds_external_settings_e2e.py --evidence-dir /data1tb/mf-external-settings-browser-20260906`。
+DISPLAY=:0/XAUTHORITYは既存user session。製品へHost import/venv共有を追加しない。
+実headed Chrome/日本語、1280x600と320x600で確認→取消→解除→reload→再登録、
+active/G8のmanaged4.5.9維持、横overflowなし、page errors0。5.973秒exit0。
+confirmation-320.pngを実画像で確認。ブラウザ内JSでactionやdialogを代行しない。
+終了後MF core Pythonで同外部inventoryを再計算し、5,580 files/1,168,332,155 Bの
+size/SHA/modeとdirectory/link一覧が前後一致。新download・既存runtime/registry変更なし。
+専用source PID222538へSIGINT、元toolのexit0を確認。本番へのrestart/update要求なし。
+
+追加7 testsはHTTP active拒否/解除再登録、確認後のproject増加、任意path/managed ID/
+確認不足の拒否、worker thread実行と取消後完了、busy拒否。project増加はunit fixture。
+実DBの制作物参照を伴うbrowser拒否、installed Host opaque iframe、英語/locale切替、
+dark/light変更、長時間認証、任意外部版はこのsliceでNOT TESTED。
+全gate `./mf.sh test`: 1079 passed / 既知warning1 / 166.62秒。
+`node --check frontend/app.js`、diff check成功。
+次はこの管理UIを含む署名版を正規公開/導入し、installed日英Settingsの同操作を確認する。
+旧版rollback時のregistry snapshot復元条件（#317）は維持。3DS-8全体はPARTIAL。
+
 ## 2026-09-06 external legacy registration persistence foundation
 
 PR #316 merged `c3d1aad1945634c2be980a91de9af62971300bc3` をfetch確認。
