@@ -3,6 +3,31 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 採用前材質候補 domain
+
+PR #260 merged `45e85311f135f090d016027becf3fd629954aae9`。branch `ux1/3d-material-preview-core`。
+`scene_material_preview.py`にprepare/read/adopt/discard/expire/connection cleanupを追加した。
+現時点ではapp/WS/HTTP/UIから未接続。既存公開Agent materialの即時commit契約は変更していない。
+候補は正式Asset/revisionではなく専用root内。全体2候補/connection1候補/TTL10分/結果含め16件、
+runtime pin、hash再検証、base競合、512KiB chunk、破棄・期限・起動時回収を実装。
+採用開始後のrequest取消はcommitの終端を待ち、再送で同じ結果を返す。prepare取消は候補回収。
+追加9 testはowner/connection分離、範囲/個数、改ざん、head競合、期限、取消、symlink等を検査する。
+
+実Blender4.5.9を既存legacy runtimeから隔離dataで実行:
+`PYTHONPATH=backend:. .venv/bin/python scripts/3ds_material_preview_core_e2e.py
+--data-dir /data1tb/mf-material-preview-core-final-20260906
+--legacy-runtime-root /data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9`。
+prepare0.462秒/adopt0.267秒、GLB2284B/12triangles/1texture、候補作成・破棄でhead/asset不変、
+採用だけrevision1→2、再送も2版、旧blend bytes不変、採用source hashと候補一致、候補directory0。
+証拠は同data-dirのobservations.json。初回scriptのPYTHONPATH不足とpurpose誤りは修正後に別dir再実行した。
+
+次はappにsingleton managerを作りprivate transportとUI比較を接続する。connection IDはサーバー生成し、
+prepare task切断取消・cleanup・定期expire・shutdown cleanupを必ず接続する。現行一般revision比較とは
+別に未保存候補を表示し、採用ボタンだけadoptする。両画像入力経路と日英/mobile/競合を実ブラウザで検査。
+transport/UI/installed署名新版はNOT IMPLEMENTED / NOT TESTED。3DS-6/GOAL-06/3DS-8は未完了。
+installed0.28.20・Host・利用者制作データは変更していない。
+gate `./mf.sh test`: 1013 passed / 既知Starlette warning1件 / 132.16秒。diff check成功。
+
 ## 2026-09-06 採用前比較の実装不足を確認
 
 PR #259 merged `a1635c9d54837085ac95ec8ef4d0f9acc3acbde5`をfetch確認。

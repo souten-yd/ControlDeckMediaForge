@@ -9406,3 +9406,34 @@ head/版数/旧版bytesの受入条件はcompletion auditへ記載した。
 候補prepare/compare/adopt/discard、同経路の実Blender/browser操作はNOT IMPLEMENTED / NOT TESTED。
 gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 105.73秒。diff check成功。
 このgreenは既存動作の回帰確認であり、採用前比較の設計適合を証明するものではない。
+
+## 2026-09-06 採用前材質候補 domain — VERIFIED FOR CORE SLICE
+
+基準main `45e8531`（PR #260 merge）、branch `ux1/3d-material-preview-core`。
+MaterialPreviewManagerを追加。prepareは正式Asset/SceneRevisionを登録せず、owner/connectionに束縛した
+専用candidateを保持する。最大2候補、connectionごと1候補、TTL10分、再送結果込み16件。
+runtime参照pin、既存texture/GLB/.blend制限、512KiB chunk、候補/依存hashとbase revision再照合を維持。
+adoptのみ既存working commitで独立検査・確定し、結果の再送は版を増やさない。
+prepare取消/破棄/期限/接続cleanup/起動時孤立候補除去を実装し、採用開始後のrequest取消はcommit完了を待つ。
+既存公開Agent/APIの即時material適用は変更していない。app singleton/WS/HTTP/UIの接続は次slice。
+
+追加9 testで候補時head/Asset不変、owner/connection拒否、byte範囲/個数上限、source/GLB/依存改ざん、
+head競合、期限、prepare取消、adopt取消後再送、symlink先を消さないcleanupを検査し成功。
+既存scene_workspaceと合わせた初回focused runも成功した（追加取消/symlink test前）。
+
+実機コマンド:
+`PYTHONPATH=backend:. .venv/bin/python scripts/3ds_material_preview_core_e2e.py
+--data-dir /data1tb/mf-material-preview-core-final-20260906
+--legacy-runtime-root /data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9`。
+既存legacy runtime4.5.9/実Blender background/autoexec無効を使用し、新規隔離Storeだけにcubeと64x64画像を作成。
+prepare0.462270664秒、adopt0.266553368秒、GLB2284B、12triangles/1material/1texture、独立GLB検証成功。
+preview SHA `8b4c8306011d4343c3111e35ee207b0e489636883569cddffb5879df575aad53`。
+scene `scene_a020ed3846034a479621e6ab401c6e6c`の候補作成/破棄時head・asset不変、採用だけ1→2版、
+再送後も2版、元blend bytes不変、採用source hashが候補と一致、candidate directory0をassert。
+証拠は同data-dirのobservations.json。初回scriptはPYTHONPATH不足（data作成前）と画像purpose誤り
+（候補作成前）で停止した。引数を修正してretry1とfinalの新規隔離dirで成功、既存dirを上書きしていない。
+
+NOT IMPLEMENTED / NOT TESTED: private transport/UI接続、実ブラウザの未保存候補比較・採用、
+その署名新版とinstalled受入、生成画像との全制作一巡。GOAL-06/3DS-6/3DS-8は未完了。
+Host/installedサービス/利用者制作データは変更していない。
+gate `./mf.sh test`: 1013 passed / 既知Starlette warning1件 / 132.16秒。diff check成功。

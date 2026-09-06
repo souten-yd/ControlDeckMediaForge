@@ -153,6 +153,22 @@ UVなしは「UVを作成」工程を明示し、投影mappingとの違いを示
 UDIM、複数材質atlas、bake、seam処理は後続profileとして追加し、元画像を上書きしない。
 材質が参照する画像の削除時は依存revisionを示し、参照中blobをGCしない。
 
+### 5.1 採用前候補のdomain実装（3DS-6補完）
+
+`MaterialPreviewManager`はSceneWorkspaceごとに1つ作り、private transportがownerと内部connection IDを
+束縛する。候補は`materialpreview_<32 hex>`のopaque IDを持ち、正式Asset/SceneRevisionではない。
+検証済み`.blend`/GLBは専用`scenes/material-previews`へ保持し、prepareはcurrent/Libraryを変更しない。
+全体同時2候補、同一connection/ownerは1候補、期限10分、再送用結果を含め最大16件。
+既存の.blend/GLB/texture上限を維持し、GLB bytesは512 KiB以下で読む。
+Blender runtime参照は準備開始から採用/破棄/期限切れまで保持する。
+
+採用時にbase revision、候補source/preview hash、全依存hashを照合し、既存working-copy commitで
+再検証・immutable登録する。採用の応答喪失は同じconnection/candidateの再送で同じ結果を返す。
+採用開始後のrequest取消ではcommitを中途放棄せず終端まで待つ。採用前のprepare取消は候補とpinを回収する。
+再起動で未採用候補を正式版やrecoveryとして扱わず除去する。新connectionは旧候補を採用できない。
+transportはprepare taskの切断取消、connection cleanup、定期expire、shutdown cleanupを必ず接続する。
+このdomain実装だけではworkspace UIやtransportの受入完了を意味しない。
+
 ## 6. OpenCode経路
 
 OpenCode → ControlDeck `controldeck_addons` stdio MCP → MediaForge agent contribution → durable job。
