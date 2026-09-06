@@ -1,6 +1,6 @@
 # 3D Studio 完了監査
 
-Date: 2026-09-06
+Date: 2026-09-07
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
 対象: PR #213のGOAL-01〜10と`g8-3d-studio-plan.md` §4 A〜F。
@@ -11,7 +11,11 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 署名公開・標準updateし採用前候補比較/破棄/採用/復元をinstalledで確認。
 2026-09-06の現在稼働版は0.28.37/healthy（署名公開/consumer検証/標準update14.645秒）。
 更新前後8テーブル全行/registry不変、real63-child Library paging/offset60 locale保持を
-installed320/1280で再受入した。retryのactive切替実行は未確認。詳細はstatus/handoff。
+installed320/1280で再受入した。2026-09-07に取消Jobのinstalled retryも追加受入。
+実Host bridgeで既定4.5.9へswitchしても元4.5.13で実Blender成功、finally既定復元、
+元Job/既存scene/revision不変。4.375秒、Host child succeeded/terminal_sent。
+証拠 `/data1tb/mf-retry-installed-0.28.37-20260907/observations.json`。
+材質故障後retryのHTTP/browserなど全条件は残る。詳細はstatus/handoff。
 0.28.26ではnative windowで比較入力・不変refreshのDOM保持と全比較/採用/復元を確認した。
 新版の他操作の受入を旧版やcandidateの証拠から推定しない。
 以前の個別実測は維持するが、条件の一部だけの実測から行全体を成功扱いしない。
