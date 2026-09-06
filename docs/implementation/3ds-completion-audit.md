@@ -37,6 +37,11 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 ## 必須シナリオ別
 
+scenario Dの停止後A削除とproject pin保護の差について、base-plan §12とruntime設計§4.1に
+履歴を保持する明示確認付きmanaged削除/同版再導入を定義した。既定の参照拒否と
+active/Job/GUI/working-copyの保護は維持する。まだ設計のみで実装・実機受入は未完了。
+前sliceのB削除や0.28.34のproject拒否を、このA削除条件の成功へ読み替えない。
+
 v0.28.34（target f806f54609e34924086887744ae30d6852aec297）署名公開/consumer再取得、
 標準update17.353秒/healthyを確認。package日本語1280/320の外部解除・reload非復活・再登録は
 7.944秒exit0、外部5,580 filesのinventory不変。installedはlegacy登録なしのため

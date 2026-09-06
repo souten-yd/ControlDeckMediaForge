@@ -139,6 +139,10 @@ idle終了、保存失敗、Blender crash、MediaForge再起動、Host認証期�
 Blender Aでsession稼働中にBをinstallし、Aが差し替わらないことを確認。
 Bのprobe失敗でAが使えること、Aの削除が参照中拒否されることを確認。
 停止後にAだけ削除し画像・scene・.blend・履歴が残ることをhashで確認。
+保存済み履歴参照は既定で拒否し、runtime設計§4.1の追加確認付き削除でこの操作を通す。
+確認前後のJob/GUI開始による再拒否、処理中の確認付き拒否、接続切断/再起動時の
+同一確認内容保持も検証する。削除後のLibrary/backupと正確な同版の再導入→再編集を
+同一sceneで確認する。旧revisionのpinや履歴を消して成功させない。
 External登録解除で外部実体を削除しない。archive改ざん・容量不足・中断も検証。
 
 ### E. GPU・長時間
