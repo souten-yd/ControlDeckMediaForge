@@ -341,6 +341,10 @@ let lastReviveAt = 0;
 
 function reviveSocket() {
   if (document.visibilityState !== "visible") return;
+  // host の frame の中では、親から postMessage で nonce が届くまで繋げない。
+  // 読み込み直後は pageshow と focus が先に来るので、ここで待たないと nonce
+  // 無しで 1 回張りに行って必ず失敗する。その失敗ぶん、最初の表示が遅れる。
+  if (window.parent !== window && !state.nonce) return;
   const now = Date.now();
   if (now - lastReviveAt < REVIVE_THROTTLE_MS) return;
   lastReviveAt = now;
