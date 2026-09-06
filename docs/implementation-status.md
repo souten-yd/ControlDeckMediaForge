@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-06 v0.28.34 external registration release preparation
+
+PR #318 merged `7c6dfb9dbeaa6059c6934633f6d80700cc1f2be9` をfetch確認。
+branch `ux1/3d-external-v02834`、addon/coreを0.28.34へ同期。
+外部legacy登録解除の永続抑止・明示再登録・設定UIと参照保護を配布する版準備。
+公開latest v0.28.33、Host標準registry.statusでinstalled0.28.33/healthy/enabled/
+requested_enabled=trueを確認。本番runtime registryはmanaged4.5.9/4.5.13のみ、
+active4.5.13、legacy登録なし。試験都合で本番のexternal登録を作らない。
+
+0.28.34の署名bundle公開/consumer再取得/標準update/installed受入はまだNOT TESTED。
+次はexact merge headからbundle構築、専用packageで外部解除/再登録を受入し、
+署名公開・標準update・installed既存Settings回帰へ進む。
+旧coreへrollbackする際、外部解除の抑止fieldを使用済みならruntime registryの
+事前snapshotも復元する（旧coreは未知fieldをfail-closed拒否）。
+全体3DS-8/scenario D/FはPARTIALを維持。
+版準備gate `./mf.sh test`: 1079 passed / 既知warning1 / 154.26秒。diff check成功。
+
 ## 2026-09-06 external registration Settings and guarded management
 
 PR #317 merged `22800333d2866c3616c1c57fcfba7828756f2d35` をfetch確認。
