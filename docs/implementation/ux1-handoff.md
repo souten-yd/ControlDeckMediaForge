@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 Release 0.28.29 preparation
+
+PR #285 navigation `ae9ed17`、PR #286 Library `05e556f`の通常mergeを確認。
+branch `ux1/release-0.28.29`でaddon/core版数を同期する。稼働版は0.28.28のまま。
+前段の実source受入/1052 testsは直下の記録。正式署名bundle公開とinstalled受入は次の段階で、
+まだ成功とは記録しない。旧DB/scene/runtimeを保持し、標準Host updateだけを使う。
+`./mf.sh test`: 1052 passed / 既知warning1 / 117.71秒。diff check成功。
+利用者の新依頼「ControlDeck Blender Skills実行連携」を優先し、版数準備branchを保存してここで中断。
+0.28.29のPR/merge/tag/build/署名公開/導入は未実施。installed0.28.28を変更していない。
+
+再開時の実測: PC bootは2026-09-06 14:40:53、Host PID2196/active。
+MediaForgeはcurrent=versions/0.28.28、unit disabled/inactive、Host feature enabled=false。
+意図した無効化の可能性を保持し、再有効化の可否を利用者へ確認中。版数PRはサービス変更なしで進める。
+再起動直前の追加testは利用者の再起動指示で634 passed時点にSIGINT/exit2、中断を成功とは数えない。
+次は版数PRを通常mergeし、そのexact commitから署名bundleを構築する。
+再起動後gate `./mf.sh test`: 1052 passed / 既知Starlette warning1 / 115.55秒、exit0。
+
 ## 2026-09-06 Web Blender primary navigation
 
 直後の追加依頼「下部の作る・ライブラリ・状況の並びにWeb Blender」を
