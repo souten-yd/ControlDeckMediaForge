@@ -6114,9 +6114,12 @@ async function loadLibrary({reset = false} = {}) {
   state.libraryCursor = page.next_before;
   byId("library-more").hidden = !page.next_before;
   if (reset) state.libraryItems = [];
+  // カードは待たずに全部並べる。以前は 1 枚ずつ await していたため、サムネの
+  // 往復が直列になり、前のカードが終わるまで次が出なかった。画像は img の src に
+  // 任せてあるので、ブラウザが可視のぶんだけ並列に取りに行く。
   for (const item of page.items) {
     state.libraryItems.push(item);
-    grid.append(await libraryCard(item));
+    grid.append(libraryCard(item));
   }
   // 消えた素材を選んだままにしない。削除の後で数だけ残ると、押しても何も起きない。
   const present = new Set(state.libraryItems.map((item) => item.asset_id));
@@ -6213,7 +6216,7 @@ function renderLibraryMediaFilter() {
   }
 }
 
-async function libraryCard(item) {
+function libraryCard(item) {
   const card = document.createElement("button");
   card.type = "button";
   card.className = "card";
@@ -6259,11 +6262,6 @@ async function libraryCard(item) {
     if (state.librarySelecting) return toggleLibrarySelection(item.asset_id);
     void openViewer(item.asset_id, item, state.libraryItems);
   });
-  // 一覧に同梱された小さな版を使う。1 枚 1 往復にしない。
-  if (item.thumbnail?.base64) {
-    image.src = `data:${item.thumbnail.mime_type};base64,${item.thumbnail.base64}`;
-    return card;
-  }
   if (item.preview_kind === "model_3d") {
     image.hidden = true;
     modelPlaceholder.hidden = false;
@@ -6273,10 +6271,11 @@ async function libraryCard(item) {
     image.hidden = true;
     return card;
   }
-  try {
-    const thumbnail = await call("assets.thumbnail", {asset_id: item.asset_id});
-    image.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
-  } catch { image.hidden = true; }
+  // 一覧に同梱されていればそれを使い、無ければ画像 URL を渡す。URL なら
+  // ブラウザが並列に取り、二度目からは自分の cache で済ませる。
+  image.src = item.thumbnail?.base64
+    ? `data:${item.thumbnail.mime_type};base64,${item.thumbnail.base64}`
+    : `/workspace-api/assets/${encodeURIComponent(item.asset_id)}/thumbnail?max_side=192`;
   return card;
 }
 

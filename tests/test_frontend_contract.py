@@ -248,9 +248,10 @@ def test_3d_assets_use_the_validated_chunk_viewer_with_a_project_preview_fallbac
 
 
 def test_library_does_not_request_a_thumbnail_for_non_preview_assets():
-    card = SCRIPT[SCRIPT.index("async function libraryCard"):SCRIPT.index("/* ── 全画面ビューア")]
+    card = SCRIPT[SCRIPT.index("function libraryCard"):SCRIPT.index("/* ── 全画面ビューア")]
     gate = card[card.index("if (!item.preview_kind)"):]
-    assert gate.index("return card") < gate.index('call("assets.thumbnail"')
+    # 出せないものへは URL すら渡さない。渡すと 404 を取りに行くだけ無駄が出る。
+    assert gate.index("return card") < gate.index("/thumbnail?max_side=")
     recent = SCRIPT[SCRIPT.index("async function applyRecent"):SCRIPT.index("/* サーバから")]
     assert 'item.preview_kind !== "model_3d" || item.thumbnail' in recent
 
@@ -1119,7 +1120,7 @@ def test_selection_mode_is_visible_before_it_changes_what_a_tap_does():
     別の意味を重ねる以上、見た目でも区別が要る。"""
     assert 'byId("library-grid").classList.toggle("selecting", active)' in SCRIPT
     assert ".grid.selecting .card[aria-selected=\"true\"]" in STYLES
-    card = SCRIPT[SCRIPT.index("async function libraryCard"):]
+    card = SCRIPT[SCRIPT.index("function libraryCard"):]
     assert "if (state.librarySelecting) return toggleLibrarySelection(item.asset_id);" in card
 
 
@@ -1178,9 +1179,9 @@ def test_the_view_head_actions_sit_at_the_right_edge():
 
 def test_an_image_that_cannot_be_shown_is_folded_away():
     """出せない絵の枠だけが正方形で残ると、一覧が読めない箱の列になる。"""
-    card = SCRIPT[SCRIPT.index("async function libraryCard"):SCRIPT.index("/* ── 全画面ビューア")]
+    card = SCRIPT[SCRIPT.index("function libraryCard"):SCRIPT.index("/* ── 全画面ビューア")]
+    # サムネは img の src に任せるので、取れなかったときも error で畳む。
     assert 'image.addEventListener("error", () => { image.hidden = true; });' in card
-    assert "catch { image.hidden = true; }" in card
     assert "表示できません" not in card, "壊れた枠に文字だけ残している"
     assert ".card img[hidden] { display: none !important; }" in STYLES
 

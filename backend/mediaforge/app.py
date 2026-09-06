@@ -1849,6 +1849,42 @@ def create_app(
     async def list_assets(limit: int = Query(default=100, ge=1, le=500)) -> dict[str, Any]:
         return {"items": [item.model_dump(mode="json") for item in store.list_assets(limit)]}
 
+    @app.get("/workspace-api/assets/{asset_id}/thumbnail", include_in_schema=False)
+    async def asset_thumbnail_image(asset_id: str, max_side: int = 192) -> Response:
+        """サムネイルを普通の画像として返す。
+
+        一覧が base64 を JSON へ埋めていたため、埋められなかったぶんは 1 枚ずつ
+        JSON で取りに行っていた。カードを 1 枚ずつ await して描いていたので往復が
+        直列になり、前のカードが終わるまで次が出なかった。画像 URL にすれば、
+        ブラウザが可視のぶんだけ並列に取り、二度目からは自分の cache で済ませる。
+
+        素材の中身は作られたあと変わらないので、長い cache を付けてよい。
+        """
+        try:
+            asset = store.get_asset(asset_id)
+            side = thumbnails.clamp_max_side(max_side)
+            if asset.mime_type == "model/gltf-binary":
+                thumbnail = thumbnails.model_cached(store.thumbnail_dir, asset_id, side)
+            elif not thumbnails.is_thumbnailable(asset.mime_type):
+                raise ThumbnailError()
+            else:
+                thumbnail = thumbnails.cached(
+                    store.asset_path(asset_id), store.thumbnail_dir, asset_id, side, asset.mime_type,
+                )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        except (ThumbnailError, OSError) as exc:
+            raise HTTPException(status_code=404, detail={"code": "thumbnail_unavailable"}) from exc
+        return Response(
+            content=thumbnail.content,
+            media_type=thumbnail.mime_type,
+            headers={
+                "Cache-Control": "private, max-age=31536000, immutable",
+                "ETag": f'"{asset_id}-{side}"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     @app.post("/workspace-api/assets/{asset_id}/thumbnail", include_in_schema=False)
     async def standalone_asset_thumbnail(asset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
