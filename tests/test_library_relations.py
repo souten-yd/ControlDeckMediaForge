@@ -51,3 +51,39 @@ def test_relations_private_transports_and_metadata_only(tmp_path: Path, monkeypa
         assert response.json() == result["result"]
         assert client.get(f"/workspace-api/assets/{source.id}/relations?offset=-1").status_code == 422
         assert client.get("/workspace-api/assets/asset_missing/relations").status_code == 404
+
+
+def test_default_sixty_relation_boundary_in_both_private_transports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    client, headers, _ = host_client(tmp_path, token="valid-user")
+    with client:
+        store = client.app.state.store
+        parents = [_register(store, tmp_path, mime_type="image/png", content=f"parent {i}".encode()) for i in range(65)]
+        source = _register(store, tmp_path, mime_type="application/x-blender", content=b"metadata-only fixture",
+                           parents=[asset.id for asset in parents])
+        children = [_register(store, tmp_path, mime_type="model/gltf-binary", content=f"child {i}".encode(),
+                             parents=[source.id]) for i in range(63)]
+        def no_bytes(*args: object, **kwargs: object) -> None:
+            raise AssertionError("relation paging must not decode asset bytes")
+        monkeypatch.setattr(store, "asset_path", no_bytes)
+        pages = []
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            for offset in (0, 60, 120, 0):
+                response = client.get(f"/workspace-api/assets/{source.id}/relations?offset={offset}")
+                assert response.status_code == 200
+                value = response.json()
+                ws = call(socket, "assets.relations", {"asset_id": source.id, "offset": offset})
+                assert ws["ok"] and ws["result"] == value
+                pages.append(value)
+        assert pages[0] == pages[3]
+        assert (len(pages[0]["parents"]), len(pages[0]["children"])) == (60, 60)
+        assert pages[0]["parents_truncated"] and pages[0]["children_truncated"]
+        assert pages[0]["next_offset"] == 60
+        assert (len(pages[1]["parents"]), len(pages[1]["children"])) == (5, 3)
+        assert pages[1]["next_offset"] is None
+        assert not pages[1]["parents_truncated"] and not pages[1]["children_truncated"]
+        assert pages[2]["parents"] == pages[2]["children"] == []
+        assert pages[2]["next_offset"] is None
+        assert [row["id"] for page in pages[:2] for row in page["parents"]] == [a.id for a in parents]
+        child_ids = [row["id"] for page in pages[:2] for row in page["children"]]
+        assert len(child_ids) == len(set(child_ids)) == 63
+        assert set(child_ids) == {a.id for a in children}

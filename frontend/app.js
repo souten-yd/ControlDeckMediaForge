@@ -6966,7 +6966,7 @@ let detailRequest = 0;
 async function openDetail(assetId, offset = 0) {
   const request = ++detailRequest;
   const body = byId("detail-body");
-  byId("detail-title").textContent = "詳細";
+  byId("detail-title").textContent = document.documentElement.lang.toLowerCase().startsWith("en") ? "Details" : "詳細";
   body.replaceChildren();
   try {
     const [provenance, relations] = await Promise.all([
@@ -6986,7 +6986,7 @@ async function openDetail(assetId, offset = 0) {
         ? "Not recorded" : modelRouteText(provenance.parameters?.model_route)],
       [english ? "License" : "ライセンス", provenance.license],
       [english ? "Validation" : "検証", provenance.validation.length
-        ? validationList(provenance.validation) : "記録なし"],
+        ? validationList(provenance.validation) : (english ? "Not recorded" : "記録なし")],
     ];
     for (const [term, value] of rows) {
       const wrap = document.createElement("div");

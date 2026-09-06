@@ -1,5 +1,42 @@
 # Media Forge implementation status
 
+## 2026-09-06 Library default-page boundary acceptance and English fallback
+
+PR #327 merged `6bd004d7e8f24605e6ee7b376cf3e27670b2f0e8`を確認。
+branch `ux1/3d-library-paging-acceptance`。
+本番read-only集計で最大children12件を観測。60件超を本番データで受入したとは扱わない。
+追加testは親65/子63のsourceを作り、private HTTPとWebSocketで既定60件、
+offset0→60→120→0の一致、末尾5/3件、truncated/next_offset、重複/欠落なしを確認。
+asset_pathを拒否fixtureにしてmetadata-onlyを検査。focused3 tests passed。
+
+新 `scripts/3ds_library_paging_e2e.py` のseedをMF Python、
+browserを既存Host Playwright診断Pythonで実行（coreへの依存追加なし）。
+`--evidence-dir /data1tb/mf-library-paging-20260906`。
+fixtureは専用Storeの親PNG65件・source .blend1件・child GLB63件。
+.blend/GLBはowned旧受入の実bytes、lineageはsynthetic acceptance fixtureと明記。
+新Blender制作を実行した証拠ではない。本番DBや既存sceneを書き換えない。
+
+初回browserはblend card待ちtimeout。Libraryが絞り込み前の実asset行でcursorを進めるため、
+sourceより新しいGLB63件を越える「もっと見る」が必要だった。scriptを既存cursorに従う
+UI操作へ修正し、日英320pxで60/60→5/3→60/60、全128 ID一意・集合一致、
+末尾nextなし・前ページ復元・document横overflowなし/page errors0を実Chromeで確認。
+localeはapplyTheme入力fixture、実Hostの言語変更通知の証拠ではない。
+
+英語screenshot検査でValidation空欄のfallbackだけ「記録なし」が残る実装を発見。
+frontendをNot recordedへ修正し、読み込み中Detailsも英語化。
+実browserで英語Validation値をassertして再実行exit0。HTTP/Storeの製品変更なし。
+本番0.28.35にはこのfallback修正を未導入。新署名releaseを出したとは扱わない。
+
+Host側read-only調査: EmbeddedAddonViewは接続時にlocale.changedを送る。
+その後のthemeTokens変更はtheme.changedのみで、browser languagechange購読もない。
+MediaForge側にはlocale.changedの詳細再描画/offset保持処理があるが、実Hostからの
+動的通知経路はまだ未検証。汎用Host通知が必要なら別PRの範囲として進める。
+GOAL-01はsource境界受入が進んだが、installed60件超/実Host動的localeはPARTIAL。
+修正前全gate1126 passed/160.30秒、修正後最終 `./mf.sh test` は
+1126 passed/既知warning1/163.69秒。node syntax/diff check成功。
+専用source PID409380と修正後PID415143はそれぞれSIGINT→shutdown complete/exit0。
+本番MFはPID396381/activeのまま。次はHostの汎用locale通知契約と実fixture付き受入を検討する。
+
 ## 2026-09-06 v0.28.35 signed release and installed history confirmation
 
 PR #326 merge/tag target `7ec457ac7bc87b73e3306b6a255ddfa143e790e9`。
