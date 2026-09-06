@@ -3,6 +3,28 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.30 signed / installed viewer scroll acceptance
+
+PR #290 merge/tag `bdaa379d682feedbea476fc037772b6dae095b9c`からexact bundle構築・正式署名公開。
+31,500,089 B、SHA `dfa398205c0706bd4b02409db8e4681546588ee4231850240f932f1f9b9b11a6`。
+公開4 asset再取得/checksum/Host trusted publisher verifier/tag一致、packaged doctor ok/0.28.30。
+private DB backup `/data1tb/mf-0.28.30-pre-update-20260906.sqlite3`は2,007,040 B。
+全制作Job/session/setup終端確認後、標準registry.update 10.500秒で0.28.29→0.28.30/healthy/enabled。
+MF PID31432/15:12:39 JST、Host PID2196不変。installed/bundle core SHAはともに
+`9f2c65b96588215249462dff3759102ba01bb064aab5413155b2d1c56a8e776d`。
+
+branch `ux1/3d-viewer-0.28.30-acceptance`。Host診断Python/PYTHONPATH=Host backendで
+`scripts/3ds_library_navigation_installed_e2e.py --scene-id scene_a94df57d689d4636844b3586dd9fed7d
+--expected-version 0.28.30 --require-scroll-lock
+--evidence-dir /data1tb/mf-viewer-scroll-installed-0.28.30-20260906`を実行、exit0。
+overlayなし、既存専用scene、login個別revoke/password不変。320px root client320/scroll320/hidden、
+viewer320/320、close後scroll復帰。旧0.28.29 negative305/319/visibleと同じassertionで修正を確認。
+4nav/Settings復帰、画像/GLB/.blend filter、親子双方向、明示GLB実表示、scene不変、page errors0を維持。
+実screenshotで横scroll消失を目視確認。公開再取得/build/package/exact worktree/backupは保持。
+source code gateは1053 passed / 既知warning1 / 112.29秒。今回追加は実測文書のみ、diff check成功。
+次は600秒TTLを跨ぐchild credential refreshの専用CPU queue試験を、service更新と並行せず再実行する。
+自然な長時間制作、GUI/setupのrefresh、全A/C/D/E/Fは未完了。統合3D Studio全体はPARTIAL。
+
 ## 2026-09-06 Release 0.28.30 preparation
 
 PR #289 merge `5b7fa617d909c649e4d43d5eafd56564e8c77651`を確認。

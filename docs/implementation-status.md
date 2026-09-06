@@ -1,5 +1,23 @@
 # Media Forge implementation status
 
+## 2026-09-06 v0.28.30 signed / installed viewer scroll — VERIFIED FOR THIS SLICE
+
+PR #290 merge/tag `bdaa379d682feedbea476fc037772b6dae095b9c` exact sourceから正式bundle構築/署名公開。
+31,500,089 B、SHA `dfa398205c0706bd4b02409db8e4681546588ee4231850240f932f1f9b9b11a6`。
+公開4 asset再取得/checksum/Host署名検証/tag一致、packaged doctor ok/0.28.30。
+private online DB backup2,007,040 Bと全Job/session/setup終端を確認。標準update10.500秒、
+0.28.29→0.28.30/healthy/enabled。MF PID31432、Host PID2196は不変。
+installed/bundle core SHA `9f2c65b96588215249462dff3759102ba01bb064aab5413155b2d1c56a8e776d`一致。
+公開再取得 `/data1tb/mf-0.28.30-public-20260906`、backup `/data1tb/mf-0.28.30-pre-update-20260906.sqlite3`。
+
+`3ds_library_navigation_installed_e2e.py --expected-version 0.28.30 --require-scroll-lock`を
+既存専用scene/Host診断Pythonで実行しexit0。実opaque iframe/overlayなし/login個別revoke。
+証拠 `/data1tb/mf-viewer-scroll-installed-0.28.30-20260906`。320px root320/320/hidden、
+viewer320/320、close後scroll復帰。旧0.28.29 negative305/319/visibleに対する同一検査の成功。
+4nav/Settings復帰、画像/GLB/.blend filter、親子双方向、明示GLB、scene不変、page errors0。
+撮影したGLB画面で横scroll消失を目視確認。source gate1053 passed / 既知warning1 / 112.29秒。
+今回は文書のみ追加、diff check成功。全体3DS-8 A/C/D/E/Fと長時間credentialは未完了のまま。
+
 ## 2026-09-06 Release 0.28.30 preparation
 
 PR #289 merge `5b7fa61`の全画面viewer背景scroll修正を配布するためaddon/core版数を0.28.30へ同期。
