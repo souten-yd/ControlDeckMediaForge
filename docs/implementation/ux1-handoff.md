@@ -3,6 +3,43 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-07 installed GUI save conflict cleanup and recovery fork
+
+PR #342 merge `ed1329a2f629dbbec854f6a5cd0f4e303f58b0eb`から
+branch `ux1/3d-save-conflict-cleanup`。新診断
+`scripts/3ds_save_conflict_cleanup_installed_e2e.py --expected-version 0.28.38
+--scene-id scene_3f3b5f1e97e94b268722ea45cc811c50
+--evidence-dir /data1tb/mf-save-conflict-cleanup-installed-20260907`をHost診断Pythonで実行。
+専用mf-e2e material conflict scene/name/版数と他GUI不在を確認。
+実Host opaque iframeの正規WSからsoftware GUIを開始し、実Blender4.5.13/Web pack1.0.0がready。
+RFB接続や手編集はこのrunでは行わない。APIでstart/save/restore/forkを呼ぶ試験と明示する。
+
+session blendersession_b4162ff56714489b960e4e59c4515c65、
+unit mediaforge-blender-b4162ff56714489b960e4e59c4515c65.service。
+ready時のcgroup.procsでPID929922/929926/929968、session rootとRFB Unix socketの実在を確認。
+GUIが第3版を基準に保持中、同じ専用sceneを通常revision restoreで第4版へ進め、
+正規blender.sessions.saveを送信。実Blender保存後のcommitがscene_revision_conflictで拒否、
+5.831秒でfailed/saved=false。復旧候補を返し、先に確定した第4版を上書きしない。
+
+failed応答後、上記3 PIDの/proc不在、cgroup/session root/socketの不在をassert。
+core/Hostや他unitへsignal・stop・restartを送らない。停止は製品自身の通常保存失敗cleanup。
+候補scene.blendは515,342 B、
+SHA287f28c7be443f21413d1dec20f4ecbd08f7844d86567a660f0c2634e45cc12f。
+正規scenes.recovery.forkで別scene_a5204dc326e95bb5ab9938e7e0f71827の初版へ確定し、
+新sourceの実bytes hashが候補と一致。元候補bytesと元scene第4版全投影は不変。
+未検証候補の保持だけで復旧成功とせず、別sceneへの検証済み確定まで確認した。
+新scene/元scene第4版/復旧候補を検証物として保持。page errors0、passed=true/exit0。
+
+終了後read-only Store.active_scene_runtime_references(4.5.13)は
+recipe_jobs/working_copies/sessions/unresolved_sessions全て0。
+全GUI24件終端、working copy active0。Host849052/MF905518/905522はPID不変・稼働。
+専用login sessionだけfinally revoke、既存password/global設定/runtime実体は不変。
+本runはsoftware GUI保存競合とprocess/参照解放・復旧確定の証拠。
+RFB入力、worker crash、idle、GPU leaseの証拠には広げず、GOAL-09/C全matrixはPARTIAL。
+最終script py_compile/diff check成功。
+全 `./mf.sh test`: 1129 passed/既知warning1/158.02秒、exit0。
+次はC/GOAL-09の他終端原因を対応する実機証拠へ紐付け、不足を実測する。
+
 ## 2026-09-07 installed stale material conflict and retry
 
 PR #341 merge `90b32055f4c7e0364528df80a4e8c557fd4f76ac`から
