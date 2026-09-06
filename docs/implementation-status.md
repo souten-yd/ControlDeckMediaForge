@@ -9759,3 +9759,49 @@ scenario Bは同一剣の既存画像→新規画像比較採用→GUI入力保�
 残りは第8版からGLB/ZIPをexportし、現在projectへの新しいgrant/receipt/hashを照合すること。
 既存の第2版の配置証拠で埋めない。長時間credential refresh/全A〜F/全体3DS-8は未完了。
 gate `./mf.sh test`: 1045 passed / 既知Starlette warning1件 / 121.40秒。diff check成功。
+
+## 2026-09-06 restored sword project delivery / scenario B
+
+PR #283 merged `7aab7b76bb806d66002834cc1e2023342e6084fb`をfetch確認。
+branch `ux1/3d-restored-delivery`、installed0.28.28/healthy/enabled。
+`scripts/3ds_opencode_flow_e2e.py`へ復元済みUI証拠を入力するmodeを追加。
+元project `MF3DS-Acceptance-20260906`の新しい兄弟folder `restored-exports`だけを作り、
+既存exports3 filesのhashを前後照合。空folderの明示再試行のみ許容、既存出力の上書き拒否。
+Host診断venv/PYTHONPATH=Host backend、global OpenCode設定変更なし、shell/file/web禁止、
+per-run credential/configだけを使用して終了時に削除する。Host/source/service/モデル重みの変更なし。
+
+初回 `/data1tb/mf-restored-opencode-delivery-20260906` はexit0/69.772秒だが実tool0/出力0。
+Bash風テキストは実行されていない。終了コードだけで成功にしない検査を追加した。
+Host /toolsは200/18件、さらに実stdio bridge tools/listの起動前確認を追加。
+二回目 `/data1tb/mf-restored-opencode-delivery-retry-20260906` はsnapshot/export後、
+過去のrestore Jobをmedia.job.statusで照会し、GLB専用packにPNGも渡す不正入力を反復。
+この試験専用OpenCode PID2779544だけをSIGTERM、exit-15/381.689秒、出力0を保持。
+直前のgenerateもerror、新しいMediaForge Jobは生成されず、最後に取得したgrantで配置もしていない。
+scene.exportは同期Asset参照、asset.job_idは履歴、G8 pack入力はGLB1件という現行契約をpromptへ明示。
+APIを変更したり、GLB+PNGを受理するよう契約を緩めたものではない。
+
+最終command: 同scriptへ `--project-name MF3DS-Acceptance-20260906
+--restored-ui-evidence /data1tb/mf-sword-ui-flow-gui-canvas-0.28.28-20260906/observations.json
+--retry-empty-output --evidence-dir /data1tb/mf-restored-opencode-delivery-contract-20260906`。
+実OpenCode PID2803322、exit0/85.660秒、実tool7回。最初の正しいGLB1件packにも
+MCP errorが1回あり、**同一入力**の再試行でsucceeded。原因は未確定で、無失敗runとは記録しない。
+ZIP Job `job_b432af302151415892994939f200f78b`、Asset `asset_78fc671a945049c7b9cc32de0eba6151`。
+scene `scene_f1554d9ba0f741968d9c468206ea3198`、
+第8版 `revision_7af7f629a4d949ada5ec717ab6ef917c`のGLBと採用画像だけを配置した。
+grant `grant:ade4a058-22d9-495b-928b-9a9bdfbc95fc`、receipt committed3/partial=false。
+GLB 1,847,240 B SHA `2dfb5a862bf1c30b9b88d3cf8c57bea8ab4aa71baa1076eae2ce64831d9c7b64`、
+PNG 1,824,647 B SHA `924ba671a052d1b91baaebab5af43a411c1654fcea66a54c46f20ab73a877ed7`、
+ZIP 1,863,588 B SHA `7aa49cce50d088934134497f3c7156e0a904cabbcf0192de794160be9e14ef76`。
+
+`python3 scripts/3ds_verify_restored_delivery.py`へ同evidence-dir、installed DB、
+`--ui-evidence <上記UI observations.json>`を渡しexit0/verified=true。
+read-onlyでUI復元ID→snapshot/export→Asset→receipt→実配置bytes→ZIP内部manifestを照合。
+DBの全8 revisionはUI試験終端と一致、旧exports3 filesもhash不変。加工後356 triangles、4 meshes、texture1。
+UI証拠をメモリ上でwrong revision/wrong image/missing historyにした3 negativeはすべて拒否。
+同一入力で後続成功したpack errorだけを回復扱いにし、先行成功・別入力・未回復errorは拒否する4 testsを追加。
+
+scenario Bは同一剣の形状/寸法/予算→既存画像→新規画像比較採用→実GUI編集→復元→再配置まで受入。
+途中の失敗・再開・再試行を含む証拠であり、一回の無中断実行ではない。
+全体3DS-8、A/C/D/E/F、長時間credential、GOAL-01/03/07/09/10の残件は維持。
+次はGOAL-01の共通Library絞込と親子双方向移動を実画面で確認する。
+gate `./mf.sh test`: 1049 passed / 既知Starlette warning1件 / 113.12秒。diff check成功。

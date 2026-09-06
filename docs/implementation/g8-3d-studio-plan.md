@@ -37,7 +37,8 @@ MaterialBinding commitまでをsource/packageで実装・確認した。3DS-6c�
 installed0.28.26では実OpenCode同一runで剣の形状→新規画像生成→材質適用→GLB→G8 ZIP→
 project grant配置を289.585秒で完走し、4制作Jobの成功、3 receiptと実ファイルのhashを照合した。
 同じ剣での既存画像比較/採用、新規画像生成/比較採用、Web Blender入力保存、旧版復元は
-installed0.28.27/28をまたぐ再開試験で確認。第8版の復元後配置はscenario Bへ残す。
+installed0.28.27/28をまたぐ再開試験で確認。第8版の復元後配置も実OpenCodeと新grantで完了し、
+3 receipt/実bytes/ZIP manifestと全8版不変を照合。scenario Bは再開/再試行を含む同一制作物として受入。
 3DS-8でinstalled-host/OpenCode/GPU/releaseの個別証拠を取得したが、必須受入全体の完了判定を撤回した。
 残件は[`3ds-completion-audit.md`](3ds-completion-audit.md)。Expert scriptは別capabilityの3DS-Xであり、
 初期提供の完了条件には含めない。
