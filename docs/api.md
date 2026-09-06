@@ -100,7 +100,14 @@ counts enter the confirmation fingerprint; an older outstanding preview must
 be requested again. Already-unregistered removal journals retain recovery cleanup.
 Managed preview, admission and execution run their synchronous DB/filesystem work
 in worker threads; a started admission/deletion is tracked through request cancellation.
-This does not yet implement history-confirmed removal or atomic GUI admission.
+New GUI admissions persist their runtime ID/version while holding the same
+resolver guard used by removal. Normal/recovery working-copy acquisition keeps
+that guard through runtime validation, file copy and durable lease creation.
+Production callers await worker-thread acquisition; cancellation waits for the
+copy and releases its newly created lease/files. GUI stop/interruption waits for
+the previous preparation task to finish cleanup before terminalizing the session.
+An already-removed runtime is rejected before a new GUI record is accepted.
+History-confirmed removal and its destructive race acceptance are not yet provided.
 
 The configured fixed legacy reference has separate private methods
 `blender.runtime.unregister.preview`, `.unregister`, and `.register_legacy`.

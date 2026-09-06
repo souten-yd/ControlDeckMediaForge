@@ -3555,9 +3555,9 @@ def create_app(
                     elif method == "scenes.working.acquire":
                         if set(params) != {"scene_id"}:
                             raise ValueError("working copy acquire accepts only scene_id")
-                        result = scene_workspace.acquire_working_copy(
+                        result = (await scene_workspace.acquire_working_copy_async(
                             scene_owner(identity), str(params.get("scene_id", ""))
-                        ).model_dump(mode="json")
+                        )).model_dump(mode="json")
                     elif method == "scenes.working.renew":
                         if set(params) != {"working_id"}:
                             raise ValueError("working copy renew accepts only working_id")
@@ -3752,7 +3752,7 @@ def create_app(
                         recovery_working_id = params.get("recovery_working_id")
                         if recovery_working_id is not None and not isinstance(recovery_working_id, str):
                             raise ValueError("Blender recovery identity is invalid")
-                        result = blender_sessions.create(
+                        result = await blender_sessions.create(
                             scene_owner(identity),
                             str(params.get("scene_id", "")),
                             recovery_working_id=recovery_working_id,
@@ -4154,9 +4154,9 @@ def create_app(
     @app.post("/workspace-api/scenes/{scene_id}/working", include_in_schema=False)
     async def standalone_scene_working_acquire(scene_id: str) -> dict[str, Any]:
         try:
-            return scene_workspace.acquire_working_copy(
+            return (await scene_workspace.acquire_working_copy_async(
                 preferences.STANDALONE_SUBJECT, scene_id
-            ).model_dump(mode="json")
+            )).model_dump(mode="json")
         except SceneError as exc:
             raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
 
@@ -4417,7 +4417,7 @@ def create_app(
                     raise BlenderSessionError(
                         "blender_session_invalid", "recovery identity is invalid"
                     )
-                return blender_sessions.create(
+                return await blender_sessions.create(
                     preferences.STANDALONE_SUBJECT,
                     str(payload["scene_id"]),
                     recovery_working_id=recovery_working_id,
