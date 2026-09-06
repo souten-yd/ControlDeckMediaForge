@@ -1,5 +1,39 @@
 # Media Forge implementation status
 
+## 2026-09-06 Blender-absent image/Library preflight
+
+PR #307 merged `2600ca325cfa645163f57fd0207e9938a3ed8885`。
+branch `ux1/3d-no-blender-image`。新script
+`scripts/3ds_no_blender_preflight_e2e.py` は認証/生成を代替しないread-only受入。
+専用root `/data1tb/mf-no-blender-0.28.32-jODjIO` のfeature/cache、
+absent-legacy、port9161で既存署名0.28.32 packageを起動（PID102366）。
+画像だけ既存MediaForge管理venv
+`/data1tb/ControlDeck/data/feature-data/media-forge/runtimes/rocm-torch/.venv/bin/python`
+とHF_HOME `/data1tb/ControlDeck/data/cache/huggingface` を明示参照。
+新runtime/重み取得なし。これは全runtimeが空のclean installではない。
+
+実HTTPはBlender missing/runtimes0/operations0/active null、Web pack missing、
+image.text_to_image available/local/measured、3d.scene_recipe unavailableを返した。
+healthはHTTP200だがenvironment snapshot不在によるsetup_requiredでありhealthyとは記録しない。
+実headed Chrome/日本語でLibraryナビをclickし空表示と種類filterを確認、page errors0、
+screenshot目視確認。commandは既存Host診断venv（Playwright、Host importなし）で
+`scripts/3ds_no_blender_preflight_e2e.py --evidence-dir /data1tb/mf-no-blender-preflight-retry-20260906`、
+DISPLAY=:0/実XAUTHORITY指定、exit0。
+最初の `/data1tb/mf-no-blender-preflight-20260906` は /library 直開きがCreateを表示してexit1。
+frontend/app.js初期化はlast_view優先でstandalone pathnameをweb-blenderのみ解釈している。
+ナビ移動の成功で直URL不具合を解消扱いしない。次の独立sliceで初期route/戻る進むを検証する。
+
+画像生成はNOT TESTED。通常standalone /api/v1/jobsはHost executionを付与せず、
+実model選択後host_lease_requiredで失敗する実装を確認。LLM gatewayのloopback免除と
+Addon Runtimeの利用者/Job権限は別経路。Brokerを省略した生成やfake画像を実生成と見なさない。
+本番Host/MF PID2078/60180は変更せず、専用PID102366はSIGINT後exit0。
+scenario A/F、GOAL-01/03はPARTIALを維持。生成に必要な正規Host経路の検証は残件。
+初回全testは1058 passed/1 failed/129.54秒。既存
+test_authenticated_workspace_transport_imports_and_locks_without_paths の切断直後再接続で
+resumed応答にresultがなくKeyError。単独再実行はpass。エラー本文がassert前に失われており、
+原因は未確定。切断cleanupがupload解放前にawaitする実装は確認したが、raceと断定しない。
+製品/test変更なしで全gate再実行は1059 passed/既知warning1/163.72秒。diff check成功。
+
 ## 2026-09-06 clean package G8 ZIP continuation
 
 PR #306 merged `517673ce442484adabba9c7b3e1efca5db3a8ad1`確認。
