@@ -52,6 +52,10 @@ GPU GUIは設計§4とCHECK-03の条件付き提供に従いsoftware-onlyを正�
 証拠 `/data1tb/mf-clean-packaged-browser-0.28.32-20260906/observations.json`。
 これはstandalone packageの初回導入であり、installed Host iframe・画像生成・G8 ZIP・
 web pack/GUIを含むscenario A全体の成功には拡大しない。
+同じ専用package/dataの続行ではSettingsのweb pack実導入、cube import、Blender4.5.9の
+実RFB画面表示と破棄終了/プロセス回収を確認した。初回試験のopen操作不足による失敗後、
+同sessionへ再接続して成功。証拠 `/data1tb/mf-clean-web-pack-{browser,resume}-0.28.32-20260906`。
+これはsoftware表示。画像生成/G8 ZIP/installed Host clean installはまだ未確認。
 PR #294でsetupの隔離source HTTP/低速archive fixtureを実行。631.247秒取消、652.011秒再導入ready、
 実Blender4.5.9/glTF入出力probe成功、終端2 operation/空stagingを確認した。
 実archive/hash/展開は実物だが転送はfixture。実Host認証/外部回線/設定browserの残件は閉じない。
