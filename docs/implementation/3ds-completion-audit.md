@@ -17,6 +17,11 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 ## 利用者ゴール別
 
+2026-09-06 PR #325 source追加受入: 日英1280/320の確認UI、日英320の実削除/同版導入、
+旧版不在中のscene履歴/GLB描画/backup保存とZIP全entry照合を実Chromeで確認。
+`/data1tb/mf-history-settings-20260906-r3`、104.143秒passed、localeはfixture入力。
+再開/identity変更7 tests追加、全1125 passed。installed更新/署名releaseは次工程。
+
 2026-09-06 candidate: 専用source実HTTPでproject-pinned inactive 4.5.9の確認付き削除、
 同archive再導入、同scene GUI再起動を73.218秒で実測。scene/revision/全6 Asset関連ファイル不変、
 active4.5.13維持。証拠 `/data1tb/mf-history-reinstall-20260906`。
