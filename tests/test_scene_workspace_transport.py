@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 from pathlib import Path
+import threading
 
 from mediaforge.scene_workspace import BLEND_CHUNK_BYTES
 from test_host_execution import host_client
@@ -20,6 +21,19 @@ def test_authenticated_workspace_transport_imports_and_locks_without_paths(tmp_p
         workspace = client.app.state.scene_workspace
         workspace.resolver = resolver
         workspace.worker = fixture_workspace.worker
+        upload_released = threading.Event()
+        released_ids: list[str] = []
+        expected_upload_id: str | None = None
+        original_cancel = workspace.cancel_upload
+
+        def observe_cancel(owner: str, upload_id: str) -> bool:
+            result = original_cancel(owner, upload_id)
+            released_ids.append(upload_id)
+            if upload_id == expected_upload_id:
+                upload_released.set()
+            return result
+
+        workspace.cancel_upload = observe_cancel
         with client.websocket_connect("/ws", headers=headers) as socket:
             begun = call(
                 socket,
@@ -59,12 +73,22 @@ def test_authenticated_workspace_transport_imports_and_locks_without_paths(tmp_p
                 "scenes.import.begin",
                 {"size": len(content), "sha256": digest, "name": "Abandoned scene"},
             )
+            assert abandoned["ok"] is True, abandoned
+            expected_upload_id = abandoned["result"]["upload_id"]
+            upload_released.clear()
+            # Context exit also cancels the ASGI task. Send a real disconnect
+            # first and wait for its exact upload cleanup before that forced
+            # cancellation; no retry of a failed request or arbitrary sleep.
+            abandoned_socket.close()
+            assert upload_released.wait(5), "disconnect did not release the upload"
+            assert abandoned["result"]["upload_id"] in released_ids
         with client.websocket_connect("/ws", headers=headers) as resumed_socket:
             resumed = call(
                 resumed_socket,
                 "scenes.import.begin",
                 {"size": len(content), "sha256": digest, "name": "Resumed scene"},
             )
+            assert resumed["ok"] is True, resumed
             canceled = call(
                 resumed_socket,
                 "scenes.import.cancel",
