@@ -269,7 +269,8 @@ class SceneWorkspace:
                     generated.unlink()
 
     def acquire_recipe_runtime(
-        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        *, retry_pin: tuple[str, str, str | None] | None = None,
     ) -> tuple[ExitStack, tuple[str, str, str | None]]:
         """Select and pin atomically with removal; call and close off the event loop.
 
@@ -279,7 +280,15 @@ class SceneWorkspace:
         references = ExitStack()
         try:
             with self.resolver.removal_guard():
-                pin = self.recipe_runtime_pin(owner, value)
+                if retry_pin is not None and isinstance(value, SceneCreateRequest):
+                    validate_scene_owner(owner)
+                    if retry_pin[2] is not None:
+                        raise SceneError("scene_retry_changed", "create retry cannot name a base revision")
+                    pin = retry_pin
+                else:
+                    pin = self.recipe_runtime_pin(owner, value)
+                    if retry_pin is not None and pin != retry_pin:
+                        raise SceneError("scene_retry_changed", "retry runtime or base revision changed")
                 runtime = references.enter_context(self.resolver.runtime_reference(pin[0]))
                 if runtime is None or runtime.version != pin[1]:
                     raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")

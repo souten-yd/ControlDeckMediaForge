@@ -212,6 +212,16 @@ sent=trueは確認したが、refresh監査は各0件。証拠
 
 ## 今回発見した具体的なコード差分
 
+### retryが現在のactive Blenderへ変わる（2026-09-06 / main e3c19a2）
+
+scene.createのretryは元Jobのruntime pinを持つが、取得時にresolve_activeで再選択していた。
+2 negative testsでactive変更後の別ID実行と元登録不在時のfallbackを再現し、
+旧試行のruntime ID/version/baseを取得guard内で再検証・保持するよう修正した。
+source実Blenderでは待機cancel→manager再作成→active4.5.13→元4.5.9でretry成功、参照0。
+`/data1tb/mf-retry-runtime-pin-source-20260906-r3/observations.json`、1.547秒。
+これはHost fixtureを使うdomain/process受入。installed/HTTP/browser、材質工程の失敗後の
+成功済み画像再利用と全retry matrixは未確認。GOAL-07はPARTIALを維持する。
+
 ### 採用前の材質比較がない（2026-09-06 / main a1635c9）
 
 `design-3d-assets-and-opencode.md` §4/5は「未保存preview」「前後比較して採用し、新revisionへ確定」を要求する。
