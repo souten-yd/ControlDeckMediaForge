@@ -3,6 +3,32 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 installed CPU child credential refresh — verified scope
+
+PR #291 merge `f513927b3bb11ad53395862fec55a8534de96eb0`を確認。
+branch `ux1/3d-credential-refresh-0.28.30`。製品/Host/script/TTL/worker timeout変更なし。
+既存 `scripts/3ds_credential_refresh_e2e.py --expected-version 0.28.30
+--evidence-dir /data1tb/mf-credential-refresh-installed-0.28.30-20260906`をHost診断Python、
+PYTHONPATH=Host backend/CONTROL_DECK_CONFIG=installed configで実行。PID33983、exit0、644.700秒。
+dedicated mf-e2eのCPU scene recipe6件。4つの正確な子processだけをpidfdで各160秒SIGSTOP/SIGCONTし、
+後続2件を元の600秒TTLより長く待機させる既存fault injection。既存user Job/service/GPUは停止しない。
+
+482.542秒までに後続success child `2ef6f7e7dedb`のrefresh監査successを観測。
+cancel child `c33bfd0fdb62`もrefresh成功後、615.630秒に取消/host_terminal_sent=true。
+644.700秒で全6件終端、local/Host DBとも5 succeeded/1 canceled、全件host_terminal_sent=true。
+後半4 childでrefresh success各1、先行2件は更新不要の時間内に成功してrefresh0。
+MF PID31432/Host PID2196は前後不変/active。非終端local Job0、停止した4 PIDは/procから消失。
+Blender4.5.13、各成功sceneは16128 triangles/8066 vertices、独立GLB構造検査passed。
+実10 asset bytesのsize/SHA-256とmetadata/provenance.output_sha256、親ID一致をread-onlyでassert。
+最終scene `scene_b2f21eddc2c548cc8cb7865d32e9a1bc`、revision `revision_103e9176714c4d0bbc88c1404f954b13`。
+最終GLB `asset_992db7c350bf44d1996c19c08ac3dfe0`は1,138,216 B、
+SHA `b468c73ca925889e3c55b5b48658526e00bbca2f0d7e3047f4eef0ea2475261b`。専用5 scene/10 assetsは証拠として保持。
+
+これは600秒を跨ぐ実child credential更新・待機・取消・終端同期の受入であり、自然な長時間演算や
+OpenCode自然言語制作、GUI/setup自身のrefreshの証拠にはしない。全体scenario E/3DS-8はPARTIAL。
+次は10分超GUI/sessionの正規認証更新を検証する。試験時Host/MFのrestart/updateを並行しない。
+今回差分は実測文書のみ。unit test再実行なし、diff check成功。既存source gate1053件成功を維持。
+
 ## 2026-09-06 v0.28.30 signed / installed viewer scroll acceptance
 
 PR #290 merge/tag `bdaa379d682feedbea476fc037772b6dae095b9c`からexact bundle構築・正式署名公開。

@@ -42,7 +42,7 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 | B 制作一巡 | VERIFIED（再開/再試行を含む同一制作物）。OpenCode剣→既存画像2→3→新規生成/比較採用3→4→GUI入力保存6→7→第6版を第8版へ復元→元projectのrestored-exportsへGLB/PNG/manifest入りZIP配置。全8版不変、旧出力保持、新3 receipt/実bytes/manifest hash一致 |
 | C lifecycle | 既存crash/idle/restart/expiry証拠は維持。競合candidateは保持だけを復旧完了としない |
 | D 更新/削除 | 稼働A中にB導入、B probe失敗、A削除拒否、停止後Aのみ削除と資産hash保持、External解除、容量不足/中断を個別照合 |
-| E GPU/長時間 | 132秒SIGSTOPはdetached維持/取消の証拠のみ。期限内child credential refreshの実応答、Host終端、120秒超制作と10分超session/setupの対応を実測 |
+| E GPU/長時間 | installed0.28.30の644.700秒CPU queue fault injectionで600秒TTL前のchild refresh4件、元期限後取消、5成功/1取消のHost終端一致を確認。自然な120秒超演算・GUI/setup自身の10分超refreshとGPU組合せ評価は残る |
 | F release | 署名公開/update/改ざん拒否証拠は維持。rollbackは候補health成功後の例外注入であり、migration失敗や自然なhealth不良の証拠へ読み替えない。clean install等も個別照合 |
 
 GPU GUIは設計§4とCHECK-03の条件付き提供に従いsoftware-onlyを正直に表示する。
@@ -55,11 +55,18 @@ viewer release gateの日英切替・mobile入力・model切替memory回収/cont
 Eevee/Cycles probeをGPU GUI動作と見なさず、CPU/画像/LLMとの組合せ評価を別々に記録する。
 credential更新は**失効前**に行う要件であり、失効tokenからの自己再発行は要求しない。
 
-現在コードではHost child token TTLは600秒、MediaForgeのrefresh marginは120秒、
+以前の監査時、Host child token TTLは600秒、MediaForgeのrefresh marginは120秒、
 scene worker timeoutは180秒。単一workerの132秒維持ではrefresh条件へ届かない。
 実Host DBを`mode=ro`で読み、`audit_logs`の`username=addon:media-forge`かつ
 `action=addon.runtime.job.credential.refresh`を検索した結果は0件。
 これは現在残る監査記録の観測であり、削除済み履歴まで含めた不実行の証明ではない。
+
+2026-09-06 installed0.28.30再試験では、通常TTL/timeoutのまま644.700秒のqueue fault injectionがexit0。
+後半4 childの期限前refresh監査success、615.630秒の元期限後cancel、5 succeeded/1 canceledの
+Host/local終端一致と全terminal_sent、停止した4子process消失、全10生成asset bytes/hashを照合。
+証拠`/data1tb/mf-credential-refresh-installed-0.28.30-20260906/events.json`。Host/MF PID不変。
+上記0件は過去監査の観測であり、今回の4件successを含む現在の総数ではない。
+人工的なqueue待機を自然な長時間演算やGUI/setup自身のrefreshへ読み替えず、scenario E全体はPARTIAL。
 
 v0.28.16 installedで既定TTLのqueue fault injectionを実行したが、Host到達性喪失/Host再起動により
 更新開始前にfailed。retry1は251.002秒までrunning、retry2は150.297秒で6件すべて

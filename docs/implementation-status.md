@@ -1,5 +1,23 @@
 # Media Forge implementation status
 
+## 2026-09-06 installed CPU child refresh across 600s — VERIFIED FOR THIS SCOPE
+
+installed0.28.30/healthyで既存`3ds_credential_refresh_e2e.py`を実行、PID33983/exit0/644.700秒。
+証拠 `/data1tb/mf-credential-refresh-installed-0.28.30-20260906/events.json`。
+dedicated CPU6 Jobの先行4 Blender childへ各160秒のpidfd SIGSTOP/SIGCONTを行うqueue fault injection。
+TTL600/worker timeout180を変更せず、元の期限前の後半4 child refresh success各1件をHost監査で確認。
+success child `2ef6f7e7dedb`の監査時刻06:23:55.882692 UTC、cancel child `c33bfd0fdb62`は同.883385。
+615.630秒の取消と644.700秒の完了を確認。local/Hostの6件は5 succeeded/1 canceledで一致し、
+全host_terminal_sent=true。MF PID31432/Host PID2196不変。local非終端0、停止した4 child PIDは消失。
+
+5 scene/10 assetsを生成、Blender4.5.13、各16128 triangles/8066 vertices、独立GLB検査passed。
+全10実ファイルのsize/hashとmetadata/provenance、親IDをread-onlyで照合しassert成功。
+最終GLB1,138,216 BのSHA `b468c73ca925889e3c55b5b48658526e00bbca2f0d7e3047f4eef0ea2475261b`。
+試験専用制作物は証拠として保持。Host/global config/model/既存scene/製品コード変更なし。
+過去のrefresh0件/Host停止による失敗記録は維持し、この無再起動runの成功で過去を上書きしない。
+自然な長時間演算、GUI/setupのrefresh、OpenCode自然言語による長時間制作はNOT TESTED。
+scenario E/全体3DS-8はPARTIAL。今回文書のみ、unit test再実行なし/diff check成功。
+
 ## 2026-09-06 v0.28.30 signed / installed viewer scroll — VERIFIED FOR THIS SLICE
 
 PR #290 merge/tag `bdaa379d682feedbea476fc037772b6dae095b9c` exact sourceから正式bundle構築/署名公開。
