@@ -313,6 +313,7 @@ def create_app(
         blender_timeout_sec=resolved.blender_timeout_sec,
         host_client=host,
         lease_renew_sec=resolved.host_lease_renew_sec,
+        warm_linger_sec=resolved.warm_linger_sec,
         model_manifest=resolved.model_manifest,
         model_catalog_manifest=resolved.model_catalog_manifest,
         model_store_root=resolved.model_store_root,
