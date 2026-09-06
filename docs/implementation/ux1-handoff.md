@@ -3,6 +3,34 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 Settings lifecycle — source browser scope verified
+
+PR #294 merge `e07c56e11430c31c00a7621c3e9658a513449488`を確認。
+branch `ux1/3d-setup-settings-ui`、製品/Host/TTL変更なし。新2 scriptで前回の隔離dataを使用。
+source起動は`MEDIA_FORGE_DATA_DIR=/data1tb/mf-long-setup-source-20260906
+MEDIA_FORGE_BLENDER_LEGACY_ROOT=/data1tb/mf-long-setup-source-20260906/absent-legacy
+PYTHONPATH=backend:. .venv/bin/python -m uvicorn mediaforge.app:app --host 127.0.0.1 --port 9161`。
+PID68057、偽downloadなし。診断Python/Playwrightから日本語Settingsの実ボタンを操作した。
+
+`3ds_setup_settings_ui_e2e.py --evidence-dir /data1tb/mf-setup-settings-ui2-20260906`: exit0/57.062秒。
+最初のrun `mf-setup-settings-ui-20260906`はactive削除時のbuttonをdisabledと仮定して失敗。
+実装はhidden＋handlerのcan_remove guardで保護していたため、製品でなくassertionを訂正。
+4.5.9/4.5.13両方のactive削除拒否を確認。実外部downloadの固定4.5.13 updateは54.993秒でready。
+378,033,952 B、SHA `da4e69b06b75b9e642d106496c50e7e240218b411d2f6e18271c1d1d819cef91`一致。
+6512 member/1,167,187,839 B展開、Blender4.5.13/Python3.11.15/background/glTF入出力probe成功。
+live/project参照0の隔離4.5.9だけをpreview/confirmで削除、1,168,332,155 B回収、active4.5.13不変。
+
+続けて`3ds_setup_repair_ui_e2e.py --evidence-dir /data1tb/mf-setup-repair-ui-20260906`: exit0/43.132秒。
+画面から4.5.9を再導入し21.721秒でready。その隔離版の.runtime.jsonだけをevidenceへrenameして保持し、
+再読込でdamaged/repairボタンを確認。repair操作は43.047秒でready、実4.5.9/glTF probe成功。
+stamp再作成、active4.5.13不変、page errors0。元stampはoriginal-runtime-stamp.jsonとして保持。
+repaired screenshotを目視確認。DB全6 operation終端（5 ready/1 canceled）、staging空。
+source PID68057はSIGINT/exit0で終了。Host PID2196/MF PID31432 activeで不変。
+隔離runtime2版/cache/元stampを保持。製品差分なしで新規release不要。
+完全空環境のbrowser install、installed opaque iframe、live/project参照削除拒否、全scenario Dは未完了。
+次は通常PR merge後、installed設定画面での非破壊確認と未検証条件の受入を進める。全体3DS-8はPARTIAL。
+gate `./mf.sh test`: 1053 passed / 既知warning1 / 114.25秒。diff check成功。
+
 ## 2026-09-06 long setup acceptance — source scope verified
 
 PR #293 merge `ba4432b80bca225005d562089ad9984028a3c86f`を確認。

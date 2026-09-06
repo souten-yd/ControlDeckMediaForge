@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-06 Settings lifecycle — VERIFIED SOURCE BROWSER SCOPE
+
+branch `ux1/3d-setup-settings-ui`、隔離source9161/PID68057、日本語Settingsの実ボタンを操作。
+`3ds_setup_settings_ui_e2e.py`は57.062秒/exit0。active版の削除確認はhidden、can_remove=false。
+固定4.5.13実外部download378,033,952 B/hash一致、update54.993秒ready/実Blender/glTF probe成功。
+参照0の隔離4.5.9のみpreview/confirmで削除し1,168,332,155 B回収。有効4.5.13は不変。
+証拠 `/data1tb/mf-setup-settings-ui2-20260906`。最初のrunはdisabledとhiddenのassertion誤りで失敗、製品変更なし。
+`3ds_setup_repair_ui_e2e.py`は43.132秒/exit0。画面から4.5.9を再導入後、隔離stampをevidenceへ退避して
+damaged/repair表示を確認。修復で実4.5.9/glTF probe成功/stamp再作成/active4.5.13不変/page errors0。
+証拠 `/data1tb/mf-setup-repair-ui-20260906`、元stampを保持。repaired画面を目視確認。
+DB6 operationは5 ready/1 canceled、staging空、sourceはSIGINT/exit0で終了。
+Host PID2196/MF PID31432 activeで不変、稼働runtime/製品/Host設定は変更なし。
+完全空環境browser install、installed opaque iframe、live/project参照保護、全scenario DはNOT TESTED。
+全体3DS-8はPARTIAL。script/文書のみなので新規release不要。
+gate `./mf.sh test`: 1053 passed / 既知warning1 / 114.25秒。diff check成功。
+
 ## 2026-09-06 long setup source probe — VERIFIED FOR SOURCE SCOPE
 
 branch `ux1/3d-long-setup-acceptance`に固定実Blender archiveの低速配信fixtureを使う

@@ -20,7 +20,7 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 |---|---|---|
 | GOAL-01 共通Library | source日英320pxに加え、署名installed0.28.29/30で画像/GLB/.blend filter、親子双方向移動、metadata移動中model read0、明示GLB表示、scene不変を確認 | PARTIAL: installed日英切替・relationsの60件超pagingを追加照合。320px viewer背景scrollは0.28.30で修正・受入済み |
 | GOAL-02 viewer | 署名installed0.28.19でLibrary→3D card、±XYZ回転・zoom両方向、逆操作差分0、320px、scene不変をoverlayなしで確認 | VERIFIED（利用者指定操作の範囲）。2026-09-06利用者確認によりwire/animationは必須から除外 |
-| GOAL-03 設定管理 | 4.5.9/4.5.13の共存、active切替、参照中削除拒否 | PARTIAL: 全操作の画面完結、失敗後再開とscenario Dの証拠を照合 |
+| GOAL-03 設定管理 | 4.5.9/4.5.13共存/active切替/参照中削除拒否。隔離source日本語Settingsで実download更新、active削除拒否、未参照旧版削除、再導入、stamp退避からの修復と実Blender probeを追加確認 | PARTIAL: 完全空環境browser install、installed画面、失敗後再開とscenario Dの全条件を照合 |
 | GOAL-04 Web Blender | `.14-long/observations.json`: 621.451秒GUI、入力、保存revision 2→3、reload/reconnect | VERIFIED（この操作範囲）。credential refreshの証拠ではない |
 | GOAL-05 OpenCode一巡 | installed0.28.26、実OpenCode同一run289.585秒でtyped剣→画像生成→材質→export→ZIP→配置、4制作Job成功、全長1.005m/加工後356 triangles | VERIFIED（この自然言語制作経路）。同じ剣での比較採用/GUI/復元はscenario Bへ残す |
 | GOAL-06 既存画像比較採用 | 署名installed0.28.26で既存画像の比較/破棄/採用/復元、さらに同sceneで実FLUX.2画像生成→候補比較/破棄→採用3→4、dependency/parent/hash一致、Broker解放を確認 | VERIFIED（既存/生成画像のbase color比較採用の範囲）。全PBR channelやOpenCode制作一巡の証拠ではない |
