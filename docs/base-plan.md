@@ -735,6 +735,10 @@ they never modify the stored asset or scene. Wireframe and animation controls ar
 optional, not Library acceptance gates. Authoring, texture comparison and Blender
 editing remain separate Studio requirements.
 
+Material comparison must keep authored PBR values while providing local display
+lighting that makes metallic surfaces inspectable. Procedural environment lighting
+is a viewer resource, not a material edit, external asset dependency or inference path.
+
 Conflict recovery never rebases unsaved bytes onto a newer scene head. An explicit recovery-fork
 operation validates a retained candidate with its pinned Blender and creates a separate scene,
 preserving the original head, candidate bytes, dependencies and source-revision asset lineage.

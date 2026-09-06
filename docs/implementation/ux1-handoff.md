@@ -3,6 +3,38 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 metallic material comparison candidate
+
+PR #256 merged `8ba4f66`を基準にbranch `ux1/3d-material-compare-acceptance`。
+導入済み0.28.19でscene_ca920fd634b14dfea8215567e930bb7aの12版/現行13版を読み取り比較した。
+2画面表示・閉じた後の両WebGL context lossとinstance/handle回収・scene不変は成功したが、
+刃が両版とも黒く材質差が見えなかった。PNG hash差だけの判定では不十分だった。
+証拠 `/data1tb/mf-material-compare-installed-0.28.19-20260906`。
+
+GLB実体と固定GLTFLoaderを照合し、刃はmetallic既定1/roughness0.25で、新版だけbaseColorTextureを持つ。
+表示用環境反射がなく、diffuse用hemisphereだけでは刃が黒くなることを候補で切り分けた。
+固定Three.js同梱RoomEnvironmentをPMREM化し、材質値/assetを変えず環境照明を追加する。
+map/一時generator/roomはdisposeし、context復旧時は環境mapを再生成する。外部HDR/URI取得なし。
+
+実候補 `/data1tb/mf-material-compare-environment-candidate-20260906`では旧版銀/新版青黒を視認。
+同サイズ487x406の刃ROI（x49.7〜50.5%, y20〜50%）平均RGBは旧版131.34/133.87/137.18、
+新版2.23/9.82/25.40。導入版baselineは旧版1/1/1、新版0/0/0だった。
+候補moduleのSHAはae9fcecc3739d0b728d8ff5280dbee6bf42e4a0724ad94db0b739746305c8848。
+
+比較画面のcontext復旧後に「復旧中」statusが残る問題も実測してapp.jsで修正。
+復旧後のPNG差はstatus文字のantialias領域(x16〜221,y16〜28)に限定されたため、status文字列は
+別assertし、WebGL画素は上40pxのstatus領域を除いて完全一致を検査する。
+新script `3ds_compare_installed_e2e.py`は個別mf-e2e sessionを発行/失効し、制作データを変更しない。
+candidateはブラウザresponse本文だけ差替え、認証/CORS headerを維持し、overlayと明示許可を記録する。
+最終候補の初回はHostがdeactivating/restartでERR_CONNECTION_REFUSED。こちらはrestartを要求していない。
+Hostはその後10:38:41 JST/PID2495560/active、health200へ復帰した。
+最終候補 `/data1tb/mf-material-compare-final-candidate-retry1-20260906`は全assertion成功。
+steel fixtureの旧銀/新青のRGB条件、新旧描画差18437px、context復旧後の描画差0とstatus復帰、
+閉じた両context loss=true、instance/handle0、scene不変、page error0を確認。
+既存Library6軸/zoom/orbit/fit/320pxも `/data1tb/mf-six-axis-environment-candidate-20260906`で成功。
+source gate `./mf.sh test`: 1004 passed / 既知warning1件 / 106.44秒。hash/構文/diff check成功。
+全体3DS-8とGOAL-06はPARTIAL。次はsource PR、正式版配布後overlayなしの同じ確認。
+
 ## 2026-09-06 v0.28.19 signed / installed Library viewer
 
 PR #255 merged `583fea18e710730a8c56758846c8cfeb13622e52`。同commitのdetached worktreeから

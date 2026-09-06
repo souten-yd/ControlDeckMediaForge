@@ -9297,3 +9297,48 @@ NOT TESTED: 新版の日英切替・mobile実タッチ・model切替memory/conte
 600秒超credential refresh、全release A〜F。GOAL-02利用者指定操作はVERIFIED、全体3DS-8はPARTIAL。
 exact release worktreeは削除（Gitから再作成可能）。build出力/packaged展開先2 directoryはgio trashへ
 退避（復元可）。公開再取得4 asset、browser JSON/PNG、更新前DB backupは保持した。
+
+## 2026-09-06 material comparison lighting/context recovery — CANDIDATE VERIFIED
+
+基準main `8ba4f66`、branch `ux1/3d-material-compare-acceptance`。
+installed0.28.19のmf-e2e-owned scene_ca920fd634b14dfea8215567e930bb7a、旧12版/現行13版を
+実ブラウザで比較。2画面・閉じた両WebGL context解放・instance/handle0・scene不変は成功したが、
+両版の刃が黒く、新旧材質が見分けられなかった。PNG hash差のみで材質比較を成功扱いしない。
+baseline証拠 `/data1tb/mf-material-compare-installed-0.28.19-20260906`。
+実GLBと固定GLTFLoaderを読み、刃はmetallic既定1/roughness0.25、新版だけbaseColorTextureを持つと確認。
+old preview asset_dab6f163e9704727a2d5523eec0c23a9は20256 B、current
+asset_d406176c628242b3a1feef3335e31bdaは1744476 B。現在版は画像asset_63e9f182fd114c559306f6f797ee939dと
+SHA a3cb9e4f70eb8a396307576cfccef57e721ac50fa10f7f73a62d671f6276494dのdependencyを保持している。
+
+固定Three.js同梱RoomEnvironment/PMREMGeneratorによるローカル環境反射を追加。
+元のmetallic/roughness/base colorやscene/assetは変更しない。外部HDR/URI・新runtime依存なし。
+環境map/一時generator/roomをdisposeし、WebGL復旧時に再生成する。
+比較paneがcontext復旧後も「復旧中」のstatusを残す問題を実測し、復旧時のstats再表示を修正した。
+
+実行（Host diagnostic venv、正規mf-e2e sessionを新規発行/個別失効、password変更なし）:
+`scripts/3ds_compare_installed_e2e.py --scene-id scene_ca920fd634b14dfea8215567e930bb7a
+--old-sequence 12 --current-sequence 13 --evidence-dir /data1tb/mf-material-compare-final-candidate-retry1-20260906
+--candidate-module frontend/three-viewer.js --candidate-app frontend/app.js --steel-fixture`。
+candidate response本文だけをCDPで差替え、HTTP認証/CORS headerを保持。試験contextの
+local-network-access許可は明示。installed sourceの成功とは扱わない。
+app SHA a60678f7dbdea56c32b1f42fdbcdf25038f79f85b18ae8723ebffb5d7930b716、
+module SHA ae9fcecc3739d0b728d8ff5280dbee6bf42e4a0724ad94db0b739746305c8848 / 647953 B。
+
+487x406 canvasの固定刃ROI x49.7〜50.5%/y20〜50%で、baseline平均RGBは旧1/1/1、新0/0/0。
+候補は旧131.34/133.87/137.18、新2.23/9.82/25.40で、旧銀/新版青黒を実画像でも確認した。
+このfixtureの旧銀が黒くない/新版の青が表示される条件をassertし、新旧描画差18437pxを記録。
+context復旧はstatus文字列復帰と、上40pxのstatus領域を除いたWebGL画素の差分0をassertした。
+初回のPNG全体hash不一致は文字antialias領域(x16〜221/y16〜28)のみであり、描画と文言を別検査する。
+閉じた両contextはisContextLost=true、instance/handle0、scene応答不変、page error0。
+これはGPU context解放の証拠であり、browser heap/VRAMのbyte単位回収の測定ではない。
+
+既存6軸/zoom/orbit/wheel/fit/320px回帰もcandidateで再実行し成功:
+`/data1tb/mf-six-axis-environment-candidate-20260906/observations.json`。
+最終比較初回はHost deactivating/restart中でERR_CONNECTION_REFUSED。こちらはrestartを要求していない。
+Hostは10:38:41 JST/PID2495560/active、health200へ復帰後に同条件を再実行した。
+`./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 106.44秒。構文/hash/diff checkも成功。
+最初のfocused testはbundle query prefixを17文字にした誤りを検出し、規約通り16文字へ修正した。
+
+NOT TESTED: 照明修正の正式署名版/overlayなしinstalled受入、材質比較からの新規採用全操作、
+新版での画像生成/G8実worker回帰、日英/実mobile touch、長時間credential。installed0.28.19は変更なし。
+全体3DS-8/GOAL-06はPARTIAL。次はこのsliceをPR/merge後、署名新版と同じ比較/6軸のinstalled受入。

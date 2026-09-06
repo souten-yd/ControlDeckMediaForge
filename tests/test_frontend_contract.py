@@ -178,6 +178,7 @@ def test_vendored_3d_viewer_is_reproducible_lazy_and_disposable() -> None:
         "OrbitControls", "GLTFLoader", "toggleBounds", "toggleAnimation",
         "setShading", "setLight", "setBackground", "forceContextLoss",
         "ResizeObserver", "texture.dispose()", "image?.close",
+        "RoomEnvironment", "PMREMGenerator", "environmentTarget?.dispose()",
     ):
         assert required in viewer_source
     assert f'const MODEL_VIEWER_BUNDLE = "{lock["bundle_sha256"][:16]}"' in SCRIPT
@@ -193,6 +194,8 @@ def test_vendored_3d_viewer_is_reproducible_lazy_and_disposable() -> None:
     assert 'rotateOnWorldAxis' in viewer_source
     assert 'viewer.modelInstance?.zoom(1)' in SCRIPT
     assert 'viewer.modelInstance?.zoom(-1)' in SCRIPT
+    assert 'rebuildEnvironment();' in viewer_source[viewer_source.index('function contextRestored()'):]
+    assert 'value === "restored" && active' in SCRIPT
 
 ADVANCED_IDS = (
     "advanced-create", "advanced-format",
