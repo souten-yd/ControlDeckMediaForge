@@ -3,6 +3,43 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 clean packaged Blender install / browser reconnect
+
+PR #304 merged `f61e47dea0d2058b9357c57b24e74a5411282f65`確認。
+branch `ux1/3d-clean-packaged-setup`。新 `scripts/3ds_clean_packaged_setup_e2e.py`。
+製品変更なし。公開検証済み0.28.32 packageを、新規mktemp
+`/data1tb/mf-clean-packaged-0.28.32-QBvHfm` の専用feature/cacheで起動。
+`CONTROL_DECK_FEATURE_DATA_DIR=<root>/feature CONTROL_DECK_SHARED_CACHE_DIR=<root>/cache
+MEDIA_FORGE_BLENDER_LEGACY_ROOT=<root>/absent-legacy MEDIA_FORGE_PORT=9161
+/data1tb/mf-0.28.32-package-iYzsMs/control-deck-media-forge-0.28.32-linux-x86_64/bin/mediaforge serve`。
+package PID62393、既存Blender/production registry/既存downloadを流用しない。
+source appではなく配布済みcore/UI、standalone loopback。画像runtime provision/重み取得なし。
+画像catalogには既存共有モデルのread-only情報も表示されるため、全モデルが空の環境とは呼ばない。
+
+実headed Chrome/日本語Settingsへ、Host診断venv（Playwrightのみ）で
+`scripts/3ds_clean_packaged_setup_e2e.py --evidence-dir /data1tb/mf-clean-packaged-browser-0.28.32-20260906`。
+exit0/61.828秒。初期runtime0/operation0/active null/base missing/web missingと導入buttonをassert。
+Settingsの基本環境導入buttonを実クリック。operation
+`blenderop_d7a54c8bf2f648abbc716383caaae506` がdownloading中の1.227秒にpage.close、
+新pageで1.608秒に同ID/downloading/409,600 Bの進捗を確認。
+実外部download（fixtureなし）37.216秒でverifying、47.250秒installing、58.794秒ready。
+377,929,956 B、SHA `dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d`。
+6510 members/1,168,332,002 extracted bytes、Blender4.5.9/Python3.11.11、
+background/gltf import/export probe成功。download実ファイルの独立sha256sumも一致。
+
+基本環境導入buttonは非表示、web pack missingと専用導入buttonは維持。
+最終page.reloadでも同operation/ready、page errors0。ready screenshotを目視確認。
+read-only SQLiteはoperation1件ready、managed runtimeは4.5.9のみ、staging空。
+package PID62393へSIGINT、exit0。専用runtime/archive/DBを次のweb pack受入用に保持。
+本番Host PID2078/MF PID60180は変更なし。利用者のglobal Blender/configへ書込なし。
+
+GOAL-03/scenario Aの空BlenderからのSettings導入・ページ切断再接続の範囲を追加受入。
+installed Host iframeでのclean install、画像生成、G8 ZIP、web pack導入/GUIはこのrunではNOT TESTED。
+全体3DS-8とscenario Aを完了扱いしない。次は同じ専用package/dataを再起動し、
+Settingsからweb packを導入してGUI開始条件を検証する。
+同scriptの再実行は空registryを要求するため、新しい専用data領域が必要。
+gate `./mf.sh test`: 1054 passed / 既知Starlette warning1 / 113.20秒。diff check成功。
+
 ## 2026-09-06 v0.28.32 signed release / installed touch targets verified
 
 branch `ux1/3d-release-0.28.32-acceptance`。PR #303 merge/tag

@@ -46,6 +46,12 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 | F release | 署名公開/update/改ざん拒否証拠は維持。rollbackは候補health成功後の例外注入であり、migration失敗や自然なhealth不良の証拠へ読み替えない。clean install等も個別照合 |
 
 GPU GUIは設計§4とCHECK-03の条件付き提供に従いsoftware-onlyを正直に表示する。
+2026-09-06の署名packaged0.28.32/専用空Blender領域では、Settings実クリックから
+基本環境を導入し、downloading中page.close→新pageで同ID/進捗復元→58.794秒ready、
+実4.5.9/glTF入出力probeとreload後readyを確認した。
+証拠 `/data1tb/mf-clean-packaged-browser-0.28.32-20260906/observations.json`。
+これはstandalone packageの初回導入であり、installed Host iframe・画像生成・G8 ZIP・
+web pack/GUIを含むscenario A全体の成功には拡大しない。
 PR #294でsetupの隔離source HTTP/低速archive fixtureを実行。631.247秒取消、652.011秒再導入ready、
 実Blender4.5.9/glTF入出力probe成功、終端2 operation/空stagingを確認した。
 実archive/hash/展開は実物だが転送はfixture。実Host認証/外部回線/設定browserの残件は閉じない。
