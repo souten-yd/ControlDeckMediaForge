@@ -23,6 +23,8 @@ def main() -> None:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--require-readable-layout", action="store_true")
     parser.add_argument("--require-touch-targets", action="store_true")
+    parser.add_argument("--require-history-confirmation", action="store_true",
+                        help="Verify default-off history acknowledgement without submitting removal")
     parser.add_argument("--native-viewport", action="store_true", help="Diagnose pointer input without viewport emulation")
     parser.add_argument("--locale", choices=("ja", "en"), default="en")
     parser.add_argument("--headless", action="store_true", help="Check responsive rendering independently of the desktop compositor")
@@ -163,7 +165,22 @@ def main() -> None:
                         assert preview["project_reference_count"] > 0 and "project_reference" in preview["blocked_reasons"]
                         if runtime_id == before["active_runtime_id"]:
                             assert "active_runtime" in preview["blocked_reasons"]
-                        expect(frame.locator("#blender-remove-confirm")).to_be_hidden()
+                        confirm = frame.locator("#blender-remove-confirm")
+                        if args.require_history_confirmation and runtime_id != before["active_runtime_id"]:
+                            assert preview["can_remove_with_history"] is True
+                            assert preview["exact_reinstall"]["version"] == "4.5.9"
+                            checkbox = frame.locator("#blender-remove-history")
+                            expect(checkbox).to_be_visible()
+                            expect(checkbox).not_to_be_checked()
+                            expect(confirm).to_be_disabled()
+                            checkbox.check()
+                            expect(confirm).to_be_enabled()
+                            frame.locator("#blender-remove-cancel").click()
+                            button.click()
+                            expect(checkbox).not_to_be_checked()
+                            expect(confirm).to_be_disabled()
+                        else:
+                            expect(confirm).to_be_hidden()
                         expect(frame.locator("#blender-remove-cancel")).to_be_visible()
                         evidence["previews"].append({"width": width, **preview})
                         page.screenshot(path=str(args.evidence_dir / f"preview-{width}-{runtime_id}.png"))
