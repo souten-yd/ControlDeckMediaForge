@@ -28,7 +28,9 @@ MaterialBinding commitまでをsource/packageで実装・確認した。3DS-6c�
 補完domainの未保存候補prepare/read/adopt/discardは実Blender4.5.9で確認し、private WebSocket経路の
 実TCP/Blender受入も追加した。standalone mirror/UIを接続しsource browserの日英/320px・採用/復元を
 確認した。署名installed0.28.23で既存画像の採用前比較/破棄/採用/旧版復元も確認したが、
-旧版比較クリック中の再描画による操作消失を再現した。修正のinstalled受入と生成画像経路の受入まで
+旧版比較クリック中の再描画による操作消失を再現した。0.28.26でDOM保持修正を導入し、
+試験viewport emulationの下端入力不達をnative windowへ切替えて比較/採用/復元をinstalled受入した。
+生成画像経路の受入まで
 3DS-6はPARTIALのまま進める。
 3DS-7はtyped Agent recipe、durable detached child Job、stable actor ownerをsource/packageで確認した。
 3DS-8でinstalled-host/OpenCode/GPU/releaseの個別証拠を取得したが、必須受入全体の完了判定を撤回した。

@@ -9610,3 +9610,22 @@ locked/disabled false、compareReady0/dialog false。全timeoutを修正済み�
 次はHost/iframeのhit targetと座標をread-only検証。生成画像/OpenCode一巡/全release A〜Fは未完了。
 exact release worktreeを削除（再作成可）、build/package directoryをgio trashへ退避（復元可）。
 公開再取得 `/data1tb/mf-0.28.26-public-20260906`、browser証拠、private backupを保持。
+
+## 2026-09-06 installed comparison native-window acceptance
+
+read-only `scripts/3ds_compare_hit_test.py`で既存sceneの比較ボタンを測定。
+emulated1280x900下端中心約y882ではHost IFRAMEがpointer/clickを受信、子frameに届かず比較が開かない。
+中心約y834では子frame BUTTONが受信して開く。下端もkeyboard Enterは成功、scene不変。
+証拠 `/data1tb/mf-compare-hit-test-{expanded,bottom}-0.28.26-20260906`。
+native viewportでは下端もpointerで開きscene不変。証拠`mf-compare-hit-test-native-0.28.26-20260906`。
+実inner835/outer945/screen954/DPR1.508333に対し、emulated inner900/outer945/screen900/DPR約1。
+この環境のemulation/実window入力領域差を確認。製品/Hostコードは変更しない。
+
+installed E2Eをno_viewport=Trueへ修正し2回成功。最終commandはHost診断venv/PYTHONPATH=Host backendで
+`scripts/3ds_material_preview_installed_e2e.py --blend /data1tb/mf-material-preview-ui-final-20260906/original.blend
+--expected-version 0.28.26 --refresh-during-click --evidence-dir /data1tb/mf-material-preview-native-final-0.28.26-20260906`。
+新scene `scene_a94df57d689d4636844b3586dd9fed7d`で比較/破棄head不変、採用1→2/復元2→3、
+source SHA一致、押下中のrefreshでもbutton保持/比較open、切断時採用禁止、日英/opaque origin null/page error0。
+最終native viewport1280x835/DPR1.508333。実日本語比較画像も確認。JSで比較を開く代用はしていない。
+試験ログインは個別作成/revoke、password不変。生成画像/mobile touch/長時間credential/全A〜Fは未完了。
+gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 112.99秒。diff check成功。

@@ -3,6 +3,34 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 native-window comparison acceptance
+
+PR #275 merged `0a5596346973bfbc61e4acedd7e06345598b5425`をfetch確認。
+branch `ux1/3d-comparison-input-hit-test`。製品/Hostは変更せず、read-only診断script
+`scripts/3ds_compare_hit_test.py`で既存試験sceneのボタン座標とHost/iframeのpointer受信を測定。
+emulated1280x900では下端button中心約y882のpointer/clickをHostのIFRAME要素が受信し、
+子frameは受信せず比較も開かない。一方中心約y834ではframeのBUTTONが受信し開く。
+同じ下端buttonはkeyboard Enterでも開き、scenes.get前後一致。重なりやJS lockとは異なる。
+証拠 `/data1tb/mf-compare-hit-test-{expanded,bottom}-0.28.26-20260906`。
+
+headed Chromeのviewport emulationを外したnative windowでは下端pointerもframeに届き比較が開く。
+`/data1tb/mf-compare-hit-test-native-0.28.26-20260906`の実innerHeight835/outerHeight945、
+screen954、DPR1.508333。emulatedではinner900/outer945/screen900/DPR約1だった。
+この環境のviewport emulationと実windowの入力領域差として扱い、一般的な全Chrome不具合とは断定しない。
+installed E2Eをno_viewport=True/実window基準へ修正。UIコードoverlayやJSによる比較open代行はしない。
+
+`3ds_material_preview_installed_e2e.py --expected-version 0.28.26 --refresh-during-click`
+（Host診断venv、PYTHONPATH=Host backend、既存original.blend、新規evidence-dir）を2回成功。
+最終証拠 `/data1tb/mf-material-preview-native-final-0.28.26-20260906`。
+scene `scene_a94df57d689d4636844b3586dd9fed7d`、採用前/破棄head不変、採用1→2/復元2→3、
+復元source SHA一致、pointerdown→同一scene refresh→pointerupでbutton保持/比較open、
+切断後採用禁止、日英表示、opaque origin null、page error0。最終native1280x835/DPR1.508333。
+日本語比較画面を実画像でも確認。初期window寸法と最終値は両方JSONへ記録する。
+過去のtimeoutは削除せず、今回の試験環境修正と成功証跡を併記する。
+次は生成画像→候補比較→採用のinstalled経路と、OpenCode/配置receiptを同一制作物で通す。
+生成画像/mobile touch/長時間credential/全release A〜Fは未完了。全体3DS-6/3DS-8はPARTIAL。
+gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 112.99秒。diff check成功。
+
 ## 2026-09-06 v0.28.26 signed / installed, comparison timeout remains
 
 PR #274 merge/tag target `c262cf23f67a9f17a7bcee3d93f13e36fd7f577d`からexact bundle構築・正式署名公開。

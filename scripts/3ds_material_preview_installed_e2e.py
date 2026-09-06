@@ -56,13 +56,17 @@ def main() -> None:
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(executable_path="/usr/bin/google-chrome", headless=False,
-                                         args=["--enable-webgl", "--ignore-gpu-blocklist"])
+                                         args=["--enable-webgl", "--ignore-gpu-blocklist", "--window-size=1280,1000"])
             try:
-                context = browser.new_context(base_url="http://127.0.0.1:8765", viewport={"width": 1280, "height": 900})
+                # Headed viewport emulation can exceed the compositor's actual
+                # content area; OOPIF bottom clicks then stop at the Host iframe.
+                # Measure native geometry instead of claiming a synthetic size.
+                context = browser.new_context(base_url="http://127.0.0.1:8765", no_viewport=True)
                 context.add_cookies([{"name": SESSION_COOKIE, "value": token, "url": "http://127.0.0.1:8765", "httpOnly": True, "sameSite": "Lax"}])
                 page = context.new_page()
                 page.on("pageerror", lambda error: evidence["page_errors"].append(str(error)))
                 page.goto("/x/media-forge/workspace/create", wait_until="domcontentloaded")
+                evidence["native_viewport"] = page.evaluate("() => ({width:innerWidth,height:innerHeight,dpr:devicePixelRatio})")
                 frame = helpers.workspace_frame(page)
                 frame.wait_for_selector('#app[aria-busy="false"]')
                 frame.evaluate("""() => {
@@ -145,7 +149,7 @@ def main() -> None:
                     assert box
                     evidence["comparison_button_box"] = box
                     page.screenshot(path=str(args.evidence_dir / "before-pointer.png"))
-                    assert 0 < box["y"] + box["height"] / 2 < 900
+                    assert 0 < box["y"] + box["height"] / 2 < page.evaluate("innerHeight")
                     page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
                     page.mouse.down()
                     frame.evaluate("() => {window.__revisionButton = document.querySelector('[data-scene-compare]');}")
@@ -178,6 +182,7 @@ def main() -> None:
                 frame.locator("#scene-compare-cancel").click()
                 assert scene() == restored
                 assert not evidence["page_errors"]
+                evidence["final_native_viewport"] = page.evaluate("() => ({width:innerWidth,height:innerHeight,dpr:devicePixelRatio})")
                 evidence.update({"prepare_discard_head_unchanged": True, "adopt_adds_one_revision": True,
                                  "restore_adds_one_revision": True, "connection_loss_disables_adopt": True,
                                  "not_tested": ["generated image workflow", "mobile touch", "long credential refresh"]})
