@@ -862,6 +862,7 @@ table.catalog td[data-label="操作"] > button { white-space: nowrap; flex: 0 0 
   font-weight: 700;
 }
 .facts { margin: 0; display: grid; gap: 0; }
+#detail-title { overflow-wrap: anywhere; min-width: 0; }
 .facts div { display: grid; grid-template-columns: minmax(140px, 1fr) 2fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .facts dt { font-size: .82rem; font-weight: 600; }
 .facts dd { margin: 0; font-size: .82rem; color: var(--muted); }
