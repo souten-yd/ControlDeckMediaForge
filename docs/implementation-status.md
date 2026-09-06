@@ -1,5 +1,47 @@
 # Media Forge implementation status
 
+## 2026-09-06 installed Host locale acceptance / iframe input still intermittent
+
+PR #300 merged `1759518b06b0c11ff0d422dbc989087ffcc5f9e5`確認。
+branch `ux1/3d-installed-locale-acceptance`。Library/Settings受入scriptに
+`--locale ja|en` と比較診断用 `--headless` を追加。
+Playwright contextのlocaleを指定し、Hostのnavigator.language→通常theme/bridge→
+子document.langの一致と実labelをassertする。子langの代入、Host message偽造、製品overlayなし。
+これは初期localeの実経路であり、開いたままのlanguage-change event受入ではない。
+Settingsの独立scroll_into_viewはstatus refreshによるdetached ElementHandleで失敗したため除去。
+通常Locator.clickのscroll/re-resolutionを使用。emulated高さは900→700へ変更したが、
+それだけでは下記入力不達を解消していない。
+
+installed0.28.31、Host診断venv/PYTHONPATH/CONTROL_DECK_CONFIG、headed時は実Xwaylandの
+DISPLAY=:0/XAUTHORITY指定。Library commandは
+`scripts/3ds_library_navigation_installed_e2e.py --expected-version 0.28.31
+--scene-id scene_a94df57d689d4636844b3586dd9fed7d --require-scroll-lock --locale <ja|en>
+--evidence-dir <下記>`。
+ja headed `/data1tb/mf-library-ja-installed-0.28.31-20260906` はexit0。
+en headed `/data1tb/mf-library-en-installed-0.28.31-20260906` はnav-createのaria-current未更新でexit1。
+enに `--headless` を付けた `/data1tb/mf-library-en-headless-installed-0.28.31-20260906` はexit0。
+成功2runはHost/子locale一致、日英filter label、画像/GLB/.blend絞込、
+親子双方向移動、明示GLB表示、metadata移動中model read0、scene全体不変、page errors0。
+320px viewer root/viewerとも320/320、背景overflow hiddenとclose後復帰。
+日本語GLB screenshotを目視。画像filterのcard数はja6/6、en54/24（desktop/mobileの観測件数）、
+GLB8/8、blend9/9。全件数やpaging完了の証拠にはしない。
+
+Settingsは同scriptへ `--expected-version 0.28.31 --require-readable-layout --locale ja`。
+`/data1tb/mf-settings-ja-installed-0.28.31-20260906` は上記detached scrollでexit1。
+retryとheight700 runはdesktop preview2件成功後、mobile pointerが親IFRAMEだけへ届き、
+子events0/preview_received=false/dialog_open=falseでexit1。
+証拠 `/data1tb/mf-settings-ja-{retry,height700}-installed-0.28.31-20260906`。
+headless ja `/data1tb/mf-settings-ja-headless-installed-0.28.31-20260906` はexit0、
+Host/子ja、設定/削除dialogの日本語、両幅/両runtimeの削除保護、runtime前後一致/page errors0。
+headless en `/data1tb/mf-settings-en-headless-installed-0.28.31-20260906` は最初のdesktop clickでexit1。
+こちらも親IFRAME events3/子events0/previewなし。したがってheaded固有・高さだけ・認証問題とは断定しない。
+各runの個別login revoke、削除送信なし、Host PID2078/MF PID29462 active不変。
+
+次はiframeのcompositor hit-testとresize/scroll反映を診断し、入力不達の再現条件を確定する。
+Host内部の製品変更はしていない。GOAL-01の初期日英表示証拠は増えたが、
+language-change、60件超relations paging、入力不達、全体3DS-8/必須シナリオはPARTIAL。
+最終gate `./mf.sh test`: 1054 passed / 既知Starlette warning1 / 113.39秒。diff check成功。
+
 ## 2026-09-06 installed 0.28.31 Settings layout / pointer recheck
 
 PR #299 merged `0634094d2815333def72f82f9a63d9e9e2e0355d`確認。

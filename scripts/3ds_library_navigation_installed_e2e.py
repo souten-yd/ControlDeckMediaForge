@@ -24,6 +24,8 @@ def main() -> None:
     parser.add_argument("--scene-id", required=True)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--require-scroll-lock", action="store_true")
+    parser.add_argument("--locale", choices=("ja", "en"), default="en")
+    parser.add_argument("--headless", action="store_true")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     installed = registry.status("media-forge")
@@ -36,7 +38,8 @@ def main() -> None:
     helpers = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helpers)
     evidence: dict[str, object] = {"version": installed["version"], "scene_id": args.scene_id,
-                                   "mode": "installed_no_overlay"}
+                                   "mode": "installed_no_overlay", "requested_locale": args.locale,
+                                   "headless": args.headless}
     errors: list[str] = []
     with SessionLocal() as db:
         user = db.query(User).filter(User.username == "mf-e2e").one()
@@ -44,16 +47,20 @@ def main() -> None:
         token = create_session(db, user, "127.0.0.1", "MediaForge Library navigation acceptance")
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(executable_path="/usr/bin/google-chrome", headless=False,
+            browser = pw.chromium.launch(executable_path="/usr/bin/google-chrome", headless=args.headless,
                 args=["--enable-webgl", "--ignore-gpu-blocklist", "--window-size=1280,1000"])
             try:
-                context = browser.new_context(base_url=args.host_url, no_viewport=True)
+                context = browser.new_context(base_url=args.host_url, no_viewport=True, locale=args.locale)
                 context.add_cookies([{"name": SESSION_COOKIE, "value": token, "url": args.host_url,
                                      "httpOnly": True, "sameSite": "Lax"}])
                 page = context.new_page()
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 try:
                     frame = helpers.open_scene(page, args.scene_id)
+                    evidence["host_language"] = page.evaluate("navigator.language")
+                    evidence["frame_language"] = frame.evaluate("document.documentElement.lang")
+                    assert evidence["host_language"] == args.locale
+                    assert evidence["frame_language"] == args.locale
                     before = frame.evaluate("id => call('scenes.get', {scene_id:id})", args.scene_id)
                     revision = before["revisions"][-1]
                     source, glb = revision["source_asset_id"], revision["preview_asset_id"]
@@ -80,6 +87,10 @@ def main() -> None:
                         frame.locator("#nav-settings").click()
                         assert frame.locator("#scene-studio").is_visible()
                         frame.locator("#nav-library").click()
+                        expect(frame.locator("#library-media-kinds")).to_have_attribute(
+                            "aria-label", "素材の種類" if args.locale == "ja" else "Media type")
+                        expect(frame.locator('[data-library-media="image"]')).to_have_text(
+                            "画像" if args.locale == "ja" else "Images")
                         for kind, mime in (("image", "image/png"), ("glb", "model/gltf-binary"),
                                            ("blend", "application/x-blender")):
                             frame.locator(f'[data-library-media="{kind}"]').click()

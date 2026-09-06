@@ -23,6 +23,8 @@ def main() -> None:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--require-readable-layout", action="store_true")
     parser.add_argument("--native-viewport", action="store_true", help="Diagnose pointer input without viewport emulation")
+    parser.add_argument("--locale", choices=("ja", "en"), default="en")
+    parser.add_argument("--headless", action="store_true", help="Check responsive rendering independently of the desktop compositor")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     status = registry.status("media-forge")
@@ -32,17 +34,18 @@ def main() -> None:
     assert spec and spec.loader
     helpers = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helpers)
-    evidence = {"version": status["version"], "mode": "installed_no_overlay", "previews": [], "layouts": [], "errors": []}
+    evidence = {"version": status["version"], "mode": "installed_no_overlay", "requested_locale": args.locale,
+                "headless": args.headless, "previews": [], "layouts": [], "errors": []}
     with SessionLocal() as db:
         user = db.query(User).filter(User.username == "mf-e2e").one()
         assert user.is_active
         token = create_session(db, user, "127.0.0.1", "MediaForge Settings protection acceptance")
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(executable_path="/usr/bin/google-chrome", headless=False,
+            browser = pw.chromium.launch(executable_path="/usr/bin/google-chrome", headless=args.headless,
                 args=["--window-size=1280,1000"])
             try:
-                context = browser.new_context(base_url="http://127.0.0.1:8765", no_viewport=True)
+                context = browser.new_context(base_url="http://127.0.0.1:8765", no_viewport=True, locale=args.locale)
                 context.add_cookies([{"name": SESSION_COOKIE, "value": token,
                     "url": "http://127.0.0.1:8765", "httpOnly": True, "sameSite": "Lax"}])
                 page = context.new_page()
@@ -51,6 +54,11 @@ def main() -> None:
                 frame = helpers.workspace_frame(page)
                 frame.locator('#app[aria-busy="false"]').wait_for()
                 assert frame.evaluate("self.origin") == "null"
+                evidence["host_language"] = page.evaluate("navigator.language")
+                evidence["frame_language"] = frame.evaluate("document.documentElement.lang")
+                assert evidence["host_language"] == args.locale
+                assert evidence["frame_language"] == args.locale
+                expect(frame.locator("#nav-settings")).to_have_text("設定" if args.locale == "ja" else "Settings")
                 before = frame.evaluate("() => call('blender.runtime.status', {})")
                 assert before["active_runtime_id"] == "blender-4.5.13-linux-x64"
                 runtimes = [r["runtime_id"] for r in before["runtimes"] if r["ownership"] == "managed"]
@@ -60,7 +68,9 @@ def main() -> None:
                     frame.locator("#blender-runtime-details-label").click()
                 for width in ((1280,) if args.native_viewport else (1280, 320)):
                     if not args.native_viewport:
-                        page.set_viewport_size({"width": width, "height": 900})
+                        # Stay within the native headed window's content height;
+                        # an oversized emulated viewport can miss iframe input.
+                        page.set_viewport_size({"width": width, "height": 700})
                     evidence["layouts"].append(frame.evaluate("""() => ({
                         width: innerWidth, client: document.documentElement.clientWidth,
                         scroll: document.documentElement.scrollWidth,
@@ -88,7 +98,8 @@ def main() -> None:
                                 }
                             }""")
                         button = frame.locator(f'[data-blender-remove="{runtime_id}"]')
-                        button.scroll_into_view_if_needed()
+                        # Locator.click resolves refreshed rows and scrolls them itself;
+                        # a separate ElementHandle scroll can race a status refresh.
                         diagnostic = {"runtime_id": runtime_id, "requested_width": width,
                             "native_viewport": args.native_viewport,
                             "button": button.bounding_box(),
@@ -106,6 +117,8 @@ def main() -> None:
                             diagnostic["dialog_open"] = frame.locator("#blender-remove-dialog").evaluate("e => e.open")
                             page.screenshot(path=str(args.evidence_dir / f"pointer-{width}-{runtime_id}.png"))
                         expect(frame.locator("#blender-remove-dialog")).to_be_visible()
+                        expect(frame.locator("#blender-remove-title")).to_have_text(
+                            "Blender環境を削除" if args.locale == "ja" else "Remove Blender runtime")
                         preview = frame.evaluate("state.blenderRemovePreview")
                         assert not preview["can_remove"]
                         assert preview["project_reference_count"] > 0 and "project_reference" in preview["blocked_reasons"]
