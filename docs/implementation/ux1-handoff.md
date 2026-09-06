@@ -3,6 +3,36 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 installed generated texture comparison/adoption
+
+PR #276 merged `33d05e72f6d8685f9196a4961ad02ae515f8190e`をfetch確認。
+branch `ux1/3d-generated-material-acceptance`。installed0.28.26/healthy/enabled、開始時Host/local Job全終端。
+`scripts/3ds_generated_material_installed_e2e.py`を追加。既存専用mf-e2e sceneを使用し、
+native headed Chrome/opaque iframeの画像生成→結果選択→候補比較/破棄→再比較/採用を操作する。
+モデル導入/重み取得/service restart/Host変更/overlayなし。ログインは個別作成/revoke、password不変。
+
+実行: Host診断venv/PYTHONPATH=Host backendで同scriptに
+`--scene-id scene_a94df57d689d4636844b3586dd9fed7d --expected-version 0.28.26
+--evidence-dir /data1tb/mf-generated-material-installed-0.28.26-20260906`。
+Job `job_cfd0e32824284a59b909bb907ae76a52`は11.110秒でsucceeded。
+FLUX.2 Klein4B/distilled、diffusers0.40.0、Apache-2.0、weights
+`sha256:f3fcfa8fdaf5ebcd26c33cd53b485ec5ebe54939b5ace585b3f488278dfae278`をprovenanceで確認。
+画像Asset `asset_bd5a2cabd39a4e12b3682049a1a16946`、1024x1024 RGBA PNG 2,232,149 B、
+SHA `51097d8edb6b8babdba9277d31912094e3e901870a1d569d598810ff4b91669b`、画像validator4件passed。
+白い現在版と青いタイル候補の比較画面を実画像でも確認。生成/比較/破棄ではhead不変、採用で3→4版。
+新revision dependencyとsource provenanceのparent/reference hashが生成画像と一致し、旧3版は不変。
+Blender4.5.13、base_color/UVMap、packed=true、external_images0、scene validation、page error0。
+
+Host DB read-only照合: Host Job `ffe974bcc230` succeededのresult.asset_idsは同画像Asset。
+resource request `7f668961-e15e-486a-bbc4-9bc68c305182`とlease
+`2d9d2bec-0c72-4d4e-8593-8ed25b991104`のactivate/renew/releaseは同Host Job/gpu0、すべてsuccess。
+lease終了state=releasedを確認。他サービスの停止を試験が要求したものではない。
+gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 115.64秒。diff check成功。
+
+GOAL-06は既存/生成画像のbase color比較採用の範囲を受入済み。全体3DS-8とscenario Bは未完了。
+次はOpenCodeで剣の形状→生成画像→材質→export→grant/receiptを同一制作物で追跡する。
+今回のUI試験を自然言語OpenCode、全PBR channel、mobile touch、長時間credentialの証拠にしない。
+
 ## 2026-09-06 native-window comparison acceptance
 
 PR #275 merged `0a5596346973bfbc61e4acedd7e06345598b5425`をfetch確認。
