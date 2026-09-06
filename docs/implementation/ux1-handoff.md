@@ -3,6 +3,40 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 external legacy registration persistence foundation
+
+PR #316 merged `c3d1aad1945634c2be980a91de9af62971300bc3` をfetch確認。
+branch `ux1/3d-external-registration-state`。
+resolverにunregister_legacyと明示register_legacy(explicit=True)を追加。
+外部実体は変更せず、registry row除去とlegacy_registration_disabled=trueを
+既存staging/fsync/atomic replace一回で保存。status/startupの再検出は抑止を尊重する。
+active/live参照は拒否、壊れた外部stampの明示再登録はfalseで抑止を保持。
+project pin/fingerprintを扱うorchestratorとUIは次sliceであり、まだ公開操作は追加しない。
+同期registry primitiveはworker threadで呼ぶ前提。新async request経路は追加していない。
+statusに加法的private field、agent/workflow/公開schemas/Hostは変更なし。
+旧registryはそのまま読める。新抑止fieldを持つregistryは旧coreがfail-closedで拒否するため、
+旧版rollbackでは事前registry snapshotも復元する要件をruntime設計へ明記した。
+
+実機script `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_external_registration_e2e.py
+--evidence-dir /data1tb/mf-external-registration-20260906` はexit0 / 5.129秒。
+新しい専用registryのみ書込み。外部参照は既存受入用
+/data1tb/mf-clean-packaged-0.28.32-QBvHfm/feature/runtimes/blender/blender-4.5.9-linux-x64、
+代替managed参照は別の既存受入用/data1tb/mf-long-setup-source-20260906/runtimes/blender。
+両領域の既存registry/実体、本番環境は変更しない。新downloadなし。
+実4.5.9/background/glTF import/export probeは解除前/明示再登録後とも成功。
+解除→resolver再作成/status/自動登録でlegacy非復活、managed active/G8維持、
+明示再登録後のみlegacy復活を確認。registryに外部生pathを保存しない。
+外部6,511 entries中5,580 files/1,168,332,155 Bの実size/SHA/modeとdirectory/link一覧が
+解除後/再登録後に前後一致。observations.jsonへ全inventoryとprobe/statusを保存。
+
+追加unit testsは抑止永続化/明示復帰、active/live拒否、壊れたstamp、
+atomic replace失敗時の旧registry保持、不正bool4例、lock symlink拒否。
+全gate `./mf.sh test`: 1072 passed / 既知warning1 / 152.45秒。diff check成功。
+実file probe/hash証拠とは別で、GUI/HTTP/Settings受入の代用ではない。
+任意外部版・公開管理・project参照保護との統合・signed release/installedはNOT TESTED。
+次は同primitiveをworker threadで呼ぶproject参照/fingerprint付き管理操作と、
+設定の登録解除/再登録導線へ接続する。全体3DS-8/scenario DはPARTIAL。
+
 ## 2026-09-06 runtime removal protection and immutable asset hashes
 
 PR #315 merged `6899713922c3b75232a51514062eb2b777fac9bb` をfetch確認。

@@ -29,6 +29,17 @@ ManagedとExternalを実体・DBの両方で区別する。画面入力から任
 受け取らない。External登録は権限付きのサーバー設定経路で検証し、通常画面にはopaque runtime IDを返す。
 OSで導入したBlenderや他アドオンのruntimeを、勝手にScene用として管理下へ移さない。
 
+既存の固定4.5.9 legacy参照についても「実体削除」と「登録解除」を分ける。
+解除はregistryから参照を外し、同じatomic registry更新に自動登録抑止を記録する。
+status/startupによる再検出では復活させず、明示的な再登録だけで抑止を解除する。
+再登録は現在の設定先とstamp/manifestを再検証し、不正なら抑止を保持する。
+実行参照・active・project pinの保護はmanagedと同様に維持する。
+resolverはlive/activeを保護し、設定orchestratorがproject pinと確認fingerprintを保護する。
+これはサーバー設定で指定済みの固定legacy実体の操作であり、ブラウザから任意pathを受けない。
+registryの加法的private field `legacy_registration_disabled` は省略時false。
+旧coreは未知fieldをfail-closedで拒否するため、解除後に旧coreへrollbackする場合は
+runtime registryの事前snapshotも復元する。外部Blender実体にはmigrationを行わない。
+
 ## 3. runtime配置と既存G8の移行
 
 提案する永続配置（既存Host Featureのdata/cache環境変数を優先）:
