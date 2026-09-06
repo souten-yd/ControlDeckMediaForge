@@ -562,6 +562,16 @@ def test_fullscreen_viewer_locks_only_the_open_modal_background():
     assert 'html:has(#scene-compare-dialog[open]) { overflow: hidden; }' in STYLES
 
 
+def test_failed_material_candidate_stops_loading_both_comparison_panes():
+    prepare = SCRIPT[SCRIPT.index("async function compareMaterialCandidate"):SCRIPT.index("function materialOption")]
+    failed = prepare[prepare.index("catch (error)"):]
+    assert 'if (!state.sceneMaterialCandidate)' in failed
+    assert 'byId("scene-compare-old-status").textContent = sceneText().materialOriginalPreserved' in failed
+    assert 'byId("scene-compare-current-status").textContent = sceneText().materialFailed' in failed
+    assert 'materialOriginalPreserved: "元の版は変更していません。"' in SCRIPT
+    assert 'materialOriginalPreserved: "The current revision is unchanged."' in SCRIPT
+
+
 def test_scene_material_binding_uses_library_assets_and_private_path_free_bridges():
     material = SCRIPT[
         SCRIPT.index("function materialOption"):SCRIPT.index("const ACTIVE_BLENDER_SESSION_STATES")

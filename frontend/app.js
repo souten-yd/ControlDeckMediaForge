@@ -4847,6 +4847,7 @@ const SCENE_TEXT = {
     materialApplying: "画像を割り当て、シーンを検証しています…",
     materialComplete: "画像を割り当てた検証済みの版を保存しました。",
     materialFailed: "画像素材を割り当てられませんでした。",
+    materialOriginalPreserved: "元の版は変更していません。",
     materialNoTargets: "UVマップのあるメッシュがありません。",
     materialNoImages: "ライブラリ画像を選ぶか、この場所の画像を新しく作ってください。",
     materialChoose: "選択してください",
@@ -4929,6 +4930,7 @@ const SCENE_TEXT = {
     materialApplying: "Assigning the image and validating the scene…",
     materialComplete: "Saved a validated revision with the image assigned.",
     materialFailed: "The image material could not be assigned.",
+    materialOriginalPreserved: "The current revision is unchanged.",
     materialNoTargets: "No mesh with a UV map is available.",
     materialNoImages: "Choose a Library image or create a new image for this target.", materialChoose: "Choose…",
     textureTitle: "Create a new image for this target", texturePrompt: "Pattern or surface to create",
@@ -5401,6 +5403,10 @@ async function compareMaterialCandidate(sceneId, binding) {
       state.sceneMaterialPreparing = false;
       byId("scene-compare-restore").disabled = true;
       byId("scene-compare-status").textContent = error?.message || sceneText().materialFailed;
+      if (!state.sceneMaterialCandidate) {
+        byId("scene-compare-old-status").textContent = sceneText().materialOriginalPreserved;
+        byId("scene-compare-current-status").textContent = sceneText().materialFailed;
+      }
     }
   }
 }
