@@ -3,6 +3,60 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-07 v0.28.38 signed bundle and standard update
+
+PR #340 merge/tag target `3832e6fb3483e9f9dda75cdc0975fdd2f96f3570`。
+exact detached /data1tb/ControlDeckMediaForge-release-0.28.38で
+`python3 scripts/build_release_bundle.py --version 0.28.38
+--output-dir /data1tb/mf-0.28.38-build-20260907
+--pyinstaller /data1tb/ControlDeckMediaForge-3ds4/runtimes/bundle-build/.venv/bin/pyinstaller`。
+PyInstaller6.22.0/Python3.12.3、約21秒/exit0。
+artifact31,516,530 B、SHA a4921fd964f638cc4c90e2e7b2196cf934af43dbe7fe5a34500f757fef2ae527。
+展開先 /data1tb/mf-0.28.38-package-2xhjl09u/control-deck-media-forge-0.28.38-linux-x86_64。
+archive6 entries/embedded199、safe paths/types、秘密鍵・venv・モデル重み・制作物なし。
+runtimesはrequirements.txtだけ、embedded frontend/app.jsはexact source bytesと一致。
+core31,778,136 B/SHA5996db3bb5e7c7904cf15d4d0034850192987890d7c5ed68e90a2e6c99b98cbd。
+addon/feature版一致、専用feature data環境を指定したpackaged doctorは
+status=ok/version0.28.38/packaged=true/exit0。
+
+新規専用fixture /data1tb/mf-library-paging-bundle-0.28.38-20260907をseedし、
+mf-library-02838-acceptance/9163でpackageを実起動。
+healthは環境snapshot不在のsetup_requiredで、healthyとは扱わない。
+`3ds_library_paging_e2e.py browser --server-kind bundle --evidence-dir`同rootは
+実Chrome日英320で60/60→5/3→先頭復元、全128 ID一意・全集合、
+横overflowなし/errors0/exit0。synthetic lineageのstandalone bundle試験。
+終了後にexact owned unitだけstopしinactive確認。
+
+既存publisher key（mode0600）で標準sign_release.py sign・自己検証。
+GitHub v0.28.38の4 assetsを公開し、consumer
+/data1tb/mf-0.28.38-public-20260907へ再取得。sha256sum -c OK/buildとcmp一致、
+tag exact commit一致。Host trusted publisherの_verify_signed_releaseでも
+version0.28.38/hash/sizeを照合。鍵内容の出力・global設定変更なし。
+
+直前に本番Job460/GUI23全終端、active working0、runtime操作5 ready/model操作0を確認。
+snapshot /data1tb/mf-0.28.38-pre-update-20260907（directory0700/files0600、
+DB2,822,144 B/integrity ok、registry SHA
+dd43b2e8b6897c9671958c3b4cc2f57dca82969a5d1d8492909761e86636741a）。
+snapshotと本番8テーブル全行一致・registry bytes一致を更新直前に再検査。
+正規registry.update('media-forge')が14.189秒で0.28.37→0.28.38、
+healthy/enabled/requested_enabled=true、exit0。
+更新後もassets/scene_documents/scene_revisions/blender_web_sessions/jobs/
+scene_working_copies/blender_runtime_operations/model_operations全行不変、registry bytes不変。
+current→versions/0.28.38、installed core hashはpackage一致。
+Host PID849052 active/再起動なし。MFの新core process905518/905522を確認。
+
+installed `3ds_library_locale_installed_e2e.py --expected-version 0.28.38`を
+既存real63-child fixtureで--width 320/1280の順に実行、双方exit0。
+証拠 /data1tb/mf-library-real-paging-installed-0.28.38-{320,1280}-20260907。
+実Host opaque iframeで60→3→60→3、63 ID一意・全集合、offset60の日英通知[ja,en]、
+source/filter/関連列/scene/load/session保持、横overflow0/page errors0、scene投影不変。
+言語入力だけfixture、Host通知と素材応答は実経路。新規制作Jobは投入しない。
+終了時Host849052 active、MF905518/905522は生存。素材失敗受入には読み替えない。
+
+製品全gateは版準備で1129 passed/既知warning1/150.44秒、viewer build差分なし。
+本追記は配布実測docsのみ。導入済みの素材失敗表示・再試行受入、全GOAL/scenario matrixは
+引き続きPARTIAL。次はinstalled HTTP/browserの素材失敗工程を元画像保持条件で確認する。
+
 ## 2026-09-07 v0.28.38 material failure display release preparation
 
 PR #339 merge `fcf9676cacc9a24044bcd3a533c889b4c80872be`をfetch確認し、

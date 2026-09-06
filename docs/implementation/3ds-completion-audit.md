@@ -9,7 +9,10 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 正式署名公開・標準updateしLibrary viewerをoverlayなしで受入した。さらにv0.28.20（target `c26f67d`）
 の材質照明・新旧双方のcontext復旧をinstalled受入した。さらに0.28.23（target `22fc2b9`）を
 署名公開・標準updateし採用前候補比較/破棄/採用/復元をinstalledで確認。
-2026-09-06の現在稼働版は0.28.37/healthy（署名公開/consumer検証/標準update14.645秒）。
+2026-09-07の現在稼働版は0.28.38/healthy（署名公開/consumer検証/標準update14.189秒）。
+更新前後8テーブル全行/registry不変、packageの日英320 Library回帰を確認。
+素材失敗表示修正は配布済みだが、同失敗経路のinstalled受入は未実施。
+以下の0.28.37実測は当該版の証拠として保持する。
 更新前後8テーブル全行/registry不変、real63-child Library paging/offset60 locale保持を
 installed320/1280で再受入した。2026-09-07に取消Jobのinstalled retryも追加受入。
 実Host bridgeで既定4.5.9へswitchしても元4.5.13で実Blender成功、finally既定復元、
@@ -19,7 +22,7 @@ installed320/1280で再受入した。2026-09-07に取消Jobのinstalled retry�
 失敗後の両paneがLoadingのまま残る不具合を修正し、日本語320/英語1280で
 旧版・元画像bytes保持、選択保持、再試行・未保存比較・明示採用をassertした。
 証拠 /data1tb/mf-material-retry-browser-fixed-{ja-320,en-1280}-20260907。
-本UI修正の署名配布・installed受入と全失敗matrixは残る。詳細はstatus/handoff。
+本UI修正は0.28.38で署名配布済み。installed失敗受入と全失敗matrixは残る。詳細はstatus/handoff。
 0.28.26ではnative windowで比較入力・不変refreshのDOM保持と全比較/採用/復元を確認した。
 新版の他操作の受入を旧版やcandidateの証拠から推定しない。
 以前の個別実測は維持するが、条件の一部だけの実測から行全体を成功扱いしない。
