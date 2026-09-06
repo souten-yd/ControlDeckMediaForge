@@ -15,7 +15,11 @@ installed320/1280で再受入した。2026-09-07に取消Jobのinstalled retry�
 実Host bridgeで既定4.5.9へswitchしても元4.5.13で実Blender成功、finally既定復元、
 元Job/既存scene/revision不変。4.375秒、Host child succeeded/terminal_sent。
 証拠 `/data1tb/mf-retry-installed-0.28.37-20260907/observations.json`。
-材質故障後retryのHTTP/browserなど全条件は残る。詳細はstatus/handoff。
+材質故障後retryは追加のsource standalone実HTTP/WebSocket/Blender/browserで確認。
+失敗後の両paneがLoadingのまま残る不具合を修正し、日本語320/英語1280で
+旧版・元画像bytes保持、選択保持、再試行・未保存比較・明示採用をassertした。
+証拠 /data1tb/mf-material-retry-browser-fixed-{ja-320,en-1280}-20260907。
+本UI修正の署名配布・installed受入と全失敗matrixは残る。詳細はstatus/handoff。
 0.28.26ではnative windowで比較入力・不変refreshのDOM保持と全比較/採用/復元を確認した。
 新版の他操作の受入を旧版やcandidateの証拠から推定しない。
 以前の個別実測は維持するが、条件の一部だけの実測から行全体を成功扱いしない。

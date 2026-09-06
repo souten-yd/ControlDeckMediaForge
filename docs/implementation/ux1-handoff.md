@@ -3,6 +3,45 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-07 material failure display and browser retry
+
+PR #338 merge `b453e8f546aedd31d963e295f0693908c3b9f96d`から
+branch `ux1/3d-material-retry-browser`。新診断
+`scripts/3ds_material_retry_browser_e2e.py`のserveをMediaForge Python、
+browserを既存Playwright診断Pythonで実行。専用data/loopback9164と既存owned
+Blender4.5.9のread-only参照を使用し、通常.blend upload/importでfixtureを作成。
+過去の実生成PNGを通常importして再利用し、このrunでは画像生成しない。
+初回applyのworker bindingだけ存在しないobjectへ変更し、実Blenderの失敗を発生させる。
+HTTP/WebSocket要求・応答やbrowser表示のmockはしない。locale入力だけfixture。
+
+修正前の日本語320ではretry自体は成功したが、失敗画面の両比較paneに
+「読み込んでいます…」が残る不具合を実画像で発見。pane終端assert追加後の
+英語1280は期待The current revision is unchanged.に対しLoading…で失敗した。
+frontendのcurrent tokenかつ候補不在のcatchだけを修正し、元版不変と割当失敗を
+日英で表示する。採用禁止・詳細error・候補が既にある場合の既存処理は維持する。
+
+修正後browserの--width 320 --locale ja、および--width 1280 --locale enは
+双方observations.json passed=true/page_errors=[]。
+証拠 /data1tb/mf-material-retry-browser-fixed-ja-320-20260907 と
+/data1tb/mf-material-retry-browser-fixed-en-1280-20260907。
+失敗後busy解除/採用不可/両pane終端表示、旧scene全投影と元image/source/previewの
+実HTTP bytes SHA不変、閉じた後の対象・画像・slot/channel/UV選択保持をassert。
+同じ割当buttonで再試行して2 pane描画、採用前は旧版不変、明示採用後だけ2版になり、
+旧revision不変・同じ画像dependency・元3 Asset hash不変・横overflow0を確認した。
+日本語修正後failed.pngでも終端文言を目視確認した。
+終了後のread-only DB照合では日英ともJobはmedia.inspect3件のみ、画像生成/編集0、
+working copyはcommitted1件・active0、material-previews配下0件。
+これは停止後の検査であり、停止前のcleanupを追加実測したとはしない。
+
+検証serverはsource standaloneでhealth=setup_required（環境snapshot不在）。
+installed Host/新画像生成/Agent retry_job_id/全失敗matrixの証拠ではない。
+英語serverはbrowser完了後、RuntimeMaxSec=300に達してsystemdが停止したことを
+journalで確認（timeout）。現在inactive、稼働製品serviceを停止・変更していない。
+本修正の署名配布・installed受入は未実施。GOAL-07/3DS-8はPARTIALを維持する。
+node --check、script py_compile、git diff --check成功。
+全 `./mf.sh test`: 1129 passed/既知warning1/509.91秒、exit0。
+次はこの修正を通常PRでmergeし、署名bundle・installed受入へ進む。
+
 ## 2026-09-07 installed retry keeps original Blender after default switch
 
 PR #337 merge `4479d72f1d444b1bd0af38dd990cacb105462969`から
