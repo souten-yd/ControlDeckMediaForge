@@ -36,6 +36,13 @@ installed320/1280で再受入した。2026-09-07に取消Jobのinstalled retry�
 
 ## 利用者ゴール別
 
+2026-09-07 installed0.28.38 GUI child crash追加:
+自分の新sessionのcgroup/executableを照合したBlender PID938903だけをPID fdでSIGKILL。
+5.266秒でrunner_lost、3 PID/cgroup/root/socket回収、durable実行参照全0。
+450,236 Bのcandidateと同hashで別scene初版を検証済み確定、元scene/候補bytes不変。
+証拠 /data1tb/mf-gui-child-crash-cleanup-installed-20260907。
+手入力/RFB/GPU/idleの証拠ではない。保存競合の証拠と合わせても全C/GOAL-09はPARTIAL。
+
 2026-09-06 installed real paging追加: 通常Agent作成/編集と正規revision restore61回で
 専用scene1件/63版を生成。synthetic DB挿入なし、既存scene/revision metadata全件不変。
 実installed0.28.36の1280/320で初版sourceのchildren63を60→3→60→3、全ID集合/一意、

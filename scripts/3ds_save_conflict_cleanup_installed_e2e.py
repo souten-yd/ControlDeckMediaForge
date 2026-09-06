@@ -1,7 +1,8 @@
-"""Installed GUI save conflict: terminal cleanup and recovery fork.
+"""Installed GUI failure: terminal cleanup and recovery fork.
 
 Host diagnostic Python. Only an explicitly named retained mf-e2e material
-conflict scene is advanced. No process signals, runtime changes or core restart.
+conflict scene is advanced in save-conflict mode. Explicit blender-crash mode
+signals only this run's verified Blender child through a PID fd. No core restart.
 """
 from __future__ import annotations
 
@@ -9,14 +10,14 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
+import signal
 import sqlite3
 import subprocess
 import time
 from typing import Any
-
-from playwright.sync_api import sync_playwright
 
 ACTIVE = {"queued", "preparing", "starting", "ready", "saving", "stopping"}
 DATA = Path("/data1tb/ControlDeck/data/feature-data/media-forge/data")
@@ -27,7 +28,27 @@ def record(session_id: str) -> dict[str, Any]:
         return json.loads(db.execute("select value_json from blender_web_sessions where id=?", (session_id,)).fetchone()[0])
 
 
+def crash_owned_blender(cgroup: Path, pids: list[int], runtime_id: str) -> int:
+    """Pin the process identity before rechecking executable and cgroup ownership."""
+    targets = [pid for pid in pids if (Path(f"/proc/{pid}/exe").resolve().name == "blender")]
+    assert len(targets) == 1
+    pid = targets[0]
+    fd = os.pidfd_open(pid)
+    try:
+        executable = Path(f"/proc/{pid}/exe").resolve(strict=True)
+        runtime = DATA.parent / "runtimes/blender" / runtime_id
+        assert executable.name == "blender" and executable.is_relative_to(runtime.resolve(strict=True))
+        members = {int(value) for path in cgroup.rglob("cgroup.procs") for value in path.read_text().split()}
+        assert pid in members
+        signal.pidfd_send_signal(fd, signal.SIGKILL)
+    finally:
+        os.close(fd)
+    return pid
+
+
 def main() -> None:
+    from playwright.sync_api import sync_playwright
+
     from app.database import SessionLocal
     from app.features import registry
     from app.models import User
@@ -37,6 +58,7 @@ def main() -> None:
     parser.add_argument("--scene-id", required=True)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash"), default="save-conflict")
     args = parser.parse_args()
     assert re.fullmatch(r"scene_[0-9a-f]{32}", args.scene_id)
     installed = registry.status("media-forge")
@@ -49,7 +71,7 @@ def main() -> None:
     helpers = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helpers)
     evidence: dict[str, Any] = {"version": args.expected_version, "scene_id": args.scene_id,
-        "mode": "installed_real_gui_save_revision_conflict", "page_errors": []}
+        "mode": "installed_real_gui_" + args.failure_kind, "page_errors": []}
     with SessionLocal() as db:
         user = db.query(User).filter(User.username == "mf-e2e").one()
         assert user.is_active
@@ -93,6 +115,7 @@ def main() -> None:
                 owned = record(session_id)
                 unit = owned["unit_id"]
                 assert re.fullmatch(r"mediaforge-blender-[0-9a-f]{32}\.service", unit)
+                assert unit == "mediaforge-blender-" + session_id.removeprefix("blendersession_") + ".service"
                 result = subprocess.run(["systemctl", "--user", "show", unit, "--property=ControlGroup", "--value"],
                                         check=True, capture_output=True, text=True, timeout=10)
                 cgroup = Path("/sys/fs/cgroup") / result.stdout.strip().lstrip("/")
@@ -104,16 +127,21 @@ def main() -> None:
                 root = DATA / "sessions/blender" / session_id
                 socket = Path("/run/user/1000/mediaforge-blender") / (session_id.removeprefix("blendersession_")[:16] + ".sock")
                 assert root.is_dir() and socket.is_socket()
-                # Regular restore advances only this dedicated scene while its GUI owns the old base.
-                call("scenes.revisions.restore", {"scene_id": args.scene_id,
-                    "base_revision_id": before["scene"]["current_revision_id"],
-                    "target_revision_id": before["revisions"][0]["id"]})
+                if args.failure_kind == "save-conflict":
+                    # Only this dedicated scene advances while its GUI owns the old base.
+                    call("scenes.revisions.restore", {"scene_id": args.scene_id,
+                        "base_revision_id": before["scene"]["current_revision_id"],
+                        "target_revision_id": before["revisions"][0]["id"]})
                 advanced = call("scenes.get", {"scene_id": args.scene_id})
                 began = time.monotonic()
-                call("blender.sessions.save", {"session_id": session_id})
+                if args.failure_kind == "save-conflict":
+                    call("blender.sessions.save", {"session_id": session_id})
+                else:
+                    evidence["signaled_blender_pid"] = crash_owned_blender(cgroup, pids, owned["runtime_id"])
                 failed = wait({"failed", "interrupted"})
-                evidence["save_terminal_sec"] = round(time.monotonic() - began, 3)
-                assert failed["error_code"] == "scene_revision_conflict", failed
+                evidence["terminal_sec"] = round(time.monotonic() - began, 3)
+                expected_error = "scene_revision_conflict" if args.failure_kind == "save-conflict" else "blender_session_runner_lost"
+                assert failed["error_code"] == expected_error, failed
                 assert failed["result"]["saved"] is False
                 working_id = failed["result"]["recovery"]["working_id"]
                 assert re.fullmatch(r"working_[0-9a-f]{32}", working_id)
@@ -134,7 +162,7 @@ def main() -> None:
                 evidence.update(passed=True, ready=ready, failed=failed, recovered=recovered,
                     candidate_sha256=digest, candidate_bytes=candidate.stat().st_size,
                     process_cgroup_root_socket_reclaimed=True,
-                    not_tested=["manual GUI edit", "RFB connection", "GPU lease", "worker crash", "idle timeout"])
+                    not_tested=["manual GUI edit", "RFB connection", "GPU lease", "batch worker crash", "idle timeout"])
             finally:
                 if session_id and record(session_id)["state"] in ACTIVE:
                     call("blender.sessions.stop", {"session_id": session_id})
@@ -144,7 +172,7 @@ def main() -> None:
         with SessionLocal() as db:
             revoke_session(db, token)
         (args.evidence_dir / "observations.json").write_text(json.dumps(evidence, indent=2) + "\n")
-    print(json.dumps({k:evidence[k] for k in ("passed", "session_id", "save_terminal_sec", "candidate_bytes")}))
+    print(json.dumps({k:evidence[k] for k in ("passed", "session_id", "terminal_sec", "candidate_bytes")}))
 
 
 if __name__ == "__main__":
