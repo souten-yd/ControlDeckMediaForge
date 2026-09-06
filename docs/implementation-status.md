@@ -1,5 +1,26 @@
 # Media Forge implementation status
 
+## 2026-09-06 v0.28.35 history-preserving management release preparation
+
+PR #325 merged `da9da4c2347ed5b8d9c856bdf23724022bfe1993`をfetch確認。
+branch `ux1/3d-history-v02835`。addon/coreを0.28.35へ同期し、release noteに
+履歴確認・同版再導入・稼働保護とrollback条件を記載した。
+installed Settings受入scriptへ任意--require-history-confirmationを追加。
+本番runtimeを削除せず、inactive旧版の確認既定off/チェック時enabled/再open時off、
+active版の削除拒否とruntime status全体不変を要求する。旧版向け既存挙動も維持する。
+
+公開latest/本番installedは0.28.34、標準registry.statusでhealthy/enabled/requested_enabled=true。
+本番Host/MF PID250878・244551/active、currentはversions/0.28.34。
+read-only SQLiteで396 Jobs全終端（262 succeeded/126 failed/8 canceled）、
+GUI23終端（17 stopped/4 interrupted/2 failed）、runtime ops3 ready/model ops0。
+working copyはcommitted29/recovery3/released8、activeなし。
+この時点では本番update/restartや新署名公開を実行していない。
+版準備gate `./mf.sh test`: 1125 passed/既知warning1/186.39秒。diff check成功。
+
+次はexact merge headから軽量bundle、専用packageで確認/削除/再導入受入、
+署名公開・consumer検証・標準update・installed確認へ進む。
+3DS全体はPARTIAL、これまでのsource受入をinstalledの証拠にしない。
+
 ## 2026-09-06 history removal restart and Settings acceptance
 
 PR #325 candidate head `7e81f7e`を確認して継続。追加7 tests:
