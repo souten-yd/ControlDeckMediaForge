@@ -3,6 +3,27 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-07 lifecycle evidence mapping
+
+PR #345 merge `ddfd37ccaa34f9f207f00faa14dd296ffd882ad3`から
+branch `ux1/3d-lifecycle-evidence-map`。設計PR #213のmerged状態とorigin/mainを再確認。
+[原因別証拠表](3ds-lifecycle-evidence.md)にscenario Cの全項目を分離した。
+8 raw observationsのread-only監査は
+`/data1tb/mf-lifecycle-evidence-audit-20260907/observations.json`、passed=true。
+9 revision JSONと現在DB、21 Asset/24,128,377 BのSHA/size/provenanceを照合済み。
+再開後のPython sqlite mode=ro検査も全21実ファイルhash/size/sidecarと9版ID存在がPASS。
+`.30` raw eventsはheld_sec480.340でconnections2、660.433までconnected、
+671.862秒でsame_session/gui_edit_saved=true、672.072秒で診断login revokeを記録。
+
+`.14-long`の入力/版増加だけでは形状変更を証明できないため、GOAL-04の編集証拠を
+成功した`.28-gui-canvas`の4→8 meshes/保存第7版/復元第8版へ修正した。
+機能を撤回したのではなく、対応する実測証拠を明確化した。
+C/GOAL-09はPARTIAL。次は実background hidden→visibleと手編集保存、
+その後に未保存編集の回収量を専用sceneで実測する。既存の故障試験を一律に繰り返さない。
+本sliceは文書のみ。service restart、runtime/global設定、制作データへの書込はなし。
+全 `./mf.sh test`: 1133 passed/既知warning1/157.84秒、exit0。
+新規相対リンクの実在確認とgit diff --checkはPASS。アプリ/GPU実機の再試験ではない。
+
 ## 2026-09-07 installed default disconnect grace acceptance
 
 PR #344 merge `7602b678c1719588ca66c2452a5ad4f662096717`から
