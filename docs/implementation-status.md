@@ -1,5 +1,13 @@
 # Media Forge implementation status
 
+## 2026-09-06 Release 0.28.29 preparation
+
+PR #286 merge `05e556f1232d8bb943f2d519a6daa1e5e5be07c4`後、addon/core versionを0.28.29へ同期。
+Web Blender primary navと共通Library formats/lineageを同じ既存MediaForge bundleへ載せる。
+この版数slice時点では署名公開/標準update/installed受入はNOT TESTED。稼働0.28.28を維持。
+gate `./mf.sh test`: 1052 passed / 既知warning1 / 117.71秒。利用者のBlender Skills連携依頼を優先し、
+branchをcommit/pushして公開前に中断。release PR/merge/tag/build/sign/installは未実施。
+
 ## 2026-09-06 Common Library formats and lineage — source acceptance
 
 PR #285 Web Blender navigationは通常merge `ae9ed17f77ddd39df9b3236db4bdbfcd6dbbe11d`を確認。
