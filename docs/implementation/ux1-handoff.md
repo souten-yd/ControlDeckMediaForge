@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 release 0.28.32 preparation
+
+PR #302 merged `b9cf655d113a4a58df9df60f79091fa2471f287c`確認。
+branch `ux1/release-0.28.32`。mobile runtime touch targetのCSS修正を配布する版数更新。
+公開契約/DB/runtime変更なし。新releaseの署名公開/標準更新/installed positiveは未実施。
+次は版数PRを通常mergeしexact mergeからbundle構築、署名公開/再取得検証/標準更新を行う。
+再開するinstalled受入は `3ds_settings_protection_installed_e2e.py --expected-version 0.28.32
+--require-readable-layout --require-touch-targets --probe-geometry --locale <ja|en>`。
+全体3DS-8と入力不達原因は未完了を維持する。
+gate `./mf.sh test`: 1054 passed / 既知Starlette warning1 / 115.02秒。diff check成功。
+
 ## 2026-09-06 runtime touch-target correction from installed geometry
 
 PR #301 merged `f288ea01ae215c2167e5e0628799db7886ac320d`確認。
