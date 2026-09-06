@@ -36,6 +36,13 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 ## 必須シナリオ別
 
+2026-09-06削除追加: `/data1tb/mf-runtime-removal-resume-20260906/observations.json`。
+専用source HTTPで旧4.5.9のGUI ready/停止後ともproject参照によりremove POST422。
+未参照4.5.13だけ削除成功（1,167,187,993 B）、旧版/scene/revisions/全6 Asset filesの
+実bytes size/SHA保持、GUI unit inactive/MainPID0、2.008秒exit0。
+この領域に個別画像Assetはない。旧A停止後の削除はproject pin保護が拒否するため、
+未参照B削除をA削除の成功へ読み替えない。External解除経路の実装差分も残る。
+
 2026-09-06 scenario D追加証拠: source専用HTTP/実Blenderで候補4.5.13のprobeを
 意図的に不合格にし、旧4.5.9のactive/実probe/GUI接続を維持。正常probe再試行で
 新版ready/active後も同GUIは旧版にpinされた。67.985秒exit0。
