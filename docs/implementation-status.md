@@ -1,5 +1,38 @@
 # Media Forge implementation status
 
+## 2026-09-06 installed 0.28.31 Settings layout / pointer recheck
+
+PR #299 merged `0634094d2815333def72f82f9a63d9e9e2e0355d`確認。
+branch `ux1/3d-settings-pointer-acceptance`。製品/Host変更なし。
+既存 `scripts/3ds_settings_protection_installed_e2e.py` にpointerdown/up/click到達先、
+実window/対象button寸法、preview受信/dialog open、失敗時も含む撮影を追加。
+診断用 `--native-viewport` はviewport emulationを行わず、desktopだけを検査する。
+
+Host診断venv/PYTHONPATH/CONTROL_DECK_CONFIGと稼働XwaylandのDISPLAY=:0/
+XAUTHORITYを指定し、同scriptに `--expected-version 0.28.31 --require-readable-layout` を渡した。
+`/data1tb/mf-settings-pointer-emulated-0.28.31-20260906` はexit0。
+desktop Host1280/iframe1056、root1041/1041、text715.484/857.766px。
+mobile iframe320/root305/305、runtime2行ともtext255px。両runtimeのpointer3種が子frame BUTTONへ到達、
+preview受信/dialog open=true、参照数2/23で削除不可、確認button hidden、戻る操作成功。
+runtime status/operation前後一致、page errors0。320px screenshotを目視し説明・確認画面を確認。
+
+追加診断がtimingへ影響した可能性を切り分けるため、exact release worktree
+`/data1tb/ControlDeckMediaForge-release-0.28.31` の**未変更script**を同引数で再実行。
+証拠 `/data1tb/mf-settings-original-repeat-0.28.31-20260906`、exit0。
+同じdesktop/mobile寸法、preview4件、runtime不変、page errors0。
+診断scriptの `--native-viewport` も
+`/data1tb/mf-settings-pointer-native-0.28.31-20260906` でexit0。
+実window inner1248x835/outer1280x964、iframe1014、root999/999、
+2 runtimeの実pointer到達/削除保護/戻る、runtime不変、page errors0。
+全試験で個別login revoke/password不変、削除送信/scene書込/overlayなし。
+終了時Host PID2078/MF PID29462 active不変。
+
+前回dialog hiddenの原因は再現できず未確定。これを認証不具合や修正済み製品bugとは呼ばない。
+0.28.31のmobile Settings layoutとproject参照削除保護は上記再実行範囲で受入。
+日英Host locale切替、空環境install、scenario D全体の成功には拡大しない。
+次はinstalled Host localeを通した日英Library/Settingsの受入を進める。全体3DS-8はPARTIAL。
+gate `./mf.sh test`: 1054 passed / 既知Starlette warning1 / 130.64秒。diff check成功。
+
 ## 2026-09-06 v0.28.31 signed release / installed browser acceptance incomplete
 
 branch `ux1/3d-release-0.28.31-acceptance`。PR #298 merged
