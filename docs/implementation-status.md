@@ -1,5 +1,41 @@
 # Media Forge implementation status
 
+## 2026-09-06 Library live locale bridge acceptance
+
+Host PR #294 merge `2fafa2d4256b14108a4beddd6b414491af53bd24`は
+frame/device/Jobs streamの構造化終了処理。全1022 passed/2 skipped/154.50秒と、
+専用systemd実WebSocketの20回text/binary切断+故障1回、残存direction0を確認してmerge。
+Host PR #293 merge `3f718782ec759a3813f764e76fa741ad164eb32d`は汎用languagechange購読/
+locale.changed通知。関連内容はHost implementation-status。Media固有Host codeなし。
+
+再開時Hostは別作業PR #295のrestart中（PID407562/deactivating）。
+こちらから停止/再起動せず、PID612020/activeへの遷移をread-only確認。
+新script `scripts/3ds_library_locale_installed_e2e.py`を既存Host診断Pythonで実行。
+専用mf-e2e sessionだけを作りfinally revoke、password/scene/runtimeを変更しない。
+ブラウザ入力としてnavigator.language + languagechangeを与えるが、bridge eventや
+workspace responseは合成しない。受信portは記録して元handlerへ渡すだけ。
+
+まず隔離Host Vite5179（マージ済みfrontend、/apiと/addon-frameは本番8765へproxy）から
+installed MF0.28.35へ接続。320/1280ともja→en、実locale.changed受信2件、
+選択source/offset0/filter/関連ID列/load時刻/nonce/scene選択不変、scene全体不変、
+opaque origin null/page errors0を確認。
+証拠 `/data1tb/mf-library-live-locale-candidate-{320,1280}-20260906`。
+320英語screenshotも実画像で確認。candidate Host UIとinstalled MFを区別する。
+
+別作業の変更がPR #295へmergeされcanonical Hostがcleanとなったこと、
+HEAD697f94c→origin/main3f71878がfrontend/docsだけ（backend差分0）を確認。
+Host canonicalをfast-forwardし標準frontend build44.03秒成功（既知chunk warning）。
+実8765のHTMLはindex-CC8QHKQj.jsを参照。Host612020/MF396381のPID不変/active、
+こちらからservice restartなし。
+続いて本番URL8765で320/1280を同script（--candidate-host-uiなし）で実行し双方exit0。
+証拠 `/data1tb/mf-library-live-locale-installed-{320,1280}-20260906`。
+両幅で実locale.changed [ja,en]、日本語/英語の詳細labelとLibrary filter label再描画、
+source asset_53a56a66f4384ecdb8506f0f9529ffa6/offset0/filter/関連ID列/load/nonce保持、
+scene全体不変/page errors0。1280日本語screenshotも実画像で確認した。
+専用Vite PID613280はSIGINT/exit130で停止。
+全 `./mf.sh test`: 1126 passed/既知warning1/236.66秒。script py_compile/diff check成功。
+GOAL-01の60件超installed pagingと、実ブラウザ設定UIからの言語変更は未検証。
+
 ## 2026-09-06 Library default-page boundary acceptance and English fallback
 
 PR #327 merged `6bd004d7e8f24605e6ee7b376cf3e27670b2f0e8`を確認。
