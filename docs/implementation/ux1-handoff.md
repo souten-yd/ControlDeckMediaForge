@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 Host terminal history prerequisite
+
+前回PR #249はmerged `a4b7014`。汎用Host PR souten-yd/ControlDeck#275もmerged `40f1bc0`。
+Host再起動後にAdd-onからDB履歴へ到達できない問題はMediaForge内で解けないため、別worktree
+`/data1tb/ControlDeck-job-history`でJob control読取だけを修正。メモリ不在の終端履歴をowner/Job/Add-on
+scope検証後に返す。非終端履歴は409、refresh/updateは404を維持し、終端を上書きしない。
+
+Host full test 951 passed / 1 skipped / 66.76秒、最新main取込後focused37 passed / 3.49秒。
+隔離systemd processでDB running→通常startup recovery→interrupted、実HTTP control200、別Job403、
+refresh404、update404、DB終端不変を確認。証拠`/tmp/cd-job-history-nzou5ckt/observations.json`。
+試験unitは停止済み。Hostの並行UI作業・稼働serviceには触れていない。
+
+**未完了**: 導入済みHostへの適用、MediaForge outbox再送/照合、600秒超credential受入。
+新規OpenCode callのJob subjectは旧child Jobへ委譲されないため、actor ownerが一致するだけで
+既存job-scope検証を迂回しない。正規identityが戻った後の再送と、Host既存終端の照合結果を
+区別する必要がある。単なる履歴読取やinterrupted照合を`host_terminal_sent=true`に読み替えない。
+次はこのauthorityを保つ汎用Host終端照合契約とMediaForge永続outbox consumerを実装する。
+全体3DS-8は引き続きPARTIAL、導入済みMediaForge v0.28.16は変更なし。
+この引き継ぎ更新の`./mf.sh test`: 993 passed / 既知warning1件 / 105.30秒。
+
 ## 2026-09-06 child credential acceptance / Host interruption
 
 branch `ux1/3d-credential-refresh-acceptance`、基準main `9ff49ac`。導入済みv0.28.16は変更なし。
