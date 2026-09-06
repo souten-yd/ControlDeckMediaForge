@@ -3,6 +3,27 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.36 Library release preparation
+
+PR #329 merge `7cbd8c4697e15a2efb8f6400ce8436fce224341f`をfetch確認。
+branch `ux1/3d-library-v02836`。addon/coreを0.28.36に同期。
+PR #328の英語Validation空欄/読み込み中Details修正を配布へ進める。
+新release noteはschema変更なし、0.28.35 rollback互換、全3DS-8 PARTIALを明記。
+paging受入scriptにbase-url/server-kindを追加し、sourceとbundleの証拠を区別する。
+
+`PYTHONPATH=backend:tests:. .venv/bin/python scripts/3ds_library_paging_e2e.py seed
+--evidence-dir /data1tb/mf-library-paging-bundle-0.28.36-20260906`で専用Storeへ
+親PNG65/source .blend1/child GLB63を作成。source asset_6dfed1fc3e0241a2a2896ebd9c531501。
+既存owned実bytesを再利用したsynthetic lineageで、新Blender制作でも本番DBでもない。
+script py_compile/diff check成功。バンドルのbrowser受入はまだ実行していない。
+
+本番read-only: installed currentは0.28.35。Jobs396全終端（262 succeeded/126 failed/8 canceled）、
+GUI23全終端（17 stopped/4 interrupted/2 failed）、runtime ops3 ready/model ops0、
+working copy committed29/recovery3/released8、active0。
+runtime registry SHA dd43b2e8b6897c9671958c3b4cc2f57dca82969a5d1d8492909761e86636741a不変。
+Host612020/MF396381 active。Hostのllama.py/test_llama_kv_capacity.pyは別作業で保全。
+全 `./mf.sh test`: 1126 passed/既知warning1/187.16秒。新tag/署名/公開/標準updateは未実施。
+
 ## 2026-09-06 Library live locale bridge acceptance
 
 Host PR #294 merge `2fafa2d4256b14108a4beddd6b414491af53bd24`は
