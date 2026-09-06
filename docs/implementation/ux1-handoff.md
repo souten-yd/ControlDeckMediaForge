@@ -3,6 +3,27 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 long setup acceptance — RUNNING, not accepted yet
+
+PR #293 merge `ba4432b80bca225005d562089ad9984028a3c86f`を確認。
+branch `ux1/3d-long-setup-acceptance`。製品/Host/TTL変更なし。
+BlenderRuntimeManagerはHostIdentity/Host clientを保持せず、durable operation IDで動く。
+setupはHost child Jobではなく、開始/状態取得/取消の各入口と転送継続を分けて受入する必要がある。
+新`3ds_long_setup_source_e2e.py`は固定4.5.9実archive377,929,956 Bをmanifestのsize/SHAで確認し、
+隔離source Uvicornの実loopback HTTPからinstall/状態/health/取消/再installを操作する。
+archive配信のみhttpx fixtureで64KiB/秒に制御。Blender展開・検証・probeは実物を使う。
+これは実Host credential更新、外部回線download、設定browser UIの受入ではない。
+
+実行: `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_long_setup_source_e2e.py
+--data-dir /data1tb/mf-long-setup-source-20260906
+--archive /data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9/downloads/blender-4.5.9-linux-x64.tar.xz`。
+PID62708/tool session67258、operation `blenderop_5c6383c803304ba8acfb76f728e2c521`。
+60.249秒でdownloading/3,866,624 B、HTTP health成功。Host PID2196/MF PID31432 activeで不変。
+現在RUNNING。10分超取消/再導入の成功は未確定。同じhandle/PIDを確認し、観測途絶だけで再起動しない。
+証拠 `/data1tb/mf-long-setup-source-20260906/observations.json`。scriptは終了まで同fileへ追記する。
+次はこのrunの終端/実probe結果と残存operationを確認する。全体3DS-8/Scenario EはPARTIAL。
+gate `./mf.sh test`: 1053 passed / 既知warning1 / 110.22秒。script含む差分はcommit/pushして保持する。
+
 ## 2026-09-06 RFB credential renewal — existing installed path verified
 
 branch `ux1/3d-rfb-credential-renewal`、baseはPR #292 merge `56c9e40`。
