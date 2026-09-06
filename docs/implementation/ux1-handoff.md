@@ -3,6 +3,42 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-07 installed Blender child crash cleanup
+
+PR #343 merge `9cbe729241460cc3b3da607fca4509dedffa363c`から
+branch `ux1/3d-gui-child-crash-cleanup`。既存GUI診断へ明示
+--failure-kind blender-crashを追加（既定save-conflictを維持）。
+`scripts/3ds_save_conflict_cleanup_installed_e2e.py --scene-id
+scene_3f3b5f1e97e94b268722ea45cc811c50 --expected-version 0.28.38
+--failure-kind blender-crash --evidence-dir /data1tb/mf-gui-child-crash-cleanup-installed-20260907`
+をHost診断Pythonで実行、passed=true/exit0。
+
+自分で新規起動したsession blendersession_af9c9b2b932f48088eba5023ede344faの
+unit mediaforge-blender-af9c9b2b932f48088eba5023ede344fa.serviceをIDで照合。
+ready時のcgroup.procsは938854/938858/938903。
+Blender実行ファイルの候補が1件だけであることを調べ、PID fdを開いてから
+実行ファイルが同managed runtime配下であることと同cgroup所属を再確認し、
+PID938903のfdだけへSIGKILLを送った。unit全体やHost/core/他Blenderへsignalしない。
+PID再利用による誤対象化を防ぐため、送信はpidfd_send_signalを使用する。
+
+実製品がblender_session_runner_lostとして5.266秒でfailed/saved=falseへ遷移。
+ready時に実在した3 PID/cgroup/session root/RFB socketが終端応答後に全て不在。
+元scene第4版の全投影は不変。復旧candidate450,236 B、
+SHA70665510ca9742db744858ce63b3b9092cb93e9569281bca1745ff157d2d945fを保持。
+通常scenes.recovery.forkで別scene_4538f2f3d6f65d548682f35a2c34aac0へ検証済み初版を確定し、
+新source実bytesと候補hash一致、元候補bytes/元scene不変をassert。page errors0。
+GUIへの手入力やRFB接続はなく、未保存手編集量の復旧範囲を測ったとはしない。
+
+終了後read-only実行参照（recipe_jobs/working_copies/sessions/unresolved_sessions）は全て0。
+Host849052 active/MF905518/905522はPID不変、service restart/runtime/global設定変更なし。
+新sceneと復旧候補は保持し、専用login sessionだけfinally revoke。
+診断helperの追加4 testsは対象一致時だけfdへsignalし、外部runtime・cgroup不一致・複数候補では
+signal0/開いたfd解放を検証する。Playwright importをmain内へ移してcore testの依存を増やさない。
+本番codeは変更せず、batch worker crash/GPU lease/idle/RFB入力の受入へ広げない。
+GOAL-09/C/3DS-8全体はPARTIAL。次は残る終端原因・資源予約の証拠を照合する。
+最終script py_compile/diff check成功。
+全 `./mf.sh test`: 1133 passed/既知warning1/162.99秒、exit0。
+
 ## 2026-09-07 installed GUI save conflict cleanup and recovery fork
 
 PR #342 merge `ed1329a2f629dbbec854f6a5cd0f4e303f58b0eb`から
