@@ -59,7 +59,15 @@ web pack/GUIを含むscenario A全体の成功には拡大しない。
 続く同じ専用package0.28.32のG8実HTTPでは、同cube GLBからJob成功/ZIP44,745 B、
 3 entriesのsize/hash/CRC、Provenanceと元素材の対応、PNG、GLB、12 trianglesを照合した。
 証拠 `/data1tb/mf-clean-g8-package-0.28.32-20260906/observations.json` と実ZIP。
-元scene/GLB不変。scenario AのBlender不在時画像実行/Library・Host初回導入は残る。
+元scene/GLB不変。このrunだけではBlender不在時画像実行/Library・Host初回導入は未確認。
+
+2026-09-06追加: signed0.28.33の専用data/空Blender registryで実画像生成とLibrary表示を確認。
+証拠 `/data1tb/mf-no-blender-image-0.28.33-20260906`。既存MF画像venv/HF cacheを明示流用し、
+Host診断用service credentialから実HTTP/Host Job/Brokerを通す。449.484秒、FLUX.2-klein、
+PNG256x256/45,160 B、provenance/output hash一致、Blender status前後不変。
+Host/local succeeded、gpu0 lease activate/renew36/release、released receipt、worker終了を照合。
+日本語320px実ChromeのLibrary画像1件を目視確認。全runtime空のclean installや通常Host
+初回認証・セットアップはこの専用環境から推定しない。scenario A/F全体はPARTIALを維持。
 PR #294でsetupの隔離source HTTP/低速archive fixtureを実行。631.247秒取消、652.011秒再導入ready、
 実Blender4.5.9/glTF入出力probe成功、終端2 operation/空stagingを確認した。
 実archive/hash/展開は実物だが転送はfixture。実Host認証/外部回線/設定browserの残件は閉じない。

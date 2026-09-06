@@ -1,5 +1,59 @@
 # Media Forge implementation status
 
+## 2026-09-06 Blender-absent real image generation and Library
+
+PR #313 merged `9dc22b7fa542d759291a3fb001b1f5d001aed2fd` を確認。
+branch `ux1/3d-no-blender-real-image`。
+新scripts/3ds_no_blender_image_e2e.pyは既存署名0.28.33専用processへHTTPを送り、
+実model provenance/PNG/hash、Blender不変を確認する。製品/Host/契約変更なし。
+専用root `/data1tb/mf-no-blender-real-0.28.33-xLNyee`、feature/cache/absent-legacy、
+port9161、package `/data1tb/mf-0.28.33-package-dOeUsF/control-deck-media-forge-0.28.33-linux-x86_64/bin/mediaforge`。
+画像だけ既存MF管理venv
+`/data1tb/ControlDeck/data/feature-data/media-forge/runtimes/rocm-torch/.venv/bin/python`と
+HF_HOME `/data1tb/ControlDeck/data/cache/huggingface` を明示参照。
+Blender runtime/operation0、active null、base/web missing。新重み取得/provisionなし。
+
+認証setupはHost診断Pythonで既存mf-e2eのactive/workflows.runを確認し、
+Host proxy標準_service_headersで短命service credentialを発行、子MF core Pythonの
+MF_ACCEPTANCE_AUTHORIZATION環境変数だけで渡した。tokenを印字/証拠/global configへ保存しない。
+repo内の新scriptはHost内部をimportせず、実Host introspection/Job/Brokerを使用。
+これは診断用に発行した有効権限であり、通常installed browser/proxy認証の受入ではない。
+script command: --evidence-dir /data1tb/mf-no-blender-image-0.28.33-20260906。
+実POST /addon/v1/workflow/execute、image.generate/auto/256x256/steps4/seed73/local_only。
+local Job `job_a6ea97330a684034bf4404a6a3e82cde`、
+Host Job `0b952daf7e20`、449.484秒exit0。
+73.346秒waiting_resource、75.351秒starting、76.356秒running/generating、
+449.458秒succeeded。遅延の内訳は未診断。再投入・性能設定の変更なし。
+
+Asset `asset_1a1a19d02f344caa8d7f738ef7c75cc2`、
+PNG45,160 B、SHA `1ed7bf93ca6c4c0d3ed50aac7ad90c04288d0cf3dfffac38f397ee701e6ba542`。
+実PNG decode/256x256/asset-provenance-output hash一致、実画像を目視（青い陶器cube）。
+diffusers.flux2-klein0.40.0/FLUX.2-klein-4B/Apache-2.0、
+weights SHA f3fcfa8fdaf5ebcd26c33cd53b485ec5ebe54939b5ace585b3f488278dfae278。
+Blender status API全体前後一致、Library assetsは生成した1件のみ。
+同専用packageの実headed Chrome日本語320pxで/library直開き、画像1件/空表示なし、
+naturalWidth/Height160、page errors0。library-320.pngを目視確認。
+ブラウザ観測は診断inline Playwright、出力は同dir/library.json。
+
+実Host DBの対象Job/auditだけをhost-terminal.jsonへ記録しsucceededを照合。
+Resource request `f8e5901e-d589-49a0-9abc-57637c164c92`、
+lease `7d35d2de-4126-43b2-b48d-68e25a4380fd`、
+request1/activate1/renew36/release1がsuccess。
+専用loginから実GET /api/v1/resourcesで対象Jobだけを抽出しresource-receipt.jsonへ記録、
+gpu0/shared-safe/26,048,477,593 B、lease releasedを確認。login finally revoke。
+実GPU total34,208,743,424 B、観測時used21,136,957,440 B（peakとは呼ばない）。
+image worker PID189754は終端確認時に消失。
+package PID187688は停止確認時すでに消失、tool exit143と正常shutdownログ。
+その後のSIGINT送信はNo such process。停止発信元未確認であり自分のSIGINT成功とは書かない。
+本番Host2078/MF181914はactiveのまま。
+
+Blender不在で実画像→Libraryまで利用できる範囲を追加確認。
+画像runtime/HF cacheを流用した専用packageであり、全環境clean install、
+通常Host初回セットアップ、scenario A/F全体は未完了。
+449秒の実Jobを、全GPU組合せやcredential refresh成功へ読み替えない。
+次は完了監査の残条件を再照合し、runtime更新/停止/再開の未受入条件を進める。
+全gate ./mf.sh test: 1060 passed/既知warning1/162.93秒。diff check成功。
+
 ## 2026-09-06 image-upload graceful disconnect gate
 
 PR #312 merged `b22cd61e7d1466967381bf419017c56fdcda6c08` を確認。
