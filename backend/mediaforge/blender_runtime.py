@@ -138,10 +138,14 @@ class BlenderRuntimeResolver:
         return {"schema_version": REGISTRY_SCHEMA_VERSION, "active_runtime_id": None, "runtimes": []}
 
     def _validated_registry(self, value: object) -> dict[str, Any]:
-        if not isinstance(value, dict) or set(value) != {
-            "schema_version", "active_runtime_id", "runtimes"
+        required = {"schema_version", "active_runtime_id", "runtimes"}
+        if not isinstance(value, dict) or not required <= set(value) or set(value) - required - {
+            "legacy_registration_disabled"
         }:
             raise BlenderRuntimeRegistryError("Blender runtime registry fields are invalid")
+        disabled = value.get("legacy_registration_disabled", False)
+        if not isinstance(disabled, bool):
+            raise BlenderRuntimeRegistryError("Blender legacy registration policy is invalid")
         if value["schema_version"] != REGISTRY_SCHEMA_VERSION:
             raise BlenderRuntimeRegistryError("Blender runtime registry version is unsupported")
         rows = value["runtimes"]
@@ -179,13 +183,18 @@ class BlenderRuntimeResolver:
             seen.add(runtime_id)
             validated.append({key: str(row[key]) for key in row})
         active = value["active_runtime_id"]
+        if disabled and G8_RUNTIME_ID in seen:
+            raise BlenderRuntimeRegistryError("disabled legacy Blender runtime is still registered")
         if active is not None and (not isinstance(active, str) or active not in seen):
             raise BlenderRuntimeRegistryError("active Blender runtime is not registered")
-        return {
+        result = {
             "schema_version": REGISTRY_SCHEMA_VERSION,
             "active_runtime_id": active,
             "runtimes": validated,
         }
+        if "legacy_registration_disabled" in value:
+            result["legacy_registration_disabled"] = disabled
+        return result
 
     def _read_registry(self) -> dict[str, Any]:
         if self.registry_path.is_symlink():
@@ -299,7 +308,12 @@ class BlenderRuntimeResolver:
     def _ready(self, runtime: ResolvedBlenderRuntime) -> bool:
         return all(self._checks(runtime).values())
 
-    def register_legacy(self) -> bool:
+    def register_legacy(self, *, explicit: bool = False) -> bool:
+        """Detect the configured legacy installation, unless explicitly detached.
+
+        Call from a worker thread: validation, registry locking and fsync are
+        synchronous. Only a deliberate re-registration may clear suppression.
+        """
         manifest = self._manifest()
         candidate = {
             "runtime_id": G8_RUNTIME_ID,
@@ -318,17 +332,49 @@ class BlenderRuntimeResolver:
             lock_path.chmod(0o600)
             fcntl.flock(lock, fcntl.LOCK_EX)
             registry = self._read_registry()
+            if registry.get("legacy_registration_disabled") and not explicit:
+                return False
             existing = next(
                 (row for row in registry["runtimes"] if row["runtime_id"] == G8_RUNTIME_ID), None
             )
             if existing is not None and existing != candidate:
                 raise BlenderRuntimeRegistryError("legacy Blender runtime registration conflicts")
             changed = existing is None or registry["active_runtime_id"] is None
+            if explicit and registry.pop("legacy_registration_disabled", False):
+                changed = True
             if existing is None:
                 registry["runtimes"].append(candidate)
             if registry["active_runtime_id"] is None:
                 registry["active_runtime_id"] = G8_RUNTIME_ID
             if changed:
+                self._write_registry(registry)
+        return True
+
+    def unregister_legacy(self) -> bool:
+        """Atomically detach the fixed external reference, never its files.
+
+        The management caller must also check durable project references before
+        calling this under removal_guard. This primitive is not a public API.
+        """
+        with self._reference_guard:
+            if self._live_references.get(G8_RUNTIME_ID, 0):
+                raise BlenderRuntimeRegistryError("Blender runtime has live references")
+            self.registry_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            lock_path = self.registry_path.with_suffix(self.registry_path.suffix + ".lock")
+            if lock_path.is_symlink():
+                raise BlenderRuntimeRegistryError("Blender runtime registry lock must not be a symlink")
+            with lock_path.open("a", encoding="ascii") as lock:
+                lock_path.chmod(0o600)
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                registry = self._read_registry()
+                if registry["active_runtime_id"] == G8_RUNTIME_ID:
+                    raise BlenderRuntimeRegistryError("active Blender runtime cannot be unregistered")
+                if registry.get("legacy_registration_disabled"):
+                    return False
+                registry["runtimes"] = [
+                    row for row in registry["runtimes"] if row["runtime_id"] != G8_RUNTIME_ID
+                ]
+                registry["legacy_registration_disabled"] = True
                 self._write_registry(registry)
         return True
 
@@ -580,6 +626,7 @@ class BlenderRuntimeResolver:
                 "required_version": G8_VERSION,
                 "active_runtime_id": registry["active_runtime_id"],
                 "g8_runtime_id": selected.runtime_id if selected is not None else None,
+                "legacy_registration_disabled": registry.get("legacy_registration_disabled", False),
                 "management_available": False,
                 "web_pack": {"state": "missing", "reason": "web_runtime_not_installed"},
                 "runtimes": rows,

@@ -176,3 +176,95 @@ def test_unregister_never_deletes_or_detaches_the_external_legacy_runtime(tmp_pa
         runtimes.unregister_managed(G8_RUNTIME_ID)
     assert (legacy / "install/blender").is_file()
     assert runtimes.resolve_g8() is not None
+
+
+def legacy_and_managed(tmp_path: Path) -> tuple[BlenderRuntimeResolver, Path]:
+    legacy = tmp_path / "external-blender"
+    ready_runtime(legacy)
+    runtimes = resolver(tmp_path, legacy)
+    assert runtimes.register_legacy()
+    managed_id = "blender-4.5.9-linux-x64"
+    ready_runtime(runtimes.managed_root / managed_id)
+    runtimes.register_managed(runtime_id=managed_id, version="4.5.9", location=managed_id,
+        archive_sha256=MANIFEST["archive_sha256"])
+    runtimes.activate(managed_id)
+    return runtimes, legacy
+
+
+def test_external_detach_survives_status_and_restart_and_can_be_explicitly_reversed(tmp_path: Path) -> None:
+    runtimes, legacy = legacy_and_managed(tmp_path)
+    before = {str(p.relative_to(legacy)): p.read_bytes() for p in legacy.rglob("*") if p.is_file()}
+    assert runtimes.unregister_legacy()
+    assert not runtimes.unregister_legacy()
+    registry_before = runtimes.registry_path.read_bytes()
+    restarted = resolver(tmp_path, legacy)
+    for _ in range(3):
+        status = restarted.status()
+        assert status["legacy_registration_disabled"] is True
+        assert all(r["runtime_id"] != G8_RUNTIME_ID for r in status["runtimes"])
+        assert restarted.resolve_registered(G8_RUNTIME_ID) is None
+        assert restarted.resolve_g8().ownership == "managed"
+        assert not restarted.register_legacy()
+    assert runtimes.registry_path.read_bytes() == registry_before
+    assert restarted.register_legacy(explicit=True)
+    assert restarted.status()["legacy_registration_disabled"] is False
+    assert restarted.resolve_registered(G8_RUNTIME_ID) is not None
+    assert restarted.resolve_active().ownership == "managed"
+    assert before == {str(p.relative_to(legacy)): p.read_bytes() for p in legacy.rglob("*") if p.is_file()}
+
+
+def test_external_detach_rejects_active_and_live_references(tmp_path: Path) -> None:
+    runtimes, _ = legacy_and_managed(tmp_path)
+    with runtimes.runtime_reference(G8_RUNTIME_ID):
+        before = runtimes.registry_path.read_bytes()
+        with pytest.raises(BlenderRuntimeRegistryError, match="live references"):
+            runtimes.unregister_legacy()
+        assert runtimes.registry_path.read_bytes() == before
+    runtimes.activate(G8_RUNTIME_ID)
+    with pytest.raises(BlenderRuntimeRegistryError, match="active"):
+        runtimes.unregister_legacy()
+    assert not runtimes.status()["legacy_registration_disabled"]
+
+
+def test_external_reattach_failure_preserves_suppression(tmp_path: Path) -> None:
+    runtimes, legacy = legacy_and_managed(tmp_path)
+    runtimes.unregister_legacy()
+    before = runtimes.registry_path.read_bytes()
+    (legacy / ".runtime.json").write_text("{}", encoding="utf-8")
+    assert not runtimes.register_legacy(explicit=True)
+    assert runtimes.registry_path.read_bytes() == before
+    assert runtimes.status()["legacy_registration_disabled"]
+
+
+def test_external_detach_atomic_write_failure_preserves_old_registration(tmp_path: Path, monkeypatch) -> None:
+    runtimes, _ = legacy_and_managed(tmp_path)
+    before = runtimes.registry_path.read_bytes()
+    def fail_replace(source: Path, target: Path) -> None:
+        raise OSError("injected registry replacement failure")
+    monkeypatch.setattr("mediaforge.blender_runtime.os.replace", fail_replace)
+    with pytest.raises(OSError, match="injected"):
+        runtimes.unregister_legacy()
+    assert runtimes.registry_path.read_bytes() == before
+    assert runtimes.resolve_registered(G8_RUNTIME_ID) is not None
+    assert not list(runtimes.registry_path.parent.glob(".blender-runtimes-*.tmp"))
+
+
+@pytest.mark.parametrize("policy", [1, "true", [], None])
+def test_external_policy_rejects_non_boolean_values(tmp_path: Path, policy: object) -> None:
+    runtimes, _ = legacy_and_managed(tmp_path)
+    value = json.loads(runtimes.registry_path.read_text())
+    value["legacy_registration_disabled"] = policy
+    runtimes.registry_path.write_text(json.dumps(value))
+    assert runtimes.status()["state"] == "invalid"
+
+
+def test_external_detach_does_not_follow_registry_lock_symlink(tmp_path: Path) -> None:
+    runtimes, _ = legacy_and_managed(tmp_path)
+    lock = runtimes.registry_path.with_suffix(".json.lock")
+    lock.unlink()
+    outside = tmp_path / "untouched"
+    outside.write_text("do not change")
+    lock.symlink_to(outside)
+    with pytest.raises(BlenderRuntimeRegistryError, match="symlink"):
+        runtimes.unregister_legacy()
+    assert outside.read_text() == "do not change"
