@@ -9652,3 +9652,13 @@ activate/renew/releaseは同Job/gpu0でsuccess、終了state=released。
 gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 115.64秒。diff check成功。
 GOAL-06は既存/生成画像base color比較採用を受入。OpenCode自然言語一巡、全PBR channel、
 mobile touch、長時間credential、全release A〜Fはこの実測の範囲外。全体3DS-8/scenario BはPARTIAL。
+
+## v0.28.26 — 生成後も model を載せたまま次の依頼を待つ
+
+続けて画像を頼むと毎回モデルの載せ直し（実測で十数秒）を払っていた。job が
+終わった時点で「queue に次が居なければ」worker を畳んでいたためで、対話的に
+頼む場面では次の依頼は数秒後に来る。
+
+生成後は lease を持ったまま待つ。返して待つと broker からは「空いている」ことに
+なり、その上へ LLM が載って単一 GPU では入らない。ControlDeck の pressure を
+短い間隔で見て、GPU を求められた時点で降りる。
