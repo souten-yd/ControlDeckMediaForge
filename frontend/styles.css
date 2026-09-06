@@ -952,6 +952,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .74rem; backgro
   display: none;
 }
 #viewer[open] { display: grid; grid-template-rows: 1fr auto; }
+/* Keep the full-viewport modal from overflowing a scrollbar-narrowed root. */
+html:has(#viewer[open]) { overflow: hidden; }
 #viewer::backdrop { background: #000; }
 
 #viewer-stage {

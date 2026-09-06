@@ -3,6 +3,27 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 full-screen viewer background scroll
+
+PR #288 merge `073158b`を確認。branch `ux1/3d-viewer-modal-scroll`。
+installed0.28.29の320pxでroot client305/scroll319を再現。viewerは100vwだが、背景rootの
+縦scrollbarが残る。既存比較dialogと同じ`html:has(#viewer[open]) { overflow: hidden; }`を追加し、
+GLB/画像共通のfull-screen modalを開く間だけ背景scrollを停止する。閉じた後はCSS条件が外れて戻る。
+公開契約/asset/scene/Hostコード/稼働版は変更していない。
+
+source coreを既存隔離data `/data1tb/mf-library-lineage-source-20260906`で9159へ起動。
+`scripts/library_lineage_ui_e2e.py`にGLB/画像双方のlayoutとclose後scroll復帰を追加した。
+修正前はoverflow=visibleで失敗（小fixtureではroot320/320で横overflow自体は出ない）。
+修正後run `/data1tb/mf-viewer-scroll-after-20260906`はexit0、GLB/画像とも320/320/hidden、
+close後visible、scene不変、日英filter/親子移動を維持、page errors0。撮影を目視確認。
+source PID17963はSIGINTで正常終了し、終端exit0を確認。
+
+installed scriptへ`--require-scroll-lock`を追加。既存専用scene/0.28.29で同flagを実行した
+`/data1tb/mf-viewer-scroll-installed-negative-0.28.29-20260906`はroot305/319/visibleで期待どおり失敗。
+overlayなし、login個別revoke、scene書込なし。修正版の署名配布/installed成功はNOT TESTED。
+次は修正PRを通常mergeし、署名新版へ反映して同じflagをinstalledで成功させる。
+gate `./mf.sh test`: 1053 passed / 既知Starlette warning1 / 115.62秒。diff check成功。
+
 ## 2026-09-06 Release 0.28.29 preparation
 
 ### Signed release / installed acceptance
