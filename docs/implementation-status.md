@@ -1,5 +1,45 @@
 # Media Forge implementation status
 
+## 2026-09-07 installed native background return
+
+PR #346 merge `19924bee14f80ec04d6be7427ca1da117ad62e8b`から
+branch `ux1/3d-background-return`。新診断
+`scripts/3ds_background_return_installed_e2e.py --scene-id
+scene_3f3b5f1e97e94b268722ea45cc811c50 --expected-version 0.28.38
+--evidence-dir /data1tb/mf-background-return-installed-20260907-native`をHost診断Pythonで実行。
+専用mf-e2e scene名・既存GUI不在を検査し、正規Host opaque WSで実software Blenderを起動。
+scene選択とGUI開始は製品helper/正規API、複製・保存は実canvas入力/通常button。
+
+初回 /data1tb/mf-background-return-installed-20260907 はGUI描画後にhidden待ちtimeout。
+自分のsessionだけを通常stopし32.631秒でlogin revoke、保存版追加なし。
+空白2 tabでも同じ現象を再現し、ローカルPlaywright coreBundle.jsの既定
+Emulation.setFocusEmulationEnabled=trueを確認。追加CDP sessionのfalse指定だけでは
+両tab visibleのまま。通常Chromeを専用一時profileで起動して
+connect_over_cdp(no_defaults=True)で接続すると実hidden→visibleがPASS。
+最終診断はこの方式。visibilityの偽装や製品code overlayは行わない。
+一時profileは終了時に削除し、既存利用者profileへ書かない。
+
+最終session blendersession_72e2174a37de48baa613279889aef914。
+実frameの色数1091を確認後、別の実tabへ切替。opaque frameのvisibility記録は
+visible at24256.600→hidden at28277.600→visible at43327.100 ms、背景15.0495秒。
+同session ready/connected・描画503色へ復帰し、canvas click/A/Shift+D/Escape後に
+通常Save new revision and finish。74.438秒でpassed、74.568秒で専用login revoke、exit0。
+第4版→第5版、実Blender検証mesh1→2、全旧revision JSONとsource/GLB bytes SHA不変。
+返却画面screenshotはBlender描画の証拠で、複製オブジェクトの見た目の差は主張しない。
+
+追加read-only DB/実ファイル照合: GLB JSONのmesh参照nodeも1→2。
+新source468,914 B/SHA17a719fa6e140c6400a7993c407f8bbcfca6744a86ffa0d91aeee2de206ae2c3、
+新GLB3,272 B/SHA224d9e0fb77c2835aaf514c86d046f262c3c5bdb96a790d8c674b5bb3f955c35。
+新revision revision_d37a3ad9b42c4298a53ffd1a0235bfe5、source/preview provenance sidecarとDB一致。
+session stopped、active GUI0、Host849052/MF905518/905522のPID不変。
+新第5版は保持。サービス再起動・runtime/global設定変更なし。
+診断browserの正常/例外時cleanupとno_defaults指定を追加2 testsで確認。
+これは短時間のdesktop背景復帰/実入力保存の受入。OS suspend、mobile背景、
+未保存手編集の故障後回収量、GPU lease、C/GOAL-09全体の完了とはしない。
+次は未保存編集の回収候補と確定版の内容差を実測する。
+全 `./mf.sh test`: 1135 passed/既知warning1/156.05秒、exit0。
+診断py_compile/diff check成功。終端unitはnot-found/inactive/MainPID0。
+
 ## 2026-09-07 lifecycle evidence mapping
 
 PR #345 merge `ddfd37ccaa34f9f207f00faa14dd296ffd882ad3`から

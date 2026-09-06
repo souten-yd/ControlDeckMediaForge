@@ -10,7 +10,7 @@ Date: 2026-09-07 / Status: PARTIAL
 |---|---|---|
 | 二つのbrowser / writer競合 | `mf-3ds8-browser-0.28.14-long`: second_writerがblender_session_busy、reload後reconnected=true | 同記録のキー送信だけでは形状変更を証明しない |
 | 切断・再接続 | 同long記録で621.451秒保持と再接続。`mf-rfb-renewal-negative-0.28.30-20260906`で同sessionのconnections 1→2をheld_sec480.340で観測、660.433までconnected、gui_edit_saved=true | 後者のnegativeというディレクトリ名は失敗判定ではない。背景復帰のvisibility証拠とは別 |
-| 背景復帰 | 上記は再接続の証拠 | NOT TESTED: 実際にhidden→visibleとなったbrowserで、同session・描画・操作・保存を確認する |
+| 背景復帰 | `mf-background-return-installed-20260907-native`: 通常Chromeへno_defaultsで接続。opaque frameのvisible→hidden→visible、背景15.0495秒、同session/実描画復帰後の複製・保存で第4→5版/mesh1→2。実GLB nodeも1→2、旧版bytes不変 | 短時間desktop tab切替の範囲でVERIFIED。OS suspend/mobile背景/未保存故障回収とは別 |
 | idle終了 | `mf-3ds8-idle-0.28.14`: idle/disconnect設定各5秒、8.695秒で終端、復旧保存revision8 | 既定connected idle1800秒の実測ではない。開始時PID集合と終端後回収、手編集回収量は未照合 |
 | 保存失敗でも終了 | `mf-save-conflict-cleanup-installed-20260907`: 実Blender保存後revision競合、5.831秒でfailed/saved=false。元scene第4版不変、開始時3 PID/cgroup/root/socket消滅、durable参照0 | RFB手編集なし。GPU leaseの回収を証明しない |
 | Blender crash | `mf-gui-child-crash-cleanup-installed-20260907`: 自分のsessionのBlender子PID fdだけへSIGKILL、5.266秒でrunner_lost。3 PID/cgroup/root/socket消滅、durable参照0 | GUI手編集なし。batch worker crashとは別 |
@@ -37,8 +37,8 @@ idle/expiry/restartの保存版、成功GUI編集の前後/復元版、.38の3�
 
 ## 次の実測
 
-1. 専用sceneの実Web Blenderで識別可能な編集を行い、背景hidden→visibleの時刻と
-   同sessionへの復帰、描画、続く入力・保存後の実形状を確認する。
+1. desktop短時間の背景hidden→visible、同session/描画/続く入力保存は上記native試験で確認。
+   Playwright既定のfocus emulationで全tab visibleとなる初回失敗は成功に含めない。
 2. 未保存編集後の故障について、回収候補と正式版の内容を実Blenderで比較し、
    回収できた変更と失われた変更を明記する。元の確定版は不変であることを確認する。
 3. idle/expiry/restartの残る回収証拠を確認し、不足箇所だけ専用sessionで補う。
