@@ -9,13 +9,21 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 正式署名公開・標準updateしLibrary viewerをoverlayなしで受入した。さらにv0.28.20（target `c26f67d`）
 の材質照明・新旧双方のcontext復旧をinstalled受入した。さらに0.28.23（target `22fc2b9`）を
 署名公開・標準updateし採用前候補比較/破棄/採用/復元をinstalledで確認。
-2026-09-06の現在稼働版は0.28.34/healthy（署名公開/consumer検証/標準updateを追加確認）。
+2026-09-06の現在稼働版は0.28.35/healthy（署名公開/consumer検証/標準updateを追加確認）。
 0.28.26ではnative windowで比較入力・不変refreshのDOM保持と全比較/採用/復元を確認した。
 新版の他操作の受入を旧版やcandidateの証拠から推定しない。
 以前の個別実測は維持するが、条件の一部だけの実測から行全体を成功扱いしない。
 下表の「未確認」は今回の監査で条件全体に対応する証拠を確定できていない意味で、コード不在とは異なる。
 
 ## 利用者ゴール別
+
+2026-09-06 v0.28.35: PR #326 exact mergeから署名公開しconsumer/Host trust照合、標準update
+16.54秒。package実Chromeでは日英320の旧版削除/再導入、旧版不在のGLB/backupを79.551秒で確認。
+installed日本語1280/320・英語geometry probe1280/320とnative desktopで確認checkbox/active保護、
+runtime不変を実測。英語の通常viewport変更直後はpointerがHost IFRAMEへ届きdialog未表示が再現。
+追加の固定初期viewport英語1280/320は通常pointerで全pass。live resizeの証拠にはしない。
+成功した別modeへ読み替えて解消済みとはしない。製品code変更なし、原因の確定は未完了。
+本番旧版の実削除は実行せず、package専用rootの実削除と区別する。詳細はimplementation-status。
 
 2026-09-06 PR #325 source追加受入: 日英1280/320の確認UI、日英320の実削除/同版導入、
 旧版不在中のscene履歴/GLB描画/backup保存とZIP全entry照合を実Chromeで確認。
