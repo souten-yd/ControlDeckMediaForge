@@ -1,5 +1,39 @@
 # Media Forge implementation status
 
+## 2026-09-06 v0.28.36 candidate paging and detail-title overflow
+
+PR #330 merge `4075df202791bda7b3e99c94557b70a10bc516e3`からexact detached checkout
+/data1tb/ControlDeckMediaForge-release-0.28.36で標準bundle build実行。exit0、
+artifact31,514,810 B/SHA b51434a5ce1d9528827761897eb63b12b7898dd6061584ad71e4cd72f9b2ff46。
+/data1tb/mf-0.28.36-build-20260906に保持。未署名・未公開・本番未導入。
+archive6 entries/embedded199を検査、venv/weights/制作物/SQLite混入なし、
+certifi公開CA以外の.pemなし/PRIVATE KEYなし。addon/feature/packaged doctor0.28.36一致。
+core SHA a33a022b15fbd2beb1ef65395c41f505cbae7a89e3c8b858b004345541d0173b。
+展開先 /data1tb/mf-0.28.36-package-i0dzdmdk/control-deck-media-forge-0.28.36-linux-x86_64。
+
+専用systemd unitの実package PID657006/9163、環境未導入healthはsetup_required。
+--server-kind bundleの実Chrome日英320で60/60→5/3→60/60、全128 ID一意/集合一致、
+英語Validation Not recorded/page errors0を確認。
+証拠 /data1tb/mf-library-paging-bundle-0.28.36-20260906。
+ただしscreenshotで長いsource ID見出しの横はみ出しとdialog内横scrollを観測した。
+document幅のassertだけではdialog内部overflowを捕まえられなかったため、公開を保留。
+
+branch ux1/3d-library-detail-wrap。#detail-titleにoverflow-wrap:anywhere/min-width:0を追加。
+paging受入scriptで先頭/末尾ページのdialog scrollWidth<=clientWidthを追加。
+旧packageへ追加assertを実行し、最初のpageでhorizontal overflow失敗を再現。
+初回は起動直後の接続拒否で、同じlive unitのhealthを確認後再試行した。再起動していない。
+証拠 /data1tb/mf-library-overflow-before-20260906（再試行のassert失敗）。
+
+修正sourceを同じowned Storeへ向け別の専用unitで起動。日英320で新assertを含め全pass、
+全128 ID、先頭/末尾/戻る不変、英語fallback、page errors0。screenshotでも見出し全体の
+折返しと横scroll消失を確認。証拠 /data1tb/mf-library-overflow-after-20260906。
+使った3つの専用unitは試験後それぞれstop/inactive。本番runtimeやsceneは変更しない。
+修正後全MF gate初回は76%以降にexit143/SIGTERMで終了、原因未確定でpassとは扱わない。
+source専用unitのjournalは正常shutdown complete（PID662516）を確認。
+再実行の全gateは1126 passed/既知warning1/163.19秒。py_compile/diff check成功。
+修正を含む新exact mergeから0.28.36を別build directoryへ作り直す。
+旧candidateを配布せず、package再受入→署名公開→consumer検証→標準updateを続ける。
+
 ## 2026-09-06 v0.28.36 Library release preparation
 
 PR #329 merge `7cbd8c4697e15a2efb8f6400ce8436fce224341f`をfetch確認。

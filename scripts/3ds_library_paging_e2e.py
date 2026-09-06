@@ -66,6 +66,7 @@ def browser(root: Path, base_url: str, server_kind: str) -> None:
                 expect(body).to_have_attribute("data-asset-id", fixture["source"])
                 expect(page.locator('[data-asset-relations="parents"] button')).to_have_count(60)
                 expect(page.locator('[data-asset-relations="children"] button')).to_have_count(60)
+                assert page.locator("#detail-dialog").evaluate("node => node.scrollWidth <= node.clientWidth"), "detail dialog horizontal overflow"
                 first = page.locator('[data-related-asset-id]').evaluate_all("els => els.map(e => e.dataset.relatedAssetId)")
                 page.locator('[data-relations-offset="60"]').click()
                 expect(body).to_have_attribute("data-offset", "60")
@@ -79,13 +80,15 @@ def browser(root: Path, base_url: str, server_kind: str) -> None:
                 expect(page.locator('[data-asset-relations="parents"] h3')).to_have_text(expected)
                 if locale == "en":
                     expect(page.locator("#detail-body .facts > div").filter(has_text="Validation").locator("dd")).to_have_text("Not recorded")
+                assert page.locator("#detail-dialog").evaluate("node => node.scrollWidth <= node.clientWidth"), "detail dialog horizontal overflow"
                 page.screenshot(path=str(root / f"page2-{locale}.png"))
                 page.locator('[data-relations-offset="0"]').click()
                 expect(body).to_have_attribute("data-offset", "0")
                 assert page.locator('[data-related-asset-id]').evaluate_all("els => els.map(e => e.dataset.relatedAssetId)") == first
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 evidence["checks"].append({"locale": locale, "width": 320, "unique_relations": 128,
-                    "first_page": [60, 60], "last_page": [5, 3], "back_restores_first_page": True})
+                    "first_page": [60, 60], "last_page": [5, 3], "back_restores_first_page": True,
+                    "detail_dialog_horizontal_overflow": False})
                 context.close()
             assert not evidence["errors"]
             evidence["passed"] = True
