@@ -146,6 +146,15 @@ class ControlDeckHostClient:
     async def cancel_resource(self, identity: HostIdentity, request_id: str) -> dict[str, Any]:
         return await self._request(identity, "DELETE", f"/{ADDON_ID}/resources/requests/{request_id}")
 
+    async def device_pressure(self, identity: HostIdentity, device_id: str) -> dict[str, Any]:
+        """その device を他が要っているか。読むだけで、lease の状態は変えない。
+
+        生成後に model を載せたまま待つ間、これを短い間隔で見る。lease の renew で
+        も分かるが、renew は監査に残る操作なので、待っている間に何十回も打つ
+        ものではない。
+        """
+        return await self._request(identity, "GET", f"/{ADDON_ID}/resources/devices/{device_id}/pressure")
+
     async def lease_action(self, identity: HostIdentity, lease_id: str, action: str) -> dict[str, Any]:
         if action not in {"activate", "renew", "release"}:
             raise ValueError("unsupported lease action")
