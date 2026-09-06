@@ -729,6 +729,18 @@ The new GUI and authoring paths are planned additions; the existing deterministi
 contract stays unchanged. Shared product/data management does not imply shared core/Blender/ML
 execution environments. Generative 3D model adoption remains a separate experimental G9 gate.
 
+Runtime removal and immutable history are separate lifecycles. An inactive managed
+Blender version may be removed while its saved revisions remain, but only after
+an explicit acknowledgement that reopening those revisions requires reinstalling
+the exact pinned version. Without that acknowledgement, project-reference removal
+remains rejected. Active, queued, executing, saving or stopping work is never
+overridden by this acknowledgement. Keep revision runtime IDs, asset bytes,
+dependencies and provenance unchanged; do not silently migrate them to the active
+Blender version. Offer this removal only with a supported exact-version reinstall
+route, and show unavailable/reinstall-required until that runtime is verified again.
+This is the intended policy for scenario D; its implementation and acceptance are still pending.
+External installation ownership remains unchanged: never delete external binaries.
+
 2026-09-06 user clarification: the Library viewer requires object rotation in both
 directions around each X/Y/Z axis and zoom in/out. These are view-only operations;
 they never modify the stored asset or scene. Wireframe and animation controls are

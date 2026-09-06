@@ -33,7 +33,8 @@ OSで導入したBlenderや他アドオンのruntimeを、勝手にScene用と�
 解除はregistryから参照を外し、同じatomic registry更新に自動登録抑止を記録する。
 status/startupによる再検出では復活させず、明示的な再登録だけで抑止を解除する。
 再登録は現在の設定先とstamp/manifestを再検証し、不正なら抑止を保持する。
-実行参照・active・project pinの保護はmanagedと同様に維持する。
+実行参照・active・project pinの既定の保護はmanagedと同様に維持する。
+§4.1の履歴参照確認付き実体削除はmanagedだけに適用し、外部登録解除の権限を拡大しない。
 resolverはlive/activeを保護し、設定orchestratorがproject pinと確認fingerprintを保護する。
 これはサーバー設定で指定済みの固定legacy実体の操作であり、ブラウザから任意pathを受けない。
 registryの加法的private field `legacy_registration_disabled` は省略時false。
@@ -63,7 +64,8 @@ runtime registryの事前snapshotも復元する。外部Blender実体にはmigr
 1. 現行runtime stamp、実行version、hash、所有権を読み取り専用で調査。
 2. 正常な既存runtimeをlegacy参照として登録。初回から削除・移動・再downloadしない。
 3. persistent rootへ移す場合は別の明示operationでstaging copy、検証、参照切替を行う。
-4. 旧場所は参照とrollback依存がゼロになるまで保持。
+4. legacy移行元の旧場所は参照とrollback依存がゼロになるまで保持。
+   移行後のmanaged版に対する利用者の明示削除は§4.1に従う。
 5. 既存 `./mf.sh blender build/status` とG8既定profileの互換テストを維持。
 
 新しいBlender版をactiveにしても既存G8 profileのcompiler契約を無条件で変更しない。
@@ -87,6 +89,41 @@ runtime registryの事前snapshotも復元する。外部Blender実体にはmigr
 UIと `mf.sh` のCLIサブコマンドは同じorchestratorを呼ぶ。doctor/statusは読み取り専用。
 `blender install/update/switch/repair/remove` CLIは稼働中MediaForgeの同じorchestratorを呼び、
 READMEへ正式掲載する。source runtime互換用の既存`blender build/status`は変更しない。
+
+### 4.1 停止済み版の削除と履歴の保持（実装目標）
+
+scenario Dは停止後に旧版Aだけを削除し、画像・scene・.blend・履歴の保持を要求する。
+0.28.34のproject_referenceは全scene_revisionsを数えるため、単にGUIを止めるだけでは
+永続的に削除できない。履歴削除や別版へのpin書換えでこの受入を通してはならない。
+
+- 既定のremoveはproject参照があれば拒否する。既存クライアントの保護を維持する。
+- 稼働・待機参照がゼロ、inactive、managed、正確な版の再導入が可能な場合だけ、
+  「制作ファイルと履歴は残ります。再編集にはBlender X.Y.Zの再導入が必要です」の
+  追加確認を出す。チェックは既定offで、確認なしの送信をbackendでも拒否する。
+- private remove入力に任意boolの履歴参照確認を追加する。既定false、bool以外は拒否。
+  previewのfingerprintに参照状態・確認対象版・再導入可能性を束縛し、実行直前にも再検査する。
+  durable operationに確認内容を保持し、restart時に確認なしの別削除へ読み替えない。
+- active版、未終端Job、GUIのqueued/preparing/starting/ready/saving/stopping、
+  active working copy、in-process処理の参照は追加確認でも解除できない。
+  GUIのruntime_idが未確定な準備中も対象scene/recoveryのpinから保護する。
+- Job受付とruntime削除の競合も保護する。Host child作成を待っている間にpinを失わず、
+  受付後から終端・process回収まで参照を持つ。終了フラグだけで実processの参照を外さない。
+- runtimeのみを既存staging/remove機構で削除する。scene/revision/dependency/asset/provenanceや
+  recipeの保存済みruntime_idを変更しない。別のactive版を自動適用しない。
+- Libraryの画像・GLB表示、履歴閲覧、制作ファイルbackupは残す。編集・復元などBlenderが
+  必要な操作は正しい版の再導入を案内し、不在をavailableと表示しない。
+- 設定からtrusted catalogの同一版・同一archive identityを明示再導入できることを確認する。
+  現在の推奨版への更新で代用しない。再導入経路がない版は確認付き削除を提供しない。
+
+実装順: durable参照集計と受付/削除の排他 → 同期DB/filesystem処理のworker-thread化 →
+追加確認付きoperation/再開 → 日英UIと正確な版の再導入導線 → 同一scene実機削除/再導入。
+DB/ORM/同期subprocess待機をasync requestに追加しない。threadの開始済みatomic操作は
+接続切断で放棄せず終端まで追跡する。参照lockをevent loop上で保持したまま別threadの
+同lock取得を待つ構成を作らない。
+
+設計選択の根拠: 履歴参照を永久拒否する案はscenario Dを満たさず、履歴削除はGOAL-07を壊す。
+別版への自動pin変更は再現性とimmutable revisionを壊す。明示確認と同版再導入で双方を維持する。
+現時点ではこの確認付き削除は未実装。0.28.34の拒否動作をこの機能の受入とは扱わない。
 
 ## 5. durable setup operation
 

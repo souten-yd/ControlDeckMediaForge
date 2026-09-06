@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-06 scenario D stopped-runtime removal policy
+
+PR #320 merged `da4e54bfcd93d7aa36552b88ef9c0604428eceed` をfetch確認。
+branch `ux1/3d-runtime-history-removal-policy`。今回は設計文書のみ。
+base-plan §12を先に更新し、runtime設計§4.1とscenario Dを整合させた。
+保存済み履歴参照は既定拒否を維持し、同版再導入が可能な停止済みmanaged版だけに
+明示確認付き削除を追加する。画像/scene/全revision/pin/provenanceは一切書き換えない。
+active/待機/実行/保存/停止処理の参照は確認でも迂回しない。外部実体の削除権限は増やさない。
+
+根拠は実コードと前slice実測: Store.scene_runtime_reference_countは全scene_revisionsを
+COUNT(DISTINCT scene_id)し、BlenderRuntimeManager.remove/_removeはproject_referenceを
+理由に拒否する。GUI停止後も旧版Aを削除できないため、scenario Dの条件と差がある。
+BlenderRuntimeResolver.live_reference_countはin-process参照のみであり、
+GUI/queued recipe/active working copyは別のdurable集計が必要。
+Storeにはblender_web_sessions/scene_working_copies/scene_recipe_tasksのruntime列がある。
+SceneRecipeJobManager.submitはruntime選択後にHost child作成をawaitするため、
+新しい確認付き削除を公開する前にその受付区間のpin保持も照合する。
+
+選択理由: 永久拒否はD未達、履歴削除はGOAL-07違反、自動pin変更はimmutable/reproducibility違反。
+追加確認と正確な同版再導入を一体で実装する。確認は既定off/backend強制/再検査、
+operationへ永続化、取消/再開を含め実機受入する。既存remove入力の既定保護は維持する。
+現在の製品実装は変えていない。0.28.34の既存拒否を新機能の成功に読み替えない。
+実装/新テスト/実機削除/再導入はNOT TESTED。文書リンク・節番号・diff checkのみ確認。
+次はdurable参照集計とJob受付区間のpin保護を実装し、確認付き削除の前提を固める。
+全体3DS-8/scenario DはPARTIAL、稼働版は前sliceで確認した0.28.34のまま（本slice更新なし）。
+
 ## 2026-09-06 v0.28.34 signed release and installed Settings regression
 
 PR #319 merge/tag target `f806f54609e34924086887744ae30d6852aec297`。
