@@ -9262,3 +9262,38 @@ failed2/interrupted4/stopped13、runtime operation ready3、model operation canc
 確認して上記を再照会した。実行中制作は確認されなかったが、update直前にも再照会する。
 署名公開・導入・overlayなしのbrowser受入は次段階。ここでは成功と記録しない。
 版準備gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 110.52秒、diff check成功。
+
+## 2026-09-06 v0.28.19 signed release / installed Library viewer — VERIFIED FOR THIS SLICE
+
+PR #255 merged `583fea18e710730a8c56758846c8cfeb13622e52`とtag v0.28.19の一致をGitHub/Gitで確認。
+exact detached worktreeから`build_release_bundle.py --version 0.28.19`を実行し、
+PyInstaller6.22.0/Python3.12.3で31,474,100 Bの正式bundleを構築した。
+SHA-256 `212d062cd2e7c9ad8da67c5f8c6fe0cbd3a3bf06becf0a5688c96758a0a13ffd`。
+packaged doctor: status=ok/version=0.28.19/packaged=true。
+既存正式publisher keyでsign_release.pyを実行し、通常GitHub Releaseへ4 assetを公開。
+manifest279 B / signature89 B / checksum119 B。公開先から再取得してchecksum一致、
+Hostの`_verify_signed_release`がtrusted publisher signature/hash/31,474,100 Bを検証した。
+公開先: https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.28.19
+
+update直前read-only照会でHost/local active Job0、Web session/runtime/model operation全終端。
+SQLite online backup `/data1tb/mf-0.28.19-pre-update-20260906.sqlite3`（1,449,984 B、非公開）を保持。
+標準`registry.update('media-forge')`: 10.613秒、previous_version=0.28.18/version=0.28.19/healthy/enabled。
+MF MainPID2470070、10:26:06 JST開始、active/running。実行中exeはversions/0.28.19配下、
+core SHA-256 `f62ae311ccd2b9375c86ac92bba3942c214869e6b5484dabd7151730eb37f1d0`は公開bundleと一致。
+実HTTP `/health`はhealthy。Hostの再起動やruntime/モデルの入替えは要求していない。
+
+実機コマンドはHost diagnostic venvで
+`scripts/3ds_viewer_render_installed_e2e.py --scene-id scene_3ac2b7089a3b5cc3b7b1a95ffd96594f
+--evidence-dir /data1tb/mf-viewer-six-axis-library-installed-0.28.19-20260906`。
+frontend_mode=installed、candidate overlay/CDP差替え/追加接続許可なし。
+通常Chrome/ANGLE AMD内蔵GPU/radeonsi LLVM20.1.2/OpenGL ES3.2、opaque origin=null。
+Library→3D→asset_4d5f5c8cde0540d49747aec5dc8d68e0のカードから236 triangles/4 materialsのGLBを表示。
+±XYZ15度回転の各差分24432/24594/1773/2485/24379/25023px、逆操作は全て差分0。
+zoom in43020px/out41483px、orbit55633px/wheel39771px、fit/idleは差分0。
+320px/scroll319、page error0、scene応答不変。専用mf-e2e sessionのみfinallyで失効。
+既存password/session/sceneを変更しない。通常viewerのthumbnail cache保存だけは許容する。
+
+NOT TESTED: 新版の日英切替・mobile実タッチ・model切替memory/context loss、材質新旧比較全操作、
+600秒超credential refresh、全release A〜F。GOAL-02利用者指定操作はVERIFIED、全体3DS-8はPARTIAL。
+exact release worktreeは削除（Gitから再作成可能）。build出力/packaged展開先2 directoryはgio trashへ
+退避（復元可）。公開再取得4 asset、browser JSON/PNG、更新前DB backupは保持した。

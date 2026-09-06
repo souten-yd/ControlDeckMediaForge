@@ -3,6 +3,32 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.19 signed / installed Library viewer
+
+PR #255 merged `583fea18e710730a8c56758846c8cfeb13622e52`。同commitのdetached worktreeから
+PyInstaller6.22.0/Python3.12.3で正式bundleを構築・署名公開。tag v0.28.19は同commit。
+31,474,100 B / SHA-256 `212d062cd2e7c9ad8da67c5f8c6fe0cbd3a3bf06becf0a5688c96758a0a13ffd`。
+公開4 assetを `/data1tb/mf-0.28.19-public-20260906`へ再取得しchecksum一致、Host publisher verifier成功。
+packaged doctor ok/0.28.19。core SHAは`f62ae311ccd2b9375c86ac92bba3942c214869e6b5484dabd7151730eb37f1d0`。
+
+更新直前Host/local Job0、Web session/runtime/model operation全終端を確認。
+SQLite online backup `/data1tb/mf-0.28.19-pre-update-20260906.sqlite3`は1,449,984 B、非公開/保持。
+標準registry.updateで0.28.18→0.28.19、10.613秒、healthy/enabled。
+MF MainPID2470070 / 10:26:06 JST開始、実行中exeのcore SHAも一致。Host再起動は要求していない。
+
+`scripts/3ds_viewer_render_installed_e2e.py --scene-id scene_3ac2b7089a3b5cc3b7b1a95ffd96594f
+--evidence-dir /data1tb/mf-viewer-six-axis-library-installed-0.28.19-20260906`をHost diagnostic venvから実行。
+frontend_mode=installed、overlayなし、追加local-network-access許可なし。通常Chrome/AMD内蔵GPUで
+Library→3D→asset card、±XYZ15度回転、zoom両方向、orbit/wheel、fitを実pixel比較で確認。
+回転差分1773〜25023px、zoom43020/41483px、逆操作/fit/idleは差分0。
+origin=null、320px/scroll319、page error0、scene応答不変。専用sessionだけ失効、password変更なし。
+GOAL-02の利用者指定操作をこの範囲でVERIFIEDとし、全体3DS-8はPARTIALのまま。
+
+exact release worktreeは削除（Gitで再作成可）。build出力/packaged展開先2 directoryはgio trashで退避
+（復元可）。公開再取得4 asset、browser JSON/PNG、更新前DBを保持。
+次はviewerの日英/mobile入力・context loss/memory回収のrelease gateと、修正済み共通loaderを通る
+材質新旧比較の実assertionを補う。長時間credentialの無再起動枠は未調整。他GOAL/A〜Fの残件は監査表。
+
 ## 2026-09-06 v0.28.19 source preparation
 
 PR #254はmerged `76a91b490ee1eee7daa08e1214da1697f319c5c6`。
