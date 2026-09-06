@@ -168,6 +168,10 @@ Blender runtime参照は準備開始から採用/破棄/期限切れまで保持
 再起動で未採用候補を正式版やrecoveryとして扱わず除去する。新connectionは旧候補を採用できない。
 transportはprepare taskの切断取消、connection cleanup、定期expire、shutdown cleanupを必ず接続する。
 このdomain実装だけではworkspace UIやtransportの受入完了を意味しない。
+private `/ws`の`scenes.material.preview.{prepare,read,adopt,discard}`は同じmanagerへ接続する。
+singleton/5秒周期expiry/shutdown cleanupをappが所有し、connection IDをクライアントから受け取らない。
+候補操作だけ1接続1要求の非同期dispatchにして、prepare中もreceiveを継続し切断時に取消・回収する。
+standalone mirrorと比較/採用UIは別の未完了sliceである。
 
 ## 6. OpenCode経路
 
