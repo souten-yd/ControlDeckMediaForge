@@ -9547,3 +9547,13 @@ scene `scene_257528fdd6a540818537d5e93f893870`で比較/破棄head不変、採�
 生成画像一巡/mobile touch/長時間credential/全release A〜FはNOT TESTED、全体はPARTIAL。
 exact release worktreeを削除（Gitで再作成可）、build/package展開先をgio trashへ退避（復元可）。
 公開再取得・browser証跡・非公開DB backupを保持。PR #269へ受入記録を提出した。
+
+## v0.28.24 — brief が決めた画面へ揃える
+
+16:9 の背景を brief で頼むと毎回 `canvas_mismatch` で失敗していた。受付が
+brief を 1024x576 へ解決し、投入時に `snap_to_native` が学習寸法のバケット
+1344x768 へ寄せ、検査がその差を見て全候補を破棄していた。比は保たれており
+画そのものは正しく描けていたので、寸法の決め方が二か所にあることだけが原因。
+
+バケットで生成し、検査の前に要求どおりの画面へ揃える (`mediaforge/canvas.py`)。
+比の端数は中央を残して切る。揃えるのは生成のみで、編集は元画像の画面を使う。
