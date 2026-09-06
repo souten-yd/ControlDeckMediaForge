@@ -424,7 +424,8 @@ html:has(#scene-compare-dialog[open]) { overflow: hidden; }
 @media (max-width: 767px) {
   #blender-runtime-list .row { grid-template-columns: minmax(0, 1fr); }
   .runtime-row-controls { justify-content: start; min-width: 0; }
-  .runtime-row-controls button { min-height: 44px; max-width: 100%; white-space: normal; }
+  /* The generic button:not(...) rule has ID specificity; preserve touch size. */
+  .runtime-row-controls button { min-height: 44px !important; max-width: 100%; white-space: normal; }
 }
 .section-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
 /* 節の見出しが前の塊に貼り付くと、どこで話が変わったのか分からない。

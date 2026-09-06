@@ -21,7 +21,7 @@ def test_mobile_blender_runtime_rows_preserve_text_and_touch_controls():
     styles = (Path(__file__).resolve().parents[1] / "frontend/styles.css").read_text()
     assert "#blender-runtime-list .row { grid-template-columns: minmax(0, 1fr); }" in styles
     assert ".runtime-row-controls { justify-content: start; min-width: 0; }" in styles
-    assert ".runtime-row-controls button { min-height: 44px; max-width: 100%; white-space: normal; }" in styles
+    assert ".runtime-row-controls button { min-height: 44px !important; max-width: 100%; white-space: normal; }" in styles
     assert "#shell-header { gap: 4px; padding: 0 8px; flex-wrap: wrap; }" in styles
 
 ROOT = Path(__file__).parents[1]

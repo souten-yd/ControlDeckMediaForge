@@ -22,9 +22,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--require-readable-layout", action="store_true")
+    parser.add_argument("--require-touch-targets", action="store_true")
     parser.add_argument("--native-viewport", action="store_true", help="Diagnose pointer input without viewport emulation")
     parser.add_argument("--locale", choices=("ja", "en"), default="en")
     parser.add_argument("--headless", action="store_true", help="Check responsive rendering independently of the desktop compositor")
+    parser.add_argument("--probe-geometry", action="store_true", help="Capture pre-click hit geometry and compare keyboard on pointer failure")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     status = registry.status("media-forge")
@@ -74,6 +76,10 @@ def main() -> None:
                     evidence["layouts"].append(frame.evaluate("""() => ({
                         width: innerWidth, client: document.documentElement.clientWidth,
                         scroll: document.documentElement.scrollWidth,
+                        buttons: [...document.querySelectorAll('#blender-runtime-list button')].map(button => ({
+                            height: button.getBoundingClientRect().height,
+                            minHeight: getComputedStyle(button).minHeight
+                        })),
                         rows: [...document.querySelectorAll('#blender-runtime-list .row')].map(row => ({
                             width: row.getBoundingClientRect().width,
                             text: row.firstElementChild.getBoundingClientRect().width,
@@ -84,6 +90,9 @@ def main() -> None:
                         layout = evidence["layouts"][-1]
                         assert all(row["text"] >= 100 for row in layout["rows"]), layout
                         assert layout["scroll"] <= layout["client"], layout
+                    if width == 320 and args.require_touch_targets:
+                        buttons = evidence["layouts"][-1]["buttons"]
+                        assert buttons and all(button["height"] >= 44 for button in buttons), buttons
                     for runtime_id in runtimes:
                         for target in (page, frame):
                             target.evaluate("""() => {
@@ -107,6 +116,28 @@ def main() -> None:
                                 outerWidth, outerHeight, screenHeight: screen.height,
                                 dpr: devicePixelRatio})""")}
                         evidence.setdefault("pointer_diagnostics", []).append(diagnostic)
+                        if args.probe_geometry:
+                            # Trial performs normal scrolling/actionability without input.
+                            button.click(trial=True)
+                            diagnostic["button_after_trial"] = button.bounding_box()
+                            diagnostic["button_dom"] = button.evaluate("""e => {
+                                const r=e.getBoundingClientRect(), s=getComputedStyle(e);
+                                const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+                                return {rect:r.toJSON(), hitIsButton:hit===e, hitTag:hit?.tagName,
+                                    minHeight:s.minHeight, innerWidth, innerHeight, scrollY,
+                                    scale:visualViewport.scale};
+                            }""")
+                            diagnostic["iframe_dom"] = frame.frame_element().evaluate("""e => {
+                                const r=e.getBoundingClientRect(),s=getComputedStyle(e);
+                                return {rect:r.toJSON(),clientWidth:e.clientWidth,clientHeight:e.clientHeight,
+                                    zoom:s.zoom,transform:s.transform,pointerEvents:s.pointerEvents,
+                                    innerWidth,innerHeight,scrollY,scale:visualViewport.scale};
+                            }""")
+                            diagnostic["host_hit"] = page.evaluate("""r => {
+                                const e=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+                                return {tag:e?.tagName,id:e?.id};
+                            }""", diagnostic["button_after_trial"])
+                            page.screenshot(path=str(args.evidence_dir / f"before-{width}-{runtime_id}.png"))
                         try:
                             button.click()
                             expect(frame.locator("#blender-remove-dialog")).to_be_visible()
@@ -116,6 +147,14 @@ def main() -> None:
                             diagnostic["preview_received"] = frame.evaluate("state.blenderRemovePreview !== null")
                             diagnostic["dialog_open"] = frame.locator("#blender-remove-dialog").evaluate("e => e.open")
                             page.screenshot(path=str(args.evidence_dir / f"pointer-{width}-{runtime_id}.png"))
+                            if args.probe_geometry and not diagnostic["dialog_open"]:
+                                # Preserve the pointer failure; this does not turn it into a pass.
+                                button.press("Enter")
+                                try:
+                                    expect(frame.locator("#blender-remove-dialog")).to_be_visible()
+                                    diagnostic["keyboard_open"] = True
+                                except AssertionError:
+                                    diagnostic["keyboard_open"] = False
                         expect(frame.locator("#blender-remove-dialog")).to_be_visible()
                         expect(frame.locator("#blender-remove-title")).to_have_text(
                             "Blender環境を削除" if args.locale == "ja" else "Remove Blender runtime")

@@ -3,6 +3,49 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 runtime touch-target correction from installed geometry
+
+PR #301 merged `f288ea01ae215c2167e5e0628799db7886ac320d`確認。
+branch `ux1/3d-settings-hit-geometry`。installed診断へ `--probe-geometry` を追加。
+通常Locator trial（入力なし）後のbutton/iframe矩形、DOM hit、computed minHeight、
+親scroll/scale/transformとクリック前撮影を記録。pointer失敗時はEnter入力を比較するが、
+元のpointer例外を成功に変えない（今回成功runではこのkeyboard分岐未実行）。
+
+installed0.28.31のen headlessとja headedで
+`3ds_settings_protection_installed_e2e.py --expected-version 0.28.31
+--require-readable-layout --locale <en|ja> --probe-geometry --evidence-dir <下記>`、
+enだけ `--headless`、Host診断venv/config/PYTHONPATH、jaは実XwaylandのDISPLAY/XAUTHORITY。
+`/data1tb/mf-settings-hit-geometry-en-0.28.31-20260906` と
+`/data1tb/mf-settings-hit-geometry-ja-0.28.31-20260906` は双方exit0。
+日英desktop/mobile preview4件、参照数2/23、runtime不変/page errors0。
+mobile iframe rect x0/y48/320x590、zoom1/transform none/pointer-events auto、
+button DOM hit=true、実pointerは子BUTTONへ到達。事前撮影/trialでtimingも変わるため、
+過去の不達の原因を確定・解決したとはしない。
+
+この診断で**mobile button実高39px/minHeight38px**を確認。
+既存44px宣言より、後方の共通 `button:not(...):not(#shell-nav button)` が
+IDを含む高specificityで優先されていた。static testの宣言存在確認だけでは見逃していた。
+製品修正はmobile `.runtime-row-controls button` のmin-height44pxへ
+`!important` を付ける限定CSSのみ。汎用button/desktop/公開契約/Host/DB変更なし。
+sourceとinstalled受入へ `--require-touch-targets` と実computed寸法記録を追加。
+
+隔離source data `/data1tb/mf-long-setup-source-20260906` をsource9161/PID49459で起動。
+`scripts/3ds_settings_layout_source_e2e.py --require-touch-targets --evidence-dir <下記>` を実headed Chromeで実行。
+before `/data1tb/mf-settings-target-before-20260906` は320en/3 buttons全39pxでexit1。
+after `/data1tb/mf-settings-target-after-20260906` はexit0。
+320日英すべて44px/minHeight44px、text255px/root305/305、controlsは説明の下。
+1280日英は従来39px/minHeight38pxを維持、root1265/1265、page errors0/runtime不変。
+source PID49459はSIGINT後exit0を確認。
+source localeはdocument設定でありHost locale eventの証拠へ読み替えない。
+
+旧installed0.28.31で同installed scriptへ `--require-touch-targets` を追加した
+`/data1tb/mf-settings-touch-negative-installed-0.28.31-20260906` は、
+desktop preview後mobile全3 button39pxで期待どおりexit1。
+個別login revoke、削除送信なし。新flagが現行未修正版を検出することを確認。
+次は修正PRを通常mergeし、署名新版を標準更新して同flagの日英installed受入を行う。
+installed修正後はNOT TESTED。入力不達原因・全体3DS-8/必須シナリオは未完了を維持。
+最終gate `./mf.sh test`: 1054 passed / 既知Starlette warning1 / 109.99秒。diff check成功。
+
 ## 2026-09-06 installed Host locale acceptance / iframe input still intermittent
 
 PR #300 merged `1759518b06b0c11ff0d422dbc989087ffcc5f9e5`確認。
