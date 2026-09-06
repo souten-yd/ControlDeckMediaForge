@@ -3,6 +3,15 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 release 0.28.31 preparation
+
+PR #297 merge `01986b2a36feeecfa114429264fbcf089026732f`を確認。
+branch `ux1/release-0.28.31`でaddon/core版を同期。公開latestは0.28.30。
+差分はmobile Settings行/狭いheaderのCSSと受入script/文書。公開契約/DB schema/Blender runtime変更なし。
+source日英320/1280と旧installed negativeは直下の記録。新releaseの署名公開・標準更新・installed成功は未検証。
+次は版数PRを通常mergeし、exact mergeからbundleを構築/正式署名公開する。全体3DS-8はPARTIAL。
+gate `./mf.sh test`: 1054 passed / 既知warning1 / 113.04秒。diff check成功。
+
 ## 2026-09-06 mobile Settings layout — source verified / installed pending
 
 PR #296 merge `f9ca26f48882bd8e58568320aa25847ee3f2b9e5`を確認。
