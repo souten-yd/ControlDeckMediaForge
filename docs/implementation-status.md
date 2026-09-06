@@ -9570,3 +9570,16 @@ source fixture9047はCtrl-Cで停止/terminal exit0。fixture/証跡は保持。
 sourceボタンisConnected assertion追加後の再実行も成功。証拠
 `/data1tb/mf-material-refresh-browser-identity-20260906`、既存fixture4→5→6版、全assert成功。
 同fixture serverを停止/exit0。過去の全timeout原因を網羅したとはしない。
+並行main #270/#271のcanvas補正と0.28.24版更新を保持して取り込み、文書競合は両記録を保持した。
+統合後gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 111.71秒。diff check成功。
+終了前実registry.statusはinstalled0.28.23/healthy/enabled。公開latest0.28.24の導入を推測しない。
+
+## v0.28.24 — brief が決めた画面へ揃える
+
+16:9 の背景を brief で頼むと毎回 `canvas_mismatch` で失敗していた。受付が
+brief を 1024x576 へ解決し、投入時に `snap_to_native` が学習寸法のバケット
+1344x768 へ寄せ、検査がその差を見て全候補を破棄していた。比は保たれており
+画そのものは正しく描けていたので、寸法の決め方が二か所にあることだけが原因。
+
+バケットで生成し、検査の前に要求どおりの画面へ揃える (`mediaforge/canvas.py`)。
+比の端数は中央を残して切る。揃えるのは生成のみで、編集は元画像の画面を使う。

@@ -15,6 +15,7 @@ from typing import Any
 
 from . import __version__
 from .asset_import import MAX_IMPORT_PIXELS
+from .canvas import conform_to_layout
 from .config import REPOSITORY_ROOT
 from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
 from .evaluator import CreativeEvaluationError, CreativeEvaluator
@@ -2425,6 +2426,34 @@ class JobManager:
             brief, resolved, width=width, height=height, has_alpha=has_alpha
         )
 
+    def _conform_outputs(
+        self, job: Job, outputs: list[dict[str, Any]], job_root: Path
+    ) -> None:
+        """brief が画面を決めていたら、その画面へ揃える。
+
+        編集は元画像の画面をそのまま使うので触らない。brief から寸法を決めたのは
+        生成だけであり、`resolved_layout` が残っているのもそのときだけである。
+        """
+        if job.request.operation != "image.generate":
+            return
+        recorded = job.request.constraints.get("resolved_layout")
+        if not isinstance(recorded, dict):
+            return
+        try:
+            width = int(recorded["width"])
+            height = int(recorded["height"])
+        except (KeyError, TypeError, ValueError):
+            # 読めない記録で生成物を作り替えない。検査がそのまま理由を名指しする。
+            logger.warning("job %s carries an unreadable resolved_layout", job.id)
+            return
+        for output in outputs:
+            path = contained(job_root, Path(output["path"]))
+            if conform_to_layout(path, width, height):
+                logger.info(
+                    "job %s conformed %s to the resolved canvas %dx%d",
+                    job.id, path.name, width, height,
+                )
+
     def _validate_output(
         self,
         job: Job,
@@ -2674,6 +2703,11 @@ class JobManager:
         if job.request.constraints.get("strict_edit") is True and job.request.constraints.get("edit_mode") != "outpaint":
             mask_id = str(job.request.constraints["editable_mask_asset_id"])
             reference_hashes[mask_id] = self.store.get_asset(mask_id).sha256
+        # 生成は学習寸法のバケットで行われる（_resolved_request の snap_to_native）。
+        # brief が決めた画面はそのバケットとは限らないので、検査より先に要求どおりの
+        # 画面へ揃える。ここで揃えないと、比を守って描けた画が canvas_mismatch で
+        # 毎回落ちる。揃えるのは決定的な操作なので、検査の前で完結させる。
+        self._conform_outputs(job, outputs, job_root)
         # Complete every deterministic validation before invoking a subjective
         # reviewer. A semantic pass can therefore never mask file/invariant failure.
         validated = [self._validate_output(job, output, job_root) for output in outputs]

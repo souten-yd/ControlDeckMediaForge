@@ -30,6 +30,10 @@ sourceにボタンのisConnected assertionも追加、同fixtureを保持して�
 `/data1tb/mf-material-refresh-browser-identity-20260906`は4→5→6版で全assert成功。
 再起動した9047も停止/exit0。過去の全timeoutの原因を網羅したとはしない。
 並行mainの#270（canvas補正）/#271（0.28.24版更新）と公開0.28.24を確認。元変更を保持して取り込む。
+両変更を保持して取り込み、status末尾の競合は双方の追記を残して解消。
+統合後gate `./mf.sh test`: 1030 passed / 既知warning1件 / 111.71秒。diff check成功。
+終了前registry.statusはinstalled0.28.23/healthy/enabled。公開latest0.28.24とは異なる。
+次はこの修正を含む署名版の準備とinstalled受入。版数は並行releaseを再確認して選ぶ。
 
 ## 2026-09-06 v0.28.23 signed / installed acceptance in progress
 
