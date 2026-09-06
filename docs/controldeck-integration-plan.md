@@ -822,6 +822,14 @@ See [3D Studio](design-3d-studio.md), [runtime/Web](design-blender-runtime-and-w
 - Keep existing image/G8 tools unchanged. New scene tools require additive schemas and current Host validation.
 - Long authoring/render operations return durable job references. Validate the current detached Host Job
   and job credential refresh path; do not extend a synchronous agent call indefinitely.
+
+Terminal outbox recovery uses the additive generic Host `jobs/{id}/terminal/reconcile` route.
+The current valid child identity may retry while in memory. After a core restart, an authenticated
+owner status/cancel request may replay that requested job's persisted terminal payload; no bearer
+is persisted or minted locally. The Host validates any fresh calling Job's signed actor, active
+state and matching runtime Job owner. An existing different Host terminal is preserved and recorded
+as a reconciliation conflict, never as `host_terminal_sent=true`. Expired/unsupported Host authority
+leaves the outbox pending. Retry never re-executes the recipe or creates another child Job.
 - Browser GUI traffic uses the existing authenticated binary WebSocket relay with a session-owned gateway.
   The presence of a relay is not proof of noVNC compatibility or post-connect revocation: test both.
 - GPU GUI sessions must account for retained VRAM. Release GPU processes before returning their lease;

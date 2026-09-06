@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from mediaforge.domain import JobRequest, JobStatus
-from mediaforge.host.client import HostIdentity
+from mediaforge.host.client import HostApiError, HostIdentity
 from mediaforge.scene_recipe_jobs import SceneRecipeJobManager
 from mediaforge.scene_recipes import SceneCreateRequest
 from mediaforge.scenes import SceneError
@@ -23,6 +23,120 @@ IDENTITY = HostIdentity(
     granted_capabilities=frozenset({"jobs.write"}),
     actor_subject="user:7",
 )
+
+
+def pending_terminal(store: Store) -> str:
+    job = store.create_job(JobRequest(operation="media.inspect", intent="outbox fixture"), host_managed=True)
+    store.create_scene_recipe_task(
+        job.id, owner="user:7", host_job_id="host-child", operation="scene.create",
+        runtime_id="blender-test", runtime_version="4.5.9", base_revision_id=None,
+        input_sha256="1" * 64, idempotency_key="2" * 64, request={},
+    )
+    store.update_job(job.id, status=JobStatus.FAILED)
+    store.update_scene_recipe_task(job.id, stage="fixture_failed")
+    store.queue_scene_recipe_terminal(job.id, {"status": "failed", "error": "fixture_failed"})
+    return job.id
+
+
+@pytest.mark.parametrize("mode", ["match", "conflict", "wrong_id", "invalid_match", "wrong_status", "unavailable"])
+def test_terminal_outbox_survives_restart_and_validates_receipt(tmp_path: Path, mode: str) -> None:
+    async def scenario():
+        store = Store(tmp_path)
+        store.initialize()
+        job_id = pending_terminal(store)
+        store = Store(tmp_path)
+        store.initialize()
+
+        class ReconcileHost(Host):
+            calls = 0
+
+            async def reconcile_job_terminal(self, identity, host_job_id, payload):
+                self.calls += 1
+                assert identity is IDENTITY and payload == {"status": "failed", "error": "fixture_failed"}
+                if mode == "unavailable":
+                    raise HostApiError("host_unreachable", "offline")
+                return {"host_job_id": "wrong" if mode == "wrong_id" else host_job_id,
+                        "status": "interrupted" if mode in {"conflict", "wrong_status"} else "failed",
+                        "disposition": "already_terminal", "terminal_matches":
+                            "true" if mode == "invalid_match" else mode != "conflict"}
+
+        host = ReconcileHost()
+        manager = SceneRecipeJobManager(store, Workspace(), host)
+        await manager.reconcile_terminal(job_id, IDENTITY)
+        projected = manager.projection(job_id, "user:7")
+        assert projected["host_terminal_sent"] is (mode == "match")
+        assert (projected["host_terminal_reconciliation"] is not None) is (mode in {"match", "conflict"})
+        await manager.reconcile_terminal(job_id, IDENTITY)
+        assert host.calls == (1 if mode in {"match", "conflict"} else 2)
+        assert host.created == [] and store.get_job(job_id).status == JobStatus.FAILED
+        assert store.get_scene_recipe_task(job_id).host_terminal == {"status": "failed", "error": "fixture_failed"}
+    asyncio.run(scenario())
+
+
+def test_outbox_checks_owner_expiry_and_capability_before_host_call(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    async def scenario():
+        store = Store(tmp_path)
+        store.initialize()
+        job_id = pending_terminal(store)
+        manager = SceneRecipeJobManager(store, Workspace(), object())
+        with pytest.raises(KeyError):
+            await manager.reconcile_terminal(job_id, replace(IDENTITY, actor_subject="user:8"))
+        await manager.reconcile_terminal(job_id, replace(IDENTITY, expires_at=0))
+        await manager.reconcile_terminal(job_id, replace(IDENTITY, granted_capabilities=frozenset()))
+        assert store.get_scene_recipe_task(job_id).host_terminal_reconciliation is None
+    asyncio.run(scenario())
+
+
+def test_failed_immediate_delivery_retries_with_child_without_reexecuting(tmp_path: Path) -> None:
+    class RecoveringHost(Host):
+        reconciled = 0
+
+        async def update_job(self, identity, host_job_id, payload):
+            if "status" in payload:
+                raise HostApiError("host_unreachable", "offline")
+            return await super().update_job(identity, host_job_id, payload)
+
+        async def reconcile_job_terminal(self, identity, host_job_id, payload):
+            assert identity.subject == "job:host-child"
+            self.reconciled += 1
+            return await super().reconcile_job_terminal(identity, host_job_id, payload)
+
+    async def scenario():
+        store = Store(tmp_path)
+        store.initialize()
+        host = RecoveringHost()
+        manager = SceneRecipeJobManager(store, Workspace(), host, control_poll_sec=0.01)
+        await manager.start()
+        job, _ = await manager.submit(recipe(), IDENTITY)
+        await manager.wait_cleanup(job.id)
+        for _ in range(150):
+            if store.get_scene_recipe_task(job.id).host_terminal_sent:
+                break
+            await asyncio.sleep(0.01)
+        assert store.get_scene_recipe_task(job.id).host_terminal_sent
+        assert host.reconciled == 1 and len(host.created) == 1
+        await manager.stop()
+        assert not manager._outbox_tasks
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("status", ["interrupted", "failed", "succeeded"])
+def test_host_terminal_control_stops_local_execution(tmp_path: Path, status: str) -> None:
+    from mediaforge.host.jobs import HostExecution
+
+    class EndedHost(Host):
+        async def job_control(self, identity, host_job_id):
+            return {"status": status, "cancel_requested": False}
+
+    async def scenario():
+        manager = SceneRecipeJobManager(Store(tmp_path), Workspace(), EndedHost(), control_poll_sec=0.001)
+        execution = HostExecution(IDENTITY, "host-child", "workflow", True)
+        with pytest.raises(HostApiError) as raised:
+            await manager._maintain_control("fixture", execution)
+        assert raised.value.code == "host_job_terminated"
+    asyncio.run(scenario())
 
 
 def recipe() -> SceneCreateRequest:
@@ -84,6 +198,10 @@ class Host:
         self, identity: HostIdentity, host_job_id: str
     ) -> dict[str, Any]:
         return {"access_token": "refreshed", "expires_at": 4_000_000_000}
+
+    async def reconcile_job_terminal(self, identity, host_job_id, payload):
+        return {"host_job_id": host_job_id, "status": payload["status"],
+                "disposition": "applied", "terminal_matches": True}
 
 
 class Workspace:
@@ -440,3 +558,6 @@ def test_scene_task_restart_fails_closed_with_persisted_stage(tmp_path: Path) ->
         ("host_context_lost", "host_context_lost"),
         ("service_restarted", "service_restarted"),
     ]
+    for item in store.list_jobs():
+        task = store.get_scene_recipe_task(item.id)
+        assert task.host_terminal == {"status": "failed", "error": task.stage}

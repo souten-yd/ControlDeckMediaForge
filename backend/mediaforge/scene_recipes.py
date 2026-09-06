@@ -228,6 +228,7 @@ class SceneTaskRecord(BaseModel):
     result: dict[str, Any] | None = None
     host_terminal: dict[str, Any] | None = None
     host_terminal_sent: bool = False
+    host_terminal_reconciliation: dict[str, Any] | None = None
     retry_of: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
     created_at: str
     updated_at: str

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Host terminal reconciliation receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["host_job_id", "status", "disposition", "terminal_matches"],
+  "properties": {
+    "host_job_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "status": {"enum": ["succeeded", "failed", "canceled", "interrupted"]},
+    "disposition": {"enum": ["applied", "already_terminal"]},
+    "terminal_matches": {"type": "boolean"}
+  },
+  "if": {"properties": {"disposition": {"const": "applied"}}},
+  "then": {"properties": {"terminal_matches": {"const": true}}}
+}

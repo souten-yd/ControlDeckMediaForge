@@ -3,6 +3,33 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 terminal outbox / v0.28.17 source
+
+branch `ux1/3d-terminal-outbox`、基準main `c5afdf9`。Host汎用PR #276はmerged `dac519b`。
+Hostの終端専用reconcileはactiveな新callの署名actor/caller/target ownerを検証し、確定済み終端を
+上書きせず一致/不一致receiptを返す。既存Job scopeやtoken/resource権限を広げない。
+
+MediaForgeは有効なchild identityで1〜30秒backoffのoutbox再送を行い、失効時は止める。
+core再起動後はownerの正規status/cancel callでそのJobのpayloadを再送する。SQLiteにreceiptを追加し、
+一致だけhost_terminal_sent=true、不一致はfalseのまま照合結果を保持。中断復旧時にもpayloadを残す。
+Host controlのinterrupted/failed/succeededは制作中断へ反映。refresh時actor_subjectも維持する。
+APIは加法的metadataのみ、新schemaは`host-terminal-reconciliation.json`。秘密tokenは永続化しない。
+
+`scripts/3ds_terminal_outbox_e2e.py`をHost diagnostic venvから起動し、coreは必ず別のMF venvで3process
+（seed→consume→consume）を実行。正規introspection・実Host HTTPで、interruptedとの不一致falseと
+active targetへの成功trueを確認。2回目processでも同receipt、local Jobは2件、recipe再実行0。
+証拠`/tmp/mf-terminal-http-1ppzav37/observations.json`。これは隔離した終端fixtureの受入であり、
+実Blender制作、full core Agent HTTP、installed package、600秒超refreshの成功とは記録しない。
+最初のsmokeはcore側PYTHONPATHにrepo rootがなくscripts importに失敗。分離venvを維持して修正後に成功。
+試験systemd unitは停止済み。導入済みv0.28.16とHost稼働serviceは変更していない。
+
+次はこのsliceをmerge後、exact mainから署名v0.28.17を公開・標準updateし、installed outbox/status/
+cancel・Host差異表示・長時間child credentialを実測する。全体3DS-8はPARTIAL。
+credential受入scriptは現時点でinstalled 0.28.16をassertするので、新版受入前に期待versionを
+明示引数化する。過去のFAILED記録を新版成功へ書き換えない。
+最終sourceの実HTTP再確認も同結果、証拠`/tmp/mf-terminal-http-4rjhhdmw/observations.json`。
+最終`./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 109.09秒。
+
 ## 2026-09-06 Host terminal history prerequisite
 
 前回PR #249はmerged `a4b7014`。汎用Host PR souten-yd/ControlDeck#275もmerged `40f1bc0`。

@@ -9130,3 +9130,32 @@ startup recoveryでrunning→interrupted、実HTTP200、別Job403、refresh404�
 この前提修正を終端同期完了とは扱わない。既存Job scopeとactor ownerを混同せず、正規identity復帰後の
 再送/照合が残る。MediaForge公開contract/画像/G8/installed v0.28.16には変更なし。
 引き継ぎ更新の`./mf.sh test`は993 passed / 既知warning1件 / 105.30秒。
+
+## 2026-09-06 — terminal outbox再送と再認証後照合
+
+source v0.28.17 / branch `ux1/3d-terminal-outbox`。Host PR `souten-yd/ControlDeck#276`はmerged `dac519b`。
+汎用終端reconcileは現在有効なservice identityとownerを検証し、新calling Jobからはactive callerと
+署名actorの一致も要求する。終端変更・credential更新・資源権限の委譲ではない。
+
+MediaForgeは即時送信3回で未達だったpayloadを、有効child identityが残る間だけbackoff再送する。
+identityはメモリのみ。再起動後は所有者の正規status/cancel callで当該Jobだけを再送する。
+startupの中断Jobにもoutboxを保持し、確認済み一致だけsent=true、Host既存終端との不一致は
+sent=falseとreceiptを永続化して再送を止める。未知/不正receiptや古いHost、認証不成立はpending。
+Host controlが確定終端を返したときは制作を中断し、refreshのactor metadataを落とさない。
+
+実行: `PYTHONPATH=/data1tb/ControlDeck-job-history/backend /data1tb/ControlDeck/app/.venv/bin/python
+scripts/3ds_terminal_outbox_e2e.py --host-repo /data1tb/ControlDeck-job-history
+--core-python /data1tb/ControlDeckMediaForge-3ds4/.venv/bin/python`。
+隔離Host systemd processと別core venvで、seed→consume→consumeの3processを実行。
+正規introspectionとHost実HTTPを通り、local `job_715a634111454b4d8231e28998d0fb7a` / Host `cf546939b730`は
+local failed / Host interruptedを保持してmatches=false、local `job_38af3bc148624939801b76faa20419ca` /
+Host `5ab5e06af58b`はsucceededを適用してmatches=true。再起動後の再照合も同receipt、local Job2件、
+recipe再実行0。証拠`/tmp/mf-terminal-http-1ppzav37/observations.json`。試験unitはfinallyで停止、inactive。
+初回2試行はcore PYTHONPATH不足によるimport失敗。core venvを変更せずrepo rootを追加して解消した。
+
+Host full testは960 passed / 1 skipped / 61.41秒。今回の実機受入は終端fixtureのdomain manager→Host HTTPであり、
+full core Agent HTTP、実Blender制作、PC/mobile、installed package、600秒超credential refreshはNOT TESTED。
+installed v0.28.16は変更なし。新schema/receiptは加法的。公開署名release/導入後受入は次工程、3DS-8はPARTIAL。
+最終source再確認も同じfalse/true・interrupted/succeeded・local2件。
+証拠`/tmp/mf-terminal-http-4rjhhdmw/observations.json`、試験unitはfinallyで停止した。
+最終`./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 109.09秒。

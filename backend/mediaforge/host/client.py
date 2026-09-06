@@ -115,6 +115,11 @@ class ControlDeckHostClient:
     async def job_control(self, identity: HostIdentity, host_job_id: str) -> dict[str, Any]:
         return await self._request(identity, "GET", f"/{ADDON_ID}/jobs/{host_job_id}/control")
 
+    async def reconcile_job_terminal(
+        self, identity: HostIdentity, host_job_id: str, payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        return await self._request(identity, "POST", f"/{ADDON_ID}/jobs/{host_job_id}/terminal/reconcile", json=payload)
+
     async def refresh_job_credential(
         self, identity: HostIdentity, host_job_id: str
     ) -> dict[str, Any]:

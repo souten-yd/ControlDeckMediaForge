@@ -2273,6 +2273,7 @@ def create_app(
                 status_code=422, detail={"code": "invalid_job_id"}
             ) from exc
         try:
+            await scene_recipe_jobs.reconcile_terminal(value.job_id, identity)
             return scene_recipe_jobs.projection(value.job_id, scene_owner(identity))
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "job_not_found"}) from exc
@@ -2289,7 +2290,9 @@ def create_app(
                 status_code=422, detail={"code": "invalid_job_id"}
             ) from exc
         try:
-            return await scene_recipe_jobs.cancel(value.job_id, scene_owner(identity))
+            await scene_recipe_jobs.cancel(value.job_id, scene_owner(identity))
+            await scene_recipe_jobs.reconcile_terminal(value.job_id, identity)
+            return scene_recipe_jobs.projection(value.job_id, scene_owner(identity))
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "job_not_found"}) from exc
 
