@@ -17,6 +17,13 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 ## 利用者ゴール別
 
+2026-09-06 live locale追加: Host汎用PR #293/294がmerge済み。本番Host frontendを3f71878へ
+fast-forward/buildし、実8765→installed MF0.28.35で日英の動的通知を1280/320で受入。
+選択source/offset0/filter/関連ID列/load/nonce/scene不変、page errors0。
+言語入力はnavigator.language + browser languagechange fixtureで、実ブラウザ設定UIではない。
+bridge eventとworkspace responseは実経路。証拠mf-library-live-locale-installed-{320,1280}-20260906。
+60件超installed pagingの残件は維持する。
+
 2026-09-06 Library追加: 専用source synthetic lineageで親65/子63の実HTTP/Chrome日英320を確認。
 60/60→5/3→60/60、全128 ID欠落/重複なし。英語Validation空fallbackを修正・source再受入。
 `/data1tb/mf-library-paging-20260906`。installed本番は最大children12件のみで、
@@ -43,7 +50,7 @@ active4.5.13維持。証拠 `/data1tb/mf-history-reinstall-20260906`。
 
 | 条件 | 確認済み証拠の範囲 | 判定と残件 |
 |---|---|---|
-| GOAL-01 共通Library | source日英320pxに加え、署名installed0.28.29/30で画像/GLB/.blend filter、親子双方向移動、metadata移動中model read0、明示GLB表示、scene不変を確認 | PARTIAL: installed日英切替・relationsの60件超pagingを追加照合。320px viewer背景scrollは0.28.30で修正・受入済み |
+| GOAL-01 共通Library | source日英320pxに加え、署名installed0.28.29/30で画像/GLB/.blend filter、親子双方向移動、metadata移動中model read0、明示GLB表示、scene不変を確認。0.28.35では実Host経由の動的日英通知と選択保持を1280/320で確認（browser言語入力fixture） | PARTIAL: relationsの60件超installed pagingを追加照合。320px viewer背景scrollは0.28.30で修正・受入済み |
 | GOAL-02 viewer | 署名installed0.28.19でLibrary→3D card、±XYZ回転・zoom両方向、逆操作差分0、320px、scene不変をoverlayなしで確認 | VERIFIED（利用者指定操作の範囲）。2026-09-06利用者確認によりwire/animationは必須から除外 |
 | GOAL-03 設定管理 | 4.5.9/4.5.13共存/active切替/参照中削除拒否。隔離source日本語Settingsで実download更新、active削除拒否、未参照旧版削除、再導入、stamp退避からの修復と実Blender probe。installed0.28.31でdesktop/320pxの説明幅・横overflowなし・project参照削除保護を未変更scriptでも再確認 | PARTIAL: 完全空環境browser install、installed日英/lifecycle、失敗後再開とscenario Dの全条件を照合。前回単発pointer不達の原因は未確定 |
 | GOAL-04 Web Blender | `.14-long/observations.json`: 621.451秒GUI、入力、保存revision 2→3、reload/reconnect | VERIFIED（この操作範囲）。credential refreshの証拠ではない |
