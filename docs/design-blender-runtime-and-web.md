@@ -129,7 +129,14 @@ DB/ORM/同期subprocess待機をasync requestに追加しない。threadの開�
 版選択と参照取得を削除guardと排他に行う。SceneRecipeJobManagerがHost child受付待ち、
 実行slot待ち、処理と取消cleanupの終端まで同じin-process参照を所有する。
 stopは受付taskも回収し、wait_cleanupは参照解放まで待つ。
-GUI/working copy等のdurable集計と確認付き削除は別の残件であり、この保護だけでは代用しない。
+durable集計の先行実装はStore.active_scene_runtime_referencesで、未終端recipe Job、
+active working copy、稼働GUIを同じDB snapshotから読む。GUIのruntime未確定時は
+working/recoveryのpin、未指定ならscene current revisionを参照し、不明なら全版の削除を拒否する。
+既存live_reference_countはin-processとdurable参照の合計、内訳をprivate previewへ追加する。
+期限超過だけではworking copyの参照を外さず、正式なretireを待つ。
+managed削除のpreview/受付/実行はworker threadでDB/filesystem処理を行い、開始済みthreadを
+request取消で放棄しない。GUI受付/working-copy作成と削除commit間の排他、確認付き削除は
+別の残件であり、参照snapshotだけで競合全体を解決したとは扱わない。
 
 ## 5. durable setup operation
 

@@ -1402,6 +1402,65 @@ class Store:
             ).fetchone()
         return int(row["count"])
 
+    def active_scene_runtime_references(self, runtime_id: str) -> dict[str, int]:
+        """Read removal blockers from one durable snapshot, not a UI projection.
+
+        Expired working leases are still blockers until explicitly retired. A
+        missing/unknown GUI pin blocks every runtime instead of guessing active.
+        This snapshot does not itself serialize new admissions with deletion.
+        """
+        active = tuple(state.value for state in ACTIVE_BLENDER_SESSION_STATES)
+        counts = {"recipe_jobs": 0, "working_copies": 0, "sessions": 0, "unresolved_sessions": 0}
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            counts["recipe_jobs"] = int(connection.execute(
+                """SELECT COUNT(*) FROM scene_recipe_tasks AS task
+                   LEFT JOIN jobs AS job ON job.id = task.job_id
+                   WHERE task.runtime_id = ? AND
+                     (job.status IS NULL OR job.status NOT IN ('succeeded', 'failed', 'canceled'))""",
+                (runtime_id,),
+            ).fetchone()[0])
+            counts["working_copies"] = int(connection.execute(
+                "SELECT COUNT(*) FROM scene_working_copies WHERE runtime_id = ? AND state = 'active'",
+                (runtime_id,),
+            ).fetchone()[0])
+            sessions = connection.execute(
+                f"""SELECT session.runtime_id, session.value_json, session.owner, session.scene_id,
+                           revision.runtime_id AS current_runtime_id
+                    FROM blender_web_sessions AS session
+                    LEFT JOIN scene_documents AS scene ON scene.id = session.scene_id
+                    LEFT JOIN scene_revisions AS revision ON revision.id = scene.current_revision_id
+                    WHERE session.state IN ({','.join('?' * len(active))})""", active,
+            ).fetchall()
+            for row in sessions:
+                selected = row["runtime_id"]
+                if selected is None:
+                    try:
+                        value = json.loads(row["value_json"])
+                        if not isinstance(value, dict):
+                            raise ValueError("session record is not an object")
+                        working_id = value.get("working_id")
+                        if working_id is None:
+                            working_id = value.get("recovery_source_id")
+                        if working_id is not None:
+                            if not isinstance(working_id, str):
+                                raise ValueError("session working identity is invalid")
+                            working = connection.execute(
+                                """SELECT runtime_id FROM scene_working_copies
+                                   WHERE id = ? AND owner = ? AND scene_id = ?""",
+                                (working_id, row["owner"], row["scene_id"]),
+                            ).fetchone()
+                            selected = working["runtime_id"] if working is not None else None
+                        else:
+                            selected = row["current_runtime_id"]
+                    except (ValueError, TypeError):
+                        selected = None
+                if not selected:
+                    counts["unresolved_sessions"] += 1
+                elif selected == runtime_id:
+                    counts["sessions"] += 1
+        return counts
+
     def acquire_scene_working_copy(
         self, owner: str, value: SceneWorkingCopy, *, now: str
     ) -> SceneWorkingCopy:

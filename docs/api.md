@@ -89,6 +89,19 @@ is limited to managed-root realpaths, refuses the active runtime and live pinned
 G8 references, revalidates the preview under the same reference lock, and keeps
 assets, scenes, history, external runtimes, and download cache out of scope.
 
+Removal/unregistration previews additionally expose `in_process_reference_count`
+and `durable_reference_counts` (`recipe_jobs`, `working_copies`, `sessions`,
+`unresolved_sessions`). `live_reference_count` is their sum: references, not
+distinct processes. Nonterminal recipe Jobs and active working copies (even
+expired leases until retired) block removal. An unpinned active GUI resolves its
+working/recovery copy, then its current scene revision only if no working ID was
+specified. An unresolved GUI conservatively blocks every runtime. All these
+counts enter the confirmation fingerprint; an older outstanding preview must
+be requested again. Already-unregistered removal journals retain recovery cleanup.
+Managed preview, admission and execution run their synchronous DB/filesystem work
+in worker threads; a started admission/deletion is tracked through request cancellation.
+This does not yet implement history-confirmed removal or atomic GUI admission.
+
 The configured fixed legacy reference has separate private methods
 `blender.runtime.unregister.preview`, `.unregister`, and `.register_legacy`.
 The standalone actions are `unregister_preview`, `unregister`, and `register_legacy`.

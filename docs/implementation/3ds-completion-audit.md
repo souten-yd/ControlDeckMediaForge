@@ -44,6 +44,11 @@ active/Job/GUI/working-copyの保護は維持する。確認付き削除自体�
 参照1と解除拒否、制作成功後参照0を確認。HTTP/installed/GUI durable参照の証拠ではない。
 前sliceのB削除や0.28.34のproject拒否を、このA削除条件の成功へ読み替えない。
 
+durable参照集計をmanaged/external previewへ追加し、managed削除経路をworker-thread化。
+source実HTTP/GUIで34.140秒passed、ready時はsession1+working copy1、停止後0を確認。
+全6 Asset/provenance bytesとscene/revision metadataは不変。GUI受付/削除commit間の排他と
+確認付き削除は残件。今回active/project拒否も併存し、runtime削除自体は実施していない。
+
 v0.28.34（target f806f54609e34924086887744ae30d6852aec297）署名公開/consumer再取得、
 標準update17.353秒/healthyを確認。package日本語1280/320の外部解除・reload非復活・再登録は
 7.944秒exit0、外部5,580 filesのinventory不変。installedはlegacy登録なしのため
