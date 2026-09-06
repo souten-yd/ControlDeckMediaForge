@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-06 mobile Settings layout — source verified
+
+branch `ux1/3d-settings-mobile-rows`。runtime行を767px以下で縦積み、操作button44px以上/折返し可、
+420px以下headerの折返しを追加。rowだけではroot横overflowが残り、header設定buttonの超過も実測して修正。
+新source browser scriptは日英320/1280でexit0。320はtext0→255.663、root client305/scroll319→305/305、
+操作欄は説明の下。1280はroot1265/1265で横並び維持。runtime不変/page errors0、撮影目視確認。
+証拠 `/data1tb/mf-settings-layout-{before,after,after2}-20260906`。source PID78593正常終了。
+installed0.28.30の`--require-readable-layout` negativeはtext0/root305/319を検出して失敗。
+証拠 `/data1tb/mf-settings-layout-installed-negative-0.28.30-20260906`。個別login revoke/削除送信なし。
+修正版の署名公開/installed成功はNOT TESTED。製品差分はCSSだけ、Host/公開契約変更なし。全体3DS-8はPARTIAL。
+gate `./mf.sh test`: 1054 passed / 既知warning1 / 119.47秒。diff check成功。
+
 ## 2026-09-06 installed Settings protection — verified; mobile layout defect found
 
 installed0.28.30の実Host opaque iframeで新`3ds_settings_protection_installed_e2e.py`を実行、

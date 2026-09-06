@@ -21,6 +21,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--expected-version", required=True)
+    parser.add_argument("--require-readable-layout", action="store_true")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     status = registry.status("media-forge")
@@ -67,6 +68,10 @@ def main() -> None:
                             controls: row.lastElementChild.getBoundingClientRect().width
                         }))
                     })"""))
+                    if args.require_readable_layout:
+                        layout = evidence["layouts"][-1]
+                        assert all(row["text"] >= 100 for row in layout["rows"]), layout
+                        assert layout["scroll"] <= layout["client"], layout
                     for runtime_id in runtimes:
                         frame.locator(f'[data-blender-remove="{runtime_id}"]').click()
                         expect(frame.locator("#blender-remove-dialog")).to_be_visible()

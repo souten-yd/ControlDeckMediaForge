@@ -3,6 +3,29 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 mobile Settings layout — source verified / installed pending
+
+PR #296 merge `f9ca26f48882bd8e58568320aa25847ee3f2b9e5`を確認。
+branch `ux1/3d-settings-mobile-rows`。767px以下でruntime行を1列にし、controlsを説明の下へ配置。
+buttonsはmin-height44px/折返し可。420px以下のheaderもflex-wrapを許容し、縦scrollbarのある
+320pxで設定buttonが右へ押し出される別原因を修正。機能/公開契約/Host変更なし。
+
+隔離dataのsource9161/PID78593で新`3ds_settings_layout_source_e2e.py`を実行。
+before `/data1tb/mf-settings-layout-before-20260906`: 英語320/text0/root305/319で失敗。
+rowだけ修正したafterもtext255.663になったがroot305/319で失敗。headed Chromeでheaderの
+nav-settings右端307.106>client305を観測し、header折返しを追加。
+after2 `/data1tb/mf-settings-layout-after2-20260906`: exit0、日英320ともroot305/305、text255.663、
+controlsが説明の下、row client280/scroll280。日英1280はroot1265/1265、desktop横並びを維持。
+runtime state前後一致、page errors0。localeはsource document設定でありHost locale eventの証拠ではない。
+撮影を目視確認。sourceはSIGINT/exit0で停止。
+
+installed scriptへ`--require-readable-layout`を追加。旧0.28.30で実行した
+`/data1tb/mf-settings-layout-installed-negative-0.28.30-20260906`はtext0/root305/319で期待どおり失敗。
+個別login revoke/overlayなし/削除送信なし。新しいflagで未修正版を検出できた。
+修正版の署名配布/installed成功はNOT TESTED。次は通常merge後に版数更新/正式署名配布し、同flagを再実行。
+全体3DS-8はPARTIAL。稼働版は変更していない。
+gate `./mf.sh test`: 1054 passed / 既知warning1 / 119.47秒。diff check成功。
+
 ## 2026-09-06 installed Settings project-reference protection / mobile defect
 
 PR #295 merge `c98f12ea3c9e6b32a5f17456aa8c800411806fcd`を確認。
