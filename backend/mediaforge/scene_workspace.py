@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import os
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -266,6 +267,26 @@ class SceneWorkspace:
             finally:
                 if generated.exists():
                     generated.unlink()
+
+    def acquire_recipe_runtime(
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest
+    ) -> tuple[ExitStack, tuple[str, str, str | None]]:
+        """Select and pin atomically with removal; call and close off the event loop.
+
+        The returned stack owns a reference, not the resolver's thread lock.
+        The admission caller transfers it to the execution task after Host acceptance.
+        """
+        references = ExitStack()
+        try:
+            with self.resolver.removal_guard():
+                pin = self.recipe_runtime_pin(owner, value)
+                runtime = references.enter_context(self.resolver.runtime_reference(pin[0]))
+                if runtime is None or runtime.version != pin[1]:
+                    raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
+            return references, pin
+        except BaseException:
+            references.close()
+            raise
 
     def recipe_runtime_pin(
         self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest

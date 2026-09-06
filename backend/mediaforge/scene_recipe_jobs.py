@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import time
+from contextlib import ExitStack
 from typing import Any
 
 from .domain import ErrorDetail, Job, JobRequest, JobStatus
@@ -41,6 +42,7 @@ class SceneRecipeJobManager:
         self.workspace = workspace
         self.host = host
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._admissions: set[asyncio.Task[tuple[Job, SceneTaskRecord]]] = set()
         self._executions: dict[str, HostExecution] = {}
         self._outbox_tasks: dict[str, asyncio.Task[None]] = {}
         self._outbox_guard = asyncio.Lock()
@@ -54,6 +56,10 @@ class SceneRecipeJobManager:
 
     async def stop(self) -> None:
         self._stopping = True
+        admissions = list(self._admissions)
+        for task in admissions:
+            task.cancel()
+        await asyncio.gather(*admissions, return_exceptions=True)
         for job_id, task in list(self._tasks.items()):
             current = self.store.get_job(job_id)
             if current.status in {JobStatus.QUEUED, JobStatus.RUNNING}:
@@ -82,6 +88,22 @@ class SceneRecipeJobManager:
         *,
         retry_of: str | None = None,
     ) -> tuple[Job, SceneTaskRecord]:
+        if self._stopping:
+            raise SceneError("service_stopped", "Scene recipe admission is stopped")
+        task = asyncio.create_task(self._submit(value, identity, retry_of=retry_of))
+        self._admissions.add(task)
+        try:
+            return await task
+        finally:
+            self._admissions.discard(task)
+
+    async def _submit(
+        self,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        identity: HostIdentity,
+        *,
+        retry_of: str | None = None,
+    ) -> tuple[Job, SceneTaskRecord]:
         missing = {"jobs.write"} - identity.granted_capabilities
         if missing:
             raise SceneError("host_capability_not_granted", "Host jobs.write capability is required")
@@ -102,9 +124,37 @@ class SceneRecipeJobManager:
             else "scene.edit"
         )
         encoded = json.dumps(external, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        runtime_id, runtime_version, base_revision_id = self.workspace.recipe_runtime_pin(
-            owner, value
-        )
+        acquisition = asyncio.create_task(asyncio.to_thread(
+            self.workspace.acquire_recipe_runtime, owner, value
+        ))
+        try:
+            references, pin = await asyncio.shield(acquisition)
+        except asyncio.CancelledError:
+            # A started thread must finish before its reference can be released.
+            references, _ = await acquisition
+            await asyncio.to_thread(references.close)
+            raise
+        try:
+            return await self._submit_pinned(
+                value, identity, owner, external, operation, encoded, retry_of, references, pin
+            )
+        except BaseException:
+            await asyncio.to_thread(references.close)
+            raise
+
+    async def _submit_pinned(
+        self,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        identity: HostIdentity,
+        owner: str,
+        external: dict[str, Any],
+        operation: str,
+        encoded: bytes,
+        retry_of: str | None,
+        references: ExitStack,
+        pin: tuple[str, str, str | None],
+    ) -> tuple[Job, SceneTaskRecord]:
+        runtime_id, runtime_version, base_revision_id = pin
         attached = await self.host.create_or_attach_job(
             identity, title="Media Forge 3D scene recipe", detached=True
         )
@@ -164,9 +214,45 @@ class SceneRecipeJobManager:
             workload_class="workflow",
             owns_terminal=attached.get("created") is True,
         )
-        task = asyncio.create_task(self._run(job.id, value), name=f"scene-recipe-{job.id}")
+        started = asyncio.Event()
+        task = asyncio.create_task(
+            self._run_pinned(job.id, value, references, started), name=f"scene-recipe-{job.id}"
+        )
+        task.add_done_callback(lambda completed: started.set())
         self._tasks[job.id] = task
+        try:
+            # Do not return a task that can be canceled before entering its finally.
+            await started.wait()
+            if task.cancelled():
+                raise asyncio.CancelledError
+        except BaseException:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            self._tasks.pop(job.id, None)
+            self._executions.pop(job.id, None)
+            raise
         return job, record
+
+    async def _run_pinned(
+        self,
+        job_id: str,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        references: ExitStack,
+        started: asyncio.Event,
+    ) -> None:
+        try:
+            started.set()
+            await self._run(job_id, value)
+        finally:
+            cleanup = asyncio.create_task(asyncio.to_thread(references.close))
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                await cleanup
+                raise
+            finally:
+                self._tasks.pop(job_id, None)
+                self._executions.pop(job_id, None)
 
     def projection(self, job_id: str, owner: str) -> dict[str, Any]:
         task = self.store.get_scene_recipe_task(job_id, owner=owner)
@@ -437,8 +523,6 @@ class SceneRecipeJobManager:
         finally:
             control.cancel()
             await asyncio.gather(control, return_exceptions=True)
-            self._tasks.pop(job_id, None)
-            self._executions.pop(job_id, None)
             record = self.store.get_scene_recipe_task(job_id)
             if not self._stopping and record.host_terminal and not record.host_terminal_sent:
                 self._outbox_tasks[job_id] = asyncio.create_task(

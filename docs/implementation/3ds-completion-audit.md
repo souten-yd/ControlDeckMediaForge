@@ -39,7 +39,9 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 scenario Dの停止後A削除とproject pin保護の差について、base-plan §12とruntime設計§4.1に
 履歴を保持する明示確認付きmanaged削除/同版再導入を定義した。既定の参照拒否と
-active/Job/GUI/working-copyの保護は維持する。まだ設計のみで実装・実機受入は未完了。
+active/Job/GUI/working-copyの保護は維持する。確認付き削除自体は実装・実機受入とも未完了。
+受付保護の先行実装はsource実Blender+遅延Host fixtureで1.801秒exit0、Host待ち/slot待ちの
+参照1と解除拒否、制作成功後参照0を確認。HTTP/installed/GUI durable参照の証拠ではない。
 前sliceのB削除や0.28.34のproject拒否を、このA削除条件の成功へ読み替えない。
 
 v0.28.34（target f806f54609e34924086887744ae30d6852aec297）署名公開/consumer再取得、

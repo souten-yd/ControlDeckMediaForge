@@ -70,10 +70,10 @@ def test_scene_agent_returns_detached_job_and_status_uses_stable_actor(
     scene_id = "scene_" + "1" * 32
     revision_id = "revision_" + "2" * 32
 
-    app.state.scene_workspace.recipe_runtime_pin = lambda owner, value: (
-        "blender-test",
-        "4.5.9",
-        None,
+    from contextlib import ExitStack
+
+    app.state.scene_workspace.acquire_recipe_runtime = lambda owner, value: (
+        ExitStack(), ("blender-test", "4.5.9", None)
     )
 
     async def apply_recipe(

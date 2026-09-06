@@ -1,5 +1,41 @@
 # Media Forge implementation status
 
+## 2026-09-06 recipe admission runtime pin
+
+PR #321 merged `1a5bc35f4a37307867821f86039be5f1c1c55010` をfetch確認。
+branch `ux1/3d-recipe-admission-pin`。runtime設計§4.1の受付中保護を実装。
+SceneWorkspace.acquire_recipe_runtimeは削除と同じguard内で版選択と参照取得を行い、
+guardを離してから参照だけを返す。呼出と解放はasyncio.to_threadへ移した。
+Host child応答待ち→実行slot待ち→Blender処理/取消cleanupまで同じ参照を保持する。
+受付taskもmanagerが追跡し、stopで取消・回収する。実行taskのfinally開始を確認してから
+submitが返り、wait_cleanupは参照解放まで待つ。公開契約/Host/画像/G8変更なし。
+
+focused `tests/test_scene_recipe_runtime_pin.py tests/test_scene_recipe_jobs.py
+tests/test_scene_agent_api.py`: 29 passed/既知warning1。
+追加6 casesは実resolverとfixture worker/Hostで、Host待機中のactive切替・登録解除拒否、
+成功/不正応答/取消/stopでの参照解放、取得thread待ち取消、slot待ちとworker後片付け中の保持。
+全gate `./mf.sh test`: 1085 passed/既知warning1/163.01秒。
+
+実行: `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_recipe_runtime_pin_e2e.py
+--evidence-dir /data1tb/mf-recipe-admission-pin-20260906
+--managed-root /data1tb/mf-long-setup-source-20260906/runtimes/blender
+--legacy-root /data1tb/mf-clean-packaged-0.28.32-QBvHfm/feature/runtimes/blender/blender-4.5.9-linux-x64`。
+1.801秒exit0。新しい専用data/registryだけを書込み、既存runtimeは読取参照。
+遅延Host応答は明示fixture、Blender batchと独立scene/GLB検査は実4.5.9 process。
+Host待ち/slot待ちのlive参照は各1、active切替後も登録解除はlive referencesで拒否。
+job_5bba3ed09faa4a748509c23691d2edd3 succeeded、元のmanaged runtime/version pin維持。
+scene_fba79736625f4109a88f926a850d491eの初版を確定、終了後live参照0。
+.blend426,899 B SHA c4c25d2c436de9437b86ce9e9a3d70ba6786a859c81255e84f1410a6c60f6b0b、
+GLB1,756 B SHA a9a481e36f7508a853767920c73bb42d2a541ddfbd9a956b6afb132a8a0d3e20。
+実binary SHA de8e8092c49e42cc6f1adde86aea0202ea5bad3338725887ecbcb7274dd0f926は前後不変。
+これはdomain/実process受入であり、HTTP/Settings/installed Hostの受入ではない。
+Host/MF user unitは照会時active/PID250878・244551。本sliceからrestart/updateは要求していない。
+
+確認付き履歴削除、GUI/working-copy/queued recipeのdurable集計、同版再導入は未実装・NOT TESTED。
+今回のin-process pinだけでscenario Dを完了にしない。新release/installed回帰もNOT TESTED。
+次はdurable参照集計とruntime管理側のworker-thread化を進め、GUI準備中の未確定pinも保護する。
+全体3DS-8/scenario DはPARTIAL。
+
 ## 2026-09-06 scenario D stopped-runtime removal policy
 
 PR #320 merged `da4e54bfcd93d7aa36552b88ef9c0604428eceed` をfetch確認。

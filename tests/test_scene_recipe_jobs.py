@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -205,6 +206,9 @@ class Host:
 
 
 class Workspace:
+    def acquire_recipe_runtime(self, owner: str, value: SceneCreateRequest):
+        return ExitStack(), self.recipe_runtime_pin(owner, value)
+
     def recipe_runtime_pin(
         self, owner: str, value: SceneCreateRequest
     ) -> tuple[str, str, None]:
@@ -274,7 +278,7 @@ async def _durable_case(tmp_path: Path) -> None:
     await manager.stop()
 
 
-class BlockingWorkspace:
+class BlockingWorkspace(Workspace):
     def __init__(self) -> None:
         self.started = asyncio.Event()
 

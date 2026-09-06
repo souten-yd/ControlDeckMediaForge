@@ -125,6 +125,12 @@ DB/ORM/同期subprocess待機をasync requestに追加しない。threadの開�
 別版への自動pin変更は再現性とimmutable revisionを壊す。明示確認と同版再導入で双方を維持する。
 現時点ではこの確認付き削除は未実装。0.28.34の拒否動作をこの機能の受入とは扱わない。
 
+受付保護の先行実装: SceneWorkspace.acquire_recipe_runtimeがworker thread内で
+版選択と参照取得を削除guardと排他に行う。SceneRecipeJobManagerがHost child受付待ち、
+実行slot待ち、処理と取消cleanupの終端まで同じin-process参照を所有する。
+stopは受付taskも回収し、wait_cleanupは参照解放まで待つ。
+GUI/working copy等のdurable集計と確認付き削除は別の残件であり、この保護だけでは代用しない。
+
 ## 5. durable setup operation
 
 提案状態: queued → preflight → downloading → verifying → installing → probing → ready。
