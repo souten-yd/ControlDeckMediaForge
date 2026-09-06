@@ -71,13 +71,36 @@ def main() -> None:
                 print(json.dumps({"loading": page.locator("#viewer-3d-loading").inner_text(), "errors": errors}))
                 raise
             assert page.locator("#viewer-edit").is_hidden()
+            viewer_layout = page.evaluate("""() => ({
+                client: document.scrollingElement.clientWidth,
+                scroll: document.scrollingElement.scrollWidth,
+                overflow: getComputedStyle(document.documentElement).overflow
+            })""")
+            page.screenshot(path=str(args.evidence_dir / "glb-layout.png"))
+            assert viewer_layout["scroll"] <= viewer_layout["client"], viewer_layout
+            assert viewer_layout["overflow"] == "hidden", viewer_layout
             page.locator("#viewer-close").click()
+            assert page.evaluate("getComputedStyle(document.documentElement).overflow") != "hidden"
+            page.locator('[data-library-media="image"]').click()
+            page.locator(f'#library-grid [data-asset-id="{texture}"]').click()
+            expect(page.locator("#viewer-image")).to_be_visible()
+            image_layout = page.evaluate("""() => ({
+                client: document.scrollingElement.clientWidth,
+                scroll: document.scrollingElement.scrollWidth,
+                overflow: getComputedStyle(document.documentElement).overflow
+            })""")
+            assert image_layout["scroll"] <= image_layout["client"], image_layout
+            assert image_layout["overflow"] == "hidden", image_layout
+            page.locator("#viewer-close").click()
+            assert page.evaluate("getComputedStyle(document.documentElement).overflow") != "hidden"
             assert page.request.get(scene_url).json() == before
             assert not errors, errors
             evidence = {"observations": observations, "scene_id": fixture["scene_id"], "source": source,
                         "glb": glb, "texture": texture, "bidirectional_navigation": True,
                         "full_asset_requests_during_navigation": 0, "explicit_glb_preview": True,
-                        "scene_unchanged": True, "page_errors": errors}
+                        "scene_unchanged": True, "page_errors": errors,
+                        "viewer_layout": viewer_layout, "image_layout": image_layout,
+                        "background_scroll_restored": True}
             (args.evidence_dir / "observations.json").write_text(json.dumps(evidence, indent=2))
             print(json.dumps(evidence))
         finally:

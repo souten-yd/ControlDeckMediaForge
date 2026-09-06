@@ -537,6 +537,11 @@ def test_scene_studio_lists_immutable_revisions_and_reuses_the_3d_viewer():
     assert "@media (max-width: 760px)" in STYLES
 
 
+def test_fullscreen_viewer_locks_only_the_open_modal_background():
+    assert 'html:has(#viewer[open]) { overflow: hidden; }' in STYLES
+    assert 'html:has(#scene-compare-dialog[open]) { overflow: hidden; }' in STYLES
+
+
 def test_scene_material_binding_uses_library_assets_and_private_path_free_bridges():
     material = SCRIPT[
         SCRIPT.index("function materialOption"):SCRIPT.index("const ACTIVE_BLENDER_SESSION_STATES")

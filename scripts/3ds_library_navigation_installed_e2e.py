@@ -23,6 +23,7 @@ def main() -> None:
     parser.add_argument("--host-url", default="http://127.0.0.1:8765")
     parser.add_argument("--scene-id", required=True)
     parser.add_argument("--expected-version", required=True)
+    parser.add_argument("--require-scroll-lock", action="store_true")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     installed = registry.status("media-forge")
@@ -115,10 +116,17 @@ def main() -> None:
                         inner_width: innerWidth, root_client: document.scrollingElement.clientWidth,
                         root_scroll: document.scrollingElement.scrollWidth,
                         viewer_client: document.querySelector('#viewer').clientWidth,
-                        viewer_scroll: document.querySelector('#viewer').scrollWidth
+                        viewer_scroll: document.querySelector('#viewer').scrollWidth,
+                        root_overflow: getComputedStyle(document.documentElement).overflow
                     })""")
+                    if args.require_scroll_lock:
+                        layout = evidence["viewer_layout"]
+                        assert layout["root_scroll"] <= layout["root_client"], layout
+                        assert layout["root_overflow"] == "hidden", layout
                     page.screenshot(path=str(args.evidence_dir / "explicit-glb.png"))
                     frame.locator("#viewer-close").click()
+                    if args.require_scroll_lock:
+                        assert frame.evaluate("getComputedStyle(document.documentElement).overflow") != "hidden"
                     assert frame.evaluate("id => call('scenes.get', {scene_id:id})", args.scene_id) == before
                     assert not errors, errors
                     evidence.update({"filters": rows, "source": source, "glb": glb, "texture": texture,

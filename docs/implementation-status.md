@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-06 viewer modal background scroll — source verified
+
+branch `ux1/3d-viewer-modal-scroll`。全画面viewer表示中だけhtml rootのscrollを停止するCSSを追加。
+100vwのviewerを背景scrollbarで狭くなったroot内へ置く状態を避け、閉じた後は通常scrollへ戻す。
+画像/GLB共通、既存材質比較のscroll制御は維持。公開契約/scene/asset/Hostコード変更なし。
+
+source9159/既存隔離素材に対し`library_lineage_ui_e2e.py`の新検査を実行。
+beforeはoverflow visibleで失敗（小fixtureでは320/320であり横overflowの再現ではない）。
+after `/data1tb/mf-viewer-scroll-after-20260906`はGLB/画像320/320/hidden、close後scroll復帰、
+日英filter/lineage維持、scene不変、page errors0。GLB screenshotを目視確認。source process正常終了。
+installed0.28.29へ`3ds_library_navigation_installed_e2e.py --require-scroll-lock`を実行した
+`/data1tb/mf-viewer-scroll-installed-negative-0.28.29-20260906`はroot305/319/visibleで失敗し、
+未修正版を新assertionが検出することを確認。診断は個別login作成/revoke、overlay/scene変更なし。
+修正版の署名公開/installed受入はNOT TESTED。全体3DS-8はPARTIALのまま。
+gate `./mf.sh test`: 1053 passed / 既知Starlette warning1 / 115.62秒。diff check成功。
+
 ## 2026-09-06 v0.28.29 signed / installed navigation and Library
 
 PR #287/tag target `a906cff03a67ce9ae9f325b62a775589659f1186`からexact bundleを構築・正式署名公開。
