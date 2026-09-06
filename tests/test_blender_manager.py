@@ -627,41 +627,41 @@ def test_remove_requires_inactive_unreferenced_runtime_and_current_preview(tmp_p
         await manager.start()
         assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
         with pytest.raises(BlenderRuntimeOperationError) as active_error:
-            manager.remove(RUNTIME_ID, manager.removal_preview(RUNTIME_ID)["confirmation_fingerprint"])
+            await manager.remove(RUNTIME_ID, (await manager.removal_preview(RUNTIME_ID))["confirmation_fingerprint"])
         assert active_error.value.code == "blender_runtime_in_use"
         assert (await wait_terminal(store, manager.update().id)).state == BlenderRuntimeOperationState.READY
 
         with resolver.g8_reference() as pinned:
             assert pinned is not None and pinned.runtime_id == RUNTIME_ID
-            blocked = manager.removal_preview(RUNTIME_ID)
+            blocked = await manager.removal_preview(RUNTIME_ID)
             assert blocked["can_remove"] is False
             assert blocked["live_reference_count"] == 1
             assert "live_reference" in blocked["blocked_reasons"]
 
         reference_count = store.scene_runtime_reference_count
         store.scene_runtime_reference_count = lambda _runtime_id: 1  # type: ignore[method-assign]
-        project_blocked = manager.removal_preview(RUNTIME_ID)
+        project_blocked = await manager.removal_preview(RUNTIME_ID)
         assert project_blocked["can_remove"] is False
         assert project_blocked["project_reference_count"] == 1
         assert "project_reference" in project_blocked["blocked_reasons"]
         store.scene_runtime_reference_count = reference_count  # type: ignore[method-assign]
 
-        preview = manager.removal_preview(RUNTIME_ID)
+        preview = await manager.removal_preview(RUNTIME_ID)
         assert preview["can_remove"] is True and preview["reclaimable_bytes"] > 0
         marker = resolver.managed_root / RUNTIME_ID / "changed-after-preview"
         marker.write_text("change", encoding="utf-8")
         with pytest.raises(BlenderRuntimeOperationError) as stale:
-            manager.remove(RUNTIME_ID, preview["confirmation_fingerprint"])
+            await manager.remove(RUNTIME_ID, preview["confirmation_fingerprint"])
         assert stale.value.code == "blender_runtime_remove_changed"
         marker.unlink()
 
         preserved = tmp_path / "data/assets/preserved.txt"
         preserved.parent.mkdir(parents=True, exist_ok=True)
         preserved.write_text("scene and assets are outside the runtime", encoding="utf-8")
-        current = manager.removal_preview(RUNTIME_ID)
+        current = await manager.removal_preview(RUNTIME_ID)
         removed = await wait_terminal(
             store,
-            manager.remove(RUNTIME_ID, current["confirmation_fingerprint"]).id,
+            (await manager.remove(RUNTIME_ID, current["confirmation_fingerprint"])).id,
         )
         assert removed.state == BlenderRuntimeOperationState.READY
         assert removed.result is not None
@@ -689,14 +689,14 @@ def test_remove_registry_failure_restores_runtime_directory(tmp_path: Path, monk
         await manager.start()
         assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
         assert (await wait_terminal(store, manager.update().id)).state == BlenderRuntimeOperationState.READY
-        preview = manager.removal_preview(RUNTIME_ID)
+        preview = await manager.removal_preview(RUNTIME_ID)
 
         def fail_unregister(_runtime_id: str) -> bool:
             raise RuntimeError("injected unregister failure")
 
         monkeypatch.setattr(resolver, "unregister_managed", fail_unregister)
         failed = await wait_terminal(
-            store, manager.remove(RUNTIME_ID, preview["confirmation_fingerprint"]).id
+            store, (await manager.remove(RUNTIME_ID, preview["confirmation_fingerprint"])).id
         )
         assert failed.state == BlenderRuntimeOperationState.FAILED
         assert (resolver.managed_root / RUNTIME_ID / "install/blender").is_file()
@@ -724,7 +724,7 @@ def test_remove_restart_finishes_after_registry_commit(
         await manager.start()
         assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
         assert (await wait_terminal(store, manager.update().id)).state == BlenderRuntimeOperationState.READY
-        preview = manager.removal_preview(RUNTIME_ID)
+        preview = await manager.removal_preview(RUNTIME_ID)
         operation = store.create_blender_runtime_operation(
             RUNTIME_ID, "4.5.9", BlenderRuntimeOperationAction.REMOVE,
             bytes_total=preview["reclaimable_bytes"], result={"removal_preview": preview},

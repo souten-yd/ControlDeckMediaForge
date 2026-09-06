@@ -97,7 +97,10 @@ async def run(args: argparse.Namespace) -> None:
 
             status = await get(runtime_path)
             assert status["active_runtime_id"] in {old, candidate}
-            assert {r["runtime_id"] for r in status["runtimes"]} == {old, candidate}
+            if args.live_references_only:
+                assert old in {r["runtime_id"] for r in status["runtimes"]}
+            else:
+                assert {r["runtime_id"] for r in status["runtimes"]} == {old, candidate}
             existing = [s for s in (await get(sessions_path))["items"]
                         if s["state"] not in {"stopped", "interrupted", "failed"}]
             assert len(existing) <= 1
@@ -121,15 +124,26 @@ async def run(args: argparse.Namespace) -> None:
 
             ready = await wait_session("ready")
             assert ready["runtime_id"] == old
-            await operation({"action": "switch", "runtime_id": candidate})
+            if not args.live_references_only:
+                await operation({"action": "switch", "runtime_id": candidate})
 
             async def reject_old(stage: str, session_state: str) -> None:
                 current = next(s for s in (await get(sessions_path))["items"] if s["id"] == session_id)
                 assert current["state"] == session_state and current["runtime_id"] == old
                 preview = await post(actions_path, {"action": "remove_preview", "runtime_id": old})
-                assert not preview["can_remove"] and not preview["active"], preview
+                assert not preview["can_remove"], preview
+                if not args.live_references_only:
+                    assert not preview["active"], preview
                 assert preview["project_reference_count"] > 0
                 assert "project_reference" in preview["blocked_reasons"]
+                if args.live_references_only:
+                    durable = preview["durable_reference_counts"]
+                    assert durable["sessions"] == int(session_state == "ready"), preview
+                    assert durable["working_copies"] == int(session_state == "ready"), preview
+                    assert durable["recipe_jobs"] == durable["unresolved_sessions"] == 0
+                    assert preview["in_process_reference_count"] == 0
+                    if session_state == "ready":
+                        assert "live_reference" in preview["blocked_reasons"]
                 response = await client.post(actions_path, json={"action": "remove", "runtime_id": old,
                     "confirmation_fingerprint": preview["confirmation_fingerprint"]})
                 assert response.status_code == 422, response.text
@@ -140,6 +154,14 @@ async def run(args: argparse.Namespace) -> None:
             await post(sessions_path, {"action": "stop", "session_id": session_id})
             stopped = await wait_session("stopped")
             await reject_old("stopped_project_still_protected", "stopped")
+            if args.live_references_only:
+                assert await get(scene_path) == scene_before
+                assert await get("/api/v1/assets") == assets_before
+                assert await asyncio.to_thread(asset_hashes, data / "assets") == hashes_before
+                await record("live_references_passed", session=stopped, assets_unchanged=hashes_before,
+                    not_tested=["installed Host/browser", "GUI framebuffer/input", "confirmed history removal",
+                                "atomic GUI admission/removal race", "runtime deletion"])
+                return
             await operation({"action": "switch", "runtime_id": old})
             preview = await post(actions_path, {"action": "remove_preview", "runtime_id": candidate})
             assert preview["can_remove"] and not preview["blocked_reasons"], preview
@@ -168,6 +190,8 @@ async def run(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-dir", required=True, type=Path)
+    parser.add_argument("--live-references-only", action="store_true",
+                        help="Start/stop real GUI and assert durable blockers; do not switch or delete runtimes")
     asyncio.run(run(parser.parse_args()))
 
 

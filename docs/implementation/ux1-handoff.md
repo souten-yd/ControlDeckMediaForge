@@ -3,6 +3,52 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 durable runtime references and off-loop removal
+
+PR #322 merged `4e0c9b20ac79683de53d1ef35f44e3d18ff89132` をfetch確認。
+branch `ux1/3d-durable-runtime-references`。Store.active_scene_runtime_referencesを追加し、
+同じDB read snapshotで未終端recipe Job、active working copy、稼働GUIを集計。
+GUIの未確定runtimeはworking/recoveryのpinを優先し、未指定ならscene current revisionを読む。
+不明/不正/他owner等でpinを解決できなければ全版の削除を拒否。期限超過だけでactive参照を外さない。
+managed/external両previewのlive_reference_countをin-process+durable合計にし、内訳も追加。
+これは参照数でありdistinct process数ではない。内訳もfingerprintへ束縛する。
+旧previewは再取得が必要。削除済みregistryのjournal回収は既存経路を維持する。
+
+managed preview/受付/削除本体をworker threadへ移し、private WS/standalone双方でawait。
+開始済み受付/削除threadはrequest取消で放棄せず、durable operationとtaskを追跡する。
+stopは受付threadの引渡しを待ってから実行taskを回収。Store通知先のSessionSubscription.deliverは
+call_soon_threadsafeを使用していることをコードで照合した。公開contract/Host/frontend変更なし。
+GUI受付/working-copy新規作成と削除commit間の全競合排他はまだ残件。
+既定のproject拒否を維持し、確認付き削除は公開していない。
+
+追加testはGUI全9 state、復旧/作業copy pinと期限、壊れた/不明pin、Job全5 state、
+後から増えたdurable Jobによるfingerprint拒否、受付/削除threadの取消後完了。
+初期focusedは49 passed/既知warning1。不正working_idの空listもfail-closedに追加し、
+同module再実行25 passed/既知warning1。初期全gate1109 passed/289.27秒。
+最終コードの `./mf.sh test`: 1110 passed/既知warning1/172.49秒。diff check成功。
+
+実行: `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_runtime_removal_e2e.py
+--live-references-only --evidence-dir /data1tb/mf-durable-runtime-references-20260906`。
+既存専用clean setup領域のみ、source appの実loopback HTTP/実Blender GUI。
+34.140秒passed/exit0。実session blendersession_01ee2af865aa4b709c4315d41c6c0cdb、
+4.5.9/ready時はin-process0、durable sessions1/working_copies1、live合計2。
+停止後は全durable0/live0、project参照1は保持。正規fingerprint付きremove POSTは
+両状態で422/blender_runtime_in_use。今回旧版はactiveでもあり、liveだけが拒否理由とはしない。
+GUI unitは停止後inactive/MainPID0。RFB接続・画面・入力はこのsliceでは未実施。
+
+scene_2642c93f480d427d920267ac790405e2の全scene/revision/Asset metadataと、
+immutable全6ファイル（.blend434663B/GLB1936B/ZIP44745B/provenance3件）のsize/SHA前後一致。
+具体hashはobservations.jsonに記録。個別画像Assetはこの領域にない。
+live-references-onlyではruntime切替・削除・再導入は行わない。
+Host/MF unitはactive/PID250878・244551。こちらから本番restart/updateを要求していない。
+
+実機のGUI準備中pin未確定を狙った競合、削除commitとの排他、確認付き履歴削除、
+正確な同版再導入、installed Host/browser、新署名releaseはNOT TESTED。
+次はGUI/working-copy受付と削除commitの排他をworker-thread境界で整合させる。
+該当経路はBlenderSessionManager.create/_prepare、SceneWorkspace.acquire_working_copy/
+acquire_recovery_working_copy、およびappのprivate WS/HTTPとmaterial previewからの呼出。
+3DS-8/scenario DはPARTIAL、稼働版0.28.34へ新機能を導入したとは扱わない。
+
 ## 2026-09-06 recipe admission runtime pin
 
 PR #321 merged `1a5bc35f4a37307867821f86039be5f1c1c55010` をfetch確認。

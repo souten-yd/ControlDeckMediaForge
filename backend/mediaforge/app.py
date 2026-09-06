@@ -3724,7 +3724,7 @@ def create_app(
                     elif method == "blender.runtime.remove.preview":
                         if set(params) != {"runtime_id"}:
                             raise ValueError("Blender removal preview accepts only runtime_id")
-                        result = blender_runtime_operations.removal_preview(
+                        result = await blender_runtime_operations.removal_preview(
                             str(params.get("runtime_id", ""))
                         )
                     elif method == "blender.runtime.remove":
@@ -3732,10 +3732,10 @@ def create_app(
                             raise ValueError(
                                 "Blender remove accepts runtime_id and confirmation_fingerprint"
                             )
-                        result = blender_runtime_operations.remove(
+                        result = (await blender_runtime_operations.remove(
                             str(params.get("runtime_id", "")),
                             str(params.get("confirmation_fingerprint", "")),
-                        ).model_dump(mode="json")
+                        )).model_dump(mode="json")
                     elif method == "blender.runtime.operations.cancel":
                         if set(params) != {"operation_id"}:
                             raise ValueError("Blender cancel accepts only operation_id")
@@ -4381,14 +4381,14 @@ def create_app(
                     str(payload["runtime_id"])
                 ).model_dump(mode="json")
             if set(payload) == {"action", "runtime_id"} and payload["action"] == "remove_preview":
-                return blender_runtime_operations.removal_preview(str(payload["runtime_id"]))
+                return await blender_runtime_operations.removal_preview(str(payload["runtime_id"]))
             if (
                 set(payload) == {"action", "runtime_id", "confirmation_fingerprint"}
                 and payload["action"] == "remove"
             ):
-                return blender_runtime_operations.remove(
+                return (await blender_runtime_operations.remove(
                     str(payload["runtime_id"]), str(payload["confirmation_fingerprint"])
-                ).model_dump(mode="json")
+                )).model_dump(mode="json")
             if set(payload) == {"action", "operation_id"} and payload["action"] == "cancel":
                 return blender_runtime_operations.cancel(
                     str(payload["operation_id"])

@@ -89,6 +89,7 @@ class BlenderRuntimeManager:
         self.web_download_root = web_download_root.resolve() if web_download_root is not None else None
         self.transport = transport
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._removal_admissions: set[asyncio.Task[BlenderRuntimeOperation]] = set()
         self._guard = asyncio.Semaphore(1)
 
     @property
@@ -107,6 +108,7 @@ class BlenderRuntimeManager:
             self._spawn(operation_id)
 
     async def stop(self) -> None:
+        await asyncio.gather(*list(self._removal_admissions), return_exceptions=True)
         tasks = list(self._tasks.values())
         for task in tasks:
             task.cancel()
@@ -299,7 +301,10 @@ class BlenderRuntimeManager:
             )
         return self._start(runtime_id, BlenderRuntimeOperationAction.SWITCH)
 
-    def removal_preview(self, runtime_id: str) -> dict[str, Any]:
+    async def removal_preview(self, runtime_id: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self._removal_preview, runtime_id)
+
+    def _removal_preview(self, runtime_id: str) -> dict[str, Any]:
         if runtime_id not in self._catalog().specs:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_not_found", "Blender runtime is not in the trusted catalog"
@@ -320,7 +325,9 @@ class BlenderRuntimeManager:
             self.resolver.managed_root, self.resolver.managed_root / runtime_id
         )
         reclaimable = self._directory_bytes(destination)
-        live_references = self.resolver.live_reference_count(runtime_id)
+        in_process = self.resolver.live_reference_count(runtime_id)
+        durable = self.store.active_scene_runtime_references(runtime_id)
+        live_references = in_process + sum(durable.values())
         project_references = self.store.scene_runtime_reference_count(runtime_id)
         blocked: list[str] = []
         if row.get("active") is True:
@@ -336,6 +343,8 @@ class BlenderRuntimeManager:
             "state": str(row["state"]),
             "reclaimable_bytes": reclaimable,
             "live_reference_count": live_references,
+            "in_process_reference_count": in_process,
+            "durable_reference_counts": durable,
             "project_reference_count": project_references,
             "blocked_reasons": blocked,
         }
@@ -355,9 +364,9 @@ class BlenderRuntimeManager:
         row = next((r for r in status["runtimes"] if r["runtime_id"] == runtime_id), None)
         if row is None or row["ownership"] != "legacy":
             raise BlenderRuntimeOperationError("blender_runtime_not_found", "external runtime is not registered")
-        live = self.resolver.live_reference_count(runtime_id) + sum(
-            session.runtime_id == runtime_id for _, session in self.store.list_active_blender_web_sessions()
-        )
+        in_process = self.resolver.live_reference_count(runtime_id)
+        durable = self.store.active_scene_runtime_references(runtime_id)
+        live = in_process + sum(durable.values())
         projects = self.store.scene_runtime_reference_count(runtime_id)
         blocked = (["active_runtime"] if row["active"] else [])
         blocked += ["live_reference"] if live else []
@@ -365,6 +374,7 @@ class BlenderRuntimeManager:
         identity = {"operation": "unregister", "runtime_id": runtime_id, "version": row["version"],
                     "active": row["active"], "state": row["state"], "reclaimable_bytes": 0,
                     "live_reference_count": live, "project_reference_count": projects,
+                    "in_process_reference_count": in_process, "durable_reference_counts": durable,
                     "blocked_reasons": blocked}
         fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         return {**identity, "can_remove": not blocked, "confirmation_fingerprint": fingerprint}
@@ -408,8 +418,29 @@ class BlenderRuntimeManager:
                 await task
                 raise
 
-    def remove(self, runtime_id: str, confirmation_fingerprint: str) -> BlenderRuntimeOperation:
-        preview = self.removal_preview(runtime_id)
+    async def remove(self, runtime_id: str, confirmation_fingerprint: str) -> BlenderRuntimeOperation:
+        task = asyncio.create_task(self._admit_removal_async(runtime_id, confirmation_fingerprint))
+        self._removal_admissions.add(task)
+        try:
+            return await task
+        finally:
+            self._removal_admissions.discard(task)
+
+    async def _admit_removal_async(
+        self, runtime_id: str, confirmation_fingerprint: str
+    ) -> BlenderRuntimeOperation:
+        task = asyncio.create_task(asyncio.to_thread(self._admit_removal, runtime_id, confirmation_fingerprint))
+        try:
+            operation = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            operation = await task
+            self._spawn(operation.id)
+            raise
+        self._spawn(operation.id)
+        return operation
+
+    def _admit_removal(self, runtime_id: str, confirmation_fingerprint: str) -> BlenderRuntimeOperation:
+        preview = self._removal_preview(runtime_id)
         if confirmation_fingerprint != preview["confirmation_fingerprint"]:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_remove_changed", "Blender runtime removal preview changed"
@@ -430,7 +461,6 @@ class BlenderRuntimeManager:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_operation_active", "another Blender runtime operation is active"
             ) from exc
-        self._spawn(operation.id)
         return operation
 
     def _start(
@@ -674,6 +704,14 @@ class BlenderRuntimeManager:
         )
 
     async def _remove(self, operation: BlenderRuntimeOperation) -> None:
+        task = asyncio.create_task(asyncio.to_thread(self._remove_sync, operation))
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            await task
+            raise
+
+    def _remove_sync(self, operation: BlenderRuntimeOperation) -> None:
         preview = (operation.result or {}).get("removal_preview")
         if not isinstance(preview, dict) or not isinstance(
             preview.get("confirmation_fingerprint"), str
@@ -705,7 +743,7 @@ class BlenderRuntimeManager:
                         raise BlenderRuntimeOperationError(
                             "blender_runtime_remove_unsafe", "Blender removal staging is unsafe"
                         )
-                    await asyncio.to_thread(shutil.rmtree, removing)
+                    shutil.rmtree(removing)
                 self.store.update_blender_runtime_operation(
                     operation.id,
                     state=BlenderRuntimeOperationState.READY,
@@ -729,7 +767,7 @@ class BlenderRuntimeManager:
                             "blender_runtime_remove_unsafe", "Blender removal state conflicts"
                         )
                     os.replace(removing, destination)
-            current = self.removal_preview(operation.runtime_id)
+            current = self._removal_preview(operation.runtime_id)
             if current["confirmation_fingerprint"] != preview["confirmation_fingerprint"]:
                 raise BlenderRuntimeOperationError(
                     "blender_runtime_remove_changed", "Blender runtime removal preview changed"
@@ -753,7 +791,7 @@ class BlenderRuntimeManager:
                         "blender_runtime_not_found", "Blender runtime was not found"
                     )
                 if moved:
-                    await asyncio.to_thread(shutil.rmtree, removing)
+                    shutil.rmtree(removing)
             except Exception:
                 if moved and removing.exists() and not destination.exists():
                     os.replace(removing, destination)
