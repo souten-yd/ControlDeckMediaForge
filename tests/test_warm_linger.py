@@ -110,3 +110,19 @@ def test_a_lingering_lease_is_not_released_by_the_job_that_handed_it_over(tmp_pa
 def test_shutdown_gives_the_device_back(tmp_path: Path):
     source = inspect.getsource(JobManager.stop)
     assert "_end_linger(retire=True)" in source
+
+
+def test_it_is_off_until_the_host_can_account_for_a_held_model(tmp_path: Path):
+    """既定では抱えない。
+
+    ControlDeck の受付は「実際に使われている VRAM」で空きを見る。lease を返した
+    後も model が載っていると、次の生成が入れないと判断されて待ち続ける
+    （実測: 2 枚目が 300 秒待って失効）。lease を持ったまま待てば場所は説明できる
+    が、次の生成は自分の lease を取るので同じ device に 2 つは持てない。
+    """
+    import dataclasses
+
+    from mediaforge.config import Settings
+
+    field = {item.name: item for item in dataclasses.fields(Settings)}["warm_linger_sec"]
+    assert field.default == 0.0
