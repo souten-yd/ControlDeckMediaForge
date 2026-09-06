@@ -1,5 +1,51 @@
 # Media Forge implementation status
 
+## 2026-09-07 installed stale material conflict and retry
+
+PR #341 merge `90b32055f4c7e0364528df80a4e8c557fd4f76ac`から
+branch `ux1/3d-material-conflict-installed`。新診断
+`scripts/3ds_material_conflict_installed_e2e.py`をHost診断Pythonで実行。
+--expected-version 0.28.38、--blendは既存専用cube fixture、--imageは過去の
+実生成PNG /data1tb/mf-no-blender-image-0.28.33-20260906/generated.png。
+専用mf-e2eの新規sceneへ通常UIでimportし、同PNGを通常assets.import。
+別の実Host opaque tabから正規scenes.material.applyで第2版を確定する。
+
+初回jaは既存open_scene helperが折り畳まれた一覧buttonのvisibleを待ちtimeout。
+scene_0d1d0c1a18a84c479f67ce47377b6397/初版とimport画像は保持。
+-r2は別タブ更新後のfocus refreshで最新headが反映され、古いformのbuttonがdisabled。
+これは保護動作であり、worker失敗や競合表示の成功ではない。
+scene_108541c7553e4867bbb4ea191dba58ae/2版を保持。各runの終端後に診断を修正した。
+
+最終診断は最新sceneを取得・通常selectで対象と同画像を再選択したうえで、
+保存した旧bindingを製品compareMaterialCandidateへ直接渡す。
+実Host/MediaForge WSはscene_revision_conflict
+（material source revision is no longer current）を返す。
+失敗要求の入口は比較helper直接呼び出しであり、通常buttonから旧版を送信できたとはしない。
+HTTP/WS応答・worker・frontend codeはmock/overlayしない。旧版拒否はworker起動前の検査で、
+worker crash/Agent retry_job_idの証拠には読み替えない。
+
+--locale ja: /data1tb/mf-material-conflict-installed-ja-20260907-r3、
+scene_0bcfede227a24869880c1d2754dd2ba1、passed=true/exit0。
+--locale en: /data1tb/mf-material-conflict-installed-en-20260907、
+scene_3f3b5f1e97e94b268722ea45cc811c50、passed=true/exit0。
+実native desktop Chrome/opaque origin null、日英の両pane終端文言・採用無効、
+失敗前後のscene投影/元imageと2版source/GLB bytes SHA不変をassert。
+閉じる→scene再読込後のobject/image/slot/channel/UV選択保持、
+通常「割り当てて比較」button→実Blender候補2pane描画→明示採用で第3版。
+採用前head不変、以前の2版不変、同じ画像ID/hash依存、元Asset bytes不変、
+既存全scene/revision value_json不変、page errors0。日英のlocaleはbrowser context入力。
+日本語conflict.pngを目視確認。新scene/画像/版は検証物として保持する。
+
+追加read-only照合: release前snapshotの既存460 Job全列不変、
+本turn追加13 Jobは全てmedia.inspectで画像生成/編集0。終了時Job473全終端、
+working copy active0、material-previews配下0。Host849052/MF905518/905522はPID不変、
+service restart/runtime/global設定変更なし。専用login sessionのみfinally revoke。
+全 `./mf.sh test`: 1129 passed/既知warning1/159.84秒。最終script py_compile/diff check成功。
+
+installed版競合の表示と成功画像再利用は確認した。worker失敗、Agent retry_job_id、
+mobile touch、新画像生成、全GOAL-07/3DS-8 matrixの未確認条件は維持する。
+次は残るライフサイクル/資源解放受入の実測を監査表に沿って進める。
+
 ## 2026-09-07 v0.28.38 signed bundle and standard update
 
 PR #340 merge/tag target `3832e6fb3483e9f9dda75cdc0975fdd2f96f3570`。

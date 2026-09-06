@@ -11,7 +11,13 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 署名公開・標準updateし採用前候補比較/破棄/採用/復元をinstalledで確認。
 2026-09-07の現在稼働版は0.28.38/healthy（署名公開/consumer検証/標準update14.189秒）。
 更新前後8テーブル全行/registry不変、packageの日英320 Library回帰を確認。
-素材失敗表示修正は配布済みだが、同失敗経路のinstalled受入は未実施。
+素材失敗表示はinstalled日英native Chromeで旧版要求の実競合として追加受入。
+別tabで第2版を確定後、旧bindingを製品比較helperへ直接渡して実WS拒否を確認し、
+通常buttonの再試行・未保存比較・採用で第3版。元画像/旧版/既存scene不変。
+証拠 /data1tb/mf-material-conflict-installed-ja-20260907-r3 と
+/data1tb/mf-material-conflict-installed-en-20260907。
+focus復帰で古いformはdisabledになるため、失敗要求入口はhelper呼び出しと明示する。
+worker crashやAgent retry_job_idのinstalled受入、全失敗matrixは未完了。
 以下の0.28.37実測は当該版の証拠として保持する。
 更新前後8テーブル全行/registry不変、real63-child Library paging/offset60 locale保持を
 installed320/1280で再受入した。2026-09-07に取消Jobのinstalled retryも追加受入。
@@ -22,7 +28,7 @@ installed320/1280で再受入した。2026-09-07に取消Jobのinstalled retry�
 失敗後の両paneがLoadingのまま残る不具合を修正し、日本語320/英語1280で
 旧版・元画像bytes保持、選択保持、再試行・未保存比較・明示採用をassertした。
 証拠 /data1tb/mf-material-retry-browser-fixed-{ja-320,en-1280}-20260907。
-本UI修正は0.28.38で署名配布済み。installed失敗受入と全失敗matrixは残る。詳細はstatus/handoff。
+本UI修正は0.28.38で署名配布済み。installed版競合受入は上記、worker失敗など全matrixは残る。詳細はstatus/handoff。
 0.28.26ではnative windowで比較入力・不変refreshのDOM保持と全比較/採用/復元を確認した。
 新版の他操作の受入を旧版やcandidateの証拠から推定しない。
 以前の個別実測は維持するが、条件の一部だけの実測から行全体を成功扱いしない。
