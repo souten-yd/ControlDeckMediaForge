@@ -22,7 +22,7 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 | GOAL-03 設定管理 | 4.5.9/4.5.13の共存、active切替、参照中削除拒否 | PARTIAL: 全操作の画面完結、失敗後再開とscenario Dの証拠を照合 |
 | GOAL-04 Web Blender | `.14-long/observations.json`: 621.451秒GUI、入力、保存revision 2→3、reload/reconnect | VERIFIED（この操作範囲）。credential refreshの証拠ではない |
 | GOAL-05 OpenCode一巡 | OpenCode形状/create/status/snapshot/export/packと、別のUI画像生成・適用 | PARTIAL: 自然言語からtexture生成/適用まで同じOpenCode制作Job経路で追跡した証拠が未確定 |
-| GOAL-06 既存画像比較採用 | 署名installed0.28.23の専用cubeで比較/破棄head不変、採用1→2、復元2→3とsource SHA一致、接続失効/日英を確認。source320px証拠も維持 | PARTIAL: 比較クリック時のDOM再生成を再現。不変refreshでDOMを保持する修正をsource実ブラウザで確認し、署名新版/installed受入を残す。生成画像を含む制作一巡も残る |
+| GOAL-06 既存画像比較採用 | 署名installed0.28.23の専用cubeで比較/破棄head不変、採用1→2、復元2→3とsource SHA一致、接続失効/日英を確認。0.28.26で不変refresh時のDOM保持も確認 | PARTIAL: 0.28.26 full browserは旧版比較openでtimeout、frameへpointer/clickが届かず原因調査を残す。生成画像を含む制作一巡も残る |
 | GOAL-07 やり直し | restoreとcrash/idle等の復旧保存。競合分岐救出をsource/package/installedの実Blender・browserで確認 | PARTIAL: 失敗工程だけの再試行の全条件照合。standalone candidate ID脱落はPR #246で修正済み |
 | GOAL-08 grant配置 | 以前のOpenCode export/pack記録 | PARTIAL: GLB/画像/manifestの配置先receiptとhashの全対応を照合 |
 | GOAL-09 取消/回収 | Broker待機取消、133.122秒の実行取消、Host終端同期、session終了 | PARTIAL: 各経路のprocess/予約回収を対応する証拠へ紐付け |
