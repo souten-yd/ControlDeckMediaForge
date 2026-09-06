@@ -1,5 +1,12 @@
 # Media Forge implementation status
 
+## 2026-09-06 release 0.28.31 preparation
+
+PR #297のmobile Settings行/header修正を配布するためaddon/core版を0.28.31へ同期。
+公開0.28.30とは区別する。新releaseの署名公開/標準更新/installed受入はNOT TESTED。
+公開契約/DB schema/Blender runtime変更なし。全体3DS-8はPARTIAL。
+gate `./mf.sh test`: 1054 passed / 既知warning1 / 113.04秒。diff check成功。
+
 ## 2026-09-06 mobile Settings layout — source verified
 
 branch `ux1/3d-settings-mobile-rows`。runtime行を767px以下で縦積み、操作button44px以上/折返し可、
