@@ -9545,3 +9545,5 @@ scene `scene_257528fdd6a540818537d5e93f893870`で比較/破棄head不変、採�
 --expected-version 0.28.23 --evidence-dir /data1tb/mf-material-preview-installed-0.28.23-diagnostic-20260906`。
 ただし直前の旧版比較timeoutは原因未確定。単一成功で解決とせず再現調査を残す。
 生成画像一巡/mobile touch/長時間credential/全release A〜FはNOT TESTED、全体はPARTIAL。
+exact release worktreeを削除（Gitで再作成可）、build/package展開先をgio trashへ退避（復元可）。
+公開再取得・browser証跡・非公開DB backupを保持。PR #269へ受入記録を提出した。

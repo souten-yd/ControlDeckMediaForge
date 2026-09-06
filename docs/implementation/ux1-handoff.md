@@ -34,6 +34,8 @@ scene `scene_257528fdd6a540818537d5e93f893870`の比較/破棄head不変、採�
 次は旧版比較timeoutの再現/原因特定と、生成画像→比較→採用/OpenCode一巡を進める。
 gate `./mf.sh test`: 1026 passed / 既知Starlette warning1件 / 111.13秒。
 GOAL-06/3DS-6/3DS-8はPARTIAL、生成画像一巡/全release A〜Fは未完了。
+PR #269へ証跡を提出。exact release worktreeは削除（Gitで再作成可）、build/package展開先は
+gio trashへ退避（復元可）。公開再取得・browser証拠・非公開DB backupは保持する。
 
 ## 2026-09-06 v0.28.23 source preparation
 
