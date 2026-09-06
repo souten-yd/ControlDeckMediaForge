@@ -1,5 +1,23 @@
 # Media Forge implementation status
 
+## 2026-09-06 Web Blender primary navigation — source browser verified
+
+利用者指定の並び「作る・ライブラリ・状況・Web Blender」に4番目の入口を追加。
+専用view `/web-blender`へ既存scene UIを移動し、3D切替も同じ入口へ接続。
+設定からの復帰、選択中のaria-current、last_viewの保存に対応。nav移動でGUI起動なし。
+設計の正base-plan §16 / design-workspace-ux追補を同期。
+
+実source coreを独立したtemporary data dirでloopback port44891へ起動。
+`/data1tb/ControlDeck/app/.venv/bin/python scripts/web_blender_navigation_e2e.py
+--url http://127.0.0.1:44891 --evidence-dir /data1tb/mf-webnav-final-20260906` exit0。
+実Chromeで1280/320pxの全4入口移動、Settings復帰、3D切替、直接URL表示にassertion成功。
+320pxは4ボタン各80x60px、一列表示。page errors0、JSON/screenshots保存。
+installed opaque iframeのhistory、GUI起動/編集、release/installed更新はNOT TESTED。
+先行Libraryの未commit差分は別worktreeに保持。本sliceはそれを含まず、全体3DS-8完了ではない。
+最終 `./mf.sh test`: 1047 passed / 3 skipped / 既知Starlette warning1 / 110.12秒。
+`pytest tests/test_release_signing.py -q -rs`で3 skipは本worktreeのbuild runtime不在と確認。
+`git diff --check`成功。専用source server PID2851228は正常終了、稼働serviceは停止していない。
+
 Date: 2026-08-26
 Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0-B4 complete
 

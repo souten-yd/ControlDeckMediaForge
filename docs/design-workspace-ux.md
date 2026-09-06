@@ -13,6 +13,10 @@ LibraryとActivityは共通。設定入口は「設定 / Settings」、その内
 Blender、保存・診断を置く。以下の旧「入口をモデル管理に固定する」記述は、3D対応sliceで
 この設定構成へ置き換える。既存画像画面の操作は維持する。
 現行mobile=embeddedを維持し、旧companion状態へ戻さない。
+2026-09-06追補: 主ナビゲーションは「作る・ライブラリ・状況・Web Blender」の4入口とする。
+Web Blenderは専用の `/web-blender` 画面として既存のシーン一覧・版管理・GUI起動へ接続する。
+移動だけではBlenderプロセスを起動しない。3D切替も同画面へ接続し、設定・戻る操作で現在地を維持する。
+モバイル下部タブは4等分し、Libraryの閲覧用3Dビューアーとは分離する。
 詳細の正は [3D Studio §5](design-3d-studio.md#5-画面仕様) と
 [Blender管理・Web操作](design-blender-runtime-and-web.md)。新機能は実装前の設計である。
 
