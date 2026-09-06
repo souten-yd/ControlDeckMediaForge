@@ -518,6 +518,8 @@ def test_scene_studio_lists_immutable_revisions_and_reuses_the_3d_viewer():
     detail = SCRIPT[SCRIPT.index("async function openScene"):SCRIPT.index("async function sceneFileHash")]
     assert "right.sequence - left.sequence" in detail
     assert "revision.preview_asset_id" in detail
+    assert "state.sceneRevisionRenderKey !== revisionRenderKey" in detail
+    assert "scene.id, scene.name, scene.current_revision_id, document.documentElement.lang, revisions" in detail
     preview = SCRIPT[SCRIPT.index('byId("scene-revisions").addEventListener'):]
     assert 'media_kind: "3d"' in preview
     assert 'preview_kind: "model_3d"' in preview

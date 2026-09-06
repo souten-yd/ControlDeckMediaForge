@@ -93,7 +93,17 @@ def browser(args: argparse.Namespace) -> None:
             adopted = scene()
             assert len(adopted["revisions"]) == len(before["revisions"]) + 1
             old = before["scene"]["current_revision_id"]
-            page.locator(f'[data-scene-compare="{old}"]').click()
+            compare = page.locator(f'[data-scene-compare="{old}"]')
+            compare.scroll_into_view_if_needed()
+            box = compare.bounding_box()
+            assert box
+            page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+            page.mouse.down()
+            page.evaluate("() => {window.__revisionButton = document.querySelector('[data-scene-compare]');}")
+            page.evaluate("id => openScene(id)", fixture["scene_id"])
+            assert page.evaluate("() => window.__revisionButton.isConnected")
+            page.mouse.up()
+            evidence["unchanged_refresh_during_pointer_click"] = True
             page.wait_for_function("() => state.sceneCompareReady === 2")
             assert "Restore" in page.locator("#scene-compare-restore").inner_text()
             page.locator("#scene-compare-restore").click()
