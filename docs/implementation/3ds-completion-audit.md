@@ -7,7 +7,8 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 監査開始コードはmain `1f4392a2d426a742046d0c03c99272ffb5e41c87`。その後PR #246/247をマージし、
 本監査でv0.28.17（target `4293d20`）の終端照合を受入後、v0.28.19（target `583fea1`）を
 正式署名公開・標準updateしLibrary viewerをoverlayなしで受入した。さらにv0.28.20（target `c26f67d`）
-の材質照明・新旧双方のcontext復旧をinstalled受入した。現行0.28.20/healthy。
+の材質照明・新旧双方のcontext復旧をinstalled受入した。さらに0.28.23（target `22fc2b9`）を
+署名公開・標準updateし採用前候補比較/破棄/採用/復元をinstalledで確認。現行0.28.23/healthy。
 新版の他操作の受入を旧版やcandidateの証拠から推定しない。
 以前の個別実測は維持するが、条件の一部だけの実測から行全体を成功扱いしない。
 下表の「未確認」は今回の監査で条件全体に対応する証拠を確定できていない意味で、コード不在とは異なる。
@@ -21,7 +22,7 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 | GOAL-03 設定管理 | 4.5.9/4.5.13の共存、active切替、参照中削除拒否 | PARTIAL: 全操作の画面完結、失敗後再開とscenario Dの証拠を照合 |
 | GOAL-04 Web Blender | `.14-long/observations.json`: 621.451秒GUI、入力、保存revision 2→3、reload/reconnect | VERIFIED（この操作範囲）。credential refreshの証拠ではない |
 | GOAL-05 OpenCode一巡 | OpenCode形状/create/status/snapshot/export/packと、別のUI画像生成・適用 | PARTIAL: 自然言語からtexture生成/適用まで同じOpenCode制作Job経路で追跡した証拠が未確定 |
-| GOAL-06 既存画像比較採用 | 未保存候補domain/private WSに加え、source standalone browserで比較/破棄時head不変、adoptだけ+1、旧版復元とbytes一致、接続失効/日英/320pxを確認 | PARTIAL: 新UIのinstalled Host/署名新版、生成画像を含む制作一巡の受入が残る |
+| GOAL-06 既存画像比較採用 | 署名installed0.28.23の専用cubeで比較/破棄head不変、採用1→2、復元2→3とsource SHA一致、接続失効/日英を確認。source320px証拠も維持 | PARTIAL: installed旧版比較openの単発timeoutは再試験で非再現、原因調査を残す。生成画像を含む制作一巡の受入が残る |
 | GOAL-07 やり直し | restoreとcrash/idle等の復旧保存。競合分岐救出をsource/package/installedの実Blender・browserで確認 | PARTIAL: 失敗工程だけの再試行の全条件照合。standalone candidate ID脱落はPR #246で修正済み |
 | GOAL-08 grant配置 | 以前のOpenCode export/pack記録 | PARTIAL: GLB/画像/manifestの配置先receiptとhashの全対応を照合 |
 | GOAL-09 取消/回収 | Broker待機取消、133.122秒の実行取消、Host終端同期、session終了 | PARTIAL: 各経路のprocess/予約回収を対応する証拠へ紐付け |

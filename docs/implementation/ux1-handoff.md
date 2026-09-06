@@ -3,6 +3,38 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.23 signed / installed acceptance in progress
+
+PR #268 merged `22fc2b95f051bac3e77f740a76367677bdb0358d`、tag v0.28.23は同commit。
+exact detached source/PyInstaller6.22.0/Python3.12.3から31,490,364 Bのbundleを構築し正式署名公開。
+SHA-256 `8a6eb22131b8a2ca305af4f2524a070f1c3051622cd14092ebc9cf311023db64`。
+公開4 assetを`/data1tb/mf-0.28.23-public-20260906`へ再取得、checksum/Host publisher verifier成功。
+packaged core doctorはok/0.28.23。launcher直接実行は必須data-dir環境変数不足で失敗したため、
+同梱coreのdoctorを実行した。core SHA `6e00a7307fe9850eee997db765643a051ed6e2f59d1cd0d6fd88bd1b4a1f2f41`。
+installed実体hashも一致。更新直前の2回の検査ではlocal/Hostのrunning Jobを各1件検出し更新しなかった。
+その後全Job/session/runtime/model operation終端を確認、非公開online DB backup
+`/data1tb/mf-0.28.23-pre-update-20260906.sqlite3`（1,466,368 B）を保持。
+標準registry.updateは10.756秒、0.28.22→0.28.23/healthy/enabled。
+MF PID2645893/11:53:53 JST。Host PID2642902/11:51:27 JSTのまま（Host restart要求なし）。
+
+新script `scripts/3ds_material_preview_installed_e2e.py`は専用mf-e2eの新規sceneだけを変更し、
+password変更なし/sessionを個別作成・revoke、frontend overlayなし。既存fixtureは変更しない。
+初回は診断venvのPillow不在で起動前失敗、標準libraryの合成PNGへ変更した。
+installed初回はHost英語設定に対する日本語assertで失敗し、明示日英切替に修正。
+再試験は候補表示/破棄/head不変/採用revision1→2まで進み、旧版比較open待ちでtimeout。
+このためinstalled全一巡はまだNOT VERIFIED。失敗画面/JSONは
+`/data1tb/mf-material-preview-installed-0.28.23-{final,diagnostic}-20260906`を参照。
+診断状態だけ追加した再試験は成功。`diagnostic` directoryのobservations.jsonで
+scene `scene_257528fdd6a540818537d5e93f893870`の比較/破棄head不変、採用1→2、復元2→3、
+復元source SHA一致、切断後採用禁止、日英表示、opaque origin null、page error0を確認。
+日本語比較画面を実画像でも確認した。1回の旧版比較timeoutは原因未確定であり、再現調査を残す。
+実行commandはHost診断venv/PYTHONPATH=Host backendで同scriptに
+`--blend /data1tb/mf-material-preview-ui-final-20260906/original.blend --expected-version 0.28.23`
+と新規evidence-dirを渡した。生成画像経路やmobile touchを成功扱いしない。
+次は旧版比較timeoutの再現/原因特定と、生成画像→比較→採用/OpenCode一巡を進める。
+gate `./mf.sh test`: 1026 passed / 既知Starlette warning1件 / 111.13秒。
+GOAL-06/3DS-6/3DS-8はPARTIAL、生成画像一巡/全release A〜Fは未完了。
+
 ## 2026-09-06 v0.28.23 source preparation
 
 PR #267 merged `ab8a059bb61d9046630d01183349d8bc62a878af`。
