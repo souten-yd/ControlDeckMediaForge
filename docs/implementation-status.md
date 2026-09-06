@@ -9467,3 +9467,8 @@ source serverは試験終了時に停止。Host/installed service/利用者制�
 NOT IMPLEMENTED / NOT TESTED: standalone mirror、未保存候補のブラウザ比較・採用UI、
 installed Host認証経路、署名新版受入。GOAL-06/3DS-6/3DS-8は未完了。
 gate `./mf.sh test`: 1021 passed / 既知Starlette warning1件 / 113.45秒。diff check成功。
+PR #264作成時にmain `1abc62e`への並行更新を確認。#262 mobile reconnectと#263 version0.28.21を
+merge commit `38a87e1`で取り込んで保持した。同じ実TCP/Blender scriptを新規隔離dir
+`/data1tb/mf-material-preview-transport-main-20260906`で再実行し、上記全assertion成功。
+他者の公開/導入作業をこちらが実施したとは記録しない。installed Host受入は引き続きNOT TESTED。
+main取込後gate `./mf.sh test`: 1021 passed / 既知Starlette warning1件 / 126.49秒。diff check成功。

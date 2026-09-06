@@ -25,6 +25,11 @@ runtime reference0/candidate directory0をassert。証拠は同data-dir/transpor
 UI/installed Host/署名新版はNOT TESTED。全体GOAL-06/3DS-6/3DS-8は未完了。
 Host/installed service/利用者制作データは変更していない。
 gate `./mf.sh test`: 1021 passed / 既知Starlette warning1件 / 113.45秒。diff check成功。
+PR #264作成後、並行作業のmain `1abc62e`（#262 mobile reconnect / #263 version0.28.21）を確認し、
+`38a87e1`で取り込んだ。相手の変更は保持。再実機証拠
+`/data1tb/mf-material-preview-transport-main-20260906/transport-observations.json`も全assert成功。
+次のUIはmobile reconnectによる候補失効も表示し、旧connectionの候補を黙って再採用しない。
+main取込後gate `./mf.sh test`: 1021 passed / 既知warning1件 / 126.49秒。diff check成功。
 
 ## 2026-09-06 採用前材質候補 domain
 
