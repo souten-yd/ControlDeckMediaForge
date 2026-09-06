@@ -3,6 +3,33 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 deterministic graceful-disconnect transport gate
+
+PR #308 merged `f52c3eb2833ade09718b689880da4700795d7a74`。
+route修正のsource Chrome受入は48 checks pass、
+`/data1tb/mf-standalone-routes-source-20260906`（1280/320px、直URL/reload/history、
+Job/assets/runtime/sessions前後不変）。ただしroute変更はまだ未commit/未配布。
+作業は専用stash `owned standalone route slice pending transport gate` に保持し、
+branch `ux1/3d-transport-disconnect-gate` で既存testの切断gateを分離。
+
+route全testは1059 passed/1 failed/153.27秒。前回と同じ
+test_authenticated_workspace_transport_imports_and_locks_without_paths のresumed result欠落。
+read-only pytest pluginで応答をassertすると単独1回目に
+scene_upload_busy / owner already has an active Blender uploadを再現。
+現在のStarlette WebSocketTestSession.__enter__はcontext終了でclose送信後に
+ASGI task cancel scopeをcancelする。MediaForgeのupload解放は複数awaitの後にあるため、
+このテストはgraceful close完了と強制cancelを区別していなかった。
+
+testを変更し、abandoned socketへ明示closeを送った後、そのupload IDのcancel_uploadが
+実行されたthreading.Eventをtest側で最大5秒待ち、実IDを照合してからcontextを終了する。
+appのasync内でwait/sleepせず、製品cleanupや認証・公開契約は変更しない。
+resumed応答もokを先にassertして今後の失敗本文を保持する。
+これは実ネットワーク/ASGI強制cancel耐性の修正証拠ではなく、graceful切断のtest前提修正。
+本番Host/MFは変更なし。source PID144938はSIGINT後exit0。
+次はこのgateを通常merge後、専用route stashを戻して修正PR・署名配布へ進む。
+全gateは1059 passed/既知warning1/168.67秒。実行中にEvent通知を対象ID限定へ絞ったため、
+その最終test本文は対象file2 testsを別に再実行しpass。diff check成功。
+
 ## 2026-09-06 Blender-absent image/Library preflight
 
 PR #307 merged `2600ca325cfa645163f57fd0207e9938a3ed8885`。
