@@ -421,6 +421,11 @@ html:has(#scene-compare-dialog[open]) { overflow: hidden; }
 #blender-runtime-list .s { overflow-wrap: anywhere; }
 .runtime-row-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: end; }
 .runtime-row-controls button { min-height: 34px; }
+@media (max-width: 767px) {
+  #blender-runtime-list .row { grid-template-columns: minmax(0, 1fr); }
+  .runtime-row-controls { justify-content: start; min-width: 0; }
+  .runtime-row-controls button { min-height: 44px; max-width: 100%; white-space: normal; }
+}
 .section-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
 /* 節の見出しが前の塊に貼り付くと、どこで話が変わったのか分からない。
    詰まって見えていたのは行間ではなく、ここの区切りが無かったため。 */
@@ -1207,7 +1212,7 @@ dialog::backdrop { background: rgba(10, 18, 17, .68); }
 @media (max-width: 420px) {
   .grid { grid-template-columns: 1fr; }
   .form-row:not(.search) { grid-template-columns: 1fr; }
-  #shell-header { gap: 4px; padding: 0 8px; }
+  #shell-header { gap: 4px; padding: 0 8px; flex-wrap: wrap; }
   .modeswitch button { padding: 5px 8px; }
   .mediaswitch button { min-width: 33px; padding: 0 4px; }
   .creative-selects { grid-template-columns: 1fr; }
