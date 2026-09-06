@@ -3,7 +3,7 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
-## 2026-09-06 long setup acceptance — RUNNING, not accepted yet
+## 2026-09-06 long setup acceptance — source scope verified
 
 PR #293 merge `ba4432b80bca225005d562089ad9984028a3c86f`を確認。
 branch `ux1/3d-long-setup-acceptance`。製品/Host/TTL変更なし。
@@ -19,9 +19,16 @@ archive配信のみhttpx fixtureで64KiB/秒に制御。Blender展開・検証�
 --archive /data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9/downloads/blender-4.5.9-linux-x64.tar.xz`。
 PID62708/tool session67258、operation `blenderop_5c6383c803304ba8acfb76f728e2c521`。
 60.249秒でdownloading/3,866,624 B、HTTP health成功。Host PID2196/MF PID31432 activeで不変。
-現在RUNNING。10分超取消/再導入の成功は未確定。同じhandle/PIDを確認し、観測途絶だけで再起動しない。
-証拠 `/data1tb/mf-long-setup-source-20260906/observations.json`。scriptは終了まで同fileへ追記する。
-次はこのrunの終端/実probe結果と残存operationを確認する。全体3DS-8/Scenario EはPARTIAL。
+同runはexit0で終端。631.247秒/41,156,608 Bで取消を確認し、652.011秒に再導入ready。
+再導入operation `blenderop_cdb9c83c1c914c78ae28ea6bd923a08c`。
+実archive SHA `dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d`を再照合し一致。
+6510 member/1,168,332,002 B展開、実Blender4.5.9/Python3.11.11/background/gltf export/import成功。
+read-only DBで2 operationがcanceled/ready、staging空、partialなし、PID62708消失を確認。
+Host PID2196/MF PID31432はactiveで不変。隔離runtimeとarchiveは後続受入用に保持。
+証拠 `/data1tb/mf-long-setup-source-20260906/observations.json`。
+PR #294に結果文書を追記。今回追加は文書のみ、unit再実行なし/diff check成功。
+次は通常merge後、設定画面からのsetup lifecycleを実ブラウザで確認する。
+全体3DS-8/Scenario EはPARTIAL。実Host credential/外部回線/browserの受入へ読み替えない。
 gate `./mf.sh test`: 1053 passed / 既知warning1 / 110.22秒。script含む差分はcommit/pushして保持する。
 
 ## 2026-09-06 RFB credential renewal — existing installed path verified
