@@ -3,6 +3,33 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 RFB credential renewal — existing installed path verified
+
+branch `ux1/3d-rfb-credential-renewal`、baseはPR #292 merge `56c9e40`。
+利用者のloopback認証不要の指摘を受け、Host main `97aba42`をread-onlyで確認。
+`security/localhost.py`はkernel peer loopbackとX-Requested-With:ControlDeckを要求する。
+現在の呼出元はLLM gateway（key不要）とagent MCP（署名/owner確認を維持し期限だけ許容）の2経路。
+addon-runtime introspect/RFB proxyには適用されず、service tokenの期限を引き続き検証する。
+遠隔browser由来でもHost→MFはloopbackになるので、ここでowner/権限を省略しない。
+
+PR #293は最初に期限前1012を追加したが、実機証拠で不要と判明し製品変更/対応unit test/設計変更を撤回。
+Hostは8分ごとにbridge nonceを更新し、MFの既存session.updated handlerはnonce更新だけでなく
+開いているRFBを再接続していた。署名installed0.28.30/overlayなしでこれを検証した。
+新`3ds_rfb_renewal_installed_e2e.py`をHost診断Pythonで実行、専用mf-e2e/個別login revoke/password不変。
+証拠 `/data1tb/mf-rfb-renewal-negative-0.28.30-20260906/observations.json`。
+directory名は当初negativeを予想した名だが、結果はexit0/672.072秒のpositive。
+session `blendersession_5ff146d2416c4b00a7e460becf1bac37`で、接続後480.340秒にRFB instance2本目を観測。
+660.433秒まで同一session/connected、実GUIでmesh複製して671.862秒に保存成功。1→2 meshes、
+32256 triangles/16132 vertices、GLB独立検査passed/2,179,304 B。
+scene `scene_b2f21eddc2c548cc8cb7865d32e9a1bc`のrevision1→2、旧版レコード不変。
+旧blend/GLBの実SHAも前回CPU試験値と一致。新GLB SHA `232b1916491b012a57422ebfdd1d487babccfdc698392481b22cf489a3452ed2`。
+Host PID2196/MF PID31432はactiveで不変。試験sessionはstopped/unit inactive/MainPID0。page errors0。
+候補source診断は並行Xvnc display99競合で2回startup failure（2回目で理由を取得）。lockを削除せず候補は終了、
+未公開診断scriptは不要な製品変更と一緒に撤回した。隔離data `mf-rfb-renewal-source{,2}-20260906`は保持。
+新規release不要。PR #293をscript/受入文書だけに変更。`./mf.sh test`: 1053 passed / warning1 / 112.01秒。
+全体3DS-8/Scenario EはPARTIAL。setup自身の10分超credential、自然な長時間演算/GPU組合せは未検証。
+次はPR #293を通常merge後、setup長時間credentialの現実装/受入範囲を確認する。
+
 ## 2026-09-06 installed CPU child credential refresh — verified scope
 
 PR #291 merge `f513927b3bb11ad53395862fec55a8534de96eb0`を確認。
