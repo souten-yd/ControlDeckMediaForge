@@ -31,6 +31,8 @@ def main() -> None:
     parser.add_argument("--candidate-app", type=Path)
     parser.add_argument("--steel-fixture", action="store_true",
                         help="Assert the known revision 12 silver / 13 blue-black blade ROI")
+    parser.add_argument("--context-side", choices=("old", "current"), default="old",
+                        help="Pane whose WebGL context is lost and restored")
     args = parser.parse_args()
     args.evidence_dir.mkdir(exist_ok=False)
     spec = importlib.util.spec_from_file_location("scene_browser", Path(__file__).with_name("3ds8_installed_browser_e2e.py"))
@@ -139,18 +141,21 @@ def main() -> None:
                     assert min(rgb["left_blade_rgb"]) > 40, "silver metal is black"
                     assert rgb["right_blade_rgb"][2] > rgb["right_blade_rgb"][0] + 10, "blue texture is not visible"
                 page.screenshot(path=str(args.evidence_dir / "comparison.png"))
-                status_before = frame.locator("#scene-compare-old-status").inner_text()
-                frame.evaluate("() => {window.__compareLoss = document.querySelector('#scene-compare-old-canvas').getContext('webgl2').getExtension('WEBGL_lose_context'); if(!window.__compareLoss) throw Error('context-loss extension unavailable'); window.__compareLoss.loseContext();}")
-                frame.wait_for_function("() => document.querySelector('#scene-compare-old-canvas').getContext('webgl2').isContextLost()")
+                context_selector = f"#scene-compare-{args.context_side}-canvas"
+                status_locator = frame.locator(f"#scene-compare-{args.context_side}-status")
+                evidence["context_side"] = args.context_side
+                status_before = status_locator.inner_text()
+                frame.evaluate("selector => {window.__compareLoss = document.querySelector(selector).getContext('webgl2').getExtension('WEBGL_lose_context'); if(!window.__compareLoss) throw Error('context-loss extension unavailable'); window.__compareLoss.loseContext();}", context_selector)
+                frame.wait_for_function("selector => document.querySelector(selector).getContext('webgl2').isContextLost()", arg=context_selector)
                 page.wait_for_timeout(150)
                 frame.evaluate("() => window.__compareLoss.restoreContext()")
-                frame.wait_for_function("() => !document.querySelector('#scene-compare-old-canvas').getContext('webgl2').isContextLost()")
+                frame.wait_for_function("selector => !document.querySelector(selector).getContext('webgl2').isContextLost()", arg=context_selector)
                 page.wait_for_timeout(500)
-                evidence["status_after_restore"] = frame.locator("#scene-compare-old-status").inner_text()
-                restored = frame.locator("#scene-compare-old-canvas").screenshot(path=str(args.evidence_dir / "restored.png"))
+                evidence["status_after_restore"] = status_locator.inner_text()
+                restored = frame.locator(context_selector).screenshot(path=str(args.evidence_dir / "restored.png"))
                 evidence["restored_sha256"] = hashlib.sha256(restored).hexdigest()
                 assert evidence["status_after_restore"] == status_before
-                evidence["context_restore_comparison"] = measure(rendered["old"], restored)
+                evidence["context_restore_comparison"] = measure(rendered[args.context_side], restored)
                 assert evidence["context_restore_comparison"]["render_changed_pixels"] == 0
                 frame.evaluate("() => {window.__compareContexts = ['old','current'].map(s=>document.querySelector(`#scene-compare-${s}-canvas`).getContext('webgl2'));}")
                 frame.locator("#scene-compare-cancel").click()
