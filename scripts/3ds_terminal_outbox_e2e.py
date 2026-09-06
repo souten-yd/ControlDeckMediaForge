@@ -64,6 +64,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--host-repo", type=Path)
     parser.add_argument("--core-python", type=Path)
+    parser.add_argument("--package-executable", type=Path)
     parser.add_argument("--serve", type=Path)
     parser.add_argument("--port", type=int)
     parser.add_argument("--core-mode", choices=["seed", "consume"])
@@ -107,6 +108,7 @@ def main() -> None:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     unit = f"mf-terminal-http-{uuid.uuid4().hex[:10]}"
+    package_unit: str | None = None
     subprocess.run(["systemd-run", "--user", "--collect", f"--unit={unit}", "--property=RuntimeMaxSec=90",
         f"--working-directory={args.host_repo}/backend", f"--setenv=PYTHONPATH={args.host_repo}/backend",
         sys.executable, str(Path(__file__).resolve()), "--serve", str(root), "--port", str(port)], check=True)
@@ -143,12 +145,53 @@ def main() -> None:
                 observations.append({"mode": mode, **observed})
                 if mode == "seed":
                     value.update(observed)
+                    if args.package_executable:
+                        with socket.socket() as sock:
+                            sock.bind(("127.0.0.1", 0))
+                            package_port = sock.getsockname()[1]
+                        package_unit = f"{unit}-core"
+                        subprocess.run(["systemd-run", "--user", "--collect", f"--unit={package_unit}",
+                            "--property=RuntimeMaxSec=60",
+                            f"--setenv=CONTROL_DECK_FEATURE_DATA_DIR={root}/feature",
+                            f"--setenv=CONTROL_DECK_SHARED_CACHE_DIR={root}/cache",
+                            f"--setenv=MEDIA_FORGE_DATA_DIR={root}/core",
+                            f"--setenv=MEDIA_FORGE_CONTROLDECK_URL={host_url}",
+                            f"--setenv=MEDIA_FORGE_PORT={package_port}",
+                            str(args.package_executable.resolve(strict=True)), "serve"], check=True)
+                        package_url = f"http://127.0.0.1:{package_port}"
+                        deadline = time.monotonic() + 25
+                        while True:
+                            try:
+                                health = client.get(f"{package_url}/health")
+                                assert health.status_code == 200
+                                break
+                            except httpx.ConnectError:
+                                if time.monotonic() >= deadline:
+                                    raise
+                                time.sleep(0.1)
+                        package_headers = {"Authorization": value["authorization"], "X-Control-Deck-Addon-ID": "media-forge"}
+                        projections = []
+                        for job_id in value["local_ids"]:
+                            response = client.post(f"{package_url}/addon/v1/agent/job/status",
+                                json={"input": {"job_id": job_id}}, headers=package_headers)
+                            assert response.status_code == 200, response.status_code
+                            projections.append(response.json())
+                        assert [item["host_terminal_sent"] for item in projections] == [False, True]
+                        cancel = client.post(f"{package_url}/addon/v1/agent/job/cancel",
+                            json={"input": {"job_id": value["local_ids"][0]}}, headers=package_headers)
+                        assert cancel.status_code == 200 and cancel.json()["status"] == "failed"
+                        observations.append({"mode": "packaged_agent_http", "projections": projections,
+                                             "terminal_cancel": cancel.json(), "health": health.json()})
+                        subprocess.run(["systemctl", "--user", "stop", package_unit], check=True)
+                        package_unit = None
             assert jobs._db_get(old.id)["status"] == "interrupted"
             assert jobs._db_get(active.json()["job"]["id"])["status"] == "succeeded"
             (root / "observations.json").write_text(json.dumps(observations, indent=2) + "\n")
             print(json.dumps({"evidence": str(root / "observations.json"), "core_processes": 3,
                 "terminal_sent": [False, True], "host_states": ["interrupted", "succeeded"], "local_jobs": 2}))
     finally:
+        if package_unit is not None:
+            subprocess.run(["systemctl", "--user", "stop", package_unit], check=True)
         subprocess.run(["systemctl", "--user", "stop", unit], check=True)
 
 

@@ -3,6 +3,47 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.17 signed / installed terminal acceptance
+
+PR #251 merged `4293d2086aaeed4784a2ad0c2b9776f88415c043`からexact worktreeで正式bundleを構築・署名公開。
+v0.28.17 tagは同commit。31,470,272 B / SHA-256
+`997f6cef6e941eca6603cff199d3dbc43a28d030d79ae7fdfbbfe9109af500b3`、公開4 asset再取得一致、
+Host consumer publisher verifier成功、packaged doctor ok/0.28.17。公開先は通常GitHub Release。
+
+画像Job `job_29459166c091438c8c14767cd35c130e`とworker PID2399992の終了、Host/local active0を
+確認してからHost mainを`dac519b`へfast-forwardし再起動した。既存dirty tsconfig.tsbuildinfoは保持。
+標準registry.updateで13.627秒、0.28.16→0.28.17/healthy/enabled。
+Host PID2403274、MF MainPID2403709/child2403714。事前DB backupは
+`/data1tb/mf-0.28.17-installed-evidence-20260906/media-forge-pre-update.sqlite3`（非公開、保持）。
+
+packageのfull Agent status/cancelを隔離Hostで確認:
+`/tmp/mf-terminal-http-hcxvio45/observations.json`。installedでも過去retry2のmf-e2e-owned failed6件を
+status/cancel/statusの18 HTTP callで照合し、Host interruptedは不変、sent=false/matches=falseを保持。
+0.304秒、Job/asset/scene/revision件数不変。証拠
+`/data1tb/mf-0.28.17-installed-terminal-retry1-20260906/observations.json`。
+これは既存終端fixtureの照合であり、未送信新規成功通知や長時間refreshまで成功にしない。
+初回installed smokeは別生成Jobを検出してpreflightで停止した。終端対象IDだけを扱うscriptの
+不要な全体idle条件を外し、scope/owner/terminalと件数不変を検証して再実行した。
+credential scriptは`--expected-version`を追加（既定0.28.16）、新版試験は0.28.17を明示する。
+受入script更新後`./mf.sh test`: 1004 passed / 既知warning1件 / 131.28秒。
+exact release worktreeは削除（Gitで再作成可）。今回のbuild出力/packaged展開先2 directoryはgio trashで退避し、
+公開再取得4 asset・観測JSON・更新前DB backupは保持した。
+
+新版長時間試験はFAILED / refresh NOT TESTED。idle確認後`--expected-version 0.28.17`で開始し、
+child2409636を160.0676秒保持・再開、child2415439を161.690秒から保持した。
+222.109秒にConnectError、225.185秒にservice_stoppedを検出。
+systemdは09:40:12 JSTにMediaForge停止、09:40:13再開を記録。本試験はrestartを要求していない。
+要求主体は未特定。Host PID2403274は不変、現在MF MainPID2416323でactive。
+全6件は1 succeeded/5 failedでHost/local一致、host_terminal_sent=true、refresh監査各0件。
+cleanup後active local0、保持した2 child PIDとも消滅。証拠
+`/data1tb/mf-credential-refresh-installed-0.28.17-20260906/events.json`とsystemd/read-only SQL。
+並行Host側のuntracked frontend/e2e/mediaforge-library.spec.tsとdirty tsconfig.tsbuildinfoは保持。
+次の長時間試験は約11分間Host/MediaForgeを再起動しない時間帯を調整する。
+正常なshutdown終端通知をcredential更新成功へ読み替えない。全体3DS-8はPARTIAL。
+その後の現物確認では、並行Library PR #252（merged `7434d7f`）に伴い現行installedは0.28.18/healthy。
+本turnが公開・導入・18call検証したのは0.28.17であり、その後の再起動時点の新版受入は別作業。
+旧版へ戻さない。次回は現行0.28.18のprovenanceと引き継ぎを再照合し、無再起動枠を調整する。
+
 ## 2026-09-06 terminal outbox / v0.28.17 source
 
 branch `ux1/3d-terminal-outbox`、基準main `c5afdf9`。Host汎用PR #276はmerged `dac519b`。

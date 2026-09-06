@@ -5,7 +5,8 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 対象: PR #213のGOAL-01〜10と`g8-3d-studio-plan.md` §4 A〜F。
 監査開始コードはmain `1f4392a2d426a742046d0c03c99272ffb5e41c87`。その後PR #246/247をマージし、
-現在導入済み版はv0.28.16（target `53faaeb`）。
+本監査でrelease受入した版はv0.28.17（target `4293d20`）。最終確認の現行installedは並行更新により
+v0.28.18/healthyであり、同版の受入をv0.28.17の証拠から推定しない。
 以前の個別実測は維持するが、条件の一部だけの実測から行全体を成功扱いしない。
 下表の「未確認」は今回の監査で条件全体に対応する証拠を確定できていない意味で、コード不在とは異なる。
 
@@ -62,6 +63,15 @@ outbox再送は未確認。新しいAgent Job subjectから旧childのauthority�
 Host interruptedとの差異はsent=false、active targetへの適用はsent=trueを保持。
 証拠`/tmp/mf-terminal-http-1ppzav37/observations.json`。これは終端fixtureのmanager→Host HTTPであり、
 installed Agent経路・GUI表示・自然な長時間制作・600秒超refreshの不足は解消したとは扱わない。
+v0.28.17署名公開・標準update後には、full packaged Agent HTTPとinstalledの過去failed6件の
+status/cancel/status18回を確認した。Host interruptedとの不一致をsent=falseのまま保持し、
+Job/asset/scene/revision件数不変。installed証拠は
+`/data1tb/mf-0.28.17-installed-terminal-retry1-20260906/observations.json`。
+GUI表示と長時間refreshは、この終端fixture受入から成功へ読み替えない。
+v0.28.17の再試験も225.185秒でMediaForge停止/再開に遭遇しFAILED。全6件のHost/local終端一致と
+sent=trueは確認したが、refresh監査は各0件。証拠
+`/data1tb/mf-credential-refresh-installed-0.28.17-20260906/events.json`。試験がrestartを要求したものではなく、
+要求主体は未特定。約11分の無再起動枠を調整して再試験する。
 詳細はhandoff/status、証拠は`/data1tb/mf-credential-refresh-installed-0.28.16-retry2/events.json`。
 
 ## 今回発見した具体的なコード差分

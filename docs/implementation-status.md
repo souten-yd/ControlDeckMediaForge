@@ -9159,3 +9159,57 @@ installed v0.28.16は変更なし。新schema/receiptは加法的。公開署名
 最終source再確認も同じfalse/true・interrupted/succeeded・local2件。
 証拠`/tmp/mf-terminal-http-4rjhhdmw/observations.json`、試験unitはfinallyで停止した。
 最終`./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 109.09秒。
+
+## 2026-09-06 — v0.28.17署名公開・標準導入・installed終端照合
+
+PR #251 merge `4293d2086aaeed4784a2ad0c2b9776f88415c043`をexact release worktreeでbuild_release_bundleし、
+既存publisher keyでsign_releaseした。core venvにはcryptographyがないため初回sign importは失敗。
+coreへ依存追加せず既存Host diagnostic venvで署名toolを実行した。artifact31,470,272 B、SHA-256
+`997f6cef6e941eca6603cff199d3dbc43a28d030d79ae7fdfbbfe9109af500b3`。通常release v0.28.17を公開し、
+4 asset再取得/hash一致、Host publisher verifierのsize/hash一致、tag target一致を確認。
+公開再取得directory `/data1tb/mf-0.28.17-public-20260906`。packaged doctorはok/0.28.17/packaged=true。
+
+生成中だった別Job `job_29459166c091438c8c14767cd35c130e`を操作せず、Host/local active0とworker2399992終了を
+確認後、Host mainを`dac519b`へfast-forward/restartした。dirty tsconfig.tsbuildinfoは保持。
+MediaForge SQLite online backupを非公開専用directoryへ作り、標準registry.updateを実行。
+13.627秒で0.28.17/healthy/enabled、actual executableはversions/0.28.17/bin/mediaforge。
+Host PID2403274、MediaForge MainPID2403709/child2403714。backupとupdate.jsonは
+`/data1tb/mf-0.28.17-installed-evidence-20260906/`に保持する。
+
+`scripts/3ds_terminal_outbox_e2e.py --package-executable .../bin/mediaforge`で配布binaryのfull Agent
+status/cancelも実HTTP確認。隔離Job2件・Host差異保持・一致sent=true、再照合で件数不変。
+証拠`/tmp/mf-terminal-http-hcxvio45/observations.json`。隔離Host/core unitはfinallyで停止済み。
+次に`scripts/3ds_terminal_installed_e2e.py`で前回retry2の明示6 Jobをowner/failed/Host interrupted検証後に
+installed status/cancel/statusで18回照会。0.304秒、sent=false・matches=false・Host interruptedを保持し、
+Job/asset/scene/revision件数不変。証拠`/data1tb/mf-0.28.17-installed-terminal-retry1-20260906/observations.json`。
+初回は別生成Jobを検出して全体idle assertで止まった。終端fixtureだけを操作するため全体idle条件を外し、
+対象scope検証と件数不変は維持した。別のactive Jobのcancel/restartは行っていない。
+
+長時間credential scriptに期待version明示引数を追加。今回の終端fixture受入を600秒超refreshの証拠にはしない。
+GUI上のHost差異表示、長時間refreshなどの残件は未確認で、3DS-8全体はPARTIAL。
+受入script更新後の`./mf.sh test`: 1004 passed / 既知warning1件 / 131.28秒。
+exact release worktreeは削除した（Gitから再作成可能）。生成したbuild出力とpackaged展開先の2 directoryは
+gio trashへ退避し復元可能。公開再取得4 asset、観測JSON、更新前DB backupは保持する。
+
+### v0.28.17長時間credential試験 — 更新条件前に中断
+
+`PYTHONPATH=/data1tb/ControlDeck/app/backend /data1tb/ControlDeck/app/.venv/bin/python
+scripts/3ds_credential_refresh_e2e.py --expected-version 0.28.17
+--evidence-dir /data1tb/mf-credential-refresh-installed-0.28.17-20260906`。
+全回帰test終了とHost/local active0を確認後に実行し、test群は並走させなかった。
+child2409636は160.0676秒停止・再開。child2415439を161.690秒に停止。
+191.712秒まで後続running、222.109秒にConnectError、225.185秒にfailedを検出した。
+systemdは09:40:12 JSTにMediaForge停止、09:40:13再開を記録。本scriptはrestartを要求していない。
+要求主体は未特定。Host PID2403274は不変、MFはMainPID2416323でactive。
+
+最終read-only SQLでは、6件は1 succeeded / 5 failedでHost/local一致、全件host_terminal_sent=true、
+credential refresh監査は各0件。blocker0はsucceeded、blocker1はscene_recipe_failed、残る4件はservice_stopped。
+Job/Host ID対応はevents.jsonのsubmitted6件に固定。finally後active local0、停止対象child2件とも消滅。
+結果はFAILED / credential refresh NOT TESTED。正常なshutdown終端通知の証拠は得たが、480秒条件前の
+停止なので更新成功ではない。次の試験には約11分間Host/MediaForgeを再起動しない実行枠が必要。
+並行Host側のuntracked frontend/e2e/mediaforge-library.spec.tsとdirty tsconfig.tsbuildinfoは保持した。
+最終現物確認では並行PR #252（Library thumbnail改善、merged `7434d7f`）が入り、installedは
+0.28.18/healthyへ変わっていた。現行core SHA-256は
+`34b5a0f1c7edc0ed65732e4dc26768382be819d1265db4e172a4cbc1aa9c07ac`。
+本turnの公開・標準導入・18call照合は0.28.17で取得した証拠であり、新版へ読み替えない。
+0.28.18の導入操作は本turnでは要求していない。現行を0.28.17へ戻す操作は行わない。

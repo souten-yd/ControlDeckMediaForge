@@ -34,6 +34,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-dir", required=True, type=Path)
     parser.add_argument("--core-url", default="http://127.0.0.1:9130")
+    parser.add_argument("--expected-version", default="0.28.16")
     args = parser.parse_args()
     host_data = data_dir()
     core_data = host_data / "feature-data/media-forge/data"
@@ -45,7 +46,7 @@ def main() -> None:
     assert not core_db.execute("SELECT id FROM jobs WHERE status IN ('queued','running')").fetchall()
     assert not core_db.execute("SELECT id FROM blender_web_sessions WHERE state IN ('queued','preparing','starting','ready','saving','stopping')").fetchall()
     installed = registry.status("media-forge")
-    assert installed["health"] == "healthy" and installed["version"] == "0.28.16", installed["version"]
+    assert installed["health"] == "healthy" and installed["version"] == args.expected_version, installed["version"]
     service_pid = int(subprocess.check_output([
         "systemctl", "--user", "show", "cdapp-feature-media-forge.service", "--property=MainPID", "--value",
     ], text=True).strip())
