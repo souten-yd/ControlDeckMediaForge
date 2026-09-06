@@ -3,6 +3,38 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 revision comparison refresh race
+
+PR #269 merged `daf9df6fd909a4ae7edf6daf3f7d92c6e2015951`をfetch確認。
+branch `ux1/3d-material-compare-diagnostic`。installed0.28.23の比較timeoutを再現し、
+試験scriptにpointer/click、openScene/比較開始終了の状態記録を追加した（認証情報は記録しない）。
+`/data1tb/mf-material-preview-trace-0.28.23-20260906`では比較click自体が記録されず、
+locked/disabled false、compareReady0/dialog falseのままtimeout。別試験ではscroll時の
+Element is not attachedを確認。同一sceneのopenSceneが毎回revision DOMをreplaceしていた。
+frontendではscene ID/name/current revision/locale/revision metadataのkeyが変わる時だけ
+revision DOMを再生成し、不変refreshではボタンを保持する。版/言語の変更表示は維持する。
+
+source fixtureを9047で起動し、実Blender4.5.9/通常Chromeでpointerdown→同一scene refresh→
+pointerupを挟んでも旧版比較が開くこと、採用2→3/復元3→4・旧blend bytes一致、
+比較/破棄head不変、切断時採用禁止、日英/320px（root320/320、dialog280/280）、page error0。
+証拠 `/data1tb/mf-material-refresh-browser-20260906/observations.json`。
+同fixtureのdata-dir `/data1tb/mf-material-refresh-ui-20260906`を保持する。
+installed0.28.23にはこの修正を導入していない。修正の署名新版/installed受入と生成画像一巡はNOT TESTED。
+全体3DS-6/3DS-8はPARTIAL。
+gate `./mf.sh test`: 1026 passed / 既知Starlette warning1件 / 111.46秒。node構文/diff check成功。
+自分が起動したsource fixture9047はCtrl-Cで停止し、terminal exit0を確認した。
+追加のread-only installed検査は既存mf-e2e sceneを同じ内容で再読込し、
+`button_retained=False, scene_unchanged=True`を観測。実体差替えを確認した。
+手動座標pointerのinstalled負例はpointerイベントを記録できず、そのtimeoutだけを差替えの証明にはしない。
+sourceにボタンのisConnected assertionも追加、同fixtureを保持して再起動/再実行した
+`/data1tb/mf-material-refresh-browser-identity-20260906`は4→5→6版で全assert成功。
+再起動した9047も停止/exit0。過去の全timeoutの原因を網羅したとはしない。
+並行mainの#270（canvas補正）/#271（0.28.24版更新）と公開0.28.24を確認。元変更を保持して取り込む。
+両変更を保持して取り込み、status末尾の競合は双方の追記を残して解消。
+統合後gate `./mf.sh test`: 1030 passed / 既知warning1件 / 111.71秒。diff check成功。
+終了前registry.statusはinstalled0.28.23/healthy/enabled。公開latest0.28.24とは異なる。
+次はこの修正を含む署名版の準備とinstalled受入。版数は並行releaseを再確認して選ぶ。
+
 ## 2026-09-06 v0.28.23 signed / installed acceptance in progress
 
 PR #268 merged `22fc2b95f051bac3e77f740a76367677bdb0358d`、tag v0.28.23は同commit。

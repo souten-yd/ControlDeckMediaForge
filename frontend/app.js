@@ -166,6 +166,7 @@ const state = {
   selectedSceneId: "",
   sceneDocument: null,
   sceneRevisions: [],
+  sceneRevisionRenderKey: "",
   sceneCompareToken: 0,
   sceneCompareTarget: null,
   sceneCompareCurrent: null,
@@ -5085,41 +5086,49 @@ async function openScene(sceneId) {
     byId("scene-detail-summary").textContent = `${sceneText().count(scene.revision_count)} · ${sceneDay(scene.updated_at)}`;
     const revisions = [...(result.revisions || [])].sort((left, right) => right.sequence - left.sequence);
     state.sceneRevisions = revisions;
-    byId("scene-revisions").replaceChildren(...revisions.map((revision) => {
-      const row = document.createElement("div");
-      row.className = "row";
-      const info = document.createElement("div");
-      const title = document.createElement("p");
-      title.className = "t";
-      title.textContent = `${sceneText().revision(revision.sequence)} · ${sceneText().validated}`;
-      const detail = document.createElement("p");
-      detail.className = "s";
-      detail.textContent = [sceneDay(revision.created_at), sceneText().runtime(revision.runtime_version),
-        sceneText().dependencies((revision.dependencies || []).length)].join(" · ");
-      info.append(title, detail);
-      const actions = document.createElement("div");
-      actions.className = "scene-revision-actions";
-      const preview = document.createElement("button");
-      preview.type = "button";
-      preview.dataset.scenePreview = revision.preview_asset_id;
-      preview.dataset.sceneName = scene.name;
-      preview.textContent = sceneText().preview;
-      actions.append(preview);
-      if (revision.id === scene.current_revision_id) {
-        const current = document.createElement("span");
-        current.className = "state current";
-        current.textContent = sceneText().currentRevision;
-        actions.append(current);
-      } else {
-        const compare = document.createElement("button");
-        compare.type = "button";
-        compare.dataset.sceneCompare = revision.id;
-        compare.textContent = sceneText().compareRevision;
-        actions.append(compare);
-      }
-      row.append(info, actions);
-      return row;
-    }));
+    // A session refresh may land between pointerdown and pointerup. Preserve
+    // unchanged revision buttons so that an in-progress click is not lost.
+    const revisionRenderKey = JSON.stringify([
+      scene.id, scene.name, scene.current_revision_id, document.documentElement.lang, revisions,
+    ]);
+    if (state.sceneRevisionRenderKey !== revisionRenderKey) {
+      byId("scene-revisions").replaceChildren(...revisions.map((revision) => {
+        const row = document.createElement("div");
+        row.className = "row";
+        const info = document.createElement("div");
+        const title = document.createElement("p");
+        title.className = "t";
+        title.textContent = `${sceneText().revision(revision.sequence)} · ${sceneText().validated}`;
+        const detail = document.createElement("p");
+        detail.className = "s";
+        detail.textContent = [sceneDay(revision.created_at), sceneText().runtime(revision.runtime_version),
+          sceneText().dependencies((revision.dependencies || []).length)].join(" · ");
+        info.append(title, detail);
+        const actions = document.createElement("div");
+        actions.className = "scene-revision-actions";
+        const preview = document.createElement("button");
+        preview.type = "button";
+        preview.dataset.scenePreview = revision.preview_asset_id;
+        preview.dataset.sceneName = scene.name;
+        preview.textContent = sceneText().preview;
+        actions.append(preview);
+        if (revision.id === scene.current_revision_id) {
+          const current = document.createElement("span");
+          current.className = "state current";
+          current.textContent = sceneText().currentRevision;
+          actions.append(current);
+        } else {
+          const compare = document.createElement("button");
+          compare.type = "button";
+          compare.dataset.sceneCompare = revision.id;
+          compare.textContent = sceneText().compareRevision;
+          actions.append(compare);
+        }
+        row.append(info, actions);
+        return row;
+      }));
+      state.sceneRevisionRenderKey = revisionRenderKey;
+    }
     byId("scene-detail").hidden = false;
     renderSceneBackupControls();
     renderBlenderSessionControls();

@@ -1,6 +1,6 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: 3DS-0〜5実装済み / 3DS-6 PARTIAL（採用前比較が未実装）/ 3DS-7経路実装済み / 3DS-8 PARTIAL
+Status: 3DS-0〜5実装済み / 3DS-6 PARTIAL（採用前比較実装済み、生成画像一巡等の受入が残る）/ 3DS-7経路実装済み / 3DS-8 PARTIAL
 Date: 2026-09-06
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
@@ -27,7 +27,8 @@ MaterialBinding commitまでをsource/packageで実装・確認した。3DS-6c�
 満たさないため、3DS-6のexit完了判定を撤回する。確定済み新旧版の比較・復元の実績は維持する。
 補完domainの未保存候補prepare/read/adopt/discardは実Blender4.5.9で確認し、private WebSocket経路の
 実TCP/Blender受入も追加した。standalone mirror/UIを接続しsource browserの日英/320px・採用/復元を
-確認した。採用前比較のinstalled Host/生成画像経路の受入まで
+確認した。署名installed0.28.23で既存画像の採用前比較/破棄/採用/旧版復元も確認したが、
+旧版比較クリック中の再描画による操作消失を再現した。修正のinstalled受入と生成画像経路の受入まで
 3DS-6はPARTIALのまま進める。
 3DS-7はtyped Agent recipe、durable detached child Job、stable actor ownerをsource/packageで確認した。
 3DS-8でinstalled-host/OpenCode/GPU/releaseの個別証拠を取得したが、必須受入全体の完了判定を撤回した。

@@ -9548,6 +9548,32 @@ scene `scene_257528fdd6a540818537d5e93f893870`で比較/破棄head不変、採�
 exact release worktreeを削除（Gitで再作成可）、build/package展開先をgio trashへ退避（復元可）。
 公開再取得・browser証跡・非公開DB backupを保持。PR #269へ受入記録を提出した。
 
+## 2026-09-06 comparison click lost during unchanged refresh
+
+installed0.28.23の比較timeoutを再現。`mf-material-preview-trace-0.28.23-20260906`では
+clickが届かずlocked/disabled false、compareReady0/dialog false。別のrefresh-click試験は
+scroll中のElement is not attachedを記録。同一sceneのopenSceneがrevision DOMを再生成していた。
+sourceではscene ID/name/current revision/locale/revision metadataが不変ならDOMを保持する修正。
+実行: core venv/PYTHONPATH=backend:.で`3ds_material_preview_ui_e2e.py --serve
+--data-dir /data1tb/mf-material-refresh-ui-20260906 --legacy-runtime-root
+/data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9 --port 9047`。
+Host診断venvで同scriptのbrowser mode（--url http://127.0.0.1:9047）を実行した。
+`/data1tb/mf-material-refresh-browser-20260906`でpointerdown→同一scene refresh→pointerupでも
+比較が開く、比較/破棄head不変、採用2→3/復元3→4、旧blend bytes一致、日英/320px、
+root320/320/dialog280/280、切断時採用禁止、page error0をassert。
+NOT TESTED: 修正の署名新版/installed受入、生成画像一巡。全体3DS-6/3DS-8はPARTIAL。
+gate `./mf.sh test`: 1026 passed / 既知Starlette warning1件 / 111.46秒。node構文/diff check成功。
+source fixture9047はCtrl-Cで停止/terminal exit0。fixture/証跡は保持。
+追加read-only installed検査: `scene_257528fdd6a540818537d5e93f893870`の同一内容refreshで
+`button_retained=False, scene_unchanged=True`。差替え自体を確認した。
+手動座標pointerのinstalled負例はpointerイベントを記録できず、そのtimeoutを根拠に原因を断定しない。
+sourceボタンisConnected assertion追加後の再実行も成功。証拠
+`/data1tb/mf-material-refresh-browser-identity-20260906`、既存fixture4→5→6版、全assert成功。
+同fixture serverを停止/exit0。過去の全timeout原因を網羅したとはしない。
+並行main #270/#271のcanvas補正と0.28.24版更新を保持して取り込み、文書競合は両記録を保持した。
+統合後gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 111.71秒。diff check成功。
+終了前実registry.statusはinstalled0.28.23/healthy/enabled。公開latest0.28.24の導入を推測しない。
+
 ## v0.28.24 — brief が決めた画面へ揃える
 
 16:9 の背景を brief で頼むと毎回 `canvas_mismatch` で失敗していた。受付が

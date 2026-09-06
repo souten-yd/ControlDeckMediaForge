@@ -37,6 +37,8 @@ def main() -> None:
     parser.add_argument("--blend", type=Path, required=True)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--refresh-during-click", action="store_true",
+                        help="Refresh unchanged scene between pointer down/up on revision comparison")
     args = parser.parse_args()
     assert args.blend.is_file() and not args.blend.is_symlink()
     args.evidence_dir.mkdir(exist_ok=False)
@@ -63,6 +65,30 @@ def main() -> None:
                 page.goto("/x/media-forge/workspace/create", wait_until="domcontentloaded")
                 frame = helpers.workspace_frame(page)
                 frame.wait_for_selector('#app[aria-busy="false"]')
+                frame.evaluate("""() => {
+                  window.__materialTrace = [];
+                  const snapshot = (event, extra = {}) => {
+                    window.__materialTrace.push({event, ms: performance.now(),
+                      locked: state.hostActionLocked, materialBusy: state.sceneMaterialBusy,
+                      restoreBusy: state.sceneRestoreBusy, disabled: state.disabled,
+                      ready: state.sceneCompareReady, token: state.sceneCompareToken,
+                      head: state.sceneDocument?.current_revision_id,
+                      dialog: document.querySelector('#scene-compare-dialog').open, ...extra});
+                  };
+                  for (const name of ['openScene', 'openSceneCompare', 'closeSceneCompare', 'restoreComparedSceneRevision']) {
+                    const original = window[name];
+                    window[name] = async function(...args) {
+                      snapshot(name + ':start', {args});
+                      try { return await original.apply(this, args); }
+                      finally { snapshot(name + ':end'); }
+                    };
+                  }
+                  for (const kind of ['pointerdown', 'pointerup', 'click']) document.addEventListener(kind, event => {
+                    const target = event.target.closest('button');
+                    snapshot(kind, {tag: event.target.tagName, id: target?.id || event.target.id,
+                      compare: target?.dataset.sceneCompare || ''});
+                  }, true);
+                }""")
                 frame.locator("#create-media-3d").click()
                 frame.locator("#scene-import-file").set_input_files(str(args.blend))
                 frame.locator("#scene-import-name").fill("mf-e2e material candidate " + args.expected_version)
@@ -110,7 +136,26 @@ def main() -> None:
                 adopted = scene()
                 assert len(adopted["revisions"]) == 2
                 old = before["scene"]["current_revision_id"]
-                frame.locator(f'[data-scene-compare="{old}"]').click()
+                compare = frame.locator(f'[data-scene-compare="{old}"]')
+                if args.refresh_during_click:
+                    frame.evaluate("id => openScene(id)", scene_id)
+                    compare.scroll_into_view_if_needed()
+                    compare.hover()
+                    box = compare.bounding_box()
+                    assert box
+                    evidence["comparison_button_box"] = box
+                    page.screenshot(path=str(args.evidence_dir / "before-pointer.png"))
+                    assert 0 < box["y"] + box["height"] / 2 < 900
+                    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                    page.mouse.down()
+                    frame.evaluate("() => {window.__revisionButton = document.querySelector('[data-scene-compare]');}")
+                    frame.evaluate("id => openScene(id)", scene_id)
+                    evidence["revision_button_retained"] = frame.evaluate("() => window.__revisionButton.isConnected")
+                    page.mouse.up()
+                    assert evidence["revision_button_retained"], "Unchanged refresh detached the pressed revision button"
+                    evidence["refresh_during_click"] = True
+                else:
+                    compare.click()
                 frame.wait_for_function("() => state.sceneCompareReady === 2")
                 assert "Restore" in frame.locator("#scene-compare-restore").inner_text()
                 frame.locator("#scene-compare-restore").click()
@@ -144,12 +189,14 @@ def main() -> None:
                     evidence["failure_state"] = frame.evaluate("() => ({locked:state.hostActionLocked,disabled:state.disabled,restoreBusy:state.sceneRestoreBusy,compareReady:state.sceneCompareReady,compareToken:state.sceneCompareToken,head:state.sceneDocument?.current_revision_id,materialRevision:state.sceneMaterialRevisionId,dialog:document.querySelector('#scene-compare-dialog').open,status:document.querySelector('#scene-compare-status').textContent})")
                 raise
             finally:
+                if 'frame' in locals() and not frame.is_detached():
+                    evidence["interaction_trace"] = frame.evaluate("() => window.__materialTrace || []")
                 browser.close()
     finally:
         with SessionLocal() as db:
             revoke_session(db, token)
         (args.evidence_dir / "observations.json").write_text(json.dumps(evidence, indent=2) + "\n")
-    print(json.dumps({k: v for k, v in evidence.items() if k not in ("before", "adopted", "restored")}, indent=2))
+    print(json.dumps({k: v for k, v in evidence.items() if k not in ("before", "adopted", "restored", "interaction_trace")}, indent=2))
 
 
 if __name__ == "__main__":
