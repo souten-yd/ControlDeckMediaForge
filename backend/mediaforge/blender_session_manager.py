@@ -161,6 +161,7 @@ class BlenderSessionManager:
         self.idle_timeout_sec = idle_timeout_sec
         self._now = now or _now
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._admissions: set[asyncio.Task[dict[str, Any]]] = set()
         self._gateway_sessions: set[str] = set()
         self._gateway_activity: dict[str, float] = {}
         self._gateway_activity_saved: dict[str, float] = {}
@@ -178,6 +179,7 @@ class BlenderSessionManager:
             self._spawn(owner, session.id, resume=True)
 
     async def stop(self) -> None:
+        await asyncio.gather(*list(self._admissions), return_exceptions=True)
         tasks = list(self._tasks.values())
         for task in tasks:
             task.cancel()
@@ -188,9 +190,35 @@ class BlenderSessionManager:
             self._gateway_activity.clear()
             self._gateway_activity_saved.clear()
 
-    def create(
+    async def create(
         self, owner: str, scene_id: str, *, recovery_working_id: str | None = None
     ) -> dict[str, Any]:
+        task = asyncio.create_task(self._admit(owner, scene_id, recovery_working_id))
+        self._admissions.add(task)
+        try:
+            return await task
+        finally:
+            self._admissions.discard(task)
+
+    async def _admit(self, owner: str, scene_id: str, recovery_working_id: str | None) -> dict[str, Any]:
+        task = asyncio.create_task(asyncio.to_thread(self._create_guarded, owner, scene_id, recovery_working_id))
+        try:
+            session = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            session = await task
+            self._spawn(owner, session.id, resume=False)
+            raise
+        self._spawn(owner, session.id, resume=False)
+        return self._projection(session)
+
+    def _create_guarded(self, owner: str, scene_id: str, recovery_working_id: str | None) -> BlenderWebSession:
+        try:
+            with self.resolver.removal_guard():
+                return self._create_record(owner, scene_id, recovery_working_id)
+        except SceneError as exc:
+            raise BlenderSessionError(exc.code, str(exc)) from exc
+
+    def _create_record(self, owner: str, scene_id: str, recovery_working_id: str | None) -> BlenderWebSession:
         owner = validate_scene_owner(owner)
         web_status = self.web_pack.status()
         if web_status.get("state") != "ready":
@@ -206,7 +234,18 @@ class BlenderSessionManager:
         if not isinstance(scene_id, str):
             raise BlenderSessionError("blender_session_invalid", "scene identity is invalid")
         # Owner and existence are checked transactionally again by Store.create.
-        self.store.get_scene(scene_id, owner)
+        document, revisions = self.scene_workspace.catalog.get(owner, scene_id)
+        if recovery_working_id is not None:
+            source = self.store.get_scene_working_copy(owner, recovery_working_id)
+            if source.scene_id != scene_id or source.state != "recovery":
+                raise BlenderSessionError("scene_recovery_unavailable", "recovery candidate is unavailable")
+            if source.base_revision_id != document.current_revision_id:
+                raise BlenderSessionError("scene_recovery_conflict", "scene changed after recovery was created")
+        else:
+            source = next(item for item in revisions if item.id == document.current_revision_id)
+        runtime = self.resolver.resolve_registered(source.runtime_id)
+        if runtime is None or runtime.version != source.runtime_version:
+            raise BlenderSessionError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
         session_id = f"blendersession_{uuid.uuid4().hex}"
         now = self._now()
         session = BlenderWebSession(
@@ -216,6 +255,8 @@ class BlenderSessionManager:
             web_pack_version=str(web_status["version"]),
             unit_id=f"mediaforge-blender-{session_id.removeprefix('blendersession_')}.service",
             state=BlenderSessionState.QUEUED,
+            runtime_id=runtime.runtime_id,
+            runtime_version=runtime.version,
             recovery_source_id=recovery_working_id,
             created_at=now,
             updated_at=now,
@@ -224,8 +265,7 @@ class BlenderSessionManager:
             self.store.create_blender_web_session(owner, session)
         except SceneError as exc:
             raise BlenderSessionError(exc.code, str(exc)) from exc
-        self._spawn(owner, session.id, resume=False)
-        return self._projection(session)
+        return session
 
     def list(self, owner: str) -> dict[str, Any]:
         return {"items": [self._projection(item) for item in self.store.list_blender_web_sessions(owner)]}
@@ -329,7 +369,7 @@ class BlenderSessionManager:
         if existing is not None:
             existing.cancel()
         task = asyncio.create_task(
-            self._interrupt(owner, session_id, code, allowed[code]),
+            self._interrupt_after(existing, owner, session_id, code, allowed[code]),
             name=f"blender-interrupt-{session_id}",
         )
         self._track(session_id, task)
@@ -362,9 +402,31 @@ class BlenderSessionManager:
         existing = self._tasks.pop(session_id, None)
         if existing is not None:
             existing.cancel()
-        task = asyncio.create_task(self._finish(owner, session_id, save=save), name=f"blender-finish-{session_id}")
+        task = asyncio.create_task(self._finish_after(existing, owner, session_id, save=save),
+                                   name=f"blender-finish-{session_id}")
         self._track(session_id, task)
         return self._projection(current)
+
+    async def _join_previous(self, previous: asyncio.Task[None] | None) -> None:
+        if previous is not None:
+            cleanup = asyncio.gather(previous, return_exceptions=True)
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                await cleanup
+                raise
+
+    async def _finish_after(
+        self, previous: asyncio.Task[None] | None, owner: str, session_id: str, *, save: bool
+    ) -> None:
+        await self._join_previous(previous)
+        await self._finish(owner, session_id, save=save)
+
+    async def _interrupt_after(
+        self, previous: asyncio.Task[None] | None, owner: str, session_id: str, code: str, message: str
+    ) -> None:
+        await self._join_previous(previous)
+        await self._interrupt(owner, session_id, code, message)
 
     def _spawn(self, owner: str, session_id: str, *, resume: bool) -> None:
         if session_id in self._tasks:
@@ -383,17 +445,19 @@ class BlenderSessionManager:
 
     async def _prepare(self, owner: str, session_id: str) -> None:
         session = self.store.get_blender_web_session(owner, session_id)
+        if session.state != BlenderSessionState.QUEUED:
+            return
         working_id: str | None = None
         try:
             session = self._update(owner, session, state=BlenderSessionState.PREPARING)
-            working = (
-                self.scene_workspace.acquire_recovery_working_copy(
-                    owner, session.scene_id, session.recovery_source_id
-                )
-                if session.recovery_source_id is not None
-                else self.scene_workspace.acquire_working_copy(owner, session.scene_id)
+            working = await self.scene_workspace.acquire_working_copy_async(
+                owner, session.scene_id, recovery_working_id=session.recovery_source_id
             )
             working_id = working.id
+            if session.runtime_id is not None and (
+                working.runtime_id != session.runtime_id or working.runtime_version != session.runtime_version
+            ):
+                raise BlenderSessionError("scene_runtime_unavailable", "queued Blender runtime pin changed")
             runtime = self.resolver.resolve_registered(working.runtime_id)
             if runtime is None or runtime.version != working.runtime_version:
                 raise BlenderSessionError("scene_runtime_unavailable", "scene Blender runtime is unavailable")

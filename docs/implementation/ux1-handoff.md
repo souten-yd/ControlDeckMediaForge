@@ -3,6 +3,48 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 guarded GUI and working-copy admission
+
+PR #323 merged `7962356b44b7db27a44d72f640be02df60ec54f6` をfetch確認。
+branch `ux1/3d-working-admission-guard`。
+GUI createをasync admissionへ移し、worker thread内のresolver.removal_guardで
+runtime ID/version検証とqueued record保存を一体にした。復旧元owner/scene/current revisionも検査。
+未導入/削除済み版は受付前に明示拒否、開始済みrecord作成はrequest取消で放棄しない。
+旧queued recordのruntime nullは引き続き読める。新しいqueuedは最初から版を固定する。
+
+通常/復旧working-copy作成も同じguard内でruntime検査・copy・DB lease確定を行う。
+app WS/HTTP、GUI準備、材質適用、材質候補採用の全production callerをasync worker取得へ接続。
+待機中の取消は開始済みthreadの終了を待ち、新規copy/leaseをreleaseする。
+GUI停止/中断は旧準備taskのcleanupをjoinしてから終端へ進み、shutdownも追跡を維持する。
+queued pinと準備したworking版が変わればfail-closed。すでにstopping/stoppedのrecordを
+遅れて準備し直さない。公開schema/agent/Host/frontend変更なし。
+
+初期focused38件中1件が失敗。async受付後にはcopy準備が進み得るため、
+「即停止時にcopyのDB行が一度も作られない」という旧assertは成立しなくなった。
+released行の保持は許容し、active copyなし/実directory空/controllerなしを要求するassertへ更新。
+追加7 casesはnormal/recoveryと削除guardの競合、準備thread中のstop/interrupt/shutdown、
+削除済みruntimeの事前拒否、GUI recordの固定とrequest取消後の記録保持。
+focused5 modules: 45 passed/既知warning1。
+最終 `./mf.sh test`: 1117 passed/既知warning1/185.31秒。diff check成功。
+
+実行: `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_runtime_removal_e2e.py
+--live-references-only --hold-working-admission
+--evidence-dir /data1tb/mf-working-admission-guard-20260906`。
+専用clean setup領域のsource実HTTP/実4.5.9 GUI。新flagはcopy thread内部の明示gate fixtureであり、
+Blender binary/runner/DB/HTTPは実物。runtime切替/削除は行わない。
+4.060秒passed/exit0。queued responseで4.5.9 pin、copy gate中のremove previewはpending。
+同区間の/healthはHTTP200/0.003346秒、statusはsetup_required（healthyとは記録しない）。
+解除後previewはsession1+working copy1/live2、実GUI ready後も2、停止後0。
+正規remove POSTは両状態で422/in_use。active/project保護も併存し、liveだけが拒否理由とはしない。
+session blendersession_206d0ccc97914646a548b8085118f2b8、停止unitはinactive/MainPID0。
+scene/revision/Asset metadataと既存全6ファイルのsize/SHAは前後不変。具体hashはobservations.json。
+本番Host/MFは照会時active/PID250878・244551。こちらからrestart/update要求なし。
+
+実削除commitが先行するGUI同時開始、確認付き履歴削除、同版再導入、
+installed Host/browser、今回のRFB画面/入力、新署名releaseはNOT TESTED。
+次は停止済みmanaged版の明示確認付き削除をdurable operationへ保存し、正確な同版再導入へ接続する。
+3DS-8/scenario DはPARTIAL、本番0.28.34へこの変更を導入したとは扱わない。
+
 ## 2026-09-06 durable runtime references and off-loop removal
 
 PR #322 merged `4e0c9b20ac79683de53d1ef35f44e3d18ff89132` をfetch確認。

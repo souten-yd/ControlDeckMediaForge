@@ -12,6 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 import socket
+import threading
 import time
 from typing import Any
 
@@ -47,6 +48,17 @@ async def run(args: argparse.Namespace) -> None:
         blender_legacy_runtime_root=root / "absent-legacy",
         blender_managed_runtime_root=managed,
         blender_web_runtime_root=feature / "runtimes/blender-web"))
+    admission_entered, admission_release = threading.Event(), threading.Event()
+    if args.hold_working_admission:
+        original_acquire = app.state.scene_workspace._acquire_working_copy
+
+        def held_acquire(*values: Any) -> Any:
+            admission_entered.set()
+            if not admission_release.wait(15):
+                raise TimeoutError("acceptance admission gate was not released")
+            return original_acquire(*values)
+
+        app.state.scene_workspace._acquire_working_copy = held_acquire
     hashes_before = await asyncio.to_thread(asset_hashes, data / "assets")
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
@@ -104,6 +116,8 @@ async def run(args: argparse.Namespace) -> None:
             existing = [s for s in (await get(sessions_path))["items"]
                         if s["state"] not in {"stopped", "interrupted", "failed"}]
             assert len(existing) <= 1
+            if args.hold_working_admission:
+                assert not existing, "held admission requires a new session, not an existing runner"
             scene_before, assets_before = await get(scene_path), await get("/api/v1/assets")
             await record("baseline", assets=hashes_before, scene=scene_before)
             if existing:
@@ -112,6 +126,26 @@ async def run(args: argparse.Namespace) -> None:
             else:
                 session = await post(sessions_path, {"action": "start", "scene_id": scene_before["scene"]["id"]})
             session_id = session["id"]
+            if args.hold_working_admission:
+                assert session["runtime_id"] == old and session["runtime_version"] == "4.5.9"
+                assert await asyncio.to_thread(admission_entered.wait, 5)
+                pending_preview = asyncio.create_task(post(actions_path,
+                    {"action": "remove_preview", "runtime_id": old}))
+                await asyncio.sleep(0.2)
+                health_started = time.monotonic()
+                health_response = await client.get("/health")
+                health_response.raise_for_status()
+                health_elapsed = time.monotonic() - health_started
+                assert health_elapsed < 2, health_elapsed
+                assert not pending_preview.done()
+                admission_release.set()
+                guarded_preview = await pending_preview
+                assert guarded_preview["durable_reference_counts"]["sessions"] == 1
+                assert guarded_preview["durable_reference_counts"]["working_copies"] == 1
+                await record("held_admission_released", queued_session=session,
+                    health_http_status=health_response.status_code,
+                    health_status=health_response.json()["status"], health_elapsed_sec=round(health_elapsed, 6),
+                    preview_was_pending=True, preview_after_release=guarded_preview)
 
             async def wait_session(target: str) -> dict[str, Any]:
                 async with asyncio.timeout(90):
@@ -182,6 +216,7 @@ async def run(args: argparse.Namespace) -> None:
         await record("failed", error_type=type(exc).__name__, message=str(exc)[:300])
         raise
     finally:
+        admission_release.set()
         server.should_exit = True
         await serving
         listener.close()
@@ -192,7 +227,12 @@ def main() -> None:
     parser.add_argument("--evidence-dir", required=True, type=Path)
     parser.add_argument("--live-references-only", action="store_true",
                         help="Start/stop real GUI and assert durable blockers; do not switch or delete runtimes")
-    asyncio.run(run(parser.parse_args()))
+    parser.add_argument("--hold-working-admission", action="store_true",
+                        help="Inject a thread gate during copy admission and verify HTTP remains responsive")
+    args = parser.parse_args()
+    if args.hold_working_admission and not args.live_references_only:
+        parser.error("--hold-working-admission requires --live-references-only")
+    asyncio.run(run(args))
 
 
 if __name__ == "__main__":

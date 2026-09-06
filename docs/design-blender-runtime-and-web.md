@@ -135,8 +135,13 @@ working/recoveryのpin、未指定ならscene current revisionを参照し、不
 既存live_reference_countはin-processとdurable参照の合計、内訳をprivate previewへ追加する。
 期限超過だけではworking copyの参照を外さず、正式なretireを待つ。
 managed削除のpreview/受付/実行はworker threadでDB/filesystem処理を行い、開始済みthreadを
-request取消で放棄しない。GUI受付/working-copy作成と削除commit間の排他、確認付き削除は
-別の残件であり、参照snapshotだけで競合全体を解決したとは扱わない。
+request取消で放棄しない。
+GUI受付も同じresolver guard内でruntime ID/versionを確定しqueued recordへ保存する。
+通常/復旧working-copy作成は版検査からcopy/DB lease確定まで同guardで排他にする。
+全production callerはworker threadの取得をawaitし、取消なら新規copy/leaseを回収する。
+GUI停止/中断は前の準備taskのcleanupを待つ。queuedのpinと異なる版へ準備中に変わった場合は
+fail-closedにする。削除済み版への新規GUI受付は事前に拒否する。
+確認付き削除と、その実削除commitを伴う同時開始/再導入の受入は引き続き残件である。
 
 ## 5. durable setup operation
 

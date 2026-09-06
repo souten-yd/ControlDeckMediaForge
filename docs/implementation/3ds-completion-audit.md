@@ -49,6 +49,11 @@ source実HTTP/GUIで34.140秒passed、ready時はsession1+working copy1、停止
 全6 Asset/provenance bytesとscene/revision metadataは不変。GUI受付/削除commit間の排他と
 確認付き削除は残件。今回active/project拒否も併存し、runtime削除自体は実施していない。
 
+続くsourceでGUI queuedの版固定と通常/復旧working-copyのguard付きworker取得を実装。
+copy threadをgateで待たせた実HTTPは/health200を0.003346秒で応答（状態setup_required）、
+remove previewは待機、解除後session1+working1、実GUI停止後0。4.060秒passed、6ファイル不変。
+確認付きの実削除commitとGUI同時開始の受入、正確な同版再導入は引き続き未完了。
+
 v0.28.34（target f806f54609e34924086887744ae30d6852aec297）署名公開/consumer再取得、
 標準update17.353秒/healthyを確認。package日本語1280/320の外部解除・reload非復活・再登録は
 7.944秒exit0、外部5,580 filesのinventory不変。installedはlegacy登録なしのため

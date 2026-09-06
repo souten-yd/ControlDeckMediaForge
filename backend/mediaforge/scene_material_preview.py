@@ -246,7 +246,7 @@ class MaterialPreviewManager:
                     self._verify_file(path, dependency.sha256)
                 except KeyError as exc:
                     raise SceneError("scene_dependency_changed", "material dependency is unavailable") from exc
-            working = self.workspace.acquire_working_copy(owner, candidate.scene_id)
+            working = await self.workspace.acquire_working_copy_async(owner, candidate.scene_id)
             try:
                 if working.base_revision_id != candidate.binding.source_revision_id:
                     raise SceneError("scene_revision_conflict", "scene changed after material preview")

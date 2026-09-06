@@ -9,6 +9,7 @@ import io
 from pathlib import Path
 from typing import Iterator
 import uuid
+import threading
 
 import pytest
 from PIL import Image
@@ -30,6 +31,12 @@ class FakeResolver:
     def __init__(self, runtime: ResolvedBlenderRuntime):
         self.runtime = runtime
         self.references = 0
+        self._reference_guard = threading.RLock()
+
+    @contextmanager
+    def removal_guard(self) -> Iterator[None]:
+        with self._reference_guard:
+            yield
 
     @contextmanager
     def active_reference(self) -> Iterator[ResolvedBlenderRuntime]:

@@ -166,13 +166,13 @@ def test_session_save_commits_revision_and_exposes_no_runner_paths(tmp_path: Pat
 
     async def scenario() -> None:
         await manager.start()
-        created = manager.create(OWNER, scene_id)
+        created = await manager.create(OWNER, scene_id)
         ready = await wait_state(manager, created["id"], "ready")
         assert ready["display"] == {"mode": "software", "width": 1280, "height": 720, "depth": 24}
         serialized = json.dumps(ready)
         assert str(tmp_path) not in serialized and "unit_id" not in serialized and "working_id" not in serialized
         with pytest.raises(BlenderSessionError) as busy:
-            manager.create(OWNER, scene_id)
+            await manager.create(OWNER, scene_id)
         assert busy.value.code == "scene_working_locked" or busy.value.code == "blender_session_busy"
         saving = manager.save_and_stop(OWNER, created["id"])
         assert saving["state"] == "saving"
@@ -194,12 +194,12 @@ def test_discard_releases_working_copy_and_allows_next_session(tmp_path: Path) -
 
     async def scenario() -> None:
         await manager.start()
-        first = manager.create(OWNER, scene_id)
+        first = await manager.create(OWNER, scene_id)
         await wait_state(manager, first["id"], "ready")
         manager.discard_and_stop(OWNER, first["id"])
         stopped = await wait_state(manager, first["id"], "stopped")
         assert stopped["result"] == {"saved": False}
-        second = manager.create(OWNER, scene_id)
+        second = await manager.create(OWNER, scene_id)
         await wait_state(manager, second["id"], "ready")
         manager.discard_and_stop(OWNER, second["id"])
         await wait_state(manager, second["id"], "stopped")
@@ -211,18 +211,19 @@ def test_discard_releases_working_copy_and_allows_next_session(tmp_path: Path) -
     asyncio.run(scenario())
 
 
-def test_queued_session_can_be_stopped_before_a_working_copy_exists(tmp_path: Path) -> None:
-    store, _workspace, scene_id, controller, manager = session_fixture(tmp_path)
+def test_immediate_stop_leaves_no_active_working_copy(tmp_path: Path) -> None:
+    store, workspace, scene_id, controller, manager = session_fixture(tmp_path)
 
     async def scenario() -> None:
         await manager.start()
-        created = manager.create(OWNER, scene_id)
+        created = await manager.create(OWNER, scene_id)
         stopping = manager.discard_and_stop(OWNER, created["id"])
         assert stopping["state"] == "stopping"
         assert stopping["can_stop"] is False
         stopped = await wait_state(manager, created["id"], "stopped")
         assert stopped["result"] == {"saved": False}
-        assert store.list_scene_working_copies(OWNER) == []
+        assert all(copy.state == "released" for copy in store.list_scene_working_copies(OWNER))
+        assert not list(workspace.working_root.iterdir())
         assert controller.units == {}
         await manager.stop()
 
@@ -234,7 +235,7 @@ def test_start_failure_retains_recovery_and_is_terminal(tmp_path: Path) -> None:
 
     async def scenario() -> None:
         await manager.start()
-        created = manager.create(OWNER, scene_id)
+        created = await manager.create(OWNER, scene_id)
         failed = await wait_state(manager, created["id"], "failed")
         assert failed["error_code"] == "blender_session_runner_failed"
         records = store.list_scene_working_copies(OWNER)
@@ -250,7 +251,7 @@ def test_missing_software_renderer_fails_closed_without_creating_a_session(tmp_p
     manager.software_vulkan_icd = tmp_path / "missing-lvp.json"
 
     with pytest.raises(BlenderSessionError) as unavailable:
-        manager.create(OWNER, scene_id)
+        asyncio.run(manager.create(OWNER, scene_id))
 
     assert unavailable.value.code == "blender_software_renderer_unavailable"
     assert store.list_blender_web_sessions(OWNER) == []
@@ -261,7 +262,7 @@ def test_service_restart_reattaches_active_unit_then_stops_it(tmp_path: Path) ->
 
     async def scenario() -> None:
         await first.start()
-        created = first.create(OWNER, scene_id)
+        created = await first.create(OWNER, scene_id)
         await wait_state(first, created["id"], "ready")
         await first.stop()
         second = BlenderSessionManager(
@@ -293,7 +294,7 @@ def test_gateway_is_owner_scoped_single_controller_and_releasable(tmp_path: Path
 
     async def scenario() -> None:
         await manager.start()
-        created = manager.create(OWNER, scene_id)
+        created = await manager.create(OWNER, scene_id)
         ready = await wait_state(manager, created["id"], "ready")
         assert ready["connection_state"] == "disconnected"
         assert ready["can_connect"] is True
@@ -323,7 +324,7 @@ def test_disconnected_timeout_stops_unit_and_retains_recovery(tmp_path: Path) ->
 
     async def scenario() -> None:
         await manager.start()
-        created = manager.create(OWNER, scene_id)
+        created = await manager.create(OWNER, scene_id)
         interrupted = await wait_state(manager, created["id"], "interrupted")
         assert interrupted["error_code"] == "blender_session_disconnected_timeout"
         assert interrupted["result"]["recovery"]["state"] == "candidate"
@@ -345,7 +346,7 @@ def test_connected_activity_delays_idle_timeout_then_session_is_retained(tmp_pat
 
     async def scenario() -> None:
         await manager.start()
-        created = manager.create(OWNER, scene_id)
+        created = await manager.create(OWNER, scene_id)
         await wait_state(manager, created["id"], "ready")
         await manager.acquire_gateway(OWNER, created["id"])
         for _ in range(4):
@@ -366,7 +367,7 @@ def test_host_disable_interrupts_and_recovery_can_become_a_revision(tmp_path: Pa
 
     async def scenario() -> None:
         await manager.start()
-        first = manager.create(OWNER, scene_id)
+        first = await manager.create(OWNER, scene_id)
         await wait_state(manager, first["id"], "ready")
         stopping = manager.interrupt(
             OWNER, first["id"], code="blender_session_host_disabled"
@@ -376,7 +377,7 @@ def test_host_disable_interrupts_and_recovery_can_become_a_revision(tmp_path: Pa
         recovery_id = interrupted["result"]["recovery"]["working_id"]
         assert store.get_scene_working_copy(OWNER, recovery_id).state == "recovery"
 
-        recovered = manager.create(
+        recovered = await manager.create(
             OWNER, scene_id, recovery_working_id=recovery_id
         )
         await wait_state(manager, recovered["id"], "ready")
@@ -396,7 +397,7 @@ def test_host_revocation_uses_the_same_fail_closed_recovery_path(tmp_path: Path)
 
     async def scenario() -> None:
         await manager.start()
-        created = manager.create(OWNER, scene_id)
+        created = await manager.create(OWNER, scene_id)
         await wait_state(manager, created["id"], "ready")
         manager.interrupt(OWNER, created["id"], code="blender_session_host_revoked")
         repeated = manager.interrupt(
@@ -420,7 +421,7 @@ def test_crash_and_save_failure_both_retain_unvalidated_bytes(tmp_path: Path) ->
 
     async def scenario() -> None:
         await manager.start()
-        first = manager.create(OWNER, scene_id)
+        first = await manager.create(OWNER, scene_id)
         await wait_state(manager, first["id"], "ready")
         unit = next(iter(controller.units))
         await controller.stop(unit)
@@ -429,7 +430,7 @@ def test_crash_and_save_failure_both_retain_unvalidated_bytes(tmp_path: Path) ->
         assert crashed["result"]["recovery"]["state"] == "candidate"
         assert not (manager.root / first["id"]).exists()
 
-        second = manager.create(OWNER, scene_id)
+        second = await manager.create(OWNER, scene_id)
         await wait_state(manager, second["id"], "ready")
         manager.save_and_stop(OWNER, second["id"])
         failed = await wait_state(manager, second["id"], "failed")
@@ -447,7 +448,7 @@ def test_revision_conflict_save_projects_the_existing_recovery_candidate(tmp_pat
 
     async def scenario() -> None:
         await manager.start()
-        created = manager.create(OWNER, scene_id)
+        created = await manager.create(OWNER, scene_id)
         await wait_state(manager, created["id"], "ready")
         document, revisions = workspace.catalog.get(OWNER, scene_id)
         current = next(item for item in revisions if item.id == document.current_revision_id)

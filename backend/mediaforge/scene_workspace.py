@@ -568,6 +568,26 @@ class SceneWorkspace:
                     self._remove_tree(upload.root, self.upload_root)
 
     def acquire_working_copy(self, owner: str, scene_id: str) -> SceneWorkingCopy:
+        """Persist the runtime reference atomically with removal; call off-loop."""
+        with self.resolver.removal_guard():
+            return self._acquire_working_copy(owner, scene_id)
+
+    async def acquire_working_copy_async(
+        self, owner: str, scene_id: str, *, recovery_working_id: str | None = None
+    ) -> SceneWorkingCopy:
+        """Do not strand a writer lease if its awaiting request is canceled."""
+        task = asyncio.create_task(asyncio.to_thread(
+            self.acquire_working_copy if recovery_working_id is None else self.acquire_recovery_working_copy,
+            owner, scene_id, *(() if recovery_working_id is None else (recovery_working_id,)),
+        ))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            working = await task
+            await asyncio.to_thread(self.release_working_copy, owner, working.id)
+            raise
+
+    def _acquire_working_copy(self, owner: str, scene_id: str) -> SceneWorkingCopy:
         owner = validate_scene_owner(owner)
         document, revisions = self.catalog.get(owner, scene_id)
         current = next(
@@ -609,6 +629,12 @@ class SceneWorkspace:
             ) from exc
 
     def acquire_recovery_working_copy(
+        self, owner: str, scene_id: str, recovery_working_id: str
+    ) -> SceneWorkingCopy:
+        with self.resolver.removal_guard():
+            return self._acquire_recovery_working_copy(owner, scene_id, recovery_working_id)
+
+    def _acquire_recovery_working_copy(
         self, owner: str, scene_id: str, recovery_working_id: str
     ) -> SceneWorkingCopy:
         """Copy retained GUI bytes into a new writer lease; keep the candidate immutable."""
@@ -1159,7 +1185,7 @@ class SceneWorkspace:
         ):
             raise SceneError("scene_dependency_changed", "material image identity changed")
 
-        working = self.acquire_working_copy(owner, scene_id)
+        working = await self.acquire_working_copy_async(owner, scene_id)
         try:
             if working.base_revision_id != binding.source_revision_id:
                 raise SceneError(
