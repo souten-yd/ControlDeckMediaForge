@@ -9,13 +9,20 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 正式署名公開・標準updateしLibrary viewerをoverlayなしで受入した。さらにv0.28.20（target `c26f67d`）
 の材質照明・新旧双方のcontext復旧をinstalled受入した。さらに0.28.23（target `22fc2b9`）を
 署名公開・標準updateし採用前候補比較/破棄/採用/復元をinstalledで確認。
-2026-09-06の現在稼働版は0.28.35/healthy（署名公開/consumer検証/標準updateを追加確認）。
+2026-09-06の現在稼働版は0.28.36/healthy（署名公開/consumer検証/標準updateを追加確認）。
 0.28.26ではnative windowで比較入力・不変refreshのDOM保持と全比較/採用/復元を確認した。
 新版の他操作の受入を旧版やcandidateの証拠から推定しない。
 以前の個別実測は維持するが、条件の一部だけの実測から行全体を成功扱いしない。
 下表の「未確認」は今回の監査で条件全体に対応する証拠を確定できていない意味で、コード不在とは異なる。
 
 ## 利用者ゴール別
+
+2026-09-06 v0.28.36: 長いdetail titleの横overflowをcandidate実画像で発見し修正。
+修正bundleの実Chrome日英320で親65/子63のpaging/英語fallback/dialog横overflow0を確認。
+署名公開→consumer/Host trust検証→標準update25.868566秒。8テーブル全行/registry不変。
+installed0.28.36でも実Hostからの日英通知・選択保持を1280/320で再確認。
+大きなlineageは専用Storeのsynthetic fixture/standalone bundleであり、
+installed Hostの60件超受入へ読み替えない。全matrix完了とはしない。
 
 2026-09-06 live locale追加: Host汎用PR #293/294がmerge済み。本番Host frontendを3f71878へ
 fast-forward/buildし、実8765→installed MF0.28.35で日英の動的通知を1280/320で受入。

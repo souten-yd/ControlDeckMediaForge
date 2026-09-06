@@ -3,6 +3,48 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.36 signed release and installed Library acceptance
+
+PR #331 merge/tag target `d6e1f041a415902582fb39698ef2fd1659d5e3f5`。
+exact detached /data1tb/ControlDeckMediaForge-release-0.28.36-r2で標準bundle build、
+--output-dir /data1tb/mf-0.28.36-build-20260906-r2。PyInstaller6.22.0/Python3.12.3、exit0。
+artifact31,516,338 B、SHA ba0e087bb4cc97beb03c671d2e9821a879e7c52beac517366c24c40941013d8a。
+旧candidate（b51434...）は未公開のまま保持し、この再buildだけを署名・公開した。
+archive6 entries/embedded199、禁止混入なし、certifi公開CA/private key区別、
+同梱stylesのwrap rule、addon/feature/packaged doctor0.28.36一致を再確認。
+展開先 /data1tb/mf-0.28.36-r2-package-t30h68ed/control-deck-media-forge-0.28.36-linux-x86_64。
+core SHA b2db4da0483259e3c435f52762c909b17caf99b54feaf91332d03173d160faed。
+
+専用package unit PID689328/9163で同じsynthetic Storeへ接続。環境未導入のhealthは
+setup_requiredでhealthyとは書かない。`3ds_library_paging_e2e.py browser --server-kind bundle
+--evidence-dir /data1tb/mf-library-paging-bundle-0.28.36-20260906-r2`は日英320全pass。
+親60/子60→5/3→元page、128 ID集合/一意、英語Not recorded、dialog横overflow0/page errors0。
+専用unitは試験後stop/inactive。これはbundle/standalone受入で、installed Hostの60件超ではない。
+
+既存publisher keyで署名/自己検証しGitHub Release v0.28.36の4 assetsを公開。
+公開consumer再取得先 /data1tb/mf-0.28.36-public-20260906でsha256sum -c OK、
+build artifactとcmp一致。Host trusted catalogの署名検証でversion/hash/size一致。
+GitHub tag refがexact target d6e1f04と一致。global agent設定や既存Blenderを変更していない。
+
+更新直前の本番Jobs396/GUI23/runtimeops3/modelops0は全終端、working copy active0。
+private snapshot /data1tb/mf-0.28.36-pre-update-20260906（directory0700/files0600）、
+SQLite2,076,672 B/integrity ok、registry SHA
+dd43b2e8b6897c9671958c3b4cc2f57dca82969a5d1d8492909761e86636741a。
+標準registry.updateは25.868566秒、0.28.35→0.28.36/healthy/enabled/requested_enabled=true。
+current→versions/0.28.36、installed core SHAがpackageと一致。runtime registry SHAも不変。
+read-onlyでsnapshotと現在のassets/scene_documents/scene_revisions/blender_web_sessions/jobs/
+scene_working_copies/blender_runtime_operations/model_operationsの全行（rowid順）が一致。
+Hostは別作業でPID658027へ更新されていた。今回はこちらからHost restartなし。
+MF更新後PID700886/active、Host658027/activeを確認。Hostの別作業ファイルは保全した。
+
+実installed `3ds_library_locale_installed_e2e.py --expected-version 0.28.36`を
+--width 320/1280で実行し両方exit0。証拠
+/data1tb/mf-library-live-locale-installed-0.28.36-{320,1280}-20260906。
+実locale.changed [ja,en]、選択source/offset0/filter/関連ID列/load/nonce保持、
+scene全体不変/page errors0。言語入力のみbrowser fixture、通知/responseは実経路。
+公開release noteへ結果を反映。製品code gateは修正exact treeの1126 passed/163.19秒、
+この追記は実測docsのみ。全GOAL/scenario matrixとinstalled60件超はPARTIALのまま。
+
 ## 2026-09-06 v0.28.36 candidate paging and detail-title overflow
 
 PR #330 merge `4075df202791bda7b3e99c94557b70a10bc516e3`からexact detached checkout
