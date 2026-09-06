@@ -9252,3 +9252,13 @@ NOT TESTED: 新版署名release/導入後overlayなしの受入、日英切替�
 source gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 114.02秒。
 `npm ci --ignore-scripts`と`npm run build:viewer`で固定依存から再構築、source/bundle hashのcontract成功。
 node構文検査と`git diff --check`も成功。これらをinstalled受入の代用にはしない。
+
+## 2026-09-06 v0.28.19 source preparation
+
+PR #254 merged `76a91b4`のLibrary viewer修正を配布するため、addon/core versionを0.28.19へ同期。
+初回read-only確認でinstalled0.28.18/healthy/enabled、Host/local active Job0、Web sessionは
+failed2/interrupted4/stopped13、runtime operation ready3、model operation canceled1/failed5/ready25。
+初回SQLは誤ったtable名blender_sessionsで失敗し、sqlite_masterで実名blender_web_sessionsを
+確認して上記を再照会した。実行中制作は確認されなかったが、update直前にも再照会する。
+署名公開・導入・overlayなしのbrowser受入は次段階。ここでは成功と記録しない。
+版準備gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 110.52秒、diff check成功。
