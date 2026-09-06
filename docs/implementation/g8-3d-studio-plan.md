@@ -1,6 +1,6 @@
 # G8拡張 — 統合3D Studio 実装計画
 
-Status: 3DS-0〜7実装済み / 3DS-8 PARTIAL（必須受入を再監査中）
+Status: 3DS-0〜5実装済み / 3DS-6 PARTIAL（採用前比較が未実装）/ 3DS-7経路実装済み / 3DS-8 PARTIAL
 Date: 2026-09-06
 設計の正: [3D Studio](../design-3d-studio.md)、base-plan、integration、workspace UX
 
@@ -22,7 +22,9 @@ exact backup core/private transport/browser UI、3DS-5a Web操作pack管理、3D
 復旧候補のpolicyと3DS-6aの既存Library画像から検証済みrevisionを作る材質bindingまで実装した。
 3DS-6bはdurable image jobのscene文脈、reload復元、cancel/retry、preview、明示選択から既存
 MaterialBinding commitまでをsource/packageで実装・確認した。3DS-6cは現行版/旧版の2画面比較と、旧版を
-新しいimmutable current revisionへ復元する工程をsource/packageで確認し、3DS-6のexit条件を閉じた。
+新しいimmutable current revisionへ復元する工程をsource/packageで確認した。ただし2026-09-06再監査で、
+材質適用は比較前にcurrent revisionへcommitしていると判明した。設計の未保存preview→比較→採用を
+満たさないため、3DS-6のexit完了判定を撤回する。確定済み新旧版の比較・復元の実績は維持する。
 3DS-7はtyped Agent recipe、durable detached child Job、stable actor ownerをsource/packageで確認した。
 3DS-8でinstalled-host/OpenCode/GPU/releaseの個別証拠を取得したが、必須受入全体の完了判定を撤回した。
 残件は[`3ds-completion-audit.md`](3ds-completion-audit.md)。Expert scriptは別capabilityの3DS-Xであり、
@@ -63,7 +65,8 @@ exact backup/restore、Web操作packの固定・導入・実display probe、隔�
 fail-closed終了、復旧候補からの検証済みrevision化、既存Library画像の型付き材質bindingは完了した。
 3DS-6bの画像生成jobからの採用、取消、再試行はsource/packageで完了した。画像編集jobからの採用は既存Library
 Asset選択で同じMaterialBindingへ到達する。3DS-6cのrevision compare/restore、3DS-7のtyped recipesと
-durable child job orchestrationも完了した。3DS-8は実installed Hostで制作一巡、opaque iframe、session lifecycle、
+durable child job orchestrationは実装済み。ただし3DS-6の採用前比較は未実装であり、上記の個別完了は
+3DS-6全体のexit成功を意味しない。3DS-8は実installed Hostで個別制作操作、opaque iframe、session lifecycle、
 GPU/Broker競合、120秒超Job、署名release/update/rollbackの個別動作を確認した。
 120秒超のfault injectionをcredential refreshや長時間制作完走の証拠へ読み替えず、初期提供は未完了とする。
 

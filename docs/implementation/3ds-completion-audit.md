@@ -21,7 +21,7 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 | GOAL-03 設定管理 | 4.5.9/4.5.13の共存、active切替、参照中削除拒否 | PARTIAL: 全操作の画面完結、失敗後再開とscenario Dの証拠を照合 |
 | GOAL-04 Web Blender | `.14-long/observations.json`: 621.451秒GUI、入力、保存revision 2→3、reload/reconnect | VERIFIED（この操作範囲）。credential refreshの証拠ではない |
 | GOAL-05 OpenCode一巡 | OpenCode形状/create/status/snapshot/export/packと、別のUI画像生成・適用 | PARTIAL: 自然言語からtexture生成/適用まで同じOpenCode制作Job経路で追跡した証拠が未確定 |
-| GOAL-06 既存画像比較採用 | `.14-material`でrevision 3→4、`.15-texture-gpu`で生成画像採用12→13。署名installed0.28.20で旧銀/新青の比較・新旧context復旧・scene不変を確認 | PARTIAL: 比較表示は確認済み。比較からの採用/復元を含む全操作を照合 |
+| GOAL-06 既存画像比較採用 | `.14-material`でrevision 3→4、`.15-texture-gpu`で生成画像適用12→13。署名installed0.28.20で確定済み旧銀/新青の比較・新旧context復旧・scene不変を確認 | INCOMPLETE: 未保存の材質候補を比較してから採用する経路が未実装。適用時にcurrentを先にcommitするコードを確認 |
 | GOAL-07 やり直し | restoreとcrash/idle等の復旧保存。競合分岐救出をsource/package/installedの実Blender・browserで確認 | PARTIAL: 失敗工程だけの再試行の全条件照合。standalone candidate ID脱落はPR #246で修正済み |
 | GOAL-08 grant配置 | 以前のOpenCode export/pack記録 | PARTIAL: GLB/画像/manifestの配置先receiptとhashの全対応を照合 |
 | GOAL-09 取消/回収 | Broker待機取消、133.122秒の実行取消、Host終端同期、session終了 | PARTIAL: 各経路のprocess/予約回収を対応する証拠へ紐付け |
@@ -83,6 +83,23 @@ sent=trueは確認したが、refresh監査は各0件。証拠
 詳細はhandoff/status、証拠は`/data1tb/mf-credential-refresh-installed-0.28.16-retry2/events.json`。
 
 ## 今回発見した具体的なコード差分
+
+### 採用前の材質比較がない（2026-09-06 / main a1635c9）
+
+`design-3d-assets-and-opencode.md` §4/5は「未保存preview」「前後比較して採用し、新revisionへ確定」を要求する。
+現行`frontend/app.js`の`applySceneMaterial`は`scenes.material.apply`を直接呼び、結果後にsceneを再読込する。
+`backend/mediaforge/scene_workspace.py`の`apply_material_binding`はworker結果をworking sourceへ移した直後に
+`commit_working_copy`を呼ぶ。`openSceneCompare`は既存`sceneRevisions`の旧版とcurrentだけを受ける。
+したがってこれは単なる実機証拠不足ではなく、設計された操作順序の実装不足である。
+`tests/test_frontend_contract.py`の既存assertも直接apply呼出を要求しており、greenではこの不足を検出しない。
+
+次の実装は3DS-6へ戻る。既存公開Agent material操作の意味を破壊せず、private workspaceに
+検証済み候補のprepare / compare / adopt / discardを追加する。候補は正式revisionやLibrary成功assetとして
+公開せず、owner/base revision/runtime pin・期限・容量制限を保持し、opaque handleでpreviewを読む。
+adopt時だけ同じ候補bytesと依存を再検証してcurrent一致条件で一度確定する。discard/期限切れ/切断・再起動時は
+currentを変えず候補資源を回収する。競合は明示エラーにし、再送で重複revisionを増やさない。
+既存画像と生成画像の双方で「比較中と破棄後はhead/版数不変、採用後だけ+1、旧版bytes不変」を
+実Blender・installed browserで確認するまでGOAL-06/3DS-6を完了に戻さない。
 
 `frontend/app.js`のstandalone session POSTが`recovery_working_id`を落としていた。
 通常startへ化けるため、そのIDを明示転送する。公開契約とHost実装は変更しない。

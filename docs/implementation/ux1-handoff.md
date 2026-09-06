@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 採用前比較の実装不足を確認
+
+PR #259 merged `a1635c9d54837085ac95ec8ef4d0f9acc3acbde5`をfetch確認。
+branch `ux1/3d-pre-adoption-gap`。PR #213はmerged `9469d8e`で設計の取り込み待ちはない。
+設計asset/OpenCode §4/5は未保存材質候補の比較→採用→revision確定を要求するが、現行
+`applySceneMaterial`→`scenes.material.apply`→`apply_material_binding`→`commit_working_copy`は
+比較前にheadを確定する。`openSceneCompare`は確定済み新旧revisionだけを表示する。
+既存frontend contract testも直接applyを要求し、この仕様差を検出しない。
+3DS-6 exit完了を撤回、GOAL-06を実装不足と明記した。署名0.28.20の確定済み版比較の実績は維持する。
+
+次は3DS-6のprivate workspace候補prepare/compare/adopt/discardを実装する。
+詳細な安全境界と受入は`3ds-completion-audit.md`「採用前の材質比較がない」に記載。
+旧版復元試験だけでこの不足を閉じない。既存公開Agent material契約は破壊せず加法的に進める。
+実装入口: SceneWorkspaceのacquire/commit/release_working_copyと_material_operationを再利用できる。
+ただしcommit_working_copyはasset登録まで進めるためprepareで呼ばない。ModelViewerSession.openは
+既存Asset限定なので、未登録候補用の内部path検証→opaque handle経路とconnection cleanupが必要。
+候補のruntime/working lease・metadata・previewの寿命を揃え、一般working commitで採用条件を迂回させない。
+今回product/Host/installed service/制作データは変更していない。新候補経路はNOT IMPLEMENTED。
+gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 105.73秒。diff check成功。
+
 ## 2026-09-06 v0.28.20 signed / installed material comparison
 
 PR #258 merged `c26f67ddb3b297bd29d9a7a350135b1ac5b8a962`、tag v0.28.20は同commit。
