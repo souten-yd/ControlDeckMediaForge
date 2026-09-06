@@ -1,5 +1,27 @@
 # Media Forge implementation status
 
+## 2026-09-06 image-upload graceful disconnect gate
+
+PR #312 merged `b22cd61e7d1466967381bf419017c56fdcda6c08` を確認。
+branch `ux1/3d-image-disconnect-gate`。前sliceで記録した画像uploadの残件を扱う。
+既存test_workspace_websocket_chunk_import_exceeds_single_message_bound_and_cleans_upは
+context exit（Starlette側のASGI cancelを伴う）の後で最大5秒cleanupを待っていた。
+#309のscene側と同じく、graceful close処理と強制cancelを区別する。
+
+画像testもsocket.close()を明示送信し、同socket context内でwork_dirが空になるまで
+最大5秒観測するよう変更。テスト側同期threadだけで既存50msのfilesystem pollを行い、
+app asyncへwait/sleepは追加しない。import APIの再試行も行わない。
+close前には未完了uploadが存在することをassertし、空状態だけの自明な成功を防ぐ。
+既存1MiB超chunk transport、PNG512x512 import、incomplete拒否のassertは維持。
+製品/Host/公開契約/依存変更なし。forced ASGI cancellationの耐性を修正したとは扱わない。
+
+対象画像test+scene transport fileの3 tests pass。
+今回の変更はtest前提の補正であり、実ネットワーク切断や画像生成の実機受入ではない。
+installed0.28.33と前sliceの実機証拠は維持し、3DS全体はPARTIAL。
+次はBlender不在の専用packageで、Hostが受理する利用者/Job権限とBroker leaseを通した
+実画像生成を検証する。standalone認証省略やfake出力で代用しない。
+全gate ./mf.sh testは1060 passed/既知warning1/156.61秒。diff check成功。
+
 ## 2026-09-06 v0.28.33 signed release and standard update
 
 PR #311 merge/tag `0fb8e1141a8b7aa2e3d5eb21a0d08d51039bf8b5` をGitHub refで照合。
