@@ -3,6 +3,40 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 material failed-stage retry reuses existing image
+
+PR #334 merge `4a86add7fecbe25e20ae74521f9c4e8530b735ce`から
+branch `ux1/3d-material-retry-acceptance`。診断scriptだけを追加し製品codeは変更しない。
+`PYTHONPATH=backend:. .venv/bin/python scripts/3ds_material_retry_e2e.py
+--evidence-dir /data1tb/mf-material-retry-source-20260906-final
+--managed-root /data1tb/mf-long-setup-source-20260906/runtimes/blender
+--image /data1tb/mf-no-blender-image-0.28.33-20260906/generated.png
+--image-sha256 1ed7bf93ca6c4c0d3ed50aac7ad90c04288d0cf3dfffac38f397ee701e6ba542`。
+専用registry/dataとread-only owned実Blender4.5.9、Host credential/control fixtureで2.386秒exit0。
+
+画像は過去の実FLUX.2成功Job job_a6ea97330a684034bf4404a6a3e82cdeの保存PNG bytesを
+hash確認して通常importする。このrunで画像を生成したとはしない。import provenanceは
+元生成Jobのprovenanceとは別。実cube/材質/UVをtyped createで作り、初回の材質workerだけ
+存在しないobject名を与える診断用faultを注入。永続request/bindingは変更しない。
+実Blenderはtrusted resultを生成せず、coreがscene_material_worker_invalidとしてfailed。
+最初のscriptはscene_material_rejectedを期待してassert失敗したが、実際のfail-closed分類を
+確認して修正。-r2は2.129秒で成功、成功済みJob不変assertも加えた-finalが最終証拠。
+
+scene_26427d1a360747cc8548a6d9d405c550、取り込みimage
+asset_9626a37739a7498b885b7bbbf8c68c88。失敗後はscene/revision全応答、
+全既存Asset metadata/provenance/実bytes hash不変、新Asset0。
+manager再作成後、同じscene/material入力とretry_job_idで新試行。
+retry_of/input hash一致、成功後は旧版不変で2版、新Assetはsource/GLB2件のみ。
+画像import/形状成功Jobは全field不変、追加Jobは失敗材質と成功retryの2件だけ。
+新revisionの画像dependency ID/hash一致、全出力の実hashもmetadataと一致。
+材質worker試行2回、image.generate/edit Job0、runtime参照0/active working copy0/
+material staging空を照合した。復旧候補を成功済み制作版と取り違えない。
+全 `./mf.sh test`: 1128 passed/既知warning1/160.43秒。最終script py_compile/diff check成功。
+
+これはsource domain/process受入であり、installed Host・HTTP・browser・GPU生成・
+全retry失敗matrixの成功には広げない。既存稼働service/runtime/sceneを変更しない。
+GOAL-07はPARTIALのまま、次は#334修正を署名bundleへ載せて導入経路を確認する。
+
 ## 2026-09-06 retry preserves original Blender runtime
 
 PR #333 merge `e3c19a2b012c65b648f847fc79fc1b2067adbd13`を確認し、
