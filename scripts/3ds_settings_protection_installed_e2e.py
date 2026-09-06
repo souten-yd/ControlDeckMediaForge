@@ -26,11 +26,15 @@ def main() -> None:
     parser.add_argument("--require-history-confirmation", action="store_true",
                         help="Verify default-off history acknowledgement without submitting removal")
     parser.add_argument("--native-viewport", action="store_true", help="Diagnose pointer input without viewport emulation")
+    parser.add_argument("--initial-width", type=int, choices=(1280, 320),
+                        help="Use one fixed initial viewport without resizing a live iframe")
     parser.add_argument("--locale", choices=("ja", "en"), default="en")
     parser.add_argument("--headless", action="store_true", help="Check responsive rendering independently of the desktop compositor")
     parser.add_argument("--probe-geometry", action="store_true", help="Capture pre-click hit geometry and compare keyboard on pointer failure")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
+    if args.initial_width and args.native_viewport:
+        parser.error("--initial-width and --native-viewport are mutually exclusive")
     status = registry.status("media-forge")
     assert status["version"] == args.expected_version and status["enabled"] and status["health"] == "healthy"
     args.evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -39,7 +43,8 @@ def main() -> None:
     helpers = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helpers)
     evidence = {"version": status["version"], "mode": "installed_no_overlay", "requested_locale": args.locale,
-                "headless": args.headless, "previews": [], "layouts": [], "errors": []}
+                "headless": args.headless, "initial_width": args.initial_width,
+                "previews": [], "layouts": [], "errors": []}
     with SessionLocal() as db:
         user = db.query(User).filter(User.username == "mf-e2e").one()
         assert user.is_active
@@ -49,7 +54,9 @@ def main() -> None:
             browser = pw.chromium.launch(executable_path="/usr/bin/google-chrome", headless=args.headless,
                 args=["--window-size=1280,1000"])
             try:
-                context = browser.new_context(base_url="http://127.0.0.1:8765", no_viewport=True, locale=args.locale)
+                viewport_options = ({"viewport": {"width": args.initial_width, "height": 700}}
+                                    if args.initial_width else {"no_viewport": True})
+                context = browser.new_context(base_url="http://127.0.0.1:8765", locale=args.locale, **viewport_options)
                 context.add_cookies([{"name": SESSION_COOKIE, "value": token,
                     "url": "http://127.0.0.1:8765", "httpOnly": True, "sameSite": "Lax"}])
                 page = context.new_page()
@@ -70,8 +77,9 @@ def main() -> None:
                 frame.locator("#nav-settings").click()
                 if not frame.locator("#blender-runtime-list").is_visible():
                     frame.locator("#blender-runtime-details-label").click()
-                for width in ((1280,) if args.native_viewport else (1280, 320)):
-                    if not args.native_viewport:
+                widths = (args.initial_width,) if args.initial_width else ((1280,) if args.native_viewport else (1280, 320))
+                for width in widths:
+                    if not args.native_viewport and not args.initial_width:
                         # Stay within the native headed window's content height;
                         # an oversized emulated viewport can miss iframe input.
                         page.set_viewport_size({"width": width, "height": 700})

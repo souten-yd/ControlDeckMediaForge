@@ -1,5 +1,67 @@
 # Media Forge implementation status
 
+## 2026-09-06 v0.28.35 signed release and installed history confirmation
+
+PR #326 merge/tag target `7ec457ac7bc87b73e3306b6a255ddfa143e790e9`。
+exact checkout /data1tb/ControlDeckMediaForge-release-0.28.35で
+`python3 scripts/build_release_bundle.py --version 0.28.35
+--output-dir /data1tb/mf-0.28.35-build-20260906
+--pyinstaller /data1tb/ControlDeckMediaForge-3ds4/runtimes/bundle-build/.venv/bin/pyinstaller`。
+PyInstaller6.22.0/Python3.12.3、exit0。artifact31,516,941 B、
+SHA eea782de56b0ce9e2e4cb1e810b7cdc490658ef2d957022c8e8a8a28c16bfa05。
+外側archive6 entries、embedded199 entriesを検査。最初の.pem一律拒否は
+certifi/cacert.pemで失敗。公開CA束でPRIVATE KEYなしを確認して区別し、
+秘密鍵/venv/weights/.blend/SQLite混入なし。addon/feature/core doctorの0.28.35一致。
+展開先 /data1tb/mf-0.28.35-package-346YqT、core SHA
+ebb7a7255082d10d9073375904145364bd524de497e5babed01054d4ab4e06e1。
+
+公開前の同一artifactを専用owned clean setup root、PID375803/9162で起動。
+`scripts/3ds_history_settings_e2e.py --verify-preserved-ui
+--evidence-dir /data1tb/mf-history-settings-package-0.28.35-20260906`
+は79.551秒/exit0、日英1280/320・確認reset・日英320で実削除/同版再導入。
+旧版不在区間のGLB表示/backup保存、ZIP全entry size/SHA照合、全6files/scene/revision不変。
+localeは入力fixture（script内source mode文字列は同じだが接続先はpackage実process）。
+試験runtimeは再導入済み、GUI未終端0を確認後SIGINT、application shutdown complete/exit0。
+
+既存publisher keyでsign_release.py署名/自己検証成功（Host診断Python、core依存追加なし）。
+GitHub Release v0.28.35の4 assetsを公開。consumer再取得先
+/data1tb/mf-0.28.35-public-20260906でchecksum・size・build artifact実bytes一致。
+Host trusted catalogの_verify_signed_releaseで公開manifestの署名/identity/versionを検証。
+GitHub tag refがexact merge targetと一致。公開鍵は既存80bNiqW1CzAzQ3LSqYqtwecm6TYQywDLxGACF9AVsac=。
+
+更新直前も本番Jobs/GUI/runtime operations未終端0。
+private snapshot /data1tb/mf-0.28.35-pre-update-20260906:
+DB2,076,672 B/integrity ok、registry488 B、双方0600。
+標準registry.updateは16.54秒、0.28.34→0.28.35/healthy/enabled/requested_enabled=true。
+current→versions/0.28.35、installed core SHAはpackageと一致。
+runtime registry SHA dd43b2e8b6897c9671958c3b4cc2f57dca82969a5d1d8492909761e86636741a
+がsnapshotと不変。Jobs396/GUI23/runtimeops3全終端・件数不変。
+MF PID396381 active、Host PID250878不変、Host restartなし。
+
+実installed `scripts/3ds_settings_protection_installed_e2e.py --expected-version 0.28.35
+--require-readable-layout --require-touch-targets --require-history-confirmation --locale ja`
+は /data1tb/mf-history-settings-ja-installed-0.28.35-20260906でexit0。
+opaque origin null、Host/child実locale一致、1280/320でold project参照2は確認既定off、
+チェックでenabled/再openでoff、active+project23の新版は確認でも削除不可。
+本番remove送信なし、runtime status全体不変。専用loginはfinally revoke、password不変。
+英語初回はpointerがHost IFRAMEに届きchild events0/dialog hiddenで失敗。
+同版無変更の--probe-geometry再実行r2は日英切替なしの英語1280/320全pass、
+各pointerがchild BUTTONへ届いた。JS click/keyboard代替で成功にしていない。
+初回の入力未到達の原因はこの記録だけでは確定しない。
+通常再実行r3でも同位置で失敗。pointerdownはHost IFRAME、pointerupのみchild BUTTON。
+--native-viewportは英語desktopで通常pointer全pass（実innerWidth1248）。
+resize後reload案は設定buttonのtoggleで設定を閉じたため検証script側が失敗し、採用しない。
+受入scriptに--initial-widthを追加し、起動時から固定viewportで開く検証を分離した。
+--initial-width 320は英語実installedで確認reset/active保護/横overflowなし/44px button、
+runtime不変を通常pointerでpass。証拠は同prefixの-native/-fixed320。
+--initial-width 1280も全pass（-fixed1280）。英語fixed320の確認画面を実画像で確認した。
+これはlive resize直後の入力問題の修正ではない。製品codeは変更せず残件を保持する。
+
+全gate1125 passed/既知warning1/186.39秒（版準備）。今回は実測文書と受入scriptの変更。
+受入script追加後の全gate: 1125 passed/既知warning1/157.30秒。diff check成功。
+新機能は署名installedへ到達。全D/F matrix、installedでの実削除、
+全体3DS-8受入は引き続きPARTIAL。次はcompletion auditの残件を依存順に進める。
+
 ## 2026-09-06 v0.28.35 history-preserving management release preparation
 
 PR #325 merged `da9da4c2347ed5b8d9c856bdf23724022bfe1993`をfetch確認。
