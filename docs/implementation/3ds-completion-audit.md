@@ -5,8 +5,9 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 対象: PR #213のGOAL-01〜10と`g8-3d-studio-plan.md` §4 A〜F。
 監査開始コードはmain `1f4392a2d426a742046d0c03c99272ffb5e41c87`。その後PR #246/247をマージし、
-本監査でrelease受入した版はv0.28.17（target `4293d20`）。最終確認の現行installedは並行更新により
-v0.28.18/healthyであり、同版の受入をv0.28.17の証拠から推定しない。
+本監査でv0.28.17（target `4293d20`）の終端照合を受入後、v0.28.19（target `583fea1`）を
+正式署名公開・標準updateしLibrary viewerをoverlayなしで受入した。現行0.28.19/healthy。
+新版の他操作の受入を旧版やcandidateの証拠から推定しない。
 以前の個別実測は維持するが、条件の一部だけの実測から行全体を成功扱いしない。
 下表の「未確認」は今回の監査で条件全体に対応する証拠を確定できていない意味で、コード不在とは異なる。
 
@@ -15,7 +16,7 @@ v0.28.18/healthyであり、同版の受入をv0.28.17の証拠から推定し�
 | 条件 | 確認済み証拠の範囲 | 判定と残件 |
 |---|---|---|
 | GOAL-01 共通Library | installed scene表示と既存画像の選択 | PARTIAL: 画像/GLB/.blendの全絞込と親子双方向移動の操作証拠を照合 |
-| GOAL-02 viewer | 現行0.28.18の誤URL/CORS失敗を再現。candidate frontendでLibraryから6方向回転・zoom・逆操作差分0・320pxを確認 | PARTIAL: 署名版へ反映しoverlayなしでinstalled受入。2026-09-06利用者確認によりwire/animationは必須から除外 |
+| GOAL-02 viewer | 署名installed0.28.19でLibrary→3D card、±XYZ回転・zoom両方向、逆操作差分0、320px、scene不変をoverlayなしで確認 | VERIFIED（利用者指定操作の範囲）。2026-09-06利用者確認によりwire/animationは必須から除外 |
 | GOAL-03 設定管理 | 4.5.9/4.5.13の共存、active切替、参照中削除拒否 | PARTIAL: 全操作の画面完結、失敗後再開とscenario Dの証拠を照合 |
 | GOAL-04 Web Blender | `.14-long/observations.json`: 621.451秒GUI、入力、保存revision 2→3、reload/reconnect | VERIFIED（この操作範囲）。credential refreshの証拠ではない |
 | GOAL-05 OpenCode一巡 | OpenCode形状/create/status/snapshot/export/packと、別のUI画像生成・適用 | PARTIAL: 自然言語からtexture生成/適用まで同じOpenCode制作Job経路で追跡した証拠が未確定 |
@@ -42,6 +43,9 @@ v0.28.18/healthyであり、同版の受入をv0.28.17の証拠から推定し�
 | F release | 署名公開/update/改ざん拒否証拠は維持。rollbackは候補health成功後の例外注入であり、migration失敗や自然なhealth不良の証拠へ読み替えない。clean install等も個別照合 |
 
 GPU GUIは設計§4とCHECK-03の条件付き提供に従いsoftware-onlyを正直に表示する。
+GOAL-02の証拠は `/data1tb/mf-viewer-six-axis-library-installed-0.28.19-20260906/observations.json`。
+通常Chrome/AMD内蔵GPUであり、R9700/software GPU描画や実mobile touchの実績ではない。
+viewer release gateの日英切替・mobile入力・model切替memory回収/context lossの再照合は残る。
 Eevee/Cycles probeをGPU GUI動作と見なさず、CPU/画像/LLMとの組合せ評価を別々に記録する。
 credential更新は**失効前**に行う要件であり、失効tokenからの自己再発行は要求しない。
 
