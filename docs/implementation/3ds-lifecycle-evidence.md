@@ -12,7 +12,7 @@ Date: 2026-09-07 / Status: PARTIAL
 | 切断・再接続 | 同long記録で621.451秒保持と再接続。`mf-rfb-renewal-negative-0.28.30-20260906`で同sessionのconnections 1→2をheld_sec480.340で観測、660.433までconnected、gui_edit_saved=true | 後者のnegativeというディレクトリ名は失敗判定ではない。背景復帰のvisibility証拠とは別 |
 | 背景復帰 | `mf-background-return-installed-20260907-native`: 通常Chromeへno_defaultsで接続。opaque frameのvisible→hidden→visible、背景15.0495秒、同session/実描画復帰後の複製・保存で第4→5版/mesh1→2。実GLB nodeも1→2、旧版bytes不変 | 短時間desktop tab切替の範囲でVERIFIED。OS suspend/mobile背景/未保存故障回収とは別 |
 | idle終了 | `mf-3ds8-idle-0.28.14`: idle/disconnect設定各5秒、8.695秒で終端、復旧保存revision8 | 既定connected idle1800秒の実測ではない。開始時PID集合と終端後回収、手編集回収量は未照合 |
-| 保存失敗でも終了 | `mf-save-conflict-cleanup-installed-20260907`: 実Blender保存後revision競合、5.831秒でfailed/saved=false。元scene第4版不変、開始時3 PID/cgroup/root/socket消滅、durable参照0 | RFB手編集なし。GPU leaseの回収を証明しない |
+| 保存失敗でも終了 | `mf-save-conflict-cleanup-installed-20260907`: 5.831秒でfailed・process回収。追加`mf-unsaved-save-conflict-installed-20260907`: 実RFBで2→4 meshes、保存前working bytes不変、競合後5.037秒でfailed・process回収。候補から別scene初版へ4 meshesを回収、競合側1 meshの第6版は不変 | 保存API内部のBlender保存後の競合。save以前のcrash/定期autosave/GPU leaseとは別 |
 | Blender crash | `mf-gui-child-crash-cleanup-installed-20260907`: 自分のsessionのBlender子PID fdだけへSIGKILL、5.266秒でrunner_lost。3 PID/cgroup/root/socket消滅、durable参照0 | GUI手編集なし。batch worker crashとは別 |
 | 切断猶予終了 | `mf-disconnect-grace-cleanup-installed-20260907-final`: 実noVNC接続後Close view only、connected_at=null/disconnected_at非null、既定300秒で302.270秒後終端。3 PID/cgroup/root/socket消滅、durable参照0 | 接続表示だけを描画品質の証拠としない。手編集なし |
 | MediaForge再起動 | `mf-3ds8-core-restart-0.28.14`: health復帰0.933秒、同session再接続、保存revision9 | 過去の再起動試験。今回service再起動なし。手編集回収量・当時の全PID回収は未照合 |
@@ -39,8 +39,9 @@ idle/expiry/restartの保存版、成功GUI編集の前後/復元版、.38の3�
 
 1. desktop短時間の背景hidden→visible、同session/描画/続く入力保存は上記native試験で確認。
    Playwright既定のfocus emulationで全tab visibleとなる初回失敗は成功に含めない。
-2. 未保存編集後の故障について、回収候補と正式版の内容を実Blenderで比較し、
-   回収できた変更と失われた変更を明記する。元の確定版は不変であることを確認する。
+2. 保存競合では追加2 meshesを全て回収できた（元2→回収4、実GLBでも確認）。
+   save以前のcrashに備える2分autosaveはruntime/Web設計§7の未実装項目。
+   次は隔離working copyへの定期保存を実装し、クラッシュ後の回収範囲を実測する。
 3. idle/expiry/restartの残る回収証拠を確認し、不足箇所だけ専用sessionで補う。
    GPU予約はsoftware GUIのprocess回収から推測せず、GOAL-10側の実lease証拠と照合する。
 

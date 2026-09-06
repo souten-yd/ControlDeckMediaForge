@@ -59,7 +59,10 @@ def main() -> None:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash", "disconnect-timeout"), default="save-conflict")
+    parser.add_argument("--manual-edit", action="store_true", help="Duplicate meshes through RFB before a save conflict")
     args = parser.parse_args()
+    if args.manual_edit and args.failure_kind != "save-conflict":
+        parser.error("--manual-edit currently requires --failure-kind save-conflict")
     assert re.fullmatch(r"scene_[0-9a-f]{32}", args.scene_id)
     installed = registry.status("media-forge")
     assert installed["version"] == args.expected_version and installed["health"] == "healthy"
@@ -70,6 +73,10 @@ def main() -> None:
     assert spec and spec.loader
     helpers = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helpers)
+    edit_spec = importlib.util.spec_from_file_location("edit_helpers", Path(__file__).with_name("3ds_background_return_installed_e2e.py"))
+    assert edit_spec and edit_spec.loader
+    edit_helpers = importlib.util.module_from_spec(edit_spec)
+    edit_spec.loader.exec_module(edit_helpers)
     evidence: dict[str, Any] = {"version": args.expected_version, "scene_id": args.scene_id,
         "mode": "installed_real_gui_" + args.failure_kind, "page_errors": []}
     with SessionLocal() as db:
@@ -114,6 +121,7 @@ def main() -> None:
                 before = call("scenes.get", {"scene_id": args.scene_id})
                 assert before["scene"]["name"].startswith("mf-e2e material conflict ")
                 assert len(before["revisions"]) >= 3
+                original_hashes = edit_helpers.asset_hashes(before) if args.manual_edit else {}
                 started = call("blender.sessions.start", {"scene_id": args.scene_id})
                 session_id = started["id"]
                 evidence["session_id"] = session_id
@@ -133,12 +141,46 @@ def main() -> None:
                 root = DATA / "sessions/blender" / session_id
                 socket = Path("/run/user/1000/mediaforge-blender") / (session_id.removeprefix("blendersession_")[:16] + ".sock")
                 assert root.is_dir() and socket.is_socket()
+                if args.manual_edit:
+                    evidence["before"] = before
+                    evidence["original_asset_hashes"] = original_hashes
+                    working_id = owned["working_id"]
+                    assert re.fullmatch(r"working_[0-9a-f]{32}", working_id)
+                    working_path = (DATA / "scenes/working" / working_id / "scene.blend").resolve(strict=True)
+                    assert working_path.is_relative_to((DATA / "scenes/working").resolve(strict=True))
+                    original_working_hash = hashlib.sha256(working_path.read_bytes()).hexdigest()
+                    frame.locator("#create-media-3d").click()
+                    frame.evaluate("id => openScene(id)", args.scene_id)
+                    frame.evaluate("s => openBlenderView(s)", ready)
+                    frame.wait_for_function("state.blenderRfb?._rfbConnectionState === 'connected'", timeout=30000)
+                    frame.wait_for_function("""() => {
+                        const c=document.querySelector('#scene-blender-screen canvas');
+                        if (!c || c.width<100 || c.height<100) return false;
+                        const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+                        const colors=new Set();
+                        for(let i=0;i<d.length;i+=160) colors.add(`${d[i]},${d[i+1]},${d[i+2]}`);
+                        return colors.size>50;
+                    }""", timeout=45000)
+                    frame.locator("#scene-blender-screen canvas").click(position={"x":320,"y":240})
+                    page.keyboard.press("a")
+                    page.wait_for_timeout(500)
+                    page.keyboard.press("Shift+D")
+                    page.wait_for_timeout(500)
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(1000)
+                    page.screenshot(path=str(args.evidence_dir / "unsaved-edit.png"))
+                    # No GUI save has occurred yet; edits exist only in Blender memory.
+                    assert hashlib.sha256(working_path.read_bytes()).hexdigest() == original_working_hash
+                    assert call("scenes.get", {"scene_id":args.scene_id}) == before
+                    evidence["working_hash_before_save"] = original_working_hash
                 if args.failure_kind == "save-conflict":
                     # Only this dedicated scene advances while its GUI owns the old base.
                     call("scenes.revisions.restore", {"scene_id": args.scene_id,
                         "base_revision_id": before["scene"]["current_revision_id"],
                         "target_revision_id": before["revisions"][0]["id"]})
                 advanced = call("scenes.get", {"scene_id": args.scene_id})
+                if args.manual_edit:
+                    evidence["advanced"] = advanced
                 if args.failure_kind == "disconnect-timeout":
                     assert ready["disconnect_grace_sec"] == 300
                     frame.evaluate("s => openBlenderView(s)", ready)
@@ -182,11 +224,18 @@ def main() -> None:
                 assert hashlib.sha256(candidate.read_bytes()).hexdigest() == digest
                 assert call("scenes.get", {"scene_id": args.scene_id}) == advanced
                 assert not evidence["page_errors"]
+                if args.manual_edit:
+                    recovered_scene = call("scenes.get", {"scene_id": recovered["scene"]["id"]})
+                    evidence["recovered_scene"] = recovered_scene
+                    assert edit_helpers.mesh_count(recovered_scene) == 2 * edit_helpers.mesh_count(before)
+                    assert edit_helpers.asset_hashes(before) == original_hashes
+                    evidence["unsaved_edit_recovered"] = True
                 evidence.update(passed=True, ready=ready, failed=failed, recovered=recovered,
                     candidate_sha256=digest, candidate_bytes=candidate.stat().st_size,
                     process_cgroup_root_socket_reclaimed=True,
-                    rfb_connection_tested=args.failure_kind == "disconnect-timeout",
-                    not_tested=["manual GUI edit", "GPU lease", "batch worker crash", "connected idle timeout"])
+                    rfb_connection_tested=args.manual_edit or args.failure_kind == "disconnect-timeout",
+                    not_tested=(["manual GUI edit"] if not args.manual_edit else ["unsaved crash recovery", "autosave"]) +
+                        ["GPU lease", "batch worker crash", "connected idle timeout"])
             finally:
                 if session_id and record(session_id)["state"] in ACTIVE:
                     call("blender.sessions.stop", {"session_id": session_id})
