@@ -57,6 +57,11 @@ v0.28.16 installedで既定TTLのqueue fault injectionを実行したが、Host�
 Host履歴読取は別PR ControlDeck#275（merged `40f1bc0`）で追加し、隔離した別processの実HTTPで
 interrupted読取200/別Job403/refresh404/update404を確認した。installed Host適用とMediaForge
 outbox再送は未確認。新しいAgent Job subjectから旧childのauthorityを無断で取得しない。
+続くHost #276（merged `dac519b`）で終端専用reconcileを追加し、v0.28.17 sourceからの
+実HTTP outbox再送を確認した。別core processの再起動・再照合でlocal Job2件は増えず、
+Host interruptedとの差異はsent=false、active targetへの適用はsent=trueを保持。
+証拠`/tmp/mf-terminal-http-1ppzav37/observations.json`。これは終端fixtureのmanager→Host HTTPであり、
+installed Agent経路・GUI表示・自然な長時間制作・600秒超refreshの不足は解消したとは扱わない。
 詳細はhandoff/status、証拠は`/data1tb/mf-credential-refresh-installed-0.28.16-retry2/events.json`。
 
 ## 今回発見した具体的なコード差分

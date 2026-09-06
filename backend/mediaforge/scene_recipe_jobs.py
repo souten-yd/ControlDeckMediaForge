@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import time
 from typing import Any
 
@@ -20,6 +21,8 @@ from .scene_recipes import (
 from .scenes import SceneError
 from .scene_workspace import SceneWorkspace
 from .store import Store
+
+logger = logging.getLogger(__name__)
 
 
 class SceneRecipeJobManager:
@@ -39,6 +42,8 @@ class SceneRecipeJobManager:
         self.host = host
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._executions: dict[str, HostExecution] = {}
+        self._outbox_tasks: dict[str, asyncio.Task[None]] = {}
+        self._outbox_guard = asyncio.Lock()
         self._execution_guard = asyncio.Semaphore(1)
         self.control_poll_sec = control_poll_sec
         self.credential_refresh_margin_sec = credential_refresh_margin_sec
@@ -65,6 +70,10 @@ class SceneRecipeJobManager:
             await asyncio.gather(*self._tasks.values(), return_exceptions=True)
         self._tasks.clear()
         self._executions.clear()
+        for task in self._outbox_tasks.values():
+            task.cancel()
+        await asyncio.gather(*self._outbox_tasks.values(), return_exceptions=True)
+        self._outbox_tasks.clear()
 
     async def submit(
         self,
@@ -179,7 +188,55 @@ class SceneRecipeJobManager:
             "retry_of": task.retry_of,
             "result": task.result,
             "host_terminal_sent": task.host_terminal_sent,
+            "host_terminal_reconciliation": task.host_terminal_reconciliation,
         }
+
+    async def reconcile_terminal(self, job_id: str, identity: HostIdentity) -> None:
+        self.store.get_scene_recipe_task(job_id, owner=identity.actor_subject or identity.subject)
+        await self._consume_terminal(job_id, identity)
+
+    async def _consume_terminal(self, job_id: str, identity: HostIdentity) -> None:
+        if identity.expires_at <= int(time.time()) or "jobs.write" not in identity.granted_capabilities:
+            return
+        async with self._outbox_guard:
+            task = self.store.get_scene_recipe_task(job_id)
+            if (task.host_terminal_sent or task.host_terminal_reconciliation is not None
+                    or task.host_terminal is None or job_id in self._tasks
+                    or self.store.get_job(job_id).status not in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}):
+                return
+            payload = {key: task.host_terminal[key] for key in ("status", "result", "error") if key in task.host_terminal}
+            try:
+                receipt = await self.host.reconcile_job_terminal(identity, task.host_job_id, payload)
+            except HostApiError as exc:
+                # Persisted payload remains pending, including on an older Host.
+                logger.warning("Terminal outbox pending for %s (Host HTTP %s)", job_id, exc.status_code)
+                return
+            if (receipt.get("host_job_id") != task.host_job_id
+                    or receipt.get("status") not in {"succeeded", "failed", "canceled", "interrupted"}
+                    or receipt.get("disposition") not in {"applied", "already_terminal"}
+                    or type(receipt.get("terminal_matches")) is not bool
+                    or (receipt["disposition"] == "applied" and receipt["terminal_matches"] is not True)):
+                logger.warning("Invalid Host terminal receipt for %s; outbox remains pending", job_id)
+                return
+            if receipt["terminal_matches"] and receipt["status"] != payload["status"]:
+                logger.warning("Inconsistent Host terminal receipt for %s; outbox remains pending", job_id)
+                return
+            self.store.record_scene_terminal_reconciliation(job_id, {
+                key: receipt[key] for key in ("host_job_id", "status", "disposition", "terminal_matches")
+            })
+
+    async def _retry_terminal(self, job_id: str, identity: HostIdentity) -> None:
+        delay = 1.0
+        try:
+            while not self._stopping and identity.expires_at > int(time.time()):
+                await asyncio.sleep(delay)
+                await self._consume_terminal(job_id, identity)
+                task = self.store.get_scene_recipe_task(job_id)
+                if task.host_terminal_sent or task.host_terminal_reconciliation is not None:
+                    return
+                delay = min(delay * 2, 30.0)
+        finally:
+            self._outbox_tasks.pop(job_id, None)
 
     async def cancel(self, job_id: str, owner: str) -> dict[str, Any]:
         self.store.get_scene_recipe_task(job_id, owner=owner)
@@ -382,6 +439,11 @@ class SceneRecipeJobManager:
             await asyncio.gather(control, return_exceptions=True)
             self._tasks.pop(job_id, None)
             self._executions.pop(job_id, None)
+            record = self.store.get_scene_recipe_task(job_id)
+            if not self._stopping and record.host_terminal and not record.host_terminal_sent:
+                self._outbox_tasks[job_id] = asyncio.create_task(
+                    self._retry_terminal(job_id, execution.identity), name=f"scene-terminal-outbox-{job_id}"
+                )
 
     async def _maintain_control(self, job_id: str, execution: HostExecution) -> bool:
         while True:
@@ -404,10 +466,13 @@ class SceneRecipeJobManager:
                     subject=execution.identity.subject,
                     expires_at=expires_at,
                     granted_capabilities=execution.identity.granted_capabilities,
+                    actor_subject=execution.identity.actor_subject,
                 )
             control = await self.host.job_control(execution.identity, execution.host_job_id)
             if control.get("cancel_requested") is True:
                 return True
+            if control.get("status") in {"succeeded", "failed", "interrupted"}:
+                raise HostApiError("host_job_terminated", "Host Job ended before local execution finished")
 
     @staticmethod
     async def _report_progress(reporter: HostJobReporter, phase: str, progress: float) -> None:

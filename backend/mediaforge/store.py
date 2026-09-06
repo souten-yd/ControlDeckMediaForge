@@ -355,6 +355,7 @@ class Store:
                 ("idempotency_key", "TEXT NOT NULL DEFAULT '" + "0" * 64 + "'"),
                 ("host_terminal_json", "TEXT"),
                 ("host_terminal_sent", "INTEGER NOT NULL DEFAULT 0"),
+                ("host_terminal_reconciliation_json", "TEXT"),
             ):
                 if name not in scene_task_columns:
                     connection.execute(
@@ -475,6 +476,15 @@ class Store:
                        AND json_extract(error_json, '$.code') = 'host_context_lost'
                    ) AND stage = 'queued'""",
                 (utc_now(), JobStatus.FAILED),
+            )
+            # Recovery must retain a terminal outbox even if the process died
+            # before queueing one, for both running and queued Host jobs.
+            connection.execute(
+                """UPDATE scene_recipe_tasks SET host_terminal_json = json_object(
+                    'status', 'failed', 'error', stage)
+                   WHERE host_terminal_json IS NULL AND stage IN ('host_context_lost', 'service_restarted')
+                   AND job_id IN (SELECT id FROM jobs WHERE status = ?)""",
+                (JobStatus.FAILED,),
             )
         for entry in self.work_dir.iterdir():
             bounded = contained(self.work_dir, entry)
@@ -635,6 +645,8 @@ class Store:
                 else None
             ),
             host_terminal_sent=bool(row["host_terminal_sent"]),
+            host_terminal_reconciliation=(json.loads(row["host_terminal_reconciliation_json"])
+                                          if row["host_terminal_reconciliation_json"] else None),
             retry_of=row["retry_of"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -670,7 +682,8 @@ class Store:
         with self._lock, self._connect() as connection:
             cursor = connection.execute(
                 """UPDATE scene_recipe_tasks
-                   SET host_terminal_json = ?, host_terminal_sent = 0, updated_at = ?
+                   SET host_terminal_json = ?, host_terminal_sent = 0,
+                       host_terminal_reconciliation_json = NULL, updated_at = ?
                    WHERE job_id = ?""",
                 (
                     json.dumps(payload, sort_keys=True, separators=(",", ":")),
@@ -692,6 +705,16 @@ class Store:
         if cursor.rowcount != 1:
             raise KeyError(job_id)
         return self.get_scene_recipe_task(job_id)
+
+    def record_scene_terminal_reconciliation(self, job_id: str, receipt: dict[str, Any]) -> None:
+        with self._lock, self._connect() as connection:
+            cursor = connection.execute(
+                """UPDATE scene_recipe_tasks SET host_terminal_reconciliation_json = ?,
+                   host_terminal_sent = ?, updated_at = ? WHERE job_id = ? AND host_terminal_json IS NOT NULL""",
+                (json.dumps(receipt, sort_keys=True), int(receipt["terminal_matches"] is True), utc_now(), job_id),
+            )
+        if cursor.rowcount != 1:
+            raise KeyError(job_id)
 
     def job_profile_snapshot(self, job_id: str) -> dict[str, Any]:
         with self._connect() as connection:

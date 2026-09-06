@@ -443,6 +443,15 @@ persists the local/Host Job IDs, stable owner, exact input and idempotency hashe
 pinned Blender runtime/version, base revision, stage, result, retry parent, and
 terminal outbox state. A restart without the short-lived identity fails closed
 as `service_restarted` or `host_context_lost`; it does not replay Blender work.
+While a valid child identity remains in memory, unsent terminals retry with bounded
+backoff. After restart, an authenticated owner `media.job.status` or `media.job.cancel`
+request may replay that requested job's outbox through the Host's terminal-only
+reconciliation API. `host_terminal_sent` becomes true only on confirmed delivery or
+an exact terminal match. The additive nullable `host_terminal_reconciliation` follows
+[`schemas/host-terminal-reconciliation.json`](../schemas/host-terminal-reconciliation.json).
+A different existing Host terminal is retained with `terminal_matches=false` and
+`host_terminal_sent=false`. An older/unreachable Host or unavailable current authority
+leaves the payload pending. No token is persisted and no recipe is replayed.
 Retry is a new Job and must carry byte-equivalent typed input through
 `retry_job_id`. Successful revisions require the same independent Blender and
 GLB validators as UI work.
