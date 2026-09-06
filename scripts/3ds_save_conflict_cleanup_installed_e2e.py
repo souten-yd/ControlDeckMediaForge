@@ -58,7 +58,7 @@ def main() -> None:
     parser.add_argument("--scene-id", required=True)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
-    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash"), default="save-conflict")
+    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash", "disconnect-timeout"), default="save-conflict")
     args = parser.parse_args()
     assert re.fullmatch(r"scene_[0-9a-f]{32}", args.scene_id)
     installed = registry.status("media-forge")
@@ -95,13 +95,19 @@ def main() -> None:
                 def call(method: str, params: dict) -> dict:
                     return frame.evaluate("p => call(p.method,p.params)", {"method": method, "params": params})
 
-                def wait(wanted: set[str]) -> dict:
-                    deadline = time.monotonic() + 90
+                def wait(wanted: set[str], timeout: float = 90) -> dict:
+                    started_at = time.monotonic()
+                    deadline = started_at + timeout
+                    report_at = started_at + 30
                     while time.monotonic() < deadline:
                         value = next(v for v in call("blender.sessions.list", {})["items"] if v["id"] == session_id)
                         if value["state"] in wanted:
                             return value
                         assert value["state"] in ACTIVE, value
+                        if time.monotonic() >= report_at:
+                            print(json.dumps({"session_id": session_id, "state": value["state"],
+                                "waiting_sec": round(time.monotonic() - started_at, 1)}), flush=True)
+                            report_at = time.monotonic() + 30
                         page.wait_for_timeout(250)
                     raise AssertionError("owned session did not reach requested state")
 
@@ -133,14 +139,31 @@ def main() -> None:
                         "base_revision_id": before["scene"]["current_revision_id"],
                         "target_revision_id": before["revisions"][0]["id"]})
                 advanced = call("scenes.get", {"scene_id": args.scene_id})
+                if args.failure_kind == "disconnect-timeout":
+                    assert ready["disconnect_grace_sec"] == 300
+                    frame.evaluate("s => openBlenderView(s)", ready)
+                    frame.wait_for_function("['接続しました','Connected'].includes(document.querySelector('#scene-blender-connection').textContent)", timeout=30000)
+                    evidence["connected_at"] = record(session_id)["connected_at"]
+                    assert evidence["connected_at"] is not None
+                    page.screenshot(path=str(args.evidence_dir / "connected.png"))
+                    frame.locator("#scene-blender-close").click()
+                    frame.wait_for_function("""async id => {
+                        const s = (await call('blender.sessions.list', {})).items.find(s => s.id === id);
+                        return s?.connection_state === 'disconnected' && s.disconnected_at && !s.connected_at;
+                    }""", arg=session_id, timeout=30000)
+                    evidence["disconnected_at"] = record(session_id)["disconnected_at"]
+                    assert evidence["disconnected_at"]
                 began = time.monotonic()
                 if args.failure_kind == "save-conflict":
                     call("blender.sessions.save", {"session_id": session_id})
-                else:
+                elif args.failure_kind == "blender-crash":
                     evidence["signaled_blender_pid"] = crash_owned_blender(cgroup, pids, owned["runtime_id"])
-                failed = wait({"failed", "interrupted"})
+                failed = wait({"failed", "interrupted"}, 330 if args.failure_kind == "disconnect-timeout" else 90)
                 evidence["terminal_sec"] = round(time.monotonic() - began, 3)
-                expected_error = "scene_revision_conflict" if args.failure_kind == "save-conflict" else "blender_session_runner_lost"
+                expected_error = {"save-conflict": "scene_revision_conflict", "blender-crash": "blender_session_runner_lost",
+                                  "disconnect-timeout": "blender_session_disconnected_timeout"}[args.failure_kind]
+                if args.failure_kind == "disconnect-timeout":
+                    assert evidence["terminal_sec"] >= 299
                 assert failed["error_code"] == expected_error, failed
                 assert failed["result"]["saved"] is False
                 working_id = failed["result"]["recovery"]["working_id"]
@@ -162,7 +185,8 @@ def main() -> None:
                 evidence.update(passed=True, ready=ready, failed=failed, recovered=recovered,
                     candidate_sha256=digest, candidate_bytes=candidate.stat().st_size,
                     process_cgroup_root_socket_reclaimed=True,
-                    not_tested=["manual GUI edit", "RFB connection", "GPU lease", "batch worker crash", "idle timeout"])
+                    rfb_connection_tested=args.failure_kind == "disconnect-timeout",
+                    not_tested=["manual GUI edit", "GPU lease", "batch worker crash", "connected idle timeout"])
             finally:
                 if session_id and record(session_id)["state"] in ACTIVE:
                     call("blender.sessions.stop", {"session_id": session_id})

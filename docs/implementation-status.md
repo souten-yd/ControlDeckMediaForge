@@ -1,5 +1,44 @@
 # Media Forge implementation status
 
+## 2026-09-07 installed default disconnect grace acceptance
+
+PR #344 merge `7602b678c1719588ca66c2452a5ad4f662096717`から
+branch `ux1/3d-disconnect-grace-cleanup`。既存GUI診断へ
+--failure-kind disconnect-timeoutを追加。設定は既定disconnect_grace_sec=300のまま。
+`scripts/3ds_save_conflict_cleanup_installed_e2e.py --scene-id
+scene_3f3b5f1e97e94b268722ea45cc811c50 --expected-version 0.28.38
+--failure-kind disconnect-timeout --evidence-dir /data1tb/mf-disconnect-grace-cleanup-installed-20260907`
+をHost診断Pythonで実行。正規WS startで実software Blender4.5.13/Web pack1.0.0がready。
+製品openBlenderViewで実noVNC/RFB接続し、Connected表示とserver connected_at非nullを確認。
+通常「Close view only」buttonで切断し、設定を変更せず自然なtimeoutを待つ。
+
+初回session blendersession_7c12f9d7ebe24b4c9d8d5c2388284b05は302.161秒で
+blender_session_disconnected_timeout/保存なしの終端へ遷移、passed=true/exit0。
+猶予中の120秒時点でunit active、durable working/session参照は各1（recipe/unresolved0）。
+終端後は開始時PID948243/948247/948290、cgroup/session root/socket不在をassert。
+450,236 B候補を通常forkでscene_d9fa6891e745506b9cc51d763317bd00の初版へ確定、
+元候補・新source SHA70665510ca9742db744858ce63b3b9092cb93e9569281bca1745ff157d2d945f一致、
+元scene第4版全投影不変。これは手編集後の未保存内容を測った試験ではない。
+
+初回の切断待機predicateは過渡状態のconnected_at残存を受理したため、
+最終診断ではdisconnected_at非nullかつconnected_at=nullを要求し、接続時刻も証拠へ保存する。
+同一セッションの安定した切断DB状態もread-onlyで確認した。初回の終端後にだけ、
+最終scriptを別証拠 /data1tb/mf-disconnect-grace-cleanup-installed-20260907-final で再実行。
+最終session blendersession_757826b8b90844b3a722354b62ca3cebは302.270秒で
+disconnected_timeout終端、passed=true/exit0。接続16:05:13.759959Z、切断16:05:29.521742Z。
+PID957403/957407/957504とcgroup/root/socket消滅、同450,236 B/hashの候補を
+scene_cff2a7987e16544390190af4a90f097fの初版へ確定。元scene/候補bytes不変。
+終了後のdurable recipe/working/session/unresolved参照は全0。
+Host849052 active/MF905518/905522はPID不変。初回・最終とも通常timeoutだけで終了した。
+
+製品code/runtime/global設定は変更せず、シグナル・service restartも行わない。
+GUI描画品質/手入力/connected idle 1800秒/GPU leaseは未検証。Connected直後の
+初回screenshotは空画面だったため、接続証拠を描画完了や編集成功の証拠にはしない。
+既存本番sceneは検証専用の同sceneだけを読む。復旧forkの新scene/候補は保持する。
+全 `./mf.sh test`: 1133 passed/既知warning1/159.78秒、exit0。
+最終script py_compile/diff check成功。C/GOAL-09全体はPARTIALを維持する。
+次は既存ライフサイクル証拠を原因ごとの監査表へ整理して残件を特定する。
+
 ## 2026-09-07 installed Blender child crash cleanup
 
 PR #343 merge `9cbe729241460cc3b3da607fca4509dedffa363c`から

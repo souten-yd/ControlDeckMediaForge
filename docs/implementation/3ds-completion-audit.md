@@ -36,6 +36,14 @@ installed320/1280で再受入した。2026-09-07に取消Jobのinstalled retry�
 
 ## 利用者ゴール別
 
+2026-09-07 installed0.28.38 default disconnect grace追加:
+実noVNC/RFB Connectedとserver接続時刻を確認し、通常Close view onlyで切断。
+既定300秒を短縮せず、猶予中はunit/working/session参照を維持、302.270秒で
+disconnected_timeout終端。3 PID/cgroup/root/socket回収、durable参照全0、
+450,236 B候補と同hashの別scene初版確定、元scene/候補bytes不変。
+最終証拠 /data1tb/mf-disconnect-grace-cleanup-installed-20260907-final。
+手編集/描画品質/接続中idle1800秒/GPU予約の証拠へは広げない。
+
 2026-09-07 installed0.28.38 GUI child crash追加:
 自分の新sessionのcgroup/executableを照合したBlender PID938903だけをPID fdでSIGKILL。
 5.266秒でrunner_lost、3 PID/cgroup/root/socket回収、durable実行参照全0。
