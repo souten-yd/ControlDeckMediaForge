@@ -9695,3 +9695,17 @@ GOAL-05は自然言語→生成画像/材質→exportの範囲、GOAL-08はGLB/�
 gate `./mf.sh test`: 1035 passed / 既知Starlette warning1件 / 112.90秒。diff check成功。
 追加5テストはverifierのsynthetic fixture/negativeであり、実機受入は上記OpenCodeと実bytes照合。
 並行PR #280の0.28.27 mergeを確認したが、この実測は0.28.26由来。新版の受入に読み替えない。
+PR #281作成後にmain `301b675`を取り込み、status文書の追記競合は両方を保持して解消。
+Host registry再確認は0.28.27/healthy/enabled。更新は並行作業由来で、本sliceから要求していない。
+main取り込み後のgate: `./mf.sh test` 1044 passed / 既知warning1件 / 113.11秒。
+read-only実成果物verifierも再実行exit0。PR #281の差分は受入script/test/文書のみ。
+
+## v0.28.26 — 生成後も model を載せたまま次の依頼を待つ
+
+続けて画像を頼むと毎回モデルの載せ直し（実測で十数秒）を払っていた。job が
+終わった時点で「queue に次が居なければ」worker を畳んでいたためで、対話的に
+頼む場面では次の依頼は数秒後に来る。
+
+生成後は lease を持ったまま待つ。返して待つと broker からは「空いている」ことに
+なり、その上へ LLM が載って単一 GPU では入らない。ControlDeck の pressure を
+短い間隔で見て、GPU を求められた時点で降りる。

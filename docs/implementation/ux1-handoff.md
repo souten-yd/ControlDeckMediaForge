@@ -45,6 +45,10 @@ GOAL-05は自然言語→生成画像/材質→exportの範囲、GOAL-08はGLB/�
 gate `./mf.sh test`: 1035 passed / 既知Starlette warning1件 / 112.90秒。diff check成功。
 追加5テストはverifierのsynthetic fixture/negativeであり、実機受入は上記OpenCodeと実bytes照合。
 並行PR #280の0.28.27 mergeを確認したが、この実測は0.28.26由来。新版の受入に読み替えない。
+PR #281作成後にmain `301b675`を取り込み、status文書の追記競合は両方を保持して解消。
+Host registry再確認は0.28.27/healthy/enabled。更新は並行作業由来で、本sliceから要求していない。
+main取り込み後のgate: `./mf.sh test` 1044 passed / 既知warning1件 / 113.11秒。
+read-only実成果物verifierも再実行exit0。PR #281の差分は受入script/test/文書のみ。
 
 ## 2026-09-06 installed generated texture comparison/adoption
 

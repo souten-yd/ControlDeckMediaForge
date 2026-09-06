@@ -147,6 +147,7 @@ class JobManager:
         blender_timeout_sec: float = 180.0,
         host_client: ControlDeckHostClient | None = None,
         lease_renew_sec: float = 10.0,
+        warm_linger_sec: float = 90.0,
         model_manifest: Path | None = None,
         model_catalog_manifest: Path | None = None,
         model_store_root: Path | None = None,
@@ -166,6 +167,7 @@ class JobManager:
         self.blender_timeout_sec = blender_timeout_sec
         self.host_client = host_client
         self.lease_renew_sec = lease_renew_sec
+        self.warm_linger_sec = warm_linger_sec
         self.model_manifest = model_manifest
         self.model_catalog_manifest = model_catalog_manifest
         self.model_store_root = model_store_root
@@ -190,6 +192,12 @@ class JobManager:
         self._processes: dict[str, asyncio.subprocess.Process] = {}
         # model を載せたまま次の job を受ける worker。queue が空になったら畳む。
         self._warm_worker: tuple[asyncio.subprocess.Process, tuple[str, str, str, str]] | None = None
+        # 生成後に model を載せたまま待っている間の lease と、その見張り。
+        # lease を持ったまま待つのは、抱えている VRAM を broker から見えるように
+        # しておくためである。返して待つと「空いている」ことになり、その上へ
+        # LLM が載って単一 GPU では入らない。
+        self._linger_execution: HostExecution | None = None
+        self._linger_task: asyncio.Task[None] | None = None
         self._host_executions: dict[str, HostExecution] = {}
         self._host_failures: dict[str, HostApiError] = {}
         self._selected_models: dict[str, ModelDescriptor] = {}
@@ -240,6 +248,7 @@ class JobManager:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         # job を畳んでから下ろす。先に下ろすと、走っている job が次を起こす。
+        await self._end_linger(retire=True)
         await self._retire_warm_worker()
         for _, process in processes:
             if process.returncode is None:
@@ -300,6 +309,10 @@ class JobManager:
             self._job_tasks[job_id] = task
 
     async def _run_one(self, job_id: str) -> None:
+        # 待っていたなら、その lease を返してから始める。この job は自分の lease を
+        # 取るので、同じ device に 2 つは要らない。model は載せたままにする——
+        # 載せ直しを省くために待っていたのだから、ここで降ろしては意味が無い。
+        await self._end_linger(retire=False)
         try:
             await self._execute(job_id)
         except asyncio.CancelledError:
@@ -342,7 +355,7 @@ class JobManager:
             # queue は _run が即座に汲み出すので、待っている job は queue では
             # なく _job_tasks に居る。queue だけ見ると常に空に見えて、続きが
             # あっても毎回下ろしてしまう。
-            if self._queue.empty() and not self._job_tasks:
+            if self._queue.empty() and not self._job_tasks and self._linger_task is None:
                 await self._retire_warm_worker()
 
     async def _execute(self, job_id: str) -> None:
@@ -478,7 +491,9 @@ class JobManager:
             if maintenance is not None:
                 maintenance.cancel()
                 await asyncio.gather(maintenance, return_exceptions=True)
-            if execution is not None:
+            if execution is not None and execution is not self._linger_execution:
+                # 待ちへ引き継いだ lease はここで返さない。返してしまうと、
+                # 抱えている VRAM が broker から見えなくなる。
                 await self._release_host_resource(execution)
 
     def _select_real_model(self, job: Job) -> ModelDescriptor | None:
@@ -1523,6 +1538,100 @@ class JobManager:
         self._warm_worker = (process, signature)
         return process
 
+    def _can_linger(self, job: Job, execution: HostExecution) -> bool:
+        """生成後に model を載せたまま待ってよいか。
+
+        待つ意味があるのは GPU に載っているときだけで、host（システムRAM）で
+        走ったものを抱えても次が速くならない。worker が既に居ないなら抱える
+        ものが無い。長さを 0 に設定してあれば従来どおり即座に降ろす。
+        """
+        if self.warm_linger_sec <= 0 or self.host_client is None:
+            return False
+        if execution.lease_id is None or execution.device_id != "gpu0":
+            return False
+        if job.request.qa.semantic:
+            # 直後に Host が VLM を載せる。抱えたままでは入らない。
+            return False
+        warm = self._warm_worker
+        return warm is not None and warm[0].returncode is None
+
+    def _begin_linger(self, execution: HostExecution) -> None:
+        """lease を持ったまま、次の依頼を待つ。"""
+        self._linger_execution = execution
+        self._linger_task = asyncio.create_task(
+            self._linger(execution), name="media-forge-warm-linger"
+        )
+
+    async def _end_linger(self, *, retire: bool) -> None:
+        """待つのをやめる。lease は必ず返す。
+
+        `retire` は model も降ろすかどうか。次の job が続くなら降ろさない——
+        載せ直しを省くために待っていたのだから、そこで降ろしては意味が無い。
+        """
+        task = self._linger_task
+        self._linger_task = None
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        execution = self._linger_execution
+        self._linger_execution = None
+        if retire:
+            # lease より先に降ろす。返しただけでは VRAM は空かない。
+            await self._retire_warm_worker()
+        if execution is not None:
+            await self._release_host_resource(execution)
+
+    async def _linger(self, execution: HostExecution) -> None:
+        """model を載せたまま待ち、他が GPU を要った時点で降りる。
+
+        待つ長さより優先するのが返却要求である。ControlDeck は LLM を載せる前に
+        broker へ返却を求め、少しだけ待ってから載せに行く。こちらがそれに気付か
+        なければ、同じ GPU へ重ねて載ることになる。
+
+        renew は監査に残る操作なので、見張りには使わない。読むだけの pressure を
+        短い間隔で見て、renew は従来どおりの間隔で打つ。
+        """
+        assert self.host_client is not None and execution.lease_id is not None
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.warm_linger_sec
+        renew_at = loop.time() + self.lease_renew_sec
+        try:
+            baseline = float((
+                await self.host_client.device_pressure(execution.identity, "gpu0")
+            ).get("release_requested_at") or 0.0)
+        except HostApiError:
+            # 様子が読めないなら抱えない。載せ直しを省くのは、確かめられる間だけ。
+            await self._end_linger(retire=True)
+            return
+        try:
+            while loop.time() < deadline:
+                await asyncio.sleep(0.5)
+                if self._job_tasks or not self._queue.empty():
+                    return  # 次の job が引き継ぐ。降ろさない。
+                if execution.identity.expires_at - int(time.time()) <= 120:
+                    execution.identity = await self.host_client.refresh_lease_identity(
+                        execution.identity, execution.lease_id
+                    )
+                pressure = await self.host_client.device_pressure(execution.identity, "gpu0")
+                if float(pressure.get("release_requested_at") or 0.0) > baseline:
+                    logger.info("warm linger: GPU を求められたので model を降ろす")
+                    break
+                if loop.time() >= renew_at:
+                    status = await self.host_client.lease_action(
+                        execution.identity, execution.lease_id, "renew"
+                    )
+                    renew_at = loop.time() + self.lease_renew_sec
+                    if status.get("release_requested") is True:
+                        logger.info("warm linger: lease の返却を求められた")
+                        break
+        except asyncio.CancelledError:
+            raise
+        except HostApiError:
+            logger.info("warm linger: Host と話せなくなったので model を降ろす")
+        except Exception:  # noqa: BLE001 - 待っている間の失敗で job を壊さない
+            logger.exception("warm linger failed")
+        await self._end_linger(retire=True)
+
     async def _retire_warm_worker(self) -> None:
         """常駐 worker を終わらせる。stdin を閉じれば main() の loop が抜ける。"""
         warm = self._warm_worker
@@ -1950,7 +2059,12 @@ class JobManager:
                 # 載せさせると、単一 GPU では入らない。上の deadlock 回避が
                 # 効くのは、lease と VRAM の寿命が揃っているときだけである。
                 await self._retire_warm_worker()
-            if not await self._release_host_resource(execution):
+            if self._can_linger(job, execution):
+                # まだ返さない。model を載せたまま次の依頼を待つ。lease を持ち
+                # 続けるのは、抱えている VRAM を broker から見えるようにして
+                # おくためで、他が要れば pressure を見て即座に降りる。
+                self._begin_linger(execution)
+            elif not await self._release_host_resource(execution):
                 await self._update(
                     job_id,
                     reporter,

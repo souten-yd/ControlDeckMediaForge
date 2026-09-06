@@ -36,6 +36,11 @@ class Settings:
     control_deck_url: str = "http://127.0.0.1:8765"
     host_request_timeout_sec: float = 10.0
     host_lease_renew_sec: float = 10.0
+    # 生成が終わった後、model を載せたまま次の依頼を待つ長さ。
+    # 載せ直しは実測で十数秒かかり、続けて頼まれる場面ではそれが待ち時間の
+    # ほとんどを占める。抱えてよいのは他が GPU を要らない間だけなので、
+    # ControlDeck から返却を求められたら長さに関わらず即座に降りる。
+    warm_linger_sec: float = 90.0
     model_manifest: Path = REPOSITORY_ROOT / "worker_packs/image/models.json"
     model_catalog_manifest: Path | None = None
     model_store_root: Path | None = None
@@ -182,6 +187,7 @@ class Settings:
             or not 0 < self.blender_idle_timeout_sec <= 86400
             or self.host_request_timeout_sec <= 0
             or self.host_lease_renew_sec <= 0
+            or not 0 <= self.warm_linger_sec <= 600
             or self.model_evaluation_timeout_sec <= 0
             or self.host_ai_timeout_sec <= 0
         ):
@@ -207,6 +213,7 @@ class Settings:
             control_deck_url=os.environ.get("MEDIA_FORGE_CONTROLDECK_URL", "http://127.0.0.1:8765"),
             host_request_timeout_sec=float(os.environ.get("MEDIA_FORGE_CONTROLDECK_TIMEOUT_SEC", "10")),
             host_lease_renew_sec=float(os.environ.get("MEDIA_FORGE_CONTROLDECK_RENEW_SEC", "10")),
+            warm_linger_sec=float(os.environ.get("MEDIA_FORGE_WARM_LINGER_SEC", "90")),
             model_manifest=Path(
                 os.environ.get("MEDIA_FORGE_MODEL_MANIFEST", REPOSITORY_ROOT / "worker_packs/image/models.json")
             ),
