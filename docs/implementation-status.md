@@ -1,5 +1,55 @@
 # Media Forge implementation status
 
+## 2026-09-06 v0.28.34 signed release and installed Settings regression
+
+PR #319 merge/tag target `f806f54609e34924086887744ae30d6852aec297`。
+exact detached worktree /data1tb/ControlDeckMediaForge-release-0.28.34で
+`python3 scripts/build_release_bundle.py --version 0.28.34
+--output-dir /data1tb/mf-0.28.34-build-20260906
+--pyinstaller /data1tb/ControlDeckMediaForge-3ds4/runtimes/bundle-build/.venv/bin/pyinstaller`。
+PyInstaller6.22.0/Python3.12.3、ビルドexit0。artifact31,504,675 B、
+SHA ac56e35a25dc1047e8207674d9e0edbe26344fe730c0d62e1bc913eb507c0d8e。
+外側archive6 entriesはlauncher/core/両manifestとdirectoryのみ。Blender/weights/venv同梱なし。
+展開先 /data1tb/mf-0.28.34-package-eLdLkz、addon/feature/core doctorの0.28.34一致。
+
+既存専用external test data /data1tb/mf-external-settings-QEvrmAでpackage PID240632/9161。
+公開前の同一artifactから `scripts/3ds_external_settings_e2e.py
+--evidence-dir /data1tb/mf-external-settings-package-0.28.34-20260906` を実行。
+Host診断Playwright Python/実headed ja、1280/320で確認取消→解除→reload→明示再登録、
+managed active維持、横overflowなし/errors0、7.944秒exit0。320px screenshotを目視。
+script内mode文字列はsource_standalone_headedのままだが、接続先は上記package実process。
+同外部inventoryを再読し5,580 files/1,168,332,155 Bのsize/SHA/mode等の前後一致。
+専用PID240632 SIGINT/package handle exit0、port9161解放。全環境clean installではない。
+
+最初の署名commandはMF core Pythonにcryptographyがなくimport失敗（鍵読取前）。
+依存を追加せず、既存Host診断Pythonで同sign_release.pyを実行し署名/自己検証成功。
+既存publisher keyのみ、公開鍵80bNiqW1CzAzQ3LSqYqtwecm6TYQywDLxGACF9AVsac=。
+GitHub Release v0.28.34へartifact/checksum/manifest/signatureの4 assetを正規公開。
+/data1tb/mf-0.28.34-public-20260906へconsumer再取得、実bytes/build一致/size/SHA照合。
+Host trusted catalogの_verify_signed_releaseで署名・identity・version検証、
+GitHub tag refがexact merge targetと一致。release notesに旧registry snapshot復元条件を掲載。
+
+更新前の本番396 Jobs全終端（262 succeeded/126 failed/8 canceled）、
+GUI23終端（17 stopped/4 interrupted/2 failed）、runtime ops3 ready/model ops0。
+private backup /data1tb/mf-0.28.34-pre-update-20260906はDB2,076,672 Bとregistry、mode0600。
+標準registry.updateは17.353秒、0.28.33→0.28.34/healthy/enabled/requested_enabled=true。
+current→versions/0.28.34、MF PID244551 active、Host PID2078不変。
+installed/package core SHA 3ef34604e51d44950721b27fee1fbbbdfc0fd1ace90c58be21736bb826538ce5が一致。
+runtime registryはbackupと実bytes一致、active4.5.13/managed2版のまま。Job/session件数不変。
+
+実installed `scripts/3ds_settings_protection_installed_e2e.py --expected-version 0.28.34
+--require-readable-layout --require-touch-targets --locale {ja,en}
+--evidence-dir /data1tb/mf-settings-{ja,en}-installed-0.28.34-20260906` を順番に実行。
+両exit0、opaque origin null/Host-child locale一致、1280/320で実pointer/dialog表示、
+旧版project参照2/新版active+project参照23による削除保護、runtime status全体不変、errors0。
+320px client/scroll305、文字領域255、button高さ44。英語320px確認画面を目視。
+専用loginは各scriptでfinally revoke、既存password不変。runtime削除送信なし。
+本番legacy登録は存在しないため、外部解除のinstalled受入には読み替えない。
+外部操作のpackage日本語は受入済み、installed外部/英語外部/locale切替/全D/FはNOT TESTED。
+版準備全gate1079 passed/既知warning1/154.26秒。今回追記は実測文書のみ。
+次はscenario Dの停止後旧版削除とproject pin保護の差を設計・現行実装で解消する。
+全体3DS-8はPARTIALを維持。
+
 ## 2026-09-06 v0.28.34 external registration release preparation
 
 PR #318 merged `7c6dfb9dbeaa6059c6934633f6d80700cc1f2be9` をfetch確認。
