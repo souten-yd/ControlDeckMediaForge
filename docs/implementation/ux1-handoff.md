@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.37 retry release preparation
+
+PR #335 merge `4d508774dd7f859494b93bb3c07b204c0b6bf77c`をfetch確認。
+branch `ux1/3d-retry-v02837`、addon/coreを0.28.37へ同期。
+#334の再試行時exact runtime保持を配布対象とし、release noteに挙動、
+元環境不在時の明示拒否、保存形式不変/0.28.36 rollback互換を記録。
+sourceの実Blender受入とHost fixtureの範囲は前2記録を参照。
+本番read-onlyでJobs459全終端（325 succeeded/126 failed/8 canceled）、
+GUI23全終端、working copy active0を確認。MF PID700886 active。
+Hostは別作業main a564c38/PID816370、frontend/tsconfig.tsbuildinfoの変更は保全する。
+この時点で新bundleのbuild・署名・公開・標準update・installed retryは未実施。
+全 `./mf.sh test`: 1128 passed/既知warning1/158.41秒。diff check成功。
+全体3DS-8/GOAL-07等の未確認条件を縮小しない。
+
 ## 2026-09-06 material failed-stage retry reuses existing image
 
 PR #334 merge `4a86add7fecbe25e20ae74521f9c4e8530b735ce`から
