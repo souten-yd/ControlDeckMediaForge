@@ -8,6 +8,12 @@ Web Blender primary navと共通Library formats/lineageを同じ既存MediaForge
 gate `./mf.sh test`: 1052 passed / 既知warning1 / 117.71秒。利用者のBlender Skills連携依頼を優先し、
 branchをcommit/pushして公開前に中断。release PR/merge/tag/build/sign/installは未実施。
 
+再開時、PC boot 2026-09-06 14:40:53を確認。Host PID2196 active、MediaForgeは
+0.28.28 installedだがenabled=false/health=error、unit disabled/inactive/MainPID0。
+無断で再有効化せず利用者へ確認中。再起動直前の追加testは634 passed時点で明示中断(exit2)、
+全通過の証拠には含めない。保存済み版数branchからサービス変更なしでrelease準備を再開する。
+再起動後の再実行 `./mf.sh test`: 1052 passed / 既知Starlette warning1 / 115.55秒、exit0。
+
 ## 2026-09-06 Common Library formats and lineage — source acceptance
 
 PR #285 Web Blender navigationは通常merge `ae9ed17f77ddd39df9b3236db4bdbfcd6dbbe11d`を確認。
