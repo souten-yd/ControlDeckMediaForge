@@ -43,6 +43,15 @@ def test_web_blender_has_dedicated_navigation_and_route():
     assert '@app.get("/web-blender")' in (BACKEND / "app.py").read_text()
 
 
+def test_standalone_routes_follow_url_without_changing_embedded_bridge():
+    assert 'window.parent === window ? standaloneView() : state.preferences.last_view || "create"' in SCRIPT
+    assert 'history.pushState(null, "", path)' in SCRIPT
+    assert 'if (location.pathname !== path)' in SCRIPT
+    assert 'window.addEventListener("popstate"' in SCRIPT
+    assert 'if (window.parent === window) activate(standaloneView(), {sync: false})' in SCRIPT
+    assert 'callHost("host.route.sync"' in SCRIPT
+
+
 DOM_IDS = (
     "app", "skeleton", "shell-header", "shell-nav",
     "nav-create", "nav-library", "nav-activity", "nav-settings", "nav-web-blender", "view-web-blender",
@@ -1323,7 +1332,7 @@ def test_progress_is_recovered_from_the_job_that_is_still_running():
     assert "!TERMINAL.has(item.status)" in body, "走っている job を拾っていない"
     assert 'call("jobs.watch"' in body, "拾い直した job に通知を張っていない"
     # boot でも view に依らず拾う。ミニ進捗は create 以外でも出る。
-    boot = SCRIPT[SCRIPT.index('activate(state.preferences.last_view'):]
+    boot = SCRIPT[SCRIPT.index('activate(initialView,'):]
     assert "restoreProgressView();" in boot[:400], "起動時に拾い直していない"
 
 

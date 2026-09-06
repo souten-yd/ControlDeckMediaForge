@@ -3,6 +3,41 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 standalone direct routes and browser history
+
+PR #309 merged `33c18588abccdc0ac6253b7574c7cee7a6784f48`。
+branch `ux1/3d-standalone-routes`。専用stashのroute変更を復元済み。
+frontend/app.jsは単体起動の初期画面をURLから選び、last_viewより優先する。
+既存/jobsはActivity、/modelsと/profilesはSettingsへ対応。/と/createはCreate。
+ナビ移動は同じpathなら履歴を増やさずpushState、popstateはsync:falseで表示だけ更新する。
+Host iframeのhost.route.sync/route.changedと既存初期preferences経路は変更していない。
+API/依存/公開契約/Blender実行処理の変更なし。
+
+前回signed0.28.32の/library直開き失敗を根拠に修正。
+source serverは既存専用 `/data1tb/mf-no-blender-0.28.32-jODjIO/feature/data` を使用、
+MEDIA_FORGE_BLENDER_MANAGED_ROOTを同feature/runtimes/blender、
+MEDIA_FORGE_BLENDER_LEGACY_ROOTを専用absent-legacyに指定。
+`PYTHONPATH=backend .venv/bin/python -m uvicorn mediaforge.app:create_app --factory
+--host 127.0.0.1 --port 9161`（PID144938）。製品source、HTTP応答/JS overlayなし。
+既存Host診断venvのPlaywrightで実headed Chrome、DISPLAY=:0/実XAUTHORITY、
+`scripts/3ds_standalone_routes_e2e.py --evidence-dir /data1tb/mf-standalone-routes-source-20260906`、
+exit0/48 checks。日本語1280/320pxで9 routes直開きとreload、Library→Web Blender→Activity、
+back2回/forward、同一tab再click時history.length不変をassert。
+Jobs/assets/runtime/sessions API前後完全一致、page errors0、320px screenshot目視確認。
+移動でBlenderやJobは開始しない。source PID144938はSIGINT後exit0。
+
+最初のroute全testは1059 passed/1 failed/153.27秒。
+切断testのscene_upload_busyは別PR #309でgraceful closeのtest前提を修正し、製品変更とは分離。
+関連frontend tests153件pass。#309統合後の全gateは1059 passed/1 failed/161.27秒。
+今度はtest_workspace_websocket_chunk_import_exceeds_single_message_bound_and_cleans_upが失敗し、
+orphan画像uploadのwork directoryが残った。これもcontext終了によるASGI cancel後に
+cleanupを待つtestであり、画像側は#309の修正範囲外。未解決として保持する。
+本sliceはsource受入であり、修正の署名package/installed受入はNOT TESTED。
+次は版数更新と署名配布後、同route scriptで公開packageを検証する。
+Blender不在での実画像生成と残る必須シナリオは未完了。3DS全体はPARTIAL。
+最終全gate再実行は1060 passed/既知warning1/140.78秒。node --checkとdiff check成功。
+再実行の成功を画像upload切断testの根治扱いしない。本番PID2078/60180は不変。
+
 ## 2026-09-06 deterministic graceful-disconnect transport gate
 
 PR #308 merged `f52c3eb2833ade09718b689880da4700795d7a74`。

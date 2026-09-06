@@ -1037,6 +1037,13 @@ async function savePreferences(values) {
 
 /* ── views ────────────────────────────────────────────────────────────── */
 
+function standaloneView(pathname = location.pathname) {
+  const name = pathname.replace(/^\/+|\/+$/g, "");
+  if (name === "jobs") return "activity";
+  if (name === "models" || name === "profiles") return "settings";
+  return VIEWS.includes(name) ? name : "create";
+}
+
 function activate(name, {sync = true} = {}) {
   const view = VIEWS.includes(name) ? name : "create";
   // 設定を閉じたときに戻る先。設定の前にいた画面へ返す。
@@ -1059,9 +1066,16 @@ function activate(name, {sync = true} = {}) {
   if (view === "settings") void loadSettings();
   if (sync && state.bridgePort) {
     void callHost("host.route.sync", {path: view === "create" ? "/" : `/${view}`}).catch(() => {});
+  } else if (sync && window.parent === window) {
+    const path = view === "create" ? "/" : `/${view}`;
+    if (location.pathname !== path) history.pushState(null, "", path);
   }
   if (state.preferences.last_view !== view) void savePreferences({last_view: view});
 }
+
+window.addEventListener("popstate", () => {
+  if (window.parent === window) activate(standaloneView(), {sync: false});
+});
 
 /* ── create ───────────────────────────────────────────────────────────── */
 
@@ -9273,10 +9287,8 @@ async function boot() {
   if (usable(snapshot.library)) await applyRecent(snapshot.library);
   restoreCreativeComposition(snapshot);
   restoreCreativeBatch(snapshot);
-  activate(state.preferences.last_view || "create", {sync: false});
-  if (window.parent === window && location.pathname === "/web-blender") {
-    activate("web-blender", {sync: false});
-  }
+  const initialView = window.parent === window ? standaloneView() : state.preferences.last_view || "create";
+  activate(initialView, {sync: false});
   // create 以外を開いていても、走っている job は拾ってミニ進捗に出す。
   restoreProgressView();
   // watch はサーバが session と一緒に張る。standalone だけ従来どおり要求する。
