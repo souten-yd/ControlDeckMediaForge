@@ -9591,3 +9591,22 @@ PR #273 merge `7e6462e`の比較ボタン保持修正を配布するためaddon/
 canvas補正を含む並行変更を保持。新版署名/公開/導入/installed受入はNOT TESTED。
 版準備gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 110.06秒。
 全体3DS-6/3DS-8はPARTIAL。
+
+## 2026-09-06 v0.28.26 signed / installed
+
+PR #274 merge/tag `c262cf23f67a9f17a7bcee3d93f13e36fd7f577d` exact sourceから正式bundle構築・署名公開。
+31,491,976 B / SHA `fc1520265de2df36fe7725cf2638d503d47545353828b6487d4ded31ff7f4408`。
+公開4 asset再取得checksum/Host publisher verifier/tag target確認成功。packaged doctor ok/0.28.26。
+core SHA `ff4d657253a229e36e3375f3e1840492ee97c4ae25f944c484c69d62e464d0da`はinstalled実体と一致。
+全Job/session/runtime/model operation終端を確認し、private online DB backup
+`/data1tb/mf-0.28.26-pre-update-20260906.sqlite3`（1,712,128 B）を保持。
+標準registry.update 10.380秒、0.28.25→0.28.26/healthy/enabled。
+MF PID2677797/12:26:16 JST、Host PID2642902/11:51:27 JSTは不変。
+
+既存mf-e2e sceneのread-only refreshでbutton_retained=True/scene_unchanged=Trueを確認。
+DOM保持は確認したが、新規fixtureのfull browser E2Eは比較/破棄/採用1→2後の旧版比較openでtimeout。
+証拠 `/data1tb/mf-material-preview-installed-0.28.26-20260906`、frameにpointer/clickなし、
+locked/disabled false、compareReady0/dialog false。全timeoutを修正済みとしない。
+次はHost/iframeのhit targetと座標をread-only検証。生成画像/OpenCode一巡/全release A〜Fは未完了。
+exact release worktreeを削除（再作成可）、build/package directoryをgio trashへ退避（復元可）。
+公開再取得 `/data1tb/mf-0.28.26-public-20260906`、browser証拠、private backupを保持。

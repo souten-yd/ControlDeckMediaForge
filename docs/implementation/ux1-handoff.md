@@ -3,6 +3,31 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.26 signed / installed, comparison timeout remains
+
+PR #274 merge/tag target `c262cf23f67a9f17a7bcee3d93f13e36fd7f577d`からexact bundle構築・正式署名公開。
+31,491,976 B、SHA `fc1520265de2df36fe7725cf2638d503d47545353828b6487d4ded31ff7f4408`。
+公開4 asset再取得/checksum/Host publisher verifier/tag target成功。packaged doctor ok/0.28.26。
+core SHA `ff4d657253a229e36e3375f3e1840492ee97c4ae25f944c484c69d62e464d0da`はinstalled実体と一致。
+全Job/session/runtime/model operation終端を確認し、private online DB backup
+`/data1tb/mf-0.28.26-pre-update-20260906.sqlite3`（1,712,128 B）を保持。
+標準registry.update 10.380秒、0.28.25→0.28.26/healthy/enabled。
+MF PID2677797/12:26:16 JST、Host PID2642902/11:51:27 JSTは不変。Host restart要求なし。
+
+既存専用mf-e2e scene `scene_257528fdd6a540818537d5e93f893870`でread-only DOM identityを再検査。
+openScene→比較button参照保持→同一scene再取得後のbutton.isConnected=True、scenes.get前後一致=True。
+0.28.23のFalse/Trueに対しDOM保持修正の導入は確認できた。試験ログインは個別作成/revoke、password不変。
+一方、`3ds_material_preview_installed_e2e.py --expected-version 0.28.26`の新規scene
+`scene_fceb3d1ae9b24f3da38cfb9ec879cdbd`は比較/破棄/採用1→2後、旧版比較openで再びtimeout。
+証拠 `/data1tb/mf-material-preview-installed-0.28.26-20260906`。pointer/clickがframeへ届かず、
+locked/disabled false、compareReady0/dialog false。DOM保持だけで全timeoutが解消したとはしない。
+次は旧版比較ボタンの実座標とHost/iframe側のhit targetを観測し、入力が届かない経路を特定する。
+直接JS呼出で比較を開いて操作成功の代用にしない。既存sceneを読み取り専用で使い試験資産の増加を避ける。
+
+exact release worktreeを削除（Gitで再作成可）、build/package作業directoryをgio trashへ退避（復元可）。
+公開再取得 `/data1tb/mf-0.28.26-public-20260906`、browser証拠、private backupは保持。
+新版full browser flowはFAILED、生成画像/OpenCode一巡/全release A〜Fは未完了。全体3DS-6/3DS-8はPARTIAL。
+
 ## 2026-09-06 v0.28.26 source preparation
 
 PR #273 merged `7e6462e551db430052ae471d7782cb5b4094ee89`。公開latestと実installedは
