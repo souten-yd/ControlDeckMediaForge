@@ -17,6 +17,11 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 ## 利用者ゴール別
 
+2026-09-06 Library追加: 専用source synthetic lineageで親65/子63の実HTTP/Chrome日英320を確認。
+60/60→5/3→60/60、全128 ID欠落/重複なし。英語Validation空fallbackを修正・source再受入。
+`/data1tb/mf-library-paging-20260906`。installed本番は最大children12件のみで、
+この境界受入をinstalled60件超の証拠にはしない。実Host動的locale通知も残件。
+
 2026-09-06 v0.28.35: PR #326 exact mergeから署名公開しconsumer/Host trust照合、標準update
 16.54秒。package実Chromeでは日英320の旧版削除/再導入、旧版不在のGLB/backupを79.551秒で確認。
 installed日本語1280/320・英語geometry probe1280/320とnative desktopで確認checkbox/active保護、
