@@ -9342,3 +9342,11 @@ Hostは10:38:41 JST/PID2495560/active、health200へ復帰後に同条件を再�
 NOT TESTED: 照明修正の正式署名版/overlayなしinstalled受入、材質比較からの新規採用全操作、
 新版での画像生成/G8実worker回帰、日英/実mobile touch、長時間credential。installed0.28.19は変更なし。
 全体3DS-8/GOAL-06はPARTIAL。次はこのsliceをPR/merge後、署名新版と同じ比較/6軸のinstalled受入。
+
+## 2026-09-06 v0.28.20 source preparation
+
+PR #257 merged `2b527d0`の材質照明/context復旧修正を正式配布するため、addon/core versionを0.28.20へ同期。
+初回read-only確認: installed0.28.19/healthy/enabled、Host/local active Job0、active Web session0。
+Host PID2499072/MF PID2470070はいずれもactive/running。更新直前に再確認する。
+署名公開・導入・overlayなしの比較/6軸受入は未実施。全体3DS-8/GOAL-06はPARTIAL。
+版準備gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 103.75秒。diff check成功。

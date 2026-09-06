@@ -3,6 +3,16 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.20 source preparation
+
+PR #257 merged `2b527d05858bbc4e279d18be16ee85f48b285cd5`。
+branch `ux1/3d-material-v02820`でaddon/core versionを0.28.20へ同期。材質照明/context復旧修正は
+同PRのコードを維持する。初回確認でinstalled0.28.19/healthy/enabled、Host/local Job0、Web session0。
+Host PID2499072、MF PID2470070。今回Host変更/restartは要求していない。
+次は版準備PR gate/merge後、exact mainの正式bundle署名公開・標準update・比較/6軸のinstalled受入。
+この段階では新版の公開/導入はNOT TESTED。全体3DS-8/GOAL-06はPARTIAL。
+版準備gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 103.75秒。diff check成功。
+
 ## 2026-09-06 metallic material comparison candidate
 
 PR #256 merged `8ba4f66`を基準にbranch `ux1/3d-material-compare-acceptance`。
