@@ -3,6 +3,56 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 same-sword material / Web Blender / restore acceptance
+
+PR #281 merged `27f732b72091d695718bc88c064577ba68a1dcd9`から
+branch `ux1/3d-sword-ui-flow`。新script `scripts/3ds_sword_ui_flow_e2e.py`。
+OpenCodeで作った同一scene `scene_f1554d9ba0f741968d9c468206ea3198`だけを使用する。
+native headed Chrome、実opaque iframe、個別session作成/revoke、password不変。
+モデル/runtime取得、Hostコード変更、service restart、frontend overlayは行わない。
+
+最初の実行はHost診断venv/PYTHONPATH=Host backendで同scriptに
+`--scene-id <同ID> --existing-image-id asset_bd5a2cabd39a4e12b3682049a1a16946
+--expected-version 0.28.27 --evidence-dir /data1tb/mf-sword-ui-flow-0.28.27-20260906`。
+既存画像の比較/破棄でhead不変、採用だけ2→3版を確認。
+画像Job `job_4f38ad44c01a4c1b8e87060d4caf9692`はwaiting_resource。
+Host GET /api/v1/resourcesは200、insufficient_vram、GPU使用19,684,872,192 B、
+lease予約0、画像worker PID2734937が残っていた。前のleaseはexpired。
+sourceの_lingerへ待機jobを入れたlocal再現でも0.5秒でmonitor終了、worker/execution保持、renew0。
+これは常駐monitor早期returnの再現であり、lease handoff全体を検証したものではない。
+試験Job取消を通常UI transportで要求した時点では、並行service停止によりすでに
+failed/service_stopped（cancel_requested0、04:11:30 UTC）だった。取消成功とは記録しない。
+並行PR #282 `b625da4`の0.28.28/常駐既定無効化をfetchして取り込み、registry healthyを確認。
+本sliceは常駐機能を変更していない。旧workerも消えたことをpsで確認した。
+
+`--expected-version 0.28.28 --resume-after-existing`と新evidence-dir
+`/data1tb/mf-sword-ui-flow-0.28.28-20260906`で同じ第3版から再開。
+新Job `job_697a8b218d904f26b546125a3f5f145f`は10.082秒でsucceeded、
+生成画像 `asset_db2cf2d984c54c7aaa0cca006be72d8a`、FLUX.2 Klein4B、
+weights `sha256:f3fcfa8fdaf5ebcd26c33cd53b485ec5ebe54939b5ace585b3f488278dfae278`。
+生成・候補比較・破棄でhead不変、採用3→4版。Blender起動後の画面open操作を試験が抜かしtimeout。
+同sessionへ再接続する試験はHost接続拒否で終了。その後実HTTP200とunit生存を確認して再接続した。
+二つのGUI保存試行は第5/6版を作ったがmesh数が増えず、編集成功のassertionを失敗させた。
+失敗JSON/screenshotを削除せず保持。第5/6版を手動形状編集の成功証拠にしない。
+
+最終commandは同scriptに `--expected-version 0.28.28 --resume-gui --resume-gui-revisions 6
+--evidence-dir /data1tb/mf-sword-ui-flow-gui-canvas-0.28.28-20260906`（scene/image引数は同じ）。
+noVNC canvasをclickして選択A→Shift+D→X/0.02/Enter、RFB入力処理の待機を入れる。
+実画像でBlade.001/Camera.001/Guard.001とX=0.02mを確認。mesh4→8、triangles292→584、
+revision6→7 `revision_f3407cff162f4487ae2d17a863c5339f`の検査済み保存。
+第6版を比較画面から第8版 `revision_7af7f629a4d949ada5ec717ab6ef917c`として復元し、mesh4/292 triangles。
+旧全版不変、page errors0、origin null。source asset `asset_dc34497d22874eceac048e0d1ba86734` と
+復元asset `asset_328e01e7545441ffa6437f2ec3d7b6dc`の実.blendにsha256sumを実行し両方
+`5ca5e3846b1c5731b7b29e86a5cef8577342ea8fc6f72598461e35c22350a94c`で一致。
+session `blendersession_a62489b8f3124f8589edc84df4d77dbb`のunitはnot-found/inactive/MainPID0、
+同sceneのactive session0。編集/保存/復元まで成功、単一無中断runではない。
+scriptは明示resume時に版数/依存を照合し、成功済み画像を生成し直さない。
+
+scenario Bは同一剣の既存画像→新規画像比較採用→GUI入力保存→旧版復元まで確認。
+残りは第8版からGLB/ZIPをexportし、現在projectへの新しいgrant/receipt/hashを照合すること。
+既存の第2版の配置証拠で埋めない。長時間credential refresh/全A〜F/全体3DS-8は未完了。
+gate `./mf.sh test`: 1045 passed / 既知Starlette warning1件 / 121.40秒。diff check成功。
+
 ## 2026-09-06 OpenCode shape / generated texture / project delivery
 
 PR #277 merge `7435db65c9bb28f066e402d8d547319fc8000322`をfetch確認。
