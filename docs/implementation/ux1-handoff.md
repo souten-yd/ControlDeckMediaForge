@@ -3,6 +3,50 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 clean package Web pack / real GUI continuation
+
+PR #305 merged `04388c98a2b16ae8871a34e0a74cd85de5bd6302`確認。
+branch `ux1/3d-clean-web-pack`。新 `scripts/3ds_clean_web_pack_e2e.py`、製品/Host変更なし。
+前回の専用 `/data1tb/mf-clean-packaged-0.28.32-QBvHfm` と署名package0.28.32を
+同じfeature/cache/absent-legacy/port9161指定で再起動（PID66056）。
+導入済みの専用Blender `.../feature/runtimes/blender/blender-4.5.9-linux-x64/install/blender`
+のfactory-startup/backgroundから `<root>/acceptance-cube.blend` を新規保存した。
+最初にbin/blenderを指定したcommandは存在せずexit127、実配置を確認してinstall/blenderへ訂正。
+既存利用者ファイル/production runtimeは変更していない。
+
+実headed Chrome、日本語Settingsで同scriptに
+`--blend <root>/acceptance-cube.blend --evidence-dir /data1tb/mf-clean-web-pack-browser-0.28.32-20260906`。
+web missingから専用導入buttonをclick、7.034秒でready。
+operation `blenderop_82248c9c0f944cb38510b6593dd74072`、
+TigerVNC1.16.2/noVNC1.7.0、software_display probe成功。
+実download15,769,716 B、2 archive実hashを独立照合:
+TigerVNC15,042,988 B/SHA `5b70c84baefc09a030cfc78315c34ccb55b2a0dde4092b7da67a1962c5f0dea6`、
+noVNC726,728 B/SHA `b1003a11b6e6e8d8f7f5e5586daae7f8ca651d8aee0aa155ff9ac841c48f52c6`。
+展開165 members/35,067,968 Bと244 members/2,471,032 B。
+UI importは10.752秒でscene `scene_2642c93f480d427d920267ac790405e2`、
+revision `revision_498980e910484e38a621d2d5844bed03`（1版）。
+実validatorはBlender4.5.9/mesh1/triangles12/vertices8、GLB構造passed/1,936 B。
+
+初回scriptは起動後の自動画面openを誤って仮定し42.798秒でtimeout。
+実UIは起動→ready→「Blenderへ戻る」の2段階。製品変更は不要と判断しscriptを訂正。
+actionもweb専用名ではなくruntime_idで対象operationを識別、sceneDocumentのID参照を訂正。
+元processを再起動せず、`--resume-scene scene_2642c93f480d427d920267ac790405e2` で
+`/data1tb/mf-clean-web-pack-resume-0.28.32-20260906`へ再実行、exit0/1.919秒。
+同session `blendersession_f218e5c939ea4d3594b30eaff34d9766` のRFB接続、
+実Blender4.5.9/cube/通常GUIをscreenshotで目視確認し、UI「破棄して終了」でstopped/saved=false。
+sceneは1版を維持、page errors0。公開session snapshotのgui_ready行は直前のdisconnected状態だが、
+画面の接続表示/実framebufferと最終session.connected_atで接続を確認した。
+systemd user unit `mediaforge-blender-f218e5c939ea4d3594b30eaff34d9766.service` inactive/MainPID0、
+DBもstopped。基本/webの2 setup operationはready。
+package PID66056へSIGINT後exit0。専用scene/runtime/archiveは次のG8 ZIP受入用に保持。
+
+これは空Blender setupからの同一専用環境でのweb導入→import→GUI表示→終了を、
+失敗/再開を含めて確認したもの。GPU描画、GUI編集保存、画像生成、G8 ZIP、
+installed Host iframeのclean install、scenario A全体は未完了。
+次は同じGLB `asset_d8548f7e2e3548359b4656b9dddc4781` からG8 ZIP生成と内容検証を進める。
+source Assetは `asset_24d8b1a3e1654c4d9c4a18a7c046393e`。本番serviceは変更なし。
+gate `./mf.sh test`: 1054 passed / 既知Starlette warning1 / 112.45秒。diff check成功。
+
 ## 2026-09-06 clean packaged Blender install / browser reconnect
 
 PR #304 merged `f61e47dea0d2058b9357c57b24e74a5411282f65`確認。
