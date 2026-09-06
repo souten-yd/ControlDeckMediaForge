@@ -39,7 +39,7 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 | 条件 | 残る照合・実測 |
 |---|---|
 | A clean環境/表示 | 全操作、320px、日英、既存画像がBlender不在でも利用可能な証拠。390pxだけで320px成功とはしない |
-| B 制作一巡 | OpenCode剣scene_f1554d9ba0f741968d9c468206ea3198で生成画像/材質/配置まで確認。同じ剣で既存画像→候補比較/採用→GUI修正→復元→再配置を残す |
+| B 制作一巡 | 同一OpenCode剣で既存画像2→3、新規生成/比較採用3→4、GUI入力mesh4→8/6→7版、第6版を第8版へ復元/実blend hash一致まで確認（途中失敗・再開あり）。第8版のGLB/ZIP再配置と新receipt/hash照合を残す |
 | C lifecycle | 既存crash/idle/restart/expiry証拠は維持。競合candidateは保持だけを復旧完了としない |
 | D 更新/削除 | 稼働A中にB導入、B probe失敗、A削除拒否、停止後Aのみ削除と資産hash保持、External解除、容量不足/中断を個別照合 |
 | E GPU/長時間 | 132秒SIGSTOPはdetached維持/取消の証拠のみ。期限内child credential refreshの実応答、Host終端、120秒超制作と10分超session/setupの対応を実測 |
