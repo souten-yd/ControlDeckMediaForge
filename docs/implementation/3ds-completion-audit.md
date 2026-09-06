@@ -212,6 +212,15 @@ sent=trueは確認したが、refresh監査は各0件。証拠
 
 ## 今回発見した具体的なコード差分
 
+2026-09-06 source材質retry追加受入: 実生成済みPNGを専用Storeへ通常importし、
+typed cube作成→材質workerの対象名fault→元requestのretryを実Blender4.5.9で実行。
+失敗時のscene/版/既存Asset bytes・provenance不変、manager再作成後のretryでだけ新2素材/第2版。
+元画像/形状Job全field不変、画像generation/edit Job0、新Jobは材質2試行だけ、
+同じ画像dependency ID/hash、runtime/working/staging回収を2.386秒exit0で確認。
+`/data1tb/mf-material-retry-source-20260906-final/observations.json`。
+Host controlはfixture、画像生成は過去の別runであり、このrunでの生成完走ではない。
+installed/HTTP/browser/全retry条件は残す。GOAL-07の全体完了は主張しない。
+
 ### retryが現在のactive Blenderへ変わる（2026-09-06 / main e3c19a2）
 
 scene.createのretryは元Jobのruntime pinを持つが、取得時にresolve_activeで再選択していた。
