@@ -9,7 +9,9 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 正式署名公開・標準updateしLibrary viewerをoverlayなしで受入した。さらにv0.28.20（target `c26f67d`）
 の材質照明・新旧双方のcontext復旧をinstalled受入した。さらに0.28.23（target `22fc2b9`）を
 署名公開・標準updateし採用前候補比較/破棄/採用/復元をinstalledで確認。
-2026-09-06の現在稼働版は0.28.36/healthy（署名公開/consumer検証/標準updateを追加確認）。
+2026-09-06の現在稼働版は0.28.37/healthy（署名公開/consumer検証/標準update14.645秒）。
+更新前後8テーブル全行/registry不変、real63-child Library paging/offset60 locale保持を
+installed320/1280で再受入した。retryのactive切替実行は未確認。詳細はstatus/handoff。
 0.28.26ではnative windowで比較入力・不変refreshのDOM保持と全比較/採用/復元を確認した。
 新版の他操作の受入を旧版やcandidateの証拠から推定しない。
 以前の個別実測は維持するが、条件の一部だけの実測から行全体を成功扱いしない。

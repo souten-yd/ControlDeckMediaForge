@@ -3,6 +3,58 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.37 signed retry release installed
+
+PR #336 merge/tag target `bb949db9d927ce2074f34a7aab0b89254528c38b`。
+exact detached /data1tb/ControlDeckMediaForge-release-0.28.37で標準buildを実行、
+--output-dir /data1tb/mf-0.28.37-build-20260906。PyInstaller6.22.0/Python3.12.3、exit0。
+artifact31,516,076 B、SHA 7eb1c6490fc21d42784a1e382275b999936485cdfeacd0de3e26c215503964b5。
+展開 /data1tb/mf-0.28.37-package-mkemqdqj/control-deck-media-forge-0.28.37-linux-x86_64。
+archive6 entries/embedded199を検査、秘密値・venv・重み・制作物の混入なし。
+最初の一律runtimes拒否は同梱requirements.txtに反応したため、依存定義と実体を区別して再検査。
+最初のdoctorは必須feature data環境変数なしで拒否。専用領域を明示した再実行で
+ok/version0.28.37/packaged=true/exit0。addon/feature版一致、PYZ内retry_pinも確認。
+core SHA 73d4384a9e9476f208ca3980c2a3f6697bafd16465dd34966f30fdea308912fa。
+
+同じ未公開packageを専用systemd unit mf-library-02837-acceptance/9163で起動。
+専用fixture Storeを使用しhealthは環境snapshot不在のsetup_required。healthyとは扱わない。
+`3ds_library_paging_e2e.py browser --server-kind bundle
+--evidence-dir /data1tb/mf-library-paging-bundle-0.28.37-20260906`は日英320で全pass。
+親60/子60→5/3→先頭復元、128 ID集合/一意、英語fallback、横overflow0/errors0。
+synthetic lineage/standalone package受入であり、実制作/installed Host受入とは区別。
+試験後にexact owned unitをstopしinactiveを確認。
+
+既存publisher key（mode0600）で署名・自己検証、GitHub v0.28.37の4 assetsを公開。
+公開consumer取得先 /data1tb/mf-0.28.37-public-20260906でsha256sum -c OK、
+build artifactとcmp一致。GitHub tag exact target一致、Host trusted publisherの
+_verify_signed_releaseでversion/hash/size一致。global agent設定/既存Blender変更なし。
+
+更新前snapshot /data1tb/mf-0.28.37-pre-update-20260906:
+directory0700、DB2,809,856 B/integrity ok/files0600。
+registry SHA dd43b2e8b6897c9671958c3b4cc2f57dca82969a5d1d8492909761e86636741a。
+更新直前にsnapshotと8テーブル全行一致を再検査してから標準registry.updateを実行。
+14.645秒で0.28.36→0.28.37/healthy/enabled/requested_enabled=true。
+current→versions/0.28.37、installed core SHAはpackageと一致。
+更新後もassets/scene_documents/scene_revisions/blender_web_sessions/jobs/
+scene_working_copies/blender_runtime_operations/model_operationsの全行（rowid順）が一致、
+registry bytesも不変。MF PID848621 active、こちらからHost restartなし。
+
+製品全gateは版準備時1128 passed/既知warning1/158.41秒。本追記は実測docsのみ。
+再試行時active切替のinstalled実行と全GOAL/scenario matrixは引き続きPARTIAL。
+installed Library `3ds_library_locale_installed_e2e.py --expected-version 0.28.37`を
+既存real63-child fixtureで320/1280実行。初回320はpage.gotoでHost8765接続拒否。
+MFは同PID848621/active、Host旧PID816370は終了し新PID849052/HTTP200へ回復したことを
+read-only確認。こちらからrestartせず、終端したbrowser試験だけを別証拠directoryで再実行。
+成功証拠 /data1tb/mf-library-real-paging-installed-0.28.37-320-20260906-r2 と
+/data1tb/mf-library-real-paging-installed-0.28.37-1280-20260906、双方exit0。
+実Host opaque iframeで子60→3→60→3/63 ID一意・全集合、offset60で日英通知[ja,en]、
+source/filter/関連列/scene/load/session保持、横overflow0、scene不変/page errors0。
+language入力のみfixture、Host通知/素材応答は実経路。新規制作Jobなし。
+終了時Host849052/MF848621ともactive。Host別作業mainは2a6f237になっており保全した。
+次のinstalled retry候補は専用user:16の取消Job job_fb5b2171ee68442f86b889b10754273b
+（Credential acceptance 6fee7bad1386 cancel、primitive1、runtime4.5.13）。
+候補選定はread-onlyで、再試行・active切替はまだ行っていない。
+
 ## 2026-09-06 v0.28.37 retry release preparation
 
 PR #335 merge `4d508774dd7f859494b93bb3c07b204c0b6bf77c`をfetch確認。
