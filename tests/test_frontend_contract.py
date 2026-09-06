@@ -140,6 +140,9 @@ def test_blender_runtime_lifecycle_has_embedded_and_standalone_receivers() -> No
         "blender.runtime.switch",
         "blender.runtime.remove.preview",
         "blender.runtime.remove",
+        "blender.runtime.unregister.preview",
+        "blender.runtime.unregister",
+        "blender.runtime.register_legacy",
         "blender.runtime.operations.cancel",
     ):
         assert method in SCRIPT

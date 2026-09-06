@@ -36,6 +36,13 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 ## 必須シナリオ別
 
+2026-09-06 External追加: resolverの永続抑止/明示再登録（#317）に加え、
+source private HTTP/WS管理操作と設定UIを実装。専用source日本語Chrome1280/320で
+確認取消・登録解除・reload後非復活・再登録、active managed維持を5.973秒exit0で確認。
+`/data1tb/mf-external-settings-browser-20260906`。外部5,580 filesのsize/SHA/mode不変。
+project確認後変更拒否はunit fixture。installed Host/英語/実project参照browser拒否は
+未検証であり、これだけでExternal全条件やscenario D全体を完了にしない。
+
 2026-09-06削除追加: `/data1tb/mf-runtime-removal-resume-20260906/observations.json`。
 専用source HTTPで旧4.5.9のGUI ready/停止後ともproject参照によりremove POST422。
 未参照4.5.13だけ削除成功（1,167,187,993 B）、旧版/scene/revisions/全6 Asset filesの

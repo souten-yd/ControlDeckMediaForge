@@ -571,17 +571,22 @@ async function standaloneCall(method, params) {
       }),
     });
   }
-  if (method === "blender.runtime.remove.preview") {
+  if (method === "blender.runtime.register_legacy") {
+    return json("/workspace-api/blender/runtime/operations", {
+      method: "POST", body: JSON.stringify({action: "register_legacy"}),
+    });
+  }
+  if (["blender.runtime.remove.preview", "blender.runtime.unregister.preview"].includes(method)) {
     return json("/workspace-api/blender/runtime/operations", {
       method: "POST", body: JSON.stringify({
-        action: "remove_preview", runtime_id: params.runtime_id,
+        action: method.includes("unregister") ? "unregister_preview" : "remove_preview", runtime_id: params.runtime_id,
       }),
     });
   }
-  if (method === "blender.runtime.remove") {
+  if (["blender.runtime.remove", "blender.runtime.unregister"].includes(method)) {
     return json("/workspace-api/blender/runtime/operations", {
       method: "POST", body: JSON.stringify({
-        action: "remove", runtime_id: params.runtime_id,
+        action: method.includes("unregister") ? "unregister" : "remove", runtime_id: params.runtime_id,
         confirmation_fingerprint: params.confirmation_fingerprint,
       }),
     });
@@ -7901,6 +7906,10 @@ const BLENDER_TEXT = {
     removeTitle: "Blender環境を削除", removeConfirm: "削除する", back: "戻る",
     removeReady: "この管理環境だけを削除します。画像・制作物・履歴は削除しません。",
     removeBlocked: "この環境は使用中のため削除できません。",
+    unregister: "登録解除", registerLegacy: "既存環境を再登録",
+    unregisterTitle: "既存Blenderの登録を解除", unregisterConfirm: "登録を解除する",
+    unregisterReady: "Media Forgeの登録だけを解除します。外部Blenderのファイル・画像・制作物・履歴は変更しません。",
+    unregisterBlocked: "この環境は使用中または制作物が参照しているため、登録を解除できません。",
     liveRefs: "実行中の参照", projectRefs: "制作物の参照",
     operation: "環境処理", failed: "環境処理に失敗しました",
     operationStates: {
@@ -7928,6 +7937,10 @@ const BLENDER_TEXT = {
     removeTitle: "Remove Blender runtime", removeConfirm: "Remove", back: "Back",
     removeReady: "Only this managed runtime will be removed. Images, projects, and history are kept.",
     removeBlocked: "This runtime cannot be removed while it is in use.",
+    unregister: "Unregister", registerLegacy: "Re-register existing runtime",
+    unregisterTitle: "Unregister existing Blender", unregisterConfirm: "Unregister",
+    unregisterReady: "Only the Media Forge registration is removed. External Blender files, images, projects, and history are unchanged.",
+    unregisterBlocked: "This runtime is active or referenced by a project and cannot be unregistered.",
     liveRefs: "Live references", projectRefs: "Project references",
     operation: "Runtime operation", failed: "Runtime operation failed",
     operationStates: {
@@ -7968,8 +7981,11 @@ function renderBlenderRemovalPreview() {
   const preview = state.blenderRemovePreview;
   if (!preview) return;
   const text = blenderText();
+  const external = preview.operation === "unregister";
+  byId("blender-remove-title").textContent = external ? text.unregisterTitle : text.removeTitle;
+  byId("blender-remove-confirm").textContent = external ? text.unregisterConfirm : text.removeConfirm;
   byId("blender-remove-summary").textContent = preview.can_remove
-    ? text.removeReady : text.removeBlocked;
+    ? (external ? text.unregisterReady : text.removeReady) : (external ? text.unregisterBlocked : text.removeBlocked);
   byId("blender-remove-detail").textContent = `Blender ${preview.version} · ${
     formatBytes(preview.reclaimable_bytes)} · ${text.liveRefs} ${
     preview.live_reference_count} · ${text.projectRefs} ${preview.project_reference_count}`;
@@ -7991,6 +8007,7 @@ function renderBlenderRuntime() {
   byId("blender-runtime-install").textContent = text.install;
   byId("blender-web-install").textContent = text.webInstall;
   byId("blender-runtime-update").textContent = text.update;
+  byId("blender-runtime-register-legacy").textContent = text.registerLegacy;
   byId("blender-runtime-cancel").textContent = text.cancel;
   byId("blender-runtime-details-label").textContent = text.details;
   byId("blender-remove-title").textContent = text.removeTitle;
@@ -8026,6 +8043,8 @@ function renderBlenderRuntime() {
   const operation = (value.operations || []).find((item) => !terminal.has(item.state));
   if (operation) watchStandaloneBlenderOperation(operation.id);
   const lastFailed = (value.operations || []).find((item) => item.state === "failed");
+  byId("blender-runtime-register-legacy").hidden = !value.legacy_registration_disabled
+    || Boolean(operation) || value.state === "invalid";
   byId("blender-runtime-install").hidden = ["ready", "invalid"].includes(value.state)
     || Boolean(operation)
     || value.management_available === false
@@ -8072,6 +8091,13 @@ function renderBlenderRuntime() {
     status.textContent = runtime.active ? text.active : (labels[runtime.state] || runtime.state);
     controls.append(status);
     const catalogIds = new Set((value.catalog?.items || []).map((item) => item.runtime_id));
+    if (!operation && runtime.ownership === "legacy") {
+      const unregister = document.createElement("button");
+      unregister.type = "button";
+      unregister.textContent = text.unregister;
+      unregister.dataset.blenderUnregister = runtime.runtime_id;
+      controls.append(unregister);
+    }
     if (!operation && runtime.ownership === "managed" && catalogIds.has(runtime.runtime_id)) {
       if (runtime.state === "damaged") {
         const repair = document.createElement("button");
@@ -8415,10 +8441,11 @@ byId("blender-runtime-update").addEventListener("click", async () => {
 });
 byId("blender-runtime-list").addEventListener("click", async (event) => {
   const remove = event.target.closest("[data-blender-remove]");
-  if (remove) {
+  const unregister = event.target.closest("[data-blender-unregister]");
+  if (remove || unregister) {
     try {
-      const preview = await call("blender.runtime.remove.preview", {
-        runtime_id: remove.dataset.blenderRemove,
+      const preview = await call(unregister ? "blender.runtime.unregister.preview" : "blender.runtime.remove.preview", {
+        runtime_id: unregister?.dataset.blenderUnregister || remove.dataset.blenderRemove,
       });
       state.blenderRemovePreview = preview;
       renderBlenderRemovalPreview();
@@ -8452,7 +8479,7 @@ byId("blender-remove-confirm").addEventListener("click", async () => {
   byId("blender-remove-dialog").close();
   state.blenderRemovePreview = null;
   try {
-    await call("blender.runtime.remove", {
+    await call(preview.operation === "unregister" ? "blender.runtime.unregister" : "blender.runtime.remove", {
       runtime_id: preview.runtime_id,
       confirmation_fingerprint: preview.confirmation_fingerprint,
     });
@@ -8460,6 +8487,19 @@ byId("blender-remove-confirm").addEventListener("click", async () => {
   } catch (error) {
     byId("blender-runtime-progress-label").hidden = false;
     byId("blender-runtime-progress-label").textContent = error?.code || "remove_failed";
+  }
+});
+byId("blender-runtime-register-legacy").addEventListener("click", async () => {
+  const button = byId("blender-runtime-register-legacy");
+  button.disabled = true;
+  try {
+    await call("blender.runtime.register_legacy", {});
+    await refreshSession(["blender_runtime"]);
+  } catch (error) {
+    byId("blender-runtime-progress-label").hidden = false;
+    byId("blender-runtime-progress-label").textContent = error?.code || "external_registration_failed";
+  } finally {
+    button.disabled = false;
   }
 });
 byId("blender-runtime-cancel").addEventListener("click", async () => {

@@ -89,6 +89,21 @@ is limited to managed-root realpaths, refuses the active runtime and live pinned
 G8 references, revalidates the preview under the same reference lock, and keeps
 assets, scenes, history, external runtimes, and download cache out of scope.
 
+The configured fixed legacy reference has separate private methods
+`blender.runtime.unregister.preview`, `.unregister`, and `.register_legacy`.
+The standalone actions are `unregister_preview`, `unregister`, and `register_legacy`.
+Preview accepts only the fixed opaque legacy ID; unregister additionally requires
+the latest confirmation fingerprint. Re-registration accepts no parameters and
+revalidates only the server-configured legacy installation. These are short atomic
+registration changes, not download jobs; reconnect reads the persisted registry.
+The preview reports `operation=unregister`, zero reclaimable bytes, and active,
+live/session and project references. Unregister rechecks these under the resolver
+guard before detaching; external files are never removed. Busy runtime operations
+reject the change. Synchronous validation/DB/registry work runs in a worker thread,
+and request cancellation waits for any started atomic write to finish.
+The registry suppression flag prevents automatic re-registration; Settings exposes
+an explicit re-register button only while detached. Existing managed removal is unchanged.
+
 3DS-5a adds private `blender.web.install` and the standalone `web_install`
 action to the same durable operation journal. The browser cannot select a URL,
 version, path, executable, or command. The checked-in Web pack manifest pins
