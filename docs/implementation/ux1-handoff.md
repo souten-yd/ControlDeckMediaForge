@@ -3,6 +3,56 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.33 signed release and standard update
+
+PR #311 merge/tag `0fb8e1141a8b7aa2e3d5eb21a0d08d51039bf8b5` をGitHub refで照合。
+exact detached worktree `/data1tb/ControlDeckMediaForge-release-0.28.33`から
+`python3 scripts/build_release_bundle.py --version 0.28.33
+--output-dir /data1tb/mf-0.28.33-build-20260906
+--pyinstaller /data1tb/ControlDeckMediaForge-3ds4/runtimes/bundle-build/.venv/bin/pyinstaller`。
+exit0、tar31,499,472 B、SHA
+`e9ddc9c23d3eccaa2b876130dc273b2f08c9d80f8932ad9bc3ca1e5f52ff5e1b`。
+外側6 entriesはlauncher/core/addon/featureのみ。Blender binary/model/venvなし。
+専用展開 `/data1tb/mf-0.28.33-package-dOeUsF` でaddon/feature版0.28.33、
+packaged doctor status ok/version0.28.33を照合。
+
+既存正式publisher鍵でsign/self-verify、v0.28.33へ4 assetsを公開。
+consumer download `/data1tb/mf-0.28.33-public-20260906` はHost trusted catalog
+_verify_signed_releaseと実size/SHA、build bytes一致を確認。Hostコード/鍵変更なし。
+同packageの専用doctor-feature/doctor-cache/absent-legacy/port9161でserve（PID174225）。
+`scripts/3ds_standalone_routes_e2e.py
+--evidence-dir /data1tb/mf-standalone-routes-package-0.28.33-20260906`、
+既存Host診断venv/実DISPLAYとXAUTHORITY、headed Chrome日本語1280/320px、
+exit0/48 checks。9 routes直開き/reload、back/forward、重複historyなし、
+Jobs/assets/runtime/sessions前後不変、page errors0。320px screenshot目視確認。
+HTTP/JS overlayなし。専用serverはSIGINT後exit0。
+
+更新直前の本番jobs396全終端、GUI23全終端（failed2/interrupted4/stopped17）、
+runtime operations3ready/model operations0をDB読取で確認。
+online DB backup `/data1tb/mf-0.28.33-pre-update-20260906.sqlite3`
+0600/2,076,672 B後、Host標準registry.update('media-forge')で0.28.32→33。
+29.624秒、healthy/enabled/requested_enabled=true、
+current→versions/0.28.33、MF PID181914 active/Host PID2078不変。
+installed/package core SHA両方
+`22d154e4c41598148205bb567314681cc6ec97e81a6eba169dbc17b97e058ccd`。
+
+installed回帰: 実Host診断venv/PYTHONPATH/config、DISPLAY/XAUTHORITYで
+scripts/3ds_library_navigation_installed_e2e.py --scene-id scene_a94df57d689d4636844b3586dd9fed7d
+--expected-version 0.28.33 --require-scroll-lock --locale ja
+--evidence-dir /data1tb/mf-library-ja-installed-0.28.33-20260906、exit0。
+実headed Chrome/opaque iframe/overlayなし、Host/子lang ja、両幅image6/GLB8/blend9表示、
+親子双方向移動、metadata移動model reads0、明示GLB表示、scene不変、page errors0。
+320px root/viewer client/scroll全320、root overflow hidden。実GLB screenshot目視確認。
+専用mf-e2e loginはscript finallyでrevoke。ユーザーパスワード変更なし。
+日英live切替・全素材paging・他必須受入をこの日本語runで成功扱いしない。
+次は残る画像upload disconnect gateとBlender不在の実画像生成経路を進める。
+
+版数PRの全gateは1060 passed/既知warning1/148.61秒。
+本sliceは配布/受入文書のみで、全testを再実行したとは記録しない。
+修正済み単体routeのsigned package受入と標準更新を確認したが、全3DSはPARTIAL。
+Blender不在での実画像生成、画像upload TestClient強制cancelの残件、
+他の必須A〜Fはこのreleaseによって完了へ読み替えない。
+
 ## 2026-09-06 release 0.28.33 preparation
 
 PR #310 merged `07703a3a6636dc291e87e11813203f67b60cd12a` を確認。
