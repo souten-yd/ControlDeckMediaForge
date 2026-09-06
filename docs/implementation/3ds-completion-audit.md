@@ -22,10 +22,10 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 | GOAL-02 viewer | 署名installed0.28.19でLibrary→3D card、±XYZ回転・zoom両方向、逆操作差分0、320px、scene不変をoverlayなしで確認 | VERIFIED（利用者指定操作の範囲）。2026-09-06利用者確認によりwire/animationは必須から除外 |
 | GOAL-03 設定管理 | 4.5.9/4.5.13の共存、active切替、参照中削除拒否 | PARTIAL: 全操作の画面完結、失敗後再開とscenario Dの証拠を照合 |
 | GOAL-04 Web Blender | `.14-long/observations.json`: 621.451秒GUI、入力、保存revision 2→3、reload/reconnect | VERIFIED（この操作範囲）。credential refreshの証拠ではない |
-| GOAL-05 OpenCode一巡 | OpenCode形状/create/status/snapshot/export/packと、別のUI画像生成・適用 | PARTIAL: 自然言語からtexture生成/適用まで同じOpenCode制作Job経路で追跡した証拠が未確定 |
+| GOAL-05 OpenCode一巡 | installed0.28.26、実OpenCode同一run289.585秒でtyped剣→画像生成→材質→export→ZIP→配置、4制作Job成功、全長1.005m/加工後356 triangles | VERIFIED（この自然言語制作経路）。同じ剣での比較採用/GUI/復元はscenario Bへ残す |
 | GOAL-06 既存画像比較採用 | 署名installed0.28.26で既存画像の比較/破棄/採用/復元、さらに同sceneで実FLUX.2画像生成→候補比較/破棄→採用3→4、dependency/parent/hash一致、Broker解放を確認 | VERIFIED（既存/生成画像のbase color比較採用の範囲）。全PBR channelやOpenCode制作一巡の証拠ではない |
 | GOAL-07 やり直し | restoreとcrash/idle等の復旧保存。競合分岐救出をsource/package/installedの実Blender・browserで確認 | PARTIAL: 失敗工程だけの再試行の全条件照合。standalone candidate ID脱落はPR #246で修正済み |
-| GOAL-08 grant配置 | 以前のOpenCode export/pack記録 | PARTIAL: GLB/画像/manifestの配置先receiptとhashの全対応を照合 |
+| GOAL-08 grant配置 | 同runのGLB/生成PNG/manifest入りG8 ZIPを直前project grantで配置。receipt3件/実bytes/Asset/provenance hash一致、ZIP内部と元GLB hashも一致 | VERIFIED（manifest入りZIPを含む3ファイル配置の範囲）。復元後の再配置はscenario Bへ残す |
 | GOAL-09 取消/回収 | Broker待機取消、133.122秒の実行取消、Host終端同期、session終了 | PARTIAL: 各経路のprocess/予約回収を対応する証拠へ紐付け |
 | GOAL-10 Broker共存 | 稼働LLM中はwaiting、idle後はBrokerがLLMを退避して57.869秒画像生成 | PARTIAL: 音声を含む共存条件の証拠と非対応GPU GUIの条件付き扱いを照合 |
 
@@ -39,7 +39,7 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 | 条件 | 残る照合・実測 |
 |---|---|
 | A clean環境/表示 | 全操作、320px、日英、既存画像がBlender不在でも利用可能な証拠。390pxだけで320px成功とはしない |
-| B 制作一巡 | GOAL-05/06/08の不足を埋め、同一制作物の履歴とreceiptを対応付ける |
+| B 制作一巡 | OpenCode剣scene_f1554d9ba0f741968d9c468206ea3198で生成画像/材質/配置まで確認。同じ剣で既存画像→候補比較/採用→GUI修正→復元→再配置を残す |
 | C lifecycle | 既存crash/idle/restart/expiry証拠は維持。競合candidateは保持だけを復旧完了としない |
 | D 更新/削除 | 稼働A中にB導入、B probe失敗、A削除拒否、停止後Aのみ削除と資産hash保持、External解除、容量不足/中断を個別照合 |
 | E GPU/長時間 | 132秒SIGSTOPはdetached維持/取消の証拠のみ。期限内child credential refreshの実応答、Host終端、120秒超制作と10分超session/setupの対応を実測 |
