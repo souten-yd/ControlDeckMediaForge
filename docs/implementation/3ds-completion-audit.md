@@ -105,7 +105,7 @@ active4.5.13維持。証拠 `/data1tb/mf-history-reinstall-20260906`。
 | GOAL-01 共通Library | 署名installed0.28.29/30で画像/GLB/.blend filter、親子双方向移動、metadata移動中model read0、明示GLB表示、scene不変。0.28.36の実children63でpaging全集合、offset60で実Host日英通知と選択保持を1280/320で追加確認（browser言語入力fixture） | VERIFIED（共通Libraryの指定操作と子63件境界）。親65/子63の両側境界はsource/bundle fixture、installed親60件超とは区別。320px viewer背景scrollも0.28.30で修正・受入済み |
 | GOAL-02 viewer | 署名installed0.28.19でLibrary→3D card、±XYZ回転・zoom両方向、逆操作差分0、320px、scene不変をoverlayなしで確認 | VERIFIED（利用者指定操作の範囲）。2026-09-06利用者確認によりwire/animationは必須から除外 |
 | GOAL-03 設定管理 | 4.5.9/4.5.13共存/active切替/参照中削除拒否。隔離source日本語Settingsで実download更新、active削除拒否、未参照旧版削除、再導入、stamp退避からの修復と実Blender probe。installed0.28.31でdesktop/320pxの説明幅・横overflowなし・project参照削除保護を未変更scriptでも再確認 | PARTIAL: 完全空環境browser install、installed日英/lifecycle、失敗後再開とscenario Dの全条件を照合。前回単発pointer不達の原因は未確定 |
-| GOAL-04 Web Blender | `.14-long/observations.json`: 621.451秒GUI、入力、保存revision 2→3、reload/reconnect | VERIFIED（この操作範囲）。credential refreshの証拠ではない |
+| GOAL-04 Web Blender | `.14-long`は621.451秒保持/reconnect。実形状変更は`mf-sword-ui-flow-gui-canvas-0.28.28-20260906`の4→8 meshes・保存第7版、復元第8版で確認。`.30` RFB更新も同sessionで編集保存成功 | VERIFIED（保存済み編集/再接続）。longのキー送信と版増加だけを形状変更の証拠にはしない。詳細は[lifecycle証拠表](3ds-lifecycle-evidence.md) |
 | GOAL-05 OpenCode一巡 | installed0.28.26、実OpenCode同一run289.585秒でtyped剣→画像生成→材質→export→ZIP→配置、4制作Job成功、全長1.005m/加工後356 triangles | VERIFIED（この自然言語制作経路）。同じ剣での比較採用/GUI/復元はscenario Bへ残す |
 | GOAL-06 既存画像比較採用 | 署名installed0.28.26で既存画像の比較/破棄/採用/復元、さらに同sceneで実FLUX.2画像生成→候補比較/破棄→採用3→4、dependency/parent/hash一致、Broker解放を確認 | VERIFIED（既存/生成画像のbase color比較採用の範囲）。全PBR channelやOpenCode制作一巡の証拠ではない |
 | GOAL-07 やり直し | restoreとcrash/idle等の復旧保存。競合分岐救出をsource/package/installedの実Blender・browserで確認 | PARTIAL: 失敗工程だけの再試行の全条件照合。standalone candidate ID脱落はPR #246で修正済み |
@@ -168,7 +168,7 @@ project確認後変更拒否はunit fixture。installed Host/英語/実project�
 |---|---|
 | A clean環境/表示 | 全操作、320px、日英、既存画像がBlender不在でも利用可能な証拠。390pxだけで320px成功とはしない |
 | B 制作一巡 | VERIFIED（再開/再試行を含む同一制作物）。OpenCode剣→既存画像2→3→新規生成/比較採用3→4→GUI入力保存6→7→第6版を第8版へ復元→元projectのrestored-exportsへGLB/PNG/manifest入りZIP配置。全8版不変、旧出力保持、新3 receipt/実bytes/manifest hash一致 |
-| C lifecycle | 既存crash/idle/restart/expiry証拠は維持。installed0.28.38実GUI保存競合は第4版不変で失敗終端・process/socket/root回収、515,342 B候補と同hashの別scene初版確定を確認。証拠 /data1tb/mf-save-conflict-cleanup-installed-20260907。RFB入力/GPU/他原因の証拠には広げない |
+| C lifecycle | [原因別証拠表](3ds-lifecycle-evidence.md)へ照合。既存idle/restart/expiryの機能証拠、.38保存失敗/child crash/既定300秒切断終了のprocess回収と別scene復旧確定を確認。9 revision/21 Assetの現在ファイルも照合。PARTIAL: 背景hidden→visible復帰、未保存手編集の回収量、他原因の回収証拠は未完了 |
 | D 更新/削除 | 稼働A中にB導入、B probe失敗、A削除拒否、停止後Aのみ削除と資産hash保持、External解除、容量不足/中断を個別照合 |
 | E GPU/長時間 | installed0.28.30の644.700秒CPU queue fault injectionでchild refresh4件/元期限後取消/終端一致。さらに既存GUIの480.340秒RFB再接続・同一session660.433秒継続・実入力保存を672.072秒runで確認（PR #293）。自然な120秒超演算・setup自身の10分超credentialとGPU組合せ評価は残る |
 | F release | 署名公開/update/改ざん拒否証拠は維持。rollbackは候補health成功後の例外注入であり、migration失敗や自然なhealth不良の証拠へ読み替えない。clean install等も個別照合 |
