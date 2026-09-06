@@ -22,6 +22,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--require-readable-layout", action="store_true")
+    parser.add_argument("--native-viewport", action="store_true", help="Diagnose pointer input without viewport emulation")
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args()
     status = registry.status("media-forge")
@@ -57,8 +58,9 @@ def main() -> None:
                 frame.locator("#nav-settings").click()
                 if not frame.locator("#blender-runtime-list").is_visible():
                     frame.locator("#blender-runtime-details-label").click()
-                for width in (1280, 320):
-                    page.set_viewport_size({"width": width, "height": 900})
+                for width in ((1280,) if args.native_viewport else (1280, 320)):
+                    if not args.native_viewport:
+                        page.set_viewport_size({"width": width, "height": 900})
                     evidence["layouts"].append(frame.evaluate("""() => ({
                         width: innerWidth, client: document.documentElement.clientWidth,
                         scroll: document.documentElement.scrollWidth,
@@ -73,7 +75,36 @@ def main() -> None:
                         assert all(row["text"] >= 100 for row in layout["rows"]), layout
                         assert layout["scroll"] <= layout["client"], layout
                     for runtime_id in runtimes:
-                        frame.locator(f'[data-blender-remove="{runtime_id}"]').click()
+                        for target in (page, frame):
+                            target.evaluate("""() => {
+                                window.__settingsPointerEvents = [];
+                                if (window.__settingsPointerListening) return;
+                                window.__settingsPointerListening = true;
+                                for (const type of ['pointerdown', 'pointerup', 'click']) {
+                                    document.addEventListener(type, e => {
+                                        window.__settingsPointerEvents.push({type, tag: e.target.tagName,
+                                            id: e.target.id, x: e.clientX, y: e.clientY});
+                                    }, true);
+                                }
+                            }""")
+                        button = frame.locator(f'[data-blender-remove="{runtime_id}"]')
+                        button.scroll_into_view_if_needed()
+                        diagnostic = {"runtime_id": runtime_id, "requested_width": width,
+                            "native_viewport": args.native_viewport,
+                            "button": button.bounding_box(),
+                            "screen": page.evaluate("""() => ({innerWidth, innerHeight,
+                                outerWidth, outerHeight, screenHeight: screen.height,
+                                dpr: devicePixelRatio})""")}
+                        evidence.setdefault("pointer_diagnostics", []).append(diagnostic)
+                        try:
+                            button.click()
+                            expect(frame.locator("#blender-remove-dialog")).to_be_visible()
+                        finally:
+                            diagnostic["host_events"] = page.evaluate("window.__settingsPointerEvents")
+                            diagnostic["frame_events"] = frame.evaluate("window.__settingsPointerEvents")
+                            diagnostic["preview_received"] = frame.evaluate("state.blenderRemovePreview !== null")
+                            diagnostic["dialog_open"] = frame.locator("#blender-remove-dialog").evaluate("e => e.open")
+                            page.screenshot(path=str(args.evidence_dir / f"pointer-{width}-{runtime_id}.png"))
                         expect(frame.locator("#blender-remove-dialog")).to_be_visible()
                         preview = frame.evaluate("state.blenderRemovePreview")
                         assert not preview["can_remove"]
