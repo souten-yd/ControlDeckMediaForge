@@ -1,5 +1,12 @@
 # Media Forge implementation status
 
+## 2026-09-06 Release 0.28.30 preparation
+
+PR #289 merge `5b7fa61`の全画面viewer背景scroll修正を配布するためaddon/core版数を0.28.30へ同期。
+新しい版の署名公開/標準更新/installed受入はNOT TESTED。公開0.28.29とは区別する。
+既存公開契約/DB schema/runtime/sceneは変更しない。全体3DS-8はPARTIAL。
+gate `./mf.sh test`: 1053 passed / 既知warning1 / 112.29秒。diff check成功。
+
 ## 2026-09-06 viewer modal background scroll — source verified
 
 branch `ux1/3d-viewer-modal-scroll`。全画面viewer表示中だけhtml rootのscrollを停止するCSSを追加。

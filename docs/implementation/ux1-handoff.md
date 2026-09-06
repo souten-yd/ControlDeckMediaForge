@@ -3,6 +3,15 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 Release 0.28.30 preparation
+
+PR #289 merge `5b7fa617d909c649e4d43d5eafd56564e8c77651`を確認。
+branch `ux1/release-0.28.30`でaddon/core版数を同期する。公開latestは0.28.29。
+viewer背景scroll修正のsource受入とinstalled旧版negativeは直下の記録。
+新しい版の署名公開・標準更新・installed受入はNOT TESTED。次は版数PRを通常mergeする。
+全体3DS-8はPARTIAL、元の必須GOAL/A〜Fを縮小しない。
+gate `./mf.sh test`: 1053 passed / 既知warning1 / 112.29秒。diff check成功。
+
 ## 2026-09-06 full-screen viewer background scroll
 
 PR #288 merge `073158b`を確認。branch `ux1/3d-viewer-modal-scroll`。
