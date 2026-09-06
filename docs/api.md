@@ -393,6 +393,25 @@ are `GET /workspace-api/scenes/{scene_id}/material-targets` and
 OpenAPI and workflow executors. 3DS-7 publishes the same binding through the
 dedicated `media.scene.material` Agent tool.
 
+The additive private WebSocket methods `scenes.material.preview.prepare`
+(`scene_id`, `binding`), `.read` (`candidate_id`, `offset`, `length`), `.adopt`
+(`candidate_id`), and `.discard` (`candidate_id`) support uncommitted material
+candidates. Field sets are exact; the client cannot supply the owner or connection
+identity. Prepare returns `candidate_id`, `scene_id`, `base_revision_id`,
+`saved=false`, `expires_at`, `sha256`, `total_bytes`, and `chunk_bytes`.
+Read returns bounded base64 GLB bytes, offset and total size; it never exposes
+the Blender source or a path. Only adoption commits a revision. The existing
+direct apply API remains unchanged. These additions are not public Agent tools
+and do not yet have a standalone mirror or UI integration.
+
+The server runs at most one candidate request per connection asynchronously,
+so disconnect can cancel preparation without blocking unrelated workspace calls.
+Disconnect discards unadopted candidates and releases runtime references;
+an explicit adoption already in progress completes before cleanup. A five-second
+sweeper checks the ten-minute TTL; shutdown removes remaining candidates.
+Expiry/access checks serialize with bounded worker operations, so physical
+reclamation can wait for an in-flight operation to finish.
+
 3DS-6b reuses the existing durable `image.generate` job for new scene images.
 `constraints.scene_texture` is the typed `media-forge.scene-texture-request@1`
 return context: scene ID, source revision ID, object, material slot, channel,

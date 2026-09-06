@@ -95,6 +95,32 @@ class MaterialPreviewManager:
         async with self._lock:
             self._expire()
 
+    async def shutdown(self) -> None:
+        async with self._lock:
+            for candidate in list(self._candidates.values()):
+                self._remove(candidate)
+
+    async def dispatch(self, owner: str, connection: str, method: str,
+                       params: dict[str, Any]) -> dict[str, Any]:
+        """Strict private transport projection; connection is never client input."""
+        fields = {
+            "prepare": {"scene_id", "binding"},
+            "read": {"candidate_id", "offset", "length"},
+            "adopt": {"candidate_id"},
+            "discard": {"candidate_id"},
+        }
+        if method not in fields or set(params) != fields[method]:
+            raise SceneError("scene_material_preview_request", "material preview fields differ")
+        if method == "prepare":
+            return await self.prepare(owner, connection, str(params["scene_id"]), params["binding"])
+        candidate_id = str(params["candidate_id"])
+        if method == "read":
+            return await self.read(owner, connection, candidate_id, params["offset"], params["length"])
+        if method == "adopt":
+            return await self.adopt(owner, connection, candidate_id)
+        await self.discard(owner, connection, candidate_id)
+        return {"discarded": True}
+
     async def cleanup(self, owner: str, connection: str) -> None:
         async with self._lock:
             for candidate in list(self._candidates.values()):

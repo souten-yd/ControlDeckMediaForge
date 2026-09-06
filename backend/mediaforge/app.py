@@ -26,6 +26,7 @@ from PIL import Image, UnidentifiedImageError, __version__ as PILLOW_VERSION
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from . import __version__, library, preferences, thumbnails
+from .scene_material_preview import MaterialPreviewManager
 from .asset_import import (
     MAX_IMPORT_BYTES,
     MAX_VIDEO_IMPORT_BYTES,
@@ -272,6 +273,7 @@ def create_app(
         recipe_worker=REPOSITORY_ROOT / "worker_packs/blender/scene_recipe.py",
         process_timeout_sec=resolved.blender_timeout_sec,
     )
+    material_previews = MaterialPreviewManager(scene_workspace)
     scene_recipe_jobs = SceneRecipeJobManager(store, scene_workspace, host)
     try:
         blender_runtimes.register_legacy()
@@ -494,10 +496,19 @@ def create_app(
         task.add_done_callback(dependency_tasks.discard)
     workspace_test_delay_pending = True
 
+    async def expire_material_previews() -> None:
+        while True:
+            await asyncio.sleep(5)
+            try:
+                await material_previews.expire()
+            except Exception:
+                logger.exception("material preview expiry failed")
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         store.initialize()
         scene_workspace.initialize()
+        material_previews.initialize()
         standalone_scene_backups.initialize()
         await manager.start()
         await scene_recipe_jobs.start()
@@ -507,7 +518,11 @@ def create_app(
             await model_operations.start()
         if model_evaluations is not None:
             await model_evaluations.start()
+        material_preview_expiry = asyncio.create_task(expire_material_previews())
         yield
+        material_preview_expiry.cancel()
+        await asyncio.gather(material_preview_expiry, return_exceptions=True)
+        await material_previews.shutdown()
         for task in dependency_tasks:
             task.cancel()
         await asyncio.gather(*dependency_tasks, return_exceptions=True)
@@ -533,6 +548,7 @@ def create_app(
     app.state.store = store
     app.state.scenes = scenes
     app.state.scene_workspace = scene_workspace
+    app.state.material_previews = material_previews
     app.state.scene_recipe_jobs = scene_recipe_jobs
     app.state.scene_backups = standalone_scene_backups
     app.state.jobs = manager
@@ -2794,6 +2810,31 @@ def create_app(
         await websocket.accept()
         uploads: dict[str, dict[str, Any]] = {}
         scene_upload_ids: set[str] = set()
+        material_connection = uuid.uuid4().hex
+        material_tasks: set[asyncio.Task[None]] = set()
+
+        async def reply_material_preview(request_id: str, method: str, params: dict[str, Any]) -> None:
+            try:
+                result = await material_previews.dispatch(
+                    scene_owner(identity), material_connection, method, params,
+                )
+                answer = {"id": request_id, "ok": True, "result": result}
+            except (SceneError, ValueError, ValidationError) as exc:
+                answer = {"id": request_id, "ok": False, "error": {
+                    "code": getattr(exc, "code", "workspace_request_rejected"),
+                    "message": str(exc)[:300],
+                }}
+            except Exception:
+                logger.exception("material preview request failed")
+                answer = {"id": request_id, "ok": False, "error": {
+                    "code": "scene_material_preview_failed", "message": "Material preview operation failed",
+                }}
+            try:
+                await websocket.send_json(answer)
+            except (WebSocketDisconnect, RuntimeError):
+                # The connection may close after a successful adoption. Its
+                # immutable revision remains; connection cleanup drops receipts.
+                return
         model_viewer = ModelViewerSession(store)
         scene_backups = SceneBackupSession(store)
         subscription = events.subscribe(asyncio.get_running_loop())
@@ -2820,7 +2861,18 @@ def create_app(
                         raise ValueError("invalid workspace request")
                     reject_host_paths(params)
                     result: dict[str, Any]
-                    if method == "jobs.create":
+                    if method.startswith("scenes.material.preview."):
+                        if any(not item.done() for item in material_tasks):
+                            raise SceneError("scene_material_preview_busy", "a material preview request is running")
+                        task = asyncio.create_task(reply_material_preview(
+                            request_id, method.removeprefix("scenes.material.preview."), params,
+                        ))
+                        material_tasks.add(task)
+                        task.add_done_callback(material_tasks.discard)
+                        # Keep receiving so disconnect can cancel preparation.
+                        # Only this new bounded operation is dispatched async.
+                        continue
+                    elif method == "jobs.create":
                         value = JobRequest.model_validate(params)
                         result = await submit_hosted(value, identity, workload_class="interactive")
                     elif method == "jobs.get":
@@ -3867,6 +3919,10 @@ def create_app(
         except WebSocketDisconnect:
             return
         finally:
+            for task in material_tasks:
+                task.cancel()
+            await asyncio.gather(*material_tasks, return_exceptions=True)
+            await material_previews.cleanup(scene_owner(identity), material_connection)
             subscription.close()
             model_subscription.close()
             session_subscription.close()

@@ -3,6 +3,34 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 採用前材質候補 private WebSocket
+
+PR #261 merged `c054495c5a6e203f188e61b4b6a5548c67b07b90`をfetch確認。
+branch `ux1/3d-material-preview-transport`。app singletonに候補managerを接続し、startup initialize、
+5秒周期expiry、shutdown cleanupと、`scenes.material.preview.{prepare,read,adopt,discard}`を追加。
+サーバー生成connection IDと認証ownerを束縛、field厳密検証、raw Host path拒否、connection1要求に制限。
+候補だけbackground dispatchにしてprepare中もreceiveを続け、切断でtask取消→cleanupする。
+既存通信の逐次処理/公開Agent applyは維持する。8 transport testsを追加して成功。
+
+`PYTHONPATH=backend:. .venv/bin/python scripts/3ds_material_preview_transport_e2e.py
+--data-dir /data1tb/mf-material-preview-transport-20260906
+--legacy-runtime-root /data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9`成功。
+新規隔離Store/ephemeral loopback Uvicorn/実TCP WS/実Blender4.5.9を使用。認証は明示fixtureであり
+installed Host認証の証拠ではない。2284B GLB、prepare/discard head不変、別connection adopt拒否、
+採用だけ2→3版/再送で増加なし、ready/prepare中の切断回収、clockを11分進めた定期expiryで
+runtime reference0/candidate directory0をassert。証拠は同data-dir/transport-observations.json。
+
+次はstandalone mirrorとfrontend未保存候補の比較/採用/破棄を実装する。現行UIはまだ直接applyする。
+新候補はassets.model.openのAssetとして扱わず専用readで読み、現行版と並べて表示する。
+UI/installed Host/署名新版はNOT TESTED。全体GOAL-06/3DS-6/3DS-8は未完了。
+Host/installed service/利用者制作データは変更していない。
+gate `./mf.sh test`: 1021 passed / 既知Starlette warning1件 / 113.45秒。diff check成功。
+PR #264作成後、並行作業のmain `1abc62e`（#262 mobile reconnect / #263 version0.28.21）を確認し、
+`38a87e1`で取り込んだ。相手の変更は保持。再実機証拠
+`/data1tb/mf-material-preview-transport-main-20260906/transport-observations.json`も全assert成功。
+次のUIはmobile reconnectによる候補失効も表示し、旧connectionの候補を黙って再採用しない。
+main取込後gate `./mf.sh test`: 1021 passed / 既知warning1件 / 126.49秒。diff check成功。
+
 ## 2026-09-06 採用前材質候補 domain
 
 PR #260 merged `45e85311f135f090d016027becf3fd629954aae9`。branch `ux1/3d-material-preview-core`。

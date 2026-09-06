@@ -9437,3 +9437,38 @@ NOT IMPLEMENTED / NOT TESTED: private transport/UI接続、実ブラウザの未
 その署名新版とinstalled受入、生成画像との全制作一巡。GOAL-06/3DS-6/3DS-8は未完了。
 Host/installedサービス/利用者制作データは変更していない。
 gate `./mf.sh test`: 1013 passed / 既知Starlette warning1件 / 132.16秒。diff check成功。
+
+## 2026-09-06 採用前材質候補 private WebSocket — VERIFIED FOR TRANSPORT SLICE
+
+基準main `c054495`（PR #261 merge）、branch `ux1/3d-material-preview-transport`。
+appにsingleton manager/startup/5秒周期expiry/shutdown cleanupを接続し、private WSへ
+`scenes.material.preview.prepare/read/adopt/discard`を加法追加。認証ownerとserver生成connection IDで束縛、
+厳密field検証、raw Host path拒否、connection1要求の上限を維持する。
+候補操作だけ非同期taskで応答し、WS receiveを継続するため、prepare中も切断検知・取消・cleanupできる。
+既存Job等の通信処理順序と公開Agent material applyは変更していない。
+
+8 transport test成功: prepare/discard時head不変、採用/再送、別connection拒否、準備中Job照会、
+重複要求busy、準備中/ready切断回収、shutdown runtime pin回収、raw path/client connection field拒否。
+最初の切断testはTestClient context exitによるASGI task強制cancelがcleanup観測へ先行した。
+明示socket.close→実cleanup観測→context exitへ直し、下記の実TCP切断でも確認した。
+
+実行コマンド:
+`PYTHONPATH=backend:. .venv/bin/python scripts/3ds_material_preview_transport_e2e.py
+--data-dir /data1tb/mf-material-preview-transport-20260906
+--legacy-runtime-root /data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9`。
+新規隔離Store、ephemeral loopback Uvicorn、実TCP WebSocketと実Blender4.5.9を使用。
+認証だけ明示FixtureHostであり、installed Hostまたはそのtoken introspectionの実績とはしない。
+2284B GLB受信、prepare/discardでhead不変、別接続adopt拒否、採用だけ2→3版、再送後も3版。
+ready時とprepare中の切断cleanup、clockを11分進めた実5秒周期expiryで
+runtime references0/candidate directories0、scene head不変をassertした。
+証拠 `/data1tb/mf-material-preview-transport-20260906/transport-observations.json`。
+source serverは試験終了時に停止。Host/installed service/利用者制作データは変更していない。
+
+NOT IMPLEMENTED / NOT TESTED: standalone mirror、未保存候補のブラウザ比較・採用UI、
+installed Host認証経路、署名新版受入。GOAL-06/3DS-6/3DS-8は未完了。
+gate `./mf.sh test`: 1021 passed / 既知Starlette warning1件 / 113.45秒。diff check成功。
+PR #264作成時にmain `1abc62e`への並行更新を確認。#262 mobile reconnectと#263 version0.28.21を
+merge commit `38a87e1`で取り込んで保持した。同じ実TCP/Blender scriptを新規隔離dir
+`/data1tb/mf-material-preview-transport-main-20260906`で再実行し、上記全assertion成功。
+他者の公開/導入作業をこちらが実施したとは記録しない。installed Host受入は引き続きNOT TESTED。
+main取込後gate `./mf.sh test`: 1021 passed / 既知Starlette warning1件 / 126.49秒。diff check成功。
