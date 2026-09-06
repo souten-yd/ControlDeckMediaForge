@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import {OrbitControls} from "three/addons/controls/OrbitControls.js";
 import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js";
+import {RoomEnvironment} from "three/addons/environments/RoomEnvironment.js";
 
 const BACKGROUNDS = [0x0b1110, 0x36413f, 0xe7eceb];
 
@@ -53,6 +54,7 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
   let boxHelper = null;
   let grid = null;
   let root = null;
+  let environmentTarget = null;
   const pivot = new THREE.Group();
   let mixer = null;
   let animations = [];
@@ -72,6 +74,20 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
     camera.aspect = cssWidth / cssHeight;
     camera.updateProjectionMatrix();
     render();
+  }
+
+  function rebuildEnvironment() {
+    const room = new RoomEnvironment();
+    const generator = new THREE.PMREMGenerator(renderer);
+    try {
+      const next = generator.fromScene(room, 0.04);
+      scene.environment = next.texture;
+      environmentTarget?.dispose();
+      environmentTarget = next;
+    } finally {
+      room.dispose();
+      generator.dispose();
+    }
   }
 
   function render() {
@@ -267,6 +283,9 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
       for (const material of materialsOf(grid.material)) material.dispose();
     }
     renderer.renderLists.dispose();
+    scene.environment = null;
+    environmentTarget?.dispose();
+    environmentTarget = null;
     renderer.dispose();
     renderer.forceContextLoss();
   }
@@ -279,6 +298,8 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
   }
 
   function contextRestored() {
+    if (disposed) return;
+    rebuildEnvironment();
     onContextState?.("restored");
     resize();
     scheduleAnimation();
@@ -323,6 +344,7 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
   pivot.position.copy(center);
   pivot.add(offset);
   scene.add(pivot);
+  try { rebuildEnvironment(); } catch (error) { dispose(); throw error; }
   if (animations.length) mixer = new THREE.AnimationMixer(root);
   resize();
   fit();

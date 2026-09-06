@@ -108,6 +108,11 @@ Library必須（2026-09-06利用者確認）: 対象の±X/±Y/±Z回転と拡�
 制作側の前後版比較、材質slot選択、画像差替えpreview、Blenderで編集は別の必須ゴールとして維持する。
 追加: normals/UV表示、LOD比較。unsupported extensionは理由を出して検証済みpreviewへ戻る。
 
+材質比較ではGLBのmetallic/roughness/base colorを保ったまま表示する。金属面を黒く潰して
+差替え画像が見えない状態を比較成功とはしない。固定Three.jsに含まれるRoomEnvironmentを
+ローカル生成して反射用の環境照明に使い、外部HDR/URIは取得しない。環境mapもviewer終了時に
+解放し、WebGL context復旧時に再生成する。これは表示用照明であり保存済み材質の変更ではない。
+
 viewerへ渡すGLBは64 MiB以下、textureは1辺8,192 px以下かつ合計67,108,864 px以下とし、
 展開後RGBA textureの上限を256 MiB相当に固定する。大型sceneは低LOD派生物を使う。
 モデル切替・画面退出時にgeometry/material/textureをdisposeし、不要なfetchをabortする。

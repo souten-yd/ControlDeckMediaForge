@@ -5134,9 +5134,10 @@ async function loadSceneComparePane(revision, canvasId, statusId, token) {
       bytes: content,
       background: "#0b1110",
       onContextState: (value) => {
-        if (token === state.sceneCompareToken && value !== "restored") {
-          status.textContent = viewer3dText().contextLost;
-        }
+        if (token !== state.sceneCompareToken) return;
+        const active = state.sceneCompareInstances.get(canvasId);
+        status.textContent = value === "restored" && active
+          ? viewer3dText().stats(active.stats) : viewer3dText().contextLost;
       },
     });
     if (token !== state.sceneCompareToken) {
@@ -6289,7 +6290,7 @@ const viewer = {
 };
 
 let modelViewerModulePromise = null;
-const MODEL_VIEWER_BUNDLE = "809184fd4a0006d6";
+const MODEL_VIEWER_BUNDLE = "ae9fcecc3739d0b7";
 
 function loadModelViewer() {
   if (modelViewerModulePromise) return modelViewerModulePromise;
