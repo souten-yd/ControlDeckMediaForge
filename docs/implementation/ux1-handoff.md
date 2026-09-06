@@ -3,6 +3,40 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.31 signed release / installed browser acceptance incomplete
+
+branch `ux1/3d-release-0.28.31-acceptance`。PR #298 merged
+`fc48b7a14a8b0948db8f344699955f8b07631499`、同commitをtag v0.28.31として通常公開。
+既存build/署名物を再確認し、専用mktemp data/cacheを指定したpackaged doctorは
+`{"status":"ok","version":"0.28.31","packaged":true}`。
+公開4 assetsを `/data1tb/mf-0.28.31-public-20260906` へ再取得。
+Host trusted catalogの `_verify_signed_release` と実tar bytes照合が成功。
+tar 31,499,258 B、SHA `bbe826e12cf36c942f0998c0983e51c168759cc32ed023de595ed0a7fd0ea931`。
+
+再開時Host user service PID2078 active、MediaForge processなし/HTTP9130到達不可。
+registryは0.28.30/requested_enabled=true/enabled=false/health=error。
+明示disableと断定せず、設定上の有効化要求が維持されていることを再確認した。
+local DBはJob396件すべて終端、runtime operation ready3、GUI session23件すべて終端。
+online backup `/data1tb/mf-0.28.31-pre-update-20260906.sqlite3`（0600、2,076,672 B）後、
+Host診断Pythonで標準 `registry.update('media-forge')` を実行。
+13.587秒で0.28.30→0.28.31、enabled/requested_enabled=true、healthy。
+user service PID29462 active、Host PID2078不変、実HTTP /health healthy。
+installed coreと検査済みpackage coreのSHAは共に
+`4396cdd231ff5711cb04c96b5fa441079a5644dcb28614e1b5244c7300c07ead`。
+
+installed Settings再試験は未合格。最初はDISPLAY未設定でChrome起動失敗。
+user managerと実XwaylandからDISPLAY=:0、
+XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.HOXYU3を確認し、
+`scripts/3ds_settings_protection_installed_e2e.py --expected-version 0.28.31
+--require-readable-layout --evidence-dir /data1tb/mf-settings-layout-installed-0.28.31-display-20260906`
+をHost診断venv/実headed Chromeで再実行。
+Settings表示/desktop layoutまでは到達したが、最初のRemoveクリック後dialog hiddenでexit1。
+観測iframe width1056/root client1041/scroll1041、runtime text715.484/857.766px、page errors0。
+preview0件、320px未到達、runtime不変の最終assert未到達。個別試験loginはfinallyでrevoke。
+原因は未確定。過去のviewport入力問題と同一と決めつけず、次はこのボタンのpointer到達とAPI応答を切り分ける。
+製品変更/追加runtime導入/削除送信なし。全体3DS-8と必須受入はPARTIALを維持。
+本sliceは文書のみ、diff check実施。1054 testsのgateは版数PR時の既存証拠で、今回再実行していない。
+
 ## 2026-09-06 release 0.28.31 preparation
 
 PR #297 merge `01986b2a36feeecfa114429264fbcf089026732f`を確認。
