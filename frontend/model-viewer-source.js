@@ -8,6 +8,10 @@ function materialsOf(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+// A credentialed module script registers this factory inside the opaque frame.
+// Native import() cannot carry its Host frame cookie across the opaque origin.
+globalThis.__mediaForgeCreateModelViewer = createModelViewer;
+
 function disposeMaterial(material, textures, materials) {
   if (!material || materials.has(material)) return;
   materials.add(material);
@@ -49,6 +53,7 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
   let boxHelper = null;
   let grid = null;
   let root = null;
+  const pivot = new THREE.Group();
   let mixer = null;
   let animations = [];
   const originalMaterials = new Map();
@@ -130,6 +135,25 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
     });
     render();
     return ["material", "neutral", "wireframe"][shadingIndex];
+  }
+
+  function rotate(axis, direction) {
+    if (disposed || !["x", "y", "z"].includes(axis) || ![-1, 1].includes(direction)) return;
+    const vector = new THREE.Vector3();
+    vector[axis] = 1;
+    pivot.rotateOnWorldAxis(vector, direction * Math.PI / 12);
+    if (boxHelper) boxHelper.box.setFromObject(root);
+    render();
+  }
+
+  function zoom(direction) {
+    if (disposed || ![-1, 1].includes(direction)) return;
+    const offset = camera.position.clone().sub(controls.target);
+    const distance = THREE.MathUtils.clamp(offset.length() * (direction > 0 ? 0.8 : 1.25),
+      controls.minDistance, controls.maxDistance);
+    camera.position.copy(controls.target).add(offset.setLength(distance));
+    controls.update();
+    render();
   }
 
   function setLight() {
@@ -292,13 +316,19 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
     dispose();
     throw new Error("model has no renderable mesh");
   }
-  scene.add(root);
+  const center = new THREE.Box3().setFromObject(root).getCenter(new THREE.Vector3());
+  const offset = new THREE.Group();
+  offset.position.copy(center).negate();
+  offset.add(root);
+  pivot.position.copy(center);
+  pivot.add(offset);
+  scene.add(pivot);
   if (animations.length) mixer = new THREE.AnimationMixer(root);
   resize();
   fit();
   return {
     stats: {triangles, meshes, materials: materialSet.size, animations: animations.length},
-    fit, setShading, setLight, setBackground, toggleBounds, toggleAnimation,
+    fit, rotate, zoom, setShading, setLight, setBackground, toggleBounds, toggleAnimation,
     setVisible, snapshot, dispose,
   };
 }

@@ -729,6 +729,12 @@ The new GUI and authoring paths are planned additions; the existing deterministi
 contract stays unchanged. Shared product/data management does not imply shared core/Blender/ML
 execution environments. Generative 3D model adoption remains a separate experimental G9 gate.
 
+2026-09-06 user clarification: the Library viewer requires object rotation in both
+directions around each X/Y/Z axis and zoom in/out. These are view-only operations;
+they never modify the stored asset or scene. Wireframe and animation controls are
+optional, not Library acceptance gates. Authoring, texture comparison and Blender
+editing remain separate Studio requirements.
+
 Conflict recovery never rebases unsaved bytes onto a newer scene head. An explicit recovery-fork
 operation validates a retained candidate with its pinned Blender and creates a separate scene,
 preserving the original head, candidate bytes, dependencies and source-revision asset lineage.

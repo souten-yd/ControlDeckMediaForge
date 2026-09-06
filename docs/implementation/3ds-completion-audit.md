@@ -15,7 +15,7 @@ v0.28.18/healthyであり、同版の受入をv0.28.17の証拠から推定し�
 | 条件 | 確認済み証拠の範囲 | 判定と残件 |
 |---|---|---|
 | GOAL-01 共通Library | installed scene表示と既存画像の選択 | PARTIAL: 画像/GLB/.blendの全絞込と親子双方向移動の操作証拠を照合 |
-| GOAL-02 viewer | installed scene preview | PARTIAL: orbit/zoom/material/wire/animationそれぞれのassertionを照合 |
+| GOAL-02 viewer | 現行0.28.18の誤URL/CORS失敗を再現。candidate frontendでLibraryから6方向回転・zoom・逆操作差分0・320pxを確認 | PARTIAL: 署名版へ反映しoverlayなしでinstalled受入。2026-09-06利用者確認によりwire/animationは必須から除外 |
 | GOAL-03 設定管理 | 4.5.9/4.5.13の共存、active切替、参照中削除拒否 | PARTIAL: 全操作の画面完結、失敗後再開とscenario Dの証拠を照合 |
 | GOAL-04 Web Blender | `.14-long/observations.json`: 621.451秒GUI、入力、保存revision 2→3、reload/reconnect | VERIFIED（この操作範囲）。credential refreshの証拠ではない |
 | GOAL-05 OpenCode一巡 | OpenCode形状/create/status/snapshot/export/packと、別のUI画像生成・適用 | PARTIAL: 自然言語からtexture生成/適用まで同じOpenCode制作Job経路で追跡した証拠が未確定 |

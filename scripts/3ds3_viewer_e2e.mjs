@@ -50,7 +50,7 @@ try {
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   page.on("pageerror", (error) => errors.push(String(error)));
   page.on("request", (request) => {
-    if (request.url().includes("/viewer-runtime.js")) moduleRequests.push(request.url());
+    if (request.url().includes("/static/three-viewer.js")) moduleRequests.push(request.url());
   });
   await page.goto(`${baseUrl}/library`, {waitUntil: "domcontentloaded"});
   await page.waitForSelector('#app[aria-busy="false"]');

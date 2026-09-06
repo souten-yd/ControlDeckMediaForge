@@ -3,6 +3,37 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 Library viewer six-axis candidate
+
+利用者がLibrary viewerの必須操作を±X/±Y/±Z回転・拡大縮小に指定し、軸の意味も確認した。
+base/UX/3D設計/plan/auditを同期。wire/animationは追加操作とし、制作側の材質比較等は維持する。
+branch `ux1/3d-viewer-render-acceptance`、基準main `8484286`。PR #213はmergedを再確認。
+6方向15度回転とzoomボタンを実装。モデル中心の表示用pivotだけを回しscene/assetを変更しない。
+既存orbit/fit等は保持。viewer/比較画面で共通のcredentialed module loaderを使用する。
+
+現行installed 0.28.18はHost直下の誤URL `/viewer-runtime.js`をimportしCORS拒否で表示失敗。
+frame配下へ直すだけでも専用routeのACAO `*`とHostの`null`が重複して拒否された。
+既存 `/static/three-viewer.js`をcredentialed module scriptで遅延読込し、HostにCORSを任せる。
+Hostコードは変更しない。bundleをlock通り再構築しhashを更新した。
+
+実機候補受入: `/data1tb/mf-viewer-six-axis-library-candidate-20260906/observations.json`。
+Host/backendはinstalledのまま、ブラウザ応答本文だけ候補へ差替え。認証/CORS/headersは保持する。
+専用mf-e2e sessionを発行しfinallyでそのsessionだけ失効。パスワード変更なし。
+Chrome通常表示、AMD内蔵GPU/radeonsi、opaque origin=null、Library→3D→asset cardから操作。
+6方向の描画差分1773〜25023px、逆回転は全て差分0。zoom両方向・orbit/wheel・fit復帰も成功。
+320px/scroll319、page error0、scene応答不変。thumbnail cache生成は通常のviewer動作に含まれる。
+これはcandidate frontendの受入であり、正式bundleの導入成功ではない。
+
+試験の初期失敗も保持: HTTP route再送はSec-Fetch-Destを失い403、CDP response-onlyへ修正。
+opaque iframeの別CDP targetも捕捉する。HTML差替え試験contextだけlocal-network-accessを許可した。
+headlessは空pageでもWebGL2=null、通常Chromeはcontext作成成功。software GPU実績とは扱わない。
+最初のpixel閾値0.5%は細い剣の長軸回転1773pxを失敗扱いしたため、idle/逆操作の差分0を対照に
+100px超の実描画差分をassertする。製品の角度/入力条件は変えていない。
+次はこのsliceのsource gate/PR後、署名releaseとinstalled overlayなしの同じLibrary受入。
+全体3DS-8はPARTIAL、長時間credential試験の無再起動枠も引き続き未調整。
+source gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 114.02秒。
+`npm ci --ignore-scripts`、`npm run build:viewer`、source/bundle hash一致、node構文検査、diff check成功。
+
 ## 2026-09-06 v0.28.17 signed / installed terminal acceptance
 
 PR #251 merged `4293d2086aaeed4784a2ad0c2b9776f88415c043`からexact worktreeで正式bundleを構築・署名公開。

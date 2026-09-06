@@ -106,7 +106,7 @@ Blender互換scriptの配置・ライセンスは既存 `worker_packs/blender/LI
 |---|---|
 | 既存回帰 | 画像生成/編集・Library・既存G8 ZIP・media.pack・OpenCode |
 | setup | clean/idempotent、切断再開、容量不足、hash不一致、cancel、修復、削除保護 |
-| viewer | 実GLB、texture/animation、model切替のmemory解放、mobile、context loss |
+| viewer | 実GLB、±X/±Y/±Z回転・拡大縮小、model切替のmemory解放、mobile、context loss（animationは追加操作） |
 | GUI | 実Blender操作、日英入力、保存、再接続、idle終了、crash recovery、権限取消 |
 | resources | CPU経路、GPU lease取得/renew/終了、画像/LLMとの競合、待機cancel |
 | assets | 新revision・旧版維持、依存画像、独立検証、grant/receipt、GC保護 |

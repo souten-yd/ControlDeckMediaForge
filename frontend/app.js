@@ -5126,11 +5126,7 @@ async function loadSceneComparePane(revision, canvasId, statusId, token) {
     await call("assets.model.close", {handle});
     state.sceneCompareHandles.delete(handle);
     handle = "";
-    const modulePromise = modelViewerModulePromise || (
-      modelViewerModulePromise = import(
-        new URL(`/viewer-runtime.js?v=${MODEL_VIEWER_BUNDLE}`, location.href).href
-      )
-    );
+    const modulePromise = loadModelViewer();
     const module = await modulePromise;
     if (token !== state.sceneCompareToken) throw new Error("scene comparison changed");
     const instance = await module.createModelViewer({
@@ -6293,12 +6289,32 @@ const viewer = {
 };
 
 let modelViewerModulePromise = null;
-const MODEL_VIEWER_BUNDLE = "99935b9427ddad9a";
+const MODEL_VIEWER_BUNDLE = "809184fd4a0006d6";
+
+function loadModelViewer() {
+  if (modelViewerModulePromise) return modelViewerModulePromise;
+  modelViewerModulePromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.type = "module";
+    script.crossOrigin = "use-credentials";
+    script.src = `${workspaceFrameRoot()}/static/three-viewer.js?v=${MODEL_VIEWER_BUNDLE}`;
+    script.onload = () => {
+      script.remove();
+      const createModelViewer = globalThis.__mediaForgeCreateModelViewer;
+      if (typeof createModelViewer === "function") resolve({createModelViewer});
+      else reject(new Error("3D viewer module did not register"));
+    };
+    script.onerror = () => { script.remove(); reject(new Error("3D viewer module could not be loaded")); };
+    document.head.append(script);
+  }).catch((error) => { modelViewerModulePromise = null; throw error; });
+  return modelViewerModulePromise;
+}
 
 const VIEWER_3D_TEXT = {
   ja: {
     loading: "3Dモデルを読み込んでいます…", failed: "3Dモデルを表示できません",
     canvas: "3Dモデル", toolbar: "3D表示", previous: "前の素材", next: "次の素材",
+    zoomIn: "拡大", zoomOut: "縮小", rotate: (axis, direction) => `${axis}軸${direction > 0 ? "正" : "負"}方向へ15度回転`,
     fit: "全体", shading: {material: "材質", neutral: "形状", wireframe: "ワイヤー"},
     light: {studio: "照明", flat: "均一光", dramatic: "強調光"},
     background: "背景", boundsOn: "範囲を隠す", boundsOff: "範囲",
@@ -6308,6 +6324,7 @@ const VIEWER_3D_TEXT = {
   en: {
     loading: "Loading 3D model…", failed: "The 3D model cannot be displayed",
     canvas: "3D model", toolbar: "3D view controls", previous: "Previous asset", next: "Next asset",
+    zoomIn: "Zoom in", zoomOut: "Zoom out", rotate: (axis, direction) => `Rotate ${axis} ${direction > 0 ? "+" : "−"}15 degrees`,
     fit: "Fit", shading: {material: "Material", neutral: "Shape", wireframe: "Wireframe"},
     light: {studio: "Light", flat: "Flat light", dramatic: "Dramatic"},
     background: "Background", boundsOn: "Hide bounds", boundsOff: "Bounds",
@@ -6328,6 +6345,13 @@ function renderViewer3dText() {
   byId("viewer-prev").setAttribute("aria-label", text.previous);
   byId("viewer-next").setAttribute("aria-label", text.next);
   byId("viewer-3d-fit").textContent = text.fit;
+  byId("viewer-3d-zoom-in").textContent = text.zoomIn;
+  byId("viewer-3d-zoom-out").textContent = text.zoomOut;
+  document.querySelectorAll("[data-viewer-rotate]").forEach((button) => {
+    const label = text.rotate(button.dataset.viewerRotate.toUpperCase(), Number(button.dataset.direction));
+    button.setAttribute("aria-label", label);
+    button.title = label;
+  });
   byId("viewer-3d-shading").textContent = text.shading[viewer.shading];
   byId("viewer-3d-light").textContent = text.light[viewer.light];
   byId("viewer-3d-background").textContent = text.background;
@@ -6453,11 +6477,7 @@ async function openModelViewer(assetId, item, token) {
   byId("viewer-3d-tools").hidden = true;
   let opened;
   try {
-    const modulePromise = modelViewerModulePromise || (
-      modelViewerModulePromise = import(
-        new URL(`/viewer-runtime.js?v=${MODEL_VIEWER_BUNDLE}`, location.href).href
-      )
-    );
+    const modulePromise = loadModelViewer();
     opened = await call("assets.model.open", {asset_id: assetId});
     viewer.modelHandle = opened.handle;
     if (opened.total_bytes > 64 * 1024 * 1024) throw new Error("model exceeds browser bound");
@@ -8587,6 +8607,11 @@ byId("viewer-detail").addEventListener("click", () => {
    通るので、ここだけ別扱いの経路を作らずに済む。 */
 byId("viewer-edit").addEventListener("click", () => void editFromLibrary(viewer.assetId));
 byId("viewer-3d-fit").addEventListener("click", () => viewer.modelInstance?.fit());
+document.querySelectorAll("[data-viewer-rotate]").forEach((button) => {
+  button.addEventListener("click", () => viewer.modelInstance?.rotate(button.dataset.viewerRotate, Number(button.dataset.direction)));
+});
+byId("viewer-3d-zoom-in").addEventListener("click", () => viewer.modelInstance?.zoom(1));
+byId("viewer-3d-zoom-out").addEventListener("click", () => viewer.modelInstance?.zoom(-1));
 byId("viewer-3d-shading").addEventListener("click", () => {
   if (!viewer.modelInstance) return;
   viewer.shading = viewer.modelInstance.setShading();

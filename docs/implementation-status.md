@@ -9213,3 +9213,42 @@ Job/Host ID対応はevents.jsonのsubmitted6件に固定。finally後active loca
 `34b5a0f1c7edc0ed65732e4dc26768382be819d1265db4e172a4cbc1aa9c07ac`。
 本turnの公開・標準導入・18call照合は0.28.17で取得した証拠であり、新版へ読み替えない。
 0.28.18の導入操作は本turnでは要求していない。現行を0.28.17へ戻す操作は行わない。
+
+## 2026-09-06 Library viewer six-axis — CANDIDATE VERIFIED / INSTALLED NOT TESTED
+
+利用者の確認によりLibrary viewer必須を±X/±Y/±Z回転・拡大縮小へ更新した。
+制作側の材質比較・採用、Blender編集、他GOAL/A〜Fは維持する。基準main `8484286`、
+branch `ux1/3d-viewer-render-acceptance`。6方向15度回転・zoom buttonsを表示専用で追加。
+viewer/scene比較のlazy loaderをHost frame配下のcredentialed static moduleへ共通化した。
+旧root URLのCORS拒否と専用routeのACAO重複を実browserで確認し、Host変更なしで回避した。
+導入済み0.28.18の失敗証拠は `/data1tb/mf-viewer-pixels-installed-diagnostic-20260906/observations.json`。
+
+実行コマンド:
+`PYTHONPATH=/data1tb/ControlDeck/app/backend /data1tb/ControlDeck/app/.venv/bin/python
+scripts/3ds_viewer_render_installed_e2e.py --scene-id scene_3ac2b7089a3b5cc3b7b1a95ffd96594f
+--evidence-dir /data1tb/mf-viewer-six-axis-library-candidate-20260906 --candidate-frontend frontend`。
+Host diagnostic venvはsession fixture/ブラウザのみ。製品coreへHost importや依存を追加しない。
+専用mf-e2e sessionを発行/個別失効し、パスワードや既存sessionは変更しない。
+
+installed Host/backendへの実通信、candidate frontendのresponse-body overlayで検証した。
+ブラウザ自身のrequestと認証/CORS応答headerは変更しない。試験contextのlocal-network-access許可を
+明示し、Chromeのopaque iframe別targetもCDPで捕捉。正式bundleのinstalled受入ではない。
+通常Chrome / ANGLE AMD Radeon Graphics / radeonsi raphael_mendocino LLVM20.1.2 / OpenGL ES3.2。
+Library→3D→対象asset cardから、236 triangles/4 materials/0 animationsのGLBを表示。
+±XYZそれぞれの描画差分24432/24594/1773/2485/24379/25023px、逆操作は全て差分0。
+zoom in43020px/out41483px、orbit55633px/wheel39771px、fitで差分0へ復帰。
+320pxでscroll319、page error0、scene応答不変。viewer通常動作のthumbnail cache保存は許容する。
+
+初期試験は旧import/CORS失敗、候補HTTP再送のSec-Fetch-Dest欠落403、別iframe module捕捉不足、
+headless WebGL context作成失敗を順に切り分けた。空pageのheadless Chrome/PlaywrightもWebGL2=null、
+通常Chromeではcontext作成成功。software描画やR9700描画の実績とは記録しない。
+細い剣の長軸回転はviewport0.5%未満でも1773px変わるため、pixel gateはidle/逆操作の完全一致を
+対照に100px超の差分とした。操作角度や製品要件を変更して通したものではない。
+先行scene preview入口の成功証拠は `/data1tb/mf-viewer-six-axis-candidate-headed-retry1-20260906`。
+
+NOT TESTED: 新版署名release/導入後overlayなしの受入、日英切替・mobile実タッチの今回の追加操作、
+モデル切替memory/context lossの再受入、600秒超credential更新。現行serviceの再起動/更新は行っていない。
+全体3DS-8はPARTIAL。次はsource PR gate後、署名版へ反映して同じLibrary受入をoverlayなしで実行する。
+source gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 114.02秒。
+`npm ci --ignore-scripts`と`npm run build:viewer`で固定依存から再構築、source/bundle hashのcontract成功。
+node構文検査と`git diff --check`も成功。これらをinstalled受入の代用にはしない。
