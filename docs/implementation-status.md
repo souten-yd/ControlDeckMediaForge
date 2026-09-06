@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-06 release 0.28.33 preparation
+
+PR #310 merged `07703a3a6636dc291e87e11813203f67b60cd12a` を確認。
+branch `ux1/release-0.28.33`。単体起動のdirect URL/history修正を配布する版数更新。
+addon/coreを0.28.33へ揃える。DB/runtime/公開契約変更なし。
+現行installedは0.28.32/healthy/enabled/requested_enabled=trueをHost標準statusで確認。
+修正sourceの48 browser checksは前sliceに記録済み。新bundleの公開/導入はまだNOT TESTED。
+次は通常mergeのexact headからbuild、既存正式鍵で署名公開、consumer再取得検証、
+専用packageで同48 checks、標準Host updateと稼働版照合を行う。
+3DS全体と残る必須シナリオはPARTIALを維持する。
+gate ./mf.sh test: 1060 passed/既知warning1/148.61秒。diff check成功。
+
 ## 2026-09-06 standalone direct routes and browser history
 
 PR #309 merged `33c18588abccdc0ac6253b7574c7cee7a6784f48`。
