@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -13,7 +12,6 @@ from fastapi import WebSocket, WebSocketDisconnect
 MAX_BROWSER_MESSAGE_BYTES = 1024 * 1024
 RFB_READ_BYTES = 64 * 1024
 REVALIDATE_INTERVAL_SEC = 15.0
-RECONNECT_MARGIN_SEC = 120
 
 
 class BlenderRfbError(RuntimeError):
@@ -33,7 +31,6 @@ async def relay_rfb(
     socket_path: Path,
     *,
     revalidate: Callable[[], Awaitable[bool]] | None = None,
-    credential_expires_at: int | None = None,
     on_activity: Callable[[], None] | None = None,
 ) -> None:
     """Relay binary frames only. Authentication and reservation happen upstream."""
@@ -76,10 +73,6 @@ async def relay_rfb(
             await asyncio.sleep(REVALIDATE_INTERVAL_SEC)
             if not await revalidate():
                 raise BlenderRfbError(4403, "host service token expired")
-            # Only rotate after successful authorization. Revocation must still
-            # interrupt the session through the caller's revalidation callback.
-            if credential_expires_at is not None and credential_expires_at - time.time() <= RECONNECT_MARGIN_SEC:
-                raise BlenderRfbError(1012, "reconnect to renew host authorization")
 
     tasks: list[asyncio.Task[None]] = []
     try:

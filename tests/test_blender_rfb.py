@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-import pytest
-
 from mediaforge.blender_rfb import MAX_BROWSER_MESSAGE_BYTES, relay_rfb
 
 
@@ -69,53 +67,6 @@ def test_relay_moves_binary_both_directions_over_unix_socket(tmp_path: Path) -> 
         assert b"".join(websocket.sent) == b"RFB 003.008\nTEST"
         assert websocket.closed is None
         assert activity == 1
-
-    asyncio.run(scenario())
-
-
-@pytest.mark.parametrize("authorized", [True, False])
-def test_expiring_credential_reconnects_only_after_authorization(
-    tmp_path: Path, monkeypatch, authorized: bool,
-) -> None:
-    monkeypatch.setattr("mediaforge.blender_rfb.REVALIDATE_INTERVAL_SEC", 0.01)
-    monkeypatch.setattr("mediaforge.blender_rfb.time.time", lambda: 1000)
-
-    async def scenario() -> None:
-        path = tmp_path / "renew.sock"
-        disconnected = asyncio.Event()
-        checks = 0
-
-        async def hold(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-            try:
-                await reader.read()
-            finally:
-                writer.close()
-                await writer.wait_closed()
-                disconnected.set()
-
-        async def revalidate() -> bool:
-            nonlocal checks
-            checks += 1
-            return authorized
-
-        server = await asyncio.start_unix_server(hold, path=str(path))
-        websocket = FakeWebSocket("binary")
-        try:
-            await asyncio.wait_for(
-                relay_rfb(
-                    websocket, path, revalidate=revalidate, credential_expires_at=1120,
-                ),  # type: ignore[arg-type]
-                timeout=2,
-            )
-            await asyncio.wait_for(disconnected.wait(), timeout=2)
-        finally:
-            server.close()
-            await server.wait_closed()
-        assert checks == 1
-        assert websocket.closed == (
-            (1012, "reconnect to renew host authorization") if authorized
-            else (4403, "host service token expired")
-        )
 
     asyncio.run(scenario())
 

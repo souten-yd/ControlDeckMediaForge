@@ -1,15 +1,20 @@
 # Media Forge implementation status
 
-## 2026-09-06 RFB credential renewal — NOT YET LIVE VERIFIED
+## 2026-09-06 RFB credential renewal — VERIFIED EXISTING INSTALLED PATH
 
 Host `97aba42`のloopback例外はLLM gateway/agent MCP限定とコードで確認。
-RFBは期限付きservice identityを再検証する。Host proxyのloopback接続だけでは遠隔browser由来の
-権限まで省略できないため、MF側で期限前に表示接続を閉じ、既存Host bridge再認証/再接続を使う。
-権限失効は再接続扱いにせず従来どおりinterruptする。Host/global config/TTL変更なし。
-branch `ux1/3d-rfb-credential-renewal`に実装と2 regression caseを追加。
-600秒超の実Blender操作/再接続/保存と署名配布はNOT TESTED。installed版は未変更。
-全体3DS-8/Scenario EはPARTIAL。実機受入を終えるまで当sliceはmergeしない。
-`./mf.sh test`: 1055 passed / 既知Starlette warning1 / 119.74秒。diff check成功。
+RFBは期限付きservice identityを再検証するが、MFの既存session.updated handlerにはRFB再接続も存在。
+当初追加した期限前1012処理は実機証拠を受け撤回。PR #293は受入script/文書だけに変更。
+installed0.28.30の実Host opaque iframeで`3ds_rfb_renewal_installed_e2e.py`を実行、exit0/672.072秒。
+証拠 `/data1tb/mf-rfb-renewal-negative-0.28.30-20260906`（negativeは当初予想の名前、結果はpositive）。
+接続後480.340秒に接続instance1→2、660.433秒まで同一sessionでconnected、GUI入力のmesh複製を保存。
+scene `scene_b2f21eddc2c548cc8cb7865d32e9a1bc` revision1→2、1→2 meshes、32256 triangles/16132 vertices。
+Blender4.5.13/独立GLB検査passed、新GLB2,179,304 B、SHA `232b1916491b012a57422ebfdd1d487babccfdc698392481b22cf489a3452ed2`。
+旧版レコード/実blend・GLB SHA不変。page errors0。専用login個別revoke/password不変、試験session終端。
+Host PID2196/MF PID31432不変、Blender unit inactive/MainPID0。Host/global config/TTL/稼働版変更なし。
+隔離sourceの並行起動はdisplay99競合で失敗、lock削除なし。不要な候補scriptは撤回、隔離dataは保持。
+`./mf.sh test`: 1053 passed / 既知Starlette warning1 / 112.01秒。全体3DS-8/Scenario EはPARTIAL。
+setupの長時間credential・自然な長時間演算/GPU組合せはNOT TESTED。製品差分なしのため新規release不要。
 
 ## 2026-09-06 installed CPU child refresh across 600s — VERIFIED FOR THIS SCOPE
 
