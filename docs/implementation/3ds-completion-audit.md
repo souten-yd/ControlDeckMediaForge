@@ -54,6 +54,9 @@ v0.28.16 installedで既定TTLのqueue fault injectionを実行したが、Host�
 更新開始前にfailed。retry1は251.002秒までrunning、retry2は150.297秒で6件すべて
 `host_context_lost`。retry2のHost DBはinterrupted、local outboxは未送信のまま、refresh監査0件。
 成功条件は未達。まず正規identity復帰時の終端再送/Host履歴照会の欠落を解決する。
+Host履歴読取は別PR ControlDeck#275（merged `40f1bc0`）で追加し、隔離した別processの実HTTPで
+interrupted読取200/別Job403/refresh404/update404を確認した。installed Host適用とMediaForge
+outbox再送は未確認。新しいAgent Job subjectから旧childのauthorityを無断で取得しない。
 詳細はhandoff/status、証拠は`/data1tb/mf-credential-refresh-installed-0.28.16-retry2/events.json`。
 
 ## 今回発見した具体的なコード差分

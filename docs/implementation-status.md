@@ -9114,3 +9114,19 @@ DB履歴には到達せず、再起動後の終端照合を妨げる。次は正
 Hostが確定したinterruptedを無断でfailedへ上書きしたり、未送信を送信済みと表示したりしない。
 証拠は3 directoryのevents.json、今回のread-only SQLとsystemd journal。全体3DS-8はPARTIAL。
 最終`./mf.sh test`: 993 passed / 既知Starlette warning 1件 / 106.33秒。
+
+## 2026-09-06 — Host終端履歴の読み取り前提
+
+MediaForge側ではHost再起動後のDB履歴にアクセスできないため、汎用Host PR
+`souten-yd/ControlDeck#275`（merged `40f1bc0`）でJob controlの履歴読み取りを追加した。現行responseのまま、
+正確なAdd-on kind、Job scopeまたはowner、終端状態を照合する。非終端DB行は409、
+更新/refreshは404を維持する。Hostの確定終端は書き換えず、実行中Jobへ復活させない。
+
+Host `./deck.sh test`951 passed / 1 skipped / 66.76秒、最新main取込後focused37 passed / 3.49秒。
+Host script `tools/addon-job-history-smoke.py`を隔離DB/systemd user unitで実行し、別processの
+startup recoveryでrunning→interrupted、実HTTP200、別Job403、refresh404、update404を観測した。
+最終証拠`/tmp/cd-job-history-nzou5ckt/observations.json`。試験unit停止済み、稼働Hostは再起動していない。
+導入済みHostへの適用、MediaForge outbox再送、長時間credential refresh、今回変更のPC/mobileはNOT TESTED。
+この前提修正を終端同期完了とは扱わない。既存Job scopeとactor ownerを混同せず、正規identity復帰後の
+再送/照合が残る。MediaForge公開contract/画像/G8/installed v0.28.16には変更なし。
+引き継ぎ更新の`./mf.sh test`は993 passed / 既知warning1件 / 105.30秒。
