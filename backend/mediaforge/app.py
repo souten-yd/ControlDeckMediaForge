@@ -2800,13 +2800,25 @@ def create_app(
             raise ValueError("session parts must name at least one known part")
         return wanted
 
+    @app.websocket("/workspace-api/material-preview/ws")
     @app.websocket("/ws")
     async def workspace_socket(websocket: WebSocket) -> None:
-        try:
-            identity = await require_host_service_headers(websocket.headers, host)
-        except HTTPException:
-            await websocket.close(code=4401, reason="invalid host service token")
-            return
+        standalone_preview = websocket.url.path == "/workspace-api/material-preview/ws"
+        if standalone_preview:
+            origin = urlsplit(websocket.headers.get("origin", ""))
+            host_header = websocket.headers.get("host", "")
+            if (origin.scheme not in {"http", "https"} or origin.netloc != host_header
+                    or origin.path not in {"", "/"} or origin.query or origin.fragment
+                    or urlsplit(f"//{host_header}").hostname not in {"127.0.0.1", "::1", "localhost"}):
+                await websocket.close(code=4403, reason="same-loopback origin required")
+                return
+            identity = HostIdentity("", "media-forge", preferences.STANDALONE_SUBJECT, 0, frozenset())
+        else:
+            try:
+                identity = await require_host_service_headers(websocket.headers, host)
+            except HTTPException:
+                await websocket.close(code=4401, reason="invalid host service token")
+                return
         await websocket.accept()
         uploads: dict[str, dict[str, Any]] = {}
         scene_upload_ids: set[str] = set()
@@ -2860,6 +2872,8 @@ def create_app(
                     if not request_id or not isinstance(method, str) or not isinstance(params, dict):
                         raise ValueError("invalid workspace request")
                     reject_host_paths(params)
+                    if standalone_preview and not method.startswith("scenes.material.preview."):
+                        raise ValueError("standalone preview socket accepts only material preview methods")
                     result: dict[str, Any]
                     if method.startswith("scenes.material.preview."):
                         if any(not item.done() for item in material_tasks):

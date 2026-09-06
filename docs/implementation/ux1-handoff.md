@@ -3,6 +3,32 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 採用前材質候補 UI / standalone mirror
+
+PR #264 merged `feaa69e3049b0d6577f694ffed731477dd26d99c`をfetch確認。
+branch `ux1/3d-material-preview-ui`。既存比較dialogを未保存候補にも使い、prepare→比較→adopt/discardを接続。
+旧版比較/復元を維持し、生成画像の選択も同じprepare経路へ入る。直接applyの公開契約は変更しない。
+standaloneは同一loopback Originだけの専用WS。candidate以外のmethod/不正Originを拒否する5 testを追加。
+再接続でcandidateをinvalidにし採用禁止、dropSocketでpendingもreject。準備中に閉じるとsocketを閉じ取消。
+旧版復元直後はmaterial revisionとscene head一致まで操作禁止。locale切替でviewer statsも更新する。
+320pxの背景navがclient305/scroll319だったため、比較dialog中は背景scrollをlockした。
+最終browserではroot320/320、dialog280/280。表示をclipして判定を通したのではなく背景スクロールを停止。
+
+実Blender4.5.9の新規隔離fixture serverを9047で起動し、通常headed Chrome/AMD内蔵GPUで
+日英/320px、青い現在版と赤い未保存候補、prepare/discard時head不変、採用だけ+1、旧版復元+1と
+旧blend bytes一致、socket切断後adopt disabled/page error0を確認。
+証拠 `/data1tb/mf-material-preview-ui-browser-final-20260906/observations.json`（2→3→4版）。
+最終保存status修正後は同fixtureの不変履歴を残したまま別evidence dirへ再実行する。
+同修正後の再実行も成功: `/data1tb/mf-material-preview-ui-browser-final-status-20260906`（4→5→6版）。
+root320/320・dialog280/280、全assert/page error0を再確認。隔離source server9047は停止済み。
+gate `./mf.sh test`: 1026 passed / 既知Starlette warning1件 / 121.80秒。構文/diff check成功。
+初回は復元直後の材質情報読み込み中の再比較でtimeout。ready条件修正後は成功した。
+初回の弱い幅assertも実画像で見抜き、client/scrollの等値検査へ変更した。
+
+次はinstalled HostでこのUIを受入し、既存画像/生成画像→比較→採用/破棄/復元の制作一巡を照合する。
+source browserの成功をinstalled/署名新版へ読み替えない。生成画像GPU経路の再実行もNOT TESTED。
+GOAL-06/3DS-6/3DS-8は未完了。Host/installed service/利用者制作データは変更していない。
+
 ## 2026-09-06 採用前材質候補 private WebSocket
 
 PR #261 merged `c054495c5a6e203f188e61b4b6a5548c67b07b90`をfetch確認。

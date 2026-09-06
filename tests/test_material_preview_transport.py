@@ -6,6 +6,7 @@ import threading
 from typing import Any
 
 import pytest
+from starlette.websockets import WebSocketDisconnect
 
 from mediaforge.material_binding import MaterialBinding
 from test_host_execution import host_client
@@ -14,6 +15,28 @@ from test_workspace_transport import call
 
 
 PREFIX = "scenes.material.preview."
+
+
+@pytest.mark.parametrize("origin", [None, "null", "https://evil.test", "http://127.0.0.1/extra"])
+def test_standalone_preview_requires_same_loopback_origin(tmp_path: Path, origin: str | None) -> None:
+    client, _, _ = host_client(tmp_path)
+    headers = {"Host": "127.0.0.1"}
+    if origin is not None:
+        headers["Origin"] = origin
+    with client, pytest.raises(WebSocketDisconnect) as error:
+        with client.websocket_connect("/workspace-api/material-preview/ws", headers=headers):
+            pass
+    assert error.value.code == 4403
+
+
+def test_standalone_preview_does_not_expose_other_workspace_methods(tmp_path: Path) -> None:
+    client, _, _ = host_client(tmp_path)
+    with client, client.websocket_connect("/workspace-api/material-preview/ws", headers={
+        "Host": "127.0.0.1", "Origin": "http://127.0.0.1",
+    }) as socket:
+        assert not call(socket, "jobs.list")["ok"]
+        result = call(socket, PREFIX + "adopt", {"candidate_id": "missing"})
+        assert result["error"]["code"] == "scene_material_preview_unavailable"
 
 
 def configure(client: Any, root: Path) -> tuple[Any, str, dict[str, Any]]:

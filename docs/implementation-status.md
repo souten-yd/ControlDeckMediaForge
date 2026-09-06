@@ -9472,3 +9472,35 @@ merge commit `38a87e1`で取り込んで保持した。同じ実TCP/Blender scri
 `/data1tb/mf-material-preview-transport-main-20260906`で再実行し、上記全assertion成功。
 他者の公開/導入作業をこちらが実施したとは記録しない。installed Host受入は引き続きNOT TESTED。
 main取込後gate `./mf.sh test`: 1021 passed / 既知Starlette warning1件 / 126.49秒。diff check成功。
+
+## 2026-09-06 採用前材質候補 UI / standalone mirror — SOURCE ACCEPTANCE
+
+基準main `feaa69e`（PR #264 merge）。branch `ux1/3d-material-preview-ui`。
+material UIを直接applyからprepare→現行版/未保存候補比較→明示adopt/discardへ変更。
+candidate bytesは専用readで受け、正式Assetとしてopenしない。旧版比較/復元を維持する。
+standalone mirrorは同一loopback Originを検証し、候補methodだけを受理する専用WSとして追加。
+接続再作成/期限で採用を無効化し、閉じる時は候補破棄、prepare中はsocket closeで取消する。
+dropSocketはpendingをrejectし、旧socketの応答待ちを残さない。公開Agent apply契約は変更していない。
+
+実機source server:
+`PYTHONPATH=backend:. .venv/bin/python scripts/3ds_material_preview_ui_e2e.py --serve
+--data-dir /data1tb/mf-material-preview-ui-final-20260906
+--legacy-runtime-root /data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9 --port 9047`。
+Host diagnostic venv（Playwrightのみ）の同scriptへ`--url http://127.0.0.1:9047 --data-dir 同上
+--evidence-dir /data1tb/mf-material-preview-ui-browser-final-20260906`を渡して成功。
+通常headed Chrome/AMD内蔵GPU/実Blender4.5.9の隔離fixtureで、青い現行版/赤い未保存候補を実画像で確認。
+prepare/discard時scene応答不変、adoptだけ2→3版、旧版復元で4版・旧blend bytes一致、
+socket切断後のadopt disabled、日英文言とstats切替、page error0をassert。
+320pxでroot client/scroll320/320、dialog280/280。保存前に未保存表示を確認。
+
+初回browserは復元直後の再比較でtimeout。材質情報がcurrent revisionへ追従するまで操作禁止にして修正。
+弱い幅検査(scroll<=320)では実画像に横scrollが残り、測定で背景navがroot client305/scroll319と判明。
+比較dialog中の背景scroll lockとclient/scroll等値検査を追加し、再実画像/数値を確認した。
+最終status文言修正後は別evidence dirで再実行する。既存生成画像E2E scriptも明示採用操作へ更新。
+同修正後の最終実行 `/data1tb/mf-material-preview-ui-browser-final-status-20260906`も成功。
+既存fixtureの履歴を残して4→5→6版、全assert/page error0、root320/320・dialog280/280を再確認。
+隔離source server9047は停止済み。gate `./mf.sh test`: 1026 passed / 既知warning1件 / 121.80秒。
+
+NOT TESTED: installed Host/署名新版、生成画像GPU経路を含む全制作一巡。既存画像のsource fixture受入を
+生成画像/installed成功へ読み替えない。GOAL-06/3DS-6/3DS-8はPARTIAL。
+Host/installed service/利用者制作データは変更していない。
