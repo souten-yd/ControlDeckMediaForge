@@ -1,5 +1,36 @@
 # Media Forge implementation status
 
+## 2026-09-07 installed retry keeps original Blender after default switch
+
+PR #337 merge `4479d72f1d444b1bd0af38dd990cacb105462969`から
+branch `ux1/3d-retry-installed-acceptance`。新診断scriptは既存専用mf-e2eの取消Job
+job_fb5b2171ee68442f86b889b10754273b（元4.5.13、primitive1件）のみを再試行対象にする。
+owner/取消/検証用名称/入力数/installed0.28.37 healthyを検査し、
+実行中Job・GUI・working copyが0であることを直前に確認した。
+
+`3ds_retry_installed_e2e.py --expected-version 0.28.37
+--job-id job_fb5b2171ee68442f86b889b10754273b
+--evidence-dir /data1tb/mf-retry-installed-0.28.37-20260907`をHost診断Pythonで実行、
+4.375秒/exit0。実Host opaque iframeのprivate bridgeで既定を4.5.9へswitch/ready後、
+正規service identityのAgent HTTPで保存済みrequest+retry_job_idを一度だけ送信。
+新Job job_f563a90199b043d882c4f4a5e666cf16は実Blender4.5.13でsucceeded。
+実行中の既定は4.5.9のまま、Job pin/worker result/新revisionはいずれも4.5.13。
+retry_ofは元取消Job。Host child DBもsucceeded、host_terminal_sent=trueを追加read-only照合。
+
+finallyで正規switchを使い既定4.5.13へ戻しready、runtime registry bytesは開始前と一致。
+元Jobの全DB列、既存scene/revision value_json全件不変、新scene/初版各1件だけ増加。
+新scene scene_d997978d6b854edda365a8ec780cd620と新source/GLB2件は検証物として保持。
+新Assetの実size/SHAとmetadata一致。runtime削除/再導入/worker故障注入/画像生成は行わない。
+専用login sessionだけfinally revoke、既存password/global設定は不変。
+Host849052/MF848621ともPID不変・active。こちらからservice restartなし。
+
+これはsigned installedの実Agent HTTP/実Blender/実Host bridge受入で、Host fixtureではない。
+switchはworkspace内call経由であり、Settingsの物理button click受入とは区別する。
+再試行時の元環境保持はinstalledまで確認した。材質の故障後retryはsourceのみ、
+全GOAL-07/3DS-8/C/D/E/Fの不足をこの1経路で完了扱いしない。
+次はGOAL-07の残るHTTP/browser失敗工程受入を、既存成功画像保持の条件に沿って進める。
+全 `./mf.sh test`: 1128 passed/既知warning1/172.05秒。script py_compile/diff check成功。
+
 ## 2026-09-06 v0.28.37 signed retry release installed
 
 PR #336 merge/tag target `bb949db9d927ce2074f34a7aab0b89254528c38b`。
