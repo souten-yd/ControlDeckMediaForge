@@ -9514,3 +9514,36 @@ PR #267 merged `ab8a059`の採用前材質比較/明示採用UIを配布する�
 NOT TESTED: installed Host/署名新版、生成画像GPU経路を含む全制作一巡。既存画像のsource fixture受入を
 生成画像/installed成功へ読み替えない。GOAL-06/3DS-6/3DS-8はPARTIAL。
 Host/installed service/利用者制作データは変更していない。
+
+## 2026-09-06 v0.28.23 signed release / installed acceptance
+
+PR #268 merge/tag target `22fc2b95f051bac3e77f740a76367677bdb0358d`から正式bundle構築・署名公開。
+31,490,364 B / SHA-256 `8a6eb22131b8a2ca305af4f2524a070f1c3051622cd14092ebc9cf311023db64`。
+公開4 asset再取得checksum/Host署名検証成功。packaged core doctor ok/0.28.23。
+launcherはdata-dir環境変数なしでは起動拒否し、core doctorで診断した。
+core SHA `6e00a7307fe9850eee997db765643a051ed6e2f59d1cd0d6fd88bd1b4a1f2f41`はinstalled実体と一致。
+更新前2回はactive Job検出で中止。その後全Job/session/runtime/model operation終端を確認した。
+online DB backup `/data1tb/mf-0.28.23-pre-update-20260906.sqlite3`は1,466,368 B、非公開/保持。
+標準registry.update 10.756秒、0.28.22→0.28.23/healthy/enabled。MF PID2645893、11:53:53 JST。
+Host PID2642902/11:51:27 JSTは不変。公開再取得 `/data1tb/mf-0.28.23-public-20260906`を保持。
+
+installed candidate E2E scriptを追加。専用mf-e2e新規scene、同ユーザーsession個別revoke、
+password変更/overlayなし。最初はPillow不在で起動前失敗し標準libraryのPNGへ変更。
+Host英語設定による日本語assert失敗を明示localeで修正。再試験は白い現行cube/赤い未保存候補を
+比較・破棄してhead不変、採用1→2まで進んだが旧版比較open待ちでtimeout。
+失敗証拠 `/data1tb/mf-material-preview-installed-0.28.23-final-20260906`、診断状態を追加し原因確認中。
+既存制作sceneは変更していない。新規試験scene/証拠は残す。
+gate `./mf.sh test`: 1026 passed / 既知warning1件 / 111.13秒。
+NOT VERIFIED: installed全一巡。NOT TESTED: 生成画像一巡/全release A〜F。GOAL-06/3DS-8はPARTIAL。
+
+診断状態だけ追加した再試験は成功。証拠
+`/data1tb/mf-material-preview-installed-0.28.23-diagnostic-20260906/observations.json`。
+scene `scene_257528fdd6a540818537d5e93f893870`で比較/破棄head不変、採用1→2、旧版復元2→3、
+復元source SHA一致、切断後採用禁止、日英表示、opaque origin null、page error0。
+白い現行cube/赤い未保存candidateの日本語比較画面を実画像でも確認した。
+実行はHost診断venvの同script、`--blend /data1tb/mf-material-preview-ui-final-20260906/original.blend
+--expected-version 0.28.23 --evidence-dir /data1tb/mf-material-preview-installed-0.28.23-diagnostic-20260906`。
+ただし直前の旧版比較timeoutは原因未確定。単一成功で解決とせず再現調査を残す。
+生成画像一巡/mobile touch/長時間credential/全release A〜FはNOT TESTED、全体はPARTIAL。
+exact release worktreeを削除（Gitで再作成可）、build/package展開先をgio trashへ退避（復元可）。
+公開再取得・browser証跡・非公開DB backupを保持。PR #269へ受入記録を提出した。
