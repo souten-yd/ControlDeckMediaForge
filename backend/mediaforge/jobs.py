@@ -147,7 +147,7 @@ class JobManager:
         blender_timeout_sec: float = 180.0,
         host_client: ControlDeckHostClient | None = None,
         lease_renew_sec: float = 10.0,
-        warm_linger_sec: float = 90.0,
+        warm_linger_sec: float = 0.0,
         model_manifest: Path | None = None,
         model_catalog_manifest: Path | None = None,
         model_store_root: Path | None = None,

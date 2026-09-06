@@ -36,11 +36,18 @@ class Settings:
     control_deck_url: str = "http://127.0.0.1:8765"
     host_request_timeout_sec: float = 10.0
     host_lease_renew_sec: float = 10.0
-    # 生成が終わった後、model を載せたまま次の依頼を待つ長さ。
-    # 載せ直しは実測で十数秒かかり、続けて頼まれる場面ではそれが待ち時間の
-    # ほとんどを占める。抱えてよいのは他が GPU を要らない間だけなので、
-    # ControlDeck から返却を求められたら長さに関わらず即座に降りる。
-    warm_linger_sec: float = 90.0
+    # 生成が終わった後、model を載せたまま次の依頼を待つ長さ。0 で使わない。
+    #
+    # 既定で 0 にしてある。載せ直し（実測で十数秒）を省くために入れたが、
+    # ControlDeck 側の受付が「実際に使われている VRAM」で空きを見るため、
+    # lease を返した後も model が載っていると、次の生成が入れないと判断されて
+    # 待ち続ける（実測: 2 枚目が 300 秒待って resource_unavailable で失効）。
+    #
+    # lease を持ったまま待てば場所は説明できるが、次の生成は自分の lease を
+    # 取るので、同じ device に 2 つは持てない。lease を次の job へ渡すには
+    # ControlDeck 側の所有判定（host job に紐づく）を変える必要がある。
+    # そこが済むまでは 0 のままにする。
+    warm_linger_sec: float = 0.0
     model_manifest: Path = REPOSITORY_ROOT / "worker_packs/image/models.json"
     model_catalog_manifest: Path | None = None
     model_store_root: Path | None = None
@@ -213,7 +220,7 @@ class Settings:
             control_deck_url=os.environ.get("MEDIA_FORGE_CONTROLDECK_URL", "http://127.0.0.1:8765"),
             host_request_timeout_sec=float(os.environ.get("MEDIA_FORGE_CONTROLDECK_TIMEOUT_SEC", "10")),
             host_lease_renew_sec=float(os.environ.get("MEDIA_FORGE_CONTROLDECK_RENEW_SEC", "10")),
-            warm_linger_sec=float(os.environ.get("MEDIA_FORGE_WARM_LINGER_SEC", "90")),
+            warm_linger_sec=float(os.environ.get("MEDIA_FORGE_WARM_LINGER_SEC", "0")),
             model_manifest=Path(
                 os.environ.get("MEDIA_FORGE_MODEL_MANIFEST", REPOSITORY_ROOT / "worker_packs/image/models.json")
             ),
