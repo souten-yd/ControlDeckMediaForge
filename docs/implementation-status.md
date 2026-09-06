@@ -1,5 +1,24 @@
 # Media Forge implementation status
 
+## 2026-09-07 v0.28.38 material failure display release preparation
+
+PR #339 merge `fcf9676cacc9a24044bcd3a533c889b4c80872be`をfetch確認し、
+branch `ux1/3d-material-v02838`でaddon/coreを0.28.38へ同期。
+材質prepare失敗後の終端表示修正と日英source実ブラウザ受入を配布対象にする。
+release noteへ保存形式不変、0.28.37へのcore rollback互換、未実施の配布受入を記録した。
+
+本番read-onlyでcurrent→versions/0.28.37、Host PID849052 active。
+Jobs460件全終端（326 succeeded/126 failed/8 canceled）、GUI23件全終端、
+working copyはcommitted29/recovery3/released8でactive0、runtime operation5件ready、
+model operation0を確認。既存制作物・runtime・サービスを変更しない。
+Host main2a6f237と既存frontend/tsconfig.tsbuildinfo変更は保全する。
+
+本版の署名公開・標準update・installed失敗表示受入は未実施。
+GOAL-07/3DS-8全体はPARTIALのまま。次はexact mergeから標準bundleを作り、
+内容/署名/consumerを検証して配布・導入済み環境の受入へ進む。
+全 `./mf.sh test`: 1129 passed/既知warning1/150.44秒、exit0。
+`npm run build:viewer`成功・生成物差分なし、node --check/diff check成功。
+
 ## 2026-09-07 material failure display and browser retry
 
 PR #338 merge `b453e8f546aedd31d963e295f0693908c3b9f96d`から
