@@ -102,8 +102,10 @@ npm registry integrityは
 DRACO/KTX2/Meshopt decoderは同梱せず、required extensionをbackend検証が受理した場合だけ追加する。
 外部CDN・外部texture URIを自動取得しない。認証付きasset deliveryから必要なbytesだけを読む。
 
-必須: orbit/pan/zoom、fit、背景・light preset、material/wireframe、bounding box、triangle数、
-animation play/pause、前後版比較、材質slot選択、画像差替えpreview、Blenderで編集。
+Library必須（2026-09-06利用者確認）: 対象の±X/±Y/±Z回転と拡大・縮小。
+表示操作はasset/sceneへ保存しない。fitと既存orbit操作は操作補助として維持する。
+背景・light preset、material/wireframe、bounding box、triangle数、animation play/pauseは追加操作。
+制作側の前後版比較、材質slot選択、画像差替えpreview、Blenderで編集は別の必須ゴールとして維持する。
 追加: normals/UV表示、LOD比較。unsupported extensionは理由を出して検証済みpreviewへ戻る。
 
 viewerへ渡すGLBは64 MiB以下、textureは1辺8,192 px以下かつ合計67,108,864 px以下とし、

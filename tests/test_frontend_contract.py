@@ -181,7 +181,18 @@ def test_vendored_3d_viewer_is_reproducible_lazy_and_disposable() -> None:
     ):
         assert required in viewer_source
     assert f'const MODEL_VIEWER_BUNDLE = "{lock["bundle_sha256"][:16]}"' in SCRIPT
-    assert "new URL(`/viewer-runtime.js?v=${MODEL_VIEWER_BUNDLE}`" in SCRIPT
+    loader = SCRIPT[SCRIPT.index("function loadModelViewer()"):SCRIPT.index("const VIEWER_3D_TEXT")]
+    assert 'script.crossOrigin = "use-credentials"' in loader
+    assert '${workspaceFrameRoot()}/static/three-viewer.js?v=${MODEL_VIEWER_BUNDLE}' in loader
+    assert '__mediaForgeCreateModelViewer' in viewer_source
+    assert 'modelViewerModulePromise = null; throw error' in loader
+    assert 'new URL(`/viewer-runtime.js' not in SCRIPT
+    for axis in ('x', 'y', 'z'):
+        assert f'data-viewer-rotate="{axis}" data-direction="1"' in (FRONTEND / "index.html").read_text()
+        assert f'data-viewer-rotate="{axis}" data-direction="-1"' in (FRONTEND / "index.html").read_text()
+    assert 'rotateOnWorldAxis' in viewer_source
+    assert 'viewer.modelInstance?.zoom(1)' in SCRIPT
+    assert 'viewer.modelInstance?.zoom(-1)' in SCRIPT
 
 ADVANCED_IDS = (
     "advanced-create", "advanced-format",
@@ -242,7 +253,7 @@ def test_3d_assets_use_the_validated_chunk_viewer_with_a_project_preview_fallbac
     assert 'call("assets.model.open"' in model
     assert 'call("assets.model.bytes"' in model
     assert 'call("assets.model.close"' in model
-    assert "new URL(`/viewer-runtime.js?v=${MODEL_VIEWER_BUNDLE}`" in model
+    assert 'const modulePromise = loadModelViewer()' in model
     assert 'call("assets.thumbnail"' in package
     assert package.index("openModelViewer") < package.index('call("assets.content"')
 

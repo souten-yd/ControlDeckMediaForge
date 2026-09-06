@@ -226,6 +226,11 @@ def test_standalone_model_transport_and_opaque_module_are_served_from_the_bundle
         assert module.headers["access-control-allow-origin"] == "*"
         assert module.headers["cross-origin-resource-policy"] == "cross-origin"
         assert b"Three.js Authors" in module.content[:300]
+        credentialed = client.get("/static/three-viewer.js?v=test", headers={"Origin": "null"})
+        assert credentialed.status_code == 200
+        # Host supplies credentialed CORS for the frame. Do not duplicate it.
+        assert "access-control-allow-origin" not in credentialed.headers
+        assert b"__mediaForgeCreateModelViewer" in credentialed.content
 
         opened = client.post(f"/workspace-api/assets/{imported['id']}/model/open").json()
         piece = client.post(
