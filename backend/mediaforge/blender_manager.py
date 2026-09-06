@@ -149,6 +149,7 @@ class BlenderRuntimeManager:
                 for runtime_id, spec in catalog.specs.items()
             ],
             "install_available": catalog.base_runtime_id not in ready_ids,
+            "exact_install_available": True,
         }
 
     def _catalog(self) -> BlenderRuntimeCatalog:
@@ -301,11 +302,62 @@ class BlenderRuntimeManager:
             )
         return self._start(runtime_id, BlenderRuntimeOperationAction.SWITCH)
 
+    async def install_exact(self, runtime_id: str) -> BlenderRuntimeOperation:
+        """Explicit exact-catalog installation, without changing an existing active pin."""
+        task = asyncio.create_task(self._admit_exact_async(runtime_id))
+        self._removal_admissions.add(task)
+        try:
+            return await task
+        finally:
+            self._removal_admissions.discard(task)
+
+    async def _admit_exact_async(self, runtime_id: str) -> BlenderRuntimeOperation:
+        task = asyncio.create_task(asyncio.to_thread(self._admit_exact, runtime_id))
+        try:
+            operation = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            operation = await task
+            self._spawn(operation.id)
+            raise
+        self._spawn(operation.id)
+        return operation
+
+    def _admit_exact(self, runtime_id: str) -> BlenderRuntimeOperation:
+        spec = self._catalog().specs.get(runtime_id)
+        if spec is None:
+            raise BlenderRuntimeOperationError("blender_runtime_not_found", "runtime is not in the trusted catalog")
+        identity = self._exact_identity(runtime_id, spec)
+        for operation in self.store.list_blender_runtime_operations():
+            if operation.runtime_id == runtime_id and operation.state not in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES:
+                if operation.action == BlenderRuntimeOperationAction.INSTALL and (operation.result or {}).get("exact_install") == identity:
+                    return operation
+                raise BlenderRuntimeOperationError("blender_runtime_operation_active", "another runtime operation is active")
+        if self.resolver.resolve_registered(runtime_id) is not None:
+            raise BlenderRuntimeOperationError("blender_runtime_already_installed", "Blender runtime is already installed")
+        try:
+            return self.store.create_blender_runtime_operation(runtime_id, spec.version,
+                BlenderRuntimeOperationAction.INSTALL, bytes_total=spec.archive_size_bytes,
+                result={"exact_install": identity})
+        except ValueError as exc:
+            raise BlenderRuntimeOperationError("blender_runtime_operation_active", "another runtime operation is active") from exc
+
+    @staticmethod
+    def _exact_identity(runtime_id: str, spec: RuntimeSpec) -> dict[str, Any]:
+        return {"runtime_id": runtime_id, "version": spec.version,
+                "archive_sha256": spec.archive_sha256, "archive_size_bytes": spec.archive_size_bytes}
+
+    @staticmethod
+    def _removal_allowed(preview: dict[str, Any], acknowledge_history: bool) -> bool:
+        if type(acknowledge_history) is not bool:
+            raise BlenderRuntimeOperationError("blender_runtime_confirmation_invalid", "history acknowledgement must be a boolean")
+        return bool(preview["can_remove"] or (acknowledge_history and preview.get("can_remove_with_history")))
+
     async def removal_preview(self, runtime_id: str) -> dict[str, Any]:
         return await asyncio.to_thread(self._removal_preview, runtime_id)
 
     def _removal_preview(self, runtime_id: str) -> dict[str, Any]:
-        if runtime_id not in self._catalog().specs:
+        spec = self._catalog().specs.get(runtime_id)
+        if spec is None:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_not_found", "Blender runtime is not in the trusted catalog"
             )
@@ -336,6 +388,8 @@ class BlenderRuntimeManager:
             blocked.append("live_reference")
         if project_references:
             blocked.append("project_reference")
+        exact_reinstall = (self._exact_identity(runtime_id, spec)
+            if row["version"] == spec.version and row.get("archive_sha256") == spec.archive_sha256 else None)
         identity = {
             "runtime_id": runtime_id,
             "version": str(row["version"]),
@@ -346,6 +400,7 @@ class BlenderRuntimeManager:
             "in_process_reference_count": in_process,
             "durable_reference_counts": durable,
             "project_reference_count": project_references,
+            "exact_reinstall": exact_reinstall,
             "blocked_reasons": blocked,
         }
         fingerprint = hashlib.sha256(
@@ -354,6 +409,7 @@ class BlenderRuntimeManager:
         return {
             **identity,
             "can_remove": not blocked,
+            "can_remove_with_history": blocked == ["project_reference"] and exact_reinstall is not None,
             "confirmation_fingerprint": fingerprint,
         }
 
@@ -418,8 +474,10 @@ class BlenderRuntimeManager:
                 await task
                 raise
 
-    async def remove(self, runtime_id: str, confirmation_fingerprint: str) -> BlenderRuntimeOperation:
-        task = asyncio.create_task(self._admit_removal_async(runtime_id, confirmation_fingerprint))
+    async def remove(
+        self, runtime_id: str, confirmation_fingerprint: str, *, acknowledge_history: bool = False
+    ) -> BlenderRuntimeOperation:
+        task = asyncio.create_task(self._admit_removal_async(runtime_id, confirmation_fingerprint, acknowledge_history))
         self._removal_admissions.add(task)
         try:
             return await task
@@ -427,9 +485,9 @@ class BlenderRuntimeManager:
             self._removal_admissions.discard(task)
 
     async def _admit_removal_async(
-        self, runtime_id: str, confirmation_fingerprint: str
+        self, runtime_id: str, confirmation_fingerprint: str, acknowledge_history: bool = False
     ) -> BlenderRuntimeOperation:
-        task = asyncio.create_task(asyncio.to_thread(self._admit_removal, runtime_id, confirmation_fingerprint))
+        task = asyncio.create_task(asyncio.to_thread(self._admit_removal, runtime_id, confirmation_fingerprint, acknowledge_history))
         try:
             operation = await asyncio.shield(task)
         except asyncio.CancelledError:
@@ -439,13 +497,15 @@ class BlenderRuntimeManager:
         self._spawn(operation.id)
         return operation
 
-    def _admit_removal(self, runtime_id: str, confirmation_fingerprint: str) -> BlenderRuntimeOperation:
+    def _admit_removal(
+        self, runtime_id: str, confirmation_fingerprint: str, acknowledge_history: bool = False
+    ) -> BlenderRuntimeOperation:
         preview = self._removal_preview(runtime_id)
         if confirmation_fingerprint != preview["confirmation_fingerprint"]:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_remove_changed", "Blender runtime removal preview changed"
             )
-        if not preview["can_remove"]:
+        if not self._removal_allowed(preview, acknowledge_history):
             raise BlenderRuntimeOperationError(
                 "blender_runtime_in_use", "Blender runtime is still in use"
             )
@@ -455,7 +515,7 @@ class BlenderRuntimeManager:
                 str(preview["version"]),
                 BlenderRuntimeOperationAction.REMOVE,
                 bytes_total=int(preview["reclaimable_bytes"]),
-                result={"removal_preview": preview},
+                result={"removal_preview": preview, "acknowledge_history": acknowledge_history},
             )
         except ValueError as exc:
             raise BlenderRuntimeOperationError(
@@ -713,6 +773,9 @@ class BlenderRuntimeManager:
 
     def _remove_sync(self, operation: BlenderRuntimeOperation) -> None:
         preview = (operation.result or {}).get("removal_preview")
+        acknowledge_history = (operation.result or {}).get("acknowledge_history", False)
+        if type(acknowledge_history) is not bool:
+            raise BlenderRuntimeOperationError("blender_runtime_confirmation_invalid", "stored history acknowledgement is invalid")
         if not isinstance(preview, dict) or not isinstance(
             preview.get("confirmation_fingerprint"), str
         ):
@@ -753,6 +816,8 @@ class BlenderRuntimeManager:
                         "version": operation.version,
                         "removed_bytes": removed_bytes,
                         "recovered": True,
+                        "acknowledge_history": acknowledge_history,
+                        "removal_preview": preview,
                     },
                 )
                 return
@@ -772,7 +837,7 @@ class BlenderRuntimeManager:
                 raise BlenderRuntimeOperationError(
                     "blender_runtime_remove_changed", "Blender runtime removal preview changed"
                 )
-            if not current["can_remove"]:
+            if not self._removal_allowed(current, acknowledge_history):
                 raise BlenderRuntimeOperationError(
                     "blender_runtime_in_use", "Blender runtime is still in use"
                 )
@@ -812,6 +877,8 @@ class BlenderRuntimeManager:
                 "runtime_id": operation.runtime_id,
                 "version": operation.version,
                 "removed_bytes": removed_bytes,
+                "acknowledge_history": acknowledge_history,
+                "removal_preview": preview,
             },
         )
 
@@ -826,6 +893,9 @@ class BlenderRuntimeManager:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_catalog_changed", "Blender runtime catalog changed"
             )
+        exact_install = (operation.result or {}).get("exact_install")
+        if exact_install is not None and exact_install != self._exact_identity(operation.runtime_id, spec):
+            raise BlenderRuntimeOperationError("blender_runtime_catalog_changed", "exact Blender archive identity changed")
         self.store.update_blender_runtime_operation(
             operation.id, state=BlenderRuntimeOperationState.PREFLIGHT
         )

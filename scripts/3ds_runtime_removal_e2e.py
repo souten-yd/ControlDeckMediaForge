@@ -1,8 +1,9 @@
 """Real isolated HTTP deletion protection and asset-byte preservation acceptance.
 
-Uses only the owned prior clean setup root, never the installed Host. Deletes
-the unreferenced candidate 4.5.13, not project-pinned 4.5.9. Reinstalling the
-candidate through Settings/update restores it; assets are never deleted here.
+Uses only the owned prior clean setup root, never the installed Host. Default
+mode deletes the unreferenced candidate 4.5.13. --history-reinstall explicitly
+removes project-pinned inactive 4.5.9, checks preserved history/assets, installs
+that exact version again and reopens the same scene. Assets are never deleted.
 """
 from __future__ import annotations
 
@@ -99,7 +100,7 @@ async def run(args: argparse.Namespace) -> None:
 
             async def operation(payload: dict[str, Any]) -> dict[str, Any]:
                 created = await post(actions_path, payload)
-                async with asyncio.timeout(90):
+                async with asyncio.timeout(300):
                     while True:
                         value = next(x for x in (await get(runtime_path))["operations"] if x["id"] == created["id"])
                         if value["state"] in {"ready", "failed", "canceled"}:
@@ -109,6 +110,9 @@ async def run(args: argparse.Namespace) -> None:
 
             status = await get(runtime_path)
             assert status["active_runtime_id"] in {old, candidate}
+            if args.history_reinstall and candidate not in {r["runtime_id"] for r in status["runtimes"]}:
+                await operation({"action": "install_exact", "runtime_id": candidate})
+                status = await get(runtime_path)
             if args.live_references_only:
                 assert old in {r["runtime_id"] for r in status["runtimes"]}
             else:
@@ -182,12 +186,45 @@ async def run(args: argparse.Namespace) -> None:
                     "confirmation_fingerprint": preview["confirmation_fingerprint"]})
                 assert response.status_code == 422, response.text
                 assert response.json()["detail"]["code"] == "blender_runtime_in_use", response.text
+                if args.history_reinstall and session_state == "ready":
+                    assert not preview["can_remove_with_history"]
+                    acknowledged = await client.post(actions_path, json={"action": "remove", "runtime_id": old,
+                        "confirmation_fingerprint": preview["confirmation_fingerprint"], "acknowledge_history": True})
+                    assert acknowledged.status_code == 422, acknowledged.text
                 await record(stage, preview=preview, rejection=response.json(), session=current)
 
             await reject_old("running_session_project_protected", "ready")
             await post(sessions_path, {"action": "stop", "session_id": session_id})
             stopped = await wait_session("stopped")
             await reject_old("stopped_project_still_protected", "stopped")
+            if args.history_reinstall:
+                preview = await post(actions_path, {"action": "remove_preview", "runtime_id": old})
+                assert preview["can_remove_with_history"] and not preview["can_remove"]
+                removed = await operation({"action": "remove", "runtime_id": old,
+                    "confirmation_fingerprint": preview["confirmation_fingerprint"], "acknowledge_history": True})
+                assert removed["result"]["acknowledge_history"] is True
+                assert not await asyncio.to_thread((managed / old).exists)
+                assert (await get(runtime_path))["active_runtime_id"] == candidate
+                assert await get(scene_path) == scene_before
+                assert await get("/api/v1/assets") == assets_before
+                assert await asyncio.to_thread(asset_hashes, data / "assets") == hashes_before
+                unavailable = await client.post(sessions_path, json={"action": "start", "scene_id": scene_before["scene"]["id"]})
+                assert unavailable.status_code == 422, unavailable.text
+                await record("history_preserved_after_old_removal", removed=removed, unavailable=unavailable.json(), assets=hashes_before)
+                reinstalled = await operation({"action": "install_exact", "runtime_id": old})
+                assert (await get(runtime_path))["active_runtime_id"] == candidate
+                reopened = await post(sessions_path, {"action": "start", "scene_id": scene_before["scene"]["id"]})
+                session_id = reopened["id"]
+                ready_again = await wait_session("ready")
+                assert ready_again["runtime_id"] == old and ready_again["runtime_version"] == "4.5.9"
+                await post(sessions_path, {"action": "stop", "session_id": session_id})
+                await wait_session("stopped")
+                assert await get(scene_path) == scene_before
+                assert await get("/api/v1/assets") == assets_before
+                assert await asyncio.to_thread(asset_hashes, data / "assets") == hashes_before
+                await record("history_reinstall_passed", reinstalled=reinstalled, reopened=ready_again,
+                    assets_unchanged=hashes_before, not_tested=["installed Host/browser", "GUI framebuffer/input"])
+                return
             if args.live_references_only:
                 assert await get(scene_path) == scene_before
                 assert await get("/api/v1/assets") == assets_before
@@ -229,9 +266,13 @@ def main() -> None:
                         help="Start/stop real GUI and assert durable blockers; do not switch or delete runtimes")
     parser.add_argument("--hold-working-admission", action="store_true",
                         help="Inject a thread gate during copy admission and verify HTTP remains responsive")
+    parser.add_argument("--history-reinstall", action="store_true",
+                        help="Remove inactive project-pinned 4.5.9 with acknowledgement and reinstall the exact version")
     args = parser.parse_args()
     if args.hold_working_admission and not args.live_references_only:
         parser.error("--hold-working-admission requires --live-references-only")
+    if args.history_reinstall and args.live_references_only:
+        parser.error("--history-reinstall cannot be combined with --live-references-only")
     asyncio.run(run(args))
 
 

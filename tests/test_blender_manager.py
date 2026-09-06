@@ -674,6 +674,70 @@ def test_remove_requires_inactive_unreferenced_runtime_and_current_preview(tmp_p
     asyncio.run(scenario())
 
 
+def test_history_acknowledgement_and_exact_reinstall_preserve_active_pin(tmp_path: Path) -> None:
+    from mediaforge.scenes import SceneCatalog
+    from test_scenes import _revision_assets, _revision_input
+
+    async def scenario() -> None:
+        base, manifest = archive_fixture(tmp_path)
+        recommended = archive_content("4.5.13")
+        catalog = catalog_fixture(tmp_path, base, recommended)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(tmp_path, store, manifest,
+            catalog_transport({"4.5.9": base, "4.5.13": recommended}), catalog=catalog)
+        await manager.start()
+        try:
+            installed = await wait_terminal(store, (await manager.install_exact(RUNTIME_ID)).id)
+            assert installed.state == BlenderRuntimeOperationState.READY
+            source, glb, image = _revision_assets(store, tmp_path)
+            scenes = SceneCatalog(store)
+            document, revision = scenes.create("user:7", name="Preserved scene", tags=[], collection=None,
+                revision=_revision_input(source, glb, image))
+            before = {path: path.read_bytes() for path in (tmp_path / "data/assets").rglob("*") if path.is_file()}
+            assert before
+            active = await manager.removal_preview(RUNTIME_ID)
+            assert not active["can_remove_with_history"]
+            with pytest.raises(BlenderRuntimeOperationError, match="still in use"):
+                await manager.remove(RUNTIME_ID, active["confirmation_fingerprint"], acknowledge_history=True)
+            assert (await wait_terminal(store, manager.update().id)).state == BlenderRuntimeOperationState.READY
+            preview = await manager.removal_preview(RUNTIME_ID)
+            assert not preview["can_remove"] and preview["can_remove_with_history"]
+            assert preview["exact_reinstall"]["archive_sha256"] == hashlib.sha256(base).hexdigest()
+            for acknowledgement in (False, "true", 1, None, [], {}):
+                with pytest.raises(BlenderRuntimeOperationError) as error:
+                    await manager.remove(RUNTIME_ID, preview["confirmation_fingerprint"], acknowledge_history=acknowledgement)
+                assert error.value.code == ("blender_runtime_in_use" if acknowledgement is False else "blender_runtime_confirmation_invalid")
+            with resolver.g8_reference():
+                live = await manager.removal_preview(RUNTIME_ID)
+                assert not live["can_remove_with_history"]
+                with pytest.raises(BlenderRuntimeOperationError, match="still in use"):
+                    await manager.remove(RUNTIME_ID, live["confirmation_fingerprint"], acknowledge_history=True)
+            removed = await wait_terminal(store, (await manager.remove(
+                RUNTIME_ID, preview["confirmation_fingerprint"], acknowledge_history=True)).id)
+            assert removed.state == BlenderRuntimeOperationState.READY
+            assert removed.result["acknowledge_history"] is True
+            assert removed.result["removal_preview"] == preview
+            assert resolver.resolve_registered(RUNTIME_ID) is None
+            assert store.scene_runtime_reference_count(RUNTIME_ID) == 1
+            assert {path: path.read_bytes() for path in before} == before
+            assert scenes.get("user:7", document.id) == (document, [revision])
+            reinstalled = await wait_terminal(store, (await manager.install_exact(RUNTIME_ID)).id)
+            assert reinstalled.state == BlenderRuntimeOperationState.READY
+            assert resolver.resolve_registered(RUNTIME_ID).version == "4.5.9"
+            assert resolver.resolve_active().version == "4.5.13"
+            assert scenes.get("user:7", document.id) == (document, [revision])
+            with pytest.raises(BlenderRuntimeOperationError) as duplicate:
+                await manager.install_exact(RUNTIME_ID)
+            assert duplicate.value.code == "blender_runtime_already_installed"
+            with pytest.raises(BlenderRuntimeOperationError) as unknown:
+                await manager.install_exact("../../external")
+            assert unknown.value.code == "blender_runtime_not_found"
+        finally:
+            await manager.stop()
+    asyncio.run(scenario())
+
+
 def test_remove_registry_failure_restores_runtime_directory(tmp_path: Path, monkeypatch) -> None:
     async def scenario() -> None:
         base, manifest = archive_fixture(tmp_path)

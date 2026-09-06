@@ -3,6 +3,78 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 history removal restart and Settings acceptance
+
+PR #325 candidate head `7e81f7e`を確認して継続。追加7 tests:
+durable確認を保持した再開、確認欠落/不正bool、受付後active変更、catalog変更の削除拒否、
+exact installのarchive SHA/size変更時の再開拒否。初回3 testsはbase manifestとの不一致で
+catalog_invalidになった。base manifestも同時更新した有効catalog変更fixtureへ修正し、
+要求したidentity-change検査まで到達させた。最終7 passed。
+`./mf.sh test`: 1125 passed/既知warning1/166.33秒。製品コードの追加変更なし。
+
+source専用server PID343487/9162を既存owned clean rootで起動。本番Hostへ変更なし。
+新 `scripts/3ds_history_settings_e2e.py` をHostの既存browser診断Pythonで実行。
+coreへPlaywright依存追加なし。初回はDISPLAY未指定でChrome起動前に失敗（製品操作なし）。
+実user環境のDISPLAY=:0/XAUTHORITYを指定して再実行。
+`--evidence-dir /data1tb/mf-history-settings-20260906-r2` は日英1280/320すべてpassed。
+さらに `--verify-preserved-ui --evidence-dir /data1tb/mf-history-settings-20260906-r3`
+は104.143秒/exit0、page errors0。native Chrome pointer操作（JSでclick代用なし）。
+localeのみproduction applyTheme/renderへfixture入力し、installed Host locale.changedとは区別。
+
+両言語1280/320で確認既定off、未確認button disabled、チェック後enabled、
+再render後の確認保持、dialog再open時のoff、document/dialog横overflowなし。
+日英320pxそれぞれで実remove→未導入版button→実exact再導入。
+旧4.5.9不在区間にWeb Blenderのscene履歴1版を表示し、GLB viewerを開く。
+実canvasは12 trianglesのcubeを表示（日本語320 screenshotも画像検査）。
+backup buttonから実downloadし、ZIP manifestのdocument/revisionsが元と一致、
+全entryの実bytes size/SHA一致。最後にSettingsへ戻り同版再導入。
+全6 immutableファイルSHA、scene/revisionsは不変、active4.5.13維持。
+削除した検証用Aは再導入済み。backup ZIP2件はevidence dirへ保持。
+最終runtime operation ready、GUI未終端0を実HTTP確認後、専用serverへSIGINT。
+同processがapplication shutdown complete/exit0。利用者の常用serviceは停止しない。
+
+PR #325のsource実装/再開・Settings/保存保持受入は完了。
+本番installedでこの変更を動かした証拠・新署名releaseはまだない。
+次は通常マージ後、署名bundleを公開・標準updateしinstalled Settingsを再受入する。
+3DS-8/scenario D全matrixや全体goal完了をこの記録だけで主張しない。
+
+## 2026-09-06 history-preserving removal and exact reinstall (candidate)
+
+PR #324 merged `d754f5d3dc1312577e02939c2065c316269cfa30` をfetch確認。
+branch `ux1/3d-history-preserving-removal`。runtime design §4.1の実装を開始。
+managed removeに既定falseのacknowledge_historyを追加し、bool以外を拒否。
+inactive・live参照ゼロ・trusted catalogとversion/archive hash一致時のみ履歴確認を許す。
+project参照なしの従来削除を維持し、active/GUI/Job/working/in-process保護は確認でも解除しない。
+preview fingerprintにexact再導入identityを含め、durable削除journalに確認内容を保持。
+private WS/HTTPにinstall_exact(runtime_idのみ)を追加。受付DB/FSはworker thread、取消時も追跡。
+既存staging/hash/probeを使い、再導入時に別active版やscene pinを変更しない。
+設定UIに未導入catalog版の導入button、既定offの履歴確認checkbox、日英説明を追加。
+このUIはまだbrowser実測前。外部登録解除の入力・公開agent/schema/Hostは変更しない。
+
+追加testは実SQLite scene/revision/画像dependencyとfixture Asset bytesの保持、
+default/不正bool/active/live拒否、正確な4.5.9再導入、active4.5.13維持、
+重複導入/未知ID拒否。初回追加testはStore取得引数順の誤りで失敗し修正。
+既存focused43 passed、追加test passed。
+`./mf.sh test`: 1118 passed/既知warning1/159.65秒。node --checkとdiff check成功。
+
+実行: `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_runtime_removal_e2e.py
+--history-reinstall --evidence-dir /data1tb/mf-history-reinstall-20260906`。
+専用clean setup rootで実HTTP/実Blender、73.218秒passed/exit0。
+candidate4.5.13をexact導入し、旧4.5.9 GUI稼働中は確認付き削除も422拒否。
+停止後も確認なしは422、確認付きで旧版のみ1,168,332,155 B削除。
+scene/revision/Asset metadataと全6ファイル（.blend/GLB/ZIP/provenance）のsize/SHA不変。
+旧版不在のGUI開始は422/scene_runtime_unavailable。scene pinを変えず、
+archive SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d の
+4.5.9を再導入しprobe成功。同じsceneを4.5.9 GUIでready→stopped。
+session blendersession_12bee578ec65464d9921befd8baa586b、停止unit inactive/MainPID0。
+activeは4.5.13を保持し、再導入後も全履歴・6ファイル不変。
+検証rootは現在A+B共存/active B。削除したAは同版再導入済み、制作物削除なし。
+本番Host/MF active/PID250878・244551を照会、restart/updateは要求していない。
+
+残件: 確認journal再開・catalog変更/競合の追加test、日英320px browser実測、
+Library表示/backup操作、installed受入・署名release。今回RFB画面/入力はNOT TESTED。
+本sliceはcandidate、3DS-8/scenario D全体はPARTIAL。マージ前に残件の検証を続ける。
+
 ## 2026-09-06 guarded GUI and working-copy admission
 
 PR #323 merged `7962356b44b7db27a44d72f640be02df60ec54f6` をfetch確認。

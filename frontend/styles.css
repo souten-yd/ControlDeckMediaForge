@@ -421,6 +421,8 @@ html:has(#scene-compare-dialog[open]) { overflow: hidden; }
 #blender-runtime-list .s { overflow-wrap: anywhere; }
 .runtime-row-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: end; }
 .runtime-row-controls button { min-height: 34px; }
+#blender-remove-history-row:not([hidden]) { display: flex; align-items: start; gap: 10px; min-height: 44px; overflow-wrap: anywhere; }
+#blender-remove-history { flex: 0 0 auto; width: 20px; height: 20px; margin-top: 3px; }
 @media (max-width: 767px) {
   #blender-runtime-list .row { grid-template-columns: minmax(0, 1fr); }
   .runtime-row-controls { justify-content: start; min-width: 0; }
