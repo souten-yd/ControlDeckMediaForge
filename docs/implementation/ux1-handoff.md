@@ -3,6 +3,16 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.23 source preparation
+
+PR #267 merged `ab8a059bb61d9046630d01183349d8bc62a878af`。
+branch `ux1/3d-material-v02823`でaddon/coreを0.28.23へ同期し、採用前比較UIを正式配布する準備。
+開始時の実registry.statusはinstalled0.28.22/healthy/enabled。公開latestも0.28.22。
+新しい版の署名/公開/導入/installed Host受入はこの段階ではNOT TESTED。
+既存source受入は維持するがGOAL-06/3DS-6/3DS-8はPARTIAL。
+次は版準備PR gate/merge、exact main bundle構築・署名公開・標準update、専用fixtureでHost browser受入。
+版準備gate `./mf.sh test`: 1026 passed / 既知Starlette warning1件 / 115.98秒。
+
 ## 2026-09-06 採用前材質候補 UI / standalone mirror
 
 PR #264 merged `feaa69e3049b0d6577f694ffed731477dd26d99c`をfetch確認。

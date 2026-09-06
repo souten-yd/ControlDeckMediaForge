@@ -9504,6 +9504,13 @@ socket切断後のadopt disabled、日英文言とstats切替、page error0をas
 この版更新・公開・導入作業をこちらが実行したとは記録しない。
 main取込後gate `./mf.sh test`: 1026 passed / 既知Starlette warning1件 / 126.61秒。diff check成功。
 
+## 2026-09-06 v0.28.23 source preparation
+
+PR #267 merged `ab8a059`の採用前材質比較/明示採用UIを配布するため、addon/core versionを0.28.23へ同期。
+版準備gate `./mf.sh test`: 1026 passed / 既知Starlette warning1件 / 115.98秒。
+開始時read-only確認: registry.status installed0.28.22/healthy/enabled、GitHub latest release0.28.22。
+新版の署名公開/導入/Host browser受入はNOT TESTED。全体GOAL-06/3DS-6/3DS-8はPARTIAL。
+
 NOT TESTED: installed Host/署名新版、生成画像GPU経路を含む全制作一巡。既存画像のsource fixture受入を
 生成画像/installed成功へ読み替えない。GOAL-06/3DS-6/3DS-8はPARTIAL。
 Host/installed service/利用者制作データは変更していない。
