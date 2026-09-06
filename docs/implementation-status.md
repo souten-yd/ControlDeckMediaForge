@@ -1,5 +1,13 @@
 # Media Forge implementation status
 
+## 2026-09-06 release 0.28.32 preparation
+
+PR #302 merged `b9cf655d113a4a58df9df60f79091fa2471f287c`確認。
+mobile runtime buttonの実高44px修正を配布するためaddon/coreを0.28.32へ同期。
+公開契約/DB/runtime変更なし。source日英320pxは44px実測、旧installed0.28.31は39pxのnegative。
+新releaseの署名公開・標準更新・installed positiveは未実施。全体3DS-8はPARTIAL。
+gate `./mf.sh test`: 1054 passed / 既知Starlette warning1 / 115.02秒。diff check成功。
+
 ## 2026-09-06 runtime touch-target correction from installed geometry
 
 PR #301 merged `f288ea01ae215c2167e5e0628799db7886ac320d`確認。
