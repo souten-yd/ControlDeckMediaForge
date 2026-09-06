@@ -9208,3 +9208,8 @@ Job/Host ID対応はevents.jsonのsubmitted6件に固定。finally後active loca
 結果はFAILED / credential refresh NOT TESTED。正常なshutdown終端通知の証拠は得たが、480秒条件前の
 停止なので更新成功ではない。次の試験には約11分間Host/MediaForgeを再起動しない実行枠が必要。
 並行Host側のuntracked frontend/e2e/mediaforge-library.spec.tsとdirty tsconfig.tsbuildinfoは保持した。
+最終現物確認では並行PR #252（Library thumbnail改善、merged `7434d7f`）が入り、installedは
+0.28.18/healthyへ変わっていた。現行core SHA-256は
+`34b5a0f1c7edc0ed65732e4dc26768382be819d1265db4e172a4cbc1aa9c07ac`。
+本turnの公開・標準導入・18call照合は0.28.17で取得した証拠であり、新版へ読み替えない。
+0.28.18の導入操作は本turnでは要求していない。現行を0.28.17へ戻す操作は行わない。

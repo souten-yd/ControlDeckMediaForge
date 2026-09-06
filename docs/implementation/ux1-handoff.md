@@ -40,6 +40,9 @@ cleanup後active local0、保持した2 child PIDとも消滅。証拠
 並行Host側のuntracked frontend/e2e/mediaforge-library.spec.tsとdirty tsconfig.tsbuildinfoは保持。
 次の長時間試験は約11分間Host/MediaForgeを再起動しない時間帯を調整する。
 正常なshutdown終端通知をcredential更新成功へ読み替えない。全体3DS-8はPARTIAL。
+その後の現物確認では、並行Library PR #252（merged `7434d7f`）に伴い現行installedは0.28.18/healthy。
+本turnが公開・導入・18call検証したのは0.28.17であり、その後の再起動時点の新版受入は別作業。
+旧版へ戻さない。次回は現行0.28.18のprovenanceと引き継ぎを再照合し、無再起動枠を調整する。
 
 ## 2026-09-06 terminal outbox / v0.28.17 source
 
