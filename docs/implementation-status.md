@@ -1,5 +1,18 @@
 # Media Forge implementation status
 
+## 2026-09-06 installed Settings protection — verified; mobile layout defect found
+
+installed0.28.30の実Host opaque iframeで新`3ds_settings_protection_installed_e2e.py`を実行、
+previewのみ/個別login revoke/password不変/overlayなし。desktop viewport1280/320両方でexit0。
+4.5.9は非activeだがproject参照2で削除不可、4.5.13は参照23とactiveで削除不可。
+確認button hidden、戻るbutton visible、runtime status/operation journal前後一致、page errors0。
+証拠 `/data1tb/mf-settings-protection-layout-installed-0.28.30-20260906`。削除やscene書込なし。
+Host PID2196/MF PID31432 active不変。
+一方、320 screenshotで設定行の縦崩れ/横scrollを観測。root client305/scroll319、
+非active行width280.981/text0/controls247.666。削除保護成功を320px layout成功へ読み替えない。
+次sliceでruntime行のmobile列割りを修正する。製品差分なし、全体3DS-8はPARTIAL。
+gate `./mf.sh test`: 1053 passed / 既知warning1 / 112.49秒。diff check成功。
+
 ## 2026-09-06 Settings lifecycle — VERIFIED SOURCE BROWSER SCOPE
 
 branch `ux1/3d-setup-settings-ui`、隔離source9161/PID68057、日本語Settingsの実ボタンを操作。

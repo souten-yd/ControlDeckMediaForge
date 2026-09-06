@@ -3,6 +3,27 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 installed Settings project-reference protection / mobile defect
+
+PR #295 merge `c98f12ea3c9e6b32a5f17456aa8c800411806fcd`を確認。
+branch `ux1/3d-installed-settings-protection`。新`3ds_settings_protection_installed_e2e.py`は
+installed0.28.30/実Host opaque iframe/専用mf-e2e個別loginでSettings削除previewのみ操作。
+Host診断Python、CONTROL_DECK_CONFIG=Host config/PYTHONPATH=Host backend、
+`--expected-version 0.28.30 --evidence-dir /data1tb/mf-settings-protection-layout-installed-0.28.30-20260906`。
+初回`mf-settings-protection-installed-0.28.30-20260906`と寸法追記runの双方exit0。
+desktop viewport1280/320の双方で4.5.9はproject参照2、4.5.13は23。
+非active4.5.9もproject_referenceでcan_remove=false、active4.5.13はactive_runtimeも併記。
+確認button hidden/戻るbutton visible、runtime status/operation journal前後一致、page errors0。
+削除送信/新規導入/scene変更なし。個別login revoke/password不変。Host PID2196/MF PID31432 active不変。
+
+320 screenshot目視で設定行の英語が縦に崩れ、横scrollを発見。
+寸法runはiframe inner320/root client305/scroll319、非active行width280.981/text0/controls247.666。
+CSS `#blender-runtime-list .row`のminmax(0,1fr) autoと横方向controlsでtext列が0まで縮む。
+削除保護の受入とlayout不良を分離する。320px設定全体を合格にはしない。
+次はこの証拠PRを通常mergeし、別sliceでmobile runtime行を縦積みにしてsource/installedで再検証する。
+今回script/文書のみ、製品変更なし。全体3DS-8/GOAL-03/scenario DはPARTIAL。
+gate `./mf.sh test`: 1053 passed / 既知warning1 / 112.49秒。diff check成功。
+
 ## 2026-09-06 Settings lifecycle — source browser scope verified
 
 PR #294 merge `e07c56e11430c31c00a7621c3e9658a513449488`を確認。
