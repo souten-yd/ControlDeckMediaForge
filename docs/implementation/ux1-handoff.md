@@ -3,6 +3,43 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 history-preserving removal and exact reinstall (candidate)
+
+PR #324 merged `d754f5d3dc1312577e02939c2065c316269cfa30` をfetch確認。
+branch `ux1/3d-history-preserving-removal`。runtime design §4.1の実装を開始。
+managed removeに既定falseのacknowledge_historyを追加し、bool以外を拒否。
+inactive・live参照ゼロ・trusted catalogとversion/archive hash一致時のみ履歴確認を許す。
+project参照なしの従来削除を維持し、active/GUI/Job/working/in-process保護は確認でも解除しない。
+preview fingerprintにexact再導入identityを含め、durable削除journalに確認内容を保持。
+private WS/HTTPにinstall_exact(runtime_idのみ)を追加。受付DB/FSはworker thread、取消時も追跡。
+既存staging/hash/probeを使い、再導入時に別active版やscene pinを変更しない。
+設定UIに未導入catalog版の導入button、既定offの履歴確認checkbox、日英説明を追加。
+このUIはまだbrowser実測前。外部登録解除の入力・公開agent/schema/Hostは変更しない。
+
+追加testは実SQLite scene/revision/画像dependencyとfixture Asset bytesの保持、
+default/不正bool/active/live拒否、正確な4.5.9再導入、active4.5.13維持、
+重複導入/未知ID拒否。初回追加testはStore取得引数順の誤りで失敗し修正。
+既存focused43 passed、追加test passed。
+`./mf.sh test`: 1118 passed/既知warning1/159.65秒。node --checkとdiff check成功。
+
+実行: `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_runtime_removal_e2e.py
+--history-reinstall --evidence-dir /data1tb/mf-history-reinstall-20260906`。
+専用clean setup rootで実HTTP/実Blender、73.218秒passed/exit0。
+candidate4.5.13をexact導入し、旧4.5.9 GUI稼働中は確認付き削除も422拒否。
+停止後も確認なしは422、確認付きで旧版のみ1,168,332,155 B削除。
+scene/revision/Asset metadataと全6ファイル（.blend/GLB/ZIP/provenance）のsize/SHA不変。
+旧版不在のGUI開始は422/scene_runtime_unavailable。scene pinを変えず、
+archive SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d の
+4.5.9を再導入しprobe成功。同じsceneを4.5.9 GUIでready→stopped。
+session blendersession_12bee578ec65464d9921befd8baa586b、停止unit inactive/MainPID0。
+activeは4.5.13を保持し、再導入後も全履歴・6ファイル不変。
+検証rootは現在A+B共存/active B。削除したAは同版再導入済み、制作物削除なし。
+本番Host/MF active/PID250878・244551を照会、restart/updateは要求していない。
+
+残件: 確認journal再開・catalog変更/競合の追加test、日英320px browser実測、
+Library表示/backup操作、installed受入・署名release。今回RFB画面/入力はNOT TESTED。
+本sliceはcandidate、3DS-8/scenario D全体はPARTIAL。マージ前に残件の検証を続ける。
+
 ## 2026-09-06 guarded GUI and working-copy admission
 
 PR #323 merged `7962356b44b7db27a44d72f640be02df60ec54f6` をfetch確認。

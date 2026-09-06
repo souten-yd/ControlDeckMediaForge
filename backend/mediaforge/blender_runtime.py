@@ -605,6 +605,7 @@ class BlenderRuntimeResolver:
                 rows.append({
                     "runtime_id": runtime.runtime_id,
                     "version": runtime.version,
+                    "archive_sha256": runtime.archive_sha256,
                     "ownership": runtime.ownership,
                     "state": "ready" if all(checks.values()) else (
                         "unsupported" if not supported else "damaged"

@@ -563,7 +563,7 @@ async function standaloneCall(method, params) {
       method: "POST", body: JSON.stringify({action: "web_install"}),
     });
   }
-  if (["blender.runtime.update", "blender.runtime.repair", "blender.runtime.switch"].includes(method)) {
+  if (["blender.runtime.update", "blender.runtime.repair", "blender.runtime.switch", "blender.runtime.install_exact"].includes(method)) {
     return json("/workspace-api/blender/runtime/operations", {
       method: "POST", body: JSON.stringify({
         action: method.slice("blender.runtime.".length),
@@ -588,6 +588,8 @@ async function standaloneCall(method, params) {
       method: "POST", body: JSON.stringify({
         action: method.includes("unregister") ? "unregister" : "remove", runtime_id: params.runtime_id,
         confirmation_fingerprint: params.confirmation_fingerprint,
+        ...(method === "blender.runtime.remove" && "acknowledge_history" in params
+          ? {acknowledge_history: params.acknowledge_history} : {}),
       }),
     });
   }
@@ -7910,6 +7912,8 @@ const BLENDER_TEXT = {
     unregisterTitle: "既存Blenderの登録を解除", unregisterConfirm: "登録を解除する",
     unregisterReady: "Media Forgeの登録だけを解除します。外部Blenderのファイル・画像・制作物・履歴は変更しません。",
     unregisterBlocked: "この環境は使用中または制作物が参照しているため、登録を解除できません。",
+    installExact: "この版を導入",
+    historyAcknowledgement: (version) => `制作ファイルと履歴は残ります。再編集にはBlender ${version}の再導入が必要であることを確認しました。`,
     liveRefs: "実行中の参照", projectRefs: "制作物の参照",
     operation: "環境処理", failed: "環境処理に失敗しました",
     operationStates: {
@@ -7941,6 +7945,8 @@ const BLENDER_TEXT = {
     unregisterTitle: "Unregister existing Blender", unregisterConfirm: "Unregister",
     unregisterReady: "Only the Media Forge registration is removed. External Blender files, images, projects, and history are unchanged.",
     unregisterBlocked: "This runtime is active or referenced by a project and cannot be unregistered.",
+    installExact: "Install this version",
+    historyAcknowledgement: (version) => `Project files and history are kept. I understand that editing again requires reinstalling Blender ${version}.`,
     liveRefs: "Live references", projectRefs: "Project references",
     operation: "Runtime operation", failed: "Runtime operation failed",
     operationStates: {
@@ -7982,14 +7988,18 @@ function renderBlenderRemovalPreview() {
   if (!preview) return;
   const text = blenderText();
   const external = preview.operation === "unregister";
+  const history = !external && preview.can_remove_with_history === true;
   byId("blender-remove-title").textContent = external ? text.unregisterTitle : text.removeTitle;
   byId("blender-remove-confirm").textContent = external ? text.unregisterConfirm : text.removeConfirm;
-  byId("blender-remove-summary").textContent = preview.can_remove
+  byId("blender-remove-summary").textContent = preview.can_remove || history
     ? (external ? text.unregisterReady : text.removeReady) : (external ? text.unregisterBlocked : text.removeBlocked);
   byId("blender-remove-detail").textContent = `Blender ${preview.version} · ${
     formatBytes(preview.reclaimable_bytes)} · ${text.liveRefs} ${
     preview.live_reference_count} · ${text.projectRefs} ${preview.project_reference_count}`;
-  byId("blender-remove-confirm").hidden = !preview.can_remove;
+  byId("blender-remove-history-row").hidden = !history;
+  byId("blender-remove-history-label").textContent = text.historyAcknowledgement(preview.version);
+  byId("blender-remove-confirm").hidden = !preview.can_remove && !history;
+  byId("blender-remove-confirm").disabled = !preview.can_remove && !(history && byId("blender-remove-history").checked);
 }
 
 function renderBlenderRuntime() {
@@ -8071,7 +8081,11 @@ function renderBlenderRuntime() {
   const checks = {
     manifest: "manifest", stamp: "stamp", executable: "executable", trusted_worker: "worker",
   };
-  byId("blender-runtime-list").replaceChildren(...(value.runtimes || []).map((runtime) => {
+  const installed = value.runtimes || [];
+  const missing = value.catalog?.exact_install_available
+    ? (value.catalog.items || []).filter((item) => !installed.some((runtime) => runtime.runtime_id === item.runtime_id))
+      .map((item) => ({...item, state: "missing", ownership: "managed"})) : [];
+  byId("blender-runtime-list").replaceChildren(...[...installed, ...missing].map((runtime) => {
     const row = document.createElement("article");
     row.className = "row";
     const info = document.createElement("div");
@@ -8081,7 +8095,7 @@ function renderBlenderRuntime() {
       runtime.ownership === "managed" ? text.managed : text.legacy}`;
     const detail = document.createElement("p");
     detail.className = "s";
-    detail.textContent = Object.entries(checks).map(([key, label]) =>
+    detail.textContent = runtime.state === "missing" ? text.missing : Object.entries(checks).map(([key, label]) =>
       `${label}: ${runtime.checks?.[key] ? "OK" : "NG"}`).join(" · ");
     info.append(title, detail);
     const controls = document.createElement("div");
@@ -8098,7 +8112,14 @@ function renderBlenderRuntime() {
       unregister.dataset.blenderUnregister = runtime.runtime_id;
       controls.append(unregister);
     }
-    if (!operation && runtime.ownership === "managed" && catalogIds.has(runtime.runtime_id)) {
+    if (!operation && runtime.state === "missing") {
+      const install = document.createElement("button");
+      install.type = "button";
+      install.textContent = text.installExact;
+      install.dataset.blenderInstallExact = runtime.runtime_id;
+      controls.append(install);
+    }
+    if (!operation && runtime.state !== "missing" && runtime.ownership === "managed" && catalogIds.has(runtime.runtime_id)) {
       if (runtime.state === "damaged") {
         const repair = document.createElement("button");
         repair.type = "button";
@@ -8448,6 +8469,7 @@ byId("blender-runtime-list").addEventListener("click", async (event) => {
         runtime_id: unregister?.dataset.blenderUnregister || remove.dataset.blenderRemove,
       });
       state.blenderRemovePreview = preview;
+      byId("blender-remove-history").checked = false;
       renderBlenderRemovalPreview();
       byId("blender-remove-dialog").showModal();
     } catch (error) {
@@ -8458,8 +8480,9 @@ byId("blender-runtime-list").addEventListener("click", async (event) => {
   }
   const repair = event.target.closest("[data-blender-repair]");
   const use = event.target.closest("[data-blender-switch]");
-  const method = repair ? "blender.runtime.repair" : (use ? "blender.runtime.switch" : null);
-  const runtimeId = repair?.dataset.blenderRepair || use?.dataset.blenderSwitch;
+  const install = event.target.closest("[data-blender-install-exact]");
+  const method = repair ? "blender.runtime.repair" : (use ? "blender.runtime.switch" : (install ? "blender.runtime.install_exact" : null));
+  const runtimeId = repair?.dataset.blenderRepair || use?.dataset.blenderSwitch || install?.dataset.blenderInstallExact;
   if (!method || !runtimeId) return;
   try {
     await call(method, {runtime_id: runtimeId});
@@ -8473,15 +8496,18 @@ byId("blender-remove-cancel").addEventListener("click", () => {
   state.blenderRemovePreview = null;
   byId("blender-remove-dialog").close();
 });
+byId("blender-remove-history").addEventListener("change", renderBlenderRemovalPreview);
 byId("blender-remove-confirm").addEventListener("click", async () => {
   const preview = state.blenderRemovePreview;
-  if (!preview?.can_remove) return;
+  const acknowledgeHistory = preview?.operation !== "unregister" && preview?.can_remove_with_history === true && byId("blender-remove-history").checked;
+  if (!preview?.can_remove && !acknowledgeHistory) return;
   byId("blender-remove-dialog").close();
   state.blenderRemovePreview = null;
   try {
     await call(preview.operation === "unregister" ? "blender.runtime.unregister" : "blender.runtime.remove", {
       runtime_id: preview.runtime_id,
       confirmation_fingerprint: preview.confirmation_fingerprint,
+      ...(preview.operation !== "unregister" ? {acknowledge_history: acknowledgeHistory} : {}),
     });
     await refreshSession(["blender_runtime"]);
   } catch (error) {

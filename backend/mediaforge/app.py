@@ -3695,6 +3695,10 @@ def create_app(
                         if params:
                             raise ValueError("Blender update accepts no client-selected source")
                         result = blender_runtime_operations.update().model_dump(mode="json")
+                    elif method == "blender.runtime.install_exact":
+                        if set(params) != {"runtime_id"} or not isinstance(params["runtime_id"], str):
+                            raise ValueError("Exact Blender install accepts only runtime_id")
+                        result = (await blender_runtime_operations.install_exact(params["runtime_id"])).model_dump(mode="json")
                     elif method == "blender.runtime.repair":
                         if set(params) != {"runtime_id"}:
                             raise ValueError("Blender repair accepts only runtime_id")
@@ -3728,13 +3732,14 @@ def create_app(
                             str(params.get("runtime_id", ""))
                         )
                     elif method == "blender.runtime.remove":
-                        if set(params) != {"runtime_id", "confirmation_fingerprint"}:
+                        if not {"runtime_id", "confirmation_fingerprint"} <= set(params) or set(params) - {"runtime_id", "confirmation_fingerprint", "acknowledge_history"}:
                             raise ValueError(
                                 "Blender remove accepts runtime_id and confirmation_fingerprint"
                             )
                         result = (await blender_runtime_operations.remove(
                             str(params.get("runtime_id", "")),
                             str(params.get("confirmation_fingerprint", "")),
+                            acknowledge_history=params.get("acknowledge_history", False),
                         )).model_dump(mode="json")
                     elif method == "blender.runtime.operations.cancel":
                         if set(params) != {"operation_id"}:
@@ -4372,6 +4377,8 @@ def create_app(
                 return blender_runtime_operations.install_web().model_dump(mode="json")
             if payload == {"action": "update"}:
                 return blender_runtime_operations.update().model_dump(mode="json")
+            if set(payload) == {"action", "runtime_id"} and payload["action"] == "install_exact" and isinstance(payload["runtime_id"], str):
+                return (await blender_runtime_operations.install_exact(payload["runtime_id"])).model_dump(mode="json")
             if set(payload) == {"action", "runtime_id"} and payload["action"] == "repair":
                 return blender_runtime_operations.repair(
                     str(payload["runtime_id"])
@@ -4383,11 +4390,13 @@ def create_app(
             if set(payload) == {"action", "runtime_id"} and payload["action"] == "remove_preview":
                 return await blender_runtime_operations.removal_preview(str(payload["runtime_id"]))
             if (
-                set(payload) == {"action", "runtime_id", "confirmation_fingerprint"}
+                {"action", "runtime_id", "confirmation_fingerprint"} <= set(payload)
+                and not set(payload) - {"action", "runtime_id", "confirmation_fingerprint", "acknowledge_history"}
                 and payload["action"] == "remove"
             ):
                 return (await blender_runtime_operations.remove(
-                    str(payload["runtime_id"]), str(payload["confirmation_fingerprint"])
+                    str(payload["runtime_id"]), str(payload["confirmation_fingerprint"]),
+                    acknowledge_history=payload.get("acknowledge_history", False),
                 )).model_dump(mode="json")
             if set(payload) == {"action", "operation_id"} and payload["action"] == "cancel":
                 return blender_runtime_operations.cancel(
