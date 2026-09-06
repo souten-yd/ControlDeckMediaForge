@@ -36,6 +36,13 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 ## 必須シナリオ別
 
+2026-09-06 scenario D追加証拠: source専用HTTP/実Blenderで候補4.5.13のprobeを
+意図的に不合格にし、旧4.5.9のactive/実probe/GUI接続を維持。正常probe再試行で
+新版ready/active後も同GUIは旧版にpinされた。67.985秒exit0。
+`/data1tb/mf-update-probe-failure-final-20260906/observations.json`。
+実RFB handshakeとAPI metadata/旧binary hashの照合であり、全Asset bytes保全、
+ブラウザ操作、参照中削除/停止後削除、scenario D全体の受入ではない。
+
 | 条件 | 残る照合・実測 |
 |---|---|
 | A clean環境/表示 | 全操作、320px、日英、既存画像がBlender不在でも利用可能な証拠。390pxだけで320px成功とはしない |

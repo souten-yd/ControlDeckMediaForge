@@ -1,5 +1,40 @@
 # Media Forge implementation status
 
+## 2026-09-06 rejected candidate update preserves pinned Blender GUI
+
+PR #314 merged `933ea4f0d0aa8867ca238747db130ae5edb5bb53` をfetch確認。
+branch `ux1/3d-update-probe-failure`。製品/Host/公開契約の変更なし。
+新script `scripts/3ds_update_probe_failure_e2e.py` は以前の専用clean setup領域
+`/data1tb/mf-clean-packaged-0.28.32-QBvHfm`だけをsource appの実loopback HTTPで操作する。
+これは署名installed版の受入ではない。fixtureは候補4.5.13の実Blender内で
+background=falseのprobe JSONを返す。download/hash/展開/Blender binaryは実物。
+
+実行: `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_update_probe_failure_e2e.py
+--evidence-dir /data1tb/mf-update-probe-failure-final-20260906`。exit0 / 67.985秒。
+同scene `scene_2642c93f480d427d920267ac790405e2`の
+GUI `blendersession_6ac54af91f6d42ef9624f555624cefc8`へ実RFB handshakeし接続を保持。
+34.094秒で候補op `blenderop_52dc8fe7d9e049049be4d8d4aba16312` failed、
+blender_runtime_install_failed / Blender preflight result differs。
+registry/activeは旧4.5.9だけ、旧版実background/glTF import/export probe成功。
+正常probeへ戻して再試行op `blenderop_66687a8ca2ba46d7915ed0fa59bc4600`は
+67.188秒時点ready、既定4.5.13でも既存GUIは4.5.9/ready/connectedのまま。
+候補archive378,033,952 B、SHA da4e69b06b75b9e642d106496c50e7e240218b411d2f6e18271c1d1d819cef91。
+取得済み検証済みarchiveを使用。旧binary SHA
+de8e8092c49e42cc6f1adde86aea0202ea5bad3338725887ecbcb7274dd0f926が前後一致。
+scene/Asset API metadata前後一致。全Asset実bytes hash比較とは呼ばない。
+最後にGUIを保存せずstopped、既定を旧版へ戻した。新版は導入済みのまま。
+追跡したsystemd user unitはActiveState=inactive/MainPID=0。source serverもexit0。
+
+途中のscript失敗を保持: 初回sessions/items key誤り、続行時の重複session HTTP422、
+実download完了後のfixture version_string比較によるbounded JSON不在、
+RFB binary subprotocol不足のHTTP403。最終scriptは同scene既存sessionを再利用、
+version tupleを照合しbinary subprotocolを指定した。製品障害修正とは扱わない。
+証拠は /data1tb/mf-update-probe-failure{,-retry,-resume,-rfb,-final}-20260906 に保持。
+RFB handshakeは実browser画面表示/入力/保存や認証期限更新の証拠ではない。
+全gate `./mf.sh test`: 1060 passed / 既知warning1 / 147.82秒。
+次はscenario Dの参照中削除拒否・停止後の対象限定削除と実Asset hash保持を同領域で検証。
+External解除/容量不足等を含むscenario D全体、3DS-8全体はPARTIALを維持。
+
 ## 2026-09-06 Blender-absent real image generation and Library
 
 PR #313 merged `9dc22b7fa542d759291a3fb001b1f5d001aed2fd` を確認。
