@@ -34,6 +34,9 @@ MaterialBinding commitまでをsource/packageで実装・確認した。3DS-6c�
 3DS-6の既存画像→生成画像→比較採用/復元の基本フローは受入済み。全PBR channelを確認したとはしない。
 全体scenario BのOpenCode制作→GUI修正→grant/receipt一巡は引き続き未完了。
 3DS-7はtyped Agent recipe、durable detached child Job、stable actor ownerをsource/packageで確認した。
+installed0.28.26では実OpenCode同一runで剣の形状→新規画像生成→材質適用→GLB→G8 ZIP→
+project grant配置を289.585秒で完走し、4制作Jobの成功、3 receiptと実ファイルのhashを照合した。
+同じ剣での既存画像比較/採用、Web Blender手修正、旧版復元、復元後の配置はscenario Bへ残す。
 3DS-8でinstalled-host/OpenCode/GPU/releaseの個別証拠を取得したが、必須受入全体の完了判定を撤回した。
 残件は[`3ds-completion-audit.md`](3ds-completion-audit.md)。Expert scriptは別capabilityの3DS-Xであり、
 初期提供の完了条件には含めない。

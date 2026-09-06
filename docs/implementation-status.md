@@ -9653,6 +9653,53 @@ gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 115.64秒。dif
 GOAL-06は既存/生成画像base color比較採用を受入。OpenCode自然言語一巡、全PBR channel、
 mobile touch、長時間credential、全release A〜Fはこの実測の範囲外。全体3DS-8/scenario BはPARTIAL。
 
+## 2026-09-06 OpenCode shape / generated texture / project delivery
+
+PR #277 merge `7435db65c9bb28f066e402d8d547319fc8000322`をfetch確認。
+branch `ux1/3d-opencode-full-flow`。新script `scripts/3ds_opencode_flow_e2e.py`で
+専用project `MF3DS-Acceptance-20260906`を作り、実OpenCode1.18.27から既存Host MCPで制作した。
+Host診断venv/PYTHONPATH=Host backendを使用（製品coreにHost importを追加しない）。
+per-run configのみ、local gateway/model auto、--pure、組込shell/file/web tool禁止。
+global設定・既存project・モデル重み・Host/serviceは変更しない。秘密値はredact、終了時に専用config削除。
+
+実行command: 同scriptへ `--project-name MF3DS-Acceptance-20260906
+--evidence-dir /data1tb/mf-opencode-full-flow-20260906`。
+同一process PID2714469の終端を確認、exit0 / 289.585秒 / JSON events44件。
+scene `scene_f1554d9ba0f741968d9c468206ea3198`、
+最終revision `revision_ec5cfa2e2bbf4312a37c770f5510ac75`（1→2版）。
+capabilities→typed shape→image.generate→snapshot→material→export→既存G8 ZIP→直前grant→media.pack。
+imageとshapeのstatus照会は同一stepで並列だが、材質適用前に双方の成功を確認した。
+create `job_3b386c6296f948789c1fd55101a0e2ee`、
+image `job_a34045e525514134aaafd55954e4e4e2`、
+material `job_f781f67e6fa949c28b345852e0da4b51`、
+ZIP `job_864a94c6cee64c74891d833bd757c10d` はevent応答/installed DBの両方でsucceeded。
+
+`python3 scripts/3ds_verify_opencode_flow.py --evidence-dir /data1tb/mf-opencode-full-flow-20260906
+--database /data1tb/ControlDeck/data/feature-data/media-forge/data/media-forge.sqlite3` はexit0。
+read-onlyで3 receipt/実配置bytes/Asset/provenanceのsize・SHA一致、画像dependency/parent/reference、
+ZIP内部manifest→加工GLB/preview hashと元GLB hashを照合。全長1.004999995m、加工後356 triangles。
+scene validationは292 triangles、G8 compiler再import/export後の356と混同しない。
+scene Blender4.5.13、G8固定compiler4.5.9/1.1.0を維持。FLUX.2 Klein4B/diffusers0.40.0、
+画像1024x1024/1,579,657 B、新規weights取得なし。
+3 filesは `/data1tb/ControlDeck/CodeDEV/MF3DS-Acceptance-20260906/exports` に保持。
+GLB 1,586,792 B SHA `61c23209c7c371a2eda8be10fb2ec62f0edeb515f5cdc534c839f607c8d8f194`、
+PNG SHA `a7b836de66df01760889e889ca9062c8024112e7a25ad533ec116e32a2f896c0`、
+ZIP 1,602,543 B SHA `2515fa1fe043fe719b69145b5ab0b1e7ac64bcdf6cc4c6fccc23a09cee2693a6`。
+receipt committed3/partial=false。manifestは既存ZIP内のまま、別の公開契約は追加しない。
+
+GOAL-05は自然言語→生成画像/材質→exportの範囲、GOAL-08はGLB/画像/manifest入りZIP配置の範囲を受入。
+画像のno text/no watermark/seamless条件はprovenanceが未検査警告を出しており成功扱いしない。
+同じ剣で既存画像→生成画像の候補比較/採用→GUI手動修正→旧版復元→再配置は未実施。
+長時間credential refresh、全release A〜F、全体3DS-8は引き続きPARTIAL。
+次はこのsceneを使ってscenario Bの残るUI/GUI/復元を追跡する。別sceneの過去証拠で埋めない。
+gate `./mf.sh test`: 1035 passed / 既知Starlette warning1件 / 112.90秒。diff check成功。
+追加5テストはverifierのsynthetic fixture/negativeであり、実機受入は上記OpenCodeと実bytes照合。
+並行PR #280の0.28.27 mergeを確認したが、この実測は0.28.26由来。新版の受入に読み替えない。
+PR #281作成後にmain `301b675`を取り込み、status文書の追記競合は両方を保持して解消。
+Host registry再確認は0.28.27/healthy/enabled。更新は並行作業由来で、本sliceから要求していない。
+main取り込み後のgate: `./mf.sh test` 1044 passed / 既知warning1件 / 113.11秒。
+read-only実成果物verifierも再実行exit0。PR #281の差分は受入script/test/文書のみ。
+
 ## v0.28.26 — 生成後も model を載せたまま次の依頼を待つ
 
 続けて画像を頼むと毎回モデルの載せ直し（実測で十数秒）を払っていた。job が
