@@ -321,8 +321,40 @@ function workspaceFrameRoot() {
 }
 
 function dropSocket() {
+  if (state.socket) {
+    // 捨てる側で onclose を走らせない。走らせると pending を二重に落とす。
+    state.socket.onopen = state.socket.onmessage = state.socket.onerror = state.socket.onclose = null;
+    try { state.socket.close(); } catch { /* 既に閉じている */ }
+  }
   state.socketReady = null;
   state.socket = null;
+}
+
+/* 携帯で別のアプリへ移って戻ると、OS が経路を切っても socket は OPEN のまま
+   残る。次の操作まで気づけず、その 1 回が失敗するか待たされる。戻ってきた
+   時点で確かめ、怪しければ捨てて張り直す。判断と間隔は ControlDeck 本体の
+   src/lib/liveConnection.ts に合わせてある。 */
+const RETURN_GRACE_MS = 11_000;
+const REVIVE_THROTTLE_MS = 3_000;
+let lastSocketMessageAt = Date.now();
+let lastReviveAt = 0;
+
+function reviveSocket() {
+  if (document.visibilityState !== "visible") return;
+  const now = Date.now();
+  if (now - lastReviveAt < REVIVE_THROTTLE_MS) return;
+  lastReviveAt = now;
+  const socket = state.socket;
+  if (socket && socket.readyState === WebSocket.CONNECTING) return;
+  if (socket && socket.readyState === WebSocket.OPEN
+      && now - lastSocketMessageAt < RETURN_GRACE_MS) return;
+  dropSocket();
+  void connectSocket().catch(() => { /* 次の操作でまた試す */ });
+}
+
+for (const signal of ["visibilitychange", "pageshow", "online", "focus"]) {
+  const target = signal === "visibilitychange" ? document : window;
+  target.addEventListener(signal, reviveSocket);
 }
 
 function connectSocket() {
@@ -335,7 +367,7 @@ function connectSocket() {
     const frameRoot = workspaceFrameRoot();
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     state.socket = new WebSocket(`${scheme}://${location.host}${frameRoot}/ws`, [`control-deck-bridge.${state.nonce}`]);
-    state.socket.onopen = () => resolve();
+    state.socket.onopen = () => { lastSocketMessageAt = Date.now(); resolve(); };
     state.socket.onerror = () => {
       dropSocket();
       reject({code: "workspace_transport_unavailable"});
@@ -348,6 +380,7 @@ function connectSocket() {
       state.pending.clear();
     };
     state.socket.onmessage = (event) => {
+      lastSocketMessageAt = Date.now();
       let message;
       try { message = JSON.parse(event.data); } catch { return; }
       if (!message?.id) return handleEvent(message);
