@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-06 long setup source probe — VERIFIED FOR SOURCE SCOPE
+
+branch `ux1/3d-long-setup-acceptance`に固定実Blender archiveの低速配信fixtureを使う
+隔離source HTTP受入scriptを追加。製品/Host/TTL変更なし。
+managerはHost credentialを保存せず、durable setup operationとして動作することをコードで確認。
+実行PID62708/session67258、60.249秒でdownloading/3,866,624 BとHTTP health応答を観測。
+同runはexit0。631.247秒/41,156,608 Bでcanceled、652.011秒で再導入ready。
+377,929,956 Bの実archive SHAは固定manifestのdcdc3eca...と一致、6510 member/1,168,332,002 B展開。
+実Blender4.5.9/Python3.11.11/background/gltf export/importのprobe成功。
+read-only DBで2 operationはcanceled/ready、staging空/partialなし/PID62708消失。
+Host PID2196/MF PID31432 activeで不変。隔離runtime/archiveは後続受入用に保持。
+証拠 `/data1tb/mf-long-setup-source-20260906/observations.json`。
+実Host credential更新/設定browser UI/実外部回線は対象外、別途受入が必要。全体3DS-8はPARTIAL。
+gate `./mf.sh test`: 1053 passed / 既知warning1 / 110.22秒。
+今回追加は結果文書のみ、unit再実行なし/diff check成功。製品差分なしで新規release不要。
+
 ## 2026-09-06 RFB credential renewal — VERIFIED EXISTING INSTALLED PATH
 
 Host `97aba42`のloopback例外はLLM gateway/agent MCP限定とコードで確認。
