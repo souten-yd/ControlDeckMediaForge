@@ -1992,6 +1992,13 @@ def create_app(
                 status_code=422, detail={"code": code, "message": str(exc)[:300]}
             ) from exc
 
+    @app.get("/workspace-api/assets/{asset_id}/relations", include_in_schema=False)
+    async def standalone_asset_relations(asset_id: str, offset: int = Query(default=0, ge=0, le=1_000_000)) -> dict[str, Any]:
+        try:
+            return await asyncio.to_thread(store.asset_relations, asset_id, offset=offset)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+
     @app.post("/workspace-api/library", include_in_schema=False)
     async def standalone_library(payload: dict[str, Any]) -> dict[str, Any]:
         kind = str(payload.get("kind", "all"))
@@ -3019,6 +3026,12 @@ def create_app(
                             shutil.rmtree(upload["root"])
                     elif method == "assets.provenance":
                         result = store.get_provenance(str(params.get("asset_id", ""))).model_dump(mode="json")
+                    elif method == "assets.relations":
+                        if "asset_id" not in params or set(params) - {"asset_id", "offset"}:
+                            raise ValueError("asset relations accepts asset_id and offset")
+                        result = await asyncio.to_thread(
+                            store.asset_relations, str(params["asset_id"]), offset=params.get("offset", 0)
+                        )
                     elif method == "assets.model.open":
                         if set(params) != {"asset_id"}:
                             raise ValueError("model viewer open accepts only asset_id")

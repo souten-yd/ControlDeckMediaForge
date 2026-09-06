@@ -33,6 +33,10 @@ Hostへの配置は既存output commitとreceiptを使う。生pathをAPIへ持�
 
 `.blend`は制作保存形式、GLBはビューワー・配布用派生物とする。
 `.blend`をブラウザで直接解釈しない。外部Blender読込時はembedded scriptを自動実行しない。
+共通Libraryは画像・3D・GLB・Blender制作ファイルを種類で絞り込む。Blender sourceも
+metadataカードとして一覧に出し、詳細から親素材・派生素材を双方向に辿れるようにする。
+関連素材はprivate workspace経路でmetadataだけを60件ずつ取得し、次/前のページで
+一覧の表示範囲外へも到達する。GLB/画像の閲覧は詳細の明示操作で開始する。
 元版を保存してから新しいBlender版で開く。新しい版の保存を旧版で開けるとは保証しない。
 
 ### 2.1 3DS-4で固定する保存契約
