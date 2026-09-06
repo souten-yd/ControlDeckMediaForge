@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-06 Common Library formats and lineage — source acceptance
+
+PR #285 Web Blender navigationは通常merge `ae9ed17f77ddd39df9b3236db4bdbfcd6dbbe11d`を確認。
+本sliceはbranch `ux1/3d-library-lineage`の保持差分を再開し、GOAL-01の不足を補完。
+`.blend`をmetadata cardとして共通Libraryへ表示し、GLB/Blender MIME別filter、
+private `assets.relations`とstandalone mirror、親/派生の双方向リンク、60件単位の次/前ページを追加。
+詳細からGLB/画像を明示閲覧でき、viewer前後移動から.blendを除外する。
+未知の合否を持つBlender factsは失敗と偽らず中立表示。locale変更で開いている詳細を再描画し、
+閉じたdialogへの遅いresponseを無効化する。公開Asset/tool契約、scene書込方式は変更しない。
+
+`PYTHONPATH=backend:. .venv/bin/python scripts/3ds_material_preview_ui_e2e.py --serve
+--data-dir /data1tb/mf-library-lineage-source-20260906
+--legacy-runtime-root /data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9 --port 9159`で
+隔離data dirへ実Blender4.5.9の2 revision/画像材質/GLBを作成、source core HTTP200。
+最初のPYTHONPATH=backendだけの起動はscripts import失敗/exit1、再実行前はserver未起動だった。
+`scripts/library_lineage_ui_e2e.py`をHost診断Pythonで実行。
+最初のbrowser runは試験側wait_for_function引数ミス、修正後は1280px日本語/320px英語で
+画像2/GLB2/.blend2のfilter、画像↔source↔GLBの双方向移動、素材本体取得0、scene不変、page errors0。
+詳細のGLB閲覧を加えたheadless runは表示失敗。独立probeでheadless WebGL2=false、
+headed WebGL2=trueを確認。失敗screenshotは`/data1tb/mf-library-lineage-browser-preview-diagnostic-20260906`に保持。
+metadata-only成功証拠は`/data1tb/mf-library-lineage-browser-reviewed-20260906`。
+初回full gateは旧「.blendを一覧から隠す」assertion1件で失敗(1050 passed)。
+GOAL-01に合わせsource/preview両方の掲載とsource preview_kind=Noneを検査するassertionへ更新した。
+installed Hostでの全filter/lineage/ページ送りと公開bundle反映はNOT TESTED。GOAL-01全体の完了にはしない。
+最終headed run `/data1tb/mf-library-lineage-browser-headed-20260906`はexit0、全filter/双方向移動に加え
+詳細の「素材を見る」から実GLB表示成功、編集ボタン非表示、scene不変、page errors0。
+`./mf.sh test`: 1051 passed / 既知warning1 / 130.00秒。`git diff --check`成功。
+
 Date: 2026-08-26
 Scope: MF0-0 through MF0-7 and G0 through G6 complete; G7 V0 complete, V1 adoption deferred; G8 B0-B4 complete
 

@@ -14,7 +14,7 @@ from .domain import Asset, Provenance
 
 Kind = Literal["generated", "edited", "imported"]
 KINDS: tuple[str, ...] = ("all", "generated", "edited", "imported")
-MEDIA_KINDS: tuple[str, ...] = ("all", "image", "video", "3d")
+MEDIA_KINDS: tuple[str, ...] = ("all", "image", "video", "3d", "glb", "blend")
 
 SUMMARY_LIMIT = 80
 MAX_LIMIT = 120
@@ -33,11 +33,6 @@ def classify(provenance: Provenance, asset: Asset) -> Kind:
 
 def is_mask(provenance: Provenance) -> bool:
     return provenance.parameters.get("purpose") == "edit_mask"
-
-
-def is_internal_scene_source(asset: Asset) -> bool:
-    """The browser opens a scene's GLB derivative, never raw `.blend` bytes."""
-    return asset.mime_type == "application/x-blender"
 
 
 def summarize(provenance: Provenance) -> str:
@@ -68,6 +63,9 @@ def entry(asset: Asset, provenance: Provenance) -> dict[str, Any]:
         media_kind = "video"
     elif asset.mime_type == "model/gltf-binary":
         preview_kind = "model_3d"
+        media_kind = "3d"
+    elif asset.mime_type == "application/x-blender":
+        # List the immutable source, but never decode it in the browser.
         media_kind = "3d"
     elif (
         asset.mime_type == "application/zip"
@@ -130,12 +128,15 @@ def page(
     """
     items: list[dict[str, Any]] = []
     for asset, provenance in records:
-        if is_internal_scene_source(asset) or (is_mask(provenance) and not include_masks):
+        if is_mask(provenance) and not include_masks:
             continue
         value = entry(asset, provenance)
         if kind != "all" and value["kind"] != kind:
             continue
-        if media_kind != "all" and value["media_kind"] != media_kind:
+        format_mime = {"glb": "model/gltf-binary", "blend": "application/x-blender"}.get(media_kind)
+        if format_mime and asset.mime_type != format_mime:
+            continue
+        if not format_mime and media_kind != "all" and value["media_kind"] != media_kind:
             continue
         if thumbnail is not None and len(items) < MAX_INLINE_THUMBNAILS:
             rendered = thumbnail(asset)

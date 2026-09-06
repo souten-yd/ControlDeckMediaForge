@@ -5,6 +5,15 @@
 
 ## 2026-09-06 restored sword project delivery / scenario B
 
+追加slice `ux1/3d-library-lineage`でGOAL-01の.blend掲載、GLB/Blender filter、
+private metadata relations(60件paging)、親子リンク、詳細から明示previewを補完。
+source受入用data `/data1tb/mf-library-lineage-source-20260906`、実Blender4.5.9の2 revisionを保持。
+browser script `scripts/library_lineage_ui_e2e.py`、失敗/成功の詳細はimplementation-status冒頭。
+Web Blender nav PR #285はmerge `ae9ed17`。本branchへ最新mainを取り込んで再gateする。
+Libraryのinstalled受入と署名release反映はまだNOT TESTED。全体3DS-8は未完了。
+headed runは全filter/双方向リンク/詳細からGLB実表示までexit0。
+`./mf.sh test`: 1051 passed / 既知warning1 / 130.00秒。diff check成功。
+
 PR #283 merged `7aab7b76bb806d66002834cc1e2023342e6084fb`をfetch確認。
 branch `ux1/3d-restored-delivery`、installed0.28.28/healthy/enabled。
 `scripts/3ds_opencode_flow_e2e.py`へ復元済みUI証拠を入力するmodeを追加。

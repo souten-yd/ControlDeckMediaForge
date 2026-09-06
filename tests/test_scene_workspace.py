@@ -202,7 +202,11 @@ def test_bounded_upload_creates_scene_and_working_commit_preserves_old_revision(
     projected = library.page(
         scene_records, kind="all", include_masks=False, limit=10, media_kind="3d"
     )
-    assert [item["asset_id"] for item in projected["items"]] == [first["preview_asset_id"]]
+    assert {item["asset_id"] for item in projected["items"]} == {
+        first["preview_asset_id"], first["source_asset_id"],
+    }
+    source_card = next(item for item in projected["items"] if item["asset_id"] == first["source_asset_id"])
+    assert source_card["preview_kind"] is None
     assert resolver.references == 0
     assert not any(workspace.upload_root.iterdir())
 

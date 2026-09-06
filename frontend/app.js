@@ -649,6 +649,7 @@ async function standaloneCall(method, params) {
   }
   if (method === "models.operations.watch" || method === "models.operations.unwatch") return {watching: []};
   if (method === "assets.provenance") return json(`/api/v1/assets/${encodeURIComponent(params.asset_id)}/provenance`);
+  if (method === "assets.relations") return json(`/workspace-api/assets/${encodeURIComponent(params.asset_id)}/relations?offset=${params.offset || 0}`);
   if (method === "preferences.get") return {values: state.preferences};
   if (method === "preferences.set") return {values: {...state.preferences, ...params.values}};
   if (method === "profiles.list") return json("/api/v1/profiles");
@@ -6360,8 +6361,8 @@ async function deleteSelectedAssets() {
 
 const KIND_LABEL = {generated: "作った", edited: "直した", imported: "取り込み"};
 const LIBRARY_MEDIA_TEXT = {
-  ja: {label: "素材の種類", all: "すべて", image: "画像", video: "動画", "3d": "3D"},
-  en: {label: "Media type", all: "All", image: "Images", video: "Videos", "3d": "3D"},
+  ja: {label: "素材の種類", all: "すべて", image: "画像", video: "動画", "3d": "3D", glb: "GLB", blend: "Blender"},
+  en: {label: "Media type", all: "All", image: "Images", video: "Videos", "3d": "3D", glb: "GLB", blend: "Blender"},
 };
 
 function renderLibraryMediaFilter() {
@@ -6397,7 +6398,7 @@ function libraryCard(item) {
   const size = document.createElement("span");
   const isVideo = String(item.mime_type || "").startsWith("video/");
   size.textContent = item.media_kind === "3d"
-    ? (item.mime_type === "application/zip" ? "3D ZIP" : "GLB")
+    ? (item.mime_type === "application/zip" ? "3D ZIP" : item.mime_type === "application/x-blender" ? "Blender" : "GLB")
     : item.mime_type === "application/zip"
       ? "ZIP"
     : (item.width && item.height ? `${item.width}×${item.height}` : "");
@@ -6417,6 +6418,7 @@ function libraryCard(item) {
   card.setAttribute("aria-selected", String(state.librarySelected.has(item.asset_id)));
   card.addEventListener("click", () => {
     if (state.librarySelecting) return toggleLibrarySelection(item.asset_id);
+    if (item.mime_type === "application/x-blender") return void openDetail(item.asset_id);
     void openViewer(item.asset_id, item, state.libraryItems);
   });
   if (item.preview_kind === "model_3d") {
@@ -6720,7 +6722,8 @@ async function openViewer(assetId, item, list, {keepList = false} = {}) {
   byId("viewer-edit").hidden = item?.media_kind === "3d";
   if (!keepList) {
     viewer.list = Array.isArray(list)
-      ? (item?.media_kind === "3d" ? list.filter((entry) => entry.media_kind === "3d") : list)
+      ? list.filter((entry) => entry.mime_type !== "application/x-blender"
+          && (item?.media_kind !== "3d" || entry.media_kind === "3d"))
       : [];
     viewer.index = viewer.list.findIndex((entry) => entry.asset_id === assetId);
   }
@@ -6920,34 +6923,46 @@ const VALIDATOR_LABEL = {
 function validationList(validation) {
   const holder = document.createElement("div");
   holder.className = "checks";
+  const english = document.documentElement.lang.toLowerCase().startsWith("en");
   for (const record of validation) {
     // 記録は status: "passed" と passed: true の二通りある。どちらも読む。
     const passed = record?.status ? record.status === "passed" : record?.passed === true;
+    const failed = record?.status === "failed" || record?.passed === false;
     const item = document.createElement("span");
-    item.className = passed ? "checkmark ok" : "checkmark bad";
-    item.textContent = `${passed ? "✓" : "✕"} ${
-      VALIDATOR_LABEL[record?.validator] || record?.validator || "不明"}`;
+    item.className = passed ? "checkmark ok" : failed ? "checkmark bad" : "checkmark";
+    const label = (!english && VALIDATOR_LABEL[record?.validator]) || record?.validator
+      || record?.schema_version || (english ? "Not recorded" : "記録なし");
+    item.textContent = `${passed ? "✓" : failed ? "✕" : "—"} ${label}`;
     if (record?.reason) item.title = String(record.reason);
     holder.append(item);
   }
   return holder;
 }
 
-async function openDetail(assetId) {
+let detailRequest = 0;
+async function openDetail(assetId, offset = 0) {
+  const request = ++detailRequest;
   const body = byId("detail-body");
   byId("detail-title").textContent = "詳細";
   body.replaceChildren();
   try {
-    const provenance = await call("assets.provenance", {asset_id: assetId});
+    const [provenance, relations] = await Promise.all([
+      call("assets.provenance", {asset_id: assetId}), call("assets.relations", {asset_id: assetId, offset}),
+    ]);
+    if (request !== detailRequest) return;
+    const english = document.documentElement.lang.toLowerCase().startsWith("en");
+    byId("detail-title").textContent = relations.asset.suggested_filename || assetId;
+    body.dataset.assetId = assetId;
+    body.dataset.offset = String(offset);
     const summary = document.createElement("dl");
     summary.className = "facts";
     const rows = [
-      ["作った指示", provenance.intent],
-      ["使ったモデル", provenance.model_id || "記録なし"],
-      ["選んだ理由", modelRouteText(provenance.parameters?.model_route)],
-      ["元になった素材", provenance.parent_asset_ids.length ? provenance.parent_asset_ids.join(", ") : "なし"],
-      ["ライセンス", provenance.license],
-      ["検証", provenance.validation.length
+      [english ? "Prompt" : "作った指示", provenance.intent],
+      [english ? "Model" : "使ったモデル", provenance.model_id || (english ? "Not recorded" : "記録なし")],
+      [english ? "Routing" : "選んだ理由", !provenance.parameters?.model_route && english
+        ? "Not recorded" : modelRouteText(provenance.parameters?.model_route)],
+      [english ? "License" : "ライセンス", provenance.license],
+      [english ? "Validation" : "検証", provenance.validation.length
         ? validationList(provenance.validation) : "記録なし"],
     ];
     for (const [term, value] of rows) {
@@ -6961,13 +6976,64 @@ async function openDetail(assetId) {
       summary.append(wrap);
     }
     body.append(summary);
+    for (const [key, title] of [["parents", english ? "Source assets" : "元になった素材"],
+                                ["children", english ? "Derived assets" : "この素材から作ったもの"]]) {
+      const section = document.createElement("section");
+      section.dataset.assetRelations = key;
+      const heading = document.createElement("h3");
+      heading.textContent = title;
+      section.append(heading);
+      for (const related of relations[key]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.relatedAssetId = related.id;
+        button.textContent = `${related.suggested_filename || related.id} · ${related.mime_type}`;
+        button.style.overflowWrap = "anywhere";
+        button.addEventListener("click", () => void openDetail(related.id));
+        section.append(button);
+      }
+      if (!relations[key].length) {
+        const note = document.createElement("p");
+        note.textContent = english ? "No assets on this page" : "このページの素材はありません";
+        section.append(note);
+      }
+      body.append(section);
+    }
+    for (const [target, label] of [[offset > 0 ? Math.max(0, offset - 60) : null, english ? "Previous relations" : "関連素材の前のページ"],
+                                   [relations.next_offset, english ? "More relations" : "関連素材の次のページ"]]) {
+      if (target === null) continue;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.relationsOffset = String(target);
+      button.textContent = label;
+      button.addEventListener("click", () => void openDetail(assetId, target));
+      body.append(button);
+    }
+    const mime = relations.asset.mime_type;
+    if (mime === "model/gltf-binary" || ["image/png", "image/jpeg", "image/webp"].includes(mime)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.id = "detail-preview";
+      button.textContent = english ? "View asset" : "素材を見る";
+      button.addEventListener("click", () => {
+        byId("detail-dialog").close();
+        const item = {...relations.asset, asset_id: assetId, media_kind: mime === "model/gltf-binary" ? "3d" : "image",
+                      preview_kind: mime === "model/gltf-binary" ? "model_3d" : "image"};
+        void openViewer(assetId, item, [item]);
+      });
+      body.append(button);
+    }
     if (state.mode === "advanced") {
       const raw = document.createElement("pre");
       raw.textContent = JSON.stringify(provenance, null, 2);
       body.append(raw);
     }
-    byId("detail-dialog").showModal();
-  } catch { /* 詳細が出せなくても一覧は使える */ }
+    if (!byId("detail-dialog").open) byId("detail-dialog").showModal();
+  } catch {
+    if (request !== detailRequest) return;
+    body.textContent = document.documentElement.lang.startsWith("en") ? "Could not load asset details." : "素材の詳細を読み込めませんでした。";
+    if (!byId("detail-dialog").open) byId("detail-dialog").showModal();
+  }
 }
 
 /* ── activity ─────────────────────────────────────────────────────────── */
@@ -8741,6 +8807,7 @@ byId("library-media-kinds").addEventListener("click", (event) => {
 });
 renderLibraryMediaFilter();
 byId("close-dialog").addEventListener("click", () => byId("detail-dialog").close());
+byId("detail-dialog").addEventListener("close", () => { detailRequest += 1; });
 byId("viewer-close").addEventListener("click", () => byId("viewer").close());
 /* 閉じ方は 1 つではない。Esc でも背景でも閉じるので、要素そのものの
    close を捉えて止める。押した場所ごとに止め忘れを作らない。 */
@@ -9227,6 +9294,9 @@ window.addEventListener("message", (event) => {
       document.documentElement.lang = message.data.locale;
       renderBlenderRuntime();
       renderLibraryMediaFilter();
+      if (byId("detail-dialog").open && byId("detail-body").dataset.assetId) {
+        void openDetail(byId("detail-body").dataset.assetId, Number(byId("detail-body").dataset.offset || 0));
+      }
       renderViewer3dText();
       renderSceneText();
     }

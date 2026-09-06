@@ -872,6 +872,30 @@ class Store:
             )
         return pairs
 
+    def asset_relations(self, asset_id: str, *, limit: int = 60, offset: int = 0) -> dict[str, Any]:
+        """Bounded metadata-only lineage, independent of the current Library page."""
+        asset = self.get_asset(asset_id)
+        if type(offset) is not int or not 0 <= offset <= 1_000_000:
+            raise ValueError("invalid relation offset")
+        limit = max(1, min(120, limit))
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT metadata_json FROM assets
+                   WHERE EXISTS (SELECT 1 FROM json_each(assets.metadata_json, '$.parent_asset_ids')
+                                 WHERE value = ?)
+                   ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?""",
+                (asset_id, limit + 1, offset),
+            ).fetchall()
+        return {
+            "asset": asset.model_dump(mode="json"),
+            "parents": [self.get_asset(value).model_dump(mode="json") for value in asset.parent_asset_ids[offset:offset + limit]],
+            "children": [Asset.model_validate_json(row["metadata_json"]).model_dump(mode="json") for row in rows[:limit]],
+            "parents_truncated": len(asset.parent_asset_ids) > offset + limit,
+            "children_truncated": len(rows) > limit,
+            "offset": offset,
+            "next_offset": offset + limit if len(rows) > limit or len(asset.parent_asset_ids) > offset + limit else None,
+        }
+
     def delete_asset(self, asset_id: str) -> None:
         """Remove one asset, its provenance sidecar, and its cached thumbnails.
 

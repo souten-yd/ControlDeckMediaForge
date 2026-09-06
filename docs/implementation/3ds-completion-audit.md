@@ -18,7 +18,7 @@ Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件�
 
 | 条件 | 確認済み証拠の範囲 | 判定と残件 |
 |---|---|---|
-| GOAL-01 共通Library | installed scene表示と既存画像の選択 | PARTIAL: 画像/GLB/.blendの全絞込と親子双方向移動の操作証拠を照合 |
+| GOAL-01 共通Library | installed scene表示と既存画像の選択。sourceで.blend掲載/GLB・Blender別filter/metadata paging/親子リンクを補完、実Blender素材で日英320px・双方向移動・本体取得0を確認 | PARTIAL: 新UIの署名installedで全絞込と親子双方向移動を受入する |
 | GOAL-02 viewer | 署名installed0.28.19でLibrary→3D card、±XYZ回転・zoom両方向、逆操作差分0、320px、scene不変をoverlayなしで確認 | VERIFIED（利用者指定操作の範囲）。2026-09-06利用者確認によりwire/animationは必須から除外 |
 | GOAL-03 設定管理 | 4.5.9/4.5.13の共存、active切替、参照中削除拒否 | PARTIAL: 全操作の画面完結、失敗後再開とscenario Dの証拠を照合 |
 | GOAL-04 Web Blender | `.14-long/observations.json`: 621.451秒GUI、入力、保存revision 2→3、reload/reconnect | VERIFIED（この操作範囲）。credential refreshの証拠ではない |
