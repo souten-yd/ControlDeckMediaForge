@@ -3,6 +3,32 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.20 signed / installed material comparison
+
+PR #258 merged `c26f67ddb3b297bd29d9a7a350135b1ac5b8a962`、tag v0.28.20は同commit。
+exact worktree/PyInstaller6.22.0/Python3.12.3から31,475,892 Bの正式bundleを構築・署名公開した。
+SHA-256 `88f0cdfab3efc67801fa4f2ca2394e38212492ee3870cc10153285fa711d6373`。
+公開4 asset再取得checksum・Host publisher verifier成功、packaged doctor ok/0.28.20。
+core SHA `1bdb6d40d24efaa5d4627e07b2323489bc3b5f109ec5a84c62c93d190ee3be21`はinstalled実体とも一致。
+更新直前Host/local active Job0、Web session/runtime/model operation全終端を確認。
+online DB backup `/data1tb/mf-0.28.20-pre-update-20260906.sqlite3`は1,449,984 B、非公開/保持。
+標準registry.updateは10.144秒、0.28.19→0.28.20/healthy/enabled。MF PID2503646、10:49:09 JST開始。
+Host変更/restartは要求していない。
+
+overlay/追加接続許可なしで比較scriptの`--steel-fixture`を実行し、旧銀/新青黒のRGB条件と
+新旧描画差18437pxを確認。`--context-side old`と新しい`--context-side current`を別々に実行し、
+テクスチャなし/あり双方のcontext復旧後描画差0・status復帰・閉じた両context loss=true、
+instance/handle0、scene不変、page error0を確認した。
+証拠 `/data1tb/mf-material-compare-installed-0.28.20-{old,current}-20260906/observations.json`。
+Library6軸/zoom/orbit/wheel/fit/320pxも `/data1tb/mf-six-axis-installed-0.28.20-20260906`で成功。
+通常Chrome/AMD内蔵GPUの実績であり、R9700や実mobile touchの実績ではない。
+
+exact release worktreeは削除（Gitで再作成可）、build出力/packaged展開先2 directoryはgio trashで退避。
+公開再取得 `/data1tb/mf-0.28.20-public-20260906`・browser証拠・DB backupは保持する。
+次は比較からの採用/旧版復元を含む制作一巡の不足を、専用fixtureで実操作する。
+今回のread-only比較で採用操作まで成功にしない。GOAL-06/3DS-8はPARTIAL、他残件は監査表。
+受入script変更後のgate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 105.01秒。
+
 ## 2026-09-06 v0.28.20 source preparation
 
 PR #257 merged `2b527d05858bbc4e279d18be16ee85f48b285cd5`。

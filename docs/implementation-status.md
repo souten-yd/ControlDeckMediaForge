@@ -9350,3 +9350,40 @@ PR #257 merged `2b527d0`の材質照明/context復旧修正を正式配布する
 Host PID2499072/MF PID2470070はいずれもactive/running。更新直前に再確認する。
 署名公開・導入・overlayなしの比較/6軸受入は未実施。全体3DS-8/GOAL-06はPARTIAL。
 版準備gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 103.75秒。diff check成功。
+
+## 2026-09-06 v0.28.20 signed / installed material comparison — VERIFIED FOR THIS SLICE
+
+PR #258 mergeとtag v0.28.20は `c26f67ddb3b297bd29d9a7a350135b1ac5b8a962`で一致。
+exact detached worktreeから既存build_release_bundle.py、PyInstaller6.22.0/Python3.12.3で構築。
+artifact31,475,892 B / SHA-256 `88f0cdfab3efc67801fa4f2ca2394e38212492ee3870cc10153285fa711d6373`。
+packaged doctorはok/version0.28.20/packaged=true。既存正式publisher keyで署名し通常Releaseへ公開。
+公開4 assetを再取得、checksumとHost `_verify_signed_release`成功。manifest279 B/signature89 B/checksum119 B。
+公開先 https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.28.20
+
+更新直前read-only照会でHost/local active Job0、Web session/runtime/model operation全終端。
+SQLite online backup `/data1tb/mf-0.28.20-pre-update-20260906.sqlite3`（1,449,984 B/非公開）を保持。
+標準registry.updateは10.144秒、0.28.19→0.28.20/healthy/enabled。
+MF PID2503646、10:49:09 JST開始。installed core SHA
+`1bdb6d40d24efaa5d4627e07b2323489bc3b5f109ec5a84c62c93d190ee3be21`は公開bundleと一致。
+Host変更/restart、runtime/モデル更新は要求していない。
+
+Host diagnostic venvで`3ds_compare_installed_e2e.py --scene-id scene_ca920fd634b14dfea8215567e930bb7a
+--old-sequence 12 --current-sequence 13 --steel-fixture`を実行。
+`--context-side`をold/currentから選べる加法的試験引数にし、両paneを別runで検査した。
+evidence-dirは `/data1tb/mf-material-compare-installed-0.28.20-{old,current}-20260906`。
+両runともfrontend_mode=installed、overlay/追加接続許可なし。新旧材質差18437px、
+刃ROI RGBは旧131.34/133.87/137.18、新2.23/9.82/25.40。textureなし/あり双方で
+context復旧後のWebGL描画差0・stats表示復帰、close後両context loss=true、instance/handle0、
+scene応答不変、page error0。専用mf-e2e sessionのみ個別失効、password変更なし。
+
+`3ds_viewer_render_installed_e2e.py --scene-id scene_3ac2b7089a3b5cc3b7b1a95ffd96594f
+--evidence-dir /data1tb/mf-six-axis-installed-0.28.20-20260906`もoverlayなしで成功。
+±XYZ回転差26000/27172/10787/9251/25716/26905px、逆操作差0、zoom46412/43828px、
+orbit56220px/wheel41342px、fit/idle差0。320px/scroll319、scene不変/page error0。
+通常Chrome/AMD内蔵GPUの実測であり、R9700/software描画や実mobile touchとは記録しない。
+
+exact release worktreeは削除（Gitで再作成可）、build/packaged展開先2 directoryはgio trashへ退避（復元可）。
+公開再取得4 asset、browser JSON/PNG、更新前DBは保持。
+NOT TESTED: 比較からの新規採用/復元を含む全制作一巡、byte単位memory回収、日英/実mobile touch、
+新版画像生成/G8実worker回帰、長時間credential、全release A〜F。GOAL-06/3DS-8はPARTIAL。
+受入script変更後のgate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 105.01秒。
