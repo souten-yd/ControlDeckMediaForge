@@ -1,5 +1,44 @@
 # Media Forge implementation status
 
+## 2026-09-06 runtime removal protection and immutable asset hashes
+
+PR #315 merged `6899713922c3b75232a51514062eb2b777fac9bb` をfetch確認。
+branch `ux1/3d-runtime-removal-evidence`。製品/Host/公開契約変更なし。
+新 `scripts/3ds_runtime_removal_e2e.py` は専用領域
+`/data1tb/mf-clean-packaged-0.28.32-QBvHfm` のみをsource app/実HTTPで操作する。
+実行: `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_runtime_removal_e2e.py
+--evidence-dir /data1tb/mf-runtime-removal-resume-20260906`。exit0 / 2.008秒。
+GUI `blendersession_fb98414ac7dd429c8c6164a02a0d1428` は旧4.5.9/ready。
+既定を4.5.13へ切替後、旧版remove_previewはactive=false/project_reference_count=1、
+can_remove=false。正規fingerprint付き実remove POSTも422/blender_runtime_in_use。
+GUI停止後も同project保護で422。scene revisionを消して保護を迂回しない。
+
+既定を旧4.5.9へ戻し、未参照4.5.13のpreviewを取得、正規removeを実行。
+op `blenderop_e14ed351d27b40628fcbd8d1a734ced1` ready、removed_bytes=1,167,187,993。
+新版managed directory消失、旧binary存在、registry/activeは旧版だけ。
+同scene/document/全revision/Asset API metadata前後一致。
+assets配下全6ファイル（blend434,663 B、GLB1,936 B、ZIP44,745 B、provenance3件）
+を実bytes SHA-256/sizeで前後照合。具体hashは同証拠observations.jsonへ保存。
+個別画像Assetはこの領域にないため画像実bytes保持の受入とは呼ばない。
+systemd user unitはinactive/MainPID=0、source app exit0。
+削除したのは専用4.5.13のみ。保持済みarchiveから標準updateで再導入可能。
+
+初回 `/data1tb/mf-runtime-removal-20260906` は1.869秒でassert失敗。
+live_reference_countはin-process batch/working-copy参照数で、GUI readyでも0。
+GUIの削除保護はproject_referenceに由来することをコードとHTTPで照合し、
+想定を修正。同sessionの生存を確認して再利用した。GUI再作成や製品修正で代用しない。
+今回RFB接続/入力/画面表示は未実施。既存probe受入とは別script。
+hash verifierに内容・provenance変更、symlink拒否、空baseline拒否の3 unit testsを追加。
+初期gate1060 passed/既知warning1/140.89秒。
+最終gate `./mf.sh test`: 1063 passed/既知warning1/142.13秒。diff check成功。
+本番Host PID2078/MF PID181914はactiveのまま（本sliceから再起動なし）。
+
+scenario Dの「停止後A削除」はproject pin保護との未解決な差がある。
+今回の未参照B削除をその条件の成功に読み替えない。
+External解除はresolverのlegacy登録/managed解除拒否しか見つからず、公開登録解除経路は未確認。
+次はExternal登録解除の設計・実装差分を確定し、外部実体を保持する管理操作を進める。
+全体3DS-8/scenario DはPARTIALを維持。
+
 ## 2026-09-06 rejected candidate update preserves pinned Blender GUI
 
 PR #314 merged `933ea4f0d0aa8867ca238747db130ae5edb5bb53` をfetch確認。
