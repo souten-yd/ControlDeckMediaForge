@@ -9583,3 +9583,11 @@ brief を 1024x576 へ解決し、投入時に `snap_to_native` が学習寸法�
 
 バケットで生成し、検査の前に要求どおりの画面へ揃える (`mediaforge/canvas.py`)。
 比の端数は中央を残して切る。揃えるのは生成のみで、編集は元画像の画面を使う。
+
+## 2026-09-06 v0.28.26 source preparation
+
+PR #273 merge `7e6462e`の比較ボタン保持修正を配布するためaddon/coreを0.28.26へ同期。
+開始時の公開latest0.28.25、実registry.status installed0.28.25/healthy/enabled。
+canvas補正を含む並行変更を保持。新版署名/公開/導入/installed受入はNOT TESTED。
+版準備gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 110.06秒。
+全体3DS-6/3DS-8はPARTIAL。

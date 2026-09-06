@@ -3,6 +3,14 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 v0.28.26 source preparation
+
+PR #273 merged `7e6462e551db430052ae471d7782cb5b4094ee89`。公開latestと実installedは
+0.28.25/healthy/enabledを確認。branch `ux1/3d-material-v02826`でaddon/coreを0.28.26へ同期する。
+比較ボタンを不変refreshで保持する修正を配布するための版準備。canvas補正を含む並行変更は保持。
+新しい版の署名/公開/導入/installed受入はNOT TESTED。全体3DS-6/3DS-8はPARTIAL。
+版準備gate `./mf.sh test`: 1030 passed / 既知Starlette warning1件 / 110.06秒。
+
 ## 2026-09-06 revision comparison refresh race
 
 PR #269 merged `daf9df6fd909a4ae7edf6daf3f7d92c6e2015951`をfetch確認。
