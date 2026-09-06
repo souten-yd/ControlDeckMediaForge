@@ -1,0 +1,151 @@
+"""Installed GUI save conflict: terminal cleanup and recovery fork.
+
+Host diagnostic Python. Only an explicitly named retained mf-e2e material
+conflict scene is advanced. No process signals, runtime changes or core restart.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import re
+import sqlite3
+import subprocess
+import time
+from typing import Any
+
+from playwright.sync_api import sync_playwright
+
+ACTIVE = {"queued", "preparing", "starting", "ready", "saving", "stopping"}
+DATA = Path("/data1tb/ControlDeck/data/feature-data/media-forge/data")
+
+
+def record(session_id: str) -> dict[str, Any]:
+    with sqlite3.connect(f"file:{DATA}/media-forge.sqlite3?mode=ro", uri=True) as db:
+        return json.loads(db.execute("select value_json from blender_web_sessions where id=?", (session_id,)).fetchone()[0])
+
+
+def main() -> None:
+    from app.database import SessionLocal
+    from app.features import registry
+    from app.models import User
+    from app.security.sessions import SESSION_COOKIE, create_session, revoke_session
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scene-id", required=True)
+    parser.add_argument("--expected-version", required=True)
+    parser.add_argument("--evidence-dir", type=Path, required=True)
+    args = parser.parse_args()
+    assert re.fullmatch(r"scene_[0-9a-f]{32}", args.scene_id)
+    installed = registry.status("media-forge")
+    assert installed["version"] == args.expected_version and installed["health"] == "healthy"
+    with sqlite3.connect(f"file:{DATA}/media-forge.sqlite3?mode=ro", uri=True) as db:
+        assert not any(state in ACTIVE for (state,) in db.execute("select state from blender_web_sessions"))
+    args.evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
+    spec = importlib.util.spec_from_file_location("helpers", Path(__file__).with_name("3ds8_installed_browser_e2e.py"))
+    assert spec and spec.loader
+    helpers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helpers)
+    evidence: dict[str, Any] = {"version": args.expected_version, "scene_id": args.scene_id,
+        "mode": "installed_real_gui_save_revision_conflict", "page_errors": []}
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.username == "mf-e2e").one()
+        assert user.is_active
+        token = create_session(db, user, "127.0.0.1", "MediaForge GUI cleanup acceptance")
+    session_id = None
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(executable_path="/usr/bin/google-chrome", headless=False,
+                                         args=["--window-size=1280,1000"])
+            try:
+                context = browser.new_context(base_url="http://127.0.0.1:8765", no_viewport=True)
+                context.add_cookies([{"name": SESSION_COOKIE, "value": token, "url": "http://127.0.0.1:8765",
+                    "httpOnly": True, "sameSite": "Lax"}])
+                page = context.new_page()
+                page.on("pageerror", lambda e: evidence["page_errors"].append(str(e)))
+                page.goto("/x/media-forge/workspace/create", wait_until="domcontentloaded")
+                frame = helpers.workspace_frame(page)
+                frame.wait_for_selector('#app[aria-busy="false"]')
+                assert frame.evaluate("self.origin") == "null"
+
+                def call(method: str, params: dict) -> dict:
+                    return frame.evaluate("p => call(p.method,p.params)", {"method": method, "params": params})
+
+                def wait(wanted: set[str]) -> dict:
+                    deadline = time.monotonic() + 90
+                    while time.monotonic() < deadline:
+                        value = next(v for v in call("blender.sessions.list", {})["items"] if v["id"] == session_id)
+                        if value["state"] in wanted:
+                            return value
+                        assert value["state"] in ACTIVE, value
+                        page.wait_for_timeout(250)
+                    raise AssertionError("owned session did not reach requested state")
+
+                before = call("scenes.get", {"scene_id": args.scene_id})
+                assert before["scene"]["name"].startswith("mf-e2e material conflict ")
+                assert len(before["revisions"]) >= 3
+                started = call("blender.sessions.start", {"scene_id": args.scene_id})
+                session_id = started["id"]
+                evidence["session_id"] = session_id
+                ready = wait({"ready"})
+                owned = record(session_id)
+                unit = owned["unit_id"]
+                assert re.fullmatch(r"mediaforge-blender-[0-9a-f]{32}\.service", unit)
+                result = subprocess.run(["systemctl", "--user", "show", unit, "--property=ControlGroup", "--value"],
+                                        check=True, capture_output=True, text=True, timeout=10)
+                cgroup = Path("/sys/fs/cgroup") / result.stdout.strip().lstrip("/")
+                assert cgroup.resolve().is_relative_to(Path("/sys/fs/cgroup")) and cgroup.is_dir()
+                pids = sorted({int(pid) for p in cgroup.rglob("cgroup.procs") for pid in p.read_text().split()})
+                assert pids
+                evidence["live_pids"] = pids
+                evidence["unit_id"] = unit
+                root = DATA / "sessions/blender" / session_id
+                socket = Path("/run/user/1000/mediaforge-blender") / (session_id.removeprefix("blendersession_")[:16] + ".sock")
+                assert root.is_dir() and socket.is_socket()
+                # Regular restore advances only this dedicated scene while its GUI owns the old base.
+                call("scenes.revisions.restore", {"scene_id": args.scene_id,
+                    "base_revision_id": before["scene"]["current_revision_id"],
+                    "target_revision_id": before["revisions"][0]["id"]})
+                advanced = call("scenes.get", {"scene_id": args.scene_id})
+                began = time.monotonic()
+                call("blender.sessions.save", {"session_id": session_id})
+                failed = wait({"failed", "interrupted"})
+                evidence["save_terminal_sec"] = round(time.monotonic() - began, 3)
+                assert failed["error_code"] == "scene_revision_conflict", failed
+                assert failed["result"]["saved"] is False
+                working_id = failed["result"]["recovery"]["working_id"]
+                assert re.fullmatch(r"working_[0-9a-f]{32}", working_id)
+                candidate = DATA / "scenes/working" / working_id / "scene.blend"
+                assert candidate.is_file() and not candidate.is_symlink()
+                digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+                assert call("scenes.get", {"scene_id": args.scene_id}) == advanced
+                assert not root.exists() and not socket.exists() and not cgroup.exists()
+                assert all(not Path(f"/proc/{pid}").exists() for pid in pids)
+                assert record(session_id)["state"] not in ACTIVE
+                recovered = call("scenes.recovery.fork", {"scene_id": args.scene_id, "recovery_working_id": working_id})
+                source_id = recovered["revision"]["source_asset_id"]
+                source = DATA / "assets" / (source_id + ".blend")
+                assert hashlib.sha256(source.read_bytes()).hexdigest() == digest
+                assert hashlib.sha256(candidate.read_bytes()).hexdigest() == digest
+                assert call("scenes.get", {"scene_id": args.scene_id}) == advanced
+                assert not evidence["page_errors"]
+                evidence.update(passed=True, ready=ready, failed=failed, recovered=recovered,
+                    candidate_sha256=digest, candidate_bytes=candidate.stat().st_size,
+                    process_cgroup_root_socket_reclaimed=True,
+                    not_tested=["manual GUI edit", "RFB connection", "GPU lease", "worker crash", "idle timeout"])
+            finally:
+                if session_id and record(session_id)["state"] in ACTIVE:
+                    call("blender.sessions.stop", {"session_id": session_id})
+                    wait({"stopped", "failed", "interrupted"})
+                browser.close()
+    finally:
+        with SessionLocal() as db:
+            revoke_session(db, token)
+        (args.evidence_dir / "observations.json").write_text(json.dumps(evidence, indent=2) + "\n")
+    print(json.dumps({k:evidence[k] for k in ("passed", "session_id", "save_terminal_sec", "candidate_bytes")}))
+
+
+if __name__ == "__main__":
+    main()
