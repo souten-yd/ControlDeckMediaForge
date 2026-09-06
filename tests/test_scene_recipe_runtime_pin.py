@@ -9,6 +9,7 @@ import pytest
 from mediaforge.blender_runtime import BlenderRuntimeRegistryError, G8_RUNTIME_ID
 from mediaforge.scene_recipe_jobs import SceneRecipeJobManager
 from mediaforge.scene_workspace import SceneWorkspace
+from mediaforge.scenes import SceneError
 from mediaforge.store import Store
 from test_blender_runtime_resolver import MANIFEST, ready_runtime, resolver
 from test_scene_recipe_jobs import Host, IDENTITY, Workspace, recipe
@@ -146,5 +147,50 @@ def test_queue_and_worker_cleanup_keep_runtime_pinned(tmp_path: Path) -> None:
         await manager.wait_cleanup(job.id)
         assert workspace.resolver.live_reference_count(runtime_id) == 0
         await manager.stop()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("removed", [False, True])
+def test_retry_preserves_failed_attempt_runtime_after_active_switch(tmp_path: Path, removed: bool) -> None:
+    async def scenario() -> None:
+        store, workspace = pinned_workspace(tmp_path)
+        original = workspace.apply_recipe
+        calls = 0
+
+        async def fail_once(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise SceneError("scene_recipe_failed", "injected transient failure")
+            return await original(*args, **kwargs)
+
+        workspace.apply_recipe = fail_once
+        host = Host()
+        manager = SceneRecipeJobManager(store, workspace, host)
+        first, record = await manager.submit(recipe(), IDENTITY)
+        await manager.wait_cleanup(first.id)
+        assert store.get_job(first.id).status.value == "failed"
+        await manager.stop()
+        await asyncio.to_thread(workspace.resolver.activate, G8_RUNTIME_ID)
+        if removed:
+            assert await asyncio.to_thread(workspace.resolver.unregister_managed, record.runtime_id)
+        # Retry after manager restart must use durable pin, not the new active default.
+        manager = SceneRecipeJobManager(store, workspace, host)
+        retry = recipe().model_copy(update={"retry_job_id": first.id})
+        try:
+            if removed:
+                with pytest.raises(SceneError, match="runtime is unavailable"):
+                    await manager.submit(retry, IDENTITY, retry_of=first.id)
+                assert len(host.created) == 1 and calls == 1
+            else:
+                second, retried = await manager.submit(retry, IDENTITY, retry_of=first.id)
+                await manager.wait_cleanup(second.id)
+                assert store.get_job(second.id).status.value == "succeeded"
+                assert (retried.runtime_id, retried.runtime_version) == (record.runtime_id, record.runtime_version)
+                assert retried.retry_of == first.id and calls == 2
+                assert workspace.resolver.live_reference_count(record.runtime_id) == 0
+        finally:
+            await manager.stop()
 
     asyncio.run(scenario())

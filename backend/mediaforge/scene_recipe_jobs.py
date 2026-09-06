@@ -109,6 +109,7 @@ class SceneRecipeJobManager:
             raise SceneError("host_capability_not_granted", "Host jobs.write capability is required")
         owner = identity.actor_subject or identity.subject
         external = value.model_dump(mode="json", exclude={"retry_job_id"})
+        retry_pin: tuple[str, str, str | None] | None = None
         if retry_of is not None:
             previous = self.store.get_scene_recipe_task(retry_of, owner=owner)
             previous_job = self.store.get_job(retry_of)
@@ -116,6 +117,7 @@ class SceneRecipeJobManager:
                 raise SceneError("scene_retry_invalid", "only a failed or canceled scene job can be retried")
             if external != previous.request:
                 raise SceneError("scene_retry_changed", "a retry must preserve the original typed input")
+            retry_pin = (previous.runtime_id, previous.runtime_version, previous.base_revision_id)
         operation = (
             "scene.create"
             if isinstance(value, SceneCreateRequest)
@@ -125,7 +127,8 @@ class SceneRecipeJobManager:
         )
         encoded = json.dumps(external, sort_keys=True, separators=(",", ":")).encode("utf-8")
         acquisition = asyncio.create_task(asyncio.to_thread(
-            self.workspace.acquire_recipe_runtime, owner, value
+            self.workspace.acquire_recipe_runtime, owner, value,
+            **({"retry_pin": retry_pin} if retry_pin is not None else {}),
         ))
         try:
             references, pin = await asyncio.shield(acquisition)

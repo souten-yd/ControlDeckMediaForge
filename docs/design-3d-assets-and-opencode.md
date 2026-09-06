@@ -237,6 +237,10 @@ Host agent経路の現行120秒上限へ長時間GUIやrenderを詰め込まな�
 - 既存public state enumは不用意に変更しない。詳細stage/wait_reasonは追加metadataとして扱う。
 - cancelはqueuedなら即時取消、runningなら所有runnerへ通知、終了確認後に資源回収。
 - retryは成功済みの画像assetを再利用し、失敗stageから新しい試行として開始。
+- typed Jobのretryは元試行の永続runtime ID/version/base revisionも保持する。
+  新規scene作成であっても、途中のactive切替を元試行の環境変更へ読み替えない。
+  元環境が不在・不適合なら別版へfallbackせず再導入を必要とする明示エラーにする。
+  edit/materialのcurrent/base競合検査はretryでも省略しない。
 - LLM提案・画像生成・Blender加工はstageごとのBroker管理。別stageのleaseを保持したまま待たない。
 - 新revisionのcommitはbase revision一致を条件にする。競合時は上書きせずbranch revisionを提案。
 

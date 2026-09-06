@@ -3,6 +3,37 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 retry preserves original Blender runtime
+
+PR #333 merge `e3c19a2b012c65b648f847fc79fc1b2067adbd13`を確認し、
+branch `ux1/3d-retry-runtime-pin`。GOAL-07を照合中、失敗scene.createのretryが
+保存済みruntime_id/versionを使わず、その時点のactive環境を再選択する不具合を発見。
+追加2 testsで修正前を再現: active変更後はlegacy IDへ変わり、元managed登録解除後も
+別環境で受理された。修正後は旧Jobの永続pinを取得threadへ渡し、同じremoval guard内で
+exact runtimeの検証・参照取得を行う。不在/不適合はHost child作成前に
+scene_runtime_unavailable。edit/materialは既存base/current検査と旧pin一致も要求する。
+公開schema/入力/成功済み版の意味を変更せず、任意runtime指定も公開しない。
+新たな同期DB/HTTP/process待機をasyncへ追加しない。取得取消と参照解放の既存保護を維持。
+
+focused scene recipe/pin28 tests成功。新testsはfailed attempt後のmanager再作成・active切替、
+元登録なし拒否、Host Job/worker追加なし、retry_of/元版一致/参照0を検査する。
+実機 `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_retry_runtime_pin_e2e.py
+--evidence-dir /data1tb/mf-retry-runtime-pin-source-20260906-r3
+--managed-root /data1tb/mf-long-setup-source-20260906/runtimes/blender`は1.547秒/exit0。
+隔離registry/dataだけを使用。既存owned runtime実体は読み取り専用、導入/削除なし。
+4.5.9で受け付けた待機Jobを正常cancel、managerを作り直しactive4.5.13へ変更した後、
+retryは実Blender4.5.9で成功。input hash/idempotency key一致、retry_of元Job、参照0。
+source426,899 B/GLB1,756 Bの実size/SHAとmetadata一致、独立GLB検査12 triangles。
+Host credential/controlはfixtureであり、HTTP/installed/browserの証拠ではない。
+初回は診断scriptのcatalog指定漏れ、r2は必須primitive name欠落で実行前失敗。
+それぞれ終了を確認してscriptを修正、別証拠directoryのr3で成功した。製品失敗とは区別。
+診断module importもasync外へ移した最終scriptを-final directoryで再実行、0.815秒/exit0。
+同じpin/取消/実Blender/Asset検査を再確認。全 `./mf.sh test` は
+1128 passed/既知warning1/157.86秒。最終script py_compile/diff checkも成功。
+
+稼働0.28.36への修正配布は未実施。材質失敗時の成功済み画像再利用、全retry matrix、
+GOAL-07/3DS-8の完了は主張しない。次は該当材質工程の実機受入と修正の署名配布。
+
 ## 2026-09-06 installed Library real 63-child paging
 
 PR #332 merge `102f2787638e2ea713ddadced65f19b549ddc25c`をfetch確認し、

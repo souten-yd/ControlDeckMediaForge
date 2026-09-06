@@ -206,8 +206,8 @@ class Host:
 
 
 class Workspace:
-    def acquire_recipe_runtime(self, owner: str, value: SceneCreateRequest):
-        return ExitStack(), self.recipe_runtime_pin(owner, value)
+    def acquire_recipe_runtime(self, owner: str, value: SceneCreateRequest, *, retry_pin=None):
+        return ExitStack(), retry_pin or self.recipe_runtime_pin(owner, value)
 
     def recipe_runtime_pin(
         self, owner: str, value: SceneCreateRequest
