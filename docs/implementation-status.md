@@ -9387,3 +9387,22 @@ exact release worktreeは削除（Gitで再作成可）、build/packaged展開�
 NOT TESTED: 比較からの新規採用/復元を含む全制作一巡、byte単位memory回収、日英/実mobile touch、
 新版画像生成/G8実worker回帰、長時間credential、全release A〜F。GOAL-06/3DS-8はPARTIAL。
 受入script変更後のgate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 105.01秒。
+
+## 2026-09-06 採用前材質比較 — 実装不足を確認
+
+`git fetch origin`でmain `a1635c9`（PR #259 merge）を確認し、PR #213 merged `9469d8e`を照合。
+`design-3d-assets-and-opencode.md` §4/5の未保存preview→前後比較→採用→revision確定に対し、
+`frontend/app.js`のapplySceneMaterialはscenes.material.applyを直接呼ぶ。
+`backend/mediaforge/scene_workspace.py`のapply_material_bindingはworking source更新後に
+commit_working_copyを呼び、openSceneCompareは確定済みsceneRevisionsだけを対象にする。
+この関数経路を`sed`/`rg`で現行コードと照合した。既存frontend contract assertも直接applyを要求する。
+したがってGOAL-06は実測未確認だけではなく未実装部分を持つ。3DS-6のexit完了判定を撤回した。
+過去の画像適用/確定済み新旧比較/context復旧の実測値は変更しない。
+
+次はprivate workspaceに検証済み未保存候補と明示採用/破棄を加法実装し、既存公開Agent契約を維持する。
+owner/base revision/runtime pin、bounded opaque preview、候補回収、採用時の競合/再送条件と
+head/版数/旧版bytesの受入条件はcompletion auditへ記載した。
+本sliceは文書監査のみ。product/Host/制作データ/installed版は変更なし。
+候補prepare/compare/adopt/discard、同経路の実Blender/browser操作はNOT IMPLEMENTED / NOT TESTED。
+gate `./mf.sh test`: 1004 passed / 既知Starlette warning1件 / 105.73秒。diff check成功。
+このgreenは既存動作の回帰確認であり、採用前比較の設計適合を証明するものではない。
