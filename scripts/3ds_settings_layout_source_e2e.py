@@ -15,6 +15,7 @@ from playwright.sync_api import sync_playwright
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--require-touch-targets", action="store_true")
     args = parser.parse_args()
     args.evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
     observations = []
@@ -35,6 +36,10 @@ def main() -> None:
                     page.locator("#blender-runtime-details-label").click()
                 layout = page.evaluate("""() => ({
                     client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth,
+                    buttons: [...document.querySelectorAll('#blender-runtime-list button')].map(button => ({
+                        height: button.getBoundingClientRect().height,
+                        minHeight: getComputedStyle(button).minHeight
+                    })),
                     rows: [...document.querySelectorAll('#blender-runtime-list .row')].map(row => {
                         const a = row.firstElementChild.getBoundingClientRect();
                         const b = row.lastElementChild.getBoundingClientRect();
@@ -48,6 +53,8 @@ def main() -> None:
                 assert all(row["text"] >= 100 for row in layout["rows"]), layout
                 if width == 320:
                     assert all(row["controlsTop"] >= row["textBottom"] for row in layout["rows"]), layout
+                    if args.require_touch_targets:
+                        assert layout["buttons"] and all(button["height"] >= 44 for button in layout["buttons"]), layout
                 assert layout["scroll"] <= layout["client"], layout
                 assert all(row["scroll"] <= row["client"] for row in layout["rows"]), layout
                 assert page.evaluate("() => call('blender.runtime.status', {})") == before
