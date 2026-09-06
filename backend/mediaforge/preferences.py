@@ -20,7 +20,7 @@ ALLOWED: dict[str, tuple[type, tuple[Any, ...] | None]] = {
     "last_count": (int, (1, 2, 3, 4, 5, 6, 7, 8)),
     "last_custom_width": (int, None),
     "last_custom_height": (int, None),
-    "last_view": (str, ("create", "library", "activity", "settings")),
+    "last_view": (str, ("create", "library", "activity", "settings", "web-blender")),
     "library_kind": (str, ("all", "generated", "edited", "imported")),
     "director_mode": (str, ("original", "refine", "art_direct")),
     "model_layout": (str, ("table", "cards")),

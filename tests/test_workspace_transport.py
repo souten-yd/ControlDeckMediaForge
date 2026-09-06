@@ -595,7 +595,7 @@ def test_preferences_round_trip_and_reject_unknown_keys(tmp_path: Path):
     with client, client.websocket_connect("/ws", headers=headers) as socket:
         defaults = call(socket, "preferences.get")["result"]["values"]
         stored = call(socket, "preferences.set", {
-            "values": {"mode": "advanced", "create_media": "video", "last_count": 4},
+            "values": {"mode": "advanced", "create_media": "video", "last_count": 4, "last_view": "web-blender"},
         })
         reloaded = call(socket, "preferences.get")["result"]["values"]
         unknown = call(socket, "preferences.set", {"values": {"api_token": "secret"}})
@@ -606,6 +606,7 @@ def test_preferences_round_trip_and_reject_unknown_keys(tmp_path: Path):
     assert stored["ok"] is True
     assert reloaded["mode"] == "advanced" and reloaded["create_media"] == "video"
     assert reloaded["last_count"] == 4
+    assert reloaded["last_view"] == "web-blender"
     assert reloaded["last_preset"] == preferences.DEFAULTS["last_preset"]
     assert unknown["ok"] is False and unknown["error"]["code"] == "invalid_preference_key"
     assert bad_value["ok"] is False and bad_value["error"]["code"] == "invalid_preference_value"
