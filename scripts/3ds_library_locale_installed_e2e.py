@@ -27,7 +27,13 @@ def main() -> None:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--width", type=int, choices=(320, 1280), required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--paging-fixture", type=Path,
+                        help="Retained installed fixture.json; verify 63 real children before locale changes at offset 60")
     args = parser.parse_args()
+    fixture = json.loads(args.paging_fixture.read_text()) if args.paging_fixture else None
+    if fixture:
+        assert fixture["passed"] and fixture["scene_id"] == args.scene_id
+        assert len(fixture["children"]) == 63 and not fixture["parents"]
     installed = registry.status("media-forge")
     assert installed["version"] == args.expected_version and installed["health"] == "healthy"
     assert installed["enabled"]
@@ -59,7 +65,7 @@ def main() -> None:
                     frame = helpers.open_scene(page, args.scene_id)
                     assert frame.evaluate("self.origin") == "null"
                     before = frame.evaluate("id => call('scenes.get', {scene_id:id})", args.scene_id)
-                    source = before["revisions"][-1]["source_asset_id"]
+                    source = fixture["source"] if fixture else before["revisions"][-1]["source_asset_id"]
                     frame.locator("#nav-library").click()
                     frame.locator('[data-library-media="blend"]').click()
                     target = frame.locator(f'#library-grid [data-asset-id="{source}"]')
@@ -76,6 +82,28 @@ def main() -> None:
                     target.click()
                     expect(frame.locator("#detail-body")).to_have_attribute("data-asset-id", source)
                     expect(frame.locator("#detail-body dt").first).to_have_text("Prompt")
+                    if fixture:
+                        body = frame.locator("#detail-body")
+                        children = frame.locator('[data-asset-relations="children"] [data-related-asset-id]')
+                        expect(children).to_have_count(60)
+                        first_page = children.evaluate_all("nodes => nodes.map(n=>n.dataset.relatedAssetId)")
+                        assert frame.locator("#detail-dialog").evaluate("n => n.scrollWidth <= n.clientWidth")
+                        frame.locator('[data-relations-offset="60"]').click()
+                        expect(body).to_have_attribute("data-offset", "60")
+                        expect(children).to_have_count(3)
+                        second_page = children.evaluate_all("nodes => nodes.map(n=>n.dataset.relatedAssetId)")
+                        assert len(set(first_page + second_page)) == 63
+                        assert set(first_page + second_page) == set(fixture["children"])
+                        expect(frame.locator('[data-relations-offset="120"]')).to_have_count(0)
+                        frame.locator('[data-relations-offset="0"]').click()
+                        expect(body).to_have_attribute("data-offset", "0")
+                        expect(children).to_have_count(60)
+                        assert children.evaluate_all("nodes => nodes.map(n=>n.dataset.relatedAssetId)") == first_page
+                        frame.locator('[data-relations-offset="60"]').click()
+                        expect(body).to_have_attribute("data-offset", "60")
+                        expect(children).to_have_count(3)
+                        evidence.update({"real_children": 63, "first_page": 60, "last_page": 3,
+                                         "unique_complete_set": True, "back_restores_first_page": True})
                     snapshot = """() => ({asset: document.querySelector('#detail-body').dataset.assetId,
                       offset: document.querySelector('#detail-body').dataset.offset, filter:state.libraryMedia,
                       related:[...document.querySelectorAll('[data-related-asset-id]')].map(n=>n.dataset.relatedAssetId),
@@ -102,6 +130,8 @@ def main() -> None:
                             "aria-label", "素材の種類" if locale == "ja" else "Media type")
                         assert frame.evaluate(snapshot) == identity
                         assert frame.locator("#detail-dialog").evaluate("node => node.open")
+                        assert frame.locator("#detail-dialog").evaluate("node => node.scrollWidth <= node.clientWidth")
+                        assert frame.evaluate("document.documentElement.scrollWidth <= innerWidth")
                         page.screenshot(path=str(args.evidence_dir / f"detail-{locale}.png"))
                     events = frame.evaluate("window.__localeAcceptanceEvents")
                     assert events == ["ja", "en"], events
