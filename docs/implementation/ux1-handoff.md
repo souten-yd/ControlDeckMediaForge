@@ -3,6 +3,44 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 installed Library real 63-child paging
+
+PR #332 merge `102f2787638e2ea713ddadced65f19b549ddc25c`をfetch確認し、
+branch `ux1/3d-library-installed-paging`で実installed0.28.36を検証。
+`scripts/3ds_library_installed_fixture.py --expected-version 0.28.36
+--evidence-dir /data1tb/mf-library-real-fixture-installed-20260906`を既存Host診断Pythonで実行。
+専用mf-e2eの正規service identityから実Agent HTTPでcube作成/transform編集を行い、
+Job job_9721927fa88e469c98d193b0fdaf1ace / job_66e7b2c31d8c4571b7710994a263d102が成功。
+実Host opaque iframeから正規scenes.revisions.restoreを61回実行。34.805秒/exit0。
+DBへのsynthetic挿入や既存scene変更はない。以前のscene/revision value_jsonは全件不変、
+追加sceneは1件だけとread-only照合。検証専用scene/historyは意図的に保持し、
+削除保護を回避するcleanupは行わない。既存mf-e2e passwordは不変、作成sessionだけfinally revoke。
+
+scene_92c45d0e9ee14d96bd64a436b2e52466、63 revisions、初版source
+asset_f085bf863bf84e1caa24e6cd3c098541。初版preview1・編集source1・復元source61の
+実children63件ができた。fixture.jsonに全IDs/Job結果/各restore応答を保存。
+追加read-only実bytes検査で126 Asset、26,978,198 Bのsize/SHAがmetadataと一致、
+126 provenance sidecarがDBと一致、61復元のsource/preview bytesは初版hashと一致。
+
+`3ds_library_locale_installed_e2e.py --paging-fixture
+/data1tb/mf-library-real-fixture-installed-20260906/fixture.json --expected-version 0.28.36
+--scene-id scene_92c45d0e9ee14d96bd64a436b2e52466 --width 320|1280`を実行。
+証拠 `/data1tb/mf-library-real-paging-installed-{320,1280}-20260906`、双方exit0。
+本番8765→署名installed MFのLibrary blend filterから初版cardを実クリック、
+子60→3→60→3、63 ID一意/全集合一致、offset120なし、前ページ同じ列を確認。
+offset60で実locale.changed [ja,en]、source/filter/関連ID列/scene選択/load/nonce保持、
+日英label再描画、dialog/document横overflow0、scene全応答不変/page errors0。
+nonceは比較時のメモリ内だけで、証拠に出さない。320英語screenshotも実画像で確認。
+言語入力だけnavigator.language/languagechange fixtureで、Host通知/素材応答は合成しない。
+初版のparentsは0件。このrunをinstalledで親60件超の証拠とはせず、
+親65/子63の専用source/bundle fixtureの既存証拠と区別する。
+
+全 `./mf.sh test`: 1126 passed/既知warning1/167.01秒。script py_compile/diff check成功。
+製品backend/frontend/公開契約/版数/配布物は変更なし、新releaseも不要。
+終了時MF PID700886/active、Host8765 listener PID757950を確認。Host変更/こちらからのrestartなし。
+GOAL-01のinstalled60件超の不足を解消。全体3DS-8のC/D/E/F・GOAL-07/09/10等はPARTIAL。
+次は失敗工程だけの再試行（GOAL-07）の実装と実機証拠の対応を照合する。
+
 ## 2026-09-06 v0.28.36 signed release and installed Library acceptance
 
 PR #331 merge/tag target `d6e1f041a415902582fb39698ef2fd1659d5e3f5`。
