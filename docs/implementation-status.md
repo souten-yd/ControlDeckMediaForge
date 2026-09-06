@@ -1,5 +1,16 @@
 # Media Forge implementation status
 
+## 2026-09-06 RFB credential renewal — NOT YET LIVE VERIFIED
+
+Host `97aba42`のloopback例外はLLM gateway/agent MCP限定とコードで確認。
+RFBは期限付きservice identityを再検証する。Host proxyのloopback接続だけでは遠隔browser由来の
+権限まで省略できないため、MF側で期限前に表示接続を閉じ、既存Host bridge再認証/再接続を使う。
+権限失効は再接続扱いにせず従来どおりinterruptする。Host/global config/TTL変更なし。
+branch `ux1/3d-rfb-credential-renewal`に実装と2 regression caseを追加。
+600秒超の実Blender操作/再接続/保存と署名配布はNOT TESTED。installed版は未変更。
+全体3DS-8/Scenario EはPARTIAL。実機受入を終えるまで当sliceはmergeしない。
+`./mf.sh test`: 1055 passed / 既知Starlette warning1 / 119.74秒。diff check成功。
+
 ## 2026-09-06 installed CPU child refresh across 600s — VERIFIED FOR THIS SCOPE
 
 installed0.28.30/healthyで既存`3ds_credential_refresh_e2e.py`を実行、PID33983/exit0/644.700秒。

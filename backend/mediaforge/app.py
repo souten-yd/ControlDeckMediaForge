@@ -621,6 +621,7 @@ def create_app(
         session_id: str,
         *,
         revalidate: Callable[[], Awaitable[bool]] | None = None,
+        credential_expires_at: int | None = None,
     ) -> None:
         reserved = False
         try:
@@ -630,6 +631,7 @@ def create_app(
                 websocket,
                 socket_path,
                 revalidate=revalidate,
+                credential_expires_at=credential_expires_at,
                 on_activity=lambda: blender_sessions.note_gateway_activity(owner, session_id),
             )
         except BlenderSessionError as exc:
@@ -679,7 +681,8 @@ def create_app(
             return valid
 
         await serve_blender_rfb(
-            websocket, scene_owner(identity), session_id, revalidate=revalidate
+            websocket, scene_owner(identity), session_id, revalidate=revalidate,
+            credential_expires_at=identity.expires_at,
         )
 
     @app.websocket("/workspace-api/blender/sessions/{session_id}/rfb")

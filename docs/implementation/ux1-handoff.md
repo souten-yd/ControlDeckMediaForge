@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-06 RFB credential renewal — implementation pending live acceptance
+
+branch `ux1/3d-rfb-credential-renewal`、baseはPR #292 merge `56c9e40`。
+利用者のloopback認証不要の指摘を受け、Host main `97aba42`をread-onlyで確認。
+`security/localhost.py`はkernel peer loopbackとX-Requested-With:ControlDeckを要求する。
+現在の呼出元はLLM gateway（key不要）とagent MCP（署名/owner確認を維持し期限だけ許容）の2経路。
+addon-runtime introspect/RFB proxyには適用されず、service tokenの期限を引き続き検証する。
+遠隔browser由来でもHost→MFはloopbackになるので、ここでowner/権限を省略しない。
+
+Hostは8分ごとにbridge nonceを更新し、MFはsession.updatedでstate.nonceを更新する既存実装。
+MF側のみ、RFBの15秒ごとの再検証成功後、残り120秒以下なら1012で画面接続を終了し、
+既存再接続で正規Host identityを取り直す変更。失効は従来の4403/interruptを優先する。
+Unix socketの解放と失効優先の2 regression caseを追加。TTL/Host/global configは変更なし。
+Host PID2196/MF PID31432はactiveで不変。installedは未変更。
+実Blenderの600秒超接続/自動再接続/同一working copyの保存はNOT TESTED。
+次はこの変更のsource実機受入、通常PR review/merge、署名配布とinstalled受入。
+実機未検証のため現段階ではmergeしない。全体3DS-8/Scenario EはPARTIAL。
+`./mf.sh test`: 1055 passed / 既知Starlette warning1 / 119.74秒、diff check成功。
+再開は当branchで`git status --short`、次に専用sceneの長時間GUI受入を準備する。
+
 ## 2026-09-06 installed CPU child credential refresh — verified scope
 
 PR #291 merge `f513927b3bb11ad53395862fec55a8534de96eb0`を確認。

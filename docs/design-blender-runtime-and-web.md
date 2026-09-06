@@ -158,6 +158,11 @@ Host再起動や認証失効時には新しい正規identityを得るまで編�
 - ブラウザへHost bearerや長命VNC passwordを渡さない。接続情報をURL queryやログに残さない。
 - noVNCのbinary subprotocolとHost nonce subprotocolの併用、Origin:null、長時間socketを実ブラウザ検証。
 - 接続後の権限剥奪・disableも反映する。proxyのhandshake認証だけに頼らずgatewayで定期再検証・終了。
+- HostからRFB接続へ渡すservice tokenは接続時点で固定される。15秒ごとの正規再検証が成功し、
+  残存期限が120秒以下になったら画面接続だけを1012で閉じる。既存の再接続処理がHost bridgeを
+  再認証し、新しいservice tokenで同じsessionへ接続する。Blender/working copyはdisconnect猶予内に保持。
+  再検証失敗・owner不一致は従来どおりsessionをinterruptし、更新待ちとして権限取消を隠さない。
+  期限切れtokenからの自己再発行やbearerのブラウザ配布はしない。これはchild Job refresh APIとは別経路。
 - 解像度、frame size、buffer、fps、帯域、接続数を上限付きにする。RFBを破損する任意byte破棄はしない。
 - 遅い受信者には更新要求抑制・解像度/品質低下、回復不能なら再接続を使う。
 - clipboard、共有ファイル転送は初期無効。必要時に明示操作・サイズ上限・権限を追加。
