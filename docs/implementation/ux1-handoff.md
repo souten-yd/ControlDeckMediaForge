@@ -3,16 +3,40 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
-## 2026-09-06 restored sword project delivery / scenario B
+## 2026-09-06 Web Blender primary navigation
+
+直後の追加依頼「下部の作る・ライブラリ・状況の並びにWeb Blender」を
+別worktree `/data1tb/ControlDeckMediaForge-webnav` / branch `ux1/web-blender-navigation`で実装。
+先行Library作業の未commit差分は`ControlDeckMediaForge-3ds4`に保持し、本sliceに混ぜない。
+4番目のnav、専用`/web-blender` view、現在地表示、Settingsからの復帰、
+既存3D切替からの接続、last_view保存を追加。移動ではGUI起動しない。
+source standalone serverをport0で起動し、実port44891に対し
+Host診断Pythonで `scripts/web_blender_navigation_e2e.py --url http://127.0.0.1:44891
+--evidence-dir /data1tb/mf-webnav-final-20260906` を実行、exit0。
+1280/320pxの4入口往復、Settings復帰、3D切替、直接URLでscene表示、page errors0。
+320px下部4ボタンは各80x60px、同じy=840。JSON/screenshotsを同directoryに保持。
+installed Host iframeでの戻る/進む、GUI編集、公開release/更新はこのsliceではNOT TESTED。
+稼働版の更新・Host変更・ユーザーシーン操作なし。全体3DS-8は未完了のまま。
+最終gate `./mf.sh test`: 1047 passed / 3 skipped (build runtime不在の署名tests) /
+既知warning1 / 110.12秒。diff check成功。試験専用server PID2851228終了。
+
+## 2026-09-06 Common Library formats and lineage
 
 追加slice `ux1/3d-library-lineage`でGOAL-01の.blend掲載、GLB/Blender filter、
 private metadata relations(60件paging)、親子リンク、詳細から明示previewを補完。
 source受入用data `/data1tb/mf-library-lineage-source-20260906`、実Blender4.5.9の2 revisionを保持。
 browser script `scripts/library_lineage_ui_e2e.py`、失敗/成功の詳細はimplementation-status冒頭。
-Web Blender nav PR #285はmerge `ae9ed17`。本branchへ最新mainを取り込んで再gateする。
+Web Blender nav PR #285はmerge `ae9ed17`。本branchへ取込済み、文書競合は両entry保持。
 Libraryのinstalled受入と署名release反映はまだNOT TESTED。全体3DS-8は未完了。
 headed runは全filter/双方向リンク/詳細からGLB実表示までexit0。
 `./mf.sh test`: 1051 passed / 既知warning1 / 130.00秒。diff check成功。
+統合後gateは1052 passed / 既知warning1 / 113.64秒。
+source再起動後にLibraryとWeb Blender navの実browser受入も再成功。
+evidenceは`mf-library-lineage-browser-restarted-20260906` / `mf-library-webnav-integrated-20260906`。
+source server終了。installed exe/cwdは実測0.28.28、PID2744941 active。
+次はこのLibrary sliceを通常PR merge後、正式署名release/updateでnav/Libraryをinstalled受入する。
+
+## 2026-09-06 restored sword project delivery / scenario B
 
 PR #283 merged `7aab7b76bb806d66002834cc1e2023342e6084fb`をfetch確認。
 branch `ux1/3d-restored-delivery`、installed0.28.28/healthy/enabled。

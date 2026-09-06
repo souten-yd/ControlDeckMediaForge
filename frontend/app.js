@@ -15,7 +15,7 @@ const CREATIVE_DEFAULTS = {
   sceneDetails: "", poseDetails: "", compositionDetails: "", cameraDetails: "",
 };
 const MODEL_TERMINAL = new Set(["ready", "failed", "canceled"]);
-const VIEWS = ["create", "library", "activity", "settings"];
+const VIEWS = ["create", "library", "activity", "settings", "web-blender"];
 
 const PHASE_TEXT = {
   starting: "準備しています",
@@ -1043,6 +1043,8 @@ function activate(name, {sync = true} = {}) {
   if (state.view && state.view !== "settings") state.lastNonSettingsView = state.view;
   state.view = view;
   app().dataset.view = view;
+  if (view === "web-blender") setCreateMedia("3d");
+  if (view === "create" && state.createMedia === "3d") setCreateMedia("image");
   for (const section of document.querySelectorAll(".view")) {
     section.hidden = section.dataset.view !== view;
   }
@@ -8137,7 +8139,8 @@ byId("mode-advanced").addEventListener("click", () => setMode("advanced"));
 byId("create-media-switch").addEventListener("click", (event) => {
   const button = event.target.closest?.("[data-create-media]");
   if (!button || state.hostActionLocked) return;
-  setCreateMedia(button.dataset.createMedia);
+  if (button.dataset.createMedia !== "3d") setCreateMedia(button.dataset.createMedia);
+  activate(button.dataset.createMedia === "3d" ? "web-blender" : "create");
 });
 byId("scene-import-file").addEventListener("change", (event) => {
   const file = event.target.files?.[0];
@@ -9271,6 +9274,9 @@ async function boot() {
   restoreCreativeComposition(snapshot);
   restoreCreativeBatch(snapshot);
   activate(state.preferences.last_view || "create", {sync: false});
+  if (window.parent === window && location.pathname === "/web-blender") {
+    activate("web-blender", {sync: false});
+  }
   // create 以外を開いていても、走っている job は拾ってミニ進捗に出す。
   restoreProgressView();
   // watch はサーバが session と一緒に張る。standalone だけ従来どおり要求する。

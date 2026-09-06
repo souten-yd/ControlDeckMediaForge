@@ -921,13 +921,14 @@ The first navigation sketch (`Create / Library / Projects / Characters / Profile
 Models / Jobs`) was **revised after G3**. Seven flat top-level entries put
 capability-gated and expert-only surfaces (models, raw profiles) at the same level
 as the primary task, and left no room for a preview/progress surface. The revised
-top level is three entries plus settings:
+top level is four entries plus settings (Web Blender added by user request on 2026-09-06):
 
 ```text
 Media Forge
 ├─ Create      creation, running progress, and latest results in one surface
 ├─ Library     finished assets, imports, characters/styles
 ├─ Activity    running and historical jobs
+├─ Web Blender scene selection, revisions, and explicit local Blender GUI launch
 └─ ⚙ Settings  state, storage, advanced-mode toggle (Models lives here)
 ```
 

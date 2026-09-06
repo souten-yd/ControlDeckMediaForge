@@ -4676,6 +4676,7 @@ def create_app(
     @app.get("/models")
     @app.get("/profiles")
     @app.get("/settings")
+    @app.get("/web-blender")
     async def workspace() -> HTMLResponse:
         nonlocal workspace_test_delay_pending
         delay_sec = workspace_test_response_delay_sec() if workspace_test_delay_pending else 0.0

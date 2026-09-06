@@ -26,9 +26,18 @@ STYLES = (FRONTEND / "styles.css").read_text(encoding="utf-8")
 ADDON = json.loads((ROOT / "addon.json").read_text(encoding="utf-8"))
 
 # DOM 契約。app.js の仕様であり、テストと Playwright がこの名前に依存する。
+def test_web_blender_has_dedicated_navigation_and_route():
+    assert 'id="nav-web-blender" data-view="web-blender"' in MARKUP
+    assert 'id="view-web-blender" class="view" data-view="web-blender" hidden' in MARKUP
+    assert MARKUP.index('id="nav-activity"') < MARKUP.index('id="nav-web-blender"')
+    assert 'grid-template-columns: repeat(4, minmax(0, 1fr));' in STYLES
+    assert 'activate(button.dataset.createMedia === "3d" ? "web-blender" : "create")' in SCRIPT
+    assert '@app.get("/web-blender")' in (BACKEND / "app.py").read_text()
+
+
 DOM_IDS = (
     "app", "skeleton", "shell-header", "shell-nav",
-    "nav-create", "nav-library", "nav-activity", "nav-settings",
+    "nav-create", "nav-library", "nav-activity", "nav-settings", "nav-web-blender", "view-web-blender",
     "settings-page-title", "blender-settings", "blender-runtime-summary",
     "blender-runtime-state", "blender-basic-value", "blender-web-value",
     "blender-version-value", "blender-runtime-refresh", "blender-runtime-details",
