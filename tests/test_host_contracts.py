@@ -415,3 +415,74 @@ def test_a_gpu_only_model_declares_no_floor():
     payload = image_model_request("job_123", _descriptor("native.stable-diffusion-cpp-flux2"))
 
     assert "minimum_bytes" not in payload["vram"]
+
+
+# ── 続けて生成するときの申告 ────────────────────────────────────────────
+#
+# broker の受付は実測 VRAM で空きを見る（ControlDeck: devices.py の
+# admitted_used = max(observed, fixed+lease)）。自分の worker が載せたままの
+# model は、その実測に既に入っている。そこへ常駐量をもう一度求めると、自分の
+# model のせいで自分が入れなくなる（config.py に残っている「2 枚目が 300 秒
+# 待って resource_unavailable」がこれ）。続きに要るのは上に乗るぶんだけである。
+
+
+def test_a_resident_model_asks_only_for_what_goes_on_top_of_it():
+    model = ModelDescriptor(
+        model_id="owner/model",
+        family="test",
+        version="1",
+        revision="a" * 40,
+        weights_hash="sha256:" + "b" * 64,
+        license="Apache-2.0",
+        runtime_adapter="test",
+        capabilities=("image.text_to_image",),
+        hardware_backends=("rocm",),
+        state=ModelState.AVAILABLE,
+        policy_rank={"auto": 1},
+        required_files=("config.json",),
+        weights=(),
+        installed=True,
+        healthy=True,
+        local_path=Path("/model"),
+        resident_vram_bytes=1_000,
+        execution_peak_vram_bytes=1_400,
+        cold_load_peak_vram_bytes=1_800,
+        headroom_vram_bytes=100,
+        measured_runtime_sec=4.0,
+    )
+
+    cold = image_model_request("job_123", model)
+    warm = image_model_request("job_123", model, already_resident=True)
+
+    # 冷えている間の申告は変えない。載せ直しには常駐も載せ込みのピークも要る。
+    assert "minimum_bytes" not in cold["vram"]
+    # 既に載っているなら、要るのは実行時に上へ乗るぶんと余白だけ。持っている
+    # ぶんは常駐量と載せ込みピークの大きいほうで見る（resident を 0 と測って
+    # いる model があり、そこを 0 として引くと減らない）。
+    assert warm["vram"]["minimum_bytes"] == 100  # max(0, 1400 - max(1000, 1800)) + 100
+    # 申告そのものは変えない。下限を下げるだけで、要求は同じものを指す。
+    assert warm["vram"]["resident_bytes"] == cold["vram"]["resident_bytes"]
+    assert warm["vram"]["cold_load_peak_bytes"] == cold["vram"]["cold_load_peak_bytes"]
+
+
+def test_the_measured_flux_model_asks_for_a_smaller_floor_when_it_is_resident():
+    """実機の測定値（resident 0 / cold load 15.97GB / 実行ピーク 22.40GB /
+    余白 3.65GB）。常駐量を 0 と測っているので、そこを引いても縮まない。
+    載せ込みのピークを「持っているぶん」と見て、その差だけを下限にする。"""
+    from mediaforge.host.resources import LeaseEstimate, _resident_minimum_bytes
+
+    estimate = LeaseEstimate(
+        resident_bytes=0,
+        execution_peak_bytes=22_397_755_392,
+        cold_load_peak_bytes=15_965_057_843,
+        headroom_bytes=3_650_722_201,
+        estimated_runtime_sec=4.0,
+    )
+    required = max(
+        estimate.resident_bytes, estimate.execution_peak_bytes, estimate.cold_load_peak_bytes
+    ) + estimate.headroom_bytes
+
+    minimum = _resident_minimum_bytes(estimate)
+
+    assert minimum < required / 2
+    assert minimum == (22_397_755_392 - 15_965_057_843) + 3_650_722_201

@@ -573,6 +573,19 @@ route accepts a model name or filesystem path.
 
 ControlDeck calls `/addon/v1/*` endpoints declared by [`addon.json`](../addon.json). Workflow and agent payloads use `{input, correlation}` envelopes. Responses return structured `job_id` and `asset_ids`; agents do not scrape filenames and do not receive a selected model name from generation or capability discovery.
 
+`media.generate.batch` (`POST /addon/v1/agent/generate/batch`) takes up to 50
+independent generation items and runs them one after another inside a single
+call. It exists because a separate call per asset is not merely slower: the Host
+unloads the language model around each generation and rebuilds the caller's
+conversation afterwards, which measured 40-350 seconds against 13-16 seconds of
+actual image generation. The image model stays loaded for the whole batch, so
+items after the first skip the model load; the run is sequential because one GPU
+and one worker cannot be shared. No clock bounds the batch as a whole: each item
+is bounded by the worker timeout it already had, and the Host is kept informed by
+progress that only moves forward, reported as this item's share of the batch.
+Items are independent, so one failure does not stop the rest and the response
+reports each outcome with `partial` and `atomic: false`.
+
 Context actions require a host-issued opaque `grant:` ID. Raw paths are rejected.
 `media.pack` commits one existing immutable Media Forge asset to a Host-issued
 project output `grant:`. Its additive request schema accepts only a Media Forge

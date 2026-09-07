@@ -859,6 +859,7 @@ def create_app(
         identity: HostIdentity,
         *,
         workload_class: str,
+        progress_window: tuple[float, float] = (0.0, 1.0),
     ) -> dict[str, Any]:
         missing = {"jobs.write", "resources.acquire"} - identity.granted_capabilities
         if missing:
@@ -878,11 +879,14 @@ def create_app(
         host_job = attached.get("job")
         if not isinstance(host_job, dict) or not isinstance(host_job.get("id"), str):
             raise HTTPException(status_code=502, detail={"code": "invalid_host_response"})
+        offset, span = progress_window
         execution = HostExecution(
             identity=identity,
             host_job_id=host_job["id"],
             workload_class=workload_class,
             owns_terminal=attached.get("created") is True,
+            progress_offset=offset,
+            progress_span=span,
         )
         return manager.submit_hosted(
             value,
@@ -2184,6 +2188,141 @@ def create_app(
         result = submitted_reference(terminal)
         result["asset_id"] = terminal["asset_ids"][0] if terminal["asset_ids"] else None
         return result
+
+    def batch_generate_items(payload: object) -> list[dict[str, Any]]:
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=422, detail={"code": "invalid_execution_envelope"})
+        reject_host_paths(payload)
+        value = payload.get("input", {})
+        items = value.get("items") if isinstance(value, dict) else None
+        if not isinstance(items, list) or not 1 <= len(items) <= 50:
+            raise HTTPException(status_code=422, detail={"code": "invalid_generation_batch"})
+        if not all(isinstance(item, dict) for item in items):
+            raise HTTPException(status_code=422, detail={"code": "invalid_generation_batch"})
+        return items
+
+    def batch_item_request(item: dict[str, Any]) -> JobRequest:
+        """batch の 1 件を、通常の生成要求へ写す。
+
+        batch の項目をあえて平たくしてあるのは、この schema がモデルの
+        制約付きデコードへそのまま渡るからである（ControlDeck の
+        model_facing_schema）。入れ子を深くすると文法が膨らみ、tool を
+        1 つ有効にしただけでモデルが使えなくなる事故が実際に起きている。
+        細かい指定が要る依頼は従来どおり media.generate を使う。
+        """
+        if set(item) - {"intent", "role", "alpha_intent", "width", "height"}:
+            raise HTTPException(status_code=422, detail={"code": "invalid_generation_batch"})
+        brief = {
+            key: item[key] for key in ("role", "alpha_intent")
+            if isinstance(item.get(key), str)
+        }
+        constraints: dict[str, Any] = {}
+        if brief:
+            constraints["asset_brief"] = brief
+        for side in ("width", "height"):
+            value = item.get(side)
+            if value is None:
+                continue
+            # schema と同じ範囲をここでも見る。schema を検証するのは host 側で
+            # あり、この入口は host 以外からも叩ける。
+            if not isinstance(value, int) or isinstance(value, bool) or not 256 <= value <= 2048:
+                raise HTTPException(status_code=422, detail={"code": "invalid_generation_batch"})
+            constraints[side] = value
+        try:
+            return JobRequest.model_validate({
+                "operation": "image.generate",
+                "intent": item.get("intent"),
+                "constraints": constraints,
+            })
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "invalid_generation_batch"}
+            ) from exc
+
+    @app.post("/addon/v1/agent/generate/batch")
+    async def agent_generate_batch(request: Request) -> dict[str, Any]:
+        """N 件を 1 コールで順に作る。
+
+        1 件ずつ呼ぶと、その都度 host は LLM を降ろして載せ直し、会話の文脈を
+        丸ごと読み直す。実測では画像 1 枚 13〜16 秒に対し、文脈の読み直しが
+        40〜350 秒だった。往復の回数そのものを減らすためにこの入口がある。
+
+        全件をまとめて受け付けてから待つ。1 件ずつ「投入して待って、また投入」
+        にすると、待っている間に処理待ちが空になり、image model が降ろされる
+        （_execute の後始末は「続きが無ければ抱えない」）。まとめて入れておけば、
+        batch の間ずっと載ったままになる。走る順は 1 件ずつで変わらない——GPU も
+        worker も 1 つなので、並べても速くならない。
+
+        時計での打ち切りは置かない。何枚だろうと、生成が進んでいる限り進める。
+        止まったときに止まるのは、job 自身が持っている worker の timeout である。
+
+        1 件の失敗で残りを捨てない。placement の batch と同じで、結果は件ごとに
+        返し、全部か無かではないことを応答自身が名乗る。
+        """
+        identity = await authorize_host(request)
+        items = batch_generate_items(await request.json())
+        # 形の誤りは 1 件でも走らせる前に断る。placement の batch と同じで、
+        # 読めない指示を混ぜたまま半分だけ実行しない。走り出してからの失敗
+        # （資源が取れない、生成が用途を満たさない）だけを件ごとに扱う。
+        requests = [batch_item_request(item) for item in items]
+        # 1 件ずつ投入して待つ。並べて投入すると job は同時に走り出し、1 つの
+        # worker プロセスへ同時に書き込むことになる。順に走らせる代わり、待って
+        # いる間も model を降ろさないよう明示して抱えてもらう。
+        span = 1.0 / len(requests)
+        item_timeout = resolved.worker_timeout_sec + 60.0
+        outcomes: list[dict[str, Any]] = []
+        with manager.keep_worker_warm():
+            for index, value in enumerate(requests):
+                try:
+                    job = await submit_hosted(
+                        value,
+                        identity,
+                        workload_class="agent-interactive",
+                        # 件ごとに 0 から測り直すと、host 側の単調増加の検査に
+                        # 弾かれる。1 件を全体の 1/N として報告する。host から
+                        # 見た進捗はそのまま「何件目まで進んだか」になり、
+                        # 進んでいる限り待ち続けられる。
+                        progress_window=(index * span, span),
+                    )
+                    terminal = await wait_for_terminal(job["id"], timeout=item_timeout)
+                    await manager.wait_cleanup(job["id"])
+                except HTTPException as exc:
+                    detail = exc.detail if isinstance(exc.detail, dict) else {}
+                    outcomes.append({
+                        "index": index,
+                        "status": "failed",
+                        "asset_id": None,
+                        "error": {"code": str(detail.get("code") or "media_job_failed")},
+                    })
+                    continue
+                except TimeoutError:
+                    outcomes.append({
+                        "index": index,
+                        "status": "failed",
+                        "asset_id": None,
+                        "error": {"code": "job_cleanup_timeout"},
+                    })
+                    continue
+                error = terminal.get("error") or {}
+                asset_ids = terminal.get("asset_ids") or []
+                outcomes.append({
+                    "index": index,
+                    "status": terminal["status"],
+                    "job_id": terminal["id"],
+                    "asset_id": asset_ids[0] if asset_ids else None,
+                    "asset_ids": asset_ids,
+                    **({"error": {"code": str(error.get("code") or "media_job_failed")}}
+                       if terminal["status"] != "succeeded" else {}),
+                })
+        succeeded = sum(1 for item in outcomes if item["status"] == "succeeded")
+        return {
+            "items": outcomes,
+            "succeeded_count": succeeded,
+            "requested_count": len(items),
+            "partial": succeeded != len(items),
+            # 1 件ずつ独立した job である。全部か無かではない。
+            "atomic": False,
+        }
 
     def scene_tool_input(payload: object) -> dict[str, Any]:
         if not isinstance(payload, dict):
