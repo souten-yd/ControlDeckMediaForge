@@ -2590,7 +2590,15 @@ class JobManager:
             error=error,
         )
         if reporter is not None and not terminal:
-            await reporter.progress(phase, normalized_progress, wait_reason=wait_reason)
+            try:
+                await reporter.progress(phase, normalized_progress, wait_reason=wait_reason)
+            except HostApiError:
+                # 進捗の報告は job の結末ではない。Host が受け取らなかった
+                # （間隔の制限に掛かった等）ことで、動いている生成を殺さない。
+                logger.warning(
+                    "host job progress update failed job=%s phase=%s progress=%s",
+                    job_id, phase, normalized_progress,
+                )
         return result
 
     @staticmethod
