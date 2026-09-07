@@ -1075,3 +1075,160 @@ def test_the_host_error_says_what_actually_went_wrong():
     assert "ADMISSION_TIMEOUT_SEC" in source
     request = source[source.index("async def request_resource("):source.index("async def resource_status(")]
     assert "timeout_sec=ADMISSION_TIMEOUT_SEC" in request
+
+
+# ── 一度に何枚も頼む（バッチ） ──────────────────────────────────────────
+#
+# 1 枚ずつ呼ぶと、その都度 host は LLM を降ろして載せ直し、会話の文脈を丸ごと
+# 読み直す。実測で画像 1 枚 13〜16 秒に対し、読み直しが 40〜350 秒だった。
+# 減らすべきは生成時間ではなく往復の回数である。
+
+
+def batch_input(*intents: str) -> dict:
+    return {"items": [{"intent": intent, "role": "sprite"} for intent in intents]}
+
+
+def test_a_batch_generates_every_item_in_one_call(tmp_path: Path):
+    client, headers, state = host_client(tmp_path)
+    with client:
+        response = client.post(
+            "/addon/v1/agent/generate/batch",
+            json={"input": batch_input("hero", "slime", "bat"), "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["requested_count"] == 3
+    assert body["succeeded_count"] == 3
+    assert body["partial"] is False
+    # 1 件ずつ独立した job である。全部か無かではないと応答自身が名乗る。
+    assert body["atomic"] is False
+    assert [item["index"] for item in body["items"]] == [0, 1, 2]
+    for item in body["items"]:
+        assert item["status"] == "succeeded"
+        assert item["asset_id"].startswith("asset_")
+        assert item["job_id"].startswith("job_")
+    # 直列に走る。GPU も worker も 1 つなので、並べても速くならない。
+    assert len(state["resource_requests"]) == 3
+
+
+def test_a_batch_keeps_going_after_an_item_fails(tmp_path: Path):
+    """1 件の失敗で残りを捨てない。件ごとに理由を返し、全部か無かではないと名乗る。"""
+    client, headers, state = host_client(tmp_path)
+    state["reject_resources"] = True
+
+    with client:
+        response = client.post(
+            "/addon/v1/agent/generate/batch",
+            json={"input": batch_input("hero", "slime"), "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["succeeded_count"] == 0
+    assert body["partial"] is True
+    assert len(body["items"]) == 2
+    # 1 件目が落ちても 2 件目は試みられている。
+    assert all(item["status"] != "succeeded" and item["error"]["code"] for item in body["items"])
+
+
+def test_a_batch_is_bounded_and_rejects_a_malformed_list(tmp_path: Path):
+    client, headers, _state = host_client(tmp_path)
+    with client:
+        empty = client.post(
+            "/addon/v1/agent/generate/batch",
+            json={"input": {"items": []}, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+        too_many = client.post(
+            "/addon/v1/agent/generate/batch",
+            json={"input": {"items": [{"intent": "x"}] * 51}, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+        wrong_shape = client.post(
+            "/addon/v1/agent/generate/batch",
+            json={"input": {"items": ["hero"]}, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    for response in (empty, too_many, wrong_shape):
+        assert response.status_code == 422, response.text
+        assert response.json()["detail"]["code"] == "invalid_generation_batch"
+
+
+def test_a_batch_item_carries_its_purpose_into_the_brief(tmp_path: Path):
+    """平たい role / alpha_intent は、通常の生成と同じ brief として効く。"""
+    client, headers, _state = host_client(tmp_path)
+    with client:
+        response = client.post(
+            "/addon/v1/agent/generate/batch",
+            json={
+                "input": {"items": [{"intent": "town gate", "role": "background"}]},
+                "correlation": {"job_id": "host-agent"},
+            },
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        job_id = response.json()["items"][0]["job_id"]
+        job = client.get(f"/api/v1/jobs/{job_id}").json()
+
+    constraints = job["request"]["constraints"]
+    assert constraints["asset_brief"] == {"role": "background"}
+    # 用途から画面が決まる。background は横長。
+    assert constraints["width"] > constraints["height"]
+
+
+def test_a_batch_reports_progress_that_only_moves_forward(tmp_path: Path):
+    """N 件を 1 つの host job にぶら下げる。件ごとに 0 から測り直すと、host 側の
+    単調増加の検査に弾かれる（ControlDeck: update_external）。弾かれると進捗が
+    途絶え、host は「止まった」と判断できてしまう。"""
+    client, headers, state = host_client(tmp_path)
+    with client:
+        response = client.post(
+            "/addon/v1/agent/generate/batch",
+            json={"input": batch_input("hero", "slime", "bat"), "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+
+    assert response.status_code == 200, response.text
+    completed = [
+        update["progress"]["completed"]
+        for update in state["job_updates"]
+        if update["job_id"] == "host-agent" and update.get("progress")
+    ]
+    assert completed == sorted(completed)
+    # 3 件目まで進めば、全体としては終わりまで来ている。
+    assert completed[-1] > 660
+
+
+def test_a_batch_holds_the_image_model_while_it_runs(tmp_path: Path):
+    """後始末は既定で「続きが無ければ抱えない」。batch は 1 件ずつ待つので、
+    宣言しないと待っている間に処理待ちが空になり、毎回載せ直しになる。"""
+    client, headers, _state = host_client(tmp_path)
+
+    with client:
+        manager = client.app.state.jobs
+        seen: list[int] = []
+        original = manager.wait_cleanup
+
+        async def record(job_id, timeout=5.0):
+            seen.append(manager._keep_warm)
+            return await original(job_id, timeout)
+
+        manager.wait_cleanup = record
+        try:
+            response = client.post(
+                "/addon/v1/agent/generate/batch",
+                json={"input": batch_input("hero", "slime"), "correlation": {"job_id": "host-agent"}},
+                headers=headers,
+            )
+        finally:
+            manager.wait_cleanup = original
+
+        assert response.status_code == 200, response.text
+        # 走っている間はずっと宣言されている。
+        assert seen == [1, 1]
+        # 抜けたら残らない。残ると以後の単発生成まで抱え続ける。
+        assert manager._keep_warm == 0

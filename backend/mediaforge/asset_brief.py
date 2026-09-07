@@ -569,4 +569,14 @@ def brief_rubric(brief: AssetBrief | None, resolved: ResolvedLayout | None) -> s
             f"The canvas is already fixed at {resolved.width}x{resolved.height} "
             f"({resolved.aspect_ratio}); do not comment on dimensions or file format."
         )
+    if effective_alpha_intent(brief) == "required":
+        # 評価器が見るのは背景を抜いた後の画で、渡される intent には呼び出し側が
+        # 書いた背景の記述が残っていることがある。断らないと「頼まれた背景が無い」
+        # と読める。背景は契約でこちらが決めており、評価の対象ではない。
+        parts.append(
+            "This asset is delivered with a transparent background: it was generated on a "
+            "flat background that Media Forge removed afterwards. Judge only the subject; "
+            "do not judge, ask for, or penalise the absence of a background, even if the "
+            "stated intent mentions one."
+        )
     return " ".join(parts)[:1500]

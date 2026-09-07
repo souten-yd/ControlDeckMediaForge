@@ -49,6 +49,15 @@ class HostExecution:
     device_id: str | None = None
     # 貸してもらった枠。全常駐に足りなければ、その中で動く形へ切り替える。
     granted_bytes: int | None = None
+    # この job が、host job 全体のどこを占めるか。既定は「全部」。
+    #
+    # batch は N 件を 1 つの host job にぶら下げる。host 側の進捗は単調増加で
+    # なければならず（ControlDeck: jobs/service.py の update_external）、件ごとに
+    # 0 から測り直すと 2 件目の報告が 422 で弾かれる。件の位置と幅を持たせて、
+    # 全体の 0→1 として報告する。1 件だけの依頼では offset 0 / span 1 になり、
+    # 従来と同じ値になる。
+    progress_offset: float = 0.0
+    progress_span: float = 1.0
 
 
 class HostJobReporter:
@@ -57,6 +66,13 @@ class HostJobReporter:
         self.execution = execution
         self.gate = ProgressGate()
         self._last_progress: tuple[str, float, str | None, str | None] | None = None
+
+    def _scaled(self, progress: float) -> float:
+        """この job の進捗を、host job 全体の中の位置へ写す。"""
+        span = self.execution.progress_span
+        if span >= 1.0 and self.execution.progress_offset <= 0.0:
+            return progress
+        return min(1.0, self.execution.progress_offset + progress * span)
 
     async def progress(
         self,
@@ -67,6 +83,7 @@ class HostJobReporter:
         message: str | None = None,
         force: bool = False,
     ) -> bool:
+        progress = self._scaled(progress)
         signature = (phase, progress, wait_reason, message)
         if not force and signature == self._last_progress:
             return False
@@ -103,6 +120,7 @@ class HostJobReporter:
         result: dict[str, Any] | None = None,
         error: str | None = None,
     ) -> None:
+        progress = self._scaled(progress)
         if not self.gate.accept(progress=progress, phase=phase, terminal=True):
             raise ValueError("terminal Host Job progress is not monotonic")
         payload: dict[str, Any] = {

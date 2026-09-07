@@ -9,7 +9,8 @@ import shutil
 import sys
 import time
 import uuid
-from contextlib import suppress
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -42,9 +43,15 @@ from .asset_brief import (
     AssetBriefError,
     BriefDefect,
     ResolvedLayout,
+    effective_alpha_intent,
     infer_brief_from_intent,
     inspect_against_brief,
     parse_brief,
+)
+from .cutout import (
+    FLAT_BACKGROUND_DIRECTIVE,
+    cut_out_background,
+    without_background_clauses,
 )
 from .blender_compile import (
     BLENDER_VERSION,
@@ -192,6 +199,11 @@ class JobManager:
         self._processes: dict[str, asyncio.subprocess.Process] = {}
         # model を載せたまま次の job を受ける worker。queue が空になったら畳む。
         self._warm_worker: tuple[asyncio.subprocess.Process, tuple[str, str, str, str]] | None = None
+        # その worker がいま抱えている model と置き場所。broker への申告を
+        # 「載せ直しぶん」か「上乗せぶん」かで変えるために要る。
+        self._warm_model: tuple[str, str] | None = None
+        # 「まだ続きが来る」と分かっている間の保持。batch がこれを立てる。
+        self._keep_warm = 0
         # 生成後に model を載せたまま待っている間の lease と、その見張り。
         # lease を持ったまま待つのは、抱えている VRAM を broker から見えるように
         # しておくためである。返して待つと「空いている」ことになり、その上へ
@@ -293,6 +305,26 @@ class JobManager:
             process.terminate()
         return self.store.get_job(job_id)
 
+    @contextmanager
+    def keep_worker_warm(self) -> Iterator[None]:
+        """次の依頼が来ると分かっている間、model を降ろさない。
+
+        後始末は既定で「続きが無ければ抱えない」である（`_execute` の最後）。
+        続きがあるかどうかは処理待ちを見て判断するが、batch は 1 件ずつ投入して
+        待つので、待っている間は処理待ちが空になる。並べて投入すれば空にならない
+        が、job は投入した順に並行して走り出すので、1 つの worker プロセスへ
+        同時に書き込むことになる。
+
+        そこで「続きがある」を外から宣言できるようにする。宣言している間だけ
+        抱え、抜けたところで通常の後始末に戻る。GPU を求められたら降りる経路
+        （lease と pressure）はこれとは別で、そちらは従来どおり効く。
+        """
+        self._keep_warm += 1
+        try:
+            yield
+        finally:
+            self._keep_warm = max(0, self._keep_warm - 1)
+
     async def wait_cleanup(self, job_id: str, timeout: float = 5.0) -> None:
         deadline = asyncio.get_running_loop().time() + timeout
         while job_id in self._job_tasks:
@@ -355,7 +387,12 @@ class JobManager:
             # queue は _run が即座に汲み出すので、待っている job は queue では
             # なく _job_tasks に居る。queue だけ見ると常に空に見えて、続きが
             # あっても毎回下ろしてしまう。
-            if self._queue.empty() and not self._job_tasks and self._linger_task is None:
+            if (
+                self._queue.empty()
+                and not self._job_tasks
+                and self._linger_task is None
+                and not self._keep_warm
+            ):
                 await self._retire_warm_worker()
 
     async def _execute(self, job_id: str) -> None:
@@ -1327,6 +1364,45 @@ class JobManager:
         request["constraints"] = constraints
         return request
 
+    def _worker_intent(self, job: Job, intent: str, selected: ModelDescriptor | None) -> str:
+        """worker へ渡す文言を、一箇所で順に組む。
+
+        以前はここが三つの独立した代入で、後のものが前のものを
+        `job.request.intent` から作り直していた。profile を付けた job では、
+        直前に足した LoRA の起動語がそれで消えていた（起動語の無い LoRA は
+        何も起こさないので、静かに効かない）。足す順に一本化する。
+
+        背景の指示は最後に置く。brief が決めた背景は、呼び出し側の文言にも
+        profile の作風にも LoRA の起動語にも譲らない。
+        """
+        trigger = self._lora_trigger_words(job, selected) if selected is not None else ""
+        if trigger:
+            intent = f"{intent}, {trigger}"
+        snapshot = self.store.job_profile_snapshot(job.id)
+        if snapshot.get("prompt"):
+            intent = f"{intent}\n{snapshot['prompt']}"
+        return self._directed_intent(job, intent)
+
+    def _directed_intent(self, job: Job, intent: str) -> str:
+        """透過を求められているなら、抜ける背景で描くよう worker への文言だけ足す。
+
+        拡散モデルは alpha を出さない。透過は後処理で作るしかなく、後処理が
+        当てにできるのは平らな単色背景だけである（`cutout`）。風景の中に
+        置かれた被写体を抜こうとすれば被写体を削る。
+
+        足すのは worker へ渡す複製に対してだけである。`job.request.intent` は
+        評価器の判定基準であり資産名の素でもあるので、利用者が書いた文言を
+        こちらの都合で書き換えない。
+        """
+        if job.request.operation != "image.generate":
+            return intent
+        brief, _resolved = self._brief_context(job)
+        if effective_alpha_intent(brief) != "required":
+            return intent
+        # 背景の注文はここで落とす。残したまま単色背景を頼むと、一つの
+        # プロンプトが二つの違う背景を要求することになる。
+        return f"{without_background_clauses(intent)}\n\n{FLAT_BACKGROUND_DIRECTIVE}"
+
     # 出せる画素数の上限。取り込みの上限と同じ値を使う（別に持つと片方だけ動く）。
     # ここを超えたものは保存も検証もできないので、作らせてから断るのではなく
     # 受付で断る。
@@ -1636,6 +1712,7 @@ class JobManager:
         """常駐 worker を終わらせる。stdin を閉じれば main() の loop が抜ける。"""
         warm = self._warm_worker
         self._warm_worker = None
+        self._warm_model = None
         if warm is None:
             return
         process, _ = warm
@@ -1816,15 +1893,10 @@ class JobManager:
                 "worker_output_dir": str(output_dir),
                 "worker_inputs": {**worker_inputs, "loras": self._resolved_loras(job, selected)},
             }
-        trigger = self._lora_trigger_words(job, selected) if selected is not None else ""
-        if trigger:
-            # 起動語を入れない LoRA は何も起こさない。足したことは job に残る。
-            target = payload["request"]
-            target["intent"] = f"{target.get('intent') or job.request.intent}, {trigger}"
-        snapshot = self.store.job_profile_snapshot(job.id)
-        if snapshot.get("prompt"):
-            target = payload["request"] if selected is not None else payload
-            target["intent"] = f"{job.request.intent}\n{snapshot['prompt']}"
+        target = payload["request"] if selected is not None else payload
+        target["intent"] = self._worker_intent(
+            job, str(target.get("intent") or job.request.intent), selected
+        )
         if job.request.qa.semantic:
             candidate_count = job.request.output.count + job.request.qa.max_regeneration_attempts
             target = payload["request"] if selected is not None else payload
@@ -2014,6 +2086,11 @@ class JobManager:
                 error=ErrorDetail(code=code, message=message[:300]),
             )
             return
+        # 応答が返った worker は、その model を載せたまま次を受けられる。次の
+        # 要求で broker へ「常駐ぶんは既に自分が持っている」と言えるように残す。
+        if selected is not None and self._warm_worker is not None:
+            placement = execution.device_id if execution is not None else None
+            self._warm_model = (selected.model_id, placement or "")
         metrics = response.get("runtime_metrics") if isinstance(response, dict) else None
         if isinstance(metrics, dict):
             load_sec = metrics.get("load_sec")
@@ -2334,6 +2411,7 @@ class JobManager:
                 selected,
                 workload_class=execution.workload_class,
                 estimated_runtime_sec=self._expected_runtime_sec(job, selected),
+                already_resident=self._warm_holds(selected, execution),
             )
             if selected is not None
             else fake_image_request(
@@ -2348,6 +2426,19 @@ class JobManager:
                 for key in ("execution_peak_bytes", "cold_load_peak_bytes"):
                     request["vram"][key] = max(int(request["vram"][key]), peak_floor)
         return request
+
+    def _warm_holds(self, selected: ModelDescriptor, execution: HostExecution) -> bool:
+        """この model を、いま自分の worker が同じ device に載せたまま持っているか。
+
+        続けて生成するとき（batch）にだけ真になる。worker が生きていて、前の
+        job で載せたのが同じ model で、置き場所も同じときに限る。違えば worker
+        は載せ直すので、常駐ぶんを改めて求めるのが正しい。
+        """
+        warm = self._warm_worker
+        if warm is None or warm[0].returncode is not None or self._warm_model is None:
+            return False
+        placement = execution.device_id or ""
+        return self._warm_model == (selected.model_id, placement) and placement == "gpu0"
 
     def _record_oom(self, selected: ModelDescriptor) -> None:
         measured = selected.measured_vram_bytes or 0
@@ -2567,6 +2658,39 @@ class JobManager:
                     "job %s conformed %s to the resolved canvas %dx%d",
                     job.id, path.name, width, height,
                 )
+
+    def _cutout_outputs(
+        self, job: Job, outputs: list[dict[str, Any]], job_root: Path
+    ) -> None:
+        """brief が透過を求めていたら、平らな背景を抜いて alpha を作る。
+
+        生成側は `_directed_intent` で単色背景を頼んである。抜けたときだけ
+        書き換わり、抜けなければ画は元のまま残る。無理に抜いて被写体を削った
+        ものを「透過あり」として通すより、`alpha_missing` で理由を名指しする
+        ほうが呼び出し側にとって正しい。
+
+        編集は触らない。元画像の透過はその画の性質であって、この job が
+        決めたものではない。
+        """
+        if job.request.operation != "image.generate":
+            return
+        brief, _resolved = self._brief_context(job)
+        if effective_alpha_intent(brief) != "required":
+            return
+        for output in outputs:
+            path = contained(job_root, Path(output["path"]))
+            try:
+                removed = cut_out_background(path)
+            except OSError:
+                logger.exception("job %s could not cut out %s", job.id, path.name)
+                continue
+            logger.info(
+                "job %s %s %s",
+                job.id,
+                "cut the flat background out of" if removed
+                else "left the background of (it is not flat enough to cut)",
+                path.name,
+            )
 
     def _validate_output(
         self,
@@ -2822,6 +2946,10 @@ class JobManager:
         # 画面へ揃える。ここで揃えないと、比を守って描けた画が canvas_mismatch で
         # 毎回落ちる。揃えるのは決定的な操作なので、検査の前で完結させる。
         self._conform_outputs(job, outputs, job_root)
+        # 透過は生成では作れない。brief が求めているなら、検査より前に
+        # 決定的に作る。ここで作らないと sprite / icon / emblem は
+        # alpha_missing で必ず落ちる（作れないものを咎めるだけになる）。
+        self._cutout_outputs(job, outputs, job_root)
         # Complete every deterministic validation before invoking a subjective
         # reviewer. A semantic pass can therefore never mask file/invariant failure.
         validated = [self._validate_output(job, output, job_root) for output in outputs]

@@ -488,3 +488,265 @@ def test_a_brief_without_hard_constraints_adds_no_noise(tmp_path):
             operation="image.generate", intent="x", constraints=constraints,
         ))
         assert manager._unverified_hard_constraints(job) == []
+
+
+# ── 透過は生成では作れない ──────────────────────────────────────────────
+#
+# sprite / icon / emblem / ui_element は重ねて使うので alpha は既定で required
+# である。ところが拡散モデルは alpha を出さず、adapter は convert("RGBA") で
+# 全画素 255 の面を付けるだけだった。実機では alpha_intent: required の依頼が
+# 例外なく alpha_missing → 502 で返っていた。作れないものを検査で咎めても
+# 資産は出てこないので、canvas と同じく決定的な後処理で作る。
+
+
+def _flat_sprite(path):
+    from PIL import Image, ImageDraw
+
+    # worker は RGBA で書くが、alpha は全画素 255 である。それがこの問題。
+    image = Image.new("RGB", (512, 512), (18, 22, 30))
+    ImageDraw.Draw(image).ellipse((128, 128, 384, 384), fill=(210, 60, 40))
+    image.convert("RGBA").save(path)
+    return path
+
+
+def _sprite_job(store):
+    return store.create_job(JobRequest(
+        operation="image.generate",
+        intent="top-down RPG hero sprite",
+        constraints={
+            "asset_brief": {"role": "sprite"},
+            "resolved_layout": {
+                "width": 512, "height": 512, "alpha": True,
+                "aspect_ratio": "1:1", "source": "role_default",
+            },
+        },
+    ))
+
+
+def test_a_required_alpha_asks_the_worker_for_a_flat_background(tmp_path):
+    """後処理が当てにできるのは平らな単色背景だけなので、そう描かせる。"""
+    from mediaforge.cutout import FLAT_BACKGROUND_DIRECTIVE
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    job = _sprite_job(store)
+
+    directed = manager._directed_intent(job, job.request.intent)
+    assert directed.startswith("top-down RPG hero sprite")
+    assert FLAT_BACKGROUND_DIRECTIVE in directed
+    # 評価器の判定基準であり資産名の素でもある文言は、こちらの都合で変えない。
+    assert job.request.intent == "top-down RPG hero sprite"
+
+
+def test_a_background_role_is_asked_for_nothing_extra(tmp_path):
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    job = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="game title background",
+        constraints={"asset_brief": {"role": "background"}},
+    ))
+    assert manager._directed_intent(job, job.request.intent) == "game title background"
+
+
+def test_an_opaque_sprite_is_cut_out_instead_of_failing(tmp_path):
+    """生成物は不透明で届く。検査より前に抜けば、用途どおりの資産として通る。"""
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+    from mediaforge.validators import validate_png
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    job = _sprite_job(store)
+
+    job_root = tmp_path / "work"
+    job_root.mkdir()
+    path = _flat_sprite(job_root / "output.png")
+    _width, _height, before = validate_png(path)
+    assert [item.code for item in manager._brief_defects(job, 512, 512, before)] == ["alpha_missing"]
+
+    manager._cutout_outputs(job, [{"path": str(path)}], job_root)
+
+    width, height, after = validate_png(path)
+    assert manager._brief_defects(job, width, height, after) == []
+
+
+def test_a_scene_that_cannot_be_cut_still_fails_by_name(tmp_path):
+    """抜けない画を抜いたことにすると、被写体を削った資産が透過ありとして通る。"""
+    from PIL import Image
+
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+    from mediaforge.validators import validate_png
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    job = _sprite_job(store)
+
+    job_root = tmp_path / "work"
+    job_root.mkdir()
+    path = job_root / "output.png"
+    scene = Image.new("RGB", (512, 512))
+    for y in range(512):
+        for x in range(512):
+            scene.putpixel((x, y), (x // 2, y // 2, 120))
+    scene.convert("RGBA").save(path)
+
+    manager._cutout_outputs(job, [{"path": str(path)}], job_root)
+
+    width, height, validation = validate_png(path)
+    assert [item.code for item in manager._brief_defects(job, width, height, validation)] == [
+        "alpha_missing"
+    ]
+
+
+# ── 透過するかどうかは用途で決まる ──────────────────────────────────────
+#
+# 抜くのは alpha が required に解決される用途だけである。texture は貼る面が
+# 埋まっていなければならず、background は面そのものなので、抜いてはいけない。
+# 明示された alpha_intent は役割の既定より強い（`effective_alpha_intent`）ので、
+# 「sprite だが不透明で欲しい」と言えば、指示も後処理も掛からない。
+
+
+def _opaque(path):
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (256, 256), (18, 22, 30))
+    ImageDraw.Draw(image).ellipse((64, 64, 192, 192), fill=(210, 60, 40))
+    image.convert("RGBA").save(path)
+    return path
+
+
+def _manager(tmp_path):
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    return JobManager(store), store
+
+
+def test_an_explicit_forbidden_alpha_keeps_the_asset_opaque(tmp_path):
+    """役割の既定より、宣言された用途が強い。指示も後処理も掛からない。"""
+    manager, store = _manager(tmp_path)
+    job = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="hero sprite on a dark background",
+        constraints={"asset_brief": {"role": "sprite", "alpha_intent": "forbidden"}},
+    ))
+
+    assert manager._directed_intent(job, job.request.intent) == "hero sprite on a dark background"
+
+    job_root = tmp_path / "work"
+    job_root.mkdir()
+    path = _opaque(job_root / "output.png")
+    before = path.read_bytes()
+    manager._cutout_outputs(job, [{"path": str(path)}], job_root)
+    assert path.read_bytes() == before
+
+
+def test_a_texture_is_never_cut_out(tmp_path):
+    """3D の texture は面を埋めるものなので、抜けば穴の空いた材質になる。"""
+    manager, store = _manager(tmp_path)
+    job = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="seamless stone texture",
+        constraints={"asset_brief": {"role": "texture"}},
+    ))
+
+    job_root = tmp_path / "work"
+    job_root.mkdir()
+    path = _opaque(job_root / "output.png")
+    before = path.read_bytes()
+    manager._cutout_outputs(job, [{"path": str(path)}], job_root)
+    assert path.read_bytes() == before
+
+
+def test_an_edit_keeps_whatever_transparency_the_source_had(tmp_path):
+    """編集は元画像の性質を引き継ぐ。この job が決めたものではない。"""
+    manager, store = _manager(tmp_path)
+    job = store.create_job(JobRequest(
+        operation="image.edit",
+        intent="make the emblem brighter",
+        inputs=[{"asset_id": "asset_0000000000000000000000000000dead"}],
+        constraints={"asset_brief": {"role": "emblem"}},
+    ))
+
+    assert manager._directed_intent(job, job.request.intent) == "make the emblem brighter"
+
+    job_root = tmp_path / "work"
+    job_root.mkdir()
+    path = _opaque(job_root / "output.png")
+    before = path.read_bytes()
+    manager._cutout_outputs(job, [{"path": str(path)}], job_root)
+    assert path.read_bytes() == before
+
+
+def test_the_caller_background_order_is_dropped_only_where_alpha_is_required(tmp_path):
+    """背景の注文と単色背景の指示が同じプロンプトに並ぶと、モデルは間を取る。"""
+    from mediaforge.cutout import FLAT_BACKGROUND_DIRECTIVE
+
+    manager, store = _manager(tmp_path)
+    sprite = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="golden coin game icon, dark fantasy style, centered on dark background",
+        constraints={"asset_brief": {"role": "icon"}},
+    ))
+    directed = manager._directed_intent(sprite, sprite.request.intent)
+    assert "dark background" not in directed
+    assert "dark fantasy style" in directed
+    assert directed.endswith(FLAT_BACKGROUND_DIRECTIVE)
+
+    scene = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="title art, centered on dark background",
+        constraints={"asset_brief": {"role": "key_visual"}},
+    ))
+    assert manager._directed_intent(scene, scene.request.intent) == scene.request.intent
+
+
+def test_the_evaluator_is_told_about_the_background_only_when_alpha_is_required():
+    """抜いた後の画を、背景つきの intent で審査させない。用途が違えば何も足さない。"""
+    from mediaforge.asset_brief import brief_rubric
+
+    sprite = brief_rubric(AssetBrief(role="sprite"), None)
+    assert "do not judge, ask for, or penalise the absence of a background" in sprite
+
+    for role in ("background", "texture", "key_visual"):
+        assert "penalise the absence of a background" not in brief_rubric(AssetBrief(role=role), None)
+
+
+def test_the_worker_prompt_keeps_every_layer_and_ends_with_the_background(tmp_path):
+    """LoRA の起動語・profile の作風・背景の指示が同居する。順に足して落とさない。
+
+    以前はここが三つの独立した代入で、profile を付けた job では直前に足した
+    起動語が `job.request.intent` からの作り直しで消えていた。
+    """
+    from mediaforge.cutout import FLAT_BACKGROUND_DIRECTIVE
+
+    manager, store = _manager(tmp_path)
+    job = store.create_job(JobRequest(
+        operation="image.generate",
+        intent="hero sprite, facing left, on a dark background",
+        constraints={"asset_brief": {"role": "sprite"}},
+    ))
+    manager._lora_trigger_words = lambda *_args, **_kwargs: "pxlsprt"
+    manager.store.job_profile_snapshot = lambda _job_id: {"prompt": "Visual style (pixel): crisp"}
+
+    composed = manager._worker_intent(job, job.request.intent, object())
+
+    assert "pxlsprt" in composed
+    assert "Visual style (pixel): crisp" in composed
+    assert "dark background" not in composed
+    assert composed.endswith(FLAT_BACKGROUND_DIRECTIVE)
+    assert composed.index("pxlsprt") < composed.index("Visual style")
+    assert composed.index("Visual style") < composed.index(FLAT_BACKGROUND_DIRECTIVE)

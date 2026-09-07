@@ -91,12 +91,20 @@ def image_model_request(
     *,
     workload_class: str = "interactive",
     estimated_runtime_sec: float | None = None,
+    already_resident: bool = False,
 ) -> dict[str, Any]:
     """Build a measured request without exposing model selection publicly.
 
     `estimated_runtime_sec` は、その要求の見積りが分かっているときだけ渡す。
     分かるのは費用が入力の面積に比例する直しの場合で、そこでは 1 枚ぶんの実測を
     渡すと broker に申告する占有時間が実際の数分の一になる。
+
+    `already_resident` は「この model を、いま自分の worker が同じ device に
+    載せたまま持っている」という意味である。broker の受付は実測 VRAM で空きを
+    見る（devices.py の admitted_used = max(observed, fixed+lease)）ので、自分が
+    載せているぶんは既に空きから引かれている。そこへ常駐量をもう一度求めると、
+    自分の model のせいで自分が入れなくなる。続けて生成するときに要るのは常駐の
+    上に乗る実行時のピークと余白だけなので、下限としてその量を申告する。
     """
     values = (
         model.resident_vram_bytes,
@@ -140,7 +148,13 @@ def image_model_request(
             "headroom_bytes": estimate.headroom_bytes,
             "confidence": model.measurement_confidence,
             # 空いているぶんを使う。足りるかどうかは実行が決める。
-            **({"minimum_bytes": MINIMUM_USABLE_VRAM_BYTES} if offers_ram else {}),
+            **(
+                {"minimum_bytes": max(
+                    0, estimate.execution_peak_bytes - estimate.resident_bytes,
+                ) + estimate.headroom_bytes}
+                if already_resident
+                else {"minimum_bytes": MINIMUM_USABLE_VRAM_BYTES} if offers_ram else {}
+            ),
         },
         # LLM と場所を分け合う。exclusive だと、LLM が載っている間は VRAM の
         # 空きに関係なく断られ、共存にならない。

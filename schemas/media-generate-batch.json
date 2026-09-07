@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/media-generate-batch.json",
+  "title": "Media Forge batch image generation",
+  "description": "Generate several unrelated images in one call, in order. Prefer this over repeated single calls whenever more than one asset is needed: every separate call makes the host unload and reload the language model around the generation, and restoring the conversation afterwards costs far more than the images themselves. One call keeps the image model loaded for the whole run. Items are independent: one failure does not stop the rest, and the response reports each item's outcome separately.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["items"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "description": "The assets to generate, in order. Ask for every asset you need in one call rather than splitting the work: Media Forge keeps the image model loaded for the whole batch, so items after the first skip the model load entirely. They are generated one at a time and each reports its own outcome.",
+      "items": {
+        "$ref": "#/$defs/batchItem"
+      }
+    }
+  },
+  "$defs": {
+    "batchItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intent"],
+      "properties": {
+        "intent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Plain description of the subject and the purpose, in any language. Structural requirements belong in role and alpha_intent, not in adjectives here: a request that said 'wide landscape' only in this field was produced as a square."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "background",
+            "key_visual",
+            "character_portrait",
+            "sprite",
+            "icon",
+            "emblem",
+            "texture",
+            "ui_element",
+            "general"
+          ],
+          "description": "Where the asset is used. This sets the default aspect ratio and whether transparency is required: 'sprite', 'icon', 'emblem' and 'ui_element' are drawn over something else and default to requiring transparency; 'background' and 'texture' fill a surface and default to opaque."
+        },
+        "alpha_intent": {
+          "type": "string",
+          "enum": ["auto", "required", "forbidden"],
+          "description": "Overrides the role default. When transparency is required, say nothing about the background in intent: Media Forge generates the subject on a flat chroma background of its own and removes it deterministically after generation. Asking for a background here contradicts that instruction and leaves an opaque halo around the subject."
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 2048,
+          "description": "Exact output width. Leave both sides unset and let the role decide."
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 2048,
+          "description": "Exact output height. Leave both sides unset and let the role decide."
+        }
+      }
+    }
+  }
+}
