@@ -2276,7 +2276,7 @@ def create_app(
         # 次の件の最初の報告が同じ 0.5 秒に入り、host の間隔制限（2Hz）に掛かる。
         gate = ProgressGate()
         outcomes: list[dict[str, Any]] = []
-        with manager.keep_worker_warm():
+        async with manager.keep_worker_warm():
             for index, value in enumerate(requests):
                 try:
                     job = await submit_hosted(

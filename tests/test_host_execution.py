@@ -1215,12 +1215,19 @@ def test_a_batch_holds_the_image_model_while_it_runs(tmp_path: Path):
         manager = client.app.state.jobs
         seen: list[int] = []
         original = manager.wait_cleanup
+        retired: list[bool] = []
+        original_retire = manager._retire_warm_worker
 
         async def record(job_id, timeout=5.0):
             seen.append(manager._keep_warm)
             return await original(job_id, timeout)
 
+        async def record_retire():
+            retired.append(True)
+            return await original_retire()
+
         manager.wait_cleanup = record
+        manager._retire_warm_worker = record_retire
         try:
             response = client.post(
                 "/addon/v1/agent/generate/batch",
@@ -1229,12 +1236,17 @@ def test_a_batch_holds_the_image_model_while_it_runs(tmp_path: Path):
             )
         finally:
             manager.wait_cleanup = original
+            manager._retire_warm_worker = original_retire
 
         assert response.status_code == 200, response.text
         # 走っている間はずっと宣言されている。
         assert seen == [1, 1]
         # 抜けたら残らない。残ると以後の単発生成まで抱え続ける。
         assert manager._keep_warm == 0
+        # 抜けた側が最後に降ろす。最後の 1 件の後始末は宣言が立っている間に
+        # 走るので素通りし、抱えたままになる（実機で 19.4GB が残り、音楽生成が
+        # GPU 待ちのまま期限切れになった）。
+        assert retired, "batch を抜けても model を降ろしていない"
 
 
 def test_a_batch_shares_one_progress_gate_with_the_host(tmp_path: Path):
@@ -1288,3 +1300,42 @@ def test_a_rejected_progress_update_does_not_kill_the_generation(tmp_path: Path)
 
     assert response.status_code == 200, response.text
     assert response.json()["asset_id"].startswith("asset_")
+
+
+def test_the_model_is_purged_before_success_is_reported(tmp_path: Path):
+    """抱えたまま「終わった」と言うと、成功を受け取った側が次を頼んだときに
+    GPU はまだ埋まっている。実機では画像 worker が 19.4GB を抱えたまま残り、
+    音楽生成が 300 秒待って期限切れになった。降ろしてから申告する。"""
+    client, headers, state = host_client(tmp_path)
+    order: list[str] = []
+
+    with client:
+        manager = client.app.state.jobs
+        original_retire = manager._retire_warm_worker
+        original_update = manager.host_client.update_job
+
+        async def record_retire():
+            order.append("purge")
+            return await original_retire()
+
+        async def record_update(identity, host_job_id, payload):
+            if payload.get("status") == "succeeded" or payload.get("phase") == "register_asset":
+                order.append(f"report:{payload.get('phase')}")
+            return await original_update(identity, host_job_id, payload)
+
+        manager._retire_warm_worker = record_retire
+        manager.host_client.update_job = record_update
+        try:
+            response = client.post(
+                "/addon/v1/agent/generate",
+                json={"input": generate_input("purge before success robot"), "correlation": {"job_id": "host-agent"}},
+                headers=headers,
+            )
+        finally:
+            manager._retire_warm_worker = original_retire
+            manager.host_client.update_job = original_update
+
+    assert response.status_code == 200, response.text
+    assert "purge" in order, "model を降ろしていない"
+    reports = [index for index, item in enumerate(order) if item.startswith("report:")]
+    assert not reports or order.index("purge") < reports[-1], f"申告のほうが先だった: {order}"
