@@ -28,14 +28,32 @@ def test_a_flat_background_becomes_transparent(tmp_path):
         assert image.getpixel((256, 256))[3] == 255
 
 
-def test_an_enclosed_region_of_the_background_colour_survives(tmp_path):
-    """閾値だけで消すと、被写体の中の同色の面が穴になる。縁から届く範囲に限る。"""
-    path = tmp_path / "sprite.png"
-    image = Image.new("RGB", (512, 512), (18, 22, 30))
+def test_an_enclosed_region_of_the_background_colour_is_a_hole(tmp_path):
+    """鍵の輪の中や UI 枠の内側は、囲まれていても背景である。実機の 8 件では
+    鍵とパネルの 2 件がこれで、マゼンタの塊が残ったまま資産になっていた。"""
+    path = tmp_path / "key.png"
+    image = Image.new("RGB", (512, 512), (255, 31, 255))
     draw = ImageDraw.Draw(image)
-    draw.ellipse((128, 128, 384, 384), fill=(210, 60, 40))
-    draw.ellipse((240, 240, 272, 272), fill=(18, 22, 30))
-    image.save(path)
+    draw.ellipse((160, 100, 352, 292), fill=(190, 190, 200))
+    draw.ellipse((208, 148, 304, 244), fill=(255, 31, 255))
+    image.convert("RGBA").save(path)
+
+    assert cut_out_background(path) is True
+    with Image.open(path) as result:
+        assert result.getpixel((256, 196))[3] == 0    # 輪の中は抜ける
+        assert result.getpixel((256, 120))[3] == 255  # 輪そのものは残る
+
+
+def test_an_enclosed_region_that_merely_resembles_the_background_survives(tmp_path):
+    """背景に近いだけの面までは抜かない。唐揚げダンジョンの gate は中央の渦が
+    背景色に近く、閾値だけで消していたときは透けたまま game に入っていた。"""
+    path = tmp_path / "gate.png"
+    image = Image.new("RGB", (512, 512), (255, 31, 255))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((128, 128, 384, 384), fill=(120, 110, 200))
+    # 背景と 55 だけ違う面。厳しい閾値(40)の外、緩い帯(120)の内。
+    draw.ellipse((208, 208, 304, 304), fill=(200, 60, 200))
+    image.convert("RGBA").save(path)
 
     assert cut_out_background(path) is True
     with Image.open(path) as result:
@@ -125,3 +143,67 @@ def test_the_background_colour_is_subtracted_from_a_blended_edge(tmp_path):
         # 見えている色は背景 3 : 被写体 1 だった。青が抜けて被写体の赤へ戻る。
         assert blue < 100
         assert red > 150
+
+
+def test_a_small_subject_on_a_large_canvas_is_not_mistaken_for_over_cutting(tmp_path):
+    """実機で落ちた形。1024x1024 にスライムが小さく描かれ、背景が 96.1% だった。
+    「消えた量」で抜きすぎを見ていたので、上限 95% に掛かって拒否していた。
+    被写体が小さいことと、被写体を消したことは別である。"""
+    from PIL import ImageDraw
+
+    path = tmp_path / "sprite.png"
+    image = Image.new("RGB", (1024, 1024), (255, 31, 255))
+    ImageDraw.Draw(image).ellipse((420, 420, 620, 580), fill=(60, 170, 70))
+    image.convert("RGBA").save(path)
+
+    assert cut_out_background(path) is True
+    with Image.open(path) as result:
+        alpha = result.getchannel("A").tobytes()
+        assert alpha.count(0) / len(alpha) > 0.95
+        assert result.getpixel((512, 500))[3] == 255
+
+
+def test_erasing_the_subject_is_still_refused(tmp_path):
+    """残りが点になる画は「抜けた」と名乗らない。上限を外した代わりの守り。"""
+    from PIL import ImageDraw
+
+    path = tmp_path / "sprite.png"
+    image = Image.new("RGB", (512, 512), (255, 31, 255))
+    # 背景色に紛れる微差の被写体。抜けば何も残らない。
+    ImageDraw.Draw(image).ellipse((240, 240, 250, 250), fill=(250, 28, 250))
+    image.convert("RGBA").save(path)
+    before = path.read_bytes()
+
+    assert cut_out_background(path) is False
+    assert path.read_bytes() == before
+
+
+def test_an_isolated_faint_speck_does_not_stretch_the_bounding_box(tmp_path):
+    """背景の揺らぎが 1 画素だけ閾値を超えることがある（実機: スライムの左上に
+    alpha 38 が 1 点）。見た目には出ないが、外接矩形が画面全体になる。呼び出し
+    側は矩形で切り出して縮めるので、点 1 つで使えない資産になる。"""
+    path = tmp_path / "sprite.png"
+    image = Image.new("RGB", (512, 512), (255, 31, 255))
+    ImageDraw.Draw(image).ellipse((200, 200, 320, 320), fill=(60, 170, 70))
+    # 背景でも被写体でもない、閾値をわずかに超えた 1 点。
+    image.putpixel((5, 5), (200, 60, 210))
+    image.convert("RGBA").save(path)
+
+    assert cut_out_background(path) is True
+    with Image.open(path) as result:
+        box = result.getchannel("A").getbbox()
+    assert box[0] > 100 and box[1] > 100
+
+
+def test_a_one_pixel_wide_line_is_not_treated_as_a_speck(tmp_path):
+    """細い線は開けば消えるが、被写体である。剣の刃や羽根の縁がこれに当たる。"""
+    path = tmp_path / "sprite.png"
+    image = Image.new("RGB", (512, 512), (255, 31, 255))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((200, 260, 320, 380), fill=(60, 170, 70))
+    draw.line((256, 60, 256, 260), fill=(230, 230, 240), width=1)
+    image.convert("RGBA").save(path)
+
+    assert cut_out_background(path) is True
+    with Image.open(path) as result:
+        assert result.getpixel((256, 150))[3] == 255

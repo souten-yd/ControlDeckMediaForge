@@ -85,6 +85,19 @@ def fake_image_request(
     }
 
 
+def _resident_minimum_bytes(estimate: LeaseEstimate) -> int:
+    """既に載っている model の上に、続きの生成が要する量。
+
+    「既に持っているぶん」は常駐量だが、それを 0 と測っている model がある
+    （実機 FLUX.2 Klein 4B の測定は resident 0 / cold load 15.97GB /
+    実行ピーク 22.40GB）。載せ込みのピークは重みの置き場そのものなので、
+    測られていないときはそちらを持っているぶんと見る。差し引いた残りに余白を
+    足したものが、続けて生成するときに新しく要る量である。
+    """
+    already = max(estimate.resident_bytes, estimate.cold_load_peak_bytes)
+    return max(0, estimate.execution_peak_bytes - already) + estimate.headroom_bytes
+
+
 def image_model_request(
     job_id: str,
     model: ModelDescriptor,
@@ -149,9 +162,7 @@ def image_model_request(
             "confidence": model.measurement_confidence,
             # 空いているぶんを使う。足りるかどうかは実行が決める。
             **(
-                {"minimum_bytes": max(
-                    0, estimate.execution_peak_bytes - estimate.resident_bytes,
-                ) + estimate.headroom_bytes}
+                {"minimum_bytes": _resident_minimum_bytes(estimate)}
                 if already_resident
                 else {"minimum_bytes": MINIMUM_USABLE_VRAM_BYTES} if offers_ram else {}
             ),

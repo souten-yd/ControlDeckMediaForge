@@ -95,6 +95,10 @@ OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 # 枠に負けたときに落とす先。cpu は入れない。CPU 実行は 28 倍遅く、待ち時間内に
 # 終わらないまま資源だけ使う（実測: 4枚で 20 分かけて打ち切られた）。
 # cpu_offload でも駄目なら、枠が足りていないということなので失敗させて broker へ返す。
+# 重みを VRAM に置く載せ方。ここで走った worker は、次の要求まで VRAM を
+# 抱えたままになる。cpu / cpu_offload は抱えないので数えない。
+_RESIDENT_MODES = frozenset({"direct_device_map", "full_device"})
+
 _LIGHTER_MODE = {
     "direct_device_map": "cpu_offload",
     "full_device": "cpu_offload",
@@ -199,9 +203,9 @@ class JobManager:
         self._processes: dict[str, asyncio.subprocess.Process] = {}
         # model を載せたまま次の job を受ける worker。queue が空になったら畳む。
         self._warm_worker: tuple[asyncio.subprocess.Process, tuple[str, str, str, str]] | None = None
-        # その worker がいま抱えている model と置き場所。broker への申告を
+        # その worker がいま VRAM に抱えている model。broker への申告を
         # 「載せ直しぶん」か「上乗せぶん」かで変えるために要る。
-        self._warm_model: tuple[str, str] | None = None
+        self._warm_model: str | None = None
         # 「まだ続きが来る」と分かっている間の保持。batch がこれを立てる。
         self._keep_warm = 0
         # 生成後に model を載せたまま待っている間の lease と、その見張り。
@@ -2087,11 +2091,18 @@ class JobManager:
             )
             return
         # 応答が返った worker は、その model を載せたまま次を受けられる。次の
-        # 要求で broker へ「常駐ぶんは既に自分が持っている」と言えるように残す。
-        if selected is not None and self._warm_worker is not None:
-            placement = execution.device_id if execution is not None else None
-            self._warm_model = (selected.model_id, placement or "")
+        # 要求で broker へ「重みは既に自分が持っている」と言えるように残す。
+        #
+        # 載っている場所は worker の報告を正とする。要求時の execution は lease を
+        # まだ持っておらず、grant が device を返すかは host 側の都合である
+        # （stub は返さない）。実際にどこへ置いたかを知っているのは worker だけ。
         metrics = response.get("runtime_metrics") if isinstance(response, dict) else None
+        device_mode = str((metrics or {}).get("device_mode") or "")
+        if selected is not None and self._warm_worker is not None and device_mode in _RESIDENT_MODES:
+            self._warm_model = selected.model_id
+        elif selected is not None and device_mode:
+            # RAM 実行や部分退避では、VRAM に重みを抱えていない。
+            self._warm_model = None
         if isinstance(metrics, dict):
             load_sec = metrics.get("load_sec")
             generation_sec = metrics.get("generation_sec")
@@ -2411,7 +2422,7 @@ class JobManager:
                 selected,
                 workload_class=execution.workload_class,
                 estimated_runtime_sec=self._expected_runtime_sec(job, selected),
-                already_resident=self._warm_holds(selected, execution),
+                already_resident=self._warm_holds(selected),
             )
             if selected is not None
             else fake_image_request(
@@ -2427,18 +2438,21 @@ class JobManager:
                     request["vram"][key] = max(int(request["vram"][key]), peak_floor)
         return request
 
-    def _warm_holds(self, selected: ModelDescriptor, execution: HostExecution) -> bool:
-        """この model を、いま自分の worker が同じ device に載せたまま持っているか。
+    def _warm_holds(self, selected: ModelDescriptor) -> bool:
+        """この model を、いま自分の worker が GPU に載せたまま持っているか。
 
         続けて生成するとき（batch）にだけ真になる。worker が生きていて、前の
-        job で載せたのが同じ model で、置き場所も同じときに限る。違えば worker
-        は載せ直すので、常駐ぶんを改めて求めるのが正しい。
+        job で載せたのが同じ model で、それが gpu0 だったときに限る。違えば
+        worker は載せ直すので、常駐ぶんを改めて求めるのが正しい。
+
+        見るのは「いま抱えているもの」であって、これから取る lease ではない。
+        要求を組み立てる時点では自分の device はまだ決まっていないので、そこを
+        見ると常に空になる（実機で minimum_bytes が一度も出なかったのがこれ）。
         """
         warm = self._warm_worker
-        if warm is None or warm[0].returncode is not None or self._warm_model is None:
+        if warm is None or warm[0].returncode is not None:
             return False
-        placement = execution.device_id or ""
-        return self._warm_model == (selected.model_id, placement) and placement == "gpu0"
+        return self._warm_model == selected.model_id
 
     def _record_oom(self, selected: ModelDescriptor) -> None:
         measured = selected.measured_vram_bytes or 0

@@ -139,9 +139,12 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
             raise HTTPException(status_code=503)
         assert "owner" not in payload
         assert payload["estimated_runtime_sec"] > 0
-        assert set(payload["vram"]) == {
-            "resident_bytes", "execution_peak_bytes", "cold_load_peak_bytes", "headroom_bytes", "confidence",
+        assert set(payload["vram"]) <= {
+            "resident_bytes", "execution_peak_bytes", "cold_load_peak_bytes", "headroom_bytes",
+            "confidence", "minimum_bytes",
         }
+        assert {"resident_bytes", "execution_peak_bytes", "cold_load_peak_bytes",
+                "headroom_bytes", "confidence"} <= set(payload["vram"])
         request_id = f"request-{len(state['resource_requests']) + 1}"
         lease_id = f"lease-{request_id}"
         if state["serialize_resources"] and state["reserved_leases"]:

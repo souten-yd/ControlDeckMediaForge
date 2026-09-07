@@ -41,7 +41,7 @@ from collections import deque
 from pathlib import Path
 from statistics import median
 
-from PIL import Image, ImageChops, ImageMath
+from PIL import Image, ImageChops, ImageFilter, ImageMath
 
 
 # 完全に背景とみなす色差（チャンネルごとの差の最大）。生成物の背景は単色を
@@ -53,10 +53,18 @@ TOLERANCE = 40
 # 背景色が被写体に現れない前提（生成側へそう頼んでいる）で決めている。
 SPILL_TOLERANCE = 120
 
-# 抜いた面積の許容範囲。ほとんど抜けないなら背景が無く、ほとんど抜けるなら
-# 被写体を消している。どちらも「抜けた」と名乗らない。
+# ほとんど抜けないなら、そもそも抜ける背景が無い。「抜けた」と名乗らない。
 MIN_REMOVED = 0.05
-MAX_REMOVED = 0.95
+
+# 抜きすぎの検出は、消えた量ではなく残ったもので行う。上限を面積で置いていた
+# ときは、1024x1024 に小さく描かれたスプライトが抜きすぎと区別できなかった
+# （実機: スライムは背景 96.1% で、上限 95% に掛かって拒否された）。被写体が
+# 小さいことと、被写体を消したことは別である。
+#
+# 残った不透明の面積と、その外接矩形の辺で見る。被写体を削った画は、残りが
+# 散った点になるか、矩形が潰れる。
+MIN_SUBJECT_PIXELS = 1024
+MIN_SUBJECT_SIDE = 16
 
 # 縁のうち背景色に収まっている割合の下限。これを割るなら、そもそも単色背景
 # ではない（風景や光源が縁まで来ている）。
@@ -247,6 +255,42 @@ def _without_spill(
     return Image.merge("RGB", bands)
 
 
+# 孤立した薄い点をノイズとみなす境目。濃い点は残す——1 画素の線（剣の刃や
+# 羽根の縁）はここを通しても消えない。
+SPECK_ALPHA = 128
+
+
+def _without_specks(alpha: Image.Image) -> Image.Image:
+    """周りが完全に透明な、薄い 1 点を落とす。
+
+    背景の揺らぎが 1 画素だけ閾値を超えることがある（実機のスライムは左上に
+    alpha 38 が 1 点だけ残った）。見た目には出ないが、外接矩形が画面全体に
+    なる。呼び出し側は矩形で切り出して縮めるので（唐揚げダンジョンの
+    prepare_assets がそうしている）、点 1 つで使えない資産になる。
+
+    落とすのは薄いものだけに限る。濃い画素は、たとえ 1 画素幅でも被写体の線で
+    ある。開いた（収縮→膨張）結果が空になるのは細い線も同じなので、そこだけで
+    判断すると剣の刃が消える。
+    """
+    opened = alpha.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
+    isolated = opened.point(lambda value: 255 if value == 0 else 0)
+    faint = alpha.point(lambda value: 255 if value < SPECK_ALPHA else 0)
+    return Image.composite(
+        Image.new("L", alpha.size, 0), alpha, ImageChops.darker(isolated, faint)
+    )
+
+
+def _subject_survives(alpha: Image.Image, opaque_pixels: int) -> bool:
+    """抜いた後に、被写体と呼べるものが残っているか。"""
+    if opaque_pixels < MIN_SUBJECT_PIXELS:
+        return False
+    box = alpha.getbbox()
+    if box is None:
+        return False
+    left, top, right, bottom = box
+    return right - left >= MIN_SUBJECT_SIDE and bottom - top >= MIN_SUBJECT_SIDE
+
+
 def cut_out_background(path: Path) -> bool:
     """`path` の平らな背景を透明にする。抜いたときだけ True。
 
@@ -276,8 +320,19 @@ def cut_out_background(path: Path) -> bool:
         Image.new("L", (width, height), 255),
         Image.frombytes("L", (width, height), bytes(reached).translate(_REACHED)),
     )
-    removed = alpha.tobytes().count(0) / (width * height)
-    if not MIN_REMOVED <= removed <= MAX_REMOVED:
+    # 背景色そのものは、縁から届かなくても背景である。鍵の輪の中や UI 枠の内側
+    # は囲まれているので連結では届かないが、そこは穴であって被写体ではない
+    # （実機の 8 件では鍵とパネルの 2 件がこれで、マゼンタの塊が残っていた）。
+    #
+    # 抜くのは厳しいほうの閾値に収まるものだけに限る。緩い帯（背景が混ざって
+    # いる範囲）まで連結を無視すると、被写体の中の似た色に穴が空く。唐揚げ
+    # ダンジョンの gate がその形で、中央の渦が透けたまま game に入っていた。
+    alpha = ImageChops.darker(alpha, distance.point(lambda value: 0 if value <= TOLERANCE else 255))
+    alpha = _without_specks(alpha)
+    raw = alpha.tobytes()
+    if raw.count(0) / (width * height) < MIN_REMOVED:
+        return False
+    if not _subject_survives(alpha, len(raw) - raw.count(0)):
         return False
     cleaned = _without_spill(rgb, alpha, colour)
     cleaned.putalpha(alpha)
