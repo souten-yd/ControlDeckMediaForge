@@ -9,8 +9,8 @@ import shutil
 import sys
 import time
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -309,8 +309,26 @@ class JobManager:
             process.terminate()
         return self.store.get_job(job_id)
 
-    @contextmanager
-    def keep_worker_warm(self) -> Iterator[None]:
+    async def _purge_if_idle(self, job_id: str | None = None) -> None:
+        """続きが無いなら、その場で model を降ろす。
+
+        「終わった」と言う前に降ろすのが順序である。抱えたまま完了を告げると、
+        次に来た要求は空いていない GPU を待つ。実機では batch の後に画像 worker
+        が 19.4GB を抱えたまま残り、音楽生成が 300 秒待って期限切れになった。
+
+        `job_id` を渡すと、その job 自身は「続き」に数えない。自分の後始末から
+        呼ぶときに要る。
+        """
+        if self._keep_warm or self._linger_task is not None:
+            return
+        if not self._queue.empty():
+            return
+        if any(pending != job_id for pending in self._job_tasks):
+            return
+        await self._retire_warm_worker()
+
+    @asynccontextmanager
+    async def keep_worker_warm(self) -> AsyncIterator[None]:
         """次の依頼が来ると分かっている間、model を降ろさない。
 
         後始末は既定で「続きが無ければ抱えない」である（`_execute` の最後）。
@@ -319,15 +337,19 @@ class JobManager:
         が、job は投入した順に並行して走り出すので、1 つの worker プロセスへ
         同時に書き込むことになる。
 
-        そこで「続きがある」を外から宣言できるようにする。宣言している間だけ
-        抱え、抜けたところで通常の後始末に戻る。GPU を求められたら降りる経路
-        （lease と pressure）はこれとは別で、そちらは従来どおり効く。
+        そこで「続きがある」を外から宣言できるようにする。
+
+        抜けるときは自分で降ろす。最後の 1 件の後始末は、まだ宣言が立っている
+        間に走るので素通りする——実機で batch の後に image worker が 19.4GB を
+        抱えたまま残り、音楽生成が GPU 待ちのまま期限切れになった。宣言した側が
+        最後に片づける。
         """
         self._keep_warm += 1
         try:
             yield
         finally:
             self._keep_warm = max(0, self._keep_warm - 1)
+            await self._purge_if_idle()
 
     async def wait_cleanup(self, job_id: str, timeout: float = 5.0) -> None:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -384,20 +406,18 @@ class JobManager:
             self._selected_models.pop(job_id, None)
             self._downgraded.pop(job_id, None)
             self._routes.pop(job_id, None)
-            self._job_tasks.pop(job_id, None)
-            self._queue.task_done()
             # 続けて処理する job が無いなら model を抱えたままにしない。
             # 差分生成のように続きがある間だけ載せたままにする。
             # queue は _run が即座に汲み出すので、待っている job は queue では
             # なく _job_tasks に居る。queue だけ見ると常に空に見えて、続きが
             # あっても毎回下ろしてしまう。
-            if (
-                self._queue.empty()
-                and not self._job_tasks
-                and self._linger_task is None
-                and not self._keep_warm
-            ):
-                await self._retire_warm_worker()
+            #
+            # 降ろすのは job を畳む前である。畳んだ時点で呼び出し側の待ちは
+            # 明けるので、後に回すと「終わった」と言いながら VRAM を握った
+            # 数瞬が残る。次に来る要求（音楽など）はそこで空きを見る。
+            await self._purge_if_idle(job_id)
+            self._job_tasks.pop(job_id, None)
+            self._queue.task_done()
 
     async def _execute(self, job_id: str) -> None:
         try:
@@ -2224,6 +2244,9 @@ class JobManager:
                 error=ErrorDetail(code="artifact_integrity_failed", message=str(exc)[:300]),
             )
             return
+        # 完了を告げる前に降ろす。ここで抱えたままにすると、成功を受け取った
+        # 呼び出し側が次を頼んだとき、GPU はまだ埋まっている。
+        await self._purge_if_idle(job_id)
         await self._update(
             job_id,
             reporter,
