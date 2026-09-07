@@ -1235,3 +1235,56 @@ def test_a_batch_holds_the_image_model_while_it_runs(tmp_path: Path):
         assert seen == [1, 1]
         # 抜けたら残らない。残ると以後の単発生成まで抱え続ける。
         assert manager._keep_warm == 0
+
+
+def test_a_batch_shares_one_progress_gate_with_the_host(tmp_path: Path):
+    """host の進捗制限（2Hz・単調増加）は host job に対して掛かる。件ごとに
+    新しい門を作ると、前の件の最後の報告と次の件の最初の報告が同じ 0.5 秒に
+    入り、429 で弾かれる。実機の batch で 2 件目以降がそれで落ちた。"""
+    client, headers, state = host_client(tmp_path)
+    with client:
+        response = client.post(
+            "/addon/v1/agent/generate/batch",
+            json={"input": batch_input("hero", "slime", "bat"), "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["succeeded_count"] == 3
+    sent = [
+        update for update in state["job_updates"]
+        if update["job_id"] == "host-agent" and update.get("progress")
+    ]
+    # 同じ門が見ているので、間隔も進み方も host の規則に収まる。
+    completed = [update["progress"]["completed"] for update in sent]
+    assert completed == sorted(completed)
+
+
+def test_a_rejected_progress_update_does_not_kill_the_generation(tmp_path: Path):
+    """進捗の報告は job の結末ではない。Host が受け取らなかったことで、動いて
+    いる生成を殺さない。"""
+    from mediaforge.host.client import HostApiError
+
+    client, headers, _state = host_client(tmp_path)
+    with client:
+        manager = client.app.state.jobs
+        original = manager.host_client.update_job
+        calls = {"n": 0}
+
+        async def refuse(identity, host_job_id, payload):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise HostApiError("host_request_rejected", "HTTP 429", status_code=429)
+            return await original(identity, host_job_id, payload)
+
+        manager.host_client.update_job = refuse
+        try:
+            response = client.post(
+                "/addon/v1/agent/generate",
+                json={"input": generate_input("progress refusal robot"), "correlation": {"job_id": "host-agent"}},
+                headers=headers,
+            )
+        finally:
+            manager.host_client.update_job = original
+
+    assert response.status_code == 200, response.text
+    assert response.json()["asset_id"].startswith("asset_")

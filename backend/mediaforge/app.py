@@ -95,7 +95,7 @@ from .environment import setup_snapshot
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.ai import HostAIGateway
 from .host.files import GrantContentTooLarge, commit_file, read_grant, require_grant_id
-from .host.jobs import HostExecution
+from .host.jobs import HostExecution, ProgressGate
 from .jobs import JobManager, ProfileResolutionError
 from .m5_companion import profile_documents as m5_profile_documents
 from .model_evaluator import H3ModelEvaluator, unmeasured_lora_bases
@@ -860,6 +860,7 @@ def create_app(
         *,
         workload_class: str,
         progress_window: tuple[float, float] = (0.0, 1.0),
+        progress_gate: ProgressGate | None = None,
     ) -> dict[str, Any]:
         missing = {"jobs.write", "resources.acquire"} - identity.granted_capabilities
         if missing:
@@ -885,6 +886,7 @@ def create_app(
             host_job_id=host_job["id"],
             workload_class=workload_class,
             owns_terminal=attached.get("created") is True,
+            progress_gate=progress_gate,
             progress_offset=offset,
             progress_span=span,
         )
@@ -2270,6 +2272,9 @@ def create_app(
         # いる間も model を降ろさないよう明示して抱えてもらう。
         span = 1.0 / len(requests)
         item_timeout = resolved.worker_timeout_sec + 60.0
+        # 進捗の門は batch で 1 つにする。件ごとに作ると、前の件の最後の報告と
+        # 次の件の最初の報告が同じ 0.5 秒に入り、host の間隔制限（2Hz）に掛かる。
+        gate = ProgressGate()
         outcomes: list[dict[str, Any]] = []
         with manager.keep_worker_warm():
             for index, value in enumerate(requests):
@@ -2283,6 +2288,7 @@ def create_app(
                         # 見た進捗はそのまま「何件目まで進んだか」になり、
                         # 進んでいる限り待ち続けられる。
                         progress_window=(index * span, span),
+                        progress_gate=gate,
                     )
                     terminal = await wait_for_terminal(job["id"], timeout=item_timeout)
                     await manager.wait_cleanup(job["id"])

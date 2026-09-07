@@ -49,6 +49,13 @@ class HostExecution:
     device_id: str | None = None
     # 貸してもらった枠。全常駐に足りなければ、その中で動く形へ切り替える。
     granted_bytes: int | None = None
+    # 進捗の間隔と単調増加を見張る門。既定は job ごとに 1 つ。
+    #
+    # batch は N 件を 1 つの host job にぶら下げるが、host の制限（2Hz、単調
+    # 増加）は host job に対して掛かる。件ごとに新しい門を作ると、前の件の
+    # 最後の報告と次の件の最初の報告が同じ 0.5 秒に入り、429 で弾かれる
+    # （実機の batch で 2 件目以降がこれで落ちた）。共有すれば同じ門が見る。
+    progress_gate: ProgressGate | None = None
     # この job が、host job 全体のどこを占めるか。既定は「全部」。
     #
     # batch は N 件を 1 つの host job にぶら下げる。host 側の進捗は単調増加で
@@ -64,7 +71,7 @@ class HostJobReporter:
     def __init__(self, client: ControlDeckHostClient, execution: HostExecution):
         self.client = client
         self.execution = execution
-        self.gate = ProgressGate()
+        self.gate = execution.progress_gate or ProgressGate()
         self._last_progress: tuple[str, float, str | None, str | None] | None = None
 
     def _scaled(self, progress: float) -> float:
