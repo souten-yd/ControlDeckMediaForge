@@ -221,6 +221,14 @@ the file before the job runs. A path is never accepted. The whole-image modes
 pair the same way generation does; the modes with their own size invariant
 (strict editing, outpaint, and the repairs) keep deciding for themselves.
 
+Those same modes honour `constraints.asset_brief`. A brief that requires
+transparency makes the edit ask for the flat background, flattens any transparent
+reference onto that colour before the model sees it, and cuts the background out
+of the result — the deterministic path generation already used. Transparency is
+never inferred from the intent on an edit: it applies only when the brief names
+it, so a touch-up is never given a chroma key it did not ask for. Modes that keep
+pixels are excluded; cutting out a protected pixel would undo the guarantee.
+
 G7 adds `video.generate` and `video.edit` without making a model name part of
 the contract. `video.generate` accepts zero to eight input assets: zero routes
 to text-to-video, one to image-to-video, and multiple inputs require a

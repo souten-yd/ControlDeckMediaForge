@@ -100,7 +100,7 @@
             "erase"
           ],
           "default": "reference",
-          "description": "How an image.edit job changes its inputs. 'reference' (the default) redraws the whole picture from one input image and the intent — use it to change pose, angle or wardrobe while keeping the same subject; it needs exactly one entry in inputs. 'multi_reference' does the same from 2..4 input images, so a front view and a side view can together produce a back view; it needs 2..4 entries in inputs. 'variation' redraws one input as an alternative take. The remaining modes are narrower: 'inpaint', 'outpaint' and 'masked_edit' work on a painted area, and 'upscale', 'deblur' and 'erase' are repairs whose output size comes from the model. Anything other than 'multi_reference' takes exactly one input."
+          "description": "How an image.edit job changes its inputs. 'reference' (the default) redraws the whole picture from one input image and the intent — use it to change pose, angle or wardrobe while keeping the same subject; it needs exactly one entry in inputs. 'multi_reference' does the same from 2..4 input images, so a front view and a side view can together produce a back view; it needs 2..4 entries in inputs. 'variation' redraws one input as an alternative take. The remaining modes are narrower: 'inpaint', 'outpaint' and 'masked_edit' work on a painted area, and 'upscale', 'deblur' and 'erase' are repairs whose output size comes from the model. Anything other than 'multi_reference' takes exactly one input. The whole-picture modes also honour constraints.asset_brief: a brief that requires transparency makes the edited result transparent, the same way generation does."
         },
         "strict_edit": {
           "type": "boolean",

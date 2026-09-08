@@ -671,14 +671,20 @@ def test_a_texture_is_never_cut_out(tmp_path):
     assert path.read_bytes() == before
 
 
-def test_an_edit_keeps_whatever_transparency_the_source_had(tmp_path):
-    """編集は元画像の性質を引き継ぐ。この job が決めたものではない。"""
+def test_a_touch_up_keeps_whatever_transparency_the_source_had(tmp_path):
+    """守る画素がある編集は元画像の性質を引き継ぐ。守った画素を後から透明に
+    すれば、守った意味が無くなる。"""
     manager, store = _manager(tmp_path)
     job = store.create_job(JobRequest(
         operation="image.edit",
         intent="make the emblem brighter",
         inputs=[{"asset_id": "asset_0000000000000000000000000000dead"}],
-        constraints={"asset_brief": {"role": "emblem"}},
+        constraints={
+            "asset_brief": {"role": "emblem"},
+            "edit_mode": "inpaint",
+            "strict_edit": True,
+            "editable_mask_asset_id": "asset_0000000000000000000000000000beef",
+        },
     ))
 
     assert manager._directed_intent(job, job.request.intent) == "make the emblem brighter"
@@ -750,3 +756,116 @@ def test_the_worker_prompt_keeps_every_layer_and_ends_with_the_background(tmp_pa
     assert composed.endswith(FLAT_BACKGROUND_DIRECTIVE)
     assert composed.index("pxlsprt") < composed.index("Visual style")
     assert composed.index("Visual style") < composed.index(FLAT_BACKGROUND_DIRECTIVE)
+
+
+# ── 編集でも透過を作る ──────────────────────────────────────────────────
+#
+# 参照から丸ごと描き直した画は新しい画であって、元の透過がそのまま残るわけでは
+# ない。実機で唐揚げダンジョンの slime.png（透過あり）を参照にした編集は、真っ黒
+# な背景で返ってきた——透明は model に届くまでに黒へ潰れる。sprite の歩行コマを
+# 作るのに、コマだけ不透明では使えない。
+
+
+def _edit_job(store, *, alpha="required", edit_mode=None, strict=False, inputs=None):
+    constraints = {"asset_brief": {"role": "sprite", "alpha_intent": alpha}}
+    if edit_mode is not None:
+        constraints["edit_mode"] = edit_mode
+    if strict:
+        constraints["strict_edit"] = True
+    return store.create_job(JobRequest(
+        operation="image.edit",
+        intent="the same slime, mid-bounce",
+        inputs=inputs or [{"asset_id": "asset_" + "0" * 32}],
+        constraints=constraints,
+    ))
+
+
+def test_an_edit_that_needs_alpha_asks_for_the_same_flat_background(tmp_path):
+    from mediaforge.cutout import FLAT_BACKGROUND_DIRECTIVE
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    directed = manager._directed_intent(_edit_job(store), "the same slime, mid-bounce")
+    assert FLAT_BACKGROUND_DIRECTIVE in directed
+
+
+def test_an_edit_that_keeps_pixels_is_never_cut_out(tmp_path):
+    """守った画素を後から透明にすれば、守った意味が無くなる。"""
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    for job in (
+        _edit_job(store, strict=True, edit_mode="inpaint"),
+        _edit_job(store, edit_mode="outpaint", strict=True),
+        _edit_job(store, edit_mode="upscale"),
+    ):
+        assert manager._alpha_required(job) is False, job.request.constraints
+
+
+def test_an_edit_does_not_guess_that_alpha_was_wanted(tmp_path):
+    """生成は文言から用途を拾うが、編集で同じことをすると頼まれていない
+    背景抜きが掛かる。編集は名指しされたときだけ抜く。"""
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    guessed = store.create_job(JobRequest(
+        operation="image.edit",
+        intent="a walking sprite with a transparent background",
+        inputs=[{"asset_id": "asset_" + "0" * 32}],
+    ))
+    assert manager._alpha_required(guessed) is False
+    named = _edit_job(store)
+    assert manager._alpha_required(named) is True
+
+
+def test_an_edited_sprite_is_cut_out_like_a_generated_one(tmp_path):
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+    from mediaforge.validators import validate_png
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    job = _edit_job(store)
+
+    job_root = tmp_path / "work"
+    job_root.mkdir()
+    path = _flat_sprite(job_root / "output.png")
+    _width, _height, before = validate_png(path)
+    assert [item.code for item in manager._brief_defects(job, 512, 512, before)] == ["alpha_missing"]
+
+    manager._cutout_outputs(job, [{"path": str(path)}], job_root)
+
+    width, height, after = validate_png(path)
+    assert manager._brief_defects(job, width, height, after) == []
+
+
+def test_a_transparent_reference_is_flattened_onto_the_colour_we_ask_for(tmp_path):
+    """透明のまま渡すと model に届くまでに黒へ潰れる。透明は「無い」であって
+    「黒」ではないので、指示と同じ単色を置く。"""
+    from PIL import Image
+
+    from mediaforge.cutout import FLAT_BACKGROUND_RGB, flatten_onto_flat_background
+
+    path = tmp_path / "reference.png"
+    image = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
+    image.putpixel((4, 4), (30, 200, 60, 255))
+    image.save(path)
+
+    assert flatten_onto_flat_background(path) is True
+    with Image.open(path) as opened:
+        opened.load()
+        flattened = opened.convert("RGBA")
+    assert flattened.getpixel((0, 0)) == (*FLAT_BACKGROUND_RGB, 255)
+    assert flattened.getpixel((4, 4)) == (30, 200, 60, 255)
+    # 透過が無い画は触らない。
+    assert flatten_onto_flat_background(path) is False

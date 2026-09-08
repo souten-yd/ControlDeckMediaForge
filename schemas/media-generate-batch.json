@@ -55,7 +55,7 @@
             "required",
             "forbidden"
           ],
-          "description": "Overrides the role default. When transparency is required, say nothing about the background in intent: Media Forge generates the subject on a flat chroma background of its own and removes it deterministically after generation. Asking for a background here contradicts that instruction and leaves an opaque halo around the subject."
+          "description": "Overrides the role default. When transparency is required, say nothing about the background in intent: Media Forge generates the subject on a flat chroma background of its own and removes it deterministically after generation. Asking for a background here contradicts that instruction and leaves an opaque halo around the subject. This applies to items with references too: an edited sprite comes back with transparency, and a transparent reference is placed on the same flat background before it is shown to the model."
         },
         "width": {
           "type": "integer",

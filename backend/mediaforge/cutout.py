@@ -74,6 +74,9 @@ BORDER_FLATNESS = 0.9
 # どうにかするより確実である。色を名指しするのは唐揚げダンジョンの実績に
 # 倣ったもので、マゼンタは被写体の色と衝突しにくい。そのとおりの色は返って
 # こないが、被写体から遠い色が返ってくれば鍵としては十分である。
+# 背景に頼む色。指示文と、参照画像を平らにするときで同じものを使う。
+FLAT_BACKGROUND_RGB = (255, 0, 255)
+
 FLAT_BACKGROUND_DIRECTIVE = (
     "Place the single subject alone on a completely flat, uniform pure magenta "
     "(RGB 255, 0, 255) background. The magenta must not appear anywhere in the "
@@ -289,6 +292,30 @@ def _subject_survives(alpha: Image.Image, opaque_pixels: int) -> bool:
         return False
     left, top, right, bottom = box
     return right - left >= MIN_SUBJECT_SIDE and bottom - top >= MIN_SUBJECT_SIDE
+
+
+def flatten_onto_flat_background(path: Path) -> bool:
+    """透過を持つ画を、頼むのと同じ単色の上へ置き直す。置き換えたときだけ True。
+
+    編集は元画像を参照として model へ渡す。透過を持つ資産をそのまま渡すと、
+    透明だった所は model に届くまでに黒へ潰れる（実測: 唐揚げダンジョンの
+    slime.png を参照にした編集が、真っ黒な背景で返ってきた）。透明は「無い」
+    であって「黒」ではないので、こちらで意味のある色を置く。
+
+    置く色は、透過を作るときに model へ頼むのと同じ単色である。参照も指示も
+    同じ背景を指すことになり、返ってきた画は後段の `cut_out_background` が
+    そのまま抜ける。
+
+    透過が無い画は触らない。触る理由が無い。
+    """
+    with Image.open(path) as opened:
+        opened.load()
+        image = opened.convert("RGBA")
+    if image.getchannel("A").getextrema()[0] == 255:
+        return False
+    flat = Image.new("RGBA", image.size, (*FLAT_BACKGROUND_RGB, 255))
+    Image.alpha_composite(flat, image).save(path, format="PNG")
+    return True
 
 
 def cut_out_background(path: Path) -> bool:

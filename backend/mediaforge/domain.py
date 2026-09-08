@@ -16,6 +16,13 @@ class JobStatus(StrEnum):
     CANCELED = "canceled"
 
 
+# 画を丸ごと描き直す編集。守る画素が無いので、生成と同じ後処理を掛けられる
+# ——用途が透過を求めるなら単色背景で描かせて抜き、寸法を名指しされたら
+# その画面へ揃える。塗った所を守るもの（strict_edit / inpaint / outpaint）と
+# 倍率で寸法が決まるもの（upscale / deblur / erase）はここに入らない。
+WHOLE_IMAGE_EDIT_MODES = frozenset({"reference", "variation", "multi_reference"})
+
+
 class AssetInput(BaseModel):
     """One image this job reads.
 
