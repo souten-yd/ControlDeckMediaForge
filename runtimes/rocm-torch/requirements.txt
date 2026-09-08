@@ -23,3 +23,9 @@ peft==0.19.0
 torchvision==0.25.0
 einops==0.8.2
 spandrel==0.4.2
+
+# 被写体の形を推定する経路（worker_packs/image/matte.py）。CPU 版でよい——
+# GPU は画像モデルが使っており、取り合いにすると生成のほうが遅くなる。実測で
+# 512² も 1024² も 4 秒である。ROCm 版の onnxruntime を入れると、上の torch と
+# 同じ轍（別の加速器版が依存を置き換える）を踏むので入れない。
+onnxruntime==1.29.0

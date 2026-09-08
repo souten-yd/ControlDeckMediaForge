@@ -207,3 +207,145 @@ def test_a_one_pixel_wide_line_is_not_treated_as_a_speck(tmp_path):
     assert cut_out_background(path) is True
     with Image.open(path) as result:
         assert result.getpixel((256, 150))[3] == 255
+
+
+# ── 形を推定して抜く ────────────────────────────────────────────────────
+#
+# クロマキーは背景色が縁へ滲むぶんを残す。閾値では消えない性質のもので、実機で
+# 残った画素の 3.5〜6.1% が桃色だった。形そのものを推定すれば背景色という前提
+# ごと無くなる。合成と可否の判断は core が持つ——model は形を出すだけである。
+
+
+def _subject_on(background, size=(256, 256), radius=70):
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", size, background)
+    draw = ImageDraw.Draw(image)
+    centre = (size[0] // 2, size[1] // 2)
+    draw.ellipse(
+        (centre[0] - radius, centre[1] - radius, centre[0] + radius, centre[1] + radius),
+        fill=(40, 170, 70),
+    )
+    return image.convert("RGBA")
+
+
+def _mask_for(size=(256, 256), radius=70):
+    from PIL import Image, ImageDraw
+
+    mask = Image.new("L", size, 0)
+    draw = ImageDraw.Draw(mask)
+    centre = (size[0] // 2, size[1] // 2)
+    draw.ellipse(
+        (centre[0] - radius, centre[1] - radius, centre[0] + radius, centre[1] + radius),
+        fill=255,
+    )
+    return mask
+
+
+def test_a_matte_becomes_the_alpha(tmp_path):
+    from PIL import Image
+
+    from mediaforge.cutout import apply_matte
+
+    path = tmp_path / "output.png"
+    _subject_on((18, 22, 30)).save(path)
+    mask_path = tmp_path / "matte.png"
+    _mask_for().save(mask_path)
+
+    assert apply_matte(path, mask_path) is True
+    with Image.open(path) as opened:
+        opened.load()
+        result = opened.convert("RGBA")
+    assert result.getpixel((4, 4))[3] == 0, "外は透明になっていない"
+    assert result.getpixel((128, 128))[3] == 255, "被写体が半透明になっている"
+
+
+def test_a_matte_over_a_flat_background_leaves_no_colour_cast(tmp_path):
+    """model は形を当てるだけで、縁が背景色と混ざっている事実は変わらない。
+
+    平らな背景なら差し引ける。単色背景で描かせた画を抜くと、差し引かないかぎり
+    縁に背景色が残る（実機ではマゼンタの輪郭として出ていた）。
+    """
+    from PIL import Image
+
+    from mediaforge.cutout import FLAT_BACKGROUND_RGB, apply_matte
+
+    path = tmp_path / "output.png"
+    image = _subject_on(FLAT_BACKGROUND_RGB)
+    # 縁を 1 画素ぶん背景と混ぜる。生成物の縁はこうなっている。
+    blurred = image.filter(__import__("PIL.ImageFilter", fromlist=["ImageFilter"]).GaussianBlur(2))
+    blurred.save(path)
+    mask_path = tmp_path / "matte.png"
+    _mask_for().save(mask_path)
+
+    assert apply_matte(path, mask_path) is True
+    with Image.open(path) as opened:
+        opened.load()
+        result = opened.convert("RGBA")
+    kept = [(p[:3], p[3]) for p in result.getdata() if p[3] > 0]
+    pink = [c for c, _a in kept if c[0] > c[1] + 40 and c[2] > c[1] + 40]
+    assert len(pink) * 100 / len(kept) < 1.0, f"桃色が {len(pink)}/{len(kept)} 残っている"
+
+
+def test_a_matte_that_keeps_nothing_is_refused(tmp_path):
+    """抜きすぎたものを「透過あり」として通さない。検査が理由を名指しできる
+    ように、触らずに False を返す。"""
+    from PIL import Image
+
+    from mediaforge.cutout import apply_matte
+
+    path = tmp_path / "output.png"
+    _subject_on((18, 22, 30)).save(path)
+    before = path.read_bytes()
+    mask_path = tmp_path / "matte.png"
+    Image.new("L", (256, 256), 0).save(mask_path)
+
+    assert apply_matte(path, mask_path) is False
+    assert path.read_bytes() == before
+
+
+def test_a_matte_that_removes_nothing_is_refused(tmp_path):
+    from PIL import Image
+
+    from mediaforge.cutout import apply_matte
+
+    path = tmp_path / "output.png"
+    _subject_on((18, 22, 30)).save(path)
+    before = path.read_bytes()
+    mask_path = tmp_path / "matte.png"
+    Image.new("L", (256, 256), 255).save(mask_path)
+
+    assert apply_matte(path, mask_path) is False
+    assert path.read_bytes() == before
+
+
+def test_a_matte_of_the_wrong_size_is_refused(tmp_path):
+    from PIL import Image
+
+    from mediaforge.cutout import apply_matte
+
+    path = tmp_path / "output.png"
+    _subject_on((18, 22, 30)).save(path)
+    mask_path = tmp_path / "matte.png"
+    Image.new("L", (128, 128), 255).save(mask_path)
+
+    assert apply_matte(path, mask_path) is False
+
+
+def test_the_matting_path_says_when_it_cannot_run(tmp_path):
+    """重みが無い環境では黙って従来の経路へ落ちる。壊れたことにしない。"""
+    import pytest
+
+    from mediaforge.matting import MattingUnavailable, matte_mask
+
+    with pytest.raises(MattingUnavailable):
+        matte_mask(
+            tmp_path / "in.png", tmp_path / "out.png",
+            runtime_python=None, model_path=None, repository_root=tmp_path,
+        )
+    with pytest.raises(MattingUnavailable):
+        matte_mask(
+            tmp_path / "in.png", tmp_path / "out.png",
+            runtime_python=tmp_path / "python", model_path=tmp_path / "model.onnx",
+            repository_root=tmp_path,
+        )

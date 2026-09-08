@@ -869,3 +869,28 @@ def test_a_transparent_reference_is_flattened_onto_the_colour_we_ask_for(tmp_pat
     assert flattened.getpixel((4, 4)) == (30, 200, 60, 255)
     # 透過が無い画は触らない。
     assert flatten_onto_flat_background(path) is False
+
+
+def test_the_background_is_only_constrained_when_the_cut_needs_it(tmp_path, monkeypatch):
+    """単色背景の指示は「風景なし・影なし・地面なし・縁に触れるな」まで含む。
+
+    形を推定して抜けるなら、その縛りを掛ける理由が無い。透過を頼むだけで作れる
+    絵が狭まっていた。
+    """
+    from mediaforge.cutout import FLAT_BACKGROUND_DIRECTIVE
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    job = _sprite_job(store)
+    intent = "top-down RPG hero sprite, on a grassy background"
+
+    monkeypatch.setattr(JobManager, "_can_matte", lambda self: False)
+    directed = manager._directed_intent(job, intent)
+    assert FLAT_BACKGROUND_DIRECTIVE in directed
+    assert "grassy" not in directed, "背景の注文が残っている"
+
+    monkeypatch.setattr(JobManager, "_can_matte", lambda self: True)
+    assert manager._directed_intent(job, intent) == intent

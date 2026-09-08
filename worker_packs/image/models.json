@@ -1699,6 +1699,49 @@
         "headroom_vram_bytes": 1073741824,
         "measured_runtime_sec": 181.91
       }
+    },
+    {
+      "model_id": "onnx-community/BiRefNet_lite-ONNX",
+      "family": "birefnet",
+      "version": "lite",
+      "revision": "de15b22ba131738a16dff04aab8bdf8dc32e3ac1",
+      "weights_hash": "sha256:5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333",
+      "license": "MIT",
+      "runtime_adapter": "onnx.matting",
+      "capabilities": [
+        "image.matting"
+      ],
+      "hardware_backends": [
+        "cpu"
+      ],
+      "state": "available",
+      "required_files": [
+        "onnx/model.onnx",
+        "preprocessor_config.json"
+      ],
+      "weights": [
+        {
+          "path": "onnx/model.onnx",
+          "size_bytes": 224005088,
+          "sha256": "5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333"
+        }
+      ],
+      "base_model": null,
+      "policy_rank": {
+        "auto": 90,
+        "fast": 90,
+        "balanced": 90,
+        "quality": 90,
+        "low_vram": 90
+      },
+      "measurements": {
+        "resident_vram_bytes": 0,
+        "execution_peak_vram_bytes": 0,
+        "cold_load_peak_vram_bytes": 0,
+        "headroom_vram_bytes": 0,
+        "measured_runtime_sec": 5.5
+      },
+      "measurement_confidence": "measured"
     }
   ]
 }

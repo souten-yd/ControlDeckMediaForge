@@ -222,12 +222,21 @@ pair the same way generation does; the modes with their own size invariant
 (strict editing, outpaint, and the repairs) keep deciding for themselves.
 
 Those same modes honour `constraints.asset_brief`. A brief that requires
-transparency makes the edit ask for the flat background, flattens any transparent
-reference onto that colour before the model sees it, and cuts the background out
-of the result — the deterministic path generation already used. Transparency is
-never inferred from the intent on an edit: it applies only when the brief names
-it, so a touch-up is never given a chroma key it did not ask for. Modes that keep
-pixels are excluded; cutting out a protected pixel would undo the guarantee.
+transparency makes the edit deliver a cut-out subject, the same way generation
+does. Transparency is never inferred from the intent on an edit: it applies only
+when the brief names it, so a touch-up is never given a cut it did not ask for.
+Modes that keep pixels are excluded; cutting out a protected pixel would undo the
+guarantee.
+
+Media Forge cuts by estimating the subject's shape (BiRefNet, MIT, run on CPU in
+the image runtime) and falls back to keying a flat background out when those
+weights are not installed. With the estimator available the request carries no
+background instruction at all — say what background you want and it is honoured,
+because the cut does not depend on it. Without it, Media Forge asks the model for
+a flat magenta field and drops any background wording from the prompt, since one
+prompt cannot ask for two different backgrounds. Either way the result is
+inspected before it is registered: a cut that keeps nothing, removes nothing, or
+leaves no subject is refused and `alpha_missing` names the reason.
 
 G7 adds `video.generate` and `video.edit` without making a model name part of
 the contract. `video.generate` accepts zero to eight input assets: zero routes
