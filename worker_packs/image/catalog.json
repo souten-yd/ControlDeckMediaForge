@@ -609,6 +609,31 @@
       "recommended_profiles": [],
       "gated": true,
       "license_notice": "FLUX.1 [dev] Non-Commercial License。**商用利用はできない。** 出力物の扱いを含め、利用前に上流のライセンスを確認すること。拡散本体は city96 による GGUF 量子化で、上流は black-forest-labs/FLUX.2-dev。文章符号化に使う Mistral-Small-3.2-24B-Instruct-2506（Apache-2.0）と VAE の FLUX.2-small-decoder（Apache-2.0）は別ライセンスだが、組として使う限り非商用の条件が掛かる。ROCm/gfx1201 で実測済み。"
+    },
+    {
+      "model_id": "onnx-community/BiRefNet_lite-ONNX",
+      "display_name": "BiRefNet Lite 切り抜き",
+      "domains": [
+        "general"
+      ],
+      "media_types": [
+        "image"
+      ],
+      "description": "被写体の形を推定して背景を抜く。単色背景で描かせなくてよくなるので、影や地面のある絵からも透過素材を作れる。CPU で 1 枚 5 秒ほど。",
+      "approx_download_bytes": 224005088,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "onnx-community/BiRefNet_lite-ONNX",
+        "revision": "de15b22ba131738a16dff04aab8bdf8dc32e3ac1"
+      },
+      "ownership": "managed",
+      "supports_lora": false,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": false,
+      "license_notice": "MIT (BiRefNet, Zheng et al.). ONNX export mirrored by onnx-community; review the model card before redistribution."
     }
   ]
 }

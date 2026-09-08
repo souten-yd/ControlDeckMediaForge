@@ -58,10 +58,12 @@ from .asset_brief import (
 )
 from .cutout import (
     FLAT_BACKGROUND_DIRECTIVE,
+    apply_matte,
     cut_out_background,
     flatten_onto_flat_background,
     without_background_clauses,
 )
+from .matting import MATTING_MODEL_ID, MATTING_WEIGHTS, MattingUnavailable, matte_mask
 from .blender_compile import (
     BLENDER_VERSION,
     COMPILER_VERSION,
@@ -1479,9 +1481,27 @@ class JobManager:
         """
         if not self._alpha_required(job):
             return intent
+        if self._can_matte():
+            # 形を推定して抜けるなら、背景を縛る理由が無い。単色背景の指示は
+            # 「風景なし・影なし・地面なし・縁に触れるな」まで含んでおり、
+            # 透過を頼むだけで作れる絵が狭まっていた。呼び出し側が書いた背景は
+            # そのまま通す——抜くのに背景の種類を選ばない。
+            return intent
         # 背景の注文はここで落とす。残したまま単色背景を頼むと、一つの
         # プロンプトが二つの違う背景を要求することになる。
         return f"{without_background_clauses(intent)}\n\n{FLAT_BACKGROUND_DIRECTIVE}"
+
+    def _can_matte(self) -> bool:
+        """形を推定して抜ける構成か。
+
+        生成を頼む前に決まっている必要がある——抜き方によって、worker へ渡す
+        文言が変わるからである。
+        """
+        return (
+            self.image_runtime_python is not None
+            and self.image_runtime_python.is_file()
+            and self._matting_weights() is not None
+        )
 
     # 出せる画素数の上限。取り込みの上限と同じ値を使う（別に持つと片方だけ動く）。
     # ここを超えたものは保存も検証もできないので、作らせてから断るのではなく
@@ -2808,20 +2828,68 @@ class JobManager:
         """
         if not self._alpha_required(job):
             return
-        for output in outputs:
+        for index, output in enumerate(outputs):
             path = contained(job_root, Path(output["path"]))
             try:
-                removed = cut_out_background(path)
+                how = self._cut_out(job, path, job_root, index)
             except OSError:
                 logger.exception("job %s could not cut out %s", job.id, path.name)
                 continue
             logger.info(
                 "job %s %s %s",
                 job.id,
-                "cut the flat background out of" if removed
-                else "left the background of (it is not flat enough to cut)",
+                how or "left the background of (it could not be cut)",
                 path.name,
             )
+
+    def _cut_out(self, job: Job, path: Path, job_root: Path, index: int) -> str:
+        """被写体を抜く。抜けた方法の名前を返す（抜けなければ空）。
+
+        形を推定するほうを先に試す。背景色を当てにしないので、縁に背景色が
+        残らず、平らな背景でなくても抜ける。使えなければクロマキーへ退避する
+        ——重みが未導入の環境でも、これまでどおり抜けるほうが大事である。
+        """
+        mask_path = contained(job_root, job_root / f"matte-{index}.png")
+        try:
+            matte_mask(
+                path,
+                mask_path,
+                runtime_python=self.image_runtime_python,
+                model_path=self._matting_weights(),
+                repository_root=REPOSITORY_ROOT,
+            )
+        except MattingUnavailable as exc:
+            logger.info("job %s falls back to the flat-background cut: %s", job.id, exc)
+        else:
+            if apply_matte(path, mask_path):
+                return "cut the subject out of"
+            logger.info("job %s could not use the estimated matte for %s", job.id, path.name)
+        return "cut the flat background out of" if cut_out_background(path) else ""
+
+    def _matting_weights(self) -> Path | None:
+        """形を推定する重みの場所。未導入なら None。
+
+        カタログを読めない環境（試験や、モデルを持たない構成）でも黙って
+        従来の経路へ落ちる。ここで例外にすると、透過の作れない環境が
+        「抜けない」ではなく「壊れた」に見える。
+        """
+        if self.model_manifest is None or self.hf_home is None:
+            return None
+        try:
+            models = ModelRegistry.load(
+                self.model_manifest,
+                hf_home=self.hf_home,
+                catalog_manifest=self.model_catalog_manifest,
+                model_store_root=self.model_store_root,
+            ).all()
+        except ModelRegistryError:
+            return None
+        for model in models:
+            if model.model_id != MATTING_MODEL_ID or model.local_path is None:
+                continue
+            candidate = Path(model.local_path) / MATTING_WEIGHTS
+            return candidate if candidate.is_file() else None
+        return None
 
     def _validate_output(
         self,

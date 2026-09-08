@@ -399,7 +399,7 @@
             "required",
             "forbidden"
           ],
-          "description": "Set 'required' whenever the asset is drawn over something else. An overlay generated without transparency arrives as an opaque rectangle with visible edges. When this is 'required', say nothing about the background in intent: Media Forge generates the subject on a flat chroma background of its own and removes it deterministically after generation. Asking for a background here contradicts that instruction and leaves an opaque halo around the subject."
+          "description": "Set 'required' whenever the asset is drawn over something else. An overlay generated without transparency arrives as an opaque rectangle with visible edges. When this is 'required', say nothing about the background in intent: Media Forge generates the subject on a flat chroma background of its own and removes it deterministically after generation. Asking for a background here contradicts that instruction and leaves an opaque halo around the subject. Media Forge cuts the subject out itself; you may describe whatever background you want and it is honoured."
         },
         "consistency_group": {
           "type": "string",

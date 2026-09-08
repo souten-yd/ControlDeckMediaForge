@@ -24,6 +24,11 @@ IMAGE_ADAPTERS = frozenset({
     "native.stable-diffusion-cpp-flux2",
 })
 
+# 画像ランタイムの中で走るが、生成の worker とは別の入口を持つもの
+# （worker_packs/image/matte.py）。生成の adapter 表に混ぜると、core と worker
+# の「実装しているもの」の突き合わせが合わなくなる。
+MATTING_ADAPTERS = frozenset({"onnx.matting"})
+
 # 動画 worker（worker_packs/video/worker.py）が実装するもの。
 # native の方は stable-diffusion.cpp の pinned build（sd-cli）を叩く。python の
 # 重い依存を必要とせず、評価で実際に 640x384 の動画を作れている駆動系である。
@@ -35,7 +40,7 @@ VIDEO_ADAPTERS = frozenset({
     "native.wan2.2",
 })
 
-RUNNABLE_ADAPTERS = IMAGE_ADAPTERS | VIDEO_ADAPTERS
+RUNNABLE_ADAPTERS = IMAGE_ADAPTERS | VIDEO_ADAPTERS | MATTING_ADAPTERS
 
 
 def is_runnable(runtime_adapter: str) -> bool:

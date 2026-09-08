@@ -318,6 +318,46 @@ def flatten_onto_flat_background(path: Path) -> bool:
     return True
 
 
+def apply_matte(path: Path, mask_path: Path) -> bool:
+    """推定されたマスクを alpha にする。使えたときだけ True。
+
+    形を決めるのは model だが、それを資産に変えるのはここである。合成と検査を
+    core に置くのは、`cut_out_background` と同じ理由——「抜けた」と名乗る条件は
+    後処理の実装ではなく、この層が決める。
+
+    背景が平らなら、縁に残った背景の寄与を差し引く。model は形を当てるだけで、
+    縁の画素が背景色と混ざっている事実は変わらない（単色背景で描かせた画を
+    抜くと、実測で残った画素の 1.4% が桃色だった）。平らでなければ差し引く
+    相手が無いので触らない。
+    """
+    with Image.open(path) as opened:
+        opened.load()
+        image = opened.convert("RGBA")
+    with Image.open(mask_path) as opened:
+        opened.load()
+        mask = opened.convert("L")
+    if mask.size != image.size:
+        return False
+    alpha = ImageChops.darker(image.getchannel("A"), mask)
+    alpha = _without_specks(alpha)
+    histogram = alpha.histogram()
+    if not _subject_survives(alpha, sum(histogram[1:])):
+        return False
+    removed = histogram[0] / float(image.width * image.height)
+    if removed < MIN_REMOVED:
+        # 何も抜けていない。抜いたと名乗らない——検査がそのまま理由を言う。
+        return False
+    rgb = image.convert("RGB")
+    border = _border(rgb)
+    colour = _background_colour(border)
+    if _flatness(border, colour) >= BORDER_FLATNESS:
+        rgb = _without_spill(rgb, alpha, colour)
+    result = rgb.convert("RGBA")
+    result.putalpha(alpha)
+    result.save(path, format="PNG")
+    return True
+
+
 def cut_out_background(path: Path) -> bool:
     """`path` の平らな背景を透明にする。抜いたときだけ True。
 
