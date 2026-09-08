@@ -209,9 +209,17 @@ OpenAPI and accepts no path.
 
 `POST /api/v1/jobs` accepts [`schemas/job-request.json`](../schemas/job-request.json).
 `image.generate` routes by `image.text_to_image`. `image.edit` uses one source
-`inputs[].asset_id`. Its optional `edit_mode` is `reference` (default),
+`inputs[]`. Its optional `edit_mode` is `reference` (default),
 `variation`, `inpaint`, or `outpaint`. Reference and variation may change the
 whole image; inpaint requires strict editing and an asset mask:
+
+Each entry in `inputs` names either an `asset_id` Media Forge already holds or a
+`grant_id` for a file in the current Control Deck project — the agent obtains one
+from the host's `control_deck.project_input_grant` tool, and Media Forge imports
+the file before the job runs. A path is never accepted. The whole-image modes
+(`reference`, `variation`, `multi_reference`) honour an explicit `width`/`height`
+pair the same way generation does; the modes with their own size invariant
+(strict editing, outpaint, and the repairs) keep deciding for themselves.
 
 G7 adds `video.generate` and `video.edit` without making a model name part of
 the contract. `video.generate` accepts zero to eight input assets: zero routes

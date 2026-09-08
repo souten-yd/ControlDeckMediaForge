@@ -203,7 +203,7 @@ class CreativeCompiler:
                 "選んだシーンとポーズは組み合わせられません。",
                 field="pose",
             )
-        input_ids = available_reference_ids or {item.asset_id for item in request.inputs}
+        input_ids = available_reference_ids or {item.resolved_asset_id for item in request.inputs}
         if any(item.asset_id not in input_ids for item in creative.reference_roles):
             raise CreativeValidationError(
                 "creative_reference_not_in_request",

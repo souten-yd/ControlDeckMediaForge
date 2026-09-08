@@ -275,7 +275,20 @@ class JobManager:
                     await process.wait()
         self._runner = None
 
+    @staticmethod
+    def _require_resolved_inputs(request: JobRequest) -> None:
+        """券のまま走らせない。
+
+        `grant_id` は「この file を読んでよい」という Host の券であって、物では
+        ない。取り込みは入口（agent 経路）で済ませ、ここから先は asset しか
+        流れない。取りこぼしを黙って落とすと、参照が 1 枚足りないまま生成が
+        成功してしまう。
+        """
+        if any(item.asset_id is None for item in request.inputs):
+            raise ValueError("inputs still name a grant; import them before submitting")
+
     def submit(self, request: JobRequest) -> Job:
+        self._require_resolved_inputs(request)
         job = self.store.create_job(request, profile_snapshot=self.resolve_profiles(request))
         self._queue.put_nowait(job.id)
         return job
@@ -289,6 +302,7 @@ class JobManager:
     ) -> Job:
         if self.host_client is None:
             raise RuntimeError("ControlDeck Host client is not configured")
+        self._require_resolved_inputs(request)
         job = self.store.create_job(
             request,
             host_managed=True,
@@ -755,7 +769,7 @@ class JobManager:
             }
             prompt_parts.append(profile_prompt(profile))
         combined_references = list(dict.fromkeys(
-            [item.asset_id for item in request.inputs] + reference_asset_ids
+            [item.resolved_asset_id for item in request.inputs] + reference_asset_ids
         ))
         if len(combined_references) > 4:
             raise ProfileResolutionError(
@@ -836,7 +850,7 @@ class JobManager:
                 if len(job.request.inputs) != 1:
                     raise WorkerFailure("invalid_pack", "3d.project.glb requires exactly one input asset")
                 try:
-                    source = self.store.get_asset(job.request.inputs[0].asset_id)
+                    source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
                 except KeyError as exc:
                     raise WorkerFailure("asset_not_found", "3D source asset was not found") from exc
                 if source.mime_type != "model/gltf-binary":
@@ -860,7 +874,7 @@ class JobManager:
                 entries = parse_m5_pack_entries(job.request.constraints.get("entries"))
             except M5CompanionError as exc:
                 raise WorkerFailure("invalid_pack", str(exc)) from exc
-            requested = [item.asset_id for item in job.request.inputs]
+            requested = [item.resolved_asset_id for item in job.request.inputs]
             mapped = [entry.asset_id for entry in entries]
             if len(set(requested)) != len(requested) or set(requested) != set(mapped):
                 raise WorkerFailure("invalid_pack", "pack entries must map every input asset exactly once")
@@ -896,12 +910,12 @@ class JobManager:
                 "multi-reference edit requires 2..4 inputs; other image.edit modes require exactly one",
             )
         try:
-            source = self.store.get_asset(job.request.inputs[0].asset_id)
+            source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
             source_path = self.store.asset_path(source.id)
         except KeyError as exc:
             raise WorkerFailure("asset_not_found", "source image asset was not found") from exc
         try:
-            references = [self.store.get_asset(item.asset_id) for item in job.request.inputs[1:]]
+            references = [self.store.get_asset(item.resolved_asset_id) for item in job.request.inputs[1:]]
         except KeyError as exc:
             raise WorkerFailure("asset_not_found", "reference image asset was not found") from exc
         if source.mime_type != "image/png" or any(item.mime_type != "image/png" for item in references):
@@ -1114,7 +1128,7 @@ class JobManager:
         await self._update(job.id, reporter, status=JobStatus.RUNNING, phase="validate", progress=0.1)
         root = contained(self.store.work_dir, self.store.work_dir / job.id)
         root.mkdir(mode=0o700)
-        source = self.store.get_asset(job.request.inputs[0].asset_id)
+        source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
         try:
             options = parse_compile_options(job.request.constraints)
         except BlenderCompileError as exc:
@@ -1453,7 +1467,7 @@ class JobManager:
         if scale < 1:
             raise WorkerFailure("capability_unavailable", "この直しモデルは倍率を宣言していません")
         try:
-            source = self.store.get_asset(job.request.inputs[0].asset_id)
+            source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
         except (IndexError, KeyError) as exc:
             raise WorkerFailure("invalid_dimensions", "直す画像がありません") from exc
         if not source.width or not source.height:
@@ -1529,7 +1543,7 @@ class JobManager:
         if cost is None or job.request.constraints.get("edit_mode") not in {"upscale", "deblur"}:
             return measured
         try:
-            source = self.store.get_asset(job.request.inputs[0].asset_id)
+            source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
         except (IndexError, KeyError):
             return measured
         pixels = (source.width or 0) * (source.height or 0)
@@ -1555,7 +1569,7 @@ class JobManager:
         source = None
         if job.request.operation == "image.edit":
             try:
-                source = self.store.get_asset(job.request.inputs[0].asset_id)
+                source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
             except (IndexError, KeyError):
                 pass
         width = job.request.constraints.get("width", source.width if source and source.width else 1024)
@@ -2265,19 +2279,19 @@ class JobManager:
         inputs_dir.mkdir(mode=0o700)
         result: dict[str, Any] = {}
         if job.request.operation == "image.edit":
-            source_id = job.request.inputs[0].asset_id
+            source_id = job.request.inputs[0].resolved_asset_id
             source_destination = contained(inputs_dir, inputs_dir / "source.png")
             shutil.copyfile(self.store.asset_path(source_id), source_destination)
             result["source_path"] = str(source_destination)
         reference_paths: list[str] = []
         for index, reference in enumerate(job.request.inputs[1:], start=1):
             destination = contained(inputs_dir, inputs_dir / f"reference-{index}.png")
-            shutil.copyfile(self.store.asset_path(reference.asset_id), destination)
+            shutil.copyfile(self.store.asset_path(reference.resolved_asset_id), destination)
             reference_paths.append(str(destination))
         if reference_paths:
             result["reference_paths"] = reference_paths
         profile_reference_paths: list[str] = []
-        direct_input_ids = {item.asset_id for item in job.request.inputs}
+        direct_input_ids = {item.resolved_asset_id for item in job.request.inputs}
         for index, asset_id in enumerate(profile_asset_ids, start=1):
             if asset_id in direct_input_ids:
                 continue
@@ -2679,12 +2693,15 @@ class JobManager:
     def _conform_outputs(
         self, job: Job, outputs: list[dict[str, Any]], job_root: Path
     ) -> None:
-        """brief が画面を決めていたら、その画面へ揃える。
+        """要求が画面を決めていたら、その画面へ揃える。
 
-        編集は元画像の画面をそのまま使うので触らない。brief から寸法を決めたのは
-        生成だけであり、`resolved_layout` が残っているのもそのときだけである。
+        生成は brief から、編集は呼び出し側が両辺を名指ししたときだけ画面が
+        決まる。どちらも `resolved_layout` が残っているかどうかで見分けられる
+        ので、ここは記録の有無だけを見る。守る画素があるもの（strict_edit /
+        inpaint / outpaint）と倍率で決まるもの（upscale / deblur / erase）は
+        そもそも記録を残さない。
         """
-        if job.request.operation != "image.generate":
+        if job.request.operation not in {"image.generate", "image.edit"}:
             return
         recorded = job.request.constraints.get("resolved_layout")
         if not isinstance(recorded, dict):
@@ -2978,7 +2995,7 @@ class JobManager:
             raise ValueError("worker returned an unexpected output count")
         model = response["model"]
         reference_hashes = {
-            item.asset_id: self.store.get_asset(item.asset_id).sha256 for item in job.request.inputs
+            item.resolved_asset_id: self.store.get_asset(item.resolved_asset_id).sha256 for item in job.request.inputs
         }
         snapshot = self.store.job_profile_snapshot(job.id)
         for asset_id in snapshot.get("reference_asset_ids", []):
@@ -3048,9 +3065,9 @@ class JobManager:
             asset_id = f"asset_{uuid.uuid4().hex}"
             provenance_id = f"prov_{uuid.uuid4().hex}"
             parent_asset_ids = (
-                [job.request.inputs[0].asset_id]
+                [job.request.inputs[0].resolved_asset_id]
                 if job.request.operation == "image.edit"
-                else [item.asset_id for item in job.request.inputs]
+                else [item.resolved_asset_id for item in job.request.inputs]
             )
             asset = Asset(
                 id=asset_id,

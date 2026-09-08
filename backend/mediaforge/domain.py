@@ -17,8 +17,28 @@ class JobStatus(StrEnum):
 
 
 class AssetInput(BaseModel):
+    """One image this job reads.
+
+    `asset_id` は Media Forge が持っている物、`grant_id` は Host が「この file を
+    読んでよい」と出した券である。券は生成の前に取り込んで asset に変えるので、
+    job が走るときには必ず `asset_id` が入っている（`resolved_asset_id`）。
+    """
+
     model_config = ConfigDict(extra="forbid")
-    asset_id: str = Field(pattern=r"^asset_[0-9a-f]{32}$")
+    asset_id: str | None = Field(default=None, pattern=r"^asset_[0-9a-f]{32}$")
+    grant_id: str | None = Field(default=None, pattern=r"^grant:[A-Za-z0-9._:-]{1,256}$")
+
+    @model_validator(mode="after")
+    def validate_reference(self) -> "AssetInput":
+        if (self.asset_id is None) == (self.grant_id is None):
+            raise ValueError("give exactly one of asset_id or grant_id")
+        return self
+
+    @property
+    def resolved_asset_id(self) -> str:
+        if self.asset_id is None:
+            raise ValueError("this input still names a grant; import it before running the job")
+        return self.asset_id
 
 
 class OutputOptions(BaseModel):
