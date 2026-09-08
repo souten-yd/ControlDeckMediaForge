@@ -18,7 +18,15 @@ from . import __version__
 from .asset_import import MAX_IMPORT_PIXELS
 from .canvas import conform_to_layout
 from .config import REPOSITORY_ROOT
-from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
+from .domain import (
+    WHOLE_IMAGE_EDIT_MODES,
+    Asset,
+    ErrorDetail,
+    Job,
+    JobRequest,
+    JobStatus,
+    Provenance,
+)
 from .evaluator import CreativeEvaluationError, CreativeEvaluator
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.jobs import HostExecution, HostJobReporter
@@ -51,6 +59,7 @@ from .asset_brief import (
 from .cutout import (
     FLAT_BACKGROUND_DIRECTIVE,
     cut_out_background,
+    flatten_onto_flat_background,
     without_background_clauses,
 )
 from .blender_compile import (
@@ -1421,6 +1430,42 @@ class JobManager:
             intent = f"{intent}\n{snapshot['prompt']}"
         return self._directed_intent(job, intent)
 
+    @staticmethod
+    def _redraws_whole_image(job: Job) -> bool:
+        """この job は画を丸ごと描き直すか。
+
+        生成と、守る画素を持たない編集がこれにあたる。守る側（strict_edit /
+        inpaint / outpaint）と、倍率で寸法が決まる直し（upscale / deblur /
+        erase）は自前の不変量を持っているので、生成と同じ後処理は掛けない。
+        """
+        if job.request.operation == "image.generate":
+            return True
+        if job.request.operation != "image.edit":
+            return False
+        if job.request.constraints.get("strict_edit") is True:
+            return False
+        return job.request.constraints.get("edit_mode", "reference") in WHOLE_IMAGE_EDIT_MODES
+
+    def _alpha_required(self, job: Job) -> bool:
+        """用途が透過を求めているか。
+
+        編集では用途を推し量らない。生成は文言から用途を拾うが（呼び出し側は
+        散文でしか書かない）、編集で同じことをすると「歩いている sprite」と
+        書いただけの写真の手直しが、頼まれてもいない背景抜きを受けてしまう。
+        編集で抜くのは、呼び出し側が asset_brief で名指ししたときだけにする。
+        """
+        if not self._redraws_whole_image(job):
+            return False
+        if job.request.operation == "image.edit":
+            try:
+                brief = parse_brief(job.request.constraints.get("asset_brief"))
+            except AssetBriefError:
+                logger.warning("job %s carries an unreadable asset_brief", job.id)
+                return False
+            return effective_alpha_intent(brief) == "required"
+        brief, _resolved = self._brief_context(job)
+        return effective_alpha_intent(brief) == "required"
+
     def _directed_intent(self, job: Job, intent: str) -> str:
         """透過を求められているなら、抜ける背景で描くよう worker への文言だけ足す。
 
@@ -1432,10 +1477,7 @@ class JobManager:
         評価器の判定基準であり資産名の素でもあるので、利用者が書いた文言を
         こちらの都合で書き換えない。
         """
-        if job.request.operation != "image.generate":
-            return intent
-        brief, _resolved = self._brief_context(job)
-        if effective_alpha_intent(brief) != "required":
+        if not self._alpha_required(job):
             return intent
         # 背景の注文はここで落とす。残したまま単色背景を頼むと、一つの
         # プロンプトが二つの違う背景を要求することになる。
@@ -2278,15 +2320,24 @@ class JobManager:
         inputs_dir = contained(job_root, job_root / "inputs")
         inputs_dir.mkdir(mode=0o700)
         result: dict[str, Any] = {}
+        # 透過を求められているなら、参照の透明を頼むのと同じ単色にする。
+        # 透明のまま渡すと model に届くまでに黒へ潰れ、返ってきた画も黒い背景
+        # になる（実機で唐揚げダンジョンの slime.png がそうなった）。参照と
+        # 指示が同じ背景を指せば、後段の背景抜きがそのまま効く。
+        flatten = self._alpha_required(job)
         if job.request.operation == "image.edit":
             source_id = job.request.inputs[0].resolved_asset_id
             source_destination = contained(inputs_dir, inputs_dir / "source.png")
             shutil.copyfile(self.store.asset_path(source_id), source_destination)
+            if flatten:
+                flatten_onto_flat_background(source_destination)
             result["source_path"] = str(source_destination)
         reference_paths: list[str] = []
         for index, reference in enumerate(job.request.inputs[1:], start=1):
             destination = contained(inputs_dir, inputs_dir / f"reference-{index}.png")
             shutil.copyfile(self.store.asset_path(reference.resolved_asset_id), destination)
+            if flatten:
+                flatten_onto_flat_background(destination)
             reference_paths.append(str(destination))
         if reference_paths:
             result["reference_paths"] = reference_paths
@@ -2297,6 +2348,8 @@ class JobManager:
                 continue
             destination = contained(inputs_dir, inputs_dir / f"profile-reference-{index}.png")
             shutil.copyfile(self.store.asset_path(str(asset_id)), destination)
+            if flatten:
+                flatten_onto_flat_background(destination)
             profile_reference_paths.append(str(destination))
         if profile_reference_paths:
             result["profile_reference_paths"] = profile_reference_paths
@@ -2670,18 +2723,34 @@ class JobManager:
             # ingress で弾いているので、ここへ来た不正は記録だけして先へ進める。
             logger.warning("job %s carries an unreadable asset_brief", job.id)
             return []
-        if brief is None:
+        if brief is None and job.request.operation != "image.edit":
+            # 生成は用途を散文でしか書かない呼び出し側が居るので、構造的な語だけ
+            # 決定的に拾う。編集では推し量らない（`_alpha_required` と揃える）
+            # ——推し量ると、頼まれていない透過を検査だけが要求することになる。
             brief = infer_brief_from_intent(job.request.intent)
-        recorded = job.request.constraints.get("resolved_layout")
-        if brief is None or not isinstance(recorded, dict):
+        if brief is None:
             return []
-        resolved = ResolvedLayout(
-            width=int(recorded.get("width", width)),
-            height=int(recorded.get("height", height)),
-            alpha=bool(recorded.get("alpha", False)),
-            source=str(recorded.get("source", "")),
-            aspect_ratio=str(recorded.get("aspect_ratio", "")),
-        )
+        recorded = job.request.constraints.get("resolved_layout")
+        if isinstance(recorded, dict):
+            resolved = ResolvedLayout(
+                width=int(recorded.get("width", width)),
+                height=int(recorded.get("height", height)),
+                alpha=bool(recorded.get("alpha", False)),
+                source=str(recorded.get("source", "")),
+                aspect_ratio=str(recorded.get("aspect_ratio", "")),
+            )
+        elif (
+            job.request.operation == "image.edit"
+            and effective_alpha_intent(brief) == "required"
+        ):
+            # 画面を名指ししていない編集の寸法は元画像から導かれる。比べる相手が
+            # 無いので出来た画面をそのまま置き、用途が求めた透過だけを検べる。
+            resolved = ResolvedLayout(
+                width=width, height=height, alpha=True,
+                source="brief.alpha_intent", aspect_ratio="",
+            )
+        else:
+            return []
         has_alpha = any(
             item.get("validator") == "image.alpha" and item.get("has_transparency") is True
             for item in validation
@@ -2731,13 +2800,13 @@ class JobManager:
         ものを「透過あり」として通すより、`alpha_missing` で理由を名指しする
         ほうが呼び出し側にとって正しい。
 
-        編集は触らない。元画像の透過はその画の性質であって、この job が
-        決めたものではない。
+        画を丸ごと描き直す編集も同じく抜く。参照から描き直したものは新しい画
+        であって、元画像の透過がそのまま残るわけではない（実際、透過を持つ
+        sprite を参照にした編集は真っ黒な背景で返ってきていた）。塗った所を
+        守る編集は触らない——守った画素を後から透明にすれば、守った意味が
+        無くなる。
         """
-        if job.request.operation != "image.generate":
-            return
-        brief, _resolved = self._brief_context(job)
-        if effective_alpha_intent(brief) != "required":
+        if not self._alpha_required(job):
             return
         for output in outputs:
             path = contained(job_root, Path(output["path"]))
