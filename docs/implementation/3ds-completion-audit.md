@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 installed0.28.55実CDN download取消/再開: 正規API cancelで1,671,168Bのpartial/進捗/ETag保持。
+通常repair再送後は同inodeの全archive/hash一致→実Blender probe/ready、
+`mf-repair-resume-installed-0.28.55-20260910`、60.838秒/exit0。47scene/162revision/64hash/registry保持。
+既定4.5.13/Host/MF PID不変、独立比較で正常cache/backup一致・partial/metadata/staging回収。
+wire-level Range採取、process crash/電源断、重複asyncio task取消、今回browserは未検証。
+取消flagによる通常中断/再試行の追加証拠であり、全D/3DS/GA完了にはしない。
+
 2026-09-10 installed0.28.55修復cache改ざん: 正常archiveを退避しcopyだけ1byte反転、
 正規repairはSHA不一致でfailed、不正cache削除/旧runtime・全scene/history保持。
 正常cache復元→通常repair実probe/ready、`mf-repair-tamper-installed-0.28.55-20260910`、25.228秒/exit0。

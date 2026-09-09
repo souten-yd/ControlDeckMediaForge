@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed repair download cancellation/resume
+
+base PR #409 merge778ef9fa92f2609e4278d76d9d18b85e2a29e17b、ux1/3d-installed-repair-resume、PR作成前。
+前turnはinstalled改ざん拒否/正常retry/mergeまで進捗。今回は実CDN download取消→通常repair再開。
+外部 /data1tb/mf-0.28.55-repair-resume.py、mf-repair-resume-installed-0.28.55-20260910、60.838秒/exit0。
+idle/backup後49db32a56f6a461a94f97d5148c8ca22を正規cancel、partial1,671,168B/進捗/ETag/元prefix SHA保持。
+c3cdcf8841b84838a66381a76cdf1390再開は同partial inode33327669→全archive/hash一致→実probe/ready。
+47scene/162revision/64hash/registry保持、旧exe同SHA/inode46146687へ修復、既定4.5.13とHost/MF PID保持。
+独立read-only比較も一致、partial/metadata/staging回収、正常cacheと退避backupは両方保持。
+文書のみ、製品/契約/版数変更なし。基準gate PR #408の1387tests/146.39秒/build/Node5、今回再実行なし。
+既存UX状態変更なし、全D/3DS/GA PARTIAL。ボーン等の機能拡張要件も維持。
+NOT TESTED: wire Range採取、process crash/電源断、重複asyncio task取消、今回browser、全matrix。
+次: scenario D必須条件と既存source/installed証跡を一覧照合し、未証明の条件だけを次の受入に選ぶ。
+再開: git fetch origin; git status --short --branch; statusと3ds-completion-auditのD欄を読む。
+具体的外部blockerなし。外部script再実行はしない。必要な実操作は毎回idle/実体を再照合する。
+
 ## 2026-09-10 installed repair tamper acceptance
 
 base PR #408 merge d01cacc1bfc8ce1672826dab207208faff110529、ux1/3d-installed-repair-tamper、PR作成前。
