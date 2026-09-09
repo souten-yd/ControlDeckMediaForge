@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 installed0.28.55旧4.5.9 GUI中の新版4.5.13 update失敗→正常retryを追加。
+`mf-update-failure-installed-0.28.55-20260910`: 候補probeのみpidfd SIGTERM、旧GUI/PID/全47scene/162revision/688hash保持。
+正常update後の既定4.5.13でも同GUI4.5.9固定。元診断は最終registry配列順bytes assertでexit1、
+独立auditは全登録identity/履歴/hash/プロセス回収を確認しexit0。両結果を区別して保持。
+D-01/02のinstalled旧→新版差分は補完したが、全D/3DS/GA完了にはしない。
+
 2026-09-10 scenario Dの[必須条件別対応表](3ds-runtime-evidence.md)を追加。
 観測JSONを再読し、source/package/installedの範囲を分離。次の不足はinstalled旧→新版updateと
 候補probe失敗→retry。逆方向exact installを同じ証拠にしない。

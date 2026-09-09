@@ -3,6 +3,25 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed newer update failure/retry
+
+base PR #411 merge13f98cfe5b2a3560332b3bf0b5555aa34d3e1767、ux1/3d-installed-newer-update、PR作成前。
+前turnはD証拠監査/merge。別image Job自然成功後idle/45専用scene参照/cache/SQLite backup確認。
+外部 /data1tb/mf-update-failure-0.28.55.py、mf-update-failure-installed-0.28.55-20260910。
+一時4.5.9既定→履歴確認付き4.5.13削除→旧4.5.9実RFB GUI→update候補probeのみpidfd SIGTERM。
+5dd93be5c853449c9088a2b09441efb4 failed→83518b1544c646c9aaec10e969666808 ready/既定4.5.13。
+同GUI/PID1167503/旧exe inode46146687、47scene/162revision/688hash保持、更新成功stage162.906秒。
+元診断は最終registry bytes assertでexit1/163.233秒login回収。配列順のみ変化、最上位passed=false保持。
+独立 /data1tb/mf-update-failure-0.28.55-audit.py はexit0。全登録identity/既定/全履歴/hash、PID回収を検証。
+independent-audit.jsonに元exit1とbytes不一致も明記。元診断を成功へ書換えず再実行しない。
+専用GUI bea1375825134eb7ba2410c12d2e0a24 stopped、候補1168098/GUI PID消失、staging空。
+4.5.13復元済み、registryは末尾再登録順、Host1141433/MF1152101不変、healthy。
+文書のみ、基準gate PR #408の1387tests/146.39秒/build/Node5、今回全test/buildなし。
+既存UX/全D/3DS/GA PARTIAL。NOT TESTED: 更新中手編集/自然probe故障/全matrix。
+次: Eの自然120秒超制作と既存refresh証跡を照合し、人工queue待機ではない専用制作Jobを受入する。
+再開: git fetch origin; git status --short --branch; completion-auditのE欄と実Job状態を読む。
+具体的外部blockerなし。他Job/Host/PCを止めず、実機稼働前にidle/所有権/予算を確認。
+
 ## 2026-09-10 scenario D evidence audit
 
 base PR #410 merge5eea4845e731bd5fc6dce9f1b83c78afe700ecfb、ux1/3d-runtime-evidence-audit、PR作成前。
