@@ -1,5 +1,30 @@
 # Media Forge implementation status
 
+## 2026-09-10 scenario D requirement-to-evidence audit
+
+base PR #410 merge5eea4845e731bd5fc6dce9f1b83c78afe700ecfb、ux1/3d-runtime-evidence-audit。
+前turnはinstalled実CDN取消再開/mergeまで進捗。本turnはread-onlyの原証跡再照合。
+g8計画§4 Dの文からD-01〜12を導出し、3ds-runtime-evidence.mdへ対応表を追加。
+probe failure、parallel runtime、history removal/re-edit、GUI/Job stale確認、reverse受付、
+confirmation restart、external、capacity、tamper、resumeのobservations.jsonを実際に読んだ。
+最初の集計はdictをlistと仮定してAttributeErrorで停止。events/checks/直接fieldを区別して再読した。
+read-only失敗であり実operationを再起動していない。
+
+実データ上、source4.5.9→4.5.13はaction=update、失敗→retry後も同4.5.9 session ready。
+installedの並行受入は逆向き4.5.13 GUI中の4.5.9 exact installで、旧→新版updateではない。
+次の実機sliceをこの差分に固定した。確認済みの改ざん/通常取消を再び未実装へ戻さない。
+history再導入のログはstarting応答を格納しているため、それ単独をready/再編集の証拠にしない。
+同sceneでの後続RFB複製/保存4→8meshesの証拠へ明示的に接続した。
+external package JSONはsource mode文字列を保持しており、起動同定/inventoryは当時statusにも依存。
+その限界、source容量fixture/再起動gate、installedとの差分を表へ残す。
+
+文書のみ、runtime/cache/制作物/Host/PC変更なし。全test/build・全asset再hash・過去全操作の再実行なし。
+対応表の17観測JSON読取、D行12件、相対文書リンク存在、git diff --checkを確認。
+基準gateは変更のないPR #408の1387 tests/146.39秒/build/Node5。全D/3DS/GA PARTIAL。
+次はinstalled旧A=4.5.9 GUI中のB=4.5.13 update失敗→正常retryを受入する。
+B導入済みの短絡probeだけで並行導入成功にせず、準備の影響・全idle・履歴pin・正規追加確認・
+同版cache/backupを確認する。保護拒否や他Jobを迂回しない。
+
 ## 2026-09-10 installed real-CDN repair cancellation and resume
 
 base PR #409 merge778ef9fa92f2609e4278d76d9d18b85e2a29e17b、ux1/3d-installed-repair-resume。
