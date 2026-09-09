@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 lifecycle追加: installed0.28.49のready GUIで未保存手編集後にMediaForgeだけを
+正常再起動。Blender3 PID/作業file bytesは保持し、同sessionで実描画/追加編集/保存を確認。
+第7→8版、2→8 meshes、実GLB8 nodes、旧14ファイルhash不変、終了後process回収。
+`mf-core-restart-edit-installed-20260910-r2`。HTTP healthy0.986秒は画面復帰時間ではない。
+接続中既定idle1800秒や保存途中crash等の残件へ、この証拠を広げない。
+
 2026-09-10追加: installed署名0.28.49で実OpenCodeの失敗診断→入力修正→新edit成功を確認。
 専用fixtureの不在object ID失敗に対し、元Job/失敗Job/snapshotを取得後、正しい対象を
 [2,0,0]へ移す一操作を実行。144.116秒/5 tools/exit0、実GLB座標・第2版・旧source保持を照合。

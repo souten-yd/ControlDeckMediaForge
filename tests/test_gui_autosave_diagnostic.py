@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import stat
+import sqlite3
 from types import ModuleType
 
 import pytest
@@ -63,3 +64,25 @@ def test_fault_rejects_symlink_and_foreign_root(tmp_path: Path) -> None:
 def test_expiry_identity_validation_precedes_host_import(session_id: str, user_id: int) -> None:
     with pytest.raises(AssertionError):
         diagnostic().expire_owned_gateway(session_id, user_id)
+
+
+@pytest.mark.parametrize("case", ["invalid_id", "other_gui", "no_owned_gui", "active_job"])
+def test_core_restart_refuses_unscoped_or_busy_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str) -> None:
+    module = diagnostic()
+    monkeypatch.setattr(module, "DATA", tmp_path)
+    session = "blendersession_" + "a" * 32
+    with sqlite3.connect(tmp_path / "media-forge.sqlite3") as db:
+        db.execute("create table blender_web_sessions(id text,state text)")
+        db.execute("create table jobs(status text)")
+        if case != "no_owned_gui":
+            db.execute("insert into blender_web_sessions values (?, 'ready')", (session,))
+        if case == "other_gui":
+            db.execute("insert into blender_web_sessions values ('other','ready')")
+        if case == "active_job":
+            db.execute("insert into jobs values ('running')")
+    def forbidden(*args: object, **kwargs: object) -> None:
+        pytest.fail("No service command may run before the idle/ownership gate")
+    monkeypatch.setattr(module.subprocess, "check_output", forbidden)
+    monkeypatch.setattr(module.subprocess, "run", forbidden)
+    with pytest.raises(AssertionError):
+        module.restart_installed_core("../foreign" if case == "invalid_id" else session)
