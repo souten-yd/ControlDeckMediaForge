@@ -82,6 +82,9 @@ def run(args: argparse.Namespace) -> None:
     if args.fixture == "robot":
         from robot_fixture import recipe
         operations = recipe()
+    elif args.fixture == "rig":
+        from rig_fixture import recipe
+        operations = recipe()
     create = SceneCreateRequest.model_validate({"name":"Game " + args.fixture + " acceptance","recipe":{"operations":operations}})
     evidence: dict[str, Any] = {"mode":"source_domain_real_blender", "runtime":runtime.version}
     began = time.monotonic()
@@ -103,15 +106,30 @@ def run(args: argparse.Namespace) -> None:
         completed = subprocess.run([str(runtime.executable), "--background", "--factory-startup", "--disable-autoexec",
             "--python-exit-code", "1",
             "--python", str(Path(__file__).resolve()), "--", "--inspect", "--source", str(source),
-            "--evidence-dir", str(args.evidence_dir), "--fixture", args.fixture],
+            "--evidence-dir", str(args.evidence_dir), "--fixture", args.fixture,
+            "--glb", str(store.asset_path(created["revision"]["preview_asset_id"]))],
             capture_output=True, text=True, timeout=180, check=False)
         assert completed.returncode == 0, (completed.stdout + completed.stderr)[-4000:]
         evidence["inspection"] = json.loads((args.evidence_dir / "inspection.json").read_text())
+        edit_operation = {"type":"transform.set","object_id":"copy" if args.fixture == "gate" else "forearm",
+                          "location":[1,2,0] if args.fixture == "gate" else [0.46,-0.025,0.91]}
+        if args.fixture == "rig":
+            edit_operation = {"type":"pose.set", "object_id":"rig", "bones":[
+                {"bone_id":"forearm", "rotation_degrees":[60,0,0]}]}
         edit = SceneEditRequest.model_validate({"scene_id": created["scene"]["id"],
             "base_revision_id":created["revision"]["id"], "recipe":{"operations":[
-                {"type":"transform.set","object_id":"copy" if args.fixture == "gate" else "forearm",
-                 "location":[1,2,0] if args.fixture == "gate" else [0.46,-0.025,0.91]}]}})
+                edit_operation]}})
         evidence["edited"] = asyncio.run(apply(edit))
+        if args.fixture == "rig":
+            revision = evidence["edited"]["revision"]
+            checked = subprocess.run([str(runtime.executable), "--background", "--factory-startup", "--disable-autoexec",
+                "--python-exit-code", "1", "--python", str(Path(__file__).resolve()), "--", "--inspect",
+                "--source", str(store.asset_path(revision["source_asset_id"])),
+                "--glb", str(store.asset_path(revision["preview_asset_id"])),
+                "--evidence-dir", str(args.evidence_dir), "--fixture", "rig", "--posed"],
+                capture_output=True, text=True, timeout=60)
+            assert checked.returncode == 0, (checked.stdout+checked.stderr)[-4000:]
+            evidence["posed_inspection"] = json.loads((args.evidence_dir / "posed-inspection.json").read_text())
         assert hashlib.sha256(source.read_bytes()).hexdigest() == old_hash
         for result in (created, evidence["edited"]):
             for aid in result["asset_ids"]:
@@ -137,11 +155,16 @@ if __name__ == "__main__":
     parser.add_argument("--runtime-id",default="blender-4.5.13-linux-x64")
     parser.add_argument("--inspect",action="store_true")
     parser.add_argument("--source",type=Path)
-    parser.add_argument("--fixture",choices=("gate", "robot"),default="gate")
+    parser.add_argument("--fixture",choices=("gate", "robot", "rig"),default="gate")
+    parser.add_argument("--glb",type=Path)
+    parser.add_argument("--posed",action="store_true")
     args = parser.parse_args(values)
     if args.inspect:
-        if args.fixture == "robot":
-            sys.path.insert(0, str(Path(__file__).resolve().parent))
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        if args.fixture == "rig":
+            from rig_fixture import inspect_blend as inspect_rig
+            inspect_rig(args.source, args.glb, args.evidence_dir, posed=args.posed)
+        elif args.fixture == "robot":
             from robot_fixture import inspect_blend as inspect_robot
             inspect_robot(args.source,args.evidence_dir / "inspection.json")
         else:

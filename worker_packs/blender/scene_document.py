@@ -98,11 +98,16 @@ def main() -> None:
         filepath=str(Path.cwd() / args.source), load_ui=False, use_scripts=False
     )
     facts = inspect_scene()
+    armatures = [obj for obj in bpy.data.objects if obj.type == "ARMATURE"]
+    typed_static_pose = bool(armatures) and not bpy.data.actions and all(
+        obj.get("media_forge_rig_schema") == 1 and obj.animation_data is None for obj in armatures
+    )
     bpy.ops.export_scene.gltf(
         filepath=str(Path.cwd() / args.preview),
         export_format="GLB",
         export_apply=True,
         export_animations=True,
+        export_rest_position_armature=not typed_static_pose,
     )
     result = {
         "schema_version": "media-forge.blender-scene-validation@1",

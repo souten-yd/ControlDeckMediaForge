@@ -1,5 +1,46 @@
 {
   "$defs": {
+    "ArmatureCreate": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "armature.create",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "bones": {
+          "items": {
+            "$ref": "#/$defs/BoneDefinition"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Bones",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "name",
+        "bones"
+      ],
+      "title": "ArmatureCreate",
+      "type": "object"
+    },
     "BevelModifier": {
       "additionalProperties": false,
       "description": "Add a bounded non-destructive bevel modifier to a mesh object.",
@@ -37,6 +78,127 @@
         "width"
       ],
       "title": "BevelModifier",
+      "type": "object"
+    },
+    "BoneDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "bone_id": {
+          "maxLength": 48,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Bone Id",
+          "type": "string"
+        },
+        "head": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Head",
+          "type": "array"
+        },
+        "tail": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Tail",
+          "type": "array"
+        },
+        "parent_bone_id": {
+          "anyOf": [
+            {
+              "maxLength": 48,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9._-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Bone Id"
+        }
+      },
+      "required": [
+        "bone_id",
+        "head",
+        "tail"
+      ],
+      "title": "BoneDefinition",
+      "type": "object"
+    },
+    "BonePose": {
+      "additionalProperties": false,
+      "properties": {
+        "bone_id": {
+          "maxLength": 48,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Bone Id",
+          "type": "string"
+        },
+        "rotation_degrees": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Degrees",
+          "type": "array"
+        }
+      },
+      "required": [
+        "bone_id",
+        "rotation_degrees"
+      ],
+      "title": "BonePose",
       "type": "object"
     },
     "CameraAdd": {
@@ -504,6 +666,40 @@
       "title": "ObjectDuplicate",
       "type": "object"
     },
+    "PoseSet": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "pose.set",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "bones": {
+          "items": {
+            "$ref": "#/$defs/BonePose"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Bones",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "bones"
+      ],
+      "title": "PoseSet",
+      "type": "object"
+    },
     "PrimitiveAdd": {
       "additionalProperties": false,
       "description": "Add one bounded mesh primitive; dimensions and location are in meters.",
@@ -634,6 +830,32 @@
       "title": "PrimitiveAdd",
       "type": "object"
     },
+    "RigidBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "mesh_object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Mesh Object Id",
+          "type": "string"
+        },
+        "bone_id": {
+          "maxLength": 48,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Bone Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mesh_object_id",
+        "bone_id"
+      ],
+      "title": "RigidBinding",
+      "type": "object"
+    },
     "SceneRecipe": {
       "additionalProperties": false,
       "description": "Operations applied sequentially by a fixed worker; scripts and operator names are forbidden.",
@@ -648,13 +870,16 @@
           "items": {
             "discriminator": {
               "mapping": {
+                "armature.create": "#/$defs/ArmatureCreate",
                 "camera.add": "#/$defs/CameraAdd",
                 "light.add": "#/$defs/LightAdd",
                 "material.set": "#/$defs/MaterialSet",
                 "modifier.bevel": "#/$defs/BevelModifier",
                 "modifier.mirror": "#/$defs/MirrorModifier",
                 "object.duplicate": "#/$defs/ObjectDuplicate",
+                "pose.set": "#/$defs/PoseSet",
                 "primitive.add": "#/$defs/PrimitiveAdd",
+                "skin.bind": "#/$defs/SkinBind",
                 "transform.set": "#/$defs/TransformSet",
                 "uv.smart_project": "#/$defs/UvSmartProject"
               },
@@ -687,6 +912,15 @@
               },
               {
                 "$ref": "#/$defs/MirrorModifier"
+              },
+              {
+                "$ref": "#/$defs/ArmatureCreate"
+              },
+              {
+                "$ref": "#/$defs/SkinBind"
+              },
+              {
+                "$ref": "#/$defs/PoseSet"
               }
             ]
           },
@@ -700,6 +934,41 @@
         "operations"
       ],
       "title": "SceneRecipe",
+      "type": "object"
+    },
+    "SkinBind": {
+      "additionalProperties": false,
+      "description": "Bind each unbound mesh rigidly to one bone, preserving rest world geometry.",
+      "properties": {
+        "type": {
+          "const": "skin.bind",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "bindings": {
+          "items": {
+            "$ref": "#/$defs/RigidBinding"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Bindings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "bindings"
+      ],
+      "title": "SkinBind",
       "type": "object"
     },
     "TransformSet": {

@@ -1,5 +1,44 @@
 # Media Forge implementation status
 
+## 2026-09-09 typed bone / rigid skin / static pose foundation
+
+利用者が明示したBlenderボーン/動きアニメーションの最初のproduct slice。
+armature.create / skin.bind / pose.setをrecipe@1へ加法追加し、
+公開create/edit/workflow schemaとdocs/apiを同期。operation discoveryは同じunionから12操作を導出。
+骨IDはASCII48文字、ordered parents/重複・零長・非有限を拒否、1 rig128/scene256 bones。
+skinは新規独立mesh全vertexを1 boneへweight1、最大64 mesh/1M vertices。
+既存parent/weights/constraint/animation/shape-key/shared data/unsupported modifierを上書きしない。
+poseは既知骨のrest-local XYZ回転±180度だけを置換し、未指定骨は保持。
+typed marker付きrigのみ、action/他種rig混在は拒否。これはclipや有機weightsの完成ではない。
+
+実診断scripts/3ds_game_static_e2e.py --fixture rigでsource domain→既存worker→
+独立scene/GLB検証→immutable Asset/revisionを使用。scripts/rig_fixture.pyは
+25部品robotを11 bonesへbindし、rest形状不変→public pose.setで右前腕60度→
+実world頂点の移動/胴体不変→GLB再importでskin/weight/前腕pose boundsを検査する。
+初回/R2はGLB importerが作るIcosphere（bone.custom_shapeで実参照）を
+制作meshへ誤算入して失敗。bone表示helperだけを区別して25 meshを確認。
+R3はskin再importまでPASSしたが、R4でpose bounds比較を加えるとrestへ戻る欠陥を実検出。
+
+固定Blender runtimeのio_scene_gltf2ソースでexport_rest_position_armature既定trueを確認。
+scene_document.pyは全rigがtyped/staticでactionsなしの場合だけfalseを指定し、
+current poseをGLBのrest poseとして出す。元blendのbone restは不変。
+既存untyped/animated入力のexport設定は変えない。clipを保持したexportの検証は後続。
+この修正後、/data1tb/mf-rig-source-20260909-r5（4.5.13）1.716秒、
+/data1tb/mf-rig-source-4.5.9-20260909（4.5.9）2.202秒、両方PASS。
+restでskin無効とのvertex差<1e-5m、前腕最大移動0.3894653035m、
+未操作torso差<1e-6m、再import skin25 mesh/11 bones・weights合計1・
+前腕bounds差<1e-4m、旧source/executable hash不変、Asset hash/provenanceを検証。
+
+r5/posed-renderへCPU Cycles3視点を生成し斜め像を実閲覧。
+pose後も24接合pairのmesh edge/triangle ray交点を確認、離したhead negativeもPASS。
+斜めPNG470815 B/SHA3638f6efaf57ba3b339f55f51cb08022e57f9395d4d4d3ab574eb653a3827c85。
+全 `./mf.sh test`:1244 passed/既知warning2/138.86秒、exit0。
+focused rig/static/contracts47件とfrontend build:viewer/diff checkも成功、viewer生成物差分なし。
+新操作は未リリース・未installed/MCP受入。Host/global設定/既存Blenderへ変更しない。
+NOT TESTED: motion clips/待機歩行、distributed weights/IK/FK、engine再生、installed/OpenCode、
+ユーザーの外観承認、全GUI操作との組合せ、original3DS/GA全体完了。
+次はこのsliceの署名導入/実MCP確認と、bounded keyframe/clipの後続実装。
+
 ## 2026-09-09 robot contact and multiview source acceptance
 
 利用者の剣の隙間指摘に対応し、scripts/robot_fixture.pyで既存公開recipeだけの

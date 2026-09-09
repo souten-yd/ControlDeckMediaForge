@@ -517,6 +517,23 @@ most 64 sequential operations from a closed vocabulary: primitive creation,
 meter-based dimensions/transform, stable object IDs, bounded bevel, Principled
 material, smart-project UV, light, camera, independent mesh duplication
 (`object.duplicate`) and a bounded non-destructive mirror (`modifier.mirror`).
+The vocabulary also includes `armature.create`, rigid `skin.bind`, and `pose.set`.
+Armatures have identity transforms, 1..128 named bones (ASCII IDs up to 48 chars),
+ordered parent references, finite rest endpoints, and minimum length 0.001m;
+creating a rig enforces 256 total scene bones. Skin binding assigns all vertices
+of each listed independent mesh to one bone at weight 1, preserving rest world
+geometry. It rejects existing parents, weights, constraints, animation, shape
+keys, and unsupported modifiers; at most 64 meshes / 1,000,000 input vertices
+per bind. Binding requires a rest pose. Pose setting replaces rest-local XYZ
+rotations in degrees (-180..180), for 1..128 distinct existing bones.
+Bind/pose currently target only typed Media Forge armatures, without shared
+armature data, animation, or constraints. Unspecified bones are unchanged.
+These operations do not yet create animation clips or distributed vertex weights.
+`pose.set` rejects scenes containing actions or other rig kinds. For static scenes
+consisting only of typed rigs, GLB export uses the current pose as its rest pose
+so the exported preview retains that pose. The source blend retains its original
+bone rest data. Existing untyped/animated scenes retain their export setting;
+this static-pose behavior is not animation-clip support.
 Available `3d.scene_recipe.supported_operations` is derived from the same
 request vocabulary. Check the current schema/capability before sending a new
 operation to an older deployment; existing operations retain their meaning.

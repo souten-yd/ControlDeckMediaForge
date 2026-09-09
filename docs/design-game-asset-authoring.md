@@ -99,6 +99,20 @@ GA-1 curve/mesh編集とGA-2 sculpt/retopologyの受入へ含める。球の寄�
 
 ## 5. 契約・安全・リソース
 
+### GA-4 first typed slice
+
+armature.createでidentity transformの骨格を作成する。親は同一操作内で先に定義したboneに限定、
+1回128 bones/scene合計256 bones、有限head/tail、零長と重複IDを拒否する。
+skin.bindはまずロボット等の剛体部品を対象に、mesh全vertexを指定boneへweight=1で割り当てる。
+既存parent/constraints/weights/armature/shape-key/animationがあるmeshは上書きせず拒否する。
+pose.setは既知boneのrest-local XYZ回転を置換する。未指定boneを勝手にresetしない。
+このsliceはポーズの生成であり、時間軸のaction/clipや有機モデルの分布weightsは次slice。
+実bone階層・bind前後のrest形状不変・poseによるworld頂点移動・旧revision不変・
+GLB skin/joints/weights再importを検証する。既存GUI骨格はtyped上限/対応条件に合う場合だけ操作する。
+現段階のGLBは、全rigがtypedかつactionsなしの場合だけcurrent poseをexport restへ使用する。
+元blendのbone restは変更しない。pose.setはaction/他種rigとの混在を拒否する。
+既存GUI/animated入力の設定は保持し、clip対応時のrest/pose/animation選択は別受入する。
+
 - schemaはschemas/、docs/apiと同期。追加operationと旧fixtureを両方検証する。
 - 依存objectはstable ID、選択はbounded selector。任意bpy path/operator文字列/評価式を受けない。
 - 選択集合、vertices/triangles、modifier増幅、texture総画素、bones/weights、frames/clips、
