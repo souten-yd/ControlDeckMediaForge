@@ -1,5 +1,56 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed history-preserving 4.5.9 removal and exact reinstall
+
+前goal turnは0.28.52公開・導入・個別animation受入/PR #387 mergeまで進捗。
+origin/main c055acd085229f3aedbba5c96d078489a599b07bと引き継ぎを確認。
+ux1/3d-installed-history-reinstallで実測記録を追加。製品code/版数変更なし。
+
+read-only前提調査: managed4.5.9 inactive、managed4.5.13 active、legacy4.5.9は別登録。
+旧版参照はuser:16のacceptance-sword13版と同Recovery1版のみ（2 scenes/14 revisions）。
+最初は別生成Jobがrunningだったため変更せず、後に自然終了/Jobs0を確認した。
+既存3ds_settings_protection_installed_e2e.pyをHost診断venv/既存CONFIG/PYTHONPATH/DISPLAYで実行:
+--expected-version 0.28.52 --require-readable-layout --require-touch-targets
+--require-history-confirmation --locale ja --initial-width 320
+--evidence-dir /data1tb/mf-settings-preflight-installed-0.28.52-20260910。
+exit0/Origin:null/overlayなし、確認既定off・再openでoff、未確認disabled、確認時enabled、
+active4.5.13は確認でも削除不可。runtime status/journal不変。320px/44px controls/横overflowなし。
+旧版previewはlive0/project2、exact_reinstall4.5.9、reclaimable1,168,898,465 B。
+
+cacheのblender-4.5.9-linux-x64.tar.xzは377,929,956 B、
+SHAdcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3dで固定catalog一致。
+/data1tb/mf-history-installed-0.28.52.pyをapply_patchで用意し同Host診断環境で実行。
+初回はpreviewの非同期応答を待たずNone参照でexit1。削除要求前であり環境変更なし。
+dialog/preview待ちを加え、別証跡 /data1tb/mf-history-installed-0.28.52-20260910-r2で再実行。
+user:16と旧版参照scene集合を固定検査。個別一時loginだけ作成しfinallyでrevoke、password変更なし。
+旧版のrealpath/所有権/非active/live0/project2/cache identityを確認してから、
+日本語320px Settingsの履歴確認checkboxと削除buttonを実pointer操作。
+
+実測: 15.431秒でmanaged旧版directory消滅、2 scene全投影/既存ファイルhash保持。
+不在区間に13版の元sceneからバックアップ21,464,415 Bを実download。
+manifestのdocument/revisions一致、全28 entriesのsize/SHA照合。
+GLBビューワーも表示し、保存PNGを画像検査（236 triangles/4 materials/animation0）。
+35.257秒で不在区間のbackup/GLB確認を終了し、Settingsの「この版を導入」を実click。
+59.953秒で同sceneを旧runtime ID/4.5.9のGUI readyへ再開、続けて停止。
+再開/停止は正規blender.sessions API。RFB手入力/追加編集まで確認したとはしない。
+全診断59.982秒/exit0/passed=true、page errors0。エラー時は旧版が不在なら
+同exact installで復元するfinallyを持つが、今回その復旧分岐は未使用。
+
+独立再監査: 14版/2 sceneに関わる60ファイルのhash一致。
+session blendersession_9caa087fd0c94883b6c7487a8351f63dはstopped、
+unit not-found/inactive/MainPID0、active GUI0。
+registryのruntime identity/ownership/archive hash集合とactive4.5.13は更新前と一致。
+再登録により配列順だけ変わったのでregistry bytes不変とは書かない。legacy登録は不変。
+MF1054020/Host667000はactive/PID不変。service restart、他Job取消、外部Blender/制作物削除なし。
+約1.17GBの旧実行環境を一時削除・同版再導入したことを利用者へ通知済み。
+
+本sliceは実機受入と文書のみ。製品gateはrelease準備1345 tests/138.50秒を参照し、
+本turnで再実行したとはしない。scenario Dの「停止済み履歴参照版を削除→同版再導入」
+と不在中のGLB/backupをinstalledで補完した。全D/3DS/GAはPARTIALを維持する。
+NOT TESTED: 再導入後のRFB編集、英語での本削除、同時受付との削除競合、
+稼働A中のB実導入/probe失敗、改ざん/容量不足/中断のinstalled全matrix。
+次は同じ旧版sceneの再導入後RFB編集を確認し、残るDの各条件を証跡へ対応付ける。
+
 ## 2026-09-10 v0.28.52 signed / installed / opaque animation acceptance
 
 PR #386 MERGEDのb5e5b77a418d67d64b87f7d530839225c3df9b00をexact checkout/tagへ固定。
