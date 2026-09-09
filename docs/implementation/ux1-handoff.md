@@ -3,6 +3,50 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.52 signed / installed / opaque animation acceptance
+
+PR #386 MERGEDのb5e5b77a418d67d64b87f7d530839225c3df9b00をexact checkout/tagへ固定。
+checkout /data1tb/ControlDeckMediaForge-release-0.28.52、tag v0.28.52。
+既存scripts/build_release_bundle.pyとbundle-build venv/PyInstaller6.22.0/Python3.12.3でbuild。
+/data1tb/mf-0.28.52-build-20260910、artifact31,534,370 B、
+SHAff5d5fe47a9131efd4eacbc1b9d75b103269698143fa97b8987c747c9568b14f。
+/data1tb/mf-0.28.52-audit.pyでCArchive202 entries、禁止名なし、certifi PEM一致、
+worker2/schema3/frontend6のexact bytes、既存failure reader/RFB observer/monitor修正を照合。
+packaged doctor:ok/version0.28.52/packaged=true。
+展開先 /data1tb/mf-0.28.52-package-dqxjge1n、build/verification.jsonに記録。
+
+既存発行者鍵で署名・自己検証し正規公開:
+https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.28.52
+公開4ファイルを /data1tb/mf-0.28.52-public-20260910へ再取得。
+Host診断venv/既存CONTROL_DECK_CONFIG/PYTHONPATHで
+/data1tb/mf-0.28.52-install.pyを実行。public bytes一致/実Host trusted publisher検証、
+idle→SQLite backup→再確認→標準install。10.177秒でinstalled0.28.52/実HTTP healthy。
+DB全table fingerprint/Blender登録bytes不変、Host667000不変、MF1054020。
+backup /data1tb/mf-0.28.52-update-oww7wqjq/observations.json。
+標準保持規則で0.28.50実行bundleのみ整理、0.28.51/.52保持。制作物/runtime削除なし。
+旧bundleは公開releaseから再取得可能。利用者へ通知済み。
+
+installed opaque browser:
+CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml
+PYTHONPATH=/data1tb/ControlDeck/app/backend DISPLAY=:0
+XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3
+/data1tb/ControlDeck/app/.venv/bin/python /data1tb/mf-0.28.52-animation-installed.py
+専用mf-e2e sessionを作成しfinallyで同sessionだけrevoke。overlayなし/Origin:null。
+既存scene_509b6ee0b688492997b86b535d70ec9aのcurrent GLBをLibrary/3D/cardから開いた。
+asset_4d359d6ce7da4684a0156750e7d146e5、SHA
+b36b26954162e40ced1a0dc99de958a4b76218f635324055244d35ba615ea61d。
+/data1tb/mf-animation-installed-0.28.52-20260910/observations.json、exit0/passed=true。
+arm_swing1秒とidle2秒を単独選択/0.5倍速再生→pause。0.5167/0.9084秒で
+操作欄を除いたモデル領域の変化36,408/6,247 pixels、pause後の時刻不変を確認。
+先頭戻し、英語label、parent320pxで選択/2倍速/overflowなし、閉じる/action回収、
+元scene投影不変/page errors0。元GLB hashも別read-onlyで照合。
+本変更のsource-only制限をこの範囲で解消する。見た目の芸術的品質や歩行の証拠にはしない。
+
+準備全1345 tests/138.50秒、追加Node5 tests/viewer build成功を参照。
+本記録sliceは文書のみ。全3DS/GAはPARTIAL、engine/有機weight/IK等はNOT TESTED。
+次は完了監査に残るscenario Dの設定ライフサイクルをinstalledで補完するため、
+対象runtimeの所有権・同版再導入可能性・専用scene pinと既存証跡を再確認する。
+
 ## 2026-09-10 v0.28.52 release preparation
 
 前goal turnは個別animation previewのPR #385通常mergeまで進捗。
