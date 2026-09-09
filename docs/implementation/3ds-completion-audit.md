@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 scenario D再編集追加: 同じacceptance-swordを再導入済み4.5.9で実RFB編集・通常保存。
+`mf-reinstalled-edit-installed-0.28.52-20260910`、66.978秒passed/67.040秒revoke/exit0。
+第13→14版、mesh4→8/triangles236→472、独立GLB8 mesh nodes/1,761,820 B。
+旧2 scenes/14 revisions/60files保持、専用GUI終端/unit回収。PNGから複製の見た目は未確認。
+以下のAPI起動のみの不足をこの入力/保存/構造検査で補完。並行更新/probe失敗等は依然未完了。
+
 2026-09-10 scenario D追加: installed署名0.28.52/日本語320px Settingsで、
 inactive managed4.5.9を履歴確認付きで実削除し、同archiveから同版を再導入。
 不在中にGLB表示/13版backup実download、28 entriesのsize/SHA照合。
