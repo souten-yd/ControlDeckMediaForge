@@ -1,5 +1,59 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.57 signed release and installed update
+
+準備PR #417 merge/tag567bf2ebea44cd83bb3484bf10f967bfa60118a7。
+exact checkout /data1tb/ControlDeckMediaForge-release-0.28.57で既存build_release_bundle.pyを実行。
+PyInstaller6.22.0/Python3.12.3、build /data1tb/mf-0.28.57-build-20260910、exit0。
+artifact31,537,008 B/SHA a8d676839fe4bab724aed179c0dc148bbcca138dee1eed0131e6501a3b0f72eb。
+外部mf-0.28.57-audit.pyはCArchive202entriesの禁止path/生成物/秘密値拡張子検査、
+certifi公開PEM一致、worker/schema/frontendのsource bytes一致、packaged doctor okを確認。
+PYZの_acquire_host_lease bytecode/constants/namesがexact source compileと一致。
+これは同梱検査であり、installed動的失敗試験ではない。audit抽出先mf-0.28.57-package-xz5e0ifc。
+
+既存publisher鍵でsign/自己検証、tag v0.28.57/通常releaseへ公開。公開4filesを
+/data1tb/mf-0.28.57-public-20260910へ再取得し、全build bytesと一致。
+外部mf-0.28.57-install.pyは実Host trusted publisher検証、全Job/GUI/runtime idle、
+SQLite backup/全table再照合、registry再照合後に標準release_bundle.installを実行。
+10.167秒/exit0でhealthy、DB全table/registry不変。backup mf-0.28.57-update-rxtfjtk1。
+Host1141433保持、MF1176927→1196201/core1196206、実processはversions/0.28.57/bin/mediaforge-core。
+installed binaryとaudit抽出binary SHAは共に5eccae6d75a859463ea8b062a34c980772c99aa32d68149c656f14dfed4922d9。
+50scenes/165revisions保持、更新直後active Job0。標準保持で.55実行bundleだけ整理、.56/.57を保持。
+制作data/runtime/外部Blender/個人設定は削除せず、.55は公開releaseから再取得可能と通知。
+
+準備gate1392tests/145.44秒/2warnings、viewer差分0/Node5。この記録sliceは文書のみ。
+更新直後のNOT TESTED: clean installed一式、自然120秒超制作、全release失敗matrix、全3DS/GA/E。
+自然長時間の画像工程は以下の追加受入で確認。他の未検証項目は継続する。
+
+同版の追加受入: 外部mf-natural-texture-quality-0.28.57.pyで既存専用panelを再利用し、
+通常workflowへ1024角/1枚/qualityを受付。0.043秒でjob_d98925b1adcc4442b8aa15f81ba6863bを返した。
+今回は約106秒でadmission応答が返り、108.258秒でgenerating、346.604秒でsucceeded。
+生成開始から238.346秒、全診断346.636秒/exit0。前回のtimeoutが毎回起きるとはしない。
+native sd-cli PID1197716はargvの出力先を同Job IDへ照合。1秒間隔の独立読取観測で
+163.032秒継続→PID消失、最大サンプルRSS27,812,859,904 B。厳密なpeakや全実行時間ではない。
+sleep/SIGSTOP/CPU制限/step水増しなし。通常quality routingの既存city96/FLUX.2-dev-gguf、
+実argv steps20/seed0、provenanceのlicenseはFLUX-1-dev-Non-Commercial-License。
+新規weight導入はなく、この記録を商用利用条件の確認済みという意味にはしない。
+PNG asset_b95ab22e65424204833a8359f1e22039、1024角/1,624,920 B、SHA
+d0e112c19750e624942947ae392250ffc00773d3dd24d52173e4492d7f9fc014。
+目視では青緑の装甲板・橙の印・縁の摩耗が描かれるが、陰影/ボルトも画像に含まれる。
+純粋なPBR albedoやseamless、完成robotの品質合格とは扱わない。
+
+続くmf-texture-apply-installed-0.28.57.pyで同panelへbase_colorを適用、2.202秒/exit0。
+job07a489adb2de4616bdb7a766139c7f5f、revision_1b61a4db0dae4779b7a4853d664c6897を確定。
+旧source/GLB hashを保持し、新revisionの画像dependency ID/hashを確認。
+GLB asset_9a754bd8b707420dba6ac74f9f386c30、1,607,176 B/SHA
+c2f8caaee1c9d360660eee85c0c79599517e8611dc7993fd8dd9e7c15e245b2c。
+実GLB JSONを独立解析し、baseColorTexture/embedded image1/外部image URIなしを確認。
+独立mf-texture-result-audit-0.28.57.pyはexit0。実Host DBで画像3e9b8f3efff4・材質638f61d48813の
+両succeeded、GPU lease3a998348-03a0-4ea8-b061-7a4e7e7c4953のactivate1/renew23/release1成功。
+証跡 /data1tb/mf-natural-texture-quality-installed-0.28.57-20260910（PNG/GLB/観測/独立audit）。
+Eの自然120秒超制作の画像工程を補完した。Blender CPU演算、credential refresh、
+今回OpenCode/GUI比較/engine取り込みの証明ではない。installed失敗通知の再現試験にはならなかった。
+次: admission応答喪失の予約回収契約を調査し、残るE/GOAL-09を進める。
+Host broker.submitは退避taskをmax_wait_secまで待ち得る一方、MediaForge HTTP上限は120秒。
+このsource上の境界差と実稼働条件を照合する。必要な汎用Host変更は別PRとし、待機者を強制停止しない。
+
 ## 2026-09-10 v0.28.57 preparation
 
 PR #416 merge6991877d730c982cecc5ca2eedd34d6debe0be60を基準にux1/release-0-28-57。

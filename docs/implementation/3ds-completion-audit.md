@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 signed/installed0.28.57で自然長時間の画像工程を確認。
+同専用panelのquality生成は待機約106秒→生成238.346秒→成功、native PID実観測163.032秒。
+画像適用後のGLB内包image/元版hash保持、両Host成功/GPU renew23/releaseを独立確認。
+証跡mf-natural-texture-quality-installed-0.28.57-20260910。人工遅延なし。
+Eの制作画像工程の追加証拠。Blender CPU演算や今回OpenCode/10分refresh/engine品質の証拠ではない。
+0.28.57の署名公開/標準update/DB保持は確認済み、全3DS/GA/EはPARTIALを維持する。
+
 2026-09-10 texture候補も自然長時間成功に未到達。installed.56で2048角はresource_limit、
 同sceneの1024角/qualityは120秒admission応答喪失でworker前失敗。Host Job/待機予約は診断で回収。
 MediaForgeのadmission例外が所有Host終端を通知しない欠陥を修正、source→実Host HTTPで両failed。
@@ -353,7 +360,7 @@ project確認後変更拒否はunit fixture。installed Host/英語/実project�
 | B 制作一巡 | VERIFIED（再開/再試行を含む同一制作物）。OpenCode剣→既存画像2→3→新規生成/比較採用3→4→GUI入力保存6→7→第6版を第8版へ復元→元projectのrestored-exportsへGLB/PNG/manifest入りZIP配置。全8版不変、旧出力保持、新3 receipt/実bytes/manifest hash一致 |
 | C lifecycle | [原因別証拠表](3ds-lifecycle-evidence.md)へ照合。既存idle/restart/expiry、.38保存失敗/child crash/既定300秒切断終了のprocess回収と別scene復旧確定。native Chrome背景復帰後の実入力保存、さらに保存競合時の未確定複製2→4 meshesを別sceneへ全回収/競合側1 mesh不変を実GLBで確認。PARTIAL: 定期autosave実装・save以前のcrash回収量、他原因の回収証拠は未完了 |
 | D 更新/削除 | [D-01〜12対応表](3ds-runtime-evidence.md)へ原証跡を照合。installedの履歴保持削除/再編集、GUI/Job参照拒否、cache改ざん/取消再開を確認済みの範囲で整理。旧→新版update/失敗retryはsource、installedは逆方向exact install。次はこの差分の受入。全DはPARTIAL |
-| E GPU/長時間 | installed0.28.30の644.700秒CPU queue fault injectionでchild refresh4件/元期限後取消/終端一致。さらに既存GUIの480.340秒RFB再接続・同一session660.433秒継続・実入力保存を672.072秒runで確認（PR #293）。自然な120秒超演算・setup自身の10分超credentialとGPU組合せ評価は残る |
+| E GPU/長時間 | installed0.28.30の644.700秒CPU queue fault injectionでchild refresh4件/元期限後取消/終端一致。既存GUIの同一session660.433秒継続・実入力保存（PR #293）。installed0.28.57で制作画像の自然生成238.346秒→同panel材質/GLB、両Host成功/GPU renew23/releaseを追加確認。setup自身の10分超credentialとGPU組合せ評価等は残る。画像工程をBlender CPU演算や全Eの完了には読み替えない |
 | F release | 署名公開/update/改ざん拒否証拠は維持。rollbackは候補health成功後の例外注入であり、migration失敗や自然なhealth不良の証拠へ読み替えない。clean install等も個別照合 |
 
 GPU GUIは設計§4とCHECK-03の条件付き提供に従いsoftware-onlyを正直に表示する。
