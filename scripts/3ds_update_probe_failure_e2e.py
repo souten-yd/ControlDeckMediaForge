@@ -1,8 +1,10 @@
 """Isolated real HTTP/Blender update failure while the old GUI session is pinned.
 
-Uses the previous clean-setup acceptance data only. The candidate probe script
-is deliberately replaced; download, extraction, binaries and old-version probe
-are real. This is NOT an installed Host/browser or natural failure acceptance.
+Uses the previous clean-setup acceptance data only. Default mode replaces the
+candidate probe script. --terminate-candidate-probe instead uses the unchanged
+real probe and terminates only its exact staged process through a PID descriptor.
+Download, extraction, binaries and old-version probe are real. Neither mode is
+an installed Host/browser or naturally occurring failure acceptance.
 """
 from __future__ import annotations
 
@@ -10,8 +12,10 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 from pathlib import Path
 import socket
+import threading
 import time
 from typing import Any
 
@@ -22,10 +26,12 @@ from websockets.asyncio.client import connect
 from mediaforge.app import create_app
 from mediaforge.config import Settings, REPOSITORY_ROOT
 from scripts.blender_runtime import load_spec, preflight
+from scripts.blender_probe_fault import terminate_candidate_probe
 
 
 async def run(args: argparse.Namespace) -> None:
     root = Path("/data1tb/mf-clean-packaged-0.28.32-QBvHfm")
+    assert await asyncio.to_thread(root.resolve, strict=True) == root
     feature = root / "feature"
     data = feature / "data"
     await asyncio.to_thread(args.evidence_dir.mkdir, mode=0o700, parents=True, exist_ok=False)
@@ -50,6 +56,8 @@ async def run(args: argparse.Namespace) -> None:
     events: list[dict[str, Any]] = []
     session_id: str | None = None
     gateway = None
+    fault_stop = threading.Event()
+    fault_task: asyncio.Task[dict[str, int | str]] | None = None
 
     async def record(stage: str, **values: Any) -> None:
         row = {"stage": stage, "elapsed_sec": round(time.monotonic() - started, 3), **values}
@@ -91,6 +99,21 @@ async def run(args: argparse.Namespace) -> None:
                 return next(x for x in (await get(sessions_path))["items"] if x["id"] == session_id)
 
             baseline = await get(runtime_path)
+            if args.terminate_candidate_probe:
+                assert not [s for s in (await get(sessions_path))['items']
+                            if s['state'] not in {'stopped', 'failed', 'interrupted'}]
+                assert not [o for o in baseline['operations'] if o['state'] not in {'ready', 'failed', 'canceled'}]
+                assert baseline['active_runtime_id'] in {old, new}
+                if baseline['active_runtime_id'] != old:
+                    switch = await post(runtime_path + '/operations', {'action': 'switch', 'runtime_id': old})
+                    assert (await wait_operation(switch['id']))['state'] == 'ready'
+                if new in {r['runtime_id'] for r in baseline['runtimes']}:
+                    preview = await post(runtime_path + '/operations', {'action': 'remove_preview', 'runtime_id': new})
+                    assert preview['can_remove'] and preview['project_reference_count'] == 0
+                    removal = await post(runtime_path + '/operations', {'action': 'remove', 'runtime_id': new,
+                        'confirmation_fingerprint': preview['confirmation_fingerprint']})
+                    assert (await wait_operation(removal['id']))['state'] == 'ready'
+                baseline = await get(runtime_path)
             assert baseline["active_runtime_id"] == old
             assert {r["runtime_id"] for r in baseline["runtimes"]} == {old}
             scene_path = "/workspace-api/scenes/scene_2642c93f480d427d920267ac790405e2"
@@ -137,11 +160,18 @@ async def run(args: argparse.Namespace) -> None:
             await record("rfb_handshake", width=int.from_bytes(header[:2], "big"),
                          height=int.from_bytes(header[2:4], "big"), name=name.decode(errors="replace"))
             await record("old_session_ready", session=session, executable_sha256=before_hash)
-            manager.preflight_script = REPOSITORY_ROOT / "scripts/fixtures/blender_probe_reject.py"
+            if not args.terminate_candidate_probe:
+                manager.preflight_script = REPOSITORY_ROOT / "scripts/fixtures/blender_probe_reject.py"
             created = await post(runtime_path + "/operations", {"action": "update"})
+            if args.terminate_candidate_probe:
+                fault_task = asyncio.create_task(asyncio.to_thread(terminate_candidate_probe,
+                    feature / 'runtimes/blender', created['id'], parent_pid=os.getpid(),
+                    script=original_probe, version='4.5.13', stop=fault_stop))
             failed = await wait_operation(created["id"])
+            if fault_task is not None:
+                await record('owned_candidate_probe_terminated', **await fault_task)
             assert failed["state"] == "failed" and failed["error_code"] == "blender_runtime_install_failed", failed
-            assert "preflight result differs" in failed["error_message"], failed
+            assert ('preflight failed' if args.terminate_candidate_probe else 'preflight result differs') in failed['error_message'], failed
             status = await get(runtime_path)
             assert status["active_runtime_id"] == old
             assert {r["runtime_id"] for r in status["runtimes"]} == {old}
@@ -173,17 +203,43 @@ async def run(args: argparse.Namespace) -> None:
         await record("failed", error_type=type(exc).__name__, message=str(exc)[:300])
         raise
     finally:
-        manager.preflight_script = original_probe
-        if gateway is not None:
-            await gateway.close()
-        server.should_exit = True
-        await serving
-        listener.close()
+        fault_stop.set()
+        if fault_task is not None:
+            await asyncio.gather(fault_task, return_exceptions=True)
+        try:
+            # New mode never leaves its own GUI running after an assertion or
+            # injection timeout. Do not affect a session from another run.
+            if args.terminate_candidate_probe and session_id is not None and server.started:
+                async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{listener.getsockname()[1]}", timeout=15) as cleanup:
+                    response = await cleanup.get('/workspace-api/blender/sessions')
+                    response.raise_for_status()
+                    current = next(s for s in response.json()['items'] if s['id'] == session_id)
+                    if current['state'] not in {'stopped', 'failed', 'interrupted'}:
+                        response = await cleanup.post('/workspace-api/blender/sessions',
+                            json={'action': 'stop', 'session_id': session_id})
+                        response.raise_for_status()
+                        async with asyncio.timeout(45):
+                            while True:
+                                response = await cleanup.get('/workspace-api/blender/sessions')
+                                response.raise_for_status()
+                                current = next(s for s in response.json()['items'] if s['id'] == session_id)
+                                if current['state'] in {'stopped', 'failed', 'interrupted'}:
+                                    break
+                                await asyncio.sleep(0.2)
+        finally:
+            manager.preflight_script = original_probe
+            if gateway is not None:
+                await gateway.close()
+            server.should_exit = True
+            await serving
+            listener.close()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-dir", required=True, type=Path)
+    parser.add_argument('--terminate-candidate-probe', action='store_true',
+        help='Isolated root only: remove unreferenced candidate, SIGTERM its exact new probe via pidfd, then retry')
     asyncio.run(run(parser.parse_args()))
 
 

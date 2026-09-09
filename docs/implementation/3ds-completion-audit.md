@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 source故障追加: 未変更の実4.5.13 candidate probeだけをexact identity/pidfdでSIGTERM。
+A4.5.9 GUI・旧版/scene保持、B update失敗→正常retryでactive4.5.13へ切替、既存GUIは4.5.9固定。
+`mf-owned-probe-failure-source-20260910`、45.922秒/exit0、候補PID/専用GUI/staging回収。
+従来のprobe script置換とは異なる故障条件。installed Hostや自然発生故障の証拠ではない。
+最終コード-r2も46.297秒/exit0、旧7hash/元revision保持と候補/GUI/staging回収を再確認。
+全1357 tests PASS。installed同条件・例外cleanup故障注入は未検証のまま維持する。
+
 2026-09-10 installed別版並行導入: A=4.5.13実RFB GUI中にB=4.5.9をexact install。
 B不在→verifying→readyを観測し、同A session/runtime/runner PID/実行file hash・inodeを保持。
 `mf-parallel-runtime-installed-0.28.53-20260910-r2`、80.889秒passed/85.896秒GUI停止/exit0。

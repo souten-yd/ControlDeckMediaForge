@@ -3,6 +3,33 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 owned candidate probe failure
+
+base PR #393 mergeedf0a53f4357148de22f0bf9d847f0fa677e983f、ux1/3d-owned-probe-failure。
+前turnはinstalled並行導入受入/mergeまで進捗。production変更なし、acceptance診断を追加。
+scripts/blender_probe_fault.py: operation IDのcandidate executable・全argv・UID・親PIDを照合し、
+pidfd再照合後にそのプロセスだけSIGTERM。thread内/stop event/timeout/descriptor回収、9 tests。
+scripts/3ds_update_probe_failure_e2e.py --terminate-candidate-probeは固定隔離rootのみ。
+初期GUI/setup0と候補参照0を検査しBを除去、A GUI開始、新B実probeをterminate、retry。
+実行はPYTHONPATH=.:backend .venv/bin/python、証跡 /data1tb/mf-owned-probe-failure-source-20260910。
+23.639秒候補PID1089251/親1089031へSIGTERM、B update failed、A4.5.9 GUI/旧bytes保持。
+45.351秒retry4.5.13 ready/active切替でも同A GUIは4.5.9、明示stop後既定4.5.9へ戻す。
+45.922秒passed/exit0。未変更の実preflight、RFB handshakeのみで画素/編集までは未実施。
+元scene保持、以前のsource baselineの6 asset/provenance+旧exe計7 hash一致、staging空。
+session658e29ad6f734dce87d487601b85ef05終端/unit not-found/inactive/MainPID0、候補PID不在。
+隔離rootは両版を保持しactive4.5.9。installed.53/MF1082083/Host667000は不変。
+新modeのfinallyは例外時も自分のGUIだけ正規HTTP停止。停止失敗自体の注入はNOT TESTED。
+次はinstalled候補への適用に必要な親process/stage所有権をread-only確認する。
+全D/3DS/GA PARTIAL、自然発生/installedでの同故障の証拠には読み替えない。
+
+再開時の前test handleは不在/pytest processなし。全gateを再実行し1357 passed/2 warnings/
+154.35秒/exit0。viewer build差分なし、Node animation5 tests/py_compile/diff check成功。
+最終identity照合後にもstopを検査する順序へ調整。旧untracked .venvは保持する。
+最終コード実機-r2: /data1tb/mf-owned-probe-failure-source-20260910-r2、46.297秒/exit0。
+候補1097947/親1097665へのSIGTERM→probe失敗、45.746秒retry readyでも旧GUI4.5.9固定。
+同版復元/GUI stop/既定4.5.9、旧7hash/元revision保持、staging0/候補PID不在を独立確認。
+session d74c7b3a4fa34e35b59223ce657ef4b3のunit不在、MF1082083/Host667000不変。
+
 ## 2026-09-10 installed parallel exact-runtime install
 
 base PR #392 merge43e8f45925947d19767ad3481c8e7c8ff3dcb799、branch ux1/3d-installed-parallel-runtime。
