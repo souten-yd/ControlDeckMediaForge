@@ -1,5 +1,51 @@
 # Media Forge implementation status
 
+## 2026-09-10 repair publication preserves live Blender runtimes
+
+PR #389 merge3471b5950ab2dbd73ab65bc623f2237ec03eb684から
+ux1/3d-repair-live-protection。前goal turnは実再編集受入/mergeまで進捗。
+installedでは別の画像Jobが実行中だったためruntime変更を行わず、コードを調査。
+修復はcandidate probe後に既存directoryをrenameするが、削除と異なり稼働参照の
+再検査/受付guardがないことを確認。候補probe中にin-processまたはdurable recipe Jobの
+参照を増やす回帰テスト2件で、修正前は誤ってreadyになることを再現した。
+最初の試行のdurable fixture import typoは修正後に再実行し、両件とも同じ欠落でREDを確認。
+
+修復の公開をworker threadへ移し、既存removal_guard内でcancelとin-process/durable
+Job・GUI・working copy参照を再検査。liveがあればblender_runtime_in_useで候補を拒否。
+guardを保持してrename/registry/失敗rollback/cleanup/ready永続化を行う。
+開始済み公開threadはshieldしshutdown取消でも終端まで待つ。activeや履歴pinだけでは
+停止済み版の修復を拒否しない。外部版の所有権や公開schema/G8契約は変更しない。
+新規のblocking DB/filesystem/lock待機をasync実行へ追加しない。
+既存の停止済み破損版修復/registry失敗rollbackに加え、late参照2件、
+公開off-loop/停止待機1件がPASS。関連manager/history-removal/runtime-reference54 tests成功。
+
+実機は利用者installedとは別の既存受入root
+/data1tb/mf-clean-packaged-0.28.32-QBvHfmだけを使用。
+PYTHONPATH=.:backend .venv/bin/python scripts/3ds_repair_live_e2e.py
+--evidence-dir /data1tb/mf-repair-live-source-20260910 を実行、25.053秒/exit0。
+開始前に専用DBのJobs/GUI/setup全終端を確認。scene_2642c93f480d427d920267ac790405e2の
+実software Blender4.5.9を起動し、実HTTPで同版repairを要求。
+377,929,956 Bの固定archive検証/展開/実candidate probe後、24.720秒で
+blenderop_a88add260d3a420d8bf14b288bd8c84d failed/blender_runtime_in_use。
+同GUIはready、scene全投影と既存8files（registry/Blender executable/制作物/provenance）SHA不変。
+HTTP healthは応答成功だがsetup_required（隔離sourceの環境stamp不足）で、healthyとは記録しない。
+session blendersession_758af0dbfdf341c5824afeb4655083d5は25.010秒stopped、
+unit not-found/inactive/MainPID0。Host667000/MF1054020はactive/PID不変。
+候補stagingのみ既存失敗cleanupで回収、元runtime/制作物/外部Blenderは削除しない。
+
+停止後の正常修復も同診断へ追加して別証跡mf-repair-live-source-20260910-r2で再実行。
+23.831秒で稼働中拒否、24.120秒で専用session停止、46.009秒で同版repair ready/全体passed、exit0。
+成功operation blenderop_be139ffd3fb64d52a6f954ef29401a2c、archive6,510 members/
+展開1,168,332,002 B、実preflightは4.5.9/GLTF import/export true。
+runtime directory inode51918012→51924524で実差替え、既存8files SHA/scene投影不変。
+専用受入rootの旧実行環境は通常修復cleanupで整理した。同固定archiveから再構築可能、
+制作物/installed runtimeの削除なし。全`./mf.sh test`: 1348 passed/既知warnings2/143.93秒/exit0。
+viewer build成功/生成差分なし、診断py_compile/diff check成功。
+
+NOT TESTED: 本修正の署名配布/installed受入、実RFB入力、A稼働中B本導入/probe失敗、
+repair中process crashの全rollback matrix。修復拒否をB導入の証拠へ読み替えない。
+全D/3DS/GAはPARTIAL。次はこの稼働版保護の署名release準備・導入とinstalled確認を行う。
+
 ## 2026-09-10 installed same-scene RFB edit after exact Blender reinstall
 
 PR #388 merge fc171f864d8638318a84e96cb10ae9097dd12708から

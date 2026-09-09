@@ -87,6 +87,11 @@ runtime registryの事前snapshotも復元する。外部Blender実体にはmigr
 「Web Blenderを使う」で両者の必要分を一度に計画できる。画像モデルの全導入を要求しない。
 重いBlender downloadを通常のMediaForge起動やbundle更新で暗黙実行しない。
 UIと `mf.sh` のCLIサブコマンドは同じorchestratorを呼ぶ。doctor/statusは読み取り専用。
+修復の候補公開も削除と同じruntime受付guardで排他にし、候補probe後・rename前に
+in-process参照とdurable Job/GUI/working copy参照を再検査する。稼働参照があれば
+`blender_runtime_in_use`で失敗し、元の実行環境を差し替えない。履歴pinやactive指定だけで
+停止済み版の修復を禁止しない。guard取得・DB照合・rename/registry/rollback/cleanupは
+worker thread内で行い、開始済み公開threadはshutdown取消でも終端まで追跡する。
 `blender install/update/switch/repair/remove` CLIは稼働中MediaForgeの同じorchestratorを呼び、
 READMEへ正式掲載する。source runtime互換用の既存`blender build/status`は変更しない。
 

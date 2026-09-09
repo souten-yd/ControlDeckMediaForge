@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10修復保護追加: candidate公開時のlive参照欠落を2件REDで再現し、
+受付guard/worker thread/取消追跡を実装。隔離source HTTP/実Blender4.5.9の稼働中修復は
+実archive/候補probe後にin_use拒否、旧8files/scene保持、GUI終端回収、25.053秒/exit0。
+`mf-repair-live-source-20260910`。installed未配布、A稼働中B導入/probe失敗の証拠ではない。
+同診断-r2で停止後の正常repairも実行、46.009秒/exit0。1,168,332,002 Bを同版再構築、
+directory inode変更・既存8files/scene保持。全1348 tests PASS、修正のinstalled受入は別途必要。
+
 2026-09-10 scenario D再編集追加: 同じacceptance-swordを再導入済み4.5.9で実RFB編集・通常保存。
 `mf-reinstalled-edit-installed-0.28.52-20260910`、66.978秒passed/67.040秒revoke/exit0。
 第13→14版、mesh4→8/triangles236→472、独立GLB8 mesh nodes/1,761,820 B。

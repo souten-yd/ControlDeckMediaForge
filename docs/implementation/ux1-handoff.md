@@ -3,6 +3,31 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 repair live-runtime protection
+
+branch ux1/3d-repair-live-protection、base PR #389 merge3471b5950ab2dbd73ab65bc623f2237ec03eb684。
+前turnは実再編集/mergeまで進捗。installed別Job稼働中のためruntime変更を避けて調査し、
+修復candidate公開のlive参照再検査/受付排他の欠落を発見。late in-process/durable参照2件RED。
+backendの修復公開だけworker threadへ移し、既存removal_guard内で参照/cancel再検査、
+rename/registry/rollback/cleanup/readyを追跡。shutdown取消は開始済み公開threadを待つ。
+active/履歴pinだけでは拒否しない。既存修復/rollbackと新規3 tests、関連54 tests PASS。
+新scripts/3ds_repair_live_e2e.pyは既存隔離clean-setup rootだけを使用し、初期idleを検査。
+PYTHONPATH=.:backend .venv/bin/python scripts/3ds_repair_live_e2e.py
+--evidence-dir /data1tb/mf-repair-live-source-20260910、25.053秒/exit0。
+実Blender4.5.9 GUI ready中に同版repair、実archive/展開/probe後にin_useで拒否。
+旧8files hash/scene保持、GUI継続ready→明示stop。session758af0dbfdf341c5824afeb4655083d5、
+unit not-found/inactive/MainPID0。source healthはsetup_requiredであってhealthyではない。
+実RFB手入力は未実施。詳しいID/hash境界はimplementation-status同日repair節。
+installed0.28.52/MF1054020/Host667000は不変。本修正は未配布。
+診断へ停止後の正常repairも追加しmf-repair-live-source-20260910-r2で再実行、46.009秒/exit0。
+稼働中拒否→24.120秒stop→同版repair ready、実展開1,168,332,002 B/GLTF import/export true。
+directory inode変更で実差替えを確認、既存8files hash/scene保持。旧専用runtimeは通常cleanupで整理、
+同固定archiveから再構築可能。session e1198bffb0304189be931c1b37f313e9。
+全`./mf.sh test`: 1348 passed/既知warnings2/143.93秒/exit0、viewer build生成差分なし、
+診断py_compile/diff check成功。製品版数はまだ0.28.52のまま。
+次は署名release準備とinstalled受入。A稼働中B導入/probe失敗等のD残件は保持。
+全3DS/GA PARTIAL、完成/blockedにはしない。.venvは既存untracked symlinkのまま保持。
+
 ## 2026-09-10 installed reinstalled-runtime browser edit
 
 branch ux1/3d-reinstalled-browser-edit、baseはPR #388 merge
