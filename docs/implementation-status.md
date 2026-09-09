@@ -1,5 +1,50 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.49 signed / installed / MCP failure correction
+
+PR #374 MERGEDのf3eb61542a13a7cb053680c2b32eaa30c1b14a40をexact checkout/tagに固定。
+31,568,987 B/SHA119ada52b1535ad8855c5857d520f5ff18bfa946f1ac55499b9c2e48a1abd431。
+PyInstaller6.22.0/Python3.12.3、CArchive201 entries、禁止名混入なし、
+certifi PEM一致、worker2/schema3ファイルexact bytes一致、新failure readerのPYZ同梱を確認。
+専用data/cacheでpackaged doctor:ok/version0.28.49/packaged=true。
+監査: /data1tb/mf-0.28.49-audit.py、build-20260910/verification.json
+（後者の完全pathは/data1tb/mf-0.28.49-build-20260910/verification.json）。
+既存鍵で署名しv0.28.49公開。公開4ファイルをpublic-20260910へ再取得してbuildとbytes一致、
+実Host trusted署名検証も通過。利用者の鍵生成/個人設定への書込は行わない。
+
+専用診断 /data1tb/mf-0.28.49-install.pyでidle再検査→SQLite backup→標準exact-tag install。
+10.393秒、実HTTP healthy、DB全15テーブルfingerprintとBlender registry bytes一致。
+backup: /data1tb/mf-0.28.49-update-ub76uv_a（observations.jsonに前後比較）。
+Host PID667000不変、MF960863、current0.28.49、保持版0.28.48/0.28.49。
+標準保持で0.28.47の実行bundleだけ整理。制作data/Blender実体は保持し、
+旧実行版は公開releaseから再取得可能。利用者へ通知済み。
+
+実installed Host MCPの直接呼出しで、新規専用scene作成→2操作editの後半を不在IDで失敗
+→snapshotで元版保持→同baseからIDを修正した新edit成功を確認。LLM実行とは区別する。
+最終証跡: /data1tb/mf-recipe-failure-installed-20260910-final/observations.json
+診断: /data1tb/mf-recipe-failure-installed-20260910.py。所要2.419秒。
+scene_48f6b6b9a465498fadd7e42cde911931。
+create Job job_b36bf89c5c374be99611ba4968e6f0aa succeeded、
+失敗 Job job_8220835954d64ebda13b5988b3ba46d5 failed/scene_recipe_failed、
+修正 Job job_942fe860a17149da91dce8e6b13dcc71 succeeded。
+実MCPのerror.messageはOperation 2/2 (transform.set, object_id=missing) failed:
+target object does not exist; inspect stable object IDs。
+失敗後revision_count1、修正後2/親は元版。旧sourceを再取得して
+SHAfa4442be19bb06980ca730dd67d8da8740f21b92db68f705efd854491ffee528不変を確認。
+入力は既存schemaで正規化後、実DB request_jsonとledgerの2件が一致。active Jobs0。
+一時provider configはfinallyで削除。新規検証sceneだけを操作し既存robotは変更しない。
+
+初回MCP診断はprimitiveの必須name/dimensions不足で拒否。
+r2は操作成功/2.495秒だが、記録配列の参照共有で失敗入力のledgerが後の訂正値へ変化した。
+コピー保存へ直したfinalの新規sceneで再検証し、r2のledgerを最終証拠へ読み替えない。
+DBとの初回照合はdefault展開前/後の比較でassertion失敗、同schema正規化後に一致を確認した。
+各中間検証sceneは保持している。未追跡.venvは既存のまま除外。
+
+配布準備の全テスト1297 passed/既知warning2/137.72秒、viewer build成功。
+今回の追記はdocsのみ、diff checkを実施。
+NOT TESTED: 自然言語の自動修正一巡、全3DS/GA必須受入の完成。
+次は実LLMへ失敗診断を返して修正を完走させる経路を検証する。
+
 ## 2026-09-10 v0.28.49 release preparation
 
 PR #373 MERGED/main c06eace24b285d3ecb388a3f65cf855c5a2ec733を確認。
