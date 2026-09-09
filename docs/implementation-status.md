@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.54 release preparation
+
+PR #397 mergef48f5db04f88627612ca8672df4d9d25a4e75d37と最新handoffを確認。
+前turnは重複取消のruntime参照漏れ修正/実Blender受入/通常mergeまで進捗。
+ux1/3d-release-0-28-54でaddon/core版を0.28.54へ揃え、release noteを追加。
+本修正のsource受入と未配布/未検証範囲を区別する。公開契約/DB/runtime版変更なし。
+次は準備PRを通常mergeし、exact commitからbundle監査・署名・公開再取得・標準更新を行う。
+全3DS/GAはPARTIAL。既存untracked .venvは保持し、Host/制作物へ変更しない。
+全`./mf.sh test`: 1361 passed/既知warnings2/139.39秒/exit0。
+viewer build成功/生成差分なし、Node animation5 tests/diff check成功。
+ephemeral /data1tb/mf-0.28.54-{audit,install}.pyを前版から準備しpy_compile成功。
+auditは今回の_finish_cleanupと3箇所の回収構造を埋込みPYZでも検査する。
+installは公開4files一致/Host署名/旧版0.28.53/全idle/DB backup/再検査を要求する。
+まだ両診断の本処理は未実行。現在installed0.28.53、MF1082083/Host667000 active/PID不変、
+実DBの未終端Job/GUI/setupは0。公開・導入時には再確認する。
+
+
 ## 2026-09-10 repeated admission cancellation runtime-reference cleanup
 
 base PR #396 merge2a0d80dc4580a25567260088e76e71980741ac32、ux1/3d-admission-repeat-cancel。
