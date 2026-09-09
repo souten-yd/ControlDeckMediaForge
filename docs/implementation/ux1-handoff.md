@@ -3,6 +3,27 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.57 published/installed and natural texture completion
+
+PR #417 merge/tag567bf2ebea44cd83bb3484bf10f967bfa60118a7、ux1/release-0-28-57-acceptance、記録PR前。
+exact checkout/build/audit/sign/public再取得/実Host署名検証/標準updateまで完了。
+artifact31,537,008B/SHAa8d676839fe4bab724aed179c0dc148bbcca138dee1eed0131e6501a3b0f72eb。
+DB全table/Blender registry保持、10.167秒healthy、backup mf-0.28.57-update-rxtfjtk1。
+Host1141433保持、MF1196201/core1196206、.56/.57保持、旧.55bundleのみ標準整理/通知済み。
+実binary SHA5eccae6d75a859463ea8b062a34c980772c99aa32d68149c656f14dfed4922d9、audit package bytes一致。
+同panelでquality画像再試行は今回は成功。受付0.043秒→生成108.258秒→成功346.604秒。
+job_d98925b1adcc4442b8aa15f81ba6863b、実生成区間238.346秒、独立native PID観測163.032秒→消失。
+image asset_b95ab22e65424204833a8359f1e22039を同panel材質へ適用し、第2版/画像内包GLB確定2.202秒。
+新revision1b61a4db0dae4779b7a4853d664c6897/GLB9a754bd8b707420dba6ac74f9f386c30、旧hash保持。
+実Host画像3e9b8f3efff4/材質638f61d48813両成功、GPU activate1/renew23/release1。独立audit exit0。
+証跡 mf-natural-texture-quality-installed-0.28.57-20260910。外部scriptsはstatus参照、無条件再実行しない。
+build10426/install6632/image30364/monitor26921/material44348は全exit0、継続中診断handleなし。
+準備gate1392tests/145.44秒/2warnings/build/Node5、記録sliceは文書のみ。全3DS/GA/E PARTIAL。
+NOT TESTED: installed失敗通知再現、10分setup refresh、今回OpenCode/engine/品質/商用条件。
+次: Host broker.submitが退避taskをmax_wait_secまで待つ境界とMF admission HTTP120秒を照合。
+未知request IDを推測せず、必要なら汎用Host別PR。Hostは今回read-only参照のみ、main cleanを確認。
+Blender骨格/organic weight/IK/歩行等の利用者要件は維持。画像工程の成功を全体完成にしない。
+
 ## 2026-09-10 v0.28.57 preparation
 
 base PR #416 merge6991877d730c982cecc5ca2eedd34d6debe0be60、ux1/release-0-28-57、PR前。
