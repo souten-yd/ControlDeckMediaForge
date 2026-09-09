@@ -1,5 +1,63 @@
 # Media Forge implementation status
 
+## 2026-09-10 exact owned candidate-process failure and update retry
+
+PR #393 mergeedf0a53f4357148de22f0bf9d847f0fa677e983fからux1/3d-owned-probe-failure。
+前turnはinstalled別版導入中のGUI維持/記録mergeまで進捗。
+既存source故障試験はpreflight scriptを差し替える方式だったため、未変更の実probeを
+起動し、その候補プロセスだけを終了させるacceptance専用診断を追加した。
+production core/公開schema/版数は変更しない。
+
+scripts/blender_probe_fault.pyはexact operation ID/version/managed root/trusted scriptを要求。
+親processの各threadのchildrenだけを調べ、UID/PPid/executable realpath/全argvを一致検査。
+pidfdを開いた後にも同じidentityを再確認し、数値PIDではなくpidfdへSIGTERMを送る。
+候補が見つからない・一致しない場合は無送信でtimeout、stop eventで追跡を終える。
+proc読取/待機/シグナルはworker thread内、descriptorはfinally close。
+9 testsでpath/argv/parent/欠落/不正ID/取消・再照合失敗時の無送信とdescriptor回収を確認。
+これは通常のBlender操作機能でも、任意processを止めるpublic APIでもない。
+
+scripts/3ds_update_probe_failure_e2e.pyへ--terminate-candidate-probeを追加。
+既存隔離root /data1tb/mf-clean-packaged-0.28.32-QBvHfmだけを使い、
+inactive/unreferencedな4.5.13の除去→4.5.9 GUI→4.5.13 update失敗→正常retryを実行する。
+初期GUI/setup不在、exact root、削除previewの参照0を検査。新modeはtimeout/例外でも
+自分のsessionだけを正規HTTP stopで回収するfinallyを持つ。停止要求の独立失敗注入は未実施。
+既存のscript置換modeは既定のまま維持。pidfd helperはproductionからimportしない。
+
+実行: PYTHONPATH=.:backend .venv/bin/python scripts/3ds_update_probe_failure_e2e.py
+--terminate-candidate-probe --evidence-dir /data1tb/mf-owned-probe-failure-source-20260910。
+2.414秒で実RFB3.8 handshake/1280x720、4.5.9 GUI ready。
+23.639秒で候補PID1089251/親1089031をexact stage/argv/UID照合後にSIGTERM。
+operation blenderop_10d02da5e27641a1adcde9d4f9627cf7はfailed/blender_runtime_install_failed、
+messageはBlender preflight failed。24.064秒でA GUI ready/active4.5.9/元scene・assets metadata保持、
+旧実行file hash不変と別実preflight4.5.9/GLTF import/export trueを確認。
+retry blenderop_954d781f0ff04137a5f27a0978b13eb5は45.351秒ready、
+archive378,033,952 B/6,512 members/展開1,167,187,839 B/実probe4.5.13。
+activeは新版4.5.13へ切り替わるが、既存GUIは同sessionの4.5.9/connectedのまま。
+明示GUI停止後に隔離rootの既定を4.5.9へ戻し、45.922秒passed/exit0。
+
+独立確認: 既存source受入baselineの6 asset/provenance filesと旧executable計7 hash一致。
+元revision_498980e910484e38a621d2d5844bed03保持、active GUI0、staging空、候補PID不在。
+session blendersession_658e29ad6f734dce87d487601b85ef05、unit not-found/inactive/MainPID0。
+同固定archiveからBを復元済み、隔離rootには両版が残り既定は4.5.9。
+installed0.28.53/MF1082083/Host667000はactive/PID不変、利用者runtime/Job/制作物には変更なし。
+NOT TESTED: installed Hostでの同故障、自然発生probe失敗、実RFB画素/入力・保存、全D/3DS/GA。
+次はこのexact所有権診断をinstalled候補に適用できるか、親processとstage境界をread-only確認する。
+
+再開時、前回全test handleは不在かつpytest processなし。結果を推定せず全gateを再実行。
+最終identity照合後にもstopを確認する順序へ調整し、`./mf.sh test`は
+1357 passed/既知warnings2/154.35秒/exit0。`npm run build:viewer`成功・生成差分なし、
+`node --test tests/model-animation.test.mjs`5 passed、診断py_compile/diff check成功。
+
+最終コードで同コマンドを別証跡`/data1tb/mf-owned-probe-failure-source-20260910-r2`へ再実行。
+24.010秒で候補PID1097947/親1097665だけSIGTERM、operation
+blenderop_0fc15d0598334bf890928f307bef0736はprobe失敗。旧GUI ready/connectedを保持。
+retry blenderop_cd3a208e33c340439295787b33638c0eは45.746秒ready、
+同session/runtime4.5.9を保持したままactive4.5.13。明示stop/既定4.5.9へ戻し46.297秒passed/exit0。
+独立read-only検査で旧7 hash/元revision保持、GUI0/staging0/候補PID不在、
+session d74c7b3a4fa34e35b59223ce657ef4b3のunit not-found/inactive/MainPID0。
+MF1082083/Host667000はactive/PID不変。隔離した未参照B runtimeのみ一時除去して同版復元済みと通知。
+例外cleanupの故障注入とinstalled同条件は引き続きNOT TESTED。
+
 ## 2026-09-10 installed side-by-side exact install while another GUI stays pinned
 
 PR #392 merge43e8f45925947d19767ad3481c8e7c8ff3dcb799とhandoffを確認。
