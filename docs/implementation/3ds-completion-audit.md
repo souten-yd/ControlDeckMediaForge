@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 installed stale削除確認: Settings preview後に4.5.9 GUIを開始し、
+履歴checkbox同意の前/後どちらの順序でも実削除buttonの古いfingerprintをremove_changed拒否。
+新しいlive preview+ack=trueも正規APIでin_use拒否。削除operation追加0・旧runtime/制作物保持。
+`mf-stale-removal[-after-ack]-installed-0.28.53-20260910`、両exit0、53.657/57.742秒login回収。
+実RFB描画/両GUI終端、独立3 scenes/17 revisions/72files保持。Job受付や削除実行中の競合へは拡大しない。
+
 2026-09-10 installed候補probe故障: 稼働4.5.13 GUI中の4.5.9 exact install候補だけpidfd SIGTERM。
 probe失敗→正常retryの間、同GUI/runtime/runner PID・active executable hash/inodeを保持。
 `mf-probe-failure-installed-0.28.53-20260910`、121.385秒passed/126.387秒own stop/exit0。

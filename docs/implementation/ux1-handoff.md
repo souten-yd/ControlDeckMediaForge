@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed stale removal confirmation
+
+base PR #395 mergeb871ccd54476070bbf786af23bb13af734de662e、ux1/3d-installed-removal-stale。
+前turnはinstalled probe失敗保護/mergeまで進捗。今回はpreview後のGUI受付で削除を再拒否する受入。
+製品変更なし。ephemeral /data1tb/mf-stale-removal-0.28.53.py、既存Host診断venv/環境。
+Settings preview/live0/project2→GUI ready→履歴確認/実buttonでstale fingerprint拒否。
+fresh live previewでもack=trueの正規API要求をin_use拒否、operation一覧不変。
+実4.5.9 opaque RFB描画/scene14版とsource/GLB28hash・exe hash/inode・registry bytes保持。
+証跡 /data1tb/mf-stale-removal-installed-0.28.53-20260910、45.558秒passed/53.657秒revoke/exit0。
+個別GUI/loginのみfinally回収。削除/再導入/サービス再起動なし。
+同意checkboxを先にcheckしてからGUI開始する逆順も別診断で完走。
+/data1tb/mf-stale-removal-after-ack-0.28.53.py、証跡mf-stale-removal-after-ack-installed-0.28.53-20260910。
+13.661秒stale拒否/13.796秒fresh live拒否、49.653秒passed/57.742秒revoke/exit0。
+両session9f952c14cb1e44ddbfaae3ffb906095b/e5e210baff234081af28503f1c42bb5c終端/unit不在。
+独立照合で前PRの3 scenes/17 revisions/72files保持、GUI0、MF1082083/Host667000不変。
+文書のみ。製品gateはPR #394の1357 tests/build/Node5を参照、今回再実行ではない。
+全D/3DS/GA PARTIAL。Job受付・削除実行中の並行受付等は残る。次はJob側の参照保護と既存実機証拠を照合。
+
 ## 2026-09-10 installed exact probe failure
 
 base PR #394 merge667906adeb24403551541ea625bb486ef2392f8f、ux1/3d-installed-probe-failure。
