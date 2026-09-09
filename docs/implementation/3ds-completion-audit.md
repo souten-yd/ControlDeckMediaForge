@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 E自然負荷の候補を実測。installed.55の8高分割球+UVは2.133秒、
+別作業で更新された.56の128bone/32剛体parts/3clips各25秒は6.950秒、両exit0/Host成功同期。
+実GLBのskin1/128joints/3animationsを独立確認したが、両方exceeds_120_sec=false。
+`mf-natural-uv8-installed-0.28.55-20260910` / `mf-natural-animation-installed-0.28.56-20260910`。
+候補校正の証拠であり自然120秒超/refresh/品質/engineの受入ではない。全E/3DS/GA PARTIAL。
+
 2026-09-10 installed0.28.55旧4.5.9 GUI中の新版4.5.13 update失敗→正常retryを追加。
 `mf-update-failure-installed-0.28.55-20260910`: 候補probeのみpidfd SIGTERM、旧GUI/PID/全47scene/162revision/688hash保持。
 正常update後の既定4.5.13でも同GUI4.5.9固定。元診断は最終registry配列順bytes assertでexit1、
