@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10署名0.28.54を公開/再取得/実Host署名検証し、標準update10.052秒healthy。
+DB全table/Blender登録保持。installed実ブラウザのstale/live削除拒否とRFB描画・終了回収も確認。
+`mf-stale-removal-after-ack-installed-0.28.54-20260910`、58.057秒/exit0。
+重複取消回収修正の同梱を監査したが、installedで重複取消を発生させた受入は未実施。
+全D/3DS/GAはPARTIALのまま。
+
 2026-09-10 Job参照回収: 受付中の2/3回取消でlive参照が漏れる2ケースREDを再現し修正。
 取得/解放のowned cleanupを反復shieldで終端まで追跡。source専用registry/実runtimeで
 3回取消→参照0→実Blender通常制作成功/終端0、`mf-repeated-admission-cancel-source-20260910`。

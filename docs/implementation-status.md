@@ -1,5 +1,44 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.54 signed and installed
+
+準備PR #398は通常merge8b5bb0375e09bae1523275e4e8f3dfb89244a460。
+exact checkout /data1tb/ControlDeckMediaForge-release-0.28.54/tag v0.28.54。
+既存build_release_bundle.py/PyInstaller6.22.0/Python3.12.3で軽量bundleを作成。
+出力 /data1tb/mf-0.28.54-build-20260910、31,535,647 B、
+SHA310c7b8a037780faef25e94c65ff156b766ad0cb56b88266a317bb5132ef6c33。
+外部診断/data1tb/mf-0.28.54-audit.pyでCArchive202 entries、検査対象の禁止path/生成物拡張子なし、
+certifi公開PEM一致、worker/schema/frontend exact bytes、既存修復/RFB/monitorと今回cleanup構造を照合。
+packaged doctor:ok/version0.28.54/packaged=true。
+展開先 /data1tb/mf-0.28.54-package-nh4o5lhq/control-deck-media-forge-0.28.54-linux-x86_64。
+verification.jsonに監査結果を記録。コード構造の照合をinstalled重複取消動作の証拠へ読み替えない。
+
+既存publisher鍵/mode600でsign_release.py sign・自己署名検証を実施し、正規公開:
+https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.28.54
+公開4filesを/data1tb/mf-0.28.54-public-20260910へ再取得。
+Host診断venv/既存CONTROL_DECK_CONFIG/PYTHONPATHで/data1tb/mf-0.28.54-install.pyを実行。
+公開bytes一致/実Host trusted publisher検証、idle→SQLite backup/registry backup→全idle/全table再検査→標準update。
+10.052秒healthy、DB全table fingerprint/Blender登録bytes不変、Host667000不変、MF1116213。
+backup /data1tb/mf-0.28.54-update-tz3fdb8w、observations.jsonに前後照合を保持。
+標準保持規則で0.28.52実行bundleだけ整理、0.28.53/.54を保持。制作物/runtime削除なし。
+旧bundleは公開releaseから復元可能と利用者へ通知。PC/Host再起動なし。
+
+準備gateは全1361 tests/139.39秒/既知warnings2、viewer build生成差分なし/Node5成功。
+本記録sliceは文書のみ。全3DS/GAはPARTIAL、installed重複取消/Job削除競合の残件を維持。
+
+installed回帰は既存Host診断venv/CONFIG/PYTHONPATH/DISPLAY/XAUTHORITYで
+`/data1tb/mf-stale-removal-after-ack-0.28.54.py`を実行。
+証跡 `/data1tb/mf-stale-removal-after-ack-installed-0.28.54-20260910`。
+同意済みSettings削除preview→同旧版GUI起動→古い確認buttonのremove_changed拒否、
+fresh live確認+ack=trueのin_use拒否、operation追加0、実opaque RFB描画1321色を確認。
+49.978秒passed/57.998秒own cleanup/58.057秒login revoke/exit0/page errors0。
+同acceptance-sword第14版・source/GLB28hash・旧runtime hash/inode・registry bytes不変。
+終了後の独立照合でも前baselineの3 scenes/current pin・72 files保持、GUI0。
+session1bcc8c9ab5bb41949dcbef31e924a111のunit not-found/inactive/MainPID0、MF1116213/Host667000不変。
+この回帰はGUI/削除保護の証拠であり、本修正の重複取消をinstalledで発生させた証拠ではない。
+次はJob受付と削除競合の未検証条件を補完する。全3DS/GAは引き続きPARTIAL。
+
+
 ## 2026-09-10 v0.28.54 release preparation
 
 PR #397 mergef48f5db04f88627612ca8672df4d9d25a4e75d37と最新handoffを確認。
