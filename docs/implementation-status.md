@@ -1,5 +1,39 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed real-CDN repair cancellation and resume
+
+base PR #409 merge778ef9fa92f2609e4278d76d9d18b85e2a29e17b、ux1/3d-installed-repair-resume。
+既存unitの取消partial保持/manager再起動Range検証と、PR #404のsource通信fixtureを照合。
+その証拠をinstalled成功へ読み替えず、稼働0.28.55の正規APIと実CDNで追加受入を行った。
+
+```bash
+.venv/bin/python /data1tb/mf-0.28.55-repair-resume.py
+```
+
+全Job/GUI/runtime操作idle、inactive4.5.9/live0/固定archive SHAを確認し、正常cacheだけ退避。
+実download operation blenderop_49db32a56f6a461a94f97d5148c8ca22の正の進捗を観測後、正規cancel。
+0.971秒時点でcanceled、1,671,168 Bのpartialと進捗が一致し、ETag保持、元archive先頭のSHAと一致。
+旧exe SHA/inode46020214、全47scene/162revision投影、関連64 asset/provenance、registryを保持。
+通常repair blenderop_c3cdcf8841b84838a66381a76cdf1390を再送し、完全archiveを事前に戻さず追跡。
+downloading1.000→verifying39.160→installing48.444→probing59.835→ready60.349秒。
+証跡 `/data1tb/mf-repair-resume-installed-0.28.55-20260910`、60.838秒/exit0。
+保持partialのinode33327669と最終archive inodeが一致、377,929,956 B/SHA
+dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d、退避cacheとも一致。
+コードはexisting partialでRange/If-Rangeを送り206/Content-Range/ETag一致を検査する。
+今回の動的証拠はpartial保持→同inode全archive→実probeであり、wire-level header採取はしていない。
+実probeは4.5.9/background/GLB入出力、6,510members/1,168,332,002 B。
+修復後旧exeは同SHA/inode46146687、既定4.5.13/SHA/inode46028345とMF1152101/Host1141433は不変。
+全poll health healthy。独立read-only照合でも全scene/revision・64hash・registry・cache/backup一致、
+partial/metadata回収、staging/removing空、未終端runtime操作0、health healthyを確認。
+正しい旧cacheは証跡dirにbackup保持。制作物や外部runtimeは削除していない。
+
+文書のみのPR。製品code/公開契約/版数変更なし、全test/build再実行・新releaseは行わない。
+変更のない基準gateはPR #408の1387 tests/146.39秒/viewer build差分0/Node5。
+NOT TESTED: wire-level Range capture、process crash/電源断、重複asyncio task取消、今回browser、全matrix。
+APIの取消flagとasyncio task.cancelは別経路。今回をPR #404の重複task取消のinstalled証拠にはしない。
+次はscenario Dの必須条件と蓄積したsource/installed証跡を一覧照合し、未証明の条件だけを次受入に選ぶ。
+全D/3DS/GA PARTIALを維持し、ボーン/有機weight/IK/歩行等の機能追加要件を縮小しない。
+
 ## 2026-09-10 installed repair rejects tampered cache and retries
 
 base PR #408 merged d01cacc1bfc8ce1672826dab207208faff110529、ux1/3d-installed-repair-tamper。
