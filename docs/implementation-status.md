@@ -1,5 +1,19 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.50 release preparation
+
+前goal turnはPR #378の実装・実source受入・通常mergeまで進捗。
+merge e4568d9acee3b5c346e36828e8629bccfdce5775をorigin/mainと照合し、
+ux1/3d-release-0-28-50でaddon/coreを0.28.50へ揃えた。
+RFB入力だけを数えるidle修正と再接続時刻保持を配布する準備。
+DB/schema/tool/capability/runtime pinの変更はない。
+docs/release-v0.28.50.mdにsource証拠とinstalled/30分idle未検証を明記。
+開始時の実installedは0.28.49、active Jobs0/GUI0、
+Host PID667000/MF975293ともactive。service再起動はまだ行っていない。
+viewer build/diff check成功。全 ./mf.sh test:1337 passed/既知warning2/138.93秒、exit0。
+署名/public download/Host trusted verify/標準update/installed idleは次の実測。
+全3DS/GAゴールはPARTIALを維持する。
+
 ## 2026-09-10 RFB input-only idle clock (source)
 
 main6e534b7とPR #213 MERGEDを再確認。ux1/3d-rfb-input-activity。
