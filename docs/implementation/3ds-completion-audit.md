@@ -3,6 +3,11 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10追加: 署名installed0.28.52/opaque frame/overlayなしで個別animation previewを確認。
+`mf-animation-installed-0.28.52-20260910`、腕振り1秒/待機2秒、モデル画素変化、
+速度/先頭戻し/pause、英語320px、元scene保持。GA-5の表示操作の追加証拠であり、
+歩行制作、有機weights/IK、engine取込や残るA〜F全体の完了を意味しない。
+
 2026-09-10追加: installed0.28.51の既定connected idle1800秒を実機完走。
 `mf-default-idle-installed-20260910-r2`、exit0/passed=true、idle_timeout終端。
 再接続でも入力時刻不変、8→16 meshesを別sceneへ回収、実GLB16 nodes/22216 B、
