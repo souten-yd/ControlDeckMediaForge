@@ -1,5 +1,15 @@
 # Media Forge implementation status
 
+## 2026-09-09 v0.28.45 release preparation
+
+PR #355 merge `77be1f1805ab068823374276a6dbb2dd25166580`から
+branch `ux1/3d-release-0.28.45`。core/addonの版を0.28.45へ揃え、
+release noteに自動保存の内容・限界・0.28.44との保存形式互換性を記載した。
+全 `./mf.sh test`: 1201 passed/既知warning2/138.10秒、exit0。
+core/addon版一致を実コードからassert。署名bundle生成/公開/consumer検証/標準updateは未実施。
+次はこのPRのmerge commitを固定してbuildし、既存publisher keyで署名・再取得検証する。
+installed4.5.13/日英受入と3DS残件は維持。既存の制作データ・runtime/global設定は不変。
+
 ## 2026-09-09 autosave integration with current main
 
 保存済みのsource受入変更をcommit `906e390`へ確定し、最新main
