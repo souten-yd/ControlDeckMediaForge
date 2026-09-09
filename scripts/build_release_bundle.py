@@ -46,9 +46,19 @@ def check_executable(entrypoint: Path, core: Path) -> None:
         raise SystemExit(
             f"built executable is only {size} bytes; the build did not finish"
         )
-    finished = subprocess.run(
-        [str(entrypoint), "doctor"], capture_output=True, timeout=600
-    )
+    # launcher は ControlDeck が導入時に渡す場所を要求する。ここでは実際の
+    # 持ち物へ触らせたくないので、捨てる場所を渡す。doctor は読むだけで、
+    # 足りないものを数え上げて返す。
+    with tempfile.TemporaryDirectory(prefix="mediaforge-smoke-") as scratch:
+        environment = dict(os.environ)
+        environment["CONTROL_DECK_FEATURE_DATA_DIR"] = str(Path(scratch) / "feature")
+        environment["CONTROL_DECK_SHARED_CACHE_DIR"] = str(Path(scratch) / "cache")
+        finished = subprocess.run(
+            [str(entrypoint), "doctor"],
+            capture_output=True,
+            timeout=600,
+            env=environment,
+        )
     if finished.returncode != 0:
         tail = finished.stderr.decode("utf-8", "replace")[-2000:]
         raise SystemExit(f"built executable failed its smoke run:\n{tail}")
