@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-09 v0.28.46 signed publication, installed update and MCP schema
+
+PR #361 merge `5bb01865112e1f9315885308432412cafad992c0`を別detached worktreeへ固定し
+build_release_bundle.pyで構築（PyInstaller6.22.0/Python3.12.3）、既存publisher keyで署名公開。
+artifact31,556,638 B/SHA0e1b8f9e1f3b8c9fd49b1060501067639784c3f77b8c7aad347db5a7e7b5c1b6。
+bundle/公開再取得は/data1tb/mf-0.28.46-build-20260909とmf-0.28.46-public-20260909。
+tar path/typeとembedded201 entriesを検査し、worker recipe/公開schema3種はexact checkoutと一致。
+秘密鍵/venv/モデル/制作物の混入なし（certifiの公開CA bundleだけ許可・実bytes照合）。
+packaged doctorはok/version0.28.46/packaged=true。公開4 filesはbuild出力とbyte一致、
+実Host trusted publisher verifierもPASS。これはpackaged CLI/配布検証であり実制作ではない。
+
+稼働Job/GUI0を再確認し、/data1tb/mf-0.28.46-update-i348oipzへ
+SQLite backupとBlender registryを0700 directory/0600 filesで保存。
+tag固定specによる標準release_bundle.installで0.28.45→0.28.46、28.243秒成功。
+全15 tableの行multiset/件数が完全一致（Job781/Asset654/scene38/revision144/GUI32等）、
+Blender registry bytesも不変。実HTTP200/healthy、enabled/requested_enabled=true。
+current→versions/0.28.46、実core PID825614/825618。Host667000はPID不変。
+標準2世代保持で0.28.44実行bundleを削除、直前0.28.45は保持。旧bundleは公開releaseから再取得可能。
+制作データ、Blender実体、利用者global設定を削除・変更しない。
+
+実HTTP capabilitiesにsupported_operations9個とobject.duplicate/modifier.mirrorを確認。
+Host providerが作る専用runtime config/正規MCP bridgeでtools/listを実行し、
+19 tools中media.scene.createのinputSchemaに新2操作が含まれることをassert、exit0。
+一時runtime configはfinallyで削除。これは実MCP schema配信の証拠であり
+LLMがdirectorを読んで新操作を実行した証拠ではない。実skill読込/制作受入は次slice。
+release準備commitの全1221 tests/138.33秒を参照。この記録sliceはdocs-only。
+GA全体/3DSの未完了条件、engine import、clean installed/失敗rollback残件は維持。
+
 ## 2026-09-09 v0.28.46 release preparation and skill discovery
 
 PR #360 merge `54e9c2d69a9999db8b05d6a09e38eee6de2d6db7`からux1/3d-release-0.28.46。
