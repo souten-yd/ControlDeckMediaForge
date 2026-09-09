@@ -1,5 +1,28 @@
 # Media Forge implementation status
 
+## 2026-09-10 retained lifecycle evidence refresh / Host deployment approval pending
+
+前sliceはHost PR #311 mergea32567c、MF記録PR #419 mergec3d66a7まで完了。
+実稼働Hostはmain6d3cd2a/PID1141433/activeで未反映、checkoutはclean。
+read-only DBでHost queued/running0、MF queued/running0、GUI active0、runtime operation active0を確認。
+別opencode.exe/llama-serverは存在し停止しない。Hostサービスのみの再起動可否を利用者へ確認中。
+今回Host/PC/MediaForgeの再起動・checkout反映は行わない。
+
+次の作業選択で、C/D要約表が最新の下段証跡を反映せず、autosave未実装や
+installed旧→新版未受入を繰り返し指示していると確認。原因別証拠表へ限定範囲を反映した。
+外部 `/data1tb/mf-current-lifecycle-audit-20260910.py` をcore venvで実行、exit0。
+autosave/expiry/default-idleのraw3件の終端理由/手編集回収/cleanup記録を確認し、
+復旧3 revisionの現在DB一致、旧版と復旧22 Assets/5,368,096 BのSHA/provenance一致、
+実GLB mesh nodes2/2/16を再照合。証跡 `/data1tb/mf-current-lifecycle-audit-g1gzbc9j`。
+read-only schema確認の初回queryは不存在path列で失敗したが、変更なし。
+schema上のstorage_nameを用いた上記auditは成功。raw証跡は書き換えない。
+expiryのrawにある「autosave後の複製を失った」は当時のスクリーンショットで裏付けがなく、
+後続キー入力の実効果NOT TESTEDという既存の訂正を保持する。
+
+文書だけのsliceでMF test/buildは再実行せず、git diff --checkを実施。
+NOT TESTED: 今回の新規lifecycle操作/現在PID回収、全C/D/E/3DS/GA、Host修正導入。
+ゲーム制作の有機weights/IK/歩行/造形品質/engine受入は独立した未完了要件として保持。
+
 ## 2026-09-10 Host queue receipt correction / installed acceptance pending
 
 前sliceの署名0.28.57/自然画像生成記録はMediaForge PR #418で通常merge

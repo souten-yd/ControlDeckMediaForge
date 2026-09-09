@@ -11,15 +11,22 @@ Date: 2026-09-10 / Status: PARTIAL
 | 二つのbrowser / writer競合 | `mf-3ds8-browser-0.28.14-long`: second_writerがblender_session_busy、reload後reconnected=true | 同記録のキー送信だけでは形状変更を証明しない |
 | 切断・再接続 | 同long記録で621.451秒保持と再接続。`mf-rfb-renewal-negative-0.28.30-20260906`で同sessionのconnections 1→2をheld_sec480.340で観測、660.433までconnected、gui_edit_saved=true | 後者のnegativeというディレクトリ名は失敗判定ではない。背景復帰のvisibility証拠とは別 |
 | 背景復帰 | `mf-background-return-installed-20260907-native`: 通常Chromeへno_defaultsで接続。opaque frameのvisible→hidden→visible、背景15.0495秒、同session/実描画復帰後の複製・保存で第4→5版/mesh1→2。実GLB nodeも1→2、旧版bytes不変 | 短時間desktop tab切替の範囲でVERIFIED。OS suspend/mobile背景/未保存故障回収とは別 |
-| idle終了 | `mf-3ds8-idle-0.28.14`: idle/disconnect設定各5秒、8.695秒で終端、復旧保存revision8 | 既定connected idle1800秒の実測ではない。開始時PID集合と終端後回収、手編集回収量は未照合 |
+| idle終了 | `mf-default-idle-installed-20260910-r2`: installed0.28.51、既定connected idle1800秒、実入力後観測1793.120秒でidle_timeout。8→16 meshesを別sceneへ回収、旧16ファイルhash保持、3 PID/cgroup/root/socket回収 | 旧.14の5秒fixtureからの推測ではない。入力後観測とterminal_secは起点が異なる。GPU/電源断とは別 |
 | 保存失敗でも終了 | `mf-save-conflict-cleanup-installed-20260907`: 5.831秒でfailed・process回収。追加`mf-unsaved-save-conflict-installed-20260907`: 実RFBで2→4 meshes、保存前working bytes不変、競合後5.037秒でfailed・process回収。候補から別scene初版へ4 meshesを回収、競合側1 meshの第6版は不変 | 保存API内部のBlender保存後の競合。save以前のcrash/定期autosave/GPU leaseとは別 |
-| Blender crash | `mf-gui-child-crash-cleanup-installed-20260907`: 5.266秒でrunner_lost・process回収。追加source `mf-autosave-crash-evidence-final-20260907-r2`: 実手編集1→2 meshes、自動保存の実書込拒否/警告/旧bytes保持→権限復元→次interval成功後にBlender子だけkillし、同hashの別scene初版へ2 meshesを回収（実GLB一致） | 新autosaveはsource受入258.512秒。installed0.28.38には未配布。保存途中のkill/次interval以前の変更量はNOT TESTED。batch worker crashとは別 |
+| Blender crash | `mf-autosave-installed-20260909`: installed0.28.45/Blender4.5.13、実手編集1→2 meshes、自動保存の書込拒否/日英警告/旧bytes保持→次interval成功→Blender子kill。3.458秒でrunner_lost、全3 PID/cgroup/root/socket回収、同hashの別scene初版へ2 meshesを回収 | source-only/未配布という旧制限はこの受入範囲で解消。言語はbrowser languagechange fixture。保存途中kill/次interval以前の変更量、batch worker crashとは別 |
 | 切断猶予終了 | `mf-disconnect-grace-cleanup-installed-20260907-final`: 実noVNC接続後Close view only、connected_at=null/disconnected_at非null、既定300秒で302.270秒後終端。3 PID/cgroup/root/socket消滅、durable参照0 | 接続表示だけを描画品質の証拠としない。手編集なし |
 | MediaForge再起動 | `mf-core-restart-edit-installed-20260910-r2`: 0.28.49/HTTP healthy0.986秒、Host PID不変、GUI3 PIDを保持。同session再接続・実描画・追加手編集・保存で第7→8版/2→8 meshes、旧14ファイルhash不変、終了後3 PID/cgroup/root/socket回収 | ready中の正常service restart。RAM内の未保存複製を保持し再接続後の編集も保存。core crash/保存途中/電源断とは別。初回runの黒画面は描画復帰成功に含めない |
-| Host認証期限切れ | `mf-3ds8-host-token-expiry-0.28.14`: 実署名token TTL20秒、25.038秒でRFB close4403/host service token expired、host_revoked、復旧保存revision10 | 秘密値は記録しない。手編集回収量・当時の全PID回収は未照合 |
+| Host認証期限切れ | `mf-expiry-edit-installed-20260909`: installed0.28.45、実Host opaque browserで1→2 meshes、120秒autosave後に正規署名TTL20秒でcore RFBへ接続。30.031秒で4403、30.309秒でhost_revoked。全3 PID/cgroup/root/socket回収、同hashの別sceneへ2 meshes復旧、旧版保持 | 期限切れ接続はHost proxy経由ではなく署名identity→installed core。後続複製キーの実効果は未確認なので、raw文言の「autosave後の複製を失った」は採用しない |
 | 復旧候補と正式版 | .38保存競合では候補515,342 Bを通常recovery.forkで別scene初版へ確定しsource hash一致。child crashと切断終了も候補450,236 Bから別scene確定、元scene/候補不変 | 未検証候補の存在だけを復旧成功としない。未保存手編集の回収範囲は次の試験で測る |
 
 ## 手編集とファイルの証拠
+
+2026-09-10再照合: 外部 `/data1tb/mf-current-lifecycle-audit-20260910.py` を実行しexit0。
+上表のautosave/expiry/default-idleのraw JSON・復旧3 revisionの現在DB一致を確認。
+旧出力と復旧blend/GLBの計22 Assets/5,368,096 Bを実hash/provenanceへ照合し、
+復旧GLBの実mesh nodes2/2/16を再確認。証跡 `mf-current-lifecycle-audit-g1gzbc9j`。
+過去の実機動作を今再実行したものではなく、現在PID回収の新しい証明でもない。
+表内の未実装/未配布/回収未照合という古い記述を、上記の限定された受入範囲で修正した。
 
 2026-09-09 installed0.28.45/Blender4.5.13の追加証拠:
 `mf-autosave-installed-20260909`で実RFB手編集1→2 meshes、
