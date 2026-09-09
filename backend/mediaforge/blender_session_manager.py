@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import time
 import stat
 from typing import Any, Callable
 import uuid
@@ -559,6 +560,17 @@ class BlenderSessionManager:
             session = self.store.get_blender_web_session(owner, session_id)
             if session.state != BlenderSessionState.READY:
                 return
+            autosave_failed = await asyncio.to_thread(self._autosave_failed, session.id)
+            # A save/stop may have begun while the status file was read.
+            session = self.store.get_blender_web_session(owner, session_id)
+            if session.state != BlenderSessionState.READY:
+                return
+            if autosave_failed is True and session.error_code in {None, "blender_session_autosave_failed"}:
+                if session.error_code is None:
+                    session = self._update(owner, session, error_code="blender_session_autosave_failed",
+                        error_message="Automatic recovery snapshot failed; the previous snapshot is retained. Save explicitly or retry later.")
+            elif autosave_failed is False and session.error_code == "blender_session_autosave_failed":
+                session = self._update(owner, session, error_code=None, error_message=None)
             if not await self.controller.active(session.unit_id):
                 await self._fail(
                     owner, session.id, session.working_id,
@@ -599,6 +611,28 @@ class BlenderSessionManager:
                     return
             if session.working_id is not None:
                 self.scene_workspace.renew_working_copy(owner, session.working_id)
+
+    def _autosave_failed(self, session_id: str) -> bool | None:
+        """Read bounded private status in a worker thread; never expose file paths."""
+        path = self._session_root(session_id) / "autosave.json"
+        try:
+            if not path.exists() and not path.is_symlink():
+                ready = path.parent / "ready.json"
+                # Grace includes one normal 120s interval plus 60s for a busy
+                # Blender. Missing/stale reports are not evidence of success.
+                return True if ready.exists() and time.time() - ready.stat().st_mtime > 180 else None
+            if path.is_symlink():
+                return True
+            if time.time() - path.stat().st_mtime > 180:
+                return True
+            value = self._read_json(path, 1024)
+            if (not isinstance(value, dict) or set(value) != {"schema_version", "session_id", "ok"}
+                or value["schema_version"] != 1 or value["session_id"] != session_id
+                or type(value["ok"]) is not bool):
+                return True
+            return not value["ok"]
+        except (OSError, ValueError, BlenderSessionError):
+            return True
 
     async def _interrupt(self, owner: str, session_id: str, code: str, message: str) -> None:
         session = self.store.get_blender_web_session(owner, session_id)

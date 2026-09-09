@@ -207,7 +207,17 @@ failed / interruptedは原因付き終端。disconnectedはRFB gatewayを追加�
 - 同時編集sessionは利用者1件、ホスト全体1件。上限拡大はRAM/VRAM実測後。
 - 同一working sceneはsingle writer lock。二つ目のタブは閲覧または明示takeover。
 - 接続断後10分猶予、入力なし30分で保存・終了を試行。期限をUIへ表示（未実装）。
-- autosave間隔2分を目標、保存先を隔離working copyへ限定（未実装）。
+- autosave間隔2分を目標、保存先を隔離working copyへ限定。
+  2026-09-07 source実装: Blender timerで120秒ごとに同working directory内の
+  一時directoryへcopy保存し、完了/header/fsync後にscene.blendをatomic replaceする。
+  保存前の失敗は直前snapshotを保持する。通常の製品保存commandも同じ保存関数を使う。
+  Blenderのmodal操作中などはtimerが遅延し得るため、120秒を上限保証とはしない。
+  autosaveはimmutable Asset/revisionを作らず、正式版は引き続き明示保存・独立検証で確定する。
+  Blender標準の一時autosave設定はsession内だけ無効化し、利用者の設定へ保存しない。
+  保存失敗または180秒を超える結果通知欠落/停止はcoreが非同期thread読取で検知し、
+  readyを保ちながら日英の警告をGUI dialog/scene欄へ表示する。次の成功で警告を解除する。
+  書込障害で通知自体が失敗してもtimerを継続し、次intervalで再試行する。
+  source実機と署名installed受入はimplementation-statusで分けて記録する。
 - 保存後に独立した検証・asset commitでrevisionを確定。autosaveは正式版ではない。
 - 終了時は入力停止→保存要求→最大30秒待機→process group終了→予約・lock回収。
 - 保存に失敗した場合はrecovery copyと理由を保持し、「保存済み」と表示しない。

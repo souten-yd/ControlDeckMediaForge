@@ -1,5 +1,85 @@
 # Media Forge implementation status
 
+## 2026-09-09 autosave integration with current main
+
+保存済みのsource受入変更をcommit `906e390`へ確定し、最新main
+`7b739bc`（PR #354、0.28.44）をmerge commit `c27ac31`で取り込んだ。
+追加された画像透過/参照入力等を保持し、競合なし。全 `./mf.sh test`は
+1201 passed/既知deprecation warning2/140.06秒、exit0。
+node --check、npm run build:viewer、git diff --check成功、viewer生成物差分なし。
+先行9月7日のsource実機証拠は保持。main統合後のGUI再実行とは読み替えない。
+
+現行Host registry.statusのread-only確認はMediaForge0.28.44、enabled/requested_enabled=true、
+health=healthy。current symlinkはversions/0.28.44、実core PID501057/501062、
+Host control-deck-web.serviceはactive/PID667000。9月7日の0.28.38/PID記録は歴史的証拠。
+自動保存の新codeはまだinstalled版へ配布していない。次は通常PR merge後に
+未使用の新しい版番号で署名release/consumer検証/標準updateとinstalled日英受入を進める。
+Host checkoutはmain ahead1で、変更・restartしていない。無関係な .venv symlinkも保持。
+
+## 2026-09-07 GUI periodic autosave (source candidate)
+
+PR #348 merge `69d04d9d84eea27669a1dbba98047a047e958f31`から
+branch `ux1/3d-autosave`。runtime/Web設計§7の120秒autosaveをBlender側timerに実装。
+隔離working copy内の一時directoryへcopy保存（relative_remap=false/compress=false）し、
+FINISHED/header/fsync後にscene.blendをatomic replace。旧candidateを保存途中に上書きしない。
+正式revision/Asset確定は行わず、既存の独立検証・明示保存/forkを維持する。
+製品の通常save commandも同じsnapshot関数へ統一。Blender標準の一時autosave設定は
+session内だけ無効化し、利用者のpreferencesを保存しない。
+
+失敗statusをcoreがasyncio.to_threadで読む。readyは保持し、GUI dialog/scene欄に日英警告、
+次の成功で解除。180秒を超える通知欠落/停止も警告し、結果不明を成功扱いしない。
+通知/heartbeat書込失敗は静的診断を出してtimerを継続、次intervalで再試行する。
+modal操作等でBlender timerが遅れるため120秒は目標であり上限保証ではない。
+追加10 testsで境界120秒、copy/atomic置換、書込失敗/CANCELLED/header不正/replace失敗時の
+旧bytes保持と再試行、警告/解除、遅いstatus読取中のevent loop応答、
+symlink/identity不正、stale/missing通知、通知書込失敗後のtimer継続を検証。
+最終全 `./mf.sh test`: 1145 passed/既知warning1/160.55秒、exit0。
+`npm run build:viewer`成功（生成物差分なし）、node --check、py_compile/diff check成功。
+
+新診断 `scripts/3ds_autosave_source_e2e.py`は専用data rootのsource HTTP/WS/GUIを使う。
+既存4.5.9とWeb packを参照するだけで、導入更新操作やHost再起動は行わない。
+最初のserverはPYTHONPATHにrepo rootがなくimport失敗、終端確認後に修正して起動。
+最初のbrowserはstandalone session一覧refresh不足で接続待ちtimeout、owned sessionをstop。
+API ready後に正規refreshSessionを呼ぶ修正後、
+/data1tb/mf-autosave-crash-evidence-20260907-r2 は133.117秒passed。
+実RFBでCube複製後、130.310秒時点で468,914 Bのautosaveを観測（15秒間隔poll）。
+SHA b214cab95c6c7856e9a7f9ecb0247f7abb715d15fd7182055c313231cee3843c。
+自分のBlender子だけをpidfd/executable/cgroup確認後にkill、runner_lost後に候補を通常fork。
+新source hash一致・復旧2 meshes・元sceneの確定版不変・process/cgroup/root消滅をassert。
+これは先行source試験。最終試験は以下の別sessionで行った。
+
+最終sourceサーバは新root /data1tb/mf-autosave-source-final-20260907、
+unit mf-autosave-source-final-20260907（RuntimeMax600秒）。初回final browserは日本語警告を
+英語だけでassertして停止した。日本語警告の実画面と旧bytes保持は確認済みだが、
+そのrunを再試行成功とはしない。owned GUI終了とdirectory権限復元をfinallyで確認。
+診断を日英文言の実測記録へ修正し、同じ稼働serverで別sessionを開始。
+--fail-first-autosave --data-dir /data1tb/mf-autosave-source-final-20260907
+--evidence-dir /data1tb/mf-autosave-crash-evidence-final-20260907-r2 は258.512秒passed/exit0。
+
+最終session blendersession_2236254f00744fdbbdf4dd30042bbd68。
+実RFBでCube1→2へ複製、保存前hash/正式版不変。
+自分のworking directoryだけを一時0500にして実書込拒否を起こし、135.054秒時点で
+autosave ok=false、旧bytes不変、正規refreshSession後に日本語のdialog警告を確認。
+元のdirectory modeへ戻し、255.184秒時点で次の120秒intervalの保存成功と警告解除。
+自動保存468,914 B、SHA8ef2f2daec61db391777be5bceb2d9b9bc14bd3b365f7556215c9fd5ac17fe87。
+これは15秒pollの観測時刻で、timerの正確な実行時刻/最大遅延保証ではない。
+
+実在したPID996734/996738/996785のうちBlender996785だけを
+pidfd取得後の実行ファイル/cgroup再確認でSIGKILL。
+runner_lost後に全3 PID/cgroup/session root消滅、候補hash不変をassert。
+通常fork先scene_a3718b63246c5c1a91824ca692ce56acの初版sourceと候補hash一致、
+実Blender検証2 meshes、元sceneの確定版不変。追加read-only実GLB解析も2 mesh node、
+3,272 B/SHA224d9e0fb77c2835aaf514c86d046f262c3c5bdb96a790d8c674b5bb3f955c35、
+provenance sidecar/DB一致。page errors0、active GUI0。元source/候補/復旧sceneは保持。
+最終source unitは明示stopしinactive/MainPID0。Host849052/MF905518/905522はPID不変。
+source /healthは環境marker不在のsetup_requiredでありhealthyと記録しない。
+日本語警告を実機確認。英語警告/installed4.5.13/強制終了が保存途中に重なる場合/
+電源断/次autosave前の変更回収量はNOT TESTED。署名配布・installed受入は次slice。
+
+署名installed版は0.28.38のままで、新autosaveはまだ配布していない。
+source受入完了後、通常PRをマージし、次の署名release/標準update/installed受入へ進む。
+C/GOAL-09/全3DS完了とはしない。
+
 ## 2026-09-07 unsaved GUI edit retained on save conflict
 
 PR #347 merge `9758cb581c4756b89493baf58a8a87e91f44796d`から
