@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-09 autosave integration with current main
+
+保存済みのsource受入変更をcommit `906e390`へ確定し、最新main
+`7b739bc`（PR #354、0.28.44）をmerge commit `c27ac31`で取り込んだ。
+追加された画像透過/参照入力等を保持し、競合なし。全 `./mf.sh test`は
+1201 passed/既知deprecation warning2/140.06秒、exit0。
+node --check、npm run build:viewer、git diff --check成功、viewer生成物差分なし。
+先行9月7日のsource実機証拠は保持。main統合後のGUI再実行とは読み替えない。
+
+現行Host registry.statusのread-only確認はMediaForge0.28.44、enabled/requested_enabled=true、
+health=healthy。current symlinkはversions/0.28.44、実core PID501057/501062、
+Host control-deck-web.serviceはactive/PID667000。9月7日の0.28.38/PID記録は歴史的証拠。
+自動保存の新codeはまだinstalled版へ配布していない。次は通常PR merge後に
+未使用の新しい版番号で署名release/consumer検証/標準updateとinstalled日英受入を進める。
+Host checkoutはmain ahead1で、変更・restartしていない。無関係な .venv symlinkも保持。
+
 ## 2026-09-07 GUI periodic autosave (source candidate)
 
 PR #348 merge `69d04d9d84eea27669a1dbba98047a047e958f31`から

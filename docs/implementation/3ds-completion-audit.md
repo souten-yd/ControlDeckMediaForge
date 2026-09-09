@@ -1,7 +1,11 @@
 # 3D Studio 完了監査
 
-Date: 2026-09-07
+Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
+
+2026-09-09現在: installed0.28.44/healthy/enabledをHost registryと実プロセスで確認。
+新autosaveはsource branchのみで未配布。main7b739bc統合後の全1201 testsがPASS。
+以下の0.28.38等の版数/プロセスは各実測日の歴史的証拠であり、現在稼働版とは区別する。
 
 2026-09-07 autosave追加: 隔離working copyへ120秒timer/atomic snapshotを実装。
 source実HTTP/WS/Blender4.5.9で書込拒否→日本語警告/旧bytes保持→権限復元→次interval成功、
