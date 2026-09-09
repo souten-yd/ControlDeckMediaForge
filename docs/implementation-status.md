@@ -1,5 +1,15 @@
 # Media Forge implementation status
 
+## 2026-09-09 v0.28.47 release preparation
+
+PR #365/#366を含むmain23d51b2からrelease準備。
+core/addonを0.28.47へ揃え、docs/release-v0.28.47.mdへrig/rigid skin/pose/clipの
+対応範囲・制限・旧operation互換とrollback注意を記載。DB migrationなし。
+現在installedは0.28.46、実HTTP healthy、Host PID667000/MF825614 active。
+事前確認時にactive Jobs0、GUIはfailed4/interrupted9/stopped19のみ。
+全 `./mf.sh test`:1258 passed/既知warning2/139.25秒、exit0。diff check成功。
+署名構築/公開/標準update/installed MCP受入は次工程で、source検証と混同しない。
+
 ## 2026-09-09 typed animation clips and real GLB playback samples
 
 recipe@1へanimation.clipを加法追加、公開create/edit/workflow schemaとAPIを同期。
