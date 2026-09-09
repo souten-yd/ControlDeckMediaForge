@@ -3,6 +3,38 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-09 robot contact and multiview source acceptance
+
+利用者の剣の隙間指摘に対応し、scripts/robot_fixture.pyで既存公開recipeだけの
+静止robot fixtureと実mesh接合/CPU多視点renderを追加。既存static診断に--fixture robot、
+Blender --python-exit-code 1を追加。初回はBlender側のsibling module importで
+inspection.jsonが作られず失敗したため、診断script directoryを明示して再検証した。
+製品core/Host/公開契約は変更しない。これはLLM制作・installed実行ではない。
+
+実行: PYTHONPATH=backend:. .venv/bin/python scripts/3ds_game_static_e2e.py
+--fixture robot --evidence-dir /data1tb/mf-robot-contact-source-20260909-final
+--runtime-root /data1tb/mf-long-setup-source-20260906/runtimes/blender/blender-4.5.9-linux-x64
+--managed-root /data1tb/ControlDeck/data/feature-data/media-forge/runtimes/blender。
+独立data/registryのみ使用し、実Blender4.5.13で4.653秒PASS。
+25 meshes、modifier評価後2724 triangles、指定24接合pairで世界座標のmesh edge rayと
+相手triangle BVHの交点を検出。AABB overlapだけではない。
+頭のedgeを5m離したnegative fixtureはneckとの交差なし。任意の包含/coplanar判定は未対応。
+CPU Cycles/16 samples/640x720のfront/side/three-quarter PNGを生成、
+R2の全3視点とfinal斜め像を実際に閲覧。首・腰・肘に芯材があり部品が浮いていない
+静止試作を確認したが、箱形主体であり利用者の「格好よい」の承認は未取得。
+final斜めPNG467256 B/SHA2e78963b0e22182760dea088793f6ccd1426b531e1e3401abd97e89858550ced。
+旧source/Blender executable hash不変、生成Asset hash/provenanceを検証した。
+GUI/Host processやglobal設定は変更しない。render用camera/lightは検査processのメモリ内だけ。
+
+利用者の「ポーン」はBlenderのボーン（骨格）と確認済み。GA-4/5を必須として維持。
+次はbounded骨格/部品割当て→pose→vertex weights→待機/歩行clip→GLB再import/再生。
+現行scene_document.pyはexport_animations=Trueで出すがbone/weight/key予算の検証はなく、
+compile_asset.pyはrig/animation付き入力の破壊的geometry/material optionを拒否する。
+このcode readだけでrig対応済みとはしない。typed rig操作と実受入は未実装。
+全 `./mf.sh test`:1231 passed/既知warning2/141.98秒、exit0。diff check成功。
+NOT TESTED: installed/MCP robot生成、rig/動的接合/animation、engine import、
+ユーザーによる外観承認、従来3DS/GA全体完了。
+
 ## 2026-09-09 director skill / static operation acceptance diagnostic
 
 既存OpenCode制作診断へ `--director-static` を追加。専用の新projectだけを作り、

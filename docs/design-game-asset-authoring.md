@@ -87,6 +87,13 @@ merge距離のworld換算はobject scaleの影響を受ける。メートル指�
 評価後meshの接触/離隔と合わせて判定する。AABBの重なりだけを接触の証明にしない。
 機械検査合格を「格好よい」の証明とはせず、ユーザーにpreviewを提示する。
 ロボットはまずstatic prop。動く関節/rig/animationはGA-4/5の別受入。
+利用者は同日、Blenderのボーンを用いた動きアニメーションも明示要求した。
+Unreal Pawnではなくarmature/boneとして扱う。static段階の終了を全体完了にしない。
+最初のrig sliceはbounded骨格階層とロボット部品の剛体的なbone割当て、rest/pose比較。
+続いて有機モデルのvertex weights、関節変形、待機/歩行clipを実装する。
+骨数/階層循環/零長bone/weight正規化/影響数/キー数を制限し、
+スキンとアニメーションを含むGLBの再import・再生を確認する。
+現在のscene検証/export制約を先に監査し、任意bpyを通常recipeへ開放して代用しない。
 カメレオンは胴体から手足への連続面、目、指、巻いた尾が必要なorganic fixtureとして
 GA-1 curve/mesh編集とGA-2 sculpt/retopologyの受入へ含める。球の寄せ集めで完成扱いにしない。
 

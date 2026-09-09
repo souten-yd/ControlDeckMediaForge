@@ -79,7 +79,10 @@ def run(args: argparse.Namespace) -> None:
          "location":[1,1,0],"dimensions":[0.4,0.2,1]},
         {"type":"material.set","object_id":"copy","base_color":[0.8,0.1,0.1,1]},
     ]
-    create = SceneCreateRequest.model_validate({"name":"Game gate acceptance","recipe":{"operations":operations}})
+    if args.fixture == "robot":
+        from robot_fixture import recipe
+        operations = recipe()
+    create = SceneCreateRequest.model_validate({"name":"Game " + args.fixture + " acceptance","recipe":{"operations":operations}})
     evidence: dict[str, Any] = {"mode":"source_domain_real_blender", "runtime":runtime.version}
     began = time.monotonic()
 
@@ -98,13 +101,16 @@ def run(args: argparse.Namespace) -> None:
         source = store.asset_path(created["revision"]["source_asset_id"])
         old_hash = hashlib.sha256(source.read_bytes()).hexdigest()
         completed = subprocess.run([str(runtime.executable), "--background", "--factory-startup", "--disable-autoexec",
+            "--python-exit-code", "1",
             "--python", str(Path(__file__).resolve()), "--", "--inspect", "--source", str(source),
-            "--evidence-dir", str(args.evidence_dir)], capture_output=True, text=True, timeout=60, check=False)
-        assert completed.returncode == 0, completed.stderr[-2000:]
+            "--evidence-dir", str(args.evidence_dir), "--fixture", args.fixture],
+            capture_output=True, text=True, timeout=180, check=False)
+        assert completed.returncode == 0, (completed.stdout + completed.stderr)[-4000:]
         evidence["inspection"] = json.loads((args.evidence_dir / "inspection.json").read_text())
         edit = SceneEditRequest.model_validate({"scene_id": created["scene"]["id"],
             "base_revision_id":created["revision"]["id"], "recipe":{"operations":[
-                {"type":"transform.set","object_id":"copy","location":[1,2,0]}]}})
+                {"type":"transform.set","object_id":"copy" if args.fixture == "gate" else "forearm",
+                 "location":[1,2,0] if args.fixture == "gate" else [0.46,-0.025,0.91]}]}})
         evidence["edited"] = asyncio.run(apply(edit))
         assert hashlib.sha256(source.read_bytes()).hexdigest() == old_hash
         for result in (created, evidence["edited"]):
@@ -131,8 +137,14 @@ if __name__ == "__main__":
     parser.add_argument("--runtime-id",default="blender-4.5.13-linux-x64")
     parser.add_argument("--inspect",action="store_true")
     parser.add_argument("--source",type=Path)
+    parser.add_argument("--fixture",choices=("gate", "robot"),default="gate")
     args = parser.parse_args(values)
     if args.inspect:
-        inspect_blend(args.source,args.evidence_dir / "inspection.json")
+        if args.fixture == "robot":
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from robot_fixture import inspect_blend as inspect_robot
+            inspect_robot(args.source,args.evidence_dir / "inspection.json")
+        else:
+            inspect_blend(args.source,args.evidence_dir / "inspection.json")
     else:
         run(args)
