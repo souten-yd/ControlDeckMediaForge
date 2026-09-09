@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10署名0.28.53公開/consumer署名検証/標準update10.240秒healthy、DB/registry保持。
+installed実opaque RFBの4.5.9稼働中repairはin_use拒否、同GUI/scene/assets/実行file inode保持。
+`mf-repair-protection-installed-0.28.53-20260910`、86.973秒/exit0、一時login/専用unit回収。
+下記修復保護の稼働中拒否をinstalledでも補完。停止後正常repairはsourceのみ、
+B並行導入/probe失敗や全D/3DS/GAが完了したとは扱わない。
+
 2026-09-10修復保護追加: candidate公開時のlive参照欠落を2件REDで再現し、
 受付guard/worker thread/取消追跡を実装。隔離source HTTP/実Blender4.5.9の稼働中修復は
 実archive/候補probe後にin_use拒否、旧8files/scene保持、GUI終端回収、25.053秒/exit0。

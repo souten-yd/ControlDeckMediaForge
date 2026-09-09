@@ -1,5 +1,51 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.53 signed release and standard installed update
+
+準備PR #391 source89ffbf9099a1598e9569cb07f80d41431cf6a772、通常merge
+330e0b0b6543e4ef2507b46775dd1f86e0849de5をexact checkout/tag v0.28.53へ固定。
+checkout /data1tb/ControlDeckMediaForge-release-0.28.53。
+同checkoutでpython3 scripts/build_release_bundle.py --version 0.28.53
+--output-dir /data1tb/mf-0.28.53-build-20260910
+--pyinstaller /data1tb/ControlDeckMediaForge-3ds4/runtimes/bundle-build/.venv/bin/pyinstaller。
+既存PyInstaller6.22.0/Python3.12.3使用、exit0。
+artifact31,573,646 B/SHAe8a22e13602634510f549b19f890074ae28d2bf68bf73e64cedfccefde1dbd80。
+/data1tb/mf-0.28.53-audit.pyでCArchive202 entries、禁止名なし、certifi公開PEM一致、
+worker/schema/frontend各bytesをexact source照合。PYZの修復guard/参照再検査と
+_installのshield/to_thread、既存RFB observer/failure reader/fresh monitorも確認。
+packaged doctor:ok/version0.28.53/packaged=true。
+展開先 /data1tb/mf-0.28.53-package-suto6775、build/verification.jsonに記録。
+
+既存publisher鍵で署名/自己検証し、通常公開:
+https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.28.53
+公開4filesを/data1tb/mf-0.28.53-public-20260910へ再取得。
+Host診断venv/既存CONTROL_DECK_CONFIG/PYTHONPATHで
+/data1tb/mf-0.28.53-install.pyを実行。local/public bytes一致と実Host trusted signature検証、
+Jobs/GUI/setup全終端→SQLite backup→再idle/全table fingerprint/registry照合後、標準install。
+10.240秒でinstalled0.28.53/実HTTP healthy、DB全table/registry bytes不変。
+backup /data1tb/mf-0.28.53-update-vvnnqdet、observations.jsonに結果を保持。
+Host667000不変、MF1082083。標準保持処理で0.28.51 executable bundleのみ整理し、
+0.28.52/.53を保持。旧bundleは公開releaseから再取得可能。制作物/runtime削除なし。
+利用者へ整理範囲を通知済み。準備全1348 tests/145.63秒、Node5/build成功を参照。
+本記録sliceは文書のみ。全3DS/GAの完了とはしない。
+
+installed修復保護: Host診断venv/既存CONFIG/PYTHONPATH/DISPLAY/XAUTHORITYで
+/data1tb/mf-repair-protection-0.28.53.pyを実行。user:16の専用scene/base第14版を固定検査し、
+正規Host opaque frame/Origin:null/overlayなしで4.5.9 GUIを起動、実RFB接続/描画1282色を確認。
+同runtimeのrepairを正規workspace APIへ要求、73.721秒でfailed/blender_runtime_in_use。
+operation blenderop_f280a6da698142d7807822bfef5f14aa。独立DB/実ファイル再照合でも旧28assets hash一致、GUI0。
+同GUI readyと描画を保持し、scene全投影/旧asset hash/registry bytes不変、
+実行ファイルSHAde8e8092c49e42cc6f1adde86aea0202ea5bad3338725887ecbcb7274dd0f926、
+inode46020214不変（稼働treeの差替えなし）。86.912秒で専用session停止、
+86.973秒で一時login revoke、exit0/page errors0。password変更なし。
+証跡 /data1tb/mf-repair-protection-installed-0.28.53-20260910/observations.json。
+session blendersession_c77efb16b51d42849a5d324fac238535、終端unit not-found/inactive/MainPID0。
+MF1082083/Host667000はactive/PID不変。PNGは実GUI描画の証拠であり編集保存の証拠ではない。
+setup要求はAPI経由で、Settingsのエラー文言操作や修復後の再編集を実測したとはしない。
+この稼働中修復拒否のsource-only制限を補完した。停止後の正常修復は前source実機を参照し、
+installedの同条件・B並行導入/probe失敗・全D/3DS/GAは未完了として維持する。
+次は残るDの別版並行導入/失敗の安全なfixtureと実行境界を確認して進める。
+
 ## 2026-09-10 v0.28.53 release preparation
 
 前goal turnは修復時の稼働版保護を実装・実Blender受入しPR #390 mergeまで進捗。

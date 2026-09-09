@@ -3,6 +3,33 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.53 signed and installed
+
+準備PR #391は通常merge330e0b0b6543e4ef2507b46775dd1f86e0849de5。
+exact checkout /data1tb/ControlDeckMediaForge-release-0.28.53/tag v0.28.53。
+既存build_release_bundle.py/PyInstaller6.22.0/Python3.12.3でbundle生成・監査、
+既存publisher鍵で署名・公開、公開4files再取得と実Host署名検証を確認。
+artifact31,573,646 B/SHAe8a22e13602634510f549b19f890074ae28d2bf68bf73e64cedfccefde1dbd80。
+/data1tb/mf-0.28.53-build-20260910/verification.json、public-20260910に証跡。
+auditは新repair guard/参照/shield/threadを含む。packaged doctor:ok/.53/packaged=true。
+Host診断venvで/data1tb/mf-0.28.53-install.pyを実行、全idle→backup→再確認→標準update。
+10.240秒/healthy、DB全table fingerprint/Blender登録bytes不変、Host667000不変/MF1082083。
+backup /data1tb/mf-0.28.53-update-vvnnqdet。保持規則で.51実行bundleのみ整理、.52/.53保持。
+制作物/runtime削除なし、旧bundleは公開releaseで復元可能と通知済み。
+準備全1348 tests/145.63秒、Node5/viewer build成功。本記録sliceは文書のみ。
+全3DS/GAはPARTIAL、未検証の条件を完成扱いしない。
+
+installed保護は/data1tb/mf-repair-protection-0.28.53.pyをHost診断venvで実行。
+既存CONFIG/PYTHONPATH/DISPLAY=:0/XAUTHORITYを利用、一時mf-e2e loginのみfinally revoke。
+opaque frame/Origin:null/overlayなし、同専用acceptance-sword第14版、4.5.9実RFB描画確認後、
+正規workspace APIで同版repair。73.721秒でin_use拒否、同GUI ready/scene/旧assets/registry保持。
+runtime executable SHA/inode不変。86.912秒stop/86.973秒revoke/exit0/page errors0。
+証跡 /data1tb/mf-repair-protection-installed-0.28.53-20260910。
+session c77efb16b51d42849a5d324fac238535、unit not-found/inactive/MainPID0。
+Host667000/MF1082083不変。PNGはGUI描画のみ、編集保存やSettings文言受入ではない。
+稼働中拒否のinstalled不足のみ補完。停止後正常repairのinstalled、別版並行導入/probe失敗は残る。
+次はDの別版並行導入/失敗の安全なfixtureと実行境界を確認する。
+
 ## 2026-09-10 v0.28.53 release preparation
 
 baseはPR #390 merge9d0f67ad06838a379641d5fd3899a647596255df。
