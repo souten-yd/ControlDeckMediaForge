@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 installed Job受付→削除再拒否: 新規専用recipeの実Host child受付後、
+旧版inactive/live3（recipe_jobs1/GUI0）でstale確認をremove_changed、fresh確認をin_use拒否。
+正規取消で両Job canceled/参照0、旧scene/registry/runtime保持、実削除なし。
+`mf-job-removal-installed-0.28.54-20260910`、7.261秒/exit0。一時既定変更は復元済み。
+逆順受付・重複取消や全D/3DS/GAの完了へ拡大しない。
+
 2026-09-10署名0.28.54を公開/再取得/実Host署名検証し、標準update10.052秒healthy。
 DB全table/Blender登録保持。installed実ブラウザのstale/live削除拒否とRFB描画・終了回収も確認。
 `mf-stale-removal-after-ack-installed-0.28.54-20260910`、58.057秒/exit0。

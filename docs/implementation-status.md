@@ -1,5 +1,51 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed Job admission blocks stale and fresh removal
+
+base PR #399 merge86fb8bec08a206620f306cb5d8a11cd40e360a87、ux1/3d-installed-job-removal。
+前turnは署名0.28.54公開/導入/ブラウザ回帰/通常mergeまで進捗。
+既存sourceのHost待機fixtureだけではinstalled Job受付との削除競合を証明しないため、
+実Host child/Agent HTTPとworkspace bridgeによる専用Job受入を追加した。製品変更なし。
+
+外部診断 `/data1tb/mf-job-removal-0.28.54.py` をapply_patchで作成。
+最初の実行はidle gateでexit1。別image.edit job_df77ab94ca3e4bacbc1e97e89cf4b476がrunningだった。
+ログイン・設定変更・証跡directory作成前の拒否。実MF cgroupのPython PID1120012も確認し、
+他Jobを止めずread-only追跡。元Jobのsucceededと未終端Job0を確認して再実行した。
+
+実行:
+
+```bash
+CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml PYTHONPATH=/data1tb/ControlDeck/app/backend DISPLAY=:0 XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3 /data1tb/ControlDeck/app/.venv/bin/python /data1tb/mf-job-removal-0.28.54.py
+```
+既存mf-e2e/user16の一時loginをfinally revoke。Agent HTTPのservice tokenは既存正規issuerで
+TTL60秒・actor16へ限定し、メモリ内だけで使用、出力/ファイル保存なし。
+全idle/非active旧版/live0/project2を検査し、workspace正規switchで既定を一時4.5.9へ。
+既存sceneには触れず、新規64 uv_sphere（各vertices128）のbounded recipe Jobを受付。
+受付直後に既定4.5.13へ戻し、旧版へ固定された実Job参照がある場合だけ削除を要求する。
+すでにJobが終端なら削除要求を送らず失敗終了する。finallyで自分のJobだけ取消し、
+既定が自分の一時設定のままなら戻す。他actorの第三の既定変更は上書きせず検知する。
+
+証跡 `/data1tb/mf-job-removal-installed-0.28.54-20260910/observations.json`、7.261秒/exit0。
+6.470秒idle preview→6.609秒job_486ad88e1663442b81b71f50dbfd8bec受付、
+実Host child7b29f60793dd/detached=true。旧版はinactive、live3（in-process2/recipe_jobs1）。
+6.800秒の古いfingerprint+ack=trueをremove_changed、6.863秒のfresh live確認+ack=trueをin_use拒否。
+GUI/working copy参照は0で、Job参照による遷移を分離できた。
+自分のJobを正規APIで取消し、7.070秒canceled/host_terminal_sent=true/live0へ回収。
+旧preview fingerprintへ戻りcan_remove_with_history=trueとなったが、実削除は行っていない。
+新scene/revision追加なし、取消Jobのasset_idsは空。全既存scene/revision投影・registry bytes・旧exe hash/inode不変。
+旧exe SHAde8e8092c49e42cc6f1adde86aea0202ea5bad3338725887ecbcb7274dd0f926/inode46020227。
+7.095秒cleanup/既定復元確認、7.261秒一時login revoke。
+
+独立DB照合: Host childとMediaForge Jobは双方canceled、未終端Job0。
+以前の受入baselineの72 files hashも保持。MF cgroupはmain1116213/core1116217だけでBlender子なし、
+Host667000/MF1116213 active/PID不変。Job実行中のBlender PID自体は採取していないため、
+生成完走や特定の演算段階でのprocess取消の証拠にはしない。
+文書のみ。製品gateは0.28.54準備1361 tests/139.39秒/build/Node5を参照、今回再実行ではない。
+診断py_compile/diff check成功。全D/3DS/GA PARTIAL。
+NOT TESTED: installed重複取消、削除実行中の逆順受付、確認の切断/再起動保持、容量不足/中断等。
+次は削除処理が先に始まる逆順の受付保護と既存実機証拠を照合する。
+
+
 ## 2026-09-10 v0.28.54 signed and installed
 
 準備PR #398は通常merge8b5bb0375e09bae1523275e4e8f3dfb89244a460。

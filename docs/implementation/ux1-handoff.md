@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed Job admission removal protection
+
+base PR #399 merge86fb8bec08a206620f306cb5d8a11cd40e360a87、ux1/3d-installed-job-removal。
+前turnは.54署名導入/回帰/mergeまで進捗。今回は実Host Job参照による削除再拒否の文書受入。
+ephemeral /data1tb/mf-job-removal-0.28.54.py、既存Host診断venv/環境。
+初回idle gateでexit1、別image.edit実Job/worker1120012をread-only追跡し自然成功後に再実行。
+login/変更前の拒否。成功証跡 /data1tb/mf-job-removal-installed-0.28.54-20260910、7.261秒/exit0。
+全idle→旧版4.5.9へ一時switch→新規専用64sphere Job受付→既定4.5.13復元。
+inactive旧版live3（in-process2/recipe1）でstale/fresh確認をremove_changed/in_use拒否。
+job_486ad88e1663442b81b71f50dbfd8bec/Host7b29f60793ddは正規取消で双方canceled、live0。
+新sceneなし/取消Jobのasset_ids空、全旧scene/revision投影/registry bytes/旧exe hash・inode保持、独立72files hash一致。
+一時login revoke、service tokenは60秒/actor16でメモリのみ。MF1116213/core1116217/Host667000不変。
+文書のみ、既存1361 tests/build/Node5を参照。実行中Blender PID自体は未採取、生成完走ではない。
+全D/3DS/GA PARTIAL。次は削除が先に始まる逆順受付の実機証拠を照合する。
+
 ## 2026-09-10 v0.28.54 signed and installed
 
 準備PR #398 merge8b5bb0375e09bae1523275e4e8f3dfb89244a460/tag v0.28.54をexact checkout。
