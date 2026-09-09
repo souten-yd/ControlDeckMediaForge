@@ -53,7 +53,13 @@ idle/expiry/restartの保存版、成功GUI編集の前後/復元版、.38の3�
 controller.active待機中のreleaseと古いsession読取による競合をred/green testで再現・修正。
 3 PID/session rootは回収され候補547950 Bを保持したが、復旧mesh確認は未到達。
 短時間source回帰`mf-probe-clock-source-20260910`は138.523秒/2 meshes回収成功。
-修正版の配布・installed既定1800秒完走は未実施。上表idleを成功へ変更しない。
+この失敗後の修正版0.28.51は署名配布・標準導入済み。
+`mf-default-idle-installed-20260910-r2`がexit0/passed=trueで既定1800秒を完走。
+実入力17:45:12.191318 UTCから終端更新18:15:18.185248 UTC、idle_timeoutで終了。
+入力後観測1793.120秒（後段waitのterminal_sec1785.096とは起点が異なる）。
+再接続で入力時計を延長せず、8→16 meshesを別sceneへ復旧。実GLB22216 B/16 nodes、
+旧16ファイルhash不変、所有3 PID/cgroup/root/socket回収を確認した。
+この証拠で既定connected idleと手編集回収の残件を補完する。GPU/電源断には広げない。
 
 2026-09-10 sourceの前提修正: 全RFB frameと再接続がidleを延長していたため、
 完全なkey/pointerのみの操作時計へ変更。`mf-rfb-input-source-20260910-r2`で

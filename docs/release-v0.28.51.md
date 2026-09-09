@@ -13,7 +13,9 @@ PR #381で修正。0.28.50の実機30分診断は約15分で切断猶予切れ�
 実装時の全テストは1345 passed（既知warning2）。
 署名公開・公開4ファイル再取得・実Hostのtrusted publisher検証を確認しました。
 標準更新9.982秒で0.28.51/実HTTP healthy、DBとBlender登録保持を確認しました。
-ControlDeck本体のプロセスは変更していません。既定30分の実機再試験は実行中で、完走は未確定です。
+ControlDeck本体のプロセスは変更していません。既定30分の実機再試験はexit0で完走しました。
+再接続で入力時計を延長せずidle_timeoutで終了し、手編集8→16 meshesを別sceneへ回収。
+実GLBと旧16ファイルhash保持、所有process回収を確認しました。GPU競合試験とは別です。
 最新の状態は[実装状況](implementation-status.md)に記録します。
 
 ## 互換性
