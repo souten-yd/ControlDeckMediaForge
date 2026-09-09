@@ -1,6 +1,6 @@
 # 3D Studio lifecycle evidence map
 
-Date: 2026-09-07 / Status: PARTIAL
+Date: 2026-09-09 / Status: PARTIAL
 
 対象は [実装計画](g8-3d-studio-plan.md) §4 C と GOAL-09。
 証拠を原因ごとに分離し、過去の実測と現在の再検証を混同しない。
@@ -20,6 +20,16 @@ Date: 2026-09-07 / Status: PARTIAL
 | 復旧候補と正式版 | .38保存競合では候補515,342 Bを通常recovery.forkで別scene初版へ確定しsource hash一致。child crashと切断終了も候補450,236 Bから別scene確定、元scene/候補不変 | 未検証候補の存在だけを復旧成功としない。未保存手編集の回収範囲は次の試験で測る |
 
 ## 手編集とファイルの証拠
+
+2026-09-09 installed0.28.45/Blender4.5.13の追加証拠:
+`mf-autosave-installed-20260909`で実RFB手編集1→2 meshes、
+実書込拒否/旧bytes保持/日英警告→次120秒interval成功/警告解除を確認。
+言語はbrowser languagechange fixtureから正規Host bridgeを通す。
+Blender子だけのkill後3.458秒でrunner_lost、全3 PID/cgroup/root/socket回収。
+候補468,914 Bと復旧初版sourceのSHA一致、実GLBも2 mesh nodes、
+元scene全投影・旧版source/GLB hash不変。詳細はimplementation-status。
+これで上表のsource-only/未配布の制限をこの受入範囲に限り解消した。
+保存途中kill/電源断/次autosave後の編集量は未検証のまま。
 
 `.14-long`のrevision2と3はともに4 meshesであり、revision増加だけを
 「Add Cubeが成功した」証拠にはしない。GOAL-04の編集証拠は
@@ -41,7 +51,7 @@ idle/expiry/restartの保存版、成功GUI編集の前後/復元版、.38の3�
    Playwright既定のfocus emulationで全tab visibleとなる初回失敗は成功に含めない。
 2. 保存競合では追加2 meshesを全て回収できた（元2→回収4、実GLBでも確認）。
    2分autosaveはsource実装・実GUIの書込失敗/再試行後crash回収を確認。
-   次は署名release/標準updateを行い、installed4.5.13/日英で受入する。
+   署名release/標準updateとinstalled4.5.13/日英受入も2026-09-09に上記の範囲で確認。
 3. idle/expiry/restartの残る回収証拠を確認し、不足箇所だけ専用sessionで補う。
    GPU予約はsoftware GUIのprocess回収から推測せず、GOAL-10側の実lease証拠と照合する。
 

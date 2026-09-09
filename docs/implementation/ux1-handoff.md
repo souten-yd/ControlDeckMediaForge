@@ -3,6 +3,44 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-09 installed autosave failure, retry and crash recovery
+
+PR #357 merge `0fc4b0dc6e6fad3fb92064ee55885008f6b8a2ad`から
+branch ux1/3d-autosave-installed。既存専用GUI診断へ--failure-kind autosave-crashを追加。
+専用mf-e2e scene、稼働GUI不在、installed版/healthを検査し、Blender4.5.13をassert。
+実RFB canvasのA/Shift+D/Escapeで1→2 meshesへ編集し、保存前working hashと正式版不変を確認。
+自分のworking directoryだけを0500にするcontext managerは正常/例外時に元modeへ戻し、
+symlink/別rootを拒否する追加3 testsを持つ。既存利用者設定へ書き込まない。
+
+Host診断Pythonで
+`scripts/3ds_save_conflict_cleanup_installed_e2e.py
+--scene-id scene_3f3b5f1e97e94b268722ea45cc811c50 --expected-version 0.28.45
+--failure-kind autosave-crash --evidence-dir /data1tb/mf-autosave-installed-20260909`
+を実行しpassed=true/exit0。実Host opaque iframe/Chrome/installed4.5.13 software GUIを使用。
+session blendersession_df3a4b3cfad74d4ebcb3d3165b3b1651。
+製品120秒timerは変更せず15秒間隔poll。編集後の観測開始から125.090秒で
+保存失敗/旧bytes保持と日英警告、230.111秒で次の保存成功/警告解除/接続維持を確認。
+日英はブラウザnavigator.language+languagechangeのfixture入力を正規Host bridgeで配信。
+製品文言/stateの差替えや永続language設定変更ではない。日英screenshotも保持。
+
+開始時PID800905/800909/800963のうち、executable/cgroup/pidfdで確認した
+Blender800963だけをSIGKILL。3.458秒でrunner_lost、
+3 PID/cgroup/root/socket消滅、active GUI0、working directoryは0700へ復元。
+468,914 Bの候補SHA256
+`9fabe0194f2d29aa33ba69b7d2b5967e54752280a00983276865cca1c420fe86`を保持。
+正規recovery.forkでscene_1ad63290d7805fa9ac71ab6420eef70fの初版
+revision_5fde7d0aa3c248f38df6955638701eadへ確定しsource hash一致。
+実Blender検証2 meshes、独立read-only GLB JSONも元1→復旧2 mesh node。
+復旧GLB3,272 B/SHA224d9e0fb77c2835aaf514c86d046f262c3c5bdb96a790d8c674b5bb3f955c35。
+元scene第6版の全投影/旧revision source・GLB hashは不変、候補・復旧sceneを保持する。
+page errors0、専用Host loginはfinallyでrevoke。Host667000/MF798514/798518は不変。
+
+全 `./mf.sh test`: 1204 passed/既知deprecation warning2/139.51秒、exit0。
+診断py_compile/diff check成功。製品codeや版番号は変更せず、診断/受入文書だけを追加。
+これはinstalled自動保存の失敗→再試行→crash回収の受入。
+保存途中のkill、電源断、次autosaveより後の編集量、GPU lease、connected idleはNOT TESTED。
+C/GOAL-09全体はPARTIAL。次はidle/expiry/restartの未保存手編集回収量と全process回収の不足証拠を補う。
+
 ## 2026-09-09 v0.28.45 signed release and installed update
 
 PR #356 merge `02bb6681bac6dd91fd0b234cd9c64fca9e2da7ad`を固定して

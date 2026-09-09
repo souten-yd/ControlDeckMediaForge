@@ -2,11 +2,14 @@
 
 Host diagnostic Python. Only an explicitly named retained mf-e2e material
 conflict scene is advanced in save-conflict mode. Explicit blender-crash mode
-signals only this run's verified Blender child through a PID fd. No core restart.
+signals only this run's verified Blender child through a PID fd. Autosave-crash
+duplicates meshes, faults only its own working directory and verifies JA/EN
+warnings via a browser-language input fixture. No core restart.
 """
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import importlib.util
 import json
@@ -14,13 +17,46 @@ import os
 from pathlib import Path
 import re
 import signal
+import stat
 import sqlite3
 import subprocess
 import time
-from typing import Any
+from typing import Any, Iterator
 
 ACTIVE = {"queued", "preparing", "starting", "ready", "saving", "stopping"}
 DATA = Path("/data1tb/ControlDeck/data/feature-data/media-forge/data")
+
+
+@contextmanager
+def deny_owned_snapshot_write(candidate: Path, working_root: Path) -> Iterator[None]:
+    """Fault only a validated diagnostic working directory; always restore mode."""
+    assert not candidate.is_symlink() and candidate.is_file()
+    parent = candidate.parent
+    assert not parent.is_symlink()
+    assert re.fullmatch(r"working_[0-9a-f]{32}", parent.name)
+    assert parent.resolve(strict=True).parent == working_root.resolve(strict=True)
+    mode = stat.S_IMODE(parent.stat().st_mode)
+    try:
+        parent.chmod(0o500)
+        yield
+    finally:
+        parent.chmod(mode)
+
+
+def await_autosave(page: Any, root: Path, session_id: str, wanted: bool) -> dict[str, Any]:
+    """Observe the actual 120-second timer without replacing its clock."""
+    began = time.monotonic()
+    while time.monotonic() - began < 150:
+        path = root / "autosave.json"
+        if path.exists():
+            assert path.is_file() and not path.is_symlink() and path.stat().st_size <= 1024
+            value = json.loads(path.read_text())
+            assert value["session_id"] == session_id and value["schema_version"] == 1
+            if value.get("ok") is wanted:
+                return value
+        print(json.dumps({"waiting_autosave": wanted, "elapsed_sec": round(time.monotonic()-began, 1)}), flush=True)
+        page.wait_for_timeout(15000)
+    raise AssertionError("default autosave did not report expected result")
 
 
 def record(session_id: str) -> dict[str, Any]:
@@ -58,11 +94,13 @@ def main() -> None:
     parser.add_argument("--scene-id", required=True)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
-    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash", "disconnect-timeout"), default="save-conflict")
+    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash", "disconnect-timeout", "autosave-crash"), default="save-conflict")
     parser.add_argument("--manual-edit", action="store_true", help="Duplicate meshes through RFB before a save conflict")
     args = parser.parse_args()
-    if args.manual_edit and args.failure_kind != "save-conflict":
-        parser.error("--manual-edit currently requires --failure-kind save-conflict")
+    if args.failure_kind == "autosave-crash":
+        args.manual_edit = True
+    if args.manual_edit and args.failure_kind not in {"save-conflict", "autosave-crash"}:
+        parser.error("--manual-edit requires save-conflict or autosave-crash")
     assert re.fullmatch(r"scene_[0-9a-f]{32}", args.scene_id)
     installed = registry.status("media-forge")
     assert installed["version"] == args.expected_version and installed["health"] == "healthy"
@@ -173,6 +211,41 @@ def main() -> None:
                     assert hashlib.sha256(working_path.read_bytes()).hexdigest() == original_working_hash
                     assert call("scenes.get", {"scene_id":args.scene_id}) == before
                     evidence["working_hash_before_save"] = original_working_hash
+                if args.failure_kind == "autosave-crash":
+                    assert owned["runtime_id"] == "blender-4.5.13-linux-x64"
+                    autosave_began = time.monotonic()
+                    with deny_owned_snapshot_write(working_path, DATA / "scenes/working"):
+                        evidence["failed_autosave"] = await_autosave(page, root, session_id, False)
+                        assert hashlib.sha256(working_path.read_bytes()).hexdigest() == original_working_hash
+                        frame.evaluate("() => refreshSession(['blender_sessions'])")
+                        warning = frame.locator("#scene-blender-autosave-warning")
+                        warning.wait_for(state="visible")
+                        evidence["warning_texts"] = {}
+                        # Browser-language input fixture, delivered through the real Host bridge.
+                        # Do not replace MediaForge strings/state or persistent user preferences.
+                        for locale, message in (("ja", "自動復旧用の保存に失敗しました"),
+                                                ("en", "Automatic recovery save failed")):
+                            page.evaluate("""locale => {
+                              Object.defineProperty(navigator, 'language', {configurable:true, get:()=>locale});
+                              window.dispatchEvent(new Event('languagechange'));
+                            }""", locale)
+                            frame.wait_for_function("lang => document.documentElement.lang === lang", arg=locale)
+                            frame.wait_for_function("text => document.querySelector('#scene-blender-autosave-warning').textContent.includes(text)", arg=message)
+                            assert warning.is_visible()
+                            evidence["warning_texts"][locale] = warning.inner_text()
+                            page.screenshot(path=str(args.evidence_dir / f"autosave-failed-{locale}.png"))
+                        evidence["failed_autosave_sec"] = round(time.monotonic()-autosave_began, 3)
+                    evidence["successful_autosave"] = await_autosave(page, root, session_id, True)
+                    autosave_hash = hashlib.sha256(working_path.read_bytes()).hexdigest()
+                    assert autosave_hash != original_working_hash
+                    assert call("scenes.get", {"scene_id": args.scene_id}) == before
+                    frame.evaluate("() => refreshSession(['blender_sessions'])")
+                    frame.locator("#scene-blender-autosave-warning").wait_for(state="hidden")
+                    frame.wait_for_function("state.blenderRfb?._rfbConnectionState === 'connected'")
+                    evidence["successful_autosave_sec"] = round(time.monotonic()-autosave_began, 3)
+                    evidence["autosave_hash"] = autosave_hash
+                    evidence["language_input"] = "navigator.language + browser languagechange fixture through Host bridge"
+                    page.screenshot(path=str(args.evidence_dir / "autosave-retried.png"))
                 if args.failure_kind == "save-conflict":
                     # Only this dedicated scene advances while its GUI owns the old base.
                     call("scenes.revisions.restore", {"scene_id": args.scene_id,
@@ -198,11 +271,12 @@ def main() -> None:
                 began = time.monotonic()
                 if args.failure_kind == "save-conflict":
                     call("blender.sessions.save", {"session_id": session_id})
-                elif args.failure_kind == "blender-crash":
+                elif args.failure_kind in {"blender-crash", "autosave-crash"}:
                     evidence["signaled_blender_pid"] = crash_owned_blender(cgroup, pids, owned["runtime_id"])
                 failed = wait({"failed", "interrupted"}, 330 if args.failure_kind == "disconnect-timeout" else 90)
                 evidence["terminal_sec"] = round(time.monotonic() - began, 3)
                 expected_error = {"save-conflict": "scene_revision_conflict", "blender-crash": "blender_session_runner_lost",
+                                  "autosave-crash": "blender_session_runner_lost",
                                   "disconnect-timeout": "blender_session_disconnected_timeout"}[args.failure_kind]
                 if args.failure_kind == "disconnect-timeout":
                     assert evidence["terminal_sec"] >= 299
@@ -213,6 +287,8 @@ def main() -> None:
                 candidate = DATA / "scenes/working" / working_id / "scene.blend"
                 assert candidate.is_file() and not candidate.is_symlink()
                 digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+                if args.failure_kind == "autosave-crash":
+                    assert digest == autosave_hash
                 assert call("scenes.get", {"scene_id": args.scene_id}) == advanced
                 assert not root.exists() and not socket.exists() and not cgroup.exists()
                 assert all(not Path(f"/proc/{pid}").exists() for pid in pids)
@@ -234,7 +310,9 @@ def main() -> None:
                     candidate_sha256=digest, candidate_bytes=candidate.stat().st_size,
                     process_cgroup_root_socket_reclaimed=True,
                     rfb_connection_tested=args.manual_edit or args.failure_kind == "disconnect-timeout",
-                    not_tested=(["manual GUI edit"] if not args.manual_edit else ["unsaved crash recovery", "autosave"]) +
+                    not_tested=(["power failure", "crash during snapshot write", "edits after last autosave"]
+                        if args.failure_kind == "autosave-crash" else
+                        (["manual GUI edit"] if not args.manual_edit else ["unsaved crash recovery", "autosave"])) +
                         ["GPU lease", "batch worker crash", "connected idle timeout"])
             finally:
                 if session_id and record(session_id)["state"] in ACTIVE:

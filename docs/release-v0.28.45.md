@@ -18,7 +18,9 @@ PR #355で実装。統合時の全テストは1201件成功。
 
 2026-09-09に署名bundleを公開し、公開4ファイルの再取得・Host署名検証を確認しました。
 稼働環境を標準installerで0.28.44から更新し、実HTTPのhealthyと既存DB行・runtime登録の保持を確認。
-installed4.5.13/日英の自動保存実機受入は未実施です。詳細はimplementation-statusに記録しています。
+同日のinstalled4.5.13実ブラウザで日英警告、旧bytes保持、次回再試行、クラッシュ後の
+別シーン回収（実GLB mesh1→2）も確認。言語はbrowser languagechange入力fixtureです。
+保存途中の電源断や次の自動保存までの編集保護は未検証です。詳細はimplementation-statusに記録しています。
 統合3D Studio全体の完了を宣言するリリースではありません。
 
 ## 更新・ロールバック
