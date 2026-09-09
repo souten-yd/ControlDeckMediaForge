@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.51 release preparation
+
+前goal turnは実機idle失敗の競合修正/PR #381通常mergeまで進捗。
+main ba0e988f669f8215c57ac860d19cca6990abbb88とhandoffを再確認し、
+ux1/3d-release-0-28-51でaddon/coreを0.28.51へ揃えた。
+release noteには0.28.50での約15分誤終了とred/green再現、修正後source回帰、
+既定30分未達を明記。DB/schema/capability/runtime変更なし。
+開始時installed0.28.50/MF1001944/Host667000、active Jobs0/GUI0を実測。
+viewer build/diff check成功。全 ./mf.sh test:1345 passed/既知warning2/150.19秒、exit0。
+署名公開・導入・既定30分再試験は準備完了後。全3DS/GAはPARTIALを維持する。
+
 ## 2026-09-10 default idle run failed / stale monitor snapshot repair
 
 前turnまでの待機は同じ実CLI/PIDを確認したverified wait。
