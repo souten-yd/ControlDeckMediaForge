@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.49 release preparation
+
+PR #373 MERGED/main c06eace24b285d3ecb388a3f65cf855c5a2ec733を確認。
+前turnは失敗箇所診断の実装・実Blender受入・mergeを完了した進捗。
+ux1/3d-release-0.28.49でcore/addonを0.28.49に揃えrelease noteを追加。
+公開schema/tool/capability/DB migration変更なし。
+全 ./mf.sh test:1297 passed/既知warning2/137.72秒、exit0。frontend build:viewer/diff check成功。
+実HTTP /health healthy、Host PID667000/MF921443 active。
+DB Job終端のみ（canceled9/failed189/succeeded593）、GUI終端のみ（failed4/interrupted9/stopped19）。
+GUI表/列の初回読取は名称違いで失敗し、sqlite_master/PRAGMAで確認した
+blender_web_sessions.stateから上記を取得。失敗した読取をidle証拠には使わない。
+installed0.28.48/制作物/個人設定は変更していない。
+次は確定mainからbundle構築・監査・署名公開・標準updateとinstalled MCP受入。
+NOT TESTED:0.28.49の配布/導入/LLM自動修正、全3DS/GA完成。
+
 ## 2026-09-10 typed recipe operation failure context (source)
 
 最新main57c6ff6、PR #213 MERGED、現行設計/引き継ぎを再確認。
