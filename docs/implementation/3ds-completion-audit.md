@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10追加: installed署名0.28.49で実OpenCodeの失敗診断→入力修正→新edit成功を確認。
+専用fixtureの不在object ID失敗に対し、元Job/失敗Job/snapshotを取得後、正しい対象を
+[2,0,0]へ移す一操作を実行。144.116秒/5 tools/exit0、実GLB座標・第2版・旧source保持を照合。
+証跡 `/data1tb/mf-opencode-failure-repair-20260910`。GOAL-07の修正経路の追加証拠であり、
+全失敗matrix、幾何品質/rig自動修正、C/GOAL-09のidle/restart等を完了にはしない。
+
 2026-09-09現在: 署名0.28.45の公開consumer検証・標準update・実HTTP healthyを確認。
 installed4.5.13の実RFBで手編集後、書込拒否→日英警告/旧bytes保持→次interval成功→
 Blender子crash→別sceneへ2 meshes回収を確認。元scene/旧版hash不変、全process回収。
