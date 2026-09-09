@@ -1,5 +1,46 @@
 # Media Forge implementation status
 
+## 2026-09-10 RFB input-only idle clock (source)
+
+main6e534b7とPR #213 MERGEDを再確認。ux1/3d-rfb-input-activity。
+既存relayは全binary frameで操作時刻を更新し、画面更新要求もidle延長になっていた。
+さらにacquire_gatewayが再接続ごとに時刻をリセットしていた。
+base-plan/integration/runtime-Web設計を先に更新し、両者を修正。
+固定noVNC/XvncのRFB3.8/Noneをbounded observerで判定し、完全なkey/pointerだけを数える。
+画面要求/negotiation/fence/clipboard/resizeは数えない。分割/結合を跨いで解析し、
+header最大20 B、可変payloadは保持せずskip、未知形式/上限超過はfail-closed。
+readyの切断では最終入力時刻を残し、core再起動後は永続時刻からmonotonic期限を再構成する。
+Host/public schema/個人設定/既存Blender実体は変更しない。新しい同期I/Oは追加しない。
+
+実sourceコマンド: PYTHONPATH=.:backend .venv/bin/python scripts/3ds_autosave_source_e2e.py
+--serve --data-dir /data1tb/mf-rfb-input-source-data-20260910-r2
+--runtime-root /data1tb/mf-long-setup-source-20260906/runtimes/blender/blender-4.5.9-linux-x64
+--web-root /data1tb/ControlDeck/data/feature-data/media-forge/runtimes/blender-web
+--blend /data1tb/ControlDeck/data/feature-data/media-forge/data/assets/asset_263d5f26d18b4d05b65357c4aa8d26e7.blend。
+browserはHost診断venvのPython、DISPLAY=:0、
+XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3、同script
+--data-dir <上記> --evidence-dir /data1tb/mf-rfb-input-source-20260910-r2 --verify-input-activity。
+初回serveはPYTHONPATH=backendのみでscripts import失敗。.:backendへ修正。
+先行run /data1tb/mf-rfb-input-source-20260910 は127.707秒/2 meshes回収成功だが、
+再接続修正前のsourceなので再接続の証拠には含めない。
+
+最終run: session blendersession_8a6249d94371453ea0044927ce58d414。
+実RFB手編集1→2 meshes、保存前working hash不変。
+24回の実framebuffer requestでdurable入力時刻不変、実canvas pointerで更新、
+Close view only→同session再接続後も入力時刻不変（36.188秒時点）。
+既定120秒autosaveの成功を126.307秒時点で観測。候補445460 B、
+SHA771d3e345bc4749b0dcadeac7bc91929269a21c9c675af54c4056c030b506a39。
+所有Blender子だけをpidfdでkillし、runner_lostとPID/cgroup/root回収を確認。
+復旧forkで同source hash/2 meshesを128.123秒時点で確認、元scene正式版不変。
+observations.json passed=true/page_errorsなし、browser exit0、専用source serverも正常終了。
+source /health は標準mf.sh起動外のためenvironment missing/setup_required。
+GUI成功をcore全体healthy/installed受入へ読み替えない。
+
+focused44 tests/6.21秒/既知warning1、viewer buildとdiff check成功。
+全 ./mf.sh test:1337 passed/既知warning2/140.88秒、exit0。
+NOT TESTED: installed本修正、既定connected idle1800秒終了、core再起動後の本変更の実機期限、
+GPU lease、全3DS/GA完成。次は署名配布・導入後に実入力を伴う既定idle終了を測る。
+
 ## 2026-09-10 installed core restart preserves unsaved GUI edits
 
 前turnは実OpenCode修正受入/PR #376 mergeの進捗。main7644e35とhandoff/lifecycleを再確認。

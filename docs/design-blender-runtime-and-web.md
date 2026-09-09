@@ -238,6 +238,13 @@ Host再起動や認証失効時には新しい正規identityを得るまで編�
 - 遅い受信者には更新要求抑制・解像度/品質低下、回復不能なら再接続を使う。
 - clipboard、共有ファイル転送は初期無効。必要時に明示操作・サイズ上限・権限を追加。
 - キー解放をblur/disconnectで保証し、押しっぱなしを残さない。IME、JIS配列、wheel、修飾キーを検証。
+- connected idleは完全なRFB KeyEvent/PointerEventだけで更新する。画面要求、連続更新、
+  handshake、Fence、clipboard/resize制御の通信を入力として数えない。
+  MediaForge側のbounded observerが固定noVNC/XvncのRFB3.8/Noneと拡張key/pointerを扱い、
+  WebSocket分割・結合を跨いで判定する。未知のmessage境界は推測せず接続を拒否する。
+  解釈用bufferは最大20 bytes、可変payloadは上限検査後に保持せず読み飛ばす。
+  根拠はRFC6143 §7.5と同梱noVNCのRFB.messages。Hostや個人設定へ変更しない。
+  再接続も入力扱いせず最終入力時刻を保持し、core再起動後は永続時刻から期限を再構成する。
 - ファイル入出力はMediaForge Library/Host grantからscene working directoryへのstageで行う。
 
 ## 9. GPU予約と相互待ちの防止

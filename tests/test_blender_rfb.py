@@ -48,14 +48,15 @@ def test_relay_moves_binary_both_directions_over_unix_socket(tmp_path: Path) -> 
         async def echo(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
             writer.write(b"RFB 003.008\n")
             await writer.drain()
-            content = await reader.readexactly(4)
+            content = await reader.readexactly(22)
             writer.write(content.upper())
             await writer.drain()
             writer.close()
             await writer.wait_closed()
 
         server = await asyncio.start_unix_server(echo, path=str(path))
-        websocket = FakeWebSocket("binary", [{"type": "websocket.receive", "bytes": b"test"}])
+        content = b"RFB 003.008\n\x01\x01" + b"\x04\x01\x00\x00\x00\x00\x00a"
+        websocket = FakeWebSocket("binary", [{"type": "websocket.receive", "bytes": content}])
         try:
             await asyncio.wait_for(
                 relay_rfb(websocket, path, on_activity=touched), timeout=2  # type: ignore[arg-type]
@@ -64,7 +65,7 @@ def test_relay_moves_binary_both_directions_over_unix_socket(tmp_path: Path) -> 
             server.close()
             await server.wait_closed()
         assert websocket.accepted == "binary"
-        assert b"".join(websocket.sent) == b"RFB 003.008\nTEST"
+        assert b"".join(websocket.sent) == b"RFB 003.008\n" + content.upper()
         assert websocket.closed is None
         assert activity == 1
 

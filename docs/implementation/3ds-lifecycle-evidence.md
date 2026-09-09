@@ -47,6 +47,12 @@ idle/expiry/restartの保存版、成功GUI編集の前後/復元版、.38の3�
 
 ## 次の実測
 
+2026-09-10 sourceの前提修正: 全RFB frameと再接続がidleを延長していたため、
+完全なkey/pointerのみの操作時計へ変更。`mf-rfb-input-source-20260910-r2`で
+24回の画面要求では時刻不変、pointerで更新、再接続でも時刻保持を実測。
+既定autosave後の所有Blender子crash→同hash/2 meshes回収も128.123秒で確認。
+これは短時間source受入であり、上表の既定connected idle1800秒の残件は解消しない。
+
 1. desktop短時間の背景hidden→visible、同session/描画/続く入力保存は上記native試験で確認。
    Playwright既定のfocus emulationで全tab visibleとなる初回失敗は成功に含めない。
 2. 保存競合では追加2 meshesを全て回収できた（元2→回収4、実GLBでも確認）。

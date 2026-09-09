@@ -302,28 +302,35 @@ class BlenderSessionManager:
                 raise BlenderSessionError("blender_session_not_ready", "Blender session is not ready")
             self._gateway_sessions.add(session_id)
             moment = asyncio.get_running_loop().time()
-            self._gateway_activity[session_id] = moment
+            if session_id not in self._gateway_activity:
+                # Handshakes/credential reconnects are not user input. Rebuild
+                # the monotonic deadline from the durable timestamp on restart.
+                last = current.last_activity_at or current.updated_at
+                elapsed = max(0.0, (self._parse_time(self._now()) - self._parse_time(last)).total_seconds())
+                self._gateway_activity[session_id] = moment - elapsed
             self._gateway_activity_saved[session_id] = moment
             self._update(
                 owner,
                 current,
                 connected_at=self._now(),
                 disconnected_at=None,
-                last_activity_at=self._now(),
             )
             return socket_path
 
     async def release_gateway(self, owner: str, session_id: str) -> None:
         async with self._gateway_lock:
             self._gateway_sessions.discard(session_id)
-            self._gateway_activity.pop(session_id, None)
-            self._gateway_activity_saved.pop(session_id, None)
             try:
                 current = self.store.get_blender_web_session(owner, session_id)
             except SceneError:
+                self._gateway_activity.pop(session_id, None)
+                self._gateway_activity_saved.pop(session_id, None)
                 return
             if current.state == BlenderSessionState.READY:
                 self._update(owner, current, connected_at=None, disconnected_at=self._now())
+            else:
+                self._gateway_activity.pop(session_id, None)
+                self._gateway_activity_saved.pop(session_id, None)
 
     def note_gateway_activity(self, owner: str, session_id: str) -> None:
         """Record controller activity without writing SQLite for every pointer event."""

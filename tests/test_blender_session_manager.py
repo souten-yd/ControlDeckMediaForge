@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 import hashlib
 import io
 import json
@@ -357,6 +358,42 @@ def test_connected_activity_delays_idle_timeout_then_session_is_retained(tmp_pat
         assert interrupted["error_code"] == "blender_session_idle_timeout"
         assert interrupted["result"]["recovery"]["state"] == "candidate"
         assert controller.units == {}
+        await manager.stop()
+
+    asyncio.run(scenario())
+
+
+def test_reconnect_preserves_input_deadline_and_terminal_release_cleans_it(tmp_path: Path) -> None:
+    _store, _workspace, scene_id, _controller, manager = session_fixture(tmp_path)
+
+    async def scenario() -> None:
+        await manager.start()
+        created = await manager.create(OWNER, scene_id)
+        await wait_state(manager, created['id'], 'ready')
+        await manager.acquire_gateway(OWNER, created['id'])
+        manager.note_gateway_activity(OWNER, created['id'])
+        moment = manager._gateway_activity[created['id']]
+        stamp = manager.get(OWNER, created['id'])['last_activity_at']
+        await manager.release_gateway(OWNER, created['id'])
+        await manager.acquire_gateway(OWNER, created['id'])
+        assert manager._gateway_activity[created['id']] == moment
+        assert manager.get(OWNER, created['id'])['last_activity_at'] == stamp
+        # Mimic loss of in-memory state on a new core, keeping the durable time.
+        await manager.release_gateway(OWNER, created['id'])
+        manager._gateway_activity.clear()
+        manager._gateway_activity_saved.clear()
+        real_now = manager._now
+        restored_now = manager._parse_time(stamp) + timedelta(seconds=120)
+        manager._now = lambda: restored_now.isoformat()
+        await manager.acquire_gateway(OWNER, created['id'])
+        assert manager.get(OWNER, created['id'])['last_activity_at'] == stamp
+        age = asyncio.get_running_loop().time() - manager._gateway_activity[created['id']]
+        assert 120 <= age < 121
+        manager._now = real_now
+        manager.discard_and_stop(OWNER, created['id'])
+        await wait_state(manager, created['id'], 'stopped')
+        await manager.release_gateway(OWNER, created['id'])
+        assert created['id'] not in manager._gateway_activity
         await manager.stop()
 
     asyncio.run(scenario())

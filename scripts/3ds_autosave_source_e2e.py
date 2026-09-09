@@ -111,6 +111,35 @@ def browser(args: argparse.Namespace) -> None:
             assert hashlib.sha256(candidate.read_bytes()).hexdigest() == initial_hash
             log('edited_not_saved')
 
+            if args.verify_input_activity:
+                # Real RFB display requests, not a substituted activity clock.
+                # Requests may split/coalesce in the actual noVNC WebSocket.
+                last_input = record(sid)['last_activity_at']
+                for _ in range(24):
+                    page.evaluate("""() => {
+                        const sock=state.blenderRfb._sock;
+                        sock.sQpushBytes(new Uint8Array([3,1,0,0,0,0,0,64,0,64]));
+                        sock.flush();
+                    }""")
+                    page.wait_for_timeout(500)
+                assert record(sid)['last_activity_at'] == last_input
+                page.locator('#scene-blender-screen canvas').click(position={'x':320,'y':240})
+                page.wait_for_timeout(1000)
+                assert record(sid)['last_activity_at'] != last_input
+                last_input = record(sid)['last_activity_at']
+                page.locator('#scene-blender-close').click()
+                page.wait_for_function("""async sid => {
+                    const s=(await call('blender.sessions.list',{})).items.find(s=>s.id===sid);
+                    return s?.connection_state==='disconnected';
+                }""", arg=sid)
+                page.evaluate('s => openBlenderView(s)', wait({'ready'}))
+                page.wait_for_function("state.blenderRfb?._rfbConnectionState === 'connected'", timeout=30000)
+                page.wait_for_timeout(2000)
+                assert record(sid)['last_activity_at'] == last_input
+                evidence['input_activity'] = {'display_requests':24, 'display_does_not_touch':True,
+                                              'pointer_does_touch':True, 'reconnect_preserves_input_time':True}
+                log('input_activity_verified')
+
             def await_autosave(wanted: bool) -> None:
                 deadline = time.monotonic() + 150
                 while True:
@@ -210,5 +239,6 @@ if __name__ == '__main__':
     parser.add_argument('--url', default='http://127.0.0.1:8797')
     parser.add_argument('--evidence-dir', type=Path)
     parser.add_argument('--fail-first-autosave', action='store_true')
+    parser.add_argument('--verify-input-activity', action='store_true')
     args = parser.parse_args()
     serve(args) if args.serve else browser(args)
