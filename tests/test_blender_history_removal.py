@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+import shutil
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,8 +15,49 @@ from mediaforge.store import Store
 from test_blender_manager import (
     archive_content, archive_fixture, catalog_fixture, catalog_transport,
     runtime_manager, wait_terminal,
+    response_transport,
 )
 from test_scenes import _revision_assets, _revision_input
+
+
+@pytest.mark.parametrize("fault", ["hash", "preflight_space", "extraction_space"])
+def test_failed_repair_keeps_old_runtime_and_allows_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fault: str,
+) -> None:
+    async def scenario() -> None:
+        content, manifest = archive_fixture(tmp_path)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(tmp_path, store, manifest, response_transport(content))
+        await manager.start()
+        try:
+            assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
+            executable = resolver.resolve_active().executable
+            original_bytes, inode = executable.read_bytes(), executable.stat().st_ino
+            registration = resolver.registry_path.read_bytes()
+            archive = manager.download_root / manager.spec.archive_name
+            original_disk_usage = shutil.disk_usage
+            if fault == "hash":
+                archive.write_bytes(content[:-1] + bytes([content[-1] ^ 1]))
+            else:
+                values = iter((0,) if fault == "preflight_space" else (10_000_000_000, 0))
+                monkeypatch.setattr("mediaforge.blender_manager.shutil.disk_usage",
+                                    lambda _path: SimpleNamespace(free=next(values)))
+            failed = await wait_terminal(store, manager.repair(RUNTIME_ID).id)
+            assert failed.state == BlenderRuntimeOperationState.FAILED
+            assert failed.error_code == ("blender_runtime_install_failed" if fault == "hash" else "insufficient_disk")
+            assert executable.read_bytes() == original_bytes and executable.stat().st_ino == inode
+            assert resolver.registry_path.read_bytes() == registration
+            assert not (resolver.managed_root / ".staging" / failed.id).exists()
+            monkeypatch.setattr("mediaforge.blender_manager.shutil.disk_usage", original_disk_usage)
+            archive.write_bytes(content)
+            repaired = await wait_terminal(store, manager.repair(RUNTIME_ID).id)
+            assert repaired.state == BlenderRuntimeOperationState.READY
+            assert executable.read_bytes() == original_bytes and executable.stat().st_ino != inode
+            assert resolver.registry_path.read_bytes() == registration
+        finally:
+            await manager.stop()
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("change", ["none", "missing_ack", "invalid_ack", "active", "catalog"])

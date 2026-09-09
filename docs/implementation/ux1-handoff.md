@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 source repair capacity failure acceptance
+
+base PR #407 merge3c9e21b3953e428353cbb8fef14ff95c06481e1e、ux1/3d-repair-failure-acceptance、PR作成前。
+前turnはボーンの意図確認のみ/no progress。途中のcapacity試験passed/process不在を確認して再開。
+tests/test_blender_history_removal.pyへhash/容量2箇所の拒否・旧exe/registry保持・正常retryの3ケース。
+対象20ケース成功。scripts/3ds_repair_live_e2e.py --capacity-failuresは実source HTTP/実archive/実Blender。
+容量だけfree=0 fixture。mf-repair-capacity-source-20260910-r2、11.120秒/exit0。
+2拒否ともinsufficient_disk、8hash/scene/inode保持、失敗後の実GLB入出力probe成功。
+独立照合で8hash/staging空/未終端操作0。全1387 tests/2既存warnings/146.39秒/exit0。
+viewer build差分0/Node5/py_compile/diff check成功。
+製品/Host/稼働版/公開契約/版数変更なし。既存UX状態を変更せず、全D/3DS/GA PARTIALを維持。
+NOT TESTED: installed改ざん、物理ENOSPC、今回browser/GUI入力、全失敗matrix。
+次: installed0.28.55 idle再確認後、正しいcacheを退避して改ざんcopy拒否→正常cache復元/repairを受入。
+診断の参考は /data1tb/mf-0.28.55-repair-download.py（そのまま再実行しない）。
+再開: git fetch origin; git status --short --branch; 最新statusと実current/Job/GUI/runtime操作を照合。
+具体的な外部blockerなし。未確認の前提を確認してから稼働cacheへ触る。
+
 ## 2026-09-10 v0.28.55 signed/installed and real-CDN repair
 
 準備PR #405 merge/tag aa940cd4e569c19216cee37bb03f8c99cf8ccf18、ux1/release-0-28-55-acceptance、記録PR作成前。
