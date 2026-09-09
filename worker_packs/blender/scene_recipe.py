@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -25,12 +26,12 @@ def bone_id(value: object) -> str:
     return value
 
 
-def rigid_armature(obj: bpy.types.Object) -> None:
+def rigid_armature(obj: bpy.types.Object, *, allow_animation: bool = False) -> None:
     if obj.type != "ARMATURE" or obj.get("media_forge_rig_schema") != 1:
         raise RuntimeError("rig must be a typed Media Forge armature")
     if not 1 <= len(obj.data.bones) <= 128 or obj.data.users != 1:
         raise RuntimeError("rig bone count or shared data differs")
-    if obj.animation_data is not None or obj.data.animation_data is not None or obj.constraints:
+    if (obj.animation_data is not None and not allow_animation) or obj.data.animation_data is not None or obj.constraints:
         raise RuntimeError("animated or constrained rig is not supported by pose/bind")
     if any(p.constraints for p in obj.pose.bones):
         raise RuntimeError("constrained pose bones are not supported")
@@ -134,6 +135,120 @@ def set_pose(obj: bpy.types.Object, operation: dict[str, object]) -> None:
     for pose, rotation in selected:
         pose.rotation_mode = "XYZ"
         pose.rotation_euler = tuple(math.radians(v) for v in rotation)
+    bpy.context.view_layer.update()
+
+
+def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: dict[str, bpy.types.Object]) -> None:
+    rigid_armature(obj, allow_animation=True)
+    clip_id = bone_id(operation.get("clip_id"))
+    fps, end = operation.get("fps", 24), operation.get("frame_count")
+    if type(fps) is not int or not 1 <= fps <= 60 or type(end) is not int or not 1 <= end <= min(600, fps*120):
+        raise RuntimeError("clip frame range or fps differs")
+    tracks = operation.get("tracks")
+    if not isinstance(tracks, list) or not 1 <= len(tracks) <= 128:
+        raise RuntimeError("clip track count differs")
+    parsed = {}
+    for track in tracks:
+        key = bone_id(track.get("bone_id"))
+        values = track.get("keys")
+        if key in parsed or key not in obj.pose.bones or not isinstance(values, list) or not 2 <= len(values) <= 256:
+            raise RuntimeError("clip bone or key count differs")
+        rows, previous = [], -1
+        for item in values:
+            frame, rotation = item.get("frame"), vector(item.get("rotation_degrees"))
+            if type(frame) is not int or not previous < frame <= end or any(abs(v) > 180 for v in rotation):
+                raise RuntimeError("clip key differs")
+            previous = frame
+            rows.append((frame, rotation))
+        if rows[0][0] != 0 or rows[-1][0] != end:
+            raise RuntimeError("clip endpoints differ")
+        if operation.get("loop", False) and rows[0][1] != rows[-1][1]:
+            raise RuntimeError("loop rotations differ")
+        parsed[key] = rows
+    for pose in obj.pose.bones:
+        parsed.setdefault(pose.name, [(0, (0,0,0)), (end, (0,0,0))])
+    scalar_keys = sum(len(rows)*3 for rows in parsed.values())
+    samples = (end+1)*len(obj.data.bones)
+    actions = list(bpy.data.actions)
+    if len(actions) >= 32:
+        raise RuntimeError("scene clip count exceeded")
+    for other in bpy.data.objects:
+        if other.type == "ARMATURE":
+            rigid_armature(other, allow_animation=True)
+        elif other.animation_data is not None:
+            raise RuntimeError("non-rig animation is not supported by typed clips")
+        if other.animation_data is not None and other.animation_data.drivers:
+            raise RuntimeError("drivers are not supported by typed clips")
+        if other.animation_data is not None:
+            for track in other.animation_data.nla_tracks:
+                if not track.mute or len(track.strips) != 1 or track.strips[0].action not in actions:
+                    raise RuntimeError("existing NLA state is not a muted clip stash")
+    if actions and (bpy.context.scene.get("media_forge_clip_fps") != fps or
+                    bpy.context.scene.render.fps != fps or bpy.context.scene.render.fps_base != 1):
+        raise RuntimeError("clip fps must match the existing scene clips")
+    for action in actions:
+        rig = objects.get(action.get("media_forge_rig_id"))
+        if action.get("media_forge_clip_schema") != 1 or rig is None or rig.type != "ARMATURE":
+            raise RuntimeError("existing action is not a typed clip")
+        if rig is obj and action.get("media_forge_clip_id") == clip_id:
+            raise RuntimeError("clip ID already exists")
+        if len(action.layers) != 1 or len(action.layers[0].strips) != 1 or len(action.slots) != 1:
+            raise RuntimeError("existing clip structure differs")
+        strip = action.layers[0].strips[0]
+        if len(strip.channelbags) != 1 or len(strip.channelbags[0].fcurves) > 384:
+            raise RuntimeError("existing clip channels differ")
+        old_end = action.get("media_forge_frame_count")
+        if type(old_end) is not int or not 1 <= old_end <= 600:
+            raise RuntimeError("existing clip frame count differs")
+        samples += (old_end+1)*len(rig.data.bones)
+        for curve in strip.channelbags[0].fcurves:
+            if not 2 <= len(curve.keyframe_points) <= 256 or curve.modifiers:
+                raise RuntimeError("existing clip key bounds differ")
+            if re.fullmatch(r'pose.bones\["[a-z][a-z0-9._-]{0,47}"\].rotation_euler', curve.data_path) is None:
+                raise RuntimeError("existing clip channel is not a bone rotation")
+            for point in curve.keyframe_points:
+                if not all(math.isfinite(v) for v in point.co) or not 0 <= point.co.x <= old_end:
+                    raise RuntimeError("existing clip key is outside its frame bound")
+            scalar_keys += len(curve.keyframe_points)
+    if scalar_keys > 262144 or samples > 250000:
+        raise RuntimeError("scene animation key or sample budget exceeded")
+    animation = obj.animation_data_create()
+    suffix = hashlib.sha256(str(operation["object_id"]).encode()).hexdigest()[:8]
+    action = bpy.data.actions.new("mf." + clip_id + "." + suffix)
+    action["media_forge_clip_schema"] = 1
+    action["media_forge_rig_id"] = str(operation["object_id"])
+    action["media_forge_clip_id"] = clip_id
+    action["media_forge_frame_count"] = end
+    action["media_forge_clip_name"] = str(operation["name"])
+    action["media_forge_loop"] = bool(operation.get("loop", False))
+    action.use_fake_user = True
+    slot = action.slots.new(obj.id_type, obj.name)
+    layer = action.layers.new("Media Forge")
+    strip = layer.strips.new(type="KEYFRAME")
+    bag = strip.channelbags.new(slot)
+    for key, rows in parsed.items():
+        pose = obj.pose.bones[key]
+        pose.rotation_mode = "XYZ"
+        pose.location = (0,0,0)
+        pose.scale = (1,1,1)
+        for axis in range(3):
+            curve = bag.fcurves.new(data_path=pose.path_from_id("rotation_euler"), index=axis)
+            curve.keyframe_points.add(len(rows))
+            for point, (frame, rotation) in zip(curve.keyframe_points, rows):
+                point.co = (frame, math.radians(rotation[axis]))
+                point.interpolation = "LINEAR"
+            curve.update()
+    track = animation.nla_tracks.new()
+    track.name = action.name
+    stash = track.strips.new(action.name, 0, action)
+    stash.action_slot = slot
+    track.mute, track.lock = True, True
+    animation.action, animation.action_slot = action, slot
+    bpy.context.scene.render.fps = fps
+    bpy.context.scene.render.fps_base = 1
+    bpy.context.scene["media_forge_clip_fps"] = fps
+    bpy.context.scene.frame_start, bpy.context.scene.frame_end = 0, end
+    bpy.context.scene.frame_set(0)
     bpy.context.view_layer.update()
 
 
@@ -281,7 +396,9 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
     obj = objects.get(object_id)
     if obj is None:
         raise RuntimeError(f"unknown stable object ID: {object_id}")
-    if kind == "skin.bind":
+    if kind == "animation.clip":
+        create_clip(obj, operation, objects)
+    elif kind == "skin.bind":
         bind_skin(obj, operation, objects)
     elif kind == "pose.set":
         set_pose(obj, operation)

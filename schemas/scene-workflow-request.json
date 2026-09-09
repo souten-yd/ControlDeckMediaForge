@@ -1,5 +1,100 @@
 {
   "$defs": {
+    "AnimationClip": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "animation.clip",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "clip_id": {
+          "maxLength": 48,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Clip Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "fps": {
+          "default": 24,
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "frame_count": {
+          "maximum": 600,
+          "minimum": 1,
+          "title": "Frame Count",
+          "type": "integer"
+        },
+        "loop": {
+          "default": false,
+          "title": "Loop",
+          "type": "boolean"
+        },
+        "tracks": {
+          "items": {
+            "$ref": "#/$defs/AnimationTrack"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Tracks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "clip_id",
+        "name",
+        "frame_count",
+        "tracks"
+      ],
+      "title": "AnimationClip",
+      "type": "object"
+    },
+    "AnimationTrack": {
+      "additionalProperties": false,
+      "properties": {
+        "bone_id": {
+          "maxLength": 48,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Bone Id",
+          "type": "string"
+        },
+        "keys": {
+          "items": {
+            "$ref": "#/$defs/RotationKey"
+          },
+          "maxItems": 256,
+          "minItems": 2,
+          "title": "Keys",
+          "type": "array"
+        }
+      },
+      "required": [
+        "bone_id",
+        "keys"
+      ],
+      "title": "AnimationTrack",
+      "type": "object"
+    },
     "ArmatureCreate": {
       "additionalProperties": false,
       "properties": {
@@ -953,6 +1048,47 @@
       "title": "RigidBinding",
       "type": "object"
     },
+    "RotationKey": {
+      "additionalProperties": false,
+      "description": "One key in a rest-local XYZ rotation track.",
+      "properties": {
+        "frame": {
+          "maximum": 600,
+          "minimum": 0,
+          "title": "Frame",
+          "type": "integer"
+        },
+        "rotation_degrees": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Degrees",
+          "type": "array"
+        }
+      },
+      "required": [
+        "frame",
+        "rotation_degrees"
+      ],
+      "title": "RotationKey",
+      "type": "object"
+    },
     "SceneCreateAction": {
       "additionalProperties": false,
       "properties": {
@@ -1115,6 +1251,7 @@
           "items": {
             "discriminator": {
               "mapping": {
+                "animation.clip": "#/$defs/AnimationClip",
                 "armature.create": "#/$defs/ArmatureCreate",
                 "camera.add": "#/$defs/CameraAdd",
                 "light.add": "#/$defs/LightAdd",
@@ -1166,6 +1303,9 @@
               },
               {
                 "$ref": "#/$defs/PoseSet"
+              },
+              {
+                "$ref": "#/$defs/AnimationClip"
               }
             ]
           },

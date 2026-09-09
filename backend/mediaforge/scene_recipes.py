@@ -236,6 +236,49 @@ class PoseSet(BaseModel):
         return self
 
 
+class RotationKey(BaseModel):
+    """One key in a rest-local XYZ rotation track."""
+    model_config = ConfigDict(extra="forbid")
+    frame: int = Field(ge=0, le=600, strict=True)
+    rotation_degrees: tuple[Annotated[float, Field(ge=-180, le=180)],
+                            Annotated[float, Field(ge=-180, le=180)],
+                            Annotated[float, Field(ge=-180, le=180)]]
+
+
+class AnimationTrack(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bone_id: BoneId
+    keys: list[RotationKey] = Field(min_length=2, max_length=256)
+
+
+class AnimationClip(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["animation.clip"]
+    object_id: ObjectId
+    clip_id: BoneId
+    name: str = Field(min_length=1, max_length=120)
+    fps: int = Field(default=24, ge=1, le=60, strict=True)
+    frame_count: int = Field(ge=1, le=600, strict=True)
+    loop: bool = False
+    tracks: list[AnimationTrack] = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def bounded_tracks(self) -> "AnimationClip":
+        if self.frame_count > self.fps * 120:
+            raise ValueError("clip duration exceeds 120 seconds")
+        seen: set[str] = set()
+        for track in self.tracks:
+            frames = [key.frame for key in track.keys]
+            if track.bone_id in seen:
+                raise ValueError("track bones must be unique")
+            seen.add(track.bone_id)
+            if frames[0] != 0 or frames[-1] != self.frame_count or any(a >= b for a,b in zip(frames, frames[1:])):
+                raise ValueError("track frames must increase from zero to frame_count")
+            if self.loop and track.keys[0].rotation_degrees != track.keys[-1].rotation_degrees:
+                raise ValueError("loop track endpoints must match")
+        return self
+
+
 SceneOperation = Annotated[
     PrimitiveAdd
     | TransformSet
@@ -248,7 +291,8 @@ SceneOperation = Annotated[
     | MirrorModifier
     | ArmatureCreate
     | SkinBind
-    | PoseSet,
+    | PoseSet
+    | AnimationClip,
     Field(discriminator="type"),
 ]
 

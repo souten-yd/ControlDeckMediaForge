@@ -1,5 +1,44 @@
 # Media Forge implementation status
 
+## 2026-09-09 typed animation clips and real GLB playback samples
+
+recipe@1へanimation.clipを加法追加、公開create/edit/workflow schemaとAPIを同期。
+同じunionからsupported_operations13個を導出。typed rigのrest-local XYZ/LINEAR回転tracks、
+0〜frame_countの昇順keys、loop端点一致、未指定boneのrest回転を明示。
+fps1〜60/最大600 frames・120秒、128 tracks/256 keys per track、
+scene32 clips/262144 scalar keys/250000 bone-frame samples。保存済みcurveを実計数して予算を検査。
+clip ID重複、既存FPS不一致（実render fps/fps_baseも照合）、drivers/非typed actions・rig/
+非rig animation/unmutedまたは未知NLA stateを拒否する。
+新clipをactiveにし、旧clipを含むmuted NLA stashes/旧immutable revisionsは保持する。
+生成/更新時の同期Blender処理はworker内のみ。Host/新規依存/任意bpy API公開は追加しない。
+
+実scripts/3ds_game_static_e2e.py --fixture motionとscripts/motion_fixture.pyで
+59操作の11骨/25部品robot+idleを作成し、別revisionへarm_swingを追加。
+/data1tb/mf-motion-source-20260909-final（Blender4.5.13）1.869秒、
+/data1tb/mf-motion-source-4.5.9-20260909-final（4.5.9）1.890秒、両方PASS。
+idle2秒/arm_swing1秒、旧idleの全curve/key bytes相当JSONが不変、
+各clipの実frame0/mid/endでmesh bounds center移動、両端差<1e-5mを検査。
+GLBを実再importし、両actionのframe_range/durationと同時刻のworld mesh center差<1e-4m。
+短いclip追加で2秒idleが1秒へ切り詰められないことも確認。
+重複ID/scene fpsを30へ変更したnegativeは新action作成前に拒否し、action件数不変。
+旧source/executable hashとAsset hash/provenanceも検証した。
+
+初回4.5.13 fixtureのsourceからCPU Cycles16 samplesで動画を作成。
+/data1tb/mf-motion-source-20260909/motion-preview/arm-swing.mp4、
+H264/480x540/24fps/24frames/1.000000秒（実ffprobe）。
+37503 B/SHA72bfb5edfa50ded3aff4eb7a42235ea910e0d2ac12fd3407de04ff3dc193937a。
+provenance.jsonにsource blend SHA/出力SHA/renderer/framesを記録、source不変。
+動画からframe0/12/23を抽出して全3枚を実閲覧し、曲げ戻しを確認した。
+初回renderはsibling importで失敗し、recipe用importを遅延させて再実行成功。
+初回ffmpeg抽出はfilter引用で失敗し、修正後の抽出を閲覧した。全動画の実ブラウザ再生は未実施。
+
+最終全 `./mf.sh test`:1258 passed/既知warning2/140.73秒、exit0。
+focused animation/rig/static/contracts61件、frontend build:viewer/diff checkも成功。
+未リリース/未installed/MCP。4.5.9/13 source workerのclip作成・評価・GLB受入に限定する。
+NOT TESTED: walking/root motion、速度連続性/自然な動作品質、IK/FK/retarget、
+分布weights、engine再生、installed OpenCode、原3DS/GA全体完成。
+次はrig/clipをまとめた署名版の公開・導入と実MCP受入。配布が終わるまで利用可能とは案内しない。
+
 ## 2026-09-09 typed bone / rigid skin / static pose foundation
 
 利用者が明示したBlenderボーン/動きアニメーションの最初のproduct slice。

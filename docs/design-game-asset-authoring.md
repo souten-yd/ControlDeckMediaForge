@@ -99,6 +99,20 @@ GA-1 curve/mesh編集とGA-2 sculpt/retopologyの受入へ含める。球の寄�
 
 ## 5. 契約・安全・リソース
 
+### GA-5 first typed slice
+
+animation.clipを加法追加する。typed rigの既知boneに対するrest-local XYZ回転trackを
+昇順frame/LINEAR補間で定義し、未指定boneは各clip内でrest回転を明示的に保持する。
+frame0からframe_countまで、fps1〜60、最大600 frames/120秒、128 tracks、
+1 track2〜256 keys、scene32 clips/262144 scalar keys/250000 bone-frame samplesを上限とする。
+loop指定時は各trackの両端回転が一致することを検査するが、滑らかな速度連続性は別の品質検査。
+同じrigのclip ID重複は上書きせず拒否。既存clipはmuted NLA stashとして保存し、
+新clipをactiveにする。全typed clipsはscene共通fpsとし、追加で既存clipの時間を変えない。
+任意action/driver/constraint/非typed rigとの混在は拒否する。保存済みcurveを実計数して予算を再検査。
+まずidleと腕振りの別clipを作り、別revisionへ追加して旧clipが不変なこと、
+実frame評価とGLB再import後の同時刻の動き・duration・両端一致を検証する。
+歩行/root motion/IK/retarget/有機変形はこの最初のsliceだけで完了にしない。
+
 ### GA-4 first typed slice
 
 armature.createでidentity transformの骨格を作成する。親は同一操作内で先に定義したboneに限定、

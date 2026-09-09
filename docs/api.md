@@ -534,6 +534,22 @@ consisting only of typed rigs, GLB export uses the current pose as its rest pose
 so the exported preview retains that pose. The source blend retains its original
 bone rest data. Existing untyped/animated scenes retain their export setting;
 this static-pose behavior is not animation-clip support.
+
+`animation.clip` adds a new named clip to a typed rig, without replacing an
+existing clip ID. Tracks contain known bone IDs and 2..256 ordered keys with
+frame numbers and rest-local XYZ rotations (-180..180 degrees); interpolation
+is LINEAR, not quaternion shortest-path/IK. Keys span frame 0 to frame_count.
+Unspecified bones receive zero rotation tracks. FPS is 1..60, frame_count
+1..600 and duration at most 120 seconds. Existing clips must share the same FPS.
+Loop requests require equal first/last rotations, not velocity continuity.
+At most 128 tracks/clip, 32 clips/scene, 262144 scalar keys and 250000 bone-frame
+samples are accepted, counting saved curves again before adding a clip.
+Only typed actions and muted single-action NLA stashes are accepted; drivers,
+constraints, other rig kinds and non-rig animation are rejected. Previous clips
+remain stashed, the new clip becomes active. Original blend/GLB scene revisions
+remain immutable. Clip display names are metadata; Blender/glTF action names use
+`mf.<clip_id>.<rig_hash>`. This does not yet add translation/root motion, scale
+tracks, IK/FK, retargeting, distributed skin weights, or engine integration.
 Available `3d.scene_recipe.supported_operations` is derived from the same
 request vocabulary. Check the current schema/capability before sending a new
 operation to an older deployment; existing operations retain their meaning.
