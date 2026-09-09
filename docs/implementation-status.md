@@ -1,5 +1,39 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed repair rejects tampered cache and retries
+
+base PR #408 merged d01cacc1bfc8ce1672826dab207208faff110529、ux1/3d-installed-repair-tamper。
+installed current0.28.55、MF1152101/Host1141433、全Job/GUI/runtime操作idleを確認。
+外部診断 `/data1tb/mf-0.28.55-repair-tamper.py` をMediaForgeの既存venvで実行した。
+source/製品code変更なし。正規loopback workspace APIのrepairを使い、runtime実行fileを直接変更しない。
+
+```bash
+.venv/bin/python /data1tb/mf-0.28.55-repair-tamper.py
+```
+
+証跡 `/data1tb/mf-repair-tamper-installed-0.28.55-20260910`、25.228秒/exit0。
+baseline.jsonに全scene/revision投影・旧版関連asset hashes、registry.jsonに登録snapshotを保持。
+inactive managed4.5.9/live0/exact archive identityを再照合し、正しいcacheをrename退避。
+新しいcopyの最終1byteだけ反転（377,929,956 B、SHA
+0dc3a9c5cea265e63777f8bd097fed6d497bbf05c22031d2eae70327ad0c2b60）。backupのSHA不変を確認。
+operation blenderop_95b06c17dacf4b61b8c06cf1532d8ce3は1.848秒でfailed、
+blender_runtime_install_failed / Blender archive SHA-256 differs。管理機構が不正cacheだけを削除した。
+旧exe SHA/inode45649239、47scenes/162revisions、旧版関連64 asset/provenance、registry保持を確認。
+有効backupをcacheへ戻し、通常repair blenderop_448938ebc3204a6facd38f956540ee15を開始。
+verifying2.220→installing12.997→probing24.373→ready24.890秒。
+実probeは4.5.9/background/GLB入出力、6,510members/1,168,332,002 Bを確認。
+旧exeは同SHAのままinode46020214へ修復、既定4.5.13のSHA/inode46028345は不変。
+Host/MF PIDも不変、全pollのhealth healthy。正常cache SHAは
+dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d。
+独立read-only照合でも全scene/revision投影・64hash・registry・正常cache一致、
+staging/removing空、未終端runtime操作0、health healthyを確認。退避cacheは正常位置へ復元済み。
+
+このPRは受入文書のみ。source test/buildは変更せず、直前PR #408の1387 tests/146.39秒と
+viewer build差分0/Node5成功を基準とする。今回は全test再実行や新release公開を行っていない。
+NOT TESTED: CDN通信中改ざん、物理ENOSPC、今回browser/GUI入力、全失敗matrix。
+全D/3DS/GA PARTIALを維持。次はDの中断再開について既存source/installed証拠を照合し、
+不足するinstalled download取消→再開を検証する。利用者の他JobやHost/PCは停止しない。
+
 ## 2026-09-10 repair capacity failure preservation
 
 base PR #407 merge3c9e21b3953e428353cbb8fef14ff95c06481e1e、ux1/3d-repair-failure-acceptance。

@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed repair tamper acceptance
+
+base PR #408 merge d01cacc1bfc8ce1672826dab207208faff110529、ux1/3d-installed-repair-tamper、PR作成前。
+前turnはsource容量失敗受入/mergeまで進捗。今回はinstalled0.28.55で実cache改ざん拒否→正常repair。
+外部診断 /data1tb/mf-0.28.55-repair-tamper.py、mf-repair-tamper-installed-0.28.55-20260910、25.228秒/exit0。
+全idle/backup/再照合後、cache copyだけ1byte反転。95b06c17dacf4b61b8c06cf1532d8ce3はSHA不一致でfailed。
+旧exe/inode45649239/47scenes/162revisions/64hash/registry保持、不正cacheはmanagerが削除。
+正常cache復元後448938ebc3204a6facd38f956540ee15は実probe/ready、旧exe同SHA/inode46020214へ修復。
+既定4.5.13/SHA/inode46028345とMF1152101/Host1141433不変。独立metadata/hash/cache/staging照合も成功。
+正常cache復元済み、証跡dirにbaseline/registry/observations保持。外部scriptは無条件再実行しない。
+文書のみ、製品code/公開契約/版数/Host差分なし。基準gateはPR #408の1387 tests/146.39秒/build/Node5。
+今回は全test再実行・新releaseなし。既存UX状態変更なし、全D/3DS/GA PARTIAL。
+NOT TESTED: CDN interception、物理ENOSPC、今回browser/GUI入力、全失敗matrix。
+次: D中断再開の既存証拠を照合後、installed download取消→再開の不足を検証する。
+再開: git fetch origin; git status --short --branch; current/実Job/GUI/runtime操作idleを確認。
+具体的な外部blockerなし。利用者の他Jobを停止せず、空き時間で専用操作だけを扱う。
+
 ## 2026-09-10 source repair capacity failure acceptance
 
 base PR #407 merge3c9e21b3953e428353cbb8fef14ff95c06481e1e、ux1/3d-repair-failure-acceptance、PR作成前。
