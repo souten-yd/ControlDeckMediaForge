@@ -8,6 +8,7 @@ import logging
 import os
 from pathlib import Path
 import shutil
+import stat
 import tarfile
 from collections.abc import Callable
 from typing import Any
@@ -1208,25 +1209,61 @@ class BlenderRuntimeManager:
                     )
                     metadata.chmod(0o600)
                 written = existing
-                with partial.open("ab") as output:
-                    async for chunk in response.aiter_bytes():
-                        self._raise_if_canceled(operation.id)
-                        written += len(chunk)
-                        if written > spec.archive_size_bytes:
-                            raise BlenderRuntimeOperationError(
-                                "blender_runtime_download_size", "download exceeded trusted size"
-                            )
-                        output.write(chunk)
-                        # Progress and restart evidence must describe bytes that
-                        # have reached the partial file, not Python's buffer.
-                        output.flush()
-                        self.store.update_blender_runtime_operation(
-                            operation.id, bytes_done=progress_base + written
+                async for chunk in response.aiter_bytes():
+                    written += len(chunk)
+                    if written > spec.archive_size_bytes:
+                        raise BlenderRuntimeOperationError(
+                            "blender_runtime_download_size", "download exceeded trusted size"
                         )
-                    output.flush()
-                    os.fsync(output.fileno())
+                    await self._download_io(self._append_download_chunk, operation.id, partial,
+                                            chunk, written, progress_base)
+                await self._download_io(self._sync_download, partial)
                 if written != spec.archive_size_bytes:
                     raise httpx.RemoteProtocolError("download ended before the trusted size")
+
+    @staticmethod
+    async def _download_io(callback: Callable[..., Any], *args: Any) -> Any:
+        """Own started disk work through repeated cancellation before returning."""
+        task = asyncio.create_task(asyncio.to_thread(callback, *args))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+            task.result()
+            raise
+
+    def _append_download_chunk(
+        self, operation_id: str, partial: Path, chunk: bytes, written: int, progress_base: int,
+    ) -> None:
+        self._raise_if_canceled(operation_id)
+        # Reopening must not follow a replaced symlink or create a missing file.
+        fd = os.open(partial, os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "ab") as output:
+            facts = os.fstat(output.fileno())
+            if not stat.S_ISREG(facts.st_mode) or facts.st_size != written - len(chunk):
+                raise BlenderRuntimeOperationError(
+                    "blender_runtime_download_unsafe", "download partial changed during transfer"
+                )
+            output.write(chunk)
+            output.flush()
+            # Publish progress only after bytes have reached the partial file.
+            self.store.update_blender_runtime_operation(operation_id, bytes_done=progress_base + written)
+
+    @staticmethod
+    def _sync_download(partial: Path) -> None:
+        fd = os.open(partial, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise BlenderRuntimeOperationError(
+                    "blender_runtime_download_unsafe", "download partial is not a regular file"
+                )
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
     @staticmethod
     def _extract(

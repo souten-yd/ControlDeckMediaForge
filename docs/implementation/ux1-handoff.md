@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 download write isolation
+
+base PR #403 mergec39c606f839b9c991b389d46f59e8bf3474f02b8、ux1/3d-download-write-isolation、PR作成前。
+前turnは削除確認再起動受入/mergeまで進捗。D中断経路調査でchunk書込/progress/fsyncの同期処理を発見。
+新規2 REDでloop thread実行を確認し、owned thread/反復shieldへ変更。symlink/非regular/size変更も拒否。
+追加10ケース（thread identity、1/3回取消、partial置換negative）成功、既存manager回帰も成功。
+scripts/3ds_download_io_e2e.py、証跡 /data1tb/mf-download-io-source-20260910[-r2]。
+実archive/実disk/実TCP health、通信・slow-writeはfixture。初回0.958秒/exit0、-r2 0.993秒passed。
+health5.686ms、3回取消→1MiB保持→Range再開→377,929,956B/SHA一致、partial回収。
+専用dataだけ変更、元archive保持。download-only operationはcanceled、install成功とはしない。
+独立DB/hash照合でもcanceled/bytes_done=377929956/partial0。全1384 tests/145.75秒/2既存warnings、build/Node5成功。
+製品修正は未配布。次は署名release準備/公開/installed受入、続いてD失敗matrixへ戻る。
+NOT TESTED: installed/実CDN/物理ENOSPC/全setup off-loop/全D/3DS/GA。全体PARTIAL。
+
 ## 2026-09-10 removal confirmation core restart
 
 base PR #402 merge2aa28ac26e6da9629eae457d0e433fa411b7aba5、ux1/3d-removal-confirmation-restart、PR作成前。

@@ -1,5 +1,44 @@
 # Media Forge implementation status
 
+## 2026-09-10 download write/progress isolation and repeated cancel
+
+base PR #403 mergec39c606f839b9c991b389d46f59e8bf3474f02b8、ux1/3d-download-write-isolation。
+前turnは削除確認再起動受入/PR #403 mergeまで進捗。Dの容量/改ざん/導入中断を照合中、
+_download_attemptがchunk書込・flush・進捗DB更新・fsyncをevent loopで同期実行していると確認。
+進捗更新とfsyncのthread identityを検査する2ケースを追加し、修正前の2 REDを再現した。
+遅いstorageがcoreを止める不具合を先に修正し、物理容量不足などのmatrixは未完了のまま維持する。
+
+Blender/Web pack共通downloadにowned _download_ioを追加。
+chunkごとの取消flag照合・書込/flush・進捗更新と最終fsyncをworker threadへ移す。
+開始済みthreadは1/3回取消でもshieldを繰り返して終端まで追跡し、例外を握り潰さない。
+partialはO_NOFOLLOW/O_NONBLOCKで既存fileだけopenし、regular/期待sizeを照合する。
+symlink/欠落/size変更/FIFOを拒否し、外部target不変/進捗0をtestで確認。
+fsync/progressそれぞれの1/3回取消でも待機継続→partial/progress保持を確認。追加10ケース成功。
+既存managerのinstall/cancel/ETag再開の回帰も成功。
+ただしdownload metadata/他のsetup DB・filesystem操作まで全てoff-loopにした変更ではない。
+
+```bash
+PYTHONPATH=backend:. .venv/bin/python scripts/3ds_download_io_e2e.py --evidence-dir /data1tb/mf-download-io-source-20260910
+PYTHONPATH=backend:. .venv/bin/python scripts/3ds_download_io_e2e.py --evidence-dir /data1tb/mf-download-io-source-20260910-r2
+```
+
+新規専用data/cacheだけへ書き、既存隔離rootの検証済み4.5.9 archiveをread-only参照。
+HTTP transportは固定fileをstreamするfixture、write遅延も明示gate。runtime導入や実CDN試験ではない。
+初回0.958秒passed/exit0、型注釈整理後-r2は0.993秒passed。
+実TCP core healthはwrite gate中5.686ms/setup_required、3回取消でも開始済みwriteを待機。
+解放後partial/progress=1,048,576 Bを照合し、同ETag/Range=1048576から残りを再開。
+完了377,929,956 B、SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d。
+元archiveも同hash保持、partial/metadata回収。最後はdownload-only fixtureのoperationをcanceledにし、
+導入成功と偽らず次回起動でinstallを自動再開させない。専用coreもshutdown。
+既存画像・runtime・scene・Host/installed環境を変更しない。証跡のdownloadコピーは専用dataへ保持。
+独立read-only照合で-r2のarchive bytes/hash、operation canceled/bytes_done=377929956、partial0を確認。
+全gate: ./mf.sh test は1384 passed/2既存warnings/145.75秒/exit0。
+viewer build生成差分なし/Node5、py_compile/diff check成功。
+
+NOT TESTED: この修正の署名配布/installed受入、実CDN、物理ENOSPC、Blender/Web pack実導入、
+全setup経路のoff-loop保証、全D/3DS/GA。次はこの製品修正を署名releaseへ含めて導入確認し、
+その後Dの容量不足/改ざん/中断の残件へ戻る。
+
 ## 2026-09-10 durable removal confirmation across isolated core restart
 
 base PR #402 merge2aa28ac26e6da9629eae457d0e433fa411b7aba5、ux1/3d-removal-confirmation-restart。
