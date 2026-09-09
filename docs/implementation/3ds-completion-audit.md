@@ -3,6 +3,11 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 Job参照回収: 受付中の2/3回取消でlive参照が漏れる2ケースREDを再現し修正。
+取得/解放のowned cleanupを反復shieldで終端まで追跡。source専用registry/実runtimeで
+3回取消→参照0→実Blender通常制作成功/終端0、`mf-repeated-admission-cancel-source-20260910`。
+Host応答はfixture、1.037秒/exit0。署名配布/installed同条件は未検証、全D/3DS/GAはPARTIAL。
+
 2026-09-10 installed stale削除確認: Settings preview後に4.5.9 GUIを開始し、
 履歴checkbox同意の前/後どちらの順序でも実削除buttonの古いfingerprintをremove_changed拒否。
 新しいlive preview+ack=trueも正規APIでin_use拒否。削除operation追加0・旧runtime/制作物保持。

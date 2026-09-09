@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 repeated admission cancellation cleanup
+
+base PR #396 merge2a0d80dc4580a25567260088e76e71980741ac32、ux1/3d-admission-repeat-cancel。
+前turnはinstalled GUI/stale削除拒否/mergeまで進捗。Job参照調査で重複取消のleakを発見。
+取得thread待ちへ2/3回取消でlive1が残る2ケースRED→owned cleanup task/反復shieldで修正。
+Host受付失敗・制作finallyのcloseにも適用し、3回取消中もthread終端まで追跡する2 tests追加。
+同期取得/解放はto_threadのまま、cleanup例外は伝播。公開契約/DB/版数変更なし。
+実source診断は既存3ds_recipe_runtime_pin_e2e.pyへ取得遅延/3回取消を追加。
+証跡 /data1tb/mf-repeated-admission-cancel-source-20260910、1.037秒/exit0。
+取消でHost未呼出/live0、その後実Blender4.5.9 cube成功/GLB1756B/終端live0、旧exe hash不変。
+Host/遅延はfixture、Blender/検証processは実物。installedの同条件受入ではない。
+次は全gate/merge後に署名release準備・installed受入。全D/3DS/GA PARTIAL。
+全1361 tests/2 warnings/152.33秒/exit0、viewer build差分なし、Node5/py_compile/diff check成功。
+最終診断-r2は0.660秒/exit0、参照回収後の実Blender制作/GLB同hash成功。
+MF1082083/Host667000は不変。未配布、旧untracked .venvは保持。
+
 ## 2026-09-10 installed stale removal confirmation
 
 base PR #395 mergeb871ccd54476070bbf786af23bb13af734de662e、ux1/3d-installed-removal-stale。

@@ -26,6 +26,16 @@ from .store import Store
 logger = logging.getLogger(__name__)
 
 
+async def _finish_cleanup(task: asyncio.Task[Any]) -> None:
+    """Drain owned cleanup despite repeated caller cancellation; keep errors."""
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            continue
+    task.result()
+
+
 class SceneRecipeJobManager:
     """Own in-process execution while SQLite remains the source of job truth."""
 
@@ -134,15 +144,18 @@ class SceneRecipeJobManager:
             references, pin = await asyncio.shield(acquisition)
         except asyncio.CancelledError:
             # A started thread must finish before its reference can be released.
-            references, _ = await acquisition
-            await asyncio.to_thread(references.close)
+            async def release_acquisition() -> None:
+                references, _ = await acquisition
+                await asyncio.to_thread(references.close)
+
+            await _finish_cleanup(asyncio.create_task(release_acquisition()))
             raise
         try:
             return await self._submit_pinned(
                 value, identity, owner, external, operation, encoded, retry_of, references, pin
             )
         except BaseException:
-            await asyncio.to_thread(references.close)
+            await _finish_cleanup(asyncio.create_task(asyncio.to_thread(references.close)))
             raise
 
     async def _submit_pinned(
@@ -251,7 +264,7 @@ class SceneRecipeJobManager:
             try:
                 await asyncio.shield(cleanup)
             except asyncio.CancelledError:
-                await cleanup
+                await _finish_cleanup(cleanup)
                 raise
             finally:
                 self._tasks.pop(job_id, None)
