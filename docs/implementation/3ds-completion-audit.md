@@ -3,6 +3,13 @@
 Date: 2026-09-07
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-07 autosave追加: 隔離working copyへ120秒timer/atomic snapshotを実装。
+source実HTTP/WS/Blender4.5.9で書込拒否→日本語警告/旧bytes保持→権限復元→次interval成功、
+Blender子だけのcrash後に手編集1→2 meshesを別sceneへ回収、実GLB一致を258.512秒で確認。
+`/data1tb/mf-autosave-crash-evidence-final-20260907-r2`。全1145 tests PASS。
+installedは0.28.38のまま。新autosaveの署名配布/installed日英・4.5.13受入は未完了。
+以下のC行にある定期autosave実装の残件はsourceで進んだが、installed完了へは読み替えない。
+
 対象: PR #213のGOAL-01〜10と`g8-3d-studio-plan.md` §4 A〜F。
 監査開始コードはmain `1f4392a2d426a742046d0c03c99272ffb5e41c87`。その後PR #246/247をマージし、
 本監査でv0.28.17（target `4293d20`）の終端照合を受入後、v0.28.19（target `583fea1`）を

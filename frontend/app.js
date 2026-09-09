@@ -4818,6 +4818,7 @@ const SCENE_TEXT = {
     restoreInvalid: ".zipバックアップを選んでください。", restoreTooLarge: "2 GiB以下のバックアップを選んでください。",
     blenderStart: "Blenderで編集", blenderOpen: "Blenderへ戻る", blenderStarting: "Blenderを準備しています…",
     blenderReady: "Blenderは表示を閉じても動き続けます。保存または破棄で終了します。",
+    blenderAutosaveFailed: "自動復旧用の保存に失敗しました。直前の候補は保持しています。明示的に保存するか、次の自動保存をお待ちください。",
     blenderSaving: "検証済みの新しい版として保存しています…", blenderStopping: "変更を破棄しています…",
     blenderFailed: "Blenderセッションを開始できませんでした。", blenderBusy: "別のシーンを編集中です。",
     blenderSetup: "設定でブラウザ操作環境を導入すると編集できます。",
@@ -4901,6 +4902,7 @@ const SCENE_TEXT = {
     restoreInvalid: "Choose a .zip backup.", restoreTooLarge: "Choose a backup no larger than 2 GiB.",
     blenderStart: "Edit in Blender", blenderOpen: "Return to Blender", blenderStarting: "Preparing Blender…",
     blenderReady: "Blender keeps running when this view closes. Save or discard to end the session.",
+    blenderAutosaveFailed: "Automatic recovery save failed. The previous snapshot is retained. Save explicitly or wait for the next automatic save.",
     blenderSaving: "Saving as a new validated revision…", blenderStopping: "Discarding changes…",
     blenderFailed: "The Blender session could not start.", blenderBusy: "Another scene is being edited.",
     blenderSetup: "Install the browser control runtime in Settings to edit.",
@@ -5779,7 +5781,7 @@ function renderBlenderSessionControls() {
   if (mobile) status = text.blenderDesktop;
   else if (!selected && active) status = text.blenderBusy;
   else if (!selected && state.blenderRuntime?.web_pack?.state !== "ready") status = text.blenderSetup;
-  else if (selected?.state === "ready") status = text.blenderReady;
+  else if (selected?.state === "ready") status = selected.error_code === "blender_session_autosave_failed" ? text.blenderAutosaveFailed : text.blenderReady;
   else if (["queued", "preparing", "starting"].includes(selected?.state)) status = text.blenderStarting;
   else if (selected?.state === "saving") status = text.blenderSaving;
   else if (selected?.state === "stopping") status = text.blenderStopping;
@@ -5806,6 +5808,10 @@ function renderBlenderSessionControls() {
   fork.disabled = state.sceneRecoveryBusy || Boolean(active) || !sceneRuntimeReady()
     || Boolean(state.sceneImport) || Boolean(state.sceneBackup) || state.sceneMaterialBusy;
   byId("scene-blender-status").textContent = status;
+  const autosaveWarning = byId("scene-blender-autosave-warning");
+  const autosaveFailed = active?.state === "ready" && active.error_code === "blender_session_autosave_failed";
+  autosaveWarning.hidden = !autosaveFailed;
+  autosaveWarning.textContent = autosaveFailed ? text.blenderAutosaveFailed : "";
   setBlenderSessionBusy(Boolean(active));
   renderSceneBackupControls();
   if (state.blenderRfbSessionId) {

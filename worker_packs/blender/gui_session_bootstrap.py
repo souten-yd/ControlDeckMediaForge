@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 import time
 
 import bpy
@@ -16,6 +17,7 @@ import gpu
 MAX_COMMAND_BYTES = 16 * 1024
 CONTROL_INTERVAL_SEC = 0.2
 HEARTBEAT_INTERVAL_SEC = 2.0
+AUTOSAVE_INTERVAL_SEC = 120.0
 
 
 def _arguments() -> tuple[Path, Path, str]:
@@ -32,6 +34,7 @@ def _arguments() -> tuple[Path, Path, str]:
 
 SCENE, CONTROL, SESSION_ID = _arguments()
 LAST_HEARTBEAT = 0.0
+LAST_AUTOSAVE = time.monotonic()
 
 
 def _atomic_json(name: str, value: dict) -> None:
@@ -57,14 +60,64 @@ def _reply(request_id: str, *, ok: bool, result: dict | None = None, error: str 
     )
 
 
+def _save_snapshot() -> None:
+    """Replace only a complete working snapshot; never commit a scene revision."""
+    if SCENE.is_symlink() or not SCENE.is_file():
+        raise RuntimeError("working snapshot is unavailable")
+    with tempfile.TemporaryDirectory(prefix=".autosave-", dir=SCENE.parent) as staging:
+        candidate = Path(staging) / "scene.blend"
+        result = bpy.ops.wm.save_as_mainfile(
+            filepath=str(candidate), check_existing=False, copy=True,
+            relative_remap=False, compress=False,
+        )
+        if result != {"FINISHED"} or candidate.is_symlink() or not candidate.is_file():
+            raise RuntimeError("Blender did not finish the snapshot")
+        with candidate.open("rb") as handle:
+            if handle.read(7) != b"BLENDER":
+                raise RuntimeError("Blender snapshot header differs")
+            os.fsync(handle.fileno())
+        candidate.chmod(0o600)
+        os.replace(candidate, SCENE)
+        directory = os.open(SCENE.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+
+
+def _autosave(now: float) -> None:
+    global LAST_AUTOSAVE
+    if now - LAST_AUTOSAVE < AUTOSAVE_INTERVAL_SEC:
+        return
+    # Both success and failure retry no faster than this interval. Blender may
+    # defer timers while a modal operation is active, so this is a target, not SLA.
+    LAST_AUTOSAVE = now
+    try:
+        _save_snapshot()
+    except Exception:
+        ok = False
+    else:
+        ok = True
+    try:
+        _atomic_json("autosave.json", {"schema_version": 1, "session_id": SESSION_ID, "ok": ok})
+    except OSError:
+        # A full disk may prevent even the failure report. Core detects stale
+        # status; keep the timer alive so a later recovery can retry.
+        print("Media Forge autosave status unavailable", file=sys.stderr, flush=True)
+
+
 def _control_tick() -> float:
     global LAST_HEARTBEAT
     now = time.monotonic()
     if now - LAST_HEARTBEAT >= HEARTBEAT_INTERVAL_SEC:
-        _atomic_json("heartbeat.json", {"schema_version": 1, "session_id": SESSION_ID, "monotonic": now})
         LAST_HEARTBEAT = now
+        try:
+            _atomic_json("heartbeat.json", {"schema_version": 1, "session_id": SESSION_ID, "monotonic": now})
+        except OSError:
+            print("Media Forge session heartbeat unavailable", file=sys.stderr, flush=True)
     command_path = CONTROL / "command.json"
     if not command_path.is_file() or command_path.is_symlink():
+        _autosave(now)
         return CONTROL_INTERVAL_SEC
     processing = CONTROL / ".command.processing"
     try:
@@ -84,7 +137,7 @@ def _control_tick() -> float:
         ):
             raise ValueError("command identity differs")
         if value["action"] == "save":
-            bpy.ops.wm.save_as_mainfile(filepath=str(SCENE), check_existing=False)
+            _save_snapshot()
             _reply(request_id, ok=True, result={"size_bytes": SCENE.stat().st_size, "sha256": _hash(SCENE)})
         elif value["action"] == "ping":
             _reply(request_id, ok=True, result={"blender_version": bpy.app.version_string})
@@ -101,6 +154,10 @@ def _control_tick() -> float:
 
 _atomic_json("bootstrap.json", {"schema_version": 1, "session_id": SESSION_ID, "stage": "opening"})
 bpy.ops.wm.open_mainfile(filepath=str(SCENE), load_ui=False, use_scripts=False)
+# The standard preference would use a separate temporary-file policy. Keep all
+# recovery snapshots in this isolated working copy instead; do not save prefs.
+bpy.context.preferences.filepaths.use_auto_save_temporary_files = False
+LAST_AUTOSAVE = time.monotonic()
 _atomic_json("bootstrap.json", {"schema_version": 1, "session_id": SESSION_ID, "stage": "opened"})
 bpy.app.timers.register(_control_tick, first_interval=CONTROL_INTERVAL_SEC, persistent=True)
 _atomic_json(
