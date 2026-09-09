@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 installed0.28.55修復cache改ざん: 正常archiveを退避しcopyだけ1byte反転、
+正規repairはSHA不一致でfailed、不正cache削除/旧runtime・全scene/history保持。
+正常cache復元→通常repair実probe/ready、`mf-repair-tamper-installed-0.28.55-20260910`、25.228秒/exit0。
+47scene/162revision投影・旧版関連64hash/registry保持、既定4.5.13/Host/MF PID不変。
+独立照合で正常cache復元/staging空/未終端操作0。取得済みcacheの改ざん条件をinstalledでも補完。
+CDN通信中改ざん/物理ENOSPC/今回browser/全D/3DS/GAの完了にはしない。
+
 2026-09-10 source修復容量失敗: free=0 fixtureを修復前/展開前に注入し、実HTTPでinsufficient_disk。
 `mf-repair-capacity-source-20260910-r2`、11.120秒/exit0、8hash/scene/旧exe inode保持。
 両失敗後の実Blender4.5.9 GLB入出力probe成功、独立照合でstaging空/未終端操作0。
