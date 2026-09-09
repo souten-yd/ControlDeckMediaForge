@@ -4,6 +4,8 @@ Uses only the owned prior clean setup root, never the installed Host. Default
 mode deletes the unreferenced candidate 4.5.13. --history-reinstall explicitly
 removes project-pinned inactive 4.5.9, checks preserved history/assets, installs
 that exact version again and reopens the same scene. Assets are never deleted.
+--hold-removal adds an explicit thread barrier inside the real deletion guard;
+it does not model a naturally occurring slow filesystem or installed Host race.
 """
 from __future__ import annotations
 
@@ -50,6 +52,26 @@ async def run(args: argparse.Namespace) -> None:
         blender_managed_runtime_root=managed,
         blender_web_runtime_root=feature / "runtimes/blender-web"))
     admission_entered, admission_release = threading.Event(), threading.Event()
+    removal_entered, removal_release = threading.Event(), threading.Event()
+    gui_admission_entered = threading.Event()
+    if args.hold_removal:
+        original_unregister = app.state.scene_workspace.resolver.unregister_managed
+        original_create = app.state.blender_sessions._create_guarded
+
+        def observed_create(*values: Any) -> Any:
+            if removal_entered.is_set() and not removal_release.is_set():
+                gui_admission_entered.set()
+            return original_create(*values)
+
+        def held_unregister(runtime_id: str) -> bool:
+            assert runtime_id == old
+            removal_entered.set()
+            if not removal_release.wait(15):
+                raise TimeoutError("acceptance removal gate was not released")
+            return original_unregister(runtime_id)
+
+        app.state.scene_workspace.resolver.unregister_managed = held_unregister
+        app.state.blender_sessions._create_guarded = observed_create
     if args.hold_working_admission:
         original_acquire = app.state.scene_workspace._acquire_working_copy
 
@@ -117,10 +139,11 @@ async def run(args: argparse.Namespace) -> None:
                 assert old in {r["runtime_id"] for r in status["runtimes"]}
             else:
                 assert {r["runtime_id"] for r in status["runtimes"]} == {old, candidate}
-            existing = [s for s in (await get(sessions_path))["items"]
+            sessions_before = (await get(sessions_path))["items"]
+            existing = [s for s in sessions_before
                         if s["state"] not in {"stopped", "interrupted", "failed"}]
             assert len(existing) <= 1
-            if args.hold_working_admission:
+            if args.hold_working_admission or args.hold_removal:
                 assert not existing, "held admission requires a new session, not an existing runner"
             scene_before, assets_before = await get(scene_path), await get("/api/v1/assets")
             await record("baseline", assets=hashes_before, scene=scene_before)
@@ -200,8 +223,36 @@ async def run(args: argparse.Namespace) -> None:
             if args.history_reinstall:
                 preview = await post(actions_path, {"action": "remove_preview", "runtime_id": old})
                 assert preview["can_remove_with_history"] and not preview["can_remove"]
-                removed = await operation({"action": "remove", "runtime_id": old,
-                    "confirmation_fingerprint": preview["confirmation_fingerprint"], "acknowledge_history": True})
+                removal = asyncio.create_task(operation({"action": "remove", "runtime_id": old,
+                    "confirmation_fingerprint": preview["confirmation_fingerprint"], "acknowledge_history": True}))
+                if args.hold_removal:
+                    contender = None
+                    try:
+                        assert await asyncio.to_thread(removal_entered.wait, 5)
+                        contender = asyncio.create_task(client.post(sessions_path,
+                            json={"action": "start", "scene_id": scene_before["scene"]["id"]}))
+                        assert await asyncio.to_thread(gui_admission_entered.wait, 5)
+                        await asyncio.sleep(0.2)
+                        health_started = time.monotonic()
+                        response = await client.get("/health")
+                        response.raise_for_status()
+                        health_elapsed = time.monotonic() - health_started
+                        assert health_elapsed < 2, health_elapsed
+                        assert not contender.done(), "GUI admission bypassed removal guard"
+                        await record("removal_holds_gui_admission", health_elapsed_sec=health_elapsed,
+                            health_status=response.json()["status"], gui_request_pending=True)
+                    finally:
+                        removal_release.set()
+                        try:
+                            if contender is not None:
+                                rejected = await contender
+                        finally:
+                            await removal
+                    assert rejected.status_code == 422, rejected.text
+                    assert rejected.json()["detail"]["code"] == "scene_runtime_unavailable", rejected.text
+                    assert len((await get(sessions_path))["items"]) == len(sessions_before) + 1
+                    await record("removal_first_gui_rejected", rejection=rejected.json())
+                removed = await removal
                 assert removed["result"]["acknowledge_history"] is True
                 assert not await asyncio.to_thread((managed / old).exists)
                 assert (await get(runtime_path))["active_runtime_id"] == candidate
@@ -222,6 +273,8 @@ async def run(args: argparse.Namespace) -> None:
                 assert await get(scene_path) == scene_before
                 assert await get("/api/v1/assets") == assets_before
                 assert await asyncio.to_thread(asset_hashes, data / "assets") == hashes_before
+                if args.hold_removal:
+                    await operation({"action": "switch", "runtime_id": status["active_runtime_id"]})
                 await record("history_reinstall_passed", reinstalled=reinstalled, reopened=ready_again,
                     assets_unchanged=hashes_before, not_tested=["installed Host/browser", "GUI framebuffer/input"])
                 return
@@ -254,6 +307,7 @@ async def run(args: argparse.Namespace) -> None:
         raise
     finally:
         admission_release.set()
+        removal_release.set()
         server.should_exit = True
         await serving
         listener.close()
@@ -268,11 +322,15 @@ def main() -> None:
                         help="Inject a thread gate during copy admission and verify HTTP remains responsive")
     parser.add_argument("--history-reinstall", action="store_true",
                         help="Remove inactive project-pinned 4.5.9 with acknowledgement and reinstall the exact version")
+    parser.add_argument("--hold-removal", action="store_true",
+                        help="Hold real removal before unregister; verify concurrent GUI admission and HTTP health")
     args = parser.parse_args()
     if args.hold_working_admission and not args.live_references_only:
         parser.error("--hold-working-admission requires --live-references-only")
     if args.history_reinstall and args.live_references_only:
         parser.error("--history-reinstall cannot be combined with --live-references-only")
+    if args.hold_removal and not args.history_reinstall:
+        parser.error("--hold-removal requires --history-reinstall")
     asyncio.run(run(args))
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 import threading
+from typing import Any
 
 import pytest
 
@@ -113,6 +114,54 @@ def test_gui_admission_and_working_copy_reject_runtime_removed_first(tmp_path: P
         assert error.value.code == "scene_runtime_unavailable"
         assert store.list_blender_web_sessions(OWNER) == []
         assert store.list_scene_working_copies(OWNER) == []
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("kind", ["gui", "working"])
+def test_admission_waits_for_removal_then_rejects_missing_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str,
+) -> None:
+    store, workspace, scene_id, controller, manager = session_fixture(tmp_path)
+    entered, release, attempted = threading.Event(), threading.Event(), threading.Event()
+    original = manager._create_guarded if kind == "gui" else workspace.acquire_working_copy
+
+    def observed(*args: Any, **kwargs: Any) -> Any:
+        attempted.set()
+        return original(*args, **kwargs)
+
+    if kind == "gui":
+        monkeypatch.setattr(manager, "_create_guarded", observed)
+    else:
+        monkeypatch.setattr(workspace, "acquire_working_copy", observed)
+
+    def removal() -> None:
+        with workspace.resolver.removal_guard():
+            entered.set()
+            assert release.wait(5)
+            monkeypatch.setattr(workspace.resolver, "resolve_registered", lambda runtime_id: None)
+
+    async def scenario() -> None:
+        removing = asyncio.create_task(asyncio.to_thread(removal))
+        request = None
+        try:
+            assert await asyncio.to_thread(entered.wait, 3)
+            request = asyncio.create_task(manager.create(OWNER, scene_id) if kind == "gui"
+                else workspace.acquire_working_copy_async(OWNER, scene_id))
+            assert await asyncio.to_thread(attempted.wait, 3)
+            await asyncio.sleep(0.02)
+            assert not request.done()
+        finally:
+            release.set()
+            await removing
+            if request is not None:
+                with pytest.raises((SceneError, BlenderSessionError)) as error:
+                    await request
+                assert error.value.code == "scene_runtime_unavailable"
+        assert store.list_blender_web_sessions(OWNER) == []
+        assert store.list_scene_working_copies(OWNER) == []
+        assert controller.starts == 0
+        await manager.stop()
 
     asyncio.run(scenario())
 

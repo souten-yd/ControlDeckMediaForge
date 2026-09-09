@@ -1,5 +1,45 @@
 # Media Forge implementation status
 
+## 2026-09-10 removal-first GUI admission, isolated real runtime
+
+base PR #400 merge9b0f3323bb3a4bdf363ba20e56278cf348dfac96、ux1/3d-removal-first-admission。
+前turnの意図確認だけでは実装進捗なし。PR #213のmerged状態と現行main/規約/設計を再照合。
+既存testの「resolve_registeredを不在に置換」は削除中の競合を証明しないため、
+逆順のGUI/working受付unit 2件と、既存実機scriptの--hold-removalを追加した。
+製品code・公開契約・Host・版数・署名artifactは変更しない。
+
+```bash
+PYTHONPATH=backend:. .venv/bin/python scripts/3ds_runtime_removal_e2e.py --evidence-dir /data1tb/mf-removal-first-source-20260910-r2 --history-reinstall --hold-removal
+```
+
+対象は既存の隔離root `/data1tb/mf-clean-packaged-0.28.32-QBvHfm` のみ。
+実removeのrename後/unregister前、removal_guardを所有するworker threadに最大15秒の明示gateを置く。
+新規GUIの_create_guarded到達を別eventで確認してからHTTP healthと受付pendingを検査する。
+fixtureは時間順の制御だけで、削除・registry更新・再導入probe・GUI runnerは実処理。
+finallyでgateを解放し、開始済みHTTP要求/削除pollを終端まで待つ。
+
+初回 `/data1tb/mf-removal-first-source-20260910` は25.568秒/exit0、health1.377ms。
+最終scriptの-r2は25.340秒/exit0。2.241秒時点でGUI受付pending、health HTTP成功/1.581ms。
+health本文はsetup_requiredでありhealthy受入とはしない。
+削除commit後、2.588秒でscene_runtime_unavailable/HTTP422。拒否したGUIのdurable record追加0。
+2.778秒で旧版不在、scene/revision・Library投影・6 asset/provenance hash保持。
+同じ4.5.9を固定archive SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d
+（377,929,956 B）から再導入し、実probeで6,510 members/1,168,332,002 BとGLB入出力成功。
+同scene_2642c93f480d427d920267ac790405e2を4.5.9で再起動→停止、元の既定4.5.9へ復元。
+
+独立照合でactive GUI0、.removing/.staging空、2runtime登録/既定4.5.9、6files hash保持。
+専用session c27cdc338d294899a97083cee51df2d1 / 621208cf21904f21a150f21da63acace の
+正しいunit名をコードから照合し、双方not-found/inactive/MainPID0。
+最初のunit照会はblendersession_を含めた誤名だったため、正しい名前で再検査した。
+隔離環境の4.5.9実行環境だけを一時削除・同版再導入した。制作物やinstalled環境は削除していない。
+
+gate: ./mf.sh test は1363 passed/2既存warnings/146.80秒/exit0。
+型注釈整理後の対象test再実行9ケース成功、npm run build:viewerは生成差分なし、
+node --test tests/model-animation.test.mjs は5 passed、py_compile/diff check成功。
+NOT TESTED: installed Host/opaque browserでの逆順競合、自然な遅延、Job逆順受付、
+GUI framebuffer/手編集、例外時の自動同版再導入、全D/3DS/GA。
+失敗経路の全matrixへ拡大しない。次はJob受付の逆順保護を同じ実削除commit条件で検証する。
+
 ## 2026-09-10 installed Job admission blocks stale and fresh removal
 
 base PR #399 merge86fb8bec08a206620f306cb5d8a11cd40e360a87、ux1/3d-installed-job-removal。
