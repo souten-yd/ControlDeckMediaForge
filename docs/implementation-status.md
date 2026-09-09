@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-10 repair capacity failure preservation
+
+base PR #407 merge3c9e21b3953e428353cbb8fef14ff95c06481e1e、ux1/3d-repair-failure-acceptance。
+PR #213はmerged、別PR #406のbuild self-checkも保持。直前turnはボーンの意図確認のみ。
+未commitだった修復失敗試験を照合し、対象20ケースを再実行して成功を確認した。
+追加3ケースはhash不一致/修復前容量不足/展開前容量不足の拒否と、旧exe bytes/inode・registry保持、
+失敗staging不在、その後の正常repairによる同bytes・別inodeへの公開を検証する。
+archive/probeはunit fixtureであり、稼働版の改ざん受入とは扱わない。
+
+```bash
+PYTHONPATH=backend:. .venv/bin/pytest -q tests/test_blender_history_removal.py --tb=short
+PYTHONPATH=backend:. .venv/bin/python scripts/3ds_repair_live_e2e.py --evidence-dir /data1tb/mf-repair-capacity-source-20260910-r2 --capacity-failures
+```
+
+後者は固定隔離rootの実4.5.9/実archive/実TCP APIを使用し、容量照会だけfree=0へ制御する。
+物理diskを満杯にはしない。元試験のobservations.jsonは12.869秒passed、process不在を確認し、
+失われたterminal handleを再起動理由にせず、完了確認後に別evidence dirで再実行した。
+最終-r2は11.120秒/exit0、前段0.322秒・展開前10.649秒にinsufficient_diskで終端。
+旧exe inode51918004、registryと6 asset/provenanceを合わせた8hash、同scene応答を保持。
+両失敗後に実Blender preflightで4.5.9/background/GLB import/exportを確認した。
+healthは隔離sourceのsetup_requiredで応答。installed healthyやGUI入力遅延の証拠ではない。
+独立read-only照合でも8hash一致、staging/removing空、未終端runtime操作0を確認。
+
+viewer build生成差分0、Node animation5ケース成功。最初のNode指定は不存在filenameで失敗し、
+実在するtests/model-animation.test.mjsで再実行した。./mf.sh testは1387 passed/2既存warnings/146.39秒/exit0。
+py_compileとgit diff --checkも成功。
+製品code・公開契約・版数・Host・稼働版への変更なし。全D/3DS/GA PARTIAL。
+NOT TESTED: 物理ENOSPC、installed改ざんcache拒否/再試行、今回のbrowser/GUI入力、全失敗matrix。
+次は稼働版0.28.55の全idleを再照合し、正しいcache退避→改ざんcopy拒否→正常cache復元/repairを受入する。
+
 ## 2026-09-10 v0.28.55 signed release and installed real-CDN repair
 
 準備PR #405 merge/tag aa940cd4e569c19216cee37bb03f8c99cf8ccf18を

@@ -8,17 +8,20 @@ import json
 from pathlib import Path
 import socket
 import sqlite3
+import shutil
 import time
 from typing import Any
+from types import SimpleNamespace
 
 import httpx
 import uvicorn
 
 from mediaforge.app import create_app
 from mediaforge.config import Settings
+from scripts.blender_runtime import preflight
 
 
-async def run(evidence_dir: Path) -> None:
+async def run(evidence_dir: Path, *, capacity_failures: bool = False) -> None:
     root = Path('/data1tb/mf-clean-packaged-0.28.32-QBvHfm')
     feature = root / 'feature'
     data = feature / 'data'
@@ -87,6 +90,48 @@ async def run(evidence_dir: Path) -> None:
                         await asyncio.sleep(0.2)
 
             before = await get('/workspace-api/scenes/' + scene_id)
+            if capacity_failures:
+                manager = app.state.blender_runtime_operations
+                original_disk_usage = shutil.disk_usage
+                executable = feature / 'runtimes/blender' / runtime_id / 'install/blender'
+                inode = (await asyncio.to_thread(executable.stat)).st_ino
+                for failure_call in (1, 2):
+                    calls = 0
+
+                    def controlled_free(path: Any) -> Any:
+                        nonlocal calls
+                        if Path(path) == feature / 'runtimes/blender':
+                            calls += 1
+                            if calls == failure_call:
+                                return SimpleNamespace(free=0)
+                        return original_disk_usage(path)
+
+                    shutil.disk_usage = controlled_free
+                    try:
+                        operation = await post(operations, {'action': 'repair', 'runtime_id': runtime_id})
+                        async with asyncio.timeout(300):
+                            while True:
+                                result = next(v for v in (await get('/workspace-api/blender/runtime'))['operations']
+                                              if v['id'] == operation['id'])
+                                if result['state'] in {'ready', 'failed', 'canceled'}:
+                                    break
+                                await asyncio.sleep(0.2)
+                        assert result['state'] == 'failed' and result['error_code'] == 'insufficient_disk', result
+                        assert calls == failure_call
+                    finally:
+                        shutil.disk_usage = original_disk_usage
+                    assert await asyncio.to_thread(baseline) == hashes
+                    assert (await asyncio.to_thread(executable.stat)).st_ino == inode
+                    assert await get('/workspace-api/scenes/' + scene_id) == before
+                    await record('capacity_repair_rejected', check_number=failure_call, operation=result,
+                                 health=await get('/health'), hashes=hashes, inode=inode,
+                                 capacity_source='explicit free=0 fixture; physical disk not filled')
+                facts = await asyncio.to_thread(preflight, executable, manager.preflight_script, manager.spec)
+                assert facts['version'] == '4.5.9'
+                assert await asyncio.to_thread(baseline) == hashes
+                await record('passed', old_runtime_preflight=facts, files_preserved=len(hashes),
+                             not_tested=['physical ENOSPC', 'installed Host/browser', 'GUI input'])
+                return
             created = await post(sessions, {'action': 'start', 'scene_id': scene_id})
             sid = created['id']
             try:
@@ -142,4 +187,7 @@ async def run(evidence_dir: Path) -> None:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--evidence-dir', type=Path, required=True)
-    asyncio.run(run(parser.parse_args().evidence_dir))
+    parser.add_argument('--capacity-failures', action='store_true',
+                        help='Inject free=0 at each repair capacity check; preserve and probe the real old runtime')
+    args = parser.parse_args()
+    asyncio.run(run(args.evidence_dir, capacity_failures=args.capacity_failures))

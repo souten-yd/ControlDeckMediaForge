@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 source修復容量失敗: free=0 fixtureを修復前/展開前に注入し、実HTTPでinsufficient_disk。
+`mf-repair-capacity-source-20260910-r2`、11.120秒/exit0、8hash/scene/旧exe inode保持。
+両失敗後の実Blender4.5.9 GLB入出力probe成功、独立照合でstaging空/未終端操作0。
+unitではhash/容量2箇所の3ケースで旧環境保持→正常retryを確認。
+物理ENOSPC・installed改ざん受入・全D/3DS/GA完了へ読み替えない。
+
 2026-09-10署名0.28.55公開/再取得/実Host署名検証/標準update10.698秒healthy、DB/registry保持。
 installedの停止済み4.5.9 repairをcache退避→実CDN転送→実probeで受入、58.081秒/exit0。
 `mf-repair-download-installed-0.28.55-20260910`、47scene/162revision投影・旧版関連64hash保持、
