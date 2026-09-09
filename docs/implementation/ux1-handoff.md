@@ -3,6 +3,14 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.48 release preparation
+
+PR #370のmain630225eからcore/addonを0.28.48へ揃え、release noteを追加。
+clip replaceの明示性・旧insert-only互換・共有action保護・旧revision保持を記載。DB migrationなし。
+事前確認: installed0.28.47、Host PID667000/MF876222 active、active Jobs0、GUI稼働0。
+全 `./mf.sh test`:1275 passed/既知warning2/137.27秒、exit0。
+frontend build:viewer/diff check成功。署名公開・標準update・installed受入は次工程。
+
 ## 2026-09-10 explicit clip replacement in immutable scene revisions
 
 前turnはPR #369の実director制作/失敗品質検出を完了した進捗であり、全体完成ではない。
