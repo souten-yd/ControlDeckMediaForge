@@ -3,6 +3,52 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.48 signed / installed / manual MCP repair
+
+PR #371のmain b6b2a985ff5fdb2e0cd8dd26aed2aea8b21eb821から署名版v0.28.48を構築・公開。
+artifact31565842 B、SHA7795859e9989b9d0e6aada08e222690d26e29f74449cfb949308c06a2f5408c2。
+CArchive201 entries、制作物/venv/秘密鍵等の禁止名混入なし、certifi PEMはbuild runtimeと一致。
+worker2ファイルとcreate/edit/workflow schemaはexact checkoutと同一。
+packaged doctor:0.28.48/ok。初回launcher診断は必須Host環境変数不足で失敗し、
+専用feature-data/cacheを指定した再実行で成功。実Host設定を省略した失敗を製品障害としない。
+公開4ファイルを再取得しbuildとbytes一致、実Host trusted署名検証も成功。
+証跡: /data1tb/mf-0.28.48-build-20260910/verification.json、
+/data1tb/mf-0.28.48-public-20260910。
+
+idleとbackup後、exact-tag標準installで.47→.48を9.807秒で更新。
+DB全15テーブル/Blender registry不変、実HTTP healthy、addon enabled=true/version0.28.48。
+Host PID667000不変、MF921443。backup/比較結果:
+`/data1tb/mf-0.28.48-update-aqnlovyf/observations.json`。
+標準保持で.46実行bundleのみ整理し、.47/.48を保持。制作data/Blender実体は削除しない。
+旧実行版は公開releaseから再取得可能。PC/Host再起動は実施しない。
+
+実installed Host MCPのedit schemaでreplaceを確認し、前回directorが作った
+scene_509b6ee0b688492997b86b535d70ec9aの第1版を明示baseとして修正。
+両腕Xを±0.250→±0.225m、既存idle/arm_swingを同じkeysでreplace=true/loop=trueへ変更。
+Job job_33ee2dedbb384336b7fcf8a0318078ad succeeded、1.731秒。
+新revision revision_52149c92fb8a41f1b1f727390a010258。
+GLB asset_4d359d6ce7da4684a0156750e7d146e5、29932 B、
+SHAb36b26954162e40ced1a0dc99de958a4b76218f635324055244d35ba615ea61d。
+before/after source/GLBをopaque Asset IDで取得し、4件とも実bytes/metadata/provenance hashを照合。
+一時実行configは削除、active Jobs0。元projectのexports/robot.glbも不変。
+
+証跡 `/data1tb/mf-motion-repair-installed-mcp-20260910` の
+observations.json、repair-inspection.json、glb-inspection.json、placement.json。
+実Blender4.5.13でframe0のmesh edge/triangle BVH交点を検査し、
+修正前の胴/両腕false→修正後true、頭/脚を含む指定5接合すべてtrue。
+2 actionのloop metadataはfalse→true、全curve/keyは不変。
+inspect_repair.py SHA cbde97180e609af411ee75365f8d9763d85e598eff81901b44ab8f6fa3400270。
+GLB再importでも7骨/6部品/136 triangles、idle2秒/arm_swing1秒、
+実mesh移動・loop両端差0を確認。これはframe0接合の検証で、全時刻の接合/見た目承認ではない。
+新しいproject grantからrepaired-exports/robot.glbへmedia.packで配置。
+receipt committed=true、Host asset:cdb8b4b5-75e2-4bf6-990d-5663a700a64f、
+実bytes/receipt SHA一致、元exports不変。旧版を上書きせず同scene第2版として保持した。
+
+配布準備全テスト1275 passed/既知warning2/137.27秒、frontend build:viewer/diff check成功。
+今回の追記はdocsのみ。修正は手動MCP呼出しであり、LLMが検査から自動修正した証拠ではない。
+NOT TESTED: 自然言語修正一巡、全時刻接合、browser/engine playback、見た目/歩行、
+原3DS/GA全体完成。次は検査結果を自然言語修正へ戻す経路と残存3DS必須受入を進める。
+
 ## 2026-09-10 v0.28.48 release preparation
 
 PR #370のmain630225eからcore/addonを0.28.48へ揃え、release noteを追加。
