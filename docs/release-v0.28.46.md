@@ -17,8 +17,10 @@ mesh/材質slotの独立性、旧版保持、60 triangles/幅2.4m、
 ゲーム制作の全機能やengine importの完了を宣言するリリースではありません。
 詳細は[ゲーム制作計画](design-game-asset-authoring.md)。
 
-この文書追加時点はリリース準備中です。署名公開・consumer検証・標準updateと
-installed MCP/Blender Skills読込の受入は実施後にimplementation-statusへ記録します。
+2026-09-09に署名公開・公開4ファイル再取得/Host署名検証・標準updateを確認しました。
+実HTTP healthy、既存DB全15 table/Blender登録保持、新9操作のcapabilityを確認。
+実Host MCPのcreate schemaにも新2操作を確認しています。
+OpenCodeの実制作中のBlender Skills読込と新操作実行は未検証で、次の受入対象です。
 
 ## 互換性
 
