@@ -85,6 +85,75 @@ def test_complete_evidence(evidence: tuple[Path, Path]) -> None:
     assert MODULE.verify(*evidence)["verified"]
 
 
+@pytest.mark.parametrize("failure", [None, "single", "no_skill", "late_skill", "no_bind", "missing_clip", "duration", "loop_default",
+                                     "bytes", "job", "wrong_asset", "wrong_revision", "unexpected_tool"])
+def test_motion_evidence(evidence: tuple[Path, Path], failure: str | None) -> None:
+    root, database = evidence
+    # These fixture bytes test evidence accounting only, never Blender validity.
+    for path in (root / "exports").iterdir():
+        path.unlink()
+    data = b"synthetic-glb"
+    (root / "exports/robot.glb").write_bytes(data)
+    observations = {"exit_code": 0, "director_motion": True, "project_path": str(root), "elapsed_sec": 1}
+    (root / "observations.json").write_text(json.dumps(observations))
+    events: list[dict[str, Any]] = []
+
+    def call(name: str, output: dict[str, Any], inputs: dict[str, Any] | None = None) -> None:
+        events.append({"type": "tool_use", "part": {"tool": "controldeck_addons_" + name,
+            "state": {"status": "completed", "input": inputs or {}, "output": json.dumps({"output": output})}}})
+
+    events.append({"type": "tool_use", "part": {"tool": "skill", "state": {
+        "status": "completed", "input": {"name": "blender-director"}, "output": "Blender Director media.scene"}}})
+    call("media_capabilities", {"capabilities": []})
+    operations = [{"type": "armature.create"}, {"type": "skin.bind"}] + [
+        {"type": "animation.clip", "clip_id": name, "fps": 24, "frame_count": frames, "loop": True}
+        for name, frames in (("idle", 48), ("arm_swing", 24))]
+    call("media_scene_create", {"job_id": "create"}, {"recipe": {"operations": operations}})
+    call("media_job_status", {"job_id": "create", "status": "succeeded", "result": {
+        "revision": {"id": "revision", "source_asset_id": "source"}}})
+    call("media_scene_snapshot", {"scene_id": "scene"})
+    call("media_scene_export", {"scene_id": "scene", "revision_id": "revision", "asset": {"id": "glb"}})
+    receipt = {"filename": "robot.glb", "source_asset_id": "glb", "committed": True, "error": None,
+               "sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data)}
+    call("media_pack", {"committed_count": 1, "requested_count": 1, "partial": False, "receipts": [receipt]})
+    if failure == "single":
+        events[-1]["part"]["state"]["output"] = json.dumps({"receipt": receipt, "media_asset_id": "glb",
+            "name": "robot.glb", "sha256": receipt["sha256"], "size": receipt["size_bytes"]})
+        operations[-1].pop("fps")  # Current public default is valid.
+    elif failure == "no_skill":
+        events.pop(0)
+    elif failure == "late_skill":
+        events.append(events.pop(0))
+    elif failure == "no_bind":
+        operations.pop(1)
+    elif failure == "missing_clip":
+        operations.pop()
+    elif failure == "duration":
+        operations[-1]["frame_count"] = 48
+    elif failure == "loop_default":
+        operations[-1].pop("loop")
+    elif failure == "bytes":
+        (root / "exports/robot.glb").write_bytes(b"tampered")
+    elif failure == "job":
+        with sqlite3.connect(database) as db:
+            db.execute("UPDATE jobs SET status='failed' WHERE id='create'")
+    elif failure == "wrong_asset":
+        receipt["source_asset_id"] = "image"
+        events[-1]["part"]["state"]["output"] = json.dumps({"committed_count": 1, "requested_count": 1,
+            "partial": False, "receipts": [receipt]})
+    elif failure == "wrong_revision":
+        events[-2]["part"]["state"]["output"] = json.dumps({
+            "scene_id": "scene", "revision_id": "other", "asset": {"id": "glb"}})
+    elif failure == "unexpected_tool":
+        call("bash", {})
+    (root / "events.jsonl").write_text("\n".join(json.dumps(event) for event in events))
+    if failure not in (None, "single"):
+        with pytest.raises(AssertionError):
+            MODULE.verify(root, database)
+    else:
+        assert MODULE.verify(root, database)["verified"]
+
+
 @pytest.mark.parametrize("failure", ["bytes", "job", "missing", "unexpected_tool"])
 def test_false_success_rejected(evidence: tuple[Path, Path], failure: str) -> None:
     root, database = evidence
@@ -130,15 +199,16 @@ def test_director_requires_actual_read_and_operations(failure: str | None) -> No
         MODULE.verify_director_static(calls)
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-def test_private_director_tool_permission(enabled: bool) -> None:
+@pytest.mark.parametrize("static,motion", [(False, False), (True, False), (False, True)])
+def test_private_director_tool_permission(static: bool, motion: bool) -> None:
     spec = importlib.util.spec_from_file_location(
         "opencode_flow_runner", Path(__file__).parents[1] / "scripts/3ds_opencode_flow_e2e.py")
     assert spec and spec.loader
     runner = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(runner)
     payload: dict[str, Any] = {}
-    runner.restrict_tools(payload, director_static=enabled)
+    runner.restrict_tools(payload, director_static=static, director_motion=motion)
+    enabled = static or motion
     if enabled:
         assert "skill" not in payload["tools"], "Legacy tools entry would override named skill permission"
     else:
