@@ -37,7 +37,7 @@ def test_new_static_operations_match_published_schemas() -> None:
         "primitive.add", "transform.set", "modifier.bevel", "material.set", "uv.smart_project",
         "light.add", "camera.add", "object.duplicate", "modifier.mirror",
         "armature.create", "skin.bind", "pose.set",
-        "animation.clip",
+        "animation.clip", "modifier.array",
     }
 
 

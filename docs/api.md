@@ -524,6 +524,15 @@ most 64 sequential operations from a closed vocabulary: primitive creation,
 meter-based dimensions/transform, stable object IDs, bounded bevel, Principled
 material, smart-project UV, light, camera, independent mesh duplication
 (`object.duplicate`) and a bounded non-destructive mirror (`modifier.mirror`).
+`modifier.array` adds a fixed-count non-destructive array to a static mesh:
+`count` is an integer from 2 to 64 including the original, and `local_offset`
+is a nonzero XYZ vector in local mesh coordinates (-10000..10000 each).
+Object scale and rotation affect world-space spacing. This is not a world-meter
+offset or relative bounding-box multiplier. At most one array per object;
+parented, constrained, animated or shape-key meshes are rejected. No object/curve
+offset, caps, fit-length, or vertex merging is exposed. Growth is bounded before
+allocation, including subsequent duplicate/mirror and bevel on the array mesh.
+Array does not join disconnected geometry or guarantee a watertight result.
 The vocabulary also includes `armature.create`, rigid `skin.bind`, and `pose.set`.
 Armatures have identity transforms, 1..128 named bones (ASCII IDs up to 48 chars),
 ordered parent references, finite rest endpoints, and minimum length 0.001m;

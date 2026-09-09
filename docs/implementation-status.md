@@ -1,5 +1,41 @@
 # Media Forge implementation status
 
+## 2026-09-10 GA-1 fixed-count array authoring / source acceptance
+
+base MF PR #420 mergec7a63a9、branch ux1/3d-array-modifier。Host再起動の承認返信はなく、
+Host修正の導入は保留してMediaForgeの次のtyped制作操作を実装した。
+`modifier.array`はstatic meshへ元を含む2〜64個の非破壊配列を追加する。
+非零local_offsetはlocal mesh座標であり、object scale/rotationの影響を受ける。
+relative/object/curve offsetやcaps/mergeは公開しない。parent/constraints/animation/shape-key、
+二重array、不正個数/offsetを拒否。duplicate/mirrorと配列後bevelの増幅をallocation前に
+既存100万geometry予算で検査し、未知GUI array設定は安全と仮定しない。
+create/edit/workflowの3 schemaとcapability由来一覧、docs/api・GA設計を加法更新。
+既存画像/G8/recipe operationの名前は変更せず、任意Pythonを公開しない。
+
+実診断は `PYTHONPATH=backend:. .venv/bin/python scripts/3ds_game_static_e2e.py
+--fixture array --runtime-root /data1tb/mf-long-setup-source-20260906/runtimes/blender/blender-4.5.9-linux-x64
+--evidence-dir <下記>`。4.5.13は追加で
+`--managed-root /data1tb/ControlDeck/data/feature-data/media-forge/runtimes/blender`。
+
+- mf-array-source-4.5.13-20260910-final: 4.5.13 / 2.193秒 / exit0
+- mf-array-source-4.5.9-20260910-final: 4.5.9 / 3.083秒 / exit0
+
+隔離data/registryで実domain→workerを実行。元8 verticesのcubeから6段/72 triangles、
+実評価48座標とGLB再importの全座標が一致。別revisionでX+2m、旧blend/GLB hash保持。
+二重arrayはOperation1/1、過大bevelはOperation2/2でscene_recipe_failedとなり、
+成功head/2 revisionsを保持。Asset SHA/provenance、runtime executable hashも一致。
+初回4.5.13 runは2.162秒成功、その後拒否位置/codeのassertを強化して上記finalを再実行。
+本番のruntime登録・既存scene・Host/service/global設定は変更しない。
+
+27件の新試験でschema/不正値/未知GUI設定/増幅予算/worker事前拒否を検査。
+focused実行で最初にmf.shへ引数を渡し拒否されたため、直接pytestで実行した。
+最終focusedは62 passed/既知warning1/1.63秒。
+viewer build成功/生成差分0、Node animation5 tests成功。
+最終全 `./mf.sh test`:1419 passed/既知warning2/157.83秒、exit0。
+対象code/診断のcompileallとgit diff --checkも成功。
+NOT TESTED: 署名公開/installed MCP/OpenCode、engine取り込み、watertight接合、
+Boolean/mesh編集/有機weights/IK/歩行/GA全体と元3DS必須受入の完成。
+
 ## 2026-09-10 retained lifecycle evidence refresh / Host deployment approval pending
 
 前sliceはHost PR #311 mergea32567c、MF記録PR #419 mergec3d66a7まで完了。

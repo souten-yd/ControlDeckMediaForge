@@ -112,6 +112,24 @@ class MirrorModifier(BaseModel):
         return self
 
 
+class ArrayModifier(BaseModel):
+    """Repeat a static mesh with a fixed local-space offset; one array per object."""
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["modifier.array"]
+    object_id: ObjectId
+    count: int = Field(ge=2, le=64, strict=True, description="Total copies including the original mesh.")
+    local_offset: Vector3 = Field(
+        description="Nonzero local mesh-space step. Object scale and rotation affect world spacing.",
+        json_schema_extra={"not": {"const": [0, 0, 0]}},
+    )
+
+    @model_validator(mode="after")
+    def nonzero_offset(self) -> "ArrayModifier":
+        if not any(self.local_offset):
+            raise ValueError("array local_offset must be nonzero")
+        return self
+
+
 class MaterialSet(BaseModel):
     """Assign a simple Principled BSDF material without external textures."""
     model_config = ConfigDict(extra="forbid")
@@ -290,6 +308,7 @@ SceneOperation = Annotated[
     | CameraAdd
     | ObjectDuplicate
     | MirrorModifier
+    | ArrayModifier
     | ArmatureCreate
     | SkinBind
     | PoseSet

@@ -89,6 +89,9 @@ def run(args: argparse.Namespace) -> None:
     elif args.fixture == "motion":
         from motion_fixture import recipe
         operations = recipe()
+    elif args.fixture == "array":
+        from array_fixture import recipe
+        operations = recipe()
     create = SceneCreateRequest.model_validate({"name":"Game " + args.fixture + " acceptance","recipe":{"operations":operations}})
     evidence: dict[str, Any] = {"mode":"source_domain_real_blender", "runtime":runtime.version}
     began = time.monotonic()
@@ -111,6 +114,8 @@ def run(args: argparse.Namespace) -> None:
         evidence["created"] = created
         source = store.asset_path(created["revision"]["source_asset_id"])
         old_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+        old_glb = store.asset_path(created["revision"]["preview_asset_id"])
+        old_glb_hash = hashlib.sha256(old_glb.read_bytes()).hexdigest()
         completed = subprocess.run([str(runtime.executable), "--background", "--factory-startup", "--disable-autoexec",
             "--python-exit-code", "1",
             "--python", str(Path(__file__).resolve()), "--", "--inspect", "--source", str(source),
@@ -127,11 +132,13 @@ def run(args: argparse.Namespace) -> None:
         elif args.fixture == "motion":
             from motion_fixture import clip
             edit_operation = clip("arm_swing")
+        elif args.fixture == "array":
+            edit_operation = {"type": "transform.set", "object_id": "step", "location": [2, 0, 0]}
         edit = SceneEditRequest.model_validate({"scene_id": created["scene"]["id"],
             "base_revision_id":created["revision"]["id"], "recipe":{"operations":[
                 edit_operation]}})
         evidence["edited"] = asyncio.run(apply(edit))
-        if args.fixture in {"rig", "motion"}:
+        if args.fixture in {"rig", "motion", "array"}:
             revision = evidence["edited"]["revision"]
             checked = subprocess.run([str(runtime.executable), "--background", "--factory-startup", "--disable-autoexec",
                 "--python-exit-code", "1", "--python", str(Path(__file__).resolve()), "--", "--inspect",
@@ -141,6 +148,29 @@ def run(args: argparse.Namespace) -> None:
                 capture_output=True, text=True, timeout=60)
             assert checked.returncode == 0, (checked.stdout+checked.stderr)[-4000:]
             evidence["posed_inspection"] = json.loads((args.evidence_dir / "posed-inspection.json").read_text())
+        if args.fixture == "array":
+            current = evidence["edited"]["revision"]
+            failures = [
+                [{"type": "modifier.array", "object_id": "step", "count": 2, "local_offset": [2, 0, 0]}],
+                [{"type": "modifier.bevel", "object_id": "step", "width": .01, "segments": 8}] * 2,
+            ]
+            for operations in failures:
+                rejected = SceneEditRequest.model_validate({"scene_id": created["scene"]["id"],
+                    "base_revision_id": current["id"], "recipe": {"operations": operations}})
+                try:
+                    asyncio.run(apply(rejected))
+                except SceneError as exc:
+                    assert exc.code == "scene_recipe_failed"
+                    expected_type = operations[-1]["type"]
+                    assert str(exc).startswith(
+                        f"Operation {len(operations)}/{len(operations)} ({expected_type}, object_id=step) failed:"
+                    ), str(exc)
+                    evidence.setdefault("array_rejection_messages", []).append(str(exc))
+                else:
+                    raise AssertionError("Unsafe array growth succeeded")
+                document, revisions = workspace.catalog.get("local", created["scene"]["id"])
+                assert document.current_revision_id == current["id"] and len(revisions) == 2
+            evidence["array_duplicate_and_growth_rejected_without_revision"] = True
         if args.replace_clip:
             from motion_fixture import replacement
             previous = evidence["edited"]["revision"]
@@ -178,6 +208,7 @@ def run(args: argparse.Namespace) -> None:
             assert document.current_revision_id == revised["id"] and len(revisions) == 3
             evidence["failed_following_operation_preserves_head"] = True
         assert hashlib.sha256(source.read_bytes()).hexdigest() == old_hash
+        assert hashlib.sha256(old_glb.read_bytes()).hexdigest() == old_glb_hash
         for result in [created, evidence["edited"]] + ([evidence["replaced"]] if args.replace_clip else []):
             for aid in result["asset_ids"]:
                 asset = store.get_asset(aid)
@@ -202,7 +233,7 @@ if __name__ == "__main__":
     parser.add_argument("--runtime-id",default="blender-4.5.13-linux-x64")
     parser.add_argument("--inspect",action="store_true")
     parser.add_argument("--source",type=Path)
-    parser.add_argument("--fixture",choices=("gate", "robot", "rig", "motion"),default="gate")
+    parser.add_argument("--fixture",choices=("gate", "robot", "rig", "motion", "array"),default="gate")
     parser.add_argument("--glb",type=Path)
     parser.add_argument("--posed",action="store_true")
     parser.add_argument("--replace-clip",action="store_true")
@@ -215,6 +246,9 @@ if __name__ == "__main__":
         if args.replace_clip:
             from motion_fixture import inspect_replacement
             inspect_replacement(args.previous_source, args.source, args.glb, args.evidence_dir)
+        elif args.fixture == "array":
+            from array_fixture import inspect_blend as inspect_array
+            inspect_array(args.source, args.glb, args.evidence_dir, edited=args.posed)
         elif args.fixture == "motion":
             from motion_fixture import inspect_blend as inspect_motion
             inspect_motion(args.source, args.glb, args.evidence_dir, edited=args.posed)
