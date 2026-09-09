@@ -3,6 +3,48 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 real OpenCode diagnosis and corrected edit
+
+前turnは0.28.49署名配布・installed MCP直接修正の進捗。main12fd048とhandoffを再確認。
+branch ux1/3d-opencode-failure-repairでscripts/3ds_opencode_repair_e2e.pyを追加。
+新規専用project/sceneだけでMCP setup:立方体作成→2操作editの後半を不在IDで失敗させる。
+ここまでは手入力fixture。その後は実OpenCode/既存local gatewayへ自然言語で修正を依頼。
+元制作Job・失敗Jobの照会、snapshotのbase確認、入力修正、新Job成功までを実LLMが行う。
+private configの許可はstatus/snapshot/edit/capabilitiesのみ。skill/shell/file/webは無効。
+正しいIDを答えとしてpromptへ渡す代わりに元Jobを照会させるが、失敗recipe内には既存target IDも含む。
+複雑な幾何検査からの推論、Blender Skills読込、rig修正の受入とは扱わない。
+
+実コマンド: CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml
+PYTHONPATH=/data1tb/ControlDeck/app/backend /data1tb/ControlDeck/app/.venv/bin/python
+scripts/3ds_opencode_repair_e2e.py --project-name MF3DS-Failure-Repair-20260910
+--evidence-dir /data1tb/mf-opencode-failure-repair-20260910。
+専用CLI PID963977、exit0/144.116秒。
+実tool完了:元Job28.618秒、失敗Job37.029秒、snapshot44.843秒、
+edit93.385秒、新Job成功98.809秒。5実tool callsのみ。
+失敗理由を参照したうえで不要な中間移動を省き、targetを[2,0,0]へ移す単一操作へ修正した。
+最終応答も実エラー・原因・新Job/revisionを正しく報告。
+
+scene_2d2921e9829e4f3b8e3d5321f436d268、
+base revision_d5a150ae08654629a519c6f4c5393e8c、
+失敗Job job_173f97a4b6e04a1d8c3c832c305f4e4d、
+修正Job job_0df96adff0794d0fb2dc6a9ffe72c5e0 succeeded、
+第2版revision_f8280780203f44578145bdbc5bd3bca3。
+旧sourceのHTTP再取得hash不変、元版を親にした2 revisionsを確認。
+GLB asset_8b0ec8fa2f964f21b8dcff09ee8458e9/1780 B、
+SHAe58749af6bd4b6e8bc6b2e4d8525f994be1347adee630090bb576ccc0ba21e59。
+独立読取でGLB一mesh/一node/translation[2,0,0]を確認。
+実DBの成功Job、正規化した実tool入力とdurable recipeの一致も確認。active Jobs0。
+証跡は上記dirのevents.jsonl、observations.json、delivery-verification.json、prompt.txt。
+一時provider configはfinallyで削除。既存robot/project files/Blender実体/Host設定は変更しない。
+
+verifierは診断前/欠落/遅い診断、終端未確認、別scene/base/対象、誤座標、retry流用、
+追加edit/shellを拒否する11 tests。実行後に診断CLI cleanupの二重finallyを追加し、
+terminate timeout時は所有childをkill/waitしてもconfig削除へ到達する。
+この強制終了分岐はNOT TESTED、上記実runは正常終了。
+frontend build:viewer/diff check成功。最終全 ./mf.sh test:1308 passed/既知warning2/138.31秒、exit0。
+NOT TESTED: 見た目・rig/animation自動修正、全3DS/GA完成。
+次は原3DSの残存lifecycle受入（実手編集後のidle終了/再起動復旧）へ戻る。
+
 ## 2026-09-10 v0.28.49 signed / installed / MCP failure correction
 
 PR #374 MERGEDのf3eb61542a13a7cb053680c2b32eaa30c1b14a40をexact checkout/tagに固定。
