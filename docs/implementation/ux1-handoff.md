@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 scenario D evidence audit
+
+base PR #410 merge5eea4845e731bd5fc6dce9f1b83c78afe700ecfb、ux1/3d-runtime-evidence-audit、PR作成前。
+前turnはinstalled取消再開/mergeまで進捗。原observations.jsonを再読、3ds-runtime-evidence.md追加。
+D-01〜12へsource/package/installedを分離し、completion-auditのD欄を接続。
+installed並行導入は逆方向exact install、旧4.5.9→新4.5.13 update/失敗retryはsource証拠のみ。
+history再導入ログのstarting応答は単独の再編集証拠にせず、後続実RFB保存へ接続。
+external packageのmode文字列/起動同定の限界も明記。文書のみ、稼働状態変更なし。
+既存UX/全D/3DS/GA PARTIAL維持。過去全操作再実行・全test/build/全asset再hashはNOT TESTED。
+基準gateはPR #408の1387 tests/146.39秒/build/Node5。17観測JSON/12条件/相対リンク/diff check確認。
+次: installed旧4.5.9 GUI中に4.5.13 update候補probe失敗→正常retry→既定Bでも旧A固定を受入。
+既存4.5.13を短絡probeしただけで並行導入成功にしない。準備の全idle/全履歴影響/同版cache/backupを先に確認。
+正規追加確認以外で削除保護を解除しない。他Job/sceneの停止・pin書換えなし。
+再開: git fetch origin; git status --short --branch; docs/implementation/3ds-runtime-evidence.mdを読む。
+既存参考 /data1tb/mf-parallel-runtime-0.28.53.py と /data1tb/mf-probe-failure-0.28.53.py は再実行せず読取のみ。
+具体的外部blockerなし。実機準備条件が満たせなければその理由を報告する。
+
 ## 2026-09-10 installed repair download cancellation/resume
 
 base PR #409 merge778ef9fa92f2609e4278d76d9d18b85e2a29e17b、ux1/3d-installed-repair-resume、PR作成前。

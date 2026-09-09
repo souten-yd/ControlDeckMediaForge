@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 scenario Dの[必須条件別対応表](3ds-runtime-evidence.md)を追加。
+観測JSONを再読し、source/package/installedの範囲を分離。次の不足はinstalled旧→新版updateと
+候補probe失敗→retry。逆方向exact installを同じ証拠にしない。
+再導入のstarting応答だけで再編集成功とせず、後続の実RFB編集保存へ根拠を接続。
+過去の全挙動再実行ではなく、全D/3DS/GA PARTIALを維持する。
+
 2026-09-10 installed0.28.55実CDN download取消/再開: 正規API cancelで1,671,168Bのpartial/進捗/ETag保持。
 通常repair再送後は同inodeの全archive/hash一致→実Blender probe/ready、
 `mf-repair-resume-installed-0.28.55-20260910`、60.838秒/exit0。47scene/162revision/64hash/registry保持。
@@ -328,7 +334,7 @@ project確認後変更拒否はunit fixture。installed Host/英語/実project�
 | A clean環境/表示 | 全操作、320px、日英、既存画像がBlender不在でも利用可能な証拠。390pxだけで320px成功とはしない |
 | B 制作一巡 | VERIFIED（再開/再試行を含む同一制作物）。OpenCode剣→既存画像2→3→新規生成/比較採用3→4→GUI入力保存6→7→第6版を第8版へ復元→元projectのrestored-exportsへGLB/PNG/manifest入りZIP配置。全8版不変、旧出力保持、新3 receipt/実bytes/manifest hash一致 |
 | C lifecycle | [原因別証拠表](3ds-lifecycle-evidence.md)へ照合。既存idle/restart/expiry、.38保存失敗/child crash/既定300秒切断終了のprocess回収と別scene復旧確定。native Chrome背景復帰後の実入力保存、さらに保存競合時の未確定複製2→4 meshesを別sceneへ全回収/競合側1 mesh不変を実GLBで確認。PARTIAL: 定期autosave実装・save以前のcrash回収量、他原因の回収証拠は未完了 |
-| D 更新/削除 | 稼働A中にB導入、B probe失敗、A削除拒否、停止後Aのみ削除と資産hash保持、External解除、容量不足/中断を個別照合 |
+| D 更新/削除 | [D-01〜12対応表](3ds-runtime-evidence.md)へ原証跡を照合。installedの履歴保持削除/再編集、GUI/Job参照拒否、cache改ざん/取消再開を確認済みの範囲で整理。旧→新版update/失敗retryはsource、installedは逆方向exact install。次はこの差分の受入。全DはPARTIAL |
 | E GPU/長時間 | installed0.28.30の644.700秒CPU queue fault injectionでchild refresh4件/元期限後取消/終端一致。さらに既存GUIの480.340秒RFB再接続・同一session660.433秒継続・実入力保存を672.072秒runで確認（PR #293）。自然な120秒超演算・setup自身の10分超credentialとGPU組合せ評価は残る |
 | F release | 署名公開/update/改ざん拒否証拠は維持。rollbackは候補health成功後の例外注入であり、migration失敗や自然なhealth不良の証拠へ読み替えない。clean install等も個別照合 |
 
