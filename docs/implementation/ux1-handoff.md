@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 GA-1 array authoring
+
+basec7a63a9、branch ux1/3d-array-modifier。modifier.arrayの固定2〜64複製/非零local offsetを
+加法実装。typed/schema/capability/worker/pre-allocation予算、GA設計/API、新27 tests。
+既存scripts/3ds_game_static_e2e.pyへarray fixtureを加え、4.5.13/4.5.9で実source受入。
+証跡 mf-array-source-4.5.13-20260910-final（2.193秒）、mf-array-source-4.5.9-20260910-final（3.083秒）。
+6段/72 triangles/48座標、GLB再import一致、2m移動/旧blendとGLB保持、二重arrayと
+増幅bevelの拒否位置/scene_recipe_failed/成功head不変を確認。全GAや接合品質とは別。
+実機handle80815は両exit0。viewer build差分0/Node5 passed、全test21839は
+1419 passed/既知warning2/157.83秒でexit0。focused62 passed/1.63秒、compileall/diff check成功。
+署名公開/installed MCP/OpenCodeは未実施。次は通常PR→版数/署名配布→導入受入。
+Host再起動の承認は引き続きなし。Host311は未導入、全3DS/GAはPARTIAL。
+
 ## 2026-09-10 retained lifecycle audit refresh
 
 Host311/MF419は通常merge済み。稼働Hostはmain6d3cd2a/PID1141433/active、未反映。

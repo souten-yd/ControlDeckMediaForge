@@ -1023,7 +1023,8 @@
                 "primitive.add": "#/$defs/PrimitiveAdd",
                 "skin.bind": "#/$defs/SkinBind",
                 "transform.set": "#/$defs/TransformSet",
-                "uv.smart_project": "#/$defs/UvSmartProject"
+                "uv.smart_project": "#/$defs/UvSmartProject",
+                "modifier.array": "#/$defs/ArrayModifier"
               },
               "propertyName": "type"
             },
@@ -1066,6 +1067,9 @@
               },
               {
                 "$ref": "#/$defs/AnimationClip"
+              },
+              {
+                "$ref": "#/$defs/ArrayModifier"
               }
             ]
           },
@@ -1264,6 +1268,71 @@
         "object_id"
       ],
       "title": "UvSmartProject",
+      "type": "object"
+    },
+    "ArrayModifier": {
+      "additionalProperties": false,
+      "description": "Repeat a static mesh with a fixed local-space offset; one array per object.",
+      "properties": {
+        "type": {
+          "const": "modifier.array",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "count": {
+          "description": "Total copies including the original mesh.",
+          "maximum": 64,
+          "minimum": 2,
+          "title": "Count",
+          "type": "integer"
+        },
+        "local_offset": {
+          "description": "Nonzero local mesh-space step. Object scale and rotation affect world spacing.",
+          "maxItems": 3,
+          "minItems": 3,
+          "not": {
+            "const": [
+              0,
+              0,
+              0
+            ]
+          },
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Local Offset",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "count",
+        "local_offset"
+      ],
+      "title": "ArrayModifier",
       "type": "object"
     }
   },

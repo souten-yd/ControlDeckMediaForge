@@ -295,6 +295,13 @@ def geometry_cost(obj: bpy.types.Object) -> int:
             cost *= 2 ** sum(modifier.use_axis)
         elif modifier.type == "BEVEL":
             cost *= 24 * int(modifier.segments) + 48
+        elif modifier.type == "ARRAY":
+            if (modifier.fit_type != "FIXED_COUNT" or not 1 <= modifier.count <= 64
+                    or modifier.use_relative_offset or modifier.use_object_offset
+                    or not modifier.use_constant_offset or modifier.offset_object is not None
+                    or modifier.start_cap is not None or modifier.end_cap is not None):
+                raise RuntimeError("apply unsupported array settings before geometry growth")
+            cost *= modifier.count
         else:
             raise RuntimeError("apply unsupported modifiers before geometry growth")
         if cost > MAX_GROWTH_GEOMETRY:
@@ -440,6 +447,8 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
     elif kind == "modifier.bevel":
         if obj.type != "MESH":
             raise RuntimeError("bevel target is not a mesh")
+        if any(m.type == "ARRAY" for m in obj.modifiers):
+            check_growth(objects, geometry_cost(obj) * (24 * int(operation["segments"]) + 47))
         modifier = obj.modifiers.new(name="Media Forge Bevel", type="BEVEL")
         modifier.width = float(operation["width"])
         modifier.segments = int(operation["segments"])
@@ -464,6 +473,29 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         modifier.use_mirror_merge = threshold > 0
         modifier.merge_threshold = threshold
         modifier.mirror_object = reference
+    elif kind == "modifier.array":
+        if obj.type != "MESH":
+            raise RuntimeError("array target is not a mesh")
+        if (obj.parent is not None or obj.constraints or obj.animation_data is not None
+                or obj.data.shape_keys is not None or obj.data.animation_data is not None):
+            raise RuntimeError("array requires an unparented unconstrained static mesh")
+        if any(m.type == "ARRAY" for m in obj.modifiers):
+            raise RuntimeError("only one array modifier per object is supported")
+        count = operation.get("count")
+        if not isinstance(count, int) or isinstance(count, bool) or not 2 <= count <= 64:
+            raise RuntimeError("array count differs")
+        offset = vector(operation.get("local_offset"))
+        if not any(offset):
+            raise RuntimeError("array local offset must be nonzero")
+        check_growth(objects, geometry_cost(obj) * (count - 1))
+        modifier = obj.modifiers.new(name="Media Forge Array", type="ARRAY")
+        modifier.fit_type = "FIXED_COUNT"
+        modifier.count = count
+        modifier.use_relative_offset = False
+        modifier.use_object_offset = False
+        modifier.use_constant_offset = True
+        modifier.constant_offset_displace = offset
+        modifier.use_merge_vertices = False
     elif kind == "material.set":
         if obj.type != "MESH":
             raise RuntimeError("material target is not a mesh")

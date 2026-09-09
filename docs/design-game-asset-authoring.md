@@ -77,6 +77,19 @@ merge距離のworld換算はobject scaleの影響を受ける。メートル指�
 ユニット・契約試験の後、実Blender worker/domain、署名installed MCP/OpenCodeへ順に進む。
 このsliceだけでarray/Boolean/rig/animation/GA-1全体完成としない。
 
+### GA-1 配列複製の加法slice（2026-09-10）
+
+`modifier.array`でstatic meshへ固定個数の非破壊配列を追加する。
+入力はstable `object_id`、`count`（元形状を含む2〜64）、非零の`local_offset`（XYZ）。
+offsetはlocal mesh座標であり、objectのscale/rotationでworldの間隔・方向が変わる。
+relative/object/curve offset、fit length、cap object、vertex mergeはこの操作には含めない。
+一つのobjectにつきarrayは一つ。既存parent/constraint/animation/shape-key付きmeshを拒否する。
+duplicate/mirror/bevelと組合せた増幅をallocation前に保守的に見積り、既存100万geometry予算で拒否。
+GUI由来の未知array設定を安全な固定配列と仮定せず、後続の形状増幅も拒否する。
+static階段をfixtureに、元meshの頂点不変、6段の実評価geometryとGLB再import後の形状・寸法、
+別revisionでの移動、旧blend/GLB hash保持、過大個数/二重array/増幅予算超過の拒否を確認する。
+このsliceで接合Boolean、organic weights、歩行、engine受入を代替しない。
+
 ### 4.1 次の制作受入 — 接合とシルエット
 
 2026-09-09利用者は剣の隙間を指摘し、格好よいロボットやカメレオンの制作を希望した。
