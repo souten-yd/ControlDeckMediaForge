@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.57 preparation
+
+PR #416 merge6991877d730c982cecc5ca2eedd34d6debe0be60を基準にux1/release-0-28-57。
+addon/coreの版数を0.28.57へ揃え、release-v0.28.57.mdへadmission失敗通知と残件を記載。
+`./mf.sh test`: 1392 passed / 2既存warnings / 145.44秒 / exit0。
+`npm run build:viewer`: exit0/生成物差分0、Node animation5 PASS、git diff --check成功。
+installed0.28.56を保持、開始時Job/GUI/runtime操作は全idle。Host/PC再起動なし。
+準備時点で署名公開・導入・installed修正受入はNOT TESTED。全3DS/GA/E PARTIAL。
+外部mf-0.28.57-audit.py/install.pyを準備。前者はembedded admission関数とexact sourceの
+bytecode/constants/names一致も検査し、後者は旧.56/全idle/DB backup/registry保持を要求する。
+次はnormal mergeのexact checkoutからbuild/audit/sign/public再取得/標準updateへ進める。
+
 ## 2026-09-10 texture admission failure and Host terminal notification
 
 前turnはPR #415 merge3f4250076c2032a667dd61e2643af21578840494と実機候補調査。
