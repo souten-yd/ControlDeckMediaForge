@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 texture admission failure notification
+
+base PR #415 merge3f4250076c2032a667dd61e2643af21578840494、ux1/3d-texture-workload-acceptance、PR前。
+実機2候補は両exit1。auto2048角はresource_limit、quality1024角はadmission応答120秒timeout。
+同専用panel scene_c19a0c389d974517b04c8eced93b0355を保持、画像生成0。
+実Host56526e9b5e5e running/予約cdf707ce-65f2-40b1-b5ac-6aa08b86a24e waitingを確認。
+外部cleanup診断で専用予約canceled/Hostfailedへ回収済み。他LLM/Jobを停止しない。
+所有Host終端通知を省いていた_acquire_host_leaseを修正。回帰3 RED→対象5 PASS。
+source manager→実Host通知はadmissionのみfixture、0.060秒/exit0/両failed/worker0。
+診断初回Store初期化忘れのHost e14fa434e746を同ID再利用してfailedへ回収、重複Jobなし。
+外部scripts /data1tb/mf-natural-texture{-quality,-cleanup}-0.28.56.py と
+/data1tb/mf-admission-terminal-source-20260910.py。証跡dirへ無条件再実行しない。
+全1392tests/150.11秒/2warnings、viewer build差分0、diff check成功。
+前2診断handle89680/13374終端exit1、全test28786終端exit0。今回製品修正は未配布。
+installed.56/Hostを再起動せず、.venv symlinkは保持。全E/3DS/GA PARTIAL。
+次: normal merge後、署名配布/installed失敗通知受入。不明request IDの自動回収は別残件。
+admission応答喪失の根本原因は未確定。自然120秒超の制作成功やengine受入に読み替えない。
+
 ## 2026-09-10 natural authoring calibration
 
 branch ux1/3d-natural-workload-measurement、base origin/main f8a95af（別PR #412/.56と#414を保持）、PR作成前。

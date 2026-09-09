@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 texture候補も自然長時間成功に未到達。installed.56で2048角はresource_limit、
+同sceneの1024角/qualityは120秒admission応答喪失でworker前失敗。Host Job/待機予約は診断で回収。
+MediaForgeのadmission例外が所有Host終端を通知しない欠陥を修正、source→実Host HTTPで両failed。
+全1392 tests成功。ただし不明request IDの自動回収、署名配布/installed修正受入は残件。
+元診断exit1と手動回収を保持。自然120秒超/OpenCode/画像品質/engine成功には読み替えない。
+
 2026-09-10 E自然負荷の候補を実測。installed.55の8高分割球+UVは2.133秒、
 別作業で更新された.56の128bone/32剛体parts/3clips各25秒は6.950秒、両exit0/Host成功同期。
 実GLBのskin1/128joints/3animationsを独立確認したが、両方exceeds_120_sec=false。
