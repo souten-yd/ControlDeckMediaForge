@@ -3,6 +3,55 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 actual OpenCode director motion delivery / quality gate failed
+
+最新main7240b9cとPR #213（MERGED）、3DS設計/関連3文書/G8計画を再照合。
+installed0.28.47、Host PID667000/MF876222 activeを確認した。
+scripts/3ds_opencode_flow_e2e.pyへ--director-motionを追加。
+private実行configだけでdirector読込を許可し、既存剣/画像/復元モードは維持する。
+自然言語から新規robot、rigid skin、idle/arm_swing、GLB、project grant配置を依頼。
+手入力recipeでのMCP受入とは別の、実LLM/skill実行である。
+
+実コマンドはHost診断venvで
+`scripts/3ds_opencode_flow_e2e.py --director-motion --project-name MF3DS-Director-Motion-20260910 --evidence-dir /data1tb/mf-director-motion-installed-20260910`。
+OpenCode1.18.29/current auto/local gateway、既存Qwen3.8-27Bを使用。
+最初のbuild応答headerが300000ms timeout。同一CLIの自動retryを追跡し、
+390.550秒でskill completed（本文3694文字）、397.762秒capabilities、
+565.919秒create、600.981秒status、618.019秒snapshot、624.832秒export、
+632.261秒grant、637.393秒pack、655.425秒exit0/8 tool calls/robot.glb一件。
+Brokerの直近requestに同LLM residentをblockingとするexpiredがあるが、
+cold起動時の根本原因・requestとの一意対応は未確定。再起動/モデル切替は行わない。
+証跡は同evidence-dirのevents.jsonl/observations.json/resource-diagnosis.json。
+
+制作Job job_719babe2682241409bd62f4e64fb23abは実DBでもsucceeded。
+scene_509b6ee0b688492997b86b535d70ec9a、
+revision_0db4ed1de5724ae7b7554908bc8e5f49、
+GLB asset_328a09210c634ce7ad4cc546fc23552f。
+29932 B/SHA464d7265aa1431b92aa31287c16b6790ac2ea54520700f3d5bc4e11779d90303。
+単一配置receiptと実bytes/Asset metadata/DB provenance.output_sha256の一致を診断確認。
+一時runtime configはfinallyで削除済み、active Jobs0。既存制作物/他OpenCode processは変更しない。
+
+追加scripts/3ds_inspect_motion_delivery.pyを実Blender4.5.13で実行:
+7 bones/6 skinned meshes/136 triangles、寸法0.610×0.260×0.980m。
+idle2秒/arm_swing1秒、実評価meshの中間移動と両端差0、GLB hash不変を確認。
+motion-inspection.jsonを保持。sourceとの比較・ブラウザ/engine再生の証拠ではない。
+
+**制作依頼全体は不合格**。生成recipeはloopを省略し、公開既定falseのため
+loop端点のworker検証が無効。実GLBの両端一致だけで指定不足を合格に変えない。
+追加verifierはこの実入力をAssertionErrorで拒否した。
+またrestの実GLB boundsで胴X最大0.190m、右腕X最小0.195m（左側も同様）、
+両腕に約0.005mの分離を確認。接合要求を満たさず、かっこいいrobotの完成とは案内しない。
+旧skill表でも現行schemaの骨格/clipを実行できた証拠だが、品質の自動修正は未受入。
+
+verifierはskill未読/遅い読込、欠落操作/clip、duration/loop指定、
+不正Job/receipt/bytes/revision/toolを拒否。単一/一括media.packの両契約を扱う。
+focused28 tests、frontend build:viewer/node --check/diff check成功。
+最終全 `./mf.sh test`:1272 passed/既知warning2/176.53秒、exit0。
+NOT TESTED: 指摘を受けた自然言語修正と再検証、接合の自動品質検査、
+歩行/root motion/滑らかなweights/IK/FK、見た目承認、全3DS/GA完成。
+次は接合/clip指定の検証結果を制作の修正工程へ戻す経路を進める。
+公開product変更のない診断sliceで、installed版は0.28.47を維持する。
+
 ## 2026-09-10 v0.28.47 signed release / installed MCP rig and clips
 
 PR #367のmain709b185から署名版v0.28.47を公開・標準導入した。

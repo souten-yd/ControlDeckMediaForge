@@ -10,11 +10,12 @@ import hashlib
 import json
 import sqlite3
 import zipfile
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
 
-def verify_director_static(calls: list[dict[str, Any]]) -> None:
+def verify_director_read(calls: list[dict[str, Any]]) -> dict[str, Any]:
     """Discovery and text promises are not evidence of skill/operation execution."""
     skills = [call for call in calls if call["tool"] == "skill"]
     assert skills, "No actual skill invocation"
@@ -28,14 +29,88 @@ def verify_director_static(calls: list[dict[str, Any]]) -> None:
     assert calls.index(skills[0]) < calls.index(creates[0]), "Skill must be read before creation"
     state = creates[0]["state"]
     assert state["status"] == "completed"
+    return creates[0]
+
+
+def verify_director_static(calls: list[dict[str, Any]]) -> None:
+    state = verify_director_read(calls)["state"]
     operations = state["input"]["recipe"]["operations"]
     assert {"object.duplicate", "modifier.mirror"} <= {op["type"] for op in operations}
     assert any(op.get("reference_object_id") == "handle" and op.get("axes") == ["X"]
                for op in operations if op["type"] == "modifier.mirror"), "Guard must mirror about the handle"
 
 
+def verify_motion(evidence_dir: Path, database: Path) -> dict[str, Any]:
+    """Check actual tool execution and delivered bytes; deformation needs Blender inspection."""
+    observations = json.loads((evidence_dir / "observations.json").read_text())
+    assert observations.get("director_motion") is True and observations["exit_code"] == 0
+    events = [json.loads(line) for line in (evidence_dir / "events.jsonl").read_text().splitlines()]
+    assert not any(event.get("type") == "error" for event in events)
+    calls = [event["part"] for event in events if event.get("type") == "tool_use"]
+    allowed = {"skill"} | {"controldeck_addons_" + name for name in (
+        "media_capabilities", "media_inspect", "media_scene_create", "media_scene_snapshot",
+        "media_scene_export", "media_job_status", "media_pack", "control_deck_project_output_grant")}
+    assert all(call["tool"] in allowed and call["state"]["status"] == "completed" for call in calls)
+    create_call = verify_director_read(calls)
+    operations = create_call["state"]["input"]["recipe"]["operations"]
+    assert {"armature.create", "skin.bind", "animation.clip"} <= {op["type"] for op in operations}
+    clips = [op for op in operations if op["type"] == "animation.clip"]
+    assert len(clips) == 2 and {op["clip_id"] for op in clips} == {"idle", "arm_swing"}
+    for op in clips:
+        assert op.get("fps", 24) == 24 and op["frame_count"] == (48 if op["clip_id"] == "idle" else 24)
+        assert op.get("loop", False) is True, "Clip must explicitly enable loop endpoint validation"
+
+    def outputs(name: str) -> list[dict[str, Any]]:
+        result = []
+        for call in calls:
+            if call["tool"] == "controldeck_addons_" + name:
+                value = json.loads(call["state"]["output"])
+                result.append(value.get("output", value))
+        return result
+
+    assert outputs("media_capabilities") and outputs("media_scene_snapshot")
+    created = outputs("media_scene_create")[0]
+    terminal = next(row for row in outputs("media_job_status")
+                    if row["job_id"] == created["job_id"] and row["status"] == "succeeded")
+    revision = terminal["result"]["revision"]
+    exported, = outputs("media_scene_export")
+    assert exported["revision_id"] == revision["id"]
+    placed, = outputs("media_pack")
+    if "receipt" in placed:
+        receipt = placed["receipt"]
+        assert placed["media_asset_id"] == receipt["source_asset_id"]
+        assert placed["name"] == receipt["filename"]
+        assert placed["sha256"] == receipt["sha256"] and placed["size"] == receipt["size_bytes"]
+    else:
+        assert placed["committed_count"] == placed["requested_count"] == 1 and placed["partial"] is False
+        receipt, = placed["receipts"]
+    assert receipt["filename"] == "robot.glb" and receipt["committed"] and receipt["error"] is None
+    assert receipt["source_asset_id"] == exported["asset"]["id"]
+    root = (Path(observations["project_path"]) / "exports").resolve(strict=True)
+    assert {p.name for p in root.iterdir()} == {"robot.glb"}
+    path = (root / "robot.glb").resolve(strict=True)
+    assert path.parent == root and path.is_file()
+    data = path.read_bytes()
+    with closing(sqlite3.connect(database.resolve(strict=True).as_uri() + "?mode=ro", uri=True)) as db:
+        assert db.execute("SELECT status FROM jobs WHERE id=?", (created["job_id"],)).fetchone() == ("succeeded",)
+        row = db.execute("SELECT metadata_json, provenance_json FROM assets WHERE id=?",
+                         (receipt["source_asset_id"],)).fetchone()
+        assert row is not None
+        metadata, provenance = map(json.loads, row)
+        assert hashlib.sha256(data).hexdigest() == receipt["sha256"] == metadata["sha256"] == provenance["output_sha256"]
+        assert len(data) == receipt["size_bytes"] == metadata["size_bytes"]
+    return {"verified": True, "scope": "actual director read, typed clip creation and GLB delivery",
+            "scene_id": exported["scene_id"], "revision_id": revision["id"], "job_id": created["job_id"],
+            "source_asset_id": revision["source_asset_id"], "receipt": receipt,
+            "elapsed_sec": observations["elapsed_sec"],
+            "not_tested": ["actual GLB deformation (run Blender inspector)", "artistic quality",
+                           "walking/root motion", "engine playback", "image generation"]}
+
+
 def verify(evidence_dir: Path, database: Path) -> dict[str, Any]:
     observations = json.loads((evidence_dir / "observations.json").read_text())
+    if observations.get("director_motion"):
+        return verify_motion(evidence_dir, database)
     assert observations["exit_code"] == 0
     events = [json.loads(line) for line in (evidence_dir / "events.jsonl").read_text().splitlines()]
     assert not any(event.get("type") == "error" for event in events)

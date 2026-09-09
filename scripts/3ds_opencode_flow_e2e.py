@@ -46,12 +46,33 @@ object.duplicateで装飾部品を独立複製し、別位置へ配置してく�
 """
 
 
-def restrict_tools(payload: dict[str, Any], *, director_static: bool) -> None:
+DIRECTOR_MOTION = """最初にskill toolでblender-directorを実際に読み込んでください。
+読込に失敗したら停止してください。MediaForgeで新しいボーン付きの小型ロボットを作り、
+待機idle（2秒）と腕振りarm_swing（1秒）の2つのループアニメーションを付けてください。
+これはBlenderの骨格です。Unreal Pawnではありません。既存sceneは変更しません。
+scene名は MF3DS OpenCode motion acceptance。頭・胴・腕・脚を持ち、全高約1m、
+3000 triangles以下。部品の接合に隙間を作らず、骨へ部品全体を剛体bindしてください。
+既存skillの7操作表にない機能も、現在のMCP公開schemaとmedia.capabilitiesに
+存在するものだけ利用可能です。armature.create / skin.bind / animation.clipを使います。
+任意PythonやBlenderMCPの存在しないtoolは使いません。現在のschemaを実行の正とします。
+骨の回転はrest-local XYZ、fps24、idleは48frames、arm_swingは24frames、
+frame0と終点は同じ回転、中間は実際に部品が動く回転にしてください。
+未指定boneの回転はrestになります。色はmaterial.setで設定し、画像は今回は生成しません。
+Jobが終端になるまでmedia.job.statusで追跡し、成功後にsnapshotを確認しGLBへexportします。
+scene.exportは同期でAssetを返します。asset.job_idは過去の履歴であり新Jobではありません。
+現在projectのexports用output grantを取得し、media.packでrobot.glbを1件配置してください。
+G8 ZIPへの加工は今回行いません。失敗は段階とJob IDを報告し、成功扱いしません。
+最終応答にscene/revision/制作Job/GLB Asset IDと配置receiptを列挙してください。
+skill読込とMediaForge tool、control_deck.project_output_grantだけを使い、shell/file/webは禁止です。
+"""
+
+
+def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_motion: bool = False) -> None:
     """Limit this diagnostic's private configuration, never global settings."""
     payload["permission"] = {"*": "deny", "controldeck_addons_*": "allow"}
     payload["tools"] = {name: False for name in (
         "bash", "read", "edit", "write", "glob", "grep", "webfetch", "websearch", "task", "skill", "question")}
-    if director_static:
+    if director_static or director_motion:
         payload["permission"]["skill"] = {"*": "deny", "blender-director": "allow"}
         # Legacy tools entries become permissions before the global wildcard;
         # duplicating skill there changes insertion order and disables it again.
@@ -74,13 +95,20 @@ def main() -> None:
                         help="Reuse only an existing empty restored output directory after a terminal failed run")
     parser.add_argument("--director-static", action="store_true",
                         help="Require a real director skill read and duplicate/mirror in a new sword scene")
+    parser.add_argument("--director-motion", action="store_true",
+                        help="Require a real director read and a new rigged robot with idle/arm_swing GLB delivery")
     args = parser.parse_args()
-    if args.director_static and (args.restored_ui_evidence or args.retry_empty_output):
-        parser.error("--director-static requires a new project/scene")
+    if args.director_static and args.director_motion:
+        parser.error("Choose one director scenario")
+    director_enabled = args.director_static or args.director_motion
+    if director_enabled and (args.restored_ui_evidence or args.retry_empty_output):
+        parser.error("Director acceptance requires a new project/scene")
     os.umask(0o077)
     args.evidence_dir.mkdir(exist_ok=False)
     project_names = {p["name"] for p in provider.list_projects()}
     prompt = DIRECTOR_STATIC + PROMPT if args.director_static else PROMPT
+    if args.director_motion:
+        prompt = DIRECTOR_MOTION
     output_directory = "exports"
     if args.restored_ui_evidence:
         assert args.project_name.startswith("MF3DS-") and args.project_name in project_names
@@ -127,15 +155,15 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
     evidence: dict[str, Any] = {"project": args.project_name, "project_path": str(project_path),
                                 "correlation_id": correlation, "model": settings["model"], "events": 0,
                                 "output_directory": output_directory, "preserved_exports": preserved,
-                                "director_static": args.director_static}
+                                "director_static": args.director_static, "director_motion": args.director_motion}
     process = None
     try:
         payload = json.loads(config.read_text())
         secrets = [payload["provider"]["controldeck"]["options"]["apiKey"],
                    payload["mcp"]["controldeck_addons"]["environment"]["CONTROL_DECK_ADDON_MCP_TOKEN"]]
-        restrict_tools(payload, director_static=args.director_static)
+        restrict_tools(payload, director_static=args.director_static, director_motion=args.director_motion)
         config.write_text(json.dumps(payload))
-        if args.director_static:
+        if director_enabled:
             debug = subprocess.run([str(registry.executable("opencode")), "debug", "agent", "build", "--pure"],
                 env=dict(os.environ, OPENCODE_CONFIG=str(config)), capture_output=True, text=True, timeout=30)
             assert debug.returncode == 0, "Agent permission preflight failed"
@@ -151,9 +179,10 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
         listing = json.loads(preflight.stdout)["result"]["tools"]
         names = {tool["name"] for tool in listing}
         assert {"media.scene.snapshot", "media.scene.export", "media.pack", "control_deck.project_output_grant"} <= names
-        if args.director_static:
+        if director_enabled:
             schema = json.dumps(next(tool["inputSchema"] for tool in listing if tool["name"] == "media.scene.create"))
-            assert all(operation in schema for operation in ("object.duplicate", "modifier.mirror"))
+            required = ("armature.create", "skin.bind", "animation.clip") if args.director_motion else ("object.duplicate", "modifier.mirror")
+            assert all(operation in schema for operation in required)
         evidence["mcp_preflight_tool_count"] = len(names)
         env = dict(os.environ, OPENCODE_CONFIG=str(config))
         argv = [str(registry.executable("opencode")), "run", prompt, "--pure", "--auto", "--format", "json",
@@ -193,7 +222,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
         print(json.dumps(evidence, indent=2), flush=True)
         assert evidence["exit_code"] == 0
         assert evidence.get("tool_calls", 0) > 0, "OpenCode emitted no actual tool calls"
-        assert set(evidence["output_files"]) == {"sword.glb", "blade.png", "sword-project.zip"}
+        expected = {"robot.glb"} if args.director_motion else {"sword.glb", "blade.png", "sword-project.zip"}
+        assert set(evidence["output_files"]) == expected
     finally:
         if process is not None and process.poll() is None:
             process.terminate()
