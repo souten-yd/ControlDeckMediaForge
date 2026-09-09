@@ -790,6 +790,9 @@ existing isolated Web Blender for direct editing. A separately authorized Expert
 script path requires its own sandbox/escape/resource/credential acceptance;
 do not treat AST filtering or the existing seven-operation worker as that gate.
 Capabilities and schemas advertise the operations actually implemented.
+Clip corrections use an explicit replacement request against an existing typed
+clip in a new immutable scene revision; ordinary clip creation remains insert-only.
+Unrelated clips and old revision bytes must be preserved, with the same resource budgets.
 Keep generic GLB/glTF as the first interchange baseline until the user chooses
 an engine; engine-specific readiness requires a real import/playback test.
 No new model weights, Blender add-ons, external account or global config changes

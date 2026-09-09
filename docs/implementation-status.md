@@ -1,5 +1,47 @@
 # Media Forge implementation status
 
+## 2026-09-10 explicit clip replacement in immutable scene revisions
+
+前turnはPR #369の実director制作/失敗品質検出を完了した進捗であり、全体完成ではない。
+main3ad2c81と現在のhandoff/編集worker/GA設計を再確認。
+既存transform.setは位置を変更できる一方、clip ID重複は追加専用で拒否するため、
+base-plan/integration/GA設計を先に更新し、animation.clipへstrict bool replace（既定false）を加法追加。
+create/edit/workflow公開schemaとdocs/apiを同期。operation名/件数13、旧insert-only動作は維持する。
+replace=trueは同じtyped rigの既存clipを要求し、全tracks/name/loop/frame_countを置換する。
+FPSは既存scene一致、他action/旧revisionは保持。任意action編集や他rigの参照解除を行わない。
+
+workerは既存action構造、全rig/NLA、対象ID一意性、共有action/余分なusersを検証。
+置換後のclip/key/sample予算を再計数し、隔離workerの作業コピー内だけで
+旧曲線を解放して新曲線を作る。最大32 clipsで同容量の置換に33個目を恒久追加しない。
+構築/後続処理/export失敗で元immutable sourceやcurrent revisionを上書きしない。
+新しい同期処理はBlender worker内のみ。Host/個人設定/既存Blender実体へ変更しない。
+
+scripts/3ds_game_static_e2e.py --fixture motion --replace-clipと
+scripts/motion_fixture.pyでcreate idle→arm_swing追加→同ID置換の3版を実行。
+sourceの腕振りを1秒/-60度から2秒/-30度へ修正し、loop/nameと同時刻の実bone角を確認。
+既存idle全curve不変、clip/NLA件数2、旧source/hash不変、GLB再importの前腕bounds差<1e-4m。
+不在ID/replaceなしの重複/FPS変更/loop不一致/別rig共有の5 negativesを拒否。
+32 clipsまで追加した作業メモリで3回置換し、action/NLA件数32とidle不変を確認。
+
+最終原子性診断:
+`/data1tb/mf-clip-replacement-atomic-source-20260910-r2`（Blender4.5.13）3.171秒、
+`/data1tb/mf-clip-replacement-atomic-source-4.5.9-20260910-r2`（4.5.9）3.179秒、双方PASS。
+さらにreplace→不明object参照のrecipeはscene_recipe_worker_invalidで失敗し、
+headは第3版のまま、Asset6件、Job成功3/失敗1。各Asset metadata/provenance hashも照合。
+このエラーは既存runnerの出力欠落検査によるもので、詳細な失敗操作の公開は未実装。
+初回実行はPYTHONPATHのrepo root不足。共有rig negativeの初回はview_layer更新前で
+pose未構築のため診断側AttributeErrorとなり、更新後に正しいRuntimeError拒否を確認。
+原子性negativeの初回は想定error codeが実装と異なり診断assertion失敗。
+既存runnerの非zero終了/出力欠落の両拒否codeを区別して記録するよう修正した。
+中間の失敗証跡は保持し、最終PASSへ読み替えない。
+
+focused animation/rig/static/contracts64件、frontend build:viewer/diff check成功。
+全 `./mf.sh test`:1275 passed/既知warning2/138.86秒、exit0。
+未署名公開・未installed・未OpenCode受入。導入済み0.28.47でreplaceを利用可能とは案内しない。
+NOT TESTED: 前回robotの隙間/loop指定修正、自然言語での修正一巡、見た目/歩行/engine、
+GA全体と原3DS必須ゴールの完成。
+次は署名版へ配布・導入し、前回不合格のrobotを同じsceneの新revisionとして修正・再検証する。
+
 ## 2026-09-10 actual OpenCode director motion delivery / quality gate failed
 
 最新main7240b9cとPR #213（MERGED）、3DS設計/関連3文書/G8計画を再照合。
