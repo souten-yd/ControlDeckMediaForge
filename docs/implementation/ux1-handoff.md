@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 OpenCode array acceptance running
+
+branch ux1/3d-opencode-array-acceptance、base5e2b99c。既存診断/検証へ--director-array追加。
+focused35 passed、全test41666は1426 passed/2 warnings/249.04秒でexit0。
+viewer再build63ms/差分0、Node5 passed、diff check成功。PR #213 merge9469d8eを再確認。
+実run handle27239、親PID1286593/子OpenCode1287125を08:53 JSTに生存確認。
+証跡 /data1tb/mf-opencode-array-installed-20260910、専用project MF3DS-OpenCode-Array-20260910。
+events0 bytes/observations未作成、実制作はまだ未確認。再実行・timeout理由の再起動はしない。
+同handleをpollし、終端後に3ds_verify_opencode_flow.pyと実Blenderの
+3ds_game_static_e2e.py --inspect --fixture arrayでsource/GLBを独立検査する。
+per-run configのfinally回収と自身Job終端も確認する。他OpenCode/LLMを停止しない。
+installed.58/core health healthy、Host再起動承認なし。全3DS/GAはPARTIAL。
+全testは完了、旧viewer handle10274不在のためbuild/Nodeを再実行してexit0を確定した。
+既存未追跡.venv symlinkを保持。次は同runの受入結果確定後に通常PRレビュー/merge。
+
 ## 2026-09-10 v0.28.58 installed / array MCP delivery
 
 PR422 merge/tag88c17bd、署名v0.28.58公開/再取得検証/標準updateまで完了。

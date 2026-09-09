@@ -1,5 +1,26 @@
 # Media Forge implementation status
 
+## 2026-09-10 OpenCode array delivery acceptance in progress
+
+Base origin/main5e2b99c、PR #213 MERGED/9469d8eを再確認。
+branch ux1/3d-opencode-array-acceptance。既存診断へ--director-arrayを追加し、
+director実読込→現在schema→6段の配列→GLB→fresh grant配置を自然言語で依頼する。
+world間隔X0.3/Z0.15mと元cube寸法を指定し、local offsetのJSON recipeは渡さない。
+verifierは実skill先行・3操作/6段/local offset・Job成功・receipt/実bytes/DB provenanceを照合する。
+6つの配列positive/negativeとpermission追加を含むfocused35 passed。
+全./mf.sh testはhandle41666終端exit0、1426 passed/既知warning2/249.04秒。
+viewer再build63ms/差分なし、Node5 passed、git diff --check成功。
+
+実行中: Host診断venv/PYTHONPATH=Host backendで
+scripts/3ds_opencode_flow_e2e.py --director-array --project-name MF3DS-OpenCode-Array-20260910
+--evidence-dir /data1tb/mf-opencode-array-installed-20260910。
+handle27239、親PID1286593/子OpenCode1287125の生存を08:53 JSTに再確認。
+events.jsonlは0 bytes、observations.json未作成。実制作/配送/独立Blender検査は未確認。
+観測待ちを失敗/成功扱いせず同handleを追跡し、重複run・他process停止・Host再起動はしない。
+現在coreへの実HTTP /healthはhealthy。既存installed.58 MCP配列成功とは別試験。
+NOT TESTED: 今回の自然言語制作完了、ゲームエンジン取込、接合品質、全3DS/GA。
+次: 同run終端→verifier→保持sourceと配置GLBを実Blender --inspect --fixture arrayで照合。
+
 ## 2026-09-10 v0.28.58 published/installed and MCP array delivery
 
 PR #422通常merge/tag88c17bd2ee31c94c737349f73993528d1a60eb27。

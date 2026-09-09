@@ -40,10 +40,24 @@ def verify_director_static(calls: list[dict[str, Any]]) -> None:
                for op in operations if op["type"] == "modifier.mirror"), "Guard must mirror about the handle"
 
 
-def verify_motion(evidence_dir: Path, database: Path) -> dict[str, Any]:
+def verify_array_recipe(operations: list[dict[str, Any]]) -> None:
+    assert {op['type'] for op in operations} == {'primitive.add', 'material.set', 'modifier.array'}
+    assert len(operations) == 3
+    primitive, = [op for op in operations if op['type'] == 'primitive.add']
+    array, = [op for op in operations if op['type'] == 'modifier.array']
+    assert primitive['object_id'] == array['object_id'] == 'step'
+    assert primitive['primitive'] == 'cube' and primitive['dimensions'] == [.4, .8, .2]
+    assert primitive.get('location', [0, 0, 0]) == [0, 0, 0]
+    assert primitive.get('rotation_degrees', [0, 0, 0]) == [0, 0, 0]
+    assert array['count'] == 6 and array['local_offset'] == [1.5, 0, 1.5]
+    assert operations.index(primitive) < operations.index(array)
+
+
+def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False) -> dict[str, Any]:
     """Check actual tool execution and delivered bytes; deformation needs Blender inspection."""
     observations = json.loads((evidence_dir / "observations.json").read_text())
-    assert observations.get("director_motion") is True and observations["exit_code"] == 0
+    assert observations.get("director_array" if array else "director_motion") is True and observations["exit_code"] == 0
+    filename = "stairs.glb" if array else "robot.glb"
     events = [json.loads(line) for line in (evidence_dir / "events.jsonl").read_text().splitlines()]
     assert not any(event.get("type") == "error" for event in events)
     calls = [event["part"] for event in events if event.get("type") == "tool_use"]
@@ -53,12 +67,15 @@ def verify_motion(evidence_dir: Path, database: Path) -> dict[str, Any]:
     assert all(call["tool"] in allowed and call["state"]["status"] == "completed" for call in calls)
     create_call = verify_director_read(calls)
     operations = create_call["state"]["input"]["recipe"]["operations"]
-    assert {"armature.create", "skin.bind", "animation.clip"} <= {op["type"] for op in operations}
-    clips = [op for op in operations if op["type"] == "animation.clip"]
-    assert len(clips) == 2 and {op["clip_id"] for op in clips} == {"idle", "arm_swing"}
-    for op in clips:
-        assert op.get("fps", 24) == 24 and op["frame_count"] == (48 if op["clip_id"] == "idle" else 24)
-        assert op.get("loop", False) is True, "Clip must explicitly enable loop endpoint validation"
+    if array:
+        verify_array_recipe(operations)
+    else:
+        assert {"armature.create", "skin.bind", "animation.clip"} <= {op["type"] for op in operations}
+        clips = [op for op in operations if op["type"] == "animation.clip"]
+        assert len(clips) == 2 and {op["clip_id"] for op in clips} == {"idle", "arm_swing"}
+        for op in clips:
+            assert op.get("fps", 24) == 24 and op["frame_count"] == (48 if op["clip_id"] == "idle" else 24)
+            assert op.get("loop", False) is True, "Clip must explicitly enable loop endpoint validation"
 
     def outputs(name: str) -> list[dict[str, Any]]:
         result = []
@@ -84,11 +101,11 @@ def verify_motion(evidence_dir: Path, database: Path) -> dict[str, Any]:
     else:
         assert placed["committed_count"] == placed["requested_count"] == 1 and placed["partial"] is False
         receipt, = placed["receipts"]
-    assert receipt["filename"] == "robot.glb" and receipt["committed"] and receipt["error"] is None
+    assert receipt["filename"] == filename and receipt["committed"] and receipt["error"] is None
     assert receipt["source_asset_id"] == exported["asset"]["id"]
     root = (Path(observations["project_path"]) / "exports").resolve(strict=True)
-    assert {p.name for p in root.iterdir()} == {"robot.glb"}
-    path = (root / "robot.glb").resolve(strict=True)
+    assert {p.name for p in root.iterdir()} == {filename}
+    path = (root / filename).resolve(strict=True)
     assert path.parent == root and path.is_file()
     data = path.read_bytes()
     with closing(sqlite3.connect(database.resolve(strict=True).as_uri() + "?mode=ro", uri=True)) as db:
@@ -99,7 +116,7 @@ def verify_motion(evidence_dir: Path, database: Path) -> dict[str, Any]:
         metadata, provenance = map(json.loads, row)
         assert hashlib.sha256(data).hexdigest() == receipt["sha256"] == metadata["sha256"] == provenance["output_sha256"]
         assert len(data) == receipt["size_bytes"] == metadata["size_bytes"]
-    return {"verified": True, "scope": "actual director read, typed clip creation and GLB delivery",
+    return {"verified": True, "scope": "actual director read, typed array creation and GLB delivery" if array else "actual director read, typed clip creation and GLB delivery",
             "scene_id": exported["scene_id"], "revision_id": revision["id"], "job_id": created["job_id"],
             "source_asset_id": revision["source_asset_id"], "receipt": receipt,
             "elapsed_sec": observations["elapsed_sec"],
@@ -109,6 +126,8 @@ def verify_motion(evidence_dir: Path, database: Path) -> dict[str, Any]:
 
 def verify(evidence_dir: Path, database: Path) -> dict[str, Any]:
     observations = json.loads((evidence_dir / "observations.json").read_text())
+    if observations.get("director_array"):
+        return verify_motion(evidence_dir, database, array=True)
     if observations.get("director_motion"):
         return verify_motion(evidence_dir, database)
     assert observations["exit_code"] == 0
