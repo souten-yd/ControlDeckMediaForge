@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.55 release preparation
+
+base PR #404 merge96b7d0e13d4292497629dc124b1accb7d0c1914e、ux1/release-0-28-55。
+前turnはdownload I/O修正/PR #404 mergeまで進捗。addon/coreを0.28.55へ揃えrelease noteを追加。
+全1384 tests/2既存warnings/165.44秒/exit0、viewer build生成差分なし/Node5/diff check成功。
+この準備commit時点では署名公開/installed更新は未実施。
+現在installed0.28.54 healthy、MF1116213、Host1141433を実照合。
+別image.edit job_a248d36966704d6388aa4b55fd7045feは自然成功、その後のworker1144063消失も確認。
+次のjob_a1dc8c94700c49cf963e41e7755e7fb7 queuedを確認したため、更新はまだ開始しない。
+通常の公開物build/audit/署名/再取得準備を進め、導入前に全Job/GUI/operation idleを再検査する。
+容量不足/改ざん/中断matrix、全D/3DS/GA PARTIALを維持する。
+
 ## 2026-09-10 download write/progress isolation and repeated cancel
 
 base PR #403 mergec39c606f839b9c991b389d46f59e8bf3474f02b8、ux1/3d-download-write-isolation。

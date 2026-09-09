@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.55 preparation
+
+base PR #404 merge96b7d0e13d4292497629dc124b1accb7d0c1914e、ux1/release-0-28-55、PR作成前。
+addon/core0.28.55、release-v0.28.55.md追加。全1384 tests/165.44秒/2既存warnings、build差分0/Node5成功。
+署名公開/導入は準備commit時点で未実施。次はnormal merge→exact checkout build/audit/sign/public再取得。
+installed0.28.54/MF1116213/Host1141433を確認。別image.editは自然成功/worker回収後、新Job queuedあり。
+更新前に全Job/GUI/runtime操作idleを再検査。Host/PCは再起動しない。
+外部診断 /data1tb/mf-0.28.55-{audit,install,repair-download}.py を準備したが実行前。
+旧cacheを退避して実CDN repairを確認する計画。旧scene/history保持・失敗時cache回復を検証し、
+installed重複取消そのものの証拠へは拡大しない。全D/3DS/GA PARTIAL。
+
 ## 2026-09-10 download write isolation
 
 base PR #403 mergec39c606f839b9c991b389d46f59e8bf3474f02b8、ux1/3d-download-write-isolation、PR作成前。
