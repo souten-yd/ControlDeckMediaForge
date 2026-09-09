@@ -3,6 +3,38 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.50 signed publication / installed update deferred
+
+PR #379 MERGEDのae63fbe2ab519effdc88ed8e55b71d71e7f705c4をexact checkout/tagへ固定。
+checkout /data1tb/ControlDeckMediaForge-release-0.28.50、build /data1tb/mf-0.28.50-build-20260910。
+既存scripts/build_release_bundle.pyをbundle-build venv/PyInstaller6.22.0/Python3.12.3で実行。
+artifact31,533,336 B/SHA915f36d835b645ddf558b212fdabf99b852e72ef1dd7954c2f937504f5a6de3e。
+/data1tb/mf-0.28.50-audit.pyでCArchive201 entries、禁止名混入なし、
+certifi PEM一致、worker2/schema3 exact bytes、PYZのfailure readerとrfb_client_activity同梱を確認。
+専用data/cacheのpackaged doctor:ok/version0.28.50/packaged=true。
+展開先 /data1tb/mf-0.28.50-package-h_eusz5o、buildのverification.jsonへ記録。
+
+既存発行者鍵で署名・自己検証し、v0.28.50を正規release公開:
+https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.28.50
+artifact/checksum/manifest/signatureの4公開ファイルを
+/data1tb/mf-0.28.50-public-20260910へ再取得し全bytes一致。
+実Hostのtrusted publisher検証で同version/hashを確認（同dir/verification.json）。
+
+標準update診断 /data1tb/mf-0.28.50-install.pyをHost診断venv/
+CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml/
+PYTHONPATH=/data1tb/ControlDeck/app/backendで実行したが、2回ともidle gateで拒否。
+開始前はJobs0だったが直前に生成Jobが開始していた。install呼出には到達していない。
+job_5b6bed82abb44b3ea17b44eea2bb77ecはrunning→succeededを実DBで確認。
+続いてjob_3db1d1e81a974beab686bc4574c7e0d9、
+job_17a8641c63264f288e7d2f9d638f44ba、job_e197c881b7974790ad988d6ab456773d等の
+別生成Jobが連続してrunningとなった。これらを取り消さずserviceも止めない。
+installed0.28.49/MF PID975293/Host667000を維持し、公開済みを導入済みとは書かない。
+この記録は署名/public consumer受入のみ。productionデータ削除/Blender変更なし。
+release preparationの全1337 tests/138.93秒とviewer build成功を参照。
+次は生成処理の落ち着いた時点でidle・backup・再確認付き標準updateを再開し、
+installed0.28.50とDB/registry保持を確認後、既定connected idle1800秒を測る。
+NOT TESTED: installed本修正・idle・全3DS/GA完成。全体目標はPARTIAL、権限不足とはしない。
+
 ## 2026-09-10 v0.28.50 release preparation
 
 前goal turnはPR #378の実装・実source受入・通常mergeまで進捗。
