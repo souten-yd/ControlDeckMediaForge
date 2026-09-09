@@ -59,6 +59,38 @@ def await_autosave(page: Any, root: Path, session_id: str, wanted: bool) -> dict
     raise AssertionError("default autosave did not report expected result")
 
 
+def expire_owned_gateway(session_id: str, user_id: int) -> dict[str, Any]:
+    """Use a real short-lived Host service identity, never an expiry override."""
+    assert re.fullmatch(r"blendersession_[0-9a-f]{32}", session_id)
+    assert isinstance(user_id, int) and not isinstance(user_id, bool) and user_id > 0
+    from app.addons import tokens
+    from websockets.exceptions import ConnectionClosed
+    from websockets.sync.client import connect
+
+    bearer = tokens.issue("media-forge", subject=str(user_id), kind="service",
+                          actor_user_id=user_id, ttl_seconds=20)
+    began = time.monotonic()
+    with connect(f"ws://127.0.0.1:9130/blender/sessions/{session_id}/rfb",
+                 additional_headers={"Authorization": "Bearer " + bearer,
+                                     "X-Control-Deck-Addon-ID": "media-forge"},
+                 subprotocols=["binary"], open_timeout=10, close_timeout=5) as ws:
+        banner = ws.recv(timeout=10)
+        assert isinstance(banner, bytes) and banner.startswith(b"RFB ")
+        # Keep the real RFB handshake open; send no edit or synthetic activity.
+        try:
+            while time.monotonic() - began < 45:
+                ws.recv(timeout=45 - (time.monotonic() - began))
+        except ConnectionClosed as closed:
+            assert closed.rcvd and closed.rcvd.code == 4403
+            assert closed.rcvd.reason == "host service token expired"
+            elapsed = round(time.monotonic() - began, 3)
+            assert elapsed >= 19
+            return {"ttl_sec": 20, "elapsed_sec": elapsed, "close_code": closed.rcvd.code,
+                    "reason": closed.rcvd.reason, "rfb_banner_received": True,
+                    "route": "Host-signed identity to installed core RFB endpoint"}
+    raise AssertionError("short-lived service identity did not expire")
+
+
 def record(session_id: str) -> dict[str, Any]:
     with sqlite3.connect(f"file:{DATA}/media-forge.sqlite3?mode=ro", uri=True) as db:
         return json.loads(db.execute("select value_json from blender_web_sessions where id=?", (session_id,)).fetchone()[0])
@@ -94,13 +126,13 @@ def main() -> None:
     parser.add_argument("--scene-id", required=True)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
-    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash", "disconnect-timeout", "autosave-crash"), default="save-conflict")
+    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash", "disconnect-timeout", "autosave-crash", "auth-expiry"), default="save-conflict")
     parser.add_argument("--manual-edit", action="store_true", help="Duplicate meshes through RFB before a save conflict")
     args = parser.parse_args()
-    if args.failure_kind == "autosave-crash":
+    if args.failure_kind in {"autosave-crash", "auth-expiry"}:
         args.manual_edit = True
-    if args.manual_edit and args.failure_kind not in {"save-conflict", "autosave-crash"}:
-        parser.error("--manual-edit requires save-conflict or autosave-crash")
+    if args.manual_edit and args.failure_kind not in {"save-conflict", "autosave-crash", "auth-expiry"}:
+        parser.error("--manual-edit requires save-conflict, autosave-crash or auth-expiry")
     assert re.fullmatch(r"scene_[0-9a-f]{32}", args.scene_id)
     installed = registry.status("media-forge")
     assert installed["version"] == args.expected_version and installed["health"] == "healthy"
@@ -120,6 +152,7 @@ def main() -> None:
     with SessionLocal() as db:
         user = db.query(User).filter(User.username == "mf-e2e").one()
         assert user.is_active
+        user_id = user.id
         token = create_session(db, user, "127.0.0.1", "MediaForge GUI cleanup acceptance")
     session_id = None
     try:
@@ -246,6 +279,27 @@ def main() -> None:
                     evidence["autosave_hash"] = autosave_hash
                     evidence["language_input"] = "navigator.language + browser languagechange fixture through Host bridge"
                     page.screenshot(path=str(args.evidence_dir / "autosave-retried.png"))
+                if args.failure_kind == "auth-expiry":
+                    assert owned["runtime_id"] == "blender-4.5.13-linux-x64"
+                    evidence["successful_autosave"] = await_autosave(page, root, session_id, True)
+                    autosave_hash = hashlib.sha256(working_path.read_bytes()).hexdigest()
+                    assert autosave_hash != original_working_hash
+                    evidence["autosave_hash"] = autosave_hash
+                    assert call("scenes.get", {"scene_id": args.scene_id}) == before
+                    frame.locator("#scene-blender-screen canvas").click(position={"x":320,"y":240})
+                    page.keyboard.press("a")
+                    page.wait_for_timeout(500)
+                    page.keyboard.press("Shift+D")
+                    page.wait_for_timeout(500)
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(1000)
+                    page.screenshot(path=str(args.evidence_dir / "post-autosave-edit.png"))
+                    assert hashlib.sha256(working_path.read_bytes()).hexdigest() == autosave_hash
+                    frame.locator("#scene-blender-close").click()
+                    frame.wait_for_function("""async id => {
+                      const s=(await call('blender.sessions.list',{})).items.find(s=>s.id===id);
+                      return s?.connection_state==='disconnected';
+                    }""", arg=session_id)
                 if args.failure_kind == "save-conflict":
                     # Only this dedicated scene advances while its GUI owns the old base.
                     call("scenes.revisions.restore", {"scene_id": args.scene_id,
@@ -273,10 +327,13 @@ def main() -> None:
                     call("blender.sessions.save", {"session_id": session_id})
                 elif args.failure_kind in {"blender-crash", "autosave-crash"}:
                     evidence["signaled_blender_pid"] = crash_owned_blender(cgroup, pids, owned["runtime_id"])
+                elif args.failure_kind == "auth-expiry":
+                    evidence["expired_gateway"] = expire_owned_gateway(session_id, user_id)
                 failed = wait({"failed", "interrupted"}, 330 if args.failure_kind == "disconnect-timeout" else 90)
                 evidence["terminal_sec"] = round(time.monotonic() - began, 3)
                 expected_error = {"save-conflict": "scene_revision_conflict", "blender-crash": "blender_session_runner_lost",
                                   "autosave-crash": "blender_session_runner_lost",
+                                  "auth-expiry": "blender_session_host_revoked",
                                   "disconnect-timeout": "blender_session_disconnected_timeout"}[args.failure_kind]
                 if args.failure_kind == "disconnect-timeout":
                     assert evidence["terminal_sec"] >= 299
@@ -287,7 +344,7 @@ def main() -> None:
                 candidate = DATA / "scenes/working" / working_id / "scene.blend"
                 assert candidate.is_file() and not candidate.is_symlink()
                 digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
-                if args.failure_kind == "autosave-crash":
+                if args.failure_kind in {"autosave-crash", "auth-expiry"}:
                     assert digest == autosave_hash
                 assert call("scenes.get", {"scene_id": args.scene_id}) == advanced
                 assert not root.exists() and not socket.exists() and not cgroup.exists()
@@ -306,12 +363,16 @@ def main() -> None:
                     assert edit_helpers.mesh_count(recovered_scene) == 2 * edit_helpers.mesh_count(before)
                     assert edit_helpers.asset_hashes(before) == original_hashes
                     evidence["unsaved_edit_recovered"] = True
+                    if args.failure_kind == "auth-expiry":
+                        evidence["recovery_boundary"] = "Last autosave recovered; post-autosave input effect is not asserted"
                 evidence.update(passed=True, ready=ready, failed=failed, recovered=recovered,
                     candidate_sha256=digest, candidate_bytes=candidate.stat().st_size,
                     process_cgroup_root_socket_reclaimed=True,
                     rfb_connection_tested=args.manual_edit or args.failure_kind == "disconnect-timeout",
-                    not_tested=(["power failure", "crash during snapshot write", "edits after last autosave"]
-                        if args.failure_kind == "autosave-crash" else
+                    not_tested=(["power failure", "crash during snapshot write", "post-autosave input effect"]
+                        if args.failure_kind == "auth-expiry" else
+                        ["power failure", "crash during snapshot write", "edits after last autosave"]
+                        if args.failure_kind in {"autosave-crash", "auth-expiry"} else
                         (["manual GUI edit"] if not args.manual_edit else ["unsaved crash recovery", "autosave"])) +
                         ["GPU lease", "batch worker crash", "connected idle timeout"])
             finally:
