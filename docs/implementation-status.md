@@ -1,5 +1,40 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.51 signed / installed / idle retry running
+
+PR #382 MERGEDのad61a431ca2424d285fa81c38ced25aa360ce740をexact checkout/tagへ固定。
+checkout /data1tb/ControlDeckMediaForge-release-0.28.51。
+既存bundle-build venv/PyInstaller6.22.0/Python3.12.3とscripts/build_release_bundle.pyを使用。
+/data1tb/mf-0.28.51-build-20260910のartifact31,532,718 B、
+SHA58e0b0cca8164463404cd8009fda51e45a2ecd22d24a7c3fa3459dea95fa2cf9。
+/data1tb/mf-0.28.51-audit.pyでCArchive201 entries、禁止名なし、certifi PEM一致、
+worker2/schema3 exact bytes、PYZ内のRFB observerと修正monitorのrunner_activeを確認。
+専用data/cacheのpackaged doctor:ok/version0.28.51/packaged=true。
+展開先 /data1tb/mf-0.28.51-package-e6lq0pyo、build/verification.jsonへ保存。
+
+既存発行者鍵で署名/自己検証して正規公開:
+https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.28.51
+公開4ファイルを /data1tb/mf-0.28.51-public-20260910へ再取得、全bytes一致。
+/data1tb/mf-0.28.51-install.pyをHost診断venv/既存CONFIG/PYTHONPATHで実行。
+実Host trusted publisher検証、Jobs0/GUI0、SQLite backup、再確認後に標準install。
+9.982秒でinstalled0.28.51/HTTP healthy、DB全テーブルfingerprintとruntime登録bytes不変。
+backup /data1tb/mf-0.28.51-update-zkg98th1/observations.json。
+Host PID667000不変、MF PID1024680。標準保持規則で0.28.49実行bundleのみ整理し、
+0.28.50/.51を保持。制作物/runtime削除なし、旧bundleは公開releaseから再取得可能。
+
+修正版で同じ既定1800秒診断を新sessionとして開始:
+Host診断Python、既存CONFIG/PYTHONPATH/DISPLAY=:0/
+XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3、
+scripts/3ds_save_conflict_cleanup_installed_e2e.py
+--scene-id scene_3f3b5f1e97e94b268722ea45cc811c50 --expected-version 0.28.51
+--failure-kind connected-idle --evidence-dir /data1tb/mf-default-idle-installed-20260910-r2。
+実CLI PID1024735/exec handle24245、
+session blendersession_23e6efc5118049f182b38608f72b50e2、4.5.13 readyを実DBで確認。
+初回0.28.50の失敗runは保持し上書きしない。新runは実行中、終端・回収は未確定。
+次turnは同handle/PID/証跡を再確認し、観測待ちを理由に再起動/再実行しない。
+準備全1345 tests/150.19秒、viewer build成功。記録sliceは文書のみ/diff check。
+全3DS/GAはPARTIAL、既定30分/本番再接続の修正完走/復旧mesh確認はまだNOT TESTED。
+
 ## 2026-09-10 v0.28.51 release preparation
 
 前goal turnは実機idle失敗の競合修正/PR #381通常mergeまで進捗。
