@@ -80,7 +80,8 @@ def test_admission_holds_exact_runtime_and_releases_on_all_outcomes(tmp_path: Pa
     asyncio.run(scenario())
 
 
-def test_cancel_during_thread_acquisition_waits_and_releases(tmp_path: Path) -> None:
+@pytest.mark.parametrize("cancel_count", [1, 2, 3])
+def test_cancel_during_thread_acquisition_waits_and_releases(tmp_path: Path, cancel_count: int) -> None:
     async def scenario() -> None:
         store, workspace = pinned_workspace(tmp_path)
         entered, proceed = threading.Event(), threading.Event()
@@ -102,6 +103,9 @@ def test_cancel_during_thread_acquisition_waits_and_releases(tmp_path: Path) -> 
         submission.cancel()
         await asyncio.sleep(0.01)
         assert not submission.done()
+        for _ in range(cancel_count - 1):
+            submission.cancel()
+            await asyncio.sleep(0.01)
         proceed.set()
         with pytest.raises(asyncio.CancelledError):
             await submission
@@ -114,6 +118,53 @@ def test_cancel_during_thread_acquisition_waits_and_releases(tmp_path: Path) -> 
 
 def assert_worker_thread(loop_thread: int) -> None:
     assert threading.get_ident() != loop_thread
+
+
+@pytest.mark.parametrize("host_failure", [False, True])
+def test_repeated_cancel_waits_for_runtime_release_thread(tmp_path: Path, host_failure: bool) -> None:
+    async def scenario() -> None:
+        store, workspace = pinned_workspace(tmp_path)
+        entered, proceed = threading.Event(), threading.Event()
+        original = workspace.acquire_recipe_runtime
+        loop_thread = threading.get_ident()
+
+        def delayed_close() -> None:
+            assert_worker_thread(loop_thread)
+            entered.set()
+            assert proceed.wait(5)
+
+        def acquire(*args, **kwargs):
+            held = original(*args, **kwargs)
+            held[0].callback(delayed_close)
+            return held
+
+        class RejectingHost(Host):
+            async def create_or_attach_job(self, *args, **kwargs):
+                return {}
+
+        workspace.acquire_recipe_runtime = acquire
+        manager = SceneRecipeJobManager(store, workspace, RejectingHost() if host_failure else Host())
+        submission = asyncio.create_task(manager.submit(recipe(), IDENTITY))
+        try:
+            assert await asyncio.to_thread(entered.wait, 3)
+            if host_failure:
+                target = submission
+            else:
+                job, _ = await submission
+                target = manager._tasks[job.id]
+            for _ in range(3):
+                target.cancel()
+                await asyncio.sleep(0.01)
+            assert not target.done()
+            assert workspace.resolver.live_reference_count("blender-4.5.9-linux-x64") == 1
+        finally:
+            proceed.set()
+            await asyncio.gather(submission, return_exceptions=True)
+            await manager.stop()
+        assert workspace.resolver.live_reference_count("blender-4.5.9-linux-x64") == 0
+        assert not manager._admissions and not manager._tasks
+
+    asyncio.run(scenario())
 
 
 def test_queue_and_worker_cleanup_keep_runtime_pinned(tmp_path: Path) -> None:

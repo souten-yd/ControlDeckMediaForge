@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
+import threading
 import time
 from typing import Any
 
@@ -58,12 +59,45 @@ async def execute(store: Store, workspace: SceneWorkspace) -> dict[str, Any]:
     value = SceneCreateRequest.model_validate({"name": "Admission pin acceptance cube", "recipe": {
         "operations": [{"type": "primitive.add", "object_id": "cube", "primitive": "cube",
                         "name": "Cube", "dimensions": [1, 1, 1]}]}})
+    # Explicit acquisition-delay fixture. The resolver/runtime are real; only
+    # the return from acquisition is held while three cancellations arrive.
+    acquired, release = threading.Event(), threading.Event()
+    original_acquire = workspace.acquire_recipe_runtime
+
+    def paused_acquire(*args: Any, **kwargs: Any) -> Any:
+        held = original_acquire(*args, **kwargs)
+        acquired.set()
+        if not release.wait(10):
+            held[0].close()
+            raise TimeoutError("acquisition fixture was not released")
+        return held
+
+    workspace.acquire_recipe_runtime = paused_acquire
+    canceled = asyncio.create_task(manager.submit(value, identity))
+    try:
+        assert await asyncio.to_thread(acquired.wait, 5)
+        for _ in range(3):
+            canceled.cancel()
+            await asyncio.sleep(0.01)
+        assert not canceled.done()
+        assert workspace.resolver.live_reference_count(runtime_id) == 1
+    except BaseException:
+        canceled.cancel()
+        raise
+    finally:
+        release.set()
+        outcome = await asyncio.gather(canceled, return_exceptions=True)
+        workspace.acquire_recipe_runtime = original_acquire
+    assert isinstance(outcome[0], asyncio.CancelledError)
+    assert workspace.resolver.live_reference_count(runtime_id) == 0
+    assert not manager._admissions and not host.entered.is_set()
     await manager._execution_guard.acquire()
     submission = asyncio.create_task(manager.submit(value, identity))
     try:
         await asyncio.wait_for(host.entered.wait(), 5)
         await asyncio.to_thread(workspace.resolver.activate, G8_RUNTIME_ID)
         observations: dict[str, Any] = {"runtime_id": runtime_id,
+            "repeated_admission_cancel": {"count": 3, "cleanup_references": 0, "host_called": False},
             "host_wait_references": workspace.resolver.live_reference_count(runtime_id)}
         assert observations["host_wait_references"] == 1
         try:

@@ -1,5 +1,51 @@
 # Media Forge implementation status
 
+## 2026-09-10 repeated admission cancellation runtime-reference cleanup
+
+base PR #396 merge2a0d80dc4580a25567260088e76e71980741ac32、ux1/3d-admission-repeat-cancel。
+前turnはinstalled stale削除確認/GUI受付の再拒否と通常mergeまで進捗。
+Job受付の参照保護を調査し、取得thread待ちの取消が重なるとruntime参照が漏れる不具合を再現。
+tests/test_scene_recipe_runtime_pin.pyの取消回数を1/2/3へ拡張し、修正前は2/3回の2ケースが
+live_reference_count=1（期待0）でRED。最初のshield後、取消処理のawait acquisitionへ
+次の取消が伝播し、実threadが返すExitStackを受け取れなくなるためだった。
+これは削除を誤許可する観測ではなく、不要な使用中参照が残る障害。
+
+SceneRecipeJobManagerの取消時取得回収を別のowned cleanup taskへまとめ、
+反復shieldで追加取消から保護し、実threadの終了とreferences.closeまで待ってから元例外を返す。
+Host受付失敗時のcloseと実行task finallyのcloseにも同じ回収待ちを適用。
+処理の例外はtask.resultで伝播させ、握り潰さない。同期の参照取得/解放はto_threadのまま。
+取消を無視して制作を継続する変更ではなく、開始済み資源回収だけを最後まで追跡する。
+さらにHost失敗/正常制作後の解放thread待ちへ3回取消を入れる2 testsで、
+gateを開くまではtask未完了/live1、終われば追跡0/live0を確認。関連3 test filesはPASS。
+公開API/DB/schema/Host/版数変更なし。
+
+既存scripts/3ds_recipe_runtime_pin_e2e.pyへ明示的な取得遅延fixtureと3回取消を追加。
+専用data/registryだけを書込み、既存隔離runtimeは読取参照する。
+実行コマンド:
+
+```bash
+PYTHONPATH=backend:. .venv/bin/python scripts/3ds_recipe_runtime_pin_e2e.py --evidence-dir /data1tb/mf-repeated-admission-cancel-source-20260910 --managed-root /data1tb/mf-clean-packaged-0.28.32-QBvHfm/feature/runtimes/blender --legacy-root /data1tb/mf-clean-packaged-0.28.32-QBvHfm/feature/runtimes/blender/blender-4.5.9-linux-x64
+```
+1.037秒/exit0。3回取消ではHost child未作成/live0へ回収し、その後の通常制作では
+Host待ち/slot待ちlive1・登録解除拒否・実Blender4.5.9によるcube制作成功・終端live0を確認。
+job_a7ff774c5bc84c08a18ab2f98781664a、scene_f83b8aeab6de4e838a13445e3b355d15初版、
+source426,899 B/SHA dca6c173718d2ae47133d9d927932d72b6d86c2da0fdd17dd6f785785ee7960e、
+GLB1,756 B/SHA a9a481e36f7508a853767920c73bb42d2a541ddfbd9a956b6afb132a8a0d3e20。
+旧Blender executable SHAde8e8092c49e42cc6f1adde86aea0202ea5bad3338725887ecbcb7274dd0f926不変。
+Host応答/取得遅延はfixture、Blender batch/独立検証は実process。installedでの重複取消とは区別する。
+NOT TESTED: この修正の署名配布/installed受入、Jobと実削除のinstalled競合、全D/3DS/GA。
+次は全gate/通常merge後、既存署名release経路で配布しinstalled受入を進める。
+
+全`./mf.sh test`: 1361 passed/既知warnings2/152.33秒/exit0。
+viewer build成功/生成差分なし、Node animation5 tests/py_compile/diff check成功。
+診断の取得timeout時にも取消してから待つfinally経路を整え、最終コードを別証跡-r2で再実行。
+`/data1tb/mf-repeated-admission-cancel-source-20260910-r2`、0.660秒/exit0、
+3回取消/Host未呼出/参照0→通常制作成功/参照0、GLB size/hashは初回と一致。
+job_3c7d840247e443f28cab51190e00eaf1、scene_e63f56934a904984b298b2c7de47a86f。
+取得timeout自体の実機注入は未実施。installed MF1082083/Host667000 active/PID不変。
+既存untracked .venvは保持。全D/3DS/GAはPARTIAL、修正のinstalled受入は次release以降。
+
+
 ## 2026-09-10 installed stale removal confirmation versus GUI admission
 
 base PR #395 mergeb871ccd54476070bbf786af23bb13af734de662e、ux1/3d-installed-removal-stale。
