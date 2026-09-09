@@ -528,6 +528,93 @@ def test_repair_replaces_damaged_managed_runtime_and_keeps_active_id(tmp_path: P
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("reference", ["in_process", "durable"])
+def test_repair_rechecks_late_live_reference_before_replacing(tmp_path: Path, monkeypatch, reference: str) -> None:
+    """An admission during candidate preparation must preserve the running tree."""
+    async def scenario() -> None:
+        base, manifest = archive_fixture(tmp_path)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(tmp_path, store, manifest, response_transport(base))
+        await manager.start()
+        assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
+        destination = resolver.managed_root / RUNTIME_ID
+        marker = destination / "running-runtime-marker"
+        marker.write_text("must survive")
+        registry_before = resolver.registry_path.read_bytes()
+        import mediaforge.blender_manager as implementation
+        original_probe = implementation.preflight
+        acquired = None
+
+        def probe(*args):
+            nonlocal acquired
+            facts = original_probe(*args)
+            if reference == "in_process":
+                acquired = resolver.runtime_reference(RUNTIME_ID)
+                acquired.__enter__()
+            else:
+                from mediaforge.domain import JobRequest
+                job = store.create_job(JobRequest(operation="media.inspect", intent="durable repair guard fixture"))
+                store.create_scene_recipe_task(job.id, owner="user:7", host_job_id="repair-fixture-child",
+                    operation="scene.create", runtime_id=RUNTIME_ID, runtime_version="4.5.9",
+                    base_revision_id=None, input_sha256="1" * 64, idempotency_key="2" * 64, request={})
+            return facts
+
+        monkeypatch.setattr(implementation, "preflight", probe)
+        try:
+            repaired = await wait_terminal(store, manager.repair(RUNTIME_ID).id)
+            assert repaired.state == BlenderRuntimeOperationState.FAILED
+            assert repaired.error_code == "blender_runtime_in_use"
+            assert marker.read_text() == "must survive"
+            assert resolver.registry_path.read_bytes() == registry_before
+            assert not any((resolver.managed_root / ".staging").glob("previous-*"))
+        finally:
+            if acquired is not None:
+                acquired.__exit__(None, None, None)
+            await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_repair_publication_runs_off_loop_and_shutdown_waits(tmp_path: Path, monkeypatch) -> None:
+    import threading
+
+    async def scenario() -> None:
+        base, manifest = archive_fixture(tmp_path)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        manager, resolver = runtime_manager(tmp_path, store, manifest, response_transport(base))
+        await manager.start()
+        assert (await wait_terminal(store, manager.install().id)).state == BlenderRuntimeOperationState.READY
+        entered, release = threading.Event(), threading.Event()
+        original = resolver.register_managed
+        loop_thread = threading.get_ident()
+
+        def held_registration(**kwargs):
+            assert threading.get_ident() != loop_thread
+            entered.set()
+            assert release.wait(10)
+            return original(**kwargs)
+
+        monkeypatch.setattr(resolver, "register_managed", held_registration)
+        operation = manager.repair(RUNTIME_ID)
+        stopping = None
+        try:
+            assert await asyncio.to_thread(entered.wait, 5)
+            stopping = asyncio.create_task(manager.stop())
+            await asyncio.sleep(0.05)
+            assert not stopping.done(), "shutdown abandoned a publication thread"
+        finally:
+            release.set()
+            if stopping is not None:
+                await stopping
+            else:
+                await manager.stop()
+        assert store.get_blender_runtime_operation(operation.id).state == BlenderRuntimeOperationState.READY
+        assert resolver.resolve_active().runtime_id == RUNTIME_ID
+        assert not any((resolver.managed_root / ".staging").iterdir())
+    asyncio.run(scenario())
+
+
 def test_repair_registry_failure_rolls_back_the_original_directory(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -1013,23 +1013,22 @@ class BlenderRuntimeManager:
             preflight, candidate / "install" / spec.executable, self.preflight_script, spec
         )
         self._raise_if_canceled(operation.id)
-        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        previous = contained(
-            self.resolver.managed_root,
-            self.resolver.managed_root / ".staging" / f"previous-{operation.id}",
-        )
-        replacing = operation.action == BlenderRuntimeOperationAction.REPAIR
-        if replacing:
-            self._ensure_managed_destination(destination)
+        if operation.action == BlenderRuntimeOperationAction.REPAIR:
+            # Admission may have happened while downloading/probing. Keep its
+            # guard, all synchronous persistence and filesystem work off-loop.
+            publication = asyncio.create_task(asyncio.to_thread(
+                self._publish_repair, operation, spec, candidate, destination,
+                archive_facts, facts,
+            ))
             try:
-                os.replace(destination, previous)
-                os.replace(candidate, destination)
-            except Exception:
-                if previous.exists() and not destination.exists():
-                    os.replace(previous, destination)
+                await asyncio.shield(publication)
+            except asyncio.CancelledError:
+                # Never let shutdown abandon a started rename/rollback thread.
+                await publication
                 raise
-        else:
-            os.replace(candidate, destination)
+            return
+        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.replace(candidate, destination)
         try:
             self.resolver.register_managed(
                 runtime_id=operation.runtime_id,
@@ -1042,11 +1041,7 @@ class BlenderRuntimeManager:
         except Exception:
             self._ensure_managed_destination(destination)
             await asyncio.to_thread(shutil.rmtree, destination)
-            if replacing and previous.exists():
-                os.replace(previous, destination)
             raise
-        if previous.exists():
-            await asyncio.to_thread(shutil.rmtree, previous)
         await self._clean_stage(operation.id)
         self.store.update_blender_runtime_operation(
             operation.id,
@@ -1060,6 +1055,51 @@ class BlenderRuntimeManager:
                 "preflight": facts,
             },
         )
+
+    def _publish_repair(
+        self, operation: BlenderRuntimeOperation, spec: RuntimeSpec,
+        candidate: Path, destination: Path,
+        archive_facts: dict[str, Any], facts: dict[str, Any],
+    ) -> None:
+        """Publish or roll back a repair atomically against runtime admission."""
+        with self.resolver.removal_guard():
+            self._raise_if_canceled(operation.id)
+            durable = self.store.active_scene_runtime_references(operation.runtime_id)
+            if self.resolver.live_reference_count(operation.runtime_id) or any(durable.values()):
+                raise BlenderRuntimeOperationError(
+                    "blender_runtime_in_use", "Stop Blender jobs and sessions before repairing this runtime"
+                )
+            self._ensure_managed_destination(destination)
+            previous = contained(self.resolver.managed_root,
+                self.resolver.managed_root / ".staging" / f"previous-{operation.id}")
+            if previous.exists() or previous.is_symlink():
+                raise BlenderRuntimeOperationError(
+                    "blender_runtime_staging_unsafe", "Blender repair rollback destination already exists"
+                )
+            os.replace(destination, previous)
+            promoted = False
+            try:
+                os.replace(candidate, destination)
+                promoted = True
+                self.resolver.register_managed(runtime_id=operation.runtime_id,
+                    version=spec.version, location=operation.runtime_id,
+                    archive_sha256=spec.archive_sha256)
+            except Exception:
+                if promoted:
+                    self._ensure_managed_destination(destination)
+                    shutil.rmtree(destination)
+                os.replace(previous, destination)
+                raise
+            shutil.rmtree(previous)
+            stage = self._stage_root(operation.id)
+            if stage.exists():
+                if stage.is_symlink():
+                    raise BlenderRuntimeOperationError("blender_runtime_staging_unsafe", "Blender staging root is unsafe")
+                shutil.rmtree(stage)
+            self.store.update_blender_runtime_operation(operation.id,
+                state=BlenderRuntimeOperationState.READY, bytes_done=spec.archive_size_bytes,
+                result={"runtime_id": operation.runtime_id, "version": spec.version,
+                    "archive_sha256": spec.archive_sha256, "archive": archive_facts, "preflight": facts})
 
     async def _download(
         self,
