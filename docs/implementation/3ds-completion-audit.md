@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 installed別版並行導入: A=4.5.13実RFB GUI中にB=4.5.9をexact install。
+B不在→verifying→readyを観測し、同A session/runtime/runner PID/実行file hash・inodeを保持。
+`mf-parallel-runtime-installed-0.28.53-20260910-r2`、80.889秒passed/85.896秒GUI停止/exit0。
+専用Bの英語Remove button実削除→同版再導入、3 scenes/17 revisions/72files保持、unit回収。
+これは逆方向の別版導入であり、旧→新版update/active切替やB probe失敗の受入ではない。
+全D/3DS/GA PARTIAL。導入中の手編集と完全な英語画面受入もNOT TESTED。
+
 2026-09-10署名0.28.53公開/consumer署名検証/標準update10.240秒healthy、DB/registry保持。
 installed実opaque RFBの4.5.9稼働中repairはin_use拒否、同GUI/scene/assets/実行file inode保持。
 `mf-repair-protection-installed-0.28.53-20260910`、86.973秒/exit0、一時login/専用unit回収。

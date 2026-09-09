@@ -1,5 +1,49 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed side-by-side exact install while another GUI stays pinned
+
+PR #392 merge43e8f45925947d19767ad3481c8e7c8ff3dcb799とhandoffを確認。
+前turnは0.28.53署名公開/導入/修復保護受入まで進捗。ux1/3d-installed-parallel-runtimeで記録。
+全体Dの別版導入中の稼働維持を、A=4.5.13 GUI / B=4.5.9 exact installとして確認する。
+これはA=旧版からB=新版へのupdate/active切替を実測する試験とは区別する。
+4.5.13は多数sceneが参照するactive版なので削除しない。Bの4.5.9だけがuser:16の
+acceptance-swordとRecoveryの2 scenesを参照し、固定archive377,929,956 B/
+SHAdcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3dがcacheにあることを確認。
+
+/data1tb/mf-parallel-runtime-0.28.53.pyを前のhistory診断からapply_patchで作成。
+最初は開始前Jobs0検査でexit1。ログイン・削除・GUI開始前で環境変更なし。
+job_2612ce682b8c42d28fef53f837918b8fのrunning→succeededと、続くimage.editを読み取り専用で追跡。
+実worker PID1085433の存在も確認し、他Jobを止めずに待機。全Jobs0になってから
+別証跡mf-parallel-runtime-installed-0.28.53-20260910-r2で再実行した。
+Host診断venv、既存CONFIG/PYTHONPATH/DISPLAY=:0/XAUTHORITYを使用。
+開始時と削除直前にidle検査、旧版参照scene/ownerの固定検査、失敗時の同版再導入finally付き。
+一時mf-e2e loginだけを作り最後にrevoke、password/global設定変更なし。
+
+実Host iframeで英語Remove button/履歴checkboxの既定off・未確認disabledをassertし、
+通常pointer確認でBを削除。18.405秒でB directory消滅、3 scenesの全投影/hash保持。
+削除後にAの受入用ロボットscene_509b6ee0b688492997b86b535d70ec9aを正規APIで起動。
+実RFB connected/描画1096色、4.5.13 pinを確認。30.780秒でA GUI ready。
+Bのinstall_exactを正規workspace APIへ要求し、verifying/ready両方で
+同session ready/runtime4.5.13と同runner MainPID1087038を確認。
+operation blenderop_a62ebac699cd45859c4efb8caa7f6b99、実archive6,510 members/
+展開1,168,332,002 B、実preflight4.5.9/GLTF import/export true、64.845秒でready観測。
+80.889秒でpassed、85.896秒で専用GUI停止、finally login revoke、exit0/page errors0。
+削除したBの実行環境は同版へ復元済み。制作物は削除せず、active4.5.13も切り替えていない。
+
+独立再照合: 3 scenes/17 revisions/72関連filesのhash・旧revision投影不変、GUI0。
+A executable SHAe3ce4e960a2fd3beb1f9d2299e38b3804475ccd395193013aec239a4b75bfbfe、
+inode46028345不変。外部登録の投影も前後一致（外部実体の健全性を新たに主張しない）。
+session blendersession_040096fdea9a492aaf1acea6a290a768、unit not-found/inactive/MainPID0。
+Host667000/MF1082083不変。PNGはGUI描画の証拠で、導入中の手編集/保存は未実施。
+英語削除buttonの実操作を確認したが、全画面の完全英語化や削除dialog全体のスクリーンショット
+受入は主張しない。画像では既存の日本語ラベルも残っている。
+約1.17GBのB実行環境のみ一時削除・同版再導入した範囲を利用者へ通知済み。
+
+文書のみ。製品gateは0.28.53準備の全1348 tests/145.63秒とviewer buildを参照、
+本turnで再実行したとはしない。NOT TESTED: 新版update/active切替、B probe失敗、
+削除と受付の実競合、容量不足/改ざん/中断全matrix。全D/3DS/GAはPARTIAL。
+次は並行導入の失敗条件を、現在版を壊さない隔離fixtureで補完しinstalledとの差を記録する。
+
 ## 2026-09-10 v0.28.53 signed release and standard installed update
 
 準備PR #391 source89ffbf9099a1598e9569cb07f80d41431cf6a772、通常merge
