@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 retained lifecycle audit refresh
+
+Host311/MF419は通常merge済み。稼働Hostはmain6d3cd2a/PID1141433/active、未反映。
+Host/MF active Job0、GUI active0、runtime operation active0をread-only確認。
+別opencode.exe/llama-serverは触らない。Hostのみ再起動の可否を利用者へasync質問中。
+承認返信を確認し、無回答を承認としない。更新する場合は直前のlive条件を再確認する。
+既存C/D要約に古い未実装/未配布記述が残っていたため原因別証拠と整合させた。
+外部mf-current-lifecycle-audit-20260910.pyはexit0、raw3件/復旧3 revision/22 Assetsを
+現在DBとSHA/provenanceで照合、計5,368,096 B/実GLB nodes2/2/16。
+証跡 /data1tb/mf-current-lifecycle-audit-g1gzbc9j。新しい障害再現ではない。
+MF branch ux1/3d-lifecycle-evidence-refreshは文書のみ、test/build再実行なし。
+全3DS/GAはPARTIAL。承認がなければHost再起動は保留し、既確認autosaveを再実装せず
+ゲーム制作設計の次のtyped weights/mesh編集等の未実装工程を選ぶ。
+
 ## 2026-09-10 Host queue receipt correction
 
 MF PR #418 mergeca9dd4f完了後、Host別worktree /data1tb/ControlDeck-resource-receiptで

@@ -358,8 +358,8 @@ project確認後変更拒否はunit fixture。installed Host/英語/実project�
 |---|---|
 | A clean環境/表示 | 全操作、320px、日英、既存画像がBlender不在でも利用可能な証拠。390pxだけで320px成功とはしない |
 | B 制作一巡 | VERIFIED（再開/再試行を含む同一制作物）。OpenCode剣→既存画像2→3→新規生成/比較採用3→4→GUI入力保存6→7→第6版を第8版へ復元→元projectのrestored-exportsへGLB/PNG/manifest入りZIP配置。全8版不変、旧出力保持、新3 receipt/実bytes/manifest hash一致 |
-| C lifecycle | [原因別証拠表](3ds-lifecycle-evidence.md)へ照合。既存idle/restart/expiry、.38保存失敗/child crash/既定300秒切断終了のprocess回収と別scene復旧確定。native Chrome背景復帰後の実入力保存、さらに保存競合時の未確定複製2→4 meshesを別sceneへ全回収/競合側1 mesh不変を実GLBで確認。PARTIAL: 定期autosave実装・save以前のcrash回収量、他原因の回収証拠は未完了 |
-| D 更新/削除 | [D-01〜12対応表](3ds-runtime-evidence.md)へ原証跡を照合。installedの履歴保持削除/再編集、GUI/Job参照拒否、cache改ざん/取消再開を確認済みの範囲で整理。旧→新版update/失敗retryはsource、installedは逆方向exact install。次はこの差分の受入。全DはPARTIAL |
+| C lifecycle | [原因別証拠表](3ds-lifecycle-evidence.md)へ照合。installedのautosave書込失敗/再試行→child crash、署名token expiry、既定connected idle1800秒で手編集2/2/16 meshes回収とprocess cleanupを確認済み。2026-09-10に復旧3 revision/22 Assetsの現在DB/hash/実GLBを再照合。定期autosave未実装という旧記述は撤回。全Cの最終照合は継続し、原証跡に記した接続経路・入力効果等の限界を保持 |
+| D 更新/削除 | [D-01〜12対応表](3ds-runtime-evidence.md)へ原証跡を照合。installedの履歴保持削除/再編集、GUI/Job参照拒否、cache改ざん/取消再開、旧→新版update/候補失敗retryまで確認済みの範囲で整理。旧→新版runのcleanup assertion exit1と独立audit exit0を区別。D-06/07/09/11のsource/packageとinstalledの差分は残る。全DはPARTIAL |
 | E GPU/長時間 | installed0.28.30の644.700秒CPU queue fault injectionでchild refresh4件/元期限後取消/終端一致。既存GUIの同一session660.433秒継続・実入力保存（PR #293）。installed0.28.57で制作画像の自然生成238.346秒→同panel材質/GLB、両Host成功/GPU renew23/releaseを追加確認。setup自身の10分超credentialとGPU組合せ評価等は残る。画像工程をBlender CPU演算や全Eの完了には読み替えない |
 | F release | 署名公開/update/改ざん拒否証拠は維持。rollbackは候補health成功後の例外注入であり、migration失敗や自然なhealth不良の証拠へ読み替えない。clean install等も個別照合 |
 
