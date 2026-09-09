@@ -159,6 +159,83 @@ class CameraAdd(BaseModel):
     focal_length_mm: float = Field(default=50, ge=1, le=300)
 
 
+BoneId = Annotated[str, Field(min_length=1, max_length=48, pattern=r"^[a-z][a-z0-9._-]*$")]
+
+
+class BoneDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bone_id: BoneId
+    head: Vector3
+    tail: Vector3
+    parent_bone_id: BoneId | None = None
+
+    @model_validator(mode="after")
+    def nonzero_length(self) -> "BoneDefinition":
+        if sum((a - b) ** 2 for a, b in zip(self.head, self.tail, strict=True)) < 0.000001:
+            raise ValueError("bone length must be at least 0.001 meters")
+        return self
+
+
+class ArmatureCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["armature.create"]
+    object_id: ObjectId
+    name: str = Field(min_length=1, max_length=120)
+    bones: list[BoneDefinition] = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def ordered_hierarchy(self) -> "ArmatureCreate":
+        known: set[str] = set()
+        for bone in self.bones:
+            if bone.bone_id in known or (bone.parent_bone_id is not None and bone.parent_bone_id not in known):
+                raise ValueError("bone IDs must be unique and parents must precede their children")
+            known.add(bone.bone_id)
+        return self
+
+
+class RigidBinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mesh_object_id: ObjectId
+    bone_id: BoneId
+
+
+class SkinBind(BaseModel):
+    """Bind each unbound mesh rigidly to one bone, preserving rest world geometry."""
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["skin.bind"]
+    object_id: ObjectId
+    bindings: list[RigidBinding] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def unique_meshes(self) -> "SkinBind":
+        ids = [binding.mesh_object_id for binding in self.bindings]
+        if len(set(ids)) != len(ids) or self.object_id in ids:
+            raise ValueError("binding mesh IDs must be distinct from each other and from the rig")
+        return self
+
+
+class BonePose(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bone_id: BoneId
+    rotation_degrees: tuple[Annotated[float, Field(ge=-180, le=180)],
+                            Annotated[float, Field(ge=-180, le=180)],
+                            Annotated[float, Field(ge=-180, le=180)]]
+
+
+class PoseSet(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["pose.set"]
+    object_id: ObjectId
+    bones: list[BonePose] = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def unique_bones(self) -> "PoseSet":
+        ids = [bone.bone_id for bone in self.bones]
+        if len(set(ids)) != len(ids):
+            raise ValueError("pose bone IDs must be unique")
+        return self
+
+
 SceneOperation = Annotated[
     PrimitiveAdd
     | TransformSet
@@ -168,7 +245,10 @@ SceneOperation = Annotated[
     | LightAdd
     | CameraAdd
     | ObjectDuplicate
-    | MirrorModifier,
+    | MirrorModifier
+    | ArmatureCreate
+    | SkinBind
+    | PoseSet,
     Field(discriminator="type"),
 ]
 
@@ -189,7 +269,7 @@ class SceneRecipe(BaseModel):
     def validate_object_references(self) -> "SceneRecipe":
         known: set[str] = set()
         for operation in self.operations:
-            if isinstance(operation, (PrimitiveAdd, LightAdd, CameraAdd, ObjectDuplicate)):
+            if isinstance(operation, (PrimitiveAdd, LightAdd, CameraAdd, ObjectDuplicate, ArmatureCreate)):
                 if operation.object_id in known:
                     raise ValueError(f"duplicate object_id: {operation.object_id}")
                 known.add(operation.object_id)

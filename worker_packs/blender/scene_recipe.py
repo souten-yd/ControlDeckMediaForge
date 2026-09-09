@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 from pathlib import Path
 import sys
 
@@ -15,6 +16,125 @@ import bpy
 FIXED = {"recipe.json", "source.blend", "scene.blend", "result.json"}
 MAX_OPERATIONS = 64
 MAX_GROWTH_GEOMETRY = 1_000_000
+MAX_SCENE_BONES = 256
+
+
+def bone_id(value: object) -> str:
+    if not isinstance(value, str) or re.fullmatch(r"[a-z][a-z0-9._-]{0,47}", value) is None:
+        raise RuntimeError("bone ID differs")
+    return value
+
+
+def rigid_armature(obj: bpy.types.Object) -> None:
+    if obj.type != "ARMATURE" or obj.get("media_forge_rig_schema") != 1:
+        raise RuntimeError("rig must be a typed Media Forge armature")
+    if not 1 <= len(obj.data.bones) <= 128 or obj.data.users != 1:
+        raise RuntimeError("rig bone count or shared data differs")
+    if obj.animation_data is not None or obj.data.animation_data is not None or obj.constraints:
+        raise RuntimeError("animated or constrained rig is not supported by pose/bind")
+    if any(p.constraints for p in obj.pose.bones):
+        raise RuntimeError("constrained pose bones are not supported")
+
+
+def create_armature(operation: dict[str, object]) -> bpy.types.Object:
+    definitions = operation.get("bones")
+    if not isinstance(definitions, list) or not 1 <= len(definitions) <= 128:
+        raise RuntimeError("bone count differs")
+    if sum(len(obj.data.bones) for obj in bpy.data.objects if obj.type == "ARMATURE") + len(definitions) > MAX_SCENE_BONES:
+        raise RuntimeError("scene bone budget exceeded")
+    known = set()
+    for definition in definitions:
+        key = bone_id(definition.get("bone_id"))
+        parent = definition.get("parent_bone_id")
+        if key in known or (parent is not None and parent not in known):
+            raise RuntimeError("bone hierarchy differs")
+        head, tail = vector(definition.get("head")), vector(definition.get("tail"))
+        if sum((a-b)**2 for a,b in zip(head,tail)) < 0.000001:
+            raise RuntimeError("bone length is too small")
+        known.add(key)
+    data = bpy.data.armatures.new(str(operation["name"]))
+    obj = bpy.data.objects.new(str(operation["name"]), data)
+    bpy.context.collection.objects.link(obj)
+    obj["media_forge_id"] = str(operation["object_id"])
+    obj["media_forge_rig_schema"] = 1
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode="EDIT")
+    try:
+        for definition in definitions:
+            bone = data.edit_bones.new(definition["bone_id"])
+            bone.head, bone.tail = vector(definition["head"]), vector(definition["tail"])
+            if bone.length < 0.0009:
+                raise RuntimeError("bone endpoints collapse at Blender precision")
+            parent = definition.get("parent_bone_id")
+            if parent is not None:
+                bone.parent = data.edit_bones[parent]
+            bone.use_deform = True
+    finally:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    return obj
+
+
+def bind_skin(obj: bpy.types.Object, operation: dict[str, object], objects: dict[str, bpy.types.Object]) -> None:
+    rigid_armature(obj)
+    for pose in obj.pose.bones:
+        if any(abs(pose.matrix_basis[i][j] - (1 if i == j else 0)) > 1e-6 for i in range(4) for j in range(4)):
+            raise RuntimeError("bind requires rest pose")
+    bindings = operation.get("bindings")
+    if not isinstance(bindings, list) or not 1 <= len(bindings) <= 64:
+        raise RuntimeError("binding count differs")
+    selected, seen, vertices = [], set(), 0
+    for binding in bindings:
+        mesh_id = binding.get("mesh_object_id")
+        mesh = objects.get(mesh_id)
+        key = bone_id(binding.get("bone_id"))
+        if mesh_id in seen or mesh is None or mesh.type != "MESH" or key not in obj.data.bones:
+            raise RuntimeError("binding mesh or bone differs")
+        seen.add(mesh_id)
+        if mesh.parent is not None or mesh.constraints or mesh.animation_data is not None or mesh.vertex_groups:
+            raise RuntimeError("bind requires an unparented unweighted unconstrained static mesh")
+        if mesh.data.users != 1 or mesh.data.shape_keys is not None or mesh.data.animation_data is not None:
+            raise RuntimeError("bind requires independent static mesh data")
+        if any(m.type not in {"BEVEL", "MIRROR"} for m in mesh.modifiers):
+            raise RuntimeError("bind modifier stack differs")
+        vertices += len(mesh.data.vertices)
+        if vertices > MAX_GROWTH_GEOMETRY:
+            raise RuntimeError("binding vertex budget exceeded")
+        selected.append((mesh, key))
+    for mesh, key in selected:
+        world = mesh.matrix_world.copy()
+        mesh.parent = obj
+        mesh.matrix_world = world
+        group = mesh.vertex_groups.new(name=key)
+        group.add(list(range(len(mesh.data.vertices))), 1.0, "REPLACE")
+        modifier = mesh.modifiers.new(name="Media Forge Skin", type="ARMATURE")
+        modifier.object = obj
+        modifier.use_vertex_groups = True
+        modifier.use_bone_envelopes = False
+    bpy.context.view_layer.update()
+
+
+def set_pose(obj: bpy.types.Object, operation: dict[str, object]) -> None:
+    rigid_armature(obj)
+    if bpy.data.actions or any(o.type == "ARMATURE" and
+            (o.get("media_forge_rig_schema") != 1 or o.animation_data is not None) for o in bpy.data.objects):
+        raise RuntimeError("static typed pose export requires a scene without other rig kinds or actions")
+    bones = operation.get("bones")
+    if not isinstance(bones, list) or not 1 <= len(bones) <= 128:
+        raise RuntimeError("pose count differs")
+    selected, seen = [], set()
+    for item in bones:
+        key = bone_id(item.get("bone_id"))
+        rotation = vector(item.get("rotation_degrees"))
+        if key in seen or key not in obj.pose.bones or any(abs(v) > 180 for v in rotation):
+            raise RuntimeError("pose bone or rotation differs")
+        seen.add(key)
+        selected.append((obj.pose.bones[key], rotation))
+    for pose, rotation in selected:
+        pose.rotation_mode = "XYZ"
+        pose.rotation_euler = tuple(math.radians(v) for v in rotation)
+    bpy.context.view_layer.update()
 
 
 def geometry_cost(obj: bpy.types.Object) -> int:
@@ -114,8 +234,11 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
     object_id = operation.get("object_id")
     if not isinstance(object_id, str):
         raise RuntimeError("recipe object ID differs")
-    if kind in {"primitive.add", "light.add", "camera.add", "object.duplicate"} and object_id in objects:
+    if kind in {"primitive.add", "light.add", "camera.add", "object.duplicate", "armature.create"} and object_id in objects:
         raise RuntimeError("recipe object ID already exists")
+    if kind == "armature.create":
+        objects[object_id] = create_armature(operation)
+        return
     if kind == "primitive.add":
         objects[object_id] = primitive(operation)
         return
@@ -158,7 +281,11 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
     obj = objects.get(object_id)
     if obj is None:
         raise RuntimeError(f"unknown stable object ID: {object_id}")
-    if kind == "transform.set":
+    if kind == "skin.bind":
+        bind_skin(obj, operation, objects)
+    elif kind == "pose.set":
+        set_pose(obj, operation)
+    elif kind == "transform.set":
         transform(obj, operation)
     elif kind == "modifier.bevel":
         if obj.type != "MESH":
