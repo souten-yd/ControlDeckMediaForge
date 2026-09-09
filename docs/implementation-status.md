@@ -1,5 +1,42 @@
 # Media Forge implementation status
 
+## 2026-09-10 durable removal confirmation across isolated core restart
+
+base PR #402 merge2aa28ac26e6da9629eae457d0e433fa411b7aba5、ux1/3d-removal-confirmation-restart。
+前turnはJob逆順受付受入/PR #402 mergeまで進捗。本sliceはscenario Dの接続再作成/再起動時確認保持。
+`scripts/3ds_removal_restart_e2e.py` を追加。固定された既存隔離rootだけを使い、
+初期read-only検査でJob/GUI/runtime operationの全idleとasset/scene snapshotを確認する。
+親が専用TCP socketを確保し、FDを配列引数のowned child coreへ渡す。個人設定/Host変更なし。
+最初のcoreだけ_removeを非同期gateへ置換し、確認内容がdurable preflightにある時点で待機させる。
+確認用HTTP clientを閉じて別clientで同一operationを再照会後、owned process handleへSIGTERM。
+終了をwaitで確認してから、fixtureなしの別coreプロセスを起動し、実削除を再開する。
+任意PID探索/killはしない。stop上限を超えた場合は自分のchildだけkillして失敗し、成功扱いしない。
+
+```bash
+PYTHONPATH=backend:. .venv/bin/python scripts/3ds_removal_restart_e2e.py --evidence-dir /data1tb/mf-removal-restart-source-20260910
+```
+
+実測は23.113秒/親exit0。0.422秒に専用core1134091起動、health=setup_required。
+0.695秒にHTTP client再接続で操作blenderop_5bb9e9fbe041478f867d28215f4fbcb2の
+acknowledge_history=true/全removal_previewの一致を確認。対象はinactive4.5.9、project参照1/live0。
+0.900秒に旧core終端（SIGTERM returncode=-15）、1.317秒に新core1134111起動。
+1.341秒に同じoperation ID/preview/fingerprint/ackを保持してready、旧runtime不在/6hash・scene/revision不変。
+22.966秒に同版4.5.9再導入成功、固定archive SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d、
+実probeは6,510members/1,168,332,002B/GLB入出力成功。元の既定4.5.9も復元。
+23.113秒に新coreもSIGTERM終端（-15）。親exit0を子exit0と混同しない。
+独立read-only照合で旧6hash/全scene-revision投影保持、2runtime登録/既定4.5.9、
+staging/removing空、両専用PID不在を確認。隔離実行環境のみ一時削除/同版復元、制作物削除なし。
+
+unitはhistory restartの5確認条件（正常/ack欠落/不正型/active変更/catalog変更）を
+queued/preflight/deletingの3 journal stateへ拡張（10ケース追加）。
+ここでdeletingはDB状態fixtureであり、rename途中の実crash試験ではない。対象17ケース成功。
+全gate: ./mf.sh test は1374 passed/2既存warnings/148.10秒/exit0。
+npm run build:viewer生成差分なし、Node5、py_compile/diff check成功。
+製品code/公開契約/Host/installed環境/版数/署名artifactは変更しない。
+NOT TESTED: installed Host/opaque browser、電源断、mid-rename crash、GUI再編集、
+例外時自動再導入、全D/3DS/GA。全体完了へ拡大しない。
+次はscenario Dの容量不足/改ざん/導入中断の既存証拠と実installedとの差分をまとめて埋める。
+
 ## 2026-09-10 removal-first recipe Job admission
 
 base PR #401 merge731f52fc40969240998e6a42bdf4350a71ffedd2、ux1/3d-removal-first-job。

@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 removal confirmation core restart
+
+base PR #402 merge2aa28ac26e6da9629eae457d0e433fa411b7aba5、ux1/3d-removal-confirmation-restart、PR作成前。
+前turnはJob逆順受入/mergeまで進捗。今回は確認済み削除のHTTP client再接続/別coreプロセス再起動。
+script scripts/3ds_removal_restart_e2e.py --evidence-dir /data1tb/mf-removal-restart-source-20260910。
+実測23.113秒/親exit0、core1134091→SIGTERM(-15)→新core1134111→同ID/preview/ackで削除再開。
+最初だけpreflight gate fixture、再起動後は未変更core。固定隔離rootだけ/Host・installed変更なし。
+6hash/scene/revision保持、同版再導入probe成功/元既定復元、両PID/staging回収を独立確認。
+unitは確認5条件×journal3状態、10ケース追加/対象17ケース成功。deleting状態はrename crashの模擬ではない。
+全1374 tests/2既存warnings/148.10秒、viewer build差分0/Node5、py_compile/diff成功。
+製品code/公開契約/版数/署名artifact変更なし。全D/3DS/GA PARTIAL。
+次: Dの容量不足/改ざん/導入中断について既存証拠とinstalledとの差分をまとめて検証する。
+NOT TESTED: installed browser、電源断/mid-rename crash、GUI再編集、例外時自動再導入。
+
 ## 2026-09-10 removal-first recipe Job admission
 
 base PR #401 merge731f52fc40969240998e6a42bdf4350a71ffedd2、ux1/3d-removal-first-job、PR作成前。
