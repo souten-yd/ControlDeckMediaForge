@@ -1,5 +1,54 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed exact candidate probe failure acceptance
+
+PR #394 merge667906adeb24403551541ea625bb486ef2392f8fと最新handoffを再確認。
+前turnは隔離sourceのexact pidfd故障注入/再試行受入と通常mergeまで進捗。
+ux1/3d-installed-probe-failureはinstalled受入の記録sliceで、製品コード/版数変更なし。
+read-only開始時: installed0.28.53、MF main1082083/core1082090、Host667000はactive。
+Job/GUI/setupは全終端。managed4.5.9の参照は既存user:16受入2 scenesだけ。
+coreのexe/UID/親PIDを照合し、実packaged preflight
+`/tmp/_MEIZWNOAN/worker_packs/blender/preflight.py`のrealpathとSHA
+3c029ca69fb6021e1c7a7f3387e0767346170cddab8140b2fd968dacc6271950をsourceと照合。
+環境変数の読取はpackaged rootだけを抽出し、秘密値は出力しない。
+
+診断`/data1tb/mf-probe-failure-0.28.53.py`を既存parallel受入からapply_patchで追加。
+Host診断venv/既存CONTROL_DECK_CONFIG/PYTHONPATH/DISPLAY/XAUTHORITYで実行。
+既存mf-e2e user16の一時loginだけを使いfinally revoke、password/global設定変更なし。
+前提/削除preview/固定cache identityを検査し、inactive4.5.9だけ履歴確認付きで一時削除。
+4.5.13 GUIを起動し、4.5.9 exact installの候補だけPR #394 helperでSIGTERMする。
+再試行と専用GUI停止、例外時の同版再導入finallyを持つ。多数sceneが使う4.5.13は削除しない。
+これは逆方向exact installであり、旧→新版update/active切替や自然発生故障と区別する。
+
+実行コマンド（Host内部importはこの外部診断だけ、製品コードへ追加しない）:
+```bash
+CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml PYTHONPATH=/data1tb/ControlDeck/app/backend DISPLAY=:0 XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3 /data1tb/ControlDeck/app/.venv/bin/python /data1tb/mf-probe-failure-0.28.53.py
+```
+証跡 `/data1tb/mf-probe-failure-installed-0.28.53-20260910/observations.json`、exit0。
+17.110秒でinactive旧版除去・履歴保持、27.203秒で4.5.13実RFB描画1096色を確認。
+候補PID1100108/親1082090、operation blenderop_a6e73ffdc7704b49bce00c7494ce914eの
+exact staged executable/全argv/UIDを再照合したpidfd SIGTERMでprobe失敗。
+57.264秒failed観測、68.289秒で同GUI ready/runtime4.5.13/runner PID1099805と
+active実行file hash/inode・元scene/asset保持を確認。稼働GUIやcore自体にはsignalを送らない。
+retry blenderop_44b3cdb6761b402795f152f076c2c835はready、実4.5.9 probe/GLTF import/export true、
+6,510 members/展開1,168,332,002 B。同GUI/runnerはverifying/installing/readyを通して保持。
+121.385秒passed、126.387秒自分のGUI停止、最後に一時login revoke。page errors0。
+PNGはGUI描画の証拠であり、再導入中の手編集/保存やロボットの見た目品質の証拠ではない。
+
+独立照合の初回は証跡のfield名をdocumentと誤りKeyErrorで中断（read-only、変更なし）。
+実schemaのsceneに直し再照合: 3 scenes/17 revisions/current pin・関連72 files hash保持、
+再導入4.5.9 executable SHAde8e8092c49e42cc6f1adde86aea0202ea5bad3338725887ecbcb7274dd0f926。
+GUI0/staging0/候補PID不在。session3658ca124e6943e98db06d7a04da0dafの
+unit not-found/inactive/MainPID0。active4.5.13/外部登録投影不変、MF1082083/Host667000 active/PID不変。
+約1.17GBの旧版実行環境だけ一時削除し同版復元済みと利用者へ通知。制作物の削除なし。
+
+本PRは文書のみ。変更のない製品gateはPR #394の1357 tests/154.35秒・viewer build/Node5を参照し、
+このturnで全gateを再実行したとはしない。診断py_compile/diff check成功。
+NOT TESTED: 新版update/active切替のinstalled同条件、自然故障、例外cleanup故障注入、
+インストール中のGUI編集、削除同時受付/容量不足/中断の全matrix。全D/3DS/GA PARTIAL。
+次は確認付き削除とJob/GUI同時受付の実機証拠を照合し、不足する競合条件を補完する。
+
+
 ## 2026-09-10 exact owned candidate-process failure and update retry
 
 PR #393 mergeedf0a53f4357148de22f0bf9d847f0fa677e983fからux1/3d-owned-probe-failure。

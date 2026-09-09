@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed exact probe failure
+
+base PR #394 merge667906adeb24403551541ea625bb486ef2392f8f、ux1/3d-installed-probe-failure。
+前turnはsource故障注入/実受入/mergeまで進捗。今回はinstalled同故障の受入記録のみ。
+実core1082090（MF main1082083）のexe/UID/親とpackaged probe SHAを確認。
+開始時Job/GUI/setup全終端、旧managed4.5.9はuser:16の専用2 scenesのみ参照。
+ephemeral /data1tb/mf-probe-failure-0.28.53.py、既存Host診断環境で実行。
+証跡 /data1tb/mf-probe-failure-installed-0.28.53-20260910。
+inactive4.5.9だけ一時削除→4.5.13 GUI→旧版exact install候補だけpidfd SIGTERM→retry。
+個別login revoke/専用GUI stop/旧版不在なら同版restoreのfinallyあり。
+旧→新版updateや自然発生故障とは区別する。製品コード/版数変更なし。
+installed実行exit0: 4.5.13 GUI描画→候補PID1100108/親1082090だけSIGTERM、57.264秒failed。
+同GUI/runner1099805を保持、retry旧版4.5.9実probe成功、121.385秒passed/126.387秒own stop。
+一時login revoke、page errors0。旧3 scenes/17 revisions/72files hash保持を独立確認。
+独立検査初回はfield名の誤りKeyError、修正後read-only再照合成功（製品障害ではない）。
+session3658ca124e6943e98db06d7a04da0dafのunit不在、GUI0/staging0/候補PID不在。
+旧版を同固定archiveから復元、active4.5.13/外部投影不変、MF1082083/Host667000不変。
+文書のみ。前PR製品gate1357 tests/154.35秒/build/Node5を参照、今回再実行ではない。
+全D/3DS/GA PARTIAL。次は確認付き削除とJob/GUI同時受付の不足する競合条件を実機照合する。
+
 ## 2026-09-10 owned candidate probe failure
 
 base PR #393 mergeedf0a53f4357148de22f0bf9d847f0fa677e983f、ux1/3d-owned-probe-failure。

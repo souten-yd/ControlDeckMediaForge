@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 installed候補probe故障: 稼働4.5.13 GUI中の4.5.9 exact install候補だけpidfd SIGTERM。
+probe失敗→正常retryの間、同GUI/runtime/runner PID・active executable hash/inodeを保持。
+`mf-probe-failure-installed-0.28.53-20260910`、121.385秒passed/126.387秒own stop/exit0。
+3 scenes/17 revisions/72files保持、旧版復元/候補/GUI/staging回収、Host/MF PID不変。
+逆方向exact installの故障保護をinstalledでも補完。新版update、自然故障、全D/3DS/GA完了ではない。
+
 2026-09-10 source故障追加: 未変更の実4.5.13 candidate probeだけをexact identity/pidfdでSIGTERM。
 A4.5.9 GUI・旧版/scene保持、B update失敗→正常retryでactive4.5.13へ切替、既存GUIは4.5.9固定。
 `mf-owned-probe-failure-source-20260910`、45.922秒/exit0、候補PID/専用GUI/staging回収。
