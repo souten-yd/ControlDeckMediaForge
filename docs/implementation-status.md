@@ -1,5 +1,46 @@
 # Media Forge implementation status
 
+## 2026-09-10 natural authoring workload calibration (120-second gate not met)
+
+前turnはPR #413 merge8fbcdfd5c6d416b4418fe06c3b7ccf440bf0c039まで進捗。
+source mainには別PR #412の0.28.56/Agent説明修正、さらに#414のbuild smoke修正が入り、保持した。
+branch ux1/3d-natural-workload-measurementのbaseはf8a95af。製品変更は行っていない。
+Eの自然120秒超制作に向け、既存の180秒worker timeout/64操作/骨格・clip予算を照合。
+人工sleep/SIGSTOP/CPU制限/上限緩和を使わず、正規Agent→detached Host childで2候補を計測した。
+
+```bash
+CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml PYTHONPATH=/data1tb/ControlDeck/app/backend /data1tb/ControlDeck/app/.venv/bin/python /data1tb/mf-natural-uv-0.28.55.py --count 8 --evidence-dir /data1tb/mf-natural-uv8-installed-0.28.55-20260910
+CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml PYTHONPATH=/data1tb/ControlDeck/app/backend /data1tb/ControlDeck/app/.venv/bin/python /data1tb/mf-natural-animation-0.28.56.py --count 32 --evidence-dir /data1tb/mf-natural-animation-installed-0.28.56-20260910
+```
+
+最初の8高分割球+UV展開16操作はinstalled0.28.55で2.133秒/exit0、job675ea881b4aa4998ac2354ac25b9cd7d。
+Host ae05cf656fbd/local双方succeeded、scene_d06ad1f93ac34460801c042c0666dedaを作成。
+実Blender4.5.13、129,024triangles/64,528vertices、GLB9,104,288 B、SHA
+c1f4ab4f6203d493de8199596b2b9aec3471d635167f2f8c4b2262c609b28723。
+所有recipe PID1176425の観測CPU1.93秒/RSS338,468,864 B、観測区間0.512秒。
+poll間隔0.5秒のサンプルであり、CPU/RSSの厳密な総量・peakではない。
+
+続くanimation開始前、別作業の更新でcurrent0.28.56へ変化していたため、.55固定scriptは副作用前にexit1。
+そのまま再試行せず、current/healthy/core1176932(parent1176927)を照合。
+実bundleのscene_recipe.py/scene_document.py bytesがsourceと一致することを確認して.56用診断を実行。
+この更新・署名公開はこちらが実施したものではなく、独立release acceptance成功の主張もしない。
+
+32剛体part・128bone階層・各600frame/24fpsのloop clip3本、37操作は6.950秒/exit0。
+job99f4b0d09d61408ea9c15d0642587f72/Host d498bb419e2e双方succeeded、
+scene_97449c53e65d433686aa90f8285f0dac、revision_a66c14b297a743dfb5f0bfdc248f0444を作成。
+GLB実bytesを別途解析し、skin1/128joints、3animations各384channels/25秒を確認。
+GLB3,953,148 B、SHA3dbb870c92c7df380aa67a16e3ab85bc9a7051491ff748f23f9a126f656f5749。
+validation/export PID1177266の観測区間5.384秒、CPU29.74秒/RSS489,160,704 B。
+CPU秒は複数threadの合計であり、実時間120秒超と読み替えない。短いrecipe processはこのrunでは未捕捉。
+
+両runとも既存scene/revision投影/registry保持、新規の検証用2sceneと4assets/provenanceのみ追加。
+別read-only照合で両Host終端、実blob/provenance存在/hash、所有PID消失、未終端Job0を確認。
+両observationsはexceeds_120_sec=false。2候補は自然長時間試験には不適であり、Eの必須gateは未達。
+この骨格出力を格好よいrobot/有機変形/歩行/engine再生の受入にしない。
+次は既存の画像・材質制作の処理条件/予算を照合し、意味のある自然長時間Job候補を選ぶ。
+時間稼ぎの重複操作やfixture待機を成功根拠にしない。
+文書のみ、全test/build・新releaseなし。NOT TESTED: 自然120秒超/credential refresh/今回browser/engine/全E/GA。
+
 ## 2026-09-10 installed newer update candidate failure and retry
 
 base PR #411 merge13f98cfe5b2a3560332b3bf0b5555aa34d3e1767、ux1/3d-installed-newer-update。

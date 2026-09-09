@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 natural authoring calibration
+
+branch ux1/3d-natural-workload-measurement、base origin/main f8a95af（別PR #412/.56と#414を保持）、PR作成前。
+前turnは#413 installed更新受入/merge。自然120秒超制作の候補を2件実測したがgate未達。
+UV8球/16操作はinstalled.55で2.133秒/exit0、scene_d06ad1f93ac34460801c042c0666deda、GLB9,104,288B。
+途中で別作業がinstalledを.56へ更新。.55固定animation scriptはJob前にexit1、現物照合後.56で実行。
+current.56/healthy、core1176932/parent1176927、2trusted workerはsource bytes一致。
+128bones/32剛体parts/3clips各25秒の37操作は6.950秒/exit0、scene_97449c53e65d433686aa90f8285f0dac。
+GLB3,953,148B/skin1/joints128/animations3を独立解析。Host/local両Job succeeded、旧scene/registry保持。
+証跡 mf-natural-{uv8-installed-0.28.55,animation-installed-0.28.56}-20260910。
+外部script /data1tb/mf-natural-{uv-0.28.55,animation-0.28.56}.py。既存evidenceへ再実行しない。
+所有PID1176425/1177266消失、未終端Job0。新規検証2scene/4assetsは保持。
+CPU29.74秒は複数thread合計、観測実時間5.384秒。exceeds_120_sec=falseを保持。
+文書のみ/全test/buildなし。既存UX/全E/3DS/GA PARTIAL。品質/有機weight/歩行/engine受入ではない。
+次: 既存画像・材質制作の処理条件/予算を照合し、意味のある自然長時間Job候補を選ぶ。
+再開: git fetch origin; git status --short --branch; current版/実Job/workerを再照合。
+外部blockerなし。180秒worker timeout等の上限を時間稼ぎのために変えない。
+
 ## 2026-09-10 installed newer update failure/retry
 
 base PR #411 merge13f98cfe5b2a3560332b3bf0b5555aa34d3e1767、ux1/3d-installed-newer-update、PR作成前。
