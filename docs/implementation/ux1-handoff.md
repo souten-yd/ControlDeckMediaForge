@@ -3,6 +3,50 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-09 game-asset roadmap and first typed modelling operations
+
+利用者のゲーム制作向け全機能の設計・実装開始依頼に基づき、base-plan §12と
+integration §18を先に拡張。`docs/design-game-asset-authoring.md`へ
+GA-0〜8/GA-X（静的mesh、UV/PBR/bake、LOD/collision、rig、animation、
+環境/VFX、engine delivery、Expert、統合release）と依存・実機gateを定義。
+エンジンは質問中で、未指定の間はgeneric GLB/glTF。ゲーム本体/engineの再実装ではない。
+PR #213の必須3DS/GOAL/A〜Fは維持し、単純なpropだけを全体完成とはしない。
+
+PR #359 merge25c6ce4からux1/3d-game-authoring-foundation。
+最初のsliceとしてobject.duplicate/modifier.mirrorを既存recipe@1へ加法追加。
+複製mesh datablockは独立、stable IDを新規予約、親/constraint/animation/shape-keyは拒否。
+mirrorはlocal/reference空間、unique XYZ、1個/object、merge距離はlocal mesh座標0〜0.1。
+事前の保守的geometry増幅予算1,000,000、mirror/bevel以外のmodifier付き増幅は拒否。
+既存の64操作、worker subprocess/timeout/cancel、独立GLB検査/immutable commitを保持。
+capabilityのsupported_operationsは同じrequest unionから導出し、未導入時は宣伝しない。
+公開create/edit/workflow JSON schemaとdocs/apiを同期。Hostやskill adapterには未変更。
+
+新診断scripts/3ds_game_static_e2e.pyをMediaForge自身のPython、
+PYTHONPATH=backend:.で実行。新しい専用data/registryだけを使い、runtime実体はread-only。
+最初はPYTHONPATH不足でimport失敗、その次は診断用JobRequestのasset.pack入力不足で停止。
+既存typed orchestrationと同じmedia.inspect記録へ修正後、
+/data1tb/mf-game-static-source-20260909-r2 はBlender4.5.9、1.677秒passed/exit0。
+/data1tb/mf-game-static-source-4.5.13-20260909 は既存managed4.5.13を専用registryへ登録、
+1.190秒passed/exit0。稼働環境のregistry/active版は変更していない。
+
+両方で左右支柱/梁を制作・後続transform編集し旧source hash不変。
+実Blender inspectorでdata独立性（copy vertex変更が元に影響しない）、
+材質slot独立性、mirror参照保持、評価済み60 triangles/X境界±1.2mをassert。
+独立GLB JSONも3 mesh nodes/60 triangles、6,864 B、
+SHA5d486108fbfb77b50638533d50e904aa6b214aa152393a18e33280cef1d57132で両runtime一致。
+新旧4 Assetの実hash/provenance対応も確認。実Blender/domain受入でありinstalled MCPではない。
+新14 testsでstrict入力、schema3種、ID重複、geometry予算、runtime有無とcapability対応を検証。
+初回全テストは未導入fixtureが既存legacyを検出して1 failed/1220 passed。
+未導入resolveを明示fixture化してfocused14件/contractとの34件はPASS。
+最終全 `./mf.sh test`:1221 passed/既知warning2/139.10秒、exit0。
+frontend build:viewer/node --check/diff check成功、viewer生成物差分なし。
+稼働Blender registryは0.28.45更新前backupとのbyte一致を再確認。
+
+installedは0.28.45のままで、この新2操作は未配布。
+GA-0の実director読込、GA-1全体、installed MCP/engine import/署名配布はNOT TESTED。
+次は本sliceの通常merge後、署名版を導入して実スキル→MCPでこの操作を受入し、
+array/Boolean/mesh編集と後続工程を計画の依存順で拡張する。
+
 ## 2026-09-09 installed authorization expiry and scope extension
 
 PR #358 merge b71291fからux1/3d-expiry-edit-recovery。

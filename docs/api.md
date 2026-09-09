@@ -515,7 +515,22 @@ Both workspace scene lists include owner-scoped `working_copies` for recovery UI
 Draft 2020-12 schemas are `schemas/scene-*.json`. Create/edit recipes accept at
 most 64 sequential operations from a closed vocabulary: primitive creation,
 meter-based dimensions/transform, stable object IDs, bounded bevel, Principled
-material, smart-project UV, light, and camera. No schema accepts Python, a
+material, smart-project UV, light, camera, independent mesh duplication
+(`object.duplicate`) and a bounded non-destructive mirror (`modifier.mirror`).
+Available `3d.scene_recipe.supported_operations` is derived from the same
+request vocabulary. Check the current schema/capability before sending a new
+operation to an older deployment; existing operations retain their meaning.
+Duplicate takes a source stable ID and a fresh target ID/name, with optional
+absolute transforms. It copies mesh data while retaining referenced materials;
+parent/constraint/animation/shape-key sources are not yet supported.
+Mirror takes unique X/Y/Z axes and an optional different reference object ID,
+otherwise uses the target origin. Merge threshold is 0..0.1 in local mesh
+coordinates (object scale affects world-space tolerance; 0 disables merge).
+At most one mirror per target. Static geometry growth uses a conservative
+1,000,000-unit vertex/triangle estimate before copying/adding a mirror; modifiers
+other than mirror/bevel must be applied before these growth operations.
+The existing worker timeout and independent output validation still apply.
+No schema accepts Python, a
 Blender operator name, shell text, URL, or filesystem path.
 
 Create, edit, and image MaterialBinding return a local durable Job reference

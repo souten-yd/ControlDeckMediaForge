@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -74,6 +74,44 @@ class BevelModifier(BaseModel):
     segments: int = Field(default=2, ge=1, le=8)
 
 
+class ObjectDuplicate(BaseModel):
+    """Copy a mesh to a new stable ID with independent geometry and absolute transforms."""
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["object.duplicate"]
+    object_id: ObjectId
+    source_object_id: ObjectId
+    name: str = Field(min_length=1, max_length=120)
+    dimensions: Dimensions3 | None = None
+    location: Vector3 | None = None
+    rotation_degrees: Vector3 | None = None
+
+    @model_validator(mode="after")
+    def distinct_ids(self) -> "ObjectDuplicate":
+        if self.object_id == self.source_object_id:
+            raise ValueError("duplicate requires a new stable object ID")
+        return self
+
+
+class MirrorModifier(BaseModel):
+    """Mirror mesh geometry in local or referenced object space; at most one mirror per object."""
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["modifier.mirror"]
+    object_id: ObjectId
+    axes: list[Literal["X", "Y", "Z"]] = Field(default_factory=lambda: ["X"], min_length=1, max_length=3,
+                                             json_schema_extra={"uniqueItems": True})
+    reference_object_id: ObjectId | None = None
+    merge_threshold: float = Field(default=0.001, ge=0, le=0.1,
+        description="Merge distance in local mesh coordinates; object scale affects world-space tolerance. Zero disables merge.")
+
+    @model_validator(mode="after")
+    def valid_axes_and_reference(self) -> "MirrorModifier":
+        if len(set(self.axes)) != len(self.axes):
+            raise ValueError("mirror axes must be unique")
+        if self.reference_object_id == self.object_id:
+            raise ValueError("mirror reference must be a different object")
+        return self
+
+
 class MaterialSet(BaseModel):
     """Assign a simple Principled BSDF material without external textures."""
     model_config = ConfigDict(extra="forbid")
@@ -128,9 +166,17 @@ SceneOperation = Annotated[
     | MaterialSet
     | UvSmartProject
     | LightAdd
-    | CameraAdd,
+    | CameraAdd
+    | ObjectDuplicate
+    | MirrorModifier,
     Field(discriminator="type"),
 ]
+
+
+def scene_operation_types() -> list[str]:
+    """Derive capability discovery from the same discriminated schema as requests."""
+    union = get_args(SceneOperation)[0]
+    return [get_args(model.model_fields["type"].annotation)[0] for model in get_args(union)]
 
 
 class SceneRecipe(BaseModel):
@@ -143,7 +189,7 @@ class SceneRecipe(BaseModel):
     def validate_object_references(self) -> "SceneRecipe":
         known: set[str] = set()
         for operation in self.operations:
-            if isinstance(operation, (PrimitiveAdd, LightAdd, CameraAdd)):
+            if isinstance(operation, (PrimitiveAdd, LightAdd, CameraAdd, ObjectDuplicate)):
                 if operation.object_id in known:
                     raise ValueError(f"duplicate object_id: {operation.object_id}")
                 known.add(operation.object_id)

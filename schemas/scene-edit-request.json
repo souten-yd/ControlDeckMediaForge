@@ -306,6 +306,204 @@
       "title": "MaterialSet",
       "type": "object"
     },
+    "MirrorModifier": {
+      "additionalProperties": false,
+      "description": "Mirror mesh geometry in local or referenced object space; at most one mirror per object.",
+      "properties": {
+        "type": {
+          "const": "modifier.mirror",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "axes": {
+          "items": {
+            "enum": [
+              "X",
+              "Y",
+              "Z"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Axes",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "reference_object_id": {
+          "anyOf": [
+            {
+              "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9._-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Object Id"
+        },
+        "merge_threshold": {
+          "default": 0.001,
+          "description": "Merge distance in local mesh coordinates; object scale affects world-space tolerance. Zero disables merge.",
+          "maximum": 0.1,
+          "minimum": 0,
+          "title": "Merge Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "object_id"
+      ],
+      "title": "MirrorModifier",
+      "type": "object"
+    },
+    "ObjectDuplicate": {
+      "additionalProperties": false,
+      "description": "Copy a mesh to a new stable ID with independent geometry and absolute transforms.",
+      "properties": {
+        "type": {
+          "const": "object.duplicate",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "source_object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Source Object Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "dimensions": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1000,
+                  "type": "number"
+                },
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1000,
+                  "type": "number"
+                },
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1000,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dimensions"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                },
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                },
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "rotation_degrees": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                },
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                },
+                {
+                  "maximum": 10000,
+                  "minimum": -10000,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rotation Degrees"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "source_object_id",
+        "name"
+      ],
+      "title": "ObjectDuplicate",
+      "type": "object"
+    },
     "PrimitiveAdd": {
       "additionalProperties": false,
       "description": "Add one bounded mesh primitive; dimensions and location are in meters.",
@@ -454,6 +652,8 @@
                 "light.add": "#/$defs/LightAdd",
                 "material.set": "#/$defs/MaterialSet",
                 "modifier.bevel": "#/$defs/BevelModifier",
+                "modifier.mirror": "#/$defs/MirrorModifier",
+                "object.duplicate": "#/$defs/ObjectDuplicate",
                 "primitive.add": "#/$defs/PrimitiveAdd",
                 "transform.set": "#/$defs/TransformSet",
                 "uv.smart_project": "#/$defs/UvSmartProject"
@@ -481,6 +681,12 @@
               },
               {
                 "$ref": "#/$defs/CameraAdd"
+              },
+              {
+                "$ref": "#/$defs/ObjectDuplicate"
+              },
+              {
+                "$ref": "#/$defs/MirrorModifier"
               }
             ]
           },

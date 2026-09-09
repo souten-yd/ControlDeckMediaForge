@@ -128,6 +128,7 @@ from .scene_recipes import (
     SceneJobReferenceRequest,
     SceneMaterialRequest,
     SceneReferenceRequest,
+    scene_operation_types,
 )
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .preferences import PreferenceError
@@ -1360,6 +1361,7 @@ def create_app(
                         "state": "available",
                         "implementation": "typed_blender_worker",
                         "schema_version": "media-forge.scene-recipe@1",
+                        "supported_operations": scene_operation_types(),
                         "local_only": True,
                     }
                     if blender_runtimes.resolve_g8() is not None

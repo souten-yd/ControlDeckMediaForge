@@ -812,6 +812,14 @@ If a proposed Media Forge feature bypasses ControlDeck's generic identity, proje
 
 ## 18. Integrated 3D Studio boundary (2026-09-05)
 
+2026-09-09 game-authoring expansion follows
+[the game asset plan](design-game-asset-authoring.md). New mesh/UV/material/rig/
+animation operations live in MediaForge recipes, schemas, workers and capability
+discovery, not Host routes or engine-specific executors. Keep the existing
+Agent MCP/Job/grant/provenance surface. Skill guidance must consult current
+schemas/capabilities rather than promise every upstream BlenderMCP operation.
+Any generic Host limitation is a separate PR; this plan does not change Host.
+
 The 3D Studio, texture authoring and server-side Web Blender are MediaForge features.
 Implementation, docs, shared assets/Jobs and release packaging remain in this repository.
 Keep the existing `media-forge` identity, service and workspace; do not register a second add-on.

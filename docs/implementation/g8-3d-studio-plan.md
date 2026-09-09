@@ -12,6 +12,10 @@ G9生成3Dモデル採用とは分離し、画像生成モデルの変更やSoni
 
 ## 1. 現状とギャップ
 
+2026-09-09追加依頼のゲーム制作向け拡張は
+[GA-0〜8/GA-X計画](../design-game-asset-authoring.md)で追跡する。
+本計画の必須GOAL/A〜Fを置換・縮小せず、型付き操作・rig/animation・engine受入を追加する。
+
 3DS-0の対象commit・fixture・実機互換性表は
 [`3ds-compatibility.md`](3ds-compatibility.md) に固定した。
 3DS-1は同表へruntime resolver、legacy登録、設定診断、G8同一hashの実測を追記した。
