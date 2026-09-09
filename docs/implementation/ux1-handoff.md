@@ -3,6 +3,33 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-09 installed authorization expiry and scope extension
+
+PR #358 merge b71291fからux1/3d-expiry-edit-recovery。
+既存診断へauth-expiryを追加。実Host opaque browserで専用sceneを1→2 meshesへ複製、
+製品120秒autosaveの成功後にviewだけ閉じる。Host診断環境で同ownerの正規署名service token
+TTL20秒を発行し、installed coreのRFB endpointへ接続（Host proxy経由とは区別）。
+実RFB banner後30.031秒で4403/host service token expired、30.309秒でhost_revoked。
+秘密tokenは出力・保存なし。実行:
+`scripts/3ds_save_conflict_cleanup_installed_e2e.py --scene-id
+scene_3f3b5f1e97e94b268722ea45cc811c50 --expected-version 0.28.45
+--failure-kind auth-expiry --evidence-dir /data1tb/mf-expiry-edit-installed-20260909`。
+passed=true/exit0、session blendersession_f6aa41d5d50545c8a6409f2c7f4b2547。
+全PID808034/808038/808081・cgroup/root/socket消滅、元scene/旧版hash不変。
+468,914 B/SHA4d4a6b4493fbdc9f4f04dd307da9f3ae5dda872600de25bb6c012d6ecec77bdfの
+候補からscene_971a177ed6725ec2b4fcdde225793ba4へ通常fork、source hash一致/検証2 meshes。
+
+重要: autosave後にも複製キーを送ったがpost-autosave-edit.pngのoutlinerは2 objectsのまま。
+raw observationsのrecovery_boundaryにある「post-autosave duplicate not retained」は
+過剰な結論なので採用しない。診断の記録文言をinput effect not assertedへ修正した。
+直前autosaveの回収は証明したが、その後の実編集の損失量はNOT TESTED。
+不正session/user入力をHost import/発行前に拒否する3 tests追加、
+全 `./mf.sh test`:1207 passed/既知warning2/140.97秒、exit0。
+
+利用者からゲーム制作に必要な機能全体の設計・実装開始を追加依頼された。
+次はbase-plan/統合設計にゲーム用asset制作拡張を追加し、MCP型付き操作を段階拡張する。
+エンジン未指定の間はGLB/glTF基準。既存3DSのidle/restart等の残件は削除しない。
+
 ## 2026-09-09 installed autosave failure, retry and crash recovery
 
 PR #357 merge `0fc4b0dc6e6fad3fb92064ee55885008f6b8a2ad`から

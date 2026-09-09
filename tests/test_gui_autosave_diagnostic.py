@@ -54,3 +54,12 @@ def test_fault_rejects_symlink_and_foreign_root(tmp_path: Path) -> None:
         with module.deny_owned_snapshot_write(candidate, foreign):
             pytest.fail("foreign root accepted")
     assert stat.S_IMODE(parent.stat().st_mode) == 0o700
+
+
+@pytest.mark.parametrize("session_id,user_id", [
+    ("../foreign", 16), ("blendersession_" + "a" * 32, 0),
+    ("blendersession_" + "a" * 32, True),
+])
+def test_expiry_identity_validation_precedes_host_import(session_id: str, user_id: int) -> None:
+    with pytest.raises(AssertionError):
+        diagnostic().expire_owned_gateway(session_id, user_id)
