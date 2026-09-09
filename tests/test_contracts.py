@@ -47,6 +47,27 @@ def test_job_schema_does_not_require_model_id():
     jsonschema.validate({"operation": "image.generate", "intent": "a blue robot"}, schema)
 
 
+def test_the_generate_contract_points_at_batch_and_at_the_asset_brief():
+    """一覧から media.generate を選ぶ側にも、二つのことを伝える。
+
+    ControlDeck は道具の説明を label と契約の description から作る。label は画面に
+    出す名前なので、そこには書けない。契約に書いていないと、一覧から media.generate
+    を選んだ使い手には届かない。
+
+    実際に起きた: OpenCode が sprite を 1 体ずつ media.generate で作り、載せ直しが
+    毎回発生し（media.generate.batch を使えば 1 回で済む）、しかも出来上がった
+    sprite に透過が付いていなかった（透過は constraints.asset_brief.role から
+    決まるのに、文言だけで頼んでいた）。
+    """
+    schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
+    text = schema["description"]
+    # 複数要るなら batch へ。
+    assert "media.generate.batch" in text
+    # 透過は文言ではなく asset_brief から決まる。
+    assert "asset_brief" in text
+    assert "alpha" in text
+
+
 def test_agent_tool_schemas_are_self_contained_for_model_decoders():
     manifest = json.loads((ROOT / "addon.json").read_text(encoding="utf-8"))
     for contribution in manifest["contributions"]["agent_tools"]:

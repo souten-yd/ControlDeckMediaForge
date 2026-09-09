@@ -445,7 +445,7 @@
       }
     }
   },
-  "description": "Ask for what the asset is FOR. Media Forge resolves the canvas, the prompt wording for whichever model is routed, and the model itself. Do not write provider-tuned prompts and do not name a model: an agent that knows one model's preferred phrasing produces worse output the day the routing changes.",
+  "description": "Ask for what the asset is FOR. Media Forge resolves the canvas, the prompt wording for whichever model is routed, and the model itself. Do not write provider-tuned prompts and do not name a model: an agent that knows one model's preferred phrasing produces worse output the day the routing changes.\n\nNeed more than one asset? Use media.generate.batch instead of calling this repeatedly. Every separate call makes the host unload and reload the language model around the generation; one batch call keeps the image model loaded for the whole run. For several variants of the SAME idea, output.count is enough.\n\nTransparency and geometry are resolved from constraints.asset_brief, not from the wording of intent. A sprite or emblem asked for in prose alone comes back opaque and square: set asset_brief.role ('sprite' and 'emblem' default to requiring alpha, 'background' to landscape and opaque).",
   "examples": [
     {
       "operation": "image.generate",
