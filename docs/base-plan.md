@@ -776,6 +776,25 @@ Stable Blender operations may include:
 
 ### 12.1 Safety
 
+2026-09-09 user extension: game-asset authoring is a product goal beyond the
+initial seven typed scene operations. Cover static props/environments,
+mesh editing, UV/PBR/baking, optimization/collision, characters/rigging,
+animation/morphs, procedural environment/VFX baking and engine delivery.
+See [game authoring plan](design-game-asset-authoring.md) for staged contracts
+and acceptance. This expands the roadmap; it neither declares PR #213 complete
+nor makes a simple substitute the completion of an unsupported complex request.
+Game engine/editor implementation itself is outside this Blender-asset scope.
+
+Use additive typed recipe operations for reproducible agent workflows and the
+existing isolated Web Blender for direct editing. A separately authorized Expert
+script path requires its own sandbox/escape/resource/credential acceptance;
+do not treat AST filtering or the existing seven-operation worker as that gate.
+Capabilities and schemas advertise the operations actually implemented.
+Keep generic GLB/glTF as the first interchange baseline until the user chooses
+an engine; engine-specific readiness requires a real import/playback test.
+No new model weights, Blender add-ons, external account or global config changes
+are authorized merely by the broader authoring goal.
+
 Do not directly execute arbitrary Blender Python emitted from a chat prompt in the long-running ControlDeck process.
 
 Use:

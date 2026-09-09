@@ -22,6 +22,7 @@ SceneForgeという製品名の採用も必須ではなく、画面の既定表�
 - [開発・管理・リリース規約](development-release-3d-studio.md)
 - [実装順序と受入条件](implementation/g8-3d-studio-plan.md)
 - [調査した参照リポジトリと現状差分](reference-3d-studio.md)
+- [ゲーム用アセット制作の拡張計画](design-game-asset-authoring.md)（2026-09-09利用者依頼）
 
 ## 2. 利用者に届けるゴール
 

@@ -14,6 +14,29 @@ import bpy
 
 FIXED = {"recipe.json", "source.blend", "scene.blend", "result.json"}
 MAX_OPERATIONS = 64
+MAX_GROWTH_GEOMETRY = 1_000_000
+
+
+def geometry_cost(obj: bpy.types.Object) -> int:
+    """Conservative pre-allocation estimate for the bounded static modifier vocabulary."""
+    if obj.type != "MESH":
+        return 0
+    cost = max(len(obj.data.vertices), sum(max(0, p.loop_total - 2) for p in obj.data.polygons))
+    for modifier in obj.modifiers:
+        if modifier.type == "MIRROR":
+            cost *= 2 ** sum(modifier.use_axis)
+        elif modifier.type == "BEVEL":
+            cost *= 24 * int(modifier.segments) + 48
+        else:
+            raise RuntimeError("apply unsupported modifiers before geometry growth")
+        if cost > MAX_GROWTH_GEOMETRY:
+            raise RuntimeError("recipe geometry growth budget exceeded")
+    return cost
+
+
+def check_growth(objects: dict[str, bpy.types.Object], added_cost: int) -> None:
+    if added_cost < 0 or sum(geometry_cost(obj) for obj in objects.values()) + added_cost > MAX_GROWTH_GEOMETRY:
+        raise RuntimeError("recipe geometry growth budget exceeded")
 
 
 def arguments() -> argparse.Namespace:
@@ -91,7 +114,7 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
     object_id = operation.get("object_id")
     if not isinstance(object_id, str):
         raise RuntimeError("recipe object ID differs")
-    if kind in {"primitive.add", "light.add", "camera.add"} and object_id in objects:
+    if kind in {"primitive.add", "light.add", "camera.add", "object.duplicate"} and object_id in objects:
         raise RuntimeError("recipe object ID already exists")
     if kind == "primitive.add":
         objects[object_id] = primitive(operation)
@@ -115,6 +138,23 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         bpy.context.scene.camera = obj
         objects[object_id] = obj
         return
+    if kind == "object.duplicate":
+        source = objects.get(str(operation.get("source_object_id")))
+        if source is None or source.type != "MESH":
+            raise RuntimeError("duplicate source is not a known mesh")
+        if source.parent is not None or source.constraints or source.animation_data is not None:
+            raise RuntimeError("duplicate of parented, constrained or animated mesh is not supported")
+        if source.data.shape_keys is not None or source.data.animation_data is not None:
+            raise RuntimeError("duplicate of shape-key or animated mesh data is not supported")
+        check_growth(objects, geometry_cost(source))
+        obj = source.copy()
+        obj.data = source.data.copy()
+        obj.name = str(operation["name"])
+        obj["media_forge_id"] = object_id
+        bpy.context.collection.objects.link(obj)
+        transform(obj, operation)
+        objects[object_id] = obj
+        return
     obj = objects.get(object_id)
     if obj is None:
         raise RuntimeError(f"unknown stable object ID: {object_id}")
@@ -126,6 +166,27 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         modifier = obj.modifiers.new(name="Media Forge Bevel", type="BEVEL")
         modifier.width = float(operation["width"])
         modifier.segments = int(operation["segments"])
+    elif kind == "modifier.mirror":
+        if obj.type != "MESH":
+            raise RuntimeError("mirror target is not a mesh")
+        axes = operation.get("axes", ["X"])
+        if not isinstance(axes, list) or not axes or len(axes) > 3 or any(a not in ("X", "Y", "Z") for a in axes) or len(set(axes)) != len(axes):
+            raise RuntimeError("mirror axes differ")
+        if any(m.type == "MIRROR" for m in obj.modifiers):
+            raise RuntimeError("only one mirror modifier per object is supported")
+        reference_id = operation.get("reference_object_id")
+        reference = objects.get(str(reference_id)) if reference_id is not None else None
+        if reference_id is not None and (reference is None or reference is obj):
+            raise RuntimeError("mirror reference differs")
+        threshold = float(operation.get("merge_threshold", 0.001))
+        if not math.isfinite(threshold) or not 0 <= threshold <= 0.1:
+            raise RuntimeError("mirror merge threshold differs")
+        check_growth(objects, geometry_cost(obj) * (2 ** len(axes) - 1))
+        modifier = obj.modifiers.new(name="Media Forge Mirror", type="MIRROR")
+        modifier.use_axis = tuple(axis in axes for axis in ("X", "Y", "Z"))
+        modifier.use_mirror_merge = threshold > 0
+        modifier.merge_threshold = threshold
+        modifier.mirror_object = reference
     elif kind == "material.set":
         if obj.type != "MESH":
             raise RuntimeError("material target is not a mesh")

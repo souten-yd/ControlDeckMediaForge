@@ -1,0 +1,111 @@
+# ゲーム用アセット制作 — 設計・実装計画
+
+Date: 2026-09-09
+Status: 利用者依頼に基づく拡張計画 / GA-1最初のslice着手
+
+## 1. 目標と「全部」の範囲
+
+利用者の「ゲーム制作に必要そうな機能は全部使えるようにしたい」を、
+Blender/MCPの文脈で**ゲーム用アセットの制作からエンジンへの受渡しまで**
+として扱う。ゲーム本体のロジック・エンジン・レベルエディタをMediaForge内に再実装しない。
+静的な小物だけを作れる状態を、この拡張全体の完成とはしない。
+エンジン・ジャンル・対象機器は未指定。まずGLB/glTFを基準にするが、
+Unity/Unreal/Godotへの対応を、ファイル生成だけで確認済みとはしない。
+
+上位の正はbase-plan §12、Host境界はcontroldeck-integration-plan §18。
+PR #213のGOAL-01〜10・3DS-0〜8・A〜Fは独立に保持し、残件を本計画で消さない。
+3DS-X（Expert）と従来後続扱いのリグ/アニメーション等を本計画の段階へ明示する。
+G9の生成3Dモデル、外部アセットのライセンス同意は別ゲートのまま。
+
+## 2. 方針と選択理由
+
+実行機能をMediaForge側へ拡張するCを主軸とし、Blender Skillsの制作知識は
+ControlDeck向けadapter（B）で利用する。BlenderMCP常駐/addon/9876を別に導入するAは採らない。
+既存のJobs/immutable revision/権限/Broker/停止/署名配布を一つの経路で守れるためである。
+工程説明だけで終わらず、MCPで実行・検証・Asset参照まで返す。
+
+- 通常のエージェント操作: bounded typed recipes。各段階でschemaを加法拡張。
+- 手作業: 既存の隔離Web Blender。Blenderで操作できることとMCPから操作できることは別に表示。
+- 複雑な手順: trusted templateとして型付き公開、または別権限のExpert script。
+  任意Pythonを既存recipeへ紛れ込ませず、脱出negative/resource/cancelゲート後にだけ提供。
+- スキル: 実際のoperation一覧/schemaと現在のscene snapshotを読む。
+  上流94スキルの存在は94種の実行対応の証明ではない。実際にdirectorを読み込んだ
+  OpenCode traceと生成物を受入証拠にする。固定7操作の説明の更新経路も検証する。
+- UI: Createは指示中心、Library/Activity/Settingsは共通。別addon/DB/ノードエディタは作らない。
+
+## 3. 段階・依存・成果物
+
+| 段階 | 制作できるもの / 実装対象 | 依存 | 実機のexit gate |
+|---|---|---|---|
+| GA-0 | operation/schema/capability対応表、予算・品質profile、skill実読込証拠 | 既存3DS | 新旧クライアントのschema互換、未対応を実行可と出さない |
+| GA-1 | 静的prop/建物: 複製、mirror/array/Boolean、join/delete、適用transform/origin、選択付きextrude/inset/bevel、curve、cleanup/normals | GA-0 | 対称武器/家具/モジュール壁をMCPで制作、寸法・triangle・実GLB再import、旧版不変 |
+| GA-2 | sculpt/high-polyとretopology、UV編集・seam/unwrap/pack、texel density、複数material slot、全PBR channel、atlas、high→low normal/AO等bake | GA-1 | 既存/生成画像を貼る→比較→採用/破棄→再実行。UV/色空間/normal方向/依存hash、low-poly形状とhigh-polyとの差の確認 |
+| GA-3 | ゲーム向け最適化: LOD、triangulation、collision proxy、socket/pivot、instance/mesh統合、budget report | GA-1/2 | 各LODの実triangle/境界、collision形状、mesh/material/texture memory予算、manifestと実bytes一致 |
+| GA-4 | キャラクター: armature/bone hierarchy、bind/weight painting、自動weightと補正、IK/FK、pose、morph/shape keys | GA-1/2 | 関節変形の実pose比較、joint/weight正規化、未重みvertex/影響数制限、skinned GLB再import |
+| GA-5 | アニメーション: keyframe/action/clip、NLA/bake、loop、root motion、retarget、morph animation | GA-4 | 待機/歩行/攻撃clipの再生、duration/fps/loop境界/root差分、エンジン再生と旧clip保持 |
+| GA-6 | 環境/VFX: terrain/foliage/scatter、procedural trusted templates、simulation bake、flipbook/sprite/impostor | GA-1/2/3 | seed再現、instance上限、cache予算、cancel/解放、ゲームで再生可能なbaked出力 |
+| GA-7 | engine delivery: generic package、選択engine向けscale/axis/material/rig/collision/LOD設定、import report、必要形式のFBX/OBJ等import/export | GA-3/5/6 | 正規grant/receipt、実engineでstatic/skinned/animated asset取込、表示/再生/衝突確認。形式追加はparser/外部URI/autoexec/容量のnegative受入後 |
+| GA-X | Expertのscript artifact/別権限/OS隔離・capability | 3DS-X隔離仕様/資源管理 | filesystem/network/credential/process脱出拒否、timeout/cancel/出力上限、再現可能provenance |
+| GA-8 | 統合受入・署名配布/導入・回帰 | 全必須段階 | 代表static/character/environmentをskill→MCP→制作→engineまで完走、update/rollback/旧asset保持 |
+
+GA-4等は「BlenderのGUIにメニューがある」だけで完了にしない。
+GA-Xは通常操作を実装しない言い訳にしない。特定機能をExpertだけで満たす場合は
+用途、権限、実行手順、再現性、残る制限を個別に記録する。
+動画/音声は既存MediaForge/SonicForge公開契約を使う。音声内部codeや第二生成基盤は作らない。
+
+## 4. GA-1最初のslice — 複製とミラー
+
+静的prop制作の基礎としてobject.duplicateとmodifier.mirrorを追加する。
+既存media.scene.create/editのrecipe@1を加法拡張し、既存7操作の意味は変えない。
+旧bundleは新operationを拒否する。クライアントはavailableなsupported_operationsと
+現在配信されたschemaを確認し、古いHost/workerへ新operationを送らない。
+
+| operation | 入力 / 意味 | 上限・拒否 |
+|---|---|---|
+| object.duplicate | source_object_id→新object_id/name、任意のabsolute location/dimensions/rotation。mesh datablockを独立copyし元geometryを保護 | meshのみ、同ID/既存ID/不明sourceを拒否。親/constraint/animation/shape-key付きsourceは今回未対応として拒否 |
+| modifier.mirror | object_id、重複なしaxes(X/Y/Z)、任意reference_object_id、merge_threshold。非破壊modifier | meshのみ、自己reference/不明referenceを拒否。1 objectにつきmirror1個、axes最大3、merge距離はlocal mesh座標で0〜0.1 |
+
+ミラーはlocal origin、reference指定時はそのobject座標系を基準にする。
+merge距離のworld換算はobject scaleの影響を受ける。メートル指定と偽らない。
+中心に対称なcubeをさらにmirrorしただけで、意図した形状ができたと扱わない。
+複製はmeshを独立にするが材質Assetは共有参照。copy後の材質差替えが元objectのslotを変えないことを確認。
+従来どおり64操作/recipe、workerのtimeout/cancelと独立GLB検証を維持。
+新機能の増幅は事前geometry予算で拒否し、巨大allocation後の検証だけに頼らない。
+
+初回fixtureは左右支柱と梁の小型ゲート。複製先の変形が元geometryを変えないこと、
+ミラーの実評価geometry/GLBに左右があること、stable IDs/材質/旧版hashを検査する。
+ユニット・契約試験の後、実Blender worker/domain、署名installed MCP/OpenCodeへ順に進む。
+このsliceだけでarray/Boolean/rig/animation/GA-1全体完成としない。
+
+## 5. 契約・安全・リソース
+
+- schemaはschemas/、docs/apiと同期。追加operationと旧fixtureを両方検証する。
+- 依存objectはstable ID、選択はbounded selector。任意bpy path/operator文字列/評価式を受けない。
+- 選択集合、vertices/triangles、modifier増幅、texture総画素、bones/weights、frames/clips、
+  simulation cache、出力bytesを工程前に制限し、評価済み結果を独立検査する。
+- CPU/GPU経路を区別。GPUは処理の存続期間に対応するHost leaseとestimated_runtime_sec、
+  renew、取消時の実process回収。別stageのleaseを持ったまま待たない。
+- 追加の同期DB/filesystem/Blender処理をasync event loopへ入れない。
+- 任意スクリプトは既存Web Blenderの存在だけで安全宣言しない。
+- 稼働中Blender、外部install、利用者global設定・鍵・重みを勝手に変更しない。
+- 依存・source/commit/hash/licenseは固定。未導入や未検証はunavailable/planned。
+- scene/asset/revision/job基盤を再利用。失敗は新revisionをcommitせず候補・理由を保持。
+
+## 6. 利用者の操作・モバイル
+
+MCP: 「門を作る」→構造/予算→typed制作→preview→画像貼付→比較採用→engine export。
+複雑な未対応依頼は不足工程を具体的に示し、簡略物を元依頼の完成品と偽らない。
+Web: 選択sceneから同じ版を開いて詳細編集、保存/復旧/停止を一貫させる。
+モバイル: Libraryの±XYZ/zoom・依頼・進捗/停止・設定を維持。
+現行767px以下のGUI起動禁止はフルGUI対応ではない。将来の入力補助/
+全画面/タッチ・キーボード/背景復帰を別受入し、PC推奨という説明だけで対応済みにしない。
+
+## 7. 完了証拠と管理
+
+各sliceに実行command、exact commit/runtime、fixture、実測、NOT TESTED、
+既存画像/G8/3DS回帰、PR、署名release/installed版を記録する。
+同じ制作物で作成→材質→最適化→rig/animation（該当asset）→engine取込を追跡する。
+機械検査は見た目・関節変形・ゲーム内品質の代替ではない。
+各engineの対応表は対象version/import設定を固定し、実機検証後だけ更新する。
+計画・コード・テスト・公開・導入・実使用確認の状態を分離し、
+予定日や全機能対応を根拠なく約束しない。
