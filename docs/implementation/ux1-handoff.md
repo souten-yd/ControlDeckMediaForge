@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.55 signed/installed and real-CDN repair
+
+準備PR #405 merge/tag aa940cd4e569c19216cee37bb03f8c99cf8ccf18、ux1/release-0-28-55-acceptance、記録PR作成前。
+exact release checkout/build/audit/sign/public4files再取得/実Host署名検証/標準updateまで実施。
+31,537,666B/SHA f6b4c31dd30e459b61face3b63772f2c71a6de697bdd60ea17e3310cbe5c716a。
+build/publicは /data1tb/mf-0.28.55-{build,public}-20260910、audit抽出package-k44om2jl。
+全idle/backup/再照合後update10.698秒healthy、DB全table/registry不変、backup mf-0.28.55-update-4i5zx261。
+Host1141433保持、MF1152101。標準保持で.53実行bundleだけ整理/.54保持、user通知済み。
+installed inactive4.5.9のcacheだけ退避して正規repair、実CDN転送/実probe/同版公開58.081秒/exit0。
+証跡 mf-repair-download-installed-0.28.55-20260910、operation4335ed440ad847d98aa16ec90dd42348。
+47scenes/162revisions/旧版関連64hash保持、既定4.5.13不変、旧exe inode45649239へ同SHA修復。
+health download70samples p95 .967ms/max1.072ms。registry/Host/MF PID不変、cache backup保持。
+準備gate1384 tests/165.44秒/build/Node5。記録sliceは文書のみ。全D/3DS/GA PARTIAL。
+次はDの容量不足/改ざん/中断残件とmetadata I/Oを照合して進める。
+NOT TESTED: 今回browser/installed重複取消/Web pack実download/物理ENOSPC/全setup off-loop。
+
 ## 2026-09-10 v0.28.55 preparation
 
 base PR #404 merge96b7d0e13d4292497629dc124b1accb7d0c1914e、ux1/release-0-28-55、PR作成前。

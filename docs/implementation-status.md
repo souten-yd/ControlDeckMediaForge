@@ -1,5 +1,52 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.55 signed release and installed real-CDN repair
+
+準備PR #405 merge/tag aa940cd4e569c19216cee37bb03f8c99cf8ccf18を
+`/data1tb/ControlDeckMediaForge-release-0.28.55` へexact checkout。既存bundle-build環境で
+build_release_bundle.py --version 0.28.55 --output-dir /data1tb/mf-0.28.55-build-20260910 を実行。
+PyInstaller6.22.0/Python3.12.3、artifact31,537,666 B、SHA
+f6b4c31dd30e459b61face3b63772f2c71a6de697bdd60ea17e3310cbe5c716a。
+外部mf-0.28.55-audit.pyでCArchive202 entries、禁止path/生成物・秘密値拡張子の検査、
+certifi公開PEM一致、worker/schema/frontend source bytes一致、packaged doctor ok/0.28.55を確認。
+PYZの既存修復guard/参照cleanup/RFB/monitorと新_download_io/_append_download_chunkの同梱を監査。
+code nameの構造監査を重複取消のinstalled動的試験と混同しない。
+audit抽出先はmf-0.28.55-package-k44om2jl、verification.jsonはbuild配下。
+
+既存publisher鍵（0600）で正規sign、tag v0.28.55/public通常releaseを公開。
+公開4filesを `/data1tb/mf-0.28.55-public-20260910` へ再取得し、build bytes一致/実Host署名検証。
+別image.edit2件の自然成功を確認し、Job/GUI/runtime操作の全idle→SQLite backup/全table照合→
+再度idle/fingerprint/registry照合後に標準release_bundle.installを実行した。
+
+```bash
+CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml PYTHONPATH=/data1tb/ControlDeck/app/backend /data1tb/ControlDeck/app/.venv/bin/python /data1tb/mf-0.28.55-install.py
+```
+
+10.698秒/exit0で0.28.55 healthy。backup/evidenceは `/data1tb/mf-0.28.55-update-4i5zx261`。
+DB全table/registry bytes不変、MFは1116213→1152101、Host1141433は更新前後で不変。
+本turn開始時点でHostは以前の667000から1141433へ変わっていた。こちらからHost/PC再起動は行わない。
+標準保持で0.28.53実行bundleのみ整理、0.28.54/.55保持。制作data削除なし、公開releaseから再取得可能と通知。
+
+導入後 `/data1tb/mf-0.28.55-repair-download.py` を実行。idleとinactive4.5.9/live0を再確認し、
+既存の正しいarchive cacheだけを証跡dirへrename退避。runtime自体を先に削除しない。
+正規loopback workspace APIから4.5.9 repairを開始し、実CDN→書込進捗→hash/展開→実probe→同版公開を確認。
+証跡 `/data1tb/mf-repair-download-installed-0.28.55-20260910`、58.081秒/exit0。
+operation blenderop_4335ed440ad847d98aa16ec90dd42348。
+downloading0.286→verifying36.409→installing45.706→probing57.073→ready57.589秒。
+377,929,956 B/SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d、
+退避cacheとも一致。実probeは6,510members/1,168,332,002 B/Blender4.5.9/GLB入出力成功。
+health112 samples全healthy。download中70 samplesのp95（nearest rank）0.967ms/max1.072ms。
+これはloopback HTTP healthでありGUI入力遅延や全setup off-loop保証ではない。
+47scenes/162revisions投影、旧4.5.9関連64 asset/provenance hashes、registry bytes保持。
+旧実行fileは同SHAのままinode46020227→45649239（同版修復）。既定4.5.13/SHA/inode46028345不変。
+Host1141433/MF1152101はrepair前後でも不変。元cacheは証跡dirへ保持し、新cacheは検証済み同bytes。
+独立read-only比較でも更新backup対比の全scene/revision投影、64hash、registry一致、未終端runtime操作0を確認。
+managed staging/removingも空であることを再照合した。
+
+準備gateは1384 tests/165.44秒/build/Node5成功。この受入記録は文書のみ、全test再実行とはしない。
+NOT TESTED: 今回のopaque browser操作、installed重複取消、Web pack実download、物理ENOSPC、
+改ざん/中断全matrix、全setup off-loop、全D/3DS/GA。次はD失敗matrixの不足とmetadata I/Oを照合する。
+
 ## 2026-09-10 v0.28.55 release preparation
 
 base PR #404 merge96b7d0e13d4292497629dc124b1accb7d0c1914e、ux1/release-0-28-55。
