@@ -1,5 +1,46 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed newer update candidate failure and retry
+
+base PR #411 merge13f98cfe5b2a3560332b3bf0b5555aa34d3e1767、ux1/3d-installed-newer-update。
+別image Job job_f24a44f8ea4642b99ef171ef032cffb4のrunningを確認し、変更せず自然succeededを待った。
+全Job/GUI/runtime idle、4.5.13参照45scenesが全てuser:16、378,033,952 Bの固定cache SHAを確認。
+外部診断 /data1tb/mf-update-failure-0.28.55.py を準備し、実core child1152107/parent1152101、
+current0.28.55、展開済みtrusted preflightのSHA/argvを照合して実行した。
+
+```bash
+CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml PYTHONPATH=/data1tb/ControlDeck/app/backend DISPLAY=:0 XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3 /data1tb/ControlDeck/app/.venv/bin/python /data1tb/mf-update-failure-0.28.55.py
+.venv/bin/python /data1tb/mf-update-failure-0.28.55-audit.py
+```
+
+証跡 `/data1tb/mf-update-failure-installed-0.28.55-20260910`。専用user:16ログインのみ作りfinally revoke。
+SQLite/registry backupと全47scene/162revision/関連688hashを記録し、既定を一時4.5.9へ切替。
+英語Settingsの履歴確認checkbox/Removeでinactive4.5.13のみ削除（1,167,754,332 B）。
+全scene/history/hash保持後、同acceptance-swordの4.5.9 GUIを起動、実RFB1310colors。
+GUI session bea1375825134eb7ba2410c12d2e0a24/PID1167503を維持してaction=updateを実行。
+5dd93be5c853449c9088a2b09441efb4の新候補probe PID1168098だけをpidfd SIGTERMし、
+failed/blender_runtime_install_failedを確認。旧GUI ready/同PID/hash/inode46146687、全履歴/hash保持。
+次のupdate83518b1544c646c9aaec10e969666808は正常probe/ready、既定4.5.13へ切替後も同GUIは4.5.9。
+162.906秒のother_install_preserved_guiに結果を記録。4.5.13実GLB入出力成功、page errors0。
+gui-after-other-install.pngを目視し、Blender4.5.9画面/同scene objectsを確認。手編集の試験ではない。
+
+ただし診断終了時のregistry bytes完全一致assertが失敗し、元runは163.233秒/login回収/**exit1**。
+成功stageを含むが、最上位passed=falseをそのまま保持する。無条件に再実行しない。
+差分を読むと、削除/再登録した4.5.13がruntimes配列の末尾になっただけだった。
+register_managedは新規rowをappendし、resolve_active/resolve_registeredはIDで検索する。
+G8候補4.5.9同士の相対順序も変わっていない。配列順を元へ手書き復元せず、独立auditで
+重複IDなし・全top-level fieldsと全runtime rowの一致・既定版保持を照合した。
+independent-audit.jsonはaudit_passed=true/exit0、registry_identity_equal=true/bytes_equal=false。
+backup対比で全47scene/162revision投影、688file SHA保持、旧exe SHA/inode維持、新exe固定SHA一致。
+候補/GUI PID消失、GUI stopped、staging/removing空/未終端runtime操作0、両managed ready/health healthy。
+Host1141433/MF1152101保持。新版runtimeは正規updateで復元済み、制作物/外部runtime削除なし。
+
+製品の更新保護と独立監査は成功したが、元診断全体のexit0とは記録しない。
+文書のみのPR、全test/build・新releaseなし。変更のない基準はPR #408の1387tests/146.39秒/build/Node5。
+NOT TESTED: 更新中の手編集、自然発生probe故障、全scenario D/3DS/GA。
+D-01/02のinstalled旧→新版差分を補完。次はEの自然な120秒超制作と既存refresh証跡を照合し、
+人工queue待機ではない専用制作Jobの受入を進める。Dのsource/package限定条件は表に維持する。
+
 ## 2026-09-10 scenario D requirement-to-evidence audit
 
 base PR #410 merge5eea4845e731bd5fc6dce9f1b83c78afe700ecfb、ux1/3d-runtime-evidence-audit。

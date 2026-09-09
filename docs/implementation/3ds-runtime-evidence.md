@@ -17,8 +17,8 @@ installedはHostが管理する稼働版。これらを互いに読み替えな�
 
 | ID / 必須条件 | 実データで確認した証拠 | 範囲・残件 |
 |---|---|---|
-| D-01 A稼働中にBを導入してAを維持 | `mf-owned-probe-failure-source-20260910-r2`: 4.5.9の同sessionをready/pinnedのまま4.5.13 updateがready。`mf-parallel-runtime-installed-0.28.53-20260910-r2`: 4.5.13 GUI中に4.5.9 exact install、同PID/hash/inode/RFB画素を保持 | source旧→新版update確認済み。installedは逆方向exact installであり、旧→新版update/既定切替のinstalled確認は残る |
-| D-02 B probe失敗でもAが使用可能 | 前者のcandidateだけpidfd SIGTERM、update failed後にAの実GLB入出力probe/同session ready、正常retry。`mf-probe-failure-installed-0.28.53-20260910`: 候補4.5.9 probe失敗→retry中も4.5.13 GUI/PID/hash保持 | sourceの旧→新版とinstalledの逆方向で確認済み。故障は意図的な候補終了。installed旧→新版はD-01と合わせて残る |
+| D-01 A稼働中にBを導入してAを維持 | `mf-owned-probe-failure-source-20260910-r2`: 4.5.9の同sessionをready/pinnedのまま4.5.13 updateがready。`mf-parallel-runtime-installed-0.28.53-20260910-r2`: 4.5.13 GUI中に4.5.9 exact install、同PID/hash/inode/RFB画素を保持 | installed旧→新版も0.28.55で追加確認済み（下記追記）。元診断exit1と独立audit exit0を区別。自然故障/更新中手編集は未検証 |
+| D-02 B probe失敗でもAが使用可能 | 前者のcandidateだけpidfd SIGTERM、update failed後にAの実GLB入出力probe/同session ready、正常retry。`mf-probe-failure-installed-0.28.53-20260910`: 候補4.5.9 probe失敗→retry中も4.5.13 GUI/PID/hash保持 | installed旧→新版も0.28.55で追加確認済み（下記追記）。元診断exit1と独立audit exit0を区別。自然故障/更新中手編集は未検証 |
 | D-03 参照中のA削除を拒否 | `mf-stale-removal-after-ack-installed-0.28.54-20260910`: GUI開始後、古い確認はremove_changed、新確認+履歴同意もin_use。`mf-job-removal-installed-0.28.54-20260910`: 実Host child受付後live3で同じ2拒否、正規取消後live0 | installed GUI/Job双方確認済み。今回は再実行していない |
 | D-04 停止後、追加確認付きでAのみ削除し履歴保持 | `mf-history-installed-0.28.52-20260910-r2`: 日本語320pxの設定から4.5.9を実削除、旧scene/revision/asset hashes保持。`mf-removal-first-job-source-20260910`: 停止だけではproject_reference拒否も記録 | installed明示削除とsource既定拒否を区別。履歴や旧pinを削除して通した試験ではない |
 | D-05 確認前後にGUI/Jobが開始しても再拒否 | 上記GUI after-ackと `mf-stale-removal-installed-0.28.53-20260910` のbefore-ack、上記Jobのstale/fresh確認 | installedで確認済み。GUIとJobを同じプロセス参照の証拠として混同しない |
@@ -33,7 +33,16 @@ installedはHostが管理する稼働版。これらを互いに読み替えな�
 
 ## 次の不足と停止条件
 
-1. 次の実機sliceはD-01/02の**installed旧→新版update**を対象にする。
+2026-09-10追記: **D-01/02のinstalled旧→新版updateを補完済み**。
+`mf-update-failure-installed-0.28.55-20260910`で4.5.9 GUI稼働中に4.5.13 update候補をpidfd SIGTERM、
+失敗後も旧GUI/同PID/hash維持、正常retry→既定4.5.13でも旧GUIは4.5.9固定。
+47scene/162revision/688hash保持。元runはregistry配列順のbytes assertでexit1、
+別independent-audit.jsonは全登録項目のID単位一致、履歴/hash、プロセス回収を確認してexit0。
+元runのpassed=falseは保持し、更新成功と診断cleanup assertionを区別する。
+上表D-01/02の「installed旧→新版が残る」はこの追記で解消。自然故障/更新中手編集は未検証。
+次はEの自然120秒超制作へ進む。D-06/07/09/11のscope制限はそのまま残す。
+
+1. D-01/02の**installed旧→新版update**で用いた準備条件（今後の無条件再実行指示ではない）:
    A=4.5.9の専用scene GUI中にB=4.5.13候補を検査し、候補probe失敗→正常retry→既定BでもA固定を確認。
    現在Bが導入済みなので、既存Bをそのままprobeする短絡経路だけで「並行導入成功」にしない。
    準備にB削除が必要なら、全Job/GUI/runtime idle・全履歴pin・正しい同版cache・backup・
