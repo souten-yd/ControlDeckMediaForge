@@ -1,5 +1,50 @@
 # Media Forge implementation status
 
+## 2026-09-10 texture admission failure and Host terminal notification
+
+前turnはPR #415 merge3f4250076c2032a667dd61e2643af21578840494と実機候補調査。
+branch ux1/3d-texture-workload-acceptance。installed0.28.56/MainPID1176927、core1176932。
+実bundleのimage/models.jsonとimage/worker.pyはsource SHA一致。Host/API timeoutは現行600秒、
+MediaForge resource admission HTTP timeoutは120秒であり、異なる上限を混同しない。
+
+外部診断 `/data1tb/mf-natural-texture-0.28.56.py` は、正規Agentで専用panelを作成:
+scene_c19a0c389d974517b04c8eced93b0355 / revision_14e53598da744f80971ee53c94f4a19e。
+画像workflow受付0.061秒、2048角/4候補/autoは測定済みmodel envelopeを超えてresource_limit。
+job_ec85b76f34234e0e9523736cfb153d15/Host88e5a0d5558eは両failed、画像生成なし、診断exit1。
+上限を変更せず、同sceneを再利用した1024角/1枚/qualityを
+`/data1tb/mf-natural-texture-quality-0.28.56.py` で正規workflowへ受付（0.024秒）。
+新weights/driver/個人設定の変更なし。job52c5bcd2827a4771a458c6f9d6b9ccdfは120.249秒で
+host_unreachable/ReadTimeout、generating未到達、画像0件、診断exit1。長時間制作成功ではない。
+
+Host DB/APIを読み、Host56526e9b5e5eがrunningのまま、request
+cdf707ce-65f2-40b1-b5ac-6aa08b86a24eがwaiting/held_by_other_owner、leaseなしと確認。
+blockingには稼働LLM Qwen3.8-27Bが記録されていた。LLMを停止せず、requestの応答が
+120秒内に届かなかった原因全体は未確定とする。診断専用user16/Jobとの一致を照合後、
+`/data1tb/mf-natural-texture-cleanup-0.28.56.py` で正規DELETE→canceled、Host PATCH→failed。
+cleanup.jsonに手動診断回収と明記。製品の自動回収成功とは扱わない。
+証跡は `/data1tb/mf-natural-texture[-quality]-installed-0.28.56-20260910`。
+
+原因の一つはJobManager._acquire_host_leaseのHostApiError処理がreporter=Noneで
+所有Host Jobへの失敗通知を省いていたこと。既存_updateへreporterを渡すよう修正。
+Host通知も失敗した場合は既存のlocal失敗保存を維持し、attached親Jobを勝手に終端化しない。
+既存拒否testへHost終端assertを追加、transport/response失敗×owned/attachedの4ケースを追加。
+修正前3 FAILED、修正後対象5 PASS。新同期I/O/Host変更/公開schema変更はない。
+
+外部 `/data1tb/mf-admission-terminal-source-20260910.py` はsource manager→実Host HTTPで検証。
+admission失敗だけ注入。Host e14fa434e746/local job40a11359ce4b4029a099fcd3238cf2f5が
+両failed、worker0/asset0、0.060秒/exit0。元診断はimport設定の不足で副作用前失敗、
+続くStore.initialize忘れでHost作成後に失敗。同じ所有Host Jobを照合・再利用して回収し、
+observations.jsonにその事実を保持した。診断Host venvはtoken発行のみ、stdin pipeで
+MediaForge venvへ渡し、tokenをfile/log/argvへ保存しない。製品環境を混用しない。
+
+`./mf.sh test`: 1392 passed / 2既存warnings / 150.11秒 / exit0。
+`npm run build:viewer`: exit0、生成物差分なし。git diff --check成功。
+今回の修正はまだ署名配布・installed受入前。既存UX状態は変更しない。全3DS/GA/EはPARTIAL。
+NOT TESTED: 自然120秒超生成、材質候補の採用、画像品質、今回OpenCode/browser/engine、
+応答喪失時の不明request IDの自動回収、Host再不通時の終端outbox。
+次: この修正の署名配布・installed失敗通知受入と、admission応答喪失後の予約回収契約を調査。
+Hostが発行した不明request IDを推測せず、必要な汎用Host変更は別PRとする。
+
 ## 2026-09-10 natural authoring workload calibration (120-second gate not met)
 
 前turnはPR #413 merge8fbcdfd5c6d416b4418fe06c3b7ccf440bf0c039まで進捗。

@@ -2512,7 +2512,10 @@ class JobManager:
         except HostApiError as exc:
             await self._update(
                 job.id,
-                reporter=None,
+                # Admission can fail while the Host Job API remains reachable.
+                # Keep the owned child terminal in sync; _update preserves the
+                # local failure even if this best-effort notification also fails.
+                reporter=reporter,
                 status=JobStatus.FAILED,
                 phase="waiting_resource",
                 error=ErrorDetail(code=exc.code, message=str(exc)[:300]),

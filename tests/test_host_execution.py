@@ -918,6 +918,40 @@ def test_host_resource_rejection_fails_before_worker_start(tmp_path: Path):
             assert terminal["error"]["code"] == "host_request_rejected"
             assert client.app.state.jobs._processes == {}
     assert state["lease_actions"] == []
+    assert state["jobs"]["host-created-1"]["status"] == "failed"
+
+
+@pytest.mark.parametrize("token", ["valid-user", "valid-job"])
+@pytest.mark.parametrize("code", ["host_unreachable", "invalid_host_response"])
+def test_admission_transport_failure_reports_only_owned_host_terminal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, token: str, code: str,
+) -> None:
+    client, headers, state = host_client(tmp_path, token=token)
+
+    async def unavailable(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise host_client_module.HostApiError(code, "resource admission response unavailable")
+
+    monkeypatch.setattr(client.app.state.jobs.host_client, "request_resource", unavailable)
+    with client:
+        response = client.post(
+            "/addon/v1/workflow/media.generate/execute",
+            json={"input": generate_input("texture admission failure")}, headers=headers,
+        )
+        assert response.status_code == 200
+        terminal = wait_terminal(client, response.json()["job_id"])
+        assert terminal["status"] == "failed"
+        assert terminal["error"]["code"] == code
+        assert terminal["asset_ids"] == []
+        assert client.app.state.jobs._processes == {}
+    host_id = "host-created-1" if token == "valid-user" else "host-agent"
+    updates = [item for item in state["job_updates"] if item["job_id"] == host_id]
+    if token == "valid-user":
+        assert state["jobs"][host_id]["status"] == "failed"
+        assert updates[-1]["error"] == "resource admission response unavailable"
+    else:
+        assert state["jobs"][host_id]["status"] == "running"
+        assert not any("status" in item for item in updates)
+    assert state["lease_actions"] == []
 
 
 # ── G4H A4: 複数資産の配置と受領書 ──────────────────────────────────────
