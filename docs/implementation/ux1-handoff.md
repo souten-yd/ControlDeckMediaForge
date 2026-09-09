@@ -3,6 +3,18 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.54 release preparation
+
+base PR #397 mergef48f5db04f88627612ca8672df4d9d25a4e75d37、ux1/3d-release-0-28-54。
+前turnは重複取消参照漏れ修正/実受入/mergeまで進捗。addon/core版を0.28.54へ揃えた。
+docs/release-v0.28.54.md追加、API/DB/runtime版変更なし。本修正はまだ未配布。
+次は準備PRの通常merge exact commitからbundle build/監査/署名/公開再取得、
+idle/SQLite backup/再確認後に標準update・installed受入。全3DS/GA PARTIAL。
+全1361 tests/2 warnings/139.39秒/exit0、viewer build差分なし、Node5/diff check成功。
+ephemeral /data1tb/mf-0.28.54-{audit,install}.py準備/py_compile済み、本処理は未実行。
+auditはPYZの_finish_cleanup/呼出/取得解放を追加検査。installは旧.53/idle/backup/再検査必須。
+installed.53/MF1082083/Host667000不変、未終端Job/GUI/setup0を確認。導入前には再確認する。
+
 ## 2026-09-10 repeated admission cancellation cleanup
 
 base PR #396 merge2a0d80dc4580a25567260088e76e71980741ac32、ux1/3d-admission-repeat-cancel。
