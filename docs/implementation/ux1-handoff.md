@@ -3,6 +3,15 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.58 preparation
+
+base PR421 merge93242b5、branch ux1/release-0-28-58。addon/core版数とrelease noteを追加。
+開始時installed.57/healthy、Host再起動承認なし。viewer build差分0/Node5 passed。
+全test handle81672は1419 passed/既知warning2/158.79秒でexit0。
+外部mf-0.28.58-audit.py/install.pyを準備、未実行。diff check/診断compileall成功。
+次: gate確定/通常merge→exact release checkout→build/audit/sign/公開consumer検証→
+idle/backup再確認後の標準MF update→新操作のinstalled受入。全3DS/GAはPARTIAL。
+
 ## 2026-09-10 GA-1 array authoring
 
 basec7a63a9、branch ux1/3d-array-modifier。modifier.arrayの固定2〜64複製/非零local offsetを
