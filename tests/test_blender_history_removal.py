@@ -18,7 +18,10 @@ from test_scenes import _revision_assets, _revision_input
 
 
 @pytest.mark.parametrize("change", ["none", "missing_ack", "invalid_ack", "active", "catalog"])
-def test_history_removal_restart_rechecks_acknowledgement_and_identity(tmp_path: Path, change: str) -> None:
+@pytest.mark.parametrize("journal_state", ["queued", "preflight", "deleting"])
+def test_history_removal_restart_rechecks_acknowledgement_and_identity(
+    tmp_path: Path, change: str, journal_state: str,
+) -> None:
     async def scenario() -> None:
         base, manifest = archive_fixture(tmp_path)
         recommended = archive_content("4.5.13")
@@ -35,6 +38,7 @@ def test_history_removal_restart_rechecks_acknowledgement_and_identity(tmp_path:
             revision=_revision_input(source, glb, image))
         preview = await manager.removal_preview(RUNTIME_ID)
         operation = await asyncio.to_thread(manager._admit_removal, RUNTIME_ID, preview["confirmation_fingerprint"], True)
+        store.update_blender_runtime_operation(operation.id, state=BlenderRuntimeOperationState(journal_state))
         await manager.stop()  # Durable acceptance exists but no executor was spawned.
         if change in {"missing_ack", "invalid_ack"}:
             result = dict(operation.result)

@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 source削除確認の再起動保持: 専用coreでdurable preflightへ到達後、HTTP client再接続、
+owned SIGTERM/別core起動で同operation ID/全preview/ackを保持した実削除再開を確認。
+`mf-removal-restart-source-20260910`、23.113秒/親exit0、両子はSIGTERM(-15)で終端。
+同版再導入/既定復元、6hash/scene/revision保持、両PID/staging回収を独立照合。
+初回preflight停止は明示fixture。installed browser/電源断/mid-rename crashは未検証。
+全D/3DS/GA PARTIALを維持する。
+
 2026-09-10 source逆順Job受付: 実remove guard中のscene.edit取得thread到達/pending→
 削除後runtime_unavailable、Host fixture呼出0/新Job0/refs0。active別版へfallbackしない。
 `mf-removal-first-job-source-20260910`、25.762秒/exit0、health1.637ms/setup_required。
