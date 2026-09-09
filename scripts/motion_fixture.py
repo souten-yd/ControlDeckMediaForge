@@ -20,6 +20,116 @@ def recipe() -> list[dict[str, Any]]:
     return rig_recipe() + [clip("idle")]
 
 
+def replacement() -> dict[str, Any]:
+    value = clip("arm_swing")
+    value.update(replace=True, name="Corrected arm swing", frame_count=48)
+    value["tracks"][0]["keys"][1].update(frame=24, rotation_degrees=[-30, 0, 0])
+    value["tracks"][0]["keys"][-1]["frame"] = 48
+    return value
+
+
+def inspect_replacement(before: Path, source: Path, glb: Path, folder: Path) -> None:
+    import bpy
+    import importlib.util
+    import hashlib
+    import math
+
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+
+    def actions() -> dict[str, Any]:
+        return {a["media_forge_clip_id"]: a for a in bpy.data.actions}
+
+    def curves(action: Any) -> list[Any]:
+        return [(c.data_path, c.array_index, [tuple(p.co) for p in c.keyframe_points])
+                for c in action.layers[0].strips[0].channelbags[0].fcurves]
+
+    bpy.ops.wm.open_mainfile(filepath=str(before), load_ui=False, use_scripts=False)
+    old = {name: curves(a) for name, a in actions().items()}
+    bpy.ops.wm.open_mainfile(filepath=str(source), load_ui=False, use_scripts=False)
+    current = actions()
+    assert set(current) == set(old) == {"idle", "arm_swing"}
+    assert curves(current["idle"]) == old["idle"]
+    assert curves(current["arm_swing"]) != old["arm_swing"]
+    target = current["arm_swing"]
+    assert target["media_forge_loop"] and target["media_forge_frame_count"] == 48
+    assert target["media_forge_clip_name"] == "Corrected arm swing"
+    assert target.name == "mf.arm_swing.c00ae0a6"
+    rig = next(o for o in bpy.data.objects if o.get("media_forge_id") == "rig")
+    assert len(rig.animation_data.nla_tracks) == 2
+    assert all(t.mute and len(t.strips) == 1 for t in rig.animation_data.nla_tracks)
+    bpy.context.scene.frame_set(24)
+    bpy.context.view_layer.update()
+    assert abs(rig.pose.bones["forearm"].rotation_euler.x - math.radians(-30)) < 1e-5
+
+    def bounds() -> list[float]:
+        obj = bpy.data.objects["Forearm"].evaluated_get(bpy.context.evaluated_depsgraph_get())
+        mesh = obj.to_mesh()
+        try:
+            points = [obj.matrix_world @ v.co for v in mesh.vertices]
+            return [f(p[i] for p in points) for f in (min, max) for i in range(3)]
+        finally:
+            obj.to_mesh_clear()
+
+    expected = bounds()
+    spec = importlib.util.spec_from_file_location("replacement_worker", Path(__file__).parents[1] / "worker_packs/blender/scene_recipe.py")
+    worker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker)
+    objects = {o.get("media_forge_id"): o for o in bpy.data.objects if o.get("media_forge_id")}
+    for kind in ("missing", "duplicate", "fps", "loop", "shared"):
+        request = replacement()
+        shared = None
+        if kind == "missing": request["clip_id"] = "absent"
+        elif kind == "duplicate": request["replace"] = False
+        elif kind == "fps": request["fps"] = 30
+        elif kind == "loop": request["tracks"][0]["keys"][-1]["rotation_degrees"] = [1, 0, 0]
+        else:
+            shared = bpy.data.objects.new("Other rig", rig.data.copy())
+            shared["media_forge_rig_schema"] = 1
+            bpy.context.collection.objects.link(shared)
+            bpy.context.view_layer.update()
+            shared.animation_data_create().action = target
+        try:
+            worker.create_clip(rig, request, objects)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("Invalid replacement succeeded: " + kind)
+        finally:
+            if shared is not None:
+                bpy.data.objects.remove(shared, do_unlink=True)
+        assert len(bpy.data.actions) == 2 and actions()["arm_swing"] is target
+    # Replacements at the clip-count limit must not allocate a permanent extra slot.
+    for i in range(30):
+        request = clip("arm_swing")
+        request["clip_id"] = "probe_" + str(i)
+        worker.create_clip(rig, request, objects)
+    for _ in range(3):
+        worker.create_clip(rig, replacement(), objects)
+        assert len(bpy.data.actions) == len(rig.animation_data.nla_tracks) == 32
+    assert curves(actions()["idle"]) == old["idle"]
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.context.scene.render.fps = 24
+    bpy.ops.import_scene.gltf(filepath=str(glb))
+    rig = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
+    action = next(a for a in bpy.data.actions if a.name.startswith("mf.arm_swing."))
+    assert abs(action.frame_range[1] - 48) < 1e-4
+    rig.animation_data.action = action
+    rig.animation_data.action_slot = action.slots[0]
+    for track in rig.animation_data.nla_tracks:
+        track.mute = True
+    bpy.context.scene.frame_set(24)
+    bpy.context.view_layer.update()
+    actual = bounds()
+    assert max(abs(a-b) for a,b in zip(expected, actual, strict=True)) < 1e-4
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == source_hash
+    (folder / "replacement-inspection.json").write_text(json.dumps({
+        "passed": True, "blender": bpy.app.version_string, "idle_unchanged": True,
+        "replacement_duration_sec": 2, "replacement_forearm_degrees": -30,
+        "source_bounds": expected, "glb_bounds": actual, "negative_cases": 5,
+        "replacements_at_32_clip_limit": 3, "source_unchanged": True,
+        "not_tested": ["installed MCP/OpenCode", "shape contact repair", "artistic quality", "engine playback"]}, indent=2)+"\n")
+
+
 def inspect_blend(source: Path, glb: Path, folder: Path, *, edited: bool) -> None:
     import importlib.util
     import bpy

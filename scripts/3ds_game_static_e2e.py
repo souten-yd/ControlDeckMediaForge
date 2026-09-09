@@ -51,6 +51,7 @@ def run(args: argparse.Namespace) -> None:
     from mediaforge.config import REPOSITORY_ROOT
     from mediaforge.domain import JobRequest, JobStatus
     from mediaforge.scene_recipes import SceneCreateRequest, SceneEditRequest
+    from mediaforge.scenes import SceneError
 
     args.evidence_dir.mkdir(parents=True, mode=0o700, exist_ok=False)
     app = create_app(Settings(data_dir=args.evidence_dir / "data",
@@ -95,8 +96,12 @@ def run(args: argparse.Namespace) -> None:
     async def apply(value: Any) -> dict[str, Any]:
         job = await asyncio.to_thread(store.create_job, JobRequest(operation="media.inspect",
             intent="Game static domain acceptance", constraints={"scene_recipe": value.model_dump(mode="json")}))
-        result = await workspace.apply_recipe("local", job.id, value, runtime_id=runtime.runtime_id,
-                                              runtime_version=runtime.version)
+        try:
+            result = await workspace.apply_recipe("local", job.id, value, runtime_id=runtime.runtime_id,
+                                                  runtime_version=runtime.version)
+        except SceneError:
+            await asyncio.to_thread(store.update_job, job.id, status=JobStatus.FAILED, phase="failed")
+            raise
         await asyncio.to_thread(store.update_job, job.id, status=JobStatus.SUCCEEDED, phase="complete",
                                 progress=1, asset_ids=result["asset_ids"])
         return result
@@ -136,8 +141,39 @@ def run(args: argparse.Namespace) -> None:
                 capture_output=True, text=True, timeout=60)
             assert checked.returncode == 0, (checked.stdout+checked.stderr)[-4000:]
             evidence["posed_inspection"] = json.loads((args.evidence_dir / "posed-inspection.json").read_text())
+        if args.replace_clip:
+            from motion_fixture import replacement
+            previous = evidence["edited"]["revision"]
+            previous_source = store.asset_path(previous["source_asset_id"])
+            previous_hash = hashlib.sha256(previous_source.read_bytes()).hexdigest()
+            change = SceneEditRequest.model_validate({"scene_id": created["scene"]["id"],
+                "base_revision_id": previous["id"], "recipe": {"operations": [replacement()]}})
+            evidence["replaced"] = asyncio.run(apply(change))
+            revised = evidence["replaced"]["revision"]
+            checked = subprocess.run([str(runtime.executable), "--background", "--factory-startup", "--disable-autoexec",
+                "--python-exit-code", "1", "--python", str(Path(__file__).resolve()), "--", "--inspect",
+                "--source", str(store.asset_path(revised["source_asset_id"])), "--previous-source", str(previous_source),
+                "--glb", str(store.asset_path(revised["preview_asset_id"])),
+                "--evidence-dir", str(args.evidence_dir), "--fixture", "motion", "--replace-clip"],
+                capture_output=True, text=True, timeout=60)
+            assert checked.returncode == 0, (checked.stdout+checked.stderr)[-4000:]
+            evidence["replacement_inspection"] = json.loads((args.evidence_dir / "replacement-inspection.json").read_text())
+            assert hashlib.sha256(previous_source.read_bytes()).hexdigest() == previous_hash
+            rejected = SceneEditRequest.model_validate({"scene_id": created["scene"]["id"],
+                "base_revision_id": revised["id"], "recipe": {"operations": [replacement(),
+                    {"type": "transform.set", "object_id": "missing", "location": [0, 0, 0]}]}})
+            try:
+                asyncio.run(apply(rejected))
+            except SceneError as exc:
+                assert exc.code in {"scene_recipe_failed", "scene_recipe_worker_invalid"}
+                evidence["failed_following_operation_code"] = exc.code
+            else:
+                raise AssertionError("Invalid post-replacement operation succeeded")
+            document, revisions = workspace.catalog.get("local", created["scene"]["id"])
+            assert document.current_revision_id == revised["id"] and len(revisions) == 3
+            evidence["failed_following_operation_preserves_head"] = True
         assert hashlib.sha256(source.read_bytes()).hexdigest() == old_hash
-        for result in (created, evidence["edited"]):
+        for result in [created, evidence["edited"]] + ([evidence["replaced"]] if args.replace_clip else []):
             for aid in result["asset_ids"]:
                 asset = store.get_asset(aid)
                 assert hashlib.sha256(store.asset_path(aid).read_bytes()).hexdigest() == asset.sha256
@@ -164,10 +200,17 @@ if __name__ == "__main__":
     parser.add_argument("--fixture",choices=("gate", "robot", "rig", "motion"),default="gate")
     parser.add_argument("--glb",type=Path)
     parser.add_argument("--posed",action="store_true")
+    parser.add_argument("--replace-clip",action="store_true")
+    parser.add_argument("--previous-source",type=Path)
     args = parser.parse_args(values)
+    if args.replace_clip and args.fixture != "motion":
+        parser.error("--replace-clip requires --fixture motion")
     if args.inspect:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        if args.fixture == "motion":
+        if args.replace_clip:
+            from motion_fixture import inspect_replacement
+            inspect_replacement(args.previous_source, args.source, args.glb, args.evidence_dir)
+        elif args.fixture == "motion":
             from motion_fixture import inspect_blend as inspect_motion
             inspect_motion(args.source, args.glb, args.evidence_dir, edited=args.posed)
         elif args.fixture == "rig":

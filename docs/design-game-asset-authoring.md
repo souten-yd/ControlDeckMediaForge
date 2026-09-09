@@ -106,7 +106,12 @@ animation.clipを加法追加する。typed rigの既知boneに対するrest-loc
 frame0からframe_countまで、fps1〜60、最大600 frames/120秒、128 tracks、
 1 track2〜256 keys、scene32 clips/262144 scalar keys/250000 bone-frame samplesを上限とする。
 loop指定時は各trackの両端回転が一致することを検査するが、滑らかな速度連続性は別の品質検査。
-同じrigのclip ID重複は上書きせず拒否。既存clipはmuted NLA stashとして保存し、
+同じrigのclip ID重複は既定で上書きせず拒否。明示replace=trueの場合だけ既存typed clipの
+全track/name/loop/frame_countを新しい制作版内で置換する。不在IDへのreplaceは拒否する。
+既存actionの構造・予算・参照を検査し、他IDから参照されるactionを巻き込まない。
+旧revisionのsource/GLB、無関係なclipは不変。FPS変更/任意actionの変換は許可しない。
+置換後のscene全体に同じclip/key/sample上限を適用し、上限到達時でも同容量の置換は可能にする。
+既存clipはmuted NLA stashとして保存し、
 新clipをactiveにする。全typed clipsはscene共通fpsとし、追加で既存clipの時間を変えない。
 任意action/driver/constraint/非typed rigとの混在は拒否する。保存済みcurveを実計数して予算を再検査。
 まずidleと腕振りの別clipを作り、別revisionへ追加して旧clipが不変なこと、

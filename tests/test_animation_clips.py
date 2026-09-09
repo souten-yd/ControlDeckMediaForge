@@ -19,8 +19,11 @@ def clip() -> dict[str, Any]:
                 {"frame": 48, "rotation_degrees": [0,0,0]}]}]}
 
 
-def test_clip_published_contracts() -> None:
-    recipe = {"operations": [clip()]}
+@pytest.mark.parametrize("replace", [False, True])
+def test_clip_published_contracts(replace: bool) -> None:
+    operation = clip()
+    operation["replace"] = replace
+    recipe = {"operations": [operation]}
     value = {"name": "Animated robot", "recipe": recipe}
     SceneCreateRequest.model_validate(value)
     root = Path(__file__).parents[1] / "schemas"
@@ -31,7 +34,7 @@ def test_clip_published_contracts() -> None:
 
 
 @pytest.mark.parametrize("failure", ["fps_zero", "fps_bool", "frames", "duration", "nan", "angle", "duplicate_bone",
-                                     "unordered", "first", "last", "loop", "many_keys", "script"])
+                                     "unordered", "first", "last", "loop", "many_keys", "script", "replace_string", "replace_int"])
 def test_invalid_clip_rejected(failure: str) -> None:
     op = clip()
     keys = op["tracks"][0]["keys"]
@@ -47,6 +50,8 @@ def test_invalid_clip_rejected(failure: str) -> None:
     elif failure == "last": keys[-1]["frame"] = 47
     elif failure == "loop": keys[-1]["rotation_degrees"][0] = 1
     elif failure == "many_keys": op["tracks"][0]["keys"] *= 100
+    elif failure == "replace_string": op["replace"] = "true"
+    elif failure == "replace_int": op["replace"] = 1
     else: op["script"] = "print(1)"
     with pytest.raises(ValidationError):
         SceneCreateRequest.model_validate({"name": "Bad", "recipe": {"operations": [op]}})

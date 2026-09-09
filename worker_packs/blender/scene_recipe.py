@@ -141,6 +141,9 @@ def set_pose(obj: bpy.types.Object, operation: dict[str, object]) -> None:
 def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: dict[str, bpy.types.Object]) -> None:
     rigid_armature(obj, allow_animation=True)
     clip_id = bone_id(operation.get("clip_id"))
+    replace = operation.get("replace", False)
+    if type(replace) is not bool:
+        raise RuntimeError("clip replace must be boolean")
     fps, end = operation.get("fps", 24), operation.get("frame_count")
     if type(fps) is not int or not 1 <= fps <= 60 or type(end) is not int or not 1 <= end <= min(600, fps*120):
         raise RuntimeError("clip frame range or fps differs")
@@ -170,8 +173,14 @@ def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: di
     scalar_keys = sum(len(rows)*3 for rows in parsed.values())
     samples = (end+1)*len(obj.data.bones)
     actions = list(bpy.data.actions)
-    if len(actions) >= 32:
+    matches = [a for a in actions if a.get("media_forge_rig_id") == operation["object_id"]
+               and a.get("media_forge_clip_id") == clip_id]
+    if len(matches) > 1 or (replace and not matches):
+        raise RuntimeError("clip replacement target is missing or ambiguous")
+    replaced = matches[0] if replace else None
+    if len(actions) + 1 - int(replaced is not None) > 32:
         raise RuntimeError("scene clip count exceeded")
+    replaced_track = None
     for other in bpy.data.objects:
         if other.type == "ARMATURE":
             rigid_armature(other, allow_animation=True)
@@ -180,9 +189,21 @@ def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: di
         if other.animation_data is not None and other.animation_data.drivers:
             raise RuntimeError("drivers are not supported by typed clips")
         if other.animation_data is not None:
+            if replaced is not None and other is not obj and other.animation_data.action is replaced:
+                raise RuntimeError("replacement clip is shared by another object")
             for track in other.animation_data.nla_tracks:
                 if not track.mute or len(track.strips) != 1 or track.strips[0].action not in actions:
                     raise RuntimeError("existing NLA state is not a muted clip stash")
+                if replaced is not None and track.strips[0].action is replaced:
+                    if other is not obj or replaced_track is not None:
+                        raise RuntimeError("replacement clip stash is shared")
+                    replaced_track = track
+    if replaced is not None:
+        if obj.animation_data is None:
+            raise RuntimeError("replacement clip has no owning animation data")
+        expected_users = 1 + int(replaced.use_fake_user) + int(obj.animation_data.action is replaced)
+        if replaced_track is None or replaced.users != expected_users:
+            raise RuntimeError("replacement clip has unsupported references")
     if actions and (bpy.context.scene.get("media_forge_clip_fps") != fps or
                     bpy.context.scene.render.fps != fps or bpy.context.scene.render.fps_base != 1):
         raise RuntimeError("clip fps must match the existing scene clips")
@@ -190,7 +211,7 @@ def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: di
         rig = objects.get(action.get("media_forge_rig_id"))
         if action.get("media_forge_clip_schema") != 1 or rig is None or rig.type != "ARMATURE":
             raise RuntimeError("existing action is not a typed clip")
-        if rig is obj and action.get("media_forge_clip_id") == clip_id:
+        if rig is obj and action.get("media_forge_clip_id") == clip_id and action is not replaced:
             raise RuntimeError("clip ID already exists")
         if len(action.layers) != 1 or len(action.layers[0].strips) != 1 or len(action.slots) != 1:
             raise RuntimeError("existing clip structure differs")
@@ -200,7 +221,8 @@ def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: di
         old_end = action.get("media_forge_frame_count")
         if type(old_end) is not int or not 1 <= old_end <= 600:
             raise RuntimeError("existing clip frame count differs")
-        samples += (old_end+1)*len(rig.data.bones)
+        if action is not replaced:
+            samples += (old_end+1)*len(rig.data.bones)
         for curve in strip.channelbags[0].fcurves:
             if not 2 <= len(curve.keyframe_points) <= 256 or curve.modifiers:
                 raise RuntimeError("existing clip key bounds differ")
@@ -209,12 +231,23 @@ def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: di
             for point in curve.keyframe_points:
                 if not all(math.isfinite(v) for v in point.co) or not 0 <= point.co.x <= old_end:
                     raise RuntimeError("existing clip key is outside its frame bound")
-            scalar_keys += len(curve.keyframe_points)
+            if action is not replaced:
+                scalar_keys += len(curve.keyframe_points)
     if scalar_keys > 262144 or samples > 250000:
         raise RuntimeError("scene animation key or sample budget exceeded")
     animation = obj.animation_data_create()
     suffix = hashlib.sha256(str(operation["object_id"]).encode()).hexdigest()[:8]
-    action = bpy.data.actions.new("mf." + clip_id + "." + suffix)
+    action_name = "mf." + clip_id + "." + suffix
+    if replaced is not None:
+        # All validation precedes mutation. This process edits an isolated copy;
+        # allocation/export failure cannot commit it over the immutable source.
+        # Release the old curves before allocation to retain the peak key budget.
+        if animation.action is replaced:
+            animation.action = None
+        animation.nla_tracks.remove(replaced_track)
+        replaced.use_fake_user = False
+        bpy.data.actions.remove(replaced, do_unlink=False)
+    action = bpy.data.actions.new(action_name)
     action["media_forge_clip_schema"] = 1
     action["media_forge_rig_id"] = str(operation["object_id"])
     action["media_forge_clip_id"] = clip_id

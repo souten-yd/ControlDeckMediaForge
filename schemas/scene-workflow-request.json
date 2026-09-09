@@ -47,6 +47,11 @@
           "title": "Loop",
           "type": "boolean"
         },
+        "replace": {
+          "default": false,
+          "title": "Replace",
+          "type": "boolean"
+        },
         "tracks": {
           "items": {
             "$ref": "#/$defs/AnimationTrack"

@@ -260,6 +260,7 @@ class AnimationClip(BaseModel):
     fps: int = Field(default=24, ge=1, le=60, strict=True)
     frame_count: int = Field(ge=1, le=600, strict=True)
     loop: bool = False
+    replace: bool = Field(default=False, strict=True)
     tracks: list[AnimationTrack] = Field(min_length=1, max_length=128)
 
     @model_validator(mode="after")

@@ -819,6 +819,9 @@ discovery, not Host routes or engine-specific executors. Keep the existing
 Agent MCP/Job/grant/provenance surface. Skill guidance must consult current
 schemas/capabilities rather than promise every upstream BlenderMCP operation.
 Any generic Host limitation is a separate PR; this plan does not change Host.
+Explicit typed clip replacement stays inside the same MediaForge scene edit/job
+transaction and base-revision conflict check. It neither overwrites old Assets nor
+adds a Host animation route or arbitrary script execution.
 
 The 3D Studio, texture authoring and server-side Web Blender are MediaForge features.
 Implementation, docs, shared assets/Jobs and release packaging remain in this repository.
