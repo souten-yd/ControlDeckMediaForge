@@ -3,6 +3,79 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 default idle run failed / stale monitor snapshot repair
+
+前turnまでの待機は同じ実CLI/PIDを確認したverified wait。
+installed0.28.50の30分試験はexec3638/CLI1004438がexit1で終端した。
+913.496秒sampleまでready/connected/入力時刻不変だったが、最終状態は
+interrupted/blender_session_disconnected_timeoutであり、idle成功ではない。
+last_activity_at17:14:32.231864 UTC、connected_at17:22:02.473389 UTC、
+disconnected_at=null、updated_at17:30:07.071092 UTCという不整合を実DBで確認。
+Host667000/MF1001944は不変。所有PID1004742/1004746/1004802とsession root消滅。
+候補working_c80e8b407b684f71bb064f053d9003db/scene.blendは547950 B、
+SHAd4ef821de34415a9aed27a890a0fa28497f5b310a998cbe26480b5650cf85951。
+/data1tb/mf-default-idle-installed-20260910/failure-audit.jsonに別途記録。
+元observations.jsonのpassed欠落を成功へ読み替えない。復旧形状の確認は未到達。
+今後の診断失敗はpassed=false/error_type/終端の安全な時刻・原因fieldを記録する。
+
+monitorはDB再読取後にcontroller.activeをawaitし、その間のgateway release後も
+古いsession.updated_atで切断猶予を判定し、古い接続fieldごとSTOPPINGを書いていた。
+runner probe内でreleaseし時計を600秒進める決定的fixtureでready→interruptedの誤終了を再現。
+追加testは修正前1 failed/0.64秒。probe awaitを既存DB再読取の前へ移し、
+両probe後の最新sessionで状態/接続期限を判断する。同期I/Oやpolicyを追加・変更しない。
+修正後focused34 tests/3.60秒/既知warning1成功。
+これは実機の記録に一致する競合再現であり、30分再試験の代わりではない。
+PR #381へ失敗証跡と修正を含め、installed本修正/既定30分受入は未完了のまま保持する。
+source実GUI回帰:
+PYTHONPATH=.:backend .venv/bin/python scripts/3ds_autosave_source_e2e.py --serve
+--data-dir /data1tb/mf-probe-clock-source-data-20260910、既存read-only4.5.9/runtime-Webと
+asset_263d5f26d18b4d05b65357c4aa8d26e7.blendを使用。
+Host診断Python/既存DISPLAY/XAUTHORITYで同script --verify-input-activity
+--evidence-dir /data1tb/mf-probe-clock-source-20260910を実行。
+session f278e4cb3fba4c398b1ac220b51b3904、44.265秒で画面要求/入力/再接続の時刻判定成功。
+136.609秒で既定autosave候補445460 B、
+SHAf8cd1e882b9fc9361f3be72ba20b34802cfb2c1583f9571f3d729894f1d78a5f。
+所有Blender子crash→同source hash/2 meshesを138.523秒で回収、元正式版不変。
+browser exit0、専用source server正常終了。source healthは標準起動外のenvironment missing/
+setup_requiredであり、healthyやinstalled30分受入の証拠へ拡大しない。
+GUI終了後の全 ./mf.sh test:1345 passed/既知warning2/156.42秒、exit0。
+次は本修正の署名release/標準update後、既定idleの同じ実診断を新しい専用sessionで再実行する。
+
+## 2026-09-10 v0.28.50 installed / default connected idle diagnostic
+
+前goal turnは署名公開/PR #380 mergeまで進捗。main a2081e6とhandoffを再確認。
+開始時job_a9b39db312f74d52baceb93ecc316d0fがrunning/generatingで更新を行わず、
+診断の準備を進めた。その後実DBでactive Jobs0を確認し標準updateを再実行。
+/data1tb/mf-0.28.50-install.py、Host診断venv、既存CONTROL_DECK_CONFIG/PYTHONPATH。
+署名/public bytes照合→idle→SQLite backup→再確認→標準installの順。
+10.401秒で0.28.50/HTTP healthy、Host PID667000不変、MF PID1001944。
+DB全テーブルfingerprintとBlender登録bytes不変、更新後Jobs0/GUI0を確認。
+backup/証跡 /data1tb/mf-0.28.50-update-qk_3u_rk/observations.json。
+currentはversions/0.28.50。標準保持規則で0.28.48実行bundleだけが整理され、
+0.28.49/.50を保持。制作物/runtimeは削除しない。旧bundleは公開releaseから再取得可能。
+
+ux1/3d-default-idle-acceptanceで既存installed lifecycle診断にconnected-idle mode追加。
+専用mf-e2e sceneだけを実RFB複製し、既定idle1800/disconnect300秒をassert。
+操作を送らず30秒ごとに同sessionの状態/接続状態/最終入力時刻を証跡へ追加。
+時刻リセット・短縮policy・早期/過遅終了・別原因終端は拒否する。
+終端後にPID/cgroup/root/socket回収、候補hashと復旧source一致、
+回収mesh数2倍、元正式版/旧hash保持まで既存診断を使う。
+server timeout/認証時計を置き換えず、Host/他processを停止しない。
+停止観測開始は実入力後のためelapsed許容1790〜1900秒だが、
+server policyは厳密1800秒。新7 casesを含むfocused17 tests/0.08秒通過。
+viewer build/diff check成功。全 ./mf.sh test:1344 passed/既知warning2/141.53秒、exit0。
+実診断をHost診断venv/既存CONFIG/PYTHONPATH、DISPLAY=:0、
+XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3で開始した:
+scripts/3ds_save_conflict_cleanup_installed_e2e.py
+--scene-id scene_3f3b5f1e97e94b268722ea45cc811c50 --expected-version 0.28.50
+--failure-kind connected-idle --evidence-dir /data1tb/mf-default-idle-installed-20260910。
+実CLI PID1004438、exec handle3638。session blendersession_2c16d66b8b1447ff9a5198405b11f935。
+Blender4.5.13の実描画/ConnectedをPNGで確認。RFB複製入力後のworking hash不変をassert。
+38.067秒sampleでready/connected、最終入力17:14:32.231864 UTCの不変を確認。
+診断は実行中でありpassed未確定。次turnは同handle/PIDを再確認して観測を継続し、
+観測待ちだけを根拠に再起動/再実行しない。最終復旧mesh数・終端回収もまだNOT TESTED。
+全3DS/GA/ボーン制作全体はPARTIALを維持する。
+
 ## 2026-09-10 v0.28.50 signed publication / installed update deferred
 
 PR #379 MERGEDのae63fbe2ab519effdc88ed8e55b71d71e7f705c4をexact checkout/tagへ固定。

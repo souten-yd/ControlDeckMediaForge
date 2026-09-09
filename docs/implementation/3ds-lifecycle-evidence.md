@@ -47,6 +47,14 @@ idle/expiry/restartの保存版、成功GUI編集の前後/復元版、.38の3�
 
 ## 次の実測
 
+2026-09-10 installed0.28.50の既定idle実診断は失敗:
+`mf-default-idle-installed-20260910/failure-audit.json`。
+913.496秒までready/connected/入力時刻不変、その後disconnected_timeoutで誤終了。
+controller.active待機中のreleaseと古いsession読取による競合をred/green testで再現・修正。
+3 PID/session rootは回収され候補547950 Bを保持したが、復旧mesh確認は未到達。
+短時間source回帰`mf-probe-clock-source-20260910`は138.523秒/2 meshes回収成功。
+修正版の配布・installed既定1800秒完走は未実施。上表idleを成功へ変更しない。
+
 2026-09-10 sourceの前提修正: 全RFB frameと再接続がidleを延長していたため、
 完全なkey/pointerのみの操作時計へ変更。`mf-rfb-input-source-20260910-r2`で
 24回の画面要求では時刻不変、pointerで更新、再接続でも時刻保持を実測。

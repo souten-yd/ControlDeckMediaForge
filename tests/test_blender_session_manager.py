@@ -399,6 +399,40 @@ def test_reconnect_preserves_input_deadline_and_terminal_release_cleans_it(tmp_p
     asyncio.run(scenario())
 
 
+def test_disconnect_during_runner_probe_uses_fresh_grace_timestamp(tmp_path: Path) -> None:
+    _store, _workspace, scene_id, controller, manager = session_fixture(
+        tmp_path, monitor_interval_sec=0.01, disconnect_grace_sec=300)
+
+    async def scenario() -> None:
+        await manager.start()
+        created = await manager.create(OWNER, scene_id)
+        await wait_state(manager, created['id'], 'ready')
+        await manager.acquire_gateway(OWNER, created['id'])
+        original_active = controller.active
+        now = manager._parse_time(manager._now()) + timedelta(seconds=600)
+        manager._now = lambda: now.isoformat()
+        released = asyncio.Event()
+
+        async def disconnect_during_probe(unit_id: str) -> bool:
+            controller.active = original_active
+            await manager.release_gateway(OWNER, created['id'])
+            released.set()
+            return await original_active(unit_id)
+
+        controller.active = disconnect_during_probe
+        try:
+            await asyncio.wait_for(released.wait(), timeout=2)
+            await asyncio.sleep(0.05)
+            value = manager.get(OWNER, created['id'])
+            assert value['state'] == 'ready'
+            assert value['disconnected_at'] == now.isoformat()
+            assert value['connected_at'] is None
+        finally:
+            await manager.stop()
+
+    asyncio.run(scenario())
+
+
 def test_host_disable_interrupts_and_recovery_can_become_a_revision(tmp_path: Path) -> None:
     store, workspace, scene_id, controller, manager = session_fixture(tmp_path)
 
