@@ -515,6 +515,14 @@ def main() -> None:
                     call("blender.sessions.stop", {"session_id": session_id})
                     wait({"stopped", "failed", "interrupted"})
                 browser.close()
+    except Exception as error:
+        evidence["passed"] = False
+        evidence["error_type"] = type(error).__name__
+        if session_id:
+            final = record(session_id)
+            evidence["failure_session"] = {key: final.get(key) for key in (
+                "state", "error_code", "connected_at", "disconnected_at", "last_activity_at", "updated_at")}
+        raise
     finally:
         with SessionLocal() as db:
             revoke_session(db, token)

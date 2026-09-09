@@ -568,7 +568,9 @@ class BlenderSessionManager:
             if session.state != BlenderSessionState.READY:
                 return
             autosave_failed = await asyncio.to_thread(self._autosave_failed, session.id)
-            # A save/stop may have begun while the status file was read.
+            runner_active = await self.controller.active(session.unit_id)
+            # Save/stop or gateway release may happen during either probe.
+            # Re-read after the last await, before checking connection clocks.
             session = self.store.get_blender_web_session(owner, session_id)
             if session.state != BlenderSessionState.READY:
                 return
@@ -578,7 +580,7 @@ class BlenderSessionManager:
                         error_message="Automatic recovery snapshot failed; the previous snapshot is retained. Save explicitly or retry later.")
             elif autosave_failed is False and session.error_code == "blender_session_autosave_failed":
                 session = self._update(owner, session, error_code=None, error_message=None)
-            if not await self.controller.active(session.unit_id):
+            if not runner_active:
                 await self._fail(
                     owner, session.id, session.working_id,
                     BlenderSessionError("blender_session_runner_lost", "isolated session unit stopped"),
