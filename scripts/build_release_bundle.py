@@ -22,6 +22,55 @@ def copy_file(source: Path, destination: Path, mode: int) -> None:
     destination.chmod(mode)
 
 
+# 出来上がりが小さすぎたら、途中で終わっている。
+#
+# SonicForge で実際に起きた: PyInstaller が OOM killer に落とされ、それでも
+# exit code は 0 で返り、2.4MB の tar.gz ができた（正常なら 30MB）。署名は
+# マニフェストと実物が一致するかしか見ないので、そのまま署名すれば**壊れた状態が
+# 正しいと証明される**。気づかなければ公開して、適用時に壊れる。
+#
+# 数字は「明らかにおかしい」を弾くためのもので、正常値に張り付けない。
+MIN_EXECUTABLE_BYTES = 10 * 1024 * 1024
+MIN_ARTIFACT_BYTES = 10 * 1024 * 1024
+
+
+def check_executable(entrypoint: Path, core: Path) -> None:
+    """出来上がった実行ファイルが、大きさを持ち、実際に起動することを確かめる。
+
+    大きさだけでは足りない。ビルド環境を取り違えると、大きさはあっても依存が
+    欠けたものができる（実際に起きた: 別の venv で建てて `No module named
+    'pydantic'` になった）。起動させるのが最も確かで、doctor は依存を全部踏む。
+    """
+    size = core.stat().st_size
+    if size < MIN_EXECUTABLE_BYTES:
+        raise SystemExit(
+            f"built executable is only {size} bytes; the build did not finish"
+        )
+    finished = subprocess.run(
+        [str(entrypoint), "doctor"], capture_output=True, timeout=600
+    )
+    if finished.returncode != 0:
+        tail = finished.stderr.decode("utf-8", "replace")[-2000:]
+        raise SystemExit(f"built executable failed its smoke run:\n{tail}")
+
+
+def check_artifact(path: Path, name: str) -> None:
+    size = path.stat().st_size
+    if size < MIN_ARTIFACT_BYTES:
+        raise SystemExit(f"archive is only {size} bytes; the build did not finish")
+    with tarfile.open(path, "r:gz") as archive:
+        members = set(archive.getnames())
+    required = {
+        f"{name}/bin/mediaforge",
+        f"{name}/bin/mediaforge-core",
+        f"{name}/control-deck-addon.json",
+        f"{name}/control-deck-feature.json",
+    }
+    missing = sorted(required - members)
+    if missing:
+        raise SystemExit(f"archive is missing: {', '.join(missing)}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
@@ -71,6 +120,7 @@ def main() -> int:
         bundle = work / name
         copy_file(dist / "mediaforge-core", bundle / "bin" / "mediaforge-core", 0o755)
         copy_file(ROOT / "scripts" / "bundle-launcher.sh", bundle / "bin" / "mediaforge", 0o755)
+        check_executable(bundle / "bin" / "mediaforge", bundle / "bin" / "mediaforge-core")
         addon = json.loads((ROOT / "addon.json").read_text(encoding="utf-8"))
         # --version で addon.json を黙って上書きしていた。結果、束ねた
         # control-deck-addon.json と、同じ束の中の mediaforge.__version__ が
@@ -110,6 +160,7 @@ def main() -> int:
         artifact = args.output_dir / f"{name}.tar.gz"
         with tarfile.open(artifact, "w:gz", compresslevel=9) as archive:
             archive.add(bundle, arcname=name, recursive=True)
+        check_artifact(artifact, name)
         digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
         checksum = artifact.with_name(artifact.name + ".sha256")
         checksum.write_text(f"{digest}  {artifact.name}\n", encoding="ascii")
