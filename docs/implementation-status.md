@@ -1,5 +1,36 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.47 signed release / installed MCP rig and clips
+
+PR #367のmain709b185から署名版v0.28.47を公開・標準導入した。
+artifact31565033 B、SHA256
+9647c10c03497a181173c32681ca435f828eea0c59779285eba76d058f058f80。
+公開4ファイルを再取得しbuildとの同一性、Hostの信頼済み署名検証を確認。
+packaged doctorは0.28.47/ok。bundle監査・embedded worker/schemaのexact checkout一致も確認した。
+
+idle確認・SQLite backup後のexact-tag標準updateは10.032秒。
+実HTTP healthy、13 operations、DB全15テーブルとBlender registryは更新前後一致。
+Host PID667000は不変、MFは876222へ更新。証跡:
+`/data1tb/mf-0.28.47-update-24txxywi/observations.json`。
+標準2世代保持で.45実行bundleのみ整理、.46/.47を保持。制作data/runtimeは削除しない。
+旧実行版は公開releaseから再取得可能。
+
+実installed Host MCPで11 bones/25部品robot+idleをcreateし、
+別revisionへarm_swingをedit、両方GLB export・opaque Asset ID経由download:2.471秒/PASS。
+証跡: `/data1tb/mf-rig-clip-installed-mcp-20260909/observations.json`。
+created/edited blendとGLBをBlender4.5.13で検査。editedのposed-inspection.jsonで
+idle2秒/arm_swing1秒、旧clip不変、GLB motion保持、loop端点一致、
+duplicate clip/FPS変更拒否がtrue。4出力のSHAとDB provenance.output_sha256を再照合、
+active Jobs0を確認した。これは手動MCP呼出しであり、LLM/skill実行の証明ではない。
+inspectorの汎用not_testedにあるinstalled MCPはinspect単体の範囲で、
+この外側の実MCP runner証跡と区別する。
+
+release準備の全テスト1258 passed/既知warning2/139.25秒を継承。
+今回の追記はdocsのみ。NOT TESTED: 新操作の自然言語OpenCode/director、
+ブラウザでのclip再生、歩行/root motion、分布weights、IK/FK/retarget、
+engine再生、見た目の承認、原3DS/GA全体完成。
+次は自然言語/skillから新操作を使う経路と既存3DS未受入項目を進める。
+
 ## 2026-09-09 v0.28.47 release preparation
 
 PR #365/#366を含むmain23d51b2からrelease準備。
