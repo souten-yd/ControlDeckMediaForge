@@ -165,8 +165,13 @@ def run(args: argparse.Namespace) -> None:
             try:
                 asyncio.run(apply(rejected))
             except SceneError as exc:
-                assert exc.code in {"scene_recipe_failed", "scene_recipe_worker_invalid"}
+                assert exc.code == "scene_recipe_failed"
+                assert str(exc) == (
+                    "Operation 2/2 (transform.set, object_id=missing) failed: "
+                    "target object does not exist; inspect stable object IDs"
+                )
                 evidence["failed_following_operation_code"] = exc.code
+                evidence["failed_following_operation_message"] = str(exc)
             else:
                 raise AssertionError("Invalid post-replacement operation succeeded")
             document, revisions = workspace.catalog.get("local", created["scene"]["id"])

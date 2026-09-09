@@ -1,5 +1,45 @@
 # Media Forge implementation status
 
+## 2026-09-10 typed recipe operation failure context (source)
+
+最新main57c6ff6、PR #213 MERGED、現行設計/引き継ぎを再確認。
+前回の自然言語の用語確認は実装進捗ではなく、.48以降の次の安全な実装を開始した。
+branch: ux1/3d-recipe-failure-context（PR作成前）。全体GOALはPARTIALのまま。
+Host user unit PID667000、MF921443 active。system unitではなくuser unitを確認する。
+installed0.28.48は変更せず、既存Blender/利用者設定/Hostコードへ書き込まない。
+
+_apply_recipe_workerにはpython-exit-code指定がなく、操作例外が出力欠落として報告されていた。
+--python-exit-code 1を追加し、trusted workerが失敗時だけprivate failure@1に
+0始まりindex/固定reason/Blender版を記録する。coreは4 KiB以下・通常file・版・index・
+reason allowlistを検査し、元のvalidated recipeから1始まり番号/操作type/object_idを組み立てる。
+既存error.code=scene_recipe_failedとerror.messageを使い、公開schema/tool名は変更しない。
+不正/欠落診断は一般エラー。生の例外・traceback・パスは返さない。
+新規file読取はasyncio.to_thread内、O_NOFOLLOW/O_NONBLOCKでリンク/FIFO待機を拒否する。
+
+自己検査で初版readerのdirectory open後のfd漏れを再現（20回:4→24）。
+open/fstat/readをfinally closeへ変更し、修正後20回:4→4、negative testも追加した。
+初回fd診断はtransform入力不足でPydantic拒否、location追加後に上記漏れを観測した。
+不足入力の実行をfd検査の成功とは扱わない。
+22 testsは診断構造/巨大・不正UTF-8・深いJSON/型違い/版違い/秘密文字列/
+missing・symlink・FIFO・directoryとfd保持を検査。既存Job projectionのerror保持もassert。
+
+実コマンド: PYTHONPATH=.:backend .venv/bin/python scripts/3ds_game_static_e2e.py
+--fixture motion --replace-clip --runtime-root /data1tb/mf-long-setup-source-20260906/runtimes/blender/blender-4.5.9-linux-x64
+--evidence-dir <下記>。4.5.13は追加で
+--managed-root /data1tb/ControlDeck/data/feature-data/media-forge/runtimes/blender。
+最終証跡:
+- /data1tb/mf-recipe-failure-context-source-20260910-final:4.5.13/3.282秒/PASS
+- /data1tb/mf-recipe-failure-context-source-4.5.9-20260910-final:4.5.9/3.276秒/PASS
+
+両版でcreate→clip追加→同clip置換の3版、source/GLBの骨/動作/旧曲線とhash保持を検査。
+置換後に不在object参照を続けたrecipeは
+Operation 2/2 (transform.set, object_id=missing) failed: target object does not exist; inspect stable object IDs
+をscene_recipe_failedとして返し、元head/3 revisions/6 assetsを保持した。
+これは実Blender+domainの診断で、実installed Agent MCPやLLM自動修正の受入ではない。
+frontend build:viewer/diff check成功。全 ./mf.sh test:1297 passed/既知warning2/139.15秒、exit0。
+NOT TESTED: この変更の署名bundle/installed、自然言語による自動修正、全3DS/GA完成。
+次はこの変更を署名版へ配布し、installed MCPで失敗箇所取得→修正の経路を検証する。
+
 ## 2026-09-10 v0.28.48 signed / installed / manual MCP repair
 
 PR #371のmain b6b2a985ff5fdb2e0cd8dd26aed2aea8b21eb821から署名版v0.28.48を構築・公開。
