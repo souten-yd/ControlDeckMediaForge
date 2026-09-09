@@ -1,5 +1,47 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed same-scene RFB edit after exact Blender reinstall
+
+PR #388 merge fc171f864d8638318a84e96cb10ae9097dd12708から
+ux1/3d-reinstalled-browser-edit。直前の応答は説明のみで新しい受入なしと分類し、
+現main/PR #213 MERGED、handoff/設計、installed0.28.52を再確認。
+開始時Jobs0/GUI0、MF1054020/Host667000 active。元checkoutの別branchと.venvは変更しない。
+
+前回旧版削除/同版再導入を行った同じuser:16のacceptance-swordを対象に、
+ephemeral診断 /data1tb/mf-reinstalled-edit-0.28.52.pyをapply_patchで作成。
+既存background-return診断のnative_browser/asset_hashes/mesh_countとinstalled browser helperを再利用。
+scene ID、owner、base revision、13版全てのruntime pin、全体idleを開始前に固定検査。
+Host診断venvでCONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml、
+PYTHONPATH=/data1tb/ControlDeck/app/backend、DISPLAY=:0、
+XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3を指定して実行。
+一時loginのみ作成/finally revoke、既存passwordや利用者global設定は変更しない。
+
+実Host opaque frame/Origin:null/overlayなし。scene選択と開始は製品helper/正規API、
+再導入済みruntime blender-4.5.9-linux-x64/version4.5.9をready投影で確認。
+実RFB connectedと描画1089色を25.899秒で確認し、canvasへのclick/A/Shift+D/Escape後、
+通常Save new revision and finishをclick。66.978秒でpassed、67.040秒でlogin revoke、exit0。
+元第13版revision_6350c1fd694347b886b3b2c8de0f312bから
+第14版revision_1479631eb20e4909a4ae975e71fa2cbfへ確定。
+独立Blender検証mesh4→8/triangles236→472、実GLB JSONのmesh参照nodeも4→8。
+新GLB asset_c889d0b198f84dea82ae3db6c7388eb1、1,761,820 B、
+SHAf132b3e074dfa4cf0282218839784ac683101f9fb90366fc9674300a612348e2。
+画面PNGでは重複形状を目視確認できていないため、描画と入力/保存後の構造検査を分けて記録する。
+証跡 /data1tb/mf-reinstalled-edit-installed-0.28.52-20260910/observations.json、page errors0。
+
+独立read-only DB/bytes照合で、前回baselineの2 scenes/14旧revisions全投影と
+関連60ファイルのSHA一致。別Recovery sceneは不変、編集対象のcurrent更新だけが意図した変更。
+session blendersession_c78a1982e18f483a96bd11f1a7e28d05はstopped、active GUI0、
+専用unit not-found/inactive/MainPID0。旧版への復元や制作物削除はせず新第14版も保持する。
+Host/MFのrestart、runtime切替/再導入、外部Blenderへの変更はこのturnでは行わない。
+
+scenario Dの同版再導入後「同一sceneで再編集」の不足を補完した。
+NOT TESTED: 英語本削除、削除と新規受付の実競合、A稼働中B導入/probe失敗、
+改ざん/容量不足/中断のinstalled全matrix。全D/3DS/GAはPARTIALのまま。
+次はA稼働中B操作の安全な対象・故障注入境界を確認してDの残条件を進める。
+GUI終端後に全`./mf.sh test`: 1345 passed/既知warnings2/142.07秒。
+`npm run build:viewer`成功/生成bundle差分なし、Node animation5 tests成功、diff check成功。
+文書のみのPRであり、新しい製品releaseは不要。installed0.28.52で上記受入を行った。
+
 ## 2026-09-10 installed history-preserving 4.5.9 removal and exact reinstall
 
 前goal turnは0.28.52公開・導入・個別animation受入/PR #387 mergeまで進捗。

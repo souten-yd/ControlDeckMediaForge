@@ -3,6 +3,30 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed reinstalled-runtime browser edit
+
+branch ux1/3d-reinstalled-browser-edit、baseはPR #388 merge
+fc171f864d8638318a84e96cb10ae9097dd12708。前応答は説明のみ、今回実機受入を前進。
+installed0.28.52/MF1054020/Host667000、開始時Jobs0/GUI0を確認。
+詳しいコマンド・受入境界はimplementation-statusの同日same-scene RFB節。
+/data1tb/mf-reinstalled-edit-0.28.52.pyをHost診断venv/既存CONFIG/PYTHONPATH/DISPLAYで実行。
+固定user:16/scene_ca920fd634b14dfea8215567e930bb7a/base第13版/全旧版4.5.9 pinを検査。
+再導入後の同sceneで正規API起動→実opaque RFB描画→canvas click/A/Shift+D/Escape→通常保存。
+4.5.9固定、mesh4→8/triangles236→472、実GLB mesh nodes4→8、第14版へ確定。
+66.978秒passed、67.040秒login revoke、exit0/page errors0。password/global設定変更なし。
+証跡 /data1tb/mf-reinstalled-edit-installed-0.28.52-20260910。
+第14版revision_1479631eb20e4909a4ae975e71fa2cbf、GLBasset_c889d0b198f84dea82ae3db6c7388eb1、
+1,761,820 B/SHAf132b3e074dfa4cf0282218839784ac683101f9fb90366fc9674300a612348e2。
+PNGの複製見た目は未確認。構造変化とGUI描画の証拠を混同しない。
+前削除baselineの14旧版/60files hash保持、別Recovery scene不変。新第14版は保持。
+session c78a1982e18f483a96bd11f1a7e28d05 stopped、unit not-found/inactive/MainPID0、GUI0。
+サービス再起動・runtime変更・外部Blender変更なし。製品code/版数変更なし。
+同版再導入後のRFB編集の不足のみ補完、全D/3DS/GA PARTIAL。
+次はA稼働中B実導入/probe失敗の安全な対象/故障注入境界を確認する。
+英語本削除、同時受付競合、改ざん/容量不足/中断等はNOT TESTED。
+GUI終端後の全`./mf.sh test`: 1345 passed/既知warnings2/142.07秒。
+viewer build成功/生成差分なし、Node animation5 tests/diff check成功。文書のみで版数変更なし。
+
 ## 2026-09-10 installed history-preserving 4.5.9 removal and exact reinstall
 
 前goal turnは0.28.52公開・導入・個別animation受入/PR #387 mergeまで進捗。
