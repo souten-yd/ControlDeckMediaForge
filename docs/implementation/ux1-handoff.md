@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-09 v0.28.46 release preparation and skill discovery
+
+PR #360 merge `54e9c2d69a9999db8b05d6a09e38eee6de2d6db7`からux1/3d-release-0.28.46。
+core/addon版を0.28.46へ揃え、複製・ミラーの内容/制限と旧版での新recipe再実行拒否を
+release noteへ記載。DB/既存Asset形式は変更しない。
+全 `./mf.sh test`:1221 passed/既知warning2/138.33秒、exit0。
+core/addon版一致、diff check成功。署名bundle生成/公開/標準updateは次工程。
+
+現在のHost skill statusはBlender Skills2026.07.10-cd1、installed/enabled/effective=true、
+execution.ready。Host診断環境でproviderが作る専用runtime configを使い、
+実 `opencode debug skill --pure`を実行、6 skills中にblender-directorを確認、exit0。
+一時runtime configはfinallyで削除。グローバル設定へ追加しない。
+これはdiscoveryの証拠で、実制作中のskill読込や新2操作実行の証拠ではない。
+既存OpenCode診断はskillを無効にしていたため、次の専用受入ではdirectorだけを許可し、
+実skill toolの読込結果・MCP実行・成果物を別々に検証する。
+
 ## 2026-09-09 game-asset roadmap and first typed modelling operations
 
 利用者のゲーム制作向け全機能の設計・実装開始依頼に基づき、base-plan §12と
