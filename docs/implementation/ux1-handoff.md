@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.57 preparation
+
+base PR #416 merge6991877d730c982cecc5ca2eedd34d6debe0be60、ux1/release-0-28-57、PR前。
+addon/core0.28.57、release note追加。全1392tests/145.44秒/2warnings、viewer差分0/Node5成功。
+テストhandle37002はexit0。installed.56保持、開始時Job/GUI/runtime全idle、Host/PC変更なし。
+外部 /data1tb/mf-0.28.57-audit.py と install.py 準備、実行前。
+次: normal merge→exact checkout /data1tb/ControlDeckMediaForge-release-0.28.57→build/audit/sign/public検証。
+build予定 /data1tb/mf-0.28.57-build-20260910、public予定 mf-0.28.57-public-20260910。
+更新前に全idle/DB snapshot/registry/稼働versionを再照合。別Jobを止めない。
+署名公開/導入/installed修正受入は準備時点NOT TESTED、全3DS/GA/E PARTIAL。
+
 ## 2026-09-10 texture admission failure notification
 
 base PR #415 merge3f4250076c2032a667dd61e2643af21578840494、ux1/3d-texture-workload-acceptance、PR前。
