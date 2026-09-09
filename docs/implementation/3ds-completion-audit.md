@@ -3,6 +3,14 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 scenario D追加: installed署名0.28.52/日本語320px Settingsで、
+inactive managed4.5.9を履歴確認付きで実削除し、同archiveから同版を再導入。
+不在中にGLB表示/13版backup実download、28 entriesのsize/SHA照合。
+2 scenes/14 revisions/既存60files保持、active4.5.13/legacy identity維持。
+同sceneの4.5.9 GUI ready→stoppedとunit回収、59.982秒/exit0を確認。
+`mf-history-installed-0.28.52-20260910-r2`。再開はAPI、RFB手編集は未実施。
+この受入範囲のsource-only制限を解消。並行更新/probe失敗/競合等、D全体は未完了。
+
 2026-09-10追加: 署名installed0.28.52/opaque frame/overlayなしで個別animation previewを確認。
 `mf-animation-installed-0.28.52-20260910`、腕振り1秒/待機2秒、モデル画素変化、
 速度/先頭戻し/pause、英語320px、元scene保持。GA-5の表示操作の追加証拠であり、
