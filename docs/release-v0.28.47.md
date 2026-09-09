@@ -22,7 +22,13 @@ PR #365/#366で実装。隔離source/domainの実Blender4.5.9/4.5.13で
 11 bones/25部品、rest形状不変、60度pose、idle2秒/arm_swing1秒の保存と再importを確認。
 GLBのskin/weights、同時刻のmesh位置、既存clip/旧revisionの保持を検証しました。
 CPU動画も生成し、開始・中間・終了付近のフレームを確認しています。
-現時点はrelease準備で、署名公開・導入環境・実MCP受入は別途記録します。
+署名版を公開し、標準updateで0.28.46から0.28.47へ導入済みです。
+公開artifactの再取得・署名検証、実HTTP healthy、DB全15テーブルとruntime登録の保持を確認。
+実installed Host MCPからrobot+idle作成、arm_swing追加、GLB出力まで2.471秒で成功。
+出力をBlender4.5.13へ再importし、2秒/1秒のclipと骨による動きの保持を検証しました。
+これは手動MCP受入です。自然言語OpenCode/skillによる新操作の実行、
+ブラウザでのclip再生、歩行、ゲームエンジン再生は未検証です。
+release準備の全テストは1258 passed（既知warning2）。詳細は実装状況に記録しています。
 
 ## 互換性
 
