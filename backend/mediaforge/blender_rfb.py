@@ -8,6 +8,8 @@ from pathlib import Path
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from .rfb_client_activity import RfbClientActivity, RfbClientFramingError
+
 
 MAX_BROWSER_MESSAGE_BYTES = 1024 * 1024
 RFB_READ_BYTES = 64 * 1024
@@ -43,6 +45,7 @@ async def relay_rfb(
         await websocket.close(code=1011, reason="Blender display is unavailable")
         return
     accepted = False
+    activity = RfbClientActivity()
 
     async def browser_to_rfb() -> None:
         while True:
@@ -57,7 +60,11 @@ async def relay_rfb(
                 raise BlenderRfbError(4400, "binary frames required")
             if len(content) > MAX_BROWSER_MESSAGE_BYTES:
                 raise BlenderRfbError(4409, "RFB frame too large")
-            if on_activity is not None:
+            try:
+                has_input = activity.feed(content)
+            except RfbClientFramingError as exc:
+                raise BlenderRfbError(4400, str(exc)) from exc
+            if has_input and on_activity is not None:
                 on_activity()
             writer.write(content)
             await writer.drain()

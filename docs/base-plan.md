@@ -759,6 +759,14 @@ duplicate branches or silently adopt the recovery into the original scene.
 
 Blender should be treated as a deterministic asset compiler/toolchain, not merely a GUI application controlled by an agent.
 
+Connected GUI idle time measures keyboard/pointer input, not WebSocket traffic.
+Frame requests, continuous updates, negotiation, fences and clipboard control
+must not extend the idle deadline. Automatic reconnect is not input either;
+retain the last input deadline across gateway release/acquisition, falling back
+to its persisted timestamp after restart. MediaForge observes the supported pinned
+RFB client stream with bounded framing; it does not make the browser or Host
+responsible for deciding whether a session is idle. Unknown framing fails closed.
+
 Stable Blender operations may include:
 
 - import

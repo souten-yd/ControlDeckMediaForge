@@ -846,6 +846,13 @@ leaves the outbox pending. Retry never re-executes the recipe or creates another
 - GPU GUI sessions must account for retained VRAM. Release GPU processes before returning their lease;
   coordinate image/LLM/Blender stages without holding competing leases across waits.
 - Browser disconnect is not batch cancellation. GUI disconnect has explicit save/grace/idle/stop policy.
+  MediaForge counts only complete RFB keyboard/pointer messages as controller
+  activity, excluding display polling and control traffic. Its bounded observer
+  handles fragmented/coalesced client packets for the pinned RFB 3.8/None
+  transport. Unknown framing closes the session connection rather than guessing
+  message boundaries. The Host binary relay and authentication remain unchanged.
+  Gateway reconnect preserves the last input time; after core restart use the
+  persisted input timestamp rather than resetting idle to the new handshake.
 - Blender and display processes are non-root isolated runners, managed independently of HTTP request lifetime.
 - Blender install/update/remove are MediaForge setup operations; OS drivers and privileged dependencies
   are diagnosed, not silently installed. Runtime removal preserves user assets and scene history.
