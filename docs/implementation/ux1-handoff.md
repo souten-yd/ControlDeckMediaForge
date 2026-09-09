@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 removal-first recipe Job admission
+
+base PR #401 merge731f52fc40969240998e6a42bdf4350a71ffedd2、ux1/3d-removal-first-job、PR作成前。
+前turnはGUI逆順実機受入/mergeまで進捗。本sliceは同実削除commit中のscene.edit Job受付。
+script --history-reinstall --hold-removal --hold-removal-job。Job domain/scene/runtimeは実体、Hostだけuncalled fixture。
+証跡 /data1tb/mf-removal-first-job-source-20260910、25.762秒/exit0、health1.637ms/setup_required。
+旧版削除guard中Job取得thread/pending→削除後runtime_unavailable、Host0/新Job0/refs0。
+同版再導入/同scene再起動/停止、6hash/旧revision保持、元既定復元、2units回収/staging空を独立確認。
+unit空Job期待の誤りをbaseline一致へ修正後、対象/recipe-pin22ケース成功。製品bug修正ではない。
+全1364 tests/2既存warnings/160.27秒、viewer build差分0/Node5、py_compile/diff成功。
+製品/Host/installed/公開契約/版数/署名artifact変更なし。全D/3DS/GA PARTIAL。
+次: durable削除確認の中断/core再起動保持を実処理で検証する。
+再開はmain/PR/statusを照合し、test_blender_history_removal.pyと削除operation journalを読む。
+NOT TESTED: installed Agent/OpenCode、create retry/material逆順、自然遅延、GUI入力、例外時自動再導入。
+
 ## 2026-09-10 removal-first GUI admission
 
 base PR #400 merge9b0f3323bb3a4bdf363ba20e56278cf348dfac96、ux1/3d-removal-first-admission、PR作成前。

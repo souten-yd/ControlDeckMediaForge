@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 source逆順Job受付: 実remove guard中のscene.edit取得thread到達/pending→
+削除後runtime_unavailable、Host fixture呼出0/新Job0/refs0。active別版へfallbackしない。
+`mf-removal-first-job-source-20260910`、25.762秒/exit0、health1.637ms/setup_required。
+同版再導入/同scene再起動/停止、6hash/履歴保持、既定復元/専用units回収。
+実Host認証/Agent HTTP/OpenCodeやcreate retry/material逆順は未検証。全D/3DS/GA PARTIAL。
+
 2026-09-10 source逆順GUI受付: 実remove guard内の明示thread gate中にGUI受付到達/pendingを確認。
 health1.581ms、削除commit後422/scene_runtime_unavailable・GUI record追加0。
 同4.5.9再導入/同scene再起動/停止、6files hash・履歴保持、既定復元/専用unit回収。
