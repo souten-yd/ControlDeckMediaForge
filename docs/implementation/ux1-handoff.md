@@ -3,6 +3,51 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed core restart preserves unsaved GUI edits
+
+前turnは実OpenCode修正受入/PR #376 mergeの進捗。main7644e35とhandoff/lifecycleを再確認。
+ux1/3d-core-restart-editで既存GUI診断へ明示core-restart modeを追加。
+唯一の検証GUIとactive Jobs0を直前に照合し、固定cdapp-feature-media-forge.serviceだけを
+systemctl --user restartする。Host/PC/他unitは再起動しない。busy/不正IDを拒否する4 tests追加。
+
+実コマンドはHost診断venv、DISPLAY=:0、
+XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3、
+scripts/3ds_save_conflict_cleanup_installed_e2e.py --scene-id scene_3f3b5f1e97e94b268722ea45cc811c50
+--expected-version 0.28.49 --failure-kind core-restart --evidence-dir <下記>。
+既存の専用mf-e2e material conflict enだけを新revisionへ進め、旧版を保持する。
+
+初回 /data1tb/mf-core-restart-edit-installed-20260910:
+MF960863→972623/HTTP healthy0.979秒、Host667000不変。
+保存後mesh1→2/第6→7版と旧bytes保持は成功したが、再接続直後PNGは黒画面だった。
+接続フラグだけで描画成功とするassertionが弱いため、実canvas色数とConnected文言を待ち、
+再接続後にも手編集して保存する診断へ修正。初回を描画復帰成功には読み替えない。
+
+最終 /data1tb/mf-core-restart-edit-installed-20260910-r2/observations.json:
+session blendersession_b6603c2744064043820c13f159778598、
+旧MF972623→975293、Host667000不変、HTTP healthy0.986秒（画面復帰時間ではない）。
+専用GUIのPID974155/974159/974203、unit/root/socket/cgroupを再起動後も保持。
+第7版の2 meshesをRFB操作で4へ複製し、autosaveを待たずcore再起動。
+再起動前後のworking .blend hash不変、同sessionへopaque iframeから再接続。
+実Blender描画/Connectedを確認し、追加RFB操作後にSaveで第8版/8 meshesを確定。
+再接続PNGではoutliner4 objectsを実視認。直後の追加編集PNGは更新前の4 objects表示であり、
+8への変更は保存後のBlender検査/GLB bytesで確認した。
+revision_fade9d2ba6fe4defa1ee48b896cd8afd、
+GLB asset_74066341b1164748a53efa842cbe38a4/11376 B、
+SHAed30cddbc76b94a0c380c0161b64e84f941c73ef45d597cf09304b22ad48f24d。
+独立GLB読取で8 mesh nodes（glb-verification.json）。
+全旧14 source/previewファイルhash不変。保存終了後3 PID/cgroup/root/socket消滅、active GUI0。
+これはready状態の正常service再起動とRAM内編集の継続であり、電源断/crash/保存途中の復旧とは別。
+一時認証sessionはfinallyでrevoke、個人設定/既存Blender実体/Hostコードは変更しない。
+
+focused14 tests、viewer build/diff check成功。
+GUI並行の全テスト初回は1311 passed/1 failed、151.57秒。
+既存test_autosave_status_read_does_not_block_event_loopの全経路<1秒assertionで1.121秒となった。
+GUI終了後、同test単独は成功。基準を緩めず、最終全 ./mf.sh testを直列再実行:
+1312 passed/既知warning2/144.85秒、exit0。
+同時負荷との因果関係は断定しない。production変更なし、installed0.28.49を維持。
+NOT TESTED: 接続中既定idle1800秒、core crash/保存途中再起動/電源断、GPU lease、全3DS/GA完成。
+次は同じ手編集・ファイル保持・process回収の観測を既定connected idle終了へ適用する。
+
 ## 2026-09-10 real OpenCode diagnosis and corrected edit
 
 前turnは0.28.49署名配布・installed MCP直接修正の進捗。main12fd048とhandoffを再確認。

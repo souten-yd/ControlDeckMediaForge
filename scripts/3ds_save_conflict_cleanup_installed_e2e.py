@@ -4,12 +4,13 @@ Host diagnostic Python. Only an explicitly named retained mf-e2e material
 conflict scene is advanced in save-conflict mode. Explicit blender-crash mode
 signals only this run's verified Blender child through a PID fd. Autosave-crash
 duplicates meshes, faults only its own working directory and verifies JA/EN
-warnings via a browser-language input fixture. No core restart.
+warnings via a browser-language input fixture. Explicit core-restart mode restarts
+only the installed MediaForge unit after checking no other GUI or Job is active.
 """
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 import hashlib
 import importlib.util
 import json
@@ -22,6 +23,8 @@ import sqlite3
 import subprocess
 import time
 from typing import Any, Iterator
+
+import httpx
 
 ACTIVE = {"queued", "preparing", "starting", "ready", "saving", "stopping"}
 DATA = Path("/data1tb/ControlDeck/data/feature-data/media-forge/data")
@@ -114,6 +117,41 @@ def crash_owned_blender(cgroup: Path, pids: list[int], runtime_id: str) -> int:
     return pid
 
 
+def restart_installed_core(session_id: str) -> dict[str, Any]:
+    """Bounded standard service restart; never restart the Host or another unit."""
+    assert re.fullmatch(r"blendersession_[0-9a-f]{32}", session_id)
+    with closing(sqlite3.connect(f"file:{DATA}/media-forge.sqlite3?mode=ro", uri=True)) as db:
+        live = {row[0] for row in db.execute(
+            "select id from blender_web_sessions where state in ('queued','preparing','starting','ready','saving','stopping')")}
+        assert live == {session_id}, "Another GUI is active; do not restart"
+        assert db.execute("select count(*) from jobs where status not in ('succeeded','failed','canceled')").fetchone()[0] == 0
+    def pid(unit: str) -> int:
+        return int(subprocess.check_output(["systemctl", "--user", "show", unit, "-p", "MainPID", "--value"],
+                                          text=True, timeout=10))
+    host = pid("control-deck-web.service")
+    before = pid("cdapp-feature-media-forge.service")
+    assert host > 0 and before > 0
+    began = time.monotonic()
+    subprocess.run(["systemctl", "--user", "restart", "cdapp-feature-media-forge.service"],
+                   check=True, timeout=45, capture_output=True)
+    after = pid("cdapp-feature-media-forge.service")
+    assert after > 0 and after != before and pid("control-deck-web.service") == host
+    with httpx.Client(timeout=2) as client:
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                response = client.get("http://127.0.0.1:9130/health")
+                healthy = response.status_code == 200 and response.json().get("status") == "healthy"
+            except httpx.HTTPError:
+                healthy = False
+            if healthy:
+                break
+            assert time.monotonic() < deadline, "MediaForge did not become healthy"
+            time.sleep(.25)
+    return {"old_core_pid": before, "new_core_pid": after, "host_pid_unchanged": host,
+            "http_health": "healthy", "elapsed_sec": round(time.monotonic()-began, 3)}
+
+
 def main() -> None:
     from playwright.sync_api import sync_playwright
 
@@ -126,13 +164,13 @@ def main() -> None:
     parser.add_argument("--scene-id", required=True)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
-    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash", "disconnect-timeout", "autosave-crash", "auth-expiry"), default="save-conflict")
+    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash", "disconnect-timeout", "autosave-crash", "auth-expiry", "core-restart"), default="save-conflict")
     parser.add_argument("--manual-edit", action="store_true", help="Duplicate meshes through RFB before a save conflict")
     args = parser.parse_args()
-    if args.failure_kind in {"autosave-crash", "auth-expiry"}:
+    if args.failure_kind in {"autosave-crash", "auth-expiry", "core-restart"}:
         args.manual_edit = True
-    if args.manual_edit and args.failure_kind not in {"save-conflict", "autosave-crash", "auth-expiry"}:
-        parser.error("--manual-edit requires save-conflict, autosave-crash or auth-expiry")
+    if args.manual_edit and args.failure_kind not in {"save-conflict", "autosave-crash", "auth-expiry", "core-restart"}:
+        parser.error("--manual-edit requires save-conflict, autosave-crash, auth-expiry or core-restart")
     assert re.fullmatch(r"scene_[0-9a-f]{32}", args.scene_id)
     installed = registry.status("media-forge")
     assert installed["version"] == args.expected_version and installed["health"] == "healthy"
@@ -244,6 +282,60 @@ def main() -> None:
                     assert hashlib.sha256(working_path.read_bytes()).hexdigest() == original_working_hash
                     assert call("scenes.get", {"scene_id":args.scene_id}) == before
                     evidence["working_hash_before_save"] = original_working_hash
+                if args.failure_kind == "core-restart":
+                    # Trigger before the default autosave: prove in-memory edits
+                    # survived in the same Blender process, not a recovered snapshot.
+                    evidence["restart"] = restart_installed_core(session_id)
+                    assert all(Path(f"/proc/{pid}").exists() for pid in pids)
+                    assert cgroup.is_dir() and root.is_dir() and socket.is_socket()
+                    assert hashlib.sha256(working_path.read_bytes()).hexdigest() == original_working_hash
+                    evidence["working_hash_after_restart"] = original_working_hash
+                    page.goto("/x/media-forge/workspace/create", wait_until="domcontentloaded")
+                    frame = helpers.workspace_frame(page)
+                    frame.wait_for_selector('#app[aria-busy="false"]')
+                    assert frame.evaluate("self.origin") == "null"
+                    resumed = wait({"ready"})
+                    assert record(session_id)["unit_id"] == unit
+                    frame.locator("#create-media-3d").click()
+                    frame.evaluate("id => openScene(id)", args.scene_id)
+                    frame.evaluate("s => openBlenderView(s)", resumed)
+                    frame.wait_for_function("state.blenderRfb?._rfbConnectionState === 'connected'", timeout=30000)
+                    frame.wait_for_function("""() => {
+                        const c=document.querySelector('#scene-blender-screen canvas');
+                        if (!c || c.width<100 || c.height<100) return false;
+                        const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+                        const colors=new Set();
+                        for(let i=0;i<d.length;i+=160) colors.add(`${d[i]},${d[i+1]},${d[i+2]}`);
+                        return colors.size>50;
+                    }""", timeout=45000)
+                    frame.wait_for_function("['接続しました','Connected'].includes(document.querySelector('#scene-blender-connection').textContent)", timeout=30000)
+                    assert call("scenes.get", {"scene_id": args.scene_id}) == before
+                    page.screenshot(path=str(args.evidence_dir / "reconnected-after-restart.png"))
+                    frame.locator("#scene-blender-screen canvas").click(position={"x":320,"y":240})
+                    page.keyboard.press("a")
+                    page.wait_for_timeout(500)
+                    page.keyboard.press("Shift+D")
+                    page.wait_for_timeout(500)
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(1000)
+                    page.screenshot(path=str(args.evidence_dir / "edited-after-restart.png"))
+                    call("blender.sessions.save", {"session_id": session_id})
+                    terminal = wait({"stopped", "failed", "interrupted"})
+                    assert terminal["state"] == "stopped" and terminal["result"]["saved"] is True
+                    after = call("scenes.get", {"scene_id": args.scene_id})
+                    assert len(after["revisions"]) == len(before["revisions"]) + 1
+                    assert edit_helpers.mesh_count(after) == 4 * edit_helpers.mesh_count(before)
+                    assert edit_helpers.asset_hashes(before) == original_hashes
+                    assert not root.exists() and not socket.exists() and not cgroup.exists()
+                    assert all(not Path(f"/proc/{pid}").exists() for pid in pids)
+                    assert not evidence["page_errors"]
+                    evidence.update(passed=True, resumed=resumed, after=after, terminal=terminal,
+                        same_gui_processes_survived_restart=True, unsaved_edit_saved=True,
+                        reconnected_render_and_edit_tested=True,
+                        process_cgroup_root_socket_reclaimed=True,
+                        not_tested=["power failure", "core crash", "restart during save", "connected idle timeout", "GPU lease"])
+                    print(json.dumps({"passed": True, "session_id": session_id, "restart": evidence["restart"]}), flush=True)
+                    return
                 if args.failure_kind == "autosave-crash":
                     assert owned["runtime_id"] == "blender-4.5.13-linux-x64"
                     autosave_began = time.monotonic()

@@ -1,6 +1,6 @@
 # 3D Studio lifecycle evidence map
 
-Date: 2026-09-09 / Status: PARTIAL
+Date: 2026-09-10 / Status: PARTIAL
 
 対象は [実装計画](g8-3d-studio-plan.md) §4 C と GOAL-09。
 証拠を原因ごとに分離し、過去の実測と現在の再検証を混同しない。
@@ -15,7 +15,7 @@ Date: 2026-09-09 / Status: PARTIAL
 | 保存失敗でも終了 | `mf-save-conflict-cleanup-installed-20260907`: 5.831秒でfailed・process回収。追加`mf-unsaved-save-conflict-installed-20260907`: 実RFBで2→4 meshes、保存前working bytes不変、競合後5.037秒でfailed・process回収。候補から別scene初版へ4 meshesを回収、競合側1 meshの第6版は不変 | 保存API内部のBlender保存後の競合。save以前のcrash/定期autosave/GPU leaseとは別 |
 | Blender crash | `mf-gui-child-crash-cleanup-installed-20260907`: 5.266秒でrunner_lost・process回収。追加source `mf-autosave-crash-evidence-final-20260907-r2`: 実手編集1→2 meshes、自動保存の実書込拒否/警告/旧bytes保持→権限復元→次interval成功後にBlender子だけkillし、同hashの別scene初版へ2 meshesを回収（実GLB一致） | 新autosaveはsource受入258.512秒。installed0.28.38には未配布。保存途中のkill/次interval以前の変更量はNOT TESTED。batch worker crashとは別 |
 | 切断猶予終了 | `mf-disconnect-grace-cleanup-installed-20260907-final`: 実noVNC接続後Close view only、connected_at=null/disconnected_at非null、既定300秒で302.270秒後終端。3 PID/cgroup/root/socket消滅、durable参照0 | 接続表示だけを描画品質の証拠としない。手編集なし |
-| MediaForge再起動 | `mf-3ds8-core-restart-0.28.14`: health復帰0.933秒、同session再接続、保存revision9 | 過去の再起動試験。今回service再起動なし。手編集回収量・当時の全PID回収は未照合 |
+| MediaForge再起動 | `mf-core-restart-edit-installed-20260910-r2`: 0.28.49/HTTP healthy0.986秒、Host PID不変、GUI3 PIDを保持。同session再接続・実描画・追加手編集・保存で第7→8版/2→8 meshes、旧14ファイルhash不変、終了後3 PID/cgroup/root/socket回収 | ready中の正常service restart。RAM内の未保存複製を保持し再接続後の編集も保存。core crash/保存途中/電源断とは別。初回runの黒画面は描画復帰成功に含めない |
 | Host認証期限切れ | `mf-3ds8-host-token-expiry-0.28.14`: 実署名token TTL20秒、25.038秒でRFB close4403/host service token expired、host_revoked、復旧保存revision10 | 秘密値は記録しない。手編集回収量・当時の全PID回収は未照合 |
 | 復旧候補と正式版 | .38保存競合では候補515,342 Bを通常recovery.forkで別scene初版へ確定しsource hash一致。child crashと切断終了も候補450,236 Bから別scene確定、元scene/候補不変 | 未検証候補の存在だけを復旧成功としない。未保存手編集の回収範囲は次の試験で測る |
 
