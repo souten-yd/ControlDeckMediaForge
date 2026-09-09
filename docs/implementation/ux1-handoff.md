@@ -3,6 +3,34 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed default idle acceptance complete
+
+署名installed0.28.51/Blender4.5.13の既定idle1800秒診断がexit0で終端。
+証跡 `/data1tb/mf-default-idle-installed-20260910-r2/observations.json`、passed=true。
+実行コマンドは直下の導入記録と同じ。CLI1024735/handle24245の終了を再確認した。
+session blendersession_23e6efc5118049f182b38608f72b50e2は
+interrupted/blender_session_idle_timeout。最終入力17:45:12.191318 UTCを保持し、
+終端更新18:15:18.185248 UTC。入力後からの診断観測1793.120秒で、
+terminal_sec1785.096は後段wait開始からの時間（serverの1800秒設定とは別）。
+画面要求・実再接続で入力時計を延長せず、切断猶予による誤終了もなかった。
+
+実RFB複製後の8→16 meshesを通常recovery.forkで別scene初版へ回収。
+scene_7053e308961c5808999f8f5a8d19f6b3 / revision_25e999602ba646e09fca62e6d45420ca。
+候補/source547950 B、SHA80dc08dae81d98703dc08ecaa8090e86418c8bfcddc0266222a7d0540cfdbc2b。
+独立read-only照合で実GLB22216 B/16 meshes/16 nodes、
+SHA553e5d0c54378009bf1e7b7035f9902febf678ca4074bf1442d98dd869e1a680を確認。
+診断は元scene投影不変をassertし、再監査でも旧16ファイルのSHA一致。
+所有PID1025055/1025059/1025120消滅、診断のcgroup/root/socket回収assert成功。
+実DBのactive GUI0、MF1024680/Host667000はactiveでPID不変。
+
+本sliceは実測記録のみ。全3DS/GAはPARTIALのまま。
+ux1/3d-default-idle-verified、base origin/main4ecc52f（PR #383 MERGED）。
+全 ./mf.sh test:1345 passed/既知warning2/144.94秒/exit0、viewer build/diff check成功。
+次はfrontend/model-viewer-source.jsの全clip同時再生を個別clip選択へ改めるslice。
+現在は未実装。新branch作成前に本記録PRを通常mergeし、origin/mainを再確認する。
+NOT TESTED: 電源断・保存途中crash・GPU lease/競合・全設定導入失敗matrix・
+ゲーム用の有機ウェイト/IK/歩行/個別clipプレビュー等。idle受入から推定しない。
+
 ## 2026-09-10 v0.28.51 signed / installed / idle retry running
 
 PR #382 MERGEDのad61a431ca2424d285fa81c38ced25aa360ce740をexact checkout/tagへ固定。

@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10追加: installed0.28.51の既定connected idle1800秒を実機完走。
+`mf-default-idle-installed-20260910-r2`、exit0/passed=true、idle_timeout終端。
+再接続でも入力時刻不変、8→16 meshesを別sceneへ回収、実GLB16 nodes/22216 B、
+旧16ファイルhash保持、所有3 PID/cgroup/root/socket回収。GOAL-09の本条件を補完。
+全lifecycle故障matrix・GPU競合・全3DS/GA完成を意味しない。
+
 2026-09-10 lifecycle追加: installed0.28.49のready GUIで未保存手編集後にMediaForgeだけを
 正常再起動。Blender3 PID/作業file bytesは保持し、同sessionで実描画/追加編集/保存を確認。
 第7→8版、2→8 meshes、実GLB8 nodes、旧14ファイルhash不変、終了後process回収。
