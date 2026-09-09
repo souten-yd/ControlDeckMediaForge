@@ -13,7 +13,9 @@ PR #378で実装。実source Blender4.5.9で24回の画面更新要求による�
 既定2分の自動保存後、所有Blender子のcrashから同じhashの2 meshesを回収し、
 元の正式版と旧ファイルを保持しました。source受入は128.123秒です。
 実装PRの全テストは1337 passed（既知warning2）。
-この文書の準備時点で署名公開・installed受入・既定30分の無操作終了は未検証です。
+署名公開・公開4ファイル再取得・実Hostのtrusted publisher検証を確認しました。
+更新直前に連続する生成Jobを検出し、idle gateで更新を中止しました。
+稼働版は0.28.49を維持し、installed本修正・既定30分の無操作終了は未検証です。
 最新の配布状態と実測は[実装状況](implementation-status.md)へ記録します。
 
 ## 互換性
