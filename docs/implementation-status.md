@@ -1,5 +1,45 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.58 published/installed and MCP array delivery
+
+PR #422通常merge/tag88c17bd2ee31c94c737349f73993528d1a60eb27。
+exact checkout /data1tb/ControlDeckMediaForge-release-0.28.58でbuild_release_bundle.pyを実行しexit0。
+artifact31,539,237 B/SHA750f8f1e370d0f155fb67e5ab66d48c979c22bc08bfef3352e93e39377c96285。
+外部mf-0.28.58-audit.pyは202 entriesの禁止path/秘密値拡張子・certifi公開PEM・
+worker/schema/frontend bytes一致、同梱ArrayModifier/公開3 schema定数、packaged doctor okを確認。
+既存publisher鍵で署名/自己検証し、通常公開release v0.28.58へ4 filesを公開。
+public再取得4filesとbuild bytesの一致、実Host trusted publisher検証を標準更新前に確認。
+
+mf-0.28.58-install.pyは実Job/GUI/runtime idle、SQLite backupと全table fingerprint再照合、
+registry再照合後に標準updateを実行。13.076秒/exit0、healthy/DB全table/registry保持。
+backup /data1tb/mf-0.28.58-update-d8eeyh6d、Host1141433保持、MF MainPID1260659。
+実/proc/1260659/exeとaudit抽出binaryのSHAはともに
+1e1fb56591f781ded82d6d9c5a8188975b049c3cd8ea3025ec12c25a836a0bbd。
+標準2版保持で旧.56実行bundleだけ整理し、.57/.58を保持。制作data/Blenderは削除せず、
+旧bundleは公開releaseから再取得可能と通知。Host修正PR311の導入・再起動はしていない。
+
+外部mf-array-mcp-installed-0.28.58.pyはOpenCode用の実Host MCP bridgeでtools/list、
+新modifier.array公開とcreate受付を確認。ただし初回はMCP envelopeのHost Job IDと
+output内のMF Job IDを取り違え、detached KeyErrorと取消拒否でexit1。
+新規作成を再実行せず、受信済みjob_d5eff63dd52044c9ae19a5ea1ba2b64dの実HTTP succeededを確認。
+mf-array-mcp-installed-0.28.58-resume.pyは同じMCP config/同Jobでstatus→snapshot→export→
+正規project grant→media.packを続行し、1.187秒/exit0。この時間は再開区間だけを表す。
+一時runtime configはfinallyで削除、残数0。Host受付12e5a1f7ca4b/child92b4abba2fccは
+独立read-only DBでも両succeeded。秘密tokenをログ・証跡へ保存しない。
+
+scene_e45604f9d7c3458c80b3604ab37fd7b9、revision_0548e2ad2ede4f8da6d4be90de3fa793、
+GLB asset_9762b4505f2d4470840d1ba2c71c6266。配置先
+/data1tb/ControlDeck/CodeDEV/MF3DS-Array-MCP-20260910/exports/stairs.glb、6,224 B、
+SHA73d162ae1eb89b22e0eb888be13e45a27ba229846b8d3b3ffd597ee2e39488ab。
+receipt/Asset/provenance/実配置bytes一致。Blender4.5.13で実blend/配置GLBを再importし、
+6段/72 triangles/48座標、local scale間隔の一致を確認。再開前のscene/revision投影と
+registryを再開後に比較して不変。初回診断全区間の全旧scene snapshot一致とはしない。
+証跡 /data1tb/mf-array-mcp-installed-0.28.58-20260910（初回/再開eventsと実Blender inspection）。
+
+準備gate1419 tests/158.79秒/2warnings、viewer差分0/Node5。記録sliceは文書のみ。
+NOT TESTED: 今回のOpenCode LLM/director実読込、engine import、接合品質、全3DS/GA。
+次: 新操作を含む実OpenCode制作受入とGA-1の後続操作。Host再起動は承認待ちのまま。
+
 ## 2026-09-10 v0.28.58 preparation
 
 PR #421 merge93242b58453c36a6be3b003e40b7ba619bb9e276を基準にux1/release-0-28-58。
