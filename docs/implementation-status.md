@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-10 Host queue receipt correction / installed acceptance pending
+
+前sliceの署名0.28.57/自然画像生成記録はMediaForge PR #418で通常merge
+ca9dd4fa788ce3bea6fd7de5145fb4459f219500。3DS/GAの残件は維持する。
+Hostが発行した未受信request IDはMediaForgeだけで照会・取消できないため、汎用Host別PR
+https://github.com/souten-yd/ControlDeck/pull/311 を実装し通常mergeした。
+source a6753e0ebca7a19f6ff5fe17a492177a74b15c17、merge a32567cc02ba2f17281c3076a0bdf59525cfe477。
+queue受付でprovider退避taskをmax_wait_secまで待つ処理を外し、IDで照会・取消できるようにした。
+fail_fastの退避結果判定とacquireの待機は保持、公開schema/timeout/GPU割当条件は変更なし。
+MediaForge側の120秒timeout延長や独自予約回収は追加しない。
+
+Host回帰5casesは修正前2 failed/3 passed→関連58 passed/3.78秒。
+隔離systemd/Uvicornの実HTTP fixtureでは退避gate閉鎖中に202/IDを0.001068秒で受信し、
+同IDのGET/DELETE、別待機の退避後grant/release、最終lease0を確認。全0.194703秒/exit0。
+証跡 /tmp/cd-resource-receipt-chdal_xh/observations.json、再実行可能なHost tools scriptを同梱。
+実Host認証route/実GPUの証明ではない。初回fixture422の修正、最初の全testでworktree
+.venv不在による2失敗もHost statusへ記録。最終全./deck.sh testは1066 passed/2 skipped/
+既知warning1/95.08秒、frontend build20.47秒、compileall/diff check成功。
+本番Host PID1141433/activeを保持、再起動・稼働checkout変更なし。Host修正は未導入。
+このMF sliceは文書のみでMF test/buildは再実行していない。
+
+NOT TESTED: 導入済みHost/MediaForgeでの同条件受入、実GPU退避、任意の応答喪失時の
+未受信ID回収/冪等再送、全E/3DS/GA。過去のtimeout全件の根本原因と断定しない。
+次: 稼働Hostの作業・接続状況と更新権限を確認して導入受入を別段階で進める。
+ボーン/weights/IK/歩行/造形品質/engine受入のゲーム制作要件は引き続き未完了。
+
 ## 2026-09-10 v0.28.57 signed release and installed update
 
 準備PR #417 merge/tag567bf2ebea44cd83bb3484bf10f967bfa60118a7。

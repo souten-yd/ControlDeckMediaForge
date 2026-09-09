@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 Host queue receipt correction
+
+MF PR #418 mergeca9dd4f完了後、Host別worktree /data1tb/ControlDeck-resource-receiptで
+queue受付がprovider drain完了までIDを返さない挙動を回帰2件で再現し修正。
+Host PR #311通常mergea32567cc02ba2f17281c3076a0bdf59525cfe477、sourcea6753e0。
+queueだけID先返し、fail_fast/acquire/公開schema/GPU割当条件を保持。
+全Host1066 passed/2 skipped/95.08秒、frontend build20.47秒。
+実HTTP fixture0.194703秒/受付0.001068秒、GET/DELETE/別waiter grant/release、lease0。
+証跡 /tmp/cd-resource-receipt-chdal_xh、Host tools/resource-queue-receipt-smoke.py。
+全test handle84393/build71771はexit0、専用systemd unitも停止/inactive。
+本番Host PID1141433/active保持、稼働checkout6d3cd2aを変更せず、修正未導入。
+MF branch ux1/3d-resource-receipt-handoffは文書だけ、MF test/buildなし。
+次: 稼働Hostの状況・更新権限確認後に導入/実Add-on受入。任意の応答喪失は別残件。
+全3DS/GA/EはPARTIAL、ゲーム品質/ボーン変形/IK/歩行/engineの要件を縮小しない。
+Host作業用.venv/frontend/node_modules symlinkとMF既存.venvは未追跡のまま保持。
+
 ## 2026-09-10 v0.28.57 published/installed and natural texture completion
 
 PR #417 merge/tag567bf2ebea44cd83bb3484bf10f967bfa60118a7、ux1/release-0-28-57-acceptance、記録PR前。
