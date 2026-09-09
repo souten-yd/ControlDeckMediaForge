@@ -1016,7 +1016,7 @@ html:has(#viewer[open]) { overflow: hidden; }
   gap: 6px;
   flex-wrap: wrap;
 }
-#viewer-3d-tools button {
+#viewer-3d-tools button, #viewer-3d-tools select {
   height: 44px;
   min-height: 44px;
   padding: 7px 10px;
@@ -1024,6 +1024,16 @@ html:has(#viewer[open]) { overflow: hidden; }
   background: rgb(16 23 22 / 88%) !important;
   color: #eef5f3 !important;
 }
+#viewer-3d-animation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+#viewer-3d-clip { min-width: 0; max-width: 260px; width: 160px; text-overflow: ellipsis; }
+#viewer-3d-speed { width: 84px; }
 
 #viewer-bar {
   min-width: 0;

@@ -6487,7 +6487,7 @@ const viewer = {
 };
 
 let modelViewerModulePromise = null;
-const MODEL_VIEWER_BUNDLE = "ae9fcecc3739d0b7";
+const MODEL_VIEWER_BUNDLE = "d4f4fa0f645ce934";
 
 function loadModelViewer() {
   if (modelViewerModulePromise) return modelViewerModulePromise;
@@ -6517,6 +6517,8 @@ const VIEWER_3D_TEXT = {
     light: {studio: "照明", flat: "均一光", dramatic: "強調光"},
     background: "背景", boundsOn: "範囲を隠す", boundsOff: "範囲",
     play: "再生", pause: "停止", contextLost: "3D表示を復旧しています…",
+    clip: "動作（繰り返しプレビュー）", speed: "再生速度", restart: "先頭へ",
+    unnamedClip: (index) => `動作 ${index + 1}`,
     stats: (value) => `${value.triangles.toLocaleString()} 三角形 · 材質 ${value.materials} · アニメ ${value.animations}`,
   },
   en: {
@@ -6527,6 +6529,8 @@ const VIEWER_3D_TEXT = {
     light: {studio: "Light", flat: "Flat light", dramatic: "Dramatic"},
     background: "Background", boundsOn: "Hide bounds", boundsOff: "Bounds",
     play: "Play", pause: "Pause", contextLost: "Restoring the 3D view…",
+    clip: "Animation (repeating preview)", speed: "Playback speed", restart: "Restart",
+    unnamedClip: (index) => `Animation ${index + 1}`,
     stats: (value) => `${value.triangles.toLocaleString()} triangle${value.triangles === 1 ? "" : "s"} · ${value.materials} material${value.materials === 1 ? "" : "s"} · ${value.animations} animation${value.animations === 1 ? "" : "s"}`,
   },
 };
@@ -6555,6 +6559,17 @@ function renderViewer3dText() {
   byId("viewer-3d-background").textContent = text.background;
   byId("viewer-3d-bounds").textContent = viewer.bounds ? text.boundsOn : text.boundsOff;
   byId("viewer-3d-animation").textContent = viewer.animation ? text.pause : text.play;
+  byId("viewer-3d-animation").setAttribute("aria-pressed", String(viewer.animation));
+  byId("viewer-3d-clip").setAttribute("aria-label", text.clip);
+  byId("viewer-3d-clip").title = text.clip;
+  byId("viewer-3d-speed").setAttribute("aria-label", text.speed);
+  byId("viewer-3d-speed").title = text.speed;
+  byId("viewer-3d-restart").textContent = text.restart;
+  const clips = viewer.modelInstance?.animationClips || [];
+  for (const option of byId("viewer-3d-clip").options) {
+    const clip = clips[Number(option.value)];
+    if (clip) option.textContent = `${clip.name || text.unnamedClip(clip.index)} · ${clip.duration.toFixed(2)} s`;
+  }
   if (viewer.modelStats) byId("viewer-3d-stats").textContent = text.stats(viewer.modelStats);
 }
 
@@ -6721,6 +6736,13 @@ async function openModelViewer(assetId, item, token) {
     loading.hidden = true;
     byId("viewer-3d-tools").hidden = false;
     byId("viewer-3d-animation").hidden = instance.stats.animations === 0;
+    byId("viewer-3d-animation-controls").hidden = instance.stats.animations === 0;
+    byId("viewer-3d-clip").replaceChildren(...instance.animationClips.map((clip) => {
+      const option = document.createElement("option");
+      option.value = String(clip.index);
+      return option;
+    }));
+    byId("viewer-3d-speed").value = "1";
     stats.textContent = viewer3dText().stats(instance.stats);
     byId("viewer-caption").textContent = `${item?.mime_type === "application/zip" ? "3D ZIP" : "GLB"} · ${formatBytes(opened.total_bytes)}`;
     renderViewer3dText();
@@ -8961,6 +8983,13 @@ byId("viewer-3d-animation").addEventListener("click", () => {
   byId("viewer-3d-animation").setAttribute("aria-pressed", String(viewer.animation));
   renderViewer3dText();
 });
+byId("viewer-3d-clip").addEventListener("change", (event) => {
+  viewer.modelInstance?.selectAnimation(Number(event.target.value));
+});
+byId("viewer-3d-speed").addEventListener("change", (event) => {
+  viewer.modelInstance?.setAnimationSpeed(Number(event.target.value));
+});
+byId("viewer-3d-restart").addEventListener("click", () => viewer.modelInstance?.restartAnimation());
 
 async function editFromLibrary(assetId) {
   const note = byId("viewer-save-note");

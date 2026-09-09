@@ -23,6 +23,8 @@ const baseUrl = required("--base-url").replace(/\/$/, "");
 const assetId = required("--asset-id");
 const screenshot = required("--screenshot");
 const expectPlaceholder = optional("--expect-placeholder", "yes") === "yes";
+const thumbnailMode = optional("--thumbnail-mode", "captured");
+check(["captured", "placeholder"].includes(thumbnailMode), "invalid thumbnail mode");
 const expectedTriangles = Number(optional("--triangles", "12"));
 const expectedAnimations = Number(optional("--animations", "0"));
 const compareAssetId = optional("--compare-asset-id", "");
@@ -223,12 +225,19 @@ try {
   });
   await page.locator("#viewer-close").click();
   await page.waitForFunction(() => !document.querySelector("#viewer").open);
-  await page.waitForFunction(
-    (selector) => document.querySelector(selector)?.querySelector("img")?.naturalWidth > 0,
-    cardSelector,
-  );
-  check(await page.locator(`${cardSelector} .model-placeholder`).isHidden(),
-    "rendered thumbnail did not replace the placeholder");
+  observations.thumbnail_mode = thumbnailMode;
+  if (thumbnailMode === "captured") {
+    await page.waitForFunction(
+      (selector) => document.querySelector(selector)?.querySelector("img")?.naturalWidth > 0,
+      cardSelector,
+    );
+    check(await page.locator(`${cardSelector} .model-placeholder`).isHidden(),
+      "rendered thumbnail did not replace the placeholder");
+  } else {
+    check(await page.locator(`${cardSelector} .model-placeholder`).isVisible(),
+      "expected lightweight model placeholder missing");
+    check(await page.locator(`${cardSelector} img`).isHidden(), "placeholder mode loaded a model image");
+  }
 
   await session.send("HeapProfiler.collectGarbage");
   const first = await session.send("Runtime.getHeapUsage");

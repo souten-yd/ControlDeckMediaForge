@@ -2,6 +2,7 @@ import * as THREE from "three";
 import {OrbitControls} from "three/addons/controls/OrbitControls.js";
 import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js";
 import {RoomEnvironment} from "three/addons/environments/RoomEnvironment.js";
+import {createAnimationPlayback} from "./model-animation.mjs";
 
 const BACKGROUNDS = [0x0b1110, 0x36413f, 0xe7eceb];
 
@@ -57,6 +58,7 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
   let environmentTarget = null;
   const pivot = new THREE.Group();
   let mixer = null;
+  let playback = null;
   let animations = [];
   const originalMaterials = new Map();
   const neutralMaterial = new THREE.MeshStandardMaterial({color: 0xaab5b2, roughness: 0.72, metalness: 0.08});
@@ -99,7 +101,7 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
     if (disposed || !visible || !animationPlaying || !mixer) return;
     const delta = lastTime ? Math.min((time - lastTime) / 1000, 0.1) : 0;
     lastTime = time;
-    mixer.update(delta);
+    playback.update(delta);
     render();
     animationFrame = requestAnimationFrame(tick);
   }
@@ -199,22 +201,30 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
   }
 
   function toggleAnimation() {
-    if (!mixer) return false;
-    animationPlaying = !animationPlaying;
+    if (disposed || !playback) return false;
+    animationPlaying = playback.toggle();
     if (animationPlaying) {
-      for (const clip of animations) {
-        const action = mixer.clipAction(clip);
-        action.paused = false;
-        action.play();
-      }
       scheduleAnimation();
     } else {
-      for (const clip of animations) mixer.clipAction(clip).paused = true;
       if (animationFrame) cancelAnimationFrame(animationFrame);
       animationFrame = 0;
       render();
     }
     return animationPlaying;
+  }
+
+  function selectAnimation(index) {
+    if (disposed || !playback?.select(index)) return false;
+    lastTime = 0;
+    render();
+    return true;
+  }
+
+  function restartAnimation() {
+    if (disposed) return;
+    playback?.restart();
+    lastTime = 0;
+    render();
   }
 
   function setVisible(next) {
@@ -256,7 +266,7 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
     controls.dispose();
     canvas.removeEventListener("webglcontextlost", contextLost);
     canvas.removeEventListener("webglcontextrestored", contextRestored);
-    if (mixer) mixer.stopAllAction();
+    playback?.dispose();
     const geometries = new Set();
     const materials = new Set();
     const textures = new Set();
@@ -345,12 +355,19 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
   pivot.add(offset);
   scene.add(pivot);
   try { rebuildEnvironment(); } catch (error) { dispose(); throw error; }
-  if (animations.length) mixer = new THREE.AnimationMixer(root);
+  if (animations.length) {
+    mixer = new THREE.AnimationMixer(root);
+    playback = createAnimationPlayback(mixer, animations);
+  }
   resize();
   fit();
   return {
     stats: {triangles, meshes, materials: materialSet.size, animations: animations.length},
     fit, rotate, zoom, setShading, setLight, setBackground, toggleBounds, toggleAnimation,
+    animationClips: animations.map((clip, index) => ({index, name: clip.name, duration: clip.duration})),
+    selectAnimation, restartAnimation,
+    setAnimationSpeed: (speed) => playback?.setSpeed(speed) || false,
+    animationState: () => playback?.state() || null,
     setVisible, snapshot, dispose,
   };
 }

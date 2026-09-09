@@ -877,6 +877,14 @@
               <button type="button" id="viewer-3d-background">背景</button>
               <button type="button" id="viewer-3d-bounds" aria-pressed="false">範囲</button>
               <button type="button" id="viewer-3d-animation" aria-pressed="false" hidden>再生</button>
+              <div id="viewer-3d-animation-controls" hidden>
+                <select id="viewer-3d-clip" aria-label="動作"></select>
+                <select id="viewer-3d-speed" aria-label="再生速度">
+                  <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+                  <option value="1" selected>1×</option><option value="2">2×</option>
+                </select>
+                <button type="button" id="viewer-3d-restart">先頭へ</button>
+              </div>
             </div>
             <p id="viewer-3d-stats" aria-live="polite"></p>
           </div>

@@ -198,6 +198,7 @@ def test_vendored_3d_viewer_is_reproducible_lazy_and_disposable() -> None:
     assert lock["three_version"] == "0.185.1"
     assert package_lock["packages"]["node_modules/three"]["integrity"] == lock["three_npm_integrity"]
     assert hashlib.sha256(source.read_bytes()).hexdigest() == lock["source_sha256"]
+    assert hashlib.sha256((FRONTEND / "model-animation.mjs").read_bytes()).hexdigest() == lock["animation_source_sha256"]
     assert hashlib.sha256(bundle.read_bytes()).hexdigest() == lock["bundle_sha256"]
     assert bundle.stat().st_size == lock["bundle_bytes"]
     assert "Copyright 2010-2026 Three.js Authors" in bundle.read_text(encoding="utf-8")[:300]
@@ -208,6 +209,7 @@ def test_vendored_3d_viewer_is_reproducible_lazy_and_disposable() -> None:
         "setShading", "setLight", "setBackground", "forceContextLoss",
         "ResizeObserver", "texture.dispose()", "image?.close",
         "RoomEnvironment", "PMREMGenerator", "environmentTarget?.dispose()",
+        "createAnimationPlayback", "selectAnimation", "restartAnimation", "setAnimationSpeed",
     ):
         assert required in viewer_source
     assert f'const MODEL_VIEWER_BUNDLE = "{lock["bundle_sha256"][:16]}"' in SCRIPT
