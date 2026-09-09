@@ -162,6 +162,9 @@ fail-closedにする。削除済み版への新規GUI受付は事前に拒否す
 - probeはversion、background処理、GLB再入出力、GUI起動を別々に記録。
 - CPU基本機能はGPU/ROCm不在でも診断できる。HIP/Cycles対応は別probe。
 - UI再読込や切断でsetupを消さない。cancelは所有runnerへ伝達しstagingだけを片付ける。
+- downloadのchunk書込/flush/進捗DB更新と最終fsyncはworker threadで行う。
+  開始済みI/Oは重複取消でも終端まで追跡し、partialの実bytesより先に進捗を公開しない。
+  chunkごとの再openはsymlink/非regular/期待size不一致を拒否し、欠落fileを暗黙再作成しない。
 - 削除対象はmanaged rootのrealpath内に限定。live referenceとTOCTOUをlockで検証する。
 
 ## 6. session構成

@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 D中断経路修正: downloadの進捗DB/fsyncがloop threadで動く2 REDを再現。
+chunk write/flush/progressとfsyncをowned threadへ移し、重複取消でも終端まで追跡。
+`mf-download-io-source-20260910-r2` 0.993秒passed、実archive/実TCP health5.686ms、
+3回取消→1MiB保持→Range再開→全377,929,956B/hash一致。通信/遅延fixture、導入probeではない。
+署名配布/installed・実ENOSPC・全setup off-loopは未検証。全D/3DS/GA PARTIAL。
+
 2026-09-10 source削除確認の再起動保持: 専用coreでdurable preflightへ到達後、HTTP client再接続、
 owned SIGTERM/別core起動で同operation ID/全preview/ackを保持した実削除再開を確認。
 `mf-removal-restart-source-20260910`、23.113秒/親exit0、両子はSIGTERM(-15)で終端。
