@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10署名0.28.55公開/再取得/実Host署名検証/標準update10.698秒healthy、DB/registry保持。
+installedの停止済み4.5.9 repairをcache退避→実CDN転送→実probeで受入、58.081秒/exit0。
+`mf-repair-download-installed-0.28.55-20260910`、47scene/162revision投影・旧版関連64hash保持、
+既定4.5.13不変、旧版同SHAでinode更新、Host/MF PID保持。download health70samples p95 .967ms。
+従来未検証だった停止後正常repairと、今回のchunk I/O修正の実CDN経路を補完。
+installed重複取消/opaque browser/物理ENOSPC/全setup off-loop/全D/3DS/GAの完了にはしない。
+
 2026-09-10 D中断経路修正: downloadの進捗DB/fsyncがloop threadで動く2 REDを再現。
 chunk write/flush/progressとfsyncをowned threadへ移し、重複取消でも終端まで追跡。
 `mf-download-io-source-20260910-r2` 0.993秒passed、実archive/実TCP health5.686ms、
