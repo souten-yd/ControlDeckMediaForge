@@ -32,11 +32,27 @@ def _chunk(kind: bytes, data: bytes) -> bytes:
     return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
 
 
-def _png(width: int, height: int, digest: bytes) -> bytes:
+# 透過を求められた要求に対して本物の worker が描くもの——単色背景に被写体
+# 1 体——を、fake も同じ形で描く。core は生成物の背景を抜いて alpha を作る
+# ので（mediaforge.cutout）、市松模様を返すと fake の経路だけが必ず
+# alpha_missing で落ちる。色は実機の生成物から採ってある。
+_FLAT_BACKGROUND = (250, 25, 150)
+_FLAT_SUBJECT = (40, 120, 200)
+
+
+def _png(width: int, height: int, digest: bytes, *, flat: bool = False) -> bytes:
     rows = []
     for y in range(height):
         row = bytearray([0])
         for x in range(width):
+            if flat:
+                inside = (
+                    width // 4 <= x < width - width // 4
+                    and height // 4 <= y < height - height // 4
+                )
+                red, green, blue = _FLAT_SUBJECT if inside else _FLAT_BACKGROUND
+                row.extend((red, green, blue, 255))
+                continue
             block = ((x // 32) + (y // 32)) % 2
             base = digest[(x + y) % len(digest)]
             row.extend(((digest[0] + block * 35) % 256, (digest[1] + base // 3) % 256, digest[2], 255))
@@ -87,7 +103,13 @@ def _handle(request: dict) -> int:
     outputs = []
     for index in range(int(request.get("output", {}).get("count", 1))):
         output_path = output_dir / f"output-{index}.png"
-        generated = _png(width, height, hashlib.sha256(f"{request['intent']}:{seed}:{index}".encode()).digest())
+        layout = constraints.get("resolved_layout")
+        wants_alpha = isinstance(layout, dict) and bool(layout.get("alpha"))
+        generated = _png(
+            width, height,
+            hashlib.sha256(f"{request['intent']}:{seed}:{index}".encode()).digest(),
+            flat=wants_alpha,
+        )
         if request.get("operation") == "image.edit" and constraints.get("edit_mode") == "outpaint":
             worker_inputs = request.get("worker_inputs", {})
             with Image.open(io.BytesIO(generated)) as patch:

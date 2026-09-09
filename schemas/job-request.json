@@ -33,7 +33,8 @@
       "default": [],
       "items": {
         "$ref": "#/$defs/assetInput"
-      }
+      },
+      "description": "Existing assets this job reads. image.edit needs exactly one, or 2..4 when constraints.edit_mode is 'multi_reference'. Give either an asset_id from a previous Media Forge result, or a grant_id for a file in the current Control Deck project."
     },
     "profile": {
       "type": [
@@ -68,7 +69,7 @@
     "constraints": {
       "type": "object",
       "default": {},
-      "description": "Free-form generation constraints. Explicit integer width/height here always win over anything inferred. Prefer describing purpose in constraints.asset_brief and letting Media Forge resolve the geometry.",
+      "description": "Free-form generation constraints. Explicit integer width/height here always win over anything inferred, for image.generate and for the image.edit modes that redraw the whole picture. Prefer describing purpose in constraints.asset_brief and letting Media Forge resolve the geometry.",
       "properties": {
         "width": {
           "type": "integer",
@@ -84,6 +85,27 @@
         "scene_texture": {
           "$ref": "#/$defs/sceneTextureRequest",
           "description": "Durable 3D Studio return context for an image.generate job. It does not grant scene mutation authority; applying the resulting immutable image still requires MaterialBinding against the current revision."
+        },
+        "edit_mode": {
+          "type": "string",
+          "enum": [
+            "reference",
+            "variation",
+            "multi_reference",
+            "inpaint",
+            "outpaint",
+            "masked_edit",
+            "upscale",
+            "deblur",
+            "erase"
+          ],
+          "default": "reference",
+          "description": "How an image.edit job changes its inputs. 'reference' (the default) redraws the whole picture from one input image and the intent — use it to change pose, angle or wardrobe while keeping the same subject; it needs exactly one entry in inputs. 'multi_reference' does the same from 2..4 input images, so a front view and a side view can together produce a back view; it needs 2..4 entries in inputs. 'variation' redraws one input as an alternative take. The remaining modes are narrower: 'inpaint', 'outpaint' and 'masked_edit' work on a painted area, and 'upscale', 'deblur' and 'erase' are repairs whose output size comes from the model. Anything other than 'multi_reference' takes exactly one input. The whole-picture modes also honour constraints.asset_brief: a brief that requires transparency makes the edited result transparent, the same way generation does."
+        },
+        "strict_edit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Keep the pixels outside the edited area unchanged. This is for touching up part of a picture, not for redrawing it: a pose or angle change needs the whole image redrawn, so leave this false there. 'inpaint' and 'outpaint' require it; 'variation' refuses it."
         }
       }
     },
@@ -102,19 +124,37 @@
     {
       "if": {
         "properties": {
-          "operation": {"enum": ["video.generate", "video.edit"]}
+          "operation": {
+            "enum": [
+              "video.generate",
+              "video.edit"
+            ]
+          }
         },
-        "required": ["operation"]
+        "required": [
+          "operation"
+        ]
       },
       "then": {
-        "required": ["output"],
+        "required": [
+          "output"
+        ],
         "properties": {
-          "inputs": {"maxItems": 8},
+          "inputs": {
+            "maxItems": 8
+          },
           "output": {
             "properties": {
-              "format": {"enum": ["mp4", "webm"]}
+              "format": {
+                "enum": [
+                  "mp4",
+                  "webm"
+                ]
+              }
             },
-            "required": ["format"]
+            "required": [
+              "format"
+            ]
           }
         }
       },
@@ -122,7 +162,14 @@
         "properties": {
           "output": {
             "properties": {
-              "format": {"not": {"enum": ["mp4", "webm"]}}
+              "format": {
+                "not": {
+                  "enum": [
+                    "mp4",
+                    "webm"
+                  ]
+                }
+              }
             }
           }
         }
@@ -130,11 +177,21 @@
     },
     {
       "if": {
-        "properties": {"operation": {"const": "video.edit"}},
-        "required": ["operation"]
+        "properties": {
+          "operation": {
+            "const": "video.edit"
+          }
+        },
+        "required": [
+          "operation"
+        ]
       },
       "then": {
-        "properties": {"inputs": {"minItems": 1}}
+        "properties": {
+          "inputs": {
+            "minItems": 1
+          }
+        }
       }
     }
   ],
@@ -194,15 +251,29 @@
     "assetInput": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "asset_id"
-      ],
+      "description": "One image this job reads. Give exactly one of the two: asset_id for something Media Forge already holds (an id returned by an earlier generate), or grant_id for a file in the current Control Deck project. Get a grant_id by calling the host's control_deck.project_input_grant tool with the file's path inside the project; Media Forge imports the file and uses it like any other asset.",
       "properties": {
         "asset_id": {
           "type": "string",
           "pattern": "^asset_[0-9a-f]{32}$"
+        },
+        "grant_id": {
+          "type": "string",
+          "pattern": "^grant:[A-Za-z0-9._:-]{1,256}$"
         }
-      }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "asset_id"
+          ]
+        },
+        {
+          "required": [
+            "grant_id"
+          ]
+        }
+      ]
     },
     "output": {
       "type": "object",
@@ -224,7 +295,8 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 8,
-          "default": 1
+          "default": 1,
+          "description": "How many images to produce from this one request. They are generated in the same call with the model kept loaded, each from a different seed, so asking for several takes far less time than repeating the call. Use it to get alternatives of the same idea and pick one; the spread between them is not steerable."
         }
       },
       "default": {}
@@ -327,7 +399,7 @@
             "required",
             "forbidden"
           ],
-          "description": "Set 'required' whenever the asset is drawn over something else. An overlay generated without transparency arrives as an opaque rectangle with visible edges."
+          "description": "Set 'required' whenever the asset is drawn over something else. An overlay generated without transparency arrives as an opaque rectangle with visible edges. When this is 'required', say nothing about the background in intent: Media Forge generates the subject on a flat chroma background of its own and removes it deterministically after generation. Asking for a background here contradicts that instruction and leaves an opaque halo around the subject. Media Forge cuts the subject out itself; you may describe whatever background you want and it is honoured."
         },
         "consistency_group": {
           "type": "string",

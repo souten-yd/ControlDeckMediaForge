@@ -267,6 +267,16 @@ def test_the_brief_explains_when_transparency_is_required():
     assert "over something else" in alpha
 
 
+def test_the_brief_tells_agents_to_leave_the_background_to_media_forge():
+    """透過は生成では作れず、単色背景を抜いて作る。呼び出し側が背景を注文すると
+    その指示と衝突し、抜けない背景が返る。MCP の呼び出し側は LLM なので、演出を
+    足す層を挟まなくても、契約の説明文がそのまま効く。"""
+    schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
+    alpha = schema["$defs"]["assetBrief"]["properties"]["alpha_intent"]["description"]
+
+    assert "say nothing about the background" in alpha
+
+
 def test_the_qa_description_separates_budget_from_correctness():
     """予算が必要な修正まで縛ると誤解させない。"""
     schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
@@ -327,3 +337,25 @@ def test_the_brief_examples_are_accepted_by_the_running_service(client):
     for example in schema["examples"]:
         response = client.post("/api/v1/jobs", json=example)
         assert response.status_code == 202, response.text
+
+
+def test_a_batch_generation_tool_is_offered_beside_the_single_one():
+    """1 枚ずつ呼ぶと、その都度 host が LLM を降ろして載せ直し、会話の文脈を
+    読み直す。実測で画像 13〜16 秒に対し読み直しが 40〜350 秒だった。往復の
+    回数そのものを減らせる口を、契約として出しておく。"""
+    manifest = json.loads((ROOT / "addon.json").read_text(encoding="utf-8"))
+    tools = {item["id"]: item for item in manifest["contributions"]["agent_tools"]}
+
+    assert tools["media.generate.batch"]["endpoint"] == "/addon/v1/agent/generate/batch"
+    schema = json.loads(
+        (ROOT / tools["media.generate.batch"]["schema_path"].removeprefix("/")).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert schema["required"] == ["items"]
+    assert schema["properties"]["items"]["maxItems"] == 50
+    # 呼び出し側は LLM である。なぜ 1 件ずつ呼ぶべきでないかを説明文が持つ。
+    assert "reload" in schema["description"] or "unload" in schema["description"]
+    jsonschema.validate(
+        {"items": [{"intent": "hero sprite", "role": "sprite"}]}, schema
+    )

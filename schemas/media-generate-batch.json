@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/media-generate-batch.json",
+  "title": "Media Forge batch image generation",
+  "description": "Generate several images in one call, in order. Prefer this over repeated single calls whenever more than one asset is needed: every separate call makes the host unload and reload the language model around the generation, and restoring the conversation afterwards costs far more than the images themselves. One call keeps the image model loaded for the whole run. Items are independent: one failure does not stop the rest, and the response reports each item's outcome separately. Items may draw from an intent alone or redraw from reference pictures.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "items"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "description": "The assets to generate, in order. Ask for every asset you need in one call rather than splitting the work: Media Forge keeps the image model loaded for the whole batch, so items after the first skip the model load entirely. They are generated one at a time and each reports its own outcome. An item with 'references' is an edit of those pictures rather than a fresh drawing, so a whole walk cycle or expression sheet fits in one call.",
+      "items": {
+        "$ref": "#/$defs/batchItem"
+      }
+    }
+  },
+  "$defs": {
+    "batchItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent"
+      ],
+      "properties": {
+        "intent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Plain description of the subject and the purpose, in any language. Structural requirements belong in role and alpha_intent, not in adjectives here: a request that said 'wide landscape' only in this field was produced as a square."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "background",
+            "key_visual",
+            "character_portrait",
+            "sprite",
+            "icon",
+            "emblem",
+            "texture",
+            "ui_element",
+            "general"
+          ],
+          "description": "Where the asset is used. This sets the default aspect ratio and whether transparency is required: 'sprite', 'icon', 'emblem' and 'ui_element' are drawn over something else and default to requiring transparency; 'background' and 'texture' fill a surface and default to opaque."
+        },
+        "alpha_intent": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "required",
+            "forbidden"
+          ],
+          "description": "Overrides the role default. Media Forge cuts the subject out of the finished image itself, so describe whatever background you want in intent and it is honoured — including references: an edited sprite comes back with transparency."
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 2048,
+          "description": "Exact output width. Leave both sides unset and let the role decide."
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 2048,
+          "description": "Exact output height. Leave both sides unset and let the role decide."
+        },
+        "references": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          },
+          "description": "Turn this item into an edit: the picture is redrawn from these images plus the intent, keeping the same subject. Use it for a new pose, angle or wardrobe. Each entry is either an asset id from an earlier Media Forge result ('asset_' followed by 32 hex characters) or a grant id for a file in the current Control Deck project ('grant:' ...), obtained from the host's control_deck.project_input_grant tool. One entry redraws from that one picture; two to four let several views inform one result, so a front view and a side view together can produce a back view. Leave this out to draw from the intent alone."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "How many takes of this item to produce, each from a different seed. They come from one model load, so several takes cost far less than repeating the item. Use it to get alternatives and pick one; the spread between them is not steerable."
+        }
+      }
+    }
+  }
+}

@@ -45,6 +45,7 @@ from .asset_placement import (
     plan_placements,
 )
 from .asset_brief import (
+    AssetBrief,
     AssetBriefError,
     infer_brief_from_intent,
     parse_brief,
@@ -95,7 +96,7 @@ from .environment import setup_snapshot
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.ai import HostAIGateway
 from .host.files import GrantContentTooLarge, commit_file, read_grant, require_grant_id
-from .host.jobs import HostExecution
+from .host.jobs import HostExecution, ProgressGate
 from .jobs import JobManager, ProfileResolutionError
 from .m5_companion import profile_documents as m5_profile_documents
 from .model_evaluator import H3ModelEvaluator, unmeasured_lora_bases
@@ -343,7 +344,7 @@ def create_app(
     ) -> JobRequest:
         identity = manager.host_identity(job.id)
         profile_snapshot = manager.resolve_profiles(request)
-        available_references = {item.asset_id for item in request.inputs} | set(
+        available_references = {item.resolved_asset_id for item in request.inputs} | set(
             profile_snapshot.get("reference_asset_ids", [])
         )
         capability_value = await capability_document(identity)
@@ -859,6 +860,8 @@ def create_app(
         identity: HostIdentity,
         *,
         workload_class: str,
+        progress_window: tuple[float, float] = (0.0, 1.0),
+        progress_gate: ProgressGate | None = None,
     ) -> dict[str, Any]:
         missing = {"jobs.write", "resources.acquire"} - identity.granted_capabilities
         if missing:
@@ -878,11 +881,15 @@ def create_app(
         host_job = attached.get("job")
         if not isinstance(host_job, dict) or not isinstance(host_job.get("id"), str):
             raise HTTPException(status_code=502, detail={"code": "invalid_host_response"})
+        offset, span = progress_window
         execution = HostExecution(
             identity=identity,
             host_job_id=host_job["id"],
             workload_class=workload_class,
             owns_terminal=attached.get("created") is True,
+            progress_gate=progress_gate,
+            progress_offset=offset,
+            progress_span=span,
         )
         return manager.submit_hosted(
             value,
@@ -971,12 +978,45 @@ def create_app(
         came back 1024x1024.
 
         The brief rides inside the already free-form ``constraints`` object, so
-        no public schema changes. Editing keeps its existing source-derived
-        geometry; only generation resolves a canvas here.
+        no public schema changes. Editing derives its canvas from the source
+        image unless the caller named one; a named canvas is honoured for the
+        modes that redraw the whole picture.
         """
-        if value.operation != "image.generate":
-            # 編集は元画像から寸法を導く。用途既定で上書きしない。
+        if value.operation not in {"image.generate", "image.edit"}:
             return value
+        width = value.constraints.get("width")
+        height = value.constraints.get("height")
+        explicit_width = width if isinstance(width, int) and not isinstance(width, bool) else None
+        explicit_height = height if isinstance(height, int) and not isinstance(height, bool) else None
+        if value.operation == "image.edit":
+            # 編集の寸法は元画像から導く。ただし呼び出し側が両辺を名指ししたなら
+            # それが答えである——schema は「明示した width/height は常に勝つ」と
+            # 書いており、書いたことは守る。
+            #
+            # 全体を描き直す形だけに限る。守る画素があるもの（strict_edit /
+            # inpaint / outpaint）と、倍率だけで寸法が決まるもの（upscale /
+            # deblur / erase）は自前の不変量を持っており、そちらが先である。
+            if explicit_width is None or explicit_height is None:
+                return value
+            if value.constraints.get("strict_edit") is True:
+                return value
+            if value.constraints.get("edit_mode", "reference") not in {
+                "reference", "variation", "multi_reference",
+            }:
+                return value
+            resolved_edit = resolve_layout(
+                AssetBrief(),
+                envelope=size_envelope(),
+                explicit_width=explicit_width,
+                explicit_height=explicit_height,
+            )
+            if resolved_edit is None:
+                return value
+            return value.model_copy(update={"constraints": {
+                **value.constraints,
+                **resolved_edit.as_constraints(),
+                "resolved_layout": resolved_edit.document(),
+            }})
         brief_value = value.constraints.get("asset_brief")
         brief = parse_brief(brief_value)
         if brief is None:
@@ -985,10 +1025,6 @@ def create_app(
             brief = infer_brief_from_intent(value.intent)
         if brief is None:
             return value
-        width = value.constraints.get("width")
-        height = value.constraints.get("height")
-        explicit_width = width if isinstance(width, int) and not isinstance(width, bool) else None
-        explicit_height = height if isinstance(height, int) and not isinstance(height, bool) else None
         resolved = resolve_layout(
             brief,
             envelope=size_envelope(),
@@ -1437,7 +1473,7 @@ def create_app(
         count = payload.get("count")
         profile_snapshot = manager.resolve_profiles(request)
         available_references = {
-            item.asset_id for item in request.inputs
+            item.resolved_asset_id for item in request.inputs
         } | set(profile_snapshot.get("reference_asset_ids", []))
         capability_value = await capability_document(identity)
         director_mode = params_director_mode(payload)
@@ -1670,7 +1706,7 @@ def create_app(
         creative_spec = CreativeSpec.model_validate(payload.get("creative_spec", {}))
         layout = LayoutSpec.model_validate(payload.get("layout"))
         profile_snapshot = manager.resolve_profiles(request)
-        available_references = {item.asset_id for item in request.inputs} | set(
+        available_references = {item.resolved_asset_id for item in request.inputs} | set(
             profile_snapshot.get("reference_asset_ids", [])
         )
         capability_value = await capability_document(identity)
@@ -2170,11 +2206,63 @@ def create_app(
         reject_host_paths(payload)
         return await capability_document(identity)
 
+    async def imported_inputs(
+        value: JobRequest,
+        identity: HostIdentity,
+        *,
+        cache: dict[str, str] | None = None,
+    ) -> JobRequest:
+        """券で指された file を取り込み、asset を指す要求に書き換える。
+
+        呼び出し側が持っているのは project の中の file であって Media Forge の
+        asset ではない。取り込み口は画面からしか届かないので、agent には
+        「作った物しか参照にできない」という穴があった。Host が出した読み取りの
+        券をここで物に変える。
+
+        受けるのは券だけである。path は受けない——どの file を読んでよいかを
+        決めるのは Host であって、こちらではない。
+        """
+        if not any(item.grant_id for item in value.inputs):
+            return value
+        seen = cache if cache is not None else {}
+        resolved: list[dict[str, str]] = []
+        for item in value.inputs:
+            if item.grant_id is None:
+                resolved.append({"asset_id": str(item.asset_id)})
+                continue
+            # batch で同じ下描きを何度も参照することがある。券 1 枚につき
+            # 取り込みは 1 度でよい。
+            known = seen.get(item.grant_id)
+            if known is not None:
+                resolved.append({"asset_id": known})
+                continue
+            try:
+                _metadata, content = await read_grant(
+                    host, identity, require_grant_id(item.grant_id),
+                    max_bytes=MAX_IMPORT_BYTES,
+                )
+            except GrantContentTooLarge as exc:
+                raise HTTPException(status_code=413, detail={"code": "reference_too_large"}) from exc
+            except (HostApiError, ValueError) as exc:
+                status_code = exc.status_code if isinstance(exc, HostApiError) else 422
+                code = exc.code if isinstance(exc, HostApiError) else "invalid_scoped_grant"
+                raise HTTPException(status_code=status_code, detail={"code": code}) from exc
+            try:
+                imported = import_asset_bytes(store, content, purpose="source")
+            except AssetImportError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "invalid_reference_image", "message": str(exc)[:300]},
+                ) from exc
+            seen[item.grant_id] = imported.id
+            resolved.append({"asset_id": imported.id})
+        return value.model_copy(update={"inputs": [AssetInput(**item) for item in resolved]})
+
     @app.post("/addon/v1/agent/generate")
     async def agent_generate(request: Request) -> dict[str, Any]:
         identity = await authorize_host(request)
         payload = await request.json()
-        value = host_job_input(payload)
+        value = await imported_inputs(host_job_input(payload), identity)
         job = await submit_hosted(value, identity, workload_class="agent-interactive")
         terminal = await wait_for_terminal(job["id"])
         await manager.wait_cleanup(job["id"])
@@ -2184,6 +2272,178 @@ def create_app(
         result = submitted_reference(terminal)
         result["asset_id"] = terminal["asset_ids"][0] if terminal["asset_ids"] else None
         return result
+
+    def batch_generate_items(payload: object) -> list[dict[str, Any]]:
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=422, detail={"code": "invalid_execution_envelope"})
+        reject_host_paths(payload)
+        value = payload.get("input", {})
+        items = value.get("items") if isinstance(value, dict) else None
+        if not isinstance(items, list) or not 1 <= len(items) <= 50:
+            raise HTTPException(status_code=422, detail={"code": "invalid_generation_batch"})
+        if not all(isinstance(item, dict) for item in items):
+            raise HTTPException(status_code=422, detail={"code": "invalid_generation_batch"})
+        return items
+
+    def batch_item_request(item: dict[str, Any]) -> JobRequest:
+        """batch の 1 件を、通常の生成要求へ写す。
+
+        batch の項目をあえて平たくしてあるのは、この schema がモデルの
+        制約付きデコードへそのまま渡るからである（ControlDeck の
+        model_facing_schema）。入れ子を深くすると文法が膨らみ、tool を
+        1 つ有効にしただけでモデルが使えなくなる事故が実際に起きている。
+        細かい指定が要る依頼は従来どおり media.generate を使う。
+        """
+        if set(item) - {
+            "intent", "role", "alpha_intent", "width", "height", "references", "count",
+        }:
+            raise HTTPException(status_code=422, detail={"code": "invalid_generation_batch"})
+        brief = {
+            key: item[key] for key in ("role", "alpha_intent")
+            if isinstance(item.get(key), str)
+        }
+        constraints: dict[str, Any] = {}
+        if brief:
+            constraints["asset_brief"] = brief
+        for side in ("width", "height"):
+            value = item.get(side)
+            if value is None:
+                continue
+            # schema と同じ範囲をここでも見る。schema を検証するのは host 側で
+            # あり、この入口は host 以外からも叩ける。
+            if not isinstance(value, int) or isinstance(value, bool) or not 256 <= value <= 2048:
+                raise HTTPException(status_code=422, detail={"code": "invalid_generation_batch"})
+            constraints[side] = value
+        # 参照があれば編集である。何枚渡されたかで形が決まるので、呼び出し側に
+        # edit_mode を選ばせない——項目を平たく保つのはこの schema がモデルの
+        # 制約付きデコードへそのまま渡るからで、選択肢を増やすほど文法が膨らむ。
+        references = item.get("references")
+        inputs: list[dict[str, str]] = []
+        if references is not None:
+            if (
+                not isinstance(references, list)
+                or not 1 <= len(references) <= 4
+                or not all(isinstance(value, str) for value in references)
+            ):
+                raise HTTPException(status_code=422, detail={"code": "invalid_generation_batch"})
+            for value in references:
+                inputs.append(
+                    {"grant_id": value} if value.startswith("grant:") else {"asset_id": value}
+                )
+            if len(inputs) > 1:
+                constraints["edit_mode"] = "multi_reference"
+        count = item.get("count")
+        if count is not None and (
+            not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 8
+        ):
+            raise HTTPException(status_code=422, detail={"code": "invalid_generation_batch"})
+        try:
+            return JobRequest.model_validate({
+                "operation": "image.edit" if inputs else "image.generate",
+                "intent": item.get("intent"),
+                "inputs": inputs,
+                "constraints": constraints,
+                **({"output": {"count": count}} if count is not None else {}),
+            })
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "invalid_generation_batch"}
+            ) from exc
+
+    @app.post("/addon/v1/agent/generate/batch")
+    async def agent_generate_batch(request: Request) -> dict[str, Any]:
+        """N 件を 1 コールで順に作る。
+
+        1 件ずつ呼ぶと、その都度 host は LLM を降ろして載せ直し、会話の文脈を
+        丸ごと読み直す。実測では画像 1 枚 13〜16 秒に対し、文脈の読み直しが
+        40〜350 秒だった。往復の回数そのものを減らすためにこの入口がある。
+
+        全件をまとめて受け付けてから待つ。1 件ずつ「投入して待って、また投入」
+        にすると、待っている間に処理待ちが空になり、image model が降ろされる
+        （_execute の後始末は「続きが無ければ抱えない」）。まとめて入れておけば、
+        batch の間ずっと載ったままになる。走る順は 1 件ずつで変わらない——GPU も
+        worker も 1 つなので、並べても速くならない。
+
+        時計での打ち切りは置かない。何枚だろうと、生成が進んでいる限り進める。
+        止まったときに止まるのは、job 自身が持っている worker の timeout である。
+
+        1 件の失敗で残りを捨てない。placement の batch と同じで、結果は件ごとに
+        返し、全部か無かではないことを応答自身が名乗る。
+        """
+        identity = await authorize_host(request)
+        items = batch_generate_items(await request.json())
+        # 形の誤りは 1 件でも走らせる前に断る。placement の batch と同じで、
+        # 読めない指示を混ぜたまま半分だけ実行しない。走り出してからの失敗
+        # （資源が取れない、生成が用途を満たさない）だけを件ごとに扱う。
+        requests = [batch_item_request(item) for item in items]
+        # 券は生成の前に物へ変える。走り出してから「参照が読めない」で落ちると、
+        # 前の件だけ出来た状態になる。
+        imported: dict[str, str] = {}
+        requests = [
+            await imported_inputs(value, identity, cache=imported) for value in requests
+        ]
+        # 1 件ずつ投入して待つ。並べて投入すると job は同時に走り出し、1 つの
+        # worker プロセスへ同時に書き込むことになる。順に走らせる代わり、待って
+        # いる間も model を降ろさないよう明示して抱えてもらう。
+        span = 1.0 / len(requests)
+        item_timeout = resolved.worker_timeout_sec + 60.0
+        # 進捗の門は batch で 1 つにする。件ごとに作ると、前の件の最後の報告と
+        # 次の件の最初の報告が同じ 0.5 秒に入り、host の間隔制限（2Hz）に掛かる。
+        gate = ProgressGate()
+        outcomes: list[dict[str, Any]] = []
+        async with manager.keep_worker_warm():
+            for index, value in enumerate(requests):
+                try:
+                    job = await submit_hosted(
+                        value,
+                        identity,
+                        workload_class="agent-interactive",
+                        # 件ごとに 0 から測り直すと、host 側の単調増加の検査に
+                        # 弾かれる。1 件を全体の 1/N として報告する。host から
+                        # 見た進捗はそのまま「何件目まで進んだか」になり、
+                        # 進んでいる限り待ち続けられる。
+                        progress_window=(index * span, span),
+                        progress_gate=gate,
+                    )
+                    terminal = await wait_for_terminal(job["id"], timeout=item_timeout)
+                    await manager.wait_cleanup(job["id"])
+                except HTTPException as exc:
+                    detail = exc.detail if isinstance(exc.detail, dict) else {}
+                    outcomes.append({
+                        "index": index,
+                        "status": "failed",
+                        "asset_id": None,
+                        "error": {"code": str(detail.get("code") or "media_job_failed")},
+                    })
+                    continue
+                except TimeoutError:
+                    outcomes.append({
+                        "index": index,
+                        "status": "failed",
+                        "asset_id": None,
+                        "error": {"code": "job_cleanup_timeout"},
+                    })
+                    continue
+                error = terminal.get("error") or {}
+                asset_ids = terminal.get("asset_ids") or []
+                outcomes.append({
+                    "index": index,
+                    "status": terminal["status"],
+                    "job_id": terminal["id"],
+                    "asset_id": asset_ids[0] if asset_ids else None,
+                    "asset_ids": asset_ids,
+                    **({"error": {"code": str(error.get("code") or "media_job_failed")}}
+                       if terminal["status"] != "succeeded" else {}),
+                })
+        succeeded = sum(1 for item in outcomes if item["status"] == "succeeded")
+        return {
+            "items": outcomes,
+            "succeeded_count": succeeded,
+            "requested_count": len(items),
+            "partial": succeeded != len(items),
+            # 1 件ずつ独立した job である。全部か無かではない。
+            "atomic": False,
+        }
 
     def scene_tool_input(payload: object) -> dict[str, Any]:
         if not isinstance(payload, dict):
@@ -3400,7 +3660,7 @@ def create_app(
                         reference_context = accepted_reference_context(params)
                         profile_snapshot = manager.resolve_profiles(request)
                         available_references = {
-                            item.asset_id for item in request.inputs
+                            item.resolved_asset_id for item in request.inputs
                         } | set(profile_snapshot.get("reference_asset_ids", []))
                         capability_value = await capability_document(identity)
                         result = compile_creative(
@@ -4608,7 +4868,7 @@ def create_app(
             reference_context = accepted_reference_context(payload)
             profile_snapshot = manager.resolve_profiles(request)
             available_references = {
-                item.asset_id for item in request.inputs
+                item.resolved_asset_id for item in request.inputs
             } | set(profile_snapshot.get("reference_asset_ids", []))
             capability_value = await capability_document()
             return compile_creative(

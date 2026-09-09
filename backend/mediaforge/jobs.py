@@ -9,7 +9,8 @@ import shutil
 import sys
 import time
 import uuid
-from contextlib import suppress
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,15 @@ from . import __version__
 from .asset_import import MAX_IMPORT_PIXELS
 from .canvas import conform_to_layout
 from .config import REPOSITORY_ROOT
-from .domain import Asset, ErrorDetail, Job, JobRequest, JobStatus, Provenance
+from .domain import (
+    WHOLE_IMAGE_EDIT_MODES,
+    Asset,
+    ErrorDetail,
+    Job,
+    JobRequest,
+    JobStatus,
+    Provenance,
+)
 from .evaluator import CreativeEvaluationError, CreativeEvaluator
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.jobs import HostExecution, HostJobReporter
@@ -42,10 +51,19 @@ from .asset_brief import (
     AssetBriefError,
     BriefDefect,
     ResolvedLayout,
+    effective_alpha_intent,
     infer_brief_from_intent,
     inspect_against_brief,
     parse_brief,
 )
+from .cutout import (
+    FLAT_BACKGROUND_DIRECTIVE,
+    apply_matte,
+    cut_out_background,
+    flatten_onto_flat_background,
+    without_background_clauses,
+)
+from .matting import MATTING_MODEL_ID, MATTING_WEIGHTS, MattingUnavailable, matte_mask
 from .blender_compile import (
     BLENDER_VERSION,
     COMPILER_VERSION,
@@ -88,6 +106,10 @@ OOM_FLOOR_INCREMENT_BYTES = 512 * 1024 * 1024
 # 枠に負けたときに落とす先。cpu は入れない。CPU 実行は 28 倍遅く、待ち時間内に
 # 終わらないまま資源だけ使う（実測: 4枚で 20 分かけて打ち切られた）。
 # cpu_offload でも駄目なら、枠が足りていないということなので失敗させて broker へ返す。
+# 重みを VRAM に置く載せ方。ここで走った worker は、次の要求まで VRAM を
+# 抱えたままになる。cpu / cpu_offload は抱えないので数えない。
+_RESIDENT_MODES = frozenset({"direct_device_map", "full_device"})
+
 _LIGHTER_MODE = {
     "direct_device_map": "cpu_offload",
     "full_device": "cpu_offload",
@@ -192,6 +214,11 @@ class JobManager:
         self._processes: dict[str, asyncio.subprocess.Process] = {}
         # model を載せたまま次の job を受ける worker。queue が空になったら畳む。
         self._warm_worker: tuple[asyncio.subprocess.Process, tuple[str, str, str, str]] | None = None
+        # その worker がいま VRAM に抱えている model。broker への申告を
+        # 「載せ直しぶん」か「上乗せぶん」かで変えるために要る。
+        self._warm_model: str | None = None
+        # 「まだ続きが来る」と分かっている間の保持。batch がこれを立てる。
+        self._keep_warm = 0
         # 生成後に model を載せたまま待っている間の lease と、その見張り。
         # lease を持ったまま待つのは、抱えている VRAM を broker から見えるように
         # しておくためである。返して待つと「空いている」ことになり、その上へ
@@ -259,7 +286,20 @@ class JobManager:
                     await process.wait()
         self._runner = None
 
+    @staticmethod
+    def _require_resolved_inputs(request: JobRequest) -> None:
+        """券のまま走らせない。
+
+        `grant_id` は「この file を読んでよい」という Host の券であって、物では
+        ない。取り込みは入口（agent 経路）で済ませ、ここから先は asset しか
+        流れない。取りこぼしを黙って落とすと、参照が 1 枚足りないまま生成が
+        成功してしまう。
+        """
+        if any(item.asset_id is None for item in request.inputs):
+            raise ValueError("inputs still name a grant; import them before submitting")
+
     def submit(self, request: JobRequest) -> Job:
+        self._require_resolved_inputs(request)
         job = self.store.create_job(request, profile_snapshot=self.resolve_profiles(request))
         self._queue.put_nowait(job.id)
         return job
@@ -273,6 +313,7 @@ class JobManager:
     ) -> Job:
         if self.host_client is None:
             raise RuntimeError("ControlDeck Host client is not configured")
+        self._require_resolved_inputs(request)
         job = self.store.create_job(
             request,
             host_managed=True,
@@ -292,6 +333,48 @@ class JobManager:
                 self._warm_worker = None
             process.terminate()
         return self.store.get_job(job_id)
+
+    async def _purge_if_idle(self, job_id: str | None = None) -> None:
+        """続きが無いなら、その場で model を降ろす。
+
+        「終わった」と言う前に降ろすのが順序である。抱えたまま完了を告げると、
+        次に来た要求は空いていない GPU を待つ。実機では batch の後に画像 worker
+        が 19.4GB を抱えたまま残り、音楽生成が 300 秒待って期限切れになった。
+
+        `job_id` を渡すと、その job 自身は「続き」に数えない。自分の後始末から
+        呼ぶときに要る。
+        """
+        if self._keep_warm or self._linger_task is not None:
+            return
+        if not self._queue.empty():
+            return
+        if any(pending != job_id for pending in self._job_tasks):
+            return
+        await self._retire_warm_worker()
+
+    @asynccontextmanager
+    async def keep_worker_warm(self) -> AsyncIterator[None]:
+        """次の依頼が来ると分かっている間、model を降ろさない。
+
+        後始末は既定で「続きが無ければ抱えない」である（`_execute` の最後）。
+        続きがあるかどうかは処理待ちを見て判断するが、batch は 1 件ずつ投入して
+        待つので、待っている間は処理待ちが空になる。並べて投入すれば空にならない
+        が、job は投入した順に並行して走り出すので、1 つの worker プロセスへ
+        同時に書き込むことになる。
+
+        そこで「続きがある」を外から宣言できるようにする。
+
+        抜けるときは自分で降ろす。最後の 1 件の後始末は、まだ宣言が立っている
+        間に走るので素通りする——実機で batch の後に image worker が 19.4GB を
+        抱えたまま残り、音楽生成が GPU 待ちのまま期限切れになった。宣言した側が
+        最後に片づける。
+        """
+        self._keep_warm += 1
+        try:
+            yield
+        finally:
+            self._keep_warm = max(0, self._keep_warm - 1)
+            await self._purge_if_idle()
 
     async def wait_cleanup(self, job_id: str, timeout: float = 5.0) -> None:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -348,15 +431,18 @@ class JobManager:
             self._selected_models.pop(job_id, None)
             self._downgraded.pop(job_id, None)
             self._routes.pop(job_id, None)
-            self._job_tasks.pop(job_id, None)
-            self._queue.task_done()
             # 続けて処理する job が無いなら model を抱えたままにしない。
             # 差分生成のように続きがある間だけ載せたままにする。
             # queue は _run が即座に汲み出すので、待っている job は queue では
             # なく _job_tasks に居る。queue だけ見ると常に空に見えて、続きが
             # あっても毎回下ろしてしまう。
-            if self._queue.empty() and not self._job_tasks and self._linger_task is None:
-                await self._retire_warm_worker()
+            #
+            # 降ろすのは job を畳む前である。畳んだ時点で呼び出し側の待ちは
+            # 明けるので、後に回すと「終わった」と言いながら VRAM を握った
+            # 数瞬が残る。次に来る要求（音楽など）はそこで空きを見る。
+            await self._purge_if_idle(job_id)
+            self._job_tasks.pop(job_id, None)
+            self._queue.task_done()
 
     async def _execute(self, job_id: str) -> None:
         try:
@@ -694,7 +780,7 @@ class JobManager:
             }
             prompt_parts.append(profile_prompt(profile))
         combined_references = list(dict.fromkeys(
-            [item.asset_id for item in request.inputs] + reference_asset_ids
+            [item.resolved_asset_id for item in request.inputs] + reference_asset_ids
         ))
         if len(combined_references) > 4:
             raise ProfileResolutionError(
@@ -775,7 +861,7 @@ class JobManager:
                 if len(job.request.inputs) != 1:
                     raise WorkerFailure("invalid_pack", "3d.project.glb requires exactly one input asset")
                 try:
-                    source = self.store.get_asset(job.request.inputs[0].asset_id)
+                    source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
                 except KeyError as exc:
                     raise WorkerFailure("asset_not_found", "3D source asset was not found") from exc
                 if source.mime_type != "model/gltf-binary":
@@ -799,7 +885,7 @@ class JobManager:
                 entries = parse_m5_pack_entries(job.request.constraints.get("entries"))
             except M5CompanionError as exc:
                 raise WorkerFailure("invalid_pack", str(exc)) from exc
-            requested = [item.asset_id for item in job.request.inputs]
+            requested = [item.resolved_asset_id for item in job.request.inputs]
             mapped = [entry.asset_id for entry in entries]
             if len(set(requested)) != len(requested) or set(requested) != set(mapped):
                 raise WorkerFailure("invalid_pack", "pack entries must map every input asset exactly once")
@@ -835,12 +921,12 @@ class JobManager:
                 "multi-reference edit requires 2..4 inputs; other image.edit modes require exactly one",
             )
         try:
-            source = self.store.get_asset(job.request.inputs[0].asset_id)
+            source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
             source_path = self.store.asset_path(source.id)
         except KeyError as exc:
             raise WorkerFailure("asset_not_found", "source image asset was not found") from exc
         try:
-            references = [self.store.get_asset(item.asset_id) for item in job.request.inputs[1:]]
+            references = [self.store.get_asset(item.resolved_asset_id) for item in job.request.inputs[1:]]
         except KeyError as exc:
             raise WorkerFailure("asset_not_found", "reference image asset was not found") from exc
         if source.mime_type != "image/png" or any(item.mime_type != "image/png" for item in references):
@@ -1053,7 +1139,7 @@ class JobManager:
         await self._update(job.id, reporter, status=JobStatus.RUNNING, phase="validate", progress=0.1)
         root = contained(self.store.work_dir, self.store.work_dir / job.id)
         root.mkdir(mode=0o700)
-        source = self.store.get_asset(job.request.inputs[0].asset_id)
+        source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
         try:
             options = parse_compile_options(job.request.constraints)
         except BlenderCompileError as exc:
@@ -1327,6 +1413,96 @@ class JobManager:
         request["constraints"] = constraints
         return request
 
+    def _worker_intent(self, job: Job, intent: str, selected: ModelDescriptor | None) -> str:
+        """worker へ渡す文言を、一箇所で順に組む。
+
+        以前はここが三つの独立した代入で、後のものが前のものを
+        `job.request.intent` から作り直していた。profile を付けた job では、
+        直前に足した LoRA の起動語がそれで消えていた（起動語の無い LoRA は
+        何も起こさないので、静かに効かない）。足す順に一本化する。
+
+        背景の指示は最後に置く。brief が決めた背景は、呼び出し側の文言にも
+        profile の作風にも LoRA の起動語にも譲らない。
+        """
+        trigger = self._lora_trigger_words(job, selected) if selected is not None else ""
+        if trigger:
+            intent = f"{intent}, {trigger}"
+        snapshot = self.store.job_profile_snapshot(job.id)
+        if snapshot.get("prompt"):
+            intent = f"{intent}\n{snapshot['prompt']}"
+        return self._directed_intent(job, intent)
+
+    @staticmethod
+    def _redraws_whole_image(job: Job) -> bool:
+        """この job は画を丸ごと描き直すか。
+
+        生成と、守る画素を持たない編集がこれにあたる。守る側（strict_edit /
+        inpaint / outpaint）と、倍率で寸法が決まる直し（upscale / deblur /
+        erase）は自前の不変量を持っているので、生成と同じ後処理は掛けない。
+        """
+        if job.request.operation == "image.generate":
+            return True
+        if job.request.operation != "image.edit":
+            return False
+        if job.request.constraints.get("strict_edit") is True:
+            return False
+        return job.request.constraints.get("edit_mode", "reference") in WHOLE_IMAGE_EDIT_MODES
+
+    def _alpha_required(self, job: Job) -> bool:
+        """用途が透過を求めているか。
+
+        編集では用途を推し量らない。生成は文言から用途を拾うが（呼び出し側は
+        散文でしか書かない）、編集で同じことをすると「歩いている sprite」と
+        書いただけの写真の手直しが、頼まれてもいない背景抜きを受けてしまう。
+        編集で抜くのは、呼び出し側が asset_brief で名指ししたときだけにする。
+        """
+        if not self._redraws_whole_image(job):
+            return False
+        if job.request.operation == "image.edit":
+            try:
+                brief = parse_brief(job.request.constraints.get("asset_brief"))
+            except AssetBriefError:
+                logger.warning("job %s carries an unreadable asset_brief", job.id)
+                return False
+            return effective_alpha_intent(brief) == "required"
+        brief, _resolved = self._brief_context(job)
+        return effective_alpha_intent(brief) == "required"
+
+    def _directed_intent(self, job: Job, intent: str) -> str:
+        """透過を求められているなら、抜ける背景で描くよう worker への文言だけ足す。
+
+        拡散モデルは alpha を出さない。透過は後処理で作るしかなく、後処理が
+        当てにできるのは平らな単色背景だけである（`cutout`）。風景の中に
+        置かれた被写体を抜こうとすれば被写体を削る。
+
+        足すのは worker へ渡す複製に対してだけである。`job.request.intent` は
+        評価器の判定基準であり資産名の素でもあるので、利用者が書いた文言を
+        こちらの都合で書き換えない。
+        """
+        if not self._alpha_required(job):
+            return intent
+        if self._can_matte():
+            # 形を推定して抜けるなら、背景を縛る理由が無い。単色背景の指示は
+            # 「風景なし・影なし・地面なし・縁に触れるな」まで含んでおり、
+            # 透過を頼むだけで作れる絵が狭まっていた。呼び出し側が書いた背景は
+            # そのまま通す——抜くのに背景の種類を選ばない。
+            return intent
+        # 背景の注文はここで落とす。残したまま単色背景を頼むと、一つの
+        # プロンプトが二つの違う背景を要求することになる。
+        return f"{without_background_clauses(intent)}\n\n{FLAT_BACKGROUND_DIRECTIVE}"
+
+    def _can_matte(self) -> bool:
+        """形を推定して抜ける構成か。
+
+        生成を頼む前に決まっている必要がある——抜き方によって、worker へ渡す
+        文言が変わるからである。
+        """
+        return (
+            self.image_runtime_python is not None
+            and self.image_runtime_python.is_file()
+            and self._matting_weights() is not None
+        )
+
     # 出せる画素数の上限。取り込みの上限と同じ値を使う（別に持つと片方だけ動く）。
     # ここを超えたものは保存も検証もできないので、作らせてから断るのではなく
     # 受付で断る。
@@ -1353,7 +1529,7 @@ class JobManager:
         if scale < 1:
             raise WorkerFailure("capability_unavailable", "この直しモデルは倍率を宣言していません")
         try:
-            source = self.store.get_asset(job.request.inputs[0].asset_id)
+            source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
         except (IndexError, KeyError) as exc:
             raise WorkerFailure("invalid_dimensions", "直す画像がありません") from exc
         if not source.width or not source.height:
@@ -1429,7 +1605,7 @@ class JobManager:
         if cost is None or job.request.constraints.get("edit_mode") not in {"upscale", "deblur"}:
             return measured
         try:
-            source = self.store.get_asset(job.request.inputs[0].asset_id)
+            source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
         except (IndexError, KeyError):
             return measured
         pixels = (source.width or 0) * (source.height or 0)
@@ -1455,7 +1631,7 @@ class JobManager:
         source = None
         if job.request.operation == "image.edit":
             try:
-                source = self.store.get_asset(job.request.inputs[0].asset_id)
+                source = self.store.get_asset(job.request.inputs[0].resolved_asset_id)
             except (IndexError, KeyError):
                 pass
         width = job.request.constraints.get("width", source.width if source and source.width else 1024)
@@ -1636,6 +1812,7 @@ class JobManager:
         """常駐 worker を終わらせる。stdin を閉じれば main() の loop が抜ける。"""
         warm = self._warm_worker
         self._warm_worker = None
+        self._warm_model = None
         if warm is None:
             return
         process, _ = warm
@@ -1816,15 +1993,10 @@ class JobManager:
                 "worker_output_dir": str(output_dir),
                 "worker_inputs": {**worker_inputs, "loras": self._resolved_loras(job, selected)},
             }
-        trigger = self._lora_trigger_words(job, selected) if selected is not None else ""
-        if trigger:
-            # 起動語を入れない LoRA は何も起こさない。足したことは job に残る。
-            target = payload["request"]
-            target["intent"] = f"{target.get('intent') or job.request.intent}, {trigger}"
-        snapshot = self.store.job_profile_snapshot(job.id)
-        if snapshot.get("prompt"):
-            target = payload["request"] if selected is not None else payload
-            target["intent"] = f"{job.request.intent}\n{snapshot['prompt']}"
+        target = payload["request"] if selected is not None else payload
+        target["intent"] = self._worker_intent(
+            job, str(target.get("intent") or job.request.intent), selected
+        )
         if job.request.qa.semantic:
             candidate_count = job.request.output.count + job.request.qa.max_regeneration_attempts
             target = payload["request"] if selected is not None else payload
@@ -2014,7 +2186,19 @@ class JobManager:
                 error=ErrorDetail(code=code, message=message[:300]),
             )
             return
+        # 応答が返った worker は、その model を載せたまま次を受けられる。次の
+        # 要求で broker へ「重みは既に自分が持っている」と言えるように残す。
+        #
+        # 載っている場所は worker の報告を正とする。要求時の execution は lease を
+        # まだ持っておらず、grant が device を返すかは host 側の都合である
+        # （stub は返さない）。実際にどこへ置いたかを知っているのは worker だけ。
         metrics = response.get("runtime_metrics") if isinstance(response, dict) else None
+        device_mode = str((metrics or {}).get("device_mode") or "")
+        if selected is not None and self._warm_worker is not None and device_mode in _RESIDENT_MODES:
+            self._warm_model = selected.model_id
+        elif selected is not None and device_mode:
+            # RAM 実行や部分退避では、VRAM に重みを抱えていない。
+            self._warm_model = None
         if isinstance(metrics, dict):
             load_sec = metrics.get("load_sec")
             generation_sec = metrics.get("generation_sec")
@@ -2136,6 +2320,9 @@ class JobManager:
                 error=ErrorDetail(code="artifact_integrity_failed", message=str(exc)[:300]),
             )
             return
+        # 完了を告げる前に降ろす。ここで抱えたままにすると、成功を受け取った
+        # 呼び出し側が次を頼んだとき、GPU はまだ埋まっている。
+        await self._purge_if_idle(job_id)
         await self._update(
             job_id,
             reporter,
@@ -2153,25 +2340,36 @@ class JobManager:
         inputs_dir = contained(job_root, job_root / "inputs")
         inputs_dir.mkdir(mode=0o700)
         result: dict[str, Any] = {}
+        # 透過を求められているなら、参照の透明を頼むのと同じ単色にする。
+        # 透明のまま渡すと model に届くまでに黒へ潰れ、返ってきた画も黒い背景
+        # になる（実機で唐揚げダンジョンの slime.png がそうなった）。参照と
+        # 指示が同じ背景を指せば、後段の背景抜きがそのまま効く。
+        flatten = self._alpha_required(job)
         if job.request.operation == "image.edit":
-            source_id = job.request.inputs[0].asset_id
+            source_id = job.request.inputs[0].resolved_asset_id
             source_destination = contained(inputs_dir, inputs_dir / "source.png")
             shutil.copyfile(self.store.asset_path(source_id), source_destination)
+            if flatten:
+                flatten_onto_flat_background(source_destination)
             result["source_path"] = str(source_destination)
         reference_paths: list[str] = []
         for index, reference in enumerate(job.request.inputs[1:], start=1):
             destination = contained(inputs_dir, inputs_dir / f"reference-{index}.png")
-            shutil.copyfile(self.store.asset_path(reference.asset_id), destination)
+            shutil.copyfile(self.store.asset_path(reference.resolved_asset_id), destination)
+            if flatten:
+                flatten_onto_flat_background(destination)
             reference_paths.append(str(destination))
         if reference_paths:
             result["reference_paths"] = reference_paths
         profile_reference_paths: list[str] = []
-        direct_input_ids = {item.asset_id for item in job.request.inputs}
+        direct_input_ids = {item.resolved_asset_id for item in job.request.inputs}
         for index, asset_id in enumerate(profile_asset_ids, start=1):
             if asset_id in direct_input_ids:
                 continue
             destination = contained(inputs_dir, inputs_dir / f"profile-reference-{index}.png")
             shutil.copyfile(self.store.asset_path(str(asset_id)), destination)
+            if flatten:
+                flatten_onto_flat_background(destination)
             profile_reference_paths.append(str(destination))
         if profile_reference_paths:
             result["profile_reference_paths"] = profile_reference_paths
@@ -2334,6 +2532,7 @@ class JobManager:
                 selected,
                 workload_class=execution.workload_class,
                 estimated_runtime_sec=self._expected_runtime_sec(job, selected),
+                already_resident=self._warm_holds(selected),
             )
             if selected is not None
             else fake_image_request(
@@ -2348,6 +2547,22 @@ class JobManager:
                 for key in ("execution_peak_bytes", "cold_load_peak_bytes"):
                     request["vram"][key] = max(int(request["vram"][key]), peak_floor)
         return request
+
+    def _warm_holds(self, selected: ModelDescriptor) -> bool:
+        """この model を、いま自分の worker が GPU に載せたまま持っているか。
+
+        続けて生成するとき（batch）にだけ真になる。worker が生きていて、前の
+        job で載せたのが同じ model で、それが gpu0 だったときに限る。違えば
+        worker は載せ直すので、常駐ぶんを改めて求めるのが正しい。
+
+        見るのは「いま抱えているもの」であって、これから取る lease ではない。
+        要求を組み立てる時点では自分の device はまだ決まっていないので、そこを
+        見ると常に空になる（実機で minimum_bytes が一度も出なかったのがこれ）。
+        """
+        warm = self._warm_worker
+        if warm is None or warm[0].returncode is not None:
+            return False
+        return self._warm_model == selected.model_id
 
     def _record_oom(self, selected: ModelDescriptor) -> None:
         measured = selected.measured_vram_bytes or 0
@@ -2485,7 +2700,15 @@ class JobManager:
             error=error,
         )
         if reporter is not None and not terminal:
-            await reporter.progress(phase, normalized_progress, wait_reason=wait_reason)
+            try:
+                await reporter.progress(phase, normalized_progress, wait_reason=wait_reason)
+            except HostApiError:
+                # 進捗の報告は job の結末ではない。Host が受け取らなかった
+                # （間隔の制限に掛かった等）ことで、動いている生成を殺さない。
+                logger.warning(
+                    "host job progress update failed job=%s phase=%s progress=%s",
+                    job_id, phase, normalized_progress,
+                )
         return result
 
     @staticmethod
@@ -2520,18 +2743,34 @@ class JobManager:
             # ingress で弾いているので、ここへ来た不正は記録だけして先へ進める。
             logger.warning("job %s carries an unreadable asset_brief", job.id)
             return []
-        if brief is None:
+        if brief is None and job.request.operation != "image.edit":
+            # 生成は用途を散文でしか書かない呼び出し側が居るので、構造的な語だけ
+            # 決定的に拾う。編集では推し量らない（`_alpha_required` と揃える）
+            # ——推し量ると、頼まれていない透過を検査だけが要求することになる。
             brief = infer_brief_from_intent(job.request.intent)
-        recorded = job.request.constraints.get("resolved_layout")
-        if brief is None or not isinstance(recorded, dict):
+        if brief is None:
             return []
-        resolved = ResolvedLayout(
-            width=int(recorded.get("width", width)),
-            height=int(recorded.get("height", height)),
-            alpha=bool(recorded.get("alpha", False)),
-            source=str(recorded.get("source", "")),
-            aspect_ratio=str(recorded.get("aspect_ratio", "")),
-        )
+        recorded = job.request.constraints.get("resolved_layout")
+        if isinstance(recorded, dict):
+            resolved = ResolvedLayout(
+                width=int(recorded.get("width", width)),
+                height=int(recorded.get("height", height)),
+                alpha=bool(recorded.get("alpha", False)),
+                source=str(recorded.get("source", "")),
+                aspect_ratio=str(recorded.get("aspect_ratio", "")),
+            )
+        elif (
+            job.request.operation == "image.edit"
+            and effective_alpha_intent(brief) == "required"
+        ):
+            # 画面を名指ししていない編集の寸法は元画像から導かれる。比べる相手が
+            # 無いので出来た画面をそのまま置き、用途が求めた透過だけを検べる。
+            resolved = ResolvedLayout(
+                width=width, height=height, alpha=True,
+                source="brief.alpha_intent", aspect_ratio="",
+            )
+        else:
+            return []
         has_alpha = any(
             item.get("validator") == "image.alpha" and item.get("has_transparency") is True
             for item in validation
@@ -2543,12 +2782,15 @@ class JobManager:
     def _conform_outputs(
         self, job: Job, outputs: list[dict[str, Any]], job_root: Path
     ) -> None:
-        """brief が画面を決めていたら、その画面へ揃える。
+        """要求が画面を決めていたら、その画面へ揃える。
 
-        編集は元画像の画面をそのまま使うので触らない。brief から寸法を決めたのは
-        生成だけであり、`resolved_layout` が残っているのもそのときだけである。
+        生成は brief から、編集は呼び出し側が両辺を名指ししたときだけ画面が
+        決まる。どちらも `resolved_layout` が残っているかどうかで見分けられる
+        ので、ここは記録の有無だけを見る。守る画素があるもの（strict_edit /
+        inpaint / outpaint）と倍率で決まるもの（upscale / deblur / erase）は
+        そもそも記録を残さない。
         """
-        if job.request.operation != "image.generate":
+        if job.request.operation not in {"image.generate", "image.edit"}:
             return
         recorded = job.request.constraints.get("resolved_layout")
         if not isinstance(recorded, dict):
@@ -2567,6 +2809,87 @@ class JobManager:
                     "job %s conformed %s to the resolved canvas %dx%d",
                     job.id, path.name, width, height,
                 )
+
+    def _cutout_outputs(
+        self, job: Job, outputs: list[dict[str, Any]], job_root: Path
+    ) -> None:
+        """brief が透過を求めていたら、平らな背景を抜いて alpha を作る。
+
+        生成側は `_directed_intent` で単色背景を頼んである。抜けたときだけ
+        書き換わり、抜けなければ画は元のまま残る。無理に抜いて被写体を削った
+        ものを「透過あり」として通すより、`alpha_missing` で理由を名指しする
+        ほうが呼び出し側にとって正しい。
+
+        画を丸ごと描き直す編集も同じく抜く。参照から描き直したものは新しい画
+        であって、元画像の透過がそのまま残るわけではない（実際、透過を持つ
+        sprite を参照にした編集は真っ黒な背景で返ってきていた）。塗った所を
+        守る編集は触らない——守った画素を後から透明にすれば、守った意味が
+        無くなる。
+        """
+        if not self._alpha_required(job):
+            return
+        for index, output in enumerate(outputs):
+            path = contained(job_root, Path(output["path"]))
+            try:
+                how = self._cut_out(job, path, job_root, index)
+            except OSError:
+                logger.exception("job %s could not cut out %s", job.id, path.name)
+                continue
+            logger.info(
+                "job %s %s %s",
+                job.id,
+                how or "left the background of (it could not be cut)",
+                path.name,
+            )
+
+    def _cut_out(self, job: Job, path: Path, job_root: Path, index: int) -> str:
+        """被写体を抜く。抜けた方法の名前を返す（抜けなければ空）。
+
+        形を推定するほうを先に試す。背景色を当てにしないので、縁に背景色が
+        残らず、平らな背景でなくても抜ける。使えなければクロマキーへ退避する
+        ——重みが未導入の環境でも、これまでどおり抜けるほうが大事である。
+        """
+        mask_path = contained(job_root, job_root / f"matte-{index}.png")
+        try:
+            matte_mask(
+                path,
+                mask_path,
+                runtime_python=self.image_runtime_python,
+                model_path=self._matting_weights(),
+                repository_root=REPOSITORY_ROOT,
+            )
+        except MattingUnavailable as exc:
+            logger.info("job %s falls back to the flat-background cut: %s", job.id, exc)
+        else:
+            if apply_matte(path, mask_path):
+                return "cut the subject out of"
+            logger.info("job %s could not use the estimated matte for %s", job.id, path.name)
+        return "cut the flat background out of" if cut_out_background(path) else ""
+
+    def _matting_weights(self) -> Path | None:
+        """形を推定する重みの場所。未導入なら None。
+
+        カタログを読めない環境（試験や、モデルを持たない構成）でも黙って
+        従来の経路へ落ちる。ここで例外にすると、透過の作れない環境が
+        「抜けない」ではなく「壊れた」に見える。
+        """
+        if self.model_manifest is None or self.hf_home is None:
+            return None
+        try:
+            models = ModelRegistry.load(
+                self.model_manifest,
+                hf_home=self.hf_home,
+                catalog_manifest=self.model_catalog_manifest,
+                model_store_root=self.model_store_root,
+            ).all()
+        except ModelRegistryError:
+            return None
+        for model in models:
+            if model.model_id != MATTING_MODEL_ID or model.local_path is None:
+                continue
+            candidate = Path(model.local_path) / MATTING_WEIGHTS
+            return candidate if candidate.is_file() else None
+        return None
 
     def _validate_output(
         self,
@@ -2809,7 +3132,7 @@ class JobManager:
             raise ValueError("worker returned an unexpected output count")
         model = response["model"]
         reference_hashes = {
-            item.asset_id: self.store.get_asset(item.asset_id).sha256 for item in job.request.inputs
+            item.resolved_asset_id: self.store.get_asset(item.resolved_asset_id).sha256 for item in job.request.inputs
         }
         snapshot = self.store.job_profile_snapshot(job.id)
         for asset_id in snapshot.get("reference_asset_ids", []):
@@ -2822,6 +3145,10 @@ class JobManager:
         # 画面へ揃える。ここで揃えないと、比を守って描けた画が canvas_mismatch で
         # 毎回落ちる。揃えるのは決定的な操作なので、検査の前で完結させる。
         self._conform_outputs(job, outputs, job_root)
+        # 透過は生成では作れない。brief が求めているなら、検査より前に
+        # 決定的に作る。ここで作らないと sprite / icon / emblem は
+        # alpha_missing で必ず落ちる（作れないものを咎めるだけになる）。
+        self._cutout_outputs(job, outputs, job_root)
         # Complete every deterministic validation before invoking a subjective
         # reviewer. A semantic pass can therefore never mask file/invariant failure.
         validated = [self._validate_output(job, output, job_root) for output in outputs]
@@ -2875,9 +3202,9 @@ class JobManager:
             asset_id = f"asset_{uuid.uuid4().hex}"
             provenance_id = f"prov_{uuid.uuid4().hex}"
             parent_asset_ids = (
-                [job.request.inputs[0].asset_id]
+                [job.request.inputs[0].resolved_asset_id]
                 if job.request.operation == "image.edit"
-                else [item.asset_id for item in job.request.inputs]
+                else [item.resolved_asset_id for item in job.request.inputs]
             )
             asset = Asset(
                 id=asset_id,

@@ -208,6 +208,9 @@ def test_model_catalog_adds_trusted_presentation_metadata(tmp_path: Path):
         # 32B は python の拡散スタックに載らないので GGUF を native の駆動系で
         # 回す。経路が違っても、選べる道具として同じ一覧に並ぶ。
         "FLUX.2 dev 32B (GGUF Q4_K_M)",
+        # 切り抜きの重みも、画像を扱う道具として並ぶ。生成の routing には
+        # 出ない（capabilities が image.matting だけである）。
+        "BiRefNet Lite 切り抜き",
     ]
     assert all(item["source"]["revision"] == item["revision"] for item in images)
     assert all("path" not in item for item in response.json()["items"])

@@ -16,9 +16,36 @@ class JobStatus(StrEnum):
     CANCELED = "canceled"
 
 
+# 画を丸ごと描き直す編集。守る画素が無いので、生成と同じ後処理を掛けられる
+# ——用途が透過を求めるなら単色背景で描かせて抜き、寸法を名指しされたら
+# その画面へ揃える。塗った所を守るもの（strict_edit / inpaint / outpaint）と
+# 倍率で寸法が決まるもの（upscale / deblur / erase）はここに入らない。
+WHOLE_IMAGE_EDIT_MODES = frozenset({"reference", "variation", "multi_reference"})
+
+
 class AssetInput(BaseModel):
+    """One image this job reads.
+
+    `asset_id` は Media Forge が持っている物、`grant_id` は Host が「この file を
+    読んでよい」と出した券である。券は生成の前に取り込んで asset に変えるので、
+    job が走るときには必ず `asset_id` が入っている（`resolved_asset_id`）。
+    """
+
     model_config = ConfigDict(extra="forbid")
-    asset_id: str = Field(pattern=r"^asset_[0-9a-f]{32}$")
+    asset_id: str | None = Field(default=None, pattern=r"^asset_[0-9a-f]{32}$")
+    grant_id: str | None = Field(default=None, pattern=r"^grant:[A-Za-z0-9._:-]{1,256}$")
+
+    @model_validator(mode="after")
+    def validate_reference(self) -> "AssetInput":
+        if (self.asset_id is None) == (self.grant_id is None):
+            raise ValueError("give exactly one of asset_id or grant_id")
+        return self
+
+    @property
+    def resolved_asset_id(self) -> str:
+        if self.asset_id is None:
+            raise ValueError("this input still names a grant; import it before running the job")
+        return self.asset_id
 
 
 class OutputOptions(BaseModel):

@@ -201,10 +201,15 @@ def test_every_routable_model_has_an_adapter_the_worker_implements():
         (root / "worker_packs/image/models.json").read_text(encoding="utf-8")
     )
     # available は「これで作れる」という表明である。作るのが画像 worker とは
-    # 限らないので、実装している側を全部足して見る。
+    # 限らないので、実装している側を全部足して見る。切り抜きは生成の worker
+    # とは別の入口（worker_packs/image/matte.py）を持つので、そちらも数える。
     from worker_packs.video import worker as video_worker
 
-    implemented = set(image_worker.ADAPTERS) | set(video_worker.ADAPTERS)
+    from mediaforge.models.adapters import MATTING_ADAPTERS
+
+    implemented = (
+        set(image_worker.ADAPTERS) | set(video_worker.ADAPTERS) | set(MATTING_ADAPTERS)
+    )
     routable = {
         model["model_id"]: model["runtime_adapter"]
         for model in manifest["models"]
@@ -299,11 +304,21 @@ def test_core_and_the_workers_agree_on_what_can_run():
     from worker_packs.image import worker as image_side
     from worker_packs.video import worker as video_side
 
-    from mediaforge.models.adapters import IMAGE_ADAPTERS, RUNNABLE_ADAPTERS, VIDEO_ADAPTERS
+    from mediaforge.models.adapters import (
+        IMAGE_ADAPTERS,
+        MATTING_ADAPTERS,
+        RUNNABLE_ADAPTERS,
+        VIDEO_ADAPTERS,
+    )
 
     assert set(IMAGE_ADAPTERS) == set(image_side.ADAPTERS)
+    # 切り抜きは生成の worker とは別の入口を持つ。表に混ぜず、入口の存在で見る。
+    assert MATTING_ADAPTERS and not (MATTING_ADAPTERS & set(image_side.ADAPTERS))
+    from worker_packs.image import matte as matte_side
+
+    assert hasattr(matte_side, "main")
     assert set(VIDEO_ADAPTERS) == set(video_side.ADAPTERS)
-    assert RUNNABLE_ADAPTERS == IMAGE_ADAPTERS | VIDEO_ADAPTERS
+    assert RUNNABLE_ADAPTERS == IMAGE_ADAPTERS | VIDEO_ADAPTERS | MATTING_ADAPTERS
 
 
 def test_a_model_without_a_runtime_is_not_called_usable():
