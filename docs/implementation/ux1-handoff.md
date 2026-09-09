@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.52 release preparation
+
+前goal turnは個別animation previewのPR #385通常mergeまで進捗。
+main c919ca631b6c00364b96679938fd49b608828e55とhandoffを照合し、
+ux1/3d-release-0-28-52でaddon/core版を0.28.52へ揃えた。
+release noteはsourceで確認した個別clip/速度/先頭戻し・日英320pxと、
+warm約3〜6秒の目標未達、installed受入未実施を分離して記録する。
+DB/public schema/capability/Blender runtime変更なし。
+
+開始時installed0.28.51/MF1024680/Host667000 active、実DB Jobs0/GUI0。
+npm run build:viewer / node --test tests/model-animation.test.mjs（5 passed）/diff check成功。
+全 ./mf.sh test:1345 passed/既知warning2/138.50秒、exit0。
+次は本PRの通常merge後、exact checkout/tagからbundleを生成して署名・公開・標準導入する。
+監査/導入診断を /data1tb/mf-0.28.52-{audit,install}.py にapply_patchで準備。
+監査ではworker/schemaに加えfrontend6ファイルのexact bytesも確認する。
+導入はexact tag/署名/public bytes→idle→SQLite backup→再確認→標準install。
+現段階では未実行なので署名/導入成功とはしない。全3DS/GAはPARTIAL。
+
 ## 2026-09-10 individual animation preview — source acceptance
 
 前turnはPR #384通常mergeまで進捗。origin/main dab4119f537e91b9a6422023a7ed498620dec405を確認し、
