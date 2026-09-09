@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.54 signed and installed
+
+準備PR #398 merge8b5bb0375e09bae1523275e4e8f3dfb89244a460/tag v0.28.54をexact checkout。
+既存bundle-build環境とbuild_release_bundle.pyでbuild、外部mf-0.28.54-audit.py監査/doctor成功。
+31,535,647 B/SHA310c7b8a037780faef25e94c65ff156b766ad0cb56b88266a317bb5132ef6c33。
+build/verification /data1tb/mf-0.28.54-build-20260910、package-nh4o5lhq。
+既存publisher鍵で署名公開、公開4files再取得はmf-0.28.54-public-20260910。
+Host診断venv/既存CONFIG/PYTHONPATHでmf-0.28.54-install.py実行、実署名/bytes一致、
+全idle/backup/再検査→標準update10.052秒healthy、DB全table/registry bytes不変。
+backup /data1tb/mf-0.28.54-update-tz3fdb8w、Host667000不変、MF1116213。
+標準規則で.52実行bundleのみ整理、.53/.54保持。公開releaseで復元可能と通知済み。
+準備全1361 tests/139.39秒/build/Node5成功。本記録sliceは文書のみ。
+全3DS/GA PARTIAL。installed重複取消自体とJob/削除の全競合はまだ未検証。
+installed回帰はmf-stale-removal-after-ack-0.28.54.pyで実施、証跡同名installed-20260910。
+同意済みpreview後GUI開始→stale/fresh live削除拒否、実opaque RFB描画、49.978秒passed/
+58.057秒login revoke/exit0。旧scene14版/28hash/runtime hash・inode/registry保持。
+独立3 scenes/current pin/72files保持、GUI0、session1bcc8c9ab5bb41949dcbef31e924a111 unit不在。
+MF1116213/Host667000不変。これをinstalled重複取消の証拠へ読み替えない。
+次はJob受付/削除競合の未検証条件を補完する。
+
 ## 2026-09-10 v0.28.54 release preparation
 
 base PR #397 mergef48f5db04f88627612ca8672df4d9d25a4e75d37、ux1/3d-release-0-28-54。
