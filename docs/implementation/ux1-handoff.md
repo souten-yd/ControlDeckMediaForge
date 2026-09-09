@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 removal-first GUI admission
+
+base PR #400 merge9b0f3323bb3a4bdf363ba20e56278cf348dfac96、ux1/3d-removal-first-admission、PR作成前。
+前turnは意図確認のみ/no progress。現行mainとPR #213設計を再確認して逆順受入を追加。
+scripts/3ds_runtime_removal_e2e.py --history-reinstall --hold-removal とunit 2ケース。
+実remove guard内で最大15秒のthread gate、GUI受付thread到達→pending/health応答→削除commit後422。
+証跡 /data1tb/mf-removal-first-source-20260910-r2、25.340秒/exit0、health1.581ms/setup_required。
+固定隔離rootだけで4.5.9を削除/同版再導入、同scene再起動/停止、6files hash・旧版保持。
+既定4.5.9復元/2runtime登録、active GUI0、staging/removing空、専用2units回収を独立照合。
+製品code/Host/installed/版数/署名配布の変更なし。全D/3DS/GAはPARTIAL、GA-4/5も維持。
+gate: 全1363 tests/2既存warnings/146.80秒、対象9ケース再実行、viewer build差分0/Node5、py_compile/diff成功。
+次: Job受付が削除より後の場合を実削除commitと組み合わせて確認する。
+再開: status/main/PRを照合後、同scriptとscene_recipe_jobsのruntime受付を読む。
+NOT TESTED: installed逆順、自然遅延、Job逆順、例外時自動再導入、GUI入力。
+
 ## 2026-09-10 installed Job admission removal protection
 
 base PR #399 merge86fb8bec08a206620f306cb5d8a11cd40e360a87、ux1/3d-installed-job-removal。

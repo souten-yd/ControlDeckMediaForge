@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 source逆順GUI受付: 実remove guard内の明示thread gate中にGUI受付到達/pendingを確認。
+health1.581ms、削除commit後422/scene_runtime_unavailable・GUI record追加0。
+同4.5.9再導入/同scene再起動/停止、6files hash・履歴保持、既定復元/専用unit回収。
+`mf-removal-first-source-20260910-r2`、25.340秒/exit0。installed/自然遅延/Job逆順は未検証。
+unitの不在模擬だけから進んだsource証拠であり、全D/3DS/GA完了ではない。
+
 2026-09-10 installed Job受付→削除再拒否: 新規専用recipeの実Host child受付後、
 旧版inactive/live3（recipe_jobs1/GUI0）でstale確認をremove_changed、fresh確認をin_use拒否。
 正規取消で両Job canceled/参照0、旧scene/registry/runtime保持、実削除なし。
