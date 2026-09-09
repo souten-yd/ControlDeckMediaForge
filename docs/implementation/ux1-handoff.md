@@ -3,6 +3,27 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed parallel exact-runtime install
+
+base PR #392 merge43e8f45925947d19767ad3481c8e7c8ff3dcb799、branch ux1/3d-installed-parallel-runtime。
+前turnは署名.53導入/受入まで進捗。今回はA=4.5.13 GUI中のB=4.5.9 exact installを確認。
+初回Jobs0検査でexit1、ログイン/削除前。連続image.editの実Job/workerをread-only追跡し、
+他Jobを止めず自然終了後に別証跡-r2で実行。ephemeral /data1tb/mf-parallel-runtime-0.28.53.py。
+Host診断venv/既存CONFIG/PYTHONPATH/DISPLAY/XAUTHORITY、一時mf-e2e loginのみfinally revoke。
+専用2sceneのみ参照するinactive Bを英語Remove button/履歴確認で削除し、同固定archiveから戻した。
+AはMF3DS OpenCode motion acceptanceのscene_509b6ee0b688492997b86b535d70ec9a、user:16。
+18.405秒B削除→30.780秒A実RFB ready→B verifying/ready中に同A runtime/session/runner PID1087038。
+実B archive6,510members/展開1,168,332,002 B/実probe4.5.9、64.845秒ready観測。
+80.889秒passed、85.896秒専用GUI停止、exit0/page errors0。
+証跡 /data1tb/mf-parallel-runtime-installed-0.28.53-20260910-r2。
+3 scenes/17 revisions/72files hash保持、A executable hash/inode不変、active4.5.13/legacy投影維持。
+session040096fdea9a492aaf1acea6a290a768、unit not-found/inactive/MainPID0、GUI0。
+installed.53/MF1082083/Host667000不変、B再導入済み。約1.17GBの旧実行環境だけ一時削除と通知済み。
+文書のみ。準備全1348 tests/145.63秒/buildを参照、今回の再実行ではない。
+この逆方向exact installを旧→新版updateやB probe失敗に読み替えない。手編集/保存も未実施。
+次は並行導入の失敗条件を隔離fixtureで補完しinstalledとの差を記録する。
+全D/3DS/GAはPARTIAL、容量/改ざん/中断/同時受付等の残件を維持。.venvはそのまま保持。
+
 ## 2026-09-10 v0.28.53 signed and installed
 
 準備PR #391は通常merge330e0b0b6543e4ef2507b46775dd1f86e0849de5。
