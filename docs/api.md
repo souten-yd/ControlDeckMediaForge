@@ -426,6 +426,13 @@ Asset and provenance documents conform to [`schemas/asset.json`](../schemas/asse
 Blender worker. Raw import, working-copy and restore operations remain private;
 3DS-7 exposes only the bounded typed recipe surface described below.
 
+Typed operation failures retain `error.code=scene_recipe_failed`. When validated
+worker context is available, `error.message` identifies the one-based operation
+number, type, stable object ID, and a bounded reason. Raw worker exceptions and
+paths are not returned; invalid or unavailable diagnostics use a generic message.
+The failed recipe does not commit a partial revision. Corrected input is a new
+edit attempt, not an unchanged-input retry.
+
 The private workspace transport accepts `.blend` only as a declared upload:
 `scenes.import.begin`, sequential `scenes.import.chunk` calls, then
 `scenes.import.commit` or `scenes.import.cancel`. Each chunk is at most 512 KiB;

@@ -210,6 +210,11 @@ workflowにも同じdomain orchestrationを投影し、UI・agent・workflowで�
 初期対象: primitive、寸法・transform、安定IDでのobject参照、bounded modifier、材質割当て、
 UV preset、light/camera preset、保存、export。許可されない操作や未実装機能は明示エラー。
 OpenCodeは現在のscene snapshotとschemaからrecipeを組み立て、失敗箇所を限定して修正する。
+型付きworkerの操作失敗は既存Jobのerror.code=scene_recipe_failedを維持し、
+error.messageに1始まりの操作番号・種類・対象stable IDと限定した理由を返す。
+worker診断はサイズ・版・index・reason allowlistを検証し、生の例外/パスを公開しない。
+不明/不正な診断は一般エラーに戻す。失敗途中をcommitせず元revisionを保持する。
+同入力のretryと、入力を修正した新しいedit試行は区別する。
 
 Expert scriptは別権限・別schema・別capabilityとして後続提供する。
 `asset.pack + 3d.project.glb`を任意script実行へ変更しない。

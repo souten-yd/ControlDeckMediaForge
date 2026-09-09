@@ -435,6 +435,9 @@ def test_failed_scene_job_retries_as_new_attempt_with_same_input(tmp_path: Path)
         first, _ = await manager.submit(recipe(), IDENTITY)
         await manager.wait_cleanup(first.id)
         assert manager.projection(first.id, "user:7")["status"] == "failed"
+        assert manager.projection(first.id, "user:7")["error"] == {
+            "code": "scene_recipe_failed", "message": "first attempt failed"
+        }
         retry = recipe().model_copy(update={"retry_job_id": first.id})
         second, _ = await manager.submit(retry, IDENTITY, retry_of=first.id)
         await manager.wait_cleanup(second.id)

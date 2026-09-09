@@ -37,6 +37,7 @@ from .scenes import (
     validate_scene_owner,
 )
 from .scene_recipes import SceneCreateRequest, SceneEditRequest, SceneMaterialRequest, SceneRecipe
+from .scene_recipe_failure import recipe_failure_message
 from .store import Store, utc_now
 
 
@@ -364,7 +365,7 @@ class SceneWorkspace:
         }
         command = [
             str(runtime.executable), "--background", "--factory-startup", "--disable-autoexec",
-            "--python", str(self.recipe_worker), "--", "--mode", mode,
+            "--python-exit-code", "1", "--python", str(self.recipe_worker), "--", "--mode", mode,
             "--recipe", "recipe.json", "--output", "scene.blend", "--result", "result.json",
             "--expected-version", runtime.version,
         ]
@@ -394,7 +395,8 @@ class SceneWorkspace:
                     raise SceneError("scene_recipe_timeout", "scene recipe timed out") from exc
                 raise
             if returncode != 0:
-                raise SceneError("scene_recipe_failed", "Blender rejected the typed scene recipe")
+                message = await asyncio.to_thread(recipe_failure_message, result_path, recipe, runtime.version)
+                raise SceneError("scene_recipe_failed", message)
             if output.is_symlink() or not output.is_file() or result_path.is_symlink() or not result_path.is_file():
                 raise SceneError("scene_recipe_worker_invalid", "scene recipe worker output is missing")
             try:

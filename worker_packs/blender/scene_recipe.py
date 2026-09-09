@@ -510,10 +510,26 @@ def main() -> None:
     if not isinstance(operations, list) or not 1 <= len(operations) <= MAX_OPERATIONS:
         raise RuntimeError("recipe operation count differs")
     objects = stable_objects()
-    for operation in operations:
+    for index, operation in enumerate(operations):
         if not isinstance(operation, dict):
             raise RuntimeError("recipe operation differs")
-        apply_operation(operation, objects)
+        try:
+            apply_operation(operation, objects)
+        except Exception as exc:
+            # Only fixed reason codes cross the process boundary, never bpy text,
+            # source paths, user names or traceback contents.
+            reason = {
+                f"unknown stable object ID: {operation.get('object_id')}": "object_not_found",
+                "recipe object ID already exists": "object_exists",
+                "clip replacement target is missing or ambiguous": "clip_target_missing",
+            }.get(str(exc), "operation_rejected")
+            (Path.cwd() / args.result).write_text(json.dumps({
+                "schema_version": "media-forge.scene-recipe-failure@1",
+                "blender_version": args.expected_version,
+                "operation_index": index,
+                "reason": reason,
+            }) + "\n", encoding="utf-8")
+            raise
     if not objects:
         raise RuntimeError("recipe produced no stable objects")
     bpy.context.scene.unit_settings.scale_length = 1.0
