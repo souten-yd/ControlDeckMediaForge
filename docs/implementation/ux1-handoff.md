@@ -3,6 +3,37 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-09 v0.28.45 signed release and installed update
+
+PR #356 merge `02bb6681bac6dd91fd0b234cd9c64fca9e2da7ad`を固定して
+別detached worktreeでbundle構築、既存publisher keyで署名しv0.28.45を公開。
+公開先から再取得した4ファイルはbuild出力とbyte一致、Host trusted publisher検証もPASS。
+artifact 31,553,471 B、SHA256
+`acf6573c0e1adfff5d5c068ed13c25670d35d43071226a41fad4c08cee700464`。
+packaged doctorはstatus=ok/version=0.28.45/packaged=true。
+これはCLI検証でありGUI受入ではない。
+
+稼働Job/GUIが0件であることをDBで確認し、0700の専用backup
+`/data1tb/mf-0.28.45-update-ho4q51ys`へSQLite backupとruntime registryを0600で保存。
+Host診断環境から既存release_bundle.installをtag固定specで実行し、
+0.28.44→0.28.45が11.444秒で成功。グローバルcatalogは変更していない。
+最初のread-only事前確認はGUI table名の誤記で停止、実schemaの
+blender_web_sessionsへ修正後に再確認した。失敗した確認では更新を開始していない。
+
+全15 tableの旧行multisetと件数が更新後も一致（Job779/Asset650/scene36/revision142/
+GUI30等）。Blender runtime registryのbytesも不変。
+証拠はbackup内observations.json。そこでhealthy keyは存在せずnullだったため、
+追加のregistry.statusで正しいhealth=healthyを確認し、実health HTTP200/status=healthyもassert。
+enabled/requested_enabled=true、currentはversions/0.28.45、
+実core PID798514/798518。Host PID667000は不変。直前0.28.44 bundleを保持。
+標準の2世代保持で0.28.43実行bundleは削除され、公開releaseから再取得可能。
+制作データ・Blender実体・利用者global設定の削除なし。
+
+このsliceは署名配布/標準updateの受入記録で、source自動保存受入はPR #355の証拠。
+installed4.5.13の日英警告/再試行/クラッシュ回収はNOT TESTED、次sliceで実施する。
+clean installed Host/故障rollback/残るGOAL・A〜Fは引き続きPARTIAL。
+全テストはrelease準備commitの1201 passed/138.10秒を参照し、本docs-only sliceで再実行とはしない。
+
 ## 2026-09-09 v0.28.45 release preparation
 
 PR #355 merge `77be1f1805ab068823374276a6dbb2dd25166580`から
