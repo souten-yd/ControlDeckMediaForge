@@ -1,5 +1,50 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed stale removal confirmation versus GUI admission
+
+base PR #395 mergeb871ccd54476070bbf786af23bb13af734de662e、ux1/3d-installed-removal-stale。
+前turnはinstalled候補probe失敗保護/再導入受入と通常mergeまで進捗。
+今回はscenario Dのpreview後GUI開始による再拒否を、installed署名0.28.53で検証。
+製品code/版数変更なし。既存acceptance-sword/user:16/第14版/全版managed4.5.9を固定。
+開始時Job/GUI不在、setup全終端・非activeを確認し、旧版exe hash/inodeとregistry bytesを記録。
+Host診断venv/既存CONFIG/PYTHONPATH/DISPLAY/XAUTHORITY、一時mf-e2e loginのみfinally revoke。
+外部診断 `/data1tb/mf-stale-removal-0.28.53.py` を既存repair受入からapply_patchで作成。
+Settingsの実削除dialogでlive0/project2/履歴確認既定off・未確認disabledを確認。
+同dialogを保持したまま正規APIでGUIを開始し、ready後に履歴checkboxをcheckして削除buttonをclick。
+古いfingerprintの送信をbackendがblender_runtime_remove_changedで拒否した。
+続いて稼働中の新previewでacknowledge_history=trueを正規APIへ送ってもin_use拒否。
+新previewはworking copy1/session1/live合計2、確認付き削除も不可。
+setup operation一覧が前後一致するため、受付で拒否され削除operationは作成されていない。
+
+証跡 `/data1tb/mf-stale-removal-installed-0.28.53-20260910/observations.json`。
+5.598秒preview/5.619秒GUI受付→11.593秒stale拒否→11.727秒fresh live拒否。
+同4.5.9 GUIの実opaque RFB描画1275色、45.558秒passed/53.595秒own cleanup/
+53.657秒一時login revoke、exit0/page errors0。元scene全投影・14版のsource/GLB28 hash不変。
+exe SHAde8e8092c49e42cc6f1adde86aea0202ea5bad3338725887ecbcb7274dd0f926/inode46020227不変、
+registry bytes不変。実削除/再導入は不要であり行わなかった。UIは拒否codeを表示し完全な翻訳文言の受入ではない。
+
+同意checkboxを先にcheckしてからGUIを起動する逆順も、
+`/data1tb/mf-stale-removal-after-ack-0.28.53.py`で別証跡へ実行。
+両診断の起動は次の環境でscript名だけを変更する:
+
+```bash
+CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml PYTHONPATH=/data1tb/ControlDeck/app/backend DISPLAY=:0 XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3 /data1tb/ControlDeck/app/.venv/bin/python /data1tb/mf-stale-removal-after-ack-0.28.53.py
+```
+証跡 `/data1tb/mf-stale-removal-after-ack-installed-0.28.53-20260910`。
+7.576秒同意済みpreview→7.598秒GUI受付→13.661秒stale拒否→13.796秒fresh live拒否。
+RFB描画1321色、49.653秒passed/57.681秒own cleanup/57.742秒revoke、exit0/page errors0。
+こちらもsource/GLB28 hash・同第14版・exe hash/inode・registry bytes不変、operation一覧不変。
+
+終了後の独立read-only照合では前PR baselineの3 scenes/17 revisions/current pin・72 files hashも保持。
+session9f952c14cb1e44ddbfaae3ffb906095b/e5e210baff234081af28503f1c42bb5cはstopped、
+両unit not-found/inactive/MainPID0、GUI0。MF1082083/Host667000 active/PID不変。
+実画面の表示を確認したが手編集/保存は行っておらず、その品質や性能を推定しない。
+文書のみ。PR #394の変更なし製品gate1357 tests/154.35秒/build/Node5を参照し再実行ではない。
+両診断py_compileとdiff check成功。全D/3DS/GAはPARTIALで維持。
+NOT TESTED: Job受付との同条件、削除実行中の並行受付、接続切断/再起動時の確認保持、
+容量不足/中断等の残matrix。次はJob側の受付参照と既存実機証拠を照合する。
+
+
 ## 2026-09-10 installed exact candidate probe failure acceptance
 
 PR #394 merge667906adeb24403551541ea625bb486ef2392f8fと最新handoffを再確認。
