@@ -1,5 +1,40 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.50 installed / default connected idle diagnostic
+
+前goal turnは署名公開/PR #380 mergeまで進捗。main a2081e6とhandoffを再確認。
+開始時job_a9b39db312f74d52baceb93ecc316d0fがrunning/generatingで更新を行わず、
+診断の準備を進めた。その後実DBでactive Jobs0を確認し標準updateを再実行。
+/data1tb/mf-0.28.50-install.py、Host診断venv、既存CONTROL_DECK_CONFIG/PYTHONPATH。
+署名/public bytes照合→idle→SQLite backup→再確認→標準installの順。
+10.401秒で0.28.50/HTTP healthy、Host PID667000不変、MF PID1001944。
+DB全テーブルfingerprintとBlender登録bytes不変、更新後Jobs0/GUI0を確認。
+backup/証跡 /data1tb/mf-0.28.50-update-qk_3u_rk/observations.json。
+currentはversions/0.28.50。標準保持規則で0.28.48実行bundleだけが整理され、
+0.28.49/.50を保持。制作物/runtimeは削除しない。旧bundleは公開releaseから再取得可能。
+
+ux1/3d-default-idle-acceptanceで既存installed lifecycle診断にconnected-idle mode追加。
+専用mf-e2e sceneだけを実RFB複製し、既定idle1800/disconnect300秒をassert。
+操作を送らず30秒ごとに同sessionの状態/接続状態/最終入力時刻を証跡へ追加。
+時刻リセット・短縮policy・早期/過遅終了・別原因終端は拒否する。
+終端後にPID/cgroup/root/socket回収、候補hashと復旧source一致、
+回収mesh数2倍、元正式版/旧hash保持まで既存診断を使う。
+server timeout/認証時計を置き換えず、Host/他processを停止しない。
+停止観測開始は実入力後のためelapsed許容1790〜1900秒だが、
+server policyは厳密1800秒。新7 casesを含むfocused17 tests/0.08秒通過。
+viewer build/diff check成功。全 ./mf.sh test:1344 passed/既知warning2/141.53秒、exit0。
+実診断をHost診断venv/既存CONFIG/PYTHONPATH、DISPLAY=:0、
+XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3で開始した:
+scripts/3ds_save_conflict_cleanup_installed_e2e.py
+--scene-id scene_3f3b5f1e97e94b268722ea45cc811c50 --expected-version 0.28.50
+--failure-kind connected-idle --evidence-dir /data1tb/mf-default-idle-installed-20260910。
+実CLI PID1004438、exec handle3638。session blendersession_2c16d66b8b1447ff9a5198405b11f935。
+Blender4.5.13の実描画/ConnectedをPNGで確認。RFB複製入力後のworking hash不変をassert。
+38.067秒sampleでready/connected、最終入力17:14:32.231864 UTCの不変を確認。
+診断は実行中でありpassed未確定。次turnは同handle/PIDを再確認して観測を継続し、
+観測待ちだけを根拠に再起動/再実行しない。最終復旧mesh数・終端回収もまだNOT TESTED。
+全3DS/GA/ボーン制作全体はPARTIALを維持する。
+
 ## 2026-09-10 v0.28.50 signed publication / installed update deferred
 
 PR #379 MERGEDのae63fbe2ab519effdc88ed8e55b71d71e7f705c4をexact checkout/tagへ固定。

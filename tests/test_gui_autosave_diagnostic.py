@@ -19,6 +19,30 @@ def diagnostic() -> ModuleType:
     return module
 
 
+@pytest.mark.parametrize("case", ["valid", "short_policy", "reset_input", "early", "late", "wrong_cause", "wrong_state"])
+def test_connected_idle_requires_real_policy_and_unchanged_input(case: str) -> None:
+    value = dict(idle_timeout_sec=1800, last_activity_at="input-time", state="interrupted",
+                 error_code="blender_session_idle_timeout")
+    elapsed = 1801
+    if case == "short_policy":
+        value["idle_timeout_sec"] = 5
+    elif case == "reset_input":
+        value["last_activity_at"] = "reconnect-time"
+    elif case == "early":
+        elapsed = 30
+    elif case == "late":
+        elapsed = 1901
+    elif case == "wrong_cause":
+        value["error_code"] = "blender_session_disconnected_timeout"
+    elif case == "wrong_state":
+        value["state"] = "stopped"
+    if case == "valid":
+        diagnostic().validate_idle_observation(value, "input-time", elapsed)
+    else:
+        with pytest.raises(AssertionError):
+            diagnostic().validate_idle_observation(value, "input-time", elapsed)
+
+
 @pytest.mark.parametrize("fail", [False, True])
 def test_owned_write_fault_restores_permissions(tmp_path: Path, fail: bool) -> None:
     parent = tmp_path / ("working_" + "a" * 32)

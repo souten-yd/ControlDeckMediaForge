@@ -6,6 +6,8 @@ signals only this run's verified Blender child through a PID fd. Autosave-crash
 duplicates meshes, faults only its own working directory and verifies JA/EN
 warnings via a browser-language input fixture. Explicit core-restart mode restarts
 only the installed MediaForge unit after checking no other GUI or Job is active.
+Connected-idle mode leaves the real 1800-second policy untouched and samples
+the same session without sending input or stopping any service.
 """
 from __future__ import annotations
 
@@ -28,6 +30,18 @@ import httpx
 
 ACTIVE = {"queued", "preparing", "starting", "ready", "saving", "stopping"}
 DATA = Path("/data1tb/ControlDeck/data/feature-data/media-forge/data")
+
+
+def validate_idle_observation(value: dict[str, Any], last_input: str, elapsed: float) -> None:
+    """Reject shortened policy, input resets, wrong cause and premature exit."""
+    assert value["idle_timeout_sec"] == 1800
+    assert last_input and value["last_activity_at"] == last_input
+    if value["state"] not in ACTIVE:
+        assert value["state"] == "interrupted"
+        assert value["error_code"] == "blender_session_idle_timeout"
+        # Sampling starts after the last input; persistence is throttled.
+        # This tolerance does not change the server's actual timeout.
+        assert 1790 <= elapsed <= 1900
 
 
 @contextmanager
@@ -164,13 +178,13 @@ def main() -> None:
     parser.add_argument("--scene-id", required=True)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
-    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash", "disconnect-timeout", "autosave-crash", "auth-expiry", "core-restart"), default="save-conflict")
+    parser.add_argument("--failure-kind", choices=("save-conflict", "blender-crash", "disconnect-timeout", "autosave-crash", "auth-expiry", "core-restart", "connected-idle"), default="save-conflict")
     parser.add_argument("--manual-edit", action="store_true", help="Duplicate meshes through RFB before a save conflict")
     args = parser.parse_args()
-    if args.failure_kind in {"autosave-crash", "auth-expiry", "core-restart"}:
+    if args.failure_kind in {"autosave-crash", "auth-expiry", "core-restart", "connected-idle"}:
         args.manual_edit = True
-    if args.manual_edit and args.failure_kind not in {"save-conflict", "autosave-crash", "auth-expiry", "core-restart"}:
-        parser.error("--manual-edit requires save-conflict, autosave-crash, auth-expiry or core-restart")
+    if args.manual_edit and args.failure_kind not in {"save-conflict", "autosave-crash", "auth-expiry", "core-restart", "connected-idle"}:
+        parser.error("--manual-edit requires save-conflict, autosave-crash, auth-expiry, core-restart or connected-idle")
     assert re.fullmatch(r"scene_[0-9a-f]{32}", args.scene_id)
     installed = registry.status("media-forge")
     assert installed["version"] == args.expected_version and installed["health"] == "healthy"
@@ -211,12 +225,17 @@ def main() -> None:
                 def call(method: str, params: dict) -> dict:
                     return frame.evaluate("p => call(p.method,p.params)", {"method": method, "params": params})
 
+                idle_started: float | None = None
+                idle_input: str | None = None
+
                 def wait(wanted: set[str], timeout: float = 90) -> dict:
                     started_at = time.monotonic()
                     deadline = started_at + timeout
                     report_at = started_at + 30
                     while time.monotonic() < deadline:
                         value = next(v for v in call("blender.sessions.list", {})["items"] if v["id"] == session_id)
+                        if idle_started is not None:
+                            validate_idle_observation(value, idle_input, time.monotonic() - idle_started)
                         if value["state"] in wanted:
                             return value
                         assert value["state"] in ACTIVE, value
@@ -224,6 +243,13 @@ def main() -> None:
                             print(json.dumps({"session_id": session_id, "state": value["state"],
                                 "waiting_sec": round(time.monotonic() - started_at, 1)}), flush=True)
                             report_at = time.monotonic() + 30
+                            if idle_started is not None:
+                                evidence.setdefault("idle_samples", []).append({
+                                    "elapsed_sec": round(time.monotonic() - idle_started, 3),
+                                    "state": value["state"], "connection_state": value["connection_state"],
+                                    "last_activity_at": value["last_activity_at"],
+                                })
+                                (args.evidence_dir / "observations.json").write_text(json.dumps(evidence, indent=2) + "\n")
                         page.wait_for_timeout(250)
                     raise AssertionError("owned session did not reach requested state")
 
@@ -282,6 +308,14 @@ def main() -> None:
                     assert hashlib.sha256(working_path.read_bytes()).hexdigest() == original_working_hash
                     assert call("scenes.get", {"scene_id":args.scene_id}) == before
                     evidence["working_hash_before_save"] = original_working_hash
+                if args.failure_kind == "connected-idle":
+                    assert ready["idle_timeout_sec"] == 1800
+                    assert ready["disconnect_grace_sec"] == 300
+                    idle_input = record(session_id)["last_activity_at"]
+                    idle_started = time.monotonic()
+                    evidence["idle_last_input"] = idle_input
+                    evidence["idle_policy_sec"] = 1800
+                    frame.wait_for_function("state.blenderRfb?._rfbConnectionState === 'connected'")
                 if args.failure_kind == "core-restart":
                     # Trigger before the default autosave: prove in-memory edits
                     # survived in the same Blender process, not a recovered snapshot.
@@ -421,11 +455,16 @@ def main() -> None:
                     evidence["signaled_blender_pid"] = crash_owned_blender(cgroup, pids, owned["runtime_id"])
                 elif args.failure_kind == "auth-expiry":
                     evidence["expired_gateway"] = expire_owned_gateway(session_id, user_id)
-                failed = wait({"failed", "interrupted"}, 330 if args.failure_kind == "disconnect-timeout" else 90)
+                timeout = 1900 if args.failure_kind == "connected-idle" else (330 if args.failure_kind == "disconnect-timeout" else 90)
+                failed = wait({"failed", "interrupted"}, timeout)
+                if idle_started is not None:
+                    evidence["idle_elapsed_sec"] = round(time.monotonic() - idle_started, 3)
+                    idle_started = None
                 evidence["terminal_sec"] = round(time.monotonic() - began, 3)
                 expected_error = {"save-conflict": "scene_revision_conflict", "blender-crash": "blender_session_runner_lost",
                                   "autosave-crash": "blender_session_runner_lost",
                                   "auth-expiry": "blender_session_host_revoked",
+                                  "connected-idle": "blender_session_idle_timeout",
                                   "disconnect-timeout": "blender_session_disconnected_timeout"}[args.failure_kind]
                 if args.failure_kind == "disconnect-timeout":
                     assert evidence["terminal_sec"] >= 299
@@ -436,6 +475,8 @@ def main() -> None:
                 candidate = DATA / "scenes/working" / working_id / "scene.blend"
                 assert candidate.is_file() and not candidate.is_symlink()
                 digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+                if args.failure_kind == "connected-idle":
+                    assert digest != original_working_hash
                 if args.failure_kind in {"autosave-crash", "auth-expiry"}:
                     assert digest == autosave_hash
                 assert call("scenes.get", {"scene_id": args.scene_id}) == advanced
@@ -466,8 +507,10 @@ def main() -> None:
                         ["power failure", "crash during snapshot write", "edits after last autosave"]
                         if args.failure_kind in {"autosave-crash", "auth-expiry"} else
                         (["manual GUI edit"] if not args.manual_edit else ["unsaved crash recovery", "autosave"])) +
-                        ["GPU lease", "batch worker crash", "connected idle timeout"])
+                        ["GPU lease", "batch worker crash"] +
+                        ([] if args.failure_kind == "connected-idle" else ["connected idle timeout"]))
             finally:
+                idle_started = None
                 if session_id and record(session_id)["state"] in ACTIVE:
                     call("blender.sessions.stop", {"session_id": session_id})
                     wait({"stopped", "failed", "interrupted"})
