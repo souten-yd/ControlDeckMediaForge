@@ -109,6 +109,11 @@ DRACO/KTX2/Meshopt decoderは同梱せず、required extensionをbackend検証�
 Library必須（2026-09-06利用者確認）: 対象の±X/±Y/±Z回転と拡大・縮小。
 表示操作はasset/sceneへ保存しない。fitと既存orbit操作は操作補助として維持する。
 背景・light preset、material/wireframe、bounding box、triangle数、animation play/pauseは追加操作。
+ゲーム用animationの追加プレビューではclipをindexで一つ選択し、名前と秒数を表示する。
+同名clipも区別し、全clip同時再生はしない。選択変更は先頭へ戻し再生/一時停止状態を保持。
+先頭戻しと0.25/0.5/1/2倍速は表示専用。繰り返しプレビューは元clipのloop指定を変更しない。
+モデル切替/終了でactionを回収し、次のモデルは先頭clip・1倍速・停止状態で開く。
+日英の文言変更は選択を保持し、320pxでも同操作へ到達できることを受入する。
 制作側の前後版比較、材質slot選択、画像差替えpreview、Blenderで編集は別の必須ゴールとして維持する。
 追加: normals/UV表示、LOD比較。unsupported extensionは理由を出して検証済みpreviewへ戻る。
 

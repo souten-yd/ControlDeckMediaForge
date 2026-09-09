@@ -3,6 +3,59 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 individual animation preview — source acceptance
+
+前turnはPR #384通常mergeまで進捗。origin/main dab4119f537e91b9a6422023a7ed498620dec405を確認し、
+ux1/3d-animation-previewで作業。既存.venv symlinkは未追跡のまま保護。
+全clip同時再生を廃止し、indexによる単一clip選択・先頭戻し・0.25/0.5/1/2倍速を実装。
+同名clipを区別し、選択変更で先頭へ戻して再生/停止状態を保持。全操作は表示専用。
+モデル切替/終了でactionを回収、再表示は先頭clip/1倍速/停止。日英locale更新は選択を保持。
+frontend/model-animation.mjsを固定Three.jsの既存bundleへ含め、source/bundle hashを更新。
+API/schema/Blender/runtime/Hostに変更なし。
+
+node --test tests/model-animation.test.mjs: 実Three mixerの5 tests成功
+（単一clipの実座標、同名識別、pause/restart/speed、不正値、空/終了後のaction回収）。
+node --check frontend/app.js / npm run build:viewer / focused frontend+viewer tests成功。
+最終全 ./mf.sh test:1345 passed/既知warning2/141.91秒、exit0。
+実GUI診断を終了してから直列実行。viewer再buildも同SHA/diff check成功。
+PR作成前、ブロッカーなし。source受入後の通常PR/署名配布を続ける。
+source実機:
+PYTHONPATH=.:backend .venv/bin/python scripts/3ds_animation_preview_e2e.py --serve
+--data-dir /data1tb/mf-animation-preview-source-data-20260910
+--glb /data1tb/ControlDeck/data/feature-data/media-forge/data/assets/asset_4d359d6ce7da4684a0156750e7d146e5.glb
+（loopback8937、専用dataへimmutable import。production入力は読取のみ）。
+browserはHost診断Pythonに既存MF site-packagesをPYTHONPATHで参照してPillowを使用。
+DISPLAY=:0/XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.AZO7U3、
+同script --data-dir 同上 --evidence-dir /data1tb/mf-animation-preview-source-20260910-r6。
+新規pip導入/Host設定変更なし。
+
+最終run exit0/passed=true、実GLTFLoader/WebGL、136 triangles/6 meshes/2 clips。
+arm_swing1秒とidle2秒を別再生。操作欄を除いた実画像差分を0.5442秒/0.94125秒で確認。
+pause後時刻不変、動作中選択、先頭戻し、速度、英語切替、320px操作44px高、
+閉じる→action停止→再表示の初期状態をassert。元GLBのSHA
+b36b26954162e40ced1a0dc99de958a4b76218f635324055244d35ba615ea61d不変。
+初回はidleの冒頭0.5秒静止区間を比較して失敗。診断の観測点を修正した。
+中間runはhiddenの別thumbを選択/重複selector/close event直前の判定で失敗し、
+Library限定selectorと正式closeイベント完了待ちへ修正。失敗証跡は別dirに保持。
+r5成功後、操作欄の文言変化をgeometry証拠に含めないcropを加えr6で再成功。
+
+既存scripts/3ds3_viewer_e2e.mjsも同sourceで実行:
+cold641.728ms、hiddenでframe11→11、visibleで18、WebGL context復旧、
+日英/320px overflowなし/44px controlsまでは確認。
+後段のthumbnail img naturalWidth待ち(line226)でexit1。thumbnails実file2件は存在。
+この失敗runの全回帰成功・繰返し5回のheap回収は主張しない。
+その後origin/mainのlibraryCardもmodel_3dは常にplaceholderを返すことを確認。
+古い診断のcaptured-thumbnail期待との不一致であり、本sliceの表示変更ではなかった。
+診断に明示--thumbnail-mode placeholderを追加し（既定capturedは維持）、
+現行のplaceholder表示/画像非表示をassertした上で後段も再実行。
+r6/viewer-regression.png.json: exit0/errors0、cold213.718ms、hidden frame9→9/復帰16、
+context復旧、320px、5回closeの全context解放、JS heap増444760 B、module取得1回。
+warm6046.563/3032.865/3030.910/3027.776ms。warm1秒目標は未達であり性能達成としない。
+このsource実機をinstalled opaque Hostの証拠へ読み替えない。
+Host667000/MF1024680はactive/PID不変、installed0.28.51にこのUI変更はまだ入っていない。
+NOT TESTED: 本変更の署名配布/導入、engine再生、有機weight/IK、全3DS/GA。
+次は本変更の署名配布・installed opaque Hostでの個別clip受入。
+
 ## 2026-09-10 installed default idle acceptance complete
 
 署名installed0.28.51/Blender4.5.13の既定idle1800秒診断がexit0で終端。
