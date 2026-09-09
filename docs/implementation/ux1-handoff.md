@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.53 release preparation
+
+baseはPR #390 merge9d0f67ad06838a379641d5fd3899a647596255df。
+前turnは修復保護実装/実機受入/mergeまで進捗。ux1/3d-release-0-28-53で
+addon/coreを0.28.53へ揃え、docs/release-v0.28.53.mdを追加。
+API/DB/runtime版変更なし。source修復拒否→停止後修復成功の証拠は前節を維持する。
+開始時installed0.28.52、Jobs0/GUI0。リリース準備段階では導入環境へ未適用。
+次は準備PRの通常merge exact commitからbundle build/監査/署名/public再取得、
+idle/SQLite backup/再確認後に標準updateし、installed修復保護を確認する。
+ephemeral監査/導入script /data1tb/mf-0.28.53-{audit,install}.pyは前版からapply_patchで準備。
+auditは埋込み_publish_repairのguard/参照検査と_installのshield/to_threadも検査する。
+installはJobs/GUIに加えsetup operationも全終端を要求する。まだ両script未実行。
+全`./mf.sh test`: 1348 passed/既知warnings2/145.63秒/exit0、viewer build生成差分なし、
+Node animation5 tests/diff check成功。
+全3DS/GAはPARTIALで維持。.venvは既存untracked symlinkを保持。
+
 ## 2026-09-10 repair live-runtime protection
 
 branch ux1/3d-repair-live-protection、base PR #389 merge3471b5950ab2dbd73ab65bc623f2237ec03eb684。

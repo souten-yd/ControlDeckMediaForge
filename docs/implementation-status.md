@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.53 release preparation
+
+前goal turnは修復時の稼働版保護を実装・実Blender受入しPR #390 mergeまで進捗。
+origin/main 9d0f67ad06838a379641d5fd3899a647596255dfとhandoff/配布規約を再確認し、
+ux1/3d-release-0-28-53でaddon/core版を0.28.53へ揃えた。
+release noteは修復の稼働参照再検査・受付排他・off-loop公開・停止時の追跡を説明し、
+source実機と未実施の署名/installed受入を分離。API/DB/Blender版の変更はない。
+開始時installed0.28.52、実DB Jobs0/GUI0。環境更新は公開consumer検証・backup・再idle確認後に行う。
+本準備PR時点でartifact生成・署名・公開・installed更新はNOT TESTED。
+全`./mf.sh test`: 1348 passed/既知warnings2/145.63秒/exit0。
+viewer build成功/生成差分なし、Node animation5 tests/diff check成功。
+
 ## 2026-09-10 repair publication preserves live Blender runtimes
 
 PR #389 merge3471b5950ab2dbd73ab65bc623f2237ec03eb684から
