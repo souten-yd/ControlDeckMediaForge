@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.58 preparation
+
+PR #421 merge93242b58453c36a6be3b003e40b7ba619bb9e276を基準にux1/release-0-28-58。
+addon/coreを0.28.58へ揃え、固定個数配列の意味・上限・互換性・未受入範囲をrelease noteへ記載。
+開始時currentは0.28.57、実HTTP /healthはhealthy。Host再起動は行わない。
+外部 /data1tb/mf-0.28.58-audit.py/install.pyを準備。auditは既存artifact検査に加え
+同梱ArrayModifierのoperation定数/非零validatorを確認する。installは旧0.28.57を要求し、
+全Job/GUI/runtime idle・SQLite backup/全table fingerprint・registry保持の標準手順を維持。
+実行前であり、準備を署名公開・導入済み・installed MCP受入として扱わない。
+viewer build差分0/Node animation5 passed。版数変更後の全 `./mf.sh test` は
+1419 passed/既知warning2/158.79秒、exit0。diff check/外部診断compileall成功。
+
 ## 2026-09-10 GA-1 fixed-count array authoring / source acceptance
 
 base MF PR #420 mergec7a63a9、branch ux1/3d-array-modifier。Host再起動の承認返信はなく、
