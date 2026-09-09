@@ -1,5 +1,41 @@
 # Media Forge implementation status
 
+## 2026-09-10 removal-first recipe Job admission
+
+base PR #401 merge731f52fc40969240998e6a42bdf4350a71ffedd2、ux1/3d-removal-first-job。
+前turnはGUI逆順受入/PR #401 mergeまで進捗。今回は同じ実削除commitと制作Job受付を組み合わせた。
+`scripts/3ds_runtime_removal_e2e.py` の `--hold-removal-job` は既存hold-removal/history-reinstallを必須とする。
+real SceneRecipeJobManager.submit/SceneWorkspace.acquire_recipe_runtimeと実scene pinを使い、
+Hostだけは呼ばれたら失敗するfixtureにする。認証/実Host child受付を証明するものではない。
+scene.edit要求は既存current revisionを指定。active4.5.13、scene pin4.5.9の状態で、
+4.5.9削除guard中にJob取得thread到達/pending/Host未呼出を確認する。
+解放後はscene_runtime_unavailableで拒否し、保存済みJob投影の前後一致・task/ref回収を検査する。
+
+```bash
+PYTHONPATH=backend:. .venv/bin/python scripts/3ds_runtime_removal_e2e.py --evidence-dir /data1tb/mf-removal-first-job-source-20260910 --history-reinstall --hold-removal --hold-removal-job
+```
+
+隔離rootは既存 `/data1tb/mf-clean-packaged-0.28.32-QBvHfm` のみ。25.762秒/exit0。
+2.240秒health1.637ms/setup_required、JobとGUI受付pending。
+2.547秒Job拒否/Host呼出0/新Job0/runtime refs0、2.589秒GUIもHTTP422/record追加0。
+2.780秒旧runtime不在・scene/revision/Library投影/6 asset-provenance hashes保持。
+固定4.5.9 archive（SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d）
+再導入の実probe成功。同sceneのGUI再起動/停止後、元の既定4.5.9へ復元した。
+独立照合: 同6hash保持、active GUI0、2runtime登録、staging/removing空。
+session a62a856bac7f4b2dae23c2a3ff3a4593 / eff858c3bdab43219f460b1e5700f826 の
+専用unitsはnot-found/inactive/MainPID0。installed/Host/個人Blenderは変更しない。
+隔離された実行環境だけ一時削除/同版復元し、制作物・履歴を削除しない。
+
+unitは既存GUI/working逆順testへrecipeケースを追加。
+初回の3失敗は、fixtureのscene作成Jobが存在するのに空リストを期待したtest側の誤り。
+既存Job投影との一致へ修正後、対象/recipe-pinの22ケース成功。製品不具合のREDとはしない。
+製品code/公開契約/Host/版数/署名artifact変更なし。
+全gate: ./mf.sh test は1364 passed/2既存warnings/160.27秒/exit0。
+viewer build生成差分なし、Node5、py_compile/diff check成功。
+NOT TESTED: installed/実Host Agent HTTP/OpenCodeの逆順受付、create retry/materialの逆順、
+自然遅延、GUI入力、例外時自動再導入、全D/3DS/GA。
+次: durable削除確認の中断・core再起動時保持を実処理で確認する。
+
 ## 2026-09-10 removal-first GUI admission, isolated real runtime
 
 base PR #400 merge9b0f3323bb3a4bdf363ba20e56278cf348dfac96、ux1/3d-removal-first-admission。

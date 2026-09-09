@@ -9,6 +9,10 @@ import pytest
 
 from mediaforge.blender_session_manager import BlenderSessionError
 from mediaforge.scenes import SceneError
+from mediaforge.scene_recipe_jobs import SceneRecipeJobManager
+from mediaforge.scene_recipes import SceneEditRequest
+from mediaforge.host.client import HostIdentity
+from unittest.mock import AsyncMock
 from test_blender_session_manager import OWNER, session_fixture, wait_state
 
 
@@ -118,13 +122,18 @@ def test_gui_admission_and_working_copy_reject_runtime_removed_first(tmp_path: P
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("kind", ["gui", "working"])
+@pytest.mark.parametrize("kind", ["gui", "working", "recipe"])
 def test_admission_waits_for_removal_then_rejects_missing_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str,
 ) -> None:
     store, workspace, scene_id, controller, manager = session_fixture(tmp_path)
     entered, release, attempted = threading.Event(), threading.Event(), threading.Event()
-    original = manager._create_guarded if kind == "gui" else workspace.acquire_working_copy
+    host = AsyncMock()
+    jobs_before = store.list_jobs()
+    host.create_or_attach_job.side_effect = AssertionError("unavailable runtime reached Host")
+    recipe_manager = SceneRecipeJobManager(store, workspace, host)
+    original = (manager._create_guarded if kind == "gui" else workspace.acquire_recipe_runtime
+                if kind == "recipe" else workspace.acquire_working_copy)
 
     def observed(*args: Any, **kwargs: Any) -> Any:
         attempted.set()
@@ -132,6 +141,8 @@ def test_admission_waits_for_removal_then_rejects_missing_runtime(
 
     if kind == "gui":
         monkeypatch.setattr(manager, "_create_guarded", observed)
+    elif kind == "recipe":
+        monkeypatch.setattr(workspace, "acquire_recipe_runtime", observed)
     else:
         monkeypatch.setattr(workspace, "acquire_working_copy", observed)
 
@@ -146,8 +157,19 @@ def test_admission_waits_for_removal_then_rejects_missing_runtime(
         request = None
         try:
             assert await asyncio.to_thread(entered.wait, 3)
-            request = asyncio.create_task(manager.create(OWNER, scene_id) if kind == "gui"
-                else workspace.acquire_working_copy_async(OWNER, scene_id))
+            if kind == "recipe":
+                document, _ = await asyncio.to_thread(workspace.catalog.get, OWNER, scene_id)
+                value = SceneEditRequest.model_validate({"scene_id": scene_id,
+                    "base_revision_id": document.current_revision_id,
+                    "recipe": {"operations": [{"type": "primitive.add", "object_id": "probe",
+                        "primitive": "cube", "name": "Never executed", "dimensions": [1, 1, 1]}]}})
+                identity = HostIdentity(authorization="Bearer fixture", addon_id="media-forge",
+                    subject="job:fixture", actor_subject=OWNER, expires_at=4_000_000_000,
+                    granted_capabilities=frozenset({"jobs.write"}))
+                request = asyncio.create_task(recipe_manager.submit(value, identity))
+            else:
+                request = asyncio.create_task(manager.create(OWNER, scene_id) if kind == "gui"
+                    else workspace.acquire_working_copy_async(OWNER, scene_id))
             assert await asyncio.to_thread(attempted.wait, 3)
             await asyncio.sleep(0.02)
             assert not request.done()
@@ -161,6 +183,10 @@ def test_admission_waits_for_removal_then_rejects_missing_runtime(
         assert store.list_blender_web_sessions(OWNER) == []
         assert store.list_scene_working_copies(OWNER) == []
         assert controller.starts == 0
+        host.create_or_attach_job.assert_not_awaited()
+        assert store.list_jobs() == jobs_before
+        assert not recipe_manager._admissions and not recipe_manager._tasks
+        await recipe_manager.stop()
         await manager.stop()
 
     asyncio.run(scenario())

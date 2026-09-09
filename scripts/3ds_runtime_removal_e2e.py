@@ -24,6 +24,22 @@ import uvicorn
 
 from mediaforge.app import create_app
 from mediaforge.config import Settings
+from mediaforge.host.client import HostIdentity
+from mediaforge.preferences import STANDALONE_SUBJECT
+from mediaforge.scene_recipe_jobs import SceneRecipeJobManager
+from mediaforge.scene_recipes import SceneEditRequest
+from mediaforge.scenes import SceneError
+
+
+class UncalledHost:
+    """Negative-admission fixture: no real Host request is authorized here."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def create_or_attach_job(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        self.calls += 1
+        raise AssertionError("removed runtime must be rejected before Host child creation")
 
 
 def asset_hashes(root: Path) -> dict[str, dict[str, Any]]:
@@ -54,6 +70,17 @@ async def run(args: argparse.Namespace) -> None:
     admission_entered, admission_release = threading.Event(), threading.Event()
     removal_entered, removal_release = threading.Event(), threading.Event()
     gui_admission_entered = threading.Event()
+    recipe_admission_entered = threading.Event()
+    recipe_host = UncalledHost()
+    recipe_manager = SceneRecipeJobManager(app.state.store, app.state.scene_workspace, recipe_host)
+    if args.hold_removal_job:
+        original_recipe_acquire = app.state.scene_workspace.acquire_recipe_runtime
+
+        def observed_recipe_acquire(*values: Any, **kwargs: Any) -> Any:
+            recipe_admission_entered.set()
+            return original_recipe_acquire(*values, **kwargs)
+
+        app.state.scene_workspace.acquire_recipe_runtime = observed_recipe_acquire
     if args.hold_removal:
         original_unregister = app.state.scene_workspace.resolver.unregister_managed
         original_create = app.state.blender_sessions._create_guarded
@@ -227,8 +254,21 @@ async def run(args: argparse.Namespace) -> None:
                     "confirmation_fingerprint": preview["confirmation_fingerprint"], "acknowledge_history": True}))
                 if args.hold_removal:
                     contender = None
+                    recipe_contender = None
                     try:
                         assert await asyncio.to_thread(removal_entered.wait, 5)
+                        if args.hold_removal_job:
+                            jobs_before = await asyncio.to_thread(app.state.store.list_jobs, 10000, include_cleared=True)
+                            assert len(jobs_before) < 10000
+                            identity = HostIdentity(authorization="Bearer fixture-only", addon_id="media-forge",
+                                subject="job:removal-fixture", actor_subject=STANDALONE_SUBJECT,
+                                expires_at=int(time.time()) + 600, granted_capabilities=frozenset({"jobs.write"}))
+                            value = SceneEditRequest.model_validate({"scene_id": scene_before["scene"]["id"],
+                                "base_revision_id": scene_before["scene"]["current_revision_id"],
+                                "recipe": {"operations": [{"type": "primitive.add", "object_id": "admission_probe",
+                                    "primitive": "cube", "name": "Never executed", "dimensions": [1, 1, 1]}]}})
+                            recipe_contender = asyncio.create_task(recipe_manager.submit(value, identity))
+                            assert await asyncio.to_thread(recipe_admission_entered.wait, 5)
                         contender = asyncio.create_task(client.post(sessions_path,
                             json={"action": "start", "scene_id": scene_before["scene"]["id"]}))
                         assert await asyncio.to_thread(gui_admission_entered.wait, 5)
@@ -239,6 +279,9 @@ async def run(args: argparse.Namespace) -> None:
                         health_elapsed = time.monotonic() - health_started
                         assert health_elapsed < 2, health_elapsed
                         assert not contender.done(), "GUI admission bypassed removal guard"
+                        if recipe_contender is not None:
+                            assert not recipe_contender.done(), "recipe admission bypassed removal guard"
+                            assert recipe_host.calls == 0
                         await record("removal_holds_gui_admission", health_elapsed_sec=health_elapsed,
                             health_status=response.json()["status"], gui_request_pending=True)
                     finally:
@@ -247,7 +290,22 @@ async def run(args: argparse.Namespace) -> None:
                             if contender is not None:
                                 rejected = await contender
                         finally:
-                            await removal
+                            try:
+                                await removal
+                            finally:
+                                if recipe_contender is not None:
+                                    recipe_outcome = (await asyncio.gather(recipe_contender, return_exceptions=True))[0]
+                                await recipe_manager.stop()
+                    if recipe_contender is not None:
+                        assert isinstance(recipe_outcome, SceneError), repr(recipe_outcome)
+                        assert recipe_outcome.code == "scene_runtime_unavailable"
+                        assert recipe_host.calls == 0
+                        assert await asyncio.to_thread(app.state.store.list_jobs, 10000, include_cleared=True) == jobs_before
+                        assert not recipe_manager._admissions and not recipe_manager._tasks
+                        assert app.state.scene_workspace.resolver.live_reference_count(old) == 0
+                        await record("removal_first_recipe_rejected", error_code=recipe_outcome.code,
+                            host_calls=0, new_jobs=0, runtime_references=0,
+                            mode="real_scene_job_admission_with_uncalled_host_fixture")
                     assert rejected.status_code == 422, rejected.text
                     assert rejected.json()["detail"]["code"] == "scene_runtime_unavailable", rejected.text
                     assert len((await get(sessions_path))["items"]) == len(sessions_before) + 1
@@ -324,6 +382,8 @@ def main() -> None:
                         help="Remove inactive project-pinned 4.5.9 with acknowledgement and reinstall the exact version")
     parser.add_argument("--hold-removal", action="store_true",
                         help="Hold real removal before unregister; verify concurrent GUI admission and HTTP health")
+    parser.add_argument("--hold-removal-job", action="store_true",
+                        help="Also verify real Job admission rejects the removed scene pin before contacting a Host fixture")
     args = parser.parse_args()
     if args.hold_working_admission and not args.live_references_only:
         parser.error("--hold-working-admission requires --live-references-only")
@@ -331,6 +391,8 @@ def main() -> None:
         parser.error("--history-reinstall cannot be combined with --live-references-only")
     if args.hold_removal and not args.history_reinstall:
         parser.error("--hold-removal requires --history-reinstall")
+    if args.hold_removal_job and not args.hold_removal:
+        parser.error("--hold-removal-job requires --hold-removal")
     asyncio.run(run(args))
 
 
