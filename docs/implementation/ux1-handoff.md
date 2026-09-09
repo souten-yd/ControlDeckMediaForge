@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.58 installed / array MCP delivery
+
+PR422 merge/tag88c17bd、署名v0.28.58公開/再取得検証/標準updateまで完了。
+artifact31,539,237 B/SHA750f8f1e370d0f155fb67e5ab66d48c979c22bc08bfef3352e93e39377c96285。
+更新13.076秒/healthy/全DB tableとregistry不変、backup mf-0.28.58-update-d8eeyh6d。
+Host1141433保持、MF1260659、実binary/audit一致。旧.56bundleのみ標準整理、.57/.58保持。
+実Host MCP bridgeで配列create→status→export→grant→stairs.glb配置を確認。
+初回診断はHost envelopeを取り違えてexit1。実制作Jobはsucceeded、再作成せず同Jobで続行。
+外部mf-array-mcp-installed-0.28.58-resume.pyは1.187秒/exit0、一時config残数0。
+job_d5eff63dd52044c9ae19a5ea1ba2b64d、scene_e45604f9d7c3458c80b3604ab37fd7b9、
+revision_0548e2ad2ede4f8da6d4be90de3fa793、GLB9762b4505f2d4470840d1ba2c71c6266。
+MF3DS-Array-MCP-20260910/exports/stairs.glbは6,224 B/receipt・実bytes一致。
+実Blender再importで6段/72tri/48座標一致。証跡 mf-array-mcp-installed-0.28.58-20260910。
+初回/再開scriptsを同dirへ無条件再実行しない。残存する診断handleなし。
+今回OpenCode LLM/directorを動かしてはいない。次は実OpenCodeとGA後続、全3DS/GAはPARTIAL。
+Host再起動承認は依然なし、Host311は未導入。記録branch ux1/release-0-28-58-acceptance。
+
 ## 2026-09-10 v0.28.58 preparation
 
 base PR421 merge93242b5、branch ux1/release-0-28-58。addon/core版数とrelease noteを追加。
