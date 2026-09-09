@@ -14,6 +14,26 @@ from pathlib import Path
 from typing import Any
 
 
+def verify_director_static(calls: list[dict[str, Any]]) -> None:
+    """Discovery and text promises are not evidence of skill/operation execution."""
+    skills = [call for call in calls if call["tool"] == "skill"]
+    assert skills, "No actual skill invocation"
+    for call in skills:
+        state = call["state"]
+        assert state["status"] == "completed"
+        assert state["input"] == {"name": "blender-director"}
+        assert "Blender Director" in state["output"] and "media.scene" in state["output"]
+    creates = [call for call in calls if call["tool"] == "controldeck_addons_media_scene_create"]
+    assert len(creates) == 1, "Expected exactly one new scene"
+    assert calls.index(skills[0]) < calls.index(creates[0]), "Skill must be read before creation"
+    state = creates[0]["state"]
+    assert state["status"] == "completed"
+    operations = state["input"]["recipe"]["operations"]
+    assert {"object.duplicate", "modifier.mirror"} <= {op["type"] for op in operations}
+    assert any(op.get("reference_object_id") == "handle" and op.get("axes") == ["X"]
+               for op in operations if op["type"] == "modifier.mirror"), "Guard must mirror about the handle"
+
+
 def verify(evidence_dir: Path, database: Path) -> dict[str, Any]:
     observations = json.loads((evidence_dir / "observations.json").read_text())
     assert observations["exit_code"] == 0
@@ -21,11 +41,15 @@ def verify(evidence_dir: Path, database: Path) -> dict[str, Any]:
     assert not any(event.get("type") == "error" for event in events)
     calls = [event["part"] for event in events if event.get("type") == "tool_use"]
     allowed = {
-        "media_capabilities", "media_scene_create", "media_generate", "media_job_status",
+        "media_capabilities", "media_inspect", "media_scene_create", "media_generate", "media_job_status",
         "media_scene_snapshot", "media_scene_material", "media_scene_export", "media_pack",
         "control_deck_project_output_grant",
     }
-    assert all(call["tool"] in {"controldeck_addons_" + name for name in allowed} for call in calls)
+    allowed_tools = {"controldeck_addons_" + name for name in allowed}
+    if observations.get("director_static"):
+        verify_director_static(calls)
+        allowed_tools.add("skill")
+    assert all(call["tool"] in allowed_tools for call in calls)
     assert all(call["state"]["status"] == "completed" for call in calls)
 
     def outputs(name: str) -> list[dict[str, Any]]:
@@ -101,6 +125,7 @@ def verify(evidence_dir: Path, database: Path) -> dict[str, Any]:
                 "dimensions_m": dimensions, "compiled_triangles": stats["triangles"],
                 "compiler": manifest["compiler"], "image_model": image_provenance["model_id"],
                 "image_warnings": image_provenance["warnings"], "verified": True,
+                "director_static": observations.get("director_static", False),
                 "not_tested": ["same-scene existing-image comparison/adoption and GUI/restore flow",
                                "image semantic constraints", "long credential refresh"]}
     finally:

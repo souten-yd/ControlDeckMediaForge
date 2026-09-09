@@ -34,6 +34,30 @@ grantが期限切れなら新規取得して一度だけ再試行してくださ
 配置receiptを列挙してください。MediaForge toolとcontrol_deck.project_output_grantだけを使ってください。
 """
 
+DIRECTOR_STATIC = """最初にskill toolでblender-directorを実際に読み込んでください。
+スキルの説明を推測して進めず、読込に失敗したら停止してください。
+以下はゲーム用静的アセットの複製・ミラー受入です。現在の公開schemaとcapabilitiesに
+object.duplicateとmodifier.mirrorがあることを確認し、scene.createのrecipe内で両方を使います。
+Guardを中心からX方向に離した片側部品として作り、中心のHandleをreferenceにXミラーして
+左右対称の鍔にしてください。中心対称cubeをその場でミラーするだけでは不十分です。
+object.duplicateで装飾部品を独立複製し、別位置へ配置してください。全体の最大寸法は約1mです。
+スキルの古い7操作表にない追加操作も、現在の公開schemaに存在するものだけ使えます。
+以下の制作依頼のtool制限には、今回だけblender-directorのskill読込を追加で許可します。
+"""
+
+
+def restrict_tools(payload: dict[str, Any], *, director_static: bool) -> None:
+    """Limit this diagnostic's private configuration, never global settings."""
+    payload["permission"] = {"*": "deny", "controldeck_addons_*": "allow"}
+    payload["tools"] = {name: False for name in (
+        "bash", "read", "edit", "write", "glob", "grep", "webfetch", "websearch", "task", "skill", "question")}
+    if director_static:
+        payload["permission"]["skill"] = {"*": "deny", "blender-director": "allow"}
+        # Legacy tools entries become permissions before the global wildcard;
+        # duplicating skill there changes insertion order and disables it again.
+        payload["tools"].pop("skill")
+    payload["enabled_providers"] = ["controldeck"]
+
 
 def main() -> None:
     from app.database import SessionLocal
@@ -48,11 +72,15 @@ def main() -> None:
                         help="Export the verified restored scene into a new sibling output folder in its existing dedicated project")
     parser.add_argument("--retry-empty-output", action="store_true",
                         help="Reuse only an existing empty restored output directory after a terminal failed run")
+    parser.add_argument("--director-static", action="store_true",
+                        help="Require a real director skill read and duplicate/mirror in a new sword scene")
     args = parser.parse_args()
+    if args.director_static and (args.restored_ui_evidence or args.retry_empty_output):
+        parser.error("--director-static requires a new project/scene")
     os.umask(0o077)
     args.evidence_dir.mkdir(exist_ok=False)
     project_names = {p["name"] for p in provider.list_projects()}
-    prompt = PROMPT
+    prompt = DIRECTOR_STATIC + PROMPT if args.director_static else PROMPT
     output_directory = "exports"
     if args.restored_ui_evidence:
         assert args.project_name.startswith("MF3DS-") and args.project_name in project_names
@@ -98,16 +126,23 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
                                       owner_user_id=user_id, project_id=args.project_name)
     evidence: dict[str, Any] = {"project": args.project_name, "project_path": str(project_path),
                                 "correlation_id": correlation, "model": settings["model"], "events": 0,
-                                "output_directory": output_directory, "preserved_exports": preserved}
+                                "output_directory": output_directory, "preserved_exports": preserved,
+                                "director_static": args.director_static}
     process = None
     try:
         payload = json.loads(config.read_text())
         secrets = [payload["provider"]["controldeck"]["options"]["apiKey"],
                    payload["mcp"]["controldeck_addons"]["environment"]["CONTROL_DECK_ADDON_MCP_TOKEN"]]
-        payload["permission"] = {"*": "deny", "controldeck_addons_*": "allow"}
-        payload["tools"] = {name: False for name in ("bash", "read", "edit", "write", "glob", "grep", "webfetch", "websearch", "task", "skill", "question")}
-        payload["enabled_providers"] = ["controldeck"]
+        restrict_tools(payload, director_static=args.director_static)
         config.write_text(json.dumps(payload))
+        if args.director_static:
+            debug = subprocess.run([str(registry.executable("opencode")), "debug", "agent", "build", "--pure"],
+                env=dict(os.environ, OPENCODE_CONFIG=str(config)), capture_output=True, text=True, timeout=30)
+            assert debug.returncode == 0, "Agent permission preflight failed"
+            resolved = json.loads(debug.stdout)
+            assert resolved["tools"]["skill"] is True, "Director skill tool is disabled after config resolution"
+            assert not any(resolved["tools"].get(name) for name in ("bash", "read", "edit", "write", "task", "webfetch"))
+            evidence["director_tool_enabled"] = True
         bridge = payload["mcp"]["controldeck_addons"]
         preflight = subprocess.run(bridge["command"],
             input=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) + "\n",
@@ -116,6 +151,9 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
         listing = json.loads(preflight.stdout)["result"]["tools"]
         names = {tool["name"] for tool in listing}
         assert {"media.scene.snapshot", "media.scene.export", "media.pack", "control_deck.project_output_grant"} <= names
+        if args.director_static:
+            schema = json.dumps(next(tool["inputSchema"] for tool in listing if tool["name"] == "media.scene.create"))
+            assert all(operation in schema for operation in ("object.duplicate", "modifier.mirror"))
         evidence["mcp_preflight_tool_count"] = len(names)
         env = dict(os.environ, OPENCODE_CONFIG=str(config))
         argv = [str(registry.executable("opencode")), "run", prompt, "--pure", "--auto", "--format", "json",

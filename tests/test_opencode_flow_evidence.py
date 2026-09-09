@@ -100,3 +100,52 @@ def test_false_success_rejected(evidence: tuple[Path, Path], failure: str) -> No
         path.write_text(path.read_text().replace("controldeck_addons_media_capabilities", "bash"))
     with pytest.raises(AssertionError):
         MODULE.verify(root, database)
+
+
+@pytest.mark.parametrize("failure", [None, "absent", "other", "failed", "late", "missing_operation", "local_mirror"])
+def test_director_requires_actual_read_and_operations(failure: str | None) -> None:
+    calls = [
+        {"tool": "skill", "state": {"status": "completed", "input": {"name": "blender-director"},
+                                    "output": "Blender Director media.scene.create"}},
+        {"tool": "controldeck_addons_media_scene_create", "state": {"status": "completed", "input": {
+            "recipe": {"operations": [{"type": "object.duplicate"},
+                {"type": "modifier.mirror", "reference_object_id": "handle", "axes": ["X"]}]}}}},
+    ]
+    if failure == "absent":
+        calls.pop(0)
+    elif failure == "other":
+        calls[0]["state"]["input"]["name"] = "other-director"
+    elif failure == "failed":
+        calls[0]["state"]["status"] = "error"
+    elif failure == "late":
+        calls.reverse()
+    elif failure == "missing_operation":
+        calls[1]["state"]["input"]["recipe"]["operations"].pop()
+    elif failure == "local_mirror":
+        calls[1]["state"]["input"]["recipe"]["operations"][1].pop("reference_object_id")
+    if failure:
+        with pytest.raises(AssertionError):
+            MODULE.verify_director_static(calls)
+    else:
+        MODULE.verify_director_static(calls)
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_private_director_tool_permission(enabled: bool) -> None:
+    spec = importlib.util.spec_from_file_location(
+        "opencode_flow_runner", Path(__file__).parents[1] / "scripts/3ds_opencode_flow_e2e.py")
+    assert spec and spec.loader
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    payload: dict[str, Any] = {}
+    runner.restrict_tools(payload, director_static=enabled)
+    if enabled:
+        assert "skill" not in payload["tools"], "Legacy tools entry would override named skill permission"
+    else:
+        assert payload["tools"]["skill"] is False
+    assert all(not value for name, value in payload["tools"].items() if name != "skill")
+    assert payload["permission"]["*"] == "deny"
+    if enabled:
+        assert payload["permission"]["skill"] == {"*": "deny", "blender-director": "allow"}
+    else:
+        assert "skill" not in payload["permission"]

@@ -3,6 +3,56 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-09 director skill / static operation acceptance diagnostic
+
+既存OpenCode制作診断へ `--director-static` を追加。専用の新projectだけを作り、
+blender-director実読込→複製・ミラー付き剣→新規画像材質→GLB/G8 ZIP/grant配置を検査する。
+上流スキル/Host/coreは変更しない。現在の公開schemaで新2操作をpreflightし、
+実OpenCode `debug agent build --pure` の解決済みskill=true、shell/read等=falseもassertする。
+検証器は実skill呼出のcompleted/name/body/作成より前の順序、新recipe両操作とhandle基準X mirror、
+既存Job/Asset hash/provenance/依存/receipt/寸法/2000 triangles上限を別々に検査する。
+一覧への掲載や手順文だけでは成功としない。現在のgeometry目視/engine受入は別ゲート。
+
+初回 `/data1tb/mf-director-static-installed-20260909` は診断設定の不備で不合格。
+OpenCode1.18.29ではlegacy tools.skill=trueとpermission.skillを重複させると、
+permission変換のkey順序により後続の全拒否が勝ち、debug agentのskill=falseを観測した。
+toolsからskill項目を除き、名前別permissionだけにすると実resolved skill=trueに変わり、
+shell/read/edit/write/task/webfetchはfalseのまま。専用一時configのみ、global変更なし。
+初回実MCPは新2操作を含むcreateを実行したが、1個目は2892 triangles、mirror基準指定もなく、
+2個目のsceneを作成しており依頼の品質を満たす証拠にならない。
+画像生成/材質/GLB exportまで到達したが、skill実読込なしのため完走受入には使わない。
+既知4 JobすべてsucceededをDBで確認後、所有PID827946をexe検証/pidfdでSIGTERM。
+387.995秒、exit=-15、配置files0。専用configはfinallyで削除し、試験Assetは追跡用に保持。
+この結果を「エージェントが利用可能なskillを無視した」とは解釈しない。
+
+修正後R2は `/data1tb/mf-director-static-installed-20260909-r2`。
+実OpenCode1.18.29/local Host gateway/auto、installed MediaForge0.28.46、Blender4.5.13。
+105.876秒にskill(name=blender-director) completed、実本文3694文字を受領。
+242.913秒にcreate、255.551秒にJob succeededを確認、snapshot/inspectまで成功。
+scene_3230c522d9c9454b88959587fefe75c4、
+revision_897bb461c2864fe39ff07d9cb8ea052f、5 meshes/322 triangles。
+実recipeの独立複製とhandle基準X mirror、およびskill読込の順序を専用検証器でPASS。
+ただしこれは接合・外観品質や制作全工程の合格ではない。
+
+利用者が剣の隙間を指摘し、ロボット/カメレオン相当の造形を希望したため品質を再評価。
+入力primitiveのZ extentではblade下端とguard上端が0.03m、
+guard下端とhandle上端が0.025m離れている（modifier評価後の接触検査ではない）。
+寸法/triangleだけで「完成」と扱わず、次sliceは接合・多視点シルエットを検査するrobot受入へ。
+カメレオンの有機形状はcurve/mesh編集等の拡張対象で、現行部品組合せを完成品と偽らない。
+
+この段階で専用PID835973をexe/pidfd検証し終了、551.693秒/exit=-15/files0。
+OpenCode session exportで実行中image.generateのintentを照合し、未応答の専用
+job_1d5dee700743436981aa29c6c3e888e6がqueuedのまま残ることを確認。
+scene専用MCP media.job.cancelでは拒否されたため、既存standalone DELETE
+/api/v1/jobs/<id>で同一の試験Jobだけ取消し、実HTTP status=canceled、active Jobs0/GUI0。
+この待機理由は未診断。CLIを止めるだけでは背景Jobが回収されない点も残件として記録する。
+両runの専用configはfinallyで削除。Host/core再起動なし、試験Assetは保持。
+R2の新規画像適用/GLB/ZIP/配置、見た目品質、engine importはNOT TESTED。全フロー未完了。
+最終 `./mf.sh test`:1230 passed/既知warning2/141.66秒、exit0。
+途中runは修正前testを収集した後の診断helper更新で1 failed/1229 passedとなったため破棄し、
+修正後の全suiteを最初から実行した結果を上記とする。
+`npm run build:viewer`、`node --check frontend/app.js`、diff check成功、生成viewer差分なし。
+
 ## 2026-09-09 v0.28.46 signed publication, installed update and MCP schema
 
 PR #361 merge `5bb01865112e1f9315885308432412cafad992c0`を別detached worktreeへ固定し

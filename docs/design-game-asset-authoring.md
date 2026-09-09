@@ -77,6 +77,19 @@ merge距離のworld換算はobject scaleの影響を受ける。メートル指�
 ユニット・契約試験の後、実Blender worker/domain、署名installed MCP/OpenCodeへ順に進む。
 このsliceだけでarray/Boolean/rig/animation/GA-1全体完成としない。
 
+### 4.1 次の制作受入 — 接合とシルエット
+
+2026-09-09利用者は剣の隙間を指摘し、格好よいロボットやカメレオンの制作を希望した。
+実skill/MCP呼出・322 trianglesという構造検査だけでは制作品質を満たさなかった。
+次のfixtureはstylized robotとし、頭/胴/肩/腕/手/腰/脚/足の接続意図を先に定義する。
+装甲の意図的な隙間と、関節/芯材がなく部品が浮いた欠陥を区別する。
+正面/側面/斜めの実renderでシルエット・比率・左右対称・接合部を比較し、
+評価後meshの接触/離隔と合わせて判定する。AABBの重なりだけを接触の証明にしない。
+機械検査合格を「格好よい」の証明とはせず、ユーザーにpreviewを提示する。
+ロボットはまずstatic prop。動く関節/rig/animationはGA-4/5の別受入。
+カメレオンは胴体から手足への連続面、目、指、巻いた尾が必要なorganic fixtureとして
+GA-1 curve/mesh編集とGA-2 sculpt/retopologyの受入へ含める。球の寄せ集めで完成扱いにしない。
+
 ## 5. 契約・安全・リソース
 
 - schemaはschemas/、docs/apiと同期。追加operationと旧fixtureを両方検証する。
