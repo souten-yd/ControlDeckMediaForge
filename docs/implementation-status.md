@@ -1,5 +1,47 @@
 # Media Forge implementation status
 
+## 2026-09-10 install and Web pack file stages off-loop
+
+base PR452 mergef3033d7、branch ux1/3d-install-stage-io。
+Blender/Web packのprepare/finish file stageを同期helperへ分離し、owned worker threadで実行。
+downloadはasync HTTPを維持、cache/partial/ETag照会・作成・破棄・rename・進捗DBをworkerへ移す。
+取消で開始済みの検証・展開・probe・配置を放棄しない。公開state/版数/導入元/容量・hash・path検査、
+修復guard/rollback/参照保護と永続cancel flagを維持する。
+
+tests/test_blender_install_io.py: 通常/既存導入の再確認/修復/Web/Web再確認の5経路で、
+実Path操作とjournalのloop呼出を拒否し、ready結果まで検査。修正前5failed/0.59秒、
+修正後関連53passed/9.43秒。検証stage中の3回shutdown/実行取消をBlender/Web両方へ追加し、
+関連97034終端exit0/94passed/18.78秒。初回全test48918終端exit0/1571passed/154.32秒。
+最終reviewでmetadata.write_textのsymlink追従と空partialの再試行不備を確認し修正。
+metadataはNOFOLLOW/NONBLOCK/regular検査後truncate、0600、partialはexclusive作成。
+symlink/FIFO/directory拒否・対象bytes保持・mode/旧余剰bytes除去・空partial再取得の5テストを追加。
+関連78288終端exit0/53passed/7.81秒。
+修正後全 `./mf.sh test` 6962も終端exit0/1576passed/既知2warnings/154.44秒。
+viewer42ms・生成物差分なし、Node5pass、git diff --check成功。
+
+実source診断: `PYTHONPATH=backend:. .venv/bin/python /data1tb/mf-install-stage-source-20260910.py`。
+85930終端exit0/21.736秒。新規専用dataへ固定実cacheからBlender4.5.9とWeb pack1.0.0を導入。
+Blenderはarchive377929956B/SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d、
+6510members/1168332002展開bytes、実background/Python3.11.11/glTF export/import probe成功。
+Webは15769716B、TigerVNC1.16.2/noVNC1.7.0/software_display probe成功。
+install `blenderop_0e795c171efc41cc8cc030c2e65176bc`、
+web `blenderop_4bc0357f094a4ca2a0093fea94118d19` は両ready。
+finish stageをthread gateで待たせた間も実TCP health200、Blender41.681ms/Web40.919ms。
+Webはstop/実行取消を各3回受けてもgate解放まで未終端、解放後ready記録/tasks空。
+全元cache SHA不変、専用core終端。証跡 `/data1tb/mf-install-stage-source-20260910/observations.json`。
+稼働.65/MediaForge PID1897795 activeを再確認。Host/既存runtime/サービス設定に変更なし。
+
+metadata修正後、guarded診断を別の新規rootで再実行:
+`PYTHONPATH=backend:. .venv/bin/python /data1tb/mf-install-stage-source-20260910-r2.py`。
+53457終端exit0/21.933秒、両実install/probe成功、health41.661/41.788ms、Web3回取消のdrain成功。
+install `blenderop_23a3d56fcfdb4ec79c3a1a82c363d373`、web `blenderop_d8c1ea9154134c6ca135ce8d3cf7a704`。
+元cache全SHA保持/専用core終端。証跡rootは同名-r2。実機はcache再利用のため、metadata異常の
+拒否は上記実ファイルunit testの範囲であり、実機network downloadの証拠とはしない。
+
+NOT TESTED: 新コードの署名配布/installed受入、今回の外部network再取得、10分超setup認証、
+全GOAL/A〜F/GA完了。既存個別失敗テストを全実機failure matrixの証拠へ読み替えない。
+全gate終端済み。次は通常PRmerge、PR452と本変更の署名配布/installed受入とHost setup所有権。
+
 ## 2026-09-10 runtime execution control off-loop
 
 base PR451 merge5c4d15f、branch ux1/3d-runtime-execution-control。

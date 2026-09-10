@@ -42,6 +42,7 @@ from .blender_runtime import (
 from .blender_web import (
     BlenderWebPack,
     BlenderWebPackError,
+    BlenderWebPackSpec,
     WebPackComponent,
     extract_web_pack_archive,
     validate_web_pack_archive,
@@ -700,6 +701,24 @@ class BlenderRuntimeManager:
         )
 
     async def _install_web(self, operation: BlenderRuntimeOperation) -> None:
+        prepared = await self._runtime_io(self._prepare_web_files, operation)
+        if prepared is None:
+            return
+        spec, destination = prepared
+        archives: list[tuple[WebPackComponent, Path]] = []
+        downloaded = 0
+        for component in spec.components:
+            archive = await self._download(
+                operation, component, download_root=self.web_download_root,
+                progress_base=downloaded,
+            )
+            downloaded += component.archive_size_bytes
+            await self._runtime_io(self.store.update_blender_runtime_operation,
+                                   operation.id, bytes_done=downloaded)
+            archives.append((component, archive))
+        await self._runtime_io(self._finish_web_files, operation, spec, destination, archives)
+
+    def _prepare_web_files(self, operation: BlenderRuntimeOperation) -> tuple[BlenderWebPackSpec, Path] | None:
         if self.web_pack is None or self.web_download_root is None:
             raise BlenderWebPackError("blender_web_not_configured", "web pack is not configured")
         spec = self.web_pack.spec()
@@ -731,16 +750,14 @@ class BlenderRuntimeManager:
         self.store.update_blender_runtime_operation(
             operation.id, state=BlenderRuntimeOperationState.DOWNLOADING
         )
-        archives: list[tuple[WebPackComponent, Path]] = []
-        downloaded = 0
-        for component in spec.components:
-            archive = await self._download(
-                operation, component, download_root=self.web_download_root,
-                progress_base=downloaded,
-            )
-            downloaded += component.archive_size_bytes
-            self.store.update_blender_runtime_operation(operation.id, bytes_done=downloaded)
-            archives.append((component, archive))
+        return spec, destination
+
+    def _finish_web_files(
+        self, operation: BlenderRuntimeOperation, spec: BlenderWebPackSpec,
+        destination: Path, archives: list[tuple[WebPackComponent, Path]],
+    ) -> None:
+        if self.web_pack is None:
+            raise BlenderWebPackError("blender_web_not_configured", "web pack is not configured")
         self._raise_if_canceled(operation.id)
         self.store.update_blender_runtime_operation(
             operation.id,
@@ -750,9 +767,7 @@ class BlenderRuntimeManager:
         archive_facts: dict[str, dict[str, int]] = {}
         for component, archive in archives:
             try:
-                archive_facts[component.id] = await asyncio.to_thread(
-                    validate_web_pack_archive, archive, component
-                )
+                archive_facts[component.id] = validate_web_pack_archive(archive, component)
             except BlenderWebPackError:
                 archive.unlink(missing_ok=True)
                 raise
@@ -767,7 +782,7 @@ class BlenderRuntimeManager:
             operation.id, state=BlenderRuntimeOperationState.INSTALLING
         )
         stage = self._web_stage_root(operation.id)
-        await self._clean_stage(operation.id)
+        self._clean_stage_sync(operation.id)
         extract_root = contained(stage, stage / "extract")
         install_root = contained(stage, stage / "candidate/install")
         extract_root.mkdir(mode=0o700, parents=True)
@@ -775,8 +790,7 @@ class BlenderRuntimeManager:
         for component, archive in archives:
             component_extract = contained(extract_root, extract_root / component.id)
             component_extract.mkdir(mode=0o700)
-            await asyncio.to_thread(
-                extract_web_pack_archive,
+            extract_web_pack_archive(
                 archive,
                 component_extract,
                 component,
@@ -792,16 +806,16 @@ class BlenderRuntimeManager:
         self.store.update_blender_runtime_operation(
             operation.id, state=BlenderRuntimeOperationState.PROBING
         )
-        probe = await asyncio.to_thread(self.web_pack.probe, candidate, spec)
+        probe = self.web_pack.probe(candidate, spec)
         self._raise_if_canceled(operation.id)
         destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if destination.exists() or destination.is_symlink():
             raise BlenderWebPackError("blender_web_destination_exists", "web pack destination appeared")
         os.replace(candidate, destination)
         if self.web_pack.status().get("state") != "ready":
-            await asyncio.to_thread(shutil.rmtree, destination)
+            shutil.rmtree(destination)
             raise BlenderWebPackError("blender_web_probe_failed", "installed web pack did not verify")
-        await self._clean_stage(operation.id)
+        self._clean_stage_sync(operation.id)
         self.store.update_blender_runtime_operation(
             operation.id,
             state=BlenderRuntimeOperationState.READY,
@@ -949,6 +963,14 @@ class BlenderRuntimeManager:
         )
 
     async def _install(self, operation: BlenderRuntimeOperation) -> None:
+        prepared = await self._runtime_io(self._prepare_install_files, operation)
+        if prepared is None:
+            return
+        spec, destination = prepared
+        archive = await self._download(operation, spec)
+        await self._runtime_io(self._finish_install_files, operation, spec, destination, archive)
+
+    def _prepare_install_files(self, operation: BlenderRuntimeOperation) -> tuple[RuntimeSpec, Path] | None:
         try:
             spec = self._catalog().specs[operation.runtime_id]
         except KeyError as exc:
@@ -985,8 +1007,8 @@ class BlenderRuntimeManager:
                 operation.id, state=BlenderRuntimeOperationState.PROBING,
                 bytes_done=spec.archive_size_bytes,
             )
-            facts = await asyncio.to_thread(
-                preflight, destination / "install" / spec.executable,
+            facts = preflight(
+                destination / "install" / spec.executable,
                 self.preflight_script, spec,
             )
             self.resolver.register_managed(
@@ -997,7 +1019,7 @@ class BlenderRuntimeManager:
             )
             if operation.action == BlenderRuntimeOperationAction.UPDATE:
                 self.resolver.activate(operation.runtime_id)
-            await self._clean_stage(operation.id)
+            self._clean_stage_sync(operation.id)
             self.store.update_blender_runtime_operation(
                 operation.id,
                 state=BlenderRuntimeOperationState.READY,
@@ -1019,14 +1041,18 @@ class BlenderRuntimeManager:
         self.store.update_blender_runtime_operation(
             operation.id, state=BlenderRuntimeOperationState.DOWNLOADING
         )
-        archive = await self._download(operation, spec)
+        return spec, destination
+
+    def _finish_install_files(
+        self, operation: BlenderRuntimeOperation, spec: RuntimeSpec, destination: Path, archive: Path,
+    ) -> None:
         self._raise_if_canceled(operation.id)
         self.store.update_blender_runtime_operation(
             operation.id, state=BlenderRuntimeOperationState.VERIFYING,
             bytes_done=spec.archive_size_bytes,
         )
         try:
-            archive_facts = await asyncio.to_thread(validate_archive, archive, spec)
+            archive_facts = validate_archive(archive, spec)
         except BlenderRuntimeError:
             archive.unlink(missing_ok=True)
             raise
@@ -1043,11 +1069,10 @@ class BlenderRuntimeManager:
             operation.id, state=BlenderRuntimeOperationState.INSTALLING
         )
         stage = self._stage_root(operation.id)
-        await self._clean_stage(operation.id)
+        self._clean_stage_sync(operation.id)
         extract_root = contained(stage, stage / "extract")
         extract_root.mkdir(mode=0o700, parents=True)
-        await asyncio.to_thread(
-            self._extract,
+        self._extract(
             archive,
             extract_root,
             spec,
@@ -1075,15 +1100,13 @@ class BlenderRuntimeManager:
         self.store.update_blender_runtime_operation(
             operation.id, state=BlenderRuntimeOperationState.PROBING
         )
-        facts = await asyncio.to_thread(
-            preflight, candidate / "install" / spec.executable, self.preflight_script, spec
-        )
+        facts = preflight(candidate / "install" / spec.executable, self.preflight_script, spec)
         self._raise_if_canceled(operation.id)
         if operation.action == BlenderRuntimeOperationAction.REPAIR:
             # Admission may have happened while downloading/probing. Keep its
             # guard, all synchronous persistence and filesystem work off-loop.
-            await self._runtime_io(
-                self._publish_repair, operation, spec, candidate, destination,
+            self._publish_repair(
+                operation, spec, candidate, destination,
                 archive_facts, facts,
             )
             return
@@ -1100,9 +1123,9 @@ class BlenderRuntimeManager:
                 self.resolver.activate(operation.runtime_id)
         except Exception:
             self._ensure_managed_destination(destination)
-            await asyncio.to_thread(shutil.rmtree, destination)
+            shutil.rmtree(destination)
             raise
-        await self._clean_stage(operation.id)
+        self._clean_stage_sync(operation.id)
         self.store.update_blender_runtime_operation(
             operation.id,
             state=BlenderRuntimeOperationState.READY,
@@ -1170,13 +1193,9 @@ class BlenderRuntimeManager:
         progress_base: int = 0,
     ) -> Path:
         selected_root = download_root or self.download_root
-        archive = contained(selected_root, selected_root / spec.archive_name)
-        if archive.is_file() and not archive.is_symlink():
+        archive, cached = await self._runtime_io(self._download_cache, selected_root, spec.archive_name)
+        if cached:
             return archive
-        if archive.exists() or archive.is_symlink():
-            raise BlenderRuntimeOperationError(
-                "blender_runtime_download_unsafe", "Blender archive cache is unsafe"
-            )
         partial = archive.with_suffix(archive.suffix + ".partial")
         metadata = archive.with_suffix(archive.suffix + ".partial.json")
         for attempt in range(DOWNLOAD_RETRIES):
@@ -1184,27 +1203,68 @@ class BlenderRuntimeManager:
                 await self._download_attempt(
                     operation, spec, partial, metadata, progress_base=progress_base
                 )
-                os.replace(partial, archive)
-                metadata.unlink(missing_ok=True)
+                await self._runtime_io(self._promote_download, partial, archive, metadata)
                 return archive
             except httpx.HTTPError:
-                self._raise_if_canceled(operation.id)
+                await self._runtime_io(self._raise_if_canceled, operation.id)
                 if attempt + 1 == DOWNLOAD_RETRIES:
                     raise
                 await asyncio.sleep(min(2 ** attempt, 4))
         raise AssertionError("download retry loop ended unexpectedly")
 
-    async def _download_attempt(
-        self,
-        operation: BlenderRuntimeOperation,
-        spec: RuntimeSpec | WebPackComponent,
-        partial: Path,
-        metadata: Path,
-        *,
-        progress_base: int = 0,
-    ) -> None:
+    @staticmethod
+    def _download_cache(root: Path, name: str) -> tuple[Path, bool]:
+        archive = contained(root, root / name)
+        if archive.is_file() and not archive.is_symlink():
+            return archive, True
+        if archive.exists() or archive.is_symlink():
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_download_unsafe", "Blender archive cache is unsafe"
+            )
+        return archive, False
+
+    @staticmethod
+    def _promote_download(partial: Path, archive: Path, metadata: Path) -> None:
+        os.replace(partial, archive)
+        metadata.unlink(missing_ok=True)
+
+    @staticmethod
+    def _discard_partial(partial: Path, metadata: Path) -> None:
+        partial.unlink(missing_ok=True)
+        metadata.unlink(missing_ok=True)
+
+    @staticmethod
+    def _prepare_partial(partial: Path, metadata: Path, etag: str | None) -> None:
+        partial.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if partial.exists() or partial.is_symlink():
+            raise BlenderRuntimeOperationError(
+                "blender_runtime_download_unsafe", "download partial is unsafe"
+            )
+        # Validate the descriptor before truncation; never follow a replaced
+        # metadata symlink or block on a FIFO. Create the partial exclusively.
+        fd = os.open(metadata, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        with os.fdopen(fd, "wb") as output:
+            if not stat.S_ISREG(os.fstat(output.fileno()).st_mode):
+                raise BlenderRuntimeOperationError(
+                    "blender_runtime_download_unsafe", "download metadata is unsafe"
+                )
+            partial_fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            os.close(partial_fd)
+            os.fchmod(output.fileno(), 0o600)
+            output.truncate(0)
+            output.write((json.dumps({"etag": etag}) + "\n").encode("utf-8"))
+
+    @staticmethod
+    def _read_resume(
+        spec: RuntimeSpec | WebPackComponent, partial: Path, metadata: Path,
+    ) -> tuple[int, str | None]:
         existing = partial.stat().st_size if partial.is_file() and not partial.is_symlink() else 0
         etag: str | None = None
+        if not existing and partial.is_file() and not partial.is_symlink():
+            # A disconnect/crash before the first chunk has nothing to resume.
+            # Remove only this empty cache entry so exclusive creation can retry.
+            partial.unlink()
+            metadata.unlink(missing_ok=True)
         if existing:
             if metadata.is_symlink() or (
                 metadata.exists() and (not metadata.is_file() or metadata.stat().st_size > 4096)
@@ -1221,6 +1281,13 @@ class BlenderRuntimeManager:
                 partial.unlink(missing_ok=True)
                 metadata.unlink(missing_ok=True)
                 existing = 0
+        return existing, etag
+
+    async def _download_attempt(
+        self, operation: BlenderRuntimeOperation, spec: RuntimeSpec | WebPackComponent,
+        partial: Path, metadata: Path, *, progress_base: int = 0,
+    ) -> None:
+        existing, etag = await self._runtime_io(self._read_resume, spec, partial, metadata)
         headers = {"Accept-Encoding": "identity", "User-Agent": USER_AGENT}
         if existing:
             headers.update({"Range": f"bytes={existing}-", "If-Range": etag or ""})
@@ -1233,8 +1300,7 @@ class BlenderRuntimeManager:
             async with client.stream("GET", spec.archive_url) as response:
                 if response.status_code not in ({206} if existing else {200}):
                     if existing:
-                        partial.unlink(missing_ok=True)
-                        metadata.unlink(missing_ok=True)
+                        await self._runtime_io(self._discard_partial, partial, metadata)
                     response.raise_for_status()
                     raise BlenderRuntimeOperationError(
                         "blender_runtime_resume_rejected", "download resume response differed"
@@ -1245,8 +1311,7 @@ class BlenderRuntimeManager:
                     != f"bytes {existing}-{spec.archive_size_bytes - 1}"
                     or response_etag != etag
                 ):
-                    partial.unlink(missing_ok=True)
-                    metadata.unlink(missing_ok=True)
+                    await self._runtime_io(self._discard_partial, partial, metadata)
                     raise BlenderRuntimeOperationError(
                         "blender_runtime_resume_rejected", "download resume identity differed"
                     )
@@ -1257,16 +1322,7 @@ class BlenderRuntimeManager:
                         "blender_runtime_download_size", "download Content-Length differed"
                     )
                 if not existing:
-                    partial.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                    if partial.exists() or partial.is_symlink():
-                        raise BlenderRuntimeOperationError(
-                            "blender_runtime_download_unsafe", "download partial is unsafe"
-                        )
-                    partial.touch(mode=0o600)
-                    metadata.write_text(
-                        json.dumps({"etag": response_etag}) + "\n", encoding="utf-8"
-                    )
-                    metadata.chmod(0o600)
+                    await self._runtime_io(self._prepare_partial, partial, metadata, response_etag)
                 written = existing
                 async for chunk in response.aiter_bytes():
                     written += len(chunk)
@@ -1285,9 +1341,9 @@ class BlenderRuntimeManager:
         return await BlenderRuntimeManager._runtime_io(callback, *args)
 
     @staticmethod
-    async def _runtime_io(callback: Callable[..., Any], *args: Any) -> Any:
+    async def _runtime_io(callback: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Own started disk work through repeated cancellation before returning."""
-        task = asyncio.create_task(asyncio.to_thread(callback, *args))
+        task = asyncio.create_task(asyncio.to_thread(callback, *args, **kwargs))
         return await BlenderRuntimeManager._await_owned(task)
 
     @staticmethod
