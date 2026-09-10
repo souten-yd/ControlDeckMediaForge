@@ -5,7 +5,7 @@
 
 ## 2026-09-10 animation loop guidance
 
-前turnは実OpenCode終端/strict不合格確認とPR432 mergeで進捗。base0a26acd、branch ux1/3d-animation-loop-guidance、PR作成前。
+前turnは実OpenCode終端/strict不合格確認とPR432 mergeで進捗。base0a26acd、branch ux1/3d-animation-loop-guidance、PR #433作成済み。
 AnimationClip/loop説明、3schema、API文書、4tests追加。既定/必須field/worker処理不変。
 focused21/0.23秒、build45ms/生成物差分0/Node5。全 ./mf.sh test handle5326終端exit0、1509 passed/146.64秒/既知warning2。
 source19130で実HTTP3schema200/exact bytes構造一致、説明を除く契約はmainと同一。
