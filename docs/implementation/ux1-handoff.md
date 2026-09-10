@@ -3,6 +3,16 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.65 preparation
+
+base PR449 mergebf2dcf0、ux1/release-0-28-65。版数/release note、全test23931終端exit0/1555passed/154.08秒。
+viewer39ms差分0/Node5pass。外部.65audit/install/installed switch診断準備・compile成功。
+現.64/MF1768792/Host1384554、旧.63bundleのみ標準保持整理対象、data/runtime保持。
+次: 全gate→commit/push/通常merge→exact checkout build/audit/署名/公開/導入。
+installedはmf-admission-installed-0.28.65-20260910.pyで通常UI4.5.9切替→4.5.13復元/2journal/旧data保持。
+新コードはPR449で全1555/source実install受入済み、.65/installed新受付/全3DS・GAは未受入。
+untracked .venv保持。
+
 ## 2026-09-10 setup admission off-loop
 
 base342e2d7、ux1/3d-setup-admission-offloop。manager.request→worker prepare/loop launch。
