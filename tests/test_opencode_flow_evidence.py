@@ -221,7 +221,8 @@ def test_private_director_tool_permission(static: bool, motion: bool, array: boo
         assert "skill" not in payload["permission"]
 
 
-@pytest.mark.parametrize("failure", [None, "world_offset", "count", "extra_object", "no_skill", "wrong_file"])
+@pytest.mark.parametrize("failure", [None, "world_offset", "count", "extra_object", "no_skill", "wrong_file",
+                                    "material_target", "material_before_primitive"])
 def test_array_delivery_evidence(evidence: tuple[Path, Path], failure: str | None) -> None:
     test_motion_evidence(evidence, None)
     root, database = evidence
@@ -238,6 +239,8 @@ def test_array_delivery_evidence(evidence: tuple[Path, Path], failure: str | Non
     if failure == "world_offset": operations[-1]['local_offset'] = [.3, 0, .15]
     elif failure == "count": operations[-1]['count'] = 5
     elif failure == "extra_object": operations.append(dict(operations[0]))
+    elif failure == "material_target": operations[1]['object_id'] = 'other'
+    elif failure == "material_before_primitive": operations[0], operations[1] = operations[1], operations[0]
     elif failure == "no_skill": events = [event for event in events if event['part']['tool'] != 'skill']
     for event in events:
         state = event['part']['state']

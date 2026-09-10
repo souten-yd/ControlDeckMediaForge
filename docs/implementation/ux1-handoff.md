@@ -25,6 +25,13 @@ eventsはもはや空ではない。最終observations/制作Job/GLBは09:03 JST
 共有LLMの大きなprompt処理は観測したが、本依頼との一意対応/根本原因は未確定。
 今回追加は診断記録のみ。新規test/buildなし、先の1426/Node5 gateを維持。
 
+追加レビュー: 材質対象/primitive先行をverifierで検査、negative2追加でfocused37 passed。
+array inspectorへsource/GLB再importの単一mesh/Principled材質RGBA/metallic/roughness一致を追加。
+前回MCP保持物で実Blender4.5.13 exit0、6段/72tri/48座標/材質一致。
+証跡 /data1tb/mf-array-material-inspection-nUvgsn。現在OpenCodeの制作成功とは別。
+全test再実行handle85668は1428 passed/既知warning2/151.72秒でexit0。
+frontend変更なし/前回buildとNode5を維持。diff check後に同PRへcommit/pushする。
+
 ## 2026-09-10 v0.28.58 installed / array MCP delivery
 
 PR422 merge/tag88c17bd、署名v0.28.58公開/再取得検証/標準updateまで完了。

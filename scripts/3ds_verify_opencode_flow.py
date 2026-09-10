@@ -45,12 +45,14 @@ def verify_array_recipe(operations: list[dict[str, Any]]) -> None:
     assert len(operations) == 3
     primitive, = [op for op in operations if op['type'] == 'primitive.add']
     array, = [op for op in operations if op['type'] == 'modifier.array']
-    assert primitive['object_id'] == array['object_id'] == 'step'
+    material, = [op for op in operations if op['type'] == 'material.set']
+    assert primitive['object_id'] == array['object_id'] == material['object_id'] == 'step'
     assert primitive['primitive'] == 'cube' and primitive['dimensions'] == [.4, .8, .2]
     assert primitive.get('location', [0, 0, 0]) == [0, 0, 0]
     assert primitive.get('rotation_degrees', [0, 0, 0]) == [0, 0, 0]
     assert array['count'] == 6 and array['local_offset'] == [1.5, 0, 1.5]
     assert operations.index(primitive) < operations.index(array)
+    assert operations.index(primitive) < operations.index(material)
 
 
 def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False) -> dict[str, Any]:

@@ -30,6 +30,18 @@ skill出力3694文字/capabilities2508文字、最初のassistant入力29035/out
 本sessionとの一意対応は未確定。これを本依頼のtoken数/根本原因と断定しない。
 他依頼/モデルを停止せず、同runの終端を待つ。今回追加はread-only診断記録のみ、test再実行なし。
 
+検証器レビューで材質対象/作成順とGLB材質保持の検査不足を補完。
+対象相違・primitiveより先の材質操作を拒否するnegative2件を追加、focused37 passed/0.43秒。
+array_fixtureはscene meshが段1個であること、単一Principled材質のbase RGBA/metallic/roughnessが
+sourceとGLB再importで1e-5以内に一致することを独立検査する。
+保持済み前回MCP source_f1c4f7a5fcf54a1aa389e12ad5e04cdf.blendと
+MF3DS-Array-MCP-20260910/exports/stairs.glbを実Blender4.5.13で--inspect --fixture array。
+exit0、6段/72tri/48座標一致、material [.05,.25,.3,1,0,.5]保持。
+証跡 /data1tb/mf-array-material-inspection-nUvgsn/inspection.json。
+これは前回MCP生成物での検査器受入。待機中OpenCode runの成功にはしない。
+変更後の全testはhandle85668終端exit0、1428 passed/既知warning2/151.72秒。
+frontend変更なし、前回viewer/Node5結果を維持。git diff --check成功。
+
 ## 2026-09-10 v0.28.58 published/installed and MCP array delivery
 
 PR #422通常merge/tag88c17bd2ee31c94c737349f73993528d1a60eb27。
