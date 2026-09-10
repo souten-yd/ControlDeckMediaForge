@@ -92,6 +92,11 @@ in-process参照とdurable Job/GUI/working copy参照を再検査する。稼働
 `blender_runtime_in_use`で失敗し、元の実行環境を差し替えない。履歴pinやactive指定だけで
 停止済み版の修復を禁止しない。guard取得・DB照合・rename/registry/rollback/cleanupは
 worker thread内で行い、開始済み公開threadはshutdown取消でも終端まで追跡する。
+修復のregister_managedはプロセス間registry lockで待つことがあるため、登録から戻った後も
+旧directoryを破棄する前に永続cancel flagを再検査する。この待機中のHost取消・認証喪失では
+候補を回収して旧directoryを戻し、canceled/failedと終端outboxを一致させる。
+単なるローカルtask停止による開始済みthreadのdrainと、永続flagによる取消は区別する。
+Host制御エラーの診断はallowlistのcode/HTTP statusとtask取消を区別し、remote messageやtokenを記録しない。
 `blender install/update/switch/repair/remove` CLIは稼働中MediaForgeの同じorchestratorを呼び、
 READMEへ正式掲載する。source runtime互換用の既存`blender build/status`は変更しない。
 

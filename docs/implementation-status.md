@@ -1,5 +1,28 @@
 # Media Forge implementation status
 
+## 2026-09-10 repair publication stop checkpoint / source rollback acceptance
+
+base PR462 merged7c61d8、ux1/3d-repair-publication-cancel。前turnはinstalled長時間不合格の実証/回収まで進捗。
+登録待ち中のHost取消・失効を2ケースでRED再現（readyになりcanceled/failedの期待に不一致）。
+_publish_repairのregister_managedから戻った直後、旧directory削除前に永続cancelを再検査。
+取消時は既存例外rollbackで旧directoryを復元。ローカルtask停止だけのowned drainは維持する。
+controllerはHostApiErrorのallowlist code/HTTP statusとtask取消を区別してログへ記録。
+remote message/token/任意codeをログへ出さず、秘密値negative assertionを追加。
+関連36pass/9.12秒。これで登録待ちの再現条件は直るが、全原子処理/全取消raceを検証したとはしない。
+
+外部`/data1tb/mf-repair-publication-cancel-source-20260910.py`を
+`PYTHONPATH=backend:.:tests .venv/bin/python`で実行、50977終端exit0。
+新しい隔離data/実source core・HTTP health/実固定Blender4.5.9を使用。Host応答・取消/403はfixture。
+同名evidence dir、実導入20.572秒→登録待ち取消rollback41.200秒→失効rollback62.470秒。
+両方とも旧exe SHA de8e8092c49e42cc6f1adde86aea0202ea5bad3338725887ecbcb7274dd0f926/
+inode20191670とregistry bytes保持、canceled/failedとHost fixture終端outbox/sent1一致。
+旧Blenderのbackground/GLB export/import probeが成功、62.637秒passed/62.789秒source停止。
+独立read-only DB照合もinstall ready/repair canceled/repair failedの3件sent1、staging全空。
+HTTP healthはsetup_required（隔離領域の他機能未導入）であり、installed healthyへ読み替えない。
+viewer build41ms/生成差分0/Node5pass/diff check成功。全70381終端exit0/1604pass/既知2warnings/169.61秒。
+NOT TESTED: 本修正の署名配布/installed受入、前回約210秒の監視停止原因、installed長時間refresh、全3DS/GA。
+次: 全gate→通常PRmerge→署名配布後、停止理由ログを使って長時間認証監視を再検証する。
+
 ## 2026-09-10 installed long setup trial FAILED / committed outcome reconciled
 
 base PR461 mergece85480、ux1/3d-installed-setup-host-long。前turnはinstalled取消受入/mergeまで進捗。
