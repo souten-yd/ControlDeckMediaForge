@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.67 signed release / installed Host setup acceptance
+
+PR459通常merge/tag d188e549aba156853146d189cddec86b8984c17f。exact checkoutからbuild35855 exit0、
+203 entries/package doctor0.28.67/新Host controller・Store・manager全classとworkspace/startupを照合。
+artifact31,608,062B、SHA256 3d4320f818e0bede37711717e732e44e5c988f14893561a5fdb9fb8b911ac35a。
+既存publisher鍵で署名、公開4files uploadedを確認しdownload41512 exit0でconsumer再取得。
+build/public: `/data1tb/mf-0.28.67-{build,public}-20260910`、verification.jsonを保存。
+外部`/data1tb/mf-0.28.67-install.py`をHost診断venvで実行、81697終端exit0。
+全Job/GUI/runtime/model操作idle・SQLite backup・再照合後、標準update11.455秒healthy。
+backup `/data1tb/mf-0.28.67-update-gkivv4r5`。全旧table/columnの行投影とruntime registry bytes保持。
+runtime operationへ追加5columnsだけ、旧記録はowner等NULL/sent0のローカル状態を維持。
+Host1811096不変、MF1949161。実/proc exe SHA ea3381007fb4249d1b2ff97e3128a9128e22c9ccd055c70adecb6a665e4d22e9
+は監査packageと一致、served auto_bind/loop/animation-settings schema一致。
+標準保持で旧.65実行bundleだけ整理（通知済み）、.66/.67とdata/runtimeを保持。
+
+外部`/data1tb/mf-setup-host-installed-0.28.67-20260910.py`もHost診断venvで実行、57035終端exit0。
+証跡 `/data1tb/mf-setup-host-installed-0.28.67-20260910`。実Chrome/ja320px/opaque iframeから
+正式認証workspace repair APIでinactive4.5.9を修復、23.064秒/実Blender background・GLB入出力probe成功。
+operation blenderop_412755b6d8eb43428ca933bbfb5ec2bf。正常版にrepairボタンはなく、UIクリックとは区別。
+通常UIで4.5.9へ切替23.146秒→4.5.13へ復元23.329秒、23.499秒passed。
+既存scene/revision/assets/jobs行、既存runtime operation行、registry bytes、両Blender実行hashを保持。
+追加3操作はowner user:16/ready、異なる3Host childがsucceeded、完全一致receipt/sent1を確認。
+独立fresh tokenの実Host control GETも3件succeeded。page errors0、23.572秒診断login失効。
+全診断は終端済み。Host/PC再起動なし。製品code変更なし、受入文書のみ。
+基準gateは準備時全1602pass/168.21秒/viewer47ms/Node5。本sliceで全test/buildの再実行なし。
+NOT TESTED: installed長時間setup/認証失効・再起動全matrix、今回のOpenCode制作/engine取込、全3DS/GA。
+次: installed setupの長時間・取消・再認証残件を既存source証拠と照合して受入。全体PARTIAL維持。
+
 ## 2026-09-10 v0.28.67 preparation
 
 PR458 merge0a67d0aからux1/release-0-28-67。PR456/457のHost setup journal/controlを含む版数とrelease note。
