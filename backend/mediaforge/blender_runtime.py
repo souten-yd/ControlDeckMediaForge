@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import tempfile
 import threading
 from typing import Any
@@ -64,6 +65,7 @@ class BlenderRuntimeResolver:
         self.trusted_worker = Path(os.path.abspath(trusted_worker))
         self.catalog_path = Path(os.path.abspath(catalog_path)) if catalog_path else None
         self._reference_guard = threading.RLock()
+        self._registration_local = threading.local()
         self._live_references: dict[str, int] = {}
 
     def _manifest(self) -> dict[str, Any]:
@@ -404,13 +406,7 @@ class BlenderRuntimeResolver:
         resolved = self._resolved(candidate)
         if not self._ready(resolved):
             raise BlenderRuntimeRegistryError("managed Blender runtime did not pass verification")
-        self.registry_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        lock_path = self.registry_path.with_suffix(self.registry_path.suffix + ".lock")
-        if lock_path.is_symlink():
-            raise BlenderRuntimeRegistryError("Blender runtime registry lock must not be a symlink")
-        with lock_path.open("a", encoding="ascii") as lock:
-            lock_path.chmod(0o600)
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        with self._registration_guard():
             registry = self._read_registry()
             existing = next(
                 (row for row in registry["runtimes"] if row["runtime_id"] == runtime_id), None
@@ -430,6 +426,37 @@ class BlenderRuntimeResolver:
             if changed:
                 self._write_registry(registry)
         return resolved
+
+    @contextmanager
+    def _registration_guard(self) -> Iterator[None]:
+        """Worker-only, same-resolver/thread reentrancy without a second flock."""
+        if getattr(self._registration_local, "held", False):
+            yield
+            return
+        self.registry_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        lock_path = self.registry_path.with_suffix(self.registry_path.suffix + ".lock")
+        descriptor = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        with os.fdopen(descriptor, "a", encoding="ascii") as lock:
+            if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
+                raise BlenderRuntimeRegistryError("Blender runtime registry lock must be a regular file")
+            os.fchmod(lock.fileno(), 0o600)
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            self._registration_local.held = True
+            try:
+                yield
+            finally:
+                self._registration_local.held = False
+
+    @contextmanager
+    def managed_publication_guard(self) -> Iterator[None]:
+        """Hold admission and registry exclusion BEFORE the first runtime rename.
+
+        Only register_managed may reenter this registry guard. Other registry
+        writers have independent locks and must not be invoked inside it.
+        No Store mutex may be held while acquiring this worker-only guard.
+        """
+        with self._reference_guard, self._registration_guard():
+            yield
 
     def activate(self, runtime_id: str) -> ResolvedBlenderRuntime:
         with self._reference_guard:

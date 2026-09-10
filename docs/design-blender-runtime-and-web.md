@@ -226,6 +226,16 @@ archive/実行file hash/catalog/probe検査を置き換えず、managerはまだ
 manager接続時はregistry lock取得と開始判定を**最初の実体renameより前**へ置く必要がある。
 現行register_managed callbackはrename後なので、その場所へbeginを足すだけでは不十分。
 
+公開ロック境界の先行接続: fresh install/updateとrepairは通常managerから
+managed_publication_guardを使い、参照guard→registry flock→取消再検査→最初のrenameの順にする。
+register_managedは同じresolver・同じworker threadでのみ既存flockを再利用し、二重取得で停止しない。
+新規配置先もlock取得後に再検査し、待機中に出現した実体を上書きしない。
+ロックfileはNOFOLLOW/NONBLOCK・regular検査・fd chmodを使う。Store mutexを保持してlockを待たない。
+他のregistry writerや回復adapterの独立flockをこのguard内から呼ばない。
+通常repairで待機中の旧inode保持、取消時の非差替えと、解除後の実probe済み修復を確認した。
+これはdurable begin/completeの接続ではない。次はこのguard内のrename前で開始を記録し、
+失敗/drain/restartをjournal経路へ接続する。従来の登録後取消窓・不明なI/O結果は未解決のまま。
+
 Host所有setupの永続化は既存blender_runtime_operationsへ加法的に置く。
 受付時のownerと一意なHost child ID、終端通知のoutbox/照合receiptだけをprivateに保存し、
 bearerは保存・公開しない。所有者なしの既存ローカル操作を後からHost所有として採用しない。
