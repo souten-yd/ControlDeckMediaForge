@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 install/Web file stages off-loop
+
+base PR452 mergef3033d7、ux1/3d-install-stage-io。
+prepare/finish stageとcache/partial/ETag/renameをowned workerへ、async HTTP/既存制約を維持。
+初回5RED、関連94pass/18.78秒、viewer42ms差分0/Node5pass。初回全48918終端exit0/1571pass/154.32秒。
+metadataのNOFOLLOW/regular/0600/exclusive作成と空partial再試行を追加、関連53pass/7.81秒。
+修正後の全6962も終端exit0/1576pass/154.44秒。初回gateで代用していない。
+実source85930終端exit0/21.736秒、新規dataへ本物の固定Blender/Web pack導入・probe成功。
+mf-install-stage-source-20260910: stage gate中health41.681/40.919ms、Web3回取消でもready記録/tasks空。
+元cache保持、専用core終端。稼働.65/MF1897795不変、Host/既存runtimeへ変更なし。
+修正後source-r2も53457終端exit0/21.933秒、実両install/probe・Web3回取消drain・元cache保持。
+証跡mf-install-stage-source-20260910-r2、health41.661/41.788ms。metadata異常はunitの範囲。
+次: commit/push/通常merge、452+本変更を署名配布/installed受入。全test/実機診断は終端済み。
+Host setup所有権/credentialと全GOAL/A〜F/GAは未完了。untracked .venv保持。
+
 ## 2026-09-10 runtime execution control off-loop
 
 base PR451 merge5c4d15f、ux1/3d-runtime-execution-control。
@@ -12,7 +27,7 @@ startup/run照会/switch/終端cleanupをworkerへ、削除/修復publicationの
 mf-execution-control-source-20260910: activate gate中health41.903ms、3回取消後も切替/ready完了。
 専用registry legacy→managed同4.5.9、元cache/外部exe保持、専用core終端。
 稼働.65/MF1897795不変。新署名/installed/全setup I/O/Host credential/全3DS・GAは未完了。
-次: commit/push/通常PRmerge。残るinstall/Web stageとHost setup所有権を進め、署名配布/installed受入へ。
+PR452通常mergef3033d7。残るinstall/Web stageとHost setup所有権を進め、署名配布/installed受入へ。
 untracked .venv保持。全test/専用source診断は終端、継続中handleなし。
 
 ## 2026-09-10 v0.28.65 installed acceptance

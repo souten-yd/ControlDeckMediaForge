@@ -172,6 +172,19 @@ shutdown自体もowned taskとして受付と実行taskの回収を待つ。task
 install/Web packの残る同期stage、exact/remove受付の取消全組合せ、Host setup所有Jobと
 credential refreshは別の未完了条件であり、この分離の成功から完了を推定しない。
 
+導入stageの追加分離: Blender/Web packとも準備と検証・展開・probe・配置を同期helperへまとめ、
+orchestratorはowned worker threadをawaitする。ネットワークstreamは既存async HTTPのまま。
+cache照会、partial/ETag読取・作成・破棄、download完了rename、各進捗DB更新もworker側で実行する。
+開始済みのファイルstageはshutdownの繰り返し取消でも終端まで追跡し、展開threadの生存中に
+stagingを別taskが消す構成にしない。利用者のcancelは既存の永続flagをworkerの検査点で受け取り、
+取消の回収と、task停止による開始済みI/Oのdrainを区別する。stage間は既存journalで再開する。
+初期版/推奨版/exact archive identity、容量・hash・path制約と修復時の参照再検査は維持する。
+この実行境界の修正はHost Job所有権やcredential refreshを新しく提供するものではない。
+download metadataはNOFOLLOW/NONBLOCKで開き、regular file検査後にだけtruncateし、0600を設定する。
+partialはexclusive作成とし、リンク先や非regular targetを書き換えない。
+最初のchunk前に中断した空のregular partialは再開bytesがないため、当該cache entryとmetadataだけを
+除いて同じtrusted sourceから再試行する。制作物やruntimeをこの回収対象にしない。
+
 提案状態: queued → preflight → downloading → verifying → installing → probing → ready。
 終端: failed / canceled。削除はdeletingを経由する。操作IDを先に永続化してから副作用を始める。
 既存model operationのjournal/watch/cancelの設計を再利用し、Blender固有policyはruntime adapterへ置く。
