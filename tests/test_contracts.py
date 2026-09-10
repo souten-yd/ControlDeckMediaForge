@@ -340,6 +340,16 @@ def test_placement_schema_keeps_single_and_batch_inputs_exclusive():
         )
 
 
+def test_placement_form_guidance_is_visible_without_interpreting_oneof() -> None:
+    schema = json.loads((ROOT / "schemas/project-asset-placement.json").read_text(encoding="utf-8"))
+    assert "Choose exactly one form" in schema["description"]
+    assert "For one file, prefer SINGLE" in schema["description"]
+    for name in ("asset_id", "filename"):
+        assert "SINGLE form only" in schema["properties"][name]["description"]
+        assert "Omit this top-level field" in schema["properties"][name]["description"]
+    assert "Omit top-level asset_id and filename entirely" in schema["properties"]["items"]["description"]
+
+
 def test_every_schema_example_validates_against_its_own_schema():
     """例が古びて嘘になるのを防ぐ。"""
     import jsonschema

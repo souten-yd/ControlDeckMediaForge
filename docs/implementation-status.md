@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-10 placement form guidance / source HTTP acceptance
+
+前PR #424は通常merge5e057f1、branch ux1/3d-placement-form-guidance。
+実OpenCode初回packの単一+items混在を受け、公開schemaのroot/asset_id/filename/items説明へ
+SINGLEとBATCHの排他・省略するfield・1件時の単一推奨を明記。API文書も両形式へ同期。
+公開oneOf/型/required/上限/拒否動作は変更しない。誤入力を暗黙に正規化して成功扱いしない。
+説明の露出テスト1件、単一field混在/両方混在/null混在の書込0拒否4件を追加。
+focused tests/test_contracts.py + test_host_execution.py:77 passed/既知warning1/23.61秒。
+
+専用data /data1tb/mf-placement-guidance-source-TaysV4でsource Uvicornを127.0.0.1:19130へ起動。
+実GET /schemas/project-asset-placement.jsonは200、新説明/ローカルschema一致、
+descriptionを除く再帰的なschema制約treeはorigin/mainと完全一致。
+HTTP body SHA5067e13cd7fa2cb7e57d08c5392096b738b027ba96ed4a19a697f7eb51ed4fcc。
+初回は未セットアップ環境へhealth=healthyを期待した診断assertでexit1。
+期待を見直し、実health HTTP200/setup_requiredを記録して再診断exit0/0.036秒。
+両専用coreは通常Ctrl-C終了/exit0。installed core/Host/モデル/既存projectを変更しない。
+NOT TESTED: installed MCPへの新説明配信、実OpenCode新規runでの混在回避。説明変更だけで改善保証しない。
+全回帰handle72146は1432 passed/1 failed/147.50秒でexit1。
+未変更test_scene_recipe_failure.pyのdirectoryケースが全process FD数224→94の減少で等数assert失敗。
+原因を今回のschema変更やFDリークと断定しない。単独同file22 passed/0.02秒、
+製品/検証ロジック無変更の全回帰再実行handle86260は1433 passed/既知warning2/148.43秒でexit0。
+新規testの型注釈を補完し、その5casesも1.17秒/exit0で再確認。最初の失敗記録は保持する。
+viewer再build73ms/生成物差分0、Node5 passed、専用19130 listener回収とdiff checkを確認。
+署名bundle導入後に新規専用runで再受入する。
+前回failed traceと配置物を保持し、全3DS/GAはPARTIAL。
+
 ## 2026-09-10 OpenCode array run terminal / delivery recovered, strict gate failed
 
 PR #424 source8c9c0c9の診断を同runで追跡。handle27239はexit0/2038.269秒で終端。

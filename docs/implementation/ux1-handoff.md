@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 placement form guidance
+
+前PR #424 merge5e057f1。branch ux1/3d-placement-form-guidance、schema説明/API同期と追加5tests。
+SINGLE/BATCHの排他をrootとfield説明へ明記。実validationは不変、混在を暗黙受理しない。
+focused77 passed/23.61秒。全test72146は1432 passed/1 failed/147.50秒でexit1。
+未変更の診断FDテストが全FD数224→94の減少で等数assert失敗。単独同file22 passed/0.02秒。
+製品/検証ロジック無変更の全test再実行86260は1433 passed/2warnings/148.43秒でexit0。
+追加testの型注釈補完後、その5casesも1.17秒/exit0。元失敗を残してcommit/pushへ。
+viewer build73ms/差分0、Node5 passed、diff check成功。
+専用source HTTP19130でschema200/説明一致/制約tree不変を確認。
+data /data1tb/mf-placement-guidance-source-TaysV4。初回health期待誤りでexit1、
+実HTTP200/setup_requiredを反映した再診断exit0/0.036秒。両core通常停止exit0、継続coreなし。
+installed.58/Host/既存projectは不変。新説明のinstalled MCP/OpenCode効果はNOT TESTED。
+次: full gate/通常merge→署名配布/導入→新規OpenCode array受入。前回成果物/失敗traceを上書きしない。
+全3DS/GA/engine受入は未完了、Host再起動承認も依然なし。
+
 ## 2026-09-10 OpenCode array terminal / strict acceptance FAILED
 
 PR #424/source8c9c0c9。handle27239はexit0/2038.269秒、9tools/36eventsで終端。
