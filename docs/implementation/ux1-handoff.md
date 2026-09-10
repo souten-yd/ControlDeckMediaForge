@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.62 installed / MCP facts accepted
+
+前turnはsaved facts実装merge、今回はPR438 merge/署名公開/標準導入/実MCPで進捗。
+base/tagd4dcf03、ux1/release-0-28-62-acceptance、記録PR作成前。
+版数全1524/154.54秒/build39ms/Node5。build52285/public57685/download73848/install58970/MCP98610すべて終端exit0。
+artifact31543807B/SHA4c1e5378c1c7076f3b544765b6057e4243abfe0d7f6fa9073d5f8ccc06c6526d、audit203entries/新facts同梱。
+backup mf-0.28.62-update-_ap76cz6、9.611秒healthy/全DB・登録保持、Host1384554不変/MF1424628。
+実exe/新schema一致、旧.60bundleのみ標準整理、.61/.62/data/runtime保持。
+MCP証跡 mf-animation-facts-mcp-installed-0.28.62-20260910、1.761秒、idle false/bend trueがJob/snapshotで一致。
+weighted.glb32140B/SHA51eb7fb98c1efee4b49c3af1c5d022129d83854e663e8791c1a8dfbf593aefd9、実Blender変形・両Jobs・設定回収確認。
+新project MF3DS-Animation-Facts-MCP-20260910のみ追加、旧scene/revisions不変。
+次: OpenCode診断へ納品前のanimation_settings照合を加え、strict条件を緩めず新runで受入する。
+現在継続OpenCodeなし。GUI後facts/engine/複雑character/全3DS・GA未完了、既存UX状態不変、blockerなし。
+再開: git status --short --branch; git fetch origin; readlink /data1tb/ControlDeck/data/features/media-forge/current。
+
 ## 2026-09-10 v0.28.62 preparation
 
 前turnは実保存factsのPR437 mergeで進捗。baseff60f65、ux1/release-0-28-62、PR作成前。

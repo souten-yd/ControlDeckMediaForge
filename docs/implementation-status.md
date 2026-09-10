@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.62 signed installed / saved facts MCP accepted
+
+PR438 merge/tagd4dcf03c170673846322c662007c0744ac43dedf。
+exact /data1tb/ControlDeckMediaForge-release-0.28.62でbuild_release_bundle.py、52285 exit0/log13.107秒。
+artifact31543807B/SHA4c1e5378c1c7076f3b544765b6057e4243abfe0d7f6fa9073d5f8ccc06c6526d。
+mf-0.28.62-audit.py exit0/203 entries:source worker/schema一致、新animation_facts/model/schema同梱、
+旧guard/recipe制約維持、packaged doctor ok/.62。package mf-0.28.62-package-ldlpjwem。
+既存bundle-build venvで署名/自己検証、新鍵/依存取得なし。
+公開57685/download73848 exit0、public mf-0.28.62-public-20260910の4filesがbuildと一致。
+外部mf-0.28.62-install.pyをHost診断環境で実行、58970 exit0/9.611秒。
+署名/idle/DBbackup後標準update、backup /data1tb/mf-0.28.62-update-_ap76cz6。
+全DBtable fingerprint/Blender登録不変、healthy、Host1384554前後不変/MF1424628。
+実exeSHA4fa65c3ba4ea5a9ba0604cb52a14b99b51125a2fd99cfd71d69990ef9dc44b6bはauditと一致。
+新scene-animation-settings.jsonとcreate schemaの実HTTP配信=exact source。
+標準保持2で旧.60実行bundleのみ整理、.61/.62/data/runtime保持。事前通知済み、旧公開版から回復可能。
+
+実MCP: mf-animation-facts-mcp-installed-0.28.62.py、98610 exit0/1.761秒。
+証跡 /data1tb/mf-animation-facts-mcp-installed-0.28.62-20260910。
+24tools→create→status→snapshotで保存factsのidle省略false/bend明示true、24fps/0→48frame/未報告0一致。
+export→新exports grant→weighted.glb配置、実Blender4.5.13 auto_skin --posedでsource/GLB変形一致。
+scene_fd74c96138df40e9a69a1483bee2adfc、revision_f014c141740b4fffacec1b46f98a1626、
+GLB asset_2b206d5ad54a40d787ec1345c3181ac6、job_fda5570c649e4db18291656daece32ad。
+Host childdf7c7756a8c7は実DBでsucceeded、private runtime-config-mf-auto-skin-14ca460b1f4.json不在を独立確認。
+project MF3DS-Animation-Facts-MCP-20260910/exports/weighted.glb32140B、
+SHA51eb7fb98c1efee4b49c3af1c5d022129d83854e663e8791c1a8dfbf593aefd9。
+receipt/Asset/provenance/実bytes一致、旧scene/revision/登録不変。
+全test版数gate1524 passed/154.54秒/既知warning2、build39ms/差分0/Node5。記録sliceはdocsのみ。
+NOT TESTED: OpenCodeによるfacts照合と指定遵守改善、GUI後facts、複雑character/engine/全3DS・GA。
+次は実OpenCode診断へ納品前のfacts照合を追加し、既存strict条件を緩めず再受入する。
+
 ## 2026-09-10 v0.28.62 preparation
 
 PR437 mergeff60f6598d86cf4c11bb1467a1fbdfa37f80f9c8確認、ux1/release-0-28-62。
