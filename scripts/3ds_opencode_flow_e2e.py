@@ -106,6 +106,19 @@ skill読込、MediaForge tool、control_deck.project_output_grantだけを使い
 """
 
 
+SAVED_SETTINGS_CHECK = """
+追加の納品前検査: status成功応答とsnapshotのrevision.validationからvalidator=blender.sceneの
+facts.animation_settingsを読み、両者のrevision IDと設定が一致することを確認してください。
+schema_version=media-forge.animation-settings@1、fps=24、unreported_actions=0、
+rigのidle/bendが各frame_start=0/frame_end=48/loop_requested=trueであることが必要です。
+loop_requestedは入力省略時falseのままです。入力の両animation.clipへloop=trueを明示し、
+保存結果でもtrueと確認できない限りexport/packを実行せず、相違とJob IDを報告して停止してください。
+これはloop品質やengine再生設定の保証ではなく、指定した設定が保存されたことの検査です。
+最後の報告に確認した両クリップの設定を含めてください。出力先grantのrelative_directoryは
+必ずexportsです。'.'やproject名は指定しません。
+"""
+
+
 def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_motion: bool = False,
                    director_array: bool = False, director_auto_skin: bool = False) -> None:
     """Limit this diagnostic's private configuration, never global settings."""
@@ -141,7 +154,11 @@ def main() -> None:
                         help="Require a real director read and fixed-count stairs GLB delivery")
     parser.add_argument("--director-auto-skin", action="store_true",
                         help="Require a real director read and distributed skin/clip GLB delivery")
+    parser.add_argument("--saved-settings", action="store_true",
+                        help="Require matching saved clip settings before automatic-skin delivery")
     args = parser.parse_args()
+    if args.saved_settings and not args.director_auto_skin:
+        parser.error("--saved-settings requires --director-auto-skin")
     if sum((args.director_static, args.director_motion, args.director_array, args.director_auto_skin)) > 1:
         parser.error("Choose one director scenario")
     director_enabled = args.director_static or args.director_motion or args.director_array or args.director_auto_skin
@@ -157,6 +174,8 @@ def main() -> None:
         prompt = DIRECTOR_ARRAY
     elif args.director_auto_skin:
         prompt = DIRECTOR_AUTO_SKIN
+        if args.saved_settings:
+            prompt += SAVED_SETTINGS_CHECK
     output_directory = "exports"
     if args.restored_ui_evidence:
         assert args.project_name.startswith("MF3DS-") and args.project_name in project_names
@@ -204,7 +223,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
                                 "correlation_id": correlation, "model": settings["model"], "events": 0,
                                 "output_directory": output_directory, "preserved_exports": preserved,
                                 "director_static": args.director_static, "director_motion": args.director_motion,
-                                "director_array": args.director_array, "director_auto_skin": args.director_auto_skin}
+                                "director_array": args.director_array, "director_auto_skin": args.director_auto_skin,
+                                "saved_settings": args.saved_settings}
     process = None
     try:
         payload = json.loads(config.read_text())
@@ -237,6 +257,10 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
             elif args.director_auto_skin:
                 required = ("armature.create", "skin.bind_auto", "animation.clip")
             assert all(operation in schema for operation in required)
+            if args.saved_settings:
+                assert 'EVERY clip' in schema and 'Omission means false' in schema
+                (args.evidence_dir / 'mcp-scene-create-schema.json').write_text(schema + '\n')
+                evidence['mcp_scene_schema_sha256'] = hashlib.sha256((schema + '\n').encode()).hexdigest()
         evidence["mcp_preflight_tool_count"] = len(names)
         env = dict(os.environ, OPENCODE_CONFIG=str(config))
         argv = [str(registry.executable("opencode")), "run", prompt, "--pure", "--auto", "--format", "json",

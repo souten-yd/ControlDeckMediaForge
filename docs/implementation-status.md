@@ -1,5 +1,26 @@
 # Media Forge implementation status
 
+## 2026-09-10 OpenCode saved-settings acceptance running
+
+PR439 mergefb3fb7321d2ece5021be7421b6f9cdceb9e3e714、ux1/3d-opencode-saved-settings。
+既存auto_skin診断へ任意--saved-settingsを追加、過去mode/失敗判定は変更しない。
+納品前にstatusとsnapshotの保存factsを照合し、両loop true/24fps/0→48frame/未報告0を要求。
+欠落や不一致時はexport/packせず停止する追加prompt。要求したcreate入力の厳格条件も維持。
+verifierは両revision同一、保存値、status→snapshot→export順序も検査。12追加casesで
+欠落/false/数値loop/fps/range/未報告/rig/clip不足/不一致/別revision/早期exportを拒否する。
+focused67 passed/0.90秒、build40ms/差分0/Node5。
+全 ./mf.sh test は1536 passed/既知warning2/148.59秒/exit0（62231終端）。
+
+実run: Host診断環境でscripts/3ds_opencode_flow_e2e.py --director-auto-skin --saved-settings
+--project-name MF3DS-OpenCode-Saved-Settings-20260910
+--evidence-dir /data1tb/mf-opencode-saved-settings-installed-0.28.62-20260910。
+既存smoke不在後に開始、handle57218/親1426898/子1426968、23秒時点同PID生存/events0。
+private build/24tool preflight通過、実MCP create schema21699Bを新evidence内へ記録、
+SHA56b3c97cdd3751730ace7ddb542a6f7a5e2e5b53b8ce2906796d13afd1b2ada5。
+これはbridge時点のschemaであり最終LLM推論入力の証拠とは区別する。
+稼働.62/Host/既存scene/global設定不変。終端/品質を先取りしない。
+NOT TESTED: 本runの終端・成果物、GUI後facts/engine/複雑character/全3DS・GA。
+
 ## 2026-09-10 v0.28.62 signed installed / saved facts MCP accepted
 
 PR438 merge/tagd4dcf03c170673846322c662007c0744ac43dedf。

@@ -124,6 +124,26 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, au
     revision = terminal["result"]["revision"]
     exported, = outputs("media_scene_export")
     assert exported["revision_id"] == revision["id"]
+    if auto_skin and observations.get('saved_settings'):
+        snapshot, = outputs('media_scene_snapshot')
+        assert snapshot['revision']['id'] == revision['id']
+        reports = []
+        for saved in (revision, snapshot['revision']):
+            check, = [item for item in saved.get('validation', []) if item['validator'] == 'blender.scene']
+            assert check['status'] == 'passed'
+            report = check['facts'].get('animation_settings')
+            assert isinstance(report, dict), 'Missing saved settings are not zero clips'
+            assert report['schema_version'] == 'media-forge.animation-settings@1'
+            assert report['fps'] == 24 and report['unreported_actions'] == 0
+            assert all(item.get('loop_requested') is True for item in report['clips'])
+            assert sorted(report['clips'], key=lambda item: item['clip_id']) == [
+                {'object_id': 'rig', 'clip_id': key, 'frame_start': 0.0, 'frame_end': 48.0,
+                 'loop_requested': True} for key in ('bend', 'idle')]
+            reports.append(report)
+        assert reports[0] == reports[1]
+        snapshot_index, = [i for i, call in enumerate(calls) if call['tool'] == 'controldeck_addons_media_scene_snapshot']
+        export_index, = [i for i, call in enumerate(calls) if call['tool'] == 'controldeck_addons_media_scene_export']
+        assert max(i for i, call in enumerate(calls) if call['tool'] == 'controldeck_addons_media_job_status') < snapshot_index < export_index
     if auto_skin:
         grant, = outputs("control_deck_project_output_grant")
         grant_call, = [call for call in calls if call['tool'] == 'controldeck_addons_control_deck_project_output_grant']

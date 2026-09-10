@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 OpenCode saved-settings check
+
+前turnは.62署名導入/実MCP受入で進捗。basefb3fb73、ux1/3d-opencode-saved-settings、PR作成前。
+runner --saved-settings追加、Job/snapshot保存値と納品前順序のstrict verifier、12tests追加。
+旧mode/初期recipe厳格条件は保持。focused67/0.90秒、build40ms/差分0/Node5。
+全 ./mf.sh test handle62231終端exit0/1536 passed/148.59秒/既知warning2。
+実OpenCode handle57218/親1426898/子1426968、再確認1分32秒で同PID生存、tool出力未観測。
+project MF3DS-OpenCode-Saved-Settings-20260910、evidence mf-opencode-saved-settings-installed-0.28.62-20260910。
+private build/24tools通過、bridge create schema21699B/SHA56b3c97cdd3751730ace7ddb542a6f7a5e2e5b53b8ce2906796d13afd1b2ada5保存。
+次: 同run終端→strict verifier→実Blender auto_skin --posed→両Jobs/receipt/設定回収。
+再開: ps -p 1426898,1426968 -o pid,ppid,etime,comm; git status --short --branch。
+観測timeoutだけで停止/重複実行しない。全3DS/GA/UX状態PARTIAL、blockerなし。製品/稼働Host変更なし。
+
 ## 2026-09-10 v0.28.62 installed / MCP facts accepted
 
 前turnはsaved facts実装merge、今回はPR438 merge/署名公開/標準導入/実MCPで進捗。
