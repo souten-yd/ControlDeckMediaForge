@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.67 installed acceptance
+
+前turnは利用者への状態報告のみ/no progress。公開済み4assets/PR459 merge d188e54を実確認して再開。
+ux1/release-0-28-67-acceptance、文書のみ。exact build35855/audit203/sign/publicを確認、download41512 exit0。
+標準install81697 exit0/11.455秒healthy、backup mf-0.28.67-update-gkivv4r5。
+全旧DB列投影/registry保持、追加5columnsと旧setup local defaults確認。実exe/served schema一致。
+Host1811096保持/MF1949161、旧.65実行bundleのみ標準整理、.66/.67/data/runtime保持（通知済み）。
+実Chrome ja320 opaque iframe診断57035 exit0、mf-setup-host-installed-0.28.67-20260910。
+正式repair APIで4.5.9修復/実GLB probe→通常UI4.5.9切替→4.5.13復元、23.499秒passed。
+3owned setup/3Host succeeded/完全一致receipt・sent1とfresh Host control GET成功、login23.572秒失効。
+旧scene/assets/jobs/operation rows/registry/実Blender hashes保持。継続中診断なし、untracked .venv保持。
+準備gate1602pass168.21秒/build47ms/Node5。本sliceは全test再実行なし。
+次: 受入docs通常PRmerge/release notes更新→installed setup長時間/取消/再認証残件の受入。
+全GOAL/A〜F/GAはPARTIAL。エンジン未指定、画像付き複雑character/歩行/engineは未受入。
+具体的blockerなし。更新・実機操作の前に実current/idle/所有権を再確認し、他Job/Hostを止めない。
+
 ## 2026-09-10 v0.28.67 preparation
 
 base0a67d0a、ux1/release-0-28-67。PR456/457を含む版数/release note、全80265 exit0/1602pass168.21秒。
