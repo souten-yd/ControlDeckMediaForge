@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 long-duration evidence map
+
+base PR485 mergedaca973a4617eaada0be47288217c43e02d91a7b、ux1/3d-long-duration-evidence-map。
+前turnは配布版回復受入/merge。GUI長時間は.30で既に660秒継続/更新後実編集保存済みと再確認。
+新規3ds-long-duration-evidence.mdへGUI/setup/自然画像/CPU人工queueを分離し、E表の古い未確認記述を修正。
+外部mf-long-duration-evidence-audit-20260910.py exit0、証跡mf-long-duration-evidence-audit-ehx6fhxm。
+5原観測SHA/GUI旧新DBrevision/GLB1→2nodes、5Assets8,274,480B/DB provenance保持。
+自然画像Job/CPU6Jobs/.69 journal/材質GLB SHA再照合。新規実行や現在版GUI再受入とはしない。
+文書のみ、基準PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5、今回再実行なし。
+次: GPU/共存証拠と現capability照合、未受入組合せを特定。全E/全GOAL/A〜F/GA/engine PARTIAL。
+製品/Host/制作物更新・restartなし。今回未実施を既存受入なしへ読み替えない。
+引き継ぎcommit/push/通常PR mergeへ。untracked .venv保持、具体的外部blockerなし。
+
 ## 2026-09-10 signed package startup recovery
 
 base PR484 merge36903d002ca99c48b2947c6ec8b3320ed66e7ab0、ux1/3d-packaged-publication-recovery。
