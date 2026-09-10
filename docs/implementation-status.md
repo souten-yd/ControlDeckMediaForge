@@ -1,5 +1,28 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.68 signed installed acceptance
+
+PR464通常merge/tag88e5061dc4756a97c2b02130bbc0d26f443a7549。exact checkout build34747 exit0、
+PyInstaller6.22.0/Python3.12.3、203entries/doctorok、manager/Host controller/Store全classのpacked code一致。
+31,606,481B/SHA da172b8d9922ff18ed4bcca28740d7241225a3c5fb86c3c1ae65904ffe8a4fe6。
+既存publisher鍵で署名、public90194/download5469ともexit0、公開4assets uploaded/consumer bytes一致。
+証跡build/publicは`/data1tb/mf-0.28.68-{build,public}-20260910`、audit verification.json保存。
+外部mf-0.28.68-install.py、37920 exit0。全idle/backup/再照合後、標準update10.967秒healthy。
+backup `/data1tb/mf-0.28.68-update-h3g12_bg`。全DB table/行hashとruntime registry bytes不変。
+Host1811096不変/MF1965886、実exe SHA da11e664cae26b58ae19a6ad235344ad51eb8ae3f115be76188052b568b5cd9d
+は監査package一致。served auto_bind/loop/animation-settings schema一致。旧.66実行bundleのみ標準整理（通知済み）、
+.67/.68/data/runtimeを保持。Host/PC再起動なし。
+
+外部mf-setup-host-installed-0.28.68-20260910.py、78897 exit0、同名evidence dir。
+実Chrome ja320 opaque iframeから正式repair APIでinactive4.5.9修復、22.868秒/実background・GLB入出力probe。
+operation blenderop_aad222b47c434210b5de88df92a728f3。通常UI4.5.9切替22.948秒→4.5.13復元23.132秒。
+23.301秒passed/23.379秒login失効。旧scene/revision/assets/jobs/setup行、registry bytes、両Blender hash保持。
+追加3owned操作/3Host childはsucceeded/完全一致receipt/sent1、fresh Host control GETで独立確認。
+全診断終端、page errors0。正常版にrepairボタンはなく正式API試験である点を維持。
+基準gateは準備時1604pass/168.30秒/viewer49ms/Node5。本受入sliceは文書のみ、全test再実行なし。
+NOT TESTED: installed登録待ち取消checkpointそのもの、長時間監視停止原因/refresh、全GOAL/A〜F/GA。
+次: 導入版の短い登録待ち取消で新checkpointを受入し、停止理由ログで長時間監視を診断する。
+
 ## 2026-09-10 v0.28.68 preparation
 
 PR463通常merge9cfce893e029b17d5cbae264f2b62d7d3c2f11d1からux1/release-0-28-68。

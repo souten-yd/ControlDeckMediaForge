@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.68 installed acceptance
+
+PR464 merge/tag88e5061、ux1/release-0-28-68-acceptance、文書PR作成前。
+前turnはcheckpoint修正/実Blender受入/mergeまで進捗。本turnは準備1604tests168.30秒/build49ms/Node5。
+exact build34747/audit203/sign/public90194/download5469/install37920全exit0。
+標準update10.967秒healthy、backup mf-0.28.68-update-h3g12_bg、全DB/registry保持/実exe・served schema一致。
+Host1811096不変/MF1965886。旧.66実行bundleだけ整理、.67/.68/data/runtime保持（通知済み）。
+実Chrome ja320 opaque iframe通常受入78897 exit0、mf-setup-host-installed-0.28.68-20260910。
+正式repair API/実4.5.9 probe→通常UI4.5.9切替→4.5.13復帰、23.301秒passed/login23.379秒失効。
+旧row/registry/両exe hash保持、3owned操作/3Host succeeded/完全一致receiptをfresh control GETでも確認。
+全診断終端。次: 受入docs通常merge/release notes更新→短いinstalled登録待ち取消でcheckpoint受入。
+その後、約210秒の長時間control停止をsafeログで診断する。未確定の原因をrefresh修正済みと案内しない。
+新checkpointは同梱コード照合/sourceで確認、installed競合そのものは未受入。全3DS/GA PARTIAL。
+untracked .venv保持、Host/PC再起動なし。実操作前にはidle/所有権を再確認する。
+
 ## 2026-09-10 v0.28.68 preparation
 
 前turnはPR463修正/1604tests/実Blender rollback受入/mergeまで進捗。base9cfce89、ux1/release-0-28-68。
