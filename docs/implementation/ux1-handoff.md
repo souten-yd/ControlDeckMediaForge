@@ -3,6 +3,16 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.64 preparation
+
+前turn PR446 mergef0afdb1。ux1/release-0-28-64、addon/core版数とrelease note。
+全test67891終端exit0/1541passed/既知2warnings/149.01秒、viewer44ms差分0/Node5pass。
+外部mf-0.28.64-audit.py/install.py準備/compile成功。状態投影のexact code比較をauditへ追加。
+現在.63/MF1573521、Host1384554。旧.62実行bundleだけの標準保持整理を事前通知、data/runtime保持。
+次: 全gate→commit/push/通常PRmerge→exact checkout build/audit/署名公開/標準導入。
+installedは既存settings_protection診断で日英320のHTTP/WS投影も再確認する。長時間credentialとは別。
+署名.64/installed修正/全3DS・GA未完了。untracked .venv保持。
+
 ## 2026-09-10 runtime status off-loop
 
 basebc3d714、ux1/3d-runtime-status-offloop。async状態投影をowned worker threadへ分離、
