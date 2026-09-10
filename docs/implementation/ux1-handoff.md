@@ -5,7 +5,7 @@
 
 ## 2026-09-10 typed automatic skin binding
 
-base PR428 merge1e6a7d6、branch ux1/3d-auto-skin-bind、PR作成前。
+base PR428 merge1e6a7d6、branch ux1/3d-auto-skin-bind、PR #429作成済み。
 前turnはprobe実機/PR428 mergeで進捗。今回GA-4設計→recipe/worker/schemaへskin.bind_auto加法実装。
 既存rigid skin.bind不変、coreにbpy import/同期待機を追加しない。GA-4/5/全3DSはPARTIAL。
 1〜16 mesh IDs、rest/identity typed rig、未bind/独立/modifierなしmesh、50k頂点/100k面/300k角/1m頂点骨pairs。
