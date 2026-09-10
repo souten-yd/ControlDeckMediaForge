@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.69 release preparation
+
+base PR480 merge291ccb984a34c83eaedfd3dbfe6265298a0b0dc5、ux1/release-0-28-69。
+前turnは実Host再認証/終了照合を受入してmerge。版番号2箇所とrelease-v0.28.69.mdを追加。
+PR467〜479の安全なHost GET再照会、公開journal/実体世代/rollback/startup回復/日英補足を含む。
+publication_jsonの加法移行と、旧coreへ実行fileだけ戻さない制約・整合backup・更新後記録の退避を明記。
+公開API/schema/worker/runtimeの版選択契約は変更しない。全3DS/GAを完成と扱わない。
+
+外部mf-0.28.69-audit.pyを準備。既存.66監査を継承し、旧repair名検査を新公開境界へ更新した上で、
+manager全classに加えStore/resolver/Host controller/client全classとpublication4module、app起動/WSを
+exact source/packed codeで照合する。frontend/schema/既存G8・animation受入条件は維持する。
+外部mf-0.28.69-install.pyは標準署名consumer/update経路を継承し、旧版.68を要求する。
+全table/全旧columnの値を比較し、blender_runtime_operationsへのpublication_json追加だけ許容、
+導入直後の全旧操作でNULLを要求する。他column/table/旧値の変化を無視して成功にしない。
+全Job/model setup/Blender setup/GUI idle、SQLite/registry backup、直前再照合、稼働exe一致を維持する。
+両wrapperと展開後scriptの構文検査は成功。配布物がまだないので監査/導入を実行したとはしない。
+
+viewer build60ms/生成差分0、Node5pass/diff check成功。既存bundle-build/PyInstaller実行fileを確認。
+全 `./mf.sh test` 24275は同一handleで終端確認、exit0/1752passed/既知2warnings/197.67秒。
+以後製品code/版数変更なし。通常commit/push/PRのexact headを照合してmergeする。
+Host2381614/MF1965886 active/不変、公開最新はv0.28.68。本turnは署名・公開・稼働更新・再起動なし。
+次: 準備PR通常mergeのexact commitで軽量bundle作成→監査/署名→公開4files再取得/consumer検証→
+idle/backup後の標準updateとinstalled新journal/UI/再認証受入。標準保持により旧.67実行bundleだけが
+整理対象になり、.68とdata/runtime/制作物を保持する予定。実削除前に利用者へ通知する。
+NOT TESTED: .69署名公開/導入/installed新機能、10分setup refresh、全GOAL/A〜F/GA。全体PARTIAL。
+
 ## 2026-09-10 publication outbox reconciliation after fresh authentication
 
 base PR479 mergee4c5ed2、ux1/3d-publication-reauth-acceptance。前turnは説明UI/実機/mergeで進捗。
