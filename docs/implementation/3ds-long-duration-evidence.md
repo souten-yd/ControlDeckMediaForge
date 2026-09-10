@@ -11,6 +11,7 @@ Date: 2026-09-10 / Status: PARTIAL
 | 10分超setupと認証更新 | installed.69、mf-setup-host-long-installed-0.28.69-20260910。browser切断、650秒診断flock、refresh監査23353 success、653.413秒repair完了、Host成功一致 | 人工的な反映前待機。自然download/演算・反映後取消・期限切れではない |
 | 自然120秒超の制作工程 | installed.57、mf-natural-texture-quality-installed-0.28.57-20260910。画像生成238.346秒、native観測163.032秒、同panel材質適用GLB、Host2件成功、GPU lease renew23/release1 | 画像工程の実演算。Blender CPU演算や今回OpenCode制作、見た目の完成品質の証拠ではない |
 | child更新後の取消と終了同期 | installed.30、mf-credential-refresh-installed-0.28.30-20260906。644.700秒、元期限後615.630秒cancel、5 succeeded/1 canceled、Host終端一致 | CPU queue fault injection。自然制作やGUI/setup自身の認証更新とは別 |
+| 通常画像の資源待ち更新と取消 | source PR488、mf-source-image-renewal-6hxjs5ll。実workspace WS/Broker、初期TTL180秒、audit24014 success、252.378944秒待機→通常取消で0.366秒local/Host/request canceled | 待機自体は実LLM競合、TTLは診断条件。画像未実行・lease未取得。主診断末尾URL誤り404/exit1を保持、独立取消/control監査exit0。自然10分・installed成功ではない |
 
 ## 今回の読み取り専用再照合
 
