@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.60 preparation
+
+base PR429 merge74378e8、ux1/release-0-28-60、PR作成前。
+前turnはtyped自動bind実機/mergeまで進捗。今回は版数/release note準備。
+全1487 tests/既知warning2/153.76秒/exit0（83176終端）、viewer build59ms/差分0/Node5成功。
+外部 /data1tb/mf-0.28.60-{audit,install}.py と mf-auto-skin-mcp-installed-0.28.60.py を準備/compile成功。
+前者は旧guard監査と新class/schema同梱、後者は公開bytes/署名/idle/DBbackup/標準update/実exe・配信schema確認。
+MCP診断は前版のenvelope unwrap修正を継承。観測エラーだけではdurable Jobをcancelしない。
+新project MF3DS-Auto-Skin-MCP-20260910、生成物weighted.glb、idle/bend各2秒を実再import予定。
+開始時未終端Jobs/GUI/runtime操作0。MF1334774/0.28.59、Host1340115/main164fa26（別途更新）。
+今回Host変更/再起動なし。新公開/導入/MCP/OpenCode/engine未受入、全3DS/GA PARTIAL、既存UX状態不変。
+次: 通常PR merge→/data1tb/ControlDeckMediaForge-release-0.28.60 exact checkoutでbuild/audit/sign/公開/導入受入。
+再開: git fetch origin; git status --short --branch; 最新statusと実current/idleを確認。
+具体的外部blockerなし。標準保持2で旧.58実行bundleだけが整理対象、導入前に通知する。
+
 ## 2026-09-10 typed automatic skin binding
 
 base PR428 merge1e6a7d6、branch ux1/3d-auto-skin-bind、PR #429作成済み。
