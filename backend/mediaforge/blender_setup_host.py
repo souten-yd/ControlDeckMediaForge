@@ -173,7 +173,17 @@ class BlenderSetupHostControl:
                 await control
             else:
                 await worker
-        except (HostApiError, asyncio.CancelledError):
+        except HostApiError as exc:
+            # Never log the remote message, token, arbitrary error code or body.
+            code = exc.code if exc.code in {
+                "host_unreachable", "host_request_rejected", "host_context_lost",
+                "invalid_host_response", "host_response_too_large",
+            } else "unknown_host_error"
+            status = exc.status_code if type(exc.status_code) is int else 0
+            logger.warning("Blender setup %s control stopped: %s (HTTP %s)", operation_id, code, status)
+            lost = True
+        except asyncio.CancelledError:
+            logger.info("Blender setup %s control task canceled", operation_id)
             lost = True
         except Exception as exc:
             logger.warning("Blender setup %s control failed (%s)", operation_id, type(exc).__name__)

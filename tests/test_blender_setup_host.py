@@ -106,9 +106,19 @@ def test_real_manager_install_refresh_terminal_and_offloop(tmp_path: Path, monke
 
 
 @pytest.mark.parametrize("revoked", [False, True])
-def test_host_cancel_or_revocation_drains_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revoked: bool) -> None:
+def test_host_cancel_or_revocation_drains_worker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revoked: bool, caplog: pytest.LogCaptureFixture,
+) -> None:
     manager, store, host = setup(tmp_path)
     entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+    original_control = host.job_control
+
+    async def control(caller: HostIdentity, job_id: str) -> dict[str, Any]:
+        if host.revoked:
+            raise HostApiError("host_request_rejected", "DO_NOT_LOG_BEARER", status_code=403)
+        return await original_control(caller, job_id)
+
+    monkeypatch.setattr(host, "job_control", control)
 
     async def worker(operation_id: str) -> None:
         await manager._runtime_io(store.update_blender_runtime_operation, operation_id, state=State.PREFLIGHT)
@@ -138,6 +148,59 @@ def test_host_cancel_or_revocation_drains_worker(tmp_path: Path, monkeypatch: py
     assert record.state == (State.FAILED if revoked else State.CANCELED)
     assert record.error_code == ("host_context_lost" if revoked else None)
     assert store.blender_runtime_host_journal(operation_id, "user:16")["sent"]
+    assert "DO_NOT_LOG_BEARER" not in caplog.text and "child-secret" not in caplog.text
+    if revoked:
+        assert "host_request_rejected (HTTP 403)" in caplog.text
+
+
+@pytest.mark.parametrize("revoked", [False, True])
+def test_repair_cancel_during_registration_restores_original(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revoked: bool,
+) -> None:
+    manager, store, host = setup(tmp_path)
+    entered, release = threading.Event(), threading.Event()
+
+    async def run() -> None:
+        await manager.start()
+        initial = await manager.request("install", identity=identity())
+        await asyncio.gather(*list(manager._tasks.values()))
+        assert store.get_blender_runtime_operation(initial.id).state == State.READY
+        destination = manager.resolver.managed_root / initial.runtime_id
+        executable = destination / "install/blender"
+        old_inode, old_bytes = executable.stat().st_ino, executable.read_bytes()
+        registry = manager.resolver.registry_path.read_bytes()
+        original = manager.resolver.register_managed
+
+        def held_registration(**kwargs: Any) -> Any:
+            value = original(**kwargs)
+            entered.set()
+            assert release.wait(5)
+            return value
+
+        monkeypatch.setattr(manager.resolver, "register_managed", held_registration)
+        try:
+            operation = await manager.request("repair", initial.runtime_id, identity=identity())
+            assert await asyncio.to_thread(entered.wait, 5)
+            host.revoked, host.cancel = revoked, not revoked
+            async with asyncio.timeout(3):
+                while not await asyncio.to_thread(store.blender_runtime_operation_cancel_requested, operation.id):
+                    await asyncio.sleep(.01)
+            release.set()
+            await asyncio.gather(*list(manager._tasks.values()))
+            result = store.get_blender_runtime_operation(operation.id)
+            assert result.state == (State.FAILED if revoked else State.CANCELED)
+            assert result.error_code == ("host_context_lost" if revoked else None)
+            assert executable.stat().st_ino == old_inode and executable.read_bytes() == old_bytes
+            assert manager.resolver.registry_path.read_bytes() == registry
+            assert not any((manager.resolver.managed_root / ".staging").iterdir())
+            journal = store.blender_runtime_host_journal(operation.id, "user:16")
+            assert journal["terminal"]["status"] == ("failed" if revoked else "canceled")
+            assert journal["sent"] is True
+        finally:
+            release.set()
+            await manager.stop()
+
+    asyncio.run(run())
 
 
 def test_disconnect_duplicate_and_foreign_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

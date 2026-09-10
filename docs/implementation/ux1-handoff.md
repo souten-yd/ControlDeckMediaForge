@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 repair publication checkpoint
+
+base PR462 merged7c61d8、ux1/3d-repair-publication-cancel。前turnは不合格実証/回収/mergeまで進捗。
+Host取消/失効中のregister待ちを2RED再現→register後・旧版破棄前のcancel再検査でrollback。
+HostApiErrorのsafe allowlist code/HTTP statusとtask取消のログを追加。secret messageは出さない。
+関連36pass9.12秒、viewer41ms差分0/Node5pass。全70381終端exit0/1604pass/既知2warnings/169.61秒。
+外部mf-repair-publication-cancel-source-20260910.py、50977 exit0/62.637秒passed/62.789秒source停止。
+実Blender4.5.9を隔離新dataへ導入→2repair register待ち取消/失効、旧hash/inode20191670/registry保持。
+Hostはfixture、実HTTP healthはsetup_required。実GLB probe成功/DB3件とstaging空を独立確認。
+製品修正は未配布。.67/Host1811096/MF1949161を今回変更していない。untracked .venv保持。
+全test/診断は終端済み。次: commit/push/通常merge。続いて署名配布と実原因ログ取得。
+前回installed約210秒のcontrol停止原因は未確定。今回checkpointをrefresh修正完了と扱わない。
+全GOAL/A〜F/GA PARTIAL。初回長時間試験は不合格のまま保存、無条件再実行しない。
+
 ## 2026-09-10 installed long setup FAILED; recovery verified
 
 base PR461 mergece85480、ux1/3d-installed-setup-host-long、文書PR作成前。前turnは進捗。

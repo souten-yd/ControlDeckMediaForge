@@ -1204,6 +1204,10 @@ class BlenderRuntimeManager:
                 self.resolver.register_managed(runtime_id=operation.runtime_id,
                     version=spec.version, location=operation.runtime_id,
                     archive_sha256=spec.archive_sha256)
+                # Registration may wait on the cross-process registry lock.
+                # Keep the previous directory until a stop arriving during that
+                # wait has been checked; the exception path restores its inode.
+                self._raise_if_canceled(operation.id)
             except Exception:
                 if promoted:
                     self._ensure_managed_destination(destination)
