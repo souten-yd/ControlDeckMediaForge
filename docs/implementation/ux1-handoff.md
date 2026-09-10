@@ -3,7 +3,33 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
-## 2026-09-10 v0.28.59 installed / OpenCode R2 running
+## 2026-09-10 auto-weight feasibility / OpenCode R2 terminal
+
+base PR427 mergeb20fc16、branch ux1/3d-auto-weight-probe、PR #428作成済み。
+前turnは状態確認のみ。R2終端と作業treeをread-only再確認後、未commit診断を再開。
+scripts/auto_weight_probe.py と tests/test_auto_weight_probe.py を追加。
+管理対象4.5.13だけで連続sphere/2骨のautomatic heat→4影響上限/正規化→rest/pose→GLB再import。
+NaN/負weightをpositive filterで隠さない検査を補強。13 focused tests成功。
+mf-auto-weight-probe-20260910-r5: exit0/0.129秒、242頂点/48混合、import287/51混合。
+raw合計誤差0.0229966→正規化後2.9802322e-08、pose差1.81433494e-07m。
+source419324B/GLB19540B、script/生成物hashとlineageは同dirのobservations.json。
+初回/r2/r3の失敗は保持。r2生成物へ後追いfailure/provenanceを記録しSHA再照合。
+製品/公開schema/稼働0.28.59/Host/既存sceneは変更なし。frontend build54ms/差分0、Node5成功。
+全 ./mf.sh test は1448 passed/既知warning2/144.68秒/exit0（handle27510終端）。
+既存UXの進捗は不変。GA-4/5/全3DSはPARTIAL、typed auto bind/complex character/engineは未実装・未受入。
+次: GA-4のbounded typed automatic bindを既存recipe/worker/revisionへ加法実装する。
+先に設計へ入力上限/失敗条件/正規化/旧版保持を明記し、任意bpy公開やrigid bind置換はしない。
+再開: git fetch origin; git status --short --branch; sed -n '1,155p' worker_packs/blender/scene_recipe.py。
+既存bindはrest/typed rig検査あり、mesh全頂点を1骨に割当てるのみ。今回probeを製品完了へ読み替えない。
+具体的な外部blockerなし。実engineの選択は未回答だがtyped制作実装は継続可能。
+
+R2 observations exit0/1134.769秒/8tools、親1334951/子1335041は不在。
+scripts/3ds_verify_opencode_flow.py --evidence-dir /data1tb/mf-opencode-array-installed-0.28.59-20260910
+--database /data1tb/ControlDeck/data/feature-data/media-forge/data/media-forge.sqlite3 はexit1。
+要求local_offset[1.5,0,1.5]に対し実入力[0.75,0,0.75]でstrict不合格。再起動/重複実行しない。
+8tools全completedでも品質合格としない。別sliceで実Blender配置検査・receipt/設定回収監査を完結する。
+
+## 2026-09-10 v0.28.59 installed / OpenCode R2 running (historical)
 
 PR426 merge/tagff02850、signed v0.28.59公開/再取得一致/Host署名検証/標準導入完了。
 artifact31,538,968B/SHA6238a574e1faa7e739181227431c94f3b659fc743808fbd08913e52ea009374e。
