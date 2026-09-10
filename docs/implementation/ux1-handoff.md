@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 completed validation project cleanup
+
+base PR493、ux1/3d-validation-project-cleanup、記録PR作成前。前作業は.70署名配布/実更新まで進捗。
+利用者指示によりMF3DS検証project14件をCodeDEV一覧から回収した。
+mf3ds-project-cleanup-20260910.py事前確認/--apply exit0、mf3ds-project-cleanup-yy9e_kee/retiredへ復元可能な退避。
+16納品fileはMF Asset SHA一致、全Git commit0、全Job/GUI終端/対象cwd processなし、移動後全hash一致。
+Host list_projectsでもMF3DS0、元Asset/history・他project・他agent processは保持。
+今後も検証終了後に明示対象を回収する。古いCodeDEV納品pathを現在あるファイルとして提示しない。
+次はinstalled.70 software GUI＋通常画像の共存受入。scene_c19a0c389d974517b04c8eced93b0355はMF内に保持。
+旧.69失敗scriptを新版・別証跡へ見直す。新projectが必要な検証だけ専用先を作り、終了時回収する。
+稼働MF2504103/Host2381614、全GOAL/A〜F/GA/engine PARTIAL。具体的外部blockerなし。
+文書だけのslice、基準gate PR492 1789pass205.39秒/skip0、viewer差分0/Node5。
+再開: git status --short --branch; gh pr list --head ux1/3d-validation-project-cleanup。
+
 ## 2026-09-10 v0.28.70 installed acceptance
 
 PR492 merge/tag19532bed829ccbc0fa1a49989f921426cba1b41c、ux1/release-0-28-70-acceptance、記録PR作成前。

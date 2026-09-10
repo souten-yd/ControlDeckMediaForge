@@ -1,5 +1,20 @@
 # Media Forge implementation status
 
+## 2026-09-10 completed MF3DS project retirement
+
+利用者から「MF3DSプロジェクトは何をしているか、検証後は消して」と指示。
+OpenCode→MCP制作・納品確認の専用projectであることを説明し、CodeDEV内の明示14件を照合した。
+mf3ds-project-cleanup-20260910.pyはread-only事前確認exit0後、--applyもexit0。
+全project Git commit0、非Gitファイルはexports/restored-exports/repaired-exportsの16件のみ。
+全16件のSHAが既存MediaForge Assetと一致、MediaForge Job/GUI非稼働・対象cwdのprocessなし。
+直前再照合後、14directoryをmf3ds-project-cleanup-yy9e_kee/retiredへrenameし全file hash一致。
+Hostのlist_projects実関数でもMF3DS残件0を確認。削除ではなく復元可能な退避として利用者に明示。
+MediaForgeの元Asset・scene・履歴、他project、他agentのOpenCode processには触れていない。
+既存文書のCodeDEV/MF3DS納品先は当時の実測であり、現在の存在証明には使わない。
+統合3D/ゲーム全体が完了したための回収ではなく、終了済み個別検証の納品先整理。
+今後の検証後回収をdevelopment-release-3d-studio.mdへ記載。全GOAL/A〜F/GA PARTIAL維持。
+文書のみ、アプリ全test/browser再実行なし。基準PR492全1789tests205.39秒/Node5/viewer差分0。
+
 ## 2026-09-10 v0.28.70 signed publication and installed update
 
 PR492 merge/tag19532bed829ccbc0fa1a49989f921426cba1b41c。exact build75174 exit0、
