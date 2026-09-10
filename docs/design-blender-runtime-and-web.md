@@ -203,6 +203,16 @@ complete_blender_publicationは実検証済みcaller専用で、ready/公開完�
 このsliceではmanagerはまだbegin/completeを呼ばない。実体照合による回復API、managerのI/O失敗/drain、
 UIでの遅延stop表示、署名installed受入を接続するまで公開競合の修正完了とはしない。
 
+回復adapterの先行実装: BlenderPublicationRecoveryはowned worker threadから明示実行する。
+参照guardとregistry flockを保持し、install/updateの登録全fieldと想定active、catalog/stamp、
+実行ファイルSHA、実Blender preflightの前後一致を確認した場合だけ専用Store recovery確定へ進む。
+この経路もready/公開完了/Host outboxを同時確定し、通常完了APIではrecovery_requiredを解除しない。
+不一致・欠落・probe失敗は理由付きrecovery_requiredのまま保持し、実体・registryを変更/削除しない。
+同一版repairは旧/新実行ファイルSHAが同じになり得るため、generationの追加証明なしに成功としない。
+その識別情報と未公開candidateのrollback、managerからの自動接続は未実装であり、実体検証adapterだけを
+全公開・修復・crash回復の完成と扱わない。先行実機試験は独立したprepare/recovery processを使うが、
+prepareは意図的な正常exitで、OS強制kill/電源断の受入ではない。
+
 Host所有setupの永続化は既存blender_runtime_operationsへ加法的に置く。
 受付時のownerと一意なHost child ID、終端通知のoutbox/照合receiptだけをprivateに保存し、
 bearerは保存・公開しない。所有者なしの既存ローカル操作を後からHost所有として採用しない。

@@ -2146,6 +2146,17 @@ class Store:
         The caller must verify the actual runtime before calling. Recovery of an
         uncertain interrupted commit requires a separate verification path.
         """
+        return self._complete_blender_publication(operation_id, identity, result, recovery=False)
+
+    def recover_blender_publication(
+        self, operation_id: str, identity: PublicationIdentity, result: dict[str, Any],
+    ) -> BlenderRuntimeOperation:
+        """For the identity-verifying recovery adapter, not normal completion."""
+        return self._complete_blender_publication(operation_id, identity, result, recovery=True)
+
+    def _complete_blender_publication(
+        self, operation_id: str, identity: PublicationIdentity, result: dict[str, Any], *, recovery: bool,
+    ) -> BlenderRuntimeOperation:
         identity = PublicationIdentity.model_validate(identity.model_dump())
         with self._lock, self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -2161,7 +2172,8 @@ class Store:
             if (publication.identity == identity and publication.phase == "committed"
                     and json.loads(row["result_json"]) == committed_result):
                 return self.get_blender_runtime_operation(operation_id)
-            if publication.identity != identity or publication.phase != "committing":
+            expected_phase = "recovery_required" if recovery else "committing"
+            if publication.identity != identity or publication.phase != expected_phase:
                 raise ValueError("Publication completion identity or phase mismatch")
             if row["host_terminal_json"] is not None or row["cancel_requested"]:
                 raise ValueError("Publication state is inconsistent")

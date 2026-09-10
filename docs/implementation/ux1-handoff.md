@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 verified publication recovery adapter
+
+base PR471 merge159a9f5、ux1/3d-publication-recovery。前turnは基盤実装/mergeで進捗。
+BlenderPublicationRecoveryはinstall/updateの登録/active/catalog/stamp/SHA/実probe前後を照合。
+一致時だけ専用Store.recover_blender_publicationでready/outboxを同時確定。不一致は理由付き隔離を維持。
+実体/registryを書換えず、repairは同一SHAで世代が不明なので自動成功にしない。
+11新規ケース、関連92092 exit0/35pass5.40秒。
+外部mf-publication-recovery-real-20260910.py、62874 exit0。prepare2254716→recovery2254804の別process。
+実4.5.9専用copy/実登録/private journal開始を残してprepare正常exit、core再起動後に明示adapter回復。
+0.610秒で実GLB入出力probe成功、実HTTP ready/遅延cancel補足/元inode・SHA/registry SHA保持、core停止。
+Host/通常manager配線なし、SIGKILL/電源断ではない。operationf1a9c0eedd334f2dadf33c4d6d0a9e0e。
+次: repair generationの識別・未公開candidateのrollbackを実装し、managerへbegin/complete/recoveryを接続。
+世代不明を無条件で採用/削除しない。PR470の実Host取消再現と失敗/再起動を受入してから配布する。
+中間directory containmentの検査順を補強。最終code実試験-r2 76782 exit0、0.638秒、別PID2260202→2260219。
+operation083f1abc973c41729da018b9d44fa466、実probe/HTTP/元identity保持を再確認。
+初版全86000 exit0/1650pass173.33秒、最終全42022 exit0/1650pass/既知2warnings/180.16秒。
+commit/push/通常merge後も未配布、通常managerへの自動接続は未実装。
+viewer40ms/差分0/Node5pass、全診断終端、Host/稼働版変更なし。
+全3DS/GA/installed長時間refreshはPARTIAL。untracked .venvと他作業を保持。外部blockerなし。
+
 ## 2026-09-10 private publication journal foundation
 
 base PR470 merge00c6667、ux1/3d-publication-journal。前turnは実再現/設計mergeで進捗。
