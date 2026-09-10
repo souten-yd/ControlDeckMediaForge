@@ -368,6 +368,22 @@ class Store:
                 connection.execute("ALTER TABLE model_operations ADD COLUMN host_job_id TEXT")
             if "result_json" not in model_operation_columns:
                 connection.execute("ALTER TABLE model_operations ADD COLUMN result_json TEXT")
+            blender_columns = {
+                str(row["name"]) for row in connection.execute(
+                    "PRAGMA table_info(blender_runtime_operations)")
+            }
+            for name, declaration in (
+                ("host_owner", "TEXT"), ("host_job_id", "TEXT"),
+                ("host_terminal_json", "TEXT"),
+                ("host_terminal_sent", "INTEGER NOT NULL DEFAULT 0"),
+                ("host_terminal_reconciliation_json", "TEXT"),
+            ):
+                if name not in blender_columns:
+                    connection.execute(
+                        f"ALTER TABLE blender_runtime_operations ADD COLUMN {name} {declaration}")
+            connection.execute(
+                """CREATE UNIQUE INDEX IF NOT EXISTS idx_blender_operation_host_job
+                   ON blender_runtime_operations(host_job_id) WHERE host_job_id IS NOT NULL""")
             connection.execute(
                 """UPDATE jobs SET status = ?, phase = NULL,
                    error_json = ?, updated_at = ? WHERE status = ?""",
@@ -393,7 +409,8 @@ class Store:
             connection.execute(
                 f"""UPDATE blender_runtime_operations SET state = ?, error_code = NULL,
                     error_message = NULL, updated_at = ?
-                    WHERE cancel_requested = 0 AND state NOT IN ({','.join('?' * len(blender_terminal))})""",
+                    WHERE host_owner IS NULL AND cancel_requested = 0
+                    AND state NOT IN ({','.join('?' * len(blender_terminal))})""",
                 (BlenderRuntimeOperationState.QUEUED, utc_now(), *blender_terminal),
             )
             connection.execute(
@@ -401,6 +418,19 @@ class Store:
                     WHERE cancel_requested = 1 AND state NOT IN ({','.join('?' * len(blender_terminal))})""",
                 (BlenderRuntimeOperationState.CANCELED, utc_now(), *blender_terminal),
             )
+            connection.execute(
+                f"""UPDATE blender_runtime_operations SET state = 'failed',
+                    error_code = 'host_context_lost',
+                    error_message = 'Service restarted without the Host setup credential',
+                    updated_at = ? WHERE host_owner IS NOT NULL
+                    AND state NOT IN ({','.join('?' * len(blender_terminal))})""",
+                (utc_now(), *blender_terminal),
+            )
+            for row in connection.execute(
+                """SELECT * FROM blender_runtime_operations WHERE host_job_id IS NOT NULL
+                   AND host_terminal_json IS NULL AND state IN ('ready', 'failed', 'canceled')"""
+            ).fetchall():
+                self._journal_blender_terminal(connection, row)
             connection.execute(
                 """UPDATE model_operations SET state = ?, error_code = ?,
                    error_message = ?, updated_at = ?
@@ -1809,7 +1839,10 @@ class Store:
         *,
         bytes_total: int,
         result: dict[str, Any] | None = None,
+        host_owner: str | None = None,
     ) -> BlenderRuntimeOperation:
+        if host_owner is not None:
+            host_owner = validate_scene_owner(host_owner)
         now = utc_now()
         operation_id = f"blenderop_{uuid.uuid4().hex}"
         terminal = tuple(state.value for state in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES)
@@ -1824,14 +1857,15 @@ class Store:
             connection.execute(
                 """INSERT INTO blender_runtime_operations
                    (id, runtime_id, version, action, state, bytes_total, bytes_done,
-                    error_code, error_message, result_json, cancel_requested, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?, 0, ?, ?)""",
+                    error_code, error_message, result_json, cancel_requested, created_at, updated_at,
+                    host_owner)
+                   VALUES (?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?, 0, ?, ?, ?)""",
                 (
                     operation_id, runtime_id, version, action,
                     BlenderRuntimeOperationState.QUEUED, bytes_total,
                     json.dumps(result, ensure_ascii=False, separators=(",", ":"))
                     if result is not None else None,
-                    now, now,
+                    now, now, host_owner,
                 ),
             )
         operation = self.get_blender_runtime_operation(operation_id)
@@ -1859,7 +1893,8 @@ class Store:
         with self._connect() as connection:
             rows = connection.execute(
                 """SELECT id FROM blender_runtime_operations
-                   WHERE state = ? AND cancel_requested = 0 ORDER BY created_at""",
+                   WHERE state = ? AND cancel_requested = 0 AND host_owner IS NULL
+                   ORDER BY created_at""",
                 (BlenderRuntimeOperationState.QUEUED,),
             ).fetchall()
         return [str(row["id"]) for row in rows]
@@ -1885,12 +1920,22 @@ class Store:
             values["result_json"] = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
         assignments = ", ".join(f"{name} = ?" for name in values)
         with self._lock, self._connect() as connection:
+            previous = connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,)
+            ).fetchone()
+            if previous is None:
+                raise KeyError(operation_id)
+            if previous["host_terminal_json"] is not None:
+                raise ValueError("Host setup terminal outcome is immutable")
             cursor = connection.execute(
                 f"UPDATE blender_runtime_operations SET {assignments} WHERE id = ?",  # noqa: S608
                 (*values.values(), operation_id),
             )
             if cursor.rowcount != 1:
                 raise KeyError(operation_id)
+            self._journal_blender_terminal(connection, connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,)
+            ).fetchone())
         operation = self.get_blender_runtime_operation(operation_id)
         self._notify_session("blender_runtime")
         return operation
@@ -1918,6 +1963,9 @@ class Store:
                            SET cancel_requested = 1, updated_at = ? WHERE id = ?""",
                         (utc_now(), operation_id),
                     )
+            self._journal_blender_terminal(connection, connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,)
+            ).fetchone())
         operation = self.get_blender_runtime_operation(operation_id)
         self._notify_session("blender_runtime")
         return operation
@@ -1931,6 +1979,96 @@ class Store:
         if row is None:
             raise KeyError(operation_id)
         return bool(row["cancel_requested"])
+
+    @staticmethod
+    def _journal_blender_terminal(connection: sqlite3.Connection, row: sqlite3.Row) -> None:
+        """Persist an outcome atomically with local completion; never persist runtime paths."""
+        statuses = {"ready": "succeeded", "failed": "failed", "canceled": "canceled"}
+        if (row["host_job_id"] is None or row["host_terminal_json"] is not None
+                or row["state"] not in statuses):
+            return
+        payload: dict[str, Any] = {
+            "status": statuses[row["state"]],
+            "result": {"operation_id": row["id"], "runtime_id": row["runtime_id"],
+                       "state": row["state"]},
+        }
+        if row["state"] == "failed":
+            payload["error"] = "Blender setup failed; inspect the local operation"
+        connection.execute(
+            "UPDATE blender_runtime_operations SET host_terminal_json = ? WHERE id = ?",
+            (json.dumps(payload, separators=(",", ":")), row["id"]),
+        )
+
+    def blender_runtime_host_journal(self, operation_id: str, owner: str) -> dict[str, Any]:
+        """Internal owner-scoped journal, not the public operation response."""
+        owner = validate_scene_owner(owner)
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ? AND host_owner = ?",
+                (operation_id, owner),
+            ).fetchone()
+        if row is None:
+            raise KeyError(operation_id)
+        return {
+            "host_job_id": row["host_job_id"],
+            "terminal": json.loads(row["host_terminal_json"]) if row["host_terminal_json"] else None,
+            "sent": bool(row["host_terminal_sent"]),
+            "reconciliation": json.loads(row["host_terminal_reconciliation_json"])
+            if row["host_terminal_reconciliation_json"] else None,
+        }
+
+    def bind_blender_runtime_host_job(self, operation_id: str, owner: str, host_job_id: str) -> None:
+        """Bind only a reserved queued operation; callers supply a verified Host child."""
+        owner = validate_scene_owner(owner)
+        if (not isinstance(host_job_id, str) or not 1 <= len(host_job_id) <= 128
+                or any(not (char.isascii() and (char.isalnum() or char in "_-"))
+                       for char in host_job_id)):
+            raise ValueError("invalid Host job ID")
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ? AND host_owner = ?",
+                (operation_id, owner),
+            ).fetchone()
+            if row is None:
+                raise KeyError(operation_id)
+            if row["host_job_id"] == host_job_id:
+                return
+            if row["host_job_id"] is not None or row["state"] != "queued" or row["cancel_requested"]:
+                raise ValueError("Host job binding is unavailable or already fixed")
+            connection.execute(
+                "UPDATE blender_runtime_operations SET host_job_id = ?, updated_at = ? WHERE id = ?",
+                (host_job_id, utc_now(), operation_id),
+            )
+
+    def reconcile_blender_runtime_terminal(
+        self, operation_id: str, owner: str, receipt: dict[str, Any],
+    ) -> bool:
+        """Record a validated Host receipt; mismatched terminal outcomes remain unsent."""
+        owner = validate_scene_owner(owner)
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ? AND host_owner = ?",
+                (operation_id, owner),
+            ).fetchone()
+            if row is None:
+                raise KeyError(operation_id)
+            if (row["host_terminal_json"] is None
+                    or receipt.get("host_job_id") != row["host_job_id"]
+                    or receipt.get("disposition") not in {"applied", "already_terminal"}
+                    or receipt.get("status") not in {"succeeded", "failed", "canceled", "interrupted"}
+                    or type(receipt.get("terminal_matches")) is not bool):
+                raise ValueError("invalid Host terminal receipt")
+            payload = json.loads(row["host_terminal_json"])
+            matched = receipt["terminal_matches"] is True and receipt["status"] == payload["status"]
+            safe_receipt = {key: receipt[key] for key in
+                            ("host_job_id", "status", "disposition", "terminal_matches")}
+            if not row["host_terminal_sent"]:
+                connection.execute(
+                    """UPDATE blender_runtime_operations SET host_terminal_sent = ?,
+                       host_terminal_reconciliation_json = ? WHERE id = ?""",
+                    (int(matched), json.dumps(safe_receipt, separators=(",", ":")), operation_id),
+                )
+            return bool(row["host_terminal_sent"]) or matched
 
     def get_model_operation(self, operation_id: str) -> ModelOperation:
         with self._connect() as connection:

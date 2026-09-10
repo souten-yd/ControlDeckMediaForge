@@ -1,5 +1,42 @@
 # Media Forge implementation status
 
+## 2026-09-10 setup Host journal foundation
+
+base PR455 merge0dc95da、branch ux1/3d-setup-host-journal。既存setup tableへprivate owner/Host child/
+terminal outbox/照合receiptを加法追加。公開operation/schemaとローカル再開policyは維持する。
+所有者なし操作の後付け採用、別owner、別child上書き、同childの二重割当てを拒否。
+Host所有操作は再起動でhost_context_lost、取消flagはcanceled。partial/旧resultを保持し、
+終端意図をlocal終端と同じtransactionへ保存する。bearer field・第二Job基盤は追加しない。
+Host実schemaを読み、errorは文字列、already-terminal interruptedは未一致receiptとして保持。
+初回実copy診断の後にこのwire形式を修正し、R2も実行した。稼働Hostへの送信は未実施。
+
+関連32 tests/6.01秒、追加後journal14 tests/2.23秒、viewer39ms差分0/Node5pass。
+`PYTHONPATH=backend .venv/bin/python scripts/3ds_verify_setup_journal.py --source-db
+/data1tb/ControlDeck/data/feature-data/media-forge/data/media-forge.sqlite3 --evidence-dir
+/data1tb/mf-setup-host-journal-20260910-r2`はexit0。
+mode=ro SQLite backupから新しい専用DBへ移行、既存15 tables/2565 rowsの全旧column fingerprint一致。
+専用control rowsのowned downloading→failed/host_context_lost、42bytes/旧result保持、
+unowned queued再開、Host終端outbox未送信を確認。元DB/runtime/assetには書き込まない。
+実プロセス再起動ではなく、新Store.initializeによるDB復旧境界の確認である。
+MF1919149/installed0.28.66 activeをread-only確認。
+app lifespanのStore.initialize同期呼出もworker threadへ移し、3回の起動取消でも移行終端を待つ。
+追加後journal15 tests/1.71秒。初回全74339は1590pass/171.04秒だが、収集後の修正前。
+2回目全50617も1590pass/165.89秒だが起動修正の収集前。
+最終全55488は1591pass/既知2warnings/165.51秒、exit0。実プロセスの起動取消はNOT TESTED。
+
+追加実source起動: 外部`/data1tb/mf-setup-journal-source-startup-20260910.py`を
+`PYTHONPATH=backend:. .venv/bin/python`で実行。初回は子PYTHONPATHにrepo rootがなく
+scripts import失敗/exit1。診断だけ修正し別dataのR2はexit0、実TCP /health=200/setup_required、
+0.421秒、PID1931234。事前のowned downloading記録は起動時failed/host_context_lost、
+42bytes保持/終端outbox未送信。専用coreをSIGTERMで終了(-15)、Host通信/Blender実行なし。
+証跡mf-setup-journal-source-startup-20260910-r2。初回失敗logも保持。
+
+NOT TESTED: この基盤の実request接続、Host child作成/refresh/cancel/終端送信、10分setup、
+署名配布/installed migration、全GOAL/A〜F/GA完了。既存production requestはまだownerを渡さない。
+次はmanager/requestに正規identityを接続し、受付時owner予約→detached child binding→
+queued/実行中refresh/control→owned drain→outbox再認証照合を一貫して実装する。
+全setup認証を完成済みとせず、旧core rollback時のsnapshot/未終端停止条件をruntime設計へ明記。
+
 ## 2026-09-10 v0.28.66 signed installed acceptance
 
 PR454 merge349a075b203657d48d597bf5ac39d8616a497614からexact checkoutをbuild。

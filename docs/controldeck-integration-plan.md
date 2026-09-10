@@ -833,6 +833,10 @@ See [3D Studio](design-3d-studio.md), [runtime/Web](design-blender-runtime-and-w
 - Keep existing image/G8 tools unchanged. New scene tools require additive schemas and current Host validation.
 - Long authoring/render operations return durable job references. Validate the current detached Host Job
   and job credential refresh path; do not extend a synchronous agent call indefinitely.
+  Blender setup keeps the owner, exact child Job binding and terminal outbox in its existing
+  private operation journal, never bearer credentials. After core restart, Host-owned work
+  must stop with lost-authentication context rather than resume as unauthenticated local work.
+  Fresh authenticated ownership is required to reconcile its pending terminal notification.
 
 Terminal outbox recovery uses the additive generic Host `jobs/{id}/terminal/reconcile` route.
 The current valid child identity may retry while in memory. After a core restart, an authenticated

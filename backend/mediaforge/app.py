@@ -509,7 +509,18 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        store.initialize()
+        initialization = asyncio.create_task(asyncio.to_thread(store.initialize))
+        initialization_canceled = False
+        while True:
+            try:
+                await asyncio.shield(initialization)
+                break
+            except asyncio.CancelledError:
+                if initialization.cancelled():
+                    raise
+                initialization_canceled = True
+        if initialization_canceled:
+            raise asyncio.CancelledError
         scene_workspace.initialize()
         material_previews.initialize()
         standalone_scene_backups.initialize()

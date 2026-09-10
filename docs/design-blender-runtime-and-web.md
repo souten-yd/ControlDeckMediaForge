@@ -150,6 +150,16 @@ fail-closedにする。削除済み版への新規GUI受付は事前に拒否す
 
 ## 5. durable setup operation
 
+Host所有setupの永続化は既存blender_runtime_operationsへ加法的に置く。
+受付時のownerと一意なHost child ID、終端通知のoutbox/照合receiptだけをprivateに保存し、
+bearerは保存・公開しない。所有者なしの既存ローカル操作を後からHost所有として採用しない。
+DB初期化・再起動照合はworker threadで実行し、起動取消が重複しても移行transactionを放棄しない。
+再起動で正規identityを失ったHost所有操作はfailed/host_context_lost（取消済みならcanceled）にし、
+partialや旧runtimeを残す。未送信の終端意図を保持し、正規ownerの再認証後に照合する。
+ローカル操作の従来の再開は維持する。DB基盤だけをrefresh/Host終端同期の実機受入と扱わない。
+旧coreはこの所有権を理解しないため、Host所有操作導入後のdowngradeでは未終端操作を
+新coreで停止・照合してから戻すか、書込停止下で更新前DB snapshotを復元する。
+
 設定のruntime状態投影（workspace初期化・明示状態照会・standalone HTTP）は、
 catalog/registry/Web pack検証・DB照会をworker threadで実行する。
 状態照会にもlegacy自動登録のatomic書込が含まれるため、要求取消が重複しても
