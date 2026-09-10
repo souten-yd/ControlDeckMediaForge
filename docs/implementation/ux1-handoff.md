@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 GUI read-boundary remediation priority
+
+base PR495 merge9914647e9efae6654bc4bd1f10eb621f52352fe3、ux1/3d-gpu-condition-audit、記録PR作成前。
+前turn installed GUI/image成功/mergeまで進捗。E監査で重大な未受入境界を実証。
+web_session_runner.restrict_filesystemはWRITEのみ。実systemd同properties/同関数で外部canary read成功/write拒否。
+mf-gui-read-boundary-20260910、unit invocation be3b0887a2c24c4a8954c04b0a9fcd0a、22ms/exit0。
+kernel観測自体は成功だが隔離はFAIL。unit inactive/canary不変、実秘密/他者fileを読んでいない。
+installed.70 runner bytesもsource一致、SHA1c708ede0c5896d3c87301da5af044413c6d2420907f92cf955a49986f8421f8。
+docs/implementation/3ds-filesystem-isolation.mdを最初に読み、READ_FILE/READ_DIR/EXECUTE default denyと
+必要runtime/OS/worker/workingだけのallowlistを実装する。/etc・/proc・Host data全体のread許可は不可。
+実GUI正常起動/保存/再接続と外部canary拒否を両方受入してから通常署名配布する。
+Unix socket/fd/process情報は別境界であり、この修正だけで全隔離完成としない。
+製品未修正、稼働.70維持。GUI機能の既存成功を秘密保持の証明にしない。全GOAL/A〜F/GA PARTIAL。
+GPU実行/新lease/新CodeDEV projectなし、旧Cycles probeはHost lease結合なしで製品経路へ転用不可。
+文書sliceのみ、基準gate1789pass205.39秒/viewer差分0/Node5、今回全testなし。外部blockerなし。
+再開: git status --short --branch; gh pr list --head ux1/3d-gpu-condition-audit。
+
 ## 2026-09-10 installed software GUI/image coexistence
 
 base PR494 merge26b221d5dfa2a2fd3e1fdc5e46e0f5f05218a949、ux1/3d-installed-gui-image-coexist、記録PR作成前。
