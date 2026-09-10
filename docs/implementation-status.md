@@ -1,5 +1,16 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.64 preparation
+
+PR446 merge f0afdb1790a2c1053e9b8c1be0b84e498e2c3db2からux1/release-0-28-64。
+addon/core版数とrelease noteを更新。全test67891終端exit0/1541passed/既知2warnings/149.01秒、viewer44ms/差分0、Node5pass。
+外部mf-0.28.64-audit.py/install.pyを準備しpy_compile成功。auditへ状態投影3関数の
+exact source/packaged code比較とto_thread/shield同梱検査を追加。準備は実行成功ではない。
+標準更新は全4公開files一致/Host署名/idle/全DBbackup/実exe/配信schema/保持検査を維持。
+保持2による旧.62実行bundleだけの整理を事前通知。制作data/runtime保持、Host再起動なし。
+現在.63、.62/.63を保持。次: full終端→commit/push/通常merge→exact build/署名公開/導入。
+NOT TESTED: .64公開/consumer/導入/installed状態経路、setup認証/全3DS/GA。
+
 ## 2026-09-10 runtime status I/O boundary
 
 base PR445 mergebc3d714、ux1/3d-runtime-status-offloop。
