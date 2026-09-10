@@ -1,5 +1,16 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.67 preparation
+
+PR458 merge0a67d0aからux1/release-0-28-67。PR456/457のHost setup journal/controlを含む版数とrelease note。
+全80265終端exit0/1602pass/既知2warnings/168.21秒、viewer47ms差分0/Node5pass。
+外部.67audit/install/installed-browser診断を準備。auditは既存gateに加えHost controller/Store全classと
+workspace/startupのpacked codeを照合。installは旧DB全column投影を保持し、追加5columns/defaultsを検査。
+installedは実Chromeの正式repair API→通常UI switch/restore、3owned Host childの成功receiptを照合する。
+稼働.66/MF1919149維持、更新時は旧.65実行bundleのみ標準保持整理対象と事前通知、data/runtime保持。
+NOT TESTED: .67build/署名公開/consumer再取得/導入/installedブラウザ、新版の長時間setup、全3DS/GA。
+次: preparation通常merge→exact checkout build/audit/署名公開/標準導入/installed受入。
+
 ## 2026-09-10 setup Host control integration
 
 PR456は通常merge9491bb4。branch ux1/3d-setup-host-control、既存managerへHost認証adapterを接続。

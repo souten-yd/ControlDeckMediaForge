@@ -3,6 +3,16 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.67 preparation
+
+base0a67d0a、ux1/release-0-28-67。PR456/457を含む版数/release note、全80265 exit0/1602pass168.21秒。
+viewer47ms差分0/Node5pass。外部mf-0.28.67-audit.py/install.pyと
+mf-setup-host-installed-0.28.67-20260910.pyを準備、実行はまだ。新Host controller/Store全class照合、
+旧DB列投影保持+追加5columns/defaults、実Chrome repair API/通常UI switch/restore/3Host成功receipt。
+次: 全gate済みcommit/push/通常PRmerge→exact build/audit/署名/公開/consumer再取得/標準導入。
+現.66/MF1919149。旧.65実行bundleのみ標準保持整理を通知済み、data/runtime保持、Host再起動なし。
+未検証をrelease成功にしない。全3DS/GAと.67installed受入は未完了。untracked .venv保持。
+
 ## 2026-09-10 setup Host control integration
 
 PR456 merge9491bb4からux1/3d-setup-host-control。実装4110bf1、PR457通常merge6cef9e5。
