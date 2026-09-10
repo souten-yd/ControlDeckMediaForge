@@ -1,5 +1,39 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.59 published/installed / fresh OpenCode run started
+
+PR #426 merge/tagff02850da78be483687cf94eb2ec86d60d33996f。
+exact checkout /data1tb/ControlDeckMediaForge-release-0.28.59でbuild_release_bundle.py exit0。
+build /data1tb/mf-0.28.59-build-20260910、artifact31,538,968 B、
+SHA6238a574e1faa7e739181227431c94f3b659fc743808fbd08913e52ea009374e。
+外部audit exit0、202 entriesの禁止path/秘密値拡張子/certifi公開PEM、既存worker/frontend/bytecode検査、
+新配置schema同梱/排他形式説明/0.28.58との制約tree不変、packaged doctor ok/0.28.59を確認。
+展開先 /data1tb/mf-0.28.59-package-nk5fpq31/control-deck-media-forge-0.28.59-linux-x86_64。
+既存publisher鍵で署名/自己検証し、通常公開v0.28.59へ4filesを公開。
+public /data1tb/mf-0.28.59-public-20260910の再取得4filesとbuild bytesは全一致。
+
+外部mf-0.28.59-install.pyをHost診断venv/configで実行、exit0/11.281秒。
+実Job/GUI/runtime操作0、全SQLite table snapshot/backupとregistryを保持して標準update。
+backup /data1tb/mf-0.28.59-update-roe1fpqx、更新前後全table fingerprint/registry bytes一致。
+installed0.28.59/HTTP health healthy、MainPID1334774、実exeとaudit package SHA一致:
+4c222c8ce10b864ed200f1278152da412ab5820be632edfe1da465c4a6053ecb。
+標準保持2版により旧.57の実行bundleのみ整理、.58/.59残存。事前通知済み、旧版は公開releaseで回復可。
+制作物/Blender環境/既存projectを削除せず、更新後のschema HTTP200/新説明一致を確認。
+schema SHA5067e13cd7fa2cb7e57d08c5392096b738b027ba96ed4a19a697f7eb51ed4fcc。
+
+Hostは開始時1141433だったが、install直前/直後は同1327409。今回の更新はHostを再起動していない。
+別途Host checkoutがclean main fc6e0a88745af2da0acfe52f4dfe6ab24b00ce3eへ進んだことをread-only確認。
+Host PR312（古いtool出力prune）がmergeされ、その親にPR311が含まれる。実Broker故障受入とは別。
+これ以前の「Host311未導入/更新待ち」は当時の記録であり、今の環境と混同しない。
+
+新規OpenCode --director-arrayを同じ診断prompt/strict verifierのまま開始。
+project MF3DS-OpenCode-Array-20260910-R2、証跡 /data1tb/mf-opencode-array-installed-0.28.59-20260910。
+handle68218、親1334951/子1335041を確認。既存run/配送物は再作成・上書きしない。
+開始時events0/終端observationsなし。旧runとHostも異なるため、新結果をMF説明だけの因果証拠にしない。
+build77859/sign50517/public58930/install94170は全exit0。継続はOpenCode68218のみ。
+記録sliceはdocsのみ、新規test/build再実行なし。版数gate1435passed/168.01秒/2warningsを参照。
+NOT TESTED: 新規strict OpenCode終端、engine取込、全3DS/GA、今回の失敗rollback。
+
 ## 2026-09-10 v0.28.59 preparation
 
 PR #425通常mergecc406cb2f6898348062aa4e76b560b61a3074dedをfetch確認。

@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.59 installed / OpenCode R2 running
+
+PR426 merge/tagff02850、signed v0.28.59公開/再取得一致/Host署名検証/標準導入完了。
+artifact31,538,968B/SHA6238a574e1faa7e739181227431c94f3b659fc743808fbd08913e52ea009374e。
+audit配布schema新説明/制約不変/packaged doctor確認。更新11.281秒healthy/全DBとregistry保持。
+backup /data1tb/mf-0.28.59-update-roe1fpqx、MF1334774、Hostはinstall前後同1327409。
+旧.57実行bundleのみ標準整理、.58/.59保持。data/runtime保持、事前通知済み。
+Hostは別途clean mainfc6e0a8（PR312/親に311）へ更新されていた。今回Hostを再起動せず、因果を分離する。
+新規strict OpenCode --director-array実行中: handle68218、親1334951/子1335041。
+project MF3DS-OpenCode-Array-20260910-R2、evidence /data1tb/mf-opencode-array-installed-0.28.59-20260910。
+同runを追跡し、終端後strict verifier→実source/GLB inspector→receipt/DB/設定回収を照合。
+前回の失敗trace/配置物を上書きせず、停止/重複実行はしない。新規run成功はまだ未確認。
+build/sign/public/install handlesは全exit0。継続は68218のみ。
+docs記録branch ux1/release-0-28-59-acceptance。全3DS/GA/engine未完了。
+
 ## 2026-09-10 v0.28.59 preparation
 
 base PR #425 mergecc406cb、branch ux1/release-0-28-59。addon/core版数とrelease note追加。
