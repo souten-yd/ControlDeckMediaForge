@@ -2138,6 +2138,25 @@ class Store:
             raise KeyError(operation_id)
         return PublicationJournal.model_validate_json(row["publication_json"]) if row["publication_json"] else None
 
+    def blender_publication_high_watermark(self) -> int:
+        """Bound one startup sweep; never chase operations created afterwards."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT COALESCE(MAX(rowid), 0) AS last FROM blender_runtime_operations WHERE publication_json IS NOT NULL",
+            ).fetchone()
+        return int(row["last"])
+
+    def blender_publication_startup_batch(self, after: int, through: int) -> list[tuple[int, str]]:
+        """Private paginated maintenance, excluding live committing operations."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT rowid AS cursor, id FROM blender_runtime_operations
+                   WHERE rowid > ? AND rowid <= ? AND publication_json IS NOT NULL
+                     AND json_extract(publication_json, '$.phase') IN ('recovery_required', 'committed', 'rolled_back')
+                   ORDER BY rowid LIMIT 50""", (after, through),
+            ).fetchall()
+        return [(int(row["cursor"]), str(row["id"])) for row in rows]
+
     def complete_blender_publication(
         self, operation_id: str, identity: PublicationIdentity, result: dict[str, Any],
     ) -> BlenderRuntimeOperation:

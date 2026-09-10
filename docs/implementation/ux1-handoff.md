@@ -3,6 +3,29 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 automatic startup publication recovery
+
+base PR477 mergef99890f、ux1/3d-publication-startup-recovery、PR作成前。前turnは状況説明/no progress。
+旧22932 handle不在/pytest process不在を確認して再検証。通常startupへowned recovery taskを接続。
+rowid上限/50件page/live committing除外、項目別guard、実照合→rollback→安全な残存stage/退避掃除。
+同期DB/probe/filesystemはworker内、起動は長い検査を待たず、停止は開始済みworkerをdrain。
+scan/項目失敗を安全な診断で明示。Host token捏造/終端上書きなし、公開契約/版数/Host変更なし。
+関連91910 exit0/76pass13.32秒、新75225 exit0/12pass3.73秒、viewer55ms差分0/Node5pass。
+全 `./mf.sh test` 56880は同一handleで終端確認、exit0/1743passed/既知2warnings/198.26秒。
+gate後code/test変更なし。引き継ぎ更新後commit/push/通常PR mergeへ進む。
+実外部mf-publication-startup-real-20260910.py: 専用core自身SIGKILL→別process通常app startup。
+99118はregistered成功/repair準備script属性誤りで全体exit1、元記録保持。
+registeredはop06e47044c8334ff09c9d49a06f95065f、2402070→2402358、0.448秒ready/実GLB probe。
+修正後repairだけ29789 exit0、mf-publication-startup-real-20260910-repair-r2。
+op4561aea92e9c497c9ed11faf01627d1d、2402870→2403504、0.309秒旧root inode22020171/旧exe欠落へ復元。
+両registry保持/stage空、held中health7.319/5.052ms。修正後元cache保持、全専用process終端を確認。
+Host2381614/MF1965886 active/不変。稼働環境の停止・更新なし。
+全体3DS/GA PARTIAL。既存UX状態を変更しない。NOT TESTED: 電源断/全crash matrix、
+実Host再起動後再認証/終端全matrix、新署名installed/UI、ゲームエンジン/全GOAL/A〜F/GA。
+次: 遅延stopとHost終端不一致の日英説明を設定UIへ接続し、実Host再認証受入→署名配布。
+再開: git fetch origin; git status --short --branch; 最新statusと実current/PIDを照合する。
+具体的外部blockerなし。untracked .venvを保持し、診断scriptは無条件に再実行しない。
+
 ## 2026-09-10 repair publication journal
 
 base PR476 merge92f6f22、ux1/3d-repair-publication-journal。前turnは進捗/merge。

@@ -270,6 +270,16 @@ private journalの新phaseを知らない旧coreへはそのままdowngradeせ�
 退避の掃除は完了記録後もowned workerが保持し、処理終端までdrainする。状態readyの観測だけで
 旧退避の掃除終了まで保証したとはしない。startup自動回復と署名配布は別の未完了ゲート。
 
+startup自動回復の接続: 起動時のjournal最大rowidを上限に、50件ずつprivate maintenanceで照合する。
+live committingは対象外とし、起動後に追加された操作を追い続けない。起動APIは検査終了を待たず、
+managerが非同期taskを所有し、各項目のDB/実体/probe/掃除はowned worker threadで行う。
+項目ごとに通常操作と同じguardへ入り、未確定公開は実体照合→未公開rollbackの順に検証する。
+committed/rolled_backだけ安全な専用stage掃除へ進み、完了repairの残存旧退避は従来の新旧照合後だけ回収する。
+不明な実体は保持し、項目の失敗やjournal読取失敗を秘密値なしの診断で明示する。
+shutdownはこのtaskも取消し、開始済みworkerを重複取消でも終端まで待つ。
+startupでHost bearerを捏造しない。確定したoutboxのHost照合は既存owner再認証経路に残す。
+これはsource起動経路の接続であり、署名installed/Host認証再開の全matrix受入とは区別する。
+
 Host所有setupの永続化は既存blender_runtime_operationsへ加法的に置く。
 受付時のownerと一意なHost child ID、終端通知のoutbox/照合receiptだけをprivateに保存し、
 bearerは保存・公開しない。所有者なしの既存ローカル操作を後からHost所有として採用しない。

@@ -104,6 +104,7 @@ class BlenderRuntimeManager:
         self._admission_guard = threading.Lock()
         self._guard = asyncio.Semaphore(1)
         self._stopping: asyncio.Task[None] | None = None
+        self._publication_recovery: asyncio.Task[None] | None = None
         self.host_control = BlenderSetupHostControl(self, host) if host is not None else None
 
     @property
@@ -114,6 +115,48 @@ class BlenderRuntimeManager:
     async def start(self) -> None:
         for operation_id in await self._runtime_io(self._startup_sync):
             self._spawn(operation_id)
+        through = await self._runtime_io(self.store.blender_publication_high_watermark)
+        if self._publication_recovery is None or self._publication_recovery.done():
+            self._publication_recovery = asyncio.create_task(
+                self._recover_startup_publications(through), name="blender-publication-startup-recovery")
+
+    async def _recover_startup_publications(self, through: int) -> None:
+        after = 0
+        while True:
+            try:
+                batch = await self._runtime_io(self.store.blender_publication_startup_batch, after, through)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning("Blender publication startup journal scan failed; evidence retained")
+                return
+            if not batch:
+                return
+            for cursor, operation_id in batch:
+                try:
+                    # Interleave normal operations between recovery items. Never
+                    # hold a Store mutex or do filesystem/probe work on the loop.
+                    async with self._guard:
+                        await self._runtime_io(self._recover_startup_publication, operation_id)
+                except asyncio.CancelledError:
+                    raise  # _runtime_io drains the already-started worker.
+                except Exception:
+                    logger.warning("Blender publication %s startup recovery failed; evidence retained", operation_id)
+                after = cursor
+
+    def _recover_startup_publication(self, operation_id: str) -> None:
+        publication = self.store.blender_publication(operation_id)
+        if publication is None or publication.phase == "committing":
+            return
+        if publication.phase == "recovery_required":
+            result = BlenderPublicationRecovery(self.store, self.resolver, self.preflight_script).recover(operation_id)
+            if result["status"] != "committed":
+                result = BlenderPublicationRollback(self.store, self.resolver).rollback(operation_id)
+            if result["status"] not in {"committed", "rolled_back"}:
+                logger.warning("Blender publication %s remains unresolved after startup verification", operation_id)
+                return
+        self._clean_repair_previous_sync(operation_id)
+        self._clean_stage_sync(operation_id)
 
     def _startup_sync(self) -> list[str]:
         self.resolver.managed_root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -134,6 +177,10 @@ class BlenderRuntimeManager:
             self.host_control.accepting = False
         await asyncio.gather(*list(self._request_admissions), return_exceptions=True)
         await asyncio.gather(*list(self._removal_admissions), return_exceptions=True)
+        if self._publication_recovery is not None:
+            self._publication_recovery.cancel()
+            await asyncio.gather(self._publication_recovery, return_exceptions=True)
+            self._publication_recovery = None
         tasks = list(self._tasks.values())
         for task in tasks:
             task.cancel()
