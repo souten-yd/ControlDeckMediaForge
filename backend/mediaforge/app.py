@@ -2939,7 +2939,8 @@ def create_app(
             blender_runtime_operations.host_control.schedule_reconciliation(identity)
         # Status includes registry discovery, filesystem validation and DB reads.
         # A canceled poll must not orphan an already-started registry write.
-        task = asyncio.create_task(asyncio.to_thread(blender_runtime_part_sync))
+        owner = (identity.actor_subject or identity.subject) if identity is not None and identity.authorization else None
+        task = asyncio.create_task(asyncio.to_thread(blender_runtime_part_sync, owner))
         canceled = False
         while True:
             try:
@@ -2953,7 +2954,7 @@ def create_app(
             raise asyncio.CancelledError
         return value
 
-    def blender_runtime_part_sync() -> dict[str, Any]:
+    def blender_runtime_part_sync(owner: str | None = None) -> dict[str, Any]:
         try:
             catalog = blender_runtime_operations.catalog()
             management = {"management_available": True, "catalog": catalog}
@@ -2974,6 +2975,7 @@ def create_app(
             "web_pack": web_status,
             "fingerprint": fingerprint,
             **management,
+            "operation_notices": store.blender_runtime_operation_notices(owner),
             "operations": [
                 item.model_dump(mode="json")
                 for item in store.list_blender_runtime_operations()

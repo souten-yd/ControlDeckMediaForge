@@ -73,6 +73,15 @@ They never return a runtime, registry, manifest, worker, or executable path.
 The development bridge is excluded from OpenAPI and none of these additions
 change the frozen public API.
 
+The private status also includes `operation_notices`, an operation-ID-to-code-list
+mapping for the authenticated owner only (local operations only on the standalone
+bridge). Fixed codes distinguish publication in progress, recovery required,
+recovered/rolled-back outcomes, late cancellation/context loss, and pending or
+mismatched Host terminal reconciliation. No private publication identity, owner,
+Host Job ID, receipt payload, or credential is included. Older clients can ignore
+this additive presentation field. Changed reconciliation receipts invalidate the
+existing session part; repeated identical receipts do not create an event loop.
+
 3DS-2 adds private `blender.runtime.install`, `.update`, `.switch`, `.repair`,
 `.remove.preview`, `.remove`, and `.operations.cancel` methods. The standalone
 development mirror is `POST /workspace-api/blender/runtime/operations` with the

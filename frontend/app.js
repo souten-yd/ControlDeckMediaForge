@@ -8033,6 +8033,17 @@ const BLENDER_TEXT = {
     historyAcknowledgement: (version) => `制作ファイルと履歴は残ります。再編集にはBlender ${version}の再導入が必要であることを確認しました。`,
     liveRefs: "実行中の参照", projectRefs: "制作物の参照",
     operation: "環境処理", failed: "環境処理に失敗しました",
+    operationNotices: "処理結果の補足",
+    noticeCodes: {
+      publication_in_progress: "検証済み環境を反映中です。この段階の中止要求は記録しますが、反映処理の終了を待ちます。",
+      publication_recovery_required: "中断後の反映結果をまだ確認できていません。候補と以前の環境を保護しています。「状態を更新」で確認し、解消しなければ診断情報を確認してください。",
+      publication_recovered: "中断後の実環境を検証し、反映完了を確認しました。現在の利用可否は環境の状態をご確認ください。",
+      publication_rolled_back: "新しい候補の反映を取り消し、以前の状態に戻しました。原因を確認してから導入・修復を再試行できます。",
+      late_cancel: "反映開始後に中止要求が届きました。中止要求だけでは処理を取り消していません。この処理の結果を確認してください。",
+      late_context_lost: "反映開始後に認証・Host接続が失われました。開始済み処理を安全な区切りまで追跡しています。再接続して結果を確認してください。",
+      host_pending: "ControlDeckへの終了結果の照合待ちです。再接続して「状態を更新」してください。",
+      host_mismatch: "ControlDeck側の終了記録と、この環境処理の結果が一致していません。Host側の記録は上書きしていません。「状況」とこの処理の結果を確認してください。",
+    },
     operationStates: {
       queued: "待機中", preflight: "容量確認中", downloading: "ダウンロード中",
       verifying: "検証中", installing: "展開中", probing: "動作確認中",
@@ -8066,6 +8077,17 @@ const BLENDER_TEXT = {
     historyAcknowledgement: (version) => `Project files and history are kept. I understand that editing again requires reinstalling Blender ${version}.`,
     liveRefs: "Live references", projectRefs: "Project references",
     operation: "Runtime operation", failed: "Runtime operation failed",
+    operationNotices: "Operation result details",
+    noticeCodes: {
+      publication_in_progress: "Applying the verified runtime. Cancellation requests at this stage are recorded while the application finishes.",
+      publication_recovery_required: "The interrupted application has not been verified yet. The candidate and previous runtime are protected. Refresh status; if unresolved, inspect diagnostic details.",
+      publication_recovered: "The runtime was verified after interruption and its application confirmed. Current availability is shown in runtime status.",
+      publication_rolled_back: "The new candidate was rolled back to the previous state. Inspect the cause before retrying installation or repair.",
+      late_cancel: "Cancellation arrived after application began. The request alone did not undo the operation. Check this operation result.",
+      late_context_lost: "Authentication or the Host connection was lost after application began. Started work is tracked to a safe boundary. Reconnect and check the result.",
+      host_pending: "Terminal reconciliation with ControlDeck is pending. Reconnect and refresh status.",
+      host_mismatch: "The ControlDeck terminal record does not match this runtime operation result. The Host record was not overwritten. Check Activity and this operation result.",
+    },
     operationStates: {
       queued: "Queued", preflight: "Checking capacity", downloading: "Downloading",
       verifying: "Verifying", installing: "Installing", probing: "Probing",
@@ -8119,6 +8141,31 @@ function renderBlenderRemovalPreview() {
   byId("blender-remove-confirm").disabled = !preview.can_remove && !(history && byId("blender-remove-history").checked);
 }
 
+function renderBlenderOperationNotices(value, text) {
+  const container = byId("blender-operation-notices");
+  byId("blender-operation-notices-title").textContent = text.operationNotices;
+  const rows = (value?.operations || []).flatMap((operation) => {
+    const codes = value?.operation_notices?.[operation.id];
+    if (!Array.isArray(codes)) return [];
+    const messages = [...new Set(codes)].map((code) => text.noticeCodes[code]).filter((message) => typeof message === "string");
+    if (!messages.length) return [];
+    const row = document.createElement("article");
+    row.dataset.operationNotice = operation.id;
+    const title = document.createElement("p");
+    title.textContent = `${text.operation} #${operation.id.slice(-8)} · Blender ${operation.version} · ${text.operationStates[operation.state] || operation.state}`;
+    row.append(title);
+    for (const message of messages) {
+      const paragraph = document.createElement("p");
+      paragraph.className = "hint";
+      paragraph.textContent = message;
+      row.append(paragraph);
+    }
+    return [row];
+  });
+  byId("blender-operation-notices-list").replaceChildren(...rows);
+  container.hidden = rows.length === 0;
+}
+
 function renderBlenderRuntime() {
   const value = state.blenderRuntime;
   const text = blenderText();
@@ -8141,6 +8188,7 @@ function renderBlenderRuntime() {
   byId("blender-remove-cancel").textContent = text.back;
   byId("blender-remove-confirm").textContent = text.removeConfirm;
   renderBlenderRemovalPreview();
+  renderBlenderOperationNotices(value, text);
   if (!value) {
     byId("blender-runtime-state").textContent = text.checking;
     return;

@@ -20,6 +20,13 @@ Web Blenderは専用の `/web-blender` 画面として既存のシーン一覧�
 詳細の正は [3D Studio §5](design-3d-studio.md#5-画面仕様) と
 [Blender管理・Web操作](design-blender-runtime-and-web.md)。新機能は実装前の設計である。
 
+2026-09-10追補: Blender設定の処理結果は、反映開始後の遅延取消・認証喪失、検証による完了回収、
+旧状態への復元、未確定回復、Host終端照合待ち/不一致を日英で区別する。
+通常進捗と別の処理別説明をSimpleに表示し、版・処理状態・短い操作IDで過去の失敗と現在を区別する。
+readyを「取消できた」と読み替えず、不一致のHost結果も上書き成功と表示しない。
+説明はowner-scopedなサーバー投影の固定codeから描画し、private journal/Host Job ID/owner/秘密値は渡さない。
+旧応答で補足がない場合は既存表示を維持する。更新・locale変更・320pxでも説明を閲覧できるようにする。
+
 ---
 
 ## 1. なぜ作り直すか（現状の批判的評価）
