@@ -3,6 +3,25 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.70 preparation / source image success
+
+base PR490 merge6b914ed3206dba40a618a6ff8bb43daf069af6d7、ux1/release-0-28-70。
+別worktree /data1tb/ControlDeckMediaForge-release-0.28.70で2版数/.70release note準備。
+3ds4 source実行中は変更しなかった。新worktreeの.venv/node_modules/build .venvは既存MF環境への開発用link。
+初回3859は署名環境参照不足の3skip、補完後3pass、最終25014 exit0/1784pass203.63秒/既知2warnings/skip0。
+viewer44ms/差分0/Node5/diff check。以後製品/test変更なし。通常commit/push/PR mergeへ。
+source画像mf-source-image-renewal-20260910-r2.py、33969 exit0、mf-source-image-renewal-dfpxj82d。
+初期TTL180のみ診断条件、実Broker競合/refresh2（audit24036/24044）後680.587秒generating、704.618秒正常通知済み。
+local job94ec339b7c65433f997bd834bf875e51/Host840e16827186、asset073e8e262c6243468237896612d25513。
+PNG45160B/SHA1ed7bf93ca6c4c0d3ed50aac7ad90c04288d0cf3dfffac38f397ee701e6ba542、実decode/目視/provenance一致。
+独立mf-source-image-success-audit-20260910.py exit0、Host/local succeeded、outbox sent1/receiptなし、GPU lease activate1/renew2/release1。
+core2478046正常終了、Host2381614/MF2428421保持、他推論停止なし、画像は専用source dataだけ。
+次: exact準備mergeを同release worktreeで使用してbuild→audit→署名公開→標準update/DB保持→installed実受入。
+準備済み /data1tb/mf-0.28.70-audit.py は旧.69監査＋新owned terminal/JobManager/HostExecution/auth hooks完全比較。
+未実行。buildは既存MF runtimes/bundle-build/.venv、既存signing keyを使う（testは一時鍵のみ）。
+3ds4 checkoutは旧feature branchのままなので、再開時に実head/PRを確認し、実行中Jobがないことを確認して進める。
+.70未配布/未導入、全GOAL/A〜F/GA/engine PARTIAL、専用署名運用・Host/PC再起動なし。
+
 ## 2026-09-10 ordinary media terminal outbox
 
 base PR489 merge8eb44daabe01569f323d65301d52e265b42d581a、ux1/3d-image-terminal-outbox。
