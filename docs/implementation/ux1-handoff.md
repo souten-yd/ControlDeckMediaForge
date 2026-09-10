@@ -5,6 +5,17 @@
 
 ## 2026-09-10 OpenCode saved-settings check
 
+更新: run57218終端exit0/476.429秒/8tools。strict verifierを再実行しverified true。
+両loop true/保存facts/操作順/receiptと実32140B一致、実Blender再import変形passed。
+別専用sceneのGUI R2も67.609秒で保存passed、fps24→30/旧版・旧hash保持。
+新sourceを実Blenderで独立読込しfps30/2actions各0→48を再確認。
+初回screenshot timeout失敗は保持。R2 cleanup/login失効記録あり。
+詳細と正確な証跡pathはimplementation-status先頭。継続OpenCodeなし。
+PR440の実機待ちは解消、文書をcommit/pushして通常mergeする。コードは全1536 gate後変更なし。
+次: 3ds-completion-auditの必須残件とmobile GUIの設計差分を照合し次sliceを進める。
+全GOAL/A〜F/GAはPARTIAL、エンジン選択未回答は他の作業を妨げない。
+以下の実機待ち記録は履歴であり現在状態ではない。
+
 前turnは.62署名導入/実MCP受入で進捗。basefb3fb73、ux1/3d-opencode-saved-settings、PR #440作成済み/実機終端待ち。
 runner --saved-settings追加、Job/snapshot保存値と納品前順序のstrict verifier、12tests追加。
 旧mode/初期recipe厳格条件は保持。focused67/0.90秒、build40ms/差分0/Node5。
