@@ -1,5 +1,61 @@
 # Media Forge implementation status
 
+## 2026-09-10 actual uvloop control disconnect / bounded read-only retry
+
+base PR467 merge8f31c17、ux1/3d-setup-uvloop-reproduction。前turnは状態回答のみ/no progress。
+PR213 merged9469d8eを再確認し、引き継ぎ・設計・現行コードからsetup障害診断を継続。
+外部mf-setup-registry-uvloop-source-20260910.pyは既存source/実Host credential-pipe診断を
+uvloopへ変更し、専用data内のregistry flockで登録を待たせる。稼働registryは触らない。
+実4.5.9固定cache/hash/probe、Python WebSocket受付後切断（実ブラウザではない）。
+86406 exit1、operation3cdbf8f4179e4e98bc5c37f451d5d12bは約20秒でhost_context_lost。
+PR467ログでRemoteProtocolErrorを初めて採取。30.148秒lock解放、30.296秒core停止。
+Host739bbd92f7eb failed/完全一致receipt/sent1、fresh control GETでもfailedを再確認。
+
+安全な診断を加えたmf-setup-registry-uvloop-trace-20260910.pyの90秒版69235はexit0、
+90.357秒成功/90.545秒停止、Hosta568cdec1f0fも独立確認。再現は毎回ではない。
+240秒上限R2の80812ではGET /jobs/.../controlが応答前切断と判明。
+例外本文は出力せずRemoteProtocolError型と既知のEOF文との一致boolのみ出力。
+operationd5f496c7fef446dda767eb8cd691fd9cは90.162秒に異常検出/解放。
+新規installには登録待機後のcancel検査がなくready+host_context_lost/cancel1になった。
+元診断はreadyだけを成功判定しexit0/passed=true、Host56a9be68959e succeededになったが、
+**この試験を成功とは認めない**。原JSONは保持。repairのPR463チェックだけではinstallを保護しない。
+install/update/recovered経路の公開・registry/active rollbackは次sliceの修正対象。
+
+ControlDeckHostClient.job_controlのGETだけ、host_unreachableの原因がRemoteProtocolError/ReadErrorかつ
+同identity期限内なら1回再照会。2回目の失敗、取消、HTTP拒否、timeout、不正JSONは伝播する。
+Job作成/PATCH/refresh/terminal POSTを再送せず、keepalive/timeout/Host設定は変えない。
+RemoteProtocolErrorだけの初版は14追加ケース、関連27pass/1.88秒。
+初版の全84166 exit0/1618pass/既知2warnings/171.09秒、viewer41ms/生成差分0/Node5pass。
+後述ReadError追加後は18ケースになり、全testを再実行した（この初版結果を最終gateに流用しない）。
+
+修正後の最初の実試験76702はHost197f4835cb22がinterruptedとなりexit1。
+16:29:52 JSTにHost PID1811096→1994253、16:29:55の起動時Job中断ログを確認。
+このturnからHost再起動は実行していない。MF1965886は不変。
+operation7021036916c14b61be2ff934e1f24832はready+host_context_lost、outbox sent0/mismatchを保持。
+通信retry成功ではなく外部Host再起動を伴う失敗試験として記録する。
+
+同じ修正のR2（61015）は60秒の観測前にRemoteProtocolErrorを実際に再照会で回復し、
+120.158秒までprobing/errorなしを確認。しかし続くcontrol GETがReadErrorで失敗。
+150.161秒解放/150.514秒停止、operationf62e38fbc7cf468b858b9ef537069816/Host2d2eca7f6c32。
+Host PID1994253は不変。この試験も新規installのready+errorを原診断が誤ってpassed=trueとしたため、
+exit0/Host succeededを全試験成功とは認めない。原JSONを保持し、本書で受入を拒否する。
+この実証から受信中断ReadErrorも同じread-only GET/1回上限へ追加。timeout/connect/write再送は追加しない。
+
+最終版source R3（26392）はexit0、240.167秒lock解放、240.378秒成功、240.487秒停止。
+operationd00bf22ed3aa43a98bb5036f5dcbe74d/Host41ad0df8b37a。途中3回の実control GET EOFを回復。
+30〜240秒の全観測でerrorなし。独立JSON照合でready/error=null/cancel=false/sent1/receipt一致、
+親診断のfresh control GETもsucceededを確認。実Blender/Host/uvloopでの回復証拠であり、
+人工registry待機を自然な長時間演算とは扱わない。refresh0、10分refreshは未検証。
+ReadError追加の最初の全test66803は203.75秒/1621pass/1fail。
+既存test_private_workspace_installs_only_the_pinned_web_packが200回待機後queuedのまま失敗。
+実Blender診断も同時実行していたが、負荷が原因とは未確定。原失敗を保持しtest条件は緩めない。
+診断終端後の同テスト+新規18ケースは19pass/0.24秒。
+最終全test12682はexit0/1622pass/既知2warnings/215.93秒。製品codeは以後変更なし。
+Host1994253/MF1965886 active、全診断終端。ReadError再照会成功は単体試験、自然実機回復はEOF3件。
+
+NOT TESTED: 署名配布/installed retry、10分refresh、新規導入の取消公開修正、全GOAL/A〜F/GA。
+keepalive競合という機序自体は未確定。実証したのはcontrol GETの応答前切断である。
+
 ## 2026-09-10 installed control-loss diagnosis / safe transport cause logging
 
 base PR466 mergea372ca1、ux1/3d-installed-setup-control-diagnosis。前turnはinstalled取消復元受入/mergeまで進捗。

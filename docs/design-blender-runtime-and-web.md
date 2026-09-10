@@ -172,6 +172,9 @@ Host workspaceのinstall/Web install/update/repair/switch/exact install/remove�
 standalone HTTP/CLIのローカル操作には不要なHost childを追加しない。
 
 CPU実行slot待ちから終端まで5秒周期でHost controlを確認し、期限前120秒でcredentialを更新する。
+Host controlの読み取り専用GETでRemoteProtocolError/ReadErrorを受けた場合は、有効期限内の同じidentityで
+1回だけ再照会する。再失敗・認証拒否・timeout・不正応答は従来どおり停止へ進む。
+この再照会はJob作成・進捗更新・credential refresh・終端通知には適用しない。
 phaseと単調な処理byte数をHost Jobへ報告する。期限切れ・不正refresh・Host終端では安全に停止し、
 既存cancel検査点とowned workerのdrain後にlocal終端/outboxを確定する。ブラウザ切断は取消にしない。
 shutdownも開始済み受付、worker、照合taskを回収する。tokenは実行task内だけに保持する。
