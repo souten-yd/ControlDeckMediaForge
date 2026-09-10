@@ -1,5 +1,19 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.60 preparation
+
+PR429 merge74378e8a004b019a1ee979d77433b80fd4ee4dd4確認、ux1/release-0-28-60。
+addon/coreを0.28.60へ更新、release noteへ新automatic bindingと前提/制限/未受入を記載。
+全 ./mf.sh test:1487 passed/既知warning2/153.76秒/exit0、viewer build59ms/生成物差分0、Node5成功。
+外部mf-0.28.60-audit.py/install.pyとmf-auto-skin-mcp-installed-0.28.60.pyを準備しpy_compile成功。
+前版監査を維持し、新schema/typed classの同梱・実exe/配信schema一致検査を追加。
+MCP診断は専用project/actor16で新規sceneだけを作り、2clips付きGLBを配置/実再importする計画。
+準備時点では実行していない。新署名公開/導入/installed MCP/OpenCode/engineはNOT TESTED。
+SQLite CLI不在のためPython標準sqlite3のread-only照合で未終端Job/GUI/runtime操作すべて0確認。
+稼働MF1334774/0.28.59、Host1340115。Hostは別途main164fa2690743f4956462ca597a4b911a67e13c7aへ更新済み。
+今回Host変更・再起動なし。全3DS/GAはPARTIAL。次は通常merge→exact checkoutでbuild/audit/sign/公開受入。
+
+
 ## 2026-09-10 typed automatic skin binding — SOURCE VERIFIED / INSTALLED NOT TESTED
 
 Base PR428 merge1e6a7d658b8f03f4287f9e36ec425c44adf50ad6、ux1/3d-auto-skin-bind。
