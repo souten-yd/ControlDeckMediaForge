@@ -116,6 +116,100 @@ def bind_skin(obj: bpy.types.Object, operation: dict[str, object], objects: dict
     bpy.context.view_layer.update()
 
 
+def normalized_influences(groups: list[tuple[int, float]], allowed: set[int]) -> list[tuple[int, float]]:
+    """Validate raw heat output before discarding zero/small influences."""
+    if any(index not in allowed or not math.isfinite(weight) or not 0 <= weight <= 1
+           for index, weight in groups) or len({index for index, _ in groups}) != len(groups):
+        raise RuntimeError("automatic skin weights are invalid")
+    selected = sorted(((index, weight) for index, weight in groups if weight > 0),
+                      key=lambda item: (-item[1], item[0]))[:4]
+    total = sum(weight for _, weight in selected)
+    if not math.isfinite(total) or total <= 0:
+        raise RuntimeError("automatic skin weights are missing")
+    return [(index, weight / total) for index, weight in selected]
+
+
+def bind_skin_auto(obj: bpy.types.Object, operation: dict[str, object], objects: dict[str, bpy.types.Object]) -> None:
+    rigid_armature(obj)
+    if obj.parent is not None or any(not math.isfinite(obj.matrix_world[i][j]) or
+            abs(obj.matrix_world[i][j] - (1 if i == j else 0)) > 1e-6 for i in range(4) for j in range(4)):
+        raise RuntimeError("automatic bind requires an identity rig")
+    for pose in obj.pose.bones:
+        if any(not math.isfinite(pose.matrix_basis[i][j]) or
+               abs(pose.matrix_basis[i][j] - (1 if i == j else 0)) > 1e-6 for i in range(4) for j in range(4)):
+            raise RuntimeError("automatic bind requires rest pose")
+    for bone in obj.data.bones:
+        bone_id(bone.name)
+        if not bone.use_deform or not math.isfinite(bone.length) or bone.length < .0009 or not all(
+                math.isfinite(value) for row in bone.matrix_local for value in row):
+            raise RuntimeError("automatic bind bone data differs")
+    ids = operation.get("mesh_object_ids")
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 16 or any(not isinstance(key, str) for key in ids):
+        raise RuntimeError("automatic bind mesh list differs")
+    if len(set(ids)) != len(ids) or operation.get("object_id") in ids:
+        raise RuntimeError("automatic bind mesh IDs differ")
+    selected, vertices, polygons, corners = [], 0, 0, 0
+    for key in ids:
+        mesh = objects.get(key)
+        if mesh is None or mesh.type != "MESH":
+            raise RuntimeError("automatic bind target is not a known mesh")
+        if mesh.parent is not None or mesh.constraints or mesh.animation_data is not None or mesh.vertex_groups or mesh.modifiers:
+            raise RuntimeError("automatic bind requires unmodified unweighted static meshes")
+        if mesh.data.users != 1 or mesh.data.shape_keys is not None or mesh.data.animation_data is not None:
+            raise RuntimeError("automatic bind requires independent static mesh data")
+        vertices += len(mesh.data.vertices)
+        polygons += len(mesh.data.polygons)
+        corners += sum(p.loop_total for p in mesh.data.polygons)
+        if (not mesh.data.vertices or not mesh.data.polygons or vertices > 50_000 or polygons > 100_000
+                or corners > 300_000 or vertices * len(obj.data.bones) > 1_000_000):
+            raise RuntimeError("automatic bind geometry budget exceeded")
+        if any(not math.isfinite(p.area) or p.area <= 0 for p in mesh.data.polygons):
+            raise RuntimeError("automatic bind requires nondegenerate faces")
+        determinant = mesh.matrix_world.determinant()
+        if (not all(math.isfinite(value) for row in mesh.matrix_world for value in row)
+                or not math.isfinite(determinant) or determinant <= 1e-12
+                or not all(math.isfinite(value) for vertex in mesh.data.vertices for value in vertex.co)):
+            raise RuntimeError("automatic bind geometry transform differs")
+        selected.append(mesh)
+    # All preflight checks precede any parent/group mutations. The caller owns the
+    # disposable candidate file; a partial heat failure must never publish it.
+    originals = {mesh.name: [mesh.matrix_world @ v.co for v in mesh.data.vertices] for mesh in selected}
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    for mesh in selected:
+        mesh.select_set(True)
+    if bpy.ops.object.parent_set(type="ARMATURE_AUTO", keep_transform=True) != {"FINISHED"}:
+        raise RuntimeError("automatic skin weights are missing")
+    for mesh in selected:
+        if mesh.parent != obj or len(mesh.modifiers) != 1 or mesh.modifiers[0].type != "ARMATURE" or mesh.modifiers[0].object != obj:
+            raise RuntimeError("automatic bind modifier result differs")
+        allowed = {group.index for group in mesh.vertex_groups if group.name in obj.data.bones}
+        for vertex in mesh.data.vertices:
+            raw = [(group.group, group.weight) for group in vertex.groups]
+            weights = normalized_influences(raw, allowed)
+            for index, _ in raw:
+                mesh.vertex_groups[index].remove([vertex.index])
+            for index, weight in weights:
+                mesh.vertex_groups[index].add([vertex.index], weight, "REPLACE")
+        for vertex in mesh.data.vertices:
+            weights = [group.weight for group in vertex.groups]
+            if not 1 <= len(weights) <= 4 or any(not math.isfinite(w) or w <= 0 for w in weights) or abs(sum(weights) - 1) >= 1e-5:
+                raise RuntimeError("automatic skin weights are invalid")
+    bpy.context.view_layer.update()
+    for mesh in selected:
+        evaluated = mesh.evaluated_get(bpy.context.evaluated_depsgraph_get())
+        result = evaluated.to_mesh()
+        try:
+            before = originals[mesh.name]
+            errors = [(evaluated.matrix_world @ vertex.co - point).length
+                      for vertex, point in zip(result.vertices, before)]
+            if len(result.vertices) != len(before) or any(not math.isfinite(error) or error >= 1e-5 for error in errors):
+                raise RuntimeError("automatic bind changed rest geometry")
+        finally:
+            evaluated.to_mesh_clear()
+
+
 def set_pose(obj: bpy.types.Object, operation: dict[str, object]) -> None:
     rigid_armature(obj)
     if bpy.data.actions or any(o.type == "ARMATURE" and
@@ -440,6 +534,8 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         create_clip(obj, operation, objects)
     elif kind == "skin.bind":
         bind_skin(obj, operation, objects)
+    elif kind == "skin.bind_auto":
+        bind_skin_auto(obj, operation, objects)
     elif kind == "pose.set":
         set_pose(obj, operation)
     elif kind == "transform.set":
@@ -554,6 +650,8 @@ def main() -> None:
                 f"unknown stable object ID: {operation.get('object_id')}": "object_not_found",
                 "recipe object ID already exists": "object_exists",
                 "clip replacement target is missing or ambiguous": "clip_target_missing",
+                "automatic skin weights are missing": "auto_weights_missing",
+                "automatic skin weights are invalid": "auto_weights_invalid",
             }.get(str(exc), "operation_rejected")
             (Path.cwd() / args.result).write_text(json.dumps({
                 "schema_version": "media-forge.scene-recipe-failure@1",

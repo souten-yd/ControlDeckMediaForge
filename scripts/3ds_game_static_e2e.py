@@ -92,6 +92,9 @@ def run(args: argparse.Namespace) -> None:
     elif args.fixture == "array":
         from array_fixture import recipe
         operations = recipe()
+    elif args.fixture == "auto_skin":
+        from auto_skin_fixture import recipe
+        operations = recipe()
     create = SceneCreateRequest.model_validate({"name":"Game " + args.fixture + " acceptance","recipe":{"operations":operations}})
     evidence: dict[str, Any] = {"mode":"source_domain_real_blender", "runtime":runtime.version}
     began = time.monotonic()
@@ -134,11 +137,14 @@ def run(args: argparse.Namespace) -> None:
             edit_operation = clip("arm_swing")
         elif args.fixture == "array":
             edit_operation = {"type": "transform.set", "object_id": "step", "location": [2, 0, 0]}
+        elif args.fixture == "auto_skin":
+            from auto_skin_fixture import clip
+            edit_operation = clip("bend")
         edit = SceneEditRequest.model_validate({"scene_id": created["scene"]["id"],
             "base_revision_id":created["revision"]["id"], "recipe":{"operations":[
                 edit_operation]}})
         evidence["edited"] = asyncio.run(apply(edit))
-        if args.fixture in {"rig", "motion", "array"}:
+        if args.fixture in {"rig", "motion", "array", "auto_skin"}:
             revision = evidence["edited"]["revision"]
             checked = subprocess.run([str(runtime.executable), "--background", "--factory-startup", "--disable-autoexec",
                 "--python-exit-code", "1", "--python", str(Path(__file__).resolve()), "--", "--inspect",
@@ -148,6 +154,32 @@ def run(args: argparse.Namespace) -> None:
                 capture_output=True, text=True, timeout=60)
             assert checked.returncode == 0, (checked.stdout+checked.stderr)[-4000:]
             evidence["posed_inspection"] = json.loads((args.evidence_dir / "posed-inspection.json").read_text())
+        if args.fixture == "auto_skin":
+            from auto_skin_fixture import binding, recipe as auto_recipe
+            current = evidence["edited"]["revision"]
+            failures = [
+                [binding()],  # already bound/animated: no implicit replacement
+                auto_recipe()[:2] + [binding(), {"type": "transform.set", "object_id": "missing", "location": [0, 0, 0]}],
+            ]
+            # The second case uses new IDs so automatic binding really executes
+            # before the deliberate following failure; prior bound objects remain.
+            failures[1][0]["object_id"] = "newbody"
+            failures[1][1]["object_id"] = "newrig"
+            failures[1][2].update(object_id="newrig", mesh_object_ids=["newbody"])
+            for operations in failures:
+                rejected = SceneEditRequest.model_validate({"scene_id": created["scene"]["id"],
+                    "base_revision_id": current["id"], "recipe": {"operations": operations}})
+                try:
+                    asyncio.run(apply(rejected))
+                except SceneError as exc:
+                    assert exc.code == "scene_recipe_failed"
+                    assert str(exc).startswith(f"Operation {len(operations)}/{len(operations)} ("), str(exc)
+                    evidence.setdefault("auto_bind_rejection_messages", []).append(str(exc))
+                else:
+                    raise AssertionError("Invalid automatic binding recipe succeeded")
+                document, revisions = workspace.catalog.get("local", created["scene"]["id"])
+                assert document.current_revision_id == current["id"] and len(revisions) == 2
+            evidence["auto_bind_failures_preserve_head"] = True
         if args.fixture == "array":
             current = evidence["edited"]["revision"]
             failures = [
@@ -233,7 +265,7 @@ if __name__ == "__main__":
     parser.add_argument("--runtime-id",default="blender-4.5.13-linux-x64")
     parser.add_argument("--inspect",action="store_true")
     parser.add_argument("--source",type=Path)
-    parser.add_argument("--fixture",choices=("gate", "robot", "rig", "motion", "array"),default="gate")
+    parser.add_argument("--fixture",choices=("gate", "robot", "rig", "motion", "array", "auto_skin"),default="gate")
     parser.add_argument("--glb",type=Path)
     parser.add_argument("--posed",action="store_true")
     parser.add_argument("--replace-clip",action="store_true")
@@ -249,6 +281,9 @@ if __name__ == "__main__":
         elif args.fixture == "array":
             from array_fixture import inspect_blend as inspect_array
             inspect_array(args.source, args.glb, args.evidence_dir, edited=args.posed)
+        elif args.fixture == "auto_skin":
+            from auto_skin_fixture import inspect_blend as inspect_auto_skin
+            inspect_auto_skin(args.source, args.glb, args.evidence_dir, edited=args.posed)
         elif args.fixture == "motion":
             from motion_fixture import inspect_blend as inspect_motion
             inspect_motion(args.source, args.glb, args.evidence_dir, edited=args.posed)

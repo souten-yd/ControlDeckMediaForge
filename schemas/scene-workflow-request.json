@@ -1269,7 +1269,8 @@
                 "skin.bind": "#/$defs/SkinBind",
                 "transform.set": "#/$defs/TransformSet",
                 "uv.smart_project": "#/$defs/UvSmartProject",
-                "modifier.array": "#/$defs/ArrayModifier"
+                "modifier.array": "#/$defs/ArrayModifier",
+                "skin.bind_auto": "#/$defs/SkinBindAuto"
               },
               "propertyName": "type"
             },
@@ -1315,6 +1316,9 @@
               },
               {
                 "$ref": "#/$defs/ArrayModifier"
+              },
+              {
+                "$ref": "#/$defs/SkinBindAuto"
               }
             ]
           },
@@ -1578,6 +1582,46 @@
         "local_offset"
       ],
       "title": "ArrayModifier",
+      "type": "object"
+    },
+    "SkinBindAuto": {
+      "additionalProperties": false,
+      "description": "Bone-heat bind unweighted static meshes to a rest typed rig; normalize to four influences.\n\nNo modifiers or existing weights are replaced. Limits: 50,000 vertices,\n100,000 polygons and 1,000,000 vertex/bone pairs across the selected meshes.\nMissing or invalid heat weights fail the operation without committing a revision.",
+      "properties": {
+        "type": {
+          "const": "skin.bind_auto",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "mesh_object_ids": {
+          "items": {
+            "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9._-]*$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Mesh Object Ids",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "mesh_object_ids"
+      ],
+      "title": "SkinBindAuto",
       "type": "object"
     }
   },

@@ -3,6 +3,28 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 typed automatic skin binding
+
+base PR428 merge1e6a7d6、branch ux1/3d-auto-skin-bind、PR作成前。
+前turnはprobe実機/PR428 mergeで進捗。今回GA-4設計→recipe/worker/schemaへskin.bind_auto加法実装。
+既存rigid skin.bind不変、coreにbpy import/同期待機を追加しない。GA-4/5/全3DSはPARTIAL。
+1〜16 mesh IDs、rest/identity typed rig、未bind/独立/modifierなしmesh、50k頂点/100k面/300k角/1m頂点骨pairs。
+heat後4影響/正規化/既知骨/finite/未割当て/実rest検査。欠落・不正weightsの固定診断追加。
+schemas3種の新definition/variantを除くとorigin/main JSONと同一。
+scripts/auto_skin_fixture.py と既存3ds_game_static_e2e.py --fixture auto_skinで実domainを検証。
+mf-auto-skin-source-20260910-r3:4.5.13/exit0/2.132秒、旧4.5.9別dirもexit0/2.823秒。
+114頂点/48混合、GLB480/192混合、最大2影響、idle/bend各2秒の5時刻差最大2.4646111e-07m。
+再bind拒否、成功bind後の4番目操作失敗の両方でhead/旧版hashを保持。Asset/provenance照合。
+既存rig fixture回帰exit0/2.283秒。frontend build43ms/差分0/Node5成功。
+全 ./mf.sh test は1487 passed/既知warning2/169.60秒/exit0、handle67502終端。
+初回PYTHONPATH不足のimport失敗とr2 collapsed heat診断失敗を保持。
+heatが縮退面にもweightを返した実測を受け、face areaを事前検査しr3/4.5.9で拒否確認。
+今回は新操作の署名公開/installed/MCP/OpenCode/取消/複雑character/engine NOT TESTED。
+稼働0.28.59/Host/既存scene不変。既存UX状態変更なし。具体的な外部blockerなし。
+次: 通常PR merge後、版数準備→署名bundle公開/導入→installed MCPとOpenCodeのauto bind受入。
+再開: git fetch origin; git status --short --branch; 最新implementation-statusと公開schema/実currentを照合。
+既存OpenCode R2は終端/strict不合格。再起動・重複制作しない。配置物/回収監査は別残件。
+
 ## 2026-09-10 auto-weight feasibility / OpenCode R2 terminal
 
 base PR427 mergeb20fc16、branch ux1/3d-auto-weight-probe、PR #428作成済み。

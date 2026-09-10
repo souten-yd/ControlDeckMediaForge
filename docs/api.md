@@ -544,12 +544,28 @@ per bind. Binding requires a rest pose. Pose setting replaces rest-local XYZ
 rotations in degrees (-180..180), for 1..128 distinct existing bones.
 Bind/pose currently target only typed Media Forge armatures, without shared
 armature data, animation, or constraints. Unspecified bones are unchanged.
-These operations do not yet create animation clips or distributed vertex weights.
+Rigid binding does not distribute weights; use the separate automatic operation below.
 `pose.set` rejects scenes containing actions or other rig kinds. For static scenes
 consisting only of typed rigs, GLB export uses the current pose as its rest pose
 so the exported preview retains that pose. The source blend retains its original
 bone rest data. Existing untyped/animated scenes retain their export setting;
 this static-pose behavior is not animation-clip support.
+
+`skin.bind_auto` adds bone-heat binding of 1..16 distinct `mesh_object_ids` to the
+typed rig identified by `object_id`. The rig must have identity world transform,
+rest pose, and deform bones; meshes must have independent static data, no parent,
+weights, constraints, animation, shape keys or modifiers, and a finite positive
+non-singular world transform. It does not silently apply modifiers or replace weights.
+Before heat computation, selected inputs are limited to 50,000 vertices,
+100,000 polygons, 300,000 face corners and 1,000,000 vertex/bone pairs. Faces must
+have finite nonzero area. CPU worker timeout/cancel still apply.
+Every vertex must receive finite nonnegative weights for known bones. The strongest
+four influences are retained (ties by group index), explicitly normalized, and
+stored sums checked within 1e-5. Missing/invalid weights fail rather than falling
+back to rigid assignment. Rest world geometry is verified before publication.
+Failure, including a later recipe operation failure, leaves the previous revision
+unchanged. Existing pose/clip operations work on the bound mesh. Automatic binding
+is not weight painting, IK or a guarantee of character deformation quality.
 
 `animation.clip` adds a new named clip to a typed rig, without replacing an
 existing clip ID by default. Optional strict boolean `replace=true` instead

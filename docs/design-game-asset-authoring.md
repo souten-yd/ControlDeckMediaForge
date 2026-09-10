@@ -131,7 +131,23 @@ loop指定時は各trackの両端回転が一致することを検査するが�
 実frame評価とGLB再import後の同時刻の動き・duration・両端一致を検証する。
 歩行/root motion/IK/retarget/有機変形はこの最初のsliceだけで完了にしない。
 
-### GA-4 first typed slice
+### GA-4 automatic binding slice（2026-09-10）
+
+`skin.bind_auto`を加法追加する。stable `object_id`でtyped rig、`mesh_object_ids`で
+1〜16個の未bind meshを指定し、Blender bone heatで分布weightを求める。既存`skin.bind`は変更しない。
+rest/identityのtyped rig、独立mesh data、親/weight/constraint/animation/shape key/modifierなしを前提にする。
+modifier適用・既存weightの置換は暗黙実行しない。全選択mesh合計50,000 vertices/100,000 polygons、
+300,000 face corners、vertices×deform bones合計1,000,000を処理前に制限し、既存worker timeout/cancelを維持する。
+finite geometry・非零の有限face area・正の非特異transform・有効なdeform bonesを検査してからCPUで実行する。
+heatの成功戻り値だけを信頼せず、全頂点に既知骨の有限非負weightがあることを検査。
+各頂点の上位4影響（同値はgroup index順）を残して正規化し、保存値の合計誤差1e-5未満を再検査する。
+weight欠落/不正/heat失敗は別の剛体割当てへfallbackせず、工程失敗とする。
+rest geometryが変わらないことも検査する。成功後のpose/clipは既存操作を用い、GLB skinを保持する。
+処理は既存候補workspace内のみ。途中失敗や後続操作失敗では新revisionをcommitせず旧版を保持する。
+実連続meshを2骨へbindし、複数骨影響・rest/pose/clip・GLB再import・旧版不変を検証する。
+小規模fixtureの成功を複雑なキャラクター品質、weight painting、IK、歩行やengine受入の代替にしない。
+
+### GA-4 rigid binding（既存）
 
 armature.createでidentity transformの骨格を作成する。親は同一操作内で先に定義したboneに限定、
 1回128 bones/scene合計256 bones、有限head/tail、零長と重複IDを拒否する。
