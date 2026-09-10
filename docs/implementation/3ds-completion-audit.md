@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-11 OS専用隔離設定の利用者承認を取得。現在の阻害要因は承認未取得ではなく
+管理者認証（sudo -n trueはpassword required）。OS/稼働版は未変更。
+namespace例外を追加する前に、権限を増やさないnamed AppArmor profileでpathname拒否を
+試す専用canaryを追加。構文検査成功、実unconfined baselineは両peer接続/隔離FAIL、
+profile未導入ではaa-exec拒否/成功にしない。loaded-profile実拒否と製品GUI受入はNOT TESTED。
+詳細/限定load・rollbackは[IPC隔離試験](3ds-ipc-isolation.md)。全GOAL/A〜F/GA PARTIALを維持。
+
 2026-09-10 [IPC隔離試験](3ds-ipc-isolation.md)でpathname/abstract接続と外部signal許可を実測。
 sourceへabstract/signal scopeを追加、実拒否/内部GUI保存・終了を確認。pathnameは未遮断。
 実機ABI8、unshare/bwrapのuser/mount/net隔離前提に権限不足。systemdのnet分離省略も実測。

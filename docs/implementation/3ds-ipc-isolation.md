@@ -105,3 +105,86 @@ acceptance. Do not disable AppArmor or globally relax unprivileged-userns policy
 do not broadly authorize every Python/systemd/bwrap invocation. A mere exception
 for a user-replaceable executable is not proof of a secure dedicated boundary.
 This is a constrained next-design requirement, not an installed or tested policy.
+
+## 2026-09-11 authorization and restriction-only alternative
+
+The user explicitly approved MediaForge-specific OS isolation work (「良いです」).
+The older authorization-pending entries above are historical, not the current
+authorization state. Noninteractive `sudo -n true` now returns exit1, `sudo: a
+password is required`. Do not ask for the password in chat or relax sudo policy.
+The current userns sysctl remains1; `/usr/local` and `/etc/apparmor.d` are root-owned
+0755 and `/usr/local/libexec` is absent. No OS policy was changed.
+
+Before designing any namespace exemption, test an alternative that **only adds
+restrictions**: an explicitly selected, named AppArmor profile, without executable
+attachment or `userns`/capability/profile-escape permission. It cannot make generic
+Python or bwrap more privileged. The [AppArmor4.0 upstream manual](https://www.apparmor.net/man/4.0/apparmor.d/)
+specifies pathname UNIX sockets are mediated by file access rules, separately from
+abstract/anonymous UNIX rules. The installed4.0.1 parser/manual were also inspected.
+This is a candidate way to close the ABI8 pathname gap, not evidence of enforcement
+on this kernel and not a replacement for all mount/PID/fd isolation acceptance.
+
+### Bounded administrator-assisted canary
+
+- `scripts/mediaforge-ipc-canary-v1.apparmor` is a **diagnostic-only** named profile.
+  It attaches to no executable. It allows the installed Python3.12 and necessary
+  library reads, socket creation, its own label read, and one task-owned pathname
+  socket pattern. No abstractions/base, broad filesystem write, userns, capabilities,
+  unconfined execution transition, mount or generic namespace exemption is granted.
+- `scripts/3ds_apparmor_ipc_probe.py` runs as the ordinary service user, never root.
+  It owns both socket peers; neither is a real Host/service endpoint. A fixed child
+  uses `aa-exec -p mediaforge-ipc-canary-v1`, isolated Python startup, a clean
+  environment, closed extra descriptors and a five-second timeout. Only its own
+  temporary directory is removed. The empty `ipc-probes` parent remains in data.
+- The canary requires the actual enforcing label, the permitted peer receiving
+  the payload, and the outside peer denied with EACCES/EPERM and receiving nothing.
+  Missing profile, complain mode, unrelated socket errors or denied positive access
+  are failures. Baseline execution deliberately cannot satisfy the gate.
+- `apparmor_parser -Q -K scripts/mediaforge-ipc-canary-v1.apparmor` compiles without
+  kernel loading or profile-cache writes. The installed parser accepted the file.
+  This is syntax evidence only.
+
+Administrator action is **not performed** by the diagnostic or Feature setup.
+After reviewing the exact checked-in profile, the local administrator may load
+this temporary, unattached diagnostic profile (no `/etc` file installation):
+
+```bash
+sudo /usr/sbin/apparmor_parser -a -K scripts/mediaforge-ipc-canary-v1.apparmor
+```
+
+Use `-a`, not `-r`: a preexisting profile with that name must not be replaced.
+If loading succeeds, run the canary **without sudo**:
+
+```bash
+/usr/bin/python3 scripts/3ds_apparmor_ipc_probe.py
+```
+
+After that canary has exited, remove only the profile loaded by this procedure:
+
+```bash
+sudo /usr/sbin/apparmor_parser -R -K scripts/mediaforge-ipc-canary-v1.apparmor
+```
+
+Do not run the removal if the initial add failed due to a name collision. No service
+restart is required by this procedure. No global AppArmor/userns change, persistent
+profile, root launcher, Blender install, or Host setting is part of this experiment.
+
+### Current observations and promotion gate
+
+Both ordinary-user commands were executed before any administrator load:
+
+- `--baseline`: exit2, child exit0/unconfined, both dedicated peers received exactly
+  `mf-owned-canary`, passed=false, owned temporary peers removed.
+- Profile mode: exit2, aa-exec exit1 reporting the named profile does not exist,
+  no child evidence, neither peer received data, passed=false, peers removed.
+- Twelve focused tests passed, including a real unconfined baseline and retained
+  sentinel verification. The full suite result is in implementation-status.
+
+**Loaded-profile enforcement: NOT TESTED.** Administrative authentication is the
+next required external action for this canary. Even a passing canary will prove
+only this pathname condition. Next implement the production policy/entry with
+per-session roots, profile-presence fail-closed checks, exact effective runner
+identity, inherited-fd and process/ptrace tests, and actual GUI save/reconnect/stop
+acceptance. Preserve existing Landlock layers and no privilege-adding fallback.
+Review production installation/rollback separately; this probe profile must never
+be shipped or advertised as a complete Blender GUI sandbox.
