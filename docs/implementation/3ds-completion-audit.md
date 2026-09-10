@@ -9,8 +9,10 @@ GUI起動・保存の成功をHost filesystem confidentialityの成功へ拡大�
 PR497でsourceのread/list/execute境界を修正。実Blender4.5.13のcanary拒否と保存を確認。
 追加でsource4.5.9/4.5.13のRFB接続・切断・再接続・保存・終了を確認、元asset保持。
 source実Chrome/noVNCでも編集/再接続/既定autosave/専用crash/2mesh復旧を127.064秒で確認。
-v0.28.71は配布準備中で稼働.70は未修正。新policyのinstalled・socket/fd/processは未受入。
-全3DS-5/security受入は未達。次は通常署名配布/導入確認。
+v0.28.71署名公開/Host検証/通常update18.707秒/既存DB・registry・995files保持を確認。
+installed実Chrome表示/再接続/保存/再open12.196秒、4GUI回収/10asset hash・provenance一致。
+稼働bundle実runner抽出のkernel negative6項目も拒否。GUI console攻撃そのものではない。
+socket/fd/processは未受入。全3DS-5/security受入は未達。次は残るOS境界の無害fixture試験。
 
 2026-09-10 installed.70のsoftware GUI＋通常画像共存を追加受入。
 mf-software-gui-image-coexist-installed-0.28.70-20260910-r2、33.647秒/exit0。
