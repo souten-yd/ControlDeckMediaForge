@@ -2462,6 +2462,7 @@ class JobManager:
         delay = float(job.request.constraints.get("_fake_delay_sec", 0))
         estimate = max(1.0, min(self.worker_timeout_sec, delay + 1.0))
         try:
+            await self._refresh_host_identity(execution)
             resource_request = self._resource_request(job, execution, selected, estimate)
             status = await self.host_client.request_resource(execution.identity, resource_request)
             request_id = status.get("request_id")
@@ -2579,10 +2580,6 @@ class JobManager:
         try:
             while True:
                 await asyncio.sleep(0.25)
-                if execution.identity.expires_at - int(time.time()) <= 120:
-                    execution.identity = await self.host_client.refresh_lease_identity(
-                        execution.identity, execution.lease_id
-                    )
                 if await self._host_or_local_cancel_requested(job_id, execution):
                     process = self._processes.get(job_id)
                     if process is not None and process.returncode is None:
@@ -2617,11 +2614,25 @@ class JobManager:
         if self.store.cancel_requested(job_id):
             return True
         assert self.host_client is not None
+        await self._refresh_host_identity(execution)
         control = await self.host_client.job_control(execution.identity, execution.host_job_id)
         if control.get("cancel_requested") is True:
             self.store.request_cancel(job_id)
             return True
         return False
+
+    async def _refresh_host_identity(self, execution: HostExecution) -> None:
+        """Keep queue/control/terminal consumers on one still-valid identity."""
+        assert self.host_client is not None
+        async with execution.identity_lock:
+            if execution.identity.expires_at - time.time() > 120:
+                return
+            if execution.identity.expires_at <= time.time():
+                raise HostApiError("host_context_lost", "Host execution credential expired", status_code=401)
+            if execution.lease_id is not None:
+                execution.identity = await self.host_client.refresh_lease_identity(execution.identity, execution.lease_id)
+            else:
+                execution.identity = await self.host_client.refresh_job_identity(execution.identity, execution.host_job_id)
 
     async def _release_host_resource(self, execution: HostExecution) -> bool:
         if self.host_client is None:

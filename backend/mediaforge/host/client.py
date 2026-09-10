@@ -192,6 +192,25 @@ class ControlDeckHostClient:
     async def grant_metadata(self, identity: HostIdentity, grant_id: str) -> dict[str, Any]:
         return await self._request(identity, "GET", f"/{ADDON_ID}/grants/{grant_id}")
 
+    async def refresh_job_identity(self, identity: HostIdentity, host_job_id: str) -> HostIdentity:
+        """Renew a still-valid owned Job identity without changing its authority."""
+        if identity.expires_at <= time.time():
+            raise HostApiError("host_context_lost", "Host execution credential expired", status_code=401)
+        value = await self.refresh_job_credential(identity, host_job_id)
+        token = value.get("access_token")
+        if (value.get("token_type") != "Bearer" or not isinstance(token, str) or not token
+                or any(character.isspace() for character in token)):
+            raise HostApiError("invalid_host_response", "ControlDeck did not return a refreshed Job token")
+        refreshed = await self.authenticate({
+            "Authorization": f"Bearer {token}", "X-Control-Deck-Addon-ID": identity.addon_id,
+        })
+        if (refreshed.addon_id != identity.addon_id or refreshed.subject != identity.subject
+                or refreshed.actor_subject != identity.actor_subject
+                or refreshed.granted_capabilities != identity.granted_capabilities
+                or refreshed.expires_at <= identity.expires_at):
+            raise HostApiError("invalid_host_response", "ControlDeck changed the Job token scope")
+        return refreshed
+
     async def grant_content(
         self,
         identity: HostIdentity,

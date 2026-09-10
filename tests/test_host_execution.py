@@ -128,6 +128,13 @@ def control_deck_stub() -> tuple[FastAPI, dict[str, Any]]:
         job.update({"phase": payload["phase"], "progress": payload.get("progress")})
         return job
 
+    @app.post("/api/v1/addon-runtime/media-forge/jobs/{host_job_id}/credential/refresh")
+    async def refresh_job(host_job_id: str) -> dict[str, Any]:
+        assert state["jobs"][host_job_id]["status"] == "running"
+        state["credential_refreshes"] += 1
+        state.setdefault("job_credential_refreshes", []).append(host_job_id)
+        return {"access_token": "valid-refreshed", "token_type": "Bearer", "expires_at": int(time.time()) + 600}
+
     @app.get("/api/v1/addon-runtime/media-forge/jobs/{host_job_id}/control")
     async def control(host_job_id: str) -> dict[str, Any]:
         job = state["jobs"].setdefault(host_job_id, {"id": host_job_id, "status": "running"})

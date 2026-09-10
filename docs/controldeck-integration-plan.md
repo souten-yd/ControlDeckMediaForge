@@ -5,6 +5,15 @@ Date: 2026-08-20
 
 ## 1. Executive decision
 
+2026-09-10 ordinary hosted media jobs renew authentication before expiry while
+waiting for resources: use the existing owned Job credential refresh before a
+lease exists, and the existing lease credential refresh after admission. Preserve
+the subject, actor, capabilities and attached-parent terminal/progress ownership.
+All consumers share the in-memory execution identity. Never persist bearers,
+reissue from expired credentials, or assume a workspace reconnect renews an
+already captured execution identity. Failed refresh remains fail-closed; source
+and installed acceptance are separate from the existing scene/setup evidence.
+
 Media Forge must remain a **real ControlDeck add-on**, not a Media-specific feature compiled into ControlDeck and merely hidden behind a flag.
 
 At the same time, ControlDeck should provide the generic host facilities that powerful add-ons need so integration feels native rather than like an unrelated web app.

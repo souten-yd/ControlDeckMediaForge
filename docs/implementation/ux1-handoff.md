@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 ordinary image waiting credential source fix
+
+base PR487 mergea05a06af62d4ac3caacd1fc074d49a400999ce58、ux1/3d-image-wait-credential-refresh。
+前turnは実待機401の診断/回収/merge。Host Job refreshは同owner service subject維持で使えると実code確認。
+新child強制作成でなく、既存execution identityを期限前に更新。統合設計追記後実装。
+host client refresh_job_identity/introspection/scope・actor・caps・期限延長照合、失効・拒否fail-closed。
+JobManager resource request前/待機control共通点、leaseなしJob更新・leaseあり既存lease更新。
+HostExecution async lock、attached親所有/区間/ProgressGate不変。secret永続化・Host変更なし。
+新9testsと既存Host55pass。全40451 exit0/1761tests197.95秒/既知2warnings、以後製品/test編集なし。
+viewer63ms/差分0/Node5pass/diff check。実Host短時間source helper2case成功。
+外部mf-image-job-refresh-real-host-20260910-r2.py、mf-image-job-refresh-real-host-zh0w4rab。
+所有1dd074549456は更新後succeeded、attached c72521a5ac87は更新後もrunning保持→診断ownerが正規終了。
+初回Hostvenv PIL不足で操作前停止、依存追加なしで2venv/別process/stdinだけの診断へ修正。
+次: source実Hostで通常画像長時間待機/更新/終端/解放を実受入→署名release→installed共存を再試験。
+更新失敗/Host不在のdurable終端回収全条件は未実装・未受入として残す。正常更新を失効救済にしない。
+稼働.69未変更、Host/PC restartなし。全E/全GOAL/A〜F/GA PARTIAL、具体的外部blockerなし。
+このslice commit/push/通常PR mergeへ。untracked .venv保持。
+
 ## 2026-09-10 image waiting credential expiry — FIX NEXT
 
 base PR486 merge745dc04b5485936089e59abd9defb867a4389503、ux1/3d-coexist-auth-failure。
