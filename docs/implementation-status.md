@@ -1,5 +1,24 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed repair registration-wait cancellation rollback
+
+base PR465 merge93c3b6a、ux1/3d-installed-repair-registration-cancel。前turnは.68署名配布/導入/mergeまで進捗。
+外部`/data1tb/mf-repair-registration-cancel-installed-0.28.68-20260910.py`をHost診断venvで実行、7488 exit0。
+同名evidence dir。全idle/SQLite backup後、実Chrome ja320 opaque iframeからinactive4.5.9 repair。
+operation blenderop_2033c422547f4736bad52e083acd7c03/Hostc2f2a971683f、受付1.731秒queued→page.close1.735秒。
+既存registry flockの短い診断保持中、36.862秒にstate probing・previous exe inode34365078と
+候補の別inodeを確認。受付中やdownload中の取消を公開待ち取消へ読み替えた試験ではない。
+通常Host cancel API200/36.876秒→永続cancel1を41.909秒で確認してflock解放。
+42.321秒passed、local/Host canceled、errorなし、旧両exe inode/hash・registry bytesを保持。
+Host固有理由のreceipt already_terminal/terminal_matches=false/sent0を保持し、fresh control GETでもcanceled確認。
+旧scene/revision/assets/jobs/setup行保持、専用staging/previous-stage不在、Host1811096/MF1965886不変。
+42.436秒login失効。独立read-only DB/旧inode/staging照合も成功。診断は終端済み。
+実installed.68のcheckpoint受入であり、Host失効/全公開race/10分refreshの証拠ではない。
+文書のみ。基準gate PR464の全1604pass168.30秒/viewer49ms/Node5、本slice全test/build再実行なし。
+NOT TESTED: 前回約210秒の監視停止原因、installed認証喪失rollback/長時間refresh、全3DS/GA。
+次: 新safeログ付き.68で登録待ち時の監視停止を診断。まず240秒の限定試験で210秒の再現有無を確認し、
+異常時は即解放・同IDの終端照合を行う。以前の650秒診断を無条件で再実行しない。
+
 ## 2026-09-10 v0.28.68 signed installed acceptance
 
 PR464通常merge/tag88e5061dc4756a97c2b02130bbc0d26f443a7549。exact checkout build34747 exit0、
