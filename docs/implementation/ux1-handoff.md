@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 auto skin R2 failed / MCP field present
+
+前turnは.61署名導入、今回は同run終端/失敗切り分けで進捗。
+baseeb9172b、ux1/3d-auto-skin-r2-audit、記録PR作成前。26740終端exit0/207.032秒/9tools。
+両loop省略、grant '.' error→exports再申請のためstrict verifier exit1。実GLB変形はexit0。
+実配置32140B/SHA d511701f6789aa286a86a5078f033a7dca8b3ebcd705508fc37b424649ade194、
+両Jobs成功/receipt・Asset・provenance一致、親子PID不在/当該private config残存0。
+mf-loop-mcp-schema-0.28.61.py:実HTTP200/90124B/24tools/bridge24、新説明とloop booleanを確認。
+現時点Host MCPでfield欠落なし。最終LLM schema/モデル判断の原因は未確定。説明だけで直ったとはしない。
+次: scene制作結果/snapshotへ実適用clip設定を提示する加法設計を検討し、照合可能にする。
+worker resultはscene_workspace.pyでキー集合を固定検査、公開結果へはoperation_count/stable IDsのみを転記。
+任意意図推測/既定変更で検証を通さない。全3DS/GA/UX状態PARTIAL、具体的外部blockerなし。
+今回docsのみ、稼働.61/MF1411733/Host1384554変更なし、OpenCode継続なし。
+再開: git status --short --branch; git fetch origin; sed -n '400,420p' backend/mediaforge/scene_workspace.py。
+
 ## 2026-09-10 v0.28.61 installed / OpenCode R2
 
 前turnはloop説明merge、今回は版数PR434 merge/署名公開/installed受入で進捗。
