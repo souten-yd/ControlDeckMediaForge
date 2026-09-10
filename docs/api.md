@@ -579,7 +579,11 @@ frame numbers and rest-local XYZ rotations (-180..180 degrees); interpolation
 is LINEAR, not quaternion shortest-path/IK. Keys span frame 0 to frame_count.
 Unspecified bones receive zero rotation tracks. FPS is 1..60, frame_count
 1..600 and duration at most 120 seconds. Existing clips must share the same FPS.
-Loop requests require equal first/last rotations, not velocity continuity.
+Loop requests must explicitly set `loop=true` on every requested looping clip.
+Omission defaults to false even if endpoint rotations match; matching keys do not
+enable loop validation. This validates equal first/last rotations, not velocity
+continuity or game-engine playback settings. Agents must compare submitted clip
+fields with the requested motion before execution, not infer compliance from Job success.
 At most 128 tracks/clip, 32 clips/scene, 262144 scalar keys and 250000 bone-frame
 samples are accepted, counting saved curves again before adding a clip.
 Only typed actions and muted single-action NLA stashes are accepted; drivers,

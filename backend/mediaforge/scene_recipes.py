@@ -290,6 +290,11 @@ class AnimationTrack(BaseModel):
 
 
 class AnimationClip(BaseModel):
+    """Create a bone animation clip. For requested looping motion, explicitly set
+    loop=true on EVERY clip: matching endpoint keys do not enable loop validation.
+    Omitted loop defaults to false. Verify the submitted fields against the request
+    before execution; a successful Job alone does not prove the requested motion.
+    """
     model_config = ConfigDict(extra="forbid")
     type: Literal["animation.clip"]
     object_id: ObjectId
@@ -297,7 +302,10 @@ class AnimationClip(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     fps: int = Field(default=24, ge=1, le=60, strict=True)
     frame_count: int = Field(ge=1, le=600, strict=True)
-    loop: bool = False
+    loop: bool = Field(default=False, description=(
+        "Set true explicitly for a requested looping clip (including idle/walk loops). "
+        "Omission means false, even when first and last rotations match. True enables "
+        "endpoint validation; it does not guarantee velocity continuity or engine playback looping."))
     replace: bool = Field(default=False, strict=True)
     tracks: list[AnimationTrack] = Field(min_length=1, max_length=128)
 

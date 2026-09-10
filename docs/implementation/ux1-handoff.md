@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 animation loop guidance
+
+前turnは実OpenCode終端/strict不合格確認とPR432 mergeで進捗。base0a26acd、branch ux1/3d-animation-loop-guidance、PR #433作成済み。
+AnimationClip/loop説明、3schema、API文書、4tests追加。既定/必須field/worker処理不変。
+focused21/0.23秒、build45ms/生成物差分0/Node5。全 ./mf.sh test handle5326終端exit0、1509 passed/146.64秒/既知warning2。
+source19130で実HTTP3schema200/exact bytes構造一致、説明を除く契約はmainと同一。
+data mf-loop-guidance-source-ul8GII、専用PID1402727は通常終了exit0。稼働MF/Host/.60変更なし。
+次: commit/push/通常PR merge後、署名版へ反映し実OpenCodeのloop明示を再受入する。
+NOT TESTED: installed新説明・実OpenCode再試験、複雑character/engine/全3DS・GA。UX状態不変、blockerなし。
+再開: git status --short --branch; git fetch origin。継続中OpenCodeなし。
+
 ## 2026-09-10 OpenCode automatic skin acceptance running
 
 更新: 同run50315は終端exit0/779.375秒/8tools。ただしstrict verifierはloop=true省略でexit1。
