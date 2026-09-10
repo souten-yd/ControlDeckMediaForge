@@ -55,11 +55,39 @@ def verify_array_recipe(operations: list[dict[str, Any]]) -> None:
     assert operations.index(primitive) < operations.index(material)
 
 
-def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False) -> dict[str, Any]:
+def verify_auto_skin_recipe(operations: list[dict[str, Any]]) -> None:
+    assert len(operations) == 5
+    primitive, rig, binding, *clips = operations
+    assert primitive['type'] == 'primitive.add' and primitive['primitive'] == 'uv_sphere'
+    assert primitive['object_id'] == 'body' and primitive['name'] == 'Body'
+    assert primitive['dimensions'] == [.3, .3, 1.3] and primitive['location'] == [0, 0, .5]
+    assert primitive.get('rotation_degrees', [0, 0, 0]) == [0, 0, 0] and primitive['vertices'] == 16
+    assert rig['type'] == 'armature.create' and rig['object_id'] == 'rig' and rig['name'] == 'Rig'
+    lower, upper = rig['bones']
+    assert lower['bone_id'] == 'lower' and lower['head'] == [0, 0, 0] and lower['tail'] == [0, 0, .5]
+    assert lower.get('parent_bone_id') is None
+    assert upper['bone_id'] == 'upper' and upper['head'] == [0, 0, .5] and upper['tail'] == [0, 0, 1]
+    assert upper['parent_bone_id'] == 'lower'
+    assert binding['type'] == 'skin.bind_auto' and binding['object_id'] == 'rig'
+    assert binding['mesh_object_ids'] == ['body'], 'Rigid binding is not distributed weight acceptance'
+    assert {clip['clip_id'] for clip in clips} == {'idle', 'bend'}
+    for clip in clips:
+        assert clip['type'] == 'animation.clip' and clip['object_id'] == 'rig'
+        assert clip.get('fps', 24) == 24 and clip['frame_count'] == 48 and clip.get('loop') is True
+        track, = clip['tracks']
+        assert track['bone_id'] == 'upper'
+        assert track['keys'] == [
+            {'frame': 0, 'rotation_degrees': [0, 0, 0]},
+            {'frame': 24, 'rotation_degrees': [5 if clip['clip_id'] == 'idle' else 60, 0, 0]},
+            {'frame': 48, 'rotation_degrees': [0, 0, 0]}]
+
+
+def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, auto_skin: bool = False) -> dict[str, Any]:
     """Check actual tool execution and delivered bytes; deformation needs Blender inspection."""
     observations = json.loads((evidence_dir / "observations.json").read_text())
-    assert observations.get("director_array" if array else "director_motion") is True and observations["exit_code"] == 0
-    filename = "stairs.glb" if array else "robot.glb"
+    mode = "director_auto_skin" if auto_skin else ("director_array" if array else "director_motion")
+    assert observations.get(mode) is True and observations["exit_code"] == 0
+    filename = "weighted.glb" if auto_skin else ("stairs.glb" if array else "robot.glb")
     events = [json.loads(line) for line in (evidence_dir / "events.jsonl").read_text().splitlines()]
     assert not any(event.get("type") == "error" for event in events)
     calls = [event["part"] for event in events if event.get("type") == "tool_use"]
@@ -69,7 +97,9 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False) ->
     assert all(call["tool"] in allowed and call["state"]["status"] == "completed" for call in calls)
     create_call = verify_director_read(calls)
     operations = create_call["state"]["input"]["recipe"]["operations"]
-    if array:
+    if auto_skin:
+        verify_auto_skin_recipe(operations)
+    elif array:
         verify_array_recipe(operations)
     else:
         assert {"armature.create", "skin.bind", "animation.clip"} <= {op["type"] for op in operations}
@@ -94,6 +124,14 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False) ->
     revision = terminal["result"]["revision"]
     exported, = outputs("media_scene_export")
     assert exported["revision_id"] == revision["id"]
+    if auto_skin:
+        grant, = outputs("control_deck_project_output_grant")
+        grant_call, = [call for call in calls if call['tool'] == 'controldeck_addons_control_deck_project_output_grant']
+        export_call, = [call for call in calls if call['tool'] == 'controldeck_addons_media_scene_export']
+        pack_call, = [call for call in calls if call['tool'] == 'controldeck_addons_media_pack']
+        assert calls.index(export_call) < calls.index(grant_call) < calls.index(pack_call), 'Acquire a fresh grant after export'
+        assert grant_call['state']['input'] == {'addon_id': 'media-forge', 'relative_directory': 'exports'}
+        assert pack_call['state']['input']['output_grant_id'] == grant['grant_id']
     placed, = outputs("media_pack")
     if "receipt" in placed:
         receipt = placed["receipt"]
@@ -118,7 +156,8 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False) ->
         metadata, provenance = map(json.loads, row)
         assert hashlib.sha256(data).hexdigest() == receipt["sha256"] == metadata["sha256"] == provenance["output_sha256"]
         assert len(data) == receipt["size_bytes"] == metadata["size_bytes"]
-    return {"verified": True, "scope": "actual director read, typed array creation and GLB delivery" if array else "actual director read, typed clip creation and GLB delivery",
+    return {"verified": True, "scope": "actual director read, automatic skin binding and GLB delivery" if auto_skin else (
+                "actual director read, typed array creation and GLB delivery" if array else "actual director read, typed clip creation and GLB delivery"),
             "scene_id": exported["scene_id"], "revision_id": revision["id"], "job_id": created["job_id"],
             "source_asset_id": revision["source_asset_id"], "receipt": receipt,
             "elapsed_sec": observations["elapsed_sec"],
@@ -128,6 +167,8 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False) ->
 
 def verify(evidence_dir: Path, database: Path) -> dict[str, Any]:
     observations = json.loads((evidence_dir / "observations.json").read_text())
+    if observations.get("director_auto_skin"):
+        return verify_motion(evidence_dir, database, auto_skin=True)
     if observations.get("director_array"):
         return verify_motion(evidence_dir, database, array=True)
     if observations.get("director_motion"):

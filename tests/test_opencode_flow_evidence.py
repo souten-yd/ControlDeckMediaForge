@@ -199,16 +199,18 @@ def test_director_requires_actual_read_and_operations(failure: str | None) -> No
         MODULE.verify_director_static(calls)
 
 
-@pytest.mark.parametrize("static,motion,array", [(False, False, False), (True, False, False), (False, True, False), (False, False, True)])
-def test_private_director_tool_permission(static: bool, motion: bool, array: bool) -> None:
+@pytest.mark.parametrize("static,motion,array,auto_skin", [(False, False, False, False),
+    (True, False, False, False), (False, True, False, False), (False, False, True, False), (False, False, False, True)])
+def test_private_director_tool_permission(static: bool, motion: bool, array: bool, auto_skin: bool) -> None:
     spec = importlib.util.spec_from_file_location(
         "opencode_flow_runner", Path(__file__).parents[1] / "scripts/3ds_opencode_flow_e2e.py")
     assert spec and spec.loader
     runner = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(runner)
     payload: dict[str, Any] = {}
-    runner.restrict_tools(payload, director_static=static, director_motion=motion, director_array=array)
-    enabled = static or motion or array
+    runner.restrict_tools(payload, director_static=static, director_motion=motion, director_array=array,
+                          director_auto_skin=auto_skin)
+    enabled = static or motion or array or auto_skin
     if enabled:
         assert "skill" not in payload["tools"], "Legacy tools entry would override named skill permission"
     else:
@@ -256,3 +258,56 @@ def test_array_delivery_evidence(evidence: tuple[Path, Path], failure: str | Non
             MODULE.verify(root, database)
     else:
         assert MODULE.verify(root, database)['verified']
+
+
+@pytest.mark.parametrize("failure", [None, "rigid", "mesh_target", "parent", "dimensions", "vertices",
+    "loop", "angle", "duration", "extra", "no_skill", "wrong_file", "tool_failed", "bytes",
+    "wrong_grant", "early_grant", "wrong_directory"])
+def test_auto_skin_delivery_evidence(evidence: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
+                                    failure: str | None) -> None:
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "scripts"))
+    from auto_skin_fixture import recipe, clip
+    test_motion_evidence(evidence, None)
+    root, database = evidence
+    observations = json.loads((root / "observations.json").read_text())
+    observations.update(director_motion=False, director_auto_skin=True)
+    (root / "observations.json").write_text(json.dumps(observations))
+    (root / "exports/robot.glb").rename(root / "exports/weighted.glb")
+    events = [json.loads(line) for line in (root / "events.jsonl").read_text().splitlines()]
+    operations = recipe() + [clip("bend")]
+    grant_event = {'type': 'tool_use', 'part': {'tool': 'controldeck_addons_control_deck_project_output_grant',
+        'state': {'status': 'completed', 'input': {'addon_id': 'media-forge', 'relative_directory': 'exports'},
+                  'output': json.dumps({'grant_id': 'grant:fixture'})}}}
+    events.insert(-1, grant_event)
+    events[-1]['part']['state']['input']['output_grant_id'] = 'grant:fixture'
+    if failure == "rigid": operations[2]["type"] = "skin.bind"
+    elif failure == "mesh_target": operations[2]["mesh_object_ids"] = ["other"]
+    elif failure == "parent": operations[1]["bones"][1]["parent_bone_id"] = "other"
+    elif failure == "dimensions": operations[0]["dimensions"] = [1, 1, 1]
+    elif failure == "vertices": operations[0]["vertices"] = 32
+    elif failure == "loop": operations[-1].pop("loop")
+    elif failure == "angle": operations[-1]["tracks"][0]["keys"][1]["rotation_degrees"] = [0, 60, 0]
+    elif failure == "duration": operations[-1]["frame_count"] = 24
+    elif failure == "extra": operations.append(dict(operations[0]))
+    elif failure == "no_skill": events = [e for e in events if e["part"]["tool"] != "skill"]
+    elif failure == "tool_failed": events[0]["part"]["state"]["status"] = "error"
+    elif failure == "bytes": (root / "exports/weighted.glb").write_bytes(b"tampered")
+    elif failure == "wrong_grant": events[-1]['part']['state']['input']['output_grant_id'] = 'grant:other'
+    elif failure == "early_grant":
+        events.remove(grant_event)
+        events.insert(1, grant_event)
+    elif failure == "wrong_directory": grant_event['part']['state']['input']['relative_directory'] = 'other'
+    for event in events:
+        state = event["part"]["state"]
+        if event["part"]["tool"] == "controldeck_addons_media_scene_create":
+            state["input"]["recipe"]["operations"] = operations
+        if event["part"]["tool"] == "controldeck_addons_media_pack":
+            output = json.loads(state["output"])
+            output["output"]["receipts"][0]["filename"] = "robot.glb" if failure == "wrong_file" else "weighted.glb"
+            state["output"] = json.dumps(output)
+    (root / "events.jsonl").write_text("\n".join(json.dumps(event) for event in events)+"\n")
+    if failure:
+        with pytest.raises(AssertionError):
+            MODULE.verify(root, database)
+    else:
+        assert MODULE.verify(root, database)["verified"]
