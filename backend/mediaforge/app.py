@@ -3965,15 +3965,15 @@ def create_app(
                     elif method == "blender.runtime.install":
                         if params:
                             raise ValueError("Blender install accepts no client-selected source")
-                        result = blender_runtime_operations.install().model_dump(mode="json")
+                        result = (await blender_runtime_operations.request("install")).model_dump(mode="json")
                     elif method == "blender.web.install":
                         if params:
                             raise ValueError("Blender web pack install accepts no client-selected source")
-                        result = blender_runtime_operations.install_web().model_dump(mode="json")
+                        result = (await blender_runtime_operations.request("web_install")).model_dump(mode="json")
                     elif method == "blender.runtime.update":
                         if params:
                             raise ValueError("Blender update accepts no client-selected source")
-                        result = blender_runtime_operations.update().model_dump(mode="json")
+                        result = (await blender_runtime_operations.request("update")).model_dump(mode="json")
                     elif method == "blender.runtime.install_exact":
                         if set(params) != {"runtime_id"} or not isinstance(params["runtime_id"], str):
                             raise ValueError("Exact Blender install accepts only runtime_id")
@@ -3981,15 +3981,15 @@ def create_app(
                     elif method == "blender.runtime.repair":
                         if set(params) != {"runtime_id"}:
                             raise ValueError("Blender repair accepts only runtime_id")
-                        result = blender_runtime_operations.repair(
+                        result = (await blender_runtime_operations.request("repair",
                             str(params.get("runtime_id", ""))
-                        ).model_dump(mode="json")
+                        )).model_dump(mode="json")
                     elif method == "blender.runtime.switch":
                         if set(params) != {"runtime_id"}:
                             raise ValueError("Blender switch accepts only runtime_id")
-                        result = blender_runtime_operations.switch(
+                        result = (await blender_runtime_operations.request("switch",
                             str(params.get("runtime_id", ""))
-                        ).model_dump(mode="json")
+                        )).model_dump(mode="json")
                     elif method == "blender.runtime.unregister.preview":
                         if set(params) != {"runtime_id"}:
                             raise ValueError("External removal preview accepts only runtime_id")
@@ -4023,9 +4023,9 @@ def create_app(
                     elif method == "blender.runtime.operations.cancel":
                         if set(params) != {"operation_id"}:
                             raise ValueError("Blender cancel accepts only operation_id")
-                        result = blender_runtime_operations.cancel(
+                        result = (await blender_runtime_operations.request("cancel",
                             str(params.get("operation_id", ""))
-                        ).model_dump(mode="json")
+                        )).model_dump(mode="json")
                     elif method == "blender.sessions.list":
                         if params:
                             raise ValueError("Blender session list accepts no parameters")
@@ -4651,21 +4651,21 @@ def create_app(
                     runtime_id=str(payload["runtime_id"]),
                     confirmation_fingerprint=str(payload["confirmation_fingerprint"]))
             if payload == {"action": "install"}:
-                return blender_runtime_operations.install().model_dump(mode="json")
+                return (await blender_runtime_operations.request("install")).model_dump(mode="json")
             if payload == {"action": "web_install"}:
-                return blender_runtime_operations.install_web().model_dump(mode="json")
+                return (await blender_runtime_operations.request("web_install")).model_dump(mode="json")
             if payload == {"action": "update"}:
-                return blender_runtime_operations.update().model_dump(mode="json")
+                return (await blender_runtime_operations.request("update")).model_dump(mode="json")
             if set(payload) == {"action", "runtime_id"} and payload["action"] == "install_exact" and isinstance(payload["runtime_id"], str):
                 return (await blender_runtime_operations.install_exact(payload["runtime_id"])).model_dump(mode="json")
             if set(payload) == {"action", "runtime_id"} and payload["action"] == "repair":
-                return blender_runtime_operations.repair(
+                return (await blender_runtime_operations.request("repair",
                     str(payload["runtime_id"])
-                ).model_dump(mode="json")
+                )).model_dump(mode="json")
             if set(payload) == {"action", "runtime_id"} and payload["action"] == "switch":
-                return blender_runtime_operations.switch(
+                return (await blender_runtime_operations.request("switch",
                     str(payload["runtime_id"])
-                ).model_dump(mode="json")
+                )).model_dump(mode="json")
             if set(payload) == {"action", "runtime_id"} and payload["action"] == "remove_preview":
                 return await blender_runtime_operations.removal_preview(str(payload["runtime_id"]))
             if (
@@ -4678,9 +4678,9 @@ def create_app(
                     acknowledge_history=payload.get("acknowledge_history", False),
                 )).model_dump(mode="json")
             if set(payload) == {"action", "operation_id"} and payload["action"] == "cancel":
-                return blender_runtime_operations.cancel(
+                return (await blender_runtime_operations.request("cancel",
                     str(payload["operation_id"])
-                ).model_dump(mode="json")
+                )).model_dump(mode="json")
         except BlenderRuntimeOperationError as exc:
             raise HTTPException(
                 status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}
