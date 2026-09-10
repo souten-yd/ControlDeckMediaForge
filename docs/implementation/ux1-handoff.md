@@ -5,6 +5,15 @@
 
 ## 2026-09-10 v0.28.63 preparation
 
+更新: PR442 merge4aafb4f、exact release checkoutでbuild32197終端/audit203/署名/公開69685終端。
+artifact31585503B/SHAd9327c3f20a53850e63f685dba4a1cf545726ddbcd1b8d4b7819b2f526a04f2b。
+branch ux1/release-0-28-63-acceptance。初回downloadはupload中で本体なし、install前検査exit1/変更なし。
+現在download41993/PID1479493実観測48秒/5511296B、public mf-0.28.63-public-20260910。
+同handle終端まで追跡し、partialを完成としない/重複downloadしない。全4files一致確認後install.py。
+installは全DBbackup/idle/署名/実exe保持検査を持つ。現在.62/旧.61bundle整理未実行、Host変更なし。
+installed browser scriptはoverlayなし、BASE第6版を厳格検査。次はconsumer→標準update→実GUI受入。
+全3DS/GA未完了、取得待ちはblockerではない。status先頭に証跡/失敗履歴。
+
 前turnはPR441 merge97cb94b。今回はux1/release-0-28-63、addon/core版数とrelease note。
 全test78582終端exit0/1537passed/151.22秒、viewer44ms/差分0/Node5。外部audit/install/installed browser診断py_compile成功。
 現在.62、旧.61bundleだけ保持整理の事前通知済み。data/runtime保持、Host変更なし。
