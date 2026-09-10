@@ -3,7 +3,7 @@
 ## 2026-09-10 setup Host control integration
 
 PR456は通常merge9491bb4。branch ux1/3d-setup-host-control、既存managerへHost認証adapterを接続。
-実装4110bf1、PR457作成時CLEAN/MERGEABLE、checksなし/必要approval0を確認。通常mergeのみを使う。
+実装4110bf1、PR457は通常merge6cef9e5。checksなし/必要approval0、保護規則の迂回なし。
 Host workspaceのinstall/web/update/repair/switch/exact/removeは受付時owner予約→実child束縛→
 既存runner。5秒control/120秒margin refresh、phase/単調bytes、lost-auth停止・owned drain、
 fresh owner状態照会のoutbox照合。公開契約/ローカル操作/既存runtimeの配置は維持する。
@@ -17,7 +17,7 @@ viewer40ms差分0/Node5pass。新規11casesは更新/失効/待機取消/重複/
 CONTROL_DECK_CONFIGは既存app/config/config.yaml、Host内部importは外部診断parentだけ。
 mf-e2e/user16の短命service tokenをstdin pipeのみでMF core側へ渡し、DB/file/logには保存しない。
 初回はapp importによる診断root作成との衝突でexit1/Host child作成前。新root R2は1869 exit0。
-mf-setup-host-source-20260910-r2: 実TCP /ws install受付.144秒→ブラウザ接続終了→実4.5.9 cached
+mf-setup-host-source-20260910-r2: 実TCP /ws install受付.144秒→自動WSクライアント切断→実4.5.9 cached
 install/probeとlocal/Host成功、20.635秒passed/20.764秒source停止。Host child816ecb706431、
 blenderop_ca740f3a521c409b86a3554f96bdde95、終端receipt一致/sent=true、元archive SHA保持。
 別のfresh service tokenによるHost control GETでもsucceededを独立確認。refresh0（短時間）を明記。
@@ -32,14 +32,16 @@ terminal_matches=false/sent=falseを保持。完全一致receiptの成功と読�
 
 長時間16356は同じ専用sourceで650秒CPU slot待ち→実Blender導入を実行、終端exit0。
 証跡mf-setup-host-long-source-20260910、operation blenderop_3d02f186b2154bac93f17948c47b516f。
-受付/ブラウザ切断.152秒、510秒観測時点で実Host refresh1、元600秒期限後の630秒もqueued/HTTP成功。
+受付/自動WSクライアント切断.152秒、510秒観測時点で実Host refresh1、元600秒期限後の630秒もqueued/HTTP成功。
 650.166秒待機解除、670.669秒passed/670.785秒専用core停止。Host childcf927b48b196も
 別fresh tokenのcontrol GETでsucceeded/revision270を確認。outbox applied/terminal_matches=true/sent=true。
 実4.5.9/Python3.11.11/background/glTF export/import=true、6510members/1168332002展開bytes、
 固定archive SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d保持。
 これは明示queue gateであり自然650秒downloadやinstalled版の証拠ではない。
+短時間/長時間/通常取消のworkspace接続はPython websockets clientであり、実ブラウザのUI操作ではない。
+診断event名accepted_and_browser_disconnectedは接続切断のラベルであり、Chrome実行の証拠にしない。
 稼働installed.66/MF1919149/Host1811096はread-onlyで存続確認、既存制作物/Host processの変更なし。
-NOT TESTED: この変更の署名公開/installed受入、実Host auth失効、Host child応答喪失時の不明Job回収、
+NOT TESTED: この変更の署名公開/installed受入/実ブラウザ操作、実Host auth失効、Host child応答喪失時の不明Job回収、
 全GOAL/A〜F/GA。全体PARTIAL。次は通常PRmerge→署名配布/installed workspace受入。
 
 ## 2026-09-10 setup Host journal foundation
