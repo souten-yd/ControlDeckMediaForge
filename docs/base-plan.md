@@ -1052,6 +1052,13 @@ required OS dependencies, trusted bootstrap files, and the session's staged
 working data. Do not grant the whole Host data directory, home, or `/proc` as a
 dependency workaround. See the [GUI isolation audit](implementation/3ds-filesystem-isolation.md).
 
+Interactive session IPC also needs kernel enforcement: apply an abstract-UNIX
+and signal scope before starting the session's X server and Blender, so their
+required internal communication and termination stay within one scope. Missing
+required ABI support must fail closed. Pathname UNIX sockets and inherited
+descriptors are separate acceptance boundaries; filesystem read restrictions
+alone do not prove them isolated.
+
 ---
 
 ## 19. Observability

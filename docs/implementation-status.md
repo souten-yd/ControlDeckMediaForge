@@ -1,5 +1,24 @@
 # Media Forge implementation status
 
+## 2026-09-10 IPC boundary failure and source scope mitigation
+
+base PR499 merge8900d125861eee8109d33648dcd07dc2b3b17915、ux1/3d-ipc-isolation。
+actual SystemdUserSessionController/runner FS policyの無害IPC試験mf-ipc-boundary-b68yu5lmは
+外部pathname/abstract接続とSIGUSR1送信が成功。検証専用2peer/親だけに接触、unit回収。
+Landlock ABI8。Linux公式仕様ではabstract/signal scopeはABI6、pathname解決制限はABI9。
+Xvnc前にIPC scopeを適用し、内部X/子終了を保持。FS層は既存通り、外側REFER-only許可で保存互換維持。
+不足ABIはfail closed。実scoped試験mf-ipc-boundary-lwkoutqoはabstract拒否/errno1、外部signal拒否/受信0。
+pathname接続は依然成功し、全IPC隔離はFAIL。未実施・未提供を成功に書き換えない。
+実source4.5.13 GUI mf-read-rfb-4.5.13-9v47jk8mはready1.018秒/再接続/保存4.224秒/終了/元asset保持。
+追加2tests/全55537 exit0、1795pass205.88秒/既知2warnings、viewer56ms差分0/Node5。
+unshareはuid_map EPERM、bwrapはnetありloopback EPERM/netなしuidmap拒否。
+systemd PrivateUsers probeはusernsだけ別、mount/net同じ、journalはPrivateNetwork省略を明示。
+sysctl apparmor_restrict_unprivileged_userns=1/caller unconfined、設定は変更なし。全診断unit inactive。
+詳細は3ds-ipc-isolation.md。OS専用隔離設定の変更は新しい権限範囲なので利用者承認前に実施しない。
+稼働.71へscope未配布、Host/PC restartなし、新CodeDEV projectなし。全GOAL/A〜F/GA PARTIAL。
+次はOS側の限定隔離設定の変更許可を得て、pathname socket/残るfd・process境界を実機検証する。
+
+
 ## 2026-09-10 v0.28.71 signed installed read-policy acceptance
 
 PR498 merge/tag0d12b100f98f99883719283dc2bd78d5b4358d74、ux1/release-0-28-71-acceptance。

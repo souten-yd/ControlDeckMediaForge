@@ -400,6 +400,15 @@ trusted bootstrapとsession固有のstageだけを許可する。依存不足を
 実GUI起動/保存/再接続と、外部canary拒否を両方満たしてから署名配布する。
 Unix socket、継承fd、process情報の境界は別途試験し、read制限だけで全隔離完成としない。
 
+2026-09-10 IPC専用canaryで、現行scopeなしでは外部pathname/abstract socket接続と
+外部への無害SIGUSR1送信が成功することを確認した。次の層としてLandlock ABI6以上の
+abstract UNIX/signal scopeをXvnc起動前に適用し、runner/Xvnc/Blenderを同一scopeへ入れる。
+これにより内部X接続と所有子の終了を維持する。FS-only層は従来通りBlender前に適用する。
+追加scope層で暗黙REFER拒否を導入しないよう、REFERだけをrootから許可する。
+read/write/execute許可をrootへ追加するものではなく、内側の既存FS制限を維持する。
+実機ABI8ではpathname socket制限（ABI9以降）を提供できないため、別のnamespace等の
+実機対策を追跡し、このscope追加だけで全IPC隔離を完了扱いしない。
+
 初期software displayはGPUなしでも接続・保存を検証できることを優先する。
 Xvfb/VNCを起動しただけでGPUアクセラレーションが成立したとは記録しない。
 GPU display/VirtualGL/EGL等は候補を実機比較し、OpenGLとCycles HIPの結果を別々に残す。

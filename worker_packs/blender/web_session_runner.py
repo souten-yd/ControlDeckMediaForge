@@ -67,6 +67,8 @@ SYS_LANDLOCK_CREATE_RULESET = 444
 SYS_LANDLOCK_ADD_RULE = 445
 SYS_LANDLOCK_RESTRICT_SELF = 446
 PR_SET_NO_NEW_PRIVS = 38
+LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET = 1 << 0
+LANDLOCK_SCOPE_SIGNAL = 1 << 1
 
 
 class LandlockRulesetAttr(ctypes.Structure):
@@ -76,6 +78,43 @@ class LandlockRulesetAttr(ctypes.Structure):
 class LandlockPathBeneathAttr(ctypes.Structure):
     _pack_ = 1
     _fields_ = [("allowed_access", ctypes.c_uint64), ("parent_fd", ctypes.c_int32)]
+
+
+class LandlockIpcRulesetAttr(ctypes.Structure):
+    _fields_ = [("handled_access_fs", ctypes.c_uint64),
+                ("handled_access_net", ctypes.c_uint64), ("scoped", ctypes.c_uint64)]
+
+
+def restrict_ipc() -> None:
+    """Scope abstract UNIX sockets and signals before creating session children."""
+    if os.uname().machine != "x86_64":
+        raise RuntimeError("Landlock IPC isolation is unsupported on this architecture")
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.syscall(SYS_LANDLOCK_CREATE_RULESET, 0, 0, LANDLOCK_CREATE_RULESET_VERSION) < 6:
+        raise RuntimeError("Landlock IPC isolation requires ABI 6 or newer")
+    # REFER is implicitly denied by every ruleset. Preserve it in this layer;
+    # the later filesystem layer grants it only inside session writable roots.
+    attr = LandlockIpcRulesetAttr(
+        handled_access_fs=LANDLOCK_ACCESS_FS_REFER,
+        scoped=LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET | LANDLOCK_SCOPE_SIGNAL,
+    )
+    descriptor = libc.syscall(SYS_LANDLOCK_CREATE_RULESET, ctypes.byref(attr), ctypes.sizeof(attr), 0)
+    if descriptor < 0:
+        raise RuntimeError(f"Landlock IPC ruleset failed: errno {ctypes.get_errno()}")
+    try:
+        root_fd = os.open("/", os.O_PATH | os.O_CLOEXEC)
+        try:
+            rule = LandlockPathBeneathAttr(allowed_access=LANDLOCK_ACCESS_FS_REFER, parent_fd=root_fd)
+            if libc.syscall(SYS_LANDLOCK_ADD_RULE, descriptor, LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(rule), 0) != 0:
+                raise RuntimeError(f"Landlock IPC REFER rule failed: errno {ctypes.get_errno()}")
+        finally:
+            os.close(root_fd)
+        if libc.prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
+            raise RuntimeError("Landlock IPC no_new_privs failed")
+        if libc.syscall(SYS_LANDLOCK_RESTRICT_SELF, descriptor, 0) != 0:
+            raise RuntimeError(f"Landlock IPC enforcement failed: errno {ctypes.get_errno()}")
+    finally:
+        os.close(descriptor)
 
 
 class BoundedDiagnostics:
@@ -260,6 +299,7 @@ def main(argv: list[str]) -> int:
     signal.signal(signal.SIGINT, request_stop)
     try:
         root, spec = validated_spec(Path(argv[0]))
+        restrict_ipc()
         socket_path = Path(spec["rfb_socket"])
         socket_path.unlink(missing_ok=True)
         environment = {

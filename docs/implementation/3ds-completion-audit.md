@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 [IPC隔離試験](3ds-ipc-isolation.md)でpathname/abstract接続と外部signal許可を実測。
+sourceへabstract/signal scopeを追加、実拒否/内部GUI保存・終了を確認。pathnameは未遮断。
+実機ABI8、unshare/bwrapのuser/mount/net隔離前提に権限不足。systemdのnet分離省略も実測。
+OS専用設定の変更権限は未取得、未変更。fd/process情報も残件で、全GUI/Expert隔離は未完了。
+scope修正の署名installed受入も未実施。read-policy成功を全IPC成功へ拡大しない。
+
 2026-09-10 [GUI読み取り隔離](3ds-filesystem-isolation.md)の導入版監査はFAIL。
 導入版と同じrunner bytes/同systemd policyの実canary試験で、許可root外のread成功/write拒否を確認。
 GUI起動・保存の成功をHost filesystem confidentialityの成功へ拡大しない。
