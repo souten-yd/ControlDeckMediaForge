@@ -5,6 +5,14 @@
 
 ## 2026-09-10 OpenCode automatic skin acceptance running
 
+更新: 同run50315は終端exit0/779.375秒/8tools。ただしstrict verifierはloop=true省略でexit1。
+実GLB配置/receipt・Asset・provenance一致、実Blender再importの2clip変形は確認済み。
+親子PID不在/当該correlation設定残存0、Host child09a42d623866もsucceeded。
+PR #432は診断として不合格検出まで実機確認。受入成功や製品完了に読み替えない。
+次: PR #432通常merge後、loop指定漏れを制作schema/説明経路から改善する。
+既存array R2もsource実Blenderで段差違いを確認、receiptと両Jobs/設定回収監査完了。
+以下のrunning記録は履歴。継続中OpenCodeなし。全3DS/GAはPARTIAL、外部blockerなし。
+
 base PR431 merge8676610、ux1/3d-opencode-auto-skin、PR #432作成済み（実機終端待ち、未マージ）。
 前turnは署名0.28.60/実MCP/記録mergeで進捗。今回は実OpenCode用--director-auto-skinを追加。
 runner/verifier/tests変更のみ、製品版数/Host/installed変更なし。既存UX/全3DS/GAはPARTIAL。

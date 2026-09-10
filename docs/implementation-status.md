@@ -1,5 +1,30 @@
 # Media Forge implementation status
 
+## 2026-09-10 OpenCode auto skin terminal — strict acceptance FAILED
+
+PR #432診断の同run50315はexit0/779.375秒/8 tool calls/34 eventsで終端。
+実director読込→capabilities→create→status→snapshot→export→新grant→pack。
+job_b99ecae01f4445e782181a482156f487、Host child09a42d623866は双方実DBでsucceeded。
+scene_b98739e6bbf946f88292cb1f39653f6c、revision_129ed350e2fa498a89dbe3624bd1ccbc、
+source asset_314a0254a7424a83ac15ce0dde8e7ef3、GLB asset_56437745bd7140f69e8f9830ba01279a。
+実配置weighted.glbは32140B、receipt/Asset/provenance/実bytesのsize・SHA一致を独立確認。
+親1388601/子1388651不在、correlation mf3ds-a2fdc4c209a84bbeを含むprivate config残存0。
+実Blender4.5.13で3ds_game_static_e2e.py --inspect --fixture auto_skin --posedを
+sourceと実配置GLBに実行しexit0/0.273秒。114頂点/48混合→480/192混合、最大2影響、
+idle/bend各2秒、5時刻world差最大2.4646110694144804e-07m。posed-inspection.jsonを保持。
+しかし3ds_verify_opencode_flow.pyはexit1: 両animation.clipでloop=trueが省略され公開既定false。
+実変形と端点一致は確認できたが、依頼したloop検証を有効にしていないため全依頼は不合格。
+verifierを緩めず、再制作/再起動/既存出力変更なし。共通inspectorのinstalled未検証欄は
+この実OpenCode traceとは別scope。複雑character/画像付きskin/engine/全3DS・GAは未受入。
+最終code全test1505 passed/150.62秒、以降docsのみ。次はloop指定漏れの制作経路改善。
+
+以前のarray R2追加監査: 同じ実Blender inspector --fixture arrayはexit1/0.080秒、
+実.blendのconstant_offset_displaceが要求(1.5,0,1.5)でないことを確認。strict不合格を維持。
+配置stairs.glb6232B/SHAa945b41cf25d171c0303a6569dc9a2bc47a011f56040fd8623f24884b6f7361d、
+receipt/Asset/provenance/実bytes一致、MediaForge JobとHost childa35f48249959はsucceeded。
+correlation mf3ds-9ea12ef89ab945d3を含むprivate config残存0。GLB再import形状検査は
+source指定違いで停止したため未実施。失敗を納品成功で上書きしない。
+
 ## 2026-09-10 OpenCode automatic skin acceptance running
 
 Base PR431 merge8676610c3fc907f96fb8aac2d7e5131947609e04、ux1/3d-opencode-auto-skin。
