@@ -1,5 +1,25 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.71 signed installed read-policy acceptance
+
+PR498 merge/tag0d12b100f98f99883719283dc2bd78d5b4358d74、ux1/release-0-28-71-acceptance。
+exact build90333 exit0、31604803B/SHA1092ce19e30c089f9b08af5350949b3643d30fcc7c7d4acb1742e95a80d73cef。
+mf-0.28.71-final-audit.py exit0、203entries/code一致/cache等混入なし/actual packaged doctor ok。
+既存鍵署名/公開4files再取得/実Hostconsumer検証→全idle/DB・registry backup/再照合→通常update。
+57397 exit0/18.707秒、backup mf-0.28.71-update-g3c3ak_g、旧DB全row/registry/995files保持。
+Host2552550保持、MF2628237、health healthy/実exe・配信UI・schema一致。
+標準保持で.69実行bundleだけ整理、.70/.71保持、利用者へ通知。制作物削除なし。
+installed GUI初回82175 exit0/9.422秒、接続/save/reopen成功だが即時画像は描画前黒画面。
+その証跡は表示成功にしない。実canvas画素待ち追加R2は42655 exit0/12.196秒、表示/再接続/保存/再open。
+mf-read-policy-gui-installed-0.28.71-20260910-r2、opaque Host/Blender4.5.13、pageerrors0/画面目視。
+mf-0.28.71-gui-audit.py exit0、全4session owner/stopped/unit inactive、旧版保持/10asset SHA・provenance一致。
+実稼働exeからrunner抽出、mf-0.28.71-installed-boundary-audit.pyでkernel read/list/write/symlink/child/execute拒否。
+証跡mf-0.28.71-installed-boundary-m0kx6a0l。直後is-active inactiveによるshell exit4は監査失敗ではない。
+実exe/runner完全SHAは3ds-filesystem-isolation.md。GUI console攻撃ではなく実bundle code/kernel試験。
+文書sliceのみ、基準gatePR498全1793pass204.70秒/既知2warnings/viewer41ms差分0/Node5。
+新CodeDEV projectなし、Host/PC restartなし。全GOAL/A〜F/GA PARTIAL。次はsocket/fd/process境界の無害実機検証。
+
+
 ## 2026-09-10 read-policy runtime/browser acceptance and v0.28.71 preparation
 
 base PR497 merge7025735e2bffa2f125a10c7d75388152478ce6cb、ux1/3d-read-policy-runtime-acceptance。

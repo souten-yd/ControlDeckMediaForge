@@ -1,6 +1,6 @@
 # GUI filesystem isolation — read boundary
 
-Date: 2026-09-10 / Status: source read-policy fixed; installed acceptance pending
+Date: 2026-09-10 / Status: read-policy fix installed and bounded acceptance passed; other OS boundaries pending
 
 ## Source remediation acceptance
 
@@ -85,11 +85,43 @@ launcher, not a healthy installed deployment. No CodeDEV project was created.
 Version preparation0.28.71: full `./mf.sh test`1793pass/204.70s/2 known warnings,
 viewer build41ms/unchanged, Node animation5pass. No product/test edits after gate.
 
-NOT TESTED with the new policy: installed signed bundle/Host browser,
-Unix-socket/fd/process-information isolation.
-Installed0.28.70 is still unfixed. Next: normal signed release and installed
-negative/GUI acceptance. This source
-fix does not close all 3DS-5 security or scenario E conditions.
+## Signed installed acceptance
+
+PR498 merge/tag0d12b100f98f99883719283dc2bd78d5b4358d74, v0.28.71.
+Exact build `/data1tb/mf-0.28.71-build-final-20260910`:31,604,803B,
+SHA `1092ce19e30c089f9b08af5350949b3643d30fcc7c7d4acb1742e95a80d73cef`.
+External final-audit exit0:203 entries, source equality, resource-cache exclusion,
+actual packaged doctor ok. Existing publisher signature, all four public files
+re-downloaded and verified by the real Host consumer before standard update.
+`mf-0.28.71-install.py` exit0/18.707s, backup mf-0.28.71-update-g3c3ak_g.
+All existing DB rows/registry/995 asset-runtime files unchanged; Host PID2552550
+unchanged, MediaForge PID2628237 healthy. Actual executable SHA
+`7fd000756cf580007bf46332608bb3c2da0e021f5cc5916ceef167a1cb89bad5` and served
+UI/schema matched. Standard retention removed only .69 execution bundle; .70/.71 remain.
+
+`mf-0.28.71-installed-gui.py` exit0/9.422s proved connection/save/reopen, but its
+immediate reopened screenshot was black before first pixels. Do not use it as
+visual proof. Separate `mf-0.28.71-installed-gui-r2.py` waits for real canvas pixels:
+6.502s initial display,6.654s same-session reconnect,7.987s saved/stopped,
+11.485s new-session display,12.196s cleanup/login revocation. Actual Host opaque
+iframe, managed4.5.13, screenshot inspected, page errors0. Evidence directories
+`mf-read-policy-gui-installed-0.28.71-20260910` and suffix-r2.
+Independent `mf-0.28.71-gui-audit.py` exit0:4 GUI sessions stopped/units inactive,
+old revisions retained,10 assets with matching actual hash and provenance.
+
+`mf-0.28.71-installed-boundary-audit.py` extracted the runner from the actual
+running executable, compared bytes, then ran the kernel negative test against
+that extracted file. All six denied: read/list/write/symlink/child/execute.
+Evidence `/data1tb/mf-0.28.71-installed-boundary-m0kx6a0l`; runner SHA
+`f6424ca677ec0b31d1dd01a4e3aa959f9bd5eb9a23c579f0496b282c90b26906`.
+The audit passed; the combined shell call returned4 because the following
+is-active checks correctly reported inactive units. This is not a GUI-console
+exploit test. No real secrets were read, no new GPU lease or CodeDEV project.
+
+NOT TESTED: Unix-socket/fd/process-information isolation, installed GUI-console
+negative attack, all failure/resource combinations. Next: harmless owned-fixture
+tests of the remaining OS boundaries. This fix does not close all 3DS-5 security
+or scenario E conditions.
 
 ## Observed boundary
 
@@ -134,9 +166,9 @@ Existing GUI operation evidence remains valid only for its named operations.
 5. Run the full gate, merge, build/inspect/sign/update normally, and repeat the
    important negative and GUI checks against the installed bundle.
 
-The original audit included no product change. The current
-installed GUI still has this read boundary gap. Do not claim all 3DS-5/security
-acceptance is complete or expand GPU/Expert capability before addressing it.
+The original audit included no product change; installed0.28.70 had this gap.
+The bounded0.28.71 read-policy acceptance above does not complete all3DS-5/security
+conditions or authorize unrestricted GPU/Expert capability.
 
 ## GPU audit context
 

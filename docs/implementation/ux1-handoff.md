@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.71 installed / remaining OS isolation
+
+PR498 merge/tag0d12b100f98f99883719283dc2bd78d5b4358d74、ux1/release-0-28-71-acceptance、記録PR作成前。
+前turnはsource版別/browser/merge/build開始まで進捗。90333 build exit0/31604803B、final auditもexit0。
+mf-0.28.71-build-final-20260910 / package-h09lgg_c / public-20260910、既存鍵署名/4files実Hostconsumer一致。
+57397通常update exit0/18.707秒、mf-0.28.71-update-g3c3ak_g backup/DB全row/registry/995files保持。
+Host2552550保持、MF2628237、actualexe/servedUI/schema一致/healthy。.69bundle標準整理/.70保持通知済み。
+82175installed GUI exit0だがreopen画像は描画前黒画面。R2canvas画素待ち42655 exit0/12.196秒。
+実opaque Host/4.5.13表示/再接続/保存/再open、pageerror0/画面目視。専用GUI4件停止/login回収。
+mf-0.28.71-gui-audit.py exit0で旧版保持/10asset SHA・provenance一致。
+actual/proc exeからrunner抽出→kernel negative6拒否、mf-0.28.71-installed-boundary-m0kx6a0l。
+audit成功の後is-active inactiveでshell exit4、失敗に読み替えない。元source/初回描画前証拠を保持。
+詳細hashとscopeは3ds-filesystem-isolation.md。全GOAL/A〜F/GA PARTIAL、GUI console攻撃やsocket/fd/processは未確認。
+次は残るOS隔離境界を無害なtask-owned Unix socket/継承fd/process fixtureで検証し、必要なら修正する。
+新CodeDEV projectなし、root利用者差分/dev3symlink保持。文書のみ、基準1793pass204.70秒/viewer差分0/Node5。
+再開: git fetch origin; git status --short --branch; gh pr list --head ux1/release-0-28-71-acceptance。
+
 ## 2026-09-10 read-policy acceptance / v0.28.71 preparation
 
 base PR497 merge7025735e2bffa2f125a10c7d75388152478ce6cb、ux1/3d-read-policy-runtime-acceptance、PR作成前。
