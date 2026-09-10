@@ -3,6 +3,7 @@
 ## 2026-09-10 setup Host control integration
 
 PR456は通常merge9491bb4。branch ux1/3d-setup-host-control、既存managerへHost認証adapterを接続。
+実装4110bf1、PR457作成時CLEAN/MERGEABLE、checksなし/必要approval0を確認。通常mergeのみを使う。
 Host workspaceのinstall/web/update/repair/switch/exact/removeは受付時owner予約→実child束縛→
 既存runner。5秒control/120秒margin refresh、phase/単調bytes、lost-auth停止・owned drain、
 fresh owner状態照会のoutbox照合。公開契約/ローカル操作/既存runtimeの配置は維持する。
