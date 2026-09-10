@@ -83,13 +83,36 @@ skill読込、MediaForge tool、control_deck.project_output_grantだけを使っ
 """
 
 
+DIRECTOR_AUTO_SKIN = """最初にskill toolでblender-directorを実際に読み込んでください。
+読込に失敗したら停止します。現在のMCP公開schemaとmedia.capabilitiesでskin.bind_autoが
+利用可能であることを確認し、次の新しいボーン変形試験モデルを制作してください。
+これは完成キャラクターではなく、連続した面に分布ウェイトを割り当てる試験です。
+既存sceneは変更せず、新しいsceneにメッシュ1個と骨格1個だけを作ります。
+メッシュはstable ID body、名前Body、uv_sphere、vertices16、寸法XYZは0.3/0.3/1.3m、
+中心XYZは0/0/0.5m、回転なし。modifierや画像・材質は追加しません。
+骨格はstable ID rig、名前Rig、lowerとupperの2本。
+lowerはhead(0,0,0)→tail(0,0,0.5)、upperはhead(0,0,0.5)→tail(0,0,1)、親はlowerです。
+skin.bind_autoでbodyをrigへ自動割当てしてください。skin.bindによる剛体割当てでは代用しません。
+その後animation.clipでidleとbendを追加。両方fps24/48frames/loop=true、upperだけの
+rest-local XYZ回転trackを指定します。frame0と48は(0,0,0)、frame24はidleが(5,0,0)、
+bendが(60,0,0)度。primitive.add、armature.create、skin.bind_auto、2つのanimation.clipの
+計5操作を一つのcreate recipeで順番に実行してください。任意Python/別サービスは使いません。
+制作Jobの終端成功をstatusで確認してからsnapshot→GLB exportと進めます。
+現在projectのexports用output grantを直前に取得し、media.packでweighted.glbを1件配置します。
+scene.exportは同期でAssetを返し、asset.job_idは新しいJobではありません。
+失敗したら段階とJob IDを報告して停止し、再制作や成功扱いはしません。
+最後にscene/revision/Job/GLB Asset IDとreceiptを示してください。
+skill読込、MediaForge tool、control_deck.project_output_grantだけを使い、shell/file/webは禁止です。
+"""
+
+
 def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_motion: bool = False,
-                   director_array: bool = False) -> None:
+                   director_array: bool = False, director_auto_skin: bool = False) -> None:
     """Limit this diagnostic's private configuration, never global settings."""
     payload["permission"] = {"*": "deny", "controldeck_addons_*": "allow"}
     payload["tools"] = {name: False for name in (
         "bash", "read", "edit", "write", "glob", "grep", "webfetch", "websearch", "task", "skill", "question")}
-    if director_static or director_motion or director_array:
+    if director_static or director_motion or director_array or director_auto_skin:
         payload["permission"]["skill"] = {"*": "deny", "blender-director": "allow"}
         # Legacy tools entries become permissions before the global wildcard;
         # duplicating skill there changes insertion order and disables it again.
@@ -116,10 +139,12 @@ def main() -> None:
                         help="Require a real director read and a new rigged robot with idle/arm_swing GLB delivery")
     parser.add_argument("--director-array", action="store_true",
                         help="Require a real director read and fixed-count stairs GLB delivery")
+    parser.add_argument("--director-auto-skin", action="store_true",
+                        help="Require a real director read and distributed skin/clip GLB delivery")
     args = parser.parse_args()
-    if sum((args.director_static, args.director_motion, args.director_array)) > 1:
+    if sum((args.director_static, args.director_motion, args.director_array, args.director_auto_skin)) > 1:
         parser.error("Choose one director scenario")
-    director_enabled = args.director_static or args.director_motion or args.director_array
+    director_enabled = args.director_static or args.director_motion or args.director_array or args.director_auto_skin
     if director_enabled and (args.restored_ui_evidence or args.retry_empty_output):
         parser.error("Director acceptance requires a new project/scene")
     os.umask(0o077)
@@ -130,6 +155,8 @@ def main() -> None:
         prompt = DIRECTOR_MOTION
     elif args.director_array:
         prompt = DIRECTOR_ARRAY
+    elif args.director_auto_skin:
+        prompt = DIRECTOR_AUTO_SKIN
     output_directory = "exports"
     if args.restored_ui_evidence:
         assert args.project_name.startswith("MF3DS-") and args.project_name in project_names
@@ -177,14 +204,14 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
                                 "correlation_id": correlation, "model": settings["model"], "events": 0,
                                 "output_directory": output_directory, "preserved_exports": preserved,
                                 "director_static": args.director_static, "director_motion": args.director_motion,
-                                "director_array": args.director_array}
+                                "director_array": args.director_array, "director_auto_skin": args.director_auto_skin}
     process = None
     try:
         payload = json.loads(config.read_text())
         secrets = [payload["provider"]["controldeck"]["options"]["apiKey"],
                    payload["mcp"]["controldeck_addons"]["environment"]["CONTROL_DECK_ADDON_MCP_TOKEN"]]
         restrict_tools(payload, director_static=args.director_static, director_motion=args.director_motion,
-                       director_array=args.director_array)
+                       director_array=args.director_array, director_auto_skin=args.director_auto_skin)
         config.write_text(json.dumps(payload))
         if director_enabled:
             debug = subprocess.run([str(registry.executable("opencode")), "debug", "agent", "build", "--pure"],
@@ -207,6 +234,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
             required = ("armature.create", "skin.bind", "animation.clip") if args.director_motion else ("object.duplicate", "modifier.mirror")
             if args.director_array:
                 required = ("modifier.array",)
+            elif args.director_auto_skin:
+                required = ("armature.create", "skin.bind_auto", "animation.clip")
             assert all(operation in schema for operation in required)
         evidence["mcp_preflight_tool_count"] = len(names)
         env = dict(os.environ, OPENCODE_CONFIG=str(config))
@@ -250,6 +279,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
         expected = {"robot.glb"} if args.director_motion else {"sword.glb", "blade.png", "sword-project.zip"}
         if args.director_array:
             expected = {"stairs.glb"}
+        elif args.director_auto_skin:
+            expected = {"weighted.glb"}
         assert set(evidence["output_files"]) == expected
     finally:
         if process is not None and process.poll() is None:

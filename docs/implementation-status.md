@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-10 OpenCode automatic skin acceptance running
+
+Base PR431 merge8676610c3fc907f96fb8aac2d7e5131947609e04、ux1/3d-opencode-auto-skin。
+既存診断へ--director-auto-skinを追加。専用の新規projectで実director読込、現行schema/capability確認、
+連続uv_sphere/2骨/skin.bind_auto/idle・bend各2秒を自然言語で依頼する。
+固定fixtureの寸法/骨位置/回転/キー時刻を明示する実行受入であり、キャラクターを自由設計する試験ではない。
+自由shell/file/webを禁止したprivate実行config、named directorだけのskill権限、実build解決を検査。
+verifierへ5操作の種類/順序/対象/形状/骨階層/clipと、export後の新grant/配置入力の一致を追加。
+既存の実skill読込/全tool成功/Job終端/receipt/実file/Asset/provenance照合は維持。
+剛体代用・別mesh・骨階層違い・形状違い・loop省略・回転違い・時間違い・余分な操作・
+skill未読・失敗tool・配置先違い・改ざんbytes・異なる/早すぎるgrantをnegativeで拒否する。
+focused55 passed/0.80秒、viewer build39ms/生成物差分0、Node5成功。
+先行full1502 passed/145.04秒はgrant検査追加前のcollection。
+最終コードの ./mf.sh test は1505 passed/既知warning2/150.62秒/exit0（handle32193終端）。
+
+実行command: Host診断venv/configでscripts/3ds_opencode_flow_e2e.py
+--director-auto-skin --project-name MF3DS-OpenCode-Auto-Skin-20260910
+--evidence-dir /data1tb/mf-opencode-auto-skin-installed-20260910。
+handle50315、親1388601/実OpenCode1388651。既存smoke未実行を確認して開始。
+3分経過時の同PID生存/events0を確認。再開時9分42秒でも同PID生存、events7467B。
+同handleの出力で384.873秒のskill tool実行を確認。終端未確認であり成功/失敗を先取りしない。
+稼働0.28.60、Host1384554/MF1384429は変更なし。global設定/他sceneを変更しない。
+終了後にstrict verifierと実Blender auto_skin inspector、Host Jobs/receipt/設定回収を照合する。
+NOT TESTED: この実OpenCodeの終端/生成物、複雑character/画像付きskin/engine、全3DS/GA。
+
+
 ## 2026-09-10 v0.28.60 published/installed / real MCP automatic binding
 
 PR430 merge/tag b1b62b237ea67c97b52793b51fcff2998ea02509。
