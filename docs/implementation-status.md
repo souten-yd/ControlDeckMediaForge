@@ -1,5 +1,36 @@
 # Media Forge implementation status
 
+## 2026-09-10 signed package publication startup recovery and notices
+
+base PR484 merge36903d002ca99c48b2947c6ec8b3320ed66e7ab0、ux1/3d-packaged-publication-recovery。
+前turnはinstalled10分refresh受入/merge。今回はsource実SIGKILLで作った専用中断dataを
+改変なし署名.69 coreで起動して回収。配布版そのもののcrashやinstalled service restartではない。
+外部mf-publication-packaged-recovery-20260910.pyをHost診断venvで実行。回収processにsource import/overlayなし。
+準備だけ既存source診断を使い、実cache/Blender probe後のcheckpointで自processをSIGKILL。
+実行中exe SHAは監査配布物6ed0a5d903ccb0de89e64fec31861320ea8986e4e9494a8324faddfa3fdf02ceと一致。
+
+初回はsource PYTHONPATHにrepo rootがなくscripts import失敗、操作前exit1。
+R2は実回収後にhealthをhealthy必須とした診断assertでexit1、coreは正常shutdown。
+専用環境は環境snapshot未設定のため実health setup_required/environment missingが正しく、結果を保持。
+R3/61143はregistered成功後、repairの後片付け前assertで全体exit1。正常shutdown後stage空を確認。
+R3 registered個別証跡passed=trueを保持し、失敗条件だけR4/13339 exit0で再実行した。
+
+証跡 mf-publication-packaged-recovery-20260910-r3/registered:
+source2435579/21.892秒実SIGKILL、op9596f1268dd045f6a7c46088ed51fdae。
+署名core2435706は0.991秒でready/committed/publication_recovered、実GLB再probe/identity/実exe SHA一致。
+証跡 mf-publication-packaged-recovery-20260910-r4/repair_previous:
+source2436201/23.095秒、専用copyの旧exe欠落→旧root退避直後SIGKILL、opb2dd6fb163e741edbddba5d79e81d7a0。
+署名core2436349は0.871秒failed/rolled_back、旧root inode26083424とexe欠落を正しく復元。
+DB終端後のcleanupを期限20秒で観測し、起動から0.952秒でstage空。旧状態が不健全なのでrepair成功ではない。
+両caseでregistry SHA保持/journal identity不変、実HTTP operation/notices照合、Chrome日本語320/1280で
+該当回復・巻戻し説明を確認、横overflowなし/page errors0。320画像を目視確認。
+両core正常停止、4対象PID不在、Host2381614/MF2428421 active不変、元cache SHA保持。
+専用data/backup/失敗logは保持。共有runtime/制作物/Hostへの変更・重み取得・再起動なし。
+
+文書のみ、基準PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5、今回再実行なし。
+NOT TESTED: 配布版自身の強制終了、installed Host再認証/遅延取消positive、電源断、英語/物理mobile、
+全matrix/全GOAL/A〜F/GA/engine。全体PARTIAL。次は残るinstalled認証・GUI条件の証跡を再照合する。
+
 ## 2026-09-10 installed .69 setup credential refresh over ten minutes
 
 base PR483 merge8cfa7c08d252bc49b23c8dab33ab6f4c3a1cb298、ux1/3d-installed-long-refresh-acceptance。

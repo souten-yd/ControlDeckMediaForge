@@ -3,6 +3,14 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 source実SIGKILLの専用中断dataから、未改変署名.69 coreの起動回収を追加受入。
+mf-publication-packaged-recovery-20260910-r3/registeredは0.991秒ready/committed/実GLB probe、
+-r4/repair_previousは0.871秒failed/rolled_back、旧root/欠落exe復元、0.952秒cleanup。
+両registry保持/実行exe一致/実Chrome日本語320/1280補足positive/横overflowなし/pageerrors0。
+R3全体は後半cleanup観測assertでexit1を保持、registered個別成功とR4修復exit0を分ける。
+専用health setup_required、source crash準備と配布版回収であり、installed Host再起動・配布版crash・
+電源断・全故障matrixを証明しない。全GOAL/A〜F/GA PARTIAL。
+
 2026-09-10 installed.69でsetupのブラウザ切断後10分超認証更新を追加受入。
 mf-setup-host-long-installed-0.28.69-20260910、実Chrome repair→page.close→650秒診断registry flock。
 同一操作のHost credential refresh1/success（audit23353）後、653.413秒でrepair ready/完全一致receipt。

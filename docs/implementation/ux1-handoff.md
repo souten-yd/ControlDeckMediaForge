@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 signed package startup recovery
+
+base PR484 merge36903d002ca99c48b2947c6ec8b3320ed66e7ab0、ux1/3d-packaged-publication-recovery。
+前turnは10分refresh受入/merge。source実SIGKILL→同専用dataを未改変署名.69 coreで自動回収。
+外部mf-publication-packaged-recovery-20260910.py、証跡同名-r3/registeredと-r4/repair_previous。
+初回import失敗/R2 health期待違い/R3 cleanup観測早すぎのexit1を保持。R3registered個別passed、R4修復のみ13339exit0。
+registered source2435579/21.892秒kill→core2435706/.991秒ready/committed/実GLB probe/hash。
+repair source2436201/23.095秒kill→core2436349/.871秒failed/rolled_back/.952秒cleanup。
+旧root inode26083424と欠落exeを復元。旧不健全状態へのrollbackであり修復成功ではない。
+両registry保持/identity一致、HTTPと実Chrome日本語320/1280補足positive、overflow/pageerrors0、画像目視。
+専用healthはsnapshot未設定setup_required、healthyとはしない。sourcecrash準備と配布版回収を区別。
+全専用core停止/対象PID不在、元cache保持、Host2381614/MF2428421不変active。
+文書のみ、基準PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5、今回再実行なし。
+次: 残るinstalled認証・GUI条件の証跡照合。全GOAL/A〜F/GA/engine PARTIAL。
+配布版自身のcrash/電源断/installed Host異常系/英語/物理mobile未検証。既存外部scriptを再実行しない。
+引き継ぎcommit/push/通常PR mergeへ。untracked .venv保持、具体的外部blockerなし。
+
 ## 2026-09-10 installed .69 ten-minute setup refresh
 
 base PR483 merge8cfa7c08d252bc49b23c8dab33ab6f4c3a1cb298、ux1/3d-installed-long-refresh-acceptance。
