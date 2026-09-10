@@ -3,6 +3,29 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 publication result UI
+
+base PR478 mergee350ac8、ux1/3d-publication-result-ui、PR作成前。前turnは進捗/実機/merge。
+private owner-scoped operation_noticesとSimple日英補足を接続。反映中/未確定/完了回収/rollback、
+遅延stop、Host pending/mismatchを区別し、readyを取消成功へ読み替えない。
+begin/認証喪失/receipt変更でsession再取得。同一receipt/同一開始/遅延認証喪失で通知loopを作らない。
+同期投影はowned worker、private identity/Host Job ID/owner/秘密値を渡さない。公開schema/版数/Host変更なし。
+関連1284 exit0/182pass6.13秒、新9ケース53304 pytest9pass1.83秒（同shell前のbrowser失敗は別記録）。
+初回全33550 exit0/1751pass199.91秒は途中code追加のため最終gateではない。viewer56ms差分0/Node5pass。
+最終全62312は同一handleで終端確認、exit0/1752passed/既知2warnings/197.35秒。
+以後code/test/script変更なし。引き継ぎ更新後commit/push/通常PR mergeへ進む。
+Chrome fixture: 初回bridge待機解除漏れ、R2/R3は未初期化画像catalog横幅。R3 failed.png/JSON保持。
+renderer fixtureを対象Blender欄に限定しR4/final20cases成功、日英320/1280/旧応答/不明code/切断回収。
+実HTTP全画面: 外部mf-publication-notices-source-browser-20260910.py、22061/16909ともexit0。
+前sliceの実Blender回復済み専用dataのop06e47044c8334ff09c9d49a06f95065fを通常Settingsで表示。
+最終証跡mf-publication-notices-source-browser-20260910-final、core2415019終了、320/1280横超過なし/
+page errors0/registry保持。Host2381614/MF1965886 active/不変。稼働更新・再起動なし。
+既存UX状態を変更せず全3DS/GA PARTIAL。NOT TESTED: signed installed/opaque Host iframe、
+実Host再起動後再認証全matrix、物理mobile、今回Blender制作/engine/全GOAL/A〜F/GA。
+次: source core再起動後の正規owner再認証と実Host outbox照合/不一致説明を受入し、署名配布。
+再開: git fetch origin; git status --short --branch; 最新status/実current/PIDを照合。
+具体的外部blockerなし。untracked .venv保持。既存診断scriptは無条件再実行しない。
+
 ## 2026-09-10 automatic startup publication recovery
 
 base PR477 mergef99890f、ux1/3d-publication-startup-recovery、PR作成前。前turnは状況説明/no progress。

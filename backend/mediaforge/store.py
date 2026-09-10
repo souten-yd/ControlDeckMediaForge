@@ -2046,6 +2046,37 @@ class Store:
             if row["host_terminal_reconciliation_json"] else None,
         }
 
+    def blender_runtime_operation_notices(self, owner: str | None) -> dict[str, list[str]]:
+        """Worker-only, owner-scoped workspace projection; no private identities."""
+        if owner is not None:
+            owner = validate_scene_owner(owner)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT id, publication_json, result_json, host_terminal_json,
+                   host_terminal_sent, host_terminal_reconciliation_json
+                   FROM blender_runtime_operations WHERE host_owner IS ?
+                   ORDER BY created_at DESC LIMIT 50""", (owner,),
+            ).fetchall()
+        result: dict[str, list[str]] = {}
+        for row in rows:
+            notices: list[str] = []
+            if row["publication_json"]:
+                publication = PublicationJournal.model_validate_json(row["publication_json"])
+                phase_notice = {"committing": "publication_in_progress",
+                                "recovery_required": "publication_recovery_required",
+                                "rolled_back": "publication_rolled_back"}.get(publication.phase)
+                if phase_notice:
+                    notices.append(phase_notice)
+                elif json.loads(row["result_json"] or "{}").get("publication_recovered") is True:
+                    notices.append("publication_recovered")
+                notices.extend("late_cancel" if stop == "cancel" else "late_context_lost"
+                               for stop in publication.stop_requests)
+            if row["host_terminal_json"] and not row["host_terminal_sent"]:
+                notices.append("host_mismatch" if row["host_terminal_reconciliation_json"] else "host_pending")
+            if notices:
+                result[str(row["id"])] = notices
+        return result
+
     def check_blender_runtime_operation_owner(self, operation_id: str, owner: str | None) -> None:
         with self._connect() as connection:
             row = connection.execute(
@@ -2063,15 +2094,18 @@ class Store:
             ).fetchone()
             if row is None or row["host_owner"] != owner:
                 raise KeyError(operation_id)
-            if self._record_blender_publication_stop(connection, row, "host_context_lost"):
-                return
-            connection.execute(
-                """UPDATE blender_runtime_operations SET cancel_requested = 1,
-                   error_code = 'host_context_lost',
-                   error_message = 'Host setup authorization or execution context was lost', updated_at = ?
-                   WHERE id = ? AND state NOT IN ('ready', 'failed', 'canceled')""",
-                (utc_now(), operation_id),
-            )
+            before_changes = connection.total_changes
+            if not self._record_blender_publication_stop(connection, row, "host_context_lost"):
+                connection.execute(
+                    """UPDATE blender_runtime_operations SET cancel_requested = 1,
+                       error_code = 'host_context_lost',
+                       error_message = 'Host setup authorization or execution context was lost', updated_at = ?
+                       WHERE id = ? AND state NOT IN ('ready', 'failed', 'canceled')""",
+                    (utc_now(), operation_id),
+                )
+            changed = connection.total_changes > before_changes
+        if changed:
+            self._notify_session("blender_runtime")
 
     @staticmethod
     def _record_blender_publication_stop(
@@ -2126,6 +2160,7 @@ class Store:
                 "UPDATE blender_runtime_operations SET publication_json = ?, updated_at = ? WHERE id = ?",
                 (publication.model_dump_json(), utc_now(), operation_id),
             )
+        self._notify_session("blender_runtime")
         return publication
 
     def blender_publication(self, operation_id: str) -> PublicationJournal | None:
@@ -2331,13 +2366,20 @@ class Store:
             matched = receipt["terminal_matches"] is True and receipt["status"] == payload["status"]
             safe_receipt = {key: receipt[key] for key in
                             ("host_job_id", "status", "disposition", "terminal_matches")}
-            if not row["host_terminal_sent"]:
+            encoded_receipt = json.dumps(safe_receipt, separators=(",", ":"))
+            changed = not row["host_terminal_sent"] and (
+                bool(row["host_terminal_sent"]) != matched
+                or row["host_terminal_reconciliation_json"] != encoded_receipt)
+            if changed:
                 connection.execute(
                     """UPDATE blender_runtime_operations SET host_terminal_sent = ?,
                        host_terminal_reconciliation_json = ? WHERE id = ?""",
-                    (int(matched), json.dumps(safe_receipt, separators=(",", ":")), operation_id),
+                    (int(matched), encoded_receipt, operation_id),
                 )
-            return bool(row["host_terminal_sent"]) or matched
+            sent = bool(row["host_terminal_sent"]) or matched
+        if changed:
+            self._notify_session("blender_runtime")
+        return sent
 
     def get_model_operation(self, operation_id: str) -> ModelOperation:
         with self._connect() as connection:

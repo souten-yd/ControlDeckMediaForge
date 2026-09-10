@@ -1,5 +1,47 @@
 # Media Forge implementation status
 
+## 2026-09-10 Blender publication result explanations
+
+base PR478 mergee350ac8、ux1/3d-publication-result-ui。前turnは自動回復/実機/mergeで進捗。
+設定Simpleへ処理別の日英補足を追加。反映中、未確定回復、完了回収、旧状態への復元、
+遅延取消/認証喪失、Host終端照合待ち/不一致を固定codeで区別し、完了を取消成功へ読み替えない。
+版/処理状態/短い操作IDを添え、過去の回復成功から現在のruntime可用性を推定しない。
+private operation_noticesはowner本人の最大50件だけ。standaloneはlocal所有だけ。
+Host Job ID/receipt本文/owner/private identityを渡さず、公開operation schemaを維持する。
+投影は既存owned workerで読み、begin/認証喪失/receipt変更を既存session invalidationへ接続。
+同一receiptや同一公開開始/遅延認証喪失の再送ではイベントを増やさない。
+UX設計を先に追補し、private API説明を同期。Host/版数/公開API/schema差分なし。
+
+関連1284 exit0/182pass6.13秒。追加通知ケース後53304のpytestは9pass1.83秒。
+同53304の直前browserは失敗しているため、shell全体exit0をbrowser成功と扱わない。
+新9ケースは4phase/owner分離/秘密情報非公開、Host不一致保持/同一receipt通知抑止、
+WebSocket2経路とlocal HTTPのowner/off-loop、旧操作互換、begin/認証喪失の通知を検証。
+初回全33550 exit0/1751pass/既知2warnings/199.91秒だが、実行中に通知と第9ケースを追加したため
+最終gateとはしない。viewer56ms/生成差分0、Node5pass、node --check/diff check成功。
+最終全 `./mf.sh test` 62312は同一handleで終端確認、exit0/1752passed/既知2warnings/197.35秒。
+以後code/test/renderer試験script変更なし。通常commit/push/PR head照合後にmergeする。
+
+Chrome renderer試験 `scripts/3ds_publication_notices_ui_e2e.py --evidence-dir <dedicated-dir>` は
+既存Host診断venvで実行（製品coreへPlaywrightを追加しない）。初回48030はfixtureのbridge待機解除漏れで
+hidden失敗。R2/R3は未初期化の画像catalog controlsによる横幅超過。R3のfailed.png/失敗JSONを保持。
+Blender rendererだけを呼ぶfixtureの対象をBlender設定へ限定し、画像catalogを初期化した実画面は
+次の別HTTP試験で確認する。製品の画像UI/CSSを変更して試験を通したものではない。
+R4/最終mf-publication-notices-ui-20260910-finalともexit0。5状態×日英×320/1280px=20cases、
+旧応答/不明code/切断時の表示回収、状態値不変、page errors0。最終ja320 screenshotを目視確認。
+これは明示status fixtureと実製品renderer/DOM/CSSのChrome試験であり、実Host照合や実Blender再実行の証拠ではない。
+
+通常HTTP/browser: 外部mf-publication-notices-source-browser-20260910.py、22061 exit0。
+前sliceの実SIGKILL回復済み専用dataだけをsource core2414022で起動し、APIのoperation_noticesと
+通常workspace初期化→Settings→回復完了説明を確認。op06e47044c8334ff09c9d49a06f95065f。
+320/1280pxともBlender欄/full page横超過なし、page errors0、registry bytes保持、専用core終了。
+文言最終調整後はMF_NOTICE_BROWSER_EVIDENCE_ROOTでfinal専用証跡へ再確認し、元試験を上書きしない。
+16909 exit0/core2415019、mf-publication-notices-source-browser-20260910-finalで同2幅・全画面横幅・
+同registry/補足表示/page errors0/専用core終端を確認した。
+Host2381614/MF1965886 active/不変、稼働版の更新/再起動なし。データ/制作物/外部runtime削除なし。
+NOT TESTED: 新説明のsigned installed/opaque Host iframe、実Host再起動後再認証の全matrix、
+物理mobile、今回Blender再制作/ゲームエンジン、全GOAL/A〜F/GA。全体PARTIAL。
+次: source core再起動後の正規owner再認証と実Host outbox照合/不一致説明を受入し、署名配布へ進む。
+
 ## 2026-09-10 automatic startup publication recovery
 
 base PR477 mergef99890f、ux1/3d-publication-startup-recovery。前turnは状況説明のみ/no progress。
