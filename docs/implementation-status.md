@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-10 runtime status I/O boundary
+
+base PR445 mergebc3d714、ux1/3d-runtime-status-offloop。
+長時間setupの照合中にblender_runtime_partがasyncのworkspace初期化/明示状態/standalone HTTPから
+同期catalog/registry/Web pack/DB検査を直接呼ぶと確認。状態取得にもlegacy登録書込がある。
+同期投影をworker threadへ移し、繰り返し取消でも開始済み処理の終端を待つ。
+結果schema、既存検証、登録policyは保持。他のsession部品/setup受付/実行全体のoff-loop化ではない。
+
+tests/test_blender_status_io.pyの最初2ケースは修正前24505 exit1/2failed/1teardown error。
+loop上の検査と取消中の同期waitを検出。修正後関連78passed/19.13秒、
+HTTP/3回取消/WS明示/WS初期化の最終focused4passed/0.59秒。
+全test43494は1539passed/既知2warnings/152.61秒。この収集後にWS2casesを加え全体を再実行。
+最終22111は終端exit0/1541passed/既知2warnings/154.44秒。型注釈追加後のfocused4もexit0。
+viewer build47ms/生成JS差分なし、Node5passed。
+
+外部mf-status-offloop-source-20260910.py初回はhealth1.521msを観測したが、worktree既定の
+legacy rootに実体がなくready期待でexit1。R2は既存外部rootをSettingsで明示、専用dataのみを使用。
+`PYTHONPATH=backend:. .venv/bin/python /data1tb/mf-status-offloop-source-20260910-r2.py`
+終端exit0/0.281秒。証跡 `/data1tb/mf-status-offloop-source-20260910-r2/observations.json`。
+実TCPのstatus検査を明示thread gateで保留中、別接続healthが1.516msで200、statusは未完了。
+解除後status200/実4.5.9のready checks、3検査すべてloopと異なるthreadを確認。専用core終了。
+人工的な検査待機であり、長時間download/Host認証/installed修正の受入ではない。
+
+setup自体の認証残件: BlenderRuntimeOperationにHost child/credential fieldはなく、
+workspace install等はidentityを渡さずBlenderRuntimeManagerのlocal operationを開始する。
+既存631秒source試験もHost認証なし。scene Jobのrefresh成功をsetupのrefreshへ転用しない。
+次はsetupのHost所有権/credential lifecycleの設計・実装対応を照合し、実長時間受入を補完する。
+NOT TESTED: 今回修正の署名配布/installed UI、全setup I/O、setup Host credential、全3DS/GA。
+稼働.63/MF1573521・Host1384554は変更なし。
+
 ## 2026-09-10 configured external reference / installed D-09 acceptance
 
 base PR444 merge4599a6c、branch ux1/3d-external-configured-acceptance。
