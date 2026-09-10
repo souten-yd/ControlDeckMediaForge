@@ -34,10 +34,61 @@ The policy remains mandatory and fails closed when Landlock cannot be applied.
   Unit `mediaforge-blender-db561195a1064900bbe97c0ec2e2faf2.service` inactive;
   original source SHA unchanged. No actual secrets were read.
 
-NOT TESTED with the new policy: browser/RFB reconnect, installed signed bundle,
-all supported runtime versions, Unix-socket/fd/process-information isolation.
-Installed0.28.70 is still unfixed. Next: source reconnect/version regression,
-then normal signed release and installed negative/GUI acceptance. This source
+## Source runtime and RFB regression
+
+After PR497 merge7025735e2bffa2f125a10c7d75388152478ce6cb, the external
+`/data1tb/mf-read-policy-rfb-versions-20260910.py` ran sequentially with arguments
+`4.5.9` and `4.5.13` under `PYTHONPATH=backend:. .venv/bin/python`.
+It uses the unchanged trusted bootstrap, fresh isolated working copies and the
+actual managed runtimes. Both returned exit0:
+
+| Runtime | Evidence directory under /data1tb | Ready | Save completed |
+|---|---|---|---|
+| 4.5.9 | mf-read-rfb-4.5.9-y0qube4m | 1.219s | 4.225s |
+| 4.5.13 | mf-read-rfb-4.5.13-zrfknuds | 1.220s | 4.024s |
+
+Both reported actual GUI/Vulkan/llvmpipe, 1280x720 RFB initialization, then
+16,384 bytes of raw pixels from a 64x64 request on each of two sequential
+connections. The first connection was closed before the second. Both saved
+2,077,182 bytes and preserved the original immutable source hash. Saved hashes:
+4.5.9 `562a63a4ada5840ca72ddfdf23dcc5ecc4c450ac8efa5b3e1ac17559a8569f2e`,
+4.5.13 `383442c11d1c7c76a375339063a55bfb8229cf257825b1d5734f3e5f95a6d1fe`.
+Dedicated units f3695cefc8cb4628a397ec7713903723 and
+199780c23a3d4a4da5d580a61ee95cb9 were independently confirmed inactive.
+This is runner/RFB transport acceptance, not a browser/noVNC/Host gateway test,
+nor semantic cross-version compatibility of all scene features.
+
+## Source browser acceptance
+
+`scripts/3ds_autosave_source_e2e.py --serve` used fresh data
+`/data1tb/mf-read-policy-browser-data-20260910-r3`, existing read-only managed
+4.5.9 and the Web pack parent, and the preceding 4.5.9 saved copy as input.
+The browser command used existing diagnostic Playwright Python and
+`--verify-input-activity`; evidence is
+`/data1tb/mf-read-policy-browser-evidence-20260910-r3`.
+Real headed Chrome/noVNC: edited9.183s, input/reconnect assertions34.111s,
+default autosave125.213s, dedicated child crash/recovery fork127.064s, exit0.
+Recovered2 meshes versus original1, original formal revision unchanged,
+candidate/recovered source SHA
+`fce6c69731c8c57072dd508ff33d521c10f416cf14eb0fb9324e61866d902532`,
+2,083,057 bytes. Screenshot inspected; page errors0. Session
+669b74f61a164c4d8ebb7b2844def48e and its cgroup/processes were reclaimed.
+The dedicated source server was terminated afterwards, not the installed service.
+
+Earlier attempts remain failed: first Chrome launch lacked Xauthority; second
+used an incorrectly nested diagnostic Web root and the real status reported
+web_pack=missing, rejecting GUI start. Neither began a GUI. Corrected references
+were passed to a new isolated source data directory; no installed config changed.
+This source server reports setup_required for its missing normal environment
+launcher, not a healthy installed deployment. No CodeDEV project was created.
+
+Version preparation0.28.71: full `./mf.sh test`1793pass/204.70s/2 known warnings,
+viewer build41ms/unchanged, Node animation5pass. No product/test edits after gate.
+
+NOT TESTED with the new policy: installed signed bundle/Host browser,
+Unix-socket/fd/process-information isolation.
+Installed0.28.70 is still unfixed. Next: normal signed release and installed
+negative/GUI acceptance. This source
 fix does not close all 3DS-5 security or scenario E conditions.
 
 ## Observed boundary

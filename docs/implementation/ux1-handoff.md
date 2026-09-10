@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 read-policy acceptance / v0.28.71 preparation
+
+base PR497 merge7025735e2bffa2f125a10c7d75388152478ce6cb、ux1/3d-read-policy-runtime-acceptance、PR作成前。
+前turnはsource read修正/全gate/mergeまで進捗。今回は4.5.9/4.5.13実RFB再接続/保存と実browserを受入。
+mf-read-policy-rfb-versions-20260910.py両exit0、ready1.219/1.220秒、保存4.225/4.024秒、元asset保持。
+source browser初回Xauthority不足、R2診断web root過深/pack missing。失敗記録保持、GUI未開始。
+正しいparent rootと新data-r3で既存3ds_autosave_source_e2e.py --verify-input-activityを実行。
+63826 exit0/127.064秒、実編集/再接続/default autosave/専用子crash/2mesh復旧、旧正式版不変。
+mf-read-policy-browser-{data,evidence}-20260910-r3、pageerrors0/画面目視、unit回収。
+専用server54136/82581は対象PIDへTERM後exit143、稼働Host/MFは停止していない。
+addon/core0.28.71/release note準備。全69529 exit0/1793pass204.70秒/既知2warnings、viewer41ms差分0/Node5。
+以後product/test編集なし。詳細hash/失敗理由は3ds-filesystem-isolation.md。旧GUI canary失敗も保持。
+次は本PR通常merge→exact .71 build/監査→署名公開/consumer再取得→idle/backup/通常update/installed受入。
+既存.70 audit/install scriptは版固定なので再実行せず新scriptへ見直す。署名鍵は既存実鍵のみ/表示禁止。
+新CodeDEV projectなし、root利用者差分/3dev symlinks保持。全GOAL/A〜F/GA PARTIAL、外部blockerなし。
+再開: git fetch origin; git status --short --branch; gh pr list --head ux1/3d-read-policy-runtime-acceptance。
+
 ## 2026-09-10 source GUI read policy fixed
 
 base PR496 merge2257980c2c9fe43dc7c4d094f927a9b6aad7f7e2、ux1/3d-gui-read-isolation、PR作成前。
