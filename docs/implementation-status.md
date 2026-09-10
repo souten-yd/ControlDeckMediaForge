@@ -1,5 +1,19 @@
 # Media Forge implementation status
 
+## 2026-09-10 long-duration evidence revalidation
+
+base PR485 mergedaca973a4617eaada0be47288217c43e02d91a7b、ux1/3d-long-duration-evidence-map。
+前turnは配布版回復受入/merge。GUI長時間の旧証拠を調査し、既存.30の660秒継続/更新後保存を確認。
+今回未実施という記述から受入全体が未確認と誤読しないよう3ds-long-duration-evidence.mdを追加。
+外部mf-long-duration-evidence-audit-20260910.py exit0、mf-long-duration-evidence-audit-ehx6fhxm。
+5原観測SHA、現在DBのGUI旧新revision JSON・実GLB nodes1→2、5 Assets/8,274,480Bの
+実SHA/DB provenance一致を確認。制作画像Job、CPU6Job終端、.69 setup journalを再照合。
+材質適用GLBの独立監査SHA一致。新しいGUI/制作/Host操作は実行していない。
+E表の旧「setup10分refresh未確認」を.69実受入へ更新し、人工待機・自然演算・GUIを分離。
+文書のみ、基準PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5、今回再実行なし。
+製品/稼働版/Host/制作物変更・restartなし。NOT TESTED: 現在版GUI新run、GPU組合せ、全E/全GOAL/A〜F/GA/engine。
+次: GPU/共存の既存証拠と現capabilityを照合し、未受入組合せを特定。全体PARTIALを維持。
+
 ## 2026-09-10 signed package publication startup recovery and notices
 
 base PR484 merge36903d002ca99c48b2947c6ec8b3320ed66e7ab0、ux1/3d-packaged-publication-recovery。
