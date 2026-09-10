@@ -1,5 +1,39 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed GUI/image run interrupted by Host restart
+
+base PR494 merge26b221d5dfa2a2fd3e1fdc5e46e0f5f05218a949、ux1/3d-installed-gui-image-coexist。
+installed.70で通常TTL/timeoutを変更せずsoftware GUI＋通常画像を試験。
+mf-software-gui-image-coexist-0.28.70-20260910.py、70532 exit1、証跡同installed-0.28.70-20260910。
+5.676秒GUI a50940d4d06f4c47bc40113c8e90f090接続、5.710秒image job8779caab4c254534b1dbea162eef5dac受付。
+Host483314bf0129、6.776秒waiting_resource、371.062秒browser呼出/同接続cleanup失敗、login回収。
+実systemd journalで21:51:39 JST Host stop開始、21:52:21停止/21:52:23新PID2552550起動。
+restart job13741を観測。こちらからHost/PC restartは実行していない。MF2504103はhealthyを維持。
+local image failed/host_unreachable/Assets0、Host再起動でinterrupted。通常認証更新や画像成功と判定しない。
+新認証のmf-gui-image-0.28.70-recover-20260910.pyはGUI正規停止・scene不変・login回収まで実行。
+末尾のHost failed期待が実interruptedに合わず79126 exit1。cleanup-auditのpassed=falseを保持。
+独立mf-gui-image-host-stop-audit-20260910.py exit0、Host interrupted/local failed、元error保持、
+owned outbox sent0/receipt already_terminal/terminal_matches false、再照合監査24100 success。
+GUI stopped/owner user:16/unit inactive、旧2revisionの4asset実SHA/provenance一致。
+資源監査はrequest24063のみ、lease activate・画像生成なし。共存正常成功とは扱わない。
+復帰・前試行終端・idle確認後、別証跡-r2/別scriptで再試験を開始。元失敗は書換えない。
+
+再試験61952 exit0、mf-software-gui-image-coexist-0.28.70-20260910-r2.py、同証跡-r2。
+4.221秒software GUI494142e15a1e41a0bfbc147ca054f4c0接続、4.247秒image job_e68ee0f981d34867bf869ef7c2c1b190受付。
+7.335秒generating、30.497秒succeeded、32.109秒保存/停止、33.254秒別GUIfcc0b5a61b424c2ca432ed6727b3e6e7再接続。
+33.647秒両GUI終了・login回収まで成功。元2revision保持、第3版追加。実opaque Chrome/1280px/page error0。
+mf-gui-image-0.28.70-r2-audit-20260910.py exit0、旧新blend/GLBと新PNG計7assets実hash/provenance一致。
+画像asset_ebf077f16f154d22af57fca8c98fc579はPNG256角/67,206B、
+SHAc725b0aad7fc751230c411337bd7c4d3f20d64a5aacfa320cc7b72791f2ffa8d。
+Host8970656aaa01/local succeeded、通常outbox sent1/receipt NULL、lease6ec16a2a-3d74-43ed-a1ae-91224bf3ad26、
+GPU0 request1/activate1/renew2/release1（24117/24120/24122/24124/24125全success）。
+両GUIはuser:16/Blender4.5.13/stopped、対応unit inactive。coexisting.pngを目視し実Blender接続を確認。
+今回は画像を生成した後に元GUIを保存・再開したもので、新画像の材質採用や手動形状修正は行っていない。
+短い成功runでcredential refresh0、通常TTLの長時間更新成功には読み替えない。
+文書のみ、基準gate PR492全1789pass205.39秒/skip0/viewer差分0/Node5、今回全test/build再実行なし。
+新CodeDEV projectを作っていない。全GOAL/A〜F/GA/engineはPARTIAL維持。
+次はGPU/CPU/Cycles/画像/LLMの条件別残件を既存実測・現capabilityに対応させ、未受入条件を進める。
+
 ## 2026-09-10 completed MF3DS project retirement
 
 利用者から「MF3DSプロジェクトは何をしているか、検証後は消して」と指示。

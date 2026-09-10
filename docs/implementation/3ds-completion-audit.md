@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 installed.70のsoftware GUI＋通常画像共存を追加受入。
+mf-software-gui-image-coexist-installed-0.28.70-20260910-r2、33.647秒/exit0。
+GUI維持中に画像成功→旧2版保持/第3版保存→再GUI接続/終了、独立7asset hash・Host成功・GPU解放一致。
+初回は外部Host restartで画像failed/Host interrupted、再認証で不一致を上書きせずGUI回収。
+正常短時間runであり長時間refresh・GPU GUI・新画像採用・engine完成には読み替えない。
+全GOAL/A〜F/GA PARTIAL。詳細は長時間条件表とimplementation-statusを参照。
+
 2026-09-10 PR490 sourceの通常画像成功まで追加確認、mf-source-image-renewal-dfpxj82d。
 実Broker待機/credential refresh2後680.587秒generating、704.618秒PNG/provenance/通常Host終端sent1。
 独立監査でHost/local succeeded・GPU0 activate1/renew2/release1。同画像45160B/SHA一致、source正常停止。
