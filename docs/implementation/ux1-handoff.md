@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.61 preparation
+
+前turnはloop説明PR433 mergeで進捗。base8136dc7、ux1/release-0-28-61、PR作成前。
+addon/core版数、docs/release-v0.28.61.md追加。全test handle30092終端exit0/1509 passed/149.23秒/既知warning2、build40ms/差分0/Node5成功。
+外部mf-0.28.61-audit.py/install.py準備/py_compile成功、未実行。
+現在.60/MF1384429/Host1384554、実DB activeJobs/GUI/setup0、OpenCode smokeなし。
+次: 全test終端確認後通常PR merge→exact release checkoutでbuild/audit/sign/公開/標準導入を行う。
+保持2の旧.59bundleのみ整理対象を事前通知、制作data/runtime保持。Host再起動なし。
+新release/OpenCode効果/engine/複雑character未受入。全3DS/GA/既存UX状態PARTIAL、blockerなし。
+再開: git status --short --branch; git fetch origin; readlink /data1tb/ControlDeck/data/features/media-forge/current。
+
 ## 2026-09-10 animation loop guidance
 
 前turnは実OpenCode終端/strict不合格確認とPR432 mergeで進捗。base0a26acd、branch ux1/3d-animation-loop-guidance、PR #433作成済み。
