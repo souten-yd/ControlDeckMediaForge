@@ -114,8 +114,9 @@ def test_workspace_routes_use_async_admission(
             "blender-4.5.9-linux-x64", "4.5.9", BlenderRuntimeOperationAction.INSTALL, bytes_total=1)
         seen: list[tuple[str, str]] = []
 
-        async def request(value: str, identifier: str = "") -> Any:
+        async def request(value: str, identifier: str = "", *, identity: Any = None) -> Any:
             await asyncio.sleep(0)
+            assert identity is not None and identity.authorization
             seen.append((value, identifier))
             return operation
 

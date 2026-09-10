@@ -48,6 +48,8 @@ from .blender_web import (
     validate_web_pack_archive,
 )
 from .paths import contained
+from .host.client import ControlDeckHostClient, HostIdentity
+from .blender_setup_host import BlenderSetupHostControl
 from .store import Store
 
 
@@ -81,6 +83,7 @@ class BlenderRuntimeManager:
         web_pack: BlenderWebPack | None = None,
         web_download_root: Path | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        host: ControlDeckHostClient | None = None,
     ) -> None:
         self.store = store
         self.resolver = resolver
@@ -97,6 +100,7 @@ class BlenderRuntimeManager:
         self._admission_guard = threading.Lock()
         self._guard = asyncio.Semaphore(1)
         self._stopping: asyncio.Task[None] | None = None
+        self.host_control = BlenderSetupHostControl(self, host) if host is not None else None
 
     @property
     def spec(self) -> RuntimeSpec:
@@ -122,6 +126,8 @@ class BlenderRuntimeManager:
         await self._await_owned(self._stopping)
 
     async def _stop_workers(self) -> None:
+        if self.host_control is not None:
+            self.host_control.accepting = False
         await asyncio.gather(*list(self._request_admissions), return_exceptions=True)
         await asyncio.gather(*list(self._removal_admissions), return_exceptions=True)
         tasks = list(self._tasks.values())
@@ -129,6 +135,8 @@ class BlenderRuntimeManager:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
+        if self.host_control is not None:
+            await self.host_control.stop_reconciliation()
 
     def catalog(self) -> dict[str, Any]:
         catalog = self._catalog()
@@ -234,15 +242,19 @@ class BlenderRuntimeManager:
     def install(self) -> BlenderRuntimeOperation:
         return self._launch(self._prepare_install())
 
-    def _prepare_install(self) -> BlenderRuntimeOperation:
-        return self._prepare_start(self._catalog().base_runtime_id, BlenderRuntimeOperationAction.INSTALL)
+    def _prepare_install(self, host_owner: str | None = None) -> BlenderRuntimeOperation:
+        return self._prepare_start(self._catalog().base_runtime_id, BlenderRuntimeOperationAction.INSTALL, host_owner)
 
-    async def request(self, action: str, identifier: str = "") -> BlenderRuntimeOperation:
+    async def request(self, action: str, identifier: str = "", *, identity: HostIdentity | None = None) -> BlenderRuntimeOperation:
         """Own admission I/O through disconnect; spawn workers only on the loop.
 
         The synchronous helpers remain compatibility entrypoints for local
         callers. Async HTTP/WS callers must use this method instead.
         """
+        if identity is not None:
+            if self.host_control is None:
+                raise BlenderRuntimeOperationError("host_setup_unavailable", "Host setup control is unavailable")
+            return await self.host_control.request(action, identifier, identity)
         callbacks: dict[str, Callable[[], BlenderRuntimeOperation]] = {
             "install": self._prepare_install,
             "web_install": self._prepare_web,
@@ -303,7 +315,7 @@ class BlenderRuntimeManager:
     def install_web(self) -> BlenderRuntimeOperation:
         return self._launch(self._prepare_web())
 
-    def _prepare_web(self) -> BlenderRuntimeOperation:
+    def _prepare_web(self, host_owner: str | None = None) -> BlenderRuntimeOperation:
         if self.web_pack is None or self.web_download_root is None:
             raise BlenderRuntimeOperationError(
                 "blender_web_not_configured", "Blender browser-operation pack is not configured"
@@ -322,13 +334,14 @@ class BlenderRuntimeManager:
             and item.state not in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES
         ), None)
         if active is not None:
-            return active
+            return self._check_operation_owner(active, host_owner)
         try:
             operation = self.store.create_blender_runtime_operation(
                 spec.pack_id,
                 spec.version,
                 BlenderRuntimeOperationAction.INSTALL,
                 bytes_total=spec.archive_size_bytes,
+                host_owner=host_owner,
             )
         except ValueError as exc:
             raise BlenderRuntimeOperationError(
@@ -339,7 +352,7 @@ class BlenderRuntimeManager:
     def update(self) -> BlenderRuntimeOperation:
         return self._launch(self._prepare_update())
 
-    def _prepare_update(self) -> BlenderRuntimeOperation:
+    def _prepare_update(self, host_owner: str | None = None) -> BlenderRuntimeOperation:
         catalog = self._catalog()
         active = self.resolver.resolve_active()
         if active is None:
@@ -351,13 +364,13 @@ class BlenderRuntimeManager:
                 "blender_runtime_already_current", "Blender Studio runtime is already current"
             )
         return self._prepare_start(
-            catalog.recommended_studio_runtime_id, BlenderRuntimeOperationAction.UPDATE
+            catalog.recommended_studio_runtime_id, BlenderRuntimeOperationAction.UPDATE, host_owner
         )
 
     def repair(self, runtime_id: str) -> BlenderRuntimeOperation:
         return self._launch(self._prepare_repair(runtime_id))
 
-    def _prepare_repair(self, runtime_id: str) -> BlenderRuntimeOperation:
+    def _prepare_repair(self, runtime_id: str, host_owner: str | None = None) -> BlenderRuntimeOperation:
         if runtime_id not in self._catalog().specs:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_not_found", "Blender runtime is not in the trusted catalog"
@@ -370,20 +383,22 @@ class BlenderRuntimeManager:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_not_found", "managed Blender runtime was not found"
             )
-        return self._prepare_start(runtime_id, BlenderRuntimeOperationAction.REPAIR)
+        return self._prepare_start(runtime_id, BlenderRuntimeOperationAction.REPAIR, host_owner)
 
     def switch(self, runtime_id: str) -> BlenderRuntimeOperation:
         return self._launch(self._prepare_switch(runtime_id))
 
-    def _prepare_switch(self, runtime_id: str) -> BlenderRuntimeOperation:
+    def _prepare_switch(self, runtime_id: str, host_owner: str | None = None) -> BlenderRuntimeOperation:
         if runtime_id not in self._catalog().specs:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_not_found", "Blender runtime is not in the trusted catalog"
             )
-        return self._prepare_start(runtime_id, BlenderRuntimeOperationAction.SWITCH)
+        return self._prepare_start(runtime_id, BlenderRuntimeOperationAction.SWITCH, host_owner)
 
-    async def install_exact(self, runtime_id: str) -> BlenderRuntimeOperation:
+    async def install_exact(self, runtime_id: str, *, identity: HostIdentity | None = None) -> BlenderRuntimeOperation:
         """Explicit exact-catalog installation, without changing an existing active pin."""
+        if identity is not None:
+            return await self.request("install_exact", runtime_id, identity=identity)
         task = asyncio.create_task(self._admit_exact_async(runtime_id))
         self._removal_admissions.add(task)
         try:
@@ -402,7 +417,7 @@ class BlenderRuntimeManager:
         self._spawn(operation.id)
         return operation
 
-    def _admit_exact(self, runtime_id: str) -> BlenderRuntimeOperation:
+    def _admit_exact(self, runtime_id: str, host_owner: str | None = None) -> BlenderRuntimeOperation:
         spec = self._catalog().specs.get(runtime_id)
         if spec is None:
             raise BlenderRuntimeOperationError("blender_runtime_not_found", "runtime is not in the trusted catalog")
@@ -410,14 +425,14 @@ class BlenderRuntimeManager:
         for operation in self.store.list_blender_runtime_operations():
             if operation.runtime_id == runtime_id and operation.state not in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES:
                 if operation.action == BlenderRuntimeOperationAction.INSTALL and (operation.result or {}).get("exact_install") == identity:
-                    return operation
+                    return self._check_operation_owner(operation, host_owner)
                 raise BlenderRuntimeOperationError("blender_runtime_operation_active", "another runtime operation is active")
         if self.resolver.resolve_registered(runtime_id) is not None:
             raise BlenderRuntimeOperationError("blender_runtime_already_installed", "Blender runtime is already installed")
         try:
             return self.store.create_blender_runtime_operation(runtime_id, spec.version,
                 BlenderRuntimeOperationAction.INSTALL, bytes_total=spec.archive_size_bytes,
-                result={"exact_install": identity})
+                result={"exact_install": identity}, host_owner=host_owner)
         except ValueError as exc:
             raise BlenderRuntimeOperationError("blender_runtime_operation_active", "another runtime operation is active") from exc
 
@@ -555,8 +570,14 @@ class BlenderRuntimeManager:
                 raise
 
     async def remove(
-        self, runtime_id: str, confirmation_fingerprint: str, *, acknowledge_history: bool = False
+        self, runtime_id: str, confirmation_fingerprint: str, *, acknowledge_history: bool = False,
+        identity: HostIdentity | None = None,
     ) -> BlenderRuntimeOperation:
+        if identity is not None:
+            if self.host_control is None:
+                raise BlenderRuntimeOperationError("host_setup_unavailable", "Host setup control is unavailable")
+            return await self.host_control.request("remove", runtime_id, identity,
+                confirmation_fingerprint=confirmation_fingerprint, acknowledge_history=acknowledge_history)
         task = asyncio.create_task(self._admit_removal_async(runtime_id, confirmation_fingerprint, acknowledge_history))
         self._removal_admissions.add(task)
         try:
@@ -578,7 +599,8 @@ class BlenderRuntimeManager:
         return operation
 
     def _admit_removal(
-        self, runtime_id: str, confirmation_fingerprint: str, acknowledge_history: bool = False
+        self, runtime_id: str, confirmation_fingerprint: str, acknowledge_history: bool = False,
+        host_owner: str | None = None,
     ) -> BlenderRuntimeOperation:
         preview = self._removal_preview(runtime_id)
         if confirmation_fingerprint != preview["confirmation_fingerprint"]:
@@ -596,6 +618,7 @@ class BlenderRuntimeManager:
                 BlenderRuntimeOperationAction.REMOVE,
                 bytes_total=int(preview["reclaimable_bytes"]),
                 result={"removal_preview": preview, "acknowledge_history": acknowledge_history},
+                host_owner=host_owner,
             )
         except ValueError as exc:
             raise BlenderRuntimeOperationError(
@@ -604,7 +627,7 @@ class BlenderRuntimeManager:
         return operation
 
     def _prepare_start(
-        self, runtime_id: str, action: BlenderRuntimeOperationAction
+        self, runtime_id: str, action: BlenderRuntimeOperationAction, host_owner: str | None = None
     ) -> BlenderRuntimeOperation:
         active = next((
             item for item in self.store.list_blender_runtime_operations()
@@ -613,7 +636,7 @@ class BlenderRuntimeManager:
             and item.state not in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES
         ), None)
         if active is not None:
-            return active
+            return self._check_operation_owner(active, host_owner)
         if action == BlenderRuntimeOperationAction.INSTALL and any(
             row.get("runtime_id") == runtime_id and row.get("state") == "ready"
             for row in self.resolver.status().get("runtimes", [])
@@ -628,6 +651,7 @@ class BlenderRuntimeManager:
                 spec.version,
                 action,
                 bytes_total=0 if action == BlenderRuntimeOperationAction.SWITCH else spec.archive_size_bytes,
+                host_owner=host_owner,
             )
         except ValueError as exc:
             raise BlenderRuntimeOperationError(
@@ -635,7 +659,14 @@ class BlenderRuntimeManager:
             ) from exc
         return operation
 
-    def cancel(self, operation_id: str) -> BlenderRuntimeOperation:
+    def _check_operation_owner(self, operation: BlenderRuntimeOperation, owner: str | None) -> BlenderRuntimeOperation:
+        try:
+            self.store.check_blender_runtime_operation_owner(operation.id, owner)
+        except KeyError as exc:
+            raise BlenderRuntimeOperationError("blender_runtime_operation_not_found", "Blender operation is unavailable") from exc
+        return operation
+
+    def cancel(self, operation_id: str, host_owner: str | None = None) -> BlenderRuntimeOperation:
         try:
             operation = self.store.get_blender_runtime_operation(operation_id)
         except KeyError as exc:
@@ -643,6 +674,7 @@ class BlenderRuntimeManager:
                 "blender_runtime_operation_not_found", "Blender runtime operation was not found"
             ) from exc
         web_pack_id = None
+        self._check_operation_owner(operation, host_owner)
         if self.web_pack is not None:
             try:
                 web_pack_id = self.web_pack.spec().pack_id
@@ -658,13 +690,16 @@ class BlenderRuntimeManager:
         current = self._tasks.get(operation_id)
         if current is not None and not current.done():
             return
-        task = asyncio.create_task(self._run(operation_id), name=f"blender-runtime-{operation_id}")
+        run = self.host_control.run(operation_id) if self.host_control is not None and self.host_control.owns(operation_id) else self._run(operation_id)
+        task = asyncio.create_task(run, name=f"blender-runtime-{operation_id}")
         self._tasks[operation_id] = task
         task.add_done_callback(lambda _task: self._tasks.pop(operation_id, None))
 
     async def _run(self, operation_id: str) -> None:
         async with self._guard:
             operation = await self._runtime_io(self.store.get_blender_runtime_operation, operation_id)
+            if operation.state in {BlenderRuntimeOperationState.READY, BlenderRuntimeOperationState.FAILED}:
+                return
             if await self._runtime_io(self.store.blender_runtime_operation_cancel_requested, operation_id):
                 await self._finish_canceled(operation)
                 return
@@ -695,6 +730,8 @@ class BlenderRuntimeManager:
 
     def _fail_sync(self, operation_id: str, code: str, message: str) -> None:
         self._clean_stage_sync(operation_id)
+        if self.store.get_blender_runtime_operation(operation_id).state in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES:
+            return
         self.store.update_blender_runtime_operation(
             operation_id, state=BlenderRuntimeOperationState.FAILED,
             error_code=code, error_message=message,
@@ -1448,8 +1485,19 @@ class BlenderRuntimeManager:
 
     def _finish_canceled_sync(self, operation: BlenderRuntimeOperation) -> None:
         self._clean_stage_sync(operation.id)
+        current = self.store.get_blender_runtime_operation(operation.id)
+        if current.state in {BlenderRuntimeOperationState.READY, BlenderRuntimeOperationState.FAILED}:
+            return
+        if current.state == BlenderRuntimeOperationState.CANCELED:
+            try:
+                self.store.check_blender_runtime_operation_owner(operation.id, None)
+            except KeyError:
+                return  # Host terminal intent is immutable; staging was still reclaimed.
+        lost = current.error_code == "host_context_lost"
         self.store.update_blender_runtime_operation(
-            operation.id, state=BlenderRuntimeOperationState.CANCELED
+            operation.id, state=BlenderRuntimeOperationState.FAILED if lost else BlenderRuntimeOperationState.CANCELED,
+            error_code="host_context_lost" if lost else None,
+            error_message="Host setup authorization or execution context was lost" if lost else None,
         )
 
     def _ensure_managed_destination(self, destination: Path) -> None:
