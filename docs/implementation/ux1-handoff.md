@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.63 preparation
+
+前turnはPR441 merge97cb94b。今回はux1/release-0-28-63、addon/core版数とrelease note。
+全test78582終端exit0/1537passed/151.22秒、viewer44ms/差分0/Node5。外部audit/install/installed browser診断py_compile成功。
+現在.62、旧.61bundleだけ保持整理の事前通知済み。data/runtime保持、Host変更なし。
+次: full終端→commit/push/通常PRmerge→exact release checkoutでbuild/audit/署名公開/標準導入。
+installed GUI診断はmf-mobile-blender-installed-0.28.63-20260910.py、source overlay一切なし。
+scene_fd74c96138df40e9a69a1483bee2adfc、BASE revision_4b315df7c5d84811bcb3d8146ea00f66/6版を事前検査。
+準備と実行を混同しない。.63/installed新UI/物理mobile/全3DS・GAは未受入。
+現在live OpenCode/GUI診断なし。untracked .venv保持。
+
 ## 2026-09-10 mobile Web Blender access
 
 最新: opaque最小iframeでもtouch244→click156の誤targetを再現。
