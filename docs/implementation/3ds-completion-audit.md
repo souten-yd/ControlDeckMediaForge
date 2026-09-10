@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 PR463の修復checkpointをsigned installed0.28.68で受入。
+`mf-repair-registration-cancel-installed-0.28.68-20260910`、実Chrome repair→page.close、
+診断flockで候補登録待ちを作り、previous旧inode/候補別inodeを実確認して正常Host cancel API200。
+42.321秒で両canceled、旧両exe hash/inode/registry/旧DB行保持、専用stage回収/login失効。
+独立DB/Host control/旧inodeを照合。Host固有取消理由のreceipt不一致は保持。
+登録待ち中の取消復元の証拠であり、下記長時間試験の原因解決・失効rollback・refresh成功ではない。
+
 2026-09-10 **installed0.28.67の長時間setup試験は不合格**。
 `mf-setup-host-long-installed-0.28.67-20260910`、実Chrome修復受付→切断→診断registry flock待ち。
 healthは603.645秒までhealthyだがrefresh0、約210秒でhost_context_lostを記録。原因未確定。

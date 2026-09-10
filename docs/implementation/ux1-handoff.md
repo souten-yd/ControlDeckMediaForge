@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed registration-wait rollback accepted
+
+base PR465 merge93c3b6a、ux1/3d-installed-repair-registration-cancel、文書PR作成前。
+前turnは.68署名導入/受入mergeまで進捗。外部mf-repair-registration-cancel-installed-0.28.68-20260910.py。
+7488 exit0、同名evidence dir。実Chrome repair→page.close→診断flock待ち、36.862秒に
+previous inode34365078/候補別inodeを確認してHost正常cancel200。41.909秒cancelflag確認・解放。
+42.321秒passed/42.436秒login失効、旧exe inode/hash/registry/全旧行保持、専用stage回収。
+operation blenderop_2033c422547f4736bad52e083acd7c03/Hostc2f2a971683fは両canceled。
+Host固有理由のreceipt false/sent0保持、fresh control GETと独立DB/inode/staging確認成功。
+.68/MF1965886/Host1811096不変、診断終端。code変更なし、全test再実行なし（基準1604pass168.30秒）。
+次: 本docs通常merge→新safeログで240秒限定の登録待ち制御試験。約210秒で停止するかを先に診断。
+異常flagを検出したら即lock解放、同IDの終端/outbox・復元を確認する。未知PIDやHost自体を止めない。
+service logは/data1tb/ControlDeck/data/features/media-forge/logs/service.log（journalctlだけでは見えない）。
+前回監視停止原因/installed失効rollback/10分refresh/全3DS/GAは未完了。untracked .venv保持。
+
 ## 2026-09-10 v0.28.68 installed acceptance
 
 PR464 merge/tag88e5061、ux1/release-0-28-68-acceptance、文書PR作成前。
