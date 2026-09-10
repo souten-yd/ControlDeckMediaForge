@@ -3,6 +3,11 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 [GUI読み取り隔離](3ds-filesystem-isolation.md)はFAIL。
+導入版と同じrunner bytes/同systemd policyの実canary試験で、許可root外のread成功/write拒否を確認。
+GUI起動・保存の成功をHost filesystem confidentialityの成功へ拡大しない。
+次の優先修正はread/list/execute境界。製品未修正、全3DS-5/security受入は未達。
+
 2026-09-10 installed.70のsoftware GUI＋通常画像共存を追加受入。
 mf-software-gui-image-coexist-installed-0.28.70-20260910-r2、33.647秒/exit0。
 GUI維持中に画像成功→旧2版保持/第3版保存→再GUI接続/終了、独立7asset hash・Host成功・GPU解放一致。

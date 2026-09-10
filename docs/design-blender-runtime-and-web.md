@@ -392,6 +392,14 @@ Landlock ABI 3以上を必須とし、session control、scene working copy、RFB
 作る必要がある固定済みtrusted componentなのでLandlock適用前に起動し、利用者sceneを読むBlenderと
 その子孫だけを追加のfilesystem sandboxへ入れる。
 
+2026-09-10の[読み取り境界監査](implementation/3ds-filesystem-isolation.md)で、上記は
+書き込みのみの制限であり、許可root外の無害なcanaryを読めることを実測した。
+このため既存の起動・保存・書込拒否を、Host filesystem全体の隔離成功へ読み替えない。
+次の修正ではREAD_FILE/READ_DIR/EXECUTEもdefault denyにし、選択runtime、必要なOS依存、
+trusted bootstrapとsession固有のstageだけを許可する。依存不足を全体read許可で回避しない。
+実GUI起動/保存/再接続と、外部canary拒否を両方満たしてから署名配布する。
+Unix socket、継承fd、process情報の境界は別途試験し、read制限だけで全隔離完成としない。
+
 初期software displayはGPUなしでも接続・保存を検証できることを優先する。
 Xvfb/VNCを起動しただけでGPUアクセラレーションが成立したとは記録しない。
 GPU display/VirtualGL/EGL等は候補を実機比較し、OpenGLとCycles HIPの結果を別々に残す。

@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-10 GUI read-isolation gap found during GPU audit
+
+base PR495 merge9914647e9efae6654bc4bd1f10eb621f52352fe3、ux1/3d-gpu-condition-audit。
+現capabilities HTTPのtyped15操作、runtime/Web ready、source software GUI policyを照合。
+旧Cycles/Eevee単体probeはJob/leaseとの結合記録がなく、製品GPU経路の証明には使えない。
+実sysfs card1 vendor1002/device7551/VRAM34208743424B、kernel7.0.0-31-genericを確認。
+調査中にGUI restrict_filesystemがwrite rightsのみであることを発見。
+同systemd properties/実runner関数の専用canary試験はoutside read許可/write拒否、22ms/exit0。
+mf-gui-read-boundary-20260910/control/result.jsonへ記録、unit inactive/canary元SHA不変。
+installed.70から抽出したrunner bytesもsourceと一致。実秘密値・Host設定の内容は読んでいない。
+詳しくは3ds-filesystem-isolation.md。試験exit0は観測成功であり隔離受入はFAIL。
+base/runtime設計でread/list/execute default denyと必要依存allowlist、実GUI/negative受入を明確化。
+製品code/稼働設定変更なし、未修正のため3DS-5/全GOAL/A〜F/GAの全隔離完了とはしない。
+次はGPU拡大より先にGUI read境界を修正する。具体的な外部blockerなし。
+文書のみ、今回全test/build/GUI再実行なし。基準PR492全1789tests205.39秒/viewer差分0/Node5。
+
 ## 2026-09-10 installed GUI/image run interrupted by Host restart
 
 base PR494 merge26b221d5dfa2a2fd3e1fdc5e46e0f5f05218a949、ux1/3d-installed-gui-image-coexist。

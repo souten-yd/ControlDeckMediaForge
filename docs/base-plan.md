@@ -1045,6 +1045,13 @@ Minimum rules:
 - `local_only=true` blocks remote inference at the backend, not merely in UI
 - Blender/custom-script execution is separately permissioned
 
+For interactive Blender, filesystem isolation includes reads, directory listing
+and execution as well as writes. A write-only sandbox does not satisfy the
+no-arbitrary-Host-filesystem rule. Permit only the selected runtime and its
+required OS dependencies, trusted bootstrap files, and the session's staged
+working data. Do not grant the whole Host data directory, home, or `/proc` as a
+dependency workaround. See the [GUI isolation audit](implementation/3ds-filesystem-isolation.md).
+
 ---
 
 ## 19. Observability
