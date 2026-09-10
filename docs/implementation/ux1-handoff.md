@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 external installed diagnostic failed / state restored
+
+PR443 mergece1140f確認後、ux1/3d-external-installed-acceptance。
+外部mf-external-installed-0.28.63-20260910.pyは79358終端exit1/65.638秒、再登録timeout。
+解除前state=damagedをpreflightで拒否していなかった診断不備。実MF1483422にLEGACY_ROOT設定なし。
+packaged既定rootとsource外部rootを混同していた。解除/再接続抑止は確認、再登録は未達。
+元のlegacy登録/抑止を事前JSONへapply_patch復元。独立55578exit0/registry全JSON一致、外部6544entries不変。
+制作DB終端/58scenes180revisions967assets。全行pre-snapshotの保存なしなので全行不変を主張しない。
+login失効済み、継続診断なし、Host/MF再起動なし、.63のまま。元damaged状態へ戻しただけ。
+次: server設定の外部root経路を確認、ready/正確なroot/DB保存を解除前必須にして再受入。
+勝手なsource rootの自動採用や既存Blenderの変更は不可。他のA/C/E/F/GAも継続可能。
+本sliceはdocsのみ、statusに失敗・復元証拠。通常PRへcommit/push/merge。untracked .venv保持。
+
 ## 2026-09-10 v0.28.63 installed acceptance terminal
 
 download41993/install88248/browser87262すべて終端exit0。稼働.63/MF1483422、Host1384554不変。
