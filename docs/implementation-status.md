@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-10 saved animation settings facts
+
+PR436 merge50c48faec0c1c0dd02cbe2ba412452f87352688c確認、ux1/3d-clip-result-facts。
+独立.blend validatorへanimation_settingsを加法出力。scene実効fps、typed rig/clip IDs、
+実action frame範囲、保存loop_requestedを最大32件報告。一般/不正/重複/overflowは未報告数へ計数。
+loop metadataを端点・速度・engine品質の合格判定にしない。旧facts欠落は未検査で、旧入力/既定を維持。
+coreは新factsの型/finite/範囲/一意/総action件数を検査。旧worker fieldsも互換受理。
+公開scene-animation-settings.json、GA-5設計/API、15tests、既存実機診断の--animation-settingsを追加。
+新しい同期DB/I/Oやcore bpy importなし。既存recipe workerの成功protocolは変更しない。
+focused27 passed/3.27秒、build42ms/生成物差分0/Node5。
+全 ./mf.sh test は1524 passed/既知warning2/148.94秒/exit0（59812終端）。
+
+実診断: PYTHONPATH=backend:. .venv/bin/python scripts/3ds_game_static_e2e.py
+--fixture auto_skin --animation-settings --runtime-root /data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9
+--managed-root /data1tb/ControlDeck/data/feature-data/media-forge/runtimes/blender
+--evidence-dir /data1tb/mf-animation-facts-source-20260910。
+4.5.13/exit0/2.054秒、初版idle省略→saved false、2版でbend明示→true/idle false保持。
+実source/GLB2clip変形再import、失敗後旧版hash保持、provenance/lineageは既存domainで記録。
+scene_b8f2a69a26154cd9b9dcfa05660eff07、初版revision_efac4e3ae07742e7bc5d2dcef129b21d、
+2版revision_392cecb9806b4b3a8a5ddd345280fd44。両factsは24fps/0→48frame/未報告0。
+managed-rootを省略した同診断も別dir mf-animation-facts-source-4.5.9-20260910でexit0/2.491秒。
+専用source core PID1417088/port19130を同診断dataで起動し、実HTTP scene GETで両revisionの
+factsが保存値と一致、新schema GET200/exact source一致を確認。専用core通常終了exit0。
+稼働.61/MF1411733/Host1384554/既存sourceは変更なし。継続中OpenCodeなし。
+NOT TESTED: 新factsのsigned installed/MCP/OpenCode効果、GUI変更後facts、複雑character/engine、全3DS/GA。
+
 ## 2026-09-10 OpenCode auto skin R2 terminal — guidance not sufficient
 
 base PR435 mergeeb9172b275bc82ffcc46b18fddfc370f332523e2、ux1/3d-auto-skin-r2-audit。

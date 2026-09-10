@@ -584,6 +584,17 @@ Omission defaults to false even if endpoint rotations match; matching keys do no
 enable loop validation. This validates equal first/last rotations, not velocity
 continuity or game-engine playback settings. Agents must compare submitted clip
 fields with the requested motion before execution, not infer compliance from Job success.
+
+New revisions expose optional `animation_settings` in their `blender.scene`
+validation facts, available in creation/edit Job results and `media.scene.snapshot`.
+Its schema is `schemas/scene-animation-settings.json`. The independent Blender
+validator reads effective scene FPS and actual action frame ranges, plus saved
+typed rig/clip IDs and `loop_requested` metadata (at most 32 clips).
+This is not loop-quality certification or an engine playback flag. General actions,
+invalid/duplicate typed metadata and overflow are counted in `unreported_actions`;
+they are not silently presented as absent. Missing facts on older revisions mean
+not inspected, not zero clips. Compare these observations with the requested motion.
+
 At most 128 tracks/clip, 32 clips/scene, 262144 scalar keys and 250000 bone-frame
 samples are accepted, counting saved curves again before adding a clip.
 Only typed actions and muted single-action NLA stashes are accepted; drivers,

@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 from pathlib import Path
 import sys
+from typing import Any
 
 import bpy
 
@@ -38,6 +40,33 @@ def finite(values: object) -> bool:
         return all(math.isfinite(float(value)) for value in values)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return False
+
+
+def animation_settings(actions: Any, fps: float) -> dict[str, object]:
+    """Observe saved typed metadata and actual ranges; never infer loop intent."""
+    clips: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    unreported = 0
+    for action in actions:
+        rig_id, clip_id = action.get("media_forge_rig_id"), action.get("media_forge_clip_id")
+        loop = action.get("media_forge_loop")
+        start, end = map(float, action.frame_range)
+        valid = (
+            action.get("media_forge_clip_schema") == 1
+            and isinstance(rig_id, str) and re.fullmatch(r"[a-z][a-z0-9._-]{0,63}", rig_id)
+            and isinstance(clip_id, str) and re.fullmatch(r"[a-z][a-z0-9._-]{0,47}", clip_id)
+            and type(loop) in (bool, int) and loop in (0, 1)
+            and math.isfinite(start) and math.isfinite(end)
+            and -2_000_000 <= start <= end <= 2_000_000
+        )
+        if not valid or len(clips) >= 32 or (rig_id, clip_id) in seen:
+            unreported += 1
+            continue
+        seen.add((rig_id, clip_id))
+        clips.append({"object_id": rig_id, "clip_id": clip_id,
+                      "frame_start": start, "frame_end": end, "loop_requested": bool(loop)})
+    return {"schema_version": "media-forge.animation-settings@1", "fps": fps,
+            "clips": clips, "unreported_actions": unreported}
 
 
 def inspect_scene() -> dict[str, object]:
@@ -81,6 +110,8 @@ def inspect_scene() -> dict[str, object]:
         "materials": len(bpy.data.materials),
         "images": len(bpy.data.images),
         "animations": len(bpy.data.actions),
+        "animation_settings": animation_settings(
+            bpy.data.actions, bpy.context.scene.render.fps / bpy.context.scene.render.fps_base),
         "text_blocks": len(bpy.data.texts),
         "linked_libraries": 0,
         "external_images": 0,
