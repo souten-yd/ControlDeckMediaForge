@@ -131,7 +131,7 @@ def test_old_schema_migration_preserves_ready_rows(tmp_path: Path) -> None:
     with sqlite3.connect(store.db_path) as connection:
         after = connection.execute("SELECT * FROM blender_runtime_operations").fetchone()
     assert after[:len(before)] == before
-    assert after[len(before):] == (None, None, None, 0, None)
+    assert after[len(before):] == (None, None, None, 0, None, None)
 
 
 @pytest.mark.parametrize("job_id", ["", "Bearer secret", "../../job", "x" * 129])

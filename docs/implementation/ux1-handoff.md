@@ -3,6 +3,25 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 private publication journal foundation
+
+base PR470 merge00c6667、ux1/3d-publication-journal。前turnは実再現/設計mergeで進捗。
+blender_publication.pyにbounded private identity/journal、既存operationへpublication_json nullable migration。
+Store.begin/complete_blender_publication、blender_publication accessorを追加。
+開始とcancel/abortはBEGIN IMMEDIATEで別接続間も競合判定。開始後stopはstop_requestsへ分離。
+検証済み完了とHost outboxを同時確定し、同一結果再送のみ許可。通常updateで公開journalを書換えない。
+起動時の未完了はfailed/recovery_requiredで保護、Host終端を作らず同runtime重複開始も拒否。
+旧NULL操作を維持。旧schema元列値不変、新末尾NULLの期待値を追加。関連45pass/7.31秒。
+外部mf-publication-journal-core-20260910.py、-r2 evidenceは実HTTP/2app lifespansでexit0/0.504秒。
+fixture identity/Blender・Hostなし。同一process内でcore再起動、OS crashではない。
+確定結果/遅延cancel保持・未確定の照合待ち・identity非公開を実応答で確認。初回mkdir失敗記録保持。
+managerはまだ新APIを呼ばず、実Blenderの公開競合修正とはしない。
+次: 実体照合後のrecovery確定API、managerのbefore_commit開始/完了・I/O失敗/drainを接続。
+未確定を無条件再実行/削除せず、PR470再現試験とprocess再起動を受入してから配布する。
+viewer55ms/差分0/Node5pass、全38329 exit0/1639pass/既知2warnings/174.19秒。
+全診断終端、commit/push/通常merge後も未配布。Host/稼働MF変更なし。
+全3DS/GA/installed10分refreshはPARTIAL。untracked .venv保持。具体的な外部blockerなし。
+
 ## 2026-09-10 publication commit boundary audit
 
 base PR469 mergebfe13c0、ux1/3d-publication-commit-boundary。前turnは進捗/merge。

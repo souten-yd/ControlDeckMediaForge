@@ -17,6 +17,7 @@ from pydantic import BaseModel, ValidationError
 
 from .composer import CreativeCompositionRecord
 from .creative_batches import CreativeBatchRecord
+from .blender_publication import PublicationIdentity, PublicationJournal
 from .blender_operation import (
     TERMINAL_BLENDER_RUNTIME_OPERATION_STATES,
     BlenderRuntimeOperation,
@@ -377,6 +378,7 @@ class Store:
                 ("host_terminal_json", "TEXT"),
                 ("host_terminal_sent", "INTEGER NOT NULL DEFAULT 0"),
                 ("host_terminal_reconciliation_json", "TEXT"),
+                ("publication_json", "TEXT"),
             ):
                 if name not in blender_columns:
                     connection.execute(
@@ -406,6 +408,19 @@ class Store:
             blender_terminal = tuple(
                 state.value for state in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES
             )
+            for row in connection.execute(
+                "SELECT id, publication_json FROM blender_runtime_operations WHERE publication_json IS NOT NULL"
+            ).fetchall():
+                publication = PublicationJournal.model_validate_json(row["publication_json"])
+                if publication.phase != "committed":
+                    publication.phase = "recovery_required"
+                    connection.execute(
+                        """UPDATE blender_runtime_operations SET publication_json = ?, state = 'failed',
+                           error_code = 'blender_publication_recovery_required',
+                           error_message = 'Interrupted runtime publication requires identity verification',
+                           updated_at = ? WHERE id = ?""",
+                        (publication.model_dump_json(), utc_now(), row["id"]),
+                    )
             connection.execute(
                 f"""UPDATE blender_runtime_operations SET state = ?, error_code = NULL,
                     error_message = NULL, updated_at = ?
@@ -1850,7 +1865,9 @@ class Store:
         with self._lock, self._connect() as connection:
             active = connection.execute(
                 f"""SELECT id FROM blender_runtime_operations WHERE runtime_id = ?
-                    AND state NOT IN ({','.join('?' * len(terminal))}) LIMIT 1""",
+                    AND (state NOT IN ({','.join('?' * len(terminal))})
+                         OR (publication_json IS NOT NULL
+                             AND json_extract(publication_json, '$.phase') != 'committed')) LIMIT 1""",
                 (runtime_id, *terminal),
             ).fetchone()
             if active is not None:
@@ -1928,6 +1945,8 @@ class Store:
                 raise KeyError(operation_id)
             if previous["host_terminal_json"] is not None:
                 raise ValueError("Host setup terminal outcome is immutable")
+            if previous["publication_json"] is not None:
+                raise ValueError("Runtime publication requires its dedicated completion path")
             if previous["cancel_requested"] and previous["error_code"] == "host_context_lost":
                 values["error_code"] = previous["error_code"]
                 values["error_message"] = previous["error_message"]
@@ -1949,12 +1968,15 @@ class Store:
     ) -> BlenderRuntimeOperation:
         terminal = {state.value for state in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES}
         with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT state FROM blender_runtime_operations WHERE id = ?", (operation_id,)
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,),
             ).fetchone()
             if row is None:
                 raise KeyError(operation_id)
-            if row["state"] not in terminal:
+            if self._record_blender_publication_stop(connection, row, "cancel"):
+                pass
+            elif row["state"] not in terminal:
                 if row["state"] == BlenderRuntimeOperationState.QUEUED:
                     connection.execute(
                         """UPDATE blender_runtime_operations
@@ -1988,6 +2010,9 @@ class Store:
     def _journal_blender_terminal(connection: sqlite3.Connection, row: sqlite3.Row) -> None:
         """Persist an outcome atomically with local completion; never persist runtime paths."""
         statuses = {"ready": "succeeded", "failed": "failed", "canceled": "canceled"}
+        if row["publication_json"] is not None:
+            if PublicationJournal.model_validate_json(row["publication_json"]).phase != "committed":
+                return
         if (row["host_job_id"] is None or row["host_terminal_json"] is not None
                 or row["state"] not in statuses):
             return
@@ -2032,11 +2057,14 @@ class Store:
     def abort_blender_runtime_host_operation(self, operation_id: str, owner: str) -> None:
         """Signal a lost-authentication stop without claiming the runner has exited."""
         with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                "SELECT host_owner FROM blender_runtime_operations WHERE id = ?", (operation_id,)
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,),
             ).fetchone()
             if row is None or row["host_owner"] != owner:
                 raise KeyError(operation_id)
+            if self._record_blender_publication_stop(connection, row, "host_context_lost"):
+                return
             connection.execute(
                 """UPDATE blender_runtime_operations SET cancel_requested = 1,
                    error_code = 'host_context_lost',
@@ -2044,6 +2072,113 @@ class Store:
                    WHERE id = ? AND state NOT IN ('ready', 'failed', 'canceled')""",
                 (utc_now(), operation_id),
             )
+
+    @staticmethod
+    def _record_blender_publication_stop(
+        connection: sqlite3.Connection, row: sqlite3.Row, reason: str,
+    ) -> bool:
+        if row["publication_json"] is None:
+            return False
+        publication = PublicationJournal.model_validate_json(row["publication_json"])
+        if publication.phase == "committed":
+            return True  # The completed outcome stays immutable.
+        if reason not in {"cancel", "host_context_lost"}:
+            raise ValueError("Invalid publication stop reason")
+        if reason not in publication.stop_requests:
+            publication = PublicationJournal.model_validate({
+                **publication.model_dump(), "stop_requests": [*publication.stop_requests, reason],
+            })
+            connection.execute(
+                "UPDATE blender_runtime_operations SET publication_json = ?, updated_at = ? WHERE id = ?",
+                (publication.model_dump_json(), utc_now(), row["id"]),
+            )
+        return True
+
+    def begin_blender_publication(
+        self, operation_id: str, identity: PublicationIdentity,
+    ) -> PublicationJournal:
+        """Call off-loop, after registry lock acquisition and before publication.
+
+        BEGIN IMMEDIATE arbitrates against stops even through another Store
+        connection. This records intent, not proof that filesystem I/O succeeded.
+        """
+        identity = PublicationIdentity.model_validate(identity.model_dump())
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(operation_id)
+            if (row["runtime_id"], row["version"], row["action"]) != (
+                    identity.runtime_id, identity.version, identity.action):
+                raise ValueError("Publication identity does not match the operation")
+            if row["publication_json"] is not None:
+                previous = PublicationJournal.model_validate_json(row["publication_json"])
+                if previous.identity != identity or previous.phase != "committing":
+                    raise ValueError("Publication identity or phase cannot be replaced")
+                return previous
+            if (row["state"] != "probing" or row["cancel_requested"] or row["error_code"]
+                    or row["host_terminal_json"] is not None):
+                raise ValueError("Stopped or unprepared operation cannot start publication")
+            publication = PublicationJournal(phase="committing", identity=identity, started_at=utc_now())
+            connection.execute(
+                "UPDATE blender_runtime_operations SET publication_json = ?, updated_at = ? WHERE id = ?",
+                (publication.model_dump_json(), utc_now(), operation_id),
+            )
+        return publication
+
+    def blender_publication(self, operation_id: str) -> PublicationJournal | None:
+        """Internal journal; never include it in the public operation schema."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT publication_json FROM blender_runtime_operations WHERE id = ?", (operation_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(operation_id)
+        return PublicationJournal.model_validate_json(row["publication_json"]) if row["publication_json"] else None
+
+    def complete_blender_publication(
+        self, operation_id: str, identity: PublicationIdentity, result: dict[str, Any],
+    ) -> BlenderRuntimeOperation:
+        """Persist verified live publication and its Host outbox together.
+
+        The caller must verify the actual runtime before calling. Recovery of an
+        uncertain interrupted commit requires a separate verification path.
+        """
+        identity = PublicationIdentity.model_validate(identity.model_dump())
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(operation_id)
+            if row["publication_json"] is None:
+                raise ValueError("Publication was not started")
+            publication = PublicationJournal.model_validate_json(row["publication_json"])
+            committed_result = {**result, "publication_stop_requests": publication.stop_requests}
+            if (publication.identity == identity and publication.phase == "committed"
+                    and json.loads(row["result_json"]) == committed_result):
+                return self.get_blender_runtime_operation(operation_id)
+            if publication.identity != identity or publication.phase != "committing":
+                raise ValueError("Publication completion identity or phase mismatch")
+            if row["host_terminal_json"] is not None or row["cancel_requested"]:
+                raise ValueError("Publication state is inconsistent")
+            publication.phase = "committed"
+            publication.completed_at = utc_now()
+            connection.execute(
+                """UPDATE blender_runtime_operations SET publication_json = ?, state = 'ready',
+                   bytes_done = bytes_total, error_code = NULL, error_message = NULL,
+                   result_json = ?, updated_at = ? WHERE id = ?""",
+                (publication.model_dump_json(), json.dumps(committed_result, separators=(",", ":")),
+                 utc_now(), operation_id),
+            )
+            self._journal_blender_terminal(connection, connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,),
+            ).fetchone())
+        self._notify_session("blender_runtime")
+        return self.get_blender_runtime_operation(operation_id)
 
     def pending_blender_runtime_host_terminals(self, owner: str) -> list[str]:
         with self._connect() as connection:
