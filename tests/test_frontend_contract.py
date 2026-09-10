@@ -43,6 +43,9 @@ def test_mobile_blender_access_preserves_runtime_guards_and_connection_keys() ->
     assert '!state.blenderRfbConnected || !Object.hasOwn(keys, code)' in script
     assert 'setBlenderKeysEnabled(false)' in script
     assert 'if (state.blenderRfb !== rfb) return;' in script
+    assert '"pointerdown", rememberBlenderInput, true' in script
+    assert 'state.blenderInputAnchor = null' in script
+    assert 'state.blenderRfb !== rfb || !state.blenderRfbConnected' in script
 BACKEND = ROOT / "backend" / "mediaforge"
 
 SCRIPT = (FRONTEND / "app.js").read_text(encoding="utf-8")

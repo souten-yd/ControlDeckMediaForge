@@ -5,6 +5,16 @@
 
 ## 2026-09-10 mobile Web Blender access
 
+最新: 原寸console r16/r17で文字入力完了/Enter down-up送信済みでも元editorに届かないと特定。
+canvas最後のpointerdown相対位置へmousemove復元→30ms→同RFB/connected確認→keyへ修正。
+source UI overlay実Blender r18は11.375秒passed、fps30→24/旧4版・hash保持、新版5。
+revision_ac4d6abff2df435ba71742bb9cba5853/sourceasset_15ac411ffa834d348b8e70ed111b2225、
+実Blender独立読込fps24/2actions成功。mouseでありtouch誤clickは未解消、PR441 draft維持。
+日英6viewportにpointer→key順序/待機中disconnectなしを追加し成功、build40ms/Node5。
+全test72132終端exit0/1537passed/169.78秒→commit/pushする。診断r18は終端/owned session回収/login失効。
+外部mf-mobile-blender-source-ui-20260910-r3.pyはOUT r18/BASE第4版なので再実行不可。
+次: touch生成clickずれの最小再現とsource全体UI受入、署名installed経路を補完。
+
 最新: r8〜r15で進捗。touchの開始/終了は正しいopen/clientY244.625、生成clickだけclose/clientY165。
 scroll不変、touch-action/is_mobileでも再現。mouseでは正しくopenし実RFB connected。
 旧CSSが残る診断欠陥を除去後、320px実Blender画面/console表示/保存を確認したがfps24は未反映。

@@ -196,6 +196,7 @@ const state = {
   blenderSessions: [],
   blenderRfb: null,
   blenderRfbConnected: false,
+  blenderInputAnchor: null,
   blenderRfbSessionId: "",
   blenderRfbModule: null,
   blenderRfbReconnect: 0,
@@ -5971,6 +5972,7 @@ async function connectBlenderRfb(session) {
 }
 
 function disconnectBlenderRfb({manual = true, clearTarget = false} = {}) {
+  state.blenderInputAnchor = null;
   setBlenderKeysEnabled(false);
   window.clearTimeout(state.blenderRfbReconnect);
   state.blenderRfbReconnect = 0;
@@ -5996,11 +5998,37 @@ function setBlenderKeysEnabled(enabled) {
   });
 }
 
-function sendBlenderAssistKey(code) {
+function rememberBlenderInput(event) {
+  const canvas = byId("scene-blender-screen").querySelector("canvas");
+  if (!canvas || event.target !== canvas || !state.blenderRfbConnected) return;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  state.blenderInputAnchor = {
+    x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
+  };
+}
+
+async function sendBlenderAssistKey(code) {
   const keys = {Escape: 0xff1b, Tab: 0xff09, Enter: 0xff0d,
     ArrowUp: 0xff52, ArrowDown: 0xff54, ArrowLeft: 0xff51, ArrowRight: 0xff53};
   const rfb = state.blenderRfb;
   if (!rfb || !state.blenderRfbConnected || !Object.hasOwn(keys, code)) return;
+  const canvas = byId("scene-blender-screen").querySelector("canvas");
+  const anchor = state.blenderInputAnchor;
+  if (canvas && anchor) {
+    // Blender dispatches keys to the editor under the remote pointer. Moving
+    // to our toolbar must not redirect Enter/Tab into a different editor.
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    canvas.dispatchEvent(new MouseEvent("mousemove", {bubbles: true,
+      clientX: rect.left + anchor.x * rect.width,
+      clientY: rect.top + anchor.y * rect.height}));
+    // The pinned noVNC batches pointer motion for up to 17 ms. Let that event
+    // flush before the key; never access its private pointer internals.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    if (state.blenderRfb !== rfb || !state.blenderRfbConnected) return;
+  }
   // noVNC sends a complete press/release pair when down is omitted.
   rfb.sendKey(keys[code], code);
 }
@@ -8321,6 +8349,7 @@ byId("scene-blender-recover").addEventListener("click", () => {
   if (recovery) void startOrOpenBlender(recovery.id);
 });
 byId("scene-blender-close").addEventListener("click", closeBlenderView);
+byId("scene-blender-screen").addEventListener("pointerdown", rememberBlenderInput, true);
 byId("scene-blender-keys").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-blender-key]");
   if (button && !button.disabled) sendBlenderAssistKey(button.dataset.blenderKey);

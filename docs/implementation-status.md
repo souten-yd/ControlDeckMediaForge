@@ -1,5 +1,32 @@
 # Media Forge implementation status
 
+## 2026-09-10 assisted keys restore Blender editor context (PR441)
+
+前turnのfps不一致を原寸canvasで切り分け。外部診断r16/r17は画像取得後保存せず終了。
+`/data1tb/mf-mobile-blender-source-ui-20260910-r16/console-native-before.png` に
+`bpy.context.scene.render.fps = 24` の完全入力を確認、afterでも未実行。
+r17は実sendKeyを元実装へ転送する診断記録で65293/Enterのdown/up両方を確認。
+ポインターをconsoleへ戻して通常Enterを送ると実行された。toolbar移動でBlenderの
+ポインター下editorが変わるため、キー送信だけでは元editorへ届かない。
+
+frontendはcanvas pointerdownの相対座標を保持し、補助key前に同canvasのmousemoveとして復元。
+固定noVNCのMOUSE_MOVE_DELAY=17msを実コードで確認し30ms待ってkeyを送信。
+private RFB methodには依存しない。待機後同RFB/connectedを再照合、disconnectでanchorを消去。
+ブラウザ回帰はpointer復元→key順序と待機中disconnect時keyなしを追加。
+診断fixtureのdisconnectがanchorを消さず次viewportで失敗したため製品と同じ消去へ修正。
+日英6viewportの実Chrome診断は修正後exit0。viewer build40ms/差分0、Node5。
+
+実source UI overlay→installed API/Blender4.5.13はr18で11.375秒passed、
+11.379秒owned session終了/11.457秒login失効。320px・mouse操作でありtouch成功とはしない。
+証跡 `/data1tb/mf-mobile-blender-source-ui-20260910-r18`、fps30→24を保存factsで確認、
+旧4revision/旧hash保持、2clips設定/1mesh不変。新版revision_ac4d6abff2df435ba71742bb9cba5853。
+managed Blenderでsource asset_15ac411ffa834d348b8e70ed111b2225.blendを
+`--background --factory-startup --disable-autoexec --python-exit-code 1 --python-expr`で独立読込し、
+fps==24/actions==2 assert成功/exit0。補助キーでの実設定変更を今回初めて確認。
+全 `./mf.sh test` 72132は終端exit0/1537 passed/既知warning2/169.78秒。
+NOT TESTED: touch誤click解消、
+installed新UI/実mobile端末、全GOAL/A〜F/GA。PR441 draft/稼働.62保持、Host変更なし。
+
 ## 2026-09-10 mobile touch/click coordinates and real RFB display (PR441)
 
 前turnの段階切り分けを受け、外部診断mf-mobile-blender-source-ui-20260910-r3.pyを改良。

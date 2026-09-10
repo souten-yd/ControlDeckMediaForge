@@ -33,7 +33,7 @@ def main() -> None:
                 state.blenderRfb = {sendKey: (...args) => sent.push(args)};
                 setBlenderKeysEnabled(true);
               }
-              function disconnectBlenderRfb() { setBlenderKeysEnabled(false); state.blenderRfb = null; }
+              function disconnectBlenderRfb() { setBlenderKeysEnabled(false); state.blenderRfb = null; state.blenderInputAnchor = null; }
             ''' + 'function openBlenderView(session)' + functions +
                 'byId("scene-blender-keys").addEventListener' + listener)
             results = []
@@ -65,6 +65,25 @@ def main() -> None:
                 page.evaluate('disconnectBlenderRfb(); sendBlenderAssistKey("Enter")')
                 assert page.evaluate('sent.length') == count
                 assert page.locator('#scene-blender-keys button:disabled').count() == 7
+                assert page.evaluate('''async () => {
+                  const canvas = document.createElement('canvas');
+                  byId('scene-blender-screen').replaceChildren(canvas);
+                  connectBlenderRfb();
+                  const rect = canvas.getBoundingClientRect();
+                  rememberBlenderInput({target:canvas, clientX:rect.left+rect.width/4,
+                    clientY:rect.top+rect.height/3});
+                  const order=[];
+                  canvas.addEventListener('mousemove', e => order.push(['move',e.clientX,e.clientY]));
+                  state.blenderRfb.sendKey=(...args)=>order.push(['key',...args]);
+                  await sendBlenderAssistKey('Enter');
+                  if(order.length!==2 || order[0][0]!=='move' || order[1][0]!=='key')return false;
+                  if(Math.abs(order[0][1]-(rect.left+rect.width/4))>1)return false;
+                  order.length=0;
+                  const pending=sendBlenderAssistKey('Tab');
+                  disconnectBlenderRfb();
+                  await pending;
+                  return order.length===1 && order[0][0]==='move';
+                }''')
                 page.evaluate('closeBlenderView()')
                 assert not page.locator('#scene-blender-dialog').is_visible()
                 results.append({'width': width, 'height': height, 'language': language, 'passed': True})
