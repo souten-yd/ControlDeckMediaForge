@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 release cache exclusion
+
+base PR491 merge c0152eaca7a1ab0c4b94e63c837bd1ea4aa6b415、ux1/3d-release-data-cache-filter、PR作成前。
+前turn状態回答のみ/no progress。66572 build成功を同handleで確認、auditはworker_packsのpycache混入でexit1。
+失敗artifact mf-0.28.70-build-20260910は未署名・未公開のまま保持。
+builderで5resource treeを専用stagingへcopyしcacheだけ除外、元checkoutを掃除しない。
+5追加tests/対象13pass、全1852 exit0/1789pass205.39秒/既知2warnings/skip0。
+viewer51ms/diff0/Node5、以後製品/test編集なし。
+修正source build70250 exit0、mf-0.28.70-build-cachefix-20260910、31605226B/SHA9259a9098fa9d7009c9fa95b79c36361d10683067d7c4d0958eda035a3a2d1ac。
+独立flat mf-0.28.70-cachefix-audit.py exit0、203entries/コード一致/実doctor ok。package-r9ii_fs7。
+次: 本PRを通常merge→exact final build/audit→署名公開→標準update/既存DB・asset・runtime保持。
+外部mf-0.28.70-install.py準備済み、未実行。新table emptyだけ許し旧全table保持、全asset/managed exe hash照合。
+稼働.69変更なし。既存UX状態・全GOAL/A〜F/GA PARTIAL、engine未確認。外部blockerなし。
+再開: git status --short --branch; gh pr list --head ux1/3d-release-data-cache-filter。
+開発用untracked3symlinkは保持、root checkoutの利用者差分には触れない。
+
 ## 2026-09-10 v0.28.70 preparation / source image success
 
 base PR490 merge6b914ed3206dba40a618a6ff8bb43daf069af6d7、ux1/release-0-28-70。

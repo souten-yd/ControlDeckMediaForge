@@ -31,9 +31,40 @@ def test_bundle_builder_excludes_heavy_runtime_and_binds_package_identity():
     assert '"provision_args": ["provision"]' in builder
     assert '"health_url": "http://127.0.0.1:9130/health"' in builder
     assert "runtimes/rocm-torch/.venv" not in builder
-    assert 'f"{ROOT / \'creative\'}:creative"' in builder
+    assert 'f"{resources / \'creative\'}:creative"' in builder
     assert "blender-runtime.json'}:config" in builder
     assert "blender-runtime-catalog.json'}:config" in builder
+
+
+@pytest.mark.parametrize("name", ["frontend", "schemas", "worker_packs", "creative", "profiles"])
+def test_release_resource_staging_excludes_nested_bytecode_without_cleaning_source(tmp_path, name):
+    from scripts.build_release_bundle import stage_bundle_data
+
+    source = tmp_path / "source"
+    destination = tmp_path / "staged"
+    for directory in ("frontend", "schemas", "worker_packs", "creative", "profiles"):
+        (source / directory).mkdir(parents=True)
+    nested = source / name / "nested"
+    (nested / "__pycache__").mkdir(parents=True)
+    files = {
+        "worker.py": b"print('worker source')\n",
+        "resource.json": b'{"version": 1}',
+        "LICENSE.md": b"License notice\n",
+        "__pycache__/worker.cpython-312.pyc": b"cached bytecode",
+        "legacy.pyc": b"legacy bytecode",
+        "legacy.pyo": b"optimized bytecode",
+    }
+    for filename, content in files.items():
+        (nested / filename).write_bytes(content)
+
+    stage_bundle_data(source, destination)
+
+    staged = destination / name / "nested"
+    assert sorted(path.name for path in staged.iterdir()) == ["LICENSE.md", "resource.json", "worker.py"]
+    for filename, content in files.items():
+        assert (nested / filename).read_bytes() == content
+        if filename in {"LICENSE.md", "resource.json", "worker.py"}:
+            assert (staged / filename).read_bytes() == content
 
 
 def test_bundle_provision_writes_health_only_after_runtime_gpu_and_model(monkeypatch, tmp_path):
