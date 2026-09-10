@@ -188,6 +188,21 @@ Host canceledが残ることを再現した。PR469はregistry待機中の取消
 実装順は加法的journal/互換試験→停止受付と公開開始の競合試験→manager接続→実機取消/回復→
 署名配布。現行の単一callback、in-process lockだけ、単体試験だけをdurable commitの証明にしない。
 
+先行実装: 既存blender_runtime_operationsのprivate publication_jsonにschema_version=1、
+committing/committed/recovery_required、bounded identity、開始/完了時刻、遅延stop理由を保存する。
+Store.begin_blender_publicationはBEGIN IMMEDIATE内で既存cancel/所有operationのidentity/phaseを照合。
+同じphaseの同一identityだけ再送可能。cancel/Host abortも同じDB書込競合へ入り、公開開始後なら
+公開停止flagではなくstop_requestsへ理由を重複なしで記録する。
+complete_blender_publicationは実検証済みcaller専用で、ready/公開完了/結果/Host outboxを同時確定する。
+同じ結果の再送だけ冪等に扱い、別identity/結果で上書きしない。元operationの公開field集合は変えず、
+遅延停止は結果のpublication_stop_requestsに補足する。private identityは公開応答に含めない。
+再起動で未完了のjournalはfailed/blender_publication_recovery_requiredとして保護し、
+未検証Host終端を作らず、同runtimeへの重複operationと通常の成功確定を拒否する。
+旧publication_json=NULLの操作は従来policyを維持する。旧coreは新journalを解釈しないため、
+この経路を有効化した後のdowngradeは未確定公開を解決するか更新前DB snapshotを復元してから行う。
+このsliceではmanagerはまだbegin/completeを呼ばない。実体照合による回復API、managerのI/O失敗/drain、
+UIでの遅延stop表示、署名installed受入を接続するまで公開競合の修正完了とはしない。
+
 Host所有setupの永続化は既存blender_runtime_operationsへ加法的に置く。
 受付時のownerと一意なHost child ID、終端通知のoutbox/照合receiptだけをprivateに保存し、
 bearerは保存・公開しない。所有者なしの既存ローカル操作を後からHost所有として採用しない。

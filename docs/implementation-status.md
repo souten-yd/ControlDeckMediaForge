@@ -1,5 +1,34 @@
 # Media Forge implementation status
 
+## 2026-09-10 private runtime publication journal foundation
+
+base PR470 merge00c6667、ux1/3d-publication-journal。前turnは実競合再現と設計mergeで進捗。
+private PublicationIdentity/PublicationJournalと既存operationへのnullable publication_json migrationを追加。
+Storeの開始・取消・Host abortをBEGIN IMMEDIATEで競合判定し、開始後stopは別のbounded理由配列へ記録。
+公開済み検証結果の確定はready/committed/結果/Host終端outboxを同時保存。同一確定再送のみ冪等。
+公開field集合は維持。private identityにはruntime/version/archive/実行file/旧登録hash等を束縛しpathを受けない。
+再起動の未確定公開はrecovery_requiredで保護し、Host終端を捏造せず、重複開始と通常の成功確定を拒否。
+旧NULL操作のpolicyを維持し、旧schemaの元列値一致を検証。新規末尾NULL列の期待値だけ追加。
+初回試験でmigration追加位置の誤りを検出・修正。次の旧schema列数差も加法的変更に合わせて修正した。
+関連89364 exit0/45pass/7.31秒。9新規ケースは前後のstop、両理由/owner、同一再送/競合identity、
+再起動保護、別Store接続の同時begin/cancel、path/旧実体identity不足を検証。
+
+外部mf-publication-journal-core-20260910.pyで専用data/実uvloop core/実HTTPを起動し、停止・再起動。
+同一診断process内で2回のapp lifespanを実行したもので、OS process crashの受入ではない。
+identityはfixtureで、実Blender/Hostなし。Store操作はasyncio.to_threadで実行。
+初回はmodule importが専用rootを先に作ったため起動前mkdirでexit1（既存本番dataは未使用）。
+作成順を修正し別-r2 evidenceでexit0/0.504秒、2回のcore停止を確認。
+実GET /healthは両setup_required。実GET /workspace-api/blender/runtimeで、確定済みready/遅延cancel補足の
+再起動後保持と、未確定probing→failed/blender_publication_recovery_required、private identity非公開を確認。
+このHTTP/SQLite証拠を実Blender公開や実Host取消の受入に読み替えない。
+viewer55ms/生成差分0/Node5pass。全38329 exit0/1639pass/既知2warnings/174.19秒。
+
+managerは新しいbegin/completeをまだ呼ばないため、通常導入の動作をこのsliceで変更したとはしない。
+次: 実体照合と回復結果の確定API、managerの登録lock後の開始/完了・I/O失敗・drainを接続し、
+PR470の実競合を再試験する。旧coreへのdowngrade制約もruntime設計に明記。
+NOT TESTED: manager/Blender公開への接続、実体crash回復、遅延stop UI、署名配布/installed、全GOAL/A〜F/GA。
+全体PARTIAL維持。Host/稼働MF/global設定の変更なし。
+
 ## 2026-09-10 post-registration cancellation boundary audit
 
 base PR469 mergebfe13c0、ux1/3d-publication-commit-boundary。前turnは登録待機取消修正/実機受入/mergeで進捗。
