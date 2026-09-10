@@ -1,5 +1,36 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed control-loss diagnosis / safe transport cause logging
+
+base PR466 mergea372ca1、ux1/3d-installed-setup-control-diagnosis。前turnはinstalled取消復元受入/mergeまで進捗。
+外部mf-setup-control-probe-installed-0.28.68-20260910.py、64685 exit0。
+240秒上限の実Chrome修復→切断/診断registry lock待ちを計画したが、19.421秒で異常検出し即解放。
+operation blenderop_7483d928931f401da05dcfe4e01ffc8b/Host07fb88a6c052。
+service.logは `control stopped: host_unreachable (HTTP 502)`。502はclientのHostApiError既定値であり、
+HostがHTTP502を返した証拠ではない。今回は認証期限到達前の通信失敗と特定できた。
+具体的なhttpx例外型は旧ログにはなく、前回約210秒の原因と同一とはまだ断定しない。
+修正版はlocal failed/host_context_lost、Host failed/完全一致receipt/sent1。19.788秒回収確認、login19.853秒失効。
+旧DB行/registry/両Blender hash保持、専用staging回収、Host1811096/MF1965886不変。
+同名evidence dirでpassed=false/cleanup_verified=trueを区別。試験process exit0を処理成功とはしない。
+
+通信の切分け: mf-host-keepalive-probe-20260910は同終端Jobへの5秒間隔GET32件/HTTP200、
+91566 exit0、最終155.375秒。mf-host-control-pair-probe-20260910は専用Host53444a6708f6に
+同じControlDeckHostClientでcontrol/update32組、47910 exit0、160.527秒に成功終端/receipt一致。
+実稼働子1965891のmapsでuvloop使用を確認（親MF1965886）。同httpx0.28.1/httpcore1.0.9と
+同loopback originのuvloop版もmf-host-control-pair-uvloop-probe-20260910、57275 exit0、
+32組/160.350秒/Hostd33fdff5594f成功終端。独立試験成功を導入版の障害解消とは扱わない。
+証跡書込の時間を除いたmf-host-control-pair-uvloop-deadline-20260910も44268 exit0、
+32組/160.367秒/Host385a2dddaa60成功終端。全4専用Host Jobの終端をfresh control GETで独立再確認。
+Host/OS設定やkeepalive値は変更していない。全診断終端済み。
+
+HostApiErrorのcauseについてallowlistの例外型だけをログへ追加。
+ReadError/RemoteProtocolError/ConnectError/各timeout等を区別し、任意型名・本文・tokenは出さない。
+既存秘密値negative試験へ原因例外本文の非出力と型名の出力を追加、関連13pass2.94秒。
+全53321終端exit0/1604pass/既知2warnings/169.11秒、viewer49ms差分0/Node5pass/diff check成功。
+この追加ログは未配布。今回実障害のcause型・keepalive原因・通信の自動retryは未証明/未実装。
+次: sourceの実Blender/coreをuvloopで動かす同条件試験で原因型を採取し、根拠なしにtimeoutやretryを変更しない。
+全GOAL/A〜F/GAとinstalled長時間refreshはPARTIAL。
+
 ## 2026-09-10 installed repair registration-wait cancellation rollback
 
 base PR465 merge93c3b6a、ux1/3d-installed-repair-registration-cancel。前turnは.68署名配布/導入/mergeまで進捗。
