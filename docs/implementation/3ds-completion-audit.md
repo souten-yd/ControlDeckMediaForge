@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 installed.69のsoftware GUI＋通常画像試験は不合格。
+mf-software-gui-image-coexist-20260910-r2、同GUI readyを維持するが画像はBrokerでLLM待ち、
+602.064秒HTTP401 failed。通常app.submit_hostedの親service identity保持と画像job refresh欠落を確認。
+Host refresh0/Host running残存を独立確認し、専用Hostjobだけ正規取消で回収、元scene/全revision保持。
+setup/sceneの長時間refresh成功をこの通常画像経路へ転用しない。先にcredential更新と終了整合を修正する。
+画像実行との共存・保存・再接続は未受入、GUI待機維持だけを共存成功にしない。
+
 2026-09-10 [長時間受入対応表](3ds-long-duration-evidence.md)を追加。
 GUI認証更新後660秒継続/実編集保存は既存.30で受入済み、setup10分refreshは.69で追加受入済み。
 原観測5件と現在DB、関連5 Assets/8,274,480B/実GLB nodes1→2をread-only再照合。

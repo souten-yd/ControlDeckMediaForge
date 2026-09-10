@@ -3,6 +3,27 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 image waiting credential expiry — FIX NEXT
+
+base PR486 merge745dc04b5485936089e59abd9defb867a4389503、ux1/3d-coexist-auth-failure。
+前turnは長時間証拠map/merge。今回はsoftware GUI+画像実試験で新しい通常画像認証欠陥を検出。
+外部mf-software-gui-image-coexist-20260910.py、初回base_url欠落で操作前失敗、R2/7015 exit1。
+GUIcc9321a35a6c429c99e27b04c1bf6c6c、画像job_aeb5aa79ea7b4127b797de3f5441c8ea、
+Host4927c03086a2、request0bebc4f3-9809-495d-8363-9d391ccbd6f6。7.964秒resource待ち→602.064秒HTTP401 failed。
+当該Host refresh0、GUIは同session ready維持後602.348秒停止/602.822秒login失効。画像worker実行なし。
+Broker held_by_other_owner/LLMblocking、別llama metrics processing1。手動LLM停止なし。
+原因app.submit_hostedのHostExecutionが親service identityのまま。通常jobs.pyにjob credential refreshなし。
+scene_recipe_jobs/blender_setup_hostは別経路。WS更新では捕捉済みexecution identityが変わらない。
+Host終端も失効identityで失敗しHost running残存。mf-coexist-failure-audit-20260910.pyで独立回収exit0。
+request expired（手動削除なし）、owner16を確認して専用Hostjobのみ正規cancel200→canceled。診断login回収。
+証跡mf-software-gui-image-coexist-20260910-r2、元passed=false保持。元scene/全revision DB一致。
+Host2381614/MF2428421 active不変、診断/runner/Blender PID不在。専用sceneはc19a0c389d974517b04c8eced93b0355。
+次: MediaForge通常画像へHost所有job credential/期限前更新を追加、admission/内部queue/失効/終了回帰。
+既存Host APIのみ、attached parent所有・区間進捗を維持し秘密をDBへ保存しない。source→署名→installedで受入。
+未修正の同試験再投入は禁止。全E/全GOAL/A〜F/GA PARTIAL、具体的外部blockerなし（コード修正可能）。
+文書のみ、基準PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5、今回は再実行なし。
+記録commit/push/通常PR mergeへ。untracked .venv保持。
+
 ## 2026-09-10 long-duration evidence map
 
 base PR485 mergedaca973a4617eaada0be47288217c43e02d91a7b、ux1/3d-long-duration-evidence-map。
