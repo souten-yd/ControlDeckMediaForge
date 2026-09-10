@@ -2,6 +2,7 @@
   "$defs": {
     "AnimationClip": {
       "additionalProperties": false,
+      "description": "Create a bone animation clip. For requested looping motion, explicitly set\nloop=true on EVERY clip: matching endpoint keys do not enable loop validation.\nOmitted loop defaults to false. Verify the submitted fields against the request\nbefore execution; a successful Job alone does not prove the requested motion.",
       "properties": {
         "type": {
           "const": "animation.clip",
@@ -44,6 +45,7 @@
         },
         "loop": {
           "default": false,
+          "description": "Set true explicitly for a requested looping clip (including idle/walk loops). Omission means false, even when first and last rotations match. True enables endpoint validation; it does not guarantee velocity continuity or engine playback looping.",
           "title": "Loop",
           "type": "boolean"
         },

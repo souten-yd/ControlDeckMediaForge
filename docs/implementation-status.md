@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-10 animation loop schema guidance
+
+PR432 merge0a26acd4ec2918a247649463f882dc5fafec8d9c確認、ux1/3d-animation-loop-guidance。
+実OpenCodeの2回のloop省略を受け、AnimationClip本体とloop fieldの説明を追加。
+各clipへの明示true、端点一致だけで有効にならないこと、Job成功と依頼充足の違いを明記。
+原因が説明不足だけであるとは確定しない。既定false/任意field/validationは維持する。
+3公開schemaとdocs/api同期、既存default/端点検証と説明一致の4tests追加。
+focused21 passed/0.23秒、viewer build45ms/生成物差分0、Node5成功。
+専用source core PID1402727/127.0.0.1:19130、data /data1tb/mf-loop-guidance-source-ul8GII。
+urllib実HTTPでcreate/edit/workflow schema3件200、exact source一致、descriptionを除くtreeは
+origin/mainと同一。診断exit0、専用coreのみ通常終了exit0（handle76064）。
+稼働0.28.60/MF1384429/Host1384554は変更なし。
+全 ./mf.sh test は1509 passed/既知warning2/146.64秒/exit0（handle5326終端）。
+NOT TESTED: 新説明のsigned installed/OpenCodeへの効果、複雑character/engine、全3DS/GA。
+次は全test終端→通常PR→署名版準備後、同じstrict条件で新OpenCode受入。
+
 ## 2026-09-10 OpenCode auto skin terminal — strict acceptance FAILED
 
 PR #432診断の同run50315はexit0/779.375秒/8 tool calls/34 eventsで終端。

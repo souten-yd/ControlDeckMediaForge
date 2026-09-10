@@ -8,7 +8,33 @@ import jsonschema
 import pytest
 from pydantic import ValidationError
 
-from mediaforge.scene_recipes import SceneCreateRequest
+from mediaforge.scene_recipes import AnimationClip, SceneCreateRequest
+
+
+def test_loop_guidance_and_legacy_default() -> None:
+    operation = clip()
+    operation.pop("loop")
+    assert AnimationClip.model_validate(operation).loop is False
+    # Endpoint equality must not silently opt legacy requests into loop validation.
+    operation["tracks"][0]["keys"][-1]["rotation_degrees"] = [1, 0, 0]
+    assert AnimationClip.model_validate(operation).loop is False
+    operation["loop"] = True
+    with pytest.raises(ValidationError, match="endpoints"):
+        AnimationClip.model_validate(operation)
+
+
+@pytest.mark.parametrize("filename", ["scene-create-request.json", "scene-edit-request.json",
+                                      "scene-workflow-request.json"])
+def test_published_loop_guidance(filename: str) -> None:
+    schema = json.loads((Path(__file__).parents[1] / "schemas" / filename).read_text())
+    definition = schema["$defs"]["AnimationClip"]
+    live = AnimationClip.model_json_schema()
+    assert definition["description"] == live["description"]
+    assert definition["properties"]["loop"] == live["properties"]["loop"]
+    assert "EVERY clip" in definition["description"]
+    assert "Omission means false" in definition["properties"]["loop"]["description"]
+    assert definition["properties"]["loop"]["default"] is False
+    assert "loop" not in definition["required"]
 
 
 def clip() -> dict[str, Any]:
