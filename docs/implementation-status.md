@@ -1,5 +1,24 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.70 signed publication and installed update
+
+PR492 merge/tag19532bed829ccbc0fa1a49989f921426cba1b41c。exact build75174 exit0、
+mf-0.28.70-build-final-20260910、31,606,524B、SHA
+f7e3f38f1e9e7d9326f4ce41a4787da56ef98fc7e0169d3d894a214a0955223b。
+mf-0.28.70-final-audit.py exit0、203entries/cacheなし、worker/UI/schema/終端更新code一致、実doctor ok。
+既存MediaForge publisher keyで署名/自己検証しv0.28.70公開、4assetsをpublic-20260910へ再取得。
+mf-0.28.70-install.pyは公開4files bytes一致・実Host trusted key検証後、全Job/GUI/setup/model idle、
+SQLite/registry backupと再照合を経て正規release_bundle.installを実行した。
+38985 exit0、10.512秒healthy。backup mf-0.28.70-update-i9mmyy2o。
+旧全table/全row保持、新owned_job_terminalsと索引だけ追加/新table空。registry bytes不変。
+既存assetとmanaged Blender exe計990filesのsize/SHA一致。Host2381614保持、MF2504103。
+実/proc exe SHA371269c05674bc90d78adebbf2e105c8b1a738c6450e941a0d2936ba3d1f12c7が監査packageと一致。
+実HTTP health healthy、auto skin/loop/animation設定schemaと配信frontend5filesがexact sourceと一致。
+標準retain2で.68実行bundleのみ整理、.69/.70保持を実listing確認し利用者通知済み。制作物削除なし。
+基準gate PR492:1789pass205.39秒/skip0、viewer51ms差分0/Node5。以後製品/test差分なし。
+NOT TESTED: 本導入版での通常TTL画像/GUI共存、全F異常系・全GOAL/A〜F/GA/engine。
+次は専用sceneのsoftware GUI＋通常画像を再受入。既存失敗証跡は保持し、他利用者推論を停止しない。
+
 ## 2026-09-10 release data bytecode exclusion
 
 PR491 merge c0152eaca7a1ab0c4b94e63c837bd1ea4aa6b415 の0.28.70 buildは66572 exit0。

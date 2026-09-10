@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.70 installed acceptance
+
+PR492 merge/tag19532bed829ccbc0fa1a49989f921426cba1b41c、ux1/release-0-28-70-acceptance、記録PR作成前。
+exact75174 build/final-audit成功、build-final-20260910、31606524B/SHAf7e3f38f1e9e7d9326f4ce41a4787da56ef98fc7e0169d3d894a214a0955223b。
+既存鍵署名/公開4files再取得/実Hostconsumer検証、idle/backup/再照合→通常update38985 exit0/10.512秒。
+backup mf-0.28.70-update-i9mmyy2o、旧全table保持/新終端table空、registry/990asset・runtime files不変。
+実exe SHA371269c05674bc90d78adebbf2e105c8b1a738c6450e941a0d2936ba3d1f12c7/配信UI5/schema一致、healthy。
+Host2381614保持/MF2504103、標準.68bundle整理通知済み/.69保持。Host/PC restartなし。
+基準gate1789pass205.39秒/skip0/viewer51ms差分0/Node5、本slice文書だけ。
+次はinstalled.70 software GUI＋通常画像の共存受入。旧mf-software-gui-image-coexist-20260910.pyは.69固定で再実行禁止。
+前回失敗scene_c19a0c389d974517b04c8eced93b0355を所有確認し、別証跡/新版/十分な待機予算で実行する。
+新利用者依頼: MF3DSプロジェクトは検証後削除。CodeDEV内14件を発見、まだ削除なし。
+終端・内容・参照を照合して検証済み納品先だけ回収し、MediaForge元asset/historyを巻き込まない。
+他agentのOpenCode実行あり（別/tmp project）。停止・設定変更しない。
+全GOAL/A〜F/GA/engine PARTIAL、installed通常TTL共存はNOT TESTED。外部blockerなし。
+再開: git status --short --branch; gh pr list --head ux1/release-0-28-70-acceptance。
+
 ## 2026-09-10 release cache exclusion
 
 base PR491 merge c0152eaca7a1ab0c4b94e63c837bd1ea4aa6b415、ux1/3d-release-data-cache-filter、PR作成前。
