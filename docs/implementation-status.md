@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-10 read-policy runtime/browser acceptance and v0.28.71 preparation
+
+base PR497 merge7025735e2bffa2f125a10c7d75388152478ce6cb、ux1/3d-read-policy-runtime-acceptance。
+外部mf-read-policy-rfb-versions-20260910.pyを4.5.9/4.5.13で順次実行、両exit0。
+実GUI ready1.219/1.220秒、RFB接続/切断/再接続/各16384pixel bytes受信、保存4.225/4.024秒。
+mf-read-rfb-4.5.9-y0qube4mとmf-read-rfb-4.5.13-zrfknuds、両unit inactive/元source hash保持。
+続くsource browser初回はXauthority不足、二回目は診断Web root一階層過深でpack missing/開始拒否。
+旧server終了後、新専用data-r3/正しいWeb rootでscripts/3ds_autosave_source_e2e.pyを実行。
+実Chrome/noVNC --verify-input-activityは63826 exit0/127.064秒。
+編集9.183秒/再接続34.111秒/default autosave125.213秒/専用Blender crash→2mesh復旧、旧正式版不変。
+証跡mf-read-policy-browser-evidence-20260910-r3、2083057B/SHAは3ds-filesystem-isolation.md。
+pageerror0/screenshot目視、GUI unit inactive、専用source serverも終了。Host/稼働MFを停止していない。
+addon/coreを0.28.71へ整合、release note追加。全69529 exit0/1793pass204.70秒/既知2warnings。
+viewer41ms差分0/Node5。以後product/test編集なし。新CodeDEV projectなし。
+稼働.70未修正、署名公開/installed/全GOAL/A〜F/GA PARTIAL。次はexact build/監査/署名配布/通常導入。
+
+
 ## 2026-09-10 source GUI read-isolation remediation
 
 base PR496 merge2257980c2c9fe43dc7c4d094f927a9b6aad7f7e2、ux1/3d-gui-read-isolation。
