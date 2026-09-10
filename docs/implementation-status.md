@@ -1,5 +1,40 @@
 # Media Forge implementation status
 
+## 2026-09-10 automatic-weight feasibility / not a published operation
+
+Base PR427 merge b20fc16、branch ux1/3d-auto-weight-probe。
+scripts/auto_weight_probe.py は管理対象Blenderだけで動く独立診断。既存sceneを開かず、
+新規evidence directoryだけへfixture/source/GLB/provenanceを保存する。製品API・版数・Host変更なし。
+実行: managed blender-4.5.13-linux-x64/install/blender --background --factory-startup
+--disable-autoexec --python-exit-code 1 --python scripts/auto_weight_probe.py
+-- --evidence-dir /data1tb/mf-auto-weight-probe-20260910-r5。
+exit0、内部0.129秒、Blender4.5.13 LTS/hash daeeeca98fb0。
+242頂点/2骨の連続sphereへARMATURE_AUTO、48頂点が複数骨の影響を受ける。
+raw heatのweight合計誤差0.022996604442596436を観測。最大4影響へ制限して明示正規化し、
+sourceとGLB再import双方で最大誤差2.9802322387695312e-08、最大2影響。
+bind前後のrest差1.1920928955078125e-07m、上側骨local X 0.6radで最大変位0.384176245m。
+GLB再import後はvertex splitで287頂点/51混合、同poseの対称最近点距離1.8143349382111313e-07m。
+実armature modifier参照とrest/poseを照合。bone.custom_shapeとして実参照されるhelperだけを除外。
+source419324B/SHA c695d51d81f0c7188ec85262f6ec69ec6d43574c2d0edb75ba2c2c0ee80b06ba、
+GLB19540B/SHA 1d37cddcb53ffcd1a49b67a5fe904b2a28976eb4a3d52fa621c10e4e5aabf3d6。
+script SHA76b8d3591ffa03d91a0bf5160b5083130b480c660430d8f8c70d150f7e685258。
+生成物は製品Asset登録ではない。observations/provenanceにlineageとNOT TESTEDを保持する。
+
+失敗履歴も保持: 初回はraw正規化assert、r2はhelperを含めたmesh件数、r3は丸め点集合のpose一致でexit1。
+r2生成ファイルに後追いfailure/provenance記録を追加し成功に変更しない。
+r4の物理距離検査成功後、NaN/負値がpositive filterで隠れないよう検査を強化してr5再実行。
+tests/test_auto_weight_probe.py は欠落geometry/空geometry/NaN/負値/非正規化/剛体のみを拒否し、13 passed。
+全 ./mf.sh test は1448 passed/既知warning2/144.68秒/exit0。npm run build:viewer は54ms/生成物差分0、
+node --test tests/model-animation.test.mjs は5 passed。diff check成功。診断のみで新署名releaseは作らない。
+NOT TESTED: typed API/MCP/OpenCode自動weight、複雑なcharacter、heat失敗処理、weight補正、
+animation clip/engine取込/見た目。GA-4/5/全3DSはPARTIAL。次はbounded typed bindと失敗時旧版保持。
+
+同時に既存OpenCode R2の終端記録をread-only確認: observations exit0/1134.769秒/8tools、
+親1334951/子1335041は不在。既存strict verifierはexit1: local_offsetが要求[1.5,0,1.5]ではなく
+[0.75,0,0.75]。全tool completedを制作合格と扱わない。配置物の独立Blender検査と回収監査は残件。
+証跡 /data1tb/mf-opencode-array-installed-0.28.59-20260910、原events/observationsは書換えない。
+
+
 ## 2026-09-10 v0.28.59 published/installed / fresh OpenCode run started
 
 PR #426 merge/tagff02850da78be483687cf94eb2ec86d60d33996f。
