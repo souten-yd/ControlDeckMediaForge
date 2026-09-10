@@ -1,5 +1,50 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.60 published/installed / real MCP automatic binding
+
+PR430 merge/tag b1b62b237ea67c97b52793b51fcff2998ea02509。
+exact /data1tb/ControlDeckMediaForge-release-0.28.60 でbuild_release_bundle.pyを実行、41502 exit0。
+PyInstaller6.22.0/Python3.12.3、buildログ15.001秒、artifact31,542,402B、
+SHA83ac8f7fb651a9ccd454618f6eeeed40470a48c797cd4c1c956974c625dd0d79。
+mf-0.28.60-audit.py exit0: 202 entriesの禁止path/秘密値拡張子/certifi公開PEMを検査、
+worker/frontend/schema bytes一致、新SkinBindAuto class/3schema、既存guard/cleanup/download等を照合。
+packaged doctor ok/0.28.60/packaged=true。抽出package mf-0.28.60-package-8hkphpe3。
+既存publisher鍵で署名/自己検証、通常公開v0.28.60へ4filesを公開。
+mf-0.28.60-public-20260910へ再取得しbuild4filesと一致、実Host署名検証も成功。
+
+外部mf-0.28.60-install.pyをHost診断venv/configで実行、45062 exit0/11.698秒。
+idle/全table backup/再照合後に標準update。backup /data1tb/mf-0.28.60-update-vkfmd1mv。
+DB全table fingerprint/runtime registry bytes不変、HTTP healthy、MF1384429。
+実exe SHA2a8d98c52444b81c19a9d7c7c90a2b6a2810f1e4b0d7da690f025d97e1b539adはaudit packageと一致。
+稼働HTTP配信scene-create schemaはexact source JSONと一致しskin.bind_autoを含む。
+標準保持2版で.58実行bundleだけ整理、事前通知済み。公開releaseで回復可、.59/.60/data/runtime保持。
+Hostはupdate直前/直後とも1340115で不変。今回Host変更・再起動は実施していない。
+
+実MCP: mf-auto-skin-mcp-installed-0.28.60.py の初回tools/listがprotocol error、exit1。
+証跡mf-auto-skin-mcp-installed-0.28.60-20260910、cleanup0.039秒/job_id=null、設定削除確認。
+生のprotocol errorを記録していないため初回原因を確定しない。
+read-only preflightはHTTP200/88,938B/24tools、同bridgeもexit0/24tools。
+Hostはその間に別途1384554へ変わり、systemd開始10:31:48 JST、初回失敗file時刻10:31:47.399。
+時間が近いという証拠であり、因果は未確定。Host sourceはclean main164fa26のまま。
+制作Job未作成・同project exports空を確認して、resume診断を新evidence dir -r2へ実行。
+再実行は新projectを重複作成せず、原失敗traceを保持する。handle80634 exit0/2.112秒。
+MCP tools/list→create→status(succeeded/host_terminal_sent=true)→snapshot→export→新grant→pack。
+job_3836cae7792b4431adf0d13518b44259、Host child7b305fe607a3は実DBでもsucceeded。
+scene_b578b611cef04aec915f3811357c85df、revision_ddda27f9d9b543999b58e1a1eca806fb、
+GLB asset_f1a2b6184d524753803df374dc0e9191。
+CodeDEV/MF3DS-Auto-Skin-MCP-20260910/exports/weighted.glbは32,140B、
+SHAb5c63cd8f12c853770c0fa08910ef865111521f938c127391baba44f5acb9af3。
+receipt/Asset/provenance.output_sha256と実bytes一致。旧scene/revisionsとruntime registry不変。
+実Blender4.5.13で同source/配置GLBを再検査: 114頂点/48混合、import480/192混合、最大2影響、
+weight合計誤差2.9802322387695312e-08。idle/bend各2秒、5時刻最大world差2.4646110694144804e-07m。
+共通inspectorのNOT TESTED欄はsource向けであり、MCP実行証拠はこのwrapper traceで別に確認する。
+初回/再実行private config2件の不存在を独立確認。global設定/他project/既存Blender実体変更なし。
+
+記録sliceはdocsのみ、versioned full gate1487 passed/153.76秒、build59ms/Node5を参照。
+NOT TESTED: 新操作のOpenCode LLM/director、engine、複雑なcharacter/画像付きskin、この版の実cancel、
+clean/失敗rollback全matrix、全3DS/GA。次は新operationの実OpenCode自然言語受入。
+
+
 ## 2026-09-10 v0.28.60 preparation
 
 PR429 merge74378e8a004b019a1ee979d77433b80fd4ee4dd4確認、ux1/release-0-28-60。
