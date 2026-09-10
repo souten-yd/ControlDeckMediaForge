@@ -1,5 +1,44 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.66 signed installed acceptance
+
+PR454 merge349a075b203657d48d597bf5ac39d8616a497614からexact checkoutをbuild。
+全76556終端exit0/1576passed/154.29秒、viewer49ms差分0/Node5pass。
+build90516終端exit0（PyInstaller6.22.0/Python3.12.3、log13.492秒）、artifact31591049B、
+SHA256 `d16768bf33689051f0925370f2472d7daef36cd95a8bf71cb01dc6d6df785ca0`。
+`/data1tb/mf-0.28.66-audit.py` は203entries・秘密値/venv/weights/制作物混入なし、
+managerクラス全体のsource/packed code一致、既存guard/schema/UI保持、metadata保護同梱、doctor成功。
+package `/data1tb/mf-0.28.66-package-xzs0vqnq/control-deck-media-forge-0.28.66-linux-x86_64`。
+既存publisher keyで署名・自己検証、public79182終端exit0/4assets uploaded後に再取得を開始。
+download66925終端exit0、全4files/build bytes一致とHost trusted署名検証を確認。
+
+`/data1tb/mf-0.28.66-install.py` の通常release_bundle.installは72460終端exit0、9.61秒healthy。
+backup `/data1tb/mf-0.28.66-update-u20k5ege`、全SQLite table fingerprints/registry bytes保持。
+Host PID1811096は更新前後不変、MF PID1919149。実exe SHA256
+`56dba1a32f5ce0b04d92127872d3f39b86fe6f224d6bd62946c387e4d50276ca` はaudit対象と一致。
+配信auto_bind/loop guidance/animation settings schemaもexact source一致。
+事前通知した標準retain2で旧.64実行bundleだけ整理、.65/.66と制作data/runtime保持。
+旧bundleは公開署名releaseから再取得可能。Host再起動・モデル追加取得なし。
+
+最初のinstalled診断36952はexit1/32.033秒でlogin失効。正常版の修復ボタンを期待した診断不備:
+frontendはdamagedだけに修復を表示するためlocator timeoutとなった。操作は開始されず、
+保存before snapshotと実DB全対象行の独立照合も不変。失敗証跡はmf-admission-installed-0.28.66-20260910に保持。
+既存環境を意図的に破損させず、R2は認証付き正式workspace APIのrepairと通常UIのswitchを区別。
+`/data1tb/mf-admission-installed-0.28.66-20260910-r2.py` をHost診断venvで実行。
+実Host opaque iframe、日本語320x700、Chrome headless、overlayなし。24918終端exit0。
+inactive4.5.9 repairは22.781秒にready、実固定cache/6510members/1168332002展開bytesと
+Blender4.5.9/Python3.11.11/background/glTF export/import probe成功。
+通常画面で4.5.9切替23.064秒→4.5.13復元23.431秒、23.617秒passed、23.692秒login失効。
+操作: repair `blenderop_45b5e0aca1dc4903ba58ef0c6f95b008`、
+switch `blenderop_1ddb115b4b1e4aa9a083d3a69304bbd0` / `blenderop_a66bdc7ea9c748cca453de44ff626919`。
+scene_documents/scene_revisions/assets/jobs全行、registry bytes、両Blender実exe SHA保持、page errors0。
+独立read-only照合で記録afterと現DB一致、追加3journalすべてready（repair1/switch2）。
+証跡 `/data1tb/mf-admission-installed-0.28.66-20260910-r2`。全診断終端、稼働.66 active。
+
+受入追記は文書のみ。NOT TESTED: damaged状態の修復ボタン操作、今回新規network取得、
+installed遅延/3回取消注入、10分超setup Host認証、全GOAL/A〜F/GA完成。
+次はsetup Host所有Job/credential lifecycle。全体PARTIALを維持する。
+
 ## 2026-09-10 v0.28.66 preparation
 
 base PR453 merge50a944a、ux1/release-0-28-66。PR452/453の実行制御・導入stage I/O修正を配布する版数準備。

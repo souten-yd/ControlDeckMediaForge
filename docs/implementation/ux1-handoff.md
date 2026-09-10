@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.66 installed acceptance
+
+PR454 merge349a075、exact build90516/audit203/署名/public79182/download66925/install72460全exit0。
+artifact31591049B/SHAd16768bf33689051f0925370f2472d7daef36cd95a8bf71cb01dc6d6df785ca0。
+標準update9.61秒healthy、backup mf-0.28.66-update-u20k5ege、全DB/registry保持。
+Host1811096不変、MF1919149/.66。旧.64実行bundleだけ整理/.65/.66/data/runtime保持。
+初回UI診断36952は正常版にrepairボタンがなく失敗、操作0/DB不変/login失効、証跡保持。
+R2は正式認証workspace repair APIと通常UI switchを区別、24918終端exit0/23.617秒passed。
+inactive4.5.9実修復/glTF probe→4.5.9切替→4.5.13復元、3journal ready/旧DB/registry/実exe保持。
+証跡mf-admission-installed-0.28.66-20260910-r2、独立DB after照合成功/login失効。継続中診断なし。
+次: 受入docs commit/push/通常merge、release note実績更新→setup Host所有Job/credential。
+全GOAL/A〜F/GAはPARTIAL。untracked .venv保持。新コードはPR452/453、版数全1576/154.29秒gate済み。
+
 ## 2026-09-10 v0.28.66 preparation
 
 base PR453 merge50a944a、ux1/release-0-28-66。PR452/453を含む版数/release note準備。
