@@ -1147,21 +1147,29 @@ class BlenderRuntimeManager:
                 archive_facts, facts,
             )
             return
-        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.replace(candidate, destination)
-        try:
-            self.resolver.register_managed(
-                runtime_id=operation.runtime_id,
-                version=spec.version,
-                location=operation.runtime_id,
-                archive_sha256=spec.archive_sha256,
-                before_commit=lambda: self._raise_if_canceled(operation.id),
-                make_active=operation.action == BlenderRuntimeOperationAction.UPDATE,
-            )
-        except Exception:
-            self._ensure_managed_destination(destination)
-            shutil.rmtree(destination)
-            raise
+        with self.resolver.managed_publication_guard():
+            self._raise_if_canceled(operation.id)
+            # Recheck after cross-process lock acquisition, not only before
+            # download. Another publisher may have created this destination.
+            if destination.exists() or destination.is_symlink():
+                raise BlenderRuntimeOperationError(
+                    "blender_runtime_destination_exists", "managed Blender destination already exists"
+                )
+            destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.replace(candidate, destination)
+            try:
+                self.resolver.register_managed(
+                    runtime_id=operation.runtime_id,
+                    version=spec.version,
+                    location=operation.runtime_id,
+                    archive_sha256=spec.archive_sha256,
+                    before_commit=lambda: self._raise_if_canceled(operation.id),
+                    make_active=operation.action == BlenderRuntimeOperationAction.UPDATE,
+                )
+            except Exception:
+                self._ensure_managed_destination(destination)
+                shutil.rmtree(destination)
+                raise
         self._clean_stage_sync(operation.id)
         self.store.update_blender_runtime_operation(
             operation.id,
@@ -1182,7 +1190,7 @@ class BlenderRuntimeManager:
         archive_facts: dict[str, Any], facts: dict[str, Any],
     ) -> None:
         """Publish or roll back a repair atomically against runtime admission."""
-        with self.resolver.removal_guard():
+        with self.resolver.managed_publication_guard():
             self._raise_if_canceled(operation.id)
             durable = self.store.active_scene_runtime_references(operation.runtime_id)
             if self.resolver.live_reference_count(operation.runtime_id) or any(durable.values()):

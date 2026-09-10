@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 normal publication lock boundary
+
+base PR473 mergee094588、ux1/3d-publication-lock-boundary。前turnは進捗/merge。
+通常fresh install/update/repairのrename前に参照guardとregistry flockを取得し、取得後取消を再検査。
+register_managedは同resolver/threadのみ再入可能。他writer/recoveryの独立flockを内側から呼ばない。
+新規配置先の再検査、NOFOLLOW/NONBLOCK/regular lock検証も追加。Store mutexを持って待機しない。
+新6ケース52690 exit0/0.97秒、関連60ケース17577 exit0/9.04秒。
+実通常manager修復は外部mf-publication-lock-real-20260910.py、79097 exit0、証跡-r2。
+実4.5.9/copy cache/uvloop/HTTP/flock、取消21.319秒・正常20.657秒、旧inode保持とGLB実probe確認。
+初回mkdir順序による起動前exit1を保持。最終core停止、Host/installed変更なし。
+viewer41ms/差分0/Node5pass、全30372を同一handleで終端確認: exit0/1669pass/既知2warnings/176.56秒。
+全診断終端。commit/push/通常mergeへ進み、新releaseはmanager journal接続受入後。
+次: guard内の最初のrename前でdurable beginし、失敗/drain/restart/未公開rollbackを接続。
+従来register callbackへの追加だけで済ませない。PR470の登録後取消窓は依然未解決で、完成・配布としない。
+全3DS/GA PARTIAL、untracked .venv保持。外部blockerなし。
+
 ## 2026-09-10 repair publication generation
 
 base PR472 mergef98de49、ux1/3d-publication-generation。前turnは進捗/merge。

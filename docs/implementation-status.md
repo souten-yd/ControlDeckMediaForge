@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-10 normal manager publication lock boundary
+
+base PR473 mergee094588、ux1/3d-publication-lock-boundary。前turnは世代識別のgate回収/mergeで進捗。
+通常fresh install/update/repairの最初のruntime rename前へregistry排他を移した。
+参照guard→registry flock→取消/参照再検査→差替え→登録の順。登録は同resolver/threadのflockを再利用。
+Store mutexを待機中保持しない。新規配置先を取得後に再検査し、他publisherの実体を上書きしない。
+lockはNOFOLLOW/NONBLOCK/regular検査/fd chmod。別writerの独立flockをguard内で呼ばない制約を明記。
+新規6ケースはinstall/update/repair×取消有無で実flock待機中の実体/registry保持と解除後終端を確認。
+52690 exit0/6pass0.97秒、既存関連17577 exit0/60pass9.04秒。
+
+外部 /data1tb/mf-publication-lock-real-20260910.py、最終79097 exit0。
+専用data/実4.5.9/cache copy/通常manager修復/uvloop core/実HTTP/実flock、Hostなし。
+初回はimportによるdata作成とmkdir順序が競合し、サービス起動前にFileExistsError/exit1。
+順序を修正し別root mf-publication-lock-real-20260910-r2で実施、元rootを保持。
+取消ab26d5adb9634759a8b7df4489dc07ce: 21.319秒canceled、待機中と取消後の旧exe inode/SHA・registry保持。
+通常3cd4bd3e8f7b4be989ef08814050b2e2: 20.657秒ready、待機中の旧inode保持→別inode/同SHAで修復。
+実preflightは4.5.9/Python3.11.11/background/GLB import/export true、stage空/registry保持/core停止。
+待機中HTTP healthはsetup_required、22.187ms/1.531ms。正常healthyや性能分布の証拠にはしない。
+viewer build41ms/生成差分0、Node5pass。全 `./mf.sh test` は30372 exit0、
+1669 passed/既知2warnings/176.56秒。同一handleで終端確認、以後製品code変更なし。
+
+次: guard内rename前のdurable begin、完了/I/O失敗/drain/再起動・未公開rollbackの接続。
+登録後取消競合のPR470再現を含む実Host受入後に配布。新journal/generationはまだ通常manager未接続。
+NOT TESTED: OS crash/電源断、実Host取消、本slice installed/GUI、全3DS/GA/署名配布。
+稼働Host/MF/global設定を変更せず、全体PARTIAL維持。
+
 ## 2026-09-10 same-version repair publication generation
 
 base PR472 mergef98de49、ux1/3d-publication-generation。前turnは実体回復adapter/実Blender/mergeで進捗。
