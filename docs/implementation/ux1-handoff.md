@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.69 signed and installed
+
+base PR481 merge/tag22d68ec74ad5e1e888046274f9a2fca807bade48、ux1/release-0-28-69-acceptance。
+前応答は利用者への状態確認のみ。今回は既存署名鍵を確認し公開/再取得/標準導入まで進捗。
+exact build31,636,439B/SHA48bbfc110381752fb139eece0f2e5c89aa6710964677b77ceff473ebd6014677。
+mf-0.28.69-audit.py exit0/doctor ok/埋込code一致。既存鍵をcatalogと照合、生成なし。
+public65188/download25989 exit0/4assets uploaded/tag実commit確認。
+mf-0.28.69-install.py18212 exit0、10.402秒、backup mf-0.28.69-update-2pnswy1r。
+全idle/署名/backup/直前再照合、既存全table値保持、新publication_json列全NULL、registry不変。
+実HTTP healthy/配信schema一致、Host2381614保持/MF2428421、稼働exeとpackage SHA一致。
+旧.67実行bundle標準整理を事前通知。Host/PC restart、制作物/Blender runtime削除なし。
+文書のみ、基準gate PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5、今回再実行なし。
+次: installed.69新journalの正規repair/補足表示/終了照合を専用操作で受入。
+開始前に実current/PID/全未終端Jobsを再確認。外部install scriptは再実行しない。
+NOT TESTED: installed新journal実動作/今回browser、10分refresh、全GOAL/A〜F/GA/engine。全体PARTIAL。
+記録commit/push/通常PR mergeへ進む。untracked .venvを保持。具体的外部blockerなし。
+
 ## 2026-09-10 v0.28.69 preparation
 
 base PR480 merge291ccb9、ux1/release-0-28-69、PR作成前。前turnは実Host再認証/受入/mergeで進捗。

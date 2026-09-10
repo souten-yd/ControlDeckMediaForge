@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.69 signed release and installed migration
+
+PR481 merge/tag22d68ec74ad5e1e888046274f9a2fca807bade48を実GitHub APIで確認。
+exact checkoutからbuild_release_bundle.pyでbuild、外部mf-0.28.69-audit.pyはexit0。
+artifact31,636,439B、SHA256 48bbfc110381752fb139eece0f2e5c89aa6710964677b77ceff473ebd6014677。
+packaged doctor ok/.69、203 entries、worker/schema/UIと新publication4module、
+Store/resolver/Host classes、manager、app起動/WSの埋込コードを比較。verification.jsonを保持。
+既存MediaForge publisher鍵0600の公開鍵をHost trusted catalogと照合、新規鍵生成なし。
+sign_release.py signで署名・自己検証成功。gh release createは65188 exit0、
+download25989 exit0、4公開asset uploaded、tagの実commitと全公開bytes一致を確認。
+
+外部mf-0.28.69-install.pyを実Host診断venvで実行、18212 exit0。
+既存Host consumer署名検証→全Job/GUI/runtime/model operation idle→SQLite/registry backup→
+直前再照合→標準install。10.402秒、実HTTP healthy、.68→.69を確認。
+backup /data1tb/mf-0.28.69-update-2pnswy1r、build/publicはmf-0.28.69-{build,public}-20260910。
+全tableの既存column/値のfingerprintは一致。blender_runtime_operationsへpublication_jsonのみ追加、全NULL。
+runtime registry bytes不変、Host2381614保持、MF2428421。
+稼働exe SHA6ed0a5d903ccb0de89e64fec31861320ea8986e4e9494a8324faddfa3fdf02ceは監査packageと一致。
+実配信scene-create schemaはexact releaseと一致、skin.bind_autoを維持。
+最初の推測URL /app.jsは404。app.mountで正規/staticを確認し、/static/app.jsの実HTTP bytesと
+exact release frontend/app.jsの一致、補足renderer同梱を確認。画面操作の受入には読み替えない。
+標準retain2の旧.67実行bundle整理を事前通知済み。制作物/モデル/Blender環境の削除は行わない。
+実versions一覧は.68/.69のみ。整理済み.67実行bundleは公開releaseから復元可能。
+
+今回は配布・移行の受入であり、新journal/UIのinstalled故障・回復受入ではない。
+製品変更なし、基準gateはPR481全1752tests/197.67秒/既知2warnings/viewer差分0/Node5。
+今回全test/buildの再実行なし（release bundle build/doctor/監査は上記の通り）。
+NOT TESTED: installed新journal/日英補足の実動作、10分setup refresh、全故障matrix、全GOAL/A〜F/GA、engine内受入。
+全3DS/GA PARTIALを維持。次はinstalled新journalの正規repairと補足表示・終了照合を専用操作で受入する。
+
 ## 2026-09-10 v0.28.69 release preparation
 
 base PR480 merge291ccb984a34c83eaedfd3dbfe6265298a0b0dc5、ux1/release-0-28-69。
