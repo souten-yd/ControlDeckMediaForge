@@ -729,6 +729,15 @@ The new GUI and authoring paths are planned additions; the existing deterministi
 contract stays unchanged. Shared product/data management does not imply shared core/Blender/ML
 execution environments. Generative 3D model adoption remains a separate experimental G9 gate.
 
+Blender setup publication needs an explicit durable commit boundary. A stop received
+before that boundary must prevent publication. Once publication has begun, finish or
+recover that same bounded commit and report a late stop separately; do not delete a
+published runtime that new work may already reference. Keep actual publication outcome,
+stop intent and the Host terminal receipt distinct. A filesystem rename and a SQLite
+transaction are not one atomic operation; interrupted publication requires identity-based
+reconciliation before claiming success. The detailed target is in the runtime design;
+this policy is not an implementation or release acceptance claim.
+
 Runtime removal and immutable history are separate lifecycles. An inactive managed
 Blender version may be removed while its saved revisions remain, but only after
 an explicit acknowledgement that reopening those revisions requires reinstalling
