@@ -3,6 +3,11 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 通常画像のpre-lease更新をsourceへ追加。Job refresh/introspectionで元scope維持、
+leaseありは従来lease更新を共通利用。9新tests/全1761tests成功、実Host短TTLの所有/attached2条件確認。
+短いhelper受入であり、実画像の長時間資源待ち・署名配布・installed共存は未確認。
+下記.69失敗を修正済み稼働へ書き換えない。更新拒否時のdurable終端回収も別残件。
+
 2026-09-10 installed.69のsoftware GUI＋通常画像試験は不合格。
 mf-software-gui-image-coexist-20260910-r2、同GUI readyを維持するが画像はBrokerでLLM待ち、
 602.064秒HTTP401 failed。通常app.submit_hostedの親service identity保持と画像job refresh欠落を確認。

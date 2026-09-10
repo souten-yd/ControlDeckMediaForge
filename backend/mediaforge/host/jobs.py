@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from .client import ControlDeckHostClient, HostIdentity
@@ -65,6 +65,7 @@ class HostExecution:
     # 従来と同じ値になる。
     progress_offset: float = 0.0
     progress_span: float = 1.0
+    identity_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
 
 class HostJobReporter:

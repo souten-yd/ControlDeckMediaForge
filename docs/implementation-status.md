@@ -1,5 +1,36 @@
 # Media Forge implementation status
 
+## 2026-09-10 ordinary hosted image pre-lease credential renewal
+
+base PR487 mergea05a06af62d4ac3caacd1fc074d49a400999ce58、ux1/3d-image-wait-credential-refresh。
+前turnは実画像資源待ちHTTP401/Host残存の診断・回収/merge。Host実APIを再読し、Job refreshは
+有効な同owner service identityも受け付け、元subjectを維持するため新childへの付け替えは不要と確認。
+統合設計を先に補足し、既存attached所有/進捗区間を変えずMediaForge側へ期限前更新を追加。
+Host client refresh_job_identityは更新後tokenを正規introspectionし、subject/actor/capabilities/期限延長を照合。
+期限切れ・token空白・認証範囲変更・拒否はfail-closed。secretはin-memoryのみ、書込み再送なし。
+JobManagerはresource request前と待機/control共通点で、leaseなしならJob更新、leaseありなら従来lease更新。
+同executionのasync lockで並行更新をまとめ、進捗/取消/終端reporterは更新済みidentityを参照する。
+既存lease更新は共通点へ移動。親Jobの終端所有やbatch gate/区間を変更しない。
+
+新tests/test_image_wait_credentials.py9件: scope/actor/capability/期限切れ/malformed/403、
+並行更新1回/attached所有・進捗保持、画像waiting→refresh→lease→更新後identityで終端/解放。
+既存test_host_execution55件pass/23.02秒。全 ./mf.sh test 40451を同一handleで終端確認、
+exit0/1761passed/既知2warnings/197.95秒。以後製品/test変更なし。
+viewer build63ms/生成差分0/Node5pass、git diff --check成功。
+
+実Host: 外部mf-image-job-refresh-real-host-20260910-r2.py exit0、証跡mf-image-job-refresh-real-host-zh0w4rab。
+初回診断はHost venvにPILがなくimport前失敗。依存追加せず、Host側token発行とMediaForge source helperを
+別venv/別processへ分け、秘密はstdinだけで渡した。service TTL30秒を既存Host endpointで更新。
+所有job1dd074549456はsubject/actor/caps保持・期限延長・新identity終端succeeded。
+job-scope c72521a5ac87は実attach created=false、更新後finish_attachedでもHost runningを保持。
+後者は診断ownerが最後に正規終了。Host/稼働MF/画像workerへoverlay/restartなし。
+これは短時間の実API/source helper受入であり、画像workerや10分待機の実成功とはしない。
+
+NOT TESTED: source実画像長時間待機/更新失敗時のdurable終端回収全条件、署名配布/installed再試験、
+GUI＋画像実行共存/全E/全GOAL/A〜F/GA。稼働.69の不具合はまだ更新されていない。
+次: source実Hostの長時間resource待機を通す正常画像処理を受入し、終了/解放を確認して署名配布へ。
+失効からの自己再発行は追加しない。refresh拒否/Host不在時の未送信終了を成功と扱わない。
+
 ## 2026-09-10 installed software GUI and image coexistence — FAILED AUTH WAIT
 
 base PR486 merge745dc04b5485936089e59abd9defb867a4389503、ux1/3d-coexist-auth-failure。
