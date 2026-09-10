@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 PR482で.69署名公開/consumer/標準導入を受入。新journal列以外の既存値保持。
+追加の実Chrome ja320正常repair/switch/restoreは26.402秒で成功、実4.5.9 GLB probe、
+journal committed/停止要求なし/実generation一致、正常時の補足なしをstatus/DOMで確認。
+3Host childの独立GET/receipt一致、旧行/registry/両exe SHA保持、Host/MF PID不変。
+証跡mf-setup-host-installed-0.28.69-20260910。正常系であり中断回復・遅延取消・
+再認証のinstalled受入と10分refreshは残る。全GOAL/A〜F/GA PARTIAL。
+
 2026-09-10 PR471〜479の公開journal/実体照合/rollback/startup回復/日英補足に対し、
 source core再起動後の正規owner再認証を実Hostで追加確認。
 `mf-publication-reauth-host-20260910`、実4.5.9 repair21.801秒ready後、終了transportだけ注入失敗。
@@ -10,7 +17,7 @@ source core再起動後の正規owner再認証を実Hostで追加確認。
 独立Host GETは新child running→succeeded。旧childのcanceled不一致は上書きせず、補足へ投影。
 元専用data DB/registry/exe SHA保持、Host/稼働MF再起動なし。製品基準1752tests成功。
 この短時間source成功をsigned installed/10分setup refresh/期限切れ/全Eの成功へ読み替えない。
-次は新journalとUIを署名配布し、installed条件を受入する。全GOAL/A〜F/GA PARTIALを維持。
+署名配布/installed正常系は上記へ更新。異常系のinstalled条件は引き続き受入が必要。全GOAL/A〜F/GA PARTIALを維持。
 
 2026-09-10 PR463の修復checkpointをsigned installed0.28.68で受入。
 `mf-repair-registration-cancel-installed-0.28.68-20260910`、実Chrome repair→page.close、

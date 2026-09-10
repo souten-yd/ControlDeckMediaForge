@@ -1,5 +1,29 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed publication normal repair acceptance
+
+base PR482 merge175217367b75628006686b6c2bf94dc043830cd4、ux1/3d-installed-publication-acceptance。
+前turnは.69署名公開/標準導入/記録mergeで進捗。今回はinstalled.69の正常修復journalを実受入。
+外部 /data1tb/mf-publication-installed-0.28.69-20260910.py をHost診断venvで実行、15750 exit0。
+旧.67実browser診断を読み、.69/新column/世代marker/補足/事前backup照合を追加。
+証跡 /data1tb/mf-setup-host-installed-0.28.69-20260910（wrapper名と証跡名は異なる）。
+全Job/GUI/runtime/model operation idle、既存全scene/revision/assets/jobs/setup行snapshot、
+両managed Blender SHA/registry bytes確認後SQLite backup、直前再照合を実施。
+実Chrome ja320 opaque iframeから正規repair API、後続switch/restoreは通常UI。
+blenderop_73149ec4154f474084fd6db80cf734dcは25.599秒ready、実4.5.9 GLB入出力preflight成功。
+4.5.9切替25.864秒→元4.5.13へ26.214秒、26.402秒passed/26.493秒login失効。
+実DB journal phase=committed/stop_requests=[]/完了時刻、修復runtime/action/旧activeと
+旧新exe SHA一致を照合。identity.generationは実runtime rootのmarkerと一致。
+実status再取得後、当該操作の補足codesなし/DOM補足行なしを確認（正常終了の誤警告防止）。
+独立Host GETで3新child succeeded/receipt完全一致/owner user:16/host_terminal_sent=1を確認。
+旧制作物/履歴/Jobs/setup行保持、3setup行のみ追加、registry bytes/両Blender SHA不変。
+診断終了後Host2381614/MF2428421 active・不変、実HTTP healthy、staging空/診断process不在。
+restored.pngを目視確認。managed2版はOK、別legacy登録の既存NG表示は保持（今回の修復対象外）。
+製品/Host/稼働版変更なし。文書のみ、基準gate PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5。
+今回全test/build再実行なし。NOT TESTED: 新journal中断回復/遅延取消/再認証のinstalled実動作、
+回復補足のpositive表示、今回英語/物理mobile/10分refresh、全GOAL/A〜F/GA/engine。全体PARTIAL。
+次は専用操作に限定したinstalled遅延取消の永続化と正規再認証による補足表示・Host不一致保持を受入する。
+
 ## 2026-09-10 v0.28.69 signed release and installed migration
 
 PR481 merge/tag22d68ec74ad5e1e888046274f9a2fca807bade48を実GitHub APIで確認。
