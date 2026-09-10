@@ -46,6 +46,9 @@ def test_mobile_blender_access_preserves_runtime_guards_and_connection_keys() ->
     assert '"pointerdown", rememberBlenderInput, true' in script
     assert 'state.blenderInputAnchor = null' in script
     assert 'state.blenderRfb !== rfb || !state.blenderRfbConnected' in script
+    assert 'installBlenderTouchButtons(byId("scene-blender-dialog"))' in script
+    assert 'event.defaultPrevented || event.touches.length' in script
+    assert 'button.isConnected' in script
 BACKEND = ROOT / "backend" / "mediaforge"
 
 SCRIPT = (FRONTEND / "app.js").read_text(encoding="utf-8")

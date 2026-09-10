@@ -35,7 +35,8 @@ def main() -> None:
               }
               function disconnectBlenderRfb() { setBlenderKeysEnabled(false); state.blenderRfb = null; state.blenderInputAnchor = null; }
             ''' + 'function openBlenderView(session)' + functions +
-                'byId("scene-blender-keys").addEventListener' + listener)
+                'byId("scene-blender-keys").addEventListener' + listener +
+                'installBlenderTouchButtons(byId("scene-blender-dialog"));')
             results = []
             for width, height, language in ((320, 640, 'ja'), (320, 640, 'en'),
                                             (640, 320, 'ja'), (640, 320, 'en'),
@@ -87,7 +88,45 @@ def main() -> None:
                 page.evaluate('closeBlenderView()')
                 assert not page.locator('#scene-blender-dialog').is_visible()
                 results.append({'width': width, 'height': height, 'language': language, 'passed': True})
-            print(json.dumps({'passed': True, 'viewports': results,
+            # Opaque iframe offset regression, with no Host or Blender involved.
+            page.set_content('<meta name="viewport" content="width=device-width, initial-scale=1">'
+                             '<body style="margin:0"><div style="height:88px"></div>'
+                             '<iframe sandbox="allow-scripts" style="border:0;width:320px;height:490px"></iframe>')
+            page.locator('iframe').evaluate('''e => e.srcdoc = `<meta name="viewport" content="width=device-width, initial-scale=1">
+              <body style="margin:0"><div style="height:5505px"></div>
+              <button id="close" style="position:absolute;top:5650px;left:130px;width:70px;height:44px">Close</button>
+              <button id="open" style="position:absolute;top:5726px;left:29px;width:262px;height:46px">Open</button>
+              <div style="height:800px"></div><script>window.clicks=[];
+              document.addEventListener('click',e=>clicks.push(e.target.id));scrollTo(0,5505)</script>`''')
+            frame = page.frames[1]
+            frame.wait_for_selector('#open')
+            helper = 'function installBlenderTouchButtons' + script.split('function installBlenderTouchButtons', 1)[1].split('function rememberBlenderInput', 1)[0]
+            frame.add_script_tag(content=helper + 'installBlenderTouchButtons(document.body);')
+            frame.locator('#open').tap()
+            page.wait_for_timeout(350)
+            assert frame.evaluate('clicks') == ['open']
+            assert frame.evaluate('''() => {
+              const button=document.getElementById('open'), rect=button.getBoundingClientRect();
+              function touch(id, dx=0) { return new Touch({identifier:id,target:button,
+                clientX:rect.left+20+dx,clientY:rect.top+20}); }
+              function fire(type, touches, changed=touches) {
+                const event=new TouchEvent(type,{bubbles:true,cancelable:true,touches,changedTouches:changed});
+                button.dispatchEvent(event); return event.defaultPrevented;
+              }
+              for(const mode of ['drag','cancel','multitouch','disabled','end_outside']) {
+                clicks=[]; const first=touch(1);
+                fire('touchstart',[first]);
+                if(mode==='drag')fire('touchmove',[touch(1,30)]);
+                if(mode==='cancel')fire('touchcancel',[],[first]);
+                if(mode==='multitouch')fire('touchstart',[first,touch(2)]);
+                if(mode==='disabled')button.disabled=true;
+                const prevented=fire('touchend',[],[mode==='end_outside'?touch(1,300):first]);
+                button.disabled=false;
+                if(prevented || clicks.length)return false;
+              }
+              return true;
+            }''')
+            print(json.dumps({'passed': True, 'viewports': results, 'opaque_touch_target': 'open_once',
                               'not_tested': ['live RFB/Blender input', 'installed opaque iframe', 'physical mobile']}))
         finally:
             browser.close()

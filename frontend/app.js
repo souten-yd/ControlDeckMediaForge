@@ -5998,6 +5998,39 @@ function setBlenderKeysEnabled(enabled) {
   });
 }
 
+function installBlenderTouchButtons(container) {
+  let tap = null;
+  container.addEventListener("touchstart", (event) => {
+    const button = event.target.closest("button");
+    const touch = event.touches[0];
+    tap = event.touches.length === 1 && button && container.contains(button) && !button.disabled
+      ? {button, id: touch.identifier, x: touch.clientX, y: touch.clientY} : null;
+  }, {passive: true});
+  container.addEventListener("touchmove", (event) => {
+    const touch = [...event.touches].find((item) => item.identifier === tap?.id);
+    if (!touch || event.touches.length !== 1
+        || Math.hypot(touch.clientX - tap.x, touch.clientY - tap.y) > 10) tap = null;
+  }, {passive: true});
+  container.addEventListener("touchcancel", () => { tap = null; }, {passive: true});
+  container.addEventListener("touchend", (event) => {
+    const current = tap;
+    tap = null;
+    if (!current || event.defaultPrevented || event.touches.length) return;
+    const touch = [...event.changedTouches].find((item) => item.identifier === current.id);
+    const button = current.button;
+    if (!touch || !button.isConnected || !container.contains(button) || button.disabled) return;
+    const rect = button.getBoundingClientRect();
+    if (Math.hypot(touch.clientX - current.x, touch.clientY - current.y) > 10
+        || touch.clientX < rect.left || touch.clientX > rect.right
+        || touch.clientY < rect.top || touch.clientY > rect.bottom) return;
+    // Chromium can offset a synthesized click inside an opaque iframe even
+    // when touchstart/end hit the correct button. Cancel that synthesis and
+    // activate the original button once. Canvas gestures and drags are untouched.
+    event.preventDefault();
+    button.click();
+  }, {passive: false});
+}
+
 function rememberBlenderInput(event) {
   const canvas = byId("scene-blender-screen").querySelector("canvas");
   if (!canvas || event.target !== canvas || !state.blenderRfbConnected) return;
@@ -8350,6 +8383,8 @@ byId("scene-blender-recover").addEventListener("click", () => {
 });
 byId("scene-blender-close").addEventListener("click", closeBlenderView);
 byId("scene-blender-screen").addEventListener("pointerdown", rememberBlenderInput, true);
+installBlenderTouchButtons(byId("scene-blender-open").parentElement);
+installBlenderTouchButtons(byId("scene-blender-dialog"));
 byId("scene-blender-keys").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-blender-key]");
   if (button && !button.disabled) sendBlenderAssistKey(button.dataset.blenderKey);

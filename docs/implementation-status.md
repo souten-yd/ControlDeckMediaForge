@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-10 opaque iframe touch activation / real Blender acceptance (PR441)
+
+前turnは補助keyのeditor context修正で進捗。今回はBlender/Hostを除いた2buttonの最小iframeで再現。
+Chrome headless/320x640/is_mobile/has_touch、sandbox allow-scripts、iframe top88px、scroll5505px。
+touchはopen/clientY244へ届くがclickはclose/clientY156へずれた。通常inline onclick付きでも再現。
+MediaForgeのBlender操作欄/dialogだけにsingle-touch button activationを追加。
+元buttonが接続済み/有効、同指の開始終了が10px以内かつbutton内の場合だけtouchendをcancelし
+button.click()を1回呼ぶ。drag/cancel/multitouch/disabled/領域外終了は処理しない。
+canvasやフォーム入力全般へ適用せず、keyboard/mouseの既存click経路を保持。
+
+`scripts/3ds_mobile_blender_ui_e2e.py` 実Chromeで日英6viewport成功。
+opaque最小再現はopen_onceになり、drag/cancel/multitouch/disabled/end_outsideの5negativeは
+preventDefaultなし/追加clickなし。これらnegativeは合成TouchEventによるhandler検査であり
+物理端末のgesture受入ではない。focused155/0.09秒、viewer64ms/差分0、Node5。
+
+外部 `/data1tb/mf-mobile-blender-source-ui-20260910-r3.py`（OUT r19）をHost診断環境で実行。
+証跡 `/data1tb/mf-mobile-blender-source-ui-20260910-r19`、12.325秒passed/exit0。
+通常認証bootstrap後にsource関数/dialog/CSSを置換するbrowser限定overlay。
+320pxのopen/補助Enter/保存に実Chrome touch入力、文字入力とcanvas focusはkeyboard/mouse。
+openのtouchend→元buttonのclick1回、6.795秒で実Blender4.5.13 canvas1007色、
+24→30fpsを新版revision_4b315df7c5d84811bcb3d8146ea00f66へ保存、旧5版/旧hash保持。
+12.328秒owned session終了、12.395秒login失効。独立DB照合でstopped/6revision。
+新source asset_eb53557cfdae46e2b7c27a5e3c08fabb.blendを実managed Blenderで
+`--background --factory-startup --disable-autoexec --python-exit-code 1 --python-expr`読込し
+fps30/actions2 assert成功/exit0。旧失敗証跡/版を保持し、成功へ書き換えない。
+
+全 `./mf.sh test` 59562は終端exit0/1537passed/既知warning2/154.34秒。source受入は補完したが、
+NOT TESTED: signed installed新UIのbootstrap/同梱確認、実mobile端末、IME/全操作/全GOAL/A〜F/GA。
+製品版数/稼働.62/Hostに変更なし。PR441通常merge後に署名版へ反映しinstalled受入する。
+
 ## 2026-09-10 assisted keys restore Blender editor context (PR441)
 
 前turnのfps不一致を原寸canvasで切り分け。外部診断r16/r17は画像取得後保存せず終了。

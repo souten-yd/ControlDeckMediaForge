@@ -5,6 +5,16 @@
 
 ## 2026-09-10 mobile Web Blender access
 
+最新: opaque最小iframeでもtouch244→click156の誤targetを再現。
+Blender操作ボタン限定のsingle-touch activationを追加、drag/multitouch等は処理しない。
+実Chrome日英6viewport/opaque open_once/5negative成功、viewer64ms/Node5。
+source UI overlay実Blender r19は320pxのopen/補助Enter/保存をtouchで12.325秒passed。
+文字入力とcanvas focusはkeyboard/mouse、物理mobile/IMEを成功扱いしない。
+fps24→30/new revision_4b315df7c5d84811bcb3d8146ea00f66、旧5版/hash保持。
+実Blender独立読込fps30/2actions、DB6revision/owned session stopped。現在live診断なし。
+全test59562終端exit0/1537passed/154.34秒→commit/push/通常PR441merge、次は署名版同梱のinstalled受入。
+外部scriptはOUT r19/BASE第5版のためそのまま再実行不可。status先頭に詳細証拠。
+
 最新: 原寸console r16/r17で文字入力完了/Enter down-up送信済みでも元editorに届かないと特定。
 canvas最後のpointerdown相対位置へmousemove復元→30ms→同RFB/connected確認→keyへ修正。
 source UI overlay実Blender r18は11.375秒passed、fps30→24/旧4版・hash保持、新版5。
