@@ -741,7 +741,14 @@ class BlenderRuntimeManager:
                 if result["status"] != "committed":
                     result = BlenderPublicationRollback(self.store, self.resolver).rollback(operation_id)
                 if result["status"] in {"committed", "rolled_back"}:
+                    if result["status"] == "committed":
+                        self._clean_repair_previous_sync(operation_id)
                     self._clean_stage_sync(operation_id)
+            else:
+                if publication.phase == "committed":
+                    self._clean_repair_previous_sync(operation_id)
+                self._clean_stage_sync(operation_id)
+                logger.warning("Completed Blender publication %s encountered a late error; recorded outcome retained", operation_id)
             # Never delete a candidate or published runtime after uncertain I/O.
             # Recovery, not the original exception, determines the durable result.
             return
@@ -1183,12 +1190,26 @@ class BlenderRuntimeManager:
 
     def _begin_publication(
         self, operation: BlenderRuntimeOperation, spec: RuntimeSpec, candidate: Path, *, recovered: bool,
+        previous: Path | None = None,
     ) -> PublicationIdentity:
         """Owned worker only, inside managed_publication_guard and before rename."""
         self._raise_if_canceled(operation.id)
         registry = self.resolver._read_registry()
         row = next((item for item in registry["runtimes"] if item["runtime_id"] == operation.runtime_id), None)
         digest = BlenderPublicationRecovery.executable_digest(candidate, candidate / "install" / spec.executable)
+        previous_facts: dict[str, Any] = {}
+        previous_digest = digest if recovered else None
+        if previous is not None:
+            if operation.action != BlenderRuntimeOperationAction.REPAIR or row is None:
+                raise BlenderRuntimeOperationError("blender_runtime_not_found", "Repair requires the previous registration")
+            self._ensure_managed_destination(previous)
+            info = previous.stat()
+            old_executable = contained(previous, previous / "install" / spec.executable)
+            missing = not old_executable.exists() and not (previous / "install" / spec.executable).is_symlink()
+            previous_digest = None if missing else BlenderPublicationRecovery.executable_digest(previous, old_executable)
+            previous_facts = {"previous_root_device": info.st_dev, "previous_root_inode": info.st_ino,
+                "previous_executable_missing": missing,
+                "previous_generation": read_generation(self.resolver.managed_root, previous)}
         generation = read_generation(self.resolver.managed_root, candidate) if recovered else create_generation(
             self.resolver.managed_root, candidate)
         identity = PublicationIdentity(
@@ -1197,8 +1218,8 @@ class BlenderRuntimeManager:
             previous_active_runtime_id=registry["active_runtime_id"],
             previous_registration_sha256=(hashlib.sha256(json.dumps(row, sort_keys=True,
                 separators=(",", ":")).encode()).hexdigest() if row is not None else None),
-            previous_executable_sha256=digest if recovered else None,
-            recovered_directory=recovered, generation=generation,
+            previous_executable_sha256=previous_digest,
+            recovered_directory=recovered, generation=generation, **previous_facts,
         )
         try:
             self.store.begin_blender_publication(operation.id, identity)
@@ -1228,34 +1249,43 @@ class BlenderRuntimeManager:
                 raise BlenderRuntimeOperationError(
                     "blender_runtime_staging_unsafe", "Blender repair rollback destination already exists"
                 )
+            identity = self._begin_publication(operation, spec, candidate, recovered=False, previous=destination)
             os.replace(destination, previous)
-            promoted = False
+            BlenderPublicationRollback._sync_parents(destination.parent, previous.parent)
+            os.replace(candidate, destination)
+            BlenderPublicationRollback._sync_parents(candidate.parent, destination.parent)
+            self.resolver.register_managed(runtime_id=operation.runtime_id,
+                version=spec.version, location=operation.runtime_id, archive_sha256=spec.archive_sha256)
+            self._clean_stage_contents_sync(operation.id)
+            self.store.complete_blender_publication(operation.id, identity, {
+                "runtime_id": operation.runtime_id, "version": spec.version,
+                "archive_sha256": spec.archive_sha256, "archive": archive_facts, "preflight": facts})
+            self._clean_repair_previous_sync(operation.id)
+
+    def _clean_repair_previous_sync(self, operation_id: str) -> None:
+        """Only a committed repair may reclaim its identity-matching old tree."""
+        publication = self.store.blender_publication(operation_id)
+        if publication is None or publication.phase != "committed" or publication.identity.action != "repair":
+            return
+        identity = publication.identity
+        with self.resolver.managed_publication_guard():
+            previous = self.resolver.managed_root / ".staging" / f"previous-{operation_id}"
+            if not previous.exists() and not previous.is_symlink():
+                return
             try:
-                os.replace(candidate, destination)
-                promoted = True
-                self.resolver.register_managed(runtime_id=operation.runtime_id,
-                    version=spec.version, location=operation.runtime_id,
-                    archive_sha256=spec.archive_sha256)
-                # Registration may wait on the cross-process registry lock.
-                # Keep the previous directory until a stop arriving during that
-                # wait has been checked; the exception path restores its inode.
-                self._raise_if_canceled(operation.id)
-            except Exception:
-                if promoted:
-                    self._ensure_managed_destination(destination)
-                    shutil.rmtree(destination)
-                os.replace(previous, destination)
-                raise
-            shutil.rmtree(previous)
-            stage = self._stage_root(operation.id)
-            if stage.exists():
-                if stage.is_symlink():
-                    raise BlenderRuntimeOperationError("blender_runtime_staging_unsafe", "Blender staging root is unsafe")
-                shutil.rmtree(stage)
-            self.store.update_blender_runtime_operation(operation.id,
-                state=BlenderRuntimeOperationState.READY, bytes_done=spec.archive_size_bytes,
-                result={"runtime_id": operation.runtime_id, "version": spec.version,
-                    "archive_sha256": spec.archive_sha256, "archive": archive_facts, "preflight": facts})
+                if contained(self.resolver.managed_root, previous) != previous:
+                    raise ValueError("Unsafe previous directory")
+                spec = self.resolver._catalog_specs()[identity.runtime_id]
+                current = self.resolver.managed_root / identity.runtime_id
+                if (read_generation(self.resolver.managed_root, current) != identity.generation
+                        or BlenderPublicationRecovery.executable_digest(current, current / "install" / spec.executable)
+                        != identity.executable_sha256
+                        or not BlenderPublicationRollback.previous_matches(identity, previous, spec)):
+                    raise ValueError("Repair cleanup identity mismatch")
+                shutil.rmtree(previous)
+                BlenderPublicationRollback._sync_parents(previous.parent)
+            except (BlenderRuntimeRegistryError, OSError, ValueError, KeyError):
+                logger.warning("Blender repair %s previous-directory cleanup incomplete; inspect remaining backup", operation_id)
 
     async def _download(
         self,

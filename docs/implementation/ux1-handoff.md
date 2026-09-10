@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 repair publication journal
+
+base PR476 merge92f6f22、ux1/3d-repair-publication-journal。前turnは進捗/merge。
+旧root device/inode・exe欠落flagをprivate identityへ追加し、通常repairをbegin/completeへ接続。
+SHA捏造なし。旧退避の削除はcommit後の旧/新実体再照合だけ。不明時は診断と残存退避を保持。
+未公開なら旧登録/active・実行参照・旧root/旧exe/旧世代と新候補を照合し復元。startup自動回復は未接続。
+初回関連45184 3failed/56pass15.80秒、停止境界/故障点の契約更新とworker終端待機後52101 61pass10.10秒。
+新21ケース89565 exit0/2.99秒、viewer52ms/差分0/Node5pass。全4757を同一handleで終端確認:
+exit0/1731pass/既知2warnings/221.54秒。全gate/診断終端、code変更なしで通常commit/push/mergeへ進む。
+実81594 exit0、mf-repair-journal-real-20260910。実4.5.9/旧exe欠落/候補rename故障22.731秒で旧root復元、
+再試行27.258秒ready/GLB実probe、元archive/registry/旧失敗保持、stage空/core停止。
+実Host20401 exit0、mf-repair-journal-host-cancel-20260910、29.300秒passed/29.415core停止。
+operation2ce61a39499745ebaba28e222aac6d8c/Hostc0019988021c、登録後取消→local ready/遅延stop別記録。
+Host canceled/sent=false/terminal_matches=falseを保持、独立GET/login回収/refresh0。
+登録後gateは診断。Host PID2381614（以前2043005から変化）、MF1965886。本turn再起動操作なし。
+全診断終端。次: startup回復と完了後残存退避回収→再起動/取消受入→UI/署名installed。
+まだ配布しない。全3DS/GA PARTIAL、untracked .venv保持。gate後commit/push/通常merge。
+
 ## 2026-09-10 unpublished rollback
 
 base PR475 merge80ad633、ux1/3d-unpublished-rollback。前turnは進捗/merge。
