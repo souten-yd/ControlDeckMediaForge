@@ -26,6 +26,29 @@ def test_mobile_blender_runtime_rows_preserve_text_and_touch_controls():
 
 ROOT = Path(__file__).parents[1]
 FRONTEND = ROOT / "frontend"
+
+
+def test_mobile_blender_access_preserves_runtime_guards_and_connection_keys() -> None:
+    script = (FRONTEND / "app.js").read_text()
+    styles = (FRONTEND / "styles.css").read_text()
+    html = (FRONTEND / "index.html").read_text()
+    controls = script.split("function renderBlenderSessionControls()", 1)[1].split("async function forkSceneRecovery", 1)[0]
+    opening = script.split("function openBlenderView(session)", 1)[1].split("function setBlenderKeysEnabled", 1)[0]
+    assert "matchMedia" not in controls + opening
+    assert "!sceneRuntimeReady()" in controls and "Boolean(active)" in controls
+    assert "web_pack?.state" in controls and "Boolean(conflict)" in controls
+    assert "#scene-blender-dialog { display: none; }" not in styles
+    assert "height: 100dvh" in styles
+    assert 'role="group"' in html and html.count('data-blender-key="') == 7
+    assert '!state.blenderRfbConnected || !Object.hasOwn(keys, code)' in script
+    assert 'setBlenderKeysEnabled(false)' in script
+    assert 'if (state.blenderRfb !== rfb) return;' in script
+    assert '"pointerdown", rememberBlenderInput, true' in script
+    assert 'state.blenderInputAnchor = null' in script
+    assert 'state.blenderRfb !== rfb || !state.blenderRfbConnected' in script
+    assert 'installBlenderTouchButtons(byId("scene-blender-dialog"))' in script
+    assert 'event.defaultPrevented || event.touches.length' in script
+    assert 'button.isConnected' in script
 BACKEND = ROOT / "backend" / "mediaforge"
 
 SCRIPT = (FRONTEND / "app.js").read_text(encoding="utf-8")
@@ -150,7 +173,7 @@ def test_blender_runtime_lifecycle_has_embedded_and_standalone_receivers() -> No
     assert "watchStandaloneBlenderOperation" in SCRIPT
 
 
-def test_blender_session_gateway_is_private_reauthenticating_and_desktop_only() -> None:
+def test_blender_session_gateway_is_private_reauthenticating_and_responsive() -> None:
     for method in (
         "blender.sessions.list", "blender.sessions.start",
         "blender.sessions.save", "blender.sessions.stop",
@@ -163,7 +186,7 @@ def test_blender_session_gateway_is_private_reauthenticating_and_desktop_only() 
     assert "blender-rfb-loader.js?v=${encodeURIComponent(webIdentity)}" in SCRIPT
     assert "wsProtocols: blenderRfbProtocols()" in SCRIPT
     assert '`control-deck-bridge.${state.nonce}`' in SCRIPT
-    assert 'window.matchMedia("(max-width: 767px)")' in SCRIPT
+    assert 'A PC, keyboard and mouse are recommended' in SCRIPT
     assert 'call("blender.sessions.interrupt", {session_id: active.id})' in SCRIPT
     assert "selectedRecoveryCandidate" in SCRIPT
     assert "recovery_working_id" in SCRIPT
@@ -556,7 +579,7 @@ def test_scene_studio_lists_immutable_revisions_and_reuses_the_3d_viewer():
     assert 'preview_kind: "model_3d"' in preview
     assert "openViewer(" in preview
     assert '#app[data-create-media="3d"] #scene-studio' in STYLES
-    assert "@media (max-width: 760px)" in STYLES
+    assert "@media (max-width: 767px)" in STYLES
 
 
 def test_fullscreen_viewer_locks_only_the_open_modal_background():

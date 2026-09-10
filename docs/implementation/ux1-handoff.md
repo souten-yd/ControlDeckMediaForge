@@ -3,6 +3,59 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 mobile Web Blender access
+
+最新: opaque最小iframeでもtouch244→click156の誤targetを再現。
+Blender操作ボタン限定のsingle-touch activationを追加、drag/multitouch等は処理しない。
+実Chrome日英6viewport/opaque open_once/5negative成功、viewer64ms/Node5。
+source UI overlay実Blender r19は320pxのopen/補助Enter/保存をtouchで12.325秒passed。
+文字入力とcanvas focusはkeyboard/mouse、物理mobile/IMEを成功扱いしない。
+fps24→30/new revision_4b315df7c5d84811bcb3d8146ea00f66、旧5版/hash保持。
+実Blender独立読込fps30/2actions、DB6revision/owned session stopped。現在live診断なし。
+全test59562終端exit0/1537passed/154.34秒→commit/push/通常PR441merge、次は署名版同梱のinstalled受入。
+外部scriptはOUT r19/BASE第5版のためそのまま再実行不可。status先頭に詳細証拠。
+
+最新: 原寸console r16/r17で文字入力完了/Enter down-up送信済みでも元editorに届かないと特定。
+canvas最後のpointerdown相対位置へmousemove復元→30ms→同RFB/connected確認→keyへ修正。
+source UI overlay実Blender r18は11.375秒passed、fps30→24/旧4版・hash保持、新版5。
+revision_ac4d6abff2df435ba71742bb9cba5853/sourceasset_15ac411ffa834d348b8e70ed111b2225、
+実Blender独立読込fps24/2actions成功。mouseでありtouch誤clickは未解消、PR441 draft維持。
+日英6viewportにpointer→key順序/待機中disconnectなしを追加し成功、build40ms/Node5。
+全test72132終端exit0/1537passed/169.78秒→commit/pushする。診断r18は終端/owned session回収/login失効。
+外部mf-mobile-blender-source-ui-20260910-r3.pyはOUT r18/BASE第4版なので再実行不可。
+次: touch生成clickずれの最小再現とsource全体UI受入、署名installed経路を補完。
+
+最新: r8〜r15で進捗。touchの開始/終了は正しいopen/clientY244.625、生成clickだけclose/clientY165。
+scroll不変、touch-action/is_mobileでも再現。mouseでは正しくopenし実RFB connected。
+旧CSSが残る診断欠陥を除去後、320px実Blender画面/console表示/保存を確認したがfps24は未反映。
+r14/r15はfps30のまま新revision追加でstrict失敗、元版/旧hash保持。現在4revision、全owned sessions stopped。
+外部script mf-mobile-blender-source-ui-20260910-r3.py はOUT末尾r15、BASEは第3版。
+次試行前に第4版のcurrentとcountをDBで再確認して更新する。現scriptをそのまま再実行しない。
+次: 原寸canvas画像でconsole文字列/Enter前後を観測。補助key enabledだけで入力成功としない。
+status先頭に証拠、製品コード変更なし/PR441 draft/新配布なし。現在live診断なし。
+
+更新: PR441 draft/source8821b0e、製品コード不変。今回は診断で原因段階を切り分け。
+HTTP overlayありはnewUI/config/bridgeありでもworkspace_transport_unavailable、なしはboot成功。
+正常bootstrap後の関数/dialog/style overlayは開始可能だがtapが別targetへ届く。
+外部mf-mobile-blender-source-ui-20260910-r3.py（現在OUT末尾r7）でclick捕捉:
+scene-blender-open要求→scene-detail-close実click、selected空/dialog false/RFB未生成。
+native CDP/headless双方で再現、scroll後750ms待ちでも未解消。次は座標とiframe scrollを実測する。
+全診断終端/owned4sessions DB stopped、元currentと2revision維持。live診断なし。
+status先頭に証跡path/失敗履歴。PR draftを維持し、実RFB/保存を成功扱いしない。
+
+前turnはPR440通常merge68f021a。今回はux1/3d-mobile-blender-accessでmobile禁止3箇所を修正。
+PC推奨日英案内、100dvh layout、固定7key補助と接続状態制御。backend/Host/.62不変。
+scripts/3ds_mobile_blender_ui_e2e.py: source HTML/CSS/関数を実Chromeで日英6viewport受入。
+通信fixtureであり実RFBではない。focused155/0.19秒、viewer41ms/差分0、Node5。
+初回focused旧期待値2failを修正。修正前full94076は2failed/1535passed/149.13秒終端exit1。
+修正後full78368は1537passed/151.29秒終端exit0。コード変更なし、文書更新してcommit/push/PR。
+外部source UI overlay試験2件は初期化待ち31秒で失敗、GUI未作成/診断login回収。
+mf-mobile-blender-source-ui-20260910[-r2]/observations.json保持。現在live診断なし。
+R2はinline config保持に修正したが未解消。次は初期化/表示状態とoverlay適用有無を観測する。
+次: 専用sceneでsource UI→実隔離Blenderの320px接続/入力/保存/旧版保持を検証しPR受入。
+installed同梱版とは区別し、署名配布後も再確認。実mobile/IME/全3DS・GA未完了。
+作業停止前に全test→commit/push/PR。untracked .venvは利用者所有のまま保持。
+
 ## 2026-09-10 OpenCode saved-settings check
 
 更新: run57218終端exit0/476.429秒/8tools。strict verifierを再実行しverified true。

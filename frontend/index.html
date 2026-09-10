@@ -975,7 +975,17 @@
           </div>
           <button type="button" id="scene-blender-close">表示だけ閉じる</button>
         </div>
+        <p id="scene-blender-guidance" class="hint"></p>
         <div id="scene-blender-screen" tabindex="0" aria-label="Blender remote desktop"></div>
+        <div id="scene-blender-keys" role="group">
+          <button type="button" data-blender-key="Escape" disabled>Esc</button>
+          <button type="button" data-blender-key="Tab" disabled>Tab</button>
+          <button type="button" data-blender-key="Enter" disabled>Enter</button>
+          <button type="button" data-blender-key="ArrowLeft" disabled>←</button>
+          <button type="button" data-blender-key="ArrowUp" disabled>↑</button>
+          <button type="button" data-blender-key="ArrowDown" disabled>↓</button>
+          <button type="button" data-blender-key="ArrowRight" disabled>→</button>
+        </div>
         <div class="dialog-actions blender-session-actions">
           <button type="button" id="scene-blender-discard">変更を破棄して終了</button>
           <button type="button" id="scene-blender-save" class="primary">新しい版として保存して終了</button>

@@ -195,6 +195,8 @@ const state = {
   sceneTextureWatchingJobs: new Set(),
   blenderSessions: [],
   blenderRfb: null,
+  blenderRfbConnected: false,
+  blenderInputAnchor: null,
   blenderRfbSessionId: "",
   blenderRfbModule: null,
   blenderRfbReconnect: 0,
@@ -4822,7 +4824,8 @@ const SCENE_TEXT = {
     blenderSaving: "検証済みの新しい版として保存しています…", blenderStopping: "変更を破棄しています…",
     blenderFailed: "Blenderセッションを開始できませんでした。", blenderBusy: "別のシーンを編集中です。",
     blenderSetup: "設定でブラウザ操作環境を導入すると編集できます。",
-    blenderDesktop: "Blender操作はデスクトップ画面で利用できます。",
+    blenderDesktop: "細かなBlender編集にはPC・キーボード・マウスを推奨します。",
+    blenderKeys: "入力補助（接続中のみ）",
     blenderDialog: "Blender編集", blenderConnecting: "Blender画面へ接続しています…",
     blenderConnected: "接続しました", blenderDisconnected: "Blender画面との接続が切れました。再接続します…",
     blenderClose: "表示だけ閉じる", blenderSave: "新しい版として保存して終了", blenderDiscard: "変更を破棄して終了",
@@ -4906,7 +4909,8 @@ const SCENE_TEXT = {
     blenderSaving: "Saving as a new validated revision…", blenderStopping: "Discarding changes…",
     blenderFailed: "The Blender session could not start.", blenderBusy: "Another scene is being edited.",
     blenderSetup: "Install the browser control runtime in Settings to edit.",
-    blenderDesktop: "Blender control is available on a desktop display.",
+    blenderDesktop: "A PC, keyboard and mouse are recommended for detailed Blender editing.",
+    blenderKeys: "Input assistance (while connected)",
     blenderDialog: "Blender editor", blenderConnecting: "Connecting to Blender…",
     blenderConnected: "Connected", blenderDisconnected: "The Blender display disconnected. Reconnecting…",
     blenderClose: "Close view only", blenderSave: "Save new revision and finish", blenderDiscard: "Discard changes and finish",
@@ -4995,6 +4999,8 @@ function renderSceneText() {
   byId("scene-list-empty").textContent = text.empty;
   byId("scene-detail-close").textContent = text.close;
   byId("scene-blender-dialog-title").textContent = text.blenderDialog;
+  byId("scene-blender-guidance").textContent = text.blenderDesktop;
+  byId("scene-blender-keys").setAttribute("aria-label", text.blenderKeys);
   byId("scene-blender-close").textContent = text.blenderClose;
   byId("scene-blender-save").textContent = text.blenderSave;
   byId("scene-blender-discard").textContent = text.blenderDiscard;
@@ -5776,10 +5782,8 @@ function renderBlenderSessionControls() {
   const recover = byId("scene-blender-recover");
   const fork = byId("scene-recovery-fork");
   const conflict = recovery && recovery.base_revision_id !== state.sceneDocument?.current_revision_id;
-  const mobile = window.matchMedia("(max-width: 767px)").matches;
   let status = "";
-  if (mobile) status = text.blenderDesktop;
-  else if (!selected && active) status = text.blenderBusy;
+  if (!selected && active) status = text.blenderBusy;
   else if (!selected && state.blenderRuntime?.web_pack?.state !== "ready") status = text.blenderSetup;
   else if (selected?.state === "ready") status = selected.error_code === "blender_session_autosave_failed" ? text.blenderAutosaveFailed : text.blenderReady;
   else if (["queued", "preparing", "starting"].includes(selected?.state)) status = text.blenderStarting;
@@ -5797,11 +5801,11 @@ function renderBlenderSessionControls() {
   if (conflict && !selected) status = text.recoveryConflict;
   if (state.sceneRecoveryStatusKey) status = text[state.sceneRecoveryStatusKey];
   button.textContent = selected?.state === "ready" ? text.blenderOpen : text.blenderStart;
-  button.disabled = mobile || Boolean(active && !selected) || Boolean(selected && selected.state !== "ready")
+  button.disabled = Boolean(active && !selected) || Boolean(selected && selected.state !== "ready")
     || !sceneRuntimeReady() || state.blenderRuntime?.web_pack?.state !== "ready"
     || Boolean(state.sceneImport) || Boolean(state.sceneBackup) || state.sceneRecoveryBusy;
   recover.hidden = !recovery || Boolean(selected);
-  recover.disabled = mobile || Boolean(active) || !sceneRuntimeReady() || Boolean(conflict) || state.sceneRecoveryBusy
+  recover.disabled = Boolean(active) || !sceneRuntimeReady() || Boolean(conflict) || state.sceneRecoveryBusy
     || state.blenderRuntime?.web_pack?.state !== "ready"
     || Boolean(state.sceneImport) || Boolean(state.sceneBackup);
   fork.hidden = !recovery || Boolean(selected);
@@ -5944,6 +5948,8 @@ async function connectBlenderRfb(session) {
     rfb.resizeSession = false;
     rfb.viewOnly = false;
     rfb.addEventListener("connect", () => {
+      if (state.blenderRfb !== rfb) return;
+      setBlenderKeysEnabled(true);
       state.blenderRfbAttempts = 0;
       byId("scene-blender-connection").textContent = sceneText().blenderConnected;
       byId("scene-blender-screen").focus();
@@ -5953,6 +5959,7 @@ async function connectBlenderRfb(session) {
     rfb.addEventListener("disconnect", () => {
       if (state.blenderRfb !== rfb) return;
       state.blenderRfb = null;
+      setBlenderKeysEnabled(false);
       if (state.blenderRfbManual || !byId("scene-blender-dialog").open) return;
       byId("scene-blender-connection").textContent = sceneText().blenderDisconnected;
       scheduleBlenderRfbReconnect(session);
@@ -5965,6 +5972,8 @@ async function connectBlenderRfb(session) {
 }
 
 function disconnectBlenderRfb({manual = true, clearTarget = false} = {}) {
+  state.blenderInputAnchor = null;
+  setBlenderKeysEnabled(false);
   window.clearTimeout(state.blenderRfbReconnect);
   state.blenderRfbReconnect = 0;
   state.blenderRfbManual = manual;
@@ -5976,11 +5985,85 @@ function disconnectBlenderRfb({manual = true, clearTarget = false} = {}) {
 }
 
 function openBlenderView(session) {
-  if (window.matchMedia("(max-width: 767px)").matches) return;
   state.blenderRfbSessionId = session.id;
   state.blenderRfbAttempts = 0;
   byId("scene-blender-dialog").showModal();
   void connectBlenderRfb(session);
+}
+
+function setBlenderKeysEnabled(enabled) {
+  state.blenderRfbConnected = enabled;
+  byId("scene-blender-keys").querySelectorAll("button").forEach((button) => {
+    button.disabled = !enabled;
+  });
+}
+
+function installBlenderTouchButtons(container) {
+  let tap = null;
+  container.addEventListener("touchstart", (event) => {
+    const button = event.target.closest("button");
+    const touch = event.touches[0];
+    tap = event.touches.length === 1 && button && container.contains(button) && !button.disabled
+      ? {button, id: touch.identifier, x: touch.clientX, y: touch.clientY} : null;
+  }, {passive: true});
+  container.addEventListener("touchmove", (event) => {
+    const touch = [...event.touches].find((item) => item.identifier === tap?.id);
+    if (!touch || event.touches.length !== 1
+        || Math.hypot(touch.clientX - tap.x, touch.clientY - tap.y) > 10) tap = null;
+  }, {passive: true});
+  container.addEventListener("touchcancel", () => { tap = null; }, {passive: true});
+  container.addEventListener("touchend", (event) => {
+    const current = tap;
+    tap = null;
+    if (!current || event.defaultPrevented || event.touches.length) return;
+    const touch = [...event.changedTouches].find((item) => item.identifier === current.id);
+    const button = current.button;
+    if (!touch || !button.isConnected || !container.contains(button) || button.disabled) return;
+    const rect = button.getBoundingClientRect();
+    if (Math.hypot(touch.clientX - current.x, touch.clientY - current.y) > 10
+        || touch.clientX < rect.left || touch.clientX > rect.right
+        || touch.clientY < rect.top || touch.clientY > rect.bottom) return;
+    // Chromium can offset a synthesized click inside an opaque iframe even
+    // when touchstart/end hit the correct button. Cancel that synthesis and
+    // activate the original button once. Canvas gestures and drags are untouched.
+    event.preventDefault();
+    button.click();
+  }, {passive: false});
+}
+
+function rememberBlenderInput(event) {
+  const canvas = byId("scene-blender-screen").querySelector("canvas");
+  if (!canvas || event.target !== canvas || !state.blenderRfbConnected) return;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  state.blenderInputAnchor = {
+    x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)),
+  };
+}
+
+async function sendBlenderAssistKey(code) {
+  const keys = {Escape: 0xff1b, Tab: 0xff09, Enter: 0xff0d,
+    ArrowUp: 0xff52, ArrowDown: 0xff54, ArrowLeft: 0xff51, ArrowRight: 0xff53};
+  const rfb = state.blenderRfb;
+  if (!rfb || !state.blenderRfbConnected || !Object.hasOwn(keys, code)) return;
+  const canvas = byId("scene-blender-screen").querySelector("canvas");
+  const anchor = state.blenderInputAnchor;
+  if (canvas && anchor) {
+    // Blender dispatches keys to the editor under the remote pointer. Moving
+    // to our toolbar must not redirect Enter/Tab into a different editor.
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    canvas.dispatchEvent(new MouseEvent("mousemove", {bubbles: true,
+      clientX: rect.left + anchor.x * rect.width,
+      clientY: rect.top + anchor.y * rect.height}));
+    // The pinned noVNC batches pointer motion for up to 17 ms. Let that event
+    // flush before the key; never access its private pointer internals.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    if (state.blenderRfb !== rfb || !state.blenderRfbConnected) return;
+  }
+  // noVNC sends a complete press/release pair when down is omitted.
+  rfb.sendKey(keys[code], code);
 }
 
 function closeBlenderView() {
@@ -8299,6 +8382,13 @@ byId("scene-blender-recover").addEventListener("click", () => {
   if (recovery) void startOrOpenBlender(recovery.id);
 });
 byId("scene-blender-close").addEventListener("click", closeBlenderView);
+byId("scene-blender-screen").addEventListener("pointerdown", rememberBlenderInput, true);
+installBlenderTouchButtons(byId("scene-blender-open").parentElement);
+installBlenderTouchButtons(byId("scene-blender-dialog"));
+byId("scene-blender-keys").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-blender-key]");
+  if (button && !button.disabled) sendBlenderAssistKey(button.dataset.blenderKey);
+});
 byId("scene-blender-save").addEventListener("click", () => void finishBlenderSession("save"));
 byId("scene-blender-discard").addEventListener("click", () => void finishBlenderSession("stop"));
 byId("scene-blender-dialog").addEventListener("cancel", (event) => {

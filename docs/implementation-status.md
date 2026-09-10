@@ -1,5 +1,142 @@
 # Media Forge implementation status
 
+## 2026-09-10 opaque iframe touch activation / real Blender acceptance (PR441)
+
+前turnは補助keyのeditor context修正で進捗。今回はBlender/Hostを除いた2buttonの最小iframeで再現。
+Chrome headless/320x640/is_mobile/has_touch、sandbox allow-scripts、iframe top88px、scroll5505px。
+touchはopen/clientY244へ届くがclickはclose/clientY156へずれた。通常inline onclick付きでも再現。
+MediaForgeのBlender操作欄/dialogだけにsingle-touch button activationを追加。
+元buttonが接続済み/有効、同指の開始終了が10px以内かつbutton内の場合だけtouchendをcancelし
+button.click()を1回呼ぶ。drag/cancel/multitouch/disabled/領域外終了は処理しない。
+canvasやフォーム入力全般へ適用せず、keyboard/mouseの既存click経路を保持。
+
+`scripts/3ds_mobile_blender_ui_e2e.py` 実Chromeで日英6viewport成功。
+opaque最小再現はopen_onceになり、drag/cancel/multitouch/disabled/end_outsideの5negativeは
+preventDefaultなし/追加clickなし。これらnegativeは合成TouchEventによるhandler検査であり
+物理端末のgesture受入ではない。focused155/0.09秒、viewer64ms/差分0、Node5。
+
+外部 `/data1tb/mf-mobile-blender-source-ui-20260910-r3.py`（OUT r19）をHost診断環境で実行。
+証跡 `/data1tb/mf-mobile-blender-source-ui-20260910-r19`、12.325秒passed/exit0。
+通常認証bootstrap後にsource関数/dialog/CSSを置換するbrowser限定overlay。
+320pxのopen/補助Enter/保存に実Chrome touch入力、文字入力とcanvas focusはkeyboard/mouse。
+openのtouchend→元buttonのclick1回、6.795秒で実Blender4.5.13 canvas1007色、
+24→30fpsを新版revision_4b315df7c5d84811bcb3d8146ea00f66へ保存、旧5版/旧hash保持。
+12.328秒owned session終了、12.395秒login失効。独立DB照合でstopped/6revision。
+新source asset_eb53557cfdae46e2b7c27a5e3c08fabb.blendを実managed Blenderで
+`--background --factory-startup --disable-autoexec --python-exit-code 1 --python-expr`読込し
+fps30/actions2 assert成功/exit0。旧失敗証跡/版を保持し、成功へ書き換えない。
+
+全 `./mf.sh test` 59562は終端exit0/1537passed/既知warning2/154.34秒。source受入は補完したが、
+NOT TESTED: signed installed新UIのbootstrap/同梱確認、実mobile端末、IME/全操作/全GOAL/A〜F/GA。
+製品版数/稼働.62/Hostに変更なし。PR441通常merge後に署名版へ反映しinstalled受入する。
+
+## 2026-09-10 assisted keys restore Blender editor context (PR441)
+
+前turnのfps不一致を原寸canvasで切り分け。外部診断r16/r17は画像取得後保存せず終了。
+`/data1tb/mf-mobile-blender-source-ui-20260910-r16/console-native-before.png` に
+`bpy.context.scene.render.fps = 24` の完全入力を確認、afterでも未実行。
+r17は実sendKeyを元実装へ転送する診断記録で65293/Enterのdown/up両方を確認。
+ポインターをconsoleへ戻して通常Enterを送ると実行された。toolbar移動でBlenderの
+ポインター下editorが変わるため、キー送信だけでは元editorへ届かない。
+
+frontendはcanvas pointerdownの相対座標を保持し、補助key前に同canvasのmousemoveとして復元。
+固定noVNCのMOUSE_MOVE_DELAY=17msを実コードで確認し30ms待ってkeyを送信。
+private RFB methodには依存しない。待機後同RFB/connectedを再照合、disconnectでanchorを消去。
+ブラウザ回帰はpointer復元→key順序と待機中disconnect時keyなしを追加。
+診断fixtureのdisconnectがanchorを消さず次viewportで失敗したため製品と同じ消去へ修正。
+日英6viewportの実Chrome診断は修正後exit0。viewer build40ms/差分0、Node5。
+
+実source UI overlay→installed API/Blender4.5.13はr18で11.375秒passed、
+11.379秒owned session終了/11.457秒login失効。320px・mouse操作でありtouch成功とはしない。
+証跡 `/data1tb/mf-mobile-blender-source-ui-20260910-r18`、fps30→24を保存factsで確認、
+旧4revision/旧hash保持、2clips設定/1mesh不変。新版revision_ac4d6abff2df435ba71742bb9cba5853。
+managed Blenderでsource asset_15ac411ffa834d348b8e70ed111b2225.blendを
+`--background --factory-startup --disable-autoexec --python-exit-code 1 --python-expr`で独立読込し、
+fps==24/actions==2 assert成功/exit0。補助キーでの実設定変更を今回初めて確認。
+全 `./mf.sh test` 72132は終端exit0/1537 passed/既知warning2/169.78秒。
+NOT TESTED: touch誤click解消、
+installed新UI/実mobile端末、全GOAL/A〜F/GA。PR441 draft/稼働.62保持、Host変更なし。
+
+## 2026-09-10 mobile touch/click coordinates and real RFB display (PR441)
+
+前turnの段階切り分けを受け、外部診断mf-mobile-blender-source-ui-20260910-r3.pyを改良。
+証跡 `/data1tb/mf-mobile-blender-source-ui-20260910-r8`〜`-r15` を別々に保持。
+r8/r9ではbutton bbox=(29,309.625,262,46)、iframe=(0,88,320,490)、local hitは正しいopen。
+r10でpointerdown/touchstart/pointerup/touchendはscene-blender-open/clientY244.625へ届くが、
+生成clickだけscene-detail-close/clientY165へ変わることを記録。scrollY5505は不変。
+誤targetを直後assertで停止し、30秒のRFB待ちに進まなくした。
+r11 touch-action:manipulation、r12 is_mobile=Trueでも同じで、CSS試行は製品へ採用していない。
+
+r13の同320px/mouse比較は正しいtarget→実RFB connected/1007色まで成功。
+ただし診断が旧CSSを残していたためdialogはdisplay:none、canvasクリック前失敗。
+r14で旧workspace styleを除いてsource CSSへ置換すると実画面を表示し、保存で第3版を追加。
+fps30→24は未反映のため終端exit1、成功扱いしない。旧2版/旧asset hashesは保持検査を通過。
+r15はその第3版から同条件で再確認。5.288秒connected/実canvas1007色、7.548秒補助key有効、
+console-before-enter.pngで実Blender Python console表示を確認。10.786秒に保存後fps不一致でexit1。
+第4版を追加したがfpsは30のまま。補助Enter有効だけで設定変更成功とはしない。
+全r8〜r15のowned sessionは独立DB照合でstopped、現在4revision。
+これらは通常認証bootstrap後のsource UI関数/dialog/CSS overlayとinstalled API/実Blenderの試験。
+installed新UIやtouch成功に読み替えない。初回のHTTP overlayも未解決の別診断制約として保持。
+
+次: 320px canvasの原寸pixelを取得し、文字入力→補助Enter前後のconsoleと実key送信を照合。
+失敗保存の第3/4版を消して履歴を隠さず、正確なcurrentから次試行を始める。
+製品コードは8821b0eから不変、PR441 draft/全1537 gate維持、今回文書のみ。
+NOT TESTED: 補助Enterの実設定変更、正しいtouch click、installed配布版/実mobile端末、全GOAL/A〜F/GA。
+
+## 2026-09-10 mobile acceptance failure stage isolated (PR441)
+
+source8821b0e/PR441 draft、製品コード変更なし。前turnはUI実装/全1537test/PR作成で進捗。
+今回の診断は外部 `/data1tb/mf-mobile-blender-init-probe-20260910[-r2|-r3].py`。
+HTTP応答overlayでdocument200/new keys/config/scriptを確認、Host bridgeとnonceも存在、origin null。
+手動connectSocket→bootの診断はworkspace_transport_unavailableを返した。
+同320px/new contextでoverlayなしの `mf-mobile-blender-init-native-20260910.py` は
+6.618秒でboot成功、busy false/bridge ready。全probeはlogin失効して終端、GUIを作らない。
+HTTP overlayの認証cookie/WS差分の詳細原因は未確定。製品のmobile初期化障害とは断定しない。
+
+正常bootstrap後に変更対象6関数/HTML dialog/CSSだけをブラウザ内で差し替える別診断を実施。
+`/data1tb/mf-mobile-blender-source-ui-20260910-r3.py`、証跡末尾r3〜r7は別directoryで保持。
+r3は診断regex過剰escapeでGUI前失敗。修正後r4/r5はsource overlay完了/専用GUI readyだが
+tap後dialog false、選択scene空、RFB未生成。r6のheadlessでも同じで、native CDPだけとは断定しない。
+r7はscroll完了後750ms待ちを追加しclick captureを観測。3.573秒で
+requested target scene-blender-open に対し actual click target scene-detail-close、
+旧mobile gateなし/dialog false/selected空を確認。33.576秒でRFB待ち失敗、
+33.842秒owned session終端、33.900秒login失効。RFB接続を実行した証拠ではない。
+全r4〜r7のowned sessionがDBでstopped、対象sceneの旧current
+revision_8cf8c752e3734fe1949dd4eec6053b54と2revision維持を独立read-only照合。
+
+次: viewport/iframe scroll/入力座標の実測と正常target到達のassertを追加し、
+誤target時は接続待ちへ進まない。UI入力とRFB/Blender入力の境界を分離して受入を続ける。
+PR441はdraftのまま、署名配布なし/.62不変。NOT TESTED: 新UIの実RFB入力/保存、
+installed新UI/実mobile端末、全GOAL/A〜F/GA。今回文書のみ、既存全test gateを再実行していない。
+
+## 2026-09-10 mobile Web Blender access implementation
+
+PR440 merge68f021a0a37b82ff5333e5141a1296be32678332からux1/3d-mobile-blender-access。
+設計§5のmobileフルGUI利用に対し、現行は開始/復旧disabled、open早期return、CSS display:noneの
+3段階で阻止していた。画面幅の禁止だけを除き、runtime/Web pack/稼働競合/復旧base競合保護は保持。
+767px以下は100dvh dialog・縦scroll・折返し・保存/終了1列、PC/keyboard/mouse推奨を日英表示。
+Esc/Tab/Enter/矢印7keyの入力補助を追加。noVNC connect後だけ有効、disconnect時無効。
+固定noVNC実体のsendKeyはdown省略でpress/releaseを送ることを確認。非公開connectionStateを
+推測で参照せず、connect/disconnectイベントに紐づく所有stateで制御する。
+
+`/data1tb/ControlDeck/app/.venv/bin/python scripts/3ds_mobile_blender_ui_e2e.py` exit0。
+実Chrome headlessの320x640/640x320/1280x800各日英6ケースでdialog表示/閉じる、
+document/dialog横overflowなし、touch tap→7key送信呼出、切断後7button無効/送信なし。
+HTML/CSS/関数/辞書はsourceを読込、RFBのみ明示fixture。実Blender入力とは扱わない。
+focused frontend155 passed/0.19秒、Node5、viewer build41ms/生成物差分なし。
+初回focusedは旧desktop-only・760px期待値2件で失敗し、承認済み設計に合わせ期待値を修正。
+同修正前の全test94076は2 failed/1535 passed/149.13秒で終端exit1。
+修正後の全 `./mf.sh test` 78368は1537 passed/既知warning2/151.29秒、終端exit0。
+外部source UI overlay診断 `/data1tb/mf-mobile-blender-source-ui-20260910.py` と同`-r2.py`は
+いずれも#app[aria-busy=false]待ちで31.111/31.103秒に失敗。両診断login失効、GUI未作成。
+初回はworkspace生成済みHTMLを未展開templateに置換する診断欠陥を発見。
+R2は元configを保持するinline style/script/dialog置換へ変更したが同じ待ちで失敗。
+したがってtemplate置換だけが原因だったとは断定しない。live input/save成功扱いにしない。
+証跡 `/data1tb/mf-mobile-blender-source-ui-20260910[-r2]/observations.json` を保持。
+次は再試行を増やす前にframe初期化/表示状態と実際の置換適用有無を観測する。
+NOT TESTED: 新UIのlive RFB/Blender保存、installed opaque iframe、実mobile端末、入力IME/修飾キー、
+新UI署名配布。backend/Host/稼働0.28.62を変更せず、全GOAL/A〜F/GAはPARTIAL。
+
 ## 2026-09-10 OpenCode saved-settings terminal acceptance / GUI saved fps
 
 PR #440の実runは終端exit0、476.429秒、33 events / 8 tools。
