@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.69 preparation
+
+base PR480 merge291ccb9、ux1/release-0-28-69、PR作成前。前turnは実Host再認証/受入/mergeで進捗。
+版番号2箇所/.69 release note追加。新publication_json移行・旧core復帰の整合backup制約を明記。
+外部mf-0.28.69-audit.py/install.py準備、wrapper/展開後構文検査成功。まだ実監査・導入なし。
+監査は従来byte比較/契約gateとmanager全class、Store/resolver/Host全class/publication4module/app起動WSを照合。
+導入は.68→.69 exact標準署名consumer、旧全table/column値一致+追加publication_json全NULLだけ許容。
+全idle/backup/直前再照合/registry/稼働exe一致のgateを維持。外部scriptを無条件に実行しない。
+viewer60ms差分0/Node5pass、既存bundle-build確認。Host2381614/MF1965886 active/不変。
+全24275は同一handleで終端確認、exit0/1752passed/既知2warnings/197.67秒。以後製品/版数変更なし。
+引き継ぎ更新後commit/push/通常PR mergeへ進む。
+現在公開/稼働.68。次: 準備PR通常mergeのexact checkoutでbuild→監査→署名/公開→consumer→標準導入。
+新releaseはBlender実体やmodelを同梱しない。旧.67 bundle標準整理の事前通知/全idle/DB backupを省略しない。
+既存UX状態変更なし、全3DS/GA PARTIAL。NOT TESTED: .69署名/導入/installed新機能、10分refresh/全GOAL/A〜F/GA。
+再開: git fetch origin; git status --short --branch; 最新status/実current/PID/全未終端Jobを照合する。
+具体的外部blockerなし。untracked .venv保持。今回署名・公開・稼働更新/再起動なし。
+
 ## 2026-09-10 fresh authentication publication acceptance
 
 base PR479 mergee4c5ed2、ux1/3d-publication-reauth-acceptance、PR作成前。前turnはUI/実機/mergeで進捗。
