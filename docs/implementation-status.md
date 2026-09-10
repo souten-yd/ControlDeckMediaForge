@@ -1,5 +1,23 @@
 # Media Forge implementation status
 
+## 2026-09-11 restriction-only AppArmor pathname canary / administrator step
+
+base PR501 merge79187acdd7ca05385de5dda1aa568ccf4b743428、ux1/3d-apparmor-ipc-canary。
+PR213はMERGED/9469d8e4を再確認。専用OS隔離設定への利用者承認を取得済み。
+sudo -n trueはexit1/password required、global userns制限1を維持。OS変更/Host再起動なし。
+名前空間例外を追加する前に、権限を追加しないnamed AppArmor profileでpathname socketを
+拒否できるか調べる専用診断を追加。profileはexec attachmentなし、userns/capability許可なし。
+公式/installed manualのfile mediation仕様を確認した候補で、製品隔離の完了とはしない。
+apparmor_parser4.0.1 -Q -Kで構文検査exit0/kernel loadなし/cache書込なし。
+実baselineはchild exit0/unconfined/両専用peerへmf-owned-canary到達、診断exit2/passed=false。
+profile modeはaa-exec exit1/profile does not exist、peer受信なし、診断exit2/passed=false。
+両方の専用一時socket directoryを回収、data内の空ipc-probes親だけ保持。
+12追加tests、全70615 exit0/1807pass208.49秒/既知2warnings。viewer build61ms/生成物差分0、Node5pass。
+全gate開始後product/test変更なし。手順/rollbackは3ds-ipc-isolation.md、利用者へ一時loadを依頼。
+loaded-profile実拒否/製品policy/GUI回帰/署名配布はNOT TESTED。稼働版へ変更なし。
+新CodeDEV projectなし、root利用者のschema/test差分と本worktreeの3devsymlinkを保持。
+全GOAL/A〜F/GA PARTIAL。次は管理者による専用canary profile load→非root実probe→専用profile回収。
+
 ## 2026-09-10 IPC namespace denial attributed to AppArmor
 
 base PR500 mergeff6e25823e6423bce5efa600011ee2ed1871451f、ux1/3d-ipc-os-prerequisite。

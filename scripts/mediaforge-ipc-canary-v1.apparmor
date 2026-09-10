@@ -1,0 +1,14 @@
+# DIAGNOSTIC ONLY: no executable attachment, namespace permission or elevation.
+# Load only with explicit administrator action; do not install as a GUI policy.
+# No include of abstractions/base (which would add unrelated socket access).
+profile mediaforge-ipc-canary-v1 {
+  /usr/bin/python3.12 rix,
+  /usr/lib/python3.12/** mr,
+  /usr/lib/x86_64-linux-gnu/** mr,
+  /etc/ld.so.cache r,
+  /dev/urandom r,
+  /dev/null rw,
+  /proc/[0-9]*/attr/current r,
+  unix (create) type=stream,
+  /data1tb/ControlDeck/data/feature-data/media-forge/ipc-probes/*/ok.sock rw,
+}
