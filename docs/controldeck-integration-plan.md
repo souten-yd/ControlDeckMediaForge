@@ -837,6 +837,12 @@ See [3D Studio](design-3d-studio.md), [runtime/Web](design-blender-runtime-and-w
   private operation journal, never bearer credentials. After core restart, Host-owned work
   must stop with lost-authentication context rather than resume as unauthenticated local work.
   Fresh authenticated ownership is required to reconcile its pending terminal notification.
+  Authenticated setup admission validates the detached child's owner/kind and binds it before
+  launching the existing runner. Refresh/control starts while waiting for its CPU execution slot.
+  A disconnected browser does not cancel admitted work. Lost authentication stops and drains it;
+  source/installed and short/over-ten-minute acceptance remain distinct evidence scopes.
+  A Host-originated cancellation may retain a different authoritative error/result than the local
+  cancellation outbox. Preserve the mismatch receipt without rewriting the Host's terminal history.
 
 Terminal outbox recovery uses the additive generic Host `jobs/{id}/terminal/reconcile` route.
 The current valid child identity may retry while in memory. After a core restart, an authenticated

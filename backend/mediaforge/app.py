@@ -295,6 +295,7 @@ def create_app(
         web_pack=blender_web_pack,
         web_download_root=resolved.blender_web_download_root,
         transport=blender_download_transport,
+        host=host,
     )
     blender_sessions = BlenderSessionManager(
         store,
@@ -2933,7 +2934,9 @@ def create_app(
         "jobs",
     )
 
-    async def blender_runtime_part() -> dict[str, Any]:
+    async def blender_runtime_part(identity: HostIdentity | None = None) -> dict[str, Any]:
+        if identity is not None and identity.authorization and blender_runtime_operations.host_control is not None:
+            blender_runtime_operations.host_control.schedule_reconciliation(identity)
         # Status includes registry discovery, filesystem validation and DB reads.
         # A canceled poll must not orphan an already-started registry write.
         task = asyncio.create_task(asyncio.to_thread(blender_runtime_part_sync))
@@ -3045,7 +3048,7 @@ def create_app(
             "model_operations": lambda: {"items": [
                 item.model_dump(mode="json") for item in store.list_model_operations()
             ]},
-            "blender_runtime": blender_runtime_part,
+            "blender_runtime": lambda: blender_runtime_part(identity),
             "blender_sessions": lambda: blender_sessions.list(scene_owner(identity)),
             "scenes": lambda: {
                 "items": [
@@ -3972,34 +3975,34 @@ def create_app(
                             "device": {"vram_bytes": device_vram_bytes()},
                         }
                     elif method == "blender.runtime.status":
-                        result = await blender_runtime_part()
+                        result = await blender_runtime_part(identity)
                     elif method == "blender.runtime.install":
                         if params:
                             raise ValueError("Blender install accepts no client-selected source")
-                        result = (await blender_runtime_operations.request("install")).model_dump(mode="json")
+                        result = (await blender_runtime_operations.request("install", identity=identity)).model_dump(mode="json")
                     elif method == "blender.web.install":
                         if params:
                             raise ValueError("Blender web pack install accepts no client-selected source")
-                        result = (await blender_runtime_operations.request("web_install")).model_dump(mode="json")
+                        result = (await blender_runtime_operations.request("web_install", identity=identity)).model_dump(mode="json")
                     elif method == "blender.runtime.update":
                         if params:
                             raise ValueError("Blender update accepts no client-selected source")
-                        result = (await blender_runtime_operations.request("update")).model_dump(mode="json")
+                        result = (await blender_runtime_operations.request("update", identity=identity)).model_dump(mode="json")
                     elif method == "blender.runtime.install_exact":
                         if set(params) != {"runtime_id"} or not isinstance(params["runtime_id"], str):
                             raise ValueError("Exact Blender install accepts only runtime_id")
-                        result = (await blender_runtime_operations.install_exact(params["runtime_id"])).model_dump(mode="json")
+                        result = (await blender_runtime_operations.install_exact(params["runtime_id"], identity=identity)).model_dump(mode="json")
                     elif method == "blender.runtime.repair":
                         if set(params) != {"runtime_id"}:
                             raise ValueError("Blender repair accepts only runtime_id")
                         result = (await blender_runtime_operations.request("repair",
-                            str(params.get("runtime_id", ""))
+                            str(params.get("runtime_id", "")), identity=identity,
                         )).model_dump(mode="json")
                     elif method == "blender.runtime.switch":
                         if set(params) != {"runtime_id"}:
                             raise ValueError("Blender switch accepts only runtime_id")
                         result = (await blender_runtime_operations.request("switch",
-                            str(params.get("runtime_id", ""))
+                            str(params.get("runtime_id", "")), identity=identity,
                         )).model_dump(mode="json")
                     elif method == "blender.runtime.unregister.preview":
                         if set(params) != {"runtime_id"}:
@@ -4030,12 +4033,13 @@ def create_app(
                             str(params.get("runtime_id", "")),
                             str(params.get("confirmation_fingerprint", "")),
                             acknowledge_history=params.get("acknowledge_history", False),
+                            identity=identity,
                         )).model_dump(mode="json")
                     elif method == "blender.runtime.operations.cancel":
                         if set(params) != {"operation_id"}:
                             raise ValueError("Blender cancel accepts only operation_id")
                         result = (await blender_runtime_operations.request("cancel",
-                            str(params.get("operation_id", ""))
+                            str(params.get("operation_id", "")), identity=identity,
                         )).model_dump(mode="json")
                     elif method == "blender.sessions.list":
                         if params:

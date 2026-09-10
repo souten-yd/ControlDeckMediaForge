@@ -160,6 +160,24 @@ partialや旧runtimeを残す。未送信の終端意図を保持し、正規own
 旧coreはこの所有権を理解しないため、Host所有操作導入後のdowngradeでは未終端操作を
 新coreで停止・照合してから戻すか、書込停止下で更新前DB snapshotを復元する。
 
+Host workspaceのinstall/Web install/update/repair/switch/exact install/removeは、既存managerの
+共通受付に認証済みidentityを渡す。worker側でownerを予約し、detached childのowner/kind/IDと
+短命credentialを検証・束縛してから既存runnerを起動する。返答前の接続取消でも受付を放棄しない。
+重複要求は同ownerの実行中operationへ戻し、他ownerやローカル経路による後付け採用/取消を拒否する。
+standalone HTTP/CLIのローカル操作には不要なHost childを追加しない。
+
+CPU実行slot待ちから終端まで5秒周期でHost controlを確認し、期限前120秒でcredentialを更新する。
+phaseと単調な処理byte数をHost Jobへ報告する。期限切れ・不正refresh・Host終端では安全に停止し、
+既存cancel検査点とowned workerのdrain後にlocal終端/outboxを確定する。ブラウザ切断は取消にしない。
+shutdownも開始済み受付、worker、照合taskを回収する。tokenは実行task内だけに保持する。
+Host child作成の応答喪失では不明IDを推測して再作成しない。local admission失敗を記録し、
+判明して束縛できたchildだけ終端照合する。未知のHost側childの自動回収は保証しない。
+
+終端通知の通信失敗はoutboxを残す。再認証済みownerの設定状態照会で、同ownerの未送信分を
+非同期・同時1taskで照合する。既に終端のHost結果は上書きしない。特にHost通常取消はHost自身の
+理由文を持つので、両側canceledでもterminal_matches=falseとなり得る。receiptを保持し、
+送信内容の完全一致やsent=trueと偽らない。新sourceの受入と署名installed受入を分離する。
+
 設定のruntime状態投影（workspace初期化・明示状態照会・standalone HTTP）は、
 catalog/registry/Web pack検証・DB照会をworker threadで実行する。
 状態照会にもlegacy自動登録のatomic書込が含まれるため、要求取消が重複しても

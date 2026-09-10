@@ -1,5 +1,47 @@
 # Media Forge implementation status
 
+## 2026-09-10 setup Host control integration
+
+PR456は通常merge9491bb4。branch ux1/3d-setup-host-control、既存managerへHost認証adapterを接続。
+実装4110bf1、PR457作成時CLEAN/MERGEABLE、checksなし/必要approval0を確認。通常mergeのみを使う。
+Host workspaceのinstall/web/update/repair/switch/exact/removeは受付時owner予約→実child束縛→
+既存runner。5秒control/120秒margin refresh、phase/単調bytes、lost-auth停止・owned drain、
+fresh owner状態照会のoutbox照合。公開契約/ローカル操作/既存runtimeの配置は維持する。
+実行ownerなし操作の後付け採用と他owner取消を拒否。Host Job/credential/所有者はpublic responseに出さない。
+最初の関連実行24497は46pass/6fail（旧route mockがidentity引数未対応）、認証伝達assertへ更新。
+74638は52pass/2fail（queued取消の既存cleanupを早期returnで省略）、cleanupと既存ローカル記録を維持して修正。
+修正後関連59pass/8.62秒、最終全8074 exit0/1602pass/既知2warnings/168.84秒。
+viewer40ms差分0/Node5pass。新規11casesは更新/失効/待機取消/重複/owner/起動済みworker回収等のfixture。
+
+実source短時間: 外部`/data1tb/mf-setup-host-source-20260910.py`をHost診断venvで実行。
+CONTROL_DECK_CONFIGは既存app/config/config.yaml、Host内部importは外部診断parentだけ。
+mf-e2e/user16の短命service tokenをstdin pipeのみでMF core側へ渡し、DB/file/logには保存しない。
+初回はapp importによる診断root作成との衝突でexit1/Host child作成前。新root R2は1869 exit0。
+mf-setup-host-source-20260910-r2: 実TCP /ws install受付.144秒→ブラウザ接続終了→実4.5.9 cached
+install/probeとlocal/Host成功、20.635秒passed/20.764秒source停止。Host child816ecb706431、
+blenderop_ca740f3a521c409b86a3554f96bdde95、終端receipt一致/sent=true、元archive SHA保持。
+別のfresh service tokenによるHost control GETでもsucceededを独立確認。refresh0（短時間）を明記。
+
+実Host通常取消: 初回92523 exit1は診断のX-Requested-With不足でCSRF403。sourceは9.609秒で停止、
+一時login失効。child60d1fbc9786eがfailed終端であることをfresh Host control GETで独立確認。
+診断だけ修正したR2は8924 exit0、mf-setup-host-cancel-source-20260910-r2。
+実TCP受付.129秒、Host通常/jobs/baba54496640/cancel受付.148秒、5.373秒passed/5.547秒source停止。
+blenderop_c67aa85dd1a545e49a5f496478d83ad6はcanceled、CPU slot前で回収、診断login失効。
+fresh Host control GETもcanceled。Host固有の取消理由とlocal outboxは異なるため
+terminal_matches=false/sent=falseを保持。完全一致receiptの成功と読み替えない。
+
+長時間16356は同じ専用sourceで650秒CPU slot待ち→実Blender導入を実行、終端exit0。
+証跡mf-setup-host-long-source-20260910、operation blenderop_3d02f186b2154bac93f17948c47b516f。
+受付/ブラウザ切断.152秒、510秒観測時点で実Host refresh1、元600秒期限後の630秒もqueued/HTTP成功。
+650.166秒待機解除、670.669秒passed/670.785秒専用core停止。Host childcf927b48b196も
+別fresh tokenのcontrol GETでsucceeded/revision270を確認。outbox applied/terminal_matches=true/sent=true。
+実4.5.9/Python3.11.11/background/glTF export/import=true、6510members/1168332002展開bytes、
+固定archive SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d保持。
+これは明示queue gateであり自然650秒downloadやinstalled版の証拠ではない。
+稼働installed.66/MF1919149/Host1811096はread-onlyで存続確認、既存制作物/Host processの変更なし。
+NOT TESTED: この変更の署名公開/installed受入、実Host auth失効、Host child応答喪失時の不明Job回収、
+全GOAL/A〜F/GA。全体PARTIAL。次は通常PRmerge→署名配布/installed workspace受入。
+
 ## 2026-09-10 setup Host journal foundation
 
 base PR455 merge0dc95da、branch ux1/3d-setup-host-journal。既存setup tableへprivate owner/Host child/

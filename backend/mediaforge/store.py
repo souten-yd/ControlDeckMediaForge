@@ -415,7 +415,8 @@ class Store:
             )
             connection.execute(
                 f"""UPDATE blender_runtime_operations SET state = ?, updated_at = ?
-                    WHERE cancel_requested = 1 AND state NOT IN ({','.join('?' * len(blender_terminal))})""",
+                    WHERE cancel_requested = 1 AND COALESCE(error_code, '') != 'host_context_lost'
+                    AND state NOT IN ({','.join('?' * len(blender_terminal))})""",
                 (BlenderRuntimeOperationState.CANCELED, utc_now(), *blender_terminal),
             )
             connection.execute(
@@ -1927,6 +1928,9 @@ class Store:
                 raise KeyError(operation_id)
             if previous["host_terminal_json"] is not None:
                 raise ValueError("Host setup terminal outcome is immutable")
+            if previous["cancel_requested"] and previous["error_code"] == "host_context_lost":
+                values["error_code"] = previous["error_code"]
+                values["error_message"] = previous["error_message"]
             cursor = connection.execute(
                 f"UPDATE blender_runtime_operations SET {assignments} WHERE id = ?",  # noqa: S608
                 (*values.values(), operation_id),
@@ -2016,6 +2020,39 @@ class Store:
             "reconciliation": json.loads(row["host_terminal_reconciliation_json"])
             if row["host_terminal_reconciliation_json"] else None,
         }
+
+    def check_blender_runtime_operation_owner(self, operation_id: str, owner: str | None) -> None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT host_owner FROM blender_runtime_operations WHERE id = ?", (operation_id,)
+            ).fetchone()
+        if row is None or row["host_owner"] != owner:
+            raise KeyError(operation_id)
+
+    def abort_blender_runtime_host_operation(self, operation_id: str, owner: str) -> None:
+        """Signal a lost-authentication stop without claiming the runner has exited."""
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT host_owner FROM blender_runtime_operations WHERE id = ?", (operation_id,)
+            ).fetchone()
+            if row is None or row["host_owner"] != owner:
+                raise KeyError(operation_id)
+            connection.execute(
+                """UPDATE blender_runtime_operations SET cancel_requested = 1,
+                   error_code = 'host_context_lost',
+                   error_message = 'Host setup authorization or execution context was lost', updated_at = ?
+                   WHERE id = ? AND state NOT IN ('ready', 'failed', 'canceled')""",
+                (utc_now(), operation_id),
+            )
+
+    def pending_blender_runtime_host_terminals(self, owner: str) -> list[str]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT id FROM blender_runtime_operations WHERE host_owner = ?
+                   AND host_terminal_json IS NOT NULL AND host_terminal_sent = 0
+                   ORDER BY created_at LIMIT 50""", (validate_scene_owner(owner),),
+            ).fetchall()
+        return [str(row["id"]) for row in rows]
 
     def bind_blender_runtime_host_job(self, operation_id: str, owner: str, host_job_id: str) -> None:
         """Bind only a reserved queued operation; callers supply a verified Host child."""
