@@ -3,6 +3,14 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 setup Host連携を署名installed0.28.67で確認。実Chrome ja320 opaque iframeから
+正式repair API→通常UI switch/restore、23.499秒成功、3Host childと完全一致receiptを独立確認。
+別の専用repairでは正常Host cancel API200→実page.close→11.345秒で両canceled。
+`mf-setup-host-cancel-installed-0.28.67-20260910`、旧DB行/registry/両exe hash・inode保持、staging回収。
+Host固有取消理由のreceipt不一致は保持し、完全一致成功と扱わない。診断login失効、Host/MF PID保持。
+先行sourceの650秒queue/refresh1→実Blender install成功670.669秒はsource限定の証拠。
+installed setup10分超refresh/認証失効・再起動全matrixは未検証であり、全E/3DS/GA PARTIALを維持する。
+
 2026-09-10 signed/installed0.28.57で自然長時間の画像工程を確認。
 同専用panelのquality生成は待機約106秒→生成238.346秒→成功、native PID実観測163.032秒。
 画像適用後のGLB内包image/元版hash保持、両Host成功/GPU renew23/releaseを独立確認。
