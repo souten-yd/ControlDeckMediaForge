@@ -75,9 +75,36 @@ is installed explicitly from Settings or `web-install`. The session runner and
 software-rendered Blender GUI lifecycle are implemented: a scene is copied into
 an isolated single-writer session, the fixed Blender runtime is started behind
 a Unix-only RFB socket, and Save creates a validated immutable scene revision.
-The authenticated RFB gateway and browser/noVNC connection remain unavailable
-until the next 3DS-5 slice; absence of the pack or software renderer does not
-disable image, Library, or existing G8 features.
+The authenticated RFB gateway and browser/noVNC connection are implemented and
+have installed-host acceptance evidence; absence of the pack or software renderer
+does not disable image, Library, or existing G8 features. The full 3DS-8 acceptance
+matrix remains partial; see the implementation status for its remaining gates.
+
+### Existing external Blender reference
+
+Settings re-registration validates the **server-configured** legacy installation;
+it does not search this checkout or accept a filesystem path from the browser.
+For an explicitly managed server configuration, `MEDIA_FORGE_BLENDER_LEGACY_ROOT`
+selects the existing fixed 4.5.9 runtime root containing `.runtime.json` and
+`install/blender`. This is not an arbitrary Blender executable selector: the
+trusted manifest, stamp, executable and worker checks must all pass. Never create
+a stamp to bypass those checks or modify an existing user installation to make it fit.
+
+The default is `runtimes/blender-4.5.9` under the running code/bundle root. A release
+bundle does not include Blender and does not automatically inherit the source
+checkout's runtime path. A persisted legacy registry row alone therefore does not
+prove that re-registration will work after moving from source to a bundle.
+Check the effective service environment and a `ready` external row before an
+unregister/re-register acceptance run. Configure the environment through the
+server's service manager, not through an agent tool or browser path parameter.
+An environment change requires a MediaForge restart after active work is stopped;
+it does not require restarting ControlDeck or altering external Blender files.
+
+Unregister removes only the reference; it frees zero external bytes and survives
+reconnection. Re-register validates the same configured root. If that root is
+missing or invalid, suppression remains and re-registration fails rather than
+silently adopting another installation. Managed installation from Settings is
+the normal path for users who do not already have a compatible legacy runtime.
 
 ## Test
 

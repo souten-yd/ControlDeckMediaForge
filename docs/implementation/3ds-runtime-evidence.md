@@ -33,6 +33,13 @@ installedはHostが管理する稼働版。これらを互いに読み替えな�
 
 ## 次の不足と停止条件
 
+2026-09-10 **D-09の設定済み固定外部をinstalledでも受入**。
+mf-external-installed-0.28.63-20260910-r2、20.973秒passed/exit0、日英1280/320。
+正式LEGACY_ROOTを一時server設定して実root/readyを解除前確認、通常UIの取消/解除/再接続抑止/再登録。
+外部6544entries/58scenes180revisions967assets全行保持、登録identity/active保持。
+一時設定は削除してMFのみ再起動、Host不変/healthy/元設定に復帰。旧未設定rootでの失敗は下記に保持。
+任意外部version、source rootの自動検出、全D完了へ拡大しない。詳細はstatus/README。
+
 2026-09-10 D-09 installed試行は未達。mf-external-installed-0.28.63-20260910は
 解除前からdamagedのlegacy行を解除し、再登録timeoutでexit1。稼働bundleに外部root設定がなく、
 source外部inventory先とpackaged既定rootが異なる。正しいready参照のpreflightが診断に欠落していた。

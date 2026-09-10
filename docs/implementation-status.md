@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-10 configured external reference / installed D-09 acceptance
+
+base PR444 merge4599a6c、branch ux1/3d-external-configured-acceptance。
+既存config.pyの正式環境変数MEDIA_FORGE_BLENDER_LEGACY_ROOTを使用。read-only resolverで
+`/data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9`のstamp/manifest/executable/workerを事前検証。
+Job/GUI/setup全終端確認後、専用一時systemd user runtime drop-inで当該rootを明示しMFのみ再起動。
+Host PID1384554不変、試験MF PID1562182。既存外部file/Host設定/bundleは変更しない。
+これは明示server設定下の受入であり、未設定のbundleがsource runtimeを自動検出した証拠ではない。
+
+外部 `/data1tb/mf-external-installed-0.28.63-20260910-r2.py`をHost診断venvで実行。
+21153終端exit0、20.973秒passed/21.045秒login失効。
+証跡 `/data1tb/mf-external-installed-0.28.63-20260910-r2`。
+解除前に実processのroot環境値と実API ready/全checksをassert。全制作DB行snapshotも保存。
+実Host opaque iframe/installed.63/overlayなし、Chrome headlessで日英×1280/320の4条件。
+通常pointerで取消→登録解除→新pageから再接続後抑止→通常再登録、横overflowなし/page errors0。
+全previewはunregister/live0/project0/reclaimable0/ready。各caseで外部6544entriesのSHA/size/mode/
+symlink/dir集合と、58scenes/180revisions/967assetsの全行一致、active4.5.13/登録identity保持。
+
+試験後、作成した90-mf-external-acceptance.confだけ削除、daemon-reload/MF再起動で元設定へ復帰。
+MF PID1573521/DropInPaths空、Host1384554不変、実HTTP /health healthy。
+独立read-only比較で外部inventoryと制作DB全行一致、登録をruntime_id順に比較して全JSON一致。
+最初の独立比較はregistry配列順まで要求してexit1（再登録でlegacyが末尾へ移った）。
+各登録内容・active・抑止が不変の独立比較はexit0。配列bytes不変とは記録しない。
+元環境には外部root指定がないためlegacy表示の元damaged状態は改善したと主張しない。
+
+README/APIへ正式設定経路・bundle既定root・ready事前条件・外部file非変更を明記。
+製品コード/公開契約/依存/署名bundle変更なし。文書のみのため全test/buildの新規実行なし。
+NOT TESTED: 外部の任意version/参照中競合の追加matrix、物理mobile入力、全D/全3DS/GA。
+D-09の設定済み固定外部のinstalled日英差分を補完。旧失敗traceは保持。次はA/C/E/F等の残件。
+
 ## 2026-09-10 installed external registration acceptance failed / restored
 
 base PR443 merge ce1140f、branch ux1/3d-external-installed-acceptance。

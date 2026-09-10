@@ -124,6 +124,15 @@ and request cancellation waits for any started atomic write to finish.
 The registry suppression flag prevents automatic re-registration; Settings exposes
 an explicit re-register button only while detached. Existing managed removal is unchanged.
 
+The server setting is `MEDIA_FORGE_BLENDER_LEGACY_ROOT`, a root containing the
+fixed runtime stamp and `install/blender`, not a browser-supplied executable path.
+Without an override, the root is relative to the running source or packaged code;
+a bundle does not implicitly locate a source checkout's existing installation.
+An old registry row can consequently report `damaged` even when another copy
+exists elsewhere. Explicit registration must validate the configured copy; an
+invalid copy leaves suppression intact. See the README's external reference
+section for deployment and acceptance preconditions.
+
 3DS-5a adds private `blender.web.install` and the standalone `web_install`
 action to the same durable operation journal. The browser cannot select a URL,
 version, path, executable, or command. The checked-in Web pack manifest pins
