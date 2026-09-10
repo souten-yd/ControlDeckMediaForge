@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.61 installed / OpenCode R2
+
+前turnはloop説明merge、今回は版数PR434 merge/署名公開/installed受入で進捗。
+base/tagd2b1ec4、branch ux1/release-0-28-61-acceptance、記録PR作成前。
+全test1509/149.23秒、build40ms/差分0/Node5。exact release build12895/audit/sign/public55308/download16532/install93480終端exit0。
+初回core署名venv依存不在で未公開、既存bundle-build venvで署名成功。依存追加なし。
+artifact31542393B/SHAe20c385c4fa2c9fcff2047050c17a9029d011e67b978f8bb9a96ca9c80654265。
+backup mf-0.28.61-update-28vyd5kq、9.707秒healthy/全DB登録不変、Host1384554不変/MF1411733。
+実exe/新説明schema配信を照合、旧.59bundleのみ標準整理、.60/.61/data/runtime保持。
+実OpenCode R2 handle26740、親1411807/子1411873、project MF3DS-OpenCode-Auto-Skin-20260910-R2。
+evidence /data1tb/mf-opencode-auto-skin-installed-0.28.61-20260910、private preflight通過、未終端。
+次: 同run終端を追跡→strict verifier→実Blender auto_skin --posedでsource/配置GLB→Host Jobと設定回収。
+旧失敗を上書きせず、観測timeoutだけでkill/再依頼しない。全3DS/GA/既存UX状態PARTIAL、blockerなし。
+再開: git status --short --branch; ps -p 1411807,1411873 -o pid,ppid,etime,comm。
+
 ## 2026-09-10 v0.28.61 preparation
 
 前turnはloop説明PR433 mergeで進捗。base8136dc7、ux1/release-0-28-61、PR作成前。
