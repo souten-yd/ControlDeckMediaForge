@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed .69 ten-minute setup refresh
+
+base PR483 merge8cfa7c08d252bc49b23c8dab33ab6f4c3a1cb298、ux1/3d-installed-long-refresh-acceptance。
+前turnは正常修復受入/merge。旧登録待ちでは遅延取消にならないため、未受入10分refreshを先行。
+外部mf-setup-host-long-installed-0.28.69-20260910.py38534 exit0、同名証跡。
+全idle/backup/旧行・registry・exe SHA/PID後、実Chrome ja320 repair→page.close→650秒診断flock。
+op64d2095f2b454fa59026686906d8fa44、Hostc994519e06a7、反映前・errorなし・他作業なしを継続監視。
+約484秒でrefresh1、Host audit23353 success。health22回1.067〜4.302ms。
+652.599秒解放、653.413秒passed/653.479秒login失効。journal committed/世代一致/停止なし。
+独立Host GET succeeded/完全一致receipt/sent1、旧行/registry/両exe SHA保持、新setup1行のみ。
+Host2381614/MF2428421 active不変、stage空/診断terminal。稼働overlay/restartなし。
+文書のみ、基準PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5、今回は再実行なし。
+次: signed package隔離dataの中断回復、またはinstalled補足positive再認証受入。
+反映前lockを遅延取消へ読み替えない。GUI長時間/期限切れ/全E/全GOAL/A〜F/GA/engineは未完了。
+人工待機を自然制作の成功に転用しない。全体PARTIAL、過去.67失敗保持。
+引き継ぎcommit/push/通常PR mergeへ。untracked .venv保持、具体的外部blockerなし。
+
 ## 2026-09-10 installed .69 normal publication acceptance
 
 base PR482 merge175217367b75628006686b6c2bf94dc043830cd4、ux1/3d-installed-publication-acceptance。

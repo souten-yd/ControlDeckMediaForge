@@ -3,12 +3,19 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 installed.69でsetupのブラウザ切断後10分超認証更新を追加受入。
+mf-setup-host-long-installed-0.28.69-20260910、実Chrome repair→page.close→650秒診断registry flock。
+同一操作のHost credential refresh1/success（audit23353）後、653.413秒でrepair ready/完全一致receipt。
+journal committed/実generation/停止なし、独立Host GET succeeded、旧行/registry/両exe SHA/PID保持。
+health22回1.067〜4.302ms。人工登録待ちであり自然な長時間制作ではない。
+setupのこの条件は受入済み。GUI自身の長時間更新・期限切れ・全E/全故障matrix/全GOAL/A〜F/GAは未完了。
+
 2026-09-10 PR482で.69署名公開/consumer/標準導入を受入。新journal列以外の既存値保持。
 追加の実Chrome ja320正常repair/switch/restoreは26.402秒で成功、実4.5.9 GLB probe、
 journal committed/停止要求なし/実generation一致、正常時の補足なしをstatus/DOMで確認。
 3Host childの独立GET/receipt一致、旧行/registry/両exe SHA保持、Host/MF PID不変。
 証跡mf-setup-host-installed-0.28.69-20260910。正常系であり中断回復・遅延取消・
-再認証のinstalled受入と10分refreshは残る。全GOAL/A〜F/GA PARTIAL。
+再認証のinstalled異常系受入は残る。setup10分refreshは上記で追加受入。全GOAL/A〜F/GA PARTIAL。
 
 2026-09-10 PR471〜479の公開journal/実体照合/rollback/startup回復/日英補足に対し、
 source core再起動後の正規owner再認証を実Hostで追加確認。

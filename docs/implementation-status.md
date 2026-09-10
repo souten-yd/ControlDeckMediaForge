@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed .69 setup credential refresh over ten minutes
+
+base PR483 merge8cfa7c08d252bc49b23c8dab33ab6f4c3a1cb298、ux1/3d-installed-long-refresh-acceptance。
+前turnはinstalled正常修復受入/mergeで進捗。反映開始前へ移ったregistry guardでは旧取消試験を
+遅延取消の証拠にできないため、別の必須残件であるinstalled長時間認証更新を先に受入。
+外部 /data1tb/mf-setup-host-long-installed-0.28.69-20260910.py、同名証跡、38534 exit0。
+旧.67診断を読み、.69版・エラー即解放・反映前journal未作成・実generation検査を追加。
+全Job/GUI/runtime/model idle、旧DB行/registry/両exe SHA/PIDを取得、SQLite backup/直前idle後、
+実Chrome ja320 opaque iframeで正規repair受付。専用操作64d2095f2b454fa59026686906d8fa44、Hostc994519e06a7。
+2.523秒診断flock取得、2.530秒page.close。650秒の人工登録待ちであり自然download/制作ではない。
+他作業到着・認証喪失・早期終端・反映開始を監視し、その場合はfinallyでロックを解放する。
+約484秒の観測でrefresh1。Host audit23353のaddon.runtime.job.credential.refreshはsuccess。
+22回のhealth観測は1.067〜4.302ms、全healthy。更新後も同一操作が継続。
+652.599秒ロック解放、653.413秒passed、653.479秒login失効。診断/Chrome終了。
+実DB ready/errorなし/cancel0、journal committed/stop_requests=[]、実runtime世代marker一致。
+Host terminal_sent1/完全一致receiptと、独立した新service credentialでのHost GET succeededを照合。
+旧scene/revision/assets/jobs/setup行、registry bytes、両Blender exe SHA保持、setup新規1行のみ。
+Host2381614/MF2428421 active/PID不変。専用stageとprevious回収、再確認でもstaging空。
+稼働core/Hostの変更・overlay・再起動・他Job停止なし。過去.67の失敗記録は保持。
+
+文書のみ、基準gate PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5、今回再実行なし。
+今回受入はinstalled setupのブラウザ切断後10分超refreshと正常完了。自然な長時間制作、
+GUI自身の10分refresh、期限切れ/取消/中断回復/全E/全GOAL/A〜F/GA/engineはNOT TESTED。
+次はsigned packageの隔離専用dataで中断回復を確認するか、installed補足positiveの再認証受入へ進む。
+反映中の約短時間窓を前段ロック待ちで代用しない。全体PARTIALを維持。
+
 ## 2026-09-10 installed publication normal repair acceptance
 
 base PR482 merge175217367b75628006686b6c2bf94dc043830cd4、ux1/3d-installed-publication-acceptance。
