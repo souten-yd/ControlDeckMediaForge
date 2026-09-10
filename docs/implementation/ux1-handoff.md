@@ -3,6 +3,18 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.64 installed
+
+PR447 mergede4a269、exact build47424/audit203/署名/public42053/download5242/install39815すべてexit0。
+artifact31587097B/SHA659f5ac7bd1d874eda4e2e72b143d542886e60306f9715cdc5d0c07fb9db0cbd。
+標準update10.066秒healthy、backup mf-0.28.64-update-4sw67q63、全DB/registry保持。
+現在.64/MF1768792、Host1384554不変、旧.62実行bundleのみ整理/.63/.64/data/runtime保持。
+状態投影3関数exact code/実exe/配信schema一致。installed320日本語settings95441/英語61273ともexit0。
+証跡mf-settings-status-installed-0.28.64-{ja,en}-20260910。両言語errors0/runtime不変/login失効。
+現在継続診断なし。次: 受入docs commit/push/通常PRmerge→setup Host credential/I/O残件。
+新コードなし、版数全1541/149.01秒/build44ms/Node5gate済み。
+全setup I/O/Host credential/全3DS・GAは未完了。untracked .venv保持。
+
 ## 2026-09-10 v0.28.64 preparation
 
 前turn PR446 mergef0afdb1。ux1/release-0-28-64、addon/core版数とrelease note。
