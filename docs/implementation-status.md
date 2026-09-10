@@ -21,6 +21,15 @@ events.jsonlは0 bytes、observations.json未作成。実制作/配送/独立Ble
 NOT TESTED: 今回の自然言語制作完了、ゲームエンジン取込、接合品質、全3DS/GA。
 次: 同run終端→verifier→保持sourceと配置GLBを実Blender --inspect --fixture arrayで照合。
 
+継続確認: commit3e85a5bをpushしdraft PR #424を作成。再実行なしで同handleを追跡。
+520.739秒でskill、541.657秒でmedia.capabilitiesが実completed、各step_finishも記録された。
+OpenCode DBの専用session ses_f776dcfe5ffeRboleo233P0I7Oと一致。
+skill出力3694文字/capabilities2508文字、最初のassistant入力29035/output358 tokens。
+09:03 JST時点で次assistant応答待ち、制作Job/GLB/最終observationsは未確認。
+同PIDのHost8765へのESTAB接続を確認。共有LLMのログではtask129の大きなprompt処理が進行するが、
+本sessionとの一意対応は未確定。これを本依頼のtoken数/根本原因と断定しない。
+他依頼/モデルを停止せず、同runの終端を待つ。今回追加はread-only診断記録のみ、test再実行なし。
+
 ## 2026-09-10 v0.28.58 published/installed and MCP array delivery
 
 PR #422通常merge/tag88c17bd2ee31c94c737349f73993528d1a60eb27。

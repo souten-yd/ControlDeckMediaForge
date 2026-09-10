@@ -18,6 +18,13 @@ installed.58/core health healthy、Host再起動承認なし。全3DS/GAはPARTI
 全testは完了、旧viewer handle10274不在のためbuild/Nodeを再実行してexit0を確定した。
 既存未追跡.venv symlinkを保持。次は同runの受入結果確定後に通常PRレビュー/merge。
 
+追記: source3e85a5bをpush済み、draft PR #424 OPEN。同runでskill520.739秒、
+media.capabilities541.657秒がcompletedへ進んだ。DB sessionはses_f776dcfe5ffeRboleo233P0I7O。
+eventsはもはや空ではない。最終observations/制作Job/GLBは09:03 JST時点で未確認。
+親1286593/子1287125とhandle27239を引き続き追跡する。別runを作らない。
+共有LLMの大きなprompt処理は観測したが、本依頼との一意対応/根本原因は未確定。
+今回追加は診断記録のみ。新規test/buildなし、先の1426/Node5 gateを維持。
+
 ## 2026-09-10 v0.28.58 installed / array MCP delivery
 
 PR422 merge/tag88c17bd、署名v0.28.58公開/再取得検証/標準updateまで完了。
