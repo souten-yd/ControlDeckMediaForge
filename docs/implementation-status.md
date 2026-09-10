@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.66 preparation
+
+base PR453 merge50a944a、ux1/release-0-28-66。PR452/453の実行制御・導入stage I/O修正を配布する版数準備。
+addon/core版数とrelease noteを更新。全test76556終端exit0/1576passed/既知2warnings/154.29秒、viewer49ms差分なし/Node5pass。
+外部mf-0.28.66-audit.py/install.py/installed診断を準備しpy_compile成功。
+auditは旧guard検査を維持し、BlenderRuntimeManagerクラス全体のsource/packaged code一致と
+metadata NOFOLLOW/NONBLOCK/EXCL/regular/0600保護の同梱を追加検査する。
+installedは通常320日本語Settingsからinactive4.5.9同版修復→切替→4.5.13復元、
+3journalと制作DB/登録/両実exe保持を確認する計画。準備を実機成功とはしない。
+標準retain2で旧.64実行bundleだけが整理対象と事前通知済み。制作data/runtime保持。
+NOT TESTED: .66 build/署名公開/consumer/導入/新コードinstalled、setup Host認証、全3DS/GA。
+
 ## 2026-09-10 install and Web pack file stages off-loop
 
 base PR452 mergef3033d7、branch ux1/3d-install-stage-io。

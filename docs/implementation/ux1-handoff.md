@@ -3,6 +3,15 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.66 preparation
+
+base PR453 merge50a944a、ux1/release-0-28-66。PR452/453を含む版数/release note準備。
+全76556終端exit0/1576pass/154.29秒、viewer49ms差分0/Node5pass。外部audit/install/installed診断compile成功。
+次: 全gate終端→commit/push/通常merge→exact checkout build/audit/署名公開/再取得/標準導入。
+auditはmanager全class source/packed code比較、installedはinactive4.5.9修復→切替/復元の3journal。
+旧.64実行bundleのみ標準保持整理対象と通知済み。data/runtime保持、現.65。
+setup Host認証/全3DS/GAは未完了。untracked .venv保持。
+
 ## 2026-09-10 install/Web file stages off-loop
 
 base PR452 mergef3033d7、ux1/3d-install-stage-io。
@@ -15,7 +24,7 @@ mf-install-stage-source-20260910: stage gate中health41.681/40.919ms、Web3回�
 元cache保持、専用core終端。稼働.65/MF1897795不変、Host/既存runtimeへ変更なし。
 修正後source-r2も53457終端exit0/21.933秒、実両install/probe・Web3回取消drain・元cache保持。
 証跡mf-install-stage-source-20260910-r2、health41.661/41.788ms。metadata異常はunitの範囲。
-次: commit/push/通常merge、452+本変更を署名配布/installed受入。全test/実機診断は終端済み。
+PR453通常merge50a944a。452+本変更を署名配布/installed受入。全test/実機診断は終端済み。
 Host setup所有権/credentialと全GOAL/A〜F/GAは未完了。untracked .venv保持。
 
 ## 2026-09-10 runtime execution control off-loop
