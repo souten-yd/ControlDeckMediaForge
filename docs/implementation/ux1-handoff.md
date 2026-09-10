@@ -3,7 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
-## 2026-09-10 OpenCode array acceptance running
+## 2026-09-10 OpenCode array terminal / strict acceptance FAILED
+
+PR #424/source8c9c0c9。handle27239はexit0/2038.269秒、9tools/36eventsで終端。
+同scene制作は成功し、6段/72tri/48座標/GLB材質保持を実Blender4.5.13で確認。
+初回packは単一+items混在でerror。OpenCode自身が単一へ修正しstairs.glb配置成功。
+「失敗時停止」違反と初回errorを保持し、strict verifierはAssertionError/exit1。
+配置成功を厳格一巡合格へ読み替えず、検証条件を緩めない。
+証跡 /data1tb/mf-opencode-array-installed-20260910、scene abb18e599cdf4309b3d5807f576873ca、
+revision43396c9ed11f43bc99818910f0e5e49a、GLBfb0a9d3e0ca34823b15c88fd4e4b8546。
+専用project MF3DS-OpenCode-Array-20260910/exports/stairs.glbは6232B/SHA5067e0095e7a7eb45665083770335c5ca68d87ea09a0c37a3314c6ba186c900f。
+receipt/実bytes/DB provenance一致、制作JobとHost3件succeeded、一時config回収、親/子PID消失。
+継続中handleなし。全1428tests/151.72秒/2warnings、focused37、実Blender検査を確認済み。
+記録PRは失敗を露呈する診断sliceとして通常mergeへ。製品変更なし/release不要。
+次はmedia.pack排他形式の説明を補強し混在拒否を維持、新しい専用実行で再受入。
+既存project/outputを上書きしない。Host再起動未承認、全3DS/GA/engineは未完了。
+
+## 2026-09-10 OpenCode array acceptance running (historical)
 
 branch ux1/3d-opencode-array-acceptance、base5e2b99c。既存診断/検証へ--director-array追加。
 focused35 passed、全test41666は1426 passed/2 warnings/249.04秒でexit0。
