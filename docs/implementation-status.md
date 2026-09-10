@@ -1,5 +1,39 @@
 # Media Forge implementation status
 
+## 2026-09-10 install/update normal publication journal
+
+base PR474 merge6e28e1d、ux1/3d-install-publication-journal。前turnは通常lock境界/実機/mergeで進捗。
+fresh install/update/recoveredをguard内のbegin/completeへ接続。rename前に候補exe SHA・登録row canonical
+SHA・旧active・generationを束縛。回収対象markerは読取のみ。停止意図を別記録し、掃除後ready/outboxを確定。
+例外はStore.require_blender_publication_recovery→guard外adapterの実体照合。一致時だけ回収し、
+未公開/不明な候補・実体を保持、汎用stage掃除と偽のHost終端を禁止。repair/rollback/startup回復は未接続。
+
+初回関連82851は9failed/50pass36.32秒。ready前の掃除順序競合1件を製品修正、停止注入8件は
+旧register待機から新begin前へ移し、pre-boundary取消のassertionを維持。33767 exit0/59pass11.94秒。
+新21ケース11569 exit0/3.80秒: install/update×fresh/recovered×cancel/context喪失×begin後/登録後16件、
+rename/登録/complete前後のI/O失敗5件。初回全23527 exit1/4failed/1686pass/186.12秒。
+旧repair fixtureが初期installの世代markerを新候補へcopyしexclusive作成で拒否されたため、
+新規展開相当にfixture修正し旧markerを保持。69057対象15pass3.66秒。最終全55437はexit0、
+1690 passed/既知2warnings/187.71秒。同一handleで終端確認、以後code変更なし。
+viewer49ms/生成差分0/Node5pass。製品codeは初回全gate以後変更なし。
+
+実PR470競合再受入: 外部mf-install-journal-host-cancel-20260910.py、75632 exit0、同名証跡。
+source/uvloop/実Host/実Blender4.5.9/cached archive、登録後gateだけ診断instrumentation。
+operation2d0c30d7c7434e8cb62da0e5c31869ed/Host2380cb5ec0f6、22.101秒committing→22.120Host cancel→
+26.383遅延stop別記録→26.742ready/committed、26.894passed/27.070core停止。
+実GLB入出力probe/exe SHA/generation/stage空/元archive保持。local cancel_requested=false/errorなし、
+publication_stop_requests=[cancel]、outbox succeeded。実Hostはcanceledなのでsent=false/terminal_matches=false。
+独立fresh GETもcanceledを確認。Hostとの終端一致ではなく、不一致の正確な記録を確認した。
+
+登録応答喪失: 外部mf-install-journal-lost-ack-20260910.py、88479 exit0、同名証跡。
+operation10840e861fe34a95805941bebbbe4da8/Hostc845f2e008dd、23.256登録→23.274Host取消→
+28.747遅延stop→診断OSError→実adapter再probe→29.643ready/committed/publication_recovered=true。
+29.796passed/29.981core停止。実体世代/GLB probe/元archive/Host不一致保持を確認。
+両login回収/独立Host GET確認/refresh0、Host2043005/MF1965886不変、全診断終端。
+NOT TESTED: installed/署名配布、実update/recoveredの新競合、repair journal、未公開rollback、
+startup自動回復、OS crash、UI遅延stop表示、全GOAL/A〜F/GA。次は未公開rollbackとrepair接続。
+旧exe欠落からの修復も既存要件であり、架空のprevious SHAでidentityを通さない。全体PARTIAL。
+
 ## 2026-09-10 normal manager publication lock boundary
 
 base PR473 mergee094588、ux1/3d-publication-lock-boundary。前turnは世代識別のgate回収/mergeで進捗。

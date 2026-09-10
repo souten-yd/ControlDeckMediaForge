@@ -48,6 +48,9 @@ from .blender_web import (
     validate_web_pack_archive,
 )
 from .paths import contained
+from .blender_publication import PublicationIdentity
+from .blender_publication_generation import create_generation, read_generation
+from .blender_publication_recovery import BlenderPublicationRecovery
 from .host.client import ControlDeckHostClient, HostIdentity
 from .blender_setup_host import BlenderSetupHostControl
 from .store import Store
@@ -729,6 +732,16 @@ class BlenderRuntimeManager:
                 await self._runtime_io(self._fail_sync, operation.id, "blender_runtime_install_failed", str(exc)[:300])
 
     def _fail_sync(self, operation_id: str, code: str, message: str) -> None:
+        publication = self.store.blender_publication(operation_id)
+        if publication is not None:
+            if publication.phase != "committed":
+                self.store.require_blender_publication_recovery(operation_id)
+                result = BlenderPublicationRecovery(self.store, self.resolver, self.preflight_script).recover(operation_id)
+                if result["status"] == "committed":
+                    self._clean_stage_sync(operation_id)
+            # Never delete a candidate or published runtime after uncertain I/O.
+            # Recovery, not the original exception, determines the durable result.
+            return
         self._clean_stage_sync(operation_id)
         if self.store.get_blender_runtime_operation(operation_id).state in TERMINAL_BLENDER_RUNTIME_OPERATION_STATES:
             return
@@ -1048,27 +1061,22 @@ class BlenderRuntimeManager:
                 destination / "install" / spec.executable,
                 self.preflight_script, spec,
             )
-            self.resolver.register_managed(
-                runtime_id=operation.runtime_id,
-                version=spec.version,
-                location=operation.runtime_id,
-                archive_sha256=spec.archive_sha256,
-                before_commit=lambda: self._raise_if_canceled(operation.id),
-                make_active=operation.action == BlenderRuntimeOperationAction.UPDATE,
-            )
-            self._clean_stage_sync(operation.id)
-            self.store.update_blender_runtime_operation(
-                operation.id,
-                state=BlenderRuntimeOperationState.READY,
-                bytes_done=spec.archive_size_bytes,
-                result={
+            with self.resolver.managed_publication_guard():
+                identity = self._begin_publication(operation, spec, destination, recovered=True)
+                self.resolver.register_managed(
+                    runtime_id=operation.runtime_id, version=spec.version, location=operation.runtime_id,
+                    archive_sha256=spec.archive_sha256,
+                    make_active=operation.action == BlenderRuntimeOperationAction.UPDATE,
+                )
+                self._clean_stage_contents_sync(operation.id)
+                self.store.complete_blender_publication(operation.id, identity, {
                     "runtime_id": operation.runtime_id,
                     "version": spec.version,
                     "archive_sha256": spec.archive_sha256,
                     "preflight": facts,
                     "recovered": True,
-                },
-            )
+                })
+            self._clean_stage_sync(operation.id)
             return
         if destination.exists() and operation.action != BlenderRuntimeOperationAction.REPAIR:
             raise BlenderRuntimeOperationError(
@@ -1155,34 +1163,47 @@ class BlenderRuntimeManager:
                 raise BlenderRuntimeOperationError(
                     "blender_runtime_destination_exists", "managed Blender destination already exists"
                 )
+            identity = self._begin_publication(operation, spec, candidate, recovered=False)
             destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             os.replace(candidate, destination)
-            try:
-                self.resolver.register_managed(
-                    runtime_id=operation.runtime_id,
-                    version=spec.version,
-                    location=operation.runtime_id,
-                    archive_sha256=spec.archive_sha256,
-                    before_commit=lambda: self._raise_if_canceled(operation.id),
-                    make_active=operation.action == BlenderRuntimeOperationAction.UPDATE,
-                )
-            except Exception:
-                self._ensure_managed_destination(destination)
-                shutil.rmtree(destination)
-                raise
+            self.resolver.register_managed(
+                runtime_id=operation.runtime_id, version=spec.version, location=operation.runtime_id,
+                archive_sha256=spec.archive_sha256,
+                make_active=operation.action == BlenderRuntimeOperationAction.UPDATE,
+            )
+            self._clean_stage_contents_sync(operation.id)
+            self.store.complete_blender_publication(operation.id, identity, {
+                "runtime_id": operation.runtime_id, "version": spec.version,
+                "archive_sha256": spec.archive_sha256, "archive": archive_facts, "preflight": facts,
+            })
         self._clean_stage_sync(operation.id)
-        self.store.update_blender_runtime_operation(
-            operation.id,
-            state=BlenderRuntimeOperationState.READY,
-            bytes_done=spec.archive_size_bytes,
-            result={
-                "runtime_id": operation.runtime_id,
-                "version": spec.version,
-                "archive_sha256": spec.archive_sha256,
-                "archive": archive_facts,
-                "preflight": facts,
-            },
+
+    def _begin_publication(
+        self, operation: BlenderRuntimeOperation, spec: RuntimeSpec, candidate: Path, *, recovered: bool,
+    ) -> PublicationIdentity:
+        """Owned worker only, inside managed_publication_guard and before rename."""
+        self._raise_if_canceled(operation.id)
+        registry = self.resolver._read_registry()
+        row = next((item for item in registry["runtimes"] if item["runtime_id"] == operation.runtime_id), None)
+        digest = BlenderPublicationRecovery.executable_digest(candidate, candidate / "install" / spec.executable)
+        generation = read_generation(self.resolver.managed_root, candidate) if recovered else create_generation(
+            self.resolver.managed_root, candidate)
+        identity = PublicationIdentity(
+            runtime_id=operation.runtime_id, version=spec.version, action=operation.action.value,
+            archive_sha256=spec.archive_sha256, executable_sha256=digest,
+            previous_active_runtime_id=registry["active_runtime_id"],
+            previous_registration_sha256=(hashlib.sha256(json.dumps(row, sort_keys=True,
+                separators=(",", ":")).encode()).hexdigest() if row is not None else None),
+            previous_executable_sha256=digest if recovered else None,
+            recovered_directory=recovered, generation=generation,
         )
+        try:
+            self.store.begin_blender_publication(operation.id, identity)
+        except ValueError:
+            # A stop may win the DB transaction after the earlier check.
+            self._raise_if_canceled(operation.id)
+            raise
+        return identity
 
     def _publish_repair(
         self, operation: BlenderRuntimeOperation, spec: RuntimeSpec,
@@ -1483,6 +1504,13 @@ class BlenderRuntimeManager:
         await self._runtime_io(self._clean_stage_sync, operation_id)
 
     def _clean_stage_sync(self, operation_id: str) -> None:
+        publication = self.store.blender_publication(operation_id)
+        if publication is not None and publication.phase != "committed":
+            return
+        self._clean_stage_contents_sync(operation_id)
+
+    def _clean_stage_contents_sync(self, operation_id: str) -> None:
+        """Only before publication or after live publication verification."""
         stages = {self._stage_root(operation_id), self._web_stage_root(operation_id)}
         for stage in stages:
             if stage.exists():

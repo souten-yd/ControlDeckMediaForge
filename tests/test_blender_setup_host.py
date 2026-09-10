@@ -208,7 +208,7 @@ def test_repair_cancel_during_registration_restores_original(
 @pytest.mark.parametrize("action", ["install", "update"])
 @pytest.mark.parametrize("recovered", [False, True])
 @pytest.mark.parametrize("revoked", [False, True])
-def test_install_registration_cancel_preserves_registry_and_previous_runtime(
+def test_install_before_publication_cancel_preserves_registry_and_previous_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, action: str, recovered: bool, revoked: bool,
 ) -> None:
     base, manifest = archive_fixture(tmp_path)
@@ -226,7 +226,7 @@ def test_install_registration_cancel_preserves_registry_and_previous_runtime(
 
     async def run() -> None:
         await manager.start()
-        original = resolver.register_managed
+        original = manager._begin_publication
         try:
             if action == "update":
                 initial = await manager.request("install", identity=identity())
@@ -246,12 +246,12 @@ def test_install_registration_cancel_preserves_registry_and_previous_runtime(
                 else:
                     resolver.registry_path.write_bytes(before)
 
-            def held_registration(**kwargs: Any) -> Any:
+            def held_registration(*args: Any, **kwargs: Any) -> Any:
                 entered.set()
                 assert release.wait(5)
-                return original(**kwargs)
+                return original(*args, **kwargs)
 
-            monkeypatch.setattr(resolver, "register_managed", held_registration)
+            monkeypatch.setattr(manager, "_begin_publication", held_registration)
             operation = await manager.request(action, identity=identity())
             assert await asyncio.to_thread(entered.wait, 5)
             host.revoked, host.cancel = revoked, not revoked
@@ -272,7 +272,7 @@ def test_install_registration_cancel_preserves_registry_and_previous_runtime(
             journal = store.blender_runtime_host_journal(operation.id, "user:16")
             assert journal["sent"] and journal["terminal"]["status"] == ("failed" if revoked else "canceled")
             host.revoked = host.cancel = False
-            monkeypatch.setattr(resolver, "register_managed", original)
+            monkeypatch.setattr(manager, "_begin_publication", original)
             retry = await manager.request(action, identity=identity())
             await asyncio.gather(*list(manager._tasks.values()))
             assert store.get_blender_runtime_operation(retry.id).state == State.READY

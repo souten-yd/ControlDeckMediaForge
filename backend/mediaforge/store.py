@@ -2148,6 +2148,30 @@ class Store:
         """
         return self._complete_blender_publication(operation_id, identity, result, recovery=False)
 
+    def require_blender_publication_recovery(self, operation_id: str) -> None:
+        """Quarantine uncertain I/O without fabricating a Host terminal outcome."""
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT publication_json FROM blender_runtime_operations WHERE id = ?", (operation_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(operation_id)
+            if row["publication_json"] is None:
+                raise ValueError("Publication was not started")
+            publication = PublicationJournal.model_validate_json(row["publication_json"])
+            if publication.phase == "committed":
+                return
+            publication.phase = "recovery_required"
+            connection.execute(
+                """UPDATE blender_runtime_operations SET publication_json = ?, state = 'failed',
+                   error_code = 'blender_publication_recovery_required',
+                   error_message = 'Runtime publication requires identity verification', updated_at = ?
+                   WHERE id = ?""",
+                (publication.model_dump_json(), utc_now(), operation_id),
+            )
+        self._notify_session("blender_runtime")
+
     def recover_blender_publication(
         self, operation_id: str, identity: PublicationIdentity, result: dict[str, Any],
     ) -> BlenderRuntimeOperation:
