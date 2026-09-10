@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.59 preparation
+
+base PR #425 mergecc406cb、branch ux1/release-0-28-59。addon/core版数とrelease note追加。
+全test30474は1432 passed/1 failed/147.37秒。同じdiagnostic全FD比較が223→93で失敗。
+testのみをreader専用実open/close追跡へ変更、close漏れ検出/無関係FD解放2cases追加。
+focused24 passed/0.02秒。全test64212は1435 passed/2warnings/168.01秒でexit0。製品readerは変更しない。
+viewer build差分0/Node5成功。初回失敗を記録に保持。
+installed.58/healthy、Host1141433/MF1260659 active保持。Host再起動承認なし。
+外部 /data1tb/mf-0.28.59-audit.py と mf-0.28.59-install.pyを準備/compileallのみ。
+auditへ新配置説明同梱/0.28.58との制約tree不変を追加。installは.58からの標準update/backup/idle保護。
+実行前に現況を再検証する。build/public/署名/導入は未実施、全3DS/GA未完了。
+次: 通常merge→exact /data1tb/ControlDeckMediaForge-release-0.28.59 checkoutでbuild/audit/sign/公開consumer検証。
+予定build /data1tb/mf-0.28.59-build-20260910、public mf-0.28.59-public-20260910。
+標準MF導入後、前回とは別project/evidenceでOpenCode arrayの厳格受入。前回失敗traceを保持する。
+
 ## 2026-09-10 placement form guidance
 
 前PR #424 merge5e057f1。branch ux1/3d-placement-form-guidance、schema説明/API同期と追加5tests。

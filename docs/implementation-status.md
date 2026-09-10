@@ -1,5 +1,25 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.59 preparation
+
+PR #425通常mergecc406cb2f6898348062aa4e76b560b61a3074dedをfetch確認。
+branch ux1/release-0-28-59、addon/coreを0.28.59へ揃えrelease note追加。
+開始時installed0.28.58、実HTTP health healthy、Host1141433/MF1260659 activeを確認。
+viewer build41ms/生成物差分0、Node5 passed、diff check成功。
+版数更新後の全test30474は1432 passed/1 failed/147.37秒でexit1。
+前sliceと同じdirectory診断テストが全process FD数223→93の減少で等数assert失敗。
+release gateの不安定性を放置せず、testだけをreader専用os proxyで実open/close追跡へ変更。
+全processのGC/他処理の解放を検査対象へ混ぜず、各呼出後の未回収0と実open回数を確認する。
+意図的close省略の実FD残存を検出するnegativeと、無関係FD解放が追跡へ影響しないcaseを追加。
+fixture自身が意図的leakを回収する。製品reader/close処理・fallback条件は変更しない。
+focused24 passed/0.02秒、全test再実行handle64212は1435 passed/既知warning2/168.01秒でexit0。
+外部 /data1tb/mf-0.28.59-audit.py と mf-0.28.59-install.pyを準備、compileall成功。
+前者は旧auditを継承し、新配置schema同梱・排他形式の説明・0.28.58との制約tree不変を追加検査。
+後者はpublic4files一致/署名/idle/DB全table backupとfingerprint/registry保持/Host PID不変を確認して標準更新する。
+両scriptはまだ未実行。build/public/署名/導入/新規OpenCode再受入はNOT TESTED。
+次: full gate確定→通常PR merge→exact checkout/build/audit/sign/public再取得→標準MF update。
+Host再起動や他Job停止はしない。既存制作物・前回失敗trace・全3DS/GAの残件は保持する。
+
 ## 2026-09-10 placement form guidance / source HTTP acceptance
 
 前PR #424は通常merge5e057f1、branch ux1/3d-placement-form-guidance。
