@@ -683,10 +683,18 @@ reports each outcome with `partial` and `atomic: false`.
 
 Context actions require a host-issued opaque `grant:` ID. Raw paths are rejected.
 `media.pack` commits one existing immutable Media Forge asset to a Host-issued
-project output `grant:`. Its additive request schema accepts only a Media Forge
-`asset_id`, the opaque output grant, and an optional safe filename. The Host
+project output `grant:`. Choose exactly one of two mutually exclusive forms:
+
+- Single: `output_grant_id`, `asset_id`, optional `filename`; omit `items`.
+- Batch: `output_grant_id`, `items` (1–32); omit top-level `asset_id` and
+  `filename`. Each item has its own `asset_id`, optional `filename` and `role`.
+
+Prefer the single form for one file. Mixed forms are rejected before writing;
+unused fields must be omitted, not filled with duplicate values or nulls. The Host
 stages and atomically commits the bytes after size/SHA-256 verification; the
-response returns the Host `asset:` ID and non-path metadata. It never accepts or
+response returns the Host `asset:` ID and non-path metadata. In a batch, each
+file commits independently; the whole batch is not atomic, and per-file receipts
+report success or failure. It never accepts or
 returns a project ID, relative directory, or filesystem path. The development-only
 `/test/host-files/roundtrip` endpoint exercises the same private Host bridge and
 is hidden unless test endpoints are explicitly enabled.

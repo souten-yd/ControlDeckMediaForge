@@ -1096,6 +1096,28 @@ def test_the_same_asset_cannot_be_listed_twice(tmp_path: Path):
     assert response.json()["detail"]["code"] == "invalid_project_asset_placement"
 
 
+@pytest.mark.parametrize("singular_fields", [
+    {"asset_id": "asset_" + "1" * 32},
+    {"filename": "one.png"},
+    {"asset_id": "asset_" + "1" * 32, "filename": "one.png"},
+    {"asset_id": None, "filename": None},
+])
+def test_mixed_placement_forms_never_write(tmp_path: Path, singular_fields: dict[str, Any]) -> None:
+    client, headers, state = host_client(tmp_path, token="valid-job")
+    with client:
+        assets = _placed_assets(client, 1)
+        response = client.post(
+            "/addon/v1/agent/pack",
+            json={"input": {"output_grant_id": "grant:export-1",
+                            "items": [{"asset_id": assets[0]["id"], "filename": "one.png"}],
+                            **singular_fields}, "correlation": {"job_id": "host-agent"}},
+            headers=headers,
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_project_asset_placement"
+    assert state["outputs"] == {}
+
+
 def test_the_host_error_says_what_actually_went_wrong():
     """どの失敗も同じ 1 文にすると、繋がっていないのか待たされたのかが分からない。
 
