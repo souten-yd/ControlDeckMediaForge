@@ -5,7 +5,7 @@
 
 ## 2026-09-10 setup Host control integration
 
-PR456 merge9491bb4からux1/3d-setup-host-control。実装4110bf1、PR457 open/CLEAN/MERGEABLE。
+PR456 merge9491bb4からux1/3d-setup-host-control。実装4110bf1、PR457通常merge6cef9e5。
 新adapterをmanager/appのHost workspaceへ接続。
 owner予約/child束縛/待機refresh/control/取消drain/再認証outbox。local経路/公開契約維持。
 route mock6failとqueued取消cleanup2failを修正、関連59pass8.62秒、全8074 exit0/1602pass168.84秒。
@@ -15,8 +15,9 @@ viewer40ms差分0/Node5pass。実source R2のHost受付→切断→実4.5.9導�
 長時間16356もexit0、mf-setup-host-long-source-20260910、650秒queue gate→実install/probe成功。
 510秒でrefresh1/元600秒期限後も継続、670.669秒passed、670.785秒専用core停止。
 実4.5.9/glTF両probe、Hostcf927b48b196 succeeded/完全一致receipt、fresh control GET独立確認。
-全test/短時間/取消/長時間診断は終端済み。次: PR457通常merge→署名配布/installed受入。
-再開時は git fetch origin と gh pr view 457 でmergeを確認する。必須checksなし/必要approval0。
+全test/短時間/取消/長時間診断は終端済み。接続切断はPython websockets clientであり実ブラウザ操作ではない。
+ux1/3d-setup-evidence-scopeはこの証拠範囲を明確化する文書のみの補正。新test/runtime実行なし。
+次: 文書補正を通常merge→署名配布/installed実ブラウザ受入。全体PARTIALを維持する。
 新release auditはmanagerだけでなくBlenderSetupHostControl/Store journalのpacked codeも照合する。
 installed.66/MF1919149/Host変更なし、untracked .venv保持。全3DS/GA/installed新制御未完了。
 
