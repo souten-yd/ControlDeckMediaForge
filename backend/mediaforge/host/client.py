@@ -113,7 +113,19 @@ class ControlDeckHostClient:
         return await self._request(identity, "PATCH", f"/{ADDON_ID}/jobs/{host_job_id}", json=payload)
 
     async def job_control(self, identity: HostIdentity, host_job_id: str) -> dict[str, Any]:
-        return await self._request(identity, "GET", f"/{ADDON_ID}/jobs/{host_job_id}/control")
+        path = f"/{ADDON_ID}/jobs/{host_job_id}/control"
+        try:
+            return await self._request(identity, "GET", path)
+        except HostApiError as exc:
+            # A live Host can close a pooled connection before sending the
+            # control response. Only this read-only request is safe to repeat;
+            # never replay admission, credential refresh or progress writes.
+            if (exc.code != "host_unreachable"
+                    or not isinstance(exc.__cause__, (httpx.RemoteProtocolError, httpx.ReadError))
+                    or identity.expires_at <= time.time()):
+                raise
+        # Exactly one additional attempt; errors and cancellation propagate.
+        return await self._request(identity, "GET", path)
 
     async def reconcile_job_terminal(
         self, identity: HostIdentity, host_job_id: str, payload: dict[str, Any],

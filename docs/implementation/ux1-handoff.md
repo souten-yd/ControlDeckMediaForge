@@ -3,6 +3,27 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 source uvloop control disconnect and bounded retry
+
+base PR467 merge8f31c17、ux1/3d-setup-uvloop-reproduction。前turnは状態回答/no progress。
+実core/実Blender4.5.9/実Hostをuvloopで起動し、隔離registry flockの登録待ちで障害を再現。
+外部mf-setup-registry-uvloop-source-20260910.py、86406 exit1/30.296秒停止、Host739bbd92f7eb failed。
+trace版90秒69235 exit0、240秒R2 80812でGET controlのRemoteProtocolError/応答前EOFを確認。
+新規installがready+error/cancel1になる別不具合を発見。原診断のpassed=trueは誤判定で受入拒否。
+製品job_control GETだけRemoteProtocolError/ReadErrorを同identity期限内1回再照会。
+write/refresh/terminalの再送なし、再失敗・timeout・認証拒否・取消は伝播。Host変更なし。
+修正後76702は外部Host再起動でinterrupted/exit1。Host1811096→1994253、MF1965886不変。
+R2 61015は実EOFから回復後ReadErrorで停止、原passed=trueを受入拒否。その証拠でReadErrorを追加。
+各原JSONを保持。生成状態だけで成功とせずerrorなし/cancelなし/receipt完全一致も確認する。
+最終R3 26392 exit0、240.378秒成功/240.487秒停止、Host41ad0df8b37a succeeded/完全一致receipt。
+3回の実EOFを回復しerror=null/cancel=falseを独立確認。ReadError回復は単体試験の範囲。
+全test初回66803は既存Web pack試験queued待機上限で1fail、条件は緩めず失敗を記録。
+単独19pass後、全12682 exit0/1622pass/既知2warnings/215.93秒、viewer41ms/差分0/Node5pass。
+全診断終端。commit/push/通常merge後も稼働版.68は未更新。Host1994253/MF1965886 active。
+次slice: install/update/recoveredの登録待機中取消をREDで固定し、registry/active/実体のrollbackを修正。
+repairのチェックだけを全公開経路の完了としない。署名releaseはこの不整合修正と受入後にまとめる。
+全3DS/GA/installed10分refreshは未完了。untracked .venvと他作業を保持、Host/PC再起動しない。
+
 ## 2026-09-10 installed Host transport failure diagnosis
 
 base PR466 mergea372ca1、ux1/3d-installed-setup-control-diagnosis。前turnは進捗。
