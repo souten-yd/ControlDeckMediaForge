@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 fresh authentication publication acceptance
+
+base PR479 mergee4c5ed2、ux1/3d-publication-reauth-acceptance、PR作成前。前turnはUI/実機/mergeで進捗。
+製品変更なし。外部mf-publication-reauth-host-20260910.py、1512 exit0、同名証跡。
+先行専用dataを別rootへcopy/SQLite backupし、元DB/registry/exe SHA前後一致。
+prepare2419719は正規repair/実4.5.9/GLB入出力、21.801秒local ready/committed。
+op ed5e93719dba4cd0b11e83c359d8cfba/Host8a7d5fcf7547、終了transportだけ注入失敗でoutbox保持。
+独立Host GET running。正常shutdown後、recover2419874を別token/同dataで起動。
+認証前照合0/local補足なし/無認証WS拒否、同じownerの新しい認証でstatus要求し0.173秒sent=true/一致receipt。
+独立Host GET succeeded。local全field/実exe SHA/phase/stage空保持。
+旧op2ce61a39499745ebaba28e222aac6d8c/Hostc0019988021cのcanceled不一致は2再照合でも上書きなし。
+late_cancel/host_mismatch投影と旧journal全field保持を確認。cookie作成なし/token stdinのみ。
+両core/script終端、Host2381614/MF1965886 active/不変。稼働更新・再起動・制作物削除なし。
+文書のみ、製品基準gate PR479全1752tests197.35秒/既知2warnings/viewer差分0/Node5を維持。
+今回全test/build/新releaseなし。既存UX状態は変更せず全3DS/GA PARTIAL。
+NOT TESTED: signed installed/今回browser、10分setup refresh/期限切れ、全故障matrix/全GOAL/A〜F/GA。
+次: PR467〜479を含む署名release準備→consumer検証/標準導入→installed新journal/UI/再認証受入。
+再開: git fetch origin; git status --short --branch; 最新status/実current/PID/未終端Jobを照合。
+具体的外部blockerなし。untracked .venv保持。実Host診断scriptを無条件再実行しない。
+
 ## 2026-09-10 publication result UI
 
 base PR478 mergee350ac8、ux1/3d-publication-result-ui、PR作成前。前turnは進捗/実機/merge。

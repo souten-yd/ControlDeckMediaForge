@@ -1,5 +1,39 @@
 # Media Forge implementation status
 
+## 2026-09-10 publication outbox reconciliation after fresh authentication
+
+base PR479 mergee4c5ed2、ux1/3d-publication-reauth-acceptance。前turnは説明UI/実機/mergeで進捗。
+製品code変更なし。外部 `/data1tb/mf-publication-reauth-host-20260910.py` を
+`CONTROL_DECK_CONFIG=/data1tb/ControlDeck/app/config/config.yaml PYTHONPATH=/data1tb/ControlDeck/app/backend
+/data1tb/ControlDeck/app/.venv/bin/python /data1tb/mf-publication-reauth-host-20260910.py` で実行。
+実Host診断user16=mf-e2eを照合し、service tokenは各子へstdinだけで渡す。session cookie作成なし。
+先行実Host取消受入の専用dataを別rootへcopyし、DBはreadonly接続のSQLite backupで取得。
+元dataのDB/registry/exe SHAは前後一致。稼働版・元診断dataを修復した試験ではない。
+
+1512 exit0、証跡 `/data1tb/mf-publication-reauth-host-20260910`。
+prepare core2419719: 正規workspace repair→実Blender4.5.9/GLB入出力→local ready/committed。
+operation ed5e93719dba4cd0b11e83c359d8cfba、Host child8a7d5fcf7547、21.801秒。
+終了通知だけを診断HostApiErrorで拒否し、terminal=succeeded/sent=false/receiptなしを永続化。
+ownerのprivate投影はhost_pending。正常shutdown後の独立実Host control GETはrunning。
+これは意図的な通知transport失敗であり、自然な通信障害の再現ではない。
+
+recover core2419874: 別process/同専用dataで通常appを起動。認証前の照合呼出0を確認。
+local HTTP投影にHost補足なし、無認証WebSocket拒否後も照合0。
+親が新しく発行した別tokenで正規workspace statusを要求し、既存owner再認証経路がoutboxを照合。
+0.173秒でHost receipt applied/succeeded/terminal_matches=true、local sent=true、host_pending解消。
+local operation全fieldは再起動前と一致、実exe SHA/phase/stage空を確認。独立Host GETもsucceeded。
+旧operation2ce61a39499745ebaba28e222aac6d8c/Hostc0019988021cは、元からHost canceledで不一致。
+新認証で2回照合しても旧journal全fieldは不変、sent=false/terminal_matches=falseを維持。
+private投影late_cancel/host_mismatchと、独立Host GETのcanceledを確認。旧取消を成功へ上書きしない。
+
+両専用core正常終端、診断scriptも終端。Host2381614/MF1965886 active/不変、稼働サービス再起動なし。
+新しいHost childは終端succeededであり、診断待ちJobを残さない。制作物/外部runtime削除なし。
+文書のみ。変更のない製品基準gateはPR479の全1752tests/197.35秒/既知2warnings、viewer差分0/Node5。
+今回全test/build・新releaseは実行していない。正規再認証後の追加実機証拠であり、認証期限切れ/refresh試験ではない。
+NOT TESTED: signed installedの新journal/UI、今回browser/opaque iframe、10分超setup refresh、
+電源断/全故障matrix、全GOAL/A〜F/GA。全体PARTIAL。次はPR467〜479を含む署名release準備・配布・
+installed再起動/再認証/新説明の受入へ進む。自然長時間の未完了条件をこの短時間成功で置換しない。
+
 ## 2026-09-10 Blender publication result explanations
 
 base PR478 mergee350ac8、ux1/3d-publication-result-ui。前turnは自動回復/実機/mergeで進捗。
