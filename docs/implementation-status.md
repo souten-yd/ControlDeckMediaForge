@@ -1,5 +1,34 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.64 signed / installed status projection
+
+PR447 merge/tag対象de4a269d8ef6f1381313e20319082dfad6da17d3。
+exact checkout `/data1tb/ControlDeckMediaForge-release-0.28.64`でbuild47424終端exit0、
+PyInstaller6.22.0/Python3.12.3/log13.942秒。artifact31587097B、
+SHA256 659f5ac7bd1d874eda4e2e72b143d542886e60306f9715cdc5d0c07fb9db0cbd。
+外部audit exit0/203entries、状態投影3関数のexact source/packed code一致とoff-loop同梱確認、
+旧schema/制約/worker/mobile UI保持、packaged doctor ok/0.28.64。
+証跡 `/data1tb/mf-0.28.64-build-20260910/verification.json`、package mf-0.28.64-package-rgi9z4nq。
+既存publisher key/既存bundle-build venvで署名・自己検証exit0。公開42053終端exit0/4assets uploaded。
+公開完了後download5242を開始、終端exit0。初回.63のupload競合を繰り返していない。
+
+外部mf-0.28.64-install.pyをHost診断venvで実行、39815終端exit0。
+公開4files/build一致、Host trusted署名検証、idle/全SQLite backup後に標準update。
+backup `/data1tb/mf-0.28.64-update-4sw67q63`、10.066秒healthy、全DB table/registry bytes保持。
+Host PID1384554不変、MF1768792、実exe SHA505ee5ef5a14fa30d784606f609147feddf2ca0c7d995d42d994b2942aff4d40。
+実配信schema/exact source一致。旧.62実行bundleのみ標準保持2で整理、.63/.64/data/runtime保持。
+旧実行bundleは公開署名releaseから再取得可能。モデル追加/Blender更新/Host再起動なし。
+
+installed UIはscripts/3ds_settings_protection_installed_e2e.pyをHost診断venvで
+--expected-version 0.28.64 --initial-width 320 --locale ja/en --headless
+--require-readable-layout --require-touch-targets --require-history-confirmationで検査。
+証跡 `/data1tb/mf-settings-status-installed-0.28.64-{ja,en}-20260910`。
+日本語95441/英語61273とも終端exit0。source/HTTP overlayなしの実Host opaque iframe。
+両言語でboot/明示状態照会/両managed preview/既定off確認を検査、横overflow0/buttons44px、
+errors0/runtime state全体不変、専用login失効。削除は実行しない。
+これは正常なinstalled状態取得であり、installedへ遅延fixtureを注入した試験ではない。
+全setup I/O/credential refresh/全GOAL/A〜F/GAはPARTIALのまま。
+
 ## 2026-09-10 v0.28.64 preparation
 
 PR446 merge f0afdb1790a2c1053e9b8c1be0b84e498e2c3db2からux1/release-0-28-64。
