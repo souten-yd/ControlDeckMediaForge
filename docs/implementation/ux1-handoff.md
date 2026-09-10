@@ -3,6 +3,18 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.63 installed acceptance terminal
+
+download41993/install88248/browser87262すべて終端exit0。稼働.63/MF1483422、Host1384554不変。
+標準update10.288秒healthy、backup mf-0.28.63-update-cf8it2q_、全DB/registry保持。
+公開4files/署名/実exe/配信schema一致。旧.61実行bundleのみ標準整理、.62/.63/data/runtime保持。
+installed UIはoverrideなしで320pxのtap open/補助Enter/save成功14.043秒。文字入力はkeyboard/mouse。
+scene_fd74c96138df40e9a69a1483bee2adfcは第7版revision_17d1026f3e314e4fbbae42f561398e2a、fps24。
+旧6版/hash保持、独立Blender読込fps24/actions2、DB7revision/owned session stopped、login失効。
+証跡mf-mobile-blender-installed-0.28.63-20260910。元診断はBASE第6版なのでそのまま再実行しない。
+現在継続診断なし。PR443へ受入記録をcommit/pushし通常mergeする。製品コード変更なし。
+物理mobile/IME/engine/全3DS・GAは未完了。次は必須A〜F残件から一つのslice。untracked .venv保持。
+
 ## 2026-09-10 v0.28.63 preparation
 
 更新: PR442 merge4aafb4f、exact release checkoutでbuild32197終端/audit203/署名/公開69685終端。

@@ -1,5 +1,32 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.63 installed / mobile RFB acceptance
+
+download41993は終端exit0、公開本体31585503B/SHA d9327c3f20a53850e63f685dba4a1cf545726ddbcd1b8d4b7819b2f526a04f2b。
+`mf-0.28.63-install.py`をHost診断venv/CONTROL_DECK_CONFIGで実行し88248終端exit0。
+全4公開files/build一致、Host trusted署名検証、idle確認、全SQLite backup後に標準update。
+backup `/data1tb/mf-0.28.63-update-cf8it2q_`、10.288秒healthy、全DB table fingerprint/registry bytes保持。
+Host PID1384554不変、MF PID1483422、実exe SHA7520edee920fa8b08b90236cb85d3954f831f5f44dfc89c2783ebad0ad557d37。
+実配信schema/exact source一致。保持2の標準整理で旧0.28.61実行bundleのみ削除、.62/.63/data/runtime保持。
+旧bundleは署名releaseから再取得可能。Host再起動/依存・model追加なし。
+
+`mf-mobile-blender-installed-0.28.63-20260910.py`を同Host診断venvで実行、87262終端exit0。
+証跡 `/data1tb/mf-mobile-blender-installed-0.28.63-20260910/observations.json`。
+source/HTTP/transport overrideなし、実Host opaque iframe、Chrome320x640/touch emulation。
+open/補助Enter/保存をtap、文字入力とcanvas focusはkeyboard/mouse。8.585秒で実4.5.13 canvas1007色、
+14.043秒passed、14.046秒owned session終端、14.113秒診断login失効、page errors0。
+scene_fd74c96138df40e9a69a1483bee2adfcを第6→7版、fps30→24、旧6版/全旧hash/mesh数/clip設定保持。
+新版revision_17d1026f3e314e4fbbae42f561398e2a、source asset_2fbf9ca1f13b4b5ca22cfd396e385b92、
+GLB asset_242d698c10244446ac94cda075cc77c6。
+独立managed Blender `--background --factory-startup --disable-autoexec --python-exit-code 1 --python-expr`
+読込exit0、fps24/actions2/両range[0,48]をassert/出力確認。
+独立DB読取でもowned blendersession_355c9cc90afd4d1a9493041caf5cbbd8はstopped、7revision。
+sqlite3 CLI不在のためPython標準sqlite3のread-only接続で確認（追加installなし）。
+
+今回は受入文書のみ。既記録1537 tests/build/Node gate後の製品コード変更なし。
+NOT TESTED: 物理mobile端末/IME/全touch-only編集、今回新GLBのengine再生、全GOAL/A〜F/GA完了。
+PR443のinstalled新UI待ちは補完。全体PARTIAL、次は必須受入表の残件へ進む。
+
 ## 2026-09-10 v0.28.63 signed publication / consumer download running
 
 PR442 merge/tag対象4aafb4feaa549c76bda0d6560192ced948e2249c。

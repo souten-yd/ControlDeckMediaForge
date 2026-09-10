@@ -19,6 +19,9 @@ source UIを使った320pxの実Blender接続では、タップで開く・補�
 24→30fpsへの変更と旧5版の保持を確認しています。文字入力とcanvas focusはキーボード・マウスです。
 保存ファイルの独立Blender読込、全1537テスト、viewer build、Nodeテストも通過しています。
 
-署名付きbundleの公開と同梱コード・packaged doctorの検査は完了しました。
-公開物の再取得・導入されたUIの初期化と同操作は、まだ確認中です。
+署名付きbundleの公開・再取得・Host署名検証・標準更新を完了しました。
+更新は10.288秒でhealthyとなり、全DBとBlender登録を保持、ControlDeck本体の再起動はありません。
+導入されたUIそのものでも320pxのタップで開く・補助Enter・保存を確認しました。
+fps30→24の第7版を保存し、旧6版とhashを保持。独立Blender読込でもfps24/2actionsを確認しています。
+この試験も文字入力とcanvas focusにはキーボード・マウスを使用しています。
 物理モバイル端末・IME・ゲームエンジンへの導入・全3D Studio受入の完了を意味しません。
