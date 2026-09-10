@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed setup Host cancellation
+
+base PR460 merge561c441、ux1/3d-installed-setup-host-cancel、文書受入PR作成前。
+前turnは.67署名導入/受入/mergeまで進捗。外部mf-setup-host-cancel-installed-0.28.67-20260910.py。
+42749 exit0、同名evidence dir。実Chrome ja320 opaque iframeで専用inactive4.5.9 repair受付1.729秒queued。
+Host43ae95aed178正常cancel API200/1.739秒→page.close1.746秒→11.345秒両canceled/passed。
+operation blenderop_a07cbe38dcdc478e9c94460bf030ed6d。fresh Host control GETでも確認。
+Host固有理由のreceipt already_terminal/terminal_matches=false/sent0保持。完全一致とは扱わない。
+旧scene/assets/jobs/setup rows/registry/両exe hash・inode保持、専用staging不在。login11.453秒失効。
+Host1811096/MF1949161不変、.67 healthy、専用診断終端。独立DB/receipt/staging照合成功。
+製品code/版数変更なし、基準gate1602pass168.21秒/build/Node5。本slice全test再実行なし。
+次: 本docs通常merge→installed setup10分超refreshの実行条件を検討し実機受入。
+既存source650秒queue gate証拠はあるがinstalledへ読み替えない。既存操作を止めたり未知PIDへsignalしない。
+全3DS/GA PARTIAL、engine未指定も継続可能な作業のblockerではない。untracked .venv保持。
+
 ## 2026-09-10 v0.28.67 installed acceptance
 
 前turnは利用者への状態報告のみ/no progress。公開済み4assets/PR459 merge d188e54を実確認して再開。

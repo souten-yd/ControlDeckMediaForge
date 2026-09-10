@@ -1,5 +1,25 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed setup Host cancellation / browser disconnect
+
+base PR460 merge561c441、ux1/3d-installed-setup-host-cancel。前turnは.67署名導入/受入mergeまで進捗。
+外部`/data1tb/mf-setup-host-cancel-installed-0.28.67-20260910.py`をHost診断venvで実行、
+42749終端exit0。証跡`/data1tb/mf-setup-host-cancel-installed-0.28.67-20260910`。
+実installed.67/Chrome ja320 opaque iframe、全Job/GUI/setup/model操作idle確認後、
+inactive4.5.9の正式workspace repair APIを開始。受付1.729秒/queued、専用
+blenderop_a07cbe38dcdc478e9c94460bf030ed6d、owner user:16、Host child43ae95aed178。
+通常Host POST /api/v1/jobs/43ae95aed178/cancelは1.739秒/HTTP200、実page.closeは1.746秒。
+11.345秒passed、local/Host canceled、独立fresh tokenでHost control GETもcanceled。
+Host固有取消理由のためreceipt disposition=already_terminal/terminal_matches=false/sent0を保持。
+通知の完全一致へ読み替えない。旧scene/revision/assets/jobs行・旧setup行、registry bytes保持。
+両Blender実行hash/device/inode保持、当該staging/previous-stage不在、Host1811096/MF1949161不変。
+page errors0、11.453秒診断login失効。独立read-only DB再照合でも同終端/receipt・staging不在。
+診断は終了済み。開始時queuedを観測しただけで、全期間queuedやprobe中取消の証拠とはしない。
+製品/Host code・版数変更なし、文書のみ。基準gateはPR459の全1602pass168.21秒/viewer47ms/Node5。
+このsliceで全test/buildは再実行していない。全GOAL/A〜F/GA PARTIAL。
+NOT TESTED: installed10分超setup refresh、実認証失効・core再起動・再認証の全matrix、今回OpenCode/engine。
+次: installed setup長時間継続の安全な専用実行条件を確認し、元credential期限超えと終端照合を検証。
+
 ## 2026-09-10 v0.28.67 signed release / installed Host setup acceptance
 
 PR459通常merge/tag d188e549aba156853146d189cddec86b8984c17f。exact checkoutからbuild35855 exit0、
