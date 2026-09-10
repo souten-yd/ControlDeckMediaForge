@@ -98,14 +98,20 @@ def test_late_host_stop_preserves_actual_publication(
 
 
 @pytest.mark.parametrize("fault", ["rename", "register_before", "register_after", "complete_before", "complete_after"])
+@pytest.mark.parametrize("action", ["install", "update"])
 def test_uncertain_publication_is_verified_or_preserved(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fault: str,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fault: str, action: str,
 ) -> None:
     manager, resolver, store, _host = setup(tmp_path)
 
     async def run() -> None:
         await manager.start()
         try:
+            if action == "update":
+                initial = await manager.request("install", identity=identity())
+                await asyncio.gather(*list(manager._tasks.values()))
+                assert store.get_blender_runtime_operation(initial.id).state == State.READY
+            before_registry = resolver.registry_path.read_bytes() if resolver.registry_path.exists() else None
             if fault == "rename":
                 original = os.replace
                 def fail_rename(source: Any, destination: Any) -> None:
@@ -122,21 +128,25 @@ def test_uncertain_publication_is_verified_or_preserved(
                         original(*args, **kwargs)
                     raise OSError("injected lost acknowledgement")
                 monkeypatch.setattr(target, name, fail_call)
-            operation = await manager.request("install", identity=identity())
+            operation = await manager.request(action, identity=identity())
             await asyncio.gather(*list(manager._tasks.values()))
             publication = store.blender_publication(operation.id)
             result = store.get_blender_runtime_operation(operation.id)
             journal = store.blender_runtime_host_journal(operation.id, "user:16")
             if fault in {"rename", "register_before"}:
-                assert publication.phase == "recovery_required"
-                assert result.state == State.FAILED and result.error_code == "blender_publication_recovery_required"
-                assert journal["terminal"] is None
-                candidate = (resolver.managed_root / ".staging" / operation.id / "candidate"
-                             if fault == "rename" else resolver.managed_root / operation.runtime_id)
-                assert read_generation(resolver.managed_root, candidate) == publication.identity.generation
-                assert (candidate / "install/blender").is_file()
+                assert publication.phase == "rolled_back"
+                assert result.state == State.FAILED and result.error_code == "blender_publication_rolled_back"
+                assert journal["terminal"]["status"] == "failed"
+                assert (resolver.registry_path.read_bytes() if resolver.registry_path.exists() else None) == before_registry
+                assert not (resolver.managed_root / operation.runtime_id).exists()
+                assert not any((resolver.managed_root / ".staging").iterdir())
                 store.initialize()
-                assert store.blender_publication(operation.id).phase == "recovery_required"
+                assert store.blender_publication(operation.id).phase == "rolled_back"
+                assert store.get_blender_runtime_operation(operation.id) == result
+                monkeypatch.undo()
+                retry = await manager.request(action, identity=identity())
+                await asyncio.gather(*list(manager._tasks.values()))
+                assert store.get_blender_runtime_operation(retry.id).state == State.READY
             else:
                 assert publication.phase == "committed" and result.state == State.READY
                 assert result.error_code is None and not result.cancel_requested

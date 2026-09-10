@@ -247,6 +247,17 @@ Hostがcanceledなら成功へ上書きせず既存terminal reconciliationの不
 repairは従来経路で、このjournal接続の対象外。未公開rollback、startup自動回復、UI遅延stop補足、
 署名installed受入も残る。この中間状態を新releaseの完成として配布しない。
 
+未公開fresh候補のrollback接続: install/updateで旧登録なし・世代あり・回収directoryではない場合、
+通常失敗処理は実体回復の照合に続けてBlenderPublicationRollbackを試す。
+参照guard/registry排他の下で対象未登録・旧active一致・live/保存済み/実行中参照ゼロ・catalog一致、
+候補一つだけ・同世代/同exe SHAを検証する。パス途中のsymlinkも拒否する。
+未登録destinationへ移動済みなら元operationのcandidateへ戻し、両親directoryをfsync、再照合する。
+adapterは実体を削除しない。private phase=rolled_backと失敗/取消結果・Host outboxを同時確定した後、
+通常managerがそのoperationの一時候補だけを掃除する。不明・登録済み・参照ありなら隔離を維持する。
+rolled_backは終端であり、停止・再起動で書き換えず、同一identity再送は冪等。新しい導入試行は受付可能。
+これは未公開候補の復元であり、repairの旧実体復元やstartup自動回復の完了ではない。
+private journalの新phaseを知らない旧coreへはそのままdowngradeせず、既記載のsnapshot復元を使う。
+
 Host所有setupの永続化は既存blender_runtime_operationsへ加法的に置く。
 受付時のownerと一意なHost child ID、終端通知のoutbox/照合receiptだけをprivateに保存し、
 bearerは保存・公開しない。所有者なしの既存ローカル操作を後からHost所有として採用しない。

@@ -1,5 +1,34 @@
 # Media Forge implementation status
 
+## 2026-09-10 unpublished install/update rollback
+
+base PR475 merge80ad633、ux1/3d-unpublished-rollback。前turnは通常journal/実Host/mergeで進捗。
+BlenderPublicationRollbackを通常I/O失敗の実体回復後へ接続。fresh install/updateの旧登録なし/世代ありだけ。
+guard内で未登録/旧active/全参照ゼロ/catalog/単一候補/世代/実exe SHAを照合し、移動済み未登録実体を
+同operation stagingへ戻して親fsync/再照合。adapterは削除せず、Storeのrolled_back/終端/outbox確定後に
+managerがその一時候補だけ回収する。曖昧・登録済み・参照あり・symlinkは保護し、別版へfallbackしない。
+停止/初期化/重複受付/Host終端処理でrolled_backを終端として扱い、元結果を保持して新しい試行を許可。
+repair/recovered directory/startup自動回復は対象外。旧private journal readerへのdowngrade注意を設計へ追記。
+
+初回関連10249は2failed/28pass6.04秒: 前sliceの未公開隔離期待を、実装した復元/新試行成功へ更新。
+新rollback13ケースと既存関連93538 exit0/43pass6.71秒。install/updateのI/O失敗5条件を両方で検証し、
+25027 exit0/39pass6.78秒。全62996はexit1/1failed/1707pass/190.12秒。
+negative fixtureがtmp全体を比較し、SQLiteの一時SHM等の自然回収をruntime削除と誤判定した。
+runtime/退避実体のinode・内容SHA・symlink先とregistry bytesの比較へ修正し、保護対象の検査を強化。
+単独57141は13pass2.44秒、修正後93019は13pass1.79秒。最終全19960はexit0、
+1708 passed/既知2warnings/182.71秒。同一handleで終端確認、以後code変更なし。
+viewer53ms/生成差分0/Node5pass。
+
+実機: 外部mf-unpublished-rollback-real-20260910.py、77698 exit0、同名証跡。
+専用source core/uvloop/通常manager/実4.5.9/cached archive/実HTTP。登録前OSErrorだけ診断注入。
+e4910d35a7144b40bab658ca78a89faaは22.795秒failed/rolled_back、target未登録/不在・stage空を確認。
+新試行4a7a131493264e4382d4bfde43782299は22.359秒ready/committed、実GLB import/export true、
+旧候補と同exe SHA、元archive SHA保持、旧失敗結果保持、core停止。healthはsetup_requiredでhealthyではない。
+Host/installed/GUI操作なし。失敗候補を削除したのはこの診断専用dataの一時領域だけで、元archiveは保持。
+NOT TESTED: 実Host rollback取消、実update rollback、repair旧実体復元、startup自動回復、
+OS crash/電源断、署名配布/installed、全GOAL/A〜F/GA。次はrepairの欠落旧exeも表せるidentityと復元接続。
+全体PARTIAL、まだ配布しない。
+
 ## 2026-09-10 install/update normal publication journal
 
 base PR474 merge6e28e1d、ux1/3d-install-publication-journal。前turnは通常lock境界/実機/mergeで進捗。

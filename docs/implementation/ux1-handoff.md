@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 unpublished rollback
+
+base PR475 merge80ad633、ux1/3d-unpublished-rollback。前turnは進捗/merge。
+通常fresh install/update失敗に未公開rollbackを接続。登録/active/全参照/catalog/候補数/世代/exeを照合し、
+必要時candidateへrename/fsync/再照合。private rolled_backと失敗/取消/outboxを確定後、専用stageだけ掃除。
+旧結果を停止/再起動で維持、新試行は受付可能。repair/recovered/startup自動回復は未接続。
+新13ケース、install/update故障5条件へ拡張。初回関連2失敗は未公開隔離期待を復元/再試行へ更新。
+関連43pass/6.71秒、拡張後39pass/6.78秒。全62996 exit1/1failed/1707pass190.12秒。
+tmp全体比較がSQLite一時SHM等の自然回収を誤判定。runtime/退避実体のinode/内容SHA/linkとregistryへ比較を限定強化。
+修正後93019は13pass1.79秒。最終全19960を同一handleで終端確認: exit0/1708pass/既知2warnings/182.71秒。
+viewer53ms/差分0/Node5pass。全gate/診断終端、code変更なしで通常commit/push/mergeへ進む。
+実77698 exit0、mf-unpublished-rollback-real-20260910: 通常manager/実4.5.9/uvloop/HTTP、登録前故障注入。
+失敗22.795秒rolled_back→新試行22.359秒ready/実GLB probe、旧結果/元archive保持、stage空/core停止。
+Host/稼働MF変更なし。次: 旧exe欠落も捏造なしで記録するrepair identityと旧実体復元/通常接続。
+未配布、全3DS/GA PARTIAL、untracked .venv保持。全gate修正後commit/push/通常merge。
+
 ## 2026-09-10 install/update normal publication journal
 
 base PR474 merge6e28e1d、ux1/3d-install-publication-journal。前turnは進捗/merge。
