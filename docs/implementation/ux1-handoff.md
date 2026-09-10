@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 source GUI read policy fixed
+
+base PR496 merge2257980c2c9fe43dc7c4d094f927a9b6aad7f7e2、ux1/3d-gui-read-isolation、PR作成前。
+前turnは検証project撤去状態の再確認のみ。今回は中断中の実装/test/実GUI結果を回収して進捗。
+runner READ_FILE/READ_DIR/EXECUTE default deny、runtime/OS/trusted script依存だけを明示許可。
+4追加tests、全23126 exit0/1793pass331.18秒/既知2warnings、viewer60ms差分0/Node5。
+以後product/test編集なし。元の実source GUI57589はready1.424秒/save4.630秒/exit0。
+canary追加49272はpreferences timeout/exit1、mf-read-gui-gq71dwma、unit回収/元asset保持。
+原因未確定、元passed=falseを保持。全test終端後の77428はexit0、mf-read-gui-mbyfb480。
+実Blender4.5.13 software GUIで外部canary read拒否、ready1.617秒/save4.620秒/終了/元hash保持。
+詳細は3ds-filesystem-isolation.md。bootstrapへのcanary assertionは外部診断copyだけ。
+次: source RFB reconnect/4.5.9回帰→版更新/全gate→exact build/署名公開/通常update/installed受入。
+稼働.70は旧policyのまま。Unix socket/fd/process境界は別残件、全GOAL/A〜F/GA PARTIAL。
+新CodeDEV projectなし。3つの開発untracked symlink/root利用者差分保持。外部blockerなし。
+再開: git fetch origin; git status --short --branch; gh pr list --head ux1/3d-gui-read-isolation。
+
 ## 2026-09-10 GUI read-boundary remediation priority
 
 base PR495 merge9914647e9efae6654bc4bd1f10eb621f52352fe3、ux1/3d-gpu-condition-audit、記録PR作成前。

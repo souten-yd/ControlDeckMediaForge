@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-10 source GUI read-isolation remediation
+
+base PR496 merge2257980c2c9fe43dc7c4d094f927a9b6aad7f7e2、ux1/3d-gui-read-isolation。
+runnerへREAD_FILE/READ_DIR/EXECUTE default denyとserver-owned依存allowlistを追加。
+runtime parent/Host treeを許可せず、runtime resource symlink脱出を拒否する。
+4追加tests含む./mf.sh testは1793pass/331.18秒/既知2warnings/exit0。
+viewer build60ms/生成物差分0、Node animation5pass。誤ったtest名の先行呼出は実行なし。
+実source GUI mf-read-gui-ppq28hrhは起動1.424秒/保存4.630秒/終了/元asset保持。
+追加canary診断の初回mf-read-gui-gq71dwmaはpreferences timeoutでexit1、原因未確定/元失敗保持。
+終端/全test終了後の別試行mf-read-gui-mbyfb480はexit0、実Blender4.5.13が外部canary read拒否、
+起動1.617秒/保存4.620秒/2077182B、unit inactive/元source hash保持を確認。
+canary診断は専用bootstrap copyでの実行であり、製品の任意script APIではない。
+詳細/完全hashは3ds-filesystem-isolation.md。Host/PC restart・新GPU lease・CodeDEV projectなし。
+稼働.70未修正、次は新policyのRFB再接続/版別回帰→署名release/installed受入。
+NOT TESTED: 新policyのbrowser/installed、全版、socket/fd/process境界。全GOAL/A〜F/GA PARTIAL。
+
+
 ## 2026-09-10 GUI read-isolation gap found during GPU audit
 
 base PR495 merge9914647e9efae6654bc4bd1f10eb621f52352fe3、ux1/3d-gpu-condition-audit。
