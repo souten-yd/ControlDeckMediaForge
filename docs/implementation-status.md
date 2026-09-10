@@ -1,5 +1,25 @@
 # Media Forge implementation status
 
+## 2026-09-10 release data bytecode exclusion
+
+PR491 merge c0152eaca7a1ab0c4b94e63c837bd1ea4aa6b415 の0.28.70 buildは66572 exit0。
+31,749,954B/SHA0bbd4f0900d6a548721a02309a8841c31fba4bf8d9c3e44d921ae6418cb101b6。
+公開前auditはworker_packs/__pycache__/__init__.cpython-312.pyc混入を検出してexit1。
+元失敗artifactはmf-0.28.70-build-20260910へ保持、署名・公開・導入しなかった。
+原因はテスト後のresource directory全体をPyInstaller --add-dataへ直接渡していたこと。
+ux1/3d-release-data-cache-filterで5resource treeを一時stagingへcopyし、
+__pycache__/*.pyc/*.pyoだけを再帰除外。元checkoutを掃除せずworker source/notice/dataを保持する。
+5treeごとのnested cache/旧bytecode除外・source不変の5testsを追加、対象13pass。
+修正sourceの実build70250 exit0、mf-0.28.70-build-cachefix-20260910、31,605,226B、
+SHA9259a9098fa9d7009c9fa95b79c36361d10683067d7c4d0958eda035a3a2d1ac。
+mf-0.28.70-cachefix-audit.py exit0、CArchive203entries、cacheなし・source/契約/新終端class一致、
+実packaged doctorはok/0.28.70。抽出package mf-0.28.70-package-r9ii_fs7。
+これは修正sourceの配布前監査であり、署名公開・installed受入ではない。
+viewer build51ms/生成差分0、Node animation5pass（最初のtest filename誤記を修正して実行）。
+全 ./mf.sh test 1852 exit0、1789pass/205.39秒/既知2warnings/skip0。以後製品/test編集なし。
+全GOAL/A〜F/GA/engineはPARTIAL維持。
+次は通常PR merge後のexact build→監査→署名公開→標準update/既存DB保持を確認する。
+
 ## 2026-09-10 v0.28.70 preparation and source real image success
 
 base PR490 merge6b914ed3206dba40a618a6ff8bb43daf069af6d7。前turnはowned終端回収の実装/実受入/merge。

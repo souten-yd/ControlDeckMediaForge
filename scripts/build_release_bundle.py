@@ -16,6 +16,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def stage_bundle_data(source: Path, destination: Path) -> None:
+    """Copy resource trees without interpreter caches left by local tests.
+
+    Workers run with their own Python versions; cached build-interpreter
+    bytecode is neither a release resource nor a replacement for their source.
+    Never clean the checkout itself to obtain a clean release.
+    """
+    for name in ("frontend", "schemas", "worker_packs", "creative", "profiles"):
+        shutil.copytree(
+            source / name, destination / name,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+        )
+
+
 def copy_file(source: Path, destination: Path, mode: int) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, destination)
@@ -96,6 +110,8 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="mediaforge-bundle-") as temporary:
         work = Path(temporary)
         dist = work / "dist"
+        resources = work / "resources"
+        stage_bundle_data(ROOT, resources)
         pyinstaller_python = args.pyinstaller.parent / "python"
         pyinstaller_argv = (
             [str(pyinstaller_python), "-m", "PyInstaller"]
@@ -113,11 +129,11 @@ def main() -> int:
                 "--distpath", str(dist),
                 "--workpath", str(work / "build"),
                 "--specpath", str(work),
-                "--add-data", f"{ROOT / 'frontend'}:frontend",
-                "--add-data", f"{ROOT / 'schemas'}:schemas",
-                "--add-data", f"{ROOT / 'worker_packs'}:worker_packs",
-                "--add-data", f"{ROOT / 'creative'}:creative",
-                "--add-data", f"{ROOT / 'profiles'}:profiles",
+                "--add-data", f"{resources / 'frontend'}:frontend",
+                "--add-data", f"{resources / 'schemas'}:schemas",
+                "--add-data", f"{resources / 'worker_packs'}:worker_packs",
+                "--add-data", f"{resources / 'creative'}:creative",
+                "--add-data", f"{resources / 'profiles'}:profiles",
                 "--add-data", f"{ROOT / 'config' / 'blender-runtime.json'}:config",
                 "--add-data", f"{ROOT / 'config' / 'blender-runtime-catalog.json'}:config",
                 "--add-data", f"{ROOT / 'config' / 'blender-web-runtime.json'}:config",
