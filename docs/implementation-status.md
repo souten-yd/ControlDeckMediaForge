@@ -1,5 +1,42 @@
 # Media Forge implementation status
 
+## 2026-09-10 automatic startup publication recovery
+
+base PR477 mergef99890f、ux1/3d-publication-startup-recovery。前turnは状況説明のみ/no progress。
+旧テスト22932はUnknown process id、psでpytest不在を確認後、現差分で関連試験を再実行した。
+PR213はMERGED/9469d8e4、fetch後のorigin/mainと作業base一致。利用者のuntracked .venvは保持。
+通常manager.startへprivate recovery taskを接続。起動時rowid上限/50件page/live committing除外、
+項目ごとの通常guardとowned worker、未確定公開の実照合/rollback、完了後stage/旧退避掃除を行う。
+未証明実体は保持。項目/scan失敗の診断を出し、例外本文・秘密値を出さない。
+shutdownは開始済みworkerを重複取消でもdrainする。Host token発行/終端照合の権限は拡大しない。
+新12ケース: 通常journalから起動回復/旧exe欠落修復/完了済み掃除7、shutdown取消1/3回2、
+50/50/3のpageとlive/上限後除外1、scan/項目失敗の安全な診断2。
+関連91910 exit0/76pass13.32秒、新75225 exit0/12pass3.73秒。viewer55ms/生成差分0/Node5pass。
+全 `./mf.sh test` は56880を同一handleで終端確認、exit0/1743passed/既知2warnings/198.26秒。
+以後製品code/test変更なし。通常commit/push/PRの対象headを照合してmergeへ進む。
+
+実機は専用source core/dataだけ。外部 `/data1tb/mf-publication-startup-real-20260910.py` を
+`PYTHONPATH=backend:. .venv/bin/python` で実行。実cached Blender4.5.9の通常公開の境界で、
+診断core自身だけSIGKILL。親がreturncode=-9を確認し、別子processの通常app起動で自動照合した。
+回復adapterを診断から直接呼ぶ試験ではない。回復worker入口のgate中に実HTTP healthを要求した。
+
+- 初回99118: registeredケースは成功。証跡mf-publication-startup-real-20260910/registered、
+  operation06e47044c8334ff09c9d49a06f95065f、prepare2402070は22.031秒committingでSIGKILL、
+  recovery2402358は0.448秒ready/committed。実GLB import/export true、exe SHA/registry保持、stage空。
+  held中health7.319ms。続くrepair準備は診断scriptのRuntimeSpec.runtime_id参照誤りで失敗し、
+  全体exit1。元証跡は保持し、registered成功を全体成功へ書き換えない。
+- 修正後29789 exit0: 環境MF_STARTUP_EVIDENCE_ROOT=/data1tb/mf-publication-startup-real-20260910-repair-r2、
+  MF_STARTUP_CASES=repair_previousで失敗したrepairだけ実行。診断copyの旧exe欠落を再現し、
+  旧root退避直後にSIGKILL。operation4561aea92e9c497c9ed11faf01627d1d、prepare2402870は22.960秒、
+  recovery2403504は0.309秒failed/rolled_back。旧root inode22020171/欠落状態/registry保持、stage空。
+  held中health5.052ms。元cache SHA一致、全子process終端、Host/installed再起動なし。
+
+自動回収が削除したのは診断専用dataの検証済み一時候補だけ。元Blender、cache、制作物は削除しない。
+Host2381614/MF1965886ともactive/同PIDを確認。公開API/schema/版数/Host差分なし。
+NOT TESTED: 電源断/全故障点のOS crash、実Host再起動後再認証/終端全matrix、署名installed、
+UI遅延stop表示、全GOAL/A〜F/GA。全体PARTIAL。次は遅延stop/Host終端不一致の日英表示を接続し、
+再起動後再認証の実Host受入と署名配布へ進む。今回を全3D制作/ゲームエンジン受入とはしない。
+
 ## 2026-09-10 repair publication journal and original-tree rollback
 
 base PR476 merge92f6f22、ux1/3d-repair-publication-journal。前turnは未公開rollback/実機/mergeで進捗。
