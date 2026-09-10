@@ -67,12 +67,29 @@ skill読込とMediaForge tool、control_deck.project_output_grantだけを使い
 """
 
 
-def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_motion: bool = False) -> None:
+DIRECTOR_ARRAY = """最初にskill toolでblender-directorを実際に読み込んでください。
+現在のMCP schemaとmedia.capabilitiesでmodifier.arrayが使えることを確認してください。
+新しいsceneに6段の静的な階段を作ります。既存sceneは変更しません。
+元の段はstable ID step、名前Steps、cube、寸法X0.4m/Y0.8m/Z0.2m、中心は原点、回転なし。
+段の中心を毎段X方向へ0.3m、Z方向へ0.15mずらし、元を含む計6段にしてください。
+modifier.arrayを必ず使用し、local_offsetがobject scaleの影響を受けることを考慮します。
+material.setで青緑色にします。画像生成、追加object、bevel、rig、animationは今回は不要です。
+制作Jobが終端になるまでstatusで追跡し、成功後snapshotを確認してGLBへexportしてください。
+scene.exportは同期でAssetを返し、asset.job_idは新Jobではありません。
+現在のControlDeck projectのexports用output grantを直前に取得し、media.packでstairs.glbを1件配置します。
+任意Python、shell、ファイル直書き、外部サービスは使用しません。
+失敗は段階とJob IDを報告して停止し、成功扱いしません。最後にscene/revision/Job/Asset IDとreceiptを示してください。
+skill読込、MediaForge tool、control_deck.project_output_grantだけを使ってください。
+"""
+
+
+def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_motion: bool = False,
+                   director_array: bool = False) -> None:
     """Limit this diagnostic's private configuration, never global settings."""
     payload["permission"] = {"*": "deny", "controldeck_addons_*": "allow"}
     payload["tools"] = {name: False for name in (
         "bash", "read", "edit", "write", "glob", "grep", "webfetch", "websearch", "task", "skill", "question")}
-    if director_static or director_motion:
+    if director_static or director_motion or director_array:
         payload["permission"]["skill"] = {"*": "deny", "blender-director": "allow"}
         # Legacy tools entries become permissions before the global wildcard;
         # duplicating skill there changes insertion order and disables it again.
@@ -97,10 +114,12 @@ def main() -> None:
                         help="Require a real director skill read and duplicate/mirror in a new sword scene")
     parser.add_argument("--director-motion", action="store_true",
                         help="Require a real director read and a new rigged robot with idle/arm_swing GLB delivery")
+    parser.add_argument("--director-array", action="store_true",
+                        help="Require a real director read and fixed-count stairs GLB delivery")
     args = parser.parse_args()
-    if args.director_static and args.director_motion:
+    if sum((args.director_static, args.director_motion, args.director_array)) > 1:
         parser.error("Choose one director scenario")
-    director_enabled = args.director_static or args.director_motion
+    director_enabled = args.director_static or args.director_motion or args.director_array
     if director_enabled and (args.restored_ui_evidence or args.retry_empty_output):
         parser.error("Director acceptance requires a new project/scene")
     os.umask(0o077)
@@ -109,6 +128,8 @@ def main() -> None:
     prompt = DIRECTOR_STATIC + PROMPT if args.director_static else PROMPT
     if args.director_motion:
         prompt = DIRECTOR_MOTION
+    elif args.director_array:
+        prompt = DIRECTOR_ARRAY
     output_directory = "exports"
     if args.restored_ui_evidence:
         assert args.project_name.startswith("MF3DS-") and args.project_name in project_names
@@ -155,13 +176,15 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
     evidence: dict[str, Any] = {"project": args.project_name, "project_path": str(project_path),
                                 "correlation_id": correlation, "model": settings["model"], "events": 0,
                                 "output_directory": output_directory, "preserved_exports": preserved,
-                                "director_static": args.director_static, "director_motion": args.director_motion}
+                                "director_static": args.director_static, "director_motion": args.director_motion,
+                                "director_array": args.director_array}
     process = None
     try:
         payload = json.loads(config.read_text())
         secrets = [payload["provider"]["controldeck"]["options"]["apiKey"],
                    payload["mcp"]["controldeck_addons"]["environment"]["CONTROL_DECK_ADDON_MCP_TOKEN"]]
-        restrict_tools(payload, director_static=args.director_static, director_motion=args.director_motion)
+        restrict_tools(payload, director_static=args.director_static, director_motion=args.director_motion,
+                       director_array=args.director_array)
         config.write_text(json.dumps(payload))
         if director_enabled:
             debug = subprocess.run([str(registry.executable("opencode")), "debug", "agent", "build", "--pure"],
@@ -182,6 +205,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
         if director_enabled:
             schema = json.dumps(next(tool["inputSchema"] for tool in listing if tool["name"] == "media.scene.create"))
             required = ("armature.create", "skin.bind", "animation.clip") if args.director_motion else ("object.duplicate", "modifier.mirror")
+            if args.director_array:
+                required = ("modifier.array",)
             assert all(operation in schema for operation in required)
         evidence["mcp_preflight_tool_count"] = len(names)
         env = dict(os.environ, OPENCODE_CONFIG=str(config))
@@ -223,6 +248,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
         assert evidence["exit_code"] == 0
         assert evidence.get("tool_calls", 0) > 0, "OpenCode emitted no actual tool calls"
         expected = {"robot.glb"} if args.director_motion else {"sword.glb", "blade.png", "sword-project.zip"}
+        if args.director_array:
+            expected = {"stairs.glb"}
         assert set(evidence["output_files"]) == expected
     finally:
         if process is not None and process.poll() is None:

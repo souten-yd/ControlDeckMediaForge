@@ -21,6 +21,18 @@ def inspect_blend(source: Path, glb: Path, folder: Path, *, edited: bool) -> Non
 
     bpy.ops.wm.open_mainfile(filepath=str(source), load_ui=False, use_scripts=False)
     step = next(obj for obj in bpy.data.objects if obj.get("media_forge_id") == "step")
+    assert [obj for obj in bpy.context.scene.objects if obj.type == "MESH"] == [step]
+
+    def material_values(obj: Any) -> tuple[float, ...]:
+        assert len(obj.material_slots) == 1
+        material = obj.material_slots[0].material
+        assert material is not None and material.use_nodes
+        shader, = [node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED"]
+        assert not shader.inputs['Base Color'].is_linked
+        return (*shader.inputs['Base Color'].default_value,
+                shader.inputs['Metallic'].default_value, shader.inputs['Roughness'].default_value)
+
+    source_material = material_values(step)
     assert len(step.data.vertices) == 8 and len(step.data.polygons) == 6
     assert {tuple(v.co) for v in step.data.vertices} == set(itertools.product((-1, 1), repeat=3))
     assert len(step.modifiers) == 1
@@ -54,11 +66,15 @@ def inspect_blend(source: Path, glb: Path, folder: Path, *, edited: bool) -> Non
     bpy.ops.object.delete(use_global=False)
     bpy.ops.import_scene.gltf(filepath=str(glb))
     meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+    assert len(meshes) == 1
+    imported_material = material_values(meshes[0])
+    assert all(abs(a - b) < 1e-5 for a, b in zip(source_material, imported_material, strict=True))
     imported, imported_triangles = geometry(meshes)
     assert imported == expected and imported_triangles == triangles
     report = {"blender": bpy.app.version_string, "copies": 6, "base_vertices": 8,
               "triangles": triangles, "unique_evaluated_points": len(points),
               "bounds": [[min(p[i] for p in points), max(p[i] for p in points)] for i in range(3)],
               "glb_reimport_exact_points": True, "local_scale_spacing_verified": True,
+              "source_material": source_material, "glb_material_preserved": True,
               "edited_translation_m": shift, "not_tested": ["engine import", "watertight union"]}
     (folder / ("posed-inspection.json" if edited else "inspection.json")).write_text(json.dumps(report, indent=2) + "\n")

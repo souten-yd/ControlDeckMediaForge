@@ -1,5 +1,78 @@
 # Media Forge implementation status
 
+## 2026-09-10 OpenCode array run terminal / delivery recovered, strict gate failed
+
+PR #424 source8c9c0c9の診断を同runで追跡。handle27239はexit0/2038.269秒で終端。
+実OpenCode session ses_f776dcfe5ffeRboleo233P0I7O、9 tool calls/36 events。
+skill520.739秒→capabilities541.657→create1406.991→status1486.889→snapshot1576.130→
+export1663.060→fresh grant1750.802→pack error1838.361→pack completed1934.042。
+初回packは単一(asset_id/filename)と一括(items)を同時指定し、MCPはgeneric request failed。
+公開oneOf/production placement_manifestのextra=forbidがこの混在を拒否することと整合する。
+OpenCodeは同じasset/grantを単一形式へ修正し成功した。ただし「失敗時停止」の指示に反する。
+既存strict verifierを実行し、全tool completed条件でAssertionError/exit1を確認。
+検証条件を緩和せず、**今回の厳格な一巡受入はFAILED**として記録する。
+
+制作Job job_65b1f8ced2844562897803ffb7b2adeaは実DB succeeded。
+scene_abb18e599cdf4309b3d5807f576873ca、revision_43396c9ed11f43bc99818910f0e5e49a。
+source asset_7c287dddd8c34480951d85dbdcf066d9、GLB asset_fb0a9d3e0ca34823b15c88fd4e4b8546。
+OpenCodeが選んだ3操作はcube寸法[.4,.8,.2]、array count6/local_offset[1.5,0,1.5]、同stepの材質。
+実Blender4.5.13 --inspect --fixture arrayでsource/GLBを独立検査、exit0。
+6段/72 triangles/48座標、world bounds[-.2,1.7]/[-.4,.4]/[-.1,.85]とGLB再import一致。
+base RGBA[0,.55,.55,1]/metallic0/roughness.6も保持。inspection.jsonは同evidence-dir。
+配置先 /data1tb/ControlDeck/CodeDEV/MF3DS-OpenCode-Array-20260910/exports/stairs.glb、6232 B、
+SHA5067e0095e7a7eb45665083770335c5ca68d87ea09a0c37a3314c6ba186c900f。
+read-only独立照合で成功receipt/実bytes/Asset metadata/provenance.output_sha256全一致。
+Host a0767ae8c170/f37c21b062cf/c03a93069fd9も実DB succeeded。
+専用config runtime-config-mf3ds-cdbb011e92a7447e.json不在、親1286593/子1287125消失。
+保持証跡 /data1tb/mf-opencode-array-installed-20260910。再作成/既存配置上書きはしない。
+
+全gate1428 tests/151.72秒/既知warning2、focused37/実Blender検査、frontend変更なし。
+本PRは診断追加と実失敗の記録であり、製品の配布変更なし。追加release不要。
+次: media.packの単一/一括排他をtoolの説明でも明確にし、混在拒否を維持して新規実行で再受入。
+任意応答喪失の補完や同grant二重配送を暗黙許可しない。全3DS/GA、engine取込/接合品質は未完了。
+
+## 2026-09-10 OpenCode array delivery acceptance in progress
+
+Base origin/main5e2b99c、PR #213 MERGED/9469d8eを再確認。
+branch ux1/3d-opencode-array-acceptance。既存診断へ--director-arrayを追加し、
+director実読込→現在schema→6段の配列→GLB→fresh grant配置を自然言語で依頼する。
+world間隔X0.3/Z0.15mと元cube寸法を指定し、local offsetのJSON recipeは渡さない。
+verifierは実skill先行・3操作/6段/local offset・Job成功・receipt/実bytes/DB provenanceを照合する。
+6つの配列positive/negativeとpermission追加を含むfocused35 passed。
+全./mf.sh testはhandle41666終端exit0、1426 passed/既知warning2/249.04秒。
+viewer再build63ms/差分なし、Node5 passed、git diff --check成功。
+
+実行中: Host診断venv/PYTHONPATH=Host backendで
+scripts/3ds_opencode_flow_e2e.py --director-array --project-name MF3DS-OpenCode-Array-20260910
+--evidence-dir /data1tb/mf-opencode-array-installed-20260910。
+handle27239、親PID1286593/子OpenCode1287125の生存を08:53 JSTに再確認。
+events.jsonlは0 bytes、observations.json未作成。実制作/配送/独立Blender検査は未確認。
+観測待ちを失敗/成功扱いせず同handleを追跡し、重複run・他process停止・Host再起動はしない。
+現在coreへの実HTTP /healthはhealthy。既存installed.58 MCP配列成功とは別試験。
+NOT TESTED: 今回の自然言語制作完了、ゲームエンジン取込、接合品質、全3DS/GA。
+次: 同run終端→verifier→保持sourceと配置GLBを実Blender --inspect --fixture arrayで照合。
+
+継続確認: commit3e85a5bをpushしdraft PR #424を作成。再実行なしで同handleを追跡。
+520.739秒でskill、541.657秒でmedia.capabilitiesが実completed、各step_finishも記録された。
+OpenCode DBの専用session ses_f776dcfe5ffeRboleo233P0I7Oと一致。
+skill出力3694文字/capabilities2508文字、最初のassistant入力29035/output358 tokens。
+09:03 JST時点で次assistant応答待ち、制作Job/GLB/最終observationsは未確認。
+同PIDのHost8765へのESTAB接続を確認。共有LLMのログではtask129の大きなprompt処理が進行するが、
+本sessionとの一意対応は未確定。これを本依頼のtoken数/根本原因と断定しない。
+他依頼/モデルを停止せず、同runの終端を待つ。今回追加はread-only診断記録のみ、test再実行なし。
+
+検証器レビューで材質対象/作成順とGLB材質保持の検査不足を補完。
+対象相違・primitiveより先の材質操作を拒否するnegative2件を追加、focused37 passed/0.43秒。
+array_fixtureはscene meshが段1個であること、単一Principled材質のbase RGBA/metallic/roughnessが
+sourceとGLB再importで1e-5以内に一致することを独立検査する。
+保持済み前回MCP source_f1c4f7a5fcf54a1aa389e12ad5e04cdf.blendと
+MF3DS-Array-MCP-20260910/exports/stairs.glbを実Blender4.5.13で--inspect --fixture array。
+exit0、6段/72tri/48座標一致、material [.05,.25,.3,1,0,.5]保持。
+証跡 /data1tb/mf-array-material-inspection-nUvgsn/inspection.json。
+これは前回MCP生成物での検査器受入。待機中OpenCode runの成功にはしない。
+変更後の全testはhandle85668終端exit0、1428 passed/既知warning2/151.72秒。
+frontend変更なし、前回viewer/Node5結果を維持。git diff --check成功。
+
 ## 2026-09-10 v0.28.58 published/installed and MCP array delivery
 
 PR #422通常merge/tag88c17bd2ee31c94c737349f73993528d1a60eb27。

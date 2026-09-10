@@ -199,16 +199,16 @@ def test_director_requires_actual_read_and_operations(failure: str | None) -> No
         MODULE.verify_director_static(calls)
 
 
-@pytest.mark.parametrize("static,motion", [(False, False), (True, False), (False, True)])
-def test_private_director_tool_permission(static: bool, motion: bool) -> None:
+@pytest.mark.parametrize("static,motion,array", [(False, False, False), (True, False, False), (False, True, False), (False, False, True)])
+def test_private_director_tool_permission(static: bool, motion: bool, array: bool) -> None:
     spec = importlib.util.spec_from_file_location(
         "opencode_flow_runner", Path(__file__).parents[1] / "scripts/3ds_opencode_flow_e2e.py")
     assert spec and spec.loader
     runner = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(runner)
     payload: dict[str, Any] = {}
-    runner.restrict_tools(payload, director_static=static, director_motion=motion)
-    enabled = static or motion
+    runner.restrict_tools(payload, director_static=static, director_motion=motion, director_array=array)
+    enabled = static or motion or array
     if enabled:
         assert "skill" not in payload["tools"], "Legacy tools entry would override named skill permission"
     else:
@@ -219,3 +219,40 @@ def test_private_director_tool_permission(static: bool, motion: bool) -> None:
         assert payload["permission"]["skill"] == {"*": "deny", "blender-director": "allow"}
     else:
         assert "skill" not in payload["permission"]
+
+
+@pytest.mark.parametrize("failure", [None, "world_offset", "count", "extra_object", "no_skill", "wrong_file",
+                                    "material_target", "material_before_primitive"])
+def test_array_delivery_evidence(evidence: tuple[Path, Path], failure: str | None) -> None:
+    test_motion_evidence(evidence, None)
+    root, database = evidence
+    observations = json.loads((root / "observations.json").read_text())
+    observations.update(director_motion=False, director_array=True)
+    (root / "observations.json").write_text(json.dumps(observations))
+    (root / "exports/robot.glb").rename(root / "exports/stairs.glb")
+    events = [json.loads(line) for line in (root / "events.jsonl").read_text().splitlines()]
+    operations = [
+        {"type": "primitive.add", "object_id": "step", "primitive": "cube", "dimensions": [.4, .8, .2]},
+        {"type": "material.set", "object_id": "step"},
+        {"type": "modifier.array", "object_id": "step", "count": 6, "local_offset": [1.5, 0, 1.5]},
+    ]
+    if failure == "world_offset": operations[-1]['local_offset'] = [.3, 0, .15]
+    elif failure == "count": operations[-1]['count'] = 5
+    elif failure == "extra_object": operations.append(dict(operations[0]))
+    elif failure == "material_target": operations[1]['object_id'] = 'other'
+    elif failure == "material_before_primitive": operations[0], operations[1] = operations[1], operations[0]
+    elif failure == "no_skill": events = [event for event in events if event['part']['tool'] != 'skill']
+    for event in events:
+        state = event['part']['state']
+        if event['part']['tool'] == 'controldeck_addons_media_scene_create':
+            state['input']['recipe']['operations'] = operations
+        if event['part']['tool'] == 'controldeck_addons_media_pack':
+            output = json.loads(state['output'])
+            output['output']['receipts'][0]['filename'] = 'robot.glb' if failure == 'wrong_file' else 'stairs.glb'
+            state['output'] = json.dumps(output)
+    (root / 'events.jsonl').write_text('\n'.join(json.dumps(event) for event in events) + '\n')
+    if failure:
+        with pytest.raises(AssertionError):
+            MODULE.verify(root, database)
+    else:
+        assert MODULE.verify(root, database)['verified']
