@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.61 signed installed / OpenCode R2 running
+
+PR434 merge/tag d2b1ec49021f2133b165cb5189793fbea9992c9d。
+exact /data1tb/ControlDeckMediaForge-release-0.28.61でbuild_release_bundle.pyを実行、
+12895 exit0、PyInstaller6.22.0/Python3.12.3/log13.801秒。
+artifact31542393B/SHAe20c385c4fa2c9fcff2047050c17a9029d011e67b978f8bb9a96ca9c80654265。
+mf-0.28.61-audit.py exit0:202 entries/source同梱/秘密値混入検査/packaged doctor ok、
+loop説明3schema/既存自動bind/旧guard維持、description除外契約treeは.60と同一。
+package /data1tb/mf-0.28.61-package-k2g_j89b/control-deck-media-forge-0.28.61-linux-x86_64。
+初回signはcore診断venvのcryptography不在でexit1、公開はmanifest不在で未作成。
+依存追加せず既存bundle-build venvで署名/自己検証exit0。既存publisher鍵を使用、生成なし。
+公開handle55308/download16532ともexit0、正規v0.28.61に4assets、draft/prerelease=false。
+public /data1tb/mf-0.28.61-public-20260910の4bytesはbuildと一致。
+外部mf-0.28.61-install.pyをHost診断環境で実行、93480 exit0/9.707秒。
+署名/idle/DBbackup/再照合後標準更新、backup /data1tb/mf-0.28.61-update-28vyd5kq。
+全DBtable fingerprint/runtime登録一致、healthy、MF1411733、Host1384554前後不変。
+実exeSHA52d0bdf7819f5773ece18b4aee9d114d2665c0464307f68726baee7ecce5d4a0が監査bundleと一致、
+実create schema=exact source、新loop説明/自動bindを配信。標準保持2で.59bundleだけ整理、
+.60/.61/data/runtime保持、旧bundleは公開releaseから回復可能。事前通知済み。
+
+既存smoke不在確認後、同じ--director-auto-skin診断を新project
+MF3DS-OpenCode-Auto-Skin-20260910-R2で開始。証跡
+/data1tb/mf-opencode-auto-skin-installed-0.28.61-20260910、handle26740、親1411807/子1411873。
+private build/24tool preflightを通過し実OpenCode開始、まだ終端未確認。
+旧.60の不合格trace/出力を保持、同じstrict verifierを使う。結果を先取りしない。
+全testは版数変更後1509 passed/149.23秒/既知warning2、build40ms/差分0/Node5。
+記録sliceはdocsのみ。NOT TESTED: R2終端/生成物、engine/複雑character、全3DS・GA。
+
 ## 2026-09-10 v0.28.61 preparation
 
 PR433 merge8136dc76d2c1d3128353b4295f752b563494a2c3確認、ux1/release-0-28-61。
