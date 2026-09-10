@@ -412,7 +412,7 @@ class Store:
                 "SELECT id, publication_json FROM blender_runtime_operations WHERE publication_json IS NOT NULL"
             ).fetchall():
                 publication = PublicationJournal.model_validate_json(row["publication_json"])
-                if publication.phase != "committed":
+                if publication.phase not in {"committed", "rolled_back"}:
                     publication.phase = "recovery_required"
                     connection.execute(
                         """UPDATE blender_runtime_operations SET publication_json = ?, state = 'failed',
@@ -1867,7 +1867,7 @@ class Store:
                 f"""SELECT id FROM blender_runtime_operations WHERE runtime_id = ?
                     AND (state NOT IN ({','.join('?' * len(terminal))})
                          OR (publication_json IS NOT NULL
-                             AND json_extract(publication_json, '$.phase') != 'committed')) LIMIT 1""",
+                             AND json_extract(publication_json, '$.phase') NOT IN ('committed', 'rolled_back'))) LIMIT 1""",
                 (runtime_id, *terminal),
             ).fetchone()
             if active is not None:
@@ -2011,7 +2011,7 @@ class Store:
         """Persist an outcome atomically with local completion; never persist runtime paths."""
         statuses = {"ready": "succeeded", "failed": "failed", "canceled": "canceled"}
         if row["publication_json"] is not None:
-            if PublicationJournal.model_validate_json(row["publication_json"]).phase != "committed":
+            if PublicationJournal.model_validate_json(row["publication_json"]).phase not in {"committed", "rolled_back"}:
                 return
         if (row["host_job_id"] is None or row["host_terminal_json"] is not None
                 or row["state"] not in statuses):
@@ -2080,7 +2080,7 @@ class Store:
         if row["publication_json"] is None:
             return False
         publication = PublicationJournal.model_validate_json(row["publication_json"])
-        if publication.phase == "committed":
+        if publication.phase in {"committed", "rolled_back"}:
             return True  # The completed outcome stays immutable.
         if reason not in {"cancel", "host_context_lost"}:
             raise ValueError("Invalid publication stop reason")
@@ -2160,7 +2160,7 @@ class Store:
             if row["publication_json"] is None:
                 raise ValueError("Publication was not started")
             publication = PublicationJournal.model_validate_json(row["publication_json"])
-            if publication.phase == "committed":
+            if publication.phase in {"committed", "rolled_back"}:
                 return
             publication.phase = "recovery_required"
             connection.execute(
@@ -2177,6 +2177,48 @@ class Store:
     ) -> BlenderRuntimeOperation:
         """For the identity-verifying recovery adapter, not normal completion."""
         return self._complete_blender_publication(operation_id, identity, result, recovery=True)
+
+    def rollback_blender_publication(
+        self, operation_id: str, identity: PublicationIdentity,
+    ) -> BlenderRuntimeOperation:
+        """Called only after verifying the unpublished filesystem/registry state."""
+        identity = PublicationIdentity.model_validate(identity.model_dump())
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(operation_id)
+            if row["publication_json"] is None:
+                raise ValueError("Publication was not started")
+            publication = PublicationJournal.model_validate_json(row["publication_json"])
+            if publication.identity != identity:
+                raise ValueError("Publication rollback identity mismatch")
+            if publication.phase == "rolled_back":
+                return self.get_blender_runtime_operation(operation_id)
+            if publication.phase != "recovery_required" or row["host_terminal_json"] is not None:
+                raise ValueError("Publication is not awaiting rollback")
+            lost = "host_context_lost" in publication.stop_requests
+            canceled = "cancel" in publication.stop_requests and not lost
+            state = "canceled" if canceled else "failed"
+            code = "host_context_lost" if lost else (None if canceled else "blender_publication_rolled_back")
+            publication.phase = "rolled_back"
+            publication.completed_at = utc_now()
+            result = {"runtime_id": identity.runtime_id, "version": identity.version,
+                "publication_rolled_back": True, "publication_stop_requests": publication.stop_requests}
+            connection.execute(
+                """UPDATE blender_runtime_operations SET publication_json = ?, state = ?,
+                   error_code = ?, error_message = ?, result_json = ?, updated_at = ? WHERE id = ?""",
+                (publication.model_dump_json(), state, code,
+                 None if canceled else "Runtime publication was rolled back; previous registration was preserved",
+                 json.dumps(result, separators=(",", ":")), utc_now(), operation_id),
+            )
+            self._journal_blender_terminal(connection, connection.execute(
+                "SELECT * FROM blender_runtime_operations WHERE id = ?", (operation_id,),
+            ).fetchone())
+        self._notify_session("blender_runtime")
+        return self.get_blender_runtime_operation(operation_id)
 
     def _complete_blender_publication(
         self, operation_id: str, identity: PublicationIdentity, result: dict[str, Any], *, recovery: bool,

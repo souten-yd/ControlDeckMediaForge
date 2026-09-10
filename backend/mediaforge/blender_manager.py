@@ -51,6 +51,7 @@ from .paths import contained
 from .blender_publication import PublicationIdentity
 from .blender_publication_generation import create_generation, read_generation
 from .blender_publication_recovery import BlenderPublicationRecovery
+from .blender_publication_rollback import BlenderPublicationRollback
 from .host.client import ControlDeckHostClient, HostIdentity
 from .blender_setup_host import BlenderSetupHostControl
 from .store import Store
@@ -734,10 +735,12 @@ class BlenderRuntimeManager:
     def _fail_sync(self, operation_id: str, code: str, message: str) -> None:
         publication = self.store.blender_publication(operation_id)
         if publication is not None:
-            if publication.phase != "committed":
+            if publication.phase not in {"committed", "rolled_back"}:
                 self.store.require_blender_publication_recovery(operation_id)
                 result = BlenderPublicationRecovery(self.store, self.resolver, self.preflight_script).recover(operation_id)
-                if result["status"] == "committed":
+                if result["status"] != "committed":
+                    result = BlenderPublicationRollback(self.store, self.resolver).rollback(operation_id)
+                if result["status"] in {"committed", "rolled_back"}:
                     self._clean_stage_sync(operation_id)
             # Never delete a candidate or published runtime after uncertain I/O.
             # Recovery, not the original exception, determines the durable result.
@@ -1505,7 +1508,7 @@ class BlenderRuntimeManager:
 
     def _clean_stage_sync(self, operation_id: str) -> None:
         publication = self.store.blender_publication(operation_id)
-        if publication is not None and publication.phase != "committed":
+        if publication is not None and publication.phase not in {"committed", "rolled_back"}:
             return
         self._clean_stage_contents_sync(operation_id)
 

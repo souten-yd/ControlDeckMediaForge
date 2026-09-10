@@ -38,7 +38,7 @@ class PublicationJournal(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     schema_version: Literal[1] = 1
-    phase: Literal["committing", "committed", "recovery_required"]
+    phase: Literal["committing", "committed", "recovery_required", "rolled_back"]
     identity: PublicationIdentity
     started_at: str = Field(min_length=20, max_length=40)
     completed_at: str | None = Field(default=None, min_length=20, max_length=40)
