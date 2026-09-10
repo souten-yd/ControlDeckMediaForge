@@ -96,6 +96,12 @@ worker thread内で行い、開始済み公開threadはshutdown取消でも終�
 旧directoryを破棄する前に永続cancel flagを再検査する。この待機中のHost取消・認証喪失では
 候補を回収して旧directoryを戻し、canceled/failedと終端outboxを一致させる。
 単なるローカルtask停止による開始済みthreadのdrainと、永続flagによる取消は区別する。
+新規install/updateと、配置済みdirectoryの回復登録では、プロセス間registry lockを取得した後、
+registryを書き換える前に永続cancel flagを検査する。待機中の取消では登録とactiveを変更せず、
+今回新規配置したcandidateだけを回収する。回復対象の既存directoryは削除しない。
+updateの登録とactive変更は同じregistry書込みにまとめ、登録後の別activate待機をなくす。
+最終取消検査からregistry fsync/DB終端までの全競合をこれだけで解決したとは扱わず、
+commit境界と再起動整合性の受入を別途追跡する。
 Host制御エラーの診断はallowlistのcode/HTTP statusとtask取消を区別し、remote messageやtokenを記録しない。
 `blender install/update/switch/repair/remove` CLIは稼働中MediaForgeの同じorchestratorを呼び、
 READMEへ正式掲載する。source runtime互換用の既存`blender build/status`は変更しない。

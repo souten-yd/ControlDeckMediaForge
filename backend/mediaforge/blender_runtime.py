@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 import fcntl
@@ -385,6 +385,8 @@ class BlenderRuntimeResolver:
         version: str,
         location: str,
         archive_sha256: str,
+        before_commit: Callable[[], None] | None = None,
+        make_active: bool = False,
     ) -> ResolvedBlenderRuntime:
         """Register an already staged and probed runtime without accepting a path."""
         candidate = {
@@ -415,10 +417,15 @@ class BlenderRuntimeResolver:
             )
             if existing is not None and existing != candidate:
                 raise BlenderRuntimeRegistryError("managed Blender runtime registration conflicts")
-            changed = existing is None or registry["active_runtime_id"] is None
+            # The cross-process lock can wait much longer than validation.
+            # Check the caller's durable cancellation before changing anything.
+            if before_commit is not None:
+                before_commit()
+            changed = (existing is None or registry["active_runtime_id"] is None
+                       or (make_active and registry["active_runtime_id"] != runtime_id))
             if existing is None:
                 registry["runtimes"].append(candidate)
-            if registry["active_runtime_id"] is None:
+            if registry["active_runtime_id"] is None or make_active:
                 registry["active_runtime_id"] = runtime_id
             if changed:
                 self._write_registry(registry)

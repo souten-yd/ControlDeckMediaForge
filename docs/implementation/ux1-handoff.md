@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 install/update registration-wait cancellation
+
+base PR468 mergeb7cfd64、ux1/3d-install-registration-cancel。前turnは進捗/merge。
+新規install/updateと回復登録の取消/認証喪失8ケースがreadyを返すREDを確認（93409 exit1）。
+resolver.register_managedにbefore_commit/make_activeをprivate追加し、flock取得後にcancel検査。
+updateの登録/activeを同一registry書込みへ統合、新規candidate回収・回復対象inode/bytes保持。
+8ケースはregistry不変・outbox・正常retryも検証、関連96993 exit0/67pass13.61秒。
+実source/uvloop/Blender4.5.9/Hostの新規登録待ちcancel53527 exit0、25.586秒成功/25.748秒停止。
+operationc41cb90dce89480cb8fcee50932ba8a8/Hoste8394637e98b、candidate回収/registry未作成。
+回復版最初は診断が未作成stagingをiterdirし58502 exit1、canceled/旧inode保持でも元失敗を保持。
+修正診断-r2 14810 exit0、6.584秒成功/6.771秒停止、Host28fd2d474857/旧inode・hash保持。
+両Host canceledをfresh control GETで確認、receipt不一致/sent0を保持、診断login回収。
+外部wrapper最初の置換assert失敗も保持（起動前/副作用なし）。詳細はstatusと各観測JSON。
+全79899 exit0/1630pass/既知2warnings/201.70秒。viewer43ms/差分0/Node5pass。
+全診断終端、commit/push/通常merge後も未配布として扱う。
+稼働MF1965886/.68は未変更、Hostは外部更新で2043005。こちらからHost/PC再起動はしない。
+次: 最終cancel検査後〜registry/DB終端のcommit境界監査と必要な修正。late race全体を未検証で完了にしない。
+その受入後に未配布PR467/468とまとめて署名release/installed受入。全3DS/GA/10分refreshはPARTIAL。
+再開時はgit/PR/current/実processを照合し、untracked .venv/他作業を保持する。
+
 ## 2026-09-10 source uvloop control disconnect and bounded retry
 
 base PR467 merge8f31c17、ux1/3d-setup-uvloop-reproduction。前turnは状態回答/no progress。

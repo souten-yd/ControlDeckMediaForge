@@ -1053,9 +1053,9 @@ class BlenderRuntimeManager:
                 version=spec.version,
                 location=operation.runtime_id,
                 archive_sha256=spec.archive_sha256,
+                before_commit=lambda: self._raise_if_canceled(operation.id),
+                make_active=operation.action == BlenderRuntimeOperationAction.UPDATE,
             )
-            if operation.action == BlenderRuntimeOperationAction.UPDATE:
-                self.resolver.activate(operation.runtime_id)
             self._clean_stage_sync(operation.id)
             self.store.update_blender_runtime_operation(
                 operation.id,
@@ -1155,9 +1155,9 @@ class BlenderRuntimeManager:
                 version=spec.version,
                 location=operation.runtime_id,
                 archive_sha256=spec.archive_sha256,
+                before_commit=lambda: self._raise_if_canceled(operation.id),
+                make_active=operation.action == BlenderRuntimeOperationAction.UPDATE,
             )
-            if operation.action == BlenderRuntimeOperationAction.UPDATE:
-                self.resolver.activate(operation.runtime_id)
         except Exception:
             self._ensure_managed_destination(destination)
             shutil.rmtree(destination)
