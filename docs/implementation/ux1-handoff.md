@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 runtime status off-loop
+
+basebc3d714、ux1/3d-runtime-status-offloop。async状態投影をowned worker threadへ分離、
+HTTP/WS明示/workspace初期化を統一、3回取消でも終端待ち。公開schema/登録policy変更なし。
+初回2RED/1teardown error、修正関連78pass、最終4focusedpass。
+全43494終端exit0/1539pass152.61秒。その収集後追加のWS2casesを含む最終22111も
+終端exit0/1541passed/既知2warnings/154.44秒。型注釈追加後focused4pass。
+viewer47ms差分0/Node5pass。実TCP dedicated sourceR2はstatus hold中health1.516ms/0.281秒passed。
+mf-status-offloop-source-20260910-r2。初回はworktree既定legacy不在でexit1、R2明示rootでready。
+稼働.63/Host変更なし、専用core終端、installed修正/全3DS/GAは未受入。
+全gate後にstatus更新→commit/push/通常PR。untracked .venv保持。
+次: 署名配布/installed確認とsetup Host credential gap。manager/local operationにHost fieldなし、
+既存631秒source setupも認証なし。scene Job refreshをsetup成功へ読み替えない。
+
 ## 2026-09-10 configured external acceptance passed
 
 base4599a6c、ux1/3d-external-configured-acceptance。正式LEGACY_ROOT環境を試験中だけ明示。

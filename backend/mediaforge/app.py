@@ -2922,7 +2922,24 @@ def create_app(
         "jobs",
     )
 
-    def blender_runtime_part() -> dict[str, Any]:
+    async def blender_runtime_part() -> dict[str, Any]:
+        # Status includes registry discovery, filesystem validation and DB reads.
+        # A canceled poll must not orphan an already-started registry write.
+        task = asyncio.create_task(asyncio.to_thread(blender_runtime_part_sync))
+        canceled = False
+        while True:
+            try:
+                value = await asyncio.shield(task)
+                break
+            except asyncio.CancelledError:
+                if task.cancelled():
+                    raise
+                canceled = True
+        if canceled:
+            raise asyncio.CancelledError
+        return value
+
+    def blender_runtime_part_sync() -> dict[str, Any]:
         try:
             catalog = blender_runtime_operations.catalog()
             management = {"management_available": True, "catalog": catalog}
@@ -3944,7 +3961,7 @@ def create_app(
                             "device": {"vram_bytes": device_vram_bytes()},
                         }
                     elif method == "blender.runtime.status":
-                        result = blender_runtime_part()
+                        result = await blender_runtime_part()
                     elif method == "blender.runtime.install":
                         if params:
                             raise ValueError("Blender install accepts no client-selected source")
@@ -4620,7 +4637,7 @@ def create_app(
 
     @app.get("/workspace-api/blender/runtime", include_in_schema=False)
     async def standalone_blender_runtime_status() -> dict[str, Any]:
-        return blender_runtime_part()
+        return await blender_runtime_part()
 
     @app.post("/workspace-api/blender/runtime/operations", include_in_schema=False)
     async def standalone_blender_runtime_operation(payload: dict[str, Any]) -> dict[str, Any]:

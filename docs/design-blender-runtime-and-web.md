@@ -150,6 +150,12 @@ fail-closedにする。削除済み版への新規GUI受付は事前に拒否す
 
 ## 5. durable setup operation
 
+設定のruntime状態投影（workspace初期化・明示状態照会・standalone HTTP）は、
+catalog/registry/Web pack検証・DB照会をworker threadで実行する。
+状態照会にもlegacy自動登録のatomic書込が含まれるため、要求取消が重複しても
+開始済みthreadの終端を待つ。公開する状態fieldや登録検証は変更しない。
+これは状態投影の境界であり、setup受付/実行の全同期処理を移したという意味ではない。
+
 提案状態: queued → preflight → downloading → verifying → installing → probing → ready。
 終端: failed / canceled。削除はdeletingを経由する。操作IDを先に永続化してから副作用を始める。
 既存model operationのjournal/watch/cancelの設計を再利用し、Blender固有policyはruntime adapterへ置く。
