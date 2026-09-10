@@ -3,6 +3,28 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.60 installed / MCP automatic bind accepted
+
+PR430 merge/tagb1b62b2、ux1/release-0-28-60-acceptance、記録PR作成前。
+前turnはtyped自動bind実機/merge。今回は署名0.28.60公開/再取得/標準導入/実MCPまで進捗。
+artifact31,542,402B/SHA83ac8f7fb651a9ccd454618f6eeeed40470a48c797cd4c1c956974c625dd0d79。
+build/audit/sign/public/installすべてexit0、build41502/install45062終端。
+backup mf-0.28.60-update-vkfmd1mv、11.698秒healthy/全tableとregistry不変。
+MF1384429、exeSHA2a8d98c52444b81c19a9d7c7c90a2b6a2810f1e4b0d7da690f025d97e1b539ad。
+実配信schema=exact source、SkinBindAutoを含む。旧.58bundleだけ標準整理、.59/.60/data/runtime保持。
+Hostはinstall前後1340115不変、その後別途1384554へ再起動（main164fa26）。こちらから再起動せず。
+初回MCP tools/list失敗traceは保持、Job未作成/設定回収。read-only HTTP/bridge再確認24tools成功。
+同専用project・新evidence-dirでresume、80634 exit0/2.112秒、実制作/2clips/GLB grant配置/再import。
+証跡 mf-auto-skin-mcp-installed-0.28.60-20260910-r2、実行script同prefix-resume.py。
+scene_b578b611cef04aec915f3811357c85df、job_3836cae7792b4431adf0d13518b44259、Host7b305fe607a3成功。
+project MF3DS-Auto-Skin-MCP-20260910/exports/weighted.glb 32140B、SHAb5c63cd8f12c853770c0fa08910ef865111521f938c127391baba44f5acb9af3。
+114頂点/48混合、GLB480/192混合、2clips各2秒、5時刻最大差2.4646111e-07m。設定2件回収/旧履歴保持。
+全testは版数準備1487passed/153.76秒/build59ms/Node5、記録はdocsのみ。
+既存UX/全3DS/GAはPARTIAL。次: --director-auto-skin相当の新診断を追加し実OpenCodeで自然言語制作を受入。
+本MCP受入はLLM/directorの実読込証拠ではない。新操作の画像付きskin/engine/複雑character/実cancelは未受入。
+再開: git fetch origin; git status --short --branch; 実current/Host状態とstatusを照合。
+具体的外部blockerなし。旧array R2のstrict不合格/配置物・回収監査残件も維持。
+
 ## 2026-09-10 v0.28.60 preparation
 
 base PR429 merge74378e8、ux1/release-0-28-60、PR作成前。
