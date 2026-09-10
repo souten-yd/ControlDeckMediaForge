@@ -1,5 +1,41 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed software GUI and image coexistence — FAILED AUTH WAIT
+
+base PR486 merge745dc04b5485936089e59abd9defb867a4389503、ux1/3d-coexist-auth-failure。
+前turnは長時間証拠再照合/merge。現Web pack1.0.0とmanagerのsoftware/Lavapipe経路を確認。
+GPU GUIとCycles単体probeを混同せず、対応済みsoftware GUI＋画像workerの実共存を試行。
+外部mf-software-gui-image-coexist-20260910.py。全Job/GUI/runtime/model idleから専用mf-e2e sceneで開始。
+初回はbrowser base_url不足で操作前exit1/login失効。R2/7015は実Chrome opaque iframe、
+6.881秒GUI接続blendersession_cc9321a35a6c429c99e27b04c1bf6c6c、6.911秒画像受付。
+Job job_aeb5aa79ea7b4127b797de3f5441c8ea、scene_c19a0c389d974517b04c8eced93b0355。
+画像は既存model auto/local_only/256角、7.964秒waiting_resource。602.064秒まで同GUI readyを継続確認。
+Broker実snapshotはrequest0bebc4f3-9809-495d-8363-9d391ccbd6f6/Host4927c03086a2、
+held_by_other_owner、LLM Qwen3.8-27Bがblocking。VRAM実測34,208,743,424B中27,637,944,320B使用。
+その後旧llama PID消失/別PID2441846でmetrics requests_processing1を観測。停止原因は断定せず、手動停止なし。
+画像は602.064秒failed/host_request_rejected HTTP401、診断全体exit1。画像実行/生成物なし。
+602.348秒専用GUI停止、602.822秒login失効。beforeのscene/全revisionは現在DBと一致、保存前に失敗。
+
+原因のcode経路: app.submit_hostedはcreate_or_attach_job後も親service identityをHostExecutionへ保持。
+jobs.pyの通常画像control/resource待機はjob credential refreshなし。受付認証期限後のHost401で失敗。
+独立Host auditの当該job credential refreshは0件。既存scene_recipe_jobs/blender_setup_hostの更新経路とは別。
+WebSocket自体の更新やGUI再接続が動いていても、捕捉済み画像execution identityは更新されない。
+認証失効後のresource解放/Host終端通知も同identityを使うため、local failedに対しHost runningが残った。
+
+mf-coexist-failure-audit-20260910.py exit0、証跡mf-software-gui-image-coexist-20260910-r2/failure-audit.json。
+専用Hostjob owner16/titleとrequest所有を照合、requestはexpiredを実確認（手動削除なし）。
+Hostの当該jobのみ正規cancel HTTP200でrunning→canceled、診断login失効。
+これは製品による正しい終端同期ではなく、診断による回収。元観測passed=falseを保持。
+Host2381614/MF2428421 active不変、専用診断/runner/Blender PID不在、元scene/全revision保持。
+別推論・Host・MFの停止/更新、モデル追加、グローバル設定変更なし。
+
+次: 通常画像のHost所有job credential発行・期限前更新・待機/実行/終了共通identityをMediaForgeで実装する。
+既存Host APIを利用し、attached Jobの所有権・進捗区間・親Job終端の保護を維持する。
+秘密tokenは永続化しない。admission時失敗/長い内部queue/失効/取消/終了通知の回帰を追加し、
+source実Host→署名release→installed同条件の順に再受入する。未修正のまま同じ長時間試験を再投入しない。
+文書のみ、製品基準PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5。今回全test/buildなし。
+全E/全GOAL/A〜F/GA PARTIAL。既存短時間画像成功やscene/setup refreshを通常画像経路の成功へ転用しない。
+
 ## 2026-09-10 long-duration evidence revalidation
 
 base PR485 mergedaca973a4617eaada0be47288217c43e02d91a7b、ux1/3d-long-duration-evidence-map。
