@@ -5,7 +5,7 @@
 
 ## 2026-09-10 auto-weight feasibility / OpenCode R2 terminal
 
-base PR427 mergeb20fc16、branch ux1/3d-auto-weight-probe、PR作成前。
+base PR427 mergeb20fc16、branch ux1/3d-auto-weight-probe、PR #428作成済み。
 前turnは状態確認のみ。R2終端と作業treeをread-only再確認後、未commit診断を再開。
 scripts/auto_weight_probe.py と tests/test_auto_weight_probe.py を追加。
 管理対象4.5.13だけで連続sphere/2骨のautomatic heat→4影響上限/正規化→rest/pose→GLB再import。
