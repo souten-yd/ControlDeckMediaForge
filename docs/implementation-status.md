@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.63 preparation
+
+PR441 merge97cb94b19bd500d1fb23d8ba5a1944f10f424a26からux1/release-0-28-63。
+addon/core版数とrelease noteを追加。全test78582終端exit0/1537passed/151.22秒/既知warning2、viewer build44ms/差分0、Node5。
+外部mf-0.28.63-audit.py/install.pyを前版の保持・署名・exact bytes検査から準備。
+新UIの同梱/旧mobile非表示なし/入力補助をauditへ追加。py_compile成功、未実行。
+mf-mobile-blender-installed-0.28.63-20260910.pyはHTTP/source overlayなしのinstalled browser試験へ変更。
+同専用sceneの第6版からopen/補助Enter/保存をtouchで検査する予定。準備を実機成功とはしない。
+現在current0.28.62、保持0.28.61/62。標準保持2による旧.61bundleのみの整理を事前通知。
+data/runtimeは整理対象外。全GOAL/A〜F/GAはPARTIAL、Host変更/再起動なし。
+NOT TESTED: .63公開/署名consumer/導入/installed新UI、物理mobile/IME/engine。
+
 ## 2026-09-10 opaque iframe touch activation / real Blender acceptance (PR441)
 
 前turnは補助keyのeditor context修正で進捗。今回はBlender/Hostを除いた2buttonの最小iframeで再現。
