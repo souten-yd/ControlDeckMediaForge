@@ -1,5 +1,64 @@
 # Media Forge implementation status
 
+## 2026-09-10 OpenCode saved-settings terminal acceptance / GUI saved fps
+
+PR #440の実runは終端exit0、476.429秒、33 events / 8 tools。
+証跡 `/data1tb/mf-opencode-saved-settings-installed-0.28.62-20260910`。
+`PYTHONPATH=backend .venv/bin/python scripts/3ds_verify_opencode_flow.py --evidence-dir
+/data1tb/mf-opencode-saved-settings-installed-0.28.62-20260910 --database
+/data1tb/ControlDeck/data/feature-data/media-forge/data/media-forge.sqlite3` を再実行しexit0/verified true。
+実director読込、初期5操作と両loop=true、Job/snapshotの保存値一致、export前の照合順序、
+fresh exports grant、receipt/Asset/provenance/実bytesを検査。scene_90ee167578dc4e5c925cbb6bad1b115f、
+revision_1ef77f62760144e98e8e269525298a6f、job_693dd75188f54754b2b8d886eadcd6a1。
+納品 `MF3DS-OpenCode-Saved-Settings-20260910/exports/weighted.glb` は32140B、
+SHA256 0d4e37c06850c795429342342209ff3cff63ba70a59155f15abbb076101d7317。
+同証跡の実Blender4.5.13 `--inspect --fixture auto_skin --posed` はpassed true、
+source114頂点/混合48、再import480頂点/混合192、最大2影響、2秒clip、
+5時刻の最大位置差2.4646110694144804e-07m。親1426898/子1426968は再確認時不在。
+以前の.60/.61失敗traceは保持。promptと保存結果照合も変えたためschema説明単独の改善とは断定しない。
+
+別の専用scene_fd74c96138df40e9a69a1483bee2adfcでWeb Blender保存後factsを確認。
+外部診断 `/data1tb/mf-animation-facts-gui-0.28.62-r2.py` を既存DISPLAY=:0の専用Chromeで実行。
+Blender自体は専用隔離session/RFBのまま。証跡
+`/data1tb/mf-animation-facts-gui-installed-0.28.62-20260910-r2/observations.json`。
+22.526秒で実canvas/1068色、RFB Python consoleへfps=30入力、67.609秒で保存検査passed。
+revision_f014c141740b4fffacec1b46f98a1626を保持し、新版revision_8cf8c752e3734fe1949dd4eec6053b54。
+fps24→30、idle false/bend trueと0→48frameは不変、旧source/GLB hashes保持、page errors0。
+67.612秒owned session終端、67.670秒診断login失効を記録。
+実managed Blender4.5.13で新source asset_74ed9ec9e71e4e9da7338bf556a3af41.blendを
+`--background --factory-startup --disable-autoexec --python-exit-code 1 --python-expr`で独立読込。
+fps==30/actions==2をassertしexit0、両action range [0,48]を実出力で確認。
+最初のGUI試験は保存前edited.pngのscreenshot timeoutで失敗した記録を保持。
+R2はその任意撮影だけを外し、保存値・旧版保持・回収のassertionを維持した。
+
+コードは既記録の全1536 tests通過後に変更なし。今回追加は受入文書のみ。
+NOT TESTED: このGUIのfps欄マウス編集/新GLB再生、一般的な自由制作の安定性、
+画像付き複雑character、歩行/IK/root motion、ゲームエンジン導入、全GOAL/A〜F/GA完了。
+稼働版0.28.62、今回Host変更/再起動/新releaseなし。全体PARTIALを維持する。
+
+## 2026-09-10 OpenCode saved-settings acceptance running
+
+PR439 mergefb3fb7321d2ece5021be7421b6f9cdceb9e3e714、ux1/3d-opencode-saved-settings。
+既存auto_skin診断へ任意--saved-settingsを追加、過去mode/失敗判定は変更しない。
+納品前にstatusとsnapshotの保存factsを照合し、両loop true/24fps/0→48frame/未報告0を要求。
+欠落や不一致時はexport/packせず停止する追加prompt。要求したcreate入力の厳格条件も維持。
+verifierは両revision同一、保存値、status→snapshot→export順序も検査。12追加casesで
+欠落/false/数値loop/fps/range/未報告/rig/clip不足/不一致/別revision/早期exportを拒否する。
+focused67 passed/0.90秒、build40ms/差分0/Node5。
+全 ./mf.sh test は1536 passed/既知warning2/148.59秒/exit0（62231終端）。
+
+実run: Host診断環境でscripts/3ds_opencode_flow_e2e.py --director-auto-skin --saved-settings
+--project-name MF3DS-OpenCode-Saved-Settings-20260910
+--evidence-dir /data1tb/mf-opencode-saved-settings-installed-0.28.62-20260910。
+既存smoke不在後に開始、handle57218/親1426898/子1426968、23秒時点同PID生存/events0。
+private build/24tool preflight通過、実MCP create schema21699Bを新evidence内へ記録、
+SHA56b3c97cdd3751730ace7ddb542a6f7a5e2e5b53b8ce2906796d13afd1b2ada5。
+これはbridge時点のschemaであり最終LLM推論入力の証拠とは区別する。
+稼働.62/Host/既存scene/global設定不変。終端/品質を先取りしない。
+code8d9a0e05df3d9042eec1e1597d1a90251d228e1dをcommit/push、PR #440作成。
+3分11秒でも同OpenCode PID生存/tool出力なし、同handle追跡。実機終端待ちで未マージ。
+NOT TESTED: 本runの終端・成果物、GUI後facts/engine/複雑character/全3DS・GA。
+
 ## 2026-09-10 v0.28.62 signed installed / saved facts MCP accepted
 
 PR438 merge/tagd4dcf03c170673846322c662007c0744ac43dedf。

@@ -311,3 +311,50 @@ def test_auto_skin_delivery_evidence(evidence: tuple[Path, Path], monkeypatch: p
             MODULE.verify(root, database)
     else:
         assert MODULE.verify(root, database)["verified"]
+
+
+@pytest.mark.parametrize("failure", [None, "missing", "false", "numeric_loop", "fps", "frames",
+    "unreported", "wrong_rig", "missing_clip", "snapshot_mismatch", "snapshot_revision", "early_export"])
+def test_saved_settings_delivery_evidence(evidence: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
+                                         failure: str | None) -> None:
+    test_auto_skin_delivery_evidence(evidence, monkeypatch, None)
+    root, database = evidence
+    observations = json.loads((root / "observations.json").read_text())
+    observations['saved_settings'] = True
+    (root / "observations.json").write_text(json.dumps(observations))
+    events = [json.loads(line) for line in (root / 'events.jsonl').read_text().splitlines()]
+    report = {'schema_version': 'media-forge.animation-settings@1', 'fps': 24.0,
+              'unreported_actions': 0, 'clips': [
+                  {'object_id': 'rig', 'clip_id': key, 'frame_start': 0.0, 'frame_end': 48.0,
+                   'loop_requested': True} for key in ('bend', 'idle')]}
+    if failure == 'false': report['clips'][0]['loop_requested'] = False
+    elif failure == 'numeric_loop': report['clips'][0]['loop_requested'] = 1
+    elif failure == 'fps': report['fps'] = 30
+    elif failure == 'frames': report['clips'][0]['frame_end'] = 24
+    elif failure == 'unreported': report['unreported_actions'] = 1
+    elif failure == 'wrong_rig': report['clips'][0]['object_id'] = 'other'
+    elif failure == 'missing_clip': report['clips'].pop()
+    validation = [{'validator': 'blender.scene', 'status': 'passed', 'facts': {}}]
+    if failure != 'missing': validation[0]['facts']['animation_settings'] = report
+    for event in events:
+        part = event['part']
+        if part['tool'].endswith('media_job_status'):
+            output = json.loads(part['state']['output'])
+            output['output']['result']['revision']['validation'] = validation
+            part['state']['output'] = json.dumps(output)
+        elif part['tool'].endswith('media_scene_snapshot'):
+            snapshot = {'id': 'other' if failure == 'snapshot_revision' else 'revision',
+                        'validation': json.loads(json.dumps(validation))}
+            if failure == 'snapshot_mismatch':
+                snapshot['validation'][0]['facts']['animation_settings']['clips'][0]['loop_requested'] = False
+            part['state']['output'] = json.dumps({'output': {'revision': snapshot}})
+    if failure == 'early_export':
+        exported, = [event for event in events if event['part']['tool'].endswith('media_scene_export')]
+        events.remove(exported)
+        events.insert(3, exported)
+    (root / 'events.jsonl').write_text('\n'.join(json.dumps(event) for event in events)+'\n')
+    if failure:
+        with pytest.raises(AssertionError):
+            MODULE.verify(root, database)
+    else:
+        assert MODULE.verify(root, database)['verified']

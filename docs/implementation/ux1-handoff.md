@@ -3,6 +3,30 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 OpenCode saved-settings check
+
+更新: run57218終端exit0/476.429秒/8tools。strict verifierを再実行しverified true。
+両loop true/保存facts/操作順/receiptと実32140B一致、実Blender再import変形passed。
+別専用sceneのGUI R2も67.609秒で保存passed、fps24→30/旧版・旧hash保持。
+新sourceを実Blenderで独立読込しfps30/2actions各0→48を再確認。
+初回screenshot timeout失敗は保持。R2 cleanup/login失効記録あり。
+詳細と正確な証跡pathはimplementation-status先頭。継続OpenCodeなし。
+PR440の実機待ちは解消、文書をcommit/pushして通常mergeする。コードは全1536 gate後変更なし。
+次: 3ds-completion-auditの必須残件とmobile GUIの設計差分を照合し次sliceを進める。
+全GOAL/A〜F/GAはPARTIAL、エンジン選択未回答は他の作業を妨げない。
+以下の実機待ち記録は履歴であり現在状態ではない。
+
+前turnは.62署名導入/実MCP受入で進捗。basefb3fb73、ux1/3d-opencode-saved-settings、PR #440作成済み/実機終端待ち。
+runner --saved-settings追加、Job/snapshot保存値と納品前順序のstrict verifier、12tests追加。
+旧mode/初期recipe厳格条件は保持。focused67/0.90秒、build40ms/差分0/Node5。
+全 ./mf.sh test handle62231終端exit0/1536 passed/148.59秒/既知warning2。
+実OpenCode handle57218/親1426898/子1426968、再確認3分11秒で同PID生存、tool出力未観測。
+project MF3DS-OpenCode-Saved-Settings-20260910、evidence mf-opencode-saved-settings-installed-0.28.62-20260910。
+private build/24tools通過、bridge create schema21699B/SHA56b3c97cdd3751730ace7ddb542a6f7a5e2e5b53b8ce2906796d13afd1b2ada5保存。
+次: 同run終端→strict verifier→実Blender auto_skin --posed→両Jobs/receipt/設定回収。
+再開: ps -p 1426898,1426968 -o pid,ppid,etime,comm; git status --short --branch。
+観測timeoutだけで停止/重複実行しない。全3DS/GA/UX状態PARTIAL、blockerなし。製品/稼働Host変更なし。
+
 ## 2026-09-10 v0.28.62 installed / MCP facts accepted
 
 前turnはsaved facts実装merge、今回はPR438 merge/署名公開/標準導入/実MCPで進捗。
