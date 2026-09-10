@@ -5,6 +5,15 @@
 
 ## 2026-09-10 mobile Web Blender access
 
+最新: r8〜r15で進捗。touchの開始/終了は正しいopen/clientY244.625、生成clickだけclose/clientY165。
+scroll不変、touch-action/is_mobileでも再現。mouseでは正しくopenし実RFB connected。
+旧CSSが残る診断欠陥を除去後、320px実Blender画面/console表示/保存を確認したがfps24は未反映。
+r14/r15はfps30のまま新revision追加でstrict失敗、元版/旧hash保持。現在4revision、全owned sessions stopped。
+外部script mf-mobile-blender-source-ui-20260910-r3.py はOUT末尾r15、BASEは第3版。
+次試行前に第4版のcurrentとcountをDBで再確認して更新する。現scriptをそのまま再実行しない。
+次: 原寸canvas画像でconsole文字列/Enter前後を観測。補助key enabledだけで入力成功としない。
+status先頭に証拠、製品コード変更なし/PR441 draft/新配布なし。現在live診断なし。
+
 更新: PR441 draft/source8821b0e、製品コード不変。今回は診断で原因段階を切り分け。
 HTTP overlayありはnewUI/config/bridgeありでもworkspace_transport_unavailable、なしはboot成功。
 正常bootstrap後の関数/dialog/style overlayは開始可能だがtapが別targetへ届く。

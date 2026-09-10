@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-10 mobile touch/click coordinates and real RFB display (PR441)
+
+前turnの段階切り分けを受け、外部診断mf-mobile-blender-source-ui-20260910-r3.pyを改良。
+証跡 `/data1tb/mf-mobile-blender-source-ui-20260910-r8`〜`-r15` を別々に保持。
+r8/r9ではbutton bbox=(29,309.625,262,46)、iframe=(0,88,320,490)、local hitは正しいopen。
+r10でpointerdown/touchstart/pointerup/touchendはscene-blender-open/clientY244.625へ届くが、
+生成clickだけscene-detail-close/clientY165へ変わることを記録。scrollY5505は不変。
+誤targetを直後assertで停止し、30秒のRFB待ちに進まなくした。
+r11 touch-action:manipulation、r12 is_mobile=Trueでも同じで、CSS試行は製品へ採用していない。
+
+r13の同320px/mouse比較は正しいtarget→実RFB connected/1007色まで成功。
+ただし診断が旧CSSを残していたためdialogはdisplay:none、canvasクリック前失敗。
+r14で旧workspace styleを除いてsource CSSへ置換すると実画面を表示し、保存で第3版を追加。
+fps30→24は未反映のため終端exit1、成功扱いしない。旧2版/旧asset hashesは保持検査を通過。
+r15はその第3版から同条件で再確認。5.288秒connected/実canvas1007色、7.548秒補助key有効、
+console-before-enter.pngで実Blender Python console表示を確認。10.786秒に保存後fps不一致でexit1。
+第4版を追加したがfpsは30のまま。補助Enter有効だけで設定変更成功とはしない。
+全r8〜r15のowned sessionは独立DB照合でstopped、現在4revision。
+これらは通常認証bootstrap後のsource UI関数/dialog/CSS overlayとinstalled API/実Blenderの試験。
+installed新UIやtouch成功に読み替えない。初回のHTTP overlayも未解決の別診断制約として保持。
+
+次: 320px canvasの原寸pixelを取得し、文字入力→補助Enter前後のconsoleと実key送信を照合。
+失敗保存の第3/4版を消して履歴を隠さず、正確なcurrentから次試行を始める。
+製品コードは8821b0eから不変、PR441 draft/全1537 gate維持、今回文書のみ。
+NOT TESTED: 補助Enterの実設定変更、正しいtouch click、installed配布版/実mobile端末、全GOAL/A〜F/GA。
+
 ## 2026-09-10 mobile acceptance failure stage isolated (PR441)
 
 source8821b0e/PR441 draft、製品コード変更なし。前turnはUI実装/全1537test/PR作成で進捗。
