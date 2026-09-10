@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-10 setup admission I/O boundary
+
+base PR448 merge342e2d7、ux1/3d-setup-admission-offloop。
+BlenderRuntimeManager.requestを追加、HTTP/WSのinstall/web_install/update/repair/switch/cancelを接続。
+既存同期helperは共通prepare/launchへ分離して互換保持。実catalog/registry/DB受付はworker thread、
+実行task生成はloop側。同一要求の照会/作成をworker内lockで直列化、二重作成を防ぐ。
+要求3回取消でもowned admissionを完了してdurable操作をspawnし、manager.stopも受付を待つ。
+公開入力/結果、trusted source、既存state/取消/既定版選択policyは維持。
+
+tests/test_blender_admission_io.py: 修正前29884終端exit1/7failed、HTTP6経路のloop I/Oと新受付未提供を検出。
+修正後関連37passed/6.21秒、重複受付追加後関連107passed/24.65秒。
+最終focused14passed/2.97秒はHTTP6/WS6/3回取消+停止/同時重複1journalを検査。
+全test70963終端exit0/1555passed/既知2warnings/153.99秒、viewer43ms/生成JS差分0、Node5pass。
+
+外部 `/data1tb/mf-admission-offloop-source-20260910.py` を
+`PYTHONPATH=backend:. .venv/bin/python`で実行、31236終端exit0/22.343秒。
+専用dataのみ、既存固定4.5.9 archiveをコピーしてhash検証。元cache/既存runtime/稼働Hostに変更なし。
+証跡 `/data1tb/mf-admission-offloop-source-20260910/observations.json`。
+実TCP install受付を明示thread gateで保留中、別HTTP /healthは1.524msで200、受付requestは未完了。
+解除後operation blenderop_4789dcedce864fa9add9a9f946fd8efaを1件作成→ready。
+実archive377929956B/SHA dcdc3eca6c9825bb35a8033b689c053f3cb5a9b0cd2a61b2eac2a49436b4ad3d、
+6510members/1168332002展開bytes、実Blender4.5.9/Python3.11.11 background/glTF export/import成功。
+受付workerとloopのthread別、元cache hash保持、専用core終了。
+受付待機はfixture、archive/展開/probeは実物。remote download/installed/Host認証試験とはしない。
+
+NOT TESTED: 新受付の署名配布/installed UI、実行中全I/O、exact/removeの重複取消全条件、setup Host credential、全3DS/GA。
+稼働.64/MF1768792/Host1384554を変更しない。次: gate→通常merge→署名導入とHost所有権の残件。
+
 ## 2026-09-10 v0.28.64 signed / installed status projection
 
 PR447 merge/tag対象de4a269d8ef6f1381313e20319082dfad6da17d3。

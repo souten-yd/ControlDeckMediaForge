@@ -3,6 +3,18 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 setup admission off-loop
+
+base342e2d7、ux1/3d-setup-admission-offloop。manager.request→worker prepare/loop launch。
+HTTP/WS6受付経路を接続、thread受付lock/重複1journal、3回取消/stop待ちを検査。
+既存同期helper/公開schema/既定policy保持、exact/remove/外部の独立経路は変更なし。
+初回7RED、修正関連107pass、最終14focusedpass。全70963終端exit0/1555passed/153.99秒、viewer43ms差分0/Node5pass。
+実sourceTCP31236終端exit0/22.343秒、受付gate中health1.524ms、実固定cache install→4.5.9/glTF probe成功。
+mf-admission-offloop-source-20260910、operation4789…/1journal、元cache保持/専用core終端。
+現在.64/MF1768792/Host1384554不変。全test含め継続診断なし。
+次: 全test終端→status更新→commit/push/通常PR→署名配布/installed受入。
+実行中I/O/Host setup credential/全3DS・GA未完了。untracked .venv保持。
+
 ## 2026-09-10 v0.28.64 installed
 
 PR447 mergede4a269、exact build47424/audit203/署名/public42053/download5242/install39815すべてexit0。

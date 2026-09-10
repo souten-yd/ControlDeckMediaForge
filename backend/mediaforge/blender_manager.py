@@ -10,6 +10,7 @@ from pathlib import Path
 import shutil
 import stat
 import tarfile
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -91,6 +92,8 @@ class BlenderRuntimeManager:
         self.transport = transport
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._removal_admissions: set[asyncio.Task[BlenderRuntimeOperation]] = set()
+        self._request_admissions: set[asyncio.Task[BlenderRuntimeOperation]] = set()
+        self._admission_guard = threading.Lock()
         self._guard = asyncio.Semaphore(1)
 
     @property
@@ -109,6 +112,7 @@ class BlenderRuntimeManager:
             self._spawn(operation_id)
 
     async def stop(self) -> None:
+        await asyncio.gather(*list(self._request_admissions), return_exceptions=True)
         await asyncio.gather(*list(self._removal_admissions), return_exceptions=True)
         tasks = list(self._tasks.values())
         for task in tasks:
@@ -218,7 +222,61 @@ class BlenderRuntimeManager:
         return BlenderRuntimeCatalog(base_id, recommended_id, specs)
 
     def install(self) -> BlenderRuntimeOperation:
-        return self._start(self._catalog().base_runtime_id, BlenderRuntimeOperationAction.INSTALL)
+        return self._launch(self._prepare_install())
+
+    def _prepare_install(self) -> BlenderRuntimeOperation:
+        return self._prepare_start(self._catalog().base_runtime_id, BlenderRuntimeOperationAction.INSTALL)
+
+    async def request(self, action: str, identifier: str = "") -> BlenderRuntimeOperation:
+        """Own admission I/O through disconnect; spawn workers only on the loop.
+
+        The synchronous helpers remain compatibility entrypoints for local
+        callers. Async HTTP/WS callers must use this method instead.
+        """
+        callbacks: dict[str, Callable[[], BlenderRuntimeOperation]] = {
+            "install": self._prepare_install,
+            "web_install": self._prepare_web,
+            "update": self._prepare_update,
+            "repair": lambda: self._prepare_repair(identifier),
+            "switch": lambda: self._prepare_switch(identifier),
+            "cancel": lambda: self.cancel(identifier),
+        }
+        if action not in callbacks:
+            raise BlenderRuntimeOperationError("invalid_blender_runtime_action", "unknown setup action")
+
+        def prepare() -> BlenderRuntimeOperation:
+            # Preserve the formerly serialized duplicate-request lookup/insert.
+            # Acquire this lock in the worker, never on the event-loop thread.
+            with self._admission_guard:
+                return callbacks[action]()
+
+        async def admit() -> BlenderRuntimeOperation:
+            operation = await asyncio.to_thread(prepare)
+            if action != "cancel":
+                self._launch(operation)
+            return operation
+
+        task = asyncio.create_task(admit())
+        self._request_admissions.add(task)
+        canceled = False
+        try:
+            while True:
+                try:
+                    operation = await asyncio.shield(task)
+                    break
+                except asyncio.CancelledError:
+                    if task.cancelled():
+                        raise
+                    canceled = True
+            if canceled:
+                raise asyncio.CancelledError
+            return operation
+        finally:
+            self._request_admissions.discard(task)
+
+    def _launch(self, operation: BlenderRuntimeOperation) -> BlenderRuntimeOperation:
+        self._spawn(operation.id)
+        return operation
 
     def web_status(self) -> dict[str, Any]:
         if self.web_pack is None:
@@ -233,6 +291,9 @@ class BlenderRuntimeManager:
         return self.web_pack.status()
 
     def install_web(self) -> BlenderRuntimeOperation:
+        return self._launch(self._prepare_web())
+
+    def _prepare_web(self) -> BlenderRuntimeOperation:
         if self.web_pack is None or self.web_download_root is None:
             raise BlenderRuntimeOperationError(
                 "blender_web_not_configured", "Blender browser-operation pack is not configured"
@@ -263,10 +324,12 @@ class BlenderRuntimeManager:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_operation_active", "another Blender web pack operation is active"
             ) from exc
-        self._spawn(operation.id)
         return operation
 
     def update(self) -> BlenderRuntimeOperation:
+        return self._launch(self._prepare_update())
+
+    def _prepare_update(self) -> BlenderRuntimeOperation:
         catalog = self._catalog()
         active = self.resolver.resolve_active()
         if active is None:
@@ -277,11 +340,14 @@ class BlenderRuntimeManager:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_already_current", "Blender Studio runtime is already current"
             )
-        return self._start(
+        return self._prepare_start(
             catalog.recommended_studio_runtime_id, BlenderRuntimeOperationAction.UPDATE
         )
 
     def repair(self, runtime_id: str) -> BlenderRuntimeOperation:
+        return self._launch(self._prepare_repair(runtime_id))
+
+    def _prepare_repair(self, runtime_id: str) -> BlenderRuntimeOperation:
         if runtime_id not in self._catalog().specs:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_not_found", "Blender runtime is not in the trusted catalog"
@@ -294,14 +360,17 @@ class BlenderRuntimeManager:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_not_found", "managed Blender runtime was not found"
             )
-        return self._start(runtime_id, BlenderRuntimeOperationAction.REPAIR)
+        return self._prepare_start(runtime_id, BlenderRuntimeOperationAction.REPAIR)
 
     def switch(self, runtime_id: str) -> BlenderRuntimeOperation:
+        return self._launch(self._prepare_switch(runtime_id))
+
+    def _prepare_switch(self, runtime_id: str) -> BlenderRuntimeOperation:
         if runtime_id not in self._catalog().specs:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_not_found", "Blender runtime is not in the trusted catalog"
             )
-        return self._start(runtime_id, BlenderRuntimeOperationAction.SWITCH)
+        return self._prepare_start(runtime_id, BlenderRuntimeOperationAction.SWITCH)
 
     async def install_exact(self, runtime_id: str) -> BlenderRuntimeOperation:
         """Explicit exact-catalog installation, without changing an existing active pin."""
@@ -524,7 +593,7 @@ class BlenderRuntimeManager:
             ) from exc
         return operation
 
-    def _start(
+    def _prepare_start(
         self, runtime_id: str, action: BlenderRuntimeOperationAction
     ) -> BlenderRuntimeOperation:
         active = next((
@@ -554,7 +623,6 @@ class BlenderRuntimeManager:
             raise BlenderRuntimeOperationError(
                 "blender_runtime_operation_active", "another Blender runtime operation is active"
             ) from exc
-        self._spawn(operation.id)
         return operation
 
     def cancel(self, operation_id: str) -> BlenderRuntimeOperation:

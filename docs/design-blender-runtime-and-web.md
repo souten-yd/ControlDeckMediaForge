@@ -156,6 +156,14 @@ catalog/registry/Web pack検証・DB照会をworker threadで実行する。
 開始済みthreadの終端を待つ。公開する状態fieldや登録検証は変更しない。
 これは状態投影の境界であり、setup受付/実行の全同期処理を移したという意味ではない。
 
+基本導入/Web pack導入/更新/修復/切替/取消のHTTP・workspace受付は、共通のasync request経路を使う。
+catalog/registry検証・既存操作照会・journal作成/取消はworker threadへ分離する。
+同一要求の照会と作成はthread側の受付lockで直列化し、既存の重複操作再利用を維持する。
+durable受付後の実行task生成はevent loop側で行う。要求の繰り返し取消では受付taskを放棄せず、
+作成済みoperationを実行managerへ渡してから取消を返す。manager停止も開始済み受付を待つ。
+既存のexact導入/確認付き削除/外部登録の別受付policyは変更しない。
+これは受付の分離であり、実行中の全DB/filesystem I/OやHost credential維持の完了を意味しない。
+
 提案状態: queued → preflight → downloading → verifying → installing → probing → ready。
 終端: failed / canceled。削除はdeletingを経由する。操作IDを先に永続化してから副作用を始める。
 既存model operationのjournal/watch/cancelの設計を再利用し、Blender固有policyはruntime adapterへ置く。
