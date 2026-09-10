@@ -15,6 +15,8 @@ REASONS = {
     "object_not_found": "target object does not exist; inspect stable object IDs",
     "object_exists": "target object ID already exists; choose a new stable ID",
     "clip_target_missing": "clip replacement target is missing or ambiguous",
+    "auto_weights_missing": "automatic binding left vertices without weights; inspect mesh and bone placement",
+    "auto_weights_invalid": "automatic binding produced invalid weights; inspect mesh and bone placement",
 }
 
 

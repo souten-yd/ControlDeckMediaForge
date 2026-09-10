@@ -1,5 +1,47 @@
 # Media Forge implementation status
 
+## 2026-09-10 typed automatic skin binding — SOURCE VERIFIED / INSTALLED NOT TESTED
+
+Base PR428 merge1e6a7d658b8f03f4287f9e36ec425c44adf50ad6、ux1/3d-auto-skin-bind。
+設計GA-4へ入力/予算/失敗条件を先に追加し、既存recipe@1にskin.bind_autoを加法実装。
+stable rig IDと1〜16 mesh IDs。rest/identity typed rig、独立・未bind・modifierなしmeshに限定。
+合計50,000 vertices/100,000 faces/300,000 corners/1,000,000 vertex-bone pairsを処理前に制限。
+finite/非縮退face/transformを検査、CPU bone heat→上位4影響/正規化→保存値/実rest形状を検査。
+欠落/不正weightsはallowlist診断で工程失敗。別方式へのfallbackなし。既存skin.bindは不変。
+async coreへ同期処理を追加せず、既存worker/Job/candidate/revision/exportを利用する。
+3公開schemaの新definition/variantだけを除去してorigin/mainとJSON構造を比較、既存契約不変を確認。
+能力一覧は同じ型定義から導出し、Blender不在時は新operationも公開しない。
+
+実行: PYTHONPATH=backend:. .venv/bin/python scripts/3ds_game_static_e2e.py --fixture auto_skin
+--runtime-root /data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9
+--managed-root /data1tb/ControlDeck/data/feature-data/media-forge/runtimes/blender
+--evidence-dir /data1tb/mf-auto-skin-source-20260910-r3。
+管理対象4.5.13、exit0/2.132秒。114頂点/224 triangles/2骨の連続sphereをbindし48頂点が複数骨影響。
+idle2秒→別revisionへbend2秒追加。各clipの0/12/24/36/48frameを実評価し、端点一致と中間変形を確認。
+GLB再importで480頂点/192混合（split）、最大2影響、weight合計誤差2.9802322387695312e-08。
+rest差1.1920928955078125e-07m、同時刻clipの最大world点差2.4646110694144804e-07m。
+GLB第1版30,596B/第2版32,140B。Scene/Asset/Job/provenanceに正規登録し実bytes/hashを照合。
+scene_786e3e3b8da94a728c0f71a3ee13b849、revision40faae4882c040deaa37403a0792cb1a→2289d574e92f49a2a9f218b3bc3a25c9。
+既存rigへの再bindは1/1で拒否。新mesh/rigのbind後に欠落object操作を加えたeditは4/4で失敗。
+どちらもhead/2版を保持、第1版blend/GLB hash不変。診断dataは専用dirのみ、稼働Host/sceneは変更なし。
+
+同commandに--runtime-id blender-4.5.9-linux-x64、別dir mf-auto-skin-source-4.5.9-20260910で
+旧4.5.9もexit0/2.823秒、同じweight/clip誤差と失敗後旧版保持を確認。
+既存rig fixtureをmf-auto-skin-rigid-regression-20260910へ実行、4.5.13/exit0/2.283秒。
+11骨/25剛体meshのrest/pose/GLB再importを既存検査で確認。今回新画像生成/GUI操作は実施なし。
+
+失敗も保持: 初回commandはPYTHONPATHにrepo root不足でimport前exit1（生成物なし）。
+修正後の初回sourceはexit0/2.04秒。r2はcollapsed meshをheatが受理し診断assertでexit1/0.797秒。
+この結果で非縮退face検査を追加し、r3/4.5.9で実collapsed surfaceをheat前に拒否した。
+実heatソルバー自体の失敗注入ではない。欠落/NaN/負/未知骨weightはpure negativeで拒否確認。
+focused auto-bind/failure reader63 passed/0.16秒、先行関連69 passed/1.55秒。
+全 ./mf.sh test は1487 passed/既知warning2/169.60秒/exit0（handle67502終端）。
+frontend build43ms/生成物差分0、Node5成功、diff check成功。
+NOT TESTED: 署名新版/installed MCP/OpenCode、この操作の実cancel、複雑なcharacter、weight補正/IK、
+歩行/root motion、全時刻の制作意図/見た目/engine取込、全3DS/GA完成。稼働版は0.28.59のまま。
+次は通常merge→署名版へ同梱・導入→実Host MCP/OpenCodeで自動bindの受入。
+
+
 ## 2026-09-10 automatic-weight feasibility / not a published operation
 
 Base PR427 merge b20fc16、branch ux1/3d-auto-weight-probe。

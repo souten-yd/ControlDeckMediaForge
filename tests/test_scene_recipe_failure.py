@@ -57,6 +57,16 @@ def test_failure_context_uses_original_typed_input(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("reason", ["auto_weights_missing", "auto_weights_invalid"])
+def test_auto_bind_failure_is_actionable_without_raw_worker_text(tmp_path: Path, reason: str) -> None:
+    recipe = SceneRecipe.model_validate({"operations": [
+        {"type": "skin.bind_auto", "object_id": "rig", "mesh_object_ids": ["body"]}]})
+    path = tmp_path / "result.json"
+    path.write_text(json.dumps({**VALID, "reason": reason}))
+    message = recipe_failure_message(path, recipe, "4.5.13")
+    assert message == "Operation 1/1 (skin.bind_auto, object_id=rig) failed: " + failure_reader.REASONS[reason]
+
+
 @pytest.mark.parametrize("changes", [
     {"operation_index": True}, {"operation_index": -1}, {"operation_index": 1},
     {"operation_index": 0.0}, {"operation_index": "0"},

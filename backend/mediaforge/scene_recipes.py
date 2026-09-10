@@ -232,6 +232,26 @@ class SkinBind(BaseModel):
         return self
 
 
+class SkinBindAuto(BaseModel):
+    """Bone-heat bind unweighted static meshes to a rest typed rig; normalize to four influences.
+
+    No modifiers or existing weights are replaced. Limits: 50,000 vertices,
+    100,000 polygons and 1,000,000 vertex/bone pairs across the selected meshes.
+    Missing or invalid heat weights fail the operation without committing a revision.
+    """
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["skin.bind_auto"]
+    object_id: ObjectId
+    mesh_object_ids: list[ObjectId] = Field(min_length=1, max_length=16,
+                                           json_schema_extra={"uniqueItems": True})
+
+    @model_validator(mode="after")
+    def unique_meshes(self) -> "SkinBindAuto":
+        if len(set(self.mesh_object_ids)) != len(self.mesh_object_ids) or self.object_id in self.mesh_object_ids:
+            raise ValueError("auto binding mesh IDs must be distinct from each other and from the rig")
+        return self
+
+
 class BonePose(BaseModel):
     model_config = ConfigDict(extra="forbid")
     bone_id: BoneId
@@ -311,6 +331,7 @@ SceneOperation = Annotated[
     | ArrayModifier
     | ArmatureCreate
     | SkinBind
+    | SkinBindAuto
     | PoseSet
     | AnimationClip,
     Field(discriminator="type"),
