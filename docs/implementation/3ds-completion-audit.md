@@ -3,6 +3,12 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 PR490 sourceの通常画像成功まで追加確認、mf-source-image-renewal-dfpxj82d。
+実Broker待機/credential refresh2後680.587秒generating、704.618秒PNG/provenance/通常Host終端sent1。
+独立監査でHost/local succeeded・GPU0 activate1/renew2/release1。同画像45160B/SHA一致、source正常停止。
+初期TTL180だけ診断条件。長い待機と画像演算時間、sourceとinstalledを区別する。
+0.28.70の版数準備/全1784tests成功。署名配布/installed受入・全GOAL/A〜F/GAは未完了。
+
 2026-09-10 source通常owned媒体Jobにprivate終端outboxを追加。新規bindingのみ、attached親は除外。
 実WS/Hostの不足画像環境でfailed、終了transport503だけ診断注入→専用source再起動→同actor再認証で
 Host running→failed/sent1/receipt一致を確認（mf-owned-terminal-real-host-ifr54lp1、1.738秒、監査24027）。

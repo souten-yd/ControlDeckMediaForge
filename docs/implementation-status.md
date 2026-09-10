@@ -1,5 +1,40 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.70 preparation and source real image success
+
+base PR490 merge6b914ed3206dba40a618a6ff8bb43daf069af6d7。前turnはowned終端回収の実装/実受入/merge。
+今回は修正済みsourceの実画像成功を確認し、通常画像認証/終端回収を配布する版数準備。
+source実行中にcodeを変えず、別worktree /data1tb/ControlDeckMediaForge-release-0.28.70、
+ux1/release-0-28-70でaddon/__version__を0.28.70へ更新。既存MF core/node/build環境をsymlink参照、
+Host venvの共有や新規依存・重み取得なし。release noteへprivate table追加/旧版復帰/未受入を記載。
+初回全3859は1781pass/3skip/202.49秒。新worktreeのbuild runtime参照不足で署名3件がskip。
+既存MF build環境参照後、当該3pass/0.28秒、最終 ./mf.sh test 25014 exit0/1784pass/203.63秒/既知2warnings。
+スキップなし。以後製品/test変更なし。viewer44ms/生成差分0/Node5/diff check成功。
+
+実画像: mf-source-image-renewal-20260910-r2.py、33969 exit0、証跡mf-source-image-renewal-dfpxj82d。
+元R1を保持し、診断末尾/control、取消DELETE、Host binding照合、未終端なら同core保持を修正。
+開始時LLM metrics processing0を確認して受付、以後processing1で自然競合。手動LLM停止なし。
+sourceは3ds4のPR490同一tree/内部版数0.28.69、専用data/port9162/PID2478046。
+初期service TTL180のみ診断条件、実workspace WS jobs.create、auto/local_only/256角/4step/seed73。
+0.051秒でjob_94ec339b7c65433f997bd834bf875e51、2.060秒waiting_resource。
+Host840e16827186、requestce364697-76d1-4566-b9e4-9768e40c2934、audit24036/24044 credential refresh success。
+680.587秒generating、702.605秒register_asset、704.606秒succeeded、704.618秒通常終端sent1。
+PNG asset_073e8e262c6243468237896612d25513、45,160B、SHA
+1ed7bf93ca6c4c0d3ed50aac7ad90c04288d0cf3dfffac38f397ee701e6ba542。
+実PNG decode/256角・青い陶器cube目視、Asset/provenance SHA一致、FLUX.2-klein4B/diffusers0.40.0。
+既存weight SHA f3fcfa8fdaf5ebcd26c33cd53b485ec5ebe54939b5ace585b3f488278dfae278、provenance Apache-2.0。
+初期TTL短縮を通常TTL受入にせず、長い資源待ちを長い画像演算へ読み替えない。
+
+mf-source-image-success-audit-20260910.py exit0で独立照合。
+Host/local succeeded、owned binding owner16/sent1/receipt NULL（通常通知であり再照合救済ではない）、
+元結果asset ID一致。GPU0 lease c160f70e-1596-4b90-b65a-58cbb677f6ab、
+activate1/renew2/release1、同Job/同lease/全success、最後released（audit24047/24049/24050/24051）。
+source正常停止/PID不在、Host2381614/MF2428421保持。新画像は専用source data内、稼働Libraryへ移していない。
+
+NOT TESTED: .70署名公開/導入・導入版通常TTL/GUI共存、新outbox不一致UI、全GOAL/A〜F/GA/engine。
+この準備PRを通常merge後、exact mergeからbundle生成・監査・署名公開・標準update/既存DB保持を進める。
+外部mf-0.28.70-audit.pyを準備済みだが、この記録時点では未実行。成果物作成を成功とは書かない。
+
 ## 2026-09-10 ordinary owned media terminal outbox
 
 base PR489 merge8eb44daabe01569f323d65301d52e265b42d581a、ux1/3d-image-terminal-outbox。
