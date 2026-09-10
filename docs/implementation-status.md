@@ -19,6 +19,8 @@ private build/24tool preflight通過、実MCP create schema21699Bを新evidence�
 SHA56b3c97cdd3751730ace7ddb542a6f7a5e2e5b53b8ce2906796d13afd1b2ada5。
 これはbridge時点のschemaであり最終LLM推論入力の証拠とは区別する。
 稼働.62/Host/既存scene/global設定不変。終端/品質を先取りしない。
+code8d9a0e05df3d9042eec1e1597d1a90251d228e1dをcommit/push、PR #440作成。
+3分11秒でも同OpenCode PID生存/tool出力なし、同handle追跡。実機終端待ちで未マージ。
 NOT TESTED: 本runの終端・成果物、GUI後facts/engine/複雑character/全3DS・GA。
 
 ## 2026-09-10 v0.28.62 signed installed / saved facts MCP accepted

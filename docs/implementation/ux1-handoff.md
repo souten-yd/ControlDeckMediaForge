@@ -5,11 +5,11 @@
 
 ## 2026-09-10 OpenCode saved-settings check
 
-前turnは.62署名導入/実MCP受入で進捗。basefb3fb73、ux1/3d-opencode-saved-settings、PR作成前。
+前turnは.62署名導入/実MCP受入で進捗。basefb3fb73、ux1/3d-opencode-saved-settings、PR #440作成済み/実機終端待ち。
 runner --saved-settings追加、Job/snapshot保存値と納品前順序のstrict verifier、12tests追加。
 旧mode/初期recipe厳格条件は保持。focused67/0.90秒、build40ms/差分0/Node5。
 全 ./mf.sh test handle62231終端exit0/1536 passed/148.59秒/既知warning2。
-実OpenCode handle57218/親1426898/子1426968、再確認1分32秒で同PID生存、tool出力未観測。
+実OpenCode handle57218/親1426898/子1426968、再確認3分11秒で同PID生存、tool出力未観測。
 project MF3DS-OpenCode-Saved-Settings-20260910、evidence mf-opencode-saved-settings-installed-0.28.62-20260910。
 private build/24tools通過、bridge create schema21699B/SHA56b3c97cdd3751730ace7ddb542a6f7a5e2e5b53b8ce2906796d13afd1b2ada5保存。
 次: 同run終端→strict verifier→実Blender auto_skin --posed→両Jobs/receipt/設定回収。
