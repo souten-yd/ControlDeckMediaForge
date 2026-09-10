@@ -1,5 +1,15 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.68 preparation
+
+PR463通常merge9cfce893e029b17d5cbae264f2b62d7d3c2f11d1からux1/release-0-28-68。
+修復register待ち取消checkpointとsafe control診断を含む版数/release noteを準備。
+外部mf-0.28.68-audit.py/install.pyとmf-setup-host-installed-0.28.68-20260910.pyを作成。
+既存class完全照合、公開4files再取得/署名検証/全DB保持、実Chrome通常repair/switch/restoreを予定。
+全95222終端exit0/1604pass/既知2warnings/168.30秒、viewer49ms差分0/Node5pass、診断compile/diff check成功。
+準備時点では署名公開/導入/installed新checkpoint受入は未実施。更新時は旧.66実行bundleのみ標準整理対象と通知。
+前回installed長時間試験の約210秒control停止原因は未確定。全3DS/GA PARTIALを維持する。
+
 ## 2026-09-10 repair publication stop checkpoint / source rollback acceptance
 
 base PR462 merged7c61d8、ux1/3d-repair-publication-cancel。前turnはinstalled長時間不合格の実証/回収まで進捗。
