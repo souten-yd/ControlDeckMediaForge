@@ -1,5 +1,36 @@
 # Media Forge implementation status
 
+## 2026-09-10 identity-verified publication recovery adapter
+
+base PR471 merge159a9f5、ux1/3d-publication-recovery。前turnはprivate journal基盤/実HTTP/mergeで進捗。
+BlenderPublicationRecoveryと専用Store recovery確定APIを追加。install/updateの公開済み実体を
+登録全field/active/catalog/stamp/exe SHA/実preflightの前後で照合し、一致した場合だけready/outboxを確定。
+同期filesystem/probe/DBはowned worker用。検証中にStore mutexを保持せず、runtime参照guardとregistry lockで保護。
+検証拒否はreason付きrecovery_required、実体/registry削除・書換えなし。通常完了APIで隔離を解除しない。
+同一版repairは旧/新exe SHAだけでは実施証明にならずrepair_generation_unprovenで維持。
+11新規ケース: install/update成功・inode/bytes/registry保持、exe/stamp/欠落/registry/symlink/
+install symlink脱出/probe失敗/probe中変更の拒否、repairの世代不明。関連92092 exit0/35pass/5.40秒。
+
+外部mf-publication-recovery-real-20260910.py、62874 exit0。専用dataへ以前の実4.5.9成功runtimeをcopy。
+prepare PID2254716は実SHAを確認し、private journal開始→実register_managed→遅延cancel記録後にexit0。
+operationf1a9c0eedd334f2dadf33c4d6d0a9e0e。別recovery PID2254804は実core起動でrecovery_requiredを確認。
+owned workerでadapterを明示実行し、0.610秒で成功。実Blender4.5.9/preflightはGLB import/exportともtrue。
+実GET /healthはsetup_required、/workspace-api/blender/runtimeはready/errorなし/公開停止flagなし/
+遅延cancel補足を確認。exe inode/SHAとregistry SHA保持、core停止を記録。
+実Blenderと別processの証拠であるが、Hostなし・通常manager配線なし・prepareは正常exitであり、
+SIGKILL/電源断や通常設定UIからの回復を検証したとはしない。fixture journalだけの前PRとは範囲を区別する。
+証跡mf-publication-recovery-real-20260910/{baseline,observations}.json、全診断終端。
+viewer40ms/生成差分0/Node5pass。初版の全86000はexit0/1650pass/既知2warnings/173.33秒。
+試験中のreviewで中間directoryのcontainment確認をreadinessチェックより前にも追加したため、最終gateを再実行。
+最終codeの実試験-r2（76782）もexit0、prepare2260202→recovery2260219、0.638秒成功。
+operation083f1abc973c41729da018b9d44fa466、実probe/実HTTP/元inode・SHA/registry SHA保持、core停止を再確認。
+最終全42022 exit0/1650pass/既知2warnings/180.16秒。以後製品code変更なし。
+
+次: repairのpublication generation識別と未公開状態の回収を追加し、managerのbegin/complete/recoveryに接続。
+未確定の実体を存在だけで採用せず、世代不明は保護する。新APIはまだ通常起動から自動呼出ししない。
+NOT TESTED: repair世代/rollback、通常manager接続、実Host取消競合再受入、OS crash、署名配布/installed、全GOAL/A〜F/GA。
+Host・稼働MF・global設定変更なし。全体PARTIAL維持。
+
 ## 2026-09-10 private runtime publication journal foundation
 
 base PR470 merge00c6667、ux1/3d-publication-journal。前turnは実競合再現と設計mergeで進捗。
