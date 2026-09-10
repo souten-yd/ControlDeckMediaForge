@@ -24,10 +24,21 @@ class PublicationIdentity(BaseModel):
     recovered_directory: bool
     generation: Generation | None = None
     previous_generation: Generation | None = None
+    previous_root_device: Annotated[int, Field(ge=0, le=2**64 - 1)] | None = None
+    previous_root_inode: Annotated[int, Field(ge=1, le=2**64 - 1)] | None = None
+    previous_executable_missing: bool = False
 
     @model_validator(mode="after")
     def previous_runtime_required(self) -> PublicationIdentity:
-        if (self.action == "repair" or self.recovered_directory) and self.previous_executable_sha256 is None:
+        if (self.previous_root_device is None) != (self.previous_root_inode is None):
+            raise ValueError("Previous root identity requires device and inode together")
+        missing_repair = (self.action == "repair" and not self.recovered_directory
+            and self.previous_executable_missing and self.previous_executable_sha256 is None
+            and self.previous_registration_sha256 is not None and self.previous_root_inode is not None
+            and self.generation is not None)
+        if self.previous_executable_missing and not missing_repair:
+            raise ValueError("Missing previous executable requires a complete repair identity")
+        if (self.action == "repair" or self.recovered_directory) and self.previous_executable_sha256 is None and not missing_repair:
             raise ValueError("Existing runtime publication requires its previous executable identity")
         if self.action == "repair" and self.generation is not None and self.generation == self.previous_generation:
             raise ValueError("Repair publication requires a new generation")

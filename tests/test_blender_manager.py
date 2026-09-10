@@ -523,6 +523,8 @@ def test_repair_replaces_damaged_managed_runtime_and_keeps_active_id(tmp_path: P
         assert repaired.state == BlenderRuntimeOperationState.READY
         assert executable.is_file()
         assert resolver.resolve_active().runtime_id == "blender-4.5.13-linux-x64"
+        # Old runtime reclamation follows the durable success commit.
+        await asyncio.gather(*list(manager._tasks.values()))
         assert not any((resolver.managed_root / ".staging").glob("previous-*"))
         await manager.stop()
     asyncio.run(scenario())
@@ -626,7 +628,7 @@ def test_repair_publication_runs_off_loop_and_shutdown_waits(
     asyncio.run(scenario())
 
 
-def test_repair_registry_failure_rolls_back_the_original_directory(
+def test_repair_candidate_rename_failure_rolls_back_the_original_directory(
     tmp_path: Path, monkeypatch
 ) -> None:
     async def scenario() -> None:
@@ -643,12 +645,18 @@ def test_repair_registry_failure_rolls_back_the_original_directory(
         marker.write_text("old directory", encoding="utf-8")
         (destination / "install/blender").unlink()
 
-        def reject_registration(**_kwargs):
-            raise RuntimeError("injected registry failure")
+        import os
+        original_replace = os.replace
+        def reject_candidate(source, target):
+            if Path(source).name == "candidate":
+                raise OSError("injected candidate rename failure")
+            original_replace(source, target)
 
-        monkeypatch.setattr(resolver, "register_managed", reject_registration)
+        monkeypatch.setattr(os, "replace", reject_candidate)
         failed = await wait_terminal(store, manager.repair(RUNTIME_ID).id)
+        await asyncio.gather(*list(manager._tasks.values()))
         assert failed.state == BlenderRuntimeOperationState.FAILED
+        assert store.blender_publication(failed.id).phase == "rolled_back"
         assert marker.read_text(encoding="utf-8") == "old directory"
         assert not any((resolver.managed_root / ".staging").glob("previous-*"))
         await manager.stop()

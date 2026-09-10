@@ -1,5 +1,44 @@
 # Media Forge implementation status
 
+## 2026-09-10 repair publication journal and original-tree rollback
+
+base PR476 merge92f6f22、ux1/3d-repair-publication-journal。前turnは未公開rollback/実機/mergeで進捗。
+private identityへ旧root device/inode・旧exe欠落flagを加法追加。旧登録/新世代/root identityが揃う
+場合だけ欠落を認め、SHAを捏造しない。省略された旧journalは従来どおり読める。
+通常repairをguard内begin→旧root退避→候補配置/fsync→登録→completeへ接続。
+旧退避の削除は完了記録後だけ行い、旧root/旧exe状態/旧世代と新世代/SHAを再照合する。
+不一致・掃除不完了は診断を出して残存退避を保持し、実完了結果を上書きしない。
+公開を証明できない場合はrollback adapterが旧登録/active・実行参照ゼロ・旧root identity/状態と
+新候補を照合して旧rootを復元する。歴史revisionは同ID修復を妨げず、実行参照は拒否を維持。
+
+初回45184は3failed/56pass15.80秒。旧「登録後の取消=取消終端」2件を新境界の前後へ分け、
+旧「登録例外で必ず復元」は候補配置前失敗へ移動。登録後新実体の実照合回収は別故障matrixで検証。
+旧退避の掃除確認はready観測だけでなくowned worker終端を待つ。関連52101 exit0/61pass10.10秒。
+新21ケース: 旧exe有/欠落×rename2箇所/登録前後/complete前後12件、欠落identity拒否6件、
+旧root差替え/新世代変更時の保護2件、完了前旧退避保持と完了後改変時の削除拒否1件。
+62928は初期18pass3.54秒、89565は21pass2.99秒。全 `./mf.sh test` 4757はexit0、
+1731 passed/既知2warnings/221.54秒。同一handleで終端確認、以後code変更なし。
+viewer52ms/生成差分0/Node5pass。
+
+実機: 外部mf-repair-journal-real-20260910.py、81594 exit0、同名証跡。
+専用copyの旧exeだけを欠落させ、実4.5.9/cached archive/uvloop/通常manager/実HTTPで修復。
+候補rename故障を注入した2ea6fb0bccea41c3a0a47e5ec4aa92ffは22.731秒failed/rolled_back、
+旧root inode/欠落状態/registryを復元。60bd2d6a574143c3b177342819b2009fの再試行は27.258秒ready、
+実GLB import/export true/Python3.11.11、元exe SHA/元archive/registry保持、stage空/core停止。
+healthはsetup_required。元runtimeと稼働版のexeを削除した試験ではない。
+
+実Host遅延取消: mf-repair-journal-host-cancel-20260910.py、20401 exit0、同名証跡。
+operation2ce61a39499745ebaba28e222aac6d8c/Hostc0019988021c、27.180秒登録/committing→
+27.211Host取消→28.634stop別記録→29.140ready/committed、29.300passed/29.415core停止。
+旧root inodeを記録、新rootへの差替え・世代/SHA・GLB probe・stage空・元archive保持を確認。
+Hostはcanceledでsent=false/terminal_matches=falseを保持し、独立GETで確認。login回収、refresh0。
+登録後gateは診断instrumentation。実Hostとlocalの終端一致を成功扱いしない。
+Host PIDは以前の2043005から2381614への変化を観測、MF1965886は同じ。本turnは再起動操作なし。
+全診断終端。NOT TESTED: startup自動回復、OS crash/電源断、実Host欠落repair rollback、
+inactive版の新repair実受入、署名配布/installed、UI遅延stop、全GOAL/A〜F/GA。
+次: 未確定journalのstartup回復と完了後残存退避の安全な回収を接続し、再起動/取消受入後に配布する。
+全体PARTIAL、稼働版への導入なし。
+
 ## 2026-09-10 unpublished install/update rollback
 
 base PR475 merge80ad633、ux1/3d-unpublished-rollback。前turnは通常journal/実Host/mergeで進捗。

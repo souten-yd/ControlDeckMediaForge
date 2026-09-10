@@ -156,8 +156,9 @@ def test_host_cancel_or_revocation_drains_worker(
 
 
 @pytest.mark.parametrize("revoked", [False, True])
-def test_repair_cancel_during_registration_restores_original(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revoked: bool,
+@pytest.mark.parametrize("late", [False, True])
+def test_repair_stop_respects_publication_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revoked: bool, late: bool,
 ) -> None:
     manager, store, host = setup(tmp_path)
     entered, release = threading.Event(), threading.Event()
@@ -171,32 +172,41 @@ def test_repair_cancel_during_registration_restores_original(
         executable = destination / "install/blender"
         old_inode, old_bytes = executable.stat().st_ino, executable.read_bytes()
         registry = manager.resolver.registry_path.read_bytes()
-        original = manager.resolver.register_managed
+        target, name = (manager.resolver, "register_managed") if late else (manager, "_begin_publication")
+        original = getattr(target, name)
 
-        def held_registration(**kwargs: Any) -> Any:
-            value = original(**kwargs)
+        def held_registration(*args: Any, **kwargs: Any) -> Any:
+            value = original(*args, **kwargs) if late else None
             entered.set()
             assert release.wait(5)
-            return value
+            return value if late else original(*args, **kwargs)
 
-        monkeypatch.setattr(manager.resolver, "register_managed", held_registration)
+        monkeypatch.setattr(target, name, held_registration)
         try:
             operation = await manager.request("repair", initial.runtime_id, identity=identity())
             assert await asyncio.to_thread(entered.wait, 5)
             host.revoked, host.cancel = revoked, not revoked
             async with asyncio.timeout(3):
-                while not await asyncio.to_thread(store.blender_runtime_operation_cancel_requested, operation.id):
+                def stopped() -> bool:
+                    if late:
+                        return bool(store.blender_publication(operation.id).stop_requests)
+                    return store.blender_runtime_operation_cancel_requested(operation.id)
+                while not await asyncio.to_thread(stopped):
                     await asyncio.sleep(.01)
             release.set()
             await asyncio.gather(*list(manager._tasks.values()))
             result = store.get_blender_runtime_operation(operation.id)
-            assert result.state == (State.FAILED if revoked else State.CANCELED)
-            assert result.error_code == ("host_context_lost" if revoked else None)
-            assert executable.stat().st_ino == old_inode and executable.read_bytes() == old_bytes
+            assert result.state == (State.READY if late else State.FAILED if revoked else State.CANCELED)
+            assert result.error_code == ("host_context_lost" if revoked and not late else None)
+            assert (executable.stat().st_ino == old_inode) == (not late)
+            assert executable.read_bytes() == old_bytes
+            if late:
+                assert result.result["publication_stop_requests"] == ["host_context_lost" if revoked else "cancel"]
+                assert store.blender_publication(operation.id).phase == "committed"
             assert manager.resolver.registry_path.read_bytes() == registry
             assert not any((manager.resolver.managed_root / ".staging").iterdir())
             journal = store.blender_runtime_host_journal(operation.id, "user:16")
-            assert journal["terminal"]["status"] == ("failed" if revoked else "canceled")
+            assert journal["terminal"]["status"] == ("succeeded" if late else "failed" if revoked else "canceled")
             assert journal["sent"] is True
         finally:
             release.set()

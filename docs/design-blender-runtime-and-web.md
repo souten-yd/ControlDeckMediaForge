@@ -258,6 +258,18 @@ rolled_backは終端であり、停止・再起動で書き換えず、同一ide
 これは未公開候補の復元であり、repairの旧実体復元やstartup自動回復の完了ではない。
 private journalの新phaseを知らない旧coreへはそのままdowngradeせず、既記載のsnapshot復元を使う。
 
+修復journal接続の補完: 旧exeが欠落したdamaged runtimeも修復対象であるため、private identityに
+旧rootのdevice/inodeと旧exe欠落flagを加法的に記録する。欠落を架空SHAで表さず、旧登録・新世代・
+旧root identityが揃う場合だけ欠落を受理する。旧journalの省略は従来どおり読める。
+修復はbegin→旧root退避→候補配置→登録/検証→completeとし、旧rootの削除は完了記録の後だけ行う。
+未完了の場合、新世代の実体照合で公開完了を確認できれば回収し、公開されていなければ旧root identity・
+旧exe状態・旧世代・旧登録/active・実行参照ゼロを照合して復元する。不明なら新旧とも保持する。
+保存済みrevisionは同一runtime IDの修復を妨げないが、実行Job/GUIの参照は引き続き拒否する。
+完了後の旧退避掃除に失敗しても実完了結果を上書きせず、診断を出して退避を保持する。
+この補完を通常repairへ接続した。source実Blenderで旧exe欠落の失敗復元/再試行と実Host遅延取消を確認。
+退避の掃除は完了記録後もowned workerが保持し、処理終端までdrainする。状態readyの観測だけで
+旧退避の掃除終了まで保証したとはしない。startup自動回復と署名配布は別の未完了ゲート。
+
 Host所有setupの永続化は既存blender_runtime_operationsへ加法的に置く。
 受付時のownerと一意なHost child ID、終端通知のoutbox/照合receiptだけをprivateに保存し、
 bearerは保存・公開しない。所有者なしの既存ローカル操作を後からHost所有として採用しない。
