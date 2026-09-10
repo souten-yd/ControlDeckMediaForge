@@ -236,6 +236,17 @@ register_managedは同じresolver・同じworker threadでのみ既存flockを�
 これはdurable begin/completeの接続ではない。次はこのguard内のrename前で開始を記録し、
 失敗/drain/restartをjournal経路へ接続する。従来の登録後取消窓・不明なI/O結果は未解決のまま。
 
+導入・更新のjournal接続（先行実装）: fresh install/updateと既存directory回収では、
+上記guard内で候補exe SHA・登録rowのcanonical SHA・以前のactive・generationを束縛し、
+最初のrename/登録前にbeginする。新候補にだけgenerationを作り、回収対象のmarkerは読取のみ。
+開始後cancel/Host context喪失はstop_requestsへ分離し、開始済み公開をowned workerで完了する。
+登録後のstage掃除を済ませ、ready/result/Host outboxを専用completeで同時確定する。
+例外はrequire_blender_publication_recoveryで隔離し、guardを解放した外側から実体/実probe照合へ進む。
+一致なら回収、未公開・不一致なら実体を削除せず保護する。完了済み結果を停止や例外で上書きしない。
+Hostがcanceledなら成功へ上書きせず既存terminal reconciliationの不一致を保持する。
+repairは従来経路で、このjournal接続の対象外。未公開rollback、startup自動回復、UI遅延stop補足、
+署名installed受入も残る。この中間状態を新releaseの完成として配布しない。
+
 Host所有setupの永続化は既存blender_runtime_operationsへ加法的に置く。
 受付時のownerと一意なHost child ID、終端通知のoutbox/照合receiptだけをprivateに保存し、
 bearerは保存・公開しない。所有者なしの既存ローカル操作を後からHost所有として採用しない。

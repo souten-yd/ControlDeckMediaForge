@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 install/update normal publication journal
+
+base PR474 merge6e28e1d、ux1/3d-install-publication-journal。前turnは進捗/merge。
+fresh install/update/recoveredをguard内rename前のbegin/completeへ接続。exe/旧登録row/active/世代を束縛。
+開始後stopは別記録、掃除→専用complete。I/O失敗は隔離→guard外adapter実照合、一致だけ回収。
+未確定stage/実体を削除せずHost偽終端なし。repair/未公開rollback/startup自動回復は未接続。
+初回関連9失敗（掃除順序1修正・旧停止注入8をbegin前へ）後59pass。新21ケース11569 exit0/3.80秒。
+初回全23527 exit1/4failed/1686pass186.12秒。repair fixtureの新候補から旧marker複製を除外し、
+旧実体markerは保持。69057対象15pass3.66秒、viewer49ms/差分0/Node5pass。
+最終全55437を同一handleで終端確認: exit0/1690pass/既知2warnings/187.71秒。
+製品codeは初回全gate以後変更なし。全gateと診断は終端、通常commit/push/mergeへ進む。
+実Host競合75632 exit0/26.894秒passed、operation2d0c30d7c7434e8cb62da0e5c31869ed/Host2380cb5ec0f6。
+実登録応答喪失88479 exit0/29.796秒passed、operation10840e861fe34a95805941bebbbe4da8/Hostc845f2e008dd。
+両方実4.5.9/uvloop/実Host、登録後gateは診断。local ready/cancel=false/遅延stop別記録、
+実GLB probe/SHA/generation/元archive保持。Hostはcanceledでsent=false/terminal_matches=falseを保持。
+独立GET確認/core停止/login回収、Host2043005/MF1965886不変。全診断終端、refresh0、未配布。
+次: 未公開rollback→repair接続→startup回復/UI遅延stop→署名installed受入。
+repairの旧exe欠落も既存修復要件。previous SHAを捏造せず欠落状態を明示的に扱う。
+全3DS/GA PARTIAL、untracked .venv保持、外部blockerなし。gate後commit/push/通常merge。
+
 ## 2026-09-10 normal publication lock boundary
 
 base PR473 mergee094588、ux1/3d-publication-lock-boundary。前turnは進捗/merge。

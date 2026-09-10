@@ -13,7 +13,7 @@ from mediaforge.blender_operation import BlenderRuntimeOperationAction as Action
 from mediaforge.blender_operation import BlenderRuntimeOperationState as State
 from mediaforge.blender_publication import PublicationIdentity
 from mediaforge.blender_publication_recovery import BlenderPublicationRecovery
-from mediaforge.blender_publication_generation import MARKER_NAME, create_generation
+from mediaforge.blender_publication_generation import MARKER_NAME, create_generation, read_generation
 from mediaforge.store import Store
 from test_blender_manager import archive_content, archive_fixture, catalog_fixture, runtime_manager
 
@@ -50,14 +50,17 @@ def interrupted(tmp_path: Path, action: str = "install", *, marked: bool = False
     generation = None
     if marked:
         staged = resolver.managed_root / ".staging" / operation.id / "candidate"
-        shutil.copytree(runtime.root, staged)
+        # A newly extracted repair candidate does not inherit the installed
+        # generation. Keep the old marker on the preserved runtime itself.
+        shutil.copytree(runtime.root, staged, ignore=shutil.ignore_patterns(MARKER_NAME))
         generation = create_generation(resolver.managed_root, staged)
     identity = PublicationIdentity(runtime_id=runtime.runtime_id, version=runtime.version, action=action,
         archive_sha256=spec.archive_sha256, executable_sha256=hashlib.sha256(runtime.executable.read_bytes()).hexdigest(),
         previous_active_runtime_id="blender-4.5.9-linux-x64" if action != "install" else None,
         previous_registration_sha256=None,
         previous_executable_sha256=hashlib.sha256(runtime.executable.read_bytes()).hexdigest() if action == "repair" else None,
-        recovered_directory=False, generation=generation)
+        recovered_directory=False, generation=generation,
+        previous_generation=read_generation(resolver.managed_root, runtime.root) if marked else None)
     store.begin_blender_publication(operation.id, identity)
     if marked:
         runtime.root.rename(tmp_path / "previous-runtime")
