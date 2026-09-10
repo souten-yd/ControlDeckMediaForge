@@ -1,5 +1,16 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.65 preparation
+
+PR449 mergebf2dcf0e670d9c7c66092cac38068e3a11a57f8fからux1/release-0-28-65。
+addon/core版数とrelease noteを更新。全test23931終端exit0/1555passed/既知2warnings/154.08秒、viewer39ms/差分0、Node5pass。
+外部mf-0.28.65-audit.py/install.pyとmf-admission-installed-0.28.65-20260910.pyを準備/compile成功。
+auditはmanager.requestのexact source/packed code比較を追加。installed試験は日本語320設定で
+inactive4.5.9へ通常切替→4.5.13へ復元、旧制作DB/Jobs/登録bytes/実exe hash保持を検査予定。
+各切替前idle確認、失敗時の通常復元、診断login失効を持つ。準備を実機成功とはしない。
+現在.64/保持.63/.64、次の標準保持2で旧.63実行bundleのみ整理予定。制作data/runtimeを保持する。
+NOT TESTED: .65公開/consumer/導入/新受付installed、setup認証/全3DS/GA。
+
 ## 2026-09-10 setup admission I/O boundary
 
 base PR448 merge342e2d7、ux1/3d-setup-admission-offloop。
