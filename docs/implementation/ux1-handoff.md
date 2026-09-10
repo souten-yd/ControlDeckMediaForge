@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 saved animation settings
+
+前turnはR2不合格切り分け/PR436 mergeで進捗。base50c48fa、ux1/3d-clip-result-facts、PR作成前。
+scene_document独立worker→revision factsへanimation_settings追加、型モデル/公開schema/15tests。
+fps/実range/保存loop_requestedを報告し、未報告数と旧facts欠落を区別。既定や品質判定は変更しない。
+focused27/3.27秒、build42ms/差分0/Node5。全 ./mf.sh test handle59812終端exit0/1524 passed/148.94秒/既知warning2。
+実4.5.13 source診断73248 exit0/2.054秒、旧4.5.9診断35809 exit0/2.491秒。
+mf-animation-facts-source[-4.5.9]-20260910、初版idle false→2版bend true/idle false、GLB実変形/旧hash保持。
+同dataの実HTTP19130で両revision保存facts/schema200確認、専用core27054 exit0。稼働.61/Host変更なし。
+次: 通常PR merge→署名配布/installed結果照合へ進める。
+新factsのinstalled/OpenCode/GUI、engine/複雑character/全3DS・GA未受入。既存UX状態不変、blockerなし。
+再開: git status --short --branch; git fetch origin。継続中OpenCodeなし。
+
 ## 2026-09-10 auto skin R2 failed / MCP field present
 
 前turnは.61署名導入、今回は同run終端/失敗切り分けで進捗。

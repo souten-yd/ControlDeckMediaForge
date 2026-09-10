@@ -95,6 +95,8 @@ def run(args: argparse.Namespace) -> None:
     elif args.fixture == "auto_skin":
         from auto_skin_fixture import recipe
         operations = recipe()
+        if args.animation_settings:
+            operations[-1].pop("loop")  # Default false must remain observable after saving.
     create = SceneCreateRequest.model_validate({"name":"Game " + args.fixture + " acceptance","recipe":{"operations":operations}})
     evidence: dict[str, Any] = {"mode":"source_domain_real_blender", "runtime":runtime.version}
     began = time.monotonic()
@@ -115,6 +117,12 @@ def run(args: argparse.Namespace) -> None:
     try:
         created = asyncio.run(apply(create))
         evidence["created"] = created
+        if args.animation_settings:
+            facts = next(item["facts"] for item in created["revision"]["validation"] if item["validator"] == "blender.scene")
+            assert facts["animation_settings"]["fps"] == 24
+            assert facts["animation_settings"]["unreported_actions"] == 0
+            assert facts["animation_settings"]["clips"] == [{"object_id": "rig", "clip_id": "idle",
+                "frame_start": 0.0, "frame_end": 48.0, "loop_requested": False}]
         source = store.asset_path(created["revision"]["source_asset_id"])
         old_hash = hashlib.sha256(source.read_bytes()).hexdigest()
         old_glb = store.asset_path(created["revision"]["preview_asset_id"])
@@ -144,6 +152,16 @@ def run(args: argparse.Namespace) -> None:
             "base_revision_id":created["revision"]["id"], "recipe":{"operations":[
                 edit_operation]}})
         evidence["edited"] = asyncio.run(apply(edit))
+        if args.animation_settings:
+            revision = evidence["edited"]["revision"]
+            facts = next(item["facts"] for item in revision["validation"] if item["validator"] == "blender.scene")
+            report = facts["animation_settings"]
+            assert {item["clip_id"]: item["loop_requested"] for item in report["clips"]} == {"idle": False, "bend": True}
+            assert report["fps"] == 24 and report["unreported_actions"] == 0
+            _, saved = workspace.catalog.get("local", created["scene"]["id"])
+            assert any(item.id == revision["id"] and any(check.facts.get("animation_settings") == report
+                       for check in item.validation) for item in saved)
+            evidence["saved_animation_settings"] = report
         if args.fixture in {"rig", "motion", "array", "auto_skin"}:
             revision = evidence["edited"]["revision"]
             checked = subprocess.run([str(runtime.executable), "--background", "--factory-startup", "--disable-autoexec",
@@ -266,6 +284,8 @@ if __name__ == "__main__":
     parser.add_argument("--inspect",action="store_true")
     parser.add_argument("--source",type=Path)
     parser.add_argument("--fixture",choices=("gate", "robot", "rig", "motion", "array", "auto_skin"),default="gate")
+    parser.add_argument("--animation-settings", action="store_true",
+                        help="Check saved default-false and explicit-true loop facts on auto_skin")
     parser.add_argument("--glb",type=Path)
     parser.add_argument("--posed",action="store_true")
     parser.add_argument("--replace-clip",action="store_true")
@@ -273,6 +293,8 @@ if __name__ == "__main__":
     args = parser.parse_args(values)
     if args.replace_clip and args.fixture != "motion":
         parser.error("--replace-clip requires --fixture motion")
+    if args.animation_settings and args.fixture != "auto_skin":
+        parser.error("--animation-settings requires --fixture auto_skin")
     if args.inspect:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         if args.replace_clip:

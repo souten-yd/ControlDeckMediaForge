@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "AnimationClipFact": {
+      "additionalProperties": false,
+      "properties": {
+        "object_id": {
+          "pattern": "^[a-z][a-z0-9._-]{0,63}$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "clip_id": {
+          "pattern": "^[a-z][a-z0-9._-]{0,47}$",
+          "title": "Clip Id",
+          "type": "string"
+        },
+        "frame_start": {
+          "maximum": 2000000,
+          "minimum": -2000000,
+          "title": "Frame Start",
+          "type": "number"
+        },
+        "frame_end": {
+          "maximum": 2000000,
+          "minimum": -2000000,
+          "title": "Frame End",
+          "type": "number"
+        },
+        "loop_requested": {
+          "description": "Saved action metadata, not proof of loop quality or engine playback settings.",
+          "title": "Loop Requested",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "object_id",
+        "clip_id",
+        "frame_start",
+        "frame_end",
+        "loop_requested"
+      ],
+      "title": "AnimationClipFact",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "media-forge.animation-settings@1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "fps": {
+      "exclusiveMinimum": 0,
+      "maximum": 1000000,
+      "title": "Fps",
+      "type": "number"
+    },
+    "clips": {
+      "items": {
+        "$ref": "#/$defs/AnimationClipFact"
+      },
+      "maxItems": 32,
+      "title": "Clips",
+      "type": "array"
+    },
+    "unreported_actions": {
+      "minimum": 0,
+      "title": "Unreported Actions",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "fps",
+    "clips",
+    "unreported_actions"
+  ],
+  "title": "AnimationSettingsFact",
+  "type": "object"
+}

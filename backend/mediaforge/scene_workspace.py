@@ -20,6 +20,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import ValidationError
 
 from . import __version__
+from .animation_facts import AnimationSettingsFact
 from .blender_runtime import BlenderRuntimeResolver, ResolvedBlenderRuntime
 from .domain import Asset, ErrorDetail, JobRequest, JobStatus, Provenance
 from .glb import GlbValidationError, validate_glb_path
@@ -1646,7 +1647,7 @@ class SceneWorkspace:
             "objects", "meshes", "vertices", "triangles", "materials", "images",
             "animations", "text_blocks", "linked_libraries", "external_images", "unit_meters",
         }
-        if not isinstance(value, dict) or set(value) != expected:
+        if not isinstance(value, dict) or set(value) - {"animation_settings"} != expected:
             raise SceneError("scene_worker_invalid", "Blender scene result fields differ")
         if (
             value["schema_version"] != "media-forge.blender-scene-validation@1"
@@ -1663,6 +1664,13 @@ class SceneWorkspace:
         }:
             if isinstance(value[name], bool) or not isinstance(value[name], int) or value[name] < 0:
                 raise SceneError("scene_worker_invalid", "Blender scene count is invalid")
+        if "animation_settings" in value:
+            try:
+                settings = AnimationSettingsFact.model_validate(value["animation_settings"])
+            except ValidationError as exc:
+                raise SceneError("scene_worker_invalid", "Blender animation settings are invalid") from exc
+            if len(settings.clips) + settings.unreported_actions != value["animations"]:
+                raise SceneError("scene_worker_invalid", "Blender animation settings count differs")
 
     def _register_assets(
         self,

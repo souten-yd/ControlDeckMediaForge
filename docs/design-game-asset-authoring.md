@@ -114,6 +114,14 @@ GA-1 curve/mesh編集とGA-2 sculpt/retopologyの受入へ含める。球の寄�
 
 ### GA-5 first typed slice
 
+2026-09-10追加: 独立した.blend検証workerが保存済みactionから`animation_settings`を
+revisionの`blender.scene` factsへ加法出力する。Job結果とsnapshotで同じfactsを参照する。
+sceneの実効fps、最大32件のtyped clip ID/rig ID/実action frame範囲/保存済みloop要求を報告。
+`loop_requested`は保存metadataであり、実際の端点一致・速度連続・engine再生設定の合格印ではない。
+一般action・不正/重複metadata・上限超過は黙って「なし」とせず`unreported_actions`へ計数する。
+旧revision/旧workerでfactsが欠ける場合も「未検査」であり、clipゼロと解釈しない。
+入力既定値/validationの挙動を変えず、GUI保存や材質変更後も独立検査から最新値を得る。
+
 animation.clipを加法追加する。typed rigの既知boneに対するrest-local XYZ回転trackを
 昇順frame/LINEAR補間で定義し、未指定boneは各clip内でrest回転を明示的に保持する。
 frame0からframe_countまで、fps1〜60、最大600 frames/120秒、128 tracks、
