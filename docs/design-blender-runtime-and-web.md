@@ -164,6 +164,14 @@ durable受付後の実行task生成はevent loop側で行う。要求の繰り�
 既存のexact導入/確認付き削除/外部登録の別受付policyは変更しない。
 これは受付の分離であり、実行中の全DB/filesystem I/OやHost credential維持の完了を意味しない。
 
+実行制御の分離: startupのdirectory作成・再開journal照会、実行開始時のjournal/取消/Web pack照会、
+切替の検査・active登録・終端記録、失敗/取消のstaging回収と終端記録をworker threadで行う。
+切替、削除commit、修復publication、終端回収は開始済みの一単位を繰り返し取消でも放棄しない。
+shutdown自体もowned taskとして受付と実行taskの回収を待つ。task生成はevent loop側に維持する。
+これは既存の公開state・参照保護・切替policyを変えずに実行境界を直すものである。
+install/Web packの残る同期stage、exact/remove受付の取消全組合せ、Host setup所有Jobと
+credential refreshは別の未完了条件であり、この分離の成功から完了を推定しない。
+
 提案状態: queued → preflight → downloading → verifying → installing → probing → ready。
 終端: failed / canceled。削除はdeletingを経由する。操作IDを先に永続化してから副作用を始める。
 既存model operationのjournal/watch/cancelの設計を再利用し、Blender固有policyはruntime adapterへ置く。

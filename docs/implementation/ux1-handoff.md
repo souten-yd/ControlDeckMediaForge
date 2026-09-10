@@ -3,6 +3,18 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 runtime execution control off-loop
+
+base PR451 merge5c4d15f、ux1/3d-runtime-execution-control。
+startup/run照会/switch/終端cleanupをworkerへ、削除/修復publicationの重複取消保持とowned stop。
+関連115pass/18.37秒、viewer43ms差分0/Node5pass。全22082終端exit0/1564pass/153.77秒。
+専用source実TCP57143終端exit0/21.335秒、実固定cache install/Blender4.5.9 glTF probe成功。
+mf-execution-control-source-20260910: activate gate中health41.903ms、3回取消後も切替/ready完了。
+専用registry legacy→managed同4.5.9、元cache/外部exe保持、専用core終端。
+稼働.65/MF1897795不変。新署名/installed/全setup I/O/Host credential/全3DS・GAは未完了。
+次: commit/push/通常PRmerge。残るinstall/Web stageとHost setup所有権を進め、署名配布/installed受入へ。
+untracked .venv保持。全test/専用source診断は終端、継続中handleなし。
+
 ## 2026-09-10 v0.28.65 installed acceptance
 
 PR450 merge9ad7462、exact build23481/audit203/署名/public24598/download80885/install93852すべてexit0。
@@ -12,7 +24,7 @@ Host1811096は今回更新前後不変、MF1897795。旧.63実行bundleのみ整
 installed通常Settings320日本語で4.5.9切替→4.5.13復元、64412終端exit0/2.162秒passed。
 mf-admission-installed-0.28.65-20260910。2journal ready/制作全行・実exe・registry保持/login失効。
 再開時read-only DB全after照合exit0、systemd active/PID一致。継続中診断なし。
-この受入sliceは文書のみ。commit/push/通常PRmergeとrelease noteの実績反映を行う。
+この受入sliceは文書のみ。PR451通常merge5c4d15f、release note実績反映済み。
 次: setup Host credential/実行中I/O。全GOAL/A〜F/GAはPARTIAL、engine未指定でも残件は進められる。
 untracked .venv保持。以前のpreparation記録は時点を区別して残す。
 

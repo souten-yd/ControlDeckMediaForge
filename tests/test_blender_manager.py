@@ -575,7 +575,10 @@ def test_repair_rechecks_late_live_reference_before_replacing(tmp_path: Path, mo
     asyncio.run(scenario())
 
 
-def test_repair_publication_runs_off_loop_and_shutdown_waits(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("cancel_count", [0, 3])
+def test_repair_publication_runs_off_loop_and_shutdown_waits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cancel_count: int,
+) -> None:
     import threading
 
     async def scenario() -> None:
@@ -602,11 +605,19 @@ def test_repair_publication_runs_off_loop_and_shutdown_waits(tmp_path: Path, mon
             assert await asyncio.to_thread(entered.wait, 5)
             stopping = asyncio.create_task(manager.stop())
             await asyncio.sleep(0.05)
+            for _ in range(cancel_count):
+                stopping.cancel()
+                manager._tasks[operation.id].cancel()
+                await asyncio.sleep(0.01)
             assert not stopping.done(), "shutdown abandoned a publication thread"
         finally:
             release.set()
             if stopping is not None:
-                await stopping
+                if cancel_count:
+                    with pytest.raises(asyncio.CancelledError):
+                        await stopping
+                else:
+                    await stopping
             else:
                 await manager.stop()
         assert store.get_blender_runtime_operation(operation.id).state == BlenderRuntimeOperationState.READY

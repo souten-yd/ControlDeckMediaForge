@@ -120,8 +120,8 @@ def test_managed_removal_preview_rechecks_durable_job_and_runs_off_loop(client, 
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("phase", ["admission", "deletion"])
-def test_removal_thread_is_not_abandoned_by_request_cancel(client, monkeypatch, phase: str) -> None:
+@pytest.mark.parametrize("phase,cancel_count", [("admission", 1), ("deletion", 1), ("deletion", 3)])
+def test_removal_thread_is_not_abandoned_by_request_cancel(client, monkeypatch, phase: str, cancel_count: int) -> None:
     from mediaforge.blender_runtime import G8_RUNTIME_ID, G8_MANAGED_RUNTIME_ID
     manager = add_alternative(client)
     manager.resolver.activate(G8_RUNTIME_ID)
@@ -148,8 +148,9 @@ def test_removal_thread_is_not_abandoned_by_request_cancel(client, monkeypatch, 
             task = asyncio.create_task(manager._run(operation.id))
         try:
             assert await asyncio.to_thread(entered.wait, 3)
-            task.cancel()
-            await asyncio.sleep(0.01)
+            for _ in range(cancel_count):
+                task.cancel()
+                await asyncio.sleep(0.01)
             assert not task.done()
         finally:
             finish.set()
