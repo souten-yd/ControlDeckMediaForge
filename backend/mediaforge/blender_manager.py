@@ -95,6 +95,7 @@ class BlenderRuntimeManager:
         self._request_admissions: set[asyncio.Task[BlenderRuntimeOperation]] = set()
         self._admission_guard = threading.Lock()
         self._guard = asyncio.Semaphore(1)
+        self._stopping: asyncio.Task[None] | None = None
 
     @property
     def spec(self) -> RuntimeSpec:
@@ -102,16 +103,24 @@ class BlenderRuntimeManager:
         return catalog.specs[catalog.base_runtime_id]
 
     async def start(self) -> None:
+        for operation_id in await self._runtime_io(self._startup_sync):
+            self._spawn(operation_id)
+
+    def _startup_sync(self) -> list[str]:
         self.resolver.managed_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.download_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         if self.web_pack is not None:
             self.web_pack.managed_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         if self.web_download_root is not None:
             self.web_download_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        for operation_id in self.store.resumable_blender_runtime_operation_ids():
-            self._spawn(operation_id)
+        return self.store.resumable_blender_runtime_operation_ids()
 
     async def stop(self) -> None:
+        if self._stopping is None or self._stopping.done():
+            self._stopping = asyncio.create_task(self._stop_workers())
+        await self._await_owned(self._stopping)
+
+    async def _stop_workers(self) -> None:
         await asyncio.gather(*list(self._request_admissions), return_exceptions=True)
         await asyncio.gather(*list(self._removal_admissions), return_exceptions=True)
         tasks = list(self._tasks.values())
@@ -654,12 +663,12 @@ class BlenderRuntimeManager:
 
     async def _run(self, operation_id: str) -> None:
         async with self._guard:
-            operation = self.store.get_blender_runtime_operation(operation_id)
-            if self.store.blender_runtime_operation_cancel_requested(operation_id):
+            operation = await self._runtime_io(self.store.get_blender_runtime_operation, operation_id)
+            if await self._runtime_io(self.store.blender_runtime_operation_cancel_requested, operation_id):
                 await self._finish_canceled(operation)
                 return
             try:
-                web_pack_id = self.web_pack.spec().pack_id if self.web_pack is not None else None
+                web_pack_id = (await self._runtime_io(self.web_pack.spec)).pack_id if self.web_pack is not None else None
                 if operation.runtime_id == web_pack_id:
                     await self._install_web(operation)
                 elif operation.action == BlenderRuntimeOperationAction.SWITCH:
@@ -676,30 +685,19 @@ class BlenderRuntimeManager:
                 if exc.code == "blender_runtime_operation_canceled":
                     await self._finish_canceled(operation)
                     return
-                await self._clean_stage(operation.id)
-                self.store.update_blender_runtime_operation(
-                    operation.id,
-                    state=BlenderRuntimeOperationState.FAILED,
-                    error_code=exc.code,
-                    error_message=str(exc)[:300],
-                )
+                await self._runtime_io(self._fail_sync, operation.id, exc.code, str(exc)[:300])
             except (BlenderRuntimeError, BlenderRuntimeRegistryError, OSError, httpx.HTTPError) as exc:
-                await self._clean_stage(operation.id)
-                self.store.update_blender_runtime_operation(
-                    operation.id,
-                    state=BlenderRuntimeOperationState.FAILED,
-                    error_code="blender_runtime_install_failed",
-                    error_message=str(exc)[:300],
-                )
+                await self._runtime_io(self._fail_sync, operation.id, "blender_runtime_install_failed", str(exc)[:300])
             except Exception as exc:  # noqa: BLE001 - durable isolation boundary
                 logger.exception("Blender runtime operation %s failed", operation.id)
-                await self._clean_stage(operation.id)
-                self.store.update_blender_runtime_operation(
-                    operation.id,
-                    state=BlenderRuntimeOperationState.FAILED,
-                    error_code="blender_runtime_install_failed",
-                    error_message=str(exc)[:300],
-                )
+                await self._runtime_io(self._fail_sync, operation.id, "blender_runtime_install_failed", str(exc)[:300])
+
+    def _fail_sync(self, operation_id: str, code: str, message: str) -> None:
+        self._clean_stage_sync(operation_id)
+        self.store.update_blender_runtime_operation(
+            operation_id, state=BlenderRuntimeOperationState.FAILED,
+            error_code=code, error_message=message,
+        )
 
     async def _install_web(self, operation: BlenderRuntimeOperation) -> None:
         if self.web_pack is None or self.web_download_root is None:
@@ -817,6 +815,10 @@ class BlenderRuntimeManager:
             },
         )
     async def _switch(self, operation: BlenderRuntimeOperation) -> None:
+        # Keep activation and its terminal journal owned as one started unit.
+        await self._runtime_io(self._switch_sync, operation)
+
+    def _switch_sync(self, operation: BlenderRuntimeOperation) -> None:
         self.store.update_blender_runtime_operation(
             operation.id, state=BlenderRuntimeOperationState.PREFLIGHT
         )
@@ -833,12 +835,7 @@ class BlenderRuntimeManager:
         )
 
     async def _remove(self, operation: BlenderRuntimeOperation) -> None:
-        task = asyncio.create_task(asyncio.to_thread(self._remove_sync, operation))
-        try:
-            await asyncio.shield(task)
-        except asyncio.CancelledError:
-            await task
-            raise
+        await self._runtime_io(self._remove_sync, operation)
 
     def _remove_sync(self, operation: BlenderRuntimeOperation) -> None:
         preview = (operation.result or {}).get("removal_preview")
@@ -1085,16 +1082,10 @@ class BlenderRuntimeManager:
         if operation.action == BlenderRuntimeOperationAction.REPAIR:
             # Admission may have happened while downloading/probing. Keep its
             # guard, all synchronous persistence and filesystem work off-loop.
-            publication = asyncio.create_task(asyncio.to_thread(
+            await self._runtime_io(
                 self._publish_repair, operation, spec, candidate, destination,
                 archive_facts, facts,
-            ))
-            try:
-                await asyncio.shield(publication)
-            except asyncio.CancelledError:
-                # Never let shutdown abandon a started rename/rollback thread.
-                await publication
-                raise
+            )
             return
         destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.replace(candidate, destination)
@@ -1291,8 +1282,17 @@ class BlenderRuntimeManager:
 
     @staticmethod
     async def _download_io(callback: Callable[..., Any], *args: Any) -> Any:
+        return await BlenderRuntimeManager._runtime_io(callback, *args)
+
+    @staticmethod
+    async def _runtime_io(callback: Callable[..., Any], *args: Any) -> Any:
         """Own started disk work through repeated cancellation before returning."""
         task = asyncio.create_task(asyncio.to_thread(callback, *args))
+        return await BlenderRuntimeManager._await_owned(task)
+
+    @staticmethod
+    async def _await_owned(task: asyncio.Task[Any]) -> Any:
+        """Drain an owned task even when the caller is canceled repeatedly."""
         try:
             return await asyncio.shield(task)
         except asyncio.CancelledError:
@@ -1375,6 +1375,9 @@ class BlenderRuntimeManager:
         )
 
     async def _clean_stage(self, operation_id: str) -> None:
+        await self._runtime_io(self._clean_stage_sync, operation_id)
+
+    def _clean_stage_sync(self, operation_id: str) -> None:
         stages = {self._stage_root(operation_id), self._web_stage_root(operation_id)}
         for stage in stages:
             if stage.exists():
@@ -1382,10 +1385,13 @@ class BlenderRuntimeManager:
                     raise BlenderRuntimeOperationError(
                         "blender_runtime_staging_unsafe", "Blender staging root is unsafe"
                     )
-                await asyncio.to_thread(shutil.rmtree, stage)
+                shutil.rmtree(stage)
 
     async def _finish_canceled(self, operation: BlenderRuntimeOperation) -> None:
-        await self._clean_stage(operation.id)
+        await self._runtime_io(self._finish_canceled_sync, operation)
+
+    def _finish_canceled_sync(self, operation: BlenderRuntimeOperation) -> None:
+        self._clean_stage_sync(operation.id)
         self.store.update_blender_runtime_operation(
             operation.id, state=BlenderRuntimeOperationState.CANCELED
         )

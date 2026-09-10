@@ -1,5 +1,37 @@
 # Media Forge implementation status
 
+## 2026-09-10 runtime execution control off-loop
+
+base PR451 merge5c4d15f、branch ux1/3d-runtime-execution-control。
+startupのdirectory作成/再開照会、実行開始のDB/取消/Web spec照会、切替全体をworker threadへ分離。
+失敗/取消はstaging回収と終端journalを同じowned threadで完了する。削除commit/修復publicationと
+download chunk I/Oは共通の繰り返し取消対応awaitへ接続。stop自体もowned taskで実行回収を待つ。
+公開state/入力/導入元/参照保護/版数は変更しない。
+
+新規tests/test_blender_execution_io.pyでready/failed/canceled時のDB・ファイル・activateの
+off-loop実行、startup復旧、3回停止/取消中の実切替commit保持、失敗/取消の終端回収を検査。
+既存実削除/修復publicationテストにも3回取消を追加した。
+初回50188 exit1/5failed/4.74秒（1件は診断側cancelメソッド名誤り、修正済み）。
+関連51pass/8.08秒、追加後6099 exit0/115pass/18.37秒。
+全 `./mf.sh test` 22082は終端exit0/1564passed/既知2warnings/153.77秒。
+viewer build43ms・生成物差分なし、Node5pass、git diff --check成功。
+
+実機専用source診断: `PYTHONPATH=backend:. .venv/bin/python /data1tb/mf-execution-control-source-20260910.py`。
+57143終端exit0/21.335秒。新規dataだけに既存固定cacheから本物のBlender4.5.9を導入し、
+GLB export/import probe成功（6510members/1168332002展開bytes）。
+install `blenderop_0f29317f06c748e98a7fffdbb9a5d882`、
+switch `blenderop_98c3baa5e87949fba9f38c68dd24154c` は両ready。
+実TCPでswitch受付後activateをthread gateに保持中、別healthは200/0.041903秒。
+stopと実行taskを各3回取消してもgate解放まで未終端、解放後は切替/ready記録完了・tasks空。
+activeは専用registryのlegacy-blender-4.5.9→managed blender-4.5.9-linux-x64。
+元cache SHA/外部legacy実exe SHA不変、専用core終端。異なるBlender版間の互換性検証ではない。
+証跡 `/data1tb/mf-execution-control-source-20260910/observations.json`。
+稼働MediaForgeはsystemd active/PID1897795（0.28.65）のまま。Host/サービス設定へ変更なし。
+
+NOT TESTED: 新コードの署名配布/installed受入、全install/Web pack stageの同期I/O除去、
+exact/remove受付の取消全組合せ、Host setup Job/credential、全GOAL/A〜F/GA完成。
+次は残るinstall/Web stageの実行境界とHost setup所有権。全体PARTIALを維持する。
+
 最新の0.28.65導入結果は末尾の「2026-09-10 v0.28.65 installed admission acceptance」を参照。
 以下のpreparationは導入前時点の記録を保持したもの。
 
