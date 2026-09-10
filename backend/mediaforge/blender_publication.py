@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 RuntimeID = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,127}$")]
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+Generation = Annotated[str, Field(pattern=r"^[0-9a-f]{32}$")]
 
 
 class PublicationIdentity(BaseModel):
@@ -21,11 +22,15 @@ class PublicationIdentity(BaseModel):
     previous_registration_sha256: Digest | None
     previous_executable_sha256: Digest | None
     recovered_directory: bool
+    generation: Generation | None = None
+    previous_generation: Generation | None = None
 
     @model_validator(mode="after")
     def previous_runtime_required(self) -> PublicationIdentity:
         if (self.action == "repair" or self.recovered_directory) and self.previous_executable_sha256 is None:
             raise ValueError("Existing runtime publication requires its previous executable identity")
+        if self.action == "repair" and self.generation is not None and self.generation == self.previous_generation:
+            raise ValueError("Repair publication requires a new generation")
         return self
 
 

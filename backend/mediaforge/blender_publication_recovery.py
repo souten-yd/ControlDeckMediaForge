@@ -15,6 +15,7 @@ from typing import Any
 from scripts.blender_runtime import BlenderRuntimeError, preflight
 
 from .blender_runtime import BlenderRuntimeRegistryError, BlenderRuntimeResolver
+from .blender_publication_generation import read_generation
 from .paths import contained
 from .store import Store
 
@@ -42,7 +43,7 @@ class BlenderPublicationRecovery:
         identity = publication.identity
         # A same-version repair can have identical old/new executable hashes.
         # Without generation evidence it is unsafe to claim the repair happened.
-        if identity.action == "repair":
+        if identity.action == "repair" and identity.generation is None:
             return {"status": "recovery_required", "reason": "repair_generation_unproven"}
         with self.resolver.removal_guard():
             lock_path = self.resolver.registry_path.with_suffix(self.resolver.registry_path.suffix + ".lock")
@@ -65,6 +66,9 @@ class BlenderPublicationRecovery:
                     # Validate intermediate directory links before readiness
                     # checks touch the executable, not only before hashing it.
                     contained(runtime.root, runtime.executable)
+                    if (identity.generation is not None
+                            and read_generation(self.resolver.managed_root, runtime.root) != identity.generation):
+                        return {"status": "recovery_required", "reason": "publication_generation_mismatch"}
                     if not self.resolver._ready(runtime):
                         return {"status": "recovery_required", "reason": "runtime_not_verified"}
                     if self.executable_digest(runtime.root, runtime.executable) != identity.executable_sha256:
@@ -74,6 +78,9 @@ class BlenderPublicationRecovery:
                     if (not self.resolver._ready(runtime)
                             or self.executable_digest(runtime.root, runtime.executable) != identity.executable_sha256):
                         return {"status": "recovery_required", "reason": "executable_changed_during_probe"}
+                    if (identity.generation is not None
+                            and read_generation(self.resolver.managed_root, runtime.root) != identity.generation):
+                        return {"status": "recovery_required", "reason": "publication_generation_changed_during_probe"}
                 except (BlenderRuntimeRegistryError, BlenderRuntimeError, OSError, ValueError, KeyError):
                     return {"status": "recovery_required", "reason": "verification_failed"}
                 operation = self.store.recover_blender_publication(operation_id, identity, {
