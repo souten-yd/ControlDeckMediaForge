@@ -1,5 +1,37 @@
 # Media Forge implementation status
 
+## 2026-09-10 source ordinary image queue renewal and cancellation
+
+PR488 merge891d87e38322ede365fa52d120ed89cf0cf730b1を取得、製品差分なしのsourceを専用data/port9162で起動。
+前turnは利用者への状態回答のみ。今回は通常workspace WS jobs.create→submit_hosted→実Host Brokerを検証。
+外部mf-source-image-renewal-20260910.py、Host診断venvで認証発行・監査、別MF venvでsource core/WS caller。
+初期service TTLだけ180秒の診断条件。製品期限・Broker・worker・Hostは改変せず、秘密はstdin/in-memory。
+専用dataは /data1tb/mf-source-image-renewal-6hxjs5ll/data、既存画像venv/HF cache参照・offline指定。
+新規weight導入・稼働版overlay・ユーザーglobal設定変更なし。source PID2455270。
+
+0.081秒でjob_c9cd4f7732024d1ca68b53fb47343f12受付、2.091秒でwaiting_resource。
+Host ebc89761a967、request5b9df39d-972b-4c69-95bc-a498617a606f。
+実Broker held_by_other_owner、Qwen3.8-27B常駐使用27,623,038,976Bを読取確認。別推論は停止しない。
+11:31:31.495686のHost監査24014はjob credential refresh success。
+初期180秒期限を越える252.378944秒時点で同Job queued/waiting_resource・error nullを確認。
+画像成功を待機成功へ読み替えず、今回の待機検証を終え、専用Jobだけ通常DELETEで明示取消。
+mf-source-image-renewal-cancel-20260910.py exit0、0.366秒でlocal/Host canceled、資源要求canceled。
+leaseは取得していないためGPU lease解放・画像worker実行の証拠ではない。
+callerは254.313秒でcanceled観測、observations.jsonのpassed=false/image未生成を維持。
+
+主診断70999は末尾Host読取URLの/control欠落によりHTTP404/exit1。製品Job実行の401ではない。
+元script/観測を成功へ書換えず、mf-source-image-renewal-control-audit-20260910.pyで正規GETを再照合、exit0。
+HTTP200/status canceled、専用DB唯一Job canceled/Assets0、source PID不在を確認。
+cancellation-audit.jsonとcontrol-audit.jsonの個別成功、主診断全体exit1を区別する。
+sourceはSIGINT後exit0、core.logに401/ERROR/Tracebackなし。Host2381614/MF2428421保持、実health healthy。
+診断一時loginは回収。元の稼働.69画像待機401を修正済みとして扱わない。
+
+文書のみ。製品基準はPR488の全1761tests/197.95秒/既知2warnings/viewer差分0/Node5。
+今回全test/build・新releaseは実行していない。NOT TESTED: source画像成功/自然10分待機、更新拒否時durable終端、
+署名配布/installed再試験、GUI＋画像実行共存、同一完成ゲームアセット/engine、全GOAL/A〜F/GA。
+次は実Brokerで画像が実行可能になった時のsource生成成功・provenance・終端/lease解放を確認して署名配布へ。
+別LLM停止で条件を作らない。待機・取消の今回証拠を再実行せず、残る成功経路を対象にする。
+
 ## 2026-09-10 ordinary hosted image pre-lease credential renewal
 
 base PR487 mergea05a06af62d4ac3caacd1fc074d49a400999ce58、ux1/3d-image-wait-credential-refresh。

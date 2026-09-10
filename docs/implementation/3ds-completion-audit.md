@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 source通常workspace画像の実Broker待機で更新/取消を追加確認。
+mf-source-image-renewal-6hxjs5ll、診断初期TTL180秒、audit24014 refresh success、
+252.378944秒同queued/error null→通常DELETE→0.366秒local/Host/資源要求canceled。
+LLM使用中で画像/lease取得なし。待機は自然、初期TTLは診断条件であり自然10分待機ではない。
+主診断末尾の誤ったGET URLで404/exit1、元image passed=false保持。独立取消/control監査exit0。
+source正常停止・専用DB Assets0。画像成功・署名配布・installed共存はまだ未確認。
+
 2026-09-10 通常画像のpre-lease更新をsourceへ追加。Job refresh/introspectionで元scope維持、
 leaseありは従来lease更新を共通利用。9新tests/全1761tests成功、実Host短TTLの所有/attached2条件確認。
 短いhelper受入であり、実画像の長時間資源待ち・署名配布・installed共存は未確認。

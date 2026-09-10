@@ -3,6 +3,25 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 source image real queue renewal/cancel acceptance
+
+base PR488 merge891d87e38322ede365fa52d120ed89cf0cf730b1、ux1/3d-image-renewal-source-acceptance。
+前turn状態回答のみ。今回は専用source port9162/PID2455270、実workspace WS jobs.create/Host Broker。
+mf-source-image-renewal-20260910.py、evidence mf-source-image-renewal-6hxjs5ll。
+初期認証TTL180だけ診断条件、2env/stdin、画像runtime/cache既存参照/offline、製品改変なし。
+local job_c9cd4f7732024d1ca68b53fb47343f12、Host ebc89761a967、request5b9df39d-972b-4c69-95bc-a498617a606f。
+2.091秒waiting、Host audit24014 refresh success、252.378944秒で元期限を越え同queued/error null。
+LLM27.6GB使用中で画像未実行。通常DELETEで専用Jobだけ取消、0.366秒local/Host/request canceled。
+取消audit exit0。主診断70999は末尾GETの/control欠落404でexit1、元passed=false保持。
+独立control-audit exit0/HTTP200 canceled、専用DB Job1 canceled/Assets0、source正常停止/PID不在。
+Host2381614/MF2428421保持/healthy。診断login回収、別LLM・稼働版・global設定変更なし。
+文書のみ、基準PR488全1761tests197.95秒/viewer差分0/Node5。今回は全test/buildなし。
+次: source画像成功/実provenance/終端/lease解放→署名release→installed再試験。
+GPUは別LLMが使用中だったが、これを全goalの外部blockerにはしない。他推論を停止しない。
+更新拒否時durable終端・自然10分待機・GUI共存・ゲーム完成品質/engine・全GOAL/A〜F/GAは未完了。
+今回受入済みの診断TTL待機/取消を繰り返さず、残る成功経路/実装を進める。
+再開はgit/status/PR/実Jobを再確認。外部scriptは固定port/固定IDの一回用で無条件再実行しない。
+
 ## 2026-09-10 ordinary image waiting credential source fix
 
 base PR487 mergea05a06af62d4ac3caacd1fc074d49a400999ce58、ux1/3d-image-wait-credential-refresh。
