@@ -76,3 +76,32 @@ pathname sockets can be accepted. Do not broaden access or claim Expert/full
 GUI isolation ready. Seek authorization before changing OS security policy.
 Inherited-fd and process-information acceptance also remains open.
 Installed0.28.71 lacks this source scope change; no new release in this slice.
+
+## Follow-up: exact OS denial evidence (read-only)
+
+After PR500 mergeff6e25823e6423bce5efa600011ee2ed1871451f, read-only kernel audit
+inspection narrowed the observed prerequisite. Command:
+`journalctl -k --since '2026-09-10 22:40:00' --until '2026-09-10 22:49:00'
+--no-pager --grep='apparmor|userns'`.
+
+- The dedicated systemd probe PID2637017 (22:48:10) transitioned from unconfined
+  to unprivileged_userns at userns_create, then AppArmor denied sys_admin.
+  Its original service invocation and unchanged mount/net namespace IDs above
+  identify the same diagnostic operation, not another service.
+- The unshare probe PID2635668 (22:47:16) has the same transition/sys_admin denial.
+- The bwrap attempts (22:47:44), parent PIDs2636383/2636409, children2636391/
+  2636418, have setpcap/net_admin denials and an explicit denied uid_map write.
+- `/etc/apparmor.d/bwrap` and `/etc/apparmor.d/unshare` do not exist. This does not
+  prove the absence of every possible alias, loaded profile or alternative.
+
+These records identify actual AppArmor denials for the probes; prior generic
+sandbox error messages alone were not sufficient attribution. No sysctl/profile/
+kernel/service configuration, installed data or source code was changed here.
+
+Authorization requested, not received: develop and apply a MediaForge-specific
+OS isolation configuration. Before applying, enumerate exact administrator-owned
+files, trusted launcher identity, scoped permissions, rollback, and negative
+acceptance. Do not disable AppArmor or globally relax unprivileged-userns policy;
+do not broadly authorize every Python/systemd/bwrap invocation. A mere exception
+for a user-replaceable executable is not proof of a secure dedicated boundary.
+This is a constrained next-design requirement, not an installed or tested policy.

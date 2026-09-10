@@ -1,5 +1,20 @@
 # Media Forge implementation status
 
+## 2026-09-10 IPC namespace denial attributed to AppArmor
+
+base PR500 mergeff6e25823e6423bce5efa600011ee2ed1871451f、ux1/3d-ipc-os-prerequisite。
+OS設定変更の許可はまだないため、読取のみで前回probeのkernel auditを照合した。
+22:48:10 dedicated systemd PID2637017はuserns_createでunprivileged_usernsへ移行しsys_admin拒否。
+unshare2635668も同拒否、bwrap2636391/2636418はsetpcap/net_adminとuid_map write拒否。
+元namespace同一/PrivateNetwork省略結果に対応するPID/時刻を確認し、AppArmor拒否を特定した。
+/etc/apparmor.d/bwrapとunshareは不在、全profile不在とは断定しない。詳細3ds-ipc-isolation.md。
+OS全体のuserns制限解除ではなく、管理者所有の専用起動経路・限定profile・rollback・negative受入を
+検討するための追加許可を求める。適用対象の確定前に設定を書かず、ユーザー置換可能な実行fileだけを
+例外化して安全と扱わない。OS/Host/稼働MF/製品codeへの変更なし。
+文書のみ、基準PR500全1795pass205.88秒/viewer差分0/Node5、今回全testや新GUIは実行なし。
+全GOAL/A〜F/GA PARTIAL。許可未取得、goalは未完了のまま。次はOS専用隔離設定の変更許可。
+
+
 ## 2026-09-10 IPC boundary failure and source scope mitigation
 
 base PR499 merge8900d125861eee8109d33648dcd07dc2b3b17915、ux1/3d-ipc-isolation。
