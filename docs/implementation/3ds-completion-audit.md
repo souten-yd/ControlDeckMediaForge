@@ -3,6 +3,15 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 PR471〜479の公開journal/実体照合/rollback/startup回復/日英補足に対し、
+source core再起動後の正規owner再認証を実Hostで追加確認。
+`mf-publication-reauth-host-20260910`、実4.5.9 repair21.801秒ready後、終了transportだけ注入失敗。
+別coreは認証前照合0、無認証WS拒否、新tokenによるstatus要求で0.173秒sent=true/完全一致receipt。
+独立Host GETは新child running→succeeded。旧childのcanceled不一致は上書きせず、補足へ投影。
+元専用data DB/registry/exe SHA保持、Host/稼働MF再起動なし。製品基準1752tests成功。
+この短時間source成功をsigned installed/10分setup refresh/期限切れ/全Eの成功へ読み替えない。
+次は新journalとUIを署名配布し、installed条件を受入する。全GOAL/A〜F/GA PARTIALを維持。
+
 2026-09-10 PR463の修復checkpointをsigned installed0.28.68で受入。
 `mf-repair-registration-cancel-installed-0.28.68-20260910`、実Chrome repair→page.close、
 診断flockで候補登録待ちを作り、previous旧inode/候補別inodeを実確認して正常Host cancel API200。
