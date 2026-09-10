@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed .69 normal publication acceptance
+
+base PR482 merge175217367b75628006686b6c2bf94dc043830cd4、ux1/3d-installed-publication-acceptance。
+前turnは署名/標準導入/merge。今回は実Chrome ja320で正規repair API→通常UI switch/restore。
+外部mf-publication-installed-0.28.69-20260910.py15750 exit0、証跡mf-setup-host-installed-0.28.69-20260910。
+全idle/SQLite backup/旧行・registry・exe hash/直前再照合後、実4.5.9 repair25.599秒ready。
+op73149ec4154f474084fd6db80cf734dc、4.5.9→元4.5.13 switch、26.402秒passed/26.493秒login失効。
+journal committed/停止要求なし/時刻/実generation/旧新exe SHAを照合、正常補足なしをstatus/DOMで確認。
+3新Host childは独立GET succeeded/完全一致receipt/sent1。旧行/registry/両exe hash保持。
+Host2381614/MF2428421不変healthy、stage空/診断terminal。スクリーンショット目視、別legacy既存NGは維持。
+文書のみ、基準PR481全1752tests197.67秒/既知2warnings/viewer差分0/Node5、今回は再実行なし。
+次: installed専用遅延取消→再認証の補足positive表示/Host不一致保持。開始前idle/実体/backup確認。
+normal修復を中断回復/長時間refresh成功に読み替えない。全GOAL/A〜F/GA/engine PARTIAL。
+今回source/Host改変・release/restartなし。外部診断はそのまま再実行しない。untracked .venv保持。
+引き継ぎcommit/push/通常PR mergeへ。具体的外部blockerなし。
+
 ## 2026-09-10 v0.28.69 signed and installed
 
 base PR481 merge/tag22d68ec74ad5e1e888046274f9a2fca807bade48、ux1/release-0-28-69-acceptance。
