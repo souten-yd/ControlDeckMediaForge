@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-10 OpenCode auto skin R2 terminal — guidance not sufficient
+
+base PR435 mergeeb9172b275bc82ffcc46b18fddfc370f332523e2、ux1/3d-auto-skin-r2-audit。
+同run26740はexit0/207.032秒/9tools/38events、親1411807/子1411873不在。
+証跡 /data1tb/mf-opencode-auto-skin-installed-0.28.61-20260910。
+実director102.957秒/capabilities118.136/create141.433/status144.859/export158.742。
+両animation.clip入力でloop省略。最初のoutput grantはrelative_directory='.'でerror、
+exportsへ再申請後pack成功。失敗時停止要求にも違反し、strict verifierは全tool成功assertでexit1。
+説明改善後も全依頼不合格。既定falseをtrueへ変更せず、失敗trace/成果物を保持する。
+Job job_2ba7fd84c7c64d3a883c0834809aa85dとHost child256756cd08b9は実DBでsucceeded。
+scene_15c1bd0cdc7a47fca00e7be64e034945、revision_0b509360cc1e48309f96e2a4c741fd97、
+source asset_50e102f4325941f2bc60ba61246e5849、GLB asset_fb5524ff4b834ac39dc284e17836558f。
+R2/exports/weighted.glb32140B/SHAd511701f6789aa286a86a5078f033a7dca8b3ebcd705508fc37b424649ade194。
+receipt/Asset/provenance/実bytes一致、correlation mf3ds-89d7fd218afe4092のprivate config残存0。
+初回独立auditは失敗toolのoutput欠落を考慮せずKeyError。失敗toolを明示報告する修正版で
+成功した納品部分だけ照合しexit0。strict verifierを緩めたものではない。
+実Blender4.5.13でsource/実配置GLBをauto_skin --posed検査、exit0/0.266秒。
+2clip変形/各2秒/混合weightsの結果はposed-inspection.json。依頼全体の合格へ読み替えない。
+
+外部mf-loop-mcp-schema-0.28.61.pyのread-only診断はexit0/0.583秒。
+専用private configをfinally回収、制作Job/新project追加なし。
+実Host /tools HTTP200/90124B/24tools、同bridge tools/list exit0/24tools。
+AnimationClip descriptionのEVERY clip、loopのboolean/default=false/説明を実応答で確認。
+Host model_facing_schemaはminLength/maxLengthのみ除去。現時点MCP配信でloop欠落なし。
+LLMに渡った最終推論リクエストのschema変換/モデル判断の切り分けは未検証で、モデルだけが原因とは断定しない。
+次は実適用clip設定を制作結果/snapshotで照合できる情報を設計する。自然言語の意図を
+backendで勝手に推測したり、全clipをループへ暗黙変更したりしない。
+本sliceは診断記録のみ、製品/installed/Host無変更。版数gate1509/149.23秒を参照。
+全3DS/GA、複雑character/engine、R2の依頼品質は未完了。継続中OpenCodeなし。
+
 ## 2026-09-10 v0.28.61 signed installed / OpenCode R2 running
 
 PR434 merge/tag d2b1ec49021f2133b165cb5189793fbea9992c9d。
