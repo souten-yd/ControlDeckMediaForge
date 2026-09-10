@@ -830,7 +830,11 @@ def test_hosted_jobs_wait_outside_worker_guard_renew_and_release(tmp_path: Path)
             while time.monotonic() < deadline:
                 first_job = client.app.state.store.get_job(first["id"])
                 second_job = client.app.state.store.get_job(second["id"])
-                if first_job.status == "running" and second_job.phase == "waiting_resource":
+                # running includes request normalization before subprocess spawn.
+                # Observe the actual first worker before asserting exclusivity.
+                first_process = client.app.state.jobs._processes.get(first["id"])
+                if (first_job.status == "running" and second_job.phase == "waiting_resource"
+                        and first_process is not None and first_process.returncode is None):
                     observed_waiting = True
                     assert len(client.app.state.jobs._processes) == 1
                     break
@@ -852,7 +856,9 @@ def test_hosted_jobs_wait_outside_worker_guard_renew_and_release(tmp_path: Path)
 
 def test_long_hosted_job_refreshes_scoped_identity_before_expiry(tmp_path: Path):
     client, headers, state = host_client(tmp_path, token="valid-user", renew_sec=0.05)
-    state["token_ttl_sec"] = 1
+    # Inside the 120-second refresh margin without a wall-clock rounding race:
+    # int(time.time()) + 1 can already expire before asynchronous admission.
+    state["token_ttl_sec"] = 60
     with client:
         with client.websocket_connect("/ws", headers=headers) as socket:
             socket.send_json({

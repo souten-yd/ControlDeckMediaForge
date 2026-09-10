@@ -14,6 +14,18 @@ reissue from expired credentials, or assume a workspace reconnect renews an
 already captured execution identity. Failed refresh remains fail-closed; source
 and installed acceptance are separate from the existing scene/setup evidence.
 
+Owned ordinary media Jobs retain a private terminal outbox in the existing
+MediaForge database: bind the Host Job and stable actor atomically with admission,
+never persist credentials, and derive missing terminal payloads from settled local
+Jobs after a crash. Re-authentication may reconcile only the same actor's owned
+Jobs through the existing Host terminal reconciliation API. Attached parent Jobs
+are excluded. A conflicting Host terminal remains recorded as a mismatch, never
+overwritten or reported as delivered. Network failure keeps the payload pending;
+without fresh authentication there is no replay. This does not replace Broker
+lease expiry or claim that failed resource release was successful.
+Legacy hosted rows without a verified persisted binding are not attributed to
+an owner retroactively; reconciliation applies to the new bound admissions.
+
 Media Forge must remain a **real ControlDeck add-on**, not a Media-specific feature compiled into ControlDeck and merely hidden behind a flag.
 
 At the same time, ControlDeck should provide the generic host facilities that powerful add-ons need so integration feels native rather than like an unrelated web app.

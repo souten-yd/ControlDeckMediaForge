@@ -3,6 +3,31 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 ordinary media terminal outbox
+
+base PR489 merge8eb44daabe01569f323d65301d52e265b42d581a、ux1/3d-image-terminal-outbox。
+前turnは実待機更新/取消受入。新private owned_job_terminalsでowned通常JobのHost/actor bindingをatomic作成。
+新hosted_job_terminals.py、same-actor再認証の非同期reconcile、off-loop Store/50件page/task集約/終了回収。
+attached親・旧owner不明行・稼働中・未認証は再送しない。local終端先行/元error保持、receipt不一致は未送信。
+submit_hosted async化/作成thread取消drain、app入口とWS再接続/jobs.getへ接続。Host/公開契約変更なし。
+新23tests focused pass4.29秒。旧testのrunning→spawn推測は実process待機へ修正、assert維持。
+初回全1779pass206.98秒後、二回目1779pass/1fail206.94秒でlocal完了→即stopによる通知打切りを確認。
+通知完了の明示待機/TTL1丸め境界をmargin内60へ修正、終了済み通知はstop時最大2秒drain。
+stop off-loop中のRUNNING再上書き回帰をatomic終端guardで修正、停止中進捗は取消。
+合算84pass27.40秒、追加3guard tests含むfocused23pass。最終全gate55161 exit0/1784passed/既知2warnings/202.80秒。
+以後製品/test変更なし。viewer58ms/差分0/Node5。commit/push/通常PR mergeへ。
+実受入mf-owned-terminal-real-host-20260910.py、5822 exit0/1.738秒、evidence mf-owned-terminal-real-host-ifr54lp1。
+空画像環境・実WS/Host Job、終了transportのみ503注入。job_c2b715656bcc4d4ab863a1d64755594d/Host7f4016a62a02。
+source2464070でfailed/unsent/Host running→正常stop→source2464101起動、認証なしでは未送信。
+同owner16再接続でapplied/matches true/sent1/Host failed、元Job/terminal JSON保持、Host audit24027 success。
+Assets0/両source終了、Host2381614/MF2428421不変。稼働.69未変更、GPU使用27.7GB・他推論停止なし。
+停止修正後の再受入33962 exit0/1.625秒、mf-owned-terminal-real-host-cuvzkv6i。
+job5c61fd5ece0a452683cbfd01f4f584aa/Hostdc680833da0d、2473113→2473145正常終了。
+未認証未送信→同owner再認証sent1/matches true/Host failed、監査24031 success、元Job保持。
+実画像成功・GPU解放失敗回収・自然crash/10分・installed再認証/UI不一致案内・署名配布は未受入。
+次は正常画像成功経路と署名配布を進める。今回受入済みの不足環境/terminal transport faultを繰り返さない。
+全GOAL/A〜F/GA PARTIAL。別LLMの使用を全goalのblockedにしない。untracked .venvは利用者の物として保持。
+
 ## 2026-09-10 source image real queue renewal/cancel acceptance
 
 base PR488 merge891d87e38322ede365fa52d120ed89cf0cf730b1、ux1/3d-image-renewal-source-acceptance。

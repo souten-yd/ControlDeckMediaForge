@@ -181,6 +181,15 @@ class Store:
                     created_at TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
+                CREATE TABLE IF NOT EXISTS owned_job_terminals (
+                    job_id TEXT PRIMARY KEY REFERENCES jobs(id),
+                    host_job_id TEXT NOT NULL UNIQUE,
+                    owner TEXT NOT NULL,
+                    terminal_json TEXT,
+                    sent INTEGER NOT NULL DEFAULT 0,
+                    receipt_json TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_owned_job_terminals_owner ON owned_job_terminals(owner);
                 CREATE INDEX IF NOT EXISTS idx_assets_created ON assets(created_at DESC);
                 CREATE TABLE IF NOT EXISTS reference_collections (
                     id TEXT PRIMARY KEY,
@@ -553,6 +562,7 @@ class Store:
         profile_snapshot: dict[str, Any] | None = None,
         initial_status: JobStatus = JobStatus.QUEUED,
         initial_phase: str | None = None,
+        owned_host_binding: tuple[str, str] | None = None,
     ) -> Job:
         now = utc_now()
         job_id = f"job_{uuid.uuid4().hex}"
@@ -573,7 +583,54 @@ class Store:
                     now,
                 ),
             )
+            if owned_host_binding is not None:
+                if not host_managed:
+                    raise ValueError("owned Host binding requires a hosted job")
+                connection.execute(
+                    "INSERT INTO owned_job_terminals(job_id,host_job_id,owner) VALUES (?,?,?)",
+                    (job_id, *owned_host_binding),
+                )
         return self._notify(self.get_job(job_id))
+
+    def owned_job_terminal(self, job_id: str) -> dict[str, Any] | None:
+        """Capture settled local truth, including after loss before outbox creation."""
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                """SELECT t.*, j.status,j.asset_ids_json,j.error_json FROM owned_job_terminals t
+                   JOIN jobs j ON j.id=t.job_id WHERE t.job_id=?""", (job_id,),
+            ).fetchone()
+            if row is None or row["status"] not in {"succeeded", "failed", "canceled"}:
+                return None
+            encoded = row["terminal_json"]
+            if encoded is None:
+                payload: dict[str, Any] = {"status": row["status"]}
+                if row["status"] == "succeeded":
+                    payload["result"] = {"asset_ids": json.loads(row["asset_ids_json"])}
+                if row["error_json"]:
+                    payload["error"] = json.loads(row["error_json"])["message"][:2000]
+                encoded = json.dumps(payload, sort_keys=True)
+                connection.execute("UPDATE owned_job_terminals SET terminal_json=? WHERE job_id=?", (encoded, job_id))
+            return {"job_id": job_id, "host_job_id": row["host_job_id"], "owner": row["owner"],
+                    "payload": json.loads(encoded), "sent": bool(row["sent"]),
+                    "receipt": json.loads(row["receipt_json"]) if row["receipt_json"] else None}
+
+    def pending_owned_job_terminals(self, owner: str, after: str = "") -> list[str]:
+        with self._connect() as connection:
+            return [row[0] for row in connection.execute(
+                """SELECT t.job_id FROM owned_job_terminals t JOIN jobs j ON j.id=t.job_id
+                   WHERE t.owner=? AND t.sent=0 AND t.receipt_json IS NULL AND t.job_id>?
+                   AND j.status IN ('succeeded','failed','canceled') ORDER BY t.job_id LIMIT 50""", (owner, after),
+            )]
+
+    def acknowledge_owned_job_terminal(self, job_id: str, payload: dict[str, Any], *,
+                                       sent: bool, receipt: dict[str, Any] | None = None) -> None:
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """UPDATE owned_job_terminals SET sent=?,receipt_json=?
+                   WHERE job_id=? AND terminal_json=? AND sent=0""",
+                (int(sent), json.dumps(receipt, sort_keys=True) if receipt is not None else None,
+                 job_id, json.dumps(payload, sort_keys=True)),
+            )
 
     def get_job(self, job_id: str) -> Job:
         with self._connect() as connection:
@@ -800,6 +857,7 @@ class Store:
         progress: float | None = None,
         asset_ids: list[str] | None = None,
         error: ErrorDetail | None = None,
+        preserve_terminal: bool = False,
     ) -> Job:
         values: dict[str, Any] = {"updated_at": utc_now()}
         if status is not None:
@@ -812,10 +870,11 @@ class Store:
         values["error_json"] = error.model_dump_json() if error else None
         assignments = ", ".join(f"{name} = ?" for name in values)
         with self._lock, self._connect() as connection:
+            guard = " AND status NOT IN ('succeeded','failed','canceled')" if preserve_terminal else ""
             cursor = connection.execute(
-                f"UPDATE jobs SET {assignments} WHERE id = ?", (*values.values(), job_id)  # noqa: S608 - fixed column names
+                f"UPDATE jobs SET {assignments} WHERE id = ?{guard}", (*values.values(), job_id)  # noqa: S608 - fixed columns/guard
             )
-            if cursor.rowcount != 1:
+            if cursor.rowcount != 1 and connection.execute("SELECT 1 FROM jobs WHERE id=?", (job_id,)).fetchone() is None:
                 raise KeyError(job_id)
         return self._notify(self.get_job(job_id))
 

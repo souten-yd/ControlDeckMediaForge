@@ -3,6 +3,13 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 source通常owned媒体Jobにprivate終端outboxを追加。新規bindingのみ、attached親は除外。
+実WS/Hostの不足画像環境でfailed、終了transport503だけ診断注入→専用source再起動→同actor再認証で
+Host running→failed/sent1/receipt一致を確認（mf-owned-terminal-real-host-ifr54lp1、1.738秒、監査24027）。
+認証なし再送なし・元Job/terminal保持・Assets0。画像実行成功、実GPU解放失敗回収、installed/署名配布、
+不一致UIは未確認。全更新拒否/故障matrixの完了にはせず、全GOAL/A〜F/GA PARTIALを維持。
+停止競合のatomic終端保護追加後もmf-owned-terminal-real-host-cuvzkv6iで再確認、1.625秒/監査24031。
+
 2026-09-10 source通常workspace画像の実Broker待機で更新/取消を追加確認。
 mf-source-image-renewal-6hxjs5ll、診断初期TTL180秒、audit24014 refresh success、
 252.378944秒同queued/error null→通常DELETE→0.366秒local/Host/資源要求canceled。

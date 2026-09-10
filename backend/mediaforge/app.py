@@ -715,7 +715,10 @@ def create_app(
         await serve_blender_rfb(websocket, preferences.STANDALONE_SUBJECT, session_id)
 
     async def authorize_host(request: Request) -> HostIdentity:
-        return await require_host_service(request, host)
+        identity = await require_host_service(request, host)
+        if manager.host_terminals is not None:
+            manager.host_terminals.schedule(identity)
+        return identity
 
     def scene_owner(identity: HostIdentity) -> str:
         return identity.actor_subject or preferences.subject_of(identity)
@@ -904,11 +907,11 @@ def create_app(
             progress_offset=offset,
             progress_span=span,
         )
-        return manager.submit_hosted(
+        return (await manager.submit_hosted(
             value,
             execution,
             profile_snapshot=profile_snapshot,
-        ).model_dump(mode="json")
+        )).model_dump(mode="json")
 
     # LLM が VRAM を占めていると、空きに合わせた置き直しを挟むぶん生成が伸びる。
     # 実測（R9700 / LLM 25GB 常駐）では 110 秒に収まる回と収まらない回があり、
@@ -3123,6 +3126,8 @@ def create_app(
                 await websocket.close(code=4401, reason="invalid host service token")
                 return
         await websocket.accept()
+        if manager.host_terminals is not None:
+            manager.host_terminals.schedule(identity)
         uploads: dict[str, dict[str, Any]] = {}
         scene_upload_ids: set[str] = set()
         material_connection = uuid.uuid4().hex
@@ -3193,6 +3198,8 @@ def create_app(
                         value = JobRequest.model_validate(params)
                         result = await submit_hosted(value, identity, workload_class="interactive")
                     elif method == "jobs.get":
+                        if manager.host_terminals is not None:
+                            manager.host_terminals.schedule(identity)
                         result = store.get_job(str(params.get("job_id", ""))).model_dump(mode="json")
                     elif method == "jobs.cancel":
                         result = (await manager.cancel(str(params.get("job_id", "")))).model_dump(mode="json")

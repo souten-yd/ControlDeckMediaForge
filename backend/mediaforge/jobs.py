@@ -30,6 +30,7 @@ from .domain import (
 from .evaluator import CreativeEvaluationError, CreativeEvaluator
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.jobs import HostExecution, HostJobReporter
+from .hosted_job_terminals import HostedJobTerminals, terminal_owner
 from .host.resources import HOST_DEVICE, fake_image_request, image_model_request
 from .image_edit import StrictEditError, strict_edit_plan, validate_strict_edit
 from .m5_companion import (
@@ -226,6 +227,8 @@ class JobManager:
         self._linger_execution: HostExecution | None = None
         self._linger_task: asyncio.Task[None] | None = None
         self._host_executions: dict[str, HostExecution] = {}
+        self.host_terminals = (HostedJobTerminals(store, host_client, lambda identifier: identifier in self._host_executions)
+                               if host_client is not None else None)
         self._host_failures: dict[str, HostApiError] = {}
         self._selected_models: dict[str, ModelDescriptor] = {}
         # 選択の根拠。provenance と UI に「なぜこのモデルか」を出すために持つ。
@@ -239,6 +242,8 @@ class JobManager:
     async def start(self) -> None:
         if self._runner is not None:
             return
+        if self.host_terminals is not None:
+            self.host_terminals.accepting = True
         self._stopping = False
         for job_id in self.store.queued_job_ids():
             self._queue.put_nowait(job_id)
@@ -248,18 +253,25 @@ class JobManager:
         return any(model.model_id == model_id for model in self._selected_models.values())
 
     async def stop(self) -> None:
+        if self.host_terminals is not None:
+            await self.host_terminals.stop()
         if self._runner is None:
             return
         self._stopping = True
         active_job_ids = list(self._job_tasks)
+        settled: list[asyncio.Task[None]] = []
         for job_id in active_job_ids:
-            current = self.store.get_job(job_id)
+            current = await asyncio.to_thread(self.store.get_job, job_id)
             if current.status in {JobStatus.QUEUED, JobStatus.RUNNING}:
-                self.store.update_job(
+                await asyncio.to_thread(
+                    self.store.update_job,
                     job_id,
                     status=JobStatus.FAILED,
                     error=ErrorDetail(code="service_stopped", message="Service stopped while the job was active"),
+                    preserve_terminal=True,
                 )
+            elif job_id in self._job_tasks:
+                settled.append(self._job_tasks[job_id])
         processes = list(self._processes.items())
         for job_id, process in processes:
             if process.returncode is None:
@@ -270,6 +282,10 @@ class JobManager:
         except asyncio.CancelledError:
             pass
         tasks = list(self._job_tasks.values())
+        if settled:
+            # Local completion precedes its notification. Allow bounded delivery
+            # on orderly shutdown; a stuck Host still leaves the durable outbox.
+            await asyncio.wait(settled, timeout=2.0)
         for task in tasks:
             task.cancel()
         if tasks:
@@ -304,7 +320,7 @@ class JobManager:
         self._queue.put_nowait(job.id)
         return job
 
-    def submit_hosted(
+    async def submit_hosted(
         self,
         request: JobRequest,
         execution: HostExecution,
@@ -314,13 +330,27 @@ class JobManager:
         if self.host_client is None:
             raise RuntimeError("ControlDeck Host client is not configured")
         self._require_resolved_inputs(request)
-        job = self.store.create_job(
-            request,
-            host_managed=True,
-            profile_snapshot=profile_snapshot if profile_snapshot is not None else self.resolve_profiles(request),
-        )
+        def persist() -> Job:
+            return self.store.create_job(
+                request, host_managed=True,
+                profile_snapshot=profile_snapshot if profile_snapshot is not None else self.resolve_profiles(request),
+                owned_host_binding=(execution.host_job_id, terminal_owner(execution.identity)) if execution.owns_terminal else None,
+            )
+        pending = asyncio.create_task(asyncio.to_thread(persist))
+        canceled = False
+        while True:
+            try:
+                job = await asyncio.shield(pending)
+                break
+            except asyncio.CancelledError:
+                if pending.cancelled():
+                    raise
+                canceled = True
+        # A disconnected caller must not orphan an already committed admission.
         self._host_executions[job.id] = execution
         self._queue.put_nowait(job.id)
+        if canceled:
+            raise asyncio.CancelledError
         return job
 
     async def cancel(self, job_id: str) -> Job:
@@ -2682,22 +2712,35 @@ class JobManager:
         error: ErrorDetail | None = None,
         wait_reason: str | None = None,
     ) -> Job:
-        current = self.store.get_job(job_id)
+        current = await asyncio.to_thread(self.store.get_job, job_id)
         normalized_progress = current.progress if progress is None else progress
         terminal = status in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
+        result = await asyncio.to_thread(
+            self.store.update_job, job_id, status=status, phase=None if terminal else phase,
+            progress=normalized_progress, asset_ids=asset_ids, error=error, preserve_terminal=True,
+        )
+        if self._stopping and not terminal:
+            raise asyncio.CancelledError
         if reporter is not None and terminal:
-            # Host への最終通知が失敗しても、job の結末は必ず自分の store に残す。
-            # ここで例外を上げると update_job まで届かず、worker の本当の失敗理由が
-            # 通知側の都合（進捗ゲートに弾かれた等）で上書きされ、原因が追えなくなる。
+            # Commit local truth before transport. An owned pending terminal can
+            # be reconstructed after a crash, without retaining its credential.
             try:
                 if reporter.execution.owns_terminal:
+                    outbox = await asyncio.to_thread(self.store.owned_job_terminal, job_id)
+                    payload = outbox["payload"] if outbox else {
+                        "status": status.value,
+                        "result": {"asset_ids": asset_ids} if status == JobStatus.SUCCEEDED else None,
+                        "error": error.message if error is not None else None,
+                    }
                     await reporter.terminal(
-                        status.value,
+                        payload["status"],
                         phase=phase,
                         progress=normalized_progress,
-                        result={"asset_ids": asset_ids} if status == JobStatus.SUCCEEDED else None,
-                        error=error.message if error is not None else None,
+                        result=payload.get("result"),
+                        error=payload.get("error"),
                     )
+                    if outbox is not None:
+                        await asyncio.to_thread(self.store.acknowledge_owned_job_terminal, job_id, payload, sent=True)
                 else:
                     await reporter.finish_attached(phase=phase, progress=normalized_progress)
             except Exception:
@@ -2705,14 +2748,6 @@ class JobManager:
                     "host job final update failed job=%s status=%s phase=%s progress=%s",
                     job_id, status.value if status else None, phase, normalized_progress,
                 )
-        result = self.store.update_job(
-            job_id,
-            status=status,
-            phase=None if terminal else phase,
-            progress=normalized_progress,
-            asset_ids=asset_ids,
-            error=error,
-        )
         if reporter is not None and not terminal:
             try:
                 await reporter.progress(phase, normalized_progress, wait_reason=wait_reason)

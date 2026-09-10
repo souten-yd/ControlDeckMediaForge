@@ -1,5 +1,56 @@
 # Media Forge implementation status
 
+## 2026-09-10 ordinary owned media terminal outbox
+
+base PR489 merge8eb44daabe01569f323d65301d52e265b42d581a、ux1/3d-image-terminal-outbox。
+前turnは実待機更新/取消受入まで進捗。今回は通常画像の終了通知失敗でHost runningが残る経路を補完。
+統合設計を先に追記し、既存DBにprivate owned_job_terminalsを追加。新規owned Jobの作成と
+Host ID/actor bindingを同一transactionへ保存、attached親は登録せず、旧行のowner推測もしない。
+JobManagerの新規保存と更新はto_thread、保存開始後のcaller取消はdrainしてqueue登録を落とさない。
+local終端を先に確定し、通知成功ならsent、失敗なら元status/error/assetsのpayloadを保持。
+payload作成前のcrashも、保持されたbindingと終端Jobから復元する。bearerをDBへ保存しない。
+新HostedJobTerminalsは認証済みHost入口/WS再接続/jobs.getで同actor分だけを非同期照合。
+所有者ごとのtaskを集約、Storeはoff-loop/50件page、稼働中は除外、stopでtask回収。
+Host既存terminal/reconcileを使用し、receiptのID/status/disposition/matchesを検証。
+Host既存終端不一致はreceiptを残してsent=false、権限不足・期限切れ・通信失敗はpending維持。
+公開API/schema・Host code・稼働版を変更しない。Brokerの解放失敗を回収済みとは扱わない。
+
+新23tests: 7 receipt/通信条件、別owner/expired/capability/standalone/addon/live拒否、queued/running再起動、
+50件page/attached除外、通常workspace画像終了通知失敗→再接続、保存中取消drain/off-loop、並行replay抑止。
+停止時の完了通知drain、3終端のatomic保護も検査。最終focused23pass/4.29秒。
+既存Host等の合算試験は一度79pass/1fail、running表示をspawn済みとみなす
+既存assertの観測タイミングを検出。normalize_request等はspawn前なので実first processを待ち、
+同時worker数1・2件成功・lease解放の検査を維持した。最初の全gate1779pass/206.98秒。
+その後の全gateは1779pass/1fail/206.94秒。local終端の直後にclientを閉じHost通知を打ち切る観測手順を検出、
+通常通知完了を明示待機し、更新認証/解放assertは維持。TTL1秒の丸め境界失効も実DB host_context_lostで確認し、
+更新margin120秒内のTTL60秒へ変更（expired拒否試験は別途維持）。通常stopには完了済み通知を最大2秒drain。
+そのstopのoff-loop化で失敗状態を後続RUNNING書込みが上書きする回帰を再現、Storeのatomic終端guardと
+停止中進捗更新取消で修正。合算84pass/27.40秒、その後追加3guard testsを含む23pass。
+最終全gate55161を同一handleで終端確認、exit0/1784passed/既知2warnings/202.80秒。
+以後製品/test変更なし。途中の失敗結果を成功へ書き換えない。
+viewer build58ms/生成差分なし/Node5、git diff --check成功。
+
+実Host受入: 外部mf-owned-terminal-real-host-20260910.py、5822 exit0/1.738秒。
+証跡 /data1tb/mf-owned-terminal-real-host-ifr54lp1。専用source port9163、空model cache/画像runtime不在。
+実WS jobs.createはlocal job_c2b715656bcc4d4ab863a1d64755594d、Host7f4016a62a02を作成し、
+capability_unavailableで正しくfailed。終了transportだけ診断HostApiError503を注入し、実core.logでも捕捉。
+0.691秒でlocal failed/payload保存/sent0・実Host control running、専用source2464070を正常停止。
+改変なしsource2464101へ再起動し、1.307秒時点で認証なしは未送信/Host runningを確認。
+同user16の新service認証でWS再接続→1.522秒でsent1/applied/terminal_matches true、Host failed。
+元Job全field/terminal JSONは不変、監査24027 terminal.reconcile success、Assets0。
+両専用sourceは正常終了/PID不在、Host2381614/MF2428421不変。実GPU読取は27,657,236,480B使用、
+別LLMや稼働画像を停止せず、一時診断login回収。Host resourceの過去granted行を現在leaseとはみなさない。
+
+停止競合修正後も同じ診断を新しい専用dataで確認、33962 exit0/1.625秒、mf-owned-terminal-real-host-cuvzkv6i。
+job_5c61fd5ece0a452683cbfd01f4f584aa/Host dc680833da0d、source2473113→2473145。
+0.579秒failed/unsent、1.197秒認証なし未送信、1.411秒同owner再認証で一致/sent1/Host failed。
+監査24031 success、両source正常停止、元Job/terminal JSON保持。この実受入後は製品/test変更なしで最終gate成功。
+
+NOT TESTED: 実画像生成成功、自然10分待機、実GPU解放失敗回収、物理crash/電源断、installed再認証、
+署名配布、新UIによる不一致案内、GUI＋画像共存、全GOAL/A〜F/GA/ゲームengine。
+今回の実機は画像前提不足＋終了transport故障であり、モデル実行成功や自然Host障害ではない。
+次はこのsource修正をgate/通常merge後、画像成功経路と署名配布・installed確認へ進める。
+
 ## 2026-09-10 source ordinary image queue renewal and cancellation
 
 PR488 merge891d87e38322ede365fa52d120ed89cf0cf730b1を取得、製品差分なしのsourceを専用data/port9162で起動。
