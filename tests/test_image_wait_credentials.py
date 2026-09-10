@@ -90,5 +90,12 @@ def test_waiting_image_renews_before_lease_and_reports_with_new_identity(tmp_pat
             created=socket.receive_json()['result']
             assert wait_terminal(client,created['id'])['status']=='succeeded'
             assert state['job_credential_refreshes']==['host-created-1']
+            # Local terminal truth is durable before Host transport. Do not
+            # shut the service down in that gap when testing normal delivery.
+            async def reported() -> None:
+                async with asyncio.timeout(5):
+                    while created['id'] in manager._host_executions:
+                        await asyncio.sleep(.01)
+            client.portal.call(reported)
     assert seen==['Bearer valid-refreshed']
     assert 'release' in [action for _,action in state['lease_actions']]
