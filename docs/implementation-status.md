@@ -1,5 +1,55 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.63 installed / mobile RFB acceptance
+
+download41993は終端exit0、公開本体31585503B/SHA d9327c3f20a53850e63f685dba4a1cf545726ddbcd1b8d4b7819b2f526a04f2b。
+`mf-0.28.63-install.py`をHost診断venv/CONTROL_DECK_CONFIGで実行し88248終端exit0。
+全4公開files/build一致、Host trusted署名検証、idle確認、全SQLite backup後に標準update。
+backup `/data1tb/mf-0.28.63-update-cf8it2q_`、10.288秒healthy、全DB table fingerprint/registry bytes保持。
+Host PID1384554不変、MF PID1483422、実exe SHA7520edee920fa8b08b90236cb85d3954f831f5f44dfc89c2783ebad0ad557d37。
+実配信schema/exact source一致。保持2の標準整理で旧0.28.61実行bundleのみ削除、.62/.63/data/runtime保持。
+旧bundleは署名releaseから再取得可能。Host再起動/依存・model追加なし。
+
+`mf-mobile-blender-installed-0.28.63-20260910.py`を同Host診断venvで実行、87262終端exit0。
+証跡 `/data1tb/mf-mobile-blender-installed-0.28.63-20260910/observations.json`。
+source/HTTP/transport overrideなし、実Host opaque iframe、Chrome320x640/touch emulation。
+open/補助Enter/保存をtap、文字入力とcanvas focusはkeyboard/mouse。8.585秒で実4.5.13 canvas1007色、
+14.043秒passed、14.046秒owned session終端、14.113秒診断login失効、page errors0。
+scene_fd74c96138df40e9a69a1483bee2adfcを第6→7版、fps30→24、旧6版/全旧hash/mesh数/clip設定保持。
+新版revision_17d1026f3e314e4fbbae42f561398e2a、source asset_2fbf9ca1f13b4b5ca22cfd396e385b92、
+GLB asset_242d698c10244446ac94cda075cc77c6。
+独立managed Blender `--background --factory-startup --disable-autoexec --python-exit-code 1 --python-expr`
+読込exit0、fps24/actions2/両range[0,48]をassert/出力確認。
+独立DB読取でもowned blendersession_355c9cc90afd4d1a9493041caf5cbbd8はstopped、7revision。
+sqlite3 CLI不在のためPython標準sqlite3のread-only接続で確認（追加installなし）。
+
+今回は受入文書のみ。既記録1537 tests/build/Node gate後の製品コード変更なし。
+NOT TESTED: 物理mobile端末/IME/全touch-only編集、今回新GLBのengine再生、全GOAL/A〜F/GA完了。
+PR443のinstalled新UI待ちは補完。全体PARTIAL、次は必須受入表の残件へ進む。
+
+## 2026-09-10 v0.28.63 signed publication / consumer download running
+
+PR442 merge/tag対象4aafb4feaa549c76bda0d6560192ced948e2249c。
+exact checkout `/data1tb/ControlDeckMediaForge-release-0.28.63`でbuild32197終端exit0。
+PyInstaller6.22.0/Python3.12.3、build log13.698秒、artifact31585503B、
+SHA256 d9327c3f20a53850e63f685dba4a1cf545726ddbcd1b8d4b7819b2f526a04f2b。
+build evidence `/data1tb/mf-0.28.63-build-20260910`。
+外部audit exit0/203entries、exact source UI/worker/schema一致、旧guard/公開制約保持、
+mobile helper/100dvh/旧display:noneなしを確認。package mf-0.28.63-package-xgcr6mo3。
+packaged doctor ok/0.28.63、既存bundle-build venv/既存publisher keyで署名・自己検証成功。
+`gh release create v0.28.63 --target 4aafb4f...` は69685終端exit0。
+GitHub公開4assets uploaded/non-draft/non-prereleaseを確認。
+
+初回download41691は公開upload終端前に取得を開始したため本体なしの3filesでexit0。
+外部install診断は本体FileNotFoundErrorで署名検証・backup・更新より前にexit1。稼働版未変更。
+upload終端後 `gh release download v0.28.63 --dir /data1tb/mf-0.28.63-public-20260910 --skip-existing`
+を実行。41993継続中、PID1479493を48秒で実観測、本体5511296Bまで取得。
+完了サイズ31585503B/全4files一致はまだ未確認。同handleを追跡し、観測timeoutで再取得しない。
+完了後 `/data1tb/mf-0.28.63-install.py` の全bytes/Host署名/idle/backup/標準updateを実行する。
+次のinstalled GUIは `/data1tb/mf-mobile-blender-installed-0.28.63-20260910.py`（overlayなし）。
+現在.62、Host再起動なし、旧.61整理もまだ実行していない。全GOAL/A〜F/GAはPARTIAL。
+NOT TESTED: consumer取得完了/署名consumer/導入/installed新UI、物理mobile/IME/engine。
+
 ## 2026-09-10 v0.28.63 preparation
 
 PR441 merge97cb94b19bd500d1fb23d8ba5a1944f10f424a26からux1/release-0-28-63。
