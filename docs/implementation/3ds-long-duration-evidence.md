@@ -14,7 +14,17 @@ Date: 2026-09-10 / Status: PARTIAL
 | 通常画像の資源待ち更新と取消 | source PR488、mf-source-image-renewal-6hxjs5ll。実workspace WS/Broker、初期TTL180秒、audit24014 success、252.378944秒待機→通常取消で0.366秒local/Host/request canceled | 待機自体は実LLM競合、TTLは診断条件。画像未実行・lease未取得。主診断末尾URL誤り404/exit1を保持、独立取消/control監査exit0。自然10分・installed成功ではない |
 | 通常画像の実待機更新から生成・終了 | source PR490、mf-source-image-renewal-dfpxj82d。初期TTL180秒、実Broker待機中refresh2、680.587秒generating、704.618秒画像/Host成功/通常sent1。独立SHA/PNG/provenance、GPU0 activate1/renew2/release1確認 | 待機は実LLM競合、初回TTLだけ診断条件。長い待機を長い画像演算へ読み替えない。通常TTL/installed.70/GUI共存は未確認 |
 
-## 今回の読み取り専用再照合
+## installed.70 software GUIと画像の共存追加
+
+mf-software-gui-image-coexist-installed-0.28.70-20260910-r2、33.647秒/exit0。
+同software GUI ready中に通常画像Jobが成功し、旧2revisionを保持して第3版保存、別GUIで再接続・終了。
+独立監査で7assets SHA/provenance、Host/local成功・通常sent1、GPU0 activate1/renew2/release1、GUI2units回収。
+通常TTL・製品timeoutは変更していないが、短時間runでcredential refreshは0。
+新画像の材質採用・手動形状修正・GPU GUIや長時間共存の証拠ではない。
+初回runは371.062秒で外部Host restartに遭遇し画像未生成、local failed/Host interrupted。
+再認証で不一致receiptを保持しGUIを回収した。元失敗/cleanup末尾assertion失敗の記録は保持する。
+
+## 過去の長時間証拠の読み取り専用再照合
 
 外部 `/data1tb/mf-long-duration-evidence-audit-20260910.py`、exit0。
 証跡 `/data1tb/mf-long-duration-evidence-audit-ehx6fhxm/observations.json`。

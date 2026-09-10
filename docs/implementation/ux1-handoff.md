@@ -3,6 +3,26 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed software GUI/image coexistence
+
+base PR494 merge26b221d5dfa2a2fd3e1fdc5e46e0f5f05218a949、ux1/3d-installed-gui-image-coexist、記録PR作成前。
+前turn.70配布/検証project整理まで進捗。通常TTLのinstalled共存受入を実行した。
+初回70532 exit1/371.062秒、Host外部restart13741で8765接続拒否、画像failed/host_unreachable。
+21:51:39stop→21:52:23Host2552550復帰、MF2504103保持。こちらからHost restartなし。
+独立再認証cleanup79126は末尾Host failed期待がinterruptedと異なりexit1、元passed=false保持。
+正規GUI停止・scene不変・login回収済み、host-stop-independent-audit exit0で元4assets/実unit回収確認。
+Host interruptedを上書きせずsent0/receipt already_terminal/matches false、監査24100 success。
+初回証跡mf-software-gui-image-coexist-installed-0.28.70-20260910、画像0/lease activate0。
+復帰/前試行終端/idle後、-r2で61952 exit0/33.647秒。4.221秒GUI→30.497秒画像成功→32.109秒第3版保存→33.254秒再GUI接続→両終了。
+job_e68ee0f981d34867bf869ef7c2c1b190/Host8970656aaa01、PNG asset_ebf077f16f154d22af57fca8c98fc579/67206B。
+mf-gui-image-0.28.70-r2-audit-20260910.py exit0、7assets hash/provenance、Host/local success、sent1、GPU activate1/renew2/release1。
+元2revision保持、GUI2件stopped/units inactive、pageerror0、coexisting screenshot目視。新画像の材質採用はこのrunでは未実施。
+短時間成功でrefresh0、通常TTLの長時間更新を成功扱いしない。全GOAL/A〜F/GA/engine PARTIAL。
+今回文書だけ、基準gate PR492全1789pass205.39秒/skip0/viewer差分0/Node5。新CodeDEV projectなし。
+次: EのGPU/CPU/Cycles/画像/LLM条件と既存probe/現capabilityを照合し、未受入の組合せへ進む。
+具体的な外部blockerなし。Host復帰済み、他agentの推論を停止しない。
+再開: git status --short --branch; gh pr list --head ux1/3d-installed-gui-image-coexist。
+
 ## 2026-09-10 completed validation project cleanup
 
 base PR493、ux1/3d-validation-project-cleanup、記録PR作成前。前作業は.70署名配布/実更新まで進捗。
