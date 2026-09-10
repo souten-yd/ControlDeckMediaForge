@@ -5,6 +5,15 @@
 
 ## 2026-09-10 mobile Web Blender access
 
+更新: PR441 draft/source8821b0e、製品コード不変。今回は診断で原因段階を切り分け。
+HTTP overlayありはnewUI/config/bridgeありでもworkspace_transport_unavailable、なしはboot成功。
+正常bootstrap後の関数/dialog/style overlayは開始可能だがtapが別targetへ届く。
+外部mf-mobile-blender-source-ui-20260910-r3.py（現在OUT末尾r7）でclick捕捉:
+scene-blender-open要求→scene-detail-close実click、selected空/dialog false/RFB未生成。
+native CDP/headless双方で再現、scroll後750ms待ちでも未解消。次は座標とiframe scrollを実測する。
+全診断終端/owned4sessions DB stopped、元currentと2revision維持。live診断なし。
+status先頭に証跡path/失敗履歴。PR draftを維持し、実RFB/保存を成功扱いしない。
+
 前turnはPR440通常merge68f021a。今回はux1/3d-mobile-blender-accessでmobile禁止3箇所を修正。
 PC推奨日英案内、100dvh layout、固定7key補助と接続状態制御。backend/Host/.62不変。
 scripts/3ds_mobile_blender_ui_e2e.py: source HTML/CSS/関数を実Chromeで日英6viewport受入。

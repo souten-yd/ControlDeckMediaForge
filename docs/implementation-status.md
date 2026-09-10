@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-10 mobile acceptance failure stage isolated (PR441)
+
+source8821b0e/PR441 draft、製品コード変更なし。前turnはUI実装/全1537test/PR作成で進捗。
+今回の診断は外部 `/data1tb/mf-mobile-blender-init-probe-20260910[-r2|-r3].py`。
+HTTP応答overlayでdocument200/new keys/config/scriptを確認、Host bridgeとnonceも存在、origin null。
+手動connectSocket→bootの診断はworkspace_transport_unavailableを返した。
+同320px/new contextでoverlayなしの `mf-mobile-blender-init-native-20260910.py` は
+6.618秒でboot成功、busy false/bridge ready。全probeはlogin失効して終端、GUIを作らない。
+HTTP overlayの認証cookie/WS差分の詳細原因は未確定。製品のmobile初期化障害とは断定しない。
+
+正常bootstrap後に変更対象6関数/HTML dialog/CSSだけをブラウザ内で差し替える別診断を実施。
+`/data1tb/mf-mobile-blender-source-ui-20260910-r3.py`、証跡末尾r3〜r7は別directoryで保持。
+r3は診断regex過剰escapeでGUI前失敗。修正後r4/r5はsource overlay完了/専用GUI readyだが
+tap後dialog false、選択scene空、RFB未生成。r6のheadlessでも同じで、native CDPだけとは断定しない。
+r7はscroll完了後750ms待ちを追加しclick captureを観測。3.573秒で
+requested target scene-blender-open に対し actual click target scene-detail-close、
+旧mobile gateなし/dialog false/selected空を確認。33.576秒でRFB待ち失敗、
+33.842秒owned session終端、33.900秒login失効。RFB接続を実行した証拠ではない。
+全r4〜r7のowned sessionがDBでstopped、対象sceneの旧current
+revision_8cf8c752e3734fe1949dd4eec6053b54と2revision維持を独立read-only照合。
+
+次: viewport/iframe scroll/入力座標の実測と正常target到達のassertを追加し、
+誤target時は接続待ちへ進まない。UI入力とRFB/Blender入力の境界を分離して受入を続ける。
+PR441はdraftのまま、署名配布なし/.62不変。NOT TESTED: 新UIの実RFB入力/保存、
+installed新UI/実mobile端末、全GOAL/A〜F/GA。今回文書のみ、既存全test gateを再実行していない。
+
 ## 2026-09-10 mobile Web Blender access implementation
 
 PR440 merge68f021a0a37b82ff5333e5141a1296be32678332からux1/3d-mobile-blender-access。
