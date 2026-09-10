@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 OS prerequisite attribution / awaiting authorization
+
+base PR500 mergeff6e25823e6423bce5efa600011ee2ed1871451f、ux1/3d-ipc-os-prerequisite、記録PR作成前。
+前turn IPC scope実装/test/mergeまで進捗、OS変更許可を依頼済み。今回自動継続を許可とは解釈しない。
+read-only kernel journalで前回専用probe PID/時刻に対応するAppArmor denialsを確認。
+systemd2637017/unshare2635668はunprivileged_userns→sys_admin拒否、bwrapはsetpcap/net_admin/uidmap拒否。
+3ds-ipc-isolation.mdへ実証と限定対策の設計条件を追記。OS設定/稼働版/code変更なし。
+次は利用者の明示許可後、管理者所有の専用起動経路/限定profile/rollback/negative受入を設計する。
+global sysctl解除、AppArmor停止、Python/systemd/bwrap全体の許可へ広げない。
+許可はまだない。承認待ちの継続2回目、今回は原因特定の新証拠が得られたため単なる待機ではない。
+全GOAL/A〜F/GA PARTIAL、稼働.71/scope未配布。新projectなし/root差分/devsymlink保持。
+文書のみ、基準1795pass205.88秒/viewer差分0/Node5。今回全test/GUI/OS変更なし。
+再開: git fetch origin; git status --short --branch; gh pr list --head ux1/3d-ipc-os-prerequisite。
+
 ## 2026-09-10 scoped IPC mitigation / OS isolation authorization
 
 base PR499 merge8900d125861eee8109d33648dcd07dc2b3b17915、ux1/3d-ipc-isolation、PR作成前。
