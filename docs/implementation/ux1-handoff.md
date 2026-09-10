@@ -3,6 +3,16 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.68 preparation
+
+前turnはPR463修正/1604tests/実Blender rollback受入/mergeまで進捗。base9cfce89、ux1/release-0-28-68。
+addon/core版数とrelease-v0.28.68.mdを準備。外部.68audit/install/installed-browser診断は既存gateを継承。
+全95222終端exit0/1604pass/既知2warnings/168.30秒、viewer49ms差分0/Node5pass、診断compile/diff check成功。
+準備時点では新build/署名公開/導入なし、稼働.67を変更していない。旧.66実行bundleのみ標準整理対象と通知済み。
+次: 全gate終端→通常merge→exact checkout/build/audit/署名公開/consumer再取得/通常導入/実Chrome受入。
+新DB migrationなし、全DB行hash一致を検査する。.67へ戻す場合も実行中Host setupを先に終端させる。
+全3DS/GAと長時間監視原因は未完了。旧失敗証跡を成功に変えない。untracked .venv保持。
+
 ## 2026-09-10 repair publication checkpoint
 
 base PR462 merged7c61d8、ux1/3d-repair-publication-cancel。前turnは不合格実証/回収/mergeまで進捗。
