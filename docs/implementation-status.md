@@ -1,5 +1,34 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed long setup trial FAILED / committed outcome reconciled
+
+base PR461 mergece85480、ux1/3d-installed-setup-host-long。前turnはinstalled取消受入/mergeまで進捗。
+外部`/data1tb/mf-setup-host-long-installed-0.28.67-20260910.py`をHost診断venvで実行、65453。
+全idle/SQLite backup後、実Chrome ja320 opaque iframeでinactive4.5.9 repair受付1.725秒queued。
+blenderop_fc669fe3206e4b2ba344d3aad7e42044、Host350c758b9e61、page.close1.729秒。
+実registryの既存flockを診断が一時保持。製品code/実行file/Host設定を変更せず、
+他Job/GUI/setup/model操作を0.5秒ごとに確認し、到着時は解放する制御した登録待ち。
+自然downloadやCPU演算時間の試験ではない。healthは30秒周期で603.645秒までhealthy。
+しかしHost refresh監査は0件。DBへ06:34:22.501521 UTCにhost_context_lost/cancel1が記録された。
+Hostの最後の成功update/controlは06:34:17、開始06:30:51から約210秒。単なる600秒期限到達とは断定しない。
+原因は未確定。health正常を認証監視の健全性へ読み替えない。
+認証喪失を確認後、専用診断PID1952318だけをexact argv/pidfdでSIGINT。
+615.360秒flock解放、615.420秒login失効、65453はexit130。元observations passed=falseを保持。
+ロック解放後の実operationはreadyなのにhost_context_lost/cancel1を保持し、成功outbox/sent0。
+原子公開途中の待機と取消・認証喪失が交差した結果であり、期待どおりの停止とは認めない。
+
+外部`/data1tb/mf-setup-host-long-installed-0.28.67-audit.py`は18854 exit0。
+新しい実Chrome認証のworkspace初期化で未送信の実確定結果を照合し、Host succeeded/
+完全一致receipt/applied/sent1へ終端。旧記録やoutboxを直接書き換えていない。
+旧scene/revision/assets/jobs/setup行、registry bytes、両Blender実行hashを独立確認し保持。
+専用staging/previous-stage不在、Host1811096/MF1949161不変、新診断loginも失効。
+`/data1tb/mf-setup-host-long-installed-0.28.67-20260910/independent-audit.json`へ
+元失敗・refresh0・実矛盾state・照合結果を併記。正常修復でinodeが変わるためinode保持とはしない。
+継続中の専用診断/Host Jobなし。元試験の成功へ置き換えない。全3DS/GA/installed長時間setup未完了。
+文書のみ、全test/buildは今回再実行なし。基準code gateはPR459の1602pass/build/Node5。
+次: HostApiError/取消の原因を秘密値なしで特定できる診断を補い、原子公開中の
+認証喪失→ready/error混在をsourceで再現・修正してから再配布する。同長時間診断の無条件再実行は禁止。
+
 ## 2026-09-10 installed setup Host cancellation / browser disconnect
 
 base PR460 merge561c441、ux1/3d-installed-setup-host-cancel。前turnは.67署名導入/受入mergeまで進捗。

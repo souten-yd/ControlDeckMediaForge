@@ -3,6 +3,14 @@
 Date: 2026-09-09
 Status: PARTIAL / 初期提供の完了判定を撤回。設計・必須条件は縮小しない。
 
+2026-09-10 **installed0.28.67の長時間setup試験は不合格**。
+`mf-setup-host-long-installed-0.28.67-20260910`、実Chrome修復受付→切断→診断registry flock待ち。
+healthは603.645秒までhealthyだがrefresh0、約210秒でhost_context_lostを記録。原因未確定。
+診断interruptで615.360秒ロック解放後、ready+host_context_lost/cancel1が残る不整合を観測。
+元exit130/passed=false保持。fresh実Chromeで成功outboxの実確定結果をHostへ照合しJob終端、
+独立audit exit0で旧行/registry/両exe hash保持/staging回収/login失効を確認。
+回収成功を長時間認証更新の成功へ読み替えない。原因診断と公開中の認証喪失制御修正を優先する。
+
 2026-09-10 setup Host連携を署名installed0.28.67で確認。実Chrome ja320 opaque iframeから
 正式repair API→通常UI switch/restore、23.499秒成功、3Host childと完全一致receiptを独立確認。
 別の専用repairでは正常Host cancel API200→実page.close→11.345秒で両canceled。

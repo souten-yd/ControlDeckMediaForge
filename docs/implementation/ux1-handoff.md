@@ -3,6 +3,25 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed long setup FAILED; recovery verified
+
+base PR461 mergece85480、ux1/3d-installed-setup-host-long、文書PR作成前。前turnは進捗。
+外部mf-setup-host-long-installed-0.28.67-20260910.py、65453はexit130（専用PID1952318へのSIGINT）。
+実Chrome repair→page.close、診断flockで登録待ち。650秒計画だが615.360秒で解放/login615.420秒失効。
+operation blenderop_fc669fe3206e4b2ba344d3aad7e42044/Host350c758b9e61。
+約210秒でhost_context_lost/cancel1。refresh監査0、health603.645秒までhealthy。原因未確定。
+解放後ready+host_context_lost/cancel1+成功outbox/sent0という不整合を実観測。期待した安全停止ではない。
+外部mf-setup-host-long-installed-0.28.67-audit.py、18854 exit0。
+fresh実Chrome状態照会→実確定結果をHost succeeded/完全一致receipt/sent1へ照合、Job残骸なし。
+旧scene/assets/jobs/setup行・registry・両exe hash保持、staging回収、新login失効、Host1811096/MF1949161不変。
+同evidence dirのobservations passed=false/independent-audit.json双方保持。独立audit成功≠長時間試験成功。
+次: controllerのHostApiError/CancelledError原因を安全なcodeで区別し、公開中の認証喪失をsource再現して修正。
+候補はblender_setup_host.py run/finish、blender_manager.py _publish_repair、Store.update_blender_runtime_operation。
+_publish_repairはrename後register_managedのflock待ちから戻ると取消再検査なしでreadyを確定する。
+Host成功updateは06:34:17 UTCまで、DB lostは06:34:22.501521。期限切れが原因とは未証明。
+診断再実行を先にしない。全test/buildは本docs slice未実施、製品修正時は全gateを実行。
+全GOAL/A〜F/GA PARTIAL。外部blockerなし。untracked .venv保持、Host/PCを再起動しない。
+
 ## 2026-09-10 installed setup Host cancellation
 
 base PR460 merge561c441、ux1/3d-installed-setup-host-cancel、文書受入PR作成前。
