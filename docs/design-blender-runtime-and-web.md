@@ -213,6 +213,19 @@ UIでの遅延stop表示、署名installed受入を接続するまで公開競�
 全公開・修復・crash回復の完成と扱わない。先行実機試験は独立したprepare/recovery processを使うが、
 prepareは意図的な正常exitで、OS強制kill/電源断の受入ではない。
 
+同一版修復の世代識別（先行実装）: private identityへoptional generation/previous_generationを追加。
+古いjournalで省略されていれば従来どおり未証明として扱う。新しい修復のgenerationは以前と同じ値を拒否。
+create_generationはmanaged rootの`.staging/blenderop_<32hex>/candidate`にだけ、ランダム32hexと改行の
+33-byte `.publication-generation`をexclusive/0600で作り、fileとdirectoryをfsyncする。
+既存markerを上書きせず、公開済みrootへの新規作成も拒否する。候補と一緒にrenameされることで世代が残る。
+readはNOFOLLOW/NONBLOCK、regular file/33-byte/形式/containmentを検証する。
+回復は記録された世代をprobe前後で照合し、同一版repairも新候補との一致を証明できた場合だけ確定する。
+markerなしの旧実体への復帰、別世代、probe中変更は保護状態のままにする。
+このmarkerは暗号的な第三者認証ではなく、trusted managerの候補とjournalを対応付ける内部識別子。
+archive/実行file hash/catalog/probe検査を置き換えず、managerはまだ新helperを呼ばない。
+manager接続時はregistry lock取得と開始判定を**最初の実体renameより前**へ置く必要がある。
+現行register_managed callbackはrename後なので、その場所へbeginを足すだけでは不十分。
+
 Host所有setupの永続化は既存blender_runtime_operationsへ加法的に置く。
 受付時のownerと一意なHost child ID、終端通知のoutbox/照合receiptだけをprivateに保存し、
 bearerは保存・公開しない。所有者なしの既存ローカル操作を後からHost所有として採用しない。

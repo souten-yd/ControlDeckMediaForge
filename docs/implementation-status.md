@@ -1,5 +1,30 @@
 # Media Forge implementation status
 
+## 2026-09-10 same-version repair publication generation
+
+base PR472 mergef98de49、ux1/3d-publication-generation。前turnは実体回復adapter/実Blender/mergeで進捗。
+private identityにoptional generation/previous_generationを追加し、旧field省略を維持。
+新helperはowned worker向けで、operation staging candidateだけに33-byte markerをexclusive/0600作成、
+file/directory fsync。公開済みrootへの作成・上書き・symlink/脱出・不正長/形式・FIFO等を拒否。
+修復の新旧generation同値は拒否し、回復adapterはrecordと実体の世代をprobe前後で照合する。
+旧/新exe SHAが同じ場合でも、旧実体復帰・別marker・probe中変更では成功にしない。
+8 markerケース+4 recoveryケースは関連1431 exit0/32pass/3.24秒。さらに旧journal互換1ケースを追加。
+
+外部mf-repair-generation-real-20260910.py、64878 exit0。専用実Blender4.5.9を旧実体とcandidateへcopy。
+prepare2264793は世代作成→private journal開始→旧実体退避/新候補rename→実登録→遅延cancelを記録して正常exit。
+旧/新exe SHAは同一、inodeは別。operation50d91cee5dc94c0c9e158563947b5078、generation511fa660569a4c138fa579ee6c3f6bc6。
+別recovery2264827の実core/明示adapterは0.665秒で成功。実GLB入出力probe true/4.5.9、
+実HTTP ready/遅延cancel補足、元registry SHA・新実体inode/SHA・旧退避実体inode/SHA保持を確認。
+世代一致も別途再読、core停止、全診断終端。Hostなし/通常manager未接続/正常exitであり、
+実設定UIの修復やSIGKILL/電源断の受入に読み替えない。証跡mf-repair-generation-real-20260910を保持。
+viewer54ms/生成差分0/Node5pass。全 `./mf.sh test` は99046の同一handleを再照会して終端確認、
+exit0/1663 passed/既知2warnings/189.91秒。以後製品code変更なし。
+
+次: 未公開状態のrollbackとmanager接続。現行register callbackはcandidate rename後なので、
+単にそのcallbackでbeginを呼ばず、registry排他と開始確定を最初のrenameより前へ移す。
+その後、失敗/drain/restart/実Host取消のPR470再現を受入する。通常managerはまだ新helperを使わない。
+NOT TESTED: 通常repairへの接続、未公開rollback、自動startup回復、実Host競合、OS crash、署名配布/installed、全GOAL/A〜F/GA。
+Host/稼働MF/global設定変更なし。全体PARTIAL維持。
 ## 2026-09-10 identity-verified publication recovery adapter
 
 base PR471 merge159a9f5、ux1/3d-publication-recovery。前turnはprivate journal基盤/実HTTP/mergeで進捗。

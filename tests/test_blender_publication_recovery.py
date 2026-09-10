@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from pathlib import Path
+import shutil
 from typing import Any
 
 import httpx
@@ -12,11 +13,12 @@ from mediaforge.blender_operation import BlenderRuntimeOperationAction as Action
 from mediaforge.blender_operation import BlenderRuntimeOperationState as State
 from mediaforge.blender_publication import PublicationIdentity
 from mediaforge.blender_publication_recovery import BlenderPublicationRecovery
+from mediaforge.blender_publication_generation import MARKER_NAME, create_generation
 from mediaforge.store import Store
 from test_blender_manager import archive_content, archive_fixture, catalog_fixture, runtime_manager
 
 
-def interrupted(tmp_path: Path, action: str = "install") -> tuple[Any, Store, str, PublicationIdentity]:
+def interrupted(tmp_path: Path, action: str = "install", *, marked: bool = False) -> tuple[Any, Store, str, PublicationIdentity]:
     base, manifest = archive_fixture(tmp_path)
     newer = archive_content("4.5.13")
     catalog = catalog_fixture(tmp_path, base, newer)
@@ -45,13 +47,21 @@ def interrupted(tmp_path: Path, action: str = "install") -> tuple[Any, Store, st
         Action(action), bytes_total=spec.archive_size_bytes, host_owner="user:16")
     store.bind_blender_runtime_host_job(operation.id, "user:16", "recovery-child")
     store.update_blender_runtime_operation(operation.id, state=State.PROBING)
+    generation = None
+    if marked:
+        staged = resolver.managed_root / ".staging" / operation.id / "candidate"
+        shutil.copytree(runtime.root, staged)
+        generation = create_generation(resolver.managed_root, staged)
     identity = PublicationIdentity(runtime_id=runtime.runtime_id, version=runtime.version, action=action,
         archive_sha256=spec.archive_sha256, executable_sha256=hashlib.sha256(runtime.executable.read_bytes()).hexdigest(),
         previous_active_runtime_id="blender-4.5.9-linux-x64" if action != "install" else None,
         previous_registration_sha256=None,
         previous_executable_sha256=hashlib.sha256(runtime.executable.read_bytes()).hexdigest() if action == "repair" else None,
-        recovered_directory=False)
+        recovered_directory=False, generation=generation)
     store.begin_blender_publication(operation.id, identity)
+    if marked:
+        runtime.root.rename(tmp_path / "previous-runtime")
+        staged.rename(runtime.root)
     store.request_blender_runtime_operation_cancel(operation.id)
     store.initialize()
     return manager, store, operation.id, identity
@@ -80,6 +90,35 @@ def test_same_version_repair_requires_generation_evidence(tmp_path: Path) -> Non
     result = BlenderPublicationRecovery(store, manager.resolver, manager.preflight_script).recover(operation_id)
     assert result == {"status": "recovery_required", "reason": "repair_generation_unproven"}
     assert store.blender_runtime_host_journal(operation_id, "user:16")["terminal"] is None
+
+
+@pytest.mark.parametrize("condition", ["valid", "restored_old", "wrong_marker", "probe_changes_marker"])
+def test_repair_generation_distinguishes_identical_executable_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, condition: str,
+) -> None:
+    manager, store, operation_id, identity = interrupted(tmp_path, "repair", marked=True)
+    runtime = manager.resolver.resolve_active()
+    previous = tmp_path / "previous-runtime"
+    old_hash = hashlib.sha256((previous / "install/blender").read_bytes()).hexdigest()
+    assert old_hash == identity.executable_sha256 == identity.previous_executable_sha256
+    if condition == "restored_old":
+        runtime.root.rename(tmp_path / "unadopted-runtime")
+        previous.rename(runtime.root)
+    elif condition == "wrong_marker":
+        (runtime.root / MARKER_NAME).write_text("0" * 32 + "\n")
+    elif condition == "probe_changes_marker":
+        def change_marker(*args: Any) -> dict[str, Any]:
+            (runtime.root / MARKER_NAME).write_text("0" * 32 + "\n")
+            return {"version": identity.version, "background": True}
+        monkeypatch.setattr("mediaforge.blender_publication_recovery.preflight", change_marker)
+    result = BlenderPublicationRecovery(store, manager.resolver, manager.preflight_script).recover(operation_id)
+    if condition == "valid":
+        assert result["status"] == "committed"
+        assert store.get_blender_runtime_operation(operation_id).state == State.READY
+        assert hashlib.sha256((previous / "install/blender").read_bytes()).hexdigest() == old_hash
+    else:
+        assert result["status"] == "recovery_required"
+        assert store.blender_runtime_host_journal(operation_id, "user:16")["terminal"] is None
 
 
 @pytest.mark.parametrize("damage", ["executable", "stamp", "missing", "registry", "symlink", "install_escape", "probe", "probe_change"])

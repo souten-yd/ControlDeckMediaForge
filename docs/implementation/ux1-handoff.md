@@ -3,6 +3,25 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 repair publication generation
+
+base PR472 mergef98de49、ux1/3d-publication-generation。前turnは進捗/merge。
+identityにoptional generation/previous_generation、fresh staging candidate専用33-byte marker helperを追加。
+exclusive/0600/fsync、公開root作成/上書き/脱出/不正marker拒否。旧journalはgenerationなしで読み取れる。
+回復adapterはrepairでもmarker一致をprobe前後で確認し、旧実体復帰/別世代/途中変更は拒否する。
+12新規ケースを含む関連1431 exit0/32pass3.24秒、旧journal互換1ケースを追加。
+外部mf-repair-generation-real-20260910.py、64878 exit0、prepare2264793→recovery2264827の別process。
+実4.5.9の同一exe SHA/異なるinodeを世代識別し0.665秒で回復。新旧実体inode/SHA・registry SHA保持。
+operation50d91cee5dc94c0c9e158563947b5078、実GLB入出力/HTTP/marker再読を確認、core停止。
+Host/通常manager配線なし・prepare正常exitで、実GUI修復/強制crashではない。
+次: 未公開rollbackとmanagerのbegin/complete/recovery接続。重要: 現行register callbackはrename後。
+registry排他と開始確定を最初のrename前へ置くよう公開経路を整理し、callbackへの単純追加で済ませない。
+I/O失敗/drain/restart/PR470実Host取消を受入してから配布。旧実体を未検証で削除しない。
+viewer54ms/差分0/Node5pass、全99046を同一handleで終端確認: exit0/1663pass/既知2warnings/189.91秒。
+直前の利用者応答は状態説明のみで実装進捗なし。本再開でgate回収・commit/push/通常mergeへ進む。
+全診断終端、稼働版変更なし。通常manager接続と配布は未完了。
+全3DS/GA/長時間refreshはPARTIAL、untracked .venv保持、外部blockerなし。
+
 ## 2026-09-10 verified publication recovery adapter
 
 base PR471 merge159a9f5、ux1/3d-publication-recovery。前turnは基盤実装/mergeで進捗。
