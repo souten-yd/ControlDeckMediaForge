@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.62 preparation
+
+前turnは実保存factsのPR437 mergeで進捗。baseff60f65、ux1/release-0-28-62、PR作成前。
+addon/core版数、release note追加。全test handle9850終端exit0/1524 passed/154.54秒/既知warning2、build39ms/差分0/Node5。
+外部mf-0.28.62-audit.py/install.pyとmf-animation-facts-mcp-installed-0.28.62.py準備/compile成功。
+新project MF3DS-Animation-Facts-MCP-20260910でidle false/bend trueのJob/snapshot照合を予定。
+現在.61/MF1411733/Host1384554、DB未終端Jobs/GUI/setup0、継続OpenCodeなし。
+次: 全test終端→通常PR merge→exact release checkoutでbuild/署名公開/導入/MCP受入。
+旧.60bundleのみ標準保持整理対象を事前通知、data/runtime保持。Host再起動なし。
+.62/GUI後facts/OpenCode効果/複雑character/engine/全3DS・GA未受入。既存UX不変、blockerなし。
+
 ## 2026-09-10 saved animation settings
 
 前turnはR2不合格切り分け/PR436 mergeで進捗。base50c48fa、ux1/3d-clip-result-facts、PR作成前。

@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.62 preparation
+
+PR437 mergeff60f6598d86cf4c11bb1467a1fbdfa37f80f9c8確認、ux1/release-0-28-62。
+addon/core版数とrelease note追加。新animation_settingsを同一bundleへ配布する準備。
+viewer build39ms/生成物差分0/Node5成功。版数変更後の全testは1524 passed/既知warning2/154.54秒/exit0（9850終端）。
+外部mf-0.28.62-audit.py/install.py、mf-animation-facts-mcp-installed-0.28.62.pyを準備/compile成功。
+新schema/model/worker同梱、旧契約・guard維持、標準署名/backup/idle/配信実体照合を含む。
+MCP診断は新projectでidle省略false/bend明示trueのJob結果・snapshot一致とGLB実変形を検査予定。
+準備時.61/MF1411733/Host1384554、実DB未終端Jobs/GUI/setup0、既存OpenCode smokeなし。
+標準保持2で旧.60実行bundleのみ整理対象と事前通知、.61/data/runtime保持。Host変更なし。
+NOT TESTED: .62公開/導入/実MCP/OpenCode効果、GUI後facts、engine/複雑character/全3DS・GA。
+
 ## 2026-09-10 saved animation settings facts
 
 PR436 merge50c48faec0c1c0dd02cbe2ba412452f87352688c確認、ux1/3d-clip-result-facts。
