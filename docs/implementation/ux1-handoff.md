@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 configured external acceptance passed
+
+base4599a6c、ux1/3d-external-configured-acceptance。正式LEGACY_ROOT環境を試験中だけ明示。
+一時runtime drop-in/MF再起動、21153終端exit0/20.973秒passed、installed.63日英1280/320の
+取消/解除/再接続抑止/通常再登録を確認。mf-external-installed-0.28.63-20260910-r2。
+実process root/ready checksを解除前assert、DB snapshot保存。外部6544entries/制作DB全行保持。
+試験drop-in削除/MF再起動済み、現在MF1573521/Host1384554不変、DropInPaths空/HTTPhealthy。
+独立比較は最初registry配列順でexit1、ID順全identity/active/抑止一致はexit0。bytes不変としない。
+元の設定未指定へ戻したのでlegacyは元damagedのまま。既存外部やbundleを書換えていない。
+README/APIに正式server設定経路を追記。docsのみ、通常PRへcommit/push/merge。
+現在継続診断なし/専用login失効。D-09設定済み固定外部を補完、全A/C/E/F/GAは継続。
+untracked .venv保持。詳細と失敗履歴はstatus。
+
 ## 2026-09-10 external installed diagnostic failed / state restored
 
 PR443 mergece1140f確認後、ux1/3d-external-installed-acceptance。
