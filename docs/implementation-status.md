@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-10 v0.28.61 preparation
+
+PR433 merge8136dc76d2c1d3128353b4295f752b563494a2c3確認、ux1/release-0-28-61。
+addon/core版数とrelease note追加、ループ説明以外の製品挙動・公開制約は不変。
+viewer build40ms/生成物差分0、Node5成功。版数変更後の全testは1509 passed/既知warning2/149.23秒/exit0（30092終端）。
+外部 /data1tb/mf-0.28.61-{audit,install}.py を既存.60手順から準備、py_compile成功。
+新loop説明の同梱と3schema制約tree不変、署名/公開bytes/idle/DBbackup/実exe配信照合を含む。
+準備時installed.60、MF1384429/Host1384554、Host clean main。実DBで未終端Jobs/GUI/setup各0、
+既存OpenCode smoke不在。Hostを変更・再起動せず、global設定/既存Blenderを変更しない。
+標準保持2により.59実行bundleのみ整理対象となることを事前通知。data/runtime/.60は保持。
+NOT TESTED: .61公開/署名consumer/導入/実OpenCode、engine/複雑character/全3DS・GA。
+
 ## 2026-09-10 animation loop schema guidance
 
 PR432 merge0a26acd4ec2918a247649463f882dc5fafec8d9c確認、ux1/3d-animation-loop-guidance。
