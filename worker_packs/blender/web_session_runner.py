@@ -20,7 +20,10 @@ STOP_TIMEOUT_SEC = 8.0
 SESSION_PATTERN = re.compile(r"^blendersession_[0-9a-f]{32}$")
 LANDLOCK_CREATE_RULESET_VERSION = 1
 LANDLOCK_RULE_PATH_BENEATH = 1
+LANDLOCK_ACCESS_FS_EXECUTE = 1 << 0
 LANDLOCK_ACCESS_FS_WRITE_FILE = 1 << 1
+LANDLOCK_ACCESS_FS_READ_FILE = 1 << 2
+LANDLOCK_ACCESS_FS_READ_DIR = 1 << 3
 LANDLOCK_ACCESS_FS_REMOVE_DIR = 1 << 4
 LANDLOCK_ACCESS_FS_REMOVE_FILE = 1 << 5
 LANDLOCK_ACCESS_FS_MAKE_CHAR = 1 << 6
@@ -45,6 +48,20 @@ LANDLOCK_WRITE_ACCESS = (
     | LANDLOCK_ACCESS_FS_MAKE_SYM
     | LANDLOCK_ACCESS_FS_REFER
     | LANDLOCK_ACCESS_FS_TRUNCATE
+)
+LANDLOCK_READ_ACCESS = (
+    LANDLOCK_ACCESS_FS_EXECUTE | LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR
+)
+LANDLOCK_ALL_ACCESS = LANDLOCK_WRITE_ACCESS | LANDLOCK_READ_ACCESS
+
+# Explicit system dependencies, not /etc, /proc, /usr or the Host data root.
+SYSTEM_READ_PATHS = (
+    "/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu", "/lib64",
+    "/usr/share/fonts", "/usr/share/fontconfig", "/etc/fonts", "/var/cache/fontconfig",
+    "/usr/share/locale", "/usr/share/X11", "/usr/share/drirc.d",
+    "/etc/ld.so.cache", "/etc/localtime", "/proc/cpuinfo", "/proc/meminfo",
+    "/sys/devices/system/cpu", "/sys/devices/system/node",
+    "/dev/null", "/dev/zero", "/dev/urandom", "/dev/random",
 )
 SYS_LANDLOCK_CREATE_RULESET = 444
 SYS_LANDLOCK_ADD_RULE = 445
@@ -82,8 +99,24 @@ class BoundedDiagnostics:
             return bytes(self.value).decode("utf-8", "replace").strip()[-1000:]
 
 
-def restrict_filesystem(writable: tuple[Path, ...]) -> None:
-    """Allow reads globally but writes only below explicitly opened directories."""
+def readable_dependencies(spec: dict) -> tuple[Path, ...]:
+    """Resolve only known runtime resources and trusted bootstrap dependencies."""
+    blender = Path(spec["blender_path"]).resolve(strict=True)
+    version = ".".join(spec["runtime_version"].split(".")[:2])
+    selected = [blender, Path(spec["bootstrap_path"]), Path(spec["preferences_path"]), Path(spec["vulkan_icd"])]
+    for name in (version, "lib", "textures", "usd"):
+        resource = blender.parent / name
+        if resource.exists():
+            resolved = resource.resolve(strict=True)
+            if not resolved.is_relative_to(blender.parent):
+                raise RuntimeError("Blender readable dependency escapes its runtime")
+            selected.append(resolved)
+    selected.extend(Path(name) for name in SYSTEM_READ_PATHS if Path(name).exists())
+    return tuple(dict.fromkeys(path.resolve(strict=True) for path in selected))
+
+
+def restrict_filesystem(writable: tuple[Path, ...], readable: tuple[Path, ...] = ()) -> None:
+    """Deny reads, listing, execution and writes outside explicit dependencies."""
     if os.uname().machine != "x86_64":
         raise RuntimeError("Landlock filesystem isolation is unsupported on this architecture")
     libc = ctypes.CDLL(None, use_errno=True)
@@ -93,7 +126,7 @@ def restrict_filesystem(writable: tuple[Path, ...]) -> None:
     )
     if abi < 3:
         raise RuntimeError("Landlock filesystem isolation is unavailable")
-    ruleset_attr = LandlockRulesetAttr(handled_access_fs=LANDLOCK_WRITE_ACCESS)
+    ruleset_attr = LandlockRulesetAttr(handled_access_fs=LANDLOCK_ALL_ACCESS)
     ruleset_fd = libc.syscall(
         SYS_LANDLOCK_CREATE_RULESET,
         ctypes.byref(ruleset_attr),
@@ -103,11 +136,17 @@ def restrict_filesystem(writable: tuple[Path, ...]) -> None:
     if ruleset_fd < 0:
         raise RuntimeError(f"Landlock ruleset creation failed: errno {ctypes.get_errno()}")
     try:
-        for root in writable:
+        rules = [(root, LANDLOCK_ALL_ACCESS) for root in writable]
+        for path in readable:
+            access = LANDLOCK_READ_ACCESS if path.is_dir() else LANDLOCK_ACCESS_FS_READ_FILE
+            if path.is_file() and os.access(path, os.X_OK):
+                access |= LANDLOCK_ACCESS_FS_EXECUTE
+            rules.append((path, access))
+        for root, access in rules:
             descriptor = os.open(root, os.O_PATH | os.O_CLOEXEC)
             try:
                 rule = LandlockPathBeneathAttr(
-                    allowed_access=LANDLOCK_WRITE_ACCESS, parent_fd=descriptor
+                    allowed_access=access, parent_fd=descriptor
                 )
                 if libc.syscall(
                     SYS_LANDLOCK_ADD_RULE,
@@ -271,7 +310,10 @@ def main(argv: list[str]) -> int:
         # Xvnc is a pinned trusted component and needs its X server lock under
         # /tmp. Apply Landlock after it starts so the untrusted Blender scene
         # can write only its control, working-copy, and RFB-socket roots.
-        restrict_filesystem((root, Path(spec["scene_path"]).parent, socket_path.parent))
+        restrict_filesystem(
+            (root, Path(spec["scene_path"]).parent, socket_path.parent),
+            readable_dependencies(spec),
+        )
         preference_setup = subprocess.run(
             [
                 spec["blender_path"], "--background", "--factory-startup", "--disable-autoexec",

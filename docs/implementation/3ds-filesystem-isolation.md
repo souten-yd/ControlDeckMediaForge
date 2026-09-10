@@ -1,6 +1,44 @@
 # GUI filesystem isolation — read boundary
 
-Date: 2026-09-10 / Status: FAIL / remediation required
+Date: 2026-09-10 / Status: source read-policy fixed; installed acceptance pending
+
+## Source remediation acceptance
+
+The runner now handles READ_FILE, READ_DIR and EXECUTE as well as the existing
+write rights. It permits only the selected executable, versioned Blender
+resources, trusted bootstrap/preferences, selected Vulkan ICD, enumerated OS
+dependencies and session working/control/socket roots. It does not grant the
+runtime parent or the Host data tree. Runtime resource symlink escape is rejected.
+The policy remains mandatory and fails closed when Landlock cannot be applied.
+
+- `./mf.sh test`: 1793 passed, 2 existing warnings, 331.18s, exit0; four new
+  isolation tests. The real Linux child-process test denies outside read/list/
+  write/execute, a working-directory symlink escape and descendant reads while
+  preserving allowed read/write operations.
+- `npm run build:viewer`: 60ms, generated file unchanged. Actual
+  `node --test tests/model-animation.test.mjs`: 5 passed. An earlier invocation
+  named a nonexistent test file and did not run tests.
+- Source runner + actual managed Blender4.5.13 software GUI:
+  `/data1tb/mf-read-gui-ppq28hrh`, ready1.424s, save4.630s, stopped,
+  original source unchanged. This uses the unchanged trusted GUI bootstrap.
+- Additional real-Blender canary assertion uses a diagnostic-only bootstrap copy
+  (`/data1tb/mf-read-gui-bootstrap-20260910.py`), not an exposed product script API.
+  First attempt `/data1tb/mf-read-gui-gq71dwma` failed at the preceding preferences
+  subprocess timeout, before the canary check. Unit was stopped and the original
+  asset retained; cause is unresolved. Its failed observation is preserved.
+- After that attempt was terminal and the full test process finished, a fresh
+  attempt of `mf-read-isolation-real-gui-canary-20260910.py` returned exit0:
+  `/data1tb/mf-read-gui-mbyfb480`, ready1.617s, save4.620s. Actual Blender denied
+  the harmless outside-canary read, saved2077182B, SHA
+  `678216ca6e03080cfb0e22da09d1789a7d6ed17333bf89a57eccd8db38515b62`.
+  Unit `mediaforge-blender-db561195a1064900bbe97c0ec2e2faf2.service` inactive;
+  original source SHA unchanged. No actual secrets were read.
+
+NOT TESTED with the new policy: browser/RFB reconnect, installed signed bundle,
+all supported runtime versions, Unix-socket/fd/process-information isolation.
+Installed0.28.70 is still unfixed. Next: source reconnect/version regression,
+then normal signed release and installed negative/GUI acceptance. This source
+fix does not close all 3DS-5 security or scenario E conditions.
 
 ## Observed boundary
 
@@ -45,7 +83,7 @@ Existing GUI operation evidence remains valid only for its named operations.
 5. Run the full gate, merge, build/inspect/sign/update normally, and repeat the
    important negative and GUI checks against the installed bundle.
 
-No product policy change or release is included in this audit slice. The current
+The original audit included no product change. The current
 installed GUI still has this read boundary gap. Do not claim all 3DS-5/security
 acceptance is complete or expand GPU/Expert capability before addressing it.
 
