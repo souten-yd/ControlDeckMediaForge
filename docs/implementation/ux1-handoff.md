@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 v0.28.65 installed acceptance
+
+PR450 merge9ad7462、exact build23481/audit203/署名/public24598/download80885/install93852すべてexit0。
+artifact31587807B/SHAac375c351447686d3bbf29e7531ebb1b64525fb91c39b2d215bb4c778f2880a1。
+標準update10.113秒healthy、backup mf-0.28.65-update-lbzqzcof、全DB/registry保持。
+Host1811096は今回更新前後不変、MF1897795。旧.63実行bundleのみ整理/.64/.65/data/runtime保持。
+installed通常Settings320日本語で4.5.9切替→4.5.13復元、64412終端exit0/2.162秒passed。
+mf-admission-installed-0.28.65-20260910。2journal ready/制作全行・実exe・registry保持/login失効。
+再開時read-only DB全after照合exit0、systemd active/PID一致。継続中診断なし。
+この受入sliceは文書のみ。commit/push/通常PRmergeとrelease noteの実績反映を行う。
+次: setup Host credential/実行中I/O。全GOAL/A〜F/GAはPARTIAL、engine未指定でも残件は進められる。
+untracked .venv保持。以前のpreparation記録は時点を区別して残す。
+
 ## 2026-09-10 v0.28.65 preparation
 
 base PR449 mergebf2dcf0、ux1/release-0-28-65。版数/release note、全test23931終端exit0/1555passed/154.08秒。

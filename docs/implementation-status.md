@@ -1,5 +1,8 @@
 # Media Forge implementation status
 
+最新の0.28.65導入結果は末尾の「2026-09-10 v0.28.65 installed admission acceptance」を参照。
+以下のpreparationは導入前時点の記録を保持したもの。
+
 ## 2026-09-10 v0.28.65 preparation
 
 PR449 mergebf2dcf0e670d9c7c66092cac38068e3a11a57f8fからux1/release-0-28-65。
@@ -15122,3 +15125,34 @@ scenario Bは同一剣の形状/寸法/予算→既存画像→新規画像比�
 全体3DS-8、A/C/D/E/F、長時間credential、GOAL-01/03/07/09/10の残件は維持。
 次はGOAL-01の共通Library絞込と親子双方向移動を実画面で確認する。
 gate `./mf.sh test`: 1049 passed / 既知Starlette warning1件 / 113.12秒。diff check成功。
+## 2026-09-10 v0.28.65 installed admission acceptance
+
+PR450 merge `9ad7462a56d82cdfcf6180845815fe4ffb89f025` のexact checkoutをbuild。
+版数準備の全testは1555 passed / 154.08秒 / exit0、viewer39ms・生成物差分なし、Node5pass。
+`scripts/build_release_bundle.py --version 0.28.65` はexit0、artifact31,587,807 B、
+SHA256 `ac375c351447686d3bbf29e7531ebb1b64525fb91c39b2d215bb4c778f2880a1`。
+`/data1tb/mf-0.28.65-audit.py` は203 embedded entries、秘密値/venv/weights/制作物混入なし、
+manager.requestのcompiled code/source一致と既存guardを検査。packaged doctorも成功。
+既存publisher keyで署名・自己検証し、v0.28.65の4公開assetを再取得してbuild bytesと照合。
+build23481/public24598/download80885/install93852はすべて終端exit0。
+
+`/data1tb/mf-0.28.65-install.py` による通常Host release_bundle.installは10.113秒でhealthy。
+backup `/data1tb/mf-0.28.65-update-lbzqzcof`、全DB table fingerprint/registry bytes保持。
+更新前後Host PID1811096不変、MediaForge PID1897795、実exe SHA256
+`1f3ff621f0db8b9cfc23ff58c2d706833086481c7cb0dd8125d44004c6a3c519` はaudit対象と一致。
+配信auto_bind/loop guidance/animation settings schemaも一致。標準retain2で旧.63実行bundleだけ整理、
+.64/.65と制作data/runtimeを保持。旧bundleは署名releaseから再取得可能。
+
+`/data1tb/mf-admission-installed-0.28.65-20260910.py` は実Host opaque iframe、
+Chrome headless・日本語320x700、overlayなしの通常Settings切替を実行。
+4.5.13→4.5.9（1.849秒）→4.5.13（2.000秒）、2.162秒passed、2.279秒login失効、exit0。
+registry bytes/両Blender実exe hashes/scene_documents/scene_revisions/assets/jobs全行保持、page errors0。
+証跡 `/data1tb/mf-admission-installed-0.28.65-20260910/{observations.json,database-before.json,restored.png}`。
+再開時の独立read-only SQLite照合もexit0、記録afterと現DBが一致。追加操作は次の2件のみでready:
+`blenderop_2acdce2781db49a2adc656728eca83b5`（4.5.9 switch）、
+`blenderop_499f38425da14f2194e2289bfa58c660`（4.5.13 switch）。
+systemd再照会でもMediaForge active/PID1897795。診断を再実行して操作を重複させていない。
+
+今回の受入追記は文書のみ。NOT TESTED: installed全6操作positive/遅延注入、
+setup Host credential維持、全実行中I/O、ゲームエンジン導入、全GOAL/A〜F/GA完了。
+次はsetupのHost所有Job/credential lifecycle。全体PARTIALを維持する。
