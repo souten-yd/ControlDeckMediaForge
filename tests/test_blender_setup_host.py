@@ -13,7 +13,7 @@ from mediaforge.blender_operation import BlenderRuntimeOperationError, BlenderRu
 from mediaforge.blender_setup_host import BlenderSetupHostControl
 from mediaforge.host.client import HostApiError, HostIdentity
 from mediaforge.store import Store
-from test_blender_manager import archive_fixture, response_transport, runtime_manager
+from test_blender_manager import archive_content, archive_fixture, catalog_fixture, response_transport, runtime_manager
 
 
 def identity(owner: str = "user:16", token: str = "parent") -> HostIdentity:
@@ -198,6 +198,85 @@ def test_repair_cancel_during_registration_restores_original(
             journal = store.blender_runtime_host_journal(operation.id, "user:16")
             assert journal["terminal"]["status"] == ("failed" if revoked else "canceled")
             assert journal["sent"] is True
+        finally:
+            release.set()
+            await manager.stop()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("action", ["install", "update"])
+@pytest.mark.parametrize("recovered", [False, True])
+@pytest.mark.parametrize("revoked", [False, True])
+def test_install_registration_cancel_preserves_registry_and_previous_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, action: str, recovered: bool, revoked: bool,
+) -> None:
+    base, manifest = archive_fixture(tmp_path)
+    newer = archive_content("4.5.13")
+    catalog = catalog_fixture(tmp_path, base, newer)
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=(
+        newer if "4.5.13" in str(request.url) else base)))
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager, resolver = runtime_manager(tmp_path, store, manifest, transport, catalog=catalog)
+    host = Host()
+    manager.host_control = BlenderSetupHostControl(manager, host)  # type: ignore[arg-type]
+    manager.host_control.poll_sec = .01
+    entered, release = threading.Event(), threading.Event()
+
+    async def run() -> None:
+        await manager.start()
+        original = resolver.register_managed
+        try:
+            if action == "update":
+                initial = await manager.request("install", identity=identity())
+                await asyncio.gather(*list(manager._tasks.values()))
+                assert store.get_blender_runtime_operation(initial.id).state == State.READY
+            before = resolver.registry_path.read_bytes() if resolver.registry_path.exists() else None
+            target = resolver.managed_root / ("blender-4.5.13-linux-x64" if action == "update" else "blender-4.5.9-linux-x64")
+            executable = target / "install/blender"
+            if recovered:
+                seeded = await manager.request(action, identity=identity())
+                await asyncio.gather(*list(manager._tasks.values()))
+                assert store.get_blender_runtime_operation(seeded.id).state == State.READY
+                old_inode, old_bytes = executable.stat().st_ino, executable.read_bytes()
+                # Emulate an already probed directory left before registry commit.
+                if before is None:
+                    resolver.registry_path.unlink()
+                else:
+                    resolver.registry_path.write_bytes(before)
+
+            def held_registration(**kwargs: Any) -> Any:
+                entered.set()
+                assert release.wait(5)
+                return original(**kwargs)
+
+            monkeypatch.setattr(resolver, "register_managed", held_registration)
+            operation = await manager.request(action, identity=identity())
+            assert await asyncio.to_thread(entered.wait, 5)
+            host.revoked, host.cancel = revoked, not revoked
+            async with asyncio.timeout(3):
+                while not await asyncio.to_thread(store.blender_runtime_operation_cancel_requested, operation.id):
+                    await asyncio.sleep(.01)
+            release.set()
+            await asyncio.gather(*list(manager._tasks.values()))
+            result = store.get_blender_runtime_operation(operation.id)
+            assert result.state == (State.FAILED if revoked else State.CANCELED)
+            assert result.error_code == ("host_context_lost" if revoked else None)
+            assert (resolver.registry_path.read_bytes() if resolver.registry_path.exists() else None) == before
+            if recovered:
+                assert executable.stat().st_ino == old_inode and executable.read_bytes() == old_bytes
+            else:
+                assert not target.exists()
+            assert not any((resolver.managed_root / ".staging").iterdir())
+            journal = store.blender_runtime_host_journal(operation.id, "user:16")
+            assert journal["sent"] and journal["terminal"]["status"] == ("failed" if revoked else "canceled")
+            host.revoked = host.cancel = False
+            monkeypatch.setattr(resolver, "register_managed", original)
+            retry = await manager.request(action, identity=identity())
+            await asyncio.gather(*list(manager._tasks.values()))
+            assert store.get_blender_runtime_operation(retry.id).state == State.READY
+            assert resolver.resolve_active().runtime_id == operation.runtime_id
         finally:
             release.set()
             await manager.stop()

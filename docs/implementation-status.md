@@ -1,5 +1,40 @@
 # Media Forge implementation status
 
+## 2026-09-10 install/update registration-wait cancellation
+
+base PR468 mergeb7cfd64、ux1/3d-install-registration-cancel。前turnは通信retry実装/実機受入/mergeまで進捗。
+引き継ぎの新規install ready+host_context_lostを、install/update×新規/回復×取消/認証喪失の8ケースで
+再現した。93409 exit1/8 RED/1.79秒、いずれもreadyが誤って残った。
+register_managedへprivate before_commit callbackとmake_activeを追加。プロセス間flock取得後、
+registry変更前に永続cancelを検査する。updateの登録とactive変更を1回のatomic registry書込みにまとめる。
+新規候補は拒否時に既存cleanupで回収。既に配置された回復対象directoryは削除しない。
+8ケースはregistry完全不変/対象directoryの回収または旧inode・bytes保持/終端outbox/正常retryも確認。
+関連96993 exit0/67pass/13.61秒。既存repair/停止drain/registry/切替試験を維持。
+
+外部mf-install-registry-cancel-source-20260910.pyをHost診断venv/credential stdinから実行。
+専用source core/uvloop/実4.5.9固定cacheとprobe/実Host/専用registry flockを使う。
+Python WebSocketで受付後切断（実ブラウザではない）。53527 exit0、
+operationc41cb90dce89480cb8fcee50932ba8a8/Hoste8394637e98b。
+20.931秒にprobe後の配置/登録待ち確認→通常Host cancel20.951秒→永続flag25.277秒→lock解放25.289秒。
+25.405秒canceled/errorなし、25.586秒candidate回収/registry未作成、25.748秒core停止。
+一時login失効、fresh control GETでHost canceledを独立確認。元固定cacheのSHA不変。
+
+回復版mf-recovered-registry-cancel-source-20260910.pyは以前の成功した専用source実体を新dataへcopyし、
+exe SHA de8e8092c49e42cc6f1adde86aea0202ea5bad3338725887ecbcb7274dd0f926を確認して開始。
+最初のwrapperは起動前置換assertでexit1、副作用なし。修正後58502はcanceledだが未作成stagingの
+iterdirで診断exit1/8.65秒停止/login回収。元passed=false保持、登録関数到達の観測も不足した。
+診断を未作成stageも許すよう修正し、登録関数到達signalを追加。別evidence -r2の14810はexit0。
+operation115ea9971fc54f1c94aba59f1a18ef6c/Host28fd2d474857、登録待ち1.501秒、cancel2.912秒、
+flag6.314秒/解放6.325秒、6.584秒成功/6.771秒停止。元exe inode/hash保持/registry未変更を確認。
+両実試験はHost通常取消固有の理由によりreceipt terminal_matches=false/sent0を正しく保持する。
+両canceledを完全一致receiptと偽らない。一時login回収、親のfresh Host controlと独立JSONでも確認。
+
+viewer43ms/生成差分0/Node5pass。実診断終端後の全test79899はexit0/1630pass/既知2warnings/201.70秒。
+Host PIDは外部更新で2043005、MF1965886 active。こちらからHost/PC再起動は実行していない。
+NOT TESTED: signed/installed修正、新版への実updateのこの取消、実Host認証失効、
+最終cancel検査からregistry書込/DB終端までの全競合・crash、10分refresh、全GOAL/A〜F/GA。
+次は残るcommit境界を監査し、その受入後にPR467/468とまとめて署名配布する。全体PARTIAL維持。
+
 ## 2026-09-10 actual uvloop control disconnect / bounded read-only retry
 
 base PR467 merge8f31c17、ux1/3d-setup-uvloop-reproduction。前turnは状態回答のみ/no progress。
