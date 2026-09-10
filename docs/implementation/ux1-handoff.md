@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 scoped IPC mitigation / OS isolation authorization
+
+base PR499 merge8900d125861eee8109d33648dcd07dc2b3b17915、ux1/3d-ipc-isolation、PR作成前。
+前turn.71署名導入/受入mergeまで進捗。今回はIPC実canary3成功→scope修正/実拒否を追加。
+mf-ipc-boundary-b68yu5lm: pathname/abstract接続と親へのSIGUSR1許可、専用peerだけ/回収済み。
+restrict_ipcをXvnc前へ、ABI6必須、abstract/signal scope。FS内側維持、外側rootはREFERだけ許可。
+mf-ipc-boundary-lwkoutqo: abstract EPERM/親signal拒否、pathnameのみ依然接続可能。元失敗保持。
+source実4.5.13 GUI9v47jk8m: ready1.018秒/save4.224秒、RFB2接続/元asset保持/unit inactive。
+全55537 exit0/1795pass205.88秒/既知2warnings、viewer56ms差分0/Node5。以後product/test変更なし。
+実kernelABI8、pathname socket権利はABI9以降。unshare/bwrapはuidmap/loopback EPERM。
+systemd PrivateUsers probeはuserns変更だけ、mount/netはcallerと同一/PrivateNetwork省略journal確認。
+sysctl値1とunconfinedを観測、単独原因とは断定せずOS設定変更なし。詳細3ds-ipc-isolation.md。
+次: 利用者からMediaForge専用OS隔離設定の変更許可を得てpathname/fd/process境界を解く。
+一般の実装権限をOSポリシー緩和へ拡大しない。GUI/Expert全隔離未達、稼働.71に本scope未導入。
+承認待ちは初回でgoal blockedへ変更しない。safe proof/修正は今回実施済み。
+新CodeDEV projectなし、root差分/3devsymlink保持。全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr list --head ux1/3d-ipc-isolation。
+
 ## 2026-09-10 v0.28.71 installed / remaining OS isolation
 
 PR498 merge/tag0d12b100f98f99883719283dc2bd78d5b4358d74、ux1/release-0-28-71-acceptance、記録PR作成前。

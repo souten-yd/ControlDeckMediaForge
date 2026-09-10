@@ -113,3 +113,77 @@ def test_handled_rights_include_read_listing_and_execution() -> None:
     runner = runner_module()
     assert runner.LANDLOCK_ALL_ACCESS & 0b1111 == 0b1111
     assert not {"/", "/etc", "/proc", "/usr", "/data1tb", "/home"}.intersection(runner.SYSTEM_READ_PATHS)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="GUI isolation targets Linux")
+def test_ipc_scope_denies_external_peers_but_preserves_children_and_rename(tmp_path: Path) -> None:
+    program = r'''
+import importlib.util,os,signal,socket,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('runner',sys.argv[1])
+runner=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(runner)
+root=Path(sys.argv[2])
+outside='\0mf-ipc-test-'+str(os.getpid())
+server=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+server.bind(outside)
+server.listen(1)
+received=[]
+signal.signal(signal.SIGUSR1,lambda *_:received.append(True))
+parent=os.getpid()
+child=os.fork()
+if child==0:
+    runner.restrict_ipc()
+    runner.restrict_filesystem((root,))
+    with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
+        try:
+            client.connect(outside)
+        except PermissionError:
+            pass
+        else:
+            os._exit(2)
+    try:
+        os.kill(parent,signal.SIGUSR1)
+    except PermissionError:
+        pass
+    else:
+        os._exit(3)
+    inside='\0mf-inside-test-'+str(os.getpid())
+    with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as local:
+        local.bind(inside)
+        local.listen(1)
+        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
+            client.connect(inside)
+    (root/'stage').mkdir()
+    (root/'stage/file').write_text('saved')
+    (root/'stage/file').rename(root/'saved')
+    assert (root/'saved').read_text()=='saved'
+    grandchild=os.fork()
+    if grandchild==0:
+        signal.pause()
+        os._exit(4)
+    os.kill(grandchild,signal.SIGTERM)
+    assert os.waitpid(grandchild,0)[1]==signal.SIGTERM
+    os._exit(0)
+assert os.waitpid(child,0)[1]==0
+assert not received
+server.close()
+print('IPC scope denied outside, allowed internal socket/signal and staged save')
+'''
+    result = subprocess.run([sys.executable, "-c", program, str(RUNNER), str(tmp_path)],
+                            capture_output=True, text=True, timeout=15, check=True)
+    assert "IPC scope denied outside" in result.stdout
+
+
+def test_ipc_scope_fails_closed_without_required_abi(monkeypatch) -> None:
+    runner = runner_module()
+
+    class UnsupportedKernel:
+        def syscall(self, *args: int) -> int:
+            assert args == (444, 0, 0, 1)
+            return 5
+
+    monkeypatch.setattr(runner.ctypes, "CDLL", lambda *args, **kwargs: UnsupportedKernel())
+    monkeypatch.setattr(runner.os, "uname", lambda: type("Platform", (), {"machine": "x86_64"})())
+    with pytest.raises(RuntimeError, match="requires ABI 6"):
+        runner.restrict_ipc()
