@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-10 mobile Web Blender access implementation
+
+PR440 merge68f021a0a37b82ff5333e5141a1296be32678332からux1/3d-mobile-blender-access。
+設計§5のmobileフルGUI利用に対し、現行は開始/復旧disabled、open早期return、CSS display:noneの
+3段階で阻止していた。画面幅の禁止だけを除き、runtime/Web pack/稼働競合/復旧base競合保護は保持。
+767px以下は100dvh dialog・縦scroll・折返し・保存/終了1列、PC/keyboard/mouse推奨を日英表示。
+Esc/Tab/Enter/矢印7keyの入力補助を追加。noVNC connect後だけ有効、disconnect時無効。
+固定noVNC実体のsendKeyはdown省略でpress/releaseを送ることを確認。非公開connectionStateを
+推測で参照せず、connect/disconnectイベントに紐づく所有stateで制御する。
+
+`/data1tb/ControlDeck/app/.venv/bin/python scripts/3ds_mobile_blender_ui_e2e.py` exit0。
+実Chrome headlessの320x640/640x320/1280x800各日英6ケースでdialog表示/閉じる、
+document/dialog横overflowなし、touch tap→7key送信呼出、切断後7button無効/送信なし。
+HTML/CSS/関数/辞書はsourceを読込、RFBのみ明示fixture。実Blender入力とは扱わない。
+focused frontend155 passed/0.19秒、Node5、viewer build41ms/生成物差分なし。
+初回focusedは旧desktop-only・760px期待値2件で失敗し、承認済み設計に合わせ期待値を修正。
+同修正前の全test94076は2 failed/1535 passed/149.13秒で終端exit1。
+修正後の全 `./mf.sh test` 78368は1537 passed/既知warning2/151.29秒、終端exit0。
+外部source UI overlay診断 `/data1tb/mf-mobile-blender-source-ui-20260910.py` と同`-r2.py`は
+いずれも#app[aria-busy=false]待ちで31.111/31.103秒に失敗。両診断login失効、GUI未作成。
+初回はworkspace生成済みHTMLを未展開templateに置換する診断欠陥を発見。
+R2は元configを保持するinline style/script/dialog置換へ変更したが同じ待ちで失敗。
+したがってtemplate置換だけが原因だったとは断定しない。live input/save成功扱いにしない。
+証跡 `/data1tb/mf-mobile-blender-source-ui-20260910[-r2]/observations.json` を保持。
+次は再試行を増やす前にframe初期化/表示状態と実際の置換適用有無を観測する。
+NOT TESTED: 新UIのlive RFB/Blender保存、installed opaque iframe、実mobile端末、入力IME/修飾キー、
+新UI署名配布。backend/Host/稼働0.28.62を変更せず、全GOAL/A〜F/GAはPARTIAL。
+
 ## 2026-09-10 OpenCode saved-settings terminal acceptance / GUI saved fps
 
 PR #440の実runは終端exit0、476.429秒、33 events / 8 tools。

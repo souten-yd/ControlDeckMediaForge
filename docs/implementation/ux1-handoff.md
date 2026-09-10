@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 mobile Web Blender access
+
+前turnはPR440通常merge68f021a。今回はux1/3d-mobile-blender-accessでmobile禁止3箇所を修正。
+PC推奨日英案内、100dvh layout、固定7key補助と接続状態制御。backend/Host/.62不変。
+scripts/3ds_mobile_blender_ui_e2e.py: source HTML/CSS/関数を実Chromeで日英6viewport受入。
+通信fixtureであり実RFBではない。focused155/0.19秒、viewer41ms/差分0、Node5。
+初回focused旧期待値2failを修正。修正前full94076は2failed/1535passed/149.13秒終端exit1。
+修正後full78368は1537passed/151.29秒終端exit0。コード変更なし、文書更新してcommit/push/PR。
+外部source UI overlay試験2件は初期化待ち31秒で失敗、GUI未作成/診断login回収。
+mf-mobile-blender-source-ui-20260910[-r2]/observations.json保持。現在live診断なし。
+R2はinline config保持に修正したが未解消。次は初期化/表示状態とoverlay適用有無を観測する。
+次: 専用sceneでsource UI→実隔離Blenderの320px接続/入力/保存/旧版保持を検証しPR受入。
+installed同梱版とは区別し、署名配布後も再確認。実mobile/IME/全3DS・GA未完了。
+作業停止前に全test→commit/push/PR。untracked .venvは利用者所有のまま保持。
+
 ## 2026-09-10 OpenCode saved-settings check
 
 更新: run57218終端exit0/476.429秒/8tools。strict verifierを再実行しverified true。
