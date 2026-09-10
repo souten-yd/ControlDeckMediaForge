@@ -1,5 +1,28 @@
 # Media Forge implementation status
 
+## 2026-09-10 post-registration cancellation boundary audit
+
+base PR469 mergebfe13c0、ux1/3d-publication-commit-boundary。前turnは登録待機取消修正/実機受入/mergeで進捗。
+Storeの取消/abortとREADY保存が別transactionであることを読み取り確認。
+外部mf-install-post-registration-cancel-source-20260910.pyで実source/uvloop/Blender4.5.9/Hostを使用。
+registry flock待ちではなく、実register_managedが戻った後に専用thread gateで一時停止。
+97274 exit1、operationc2f2e57e3f0b45069cad02a2244ebdbb/Host51221b314061。
+20.560秒登録済み/未終端→20.579秒通常Host cancel→25.310秒永続flag→25.322秒gate解放。
+25.333秒local ready/error=null/cancel=true、25.492秒core停止。一時loginはfinallyで失効。
+元passed=false/exit1を保持。実登録済み実体が残り、独立--versionでもBlender4.5.9 LTSを確認。
+Hostはfresh control GETでcanceled/cancel=trueを確認。local success outboxはsent0、
+receipt already_terminal/status=canceled/terminal_matches=false。成功や取消完了の受入とはしない。
+個人設定・稼働制作物・Host/serviceを変更せず、専用dataの証拠runtimeを保持する。全診断終端。
+
+base-planとruntime設計に、durable公開開始の確定点と遅延stop意図を分離する方針を追加。
+登録前のcancel検査だけでなく、同一DB transactionで公開開始/停止の勝者を決める必要がある。
+開始後は実公開結果の確定/回復と遅延stop記録を分け、既に参照を得たruntimeを無条件で消さない。
+filesystem/SQLiteを単一atomic transactionと偽らず、journalと実identityの再起動照合を必須とする。
+次は既存operationへの加法的private journalと互換試験、その後manager/停止受付を接続する。
+今回製品code・schema変更なし、全test/build再実行なし。基準PR469は1630pass/201.70秒/build43ms/Node5。
+NOT TESTED: 新commit境界実装、停止後の回復全matrix、署名配布/installed、全GOAL/A〜F/GA。
+全体PARTIAL維持。具体的な外部blockerはなく、次の実装は継続可能。
+
 ## 2026-09-10 install/update registration-wait cancellation
 
 base PR468 mergeb7cfd64、ux1/3d-install-registration-cancel。前turnは通信retry実装/実機受入/mergeまで進捗。

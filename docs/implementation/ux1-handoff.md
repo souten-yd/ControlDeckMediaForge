@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 publication commit boundary audit
+
+base PR469 mergebfe13c0、ux1/3d-publication-commit-boundary。前turnは進捗/merge。
+外部mf-install-post-registration-cancel-source-20260910.py、実source/uvloop/Blender/Host。
+register_managed戻り後をthread gateで保持し、通常Host cancel。97274 exit1/25.492秒停止/login回収。
+operationc2f2e57e3f0b45069cad02a2244ebdbbはready/error=null/cancel=true、Host51221b314061 canceled。
+元passed=false/exit1を保持。独立--versionで実体4.5.9、fresh control GETでHost取消を確認。
+outbox success/sent0/terminal_matches=falseを保持。取消完了や成功の受入にしない。全診断終端。
+base-plan/runtime設計へdurable公開開始と遅延stopの境界方針を追加（未実装）。
+次: 既存operationにprivate publication journalを加法実装し、公開開始/stopを同一transactionで競合判定。
+managerのregistry lock後に開始確定し、開始後のstopは遅延意図として実結果と別記録する。
+filesystem/DBのcrash照合も必要。登録済み実体を無条件削除せず、Store mutexをregistry待ちで保持しない。
+詳細はruntime設計§5「公開commit境界の補完」。型付き停止/回復の全境界テストを作ってから配布する。
+今回docs-only/製品code不変、基準PR469の1630pass/201.70秒/build43ms/Node5を維持。新全testなし。
+全GOAL/A〜F/GA/installed長時間refreshはPARTIAL。外部blockerなし、untracked .venv保持。
+commit/push/通常merge後、次turnは上記journal実装へ進む。Host/PC再起動や稼働版変更はしていない。
+
 ## 2026-09-10 install/update registration-wait cancellation
 
 base PR468 mergeb7cfd64、ux1/3d-install-registration-cancel。前turnは進捗/merge。

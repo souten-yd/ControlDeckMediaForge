@@ -161,6 +161,33 @@ fail-closedにする。削除済み版への新規GUI受付は事前に拒否す
 
 ## 5. durable setup operation
 
+### 公開commit境界の補完（2026-09-10設計、未実装）
+
+実source/Blender/Hostで、登録完了後・DB終端保存前の取消によりlocal ready/cancel=trueと
+Host canceledが残ることを再現した。PR469はregistry待機中の取消を保護するが、この区間は保護しない。
+取消意図と実際のcommit結果を区別せず、チェックを1個ずつ後ろへ足すだけでは競合窓が移動する。
+
+- 既存operation journalにprivateな公開phaseと必要なidentityを加法的に保存する。
+  第二のJobs基盤は作らない。受付済み・公開中・公開完了と、遅延したstop意図を区別する。
+  bearer、生の利用者path、任意の外部URLを保存しない。
+- registry lock取得後、公開開始とcancel/認証喪失flagの照合を同じDB transactionで行う。
+  先にstopが確定していれば公開を始めず回収する。公開開始が先なら、後続stopは遅延意図として残し、
+  既に進むcommitを別taskが中断・削除しない。registry待機中にStore全体のmutexを保持しない。
+- 公開中journalには対象runtime/archive identity、対象操作、以前のactive/登録identity、
+  新規候補か回復対象か、repairの退避identityを束縛する。別operationの実体へ適用しない。
+- 正常時は実公開結果とlocal終端/outboxを確定し、遅延取消・認証喪失を結果の補足として明示する。
+  readyを失敗理由と混在させたり、取消前に止まったかのように装ったりしない。
+  Hostが既にcanceledなら上書きせず、receipt不一致を保存・表示する。
+- 公開開始後のI/O失敗、core再起動、registry/DB応答喪失ではjournalと実体を照合する。
+  完了identityが証明できればその結果を回収し、未公開なら旧状態へ戻す。不明なら成功とせず、
+  候補/以前の実体を保護して明示的な回復状態にする。参照を得た公開済みruntimeを無条件で削除しない。
+- install/update/recovered/repairに同じ境界を適用する。公開開始前・開始後・registry後・終端前の
+  cancel/revocation/shutdown、書込失敗、再起動を分けて試験する。phase移行と停止記録はworker側で実行する。
+  既存のHost所有でないCLI経路にも互換性を持たせ、旧operationの再開policyを暗黙変更しない。
+
+実装順は加法的journal/互換試験→停止受付と公開開始の競合試験→manager接続→実機取消/回復→
+署名配布。現行の単一callback、in-process lockだけ、単体試験だけをdurable commitの証明にしない。
+
 Host所有setupの永続化は既存blender_runtime_operationsへ加法的に置く。
 受付時のownerと一意なHost child ID、終端通知のoutbox/照合receiptだけをprivateに保存し、
 bearerは保存・公開しない。所有者なしの既存ローカル操作を後からHost所有として採用しない。
