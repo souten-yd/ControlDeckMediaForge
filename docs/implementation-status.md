@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-10 installed external registration acceptance failed / restored
+
+base PR443 merge ce1140f、branch ux1/3d-external-installed-acceptance。
+外部登録解除/再登録のinstalled差分を検査する外部診断
+`/data1tb/mf-external-installed-0.28.63-20260910.py`をHost診断venvで実行。
+証跡 `/data1tb/mf-external-installed-0.28.63-20260910`、79358終端exit1/65.638秒。
+実Host opaque iframe/overlayなし/日本語1280でcancel→unregister→再接続後抑止を確認。
+しかし再登録を待つ条件がtimeout、finallyの通常UI再登録もtimeout。診断loginは65.640秒で失効。
+4画面条件の完走・通常再登録成功は未達であり、D-09をVERIFIEDへ変更しない。
+
+解除前previewはstate=damaged/live0/project0/can_remove=true/reclaimable0。
+実MF PID1483422の環境をキー限定で読取: MEDIA_FORGE_BLENDER_LEGACY_ROOT未設定。
+config.pyの既定はREPOSITORY_ROOT（packaged sys._MEIPASS）/runtimes/blender-4.5.9であり、
+診断がinventoryした `/data1tb/ControlDeckMediaForge/runtimes/blender-4.5.9` を指す設定ではない。
+register_legacyは_ready失敗時にfalseを返して抑止を維持するため、登録行の存在だけでは再登録可能性を証明しない。
+診断の解除前preflightがstate=ready/正しい参照先を確認していなかった不備を記録する。
+利用者の既存Blenderへ勝手に参照を変更したり、壊れた登録をreadyとして扱う修正は行わない。
+
+診断終端後、登録JSONの当該legacy行と抑止のみをapply_patchで事前状態へ戻した。
+独立read-only照合55578終端exit0: registry-before.jsonとのJSON全体一致、外部6544entriesの
+全file SHA/size/mode・symlink target・directory集合がexternal-before.jsonと一致。
+外部ファイル/managed runtime/active版は変更なし。DBは全Job/GUI/setup終端、58scenes/180revisions/967assets。
+診断は制作APIを呼ばないが、実行前DB全行snapshotはファイルに保存していないため全行不変の独立証拠とはしない。
+元のdamaged表示へ戻したのであり、再登録成功や外部参照の修復とは報告しない。
+
+今回は文書のみ、製品コード/Host/service設定・依存変更なし、全test/buildを新規実行していない。
+次: 正式なサーバー設定経路の外部root指定を確認し、設定済みready外部の範囲でinstalled受入を再計画。
+解除前にready/参照先/全DB保存/通常再登録の前提を厳格検査する。既存のsource/package成功は維持。
+全GOAL/A〜F/GAはPARTIAL、他の安全な残件も継続可能。
+
 ## 2026-09-10 v0.28.63 installed / mobile RFB acceptance
 
 download41993は終端exit0、公開本体31585503B/SHA d9327c3f20a53850e63f685dba4a1cf545726ddbcd1b8d4b7819b2f526a04f2b。

@@ -33,6 +33,12 @@ installedはHostが管理する稼働版。これらを互いに読み替えな�
 
 ## 次の不足と停止条件
 
+2026-09-10 D-09 installed試行は未達。mf-external-installed-0.28.63-20260910は
+解除前からdamagedのlegacy行を解除し、再登録timeoutでexit1。稼働bundleに外部root設定がなく、
+source外部inventory先とpackaged既定rootが異なる。正しいready参照のpreflightが診断に欠落していた。
+当該登録だけ事前JSONへ復元し、外部6544entries不変・registry一致を独立確認。詳細はstatus。
+通常再登録成功とはしない。設定済みready外部を対象にする次の受入と、既存source/package成功を区別する。
+
 2026-09-10追記: **D-01/02のinstalled旧→新版updateを補完済み**。
 `mf-update-failure-installed-0.28.55-20260910`で4.5.9 GUI稼働中に4.5.13 update候補をpidfd SIGTERM、
 失敗後も旧GUI/同PID/hash維持、正常retry→既定4.5.13でも旧GUIは4.5.9固定。
