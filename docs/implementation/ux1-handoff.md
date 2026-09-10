@@ -5,7 +5,7 @@
 
 ## 2026-09-10 OpenCode automatic skin acceptance running
 
-base PR431 merge8676610、ux1/3d-opencode-auto-skin、PR作成前。
+base PR431 merge8676610、ux1/3d-opencode-auto-skin、PR #432作成済み（実機終端待ち、未マージ）。
 前turnは署名0.28.60/実MCP/記録mergeで進捗。今回は実OpenCode用--director-auto-skinを追加。
 runner/verifier/tests変更のみ、製品版数/Host/installed変更なし。既存UX/全3DS/GAはPARTIAL。
 固定fixture（sphere寸法/2骨/idle・bend各2秒）の実LLM制作。自由設計や見た目承認の証拠にはしない。
@@ -13,7 +13,8 @@ strict verifierは剛体代用/誤形状/骨/clip/loop/grantを拒否。focused5
 先行full1502/145.04秒はgrant検査追加前collection。最終full handle32193終端/exit0、1505 passed/150.62秒/既知warning2。
 実run handle50315、親1388601/子OpenCode1388651、project MF3DS-OpenCode-Auto-Skin-20260910。
 evidence /data1tb/mf-opencode-auto-skin-installed-20260910。再開9分42秒で同PID生存/events7467B、未終端。
-同handleで384.873秒skill実行の出力確認。前turnは同PID確認による検証待ち、今回は最終test成功を確定。
+同handleで384.873秒skill、641.007秒media.capabilities実行の出力確認。
+前turnは同PID確認による検証待ち、今回は最終test成功と診断commit/push/PR作成まで進捗。
 次: 同handleを追跡して終端後strict verifier→実Blender --fixture auto_skin --posedでsource/GLBを検査。
 verifier: PYTHONPATH=backend .venv/bin/python scripts/3ds_verify_opencode_flow.py --evidence-dir
 /data1tb/mf-opencode-auto-skin-installed-20260910 --database /data1tb/ControlDeck/data/feature-data/media-forge/data/media-forge.sqlite3。

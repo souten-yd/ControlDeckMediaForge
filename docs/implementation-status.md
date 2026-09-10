@@ -20,7 +20,10 @@ focused55 passed/0.80秒、viewer build39ms/生成物差分0、Node5成功。
 --evidence-dir /data1tb/mf-opencode-auto-skin-installed-20260910。
 handle50315、親1388601/実OpenCode1388651。既存smoke未実行を確認して開始。
 3分経過時の同PID生存/events0を確認。再開時9分42秒でも同PID生存、events7467B。
-同handleの出力で384.873秒のskill tool実行を確認。終端未確認であり成功/失敗を先取りしない。
+同handleの出力で384.873秒のskill tool、641.007秒media.capabilities実行を確認。
+診断code3c3da4714841d037364a0834b52049f00a730972をcommit/push、PR #432作成。
+GitHub main rulesはPR必須/必要承認0、PRはCLEAN/checks空。実機終端待ちのため未マージ。
+終端未確認であり成功/失敗を先取りしない。
 稼働0.28.60、Host1384554/MF1384429は変更なし。global設定/他sceneを変更しない。
 終了後にstrict verifierと実Blender auto_skin inspector、Host Jobs/receipt/設定回収を照合する。
 NOT TESTED: この実OpenCodeの終端/生成物、複雑character/画像付きskin/engine、全3DS/GA。
