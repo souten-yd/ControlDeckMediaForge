@@ -180,7 +180,15 @@ class BlenderSetupHostControl:
                 "invalid_host_response", "host_response_too_large",
             } else "unknown_host_error"
             status = exc.status_code if type(exc.status_code) is int else 0
-            logger.warning("Blender setup %s control stopped: %s (HTTP %s)", operation_id, code, status)
+            cause = type(exc.__cause__).__name__ if exc.__cause__ is not None else "none"
+            if cause not in {
+                "none", "ConnectError", "ConnectTimeout", "ReadError", "ReadTimeout",
+                "WriteError", "WriteTimeout", "PoolTimeout", "RemoteProtocolError",
+                "LocalProtocolError", "ProxyError",
+            }:
+                cause = "unknown"
+            logger.warning("Blender setup %s control stopped: %s (HTTP %s; cause=%s)",
+                           operation_id, code, status, cause)
             lost = True
         except asyncio.CancelledError:
             logger.info("Blender setup %s control task canceled", operation_id)

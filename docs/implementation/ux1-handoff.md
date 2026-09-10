@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-10 installed Host transport failure diagnosis
+
+base PR466 mergea372ca1、ux1/3d-installed-setup-control-diagnosis。前turnは進捗。
+実Chrome/installed.68/registry待ち240秒試験64685は19.421秒でhost_context_lost検出・即解放。
+operation blenderop_7483d928931f401da05dcfe4e01ffc8b/Host07fb88a6c052、両failed/完全一致receipt/sent1。
+19.788秒cleanup確認/login19.853秒失効、旧行/registry/両exe hash保持。元passed=false/cleanup=true。
+service.log: host_unreachable (HTTP 502)。502はclient既定error statusでありwire応答の証拠ではない。
+今回の停止は期限切れでなく通信失敗。前回210秒と同因か/具体的cause型は未確定。
+独立終端Job GET32回/5秒は91566 exit0。ControlDeckHostClientのcontrol/update32組も47910 exit0/160.527秒。
+稼働子1965891のmapsでuvloop確認。同ライブラリ版/同originのuvloop版57275もexit0/160.350秒。
+別deadline版44268もexit0/32組/160.367秒。全診断終端、専用4Host Jobの終端をfresh control GETで独立確認。
+診断codeはcauseのallowlist型だけログへ追加、本文/tokenは出さない。関連13pass2.94秒、
+全53321 exit0/1604pass169.11秒/既知2warnings、viewer49ms差分0/Node5pass。未配布。
+次: docs確定/commit/push/通常merge。続いて実Blender/core+uvloopのsource同条件でcause型を採取。
+単純GET/独立pair成功をinstalledの障害修正とは扱わず、keepalive/timeout/retryの推測修正をしない。
+全3DS/GA/installed10分refreshは未完了。.68/MF1965886/Host1811096維持、untracked .venv保持。
+
 ## 2026-09-10 installed registration-wait rollback accepted
 
 base PR465 merge93c3b6a、ux1/3d-installed-repair-registration-cancel、文書PR作成前。

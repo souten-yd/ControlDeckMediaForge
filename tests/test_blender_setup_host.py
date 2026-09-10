@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 import pytest
+import httpx
 
 from mediaforge.blender_operation import BlenderRuntimeOperationError, BlenderRuntimeOperationState as State
 from mediaforge.blender_setup_host import BlenderSetupHostControl
@@ -115,7 +116,7 @@ def test_host_cancel_or_revocation_drains_worker(
 
     async def control(caller: HostIdentity, job_id: str) -> dict[str, Any]:
         if host.revoked:
-            raise HostApiError("host_request_rejected", "DO_NOT_LOG_BEARER", status_code=403)
+            raise HostApiError("host_request_rejected", "DO_NOT_LOG_BEARER", status_code=403) from httpx.ReadError("DO_NOT_LOG_TRANSPORT")
         return await original_control(caller, job_id)
 
     monkeypatch.setattr(host, "job_control", control)
@@ -149,8 +150,9 @@ def test_host_cancel_or_revocation_drains_worker(
     assert record.error_code == ("host_context_lost" if revoked else None)
     assert store.blender_runtime_host_journal(operation_id, "user:16")["sent"]
     assert "DO_NOT_LOG_BEARER" not in caplog.text and "child-secret" not in caplog.text
+    assert "DO_NOT_LOG_TRANSPORT" not in caplog.text
     if revoked:
-        assert "host_request_rejected (HTTP 403)" in caplog.text
+        assert "host_request_rejected (HTTP 403; cause=ReadError)" in caplog.text
 
 
 @pytest.mark.parametrize("revoked", [False, True])
