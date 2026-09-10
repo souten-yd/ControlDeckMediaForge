@@ -4,6 +4,7 @@
 
 base PR455 merge0dc95da、branch ux1/3d-setup-host-journal。既存setup tableへprivate owner/Host child/
 terminal outbox/照合receiptを加法追加。公開operation/schemaとローカル再開policyは維持する。
+実装43be15d、PR456作成時CLEAN/MERGEABLE/checksなし。main規則はPR必須・必要approval0、迂回しない。
 所有者なし操作の後付け採用、別owner、別child上書き、同childの二重割当てを拒否。
 Host所有操作は再起動でhost_context_lost、取消flagはcanceled。partial/旧resultを保持し、
 終端意図をlocal終端と同じtransactionへ保存する。bearer field・第二Job基盤は追加しない。

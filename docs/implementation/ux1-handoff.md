@@ -5,7 +5,8 @@
 
 ## 2026-09-10 setup Host journal foundation
 
-base0dc95da、ux1/3d-setup-host-journal。Storeへprivate owner/child/outbox/receipt、再起動fail-closed。
+base0dc95da、ux1/3d-setup-host-journal、PR456 open/mergeable、実装head43be15d。
+Storeへprivate owner/child/outbox/receipt、再起動fail-closed。
 公開契約不変、既存ローカル再開保持。journal14pass2.23秒、viewer39ms差分0/Node5pass。
 実DB readonly backupのR2診断exit0、15tables2565rows全旧column保持、専用owned停止/local再開。
 証跡mf-setup-host-journal-20260910-r2。Host schema error文字列/interrupted receiptを修正後に再受入。
@@ -14,7 +15,8 @@ DB初期化をapp lifespanのworkerへ移し、3回取消drain試験を追加/jo
 実source起動R2はexit0/.421秒、HTTP200/setup_required、owned停止/outbox保持、子1931234終端-15。
 証跡mf-setup-journal-source-startup-20260910-r2。初回は診断PYTHONPATH不足でexit1/log保持。
 MF1919149/installed.66 active、Host変更/再起動/公開なし。untracked .venv保持。
-次: 全gate・commit/push/通常PRmerge後、manager/requestへ正規identityとrefresh/control/outboxを接続。
+次: PR456通常merge後、manager/requestへ正規identityとrefresh/control/outboxを接続。
+再開: git fetch origin と gh pr view 456 でmerge stateを確認。実行中test/診断なし。
 現行production callerはまだownerなし。実Host setup認証/署名配布/全3DS・GAは未完了。
 
 ## 2026-09-10 v0.28.66 installed acceptance
