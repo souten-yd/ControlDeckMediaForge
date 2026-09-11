@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import time
 from itertools import islice
 from pathlib import Path
@@ -238,8 +240,44 @@ class DiffusersFlux2KleinAdapter:
         self.pipeline = pipeline
         self.load_sec = time.perf_counter() - started
 
+    # 量子化した重みを置いておく場所。共有の cache 配下で、モデルの revision
+    # ごとに分ける。revision が変われば別の入れ物になるので、古いものを誤って
+    # 使うことはない。
+    QUANTIZED_CACHE_DIR = "quantized-text-encoders"
+
+    def _quantized_cache_path(self) -> Path | None:
+        root = os.environ.get("CONTROL_DECK_SHARED_CACHE_DIR")
+        if not root:
+            return None
+        # model_path は .../snapshots/<revision> を指している。
+        return (Path(root) / self.QUANTIZED_CACHE_DIR
+                / f"{self.model_path.parent.parent.name}-{self.model_path.name}-int8")
+
     def _quantized_text_encoder(self, torch: Any) -> Any:
+        """int8 の text_encoder を返す。一度作ったら保存して使い回す。
+
+        毎回 bf16 で読んでから量子化していた。実測でその二段が重い:
+
+          読む＋量子化   6.9 秒。RAM の山は 18 GB 前後（変換中は元と先が同居）
+          保存済みを読む 0.1 秒。RAM は 4.5 GB
+
+        RAM の山が効く。30 GB の機械で言語モデルが 15 GB を mmap しているので、
+        18 GB の山はそれだけで尽きる（実測: まとめ生成の 2 枚目が 147 秒、
+        3 枚目は 8 分以上そのまま）。
+
+        保存は一度だけで 29 秒かかる。作れない環境（cache の置き場が無い、
+        書けない）では黙って従来の道に戻る——遅くなるだけで、結果は変わらない。
+        """
+        from optimum.quanto import QuantizedModelForCausalLM
         from transformers import Qwen3ForCausalLM
+
+        cache = self._quantized_cache_path()
+        if cache is not None and (cache / "model.safetensors").is_file():
+            try:
+                wrapped = QuantizedModelForCausalLM.from_pretrained(str(cache))
+                return getattr(wrapped, "_wrapped", None) or getattr(wrapped, "model", wrapped)
+            except Exception:  # noqa: BLE001 - 壊れていたら作り直す
+                shutil.rmtree(cache, ignore_errors=True)
 
         encoder = Qwen3ForCausalLM.from_pretrained(
             self.model_path / "text_encoder",
@@ -247,6 +285,17 @@ class DiffusersFlux2KleinAdapter:
             local_files_only=True,
         )
         self._quantize(encoder)
+        if cache is not None:
+            try:
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                # 途中で落ちた残骸を使わないよう、出来上がってから名前を付ける。
+                staging = cache.with_name(cache.name + ".partial")
+                shutil.rmtree(staging, ignore_errors=True)
+                QuantizedModelForCausalLM(encoder).save_pretrained(str(staging))
+                shutil.rmtree(cache, ignore_errors=True)
+                staging.rename(cache)
+            except Exception:  # noqa: BLE001 - 保存できなくても生成は続ける
+                shutil.rmtree(cache.with_name(cache.name + ".partial"), ignore_errors=True)
         return encoder
 
     @staticmethod

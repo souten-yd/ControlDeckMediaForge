@@ -717,3 +717,33 @@ def test_a_batch_keeps_the_weights_instead_of_reloading_them_each_time():
         assert "keep_resident" not in (model.get("runtime_options") or {}), (
             f"{model['model_id']}: keep_resident はカタログに書くものではない"
         )
+
+
+def test_the_quantized_text_encoder_is_kept_instead_of_rebuilt_each_time():
+    """int8 の text_encoder は一度作ったら保存して使い回す。
+
+    毎回 bf16 で読んでから量子化していた。実測でその二段が重い:
+
+      読む＋量子化   6.9 秒。RAM の山は 18 GB 前後（変換中は元と先が同居）
+      保存済みを読む 0.1 秒。RAM は 4.5 GB
+
+    RAM の山が効く。30 GB の機械で言語モデルが 15 GB を mmap しているので、
+    18 GB の山はそれだけで尽きる（実測: まとめ生成の 2 枚目が 147 秒、
+    3 枚目は 8 分以上そのまま）。
+
+    絵は変わらない。量子化の中身は同じで、作る時期が違うだけである。
+    """
+    import inspect
+
+    from worker_packs.image.adapters.diffusers_flux2 import DiffusersFlux2KleinAdapter
+
+    source = inspect.getsource(DiffusersFlux2KleinAdapter._quantized_text_encoder)
+    assert "QuantizedModelForCausalLM.from_pretrained" in source, "保存済みを読んでいない"
+    assert "save_pretrained" in source, "作ったものを保存していない"
+    # 途中で落ちた残骸を使わない。
+    assert "partial" in source, "出来上がる前のものを使う余地がある"
+
+    # 置き場は revision ごとに分ける。別の版の重みを誤って使わない。
+    path_source = inspect.getsource(DiffusersFlux2KleinAdapter._quantized_cache_path)
+    assert "CONTROL_DECK_SHARED_CACHE_DIR" in path_source
+    assert "int8" in path_source
