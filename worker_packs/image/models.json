@@ -38,9 +38,9 @@
       "state": "available",
       "measurements": {
         "resident_vram_bytes": 0,
-        "execution_peak_vram_bytes": 8246337208,
-        "cold_load_peak_vram_bytes": 8246337208,
-        "headroom_vram_bytes": 1932735283,
+        "execution_peak_vram_bytes": 9556302233,
+        "cold_load_peak_vram_bytes": 9556302233,
+        "headroom_vram_bytes": 3221225472,
         "measured_runtime_sec": 7.0,
         "host_resident_bytes": 12884901888
       },
