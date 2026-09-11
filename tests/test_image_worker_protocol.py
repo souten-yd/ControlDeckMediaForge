@@ -584,3 +584,40 @@ def test_flux_is_offloaded_so_the_language_model_can_stay_resident():
         options = model["runtime_options"]
         assert options["device_mode"] == "cpu_offload"
         assert options["text_encoder_quantization"] == "int8"
+
+
+def test_the_measurements_match_the_way_the_model_is_placed():
+    """載せ方を変えたら、実測も測り直さないと資源の申告が嘘になる。
+
+    実際に起きた: FLUX.2 Klein を direct_device_map から cpu_offload へ変えた
+    のに measurements は前のままで、山 20.9 GiB + 余白 3.4 GiB = 24.3 GiB を
+    申告し続けた。言語モデルが 18.9 GiB 載っている状態では取れないので、生成の
+    job が waiting_resource から動かなくなった。部分退避の実測は 7.68 GiB で、
+    申告が正しければ収まる。
+
+    載せ方ごとに測り直す仕組みまでは作らない（測るのは重い）。代わりに、
+    部分退避を名乗るモデルが全部載せのときの山を申告していないことを見る。
+    """
+    import json
+    from pathlib import Path
+
+    GIB = 1024 ** 3
+    manifest = json.loads(
+        (Path(__file__).parents[1] / "worker_packs/image/models.json").read_text(encoding="utf-8")
+    )
+    for model in manifest["models"]:
+        options = model.get("runtime_options") or {}
+        if options.get("device_mode") != "cpu_offload":
+            continue
+        measurements = model.get("measurements") or {}
+        peak = int(measurements.get("execution_peak_vram_bytes") or 0)
+        assert peak > 0, f"{model['model_id']}: 山が測られていない"
+        # 部分退避は「同時に載る最大の部品」で決まる。重み全体を超えるなら、
+        # それは全部載せのときの数字である。
+        assert peak <= 12 * GIB, (
+            f"{model['model_id']}: cpu_offload なのに山が {peak/GIB:.1f} GiB。"
+            "全部載せのときの実測が残っている疑いがある"
+        )
+        assert int(measurements.get("resident_vram_bytes") or 0) == 0, (
+            f"{model['model_id']}: cpu_offload は呼び出しの間しか載らないので常駐は 0"
+        )
