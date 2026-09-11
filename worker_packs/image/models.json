@@ -15,7 +15,8 @@
         "default_steps": 4,
         "native_width": 1024,
         "native_height": 1024,
-        "text_encoder_quantization": "int8"
+        "text_encoder_quantization": "int8",
+        "transformer_quantization": "int8"
       },
       "generation_limits": {
         "max_width": 1024,
@@ -38,11 +39,11 @@
       "state": "available",
       "measurements": {
         "resident_vram_bytes": 0,
-        "execution_peak_vram_bytes": 9556302233,
-        "cold_load_peak_vram_bytes": 9556302233,
-        "headroom_vram_bytes": 3221225472,
-        "measured_runtime_sec": 7.0,
-        "host_resident_bytes": 12884901888
+        "execution_peak_vram_bytes": 7086696038,
+        "cold_load_peak_vram_bytes": 7086696038,
+        "headroom_vram_bytes": 2362232012,
+        "measured_runtime_sec": 4.5,
+        "host_resident_bytes": 9663676416
       },
       "measurement_confidence": "measured",
       "policy_rank": {

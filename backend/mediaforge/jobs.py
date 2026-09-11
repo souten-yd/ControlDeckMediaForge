@@ -138,7 +138,7 @@ def _placement_summary(response: dict[str, Any]) -> dict[str, Any]:
         return {}
     placement = {
         key: metrics[key]
-        for key in ("device_mode", "text_encoder_quantization")
+        for key in ("device_mode", "text_encoder_quantization", "transformer_quantization")
         if isinstance(metrics.get(key), str) and metrics[key]
     }
     return {"runtime_placement": placement} if placement else {}
@@ -2025,6 +2025,8 @@ class JobManager:
                         # 受け取ると worker は要求ごと弾く。
                         **({"text_encoder_quantization": selected.text_encoder_quantization}
                            if selected.text_encoder_quantization != "none" else {}),
+                        **({"transformer_quantization": selected.transformer_quantization}
+                           if selected.transformer_quantization != "none" else {}),
                         # まとめ生成の途中かどうか。部分退避の worker は仕事の
                         # たびに重みを手放すが、続きがあるなら抱えたままにする。
                         #
