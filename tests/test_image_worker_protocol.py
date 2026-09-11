@@ -646,3 +646,30 @@ def test_provenance_records_how_the_model_was_placed():
     assert _placement_summary({"runtime_metrics": {"device_mode": "full_device"}}) == {
         "runtime_placement": {"device_mode": "full_device"}
     }
+
+
+def test_catalog_runtime_options_reach_the_worker():
+    """カタログに書いた設定が worker まで届かないと、書いた意味がない。
+
+    実際に起きた: text_encoder_quantization をカタログと worker の両方に足した
+    のに、core は worker へ渡す runtime_options を ModelDescriptor の項目から
+    組み直しており、descriptor にその項目が無かったので落ちていた。絵は int8 で
+    作られず、来歴にも残らなかった。
+
+    同じ形の事故が今日 3 回起きている（説明の二重、許可一覧の二重、実測と載せ方）。
+    どれも「同じ事実が二か所にあり、片方だけ変わると壊れる」である。
+    """
+    import inspect
+
+    from mediaforge.models import registry as model_registry
+    from mediaforge import jobs as job_module
+
+    descriptor_fields = set(model_registry.ModelDescriptor.__dataclass_fields__)
+    assert "text_encoder_quantization" in descriptor_fields, (
+        "ModelDescriptor が運ばないと、カタログの設定は worker へ届かない"
+    )
+    payload_source = inspect.getsource(job_module.JobManager._run_worker) \
+        if hasattr(job_module.JobManager, "_run_worker") else inspect.getsource(job_module)
+    assert "selected.text_encoder_quantization" in payload_source, (
+        "worker へ渡す runtime_options に載っていない"
+    )

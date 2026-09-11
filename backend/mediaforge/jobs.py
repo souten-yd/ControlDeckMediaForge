@@ -2021,6 +2021,10 @@ class JobManager:
                     "runtime_options": {
                         "device_mode": self._resolved_device_mode(job_id, selected, execution),
                         "disable_mmap": selected.disable_mmap,
+                        # 量子化していない adapter には送らない。知らない鍵を
+                        # 受け取ると worker は要求ごと弾く。
+                        **({"text_encoder_quantization": selected.text_encoder_quantization}
+                           if selected.text_encoder_quantization != "none" else {}),
                         # 系統ごとの既定。持たないモデルには送らない。
                         **({"negative_prompt": selected.negative_prompt}
                            if selected.negative_prompt else {}),
