@@ -2025,6 +2025,15 @@ class JobManager:
                         # 受け取ると worker は要求ごと弾く。
                         **({"text_encoder_quantization": selected.text_encoder_quantization}
                            if selected.text_encoder_quantization != "none" else {}),
+                        # まとめ生成の途中かどうか。部分退避の worker は仕事の
+                        # たびに重みを手放すが、続きがあるなら抱えたままにする。
+                        #
+                        # 手放す理由は RAM である（VRAM を空けた分が RAM へ移り、
+                        # 実測で 30 GB が尽きて 1 枚目が 176 秒かかった）。ところが
+                        # まとめ生成では、1 件ごとに 12 GB を読み直すことになり、
+                        # 同じ RAM 逼迫をもっと激しく起こす（実測: 4 枚の batch で
+                        # 2 枚目が 147 秒）。抱えたままなら読み直しが 1 回で済む。
+                        "keep_resident": bool(self._keep_warm),
                         # 系統ごとの既定。持たないモデルには送らない。
                         **({"negative_prompt": selected.negative_prompt}
                            if selected.negative_prompt else {}),
