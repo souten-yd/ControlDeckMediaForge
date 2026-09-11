@@ -243,6 +243,17 @@ class JobManager:
         # LLM が載って単一 GPU では入らない。
         self._linger_execution: HostExecution | None = None
         self._linger_task: asyncio.Task[None] | None = None
+        # 続きが来ると分かっている間、件をまたいで持ち回る lease。
+        #
+        # 返してすぐ同じ量を求め直すと、その隙に broker が「置き場所が無い」と
+        # 判じ、使っていない言語モデルを降ろす（resources/broker.py の
+        # _ask_for_room → provider.step_aside）。実測では 4 枚のまとめ生成で
+        # 3 枚目まで同居できて、そこで降りた。申告 8.8GiB は実測 6.15GiB の
+        # 1.4 倍あるうえ、broker が見る VRAM は 2 秒ごとの標本で最大 4 秒古く、
+        # 前の 1 枚の山がまだ見えている間に次の受付が走るためである。
+        #
+        # linger と違うのは引き金だけで、こちらは時計ではなく宣言で決まる。
+        self._carried_lease: HostExecution | None = None
         self._host_executions: dict[str, HostExecution] = {}
         self.host_terminals = (HostedJobTerminals(store, host_client, lambda identifier: identifier in self._host_executions)
                                if host_client is not None else None)
@@ -421,7 +432,9 @@ class JobManager:
             yield
         finally:
             self._keep_warm = max(0, self._keep_warm - 1)
+            # 降ろすのが先、返すのが後。返しただけでは VRAM は空かない。
             await self._purge_if_idle()
+            await self._release_carried_lease()
 
     async def wait_cleanup(self, job_id: str, timeout: float = 5.0) -> None:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -603,7 +616,9 @@ class JobManager:
                 # host（システムRAM）を割り当てるので、場所を空けてもらう必要が
                 # 無くなった。降ろさせると、使っている最中の OpenCode や chat の
                 # モデルを画像 1 枚のために落とすことになる。
-                admitted = await self._acquire_host_lease(job, execution, reporter)
+                admitted = await self._adopt_carried_lease(execution, selected)
+                if not admitted:
+                    admitted = await self._acquire_host_lease(job, execution, reporter)
                 if not admitted:
                     return
                 maintenance = asyncio.create_task(
@@ -624,9 +639,11 @@ class JobManager:
             if maintenance is not None:
                 maintenance.cancel()
                 await asyncio.gather(maintenance, return_exceptions=True)
-            if execution is not None and execution is not self._linger_execution:
-                # 待ちへ引き継いだ lease はここで返さない。返してしまうと、
-                # 抱えている VRAM が broker から見えなくなる。
+            if (execution is not None
+                    and execution is not self._linger_execution
+                    and execution is not self._carried_lease):
+                # 待ちへ引き継いだ lease、次の件へ持ち回る lease はここで返さない。
+                # 返してしまうと、抱えている VRAM が broker から見えなくなる。
                 await self._release_host_resource(execution)
 
     def _select_real_model(self, job: Job) -> ModelDescriptor | None:
@@ -1778,6 +1795,85 @@ class JobManager:
         warm = self._warm_worker
         return warm is not None and warm[0].returncode is None
 
+    def _can_carry_lease(self, job: Job, execution: HostExecution) -> bool:
+        """この lease を次の件へ持ち回ってよいか。
+
+        持ち回るのは「続きが来る」と宣言されている間（batch）だけである。
+        linger と同じ判断だが、引き金が時計ではなく宣言なので、
+        warm_linger_sec を 0 にしていても効く（既定が 0 である）。
+
+        GPU に載っているときに限る。host（システムRAM）で走ったものを持ち
+        回っても次が速くならないし、broker から見た空きを狭めるだけになる。
+        """
+        if not self._keep_warm or self.host_client is None:
+            return False
+        if execution.lease_id is None or execution.device_id != "gpu0":
+            return False
+        if self._carried_lease is not None:
+            # 二重に抱えない。持ち回りは常に 1 つで、次の件がそれを引き取る。
+            return False
+        if job.request.qa.semantic:
+            # 直後に Host が VLM を載せる。抱えたままでは入らない。
+            return False
+        warm = self._warm_worker
+        return warm is not None and warm[0].returncode is None
+
+    async def _adopt_carried_lease(
+        self, execution: HostExecution, selected: ModelDescriptor | None
+    ) -> bool:
+        """前の件から持ち回った lease を、この件のものとして使う。
+
+        使えるのは、同じ host job に属し、同じ model を GPU に載せたまま
+        引き継いだときだけである。model が違えば worker は載せ直すので、
+        常駐ぶんを改めて求めるのが正しい。
+
+        identity も引き継ぐ。件ごとの受付を通らなくなるぶん、資格の更新も
+        通らなくなるので、ここで明示して更新する。見張り（_maintain_host_lease）
+        が更新するのは lease であって資格ではない。
+
+        これをしないと、件ごとに「返す→同じ量を求める」を繰り返すことになる。
+        その隙に broker が「置き場所が無い」と判じ、使っていない言語モデルを
+        降ろす。実測では 4 枚のまとめ生成で 3 枚目まで同居できて、そこで降りた。
+        """
+        previous = self._carried_lease
+        if previous is None or selected is None:
+            # 実 model を選んでいないなら、載せたままのものが無い。
+            return False
+        if previous.lease_id is None or previous.device_id != "gpu0":
+            return False
+        if previous.host_job_id != execution.host_job_id:
+            return False
+        warm = self._warm_worker
+        if warm is None or warm[0].returncode is not None:
+            return False
+        if self._warm_model != selected.model_id:
+            return False
+        try:
+            await self._refresh_host_identity(previous)
+        except HostApiError:
+            # 資格が切れていたら持ち回りは諦める。通常の受付が改めて取り、
+            # そこで落ちれば job の error として報告される。黙って続けない。
+            await self._release_carried_lease()
+            return False
+        self._carried_lease = None
+        execution.identity = previous.identity
+        execution.lease_id = previous.lease_id
+        execution.device_id = previous.device_id
+        execution.granted_bytes = previous.granted_bytes
+        # 受付の要求は前の件のもので、返すのは lease の方である。両方を持つと
+        # _release_host_resource がどちらを返すか曖昧になる。
+        execution.request_id = None
+        previous.lease_id = None
+        previous.request_id = None
+        return True
+
+    async def _release_carried_lease(self) -> None:
+        """持ち回っている lease を返す。続きが無くなったときに呼ぶ。"""
+        execution = self._carried_lease
+        self._carried_lease = None
+        if execution is not None:
+            await self._release_host_resource(execution)
+
     def _begin_linger(self, execution: HostExecution) -> None:
         """lease を持ったまま、次の依頼を待つ。"""
         self._linger_execution = execution
@@ -1856,28 +1952,38 @@ class JobManager:
         await self._end_linger(retire=True)
 
     async def _retire_warm_worker(self) -> None:
-        """常駐 worker を終わらせる。stdin を閉じれば main() の loop が抜ける。"""
+        """常駐 worker を終わらせる。stdin を閉じれば main() の loop が抜ける。
+
+        持ち回っている lease も、ここで必ず返す。抱えているものが無くなった
+        のに lease だけ残ると、broker から見た空きが実際より狭いままになる。
+        返すのは worker を終わらせた後である——返しただけでは VRAM は空かない。
+        """
         warm = self._warm_worker
         self._warm_worker = None
         self._warm_model = None
         if warm is None:
+            await self._release_carried_lease()
             return
         process, _ = warm
-        if process.returncode is None:
-            try:
-                if process.stdin is not None and not process.stdin.is_closing():
-                    process.stdin.close()
-                await asyncio.wait_for(process.wait(), timeout=5)
-            except asyncio.CancelledError:
-                # 終了中に取り消されても、worker を残さない。pipe を畳めば
-                # transport が生きているプロセスを終わらせる。
-                self._close_pipes(process)
-                raise
-            except (TimeoutError, asyncio.TimeoutError, ConnectionResetError, BrokenPipeError):
-                await self._kill(process)
-            except Exception:  # noqa: BLE001 - 後片付けで job を落とさない
-                await self._kill(process)
-        self._close_pipes(process)
+        try:
+            if process.returncode is None:
+                try:
+                    if process.stdin is not None and not process.stdin.is_closing():
+                        process.stdin.close()
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except asyncio.CancelledError:
+                    # 終了中に取り消されても、worker を残さない。pipe を畳めば
+                    # transport が生きているプロセスを終わらせる。
+                    self._close_pipes(process)
+                    raise
+                except (TimeoutError, asyncio.TimeoutError, ConnectionResetError, BrokenPipeError):
+                    await self._kill(process)
+                except Exception:  # noqa: BLE001 - 後片付けで job を落とさない
+                    await self._kill(process)
+            self._close_pipes(process)
+        finally:
+            # 取り消されても lease は残さない。shield で取り消しの先へ通す。
+            await asyncio.shield(asyncio.ensure_future(self._release_carried_lease()))
 
     @staticmethod
     async def _kill(process: asyncio.subprocess.Process) -> None:
@@ -2310,6 +2416,10 @@ class JobManager:
                 # 続けるのは、抱えている VRAM を broker から見えるようにして
                 # おくためで、他が要れば pressure を見て即座に降りる。
                 self._begin_linger(execution)
+            elif self._can_carry_lease(job, execution):
+                # まだ返さない。続きが来ると宣言されているので、次の件がこれを
+                # そのまま使う。返して取り直す隙が、言語モデルを降ろさせる。
+                self._carried_lease = execution
             elif not await self._release_host_resource(execution):
                 await self._update(
                     job_id,

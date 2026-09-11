@@ -106,6 +106,135 @@ def host_execution() -> HostExecution:
     )
 
 
+class _RecordingHost:
+    """lease に対する操作だけを記録する。他は呼ばれたら気づけるよう置かない。"""
+
+    def __init__(self) -> None:
+        self.lease_actions: list[tuple[str, str]] = []
+        self.canceled_requests: list[str] = []
+
+    async def lease_action(self, identity, lease_id: str, action: str) -> dict:
+        self.lease_actions.append((lease_id, action))
+        return {"lease_id": lease_id, "state": "released" if action == "release" else "active"}
+
+    async def cancel_resource(self, identity, request_id: str) -> dict:
+        self.canceled_requests.append(request_id)
+        return {"request_id": request_id, "state": "canceled"}
+
+
+class _AliveWorker:
+    """生きている worker の代わり。stdin も transport も持たない。"""
+
+    returncode: int | None = None
+    stdin = None
+
+    async def wait(self) -> int:
+        self.returncode = 0
+        return 0
+
+
+def _warm_manager(tmp_path: Path) -> tuple[JobManager, _RecordingHost]:
+    store = Store(tmp_path / "data")
+    store.initialize()
+    host = _RecordingHost()
+    manager = JobManager(store, host_client=host)
+    # まとめ生成の最中を作る: 続きが来ると宣言され、worker が model を載せたまま
+    # 生きている。
+    manager._keep_warm = 1
+    manager._warm_worker = (_AliveWorker(), "signature")
+    manager._warm_model = "owner/model"
+    return manager, host
+
+
+def _granted(lease_id: str) -> HostExecution:
+    execution = host_execution()
+    execution.lease_id = lease_id
+    execution.device_id = "gpu0"
+    execution.granted_bytes = 9_448_928_051
+    return execution
+
+
+def test_a_batch_carries_its_lease_instead_of_returning_and_asking_again(tmp_path: Path):
+    """件と件の間で lease を返さない。返して取り直す隙が、言語モデルを降ろさせる。
+
+    返した瞬間、broker から見た空きは変わらない（worker が VRAM を抱えたまま）
+    のに、次の件が改めて 8.8GiB を求める。置けないと判じた broker は、使って
+    いない言語モデルを降ろす（ControlDeck: resources/broker.py の
+    _ask_for_room → provider.step_aside）。
+
+    実測: 4 枚のまとめ生成で 3 枚目まで同居できて、そこで降りた。申告 8.8GiB は
+    実測 6.15GiB の 1.4 倍あり、broker が見る VRAM は 2 秒ごとの標本で最大
+    4 秒古く、前の 1 枚の山がまだ見えている間に次の受付が走るためである。
+    """
+    manager, host = _warm_manager(tmp_path)
+    job = manager.store.create_job(JobRequest(operation="image.generate", intent="1 件目"))
+    first = _granted("lease-1")
+
+    assert manager._can_carry_lease(job, first), "続きがあるのに返そうとしている"
+    manager._carried_lease = first
+
+    second = host_execution()
+    adopted = asyncio.run(manager._adopt_carried_lease(second, measured_model()))
+
+    assert adopted, "持ち回った lease を使っていない"
+    assert second.lease_id == "lease-1"
+    assert second.device_id == "gpu0"
+    assert second.granted_bytes == first.granted_bytes
+    # 返してもいないし、求め直してもいない。
+    assert host.lease_actions == []
+    assert host.canceled_requests == []
+    # 同じ lease を二つの execution が持たない。返すのは一度きりである。
+    assert first.lease_id is None
+
+
+def test_the_carried_lease_is_returned_once_the_worker_is_gone(tmp_path: Path):
+    """抱えているものが無くなったら lease も返す。
+
+    返し忘れると、broker から見た空きが実際より狭いままになり、次に GPU を
+    要る処理（音楽生成や会話）が入らなくなる。順序は「降ろしてから返す」で、
+    返しただけでは VRAM は空かない。
+    """
+    manager, host = _warm_manager(tmp_path)
+    manager._carried_lease = _granted("lease-1")
+
+    asyncio.run(manager._retire_warm_worker())
+
+    assert host.lease_actions == [("lease-1", "release")]
+    assert manager._carried_lease is None
+    assert manager._warm_worker is None
+
+
+def test_a_different_model_does_not_reuse_the_carried_lease(tmp_path: Path):
+    """載せ直すなら常駐ぶんを改めて求める。
+
+    lease は「この model をこの device に置いてよい」という許可である。worker が
+    別の model へ載せ替えるなら、前の許可を使い回してはいけない。
+    """
+    manager, host = _warm_manager(tmp_path)
+    manager._warm_model = "owner/other-model"
+    manager._carried_lease = _granted("lease-1")
+
+    adopted = asyncio.run(manager._adopt_carried_lease(host_execution(), measured_model()))
+
+    assert not adopted
+    # 諦めただけで、失くしてはいない。宣言が解ければ返される。
+    assert manager._carried_lease is not None
+    assert host.lease_actions == []
+
+
+def test_a_lease_on_system_ram_is_not_carried(tmp_path: Path):
+    """host（システムRAM）で走ったものは持ち回らない。
+
+    抱えても次が速くならないうえ、broker から見た GPU の空きを狭めるだけになる。
+    """
+    manager, _host = _warm_manager(tmp_path)
+    job = manager.store.create_job(JobRequest(operation="image.generate", intent="RAM で走った"))
+    execution = _granted("lease-1")
+    execution.device_id = "host"
+
+    assert not manager._can_carry_lease(job, execution)
+
+
 def test_generation_does_not_unload_the_language_model(tmp_path: Path):
     """画像 1 枚のために、使っている最中の LLM を降ろさせない。
 
