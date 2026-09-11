@@ -99,7 +99,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Bind an existing Media Forge image Asset to an exact scene revision.",
+  "description": "Put a picture onto a surface in a 3D scene — wood grain on a table, a label on a can. The picture must already be a Media Forge asset; make it with media.generate first.\n\nName the revision you are changing, as media.scene.edit does. For anything else — moving things, lighting, camera — use media.scene.edit.",
   "properties": {
     "scene_id": {
       "pattern": "^scene_[0-9a-f]{32}$",

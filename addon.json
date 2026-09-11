@@ -2,7 +2,7 @@
   "api_version": "2",
   "id": "media-forge",
   "name": "Media Forge",
-  "version": "0.28.71",
+  "version": "0.28.72",
   "description": "Local-first media generation and asset library",
   "publisher": "souten-yd",
   "requires": {
@@ -95,7 +95,7 @@
     "agent_tools": [
       {
         "id": "media.capabilities",
-        "label": "Inspect media capabilities",
+        "label": "List the media models and features available now",
         "endpoint": "/addon/v1/agent/capabilities",
         "schema_path": "/schemas/empty-input.json",
         "permission": "workflows.run"
@@ -116,7 +116,7 @@
       },
       {
         "id": "media.inspect",
-        "label": "Inspect a media asset",
+        "label": "Read back what a finished media asset is",
         "endpoint": "/addon/v1/agent/inspect",
         "schema_path": "/schemas/asset-reference.json",
         "permission": "workflows.run"
@@ -130,51 +130,51 @@
       },
       {
         "id": "media.scene.create",
-        "label": "Create a 3D scene with a typed recipe and return a durable Job",
+        "label": "Create a 3D scene",
         "endpoint": "/addon/v1/agent/scene/create",
         "schema_path": "/schemas/scene-create-request.json",
         "permission": "workflows.run"
       },
       {
         "id": "media.scene.edit",
-        "label": "Edit a 3D scene with bounded typed operations and return a durable Job",
+        "label": "Edit an existing 3D scene",
         "endpoint": "/addon/v1/agent/scene/edit",
         "schema_path": "/schemas/scene-edit-request.json",
         "permission": "workflows.run"
       },
       {
         "id": "media.scene.material",
-        "label": "Apply a typed material operation to a 3D scene",
+        "label": "Change a material on a 3D scene",
         "endpoint": "/addon/v1/agent/scene/material",
         "schema_path": "/schemas/scene-material-request.json",
         "permission": "workflows.run"
       },
       {
         "id": "media.scene.snapshot",
-        "label": "Inspect the current immutable 3D scene revision",
+        "label": "Read back the current state of a 3D scene",
         "endpoint": "/addon/v1/agent/scene/snapshot",
         "schema_path": "/schemas/scene-reference.json",
         "permission": "workflows.run"
       },
       {
         "id": "media.scene.export",
-        "label": "Resolve a validated GLB or Blender asset for a 3D scene",
+        "label": "Export a 3D scene as GLB or Blender",
         "endpoint": "/addon/v1/agent/scene/export",
         "schema_path": "/schemas/scene-export-request.json",
         "permission": "workflows.run"
       },
       {
         "id": "media.job.status",
-        "label": "Inspect an owner-scoped durable Media Forge scene Job",
+        "label": "Check whether a 3D scene job has finished",
         "endpoint": "/addon/v1/agent/job/status",
-        "schema_path": "/schemas/scene-job-reference.json",
+        "schema_path": "/schemas/scene-job-status-request.json",
         "permission": "workflows.run"
       },
       {
         "id": "media.job.cancel",
-        "label": "Cancel an owner-scoped durable Media Forge scene Job",
+        "label": "Cancel a running 3D scene job",
         "endpoint": "/addon/v1/agent/job/cancel",
-        "schema_path": "/schemas/scene-job-reference.json",
+        "schema_path": "/schemas/scene-job-cancel-request.json",
         "permission": "workflows.run"
       }
     ],

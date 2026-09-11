@@ -2,5 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://media-forge.local/schemas/empty-input.json",
   "type": "object",
-  "additionalProperties": false
+  "additionalProperties": false,
+  "description": "Which image, video and 3D models are installed, and which of them run on this machine. Use it when you need to know what is possible before promising it. It makes nothing — media.generate and media.generate.batch do, and neither needs this first."
 }

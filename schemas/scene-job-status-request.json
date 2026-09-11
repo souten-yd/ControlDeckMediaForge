@@ -1,0 +1,18 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id"
+  ],
+  "title": "SceneJobStatusRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/scene-job-status-request.json",
+  "description": "Whether a 3D scene job has finished, and what it produced. Scene work returns a job id; follow it here. It starts nothing — media.scene.create and media.scene.edit do."
+}

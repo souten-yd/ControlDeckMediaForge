@@ -29,3 +29,12 @@ spandrel==0.4.2
 # 512² も 1024² も 4 秒である。ROCm 版の onnxruntime を入れると、上の torch と
 # 同じ轍（別の加速器版が依存を置き換える）を踏むので入れない。
 onnxruntime==1.29.0
+
+# text_encoder を int8 にする。FLUX.2 は重みの 8 割が text_encoder（Qwen3）で、
+# ここを削ると生成の山が 3 GB 下がる（実測 18.35 → 15.30 GiB、生成も 4.0 → 2.8 秒）。
+# 同じ seed・同じ手数で絵の違いは見て取れなかった。
+#
+# **--no-deps で入れること。** 素で入れると pip が torch を解決し直し、
+# CUDA 版で ROCm の torch を置き換える（上の torchvision と同じ事故になる）。
+# int4 は quanto が HIP の拡張をその場で組もうとして失敗する。int8 は要らない。
+optimum-quanto==0.2.7

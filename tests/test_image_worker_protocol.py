@@ -502,3 +502,174 @@ def test_a_cached_adapter_is_not_reused_for_a_different_placement(monkeypatch, t
         worker.handle(request)
 
     assert built == ["direct_device_map", "cpu"]
+
+
+def test_the_catalog_options_allowed_by_core_and_worker_are_the_same():
+    """runtime_options の許可一覧が二か所にある。片方だけ足すとカタログが読めなくなる。
+
+    実際に起きた: worker 側に text_encoder_quantization を足してカタログへ書いた
+    ところ、core 側（models/registry.py）が知らない鍵として弾き、モデルが 1 件も
+    読めなくなって試験が 8 件落ちた。落ち方は「生成された資産が無い」で、原因から
+    遠い。
+
+    どちらが正しいかではなく、食い違っていないことを見る。
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+
+    def allowed(path: str, anchor: str) -> set[str]:
+        body = (root / path).read_text(encoding="utf-8")
+        start = body.index(anchor)
+        block = body[start:body.index("}:", start)]
+        return set(re.findall(r'"([a-z_]+)"', block))
+
+    core = allowed("backend/mediaforge/models/registry.py",
+                   'if not isinstance(runtime_options, dict) or set(runtime_options) - {')
+    worker = allowed("worker_packs/image/worker.py",
+                     'if not isinstance(runtime_options, dict) or set(runtime_options) - {')
+
+    # worker が受けるものは、core も通せなければカタログが読めない。
+    assert worker <= core, f"core が知らない runtime_options: {sorted(worker - core)}"
+
+
+def test_an_offloaded_run_lets_go_of_the_weights_afterwards():
+    """部分退避で走ったら、CPU 側も手放す。
+
+    host は cpu_offload を「重みを抱えない載せ方」として扱い、常駐の数に入れて
+    いない（jobs.py の _RESIDENT_MODES）。ところが worker は adapter を持った
+    ままで、重みは CPU の RAM に残っていた。VRAM を空けた分が RAM へ移るだけで、
+    host の前提と食い違っていた。
+
+    実測: LLM が mmap で 15 GB、FLUX.2 の text_encoder が 12 GB を抱え、RAM
+    30 GB が尽きて 1 枚目の描画が 176 秒かかった（本来 3.7 秒）。手放すと次回は
+    ディスクから読み直すが 7.6 秒である。
+    """
+    import inspect
+
+    from worker_packs.image import worker as image_worker
+
+    source = inspect.getsource(image_worker.ImageWorker.handle)
+    assert 'if device_mode == "cpu_offload":' in source
+    assert "_release_adapters()" in source
+
+    released = image_worker.ImageWorker.__new__(image_worker.ImageWorker)
+    released.adapters = {("x", "cpu_offload"): object()}
+    released._release_adapters()
+    assert released.adapters == {}
+
+
+def test_flux_is_offloaded_so_the_language_model_can_stay_resident():
+    """FLUX.2 は重みの 8 割が text_encoder で、しかも使うのは最初の一度だけ。
+
+    実測（同じ seed・同じ手数）:
+      full_device    山 15.30 GiB  生成 3.4 秒
+      cpu_offload    山  7.68 GiB  生成 7.0 秒
+
+    LLM は ctx 65,536 で 18.9 GiB を占める。全部載せでは足して 34.2 GiB となり
+    31.9 GiB のカードに収まらず、生成のたびに LLM を降ろしていた。降ろすと戻す
+    ときに文脈を読み直すため、実測で 1 枚あたり約 70 秒かかっていた。
+    部分退避なら足して 26.6 GiB で収まり、降ろさずに 7 秒で済む。
+    """
+    import json
+    from pathlib import Path
+
+    manifest = json.loads(
+        (Path(__file__).parents[1] / "worker_packs/image/models.json").read_text(encoding="utf-8")
+    )
+    flux = [m for m in manifest["models"] if m.get("runtime_adapter") == "diffusers.flux2-klein"]
+    assert flux, "FLUX.2 Klein がカタログに無い"
+    for model in flux:
+        options = model["runtime_options"]
+        assert options["device_mode"] == "cpu_offload"
+        assert options["text_encoder_quantization"] == "int8"
+
+
+def test_the_measurements_match_the_way_the_model_is_placed():
+    """載せ方を変えたら、実測も測り直さないと資源の申告が嘘になる。
+
+    実際に起きた: FLUX.2 Klein を direct_device_map から cpu_offload へ変えた
+    のに measurements は前のままで、山 20.9 GiB + 余白 3.4 GiB = 24.3 GiB を
+    申告し続けた。言語モデルが 18.9 GiB 載っている状態では取れないので、生成の
+    job が waiting_resource から動かなくなった。部分退避の実測は 7.68 GiB で、
+    申告が正しければ収まる。
+
+    載せ方ごとに測り直す仕組みまでは作らない（測るのは重い）。代わりに、
+    部分退避を名乗るモデルが全部載せのときの山を申告していないことを見る。
+    """
+    import json
+    from pathlib import Path
+
+    GIB = 1024 ** 3
+    manifest = json.loads(
+        (Path(__file__).parents[1] / "worker_packs/image/models.json").read_text(encoding="utf-8")
+    )
+    for model in manifest["models"]:
+        options = model.get("runtime_options") or {}
+        if options.get("device_mode") != "cpu_offload":
+            continue
+        measurements = model.get("measurements") or {}
+        peak = int(measurements.get("execution_peak_vram_bytes") or 0)
+        assert peak > 0, f"{model['model_id']}: 山が測られていない"
+        # 部分退避は「同時に載る最大の部品」で決まる。重み全体を超えるなら、
+        # それは全部載せのときの数字である。
+        assert peak <= 12 * GIB, (
+            f"{model['model_id']}: cpu_offload なのに山が {peak/GIB:.1f} GiB。"
+            "全部載せのときの実測が残っている疑いがある"
+        )
+        assert int(measurements.get("resident_vram_bytes") or 0) == 0, (
+            f"{model['model_id']}: cpu_offload は呼び出しの間しか載らないので常駐は 0"
+        )
+
+
+def test_provenance_records_how_the_model_was_placed():
+    """同じ重みでも、載せ方と量子化で出る絵は変わる。
+
+    実測: text_encoder を int4 にすると埋め込みの相対誤差が 3% から 14% に跳ね、
+    同じ seed・同じ手数でも絵が別物になった（軸の形、艶、木目、背景のぼけ方）。
+    来歴に model_id と weights_hash はあったが載せ方が無く、int8 で作った絵と
+    bf16 で作った絵を後から区別できなかった。
+
+    宣言（カタログ）ではなく worker の報告を正とする。枠が足りずに軽い載せ方へ
+    落ちることがあり、そのときカタログを写すと嘘になる。
+    """
+    from mediaforge.jobs import _placement_summary
+
+    assert _placement_summary({}) == {}
+    assert _placement_summary({"runtime_metrics": {}}) == {}
+    assert _placement_summary({"runtime_metrics": {
+        "device_mode": "cpu_offload", "text_encoder_quantization": "int8",
+    }}) == {"runtime_placement": {"device_mode": "cpu_offload",
+                                  "text_encoder_quantization": "int8"}}
+    # 量子化していない adapter は名乗らない。空の鍵を残さない。
+    assert _placement_summary({"runtime_metrics": {"device_mode": "full_device"}}) == {
+        "runtime_placement": {"device_mode": "full_device"}
+    }
+
+
+def test_catalog_runtime_options_reach_the_worker():
+    """カタログに書いた設定が worker まで届かないと、書いた意味がない。
+
+    実際に起きた: text_encoder_quantization をカタログと worker の両方に足した
+    のに、core は worker へ渡す runtime_options を ModelDescriptor の項目から
+    組み直しており、descriptor にその項目が無かったので落ちていた。絵は int8 で
+    作られず、来歴にも残らなかった。
+
+    同じ形の事故が今日 3 回起きている（説明の二重、許可一覧の二重、実測と載せ方）。
+    どれも「同じ事実が二か所にあり、片方だけ変わると壊れる」である。
+    """
+    import inspect
+
+    from mediaforge.models import registry as model_registry
+    from mediaforge import jobs as job_module
+
+    descriptor_fields = set(model_registry.ModelDescriptor.__dataclass_fields__)
+    assert "text_encoder_quantization" in descriptor_fields, (
+        "ModelDescriptor が運ばないと、カタログの設定は worker へ届かない"
+    )
+    payload_source = inspect.getsource(job_module.JobManager._run_worker) \
+        if hasattr(job_module.JobManager, "_run_worker") else inspect.getsource(job_module)
+    assert "selected.text_encoder_quantization" in payload_source, (
+        "worker へ渡す runtime_options に載っていない"
+    )

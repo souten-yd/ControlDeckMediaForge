@@ -22,5 +22,6 @@
   "title": "SceneExportRequest",
   "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://media-forge.local/schemas/scene-export-request.json"
+  "$id": "https://media-forge.local/schemas/scene-export-request.json",
+  "description": "Turn a 3D scene into a file other programs can open (GLB, or a Blender file). Call it once the scene looks right and someone needs the asset itself. It changes nothing, and it is not how a file gets into the project — media.pack is."
 }

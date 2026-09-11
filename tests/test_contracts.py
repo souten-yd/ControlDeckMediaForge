@@ -164,7 +164,11 @@ def test_3ds7_scene_tools_are_additive_strict_and_keep_job_request_frozen():
         }
     }
     scene_schema_paths.add("/schemas/scene-workflow-request.json")
-    assert len(scene_schema_paths) == 7
+    # 7 だった。media.job.status と media.job.cancel が一つの schema を共有して
+    # いたためである。top-level description は道具ごとの用途を書く場所なので、
+    # 共有しているとどちらの用途も書けない（一覧から選ぶ側に届かない）。
+    # 形が同じでもファイルを分けた。
+    assert len(scene_schema_paths) == 8
     for schema_path in scene_schema_paths:
         schema = json.loads((ROOT / schema_path.removeprefix("/")).read_text(encoding="utf-8"))
         jsonschema.Draft202012Validator.check_schema(schema)
@@ -288,14 +292,18 @@ def test_the_brief_explains_when_transparency_is_required():
     assert "over something else" in alpha
 
 
-def test_the_brief_tells_agents_to_leave_the_background_to_media_forge():
-    """透過は生成では作れず、単色背景を抜いて作る。呼び出し側が背景を注文すると
-    その指示と衝突し、抜けない背景が返る。MCP の呼び出し側は LLM なので、演出を
-    足す層を挟まなくても、契約の説明文がそのまま効く。"""
+def test_the_brief_tells_agents_the_background_is_theirs_to_choose():
+    """0.28.44 で被写体の形を推定して抜くようになり、背景を選べるようになった。
+    それ以前の「背景に触れるな」という指示が単品側の説明文に残ったままで、同じ
+    説明文が前半と後半で逆のことを言っていた（遅延読み込みの実験で発見）。
+    batch 側は書き換わっていたので、単品側を揃える。"""
     schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
     alpha = schema["$defs"]["assetBrief"]["properties"]["alpha_intent"]["description"]
 
-    assert "say nothing about the background" in alpha
+    assert "describe whatever background you want" in alpha
+    # 古い指示は残っていてはいけない。両方あると呼び出し側が判断できない。
+    assert "say nothing about the background" not in alpha
+    assert "chroma" not in alpha
 
 
 def test_the_qa_description_separates_budget_from_correctness():

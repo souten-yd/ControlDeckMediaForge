@@ -10,11 +10,12 @@
       "license": "Apache-2.0",
       "runtime_adapter": "diffusers.flux2-klein",
       "runtime_options": {
-        "device_mode": "direct_device_map",
+        "device_mode": "cpu_offload",
         "disable_mmap": false,
         "default_steps": 4,
         "native_width": 1024,
-        "native_height": 1024
+        "native_height": 1024,
+        "text_encoder_quantization": "int8"
       },
       "generation_limits": {
         "max_width": 1024,
@@ -37,11 +38,11 @@
       "state": "available",
       "measurements": {
         "resident_vram_bytes": 0,
-        "execution_peak_vram_bytes": 22397755392,
-        "cold_load_peak_vram_bytes": 15965057843,
-        "headroom_vram_bytes": 3650722201,
-        "measured_runtime_sec": 2.98,
-        "host_resident_bytes": 19209719808
+        "execution_peak_vram_bytes": 8246337208,
+        "cold_load_peak_vram_bytes": 8246337208,
+        "headroom_vram_bytes": 1932735283,
+        "measured_runtime_sec": 7.0,
+        "host_resident_bytes": 12884901888
       },
       "measurement_confidence": "measured",
       "policy_rank": {
@@ -256,7 +257,7 @@
         "rocm",
         "cuda"
       ],
-      "state": "available",
+      "state": "experimental",
       "measurement_confidence": "measured",
       "policy_rank": {
         "auto": 50,
@@ -317,7 +318,8 @@
         "cold_load_peak_vram_bytes": 4520802304,
         "headroom_vram_bytes": 1073741824,
         "measured_runtime_sec": 326.97
-      }
+      },
+      "license_notice": "Apache-2.0; upstream describes a 1.3B SDXL-derived model. Not routed: FLUX.2 Klein with cpu_offload needs less VRAM (7.7 vs 17.4 GiB) and is 47x faster on this hardware (7 vs 327 seconds), so the low-VRAM fallback has nothing left to offer."
     },
     {
       "model_id": "Wan-AI/Wan2.2-TI2V-5B",

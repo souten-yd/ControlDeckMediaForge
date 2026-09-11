@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import gc
 import importlib.metadata
 import json
 import os
@@ -137,6 +138,18 @@ class ImageWorker:
             })
         return resolved
 
+    def _release_adapters(self) -> None:
+        """載せてあるものを手放し、RAM を返す。"""
+        self.adapters = {}
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:  # noqa: BLE001 - GPU が無い経路では返すものが無い
+            pass
+
     def handle(self, payload: object) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise ValueError("worker request must be an object")
@@ -168,6 +181,9 @@ class ImageWorker:
             "default_steps",
             # 単一ファイルは自分がどの系統か名乗らない。配布元の申告を渡す。
             "base_model",
+            # text_encoder を int8 にする。FLUX.2 は重みの 8 割が text_encoder で、
+            # ここを削ると山が 3 GB 下がる（実測 18.35 → 15.30 GiB）。
+            "text_encoder_quantization",
         }:
             raise ValueError("worker model runtime options are invalid")
         declared_steps = runtime_options.get("default_steps")
@@ -196,6 +212,11 @@ class ImageWorker:
             if not isinstance(value, str) or len(value) > 64:
                 raise ValueError("worker model runtime options are invalid")
             family_options["base_model"] = value
+        if "text_encoder_quantization" in runtime_options:
+            value = runtime_options["text_encoder_quantization"]
+            if value not in {"none", "int8"}:
+                raise ValueError("worker model runtime options are invalid")
+            family_options["text_encoder_quantization"] = value
         if "guidance_scale" in runtime_options:
             value = runtime_options["guidance_scale"]
             # 0 は「CFG を使わない」という指示である。Turbo 系はそれを前提に
@@ -391,6 +412,18 @@ class ImageWorker:
                 **({"scale": adapter.scale} if upscaling else {}),
                 "seed": result.seed,
             })
+        # 部分退避で走ったなら、CPU 側も手放す。
+        #
+        # host は cpu_offload を「重みを抱えない載せ方」として扱い、常駐の数に
+        # 入れていない（jobs.py の _RESIDENT_MODES）。ところが worker は adapter を
+        # 持ったままで、重みは CPU の RAM に残っていた。VRAM を空けた分が RAM へ
+        # 移っただけである。
+        #
+        # 実測: LLM が mmap で 15 GB、FLUX.2 の text_encoder が 12 GB を抱え、
+        # RAM 30 GB が尽きて 1 枚目の描画が 176 秒かかった（本来 3.7 秒）。
+        # 手放すと次回はディスクから読み直すが、実測 7.6 秒である。
+        if device_mode == "cpu_offload":
+            self._release_adapters()
         return {
             "outputs": outputs,
             "model": {
@@ -419,6 +452,11 @@ class ImageWorker:
                 "generation_sec": generation_sec,
                 "device_mode": device_mode,
                 "disable_mmap": disable_mmap,
+                # 同じ重みでも、量子化で出る絵は変わる（実測: text_encoder を
+                # int4 にすると埋め込みの誤差が 14% に跳ね、絵が別物になった）。
+                # 来歴に残せるよう報告する。
+                **({"text_encoder_quantization": family_options["text_encoder_quantization"]}
+                   if "text_encoder_quantization" in family_options else {}),
                 "placement": adapter.placement,
                 "vram_budget_bytes": int(os.environ.get("MEDIA_FORGE_VRAM_BUDGET_BYTES") or 0),
                 # この process が実際に確保した量。外から カード全体を見ると、

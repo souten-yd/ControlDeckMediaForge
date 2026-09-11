@@ -127,6 +127,23 @@ def _full_residency_bytes(model: ModelDescriptor) -> int:
     return peak + int(model.headroom_vram_bytes or 0)
 
 
+def _placement_summary(response: dict[str, Any]) -> dict[str, Any]:
+    """worker が実際にどう載せたかを、来歴へ残せる形にする。
+
+    宣言（カタログ）ではなく worker の報告を正とする。枠が足りずに軽い載せ方へ
+    落ちることがあり、そのときカタログを写すと嘘になる。
+    """
+    metrics = response.get("runtime_metrics")
+    if not isinstance(metrics, dict):
+        return {}
+    placement = {
+        key: metrics[key]
+        for key in ("device_mode", "text_encoder_quantization")
+        if isinstance(metrics.get(key), str) and metrics[key]
+    }
+    return {"runtime_placement": placement} if placement else {}
+
+
 class WorkerFailure(RuntimeError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -2004,6 +2021,10 @@ class JobManager:
                     "runtime_options": {
                         "device_mode": self._resolved_device_mode(job_id, selected, execution),
                         "disable_mmap": selected.disable_mmap,
+                        # 量子化していない adapter には送らない。知らない鍵を
+                        # 受け取ると worker は要求ごと弾く。
+                        **({"text_encoder_quantization": selected.text_encoder_quantization}
+                           if selected.text_encoder_quantization != "none" else {}),
                         # 系統ごとの既定。持たないモデルには送らない。
                         **({"negative_prompt": selected.negative_prompt}
                            if selected.negative_prompt else {}),
@@ -3295,6 +3316,11 @@ class JobManager:
                     # （AGENTS.md 7 / docs/api.md）を保つ。
                     **({"model_route": self._route_summary(job.id)} if self._routes.get(job.id) else {}),
                     **({"resolved_profiles": snapshot.get("profiles", {})} if snapshot else {}),
+                    # どう載せて、どう量子化して作ったか。同じ model_id と
+                    # weights_hash でも、載せ方と量子化で出る絵は変わる（実測:
+                    # text_encoder を int4 にすると埋め込みの誤差が 14% に跳ね、
+                    # 絵が別物になった）。残さないと後から区別できない。
+                    **_placement_summary(response),
                 },
                 reference_asset_hashes=reference_hashes,
                 postprocessing=[str(item) for item in response.get("postprocessing", [])],
