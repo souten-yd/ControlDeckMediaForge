@@ -243,7 +243,7 @@ class DiffusersFlux2KleinAdapter:
         # 空いた 2.11 GiB は言語モデルの窓に回る。窓は 1 トークンあたり 53.9 KiB
         # 使うので、65,536 から 131,072 へ倍にできる。
         if self.transformer_quantization == "int8":
-            self._quantize(pipeline.transformer)
+            self._apply_quantized_transformer(pipeline)
         if self.device_mode == "cpu_offload":
             pipeline.enable_model_cpu_offload()
         elif self.device_mode == "full_device":
@@ -259,16 +259,55 @@ class DiffusersFlux2KleinAdapter:
 
     # 量子化した重みを置いておく場所。共有の cache 配下で、モデルの revision
     # ごとに分ける。revision が変われば別の入れ物になるので、古いものを誤って
-    # 使うことはない。
-    QUANTIZED_CACHE_DIR = "quantized-text-encoders"
+    # 使うことはない。text_encoder と transformer の両方を置く。
+    QUANTIZED_CACHE_DIR = "quantized-weights"
 
-    def _quantized_cache_path(self) -> Path | None:
+    def _apply_quantized_transformer(self, pipeline: Any) -> None:
+        """int8 の transformer を当てる。一度作ったら保存して使い回す。
+
+        text_encoder と同じ理由である。その場で量子化すると毎回 4.4 秒かかり、
+        変換の最中は元と先が同時に RAM へ乗る。保存しておけば読むだけで済む。
+        """
+        from diffusers import Flux2Transformer2DModel
+        from optimum.quanto import QuantizedDiffusersModel
+
+        # quanto の土台は抽象で、どの型の模型かを名乗る派生が要る
+        # （base_class を設定しないと from_pretrained が ValueError になる）。
+        class QuantizedFlux2Transformer(QuantizedDiffusersModel):
+            base_class = Flux2Transformer2DModel
+
+        cache = self._quantized_cache_path("transformer")
+        if cache is not None and (cache / "diffusion_pytorch_model.safetensors").is_file():
+            try:
+                wrapped = QuantizedFlux2Transformer.from_pretrained(str(cache))
+                loaded = getattr(wrapped, "_wrapped", None) or getattr(wrapped, "model", wrapped)
+                pipeline.transformer = loaded
+                return
+            except Exception:  # noqa: BLE001 - 壊れていたら作り直す
+                shutil.rmtree(cache, ignore_errors=True)
+
+        self._quantize(pipeline.transformer)
+        if cache is None:
+            return
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            staging = cache.with_name(cache.name + ".partial")
+            shutil.rmtree(staging, ignore_errors=True)
+            QuantizedFlux2Transformer(pipeline.transformer).save_pretrained(str(staging))
+            shutil.rmtree(cache, ignore_errors=True)
+            staging.rename(cache)
+        except Exception:  # noqa: BLE001 - 保存できなくても生成は続ける
+            shutil.rmtree(cache.with_name(cache.name + ".partial"), ignore_errors=True)
+
+    def _quantized_cache_path(self, component: str = "text_encoder") -> Path | None:
         root = os.environ.get("CONTROL_DECK_SHARED_CACHE_DIR")
         if not root:
             return None
         # model_path は .../snapshots/<revision> を指している。
-        return (Path(root) / self.QUANTIZED_CACHE_DIR
-                / f"{self.model_path.parent.parent.name}-{self.model_path.name}-int8")
+        name = f"{self.model_path.parent.parent.name}-{self.model_path.name}-int8"
+        if component != "text_encoder":
+            name = f"{name}-{component}"
+        return Path(root) / self.QUANTIZED_CACHE_DIR / name
 
     def _quantized_text_encoder(self, torch: Any) -> Any:
         """int8 の text_encoder を返す。一度作ったら保存して使い回す。
