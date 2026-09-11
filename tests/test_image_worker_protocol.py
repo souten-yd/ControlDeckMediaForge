@@ -617,6 +617,15 @@ def test_the_measurements_match_the_way_the_model_is_placed():
         measurements = model.get("measurements") or {}
         peak = int(measurements.get("execution_peak_vram_bytes") or 0)
         assert peak > 0, f"{model['model_id']}: 山が測られていない"
+        # 申告は「言語モデルと同居した実環境」で測る。単体（言語モデルなし）で
+        # 測ると小さく出て、枠が実際の使用量ぎりぎりになる。実測: 単体 7.68 GiB
+        # に対し同居時は 8.9 GiB で、枠の余裕が 6% しか残らず、torch が縁で
+        # 確保と解放を繰り返して 15 秒の生成が 63〜93 秒になった。
+        headroom = int(measurements.get("headroom_vram_bytes") or 0)
+        assert headroom >= peak * 0.25, (
+            f"{model['model_id']}: 余白が山の {headroom/peak*100:.0f}% しかない。"
+            "縁で詰まる（実測で 6 倍遅くなった）"
+        )
         # 部分退避は「同時に載る最大の部品」で決まる。重み全体を超えるなら、
         # それは全部載せのときの数字である。
         assert peak <= 12 * GIB, (
