@@ -1,0 +1,18 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{32}$",
+      "title": "Job Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id"
+  ],
+  "title": "SceneJobCancelRequest",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/scene-job-cancel-request.json",
+  "description": "Stop a 3D scene job that is still running, when the work is no longer wanted. A finished job cannot be cancelled and does not need to be, and this does not undo what it made."
+}

@@ -309,7 +309,13 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         "device_mode", "disable_mmap", "negative_prompt", "guidance_scale",
         "default_steps", "native_width", "native_height", "base_model",
         "trigger_words", "video", "upscale",
+        # text_encoder を int8 にする。FLUX.2 は重みの 8 割が text_encoder
+        # （Qwen3）で、削ると生成の山が 3 GB 下がる（実測 18.35 → 15.30 GiB）。
+        "text_encoder_quantization",
     }:
+        raise ModelRegistryError("model registry runtime_options are invalid")
+    quantization = runtime_options.get("text_encoder_quantization")
+    if quantization is not None and quantization not in {"none", "int8"}:
         raise ModelRegistryError("model registry runtime_options are invalid")
     negative_prompt = runtime_options.get("negative_prompt", "")
     if not isinstance(negative_prompt, str) or len(negative_prompt) > 2000:

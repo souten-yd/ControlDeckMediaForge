@@ -502,3 +502,85 @@ def test_a_cached_adapter_is_not_reused_for_a_different_placement(monkeypatch, t
         worker.handle(request)
 
     assert built == ["direct_device_map", "cpu"]
+
+
+def test_the_catalog_options_allowed_by_core_and_worker_are_the_same():
+    """runtime_options の許可一覧が二か所にある。片方だけ足すとカタログが読めなくなる。
+
+    実際に起きた: worker 側に text_encoder_quantization を足してカタログへ書いた
+    ところ、core 側（models/registry.py）が知らない鍵として弾き、モデルが 1 件も
+    読めなくなって試験が 8 件落ちた。落ち方は「生成された資産が無い」で、原因から
+    遠い。
+
+    どちらが正しいかではなく、食い違っていないことを見る。
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).parents[1]
+
+    def allowed(path: str, anchor: str) -> set[str]:
+        body = (root / path).read_text(encoding="utf-8")
+        start = body.index(anchor)
+        block = body[start:body.index("}:", start)]
+        return set(re.findall(r'"([a-z_]+)"', block))
+
+    core = allowed("backend/mediaforge/models/registry.py",
+                   'if not isinstance(runtime_options, dict) or set(runtime_options) - {')
+    worker = allowed("worker_packs/image/worker.py",
+                     'if not isinstance(runtime_options, dict) or set(runtime_options) - {')
+
+    # worker が受けるものは、core も通せなければカタログが読めない。
+    assert worker <= core, f"core が知らない runtime_options: {sorted(worker - core)}"
+
+
+def test_an_offloaded_run_lets_go_of_the_weights_afterwards():
+    """部分退避で走ったら、CPU 側も手放す。
+
+    host は cpu_offload を「重みを抱えない載せ方」として扱い、常駐の数に入れて
+    いない（jobs.py の _RESIDENT_MODES）。ところが worker は adapter を持った
+    ままで、重みは CPU の RAM に残っていた。VRAM を空けた分が RAM へ移るだけで、
+    host の前提と食い違っていた。
+
+    実測: LLM が mmap で 15 GB、FLUX.2 の text_encoder が 12 GB を抱え、RAM
+    30 GB が尽きて 1 枚目の描画が 176 秒かかった（本来 3.7 秒）。手放すと次回は
+    ディスクから読み直すが 7.6 秒である。
+    """
+    import inspect
+
+    from worker_packs.image import worker as image_worker
+
+    source = inspect.getsource(image_worker.ImageWorker.handle)
+    assert 'if device_mode == "cpu_offload":' in source
+    assert "_release_adapters()" in source
+
+    released = image_worker.ImageWorker.__new__(image_worker.ImageWorker)
+    released.adapters = {("x", "cpu_offload"): object()}
+    released._release_adapters()
+    assert released.adapters == {}
+
+
+def test_flux_is_offloaded_so_the_language_model_can_stay_resident():
+    """FLUX.2 は重みの 8 割が text_encoder で、しかも使うのは最初の一度だけ。
+
+    実測（同じ seed・同じ手数）:
+      full_device    山 15.30 GiB  生成 3.4 秒
+      cpu_offload    山  7.68 GiB  生成 7.0 秒
+
+    LLM は ctx 65,536 で 18.9 GiB を占める。全部載せでは足して 34.2 GiB となり
+    31.9 GiB のカードに収まらず、生成のたびに LLM を降ろしていた。降ろすと戻す
+    ときに文脈を読み直すため、実測で 1 枚あたり約 70 秒かかっていた。
+    部分退避なら足して 26.6 GiB で収まり、降ろさずに 7 秒で済む。
+    """
+    import json
+    from pathlib import Path
+
+    manifest = json.loads(
+        (Path(__file__).parents[1] / "worker_packs/image/models.json").read_text(encoding="utf-8")
+    )
+    flux = [m for m in manifest["models"] if m.get("runtime_adapter") == "diffusers.flux2-klein"]
+    assert flux, "FLUX.2 Klein がカタログに無い"
+    for model in flux:
+        options = model["runtime_options"]
+        assert options["device_mode"] == "cpu_offload"
+        assert options["text_encoder_quantization"] == "int8"

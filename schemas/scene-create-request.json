@@ -1383,7 +1383,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Create a new immutable 3D scene and return a detached durable Job immediately.",
+  "description": "Build a 3D scene from nothing: floors, props, lights and a camera, as a list of operations. To change a scene that already exists use media.scene.edit — creating again makes a second, unrelated scene.\n\nReturns a job id immediately; follow it with media.job.status. Scenes are immutable: every change makes a new revision, and edits name the revision they change so two callers cannot overwrite each other.",
   "properties": {
     "name": {
       "maxLength": 120,

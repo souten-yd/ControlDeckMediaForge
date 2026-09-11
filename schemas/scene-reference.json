@@ -13,5 +13,6 @@
   "title": "SceneReferenceRequest",
   "type": "object",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://media-forge.local/schemas/scene-reference.json"
+  "$id": "https://media-forge.local/schemas/scene-reference.json",
+  "description": "Read back a 3D scene: its current revision and what is in it. Call it for the revision id an edit needs, or to see what an edit did. It changes nothing — media.scene.edit does that, and calling this again will not move the work forward."
 }

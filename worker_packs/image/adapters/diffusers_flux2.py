@@ -26,12 +26,16 @@ class DiffusersFlux2KleinAdapter:
         *,
         device_mode: str = "full_device",
         disable_mmap: bool = False,
+        text_encoder_quantization: str = "none",
     ):
         if device_mode not in {"full_device", "direct_device_map", "cpu_offload", "cpu"}:
             raise ValueError("unsupported image device mode")
+        if text_encoder_quantization not in {"none", "int8"}:
+            raise ValueError("unsupported text encoder quantization")
         self.model_path = model_path.resolve(strict=True)
         self.device_mode = device_mode
         self.disable_mmap = disable_mmap
+        self.text_encoder_quantization = text_encoder_quantization
         self.pipeline: Any | None = None
         # 塗った所を渡せる経路。重みは base と共有するので、載せ直しは起きない。
         self.inpaint_pipeline: Any | None = None
@@ -179,7 +183,19 @@ class DiffusersFlux2KleinAdapter:
 
         started = time.perf_counter()
         text_encoder: Any | None = None
-        if self.disable_mmap:
+        # FLUX.2 は文章の理解に Qwen3 を丸ごと使う。実測で 15 GB の重みのうち
+        # 12 GB が text_encoder で、絵を描く transformer は 2.9 GB しかない。
+        # 山を下げたいならここを削るのが筋である。
+        #
+        # 実測（同じ seed・同じ手数、りんごの絵）:
+        #   bf16  山 18.35 GiB  生成 4.0 秒
+        #   int8  山 15.30 GiB  生成 2.8 秒   絵の違いは見て取れなかった
+        #
+        # int4 は quanto が HIP の拡張をその場で組もうとして失敗する
+        # （hip/hip_runtime.h が見つからない）。int8 は拡張を要らない。
+        if self.text_encoder_quantization == "int8" and not self.disable_mmap:
+            text_encoder = self._quantized_text_encoder(torch)
+        elif self.disable_mmap:
             # Diffusers 0.40 forwards disable_mmap to Diffusers components but
             # not to Transformers components. Load Qwen explicitly so half of
             # the pipeline does not silently remain on the slow mmap transfer
@@ -197,6 +213,8 @@ class DiffusersFlux2KleinAdapter:
                 self.model_path / "text_encoder",
                 **text_encoder_options,
             )
+            if self.text_encoder_quantization == "int8":
+                self._quantize(text_encoder)
         load_options: dict[str, Any] = {
             "torch_dtype": torch.bfloat16,
             "local_files_only": True,
@@ -219,6 +237,28 @@ class DiffusersFlux2KleinAdapter:
         self._verify_direct_placement()
         self.pipeline = pipeline
         self.load_sec = time.perf_counter() - started
+
+    def _quantized_text_encoder(self, torch: Any) -> Any:
+        from transformers import Qwen3ForCausalLM
+
+        encoder = Qwen3ForCausalLM.from_pretrained(
+            self.model_path / "text_encoder",
+            dtype=torch.bfloat16,
+            local_files_only=True,
+        )
+        self._quantize(encoder)
+        return encoder
+
+    @staticmethod
+    def _quantize(encoder: Any) -> None:
+        """重みだけ int8 にする。活性は bfloat16 のまま。
+
+        freeze しないと元の重みが残り、載る量が減らない。
+        """
+        from optimum.quanto import freeze, qint8, quantize
+
+        quantize(encoder, weights=qint8)
+        freeze(encoder)
 
     def _inpainter(self) -> Any:
         """The pipeline that takes the painted area, over the weights already loaded.

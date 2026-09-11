@@ -1383,7 +1383,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Edit exactly the named current revision; conflicts fail without overwriting it.",
+  "description": "Change a 3D scene that already exists: move, add or remove things, adjust lights, aim the camera. This is the only way to change one — media.scene.snapshot only reads it back, and media.scene.create would start a new one.\n\nName the revision you are changing (media.scene.snapshot returns it). If someone changed it first the edit fails instead of overwriting their work; read the scene again and retry. Returns a job id; follow it with media.job.status.",
   "properties": {
     "scene_id": {
       "pattern": "^scene_[0-9a-f]{32}$",

@@ -10,11 +10,12 @@
       "license": "Apache-2.0",
       "runtime_adapter": "diffusers.flux2-klein",
       "runtime_options": {
-        "device_mode": "direct_device_map",
+        "device_mode": "cpu_offload",
         "disable_mmap": false,
         "default_steps": 4,
         "native_width": 1024,
-        "native_height": 1024
+        "native_height": 1024,
+        "text_encoder_quantization": "int8"
       },
       "generation_limits": {
         "max_width": 1024,

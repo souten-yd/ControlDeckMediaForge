@@ -3,23 +3,6 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
-## 2026-09-11 dedicated AppArmor canary / authorized but administrator authentication needed
-
-base PR501 merge79187acdd7ca05385de5dda1aa568ccf4b743428、ux1/3d-apparmor-ipc-canary、PR作成前。
-利用者「良いです」でOS専用設定承認済み。承認を再要求しない。sudo -n trueはpassword required。
-前turnは管理者認証の制約確認。今回は制限追加だけのAppArmor pathname canaryを実装/実baseline確認。
-scripts/3ds_apparmor_ipc_probe.py / mediaforge-ipc-canary-v1.apparmorは診断限定、製品へ接続なし。
-公式/installed仕様ではpathnameはfile ruleで媒介。namespace例外より先に追加制限だけの候補を実証する。
-parser4.0.1 -Q -K exit0。unconfined両peer受信は隔離FAIL、profile missingはfail closed、両temp回収。
-利用者へ専用profileの一時sudo load（-a/-K/絶対path）を依頼済み。OS変更はまだない。
-手順/限定rollback/受入条件は3ds-ipc-isolation.md末尾。load後、非rootで同script実行、
-enforce label/許可peer受信/外部EACCESまたはEPERM/外部受信なしを照合。構文成功を実遮断にしない。
-その後専用profileを管理者が回収（自分でload成功したものだけ）。製品GUI policyとfd/process受入は別。
-全70615 exit0/1807pass208.49秒/既知2warnings、viewer61ms差分0/Node5。以後product/test変更なし。
-稼働.71変更なし/scope未配布、新projectなし。全GOAL/A〜F/GA PARTIALを維持。
-rootはfix/agent-tool-descriptionsで利用者schema/test差分あり、本worktree3devsymlinkも保持。
-再開: git fetch origin; git status --short --branch; gh pr list --head ux1/3d-apparmor-ipc-canary。
-
 ## 2026-09-10 OS prerequisite attribution / awaiting authorization
 
 base PR500 mergeff6e25823e6423bce5efa600011ee2ed1871451f、ux1/3d-ipc-os-prerequisite、記録PR作成前。

@@ -3,6 +3,14 @@
   "$id": "https://media-forge.local/schemas/asset-reference.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["asset_id"],
-  "properties": {"asset_id": {"type": "string", "pattern": "^asset_[0-9a-f]{32}$"}}
+  "required": [
+    "asset_id"
+  ],
+  "properties": {
+    "asset_id": {
+      "type": "string",
+      "pattern": "^asset_[0-9a-f]{32}$"
+    }
+  },
+  "description": "Read back a finished asset: its kind, size, and whether it is ready. It changes nothing — to draw one call media.generate, to change one call media.generate with references, to put one in the project call media.pack. None of them need this first."
 }
