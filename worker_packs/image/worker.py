@@ -184,6 +184,8 @@ class ImageWorker:
             # text_encoder を int8 にする。FLUX.2 は重みの 8 割が text_encoder で、
             # ここを削ると山が 3 GB 下がる（実測 18.35 → 15.30 GiB）。
             "text_encoder_quantization",
+            # まとめ生成の途中なら抱えたままにする。core が立てる。
+            "keep_resident",
         }:
             raise ValueError("worker model runtime options are invalid")
         declared_steps = runtime_options.get("default_steps")
@@ -422,7 +424,10 @@ class ImageWorker:
         # 実測: LLM が mmap で 15 GB、FLUX.2 の text_encoder が 12 GB を抱え、
         # RAM 30 GB が尽きて 1 枚目の描画が 176 秒かかった（本来 3.7 秒）。
         # 手放すと次回はディスクから読み直すが、実測 7.6 秒である。
-        if device_mode == "cpu_offload":
+        # 続きがあるなら抱えたままにする。まとめ生成で 1 件ごとに手放すと、
+        # 12 GB の重みを毎回読み直すことになり、RAM 逼迫がむしろ悪化する
+        # （実測: 4 枚の batch で 2 枚目が 147 秒。単発なら 23 秒）。
+        if device_mode == "cpu_offload" and not runtime_options.get("keep_resident"):
             self._release_adapters()
         return {
             "outputs": outputs,

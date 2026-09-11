@@ -530,8 +530,12 @@ def test_the_catalog_options_allowed_by_core_and_worker_are_the_same():
     worker = allowed("worker_packs/image/worker.py",
                      'if not isinstance(runtime_options, dict) or set(runtime_options) - {')
 
+    # core がその場で立てるものは、カタログに書かれないので registry を通らない。
+    RUNTIME_ONLY = {"keep_resident"}
     # worker が受けるものは、core も通せなければカタログが読めない。
-    assert worker <= core, f"core が知らない runtime_options: {sorted(worker - core)}"
+    assert worker - RUNTIME_ONLY <= core, (
+        f"core が知らない runtime_options: {sorted(worker - RUNTIME_ONLY - core)}"
+    )
 
 
 def test_an_offloaded_run_lets_go_of_the_weights_afterwards():
@@ -551,7 +555,8 @@ def test_an_offloaded_run_lets_go_of_the_weights_afterwards():
     from worker_packs.image import worker as image_worker
 
     source = inspect.getsource(image_worker.ImageWorker.handle)
-    assert 'if device_mode == "cpu_offload":' in source
+    # まとめ生成の途中は抱えたままにする（下の試験を参照）。単発では手放す。
+    assert 'device_mode == "cpu_offload" and not runtime_options.get("keep_resident")' in source
     assert "_release_adapters()" in source
 
     released = image_worker.ImageWorker.__new__(image_worker.ImageWorker)
@@ -673,3 +678,42 @@ def test_catalog_runtime_options_reach_the_worker():
     assert "selected.text_encoder_quantization" in payload_source, (
         "worker へ渡す runtime_options に載っていない"
     )
+
+
+def test_a_batch_keeps_the_weights_instead_of_reloading_them_each_time():
+    """まとめ生成の途中では、部分退避でも重みを抱えたままにする。
+
+    仕事のたびに手放すのは RAM のためである（VRAM を空けた分が RAM へ移り、
+    実測で 30 GB が尽きて 1 枚目が 176 秒かかった）。ところが手放し方が
+    まとめ生成を見ていなかった。1 件ごとに 12 GB の text_encoder を読み直す
+    ことになり、同じ RAM 逼迫をもっと激しく起こす。
+
+    実測: 4 枚の batch で 1 枚目 16 秒、2 枚目 147 秒。単発なら 23 秒である。
+    core には既に keep_worker_warm() があり「batch の間は抱える」と決めて
+    いたが、worker へ伝わっていなかった。
+
+    keep_resident はカタログに書く設定ではない。core がその場で立てる。
+    """
+    import inspect
+
+    from worker_packs.image import worker as image_worker
+    from mediaforge import jobs as job_module
+
+    handle = inspect.getsource(image_worker.ImageWorker.handle)
+    assert 'runtime_options.get("keep_resident")' in handle, (
+        "worker が「続きがある」を見ていない"
+    )
+    assert '"keep_resident": bool(self._keep_warm)' in inspect.getsource(job_module), (
+        "core が worker へ伝えていない"
+    )
+
+    # カタログ由来の設定ではないので、registry の許可一覧には無くてよい。
+    import json
+    from pathlib import Path
+    manifest = json.loads(
+        (Path(__file__).parents[1] / "worker_packs/image/models.json").read_text(encoding="utf-8")
+    )
+    for model in manifest["models"]:
+        assert "keep_resident" not in (model.get("runtime_options") or {}), (
+            f"{model['model_id']}: keep_resident はカタログに書くものではない"
+        )
