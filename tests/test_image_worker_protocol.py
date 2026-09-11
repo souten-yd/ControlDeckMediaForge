@@ -763,3 +763,34 @@ def test_the_quantized_text_encoder_is_kept_instead_of_rebuilt_each_time():
     path_source = inspect.getsource(DiffusersFlux2KleinAdapter._quantized_cache_path)
     assert "CONTROL_DECK_SHARED_CACHE_DIR" in path_source
     assert "int8" in path_source
+
+
+def test_both_quantized_parts_are_kept_instead_of_rebuilt():
+    """text_encoder も transformer も、一度作ったら保存して使い回す。
+
+    その場で量子化すると text_encoder が 6.9 秒、transformer が 4.4 秒かかり、
+    どちらも変換の最中は元と先が同時に RAM へ乗る。30 GB の機械で言語モデルが
+    15 GB を mmap しているので、その山が逼迫の根になる。
+
+    置き場は revision ごとに分ける。別の版の重みを誤って使わない。
+    """
+    import inspect
+
+    from worker_packs.image.adapters.diffusers_flux2 import DiffusersFlux2KleinAdapter
+
+    encoder = inspect.getsource(DiffusersFlux2KleinAdapter._quantized_text_encoder)
+    transformer = inspect.getsource(DiffusersFlux2KleinAdapter._apply_quantized_transformer)
+    for source, name in ((encoder, "text_encoder"), (transformer, "transformer")):
+        assert "from_pretrained" in source, f"{name}: 保存済みを読んでいない"
+        assert "save_pretrained" in source, f"{name}: 作ったものを保存していない"
+        # 途中で落ちた残骸を使わない。
+        assert "partial" in source, f"{name}: 出来上がる前のものを使う余地がある"
+
+    # 二つは別の入れ物に置く。同じ名前だと片方が片方を上書きする。
+    path_source = inspect.getsource(DiffusersFlux2KleinAdapter._quantized_cache_path)
+    assert "component" in path_source, "部品ごとに分けていない"
+
+    # quanto の QuantizedDiffusersModel は抽象の土台で、どの型かを名乗る派生が
+    # 要る。名乗らないと save_pretrained は通るのに from_pretrained だけが
+    # ValueError になり、毎回 3.61 GiB を書いては読めずに捨てることになる。
+    assert "base_class" in transformer, "base_class を名乗っていない。保存はできても読み直せない"
