@@ -589,6 +589,12 @@ def test_flux_is_offloaded_so_the_language_model_can_stay_resident():
         options = model["runtime_options"]
         assert options["device_mode"] == "cpu_offload"
         assert options["text_encoder_quantization"] == "int8"
+        # 山を決めているのは transformer である。実測（同じ seed・同じ手数、
+        # 部分退避、text_encoder は両方 int8、三題）:
+        #   bf16  山 7.68 GiB  生成 6.2〜14.7 秒
+        #   int8  山 5.57 GiB  生成 4.4〜 4.6 秒   絵は実用上同じ
+        # 空いた分は言語モデルの窓に回る（1 トークン 53.9 KiB、65,536 → 131,072）。
+        assert options["transformer_quantization"] == "int8"
 
 
 def test_the_measurements_match_the_way_the_model_is_placed():
@@ -679,14 +685,15 @@ def test_catalog_runtime_options_reach_the_worker():
     from mediaforge import jobs as job_module
 
     descriptor_fields = set(model_registry.ModelDescriptor.__dataclass_fields__)
-    assert "text_encoder_quantization" in descriptor_fields, (
-        "ModelDescriptor が運ばないと、カタログの設定は worker へ届かない"
-    )
     payload_source = inspect.getsource(job_module.JobManager._run_worker) \
         if hasattr(job_module.JobManager, "_run_worker") else inspect.getsource(job_module)
-    assert "selected.text_encoder_quantization" in payload_source, (
-        "worker へ渡す runtime_options に載っていない"
-    )
+    for field in ("text_encoder_quantization", "transformer_quantization"):
+        assert field in descriptor_fields, (
+            f"ModelDescriptor が {field} を運ばないと、カタログの設定は worker へ届かない"
+        )
+        assert f"selected.{field}" in payload_source, (
+            f"worker へ渡す runtime_options に {field} が載っていない"
+        )
 
 
 def test_a_batch_keeps_the_weights_instead_of_reloading_them_each_time():

@@ -29,15 +29,19 @@ class DiffusersFlux2KleinAdapter:
         device_mode: str = "full_device",
         disable_mmap: bool = False,
         text_encoder_quantization: str = "none",
+        transformer_quantization: str = "none",
     ):
         if device_mode not in {"full_device", "direct_device_map", "cpu_offload", "cpu"}:
             raise ValueError("unsupported image device mode")
         if text_encoder_quantization not in {"none", "int8"}:
             raise ValueError("unsupported text encoder quantization")
+        if transformer_quantization not in {"none", "int8"}:
+            raise ValueError("unsupported transformer quantization")
         self.model_path = model_path.resolve(strict=True)
         self.device_mode = device_mode
         self.disable_mmap = disable_mmap
         self.text_encoder_quantization = text_encoder_quantization
+        self.transformer_quantization = transformer_quantization
         self.pipeline: Any | None = None
         # 塗った所を渡せる経路。重みは base と共有するので、載せ直しは起きない。
         self.inpaint_pipeline: Any | None = None
@@ -227,6 +231,19 @@ class DiffusersFlux2KleinAdapter:
         if self.device_mode == "direct_device_map":
             load_options["device_map"] = "cuda"
         pipeline = Flux2KleinPipeline.from_pretrained(self.model_path, **load_options)
+        # 絵を描く側も int8 にする。山を決めているのはこちらで、text_encoder では
+        # ない（実測: transformer 7.22 GiB、text_encoder は int8 で 4.47 GiB）。
+        #
+        # 実測（同じ seed・同じ手数、部分退避、text_encoder は両方 int8）:
+        #   bf16  山 7.68 GiB  生成 6.2〜14.7 秒
+        #   int8  山 5.57 GiB  生成 4.4〜 4.6 秒
+        # りんご・ドット絵・日本語の商店街の三題で、絵は実用上同じだった。違うのは
+        # 看板の崩れた文字の形くらいで、もともと読める文字ではない。
+        #
+        # 空いた 2.11 GiB は言語モデルの窓に回る。窓は 1 トークンあたり 53.9 KiB
+        # 使うので、65,536 から 131,072 へ倍にできる。
+        if self.transformer_quantization == "int8":
+            self._quantize(pipeline.transformer)
         if self.device_mode == "cpu_offload":
             pipeline.enable_model_cpu_offload()
         elif self.device_mode == "full_device":

@@ -184,6 +184,8 @@ class ImageWorker:
             # text_encoder を int8 にする。FLUX.2 は重みの 8 割が text_encoder で、
             # ここを削ると山が 3 GB 下がる（実測 18.35 → 15.30 GiB）。
             "text_encoder_quantization",
+            # 絵を描く側の量子化。山を決めているのはこちらである。
+            "transformer_quantization",
             # まとめ生成の途中なら抱えたままにする。core が立てる。
             "keep_resident",
         }:
@@ -214,11 +216,13 @@ class ImageWorker:
             if not isinstance(value, str) or len(value) > 64:
                 raise ValueError("worker model runtime options are invalid")
             family_options["base_model"] = value
-        if "text_encoder_quantization" in runtime_options:
-            value = runtime_options["text_encoder_quantization"]
+        for key in ("text_encoder_quantization", "transformer_quantization"):
+            if key not in runtime_options:
+                continue
+            value = runtime_options[key]
             if value not in {"none", "int8"}:
                 raise ValueError("worker model runtime options are invalid")
-            family_options["text_encoder_quantization"] = value
+            family_options[key] = value
         if "guidance_scale" in runtime_options:
             value = runtime_options["guidance_scale"]
             # 0 は「CFG を使わない」という指示である。Turbo 系はそれを前提に
@@ -460,8 +464,9 @@ class ImageWorker:
                 # 同じ重みでも、量子化で出る絵は変わる（実測: text_encoder を
                 # int4 にすると埋め込みの誤差が 14% に跳ね、絵が別物になった）。
                 # 来歴に残せるよう報告する。
-                **({"text_encoder_quantization": family_options["text_encoder_quantization"]}
-                   if "text_encoder_quantization" in family_options else {}),
+                **{key: family_options[key]
+                   for key in ("text_encoder_quantization", "transformer_quantization")
+                   if key in family_options},
                 "placement": adapter.placement,
                 "vram_budget_bytes": int(os.environ.get("MEDIA_FORGE_VRAM_BUDGET_BYTES") or 0),
                 # この process が実際に確保した量。外から カード全体を見ると、

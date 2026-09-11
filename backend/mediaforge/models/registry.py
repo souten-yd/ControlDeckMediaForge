@@ -120,6 +120,9 @@ class ModelDescriptor:
     # int8 にすると生成の山が 3 GB 下がる（実測 18.35 → 15.30 GiB）。
     # 同じ重みでも量子化で出る絵は変わるので、来歴にも残す。
     text_encoder_quantization: str = "none"
+    # 絵を描く側の量子化。山を決めているのはこちらで、text_encoder ではない
+    # （実測: transformer 7.22 GiB、text_encoder は int8 で 4.47 GiB）。
+    transformer_quantization: str = "none"
     # SD 系だけが取る。FLUX.2 Klein では常に既定のままになる。
     negative_prompt: str = ""
     guidance_scale: float | None = None
@@ -312,15 +315,16 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     if not isinstance(runtime_options, dict) or set(runtime_options) - {
         "device_mode", "disable_mmap", "negative_prompt", "guidance_scale",
         "default_steps", "native_width", "native_height", "base_model",
-        "trigger_words", "video", "upscale",
+        "trigger_words", "video", "upscale", "transformer_quantization",
         # text_encoder を int8 にする。FLUX.2 は重みの 8 割が text_encoder
         # （Qwen3）で、削ると生成の山が 3 GB 下がる（実測 18.35 → 15.30 GiB）。
         "text_encoder_quantization",
     }:
         raise ModelRegistryError("model registry runtime_options are invalid")
-    quantization = runtime_options.get("text_encoder_quantization")
-    if quantization is not None and quantization not in {"none", "int8"}:
-        raise ModelRegistryError("model registry runtime_options are invalid")
+    for key in ("text_encoder_quantization", "transformer_quantization"):
+        quantization = runtime_options.get(key)
+        if quantization is not None and quantization not in {"none", "int8"}:
+            raise ModelRegistryError("model registry runtime_options are invalid")
     negative_prompt = runtime_options.get("negative_prompt", "")
     if not isinstance(negative_prompt, str) or len(negative_prompt) > 2000:
         raise ModelRegistryError("model registry runtime_options are invalid")
@@ -484,6 +488,9 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         disable_mmap=disable_mmap,
         text_encoder_quantization=str(
             runtime_options.get("text_encoder_quantization") or "none"
+        ),
+        transformer_quantization=str(
+            runtime_options.get("transformer_quantization") or "none"
         ),
         negative_prompt=negative_prompt,
         guidance_scale=float(guidance_scale) if guidance_scale is not None else None,
