@@ -50,7 +50,11 @@ def test_ssd_1b_is_routable_because_it_was_measured_on_real_hardware() -> None:
     """
     model = next(item for item in registry().all() if item.model_id == "segmind/SSD-1B")
 
-    assert model.state == "available"
+    # routing の候補から外した。部分退避の FLUX.2 Klein は VRAM も時間も
+    # 上回っており（7.7 対 17.4 GiB、7 秒 対 327 秒）、低 VRAM の逃げ道として
+    # 差し出せるものが無くなった。測ってあることは残す——測ったという事実は
+    # 消えないし、戻すときに測り直さずに済む。
+    assert model.state == "experimental"
     assert model.measurement_confidence == "measured"
     assert model.runtime_adapter == "diffusers.sdxl"
     # 測っていないものを capability として名乗らない。編集系は未実装である。

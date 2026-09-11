@@ -257,7 +257,7 @@
         "rocm",
         "cuda"
       ],
-      "state": "available",
+      "state": "experimental",
       "measurement_confidence": "measured",
       "policy_rank": {
         "auto": 50,
@@ -318,7 +318,8 @@
         "cold_load_peak_vram_bytes": 4520802304,
         "headroom_vram_bytes": 1073741824,
         "measured_runtime_sec": 326.97
-      }
+      },
+      "license_notice": "Apache-2.0; upstream describes a 1.3B SDXL-derived model. Not routed: FLUX.2 Klein with cpu_offload needs less VRAM (7.7 vs 17.4 GiB) and is 47x faster on this hardware (7 vs 327 seconds), so the low-VRAM fallback has nothing left to offer."
     },
     {
       "model_id": "Wan-AI/Wan2.2-TI2V-5B",
