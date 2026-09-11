@@ -621,3 +621,28 @@ def test_the_measurements_match_the_way_the_model_is_placed():
         assert int(measurements.get("resident_vram_bytes") or 0) == 0, (
             f"{model['model_id']}: cpu_offload は呼び出しの間しか載らないので常駐は 0"
         )
+
+
+def test_provenance_records_how_the_model_was_placed():
+    """同じ重みでも、載せ方と量子化で出る絵は変わる。
+
+    実測: text_encoder を int4 にすると埋め込みの相対誤差が 3% から 14% に跳ね、
+    同じ seed・同じ手数でも絵が別物になった（軸の形、艶、木目、背景のぼけ方）。
+    来歴に model_id と weights_hash はあったが載せ方が無く、int8 で作った絵と
+    bf16 で作った絵を後から区別できなかった。
+
+    宣言（カタログ）ではなく worker の報告を正とする。枠が足りずに軽い載せ方へ
+    落ちることがあり、そのときカタログを写すと嘘になる。
+    """
+    from mediaforge.jobs import _placement_summary
+
+    assert _placement_summary({}) == {}
+    assert _placement_summary({"runtime_metrics": {}}) == {}
+    assert _placement_summary({"runtime_metrics": {
+        "device_mode": "cpu_offload", "text_encoder_quantization": "int8",
+    }}) == {"runtime_placement": {"device_mode": "cpu_offload",
+                                  "text_encoder_quantization": "int8"}}
+    # 量子化していない adapter は名乗らない。空の鍵を残さない。
+    assert _placement_summary({"runtime_metrics": {"device_mode": "full_device"}}) == {
+        "runtime_placement": {"device_mode": "full_device"}
+    }

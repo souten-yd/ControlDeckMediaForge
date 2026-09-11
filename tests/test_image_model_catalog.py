@@ -61,7 +61,10 @@ def test_ssd_1b_is_routable_because_it_was_measured_on_real_hardware() -> None:
     assert model.device_mode == "full_device"
 
     flux = next(item for item in registry().all() if item.model_id.endswith("FLUX.2-klein-4B"))
-    assert model.execution_peak_vram_bytes < flux.execution_peak_vram_bytes
+    # 山の大小はここで見ない。FLUX を部分退避へ変えて 20.9 → 7.7 GiB になり、
+    # 「SSD-1B のほうが軽い」という前提が逆転した。低 VRAM 時に SSD-1B を
+    # 選ぶ理由は山の大小ではなく、下の policy_rank が表している。
+    assert flux.device_mode == "cpu_offload"
     assert model.measured_runtime_sec > flux.measured_runtime_sec
     assert model.policy_rank["low_vram"] < flux.policy_rank["low_vram"]
     assert model.policy_rank["auto"] > flux.policy_rank["auto"]

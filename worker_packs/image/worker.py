@@ -452,6 +452,11 @@ class ImageWorker:
                 "generation_sec": generation_sec,
                 "device_mode": device_mode,
                 "disable_mmap": disable_mmap,
+                # 同じ重みでも、量子化で出る絵は変わる（実測: text_encoder を
+                # int4 にすると埋め込みの誤差が 14% に跳ね、絵が別物になった）。
+                # 来歴に残せるよう報告する。
+                **({"text_encoder_quantization": family_options["text_encoder_quantization"]}
+                   if "text_encoder_quantization" in family_options else {}),
                 "placement": adapter.placement,
                 "vram_budget_bytes": int(os.environ.get("MEDIA_FORGE_VRAM_BUDGET_BYTES") or 0),
                 # この process が実際に確保した量。外から カード全体を見ると、
