@@ -254,6 +254,10 @@ class JobManager:
         #
         # linger と違うのは引き金だけで、こちらは時計ではなく宣言で決まる。
         self._carried_lease: HostExecution | None = None
+        # その lease を取ったときの model。_warm_model とは別の問いである——
+        # あちらは「重みを VRAM に抱えているか」で、部分退避（cpu_offload）では
+        # 常に None になる。こちらは「同じ worker が同じ model を次も走らせるか」。
+        self._carried_model: str | None = None
         self._host_executions: dict[str, HostExecution] = {}
         self.host_terminals = (HostedJobTerminals(store, host_client, lambda identifier: identifier in self._host_executions)
                                if host_client is not None else None)
@@ -1836,26 +1840,40 @@ class JobManager:
         降ろす。実測では 4 枚のまとめ生成で 3 枚目まで同居できて、そこで降りた。
         """
         previous = self._carried_lease
-        if previous is None or selected is None:
-            # 実 model を選んでいないなら、載せたままのものが無い。
-            return False
-        if previous.lease_id is None or previous.device_id != "gpu0":
-            return False
-        if previous.host_job_id != execution.host_job_id:
+        if previous is None:
             return False
         warm = self._warm_worker
-        if warm is None or warm[0].returncode is not None:
-            return False
-        if self._warm_model != selected.model_id:
-            return False
-        try:
-            await self._refresh_host_identity(previous)
-        except HostApiError:
-            # 資格が切れていたら持ち回りは諦める。通常の受付が改めて取り、
-            # そこで落ちれば job の error として報告される。黙って続けない。
+        usable = (
+            selected is not None
+            and previous.lease_id is not None
+            and previous.device_id == "gpu0"
+            and previous.host_job_id == execution.host_job_id
+            and warm is not None
+            and warm[0].returncode is None
+            and self._carried_model == selected.model_id
+        )
+        if usable:
+            try:
+                await self._refresh_host_identity(previous)
+            except HostApiError:
+                # 資格が切れていたら持ち回りは諦める。通常の受付が改めて取り、
+                # そこで落ちれば job の error として報告される。黙って続けない。
+                usable = False
+        if not usable:
+            # 使えないなら、抱えたままにしない。持ったまま新しい lease を取ると
+            # 同じ device に 2 つぶんを求めることになり、かえって入らなくなる
+            # ——それが言語モデルを降ろさせる当のものである。
+            logger.info(
+                "lease not adopted device=%s carried_model=%s selected=%s worker=%s",
+                previous.device_id, self._carried_model,
+                selected.model_id if selected is not None else None,
+                warm is not None and warm[0].returncode is None,
+            )
             await self._release_carried_lease()
             return False
+        logger.info("lease adopted lease=%s device=%s", previous.lease_id, previous.device_id)
         self._carried_lease = None
+        self._carried_model = None
         execution.identity = previous.identity
         execution.lease_id = previous.lease_id
         execution.device_id = previous.device_id
@@ -1871,6 +1889,7 @@ class JobManager:
         """持ち回っている lease を返す。続きが無くなったときに呼ぶ。"""
         execution = self._carried_lease
         self._carried_lease = None
+        self._carried_model = None
         if execution is not None:
             await self._release_host_resource(execution)
 
@@ -2420,6 +2439,10 @@ class JobManager:
                 # まだ返さない。続きが来ると宣言されているので、次の件がこれを
                 # そのまま使う。返して取り直す隙が、言語モデルを降ろさせる。
                 self._carried_lease = execution
+                self._carried_model = selected.model_id if selected is not None else None
+                logger.info(
+                    "lease carried job=%s lease=%s device=%s", job_id, execution.lease_id, execution.device_id
+                )
             elif not await self._release_host_resource(execution):
                 await self._update(
                     job_id,
