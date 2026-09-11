@@ -142,7 +142,6 @@ def _warm_manager(tmp_path: Path) -> tuple[JobManager, _RecordingHost]:
     # 生きている。
     manager._keep_warm = 1
     manager._warm_worker = (_AliveWorker(), "signature")
-    manager._warm_model = "owner/model"
     return manager, host
 
 
@@ -172,6 +171,7 @@ def test_a_batch_carries_its_lease_instead_of_returning_and_asking_again(tmp_pat
 
     assert manager._can_carry_lease(job, first), "続きがあるのに返そうとしている"
     manager._carried_lease = first
+    manager._carried_model = "owner/model"
 
     second = host_execution()
     adopted = asyncio.run(manager._adopt_carried_lease(second, measured_model()))
@@ -196,6 +196,7 @@ def test_the_carried_lease_is_returned_once_the_worker_is_gone(tmp_path: Path):
     """
     manager, host = _warm_manager(tmp_path)
     manager._carried_lease = _granted("lease-1")
+    manager._carried_model = "owner/model"
 
     asyncio.run(manager._retire_warm_worker())
 
@@ -204,21 +205,45 @@ def test_the_carried_lease_is_returned_once_the_worker_is_gone(tmp_path: Path):
     assert manager._warm_worker is None
 
 
-def test_a_different_model_does_not_reuse_the_carried_lease(tmp_path: Path):
-    """載せ直すなら常駐ぶんを改めて求める。
+def test_a_different_model_returns_the_carried_lease_before_asking_again(tmp_path: Path):
+    """載せ直すなら、持ち回りを返してから改めて求める。
 
     lease は「この model をこの device に置いてよい」という許可である。worker が
     別の model へ載せ替えるなら、前の許可を使い回してはいけない。
+
+    大事なのは、諦めるときに必ず返すことである。抱えたまま新しい lease を取ると
+    同じ device に 2 つぶんを求めることになり、1 つぶんより入らなくなる——それが
+    言語モデルを降ろさせる当のものである。実測で、ここを返し忘れたときの追い出しは
+    返して取り直していた頃（50.6 秒）より早く、22.5 秒で起きた。
     """
     manager, host = _warm_manager(tmp_path)
-    manager._warm_model = "owner/other-model"
     manager._carried_lease = _granted("lease-1")
+    manager._carried_model = "owner/other-model"
 
     adopted = asyncio.run(manager._adopt_carried_lease(host_execution(), measured_model()))
 
     assert not adopted
-    # 諦めただけで、失くしてはいない。宣言が解ければ返される。
-    assert manager._carried_lease is not None
+    # 抱えたままにしない。
+    assert manager._carried_lease is None
+    assert host.lease_actions == [("lease-1", "release")]
+
+
+def test_the_carried_lease_survives_partial_offload(tmp_path: Path):
+    """部分退避（cpu_offload）でも持ち回る。
+
+    _warm_model は「重みを VRAM に抱えているか」で、cpu_offload では毎回 None に
+    なる。lease の持ち回りに要るのは別の問い——「同じ worker が同じ model を次も
+    走らせるか」である。ここを _warm_model で判じると、実運用の設定（Flux は
+    cpu_offload）で一度も持ち回らない。
+    """
+    manager, host = _warm_manager(tmp_path)
+    manager._warm_model = None      # 部分退避では常にこうなる
+    manager._carried_lease = _granted("lease-1")
+    manager._carried_model = "owner/model"
+
+    second = host_execution()
+    assert asyncio.run(manager._adopt_carried_lease(second, measured_model()))
+    assert second.lease_id == "lease-1"
     assert host.lease_actions == []
 
 
