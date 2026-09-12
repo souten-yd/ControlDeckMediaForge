@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 PR525取消drain補完
+
+同ux1/3d-workspace-scene-create/Draft PR525、base16d992c。root利用者branch/2dev symlink保持。
+manager.cancelのDB検査/flag記録/投影をto_threadへ移し、owned取消taskをshield/drain。
+要求取消をDB/runner cleanupへ伝播させず、後片付け完了後に呼出元へCancelledErrorを返す。
+実SQLite＋制御worker testでDB待機中のevent loop継続、繰り返し要求取消時のdrain/最終flag確認。
+focused63434 exit0、Node13/viewer51ms差分0、全64159/cd88c4 exit0、1916pass3skip2warnings206.63秒。
+以後product/test/script変更なし。同PRへcommit/push、未merge/未署名公開。
+次はcreation.listのowner再認証後Host終端照合を接続する。既存reconcileにも同期DBが残るため
+その境界を補完してから呼ぶ。再接続購読/独立同時cancel/実Host・Blender受入も残る。
+本番0.28.80 active/OS設定・制作物・認証変更なし。正規loginの必要性は前turnの実測を参照。
+同PRへcommit/push後もDraft維持。native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
 ## 2026-09-13 PR525 UI/history検証・push
 
 同ux1/3d-workspace-scene-create、Draft PR525、base main3e274e5/既存head d1b7f85からの追加。

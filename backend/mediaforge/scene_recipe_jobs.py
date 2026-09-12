@@ -349,10 +349,26 @@ class SceneRecipeJobManager:
             self._outbox_tasks.pop(job_id, None)
 
     async def cancel(self, job_id: str, owner: str) -> dict[str, Any]:
+        # A disconnected requester must not abandon a started DB write or
+        # propagate repeated cancellation into the runner's cleanup.
+        cancellation = asyncio.create_task(self._cancel_owned(job_id, owner))
+        try:
+            return await asyncio.shield(cancellation)
+        except asyncio.CancelledError:
+            await _finish_cleanup(cancellation)
+            raise
+
+    def _request_cancel(self, job_id: str, owner: str) -> bool:
+        """Validate ownership and persist intent together in an owned worker."""
         self.store.get_scene_recipe_task(job_id, owner=owner)
         current = self.store.get_job(job_id)
         if current.status in {JobStatus.QUEUED, JobStatus.RUNNING}:
             self.store.request_cancel(job_id)
+            return True
+        return False
+
+    async def _cancel_owned(self, job_id: str, owner: str) -> dict[str, Any]:
+        if await asyncio.to_thread(self._request_cancel, job_id, owner):
             task = self._tasks.get(job_id)
             if task is not None:
                 task.cancel()
@@ -361,7 +377,7 @@ class SceneRecipeJobManager:
                     await task
                 except asyncio.CancelledError:
                     pass
-        return self.projection(job_id, owner)
+        return await asyncio.to_thread(self.projection, job_id, owner)
 
     async def wait_cleanup(self, job_id: str, timeout: float = 5.0) -> None:
         deadline = asyncio.get_running_loop().time() + timeout

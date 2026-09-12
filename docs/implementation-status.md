@@ -1,5 +1,23 @@
 # Media Forge implementation status
 
+## 2026-09-13 PR525取消処理のoff-loop化と切断時drain
+
+base16d992c、同ux1/3d-workspace-scene-create/Draft PR525。前turnはUI/history実装・検証・pushで進捗。
+SceneRecipeJobManager.cancelの所有者検査・状態照会・取消flag書込を一つの同期helperとして
+worker threadへ移し、結果projectionもto_threadにした。既存DB transactionの意味は変更しない。
+取消operationをowned taskにし、呼出元取消はshield＋既存_finish_cleanupで終端までdrainした後に返す。
+runner taskへの取消はevent loop側に維持。開始済みDB書込やrunner cleanupへ要求取消を伝播させない。
+ownerの拒否と終端状態の既存testを維持。追加testは実SQLite fixtureと制御したworker taskで、
+DB書込をthread Eventで止めてもevent loopが進み、要求の複数回取消後も書込とcleanupの両完了を待つ。
+DB書込とprojectionのthread IDがevent loopと異なること、永続cancel flag/最終canceledをassert。
+63434/680fe1 focused exit0。Node13pass/viewer51ms/生成差分なし。
+全64159/cd88c4 exit0、1916passed/3skipped/既知2warnings/206.63秒。以後product/test/script変更なし。
+このtestは実Blender/Host/実ネットワーク切断ではない。shutdownとの全競合や複数の独立した
+cancel要求の同時到着、manager全体の同期DB移行まで証明したとは扱わない。
+次は新creation.listの再認証時Host終端照合と再接続購読を確認・接続して実機受入する。
+本番unit active/current0.28.80を再確認。OS/native承認・制作物・本番service変更なし。
+native setup/全GUI隔離/全GOAL/A〜F/GAはPARTIAL、PRは引き続きDraft。
+
 ## 2026-09-13 PR525再開監査・未回収テストの再検証
 
 前turnはセットアップ方針の説明のみで、実装上はno progress。今回git fetchとGitHub照会で

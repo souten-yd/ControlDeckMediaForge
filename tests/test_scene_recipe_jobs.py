@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import threading
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
@@ -301,6 +302,74 @@ class BlockingWorkspace(Workspace):
 
 def test_scene_recipe_cancel_is_owner_scoped_and_terminal(tmp_path: Path) -> None:
     asyncio.run(_cancel_case(tmp_path))
+
+
+def test_cancel_db_is_off_loop_and_disconnect_drains_cleanup(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        store = Store(tmp_path)
+        store.initialize()
+        job_id = pending_terminal(store)
+        store.update_job(job_id, status=JobStatus.RUNNING)
+        manager = SceneRecipeJobManager(store, Workspace(), Host())
+        loop_thread = threading.get_ident()
+        entered = threading.Event()
+        release = threading.Event()
+        cleanup_started = asyncio.Event()
+        cleanup_release = asyncio.Event()
+        runner_started = asyncio.Event()
+        original_request = store.request_cancel
+        original_projection = manager.projection
+
+        def blocked_request(value: str) -> None:
+            assert threading.get_ident() != loop_thread
+            entered.set()
+            assert release.wait(5), "test did not release the DB worker"
+            original_request(value)
+
+        def projection(value: str, owner: str) -> dict[str, Any]:
+            assert threading.get_ident() != loop_thread
+            return original_projection(value, owner)
+
+        async def runner() -> None:
+            runner_started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                cleanup_started.set()
+                await cleanup_release.wait()
+                await asyncio.to_thread(store.update_job, job_id, status=JobStatus.CANCELED)
+
+        store.request_cancel = blocked_request  # type: ignore[method-assign]
+        manager.projection = projection  # type: ignore[method-assign]
+        task = asyncio.create_task(runner())
+        manager._tasks[job_id] = task
+        await runner_started.wait()
+        request = asyncio.create_task(manager.cancel(job_id, "user:7"))
+        try:
+            async with asyncio.timeout(3):
+                while not entered.is_set():
+                    await asyncio.sleep(0.001)
+                # The event loop reaches here while the DB worker is blocked.
+                request.cancel()
+                await asyncio.sleep(0)
+                request.cancel()
+                assert not request.done()
+                release.set()
+                await cleanup_started.wait()
+                request.cancel()
+                await asyncio.sleep(0)
+                assert not request.done() and not task.done()
+                cleanup_release.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await request
+            assert task.done()
+            assert store.cancel_requested(job_id)
+            assert store.get_job(job_id).status == JobStatus.CANCELED
+        finally:
+            release.set()
+            cleanup_release.set()
+            await asyncio.gather(request, task, return_exceptions=True)
+    asyncio.run(scenario())
 
 
 async def _cancel_case(tmp_path: Path) -> None:
