@@ -6,6 +6,7 @@
 ## 2026-09-12 v0.28.80 published and installed
 
 準備PR518 MERGED/82bf5eb、tag同commit。ux1/release-0-28-80-acceptance、/tmp/mediaforge-cleanup-docs-20260912。
+受入記録PR519 OPEN、bcb3edfでCLEAN/checks空を確認。merge状態は再開時にghで再照合する。
 build68339 exit0/31619183B、embedded frontend4files一致、既存鍵署名、公開4files再取得/Host consumer成功。
 package実Chrome ja/en320/1280不足表示・設定/戻る、50484正常停止/9163解放。
 通常deck update22079 exit0、.79→.80/healthy/MF52609、Host2302保持。旧.78bundle標準整理/.79保持。
