@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 PR525独立cancel合流と誤検知test修正
+
+同ux1/3d-workspace-scene-create/Draft PR525、basea4b514d。root利用者branch/2dev symlink保持。
+修正前f6f8b2で二つ目のcancelによるrunner cleanup中断を再現。owner/job別in-flight taskで合流。
+異owner拒否、片方要求取消時drain、他方canceled返答、DB flag書込1回と終端再送をtest。
+focused成功。全89628は1918pass1fail3skip210.19秒、既存notice testの公開UUIDにbbbbが偶然含まれ誤検知。
+試験DB read-onlyで実ID確認。key集合を厳密検査、秘密検査は全通知valueへ分離して他assert維持。
+修正後focused60729前半成功、全60729/52d72b exit0、1919pass3skip2warnings210.73秒。
+以後product/test/script変更なし。Node15/viewer40ms差分0。同PRcommit/push、Draft維持/未merge/未署名公開。
+次は新入口の実Host/Blender制作一巡へ進むため、正規ユーザー認証の受入経路を用意する。
+新規Chromeは/login、Host checkoutのbrowserはcookie必須、loopback MCPはactor token必須。
+現agent環境にHost token変数なし。他process/session/tokenの借用やpassword変更で代用しない。
+manager.stopとの全競合/実2タブcancelも未受入。OS承認/本番/制作物変更なし。
+native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
 ## 2026-09-13 PR525進捗再取得・操作DOM保持
 
 同ux1/3d-workspace-scene-create/Draft PR525、basee9eb846。利用者root/2dev symlink保持。

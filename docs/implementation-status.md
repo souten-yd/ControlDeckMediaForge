@@ -1,5 +1,34 @@
 # Media Forge implementation status
 
+## 2026-09-13 PR525独立した取消要求の合流
+
+basea4b514d、同ux1/3d-workspace-scene-create/Draft PR525。前turnは進捗再取得/DOM保持実装・検証・pushで進捗。
+追加testを修正前に実行しf6f8b2 exit1: 同ownerの二つ目のcancelが後片付け中runnerを再度cancelし、
+cleanup完了前に要求が返ることを再現した。片方の要求取消と、別ownerの拒否も同scenarioに含めた。
+managerに(owner, job_id)別の進行中取消taskを保持し、同owner同Jobだけ同一owned operationを待つ。
+別ownerは別の所有者検査へ進み拒否される。終端callbackは同taskの場合だけ登録を回収し、
+後の要求で置き換えたtaskを古いcallbackが消さない。DB/公開Job契約の変更なし。
+修正後focused89628の前半で成功。二つの要求の一方が取消されてもcleanup完了を待ち、
+他方はcanceled結果を受け、取消flag書込1回、終端後再送で追加書込なしを確認。
+これは制御したasync runner＋実SQLiteであり、実ブラウザ2タブ/実Blender受入ではない。
+manager.stopとの全競合をこのtestで受入済みと扱わない。
+
+最初の全89628/899d29は1918pass/1fail/3skip/2warnings210.19秒。
+失敗は既存test_blender_operation_noticesの秘密文字列検査で、試験DBの公開ID
+blenderop_cc30a193d4b34bbbb23ad0eafaad15f3にbbbbが含まれた誤検知。
+sqlite3 CLI不在を確認後、Python sqlite3 read-onlyで当該IDだけを照会した（ed10cc exit0）。
+公開key集合を厳密assertし、秘密検査は全通知valueへ適用。owner/phase/結果不変のassertは保持した。
+修正後関連test60729前半exit0、全60729/52d72b exit0、1919passed/3skipped/既知2warnings/210.73秒。
+以後product/test/script変更なし。同PRへcommit/pushする。
+Node15pass/viewer40ms/生成差分なし。OS設定/制作物/本番変更なし。
+
+Host checkoutの読取ではsecurity/deps.pyのbrowser認証はsession cookie必須、
+addons/agent_mcp.pyのloopback例外は有効署名tokenの期限だけで、actor token自体は必要と確認。
+前turnの実Chrome/login遷移と整合するが、稼働Hostとcheckoutの全一致を新たに証明したとはしない。
+現agent環境の変数名照会にControlDeck/MCP tokenなし、OpenCode実行fileの存在だけを確認。
+他processのtoken/sessionを借用せず、認証設定も変更しない。正規ユーザー経路での実機受入が次の残件。
+PR525はDraft、native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+
 ## 2026-09-13 PR525再接続後の進捗再取得と操作DOM保持
 
 basee9eb846、同ux1/3d-workspace-scene-create/Draft PR525。前turnはHost終端outbox接続・test・pushで進捗。

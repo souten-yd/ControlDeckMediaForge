@@ -407,6 +407,68 @@ def test_scene_recipe_cancel_is_owner_scoped_and_terminal(tmp_path: Path) -> Non
     asyncio.run(_cancel_case(tmp_path))
 
 
+def test_independent_cancel_requests_share_cleanup_but_not_ownership(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        store = Store(tmp_path)
+        store.initialize()
+        job_id = pending_terminal(store)
+        store.update_job(job_id, status=JobStatus.RUNNING)
+        manager = SceneRecipeJobManager(store, Workspace(), Host())
+        started, cleaning, release, cleaned = (asyncio.Event() for _ in range(4))
+        writes = []
+        original = store.request_cancel
+
+        def recording(value: str) -> None:
+            writes.append(value)
+            original(value)
+
+        store.request_cancel = recording  # type: ignore[method-assign]
+
+        async def runner() -> None:
+            started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                cleaning.set()
+                await release.wait()
+                await asyncio.to_thread(store.update_job, job_id, status=JobStatus.CANCELED)
+                cleaned.set()
+
+        task = asyncio.create_task(runner())
+        manager._tasks[job_id] = task
+        requests = []
+        try:
+            async with asyncio.timeout(3):
+                await started.wait()
+                first = asyncio.create_task(manager.cancel(job_id, "user:7"))
+                requests.append(first)
+                await cleaning.wait()
+                with pytest.raises(KeyError):
+                    await manager.cancel(job_id, "user:8")
+                second = asyncio.create_task(manager.cancel(job_id, "user:7"))
+                requests.append(second)
+                first.cancel()
+                await asyncio.sleep(0)
+                first.cancel()
+                done, _ = await asyncio.wait(requests, timeout=0.05)
+                assert not done, "a repeated cancel interrupted runner cleanup"
+                release.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await first
+                result = await second
+                assert result["status"] == "canceled" and cleaned.is_set()
+                assert writes == [job_id]
+                # A later repeat is still valid, but must not persist another cancel.
+                assert (await manager.cancel(job_id, "user:7"))["status"] == "canceled"
+                assert writes == [job_id]
+        finally:
+            release.set()
+            if not cleaning.is_set():
+                task.cancel()
+            await asyncio.gather(*requests, task, return_exceptions=True)
+    asyncio.run(scenario())
+
+
 def test_cancel_db_is_off_loop_and_disconnect_drains_cleanup(tmp_path: Path) -> None:
     async def scenario() -> None:
         store = Store(tmp_path)

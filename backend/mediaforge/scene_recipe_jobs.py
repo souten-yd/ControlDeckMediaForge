@@ -55,6 +55,7 @@ class SceneRecipeJobManager:
         self._admissions: set[asyncio.Task[tuple[Job, SceneTaskRecord]]] = set()
         self._executions: dict[str, HostExecution] = {}
         self._outbox_tasks: dict[str, asyncio.Task[None]] = {}
+        self._cancel_requests: dict[tuple[str, str], asyncio.Task[dict[str, Any]]] = {}
         self._outbox_guard = asyncio.Lock()
         self._execution_guard = asyncio.Semaphore(1)
         self.control_poll_sec = control_poll_sec
@@ -381,7 +382,18 @@ class SceneRecipeJobManager:
     async def cancel(self, job_id: str, owner: str) -> dict[str, Any]:
         # A disconnected requester must not abandon a started DB write or
         # propagate repeated cancellation into the runner's cleanup.
-        cancellation = asyncio.create_task(self._cancel_owned(job_id, owner))
+        key = (owner, job_id)
+        cancellation = self._cancel_requests.get(key)
+        if cancellation is None or cancellation.done():
+            cancellation = asyncio.create_task(self._cancel_owned(job_id, owner))
+            self._cancel_requests[key] = cancellation
+
+            def finished(task: asyncio.Task[dict[str, Any]]) -> None:
+                # A later request may already have replaced this completed one.
+                if self._cancel_requests.get(key) is task:
+                    self._cancel_requests.pop(key)
+
+            cancellation.add_done_callback(finished)
         try:
             return await asyncio.shield(cancellation)
         except asyncio.CancelledError:
