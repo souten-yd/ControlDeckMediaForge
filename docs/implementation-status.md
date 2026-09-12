@@ -1,5 +1,30 @@
 # Media Forge implementation status
 
+## 2026-09-12 不要な検証データ・旧バックアップの完全削除
+
+利用者が「不要ファイルは消して。以前のバックアップも不要では？記録はPRに記録されていないのか」
+と完全削除を改めて依頼。前回PR514の退避だけでは容量を解放していなかったため、対象を再確認して削除した。
+前回の705 directory（保留648・ごみ箱57）すべて、/data1tb直下の旧更新前DB backup9、
+検証script165、PR/release下書き8、canary1を完全削除。ごみ箱の該当57 metadataだけも回収した。
+元の棚卸しinode/device/所有者と実体を照合し、現在の通常利用者process、symlink、設定、
+Host/MF read-only DBの参照0を確認。削除root内のmountもないことを確認した。
+proc読取不可はsystemd2023/sd-pam2032、他利用者領域やcache等の探索除外は前記の範囲を維持。
+名前だけで全/data1tbや全ごみ箱を削除したものではない。
+
+実行 /tmp/mf_permanent_cleanup.py --apply、47533 exit0。全888対象不在、直下mf-* entry0。
+導入0.28.79ファイル・正式assets・runtime-stateの2398 filesについてinode/size/mtime不変。
+これはmetadata照合であり全bytesの再hashやサービス稼働の証明ではない。
+空き容量227,910,000,640→295,349,002,240 bytes、観測増加67,439,001,600 bytes（約67.4GB）。
+他processの同時disk使用を排除した厳密なファイル別割当量ではなく、削除前後の実測差である。
+
+削除一覧・実行履歴・結果だけは既存maintenance/diagnostics-20260912の
+purge-plan.json/purge-actions.jsonl/purge-result.jsonへ保存。重いdata/backupは残していない。
+PRとGit履歴の結果要約は残るが、生のscreenshots/試験DB/fixture/一時backupは今回削除済み。
+PR514の復元可能という記録は過去の状態であり、現在は通常の復元不可。以前の対応表は削除履歴としてのみ使う。
+今後、生の証拠が必要な条件は管理下の新しい専用fixtureで再検証し、過去のpathを実在扱いしない。
+現在の制作物、管理対象runtime、正式な導入版/rollback配置、他利用者のごみ箱は対象外。
+サービス/OS policy変更なし。文書のみのslice、今回はtest/build/releaseなし。全3DS完了とはしない。
+
 ## 2026-09-12 検証フォルダの整理とAppArmor試験の起動失敗
 
 利用者から `/data1tb/mf-*` の不要フォルダを片付ける依頼を受け、直下705 directoryを確認。

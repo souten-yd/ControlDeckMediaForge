@@ -3,6 +3,18 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 diagnostic purge completed (supersedes recoverable cleanup below)
+
+base PR514/b6627e9、ux1/3d-diagnostic-purge、/tmp/mediaforge-cleanup-docs-20260912。
+利用者の追加指示で、保留648＋trash57 directoryを完全削除。root旧backup9/script165/下書き8/canary1も削除。
+全888対象不在、/data1tb直下mf-* entry0、47533 exit0。空き容量の観測増加67,439,001,600B。
+metadata保護2398files不変、正式制作物/runtime/導入版/他のtrashを削除していない。
+maintenance/diagnostics-20260912のpurge-plan/actions/resultに小さい削除記録だけ保持。
+下記retained/trash復元先はもう存在しない。PR/Git要約は残るがraw evidence/試験DB/backupは復元不可。
+以前の/data1tb/mf-* scriptは再実行不可。必要な再検証はdata_dir管理下へ新fixtureを作り、終了後回収する。
+診断profile不備/最新版で診断削除済みの問題は未変更。製品・OS・service起動停止なし。
+今回文書だけ、test/build/release未実施。統合3D Studio全体はPARTIALのまま。
+
 ## 2026-09-12 cleanup / loaded canary cannot initialize Python
 
 base origin/main03ed1af、ux1/3d-diagnostic-cleanup、/tmp/mediaforge-cleanup-docs-20260912。
