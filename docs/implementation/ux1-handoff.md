@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 PR525履歴再認証とHost終端outbox
+
+同ux1/3d-workspace-scene-create/Draft PR525、baseacb2318。利用者root/開発symlink保持。
+creation.list→async creation_snapshot。owner最新20件をoff-loop読取、終端未照合だけ既存retry予約。
+履歴応答はHost待ちなし、jobs.write/期限/owner/稼働・既存task/停止を検査して重複実行しない。
+既存reconcileのDB読取/receipt書込もto_thread、receipt書込取消drain、通信前期限再検査を追加。
+focused82795 exit0、SQLite reopen/slow Host fixture/owner/期限・権限/重複なし/全DB thread ID/receipt drain。
+Node13/viewer50ms差分0、全10473/610a0e exit0、1918pass3skip2warnings207.70秒。
+以後product/test/script変更なし。同PRcommit/push、Draft/未merge/未署名公開。
+次は再接続時の作成進捗購読を検証する（workspace.sessionの既存全Job購読は最大10件）。
+複数独立cancel/実Host・Blender新入口の制作受入も残り、Draftを維持して受入前にはmergeしない。
+実Host browserは前turn確認の正規loginが必要。新たなOS承認/本番変更/制作物変更なし。
+native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
 ## 2026-09-13 PR525取消drain補完
 
 同ux1/3d-workspace-scene-create/Draft PR525、base16d992c。root利用者branch/2dev symlink保持。

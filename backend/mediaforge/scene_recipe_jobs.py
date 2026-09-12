@@ -278,6 +278,25 @@ class SceneRecipeJobManager:
             items.append({**self.projection(job_id, owner), "name": task.request.get("name", "")})
         return {"items": items}
 
+    async def creation_snapshot(self, identity: HostIdentity) -> dict[str, Any]:
+        """Return owned history without waiting for Host outbox delivery."""
+        owner = identity.actor_subject or identity.subject
+        result = await asyncio.to_thread(self.creation_list, owner)
+        if "jobs.write" not in identity.granted_capabilities or identity.expires_at <= int(time.time()):
+            return result
+        for item in result["items"]:
+            if (item["status"] not in {"succeeded", "failed", "canceled"}
+                    or item["host_terminal_sent"] or item["host_terminal_reconciliation"] is not None):
+                continue
+            job_id = item["job_id"]
+            task = await asyncio.to_thread(self.store.get_scene_recipe_task, job_id, owner=owner)
+            if (task.host_terminal is not None and not self._stopping
+                    and job_id not in self._outbox_tasks and job_id not in self._tasks):
+                self._outbox_tasks[job_id] = asyncio.create_task(
+                    self._retry_terminal(job_id, identity), name=f"scene-terminal-outbox-{job_id}"
+                )
+        return result
+
     def projection(self, job_id: str, owner: str) -> dict[str, Any]:
         task = self.store.get_scene_recipe_task(job_id, owner=owner)
         job = self.store.get_job(job_id)
@@ -302,17 +321,23 @@ class SceneRecipeJobManager:
         }
 
     async def reconcile_terminal(self, job_id: str, identity: HostIdentity) -> None:
-        self.store.get_scene_recipe_task(job_id, owner=identity.actor_subject or identity.subject)
+        await asyncio.to_thread(
+            self.store.get_scene_recipe_task, job_id, owner=identity.actor_subject or identity.subject
+        )
         await self._consume_terminal(job_id, identity)
 
     async def _consume_terminal(self, job_id: str, identity: HostIdentity) -> None:
         if identity.expires_at <= int(time.time()) or "jobs.write" not in identity.granted_capabilities:
             return
         async with self._outbox_guard:
-            task = self.store.get_scene_recipe_task(job_id)
+            task = await asyncio.to_thread(
+                self.store.get_scene_recipe_task, job_id, owner=identity.actor_subject or identity.subject
+            )
+            current = await asyncio.to_thread(self.store.get_job, job_id)
             if (task.host_terminal_sent or task.host_terminal_reconciliation is not None
                     or task.host_terminal is None or job_id in self._tasks
-                    or self.store.get_job(job_id).status not in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}):
+                    or identity.expires_at <= int(time.time())
+                    or current.status not in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}):
                 return
             payload = {key: task.host_terminal[key] for key in ("status", "result", "error") if key in task.host_terminal}
             try:
@@ -331,9 +356,14 @@ class SceneRecipeJobManager:
             if receipt["terminal_matches"] and receipt["status"] != payload["status"]:
                 logger.warning("Inconsistent Host terminal receipt for %s; outbox remains pending", job_id)
                 return
-            self.store.record_scene_terminal_reconciliation(job_id, {
+            recording = asyncio.create_task(asyncio.to_thread(self.store.record_scene_terminal_reconciliation, job_id, {
                 key: receipt[key] for key in ("host_job_id", "status", "disposition", "terminal_matches")
-            })
+            }))
+            try:
+                await asyncio.shield(recording)
+            except asyncio.CancelledError:
+                await _finish_cleanup(recording)
+                raise
 
     async def _retry_terminal(self, job_id: str, identity: HostIdentity) -> None:
         delay = 1.0
@@ -341,7 +371,7 @@ class SceneRecipeJobManager:
             while not self._stopping and identity.expires_at > int(time.time()):
                 await asyncio.sleep(delay)
                 await self._consume_terminal(job_id, identity)
-                task = self.store.get_scene_recipe_task(job_id)
+                task = await asyncio.to_thread(self.store.get_scene_recipe_task, job_id)
                 if task.host_terminal_sent or task.host_terminal_reconciliation is not None:
                     return
                 delay = min(delay * 2, 30.0)

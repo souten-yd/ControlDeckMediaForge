@@ -27,10 +27,10 @@ IDENTITY = HostIdentity(
 )
 
 
-def pending_terminal(store: Store) -> str:
+def pending_terminal(store: Store, owner: str = "user:7") -> str:
     job = store.create_job(JobRequest(operation="media.inspect", intent="outbox fixture"), host_managed=True)
     store.create_scene_recipe_task(
-        job.id, owner="user:7", host_job_id="host-child", operation="scene.create",
+        job.id, owner=owner, host_job_id="host-child", operation="scene.create",
         runtime_id="blender-test", runtime_version="4.5.9", base_revision_id=None,
         input_sha256="1" * 64, idempotency_key="2" * 64, request={},
     )
@@ -88,6 +88,109 @@ def test_outbox_checks_owner_expiry_and_capability_before_host_call(tmp_path: Pa
         await manager.reconcile_terminal(job_id, replace(IDENTITY, expires_at=0))
         await manager.reconcile_terminal(job_id, replace(IDENTITY, granted_capabilities=frozenset()))
         assert store.get_scene_recipe_task(job_id).host_terminal_reconciliation is None
+    asyncio.run(scenario())
+
+
+def test_creation_reconnect_schedules_owned_outbox_without_waiting_for_host(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    async def scenario() -> None:
+        store = Store(tmp_path)
+        store.initialize()
+        owned = pending_terminal(store)
+        pending_terminal(store, "user:8")
+        # Reopen persistent data without retaining the old manager or bearer.
+        store = Store(tmp_path)
+        store.initialize()
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        class SlowHost(Host):
+            calls = 0
+
+            async def reconcile_job_terminal(self, identity, host_job_id, payload):
+                assert identity is IDENTITY
+                self.calls += 1
+                entered.set()
+                await release.wait()
+                return {"host_job_id": host_job_id, "status": "failed", "disposition": "applied",
+                        "terminal_matches": True}
+
+        host = SlowHost()
+        manager = SceneRecipeJobManager(store, Workspace(), host)
+        loop_thread = threading.get_ident()
+
+        def off_loop(method):
+            def checked(*args, **kwargs):
+                assert threading.get_ident() != loop_thread
+                return method(*args, **kwargs)
+            return checked
+
+        for name in ("list_scene_creation_job_ids", "get_scene_recipe_task", "get_job",
+                     "record_scene_terminal_reconciliation"):
+            setattr(store, name, off_loop(getattr(store, name)))
+        try:
+            for invalid in (replace(IDENTITY, expires_at=0),
+                            replace(IDENTITY, granted_capabilities=frozenset())):
+                await manager.creation_snapshot(invalid)
+                assert manager._outbox_tasks == {}
+            async with asyncio.timeout(3):
+                first = await manager.creation_snapshot(IDENTITY)
+                assert [item["job_id"] for item in first["items"]] == [owned]
+                assert first["items"][0]["host_terminal_sent"] is False
+                delivery = manager._outbox_tasks[owned]
+                await entered.wait()
+                second = await manager.creation_snapshot(IDENTITY)
+                assert second == first and manager._outbox_tasks[owned] is delivery
+                assert host.calls == 1 and not delivery.done()
+                release.set()
+                await delivery
+                final = await manager.creation_snapshot(IDENTITY)
+                assert final["items"][0]["host_terminal_sent"] is True
+                assert manager._outbox_tasks == {} and host.calls == 1
+                assert host.created == []
+        finally:
+            release.set()
+            await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_terminal_receipt_write_drains_on_repeated_cancellation(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        store = Store(tmp_path)
+        store.initialize()
+        job_id = pending_terminal(store)
+        entered, release = threading.Event(), threading.Event()
+        original = store.record_scene_terminal_reconciliation
+
+        class ReceiptHost(Host):
+            async def reconcile_job_terminal(self, identity, host_job_id, payload):
+                return {"host_job_id": host_job_id, "status": "failed", "disposition": "applied",
+                        "terminal_matches": True}
+
+        def recording(*args, **kwargs):
+            entered.set()
+            assert release.wait(5)
+            return original(*args, **kwargs)
+
+        store.record_scene_terminal_reconciliation = recording  # type: ignore[method-assign]
+        manager = SceneRecipeJobManager(store, Workspace(), ReceiptHost())
+        request = asyncio.create_task(manager.reconcile_terminal(job_id, IDENTITY))
+        try:
+            async with asyncio.timeout(3):
+                while not entered.is_set():
+                    await asyncio.sleep(0.001)
+                request.cancel()
+                await asyncio.sleep(0)
+                request.cancel()
+                assert not request.done()
+                release.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await request
+            assert store.get_scene_recipe_task(job_id).host_terminal_sent
+        finally:
+            release.set()
+            await asyncio.gather(request, return_exceptions=True)
+            await manager.stop()
     asyncio.run(scenario())
 
 

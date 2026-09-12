@@ -3761,7 +3761,7 @@ def create_app(
                     elif method == "scenes.creation.list":
                         if params:
                             raise ValueError("scene creation list accepts no parameters")
-                        result = await asyncio.to_thread(scene_recipe_jobs.creation_list, scene_owner(identity))
+                        result = await scene_recipe_jobs.creation_snapshot(identity)
                     elif method == "scenes.creation.cancel":
                         if "jobs.write" not in identity.granted_capabilities:
                             raise SceneError("host_capability_not_granted", "jobs.write is required")

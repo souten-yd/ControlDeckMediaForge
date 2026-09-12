@@ -9,6 +9,10 @@ this action. Existing `media.scene.create` remains the typed Agent interface.
 The new-scene UI uses private `scenes.creation.list` (no arguments, latest20
 uncleared scene-creation Jobs belonging to the authenticated actor) and
 `scenes.creation.cancel` (`job_id`, owner check and jobs.write required).
+Listing with a current jobs.write identity also schedules existing terminal
+outbox retries for these owned creations. It does not wait for Host delivery,
+create another job, or change the local result. A later listing returns the
+persisted receipt; a pending or conflicting receipt is not reported as delivered.
 The `3d.scene_recipe.workspace_create` flag advertises this authenticated
 workspace route, independently of runtime availability. Submission additionally
 requires the existing runtime availability state. Standalone advertises false;

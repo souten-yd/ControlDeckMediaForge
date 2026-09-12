@@ -1,5 +1,25 @@
 # Media Forge implementation status
 
+## 2026-09-13 PR525履歴再接続からのHost終端照合
+
+baseacb2318、同ux1/3d-workspace-scene-create/Draft PR525。前turnは取消off-loop/drain実装・検証・pushで進捗。
+private scenes.creation.listをmanager.creation_snapshotへ接続した。owner別最新20件をoff-loopで読み、
+有効なjobs.write identityがある場合だけ、終端かつ未照合の同owner Jobへ既存outbox retryを予約する。
+既に実行/照合中なら重複taskを作らず、停止中にも開始しない。履歴応答はHost通信完了を待たない。
+既存1秒開始/最大30秒backoff、manager stop回収、receipt検証/競合保持を再利用し、第二Jobを作らない。
+reconcile/_consume/_retryのDB読取とreceipt書込もworker threadへ分離した。
+outbox lock/DB待機後にもidentity期限を再検査。開始済みreceipt書込は取消時もshield/drainする。
+
+追加testはSQLiteを再openし、新managerと正規owner fixtureで履歴を復元。
+期限切れ/権限なしでは予約なし、別ownerを除外、Host応答待ち中も履歴返答、再照会時task同一、
+Host呼出1回/新Job0、完了後receipt保存と再予約なしを確認。全関係Store methodのthread IDもassert。
+別testはreceipt書込をthreadで止め、繰り返し要求取消でも書込終端を待つことを確認。
+82795/7a18a6 focused exit0。Node13pass/viewer50ms/生成差分なし。
+全10473/610a0e exit0、1918passed/3skipped/既知2warnings/207.70秒。以後product/test/script変更なし。
+Host応答はfixture、実Host認証/HTTP/Blender/opaque browser受入はNOT TESTED。
+新creationの再接続進捗購読、複数独立cancel、実機一巡と署名配布は未完了。PRはDraft維持。
+OS承認/本番service/制作物変更なし。native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+
 ## 2026-09-13 PR525取消処理のoff-loop化と切断時drain
 
 base16d992c、同ux1/3d-workspace-scene-create/Draft PR525。前turnはUI/history実装・検証・pushで進捗。
