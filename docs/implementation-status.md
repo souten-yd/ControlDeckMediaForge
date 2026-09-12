@@ -1,5 +1,19 @@
 # Media Forge implementation status
 
+## 2026-09-12 native package入力の実測で不適合を確認
+
+PR520はMERGED/3b0fb59をghとorigin/mainで照合。前turnは説明のみで製品進捗なし、
+今回は残件のnative入力を実OSへ照会し、次の実装判断を変更した。
+詳細と再現条件は[3ds-native-setup-input.md](implementation/3ds-native-setup-input.md)。
+8d0056 exit0: 526Bの無害な.debをGetDetailsLocalで照会。通常pathは期待Detailsを返すが、
+同bytesのsealed memfd/proc-fd pathはDetailsなしでFinished1。成功終端だけを受入に使わない。
+InstallFiles/管理者対話/OS policy変更なし。30d0f2で試験package未導入・transaction空を確認。
+upstream1.2.8固定commitのInstallFilesは認可前にpathだけ保持し、bytesの固定を保証しない。
+候補memfd holderの製品実装は取り止め、署名検証からOS適用まで同一bytesを保証する
+native handoff/初回bootstrap経路を先に解く。PackageKit全体を利用不可と断定したものではない。
+利用者へCLI再適用を求める方式へ戻さない。新しいHost特権API/OS例外の導入もなし。
+文書のみ変更、今回製品test/build/GUI/releaseはNOT TESTED。全3DS/GOAL/A〜F/GAはPARTIAL。
+
 ## 2026-09-12 no-code OS setup向けの非対話診断を実装
 
 base PR519/bd8f378、ux1/3d-native-setup-probe。前turnの署名.80導入を維持。

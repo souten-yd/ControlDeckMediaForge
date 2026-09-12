@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 native sealed input candidate rejected
+
+base PR520 MERGED/3b0fb59、ux1/3d-native-sealed-input、/tmp/mediaforge-cleanup-docs-20260912。
+tracked製品変更なし。8d0056実GetDetailsLocalで通常.debはDetailsあり、sealed proc-fdはなし。
+両Finished1、terminal successのみの導入成功扱いは禁止。詳細は3ds-native-setup-input.md。
+前の試験出力は未確認/親process不在を確かめてから別試験。InstallFiles/OS変更/対話なし。
+upstream固定commit09ef076は認可前pathのみ保持、mutable代替では差替え防止を保証できない。
+memfd holder実装を先行しない。次は特権境界内の署名/bytes検証と初回bootstrapを含む
+native handoff設計・検証。既存Host hw-helperはGPU/固定serviceのみ、installerとして使わない。
+通常利用時CLI不要/初回OS承認/永続化の要件維持、GUI/全GOAL/A〜F/GA PARTIAL。
+今回は文書のみ。製品test/build/releaseなし、稼働版/ユーザーroot/2dev symlink保持。
+今回fixture2filesと空native-handoff-probe directoryを回収、rawdataは残さない。
+
 ## 2026-09-12 non-interactive native setup discovery
 
 base PR519 mergebd8f378、ux1/3d-native-setup-probe、/tmp/mediaforge-cleanup-docs-20260912。PR520 OPEN。
