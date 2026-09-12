@@ -105,3 +105,51 @@ acceptance. Do not disable AppArmor or globally relax unprivileged-userns policy
 do not broadly authorize every Python/systemd/bwrap invocation. A mere exception
 for a user-replaceable executable is not proof of a secure dedicated boundary.
 This is a constrained next-design requirement, not an installed or tested policy.
+
+## 2026-09-12 minimal diagnostic restored and pathname canary passed
+
+The user explicitly authorized restoring only the necessary code. Restore the
+PR502 canary script, its named profile, and its tests on current main; do not
+restore deleted `/data1tb/mf-*` fixtures, backups, scripts or historical payloads.
+Add the missing `/usr/lib/python3.12/ r` directory rule (the recursive child rule
+did not permit listing the directory itself) and the exact local timezone read.
+The first defect was confirmed by the actual kernel denial and Python encodings
+initialization failure, not inferred from a generic launch error.
+
+The user reloaded the revised profile. Running
+`/usr/bin/python3 scripts/3ds_apparmor_ipc_probe.py` returned exit0:
+
+- Actual child label `mediaforge-ipc-canary-v1 (enforce)`; stderr empty.
+- Permitted dedicated peer connected and received `mf-owned-canary`.
+- Outside dedicated peer connection denied with errno13/EACCES; no payload received.
+- `passed=true`, all owned temporary peers removed. No real service socket contacted.
+
+The restored twelve tests and one new directory/no-privilege regression test are
+part of the full gate recorded in implementation-status. Parser `-Q -K` also
+succeeded without loading policy or writing its cache. No product runner changes.
+This passes the pathname canary, **not** the full GUI/fd/process confinement gate.
+
+The current profile remains a temporary, unattached diagnostic profile. Following
+the user request to avoid repeated manual application, the production design now
+requires one explicit persistent administrator setup followed by OS boot loading
+and ordinary non-root entry/checks. Do not ask for repeated canary reloads or call
+this diagnostic profile a completed production installer. Future rule updates need
+administrator authorization; no global userns exception or unrestricted sudo.
+
+## Web Blender entry investigation (not a GUI fix)
+
+The user reported no editor window after opening the Web Blender navigation.
+Current HTML puts `scene-blender-open` inside the initially hidden scene detail;
+navigation itself selects the scene browser, not the RFB dialog. Selecting a scene
+and pressing the edit button is required. No-scene users only see import/backup
+controls and the empty list, so discoverability/new-scene entry remains a gap.
+
+A headless real-browser read-only check against installed0.28.79 standalone
+`http://127.0.0.1:9130/web-blender` observed nav1, scene buttons0, editor button
+not visible, dialog not visible, and the Japanese no-scenes message. Non-GET
+requests were blocked to avoid preference/data writes. This is the standalone
+owner, not proof of the reporting user having no scenes. The actual Host URL
+redirected the fresh diagnostic browser to login; no password/session was changed.
+Core health is currently healthy. User-path reproduction, entry improvements and
+actual opaque-frame editor acceptance remain open; the pathname canary does not
+resolve this separate UI report.

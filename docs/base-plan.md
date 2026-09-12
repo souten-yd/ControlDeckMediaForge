@@ -1059,6 +1059,13 @@ required ABI support must fail closed. Pathname UNIX sockets and inherited
 descriptors are separate acceptance boundaries; filesystem read restrictions
 alone do not prove them isolated.
 
+OS confinement policy is an administrator-owned prerequisite, not a per-edit
+manual operation. Once the production policy is accepted and explicitly installed,
+the OS should reload it at boot and ordinary sessions should only enter/check it.
+Policy changes still require administrator authorization; do not give the core
+unrestricted sudo or permission to weaken its own confinement. A temporary canary
+profile is not the production policy or proof that this lifecycle is implemented.
+
 ---
 
 ## 19. Observability

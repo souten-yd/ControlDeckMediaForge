@@ -1,5 +1,27 @@
 # Media Forge implementation status
 
+## 2026-09-12 必要なIPC診断だけを復元、実pathname接続拒否を確認
+
+利用者が必要コードだけの復元を許可。最新main/e063d4e上へPR502の診断script/profile/testを限定復元。
+標準library directory自身のreadとローカルtimezone readだけを補い、再発防止test1を追加。
+旧バックアップ・大量fixture・一時script群は復元していない。診断は製品runnerへまだ接続していない。
+利用者の修正版適用後、実probe3362d6 exit0: enforce label、許可peer受信、外部errno13/受信なし、
+passed true、所有temp回収。kernel pathname境界の専用canaryとして成功、全GUI隔離の成功ではない。
+parser -Q -K exit0。全1070 exit0/1849passed・3skipped・2warnings/212.30秒。
+viewer build64ms/生成差分0、Node5pass。全gate開始後product/test変更なし。
+2開発symlinkは既存MediaForge venv/node_modulesを参照し、Host venvを共有していない。
+
+利用者から毎回の手動適用を避ける要求、さらにコード入力なしのMediaForgeセットアップへの統合要求。
+初回のOS管理者承認→固定policy永続登録→OS boot読込→通常非root利用を設計へ明記。
+coreへの無制限sudoやブラウザでの管理者パスワード収集は不可。Host支援は汎用別PRで、未提供契約を仮定しない。
+この初回GUIセットアップ・本番policy・更新rollbackは未実装。今回の一時profileを本番導入完了とはしない。
+
+Web Blenderで編集windowが見つからない報告も調査。navは一覧切替、編集buttonは選択後のdetail内で初期hidden。
+実installed0.28.79 standaloneブラウザでscene0/editor非表示/dialog非表示を確認（非GET拒否で書込なし）。
+ユーザーのHost画面は別ownerで、診断browserはloginへredirect。報告者のscene0や同一症状を実証したとはしない。
+現在のcore healthはhealthy。入口改善・Host実画面再現・新規sceneからの編集導線は別の未完了条件。
+実機記録の詳細は3ds-ipc-isolation.md。設定/GUI変更・署名配布は今回なし。統合3DS全体はPARTIAL。
+
 ## 2026-09-12 不要な検証データ・旧バックアップの完全削除
 
 利用者が「不要ファイルは消して。以前のバックアップも不要では？記録はPRに記録されていないのか」

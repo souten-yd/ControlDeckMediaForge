@@ -381,6 +381,23 @@ flowchart TD
 Blenderとdisplay/VNCはsession専用process group / cgroupでまとめる。
 HostのWeb processやMediaForge HTTP requestの生存期間を寿命の基準にしない。
 Linuxではsystemd user unitでrunnerを所有する。権限・隔離要件を満たすrunnerを先に検証する。
+
+2026-09-12利用者指示: 編集のたびに管理者が隔離設定を手動適用する運用にはしない。
+本番の固定OS policyは受入後に管理者が一度永続登録し、以後はOSの起動時読込と
+非root runnerのpolicy確認・入域で利用する。通常の起動・編集・再接続にはsudoを要求しない。
+policy自体の更新/削除は別の明示管理者操作であり、任意のrule変更を自動承認しない。
+coreへ無制限sudoを与えず、policy不足なら原因と初回setup導線を出してfail closedにする。
+現時点の試験用profileは一時読込であり、本番policy・永続setup・GUIへの接続は未実装。
+診断変更のたびに利用者へ適用を依頼し続けず、本番policyとsetup/rollbackをまとめて受入する。
+
+同日追加要件: 初回登録もMediaForgeセットアップ画面から開始し、利用者のコード入力を必須にしない。
+UIは不足診断→「安全な編集環境を設定」→OS管理者承認→固定policy登録→実隔離診断の順を示す。
+ブラウザ/MediaForgeに管理者パスワードを保存・転送させない。管理者承認を受ける仕組み自体が
+未導入の場合は自動登録できると表示せず、OS側の初回導入手段が必要なことを明示する。
+Host側の支援が必要なら汎用の署名済みOSセットアップ認可として別PRにし、Media専用の
+特権ルート・任意shell実行・任意profile書込をHostへ追加しない。現行契約にこの認可があると仮定しない。
+ローカルPCと遠隔/モバイルで管理者承認を完結できる経路、拒否・取消・適用失敗時の旧状態保持を
+受入してから提供する。CLI手順の掲載だけでは、このセットアップ要件の完了とはしない。
 web APIがprocessを起動してすぐ忘れる方式や、個人の既存X11/Wayland sessionへの接続を採らない。
 
 3DS-5bではtransient systemd user unitをdurable session IDへ固定し、`NoNewPrivileges`、

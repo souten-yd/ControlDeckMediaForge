@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 IPC canary restored/passed; no-code setup and Web Blender entry required
+
+base e063d4e/PR515、ux1/3d-restore-ipc-diagnostic、/tmp/mediaforge-cleanup-docs-20260912。
+ユーザーが必要コード復元を許可。script/profile/testsだけ復元、stdlib directory read/timezone readを追加。
+利用者が適用済み。実probe3362d6 exit0/enforce/許可peer成功/外部EACCES受信0/temp回収。
+全1070 exit0/1849pass3skip2warnings212.30秒、viewer64ms差分0/Node5。以後product/test変更なし。
+古いrawdata/backup/外部script群は復元なし、2dev symlinkのみ保持。全GUI隔離/本番setup未完了。
+ユーザー要件: 毎回CLI適用を求めず、MediaForge setup UIから初回OS承認/永続policy登録と実検証。
+ブラウザで管理者passwordを集めない、無制限sudo不可。generic Host支援が必要なら別PR。
+通常編集時には管理者操作不要。診断profileの一時load成功をこのsetupの実装済みと混同しない。
+Web Blender入口はシーン一覧で、scene選択前は編集button/dialog非表示。
+実installed standalone scene0で再現、Host診断browserはloginredirectのため報告者環境は未確認。
+現在.79/core healthy。次は本番OS setup認可経路と、明確な編集入口/新規scene導線を依存順に実装。
+一つのPRへ混ぜず、scene/RFBの安全条件と実機受入を維持。CLI適用の依頼を繰り返す運用へ戻さない。
+
 ## 2026-09-12 diagnostic purge completed (supersedes recoverable cleanup below)
 
 base PR514/b6627e9、ux1/3d-diagnostic-purge、/tmp/mediaforge-cleanup-docs-20260912。
