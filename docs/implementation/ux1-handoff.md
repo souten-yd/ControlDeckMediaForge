@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 Web Blender entry visible before selection
+
+base origin/main6c659e5/PR516、ux1/3d-web-entry、/tmp/mediaforge-cleanup-docs-20260912。PR517 OPEN。
+product head40f3cb2でCLEAN/checks空、main ruleはPR必須/必要承認0を実確認。以後merge状態はghで再確認。
+frontendの編集/復旧入口を先頭へ移動、未選択guard/対象名/日英案内/Blender設定focusを追加。
+既存API/runner/権限/配布版に変更なし。PR-U0〜7既存状態は変更せず、統合3DS全体PARTIAL。
+実Chrome readonly81537 exit0、候補UI+稼働.79 GET、ja/en×320/1280設定/戻る/overflowなし/pageerror0。
+選択/解除/XSS literalはbrowser内fixtureのみ。新scene/Job/GUI/backupなし、browser終了。
+Node renderer4/animation5pass、viewer44ms差分0。全64379 exit0/1850pass3skip2warnings/208.46秒。
+以後product/test/script変更なし、記録のみ。新規scriptはread-only browser受入用で実行成功済み。
+2dev symlink保持、root work branch ahead11のtracked差分なしを再確認、他branchは変更なし。
+次はこのUI sliceのPR gate/mergeを完了し、署名配布後にHost opaque iframeで入口を再確認する。
+no-code OS setupは未実装のまま。pkexec存在/polkit activeでもHost初回認可の実装を意味しない。
+本番policy・初回管理者承認・永続化/rollback、直接新規scene作成UI、全GOAL/A〜F/GAは未完了。
+再開: git fetch origin; git status --short --branch; gh pr list --head ux1/3d-web-entry。
+
 ## 2026-09-12 IPC canary restored/passed; no-code setup and Web Blender entry required
 
 base e063d4e/PR515、ux1/3d-restore-ipc-diagnostic、/tmp/mediaforge-cleanup-docs-20260912。

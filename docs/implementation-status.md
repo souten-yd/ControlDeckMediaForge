@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-12 Web Blenderの編集入口を未選択時にも表示
+
+base origin/main6c659e5/PR516、ux1/3d-web-entry。PR213はMERGED/9469d8eをghで再確認。
+PR517を作成、product head40f3cb2でCLEAN/checks空。main保護はPR必須/必要承認0、迂回なし。
+既存の編集・復旧buttonをhidden detailから先頭panelへ移し、未選択guardと選択対象表示を追加。
+一覧選択/取り込み/OpenCode制作後の更新を日英で案内。Blender設定へ通常activateで移動しfocusを設定。
+環境不足・別sceneの編集中・保存中・取り込み中などの既存制約とRFB起動経路は維持。
+scene一覧再描画で入口も更新するため、detailを閉じた直後に編集buttonを無効化する。
+新規sceneの直接作成UI、本番OS policy、コード入力なしのOS setupはこの変更に含まない。
+
+`node scripts/3ds_web_entry_readonly.mjs http://127.0.0.1:9130`、81537 exit0。
+実Chromeのnavigation応答だけ候補HTML/JS/CSSへ差替え、configと初期GETは稼働.79から取得。
+初期standalone scene0/basic ready/web ready/editor非表示。報告者のHost ownerとは別のsnapshot。
+ja/en×320/1280で入口表示・横overflowなし・設定focus/URL/settings・戻る/web-blenderをassert。
+選択/解除・HTMLを含むscene名のliteral表示はbrowser内だけのfixtureで確認（serverへ送信なし）。
+pageerror0、非GET拒否1（Library読取POSTも拒否）。新scene/Job/GUI、認証変更、OS変更なし。
+診断browserはfinallyで終了、raw画像/DB/backupは作成していない。再現scriptは本PRへ同梱。
+Node renderer4＋既存animation5pass、viewer build44ms/生成差分0、node構文検査成功。
+初回focusedはfixtureのfalse未初期化とstatic testのsection境界仮定で失敗。fixtureとpanel構造を修正し再成功。
+`./mf.sh test`64379 exit0、1850passed/3skipped/既知2warnings、208.46秒。
+この全gate開始後のproduct/test/script変更なし。追加は実測記録と引き継ぎのみ。
+
+OS認可経路のread-only確認: /usr/bin/pkexec存在、polkit.service active。
+Host backend/app/featuresとdesign-addon-platform-v2/addon-ux-guidelinesの検索ではOS setup認可経路を発見せず。
+見つかったprivileged記述はrelease archiveの特権mode拒否。Host全体で存在しない証明とはしない。
+pkexecの存在だけでブラウザから安全に導入できるとは扱わない。初回管理者認可・永続登録・rollbackは未実装。
+稼働current.79/unit active/MainPID14041/health200を再確認、restart・配布なし。
+NOT TESTED: installed候補UI、Host opaque iframe、実GUI起動保存、物理mobile、OS setup/再起動後維持。
+統合3DS/GOAL/A〜F/GAはPARTIALのまま。署名配布後のHost受入と、本番OS隔離・no-code setupを継続する。
+
 ## 2026-09-12 必要なIPC診断だけを復元、実pathname接続拒否を確認
 
 利用者が必要コードだけの復元を許可。最新main/e063d4e上へPR502の診断script/profile/testを限定復元。
