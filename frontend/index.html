@@ -365,6 +365,18 @@
 
         <section id="view-web-blender" class="view" data-view="web-blender" hidden>
           <section id="scene-studio" aria-labelledby="scene-studio-title">
+            <div id="scene-blender-entry" class="panel" role="region" aria-labelledby="scene-blender-entry-title">
+              <h2 id="scene-blender-entry-title">Web Blenderで編集</h2>
+              <p id="scene-blender-entry-guide" class="hint">下の一覧からシーンを選び、「Blenderで編集」を押すと編集画面が開きます。シーンがない場合は.blendを取り込むか、OpenCodeで制作して一覧を更新してください。</p>
+              <p id="scene-blender-selection" class="hint" role="status">編集するシーンを選んでください。</p>
+              <div class="scene-blender-tools">
+                <button type="button" id="scene-blender-open" class="primary" aria-describedby="scene-blender-selection scene-blender-status" disabled>Blenderで編集</button>
+                <button type="button" id="scene-blender-settings">Blenderの設定を開く</button>
+                <button type="button" id="scene-blender-recover" hidden>復旧候補をBlenderで開く</button>
+                <button type="button" id="scene-recovery-fork" hidden>復旧内容を別シーンとして保存</button>
+                <p id="scene-blender-status" class="hint" role="status"></p>
+              </div>
+            </div>
             <form id="scene-import-form" class="panel" novalidate>
               <div class="field-head">
                 <div>
@@ -423,12 +435,6 @@
                     <button type="button" id="scene-backup-download">バックアップを保存</button>
                     <button type="button" id="scene-detail-close">閉じる</button>
                   </div>
-                </div>
-                <div class="scene-blender-tools">
-                  <button type="button" id="scene-blender-open" class="primary">Blenderで編集</button>
-                  <button type="button" id="scene-blender-recover" hidden>復旧候補をBlenderで開く</button>
-                  <button type="button" id="scene-recovery-fork" hidden>復旧内容を別シーンとして保存</button>
-                  <p id="scene-blender-status" class="hint" role="status"></p>
                 </div>
                 <details id="scene-material-tools" class="scene-material-tools">
                   <summary id="scene-material-title">画像素材を割り当て</summary>
@@ -567,7 +573,7 @@
             <p id="settings-page-note" class="hint">実行環境と保存状態を確認・管理します。</p>
           </div>
 
-          <section id="blender-settings" class="settings-section" aria-labelledby="blender-settings-title">
+          <section id="blender-settings" class="settings-section" aria-labelledby="blender-settings-title" tabindex="-1">
             <div class="runtime-heading">
               <div>
                 <p id="blender-settings-title" class="section-label">Blender</p>

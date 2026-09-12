@@ -4785,6 +4785,11 @@ class SceneSha256 {
 const SCENE_TEXT = {
   ja: {
     switchLabel: "3Dを作る", title: "3D Studio",
+    blenderEntryTitle: "Web Blenderで編集",
+    blenderEntryGuide: "下の一覧からシーンを選び、「Blenderで編集」を押すと編集画面が開きます。シーンがない場合は.blendを取り込むか、OpenCodeで制作して一覧を更新してください。",
+    blenderSelect: "編集するシーンを選んでください。",
+    blenderSelected: (name) => `編集対象: ${name}`,
+    blenderSettings: "Blenderの設定を開く",
     note: "Blender制作ファイルを取り込み、検証済みの版として保存します。",
     file: "Blenderファイル（.blend、最大256 MiB）", name: "シーン名",
     safety: "ファイル内のscriptは実行せず、隔離したBlenderで検査します。",
@@ -4868,6 +4873,11 @@ const SCENE_TEXT = {
   },
   en: {
     switchLabel: "Create 3D", title: "3D Studio",
+    blenderEntryTitle: "Edit in Web Blender",
+    blenderEntryGuide: 'Select a scene below, then choose "Edit in Blender" to open the editor. If there are no scenes, import a .blend file or create one with OpenCode and refresh the list.',
+    blenderSelect: "Select a scene to edit.",
+    blenderSelected: (name) => `Editing target: ${name}`,
+    blenderSettings: "Open Blender settings",
     note: "Import a Blender project and save it as a validated revision.",
     file: "Blender file (.blend, up to 256 MiB)", name: "Scene name",
     safety: "Scripts in the file are not run; an isolated Blender process validates it.",
@@ -4988,6 +4998,9 @@ function renderSceneText() {
   switcher.setAttribute("aria-label", text.switchLabel);
   switcher.title = text.switchLabel;
   byId("scene-studio-title").textContent = text.title;
+  byId("scene-blender-entry-title").textContent = text.blenderEntryTitle;
+  byId("scene-blender-entry-guide").textContent = text.blenderEntryGuide;
+  byId("scene-blender-settings").textContent = text.blenderSettings;
   byId("scene-import-note").textContent = text.note;
   byId("scene-import-file-label").textContent = text.file;
   byId("scene-import-name-label").textContent = text.name;
@@ -5093,6 +5106,7 @@ function renderScenes() {
   }));
   byId("scene-list-empty").hidden = state.scenes.length > 0;
   byId("scene-list-count").textContent = state.scenes.length ? text.count(state.scenes.length) : "";
+  renderBlenderSessionControls();
 }
 
 async function loadScenes() {
@@ -5784,6 +5798,7 @@ function renderBlenderSessionControls() {
   const conflict = recovery && recovery.base_revision_id !== state.sceneDocument?.current_revision_id;
   let status = "";
   if (!selected && active) status = text.blenderBusy;
+  else if (!selected && !sceneRuntimeReady()) status = text.runtimeMissing;
   else if (!selected && state.blenderRuntime?.web_pack?.state !== "ready") status = text.blenderSetup;
   else if (selected?.state === "ready") status = selected.error_code === "blender_session_autosave_failed" ? text.blenderAutosaveFailed : text.blenderReady;
   else if (["queued", "preparing", "starting"].includes(selected?.state)) status = text.blenderStarting;
@@ -5801,7 +5816,7 @@ function renderBlenderSessionControls() {
   if (conflict && !selected) status = text.recoveryConflict;
   if (state.sceneRecoveryStatusKey) status = text[state.sceneRecoveryStatusKey];
   button.textContent = selected?.state === "ready" ? text.blenderOpen : text.blenderStart;
-  button.disabled = Boolean(active && !selected) || Boolean(selected && selected.state !== "ready")
+  button.disabled = !state.selectedSceneId || Boolean(active && !selected) || Boolean(selected && selected.state !== "ready")
     || !sceneRuntimeReady() || state.blenderRuntime?.web_pack?.state !== "ready"
     || Boolean(state.sceneImport) || Boolean(state.sceneBackup) || state.sceneRecoveryBusy;
   recover.hidden = !recovery || Boolean(selected);
@@ -5812,6 +5827,9 @@ function renderBlenderSessionControls() {
   fork.disabled = state.sceneRecoveryBusy || Boolean(active) || !sceneRuntimeReady()
     || Boolean(state.sceneImport) || Boolean(state.sceneBackup) || state.sceneMaterialBusy;
   byId("scene-blender-status").textContent = status;
+  const target = state.scenes.find((item) => item.id === state.selectedSceneId)
+    || (state.sceneDocument?.id === state.selectedSceneId ? state.sceneDocument : null);
+  byId("scene-blender-selection").textContent = target ? text.blenderSelected(target.name) : text.blenderSelect;
   const autosaveWarning = byId("scene-blender-autosave-warning");
   const autosaveFailed = active?.state === "ready" && active.error_code === "blender_session_autosave_failed";
   autosaveWarning.hidden = !autosaveFailed;
@@ -8424,6 +8442,10 @@ for (const id of [
   byId(id).addEventListener("change", () => renderSceneMaterialControls({targetsChanged: false}));
 }
 byId("scene-blender-open").addEventListener("click", () => void startOrOpenBlender());
+byId("scene-blender-settings").addEventListener("click", () => {
+  activate("settings");
+  byId("blender-settings").focus();
+});
 byId("scene-recovery-fork").addEventListener("click", () => void forkSceneRecovery());
 byId("scene-blender-recover").addEventListener("click", () => {
   const recovery = selectedRecoveryCandidate();

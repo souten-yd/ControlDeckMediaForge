@@ -75,9 +75,23 @@ def test_standalone_routes_follow_url_without_changing_embedded_bridge():
     assert 'callHost("host.route.sync"' in SCRIPT
 
 
+def test_web_blender_edit_entry_is_visible_before_scene_selection() -> None:
+    entry = MARKUP.split('id="scene-blender-entry"', 1)[1].split('<form id="scene-import-form"', 1)[0]
+    assert 'id="scene-blender-open"' in entry
+    assert 'aria-describedby="scene-blender-selection scene-blender-status" disabled' in entry
+    assert 'id="scene-blender-settings"' in entry
+    assert MARKUP.index('id="scene-blender-entry"') < MARKUP.index('id="scene-import-form"')
+    assert MARKUP.count('id="scene-blender-open"') == 1
+    assert 'button.disabled = !state.selectedSceneId' in SCRIPT
+    assert 'byId("blender-settings").focus()' in SCRIPT
+    assert '#scene-blender-entry { grid-column: 1 / -1; min-width: 0; }' in STYLES
+
+
 DOM_IDS = (
     "app", "skeleton", "shell-header", "shell-nav",
     "nav-create", "nav-library", "nav-activity", "nav-settings", "nav-web-blender", "view-web-blender",
+    "scene-blender-entry", "scene-blender-entry-title", "scene-blender-entry-guide",
+    "scene-blender-selection", "scene-blender-settings",
     "settings-page-title", "blender-settings", "blender-runtime-summary",
     "blender-runtime-state", "blender-basic-value", "blender-web-value",
     "blender-version-value", "blender-runtime-refresh", "blender-runtime-details",
