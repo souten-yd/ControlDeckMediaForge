@@ -1,5 +1,43 @@
 # Media Forge implementation status
 
+## 2026-09-12 v0.28.80署名公開・通常更新・導入版の入口確認
+
+準備PR518 merge/tagは82bf5eb02b2aa3e80c2597bd4b7a74c1e00e8706。
+同commitをdetached checkoutして標準build_release_bundle.pyを既存build venvで実行、68339 exit0。
+PyInstaller6.22.0/Python3.12.3、artifact31,619,183B、SHA256
+`77a567c8107d5e207608f5319cbb2e55a35567c86bff20827024542a9fd03914`。
+外側6entries/embedded204/PYZ1011、frontend4files実bytesがsource一致、core/addon/feature0.28.80一致。
+torch/diffusers/transformers、venv、制作物/重み/DBの検査対象pattern混入なし、PRIVATE KEY markerなし。
+初回監査は全.pem禁止でcertifi/cacert.pemを拒否。公開CAとbuild環境の実bytes一致を確認して再監査成功。
+既存publisher keyで署名・自己検証、441f4d exit0。新規鍵や利用者global設定の変更なし。
+公開4assetsを再取得してbuild側と全bytes一致、実Host consumerの署名/identity/version/size/SHA検証成功。
+検証call ca050a exit0。初回はHost backend内でvenv相対pathを誤りexit127、../.venvへ修正後に実検証。
+
+公開前の実配布coreを専用data/port9163で起動（50484）。未導入healthはsetup_requiredを確認。
+unmodified package HTMLの実Chrome ja/en×320/1280で入口/無効化/基本環境不足/設定focus/戻る、pageerror0。
+24095 exit0。新GUI/制作Jobなし、SIGINT→正常終了、90697 exit0/port解放。
+
+更新直前のJobs1321・GUI72・runtime操作43は全終端、model操作0をread-only確認。
+`./deck.sh feature update media-forge`22079 exit0、0.28.79→0.28.80/healthy/enabled/requested_enabled一致。
+current→versions/0.28.80、MF MainPID52609 active、Host TCP8765/PID2302は維持。
+installed core SHA256 `532ec7f503887b6b663343da97e5ba29e8a7aaa41f9f0acc847c9fca1ff0660d` は監査済みartifact一致。
+更新前後のDB16tables全行の正規化digest一致（Assets1194、scene58、revision183を含む）。
+assets/scenes配下2404filesのpath/inode/size/mtime_ns digestも一致。file bytesのhash検証ではない。
+metadata digest `3a863dabf508763ba13e65c8f4d71830a8911027c061b2cf43a736f75299e60b`。
+Blender登録JSONのSHA一致 `e2ef1b01f4ffb91a69eb26a7f0eae80910e5173f241476cb29735c3159014161`。
+初回registry探索rootが違い0件だったため、config既定runtime-stateを確認し、更新前から正しいpathで再採取。
+不要backup/DBコピーは作らず、digestと件数だけ記録した。標準世代保持で.78bundleを削除/.79保持。
+
+installed unmodified HTMLの実Chrome ja/en×320/1280で入口表示・未選択無効・設定focus・戻る・横overflowなし。
+8e44df exit0/pageerror0/非GET拒否1。standalone別ownerの表示であり、報告者のHost画面の受入ではない。
+ja320 screenshotを目視確認後に回収。今回の独立作業領域maintenance/release-0.28.80は95,434,658Bを削除、
+実体不在を確認。build/検証data/配布コピー/画像は残していない。公開4assetsとPR/Git記録から再検証できるが
+削除した生画像そのものは保持していない。正式runtime/制作物は削除なし。
+
+NOT TESTED: Host opaque iframeで本版の入口、物理mobile、実GUI開始/保存、OS setup/永続policy、全GOAL/A〜F/GA。
+no-code OS setupは未実装。最新の編集入口を届けたことと本番隔離・初期導入全体を区別する。
+今回の追加は文書のみで全test再実行なし、対象製品gateは1850pass/206.71秒/Node9/viewer46ms差分0。
+
 ## 2026-09-12 v0.28.80の配布準備
 
 PR517はMERGED/ce5df4518919447b961e19609c7bb64abf277a48をghで確認。
