@@ -15,7 +15,7 @@ from worker_packs.native_setup import probe
 
 
 class BusError(Exception):
-    pass
+    remote_name = "org.freedesktop.DBus.Error.Failed"
 
 
 class Variant:
@@ -34,6 +34,8 @@ class Bus:
         self.authorization = authorization
         self.calls: list[tuple[Any, ...]] = []
         self.fail: str | None = None
+        self.session: Any = "/org/freedesktop/login1/session/_32"
+        self.remote_error = "org.freedesktop.DBus.Error.Failed"
 
     def get_unique_name(self) -> str:
         return ":1.321"
@@ -42,15 +44,20 @@ class Bus:
         self.calls.append(args)
         method = args[3]
         if method == self.fail:
-            raise BusError("private diagnostic details must not be returned")
+            error = BusError("private diagnostic details must not be returned")
+            error.remote_name = self.remote_error
+            raise error
         if method == "GetAll":
             return Variant("(a{sv})", (self.properties,))
+        if method == "GetSessionByPID":
+            return Variant("(o)", (self.session,))
         assert method == "CheckAuthorization"
         return Variant("((bba{ss}))", (self.authorization,))
 
 
 def discover(bus: Bus) -> dict[str, Any]:
-    return probe.discover(bus, SimpleNamespace(DBusCallFlags=SimpleNamespace(NONE=0)),
+    return probe.discover(bus, SimpleNamespace(DBusCallFlags=SimpleNamespace(NONE=0),
+                          DBusError=SimpleNamespace(get_remote_error=lambda error: error.remote_name)),
                           SimpleNamespace(Variant=Variant, VariantType=SimpleNamespace(new=lambda x: x), Error=BusError))
 
 
@@ -63,7 +70,10 @@ def test_probe_never_prompts_or_creates_transactions(authorized: bool, challenge
     assert value["state"] == "detected" and value["authorization"] == expected
     assert value["installation"] == "not_implemented" and value["interactive_agent"] == "not_checked"
     assert "private" not in repr(value)
-    assert [call[3] for call in bus.calls] == ["GetAll", "CheckAuthorization"]
+    assert [call[3] for call in bus.calls] == ["GetAll", "CheckAuthorization", "GetSessionByPID"]
+    assert value["login_session"] == "present"
+    assert bus.calls[2][4].signature == "(u)"
+    assert bus.calls[2][4].value == (probe.os.getpid(),)
     for call in bus.calls:
         assert call[6] == 0 and call[7] == 2000  # no interactive D-Bus flag, bounded call
     params = bus.calls[1][4]
@@ -99,7 +109,7 @@ def test_invalid_properties_do_not_produce_a_detected_provider(key: str, value: 
     assert len(bus.calls) == 1
 
 
-@pytest.mark.parametrize("field", ["installation", "interactive_agent", "state"])
+@pytest.mark.parametrize("field", ["installation", "interactive_agent", "state", "login_session"])
 def test_protocol_cannot_claim_installation_or_agent_readiness(field: str) -> None:
     value = probe.result()
     value[field] = "ready"
@@ -122,7 +132,33 @@ def test_worker_source_has_only_fixed_readonly_dbus_calls() -> None:
     methods = [node.args[3].value for node in ast.walk(tree)
                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                and node.func.attr == "call_sync"]
-    assert methods == ["GetAll", "CheckAuthorization"]
+    assert methods == ["GetAll", "CheckAuthorization", "GetSessionByPID"]
+
+
+@pytest.mark.parametrize(("name", "expected"), [
+    ("org.freedesktop.login1.NoSessionForPID", "absent"),
+    ("org.freedesktop.DBus.Error.AccessDenied", "unknown"),
+    ("org.freedesktop.DBus.Error.NoReply", "unknown"),
+])
+def test_session_scope_uses_exact_error_not_error_text(name: str, expected: str) -> None:
+    bus = Bus()
+    bus.fail = "GetSessionByPID"
+    bus.remote_error = name
+    value = discover(bus)
+    assert value["login_session"] == expected
+    assert value["interactive_agent"] == "not_checked"
+    assert value["installation"] == "not_implemented"
+    assert "private" not in repr(value)
+    native_setup.NativeSetupProbe.model_validate(value)
+
+
+@pytest.mark.parametrize("session", [None, 1, "/", "/org/freedesktop/login1/session/", "x" * 1000])
+def test_invalid_session_reply_is_unknown(session: Any) -> None:
+    bus = Bus()
+    bus.session = session
+    value = discover(bus)
+    assert value["login_session"] == "unknown"
+    assert value["interactive_agent"] == "not_checked"
 
 
 @pytest.mark.parametrize(("payload", "expected"), [

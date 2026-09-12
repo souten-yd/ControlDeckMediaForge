@@ -1,5 +1,43 @@
 # Media Forge implementation status
 
+## 2026-09-12 native承認のsession境界を実測・診断へ追加
+
+base PR522 MERGED/44ea23e、ux1/3d-native-session-diagnostic。前turnは署名検証を実装/test/mergeした進捗。
+今回はPCの承認agentとサービスの所属sessionを読み取り確認した。
+aedf8a: polkit.service journalで21:41:54にGNOME Shell PID2281/system bus :1.43が
+unix-session:2のAuthenticationAgentを登録。loginctlはsession2/local/Wayland/active/locked=false。
+779077: 稼働MF MainPID52609をlogin1 GetSessionByPIDへ照会するとNoSessionForPID。
+PCにGNOME agentが存在しても、稼働serviceの直接のsession承認経路を証明しない。
+
+polkit124の固定upstream commit82f0924dc0eb23b9df68e88dbaf9e07c81940a5aの
+[agent lookup](https://github.com/polkit-org/polkit/blob/82f0924dc0eb23b9df68e88dbaf9e07c81940a5a/src/polkitbackend/polkitbackendinteractiveauthority.c#L1697)
+はsubject/process、その所属sessionのagentを調べる。これはupstream読取であり、全Ubuntu patchの監査ではない。
+OS pkexecのmanには既存agent不在時の内蔵text agentが記載されているが、ブラウザへpassword入力を
+転送する方式は採らない。native画面/OS端末を使う場合も明示承認とtrusted bootstrapの受入が必要。
+今回は認可dialog・端末を起動せず、pkexecも実行していない。
+
+native probeへlogin1 GetSessionByPID（自分自身のPIDのみ/2秒/非対話）を追加。
+login_session=present/absent/unknownを返す。NoSessionForPIDというremote error名だけabsent、
+通信/権限エラーや不正応答はunknown。session path/PID/raw errorは結果へ出さない。
+presentはdesktopやagentの利用可能を意味しないためinteractive_agent=not_checkedを維持する。
+別desktop PIDを認可subjectとして借りず、coreは既存の非同期8秒/4096B/取消回収を維持。
+新fieldは既定unknown、旧応答も受理。GUI/setup/既存画像の稼働経路へはまだ未接続。
+
+focused33件が821658/9fe149で成功（9追加）。初回field名desktop_sessionは広すぎるため
+login_sessionに改名後、最終codeで全gate開始。381f78 exit0は同codeを専用systemd user unitで実行。
+unitは実行前not-found、結果PackageKit1.2.8/apt/challenge/login_session absent、
+前後transaction空、終了後not-found/inactive。実service起動方式での診断であり承認成功ではない。
+probe SHA ef5a3f17e2bdde60206519e587ebd05943626eb8ffa718ffb23eeaf81b4eb441。
+Node9pass/viewer101ms/生成差分なし/稼働MF active。
+全52048 exit0、1887passed/3skipped/既知2warnings、207.91秒。以後product/test変更なし。
+自己点検で本人PID固定、非対話flag/2秒call/8秒全体、unknownとabsentの区別と非開示を確認。
+
+NOT TESTED/IMPLEMENTED: 実承認・専用native承認経路・trusted bootstrap/保護staging、
+本番policyの署名配布/適用/取消rollback/削除boot、設定画面接続とGUI全隔離。
+次はsession外のserviceからOS側に承認を委ねる経路を、署名済み入力と一体で実装・受入する。
+全3DS/GOAL/A〜F/GAはPARTIAL、CLI入力不要を維持。OS設定/稼働版/制作物変更なし、
+新規data fixture/backupもなし。単にPackageKitに対話flagを立てれば済むと扱わない。
+
 ## 2026-09-12 native policy署名検証を実装（OS適用は未接続）
 
 base PR521 MERGED/a6c592d、ux1/3d-native-policy-verifier。
