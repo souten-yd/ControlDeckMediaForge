@@ -1,5 +1,15 @@
 # Media Forge implementation status
 
+## 2026-09-13 実機受入の承認待ちでblocked
+
+PR525 OPEN/Draft/head1c94503、作業treeの製品差分なし、本番unit activeを再確認。
+停止/loginの可否未回答が3turn連続。先行する取消・終了・再接続修正とローカル検証、
+実データ保護範囲の読取確認は完了したが、実Host/Blender受入へは進めていない。
+新しい認証回避や本番停止の許可を自動継続から作らず、goalをblockedとして回答待ちにする。
+再開条件は短時間停止と正規PC browser loginの調整。許可後もidle/保護領域を再確認してから実施する。
+native OS setup/全GUI隔離/全GOAL/A〜F/GAは未完了。PRのmerge/署名公開を行わない。
+今回文書のみ、テスト・OS変更・service停止・制作物変更なし。
+
 ## 2026-09-13 実機切替前の永続領域・idle読取監査
 
 base3b400a5、同PR525/Draft。前turnはshutdown/drain実装・test・pushで進捗。

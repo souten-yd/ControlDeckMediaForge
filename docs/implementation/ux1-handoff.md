@@ -3,6 +3,15 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 承認待ちblocked
+
+同branch/PR525 Draft、base1c94503。停止/login可否の未回答が3turn連続。
+先行修正・ローカルgate・保護領域確認を済ませ、実機受入に必要な回答待ちとしてgoalをblockedへ。
+本番unit active、製品差分なし（2dev symlink保持）。今回docsのみ、テスト再実行なし。
+再開時は利用者の停止・PC login可否を確認し、実際のidle/永続root保護を再検査する。
+回答や再開を、他processのtoken借用・OS制限解除・保護データ削除の許可へ拡大しない。
+全GOAL/A〜F/GAとnative setupは未完了。Draft/未merge/未署名公開。
+
 ## 2026-09-13 実機検証前の保護領域確認
 
 同ux1/3d-workspace-scene-create/Draft PR525、base3b400a5。停止/login回答なし、本番変更なし。
