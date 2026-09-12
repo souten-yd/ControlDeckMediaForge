@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 cleanup / loaded canary cannot initialize Python
+
+base origin/main03ed1af、ux1/3d-diagnostic-cleanup、/tmp/mediaforge-cleanup-docs-20260912。
+利用者がprofile load実行・/data1tb/mf-*不要folder整理を依頼。管理者loadはkernel記録で確認。
+旧branch probeはPython encodings初期化失敗、directory /usr/lib/python3.12/ r拒否が原因。
+socket試験本体未到達、profile更新なし。最新mainはPR503/caa4882で診断一式が削除済み。
+削除を勝手に復活させず、意図確認と限定directory read修正を次へ残す。OS全体の緩和は不要。
+旧/data1tb/ControlDeckMediaForge-release-0.28.70はux1/3d-apparmor-ipc-canaryへ戻しtracked clean、
+3dev symlink保持。rootは利用者work branchでahead11、変更なし。新しいmainの量子化等を戻さない。
+705検証directory/67,421,245,440Bを棚卸し、参照確認範囲と除外はimplementation-status参照。
+旧配布コピー57件をgio trash、残648は必要記録を含むため保留・集約。完全削除/容量解放なし。
+管理先/data1tb/ControlDeck/data/feature-data/media-forge/maintenance/diagnostics-20260912。
+retainedが集約先、plan.jsonとverification.jsonが旧→新/trash対応。全705のinode/元path不在確認済み。
+以後過去の/data1tb/mf-* pathを直接再実行しない。対応表から証拠を読み、未完了条件は保持する。
+直下mf-*残数0、648保持/57trashを実測。新projectなし/再起動なし。
+旧9130 healthは拒否、8765 /healthはHTML。現在のservice状態を再確認してからGUI実行へ進む。
+文書のみ、今回test/build/releaseなし。全GOAL/A〜F/GA PARTIAL。
+
 ## 2026-09-10 OS prerequisite attribution / awaiting authorization
 
 base PR500 mergeff6e25823e6423bce5efa600011ee2ed1871451f、ux1/3d-ipc-os-prerequisite、記録PR作成前。
