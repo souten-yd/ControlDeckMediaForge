@@ -1,5 +1,27 @@
 # Media Forge implementation status
 
+## 2026-09-13 PR525停止との取消競合・実機受入の調整
+
+basec86e390、同ux1/3d-workspace-scene-create/Draft PR525。前turnは独立cancel合流/test/pushで進捗。
+実機受入に向け、短時間のMediaForge停止・別dataの検証版・PCの検証用browserでの正規login・
+終了後の現行版復帰について利用者へ可否を質問した。今回時点で回答はなく、停止/切替/認証操作はしない。
+実unit MainPID52609、WorkingDirectory versions/0.28.80、current0.28.80/activeを読取確認。
+他processのtokenや個人browser sessionを借用せず、テスト用認証を実Host認証へ読み替えない。
+
+調整中に停止との取消競合を検証。01fdd5 exit1: 通常の独立cancelはpass、stop同時実行だけ
+runner cleanupを中断してservice_stoppedへ上書きした。実SQLite＋制御async runnerでの再現。
+stopを単一owned taskとしてshield/drainし、受付済みcancel tasksが終わってから残るJobを中断する。
+新しい取消はstopping中に拒否し、既存同owner取消の待機は維持。stopのDB照会/中断記録をto_threadへ移す。
+複数stop要求とその呼出元の繰り返し取消でも同じ終了処理を待ち、既存cancel結果を保持する。
+startは以前のstopを待つが、待機中にstart要求自体が取消された場合はdrain後に再送出し、受付を再開しない。
+この最終start取消補完は全35671開始後に追加したため、35671は最終gateとしない。
+35671/37c7e6は1920pass3skip/218.30秒で終了。最終版の全28192/4d03d4を改めて実行し、
+exit0、1920passed/3skipped/既知2warnings/208.42秒。以後product/test/script変更なし、同PRへcommit/push。
+最終focused54582/eba262 exit0。stop同時・二重stop・stop要求取消・start待機取消を含むcaseを確認。
+Node15pass/viewer38ms/生成差分なし。本番shutdown/実Blender/2ブラウザや全起動失敗matrixはNOT TESTED。
+次は正規ユーザー認証と検証中停止の調整後、新作成入口の実Host/Blender一巡を受入する。
+制作物/OS policy/本番service変更なし。PRはDraft、native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+
 ## 2026-09-13 PR525独立した取消要求の合流
 
 basea4b514d、同ux1/3d-workspace-scene-create/Draft PR525。前turnは進捗再取得/DOM保持実装・検証・pushで進捗。

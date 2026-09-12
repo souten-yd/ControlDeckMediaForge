@@ -56,6 +56,7 @@ class SceneRecipeJobManager:
         self._executions: dict[str, HostExecution] = {}
         self._outbox_tasks: dict[str, asyncio.Task[None]] = {}
         self._cancel_requests: dict[tuple[str, str], asyncio.Task[dict[str, Any]]] = {}
+        self._stop_task: asyncio.Task[None] | None = None
         self._outbox_guard = asyncio.Lock()
         self._execution_guard = asyncio.Semaphore(1)
         self.control_poll_sec = control_poll_sec
@@ -63,25 +64,46 @@ class SceneRecipeJobManager:
         self._stopping = False
 
     async def start(self) -> None:
+        if self._stop_task is not None:
+            try:
+                await asyncio.shield(self._stop_task)
+            except asyncio.CancelledError:
+                await _finish_cleanup(self._stop_task)
+                raise
+            self._stop_task = None
         self._stopping = False
 
     async def stop(self) -> None:
         self._stopping = True
+        if self._stop_task is None:
+            self._stop_task = asyncio.create_task(self._stop_owned())
+        try:
+            await asyncio.shield(self._stop_task)
+        except asyncio.CancelledError:
+            await _finish_cleanup(self._stop_task)
+            raise
+
+    def _interrupt_job(self, job_id: str) -> bool:
+        current = self.store.get_job(job_id)
+        if current.status not in {JobStatus.QUEUED, JobStatus.RUNNING}:
+            return False
+        self.store.update_job(
+            job_id, status=JobStatus.FAILED,
+            error=ErrorDetail(code="service_stopped", message="Service stopped while the scene recipe was active"),
+        )
+        self.store.update_scene_recipe_task(job_id, stage="service_stopped")
+        return True
+
+    async def _stop_owned(self) -> None:
+        # Already accepted cancellations own runner cleanup. Do not interrupt
+        # those runners again or replace their eventual canceled outcome.
+        await asyncio.gather(*self._cancel_requests.values(), return_exceptions=True)
         admissions = list(self._admissions)
         for task in admissions:
             task.cancel()
         await asyncio.gather(*admissions, return_exceptions=True)
         for job_id, task in list(self._tasks.items()):
-            current = self.store.get_job(job_id)
-            if current.status in {JobStatus.QUEUED, JobStatus.RUNNING}:
-                self.store.update_job(
-                    job_id,
-                    status=JobStatus.FAILED,
-                    error=ErrorDetail(
-                        code="service_stopped", message="Service stopped while the scene recipe was active"
-                    ),
-                )
-                self.store.update_scene_recipe_task(job_id, stage="service_stopped")
+            if await asyncio.to_thread(self._interrupt_job, job_id):
                 task.cancel()
         if self._tasks:
             await asyncio.gather(*self._tasks.values(), return_exceptions=True)
@@ -385,6 +407,8 @@ class SceneRecipeJobManager:
         key = (owner, job_id)
         cancellation = self._cancel_requests.get(key)
         if cancellation is None or cancellation.done():
+            if self._stopping:
+                raise SceneError("service_stopped", "Scene recipe cancellation admission is stopped")
             cancellation = asyncio.create_task(self._cancel_owned(job_id, owner))
             self._cancel_requests[key] = cancellation
 

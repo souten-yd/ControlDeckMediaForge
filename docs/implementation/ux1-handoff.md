@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 PR525 shutdown/drainと実機受入の調整
+
+同ux1/3d-workspace-scene-create/Draft PR525、basec86e390。root利用者branch/2dev symlink保持。
+短時間停止・別data検証版・PC browser通常login・現行版復帰の可否を利用者へ質問済み、回答なし。
+本番unit52609/current0.28.80 activeを読取確認。まだ停止/切替/OS承認/browser起動をしない。
+01fdd5でstop同時cancelによるcleanup中断を再現。単一owned stopをshield/drainし、既存cancel終了を先に待つ。
+stopping中は新cancelを拒否、既存同owner待機は維持。stopのDB処理はto_thread。
+複数stop/要求取消と、stop待ち中のstart取消で受付を再開しないことを補完。
+最終focused54582 exit0、Node15/viewer38ms差分0。全35671は補完前1920pass3skip218.30秒。
+最終全28192/4d03d4 exit0、1920pass3skip2warnings208.42秒。以後product/test/script変更なし。
+同PRcommit/push。Draft維持/未merge/未署名公開。
+次は利用者の停止/login可否回答を確認し、正規認証での実Host/Blender新入口一巡を準備する。
+回答がなければ自動継続を許可と解釈しない。他process/token/session借用やpassword変更は禁止。
+今回阻害条件の初回、コード進捗あり。全GOALをblocked/completeへ変更しない。
+native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
 ## 2026-09-13 PR525独立cancel合流と誤検知test修正
 
 同ux1/3d-workspace-scene-create/Draft PR525、basea4b514d。root利用者branch/2dev symlink保持。

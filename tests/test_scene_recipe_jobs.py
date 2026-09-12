@@ -407,7 +407,8 @@ def test_scene_recipe_cancel_is_owner_scoped_and_terminal(tmp_path: Path) -> Non
     asyncio.run(_cancel_case(tmp_path))
 
 
-def test_independent_cancel_requests_share_cleanup_but_not_ownership(tmp_path: Path) -> None:
+@pytest.mark.parametrize("shutdown", [False, True])
+def test_independent_cancel_requests_share_cleanup_but_not_ownership(tmp_path: Path, shutdown: bool) -> None:
     async def scenario() -> None:
         store = Store(tmp_path)
         store.initialize()
@@ -447,9 +448,22 @@ def test_independent_cancel_requests_share_cleanup_but_not_ownership(tmp_path: P
                     await manager.cancel(job_id, "user:8")
                 second = asyncio.create_task(manager.cancel(job_id, "user:7"))
                 requests.append(second)
+                stopping = asyncio.create_task(manager.stop()) if shutdown else None
+                if stopping is not None:
+                    requests.append(stopping)
                 first.cancel()
                 await asyncio.sleep(0)
                 first.cancel()
+                if stopping is not None:
+                    other_stop = asyncio.create_task(manager.stop())
+                    requests.append(other_stop)
+                    stopping.cancel()
+                    await asyncio.sleep(0)
+                    stopping.cancel()
+                    starting = asyncio.create_task(manager.start())
+                    requests.append(starting)
+                    await asyncio.sleep(0)
+                    starting.cancel()
                 done, _ = await asyncio.wait(requests, timeout=0.05)
                 assert not done, "a repeated cancel interrupted runner cleanup"
                 release.set()
@@ -459,7 +473,17 @@ def test_independent_cancel_requests_share_cleanup_but_not_ownership(tmp_path: P
                 assert result["status"] == "canceled" and cleaned.is_set()
                 assert writes == [job_id]
                 # A later repeat is still valid, but must not persist another cancel.
-                assert (await manager.cancel(job_id, "user:7"))["status"] == "canceled"
+                if stopping is None:
+                    assert (await manager.cancel(job_id, "user:7"))["status"] == "canceled"
+                else:
+                    with pytest.raises(asyncio.CancelledError):
+                        await stopping
+                    await other_stop
+                    with pytest.raises(asyncio.CancelledError):
+                        await starting
+                    with pytest.raises(SceneError, match="stopped"):
+                        await manager.cancel(job_id, "user:7")
+                    assert manager._cancel_requests == {} and manager._tasks == {}
                 assert writes == [job_id]
         finally:
             release.set()
