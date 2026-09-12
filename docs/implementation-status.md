@@ -1,5 +1,40 @@
 # Media Forge implementation status
 
+## 2026-09-12 no-code OS setup向けの非対話診断を実装
+
+base PR519/bd8f378、ux1/3d-native-setup-probe。前turnの署名.80導入を維持。
+既存Host helperはGPU属性/固定catalogのsystem-service操作だけで、任意sudoやpolicy導入APIを追加しない。
+OS標準PackageKit/Polkitの明示承認を第一候補とし、base-plan/integration/runtime-Web設計を先に追記。
+新しいroot daemon/Host固有依存を作らず、MediaForge側の非root clientと固定policy packageを段階実装する。
+今回のsliceは前提確認だけ。backend/mediaforge/native_setup.pyとworker_packs/native_setup/probe.pyを追加。
+OS PythonのGIから固定GetAll/CheckAuthorization(flags=0、自身のsystem-bus-name)だけを実行。
+coreは非同期subprocess、stdin無効/環境allowlist/close_fds/8秒/4096B上限/取消時の回収。
+GI依存をcoreへ追加せず、root/追加argvは禁止。生DBusエラーや認可detailsは返さない。
+結果はdetected/unavailable、installation=not_implemented、interactive_agent=not_checked。
+診断を頻繁なhealth/statusへ追加しない。UI/APIへの接続・本番導入処理・署名配布はまだない。
+
+実機PackageKit GetAllは1.2.8/APT/Ubuntu24.04/local .deb MIME/Locked=false。
+`PYTHONPATH=backend .venv/bin/python -m mediaforge.native_setup` はdetected/authorization=challenge。
+独立native helperの実確認7ba348 exit0、0.029909秒/event loop heartbeat27回。
+前後のdpkg-query package/version digest一致、PackageKit transaction一覧は前後とも空。
+CreateTransaction/InstallFiles/対話許可/OS policy変更は実装せず、管理者承認画面は起動していない。
+system-bus参照でOSのPackageKit daemonが起動し得ることと、package導入を区別する。
+開発者向けmodule実行であり、利用者へCLIを要求するセットアップの完成とはしない。
+
+追加24tests: read-only method/認可flag/主体固定、認可3結果、異常情報の非開示、root/argv拒否、
+不正payload/超過/timeout、実child spawn/read取消・回収、fragmented JSON/event loop応答。
+初回は出力超過時にkill後もPIPEの読み残しでwaitが終了せず、2つのfocused processを終了した。
+61175/61814へTERM（診断helper自身は既に終了）。後続commandのexit0を失敗したpytestの成功とはしない。
+修正はkill後にbufferを保持せずdrainしてからreapすること。89034 exit0、24tests成功。
+全59043 exit0、1874passed/3skipped/既知2warnings、218.00秒。以後product/test変更なし。
+Node9pass、viewer build58ms/生成差分0、稼働MediaForge unit activeを再確認。
+
+NOT IMPLEMENTED/TESTED: 固定署名OS policy packageと安定した入力検証、native承認agent到達性、
+実導入/取消/rollback/削除/boot読込、モバイルからPC承認、GUIへの本番隔離接続、setup画面。
+PackageKitのchallengeは認可要求の検査結果であり、実導入可能やGUI隔離成功とは言わない。
+次はこの診断を土台に、固定された専用起動経路を含む本番policy packageとOS承認lifecycleを実装する。
+Python/systemd/bwrap全体への例外やAppArmor無効化へ広げない。全3DS/GOAL/A〜F/GAはPARTIAL。
+
 ## 2026-09-12 v0.28.80署名公開・通常更新・導入版の入口確認
 
 準備PR518 merge/tagは82bf5eb02b2aa3e80c2597bd4b7a74c1e00e8706。

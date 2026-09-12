@@ -1066,6 +1066,17 @@ Policy changes still require administrator authorization; do not give the core
 unrestricted sudo or permission to weaken its own confinement. A temporary canary
 profile is not the production policy or proof that this lifecycle is implemented.
 
+For the no-code initial setup, use the OS package manager's explicit native
+administrator authorization, initially evaluating PackageKit/Polkit on Ubuntu.
+Do not add a generic sudo/command endpoint or collect administrator passwords in
+MediaForge. The existing OS service, not a new privileged MediaForge daemon, owns
+package installation. First probe its availability and authorization with interaction
+disabled. Detection is not installation readiness or proof that an authentication
+agent is reachable. A signed, fixed-version production policy package, stable input
+verification, refusal/cancel/rollback and boot-time loading must be accepted before
+exposing installation. Mobile initiation may require approval on the server PC;
+absence of a local approval agent must be explicit, not replaced with a web password form.
+
 ---
 
 ## 19. Observability

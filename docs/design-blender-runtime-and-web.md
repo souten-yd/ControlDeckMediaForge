@@ -398,6 +398,18 @@ Host側の支援が必要なら汎用の署名済みOSセットアップ認可�
 特権ルート・任意shell実行・任意profile書込をHostへ追加しない。現行契約にこの認可があると仮定しない。
 ローカルPCと遠隔/モバイルで管理者承認を完結できる経路、拒否・取消・適用失敗時の旧状態保持を
 受入してから提供する。CLI手順の掲載だけでは、このセットアップ要件の完了とはしない。
+
+2026-09-12実装経路: Ubuntuでは既存のPackageKit/Polkitを使う明示的なOS package導入を第一候補にする。
+新しいroot daemonやHostの任意sudo APIを作らない。最初のsliceは非rootの独立probeでsystem busの
+PackageKit propertiesとPolkitの非対話CheckAuthorizationだけを読み、coreへ小さい固定JSONを返す。
+GIはOSのPython側だけで使用しcoreへ追加しない。coreは非同期subprocessで時間/出力を制限し、取消時も回収する。
+CheckAuthorizationはflags=0、主体はその接続自身のsystem-bus-name。別userやPIDを指定しない。
+CreateTransaction/InstallFiles、Polkitの対話許可、OS file変更はこのprobeには実装しない。
+detected/承認challengeは導入可能・隔離済みを意味しない。agent到達性はnot_checked、導入はnot_implementedを保つ。
+次の依存は固定版署名policy package（同じMediaForge配布系統）、検証したbytesの差替え防止、
+OS承認拒否/取消・rollback・再起動後読込。これらを通してからsetupボタンを有効にする。
+参照: [PackageKitの利用経路](https://packagekit.freedesktop.org/pk-using.html)、
+[OS側の導入認可policy](https://github.com/PackageKit/PackageKit/blob/main/policy/org.freedesktop.packagekit.policy.in)。
 web APIがprocessを起動してすぐ忘れる方式や、個人の既存X11/Wayland sessionへの接続を採らない。
 
 3DS-5bではtransient systemd user unitをdurable session IDへ固定し、`NoNewPrivileges`、
