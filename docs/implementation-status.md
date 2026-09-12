@@ -1,5 +1,34 @@
 # Media Forge implementation status
 
+## 2026-09-12 検証フォルダの整理とAppArmor試験の起動失敗
+
+利用者から `/data1tb/mf-*` の不要フォルダを片付ける依頼を受け、直下705 directoryを確認。
+du合計67,421,245,440 bytes。通常利用者のprocess cmdline/maps/cwd/exe/fd、対象外の/data1tbと
+home配下のsymlink、Host設定/user unit/runtime registry、Host/MFのread-only DBに対象参照なし。
+読取不可はsystemd2023/sd-pam2032の一部procと別利用者のAMDLucebox-runner tree。
+homeのcache/git等は探索対象外。全利用者・全設定を完全走査したとはしない。
+
+名前だけで完全削除せず、旧0.28.9〜69の配布コピーで内容も配布物だけの57 directory
+（1,801,641,984 bytes）はgio trashへ。残る648 directoryは検証記録・DB・バックアップ・
+fixtureを含むため、削除可否を一律に断定せずMediaForge管理下に保留・集約した。
+移動先 `/data1tb/ControlDeck/data/feature-data/media-forge/maintenance/diagnostics-20260912/retained/`。
+親のinventory.json/extra-checks.json/plan.json/actions.jsonl/verification.jsonに全対象・処置・復元先を記録。
+実施scriptは/tmp/mf_cleanup_{inventory,extra_checks,apply,verify}.py。apply exit0、
+648移動先と57trashのinode一致を独立確認、直下mf-* directory残数0。57trashは/data1tb/.Trash-1000。
+完全削除なし・ディスク空き容量解放なし。過去の/data1tb/mf-*証跡pathは現在の実在pathではなく、
+上記plan/verificationの対応表で引く。利用者の元Asset・稼働runtime・root作業差分は変更していない。
+整理後の旧9130 healthは接続拒否、8765 /healthはHTMLでありservice healthyの証明にしない。
+サービスの起動/停止/再起動は行っていない。
+
+利用者が試験profileを読み込んだことをkernel journalの21:48:11 profile_loadで確認。
+旧診断branchのprobeはexit2/child exit1。Python初期化時encodings不在で試験本体未到達。
+21:49:16 PID8096の同profileによる/usr/lib/python3.12/ directory read拒否がfatal原因。
+timezone /usr/share/zoneinfo/Asia/Tokyoのread拒否も観測。socket拒否成功とは扱わない。
+最新mainではPR503/caa4882によりPR502の診断script/profile/test/記録が削除されていることを確認。
+削除を勝手に取り消さず、今回は製品code/profileを変更していない。旧作業branchは保持。
+次は診断削除の意図を確認し、継続する場合は必要なdirectory許可を補った限定profileで再受入する。
+文書のみのslice。全test/build/新GUI/署名配布は今回未実施。全GOAL/A〜F/GA PARTIALを維持。
+
 ## 2026-09-12 batchの件と件の間でleaseを持ち回る（0.28.78〜0.28.79）
 
 先に訂正を書く。「4枚のbatchが3枚目まで同居できて、そこで言語モデルが降ろされる」と
