@@ -64,6 +64,11 @@ def test_capabilities_get_matches_the_public_document_and_bounds_presets(tmp_pat
 
     assert answer["ok"] is True
     result = answer["result"]
+    # Only workspace admission depends on the authenticated transport. Keep
+    # exact equality for every other capability field, including readiness.
+    assert public["capabilities"]["3d.scene_recipe"]["workspace_create"] is False
+    assert result["capabilities"]["3d.scene_recipe"]["workspace_create"] is True
+    public["capabilities"]["3d.scene_recipe"]["workspace_create"] = True
     assert result["capabilities"] == public["capabilities"]
     assert result["contract_version"] == public["contract_version"]
     # 動画は旗で固定せず実態から出す。動くモデルが登録されるまでは、

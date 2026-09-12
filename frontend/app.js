@@ -178,6 +178,12 @@ const state = {
   sceneMaterialExpiryTimer: null,
   sceneRestoreBusy: false,
   sceneImport: null,
+  sceneCreating: false,
+  sceneCreationJobs: [],
+  sceneCreationStatus: "",
+  sceneCreationRefreshing: false,
+  sceneCreationRefreshPending: false,
+  sceneCreationRefreshTimer: null,
   sceneStatusKey: "",
   sceneBackup: null,
   sceneBackupStatusKey: "",
@@ -466,6 +472,10 @@ function handleEvent(message) {
     const job = message.data;
     // 復元できるよう、届いた最新状態を持っておく。
     rememberJob(job);
+    if (job.request?.constraints?.scene_operation === "scene.create") {
+      void refreshSceneCreationJobs();
+      return;
+    }
     if (sceneTextureContext(job)) {
       renderSceneMaterialControls({targetsChanged: false});
       return;
@@ -4786,7 +4796,14 @@ const SCENE_TEXT = {
   ja: {
     switchLabel: "3Dを作る", title: "3D Studio",
     blenderEntryTitle: "Web Blenderで編集",
-    blenderEntryGuide: "下の一覧からシーンを選び、「Blenderで編集」を押すと編集画面が開きます。シーンがない場合は.blendを取り込むか、OpenCodeで制作して一覧を更新してください。",
+    blenderEntryGuide: "下の一覧からシーンを選び、「Blenderで編集」を押すと編集画面が開きます。シーンがない場合は新規作成、.blendの取り込み、またはOpenCodeで制作できます。",
+    createTitle: "新しいシーンを作る", createSubmit: "新規作成", createRefresh: "作成状況を更新",
+    createGuide: "2mの初期キューブを作成します。完成後に選択してBlenderで編集できます。",
+    createHost: "新規作成はControlDeckに接続して利用してください。", createPending: "作成を受け付けています…",
+    createAccepted: "作成を受け付けました。下の作成状況で進捗を確認できます。",
+    createFailed: "受付を確認できませんでした。再試行する前に作成状況を更新してください。", createReadFailed: "作成状況を取得できませんでした。前の表示を保持しています。",
+    createCancelFailed: "取消を確認できませんでした。状況を更新してください。", createSelect: "このシーンを選択",
+    createStates: {queued: "待機中", running: "作成中", succeeded: "作成完了", failed: "失敗", canceled: "取消済み"},
     blenderSelect: "編集するシーンを選んでください。",
     blenderSelected: (name) => `編集対象: ${name}`,
     blenderSettings: "Blenderの設定を開く",
@@ -4874,7 +4891,14 @@ const SCENE_TEXT = {
   en: {
     switchLabel: "Create 3D", title: "3D Studio",
     blenderEntryTitle: "Edit in Web Blender",
-    blenderEntryGuide: 'Select a scene below, then choose "Edit in Blender" to open the editor. If there are no scenes, import a .blend file or create one with OpenCode and refresh the list.',
+    createTitle: "Create a new scene", createSubmit: "Create scene", createRefresh: "Refresh creation status",
+    createGuide: "Create a two-metre starting cube, then select it to edit in Blender.",
+    createHost: "Connect through ControlDeck to create a scene.", createPending: "Submitting scene creation…",
+    createAccepted: "Creation accepted. Follow progress below.", createFailed: "Submission could not be confirmed. Refresh creation status before retrying.",
+    createReadFailed: "Creation status could not be loaded. The previous view is retained.",
+    createCancelFailed: "Cancellation could not be confirmed. Refresh status.", createSelect: "Select this scene",
+    createStates: {queued: "Queued", running: "Creating", succeeded: "Created", failed: "Failed", canceled: "Canceled"},
+    blenderEntryGuide: 'Select a scene below, then choose "Edit in Blender". You can create a new scene, import a .blend file, or create one with OpenCode.',
     blenderSelect: "Select a scene to edit.",
     blenderSelected: (name) => `Editing target: ${name}`,
     blenderSettings: "Open Blender settings",
@@ -4966,6 +4990,130 @@ function sceneText() {
   return document.documentElement.lang.toLowerCase().startsWith("en") ? SCENE_TEXT.en : SCENE_TEXT.ja;
 }
 
+function sceneCreationSupported() {
+  return state.capabilities?.["3d.scene_recipe"]?.workspace_create === true;
+}
+
+function renderSceneCreation() {
+  const text = sceneText();
+  byId("scene-create-title").textContent = text.createTitle;
+  byId("scene-create-name-label").textContent = text.name;
+  byId("scene-create-guide").textContent = text.createGuide;
+  byId("scene-create-submit").textContent = text.createSubmit;
+  byId("scene-create-refresh").textContent = text.createRefresh;
+  const supported = sceneCreationSupported();
+  if (!supported || state.disabled) {
+    clearTimeout(state.sceneCreationRefreshTimer);
+    state.sceneCreationRefreshTimer = null;
+  }
+  byId("scene-create-submit").disabled = state.disabled || state.sceneCreating || !supported
+    || state.capabilities?.["3d.scene_recipe"]?.state !== "available" || !sceneRuntimeReady();
+  byId("scene-create-refresh").disabled = state.disabled || !supported || state.sceneCreationRefreshing;
+  byId("scene-create-name").disabled = state.sceneCreating;
+  byId("scene-create-status").textContent = state.sceneCreationStatus ? text[state.sceneCreationStatus]
+    : !supported ? text.createHost : !sceneRuntimeReady() ? text.runtimeMissing : "";
+  const container = byId("scene-create-jobs");
+  const previous = Array.from(container.children);
+  const existing = new Map(previous.map(row => [row.sceneJobId, row]));
+  const rows = state.sceneCreationJobs.map((job) => {
+    let row = existing.get(job.job_id);
+    if (!row) {
+      row = document.createElement("div");
+      row.sceneJobId = job.job_id;
+      row.className = "scene-creation-job";
+      row.append(document.createElement("p"));
+    }
+    const label = row.children[0];
+    label.textContent = `${job.name} · ${text.createStates[job.status] || job.status}`
+      + (Number.isFinite(job.progress) ? ` · ${Math.round(Math.max(0, Math.min(1, job.progress)) * 100)}%` : "")
+      + (job.error?.code ? ` · ${job.error.code}` : "");
+    const sceneId = job.status === "succeeded" && job.result?.scene?.id;
+    const action = sceneId || (!TERMINAL.has(job.status) ? "cancel" : null);
+    if (row.sceneAction !== action) {
+      row.sceneAction = action;
+      row.replaceChildren(label);
+    }
+    if (action && row.children.length === 1) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.addEventListener("click", async () => {
+        if (state.disabled || row.sceneActionBusy) return;
+        row.sceneActionBusy = true;
+        button.disabled = true;
+        try {
+          if (sceneId) { await loadScenes(); await openScene(sceneId); }
+          else { await call("scenes.creation.cancel", {job_id: job.job_id}); await refreshSceneCreationJobs(); }
+        } catch { state.sceneCreationStatus = sceneId ? "createReadFailed" : "createCancelFailed"; }
+        finally { row.sceneActionBusy = false; renderSceneCreation(); }
+      });
+      row.append(button);
+    }
+    if (action) {
+      row.children[1].textContent = sceneId ? text.createSelect : text.cancel;
+      row.children[1].disabled = state.disabled || !!row.sceneActionBusy;
+    }
+    return row;
+  });
+  if (rows.length !== previous.length || rows.some((row, index) => row !== previous[index])) {
+    container.replaceChildren(...rows);
+  }
+}
+
+function scheduleSceneCreationRefresh() {
+  clearTimeout(state.sceneCreationRefreshTimer);
+  state.sceneCreationRefreshTimer = null;
+  if (state.disabled || !sceneCreationSupported()) return;
+  // The shared push subscription is limited to ten Jobs. Reconcile this
+  // bounded owned list even when notifications are lost or that limit is full.
+  if (state.sceneCreationStatus === "createReadFailed"
+      || state.sceneCreationJobs.some(job => !TERMINAL.has(job.status))) {
+    state.sceneCreationRefreshTimer = setTimeout(() => {
+      state.sceneCreationRefreshTimer = null;
+      return refreshSceneCreationJobs();
+    }, 5000);
+  }
+}
+
+async function refreshSceneCreationJobs() {
+  clearTimeout(state.sceneCreationRefreshTimer);
+  state.sceneCreationRefreshTimer = null;
+  if (!sceneCreationSupported() || state.disabled) return;
+  if (state.sceneCreationRefreshing) { state.sceneCreationRefreshPending = true; return; }
+  state.sceneCreationRefreshing = true;
+  renderSceneCreation();
+  try {
+    const result = await call("scenes.creation.list", {});
+    state.sceneCreationJobs = result.items || [];
+    if (state.sceneCreationStatus === "createReadFailed") state.sceneCreationStatus = "";
+  } catch { state.sceneCreationStatus = "createReadFailed"; }
+  finally {
+    state.sceneCreationRefreshing = false;
+    renderSceneCreation();
+    if (state.sceneCreationRefreshPending) {
+      state.sceneCreationRefreshPending = false;
+      void refreshSceneCreationJobs();
+    } else scheduleSceneCreationRefresh();
+  }
+}
+
+async function createWorkspaceScene() {
+  if (state.sceneCreating || state.disabled || !sceneCreationSupported() || !sceneRuntimeReady()
+      || state.capabilities?.["3d.scene_recipe"]?.state !== "available") return;
+  const name = byId("scene-create-name").value.trim();
+  if (!name) { state.sceneCreationStatus = "nameRequired"; renderSceneCreation(); return; }
+  state.sceneCreating = true;
+  state.sceneCreationStatus = "createPending";
+  renderSceneCreation();
+  try {
+    const accepted = await call("scenes.create", {name});
+    state.sceneCreationStatus = "createAccepted";
+    try { await call("jobs.watch", {job_ids: [accepted.job_id]}); }
+    catch { state.sceneCreationStatus = "createReadFailed"; }
+    await refreshSceneCreationJobs();
+  } catch { state.sceneCreationStatus = "createFailed"; }
+  finally { state.sceneCreating = false; renderSceneCreation(); }
+}
+
 function sceneRuntimeReady() { return state.blenderRuntime?.state === "ready"; }
 
 function setSceneStatus(key) {
@@ -4993,6 +5141,7 @@ function renderSceneBackupControls() {
 }
 
 function renderSceneText() {
+  renderSceneCreation();
   const text = sceneText();
   const switcher = byId("create-media-3d");
   switcher.setAttribute("aria-label", text.switchLabel);
@@ -8393,6 +8542,11 @@ byId("scene-import-file").addEventListener("change", (event) => {
   }
   byId("scene-import-status").textContent = sceneRuntimeReady() ? "" : sceneText().runtimeMissing;
 });
+byId("scene-create-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  void createWorkspaceScene();
+});
+byId("scene-create-refresh").addEventListener("click", () => { void refreshSceneCreationJobs(); });
 byId("scene-import-form").addEventListener("submit", (event) => {
   event.preventDefault();
   if (!state.sceneImport) void importScene();
@@ -9443,6 +9597,7 @@ function applySessionParts(snapshot) {
     state.scenes = snapshot.scenes.items || [];
     state.sceneWorkingCopies = snapshot.scenes.working_copies || [];
     renderScenes();
+    void refreshSceneCreationJobs();
   }
 }
 
@@ -9598,6 +9753,7 @@ window.addEventListener("message", (event) => {
     }
     if (message.event === "disable.pending") {
       state.disabled = true;
+      renderSceneCreation();
       void closeSceneCompare();
       const active = activeBlenderSession();
       if (active) {

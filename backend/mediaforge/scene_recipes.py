@@ -383,6 +383,26 @@ class SceneCreateRequest(BaseModel):
     retry_job_id: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
 
 
+def workspace_scene_create_request(params: dict[str, Any]) -> SceneCreateRequest:
+    """Build the fixed starting cube for the workspace's new-scene action.
+
+    The browser supplies only a label. Recipes, runtimes, paths and ownership
+    remain server-owned, and execution uses the existing durable scene manager.
+    """
+    if set(params) != {"name"}:
+        raise ValueError("scene creation accepts only name")
+    name = params["name"]
+    if isinstance(name, str):
+        name = name.strip()
+    return SceneCreateRequest.model_validate({
+        "name": name,
+        "recipe": {"operations": [{
+            "type": "primitive.add", "object_id": "cube", "primitive": "cube",
+            "name": "Cube", "dimensions": [2.0, 2.0, 2.0],
+        }]},
+    })
+
+
 class SceneEditRequest(BaseModel):
     """Edit exactly the named current revision; conflicts fail without overwriting it."""
     model_config = ConfigDict(extra="forbid")

@@ -3,6 +3,154 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 承認待ちblocked
+
+同branch/PR525 Draft、base1c94503。停止/login可否の未回答が3turn連続。
+先行修正・ローカルgate・保護領域確認を済ませ、実機受入に必要な回答待ちとしてgoalをblockedへ。
+本番unit active、製品差分なし（2dev symlink保持）。今回docsのみ、テスト再実行なし。
+再開時は利用者の停止・PC login可否を確認し、実際のidle/永続root保護を再検査する。
+回答や再開を、他processのtoken借用・OS制限解除・保護データ削除の許可へ拡大しない。
+全GOAL/A〜F/GAとnative setupは未完了。Draft/未merge/未署名公開。
+
+## 2026-09-13 実機検証前の保護領域確認
+
+同ux1/3d-workspace-scene-create/Draft PR525、base3b400a5。停止/login回答なし、本番変更なし。
+実processのdata設定allowlistを確認し、配布版隣のfeatures/media-forge/dataと実体を区別した。
+実永続root /data1tb/ControlDeck/data/feature-data/media-forge、DBはそのdata/media-forge.sqlite3。
+Web packは同root/runtimes/blender-web。token値を出力せず、他processの認証を借用していない。
+read-only DBでJob1323全終端/GUI72全終端/runtime operations43全終端、asset1196/scene58/revision183。
+working committed49/recovery12/released35。recoveryは検証fixtureではなく保護対象、消さない。
+照会は個別時点。検証停止直前にidleと対象を再確認し、現状値だけで停止可能と保証しない。
+初期推定features/.../dataのDB不在はis_fileで拒否、DBは作成していない。新backup/候補dataもなし。
+docsのみcommit/push、製品/test/script差分なし。基準1920pass3skip208.42秒を今回再実行と呼ばない。
+次は停止・正規PC login可否の回答を確認して実Host/Blender新入口一巡を準備する。
+同じ調整条件の2turn目だが、今回の保護領域特定は新しい証拠。全体のnative setup等も未完了。
+Draft/未merge/未署名公開、全GOAL/A〜F/GA PARTIAL。root利用者branch/2dev symlink保持。
+
+## 2026-09-13 PR525 shutdown/drainと実機受入の調整
+
+同ux1/3d-workspace-scene-create/Draft PR525、basec86e390。root利用者branch/2dev symlink保持。
+短時間停止・別data検証版・PC browser通常login・現行版復帰の可否を利用者へ質問済み、回答なし。
+本番unit52609/current0.28.80 activeを読取確認。まだ停止/切替/OS承認/browser起動をしない。
+01fdd5でstop同時cancelによるcleanup中断を再現。単一owned stopをshield/drainし、既存cancel終了を先に待つ。
+stopping中は新cancelを拒否、既存同owner待機は維持。stopのDB処理はto_thread。
+複数stop/要求取消と、stop待ち中のstart取消で受付を再開しないことを補完。
+最終focused54582 exit0、Node15/viewer38ms差分0。全35671は補完前1920pass3skip218.30秒。
+最終全28192/4d03d4 exit0、1920pass3skip2warnings208.42秒。以後product/test/script変更なし。
+同PRcommit/push。Draft維持/未merge/未署名公開。
+次は利用者の停止/login可否回答を確認し、正規認証での実Host/Blender新入口一巡を準備する。
+回答がなければ自動継続を許可と解釈しない。他process/token/session借用やpassword変更は禁止。
+今回阻害条件の初回、コード進捗あり。全GOALをblocked/completeへ変更しない。
+native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
+## 2026-09-13 PR525独立cancel合流と誤検知test修正
+
+同ux1/3d-workspace-scene-create/Draft PR525、basea4b514d。root利用者branch/2dev symlink保持。
+修正前f6f8b2で二つ目のcancelによるrunner cleanup中断を再現。owner/job別in-flight taskで合流。
+異owner拒否、片方要求取消時drain、他方canceled返答、DB flag書込1回と終端再送をtest。
+focused成功。全89628は1918pass1fail3skip210.19秒、既存notice testの公開UUIDにbbbbが偶然含まれ誤検知。
+試験DB read-onlyで実ID確認。key集合を厳密検査、秘密検査は全通知valueへ分離して他assert維持。
+修正後focused60729前半成功、全60729/52d72b exit0、1919pass3skip2warnings210.73秒。
+以後product/test/script変更なし。Node15/viewer40ms差分0。同PRcommit/push、Draft維持/未merge/未署名公開。
+次は新入口の実Host/Blender制作一巡へ進むため、正規ユーザー認証の受入経路を用意する。
+新規Chromeは/login、Host checkoutのbrowserはcookie必須、loopback MCPはactor token必須。
+現agent環境にHost token変数なし。他process/session/tokenの借用やpassword変更で代用しない。
+manager.stopとの全競合/実2タブcancelも未受入。OS承認/本番/制作物変更なし。
+native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
+## 2026-09-13 PR525進捗再取得・操作DOM保持
+
+同ux1/3d-workspace-scene-create/Draft PR525、basee9eb846。利用者root/2dev symlink保持。
+共有push購読上限10件に依存せず、active creation/取得失敗中だけ5秒ごと最新20件履歴を再取得。
+single timer/refresh coalescing、終端/非対応/disableで停止。要求再送による制作はしない。
+row/buttonをJob IDで再利用、進捗更新中のfocus保持、同row busyで重複クリック拒否。
+Node15pass、実Chrome component日英320/1280で実5秒timer→65%表示/同button/focus/取消/選択成功。
+timeout引数位置修正後の52389/d48cd7 exit0を最終component証拠とする。backendはfixtureのみ。
+viewer51ms差分0、全21910/9eb572 exit0、1918pass3skip2warnings209.43秒。
+以後product/test/script変更なし、同PRcommit/push。
+次はmanagerの複数独立cancel要求でcleanupを二重取消しないことを検証・補完する。
+実Host/Blender新入口の一巡は未受入、正規login必要。Draft維持/未merge/未署名公開。
+OS承認/本番/制作物変更なし、native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
+## 2026-09-13 PR525履歴再認証とHost終端outbox
+
+同ux1/3d-workspace-scene-create/Draft PR525、baseacb2318。利用者root/開発symlink保持。
+creation.list→async creation_snapshot。owner最新20件をoff-loop読取、終端未照合だけ既存retry予約。
+履歴応答はHost待ちなし、jobs.write/期限/owner/稼働・既存task/停止を検査して重複実行しない。
+既存reconcileのDB読取/receipt書込もto_thread、receipt書込取消drain、通信前期限再検査を追加。
+focused82795 exit0、SQLite reopen/slow Host fixture/owner/期限・権限/重複なし/全DB thread ID/receipt drain。
+Node13/viewer50ms差分0、全10473/610a0e exit0、1918pass3skip2warnings207.70秒。
+以後product/test/script変更なし。同PRcommit/push、Draft/未merge/未署名公開。
+次は再接続時の作成進捗購読を検証する（workspace.sessionの既存全Job購読は最大10件）。
+複数独立cancel/実Host・Blender新入口の制作受入も残り、Draftを維持して受入前にはmergeしない。
+実Host browserは前turn確認の正規loginが必要。新たなOS承認/本番変更/制作物変更なし。
+native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
+## 2026-09-13 PR525取消drain補完
+
+同ux1/3d-workspace-scene-create/Draft PR525、base16d992c。root利用者branch/2dev symlink保持。
+manager.cancelのDB検査/flag記録/投影をto_threadへ移し、owned取消taskをshield/drain。
+要求取消をDB/runner cleanupへ伝播させず、後片付け完了後に呼出元へCancelledErrorを返す。
+実SQLite＋制御worker testでDB待機中のevent loop継続、繰り返し要求取消時のdrain/最終flag確認。
+focused63434 exit0、Node13/viewer51ms差分0、全64159/cd88c4 exit0、1916pass3skip2warnings206.63秒。
+以後product/test/script変更なし。同PRへcommit/push、未merge/未署名公開。
+次はcreation.listのowner再認証後Host終端照合を接続する。既存reconcileにも同期DBが残るため
+その境界を補完してから呼ぶ。再接続購読/独立同時cancel/実Host・Blender受入も残る。
+本番0.28.80 active/OS設定・制作物・認証変更なし。正規loginの必要性は前turnの実測を参照。
+同PRへcommit/push後もDraft維持。native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
+## 2026-09-13 PR525 UI/history検証・push
+
+同ux1/3d-workspace-scene-create、Draft PR525、base main3e274e5/既存head d1b7f85からの追加。
+作業tree /tmp/mediaforge-cleanup-docs-20260912。利用者root work branch/開発symlinkを保持。
+前turnは説明のみno progress。今回全test旧7884のhandle不在/実processなしを確認し再実行。
+88871は1914pass/1fail/3skip207.82秒: capabilityの認証依存flagと既存完全一致testが衝突。
+workspace_create false/trueを個別assert、他fieldは完全一致維持。関連test49516 exit0。
+再全37413/1942a6 exit0、1915pass3skip2既知warnings213.54秒。以後product/test/script変更なし。
+Node13pass/component実Chrome日英320/1280全4条件pass/viewer39ms差分なし/diff check成功。
+本番unit active/current0.28.80/実health healthy。新規ChromeでHost URL→/login、password input1。
+browser終了、OS承認・認証設定・本番asset・service変更なし。componentを実Host制作の受入にしない。
+今回UI/history/contract testとdocsを同PRへcommit/push。まだDraft/未merge/未署名公開。
+次の一作業: 新cancel入口が再利用するSceneRecipeJobManager.cancelの同期Store処理をoff-loop化し、
+取消要求の切断時drain/owner拒否を検証する。その後listのHost終端reconcile/再接続購読と実機受入。
+実Host browserは正規loginが必要。native setup/永続OS policy/全GUI隔離は未完成のまま。
+全GOAL/A〜F/GA PARTIAL。既存U0〜7の完了状態は変更しない。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
+## 2026-09-13 PR525 scene creation UI/history
+
+同ux1/3d-workspace-scene-create、Draft PR525/d1b7f85から継続、/tmp/mediaforge-cleanup-docs-20260912。
+新規create form/日英/status/cancel/select、owner別最新20未clear creation list/DBを追加。
+cap workspace_create＋runtimeでgate、standaloneはflag false/明示案内。DB listはto_thread。
+表示はtextContent、reload後履歴再取得、失敗時既存表示保持、受付後watch失敗を作成失敗にしない。
+最初のNode/runtime fixtureとPython不存在属性の不備を修正。新Node4/最終focused16成功。
+実Chrome component97dfe8 exit0、ja/en320/1280 submit/cancel/select/overflowなし/errors0。
+明示backend fixtureのみ、実Host/Blender/全opaque workspaceはNOT TESTED。browser終了、外部fixtureなし。
+Node全13/viewer39ms差分0、全7884の終端不明。上記再開記録の再実行結果を正とする。
+同PRをDraftで維持。次は実Host/Blenderの新入口/取消/再接続/Host終端整合を受入してからmerge。
+standalone mirror/署名公開とnative OS setup/全GUI隔離は残件。全GOAL/A〜F/GA PARTIAL。
+利用者root/2dev symlink/制作物/OS設定/稼働版保持、承認画面は再表示しない。
+
+## 2026-09-13 workspace scene creation admission
+
+base PR524 MERGED/3e274e5、ux1/3d-workspace-scene-create、/tmp/mediaforge-cleanup-docs-20260912。
+承認テスト再表示なし。Webの新規scene入口不足へprivate WS scenes.create追加。
+nameだけ→固定2m cubeのSceneCreateRequest→既存submit_scene_tool/SceneRecipeJobManager。
+新Job/asset基盤なし。actor/runtime pin/Host Job/版は既存管理。完成/GUI開始ではなくqueued Job受付。
+23f0d8 focused14pass（ASGI TestClient＋mock admission、実Host/Blender生成ではない）。
+Node9/viewer50ms差分0/MF active。全33129 exit0/1913pass3skip2warnings/207.51秒、以後product/test変更なし。
+commit/push後Draft PRで保留し、UI/新入口の実機受入前にmergeしない。
+次は同じbranch/PRの続きを行う（origin/mainにはまだ本変更がない）。
+capabilityとtransport条件、新規作成UI/進捗/取消/選択を接続し
+実Host/Blender/browserで作成→選択→編集を受入。standalone mirror/署名配布も未接続。
+OS setup/本番隔離/初回承認の残件は維持、全GOAL/A〜F/GA PARTIAL。
+root利用者branch/2dev symlink/制作物保持、外部fixture/backup/OS変更なし。
+
 ## 2026-09-12 sealed native bootstrap transport
 
 base PR523 MERGED/54084d1、ux1/3d-native-sealed-bootstrap、/tmp/mediaforge-cleanup-docs-20260912。

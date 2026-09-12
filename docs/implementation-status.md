@@ -1,5 +1,237 @@
 # Media Forge implementation status
 
+## 2026-09-13 実機受入の承認待ちでblocked
+
+PR525 OPEN/Draft/head1c94503、作業treeの製品差分なし、本番unit activeを再確認。
+停止/loginの可否未回答が3turn連続。先行する取消・終了・再接続修正とローカル検証、
+実データ保護範囲の読取確認は完了したが、実Host/Blender受入へは進めていない。
+新しい認証回避や本番停止の許可を自動継続から作らず、goalをblockedとして回答待ちにする。
+再開条件は短時間停止と正規PC browser loginの調整。許可後もidle/保護領域を再確認してから実施する。
+native OS setup/全GUI隔離/全GOAL/A〜F/GAは未完了。PRのmerge/署名公開を行わない。
+今回文書のみ、テスト・OS変更・service停止・制作物変更なし。
+
+## 2026-09-13 実機切替前の永続領域・idle読取監査
+
+base3b400a5、同PR525/Draft。前turnはshutdown/drain実装・test・pushで進捗。
+停止/login可否の回答は未着。自動継続を許可にせず、本番切替やbrowser認証を開始しない。
+MainPID52609/WorkingDirectory versions/0.28.80を再確認。初期に推定した
+features/media-forge/data/media-forge.sqlite3は存在せず、read-only接続前のis_fileで拒否した。
+同dataにはreference-analysis-cacheだけがあり、配布先のdataを制作データ本体と誤認しない。
+
+実process環境の固定allowlist（data/root設定だけ、token値出力なし）から正規領域を確認:
+
+- CONTROL_DECK_FEATURE_DATA_DIR: /data1tb/ControlDeck/data/feature-data/media-forge
+- MEDIA_FORGE_DATA_DIR: /data1tb/ControlDeck/data/feature-data/media-forge/data
+- MEDIA_FORGE_BLENDER_WEB_ROOT: /data1tb/ControlDeck/data/feature-data/media-forge/runtimes/blender-web
+
+このDBをsqlite URI mode=roで照会した。840ca9: Jobs canceled10/failed226/succeeded1087、
+runtime operations canceled3/failed5/ready35。2ab4d3: GUI failed4/interrupted11/stopped57、assets1196。
+4d8d79: scenes58/revisions183、working committed49/recovery12/released35。
+各照会時点で稼働中stateはないが、別query間のatomic snapshotや将来のidleを保証しない。
+特にrecovery12件は利用者の未確定制作物として保護し、検証cleanup対象にしない。
+検証dataはこの永続領域とは別の明示作業領域へ置き、停止直前にJob/GUI/setup/workingを再確認する。
+今回は候補data、backup、browser、検証assetを作っておらず、削除・DB更新・OS変更もなし。
+記録のみ。製品/test/script差分なし、基準は直前1920pass/3skip/208.42秒、今回の再実行ではない。
+PR525 OPEN/Draft/head3b400a5をGitHubで確認。全GOAL/A〜F/GAはPARTIAL。
+
+## 2026-09-13 PR525停止との取消競合・実機受入の調整
+
+basec86e390、同ux1/3d-workspace-scene-create/Draft PR525。前turnは独立cancel合流/test/pushで進捗。
+実機受入に向け、短時間のMediaForge停止・別dataの検証版・PCの検証用browserでの正規login・
+終了後の現行版復帰について利用者へ可否を質問した。今回時点で回答はなく、停止/切替/認証操作はしない。
+実unit MainPID52609、WorkingDirectory versions/0.28.80、current0.28.80/activeを読取確認。
+他processのtokenや個人browser sessionを借用せず、テスト用認証を実Host認証へ読み替えない。
+
+調整中に停止との取消競合を検証。01fdd5 exit1: 通常の独立cancelはpass、stop同時実行だけ
+runner cleanupを中断してservice_stoppedへ上書きした。実SQLite＋制御async runnerでの再現。
+stopを単一owned taskとしてshield/drainし、受付済みcancel tasksが終わってから残るJobを中断する。
+新しい取消はstopping中に拒否し、既存同owner取消の待機は維持。stopのDB照会/中断記録をto_threadへ移す。
+複数stop要求とその呼出元の繰り返し取消でも同じ終了処理を待ち、既存cancel結果を保持する。
+startは以前のstopを待つが、待機中にstart要求自体が取消された場合はdrain後に再送出し、受付を再開しない。
+この最終start取消補完は全35671開始後に追加したため、35671は最終gateとしない。
+35671/37c7e6は1920pass3skip/218.30秒で終了。最終版の全28192/4d03d4を改めて実行し、
+exit0、1920passed/3skipped/既知2warnings/208.42秒。以後product/test/script変更なし、同PRへcommit/push。
+最終focused54582/eba262 exit0。stop同時・二重stop・stop要求取消・start待機取消を含むcaseを確認。
+Node15pass/viewer38ms/生成差分なし。本番shutdown/実Blender/2ブラウザや全起動失敗matrixはNOT TESTED。
+次は正規ユーザー認証と検証中停止の調整後、新作成入口の実Host/Blender一巡を受入する。
+制作物/OS policy/本番service変更なし。PRはDraft、native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+
+## 2026-09-13 PR525独立した取消要求の合流
+
+basea4b514d、同ux1/3d-workspace-scene-create/Draft PR525。前turnは進捗再取得/DOM保持実装・検証・pushで進捗。
+追加testを修正前に実行しf6f8b2 exit1: 同ownerの二つ目のcancelが後片付け中runnerを再度cancelし、
+cleanup完了前に要求が返ることを再現した。片方の要求取消と、別ownerの拒否も同scenarioに含めた。
+managerに(owner, job_id)別の進行中取消taskを保持し、同owner同Jobだけ同一owned operationを待つ。
+別ownerは別の所有者検査へ進み拒否される。終端callbackは同taskの場合だけ登録を回収し、
+後の要求で置き換えたtaskを古いcallbackが消さない。DB/公開Job契約の変更なし。
+修正後focused89628の前半で成功。二つの要求の一方が取消されてもcleanup完了を待ち、
+他方はcanceled結果を受け、取消flag書込1回、終端後再送で追加書込なしを確認。
+これは制御したasync runner＋実SQLiteであり、実ブラウザ2タブ/実Blender受入ではない。
+manager.stopとの全競合をこのtestで受入済みと扱わない。
+
+最初の全89628/899d29は1918pass/1fail/3skip/2warnings210.19秒。
+失敗は既存test_blender_operation_noticesの秘密文字列検査で、試験DBの公開ID
+blenderop_cc30a193d4b34bbbb23ad0eafaad15f3にbbbbが含まれた誤検知。
+sqlite3 CLI不在を確認後、Python sqlite3 read-onlyで当該IDだけを照会した（ed10cc exit0）。
+公開key集合を厳密assertし、秘密検査は全通知valueへ適用。owner/phase/結果不変のassertは保持した。
+修正後関連test60729前半exit0、全60729/52d72b exit0、1919passed/3skipped/既知2warnings/210.73秒。
+以後product/test/script変更なし。同PRへcommit/pushする。
+Node15pass/viewer40ms/生成差分なし。OS設定/制作物/本番変更なし。
+
+Host checkoutの読取ではsecurity/deps.pyのbrowser認証はsession cookie必須、
+addons/agent_mcp.pyのloopback例外は有効署名tokenの期限だけで、actor token自体は必要と確認。
+前turnの実Chrome/login遷移と整合するが、稼働Hostとcheckoutの全一致を新たに証明したとはしない。
+現agent環境の変数名照会にControlDeck/MCP tokenなし、OpenCode実行fileの存在だけを確認。
+他processのtoken/sessionを借用せず、認証設定も変更しない。正規ユーザー経路での実機受入が次の残件。
+PR525はDraft、native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+
+## 2026-09-13 PR525再接続後の進捗再取得と操作DOM保持
+
+basee9eb846、同ux1/3d-workspace-scene-create/Draft PR525。前turnはHost終端outbox接続・test・pushで進捗。
+既存共有Job通知には10件の購読上限があるため、それだけでは作成履歴最新20件の更新を保証できない。
+作成中Jobまたは履歴取得失敗がある間、既存scenes.creation.listを5秒間隔で再取得するよう補完した。
+一度の取得が終わってから次を予約し、通知/手動更新と既存refresh pendingで合流する。
+新Jobを再送せず、失敗時は既存表示とerrorを保持する。全件終端/機能非対応/disableでtimerを回収。
+disable.pendingで直ちにrenderを呼びtimer/操作を無効化し、取得中応答後にも再予約しない。
+
+Job IDごとに既存row/buttonを再利用し、進捗・言語更新ではlabelだけを変える。
+actionが変わった場合だけbuttonを交換し、取消/選択の処理中flagは同rowに保持する。
+同画面の重複クリックを拒否し、進捗更新でfocusや押下先を失わない。
+Node新2testでpushなしの復元→進捗→終端/5秒timer1件、取得失敗の定期再試行/disable停止を確認。
+全Node15pass。componentは実Chromeで日英320/1280の全4条件、通知なしで実5秒timerから65%表示へ更新、
+取消button同一node/focus保持、実click取消/選択、横overflowなし/pageerrors0を確認した。
+最初のcomponent呼出はwaitForFunctionのtimeoutをarg位置に渡していたため既定timeoutで実行された。
+第三引数へ修正した52389/d48cd7 exit0で全4条件を再確認。製品の5秒設定を短縮して試験していない。
+backendは明示fixture、実Host/Blender/opaque iframeの制作受入に拡大しない。browserは終了。
+viewer51ms/生成差分なし、全21910/9eb572 exit0、1918passed/3skipped/既知2warnings/209.43秒。
+以後product/test/script変更なし。同PRへcommit/pushする。
+次は複数独立cancel要求が同じrunner cleanupを二重取消しないことを確認・補完して実機受入へ進む。
+本番・OS設定・制作物変更なし、PRはDraft維持。native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+
+## 2026-09-13 PR525履歴再接続からのHost終端照合
+
+baseacb2318、同ux1/3d-workspace-scene-create/Draft PR525。前turnは取消off-loop/drain実装・検証・pushで進捗。
+private scenes.creation.listをmanager.creation_snapshotへ接続した。owner別最新20件をoff-loopで読み、
+有効なjobs.write identityがある場合だけ、終端かつ未照合の同owner Jobへ既存outbox retryを予約する。
+既に実行/照合中なら重複taskを作らず、停止中にも開始しない。履歴応答はHost通信完了を待たない。
+既存1秒開始/最大30秒backoff、manager stop回収、receipt検証/競合保持を再利用し、第二Jobを作らない。
+reconcile/_consume/_retryのDB読取とreceipt書込もworker threadへ分離した。
+outbox lock/DB待機後にもidentity期限を再検査。開始済みreceipt書込は取消時もshield/drainする。
+
+追加testはSQLiteを再openし、新managerと正規owner fixtureで履歴を復元。
+期限切れ/権限なしでは予約なし、別ownerを除外、Host応答待ち中も履歴返答、再照会時task同一、
+Host呼出1回/新Job0、完了後receipt保存と再予約なしを確認。全関係Store methodのthread IDもassert。
+別testはreceipt書込をthreadで止め、繰り返し要求取消でも書込終端を待つことを確認。
+82795/7a18a6 focused exit0。Node13pass/viewer50ms/生成差分なし。
+全10473/610a0e exit0、1918passed/3skipped/既知2warnings/207.70秒。以後product/test/script変更なし。
+Host応答はfixture、実Host認証/HTTP/Blender/opaque browser受入はNOT TESTED。
+新creationの再接続進捗購読、複数独立cancel、実機一巡と署名配布は未完了。PRはDraft維持。
+OS承認/本番service/制作物変更なし。native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+
+## 2026-09-13 PR525取消処理のoff-loop化と切断時drain
+
+base16d992c、同ux1/3d-workspace-scene-create/Draft PR525。前turnはUI/history実装・検証・pushで進捗。
+SceneRecipeJobManager.cancelの所有者検査・状態照会・取消flag書込を一つの同期helperとして
+worker threadへ移し、結果projectionもto_threadにした。既存DB transactionの意味は変更しない。
+取消operationをowned taskにし、呼出元取消はshield＋既存_finish_cleanupで終端までdrainした後に返す。
+runner taskへの取消はevent loop側に維持。開始済みDB書込やrunner cleanupへ要求取消を伝播させない。
+ownerの拒否と終端状態の既存testを維持。追加testは実SQLite fixtureと制御したworker taskで、
+DB書込をthread Eventで止めてもevent loopが進み、要求の複数回取消後も書込とcleanupの両完了を待つ。
+DB書込とprojectionのthread IDがevent loopと異なること、永続cancel flag/最終canceledをassert。
+63434/680fe1 focused exit0。Node13pass/viewer51ms/生成差分なし。
+全64159/cd88c4 exit0、1916passed/3skipped/既知2warnings/206.63秒。以後product/test/script変更なし。
+このtestは実Blender/Host/実ネットワーク切断ではない。shutdownとの全競合や複数の独立した
+cancel要求の同時到着、manager全体の同期DB移行まで証明したとは扱わない。
+次は新creation.listの再認証時Host終端照合と再接続購読を確認・接続して実機受入する。
+本番unit active/current0.28.80を再確認。OS/native承認・制作物・本番service変更なし。
+native setup/全GUI隔離/全GOAL/A〜F/GAはPARTIAL、PRは引き続きDraft。
+
+## 2026-09-13 PR525再開監査・未回収テストの再検証
+
+前turnはセットアップ方針の説明のみで、実装上はno progress。今回git fetchとGitHub照会で
+PR213 MERGED、PR525 OPEN/Draft/head d1b7f85を確認。利用者root branchには触れていない。
+旧全test session7884はUnknown process id、psにもpytest/mf.sh testの実行なし。
+終了結果は回収できないため成功に換算せず、同じ製品差分で全test session88871を開始した。
+88871はexit1、1914passed/1failed/3skipped/2warnings/207.82秒。
+失敗は既存workspace/public capability完全一致test。追加workspace_createは認証/経路で差を持つ設計のため、
+両値false/trueを個別assertした後、このfieldだけ正規化し、他全fieldの完全一致を維持した。
+修正後test_workspace_transport.py＋test_workspace_scene_create.pyは49516 exit0。
+全test37413/1942a6はexit0、1915passed/3skipped/既知2warnings/213.54秒。
+これ以後product/test/script変更なし。同PRへcommit/pushし、Draftのまま継続する。
+Node13pass、実Chrome componentの日英320/1280全4条件pass、viewer39ms、git diff --check成功。
+componentはfixture backendのみで、実Host/Blender/opaque iframeの受入ではない。
+本番unitはactive、currentはversions/0.28.80。再起動・OS変更・本番制作物変更なし。
+実HTTP GET9130/healthはhealthy、8765/x/media-forge/workspaceは200。
+後者はHTML取得だけであり、認証済みiframe/sessionや制作権限の証拠ではない。
+94050/86969d exit0: 新規headless Chrome contextから同Host URLへアクセスすると/loginへ遷移、
+password input1、iframeなし、pageerrors0。browserはfinallyで終了し、認証情報の入力/変更は行わない。
+loopbackのHTML200を認証不要と解釈せず、実Host UI受入には正規のログイン経路が必要。
+
+reviewで新creation.listはoff-loopだがHost終端reconcileを呼ばないことを確認した。
+新cancel入口が再利用する既存manager.cancelには同期Store照会/取消/投影が残る。
+実機受入前にこの境界と、再認証後のoutbox照合、再接続時の進捗購読を確認・補完する。
+この既知残件をテスト成功だけで完了にせず、PR525はDraftを維持する。
+設定からのnative OS policy導入/管理者承認/永続化も未完成。全GOAL/A〜F/GA PARTIAL。
+
+## 2026-09-13 PR525の新規scene UIと所有者別履歴を接続
+
+ux1/3d-workspace-scene-create、Draft PR525/d1b7f85から継続。前turnはadmission実装/test/pushで進捗。
+新規作成form/日英案内/名前入力、受付・進捗、取消、完了scene選択を追加。
+capabilityのworkspace_create（Host jobs.write付きidentityのみ）とruntime availabilityの両方で
+作成をgate。standaloneは対応flag falseと案内を出す。任意recipe/二重クリックの追加送信をしない。
+受付済み後のjobs.watch失敗を作成失敗へ変換せず、受付応答不明時も再送前に状況確認を案内する。
+
+scenes.creation.listはstoreの固定SQLでactor owner/scene.create/未clearだけ、最新20件。
+新規listのDB読取/projectionはasyncio.to_threadで実施。scenes.creation.cancelはjobs.writeと
+既存managerのowner checkを使用。第二Job/履歴基盤なし。reload後はこの履歴を再取得する。
+既存Job通知/scene snapshotから更新し、手動refreshも用意。取得失敗時は既存表示と明示errorを保持。
+完了Jobのscene.idを既存loadScenes/openSceneへ渡し、勝手にGUIを起動しない。
+
+初回testは2つのfixture不備で失敗: Node fixtureにruntime状態が欠落、PythonはJobに存在しない
+cancel_requested属性を参照。製品runtime条件は緩めず、fixture/既存Store.cancel_requested照会を修正。
+106f13でNode新4成功、以後最終focused16成功を7884の出力で確認。
+所有者7/8とscene.editを分けたDB fixture、WS再接続、他owner取消拒否/取消flag不変、clear除外、
+standalone/Host capability差を確認。Nodeは二重送信防止/受付後watch失敗/取得失敗保持/XSS literal/選択取消。
+
+97dfe8 exit0: 実Chromeで製品form/CSS/rendererを使うcomponent script
+`node scripts/3ds_scene_create_component.mjs`。日英×320/1280でsubmit/cancel/select、
+unsupported時disabled、名前をHTMLとして解釈しないこと、横overflowなし/pageerrors0を確認。
+backend応答は明示fixtureであり、Host・Blenderへ実Jobは送っていない。全workspace/opaque iframe/
+実制作・保存・GUI受入へ拡大しない。browserは終了、外部data/screenshot/backupなし。
+Node全13pass/viewer39ms/生成差分なし。全7884の終端は回収不能、上の再開記録で再検証した。
+
+PR525はDraftを維持。次は新入口で実Host/Blender Job作成→進捗/取消→完成scene選択を実機受入し、
+Host terminal同期/再接続失敗条件も確認する。standalone mirror/署名配布は未実施。
+native承認画面再表示/OS設定/稼働版/制作物変更なし。全GOAL/A〜F/GAはPARTIAL。
+
+## 2026-09-13 Webの新規scene作成向けadmissionを追加
+
+base PR524 MERGED/3e274e5、ux1/3d-workspace-scene-create。前turnはsealed transport実装/test/mergeで進捗。
+native承認テストを再表示せず、GOAL-04の制作ファイル未所持時の導線を調査した。
+既存Webは.blend import/既存scene編集のみ、新規typed制作はAgent endpointだけ。
+Web専用の第二Job/asset基盤を作らず、認証済みprivate WSへscenes.createを追加した。
+nameだけ受け、server側で2m cube一つの既存SceneCreateRequestを組み立てる。
+submit_scene_tool→既存SceneRecipeJobManagerを利用し、runtime pin/Host detached Job/owner/版管理は
+既存経路のまま。返すのはJob ID/status/Host Job ID/input SHA/asset IDsで、scene完成やGUI起動ではない。
+nameの前後空白を除去し、空/制御文字/path/超過を既存型で拒否する。recipe/script/owner/runtimeは受けない。
+既存Agent tool/public schemaの意味を変えず、API文書へprivate actionと未接続の範囲を追記。
+
+23f0d8 focused14pass。型付き初期template/各request独立性と、不正10入力を検査。
+ASGI TestClientの認証済みWSから既存manager.submitへ同actor user:7/固定recipeが渡ること、
+queued detached応答とruntime不足/Host障害のerror mapping、追加script拒否を確認。
+admissionはmockであり、今回の実Host/Blender Job生成や実ブラウザ成功ではない。
+既存managerのdurabilityと新しいWeb入口の実機制作一巡を混同しない。
+Node9pass/viewer50ms/生成差分なし/MF active。
+全33129 exit0、1913passed/3skipped/既知2warnings、207.51秒。以後product/test変更なし。
+UIと新入口の実機受入がまだなので、本変更はDraft PRで保持し、この段階でmergeしない。
+同じbranch/PRでUIと実機受入を続け、利用者動作を満たしてから通常merge gateへ進む。
+
+NOT IMPLEMENTED/TESTED: 新規作成ボタン、受付後の進捗/取消/完了scene選択、standalone mirror、
+実Hostから新しい入口でのBlender制作・browser受入、署名配布。次はcapability/transport表示条件と
+新規作成UIを接続し、同sceneを作成→選択→編集する実機受入へ進む。
+native OS setup/署名bootstrap/本番policy適用/永続化/GUI全隔離の残件は維持。全GOAL/A〜F/GA PARTIAL。
+今回OS設定/稼働版/制作物/利用者root変更なし、外部data fixtureやbackupなし。
+
 ## 2026-09-12 native bootstrapのsealed入力を実装、承認確認は時間切れ
 
 base PR523 MERGED/54084d1、ux1/3d-native-sealed-bootstrap。前turnは所属session診断の実装/受入/mergeで進捗。
