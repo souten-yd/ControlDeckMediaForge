@@ -1077,6 +1077,15 @@ verification, refusal/cancel/rollback and boot-time loading must be accepted bef
 exposing installation. Mobile initiation may require approval on the server PC;
 absence of a local approval agent must be explicit, not replaced with a web password form.
 
+The native policy verifier must bind the existing publisher, feature, confinement
+purpose, exact MediaForge version/source commit, platform/architecture, artifact
+name, size and digest. It verifies the received canonical manifest bytes and
+retains the exact immutable package bytes; reopening a caller-owned path after
+verification is not an installation guarantee. Verification code runs outside
+core, using the OS crypto provider, with no private key or new core dependency.
+Its first implementation performs no OS writes and does not resolve the pending
+trusted bootstrap/administrator-consent handoff by itself.
+
 ---
 
 ## 19. Observability

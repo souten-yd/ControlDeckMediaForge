@@ -408,6 +408,13 @@ CreateTransaction/InstallFiles、Polkitの対話許可、OS file変更はこのp
 detected/承認challengeは導入可能・隔離済みを意味しない。agent到達性はnot_checked、導入はnot_implementedを保つ。
 次の依存は固定版署名policy package（同じMediaForge配布系統）、検証したbytesの差替え防止、
 OS承認拒否/取消・rollback・再起動後読込。これらを通してからsetupボタンを有効にする。
+native verifierの契約は `schemas/native-policy-release.schema.json`。
+通常feature bundleと用途を分離し、既存publisher鍵/canonical JSON/Ed25519で
+purpose・版・source commit・platform/arch・artifact名・size/hashを束縛する。
+worker側のpolicy_release.pyは最大4096B manifest/8MiB immutable package bytesだけ受け、
+署名した元bytesを検証して同じimmutable bytesを返す。path/任意鍵/URLは受けない。
+このverifierを呼ぶ将来のOS側処理自身の信頼と、保護stagingへの受渡しは未解決。
+検証用コードだけでTOCTOUや初回認可が解決したとはしない。coreにcrypto依存を追加しない。
 参照: [PackageKitの利用経路](https://packagekit.freedesktop.org/pk-using.html)、
 [OS側の導入認可policy](https://github.com/PackageKit/PackageKit/blob/main/policy/org.freedesktop.packagekit.policy.in)。
 web APIがprocessを起動してすぐ忘れる方式や、個人の既存X11/Wayland sessionへの接続を採らない。

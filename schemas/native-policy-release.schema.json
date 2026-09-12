@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://media-forge.local/schemas/native-policy-release.schema.json",
+  "title": "MediaForge native OS policy release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "feature_id", "purpose", "version", "source_commit", "platform", "architecture", "artifact_name", "sha256", "size_bytes"],
+  "properties": {
+    "schema_version": {"const": "media-forge.native-policy-release@1"},
+    "feature_id": {"const": "media-forge"},
+    "purpose": {"const": "blender-gui-confinement"},
+    "version": {"type": "string", "maxLength": 64, "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$"},
+    "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "platform": {"const": "linux"},
+    "architecture": {"const": "x86_64"},
+    "artifact_name": {"type": "string", "pattern": "^control-deck-media-forge-os-policy-[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?-linux-x86_64\\.deb$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "size_bytes": {"type": "integer", "minimum": 1, "maximum": 8388608}
+  }
+}

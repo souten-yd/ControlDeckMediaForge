@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-12 native policy署名検証を実装（OS適用は未接続）
+
+base PR521 MERGED/a6c592d、ux1/3d-native-policy-verifier。
+前turnは入力候補の不適合を実測して記録/mergeした進捗。今回は次に必要なnative trustの
+署名検証部分を実装。base/integrationを先に追記し、worker_packs/native_setup/policy_release.py、
+追加manifest schema/API/release/runtime-Web文書を同期。既存feature signer/Host consumerは不変。
+既存publisher公開鍵は現Host trusted-catalog.jsonと一致。別鍵/別release系列を作らない。
+canonical元JSONと用途・版・source commit・arch・artifact名・size/hashを同時検証し、
+検証したimmutable bytes自体を返す。最大manifest4096B/package8MiB、任意path/URL/鍵を受けない。
+OS Pythonのcryptoだけを遅延importし、core依存は増やさない。秘密鍵/署名生成/OS書込なし。
+UI/APIから呼べるinstallerではない。将来のconsumerは信頼された特権境界内で自ら検証し、
+保護stagingへ同じbytesを書き出す必要がある。現時点で初回bootstrap/TOCTOU解決済みとはしない。
+
+focused57012 exit0（native setup24＋新3）、追加crypto不在拒否後b204b0 exit0（新4）。
+実OS Python/cryptography41.0.7の独立テスト78a66d exit0、9unittest/0.016秒。
+一時鍵はmemory内のみ。正規publisherがtest鍵を拒否、test鍵下で正しい入力を検証し、
+別署名・同size改ざん・用途/版/commit/名前/arch違い・重複/非canonical JSON・欠落/超過・
+可変bytes・latest等の期待値を拒否、返却bytes同一性とfrozen状態を確認。
+これは実crypto検証のtestであり、本番署名package/実OS導入の受入ではない。
+verifier SHA b5b3cfca6d3a050be6b6cfbef8927173b2685a2a68aeac7cbdfc897e7c687de0。
+Node9pass/viewer41ms/生成差分0、稼働MF unit active。
+全test65040 exit0、1878passed/3skipped/既知2warnings、212.72秒。以後製品/test変更なし。
+自己点検で公開鍵一致、入力上限、失敗時情報非開示、core import境界と未実装gate維持を確認。
+
+NOT IMPLEMENTED/TESTED: 本番policy/package builderと署名公開、trusted bootstrap、OS承認agent、
+初回適用/取消/rollback/削除/boot、設定ボタン/モバイルPC承認、GUIの全隔離受入。
+稼働版/制作物/利用者root worktreeは変更せず、新規OS設定・backup・外部fixtureなし。
+次は検証器を実際の保護stagingとnative承認経路へ接続するためのtrusted bootstrapを確定する。
+全3DS/GOAL/A〜F/GAはPARTIAL。CLI不要の要件を縮小しない。
+
 ## 2026-09-12 native package入力の実測で不適合を確認
 
 PR520はMERGED/3b0fb59をghとorigin/mainで照合。前turnは説明のみで製品進捗なし、

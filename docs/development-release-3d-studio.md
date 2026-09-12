@@ -66,6 +66,14 @@ canonical encodingは既存signerの `sort_keys=True, separators=(",", ":"), ens
 貼り替える方式へ戻さない。新しいHost capabilityが必要なら既存catalog allowlistとの適合を別途確認。
 署名が有効でも過剰capability、identity違い、downgrade、unsafe extractionを許さない。
 
+Native confinement policyは同じMediaForge release/version/publisherから配布する追加assetとし、
+別製品・別鍵・別release系列を作らない。manifest schemaは
+[`native-policy-release.schema.json`](../schemas/native-policy-release.schema.json)、purposeは
+`blender-gui-confinement`。`.deb`名の版と署名した版、source commitを一致させる。
+native verifierはOS process内のcryptographyで公開鍵検証だけを行い、秘密鍵/署名生成を持たない。
+既存tar.gz signer/Host consumerは変更しない。native package builder/signerの接続と、
+本番policyの構造・権限・実機受入はまだ未実装であり、このschema追加を公開完了とはしない。
+
 ## 4. release gate
 
 1. MediaForge版、addon版、feature manifest版、tag、signed manifest版を一致させる。
