@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 native login-session boundary
+
+base PR522 MERGED/44ea23e、ux1/3d-native-session-diagnostic、/tmp/mediaforge-cleanup-docs-20260912。
+polkit journalのGNOME agentはsession2、MF PID52609はlogin1 NoSessionForPIDを実確認。
+probeは自分のPIDだけGetSessionByPIDで照会、login_session present/absent/unknown追加。
+presentをdesktop/agent readyと扱わずinteractive_agent not_checked/installation not_implemented維持。
+native33tests成功（9追加）、全52048 exit0/1887pass3skip2warnings/207.91秒。以後product/test変更なし。
+自己点検済み、main PR必須/必要承認0を実確認。commit/push/PR後はexact headのgateを照合する。
+381f78実systemd user transient unitでabsent/challenge、前後transaction空、unit回収済み。
+probeSHA ef5a3f17e2bdde60206519e587ebd05943626eb8ffa718ffb23eeaf81b4eb441。
+Node9/viewer101ms差分0/MF active。OS設定/認可dialog/端末/pkexec実行/稼働版変更なし。
+次はsession外service向けnative承認とtrusted bootstrap/保護stagingの接続を実装する。
+既存GNOME agentへ他PIDをsubjectとして借用しない。Webへpasswordを転送しない。
+本番policy/署名配布/初回適用/永続化/GUI全隔離は未完了、全GOAL/A〜F/GA PARTIAL。
+利用者root/2dev symlink/制作物保持、data fixtureやbackup追加なし。
+
 ## 2026-09-12 native policy release verifier
 
 base PR521 MERGED/a6c592d、ux1/3d-native-policy-verifier、/tmp/mediaforge-cleanup-docs-20260912。

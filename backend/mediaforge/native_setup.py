@@ -34,6 +34,7 @@ class NativeSetupProbe(BaseModel):
     locked: bool | None = None
     authorization: Literal["not_checked", "granted", "challenge", "denied", "unavailable"] = "not_checked"
     interactive_agent: Literal["not_checked"] = "not_checked"
+    login_session: Literal["present", "absent", "unknown"] = "unknown"
     installation: Literal["not_implemented"] = "not_implemented"
 
     @model_validator(mode="after")

@@ -21,6 +21,7 @@ def result(error_code: str | None = None) -> dict[str, Any]:
         "state": "unavailable" if error_code else "detected", "error_code": error_code,
         "version": None, "backend": None, "local_deb_mime": False, "locked": None,
         "authorization": "not_checked", "interactive_agent": "not_checked",
+        "login_session": "unknown",
         "installation": "not_implemented",
     }
 
@@ -67,6 +68,25 @@ def discover(connection: Any, gio: Any, glib: Any) -> dict[str, Any]:
     except (TypeError, ValueError, glib.Error):
         value["authorization"] = "unavailable"
         value["error_code"] = "native_setup_authorization_unavailable"
+    try:
+        # Query only this new worker. Never use a caller-supplied or desktop PID
+        # as the authorization subject. Session presence is not agent readiness.
+        reply = connection.call_sync(
+            "org.freedesktop.login1", "/org/freedesktop/login1",
+            "org.freedesktop.login1.Manager", "GetSessionByPID",
+            glib.Variant("(u)", (os.getpid(),)), glib.VariantType.new("(o)"),
+            gio.DBusCallFlags.NONE, CALL_TIMEOUT_MS, None,
+        )
+        session = reply.unpack()[0]
+        if (isinstance(session, str) and session.startswith("/org/freedesktop/login1/session/")
+                and 0 < len(session.removeprefix("/org/freedesktop/login1/session/")) <= 128):
+            value["login_session"] = "present"
+    except glib.Error as error:
+        if gio.DBusError.get_remote_error(error) == "org.freedesktop.login1.NoSessionForPID":
+            value["login_session"] = "absent"
+        # Other failures leave an explicit unknown; raw OS details are omitted.
+    except (IndexError, TypeError, ValueError):
+        pass  # Malformed replies are unknown, never a present/absent observation.
     return value
 
 

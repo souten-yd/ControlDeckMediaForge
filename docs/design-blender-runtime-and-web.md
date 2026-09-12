@@ -406,6 +406,11 @@ GIはOSのPython側だけで使用しcoreへ追加しない。coreは非同期su
 CheckAuthorizationはflags=0、主体はその接続自身のsystem-bus-name。別userやPIDを指定しない。
 CreateTransaction/InstallFiles、Polkitの対話許可、OS file変更はこのprobeには実装しない。
 detected/承認challengeは導入可能・隔離済みを意味しない。agent到達性はnot_checked、導入はnot_implementedを保つ。
+診断workerはlogin1へ自分自身のPIDだけを照会し、login_sessionをpresent/absent/unknownで返す。
+session path/PIDは結果へ出さず、権限エラー・通信失敗をabsentと混同しない。
+presentはログインsessionへの所属だけで、GUI desktopや認可agentの存在・到達性ではない。
+稼働MFのuser serviceがsession外なら、PC側GNOME agentの登録だけでは直接到達を保証できない。
+他のdesktop PIDを認可主体に指定して借用せず、明示されたnative承認経路が必要。
 次の依存は固定版署名policy package（同じMediaForge配布系統）、検証したbytesの差替え防止、
 OS承認拒否/取消・rollback・再起動後読込。これらを通してからsetupボタンを有効にする。
 native verifierの契約は `schemas/native-policy-release.schema.json`。
