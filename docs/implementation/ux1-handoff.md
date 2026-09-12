@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 v0.28.80 published and installed
+
+準備PR518 MERGED/82bf5eb、tag同commit。ux1/release-0-28-80-acceptance、/tmp/mediaforge-cleanup-docs-20260912。
+受入記録PR519 OPEN、bcb3edfでCLEAN/checks空を確認。merge状態は再開時にghで再照合する。
+build68339 exit0/31619183B、embedded frontend4files一致、既存鍵署名、公開4files再取得/Host consumer成功。
+package実Chrome ja/en320/1280不足表示・設定/戻る、50484正常停止/9163解放。
+通常deck update22079 exit0、.79→.80/healthy/MF52609、Host2302保持。旧.78bundle標準整理/.79保持。
+DB16tables全行digest・Blender登録SHA・2404file metadata保持。file bytes全hashとは言わない。
+installed unmodified HTMLでも日英320/1280入口/設定/戻る/overflowなし/pageerror0、8e44df exit0。
+standalone別ownerのみ。Host opaque iframe、実GUI/物理mobile、OS setupはNOT TESTED。
+maintenance/release-0.28.80の今回作業物95434658B削除、公開物とGit/PR要約だけ残す。制作物変更なし。
+新規backup/DB copyなし。2dev symlink保持。文書のみ、製品gate1850pass206.71秒/Node9/viewer46ms差分0。
+次はこの受入記録PRをmerge後、no-code OS setupの初回承認と本番policyの実装へ戻る。
+編集入口の提供をOS setup完成と呼ばない。直接新規scene、全3DS/GOAL/A〜F/GAはPARTIALのまま。
+再開: git fetch origin; git status --short --branch; gh pr list --head ux1/release-0-28-80-acceptance。
+
 ## 2026-09-12 v0.28.80 release preparation
 
 base PR517 mergece5df45、ux1/release-0-28-80、/tmp/mediaforge-cleanup-docs-20260912。PR作成前。
