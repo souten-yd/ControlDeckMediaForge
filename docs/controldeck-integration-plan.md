@@ -894,6 +894,11 @@ leaves the outbox pending. Retry never re-executes the recipe or creates another
   A detected service is not proof of an installed policy or usable native approval
   agent. This route remains gated until package trust, lifecycle and real confinement
   acceptance; no Media-specific root code or package manager dependency enters Host.
+  Native policy verification uses the same MediaForge publisher identity but a
+  distinct purpose-bound manifest; an ordinary feature bundle is not an OS policy.
+  The verifier accepts immutable bytes, never Host/browser-supplied paths or keys.
+  A future privileged consumer must verify inside its trusted boundary and retain
+  those bytes through protected staging; a non-root check alone is insufficient.
 - ControlDeck signature verification is already present at the referenced current commit. Use the existing
   MediaForge publisher/capability trust; do not add a new feature ID or per-release Host checksum pin.
 - If a generic Host facility is insufficient, document the exact gap and use a separate generic Host PR.

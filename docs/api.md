@@ -1,5 +1,14 @@
 # Media Forge public API
 
+Native OS policy release metadata is specified separately in
+[`native-policy-release.schema.json`](../schemas/native-policy-release.schema.json).
+It is not an HTTP endpoint or an enabled installation capability. The native
+verifier binds canonical JSON/Ed25519 to the existing MediaForge publisher,
+confinement purpose, exact release/source commit and package digest/size.
+The expected identity comes from trusted release metadata, not a browser request.
+Ordinary feature-bundle manifests cannot authorize OS policy installation.
+Native approval, protected staging and installation remain separate pending gates.
+
 Status: G1 public contract frozen; G2 additions are backward-compatible
 Contract version: `1.0`
 Date: 2026-08-22

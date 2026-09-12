@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 native policy release verifier
+
+base PR521 MERGED/a6c592d、ux1/3d-native-policy-verifier、/tmp/mediaforge-cleanup-docs-20260912。
+native policy_release.py＋schema＋test4（OS Python側9cases）。base/integration先行更新。
+既存publisherを実Host catalogに照合、用途/版/source commit/arch/name/size/hashを束縛。
+canonical受信bytesそのものをEd25519検証し同一immutable package bytes保持、path/任意鍵なし。
+OScrypto依存のみ、coreへのimportはtestで禁止。verifierはOS書込も実導入も行わない。
+b204b0 focused4pass/Node9/viewer41ms差分0、78a66d OS9cases/0.016秒/crypto41.0.7。
+verifierSHA b5b3cfca6d3a050be6b6cfbef8927173b2685a2a68aeac7cbdfc897e7c687de0。
+全65040 exit0/1878pass3skip2warnings/212.72秒。以後製品test変更なし。
+自己点検で公開鍵/上限/境界/未実装gate維持、mainはPR必須/必要承認0を実確認。
+次にcommit/push/PRを行い、exact headの必要gateとmerge状態をghで確認する。
+次はtrusted bootstrap/保護staging/native承認を実consumerとして繋ぐ経路を確定。
+本番policy署名配布/OS対話/初回適用/永続化/GUI/モバイル承認は未完了。testを実導入と呼ばない。
+稼働MF active、root利用者branch/2dev symlink/制作物保持。外部fixture/backupなし。
+全GOAL/A〜F/GA PARTIAL、通常CLI不要を維持し、権限を広げたHost APIを作らない。
+
 ## 2026-09-12 native sealed input candidate rejected
 
 base PR520 MERGED/3b0fb59、ux1/3d-native-sealed-input、/tmp/mediaforge-cleanup-docs-20260912。
