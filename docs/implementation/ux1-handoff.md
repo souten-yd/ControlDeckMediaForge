@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 sealed native bootstrap transport
+
+base PR523 MERGED/54084d1、ux1/3d-native-sealed-bootstrap、/tmp/mediaforge-cleanup-docs-20260912。
+予告後一度だけgnome-terminal→45秒timeout→pkexec /usr/bin/trueを試した。a0a279でnative124/45.504秒。
+OS変更なし/承認成功ではない。画面目視は未確認、関連process不在を確認、再表示していない。
+base/integration先行更新、sealed_input.py＋12tests。最大8MiB/4seals/CLOEXEC/context close。
+専用holderのdumpability制限はcoreへ適用しない。root/明示fd継承/trusted holder自身は別の信頼境界。
+実OS Pythonがsealed ZIPapp/同梱verifierを読み、不正署名を拒否。protected holderへのpeer read拒否。
+PackageKit proc-fd不適合の撤回ではなく、root consumer/承認/保護stagingは未受入。
+sealed_input SHA 1d59308a7e03beb00f4461a36a81a322393fabc2d1d5846d8e152e8a084aec9a。
+focused12pass/Node9/viewer39ms差分0/MF active、全35366 exit0/1899pass3skip2warnings/207.17秒。
+以後product/test変更なし。自己点検済/main PR必須/必要承認0確認、commit/push/PR gateへ進む。
+次は固定bootstrap/署名検証済みpackageの信頼と生存期間を
+束縛しnative承認→保護staging→OS packageへ接続。通常CLI不要とbrowser password禁止を維持。
+本番policy/署名配布/適用/永続化/GUI全隔離は未完了、全GOAL/A〜F/GA PARTIAL。
+利用者root/2dev symlink/制作物保持、data fixture/backup追加なし。
+
 ## 2026-09-12 native login-session boundary
 
 base PR522 MERGED/44ea23e、ux1/3d-native-session-diagnostic、/tmp/mediaforge-cleanup-docs-20260912。

@@ -1,5 +1,45 @@
 # Media Forge implementation status
 
+## 2026-09-12 native bootstrapのsealed入力を実装、承認確認は時間切れ
+
+base PR523 MERGED/54084d1、ux1/3d-native-sealed-bootstrap。前turnは所属session診断の実装/受入/mergeで進捗。
+PC session2 active/locked=falseを確認後、利用者へ予告して一度だけnative承認経路を試験。
+argvは `gnome-terminal --wait --window --title=MediaForge… -- timeout --foreground --kill-after=2s
+45s pkexec /usr/bin/true`（すべて絶対実行path/配列）。rootで行う候補は無変更のtrueだけ。
+client envはPATH/LANG/XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESSのみ、stdin無効、client出力のみ取得。
+OS端末のpassword入力をMediaForge/browserへ転送していない。操作はcode入力を要求しない。
+31692→a0a279 exit0は観測scriptの成功で、native command自体はreturncode124/45.504秒/stderr空。
+承認成功や利用者による拒否とは扱わない。確認画面の目視/物理操作はNOT TESTED。
+直後psで該当timeout/pkexec/pkttyagent/terminal-server不在。再表示・再試行していない。
+polkit journalのadmin group警告は観測したが、それだけでtimeout原因と断定しない。
+
+base/integrationを先に更新し、native専用workerのsealed_input.pyを追加。
+既に信頼確認したimmutable bytesだけを最大8MiBでmemfdへ保持し、4seals/検査/CLOEXEC/終了時close。
+書き込みは短いwriteを処理、失敗/consumer例外もfdを回収。path/URL/任意鍵を受けない。
+別関数は専用holder自身をPR_SET_DUMPABLE0→GET確認し、通常の同一UID inspectionを制限する。
+coreで呼ばない。root・明示fd継承は対象外で、同じtrusted process自身が設定を戻すことも防がない。
+callerは信頼判定とholder生存期間を管理し、consumer終了までfdを保持する必要がある。
+署名検証・承認・root protected stagingの代替ではなく、installer/任意コードAPIは追加しない。
+
+283466 focused11pass、実verifier ZIPapp test追加後9c7805 focused12pass。
+実kernelのwrite/shrink/grow/shared writable mmap拒否、short write、invalid input、失敗/終了時close、
+非rootのOS Python -Iによるsealed ZIPappと同梱module読込を確認。
+既存policy_release.pyを変更せずZIPappに含め、OScryptoで不正署名をsignature_invalidとして拒否する
+実consumerも確認。protected専用workerでは別childのparent proc-fd readがPermissionError、
+明示pass_fdsしたconsumerだけ同bytesを読む。これらはcomponent受入でありroot consumer受入ではない。
+PackageKitのproc-fd不適合は維持。Python ZIPappの成功に読み替えてPackageKitをreadyにしない。
+参照: [memfd](https://man7.org/linux/man-pages/man2/memfd_create.2.html)、
+[dumpability](https://man7.org/linux/man-pages/man2/PR_SET_DUMPABLE.2const.html)。
+sealed_input SHA 1d59308a7e03beb00f4461a36a81a322393fabc2d1d5846d8e152e8a084aec9a。
+Node9pass/viewer39ms/生成差分なし/MF active。
+全35366 exit0、1899passed/3skipped/既知2warnings、207.17秒。以後product/test変更なし。
+自己点検でsignature/transport/authorizationの境界、fd所有/取消時の上位責務、core非適用を確認。
+
+NOT IMPLEMENTED/TESTED: 承認成功、署名したbootstrap生成/実配布/元bytesの信頼接続、
+root consumerの読込/保護staging、本番policy/packageの適用/取消rollback/boot、設定UI/GUI全隔離。
+次はこのtransportで固定bootstrapと検証済みpackageを束縛し、native承認からOS package機構へ
+接続する。OS設定/稼働版/制作物変更なし、新規data fixture/backupなし、全GOAL/A〜F/GA PARTIAL。
+
 ## 2026-09-12 native承認のsession境界を実測・診断へ追加
 
 base PR522 MERGED/44ea23e、ux1/3d-native-session-diagnostic。前turnは署名検証を実装/test/mergeした進捗。

@@ -1086,6 +1086,14 @@ core, using the OS crypto provider, with no private key or new core dependency.
 Its first implementation performs no OS writes and does not resolve the pending
 trusted bootstrap/administrator-consent handoff by itself.
 
+Native bootstrap transport may hold already-trusted code/data in sealed Linux
+memory files for the complete approval/consumer lifetime. Sealing prevents byte
+mutation; a dedicated non-root holder also disables its own dumpability to deny
+same-user process inspection/descriptor retargeting. This is not a signature or
+an authorization mechanism. It must not be applied inside core or substituted
+for protected privileged staging. The prior PackageKit proc-fd metadata failure
+still stands; a Python bootstrap consumer requires separate acceptance.
+
 ---
 
 ## 19. Observability

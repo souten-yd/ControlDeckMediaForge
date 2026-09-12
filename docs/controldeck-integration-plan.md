@@ -899,6 +899,11 @@ leaves the outbox pending. Retry never re-executes the recipe or creates another
   The verifier accepts immutable bytes, never Host/browser-supplied paths or keys.
   A future privileged consumer must verify inside its trusted boundary and retain
   those bytes through protected staging; a non-root check alone is insufficient.
+  A non-root native holder may seal trusted bootstrap/package bytes and restrict
+  its own process inspection while waiting. This worker-local boundary adds no
+  privileged Host endpoint; consumer approval, signature trust and protected OS
+  staging remain independent gates. Never make the Host/core non-dumpable as a
+  side effect of a native setup request.
 - ControlDeck signature verification is already present at the referenced current commit. Use the existing
   MediaForge publisher/capability trust; do not add a new feature ID or per-release Host checksum pin.
 - If a generic Host facility is insufficient, document the exact gap and use a separate generic Host PR.
