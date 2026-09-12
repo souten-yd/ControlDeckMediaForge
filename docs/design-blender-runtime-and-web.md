@@ -420,6 +420,13 @@ worker側のpolicy_release.pyは最大4096B manifest/8MiB immutable package byte
 署名した元bytesを検証して同じimmutable bytesを返す。path/任意鍵/URLは受けない。
 このverifierを呼ぶ将来のOS側処理自身の信頼と、保護stagingへの受渡しは未解決。
 検証用コードだけでTOCTOUや初回認可が解決したとはしない。coreにcrypto依存を追加しない。
+native専用holderの入力保持はsealed_input.pyに分離する。既に信頼を確認した最大8MiB bytesを
+memfdへ保持し、WRITE/GROW/SHRINK/SEALを固定、context終了時fdを回収する。
+holder自身のdumpabilityを無効にする関数は専用workerでだけ使い、coreへimportしない。
+同一worker自身は設定を戻せるため任意コードをそこで実行せず、rootや明示fd転送は遮断対象ではない。
+sealed ZIPappをOS Pythonで読む経路と、PackageKitへproc-fdを渡す経路は別物。
+後者の不適合を撤回しない。前者もroot consumer/承認/署名したbootstrapの配布・保護stagingは
+未受入のまま。通常起動やWebから任意コードを渡せるAPIを追加しない。
 参照: [PackageKitの利用経路](https://packagekit.freedesktop.org/pk-using.html)、
 [OS側の導入認可policy](https://github.com/PackageKit/PackageKit/blob/main/policy/org.freedesktop.packagekit.policy.in)。
 web APIがprocessを起動してすぐ忘れる方式や、個人の既存X11/Wayland sessionへの接続を採らない。
