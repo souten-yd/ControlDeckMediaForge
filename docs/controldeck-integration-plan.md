@@ -887,6 +887,13 @@ leaves the outbox pending. Retry never re-executes the recipe or creates another
 - Blender and display processes are non-root isolated runners, managed independently of HTTP request lifetime.
 - Blender install/update/remove are MediaForge setup operations; OS drivers and privileged dependencies
   are diagnosed, not silently installed. Runtime removal preserves user assets and scene history.
+- Initial OS confinement setup is a separate explicit consent flow: prefer the OS's
+  PackageKit/Polkit service to a new privileged Host API. MediaForge owns the fixed
+  policy package and non-root client; the OS owns administrator approval and package
+  installation. Read-only detection must not create package transactions or prompt.
+  A detected service is not proof of an installed policy or usable native approval
+  agent. This route remains gated until package trust, lifecycle and real confinement
+  acceptance; no Media-specific root code or package manager dependency enters Host.
 - ControlDeck signature verification is already present at the referenced current commit. Use the existing
   MediaForge publisher/capability trust; do not add a new feature ID or per-release Host checksum pin.
 - If a generic Host facility is insufficient, document the exact gap and use a separate generic Host PR.

@@ -3,6 +3,25 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 non-interactive native setup discovery
+
+base PR519 mergebd8f378、ux1/3d-native-setup-probe、/tmp/mediaforge-cleanup-docs-20260912。PR520 OPEN。
+d534aeaでCLEAN/checks空、mainはPR必須/必要承認0を再確認。merge状態は再開時にghで照合する。
+base/integration/runtime-WebへOS PackageKit/Polkit明示承認を第一候補として記録。
+backend native_setup.py＋worker_packs/native_setup/probe.py＋24tests。非root/固定read-only DBus/flags0。
+GIはOS Python内のみ、core async subprocessは8秒/4096B/環境制限/取消spawn回収。
+初回focusedは出力超過後PIPE pauseでwaitがhang、2test processをTERM。kill後drain→reapで修正。
+89034 exit0/追加24tests成功。全59043 exit0/1874pass3skip2warnings/218.00秒、以後product/test変更なし。
+Node9/viewer58ms差分0/稼働unit active。自己点検: 固定2method/flags0、root拒否、異常/取消cleanupと出力上限を確認。
+実probe7ba348 exit0/0.029909秒/heartbeat27。
+PackageKit1.2.8/apt/localdeb MIME/locked false/Polkit challenge、前後package/version digest不変、transactions空。
+対話・package導入・policy変更なし。診断UI/API接続もなし。CLIは開発者確認だけで利用者へ要求しない。
+installation not_implemented/agent not_checkedを維持。稼働署名.80は変更せず、2dev symlink/利用者root保持。
+次は全gateとこのPRを完了後、固定された専用起動経路を含む本番policy package/OS承認lifecycleを実装する。
+固定署名/差替え防止/承認agent/取消rollback/boot/GUI/モバイルPC承認は未完了、全GOAL/A〜F/GA PARTIAL。
+旧PR-U0〜7判定を変更しない。新しいHost root daemonや任意sudo APIを作らず、必要な汎用変更は別PR。
+再開: git fetch origin; git status --short --branch; gh pr list --head ux1/3d-native-setup-probe。
+
 ## 2026-09-12 v0.28.80 published and installed
 
 準備PR518 MERGED/82bf5eb、tag同commit。ux1/release-0-28-80-acceptance、/tmp/mediaforge-cleanup-docs-20260912。
