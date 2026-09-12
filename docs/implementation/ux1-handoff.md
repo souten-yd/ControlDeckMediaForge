@@ -5,7 +5,8 @@
 
 ## 2026-09-12 non-interactive native setup discovery
 
-base PR519 mergebd8f378、ux1/3d-native-setup-probe、/tmp/mediaforge-cleanup-docs-20260912。PR作成前。
+base PR519 mergebd8f378、ux1/3d-native-setup-probe、/tmp/mediaforge-cleanup-docs-20260912。PR520 OPEN。
+d534aeaでCLEAN/checks空、mainはPR必須/必要承認0を再確認。merge状態は再開時にghで照合する。
 base/integration/runtime-WebへOS PackageKit/Polkit明示承認を第一候補として記録。
 backend native_setup.py＋worker_packs/native_setup/probe.py＋24tests。非root/固定read-only DBus/flags0。
 GIはOS Python内のみ、core async subprocessは8秒/4096B/環境制限/取消spawn回収。
