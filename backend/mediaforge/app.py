@@ -129,6 +129,7 @@ from .scene_recipes import (
     SceneMaterialRequest,
     SceneReferenceRequest,
     scene_operation_types,
+    workspace_scene_create_request,
 )
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .preferences import PreferenceError
@@ -3752,6 +3753,8 @@ def create_app(
                         )
                     elif method == "creative.evaluate":
                         result = await evaluate_creative_candidates(params, identity)
+                    elif method == "scenes.create":
+                        result = await submit_scene_tool(workspace_scene_create_request(params), identity)
                     elif method == "scenes.list":
                         if params:
                             raise ValueError("scene list accepts no parameters")

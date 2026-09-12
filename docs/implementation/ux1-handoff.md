@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 workspace scene creation admission
+
+base PR524 MERGED/3e274e5、ux1/3d-workspace-scene-create、/tmp/mediaforge-cleanup-docs-20260912。
+承認テスト再表示なし。Webの新規scene入口不足へprivate WS scenes.create追加。
+nameだけ→固定2m cubeのSceneCreateRequest→既存submit_scene_tool/SceneRecipeJobManager。
+新Job/asset基盤なし。actor/runtime pin/Host Job/版は既存管理。完成/GUI開始ではなくqueued Job受付。
+23f0d8 focused14pass（ASGI TestClient＋mock admission、実Host/Blender生成ではない）。
+Node9/viewer50ms差分0/MF active。全33129 exit0/1913pass3skip2warnings/207.51秒、以後product/test変更なし。
+commit/push後Draft PRで保留し、UI/新入口の実機受入前にmergeしない。
+次は同じbranch/PRの続きを行う（origin/mainにはまだ本変更がない）。
+capabilityとtransport条件、新規作成UI/進捗/取消/選択を接続し
+実Host/Blender/browserで作成→選択→編集を受入。standalone mirror/署名配布も未接続。
+OS setup/本番隔離/初回承認の残件は維持、全GOAL/A〜F/GA PARTIAL。
+root利用者branch/2dev symlink/制作物保持、外部fixture/backup/OS変更なし。
+
 ## 2026-09-12 sealed native bootstrap transport
 
 base PR523 MERGED/54084d1、ux1/3d-native-sealed-bootstrap、/tmp/mediaforge-cleanup-docs-20260912。

@@ -1,5 +1,14 @@
 # Media Forge public API
 
+The authenticated embedded workspace has a private `scenes.create` action with
+exactly `{"name": "My scene"}`. It submits a fixed two-metre starting cube through
+the existing detached scene-recipe Job manager and returns Job/Host Job IDs,
+status, asset IDs and input digest—not a completed scene or Blender GUI session.
+Recipes, scripts, ownership, runtime IDs and paths are not browser inputs for
+this action. Existing `media.scene.create` remains the typed Agent interface.
+This private admission action is not yet wired to a new-scene UI or standalone
+mirror; it does not indicate OS confinement/setup readiness.
+
 Native OS policy release metadata is specified separately in
 [`native-policy-release.schema.json`](../schemas/native-policy-release.schema.json).
 It is not an HTTP endpoint or an enabled installation capability. The native

@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-13 Webの新規scene作成向けadmissionを追加
+
+base PR524 MERGED/3e274e5、ux1/3d-workspace-scene-create。前turnはsealed transport実装/test/mergeで進捗。
+native承認テストを再表示せず、GOAL-04の制作ファイル未所持時の導線を調査した。
+既存Webは.blend import/既存scene編集のみ、新規typed制作はAgent endpointだけ。
+Web専用の第二Job/asset基盤を作らず、認証済みprivate WSへscenes.createを追加した。
+nameだけ受け、server側で2m cube一つの既存SceneCreateRequestを組み立てる。
+submit_scene_tool→既存SceneRecipeJobManagerを利用し、runtime pin/Host detached Job/owner/版管理は
+既存経路のまま。返すのはJob ID/status/Host Job ID/input SHA/asset IDsで、scene完成やGUI起動ではない。
+nameの前後空白を除去し、空/制御文字/path/超過を既存型で拒否する。recipe/script/owner/runtimeは受けない。
+既存Agent tool/public schemaの意味を変えず、API文書へprivate actionと未接続の範囲を追記。
+
+23f0d8 focused14pass。型付き初期template/各request独立性と、不正10入力を検査。
+ASGI TestClientの認証済みWSから既存manager.submitへ同actor user:7/固定recipeが渡ること、
+queued detached応答とruntime不足/Host障害のerror mapping、追加script拒否を確認。
+admissionはmockであり、今回の実Host/Blender Job生成や実ブラウザ成功ではない。
+既存managerのdurabilityと新しいWeb入口の実機制作一巡を混同しない。
+Node9pass/viewer50ms/生成差分なし/MF active。
+全33129 exit0、1913passed/3skipped/既知2warnings、207.51秒。以後product/test変更なし。
+UIと新入口の実機受入がまだなので、本変更はDraft PRで保持し、この段階でmergeしない。
+同じbranch/PRでUIと実機受入を続け、利用者動作を満たしてから通常merge gateへ進む。
+
+NOT IMPLEMENTED/TESTED: 新規作成ボタン、受付後の進捗/取消/完了scene選択、standalone mirror、
+実Hostから新しい入口でのBlender制作・browser受入、署名配布。次はcapability/transport表示条件と
+新規作成UIを接続し、同sceneを作成→選択→編集する実機受入へ進む。
+native OS setup/署名bootstrap/本番policy適用/永続化/GUI全隔離の残件は維持。全GOAL/A〜F/GA PARTIAL。
+今回OS設定/稼働版/制作物/利用者root変更なし、外部data fixtureやbackupなし。
+
 ## 2026-09-12 native bootstrapのsealed入力を実装、承認確認は時間切れ
 
 base PR523 MERGED/54084d1、ux1/3d-native-sealed-bootstrap。前turnは所属session診断の実装/受入/mergeで進捗。
