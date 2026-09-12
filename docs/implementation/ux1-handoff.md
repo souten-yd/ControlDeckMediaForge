@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 実機検証前の保護領域確認
+
+同ux1/3d-workspace-scene-create/Draft PR525、base3b400a5。停止/login回答なし、本番変更なし。
+実processのdata設定allowlistを確認し、配布版隣のfeatures/media-forge/dataと実体を区別した。
+実永続root /data1tb/ControlDeck/data/feature-data/media-forge、DBはそのdata/media-forge.sqlite3。
+Web packは同root/runtimes/blender-web。token値を出力せず、他processの認証を借用していない。
+read-only DBでJob1323全終端/GUI72全終端/runtime operations43全終端、asset1196/scene58/revision183。
+working committed49/recovery12/released35。recoveryは検証fixtureではなく保護対象、消さない。
+照会は個別時点。検証停止直前にidleと対象を再確認し、現状値だけで停止可能と保証しない。
+初期推定features/.../dataのDB不在はis_fileで拒否、DBは作成していない。新backup/候補dataもなし。
+docsのみcommit/push、製品/test/script差分なし。基準1920pass3skip208.42秒を今回再実行と呼ばない。
+次は停止・正規PC login可否の回答を確認して実Host/Blender新入口一巡を準備する。
+同じ調整条件の2turn目だが、今回の保護領域特定は新しい証拠。全体のnative setup等も未完了。
+Draft/未merge/未署名公開、全GOAL/A〜F/GA PARTIAL。root利用者branch/2dev symlink保持。
+
 ## 2026-09-13 PR525 shutdown/drainと実機受入の調整
 
 同ux1/3d-workspace-scene-create/Draft PR525、basec86e390。root利用者branch/2dev symlink保持。

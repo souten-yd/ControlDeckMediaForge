@@ -1,5 +1,29 @@
 # Media Forge implementation status
 
+## 2026-09-13 実機切替前の永続領域・idle読取監査
+
+base3b400a5、同PR525/Draft。前turnはshutdown/drain実装・test・pushで進捗。
+停止/login可否の回答は未着。自動継続を許可にせず、本番切替やbrowser認証を開始しない。
+MainPID52609/WorkingDirectory versions/0.28.80を再確認。初期に推定した
+features/media-forge/data/media-forge.sqlite3は存在せず、read-only接続前のis_fileで拒否した。
+同dataにはreference-analysis-cacheだけがあり、配布先のdataを制作データ本体と誤認しない。
+
+実process環境の固定allowlist（data/root設定だけ、token値出力なし）から正規領域を確認:
+
+- CONTROL_DECK_FEATURE_DATA_DIR: /data1tb/ControlDeck/data/feature-data/media-forge
+- MEDIA_FORGE_DATA_DIR: /data1tb/ControlDeck/data/feature-data/media-forge/data
+- MEDIA_FORGE_BLENDER_WEB_ROOT: /data1tb/ControlDeck/data/feature-data/media-forge/runtimes/blender-web
+
+このDBをsqlite URI mode=roで照会した。840ca9: Jobs canceled10/failed226/succeeded1087、
+runtime operations canceled3/failed5/ready35。2ab4d3: GUI failed4/interrupted11/stopped57、assets1196。
+4d8d79: scenes58/revisions183、working committed49/recovery12/released35。
+各照会時点で稼働中stateはないが、別query間のatomic snapshotや将来のidleを保証しない。
+特にrecovery12件は利用者の未確定制作物として保護し、検証cleanup対象にしない。
+検証dataはこの永続領域とは別の明示作業領域へ置き、停止直前にJob/GUI/setup/workingを再確認する。
+今回は候補data、backup、browser、検証assetを作っておらず、削除・DB更新・OS変更もなし。
+記録のみ。製品/test/script差分なし、基準は直前1920pass/3skip/208.42秒、今回の再実行ではない。
+PR525 OPEN/Draft/head3b400a5をGitHubで確認。全GOAL/A〜F/GAはPARTIAL。
+
 ## 2026-09-13 PR525停止との取消競合・実機受入の調整
 
 basec86e390、同ux1/3d-workspace-scene-create/Draft PR525。前turnは独立cancel合流/test/pushで進捗。
