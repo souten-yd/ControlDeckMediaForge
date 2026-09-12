@@ -270,6 +270,14 @@ class SceneRecipeJobManager:
                 self._tasks.pop(job_id, None)
                 self._executions.pop(job_id, None)
 
+    def creation_list(self, owner: str) -> dict[str, Any]:
+        """Off-loop snapshot for the workspace, without exposing another actor."""
+        items = []
+        for job_id in self.store.list_scene_creation_job_ids(owner):
+            task = self.store.get_scene_recipe_task(job_id, owner=owner)
+            items.append({**self.projection(job_id, owner), "name": task.request.get("name", "")})
+        return {"items": items}
+
     def projection(self, job_id: str, owner: str) -> dict[str, Any]:
         task = self.store.get_scene_recipe_task(job_id, owner=owner)
         job = self.store.get_job(job_id)

@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from mediaforge.domain import JobStatus
+from mediaforge.domain import JobRequest
 from mediaforge.host.client import HostApiError
 from mediaforge.scene_recipe_jobs import SceneRecipeJobManager
 from mediaforge.scene_recipes import workspace_scene_create_request
@@ -75,3 +76,39 @@ def test_admission_errors_are_returned_without_claiming_creation(
         answer = call(socket, "scenes.create", {"name": "New scene"})
     assert answer["ok"] is False and answer["error"]["code"] == failure.code
     assert "result" not in answer
+
+
+def test_creation_history_is_owned_durable_and_ignores_cleared_jobs(tmp_path: Path) -> None:
+    client, headers, _ = host_client(tmp_path, token="valid-user")
+    with client:
+        store = client.app.state.store
+        ids = []
+        for owner, operation in [("user:7", "scene.create"), ("user:8", "scene.create"), ("user:7", "scene.edit")]:
+            job = store.create_job(JobRequest(operation="media.inspect", intent="fixture"), host_managed=True)
+            ids.append(job.id)
+            store.create_scene_recipe_task(job.id, owner=owner, host_job_id="fixture", operation=operation,
+                runtime_id="fixture", runtime_version="4.5.9", base_revision_id=None,
+                input_sha256="a" * 64, idempotency_key="b" * 64, request={"name": "<b>Robot</b>"})
+        for _ in range(2):
+            with client.websocket_connect("/ws", headers=headers) as socket:
+                answer = call(socket, "scenes.creation.list", {})
+                assert answer["ok"] is True, answer
+                assert [item["job_id"] for item in answer["result"]["items"]] == [ids[0]]
+                assert answer["result"]["items"][0]["name"] == "<b>Robot</b>"
+                denied = call(socket, "scenes.creation.cancel", {"job_id": ids[1]})
+                assert denied["ok"] is False
+        assert store.get_job(ids[1]).status == JobStatus.QUEUED
+        assert not store.cancel_requested(ids[1])
+        store.update_job(ids[0], status=JobStatus.SUCCEEDED)
+        store.clear_finished_jobs()
+        assert store.list_scene_creation_job_ids("user:7") == []
+
+
+def test_creation_capability_requires_host_identity_even_without_runtime(tmp_path: Path) -> None:
+    client, headers, _ = host_client(tmp_path, token="valid-user")
+    with client:
+        with client.websocket_connect("/ws", headers=headers) as socket:
+            result = call(socket, "capabilities.get", {})["result"]
+            assert result["capabilities"]["3d.scene_recipe"]["workspace_create"] is True
+        result = client.get("/api/v1/capabilities").json()
+        assert result["capabilities"]["3d.scene_recipe"]["workspace_create"] is False

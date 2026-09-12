@@ -3,6 +3,38 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 PR525 UI/history検証・push
+
+同ux1/3d-workspace-scene-create、Draft PR525、base main3e274e5/既存head d1b7f85からの追加。
+作業tree /tmp/mediaforge-cleanup-docs-20260912。利用者root work branch/開発symlinkを保持。
+前turnは説明のみno progress。今回全test旧7884のhandle不在/実processなしを確認し再実行。
+88871は1914pass/1fail/3skip207.82秒: capabilityの認証依存flagと既存完全一致testが衝突。
+workspace_create false/trueを個別assert、他fieldは完全一致維持。関連test49516 exit0。
+再全37413/1942a6 exit0、1915pass3skip2既知warnings213.54秒。以後product/test/script変更なし。
+Node13pass/component実Chrome日英320/1280全4条件pass/viewer39ms差分なし/diff check成功。
+本番unit active/current0.28.80/実health healthy。新規ChromeでHost URL→/login、password input1。
+browser終了、OS承認・認証設定・本番asset・service変更なし。componentを実Host制作の受入にしない。
+今回UI/history/contract testとdocsを同PRへcommit/push。まだDraft/未merge/未署名公開。
+次の一作業: 新cancel入口が再利用するSceneRecipeJobManager.cancelの同期Store処理をoff-loop化し、
+取消要求の切断時drain/owner拒否を検証する。その後listのHost終端reconcile/再接続購読と実機受入。
+実Host browserは正規loginが必要。native setup/永続OS policy/全GUI隔離は未完成のまま。
+全GOAL/A〜F/GA PARTIAL。既存U0〜7の完了状態は変更しない。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
+## 2026-09-13 PR525 scene creation UI/history
+
+同ux1/3d-workspace-scene-create、Draft PR525/d1b7f85から継続、/tmp/mediaforge-cleanup-docs-20260912。
+新規create form/日英/status/cancel/select、owner別最新20未clear creation list/DBを追加。
+cap workspace_create＋runtimeでgate、standaloneはflag false/明示案内。DB listはto_thread。
+表示はtextContent、reload後履歴再取得、失敗時既存表示保持、受付後watch失敗を作成失敗にしない。
+最初のNode/runtime fixtureとPython不存在属性の不備を修正。新Node4/最終focused16成功。
+実Chrome component97dfe8 exit0、ja/en320/1280 submit/cancel/select/overflowなし/errors0。
+明示backend fixtureのみ、実Host/Blender/全opaque workspaceはNOT TESTED。browser終了、外部fixtureなし。
+Node全13/viewer39ms差分0、全7884の終端不明。上記再開記録の再実行結果を正とする。
+同PRをDraftで維持。次は実Host/Blenderの新入口/取消/再接続/Host終端整合を受入してからmerge。
+standalone mirror/署名公開とnative OS setup/全GUI隔離は残件。全GOAL/A〜F/GA PARTIAL。
+利用者root/2dev symlink/制作物/OS設定/稼働版保持、承認画面は再表示しない。
+
 ## 2026-09-13 workspace scene creation admission
 
 base PR524 MERGED/3e274e5、ux1/3d-workspace-scene-create、/tmp/mediaforge-cleanup-docs-20260912。

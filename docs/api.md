@@ -6,8 +6,14 @@ the existing detached scene-recipe Job manager and returns Job/Host Job IDs,
 status, asset IDs and input digest—not a completed scene or Blender GUI session.
 Recipes, scripts, ownership, runtime IDs and paths are not browser inputs for
 this action. Existing `media.scene.create` remains the typed Agent interface.
-This private admission action is not yet wired to a new-scene UI or standalone
-mirror; it does not indicate OS confinement/setup readiness.
+The new-scene UI uses private `scenes.creation.list` (no arguments, latest20
+uncleared scene-creation Jobs belonging to the authenticated actor) and
+`scenes.creation.cancel` (`job_id`, owner check and jobs.write required).
+The `3d.scene_recipe.workspace_create` flag advertises this authenticated
+workspace route, independently of runtime availability. Submission additionally
+requires the existing runtime availability state. Standalone advertises false;
+there is no standalone creation mirror yet. This is not OS confinement/setup
+readiness or completed real-Host/browser acceptance.
 
 Native OS policy release metadata is specified separately in
 [`native-policy-release.schema.json`](../schemas/native-policy-release.schema.json).

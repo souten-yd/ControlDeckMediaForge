@@ -1,5 +1,63 @@
 # Media Forge implementation status
 
+## 2026-09-13 PR525再開監査・未回収テストの再検証
+
+前turnはセットアップ方針の説明のみで、実装上はno progress。今回git fetchとGitHub照会で
+PR213 MERGED、PR525 OPEN/Draft/head d1b7f85を確認。利用者root branchには触れていない。
+旧全test session7884はUnknown process id、psにもpytest/mf.sh testの実行なし。
+終了結果は回収できないため成功に換算せず、同じ製品差分で全test session88871を開始した。
+88871はexit1、1914passed/1failed/3skipped/2warnings/207.82秒。
+失敗は既存workspace/public capability完全一致test。追加workspace_createは認証/経路で差を持つ設計のため、
+両値false/trueを個別assertした後、このfieldだけ正規化し、他全fieldの完全一致を維持した。
+修正後test_workspace_transport.py＋test_workspace_scene_create.pyは49516 exit0。
+全test37413/1942a6はexit0、1915passed/3skipped/既知2warnings/213.54秒。
+これ以後product/test/script変更なし。同PRへcommit/pushし、Draftのまま継続する。
+Node13pass、実Chrome componentの日英320/1280全4条件pass、viewer39ms、git diff --check成功。
+componentはfixture backendのみで、実Host/Blender/opaque iframeの受入ではない。
+本番unitはactive、currentはversions/0.28.80。再起動・OS変更・本番制作物変更なし。
+実HTTP GET9130/healthはhealthy、8765/x/media-forge/workspaceは200。
+後者はHTML取得だけであり、認証済みiframe/sessionや制作権限の証拠ではない。
+94050/86969d exit0: 新規headless Chrome contextから同Host URLへアクセスすると/loginへ遷移、
+password input1、iframeなし、pageerrors0。browserはfinallyで終了し、認証情報の入力/変更は行わない。
+loopbackのHTML200を認証不要と解釈せず、実Host UI受入には正規のログイン経路が必要。
+
+reviewで新creation.listはoff-loopだがHost終端reconcileを呼ばないことを確認した。
+新cancel入口が再利用する既存manager.cancelには同期Store照会/取消/投影が残る。
+実機受入前にこの境界と、再認証後のoutbox照合、再接続時の進捗購読を確認・補完する。
+この既知残件をテスト成功だけで完了にせず、PR525はDraftを維持する。
+設定からのnative OS policy導入/管理者承認/永続化も未完成。全GOAL/A〜F/GA PARTIAL。
+
+## 2026-09-13 PR525の新規scene UIと所有者別履歴を接続
+
+ux1/3d-workspace-scene-create、Draft PR525/d1b7f85から継続。前turnはadmission実装/test/pushで進捗。
+新規作成form/日英案内/名前入力、受付・進捗、取消、完了scene選択を追加。
+capabilityのworkspace_create（Host jobs.write付きidentityのみ）とruntime availabilityの両方で
+作成をgate。standaloneは対応flag falseと案内を出す。任意recipe/二重クリックの追加送信をしない。
+受付済み後のjobs.watch失敗を作成失敗へ変換せず、受付応答不明時も再送前に状況確認を案内する。
+
+scenes.creation.listはstoreの固定SQLでactor owner/scene.create/未clearだけ、最新20件。
+新規listのDB読取/projectionはasyncio.to_threadで実施。scenes.creation.cancelはjobs.writeと
+既存managerのowner checkを使用。第二Job/履歴基盤なし。reload後はこの履歴を再取得する。
+既存Job通知/scene snapshotから更新し、手動refreshも用意。取得失敗時は既存表示と明示errorを保持。
+完了Jobのscene.idを既存loadScenes/openSceneへ渡し、勝手にGUIを起動しない。
+
+初回testは2つのfixture不備で失敗: Node fixtureにruntime状態が欠落、PythonはJobに存在しない
+cancel_requested属性を参照。製品runtime条件は緩めず、fixture/既存Store.cancel_requested照会を修正。
+106f13でNode新4成功、以後最終focused16成功を7884の出力で確認。
+所有者7/8とscene.editを分けたDB fixture、WS再接続、他owner取消拒否/取消flag不変、clear除外、
+standalone/Host capability差を確認。Nodeは二重送信防止/受付後watch失敗/取得失敗保持/XSS literal/選択取消。
+
+97dfe8 exit0: 実Chromeで製品form/CSS/rendererを使うcomponent script
+`node scripts/3ds_scene_create_component.mjs`。日英×320/1280でsubmit/cancel/select、
+unsupported時disabled、名前をHTMLとして解釈しないこと、横overflowなし/pageerrors0を確認。
+backend応答は明示fixtureであり、Host・Blenderへ実Jobは送っていない。全workspace/opaque iframe/
+実制作・保存・GUI受入へ拡大しない。browserは終了、外部data/screenshot/backupなし。
+Node全13pass/viewer39ms/生成差分なし。全7884の終端は回収不能、上の再開記録で再検証した。
+
+PR525はDraftを維持。次は新入口で実Host/Blender Job作成→進捗/取消→完成scene選択を実機受入し、
+Host terminal同期/再接続失敗条件も確認する。standalone mirror/署名配布は未実施。
+native承認画面再表示/OS設定/稼働版/制作物変更なし。全GOAL/A〜F/GAはPARTIAL。
+
 ## 2026-09-13 Webの新規scene作成向けadmissionを追加
 
 base PR524 MERGED/3e274e5、ux1/3d-workspace-scene-create。前turnはsealed transport実装/test/mergeで進捗。

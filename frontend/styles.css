@@ -340,6 +340,11 @@ html:has(#scene-compare-dialog[open]) { overflow: hidden; }
 .scene-blender-tools { display: grid; gap: 6px; padding: 10px 0; }
 .scene-blender-tools .hint { margin: 0; }
 #scene-blender-entry { grid-column: 1 / -1; min-width: 0; }
+#scene-create-form { display: grid; gap: 10px; min-width: 0; }
+#scene-create-form h2 { margin: 0; font-size: 1.1rem; }
+#scene-create-form button { min-height: 44px; white-space: normal; }
+.scene-creation-job { padding: 8px 0; min-width: 0; }
+.scene-creation-job p { overflow-wrap: anywhere; }
 #scene-blender-entry h2 { margin: 0; font-size: 1.1rem; }
 #scene-blender-selection { overflow-wrap: anywhere; }
 #scene-blender-entry button { min-height: 44px; white-space: normal; }
