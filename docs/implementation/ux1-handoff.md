@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-12 v0.28.80 release preparation
+
+base PR517 mergece5df45、ux1/release-0-28-80、/tmp/mediaforge-cleanup-docs-20260912。PR作成前。
+addon/coreの版数0.28.80とrelease noteだけ追加、既存画像修正/契約/DBは保持。
+全79302 exit0/1850pass3skip2warnings/206.71秒。Node9/viewer46ms差分0。以後product/test変更なし。
+前段sourceの実Chrome ja/en320/1280受入あり。配布版実機は未確認。
+次: 全gate完了後prepare PRをmergeし、その固定commitからbundle構築・既存鍵署名・公開再取得を行う。
+既存build venv=/data1tb/ControlDeckMediaForge/runtimes/bundle-build/.venv、6.22.0/46.0.7確認。
+publisher key=/home/souten/.keys/media-forge.pem (0600)、読取内容の出力禁止、鍵生成なし。
+稼働.79は維持、jobsは全終端確認。更新前にGUI/操作状態を再確認し、稼働中なら更新しない。
+不要backupを追加しない。作業物はfeature-data/media-forgeの管理領域へ置き終了後に回収する。
+no-code OS setup/本番隔離/直接新規scene/全GOAL/A〜F/GAはPARTIAL。旧PR-U0〜7判定を変更しない。
+再開: git fetch origin; git status --short --branch; gh pr list --head ux1/release-0-28-80。
+
 ## 2026-09-12 Web Blender entry visible before selection
 
 base origin/main6c659e5/PR516、ux1/3d-web-entry、/tmp/mediaforge-cleanup-docs-20260912。PR517 OPEN。

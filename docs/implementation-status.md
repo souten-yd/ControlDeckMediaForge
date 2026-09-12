@@ -1,5 +1,18 @@
 # Media Forge implementation status
 
+## 2026-09-12 v0.28.80の配布準備
+
+PR517はMERGED/ce5df4518919447b961e19609c7bb64abf277a48をghで確認。
+同mainからux1/release-0-28-80を作成。addon/coreを0.28.80へ揃え、release noteを追加。
+配布対象の機能は先頭の編集入口と設定への導線。no-code OS setupを提供済みと表示しない。
+v0.28.79の画像修正を保持。DB/public契約/既存制作物/Blender登録は変更しない。
+全79302 exit0、1850passed/3skipped/既知2warnings、206.71秒。Node9pass/viewer46ms差分0。
+以後product/test変更なし。配布build/sign/consumer再取得/標準update/導入版受入は未実施。
+既存bundle-build runtimeのPyInstaller6.22.0/cryptography46.0.7を確認、依存追加なし。
+既存publisher keyはmode0600、内容を出力せず。新規鍵なし。
+read-only DBでjobs1321件は全終端、runtime操作43件全終端、model操作0件。GUI状態は更新直前に別途確認。
+ユーザー指示を受け、不要な旧backupを復活させず、制作物の保持は照合記録で確認する。
+
 ## 2026-09-12 Web Blenderの編集入口を未選択時にも表示
 
 base origin/main6c659e5/PR516、ux1/3d-web-entry。PR213はMERGED/9469d8eをghで再確認。
