@@ -1,5 +1,28 @@
 # Media Forge implementation status
 
+## 2026-09-13 PR525再接続後の進捗再取得と操作DOM保持
+
+basee9eb846、同ux1/3d-workspace-scene-create/Draft PR525。前turnはHost終端outbox接続・test・pushで進捗。
+既存共有Job通知には10件の購読上限があるため、それだけでは作成履歴最新20件の更新を保証できない。
+作成中Jobまたは履歴取得失敗がある間、既存scenes.creation.listを5秒間隔で再取得するよう補完した。
+一度の取得が終わってから次を予約し、通知/手動更新と既存refresh pendingで合流する。
+新Jobを再送せず、失敗時は既存表示とerrorを保持する。全件終端/機能非対応/disableでtimerを回収。
+disable.pendingで直ちにrenderを呼びtimer/操作を無効化し、取得中応答後にも再予約しない。
+
+Job IDごとに既存row/buttonを再利用し、進捗・言語更新ではlabelだけを変える。
+actionが変わった場合だけbuttonを交換し、取消/選択の処理中flagは同rowに保持する。
+同画面の重複クリックを拒否し、進捗更新でfocusや押下先を失わない。
+Node新2testでpushなしの復元→進捗→終端/5秒timer1件、取得失敗の定期再試行/disable停止を確認。
+全Node15pass。componentは実Chromeで日英320/1280の全4条件、通知なしで実5秒timerから65%表示へ更新、
+取消button同一node/focus保持、実click取消/選択、横overflowなし/pageerrors0を確認した。
+最初のcomponent呼出はwaitForFunctionのtimeoutをarg位置に渡していたため既定timeoutで実行された。
+第三引数へ修正した52389/d48cd7 exit0で全4条件を再確認。製品の5秒設定を短縮して試験していない。
+backendは明示fixture、実Host/Blender/opaque iframeの制作受入に拡大しない。browserは終了。
+viewer51ms/生成差分なし、全21910/9eb572 exit0、1918passed/3skipped/既知2warnings/209.43秒。
+以後product/test/script変更なし。同PRへcommit/pushする。
+次は複数独立cancel要求が同じrunner cleanupを二重取消しないことを確認・補完して実機受入へ進む。
+本番・OS設定・制作物変更なし、PRはDraft維持。native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+
 ## 2026-09-13 PR525履歴再接続からのHost終端照合
 
 baseacb2318、同ux1/3d-workspace-scene-create/Draft PR525。前turnは取消off-loop/drain実装・検証・pushで進捗。

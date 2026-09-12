@@ -47,6 +47,16 @@ try {
     await page.locator("#scene-create-submit").click();
     await page.waitForFunction(() => state.sceneCreationJobs.length === 1 && !state.sceneCreating);
     assert.equal(await page.evaluate(() => calls.filter(item => item.method === "scenes.create").length), 1);
+    await page.locator(".scene-creation-job button").focus();
+    await page.evaluate(() => {
+      window.fixtureCancelButton = document.querySelector(".scene-creation-job button");
+      // No job.changed event: exercise the real five-second reconciliation timer.
+      jobs = [{...jobs[0], status: "running", progress: 0.65}];
+    });
+    await page.waitForFunction(() => document.querySelector(".scene-creation-job p").textContent.includes("65%"),
+      null, {timeout: 8000});
+    assert.ok(await page.evaluate(() => document.querySelector(".scene-creation-job button") === window.fixtureCancelButton
+      && document.activeElement === window.fixtureCancelButton));
     await page.locator(".scene-creation-job button").click();
     await page.waitForFunction(() => state.sceneCreationJobs[0].status === "canceled");
     await page.evaluate(() => {
@@ -60,7 +70,8 @@ try {
     await page.evaluate(() => {state.capabilities["3d.scene_recipe"].workspace_create = false; renderSceneCreation();});
     assert.equal(await page.locator("#scene-create-submit").isDisabled(), true);
     assert.deepEqual(errors, []);
-    reports.push({language, width, submit: true, cancel: true, select: true, no_overflow: true, page_errors: errors});
+    reports.push({language, width, submit: true, timed_progress: true, retained_focus: true,
+      cancel: true, select: true, no_overflow: true, page_errors: errors});
     await page.close();
   }
 } finally {await browser.close();}

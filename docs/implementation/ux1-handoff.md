@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 PR525進捗再取得・操作DOM保持
+
+同ux1/3d-workspace-scene-create/Draft PR525、basee9eb846。利用者root/2dev symlink保持。
+共有push購読上限10件に依存せず、active creation/取得失敗中だけ5秒ごと最新20件履歴を再取得。
+single timer/refresh coalescing、終端/非対応/disableで停止。要求再送による制作はしない。
+row/buttonをJob IDで再利用、進捗更新中のfocus保持、同row busyで重複クリック拒否。
+Node15pass、実Chrome component日英320/1280で実5秒timer→65%表示/同button/focus/取消/選択成功。
+timeout引数位置修正後の52389/d48cd7 exit0を最終component証拠とする。backendはfixtureのみ。
+viewer51ms差分0、全21910/9eb572 exit0、1918pass3skip2warnings209.43秒。
+以後product/test/script変更なし、同PRcommit/push。
+次はmanagerの複数独立cancel要求でcleanupを二重取消しないことを検証・補完する。
+実Host/Blender新入口の一巡は未受入、正規login必要。Draft維持/未merge/未署名公開。
+OS承認/本番/制作物変更なし、native setup/全GUI隔離/全GOAL/A〜F/GA PARTIAL。
+再開: git fetch origin; git status --short --branch; gh pr view 525 --json state,isDraft,headRefOid。
+
 ## 2026-09-13 PR525履歴再認証とHost終端outbox
 
 同ux1/3d-workspace-scene-create/Draft PR525、baseacb2318。利用者root/開発symlink保持。

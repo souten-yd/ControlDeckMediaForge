@@ -183,6 +183,7 @@ const state = {
   sceneCreationStatus: "",
   sceneCreationRefreshing: false,
   sceneCreationRefreshPending: false,
+  sceneCreationRefreshTimer: null,
   sceneStatusKey: "",
   sceneBackup: null,
   sceneBackupStatusKey: "",
@@ -5001,41 +5002,81 @@ function renderSceneCreation() {
   byId("scene-create-submit").textContent = text.createSubmit;
   byId("scene-create-refresh").textContent = text.createRefresh;
   const supported = sceneCreationSupported();
+  if (!supported || state.disabled) {
+    clearTimeout(state.sceneCreationRefreshTimer);
+    state.sceneCreationRefreshTimer = null;
+  }
   byId("scene-create-submit").disabled = state.disabled || state.sceneCreating || !supported
     || state.capabilities?.["3d.scene_recipe"]?.state !== "available" || !sceneRuntimeReady();
   byId("scene-create-refresh").disabled = state.disabled || !supported || state.sceneCreationRefreshing;
   byId("scene-create-name").disabled = state.sceneCreating;
   byId("scene-create-status").textContent = state.sceneCreationStatus ? text[state.sceneCreationStatus]
     : !supported ? text.createHost : !sceneRuntimeReady() ? text.runtimeMissing : "";
-  byId("scene-create-jobs").replaceChildren(...state.sceneCreationJobs.map((job) => {
-    const row = document.createElement("div");
-    row.className = "scene-creation-job";
-    const label = document.createElement("p");
+  const container = byId("scene-create-jobs");
+  const previous = Array.from(container.children);
+  const existing = new Map(previous.map(row => [row.sceneJobId, row]));
+  const rows = state.sceneCreationJobs.map((job) => {
+    let row = existing.get(job.job_id);
+    if (!row) {
+      row = document.createElement("div");
+      row.sceneJobId = job.job_id;
+      row.className = "scene-creation-job";
+      row.append(document.createElement("p"));
+    }
+    const label = row.children[0];
     label.textContent = `${job.name} · ${text.createStates[job.status] || job.status}`
       + (Number.isFinite(job.progress) ? ` · ${Math.round(Math.max(0, Math.min(1, job.progress)) * 100)}%` : "")
       + (job.error?.code ? ` · ${job.error.code}` : "");
-    row.append(label);
     const sceneId = job.status === "succeeded" && job.result?.scene?.id;
-    if (sceneId || !TERMINAL.has(job.status)) {
+    const action = sceneId || (!TERMINAL.has(job.status) ? "cancel" : null);
+    if (row.sceneAction !== action) {
+      row.sceneAction = action;
+      row.replaceChildren(label);
+    }
+    if (action && row.children.length === 1) {
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = sceneId ? text.createSelect : text.cancel;
-      button.disabled = state.disabled;
       button.addEventListener("click", async () => {
+        if (state.disabled || row.sceneActionBusy) return;
+        row.sceneActionBusy = true;
         button.disabled = true;
         try {
           if (sceneId) { await loadScenes(); await openScene(sceneId); }
           else { await call("scenes.creation.cancel", {job_id: job.job_id}); await refreshSceneCreationJobs(); }
         } catch { state.sceneCreationStatus = sceneId ? "createReadFailed" : "createCancelFailed"; }
-        finally { renderSceneCreation(); }
+        finally { row.sceneActionBusy = false; renderSceneCreation(); }
       });
       row.append(button);
     }
+    if (action) {
+      row.children[1].textContent = sceneId ? text.createSelect : text.cancel;
+      row.children[1].disabled = state.disabled || !!row.sceneActionBusy;
+    }
     return row;
-  }));
+  });
+  if (rows.length !== previous.length || rows.some((row, index) => row !== previous[index])) {
+    container.replaceChildren(...rows);
+  }
+}
+
+function scheduleSceneCreationRefresh() {
+  clearTimeout(state.sceneCreationRefreshTimer);
+  state.sceneCreationRefreshTimer = null;
+  if (state.disabled || !sceneCreationSupported()) return;
+  // The shared push subscription is limited to ten Jobs. Reconcile this
+  // bounded owned list even when notifications are lost or that limit is full.
+  if (state.sceneCreationStatus === "createReadFailed"
+      || state.sceneCreationJobs.some(job => !TERMINAL.has(job.status))) {
+    state.sceneCreationRefreshTimer = setTimeout(() => {
+      state.sceneCreationRefreshTimer = null;
+      return refreshSceneCreationJobs();
+    }, 5000);
+  }
 }
 
 async function refreshSceneCreationJobs() {
+  clearTimeout(state.sceneCreationRefreshTimer);
+  state.sceneCreationRefreshTimer = null;
   if (!sceneCreationSupported() || state.disabled) return;
   if (state.sceneCreationRefreshing) { state.sceneCreationRefreshPending = true; return; }
   state.sceneCreationRefreshing = true;
@@ -5051,7 +5092,7 @@ async function refreshSceneCreationJobs() {
     if (state.sceneCreationRefreshPending) {
       state.sceneCreationRefreshPending = false;
       void refreshSceneCreationJobs();
-    }
+    } else scheduleSceneCreationRefresh();
   }
 }
 
@@ -9712,6 +9753,7 @@ window.addEventListener("message", (event) => {
     }
     if (message.event === "disable.pending") {
       state.disabled = true;
+      renderSceneCreation();
       void closeSceneCompare();
       const active = activeBlenderSession();
       if (active) {
