@@ -5,7 +5,8 @@
 
 ## 2026-09-12 Web Blender entry visible before selection
 
-base origin/main6c659e5/PR516、ux1/3d-web-entry、/tmp/mediaforge-cleanup-docs-20260912。PR作成前。
+base origin/main6c659e5/PR516、ux1/3d-web-entry、/tmp/mediaforge-cleanup-docs-20260912。PR517 OPEN。
+product head40f3cb2でCLEAN/checks空、main ruleはPR必須/必要承認0を実確認。以後merge状態はghで再確認。
 frontendの編集/復旧入口を先頭へ移動、未選択guard/対象名/日英案内/Blender設定focusを追加。
 既存API/runner/権限/配布版に変更なし。PR-U0〜7既存状態は変更せず、統合3DS全体PARTIAL。
 実Chrome readonly81537 exit0、候補UI+稼働.79 GET、ja/en×320/1280設定/戻る/overflowなし/pageerror0。

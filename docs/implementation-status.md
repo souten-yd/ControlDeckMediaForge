@@ -3,6 +3,7 @@
 ## 2026-09-12 Web Blenderの編集入口を未選択時にも表示
 
 base origin/main6c659e5/PR516、ux1/3d-web-entry。PR213はMERGED/9469d8eをghで再確認。
+PR517を作成、product head40f3cb2でCLEAN/checks空。main保護はPR必須/必要承認0、迂回なし。
 既存の編集・復旧buttonをhidden detailから先頭panelへ移し、未選択guardと選択対象表示を追加。
 一覧選択/取り込み/OpenCode制作後の更新を日英で案内。Blender設定へ通常activateで移動しfocusを設定。
 環境不足・別sceneの編集中・保存中・取り込み中などの既存制約とRFB起動経路は維持。
