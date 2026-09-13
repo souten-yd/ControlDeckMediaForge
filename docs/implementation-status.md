@@ -1,5 +1,19 @@
 # Media Forge implementation status
 
+## 2026-09-13 v0.28.82 release preparation
+
+rules/branches/mainでPR必須/required approvals0を照合（afddda）。旧branch protection APIは404、
+gh pr diff --statは非対応だったためgit diffで確認した。いずれも状態変更なし。
+PR528を実head390fa78でmerge、735d8e236d9588fdeb2e817a5d93fc4c8f668d17。
+PR529をmainへretargetし実headd4f419aでmerge、5ceebcf3ee54c71d0d99f349d52759fe62fcae3c。
+51dcf2で両MERGED/main fast-forwardを確認。ux1/release-0-28-82、版数とrelease noteを更新。
+これはsource修正の統合でありM1受入完了ではない。次は署名配布/installed/実OpenCode。
+版更新後全test81142は63e9c0/5533eb exit0、1937passed3skipped2warnings/216.04秒。
+Node9pass/viewer43ms差分なし/diff check成功。以後product/script/test変更なし。
+DB read-only d8eb7bで1327Jobs/72GUI/43runtime全終端、recovery12保持を確認。
+DB16tablesのrow count/hash、assets2400filesの属性hash、runtime登録hashをmemory内へ取得。
+DB backupは作っていない。署名作業領域はmaintenance/release-0.28.82-qKl9x6。
+
 ## 2026-09-13 M1 explicit closed-edge validation (source, not installed)
 
 Branch ux1/3d-authored-mesh-closure is stacked on PR528 commit390fa78.
