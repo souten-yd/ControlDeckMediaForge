@@ -29,6 +29,8 @@ PR #526の実測では、実Blender 4.5.9で28 mesh / 2,312 vertices / 4,512 tri
 
 ## 1. Web / コミュニティ調査から採用する判断
 
+Community項目は経験談・実装例であり製品性能の証拠ではない。採用判断はBlender/Khronos等の一次資料、既存MediaForge境界、実機受入を優先する。詳細な一次資料・研究・外部repoの固定点は`docs/research/ai-blender-game-asset-authoring.md`にも記録する。
+
 ### 1.1 直接LLMに「完成品を一発生成」させるのは主経路にしない
 
 Blender MCPのコミュニティ報告では、LLMはblockout、配置、材質の一括変更、簡単なrig、camera/previzでは有用だが、高品質な人物や複雑な3Dでは「それらしく見える」段階を早く合格扱いしやすいという報告がある。実務例でも、自然言語だけで全3D工程を完遂するより、blockout・modular set・既存rig・atlas・反復修正を組み合わせる方が安定している。
