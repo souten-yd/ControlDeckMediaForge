@@ -758,6 +758,11 @@ G9は「制作を加速する候補生成器」として後段に置く。
 
 ## 15. 実装順序
 
+Host PR324の汎用thinking契約に対するMF client候補を追加。groupedのみ明示true、
+各段階でrequest_optionsを検証し、未対応/不正/利用不可なら推論POST前に停止する。
+旧Host実確認では0.066秒でhost_ai_thinking_unsupported。これは負の互換性受入で、
+新Host推論やM1成功ではない。次はHost gate/実受入→scoped grouped→compose/OpenCode。
+
 M1ガイド追補（2026-09-13）: capability応答へアセット7分類の確認点とVLM比較前の
 revision/観察条件/対象照合を追加する。実行権限・VLM availabilityは追加しない。
 M2受入では古いrevision画像、異なる画角、未提供の背面、画像から対象IDを確定できない場合を

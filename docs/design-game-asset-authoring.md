@@ -89,6 +89,11 @@ append_faces/reverse_face_indicesだけのstrictデータに限定する。LLM�
 下書きのコピーへ適用し、座標・材質は保持する。同じcore検査が通るまでBlenderへ渡さない。
 初回生成+最大2修正の総呼出数は増やさない。自動cap追加やvalidatorによる黙示的修復ではない。
 grouped draftの内部候補は、座標群と面群の計画→面index提出→必要な面群だけの再提出の最大3call。
+思考有効を明示要求し、各段階の最新child identityでHostのrequest_optionsを発見してから
+scoped streamへ送る。未対応Hostはhost_ai_thinking_unsupportedで実行前停止し、
+黙示的に思考無効やprovider直結へ切り替えない。発見HTTPも段階のabsolute deadline内。
+要求条件requested_thinkingをprovenanceへ記録するが、モデル能力/品質の保証とはしない。
+既存raw draftや一般AI呼び出しはoption省略を維持し、旧Hostとの互換性を保つ。
 座標群/面群各最大8、全頂点32かつrequest budget以内、全面64、各応答8KiB/全300秒を維持する。
 座標は全体で一つのvertices配列に置き、座標群はそのindexの重複なし完全分割とする。
 この形で全頂点上限を応答schemaにも反映し、群ごとの上限だけで合計超過を見逃さない。

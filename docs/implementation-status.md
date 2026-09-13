@@ -1,5 +1,18 @@
 # Media Forge implementation status
 
+## 2026-09-13 grouped candidate scoped thinking discovery
+
+Host PR324の追加契約をMF scoped stream clientへ接続。既存呼び出しはoption省略で
+互換性維持、groupedのみthinking=trueを要求。段階ごとのidentityでfeature discoveryを
+行い、旧Host/不正応答/利用不可を実行前拒否。発見HTTPもabsolute deadline内。
+provenanceは要求条件を記録し、モデルの能力保証や実品質PASSとは扱わない。
+実probe --grouped: 0.066秒でhost_ai_thinking_unsupported（稼働旧Host、推論POSTなし）。
+関連57test、全2045pass3skip2warnings/268.96秒、Node9/viewer51ms成功。
+Host候補のbuild後gateは1103pass2fail2skip/132.10秒。既存fail修正は別test-only
+branch8455ab9で全1094pass2skip/108.83秒。unknown alias転送仕様と実容量依存を修正。
+Host/MF稼働版、asset/project不変。新Hostの実推論・取消・lease、MCP/OpenCode/installedは
+NOT TESTED。今回の負の互換性受入をM1完成とはしない。
+
 ## 2026-09-13 M1 generic Host reasoning dependency candidate
 
 Host main7cf5605から別worktree/branch ux1/addon-ai-thinkingでcommit88bef36を実装・push。

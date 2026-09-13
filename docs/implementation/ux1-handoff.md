@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 scoped thinking discovery wired to grouped candidate
+
+前turnはHost PR324作成まで進捗。MF main fetch4f978a0（既にancestor）、PR533継続。
+HostAIGateway.complete_streamedにoptional thinkingを追加、省略時の旧payload不変。
+明示指定は同じidentityでai/capabilities.request_optionsを検証してからPOST、発見もdeadline内。
+groupedのみtrue、provenance.requested_thinking=true。旧Host実probeは0.066秒で
+host_ai_thinking_unsupported、推論POST前停止。normal composeはまだrawのまま。
+関連57pass、全91813/77dd89 exit0: 2045pass3skip2warnings/268.96秒、Node9/viewer51ms差分なし。
+以後product/test変更なし。新asset/project/backupなし、Host485004/MF537447 active保持。
+Host324 build後再全gateは1103pass2fail2skip/132.10秒、既存2失敗のみ（comment記録）。
+別Host test-only branch ux1/ai-gate-test-isolation、worktree /tmp/controldeck-ai-gate-tests-20260913、
+8455ab9 push: unknown aliasの現仕様期待値、KV空き容量をfixture制御し拒否POST0/meta0も検査。
+同branch全1094pass2skip/108.83秒。製品code変更なし、frontendは既build成果物参照。
+次: test-only PR review→Host324へ取り込み→combined全gate→新版実HTTP推論/取消/lease受入。
+その後MF grouped scoped実shape→compose接続→OpenCode/installed一巡。M1未完了/M2未着手。
+新Host機能は未配布/実推論NOT TESTED、compose acceptance_pending。全実行handle終端後に保存する。
+
 ## 2026-09-13 generic Host thinking candidate implemented
 
 前turnはgrouped実装/paired診断/PR533 pushまで進捗。今回は別Host repoの汎用依存を実装。

@@ -58,10 +58,12 @@ def test_grouped_prism_is_model_authored_data_with_provenance_and_no_execution()
     assert mesh.require_closed
     assert result.provenance["quality_status"] == "NOT TESTED"
     assert result.provenance["execution_status"] == "not_executed"
+    assert result.provenance["requested_thinking"] is True
     assert len(result.provenance["layout_sha256"]) == 64
     for _, capability, messages, options in gateway.calls:
         assert capability == "text.generate" and len(messages) == 2
         assert options["max_output_bytes"] == 8192 and options["timeout_seconds"] == 90
+        assert options["thinking"] is True
         assert "model" not in options and options["response_format"]["strict"]
 
 

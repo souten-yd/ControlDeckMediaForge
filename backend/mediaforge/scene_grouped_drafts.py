@@ -204,7 +204,8 @@ class GroupedMeshDraftPreparer:
                 identity_provider() if identity_provider else identity, "text.generate",
                 [{"role": "system", "content": instruction}, {"role": "user", "content": json.dumps(data)}],
                 response_format={"type": "json_schema", "name": "grouped_mesh", "schema": schema, "strict": True},
-                temperature=.1, max_tokens=4096, timeout_seconds=90, max_output_bytes=MAX_DRAFT_BYTES)
+                temperature=.1, max_tokens=4096, timeout_seconds=90, max_output_bytes=MAX_DRAFT_BYTES,
+                thinking=True)
             content = _bounded(result.content)
             attempts.append({"attempt": len(attempts)+1, "response_kind": kind, "response_sha256": _sha(content),
                              "valid": False})
@@ -253,6 +254,7 @@ class GroupedMeshDraftPreparer:
                     attempts[-1]["valid"] = True
                     return PreparedMeshDraft(create, {
                         "schema_version": "media-forge.grouped-mesh-draft@1", "capability": "text.generate",
+                        "requested_thinking": True,
                         "instructions_sha256": _sha(LAYOUT_INSTRUCTIONS), "repair_instructions_sha256": _sha(FACES_INSTRUCTIONS),
                         "input_sha256": _sha(request.model_dump_json()), "layout_sha256": _sha(layout.model_dump_json()),
                         "request_sha256": _sha(create.model_dump_json()), "attempts": attempts,
