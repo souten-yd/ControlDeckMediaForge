@@ -3,6 +3,18 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 v0.28.81 preparation / M1 installed gate pending
+
+PR526 MERGED/08469041649ea7954e9190de4bce334e653dcfe7を実確認。
+ux1/release-0-28-81、/tmp/mediaforge-cleanup-docs-20260912。版数2箇所とrelease noteのみ変更。
+M1のsource基盤はmerge済みだが、signed installed→実OpenCode/mesh/GLB/receipt受入は未完了。
+次は版数更新後全test→commit/push/PR、固定merge commitから署名bundle→正規更新→受入。
+前gate1926pass208.58秒。新gateは終了後記録。新操作を高品質character完成と呼ばない。
+新gate45d552 exit0/1926pass3skip2warnings/207.30秒、Node9/viewer50ms差分0。以後product変更なし。
+GUI72/Job1323/runtime43終端をread-only確認、recovery12を保持。更新直前にも再確認する。
+PR526の最初のmerge commandは誤ったhead hashで拒否、実head照合後にmatch付きmerge成功。
+本番は.80/MF52609のまま、Host変更なし、ユーザーroot/2dev symlink保持。
+
 ## 2026-09-13 MCP authoring priority / research-informed authored mesh
 
 再開補足: PR526 originの追加文書3commitをfast-forwardし7947d5aへ。
