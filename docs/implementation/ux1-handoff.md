@@ -16,6 +16,8 @@ Host324 build後再全gateは1103pass2fail2skip/132.10秒、既存2失敗のみ�
 別Host test-only branch ux1/ai-gate-test-isolation、worktree /tmp/controldeck-ai-gate-tests-20260913、
 8455ab9 push: unknown aliasの現仕様期待値、KV空き容量をfixture制御し拒否POST0/meta0も検査。
 同branch全1094pass2skip/108.83秒。製品code変更なし、frontendは既build成果物参照。
+test-only PR作成はGraphQL502/実行エラー、REST POST応答JSON終端不正で未完了。
+最後のREST GET head限定一覧は空（exit0）。8455ab9はremoteへpush済み、次回重複確認後PR作成。
 次: test-only PR review→Host324へ取り込み→combined全gate→新版実HTTP推論/取消/lease受入。
 その後MF grouped scoped実shape→compose接続→OpenCode/installed一巡。M1未完了/M2未着手。
 新Host機能は未配布/実推論NOT TESTED、compose acceptance_pending。全実行handle終端後に保存する。
