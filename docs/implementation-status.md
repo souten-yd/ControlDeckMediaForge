@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-13 正規login受入の判定を補完
+
+basecbc4462、同PR525/Draft。前turnは実Blender preflightと回収で進捗。
+既存browser15402を再pollし、実PID357961/経過407秒も確認して同handleを待った。
+e36f33でlogin_window_finished/workspaceFrameObserved=false/exit0、PID不在を確認。
+これは10分待機の終端であり、ログイン成功も失敗も証明しない。
+Host checkoutのLogin.tsxは成功後navigate('/')、App.tsxはloginへfromを渡すため、
+旧診断の「iframeが現れるまで待つ」だけでは正常login後のhomeを見落とすと確認した。
+Hostは読取のみ。利用者の実session/Cookieを調査せず、次の検証に向けMediaForgeの補助scriptを直す。
+
+scripts/3ds_host_login.mjsは新規contextだけで通常loginを待ち、同contextの正規GET
+/api/v1/auth/me（X-Requested-With、redirect禁止、5秒上限）を照会する。
+401は入力画面を保持、JSON identityの形式とTOTP前提を確認した後だけworkspaceへ明示移動。
+実Host frontendのtitle規則に合わせたiframeのvisibleを待ち、認証と画面到達を分離する。
+token/password/Cookieの取得・保存・出力、他context借用、Job発行、本番停止は実装していない。
+既定は10分で終了/所有browser回収。生のPlaywright例外はrequest情報を含み得るため出力しない。
+この補助scriptだけを利用者向けOSセットアップボタンや制作一巡の完成とはしない。
+
+7de984: 9追加Node tests成功。home後移動/401/302/403/HTML200/不正identity/TOTP/iframe失敗を検証。
+f9ebf8: 新規headless Chromeから実Hostへ同helperを呼び、login_required/workspaceOpened=falseと
+元/login画面保持をassert、exit0。認証成功はfixture試験のみ、実ユーザー成功はNOT TESTED。
+c293ac: Node全24pass、viewer build51ms/生成file差分なし。
+全42016/f39499: ./mf.sh test exit0、1920pass/3skip/既知2warnings/214.78秒。
+以後script/test/product変更なし。docsと補助script/testを同PRでcommit/pushしDraft維持。
+本番52609/.80 activeを保持、新しい待機窓・候補server・検証DBは残していない。
+次は利用者がPCを操作できる時点で、補完済みhelperを使って正規認証→実Host新制作UIを受入する。
+全GOAL/A〜F/GA/native setup PARTIAL、未merge/未署名公開。
+
 ## 2026-09-13 制作入口の実Blender事前検証
 
 前turnは方針説明のみでno progress。今回はPR213 MERGED/9469d8e、PR525 OPEN/Draft/head0c3c6faと

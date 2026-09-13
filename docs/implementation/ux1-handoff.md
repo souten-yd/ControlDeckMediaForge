@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 login後homeを見落とさない受入準備
+
+同branch/PR525 Draft、basecbc4462。旧browser15402はe36f33で10分上限終了/exit0、PID357961不在。
+workspaceFrameObserved=falseはlogin成否不明。Host Login.tsxは成功後homeへ戻るため旧待機に盲点。
+補助scripts/3ds_host_login.mjsと9tests追加。同新規contextの正規auth/meで認証を確認してから
+workspaceへ明示移動し実titleのvisible iframeを待つ。token/Cookie/passwordの保存・借用なし。
+新規headless/実Host f9ebf8で401→login画面保持を確認。実login成功/新制作UIはNOT TESTED。
+Node全24pass/viewer51ms差分なし。全42016/f39499 exit0、1920pass3skip2warnings214.78秒。
+以後script/test/product変更なし。本番52609/.80 active、OS/制作物変更なし、検証process/dataなし。
+次はPC操作可否の回答を確認して補完済みhelperから正規login/実Host候補受入へ。
+自動継続をlogin成功に読み替えず、待機窓の自動再表示・本番停止を繰り返さない。
+全GOAL/A〜F/GA/native setup PARTIAL、Draft/未merge/未署名公開。root/2dev symlink保持。
+
 ## 2026-09-13 実Blender制作入口preflight
 
 同branch/Draft PR525、base0c3c6fa。前turn方針説明のみから、別DB/実Blender検証へ進捗。
