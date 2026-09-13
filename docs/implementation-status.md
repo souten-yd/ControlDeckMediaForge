@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 scoped structured draft preparation (internal only)
+
+PR531/c42f966をbaseとしてux1/3d-structured-mesh-draftへ分割。main4f978a0を保持。
+新規通常service credentialを既存専用mf-e2e userに発行し、実Hostのintrospection→
+Add-on Runtime AI→既存HostAIGatewayを検査した。借用token/設定書換え/直接provider推論なし。
+dd6f6f/725451: text.generate/vision.analyzeのcapabilityはtrue。ただしVLM実画像判定は未実施。
+フルSceneCreateRequest schemaのJSON生成+件数feedbackは7.586/6.780/6.833秒、
+全3回boundary8/multiple0/winding3で拒否。exit1、Blender/asset/Jobは生成していない。
+
+内部scene_drafts.pyを追加。固定指示、限定schema、mesh+material参照整合、閉殻要求保持、
+頂点4〜32/面64/応答8192bytes、最大2修正、全体300秒、各要求90秒/4096tokens。
+修正には最大16辺の実indices/方向/使用数を返す。入力/指示/応答/request hashとattemptを
+準備provenanceに保持。Host model/providerをMFへ持ち込まず、実行権限も追加していない。
+内部helperは公開API/MCPへ未接続、capability availableではない。生成物・global設定の変更なし。
+
+再現: Host cwdで `PYTHONPATH=backend .venv/bin/python
+/tmp/mediaforge-cleanup-docs-20260912/scripts/3ds_scoped_draft_probe.py`。
+9e5e62/284110: exit0、7.226秒、初回で8vertices/6facesの閉殻検査PASS。
+request SHA256 f91ced9584af7e4a12ae0522efbdcb652492724458e3e6819bdd9adc4d709ec3。
+これはdata-only試験1件。front ridge/寸法/視覚品質・Blender実行・MCP納品はNOT TESTED。
+schema縮小と具体的feedbackを同時導入したため効果の個別帰属はできない（成功例は修正なし）。
+39898a: focused18pass。取消/Host失敗時にretryしない、上限/未grant/closed bypass/開布互換を確認。
+Host completeはfinallyでlease返却するコードを確認したが、HTTP切断で処理が終わる実測はNOT TESTED。
+fake CancelledError伝播をremote cancel受入に代用しない。公開前に当該gateとJobs/lineage接続が必要。
+全test48660は0bbc4d exit0/1959passed3skipped2warnings/206.81秒。
+以後product/script/test変更なし。Node9pass、viewer51ms（a0ad6b/ecbfe3）、tracked build差分なし。
+M1未完了/M2未着手、稼働.82不変。
+
 ## 2026-09-13 M1 argument generation isolation (no asset execution)
 
 最新main4f978a0をfetch/mergeしalready up to date。PR531 head7768b2a上で継続。
