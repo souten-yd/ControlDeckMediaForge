@@ -1339,6 +1339,12 @@ precedes further Web Blender acceptance. Characters, creatures, environment prop
 tools, vehicles, weapons and armor remain in scope. Authored meshes may explicitly
 require closed, consistently paired edges before allocation; open cloth remains
 the compatible default. This check is not a solid/self-intersection or quality guarantee.
+Before execution, bounded structured drafts may use the existing Host-owned
+text.generate gateway: validate the draft and allow at most two feedback-driven
+corrections. A draft is untrusted data, never an executable script or a quality
+approval. Scoped authorization, cancellation, output bounds and provenance must
+be verified before exposing this preparation stage; do not duplicate model/GPU
+management or silently switch transport/runtime defaults to hide generation failures.
 Start with bounded authored
 mesh topology so silhouettes, hair clumps, garment shells and fitted armor are not
 limited to assembled primitives. Mesh hair/garments are not hair/cloth simulation.

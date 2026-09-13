@@ -52,6 +52,12 @@ require_closed（strict bool、既定false）を追加する。trueなら全辺�
 共有されることをcore/workerがallocation前に独立検査する。境界/3面以上の共有/向き不整合を拒否。
 false/省略の布を壊さず、自己交差・頂点fan・体積・外向き・見た目を保証するsolid判定とは呼ばない。
 このfieldは新schemaで発見した場合だけ送信し、installed旧版では未対応とする。
+M1の引数生成診断を受け、実行前段にbounded structured draftを置く。既存HostAIGatewayの
+text.generate/json_schemaを使用し、core検査→最大2回のfeedback修正までとする。
+draftは未信頼データであり、任意scriptや品質合格ではない。採用前にscoped AIの実受入、
+取消・出力サイズ・provenance/lineage・falseによる検査回避拒否を確認する。
+新しいmodel/port/lease管理や第二asset/Jobs基盤を作らない。実行は既存typed recipeへ戻す。
+一標本のJSON修正成功は実OpenCode/MCP一巡の代替ではなく、現時点のdraft機能は未実装。
 髪の束・衣服shell・装甲の輪郭を実Blenderで作り、構造検査と見た目の評価を分離する。
 後続は選択付き編集/曲面・UV/bake・weight補正/IK・表情/動作、engine受入へ進む。
 この一操作だけで高品質キャラクター、cloth/hair simulationや全GA完成としない。
