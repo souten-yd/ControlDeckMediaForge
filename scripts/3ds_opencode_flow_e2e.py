@@ -117,6 +117,12 @@ authoring_guidance.versionがmedia-forge.scene-authoring-guidance@1であるこ�
 mesh.createでstable ID armor、名前Armor、閉じた三角/四角面のmeshを一つだけ作り、
 material.setで青緑色の金属にしてください。primitive.addや別meshは使用しません。
 schemaの上限内の頂点/面を自分で組み、面indexは0始まり、全頂点を参照してください。
+この受入では複雑さを抑え、頂点は10個以下にしてください。例えば凸五角形の断面を
+上下に2リング置き、側面を四角面、両端を三角面にすると小さな閉じた稜線付き形状になります。
+頂点座標と面indexは自分で決めます。閉じた形では各辺が逆向きに2回だけ現れることを確認し、
+重複面、同じ面内の重複index、未参照頂点、5頂点以上の面を作らないでください。
+送信前にrecipeと外側の引数objectの括弧まで閉じた有効なJSONであることを確認します。
+skillとcapabilitiesの成功後に同じ読込を繰り返さず、制作へ進んでください。
 新規createは一回だけ。失敗したら理由とJob IDを報告して止め、別sceneの再生成はしません。
 制作Jobをmedia.job.statusで終端まで追跡し、成功後snapshotの現在revisionと検証結果を確認します。
 GLBへexportし、現在projectのexports用output grantを直前に取得してmedia.packでarmor.glbを配置します。

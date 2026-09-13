@@ -1,5 +1,56 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 transport isolation / streamed argument failure
+
+Own R3 sessionのOpenCode logをread-only照合（2068c5）。05:31:49〜05:35:05 UTCに
+provider server_error/500 `Invalid diff: now finding less tool calls!` が4件ある。
+Previousにはscene.createと生成途中の頂点/面があり、Currentはtool_calls=0。
+従って「LLMが何も生成しなかった」ではなく、引数streamが正常完了せずMCPへ届かなかった。
+生成途中の値には重複面や5頂点faceもあり、輸送修復とgeometry受入を分ける必要がある。
+同文言はllama.cpp common/chat.cppのtool-call差分検査にも存在するが、installed推論binaryの
+該当source revision照合と根本原因再現は未実施。既知issueを修正済みの根拠にしない。
+
+正規mf-e2e/private run configからstdio MCP tools/callを直接実行。Host source/global設定変更0。
+これはscripted診断でありLLM成功の代替ではない。37bfc2 create受付0.095秒、
+8e37a0 status succeeded、job_ff8c68588e884b1ab7d51ef534534a11。
+scene_b27897bcb29a44e0b35068e98e0da9b0、revision_1f6a0dfd05d144e89a004f42c1f97ff4。
+実選択runtimeは4.5.13（以前の4.5.9 fixtureとは別）。2ops/10vertices/16triangles/1mesh。
+blender.scene/glb.structure passed。e3cc03 snapshot/exportで同revisionを確認。
+GLB asset_dcc2635689de44bea4ca6156ec626fdf、1860B、
+SHA256 81f731647c5d28c3d35f64d8c63cf9ea33b47590e2d0a703e0382057790bba36。
+f48d56 fresh grant→media.pack committed=true、R3 exports/scripted-transport.glbの実size/hash一致。
+ff9571 managed Blender4.5.13へ実GLB再import成功、1mesh/16triangles、寸法約0.4/0.08/0.5m。
+再import vertices30はflat-normal境界で分離した値でありauthoringの10と同じ指標ではない。
+視覚/VLM/変形/engineはNOT TESTED。診断scene/asset/配置物は比較のため一時保持し、受入後回収する。
+
+M1専用promptへ10頂点以下の構成、各辺の逆向き対、JSON閉じ、成功済みskill再読込禁止を追加。
+座標/面を答えとして埋めずLLMが決定する。verifierも10頂点上限を確認しnegative追加、
+focused9passed（8c9e64）。これはstream parser修正ではなく小さい入力での切り分け。
+R4 project MF3DS-M1-Authored-R4-20260913、evidence maintenance/m1-opencode-20260913-r4、
+handle39252/子517208を開始（39239b）。以下が終端結果である。
+
+R4はskill90.469秒/capability94.984秒。own session ses_f66b3994effe5sDyU5fDTANPLPの
+logで同provider stream500を2件確認（bf52e7）、非改善反復として子をTERM。
+終端ad2f50 exit1/子-15/206.296秒/5calls/納品0、517208不在確認。観測timeoutではない。
+終端events再検査46d8eeで、停止直前200.383秒にcreate一件が実際にはcompletedと判明。
+他2件は空引数abortであり、有効な送信が全くないというR3の説明をR4へ流用しない。
+LLM作成recipeのJobはjob_8488e929bc5b444388af8e2eaca9d41f。
+ce48e3で正規MCPから追跡してsucceeded確認、runtime4.5.13/2ops/10vertices/12triangles、
+scene_c0c869f2a5ff453ead3fe40f594f6736、revision_fa09bac7b59d4c9691eaa4666b001b8c。
+source asset_cbec055f37a24952992223cb592660d5、preview asset_47558fb8c2ab46429971435c3c81efec。
+blender.scene/glb.structure passedだが、実LLM入力には7facesしかなくboundary edges=8（580b36）。
+依頼した閉じた装甲ではない。8a5d8d verifier exit1、LLM終端/閉殻/納品受入FAIL。
+輸送は不安定だが一件通過、worker実行PASS、目的形状FAILを分けて記録する。
+R4 scene/2assetsとredacted evidenceは修正比較のため一時保持、OpenCode再投入なし。
+
+実推論PID505582のexeはllama-gpu-b10917/rocm/extracted/bin/llama-server。
+同pack build-info.cppのcommit表示は8ea2902、compiler GNU11.4.0。パッケージの表示番号と
+upstream commitの完全照合は未実施。モデル/runtime差し替え、Host設定変更は行っていない。
+次はstream parserの固定source照合と、境界辺のある入力を制作目的に照らして拒否する
+指示/検査を切り分ける。M1の判定を緩めず、M2はまだ着手しない。
+最終全test49717は22378e exit0/1928passed3skipped2warnings/203.91秒。
+Node9pass/viewer44ms差分なし/diff check成功。以後script/test変更なし。
+
 ## 2026-09-13 M1 acceptance harness: inherited delegation mask rejected
 
 R1 handle62788は34f4f5 exit1で終端。新schema/guide取得とdirector実読込は成功したが、

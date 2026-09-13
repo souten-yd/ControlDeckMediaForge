@@ -32,7 +32,7 @@ def calls() -> list[dict[str, Any]]:
     ]
 
 
-@pytest.mark.parametrize("failure", [None, "no_guide", "late_discovery", "open_shell", "primitive", "wrong_revision", "failed_validation"])
+@pytest.mark.parametrize("failure", [None, "no_guide", "late_discovery", "open_shell", "primitive", "wrong_revision", "failed_validation", "complexity"])
 def test_authored_mesh_evidence(failure: str | None) -> None:
     value = copy.deepcopy(calls())
     if failure == "no_guide":
@@ -43,6 +43,13 @@ def test_authored_mesh_evidence(failure: str | None) -> None:
         value.append(value.pop(1))
     elif failure == "open_shell":
         value[2]["state"]["input"]["recipe"]["operations"][0]["faces"].pop()
+    elif failure == "complexity":
+        mesh = value[2]["state"]["input"]["recipe"]["operations"][0]
+        vertices, faces = copy.deepcopy(mesh["vertices"]), copy.deepcopy(mesh["faces"])
+        # Three valid closed tetrahedra exceed only this diagnostic's budget.
+        for offset in (1, 2):
+            mesh["vertices"].extend([[x + offset, y, z] for x, y, z in vertices])
+            mesh["faces"].extend([[index + offset * 4 for index in face] for face in faces])
     elif failure == "primitive":
         value[2]["state"]["input"]["recipe"]["operations"][0] = {
             "type": "primitive.add", "object_id": "armor", "name": "Armor", "primitive": "cube"}

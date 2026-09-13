@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 streaming / direct MCP diagnostic
+
+PR528 Draft/ux1/release-0-28-81-acceptance、base f4bcb0d。下の旧running記述より本節を優先。
+R3は終端。own logでprovider500 Invalid diffを4件確認、LLMは引数を生成途中だった。
+正規scripted MCP create→status→snapshot→export→grant→pack成功、実4.5.13 GLB再import成功。
+詳しいID/hash/計測はstatus新節。M1のLLM受入とは分ける。
+R3 projectに診断用scripted-transport.glbがあるため、もはやempty projectではない。
+専用scene/2asset/配置物は比較用一時保持、成功後に参照確認して回収。制作物/recovery12保護。
+小さい形の指示とverifier上限/negative追加、focused9pass。
+最終全test49717は22378e exit0/1928pass3skip2warnings/203.91秒、Node9/viewer44ms差分なし。
+R4は2回の同streamエラー反復で子517208をTERM、ad2f50 exit1/-15/206.296秒。両handle閉鎖済み。
+停止直前にcreate1件が実際に受付済みだった。ce48e3の正規MCP追跡でそのJob succeeded。
+ただし実LLM recipeは10vertices/7faces、boundary edges8で閉殻要求FAIL、納品0。
+R4 verifier8a5d8d exit1。輸送一件通過/workerPASSをM1完了へ読み替えない。
+R4 scene/2assets/evidenceも比較用保持。全対象IDはstatus新節。残存進行process/Jobなし。
+次は固定parser sourceの照合と目的別geometry検査/指示を切り分け、M1受入を継続する。
+runtime差し替え/Host設定変更なし。M1未完了/M2未着手。全gate後commit/push、PR528 Draft維持。
+
 ## 2026-09-13 v0.28.81 preparation / M1 installed gate pending
 
 最新: R1 handle62788は終端exit1、子502120は誤ったtool反復のためTERM済み。再poll不要。
