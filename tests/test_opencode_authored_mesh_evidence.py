@@ -57,3 +57,24 @@ def test_authored_mesh_evidence(failure: str | None) -> None:
             MODULE.verify_authored_mesh_calls(value)
     else:
         MODULE.verify_authored_mesh_calls(value)
+
+
+def test_authored_mesh_private_permissions_remove_delegation_mask() -> None:
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("runner", Path(__file__).parents[1] / "scripts/3ds_opencode_flow_e2e.py")
+    assert spec and spec.loader
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    payload = {"agent": {"build": {"tools": {"controldeck_addons_media_scene_*": False}}}}
+    runner.restrict_tools(payload, director_static=False, director_authored_mesh=True)
+    assert payload["agent"] == {"build": {"tools": {"controldeck_addons_*": True}}}
+    assert payload["tools"]["task"] is False and payload["tools"]["bash"] is False
+    assert payload["permission"]["skill"] == {"*": "deny", "blender-director": "allow"}
+    resolved = {"tools": {}, "permission": [
+        {"permission": "*", "pattern": "*", "action": "deny"},
+        {"permission": "controldeck_addons_*", "pattern": "*", "action": "allow"}]}
+    runner.assert_direct_mcp_permissions(resolved)
+    resolved["permission"].append({"permission": "controldeck_addons_media_scene_*", "pattern": "*", "action": "deny"})
+    with pytest.raises(AssertionError, match="media_scene_create"):
+        runner.assert_direct_mcp_permissions(resolved)

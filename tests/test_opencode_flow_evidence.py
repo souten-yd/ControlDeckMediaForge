@@ -207,10 +207,12 @@ def test_private_director_tool_permission(static: bool, motion: bool, array: boo
     assert spec and spec.loader
     runner = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(runner)
-    payload: dict[str, Any] = {}
+    payload: dict[str, Any] = {"agent": {"build": {"tools": {"controldeck_addons_media_scene_*": False}},
+                                      "sculptor": {"mode": "subagent"}}}
     runner.restrict_tools(payload, director_static=static, director_motion=motion, director_array=array,
                           director_auto_skin=auto_skin)
     enabled = static or motion or array or auto_skin
+    assert payload["agent"] == {"build": {"tools": {"controldeck_addons_*": True}}}
     if enabled:
         assert "skill" not in payload["tools"], "Legacy tools entry would override named skill permission"
     else:

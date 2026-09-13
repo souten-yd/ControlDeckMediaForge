@@ -1,5 +1,43 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 acceptance harness: inherited delegation mask rejected
+
+R1 handle62788は34f4f5 exit1で終端。新schema/guide取得とdirector実読込は成功したが、
+scene.createを呼べずmedia.generateへ誤ったmedia.inspect依頼を反復したため所有子502120をTERM。
+OpenCode exit-15/510.809秒、7tool calls、納品0。観測timeoutだけで停止・再試行したものではない。
+Host provider._delegated_agentsはbuildからscene toolsを隠してsculptorへ委譲する。
+旧診断はtaskを禁止しつつそのmaskを保持しており、実行役からscene toolsが消えていた。
+Host/MF製品コードでなく、試験用private configの矛盾が原因。Host変更は不要。
+R1からfailed job_c88ee9bf003146eb95a374d3dc7ed0a9/job_de5d869dc4cc41b79194f51469973573が追加、
+scene総数58のまま、新sceneなし。失敗Jobの監査履歴は消さない。
+
+runnerはprivate agent mapを直接MCP実行用へ置換し、task/shell/file/web禁止を維持。
+R2はdebug agent.toolsにMCP wildcardが出るという誤ったassertで0a9f5c exit1、LLM未起動。
+f2b0e6の実debug出力からtoolsはbuiltin、MCPはpermission列にあると確認し、
+必要なMCP名について最終matching ruleがallowかを開始前に検査するよう訂正した。
+既存subagent mask保持を再現するnegativeを追加。利用者global設定やHostの通常delegate設定は変更しない。
+直接実行試験であり、通常のdelegated agent一巡を確認済みとはしない。
+
+R3: handle14782/親509049/子509111、project MF3DS-M1-Authored-R3-20260913、
+evidence maintenance/m1-opencode-20260913-r3。4fe0bcでskill50.328秒/capabilities55.590秒、
+実tool呼出成功、終端はまだ未確認。同handleを追跡する。
+先の全test75632は実行中にpreflight修正が入ったため所有pytest507285を停止（ce6f08 exit143）、
+最終コードの全test59418を開始した。旧部分結果を全通過と数えない。
+R1/R2のempty専用project/evidenceは失敗要約記録後に回収し、R3は終端まで保持する。
+R1/R2はrealpath/非.gitファイル0/参照なしを確認し、専用project2件とevidence2件を削除。
+du合計93,121 B、rm -r成功。失敗Job/本番assetは削除していない。
+最終全test59418はd6ffd5 exit0/1927passed3skipped2warnings/203.77秒。Node9pass、diff check成功。
+以後script/test変更なし。R3はskill/capability取得後、scene.createを3回空引数で中断。
+217dfa/1f7d56で全てinput={}、Tool execution aborted/interrupted=true、正常なrecipe送信なしを確認。
+同じ非改善反復を止めるため所有子509111をTERM、e715f4 exit1/子-15/313.291秒/8calls/納品0。
+観測timeoutによる再起動ではない。R3 session ses_f66c166baffeOmzipVq7BXsQ47、
+correlation mf3ds-e60d59d8bd7e48ac。権限補正だけではLLMの有効な引数生成は成立しなかった。
+原因をBlender workerの失敗とは断定しない。次は正規MCP直接callの独立検証と
+同じOpenCode sessionのtool引数生成/中断原因を切り分け、必要なinstruction/schemaを改善する。
+通常delegated agentの受入もNOT TESTED。M1はinstalled discoveryまでで未完了、M2へは進まない。
+R3のredacted events/observationsと空専用projectは、この切り分けに必要なため一時保持し、
+原因の記録・修正受入後に回収する。稼働Job/子processが停止したことは次の再開時にも照合する。
+
 ## 2026-09-13 v0.28.81 signed installed / actual OpenCode M1 running
 
 準備PR527 MERGED、固定commit f5093eaa9f9984e0b40364a91f115d61709dc5b3からbundle構築。

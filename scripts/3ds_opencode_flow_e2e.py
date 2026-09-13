@@ -7,6 +7,7 @@ tools and external plugins are disabled. Keeps output and redacted JSON events.
 from __future__ import annotations
 
 import argparse
+from fnmatch import fnmatchcase
 import hashlib
 import json
 import os
@@ -144,6 +145,11 @@ def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_m
                    director_authored_mesh: bool = False) -> None:
     """Limit this diagnostic's private configuration, never global settings."""
     payload["permission"] = {"*": "deny", "controldeck_addons_*": "allow"}
+    # The Host's current build agent delegates scene tools to a subagent. This
+    # diagnostic deliberately forbids task/delegation, so retaining that mask
+    # leaves the only executing agent unable to create scenes. Override only
+    # this private run's agent map, never the Host or global user configuration.
+    payload["agent"] = {"build": {"tools": {"controldeck_addons_*": True}}}
     payload["tools"] = {name: False for name in (
         "bash", "read", "edit", "write", "glob", "grep", "webfetch", "websearch", "task", "skill", "question")}
     if director_static or director_motion or director_array or director_auto_skin or director_authored_mesh:
@@ -152,6 +158,17 @@ def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_m
         # duplicating skill there changes insertion order and disables it again.
         payload["tools"].pop("skill")
     payload["enabled_providers"] = ["controldeck"]
+
+
+def assert_direct_mcp_permissions(resolved: dict[str, Any]) -> None:
+    """debug agent lists builtins in tools, but MCP rules in permission."""
+    for name in ("media_capabilities", "media_scene_create", "media_scene_snapshot",
+                 "media_scene_export", "media_job_status", "media_pack",
+                 "control_deck_project_output_grant"):
+        permission = "controldeck_addons_" + name
+        rules = [rule for rule in resolved["permission"]
+                 if fnmatchcase(permission, rule["permission"]) and rule.get("pattern") == "*"]
+        assert rules and rules[-1]["action"] == "allow", f"Direct MCP permission is unavailable: {name}"
 
 
 def main() -> None:
@@ -269,6 +286,7 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
             resolved = json.loads(debug.stdout)
             assert resolved["tools"]["skill"] is True, "Director skill tool is disabled after config resolution"
             assert not any(resolved["tools"].get(name) for name in ("bash", "read", "edit", "write", "task", "webfetch"))
+            assert_direct_mcp_permissions(resolved)
             evidence["director_tool_enabled"] = True
         bridge = payload["mcp"]["controldeck_addons"]
         preflight = subprocess.run(bridge["command"],

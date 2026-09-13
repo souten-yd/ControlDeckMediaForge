@@ -5,6 +5,22 @@
 
 ## 2026-09-13 v0.28.81 preparation / M1 installed gate pending
 
+最新: R1 handle62788は終端exit1、子502120は誤ったtool反復のためTERM済み。再poll不要。
+Hostがscene操作をsculptorへ委譲する一方、旧試験がtask禁止でbuild maskを残す矛盾を確認。
+private configだけを直接MCP実行へ変更、Hostの通常設定は不変。R2はdebug tools欄誤認assertで開始前失敗。
+実debugでpermission列を確認しpreflight訂正、R3 handle14782/親509049/子509111を開始。
+4fe0bcでskill/capability実呼出済み、終端未確認。project MF3DS-M1-Authored-R3-20260913、
+evidence maintenance/m1-opencode-20260913-r3。同handle監視→verifier→実GLB再importへ。
+旧全test75632は途中修正で中断、最終全test59418を追跡。新script/testは未commit、gate後に必ず保存。
+PR528 Draft、.81 healthy、M1未完了/M2未着手。R1/R2失敗要約はstatusに記録、空projectとevidence回収予定。
+R1/R2のproject/evidenceは参照なし/空制作物確認後に93,121B削除済み。
+最終全test59418はd6ffd5 exit0/1927pass3skip2warnings/203.77秒、以後script/test変更なし。
+R3も終端e715f4 exit1（子509111を3回の空引数中断後TERM、-15/313.291秒/納品0）。
+handle14782は閉じたので再pollしない。session ses_f66c166baffeOmzipVq7BXsQ47を調査対象とする。
+次: 正規MCP直接callでtransport/workerを独立検証し、OpenCodeの引数生成/中断を同session証拠で切り分ける。
+R3 redacted events/observations/空projectはこの診断のため保持、原因記録と修正受入後に回収。
+M1の実OpenCode制作はFAIL、GLB/receipt/品質はNOT TESTED。M2へ進む条件は満たしていない。
+
 更新: PR527 MERGED/f5093ea、現在ux1/release-0-28-81-acceptance。
 公開bundle31631731B/SHA98400a49…3077ee、Host署名consumer/実bundle caps成功、.81通常更新healthy。
 MF501843/versions.81、DB16tables全row digest/assets2392metadata/runtime登録hashは更新前後一致。
