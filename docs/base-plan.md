@@ -1353,6 +1353,29 @@ testing found complete still busy after 20 seconds, but stream idle at 0.502 sec
 Lease return and end-to-end acceptance are separate gates: scoped client cancel
 and deadline tests observed the target lease released; the public MCP/Jobs path
 still needs its own cancellation and delivery acceptance.
+Brief-driven creation is an additive scene.compose operation in the existing
+scene recipe Job manager, not a second queue or asset system. It pins Blender
+before acceptance, prepares and validates data under the child Job identity,
+then executes the existing recipe worker. Persist brief and generated request
+hashes and preparation history with the Job and resulting asset provenance.
+Public exposure requires the same grants, cancellation, retry and installed
+acceptance boundaries as typed scene creation, plus scoped ai.inference.
+The release sequence must not make installed acceptance a prerequisite for
+installing the candidate being tested. First verify the candidate's source
+execution, authorization, cancellation and retry through real Host child Jobs
+and the managed Blender worker. Only then connect its additive contribution
+and request-scoped readiness, build/sign that exact candidate, and exercise the
+normal installed MCP/OpenCode delivery path. Installed acceptance remains an
+explicit release gate; source success does not satisfy it.
+Runtime readiness and asset quality are separate claims. Compose readiness must
+check the actual creation runtime, current caller grants, and the scoped Host
+text streaming/thinking contract; unknown or unavailable prerequisites fail
+closed with a reason. Neither a contribution entry nor an installed skill is
+proof of readiness. A ready execution path may still produce rejected drafts,
+and successful execution never turns visual/deformation/engine NOT TESTED into
+PASS. Do not force availability or weaken the OpenCode fixture to obtain an
+acceptance result. Until the source lifecycle gates pass, acceptance_pending
+remains in place.
 Start with bounded authored
 mesh topology so silhouettes, hair clumps, garment shells and fitted armor are not
 limited to assembled primitives. Mesh hair/garments are not hair/cloth simulation.

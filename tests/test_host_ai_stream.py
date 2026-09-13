@@ -52,6 +52,7 @@ async def invoke(stream, *, status=200, content_type="text/event-stream", **opti
         assert calls[0].headers["Authorization"] == "Bearer test"
         assert calls[0].headers["X-Control-Deck-Addon-ID"] == "media-forge"
         assert "model" not in json.loads(calls[0].content)
+        assert "thinking" not in json.loads(calls[0].content)
         return result
     finally:
         await host.close()
@@ -117,3 +118,69 @@ def test_absolute_deadline_closes_stalled_stream(monkeypatch):
     monkeypatch.setattr("mediaforge.host.ai.asyncio.timeout", lambda _: original(.01))
     with pytest.raises(HostAIError, match="interrupted"):
         asyncio.run(invoke(Stream([], hold=True)))
+
+
+@pytest.mark.parametrize("thinking", [False, True])
+def test_thinking_discovery_precedes_inference_and_is_request_local(thinking):
+    async def run():
+        calls = []
+        def handler(request):
+            calls.append(request)
+            assert request.headers["authorization"] == IDENTITY.authorization
+            if request.method == "GET":
+                return httpx.Response(200, json={"text.generate": {
+                    "available": True, "stream": True, "request_options": {"thinking": {"default": False}}}})
+            return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                  content=event({"type": "content", "content": "{}"}) + event({"type": "done"}))
+        host = ControlDeckHostClient("http://host", transport=httpx.MockTransport(handler))
+        try:
+            gateway = HostAIGateway(host)
+            assert (await gateway.complete_streamed(IDENTITY, "text.generate", [], thinking=thinking)).content == "{}"
+            await gateway.complete_streamed(IDENTITY, "text.generate", [])
+            assert [r.method for r in calls] == ["GET", "POST", "POST"]
+            assert calls[0].url.path.endswith("/ai/capabilities")
+            assert json.loads(calls[1].content)["thinking"] is thinking
+            assert "thinking" not in json.loads(calls[2].content)
+        finally:
+            await host.close()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("item", [None, {}, {"available": True},
+    {"request_options": []}, {"request_options": {"thinking": True}},
+    {"request_options": {"thinking": {"default": 0}}},
+    {"request_options": {"thinking": {"default": False}}, "available": False, "stream": True},
+    {"request_options": {"thinking": {"default": False}}, "available": True, "stream": False},
+])
+def test_missing_invalid_or_unavailable_thinking_never_starts_inference(item):
+    async def run():
+        calls = []
+        def handler(request):
+            calls.append(request.method)
+            return httpx.Response(200, json={"text.generate": item})
+        host = ControlDeckHostClient("http://host", transport=httpx.MockTransport(handler))
+        try:
+            with pytest.raises(HostAIError):
+                await HostAIGateway(host).complete_streamed(IDENTITY, "text.generate", [], thinking=True)
+            assert calls == ["GET"]
+        finally:
+            await host.close()
+    asyncio.run(run())
+
+
+def test_thinking_discovery_shares_absolute_deadline(monkeypatch):
+    original = asyncio.timeout
+    monkeypatch.setattr("mediaforge.host.ai.asyncio.timeout", lambda _: original(.01))
+    async def run():
+        calls = []
+        async def handler(request):
+            calls.append(request.method)
+            await asyncio.Event().wait()
+        host = ControlDeckHostClient("http://host", transport=httpx.MockTransport(handler))
+        try:
+            with pytest.raises(HostAIError, match="interrupted"):
+                await HostAIGateway(host).complete_streamed(IDENTITY, "text.generate", [], thinking=True)
+            assert calls == ["GET"]
+        finally:
+            await host.close()
+    asyncio.run(run())

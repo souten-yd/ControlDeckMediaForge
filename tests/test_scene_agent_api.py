@@ -10,6 +10,31 @@ from fastapi.testclient import TestClient
 from conftest import fake_settings
 from mediaforge.app import create_app
 from mediaforge.host.client import HostIdentity
+from mediaforge.scene_drafts import SceneComposeRequest
+
+
+def test_compose_contract_and_rejection_before_job_allocation(tmp_path: Path):
+    import json
+    import jsonschema
+    schema = json.loads((Path(__file__).resolve().parents[1] / "schemas/scene-compose-request.json").read_text())
+    assert schema == SceneComposeRequest.model_json_schema()
+    jsonschema.validate({"name": "Armor", "intent": "closed teal armor"}, schema)
+    host = Host()
+    app = create_app(fake_settings(tmp_path), host_client=host)
+    with TestClient(app) as client:
+        for value in [
+            {"name": "Armor", "intent": "armor", "python": "bad"},
+            {"name": "Armor", "intent": "armor", "local_only": False},
+            {"name": "Armor", "intent": "armor", "vertex_budget": 1000},
+        ]:
+            response = client.post("/addon/v1/agent/scene/compose", json={"input": value})
+            assert response.status_code == 422
+        # Valid brief still needs ai.inference, independent of frontend flags.
+        response = client.post("/addon/v1/agent/scene/compose",
+                               json={"input": {"name": "Armor", "intent": "armor"}})
+        assert response.status_code == 422
+        assert response.json()["detail"]["code"] == "host_capability_not_granted"
+        assert host.children == 0
 
 
 class Host:

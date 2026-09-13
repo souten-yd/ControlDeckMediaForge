@@ -3,6 +3,260 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 shared inference window required / goal blocked
+
+source05ed9ba/PR533 OPENを再確認、fetch mainは既にancestor、tracked clean。
+前turnは実取消とretry失敗の証拠が増えた進捗。今回97349/cd6791で50.096秒read-only観測:
+task71548/71725/71811/71944/72010/72088/72141が継続してbusy、3秒quiet windowなし。
+新推論/Job/asset/診断dataを作成せず、他処理/Host/runtimeを停止していない。
+共有推論が継続する条件が3turn続き、前回の通常Broker経由試験も期限前の本文を得られなかった。
+今必要なのは実行中取消・成功retryの実受入であり、追加のfake testやavailability変更で代用しない。
+共有推論が落ち着く外部条件を待つためgoal blocked。利用者に既存LLM/OpenCode処理の終了後の
+再開を依頼する。処理を止める許可へ読み替えず、M1/全GOALを完了扱いにしない。
+再開時はslot/lease/PR/稼働版を再確認し、既存のsource lifecycle→正規署名配布→
+MCP/OpenCode/installed納品の順を継続。M2未着手、品質/変形/engine NOT TESTED。
+今回は文書のみ、code/testは2062pass基準から変更なし。全owned handle終端。
+
+## 2026-09-13 real queued compose cancel / retry timeout
+
+前turnはretry tests/上位設計まで進捗。今回は実Host/既定grouped managerで取消・retryを診断。
+source6cddd6b/PR533、main4f978a0 ancestor、製品/test/Host/MF版は変更なし。
+初回84859はidle直後に別推論再開、Job投入前停止。65186は共有task66017継続中に
+専用job_ab7f193bd0334a25bf6556bd5177753b/Host3030ec38a8d2受付→取消0.057秒、
+新規観測lease17213813...released、他task66017継続、asset0/終端通知true。
+これは受付/待機取消で、自分のprovider実行を観測していない。
+同入力retry job_37fa240b000b4f2bbbada7ead4059ace/Hostb27cba595075は全体96.069秒で
+host_ai_unavailable/failed/asset0。DBでbrief/hash/pin/retry_of/別子Job/元履歴保持確認。
+41719の自分の非空SSE contentを観測後取消する別四面体診断も、content前にAI期限失敗。
+Hostcb5b1a1be413 failed確認。実行中取消・成功retryは引き続きNOT TESTED。
+providerログの時間/token件数のみ読取で別task67119のprompt eval159.433秒/111541tokensを確認。
+Job-provider task対応がないので個々のtimeout原因を待機だけと断定しない。モデル/期限変更なし。
+最終Host resourcesで別gateway-638102f4caad46f3 active。追加投入停止、他処理は取消しない。
+3scratch計800727BはDB終端/asset0/symlinkなし/参照なし後に削除。raw DB保持なし。
+全owned handle終端、login finally失効、新正式asset/project/backupなし。
+次は現在のslot/leaseを観測して、共有推論の落ち着いた時間帯で実行中取消/成功retryを確認。
+一瞬のidleを専有保証にせず、busyのまま同じ95秒試験を連続投入しない。
+source gate後のreadiness→署名候補→正規MCP/OpenCode/installed納品を継続する。
+M1未完了/M2未着手、acceptance_pending維持。今回は文書のみ、2062pass基準からcode/test変更なし。
+
+## 2026-09-13 compose retry regression / source gate pending
+
+前turnはOpenCode fixture/証拠検証器追加まで進捗。今回main fetch4f978a0は既にancestor、
+PR533/1020f42からcompose failed/canceled両retryの回帰を追加。元brief/pin/hash/結果保持、
+入力変更/他owner/不足grant拒否を確認。実AIではない。全75041/0e4c47は2062pass3skip/
+2warnings/259.07秒、Node9/viewer45ms差分なし。以後product/test変更なし。
+上位base-plan/integrationへsource実lifecycle→公開接続→署名候補→installed受入の順を明記。
+実行前提と品質合否を分けるが、acceptance_pending/product healthはまだ変更していない。
+共有LLMは各観測で実busy、最新task63519。正規resourcesでも別gatewayのactive lease確認。
+新推論/Host再起動なし、既存Host711252/MF537447保持。専用login finally失効。
+次は現在のslot/leaseを再確認してgrouped Job実取消/再試行を実行。元入力/版/別子Job/
+部分assetなし/終端通知/当該lease返却まで見る。直前turnの単独client cancelを代用しない。
+source gate後に実runtime+caller grants+scoped text stream/thinkingでreadinessを接続し、
+PR532/533の正規配布→実OpenCode --director-compose→installed納品へ。品質/変形/engineを維持。
+M1未完了/M2未着手。新project/asset/scratch/backupなし、tracked変更はcommit/pushして保存する。
+
+## 2026-09-13 OpenCode compose fixture and evidence verification
+
+前turnは実scoped Job/Blender/VLMまで進捗。今回はrunner --director-composeを独立追加し、
+従来typed authored-mesh試験を保持。private configのskill/MCP権限解決とschema事前確認もcomposeへ対応。
+検証器はcompose一回/typed create代用拒否、Job prepared_requestの閉殻/寸法/ridge、
+execution hash/思考要求/修正回数、同revision snapshot/export、新鮮grant/配置bytesを確認。
+DB scene_recipe_tasks input/result、source provenance preparationも照合する。
+synthetic14test追加（MCP実成功とは扱わない）。関連94pass、全11732/b461c2は
+2060pass3skip2warnings/208.56秒、Node9/viewer50ms差分なし。以後product/script/test変更なし。
+実Host MCP tools/list62024/53b9b9は22件、create/packありcomposeなし。private config finally削除。
+新project/asset/scratchなし。通常OpenCode生成は未開始、M1未完了/M2未着手。
+次: source grouped Jobの実取消/再試行を確認し、base-plan末尾のpublic exposure gateを満たす。
+その後installed contribution/health/capability接続を設計と同期し、既存Add-onの正規配布と
+MCP経路で新fixtureを実行する。現capabilityはacceptance_pending固定、health表にも未追加。
+実行前提とQA達成状態の区別を上位文書へ明記する必要がある。根拠なくavailableへ変えない。
+source Job成功を実OpenCode/installed納品へ読み替えず、元の品質/変形/engine要件を維持。
+
+## 2026-09-13 installed Host thinking / real compose Job succeeds
+
+前turnはHost combined gate完了まで進捗。共有task52832終了、正規認証resources active lease0、
+専用user jobsはcanceled/interruptedのみ確認（全user Jobsの確認ではない）。
+Host324 ready後API mergeはHTTP500。local --no-ff mergeを検証済みtreeと差分0確認して通常push、
+ca02bb926ffa8d480e34cd75075bce658394e572、PR324 MERGEDを確認。root ff→./deck.sh start exit0。
+Host711252 active、MF537447維持。Host実受入docs PR326/94cdc8b push済み、未merge。
+thinking=true実取消6e2ba05a...はlocal終端後0.352秒、期限71533f3d...は0.306秒でidle/released。
+既存cancel probeをprocess-local wrapperでthinking=True指定、credentials/推論経路は正規のまま。
+scoped --grouped実51.677秒/2call、閉殻/寸法/ridge PASS。これを受けcompose既定をgroupedへ接続。
+source SceneRecipeJobManager→実Host子Job25542e2a0723→scoped AI→Blender4.5.13が79.415秒成功。
+job_84f8fae485b94d6588fce8400125b236、3call（winding10→cap修正）、asset2/terminal_sent=true。
+初回はHost venvでPIL不足、実行前失敗。再試験はHost発行credentialをstdinでMF別venvへ渡して解決。
+GLB再import16triangles/寸法一致。実画像は粗い縦板、反対側追加でridge確認。VLM7.548秒もblockout。
+VLMはJSON指定でもfenced JSON、beveled edge等の推測を含む。structured合格/自動修正根拠にしない。
+人の採用/人体変形/engine/通常MCP/OpenCode/installed MFはNOT TESTED。
+全99425/a498b2 exit0:2046pass3skip2warnings/207.87秒、関連83pass/Node9/viewer58ms差分なし。
+以後product/test変更なし。scratch m1-scoped-compose-YGCHjWはjob終端/asset hash不変/
+lsof参照なし/symlinkなし/1393287B確認後削除、raw画像/DB/GLB保持なし。元資産/runtime不変。
+次はcomposeを呼ぶ実OpenCode/MCP fixtureへ更新してsourceで一巡、取消伝播/再試行も確認し、
+依存PR532/533の受入と署名配布→installed再実行へ。既存fixtureはtyped createなので代用しない。
+M1未完了/M2未着手。compose acceptance_pending維持、全GOAL品質要件は削らない。
+
+## 2026-09-13 Host combined gate green / live inference protected
+
+前turnはMF接続とtest-only修正まで進捗。今回はHost PR325作成、app connector経由merge成功、
+通常Git/PR APIで47656666630412f7de8a81cc932218a259fb07fb/MERGEDを確認。
+gh GraphQL/REST mergeは失敗して未mergeだったため、別経路の成功後に再確認した。
+Host324へtest-only branchをmerge、status衝突は双方の記録を保持。
+全31761/7c179d: 1106pass2skip1warning/97.58秒 exit0。product変更は88bef36からなし。
+commit a49922e→origin/main統合9e51fbe push済み。Host324はまだ未配布、実推論NOT TESTED。
+Host root main7cf5605/稼働485004、MF537447は変更していない。
+配布前read-only /slotsで共有LLM id0/id_task52832/is_processing=true/n_prompt_tokens41868を
+確認。他の推論なのでHost再起動・cancel・モデル変更を行わない。jobs/resources未認証は401。
+次は同じ実slotの現在状態とHostの実行中Jobを正規認証で再確認し、安全な反映時点を判断する。
+Host324差分review/実機受入を完了し、その後grouped --probe→compose→OpenCode/installedへ。
+既存scripts/3ds_scoped_ai_cancel_probe.pyはidle/unique新leaseを確認して取消/期限を測る。
+thinking=Trueでの受入時は明示指定が必要（既存scriptはまだ省略、既存成功を流用しない）。
+今回はMF文書のみ、2045pass基準からproduct/test変更なし。新asset/project/backupなし。
+M1未完了/M2未着手、compose acceptance_pending。待機は外部推論の実観測であり、goal blockedではない。
+
+## 2026-09-13 scoped thinking discovery wired to grouped candidate
+
+前turnはHost PR324作成まで進捗。MF main fetch4f978a0（既にancestor）、PR533継続。
+HostAIGateway.complete_streamedにoptional thinkingを追加、省略時の旧payload不変。
+明示指定は同じidentityでai/capabilities.request_optionsを検証してからPOST、発見もdeadline内。
+groupedのみtrue、provenance.requested_thinking=true。旧Host実probeは0.066秒で
+host_ai_thinking_unsupported、推論POST前停止。normal composeはまだrawのまま。
+関連57pass、全91813/77dd89 exit0: 2045pass3skip2warnings/268.96秒、Node9/viewer51ms差分なし。
+以後product/test変更なし。新asset/project/backupなし、Host485004/MF537447 active保持。
+Host324 build後再全gateは1103pass2fail2skip/132.10秒、既存2失敗のみ（comment記録）。
+別Host test-only branch ux1/ai-gate-test-isolation、worktree /tmp/controldeck-ai-gate-tests-20260913、
+8455ab9 push: unknown aliasの現仕様期待値、KV空き容量をfixture制御し拒否POST0/meta0も検査。
+同branch全1094pass2skip/108.83秒。製品code変更なし、frontendは既build成果物参照。
+test-only PR作成はGraphQL502/実行エラー、REST POST応答JSON終端不正で未完了。
+最後のREST GET head限定一覧は空（exit0）。8455ab9はremoteへpush済み、次回重複確認後PR作成。
+次: test-only PR review→Host324へ取り込み→combined全gate→新版実HTTP推論/取消/lease受入。
+その後MF grouped scoped実shape→compose接続→OpenCode/installed一巡。M1未完了/M2未着手。
+新Host機能は未配布/実推論NOT TESTED、compose acceptance_pending。全実行handle終端後に保存する。
+
+## 2026-09-13 generic Host thinking candidate implemented
+
+前turnはgrouped実装/paired診断/PR533 pushまで進捗。今回は別Host repoの汎用依存を実装。
+MF main fetch4f978a0、PR533 head d1af91e。Host main fetch7cf5605、root tracked clean。
+Host worktree `/tmp/controldeck-addon-ai-thinking-20260913`、branch ux1/addon-ai-thinking、
+commit88bef36 push済み、Host PR324 OPEN（create応答502後に実PR存在を確認）。
+strict boolean thinking省略false、既存providerへrequest単位で変換、
+ai/capabilities各項request_options.thinking.default=false。能力保証ではなく入力契約の発見。
+関連36pass、Host全1102pass3fail2skip/150.21秒。main比較でmodel_limits/KV容量の2失敗再現。
+Project Lab 404/405はfrontend build完了後に候補でもpass。Host build54.76秒/1550modules。
+実旧Host scoped capabilities200/new thinking422を確認、新版の実HTTP推論はNOT TESTED。
+Host485004/MF537447 active、稼働source/設定未変更。全test/build/診断handle終端。
+次はHost候補のreview/残る全gate/実HTTP推論・取消・lease返却受入。genericのみ、別PR維持。
+その後MF clientでoption discoveryを確認してgroupedへthinkingを明示指定、scoped実shapeから
+compose/OpenCode/installed受入へ進む。M1未完了/M2未着手、compose acceptance_pending。
+今回MFは文書のみ、product/testはd1af91eの2034pass基準から変更なし。既存symlink/asset保持。
+
+## 2026-09-13 M1 grouped candidate and reasoning dependency
+
+PR533/ux1/3d-compose-job、base06119d3、fetch後main4f978a0。Host/user root/installed不変。
+scene_grouped_drafts内部候補と31test、probe --groupedを追加。layout→faces→局所修正の最大3call。
+全vertices一配列+index群の完全分割、面群の許可index/件数、既存全mesh検査、上限/取消/identity/hash。
+実scopedは構造不正、箱によるridge不適合、budget/ref拒否を観測。通常composeへはまだ接続しない。
+37375探索はresponse_format未正規化で比較不適切、結果を効果判定に使わない。
+正規化した通常Host gateway paired比較71645: false15.904秒FAIL、true73.158秒で
+閉殻/寸法.4/.08/.5/ridge PASS（3段階、cap winding修正）。単一例でM1/OpenCode完了ではない。
+全69879は4a7bb5 exit0、2034pass3skip2warnings/209.45秒。以後product/script/test変更なし。
+Node9/viewer49ms差分なし。全handle終端、private config finally削除、新asset/project/backupなし。
+MF537447 active。commit/pushしてPR533へ記録する。
+次: Host scoped AIはthinking=false固定なので、汎用request単位reasoning指定/機能発見を
+別Host PRで実装・受入する。MediaForge内だけでは指定不能という理由を先に明示済み。
+Host AGENTS/設計/status/最新mainを再確認し、既定互換と取消/leaseを守り、Media固有コードを入れない。
+その後MF client/grouped→compose/scoped実機→OpenCode/installedへ。M1未完了/M2未着手。
+compose acceptance_pending。以前full-draft reasoning比較が失敗した記録は維持。
+
+## 2026-09-13 M1 grouped draft reaches real Blender and visual diagnostic
+
+PR533/ux1/3d-compose-job、base8c82e80、fetch後main4f978a0。Host/user root/installed不変。
+raw38984は箱+辺上点の不正形状、二段階22699もFAIL。grouped58198は稜線座標/sideを生成、capだけFAIL。
+その実応答の座標/sideを保持しcapのみ再提出88186は1.651秒、閉殻/寸法/ridge PASS。
+10vertices11faces、寸法.4/.08/.5。固定brief診断2件をつないだもので一般compose/OpenCodeではない。
+汎用の保存済みdraft実機driver scripts/3ds_prepared_mesh_e2e.pyと2negative testを追加。
+実Blender4.5.13→GLB再import16triangles/同寸法、R2制作0.405秒。実source/GLB provenanceと親/hash一致。
+CPU正面/側面/斜め/flat-clayを実視認、普通の縦板で高品質防具ではない。
+99056はscoped vision.analyzeへ実画像2枚→応答成功。VLMの上端段差指摘はtop Z=.5と不整合、
+自動修正根拠にしない。人の採用/参照一致/人体変形/engine/通常OpenCodeはNOT TESTED。
+全70458は9e1bee exit0、2003pass3skip2warnings/208.85秒。以後product/script/test変更なし。
+Node9/viewer51ms差分なし。全probe/worker/test handle終端、MF537447 active。
+scratch m1-grouped-tBk7Gxは両DB終端/参照なし/2391364B確認後完全削除、raw画像/DB/GLB保持なし。
+詳細ID/SHA/再現方法はstatus。元asset/runtime/recovery/user rootは保持。commit/pushしてPR533へ記録。
+次は内部bounded groupingの一般化: 頂点群と面群、参照可能index、局所再提出を扱い、
+LLM未提出の座標/面を自動補完しない。特定装甲座標や五角柱専用の完成品生成器に置換しない。
+総call/time/output上限、取消、child identity、provenanceを維持してcomposeへ接続する。
+M3公開loft/sweepの先行ではない。実shape→Job/Blender→OpenCode/installedのM1受入を継続。
+M1未完了/M2未着手、compose acceptance_pending。
+
+## 2026-09-13 M1 shape acceptance and live draft failure
+
+PR533/ux1/3d-compose-job、base d2a386f、fetch後main4f978a0。Host/user root/installed不変。
+M1 verifierが四面体を通す不足を修正。local寸法5%と接続稜線の最低条件を追加、
+閉殻PASSの厚さ違い/四面体/平面分割箱を拒否するテスト追加。美観/実exportの証明ではない。
+probeはprepared_requestとshape報告を出す。入力は固定の試験brief、credential出力なし。
+実38000は95.139秒timeout。共有slot終了後18660は106.559秒で3attempt同じ不正形状。
+縮小schema59858/25.657秒、fresh修正context91686/25.274秒、index式追記80350/26.923秒も
+全3attempt同じ不正形状。製品へこれらの診断変更を採用しない。詳細SHA/status参照。
+単純JSON amber→violetのfollow-up84648は両期待値一致、exit0。一般的な履歴消失は再現せず。
+全80351は2f8573 exit0、2001pass3skip2warnings/211.42秒、以後product/script/test変更なし。
+focused13pass、Node9pass/viewer57ms差分なし、全probe/test handle終端。commit/pushしてPR533へ保存。
+次: 固定brief由来の失敗draft実データを診断限定で確認し、座標と接続を分ける等を比較。
+同じ全文再生成を無期限に続けず、検査を緩和しない。実shape→Job/Blender→OpenCode/installed。
+M1未完了/M2未着手、compose acceptance_pending。新asset/project/scratch/backupなし。
+
+## 2026-09-13 M1 guidance comparison protocol continuation
+
+PR533/ux1/3d-compose-job、base5e9859a。fetch後main4f978a0、PR OPEN DRAFTを確認。
+ガイドへ7分類の確認点、比較前のrevision/観察条件/対象照合と未観測の扱いを追加。
+テストと調査・制作guide・M1/M2計画を同期。新tool/VLM可用性宣言なし、Host変更なし。
+実scoped draft38166は96006b exit1/136.777秒/host_ai_unavailable、終端。
+capabilityのtext/vision trueとhealth200は推論成功ではない。形状/MCP/OpenCode/VLMはNOT TESTED。
+MF537447 active、user root/本番/既存asset/runtime不変、新scratch/backupなし。
+focused88176はexit0、Node9pass/viewer66ms差分なし。全51345は4eac7c exit0、
+1998pass3skip2warnings/348.24秒。以後product/script/test変更なし。全handle終端、commit/pushへ。
+M1未完了/M2未着手、compose acceptance_pending。次もscoped shapeの意味的適合から、
+実Job/Blender→実OpenCode/MCP→installedへ。ガイド追加を品質受入の代替にしない。
+
+## 2026-09-13 M1 small topology correction continuation
+
+PR533/ux1/3d-compose-job、base7d5710b。main4f978a0含む。Host変更なし。
+同条件のreasoning false/true比較は両方3attempt FAIL（詳細status）。Host reasoning追加を採用しない。
+具体的cap/反転候補を返しても全体JSON再生成はFAIL。小さなappend_faces/reverse_face_indices応答は
+1.010秒で閉殻検査PASS/10vertices11faces、ただしdepth0.12で要求0.08に不一致。
+内部preparerを明示的小修正→コピーへ適用→再検査へ。自動修復/guard緩和なし、総3call以内。
+寸法指示とprobeの寸法/非直方体チェックを追加。統合52305は共有LLM別要求中に95.132秒期限超過。
+9840/31389/69481/52305は終端。旧全61835/91496後に修正したため最終gateには使わない。
+その後詳細出力とindex上限修正を追加。初期meshに存在しないindex/多重共有があり候補なし。
+schemaのfaces index上限をbudget-1へ、候補側もactual vertex countを検査。focused33pass。
+最終全8589は3245bc exit0/1997pass3skip2warnings/249.58秒。以後product/script/test変更なし。
+Node9/viewer53ms差分なし。commit/pushしてPR533を更新する。
+10886/66173はvalidation_exhaustedで終端。65083は95.133秒host_ai_unavailable、終端。
+slots読取もReadTimeoutで現在推論状態未確定。再起動/他要求取消はしていない。
+後続healthはHTTP200、slotは98946tokens/temperature1/max_tokens32768の別要求処理中。
+RAM available2.2GiB/swap7.8GiB使用を観測、原因は未確定。追加61376も95.137秒期限超過で終端。
+当turn全handleは終端、旧handleの再poll/再起動禁止。本番MF537447 active、Host変更なし。
+次はAI health/LLM空きを確認し同じscoped probe（scripts/3ds_scoped_draft_probe.py）から再開。
+新scratch/asset/backupなし。
+shape成功とはまだ言えない。寸法/閉殻/非直方体→実Job/Blender→MCP/OpenCode/installedへ。
+M1未完了/M2未着手、compose acceptance_pending、本番とuser rootを保持。
+
+## 2026-09-13 M1 compose Job/API candidate
+
+ux1/3d-compose-job、base PR532/1d493c5（PR531上）、main4f978a0を含む。
+compose request/schema/manifest/routeを既存SceneRecipeJobManagerへ接続、child AI/取消/準備履歴を実装。
+3d.scene_composeはunavailable/acceptance_pending、installedは未変更。M1未完了/M2未着手。
+source実APIで8.101秒→Blender4.5.13→blend/GLB/provenanceまで通過したが形は直方体、装甲要求FAIL。
+指示強化後のridgeは24.169秒、3attemptともboundary3/同hashでfailed/asset0。
+失敗details保存時のstage欠落で旧Jobがrunningに残る不具合を実機で発見し修正、unit追加。
+修正後はfailed/履歴/Host終端送信まで確認。旧Host子Jobab4e12274577もscoped reconcileでfailed済。
+全39620(1982pass209秒)の後に修正したため最終gateではない。
+再全13938は54a1c0 exit0/1982pass3skip2warnings/209.38秒、handle閉鎖済み。
+focused43pass、Node9/viewer48ms差分なし。以後product/script/test変更なし、commit/push/小PRへ。
+すべてのcandidate/driverは終端。scratch m1-compose-nJUJfSは784365B、参照なし検査後削除済。
+本番537447/9130、user root、runtime/recoveryは不変。詳細ID/証拠はstatus冒頭。
+次: 同じbrief/schemaでscoped AIのthinking無効固定を診断（原因未確定、Host未変更）。
+必要なHost修正は汎用任意reasoning制御だけ、別repo/PR。意味的適合→MCP/OpenCode→signed installedへ。
+
 ## 2026-09-13 M1 scoped cancel accepted, MCP connection pending
 
 PR532/ux1/3d-structured-mesh-draft、base0ba2ab0（PR531/c42f966上）、main4f978a0含む。

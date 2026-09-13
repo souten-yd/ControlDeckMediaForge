@@ -38,6 +38,7 @@ from .scenes import (
     validate_scene_owner,
 )
 from .scene_recipes import SceneCreateRequest, SceneEditRequest, SceneMaterialRequest, SceneRecipe
+from .scene_drafts import SceneComposeRequest
 from .scene_recipe_failure import recipe_failure_message
 from .store import Store, utc_now
 
@@ -190,6 +191,7 @@ class SceneWorkspace:
         *,
         runtime_id: str,
         runtime_version: str,
+        preparation: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run a typed recipe and atomically publish a validated scene revision."""
         owner = validate_scene_owner(owner)
@@ -235,6 +237,8 @@ class SceneWorkspace:
                         ).hexdigest(),
                         "operation_count": len(value.recipe.operations),
                         "stable_object_ids": worker_facts["stable_object_ids"],
+                        **({"preparation": {**preparation, "execution_status": "executed"}}
+                           if preparation is not None else {}),
                     },
                 )
                 registered.extend([source_asset.id, preview_asset.id])
@@ -271,7 +275,7 @@ class SceneWorkspace:
                     generated.unlink()
 
     def acquire_recipe_runtime(
-        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneComposeRequest,
         *, retry_pin: tuple[str, str, str | None] | None = None,
     ) -> tuple[ExitStack, tuple[str, str, str | None]]:
         """Select and pin atomically with removal; call and close off the event loop.
@@ -282,7 +286,7 @@ class SceneWorkspace:
         references = ExitStack()
         try:
             with self.resolver.removal_guard():
-                if retry_pin is not None and isinstance(value, SceneCreateRequest):
+                if retry_pin is not None and isinstance(value, (SceneCreateRequest, SceneComposeRequest)):
                     validate_scene_owner(owner)
                     if retry_pin[2] is not None:
                         raise SceneError("scene_retry_changed", "create retry cannot name a base revision")
@@ -300,7 +304,7 @@ class SceneWorkspace:
             raise
 
     def recipe_runtime_pin(
-        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneComposeRequest
     ) -> tuple[str, str, str | None]:
         owner = validate_scene_owner(owner)
         if isinstance(value, (SceneEditRequest, SceneMaterialRequest)):

@@ -146,3 +146,24 @@ def test_character_fixture_is_valid_bounded_geometry() -> None:
     parsed = SceneCreateRequest.model_validate(module.character_recipe())
     assert len(parsed.recipe.operations) == 56
     assert sum(isinstance(op, MeshCreate) for op in parsed.recipe.operations) == 28
+
+
+def test_guidance_delivers_family_checks_and_evidence_bound_review() -> None:
+    from mediaforge.scene_authoring_guidance import scene_authoring_guidance
+
+    guidance = scene_authoring_guidance()
+    assert set(guidance["asset_family_checks"]) == {
+        "character", "hair", "clothing_armor", "creature", "weapon_tool", "vehicle", "environment",
+    }
+    review = guidance["visual_review"]
+    assert review["availability"] == "not_asserted_by_this_guidance"
+    protocol = " ".join(review["comparison_protocol"])
+    for boundary in ("actual revision", "inconclusive", "target unknown", "unobserved"):
+        assert boundary in protocol
+    # Returned nested guidance must not leak edits between capability requests.
+    review["comparison_protocol"].clear()
+    guidance["asset_family_checks"].clear()
+    fresh = scene_authoring_guidance()
+    assert len(fresh["visual_review"]["comparison_protocol"]) == 4
+    assert len(fresh["asset_family_checks"]) == 7
+    json.dumps(fresh, allow_nan=False)

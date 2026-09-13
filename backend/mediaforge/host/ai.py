@@ -107,6 +107,7 @@ class HostAIGateway:
         max_tokens: int = 2048,
         timeout_seconds: int = 120,
         max_output_bytes: int = 8192,
+        thinking: bool | None = None,
     ) -> HostAIResult:
         """Assemble bounded text data over the scoped, cancellable Host SSE API.
 
@@ -118,6 +119,8 @@ class HostAIGateway:
             raise ValueError("Host streaming supports text.generate only")
         if type(max_output_bytes) is not int or not 1 <= max_output_bytes <= 65536:
             raise ValueError("invalid Host AI output bound")
+        if thinking is not None and type(thinking) is not bool:
+            raise ValueError("invalid Host AI thinking option")
         payload: dict[str, Any] = {
             "capability": capability, "messages": messages, "temperature": temperature,
             "max_tokens": max_tokens, "timeout_seconds": timeout_seconds,
@@ -131,6 +134,24 @@ class HostAIGateway:
         data: list[bytes] = []
         try:
             async with asyncio.timeout(timeout_seconds + 5):
+                if thinking is not None:
+                    # Discover with this stage's credential; do not cache another
+                    # caller's permission or silently downgrade on an older Host.
+                    if "ai.inference" not in identity.granted_capabilities:
+                        raise HostAIError("host_ai_not_granted", "ControlDeck AI access is not granted")
+                    document = await self.host._request(
+                        identity, "GET", f"/{identity.addon_id}/ai/capabilities",
+                        timeout_sec=timeout_seconds + 5,
+                    )
+                    item = document.get(capability)
+                    options = item.get("request_options") if isinstance(item, dict) else None
+                    option = options.get("thinking") if isinstance(options, dict) else None
+                    if not isinstance(option, dict) or option.get("default") is not False:
+                        raise HostAIError("host_ai_thinking_unsupported",
+                                          "ControlDeck does not advertise request-local thinking control")
+                    if item.get("available") is not True or item.get("stream") is not True:
+                        raise HostAIError("host_ai_unavailable", "Requested ControlDeck AI stream is unavailable")
+                    payload["thinking"] = thinking
                 async with self.host._client.stream(  # same-package scoped transport
                     "POST", f"/api/v1/addon-runtime/{identity.addon_id}/ai/stream",
                     headers=self.host._headers(identity.authorization, identity.addon_id),

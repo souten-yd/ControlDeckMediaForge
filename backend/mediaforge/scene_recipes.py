@@ -493,7 +493,7 @@ class SceneJobReferenceRequest(BaseModel):
 class SceneTaskRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: str = Field(pattern=r"^job_[0-9a-f]{32}$")
-    operation: Literal["scene.create", "scene.edit", "scene.material"]
+    operation: Literal["scene.create", "scene.edit", "scene.material", "scene.compose"]
     owner: str = Field(min_length=1, max_length=256)
     host_job_id: str = Field(min_length=1, max_length=128)
     runtime_id: str = Field(min_length=1, max_length=128)

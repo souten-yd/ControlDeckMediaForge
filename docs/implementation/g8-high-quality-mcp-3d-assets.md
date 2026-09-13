@@ -758,6 +758,37 @@ G9は「制作を加速する候補生成器」として後段に置く。
 
 ## 15. 実装順序
 
+2026-09-13公開順序の明確化: base-plan §25 / integration §18に、sourceで実Host子Jobの
+実行・権限・取消・再試行を確認→contribution/readiness接続→exact署名候補を導入→
+正規installed MCP/OpenCode納品受入の順を明記した。導入前にinstalled受入を要求する
+循環を避けるが、installed gate自体は省略しない。実行前提と作品の品質合否を分離する。
+composeの失敗/取消からの同入力retryについて、active runtime変更後の元pin維持、
+元試行不変、入力変更/他owner/ai.inference欠如の拒否を回帰testへ追加した。
+これは実Host/Blenderでのretry成功ではない。source実取消/再試行の残件があるため、
+productのacceptance_pendingとhealth表はまだ変更していない。
+
+2026-09-13 OpenCode compose受入準備: runnerへ独立の--director-composeを追加し、
+従来のtyped authored-mesh試験を保持。検証器はcompose一回、生成Jobのprepared_request/
+実行条件hash/局所修正回数、同revisionのsnapshot/export、新鮮なgrant、実配置bytesを確認する。
+DBのscene_recipe_tasks入力/結果とsource provenanceも照合し、応答だけの成功は認めない。
+実Host tools/listは22件、create/packあり、composeなし。今回OpenCode制作は未開始。
+次の接続gateはinstalled contributionとhealth/capabilityである。sourceのcompose capabilityは
+acceptance_pending固定、health contribution表にもまだ追加していないため、runnerだけ追加しても
+試験は開始できない。実行前提（Blender/Host AI thinking/権限）と品質・全受入の達成状態を
+区別する設計を上位文書と照合してから接続する。根拠なくavailableへ変更しない。
+availabilityを偽る試験fixtureを実受入証拠にせず、既存Add-onの正規配布・MCP経路で検証する。
+
+Host PR324の汎用thinking契約に対するMF client候補を追加。groupedのみ明示true、
+各段階でrequest_optionsを検証し、未対応/不正/利用不可なら推論POST前に停止する。
+旧Host実確認では0.066秒でhost_ai_thinking_unsupported。これは負の互換性受入で、
+新Host推論やM1成功ではない。次はHost gate/実受入→scoped grouped→compose/OpenCode。
+
+M1ガイド追補（2026-09-13）: capability応答へアセット7分類の確認点とVLM比較前の
+revision/観察条件/対象照合を追加する。実行権限・VLM availabilityは追加しない。
+M2受入では古いrevision画像、異なる画角、未提供の背面、画像から対象IDを確定できない場合を
+negative fixtureへ含める。空の欠陥一覧をPASSにせず、比較不能/未観測を保持する。
+M1の実shape/Job/OpenCode/installed受入が先であり、本ガイド追加をM2完了と数えない。
+
 PR #526をM1として完了させ、その後は原則次の順序で小PRへ分割する。
 
 M1受入時はLLM引数生成/stream、MCP受付、worker終端、export/配置を別々に記録する。
@@ -786,8 +817,44 @@ front ridge/寸法/見た目・Blender実行は未評価。closed edge PASSを�
 一括completeは切断20秒後もbusyだったためdraftでは使用しない。streamはdone受信前の
 部分JSONを採用せず、wire/出力上限とabsolute deadlineを持つ。Host変更なし。
 残るgateはMCP/既存Jobsからの取消伝播、準備provenance→asset lineage、実制作・納品。
+compose候補を既存Jobsへ接続し、source実APIで子JobAI→Blender4.5.13→asset/revisionと
+provenance/GLB親関係、API取消→実推論停止/lease返却を確認した。ただし生成は直方体でridge要求FAIL。
+指示補強後は同じboundary3が3回とも直らず、正常failed/asset0。形状検査を緩めず、
+同条件でHostのscoped reasoning無効固定の影響を切り分ける。原因とはまだ断定しない。
+公開契約候補は追加済みだがcapabilityはacceptance_pending、実OpenCode/installed納品は未達。
+reasoning条件の比較は双方3attempt失敗し、Host変更は採用していない。
+曖昧でないtopology defectは面追加/反転候補を算出し、LLMの小さなstrict修正データを
+下書きコピーへ適用して再検査する。元typed requestをvalidatorが黙示修復することはない。
+単独修正試験は閉殻PASSだがdepth不一致、統合試験は共有LLM処理中の期限超過で未受入。
+寸法を含む意味的検査を先に通し、構造PASSだけでfixtureやM1完了を緩めない。
 未受入のhelperをcapability availableへ追加しない。M2開始条件は変わらない。
 診断の一標本の成功を安定運用やM1完了とはしない。実OpenCodeからの一巡が引き続き必須。
+
+M1 shape受入追補: 従来のOpenCode verifierの閉殻条件だけでは四面体も合格したため、
+fixtureのlocal X幅/Y厚さ/Z高さを0.4/0.08/0.5m（5%許容）として明示する。
+幅の端でない位置に高さの半分以上を走る接続edgeがあり、同じ高さの左右表面より突出する
+最小の稜線条件を追加する。箱/平面を分割した箱/四面体/厚さ違いは合格させない。
+この条件は当fixture専用で、一般の装甲形状を規定せず、交差・外向き・美観の証明でもない。
+実画像・Blender再import・exportされた実寸法・OpenCode納品は独立の受入として維持する。
+
+M1内部draftの次の比較候補（実機診断による追補）: raw頂点/面を一括再生成しても、箱の
+辺上への頂点追加と不正capが反復された。単純な座標→面の二段階化も不合格だった。
+頂点ringとside/bottom/topの面を別fieldへ分け、capの参照可能indexを束縛する診断では
+稜線座標を生成し、capだけの明示的再提出で閉殻/寸法/最低稜線を満たした。
+既存typed workerで実Blender/GLB再importも確認したが、この診断は固定briefの単例である。
+製品のcomposeを特定の装甲座標や五角柱テンプレートへ置き換えない。内部の一般的な
+bounded grouping（頂点群・対応する面群・局所再提出）の候補として設計・比較する。
+LLMが提出していない座標/面をvalidatorが自動生成しない。検査、総呼出数・時間・出力上限、
+取消・子Job identity・hash/provenanceを維持し、通常のraw mesh入力は互換のままにする。
+M3の公開loft/sweepを先行提供したことにはせず、M1の下書き生成方法だけを扱う。
+固定briefでの成功を一般化や実OpenCode受入の証拠にしない。
+
+grouped候補のsource実装後、正常Host gateway/Brokerで同じseed7/temperature0.1/4096tokens/
+正規化schemaを比較した。thinking falseは不正面を反復、trueは3段階で寸法・閉殻・最低稜線PASS。
+単例であり、以前のfull-draft比較の失敗を取り消さない。scoped AIはthinking無効固定なので、
+次の依存は汎用Hostのrequest単位reasoning指定と機能発見を別PRで検討・実機受入すること。
+その後MF client/grouped preparer→既存composeへ接続し、scoped実生成/取消/Blenderと
+OpenCode/installedを改めて確認する。通常gatewayの診断をscoped受入へ読み替えない。
 
 | 順序 | slice | 主な成果 | exit gate |
 |---|---|---|---|

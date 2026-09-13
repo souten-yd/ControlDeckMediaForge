@@ -1,5 +1,448 @@
 # Media Forge implementation status
 
+## 2026-09-13 shared inference acceptance window unavailable
+
+PR533/head05ed9ba OPEN、最新mainはancestor。97349/cd6791でread-only slotを50.096秒観測。
+task71548/71725/71811/71944/72010/72088/72141がbusy、連続3秒のidleなし。
+前回の受付取消/失敗retryの証拠は維持するが、実行中取消・成功retryは未受入。
+3turn継続する同じ共有資源条件に対して安全な診断/通常Broker試験を実施済みであり、
+追加試験投入や偽のavailabilityで回避せず、推論の空く外部条件待ち（goal blocked）とする。
+利用者の他LLM/OpenCode処理終了後に現在状態を再確認して再開する。無断停止はしない。
+新推論/Job/asset/scratchなし。文書のみ、全test再実行なし、2062pass基準から製品/test変更なし。
+M1未完了/M2未着手、MCP/OpenCode/installedと品質/変形/engineの残件を保持。
+
+## 2026-09-13 real compose cancellation under concurrent inference
+
+source6cddd6b/PR533、main4f978a0はancestor。製品/test/稼働版は変更せず実診断した。
+Host正常token issuer（sync ORMはasync外）→stdin→MF専用venv別process、
+既定GroupedMeshDraftPreparer/SceneRecipeJobManager→正規Host child/AI経路。
+モデル/設定/推論経路の差替えなし。MCP/OpenCodeの実行ではない。
+
+- 84859/856765: slot空き観測後に別推論が再開。MF側事前検査で停止し、Job/asset0。
+  一瞬のidle観測を専有時間の保証にしない。
+- 65186/dd6374: baseline task66017/busy、lease edefd7c5-c321-4c4b-86d3-eea6c77c9324。
+  job_ab7f193bd0334a25bf6556bd5177753b / Host3030ec38a8d2を正常受付。
+  新規観測lease17213813-53e0-4120-8099-4edef2657e43は取消後released、取消0.057秒。
+  他のslotは同じtask66017/busyを維持。local/Hostともcanceled、host_terminal_sent=true、asset0。
+  自分のprovider本文生成は未観測なので、これは受付/待機段階の取消受入に限定する。
+- 同入力retry job_37fa240b000b4f2bbbada7ead4059ace / Host b27cba595075。
+  65186/a3a57eは全体96.069秒でhost_ai_unavailable/Host AI stream interrupted、failed/asset0。
+  DB後検査511a8fで元request JSON/input SHA/runtime pin一致、別child/retry_of/両終端通知を確認。
+  input SHA b6439c298fe161975d938adb9b2313f591daf3c0a125157638c2a4ff700a99e7、Blender4.5.13。
+  retry受付・失敗終端の実証であり、成功するretry/Blender再実行とは扱わない。
+- 41719/2c677f: 四面体brief/vertex_budget4の別取消診断。
+  job_0c6d3658b554448b8216dd2d2e031529 / Host cb5b1a1be413。
+  HTTP response streamのpassive tapで自分の非空contentを検出してから取消する計画だったが、
+  content観測前に同じAI期限エラーでfailed。100秒の観測待ちもtimeout、実行中取消は未実施。
+  tapは既存bytesをそのまま渡し、payload/経路/timeoutを変えず秘密値・本文を出力していない。
+
+Host GET jobsで3子Jobのcanceled/failed/failedを再確認。診断loginは各finallyで失効。
+providerのログはtask番号・時間・token件数だけに限定して読取（prompt本文なし）。
+task67119のprompt eval159432.61ms/111541tokens、total179646.68msを観測。
+別の長い処理が95秒を超えることは実証されたが、gateway Jobとprovider taskの厳密な対応が
+ないため、今回の各timeoutを待機だけのせいと断定しない。未観測の推論を成功・取消成功にしない。
+最終resourcesは別gateway-638102f4caad46f3/lease67acdae1-ab3e-4151-a575-f838c372dc5a active。
+他の要求をcancel/停止/モデル切替せず、追加試験投入を止めた。
+
+scratch m1-job-retry-6dph7h4e / m1-job-retry-p1pasp99 / m1-stream-cancel-zwla8wfiは
+各266909B、DB終端/asset0/symlinkなし/lsof参照なし確認後に完全削除（計800727B）。
+正式asset/runtime/recovery/backupは保持。raw診断DBは残っていない。
+今回は文書のみ、全test再実行なし。直前の同一製品/test基準2062pass3skip/259.07秒を維持。
+NOT TESTED: grouped Job実行中取消、成功retry、compose MCP/OpenCode/installed、品質/変形/engine。
+次は共有推論の落ち着いた時間帯で再確認する。忙しい間に同じ95秒試験を反復しない。
+availabilityを変えずM1未完了/M2未着手。期限を伸ばすだけで原因確認/品質gateを回避しない。
+
+## 2026-09-13 compose retry invariants and exposure sequence
+
+PR533/source1020f42から、composeのfailed/canceled各終端後のretry回帰testを追加。
+元briefの一致、active版4.5.9→4.5.13変更後も元4.5.9 pin、別Job ID、input hash/
+idempotency一致、元試行の結果不変、Host終端通知を検査した。入力intent/budget/closed変更、
+他owner、ai.inference欠如は新子Job/準備前に拒否。fake orchestrationであり実生成受入ではない。
+`./mf.sh test` 75041/0e4c47: 2062passed3skipped2warnings、259.07秒。
+関連scene recipe tests成功、Node9成功、viewer build45ms/生成差分なし。以後product/test変更なし。
+
+base-plan §25/integration §18へsource lifecycle→contribution/readiness→署名候補導入→
+実installed MCP/OpenCodeの順を明記。installed受入と品質gateを省略せず、availabilityは
+現実の実行前提に基づくものとする。今回product capability/healthは変更していない。
+
+read-only実slotは60939→61737→61890→62475→62921→63519と変化し、各観測でbusy。
+正規専用loginのresources観測でもlease eb80cf8a-0280-4c62-881a-ab8edf226840/
+job gateway-76502b5916144ef1がactive。loginはfinally失効。別処理を停止せず、新推論を投入しなかった。
+Host711252/MF537447稼働を再確認。新project/asset/scratch/backupなし、global設定変更なし。
+NOT TESTED: grouped既定Jobの実取消/再試行、compose実OpenCode/installed納品、品質/変形/engine。
+M1未完了/M2未着手。次は共有推論状態を再確認して実Job取消/再試行、その後readiness接続へ。
+
+## 2026-09-13 OpenCode compose acceptance harness
+
+独立--director-composeで短い制作意図→scene.compose一回→Job終端→snapshot/export→
+fresh project output grant→armor.glb配置を指示する。既存typed mesh試験はそのまま保持。
+検証器はJobの実行済みprepared_request/閉殻/寸法/ridge、生成履歴/実行hash、同revision、
+実配置bytesを照合。さらにDBの元brief/Job結果/source provenanceをMCP応答と比較する。
+synthetic14testで未対応capability、typed create代用、hash/実行状態/品質主張/思考条件/
+回数上限、prepared_request欠落、DB・provenance・納品bytes不一致を拒否。
+全2060pass3skip2warnings/208.56秒、関連94pass、Node9/viewer50ms。以後code/test変更なし。
+
+実Host MCP bridge tools/listは22件、media.scene.create/packあり、composeなし。
+通常token/config発行経由、secret未表示、private configはfinally削除、projectを作成していない。
+稼働MF未更新のためOpenCode本実行はNOT TESTED。sourceもcapability acceptance_pending固定であり、
+公開条件を確認せず無条件availableにはしない。次はJob取消/再試行実受入と正規配布の接続gate。
+M1/高品質/変形/engineは未完了のまま。
+
+## 2026-09-13 grouped compose executes through real Host and Blender
+
+Host PR324 main ca02bb926ffa8d480e34cd75075bce658394e572を通常反映、Host711252/MF537447。
+GitHub merge API HTTP500後、検証済みtree同一のlocal mergeを通常pushし、PR MERGEDを再確認。
+Host記録PR326。thinking=true取消lease6e2ba05a-0e12-4e71-b987-6e8b152a29d3は1.402秒全体/
+local終端後0.352秒でidle/released。期限lease71533f3d-80ff-483a-9618-1ab4927b3a5bは6.314秒/
+0.306秒。既存probeへのprocess-local thinking wrapper、正規scoped認証/機能発見経路。
+
+scoped grouped probe 93796/5ccea1は51.677秒、10vertices11faces、寸法0.4/0.08/0.5m/ridge PASS。
+request SHA7f8e4254522bc7ae3d6f017d1ba12319164adec92b1ef0758a3bf659e5d9842d、2call。
+この実受入後、既存SceneRecipeJobManagerのcompose既定をGroupedMeshDraftPreparerへ接続。
+raw helper/既存typed createは保持、公開availabilityはacceptance_pendingのまま。
+
+source Job実診断5463/f5b551:
+
+- 初回Host venv import PIL不足で実行前失敗。依存を共有せず、Hostの正常token発行→stdin→
+  MF専用venv別processへ分離して再実行。coreはHost内部をimportしない。
+- job_84f8fae485b94d6588fce8400125b236 / Host child25542e2a0723、79.415秒でsucceeded。
+  3call、winding10を局所面再提出で解消。host_terminal_sent=true、preparation.execution_status=executed。
+- scene_0a2801189d3e4858b27420f89214dd46 / revision_b1db350ea35c40af85181e48b976588f。
+- source asset_8e4de63b20b84fe4a231469f8e492a49、450132B、
+  SHAdb5234f2ff09a2f5628f26c9259883c85ce38c0f8af7813d0b5914f11e50cca7。
+- GLB asset_97936ca9de784c6e98a7227f17d5fe8e、1308B、
+  SHAa99751dac868f123736de0fc5dcfe33d800e7a3e55d43c84cf3a5e2601574009、parentは上記source。
+  両assetにprovenance IDがあり、後続render後もhash一致。
+- 実Blender4.5.13再import16triangles、寸法[0.4000000059604645,0.07999999821186066,0.5]。
+  CPU/Cycles16samples実画像を確認。既存カメラ(2,-3,1)はridgeと反対なので、同revisionの
+  (2,3,1)を診断追加し、稜線を目視。平面側を見ただけでridge欠損とは判断しない。
+- VLM32472/4e6b2e、7.548秒。実画像clay SHAaa11ab8ea36a8440ba81a9d525294aec6526abdf8069c049bac0b59d013e8033
+  /opposite SHA32dd82cf58f5090a8f369400134372136ff83b10b12d143c85fb9324d46dd5d6を入力。
+  片側flat/反対側ridge、coarse blockoutと評価。JSON指定へのfenced JSONとbevel推測は
+  structured成功/自動修正根拠にしない。高品質防具ではない。
+
+全2046pass3skip2warnings/207.87秒、関連83pass、Node9/viewer58ms、以後product/test変更なし。
+scratch1393287BはJob終端/参照なし/symlinkなし確認後削除。既存runtime/元asset/recovery保持。
+NOT TESTED: 本source経路でのMCP/OpenCode、installed MF、参照画像との人の採用判断、変形、engine。
+次は既存typed createのOpenCode fixtureをcompose依頼に対応させ、正常/取消/納品を実行する。
+
+## 2026-09-13 Host prerequisite gate integrated
+
+Host test-only PR325をmerge4765666で確認。Host PR324へ統合後の全testは
+1106 passed / 2 skipped / 1 warning、97.58秒、exit0。Host候補head9e51fbe push済み。
+製品変更は既存thinking候補のみ、旧test失敗を消さずHost statusへ追記した。
+実機反映前にread-only /slotsで他の実推論（slot0/task52832）稼働を確認し、
+Host再起動せず保護。新thinkingの実推論/取消/lease受入はNOT TESTEDのまま。
+MF product/稼働/asset不変、M1のMCP/OpenCode/installed受入未完了。
+
+## 2026-09-13 grouped candidate scoped thinking discovery
+
+Host PR324の追加契約をMF scoped stream clientへ接続。既存呼び出しはoption省略で
+互換性維持、groupedのみthinking=trueを要求。段階ごとのidentityでfeature discoveryを
+行い、旧Host/不正応答/利用不可を実行前拒否。発見HTTPもabsolute deadline内。
+provenanceは要求条件を記録し、モデルの能力保証や実品質PASSとは扱わない。
+実probe --grouped: 0.066秒でhost_ai_thinking_unsupported（稼働旧Host、推論POSTなし）。
+関連57test、全2045pass3skip2warnings/268.96秒、Node9/viewer51ms成功。
+Host候補のbuild後gateは1103pass2fail2skip/132.10秒。既存fail修正は別test-only
+branch8455ab9で全1094pass2skip/108.83秒。unknown alias転送仕様と実容量依存を修正。
+Host/MF稼働版、asset/project不変。新Hostの実推論・取消・lease、MCP/OpenCode/installedは
+NOT TESTED。今回の負の互換性受入をM1完成とはしない。
+
+## 2026-09-13 M1 generic Host reasoning dependency candidate
+
+Host main7cf5605から別worktree/branch ux1/addon-ai-thinkingでcommit88bef36を実装・push。
+別PR: https://github.com/souten-yd/ControlDeck/pull/324 （OPEN、未merge/未配布）。
+scoped AIにstrict boolean thinking（既定false）とrequest_optionsの発見を追加。
+Media固有のコード/モデル/ルートなし。既存providerの変換・Host admission経路を維持。
+関連36test成功、Host全1102pass3fail2skip（150.21秒）、build54.76秒成功。
+未変更mainでmodel_limits/KV snapshot失敗を再現、Project Labはbuild完了後の再実行でpass。
+全gateを成功とは記録しない。詳細はHost docs/implementation-status.md。
+稼働Hostの実scoped GET200には新optionなし、thinking=true POST422/extra_forbidden。
+旧版の境界確認のみ、新版実推論/取消/lease返却はNOT TESTED。稼働Host/MF未変更。
+MF client/groupedへの接続は次段階、M1/OpenCode/installed受入未完了。
+
+## 2026-09-13 M1 bounded grouped preparer candidate
+
+PR533/06119d3で再開、fetch後main4f978a0、tracked clean（dev symlinkのみ）を確認。
+前turnは固定briefのgrouped実生成/Blender/VLM診断まで進展。
+scene_grouped_drafts.pyに内部候補を実装。layout→faces→必要な面群だけ再提出、最大3call。
+面群の参照index集合/面サイズ/面数をAI schemaとローカル検査で強制し、最終MeshCreateを維持。
+座標/面の自動生成や修復なし。頂点/面群各8、頂点32かつrequest budget、面64、応答8KiB、
+全300秒/各90秒+transport上限、段階ごとのchild identity更新とhash/provenanceを保持する。
+非cap面の個別検査と全不正辺のcap接触を満たす場合だけcap限定修正、それ以外は全群を再提出。
+元raw helper/既存composeはまだ切り替えず、probe --groupedで候補を選択する。
+
+初版54010/b307b4は22.224秒でvalidation_exhausted、boundary6/winding2が修正後も残った。
+32887/1772cfは10.999秒で構造/寸法PASSだが8頂点の箱、ridge=falseでprobe exit1。
+指示とedge feedback補強後40801/db14b8は9.524秒でvertex budget拒否。
+群ごとに座標配列を持つ形では合計上限をschemaで示せないため、全vertices配列+index群へ変更。
+全indexの重複なし完全分割、不明/重複参照、未使用群、不可能な面サイズをlayout段階で拒否。
+3423/f01f1fは9.788秒でface-group reference拒否。
+36943/cfd513は16.416秒、10頂点（箱8点+上辺上2点）の不正形状、面の修正前後が同じSHA
+7bd46e8a6d7769af133a599a1871bae875710f322efbb1b3c2cc17c0df0a1728。
+degenerate facesと境界/方向不整合を拒否した。汎用化後の意味的適合はまだ未達。
+
+tests/test_scene_grouped_drafts.pyで31件通過（87200b）。三角柱/open panel、局所修正、
+非cap間の不正をcap修正で隠さない、strict index/全体予算/partition/extra拒否、
+最大call、取消/絶対期限/更新identity/provenanceを検査。特定の五角柱座標は実装に含めない。
+全69879は4a7bb5 exit0、2034pass3skip2warnings/209.45秒。以後product/script/test変更なし。
+Node9pass/9c9793、viewer49ms/0d1942、tracked生成物差分なし。
+通常Host gatewayのthinking=true探索診断37375/89816eは27.563秒でlayout拒否。
+この診断では簡略response_formatをOpenAI標準へ正規化しておらず、material fieldも不一致だった。
+この結果を思考効果の比較根拠にはしない。private configはfinally回収、scoped AI受入とも区別する。
+正常なnormalize_response_formatを使い、同じseed7/temperature0.1/max_tokens4096/schemaで
+thinking false/trueを比較した71645は43a598で終端。falseは15.904秒でdegenerate faces、3call終端。
+trueは73.158秒でlayout→faces→cap修正が通過し、10vertices11faces、寸法[.4,.08,.5]とridge PASS。
+初回面のwinding5を具体的edge feedback後に修正。layout SHA
+7af63636fb4f05b2fa82a1d89d4c1801066ad4459acf0eab543762622b970169、request SHA
+0ba7ec7482d4dbd6541bda23fb213a18e0182d38ab300595e2c23da68cd0171f。
+最終修正応答SHA7ffbfbe4bab2a8e3b5e5cb51415040561243012848a4d7d22c6cb23ff6434ba6。
+全応答finish=stop。単一paired診断の結果であり安定性/実Blender/MCP/installedの受入ではない。
+この比較も正常Host gateway/Brokerを通す診断であり、scoped APIへのreasoning追加や設定変更ではない。
+両診断private configはfinally削除、全handle終端、新asset/project/backupなし、MF537447 active。
+次のHost検討理由: scoped RuntimeAIRequest/_runtime_requestはthinking無効固定であり、
+MediaForgeが同じ推論条件を要求できない。汎用のrequest単位reasoning制御を別Host PRで扱う。
+既定の無効動作と既存Add-on互換、広告された機能だけの利用、取消/lease、秘密値非公開を維持する。
+Media固有のmodel/route/文言をHostへ追加せず、既存グローバル設定を切り替えない。
+M1未完了/compose acceptance_pending/M2未着手、Hostコード・本番設定は変更なし。
+
+## 2026-09-13 M1 grouped draft, real Blender and visual diagnostic
+
+PR533/8c82e80で再開、fetch後main4f978a0。前turnはverifier修正/実推論診断の進展。
+固定briefのraw応答を診断限定で表示した38984/a891baは24.4秒validation_exhausted。
+3回同SHA0a5e50df8b598f572580462292ae2d54ae7c040b14d12c22a1f6e1cd7e3301b1。
+8個の箱頂点と底面左右辺上の2点で、稜線でなく零面積faceもあった。
+座標→面の二段階診断22699/2683adも不合格。座標は矩形辺上の点を含む平坦断面、cap重複。
+
+grouped診断58198/d0a133はbottom_ring/top_ring/sides/bottom_cap/top_capへJSONを分割。
+各ring5点、side5quad、cap各3triangle、capのindex範囲を0..4/5..9へ限定した。
+LLMが生成したbottom ringは[[-.1,.02,0],[0,0,0],[.1,.02,0],[.2,.08,0],[-.2,.08,0]]、
+topは同XYでZ=.5、sidesは対応する隣接ringを結ぶ5quad。capは不正で検査拒否。
+この実応答の座標/sidesを変更せず、capだけをscoped AIで再提出させた88186/99edb7は
+1.651秒、bottom [[0,2,1],[0,3,2],[0,4,3]] / top [[5,6,7],[5,7,8],[5,8,9]]。
+10vertices/11faces、閉殻、寸法[.4,.08,.5]、接続稜線検査PASS。
+これは二つの診断をつないだ単例で、一般compose/OpenCodeの受入ではない。
+
+scripts/3ds_prepared_mesh_e2e.pyを追加。保存済みbounded requestを既存SceneWorkspace/
+実Blenderで実行し、別BlenderでGLB再import、CPU画像を作る診断専用。AI生成器ではない。
+実行: env PYTHONPATH=backend:. .venv/bin/python scripts/3ds_prepared_mesh_e2e.py
+--recipe <owned>/prepared.json --registry <installed-data>/runtime-state/blender-runtimes.json
+--runtime-root <feature-data>/runtimes/blender --evidence-dir <owned>/evidence-r2。
+owned=/data1tb/ControlDeck/data/feature-data/media-forge/maintenance/m1-grouped-tBk7Gx。
+最初のPYTHONPATH=backendのみはscripts import不足で68b34a exit1、実行前の失敗として保持。
+6c4a84/331368は1.077秒で制作成功、R2は364bf4/ec4610、0.405秒、Blender4.5.13。
+GLB再importは16triangles、寸法[.4000000059604645,.07999999821186066,.5]、CPU/Cycles16samples。
+R2scene_f201e2fd9512445885572d2034f2adfd、revision_afa981f941364843b532db0168b230ac。
+source asset_4c5a2b2df74b4b779133df407b4b2763、450132B、SHA
+1b1512af2fdf8ed6cc6a89ce6cac28933c7e24a8f8ecfbd02e101b2dd18db115。
+GLB asset_9f2444fb67bc4bd1b50b8d894866b1aa、1308B、SHA
+db3dadd84ffcc2970050a8d7853085dedb6635a481d3eb1af153f01411c6a171（R1/R2一致）。
+入力JSON SHA9a385d071344f8886acd8989064673110befb3883ba934ea964dab1de97bcb08。
+2ebdd1で両asset実SHAとDB一致、GLB親source、preparation.execution_status=executedを確認。
+registryはscratchへcopy、実runtimeは読取り参照。Host/本番サービス/制作assetは変更なし。
+
+正面/側面/斜めと、元assetを再保存しない無地flat-clay斜め画像を実視認。
+単純な縦板の稜線は見えるが、滑らかな金属陰影は形状を読み取りにくく、高品質防具ではない。
+通常scoped vision.analyzeへR2斜め2画像をdata URLで実送信した99056/3187b7はexit0。
+oblique139530B/SHA8cd11a94f8e24f6c0c6a501692d33ad5ddac2776346f0f1d8a8581cb521fb3d9、
+clay120734B/SHAab673b13100db1b6182fc57c74d9c668e293cd86029551601983e738060d21dd。
+VLMは稜線/反射/低ポリ面を指摘し、不可視構造や寸法・engineは保証しないと回答した。
+一方「上端の段差」は全top頂点Z=.5の実データと整合せず、投影された輪郭を欠陥と断定しない。
+VLMの記述を自動採用しない。参照画像との比較、人体への装着/変形/実engineはNOT TESTED。
+M2の公開観察surfaceを実装したわけではない。M1通常OpenCode/installedは未完了。
+新helperの既存evidence保護/サイズ上限のfocused2件は89ad7c pass。
+全70458は9e1bee exit0、2003pass3skip2warnings/208.85秒。以後product/script/test変更なし。
+Node9pass/e01247、viewer51ms/bb6a9f、tracked生成物差分なし。
+全診断handleは終端。5097b7で両専用DBのJob各1件succeeded、2391364B、symlinkなし、
+396800 lsof出力なしを確認後、70e195で上記owned directoryだけ完全削除した。
+raw画像/DB/GLBは現在残っておらずbackupなし。要約/数値/hash/手順は本記録とPRへ保持。
+MF537447/activeを再確認。M1未完了、compose acceptance_pending、M2未着手。
+
+## 2026-09-13 M1 shape verifier and repeated invalid draft
+
+PR533/d2a386fで再開、fetch後main4f978a0、tracked cleanを確認。前turnはguide実装の進展。
+8097 health200だがslot task34560が82425→94363tokensで処理中。
+通常scoped draft38000は2f21cc exit1/95.139秒/host_ai_unavailable。
+30秒待機後に別task35765/27338tokensを観測し、通常経路を再実行した。
+18660/fe8e0eは106.559秒でdraft_validation_exhausted、3attempt全て同じ応答SHA
+b107fc68adcf63630331df84e5eb9eb33ff952ba7fa2e376d6310156d30f62ce。
+mesh face indices invalidと多重共有/境界/向き不整合、曖昧なためrepair_hintsなし。
+この回は実推論応答を得た上での構造FAILであり、接続待ちだけを原因にしない。
+Host _runtime_requestはbody.messagesを渡し、streamがHost admissionを使うコードも読取り確認。
+Host変更・共有推論の停止・設定変更なし。MF537447/active保持、新asset/project/backupなし。
+
+従来OpenCode verifierのsynthetic positiveが四面体だったことを確認。
+閉殻検査のみでは胸当て形状を証明しないため、fixture説明にlocal軸/寸法/5%許容を明示し、
+独立armor_shape_reportで寸法と接続された突出edgeの最低条件を検査する。
+positive fixtureは稜線付き五角断面の閉殻へ、negativeは厚さ違い/四面体/平面分割箱を追加。
+それぞれMeshCreate閉殻検査PASSを先にassertし、拒否がshape条件によることを試験した。
+scoped probeも同じridge検査と検査済みprepared_requestを出力する（現在の固定brief、secretなし）。
+043159 focused13件成功。shape条件は美観・自己交差・実export寸法の証明ではない。
+診断59858/346e54は25.657秒でvalidation_exhausted。MeshCreateはtype/object_id/name/
+vertices/faces/require_closed、MaterialSetはtype/object_id/base_color/metallic/roughnessだけの
+schemaへprocess内で限定し、faceのuniqueItemsも指定した。3attempt同SHA
+3c074adaef0dd7ff0e1938ba2cf83147b375292c64360235443a8a6981eb6a3f、degenerate faces。
+この縮小は採用していない。次の診断91686/efdd3aは25.274秒でvalidation_exhausted。
+元schemaのまま、full repair時だけsystem+user二件へまとめ、userにoriginal_brief/
+rejected_draft/validator_feedbackを渡した。3attempt同SHA
+904d385cde51a7182252917287905e534d1f40323cc179802aa20063e17f455f、duplicate faces。
+両診断はHost診断venvのpython -cで対象関数をprocess内だけ差し替え、同じscoped probeをrunpy実行。
+production config/codeは不変。各条件のinitial形状も異なり、単一因子の因果や安定性を断定しない。
+共通して修正前後の応答が同一であり、次は小さい既知JSONでfollow-up指示が実反映されるかを
+正常Host経路で切り分ける。形状検査を弱めたり任意Python実行へ迂回しない。
+全80351は2f8573 exit0、2001pass3skip2warnings/211.42秒。以後product/script/test変更なし。
+Node9pass/viewer57ms（98eb0f/3c90d0）、build差分なし。
+小さいJSONの追従診断84648/a44259/410aefはexit0。通常scoped経路でanswer=amberを返した後、
+同じsystem/user/assistant履歴へvioletへの変更指示を追加し、answer=violetを受信。
+両方期待値一致。温度0.1/128tokens/90秒、同一schema。実時間は採取していない。
+一般的なfollow-up消失はこの試験では再現せず、形状設計/修正の条件へ戻る。
+続けて凸断面の上下ringを結ぶ一般的なindex式だけをsystemへ追記した診断80350/98af6eも
+26.923秒でvalidation_exhausted、3attempt同SHA
+6ebf805205af2e0f2c5eeb08f43096a7dd45636a3a20c9e6e3df44dcdc807d29、invalid face indices。
+式はside=[i,j,j+n,i+n], j=(i+1)%n、caps=[0,i+1,i]/[n,n+i,n+i+1]。
+座標はLLMが決め、既存validatorとshape受入を維持した。製品指示には未採用。
+全probe/test handleは終端。次は失敗draftの固定brief由来の実データを診断限定で確認し、
+座標設計と面接続を分ける等の候補を比較する。失敗した全体JSON再生成を無期限に反復しない。
+M1実OpenCode/installedの受入は未完了、compose acceptance_pending、M2未着手。
+
+## 2026-09-13 M1 agent instructions and scoped recheck
+
+再開tree /tmp/mediaforge-cleanup-docs-20260912、PR533/5e9859a、fetch後main4f978a0。
+PR533 OPEN DRAFT/base ux1/3d-structured-mesh-draftを確認。user root work/03ed1afは変更しない。
+既存研究・制作ガイド・GA/M1計画を確認し、BlenderGym v1本文を再閲覧した。
+制作ガイドの加法拡張として、7分類のasset_family_checksと、revision/画像条件/対象照合/
+退行・未観測を扱うcomparison_protocolを実capability生成関数へ追加。
+VLM availabilityはnot_asserted_by_this_guidanceを維持。新規VLM起動やM2実装ではない。
+docs/agent-3d-authoring-guide.md、調査書、M1/M2のnegative受入計画も同期した。
+
+実Host診断venvでenv PYTHONPATH=backend .venv/bin/python
+/tmp/mediaforge-cleanup-docs-20260912/scripts/3ds_scoped_draft_probe.pyを実行。
+481bba/96006b: scoped capabilities text.generate=true/vision.analyze=trueを受信したが、
+136.777秒でhost_ai_unavailable、exit1。これは全probeの経過秒でありAI段階だけの時間ではない。
+形状生成の合否、VLMの実画像入力、Blender/実MCP/OpenCode/納品は今回NOT TESTED。
+前後の8097/healthはHTTP200、MF unitはMainPID537447/active。health200を推論成功と数えない。
+他要求の停止・LLM再設定・Host code変更なし。新project/asset/scratch/backupなし。
+
+focused authored_mesh/game_static_operationsはd14f06 exit0。Nodeはdf4a61で9pass、
+viewer build e8d330 exit0/66ms、生成物tracked差分なし。初回Nodeは存在しない
+scene_viewer.test.mjsを指定してexit1、rgで実ファイル確認後に上記2fileを実行した。
+全 ./mf.sh test は51345/4eac7c exit0、1998passed/3skipped/2warnings、348.24秒。
+このgate後のproduct/script/test変更なし。実AI probeと全test handleは終端。
+最終diff checkも通過し、PR533へcommit/pushして記録する。
+M1未完了、compose acceptance_pending、M2以降は未着手。本番への新ガイド配布はNOT TESTED。
+
+## 2026-09-13 M1 explicit topology corrections, no Host reasoning change
+
+PR533/7d5710bで再開、fetch後main4f978a0、tracked clean、PR533 OPENを確認。
+前turnはJob接続/実機失敗診断の進展。Host AGENTS/design-addon-ai-gatewayを読取り、Hostコード変更なし。
+同じbrief/schema/temperature0.1/seed7/max_tokens8192で、通常Host LLM gateway/Broker経由の
+非stream JSON生成を比較した（scoped AIの受入ではなく、設定効果の分離診断）。
+private runtime configはfinally回収、provider直通/モデル変更/asset生成なし。
+
+| reasoning | attempt | 秒 | 結果 |
+|---|---:|---:|---|
+| false | 1 | 7.551 | boundary3/multiple0/winding0 |
+| false | 2 | 7.504 | 同じ欠損 |
+| false | 3 | 7.108 | 同じ欠損 |
+| true | 1 | 29.023 | boundary3/multiple1/winding3 |
+| true | 2 | 28.095 | boundary0/multiple0/winding10 |
+| true | 3 | 28.160 | winding10のまま |
+
+5dccd8/b5f72a/493ec2/49f3fe/54a958。全応答finish=stopだが検査FAIL。
+有効化だけでは解決しなかったため、汎用Host APIのreasoning追加はこの時点では採用しない。
+
+MediaForgeのdata-only feedbackに、単純3/4辺loopのcap面候補、閉二面共有graphの面反転候補を追加。
+分岐/多重共有/重複面/制約矛盾には候補を出さない。入力を自動修正せず同じ検査へ再提出させる。
+全体JSONの再生成を求める実scoped試験は6e0c64/224745 exit1、24.181秒/validation_exhausted。
+
+別の実scoped試験で応答をappend_faces/reverse_face_indicesだけに限定した。
+c15b8e/1cd0e7: 初回8.350秒、反転候補[8,9,10]。修正1.010秒でその3面の反転JSONを返し、
+検査PASS/10vertices11faces。ただし全体寸法[0.4,0.12,0.5]で要求depth0.08に不一致。
+前稜線の座標は生成したが、寸法適合/装甲完成の合格ではない。Blender/画像/納品は未実施。
+
+この小修正を内部preparerへ接続。候補がある場合だけstrict topology correctionをLLMへ要求し、
+明示された変更を下書きのコピーへ適用してcoreを再検査する。座標・材質・require_closedは維持。
+初回+最大2修正を維持、修正512tokens、raw応答のkind/hashとrepair指示hashを記録。
+無変更patch、重複/存在しないindex、非整数、座標混入は成功にしない。自動cap補完ではない。
+寸法は突起を含むbounding box extentだと指示を明確化し、probeに寸法/非直方体座標の実測を追加。
+後者はridge品質や自己交差の証明ではない。
+
+統合試験52305はfac17f exit1/95.132秒/host_ai_unavailable。観測slotは75459tokens、
+続くslotは81094tokensの別要求が処理中（a6b3a7/b0148a）。当試験のbounded入力より大きく、
+この期限超過を形状成否へ算入しない。他の処理は停止/再設定していない。
+reasoning比較9840、小修正69481、全体再生成31389、統合52305は全て終端。
+focused32pass（6d7905）。当時の全61835はa01988 exit0/1996passed3skipped2warnings/216.57秒。
+後述の変更前のgateであり最終結果ではない。Node9/viewer53ms差分なし（880cbe）。
+空き（8f8c4b）を確認して統合probeを再実行したが、d8a526/261dc1は27.596秒で
+validation_exhausted。診断出力へ既存bounded detailsを追加し、bbbc06/03cc07で再取得。
+32.952秒、3回とも同じ応答、face indices invalid、多重共有、repair_hintsなし。
+頂点予算10に対し面のLLM schema上限が4095のままだったため、budget-1へ縮小した。
+候補計算も実頂点数外のindexを拒否。曖昧な形へ無理に修正候補を生成していない。
+修正後65083は7daaef exit1/95.133秒/host_ai_unavailable、直後slots読取もReadTimeout（c37cfa）。
+この時点の推論状態/終了は未確定。プロセス再起動や他の要求取消は行っていない。
+10886/66173/65083は終端。旧全61835の後にscript/schema/testを変更したため最終gateには使わない。
+再全91496は9b2e1d/1996pass282.79秒だが、実行中にindex guardを変更したので最終gateではない。
+最終全8589は3245bc exit0/1997passed3skipped2warnings/249.58秒。以後product/script/test変更なし。
+40b649でmodel health HTTP200、cf800bでmodel RSS26410568KiB、RAM available2.2GiB、swap使用7.8GiB。
+同時点のslotは98946prompt tokens/temperature1/max_tokens32768で、当probe(.1/4096)とは異なる要求。
+これは観測値でありOOMや原因確定の証拠とはしない。追加待機試験61376もbae421 exit1/95.137秒で終端。
+当turnの全診断handle/全testは終端。本番MF537447 activeを再確認（9cd1b3）、Host変更なし。
+最新focused33pass（face1d）。次: AI health/slotを再確認し、同じ統合probeで寸法/閉殻/非直方体を
+確認してから実Blender/Jobへ進む。タイムアウトを幾何検査FAILや成功に読み替えない。
+M1未完了/M2未着手、capability acceptance_pending、Host/installed/model/global設定は不変。
+
+## 2026-09-13 M1 compose Job/API candidate, semantic gate still failed
+
+PR532/1d493c5で再開しfetch/main4f978a0を確認。ux1/3d-compose-jobへ分割。
+加法的media.scene.compose/自己完結schema/agent routeを追加。既存SceneRecipeJobManagerで
+runtime pin→Host子Job→scoped AI prepare_mesh→typed recipe→既存asset/revisionを実行する。
+jobs.write/ai.inferenceをbackendで要求、local_only固定、strict brief/budget、同じ停止/再試行経路。
+Jobに元brief/generated request/preparation hashを保持、source/preview provenanceへ準備履歴を渡す。
+前段失敗のbounded issue/edge summariesも保存。第二queue/asset基盤やHostコード変更なし。
+capabilityはunavailable/acceptance_pending。一般利用・installed/OpenCode受入済みとはしていない。
+
+分離候補: maintenance/m1-compose-nJUJfS、独立DB/registry、既存managed Blender4.5.13だけ参照。
+実Uvicorn9167を起動し、専用mf-e2e通常新規service token→実Host子Job/AI/Brokerで検証。
+候補PID561622/562235/563835/568107は全て終端。稼働本番537447/9130には適用していない。
+
+| 試験 | Job / Host子Job | 実結果 |
+|---|---|---|
+| 初回armor brief | job_c1aa682a20b547deb85a0794baee2ad2 / 754dd20833d4 | 8.101秒/succeeded、Blender4.5.13、2ops、blend+GLB登録 |
+| ridge明示R2 | job_0241f1d5f86a41d090e7241ebecebe7f / 402517798a23 | 24.172秒/draft_validation_exhausted、asset0 |
+| 下書き中API cancel | job_b1b74920df784c9c8adbc66acd70a472 / bfc1965c7310 | canceled、asset0、0.352秒でidle/lease released |
+| 失敗履歴保存の初回 | job_6716824daae84f34acfa176c23cc4331 / ab4e12274577 | 保存時stage引数不足でtask例外、DB runningが残った。不合格 |
+| 保存修正後ridge | job_eeedf1975099438f8586f801ca659063 / 6e84940cf990 | 24.169秒/failed、3attempt summaries保存、asset0、Host終端送信済 |
+
+初回生成はscene_07027e4725744247bf772c3831a2b956/revision_ea30610950384e028ba7bd8c008a095c。
+blend asset_fac686ebd20a4197b7bff7daff07e926 / GLB asset_19e69d6f9546464cab7bad9437010f40。
+2d1b7bで両provenanceのpreparation hash、GLB parent=blendを実確認。
+ただし形は8vertices/6faces/12trianglesの直方体。前稜線なし、指定軸も不一致で依頼への適合FAIL。
+構造PASSを装甲品質/M1合格に読み替えない。初期nested preparation.execution_statusはnot_executedの
+ままだったため、成功時のasset/Job履歴はexecutedへ更新するコードを追加（最終source成功例は未実施）。
+
+X幅/Y奥行/Z高さ、実形状としてのridge、pentagonal ring/triangulated capの指示を補強。
+最後の失敗traceは3回ともboundary3/multiple0/winding0、同じ応答SHA
+2a6af621cacb50cfd4919777e5adb4510cf990174cbf156f5eb96a4d18300e40。
+具体的辺feedbackでも同じ三角形分の穴が直っていない。自動で穴を埋めたりguardを緩めたりしていない。
+Hostはmessagesをそのまま転送する一方、scoped AIはthinking=False/disable_thinking=True固定を確認
+（afc919）。この設定が原因だとは未確定。次は同じbrief/schemaでreasoning条件を切り分ける。
+Host変更が必要なら他Add-onにも成立する任意の推論制御だけを別PRにし、モデル既定は変えない。
+
+保存不具合は必須stage欠落と、後続updateがresultを消す経路を修正。失敗details付きunitを追加。
+旧driver81815は85622e exit143、candidate71047はf346f8 exit143、推論leaseは2ea808でactive0。
+同一DBで候補再起動後に旧Job failedを確認。残った当該Host子Jobは通常scoped reconcileで
+failed/source_candidate_execution_lostへ、35d9e9 applied/terminal_matches=true。
+修正後59937はc86542 exit0、候補88194は831dcf exit143。cancel leaseは
+6dcef514-3120-4843-a7f4-c641669a0277、実API停止から0.352秒でreleased/slot idle（af9129）。
+
+初回全39620は1982pass209.00秒だが、その後修正したため最終gateには使わない。
+再全13938は54a1c0 exit0/1982passed3skipped2warnings/209.38秒。以後product/script/test変更なし。
+focused43pass（58fffe）、Node9/viewer48ms差分なし（5ea7eb）。
+候補DB全Job終端（1success/3fail/1cancel）・process停止・realpath/lsof参照なしを確認。
+784365bytesの検証専用scratch（直方体blend/GLB含む）を07233aで削除、不存在確認済み。
+再取得用backupなし、本番asset/recovery/runtimeは保持。Host診断loginはfinally revoke。
+M1未完了/M2未着手、実OpenCode/MCP納品・画像/VLM・変形・engineはNOT TESTED。
+
 ## 2026-09-13 M1 scoped stream cancellation / lease acceptance
 
 PR532/0ba2ab0で再開。fetch後main4f978a0、tracked clean、PR532 OPEN/base PR531を確認。

@@ -72,6 +72,40 @@ complete呼出は切断20秒後も推論中だったため使わない。stream�
 既存completeの利用者は変更しない。tool引数streamの障害回避fallbackやmodel変更ではない。
 実Hostで取消・期限超過の両方を実行し、推論idleと対象lease releasedを確認した（status参照）。
 このgateはscoped clientまで。公開MCP→Jobs経由の取消・lineage・納品は別途未受入。
+次の加法的入口はmedia.scene.compose（name/intent/vertex_budget/require_closed等）。
+既存SceneRecipeJobManagerでruntime pin→Host子Job→prepare_mesh→typed worker→revisionを実行する。
+AI段階には子Jobのidentityを使い、修正間は更新済みcredentialを参照する。別queue/asset基盤なし。
+Jobは元brief、検査済みrequest、準備provenanceを保持し、生成blend/GLBにもhash/historyを伝える。
+失敗時のbounded validation/edge summariesもJobへ保存し、元の失敗を空の成功に置き換えない。
+briefのretryは元brief/runtimeを固定するがAI出力の再現を保証しない。生成request/hashを比較する。
+source候補で登録・取消を評価中。形状の意味的適合とinstalled受入が済むまでは
+3d.scene_composeをunavailable/acceptance_pendingのままにする。
+閉殻修正のfeedbackには、曖昧さのない3/4辺の境界loopから導いたcap面候補、または
+閉じた二面共有graphから導いた面反転候補を返してよい。これは未信頼draftへの診断指示であり、
+入力を自動変更・実行しない。再提出にも同じcore/worker検査を必須とする。
+分岐boundary、3面以上の共有、向きの制約矛盾では候補を作らない。
+全体JSON再提出を繰り返しても修正されない実測を受け、候補がある場合は修正応答を
+append_faces/reverse_face_indicesだけのstrictデータに限定する。LLMが明示提出した変更だけを
+下書きのコピーへ適用し、座標・材質は保持する。同じcore検査が通るまでBlenderへ渡さない。
+初回生成+最大2修正の総呼出数は増やさない。自動cap追加やvalidatorによる黙示的修復ではない。
+grouped draftの内部候補は、座標群と面群の計画→面index提出→必要な面群だけの再提出の最大3call。
+思考有効を明示要求し、各段階の最新child identityでHostのrequest_optionsを発見してから
+scoped streamへ送る。未対応Hostはhost_ai_thinking_unsupportedで実行前停止し、
+黙示的に思考無効やprovider直結へ切り替えない。発見HTTPも段階のabsolute deadline内。
+要求条件requested_thinkingをprovenanceへ記録するが、モデル能力/品質の保証とはしない。
+既存raw draftや一般AI呼び出しはoption省略を維持し、旧Hostとの互換性を保つ。
+2026-09-13 scoped実受入（51.677秒/2段階、閉殻/寸法/ridge PASS）後、
+SceneRecipeJobManagerのcompose既定preparerをgroupedへ接続する。raw helperは保持。
+composeの公開availabilityは実OpenCode/installed受入までacceptance_pendingのままとする。
+座標群/面群各最大8、全頂点32かつrequest budget以内、全面64、各応答8KiB/全300秒を維持する。
+座標は全体で一つのvertices配列に置き、座標群はそのindexの重複なし完全分割とする。
+この形で全頂点上限を応答schemaにも反映し、群ごとの上限だけで合計超過を見逃さない。
+面群の計画は名前、参照可能な座標群、三角/四角、面数、cap/surface区分を持つ未信頼データ。
+その計画から応答schemaのindex許可集合と件数だけを構成する。座標/面そのものは生成しない。
+cap修正は、それ以外の面群が個別の面検査を満たし、不正な共有辺が全てcapにも接する場合だけ
+cap群へ限定する。それ以外は全ての面群を再提出させる。いずれも既存MeshCreateで全体を再検査。
+要求/指示/各段階/最終requestのhash、更新済みchild identityと取消を維持し、raw入力の互換性を保つ。
+候補helperは実機評価してから既存composeへ接続する。特定装甲や固定五角柱の座標は埋め込まない。
 髪の束・衣服shell・装甲の輪郭を実Blenderで作り、構造検査と見た目の評価を分離する。
 後続は選択付き編集/曲面・UV/bake・weight補正/IK・表情/動作、engine受入へ進む。
 この一操作だけで高品質キャラクター、cloth/hair simulationや全GA完成としない。

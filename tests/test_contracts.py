@@ -169,6 +169,7 @@ def test_3ds7_scene_tools_are_additive_strict_and_keep_job_request_frozen():
     # 共有しているとどちらの用途も書けない（一覧から選ぶ側に届かない）。
     # 形が同じでもファイルを分けた。
     assert len(scene_schema_paths) == 8
+    scene_schema_paths.add("/schemas/scene-compose-request.json")
     for schema_path in scene_schema_paths:
         schema = json.loads((ROOT / schema_path.removeprefix("/")).read_text(encoding="utf-8"))
         jsonschema.Draft202012Validator.check_schema(schema)

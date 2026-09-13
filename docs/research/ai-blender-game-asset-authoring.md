@@ -229,6 +229,14 @@ runtime不足はセットアップ案内、資源待ちはJob状態の確認と�
 
 ## 12. 観察・品質評価の製品設計
 
+2026-09-13追補: BlenderGym本文のgenerator/verifier構成と、視覚差の見落とし・無関係な
+変更・自己評価の偏りに関する記述を再確認した。[^2] これを踏まえたMediaForge側の判断として、
+評価前に参照/採用版/候補のidentityと観察条件を照合する。比較不能、対象不明、未観測を
+肯定評価と分け、依頼箇所以外の退行も明示する。これは同論文の品質達成率の転用ではない。
+実capabilityで配信するガイドにcomparison_protocolとasset_family_checksを加法追加する。
+文書内だけに置かず実行エージェントへ届けるが、VLM起動や新render機能の実装とは数えない。
+今回Blender 4.5 glTF exporterページの取得は402で失敗したため、新しいexporter仕様の根拠には使わない。
+
 次の重要なsliceは、版に固定した複数視点画像の生成・参照である。camera名、解像度、照明、背景、
 render設定、対象範囲を固定し、結果を既存asset/provenanceで管理する。LLM/VLMへraw host pathを渡さない。
 GPUを使う場合はBroker leaseを取り、LLMや画像生成と相互待ちしない段階分割にする。

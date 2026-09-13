@@ -543,6 +543,29 @@ Both workspace scene lists include owner-scoped `working_copies` for recovery UI
 
 ### Typed 3D scene Agent and workflow tools
 
+M1 candidate addition: `media.scene.compose` (`POST /addon/v1/agent/scene/compose`,
+`schemas/scene-compose-request.json`) accepts a name and intent rather than a
+recipe. It requires `jobs.write` and `ai.inference`, local-only, 4..32 vertex
+budget, and defaults to a required closed mesh. It uses the existing detached
+scene Job manager and status/cancel endpoints. One mesh plus one material is
+prepared through scoped AI, checked with at most two corrections, then passed
+to the existing Blender worker. This is not a complete-character generator.
+Where an unambiguous topology repair is possible, the AI submits a bounded
+face-append/face-reversal data correction; positions and material remain fixed,
+and the complete result must pass the same validator. No automatic repair is
+performed by the typed recipe validator. An accepted closed mesh can still fail
+requested dimensions, silhouette or visual quality.
+The Job stores the original brief, generated request, and preparation hashes;
+both Blender/GLB provenance retain preparation history, and GLB retains its
+source asset parent. Validation exhaustion fails before Blender allocation;
+bounded issue/edge summaries remain in `result.preparation_failure`.
+Retry preserves the brief and pinned runtime; AI preparation can produce a new
+candidate, whose exact generated request/hash is recorded rather than claiming
+deterministic geometry. Existing typed recipe retry semantics are unchanged.
+`3d.scene_compose` remains `unavailable/acceptance_pending` until the M1
+semantic/installed acceptance gates pass. Do not treat this candidate endpoint
+or a successful structural check as available high-quality asset creation.
+
 3DS-7 adds `media.scene.create`, `media.scene.edit`, `media.scene.material`,
 `media.scene.snapshot`, `media.scene.export`, `media.job.status`, and
 `media.job.cancel`, plus the `media.scene` workflow executor. Their self-contained
