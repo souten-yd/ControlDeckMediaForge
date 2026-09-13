@@ -25,6 +25,7 @@ docs/implementation/                 実装の指示（どの順で・何を確�
 | 1 | [goal-roadmap.md](goal-roadmap.md) | MediaForge | 全体像。G0〜G10 のゴール機能と進め方の原則 |
 | G7 | [g7-video-runtime.md](g7-video-runtime.md) | MediaForge | 動画契約、FFmpeg 境界、候補評価、Broker 共存、installed 受け入れ |
 | G8 | [g8-blender-production.md](g8-blender-production.md) | MediaForge | Blender runtime、bounded GLB import、deterministic compile/package、agent/installed受け入れ |
+| G8HQ | [g8-high-quality-mcp-3d-assets.md](g8-high-quality-mcp-3d-assets.md) | MediaForge | 高精細キャラクター/髪/装備/ロボット/乗り物/環境/建物/VFXをMCPで制作するM1〜M10計画。多視点観察、局所修正、UV/PBR/bake、rig/animation、trusted procedural、engine受入 |
 | 2 | [mf0-0-environment.md](mf0-0-environment.md) | MediaForge | 実行環境の分離・自動整備・削除安全性。**最初に実施** |
 | 3 | [mf0-addon-core.md](mf0-addon-core.md) | MediaForge | G0。Add-on として成立させる（fake worker） |
 | 4 | [ux1-workspace.md](ux1-workspace.md) | MediaForge | G0〜G3 の機能を使える形にする workspace UI。設計は `../design-workspace-ux.md` |
@@ -37,6 +38,7 @@ docs/implementation/                 実装の指示（どの順で・何を確�
 
 `host-load-profile-fix.md` だけ作業対象が ControlDeck リポジトリ。
 `g4-agent-asset-workflow-hardening.md` は原則 MediaForge の実装計画であり、文書内 H1〜H4 は **別 ControlDeck PR の候補**として明確に分離する。MediaForge PR の都合で Host に Media 固有コードを追加してはならない。
+`g8-high-quality-mcp-3d-assets.md` は `design-game-asset-authoring.md` のGA-0〜8を縮小せず、高品質化の依存順・品質gate・アセット群別受入を具体化する実装計画である。PR #526 のM1基盤を入口とし、M2のrevision固定多視点観察を次の優先sliceとする。
 Creative Intelligence は ControlDeck の generic `ai.inference` を利用するが、Media固有の provider/model route は追加しない。
 Media Forge G7（動画）で LLM 退避が実際に必要になるため、依存関係の記録として `host-load-profile-fix.md` をここに置く。
 
@@ -57,12 +59,14 @@ G5   M5Stack companion が実運用できる
 G6   2Dゲーム素材一式が出せる
 G7   動かせる（動画・アニメーション）    ← host-load-profile-fix.md が前提
 G8   3D素材がプロジェクトに載る
+G8HQ 高精細3DをMCPで制作・検証・engine受入できる  g8-high-quality-mcp-3d-assets.md
 G9   3Dを生成できる（実験的）
 G10  手持ち資料を参照源にできる
 ```
 
 G0〜G4 で local media service として実用成立する。
 G4H は G4 を作り直すものではなく、実 OpenCode 利用で見えた用途解釈・canvas・評価・placement の摩擦を既存 G4/CI/G6 基盤上で解消する横断 hardening である。
+G8HQ はG8/3D Studioを作り直さず、既存scene/revision/Blender worker/MaterialBinding/Agent MCPの上へ、観察・局所モデリング・表面・変形・アニメーション・procedural環境・engine受入を段階追加する。
 UX2 は G1〜G3 の既存能力を利用者が使い分けるための横断スライス。
 Creative Intelligence は UX2 の Pose/Scene/Composer/Evaluator を捨てず、自然文のActionStateとControlDeck AI gatewayを上に載せる横断スライス。
 G5 以降は用途別の上積みで、順序を入れ替えてよい。
@@ -88,6 +92,11 @@ Canvas            wide/portrait等の用途要件はprompt文字列だけでな�
 VLM改善           通常単発生成へmandatoryなcritic loopを追加しない。再生成はbounded opt-inのみ
 Placement         output grantは配置直前に取得。raw project pathをMediaForgeへ渡さない
 Host変更           別pluginでも成立するgeneric primitiveだけ。Media固有便利APIは禁止
+3D操作             MCP top-level toolを増殖させず、bounded typed recipe/category discoveryを主経路にする
+3D品質             structure PASSやVLM点数だけで高品質扱いしない。実画像・変形・実engine gateを分離する
+3D安全             任意bpy/Python/operator/shellを通常recipeへ入れない。Expertは別capability/OS隔離gate
+3D履歴             失敗候補でcurrent revisionを上書きしない。修正は新immutable revision
+3D生成             G9のAI 3D生成はcandidate source扱い。R9700実測前にdefaultへ入れない
 モデル削除       Media Forge 管理下の重みだけ削除し、共有HF/ComfyUI/外部モデルを勝手に消さない
 ```
 
