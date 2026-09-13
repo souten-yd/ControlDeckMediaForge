@@ -1,5 +1,43 @@
 # Media Forge implementation status
 
+## 2026-09-13 grouped compose executes through real Host and Blender
+
+Host PR324 main ca02bb926ffa8d480e34cd75075bce658394e572を通常反映、Host711252/MF537447。
+GitHub merge API HTTP500後、検証済みtree同一のlocal mergeを通常pushし、PR MERGEDを再確認。
+Host記録PR326。thinking=true取消lease6e2ba05a-0e12-4e71-b987-6e8b152a29d3は1.402秒全体/
+local終端後0.352秒でidle/released。期限lease71533f3d-80ff-483a-9618-1ab4927b3a5bは6.314秒/
+0.306秒。既存probeへのprocess-local thinking wrapper、正規scoped認証/機能発見経路。
+
+scoped grouped probe 93796/5ccea1は51.677秒、10vertices11faces、寸法0.4/0.08/0.5m/ridge PASS。
+request SHA7f8e4254522bc7ae3d6f017d1ba12319164adec92b1ef0758a3bf659e5d9842d、2call。
+この実受入後、既存SceneRecipeJobManagerのcompose既定をGroupedMeshDraftPreparerへ接続。
+raw helper/既存typed createは保持、公開availabilityはacceptance_pendingのまま。
+
+source Job実診断5463/f5b551:
+
+- 初回Host venv import PIL不足で実行前失敗。依存を共有せず、Hostの正常token発行→stdin→
+  MF専用venv別processへ分離して再実行。coreはHost内部をimportしない。
+- job_84f8fae485b94d6588fce8400125b236 / Host child25542e2a0723、79.415秒でsucceeded。
+  3call、winding10を局所面再提出で解消。host_terminal_sent=true、preparation.execution_status=executed。
+- scene_0a2801189d3e4858b27420f89214dd46 / revision_b1db350ea35c40af85181e48b976588f。
+- source asset_8e4de63b20b84fe4a231469f8e492a49、450132B、
+  SHAdb5234f2ff09a2f5628f26c9259883c85ce38c0f8af7813d0b5914f11e50cca7。
+- GLB asset_97936ca9de784c6e98a7227f17d5fe8e、1308B、
+  SHAa99751dac868f123736de0fc5dcfe33d800e7a3e55d43c84cf3a5e2601574009、parentは上記source。
+  両assetにprovenance IDがあり、後続render後もhash一致。
+- 実Blender4.5.13再import16triangles、寸法[0.4000000059604645,0.07999999821186066,0.5]。
+  CPU/Cycles16samples実画像を確認。既存カメラ(2,-3,1)はridgeと反対なので、同revisionの
+  (2,3,1)を診断追加し、稜線を目視。平面側を見ただけでridge欠損とは判断しない。
+- VLM32472/4e6b2e、7.548秒。実画像clay SHAaa11ab8ea36a8440ba81a9d525294aec6526abdf8069c049bac0b59d013e8033
+  /opposite SHA32dd82cf58f5090a8f369400134372136ff83b10b12d143c85fb9324d46dd5d6を入力。
+  片側flat/反対側ridge、coarse blockoutと評価。JSON指定へのfenced JSONとbevel推測は
+  structured成功/自動修正根拠にしない。高品質防具ではない。
+
+全2046pass3skip2warnings/207.87秒、関連83pass、Node9/viewer58ms、以後product/test変更なし。
+scratch1393287BはJob終端/参照なし/symlinkなし確認後削除。既存runtime/元asset/recovery保持。
+NOT TESTED: 本source経路でのMCP/OpenCode、installed MF、参照画像との人の採用判断、変形、engine。
+次は既存typed createのOpenCode fixtureをcompose依頼に対応させ、正常/取消/納品を実行する。
+
 ## 2026-09-13 Host prerequisite gate integrated
 
 Host test-only PR325をmerge4765666で確認。Host PR324へ統合後の全testは

@@ -532,6 +532,13 @@ def test_failed_scene_job_retries_as_new_attempt_with_same_input(tmp_path: Path)
     asyncio.run(scenario())
 
 
+def test_compose_default_uses_scoped_grouped_preparer():
+    from mediaforge.scene_grouped_drafts import GroupedMeshDraftPreparer
+
+    manager = SceneRecipeJobManager(None, None, Host())
+    assert isinstance(manager.draft_preparer, GroupedMeshDraftPreparer)
+
+
 class RefreshHost(Host):
     def __init__(self) -> None:
         super().__init__()

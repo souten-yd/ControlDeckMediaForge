@@ -94,6 +94,9 @@ scoped streamへ送る。未対応Hostはhost_ai_thinking_unsupportedで実行�
 黙示的に思考無効やprovider直結へ切り替えない。発見HTTPも段階のabsolute deadline内。
 要求条件requested_thinkingをprovenanceへ記録するが、モデル能力/品質の保証とはしない。
 既存raw draftや一般AI呼び出しはoption省略を維持し、旧Hostとの互換性を保つ。
+2026-09-13 scoped実受入（51.677秒/2段階、閉殻/寸法/ridge PASS）後、
+SceneRecipeJobManagerのcompose既定preparerをgroupedへ接続する。raw helperは保持。
+composeの公開availabilityは実OpenCode/installed受入までacceptance_pendingのままとする。
 座標群/面群各最大8、全頂点32かつrequest budget以内、全面64、各応答8KiB/全300秒を維持する。
 座標は全体で一つのvertices配列に置き、座標群はそのindexの重複なし完全分割とする。
 この形で全頂点上限を応答schemaにも反映し、群ごとの上限だけで合計超過を見逃さない。

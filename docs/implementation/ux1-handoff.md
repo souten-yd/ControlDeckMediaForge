@@ -3,6 +3,29 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 installed Host thinking / real compose Job succeeds
+
+前turnはHost combined gate完了まで進捗。共有task52832終了、正規認証resources active lease0、
+専用user jobsはcanceled/interruptedのみ確認（全user Jobsの確認ではない）。
+Host324 ready後API mergeはHTTP500。local --no-ff mergeを検証済みtreeと差分0確認して通常push、
+ca02bb926ffa8d480e34cd75075bce658394e572、PR324 MERGEDを確認。root ff→./deck.sh start exit0。
+Host711252 active、MF537447維持。Host実受入docs PR326/94cdc8b push済み、未merge。
+thinking=true実取消6e2ba05a...はlocal終端後0.352秒、期限71533f3d...は0.306秒でidle/released。
+既存cancel probeをprocess-local wrapperでthinking=True指定、credentials/推論経路は正規のまま。
+scoped --grouped実51.677秒/2call、閉殻/寸法/ridge PASS。これを受けcompose既定をgroupedへ接続。
+source SceneRecipeJobManager→実Host子Job25542e2a0723→scoped AI→Blender4.5.13が79.415秒成功。
+job_84f8fae485b94d6588fce8400125b236、3call（winding10→cap修正）、asset2/terminal_sent=true。
+初回はHost venvでPIL不足、実行前失敗。再試験はHost発行credentialをstdinでMF別venvへ渡して解決。
+GLB再import16triangles/寸法一致。実画像は粗い縦板、反対側追加でridge確認。VLM7.548秒もblockout。
+VLMはJSON指定でもfenced JSON、beveled edge等の推測を含む。structured合格/自動修正根拠にしない。
+人の採用/人体変形/engine/通常MCP/OpenCode/installed MFはNOT TESTED。
+全99425/a498b2 exit0:2046pass3skip2warnings/207.87秒、関連83pass/Node9/viewer58ms差分なし。
+以後product/test変更なし。scratch m1-scoped-compose-YGCHjWはjob終端/asset hash不変/
+lsof参照なし/symlinkなし/1393287B確認後削除、raw画像/DB/GLB保持なし。元資産/runtime不変。
+次はcomposeを呼ぶ実OpenCode/MCP fixtureへ更新してsourceで一巡、取消伝播/再試行も確認し、
+依存PR532/533の受入と署名配布→installed再実行へ。既存fixtureはtyped createなので代用しない。
+M1未完了/M2未着手。compose acceptance_pending維持、全GOAL品質要件は削らない。
+
 ## 2026-09-13 Host combined gate green / live inference protected
 
 前turnはMF接続とtest-only修正まで進捗。今回はHost PR325作成、app connector経由merge成功、

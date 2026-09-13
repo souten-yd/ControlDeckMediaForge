@@ -14,6 +14,7 @@ from .domain import ErrorDetail, Job, JobRequest, JobStatus
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.ai import HostAIGateway, HostAIError
 from .scene_drafts import MeshDraftError, MeshDraftPreparer, MeshDraftRequest, SceneComposeRequest
+from .scene_grouped_drafts import GroupedMeshDraftPreparer
 from .host.jobs import HostExecution, HostJobReporter
 from .scene_recipes import (
     SceneCreateRequest,
@@ -50,12 +51,12 @@ class SceneRecipeJobManager:
         *,
         control_poll_sec: float = 1.0,
         credential_refresh_margin_sec: int = 120,
-        draft_preparer: MeshDraftPreparer | None = None,
+        draft_preparer: MeshDraftPreparer | GroupedMeshDraftPreparer | None = None,
     ) -> None:
         self.store = store
         self.workspace = workspace
         self.host = host
-        self.draft_preparer = draft_preparer or MeshDraftPreparer(HostAIGateway(host))
+        self.draft_preparer = draft_preparer or GroupedMeshDraftPreparer(HostAIGateway(host))
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._admissions: set[asyncio.Task[tuple[Job, SceneTaskRecord]]] = set()
         self._executions: dict[str, HostExecution] = {}
