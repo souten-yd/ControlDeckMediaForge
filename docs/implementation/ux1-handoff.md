@@ -5,6 +5,16 @@
 
 ## 2026-09-13 v0.28.81 preparation / M1 installed gate pending
 
+更新: PR527 MERGED/f5093ea、現在ux1/release-0-28-81-acceptance。
+公開bundle31631731B/SHA98400a49…3077ee、Host署名consumer/実bundle caps成功、.81通常更新healthy。
+MF501843/versions.81、DB16tables全row digest/assets2392metadata/runtime登録hashは更新前後一致。
+実OpenCode M1 handle62788/親502036/子502120を開始（専用MF3DS-M1-Authored-20260913）。
+同handleを追跡し、timeout観測だけで再投入しない。終端後verify→実GLB再import→結果記録/cleanup。
+evidence maintenance/m1-opencode-20260913-r1、release作業物maintenance/release-0.28.81も回収対象。
+M1未完了、M2未着手。新product変更なし、前gate1926pass207.30秒を継承。
+release作業物95,401,318Bは参照なしを確認して削除済み。公開物/installed .81/.80保持。
+M1 project/evidenceは進行中で保持、子502120生存/events0を35455aで確認。再投入しない。
+
 PR526 MERGED/08469041649ea7954e9190de4bce334e653dcfe7を実確認。
 ux1/release-0-28-81、/tmp/mediaforge-cleanup-docs-20260912。版数2箇所とrelease noteのみ変更。
 M1のsource基盤はmerge済みだが、signed installed→実OpenCode/mesh/GLB/receipt受入は未完了。

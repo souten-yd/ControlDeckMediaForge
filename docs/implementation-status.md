@@ -1,5 +1,38 @@
 # Media Forge implementation status
 
+## 2026-09-13 v0.28.81 signed installed / actual OpenCode M1 running
+
+準備PR527 MERGED、固定commit f5093eaa9f9984e0b40364a91f115d61709dc5b3からbundle構築。
+ux1/release-0-28-81-acceptance。d3c5e6 exit0、PyInstaller6.22.0/Python3.12.3、
+artifact31,631,731 B / SHA256 98400a4933f266cd27c3d11d0aa962269a95eed6a2d2dcaafef1ac410d3077ee。
+一時物はfeature-data/media-forge/maintenance/release-0.28.81内、TMPDIRも同領域。
+初回署名はcore venvにcryptographyがなくf16227 exit1、manifest不在で公開commandもfe9a80 exit1。
+依存追加せず既存bundle-build venvで署名・自己検証b4bf51 exit0、既存publisher鍵とcatalog一致。
+正規公開207e60 exit0/v0.28.81。公開4点再取得92daa9 exit0、Host consumerで固定tagの
+署名/版/サイズ/SHAとsafe extractionを検証23fc67成功。global config/鍵/Host source変更なし。
+
+公開bundleを専用scratchで起動PID501526/9167、8cc5df HTTP200/16ops/guide@1を確認。
+scratchには環境snapshotがないためhealthはsetup_requiredでありhealthy成功とはしない。
+候補をTERM、9edb4c exit143、Uvicorn正常shutdown。通常更新直前にJobs/GUI/setup全終端再確認。
+./deck.sh feature update media-forge はd88382 exit0、.80→.81、healthy/enabled/requested_enabled true。
+MF501843、実WorkingDirectory versions/0.28.81/current一致、実capabilitiesで16ops/guide@1確認。
+DB16tablesのrow count/content digestとassets2392filesのname/size/mtime digest、Blender登録hashが
+更新前後で完全一致（functions比較true）。全file bytes hashとは言わない。DB copy/新backupなし。
+旧.80はrollback用、標準retain世代整理対象と制作物/runtimeは区別する。
+
+実M1開始:
+Host診断venv /data1tb/ControlDeck/appでPYTHONPATH=backend、
+scripts/3ds_opencode_flow_e2e.py --director-authored-mesh
+--project-name MF3DS-M1-Authored-20260913
+--evidence-dir /data1tb/ControlDeck/data/feature-data/media-forge/maintenance/m1-opencode-20260913-r1。
+handle62788、親502036/子OpenCode502120、private config/permission/MCP schema preflight通過後に開始。
+1fedc6時点14秒/子生存、終端は未確認。実LLM生成/Job/receipt成功を先取りしない。
+制作試験が終了してからverifierとGLB再importを行い、専用project/evidenceを回収する。
+release作業物も完了後回収。M1/全体はPARTIAL、M2へはまだ進まない。
+release作業物は95,401,318 B、lsof参照なし/候補停止を照合して明示directoryのみ削除、test ! -e成功。
+公開署名物とinstalled .81/.80 rollback版を保持。通常retainで.79 bundleは整理された。
+M1実行用project/evidenceは進行中のため保持。35455a時点子502120生存1分9秒/events0。
+
 ## 2026-09-13 v0.28.81 release preparation
 
 PR526は実head3efd811318ad313512390128d6232fd68e19bf57のCLEAN/checks空を照合しmerge、
