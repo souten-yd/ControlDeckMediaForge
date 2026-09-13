@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-13 v0.28.81 release preparation
+
+PR526は実head3efd811318ad313512390128d6232fd68e19bf57のCLEAN/checks空を照合しmerge、
+merge commit08469041649ea7954e9190de4bce334e653dcfe7をghで確認。
+最初のmatch hash指定は誤記で安全拒否された。再照合後のexact headでmerge成功。
+これはsource基盤の確定でありM1 installed受入完了ではない。
+ux1/release-0-28-81へ分岐し、addon/core版数とrelease noteを追加。
+M1の正規OpenCode新操作/署名installed/receipt、視覚・変形・engineは未完了のまま。
+版数更新後全45d552 exit0/1926passed3skipped2warnings/207.30秒。Node9/viewer50ms差分0。
+以後product/test変更なし。更新前DB16tablesのrow digestとassets2392filesのmetadata、
+runtime登録hashを採取（230e88/f474df）。DB copyや新規backupなし。
+
 ## 2026-09-13 M1 OpenCode受入の準備と実installed discovery
 
 PR526/ux1/3d-authored-meshを再開。originのf5ba40d/1afddc1/7947d5aをfast-forward、
