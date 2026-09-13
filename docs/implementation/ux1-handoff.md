@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 shared inference window required / goal blocked
+
+source05ed9ba/PR533 OPENを再確認、fetch mainは既にancestor、tracked clean。
+前turnは実取消とretry失敗の証拠が増えた進捗。今回97349/cd6791で50.096秒read-only観測:
+task71548/71725/71811/71944/72010/72088/72141が継続してbusy、3秒quiet windowなし。
+新推論/Job/asset/診断dataを作成せず、他処理/Host/runtimeを停止していない。
+共有推論が継続する条件が3turn続き、前回の通常Broker経由試験も期限前の本文を得られなかった。
+今必要なのは実行中取消・成功retryの実受入であり、追加のfake testやavailability変更で代用しない。
+共有推論が落ち着く外部条件を待つためgoal blocked。利用者に既存LLM/OpenCode処理の終了後の
+再開を依頼する。処理を止める許可へ読み替えず、M1/全GOALを完了扱いにしない。
+再開時はslot/lease/PR/稼働版を再確認し、既存のsource lifecycle→正規署名配布→
+MCP/OpenCode/installed納品の順を継続。M2未着手、品質/変形/engine NOT TESTED。
+今回は文書のみ、code/testは2062pass基準から変更なし。全owned handle終端。
+
 ## 2026-09-13 real queued compose cancel / retry timeout
 
 前turnはretry tests/上位設計まで進捗。今回は実Host/既定grouped managerで取消・retryを診断。

@@ -1,5 +1,16 @@
 # Media Forge implementation status
 
+## 2026-09-13 shared inference acceptance window unavailable
+
+PR533/head05ed9ba OPEN、最新mainはancestor。97349/cd6791でread-only slotを50.096秒観測。
+task71548/71725/71811/71944/72010/72088/72141がbusy、連続3秒のidleなし。
+前回の受付取消/失敗retryの証拠は維持するが、実行中取消・成功retryは未受入。
+3turn継続する同じ共有資源条件に対して安全な診断/通常Broker試験を実施済みであり、
+追加試験投入や偽のavailabilityで回避せず、推論の空く外部条件待ち（goal blocked）とする。
+利用者の他LLM/OpenCode処理終了後に現在状態を再確認して再開する。無断停止はしない。
+新推論/Job/asset/scratchなし。文書のみ、全test再実行なし、2062pass基準から製品/test変更なし。
+M1未完了/M2未着手、MCP/OpenCode/installedと品質/変形/engineの残件を保持。
+
 ## 2026-09-13 real compose cancellation under concurrent inference
 
 source6cddd6b/PR533、main4f978a0はancestor。製品/test/稼働版は変更せず実診断した。
