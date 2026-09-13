@@ -39,6 +39,11 @@ create受付後は返されたJobを`media.job.status`で追跡する。
 tool応答の成功はJob成功ではない。成功したrevisionとasset参照を次へ渡す。
 同じcreateを繰り返して結果待ちの代わりにしない。
 
+`Tool execution aborted`だけでBlender失敗と断定しない。providerのstreamエラー、
+schema拒否、受付済みJobの失敗を区別する。Job IDがある場合はその状態を照合し、
+応答を失っただけか不明なら新規createを重ねない。生成途中のJSONを補完して無断実行しない。
+大量の頂点列挙が失敗した場合も、上限を拡大せず小さい構成で輸送と形状を別に確認する。
+
 ## 3. 大きな形から作る
 
 輪郭、比率、接地、接続を先に合わせる。武器の柄と本体、髪の根元と頭皮、

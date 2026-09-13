@@ -299,6 +299,15 @@ PRに要約を残すことと、raw画像やDBを保存することは別であ�
 
 ## Sources
 
+実行経路の追補（2026-09-13）: [OpenCode issue #15906](https://github.com/anomalyco/opencode/issues/15906)
+にはproviderの不正なtool-call差分と`Tool execution aborted`の組合せが報告されている。
+閲覧時はclosed as not plannedであり、修正提供の証拠ではない。
+[llama.cpp common/chat.cpp](https://github.com/ggml-org/llama.cpp/blob/master/common/chat.cpp)
+にもtool-call数の減少を拒否する同文言がある。これは調査用参照で、未固定HEADを導入しない。
+今回の実ログとの照合はimplementation-statusに分離して記録する。
+論点は3D操作の追加だけではない。LLMが有効な引数を完了できること、MCPが受理したこと、
+workerが目的の形を保存したことの各gateが必要であり、silent retry/JSON補完を品質保証にしない。
+
 以下は本文の資料番号に対応する一次資料一覧。翻訳/UATESTの注記は適用範囲を限定するためのもので、
 将来版の機能を現在のruntime対応として扱うためではない。
 

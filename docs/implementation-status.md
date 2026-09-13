@@ -1,5 +1,127 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 transport isolation / streamed argument failure
+
+Own R3 sessionのOpenCode logをread-only照合（2068c5）。05:31:49〜05:35:05 UTCに
+provider server_error/500 `Invalid diff: now finding less tool calls!` が4件ある。
+Previousにはscene.createと生成途中の頂点/面があり、Currentはtool_calls=0。
+従って「LLMが何も生成しなかった」ではなく、引数streamが正常完了せずMCPへ届かなかった。
+生成途中の値には重複面や5頂点faceもあり、輸送修復とgeometry受入を分ける必要がある。
+同文言はllama.cpp common/chat.cppのtool-call差分検査にも存在するが、installed推論binaryの
+該当source revision照合と根本原因再現は未実施。既知issueを修正済みの根拠にしない。
+
+正規mf-e2e/private run configからstdio MCP tools/callを直接実行。Host source/global設定変更0。
+これはscripted診断でありLLM成功の代替ではない。37bfc2 create受付0.095秒、
+8e37a0 status succeeded、job_ff8c68588e884b1ab7d51ef534534a11。
+scene_b27897bcb29a44e0b35068e98e0da9b0、revision_1f6a0dfd05d144e89a004f42c1f97ff4。
+実選択runtimeは4.5.13（以前の4.5.9 fixtureとは別）。2ops/10vertices/16triangles/1mesh。
+blender.scene/glb.structure passed。e3cc03 snapshot/exportで同revisionを確認。
+GLB asset_dcc2635689de44bea4ca6156ec626fdf、1860B、
+SHA256 81f731647c5d28c3d35f64d8c63cf9ea33b47590e2d0a703e0382057790bba36。
+f48d56 fresh grant→media.pack committed=true、R3 exports/scripted-transport.glbの実size/hash一致。
+ff9571 managed Blender4.5.13へ実GLB再import成功、1mesh/16triangles、寸法約0.4/0.08/0.5m。
+再import vertices30はflat-normal境界で分離した値でありauthoringの10と同じ指標ではない。
+視覚/VLM/変形/engineはNOT TESTED。診断scene/asset/配置物は比較のため一時保持し、受入後回収する。
+
+M1専用promptへ10頂点以下の構成、各辺の逆向き対、JSON閉じ、成功済みskill再読込禁止を追加。
+座標/面を答えとして埋めずLLMが決定する。verifierも10頂点上限を確認しnegative追加、
+focused9passed（8c9e64）。これはstream parser修正ではなく小さい入力での切り分け。
+R4 project MF3DS-M1-Authored-R4-20260913、evidence maintenance/m1-opencode-20260913-r4、
+handle39252/子517208を開始（39239b）。以下が終端結果である。
+
+R4はskill90.469秒/capability94.984秒。own session ses_f66b3994effe5sDyU5fDTANPLPの
+logで同provider stream500を2件確認（bf52e7）、非改善反復として子をTERM。
+終端ad2f50 exit1/子-15/206.296秒/5calls/納品0、517208不在確認。観測timeoutではない。
+終端events再検査46d8eeで、停止直前200.383秒にcreate一件が実際にはcompletedと判明。
+他2件は空引数abortであり、有効な送信が全くないというR3の説明をR4へ流用しない。
+LLM作成recipeのJobはjob_8488e929bc5b444388af8e2eaca9d41f。
+ce48e3で正規MCPから追跡してsucceeded確認、runtime4.5.13/2ops/10vertices/12triangles、
+scene_c0c869f2a5ff453ead3fe40f594f6736、revision_fa09bac7b59d4c9691eaa4666b001b8c。
+source asset_cbec055f37a24952992223cb592660d5、preview asset_47558fb8c2ab46429971435c3c81efec。
+blender.scene/glb.structure passedだが、実LLM入力には7facesしかなくboundary edges=8（580b36）。
+依頼した閉じた装甲ではない。8a5d8d verifier exit1、LLM終端/閉殻/納品受入FAIL。
+輸送は不安定だが一件通過、worker実行PASS、目的形状FAILを分けて記録する。
+R4 scene/2assetsとredacted evidenceは修正比較のため一時保持、OpenCode再投入なし。
+
+実推論PID505582のexeはllama-gpu-b10917/rocm/extracted/bin/llama-server。
+同pack build-info.cppのcommit表示は8ea2902、compiler GNU11.4.0。パッケージの表示番号と
+upstream commitの完全照合は未実施。モデル/runtime差し替え、Host設定変更は行っていない。
+次はstream parserの固定source照合と、境界辺のある入力を制作目的に照らして拒否する
+指示/検査を切り分ける。M1の判定を緩めず、M2はまだ着手しない。
+最終全test49717は22378e exit0/1928passed3skipped2warnings/203.91秒。
+Node9pass/viewer44ms差分なし/diff check成功。以後script/test変更なし。
+
+## 2026-09-13 M1 acceptance harness: inherited delegation mask rejected
+
+R1 handle62788は34f4f5 exit1で終端。新schema/guide取得とdirector実読込は成功したが、
+scene.createを呼べずmedia.generateへ誤ったmedia.inspect依頼を反復したため所有子502120をTERM。
+OpenCode exit-15/510.809秒、7tool calls、納品0。観測timeoutだけで停止・再試行したものではない。
+Host provider._delegated_agentsはbuildからscene toolsを隠してsculptorへ委譲する。
+旧診断はtaskを禁止しつつそのmaskを保持しており、実行役からscene toolsが消えていた。
+Host/MF製品コードでなく、試験用private configの矛盾が原因。Host変更は不要。
+R1からfailed job_c88ee9bf003146eb95a374d3dc7ed0a9/job_de5d869dc4cc41b79194f51469973573が追加、
+scene総数58のまま、新sceneなし。失敗Jobの監査履歴は消さない。
+
+runnerはprivate agent mapを直接MCP実行用へ置換し、task/shell/file/web禁止を維持。
+R2はdebug agent.toolsにMCP wildcardが出るという誤ったassertで0a9f5c exit1、LLM未起動。
+f2b0e6の実debug出力からtoolsはbuiltin、MCPはpermission列にあると確認し、
+必要なMCP名について最終matching ruleがallowかを開始前に検査するよう訂正した。
+既存subagent mask保持を再現するnegativeを追加。利用者global設定やHostの通常delegate設定は変更しない。
+直接実行試験であり、通常のdelegated agent一巡を確認済みとはしない。
+
+R3: handle14782/親509049/子509111、project MF3DS-M1-Authored-R3-20260913、
+evidence maintenance/m1-opencode-20260913-r3。4fe0bcでskill50.328秒/capabilities55.590秒、
+実tool呼出成功、終端はまだ未確認。同handleを追跡する。
+先の全test75632は実行中にpreflight修正が入ったため所有pytest507285を停止（ce6f08 exit143）、
+最終コードの全test59418を開始した。旧部分結果を全通過と数えない。
+R1/R2のempty専用project/evidenceは失敗要約記録後に回収し、R3は終端まで保持する。
+R1/R2はrealpath/非.gitファイル0/参照なしを確認し、専用project2件とevidence2件を削除。
+du合計93,121 B、rm -r成功。失敗Job/本番assetは削除していない。
+最終全test59418はd6ffd5 exit0/1927passed3skipped2warnings/203.77秒。Node9pass、diff check成功。
+以後script/test変更なし。R3はskill/capability取得後、scene.createを3回空引数で中断。
+217dfa/1f7d56で全てinput={}、Tool execution aborted/interrupted=true、正常なrecipe送信なしを確認。
+同じ非改善反復を止めるため所有子509111をTERM、e715f4 exit1/子-15/313.291秒/8calls/納品0。
+観測timeoutによる再起動ではない。R3 session ses_f66c166baffeOmzipVq7BXsQ47、
+correlation mf3ds-e60d59d8bd7e48ac。権限補正だけではLLMの有効な引数生成は成立しなかった。
+原因をBlender workerの失敗とは断定しない。次は正規MCP直接callの独立検証と
+同じOpenCode sessionのtool引数生成/中断原因を切り分け、必要なinstruction/schemaを改善する。
+通常delegated agentの受入もNOT TESTED。M1はinstalled discoveryまでで未完了、M2へは進まない。
+R3のredacted events/observationsと空専用projectは、この切り分けに必要なため一時保持し、
+原因の記録・修正受入後に回収する。稼働Job/子processが停止したことは次の再開時にも照合する。
+
+## 2026-09-13 v0.28.81 signed installed / actual OpenCode M1 running
+
+準備PR527 MERGED、固定commit f5093eaa9f9984e0b40364a91f115d61709dc5b3からbundle構築。
+ux1/release-0-28-81-acceptance。d3c5e6 exit0、PyInstaller6.22.0/Python3.12.3、
+artifact31,631,731 B / SHA256 98400a4933f266cd27c3d11d0aa962269a95eed6a2d2dcaafef1ac410d3077ee。
+一時物はfeature-data/media-forge/maintenance/release-0.28.81内、TMPDIRも同領域。
+初回署名はcore venvにcryptographyがなくf16227 exit1、manifest不在で公開commandもfe9a80 exit1。
+依存追加せず既存bundle-build venvで署名・自己検証b4bf51 exit0、既存publisher鍵とcatalog一致。
+正規公開207e60 exit0/v0.28.81。公開4点再取得92daa9 exit0、Host consumerで固定tagの
+署名/版/サイズ/SHAとsafe extractionを検証23fc67成功。global config/鍵/Host source変更なし。
+
+公開bundleを専用scratchで起動PID501526/9167、8cc5df HTTP200/16ops/guide@1を確認。
+scratchには環境snapshotがないためhealthはsetup_requiredでありhealthy成功とはしない。
+候補をTERM、9edb4c exit143、Uvicorn正常shutdown。通常更新直前にJobs/GUI/setup全終端再確認。
+./deck.sh feature update media-forge はd88382 exit0、.80→.81、healthy/enabled/requested_enabled true。
+MF501843、実WorkingDirectory versions/0.28.81/current一致、実capabilitiesで16ops/guide@1確認。
+DB16tablesのrow count/content digestとassets2392filesのname/size/mtime digest、Blender登録hashが
+更新前後で完全一致（functions比較true）。全file bytes hashとは言わない。DB copy/新backupなし。
+旧.80はrollback用、標準retain世代整理対象と制作物/runtimeは区別する。
+
+実M1開始:
+Host診断venv /data1tb/ControlDeck/appでPYTHONPATH=backend、
+scripts/3ds_opencode_flow_e2e.py --director-authored-mesh
+--project-name MF3DS-M1-Authored-20260913
+--evidence-dir /data1tb/ControlDeck/data/feature-data/media-forge/maintenance/m1-opencode-20260913-r1。
+handle62788、親502036/子OpenCode502120、private config/permission/MCP schema preflight通過後に開始。
+1fedc6時点14秒/子生存、終端は未確認。実LLM生成/Job/receipt成功を先取りしない。
+制作試験が終了してからverifierとGLB再importを行い、専用project/evidenceを回収する。
+release作業物も完了後回収。M1/全体はPARTIAL、M2へはまだ進まない。
+release作業物は95,401,318 B、lsof参照なし/候補停止を照合して明示directoryのみ削除、test ! -e成功。
+公開署名物とinstalled .81/.80 rollback版を保持。通常retainで.79 bundleは整理された。
+M1実行用project/evidenceは進行中のため保持。35455a時点子502120生存1分9秒/events0。
+
 ## 2026-09-13 v0.28.81 release preparation
 
 PR526は実head3efd811318ad313512390128d6232fd68e19bf57のCLEAN/checks空を照合しmerge、

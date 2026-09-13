@@ -3,7 +3,51 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 streaming / direct MCP diagnostic
+
+PR528 Draft/ux1/release-0-28-81-acceptance、base f4bcb0d。下の旧running記述より本節を優先。
+R3は終端。own logでprovider500 Invalid diffを4件確認、LLMは引数を生成途中だった。
+正規scripted MCP create→status→snapshot→export→grant→pack成功、実4.5.13 GLB再import成功。
+詳しいID/hash/計測はstatus新節。M1のLLM受入とは分ける。
+R3 projectに診断用scripted-transport.glbがあるため、もはやempty projectではない。
+専用scene/2asset/配置物は比較用一時保持、成功後に参照確認して回収。制作物/recovery12保護。
+小さい形の指示とverifier上限/negative追加、focused9pass。
+最終全test49717は22378e exit0/1928pass3skip2warnings/203.91秒、Node9/viewer44ms差分なし。
+R4は2回の同streamエラー反復で子517208をTERM、ad2f50 exit1/-15/206.296秒。両handle閉鎖済み。
+停止直前にcreate1件が実際に受付済みだった。ce48e3の正規MCP追跡でそのJob succeeded。
+ただし実LLM recipeは10vertices/7faces、boundary edges8で閉殻要求FAIL、納品0。
+R4 verifier8a5d8d exit1。輸送一件通過/workerPASSをM1完了へ読み替えない。
+R4 scene/2assets/evidenceも比較用保持。全対象IDはstatus新節。残存進行process/Jobなし。
+次は固定parser sourceの照合と目的別geometry検査/指示を切り分け、M1受入を継続する。
+runtime差し替え/Host設定変更なし。M1未完了/M2未着手。全gate後commit/push、PR528 Draft維持。
+
 ## 2026-09-13 v0.28.81 preparation / M1 installed gate pending
+
+最新: R1 handle62788は終端exit1、子502120は誤ったtool反復のためTERM済み。再poll不要。
+Hostがscene操作をsculptorへ委譲する一方、旧試験がtask禁止でbuild maskを残す矛盾を確認。
+private configだけを直接MCP実行へ変更、Hostの通常設定は不変。R2はdebug tools欄誤認assertで開始前失敗。
+実debugでpermission列を確認しpreflight訂正、R3 handle14782/親509049/子509111を開始。
+4fe0bcでskill/capability実呼出済み、終端未確認。project MF3DS-M1-Authored-R3-20260913、
+evidence maintenance/m1-opencode-20260913-r3。同handle監視→verifier→実GLB再importへ。
+旧全test75632は途中修正で中断、最終全test59418を追跡。新script/testは未commit、gate後に必ず保存。
+PR528 Draft、.81 healthy、M1未完了/M2未着手。R1/R2失敗要約はstatusに記録、空projectとevidence回収予定。
+R1/R2のproject/evidenceは参照なし/空制作物確認後に93,121B削除済み。
+最終全test59418はd6ffd5 exit0/1927pass3skip2warnings/203.77秒、以後script/test変更なし。
+R3も終端e715f4 exit1（子509111を3回の空引数中断後TERM、-15/313.291秒/納品0）。
+handle14782は閉じたので再pollしない。session ses_f66c166baffeOmzipVq7BXsQ47を調査対象とする。
+次: 正規MCP直接callでtransport/workerを独立検証し、OpenCodeの引数生成/中断を同session証拠で切り分ける。
+R3 redacted events/observations/空projectはこの診断のため保持、原因記録と修正受入後に回収。
+M1の実OpenCode制作はFAIL、GLB/receipt/品質はNOT TESTED。M2へ進む条件は満たしていない。
+
+更新: PR527 MERGED/f5093ea、現在ux1/release-0-28-81-acceptance。
+公開bundle31631731B/SHA98400a49…3077ee、Host署名consumer/実bundle caps成功、.81通常更新healthy。
+MF501843/versions.81、DB16tables全row digest/assets2392metadata/runtime登録hashは更新前後一致。
+実OpenCode M1 handle62788/親502036/子502120を開始（専用MF3DS-M1-Authored-20260913）。
+同handleを追跡し、timeout観測だけで再投入しない。終端後verify→実GLB再import→結果記録/cleanup。
+evidence maintenance/m1-opencode-20260913-r1、release作業物maintenance/release-0.28.81も回収対象。
+M1未完了、M2未着手。新product変更なし、前gate1926pass207.30秒を継承。
+release作業物95,401,318Bは参照なしを確認して削除済み。公開物/installed .81/.80保持。
+M1 project/evidenceは進行中で保持、子502120生存/events0を35455aで確認。再投入しない。
 
 PR526 MERGED/08469041649ea7954e9190de4bce334e653dcfe7を実確認。
 ux1/release-0-28-81、/tmp/mediaforge-cleanup-docs-20260912。版数2箇所とrelease noteのみ変更。

@@ -760,6 +760,12 @@ G9は「制作を加速する候補生成器」として後段に置く。
 
 PR #526をM1として完了させ、その後は原則次の順序で小PRへ分割する。
 
+M1受入時はLLM引数生成/stream、MCP受付、worker終端、export/配置を別々に記録する。
+2026-09-13のR3ではprovider streamが中断し、scripted MCPの別診断は実行/配置まで成功した。
+後者を実OpenCode受入へ代用しない。小さいauthored meshで有効なJSONと閉じたtopologyを
+確認してから規模を上げる。parser障害時に生成途中の引数を自動補完して副作用を実行しない。
+実測の正はimplementation-status。M1のsource merge/signed導入とLLM受入完了を区別する。
+
 | 順序 | slice | 主な成果 | exit gate |
 |---|---|---|---|
 | M1 | authored mesh / guidance | `mesh.create` + guide | PR #526の新operation実MCP/OpenCode、source→signed installed |

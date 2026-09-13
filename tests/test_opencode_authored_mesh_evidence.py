@@ -32,7 +32,7 @@ def calls() -> list[dict[str, Any]]:
     ]
 
 
-@pytest.mark.parametrize("failure", [None, "no_guide", "late_discovery", "open_shell", "primitive", "wrong_revision", "failed_validation"])
+@pytest.mark.parametrize("failure", [None, "no_guide", "late_discovery", "open_shell", "primitive", "wrong_revision", "failed_validation", "complexity"])
 def test_authored_mesh_evidence(failure: str | None) -> None:
     value = copy.deepcopy(calls())
     if failure == "no_guide":
@@ -43,6 +43,13 @@ def test_authored_mesh_evidence(failure: str | None) -> None:
         value.append(value.pop(1))
     elif failure == "open_shell":
         value[2]["state"]["input"]["recipe"]["operations"][0]["faces"].pop()
+    elif failure == "complexity":
+        mesh = value[2]["state"]["input"]["recipe"]["operations"][0]
+        vertices, faces = copy.deepcopy(mesh["vertices"]), copy.deepcopy(mesh["faces"])
+        # Three valid closed tetrahedra exceed only this diagnostic's budget.
+        for offset in (1, 2):
+            mesh["vertices"].extend([[x + offset, y, z] for x, y, z in vertices])
+            mesh["faces"].extend([[index + offset * 4 for index in face] for face in faces])
     elif failure == "primitive":
         value[2]["state"]["input"]["recipe"]["operations"][0] = {
             "type": "primitive.add", "object_id": "armor", "name": "Armor", "primitive": "cube"}
@@ -57,3 +64,24 @@ def test_authored_mesh_evidence(failure: str | None) -> None:
             MODULE.verify_authored_mesh_calls(value)
     else:
         MODULE.verify_authored_mesh_calls(value)
+
+
+def test_authored_mesh_private_permissions_remove_delegation_mask() -> None:
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("runner", Path(__file__).parents[1] / "scripts/3ds_opencode_flow_e2e.py")
+    assert spec and spec.loader
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    payload = {"agent": {"build": {"tools": {"controldeck_addons_media_scene_*": False}}}}
+    runner.restrict_tools(payload, director_static=False, director_authored_mesh=True)
+    assert payload["agent"] == {"build": {"tools": {"controldeck_addons_*": True}}}
+    assert payload["tools"]["task"] is False and payload["tools"]["bash"] is False
+    assert payload["permission"]["skill"] == {"*": "deny", "blender-director": "allow"}
+    resolved = {"tools": {}, "permission": [
+        {"permission": "*", "pattern": "*", "action": "deny"},
+        {"permission": "controldeck_addons_*", "pattern": "*", "action": "allow"}]}
+    runner.assert_direct_mcp_permissions(resolved)
+    resolved["permission"].append({"permission": "controldeck_addons_media_scene_*", "pattern": "*", "action": "deny"})
+    with pytest.raises(AssertionError, match="media_scene_create"):
+        runner.assert_direct_mcp_permissions(resolved)
