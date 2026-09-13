@@ -1,5 +1,38 @@
 # Media Forge implementation status
 
+## 2026-09-13 制作入口の実Blender事前検証
+
+前turnは方針説明のみでno progress。今回はPR213 MERGED/9469d8e、PR525 OPEN/Draft/head0c3c6faと
+作業treeを照合し、実処理を検証した。git fetch後のmainは3e274e5。製品コードの変更はない。
+本番はPID52609/versions/0.28.80/activeを維持し、停止・切替・OS policy変更をしていない。
+
+専用領域maintenance/scene-create-acceptance-wZw73MvJ（実feature-data/media-forge配下）へ
+別DBを作り、PYTHONPATH=backendとMEDIA_FORGE_DATA_DIRを明示してsource coreを9131で起動。
+既存4.5.9 runtimeはlegacy参照だけ、Web packも既存参照。候補registry/managed rootは別領域。
+453619/92643: PID358736 startup complete。実HTTP c9d5f3はhealth=setup_required（sourceの
+environment status未生成）、scene_recipe=available/workspace_create=false。standaloneのため
+認証付き制作入口を提供しない挙動を確認。healthyやHost画面受入とは記録しない。
+
+同領域の別recipe-preflight DBでworkspace_scene_create_requestの固定レシピを既存domainへ渡した。
+実Blender4.5.9、72045/1871e6 exit0、1.073秒。scene_3e11db2aaaaa4139a6ad44b118e2c89cの初版、
+stable ID cube、1 object/1 mesh/8 vertices/12 triangles、blender.scene/glb.structureともpassed。
+source426899B SHA256 ba01f6f99e5c272ef66bc375f3214d3e4ea85c7a23aeec27acd26f3e8757874a、
+GLB1732B SHA256 30879a3e87102b4abab9c7b55fcb5dea308d78913c44d964a0c0c93f0546db42。
+provenanceでscene.recipe.create、recipe hash、runtime4.5.9、source output hash一致を確認。
+実Blenderで保存済みsourceを再読込した6ba9eb exit0で、cube単体・寸法2/2/2・位置0/0/0をassert。
+初回の手動再読込は実体をroot/blenderと誤指定しexit127。rgでinstall/blenderを特定して訂正した。
+domainは元からresolver経由で成功しており、この手動パス誤りを製品障害と混同しない。
+
+PCに新規・専用Chrome contextを開き、通常loginを利用者へ依頼した（15402/bdd888、
+d55387 own_login_window_open）。既存Cookie/token/sessionを借用せず、パスワードを取得しない。
+workspace frameの観測と利用者回答はまだなく、実Host UI/durable child/cancelの受入はNOT TESTED。
+候補serverは実PIDを照合してTERM、92643/e28c52でapplication shutdown complete/exit143を回収。
+専用PID不在と全file一覧を確認後、不要な専用生成物と候補DB（du 1.1M）を当該領域だけ削除し、
+不在を確認した。raw fileは復元不可、上記の結果/hashだけを残す。本番asset/recovery/runtimeは対象外。
+製品/test/script差分なし。全testは今回再実行せず、最後の製品headに対する1920pass/3skip/
+208.42秒を基準として保持。PR525はDraft、全GOAL/A〜F/GA・native setupはPARTIALのまま。
+次は正規loginの完了を実確認し、既存Host endpoint経由の候補受入と本番復帰を実施する。
+
 ## 2026-09-13 実機受入の承認待ちでblocked
 
 PR525 OPEN/Draft/head1c94503、作業treeの製品差分なし、本番unit activeを再確認。

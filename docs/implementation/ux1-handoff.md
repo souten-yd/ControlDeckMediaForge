@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 実Blender制作入口preflight
+
+同branch/Draft PR525、base0c3c6fa。前turn方針説明のみから、別DB/実Blender検証へ進捗。
+9131候補358736起動→実HTTP setup_required/typed available/standalone create falseを確認。
+固定workspace recipeが実4.5.9で1.073秒、source/GLB独立検査・再読込で2m cube/原点を確認。
+詳しいhash/失敗した手動パス/限定scopeはimplementation-status。本番52609/.80 active維持。
+候補92643はTERM後application shutdown complete/exit143で回収済み。
+maintenance/scene-create-acceptance-wZw73MvJは専用data/生成物だけと確認し、記録後削除/不在確認済み。
+PC専用Chrome15402は10分上限の通常login窓。既存session/token借用なし。最後のpollでは
+workspace frame観測なし、利用者へlogin完了を質問済み。再開時は同handleをpollして終端を判断する。
+本番停止/切替/OS認可適用なし。実Host新UI/child/cancelはNOT TESTED。
+製品変更なし、1920pass3skip208.42秒の基準を今回再実行とは呼ばない。
+全GOAL/A〜F/GA/native setup PARTIAL、Draft/未merge/未署名公開。2dev symlinkとroot利用者branch保持。
+
 ## 2026-09-13 承認待ちblocked
 
 同branch/PR525 Draft、base1c94503。停止/login可否の未回答が3turn連続。
