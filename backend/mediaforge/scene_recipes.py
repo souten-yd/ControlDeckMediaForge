@@ -49,6 +49,47 @@ class PrimitiveAdd(BaseModel):
     vertices: int = Field(default=32, ge=3, le=128)
 
 
+class MeshCreate(BaseModel):
+    """Create authored triangle/quad topology for organic silhouettes, hair clumps,
+    garment shells or armor. Coordinates are local meters; faces use zero-based
+    vertex indices in outward winding order. Smooth shading changes normals only,
+    not geometry. Open garment edges are allowed; no automatic retopology or UVs.
+    """
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["mesh.create"]
+    object_id: ObjectId
+    name: SceneLabel
+    vertices: list[Vector3] = Field(min_length=3, max_length=4096)
+    faces: list[Annotated[list[Annotated[int, Field(ge=0, le=4095, strict=True)]],
+                          Field(min_length=3, max_length=4)]] = Field(min_length=1, max_length=4096)
+    smooth: bool = Field(default=True, strict=True)
+    location: Vector3 = (0.0, 0.0, 0.0)
+    rotation_degrees: Vector3 = (0.0, 0.0, 0.0)
+
+    @model_validator(mode="after")
+    def topology(self) -> "MeshCreate":
+        used: set[int] = set()
+        seen: set[tuple[int, ...]] = set()
+        for face in self.faces:
+            if len(set(face)) != len(face) or max(face) >= len(self.vertices):
+                raise ValueError("mesh face indices are invalid")
+            identity = tuple(sorted(face))
+            if identity in seen:
+                raise ValueError("mesh has duplicate faces")
+            seen.add(identity)
+            used.update(face)
+            a = self.vertices[face[0]]
+            for offset in range(1, len(face) - 1):
+                b, c = self.vertices[face[offset]], self.vertices[face[offset + 1]]
+                u, v = [b[i] - a[i] for i in range(3)], [c[i] - a[i] for i in range(3)]
+                cross = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]
+                if sum(x*x for x in cross) <= 1e-20:
+                    raise ValueError("mesh has degenerate faces")
+        if len(used) != len(self.vertices):
+            raise ValueError("mesh has unreferenced vertices")
+        return self
+
+
 class TransformSet(BaseModel):
     """Replace one or more transforms on an existing stable object ID."""
     model_config = ConfigDict(extra="forbid")
@@ -328,6 +369,7 @@ class AnimationClip(BaseModel):
 
 SceneOperation = Annotated[
     PrimitiveAdd
+    | MeshCreate
     | TransformSet
     | BevelModifier
     | MaterialSet
@@ -362,7 +404,7 @@ class SceneRecipe(BaseModel):
     def validate_object_references(self) -> "SceneRecipe":
         known: set[str] = set()
         for operation in self.operations:
-            if isinstance(operation, (PrimitiveAdd, LightAdd, CameraAdd, ObjectDuplicate, ArmatureCreate)):
+            if isinstance(operation, (PrimitiveAdd, MeshCreate, LightAdd, CameraAdd, ObjectDuplicate, ArmatureCreate)):
                 if operation.object_id in known:
                     raise ValueError(f"duplicate object_id: {operation.object_id}")
                 known.add(operation.object_id)

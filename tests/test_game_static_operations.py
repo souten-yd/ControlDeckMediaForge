@@ -37,7 +37,7 @@ def test_new_static_operations_match_published_schemas() -> None:
         "primitive.add", "transform.set", "modifier.bevel", "material.set", "uv.smart_project",
         "light.add", "camera.add", "object.duplicate", "modifier.mirror",
         "armature.create", "skin.bind", "pose.set",
-        "animation.clip", "modifier.array", "skin.bind_auto",
+        "animation.clip", "modifier.array", "skin.bind_auto", "mesh.create",
     }
 
 
@@ -74,9 +74,14 @@ def test_capability_operations_only_advertised_with_runtime(tmp_path: Path, monk
         unavailable = client.get("/api/v1/capabilities").json()["capabilities"]["3d.scene_recipe"]
         assert unavailable["state"] == "unavailable"
         assert "supported_operations" not in unavailable
+        assert "authoring_guidance" not in unavailable
         monkeypatch.setattr(app.state.blender_runtimes, "resolve_g8", lambda: object())
         available = client.get("/api/v1/capabilities").json()["capabilities"]["3d.scene_recipe"]
         assert available["supported_operations"] == scene_operation_types()
+        guidance = available["authoring_guidance"]
+        assert guidance["version"] == "media-forge.scene-authoring-guidance@1"
+        assert set(guidance["operation_notes"]) <= set(available["supported_operations"])
+        assert guidance["visual_review"]["availability"] == "not_asserted_by_this_guidance"
 
 
 def worker(monkeypatch: pytest.MonkeyPatch) -> Any:

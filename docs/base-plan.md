@@ -1334,6 +1334,22 @@ A "no" to #10 is an architecture smell.
 
 ## 25. Baseline architectural decision
 
+2026-09-13 user priority: game-asset authoring through the existing MCP surface
+precedes further Web Blender acceptance. Characters, creatures, environment props,
+tools, vehicles, weapons and armor remain in scope. Start with bounded authored
+mesh topology so silhouettes, hair clumps, garment shells and fitted armor are not
+limited to assembled primitives. Mesh hair/garments are not hair/cloth simulation.
+Evaluate actual Blender output and visual quality separately from structural
+validity; do not label a primitive assemblage a high-quality character. Preserve
+the Web/OS isolation requirements, but do not make typed authoring wait on GUI login.
+
+Research-informed authoring uses capability/schema discovery, staged edits and
+revision-bound multi-view evidence before expanding detail. Deliver compact LLM/VLM
+guidance through media.capabilities; instructions do not enable a visual model.
+Without actual image input, visual review remains NOT TESTED. Prioritize observation
+and bounded local repair after authored meshes, then UV/bake, deformation and engine
+acceptance. See research/ai-blender-game-asset-authoring.md and the GA plan.
+
 Adopt Media Forge as:
 
 > **A local-first, capability-routed media asset service and ControlDeck add-on, with generic image/video APIs at its core; deterministic production/validation around generative models; optional domain profiles for M5Stack, 2D games, web, manga, and 3D; and thin integrations for coding agents rather than agent-specific media stacks.**

@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 MCP authoring priority / research-informed authored mesh
+
+base main3e274e5/PR524、ux1/3d-authored-mesh、/tmp/mediaforge-cleanup-docs-20260912。
+利用者はWebよりMCPでゲームasset/高品質characterを優先し、LLM/VLM向け詳細調査と実装を依頼。
+PR525 GUI入口はDraftのまま別branchへ保存済み。このbranchに混ぜない。GUI loginを次のblockerにしない。
+base/GA計画先行更新、research/ai-blender-game-asset-authoring.mdとagent-3d-authoring-guide.md追加。
+mesh.create（上限/独立core-worker検証）とcapability内guide、公開3schema、tests追加。
+guideはVLM起動でも上流BlenderMCP全対応でもない。現在のschema/実画像/段階修正/未検証表示を要求。
+08c54d 実Blender4.5.9 source fixture: 28mesh/2312vertices/4512triangles/56ops、GLB81264B、制作0.494秒。
+GLB再import/CPUrender成功。ただし髪・顔・服・防具は目視で目標未達。高品質/game-readyではない。
+実MCP/LLM/VLM/engine新機能受入はNOT TESTED。稼働.80/9130は15opsでmesh.createなし。
+46992b 候補9167実GETは16ops/guide@1、semantic_review unavailable。候補424259終了/不在確認済み。
+全e1f6a5 exit0/1919pass3skip2warnings/208.25秒、Node9/viewer50ms差分0。以後product変更なし。
+次はこのsliceのDraft PR保存後、M2 revision固定の多視点画像asset/正規アクセス/取消・資源回収を実装。
+続いてM3 loft/sweep/局所修正、M4 UV/bake、M5 weight/衣服、M6 clips/engine、M7分類別generator。
+現行スキル数や構造PASSを高品質証拠にしない。全3DS/GOAL/A〜F/GAはPARTIAL。
+利用者root/2dev symlink、本番asset/recovery/runtime/OS保護。検証fixture回収はstatus参照。
+
 ## 2026-09-12 sealed native bootstrap transport
 
 base PR523 MERGED/54084d1、ux1/3d-native-sealed-bootstrap、/tmp/mediaforge-cleanup-docs-20260912。

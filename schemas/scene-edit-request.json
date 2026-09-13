@@ -1027,7 +1027,8 @@
                 "transform.set": "#/$defs/TransformSet",
                 "uv.smart_project": "#/$defs/UvSmartProject",
                 "modifier.array": "#/$defs/ArrayModifier",
-                "skin.bind_auto": "#/$defs/SkinBindAuto"
+                "skin.bind_auto": "#/$defs/SkinBindAuto",
+                "mesh.create": "#/$defs/MeshCreate"
               },
               "propertyName": "type"
             },
@@ -1076,6 +1077,9 @@
               },
               {
                 "$ref": "#/$defs/SkinBindAuto"
+              },
+              {
+                "$ref": "#/$defs/MeshCreate"
               }
             ]
           },
@@ -1379,6 +1383,146 @@
         "mesh_object_ids"
       ],
       "title": "SkinBindAuto",
+      "type": "object"
+    },
+    "MeshCreate": {
+      "additionalProperties": false,
+      "description": "Create authored triangle/quad topology for organic silhouettes, hair clumps,\ngarment shells or armor. Coordinates are local meters; faces use zero-based\nvertex indices in outward winding order. Smooth shading changes normals only,\nnot geometry. Open garment edges are allowed; no automatic retopology or UVs.",
+      "properties": {
+        "type": {
+          "const": "mesh.create",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "vertices": {
+          "items": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "maximum": 10000,
+                "minimum": -10000,
+                "type": "number"
+              },
+              {
+                "maximum": 10000,
+                "minimum": -10000,
+                "type": "number"
+              },
+              {
+                "maximum": 10000,
+                "minimum": -10000,
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "maxItems": 4096,
+          "minItems": 3,
+          "title": "Vertices",
+          "type": "array"
+        },
+        "faces": {
+          "items": {
+            "items": {
+              "maximum": 4095,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 4,
+            "minItems": 3,
+            "type": "array"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Faces",
+          "type": "array"
+        },
+        "smooth": {
+          "default": true,
+          "title": "Smooth",
+          "type": "boolean"
+        },
+        "location": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Location",
+          "type": "array"
+        },
+        "rotation_degrees": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Degrees",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "name",
+        "vertices",
+        "faces"
+      ],
+      "title": "MeshCreate",
       "type": "object"
     }
   },

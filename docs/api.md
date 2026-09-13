@@ -823,6 +823,22 @@ validation and save creates a formal scene revision.
 
 ## Contract evolution
 
+Available `3d.scene_recipe` now includes additive `authoring_guidance` metadata,
+also returned by `media.capabilities`. It describes capability/schema discovery,
+staged edits, actual image evidence, recovery and separate completion gates.
+It does not enable a VLM or advertise future operations. Runtime-unavailable
+responses omit both operation lists and authoring guidance. See
+[agent guide](agent-3d-authoring-guide.md) and [research](research/ai-blender-game-asset-authoring.md).
+
+The additive `mesh.create` typed operation accepts 3–4096 local-space vertices,
+1–4096 triangle/quad faces with zero-based indices, a new stable object ID, name,
+smooth shading and optional location/rotation. Repeated/out-of-range indices,
+duplicate faces, degenerate fan triangles and unreferenced vertices are rejected.
+The worker independently checks topology and the existing scene growth budget
+before allocation. Open surfaces are allowed for garments; watertightness,
+retopology, UV generation and simulation are not implied. Existing recipe tools,
+Jobs, provenance and independently validated `.blend`/GLB revisions are reused.
+
 G1 froze public schemas, manifest contributions, agent tools, workflow executor
 types, and required asset/provenance fields. G2 retains contract version `1.0`:
 the import route and edit constraint keys are additive, while the existing
