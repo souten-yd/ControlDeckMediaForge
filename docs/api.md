@@ -839,6 +839,16 @@ before allocation. Open surfaces are allowed for garments; watertightness,
 retopology, UV generation and simulation are not implied. Existing recipe tools,
 Jobs, provenance and independently validated `.blend`/GLB revisions are reused.
 
+Additive `mesh.create.require_closed` is a strict boolean, default `false`.
+When `true`, core and worker reject boundary edges, edges shared by more than two
+faces, and two incident faces traversing their shared edge in the same direction.
+Core/worker diagnostic exceptions report boundary/multiple/winding edge counts
+before allocation; the public route retains its `invalid_scene_recipe` error code.
+Detailed per-edge MCP feedback is not added in this slice. This
+does not verify vertex fans, self-intersections, signed volume, outward orientation
+or visual quality, and does not repair geometry. Omission retains open-cloth support.
+Discover the field in the installed schema before submitting it to an older worker.
+
 G1 froze public schemas, manifest contributions, agent tools, workflow executor
 types, and required asset/provenance fields. G2 retains contract version `1.0`:
 the import route and edit constraint keys are additive, while the existing

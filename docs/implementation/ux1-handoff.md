@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 closed-edge guard continuation
+
+作業branch ux1/3d-authored-mesh-closure、PR528/390fa78上のstack。user rootは不変。
+require_closed strictbool/defaultfalseをcore/workerへ追加、3schema/API/guide同期。
+runner preflightは新fieldを要求、verifierはguard bypassを拒否。focused38pass。
+実4.5.13で閉mesh作成/穴のallocation前拒否/開布互換、R4実入力boundary8拒否を確認。
+実候補9167schemaにfieldあり、installed9130(.81)はなし。候補停止/233472B scratch回収済み。
+新fieldのsigned installed/実OpenCode受入はNOT TESTED、M1未完了/M2未着手。
+最終全test58017は21e638 exit0/1937pass3skip2warnings/210.07秒、以後product/script/test変更なし。
+旧86123は途中修正でTERM済み、再poll/成功扱い禁止。Node9/viewer40ms差分なし/diff check成功。
+status更新済、commit/pushしPR528をbaseとする別小PRへ保存する。
+次は親PRの扱いを確定し、source修正を正規署名配布→M1実受入へ。runtime/global/Host変更なし。
+R3/R4旧processは終端。比較用scene/assets/evidenceは前節のIDで保持し、無差別削除しない。
+
 ## 2026-09-13 M1 streaming / direct MCP diagnostic
 
 PR528 Draft/ux1/release-0-28-81-acceptance、base f4bcb0d。下の旧running記述より本節を優先。

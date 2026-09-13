@@ -47,6 +47,11 @@ face indexはstrict整数/範囲内/重複なし、重複face/未参照頂点/�
 任意operator/Python/外部pathを受けず、smooth shadingと通常transformを指定可能にする。
 既存asset/provenance/immutable revision/独立GLB検査とgeometry増幅予算を維持する。
 布の開いた縁は許容し、閉じたsolidや良い変形topologyを自動保証しない。
+M1実LLM試験で欠損した装甲が生成されたため、mesh.createへ加法的な
+require_closed（strict bool、既定false）を追加する。trueなら全辺が逆向きの2面で
+共有されることをcore/workerがallocation前に独立検査する。境界/3面以上の共有/向き不整合を拒否。
+false/省略の布を壊さず、自己交差・頂点fan・体積・外向き・見た目を保証するsolid判定とは呼ばない。
+このfieldは新schemaで発見した場合だけ送信し、installed旧版では未対応とする。
 髪の束・衣服shell・装甲の輪郭を実Blenderで作り、構造検査と見た目の評価を分離する。
 後続は選択付き編集/曲面・UV/bake・weight補正/IK・表情/動作、engine受入へ進む。
 この一操作だけで高品質キャラクター、cloth/hair simulationや全GA完成としない。

@@ -63,6 +63,12 @@ class MeshCreate(BaseModel):
     faces: list[Annotated[list[Annotated[int, Field(ge=0, le=4095, strict=True)]],
                           Field(min_length=3, max_length=4)]] = Field(min_length=1, max_length=4096)
     smooth: bool = Field(default=True, strict=True)
+    require_closed: bool = Field(
+        default=False, strict=True,
+        description="Set true for a requested closed armor/solid shell. Every edge must have exactly two "
+        "oppositely directed face uses. Open cloth remains allowed when false. This does not check "
+        "self-intersections, vertex fans, volume, outward orientation or visual quality.",
+    )
     location: Vector3 = (0.0, 0.0, 0.0)
     rotation_degrees: Vector3 = (0.0, 0.0, 0.0)
 
@@ -87,6 +93,17 @@ class MeshCreate(BaseModel):
                     raise ValueError("mesh has degenerate faces")
         if len(used) != len(self.vertices):
             raise ValueError("mesh has unreferenced vertices")
+        if self.require_closed:
+            edges: dict[tuple[int, int], list[tuple[int, int]]] = {}
+            for face in self.faces:
+                for a, b in zip(face, face[1:] + face[:1]):
+                    edges.setdefault(tuple(sorted((a, b))), []).append((a, b))
+            boundary = sum(len(uses) == 1 for uses in edges.values())
+            multiple = sum(len(uses) > 2 for uses in edges.values())
+            winding = sum(len(uses) == 2 and uses[0] != uses[1][::-1] for uses in edges.values())
+            if boundary or multiple or winding:
+                raise ValueError(f"mesh requires closed consistent edges: boundary={boundary}, "
+                                 f"multiple={multiple}, winding={winding}")
         return self
 
 

@@ -115,6 +115,8 @@ authoring_guidance.versionがmedia-forge.scene-authoring-guidance@1であるこ�
 新規sceneに、ロボット装甲の形状試験として、前面に稜線のある小さな胸当てを作ってください。
 幅約0.4m、高さ約0.5m、厚さ約0.08m。これはM1操作受入用で、高品質キャラクターの完成ではありません。
 mesh.createでstable ID armor、名前Armor、閉じた三角/四角面のmeshを一つだけ作り、
+現在のschemaにrequire_closedがあることを確認し、必ずtrueを指定してください。
+そのfieldがなければ未導入と報告して停止します。falseへ変更して検査を回避しません。
 material.setで青緑色の金属にしてください。primitive.addや別meshは使用しません。
 schemaの上限内の頂点/面を自分で組み、面indexは0始まり、全頂点を参照してください。
 この受入では複雑さを抑え、頂点は10個以下にしてください。例えば凸五角形の断面を
@@ -310,7 +312,7 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
             elif args.director_auto_skin:
                 required = ("armature.create", "skin.bind_auto", "animation.clip")
             elif args.director_authored_mesh:
-                required = ("mesh.create",)
+                required = ("mesh.create", "require_closed")
             assert all(operation in schema for operation in required)
             if args.saved_settings:
                 assert 'EVERY clip' in schema and 'Omission means false' in schema

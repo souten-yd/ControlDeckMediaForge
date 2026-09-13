@@ -22,7 +22,7 @@ def calls() -> list[dict[str, Any]]:
             "state": "available", "supported_operations": ["mesh.create"],
             "authoring_guidance": {"version": "media-forge.scene-authoring-guidance@1"}}}}),
         call("controldeck_addons_media_scene_create", {"name": "Armor acceptance", "recipe": {"operations": [
-            {"type": "mesh.create", "object_id": "armor", "name": "Armor", "vertices": [
+            {"type": "mesh.create", "object_id": "armor", "name": "Armor", "require_closed": True, "vertices": [
                 [0, 0, 0], [.4, 0, 0], [0, .08, 0], [0, 0, .5]],
              "faces": [[0, 2, 1], [0, 1, 3], [1, 2, 3], [2, 0, 3]]},
             {"type": "material.set", "object_id": "armor", "base_color": [0, .5, .5, 1]}]}}, {"job_id": "job"}),
@@ -32,7 +32,7 @@ def calls() -> list[dict[str, Any]]:
     ]
 
 
-@pytest.mark.parametrize("failure", [None, "no_guide", "late_discovery", "open_shell", "primitive", "wrong_revision", "failed_validation", "complexity"])
+@pytest.mark.parametrize("failure", [None, "no_guide", "late_discovery", "open_shell", "primitive", "wrong_revision", "failed_validation", "complexity", "guard_bypass"])
 def test_authored_mesh_evidence(failure: str | None) -> None:
     value = copy.deepcopy(calls())
     if failure == "no_guide":
@@ -43,6 +43,8 @@ def test_authored_mesh_evidence(failure: str | None) -> None:
         value.append(value.pop(1))
     elif failure == "open_shell":
         value[2]["state"]["input"]["recipe"]["operations"][0]["faces"].pop()
+    elif failure == "guard_bypass":
+        value[2]["state"]["input"]["recipe"]["operations"][0]["require_closed"] = False
     elif failure == "complexity":
         mesh = value[2]["state"]["input"]["recipe"]["operations"][0]
         vertices, faces = copy.deepcopy(mesh["vertices"]), copy.deepcopy(mesh["faces"])
