@@ -532,6 +532,80 @@ def test_failed_scene_job_retries_as_new_attempt_with_same_input(tmp_path: Path)
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("first_outcome", ["failed", "canceled"])
+def test_compose_retry_preserves_brief_pin_and_original_attempt(tmp_path: Path, first_outcome: str) -> None:
+    from dataclasses import replace
+
+    async def scenario() -> None:
+        store = Store(tmp_path)
+        store.initialize()
+        entered = asyncio.Event()
+        drafts: list[dict[str, Any]] = []
+        pins: list[tuple[str, str]] = []
+
+        class Preparer:
+            async def prepare(self, identity, request, *, identity_provider):
+                assert identity_provider() is identity
+                drafts.append(request.model_dump(mode="json"))
+                entered.set()
+                if len(drafts) == 1:
+                    if first_outcome == "canceled":
+                        await asyncio.Event().wait()
+                    raise MeshDraftError("draft_validation_exhausted", details={"attempts": [{"valid": False}]})
+                # An orchestration fixture, not real AI/Blender or shape acceptance.
+                return PreparedMeshDraft(recipe(), {"quality_status": "NOT TESTED"})
+
+        class RetryWorkspace(Workspace):
+            active = "4.5.9"
+
+            def recipe_runtime_pin(self, owner, value):
+                return "blender-test", self.active, None
+
+            async def apply_recipe(self, owner, job_id, value, *, runtime_id, runtime_version, preparation):
+                pins.append((runtime_id, runtime_version))
+                return await super().apply_recipe(owner, job_id, value,
+                    runtime_id=runtime_id, runtime_version=runtime_version)
+
+        host, workspace = Host(), RetryWorkspace()
+        manager = SceneRecipeJobManager(store, workspace, host, draft_preparer=Preparer())
+        identity = replace(IDENTITY, granted_capabilities=frozenset({"jobs.write", "ai.inference"}))
+        request = SceneComposeRequest(name="Retry fixture", intent="closed ridged armor",
+                                      vertex_budget=10, require_closed=True)
+        try:
+            first, _ = await manager.submit(request, identity)
+            await entered.wait()
+            if first_outcome == "canceled":
+                await manager.cancel(first.id, "user:7")
+            await manager.wait_cleanup(first.id)
+            original = manager.projection(first.id, "user:7")
+            assert original["status"] == first_outcome and not original["asset_ids"]
+            assert original["host_terminal_sent"] is True
+            workspace.active = "4.5.13"
+            for change in ({"intent": "different armor"}, {"vertex_budget": 12}, {"require_closed": False}):
+                with pytest.raises(SceneError, match="preserve"):
+                    await manager.submit(request.model_copy(update=change), identity, retry_of=first.id)
+            with pytest.raises(KeyError):
+                await manager.submit(request, replace(identity, actor_subject="user:8"), retry_of=first.id)
+            with pytest.raises(SceneError, match="capability"):
+                await manager.submit(request, IDENTITY, retry_of=first.id)
+            assert len(host.created) == 1 and len(drafts) == 1
+            retry = request.model_copy(update={"retry_job_id": first.id})
+            second, _ = await manager.submit(retry, identity, retry_of=first.id)
+            await manager.wait_cleanup(second.id)
+            result = manager.projection(second.id, "user:7")
+            assert second.id != first.id and result["status"] == "succeeded"
+            assert result["retry_of"] == first.id and result["host_terminal_sent"] is True
+            assert result["input_sha256"] == original["input_sha256"]
+            assert result["idempotency_key"] == original["idempotency_key"]
+            assert pins == [("blender-test", "4.5.9")]
+            assert drafts[0] == drafts[1]
+            assert manager.projection(first.id, "user:7") == original
+        finally:
+            await manager.stop()
+
+    asyncio.run(scenario())
+
+
 def test_compose_default_uses_scoped_grouped_preparer():
     from mediaforge.scene_grouped_drafts import GroupedMeshDraftPreparer
 

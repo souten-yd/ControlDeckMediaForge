@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 compose retry regression / source gate pending
+
+前turnはOpenCode fixture/証拠検証器追加まで進捗。今回main fetch4f978a0は既にancestor、
+PR533/1020f42からcompose failed/canceled両retryの回帰を追加。元brief/pin/hash/結果保持、
+入力変更/他owner/不足grant拒否を確認。実AIではない。全75041/0e4c47は2062pass3skip/
+2warnings/259.07秒、Node9/viewer45ms差分なし。以後product/test変更なし。
+上位base-plan/integrationへsource実lifecycle→公開接続→署名候補→installed受入の順を明記。
+実行前提と品質合否を分けるが、acceptance_pending/product healthはまだ変更していない。
+共有LLMは各観測で実busy、最新task63519。正規resourcesでも別gatewayのactive lease確認。
+新推論/Host再起動なし、既存Host711252/MF537447保持。専用login finally失効。
+次は現在のslot/leaseを再確認してgrouped Job実取消/再試行を実行。元入力/版/別子Job/
+部分assetなし/終端通知/当該lease返却まで見る。直前turnの単独client cancelを代用しない。
+source gate後に実runtime+caller grants+scoped text stream/thinkingでreadinessを接続し、
+PR532/533の正規配布→実OpenCode --director-compose→installed納品へ。品質/変形/engineを維持。
+M1未完了/M2未着手。新project/asset/scratch/backupなし、tracked変更はcommit/pushして保存する。
+
 ## 2026-09-13 OpenCode compose fixture and evidence verification
 
 前turnは実scoped Job/Blender/VLMまで進捗。今回はrunner --director-composeを独立追加し、

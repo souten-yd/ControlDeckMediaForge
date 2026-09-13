@@ -1,5 +1,25 @@
 # Media Forge implementation status
 
+## 2026-09-13 compose retry invariants and exposure sequence
+
+PR533/source1020f42から、composeのfailed/canceled各終端後のretry回帰testを追加。
+元briefの一致、active版4.5.9→4.5.13変更後も元4.5.9 pin、別Job ID、input hash/
+idempotency一致、元試行の結果不変、Host終端通知を検査した。入力intent/budget/closed変更、
+他owner、ai.inference欠如は新子Job/準備前に拒否。fake orchestrationであり実生成受入ではない。
+`./mf.sh test` 75041/0e4c47: 2062passed3skipped2warnings、259.07秒。
+関連scene recipe tests成功、Node9成功、viewer build45ms/生成差分なし。以後product/test変更なし。
+
+base-plan §25/integration §18へsource lifecycle→contribution/readiness→署名候補導入→
+実installed MCP/OpenCodeの順を明記。installed受入と品質gateを省略せず、availabilityは
+現実の実行前提に基づくものとする。今回product capability/healthは変更していない。
+
+read-only実slotは60939→61737→61890→62475→62921→63519と変化し、各観測でbusy。
+正規専用loginのresources観測でもlease eb80cf8a-0280-4c62-881a-ab8edf226840/
+job gateway-76502b5916144ef1がactive。loginはfinally失効。別処理を停止せず、新推論を投入しなかった。
+Host711252/MF537447稼働を再確認。新project/asset/scratch/backupなし、global設定変更なし。
+NOT TESTED: grouped既定Jobの実取消/再試行、compose実OpenCode/installed納品、品質/変形/engine。
+M1未完了/M2未着手。次は共有推論状態を再確認して実Job取消/再試行、その後readiness接続へ。
+
 ## 2026-09-13 OpenCode compose acceptance harness
 
 独立--director-composeで短い制作意図→scene.compose一回→Job終端→snapshot/export→

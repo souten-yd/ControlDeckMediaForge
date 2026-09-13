@@ -758,6 +758,15 @@ G9は「制作を加速する候補生成器」として後段に置く。
 
 ## 15. 実装順序
 
+2026-09-13公開順序の明確化: base-plan §25 / integration §18に、sourceで実Host子Jobの
+実行・権限・取消・再試行を確認→contribution/readiness接続→exact署名候補を導入→
+正規installed MCP/OpenCode納品受入の順を明記した。導入前にinstalled受入を要求する
+循環を避けるが、installed gate自体は省略しない。実行前提と作品の品質合否を分離する。
+composeの失敗/取消からの同入力retryについて、active runtime変更後の元pin維持、
+元試行不変、入力変更/他owner/ai.inference欠如の拒否を回帰testへ追加した。
+これは実Host/Blenderでのretry成功ではない。source実取消/再試行の残件があるため、
+productのacceptance_pendingとhealth表はまだ変更していない。
+
 2026-09-13 OpenCode compose受入準備: runnerへ独立の--director-composeを追加し、
 従来のtyped authored-mesh試験を保持。検証器はcompose一回、生成Jobのprepared_request/
 実行条件hash/局所修正回数、同revisionのsnapshot/export、新鮮なgrant、実配置bytesを確認する。

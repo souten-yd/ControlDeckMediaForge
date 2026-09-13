@@ -851,6 +851,14 @@ See [3D Studio](design-3d-studio.md), [runtime/Web](design-blender-runtime-and-w
 [assets/OpenCode](design-3d-assets-and-opencode.md) and [release rules](development-release-3d-studio.md).
 
 - Reuse Host Agent MCP projection; do not install a separate OpenCode or edit its global config.
+- For brief-driven compose, contribution health describes the registered transport,
+  not a user's inference authorization or the quality of generated assets. The
+  authenticated MediaForge capability and admission paths must check actual
+  creation-runtime readiness, jobs.write/ai.inference, and Host text stream/thinking
+  support. Public health must not mint a user identity or run inference probes.
+  Source lifecycle acceptance precedes connection and signed candidate deployment;
+  actual installed MCP/OpenCode acceptance follows that deployment and remains
+  mandatory. No alternate bridge or false capability override substitutes for it.
 - Keep existing image/G8 tools unchanged. New scene tools require additive schemas and current Host validation.
 - Long authoring/render operations return durable job references. Validate the current detached Host Job
   and job credential refresh path; do not extend a synchronous agent call indefinitely.
