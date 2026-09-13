@@ -3,6 +3,21 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 v0.28.82 actual installation
+
+PR530 MERGED/4f978a0、ux1/release-0-28-82-acceptance。固定commitから署名公開/re-download/
+Host consumer検証成功。31633730B/SHA8038f3f1…ac722。実bundle候補schema field確認、候補537200停止済み。
+通常更新48910は45282d exit0、MF537447/current .82/healthy。新schemafield確認。
+更新前後snapshot完全一致、制作物/recovery12保持。release scratch95407170B回収済み。
+実MCPへR4不正形+require_closed=trueを送りHTTP422/新MF Jobとsceneなしを確認。
+R5実OpenCodeはhandle79197/子537726、project MF3DS-M1-Authored-R5-20260913、
+evidence maintenance/m1-opencode-20260913-r5。R5は880a16 exit1/-15/265.563秒、3回同streamエラーでTERM。
+handle79197は閉鎖済み、537726不在、MF Job/scene増加なし。実LLM制作/納品FAIL。
+R5 empty project26249Bは非.gitファイル0/参照なし検査後回収。redacted evidenceは診断用保持。
+旧R3/R4も終端。次は汎用LLM tool-call streamの原因/対策を調査。Host変更は未実施。
+末端のgeometry検査を緩めない。M1受入完了前にM2へ進まない。最終結果記録済み、commit/pushへ。
+最終全1937pass216.04秒以後product/script/test変更なし。M1未完了/M2未着手。
+
 ## 2026-09-13 v0.28.82 preparation
 
 PR528 MERGED/735d8e2、PR529をmainへretargetしてMERGED/5ceebcfを実確認。

@@ -1,5 +1,43 @@
 # Media Forge implementation status
 
+## 2026-09-13 v0.28.82 signed bundle / installed acceptance
+
+PR530 MERGED/4f978a0a67a0d89fdd0afa7aa8482e9f53eae662（a89ec1）。同固定commitから
+既存bundle-build Python3.12.3/PyInstaller6.22.0で構築、d1b099 exit0。
+artifact31633730B/SHA256 8038f3f1e6aa2bd41a6b7c737fc7b5b6d148fd70181cebe90c474e1a611ac722。
+既存publisher鍵で署名/自己検証6efa77成功、v0.28.82へ4点公開63b2c7成功。
+固定tagの公開4点を再取得8a6dc2、Host consumerの署名/版/サイズ/SHA検査とsafe extractionを
+6e3736で成功。Host source/鍵/global設定変更なし。releaseは高品質完成を謳っていない。
+
+実bundleをscratch候補537200/9167で起動、d97948でschemaのrequire_closed boolean/defaultfalse確認。
+health HTTP200だがscratchのenvironment snapshot不在でsetup_required、healthyとは記録しない。
+候補TERM/f36305 exit143、正常shutdown。更新直前にDB/assets/runtime snapshotを再取得し
+release82_beforeと完全一致、1327Job/72GUI/43runtime全終端、recovery12保持を確認した。
+通常 ./deck.sh feature update media-forge は45282d exit0/.81→.82/healthy/enabled。
+1a5a4aでMF537447、WorkingDirectory/current versions/0.28.82、health HTTP200 healthy、
+実schemaにrequire_closed確認。更新前後snapshotは完全一致: DB16tables全row count/hash、
+assets2400files属性hash03c74b51…6a86f、runtime登録hash e2ef1b01…14161。
+asset全bytesのhashではなく名前/size/mtime比較である。DB backupは作っていない。
+release作業領域は候補停止/lsof参照なし/realpath確認、95407170Bを693006で削除・不存在確認。
+公開releaseとinstalled .82/.81は保持。本番asset/recovery/runtimeを削除していない。
+
+新規R5専用project MF3DS-M1-Authored-R5-20260913、evidence maintenance/m1-opencode-20260913-r5で
+runner --director-authored-meshを実起動。handle79197/子537726（d60a1b）、終端を追跡する。
+それとは独立に、正規mf-e2e/private configのstdio MCPへR4実入力+require_closed=trueを送信。
+3536c1はisError=true（bridgeはgeneric error文言）、f1d987の実service.logでscene/create HTTP422、
+0d2076でscenes60/tasks68/Jobs1327のままを確認。新しいMF Job/sceneを作らず拒否した。
+これはinstalled MCP negative受入でありLLMの有効形状生成/納品成功ではない。
+R5は880a16 exit1/子-15/265.563秒で終端。skill75.773秒/capability81.289秒のみcompleted、
+tool_calls2/納品0。own session ses_f669c2dcfffeFeuIAqP97s7gCr / run69d53d4eのlogで
+同provider500 Invalid diffを3件確認（06:12:50/06:13:31/06:14:12 UTC、f22dcf）。
+同じ非改善反復を止めるため所有子537726をTERM、観測timeoutだけの再起動ではない。
+b6f9a1で子不在、MF Jobs1327/scenes60/tasks68のままを照合。有効なscene受付はなかった。
+R5のempty専用projectはrealpath/lsof参照なし/非.gitファイル0を検査し26249B削除（14e80a）。
+redacted events/observationsはmaintenance/m1-opencode-20260913-r5へ診断用保持、原因記録・修正受入後回収。
+新fieldのinstalled MCP negativeはPASS、実LLM制作/納品はFAIL、M1未完了/M2未着手。
+次はLLM tool-call streamの汎用経路を調査する。現在Host変更0、モデル/runtime差し替え0。
+末端MediaForge workerの検査を緩めてprovider500を隠す対応はしない。
+
 ## 2026-09-13 v0.28.82 release preparation
 
 rules/branches/mainでPR必須/required approvals0を照合（afddda）。旧branch protection APIは404、

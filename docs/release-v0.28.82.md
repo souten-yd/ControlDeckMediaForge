@@ -15,3 +15,10 @@ M1全体、高品質キャラクター、実画像/VLM/変形/engine受入は未
 
 DB migrationはありません。既存の制作物とruntime登録を保持します。
 旧版はこのfieldを契約として持たないため、rollback後に検査付きrecipeを送信しないでください。
+
+## 導入確認
+
+固定commit4f978a0から署名公開し、再取得した公開物をHost consumerで検証しました。
+通常更新で.81→.82 healthyを確認。DB16tablesと制作物の属性/Blender登録情報は更新前後一致。
+正規MCPで、前回の欠損入力を検査付きで送るとHTTP422となり、新規MF Job/sceneなしを確認。
+LLMによる有効な制作から納品までの受入は、implementation-statusへ別途記録します。
