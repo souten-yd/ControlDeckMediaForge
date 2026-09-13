@@ -36,7 +36,7 @@ class Gateway:
         self.responses = iter(responses)
         self.calls = []
 
-    async def complete(self, identity, capability, messages, **kwargs):
+    async def complete_streamed(self, identity, capability, messages, **kwargs):
         self.calls.append((identity, capability, copy.deepcopy(messages), kwargs))
         value = next(self.responses)
         if isinstance(value, BaseException):

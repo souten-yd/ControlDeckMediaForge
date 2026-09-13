@@ -135,11 +135,12 @@ class MeshDraftPreparer:
         # on HTTP disconnect; installed Host cancellation still needs acceptance.
         async with asyncio.timeout(300):
             for attempt in range(MAX_REPAIRS + 1):
-                result = await self.gateway.complete(
+                result = await self.gateway.complete_streamed(
                     identity, "text.generate", messages,
                     response_format={"type": "json_schema", "name": "mesh_draft",
                                      "schema": draft_schema(request), "strict": True},
                     temperature=0.1, max_tokens=4096, timeout_seconds=90,
+                    max_output_bytes=MAX_DRAFT_BYTES,
                 )
                 # Oversize output is terminal, never echoed into another request.
                 if len(result.content.encode("utf-8")) > MAX_DRAFT_BYTES:

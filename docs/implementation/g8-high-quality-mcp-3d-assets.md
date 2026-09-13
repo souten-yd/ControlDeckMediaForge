@@ -782,6 +782,10 @@ scoped AI実受入、出力サイズ/取消/provenance/検査回避negativeを�
 front ridge/寸法/見た目・Blender実行は未評価。closed edge PASSを依頼への適合と混同しない。
 次gate: Host側のHTTP切断/期限超過で推論とleaseが終了する実測、既存Jobs/asset lineageへの接続、
 通常MCPから短い制作意図→検査済みrequest→既存実行→export/配置の実OpenCode一巡。
+2026-09-13追記: scoped stream clientに限り取消/期限超過で実推論idle・対象lease releasedまで確認。
+一括completeは切断20秒後もbusyだったためdraftでは使用しない。streamはdone受信前の
+部分JSONを採用せず、wire/出力上限とabsolute deadlineを持つ。Host変更なし。
+残るgateはMCP/既存Jobsからの取消伝播、準備provenance→asset lineage、実制作・納品。
 未受入のhelperをcapability availableへ追加しない。M2開始条件は変わらない。
 診断の一標本の成功を安定運用やM1完了とはしない。実OpenCodeからの一巡が引き続き必須。
 

@@ -66,6 +66,12 @@ asset/revisionのprovenance・lineageを置き換えない。実行はnot_execut
 2026-09-13時点でhelperのみ実装、API/MCP/capabilityには未公開。
 局所coroutineの取消伝播は、Host HTTP切断時の推論終了・lease返却の実受入とは区別する。
 後者と既存Jobsへの接続・納品を確認するまで利用可能とは表示しない。
+実取消診断を受け、draftだけは既存Hostのscoped text streamでJSONを組み立てる。
+complete呼出は切断20秒後も推論中だったため使わない。streamは終端done必須、途中EOF/error/
+出力超過を拒否、wire2MiB/UTF-8出力8KiB、要求期限+5秒のabsolute timeoutで接続を閉じる。
+既存completeの利用者は変更しない。tool引数streamの障害回避fallbackやmodel変更ではない。
+実Hostで取消・期限超過の両方を実行し、推論idleと対象lease releasedを確認した（status参照）。
+このgateはscoped clientまで。公開MCP→Jobs経由の取消・lineage・納品は別途未受入。
 髪の束・衣服shell・装甲の輪郭を実Blenderで作り、構造検査と見た目の評価を分離する。
 後続は選択付き編集/曲面・UV/bake・weight補正/IK・表情/動作、engine受入へ進む。
 この一操作だけで高品質キャラクター、cloth/hair simulationや全GA完成としない。

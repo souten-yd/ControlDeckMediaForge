@@ -1,5 +1,44 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 scoped stream cancellation / lease acceptance
+
+PR532/0ba2ab0で再開。fetch後main4f978a0、tracked clean、PR532 OPEN/base PR531を確認。
+前turnは内部helper/実scopedデータ生成の進展。M1の残gateを継続し、Hostはread-only参照。
+
+実Host completeへ長いJSON生成を依頼し、他の推論がないslot idle→当該slot busyを確認して
+クライアントtaskを取消した（f31e66/7b1e39/4e416a）。取消後0.502/2.003/5.005/10.007/
+20.012秒でもbusy、35.018秒観測でidle。正確な終了時刻とleaseはこの試験では未計測。
+新しいservice tokenのみ、asset/project生成なし。続く既存scoped streamの同条件診断cb01d7は
+切断0.502秒後idle。単純な局所task取消をremote推論取消と混同しないことを実証した。
+
+HostAIGateway.complete_streamedを追加し内部draftにだけ接続。終端done必須、partial EOF/error/
+異常イベント/非SSEをfail-closed、wire2MiB/出力8192bytes、absolute deadline=timeout_seconds+5。
+JSONデータのみを組み立てる。既存complete呼出とmodel/provider/defaultは変更なし。
+51d98d: focused33pass。UTF-8分割/CRLF/multiline、異常EOF、超過、未grant、実task cancelで
+transport close、stalled stream deadlineを確認。新public tool/capabilityはまだ追加していない。
+
+実データ生成: `scripts/3ds_scoped_draft_probe.py`、fedf8a/9a67ec exit0/6.590秒、
+初回8vertices6faces、request hash f91ced9584af7e4a12ae0522efbdcb652492724458e3e6819bdd9adc4d709ec3。
+Blender/画像/納品は未実施。この例は前の非streamと同一データであり品質向上とは数えない。
+
+再現可能な実取消診断をscripts/3ds_scoped_ai_cancel_probe.pyへ追加。
+Host diagnostic venvで同script --mode cancel / --mode deadlineを実行。
+専用mf-e2eへ通常issuerで新規service tokenと短命loginを作り、通常system.view HTTPで
+対象leaseを観測。loginはfinally revoke、token/secret非表示。provider /slotsはread-onlyのみ。
+baseline idleから一つだけ新規active leaseが現れることを確認し、他人の要求は取消しない。
+
+| mode | 対象lease | 実結果 |
+|---|---|---|
+| cancel (8cc452) | aff22eda-67dd-4823-a244-483080d8fe55 | total0.627秒、局所終端0.300秒後idle/released |
+| deadline (799f1d/fb4dcb) | dff0eadc-4b81-4f5a-a471-f0de3ddb5add | timeout要求1秒+transport猶予5秒、total6.302秒、局所終端0.299秒後idle/released |
+| cancel再検証 (948287) | a1157677-3711-4943-b2c9-7e36a0486a70 | total0.663秒、局所終端0.315秒後idle/released |
+
+deadlineはHostAIError/partial successなし。各handle46720/53558/35067は終端。
+全test82441は297133 exit0/1974passed3skipped2warnings/206.85秒。以後product/script/test変更なし。
+Node9pass/viewer49ms、tracked build差分なし（e1f5e1）。Host tracked変更0、実MF537447 active。
+M1未完了/M2未着手、public MCP/Jobsからの取消・lineage・納品はNOT TESTED。
+次は既存SceneRecipeJobManagerとasset provenanceへの接続を設計し、MCP/installed一巡へ進める。
+
 ## 2026-09-13 M1 scoped structured draft preparation (internal only)
 
 PR531/c42f966をbaseとしてux1/3d-structured-mesh-draftへ分割。main4f978a0を保持。

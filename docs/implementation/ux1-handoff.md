@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 scoped cancel accepted, MCP connection pending
+
+PR532/ux1/3d-structured-mesh-draft、base0ba2ab0（PR531/c42f966上）、main4f978a0含む。
+Host completeは切断20秒後もbusy。既存scoped streamは0.502秒後idle。
+HostAIGateway.complete_streamedを実装、内部draftを接続。既存complete/Host本体は不変。
+33focused pass、実draft6.590秒/8vertices6facesの閉殻PASS（品質/Blenderは未実施）。
+実scoped client cancel/deadlineで対象lease releasedとslot idleを確認、statusにID/実測記録。
+新script3ds_scoped_ai_cancel_probe.py、専用mf-e2e通常新規loginをfinally revoke、secret非出力。
+46720/53558/35067は終端。全test82441は297133 exit0/1974pass3skip2warnings/206.85秒。
+以後product/script/test変更なし。Node9pass/viewer49ms差分なし、Host tracked変更0/MF537447 active。
+次: 既存SceneRecipeJobManager・asset provenanceへの接続、MCPからの取消伝播、実OpenCode一巡。
+public tool/capabilityはまだ未追加、M1未完了/M2未着手。installed.82/user rootを保持。
+全gate完了、commit/pushしてPR532を更新する。
+
 ## 2026-09-13 M1 internal scoped draft helper
 
 ux1/3d-structured-mesh-draft、base PR531/c42f966、main4f978a0を含む。
