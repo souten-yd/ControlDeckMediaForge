@@ -3,6 +3,18 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 v0.28.82 preparation
+
+PR528 MERGED/735d8e2、PR529をmainへretargetしてMERGED/5ceebcfを実確認。
+head d4f419aの閉メッシュ検査を含むmainをfast-forward、ux1/release-0-28-82へ。
+版数2箇所とrelease note追加。前gate1937pass210.07秒、版更新後の全gateを追跡する。
+新gate81142は63e9c0/5533eb exit0/1937pass216.04秒、Node9/viewer43ms差分なし。
+以後product/script/test変更なし。署名作業領域maintenance/release-0.28.82-qKl9x6。
+before snapshotはfunctions store release82_before、再実行commandはrelease82_snapshot_cmd。
+更新前に再照合し、更新後比較する。DB backup未作成、recovery12保持。
+次はcommit/push/PR→固定merge commitから署名bundle→正規更新→M1実受入。
+M1未完了/M2未着手、.81稼働、ユーザーroot/制作物/recovery/runtimeは保持。
+
 ## 2026-09-13 M1 closed-edge guard continuation
 
 作業branch ux1/3d-authored-mesh-closure、PR528/390fa78上のstack。user rootは不変。
