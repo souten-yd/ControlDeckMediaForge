@@ -3,6 +3,28 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 real queued compose cancel / retry timeout
+
+前turnはretry tests/上位設計まで進捗。今回は実Host/既定grouped managerで取消・retryを診断。
+source6cddd6b/PR533、main4f978a0 ancestor、製品/test/Host/MF版は変更なし。
+初回84859はidle直後に別推論再開、Job投入前停止。65186は共有task66017継続中に
+専用job_ab7f193bd0334a25bf6556bd5177753b/Host3030ec38a8d2受付→取消0.057秒、
+新規観測lease17213813...released、他task66017継続、asset0/終端通知true。
+これは受付/待機取消で、自分のprovider実行を観測していない。
+同入力retry job_37fa240b000b4f2bbbada7ead4059ace/Hostb27cba595075は全体96.069秒で
+host_ai_unavailable/failed/asset0。DBでbrief/hash/pin/retry_of/別子Job/元履歴保持確認。
+41719の自分の非空SSE contentを観測後取消する別四面体診断も、content前にAI期限失敗。
+Hostcb5b1a1be413 failed確認。実行中取消・成功retryは引き続きNOT TESTED。
+providerログの時間/token件数のみ読取で別task67119のprompt eval159.433秒/111541tokensを確認。
+Job-provider task対応がないので個々のtimeout原因を待機だけと断定しない。モデル/期限変更なし。
+最終Host resourcesで別gateway-638102f4caad46f3 active。追加投入停止、他処理は取消しない。
+3scratch計800727BはDB終端/asset0/symlinkなし/参照なし後に削除。raw DB保持なし。
+全owned handle終端、login finally失効、新正式asset/project/backupなし。
+次は現在のslot/leaseを観測して、共有推論の落ち着いた時間帯で実行中取消/成功retryを確認。
+一瞬のidleを専有保証にせず、busyのまま同じ95秒試験を連続投入しない。
+source gate後のreadiness→署名候補→正規MCP/OpenCode/installed納品を継続する。
+M1未完了/M2未着手、acceptance_pending維持。今回は文書のみ、2062pass基準からcode/test変更なし。
+
 ## 2026-09-13 compose retry regression / source gate pending
 
 前turnはOpenCode fixture/証拠検証器追加まで進捗。今回main fetch4f978a0は既にancestor、

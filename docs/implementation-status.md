@@ -1,5 +1,46 @@
 # Media Forge implementation status
 
+## 2026-09-13 real compose cancellation under concurrent inference
+
+source6cddd6b/PR533、main4f978a0はancestor。製品/test/稼働版は変更せず実診断した。
+Host正常token issuer（sync ORMはasync外）→stdin→MF専用venv別process、
+既定GroupedMeshDraftPreparer/SceneRecipeJobManager→正規Host child/AI経路。
+モデル/設定/推論経路の差替えなし。MCP/OpenCodeの実行ではない。
+
+- 84859/856765: slot空き観測後に別推論が再開。MF側事前検査で停止し、Job/asset0。
+  一瞬のidle観測を専有時間の保証にしない。
+- 65186/dd6374: baseline task66017/busy、lease edefd7c5-c321-4c4b-86d3-eea6c77c9324。
+  job_ab7f193bd0334a25bf6556bd5177753b / Host3030ec38a8d2を正常受付。
+  新規観測lease17213813-53e0-4120-8099-4edef2657e43は取消後released、取消0.057秒。
+  他のslotは同じtask66017/busyを維持。local/Hostともcanceled、host_terminal_sent=true、asset0。
+  自分のprovider本文生成は未観測なので、これは受付/待機段階の取消受入に限定する。
+- 同入力retry job_37fa240b000b4f2bbbada7ead4059ace / Host b27cba595075。
+  65186/a3a57eは全体96.069秒でhost_ai_unavailable/Host AI stream interrupted、failed/asset0。
+  DB後検査511a8fで元request JSON/input SHA/runtime pin一致、別child/retry_of/両終端通知を確認。
+  input SHA b6439c298fe161975d938adb9b2313f591daf3c0a125157638c2a4ff700a99e7、Blender4.5.13。
+  retry受付・失敗終端の実証であり、成功するretry/Blender再実行とは扱わない。
+- 41719/2c677f: 四面体brief/vertex_budget4の別取消診断。
+  job_0c6d3658b554448b8216dd2d2e031529 / Host cb5b1a1be413。
+  HTTP response streamのpassive tapで自分の非空contentを検出してから取消する計画だったが、
+  content観測前に同じAI期限エラーでfailed。100秒の観測待ちもtimeout、実行中取消は未実施。
+  tapは既存bytesをそのまま渡し、payload/経路/timeoutを変えず秘密値・本文を出力していない。
+
+Host GET jobsで3子Jobのcanceled/failed/failedを再確認。診断loginは各finallyで失効。
+providerのログはtask番号・時間・token件数だけに限定して読取（prompt本文なし）。
+task67119のprompt eval159432.61ms/111541tokens、total179646.68msを観測。
+別の長い処理が95秒を超えることは実証されたが、gateway Jobとprovider taskの厳密な対応が
+ないため、今回の各timeoutを待機だけのせいと断定しない。未観測の推論を成功・取消成功にしない。
+最終resourcesは別gateway-638102f4caad46f3/lease67acdae1-ab3e-4151-a575-f838c372dc5a active。
+他の要求をcancel/停止/モデル切替せず、追加試験投入を止めた。
+
+scratch m1-job-retry-6dph7h4e / m1-job-retry-p1pasp99 / m1-stream-cancel-zwla8wfiは
+各266909B、DB終端/asset0/symlinkなし/lsof参照なし確認後に完全削除（計800727B）。
+正式asset/runtime/recovery/backupは保持。raw診断DBは残っていない。
+今回は文書のみ、全test再実行なし。直前の同一製品/test基準2062pass3skip/259.07秒を維持。
+NOT TESTED: grouped Job実行中取消、成功retry、compose MCP/OpenCode/installed、品質/変形/engine。
+次は共有推論の落ち着いた時間帯で再確認する。忙しい間に同じ95秒試験を反復しない。
+availabilityを変えずM1未完了/M2未着手。期限を伸ばすだけで原因確認/品質gateを回避しない。
+
 ## 2026-09-13 compose retry invariants and exposure sequence
 
 PR533/source1020f42から、composeのfailed/canceled各終端後のretry回帰testを追加。
