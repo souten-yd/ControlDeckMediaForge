@@ -1,5 +1,14 @@
 # Media Forge implementation status
 
+## 2026-09-13 Host prerequisite gate integrated
+
+Host test-only PR325をmerge4765666で確認。Host PR324へ統合後の全testは
+1106 passed / 2 skipped / 1 warning、97.58秒、exit0。Host候補head9e51fbe push済み。
+製品変更は既存thinking候補のみ、旧test失敗を消さずHost statusへ追記した。
+実機反映前にread-only /slotsで他の実推論（slot0/task52832）稼働を確認し、
+Host再起動せず保護。新thinkingの実推論/取消/lease受入はNOT TESTEDのまま。
+MF product/稼働/asset不変、M1のMCP/OpenCode/installed受入未完了。
+
 ## 2026-09-13 grouped candidate scoped thinking discovery
 
 Host PR324の追加契約をMF scoped stream clientへ接続。既存呼び出しはoption省略で

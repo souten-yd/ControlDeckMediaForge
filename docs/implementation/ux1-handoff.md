@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 Host combined gate green / live inference protected
+
+前turnはMF接続とtest-only修正まで進捗。今回はHost PR325作成、app connector経由merge成功、
+通常Git/PR APIで47656666630412f7de8a81cc932218a259fb07fb/MERGEDを確認。
+gh GraphQL/REST mergeは失敗して未mergeだったため、別経路の成功後に再確認した。
+Host324へtest-only branchをmerge、status衝突は双方の記録を保持。
+全31761/7c179d: 1106pass2skip1warning/97.58秒 exit0。product変更は88bef36からなし。
+commit a49922e→origin/main統合9e51fbe push済み。Host324はまだ未配布、実推論NOT TESTED。
+Host root main7cf5605/稼働485004、MF537447は変更していない。
+配布前read-only /slotsで共有LLM id0/id_task52832/is_processing=true/n_prompt_tokens41868を
+確認。他の推論なのでHost再起動・cancel・モデル変更を行わない。jobs/resources未認証は401。
+次は同じ実slotの現在状態とHostの実行中Jobを正規認証で再確認し、安全な反映時点を判断する。
+Host324差分review/実機受入を完了し、その後grouped --probe→compose→OpenCode/installedへ。
+既存scripts/3ds_scoped_ai_cancel_probe.pyはidle/unique新leaseを確認して取消/期限を測る。
+thinking=Trueでの受入時は明示指定が必要（既存scriptはまだ省略、既存成功を流用しない）。
+今回はMF文書のみ、2045pass基準からproduct/test変更なし。新asset/project/backupなし。
+M1未完了/M2未着手、compose acceptance_pending。待機は外部推論の実観測であり、goal blockedではない。
+
 ## 2026-09-13 scoped thinking discovery wired to grouped candidate
 
 前turnはHost PR324作成まで進捗。MF main fetch4f978a0（既にancestor）、PR533継続。
