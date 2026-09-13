@@ -769,6 +769,14 @@ M1の閉装甲fixtureでは新schemaのrequire_closed=trueを必須とし、boun
 入力をcore/workerで拒否する。false/省略は布の互換性用で、閉装甲の検査回避に使わない。
 全辺の共有条件だけの検査をself-intersection-free solidや視覚品質の保証へ拡張解釈しない。
 
+M1修正候補の実装順（2026-09-13実測に基づく）:
+LLMのtool引数生成と形状設計を同時に行う経路は失敗を再現した。単純な非stream化も
+0call/lengthのため採用しない。構造化JSON draft→coreの目的別検査→最大2回の修正を
+実行前に分け、合格したdraftだけを既存recipe実行へ渡す方向でM1を継続する。
+既存HostAIGatewayのtext.generate/json_schemaを使い、モデル/port/GPU管理をMediaForgeへ複製しない。
+scoped AI実受入、出力サイズ/取消/provenance/検査回避negativeを先に通す。現在は未実装。
+診断の一標本の成功を安定運用やM1完了とはしない。実OpenCodeからの一巡が引き続き必須。
+
 | 順序 | slice | 主な成果 | exit gate |
 |---|---|---|---|
 | M1 | authored mesh / guidance | `mesh.create` + guide | PR #526の新operation実MCP/OpenCode、source→signed installed |
