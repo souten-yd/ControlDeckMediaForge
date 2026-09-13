@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 
-def verify_director_read(calls: list[dict[str, Any]]) -> dict[str, Any]:
+def verify_director_read(calls: list[dict[str, Any]], *, compose: bool = False) -> dict[str, Any]:
     """Discovery and text promises are not evidence of skill/operation execution."""
     skills = [call for call in calls if call["tool"] == "skill"]
     assert skills, "No actual skill invocation"
@@ -25,7 +25,10 @@ def verify_director_read(calls: list[dict[str, Any]]) -> dict[str, Any]:
         assert state["status"] == "completed"
         assert state["input"] == {"name": "blender-director"}
         assert "Blender Director" in state["output"] and "media.scene" in state["output"]
-    creates = [call for call in calls if call["tool"] == "controldeck_addons_media_scene_create"]
+    creator = "controldeck_addons_media_scene_compose" if compose else "controldeck_addons_media_scene_create"
+    creates = [call for call in calls if call["tool"] == creator]
+    if compose:
+        assert not any(c["tool"] == "controldeck_addons_media_scene_create" for c in calls), "No typed-create substitution"
     assert len(creates) == 1, "Expected exactly one new scene"
     assert calls.index(skills[0]) < calls.index(creates[0]), "Skill must be read before creation"
     state = creates[0]["state"]
@@ -113,12 +116,37 @@ def armor_shape_report(vertices: list[Any], faces: list[Any]) -> dict[str, Any]:
             "connected_ridge": ridge, "visual_quality": "NOT TESTED"}
 
 
-def verify_authored_mesh_calls(calls: list[dict[str, Any]]) -> None:
+def verify_authored_mesh_calls(calls: list[dict[str, Any]], *, compose: bool = False) -> None:
     """Prove actual new-operation use, not schema discovery or quality claims."""
     from mediaforge.scene_recipes import MeshCreate, SceneCreateRequest
 
-    create = verify_director_read(calls)
-    parsed = SceneCreateRequest.model_validate(create["state"]["input"])
+    def output(call: dict[str, Any]) -> dict[str, Any]:
+        assert call["state"]["status"] == "completed"
+        value = json.loads(call["state"]["output"])
+        return value.get("output", value)
+
+    create = verify_director_read(calls, compose=compose)
+    job_id = output(create)["job_id"]
+    terminals = [c for c in calls if c["tool"] == "controldeck_addons_media_job_status"
+                 and output(c).get("job_id") == job_id and output(c).get("status") == "succeeded"]
+    assert terminals
+    if compose:
+        from mediaforge.scene_drafts import SceneComposeRequest
+        request = SceneComposeRequest.model_validate(create["state"]["input"])
+        assert request.require_closed and request.vertex_budget <= 10 and request.retry_job_id is None
+        result = output(terminals[-1])["result"]
+        parsed = SceneCreateRequest.model_validate(result["prepared_request"])
+        assert parsed.name == request.name and parsed.tags == request.tags and parsed.collection == request.collection
+        preparation = result["preparation"]
+        assert preparation["schema_version"] == "media-forge.grouped-mesh-draft@1"
+        assert preparation["execution_status"] == "executed" and preparation["requested_thinking"] is True
+        assert preparation["quality_status"] == "NOT TESTED", "Structural proof is not quality acceptance"
+        assert preparation["execution_request_sha256"] == hashlib.sha256(parsed.model_dump_json().encode()).hexdigest()
+        attempts = preparation["attempts"]
+        assert 2 <= len(attempts) <= 3 and attempts[0]["valid"] and attempts[-1]["valid"]
+        assert [a["response_kind"] for a in attempts] == ["layout", "faces", "face_group_correction"][:len(attempts)]
+    else:
+        parsed = SceneCreateRequest.model_validate(create["state"]["input"])
     assert len(parsed.recipe.operations) == 2
     mesh, material = parsed.recipe.operations
     assert isinstance(mesh, MeshCreate) and mesh.object_id == "armor" and mesh.name == "Armor"
@@ -135,10 +163,6 @@ def verify_authored_mesh_calls(calls: list[dict[str, Any]]) -> None:
     assert shape["dimensions_match"], "Armor must match local X/Y/Z dimensions within 5 percent"
     assert shape["connected_ridge"], "A box or tetrahedron is not the requested ridged chest plate"
 
-    def output(call: dict[str, Any]) -> dict[str, Any]:
-        value = json.loads(call["state"]["output"])
-        return value.get("output", value)
-
     capability_calls = [c for c in calls if c["tool"] == "controldeck_addons_media_capabilities"]
     assert capability_calls
     for call in capability_calls:
@@ -146,10 +170,8 @@ def verify_authored_mesh_calls(calls: list[dict[str, Any]]) -> None:
         capability = output(call)["capabilities"]["3d.scene_recipe"]
         assert capability["state"] == "available" and "mesh.create" in capability["supported_operations"]
         assert capability["authoring_guidance"]["version"] == "media-forge.scene-authoring-guidance@1"
-    job_id = output(create)["job_id"]
-    terminals = [c for c in calls if c["tool"] == "controldeck_addons_media_job_status"
-                 and output(c).get("job_id") == job_id and output(c).get("status") == "succeeded"]
-    assert terminals
+        if compose:
+            assert output(call)["capabilities"]["3d.scene_compose"]["state"] == "available"
     snapshot, = [c for c in calls if c["tool"] == "controldeck_addons_media_scene_snapshot"]
     export, = [c for c in calls if c["tool"] == "controldeck_addons_media_scene_export"]
     assert calls.index(create) < calls.index(terminals[-1]) < calls.index(snapshot) < calls.index(export)
@@ -160,24 +182,27 @@ def verify_authored_mesh_calls(calls: list[dict[str, Any]]) -> None:
 
 
 def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, auto_skin: bool = False,
-                  authored_mesh: bool = False) -> dict[str, Any]:
+                  authored_mesh: bool = False, compose: bool = False) -> dict[str, Any]:
     """Check actual tool execution and delivered bytes; deformation needs Blender inspection."""
     observations = json.loads((evidence_dir / "observations.json").read_text())
-    mode = "director_authored_mesh" if authored_mesh else (
+    mode = "director_compose" if compose else "director_authored_mesh" if authored_mesh else (
         "director_auto_skin" if auto_skin else ("director_array" if array else "director_motion"))
     assert observations.get(mode) is True and observations["exit_code"] == 0
-    filename = "armor.glb" if authored_mesh else ("weighted.glb" if auto_skin else ("stairs.glb" if array else "robot.glb"))
+    filename = "armor.glb" if authored_mesh or compose else ("weighted.glb" if auto_skin else ("stairs.glb" if array else "robot.glb"))
     events = [json.loads(line) for line in (evidence_dir / "events.jsonl").read_text().splitlines()]
     assert not any(event.get("type") == "error" for event in events)
     calls = [event["part"] for event in events if event.get("type") == "tool_use"]
     allowed = {"skill"} | {"controldeck_addons_" + name for name in (
         "media_capabilities", "media_inspect", "media_scene_create", "media_scene_snapshot",
         "media_scene_export", "media_job_status", "media_pack", "control_deck_project_output_grant")}
+    if compose:
+        allowed.remove("controldeck_addons_media_scene_create")
+        allowed.add("controldeck_addons_media_scene_compose")
     assert all(call["tool"] in allowed and call["state"]["status"] == "completed" for call in calls)
-    create_call = verify_director_read(calls)
-    operations = create_call["state"]["input"]["recipe"]["operations"]
-    if authored_mesh:
-        verify_authored_mesh_calls(calls)
+    create_call = verify_director_read(calls, compose=compose)
+    operations = [] if compose else create_call["state"]["input"]["recipe"]["operations"]
+    if authored_mesh or compose:
+        verify_authored_mesh_calls(calls, compose=compose)
     elif auto_skin:
         verify_auto_skin_recipe(operations)
     elif array:
@@ -199,7 +224,7 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, au
         return result
 
     assert outputs("media_capabilities") and outputs("media_scene_snapshot")
-    created = outputs("media_scene_create")[0]
+    created = outputs("media_scene_compose" if compose else "media_scene_create")[0]
     terminal = next(row for row in outputs("media_job_status")
                     if row["job_id"] == created["job_id"] and row["status"] == "succeeded")
     revision = terminal["result"]["revision"]
@@ -225,7 +250,7 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, au
         snapshot_index, = [i for i, call in enumerate(calls) if call['tool'] == 'controldeck_addons_media_scene_snapshot']
         export_index, = [i for i, call in enumerate(calls) if call['tool'] == 'controldeck_addons_media_scene_export']
         assert max(i for i, call in enumerate(calls) if call['tool'] == 'controldeck_addons_media_job_status') < snapshot_index < export_index
-    if auto_skin or authored_mesh:
+    if auto_skin or authored_mesh or compose:
         grant, = outputs("control_deck_project_output_grant")
         grant_call, = [call for call in calls if call['tool'] == 'controldeck_addons_control_deck_project_output_grant']
         export_call, = [call for call in calls if call['tool'] == 'controldeck_addons_media_scene_export']
@@ -251,13 +276,22 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, au
     data = path.read_bytes()
     with closing(sqlite3.connect(database.resolve(strict=True).as_uri() + "?mode=ro", uri=True)) as db:
         assert db.execute("SELECT status FROM jobs WHERE id=?", (created["job_id"],)).fetchone() == ("succeeded",)
+        if compose:
+            from mediaforge.scene_drafts import SceneComposeRequest
+            row = db.execute("SELECT operation, result_json, request_json FROM scene_recipe_tasks WHERE job_id=?", (created["job_id"],)).fetchone()
+            assert row is not None and row[0] == "scene.compose"
+            assert json.loads(row[1]) == terminal["result"], "MCP result must match executed database record"
+            assert json.loads(row[2]) == SceneComposeRequest.model_validate(create_call["state"]["input"]).model_dump(mode="json", exclude={"retry_job_id"})
+            source = db.execute("SELECT provenance_json FROM assets WHERE id=?", (revision["source_asset_id"],)).fetchone()
+            assert source is not None
+            assert json.loads(source[0])["parameters"]["preparation"] == terminal["result"]["preparation"]
         row = db.execute("SELECT metadata_json, provenance_json FROM assets WHERE id=?",
                          (receipt["source_asset_id"],)).fetchone()
         assert row is not None
         metadata, provenance = map(json.loads, row)
         assert hashlib.sha256(data).hexdigest() == receipt["sha256"] == metadata["sha256"] == provenance["output_sha256"]
         assert len(data) == receipt["size_bytes"] == metadata["size_bytes"]
-    return {"verified": True, "scope": "actual director read, authored mesh, guidance and GLB delivery" if authored_mesh else (
+    return {"verified": True, "scope": "actual director read, compose Job and GLB delivery" if compose else "actual director read, authored mesh, guidance and GLB delivery" if authored_mesh else (
                 "actual director read, automatic skin binding and GLB delivery" if auto_skin else (
                 "actual director read, typed array creation and GLB delivery" if array else "actual director read, typed clip creation and GLB delivery")),
             "scene_id": exported["scene_id"], "revision_id": revision["id"], "job_id": created["job_id"],
@@ -269,6 +303,8 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, au
 
 def verify(evidence_dir: Path, database: Path) -> dict[str, Any]:
     observations = json.loads((evidence_dir / "observations.json").read_text())
+    if observations.get("director_compose"):
+        return verify_motion(evidence_dir, database, compose=True)
     if observations.get("director_authored_mesh"):
         return verify_motion(evidence_dir, database, authored_mesh=True)
     if observations.get("director_auto_skin"):

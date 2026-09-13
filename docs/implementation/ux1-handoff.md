@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 OpenCode compose fixture and evidence verification
+
+前turnは実scoped Job/Blender/VLMまで進捗。今回はrunner --director-composeを独立追加し、
+従来typed authored-mesh試験を保持。private configのskill/MCP権限解決とschema事前確認もcomposeへ対応。
+検証器はcompose一回/typed create代用拒否、Job prepared_requestの閉殻/寸法/ridge、
+execution hash/思考要求/修正回数、同revision snapshot/export、新鮮grant/配置bytesを確認。
+DB scene_recipe_tasks input/result、source provenance preparationも照合する。
+synthetic14test追加（MCP実成功とは扱わない）。関連94pass、全11732/b461c2は
+2060pass3skip2warnings/208.56秒、Node9/viewer50ms差分なし。以後product/script/test変更なし。
+実Host MCP tools/list62024/53b9b9は22件、create/packありcomposeなし。private config finally削除。
+新project/asset/scratchなし。通常OpenCode生成は未開始、M1未完了/M2未着手。
+次: source grouped Jobの実取消/再試行を確認し、base-plan末尾のpublic exposure gateを満たす。
+その後installed contribution/health/capability接続を設計と同期し、既存Add-onの正規配布と
+MCP経路で新fixtureを実行する。現capabilityはacceptance_pending固定、health表にも未追加。
+実行前提とQA達成状態の区別を上位文書へ明記する必要がある。根拠なくavailableへ変えない。
+source Job成功を実OpenCode/installed納品へ読み替えず、元の品質/変形/engine要件を維持。
+
 ## 2026-09-13 installed Host thinking / real compose Job succeeds
 
 前turnはHost combined gate完了まで進捗。共有task52832終了、正規認証resources active lease0、

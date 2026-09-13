@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-13 OpenCode compose acceptance harness
+
+独立--director-composeで短い制作意図→scene.compose一回→Job終端→snapshot/export→
+fresh project output grant→armor.glb配置を指示する。既存typed mesh試験はそのまま保持。
+検証器はJobの実行済みprepared_request/閉殻/寸法/ridge、生成履歴/実行hash、同revision、
+実配置bytesを照合。さらにDBの元brief/Job結果/source provenanceをMCP応答と比較する。
+synthetic14testで未対応capability、typed create代用、hash/実行状態/品質主張/思考条件/
+回数上限、prepared_request欠落、DB・provenance・納品bytes不一致を拒否。
+全2060pass3skip2warnings/208.56秒、関連94pass、Node9/viewer50ms。以後code/test変更なし。
+
+実Host MCP bridge tools/listは22件、media.scene.create/packあり、composeなし。
+通常token/config発行経由、secret未表示、private configはfinally削除、projectを作成していない。
+稼働MF未更新のためOpenCode本実行はNOT TESTED。sourceもcapability acceptance_pending固定であり、
+公開条件を確認せず無条件availableにはしない。次はJob取消/再試行実受入と正規配布の接続gate。
+M1/高品質/変形/engineは未完了のまま。
+
 ## 2026-09-13 grouped compose executes through real Host and Blender
 
 Host PR324 main ca02bb926ffa8d480e34cd75075bce658394e572を通常反映、Host711252/MF537447。

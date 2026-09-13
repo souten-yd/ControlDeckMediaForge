@@ -137,6 +137,25 @@ skill読込、MediaForge tool、control_deck.project_output_grantだけを使い
 """
 
 
+DIRECTOR_COMPOSE = """最初にskill toolでblender-directorを実際に読み込んでください。
+media.capabilitiesで3d.scene_composeと3d.scene_recipeがavailable、後者のauthoring_guidance.versionが
+media-forge.scene-authoring-guidance@1であることを確認し、未対応なら制作せず停止してください。
+現在のMCP schemaを正とします。media.scene.composeを一回だけ呼び、新しいsceneを制作します。
+nameはMF3DS OpenCode compose acceptance、vertex_budget=10、require_closed=true。
+intentには「前面に縦の稜線がある閉じた胸当て。local X幅0.4m/Y厚さ0.08m/Z高さ0.5m、
+stable ID armor、mesh名Armor、青緑色の金属。箱や四面体で代用しない」と指定してください。
+これはM1の小メッシュ受入で、高品質キャラクターではありません。
+scene.createへの置換、頂点の手書き、任意Python、外部サービス、別sceneの再生成は禁止です。
+返されたJobをmedia.job.statusで終端まで追跡し、成功時のprepared_requestとpreparationを確認。
+失敗したら理由とJob IDを報告して停止してください。構造成功を高品質成功と言い換えません。
+成功後snapshotで同じrevisionと検証結果を確認してGLBへexportします。
+exportは同期で、asset.job_idは新しいJobではありません。
+直前に現在projectのexports用output grantを取得し、media.packでarmor.glbを一件配置してください。
+最後にscene/revision/Job/Asset IDとreceiptを示します。画像評価・変形・engine導入はNOT TESTED。
+skill、MediaForge tool、control_deck.project_output_grantだけを使い、shell/file/webは禁止です。
+"""
+
+
 SAVED_SETTINGS_CHECK = """
 追加の納品前検査: status成功応答とsnapshotのrevision.validationからvalidator=blender.sceneの
 facts.animation_settingsを読み、両者のrevision IDと設定が一致することを確認してください。
@@ -152,7 +171,7 @@ loop_requestedは入力省略時falseのままです。入力の両animation.cli
 
 def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_motion: bool = False,
                    director_array: bool = False, director_auto_skin: bool = False,
-                   director_authored_mesh: bool = False) -> None:
+                   director_authored_mesh: bool = False, director_compose: bool = False) -> None:
     """Limit this diagnostic's private configuration, never global settings."""
     payload["permission"] = {"*": "deny", "controldeck_addons_*": "allow"}
     # The Host's current build agent delegates scene tools to a subagent. This
@@ -162,7 +181,7 @@ def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_m
     payload["agent"] = {"build": {"tools": {"controldeck_addons_*": True}}}
     payload["tools"] = {name: False for name in (
         "bash", "read", "edit", "write", "glob", "grep", "webfetch", "websearch", "task", "skill", "question")}
-    if director_static or director_motion or director_array or director_auto_skin or director_authored_mesh:
+    if director_static or director_motion or director_array or director_auto_skin or director_authored_mesh or director_compose:
         payload["permission"]["skill"] = {"*": "deny", "blender-director": "allow"}
         # Legacy tools entries become permissions before the global wildcard;
         # duplicating skill there changes insertion order and disables it again.
@@ -170,9 +189,9 @@ def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_m
     payload["enabled_providers"] = ["controldeck"]
 
 
-def assert_direct_mcp_permissions(resolved: dict[str, Any]) -> None:
+def assert_direct_mcp_permissions(resolved: dict[str, Any], *, compose: bool = False) -> None:
     """debug agent lists builtins in tools, but MCP rules in permission."""
-    for name in ("media_capabilities", "media_scene_create", "media_scene_snapshot",
+    for name in ("media_capabilities", "media_scene_compose" if compose else "media_scene_create", "media_scene_snapshot",
                  "media_scene_export", "media_job_status", "media_pack",
                  "control_deck_project_output_grant"):
         permission = "controldeck_addons_" + name
@@ -206,14 +225,16 @@ def main() -> None:
                         help="Require matching saved clip settings before automatic-skin delivery")
     parser.add_argument("--director-authored-mesh", action="store_true",
                         help="Require director read, capability guidance and authored armor mesh GLB delivery")
+    parser.add_argument("--director-compose", action="store_true",
+                        help="Require director read, a compose Job and verified armor GLB delivery")
     args = parser.parse_args()
     if args.saved_settings and not args.director_auto_skin:
         parser.error("--saved-settings requires --director-auto-skin")
     if sum((args.director_static, args.director_motion, args.director_array, args.director_auto_skin,
-            args.director_authored_mesh)) > 1:
+            args.director_authored_mesh, args.director_compose)) > 1:
         parser.error("Choose one director scenario")
     director_enabled = (args.director_static or args.director_motion or args.director_array
-                        or args.director_auto_skin or args.director_authored_mesh)
+                        or args.director_auto_skin or args.director_authored_mesh or args.director_compose)
     if director_enabled and (args.restored_ui_evidence or args.retry_empty_output):
         parser.error("Director acceptance requires a new project/scene")
     os.umask(0o077)
@@ -230,6 +251,8 @@ def main() -> None:
             prompt += SAVED_SETTINGS_CHECK
     elif args.director_authored_mesh:
         prompt = DIRECTOR_AUTHORED_MESH
+    elif args.director_compose:
+        prompt = DIRECTOR_COMPOSE
     output_directory = "exports"
     if args.restored_ui_evidence:
         assert args.project_name.startswith("MF3DS-") and args.project_name in project_names
@@ -280,6 +303,7 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
                                 "director_array": args.director_array, "director_auto_skin": args.director_auto_skin,
                                 "saved_settings": args.saved_settings}
     evidence["director_authored_mesh"] = args.director_authored_mesh
+    evidence["director_compose"] = args.director_compose
     process = None
     try:
         payload = json.loads(config.read_text())
@@ -287,7 +311,7 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
                    payload["mcp"]["controldeck_addons"]["environment"]["CONTROL_DECK_ADDON_MCP_TOKEN"]]
         restrict_tools(payload, director_static=args.director_static, director_motion=args.director_motion,
                        director_array=args.director_array, director_auto_skin=args.director_auto_skin,
-                       director_authored_mesh=args.director_authored_mesh)
+                       director_authored_mesh=args.director_authored_mesh, director_compose=args.director_compose)
         config.write_text(json.dumps(payload))
         if director_enabled:
             debug = subprocess.run([str(registry.executable("opencode")), "debug", "agent", "build", "--pure"],
@@ -296,7 +320,7 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
             resolved = json.loads(debug.stdout)
             assert resolved["tools"]["skill"] is True, "Director skill tool is disabled after config resolution"
             assert not any(resolved["tools"].get(name) for name in ("bash", "read", "edit", "write", "task", "webfetch"))
-            assert_direct_mcp_permissions(resolved)
+            assert_direct_mcp_permissions(resolved, compose=args.director_compose)
             evidence["director_tool_enabled"] = True
         bridge = payload["mcp"]["controldeck_addons"]
         preflight = subprocess.run(bridge["command"],
@@ -307,7 +331,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
         names = {tool["name"] for tool in listing}
         assert {"media.scene.snapshot", "media.scene.export", "media.pack", "control_deck.project_output_grant"} <= names
         if director_enabled:
-            schema = json.dumps(next(tool["inputSchema"] for tool in listing if tool["name"] == "media.scene.create"))
+            schema = json.dumps(next(tool["inputSchema"] for tool in listing
+                                     if tool["name"] == ("media.scene.compose" if args.director_compose else "media.scene.create")))
             required = ("armature.create", "skin.bind", "animation.clip") if args.director_motion else ("object.duplicate", "modifier.mirror")
             if args.director_array:
                 required = ("modifier.array",)
@@ -315,6 +340,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
                 required = ("armature.create", "skin.bind_auto", "animation.clip")
             elif args.director_authored_mesh:
                 required = ("mesh.create", "require_closed")
+            elif args.director_compose:
+                required = ("intent", "vertex_budget", "require_closed")
             assert all(operation in schema for operation in required)
             if args.saved_settings:
                 assert 'EVERY clip' in schema and 'Omission means false' in schema
@@ -364,7 +391,7 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
             expected = {"stairs.glb"}
         elif args.director_auto_skin:
             expected = {"weighted.glb"}
-        elif args.director_authored_mesh:
+        elif args.director_authored_mesh or args.director_compose:
             expected = {"armor.glb"}
         assert set(evidence["output_files"]) == expected
     finally:

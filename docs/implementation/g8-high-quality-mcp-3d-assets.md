@@ -758,6 +758,17 @@ G9は「制作を加速する候補生成器」として後段に置く。
 
 ## 15. 実装順序
 
+2026-09-13 OpenCode compose受入準備: runnerへ独立の--director-composeを追加し、
+従来のtyped authored-mesh試験を保持。検証器はcompose一回、生成Jobのprepared_request/
+実行条件hash/局所修正回数、同revisionのsnapshot/export、新鮮なgrant、実配置bytesを確認する。
+DBのscene_recipe_tasks入力/結果とsource provenanceも照合し、応答だけの成功は認めない。
+実Host tools/listは22件、create/packあり、composeなし。今回OpenCode制作は未開始。
+次の接続gateはinstalled contributionとhealth/capabilityである。sourceのcompose capabilityは
+acceptance_pending固定、health contribution表にもまだ追加していないため、runnerだけ追加しても
+試験は開始できない。実行前提（Blender/Host AI thinking/権限）と品質・全受入の達成状態を
+区別する設計を上位文書と照合してから接続する。根拠なくavailableへ変更しない。
+availabilityを偽る試験fixtureを実受入証拠にせず、既存Add-onの正規配布・MCP経路で検証する。
+
 Host PR324の汎用thinking契約に対するMF client候補を追加。groupedのみ明示true、
 各段階でrequest_optionsを検証し、未対応/不正/利用不可なら推論POST前に停止する。
 旧Host実確認では0.066秒でhost_ai_thinking_unsupported。これは負の互換性受入で、
