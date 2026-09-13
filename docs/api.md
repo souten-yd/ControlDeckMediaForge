@@ -550,6 +550,11 @@ budget, and defaults to a required closed mesh. It uses the existing detached
 scene Job manager and status/cancel endpoints. One mesh plus one material is
 prepared through scoped AI, checked with at most two corrections, then passed
 to the existing Blender worker. This is not a complete-character generator.
+Where an unambiguous topology repair is possible, the AI submits a bounded
+face-append/face-reversal data correction; positions and material remain fixed,
+and the complete result must pass the same validator. No automatic repair is
+performed by the typed recipe validator. An accepted closed mesh can still fail
+requested dimensions, silhouette or visual quality.
 The Job stores the original brief, generated request, and preparation hashes;
 both Blender/GLB provenance retain preparation history, and GLB retains its
 source asset parent. Validation exhaustion fails before Blender allocation;

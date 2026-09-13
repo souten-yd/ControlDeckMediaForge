@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 from pathlib import Path
 import sys
 import time
@@ -54,15 +55,23 @@ def main() -> None:
                 vertex_budget=10, require_closed=True,
             ))
             mesh = result.request.recipe.operations[0]
+            dimensions = [max(point[axis] for point in mesh.vertices) - min(point[axis] for point in mesh.vertices)
+                          for axis in range(3)]
+            dimensions_match = all(math.isclose(actual, expected, abs_tol=1e-6)
+                                   for actual, expected in zip(dimensions, (0.4, 0.08, 0.5)))
+            non_cuboid = any(len({point[axis] for point in mesh.vertices}) > 2 for axis in range(3))
             print(json.dumps({
                 "valid": True, "seconds": round(time.monotonic() - started, 3),
                 "vertices": len(mesh.vertices), "faces": len(mesh.faces),
+                "dimensions_meters": dimensions, "dimensions_match": dimensions_match,
+                "non_cuboid_coordinates": non_cuboid,
                 "provenance": result.provenance,
             }), flush=True)
-            return True
+            return dimensions_match and non_cuboid
         except (MeshDraftError, HostAIError) as exc:
             print(json.dumps({"valid": False, "seconds": round(time.monotonic() - started, 3),
-                              "code": exc.code}), flush=True)
+                              "code": exc.code,
+                              "details": exc.details if isinstance(exc, MeshDraftError) else {}}), flush=True)
             return False
         finally:
             await host.close()

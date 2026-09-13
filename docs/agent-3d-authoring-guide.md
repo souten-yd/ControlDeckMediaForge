@@ -25,6 +25,9 @@ X幅/Y奥行/Z高さ、実寸、必要な輪郭・稜線、頂点予算をintent
 require_closedをtrueに保つ。返るのはJob IDなので、statusで終端とexact revisionを確認する。
 停止は同じmedia.job.cancel。検査が失敗したらpreparation_failureの辺/方向/attemptを読み、
 同じ欠損を繰り返しているものを成功扱いしない。閉殻PASSでも、箱を稜線付き装甲とは呼ばない。
+内部の下書きAIは、必要なら面追加/面反転だけのstrict修正データを返す。
+これは公開MCP操作ではないので、append_faces等をtool名として呼ばない。
+元の座標・材質を保持した修正でも、寸法・シルエットの要求を満たすとは限らない。
 Jobのprepared_requestとpreparation履歴を確認し、実画像/変形/engine/配置はそれぞれ別に検証する。
 
 ## 1. 制作brief

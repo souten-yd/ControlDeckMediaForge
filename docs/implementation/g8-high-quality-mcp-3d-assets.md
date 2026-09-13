@@ -791,6 +791,11 @@ provenance/GLB親関係、API取消→実推論停止/lease返却を確認した
 指示補強後は同じboundary3が3回とも直らず、正常failed/asset0。形状検査を緩めず、
 同条件でHostのscoped reasoning無効固定の影響を切り分ける。原因とはまだ断定しない。
 公開契約候補は追加済みだがcapabilityはacceptance_pending、実OpenCode/installed納品は未達。
+reasoning条件の比較は双方3attempt失敗し、Host変更は採用していない。
+曖昧でないtopology defectは面追加/反転候補を算出し、LLMの小さなstrict修正データを
+下書きコピーへ適用して再検査する。元typed requestをvalidatorが黙示修復することはない。
+単独修正試験は閉殻PASSだがdepth不一致、統合試験は共有LLM処理中の期限超過で未受入。
+寸法を含む意味的検査を先に通し、構造PASSだけでfixtureやM1完了を緩めない。
 未受入のhelperをcapability availableへ追加しない。M2開始条件は変わらない。
 診断の一標本の成功を安定運用やM1完了とはしない。実OpenCodeからの一巡が引き続き必須。
 

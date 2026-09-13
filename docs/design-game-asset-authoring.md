@@ -80,6 +80,14 @@ Jobは元brief、検査済みrequest、準備provenanceを保持し、生成blen
 briefのretryは元brief/runtimeを固定するがAI出力の再現を保証しない。生成request/hashを比較する。
 source候補で登録・取消を評価中。形状の意味的適合とinstalled受入が済むまでは
 3d.scene_composeをunavailable/acceptance_pendingのままにする。
+閉殻修正のfeedbackには、曖昧さのない3/4辺の境界loopから導いたcap面候補、または
+閉じた二面共有graphから導いた面反転候補を返してよい。これは未信頼draftへの診断指示であり、
+入力を自動変更・実行しない。再提出にも同じcore/worker検査を必須とする。
+分岐boundary、3面以上の共有、向きの制約矛盾では候補を作らない。
+全体JSON再提出を繰り返しても修正されない実測を受け、候補がある場合は修正応答を
+append_faces/reverse_face_indicesだけのstrictデータに限定する。LLMが明示提出した変更だけを
+下書きのコピーへ適用し、座標・材質は保持する。同じcore検査が通るまでBlenderへ渡さない。
+初回生成+最大2修正の総呼出数は増やさない。自動cap追加やvalidatorによる黙示的修復ではない。
 髪の束・衣服shell・装甲の輪郭を実Blenderで作り、構造検査と見た目の評価を分離する。
 後続は選択付き編集/曲面・UV/bake・weight補正/IK・表情/動作、engine受入へ進む。
 この一操作だけで高品質キャラクター、cloth/hair simulationや全GA完成としない。

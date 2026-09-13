@@ -1,5 +1,65 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 explicit topology corrections, no Host reasoning change
+
+PR533/7d5710bで再開、fetch後main4f978a0、tracked clean、PR533 OPENを確認。
+前turnはJob接続/実機失敗診断の進展。Host AGENTS/design-addon-ai-gatewayを読取り、Hostコード変更なし。
+同じbrief/schema/temperature0.1/seed7/max_tokens8192で、通常Host LLM gateway/Broker経由の
+非stream JSON生成を比較した（scoped AIの受入ではなく、設定効果の分離診断）。
+private runtime configはfinally回収、provider直通/モデル変更/asset生成なし。
+
+| reasoning | attempt | 秒 | 結果 |
+|---|---:|---:|---|
+| false | 1 | 7.551 | boundary3/multiple0/winding0 |
+| false | 2 | 7.504 | 同じ欠損 |
+| false | 3 | 7.108 | 同じ欠損 |
+| true | 1 | 29.023 | boundary3/multiple1/winding3 |
+| true | 2 | 28.095 | boundary0/multiple0/winding10 |
+| true | 3 | 28.160 | winding10のまま |
+
+5dccd8/b5f72a/493ec2/49f3fe/54a958。全応答finish=stopだが検査FAIL。
+有効化だけでは解決しなかったため、汎用Host APIのreasoning追加はこの時点では採用しない。
+
+MediaForgeのdata-only feedbackに、単純3/4辺loopのcap面候補、閉二面共有graphの面反転候補を追加。
+分岐/多重共有/重複面/制約矛盾には候補を出さない。入力を自動修正せず同じ検査へ再提出させる。
+全体JSONの再生成を求める実scoped試験は6e0c64/224745 exit1、24.181秒/validation_exhausted。
+
+別の実scoped試験で応答をappend_faces/reverse_face_indicesだけに限定した。
+c15b8e/1cd0e7: 初回8.350秒、反転候補[8,9,10]。修正1.010秒でその3面の反転JSONを返し、
+検査PASS/10vertices11faces。ただし全体寸法[0.4,0.12,0.5]で要求depth0.08に不一致。
+前稜線の座標は生成したが、寸法適合/装甲完成の合格ではない。Blender/画像/納品は未実施。
+
+この小修正を内部preparerへ接続。候補がある場合だけstrict topology correctionをLLMへ要求し、
+明示された変更を下書きのコピーへ適用してcoreを再検査する。座標・材質・require_closedは維持。
+初回+最大2修正を維持、修正512tokens、raw応答のkind/hashとrepair指示hashを記録。
+無変更patch、重複/存在しないindex、非整数、座標混入は成功にしない。自動cap補完ではない。
+寸法は突起を含むbounding box extentだと指示を明確化し、probeに寸法/非直方体座標の実測を追加。
+後者はridge品質や自己交差の証明ではない。
+
+統合試験52305はfac17f exit1/95.132秒/host_ai_unavailable。観測slotは75459tokens、
+続くslotは81094tokensの別要求が処理中（a6b3a7/b0148a）。当試験のbounded入力より大きく、
+この期限超過を形状成否へ算入しない。他の処理は停止/再設定していない。
+reasoning比較9840、小修正69481、全体再生成31389、統合52305は全て終端。
+focused32pass（6d7905）。当時の全61835はa01988 exit0/1996passed3skipped2warnings/216.57秒。
+後述の変更前のgateであり最終結果ではない。Node9/viewer53ms差分なし（880cbe）。
+空き（8f8c4b）を確認して統合probeを再実行したが、d8a526/261dc1は27.596秒で
+validation_exhausted。診断出力へ既存bounded detailsを追加し、bbbc06/03cc07で再取得。
+32.952秒、3回とも同じ応答、face indices invalid、多重共有、repair_hintsなし。
+頂点予算10に対し面のLLM schema上限が4095のままだったため、budget-1へ縮小した。
+候補計算も実頂点数外のindexを拒否。曖昧な形へ無理に修正候補を生成していない。
+修正後65083は7daaef exit1/95.133秒/host_ai_unavailable、直後slots読取もReadTimeout（c37cfa）。
+この時点の推論状態/終了は未確定。プロセス再起動や他の要求取消は行っていない。
+10886/66173/65083は終端。旧全61835の後にscript/schema/testを変更したため最終gateには使わない。
+再全91496は9b2e1d/1996pass282.79秒だが、実行中にindex guardを変更したので最終gateではない。
+最終全8589は3245bc exit0/1997passed3skipped2warnings/249.58秒。以後product/script/test変更なし。
+40b649でmodel health HTTP200、cf800bでmodel RSS26410568KiB、RAM available2.2GiB、swap使用7.8GiB。
+同時点のslotは98946prompt tokens/temperature1/max_tokens32768で、当probe(.1/4096)とは異なる要求。
+これは観測値でありOOMや原因確定の証拠とはしない。追加待機試験61376もbae421 exit1/95.137秒で終端。
+当turnの全診断handle/全testは終端。本番MF537447 activeを再確認（9cd1b3）、Host変更なし。
+最新focused33pass（face1d）。次: AI health/slotを再確認し、同じ統合probeで寸法/閉殻/非直方体を
+確認してから実Blender/Jobへ進む。タイムアウトを幾何検査FAILや成功に読み替えない。
+M1未完了/M2未着手、capability acceptance_pending、Host/installed/model/global設定は不変。
+
 ## 2026-09-13 M1 compose Job/API candidate, semantic gate still failed
 
 PR532/1d493c5で再開しfetch/main4f978a0を確認。ux1/3d-compose-jobへ分割。

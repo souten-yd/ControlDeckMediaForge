@@ -3,6 +3,29 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 small topology correction continuation
+
+PR533/ux1/3d-compose-job、base7d5710b。main4f978a0含む。Host変更なし。
+同条件のreasoning false/true比較は両方3attempt FAIL（詳細status）。Host reasoning追加を採用しない。
+具体的cap/反転候補を返しても全体JSON再生成はFAIL。小さなappend_faces/reverse_face_indices応答は
+1.010秒で閉殻検査PASS/10vertices11faces、ただしdepth0.12で要求0.08に不一致。
+内部preparerを明示的小修正→コピーへ適用→再検査へ。自動修復/guard緩和なし、総3call以内。
+寸法指示とprobeの寸法/非直方体チェックを追加。統合52305は共有LLM別要求中に95.132秒期限超過。
+9840/31389/69481/52305は終端。旧全61835/91496後に修正したため最終gateには使わない。
+その後詳細出力とindex上限修正を追加。初期meshに存在しないindex/多重共有があり候補なし。
+schemaのfaces index上限をbudget-1へ、候補側もactual vertex countを検査。focused33pass。
+最終全8589は3245bc exit0/1997pass3skip2warnings/249.58秒。以後product/script/test変更なし。
+Node9/viewer53ms差分なし。commit/pushしてPR533を更新する。
+10886/66173はvalidation_exhaustedで終端。65083は95.133秒host_ai_unavailable、終端。
+slots読取もReadTimeoutで現在推論状態未確定。再起動/他要求取消はしていない。
+後続healthはHTTP200、slotは98946tokens/temperature1/max_tokens32768の別要求処理中。
+RAM available2.2GiB/swap7.8GiB使用を観測、原因は未確定。追加61376も95.137秒期限超過で終端。
+当turn全handleは終端、旧handleの再poll/再起動禁止。本番MF537447 active、Host変更なし。
+次はAI health/LLM空きを確認し同じscoped probe（scripts/3ds_scoped_draft_probe.py）から再開。
+新scratch/asset/backupなし。
+shape成功とはまだ言えない。寸法/閉殻/非直方体→実Job/Blender→MCP/OpenCode/installedへ。
+M1未完了/M2未着手、compose acceptance_pending、本番とuser rootを保持。
+
 ## 2026-09-13 M1 compose Job/API candidate
 
 ux1/3d-compose-job、base PR532/1d493c5（PR531上）、main4f978a0を含む。
