@@ -16,6 +16,12 @@ def scene_authoring_guidance() -> dict[str, Any]:
         "supported_operations is the authority, not Blender's GUI or an installed skill. "
         "Do not call BlenderMCP execute_blender_code/get_viewport_screenshot, run shell Python, "
         "install addons, or use remote generators as substitutes for missing operations.",
+        "brief_creation": "Use media.scene.compose only when 3d.scene_compose is available. "
+        "It prepares one small mesh and material from intent, not a complete character. "
+        "Give concrete dimensions, silhouette and vertex_budget; keep require_closed=true for solids. "
+        "It returns a durable Job immediately, not a finished scene. Follow media.job.status; "
+        "inspect the exact returned revision and preparation history before export/delivery. "
+        "Use media.job.cancel to stop preparation or Blender. Never infer visual quality from closed edges.",
         "workflow": [
             "Brief: establish asset family, style/reference rights, real dimensions, intended camera "
             "distance, target engine/device, triangle/material/texture budgets, pivot, required clips. "

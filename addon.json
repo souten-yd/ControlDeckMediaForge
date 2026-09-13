@@ -136,6 +136,13 @@
         "permission": "workflows.run"
       },
       {
+        "id": "media.scene.compose",
+        "label": "Create a small authored mesh from a brief",
+        "endpoint": "/addon/v1/agent/scene/compose",
+        "schema_path": "/schemas/scene-compose-request.json",
+        "permission": "workflows.run"
+      },
+      {
         "id": "media.scene.edit",
         "label": "Edit an existing 3D scene",
         "endpoint": "/addon/v1/agent/scene/edit",

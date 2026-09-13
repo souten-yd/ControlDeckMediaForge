@@ -1,5 +1,57 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 compose Job/API candidate, semantic gate still failed
+
+PR532/1d493c5で再開しfetch/main4f978a0を確認。ux1/3d-compose-jobへ分割。
+加法的media.scene.compose/自己完結schema/agent routeを追加。既存SceneRecipeJobManagerで
+runtime pin→Host子Job→scoped AI prepare_mesh→typed recipe→既存asset/revisionを実行する。
+jobs.write/ai.inferenceをbackendで要求、local_only固定、strict brief/budget、同じ停止/再試行経路。
+Jobに元brief/generated request/preparation hashを保持、source/preview provenanceへ準備履歴を渡す。
+前段失敗のbounded issue/edge summariesも保存。第二queue/asset基盤やHostコード変更なし。
+capabilityはunavailable/acceptance_pending。一般利用・installed/OpenCode受入済みとはしていない。
+
+分離候補: maintenance/m1-compose-nJUJfS、独立DB/registry、既存managed Blender4.5.13だけ参照。
+実Uvicorn9167を起動し、専用mf-e2e通常新規service token→実Host子Job/AI/Brokerで検証。
+候補PID561622/562235/563835/568107は全て終端。稼働本番537447/9130には適用していない。
+
+| 試験 | Job / Host子Job | 実結果 |
+|---|---|---|
+| 初回armor brief | job_c1aa682a20b547deb85a0794baee2ad2 / 754dd20833d4 | 8.101秒/succeeded、Blender4.5.13、2ops、blend+GLB登録 |
+| ridge明示R2 | job_0241f1d5f86a41d090e7241ebecebe7f / 402517798a23 | 24.172秒/draft_validation_exhausted、asset0 |
+| 下書き中API cancel | job_b1b74920df784c9c8adbc66acd70a472 / bfc1965c7310 | canceled、asset0、0.352秒でidle/lease released |
+| 失敗履歴保存の初回 | job_6716824daae84f34acfa176c23cc4331 / ab4e12274577 | 保存時stage引数不足でtask例外、DB runningが残った。不合格 |
+| 保存修正後ridge | job_eeedf1975099438f8586f801ca659063 / 6e84940cf990 | 24.169秒/failed、3attempt summaries保存、asset0、Host終端送信済 |
+
+初回生成はscene_07027e4725744247bf772c3831a2b956/revision_ea30610950384e028ba7bd8c008a095c。
+blend asset_fac686ebd20a4197b7bff7daff07e926 / GLB asset_19e69d6f9546464cab7bad9437010f40。
+2d1b7bで両provenanceのpreparation hash、GLB parent=blendを実確認。
+ただし形は8vertices/6faces/12trianglesの直方体。前稜線なし、指定軸も不一致で依頼への適合FAIL。
+構造PASSを装甲品質/M1合格に読み替えない。初期nested preparation.execution_statusはnot_executedの
+ままだったため、成功時のasset/Job履歴はexecutedへ更新するコードを追加（最終source成功例は未実施）。
+
+X幅/Y奥行/Z高さ、実形状としてのridge、pentagonal ring/triangulated capの指示を補強。
+最後の失敗traceは3回ともboundary3/multiple0/winding0、同じ応答SHA
+2a6af621cacb50cfd4919777e5adb4510cf990174cbf156f5eb96a4d18300e40。
+具体的辺feedbackでも同じ三角形分の穴が直っていない。自動で穴を埋めたりguardを緩めたりしていない。
+Hostはmessagesをそのまま転送する一方、scoped AIはthinking=False/disable_thinking=True固定を確認
+（afc919）。この設定が原因だとは未確定。次は同じbrief/schemaでreasoning条件を切り分ける。
+Host変更が必要なら他Add-onにも成立する任意の推論制御だけを別PRにし、モデル既定は変えない。
+
+保存不具合は必須stage欠落と、後続updateがresultを消す経路を修正。失敗details付きunitを追加。
+旧driver81815は85622e exit143、candidate71047はf346f8 exit143、推論leaseは2ea808でactive0。
+同一DBで候補再起動後に旧Job failedを確認。残った当該Host子Jobは通常scoped reconcileで
+failed/source_candidate_execution_lostへ、35d9e9 applied/terminal_matches=true。
+修正後59937はc86542 exit0、候補88194は831dcf exit143。cancel leaseは
+6dcef514-3120-4843-a7f4-c641669a0277、実API停止から0.352秒でreleased/slot idle（af9129）。
+
+初回全39620は1982pass209.00秒だが、その後修正したため最終gateには使わない。
+再全13938は54a1c0 exit0/1982passed3skipped2warnings/209.38秒。以後product/script/test変更なし。
+focused43pass（58fffe）、Node9/viewer48ms差分なし（5ea7eb）。
+候補DB全Job終端（1success/3fail/1cancel）・process停止・realpath/lsof参照なしを確認。
+784365bytesの検証専用scratch（直方体blend/GLB含む）を07233aで削除、不存在確認済み。
+再取得用backupなし、本番asset/recovery/runtimeは保持。Host診断loginはfinally revoke。
+M1未完了/M2未着手、実OpenCode/MCP納品・画像/VLM・変形・engineはNOT TESTED。
+
 ## 2026-09-13 M1 scoped stream cancellation / lease acceptance
 
 PR532/0ba2ab0で再開。fetch後main4f978a0、tracked clean、PR532 OPEN/base PR531を確認。

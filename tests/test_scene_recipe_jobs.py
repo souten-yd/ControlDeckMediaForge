@@ -12,6 +12,7 @@ from mediaforge.domain import JobRequest, JobStatus
 from mediaforge.host.client import HostApiError, HostIdentity
 from mediaforge.scene_recipe_jobs import SceneRecipeJobManager
 from mediaforge.scene_recipes import SceneCreateRequest
+from mediaforge.scene_drafts import MeshDraftError, PreparedMeshDraft, SceneComposeRequest
 from mediaforge.scenes import SceneError
 from mediaforge.store import Store
 
@@ -240,6 +241,84 @@ async def terminal(store: Store, job_id: str) -> None:
             return
         await asyncio.sleep(0.01)
     raise AssertionError("scene job did not finish")
+
+
+@pytest.mark.parametrize("mode", ["success", "failure", "cancel", "host_cancel", "missing_grant"])
+def test_compose_prepares_inside_existing_child_job_and_preserves_history(tmp_path: Path, mode: str):
+    from dataclasses import replace
+
+    async def scenario():
+        store = Store(tmp_path)
+        store.initialize()
+        entered, canceled = asyncio.Event(), asyncio.Event()
+        executions = []
+
+        class Preparer:
+            async def prepare(self, identity, request, *, identity_provider):
+                assert identity.subject == "job:host-child"
+                assert identity_provider() is identity
+                assert request.intent == "a closed armor"
+                entered.set()
+                if mode == "failure":
+                    raise MeshDraftError("draft_validation_exhausted", details={"attempts": [{"valid": False}]})
+                if mode in {"cancel", "host_cancel"}:
+                    try:
+                        await asyncio.Event().wait()
+                    finally:
+                        canceled.set()
+                recipe = SceneCreateRequest.model_validate({"name": "Model name", "recipe": {"operations": [
+                    {"type": "mesh.create", "object_id": "armor", "name": "Armor", "require_closed": True,
+                     "vertices": [[0,0,0],[1,0,0],[0,1,0],[0,0,1]],
+                     "faces": [[0,2,1],[0,1,3],[1,2,3],[2,0,3]]},
+                ]}})
+                return PreparedMeshDraft(recipe, {"quality_status": "NOT TESTED", "attempts": [{"valid": True}]})
+
+        class ComposeWorkspace(Workspace):
+            async def apply_recipe(self, owner, job_id, value, *, runtime_id, runtime_version, preparation):
+                assert value.name == "User name" and value.tags == ["armor"]
+                assert preparation["quality_status"] == "NOT TESTED"
+                assert len(preparation["execution_request_sha256"]) == 64
+                executions.append(value)
+                return await super().apply_recipe(owner, job_id, value,
+                    runtime_id=runtime_id, runtime_version=runtime_version)
+
+        class ComposeHost(Host):
+            async def job_control(self, identity, host_job_id):
+                return {"cancel_requested": mode == "host_cancel" and entered.is_set()}
+
+        host = ComposeHost()
+        manager = SceneRecipeJobManager(store, ComposeWorkspace(), host,
+                                        draft_preparer=Preparer(), control_poll_sec=.01)
+        identity = replace(IDENTITY, granted_capabilities=frozenset({"jobs.write", "ai.inference"}))
+        request = SceneComposeRequest(name="User name", tags=["armor"], intent="a closed armor")
+        if mode == "missing_grant":
+            with pytest.raises(SceneError, match="capability"):
+                await manager.submit(request, IDENTITY)
+            assert not host.created and not entered.is_set()
+            return
+        job, record = await manager.submit(request, identity)
+        assert record.operation == "scene.compose" and record.request["intent"] == request.intent
+        await entered.wait()
+        if mode == "cancel":
+            await manager.cancel(job.id, "user:7")
+        await terminal(store, job.id)
+        await manager.wait_cleanup(job.id)
+        result = manager.projection(job.id, "user:7")
+        if mode == "success":
+            assert result["status"] == "succeeded" and len(executions) == 1
+            assert result["result"]["prepared_request"]["name"] == "User name"
+            assert result["result"]["preparation"]["quality_status"] == "NOT TESTED"
+        else:
+            assert not executions and not result["asset_ids"]
+            assert result["status"] == ("failed" if mode == "failure" else "canceled")
+            if mode == "failure":
+                assert result["error"]["code"] == "draft_validation_exhausted"
+                assert result["result"]["preparation_failure"]["attempts"] == [{"valid": False}]
+            else:
+                assert canceled.is_set()
+        assert len(host.created) == 1
+        await manager.stop()
+    asyncio.run(scenario())
 
 
 def test_scene_recipe_is_a_detached_durable_owner_scoped_job(tmp_path: Path) -> None:

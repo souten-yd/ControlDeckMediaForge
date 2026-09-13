@@ -1,0 +1,82 @@
+{
+  "additionalProperties": false,
+  "description": "Create one small authored mesh from a brief in a durable scene Job.\n\nThis is not a finished character generator. Follow the returned Job to its\nterminal result, inspect the exact revision, then export and deliver it.",
+  "properties": {
+    "intent": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Intent",
+      "type": "string"
+    },
+    "vertex_budget": {
+      "default": 10,
+      "maximum": 32,
+      "minimum": 4,
+      "title": "Vertex Budget",
+      "type": "integer"
+    },
+    "require_closed": {
+      "default": true,
+      "title": "Require Closed",
+      "type": "boolean"
+    },
+    "local_only": {
+      "const": true,
+      "default": true,
+      "title": "Local Only",
+      "type": "boolean"
+    },
+    "name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+      "title": "Name",
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Tags",
+      "type": "array"
+    },
+    "collection": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Collection"
+    },
+    "retry_job_id": {
+      "anyOf": [
+        {
+          "pattern": "^job_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retry Job Id"
+    }
+  },
+  "required": [
+    "intent",
+    "name"
+  ],
+  "title": "SceneComposeRequest",
+  "type": "object"
+}

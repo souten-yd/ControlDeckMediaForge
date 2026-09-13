@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from collections.abc import Callable
 import hashlib
 import json
 from typing import Any, Literal
@@ -16,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from .host.ai import HostAIGateway
 from .host.client import HostIdentity
-from .scene_recipes import MaterialSet, MeshCreate, SceneCreateRequest, SceneRecipe
+from .scene_recipes import MaterialSet, MeshCreate, SceneCreateRequest, SceneRecipe, SceneLabel, SceneTag
 
 
 DRAFT_VERSION = "media-forge.mesh-draft@1"
@@ -32,6 +33,12 @@ end caps; do not merely overlay disconnected primitives. Keep ordered rings and
 consistent winding. Do not reuse a vertex index twice in one face, leave vertices
 unused, duplicate faces, or create zero-area triangles. Smooth shading is not
 geometry. Material must target the mesh's stable object_id. Obey vertex_budget
+and use X for width, Y for depth, Z for height. A requested ridge must change
+the actual cross-section; a cuboid does not satisfy it. One low-budget ridge
+construction uses two ordered pentagonal rings with matching vertices, five
+side quads, and triangulated end caps. Choose the coordinates and triangulation
+for the brief yourself; never omit caps or flatten the ridge to pass validation.
+Obey vertex_budget
 and require_closed exactly, even when correcting errors. A repair response must
 replace the entire JSON draft, not describe manual steps or output a patch.
 No tools, scripts, paths, URLs or external resources. This small draft is not a
@@ -48,6 +55,18 @@ class MeshDraftRequest(BaseModel):
     local_only: Literal[True] = True
 
 
+class SceneComposeRequest(MeshDraftRequest):
+    """Create one small authored mesh from a brief in a durable scene Job.
+
+    This is not a finished character generator. Follow the returned Job to its
+    terminal result, inspect the exact revision, then export and deliver it.
+    """
+    name: SceneLabel
+    tags: list[SceneTag] = Field(default_factory=list, max_length=32)
+    collection: SceneLabel | None = None
+    retry_job_id: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
+
+
 class _DraftData(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=120)
@@ -62,9 +81,10 @@ class _DraftData(BaseModel):
 
 
 class MeshDraftError(RuntimeError):
-    def __init__(self, code: str):
+    def __init__(self, code: str, *, details: dict[str, Any] | None = None):
         super().__init__(code)
         self.code = code
+        self.details = details or {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,7 +143,8 @@ class MeshDraftPreparer:
     def __init__(self, gateway: HostAIGateway):
         self.gateway = gateway
 
-    async def prepare(self, identity: HostIdentity, request: MeshDraftRequest) -> PreparedMeshDraft:
+    async def prepare(self, identity: HostIdentity, request: MeshDraftRequest, *,
+                      identity_provider: Callable[[], HostIdentity] | None = None) -> PreparedMeshDraft:
         if "ai.inference" not in identity.granted_capabilities:
             raise MeshDraftError("host_ai_not_granted")
         messages: list[dict[str, Any]] = [
@@ -136,7 +157,8 @@ class MeshDraftPreparer:
         async with asyncio.timeout(300):
             for attempt in range(MAX_REPAIRS + 1):
                 result = await self.gateway.complete_streamed(
-                    identity, "text.generate", messages,
+                    identity_provider() if identity_provider is not None else identity,
+                    "text.generate", messages,
                     response_format={"type": "json_schema", "name": "mesh_draft",
                                      "schema": draft_schema(request), "strict": True},
                     temperature=0.1, max_tokens=4096, timeout_seconds=90,
@@ -151,8 +173,6 @@ class MeshDraftPreparer:
                     draft = validate_draft(result.content, request)
                 except (ValidationError, MeshDraftError) as exc:
                     record["valid"] = False
-                    if attempt == MAX_REPAIRS:
-                        raise MeshDraftError("draft_validation_exhausted") from exc
                     # No raw validation inputs/context (may contain prompt text).
                     issues = (exc.errors(include_input=False, include_context=False, include_url=False)[:8]
                               if isinstance(exc, ValidationError) else [{"type": exc.code}])
@@ -160,6 +180,10 @@ class MeshDraftPreparer:
                         value = json.loads(result.content)
                     except ValueError:
                         value = None
+                    record["issues"] = issues
+                    record["edge_problems"] = edge_feedback(value)
+                    if attempt == MAX_REPAIRS:
+                        raise MeshDraftError("draft_validation_exhausted", details={"attempts": attempts}) from exc
                     messages += [
                         {"role": "assistant", "content": result.content},
                         {"role": "user", "content": json.dumps({

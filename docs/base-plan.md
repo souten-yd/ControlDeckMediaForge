@@ -1353,6 +1353,13 @@ testing found complete still busy after 20 seconds, but stream idle at 0.502 sec
 Lease return and end-to-end acceptance are separate gates: scoped client cancel
 and deadline tests observed the target lease released; the public MCP/Jobs path
 still needs its own cancellation and delivery acceptance.
+Brief-driven creation is an additive scene.compose operation in the existing
+scene recipe Job manager, not a second queue or asset system. It pins Blender
+before acceptance, prepares and validates data under the child Job identity,
+then executes the existing recipe worker. Persist brief and generated request
+hashes and preparation history with the Job and resulting asset provenance.
+Public exposure requires the same grants, cancellation, retry and installed
+acceptance boundaries as typed scene creation, plus scoped ai.inference.
 Start with bounded authored
 mesh topology so silhouettes, hair clumps, garment shells and fitted armor are not
 limited to assembled primitives. Mesh hair/garments are not hair/cloth simulation.

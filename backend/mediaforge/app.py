@@ -121,6 +121,7 @@ from .scene_backup_transport import SceneBackupSession
 from .scenes import SceneCatalog, SceneError
 from .scene_workspace import SceneWorkspace
 from .scene_recipe_jobs import SceneRecipeJobManager
+from .scene_drafts import SceneComposeRequest
 from .scene_authoring_guidance import scene_authoring_guidance
 from .scene_recipes import (
     SceneCreateRequest,
@@ -1384,6 +1385,10 @@ def create_app(
                     if blender_runtimes.resolve_g8() is not None
                     else {"state": "unavailable", "reason": "runtime_not_installed", "local_only": True}
                 ),
+                "3d.scene_compose": {
+                    "state": "unavailable", "reason": "acceptance_pending", "local_only": True,
+                    "tool": "media.scene.compose", "scope": "single_mesh_and_material",
+                },
                 # 旗を立てて回るのではなく、実際に走らせられるかで決める。
                 # 実測済みの動画モデルと動画 runtime の両方が揃ったときだけ出す。
                 "video.text_to_video": video_capability("video.text_to_video"),
@@ -2474,7 +2479,7 @@ def create_app(
         return value
 
     async def submit_scene_tool(
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneComposeRequest,
         identity: HostIdentity,
     ) -> dict[str, Any]:
         try:
@@ -2503,6 +2508,15 @@ def create_app(
             value = SceneCreateRequest.model_validate(scene_tool_input(await request.json()))
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail={"code": "invalid_scene_recipe"}) from exc
+        return await submit_scene_tool(value, identity)
+
+    @app.post("/addon/v1/agent/scene/compose")
+    async def agent_scene_compose(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneComposeRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_brief"}) from exc
         return await submit_scene_tool(value, identity)
 
     @app.post("/addon/v1/agent/scene/edit")

@@ -76,9 +76,11 @@ def test_one_feedback_repair_includes_specific_edges_without_changing_constraint
 
 def test_validation_is_exhausted_after_exactly_two_repairs():
     gateway = Gateway("{}", "{}", "{}")
-    with pytest.raises(MeshDraftError, match="draft_validation_exhausted"):
+    with pytest.raises(MeshDraftError, match="draft_validation_exhausted") as caught:
         asyncio.run(MeshDraftPreparer(gateway).prepare(IDENTITY, MeshDraftRequest(intent="armor")))
     assert len(gateway.calls) == 3
+    assert len(caught.value.details["attempts"]) == 3
+    assert all("issues" in item for item in caught.value.details["attempts"])
 
 
 @pytest.mark.parametrize("error", [HostAIError("host_ai_unavailable", "unavailable"), asyncio.CancelledError()])

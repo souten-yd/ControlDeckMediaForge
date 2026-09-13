@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 compose Job/API candidate
+
+ux1/3d-compose-job、base PR532/1d493c5（PR531上）、main4f978a0を含む。
+compose request/schema/manifest/routeを既存SceneRecipeJobManagerへ接続、child AI/取消/準備履歴を実装。
+3d.scene_composeはunavailable/acceptance_pending、installedは未変更。M1未完了/M2未着手。
+source実APIで8.101秒→Blender4.5.13→blend/GLB/provenanceまで通過したが形は直方体、装甲要求FAIL。
+指示強化後のridgeは24.169秒、3attemptともboundary3/同hashでfailed/asset0。
+失敗details保存時のstage欠落で旧Jobがrunningに残る不具合を実機で発見し修正、unit追加。
+修正後はfailed/履歴/Host終端送信まで確認。旧Host子Jobab4e12274577もscoped reconcileでfailed済。
+全39620(1982pass209秒)の後に修正したため最終gateではない。
+再全13938は54a1c0 exit0/1982pass3skip2warnings/209.38秒、handle閉鎖済み。
+focused43pass、Node9/viewer48ms差分なし。以後product/script/test変更なし、commit/push/小PRへ。
+すべてのcandidate/driverは終端。scratch m1-compose-nJUJfSは784365B、参照なし検査後削除済。
+本番537447/9130、user root、runtime/recoveryは不変。詳細ID/証拠はstatus冒頭。
+次: 同じbrief/schemaでscoped AIのthinking無効固定を診断（原因未確定、Host未変更）。
+必要なHost修正は汎用任意reasoning制御だけ、別repo/PR。意味的適合→MCP/OpenCode→signed installedへ。
+
 ## 2026-09-13 M1 scoped cancel accepted, MCP connection pending
 
 PR532/ux1/3d-structured-mesh-draft、base0ba2ab0（PR531/c42f966上）、main4f978a0含む。

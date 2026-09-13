@@ -72,6 +72,14 @@ complete呼出は切断20秒後も推論中だったため使わない。stream�
 既存completeの利用者は変更しない。tool引数streamの障害回避fallbackやmodel変更ではない。
 実Hostで取消・期限超過の両方を実行し、推論idleと対象lease releasedを確認した（status参照）。
 このgateはscoped clientまで。公開MCP→Jobs経由の取消・lineage・納品は別途未受入。
+次の加法的入口はmedia.scene.compose（name/intent/vertex_budget/require_closed等）。
+既存SceneRecipeJobManagerでruntime pin→Host子Job→prepare_mesh→typed worker→revisionを実行する。
+AI段階には子Jobのidentityを使い、修正間は更新済みcredentialを参照する。別queue/asset基盤なし。
+Jobは元brief、検査済みrequest、準備provenanceを保持し、生成blend/GLBにもhash/historyを伝える。
+失敗時のbounded validation/edge summariesもJobへ保存し、元の失敗を空の成功に置き換えない。
+briefのretryは元brief/runtimeを固定するがAI出力の再現を保証しない。生成request/hashを比較する。
+source候補で登録・取消を評価中。形状の意味的適合とinstalled受入が済むまでは
+3d.scene_composeをunavailable/acceptance_pendingのままにする。
 髪の束・衣服shell・装甲の輪郭を実Blenderで作り、構造検査と見た目の評価を分離する。
 後続は選択付き編集/曲面・UV/bake・weight補正/IK・表情/動作、engine受入へ進む。
 この一操作だけで高品質キャラクター、cloth/hair simulationや全GA完成としない。

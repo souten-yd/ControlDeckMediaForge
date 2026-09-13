@@ -786,6 +786,11 @@ front ridge/寸法/見た目・Blender実行は未評価。closed edge PASSを�
 一括completeは切断20秒後もbusyだったためdraftでは使用しない。streamはdone受信前の
 部分JSONを採用せず、wire/出力上限とabsolute deadlineを持つ。Host変更なし。
 残るgateはMCP/既存Jobsからの取消伝播、準備provenance→asset lineage、実制作・納品。
+compose候補を既存Jobsへ接続し、source実APIで子JobAI→Blender4.5.13→asset/revisionと
+provenance/GLB親関係、API取消→実推論停止/lease返却を確認した。ただし生成は直方体でridge要求FAIL。
+指示補強後は同じboundary3が3回とも直らず、正常failed/asset0。形状検査を緩めず、
+同条件でHostのscoped reasoning無効固定の影響を切り分ける。原因とはまだ断定しない。
+公開契約候補は追加済みだがcapabilityはacceptance_pending、実OpenCode/installed納品は未達。
 未受入のhelperをcapability availableへ追加しない。M2開始条件は変わらない。
 診断の一標本の成功を安定運用やM1完了とはしない。実OpenCodeからの一巡が引き続き必須。
 

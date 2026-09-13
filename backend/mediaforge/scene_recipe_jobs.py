@@ -12,6 +12,8 @@ from typing import Any
 
 from .domain import ErrorDetail, Job, JobRequest, JobStatus
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
+from .host.ai import HostAIGateway, HostAIError
+from .scene_drafts import MeshDraftError, MeshDraftPreparer, MeshDraftRequest, SceneComposeRequest
 from .host.jobs import HostExecution, HostJobReporter
 from .scene_recipes import (
     SceneCreateRequest,
@@ -24,6 +26,7 @@ from .scene_workspace import SceneWorkspace
 from .store import Store
 
 logger = logging.getLogger(__name__)
+SceneJobInput = SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneComposeRequest
 
 
 async def _finish_cleanup(task: asyncio.Task[Any]) -> None:
@@ -47,10 +50,12 @@ class SceneRecipeJobManager:
         *,
         control_poll_sec: float = 1.0,
         credential_refresh_margin_sec: int = 120,
+        draft_preparer: MeshDraftPreparer | None = None,
     ) -> None:
         self.store = store
         self.workspace = workspace
         self.host = host
+        self.draft_preparer = draft_preparer or MeshDraftPreparer(HostAIGateway(host))
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._admissions: set[asyncio.Task[tuple[Job, SceneTaskRecord]]] = set()
         self._executions: dict[str, HostExecution] = {}
@@ -93,7 +98,7 @@ class SceneRecipeJobManager:
 
     async def submit(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneJobInput,
         identity: HostIdentity,
         *,
         retry_of: str | None = None,
@@ -109,14 +114,16 @@ class SceneRecipeJobManager:
 
     async def _submit(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneJobInput,
         identity: HostIdentity,
         *,
         retry_of: str | None = None,
     ) -> tuple[Job, SceneTaskRecord]:
         missing = {"jobs.write"} - identity.granted_capabilities
+        if isinstance(value, SceneComposeRequest):
+            missing |= {"ai.inference"} - identity.granted_capabilities
         if missing:
-            raise SceneError("host_capability_not_granted", "Host jobs.write capability is required")
+            raise SceneError("host_capability_not_granted", "Required Host capability is not granted")
         owner = identity.actor_subject or identity.subject
         external = value.model_dump(mode="json", exclude={"retry_job_id"})
         retry_pin: tuple[str, str, str | None] | None = None
@@ -129,8 +136,8 @@ class SceneRecipeJobManager:
                 raise SceneError("scene_retry_changed", "a retry must preserve the original typed input")
             retry_pin = (previous.runtime_id, previous.runtime_version, previous.base_revision_id)
         operation = (
-            "scene.create"
-            if isinstance(value, SceneCreateRequest)
+            "scene.compose" if isinstance(value, SceneComposeRequest) else "scene.create"
+            if isinstance(value, (SceneCreateRequest, SceneComposeRequest))
             else "scene.material"
             if isinstance(value, SceneMaterialRequest)
             else "scene.edit"
@@ -160,7 +167,7 @@ class SceneRecipeJobManager:
 
     async def _submit_pinned(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneJobInput,
         identity: HostIdentity,
         owner: str,
         external: dict[str, Any],
@@ -195,7 +202,7 @@ class SceneRecipeJobManager:
             operation="media.inspect",
             intent=(
                 f"Create typed Blender scene: {value.name}"
-                if isinstance(value, SceneCreateRequest)
+                if isinstance(value, (SceneCreateRequest, SceneComposeRequest))
                 else f"Apply a typed material binding to {value.scene_id}"
                 if isinstance(value, SceneMaterialRequest)
                 else f"Apply typed Blender scene edit to {value.scene_id}"
@@ -252,7 +259,7 @@ class SceneRecipeJobManager:
     async def _run_pinned(
         self,
         job_id: str,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneJobInput,
         references: ExitStack,
         started: asyncio.Event,
     ) -> None:
@@ -365,7 +372,7 @@ class SceneRecipeJobManager:
     async def _run(
         self,
         job_id: str,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneJobInput,
     ) -> None:
         execution = self._executions[job_id]
         reporter = HostJobReporter(self.host, execution)
@@ -373,6 +380,38 @@ class SceneRecipeJobManager:
             self._maintain_control(job_id, execution), name=f"scene-recipe-control-{job_id}"
         )
         try:
+            preparation: dict[str, Any] | None = None
+            prepared_request: dict[str, Any] | None = None
+            if isinstance(value, SceneComposeRequest):
+                await asyncio.to_thread(self.store.update_job, job_id,
+                                        status=JobStatus.RUNNING, phase="prepare_mesh", progress=0.01)
+                await asyncio.to_thread(self.store.update_scene_recipe_task, job_id, stage="prepare_mesh")
+                await self._report_progress(reporter, "prepare_mesh", 0.01)
+                brief = MeshDraftRequest.model_validate(value.model_dump(include={
+                    "intent", "vertex_budget", "require_closed", "local_only",
+                }))
+                pending = asyncio.create_task(self.draft_preparer.prepare(
+                    execution.identity, brief, identity_provider=lambda: execution.identity,
+                ))
+                try:
+                    done, _ = await asyncio.wait({pending, control}, return_when=asyncio.FIRST_COMPLETED)
+                    if control in done:
+                        if control.exception() is not None:
+                            raise SceneError("host_context_lost", "Host control failed during mesh preparation")
+                        raise asyncio.CancelledError
+                    draft = pending.result()
+                finally:
+                    if not pending.done():
+                        pending.cancel()
+                        await asyncio.gather(pending, return_exceptions=True)
+                value = draft.request.model_copy(update={
+                    "name": value.name, "tags": value.tags, "collection": value.collection,
+                })
+                preparation = {**draft.provenance,
+                    "execution_request_sha256": hashlib.sha256(value.model_dump_json().encode()).hexdigest()}
+                prepared_request = value.model_dump(mode="json")
+                await asyncio.to_thread(self.store.update_scene_recipe_task, job_id,
+                    stage="mesh_prepared", result={"preparation": preparation, "prepared_request": prepared_request})
             self.store.update_job(job_id, status=JobStatus.RUNNING, phase="validate_recipe", progress=0.05)
             self.store.update_scene_recipe_task(job_id, stage="validate_recipe")
             await self._report_progress(reporter, "validate_recipe", 0.05)
@@ -415,6 +454,7 @@ class SceneRecipeJobManager:
                         value,
                         runtime_id=task.runtime_id,
                         runtime_version=task.runtime_version,
+                        **({"preparation": preparation} if preparation is not None else {}),
                     )
                 )
                 recipe_execution = asyncio.create_task(
@@ -451,6 +491,9 @@ class SceneRecipeJobManager:
                 if acquired:
                     self._execution_guard.release()
             self.store.update_job(job_id, phase="publish_revision", progress=0.9)
+            if preparation is not None:
+                preparation = {**preparation, "execution_status": "executed"}
+                result = {**result, "preparation": preparation, "prepared_request": prepared_request}
             self.store.update_scene_recipe_task(job_id, stage="publish_revision")
             assets = list(result.pop("asset_ids")) if "asset_ids" in result else [
                 result["revision"]["source_asset_id"],
@@ -503,9 +546,13 @@ class SceneRecipeJobManager:
                 if await self._report_terminal(reporter, execution, "canceled"):
                     self.store.mark_scene_recipe_terminal_sent(job_id)
             raise
-        except (SceneError, HostApiError, KeyError) as exc:
+        except (SceneError, HostApiError, HostAIError, MeshDraftError, KeyError) as exc:
             code = getattr(exc, "code", "scene_recipe_failed")
-            self.store.update_scene_recipe_task(job_id, stage=str(code))
+            if isinstance(exc, MeshDraftError) and exc.details:
+                await asyncio.to_thread(self.store.update_scene_recipe_task, job_id,
+                    stage=str(code), result={"preparation_failure": exc.details})
+            else:
+                self.store.update_scene_recipe_task(job_id, stage=str(code))
             self.store.update_job(
                 job_id,
                 status=JobStatus.FAILED,

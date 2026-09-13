@@ -16,6 +16,17 @@ BlenderMCP用skillを読めても、`execute_blender_code`や`get_viewport_scree
 sourceが新しくてもinstalledが古ければ新操作は送らない。
 capability内の`authoring_guidance`は短縮版であり、VLM可用性宣言ではない。
 
+### Briefからの小メッシュ制作（候補）
+
+`media.scene.compose`は`3d.scene_compose.state=available`の場合だけ通常制作に使う。
+現時点は`acceptance_pending`。tool名が一覧にあるだけで利用可能と判断しない。
+対応時も単一mesh+materialの小さな下書きであり、完成キャラクターではない。
+X幅/Y奥行/Z高さ、実寸、必要な輪郭・稜線、頂点予算をintentで具体化し、solidなら
+require_closedをtrueに保つ。返るのはJob IDなので、statusで終端とexact revisionを確認する。
+停止は同じmedia.job.cancel。検査が失敗したらpreparation_failureの辺/方向/attemptを読み、
+同じ欠損を繰り返しているものを成功扱いしない。閉殻PASSでも、箱を稜線付き装甲とは呼ばない。
+Jobのprepared_requestとpreparation履歴を確認し、実画像/変形/engine/配置はそれぞれ別に検証する。
+
 ## 1. 制作brief
 
 以下を整理する。未指定は仮定として明示し、工程を大きく変える選択だけ確認する。
