@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 agent instructions and scoped recheck
+
+再開tree /tmp/mediaforge-cleanup-docs-20260912、PR533/5e9859a、fetch後main4f978a0。
+PR533 OPEN DRAFT/base ux1/3d-structured-mesh-draftを確認。user root work/03ed1afは変更しない。
+既存研究・制作ガイド・GA/M1計画を確認し、BlenderGym v1本文を再閲覧した。
+制作ガイドの加法拡張として、7分類のasset_family_checksと、revision/画像条件/対象照合/
+退行・未観測を扱うcomparison_protocolを実capability生成関数へ追加。
+VLM availabilityはnot_asserted_by_this_guidanceを維持。新規VLM起動やM2実装ではない。
+docs/agent-3d-authoring-guide.md、調査書、M1/M2のnegative受入計画も同期した。
+
+実Host診断venvでenv PYTHONPATH=backend .venv/bin/python
+/tmp/mediaforge-cleanup-docs-20260912/scripts/3ds_scoped_draft_probe.pyを実行。
+481bba/96006b: scoped capabilities text.generate=true/vision.analyze=trueを受信したが、
+136.777秒でhost_ai_unavailable、exit1。これは全probeの経過秒でありAI段階だけの時間ではない。
+形状生成の合否、VLMの実画像入力、Blender/実MCP/OpenCode/納品は今回NOT TESTED。
+前後の8097/healthはHTTP200、MF unitはMainPID537447/active。health200を推論成功と数えない。
+他要求の停止・LLM再設定・Host code変更なし。新project/asset/scratch/backupなし。
+
+focused authored_mesh/game_static_operationsはd14f06 exit0。Nodeはdf4a61で9pass、
+viewer build e8d330 exit0/66ms、生成物tracked差分なし。初回Nodeは存在しない
+scene_viewer.test.mjsを指定してexit1、rgで実ファイル確認後に上記2fileを実行した。
+全 ./mf.sh test は51345/4eac7c exit0、1998passed/3skipped/2warnings、348.24秒。
+このgate後のproduct/script/test変更なし。実AI probeと全test handleは終端。
+最終diff checkも通過し、PR533へcommit/pushして記録する。
+M1未完了、compose acceptance_pending、M2以降は未着手。本番への新ガイド配布はNOT TESTED。
+
 ## 2026-09-13 M1 explicit topology corrections, no Host reasoning change
 
 PR533/7d5710bで再開、fetch後main4f978a0、tracked clean、PR533 OPENを確認。

@@ -758,6 +758,12 @@ G9は「制作を加速する候補生成器」として後段に置く。
 
 ## 15. 実装順序
 
+M1ガイド追補（2026-09-13）: capability応答へアセット7分類の確認点とVLM比較前の
+revision/観察条件/対象照合を追加する。実行権限・VLM availabilityは追加しない。
+M2受入では古いrevision画像、異なる画角、未提供の背面、画像から対象IDを確定できない場合を
+negative fixtureへ含める。空の欠陥一覧をPASSにせず、比較不能/未観測を保持する。
+M1の実shape/Job/OpenCode/installed受入が先であり、本ガイド追加をM2完了と数えない。
+
 PR #526をM1として完了させ、その後は原則次の順序で小PRへ分割する。
 
 M1受入時はLLM引数生成/stream、MCP受付、worker終端、export/配置を別々に記録する。

@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 guidance comparison protocol continuation
+
+PR533/ux1/3d-compose-job、base5e9859a。fetch後main4f978a0、PR OPEN DRAFTを確認。
+ガイドへ7分類の確認点、比較前のrevision/観察条件/対象照合と未観測の扱いを追加。
+テストと調査・制作guide・M1/M2計画を同期。新tool/VLM可用性宣言なし、Host変更なし。
+実scoped draft38166は96006b exit1/136.777秒/host_ai_unavailable、終端。
+capabilityのtext/vision trueとhealth200は推論成功ではない。形状/MCP/OpenCode/VLMはNOT TESTED。
+MF537447 active、user root/本番/既存asset/runtime不変、新scratch/backupなし。
+focused88176はexit0、Node9pass/viewer66ms差分なし。全51345は4eac7c exit0、
+1998pass3skip2warnings/348.24秒。以後product/script/test変更なし。全handle終端、commit/pushへ。
+M1未完了/M2未着手、compose acceptance_pending。次もscoped shapeの意味的適合から、
+実Job/Blender→実OpenCode/MCP→installedへ。ガイド追加を品質受入の代替にしない。
+
 ## 2026-09-13 M1 small topology correction continuation
 
 PR533/ux1/3d-compose-job、base7d5710b。main4f978a0含む。Host変更なし。
