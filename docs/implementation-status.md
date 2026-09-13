@@ -1,5 +1,52 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 shape verifier and repeated invalid draft
+
+PR533/d2a386fで再開、fetch後main4f978a0、tracked cleanを確認。前turnはguide実装の進展。
+8097 health200だがslot task34560が82425→94363tokensで処理中。
+通常scoped draft38000は2f21cc exit1/95.139秒/host_ai_unavailable。
+30秒待機後に別task35765/27338tokensを観測し、通常経路を再実行した。
+18660/fe8e0eは106.559秒でdraft_validation_exhausted、3attempt全て同じ応答SHA
+b107fc68adcf63630331df84e5eb9eb33ff952ba7fa2e376d6310156d30f62ce。
+mesh face indices invalidと多重共有/境界/向き不整合、曖昧なためrepair_hintsなし。
+この回は実推論応答を得た上での構造FAILであり、接続待ちだけを原因にしない。
+Host _runtime_requestはbody.messagesを渡し、streamがHost admissionを使うコードも読取り確認。
+Host変更・共有推論の停止・設定変更なし。MF537447/active保持、新asset/project/backupなし。
+
+従来OpenCode verifierのsynthetic positiveが四面体だったことを確認。
+閉殻検査のみでは胸当て形状を証明しないため、fixture説明にlocal軸/寸法/5%許容を明示し、
+独立armor_shape_reportで寸法と接続された突出edgeの最低条件を検査する。
+positive fixtureは稜線付き五角断面の閉殻へ、negativeは厚さ違い/四面体/平面分割箱を追加。
+それぞれMeshCreate閉殻検査PASSを先にassertし、拒否がshape条件によることを試験した。
+scoped probeも同じridge検査と検査済みprepared_requestを出力する（現在の固定brief、secretなし）。
+043159 focused13件成功。shape条件は美観・自己交差・実export寸法の証明ではない。
+診断59858/346e54は25.657秒でvalidation_exhausted。MeshCreateはtype/object_id/name/
+vertices/faces/require_closed、MaterialSetはtype/object_id/base_color/metallic/roughnessだけの
+schemaへprocess内で限定し、faceのuniqueItemsも指定した。3attempt同SHA
+3c074adaef0dd7ff0e1938ba2cf83147b375292c64360235443a8a6981eb6a3f、degenerate faces。
+この縮小は採用していない。次の診断91686/efdd3aは25.274秒でvalidation_exhausted。
+元schemaのまま、full repair時だけsystem+user二件へまとめ、userにoriginal_brief/
+rejected_draft/validator_feedbackを渡した。3attempt同SHA
+904d385cde51a7182252917287905e534d1f40323cc179802aa20063e17f455f、duplicate faces。
+両診断はHost診断venvのpython -cで対象関数をprocess内だけ差し替え、同じscoped probeをrunpy実行。
+production config/codeは不変。各条件のinitial形状も異なり、単一因子の因果や安定性を断定しない。
+共通して修正前後の応答が同一であり、次は小さい既知JSONでfollow-up指示が実反映されるかを
+正常Host経路で切り分ける。形状検査を弱めたり任意Python実行へ迂回しない。
+全80351は2f8573 exit0、2001pass3skip2warnings/211.42秒。以後product/script/test変更なし。
+Node9pass/viewer57ms（98eb0f/3c90d0）、build差分なし。
+小さいJSONの追従診断84648/a44259/410aefはexit0。通常scoped経路でanswer=amberを返した後、
+同じsystem/user/assistant履歴へvioletへの変更指示を追加し、answer=violetを受信。
+両方期待値一致。温度0.1/128tokens/90秒、同一schema。実時間は採取していない。
+一般的なfollow-up消失はこの試験では再現せず、形状設計/修正の条件へ戻る。
+続けて凸断面の上下ringを結ぶ一般的なindex式だけをsystemへ追記した診断80350/98af6eも
+26.923秒でvalidation_exhausted、3attempt同SHA
+6ebf805205af2e0f2c5eeb08f43096a7dd45636a3a20c9e6e3df44dcdc807d29、invalid face indices。
+式はside=[i,j,j+n,i+n], j=(i+1)%n、caps=[0,i+1,i]/[n,n+i,n+i+1]。
+座標はLLMが決め、既存validatorとshape受入を維持した。製品指示には未採用。
+全probe/test handleは終端。次は失敗draftの固定brief由来の実データを診断限定で確認し、
+座標設計と面接続を分ける等の候補を比較する。失敗した全体JSON再生成を無期限に反復しない。
+M1実OpenCode/installedの受入は未完了、compose acceptance_pending、M2未着手。
+
 ## 2026-09-13 M1 agent instructions and scoped recheck
 
 再開tree /tmp/mediaforge-cleanup-docs-20260912、PR533/5e9859a、fetch後main4f978a0。

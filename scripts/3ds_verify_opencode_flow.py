@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sqlite3
 import zipfile
 from contextlib import closing
@@ -82,6 +83,36 @@ def verify_auto_skin_recipe(operations: list[dict[str, Any]]) -> None:
             {'frame': 48, 'rotation_degrees': [0, 0, 0]}]
 
 
+def armor_shape_report(vertices: list[Any], faces: list[Any]) -> dict[str, Any]:
+    """Minimum M1 fixture shape checks, not an aesthetic or solid-volume verdict.
+
+    Check local X width/Y depth/Z height and a connected vertical ridge inside
+    the width, on either depth extreme. Coordinates remain authored by the LLM.
+    """
+    lows = [min(p[a] for p in vertices) for a in range(3)]
+    highs = [max(p[a] for p in vertices) for a in range(3)]
+    dimensions = [hi - lo for lo, hi in zip(lows, highs)]
+    dimensions_match = all(math.isclose(got, expected, rel_tol=.05, abs_tol=1e-6)
+                           for got, expected in zip(dimensions, (.4, .08, .5)))
+    ridge = False
+    for face in faces:
+        for first, second in zip(face, [*face[1:], face[0]]):
+            a, b = vertices[first], vertices[second]
+            if (lows[0] + .1 * dimensions[0] < a[0] < highs[0] - .1 * dimensions[0]
+                    and math.isclose(a[0], b[0], abs_tol=1e-6)
+                    and math.isclose(a[1], b[1], abs_tol=1e-6)
+                    and abs(a[2] - b[2]) >= .5 * dimensions[2]
+                    and any(math.isclose(a[1], depth, abs_tol=1e-6) for depth in (lows[1], highs[1]))):
+                # A subdivided flat box face is not a protruding ridge.
+                same_level = [p for p in vertices if math.isclose(p[2], a[2], abs_tol=1e-6)]
+                left = [p for p in same_level if p[0] < a[0] - 1e-6]
+                right = [p for p in same_level if p[0] > a[0] + 1e-6]
+                if left and right and all(abs(p[1] - a[1]) > 1e-6 for p in left + right):
+                    ridge = True
+    return {"dimensions_meters": dimensions, "dimensions_match": dimensions_match,
+            "connected_ridge": ridge, "visual_quality": "NOT TESTED"}
+
+
 def verify_authored_mesh_calls(calls: list[dict[str, Any]]) -> None:
     """Prove actual new-operation use, not schema discovery or quality claims."""
     from mediaforge.scene_recipes import MeshCreate, SceneCreateRequest
@@ -100,6 +131,9 @@ def verify_authored_mesh_calls(calls: list[dict[str, Any]]) -> None:
         for a, b in zip(face, face[1:] + face[:1]):
             edges.setdefault(tuple(sorted((a, b))), []).append((a, b))
     assert all(len(pair) == 2 and pair[0] == pair[1][::-1] for pair in edges.values()), "Armor shell must be closed with consistent winding"
+    shape = armor_shape_report(mesh.vertices, mesh.faces)
+    assert shape["dimensions_match"], "Armor must match local X/Y/Z dimensions within 5 percent"
+    assert shape["connected_ridge"], "A box or tetrahedron is not the requested ridged chest plate"
 
     def output(call: dict[str, Any]) -> dict[str, Any]:
         value = json.loads(call["state"]["output"])

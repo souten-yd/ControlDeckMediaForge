@@ -7,6 +7,7 @@ ephemeral and never printed or written. This is not OpenCode/MCP acceptance.
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import math
 from pathlib import Path
@@ -60,14 +61,18 @@ def main() -> None:
             dimensions_match = all(math.isclose(actual, expected, abs_tol=1e-6)
                                    for actual, expected in zip(dimensions, (0.4, 0.08, 0.5)))
             non_cuboid = any(len({point[axis] for point in mesh.vertices}) > 2 for axis in range(3))
+            shape = importlib.import_module("3ds_verify_opencode_flow").armor_shape_report(
+                mesh.vertices, mesh.faces)
             print(json.dumps({
                 "valid": True, "seconds": round(time.monotonic() - started, 3),
                 "vertices": len(mesh.vertices), "faces": len(mesh.faces),
                 "dimensions_meters": dimensions, "dimensions_match": dimensions_match,
                 "non_cuboid_coordinates": non_cuboid,
+                "shape": shape,
+                "prepared_request": result.request.model_dump(mode="json"),
                 "provenance": result.provenance,
             }), flush=True)
-            return dimensions_match and non_cuboid
+            return dimensions_match and non_cuboid and shape["connected_ridge"]
         except (MeshDraftError, HostAIError) as exc:
             print(json.dumps({"valid": False, "seconds": round(time.monotonic() - started, 3),
                               "code": exc.code,

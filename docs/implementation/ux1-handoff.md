@@ -3,6 +3,22 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 shape acceptance and live draft failure
+
+PR533/ux1/3d-compose-job、base d2a386f、fetch後main4f978a0。Host/user root/installed不変。
+M1 verifierが四面体を通す不足を修正。local寸法5%と接続稜線の最低条件を追加、
+閉殻PASSの厚さ違い/四面体/平面分割箱を拒否するテスト追加。美観/実exportの証明ではない。
+probeはprepared_requestとshape報告を出す。入力は固定の試験brief、credential出力なし。
+実38000は95.139秒timeout。共有slot終了後18660は106.559秒で3attempt同じ不正形状。
+縮小schema59858/25.657秒、fresh修正context91686/25.274秒、index式追記80350/26.923秒も
+全3attempt同じ不正形状。製品へこれらの診断変更を採用しない。詳細SHA/status参照。
+単純JSON amber→violetのfollow-up84648は両期待値一致、exit0。一般的な履歴消失は再現せず。
+全80351は2f8573 exit0、2001pass3skip2warnings/211.42秒、以後product/script/test変更なし。
+focused13pass、Node9pass/viewer57ms差分なし、全probe/test handle終端。commit/pushしてPR533へ保存。
+次: 固定brief由来の失敗draft実データを診断限定で確認し、座標と接続を分ける等を比較。
+同じ全文再生成を無期限に続けず、検査を緩和しない。実shape→Job/Blender→OpenCode/installed。
+M1未完了/M2未着手、compose acceptance_pending。新asset/project/scratch/backupなし。
+
 ## 2026-09-13 M1 guidance comparison protocol continuation
 
 PR533/ux1/3d-compose-job、base5e9859a。fetch後main4f978a0、PR OPEN DRAFTを確認。

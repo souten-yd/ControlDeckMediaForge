@@ -805,6 +805,13 @@ reasoning条件の比較は双方3attempt失敗し、Host変更は採用して�
 未受入のhelperをcapability availableへ追加しない。M2開始条件は変わらない。
 診断の一標本の成功を安定運用やM1完了とはしない。実OpenCodeからの一巡が引き続き必須。
 
+M1 shape受入追補: 従来のOpenCode verifierの閉殻条件だけでは四面体も合格したため、
+fixtureのlocal X幅/Y厚さ/Z高さを0.4/0.08/0.5m（5%許容）として明示する。
+幅の端でない位置に高さの半分以上を走る接続edgeがあり、同じ高さの左右表面より突出する
+最小の稜線条件を追加する。箱/平面を分割した箱/四面体/厚さ違いは合格させない。
+この条件は当fixture専用で、一般の装甲形状を規定せず、交差・外向き・美観の証明でもない。
+実画像・Blender再import・exportされた実寸法・OpenCode納品は独立の受入として維持する。
+
 | 順序 | slice | 主な成果 | exit gate |
 |---|---|---|---|
 | M1 | authored mesh / guidance | `mesh.create` + guide | PR #526の新operation実MCP/OpenCode、source→signed installed |

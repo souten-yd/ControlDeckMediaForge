@@ -113,7 +113,9 @@ authoring_guidance.versionがmedia-forge.scene-authoring-guidance@1であるこ�
 いずれかが欠けたら制作せず停止してください。現在のMCP schemaを実行の正とし、
 上流BlenderMCPのPythonやスクリーンショットtoolを呼ばないでください。
 新規sceneに、ロボット装甲の形状試験として、前面に稜線のある小さな胸当てを作ってください。
-幅約0.4m、高さ約0.5m、厚さ約0.08m。これはM1操作受入用で、高品質キャラクターの完成ではありません。
+local X幅0.4m/Y厚さ0.08m/Z高さ0.5m（突起を含む全寸法、許容差5%）。
+幅の内側を高さ方向に走る接続された稜線が必要で、箱や四面体では代用しません。
+これはM1操作受入用で、高品質キャラクターの完成ではありません。
 mesh.createでstable ID armor、名前Armor、閉じた三角/四角面のmeshを一つだけ作り、
 現在のschemaにrequire_closedがあることを確認し、必ずtrueを指定してください。
 そのfieldがなければ未導入と報告して停止します。falseへ変更して検査を回避しません。
