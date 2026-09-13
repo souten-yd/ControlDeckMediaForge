@@ -40,7 +40,10 @@ def scene_authoring_guidance() -> dict[str, Any]:
             "mesh.create": "Local-meter vertices, zero-based triangle/quad indices; outward winding. "
             "3..4096 vertices, 1..4096 faces, all vertices referenced. Unique face indices, no duplicate "
             "faces or zero-area fan triangles. Open cloth panels are permitted. Smooth changes normals, "
-            "not topology. This does not generate UVs, edge loops, watertightness or intersections checks.",
+            "not topology. For a requested closed armor shell, set require_closed=true after discovering "
+            "that field in the current schema. It rejects boundary edges, more than two face uses and "
+            "inconsistent winding; it does not fix geometry or check intersections, vertex fans, "
+            "volume or outward orientation. This does not generate UVs or deformation edge loops.",
             "uv.smart_project": "A starting UV projection, not seam placement, texel-density control "
             "or a guarantee of texture continuity. Inspect seams before accepting image placement.",
             "skin.bind_auto": "Initial automatic weights, not final deformation quality. "

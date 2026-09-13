@@ -1,5 +1,40 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 explicit closed-edge validation (source, not installed)
+
+Branch ux1/3d-authored-mesh-closure is stacked on PR528 commit390fa78.
+origin/main f5093ea was fetched and merge reported already up to date (8de144).
+M1実LLM R4の開いた装甲を受け、設計を先行追記しrequire_closedを加法追加した。
+strict bool/default falseで既存布を保持。true時は全辺の逆向き2面共有をcore/workerが
+独立に検査し、境界/多面共有/向き不整合をallocation前に拒否する。
+自己交差/頂点fan/体積/外向き/見た目は保証しない。操作の意味や上限を緩めていない。
+create/edit/workflow公開schema3件、API文書、capability guideを同期。
+M1 runnerはfield発見をpreflight条件にしtrue指定を要求、verifierはfalseによる回避を拒否する。
+coreのpublic拒否は既存invalid_scene_recipeのまま。詳細辺feedbackは今回未追加。
+
+cfacd1 focused38passed。実managed Blender4.5.13をCPU/background/factory-startup/
+disable-autoexec/python-exit-code1で起動しsource workerを実行（9160a2 exit0）。
+穴ありはboundary3で拒否しbpy mesh/object数不変、閉 tetraは4vertices/4facesで実生成、
+explicit falseの開surfaceも作成成功。ファイル保存はしていない。
+5ac4bd exit0はR4 redacted eventsの実入力を読み、require_closed=trueだけを追加して実workerへ。
+boundary8/multiple0/winding0で拒否、bpy mesh/object数不変をassertした。
+これはsource worker受入でありsigned installed/OpenCodeでの新field受入はNOT TESTED。
+
+専用scratch候補PID526742/9167を実起動。c9c60e GET schema HTTP200で
+installed9130はrequire_closedなし、candidate9167はdefault falseのboolean fieldありを確認。
+候補をTERM、a0208b exit143/正常shutdown、PID不在/lsof参照なしを照合。
+scratch maintenance/m1-closure-Z3lFvpは233472B、488b80で削除・不存在確認。
+本番asset/recovery/runtime/Host/global設定は変更していない。稼働MF501843/.81のまま。
+
+全test旧86123は途中でrunner/verifier最終修正が入ったため所有pytest523812をTERM
+（82a8c5 exit143）。部分結果は全gateに数えない。
+最終全test58017は21e638 exit0/1937passed3skipped2warnings/210.07秒。
+以後product/script/test変更なし。diff check成功、user root work branchはcleanで不変。
+Node9pass/viewer40ms差分なし。M1未完了/M2未着手、署名配布後に新fieldの正規MCP/LLM受入が必要。
+通信調査: pack build-infoの8ea2902はupstream 8ea290247c87ced2ab245b056ffe96dbcf90d36cに解決。
+そのcommon/chat.cppでも同tool-call減少例外を確認。例外発生元の照合であり、
+モデル出力/制約decoder/parserのどれが減少を作ったかの原因特定や修正とはしない。
+
 ## 2026-09-13 M1 transport isolation / streamed argument failure
 
 Own R3 sessionのOpenCode logをread-only照合（2068c5）。05:31:49〜05:35:05 UTCに

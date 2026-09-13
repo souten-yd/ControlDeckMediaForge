@@ -487,6 +487,8 @@ def authored_mesh_data(operation: dict[str, object]) -> tuple[list[tuple[float, 
         raise RuntimeError("mesh face count differs")
     if type(operation.get("smooth", True)) is not bool:
         raise RuntimeError("mesh smooth flag differs")
+    if type(operation.get("require_closed", False)) is not bool:
+        raise RuntimeError("mesh require_closed flag differs")
     vertices = [vector(item) for item in raw]
     used, seen = set(), set()
     for face in faces:
@@ -508,6 +510,17 @@ def authored_mesh_data(operation: dict[str, object]) -> tuple[list[tuple[float, 
                 raise RuntimeError("mesh faces are degenerate")
     if len(used) != len(vertices):
         raise RuntimeError("mesh has unreferenced vertices")
+    if operation.get("require_closed", False):
+        edges: dict[tuple[int, int], list[tuple[int, int]]] = {}
+        for face in faces:
+            for a, b in zip(face, face[1:] + face[:1]):
+                edges.setdefault(tuple(sorted((a, b))), []).append((a, b))
+        boundary = sum(len(uses) == 1 for uses in edges.values())
+        multiple = sum(len(uses) > 2 for uses in edges.values())
+        winding = sum(len(uses) == 2 and uses[0] != uses[1][::-1] for uses in edges.values())
+        if boundary or multiple or winding:
+            raise RuntimeError(f"mesh requires closed consistent edges: boundary={boundary}, "
+                               f"multiple={multiple}, winding={winding}")
     return vertices, faces
 
 

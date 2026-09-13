@@ -1336,7 +1336,10 @@ A "no" to #10 is an architecture smell.
 
 2026-09-13 user priority: game-asset authoring through the existing MCP surface
 precedes further Web Blender acceptance. Characters, creatures, environment props,
-tools, vehicles, weapons and armor remain in scope. Start with bounded authored
+tools, vehicles, weapons and armor remain in scope. Authored meshes may explicitly
+require closed, consistently paired edges before allocation; open cloth remains
+the compatible default. This check is not a solid/self-intersection or quality guarantee.
+Start with bounded authored
 mesh topology so silhouettes, hair clumps, garment shells and fitted armor are not
 limited to assembled primitives. Mesh hair/garments are not hair/cloth simulation.
 Evaluate actual Blender output and visual quality separately from structural

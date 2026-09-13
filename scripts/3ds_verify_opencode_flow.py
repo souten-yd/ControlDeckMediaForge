@@ -91,6 +91,7 @@ def verify_authored_mesh_calls(calls: list[dict[str, Any]]) -> None:
     assert len(parsed.recipe.operations) == 2
     mesh, material = parsed.recipe.operations
     assert isinstance(mesh, MeshCreate) and mesh.object_id == "armor" and mesh.name == "Armor"
+    assert mesh.require_closed is True, "Closed armor must request the execution-time guard"
     assert len(mesh.vertices) <= 10, "M1 diagnostic requires a small authored mesh, not a complex asset"
     assert material.type == "material.set" and material.object_id == "armor"
     # This fixture requires a closed shell. General mesh.create permits open cloth.

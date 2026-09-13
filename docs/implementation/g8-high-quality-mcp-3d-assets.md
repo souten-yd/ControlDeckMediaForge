@@ -765,6 +765,9 @@ M1受入時はLLM引数生成/stream、MCP受付、worker終端、export/配置�
 後者を実OpenCode受入へ代用しない。小さいauthored meshで有効なJSONと閉じたtopologyを
 確認してから規模を上げる。parser障害時に生成途中の引数を自動補完して副作用を実行しない。
 実測の正はimplementation-status。M1のsource merge/signed導入とLLM受入完了を区別する。
+M1の閉装甲fixtureでは新schemaのrequire_closed=trueを必須とし、boundary edgeのある
+入力をcore/workerで拒否する。false/省略は布の互換性用で、閉装甲の検査回避に使わない。
+全辺の共有条件だけの検査をself-intersection-free solidや視覚品質の保証へ拡張解釈しない。
 
 | 順序 | slice | 主な成果 | exit gate |
 |---|---|---|---|

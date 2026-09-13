@@ -1703,6 +1703,12 @@
           "title": "Smooth",
           "type": "boolean"
         },
+        "require_closed": {
+          "default": false,
+          "description": "Set true for a requested closed armor/solid shell. Every edge must have exactly two oppositely directed face uses. Open cloth remains allowed when false. This does not check self-intersections, vertex fans, volume, outward orientation or visual quality.",
+          "title": "Require Closed",
+          "type": "boolean"
+        },
         "location": {
           "default": [
             0.0,

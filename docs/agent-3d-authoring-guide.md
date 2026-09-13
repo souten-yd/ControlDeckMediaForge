@@ -54,6 +54,10 @@ mesh.createは頂点3〜4096、三角/四角面1〜4096。indexは0始まりの�
 座標はobject localのメートル、rotation_degreesは度。GLBの軸変換を二重適用しない。
 smoothは陰影の指定であり、曲面分割、remesh、UV、変形topologyを生成しない。
 開いた布の縁は許容されるが、自己交差やmanifoldは保証されない。
+閉じた装甲などを要求された場合、現在のschemaにrequire_closedがあればtrueにする。
+invalid_scene_recipeの拒否を受けたら境界辺・面の共有・向きを含め再点検し、
+falseへ変更して検査を回避しない。MCPエラーが各辺の詳細を返すとは仮定しない。
+この検査は全辺の逆向き2面共有だけであり、自己交差・体積・外向き・見た目は別に確認する。
 
 複製・mirror・arrayは対象と原点を確認する。中心対称の塊をさらにmirrorしても
 望む輪郭は作れない。小さいrecipeに区切り、成功済みの版を保持する。

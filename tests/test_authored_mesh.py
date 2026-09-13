@@ -21,6 +21,7 @@ def test_authored_mesh_contracts() -> None:
     value = request(operation())
     parsed = SceneCreateRequest.model_validate(value)
     assert parsed.recipe.operations[0].smooth is True
+    assert parsed.recipe.operations[0].require_closed is False
     for name, payload in (
         ("scene-create-request.json", value),
         ("scene-edit-request.json", {"scene_id": "scene_" + "a"*32,
@@ -55,6 +56,57 @@ def test_open_surface_and_flat_shading_allowed(monkeypatch: pytest.MonkeyPatch) 
     parsed = MeshCreate.model_validate(value)
     vertices, faces = worker(monkeypatch).authored_mesh_data(parsed.model_dump(mode="json"))
     assert len(vertices) == 4 and faces == [[0, 1, 2, 3]]
+
+
+def closed_operation() -> dict[str, Any]:
+    return operation(require_closed=True, vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                     faces=[[0, 2, 1], [0, 1, 3], [1, 2, 3], [2, 0, 3]])
+
+
+@pytest.mark.parametrize("failure", [None, "open", "winding", "multiple", "string", "integer"])
+def test_closed_requirement_independent_checks(monkeypatch: pytest.MonkeyPatch, failure: str | None) -> None:
+    value = closed_operation()
+    if failure == "open":
+        value["faces"].pop()
+    elif failure == "winding":
+        value["faces"][0].reverse()
+    elif failure == "multiple":
+        value["vertices"].append([0, -1, 0])
+        value["faces"].append([0, 1, 4])
+    elif failure in {"string", "integer"}:
+        value["require_closed"] = "true" if failure == "string" else 1
+    module = worker(monkeypatch)
+    if failure:
+        with pytest.raises(ValidationError):
+            MeshCreate.model_validate(value)
+        with pytest.raises(RuntimeError, match="closed"):
+            module.authored_mesh_data(value)
+        # The stub has no Blender allocation API: closure must reject first.
+        with pytest.raises(RuntimeError, match="closed"):
+            module.apply_operation(value, {})
+    else:
+        parsed = MeshCreate.model_validate(value)
+        vertices, faces = module.authored_mesh_data(parsed.model_dump(mode="json"))
+        assert len(vertices) == 4 and len(faces) == 4
+
+
+def test_open_cloth_explicit_false_remains_compatible(monkeypatch: pytest.MonkeyPatch) -> None:
+    value = operation(require_closed=False)
+    MeshCreate.model_validate(value)
+    assert worker(monkeypatch).authored_mesh_data(value)[1] == [[0, 1, 2, 3]]
+
+
+def test_r4_missing_caps_rejected_with_boundary_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Observed real OpenCode shape: bottom and one top triangle were missing.
+    value = operation(require_closed=True,
+        vertices=[[x, y, z] for z in (0, .5) for x, y in
+                  [(0, -.04), (.2, -.02), (.2, .04), (-.2, .04), (-.2, -.02)]],
+        faces=[[0, 1, 6, 5], [1, 2, 7, 6], [2, 3, 8, 7], [3, 4, 9, 8], [4, 0, 5, 9],
+               [5, 6, 7], [7, 8, 9]])
+    with pytest.raises(ValidationError, match="boundary=8"):
+        MeshCreate.model_validate(value)
+    with pytest.raises(RuntimeError, match="boundary=8"):
+        worker(monkeypatch).authored_mesh_data(value)
 
 
 def test_new_mesh_reserves_id_and_budget_before_allocation(monkeypatch: pytest.MonkeyPatch) -> None:
