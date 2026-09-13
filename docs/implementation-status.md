@@ -1,5 +1,16 @@
 # Media Forge implementation status
 
+## 2026-09-13 正規PC loginの調整待ち（再開後blocked）
+
+basec9047f5、PR525 OPEN/Draft。前turnは判定補助script/9tests/実401保持/全gateで進捗。
+今回はread-only d13af8でremote head一致、本番PID52609 active、専用browser/candidate PID不在を確認。
+検証窓15402は前turnで実終端を回収済み。生きた待機処理はなく、再表示はしていない。
+再開後3turn（実Blender preflight、login判定補完、今回）にわたり正規PC loginの調整が未解決。
+安全に先行できる事前検証と判定修正を済ませ、実ユーザー認証によるworkspace到達の確認が次の条件。
+同意/認証を自動継続から捏造せず、goalをblockedとしてPC操作可否の回答を待つ。
+今回はdocsだけ、テスト再実行/製品変更/OS変更/本番停止/データ生成なし。
+必須GOAL/A〜F/GA/native setupの未完了と、PR525の未受入/Draft/未merge/未署名公開を維持する。
+
 ## 2026-09-13 正規login受入の判定を補完
 
 basecbc4462、同PR525/Draft。前turnは実Blender preflightと回収で進捗。

@@ -3,6 +3,18 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 再開後の正規PC login待ちでblocked
+
+同branch/Draft PR525、basec9047f5。再開後の実Blenderpreflight、login判定補完、今回確認の
+3turnで同じ正規PC loginの調整条件が継続。先行可能な事前検証と判定修正は完了した。
+今回d13af8でPR head/Draft・本番52609 active・検証PID357961/358736不在を確認。
+実行中の待機processはなく、単なるtimer待ちではない。認証済みworkspace到達は未確認。
+利用者のPC操作可否の回答が必要なためgoalをblockedへ。自動でlogin窓/本番切替を繰り返さない。
+再開時は補助scriptを単独検証で閉じるだけでなく、同じ所有contextを実制作受入へ使い続ける。
+本番停止直前のidle/保護data確認、候補受入後の.80復帰を忘れない。認証借用/OS解除は禁止。
+今回docsのみ、製品変更/テスト再実行なし。基準1920pass3skip214.78秒、Node24。
+全GOAL/A〜F/GA/native setupは未完了。Draft/未merge/未署名公開、root/2dev symlink保持。
+
 ## 2026-09-13 login後homeを見落とさない受入準備
 
 同branch/PR525 Draft、basecbc4462。旧browser15402はe36f33で10分上限終了/exit0、PID357961不在。
