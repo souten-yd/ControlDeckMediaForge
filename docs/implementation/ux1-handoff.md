@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 generic Host thinking candidate implemented
+
+前turnはgrouped実装/paired診断/PR533 pushまで進捗。今回は別Host repoの汎用依存を実装。
+MF main fetch4f978a0、PR533 head d1af91e。Host main fetch7cf5605、root tracked clean。
+Host worktree `/tmp/controldeck-addon-ai-thinking-20260913`、branch ux1/addon-ai-thinking、
+commit88bef36 push済み、Host PR324 OPEN（create応答502後に実PR存在を確認）。
+strict boolean thinking省略false、既存providerへrequest単位で変換、
+ai/capabilities各項request_options.thinking.default=false。能力保証ではなく入力契約の発見。
+関連36pass、Host全1102pass3fail2skip/150.21秒。main比較でmodel_limits/KV容量の2失敗再現。
+Project Lab 404/405はfrontend build完了後に候補でもpass。Host build54.76秒/1550modules。
+実旧Host scoped capabilities200/new thinking422を確認、新版の実HTTP推論はNOT TESTED。
+Host485004/MF537447 active、稼働source/設定未変更。全test/build/診断handle終端。
+次はHost候補のreview/残る全gate/実HTTP推論・取消・lease返却受入。genericのみ、別PR維持。
+その後MF clientでoption discoveryを確認してgroupedへthinkingを明示指定、scoped実shapeから
+compose/OpenCode/installed受入へ進む。M1未完了/M2未着手、compose acceptance_pending。
+今回MFは文書のみ、product/testはd1af91eの2034pass基準から変更なし。既存symlink/asset保持。
+
 ## 2026-09-13 M1 grouped candidate and reasoning dependency
 
 PR533/ux1/3d-compose-job、base06119d3、fetch後main4f978a0。Host/user root/installed不変。

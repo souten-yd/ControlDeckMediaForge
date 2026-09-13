@@ -1,5 +1,18 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 generic Host reasoning dependency candidate
+
+Host main7cf5605から別worktree/branch ux1/addon-ai-thinkingでcommit88bef36を実装・push。
+別PR: https://github.com/souten-yd/ControlDeck/pull/324 （OPEN、未merge/未配布）。
+scoped AIにstrict boolean thinking（既定false）とrequest_optionsの発見を追加。
+Media固有のコード/モデル/ルートなし。既存providerの変換・Host admission経路を維持。
+関連36test成功、Host全1102pass3fail2skip（150.21秒）、build54.76秒成功。
+未変更mainでmodel_limits/KV snapshot失敗を再現、Project Labはbuild完了後の再実行でpass。
+全gateを成功とは記録しない。詳細はHost docs/implementation-status.md。
+稼働Hostの実scoped GET200には新optionなし、thinking=true POST422/extra_forbidden。
+旧版の境界確認のみ、新版実推論/取消/lease返却はNOT TESTED。稼働Host/MF未変更。
+MF client/groupedへの接続は次段階、M1/OpenCode/installed受入未完了。
+
 ## 2026-09-13 M1 bounded grouped preparer candidate
 
 PR533/06119d3で再開、fetch後main4f978a0、tracked clean（dev symlinkのみ）を確認。
