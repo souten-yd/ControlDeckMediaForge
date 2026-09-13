@@ -5,6 +5,17 @@
 
 ## 2026-09-13 MCP authoring priority / research-informed authored mesh
 
+再開補足: PR526 originの追加文書3commitをfast-forwardし7947d5aへ。
+最新main3e274e5は既に含む。g8-high-quality-mcp-3d-assets.md全体を読み、M1 installed受入前にM2へ
+進む旧「次」記述を訂正する。まずM1、以降M2〜M9、G9/M10はoptional/default off。
+3ds_opencode_flow_e2e.pyへ--director-authored-mesh、verifierとnegative7cases追加。
+実debug skillはdirector認識、実Host MCP22tools/installed mesh.createなし（caaf8d/3717f3 exit0）。
+新project/scene生成前のread-only preflightのみ、private config回収済み、Host変更0。
+次は全test後このPRを配布可能なsource基盤として確定し、署名版へ反映して同modeを実行する。
+M1完了は正規OpenCode新操作→Job→GLB→grant/receiptとinstalled検証まで保留。
+全1c3d55 exit0/1926pass3skip2warnings/208.58秒、以後product/test変更なし。
+自己点検済/main PR必須/必要承認0/checksなしを照合。source PR確定→別release PR→installed実runへ。
+
 base main3e274e5/PR524、ux1/3d-authored-mesh、/tmp/mediaforge-cleanup-docs-20260912。
 利用者はWebよりMCPでゲームasset/高品質characterを優先し、LLM/VLM向け詳細調査と実装を依頼。
 PR525 GUI入口はDraftのまま別branchへ保存済み。このbranchに混ぜない。GUI loginを次のblockerにしない。

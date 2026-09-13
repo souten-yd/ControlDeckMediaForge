@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 OpenCode受入の準備と実installed discovery
+
+PR526/ux1/3d-authored-meshを再開。originのf5ba40d/1afddc1/7947d5aをfast-forward、
+最新main3e274e5は既に含む。追加されたg8-high-quality-mcp-3d-assets.mdを読み、
+M1実MCP/OpenCode/installed完了をM2より先に行う。前turnはsource実装と検証でprogress。
+旧handoffの「次M2」はM1受入完了後へ訂正、全体目標は縮小しない。
+
+既存受入runnerへ--director-authored-meshを追加。director実読込、現行capability/guide/schema、
+閉じた装甲mesh一個＋material、Job終端→snapshot→GLB→直前grant→armor.glb receiptを要求。
+verifierはschema/閉境界/面順序、実call順序、revision/検証結果、既存DB/hash/receipt照合を行う。
+不足guide/後置discovery/開面/primitive代用/別revision/失敗validationのnegativeを追加。
+これは高品質character評価ではなくM1実行/納品gate。実画像・VLM・変形・engineは別gateのまま。
+
+Host診断venvで既存mf-e2e active owner/Host gateway/model autoを確認（18ca92 exit0）。
+通常provider生成のprivate configで実opencode debug skill --pure: exit0/director認識。
+同identityのMCP tools/list: exit0/22tools、installed create schemaにmesh.createなし。
+caaf8d→3717f3 exit0。configはfinallyで回収、token出力/借用、global設定、Host source変更なし。
+新project/sceneや不要fixtureをこのpreflightでは作っていない。MF52609/.80 activeを確認。
+
+focused新旧verifierはf77fe1 exit0。Node9pass、viewer50ms/tracked差分なし。
+全 ./mf.sh test は1c3d55 exit0、1926passed/3skipped/2warnings、208.58秒。以後product/test変更なし。
+自己点検とmain保護規則を確認（PR必須/必要承認0/checksなし）。M1実制作/署名installedは未完了のまま、
+このsource基盤をPR確定し、別version PR→署名配布→installed受入を行う。
+実DBのJob1323件は全終端、GUI72件もfailed/interrupted/stopped、runtime43件も終端。
+working copyのrecovery12件は保護し、稼働判定やcleanupのために消さない。
+
 ## 2026-09-13 MCP authored mesh・LLM/VLM制作ガイド、品質目標は未達
 
 base origin/main 3e274e548a61e5ff751125300d7936283ec06990（PR524）、
