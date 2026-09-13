@@ -824,6 +824,13 @@ LLMが提出していない座標/面をvalidatorが自動生成しない。検�
 M3の公開loft/sweepを先行提供したことにはせず、M1の下書き生成方法だけを扱う。
 固定briefでの成功を一般化や実OpenCode受入の証拠にしない。
 
+grouped候補のsource実装後、正常Host gateway/Brokerで同じseed7/temperature0.1/4096tokens/
+正規化schemaを比較した。thinking falseは不正面を反復、trueは3段階で寸法・閉殻・最低稜線PASS。
+単例であり、以前のfull-draft比較の失敗を取り消さない。scoped AIはthinking無効固定なので、
+次の依存は汎用Hostのrequest単位reasoning指定と機能発見を別PRで検討・実機受入すること。
+その後MF client/grouped preparer→既存composeへ接続し、scoped実生成/取消/Blenderと
+OpenCode/installedを改めて確認する。通常gatewayの診断をscoped受入へ読み替えない。
+
 | 順序 | slice | 主な成果 | exit gate |
 |---|---|---|---|
 | M1 | authored mesh / guidance | `mesh.create` + guide | PR #526の新operation実MCP/OpenCode、source→signed installed |

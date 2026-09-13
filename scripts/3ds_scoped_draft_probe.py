@@ -7,6 +7,7 @@ ephemeral and never printed or written. This is not OpenCode/MCP acceptance.
 from __future__ import annotations
 
 import asyncio
+import argparse
 import importlib
 import json
 import math
@@ -18,7 +19,10 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--grouped", action="store_true", help="Evaluate the unpublished grouped candidate")
+    args = parser.parse_args(argv)
     from app.addons import tokens
     from app.database import SessionLocal
     from app.models import User
@@ -27,6 +31,7 @@ def main() -> None:
     from mediaforge.host.client import ControlDeckHostClient
     from mediaforge.scene_drafts import MeshDraftError, MeshDraftPreparer, MeshDraftRequest
     from mediaforge.host.ai import HostAIGateway, HostAIError
+    from mediaforge.scene_grouped_drafts import GroupedMeshDraftPreparer
 
     # Sync issuer/ORM stays outside the async request path and outside MF core.
     with SessionLocal() as db:
@@ -49,7 +54,8 @@ def main() -> None:
             gateway = HostAIGateway(host)
             capabilities = await gateway.capabilities(identity)
             print(json.dumps({"scoped_capabilities": capabilities}), flush=True)
-            result = await MeshDraftPreparer(gateway).prepare(identity, MeshDraftRequest(
+            preparer = GroupedMeshDraftPreparer(gateway) if args.grouped else MeshDraftPreparer(gateway)
+            result = await preparer.prepare(identity, MeshDraftRequest(
                 intent="Closed chest armor with a front ridge, width 0.4m, height 0.5m, "
                        "thickness 0.08m. Choose coordinates and faces yourself. "
                        "Name Armor, object_id armor, teal metallic material.",

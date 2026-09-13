@@ -3,6 +3,24 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 grouped candidate and reasoning dependency
+
+PR533/ux1/3d-compose-job、base06119d3、fetch後main4f978a0。Host/user root/installed不変。
+scene_grouped_drafts内部候補と31test、probe --groupedを追加。layout→faces→局所修正の最大3call。
+全vertices一配列+index群の完全分割、面群の許可index/件数、既存全mesh検査、上限/取消/identity/hash。
+実scopedは構造不正、箱によるridge不適合、budget/ref拒否を観測。通常composeへはまだ接続しない。
+37375探索はresponse_format未正規化で比較不適切、結果を効果判定に使わない。
+正規化した通常Host gateway paired比較71645: false15.904秒FAIL、true73.158秒で
+閉殻/寸法.4/.08/.5/ridge PASS（3段階、cap winding修正）。単一例でM1/OpenCode完了ではない。
+全69879は4a7bb5 exit0、2034pass3skip2warnings/209.45秒。以後product/script/test変更なし。
+Node9/viewer49ms差分なし。全handle終端、private config finally削除、新asset/project/backupなし。
+MF537447 active。commit/pushしてPR533へ記録する。
+次: Host scoped AIはthinking=false固定なので、汎用request単位reasoning指定/機能発見を
+別Host PRで実装・受入する。MediaForge内だけでは指定不能という理由を先に明示済み。
+Host AGENTS/設計/status/最新mainを再確認し、既定互換と取消/leaseを守り、Media固有コードを入れない。
+その後MF client/grouped→compose/scoped実機→OpenCode/installedへ。M1未完了/M2未着手。
+compose acceptance_pending。以前full-draft reasoning比較が失敗した記録は維持。
+
 ## 2026-09-13 M1 grouped draft reaches real Blender and visual diagnostic
 
 PR533/ux1/3d-compose-job、base8c82e80、fetch後main4f978a0。Host/user root/installed不変。

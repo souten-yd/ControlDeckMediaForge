@@ -1,5 +1,50 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 bounded grouped preparer candidate
+
+PR533/06119d3で再開、fetch後main4f978a0、tracked clean（dev symlinkのみ）を確認。
+前turnは固定briefのgrouped実生成/Blender/VLM診断まで進展。
+scene_grouped_drafts.pyに内部候補を実装。layout→faces→必要な面群だけ再提出、最大3call。
+面群の参照index集合/面サイズ/面数をAI schemaとローカル検査で強制し、最終MeshCreateを維持。
+座標/面の自動生成や修復なし。頂点/面群各8、頂点32かつrequest budget、面64、応答8KiB、
+全300秒/各90秒+transport上限、段階ごとのchild identity更新とhash/provenanceを保持する。
+非cap面の個別検査と全不正辺のcap接触を満たす場合だけcap限定修正、それ以外は全群を再提出。
+元raw helper/既存composeはまだ切り替えず、probe --groupedで候補を選択する。
+
+初版54010/b307b4は22.224秒でvalidation_exhausted、boundary6/winding2が修正後も残った。
+32887/1772cfは10.999秒で構造/寸法PASSだが8頂点の箱、ridge=falseでprobe exit1。
+指示とedge feedback補強後40801/db14b8は9.524秒でvertex budget拒否。
+群ごとに座標配列を持つ形では合計上限をschemaで示せないため、全vertices配列+index群へ変更。
+全indexの重複なし完全分割、不明/重複参照、未使用群、不可能な面サイズをlayout段階で拒否。
+3423/f01f1fは9.788秒でface-group reference拒否。
+36943/cfd513は16.416秒、10頂点（箱8点+上辺上2点）の不正形状、面の修正前後が同じSHA
+7bd46e8a6d7769af133a599a1871bae875710f322efbb1b3c2cc17c0df0a1728。
+degenerate facesと境界/方向不整合を拒否した。汎用化後の意味的適合はまだ未達。
+
+tests/test_scene_grouped_drafts.pyで31件通過（87200b）。三角柱/open panel、局所修正、
+非cap間の不正をcap修正で隠さない、strict index/全体予算/partition/extra拒否、
+最大call、取消/絶対期限/更新identity/provenanceを検査。特定の五角柱座標は実装に含めない。
+全69879は4a7bb5 exit0、2034pass3skip2warnings/209.45秒。以後product/script/test変更なし。
+Node9pass/9c9793、viewer49ms/0d1942、tracked生成物差分なし。
+通常Host gatewayのthinking=true探索診断37375/89816eは27.563秒でlayout拒否。
+この診断では簡略response_formatをOpenAI標準へ正規化しておらず、material fieldも不一致だった。
+この結果を思考効果の比較根拠にはしない。private configはfinally回収、scoped AI受入とも区別する。
+正常なnormalize_response_formatを使い、同じseed7/temperature0.1/max_tokens4096/schemaで
+thinking false/trueを比較した71645は43a598で終端。falseは15.904秒でdegenerate faces、3call終端。
+trueは73.158秒でlayout→faces→cap修正が通過し、10vertices11faces、寸法[.4,.08,.5]とridge PASS。
+初回面のwinding5を具体的edge feedback後に修正。layout SHA
+7af63636fb4f05b2fa82a1d89d4c1801066ad4459acf0eab543762622b970169、request SHA
+0ba7ec7482d4dbd6541bda23fb213a18e0182d38ab300595e2c23da68cd0171f。
+最終修正応答SHA7ffbfbe4bab2a8e3b5e5cb51415040561243012848a4d7d22c6cb23ff6434ba6。
+全応答finish=stop。単一paired診断の結果であり安定性/実Blender/MCP/installedの受入ではない。
+この比較も正常Host gateway/Brokerを通す診断であり、scoped APIへのreasoning追加や設定変更ではない。
+両診断private configはfinally削除、全handle終端、新asset/project/backupなし、MF537447 active。
+次のHost検討理由: scoped RuntimeAIRequest/_runtime_requestはthinking無効固定であり、
+MediaForgeが同じ推論条件を要求できない。汎用のrequest単位reasoning制御を別Host PRで扱う。
+既定の無効動作と既存Add-on互換、広告された機能だけの利用、取消/lease、秘密値非公開を維持する。
+Media固有のmodel/route/文言をHostへ追加せず、既存グローバル設定を切り替えない。
+M1未完了/compose acceptance_pending/M2未着手、Hostコード・本番設定は変更なし。
+
 ## 2026-09-13 M1 grouped draft, real Blender and visual diagnostic
 
 PR533/8c82e80で再開、fetch後main4f978a0。前turnはverifier修正/実推論診断の進展。
