@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import threading
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
@@ -26,10 +27,10 @@ IDENTITY = HostIdentity(
 )
 
 
-def pending_terminal(store: Store) -> str:
+def pending_terminal(store: Store, owner: str = "user:7") -> str:
     job = store.create_job(JobRequest(operation="media.inspect", intent="outbox fixture"), host_managed=True)
     store.create_scene_recipe_task(
-        job.id, owner="user:7", host_job_id="host-child", operation="scene.create",
+        job.id, owner=owner, host_job_id="host-child", operation="scene.create",
         runtime_id="blender-test", runtime_version="4.5.9", base_revision_id=None,
         input_sha256="1" * 64, idempotency_key="2" * 64, request={},
     )
@@ -87,6 +88,109 @@ def test_outbox_checks_owner_expiry_and_capability_before_host_call(tmp_path: Pa
         await manager.reconcile_terminal(job_id, replace(IDENTITY, expires_at=0))
         await manager.reconcile_terminal(job_id, replace(IDENTITY, granted_capabilities=frozenset()))
         assert store.get_scene_recipe_task(job_id).host_terminal_reconciliation is None
+    asyncio.run(scenario())
+
+
+def test_creation_reconnect_schedules_owned_outbox_without_waiting_for_host(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    async def scenario() -> None:
+        store = Store(tmp_path)
+        store.initialize()
+        owned = pending_terminal(store)
+        pending_terminal(store, "user:8")
+        # Reopen persistent data without retaining the old manager or bearer.
+        store = Store(tmp_path)
+        store.initialize()
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        class SlowHost(Host):
+            calls = 0
+
+            async def reconcile_job_terminal(self, identity, host_job_id, payload):
+                assert identity is IDENTITY
+                self.calls += 1
+                entered.set()
+                await release.wait()
+                return {"host_job_id": host_job_id, "status": "failed", "disposition": "applied",
+                        "terminal_matches": True}
+
+        host = SlowHost()
+        manager = SceneRecipeJobManager(store, Workspace(), host)
+        loop_thread = threading.get_ident()
+
+        def off_loop(method):
+            def checked(*args, **kwargs):
+                assert threading.get_ident() != loop_thread
+                return method(*args, **kwargs)
+            return checked
+
+        for name in ("list_scene_creation_job_ids", "get_scene_recipe_task", "get_job",
+                     "record_scene_terminal_reconciliation"):
+            setattr(store, name, off_loop(getattr(store, name)))
+        try:
+            for invalid in (replace(IDENTITY, expires_at=0),
+                            replace(IDENTITY, granted_capabilities=frozenset())):
+                await manager.creation_snapshot(invalid)
+                assert manager._outbox_tasks == {}
+            async with asyncio.timeout(3):
+                first = await manager.creation_snapshot(IDENTITY)
+                assert [item["job_id"] for item in first["items"]] == [owned]
+                assert first["items"][0]["host_terminal_sent"] is False
+                delivery = manager._outbox_tasks[owned]
+                await entered.wait()
+                second = await manager.creation_snapshot(IDENTITY)
+                assert second == first and manager._outbox_tasks[owned] is delivery
+                assert host.calls == 1 and not delivery.done()
+                release.set()
+                await delivery
+                final = await manager.creation_snapshot(IDENTITY)
+                assert final["items"][0]["host_terminal_sent"] is True
+                assert manager._outbox_tasks == {} and host.calls == 1
+                assert host.created == []
+        finally:
+            release.set()
+            await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_terminal_receipt_write_drains_on_repeated_cancellation(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        store = Store(tmp_path)
+        store.initialize()
+        job_id = pending_terminal(store)
+        entered, release = threading.Event(), threading.Event()
+        original = store.record_scene_terminal_reconciliation
+
+        class ReceiptHost(Host):
+            async def reconcile_job_terminal(self, identity, host_job_id, payload):
+                return {"host_job_id": host_job_id, "status": "failed", "disposition": "applied",
+                        "terminal_matches": True}
+
+        def recording(*args, **kwargs):
+            entered.set()
+            assert release.wait(5)
+            return original(*args, **kwargs)
+
+        store.record_scene_terminal_reconciliation = recording  # type: ignore[method-assign]
+        manager = SceneRecipeJobManager(store, Workspace(), ReceiptHost())
+        request = asyncio.create_task(manager.reconcile_terminal(job_id, IDENTITY))
+        try:
+            async with asyncio.timeout(3):
+                while not entered.is_set():
+                    await asyncio.sleep(0.001)
+                request.cancel()
+                await asyncio.sleep(0)
+                request.cancel()
+                assert not request.done()
+                release.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await request
+            assert store.get_scene_recipe_task(job_id).host_terminal_sent
+        finally:
+            release.set()
+            await asyncio.gather(request, return_exceptions=True)
+            await manager.stop()
     asyncio.run(scenario())
 
 
@@ -301,6 +405,160 @@ class BlockingWorkspace(Workspace):
 
 def test_scene_recipe_cancel_is_owner_scoped_and_terminal(tmp_path: Path) -> None:
     asyncio.run(_cancel_case(tmp_path))
+
+
+@pytest.mark.parametrize("shutdown", [False, True])
+def test_independent_cancel_requests_share_cleanup_but_not_ownership(tmp_path: Path, shutdown: bool) -> None:
+    async def scenario() -> None:
+        store = Store(tmp_path)
+        store.initialize()
+        job_id = pending_terminal(store)
+        store.update_job(job_id, status=JobStatus.RUNNING)
+        manager = SceneRecipeJobManager(store, Workspace(), Host())
+        started, cleaning, release, cleaned = (asyncio.Event() for _ in range(4))
+        writes = []
+        original = store.request_cancel
+
+        def recording(value: str) -> None:
+            writes.append(value)
+            original(value)
+
+        store.request_cancel = recording  # type: ignore[method-assign]
+
+        async def runner() -> None:
+            started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                cleaning.set()
+                await release.wait()
+                await asyncio.to_thread(store.update_job, job_id, status=JobStatus.CANCELED)
+                cleaned.set()
+
+        task = asyncio.create_task(runner())
+        manager._tasks[job_id] = task
+        requests = []
+        try:
+            async with asyncio.timeout(3):
+                await started.wait()
+                first = asyncio.create_task(manager.cancel(job_id, "user:7"))
+                requests.append(first)
+                await cleaning.wait()
+                with pytest.raises(KeyError):
+                    await manager.cancel(job_id, "user:8")
+                second = asyncio.create_task(manager.cancel(job_id, "user:7"))
+                requests.append(second)
+                stopping = asyncio.create_task(manager.stop()) if shutdown else None
+                if stopping is not None:
+                    requests.append(stopping)
+                first.cancel()
+                await asyncio.sleep(0)
+                first.cancel()
+                if stopping is not None:
+                    other_stop = asyncio.create_task(manager.stop())
+                    requests.append(other_stop)
+                    stopping.cancel()
+                    await asyncio.sleep(0)
+                    stopping.cancel()
+                    starting = asyncio.create_task(manager.start())
+                    requests.append(starting)
+                    await asyncio.sleep(0)
+                    starting.cancel()
+                done, _ = await asyncio.wait(requests, timeout=0.05)
+                assert not done, "a repeated cancel interrupted runner cleanup"
+                release.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await first
+                result = await second
+                assert result["status"] == "canceled" and cleaned.is_set()
+                assert writes == [job_id]
+                # A later repeat is still valid, but must not persist another cancel.
+                if stopping is None:
+                    assert (await manager.cancel(job_id, "user:7"))["status"] == "canceled"
+                else:
+                    with pytest.raises(asyncio.CancelledError):
+                        await stopping
+                    await other_stop
+                    with pytest.raises(asyncio.CancelledError):
+                        await starting
+                    with pytest.raises(SceneError, match="stopped"):
+                        await manager.cancel(job_id, "user:7")
+                    assert manager._cancel_requests == {} and manager._tasks == {}
+                assert writes == [job_id]
+        finally:
+            release.set()
+            if not cleaning.is_set():
+                task.cancel()
+            await asyncio.gather(*requests, task, return_exceptions=True)
+    asyncio.run(scenario())
+
+
+def test_cancel_db_is_off_loop_and_disconnect_drains_cleanup(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        store = Store(tmp_path)
+        store.initialize()
+        job_id = pending_terminal(store)
+        store.update_job(job_id, status=JobStatus.RUNNING)
+        manager = SceneRecipeJobManager(store, Workspace(), Host())
+        loop_thread = threading.get_ident()
+        entered = threading.Event()
+        release = threading.Event()
+        cleanup_started = asyncio.Event()
+        cleanup_release = asyncio.Event()
+        runner_started = asyncio.Event()
+        original_request = store.request_cancel
+        original_projection = manager.projection
+
+        def blocked_request(value: str) -> None:
+            assert threading.get_ident() != loop_thread
+            entered.set()
+            assert release.wait(5), "test did not release the DB worker"
+            original_request(value)
+
+        def projection(value: str, owner: str) -> dict[str, Any]:
+            assert threading.get_ident() != loop_thread
+            return original_projection(value, owner)
+
+        async def runner() -> None:
+            runner_started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                cleanup_started.set()
+                await cleanup_release.wait()
+                await asyncio.to_thread(store.update_job, job_id, status=JobStatus.CANCELED)
+
+        store.request_cancel = blocked_request  # type: ignore[method-assign]
+        manager.projection = projection  # type: ignore[method-assign]
+        task = asyncio.create_task(runner())
+        manager._tasks[job_id] = task
+        await runner_started.wait()
+        request = asyncio.create_task(manager.cancel(job_id, "user:7"))
+        try:
+            async with asyncio.timeout(3):
+                while not entered.is_set():
+                    await asyncio.sleep(0.001)
+                # The event loop reaches here while the DB worker is blocked.
+                request.cancel()
+                await asyncio.sleep(0)
+                request.cancel()
+                assert not request.done()
+                release.set()
+                await cleanup_started.wait()
+                request.cancel()
+                await asyncio.sleep(0)
+                assert not request.done() and not task.done()
+                cleanup_release.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await request
+            assert task.done()
+            assert store.cancel_requested(job_id)
+            assert store.get_job(job_id).status == JobStatus.CANCELED
+        finally:
+            release.set()
+            cleanup_release.set()
+            await asyncio.gather(request, task, return_exceptions=True)
+    asyncio.run(scenario())
 
 
 async def _cancel_case(tmp_path: Path) -> None:

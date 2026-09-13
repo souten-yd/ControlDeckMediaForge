@@ -49,7 +49,11 @@ def test_notice_projection_preserves_outcome_and_hides_private_identity(tmp_path
     assert store.blender_runtime_operation_notices("user:17") == {}
     assert store.blender_runtime_operation_notices(None) == {}
     assert before == store.blender_runtime_host_journal(operation_id, "user:16")
-    assert not any(secret in json.dumps(notices) for secret in ("user:16", "child_", "aaaa", "bbbb", "identity"))
+    # The public random operation ID can legitimately contain "aaaa"/"bbbb".
+    # Check the exact key set separately, then inspect every projected value.
+    assert set(notices) == {operation_id}
+    assert not any(secret in json.dumps(list(notices.values()))
+                   for secret in ("user:16", "child_", "aaaa", "bbbb", "identity"))
 
 
 def test_receipt_changes_notify_once_and_preserve_host_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

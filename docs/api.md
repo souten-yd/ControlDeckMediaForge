@@ -1,5 +1,24 @@
 # Media Forge public API
 
+The authenticated embedded workspace has a private `scenes.create` action with
+exactly `{"name": "My scene"}`. It submits a fixed two-metre starting cube through
+the existing detached scene-recipe Job manager and returns Job/Host Job IDs,
+status, asset IDs and input digest—not a completed scene or Blender GUI session.
+Recipes, scripts, ownership, runtime IDs and paths are not browser inputs for
+this action. Existing `media.scene.create` remains the typed Agent interface.
+The new-scene UI uses private `scenes.creation.list` (no arguments, latest20
+uncleared scene-creation Jobs belonging to the authenticated actor) and
+`scenes.creation.cancel` (`job_id`, owner check and jobs.write required).
+Listing with a current jobs.write identity also schedules existing terminal
+outbox retries for these owned creations. It does not wait for Host delivery,
+create another job, or change the local result. A later listing returns the
+persisted receipt; a pending or conflicting receipt is not reported as delivered.
+The `3d.scene_recipe.workspace_create` flag advertises this authenticated
+workspace route, independently of runtime availability. Submission additionally
+requires the existing runtime availability state. Standalone advertises false;
+there is no standalone creation mirror yet. This is not OS confinement/setup
+readiness or completed real-Host/browser acceptance.
+
 Native OS policy release metadata is specified separately in
 [`native-policy-release.schema.json`](../schemas/native-policy-release.schema.json).
 It is not an HTTP endpoint or an enabled installation capability. The native

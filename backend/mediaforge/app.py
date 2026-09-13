@@ -129,6 +129,7 @@ from .scene_recipes import (
     SceneMaterialRequest,
     SceneReferenceRequest,
     scene_operation_types,
+    workspace_scene_create_request,
 )
 from .host.security import reject_host_paths, require_host_service, require_host_service_headers
 from .preferences import PreferenceError
@@ -1323,6 +1324,7 @@ def create_app(
         ]
 
     async def capability_document(identity: HostIdentity | None = None) -> dict[str, Any]:
+        workspace_create = bool(identity and "jobs.write" in identity.granted_capabilities)
         text_direction_available = await creative_director.available(identity)
         evaluator_available = await evaluator.available(identity)
         semantic_available = evaluator_available
@@ -1375,12 +1377,14 @@ def create_app(
                     {
                         "state": "available",
                         "implementation": "typed_blender_worker",
+                        "workspace_create": workspace_create,
                         "schema_version": "media-forge.scene-recipe@1",
                         "supported_operations": scene_operation_types(),
                         "local_only": True,
                     }
                     if blender_runtimes.resolve_g8() is not None
-                    else {"state": "unavailable", "reason": "runtime_not_installed", "local_only": True}
+                    else {"state": "unavailable", "reason": "runtime_not_installed", "local_only": True,
+                          "workspace_create": workspace_create}
                 ),
                 # 旗を立てて回るのではなく、実際に走らせられるかで決める。
                 # 実測済みの動画モデルと動画 runtime の両方が揃ったときだけ出す。
@@ -3752,6 +3756,17 @@ def create_app(
                         )
                     elif method == "creative.evaluate":
                         result = await evaluate_creative_candidates(params, identity)
+                    elif method == "scenes.create":
+                        result = await submit_scene_tool(workspace_scene_create_request(params), identity)
+                    elif method == "scenes.creation.list":
+                        if params:
+                            raise ValueError("scene creation list accepts no parameters")
+                        result = await scene_recipe_jobs.creation_snapshot(identity)
+                    elif method == "scenes.creation.cancel":
+                        if "jobs.write" not in identity.granted_capabilities:
+                            raise SceneError("host_capability_not_granted", "jobs.write is required")
+                        value = SceneJobReferenceRequest.model_validate(params)
+                        result = await scene_recipe_jobs.cancel(value.job_id, scene_owner(identity))
                     elif method == "scenes.list":
                         if params:
                             raise ValueError("scene list accepts no parameters")

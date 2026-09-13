@@ -720,6 +720,17 @@ class Store:
             )
         return self.get_scene_recipe_task(job_id, owner=owner)
 
+    def list_scene_creation_job_ids(self, owner: str) -> list[str]:
+        """Recent owned scene creations; use off-loop in request handlers."""
+        owner = validate_scene_owner(owner)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT t.job_id FROM scene_recipe_tasks t JOIN jobs j ON j.id = t.job_id
+                   WHERE t.owner = ? AND t.operation = 'scene.create' AND j.cleared_at IS NULL
+                   ORDER BY t.created_at DESC, t.job_id DESC LIMIT 20""", (owner,),
+            ).fetchall()
+        return [row["job_id"] for row in rows]
+
     def get_scene_recipe_task(
         self, job_id: str, *, owner: str | None = None
     ) -> SceneTaskRecord:

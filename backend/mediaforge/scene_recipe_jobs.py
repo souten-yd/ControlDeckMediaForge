@@ -55,6 +55,8 @@ class SceneRecipeJobManager:
         self._admissions: set[asyncio.Task[tuple[Job, SceneTaskRecord]]] = set()
         self._executions: dict[str, HostExecution] = {}
         self._outbox_tasks: dict[str, asyncio.Task[None]] = {}
+        self._cancel_requests: dict[tuple[str, str], asyncio.Task[dict[str, Any]]] = {}
+        self._stop_task: asyncio.Task[None] | None = None
         self._outbox_guard = asyncio.Lock()
         self._execution_guard = asyncio.Semaphore(1)
         self.control_poll_sec = control_poll_sec
@@ -62,25 +64,46 @@ class SceneRecipeJobManager:
         self._stopping = False
 
     async def start(self) -> None:
+        if self._stop_task is not None:
+            try:
+                await asyncio.shield(self._stop_task)
+            except asyncio.CancelledError:
+                await _finish_cleanup(self._stop_task)
+                raise
+            self._stop_task = None
         self._stopping = False
 
     async def stop(self) -> None:
         self._stopping = True
+        if self._stop_task is None:
+            self._stop_task = asyncio.create_task(self._stop_owned())
+        try:
+            await asyncio.shield(self._stop_task)
+        except asyncio.CancelledError:
+            await _finish_cleanup(self._stop_task)
+            raise
+
+    def _interrupt_job(self, job_id: str) -> bool:
+        current = self.store.get_job(job_id)
+        if current.status not in {JobStatus.QUEUED, JobStatus.RUNNING}:
+            return False
+        self.store.update_job(
+            job_id, status=JobStatus.FAILED,
+            error=ErrorDetail(code="service_stopped", message="Service stopped while the scene recipe was active"),
+        )
+        self.store.update_scene_recipe_task(job_id, stage="service_stopped")
+        return True
+
+    async def _stop_owned(self) -> None:
+        # Already accepted cancellations own runner cleanup. Do not interrupt
+        # those runners again or replace their eventual canceled outcome.
+        await asyncio.gather(*self._cancel_requests.values(), return_exceptions=True)
         admissions = list(self._admissions)
         for task in admissions:
             task.cancel()
         await asyncio.gather(*admissions, return_exceptions=True)
         for job_id, task in list(self._tasks.items()):
-            current = self.store.get_job(job_id)
-            if current.status in {JobStatus.QUEUED, JobStatus.RUNNING}:
-                self.store.update_job(
-                    job_id,
-                    status=JobStatus.FAILED,
-                    error=ErrorDetail(
-                        code="service_stopped", message="Service stopped while the scene recipe was active"
-                    ),
-                )
-                self.store.update_scene_recipe_task(job_id, stage="service_stopped")
+            if await asyncio.to_thread(self._interrupt_job, job_id):
                 task.cancel()
         if self._tasks:
             await asyncio.gather(*self._tasks.values(), return_exceptions=True)
@@ -270,6 +293,33 @@ class SceneRecipeJobManager:
                 self._tasks.pop(job_id, None)
                 self._executions.pop(job_id, None)
 
+    def creation_list(self, owner: str) -> dict[str, Any]:
+        """Off-loop snapshot for the workspace, without exposing another actor."""
+        items = []
+        for job_id in self.store.list_scene_creation_job_ids(owner):
+            task = self.store.get_scene_recipe_task(job_id, owner=owner)
+            items.append({**self.projection(job_id, owner), "name": task.request.get("name", "")})
+        return {"items": items}
+
+    async def creation_snapshot(self, identity: HostIdentity) -> dict[str, Any]:
+        """Return owned history without waiting for Host outbox delivery."""
+        owner = identity.actor_subject or identity.subject
+        result = await asyncio.to_thread(self.creation_list, owner)
+        if "jobs.write" not in identity.granted_capabilities or identity.expires_at <= int(time.time()):
+            return result
+        for item in result["items"]:
+            if (item["status"] not in {"succeeded", "failed", "canceled"}
+                    or item["host_terminal_sent"] or item["host_terminal_reconciliation"] is not None):
+                continue
+            job_id = item["job_id"]
+            task = await asyncio.to_thread(self.store.get_scene_recipe_task, job_id, owner=owner)
+            if (task.host_terminal is not None and not self._stopping
+                    and job_id not in self._outbox_tasks and job_id not in self._tasks):
+                self._outbox_tasks[job_id] = asyncio.create_task(
+                    self._retry_terminal(job_id, identity), name=f"scene-terminal-outbox-{job_id}"
+                )
+        return result
+
     def projection(self, job_id: str, owner: str) -> dict[str, Any]:
         task = self.store.get_scene_recipe_task(job_id, owner=owner)
         job = self.store.get_job(job_id)
@@ -294,17 +344,23 @@ class SceneRecipeJobManager:
         }
 
     async def reconcile_terminal(self, job_id: str, identity: HostIdentity) -> None:
-        self.store.get_scene_recipe_task(job_id, owner=identity.actor_subject or identity.subject)
+        await asyncio.to_thread(
+            self.store.get_scene_recipe_task, job_id, owner=identity.actor_subject or identity.subject
+        )
         await self._consume_terminal(job_id, identity)
 
     async def _consume_terminal(self, job_id: str, identity: HostIdentity) -> None:
         if identity.expires_at <= int(time.time()) or "jobs.write" not in identity.granted_capabilities:
             return
         async with self._outbox_guard:
-            task = self.store.get_scene_recipe_task(job_id)
+            task = await asyncio.to_thread(
+                self.store.get_scene_recipe_task, job_id, owner=identity.actor_subject or identity.subject
+            )
+            current = await asyncio.to_thread(self.store.get_job, job_id)
             if (task.host_terminal_sent or task.host_terminal_reconciliation is not None
                     or task.host_terminal is None or job_id in self._tasks
-                    or self.store.get_job(job_id).status not in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}):
+                    or identity.expires_at <= int(time.time())
+                    or current.status not in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}):
                 return
             payload = {key: task.host_terminal[key] for key in ("status", "result", "error") if key in task.host_terminal}
             try:
@@ -323,9 +379,14 @@ class SceneRecipeJobManager:
             if receipt["terminal_matches"] and receipt["status"] != payload["status"]:
                 logger.warning("Inconsistent Host terminal receipt for %s; outbox remains pending", job_id)
                 return
-            self.store.record_scene_terminal_reconciliation(job_id, {
+            recording = asyncio.create_task(asyncio.to_thread(self.store.record_scene_terminal_reconciliation, job_id, {
                 key: receipt[key] for key in ("host_job_id", "status", "disposition", "terminal_matches")
-            })
+            }))
+            try:
+                await asyncio.shield(recording)
+            except asyncio.CancelledError:
+                await _finish_cleanup(recording)
+                raise
 
     async def _retry_terminal(self, job_id: str, identity: HostIdentity) -> None:
         delay = 1.0
@@ -333,7 +394,7 @@ class SceneRecipeJobManager:
             while not self._stopping and identity.expires_at > int(time.time()):
                 await asyncio.sleep(delay)
                 await self._consume_terminal(job_id, identity)
-                task = self.store.get_scene_recipe_task(job_id)
+                task = await asyncio.to_thread(self.store.get_scene_recipe_task, job_id)
                 if task.host_terminal_sent or task.host_terminal_reconciliation is not None:
                     return
                 delay = min(delay * 2, 30.0)
@@ -341,10 +402,39 @@ class SceneRecipeJobManager:
             self._outbox_tasks.pop(job_id, None)
 
     async def cancel(self, job_id: str, owner: str) -> dict[str, Any]:
+        # A disconnected requester must not abandon a started DB write or
+        # propagate repeated cancellation into the runner's cleanup.
+        key = (owner, job_id)
+        cancellation = self._cancel_requests.get(key)
+        if cancellation is None or cancellation.done():
+            if self._stopping:
+                raise SceneError("service_stopped", "Scene recipe cancellation admission is stopped")
+            cancellation = asyncio.create_task(self._cancel_owned(job_id, owner))
+            self._cancel_requests[key] = cancellation
+
+            def finished(task: asyncio.Task[dict[str, Any]]) -> None:
+                # A later request may already have replaced this completed one.
+                if self._cancel_requests.get(key) is task:
+                    self._cancel_requests.pop(key)
+
+            cancellation.add_done_callback(finished)
+        try:
+            return await asyncio.shield(cancellation)
+        except asyncio.CancelledError:
+            await _finish_cleanup(cancellation)
+            raise
+
+    def _request_cancel(self, job_id: str, owner: str) -> bool:
+        """Validate ownership and persist intent together in an owned worker."""
         self.store.get_scene_recipe_task(job_id, owner=owner)
         current = self.store.get_job(job_id)
         if current.status in {JobStatus.QUEUED, JobStatus.RUNNING}:
             self.store.request_cancel(job_id)
+            return True
+        return False
+
+    async def _cancel_owned(self, job_id: str, owner: str) -> dict[str, Any]:
+        if await asyncio.to_thread(self._request_cancel, job_id, owner):
             task = self._tasks.get(job_id)
             if task is not None:
                 task.cancel()
@@ -353,7 +443,7 @@ class SceneRecipeJobManager:
                     await task
                 except asyncio.CancelledError:
                     pass
-        return self.projection(job_id, owner)
+        return await asyncio.to_thread(self.projection, job_id, owner)
 
     async def wait_cleanup(self, job_id: str, timeout: float = 5.0) -> None:
         deadline = asyncio.get_running_loop().time() + timeout

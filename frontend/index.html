@@ -377,6 +377,16 @@
                 <p id="scene-blender-status" class="hint" role="status"></p>
               </div>
             </div>
+            <form id="scene-create-form" class="panel" novalidate>
+              <h2 id="scene-create-title">新しいシーンを作る</h2>
+              <label id="scene-create-name-label" for="scene-create-name">シーン名</label>
+              <input id="scene-create-name" maxlength="120" autocomplete="off">
+              <p id="scene-create-guide" class="hint">初期キューブを作成します。完成後に選択してBlenderで編集できます。</p>
+              <button id="scene-create-submit" class="primary" type="submit" disabled>新規作成</button>
+              <p id="scene-create-status" class="hint" role="status"></p>
+              <button id="scene-create-refresh" type="button">作成状況を更新</button>
+              <div id="scene-create-jobs" aria-live="polite"></div>
+            </form>
             <form id="scene-import-form" class="panel" novalidate>
               <div class="field-head">
                 <div>
