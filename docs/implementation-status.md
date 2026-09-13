@@ -1,5 +1,57 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 grouped draft, real Blender and visual diagnostic
+
+PR533/8c82e80で再開、fetch後main4f978a0。前turnはverifier修正/実推論診断の進展。
+固定briefのraw応答を診断限定で表示した38984/a891baは24.4秒validation_exhausted。
+3回同SHA0a5e50df8b598f572580462292ae2d54ae7c040b14d12c22a1f6e1cd7e3301b1。
+8個の箱頂点と底面左右辺上の2点で、稜線でなく零面積faceもあった。
+座標→面の二段階診断22699/2683adも不合格。座標は矩形辺上の点を含む平坦断面、cap重複。
+
+grouped診断58198/d0a133はbottom_ring/top_ring/sides/bottom_cap/top_capへJSONを分割。
+各ring5点、side5quad、cap各3triangle、capのindex範囲を0..4/5..9へ限定した。
+LLMが生成したbottom ringは[[-.1,.02,0],[0,0,0],[.1,.02,0],[.2,.08,0],[-.2,.08,0]]、
+topは同XYでZ=.5、sidesは対応する隣接ringを結ぶ5quad。capは不正で検査拒否。
+この実応答の座標/sidesを変更せず、capだけをscoped AIで再提出させた88186/99edb7は
+1.651秒、bottom [[0,2,1],[0,3,2],[0,4,3]] / top [[5,6,7],[5,7,8],[5,8,9]]。
+10vertices/11faces、閉殻、寸法[.4,.08,.5]、接続稜線検査PASS。
+これは二つの診断をつないだ単例で、一般compose/OpenCodeの受入ではない。
+
+scripts/3ds_prepared_mesh_e2e.pyを追加。保存済みbounded requestを既存SceneWorkspace/
+実Blenderで実行し、別BlenderでGLB再import、CPU画像を作る診断専用。AI生成器ではない。
+実行: env PYTHONPATH=backend:. .venv/bin/python scripts/3ds_prepared_mesh_e2e.py
+--recipe <owned>/prepared.json --registry <installed-data>/runtime-state/blender-runtimes.json
+--runtime-root <feature-data>/runtimes/blender --evidence-dir <owned>/evidence-r2。
+owned=/data1tb/ControlDeck/data/feature-data/media-forge/maintenance/m1-grouped-tBk7Gx。
+最初のPYTHONPATH=backendのみはscripts import不足で68b34a exit1、実行前の失敗として保持。
+6c4a84/331368は1.077秒で制作成功、R2は364bf4/ec4610、0.405秒、Blender4.5.13。
+GLB再importは16triangles、寸法[.4000000059604645,.07999999821186066,.5]、CPU/Cycles16samples。
+R2scene_f201e2fd9512445885572d2034f2adfd、revision_afa981f941364843b532db0168b230ac。
+source asset_4c5a2b2df74b4b779133df407b4b2763、450132B、SHA
+1b1512af2fdf8ed6cc6a89ce6cac28933c7e24a8f8ecfbd02e101b2dd18db115。
+GLB asset_9f2444fb67bc4bd1b50b8d894866b1aa、1308B、SHA
+db3dadd84ffcc2970050a8d7853085dedb6635a481d3eb1af153f01411c6a171（R1/R2一致）。
+入力JSON SHA9a385d071344f8886acd8989064673110befb3883ba934ea964dab1de97bcb08。
+2ebdd1で両asset実SHAとDB一致、GLB親source、preparation.execution_status=executedを確認。
+registryはscratchへcopy、実runtimeは読取り参照。Host/本番サービス/制作assetは変更なし。
+
+正面/側面/斜めと、元assetを再保存しない無地flat-clay斜め画像を実視認。
+単純な縦板の稜線は見えるが、滑らかな金属陰影は形状を読み取りにくく、高品質防具ではない。
+通常scoped vision.analyzeへR2斜め2画像をdata URLで実送信した99056/3187b7はexit0。
+oblique139530B/SHA8cd11a94f8e24f6c0c6a501692d33ad5ddac2776346f0f1d8a8581cb521fb3d9、
+clay120734B/SHAab673b13100db1b6182fc57c74d9c668e293cd86029551601983e738060d21dd。
+VLMは稜線/反射/低ポリ面を指摘し、不可視構造や寸法・engineは保証しないと回答した。
+一方「上端の段差」は全top頂点Z=.5の実データと整合せず、投影された輪郭を欠陥と断定しない。
+VLMの記述を自動採用しない。参照画像との比較、人体への装着/変形/実engineはNOT TESTED。
+M2の公開観察surfaceを実装したわけではない。M1通常OpenCode/installedは未完了。
+新helperの既存evidence保護/サイズ上限のfocused2件は89ad7c pass。
+全70458は9e1bee exit0、2003pass3skip2warnings/208.85秒。以後product/script/test変更なし。
+Node9pass/e01247、viewer51ms/bb6a9f、tracked生成物差分なし。
+全診断handleは終端。5097b7で両専用DBのJob各1件succeeded、2391364B、symlinkなし、
+396800 lsof出力なしを確認後、70e195で上記owned directoryだけ完全削除した。
+raw画像/DB/GLBは現在残っておらずbackupなし。要約/数値/hash/手順は本記録とPRへ保持。
+MF537447/activeを再確認。M1未完了、compose acceptance_pending、M2未着手。
+
 ## 2026-09-13 M1 shape verifier and repeated invalid draft
 
 PR533/d2a386fで再開、fetch後main4f978a0、tracked cleanを確認。前turnはguide実装の進展。

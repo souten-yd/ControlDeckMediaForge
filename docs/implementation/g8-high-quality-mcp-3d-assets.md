@@ -812,6 +812,18 @@ fixtureのlocal X幅/Y厚さ/Z高さを0.4/0.08/0.5m（5%許容）として明�
 この条件は当fixture専用で、一般の装甲形状を規定せず、交差・外向き・美観の証明でもない。
 実画像・Blender再import・exportされた実寸法・OpenCode納品は独立の受入として維持する。
 
+M1内部draftの次の比較候補（実機診断による追補）: raw頂点/面を一括再生成しても、箱の
+辺上への頂点追加と不正capが反復された。単純な座標→面の二段階化も不合格だった。
+頂点ringとside/bottom/topの面を別fieldへ分け、capの参照可能indexを束縛する診断では
+稜線座標を生成し、capだけの明示的再提出で閉殻/寸法/最低稜線を満たした。
+既存typed workerで実Blender/GLB再importも確認したが、この診断は固定briefの単例である。
+製品のcomposeを特定の装甲座標や五角柱テンプレートへ置き換えない。内部の一般的な
+bounded grouping（頂点群・対応する面群・局所再提出）の候補として設計・比較する。
+LLMが提出していない座標/面をvalidatorが自動生成しない。検査、総呼出数・時間・出力上限、
+取消・子Job identity・hash/provenanceを維持し、通常のraw mesh入力は互換のままにする。
+M3の公開loft/sweepを先行提供したことにはせず、M1の下書き生成方法だけを扱う。
+固定briefでの成功を一般化や実OpenCode受入の証拠にしない。
+
 | 順序 | slice | 主な成果 | exit gate |
 |---|---|---|---|
 | M1 | authored mesh / guidance | `mesh.create` + guide | PR #526の新operation実MCP/OpenCode、source→signed installed |

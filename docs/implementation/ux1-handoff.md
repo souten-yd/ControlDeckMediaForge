@@ -3,6 +3,27 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 grouped draft reaches real Blender and visual diagnostic
+
+PR533/ux1/3d-compose-job、base8c82e80、fetch後main4f978a0。Host/user root/installed不変。
+raw38984は箱+辺上点の不正形状、二段階22699もFAIL。grouped58198は稜線座標/sideを生成、capだけFAIL。
+その実応答の座標/sideを保持しcapのみ再提出88186は1.651秒、閉殻/寸法/ridge PASS。
+10vertices11faces、寸法.4/.08/.5。固定brief診断2件をつないだもので一般compose/OpenCodeではない。
+汎用の保存済みdraft実機driver scripts/3ds_prepared_mesh_e2e.pyと2negative testを追加。
+実Blender4.5.13→GLB再import16triangles/同寸法、R2制作0.405秒。実source/GLB provenanceと親/hash一致。
+CPU正面/側面/斜め/flat-clayを実視認、普通の縦板で高品質防具ではない。
+99056はscoped vision.analyzeへ実画像2枚→応答成功。VLMの上端段差指摘はtop Z=.5と不整合、
+自動修正根拠にしない。人の採用/参照一致/人体変形/engine/通常OpenCodeはNOT TESTED。
+全70458は9e1bee exit0、2003pass3skip2warnings/208.85秒。以後product/script/test変更なし。
+Node9/viewer51ms差分なし。全probe/worker/test handle終端、MF537447 active。
+scratch m1-grouped-tBk7Gxは両DB終端/参照なし/2391364B確認後完全削除、raw画像/DB/GLB保持なし。
+詳細ID/SHA/再現方法はstatus。元asset/runtime/recovery/user rootは保持。commit/pushしてPR533へ記録。
+次は内部bounded groupingの一般化: 頂点群と面群、参照可能index、局所再提出を扱い、
+LLM未提出の座標/面を自動補完しない。特定装甲座標や五角柱専用の完成品生成器に置換しない。
+総call/time/output上限、取消、child identity、provenanceを維持してcomposeへ接続する。
+M3公開loft/sweepの先行ではない。実shape→Job/Blender→OpenCode/installedのM1受入を継続。
+M1未完了/M2未着手、compose acceptance_pending。
+
 ## 2026-09-13 M1 shape acceptance and live draft failure
 
 PR533/ux1/3d-compose-job、base d2a386f、fetch後main4f978a0。Host/user root/installed不変。
