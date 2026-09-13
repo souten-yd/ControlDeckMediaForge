@@ -106,6 +106,26 @@ skill読込、MediaForge tool、control_deck.project_output_grantだけを使い
 """
 
 
+DIRECTOR_AUTHORED_MESH = """最初にskill toolでblender-directorを実際に読み込んでください。
+次にmedia.capabilitiesを呼び、3d.scene_recipeがavailable、supported_operationsにmesh.create、
+authoring_guidance.versionがmedia-forge.scene-authoring-guidance@1であることを確認します。
+いずれかが欠けたら制作せず停止してください。現在のMCP schemaを実行の正とし、
+上流BlenderMCPのPythonやスクリーンショットtoolを呼ばないでください。
+新規sceneに、ロボット装甲の形状試験として、前面に稜線のある小さな胸当てを作ってください。
+幅約0.4m、高さ約0.5m、厚さ約0.08m。これはM1操作受入用で、高品質キャラクターの完成ではありません。
+mesh.createでstable ID armor、名前Armor、閉じた三角/四角面のmeshを一つだけ作り、
+material.setで青緑色の金属にしてください。primitive.addや別meshは使用しません。
+schemaの上限内の頂点/面を自分で組み、面indexは0始まり、全頂点を参照してください。
+新規createは一回だけ。失敗したら理由とJob IDを報告して止め、別sceneの再生成はしません。
+制作Jobをmedia.job.statusで終端まで追跡し、成功後snapshotの現在revisionと検証結果を確認します。
+GLBへexportし、現在projectのexports用output grantを直前に取得してmedia.packでarmor.glbを配置します。
+scene.exportは同期応答で、asset.job_idは新しいJobではありません。
+画像入力がないため視覚評価はNOT TESTED、変形とengine importもNOT TESTEDとして報告します。
+最後にscene/revision/Job/Asset IDとreceiptを示し、構造成功を高品質成功と言い換えないでください。
+skill読込、MediaForge tool、control_deck.project_output_grantだけを使い、shell/file/webは禁止です。
+"""
+
+
 SAVED_SETTINGS_CHECK = """
 追加の納品前検査: status成功応答とsnapshotのrevision.validationからvalidator=blender.sceneの
 facts.animation_settingsを読み、両者のrevision IDと設定が一致することを確認してください。
@@ -120,12 +140,13 @@ loop_requestedは入力省略時falseのままです。入力の両animation.cli
 
 
 def restrict_tools(payload: dict[str, Any], *, director_static: bool, director_motion: bool = False,
-                   director_array: bool = False, director_auto_skin: bool = False) -> None:
+                   director_array: bool = False, director_auto_skin: bool = False,
+                   director_authored_mesh: bool = False) -> None:
     """Limit this diagnostic's private configuration, never global settings."""
     payload["permission"] = {"*": "deny", "controldeck_addons_*": "allow"}
     payload["tools"] = {name: False for name in (
         "bash", "read", "edit", "write", "glob", "grep", "webfetch", "websearch", "task", "skill", "question")}
-    if director_static or director_motion or director_array or director_auto_skin:
+    if director_static or director_motion or director_array or director_auto_skin or director_authored_mesh:
         payload["permission"]["skill"] = {"*": "deny", "blender-director": "allow"}
         # Legacy tools entries become permissions before the global wildcard;
         # duplicating skill there changes insertion order and disables it again.
@@ -156,12 +177,16 @@ def main() -> None:
                         help="Require a real director read and distributed skin/clip GLB delivery")
     parser.add_argument("--saved-settings", action="store_true",
                         help="Require matching saved clip settings before automatic-skin delivery")
+    parser.add_argument("--director-authored-mesh", action="store_true",
+                        help="Require director read, capability guidance and authored armor mesh GLB delivery")
     args = parser.parse_args()
     if args.saved_settings and not args.director_auto_skin:
         parser.error("--saved-settings requires --director-auto-skin")
-    if sum((args.director_static, args.director_motion, args.director_array, args.director_auto_skin)) > 1:
+    if sum((args.director_static, args.director_motion, args.director_array, args.director_auto_skin,
+            args.director_authored_mesh)) > 1:
         parser.error("Choose one director scenario")
-    director_enabled = args.director_static or args.director_motion or args.director_array or args.director_auto_skin
+    director_enabled = (args.director_static or args.director_motion or args.director_array
+                        or args.director_auto_skin or args.director_authored_mesh)
     if director_enabled and (args.restored_ui_evidence or args.retry_empty_output):
         parser.error("Director acceptance requires a new project/scene")
     os.umask(0o077)
@@ -176,6 +201,8 @@ def main() -> None:
         prompt = DIRECTOR_AUTO_SKIN
         if args.saved_settings:
             prompt += SAVED_SETTINGS_CHECK
+    elif args.director_authored_mesh:
+        prompt = DIRECTOR_AUTHORED_MESH
     output_directory = "exports"
     if args.restored_ui_evidence:
         assert args.project_name.startswith("MF3DS-") and args.project_name in project_names
@@ -225,13 +252,15 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
                                 "director_static": args.director_static, "director_motion": args.director_motion,
                                 "director_array": args.director_array, "director_auto_skin": args.director_auto_skin,
                                 "saved_settings": args.saved_settings}
+    evidence["director_authored_mesh"] = args.director_authored_mesh
     process = None
     try:
         payload = json.loads(config.read_text())
         secrets = [payload["provider"]["controldeck"]["options"]["apiKey"],
                    payload["mcp"]["controldeck_addons"]["environment"]["CONTROL_DECK_ADDON_MCP_TOKEN"]]
         restrict_tools(payload, director_static=args.director_static, director_motion=args.director_motion,
-                       director_array=args.director_array, director_auto_skin=args.director_auto_skin)
+                       director_array=args.director_array, director_auto_skin=args.director_auto_skin,
+                       director_authored_mesh=args.director_authored_mesh)
         config.write_text(json.dumps(payload))
         if director_enabled:
             debug = subprocess.run([str(registry.executable("opencode")), "debug", "agent", "build", "--pure"],
@@ -256,6 +285,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
                 required = ("modifier.array",)
             elif args.director_auto_skin:
                 required = ("armature.create", "skin.bind_auto", "animation.clip")
+            elif args.director_authored_mesh:
+                required = ("mesh.create",)
             assert all(operation in schema for operation in required)
             if args.saved_settings:
                 assert 'EVERY clip' in schema and 'Omission means false' in schema
@@ -305,6 +336,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
             expected = {"stairs.glb"}
         elif args.director_auto_skin:
             expected = {"weighted.glb"}
+        elif args.director_authored_mesh:
+            expected = {"armor.glb"}
         assert set(evidence["output_files"]) == expected
     finally:
         if process is not None and process.poll() is None:

@@ -35,6 +35,32 @@ ControlDeck向けadapter（B）で利用する。BlenderMCP常駐/addon/9876を�
 
 ## 3. 段階・依存・成果物
 
+根拠は[AI Blender詳細調査](research/ai-blender-game-asset-authoring.md)、
+実行時の原則は[LLM/VLM制作ガイド](agent-3d-authoring-guide.md)にまとめる。
+短縮版をavailableな3d.scene_recipe.authoring_guidanceへ加法追加し、
+既存media.capabilitiesから届ける。VLM可用性や自動評価実装とは分離する。
+
+2026-09-13優先順位: 利用者指定によりWeb BlenderよりMCP制作・実物品質評価を先行する。
+PR525の新GUI入口はDraftで保留し、GA-1/2/4/5を既存media.scene.*内で進める。
+最初はmesh.createを加法追加する。local座標の頂点3〜4096、三角/四角face1〜4096、
+face indexはstrict整数/範囲内/重複なし、重複face/未参照頂点/零面積三角を拒否する。
+任意operator/Python/外部pathを受けず、smooth shadingと通常transformを指定可能にする。
+既存asset/provenance/immutable revision/独立GLB検査とgeometry増幅予算を維持する。
+布の開いた縁は許容し、閉じたsolidや良い変形topologyを自動保証しない。
+髪の束・衣服shell・装甲の輪郭を実Blenderで作り、構造検査と見た目の評価を分離する。
+後続は選択付き編集/曲面・UV/bake・weight補正/IK・表情/動作、engine受入へ進む。
+この一操作だけで高品質キャラクター、cloth/hair simulationや全GA完成としない。
+
+調査後の依存順はM1 authored mesh/guide → M2 revision固定多視点画像 →
+M3 bounded loft/sweep/局所編集 → M4 UV/PBR/bake → M5 weight補正/衣服転送/pose集 →
+M6 clip/root/morph/選択engine → M7 LOD/collision/分類別generatorとする。
+既存GAを縮小せず、次の小PRはM2観察surfaceの契約・実画像asset・取消/資源回収を扱う。
+各段階は正規MCP実行と実物受入を要する。M1のsource試作は構造PASSだが、髪・顔・服・防具の
+目標品質は未達のため、raw頂点を増やす前に観察と局所修正を優先する。
+高品質判定は複数視点、近接、関節姿勢、ゲーム表示を使い、構造PASS/VLM点数だけで代替しない。
+VLMへ実画像が渡らなければ視覚評価NOT TESTED。任意Pythonや外部生成へfallbackしない。
+人型、クリーチャー、武器、モジュール環境、乗り物は別fixtureで評価する。
+
 | 段階 | 制作できるもの / 実装対象 | 依存 | 実機のexit gate |
 |---|---|---|---|
 | GA-0 | operation/schema/capability対応表、予算・品質profile、skill実読込証拠 | 既存3DS | 新旧クライアントのschema互換、未対応を実行可と出さない |

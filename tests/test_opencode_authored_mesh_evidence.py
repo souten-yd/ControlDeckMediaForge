@@ -1,0 +1,59 @@
+"""Synthetic verifier checks, not actual OpenCode/Blender acceptance."""
+from __future__ import annotations
+
+import copy
+import json
+from typing import Any
+
+import pytest
+
+from test_opencode_flow_evidence import MODULE
+
+
+def calls() -> list[dict[str, Any]]:
+    def call(tool: str, inputs: dict[str, Any], output: dict[str, Any] | str) -> dict[str, Any]:
+        return {"tool": tool, "state": {"status": "completed", "input": inputs,
+                "output": output if isinstance(output, str) else json.dumps({"output": output})}}
+    revision = {"id": "revision", "validation": [
+        {"validator": name, "status": "passed"} for name in ("blender.scene", "glb.structure")]}
+    return [
+        call("skill", {"name": "blender-director"}, "Blender Director media.scene"),
+        call("controldeck_addons_media_capabilities", {}, {"capabilities": {"3d.scene_recipe": {
+            "state": "available", "supported_operations": ["mesh.create"],
+            "authoring_guidance": {"version": "media-forge.scene-authoring-guidance@1"}}}}),
+        call("controldeck_addons_media_scene_create", {"name": "Armor acceptance", "recipe": {"operations": [
+            {"type": "mesh.create", "object_id": "armor", "name": "Armor", "vertices": [
+                [0, 0, 0], [.4, 0, 0], [0, .08, 0], [0, 0, .5]],
+             "faces": [[0, 2, 1], [0, 1, 3], [1, 2, 3], [2, 0, 3]]},
+            {"type": "material.set", "object_id": "armor", "base_color": [0, .5, .5, 1]}]}}, {"job_id": "job"}),
+        call("controldeck_addons_media_job_status", {}, {"job_id": "job", "status": "succeeded", "result": {"revision": revision}}),
+        call("controldeck_addons_media_scene_snapshot", {}, {"revision": revision}),
+        call("controldeck_addons_media_scene_export", {}, {"revision_id": "revision"}),
+    ]
+
+
+@pytest.mark.parametrize("failure", [None, "no_guide", "late_discovery", "open_shell", "primitive", "wrong_revision", "failed_validation"])
+def test_authored_mesh_evidence(failure: str | None) -> None:
+    value = copy.deepcopy(calls())
+    if failure == "no_guide":
+        output = json.loads(value[1]["state"]["output"])
+        del output["output"]["capabilities"]["3d.scene_recipe"]["authoring_guidance"]
+        value[1]["state"]["output"] = json.dumps(output)
+    elif failure == "late_discovery":
+        value.append(value.pop(1))
+    elif failure == "open_shell":
+        value[2]["state"]["input"]["recipe"]["operations"][0]["faces"].pop()
+    elif failure == "primitive":
+        value[2]["state"]["input"]["recipe"]["operations"][0] = {
+            "type": "primitive.add", "object_id": "armor", "name": "Armor", "primitive": "cube"}
+    elif failure == "wrong_revision":
+        value[-1]["state"]["output"] = json.dumps({"revision_id": "other"})
+    elif failure == "failed_validation":
+        output = json.loads(value[4]["state"]["output"])
+        output["output"]["revision"]["validation"][0]["status"] = "failed"
+        value[4]["state"]["output"] = json.dumps(output)
+    if failure:
+        with pytest.raises((AssertionError, KeyError, ValueError)):
+            MODULE.verify_authored_mesh_calls(value)
+    else:
+        MODULE.verify_authored_mesh_calls(value)

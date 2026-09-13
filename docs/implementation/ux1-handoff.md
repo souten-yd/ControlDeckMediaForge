@@ -3,6 +3,35 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 MCP authoring priority / research-informed authored mesh
+
+再開補足: PR526 originの追加文書3commitをfast-forwardし7947d5aへ。
+最新main3e274e5は既に含む。g8-high-quality-mcp-3d-assets.md全体を読み、M1 installed受入前にM2へ
+進む旧「次」記述を訂正する。まずM1、以降M2〜M9、G9/M10はoptional/default off。
+3ds_opencode_flow_e2e.pyへ--director-authored-mesh、verifierとnegative7cases追加。
+実debug skillはdirector認識、実Host MCP22tools/installed mesh.createなし（caaf8d/3717f3 exit0）。
+新project/scene生成前のread-only preflightのみ、private config回収済み、Host変更0。
+次は全test後このPRを配布可能なsource基盤として確定し、署名版へ反映して同modeを実行する。
+M1完了は正規OpenCode新操作→Job→GLB→grant/receiptとinstalled検証まで保留。
+全1c3d55 exit0/1926pass3skip2warnings/208.58秒、以後product/test変更なし。
+自己点検済/main PR必須/必要承認0/checksなしを照合。source PR確定→別release PR→installed実runへ。
+
+base main3e274e5/PR524、ux1/3d-authored-mesh、/tmp/mediaforge-cleanup-docs-20260912。
+利用者はWebよりMCPでゲームasset/高品質characterを優先し、LLM/VLM向け詳細調査と実装を依頼。
+PR525 GUI入口はDraftのまま別branchへ保存済み。このbranchに混ぜない。GUI loginを次のblockerにしない。
+base/GA計画先行更新、research/ai-blender-game-asset-authoring.mdとagent-3d-authoring-guide.md追加。
+mesh.create（上限/独立core-worker検証）とcapability内guide、公開3schema、tests追加。
+guideはVLM起動でも上流BlenderMCP全対応でもない。現在のschema/実画像/段階修正/未検証表示を要求。
+08c54d 実Blender4.5.9 source fixture: 28mesh/2312vertices/4512triangles/56ops、GLB81264B、制作0.494秒。
+GLB再import/CPUrender成功。ただし髪・顔・服・防具は目視で目標未達。高品質/game-readyではない。
+実MCP/LLM/VLM/engine新機能受入はNOT TESTED。稼働.80/9130は15opsでmesh.createなし。
+46992b 候補9167実GETは16ops/guide@1、semantic_review unavailable。候補424259終了/不在確認済み。
+全e1f6a5 exit0/1919pass3skip2warnings/208.25秒、Node9/viewer50ms差分0。以後product変更なし。
+次はこのsliceのDraft PR保存後、M2 revision固定の多視点画像asset/正規アクセス/取消・資源回収を実装。
+続いてM3 loft/sweep/局所修正、M4 UV/bake、M5 weight/衣服、M6 clips/engine、M7分類別generator。
+現行スキル数や構造PASSを高品質証拠にしない。全3DS/GOAL/A〜F/GAはPARTIAL。
+利用者root/2dev symlink、本番asset/recovery/runtime/OS保護。検証fixture回収はstatus参照。
+
 ## 2026-09-12 sealed native bootstrap transport
 
 base PR523 MERGED/54084d1、ux1/3d-native-sealed-bootstrap、/tmp/mediaforge-cleanup-docs-20260912。

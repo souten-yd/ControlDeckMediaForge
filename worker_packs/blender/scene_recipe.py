@@ -478,13 +478,63 @@ def primitive(operation: dict[str, object]) -> bpy.types.Object:
     return obj
 
 
+def authored_mesh_data(operation: dict[str, object]) -> tuple[list[tuple[float, float, float]], list[list[int]]]:
+    """Validate before Blender allocation, independently of the core schema."""
+    raw, faces = operation.get("vertices"), operation.get("faces")
+    if not isinstance(raw, list) or not 3 <= len(raw) <= 4096:
+        raise RuntimeError("mesh vertex count differs")
+    if not isinstance(faces, list) or not 1 <= len(faces) <= 4096:
+        raise RuntimeError("mesh face count differs")
+    if type(operation.get("smooth", True)) is not bool:
+        raise RuntimeError("mesh smooth flag differs")
+    vertices = [vector(item) for item in raw]
+    used, seen = set(), set()
+    for face in faces:
+        if (not isinstance(face, list) or len(face) not in (3, 4)
+                or any(type(i) is not int or not 0 <= i < len(vertices) for i in face)
+                or len(set(face)) != len(face)):
+            raise RuntimeError("mesh face indices differ")
+        identity = tuple(sorted(face))
+        if identity in seen:
+            raise RuntimeError("mesh faces are duplicated")
+        seen.add(identity)
+        used.update(face)
+        a = vertices[face[0]]
+        for offset in range(1, len(face)-1):
+            b, c = vertices[face[offset]], vertices[face[offset+1]]
+            u, v = [b[i]-a[i] for i in range(3)], [c[i]-a[i] for i in range(3)]
+            cross = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]
+            if sum(x*x for x in cross) <= 1e-20:
+                raise RuntimeError("mesh faces are degenerate")
+    if len(used) != len(vertices):
+        raise RuntimeError("mesh has unreferenced vertices")
+    return vertices, faces
+
+
 def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.Object]) -> None:
     kind = operation.get("type")
     object_id = operation.get("object_id")
     if not isinstance(object_id, str):
         raise RuntimeError("recipe object ID differs")
-    if kind in {"primitive.add", "light.add", "camera.add", "object.duplicate", "armature.create"} and object_id in objects:
+    if kind in {"primitive.add", "mesh.create", "light.add", "camera.add", "object.duplicate", "armature.create"} and object_id in objects:
         raise RuntimeError("recipe object ID already exists")
+    if kind == "mesh.create":
+        vertices, faces = authored_mesh_data(operation)
+        check_growth(objects, max(len(vertices), sum(len(face)-2 for face in faces)))
+        mesh = bpy.data.meshes.new(str(operation["name"]))
+        mesh.from_pydata(vertices, [], faces)
+        if mesh.validate():
+            bpy.data.meshes.remove(mesh)
+            raise RuntimeError("authored mesh required repair")
+        mesh.update()
+        for polygon in mesh.polygons:
+            polygon.use_smooth = operation.get("smooth", True)
+        obj = bpy.data.objects.new(str(operation["name"]), mesh)
+        bpy.context.collection.objects.link(obj)
+        obj["media_forge_id"] = object_id
+        transform(obj, operation)
+        objects[object_id] = obj
+        return
     if kind == "armature.create":
         objects[object_id] = create_armature(operation)
         return

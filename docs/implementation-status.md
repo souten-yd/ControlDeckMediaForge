@@ -1,5 +1,88 @@
 # Media Forge implementation status
 
+## 2026-09-13 M1 OpenCode受入の準備と実installed discovery
+
+PR526/ux1/3d-authored-meshを再開。originのf5ba40d/1afddc1/7947d5aをfast-forward、
+最新main3e274e5は既に含む。追加されたg8-high-quality-mcp-3d-assets.mdを読み、
+M1実MCP/OpenCode/installed完了をM2より先に行う。前turnはsource実装と検証でprogress。
+旧handoffの「次M2」はM1受入完了後へ訂正、全体目標は縮小しない。
+
+既存受入runnerへ--director-authored-meshを追加。director実読込、現行capability/guide/schema、
+閉じた装甲mesh一個＋material、Job終端→snapshot→GLB→直前grant→armor.glb receiptを要求。
+verifierはschema/閉境界/面順序、実call順序、revision/検証結果、既存DB/hash/receipt照合を行う。
+不足guide/後置discovery/開面/primitive代用/別revision/失敗validationのnegativeを追加。
+これは高品質character評価ではなくM1実行/納品gate。実画像・VLM・変形・engineは別gateのまま。
+
+Host診断venvで既存mf-e2e active owner/Host gateway/model autoを確認（18ca92 exit0）。
+通常provider生成のprivate configで実opencode debug skill --pure: exit0/director認識。
+同identityのMCP tools/list: exit0/22tools、installed create schemaにmesh.createなし。
+caaf8d→3717f3 exit0。configはfinallyで回収、token出力/借用、global設定、Host source変更なし。
+新project/sceneや不要fixtureをこのpreflightでは作っていない。MF52609/.80 activeを確認。
+
+focused新旧verifierはf77fe1 exit0。Node9pass、viewer50ms/tracked差分なし。
+全 ./mf.sh test は1c3d55 exit0、1926passed/3skipped/2warnings、208.58秒。以後product/test変更なし。
+自己点検とmain保護規則を確認（PR必須/必要承認0/checksなし）。M1実制作/署名installedは未完了のまま、
+このsource基盤をPR確定し、別version PR→署名配布→installed受入を行う。
+実DBのJob1323件は全終端、GUI72件もfailed/interrupted/stopped、runtime43件も終端。
+working copyのrecovery12件は保護し、稼働判定やcleanupのために消さない。
+
+## 2026-09-13 MCP authored mesh・LLM/VLM制作ガイド、品質目標は未達
+
+base origin/main 3e274e548a61e5ff751125300d7936283ec06990（PR524）、
+ux1/3d-authored-mesh、/tmp/mediaforge-cleanup-docs-20260912。
+利用者のMCP優先と詳細調査依頼に従いbase/GA計画を更新。PR525のGUI入口はDraft保留。
+Blender4.5公式資料、glTF、Godot、BlenderGym/BlenderAlchemy、固定blender-skills等の調査を
+`docs/research/ai-blender-game-asset-authoring.md`へ記録。LLM/VLM手順は
+`docs/agent-3d-authoring-guide.md`、短縮版は既存media.capabilitiesのavailableな
+3d.scene_recipe.authoring_guidanceで返す。ガイド追加はVLM導入・自動評価実装ではない。
+
+mesh.createをtyped recipeとcreate/edit/workflow schemaへ加法追加。
+3〜4096頂点、1〜4096三角/四角面、strict index/smooth、重複・未参照・退化face拒否。
+coreとworkerで独立検証、Blender allocation前geometry budget、stable ID、既存revision/asset経路を維持。
+manifold/自己交差/変形topology/自動UVは保証しない。既存operationの意味やHostコードは変更なし。
+
+実行:
+
+```text
+env PYTHONPATH=backend:. .venv/bin/python scripts/3ds_authored_character_e2e.py
+  --runtime-root /data1tb/ControlDeck/data/feature-data/media-forge/runtimes/blender/blender-4.5.9-linux-x64
+  --evidence-dir /data1tb/ControlDeck/data/feature-data/media-forge/maintenance/authored-character-20260913-r1
+```
+
+08c54d exit0、Blender4.5.9、source-domain/実worker（実Host MCPではない）。
+56操作、28 authored mesh、2,312頂点、4,512 triangle、制作0.494秒。
+blender.scene/glb.structure成功、実GLB再importで28 mesh/4,512 triangle一致。
+Cycles CPU/8threads/24samples/768x896で再import結果をrender、renderログ1.68秒/peak118.47MB。
+GPU lease受入や全process RAM測定ではない。初回PYTHONPATH=backendのみはimport失敗402014 exit1、
+rootを加えて再実行した。失敗時のfixture作成なし。
+
+- scene_ddc618c7c97d4470a09c3827710f7dc4 / revision_58f8a0fa669742d39c843e688c33b5d8。
+- .blend: 1,377,875 B、SHA256 6ee2c5aee6e1b3632cd4399fd90c93c3c8f5f6597ee99aeab40320fecfd26636。
+- GLB: 81,264 B、SHA256 20b77cb71791d6d32c3c841407e13779fb5081a403e03be4c3134536ce1e2844。
+- 画像目視: 棒状の髪束/根元と頭皮の接続、簡素な顔・手、服の縫い目/皺不足、丸い肩当て。
+  **高品質キャラクター目標は未達**。texture/skin/animationなし、ゲーム用完成例ではない。
+
+候補Uvicorn PID424259/9167に実GET /api/v1/capabilities、46992b HTTP200、
+16 operations/mesh.createあり、guide@1あり。image.semantic_reviewは
+unavailable/vision_analyzer_unavailable。稼働9130は15operations、新operationなし。
+既存agent endpointも同じcapability_documentを返すコードを確認したが、
+今回追加機能の正規OpenCode→Host MCP→LLM制作、VLM画像入力、多視点自動比較、
+engine import/ゲーム表示、grant納品、署名配布/installed新操作は **NOT TESTED**。
+worker/sourceの成功をMCP/LLM受入に読み替えない。
+
+全 `./mf.sh test`: e1f6a5 exit0、1919 passed/3 skipped/2 warnings、208.25秒。
+`npm run build:viewer`: 50ms、tracked bundle差分0。
+`node --test tests/*test.mjs`: 9 passed。`git diff --check`成功。
+以後product/script/test変更なし。候補PID424259をTERMし終了143/不在確認。
+本番unit active、利用者root checkout tracked差分0、global設定/既存Blender/OS policy変更なし。
+fixtureはrealpath一致/内容一覧/候補process不在/lsof参照なしを確認し、
+authored-character-20260913-r1のみ削除、test ! -e成功。削除前du -sb 2,447,813 B。
+専用DB、試作.blend/GLB/provenance、render画像とobservationsを完全削除した。
+raw画像/DBはPRには保存しない。再現recipeと要約/hashのみ保持、本番asset/runtimeは削除なし。
+force削除commandは実行環境に拒否されたため、forceなしの明示対象削除を使用した。
+次のsliceはM2のrevision固定多視点観察。
+M1はsource構造受入まででDraft、全3DS/GOAL/A〜F/GAはPARTIALのまま。
+
 ## 2026-09-12 native bootstrapのsealed入力を実装、承認確認は時間切れ
 
 base PR523 MERGED/54084d1、ux1/3d-native-sealed-bootstrap。前turnは所属session診断の実装/受入/mergeで進捗。

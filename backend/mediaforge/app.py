@@ -121,6 +121,7 @@ from .scene_backup_transport import SceneBackupSession
 from .scenes import SceneCatalog, SceneError
 from .scene_workspace import SceneWorkspace
 from .scene_recipe_jobs import SceneRecipeJobManager
+from .scene_authoring_guidance import scene_authoring_guidance
 from .scene_recipes import (
     SceneCreateRequest,
     SceneEditRequest,
@@ -1377,6 +1378,7 @@ def create_app(
                         "implementation": "typed_blender_worker",
                         "schema_version": "media-forge.scene-recipe@1",
                         "supported_operations": scene_operation_types(),
+                        "authoring_guidance": scene_authoring_guidance(),
                         "local_only": True,
                     }
                     if blender_runtimes.resolve_g8() is not None

@@ -82,12 +82,55 @@ def verify_auto_skin_recipe(operations: list[dict[str, Any]]) -> None:
             {'frame': 48, 'rotation_degrees': [0, 0, 0]}]
 
 
-def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, auto_skin: bool = False) -> dict[str, Any]:
+def verify_authored_mesh_calls(calls: list[dict[str, Any]]) -> None:
+    """Prove actual new-operation use, not schema discovery or quality claims."""
+    from mediaforge.scene_recipes import MeshCreate, SceneCreateRequest
+
+    create = verify_director_read(calls)
+    parsed = SceneCreateRequest.model_validate(create["state"]["input"])
+    assert len(parsed.recipe.operations) == 2
+    mesh, material = parsed.recipe.operations
+    assert isinstance(mesh, MeshCreate) and mesh.object_id == "armor" and mesh.name == "Armor"
+    assert material.type == "material.set" and material.object_id == "armor"
+    # This fixture requires a closed shell. General mesh.create permits open cloth.
+    edges: dict[tuple[int, int], list[tuple[int, int]]] = {}
+    for face in mesh.faces:
+        for a, b in zip(face, face[1:] + face[:1]):
+            edges.setdefault(tuple(sorted((a, b))), []).append((a, b))
+    assert all(len(pair) == 2 and pair[0] == pair[1][::-1] for pair in edges.values()), "Armor shell must be closed with consistent winding"
+
+    def output(call: dict[str, Any]) -> dict[str, Any]:
+        value = json.loads(call["state"]["output"])
+        return value.get("output", value)
+
+    capability_calls = [c for c in calls if c["tool"] == "controldeck_addons_media_capabilities"]
+    assert capability_calls
+    for call in capability_calls:
+        assert calls.index(call) < calls.index(create), "Discover before creating"
+        capability = output(call)["capabilities"]["3d.scene_recipe"]
+        assert capability["state"] == "available" and "mesh.create" in capability["supported_operations"]
+        assert capability["authoring_guidance"]["version"] == "media-forge.scene-authoring-guidance@1"
+    job_id = output(create)["job_id"]
+    terminals = [c for c in calls if c["tool"] == "controldeck_addons_media_job_status"
+                 and output(c).get("job_id") == job_id and output(c).get("status") == "succeeded"]
+    assert terminals
+    snapshot, = [c for c in calls if c["tool"] == "controldeck_addons_media_scene_snapshot"]
+    export, = [c for c in calls if c["tool"] == "controldeck_addons_media_scene_export"]
+    assert calls.index(create) < calls.index(terminals[-1]) < calls.index(snapshot) < calls.index(export)
+    revision = output(terminals[-1])["result"]["revision"]
+    assert output(snapshot)["revision"]["id"] == output(export)["revision_id"] == revision["id"]
+    for saved in (revision, output(snapshot)["revision"]):
+        assert {item["validator"] for item in saved["validation"] if item["status"] == "passed"} >= {"blender.scene", "glb.structure"}
+
+
+def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, auto_skin: bool = False,
+                  authored_mesh: bool = False) -> dict[str, Any]:
     """Check actual tool execution and delivered bytes; deformation needs Blender inspection."""
     observations = json.loads((evidence_dir / "observations.json").read_text())
-    mode = "director_auto_skin" if auto_skin else ("director_array" if array else "director_motion")
+    mode = "director_authored_mesh" if authored_mesh else (
+        "director_auto_skin" if auto_skin else ("director_array" if array else "director_motion"))
     assert observations.get(mode) is True and observations["exit_code"] == 0
-    filename = "weighted.glb" if auto_skin else ("stairs.glb" if array else "robot.glb")
+    filename = "armor.glb" if authored_mesh else ("weighted.glb" if auto_skin else ("stairs.glb" if array else "robot.glb"))
     events = [json.loads(line) for line in (evidence_dir / "events.jsonl").read_text().splitlines()]
     assert not any(event.get("type") == "error" for event in events)
     calls = [event["part"] for event in events if event.get("type") == "tool_use"]
@@ -97,7 +140,9 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, au
     assert all(call["tool"] in allowed and call["state"]["status"] == "completed" for call in calls)
     create_call = verify_director_read(calls)
     operations = create_call["state"]["input"]["recipe"]["operations"]
-    if auto_skin:
+    if authored_mesh:
+        verify_authored_mesh_calls(calls)
+    elif auto_skin:
         verify_auto_skin_recipe(operations)
     elif array:
         verify_array_recipe(operations)
@@ -144,7 +189,7 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, au
         snapshot_index, = [i for i, call in enumerate(calls) if call['tool'] == 'controldeck_addons_media_scene_snapshot']
         export_index, = [i for i, call in enumerate(calls) if call['tool'] == 'controldeck_addons_media_scene_export']
         assert max(i for i, call in enumerate(calls) if call['tool'] == 'controldeck_addons_media_job_status') < snapshot_index < export_index
-    if auto_skin:
+    if auto_skin or authored_mesh:
         grant, = outputs("control_deck_project_output_grant")
         grant_call, = [call for call in calls if call['tool'] == 'controldeck_addons_control_deck_project_output_grant']
         export_call, = [call for call in calls if call['tool'] == 'controldeck_addons_media_scene_export']
@@ -176,8 +221,9 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, au
         metadata, provenance = map(json.loads, row)
         assert hashlib.sha256(data).hexdigest() == receipt["sha256"] == metadata["sha256"] == provenance["output_sha256"]
         assert len(data) == receipt["size_bytes"] == metadata["size_bytes"]
-    return {"verified": True, "scope": "actual director read, automatic skin binding and GLB delivery" if auto_skin else (
-                "actual director read, typed array creation and GLB delivery" if array else "actual director read, typed clip creation and GLB delivery"),
+    return {"verified": True, "scope": "actual director read, authored mesh, guidance and GLB delivery" if authored_mesh else (
+                "actual director read, automatic skin binding and GLB delivery" if auto_skin else (
+                "actual director read, typed array creation and GLB delivery" if array else "actual director read, typed clip creation and GLB delivery")),
             "scene_id": exported["scene_id"], "revision_id": revision["id"], "job_id": created["job_id"],
             "source_asset_id": revision["source_asset_id"], "receipt": receipt,
             "elapsed_sec": observations["elapsed_sec"],
@@ -187,6 +233,8 @@ def verify_motion(evidence_dir: Path, database: Path, *, array: bool = False, au
 
 def verify(evidence_dir: Path, database: Path) -> dict[str, Any]:
     observations = json.loads((evidence_dir / "observations.json").read_text())
+    if observations.get("director_authored_mesh"):
+        return verify_motion(evidence_dir, database, authored_mesh=True)
     if observations.get("director_auto_skin"):
         return verify_motion(evidence_dir, database, auto_skin=True)
     if observations.get("director_array"):
