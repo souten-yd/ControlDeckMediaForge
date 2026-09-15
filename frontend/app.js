@@ -16,6 +16,10 @@ const CREATIVE_DEFAULTS = {
 };
 const MODEL_TERMINAL = new Set(["ready", "failed", "canceled"]);
 const VIEWS = ["create", "library", "activity", "settings", "web-blender"];
+/* 一度に落とせる件数。選んだ素材の id は URL に載るので、伸ばし過ぎると途中で
+   切れる。切れたことは落ちてきた zip を開くまで分からないので、こちらで止める。
+   受け取る側（library_download.MAX_ASSETS）と同じ数にしてある。 */
+const LIBRARY_DOWNLOAD_MAX = 100;
 
 const PHASE_TEXT = {
   starting: "準備しています",
@@ -6448,6 +6452,8 @@ function renderLibrarySelection() {
   byId("library-selection-count").textContent = `${count} 件を選択`;
   byId("library-delete").disabled = count === 0;
   byId("library-delete").textContent = count ? `${count} 件を削除` : "削除";
+  byId("library-download").disabled = count === 0;
+  byId("library-download").textContent = count > 1 ? `${count} 件をダウンロード` : "ダウンロード";
   for (const card of byId("library-grid").querySelectorAll(".card")) {
     card.setAttribute("aria-selected", String(state.librarySelected.has(card.dataset.assetId)));
   }
@@ -6463,6 +6469,39 @@ function toggleLibrarySelection(assetId) {
   if (state.librarySelected.has(assetId)) state.librarySelected.delete(assetId);
   else state.librarySelected.add(assetId);
   renderLibrarySelection();
+}
+
+/* ── 選んだぶんを手元へ落とす ────────────────────────────────────────────
+   押した瞬間に落ち始めるようにする。組み立てを待ってから URL を差し替える形に
+   すると、待つ間に利用者の操作との繋がりが切れ、iOS の Safari はそれを
+   ダウンロードとして扱わないことがある。だからここは **await を挟まない**。
+   押した先がそのまま中身で、まとめる仕事は受け取った側がやる。
+
+   1 件だけなら zip にしない。写真 1 枚を落としたいだけの人に zip を渡すと、
+   携帯では展開する手間が増える。 */
+
+function downloadSelectedAssets() {
+  const assetIds = [...state.librarySelected];
+  if (!assetIds.length) return;
+  if (assetIds.length > LIBRARY_DOWNLOAD_MAX) {
+    return libraryNote(`一度に落とせるのは ${LIBRARY_DOWNLOAD_MAX} 件までです。`);
+  }
+  const url = assetIds.length === 1
+    ? `/workspace-api/assets/${encodeURIComponent(assetIds[0])}/download`
+    : `/workspace-api/library/download?${assetIds
+        .map((id) => `asset_id=${encodeURIComponent(id)}`).join("&")}`;
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  /* download 属性は同一生成元でしか効かないが、効かない相手でも
+     Content-Disposition: attachment が付いているので落ちる。 */
+  anchor.download = "";
+  anchor.rel = "noopener";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  libraryNote(assetIds.length === 1
+    ? "ダウンロードを始めました。"
+    : `${assetIds.length} 件を 1 つの zip にまとめています。始まるまで少しかかります。`);
 }
 
 async function deleteSelectedAssets() {
@@ -9242,6 +9281,7 @@ byId("library-select-none").addEventListener("click", () => {
   renderLibrarySelection();
 });
 byId("library-delete").addEventListener("click", () => void deleteSelectedAssets());
+byId("library-download").addEventListener("click", downloadSelectedAssets);
 const catalogQuery = byId("catalog-query");
 const catalogClear = byId("catalog-clear");
 function syncCatalogClear() { catalogClear.hidden = !catalogQuery.value; }

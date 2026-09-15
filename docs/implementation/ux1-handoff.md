@@ -3,6 +3,16 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-15 library download
+
+作業branch ux1/library-download、origin/main 4f978a0から。版0.28.83（addon.json/__init__.py）。
+新規backend/mediaforge/library_download.pyとtests/test_library_download.py（8件）、
+app.pyへGET2本、frontendへダウンロードboutonと非同期を挟まないhandler。
+1件は生ファイル、複数は1zip。押した瞬間に落ち始める形を崩さないこと——awaitを挟むと
+iOS Safariがダウンロードとして扱わない。上限100件/2GiB、zipは返却後に削除。
+実uvicorn 9199で1件/3件/404/残骸なしを確認。./mf.sh test 1946pass、既存2failは素の木でも同じ。
+**実iPhoneでの受入はNOT TESTED。** commit済/push未、PR未作成。次はpush→PR→実機確認。
+
 ## 2026-09-13 v0.28.82 preparation
 
 PR528 MERGED/735d8e2、PR529をmainへretargetしてMERGED/5ceebcfを実確認。
