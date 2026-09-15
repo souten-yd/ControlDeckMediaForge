@@ -1,5 +1,29 @@
 # Media Forge implementation status
 
+## 2026-09-15 library download to the viewing device
+
+ux1/library-downloadをorigin/main 4f978a0から起こした。作業中のwork branchは41commit遅れており、
+その上のdiffを捨ててpatch再適用した（cleanly適用、衝突なし）。
+ライブラリの選択barへダウンロードを追加。1件は生ファイル、2件以上は1つのzipで返す。
+GET一本にしてある——組み立てを待ってからURLを差し替えると、iOS Safariが利用者の操作との
+繋がりを失いダウンロードとして扱わないことがあるため。件数上限100、合計上限2GiB。
+zipは要求ごとに作り、返し終えたら消す。途中で落ちた残りは次の要求時に3600秒で掃く。
+
+実uvicorn 127.0.0.1:9199（別data_dir、稼働中の9130には触れていない）で確認:
+1件はcontent-disposition attachment/filename=media-forge-import-e160fcff.png/content-type image/png/
+179B、取り出したファイルはPNG 64x48として読めた。3件はapplication/zip/973B/
+media-forge-20260915-032006.zip、unzip -lで3 files 537B。欠けたidを混ぜると404
+{"code":"asset_not_found"}で、混ぜたぶんだけ抜いて成功にはしない。
+返却後のdata_dir/downloadsは空。
+
+./mf.sh test 1946passed/2failed/230.50秒。落ちた2件
+（test_blender_filesystem_isolation::test_ipc_scope_denies_external_peers_but_preserves_children_and_rename、
+test_model_evaluator::test_evaluation_cancel_terminates_process_and_releases_lease）は
+差分を外したorigin/main素の木でも同じく落ちる（1938passed/2failed/230.54秒）。本差分とは無関係。
+
+実iPhoneでの受入はNOT TESTED。signed installedにも未反映（稼働は.82）。
+
+
 ## 2026-09-13 v0.28.82 release preparation
 
 rules/branches/mainでPR必須/required approvals0を照合（afddda）。旧branch protection APIは404、

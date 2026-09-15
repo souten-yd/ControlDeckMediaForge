@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import sys
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -21,11 +22,12 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from starlette.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
+from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError, __version__ as PILLOW_VERSION
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from . import __version__, library, preferences, thumbnails
+from . import __version__, library, library_download, preferences, thumbnails
 from .scene_material_preview import MaterialPreviewManager
 from .asset_import import (
     MAX_IMPORT_BYTES,
@@ -2046,6 +2048,69 @@ def create_app(
             raise HTTPException(
                 status_code=422, detail={"code": code, "message": str(exc)[:300]}
             ) from exc
+
+    @app.get("/workspace-api/assets/{asset_id}/download", include_in_schema=False)
+    async def asset_download(asset_id: str) -> FileResponse:
+        """素材 1 件を、手元の端末へ落とす形で返す。
+
+        既にある `/api/v1/assets/{id}/content` は inline である。画面で見せる
+        ための経路なので、そのまま押させるとブラウザは開いてしまう。落とすため
+        の経路は disposition を分けて別に置く——同じ経路に両方の意味を持たせると、
+        片方を直したときにもう片方が壊れる。
+        """
+        try:
+            asset = store.get_asset(asset_id)
+            path = store.asset_path(asset_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"})
+        return FileResponse(
+            path,
+            media_type=asset.mime_type,
+            filename=library_download.safe_name(asset.suggested_filename, asset_id),
+            content_disposition_type="attachment",
+        )
+
+    @app.get("/workspace-api/library/download", include_in_schema=False)
+    async def library_download_archive(
+        asset_id: list[str] = Query(default_factory=list),
+    ) -> FileResponse:
+        """選んだ素材をまとめて 1 つの zip で返す。
+
+        **GET 一本にしてある。** 先に組み立ててから URL を差し替える形だと、
+        組み立てを待つ間に利用者の操作との繋がりが切れ、iOS の Safari は
+        ダウンロードとして扱わないことがある。押した先がそのまま zip であれば、
+        その切れ目が無い。
+
+        作った zip は返し終えたら消す。素材は増減するので、作り置きを持つと
+        古い中身が落ちてくる。
+        """
+        try:
+            entries = library_download.plan(store, asset_id)
+        except library_download.DownloadRefused as exc:
+            raise HTTPException(
+                status_code=404 if exc.code == "asset_not_found" else 422,
+                detail={"code": exc.code, "message": str(exc)[:300]},
+            ) from exc
+        name = library_download.archive_name()
+        downloads = store.data_dir / "downloads"
+        await asyncio.to_thread(library_download.sweep, downloads, time.time())
+        target = downloads / f"{uuid.uuid4().hex}.zip"
+        try:
+            await asyncio.to_thread(library_download.build, entries, target)
+        except OSError as exc:
+            target.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=500, detail={"code": "download_failed", "message": str(exc)[:300]}
+            ) from exc
+        return FileResponse(
+            target,
+            media_type="application/zip",
+            filename=name,
+            content_disposition_type="attachment",
+            background=BackgroundTask(target.unlink, missing_ok=True),
+        )
 
     @app.get("/workspace-api/assets/{asset_id}/relations", include_in_schema=False)
     async def standalone_asset_relations(asset_id: str, offset: int = Query(default=0, ge=0, le=1_000_000)) -> dict[str, Any]:
