@@ -1,5 +1,25 @@
 # Media Forge implementation status
 
+## 2026-09-16 release the GPU on demand instead of on a clock
+
+feat/release-gpu-on-demand、origin/main d6c8ab0から。版0.28.84。
+これまでmodelを降ろす引き金は時計と「続きが無ければ抱えない」だけで、次を待つlinger中と
+batch中は抱えたままだった。実測2026-09-11、batchの後に画像workerが19.4GBを抱えて残り、
+音楽生成が300秒待って期限切れになった。ControlDeck #332が頼みに来る入口を2つ足した:
+GET /addon/v1/resources/residency と POST /addon/v1/resources/step-aside。
+走っている処理は切らない——job_tasksかqueueが空でなければreleased=falseで返す。
+申告する量は目安（WARM_MODEL_VRAM_ESTIMATE 16GiB、実測19.4GBに寄せた）で、
+誰に頼むかを決めるためだけに使う。空きの判断はホストが観測値で決める。
+
+./mf.sh test 1949passed/3failed/285.81秒。落ちた3件のうち
+test_blender_filesystem_isolation::test_ipc_scope_denies_external_peers_but_preserves_children_and_rename と
+test_model_evaluator::test_evaluation_cancel_terminates_process_and_releases_lease は既知。
+test_api::test_running_and_queued_jobs_can_be_canceled は本差分を外した素の木で単独実行すると
+落ち、本差分ありでは通る（1 passed）ため、タイミング依存で本差分とは無関係。
+
+実機での需要駆動の解放はNOT TESTED。
+
+
 ## 2026-09-15 library download to the viewing device
 
 ux1/library-downloadをorigin/main 4f978a0から起こした。作業中のwork branchは41commit遅れており、
