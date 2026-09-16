@@ -2239,6 +2239,39 @@ def create_app(
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
 
+    @app.get("/addon/v1/resources/residency")
+    async def resource_residency() -> dict[str, Any]:
+        """いま GPU に置いているものを申告する。
+
+        ControlDeck はこれを見て「この add-on に頼めば場所が空くか」を判断する。
+        量は目安である——worker は別の process なので正確な量はこちらから見えない。
+        空きの判断そのものはホストが device を直接見て決めており、目安が外れても
+        受け入れが甘くなることはない。
+        """
+        held = manager.held_models()
+        return {
+            "device_id": "gpu0",
+            "reserved_bytes": sum(held.values()),
+            "engines": [{"engine_id": key, "reserved_bytes": value} for key, value in sorted(held.items())],
+            "estimated": True,
+        }
+
+    @app.post("/addon/v1/resources/step-aside")
+    async def resource_step_aside() -> dict[str, Any]:
+        """場所が要るので退いてくれ、という頼みに答える。
+
+        時計も linger も待たずに、いま使っていない model を降ろす。**走っている
+        処理は切らない** ので、頼まれても空けられないことがある。そのときは
+        released=false で返し、頼んだ側は待ち直す。
+        """
+        engines, freed = await manager.release_idle_now()
+        return {
+            "released": bool(engines),
+            "reason": "released" if engines else "in_use_or_empty",
+            "freed_bytes": freed,
+            "engines": engines,
+        }
+
     @app.get("/api/v1/assets/{asset_id}/provenance")
     async def asset_provenance(asset_id: str) -> dict[str, Any]:
         try:

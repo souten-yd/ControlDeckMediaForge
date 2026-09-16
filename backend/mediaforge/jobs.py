@@ -172,6 +172,14 @@ def requested_guidance(job: Job, selected: ModelDescriptor) -> float | None:
 WORKER_MESSAGE_LIMIT_BYTES = 1024 * 1024
 
 
+# 常駐している画像 worker が GPU に置いている量の目安。
+#
+# model によって違うが、頼む相手を決めるためだけの数なので一つにまとめる。
+# 実測 2026-09-11: batch のあとに 19.4GB を抱えたまま残っていた。控えめに置くと
+# 「頼んでも大して空かない」と見られて頼まれなくなるので、実測に寄せる。
+WARM_MODEL_VRAM_ESTIMATE = 16 * 1024**3
+
+
 class JobManager:
     """Durable queue with a single worker-local execution guard.
 
@@ -1969,6 +1977,46 @@ class JobManager:
         except Exception:  # noqa: BLE001 - 待っている間の失敗で job を壊さない
             logger.exception("warm linger failed")
         await self._end_linger(retire=True)
+
+    def held_models(self) -> dict[str, int]:
+        """いま GPU に置いているものと、その目安の量（バイト）。
+
+        worker は別の process なので、こちらから正確な量は見えない。ここにある
+        のは実測から置いた目安で、**「誰に退いてくれと頼むか」を決めるためだけ**
+        に使う。空きの判断そのものはホストが device を直接見て決めており（観測値
+        と申告値の大きい方を使う）、目安が外れても受け入れが甘くなることはない。
+
+        実測 2026-09-11: batch のあとに画像 worker が 19.4GB を抱えたまま残り、
+        音楽生成が 300 秒待って期限切れになった。抱えている間は、その量をきちんと
+        申告する。
+        """
+        warm = self._warm_worker
+        if warm is None:
+            return {}
+        _process, model = warm
+        return {str(model[0] if isinstance(model, tuple) else model): WARM_MODEL_VRAM_ESTIMATE}
+
+    async def release_idle_now(self) -> tuple[list[str], int]:
+        """場所が要ると言われたので、いま使っていない model を降ろす。
+
+        時計も linger も待たない。後始末は既定で「続きが無ければ抱えない」だが、
+        次を待って抱えている間（linger）と、batch のあいだ抱えている間がある。
+        他の誰かが場所を欲しがっているなら、そちらを優先する。
+
+        **走っている処理は切らない。** 切らないので、頼まれても空けられないことが
+        ある。そのときは空で返す。使用中のものを取り上げても、取り上げられた側が
+        落ちるだけで、GPU の取り合いは解決しない。
+        """
+        if self._job_tasks or not self._queue.empty():
+            return [], 0
+        held = self.held_models()
+        if not held:
+            return [], 0
+        if self._linger_task is not None:
+            await self._end_linger(retire=True)
+        else:
+            await self._retire_warm_worker()
+        return sorted(held), sum(held.values())
 
     async def _retire_warm_worker(self) -> None:
         """常駐 worker を終わらせる。stdin を閉じれば main() の loop が抜ける。
