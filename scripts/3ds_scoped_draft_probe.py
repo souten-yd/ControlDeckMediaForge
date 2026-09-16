@@ -1,0 +1,74 @@
+"""Run in the Host diagnostic venv; no executor, project or asset creation.
+
+Use the normal service-token issuer for the existing dedicated mf-e2e user.
+Only the scoped Add-on Runtime HTTP client performs inference. Credentials are
+ephemeral and never printed or written. This is not OpenCode/MCP acceptance.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+import sys
+import time
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def main() -> None:
+    from app.addons import tokens
+    from app.database import SessionLocal
+    from app.models import User
+
+    sys.path.insert(0, str(ROOT / "backend"))
+    from mediaforge.host.client import ControlDeckHostClient
+    from mediaforge.scene_drafts import MeshDraftError, MeshDraftPreparer, MeshDraftRequest
+    from mediaforge.host.ai import HostAIGateway, HostAIError
+
+    # Sync issuer/ORM stays outside the async request path and outside MF core.
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.username == "mf-e2e").one()
+        assert user.is_active, "Dedicated acceptance user must be active"
+        user_id = user.id
+    headers = {
+        "Authorization": "Bearer " + tokens.issue(
+            "media-forge", subject=f"user:{user_id}", kind="service",
+            actor_user_id=user_id, grant_ids=[],
+        ),
+        "X-Control-Deck-Addon-ID": "media-forge",
+    }
+
+    async def run() -> bool:
+        host = ControlDeckHostClient("http://127.0.0.1:8765")
+        started = time.monotonic()
+        try:
+            identity = await host.authenticate(headers)
+            gateway = HostAIGateway(host)
+            capabilities = await gateway.capabilities(identity)
+            print(json.dumps({"scoped_capabilities": capabilities}), flush=True)
+            result = await MeshDraftPreparer(gateway).prepare(identity, MeshDraftRequest(
+                intent="Closed chest armor with a front ridge, width 0.4m, height 0.5m, "
+                       "thickness 0.08m. Choose coordinates and faces yourself. "
+                       "Name Armor, object_id armor, teal metallic material.",
+                vertex_budget=10, require_closed=True,
+            ))
+            mesh = result.request.recipe.operations[0]
+            print(json.dumps({
+                "valid": True, "seconds": round(time.monotonic() - started, 3),
+                "vertices": len(mesh.vertices), "faces": len(mesh.faces),
+                "provenance": result.provenance,
+            }), flush=True)
+            return True
+        except (MeshDraftError, HostAIError) as exc:
+            print(json.dumps({"valid": False, "seconds": round(time.monotonic() - started, 3),
+                              "code": exc.code}), flush=True)
+            return False
+        finally:
+            await host.close()
+
+    raise SystemExit(0 if asyncio.run(run()) else 1)
+
+
+if __name__ == "__main__":
+    main()

@@ -3,6 +3,35 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-13 M1 scoped cancel accepted, MCP connection pending
+
+PR532/ux1/3d-structured-mesh-draft、base0ba2ab0（PR531/c42f966上）、main4f978a0含む。
+Host completeは切断20秒後もbusy。既存scoped streamは0.502秒後idle。
+HostAIGateway.complete_streamedを実装、内部draftを接続。既存complete/Host本体は不変。
+33focused pass、実draft6.590秒/8vertices6facesの閉殻PASS（品質/Blenderは未実施）。
+実scoped client cancel/deadlineで対象lease releasedとslot idleを確認、statusにID/実測記録。
+新script3ds_scoped_ai_cancel_probe.py、専用mf-e2e通常新規loginをfinally revoke、secret非出力。
+46720/53558/35067は終端。全test82441は297133 exit0/1974pass3skip2warnings/206.85秒。
+以後product/script/test変更なし。Node9pass/viewer49ms差分なし、Host tracked変更0/MF537447 active。
+次: 既存SceneRecipeJobManager・asset provenanceへの接続、MCPからの取消伝播、実OpenCode一巡。
+public tool/capabilityはまだ未追加、M1未完了/M2未着手。installed.82/user rootを保持。
+全gate完了、commit/pushしてPR532を更新する。
+
+## 2026-09-13 M1 internal scoped draft helper
+
+ux1/3d-structured-mesh-draft、base PR531/c42f966、main4f978a0を含む。
+scene_drafts.py+18unit checks+scoped診断scriptを追加。まだpublic API/MCP/capabilityには未接続。
+実scoped HostAIGatewayは利用可。full scene schema+件数feedbackは3回同エラー、
+限定schema+具体的辺feedback helperは284110 exit0/7.226秒/初回8vertices6faces閉殻PASS。
+見た目/寸法/Blender/納品は未評価。詳細はstatus冒頭、M1未完了/M2未着手。
+Host core read-only、service tokenは通常issuerで専用mf-e2eに新規発行、永続化/出力なし。
+probe99468/90361は終端、asset/project/backupは新規作成していない。
+全test48660は0bbc4d exit0/1959pass3skip2warnings/206.81秒、handle閉鎖済み。
+以後product/script/test変更なし。focused18pass、Node9/viewer51ms差分なし。
+次: remote cancel/期限/lease返却実受入→既存Jobs/lineageに接続→実OpenCode一巡。
+local CancelledError試験だけでremote cancel合格としない。公開前に確認。
+全gate完了、commit/pushしてPR531をbaseにした小PRとして保存。user rootとinstalled.82は不変。
+
 ## 2026-09-13 M1 structured draft investigation
 
 PR531/ux1/release-0-28-82-acceptance、base7768b2a。main4f978a0は既に含む。

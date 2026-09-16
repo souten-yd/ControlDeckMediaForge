@@ -1345,6 +1345,14 @@ corrections. A draft is untrusted data, never an executable script or a quality
 approval. Scoped authorization, cancellation, output bounds and provenance must
 be verified before exposing this preparation stage; do not duplicate model/GPU
 management or silently switch transport/runtime defaults to hide generation failures.
+The draft stage explicitly uses the existing scoped text stream for disconnect
+cancellation, assembling bounded JSON data only after a terminal done event.
+This is not a tool-argument streaming fallback: no incomplete arguments execute,
+and existing complete callers/model defaults remain unchanged. Real disconnect
+testing found complete still busy after 20 seconds, but stream idle at 0.502 seconds.
+Lease return and end-to-end acceptance are separate gates: scoped client cancel
+and deadline tests observed the target lease released; the public MCP/Jobs path
+still needs its own cancellation and delivery acceptance.
 Start with bounded authored
 mesh topology so silhouettes, hair clumps, garment shells and fitted armor are not
 limited to assembled primitives. Mesh hair/garments are not hair/cloth simulation.

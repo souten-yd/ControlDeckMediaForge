@@ -57,7 +57,21 @@ text.generate/json_schemaを使用し、core検査→最大2回のfeedback修正
 draftは未信頼データであり、任意scriptや品質合格ではない。採用前にscoped AIの実受入、
 取消・出力サイズ・provenance/lineage・falseによる検査回避拒否を確認する。
 新しいmodel/port/lease管理や第二asset/Jobs基盤を作らない。実行は既存typed recipeへ戻す。
-一標本のJSON修正成功は実OpenCode/MCP一巡の代替ではなく、現時点のdraft機能は未実装。
+一標本のJSON修正成功は実OpenCode/MCP一巡の代替ではない。
+内部helperの初期範囲はmesh一つ+同じobject_idのmaterial一つ、頂点4〜32/面64まで、
+応答8KiB/4096tokens、初回+最大2修正、全体300秒/各AI要求90秒とする。
+閉殻要求を応答が変更したら拒否し、修正には最大16辺の向き/共有面数を返す。
+入力・指示・各応答・検証済みrequestのhashとattempt履歴を保持するが、これは準備のprovenanceであり
+asset/revisionのprovenance・lineageを置き換えない。実行はnot_executed、品質はNOT TESTED。
+2026-09-13時点でhelperのみ実装、API/MCP/capabilityには未公開。
+局所coroutineの取消伝播は、Host HTTP切断時の推論終了・lease返却の実受入とは区別する。
+後者と既存Jobsへの接続・納品を確認するまで利用可能とは表示しない。
+実取消診断を受け、draftだけは既存Hostのscoped text streamでJSONを組み立てる。
+complete呼出は切断20秒後も推論中だったため使わない。streamは終端done必須、途中EOF/error/
+出力超過を拒否、wire2MiB/UTF-8出力8KiB、要求期限+5秒のabsolute timeoutで接続を閉じる。
+既存completeの利用者は変更しない。tool引数streamの障害回避fallbackやmodel変更ではない。
+実Hostで取消・期限超過の両方を実行し、推論idleと対象lease releasedを確認した（status参照）。
+このgateはscoped clientまで。公開MCP→Jobs経由の取消・lineage・納品は別途未受入。
 髪の束・衣服shell・装甲の輪郭を実Blenderで作り、構造検査と見た目の評価を分離する。
 後続は選択付き編集/曲面・UV/bake・weight補正/IK・表情/動作、engine受入へ進む。
 この一操作だけで高品質キャラクター、cloth/hair simulationや全GA完成としない。

@@ -774,7 +774,19 @@ LLMのtool引数生成と形状設計を同時に行う経路は失敗を再現�
 0call/lengthのため採用しない。構造化JSON draft→coreの目的別検査→最大2回の修正を
 実行前に分け、合格したdraftだけを既存recipe実行へ渡す方向でM1を継続する。
 既存HostAIGatewayのtext.generate/json_schemaを使い、モデル/port/GPU管理をMediaForgeへ複製しない。
-scoped AI実受入、出力サイズ/取消/provenance/検査回避negativeを先に通す。現在は未実装。
+scoped AI実受入、出力サイズ/取消/provenance/検査回避negativeを先に通す。
+内部scene_drafts helperを先行実装（公開toolは未追加）。フルscene schemaでエラー件数だけを返す
+実scoped試験は3回とも同じboundary8/winding3で失敗したため、mesh+materialに限定したschemaと
+具体的なedge feedbackを使う。後者の実scoped試験1件は7.226秒/初回8vertices6facesで検査PASS。
+二条件を同時に変更したため、schema縮小とfeedbackのどちらが効いたかはこの1件では分離できない。
+front ridge/寸法/見た目・Blender実行は未評価。closed edge PASSを依頼への適合と混同しない。
+次gate: Host側のHTTP切断/期限超過で推論とleaseが終了する実測、既存Jobs/asset lineageへの接続、
+通常MCPから短い制作意図→検査済みrequest→既存実行→export/配置の実OpenCode一巡。
+2026-09-13追記: scoped stream clientに限り取消/期限超過で実推論idle・対象lease releasedまで確認。
+一括completeは切断20秒後もbusyだったためdraftでは使用しない。streamはdone受信前の
+部分JSONを採用せず、wire/出力上限とabsolute deadlineを持つ。Host変更なし。
+残るgateはMCP/既存Jobsからの取消伝播、準備provenance→asset lineage、実制作・納品。
+未受入のhelperをcapability availableへ追加しない。M2開始条件は変わらない。
 診断の一標本の成功を安定運用やM1完了とはしない。実OpenCodeからの一巡が引き続き必須。
 
 | 順序 | slice | 主な成果 | exit gate |
