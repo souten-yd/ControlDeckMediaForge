@@ -35,6 +35,12 @@ ControlDeck向けadapter（B）で利用する。BlenderMCP常駐/addon/9876を�
 
 ## 3. 段階・依存・成果物
 
+2026-09-18の参照画像制作は[追加設計](research/reference-guided-3d-authoring.md)と
+[実装slice表](implementation/g8-high-quality-mcp-3d-assets.md#19-reference-guided-authoring-slices-2026-09-18)に従う。
+初回は汎用曲面基盤を恐竜・四足・propで評価し、Blender/MediaForge viewerでanimationまで受入する。
+独立生成した正面/側面を正しい立体の証拠とせず、ReferenceSetを固定して形状/変形を別検証する。
+この初回targetを既存GA-7/8のengine受入の代用にしない。
+
 根拠は[AI Blender詳細調査](research/ai-blender-game-asset-authoring.md)、
 実行時の原則は[LLM/VLM制作ガイド](agent-3d-authoring-guide.md)にまとめる。
 短縮版をavailableな3d.scene_recipe.authoring_guidanceへ加法追加し、

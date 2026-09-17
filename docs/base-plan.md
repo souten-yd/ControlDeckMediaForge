@@ -1334,6 +1334,22 @@ A "no" to #10 is an architecture smell.
 
 ## 25. Baseline architectural decision
 
+2026-09-18 reference-guided authoring decision: use MediaForge image assets to
+establish one consistent design before deriving front/side/back/three-quarter
+references. Accepted references constrain typed Blender loft/sweep/control-cage
+authoring; independent generated views are not assumed to describe one exact
+object. Freeze view, scale, axes, landmarks and provenance as an asset-backed
+ReferenceSet. Reuse existing Assets and Jobs; do not create another asset store.
+Observe immutable revisions under fixed cameras/light in material, clay,
+silhouette and object-ID modes, then use actual images through Host vision.analyze
+for structured review when available. Geometry audits remain deterministic.
+The first target is curved stylized, animated assets accepted in Blender and the
+MediaForge viewer; other engine acceptance remains a separate gate. Dinosaur,
+quadruped and prop fixtures must exercise the same general operations. New model
+weights are optional G9 candidates, never a fallback for unavailable authoring.
+See [reference-guided research](research/reference-guided-3d-authoring.md) and
+[the implementation slices](implementation/g8-high-quality-mcp-3d-assets.md#19-reference-guided-authoring-slices-2026-09-18).
+
 2026-09-13 user priority: game-asset authoring through the existing MCP surface
 precedes further Web Blender acceptance. Characters, creatures, environment props,
 tools, vehicles, weapons and armor remain in scope. Authored meshes may explicitly

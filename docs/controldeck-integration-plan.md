@@ -833,6 +833,18 @@ If a proposed Media Forge feature bypasses ControlDeck's generic identity, proje
 
 ## 18. Integrated 3D Studio boundary (2026-09-05)
 
+Reference-guided authoring (2026-09-18) retains this boundary. ReferenceSet,
+ObservationSpec and structured reviews belong to MediaForge's existing Asset,
+provenance and durable Job facilities. Planned additive media.scene.observe and
+media.scene.review accept authorized scene/revision/asset IDs, never host paths.
+Observation pins the source revision and renderer settings; review consumes the
+actual resulting images via the existing Host AI vision.analyze capability.
+Unavailable vision stays unavailable, not a text-only visual success. No model
+choice, image routing, geometry semantics or second job scheduler enters Host.
+Image generation, Blender render and vision stages acquire/release their own
+applicable resource leases; do not retain GPU ownership while waiting for the
+next stage. New tools are advertised only after implementation and acceptance.
+
 2026-09-09 game-authoring expansion follows
 [the game asset plan](design-game-asset-authoring.md). New mesh/UV/material/rig/
 animation operations live in MediaForge recipes, schemas, workers and capability

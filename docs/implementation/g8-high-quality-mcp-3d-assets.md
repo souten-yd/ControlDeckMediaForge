@@ -854,3 +854,49 @@ Community observations used only as design input, not as product evidence:
 - MCP large-tool-set lazy-loading architecture discussion: https://www.reddit.com/r/mcp/comments/1ro7ifh/blender_mcp_pro_100_tools_mcp_server_for_blender/
 
 Community source is anecdotal.採用判断はBlender一次資料、MediaForgeの境界、実機受入を優先する。
+
+
+## 19. Reference-guided authoring slices (2026-09-18)
+
+採用理由・一次資料・比較手法は[参照画像調査](../research/reference-guided-3d-authoring.md)。
+利用者の指定は汎用基盤、曲面のstylized表現、animation込み、初回Blender＋MediaForge viewer。
+既存M1〜M10/GAの範囲を削除せず、その中に次の小sliceを配置する。
+
+| slice | 依存 | 実装・契約 | exit gate |
+|---|---|---|---|
+| R0 | 既存baseline | 一次資料、採用判断、共通manifest/品質方針、実装順を記録 | 文書整合、実測と計画の区別 |
+| M1-gate | installed mesh.create | 実OpenCode authored closed mesh→Job→snapshot→export→grant | guard有効、trace、receipt/hash、実GLB再import |
+| R1 reference | M1-gate | 既存画像Asset上のReferenceSet manifest/lineage、scene参照を加法追加 | owner/hash/view/axis検査、整合したfront/side/back/3q、矛盾時needs_review |
+| M2a observe | M1-gate | media.scene.observe、revision固定ObservationSpec、既存durable Jobs・画像Asset | material/clay/silhouette/object ID、実render、before/after同条件、取消/再起動/解放 |
+| M2b review | R1/M2a | media.scene.review、Host vision.analyze、構造化issue report | 実画像trace、対象ID/根拠、VLM不在・失敗は非成功 |
+| M3a curve | M2a | bounded loft/sweep、制御点/断面編集、bridge、subdivision | 恐竜・四足・prop、独立予算検査、接合、閉殻方針、旧selection拒否 |
+| M3b iteration | M2b/M3a | audit→最大3issue→局所修正→同条件比較、2回不改善で停止 | immutable candidate、旧版保護、悪化非採用、clay形状gate |
+| M4 surface | M3b | 既存material/image経路＋UV/PBR/bake拡張 | 形状合格後に表面、依存画像hash、実GLB |
+| M5 deformation | M3b/M4 | part graph/skeleton、既存auto-bind＋weight set/smooth/normalize、脚IK/bake | 関節pose、weight和/影響数/未重み、collapse/離脱/貫通 |
+| M6 motion | M5 | rotation互換のtranslation tracks、deform skeleton＋baked clips | 24fps idle2秒/walk1秒/attack1.5秒、GLB再import、viewer再生/loop/切替/停止 |
+| R2 comparison | R1〜M6 | T-Rex/四足/propの同一brief、3条件×各3試行 | 成功数、修正数、秒、memory、全gate別PASS/FAIL/NOT TESTED |
+| M10 optional | 独立G9 gate | Hunyuan3D-2mv/SF3D/TRELLIS.2候補adapter | 明示license同意、AMD/CPU実測、cleanupと変形、default off |
+
+### 加法契約と失敗条件
+
+ReferenceSetは既存Assetのversioned manifest。image asset ID/hash、view、scale、forward/up軸、
+landmarks、parts/attachments、provenance/license、承認状態を保持し、画像変更は新版にする。
+scene参照はoptional。既存scene/recipeの意味と必須fieldは変えない。
+未実装のtoolやmanifest型をaddon.json/capabilitiesへ先行広告しない。
+
+observe/reviewはscene_id・revision_id・ReferenceSet asset IDを認可し、入力digestを固定する。
+画像枚数・解像度・frame/focus対象・出力bytes・geometry増幅・timeoutをboundedにする。
+観察Jobがsceneの最新revisionを進める必要はない。render対象はpinしたrevisionから変えない。
+実装時にrequest/response/schema/API/agent guide/Host projectionを同時更新する。
+
+reviewは既存Host AI gatewayと画像縮小処理を再利用する。実画像がモデルへ届いた証跡と
+数値auditを分離する。画像IDを列挙しただけのtext-only評価をvisual PASSにしない。
+提案operationが現在schemaに無ければunsupported、入力不足ならneeds_reviewで終了する。
+
+shape操作は少数の断面/経路/制御点をworkerで展開する。高密度raw JSONをLLMへ要求しない。
+新旧topologyとselection/revisionの対応を検証し、古い頂点indexを推測で再利用しない。
+voxelで融合しただけの形状をdeformation合格にしない。
+
+各sliceはowner違い、revision違い、過大入力、資源待ち、取消、再起動のnegativeを含む。
+source試験、署名installed、実OpenCode制作、品質受入は別欄に記録する。
+M1-gate未達の間はM2以降の実装完了・品質完了を宣言せず、具体的な障害と再開条件を残す。

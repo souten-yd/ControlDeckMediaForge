@@ -4,6 +4,18 @@
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
 
+## 2026-09-18 reference-guided authoring
+
+branch ux1/reference-guided-3d-plan、worktree /tmp/mediaforge-reference-plan-20260918、親PR536/30e2971。
+base/integration/GA設計更新、research/reference-guided-3d-authoring.mdとslice表を追加。
+M1標準runはstream500反復で終端、6頂点prompt比較は183.572秒/8tools/納品1260B成功。
+同verifier＋実Blender4.5.13再import成功、M1小閉mesh installed/LLM gate PASS。
+根本stream安定性と品質は別。新ReferenceSet/observe/review/curve/IKは未実装。
+次はM2a revision固定観察Jobを既存SceneRecipeJobManager/Assetへ追加し、実render/取消/解放を確認。
+status/implementation/reference-authoring-20260918.mdにID/sha/実行・NOT TESTEDを記録。
+全test1949pass3skip2warnings206.37秒＋署名skip3件を既存bundle-build runtimeで追加PASS。
+ユーザーroot/Host/global/runtime設定変更0。M1専用projectにGLB/evidence保持、所有run2件終端済み。
+
 ## 2026-09-18 local LLM T-Rex trial
 
 origin/main9304129から別worktree /tmp/mediaforge-trex-docs-20260918、ux1/trex-opencode-evidence。
