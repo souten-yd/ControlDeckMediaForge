@@ -1,5 +1,18 @@
 # Media Forge implementation status
 
+## 2026-09-18 v0.28.85 release preparation
+
+利用者が実VLM評価・稼働導入・恐竜比較を追加要求。PR536〜545を依存順にmainへ統合。
+main 3f3ce8cは検証済み2724bc2とtree差分0。原root9304129/利用者branchは保持。
+ux1/release-0-28-85でaddon/core版数とrelease noteのみ更新。
+全test10455 exit0:2162pass2warnings229.83秒、Node実mixer6pass。以後product変更なし。
+更新前DB16table論理hash/2604asset file属性hash/Blender registry hashを採取。
+1437Jobs/72GUI/43runtime operations全終端、recovery12保持。
+maintenance/release-0.28.85-20260918にSQLiteとregistryの復旧snapshotを1組保持。
+既存publisher key mode0600と現在Host trusted key一致を確認。未公開/未導入。
+次:固定merge commitからbundle/sign→再取得検証→idle再照合→通常feature update→
+データ/health/tool/schemaを確認して実VLM/恐竜比較へ進む。目標は未完了。
+
 ## 2026-09-18 M6 translation and viewer playback source
 
 ux1/3d-motion-playback、親PR544/0538de7。optional translation_mを旧回転JSON互換で追加。
