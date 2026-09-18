@@ -78,7 +78,13 @@ def _offline_environment() -> None:
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
     # The OpenGL rasterizer replaces the CUDA one on this platform, and flash
     # attention is not built, so fall back to what PyTorch ships.
+    #
+    # Two variables, not one. The sparse transformer reads SPARSE_ATTN_BACKEND
+    # first and only falls back to ATTN_BACKEND when it is unset, so setting the
+    # dense one alone still lands in ``import flash_attn`` partway through
+    # generation — after the weights are loaded, which is a slow way to find out.
     os.environ.setdefault("ATTN_BACKEND", "sdpa")
+    os.environ.setdefault("SPARSE_ATTN_BACKEND", "sdpa")
 
 
 def _gemm_is_sane(torch: Any) -> dict[str, Any]:
@@ -96,6 +102,34 @@ def _gemm_is_sane(torch: Any) -> dict[str, Any]:
     return {"rows": rows, "mismatched": mismatched, "fp32_matmul_sane": mismatched == 0}
 
 
+def _disable_rembg() -> None:
+    """Stop the pipeline from building its background remover at load time.
+
+    ``pipeline.json`` names ``briaai/RMBG-2.0``, which is gated and cannot be
+    fetched here. The probe never needs it: ``preprocess_image`` skips the
+    remover entirely when the input already carries a non-opaque alpha channel,
+    and the probe is fed a cut-out RGBA image. The model is still constructed
+    eagerly during ``from_pretrained`` though, so replace it with something that
+    raises only if it is actually called.
+    """
+    from trellis2.pipelines import rembg
+
+    class _Absent:
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            pass
+
+        def to(self, _device: str) -> "_Absent":
+            return self
+
+        def cpu(self) -> "_Absent":
+            return self
+
+        def __call__(self, *_args: Any, **_kwargs: Any):
+            raise RuntimeError("probe input must already be a cut-out RGBA image")
+
+    rembg.BiRefNet = _Absent
+
+
 def _peak_vram_bytes(torch: Any) -> int:
     return int(torch.cuda.max_memory_allocated())
 
@@ -111,6 +145,7 @@ def _generate(snapshot: Path, image_path: Path, output: Path, preset_name: str) 
         "revision": CANDIDATE_REVISION,
         "preset": preset_name,
         "attn_backend": os.environ["ATTN_BACKEND"],
+        "sparse_attn_backend": os.environ["SPARSE_ATTN_BACKEND"],
         "torch": torch.__version__,
         "hip": torch.version.hip,
         "device": torch.cuda.get_device_properties(0).gcnArchName,
@@ -119,6 +154,8 @@ def _generate(snapshot: Path, image_path: Path, output: Path, preset_name: str) 
 
     from trellis2.pipelines import Trellis2ImageTo3DPipeline
     import o_voxel
+
+    _disable_rembg()
 
     torch.cuda.reset_peak_memory_stats()
     started = time.perf_counter()

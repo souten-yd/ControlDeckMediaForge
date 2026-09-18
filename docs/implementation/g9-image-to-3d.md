@@ -298,6 +298,56 @@ TRELLIS.2 素での同条件（退避先の実力）
 VRAM に収まらない、のいずれでも止めて報告する。Pixal3D だけ駄目で TRELLIS.2 が通るなら、
 退避先で進めてよいか判断を仰ぐ。
 
+### 2.1 実測: TRELLIS.2 は gfx1201 で動く。ただし入力を選ぶ（2026-09-19）
+
+`runtimes/trellis2-probe`、ROCm 7.2.1 / torch 2.10.0 / gfx1201 / 34.2 GB。
+
+**通ったこと:**
+
+| | |
+|---|---|
+| attention | `ATTN_BACKEND=sdpa` / `SPARSE_ATTN_BACKEND=sdpa`（両方要る。§2.2） |
+| conv | `flex_gemm` |
+| ラスタライザ | OpenGL（CUDA 版は stub） |
+| 読み込み | 37〜65 秒 |
+| 生成 | 81〜122 秒（既定 12 step × 4 段） |
+| 書き出し | 140〜202 秒 |
+| ピーク VRAM | **4.88 GB**（32 GB に対して十分な余裕） |
+
+**上流サンプル（`assets/example_image/T.png`）は破綻なく出た。** 4,424,912 頂点 /
+6,314,020 面で、機械部品の形が素直に立ち上がっている。**つまりスタックは正しい。**
+
+**一方で L01 DAWNBRINGER の4面図（正面）は破片になる。** 前処理後の画像は
+1022×1022 で機体が枠いっぱいに収まった良い絵（目視確認済み）なのに、出てくる
+メッシュは装甲板がばらばらに散る。上半身だけを切り出して塊の大きい対象にしても
+同じだった。
+
+原因は**未確定**。有力なのは2つで、どちらも決め切れていない。
+
+1. §1.5 の fp32 GEMM 破損が形状の復号のどこかを踏んでいる。probe は毎回
+   `fp32_matmul_sane: false` を返している。ただし上流サンプルも 4.4M 頂点で
+   2^19 を大きく超えており、それが通っている点と整合しない。
+2. 単視点の TRELLIS.2 が、正投影のコンセプトアート・細い四肢の人型という
+   入力領域に弱い。サンプルはコンパクトな機械部品である。
+
+**次に効くのは多視点。** 4面図が揃っているのだから Pixal3D の `inference_mv.py`
+（`_mv` 付き checkpoint）へ載せるのが筋で、上の 2 が主因ならこれで解ける。
+1 が主因なら多視点でも同じように壊れるので、**切り分けとしても意味がある。**
+
+### 2.2 実測: 動かすまでに要った手当て
+
+素の TRELLIS.2 はこの機体では起動しない。要ったのは以下。
+
+| 障害 | 手当て |
+|---|---|
+| `briaai/RMBG-2.0` が gated（403、承認制） | 入力を切り抜き済み RGBA にすれば `preprocess_image` は背景除去を通らない。読み込み時に必ず構築されるので probe 側で無効化する |
+| `facebook/dinov3-…` が gated（401） | ライセンス承諾と HF token。**重み 16 GB を揃えただけでは動かない** |
+| sparse attention が `sdpa` を受けない | `config.py` の許可一覧は `xformers` / `flash_attn` / `flash_attn_3` のみ。`ATTN_BACKEND=sdpa` は黙って無視され、既定の flash_attn のまま**重みを読み終えたあとで** `ModuleNotFoundError` になる |
+| 全経路が `RasterizeCudaContext` | `RasterizeGLContext` へ置換（`patch-trellis2-source.sh`） |
+
+背景除去は MediaForge が既に持っている BiRefNet の ONNX（MIT、CPU）を使った
+（`worker_packs/image/matte.py`）。gated なモデルを増やさずに済む。
+
 ---
 
 ## 3. production adapter と G8 への受け渡し
@@ -485,7 +535,8 @@ NOT TESTED かを記録する）に従う。
 | 2a-3 | ネイティブ拡張を gfx1201 で通す | **完了** | 5本すべてビルド・import 成功（§1.6）。flash-attn は入れない |
 | 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | **完了** | `RasterizeGLContext` 取得 OK。ラスタライズ被覆と補間を実値で検算して一致 |
 | 2b-1 | TRELLIS.2 の重み取得 | **完了** | 16.24 GB / 22分34秒。`microsoft/TRELLIS.2-4B` MIT（§1.7） |
-| 2b-2 | TRELLIS.2 の生成計測 | **待ち** | DINOv3 が gated。ライセンス承諾と HF token が要る |
+| 2b-2 | TRELLIS.2 の生成計測 | **完了** | 上流サンプルは破綻なし。ピーク VRAM 4.88 GB、生成 81〜122 秒（§2.1） |
+| 2b-3 | L01 4面図からの生成 | **未達** | 前処理は良好だがメッシュが破片になる。原因未確定（§2.1） |
 | 2c | Pixal3D の重み取得と生成計測 | 未着手 | 18.5〜46 GB。多視点版 `inference_mv.py` あり |
 | 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | 未着手 | |
 | 2b | `runtimes/pixal3d-probe` + `worker_packs/three_d/pixal3d_probe.py` | 未着手 | |
