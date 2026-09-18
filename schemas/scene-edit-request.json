@@ -1560,6 +1560,19 @@
       ],
       "default": null,
       "title": "Retry Job Id"
+    },
+    "reference_set_asset_id": {
+      "anyOf": [
+        {
+          "pattern": "^asset_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reference Set Asset Id"
     }
   },
   "required": [

@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-18 R1 reference storage source
+
+同worktree /tmp/mediaforge-reference-plan-20260918、branch ux1/3d-reference-set、親PR538/27676ca。
+既存asset.packの3d.reference_set、versioned ZIP/manifest、optional scene参照を実装。
+旧版/owner/競合/legacy retry保持、view/axis/parts/画像・ZIP上限、hash/license/lineage、取消drain。
+実HTTP同入力2回ZIP hash一致1596441B、実Blender4.5.13 binding/旧版保持/解放PASS。
+実Store再openの失敗終端・queued取消保持PASS。evidence/reference-sourceへ証跡保存。
+backup復元後の参照reader不整合を発見・修正、元画像ID/hashをorigin来歴へ保持。
+実2世代backup/restore/Blender再編集PASS。最終全gate54975はexit0、2022pass2warnings214.53秒。
+以後product変更なし、文書link/diff check成功。commit/push/PRへ保存する。
+稼働0.28.84/root/Host/model不変。canonical画像生成と整合受入は未実施、R1全体完了ではない。
+次はM2b actual-image reviewとM3曲面。source試験とsigned installed/OpenCode/品質gateを混同しない。
+
 
 ## 2026-09-18 M2a observation source
 

@@ -439,6 +439,7 @@ class SceneCreateRequest(BaseModel):
     tags: list[SceneTag] = Field(default_factory=list, max_length=32)
     collection: SceneLabel | None = None
     recipe: SceneRecipe
+    reference_set_asset_id: str | None = Field(default=None, pattern=r"^asset_[0-9a-f]{32}$")
     retry_job_id: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
 
 
@@ -448,6 +449,7 @@ class SceneEditRequest(BaseModel):
     scene_id: str = Field(pattern=r"^scene_[0-9a-f]{32}$")
     base_revision_id: str = Field(pattern=r"^revision_[0-9a-f]{32}$")
     recipe: SceneRecipe
+    reference_set_asset_id: str | None = Field(default=None, pattern=r"^asset_[0-9a-f]{32}$")
     retry_job_id: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
 
 

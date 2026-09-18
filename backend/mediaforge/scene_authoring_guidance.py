@@ -64,6 +64,13 @@ def scene_authoring_guidance() -> dict[str, Any]:
         "and renderer version for comparisons. Z up; front from -Y, side from +X. CPU frame 0, at most "
         "four views, 256/512 pixels. Poll media.job.status for image Assets. Historical observation "
         "does not advance the scene. Rendering alone is not semantic review or visual approval.",
+        "reference_set": "If asset.reference_set is available, use media.generate with operation "
+        "asset.pack, profile 3d.reference_set, all unique image Asset inputs and constraints matching "
+        "reference-set-spec.json. Front and side are required; canonical design, scale axis/meters, "
+        "forward/up axes, parts, normalized landmarks and source notes describe the design. "
+        "Attach the resulting ZIP Asset through scene create/edit reference_set_asset_id. Omission "
+        "on edit retains the previous set. Packaging does not certify cross-view consistency: "
+        "needs_review remains until an actual image review; do not invent camera calibration.",
         "visual_review": {
             "availability": "not_asserted_by_this_guidance",
             "required_evidence": ["scene_id", "revision_id", "actual_image_asset_id", "view", "visible_defect"],

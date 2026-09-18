@@ -1372,6 +1372,11 @@ def create_app(
                     "semantic_reason": None if semantic_available else "vision_analyzer_unavailable",
                 },
                 "asset.m5_companion_pack": {"state": "available"},
+                "asset.reference_set": {
+                    "state": "available", "profile": "3d.reference_set",
+                    "schema_path": "/schemas/reference-set-spec.json", "max_images": 5,
+                    "visual_consistency": "not_reviewed", "local_only": True,
+                },
                 "asset.3d_project_pack": (
                     {"state": "available", "profile": "3d.project.glb"}
                     if blender_runtimes.resolve_g8() is not None

@@ -1,0 +1,229 @@
+{
+  "$defs": {
+    "ReferenceLandmark": {
+      "additionalProperties": false,
+      "properties": {
+        "view": {
+          "enum": [
+            "front",
+            "side",
+            "back",
+            "three-quarter"
+          ],
+          "title": "View",
+          "type": "string"
+        },
+        "part_id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Part Id",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "uv": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            }
+          ],
+          "title": "Uv",
+          "type": "array"
+        }
+      },
+      "required": [
+        "view",
+        "part_id",
+        "name",
+        "uv"
+      ],
+      "title": "ReferenceLandmark",
+      "type": "object"
+    },
+    "ReferencePart": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "description": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "description"
+      ],
+      "title": "ReferencePart",
+      "type": "object"
+    },
+    "ReferenceView": {
+      "additionalProperties": false,
+      "properties": {
+        "view": {
+          "enum": [
+            "front",
+            "side",
+            "back",
+            "three-quarter"
+          ],
+          "title": "View",
+          "type": "string"
+        },
+        "asset_id": {
+          "pattern": "^asset_[0-9a-f]{32}$",
+          "title": "Asset Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "view",
+        "asset_id"
+      ],
+      "title": "ReferenceView",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "media-forge.reference-set-spec@1",
+      "default": "media-forge.reference-set-spec@1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+      "title": "Name",
+      "type": "string"
+    },
+    "canonical_asset_id": {
+      "anyOf": [
+        {
+          "pattern": "^asset_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Canonical Asset Id"
+    },
+    "views": {
+      "items": {
+        "$ref": "#/$defs/ReferenceView"
+      },
+      "maxItems": 4,
+      "minItems": 2,
+      "title": "Views",
+      "type": "array"
+    },
+    "scale_m": {
+      "exclusiveMinimum": 0,
+      "maximum": 10000,
+      "title": "Scale M",
+      "type": "number"
+    },
+    "scale_axis": {
+      "default": "+Y",
+      "enum": [
+        "+X",
+        "-X",
+        "+Y",
+        "-Y",
+        "+Z",
+        "-Z"
+      ],
+      "title": "Scale Axis",
+      "type": "string"
+    },
+    "forward_axis": {
+      "default": "-Y",
+      "enum": [
+        "+X",
+        "-X",
+        "+Y",
+        "-Y",
+        "+Z",
+        "-Z"
+      ],
+      "title": "Forward Axis",
+      "type": "string"
+    },
+    "up_axis": {
+      "default": "+Z",
+      "enum": [
+        "+X",
+        "-X",
+        "+Y",
+        "-Y",
+        "+Z",
+        "-Z"
+      ],
+      "title": "Up Axis",
+      "type": "string"
+    },
+    "parts": {
+      "items": {
+        "$ref": "#/$defs/ReferencePart"
+      },
+      "maxItems": 64,
+      "title": "Parts",
+      "type": "array"
+    },
+    "landmarks": {
+      "items": {
+        "$ref": "#/$defs/ReferenceLandmark"
+      },
+      "maxItems": 256,
+      "title": "Landmarks",
+      "type": "array"
+    },
+    "origin_notes": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "title": "Origin Notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "views",
+    "scale_m",
+    "origin_notes"
+  ],
+  "title": "ReferenceSetSpec",
+  "type": "object"
+}

@@ -1357,6 +1357,18 @@ never auto-fit each candidate separately. Render at most four fixed views at
 the source revision, source hash, exact observation specification and renderer
 version in every image's provenance. It produces evidence, not a visual verdict.
 
+ReferenceSet storage uses the existing deterministic asset.pack Job with the
+additive 3d.reference_set profile: one bounded, reproducible ZIP containing a
+versioned manifest and normalized reference PNGs. Parent image IDs/hashes, view
+labels, canonical design, declared scale/axes, parts/landmarks and source license
+metadata remain explicit. Packaging freezes inputs but leaves visual consistency
+needs_review; it does not certify that generated views agree or are orthographic.
+An optional scene reference-set Asset dependency pins that package's hash across
+edits and exports. No second collection database or new inference runtime is needed.
+Exact scene backups retain the package bytes and original image identities as
+historical provenance. Restored Library IDs do not rewrite IDs inside that ZIP;
+the embedded reference images remain usable without those original Library rows.
+
 2026-09-13 user priority: game-asset authoring through the existing MCP surface
 precedes further Web Blender acceptance. Characters, creatures, environment props,
 tools, vehicles, weapons and armor remain in scope. Authored meshes may explicitly

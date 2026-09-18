@@ -1152,6 +1152,19 @@
           "const": "create",
           "title": "Action",
           "type": "string"
+        },
+        "reference_set_asset_id": {
+          "anyOf": [
+            {
+              "pattern": "^asset_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Set Asset Id"
         }
       },
       "required": [
@@ -1195,6 +1208,19 @@
           "const": "edit",
           "title": "Action",
           "type": "string"
+        },
+        "reference_set_asset_id": {
+          "anyOf": [
+            {
+              "pattern": "^asset_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Set Asset Id"
         }
       },
       "required": [

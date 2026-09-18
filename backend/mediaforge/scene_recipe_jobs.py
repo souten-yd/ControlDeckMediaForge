@@ -120,6 +120,9 @@ class SceneRecipeJobManager:
             raise SceneError("host_capability_not_granted", "Host jobs.write capability is required")
         owner = identity.actor_subject or identity.subject
         external = value.model_dump(mode="json", exclude={"retry_job_id"})
+        # Preserve the durable payload of requests submitted before this additive field.
+        if external.get("reference_set_asset_id") is None:
+            external.pop("reference_set_asset_id", None)
         retry_pin: tuple[str, str, str | None] | None = None
         if retry_of is not None:
             previous = self.store.get_scene_recipe_task(retry_of, owner=owner)
