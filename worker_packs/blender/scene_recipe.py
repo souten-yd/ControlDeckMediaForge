@@ -13,6 +13,10 @@ import sys
 
 import bpy
 
+# This directory is a shipped trusted worker pack, never an input asset path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import scene_curves
+
 
 FIXED = {"recipe.json", "source.blend", "scene.blend", "result.json"}
 MAX_OPERATIONS = 64
@@ -389,6 +393,12 @@ def geometry_cost(obj: bpy.types.Object) -> int:
             cost *= 2 ** sum(modifier.use_axis)
         elif modifier.type == "BEVEL":
             cost *= 24 * int(modifier.segments) + 48
+        elif modifier.type == "ARMATURE":
+            continue
+        elif modifier.type == "SUBSURF":
+            if modifier.subdivision_type != "CATMULL_CLARK" or not 1 <= modifier.levels <= 2 or modifier.render_levels != modifier.levels:
+                raise RuntimeError("unsupported subdivision settings")
+            cost *= 6 * 4 ** (modifier.levels - 1)
         elif modifier.type == "ARRAY":
             if (modifier.fit_type != "FIXED_COUNT" or not 1 <= modifier.count <= 64
                     or modifier.use_relative_offset or modifier.use_object_offset
@@ -529,8 +539,27 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
     object_id = operation.get("object_id")
     if not isinstance(object_id, str):
         raise RuntimeError("recipe object ID differs")
-    if kind in {"primitive.add", "mesh.create", "light.add", "camera.add", "object.duplicate", "armature.create"} and object_id in objects:
+    if kind in {"primitive.add", "mesh.create", "mesh.loft", "mesh.sweep", "light.add", "camera.add", "object.duplicate", "armature.create"} and object_id in objects:
         raise RuntimeError("recipe object ID already exists")
+    if kind in {"mesh.loft", "mesh.sweep"}:
+        vertices, faces, spec = scene_curves.geometry(operation)
+        check_growth(objects, max(len(vertices), sum(len(face)-2 for face in faces)))
+        mesh = bpy.data.meshes.new(str(operation["name"]))
+        mesh.from_pydata(vertices, [], faces)
+        if mesh.validate():
+            bpy.data.meshes.remove(mesh)
+            raise RuntimeError("curve mesh required repair")
+        mesh.update()
+        for polygon in mesh.polygons:
+            polygon.use_smooth = spec["smooth"]
+        obj = bpy.data.objects.new(str(operation["name"]), mesh)
+        bpy.context.collection.objects.link(obj)
+        obj["media_forge_id"] = object_id
+        obj["media_forge_curve"] = json.dumps(spec, separators=(",", ":"))
+        obj["media_forge_curve_sha256"] = scene_curves.mesh_hash(mesh)
+        transform(obj, operation)
+        objects[object_id] = obj
+        return
     if kind == "mesh.create":
         vertices, faces = authored_mesh_data(operation)
         check_growth(objects, max(len(vertices), sum(len(face)-2 for face in faces)))
@@ -593,7 +622,24 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
     obj = objects.get(object_id)
     if obj is None:
         raise RuntimeError(f"unknown stable object ID: {object_id}")
-    if kind == "animation.clip":
+    if kind == "mesh.sections.set":
+        check_growth(objects, 0)
+        scene_curves.set_sections(obj, operation)
+    elif kind == "mesh.bridge_loops":
+        other_id = str(operation.get("other_object_id"))
+        count = operation.get("boundary")
+        check_growth(objects, 2*len(count) if isinstance(count, list) else MAX_GROWTH_GEOMETRY+1)
+        scene_curves.bridge(obj, objects.get(other_id), operation)
+        del objects[other_id]
+    elif kind == "modifier.subdivision":
+        if obj.type != "MESH" or any(m.type == "SUBSURF" for m in obj.modifiers):
+            raise RuntimeError("subdivision requires a mesh without existing subdivision")
+        levels = scene_curves.bounded_int(operation.get("levels",1),1,2)
+        check_growth(objects, geometry_cost(obj)*(6*4**(levels-1)-1))
+        modifier = obj.modifiers.new(name="Media Forge Subdivision", type="SUBSURF")
+        modifier.subdivision_type = "CATMULL_CLARK"
+        modifier.levels = modifier.render_levels = levels
+    elif kind == "animation.clip":
         create_clip(obj, operation, objects)
     elif kind == "skin.bind":
         bind_skin(obj, operation, objects)
@@ -715,6 +761,7 @@ def main() -> None:
                 "clip replacement target is missing or ambiguous": "clip_target_missing",
                 "automatic skin weights are missing": "auto_weights_missing",
                 "automatic skin weights are invalid": "auto_weights_invalid",
+                "geometry selection is stale": "geometry_selection_stale",
             }.get(str(exc), "operation_rejected")
             (Path.cwd() / args.result).write_text(json.dumps({
                 "schema_version": "media-forge.scene-recipe-failure@1",
@@ -733,6 +780,9 @@ def main() -> None:
         "autoexec_disabled": not bpy.context.preferences.filepaths.use_scripts_auto_execute,
         "operation_count": len(operations),
         "stable_object_ids": sorted(objects),
+        "mesh_geometry": [scene_curves.mesh_fact(obj) for key,obj in sorted(objects.items())[:256]
+                          if obj.type == "MESH" and len(obj.data.vertices) <= scene_curves.MAX_VERTICES
+                          and len(obj.data.polygons) <= 32768],
     }
     (Path.cwd() / args.result).write_text(
         json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"

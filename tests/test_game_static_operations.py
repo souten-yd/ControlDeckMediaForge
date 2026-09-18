@@ -38,6 +38,7 @@ def test_new_static_operations_match_published_schemas() -> None:
         "light.add", "camera.add", "object.duplicate", "modifier.mirror",
         "armature.create", "skin.bind", "pose.set",
         "animation.clip", "modifier.array", "skin.bind_auto", "mesh.create",
+        "mesh.loft", "mesh.sweep", "mesh.sections.set", "mesh.bridge_loops", "modifier.subdivision",
     }
 
 

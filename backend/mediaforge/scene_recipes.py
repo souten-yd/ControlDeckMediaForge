@@ -107,6 +107,118 @@ class MeshCreate(BaseModel):
         return self
 
 
+class CurveSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    center: Vector3
+    radii: tuple[Annotated[float, Field(ge=0.001, le=100)], Annotated[float, Field(ge=0.001, le=100)]]
+
+
+class MeshLoft(BaseModel):
+    """Generate an elliptical loft in local meters. The worker expands bounded sections;
+    caps close ends, not intersections. Same-count sections can later be edited using
+    the geometry hash returned by the recipe and snapshot.
+    """
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["mesh.loft"]
+    object_id: ObjectId
+    name: SceneLabel
+    sections: list[CurveSection] = Field(min_length=2, max_length=32)
+    radial_segments: int = Field(default=16, ge=8, le=32, strict=True)
+    samples_per_segment: int = Field(default=3, ge=1, le=8, strict=True)
+    caps: Literal["both", "start", "end", "none"] = "both"
+    up: Vector3 = (0.0, 0.0, 1.0)
+    smooth: bool = Field(default=True, strict=True)
+    location: Vector3 = (0.0, 0.0, 0.0)
+    rotation_degrees: Vector3 = (0.0, 0.0, 0.0)
+
+    @model_validator(mode="after")
+    def curve_bounds(self) -> "MeshLoft":
+        validate_curve_sections(self.sections, self.up)
+        return self
+
+
+def validate_curve_sections(sections: list[CurveSection], up: Vector3) -> None:
+    if sum(x*x for x in up) < 1e-12:
+        raise ValueError("curve up vector must be nonzero")
+    if any(sum((x-y)**2 for x,y in zip(a.center,b.center)) < 1e-8 for a,b in zip(sections, sections[1:])):
+        raise ValueError("adjacent curve centers must be distinct")
+
+
+class MeshSweep(BaseModel):
+    """Sweep a constant elliptical cross-section along a bounded local-meter path."""
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["mesh.sweep"]
+    object_id: ObjectId
+    name: SceneLabel
+    path_points: list[Vector3] = Field(min_length=2, max_length=32)
+    radii: tuple[Annotated[float, Field(ge=0.001, le=100)], Annotated[float, Field(ge=0.001, le=100)]]
+    radial_segments: int = Field(default=16, ge=8, le=32, strict=True)
+    samples_per_segment: int = Field(default=3, ge=1, le=8, strict=True)
+    caps: Literal["both", "start", "end", "none"] = "both"
+    up: Vector3 = (0.0, 0.0, 1.0)
+    smooth: bool = Field(default=True, strict=True)
+    location: Vector3 = (0.0, 0.0, 0.0)
+    rotation_degrees: Vector3 = (0.0, 0.0, 0.0)
+
+    @model_validator(mode="after")
+    def curve_bounds(self) -> "MeshSweep":
+        validate_curve_sections([CurveSection(center=p,radii=self.radii) for p in self.path_points], self.up)
+        return self
+
+
+class MeshSectionsSet(BaseModel):
+    """Replace all control sections, preserving vertex/face order, weights and UVs.
+    Requires an unchanged procedural mesh and its actual geometry hash. The number
+    of sections and sampling settings cannot change through this operation.
+    """
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["mesh.sections.set"]
+    object_id: ObjectId
+    expected_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    sections: list[CurveSection] = Field(min_length=2, max_length=32)
+
+
+    @model_validator(mode="after")
+    def sections_distinct(self) -> "MeshSectionsSet":
+        validate_curve_sections(self.sections, (0.0, 0.0, 1.0))
+        return self
+
+
+class MeshBridgeLoops(BaseModel):
+    """Join two independent static meshes across equal-sized open boundary loops.
+    Requires current geometry hashes and ordered boundary indices, consumes the
+    second object, preserves existing faces/materials/UVs, and ends procedural
+    section editing. It does not cut holes or prove an intersection-free joint.
+    """
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["mesh.bridge_loops"]
+    object_id: ObjectId
+    other_object_id: ObjectId
+    expected_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    other_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    boundary: list[Annotated[int, Field(ge=0, le=16383, strict=True)]] = Field(min_length=3, max_length=64)
+    other_boundary: list[Annotated[int, Field(ge=0, le=16383, strict=True)]] = Field(min_length=3, max_length=64)
+    twist_offset: int = Field(default=0, ge=-63, le=63, strict=True)
+
+    @model_validator(mode="after")
+    def unique_loops(self) -> "MeshBridgeLoops":
+        if self.object_id == self.other_object_id:
+            raise ValueError("bridge requires two different objects")
+        if len(self.boundary) != len(self.other_boundary) or any(len(set(loop)) != len(loop) for loop in (self.boundary,self.other_boundary)):
+            raise ValueError("bridge loops must have equal counts and unique indices")
+        return self
+
+
+class SubdivisionModifier(BaseModel):
+    """Add one bounded Catmull-Clark subdivision modifier; estimated scene growth
+    is checked before evaluation. This smooths geometry, not semantic quality.
+    """
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["modifier.subdivision"]
+    object_id: ObjectId
+    levels: int = Field(default=1, ge=1, le=2, strict=True)
+
+
 class TransformSet(BaseModel):
     """Replace one or more transforms on an existing stable object ID."""
     model_config = ConfigDict(extra="forbid")
@@ -387,6 +499,11 @@ class AnimationClip(BaseModel):
 SceneOperation = Annotated[
     PrimitiveAdd
     | MeshCreate
+    | MeshLoft
+    | MeshSweep
+    | MeshSectionsSet
+    | MeshBridgeLoops
+    | SubdivisionModifier
     | TransformSet
     | BevelModifier
     | MaterialSet
@@ -421,7 +538,7 @@ class SceneRecipe(BaseModel):
     def validate_object_references(self) -> "SceneRecipe":
         known: set[str] = set()
         for operation in self.operations:
-            if isinstance(operation, (PrimitiveAdd, MeshCreate, LightAdd, CameraAdd, ObjectDuplicate, ArmatureCreate)):
+            if isinstance(operation, (PrimitiveAdd, MeshCreate, MeshLoft, MeshSweep, LightAdd, CameraAdd, ObjectDuplicate, ArmatureCreate)):
                 if operation.object_id in known:
                     raise ValueError(f"duplicate object_id: {operation.object_id}")
                 known.add(operation.object_id)

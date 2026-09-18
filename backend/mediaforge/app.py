@@ -2714,6 +2714,7 @@ def create_app(
         return {
             "scene": document.model_dump(mode="json"),
             "revision": current.model_dump(mode="json"),
+            "mesh_geometry": await asyncio.to_thread(scene_workspace.geometry_facts, current),
         }
 
     @app.post("/addon/v1/agent/scene/export")

@@ -40,6 +40,7 @@ from .scenes import (
     SceneWorkingCopy,
     validate_scene_owner,
 )
+from .scene_geometry import validate_geometry_facts
 from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
 from .scene_recipes import SceneCreateRequest, SceneEditRequest, SceneMaterialRequest, SceneRecipe
@@ -288,6 +289,7 @@ class SceneWorkspace:
                         ).hexdigest(),
                         "operation_count": len(value.recipe.operations),
                         "stable_object_ids": worker_facts["stable_object_ids"],
+                        "mesh_geometry": worker_facts.get("mesh_geometry", []),
                     },
                 )
                 registered.extend([source_asset.id, preview_asset.id])
@@ -454,13 +456,15 @@ class SceneWorkspace:
                 raise SceneError("scene_recipe_failed", message)
             if output.is_symlink() or not output.is_file() or result_path.is_symlink() or not result_path.is_file():
                 raise SceneError("scene_recipe_worker_invalid", "scene recipe worker output is missing")
+            if result_path.stat().st_size > 4 * 1024 * 1024:
+                raise SceneError("scene_recipe_worker_invalid", "scene recipe result exceeds bounds")
             try:
                 result = json.loads(result_path.read_text(encoding="utf-8"))
             except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise SceneError("scene_recipe_worker_invalid", "scene recipe result is invalid") from exc
             expected = {"schema_version", "blender_version", "autoexec_disabled", "operation_count", "stable_object_ids"}
             if (
-                not isinstance(result, dict) or set(result) != expected
+                not isinstance(result, dict) or not expected <= set(result) or set(result) - expected - {"mesh_geometry"}
                 or result["schema_version"] != "media-forge.scene-recipe-result@1"
                 or result["blender_version"] != runtime.version
                 or result["autoexec_disabled"] is not True
@@ -469,6 +473,11 @@ class SceneWorkspace:
                 or not all(isinstance(item, str) for item in result["stable_object_ids"])
             ):
                 raise SceneError("scene_recipe_worker_invalid", "scene recipe result differs")
+            try:
+                if "mesh_geometry" in result:
+                    result["mesh_geometry"] = validate_geometry_facts(result["mesh_geometry"], result["stable_object_ids"])
+            except (ValidationError, ValueError) as exc:
+                raise SceneError("scene_recipe_worker_invalid", "scene mesh facts differ") from exc
             os.replace(output, retained)
             return retained, result
         except OSError as exc:
@@ -1905,6 +1914,14 @@ class SceneWorkspace:
             "chunk_bytes": BLEND_CHUNK_BYTES,
             "expires_at": _iso(value.expires_at),
         }
+
+    def geometry_facts(self, revision: SceneRevision) -> list[dict[str, Any]]:
+        """Only expose selector facts from the verified immutable source provenance."""
+        _, provenance, _ = self._verified_revision_asset(revision.source_asset_id, "application/x-blender")
+        try:
+            return validate_geometry_facts(provenance.parameters.get("mesh_geometry", []))
+        except (ValidationError, ValueError) as exc:
+            raise SceneError("scene_geometry_invalid", "stored geometry facts differ") from exc
 
     @staticmethod
     def _scene_projection(document: SceneDocument, revision: SceneRevision) -> dict[str, Any]:

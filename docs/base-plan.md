@@ -1416,3 +1416,17 @@ These links are references for initial adapter evaluation only. The architecture
 - LTX-Video / LTX-2 official repository: https://github.com/Lightricks/LTX-Video
 - Hunyuan3D 2.1 official repository: https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1
 - Blender Python API: https://docs.blender.org/api/current/
+
+### 2026-09-18 bounded curve authoring contract
+
+M3a adds mesh.loft / mesh.sweep / mesh.sections.set / mesh.bridge_loops /
+modifier.subdivision inside existing typed recipes. Worker expands 2–32 elliptical
+sections with 8–32 radial vertices and 1–8 samples per segment. Geometry hashes
+identify actual stored positions and face order; local edits preserve topology and
+require the hash plus current revision. Snapshot/provenance expose bounded mesh
+facts and procedural controls. Bridge consumes two unweighted independent static
+meshes at equal-sized open boundary loops; it preserves original UVs/materials but
+new joint UVs require explicit projection, and procedural control editing ends.
+Subdivision is fixed Catmull-Clark levels 1–2 under the existing geometry budget.
+Closed edges and smooth surfaces alone are not self-intersection/deformation or
+visual approval. No raw Python, new service, GPU admission or Host contract.
