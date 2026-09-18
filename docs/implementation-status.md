@@ -1,5 +1,20 @@
 # Media Forge implementation status
 
+## 2026-09-18 M2b advisory review (source; live vision pending)
+
+ux1/3d-vision-review、PR539/1930778上。media.scene.reviewを既存scene Jobsへ追加。
+revision固定画像/参照ZIPを検証し、Host vision.analyzeへ最大3枚のラベル付きシートを渡す。
+入力hash/送信JPEG hash/領域、最大3issue、object/evidence検査、未対応提案needs_review、ZIP来歴。
+source/fake gatewayで取消・retry・再起動・境界・APIを検証。実VLM成功とはしない。
+実Blender4.5.13で既存恐竜のclay4viewを4.330秒、入力準備0.153秒、7画像→2sheet/34mesh IDs。
+hash/旧版head/解放をassertし、実sheetを目視。実vision呼出0、semantic_review NOT TESTED。
+最初のfull gateはtool説明欠落1fail/2047passを検出し、説明をschemaへ追加した。
+次gateは既存autosave待機1fail/2049pass/221.94秒。単独PASS、product無変更で全体再実行。
+最終./mf.sh testは2050passed/2warnings/220.56秒、exit0。証跡にfull logを保持。
+詳細は[実装・入力準備記録](implementation/m2-review-20260918.md)。
+NOT TESTED: 実Host VLM/provider取消と解放、新toolのsigned installed/MCP/OpenCode、制作の品質。
+Host/global/モデル/稼働0.28.84変更0。M2全体・計画全体完了とはしない。
+
 ## 2026-09-18 R1 reference package and scene binding (source)
 
 ux1/3d-reference-set、PR538/27676ca上の独立slice。

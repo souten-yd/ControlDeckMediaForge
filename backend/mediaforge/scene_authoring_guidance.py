@@ -71,6 +71,12 @@ def scene_authoring_guidance() -> dict[str, Any]:
         "Attach the resulting ZIP Asset through scene create/edit reference_set_asset_id. Omission "
         "on edit retains the previous set. Packaging does not certify cross-view consistency: "
         "needs_review remains until an actual image review; do not invent camera calibration.",
+        "scene_review": "If 3d.scene_review is available, call media.scene.review with the exact scene/revision "
+        "and 2..4 observation image Asset IDs including front and side under identical observation settings. "
+        "The revision's pinned reference set is used automatically. It submits labelled image sheets through "
+        "Host vision.analyze and returns a ZIP report with at most three evidence-backed issues. "
+        "Check review_state and unsupported_suggestions; job success means the review ran, not that the asset "
+        "is approved. No edits run automatically. Missing vision is unavailable, never a text-only substitute.",
         "visual_review": {
             "availability": "not_asserted_by_this_guidance",
             "required_evidence": ["scene_id", "revision_id", "actual_image_asset_id", "view", "visible_defect"],

@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-18 M2b advisory review source
+
+worktree /tmp/mediaforge-reference-plan-20260918、branch ux1/3d-vision-review、親PR539/1930778。
+review tool/schema、既存scene Job/owner/history/取消/retry、Host vision.analyze、typed最大3issue、ZIP来歴。
+Host最大4画像に合わせ最大3sheetへ。新observeの実mesh IDs、原画像/送信JPEG hashと領域を記録。
+actual Blender恐竜clay4view4.330秒、入力準備0.153秒、7images/2sheets/34IDs、staging/ref解放PASS。
+実VLM呼出なし。source controlled gatewayの成功を実semantic受入に読み替えない。
+初回full2047pass1fail（tool説明）を修正。次gateは既存autosave待機1fail/2049pass。
+同test単独PASS、無変更再実行の最終全gate52321は2050pass2warnings220.56秒/exit0。
+新規product修正なし。commit/push/PRへ保存する。
+実証跡review-sourceに保持、稼働0.28.84/root/Host/model不変。
+次はM3 bounded曲面のsource slice、signed installed/実VLM/MCPとprovider取消は別gateで継続。
+
 ## 2026-09-18 R1 reference storage source
 
 同worktree /tmp/mediaforge-reference-plan-20260918、branch ux1/3d-reference-set、親PR538/27676ca。

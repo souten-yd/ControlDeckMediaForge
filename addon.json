@@ -157,6 +157,13 @@
         "permission": "workflows.run"
       },
       {
+        "id": "media.scene.review",
+        "label": "Review observed 3D scene images",
+        "endpoint": "/addon/v1/agent/scene/review",
+        "schema_path": "/schemas/scene-review-request.json",
+        "permission": "workflows.run"
+      },
+      {
         "id": "media.scene.snapshot",
         "label": "Read back the current state of a 3D scene",
         "endpoint": "/addon/v1/agent/scene/snapshot",

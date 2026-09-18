@@ -862,6 +862,8 @@ Community source is anecdotal.採用判断はBlender一次資料、MediaForgeの
 M2a観察は[source実装・実Blender受入](m2-observation-20260918.md)まで進行。
 R1の保存・scene参照部分は既存asset.packの3d.reference_set profileで実装。
 canonical条件付き画像生成と4方向整合性の実受入は別途継続する。
+M2bは[レビューsource実装・実入力準備](m2-review-20260918.md)まで進行。
+Host実VLM判定・provider取消/解放・installed新toolはNOT TESTED。
 新toolのsigned installed/OpenCode受入はNOT TESTED。M2全体や高品質制作の完了とはしない。
 
 採用理由・一次資料・比較手法は[参照画像調査](../research/reference-guided-3d-authoring.md)。

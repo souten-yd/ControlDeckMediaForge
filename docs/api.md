@@ -927,7 +927,54 @@ bevel/mirror/fixed array/armature modifiers; unsupported geometry is rejected;
 each PNG ≤4MiB; worker report ≤128KiB; existing Blender timeout.
 CPU Cycles, 2 threads, 16 samples, fixed lights and explicit orthographic framing.
 No GPU is used or leased. A scene render is evidence, not an automatic quality verdict;
-semantic_review remains not_tested, and no media.scene.review tool is added in this slice.
+semantic_review on an observation result remains not_tested; image creation itself does not review the scene.
+
+### Advisory scene image review
+
+`media.scene.review` → `POST /addon/v1/agent/scene/review`, with
+[`scene-review-request.json`](../schemas/scene-review-request.json).
+Requires normal scene ownership, `jobs.write` and `ai.inference`. It returns an
+existing detached scene Job; poll `media.job.status`, cancel with `media.job.cancel`.
+The exact revision's runtime identity remains pinned, but review launches no Blender
+process and acquires no second GPU lease. Host owns vision admission and routing.
+
+Provide `scene_id`, `revision_id`, `intent`, and 2–4 unique `observation_asset_ids`.
+Images must include front and side, originate from `scene.observe` for that exact
+source/revision/runtime, have matching ObservationSpec and object IDs, and pass
+byte/provenance/dimension checks. Historical revisions are allowed. Rendering
+another revision with identical-looking bytes is not interchangeable evidence.
+New observation provenance records actual stable mesh IDs; old observations may
+have none, in which case object-specific findings cannot name guessed IDs.
+
+The revision's `reference_set` dependency is used automatically. If optional
+`reference_set_asset_id` is supplied it must equal that dependency. Reference
+images are read from the verified package, including restored packages whose
+historical original image IDs are no longer current Library IDs.
+
+Images are sent to `vision.analyze` as one labelled observation sheet and, when
+present, one or two reference sheets (at most 768 pixels per side). A distinct
+canonical image is included too: at most three submitted sheets for nine original
+images. This respects Host's four-image bound without dropping selected views. Panels are fitted
+independently; their pixel sizes are not metric measurements. Evidence records
+source hashes, submitted JPEG hashes/bytes, sheet IDs and image pixel regions.
+
+The model must return the bounded [visual review schema](../schemas/scene-visual-review.json):
+at most three issues with validated evidence IDs, scope, known object ID where
+applicable, expected improvement and optional suggested operation. Unknown
+evidence/objects or inconsistent verdicts fail the Job. Unsupported operation
+suggestions remain advisory, are listed explicitly, and set `review_state=needs_review`.
+Unavailable vision/invalid response is a failure with no successful review Asset;
+there is no text-only fallback. Cancellation interrupts the awaited gateway call;
+live provider termination/resource-release acceptance is a separate gate.
+
+Successful execution returns an immutable ZIP Asset containing `review.json` and
+a `result.review` projection with deterministic revision validation separated
+from advisory visual findings. All cited input Assets are rechecked after inference.
+`semantic_review=completed` means the call and evidence/schema checks completed;
+`asset_approval=not_granted` and `edits_executed=false` are fixed. A no-visible-issues
+verdict applies only to the submitted stills. It does not certify topology,
+deformation, animation, reference calibration or game readiness, and cannot
+rewrite the ReferenceSet's needs_review state or advance the scene head.
 No workflow action is added; existing create/edit/material workflow contracts are unchanged.
 
 Invalid input returns invalid_scene_observation; runtime/owner/revision failures reuse scene

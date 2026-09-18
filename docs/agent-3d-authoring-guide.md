@@ -123,6 +123,15 @@ editで省略/nullなら維持、新IDなら差し替え。旧版の参照は変
 同一デザインから生成した画像でも、体格・部位数・向き・接続を実画像で確認する。
 投影と寸法は未検証の宣言であり、自動で正投影・測定済みと主張しない。
 
+`3d.scene_review`がavailableなら、同版・同条件の観察画像2〜4件（front/side必須）を
+`media.scene.review`へ渡す。添付した参照セットは自動的に比較へ含まれる。
+ラベル付きシートの実画像がHostのvision.analyzeへ届く。返るZIP reportのevidenceには
+元画像hash、送信JPEG hash、シート内領域があり、画像IDを文章で並べるだけの評価と区別する。
+Job成功はレビュー実行の成功である。review_state、最大3件の指摘、unsupported_suggestionsを
+確認してから局所編集を別Jobで行う。参照矛盾・不確かさはneeds_reviewで止める。
+VLM不在・応答不正は失敗であり、テキスト推測でPASSにしない。シートは独立にfitしているため
+見かけのpixelサイズを実寸と解釈しない。変形・animation・topologyは別の検証が必要である。
+
 ## 6. 表面と変形
 
 uv.smart_projectは初期投影で、継ぎ目や密度を保証しない。顔、模様、側面・背面を見る。
