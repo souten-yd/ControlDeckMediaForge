@@ -105,10 +105,8 @@ A100 と H100 で検証」と明記している。`inference.py` も `import o_v
 
 ### 1.3 未確定のリスク（probe で潰す）
 
-1. **RDNA4 / gfx1201**。先行例は RDNA3（gfx1100）まで。さらに先行例は
-   **fp32 matmul で M > 2^19 行のとき GEMM が黙って壊れる**問題に触れており、
-   RDNA4 に関わる話として記録されている。**probe はこれを明示的に確かめること**
-   （壊れても例外は出ない。出力を検算する必要がある）。
+1. **RDNA4 / gfx1201**。先行例は RDNA3（gfx1100）まで。
+   fp32 GEMM の破損は **この機体で再現した**。詳細は §1.5。
 2. **nvdiffrast が OpenGL backend になる**。MediaForge の worker は headless の
    サブプロセスなので、**EGL の初期化**が要る。先行例も headless/WSL2 では GL context を
    早期に初期化しないと EGL が失敗すると書いている。`runtimes/blender-web` 側に GL の
@@ -130,6 +128,45 @@ A100 と H100 で検証」と明記している。`inference.py` も `import o_v
 **Pixal3D が駄目でも作り直しにはならない。** backbone が同じなので runtime と拡張一式は
 共通で、退避は「Pixal3D 固有の段を外して TRELLIS.2 の素で回す」だけで済む。
 逆に言えば**拡張6本が通らなければ両方とも駄目**なので、probe の第一関門はそこになる。
+
+### 1.5 実測: gfx1201 で fp32 matmul が M > 2^19 のとき黙って壊れる
+
+**2026-09-18、この機体で再現。** torch 2.10.0+rocm7.2.1 / ROCm 7.2.1 /
+AMD Radeon AI PRO R9700 (gfx1201) / 34.2 GB。
+
+`A(M,64) @ B(64,32)` を CPU と突き合わせた結果:
+
+| M | 最大絶対差 | 不一致要素数 | |
+|---|---|---|---|
+| 262,144 (2^18) | 0.000e+00 | 0 | OK |
+| **524,288 (2^19)** | 0.000e+00 | 0 | OK |
+| **524,289 (2^19+1)** | 1.596e+01 | 32 | **壊れる** |
+| 1,048,576 (2^20) | 5.048e+01 | 16,775,541 | 壊れる |
+| 1,500,000 | 4.730e+01 | 31,219,651 | 壊れる |
+
+境界はちょうど 2^19。**例外は出ない。** 通ったことを成功と読んではいけない。
+
+範囲を詰めた結果（M = 2^20）:
+
+| 対象 | 結果 |
+|---|---|
+| `float32` matmul | **壊れる**（max 4.675e+01、16,775,468 要素） |
+| `torch.nn.functional.linear` (fp32) | **壊れる**（max 3.318e+03） |
+| `bfloat16` matmul | OK |
+| `float16` matmul | OK |
+| elementwise（mul/add） | OK |
+| fp32 を 2^18 行ずつに分割 | **OK**（max 0.000e+00） |
+
+**この計画にとっての意味:**
+
+- TRELLIS.2 / Pixal3D の checkpoint は `_bf16` 系で、推論の主経路は bf16 なので
+  **そのままでは踏まない**見込みが高い。
+- 踏むとすれば、decoder・voxel 処理・幾何処理のどこかに紛れる fp32 matmul である。
+  **probe と adapter は出力を検算すること**。速度だけ測って通ったことにしない。
+- 回避は「2^19 未満へ分割する」で足りる。分割した結果は CPU と完全一致した。
+
+**この不具合はこの計画に閉じない。** 同じ機体の image / video runtime でも、
+fp32 の大きい matmul を通す経路があれば同じことが起きる。G9 とは別に扱うこと。
 
 ### 1.4 依存が既存 runtime と衝突する
 
@@ -365,7 +402,10 @@ NOT TESTED かを記録する）に従う。
 |---|---|---|---|
 | 0 | ソースを 0.28.86 へ同期 | **完了** | 2026-09-18。`origin/main` = `8a8f1a2`、道具 16 本を確認。作業ブランチ `feat/g9-image-to-3d` |
 | 1 | 上流の固定（重み sha・依存・リスク）を文書化 | **完了** | 本文書 §1。HF sha `b0cb2e1b…`、master branch、weights 18.5〜46 GB。**ネイティブ拡張6本の移植が要ることが判明**（§1.2）。固定する HF repo は3つ |
-| 2a | ネイティブ拡張6本を gfx1201 で通す（probe の第一関門） | 未着手 | ビルド可否／EGL／fp32 GEMM 検算 |
+| 2a-1 | fp32 GEMM 検算 | **完了・不具合あり** | 2026-09-18。M > 2^19 で fp32 matmul が黙って壊れることを再現（§1.5）。bf16/fp16 は無事。分割で回避可 |
+| 2a-2 | probe 用 venv（ROCm 7.2.1 / torch 2.10.0） | **完了** | `runtimes/trellis2-probe/`。gfx1201 認識、34.2 GB |
+| 2a-3 | ネイティブ拡張6本を gfx1201 で通す | 着手中 | o-voxel / FlexGEMM / CuMesh / nvdiffrast / nvdiffrec。flash-attn は入れない |
+| 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | 未着手 | |
 | 2b | `runtimes/pixal3d-probe` + `worker_packs/three_d/pixal3d_probe.py` | 未着手 | |
 | 3 | **probe を実機実行して報告・判断を仰ぐ（ここで止まる）** | 未着手 | 所要秒数／ピーク VRAM／attention backend／GLB 検証 |
 | 4 | adapter + job + G8 受け渡し | 未着手 | |
