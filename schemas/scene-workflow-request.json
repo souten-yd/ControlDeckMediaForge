@@ -1313,8 +1313,12 @@
                 "primitive.add": "#/$defs/PrimitiveAdd",
                 "skin.bind": "#/$defs/SkinBind",
                 "skin.bind_auto": "#/$defs/SkinBindAuto",
+                "transform.apply_scale": "#/$defs/TransformApplyScale",
                 "transform.set": "#/$defs/TransformSet",
-                "uv.smart_project": "#/$defs/UvSmartProject"
+                "uv.pack": "#/$defs/UvPack",
+                "uv.seams.set": "#/$defs/UvSeamsSet",
+                "uv.smart_project": "#/$defs/UvSmartProject",
+                "uv.unwrap": "#/$defs/UvUnwrap"
               },
               "propertyName": "type"
             },
@@ -1351,6 +1355,18 @@
               },
               {
                 "$ref": "#/$defs/UvSmartProject"
+              },
+              {
+                "$ref": "#/$defs/TransformApplyScale"
+              },
+              {
+                "$ref": "#/$defs/UvSeamsSet"
+              },
+              {
+                "$ref": "#/$defs/UvUnwrap"
+              },
+              {
+                "$ref": "#/$defs/UvPack"
               },
               {
                 "$ref": "#/$defs/LightAdd"
@@ -2384,6 +2400,192 @@
         "object_id"
       ],
       "title": "SubdivisionModifier",
+      "type": "object"
+    },
+    "UvPack": {
+      "additionalProperties": false,
+      "description": "Pack existing UV islands into a unit tile under a bounded geometry hash.",
+      "properties": {
+        "type": {
+          "const": "uv.pack",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "expected_geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Geometry Sha256",
+          "type": "string"
+        },
+        "margin": {
+          "default": 0.02,
+          "maximum": 0.25,
+          "minimum": 0.001,
+          "title": "Margin",
+          "type": "number"
+        },
+        "rotate": {
+          "default": true,
+          "title": "Rotate",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "expected_geometry_sha256"
+      ],
+      "title": "UvPack",
+      "type": "object"
+    },
+    "UvSeamsSet": {
+      "additionalProperties": false,
+      "description": "Mark or clear bounded mesh edges as UV seams using actual geometry selectors.",
+      "properties": {
+        "type": {
+          "const": "uv.seams.set",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "expected_geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Geometry Sha256",
+          "type": "string"
+        },
+        "edges": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "maximum": 16383,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "maximum": 16383,
+                "minimum": 0,
+                "type": "integer"
+              }
+            ],
+            "type": "array"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Edges",
+          "type": "array"
+        },
+        "mark": {
+          "default": true,
+          "title": "Mark",
+          "type": "boolean"
+        },
+        "clear_existing": {
+          "default": false,
+          "title": "Clear Existing",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "expected_geometry_sha256",
+        "edges"
+      ],
+      "title": "UvSeamsSet",
+      "type": "object"
+    },
+    "UvUnwrap": {
+      "additionalProperties": false,
+      "description": "Unwrap a bounded mesh after explicit seams; selection is hash pinned.",
+      "properties": {
+        "type": {
+          "const": "uv.unwrap",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "expected_geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Geometry Sha256",
+          "type": "string"
+        },
+        "method": {
+          "default": "ANGLE_BASED",
+          "enum": [
+            "ANGLE_BASED",
+            "CONFORMAL"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "margin": {
+          "default": 0.02,
+          "maximum": 0.25,
+          "minimum": 0.001,
+          "title": "Margin",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "expected_geometry_sha256"
+      ],
+      "title": "UvUnwrap",
+      "type": "object"
+    },
+    "TransformApplyScale": {
+      "additionalProperties": false,
+      "description": "Apply positive scale to independent static mesh coordinates before baking.\nGeometry is hash pinned; only subdivision modifiers are retained. Procedural\ncontrols become stale when a non-unit scale changes the cage coordinates.",
+      "properties": {
+        "type": {
+          "const": "transform.apply_scale",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "expected_geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Geometry Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "expected_geometry_sha256"
+      ],
+      "title": "TransformApplyScale",
       "type": "object"
     }
   },

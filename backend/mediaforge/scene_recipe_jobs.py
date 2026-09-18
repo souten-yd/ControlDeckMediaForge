@@ -17,6 +17,7 @@ from .host.jobs import HostExecution, HostJobReporter
 from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
 from .scene_refinement import SceneRefineRequest
+from .scene_bake import SceneBakeRequest
 from .scene_recipes import (
     SceneCreateRequest,
     SceneEditRequest,
@@ -99,7 +100,7 @@ class SceneRecipeJobManager:
 
     async def submit(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
         identity: HostIdentity,
         *,
         retry_of: str | None = None,
@@ -115,7 +116,7 @@ class SceneRecipeJobManager:
 
     async def _submit(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
         identity: HostIdentity,
         *,
         retry_of: str | None = None,
@@ -147,6 +148,7 @@ class SceneRecipeJobManager:
             else "scene.material"
             if isinstance(value, SceneMaterialRequest)
             else "scene.observe" if isinstance(value, SceneObserveRequest)
+            else "scene.bake" if isinstance(value, SceneBakeRequest)
             else "scene.refine" if isinstance(value, SceneRefineRequest)
             else "scene.review" if isinstance(value, SceneReviewRequest)
             else "scene.edit"
@@ -176,7 +178,7 @@ class SceneRecipeJobManager:
 
     async def _submit_pinned(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
         identity: HostIdentity,
         owner: str,
         external: dict[str, Any],
@@ -216,6 +218,8 @@ class SceneRecipeJobManager:
                 if isinstance(value, SceneMaterialRequest)
                 else f"Observe fixed Blender scene revision {value.revision_id}"
                 if isinstance(value, SceneObserveRequest)
+                else f"Bake textures from fixed Blender scene revision {value.revision_id}"
+                if isinstance(value, SceneBakeRequest)
                 else f"Refine fixed Blender scene revision {value.base_revision_id}"
                 if isinstance(value, SceneRefineRequest)
                 else f"Review observed Blender scene revision {value.revision_id}"
@@ -274,7 +278,7 @@ class SceneRecipeJobManager:
     async def _run_pinned(
         self,
         job_id: str,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
         references: ExitStack,
         started: asyncio.Event,
     ) -> None:
@@ -391,7 +395,7 @@ class SceneRecipeJobManager:
     async def _run(
         self,
         job_id: str,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
     ) -> None:
         execution = self._executions[job_id]
         reporter = HostJobReporter(self.host, execution)
@@ -402,7 +406,7 @@ class SceneRecipeJobManager:
             self.store.update_job(job_id, status=JobStatus.RUNNING, phase="validate_recipe", progress=0.05)
             self.store.update_scene_recipe_task(job_id, stage="validate_recipe")
             await self._report_progress(reporter, "validate_recipe", 0.05)
-            execution_phase = "scene_refinement" if isinstance(value, SceneRefineRequest) else "vision_review" if isinstance(value, SceneReviewRequest) else "blender_recipe"
+            execution_phase = "blender_bake" if isinstance(value, SceneBakeRequest) else "scene_refinement" if isinstance(value, SceneRefineRequest) else "vision_review" if isinstance(value, SceneReviewRequest) else "blender_recipe"
             self.store.update_job(job_id, phase=execution_phase, progress=0.25)
             self.store.update_scene_recipe_task(job_id, stage=execution_phase)
             await self._report_progress(reporter, execution_phase, 0.25)
@@ -440,6 +444,10 @@ class SceneRecipeJobManager:
                         task.owner, job_id, value,
                         runtime_id=task.runtime_id, runtime_version=task.runtime_version,
                     ) if isinstance(value, SceneObserveRequest)
+                    else self.workspace.bake_scene(
+                        task.owner, job_id, value,
+                        runtime_id=task.runtime_id, runtime_version=task.runtime_version,
+                    ) if isinstance(value, SceneBakeRequest)
                     else self.workspace.refine_scene(
                         task.owner, job_id, value, gateway=self.ai_gateway,
                         identity_provider=lambda: execution.identity,
@@ -491,6 +499,7 @@ class SceneRecipeJobManager:
                 if acquired:
                     self._execution_guard.release()
             publish_stage = ("publish_observation" if isinstance(value, SceneObserveRequest)
+                             else "publish_bake" if isinstance(value, SceneBakeRequest)
                              else "publish_refinement" if isinstance(value, SceneRefineRequest)
                              else "publish_review" if isinstance(value, SceneReviewRequest) else "publish_revision")
             self.store.update_job(job_id, phase=publish_stage, progress=0.9)

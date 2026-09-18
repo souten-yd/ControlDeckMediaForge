@@ -127,6 +127,7 @@ from .scene_authoring_guidance import scene_authoring_guidance
 from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
 from .scene_refinement import SceneRefineRequest
+from .scene_bake import SceneBakeRequest
 from .scene_recipes import (
     SceneCreateRequest,
     SceneEditRequest,
@@ -280,6 +281,7 @@ def create_app(
         material_worker=REPOSITORY_ROOT / "worker_packs/blender/material_binding.py",
         recipe_worker=REPOSITORY_ROOT / "worker_packs/blender/scene_recipe.py",
         observation_worker=REPOSITORY_ROOT / "worker_packs/blender/scene_observation.py",
+        bake_worker=REPOSITORY_ROOT / "worker_packs/blender/scene_bake.py",
         process_timeout_sec=resolved.blender_timeout_sec,
     )
     material_previews = MaterialPreviewManager(scene_workspace)
@@ -1100,6 +1102,7 @@ def create_app(
                 "agent_tool:media.scene.observe": token_state,
                 "agent_tool:media.scene.review": token_state,
                 "agent_tool:media.scene.refine": token_state,
+                "agent_tool:media.scene.bake": token_state,
                 "agent_tool:media.scene.snapshot": token_state,
                 "agent_tool:media.scene.export": token_state,
                 "agent_tool:media.job.status": token_state,
@@ -1409,6 +1412,13 @@ def create_app(
                     else {"state": "unavailable", "reason": "runtime_not_installed", "local_only": True}
                 ),
                 # 旗を立てて回るのではなく、実際に走らせられるかで決める。
+                "3d.scene_bake": (
+                    {"state": "available", "channels": ["normal", "ao"], "device": "CPU",
+                     "resolutions": [256, 512, 1024], "frame": 0, "samples": 16,
+                     "schema_path": "/schemas/scene-bake-request.json", "local_only": True}
+                    if blender_runtimes.resolve_g8() is not None
+                    else {"state": "unavailable", "reason": "runtime_not_installed", "local_only": True}
+                ),
                 "3d.scene_refinement": (
                     {"state": "available", "max_issues": 3, "max_iterations": 6,
                      "stop_after_non_improvements": 2, "original_head_retained": True,
@@ -2611,7 +2621,7 @@ def create_app(
         return value
 
     async def submit_scene_tool(
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
         identity: HostIdentity,
     ) -> dict[str, Any]:
         try:
@@ -2713,6 +2723,15 @@ def create_app(
             value = SceneRefineRequest.model_validate(scene_tool_input(await request.json()))
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail={"code": "invalid_scene_refinement"}) from exc
+        return await submit_scene_tool(value, identity)
+
+    @app.post("/addon/v1/agent/scene/bake")
+    async def agent_scene_bake(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneBakeRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_bake"}) from exc
         return await submit_scene_tool(value, identity)
 
     @app.post("/addon/v1/agent/scene/snapshot")

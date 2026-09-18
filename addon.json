@@ -157,6 +157,13 @@
         "permission": "workflows.run"
       },
       {
+        "id": "media.scene.bake",
+        "label": "Bake normal and AO texture maps on CPU",
+        "endpoint": "/addon/v1/agent/scene/bake",
+        "schema_path": "/schemas/scene-bake-request.json",
+        "permission": "workflows.run"
+      },
+      {
         "id": "media.scene.review",
         "label": "Review observed 3D scene images",
         "endpoint": "/addon/v1/agent/scene/review",
