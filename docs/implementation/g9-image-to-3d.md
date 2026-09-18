@@ -129,6 +129,42 @@ A100 と H100 で検証」と明記している。`inference.py` も `import o_v
 共通で、退避は「Pixal3D 固有の段を外して TRELLIS.2 の素で回す」だけで済む。
 逆に言えば**拡張6本が通らなければ両方とも駄目**なので、probe の第一関門はそこになる。
 
+### 1.6 実測: ネイティブ拡張のビルド結果（gfx1201 / ROCm 7.2.1）
+
+2026-09-18。`runtimes/trellis2-probe/.venv`（torch 2.10.0+rocm7.2.1、Python 3.12.3）。
+
+| 拡張 | 結果 | 要ったこと |
+|---|---|---|
+| `o_voxel` | **ビルド成功** | `ROCM_HOME=/opt/rocm` の明示だけ。setup.py に HIP 分岐あり |
+| `flex_gemm` | **ビルド成功・import OK** | ビルドはそのまま。Triton 設定の TF32 を ROCm で無効化 |
+| `cumesh` | **ビルド成功・import OK** | fork と3種のソース修正が要る（下記） |
+| `nvdiffrast` | 未着手 | `o_voxel` の import が 要求するので必須 |
+| `nvdiffrec` | 未着手 | |
+| `flash-attn` | 入れない | `ATTN_BACKEND=sdpa` で代替 |
+
+**先に潰すべき環境の罠:** torch の `ROCM_HOME` 自動判定がこの機体では
+`/opt/rocm-7.2.1/core-10.0` を掴む。そこに `include/hip/` は無く、
+`'hip/hip_runtime.h' file not found` で全部の HIP 拡張が落ちる。
+**`ROCM_HOME=/opt/rocm ROCM_PATH=/opt/rocm` を明示すること。**
+これは G9 に限らず、この機体で HIP 拡張を組むとき常に要る。
+
+**CuMesh に要る修正**（上流 `JeffreyXiang/CuMesh` ではビルドできない）:
+
+1. fork `visualbruno/CuMesh` を使う。
+2. `src/clean_up.cu` の `::cuda::std::tuple`（libcu++）は HIP に無い。
+   `rocprim::tuple` へ差し替える。`rocprim::tuple` は explicit constructor なので
+   `return {a,b,c}` のブレース初期化も明示構築へ直す。
+3. `src/dtypes.cuh` の `Vec3f` 既定 constructor を `__device__` から
+   `__host__ __device__` へ。`hipcub::DeviceSegmentedReduce` が identity を
+   host から作るため。
+4. `setup.py` から NVCC 専用フラグ（`--extended-lambda` 等）を落とす。
+5. vendored な `third_party/cubvh` は git submodule ではないので eigen を直接 clone する。
+6. `cumesh/remeshing.py` を fork のものへ差し替える。
+
+**FlexGEMM に要る修正:** `flex_gemm/kernels/triton/spconv/config.py` の
+`allow_tf32 = True` を ROCm で False にする。TF32 は NVIDIA 専用で、ROCm の Triton は
+`ieee` / `bf16x3` / `bf16x6` しか持たない。Triton の cache も捨てる。
+
 ### 1.5 実測: gfx1201 で fp32 matmul が M > 2^19 のとき黙って壊れる
 
 **2026-09-18、この機体で再現。** torch 2.10.0+rocm7.2.1 / ROCm 7.2.1 /
@@ -404,7 +440,7 @@ NOT TESTED かを記録する）に従う。
 | 1 | 上流の固定（重み sha・依存・リスク）を文書化 | **完了** | 本文書 §1。HF sha `b0cb2e1b…`、master branch、weights 18.5〜46 GB。**ネイティブ拡張6本の移植が要ることが判明**（§1.2）。固定する HF repo は3つ |
 | 2a-1 | fp32 GEMM 検算 | **完了・不具合あり** | 2026-09-18。M > 2^19 で fp32 matmul が黙って壊れることを再現（§1.5）。bf16/fp16 は無事。分割で回避可 |
 | 2a-2 | probe 用 venv（ROCm 7.2.1 / torch 2.10.0） | **完了** | `runtimes/trellis2-probe/`。gfx1201 認識、34.2 GB |
-| 2a-3 | ネイティブ拡張6本を gfx1201 で通す | 着手中 | o-voxel / FlexGEMM / CuMesh / nvdiffrast / nvdiffrec。flash-attn は入れない |
+| 2a-3 | ネイティブ拡張を gfx1201 で通す | **3/5 完了** | o_voxel・flex_gemm・cumesh がビルド成功（§1.6）。nvdiffrast / nvdiffrec が残り。flash-attn は入れない |
 | 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | 未着手 | |
 | 2b | `runtimes/pixal3d-probe` + `worker_packs/three_d/pixal3d_probe.py` | 未着手 | |
 | 3 | **probe を実機実行して報告・判断を仰ぐ（ここで止まる）** | 未着手 | 所要秒数／ピーク VRAM／attention backend／GLB 検証 |
