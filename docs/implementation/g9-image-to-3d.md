@@ -135,12 +135,18 @@ A100 と H100 で検証」と明記している。`inference.py` も `import o_v
 
 | 拡張 | 結果 | 要ったこと |
 |---|---|---|
-| `o_voxel` | **ビルド成功** | `ROCM_HOME=/opt/rocm` の明示だけ。setup.py に HIP 分岐あり |
-| `flex_gemm` | **ビルド成功・import OK** | ビルドはそのまま。Triton 設定の TF32 を ROCm で無効化 |
-| `cumesh` | **ビルド成功・import OK** | fork と3種のソース修正が要る（下記） |
-| `nvdiffrast` | 未着手 | `o_voxel` の import が 要求するので必須 |
-| `nvdiffrec` | 未着手 | |
+| `o_voxel` | **成功・import OK** | `ROCM_HOME=/opt/rocm` の明示だけ。setup.py に HIP 分岐あり |
+| `flex_gemm` | **成功・import OK** | ビルドはそのまま。Triton 設定の TF32 を ROCm で無効化 |
+| `cumesh` | **成功・import OK** | fork と3種のソース修正が要る（下記） |
+| `nvdiffrast` | **成功・import OK** | CUDA ラスタライザは stub。GL ラスタライザを別途組む（下記） |
+| `nvdiffrec_render` | **成功・import OK** | nvdiffrast と同じ枠で組める |
 | `flash-attn` | 入れない | `ATTN_BACKEND=sdpa` で代替 |
+
+**実機検証（2026-09-18）:** headless で `dr.RasterizeGLContext` が取れ、三角形の
+ラスタライズは被覆 1,352/4,096（幾何から出る期待値 約1,310）、`dr.interpolate` の
+重心座標の和は min/max ともに 1.0000 だった。**通っただけでなく値が合っている。**
+
+再現手順は `runtimes/trellis2-probe/build-nvdiffrast-rocm.sh` に置いた。
 
 **先に潰すべき環境の罠:** torch の `ROCM_HOME` 自動判定がこの機体では
 `/opt/rocm-7.2.1/core-10.0` を掴む。そこに `include/hip/` は無く、
@@ -160,6 +166,27 @@ A100 と H100 で検証」と明記している。`inference.py` も `import o_v
 4. `setup.py` から NVCC 専用フラグ（`--extended-lambda` 等）を落とす。
 5. vendored な `third_party/cubvh` は git submodule ではないので eigen を直接 clone する。
 6. `cumesh/remeshing.py` を fork のものへ差し替える。
+
+**nvdiffrast に要る修正**（一番重い）:
+
+1. 本体の CUDA ラスタライザ（CudaRaster）は **PTX のインラインアセンブリ**を使っており
+   HIP へ移植できない。v0.4.0 側では stub にして interpolate / texture / antialias だけ組む。
+2. 代わりに **v0.3.5 の OpenGL ラスタライザ**を別モジュールとして組み、`ops.py` を
+   patch して `RasterizeGLContext` から使えるようにする。
+3. HIP-GL interop（`hipGraphicsGLRegisterBuffer` 等）は Mesa のオープンドライバでは
+   動かないので、GPU-GL のやり取りは **CPU 経由**にする
+   （`hipMemcpy D2H` → `glBufferSubData`、`glGetTexImage` → `hipMemcpy H2D`）。
+4. `__frcp_rz` は CUDA 専用なので `__fdividef(1.0f, x)` へ。
+5. ROCm 7.2 の warp 同期は 64bit マスクを要求するので `0xffffffffu` を
+   `(unsigned long long)` へ、`amask` も `unsigned long long` へ。
+6. **guard は Masquerading 版を使うこと。** 素の `c10::hip::OptionalHIPGuard` は
+   `DeviceType::HIP` しか受けず、ROCm torch が Python から cuda を名乗るため
+   `HIPGuardImpl initialized with non-HIP DeviceType: cuda` で落ちる。
+   `ATen/hip/impl/HIPGuardImplMasqueradingAsCUDA.h` と `HIPStreamMasqueradingAsCUDA.h` から
+   `at::hip::OptionalHIPGuardMasqueradingAsCUDA` /
+   `at::hip::getCurrentHIPStreamMasqueradingAsCUDA` を取る。
+   torch 2.10.0+rocm7.2.1 の `c10/hip/HIPGuard.h` にこれらは無い。
+7. `EGL/egl.h` が要る（`libegl1-mesa-dev`）。`GL/gl.h` と `KHR` は既に入っていた。
 
 **FlexGEMM に要る修正:** `flex_gemm/kernels/triton/spconv/config.py` の
 `allow_tf32 = True` を ROCm で False にする。TF32 は NVIDIA 専用で、ROCm の Triton は
@@ -440,7 +467,9 @@ NOT TESTED かを記録する）に従う。
 | 1 | 上流の固定（重み sha・依存・リスク）を文書化 | **完了** | 本文書 §1。HF sha `b0cb2e1b…`、master branch、weights 18.5〜46 GB。**ネイティブ拡張6本の移植が要ることが判明**（§1.2）。固定する HF repo は3つ |
 | 2a-1 | fp32 GEMM 検算 | **完了・不具合あり** | 2026-09-18。M > 2^19 で fp32 matmul が黙って壊れることを再現（§1.5）。bf16/fp16 は無事。分割で回避可 |
 | 2a-2 | probe 用 venv（ROCm 7.2.1 / torch 2.10.0） | **完了** | `runtimes/trellis2-probe/`。gfx1201 認識、34.2 GB |
-| 2a-3 | ネイティブ拡張を gfx1201 で通す | **3/5 完了** | o_voxel・flex_gemm・cumesh がビルド成功（§1.6）。nvdiffrast / nvdiffrec が残り。flash-attn は入れない |
+| 2a-3 | ネイティブ拡張を gfx1201 で通す | **完了** | 5本すべてビルド・import 成功（§1.6）。flash-attn は入れない |
+| 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | **完了** | `RasterizeGLContext` 取得 OK。ラスタライズ被覆と補間を実値で検算して一致 |
+| 2b | Pixal3D の重み取得と生成計測 | 未着手 | 上流ライセンスの承諾が要る。18.5〜46 GB |
 | 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | 未着手 | |
 | 2b | `runtimes/pixal3d-probe` + `worker_packs/three_d/pixal3d_probe.py` | 未着手 | |
 | 3 | **probe を実機実行して報告・判断を仰ぐ（ここで止まる）** | 未着手 | 所要秒数／ピーク VRAM／attention backend／GLB 検証 |
