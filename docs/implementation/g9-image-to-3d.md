@@ -231,6 +231,21 @@ AMD Radeon AI PRO R9700 (gfx1201) / 34.2 GB。
 **この不具合はこの計画に閉じない。** 同じ機体の image / video runtime でも、
 fp32 の大きい matmul を通す経路があれば同じことが起きる。G9 とは別に扱うこと。
 
+### 1.7 重みの入手（2026-09-19 実測）
+
+`microsoft/TRELLIS.2-4B`（**MIT**、sha `af44b45f2e35a493886929c6d786e563ec68364d`）は
+22 files / **16.24 GB**。実測で取得に 22 分 34 秒かかった。
+
+**`facebook/dinov3-vitl16-pretrain-lvd1689m` が gated。** TRELLIS.2 の画像条件付けが
+これを参照するので、HF のライセンス承諾と token が無いと 401 で止まる。
+上流の重みだけ揃えても動かない点に注意。
+
+参考: Pixal3D は同じ DINOv3 を非 gated のミラー
+（`camenduru/dinov3-vitl16-pretrain-lvd1689m`）で参照している。
+
+取得先は `data/feature-data/media-forge/hf-cache` に置いた（`HF_HOME` で指定）。
+リポジトリの中には入れない。
+
 ### 1.4 依存が既存 runtime と衝突する
 
 上流 `requirements.txt` は `transformers==4.57.3` / `diffusers==0.37.1` を要求する。
@@ -469,7 +484,9 @@ NOT TESTED かを記録する）に従う。
 | 2a-2 | probe 用 venv（ROCm 7.2.1 / torch 2.10.0） | **完了** | `runtimes/trellis2-probe/`。gfx1201 認識、34.2 GB |
 | 2a-3 | ネイティブ拡張を gfx1201 で通す | **完了** | 5本すべてビルド・import 成功（§1.6）。flash-attn は入れない |
 | 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | **完了** | `RasterizeGLContext` 取得 OK。ラスタライズ被覆と補間を実値で検算して一致 |
-| 2b | Pixal3D の重み取得と生成計測 | 未着手 | 上流ライセンスの承諾が要る。18.5〜46 GB |
+| 2b-1 | TRELLIS.2 の重み取得 | **完了** | 16.24 GB / 22分34秒。`microsoft/TRELLIS.2-4B` MIT（§1.7） |
+| 2b-2 | TRELLIS.2 の生成計測 | **待ち** | DINOv3 が gated。ライセンス承諾と HF token が要る |
+| 2c | Pixal3D の重み取得と生成計測 | 未着手 | 18.5〜46 GB。多視点版 `inference_mv.py` あり |
 | 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | 未着手 | |
 | 2b | `runtimes/pixal3d-probe` + `worker_packs/three_d/pixal3d_probe.py` | 未着手 | |
 | 3 | **probe を実機実行して報告・判断を仰ぐ（ここで止まる）** | 未着手 | 所要秒数／ピーク VRAM／attention backend／GLB 検証 |

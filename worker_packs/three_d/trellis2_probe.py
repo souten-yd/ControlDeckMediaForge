@@ -63,9 +63,12 @@ def _snapshot(path: Path) -> Path:
         raise ValueError("TRELLIS.2 snapshot revision differs from the pinned revision")
     if snapshot.parent.name != "snapshots":
         raise ValueError("TRELLIS.2 snapshot must use a verified Hugging Face cache layout")
+    # Cache entries are symlinks into blobs/, so contain against the repository
+    # directory rather than the snapshot.
+    repository = snapshot.parent.parent.resolve(strict=True)
     config = (snapshot / "pipeline.json").resolve(strict=True)
-    if not config.is_file() or not config.is_relative_to(snapshot):
-        raise ValueError("TRELLIS.2 pipeline config escapes its snapshot")
+    if not config.is_file() or not config.is_relative_to(repository):
+        raise ValueError("TRELLIS.2 pipeline config escapes its repository")
     if config.stat().st_size > 64 * 1024:
         raise ValueError("TRELLIS.2 pipeline config is unbounded")
     return snapshot
