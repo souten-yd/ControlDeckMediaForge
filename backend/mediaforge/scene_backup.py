@@ -496,6 +496,11 @@ class SceneBackupCodec:
                     "created_at": now,
                 }
             )
+            reference_parameters: dict[str, Any] = {}
+            if (entry.provenance.parameters.get("profile") == "3d.reference_set"
+                    or "reference_set_origin" in entry.provenance.parameters):
+                from .reference_set import reference_origin
+                reference_parameters["reference_set_origin"] = reference_origin(entry.provenance).model_dump(mode="json")
             provenance = Provenance(
                 id=provenance_id,
                 asset_id=asset_id,
@@ -514,6 +519,7 @@ class SceneBackupCodec:
                     "backup_sha256": archive_sha256,
                     "source_asset_id": original_id,
                     "source_provenance_id": entry.provenance.id,
+                    **reference_parameters,
                 },
                 reference_asset_hashes={
                     asset_ids[value]: digest

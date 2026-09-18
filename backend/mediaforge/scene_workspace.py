@@ -26,6 +26,7 @@ from .domain import Asset, ErrorDetail, JobRequest, JobStatus, Provenance
 from .glb import GlbValidationError, validate_glb_path
 from .material_binding import MaterialBinding
 from .paths import contained
+from .reference_set import ReferenceSetError, read_reference_set
 from .scenes import (
     SceneCatalog,
     SceneDocument,
@@ -232,6 +233,20 @@ class SceneWorkspace:
                 _, _, source = self._verified_revision_asset(
                     parent.source_asset_id, "application/x-blender"
                 )
+            dependencies = list(parent.dependencies) if parent is not None else []
+            previous_reference = next((item for item in dependencies if item.role == "reference_set"), None)
+            reference_id = value.reference_set_asset_id or (previous_reference.asset_id if previous_reference else None)
+            if reference_id is not None:
+                try:
+                    await asyncio.to_thread(read_reference_set, self.store, reference_id)
+                    reference, _, _ = self._verified_revision_asset(reference_id, "application/zip")
+                except ReferenceSetError as exc:
+                    raise SceneError("scene_reference_invalid", str(exc)) from exc
+                if (value.reference_set_asset_id is None and previous_reference is not None
+                        and reference.sha256 != previous_reference.sha256):
+                    raise SceneError("scene_reference_invalid", "pinned reference package hash changed")
+                dependencies = [item for item in dependencies if item.role != "reference_set"]
+                dependencies.append(SceneDependency(role="reference_set", asset_id=reference.id, sha256=reference.sha256))
             generated, worker_facts = await self._apply_recipe_worker(
                 value.recipe, runtime, source=source
             )
@@ -245,7 +260,7 @@ class SceneWorkspace:
                     blender_facts,
                     glb_facts,
                     parent_revision=parent,
-                    dependencies=parent.dependencies if parent is not None else [],
+                    dependencies=dependencies,
                     operation="scene.recipe.create" if parent is None else "scene.recipe.edit",
                     parameters={
                         "recipe_schema": value.recipe.schema_version,
@@ -260,7 +275,7 @@ class SceneWorkspace:
                 revision_value = SceneRevisionInput(
                     source_asset_id=source_asset.id,
                     preview_asset_id=preview_asset.id,
-                    dependencies=parent.dependencies if parent is not None else [],
+                    dependencies=dependencies,
                     runtime_id=runtime.runtime_id,
                     runtime_version=runtime.version,
                     validation=self._validation(blender_facts, glb_facts),

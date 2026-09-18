@@ -8,6 +8,7 @@ import os
 import shutil
 import sys
 import time
+import threading
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
@@ -47,6 +48,10 @@ from .outpaint import outpaint_plan, validate_outpaint
 from .models.adapters import VIDEO_ADAPTERS
 from .paths import contained
 from .profiles import profile_prompt
+from .reference_set import (
+    PROFILE as REFERENCE_SET_PROFILE, ReferenceSetError, ReferenceSetCanceled,
+    build_reference_set, parse_spec as parse_reference_spec,
+)
 from .asset_brief import (
     AssetBrief,
     AssetBriefError,
@@ -558,7 +563,9 @@ class JobManager:
                         name=f"media-forge-host-control-{job_id}",
                     )
                 self._validate_input_assets(job)
-                if job.request.profile == "3d.project.glb":
+                if job.request.profile == REFERENCE_SET_PROFILE:
+                    await self._execute_reference_pack(job, reporter)
+                elif job.request.profile == "3d.project.glb":
                     await self._execute_3d_pack(job, reporter)
                 else:
                     await self._execute_m5_pack(job, reporter)
@@ -918,6 +925,19 @@ class JobManager:
 
     def _validate_input_assets(self, job: Job) -> None:
         if job.request.operation == "asset.pack":
+            if job.request.profile == REFERENCE_SET_PROFILE:
+                if (job.request.output.format != "zip" or job.request.output.count != 1
+                        or job.request.model_policy != "auto" or job.request.qa.semantic
+                        or job.request.qa.max_regeneration_attempts != 0):
+                    raise WorkerFailure("unsupported_pack_profile", "reference sets require one deterministic ZIP")
+                try:
+                    spec = parse_reference_spec(job.request.constraints)
+                except ReferenceSetError as exc:
+                    raise WorkerFailure("invalid_reference_set", str(exc)) from exc
+                requested = [item.resolved_asset_id for item in job.request.inputs]
+                if sorted(requested) != spec.asset_ids():
+                    raise WorkerFailure("invalid_reference_set", "reference inputs must match every declared Asset once")
+                return
             if job.request.profile == "3d.project.glb":
                 if (
                     job.request.output.format != "zip"
@@ -1132,6 +1152,76 @@ class JobManager:
                 validate_m5_edit_mask(mask_path, str(job.request.profile))
             except M5CompanionError as exc:
                 raise WorkerFailure("invalid_edit_mask", str(exc)) from exc
+
+    async def _execute_reference_pack(self, job: Job, reporter: HostJobReporter | None) -> None:
+        await self._update(job.id, reporter, status=JobStatus.RUNNING, phase="validate", progress=0.1)
+        root = contained(self.store.work_dir, self.store.work_dir / job.id)
+        root.mkdir(mode=0o700)
+        output = root / "reference-set.zip"
+        spec = parse_reference_spec(job.request.constraints)
+        stopped = threading.Event()
+        task = asyncio.create_task(asyncio.to_thread(
+            build_reference_set, self.store, spec, output,
+            canceled=lambda: stopped.is_set() or self.store.cancel_requested(job.id),
+        ))
+        try:
+            manifest = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            stopped.set()
+            # Drain the bounded writer before _run_one removes its staging directory.
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+            if not task.cancelled():
+                task.exception()
+            raise
+        except ReferenceSetCanceled:
+            await self._finish_canceled(job.id, reporter)
+            return
+        except ReferenceSetError as exc:
+            raise WorkerFailure("invalid_reference_set", str(exc)) from exc
+        if self.store.cancel_requested(job.id):
+            await self._finish_canceled(job.id, reporter)
+            return
+        now = utc_now()
+        digest = hashlib.sha256(output.read_bytes()).hexdigest()
+        asset = Asset(
+            id=f"asset_{uuid.uuid4().hex}", job_id=job.id, parent_asset_ids=spec.asset_ids(),
+            mime_type="application/zip", size_bytes=output.stat().st_size, sha256=digest,
+            suggested_filename="reference-set.zip", provenance_id=f"prov_{uuid.uuid4().hex}", created_at=now,
+        )
+        provenance = Provenance(
+            id=asset.provenance_id, asset_id=asset.id, parent_asset_ids=asset.parent_asset_ids,
+            operation="asset.pack", intent=job.request.intent,
+            model_id="media-forge/reference-set-packer", model_version="1.0.0",
+            weights_hash="sha256:" + "0" * 64, license="derived-from-parent-assets",
+            runtime_adapter="deterministic.reference-set", runtime_version="1.0.0",
+            tool_versions={"media-forge": __version__, REFERENCE_SET_PROFILE: "1.0.0"}, seed=0,
+            parameters={"profile": REFERENCE_SET_PROFILE, "manifest": manifest.model_dump(mode="json")},
+            reference_asset_hashes={item.asset_id: item.source_sha256 for item in manifest.images},
+            postprocessing=["reference_set.package", "zip.reproducible"],
+            validation=[{"validator": "reference_set.package", "status": "passed"},
+                        {"validator": "reference_set.visual_consistency", "status": "not_checked"}],
+            warnings=["reference views require visual consistency review"], output_sha256=digest, created_at=now,
+        )
+        # No await between publication and local terminal commit. Terminal transport
+        # below can be retried by the existing outbox without rerunning the packer.
+        self.store.register_asset(asset, provenance, output)
+        try:
+            terminal = self.store.update_job(job.id, status=JobStatus.SUCCEEDED, phase=None,
+                                            progress=1, asset_ids=[asset.id], preserve_terminal=True)
+        except BaseException:
+            self.store.delete_asset(asset.id)
+            raise
+        if terminal.status != JobStatus.SUCCEEDED:
+            self.store.delete_asset(asset.id)
+            return
+        await self._update(job.id, reporter, status=JobStatus.SUCCEEDED,
+                           phase="package", progress=1, asset_ids=[asset.id])
 
     async def _execute_m5_pack(self, job: Job, reporter: HostJobReporter | None) -> None:
         await self._update(job.id, reporter, status=JobStatus.RUNNING, phase="validate", progress=0.1)

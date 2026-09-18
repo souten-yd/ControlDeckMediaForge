@@ -110,6 +110,19 @@ revision競合はsnapshot再取得、runtime不足は設定案内、資源待ち
 一時的失敗だけ同一入力でretryし、変更入力は新しいeditとして扱う。
 owner、credential、global configを変えない。不要な所有Jobは正規cancelで止める。
 
+## 5a. 参照画像を固定する
+
+`asset.reference_set`がavailableなら、既存`media.generate`へ`operation=asset.pack`、
+`profile=3d.reference_set`、全画像Assetのinputsとreference-set-spec.json準拠のconstraintsを渡す。
+正面・側面は別Assetで必須。任意の背面・斜め・canonical画像、寸法と測定軸、前方/上方軸、
+部位階層、画像左上基準の正規化landmark、出典説明を保持できる。
+出力ZIPをscene create/editの`reference_set_asset_id`に指定すると、その版にhash付きで固定する。
+editで省略/nullなら維持、新IDなら差し替え。旧版の参照は変わらない。
+
+包装は画像生成や整合性判定ではない。`needs_review`を「承認済み」に読み替えない。
+同一デザインから生成した画像でも、体格・部位数・向き・接続を実画像で確認する。
+投影と寸法は未検証の宣言であり、自動で正投影・測定済みと主張しない。
+
 ## 6. 表面と変形
 
 uv.smart_projectは初期投影で、継ぎ目や密度を保証しない。顔、模様、側面・背面を見る。

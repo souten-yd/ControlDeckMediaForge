@@ -28,6 +28,11 @@ SonicForgeのDBやPythonをimportしない。将来音声が必要なら公開Ho
 | ValidationReport（追加） | validator版、検査項目、pass/fail/not_checked、統計、警告 |
 
 既存asset必須fieldを変えず、追加metadata/schema versionで3D情報を表す。
+参照セットは`asset.pack / 3d.reference_set`で作る既存ZIP Assetとする。
+versioned manifestと正規化PNG、元画像ID/hash/license/provenanceを固定し、包装時点は常に
+needs_review。正面・側面・canonical・寸法/軸・部位/landmarkを保持するが、整合性や正投影を
+保証しない。SceneRevisionの既存dependencyへ`role=reference_set`としてZIP ID/hashを紐づける。
+source→preview→exportの来歴を維持し、差し替えても過去版は書き換えない。
 MediaForge内の `asset_...` とHostの `asset:` / `grant:` は異なるID体系であり変換を推測しない。
 Hostへの配置は既存output commitとreceiptを使う。生pathをAPIへ持ち込まない。
 

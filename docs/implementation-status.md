@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-18 R1 reference package and scene binding (source)
+
+ux1/3d-reference-set、PR538/27676ca上の独立slice。
+既存asset.packへ3d.reference_setを追加。versioned manifest/PNG/元画像hash・licenseをZIP化し、
+scene create/editへoptional reference_set_asset_idを追加。旧版/owner/競合/既存retryを保持。
+常にneeds_review。画像生成・投影保証・視覚承認ではない。CPU bounded writerの取消drainを追加。
+実isolated HTTPで3画像のZIP1596441B、0.478秒/再実行0.473秒、同一SHA256を確認。
+実Blender4.5.13のscene編集・参照追加0.438秒、旧版不変、source/preview来歴hash、解放をassert。
+実Store再openでrunning→service_restarted、queued取消保持、Asset0。
+backup復元でIDが変わる既存仕様に対応し、bounded origin来歴を保持。
+実backup→復元→Blender編集を2世代実行し0.470秒/0.442秒、参照ZIP hash不変。
+最終./mf.sh testはexit0、2022passed/2warnings/214.53秒。以後product変更なし。
+focused32件、文書link/diff check成功。実証跡とfull logを専用projectへ保持。
+詳細・初回harness失敗と修正は[実装記録](implementation/r1-reference-set-20260918.md)。
+NOT TESTED: signed installed/実OpenCode、canonical条件付き画像生成、4方向整合、VLM/曲面/rig/animation。
+R1全体や制作品質の完了とはしない。稼働版0.28.84・Host・モデル設定は変更していない。
+
 ## 2026-09-18 M2a revision-pinned scene observation (source)
 
 ux1/3d-observe-revision、PR537/c790834上の独立slice。

@@ -844,6 +844,10 @@ choice, image routing, geometry semantics or second job scheduler enters Host.
 Image generation, Blender render and vision stages acquire/release their own
 applicable resource leases; do not retain GPU ownership while waiting for the
 next stage. New tools are advertised only after implementation and acceptance.
+ReferenceSet packaging reuses media.generate/asset.pack with profile
+3d.reference_set and existing input Asset IDs. Its ZIP and images stay in the
+same Library/provenance graph. Binding a package to a scene requires that scene's
+existing owner/revision checks; the Host acquires no geometry or reference-view logic.
 
 2026-09-09 game-authoring expansion follows
 [the game asset plan](design-game-asset-authoring.md). New mesh/UV/material/rig/

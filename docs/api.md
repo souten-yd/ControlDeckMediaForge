@@ -778,6 +778,38 @@ ZIP output. ZIP placement uses the same
 `media.pack` output grant as images; no path field or M5-specific Host route is
 added.
 
+`asset.pack` with `profile=3d.reference_set` accepts two to five unique image
+Assets and one ZIP output. `constraints` follows
+[`reference-set-spec.json`](../schemas/reference-set-spec.json): distinct front
+and side views are required; back/three-quarter and a canonical design are
+optional. Declare `scale_m` along `scale_axis`, orthogonal forward/up axes,
+parts with acyclic parents, and per-view landmarks (`uv` normalized from the
+image's top-left, right/down positive). Scale and axes are declarations, not
+measurements recovered from images. `origin_notes` records the source context.
+Every declared image must occur exactly once in `inputs`; canonical may reuse
+a view Asset. Routing is `auto`, semantic QA is false, and regeneration is zero.
+
+The deterministic CPU ZIP contains `manifest.json` and `images/<asset_id>.png`.
+The [manifest schema](../schemas/reference-set-manifest.json) records source and
+normalized-image hashes, original license/provenance, and dimensions. PNG/JPEG/WebP
+inputs are limited to 8 MiB and 4096 pixels per side, one frame; orientation is
+normalized, private metadata stripped, and pixels are not resized. Output is
+limited to 8 MiB per PNG, 128 KiB manifest and 64 MiB ZIP. No inference is run.
+`needs_review`, `visual_consistency=not_reviewed` and `projection=unverified`
+cannot be promoted by a caller; successful packaging is not visual approval.
+
+Scene create/edit and their workflow forms accept optional
+`reference_set_asset_id`. Only verified reference packages can be attached.
+An edit with null/omitted field retains the prior package; a new ID replaces
+the current dependency while old revisions retain their own ID/hash. Existing
+scene ownership, revision conflicts and source/preview provenance apply.
+No change is made to the package by an edit, and a new package is required for
+changed images or declarations. ZIP download/delivery uses existing Asset APIs.
+Scene backup/restore preserves the ZIP bytes and historical source-image IDs.
+`scene.restore` provenance records a bounded `reference_set_origin`; those IDs
+describe the original inputs, not new Library IDs. The package's embedded PNGs
+remain usable even when its original parent images were outside the scene backup.
+
 `asset.pack` with `profile=3d.project.glb` accepts exactly one
 `model/gltf-binary` input, no free-form B2 constraints, and one ZIP output. It
 runs the pinned Blender compiler as a separate factory/background process with
