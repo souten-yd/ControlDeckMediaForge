@@ -16,14 +16,19 @@
 # flash-attn を入れない理由は上流 setup.sh の HIP 分岐が GPU_ARCHS=gfx942（MI300）
 # 決め打ちで、この機体（gfx1201 / RDNA4）に合わないため。
 #
+# Pixal3D は既に sdpa を受け付けるので 1 は当たらない（冪等に素通りする）。
 # 冪等。何度流してもよい。
 set -euo pipefail
 
 SRC="${1:-/data1tb/ControlDeck/data/feature-data/media-forge/runtimes/trellis2-source}"
-[ -d "$SRC/trellis2" ] || { echo "TRELLIS.2 のソースが見つからない: $SRC" >&2; exit 1; }
+# TRELLIS.2 と Pixal3D はどちらも同じ形なので、package 名だけ見分ける。
+if   [ -d "$SRC/trellis2" ]; then PKG=trellis2
+elif [ -d "$SRC/pixal3d" ];  then PKG=pixal3d
+else echo "TRELLIS.2 / Pixal3D のソースが見つからない: $SRC" >&2; exit 1; fi
+echo "package: $PKG"
 
-CONFIG="$SRC/trellis2/modules/sparse/config.py"
-FULL_ATTN="$SRC/trellis2/modules/sparse/attention/full_attn.py"
+CONFIG="$SRC/$PKG/modules/sparse/config.py"
+FULL_ATTN="$SRC/$PKG/modules/sparse/attention/full_attn.py"
 
 # --- 1a. backend の許可一覧へ sdpa を足す ---
 if ! grep -q "'sdpa'" "$CONFIG"; then
@@ -77,7 +82,7 @@ changed=0
 while IFS= read -r f; do
     sed -i 's/RasterizeCudaContext/RasterizeGLContext/g' "$f"
     changed=$((changed + 1))
-done < <(grep -rl "RasterizeCudaContext" "$SRC/trellis2" 2>/dev/null || true)
+done < <(grep -rl "RasterizeCudaContext" "$SRC/$PKG" 2>/dev/null || true)
 [ "$changed" -gt 0 ] && echo "RasterizeCudaContext → RasterizeGLContext: ${changed} files"
 
 echo "done"
