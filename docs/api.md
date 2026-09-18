@@ -1186,3 +1186,8 @@ the selected clip, including tracks which animate different properties.
 
 Public `/schemas/{schema_name}` responses use compact JSON so expanded scene contracts
 fit the Host 64 KiB discovery limit. Parsed schema content and media type are unchanged.
+
+For agent discovery, `job-request.json` also declares the existing ReferenceSetSpec
+fields directly in `constraints`. They are optional on generic jobs; the existing
+`3d.reference_set` pack validator still requires its name/views/scale/origin fields.
+Image generation does not require them. No wrapper field or second packing API is added.

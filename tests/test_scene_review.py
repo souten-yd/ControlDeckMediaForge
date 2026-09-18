@@ -20,6 +20,7 @@ from mediaforge.host.ai import HostAIError, HostAIResult
 from mediaforge.jobs import JobManager
 from mediaforge.scene_recipe_jobs import SceneRecipeJobManager
 from mediaforge.scene_review import SceneReviewRequest, VisualReview
+from mediaforge.scene_recipes import scene_operation_types
 from mediaforge.scenes import SceneError, SceneRevisionInput
 from mediaforge.store import Store
 from test_reference_set import request as pack_request, spec as reference_spec
@@ -115,6 +116,10 @@ def test_review_sends_actual_images_and_records_lineage_without_advancing_head(t
         assert len(gateway.calls)==1 and len(report['evidence'])==(6 if references else 4)
         identity, capability, messages, options = gateway.calls[0]
         assert identity.subject=='job:host-child' and capability=='vision.analyze'
+        prompt = messages[0]['content'][0]['text']
+        context = json.loads(prompt.split('Context JSON: ', 1)[1])
+        assert set(context['known_suggested_operations']) == set(scene_operation_types())
+        assert 'or null when no known' in prompt
         images = [item['image_url']['url'] for item in messages[0]['content'] if item['type']=='image_url']
         assert len(images)==(2 if references else 1)
         for url, kind in zip(images, ['observation', 'reference']):

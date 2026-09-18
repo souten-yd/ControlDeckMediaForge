@@ -79,7 +79,39 @@ review.jsonのsemantic_review=completed、verdict=issues_found、asset_approval=
 schema修正後full gateは2,171 passed / 2 warnings / 229.08秒、exit0。
 参照画像生成の新規project `MF3DS-Trex-References-20260918` は実行中。
 
+## Canonical-conditioned references and packaging discovery failure
+
+実OpenCode project `MF3DS-Trex-References-20260918` はcanonical1枚と同canonicalを
+入力にしたfront/side/back3枚を実生成。4画像のhash/来歴、3editの親canonical一致を独立検証。
+既存採用FLUX.2-klein-4B、runtime0.40.0、CPU offload/int8配置。新weights導入なし。
+canonical `asset_40fcc3b7ab5f4ea38405e1ea84dab470`、front `asset_4f416d60cdc24d74877f43d70e8e210e`、
+side `asset_a1b7799ed95b472bae22477e98f8baf9`、back `asset_4927ce10fc1044dd99fb9fa50ad3fdf3`。
+親の目視では体色/体形は概ね保持するが腕が長く指/趾数はbrief不一致、側面も厳密な正投影を
+保証できない。生成成功を解剖学/多視点整合性の承認にしない。
+
+最初のLLMはgrant:placeholderを誤使用し失敗。その後canonical/edit生成は成功したが、
+ReferenceSet packでconstraintsをasset_briefへ置換/省略し繰返しinvalid_reference_set。
+途中image.generate/profile=3d.reference_set/intent=placeholderの不要な画像生成も1件発生した。
+この診断runだけPID1967321をTERM、399.653秒/10tool calls/exit-15/納品0。
+停止後MediaForge active Job0を確認。失敗runは成功扱いせず、生成済み4画像/全Jobは保持。
+
+実MCP公開job-request schemaのconstraints.propertiesにReferenceSetSpec項目がないため、
+必要なname/views/scale_m/origin_notes等を加法的に掲載し、同じ既存asset.packへ送れるよう修正。
+既存generic required/自由拡張を保持。別toolや第二storeは追加しない。
+実source HTTPではjob-request14,429Bでcanonical JSON一致、必要項目あり。
+regressionは公開schemaに従う実pack要求と通常image.generate/free-form互換を確認。
+0.28.86へ含め、再生成せず4画像のpack/納品のみを新規projectで再検証する。
+
+## Review vocabulary correction
+
+旧T-Rex実VLMはmodeling.add_teeth等を提案したが、review promptは既知のobject IDのみを
+渡し、検査対象のoperation語彙を渡していなかった。現在のscene_operation_typesを明示し、
+該当しない提案はnullとする案内を追加。未対応提案の記録/needs_review/非実行は保持する。
+実候補修正に進めるかは更新後の別評価で確認し、prompt変更だけで改善成功とはしない。
+
 ## Remaining gates
 
-実canonical条件付き参照画像の整合性、実VLM比較・候補改善、R2の3条件×各3試行、
+実canonical条件付き参照画像の整合性承認、修正後pack納品、実VLM比較・候補改善、R2の3条件×各3試行、
 完成恐竜の変形・接地・自然なclip品質はNOT TESTED。
+
+0.28.86最終./mf.sh test: 2,172 passed, 2 warnings, 228.15秒、exit0。以後product変更なし。
