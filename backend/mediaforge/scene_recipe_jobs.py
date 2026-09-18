@@ -16,6 +16,7 @@ from .host.ai import HostAIGateway
 from .host.jobs import HostExecution, HostJobReporter
 from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
+from .scene_refinement import SceneRefineRequest
 from .scene_recipes import (
     SceneCreateRequest,
     SceneEditRequest,
@@ -85,7 +86,7 @@ class SceneRecipeJobManager:
                         code="service_stopped", message="Service stopped while the scene recipe was active"
                     ),
                 )
-                self.store.update_scene_recipe_task(job_id, stage="service_stopped")
+                self.store.update_scene_recipe_task(job_id, stage="service_stopped", result=self._refinement_checkpoint(job_id))
                 task.cancel()
         if self._tasks:
             await asyncio.gather(*self._tasks.values(), return_exceptions=True)
@@ -98,7 +99,7 @@ class SceneRecipeJobManager:
 
     async def submit(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
         identity: HostIdentity,
         *,
         retry_of: str | None = None,
@@ -114,7 +115,7 @@ class SceneRecipeJobManager:
 
     async def _submit(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
         identity: HostIdentity,
         *,
         retry_of: str | None = None,
@@ -122,13 +123,15 @@ class SceneRecipeJobManager:
         missing = {"jobs.write"} - identity.granted_capabilities
         if missing:
             raise SceneError("host_capability_not_granted", "Host jobs.write capability is required")
-        if isinstance(value, SceneReviewRequest) and "ai.inference" not in identity.granted_capabilities:
+        if isinstance(value, (SceneReviewRequest, SceneRefineRequest)) and "ai.inference" not in identity.granted_capabilities:
             raise SceneError("host_ai_not_granted", "Host AI access is required for image review")
         owner = identity.actor_subject or identity.subject
         external = value.model_dump(mode="json", exclude={"retry_job_id"})
         # Preserve the durable payload of requests submitted before this additive field.
         if external.get("reference_set_asset_id") is None:
             external.pop("reference_set_asset_id", None)
+        if external.get("publish_mode") == "advance":
+            external.pop("publish_mode", None)
         retry_pin: tuple[str, str, str | None] | None = None
         if retry_of is not None:
             previous = self.store.get_scene_recipe_task(retry_of, owner=owner)
@@ -144,6 +147,7 @@ class SceneRecipeJobManager:
             else "scene.material"
             if isinstance(value, SceneMaterialRequest)
             else "scene.observe" if isinstance(value, SceneObserveRequest)
+            else "scene.refine" if isinstance(value, SceneRefineRequest)
             else "scene.review" if isinstance(value, SceneReviewRequest)
             else "scene.edit"
         )
@@ -172,7 +176,7 @@ class SceneRecipeJobManager:
 
     async def _submit_pinned(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
         identity: HostIdentity,
         owner: str,
         external: dict[str, Any],
@@ -212,6 +216,8 @@ class SceneRecipeJobManager:
                 if isinstance(value, SceneMaterialRequest)
                 else f"Observe fixed Blender scene revision {value.revision_id}"
                 if isinstance(value, SceneObserveRequest)
+                else f"Refine fixed Blender scene revision {value.base_revision_id}"
+                if isinstance(value, SceneRefineRequest)
                 else f"Review observed Blender scene revision {value.revision_id}"
                 if isinstance(value, SceneReviewRequest)
                 else f"Apply typed Blender scene edit to {value.scene_id}"
@@ -268,7 +274,7 @@ class SceneRecipeJobManager:
     async def _run_pinned(
         self,
         job_id: str,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
         references: ExitStack,
         started: asyncio.Event,
     ) -> None:
@@ -371,6 +377,10 @@ class SceneRecipeJobManager:
                     pass
         return self.projection(job_id, owner)
 
+    def _refinement_checkpoint(self, job_id: str) -> dict[str, Any] | None:
+        record = self.store.get_scene_recipe_task(job_id)
+        return record.result if record.operation == "scene.refine" else None
+
     async def wait_cleanup(self, job_id: str, timeout: float = 5.0) -> None:
         deadline = asyncio.get_running_loop().time() + timeout
         while job_id in self._tasks:
@@ -381,7 +391,7 @@ class SceneRecipeJobManager:
     async def _run(
         self,
         job_id: str,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
     ) -> None:
         execution = self._executions[job_id]
         reporter = HostJobReporter(self.host, execution)
@@ -392,7 +402,7 @@ class SceneRecipeJobManager:
             self.store.update_job(job_id, status=JobStatus.RUNNING, phase="validate_recipe", progress=0.05)
             self.store.update_scene_recipe_task(job_id, stage="validate_recipe")
             await self._report_progress(reporter, "validate_recipe", 0.05)
-            execution_phase = "vision_review" if isinstance(value, SceneReviewRequest) else "blender_recipe"
+            execution_phase = "scene_refinement" if isinstance(value, SceneRefineRequest) else "vision_review" if isinstance(value, SceneReviewRequest) else "blender_recipe"
             self.store.update_job(job_id, phase=execution_phase, progress=0.25)
             self.store.update_scene_recipe_task(job_id, stage=execution_phase)
             await self._report_progress(reporter, execution_phase, 0.25)
@@ -430,6 +440,11 @@ class SceneRecipeJobManager:
                         task.owner, job_id, value,
                         runtime_id=task.runtime_id, runtime_version=task.runtime_version,
                     ) if isinstance(value, SceneObserveRequest)
+                    else self.workspace.refine_scene(
+                        task.owner, job_id, value, gateway=self.ai_gateway,
+                        identity_provider=lambda: execution.identity,
+                        runtime_id=task.runtime_id, runtime_version=task.runtime_version,
+                    ) if isinstance(value, SceneRefineRequest)
                     else self.workspace.review_scene(
                         task.owner, job_id, value, gateway=self.ai_gateway, identity=execution.identity,
                         runtime_id=task.runtime_id, runtime_version=task.runtime_version,
@@ -476,9 +491,10 @@ class SceneRecipeJobManager:
                 if acquired:
                     self._execution_guard.release()
             publish_stage = ("publish_observation" if isinstance(value, SceneObserveRequest)
+                             else "publish_refinement" if isinstance(value, SceneRefineRequest)
                              else "publish_review" if isinstance(value, SceneReviewRequest) else "publish_revision")
             self.store.update_job(job_id, phase=publish_stage, progress=0.9)
-            self.store.update_scene_recipe_task(job_id, stage=publish_stage)
+            self.store.update_scene_recipe_task(job_id, stage=publish_stage, result=self._refinement_checkpoint(job_id))
             assets = list(result.pop("asset_ids")) if "asset_ids" in result else [
                 result["revision"]["source_asset_id"],
                 result["revision"]["preview_asset_id"],
@@ -517,7 +533,7 @@ class SceneRecipeJobManager:
                 ):
                     self.store.mark_scene_recipe_terminal_sent(job_id)
             else:
-                self.store.update_scene_recipe_task(job_id, stage="canceled")
+                self.store.update_scene_recipe_task(job_id, stage="canceled", result=self._refinement_checkpoint(job_id))
                 self.store.update_job(
                     job_id,
                     status=JobStatus.CANCELED,
@@ -532,7 +548,7 @@ class SceneRecipeJobManager:
             raise
         except (SceneError, HostApiError, KeyError) as exc:
             code = getattr(exc, "code", "scene_recipe_failed")
-            self.store.update_scene_recipe_task(job_id, stage=str(code))
+            self.store.update_scene_recipe_task(job_id, stage=str(code), result=self._refinement_checkpoint(job_id))
             self.store.update_job(
                 job_id,
                 status=JobStatus.FAILED,
@@ -547,7 +563,7 @@ class SceneRecipeJobManager:
             if await self._report_terminal(reporter, execution, "failed", error=str(code)):
                 self.store.mark_scene_recipe_terminal_sent(job_id)
         except Exception as exc:  # final isolation boundary; one bad recipe must not strand the queue
-            self.store.update_scene_recipe_task(job_id, stage="internal_error")
+            self.store.update_scene_recipe_task(job_id, stage="internal_error", result=self._refinement_checkpoint(job_id))
             self.store.update_job(
                 job_id,
                 status=JobStatus.FAILED,

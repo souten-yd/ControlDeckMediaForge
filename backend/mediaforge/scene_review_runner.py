@@ -35,7 +35,10 @@ MAX_REPORT_BYTES = 128 * 1024
 
 def prepare(
     workspace: SceneWorkspace, owner: str, value: SceneReviewRequest, root: Path,
+    *, observation_label: str = "observation",
 ) -> dict[str, Any]:
+    if observation_label not in {"observation", "baseline", "candidate"}:
+        raise ValueError("invalid internal observation label")
     document, revisions = workspace.catalog.get(owner, value.scene_id)
     revision = next((r for r in revisions if r.id == value.revision_id), None)
     if revision is None:
@@ -73,10 +76,10 @@ def prepare(
                 raise SceneError("scene_review_input_invalid", "observation image geometry differs")
             image.verify()
         observation, object_ids = spec, ids
-        paths.append((f"observation.{view}", path, {"asset_id": asset.id, "sha256": asset.sha256, "view": view}))
+        paths.append((f"{observation_label}.{view}", path, {"asset_id": asset.id, "sha256": asset.sha256, "view": view}))
         hashes[asset.id], mime_types[asset.id] = asset.sha256, asset.mime_type
     keys = [key for key, _, _ in paths]
-    if len(set(keys)) != len(keys) or not {"observation.front", "observation.side"} <= set(keys):
+    if len(set(keys)) != len(keys) or not {f"{observation_label}.front", f"{observation_label}.side"} <= set(keys):
         raise SceneError("scene_review_input_invalid", "unique front and side observations are required")
     dependency = next((d for d in revision.dependencies if d.role == "reference_set"), None)
     if value.reference_set_asset_id is not None and (dependency is None or value.reference_set_asset_id != dependency.asset_id):
@@ -111,7 +114,7 @@ def prepare(
     # Host accepts at most four images. Up to three sheets retain the observations,
     # four reference views and optional distinct canonical without changing Host.
     groups = []
-    for kind in ("observation", "reference"):
+    for kind in (observation_label, "reference"):
         selected = sorted((entry for entry in paths if entry[0].startswith(kind + ".")), key=lambda entry: entry[0])
         for start in range(0, len(selected), 4):
             groups.append((kind if start == 0 else f"{kind}_2", selected[start:start+4]))

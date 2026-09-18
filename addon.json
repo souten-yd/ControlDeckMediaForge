@@ -164,6 +164,13 @@
         "permission": "workflows.run"
       },
       {
+        "id": "media.scene.refine",
+        "label": "Refine 3D shape through compared candidates",
+        "endpoint": "/addon/v1/agent/scene/refine",
+        "schema_path": "/schemas/scene-refine-request.json",
+        "permission": "workflows.run"
+      },
+      {
         "id": "media.scene.snapshot",
         "label": "Read back the current state of a 3D scene",
         "endpoint": "/addon/v1/agent/scene/snapshot",

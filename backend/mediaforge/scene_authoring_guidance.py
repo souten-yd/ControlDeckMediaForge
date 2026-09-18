@@ -85,6 +85,13 @@ def scene_authoring_guidance() -> dict[str, Any]:
         "Attach the resulting ZIP Asset through scene create/edit reference_set_asset_id. Omission "
         "on edit retains the previous set. Packaging does not certify cross-view consistency: "
         "needs_review remains until an actual image review; do not invent camera calibration.",
+        "scene_refinement": "If 3d.scene_refinement is available, media.scene.refine runs fixed clay "
+        "observation, actual image review, bounded local section/transform repair and comparison. Supply "
+        "the current base revision and fixed front/side ObservationSpec. Up to three issues, 1..6 attempts "
+        "(default 3); two consecutive non-improvements stop. Original head remains unchanged; candidate "
+        "scenes and report evidence remain inspectable. Read selected_scene_id, stop_reason and remaining "
+        "issues; selection is advisory, not asset approval. Unsupported fixes and unavailable AI stay explicit. "
+        "For manual experiments, scene.edit publish_mode=candidate creates a separate scene with lineage.",
         "scene_review": "If 3d.scene_review is available, call media.scene.review with the exact scene/revision "
         "and 2..4 observation image Asset IDs including front and side under identical observation settings. "
         "The revision's pinned reference set is used automatically. It submits labelled image sheets through "

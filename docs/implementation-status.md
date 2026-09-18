@@ -1,5 +1,20 @@
 # Media Forge implementation status
 
+## 2026-09-18 M3b bounded candidate refinement (source)
+
+ux1/3d-refinement-loop、親PR541/1724a6c。candidate編集とmedia.scene.refineを追加。
+固定clay→最大3指摘→既知meshの断面/変換→別候補→実画像比較、2連続不改善で停止。
+原scene head保持、VLM改善判定でもedge診断悪化は非選択。Hostの最新child identityを各呼出で使用。
+試験用応答＋実Blender4.5.13で不改善2回7.718秒/20Assets、改善選択1回4.942秒/13Assets。
+原版hash/head不変、3候補の生成、実画像入力hash/4view、pin0/staging空をassert。
+実Host inference呼出0、semantic_review NOT TESTED。試験用判断をVLM品質の証拠にしない。
+途中テストでcheckpoint必須stage漏れと取消時のpartial結果消失を検出・修正。
+source focused成功、最終./mf.sh testは2092passed/2warnings/226.80秒、exit0。
+以後product変更なし。証跡refinement-sourceにactual/controlled traceとfull logを保存。
+詳細は[実装・制御試験記録](implementation/m3-refinement-20260918.md)。
+NOT TESTED: 実Host text/VLM/provider取消、新tool signed installed/MCP/OpenCode、最終品質・表面・変形。
+原root/稼働0.28.84/Host/model変更0、計画全体完了ではない。
+
 ## 2026-09-18 M3a bounded curve source
 
 ux1/3d-bounded-curves、親PR540/4f18ef1。loft/sweep/断面更新/境界接合/subdivisionを追加。

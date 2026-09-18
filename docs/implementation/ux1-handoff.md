@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-18 M3b candidate loop source
+
+worktree /tmp/mediaforge-reference-plan-20260918、branch ux1/3d-refinement-loop、親PR541/1724a6c。
+candidate編集を加法追加、既存scene Jobへrefine、max3issues/6attempts/2連続不改善停止。
+固定clay実画像比較＋edge悪化拒否、元head保持、partial checkpointsを取消/失敗でも保持。
+実4.5.13＋controlled gatewayで2回非採用と1回選択、7.718秒/4.942秒、実inference0。
+証跡M1 project/evidence/refinement-source。実Host/installed/MCP/semanticの成功ではない。
+最終full12626はexit0/2092pass2warnings226.80秒。以後product変更なし。
+full log保持、diff check成功。commit/push/PRで保存する。
+次は形状gate後のsurface/weights/IK/translation clipsと実Host/installed受入。
+
 ## 2026-09-18 M3a bounded curves source
 
 worktree /tmp/mediaforge-reference-plan-20260918、branch ux1/3d-bounded-curves、親PR540/4f18ef1。

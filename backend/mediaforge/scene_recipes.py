@@ -565,6 +565,7 @@ class SceneEditRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scene_id: str = Field(pattern=r"^scene_[0-9a-f]{32}$")
     base_revision_id: str = Field(pattern=r"^revision_[0-9a-f]{32}$")
+    publish_mode: Literal["advance", "candidate"] = Field(default="advance", description="advance keeps existing behavior; candidate creates a separate scene and retains the original head.")
     recipe: SceneRecipe
     reference_set_asset_id: str | None = Field(default=None, pattern=r"^asset_[0-9a-f]{32}$")
     retry_job_id: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
@@ -612,7 +613,7 @@ class SceneJobReferenceRequest(BaseModel):
 class SceneTaskRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: str = Field(pattern=r"^job_[0-9a-f]{32}$")
-    operation: Literal["scene.create", "scene.edit", "scene.material", "scene.observe", "scene.review"]
+    operation: Literal["scene.create", "scene.edit", "scene.material", "scene.observe", "scene.review", "scene.refine"]
     owner: str = Field(min_length=1, max_length=256)
     host_job_id: str = Field(min_length=1, max_length=128)
     runtime_id: str = Field(min_length=1, max_length=128)

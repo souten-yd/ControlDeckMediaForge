@@ -1221,6 +1221,16 @@
           ],
           "default": null,
           "title": "Reference Set Asset Id"
+        },
+        "publish_mode": {
+          "default": "advance",
+          "description": "advance keeps existing behavior; candidate creates a separate scene and retains the original head.",
+          "enum": [
+            "advance",
+            "candidate"
+          ],
+          "title": "Publish Mode",
+          "type": "string"
         }
       },
       "required": [
