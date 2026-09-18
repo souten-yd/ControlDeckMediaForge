@@ -1,5 +1,18 @@
 # Media Forge implementation status
 
+## 2026-09-18 v0.28.86 release preparation
+
+PR547 / merge4480f7aでschema compact配信を統合。0.28.85で欠落したMCP create/editを
+Host変更なしで復旧するpatch releaseを準備。addon/core版数とrelease noteを更新。
+実旧T-Rex VLMは完了、参照画像の条件付き生成は実行中。生成中のinstalledを再起動しない。
+version更新後full2171pass261.48秒。その後実参照生成でpack入力の公開不足を検出。
+canonical＋同canonical由来3editは成功、pack要求のconstraints欠落が反復したため所有runを停止。
+不要なplaceholder画像生成1件も記録。exit-15/399.653秒、MediaForge active Job0。
+job-request constraintsへ既存ReferenceSetSpec項目を加法掲載。source HTTP14429B/内容一致。
+参照schema追加後full2172pass234.62秒。review語彙案内を追加後に最終全gateを再実行し、
+2172pass2warnings228.15秒/exit0（43120）。以後product変更なし。
+次は固定commitの署名通常更新→新schema/MCP→生成済み画像pack再受入と恐竜比較。
+
 ## 2026-09-18 signed install and MCP schema discovery repair
 
 0.28.85を固定df70be4から構築/既存鍵署名/公開/再取得検証し、通常feature updateで導入。

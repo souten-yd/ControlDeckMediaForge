@@ -82,6 +82,25 @@ def test_contracts_and_discovery(client) -> None:
     assert capability['state'] == 'available' and capability['visual_consistency'] == 'not_reviewed'
 
 
+def test_agent_generation_schema_exposes_reference_pack_fields(client) -> None:
+    schema = client.get('/schemas/job-request.json').json()
+    reference = ReferenceSetSpec.model_json_schema()
+    properties = schema['properties']['constraints']['properties']
+    for name, field in reference['properties'].items():
+        if name != 'schema_version':
+            assert properties[name] == field
+    for name, definition in reference['$defs'].items():
+        assert schema['$defs'][name] == definition
+    value = request(spec(*inputs(client)))
+    jsonschema.validate(value, schema)
+    response = client.post('/api/v1/jobs', json=value)
+    assert response.status_code == 202
+    assert wait_terminal(client, response.json()['id'])['status'] == 'succeeded'
+    # Image generation still requires no reference-set fields and remains open.
+    jsonschema.validate({'operation': 'image.generate', 'intent': 'a tree',
+                         'constraints': {'custom_vendor_hint': 'preserved'}}, schema)
+
+
 @pytest.mark.parametrize('changes', [
     {'scale_m': True}, {'scale_m': 0}, {'scale_m': float('nan')}, {'forward_axis': '-Z'},
     {'views': [{'view': 'front', 'asset_id': 'asset_'+'a'*32}]*2},
