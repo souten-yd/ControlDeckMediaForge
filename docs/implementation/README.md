@@ -26,6 +26,7 @@ docs/implementation/                 実装の指示（どの順で・何を確�
 | G7 | [g7-video-runtime.md](g7-video-runtime.md) | MediaForge | 動画契約、FFmpeg 境界、候補評価、Broker 共存、installed 受け入れ |
 | G8 | [g8-blender-production.md](g8-blender-production.md) | MediaForge | Blender runtime、bounded GLB import、deterministic compile/package、agent/installed受け入れ |
 | G8HQ | [g8-high-quality-mcp-3d-assets.md](g8-high-quality-mcp-3d-assets.md) | MediaForge | 高精細キャラクター/髪/装備/ロボット/乗り物/環境/建物/VFXをMCPで制作するM1〜M10計画。多視点観察、局所修正、UV/PBR/bake、rig/animation、trusted procedural、engine受入 |
+| G9 | [g9-image-to-3d.md](g9-image-to-3d.md) | MediaForge | 画像から3Dを生成する（Pixal3D、experimental）。採用probe、raw mesh→G8 pipeline、3D系MCPの断捨離、資産整理 |
 | 2 | [mf0-0-environment.md](mf0-0-environment.md) | MediaForge | 実行環境の分離・自動整備・削除安全性。**最初に実施** |
 | 3 | [mf0-addon-core.md](mf0-addon-core.md) | MediaForge | G0。Add-on として成立させる（fake worker） |
 | 4 | [ux1-workspace.md](ux1-workspace.md) | MediaForge | G0〜G3 の機能を使える形にする workspace UI。設計は `../design-workspace-ux.md` |
@@ -60,7 +61,7 @@ G6   2Dゲーム素材一式が出せる
 G7   動かせる（動画・アニメーション）    ← host-load-profile-fix.md が前提
 G8   3D素材がプロジェクトに載る
 G8HQ 高精細3DをMCPで制作・検証・engine受入できる  g8-high-quality-mcp-3d-assets.md
-G9   3Dを生成できる（実験的）
+G9   3Dを生成できる（実験的）            g9-image-to-3d.md
 G10  手持ち資料を参照源にできる
 ```
 
