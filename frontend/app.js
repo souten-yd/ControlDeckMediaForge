@@ -6627,7 +6627,7 @@ const viewer = {
 };
 
 let modelViewerModulePromise = null;
-const MODEL_VIEWER_BUNDLE = "d4f4fa0f645ce934";
+const MODEL_VIEWER_BUNDLE = "a0194e0faa2ea6c3";
 
 function loadModelViewer() {
   if (modelViewerModulePromise) return modelViewerModulePromise;
@@ -6656,8 +6656,8 @@ const VIEWER_3D_TEXT = {
     fit: "全体", shading: {material: "材質", neutral: "形状", wireframe: "ワイヤー"},
     light: {studio: "照明", flat: "均一光", dramatic: "強調光"},
     background: "背景", boundsOn: "範囲を隠す", boundsOff: "範囲",
-    play: "再生", pause: "停止", contextLost: "3D表示を復旧しています…",
-    clip: "動作（繰り返しプレビュー）", speed: "再生速度", restart: "先頭へ",
+    play: "再生", pause: "一時停止", contextLost: "3D表示を復旧しています…",
+    clip: "動作", speed: "再生速度", restart: "先頭へ", stop: "停止", loop: "ループ", once: "1回",
     unnamedClip: (index) => `動作 ${index + 1}`,
     stats: (value) => `${value.triangles.toLocaleString()} 三角形 · 材質 ${value.materials} · アニメ ${value.animations}`,
   },
@@ -6669,7 +6669,7 @@ const VIEWER_3D_TEXT = {
     light: {studio: "Light", flat: "Flat light", dramatic: "Dramatic"},
     background: "Background", boundsOn: "Hide bounds", boundsOff: "Bounds",
     play: "Play", pause: "Pause", contextLost: "Restoring the 3D view…",
-    clip: "Animation (repeating preview)", speed: "Playback speed", restart: "Restart",
+    clip: "Animation", speed: "Playback speed", restart: "Restart", stop: "Stop", loop: "Loop", once: "Once",
     unnamedClip: (index) => `Animation ${index + 1}`,
     stats: (value) => `${value.triangles.toLocaleString()} triangle${value.triangles === 1 ? "" : "s"} · ${value.materials} material${value.materials === 1 ? "" : "s"} · ${value.animations} animation${value.animations === 1 ? "" : "s"}`,
   },
@@ -6705,10 +6705,11 @@ function renderViewer3dText() {
   byId("viewer-3d-speed").setAttribute("aria-label", text.speed);
   byId("viewer-3d-speed").title = text.speed;
   byId("viewer-3d-restart").textContent = text.restart;
+  byId("viewer-3d-stop").textContent = text.stop;
   const clips = viewer.modelInstance?.animationClips || [];
   for (const option of byId("viewer-3d-clip").options) {
     const clip = clips[Number(option.value)];
-    if (clip) option.textContent = `${clip.name || text.unnamedClip(clip.index)} · ${clip.duration.toFixed(2)} s`;
+    if (clip) option.textContent = `${clip.name || text.unnamedClip(clip.index)} · ${clip.duration.toFixed(2)} s${clip.loopRequested === null ? "" : ` · ${clip.loopRequested ? text.loop : text.once}`}`;
   }
   if (viewer.modelStats) byId("viewer-3d-stats").textContent = text.stats(viewer.modelStats);
 }
@@ -6858,6 +6859,11 @@ async function openModelViewer(assetId, item, token) {
       canvas: byId("viewer-3d-canvas"),
       bytes: content,
       background: "#0b1110",
+      onAnimationState: (value) => {
+        if (token !== viewer.token) return;
+        viewer.animation = value.playing;
+        renderViewer3dText();
+      },
       onContextState: (value) => {
         if (token !== viewer.token) return;
         loading.hidden = value === "restored";
@@ -9193,6 +9199,11 @@ byId("viewer-3d-clip").addEventListener("change", (event) => {
 });
 byId("viewer-3d-speed").addEventListener("change", (event) => {
   viewer.modelInstance?.setAnimationSpeed(Number(event.target.value));
+});
+byId("viewer-3d-stop").addEventListener("click", () => {
+  viewer.modelInstance?.stopAnimation();
+  viewer.animation = false;
+  renderViewer3dText();
 });
 byId("viewer-3d-restart").addEventListener("click", () => viewer.modelInstance?.restartAnimation());
 

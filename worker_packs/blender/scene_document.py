@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import re
+import struct
 from pathlib import Path
 import sys
 from typing import Any
@@ -119,6 +120,40 @@ def inspect_scene() -> dict[str, object]:
     }
 
 
+def add_clip_metadata(path: Path) -> None:
+    """Annotate only known typed animation names; preserve the binary payload."""
+    known = {}
+    for action in bpy.data.actions:
+        clip_id = action.get("media_forge_clip_id")
+        end = action.get("media_forge_frame_count")
+        loop = action.get("media_forge_loop")
+        fps = bpy.context.scene.get("media_forge_clip_fps")
+        if (action.get("media_forge_clip_schema") == 1 and isinstance(clip_id, str)
+                and re.fullmatch(r"[a-z][a-z0-9._-]{0,47}", clip_id)
+                and type(end) is int and 1 <= end <= 600
+                and type(fps) is int and 1 <= fps <= 60 and type(loop) is bool):
+            known[action.name] = {"schema_version": "media-forge.clip-playback@1",
+                "clip_id": clip_id, "fps": fps, "frame_count": end, "loop_requested": loop}
+    if not known:
+        return
+    data = path.read_bytes()
+    magic, version, total, size, kind = struct.unpack_from("<5I", data)
+    if magic != 0x46546c67 or version != 2 or total != len(data) or kind != 0x4e4f534a or size > len(data)-20:
+        raise RuntimeError("exported GLB header differs")
+    document = json.loads(data[20:20+size])
+    changed = False
+    for animation in document.get("animations", []):
+        metadata = known.get(animation.get("name"))
+        if metadata is not None:
+            animation.setdefault("extras", {})["media_forge_clip"] = metadata
+            changed = True
+    if changed:
+        encoded = json.dumps(document, separators=(",", ":"), ensure_ascii=True).encode()
+        encoded += b" " * (-len(encoded) % 4)
+        rest = data[20+size:]
+        path.write_bytes(struct.pack("<5I", magic, version, 20+len(encoded)+len(rest), len(encoded), kind) + encoded + rest)
+
+
 def main() -> None:
     args = arguments()
     expected = tuple(int(part) for part in args.expected_version.split("."))
@@ -140,6 +175,7 @@ def main() -> None:
         export_animations=True,
         export_rest_position_armature=not typed_static_pose,
     )
+    add_clip_metadata(Path.cwd() / args.preview)
     result = {
         "schema_version": "media-forge.blender-scene-validation@1",
         "blender_version": args.expected_version,

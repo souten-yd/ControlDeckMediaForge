@@ -72,7 +72,9 @@ def scene_authoring_guidance() -> dict[str, Any]:
             "at most 120 frames. Fixed no-stretch IK is baked to an ordinary rotation clip and checked at "
             "every frame within 1 cm. No persistent controls, root translation or coordinated walk is implied.",
             "pose.set": "Bone rotations only; do not assume IK, translations or corrective shapes.",
-            "animation.clip": "Bone rotation tracks only; do not claim root motion, retargeting, "
+            "animation.clip": "Bone rotation keys with optional rest-bone-local translation_m at every key "
+            "of a translated track. Loop endpoints must match both. Missing translation retains legacy rotation "
+            "payloads. Translation channels are not gameplay root-motion extraction; do not claim retargeting, "
             "morph animation or engine gameplay integration from a generated clip.",
         },
         "representation_limits": [

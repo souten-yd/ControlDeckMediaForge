@@ -23,7 +23,7 @@ function disposeMaterial(material, textures, materials) {
   material.dispose();
 }
 
-export async function createModelViewer({canvas, bytes, background = "#0b1110", onContextState}) {
+export async function createModelViewer({canvas, bytes, background = "#0b1110", onContextState, onAnimationState}) {
   const renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: false});
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -102,8 +102,10 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
     const delta = lastTime ? Math.min((time - lastTime) / 1000, 0.1) : 0;
     lastTime = time;
     playback.update(delta);
+    animationPlaying = playback.state().playing;
     render();
-    animationFrame = requestAnimationFrame(tick);
+    if (animationPlaying) animationFrame = requestAnimationFrame(tick);
+    else onAnimationState?.(playback.state());
   }
 
   function scheduleAnimation() {
@@ -211,6 +213,14 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
       render();
     }
     return animationPlaying;
+  }
+
+  function stopAnimation() {
+    playback?.stop();
+    animationPlaying = false;
+    if (animationFrame) cancelAnimationFrame(animationFrame);
+    animationFrame = 0;
+    render();
   }
 
   function selectAnimation(index) {
@@ -355,17 +365,22 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
   pivot.add(offset);
   scene.add(pivot);
   try { rebuildEnvironment(); } catch (error) { dispose(); throw error; }
+  const loopFlags = (gltf.parser?.json?.animations || []).map((animation) => {
+    const metadata = animation.extras?.media_forge_clip;
+    return metadata?.schema_version === "media-forge.clip-playback@1" && typeof metadata.loop_requested === "boolean"
+      ? metadata.loop_requested : null;
+  });
   if (animations.length) {
     mixer = new THREE.AnimationMixer(root);
-    playback = createAnimationPlayback(mixer, animations);
+    playback = createAnimationPlayback(mixer, animations, loopFlags);
   }
   resize();
   fit();
   return {
     stats: {triangles, meshes, materials: materialSet.size, animations: animations.length},
     fit, rotate, zoom, setShading, setLight, setBackground, toggleBounds, toggleAnimation,
-    animationClips: animations.map((clip, index) => ({index, name: clip.name, duration: clip.duration})),
-    selectAnimation, restartAnimation,
+    animationClips: animations.map((clip, index) => ({index, name: clip.name, duration: clip.duration, loopRequested: loopFlags[index] ?? null})),
+    selectAnimation, restartAnimation, stopAnimation,
     setAnimationSpeed: (speed) => playback?.setSpeed(speed) || false,
     animationState: () => playback?.state() || null,
     setVisible, snapshot, dispose,

@@ -73,3 +73,20 @@ test("switching disjoint tracks restores old properties without changing clip da
   assert.equal(root.position.x, 0); assert.equal(root.position.y, 5);
   assert.deepEqual(clips.map((clip) => JSON.stringify(THREE.AnimationClip.toJSON(clip))), original);
 });
+
+test("typed nonloop clips finish once, resume from start, and stop restores rest", () => {
+  const {root, clips, mixer} = fixture();
+  const player = createAnimationPlayback(mixer, clips, [true, false]);
+  player.select(1); player.toggle(); player.update(2.2);
+  assert.equal(root.position.x, 10);
+  assert.equal(player.state().playing, false);
+  assert.equal(player.state().time, 2);
+  player.update(1); assert.equal(root.position.x, 10);
+  player.toggle(); assert.equal(player.state().time, 0);
+  player.update(.5); assert.equal(root.position.x, 2.5);
+  player.stop(); assert.equal(root.position.x, 0);
+  assert.equal(player.state().playing, false); assert.equal(player.state().time, 0);
+  player.select(0); player.toggle(); player.update(2.5);
+  assert.equal(player.state().playing, true); assert.equal(player.state().time, .5);
+  player.stop(); player.dispose();
+});

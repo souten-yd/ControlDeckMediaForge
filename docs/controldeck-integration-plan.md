@@ -951,3 +951,7 @@ M5 deformation remains fixed CPU recipe work in the existing immutable scene
 Job. Vertex selectors, rig IDs and finite target coordinates are MediaForge
 schema data, not Blender expressions or Host paths. No new Host executor,
 inference lease or separate skeleton storage is introduced.
+
+M6 translation and typed clip extras are additive MediaForge recipe/export data.
+The existing viewer consumes bounded playback metadata locally; Host grants,
+asset handles, Jobs and scoped file delivery remain unchanged.

@@ -1057,7 +1057,7 @@
     },
     "RotationKey": {
       "additionalProperties": false,
-      "description": "One key in a rest-local XYZ rotation track.",
+      "description": "Rest-local XYZ rotation plus optional rest-bone-local translation in meters.",
       "properties": {
         "frame": {
           "maximum": 600,
@@ -1087,6 +1087,37 @@
           ],
           "title": "Rotation Degrees",
           "type": "array"
+        },
+        "translation_m": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "maximum": 100,
+                  "minimum": -100,
+                  "type": "number"
+                },
+                {
+                  "maximum": 100,
+                  "minimum": -100,
+                  "type": "number"
+                },
+                {
+                  "maximum": 100,
+                  "minimum": -100,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Translation M"
         }
       },
       "required": [

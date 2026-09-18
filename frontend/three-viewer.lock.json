@@ -3,8 +3,8 @@
   "three_version": "0.185.1",
   "three_npm_integrity": "sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==",
   "esbuild_version": "0.28.2",
-  "source_sha256": "c378583ab5946a00c391b9088b4413945cde13867c195bc151eabdbe43bc5844",
-  "animation_source_sha256": "f6492c8691dd253fc4ee09ad4fba236ae481d28181fb58048200d2a898cb5dc4",
-  "bundle_sha256": "d4f4fa0f645ce9346ac9c3dd7538626770d0a1def7a02485afdeae784d2de7eb",
-  "bundle_bytes": 648733
+  "source_sha256": "c506819493a1bb9ed3cf802c029b402c34d8e92a54c3c07607a609853ae27b42",
+  "animation_source_sha256": "dd7dca938d5d478f4bdd50ca24f360e49e0a50713a7131dc8527e918a7ec661d",
+  "bundle_sha256": "a0194e0faa2ea6c3e416b441b4f039f780460e259b682759ea52ce655315cd0a",
+  "bundle_bytes": 649329
 }

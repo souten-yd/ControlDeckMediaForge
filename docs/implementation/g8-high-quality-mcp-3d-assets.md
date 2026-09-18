@@ -858,6 +858,9 @@ Community source is anecdotal.採用判断はBlender一次資料、MediaForgeの
 
 ## 19. Reference-guided authoring slices (2026-09-18)
 
+M6 sourceは旧rotation互換translation keysとtyped GLB playback intent、viewer停止を追加。
+実3clip再import/standalone source UI再生成功、完成歩行/installedは別gate。[記録](m6-motion-20260918.md)。
+
 M5 sourceは局所weightsと2骨IKのrotation bakeを追加。実脚fixture/足joint再importを確認。
 完成モデルの変形・協調歩行・installedは別gate。[記録](m5-deformation-20260918.md)。
 
