@@ -76,22 +76,62 @@ DiT は 1 本 1.3B で、工程が逐次なので low-VRAM モードなら峰は
 R05 のように正面と斜めの2枚がある素材はこちらに載る。単視点を先に通し、
 多視点は後続とする。
 
-### 1.2 未確定のリスク（probe で潰す）
+### 1.2 これは pip だけでは入らない — ネイティブ拡張6本の移植が要る
 
-1. **RDNA4 / gfx1201**。ROCm 版 TRELLIS の動作報告は RDNA3（gfx1100/1103）まで。
-2. **`natten==0.21.0`**。上流は `NATTEN_CUDA_ARCH` を指定した source build を要求する。
+**ここが本計画で最も重い部分なので、着手前に把握しておくこと。**
+
+Pixal3D の導入は「まず TRELLIS.2 の導入手順に従う」から始まる。その TRELLIS.2 は
+`setup.sh --flash-attn --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm` という
+**CUDA ネイティブ拡張の集合**を要求し、README は「24GB 以上の NVIDIA GPU が必要。
+A100 と H100 で検証」と明記している。`inference.py` も `import o_voxel` を直接叩く。
+
+つまり素の pip では入らない。ただし**ROCm で通した先行例がある**
+（`toastmanAu/trellis-2-rocm-comfyui`）。そこで当てている内容:
+
+| 拡張 | ROCm での扱い | ビルド時間 |
+|---|---|---|
+| `cumesh` | HIP パッチを当ててソースビルド | 約5分 |
+| `flexgemm` | Triton ベース。ROCm 向けに組み直し | 約1分 |
+| `nvdiffrast` | HIP パッチ。**CUDA ラスタライザではなく OpenGL backend を使う** | 約3分 |
+| `nvdiffrec_render` | 移植 | 約2分 |
+| `o_voxel` | 移植 | 約3分 |
+| `custom_rasterizer` | PyTorch の自動 HIP 化で通す | 約3分 |
+| `flash-attn` | **移植しない**。PyTorch の cross-attention（SDPA）へ倒す | — |
+
+先行例の実測環境: **ROCm 7.2.2 / PyTorch 2.11.0+rocm7.2 / RX 7900 XTX (gfx1100, RDNA3)
+/ 24GB / Python 3.10**。shape のみと texture 込みの両方が通り、GLB が出ている。
+
+この機体は `rocm-torch` が ROCm 7.2.1 / torch 2.10 なので近いが同じではない。
+
+### 1.3 未確定のリスク（probe で潰す）
+
+1. **RDNA4 / gfx1201**。先行例は RDNA3（gfx1100）まで。さらに先行例は
+   **fp32 matmul で M > 2^19 行のとき GEMM が黙って壊れる**問題に触れており、
+   RDNA4 に関わる話として記録されている。**probe はこれを明示的に確かめること**
+   （壊れても例外は出ない。出力を検算する必要がある）。
+2. **nvdiffrast が OpenGL backend になる**。MediaForge の worker は headless の
+   サブプロセスなので、**EGL の初期化**が要る。先行例も headless/WSL2 では GL context を
+   早期に初期化しないと EGL が失敗すると書いている。`runtimes/blender-web` 側に GL の
+   下地はあるが、worker からは別経路になる。
+3. **`natten==0.21.0`**。上流は `NATTEN_CUDA_ARCH` 指定の source build を要求する。
    NATTEN には **Flex Attention backend**（PyTorch 実装・ROCm 対応）があるので経路は
-   あるが、多次元タイリングの融合ができないぶん遅い。CUDA カーネル版は使えない前提で組む。
-3. **`flash_attn`**。上流が「無ければ `ATTN_BACKEND=sdpa` で代替できる」と明記して
-   いるので入れない。
-4. **`git+https://github.com/microsoft/MoGe.git`**。上流 requirements が git 直参照。
+   あるが、多次元タイリングの融合ができないぶん遅い。CUDA カーネル版は使わない前提で組む。
+4. **`flash_attn`**。上流が「無ければ `ATTN_BACKEND=sdpa` で代替できる」と明記。入れない。
+   `inference.py` は既定を `flash_attn` にしているので**環境変数で上書きする**。
+5. **追加の重み**。Pixal3D 本体のほかに `inference.py` が2つの HF repo を参照する。
+   固定対象は3つ:
+   - `TencentARC/Pixal3D`（sha `b0cb2e1b…`）
+   - `Ruicheng/moge-2-vitl`（MoGe-2。単眼形状推定）
+   - `camenduru/dinov3-vitl16-pretrain-lvd1689m`（DINOv3。画像条件付け）
+6. **`git+https://github.com/microsoft/MoGe.git`**。上流 requirements が git 直参照。
    固定 revision へ読み替える。
-5. **VRAM**。1536 の実測値が公開されていない。32GB で足りなければ low-VRAM（1024）へ。
+7. **VRAM**。1536 の実測値が公開されていない。32GB で足りなければ low-VRAM（1024）へ。
 
-**Pixal3D が駄目でも作り直しにはならない。** backbone が同じなので runtime と worker は
-ほぼ共通で、退避は「Pixal3D 固有の段を外して TRELLIS.2 の素で回す」だけで済む。
+**Pixal3D が駄目でも作り直しにはならない。** backbone が同じなので runtime と拡張一式は
+共通で、退避は「Pixal3D 固有の段を外して TRELLIS.2 の素で回す」だけで済む。
+逆に言えば**拡張6本が通らなければ両方とも駄目**なので、probe の第一関門はそこになる。
 
-### 1.3 依存が既存 runtime と衝突する
+### 1.4 依存が既存 runtime と衝突する
 
 上流 `requirements.txt` は `transformers==4.57.3` / `diffusers==0.37.1` を要求する。
 `runtimes/rocm-torch` は `transformers==5.15.1` / `diffusers==0.40.0` なので**同居できない**。
@@ -115,17 +155,31 @@ repository 名を解決しないので重みを落とせない。呼び出し側
 - `worker_packs/three_d/pixal3d_probe.py`
   `--snapshot` / `--work-root` / `--output` / `--preset` を取り、結果を1行 JSON で返す。
 
-probe が記録するもの:
+probe は2段に分ける。**先に拡張、次に生成。**
+
+**2a. 拡張ビルドの関門**（`--preset extensions`）
 
 ```text
-選ばれた attention backend（natten が ROCm 経路を選べたか）
+cumesh / flexgemm / nvdiffrast / nvdiffrec_render / o_voxel / custom_rasterizer を
+gfx1201 で build & import できるか
+nvdiffrast の OpenGL backend が headless（EGL）で context を取れるか
+fp32 matmul の M > 2^19 行で GEMM が壊れていないか（結果を CPU と突き合わせて検算する。
+  壊れても例外は出ないので、通ったことを成功と読まない）
+```
+
+ここが通らなければ Pixal3D も TRELLIS.2 も動かない。**止めて報告する。**
+
+**2b. 生成の計測**（`--preset smoke` / `low-vram-1024` / `standard-1536`）
+
+```text
+選ばれた attention backend（sdpa へ倒せているか、natten が ROCm 経路を選べたか）
 解像度ごとの所要秒数（1024 / 1536）
 ピーク VRAM
 出力 GLB の構造検証結果（既存 glb.validate_glb を通す）
 TRELLIS.2 素での同条件（退避先の実力）
 ```
 
-**合否の判断:** gfx1201 で落ちる / NATTEN が ROCm backend を選べない / 1024 も 1536 も
+**合否の判断:** 拡張が揃わない / GEMM 検算が合わない / EGL が取れない / 1024 も 1536 も
 VRAM に収まらない、のいずれでも止めて報告する。Pixal3D だけ駄目で TRELLIS.2 が通るなら、
 退避先で進めてよいか判断を仰ぐ。
 
@@ -310,9 +364,10 @@ NOT TESTED かを記録する）に従う。
 | # | 段 | 状態 | 記録 |
 |---|---|---|---|
 | 0 | ソースを 0.28.86 へ同期 | **完了** | 2026-09-18。`origin/main` = `8a8f1a2`、道具 16 本を確認。作業ブランチ `feat/g9-image-to-3d` |
-| 1 | 上流の固定（重み sha・依存・リスク）を文書化 | **完了** | 本文書 §1。HF sha `b0cb2e1b…`、master branch、weights 18.5〜46 GB |
-| 2 | `runtimes/pixal3d-probe` + `worker_packs/three_d/pixal3d_probe.py` | 未着手 | |
-| 3 | **probe を実機実行して報告・判断を仰ぐ（ここで止まる）** | 未着手 | 所要秒数／ピーク VRAM／NATTEN backend／GLB 検証 |
+| 1 | 上流の固定（重み sha・依存・リスク）を文書化 | **完了** | 本文書 §1。HF sha `b0cb2e1b…`、master branch、weights 18.5〜46 GB。**ネイティブ拡張6本の移植が要ることが判明**（§1.2）。固定する HF repo は3つ |
+| 2a | ネイティブ拡張6本を gfx1201 で通す（probe の第一関門） | 未着手 | ビルド可否／EGL／fp32 GEMM 検算 |
+| 2b | `runtimes/pixal3d-probe` + `worker_packs/three_d/pixal3d_probe.py` | 未着手 | |
+| 3 | **probe を実機実行して報告・判断を仰ぐ（ここで止まる）** | 未着手 | 所要秒数／ピーク VRAM／attention backend／GLB 検証 |
 | 4 | adapter + job + G8 受け渡し | 未着手 | |
 | 5 | MCP 断捨離（`author` 統合 → 5 本削除 → 0.29.0 → docs） | 未着手 | |
 | 6 | `media.scene.from_image` の公開 | 未着手 | |
