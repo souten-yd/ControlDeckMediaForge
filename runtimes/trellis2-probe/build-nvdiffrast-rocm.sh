@@ -1,0 +1,1379 @@
+#!/usr/bin/env bash
+# nvdiffrast（v0.4.0 + v0.3.5 の GL プラグイン）と nvdiffrec_render を gfx1201 で組む。
+#
+# 本体の CUDA ラスタライザは PTX のインラインアセンブリを使っており HIP へ移植できない。
+# そこで v0.4.0 側では stub にし、v0.3.5 の OpenGL ラスタライザを別モジュールとして
+# 組んで差し替える。HIP-GL interop は Mesa のオープンドライバでは動かないので、
+# GPU-GL のやり取りは CPU 経由（hipMemcpy D2H → glBufferSubData、glGetTexImage →
+# hipMemcpy H2D）にしてある。
+#
+# パッチの中身は egore/comfyui-trellis2-gguf-rocm の install-trellis2-gguf-rocm.sh
+# （MIT）から取り、ComfyUI 依存の部分だけ MediaForge の runtime 向けへ差し替えた。
+#
+# 前提: runtimes/trellis2-probe/.venv が出来ていること。
+#       torch の ROCM_HOME 自動判定はこの機体では壊れているので明示する。
+set -euo pipefail
+
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+VENV="${REPO_ROOT}/runtimes/trellis2-probe/.venv"
+PYTHON_EXE="${VENV}/bin/python"
+SITE_PACKAGES="$("${PYTHON_EXE}" -c 'import site; print(site.getsitepackages()[0])')"
+TMPBUILD="${TMPBUILD:-/data1tb/ControlDeck/data/feature-data/media-forge/runtimes/trellis2-ext}"
+PIPargs="--no-build-isolation --no-deps"
+
+export ROCM_HOME=/opt/rocm
+export ROCM_PATH=/opt/rocm
+export GPU_ARCHS="${GPU_ARCHS:-gfx1201}"
+export BUILD_TARGET=rocm
+export MAX_JOBS="${MAX_JOBS:-16}"
+export PYTORCH_ROCM_ARCH="${GPU_ARCHS}"
+
+mkdir -p "${TMPBUILD}"
+green=''; yellow=''; reset=''; warning=''
+# --- nvdiffrast v0.4.0 (patched for ROCm/HIP) ---
+# Builds interpolate/texture/antialias ops with HIP. The CUDA rasterizer is
+# stubbed out because CudaRaster uses PTX inline assembly.
+echo -e "${green}:::::::::::::: Building ${yellow}nvdiffrast v0.4.0${green} from source (ROCm)${reset}"
+if [ -d "${TMPBUILD}/nvdiffrast" ]; then rm -rf "${TMPBUILD}/nvdiffrast"; fi
+git clone -b v0.4.0 https://github.com/NVlabs/nvdiffrast.git "${TMPBUILD}/nvdiffrast"
+
+echo -e "${yellow}Applying ROCm patches to nvdiffrast v0.4.0...${reset}"
+NVDR="${TMPBUILD}/nvdiffrast"
+
+# 1) __frcp_rz is CUDA-only; replace with 1.0f/x which compiles on both
+sed -i 's/__frcp_rz(\(.*\))/(__fdividef(1.0f, \1))/g' "${NVDR}/csrc/common/texture_kernel.cu"
+
+# 2) Warp sync functions on ROCm 7.2 require 64-bit masks.
+#    Cast 0xffffffffu mask literals and change amask to unsigned long long.
+sed -i 's/0xffffffffu/(unsigned long long)0xffffffffu/g' \
+    "${NVDR}/csrc/common/antialias.cu" \
+    "${NVDR}/csrc/common/interpolate.cu" \
+    "${NVDR}/csrc/common/common.h"
+sed -i 's/unsigned int amask/unsigned long long amask/g' \
+    "${NVDR}/csrc/common/antialias.cu"
+
+# 3) Remove -lineinfo NVCC flag that hipcc doesn't understand
+sed -i 's/"-lineinfo"//g' "${NVDR}/setup.py"
+
+# 4) The cudaraster module uses NVIDIA PTX inline assembly and cannot be ported to HIP.
+#    Remove cudaraster sources AND torch_rasterize (deeply coupled to CudaRaster internals).
+sed -i '/cudaraster\/impl\/Buffer.cpp/d' "${NVDR}/setup.py"
+sed -i '/cudaraster\/impl\/CudaRaster.cpp/d' "${NVDR}/setup.py"
+sed -i '/cudaraster\/impl\/RasterImpl.cpp/d' "${NVDR}/setup.py"
+sed -i '/cudaraster\/impl\/RasterImpl_kernel.cu/d' "${NVDR}/setup.py"
+sed -i '/torch_rasterize/d' "${NVDR}/setup.py"
+
+# 4b) Create stub rasterize implementations so torch_bindings links successfully.
+cat > "${NVDR}/csrc/torch/torch_rasterize_stub.cu" << 'STUBEOF'
+#include "torch_common.inl"
+#include "torch_types.h"
+#include <tuple>
+
+RasterizeCRStateWrapper::RasterizeCRStateWrapper(int deviceIdx) : cr(nullptr), cudaDeviceIdx(deviceIdx) {}
+RasterizeCRStateWrapper::~RasterizeCRStateWrapper() {}
+
+std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_cuda(RasterizeCRStateWrapper&, torch::Tensor, torch::Tensor, std::tuple<int,int>, torch::Tensor, int) { throw std::runtime_error("CUDA rasterizer not available on ROCm. Use RasterizeGLContext."); }
+torch::Tensor rasterize_grad(torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor) { throw std::runtime_error("CUDA rasterizer not available on ROCm."); }
+torch::Tensor rasterize_grad_db(torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor) { throw std::runtime_error("CUDA rasterizer not available on ROCm."); }
+STUBEOF
+
+# Add stub to setup.py sources list
+sed -i '/torch_bindings/a\                "csrc/torch/torch_rasterize_stub.cu",' "${NVDR}/setup.py"
+
+# 5) Patch framework.h to use HIP includes on ROCm.
+cat > "${NVDR}/csrc/common/framework.h" << 'FWEOF'
+#pragma once
+
+#ifdef NVDR_TORCH
+
+#if defined(__HIP_PLATFORM_AMD__)
+#include <torch/extension.h>
+#include <ATen/hip/HIPContext.h>
+#include <ATen/hip/HIPUtils.h>
+#include <c10/hip/HIPGuard.h>
+// hipify は OptionalCUDAGuard / getCurrentCUDAStream を at::hip の
+// ...MasqueradingAsCUDA へ置き換える。その宣言はここにある。
+// torch 2.10.0+rocm7.2.1 では c10/hip/HIPGuard.h には入っていない。
+#include <ATen/hip/impl/HIPGuardImplMasqueradingAsCUDA.h>
+#include <ATen/hip/impl/HIPStreamMasqueradingAsCUDA.h>
+#include <pybind11/numpy.h>
+#define NVDR_CHECK(COND, ERR) do { TORCH_CHECK(COND, ERR) } while(0)
+#define NVDR_CHECK_CUDA_ERROR(HIP_CALL) do { hipError_t err = HIP_CALL; TORCH_CHECK(!err, "HIP error: ", hipGetErrorString(hipGetLastError()), "[", #HIP_CALL, ";]"); } while(0)
+#else
+#ifndef __CUDACC__
+#include <torch/extension.h>
+#include <ATen/cuda/CUDAContext.h>
+#include <ATen/cuda/CUDAUtils.h>
+#include <c10/cuda/CUDAGuard.h>
+#include <pybind11/numpy.h>
+#endif
+#define NVDR_CHECK(COND, ERR) do { TORCH_CHECK(COND, ERR) } while(0)
+#define NVDR_CHECK_CUDA_ERROR(CUDA_CALL) do { cudaError_t err = CUDA_CALL; TORCH_CHECK(!err, "Cuda error: ", cudaGetLastError(), "[", #CUDA_CALL, ";]"); } while(0)
+#endif
+
+#endif // NVDR_TORCH
+FWEOF
+
+# 6) Fix narrowing conversion error in torch_antialias.cpp (clang is stricter than nvcc)
+sed -i 's/(uint64_t)p\.allocTriangles/(int64_t)p.allocTriangles/g' "${NVDR}/csrc/torch/torch_antialias.cpp"
+
+# 7) Rename .cpp files to .cu so they get compiled with hipcc
+for f in torch_antialias torch_bindings torch_interpolate torch_texture; do
+    if [ -f "${NVDR}/csrc/torch/${f}.cpp" ]; then
+        mv "${NVDR}/csrc/torch/${f}.cpp" "${NVDR}/csrc/torch/${f}.cu"
+        sed -i "s|csrc/torch/${f}.cpp|csrc/torch/${f}.cu|" "${NVDR}/setup.py"
+    fi
+done
+for f in common texture; do
+    if [ -f "${NVDR}/csrc/common/${f}.cpp" ]; then
+        mv "${NVDR}/csrc/common/${f}.cpp" "${NVDR}/csrc/common/${f}.cu"
+        sed -i "s|csrc/common/${f}.cpp|csrc/common/${f}.cu|" "${NVDR}/setup.py"
+    fi
+done
+
+$PYTHON_EXE -m pip install "${NVDR}" --no-build-isolation $PIPargs || \
+    echo -e "${warning}WARNING: nvdiffrast v0.4.0 build failed. Some rendering features may not work.${reset}"
+echo ""
+
+# --- nvdiffrast GL plugin from v0.3.5 (CPU-bounce, no HIP-GL interop) ---
+# v0.4.0 removed the OpenGL rasterizer. We build the GL plugin from v0.3.5 sources
+# as a separate extension module, then patch ops.py to load it for RasterizeGLContext.
+# HIP-GL interop (hipGraphicsGLRegisterBuffer etc.) does NOT work with Mesa's open-source
+# drivers, so we replace all GPU-GL interop with CPU bounce transfers:
+#   Upload: hipMemcpy D2H → glBufferSubData
+#   Readback: glGetTexImage → hipMemcpy H2D
+echo -e "${green}:::::::::::::: Building ${yellow}nvdiffrast GL plugin${green} from v0.3.5 sources (CPU-bounce)${reset}"
+if [ -d "${TMPBUILD}/nvdiffrast_gl" ]; then rm -rf "${TMPBUILD}/nvdiffrast_gl"; fi
+git clone -b v0.3.5 https://github.com/NVlabs/nvdiffrast.git "${TMPBUILD}/nvdiffrast_gl"
+
+NVDR_GL="${TMPBUILD}/nvdiffrast_gl/nvdiffrast"
+NVDR_INSTALLED="${SITE_PACKAGES}/nvdiffrast"
+
+echo -e "${yellow}Patching v0.3.5 GL sources for ROCm (CPU-bounce path)...${reset}"
+
+# Patch common.cpp: replace cuda_runtime.h with hip equivalent
+sed -i 's|#include <cuda_runtime.h>|#if defined(__HIP_PLATFORM_AMD__)\n#include <hip/hip_runtime.h>\n#else\n#include <cuda_runtime.h>\n#endif|' "${NVDR_GL}/common/common.cpp"
+
+# Patch common.h: replace cuda.h with hip equivalent
+sed -i 's|#include <cuda.h>|#if defined(__HIP_PLATFORM_AMD__)\n#include <hip/hip_runtime.h>\n#else\n#include <cuda.h>\n#endif|' "${NVDR_GL}/common/common.h"
+
+# Replace glutil.h: EGL context struct, no cuda_gl_interop.h, add needed GL constants
+cat > "${NVDR_GL}/common/glutil.h" << 'GLUTILHEOF'
+#pragma once
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#define GLAPIENTRY APIENTRY
+struct GLContext { HDC hdc; HGLRC hglrc; int extInitialized; };
+#endif
+#ifdef __linux__
+#define EGL_NO_X11
+#define MESA_EGL_NO_X11_HEADERS
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#define GL_GLEXT_LEGACY
+#define GLAPIENTRY
+struct GLContext { EGLDisplay display; EGLContext context; int extInitialized; };
+#endif
+#include <GL/gl.h>
+// HIP-GL interop not used — CPU bounce transfers instead.
+#ifndef GL_CLAMP_TO_EDGE
+#define GL_CLAMP_TO_EDGE 0x812F
+#endif
+#ifndef GL_TEXTURE_3D
+#define GL_TEXTURE_3D 0x806F
+#endif
+#ifndef GL_ARRAY_BUFFER
+#define GL_ARRAY_BUFFER 0x8892
+#endif
+#ifndef GL_DYNAMIC_DRAW
+#define GL_DYNAMIC_DRAW 0x88E8
+#endif
+#ifndef GL_ELEMENT_ARRAY_BUFFER
+#define GL_ELEMENT_ARRAY_BUFFER 0x8893
+#endif
+#ifndef GL_FRAGMENT_SHADER
+#define GL_FRAGMENT_SHADER 0x8B30
+#endif
+#ifndef GL_INFO_LOG_LENGTH
+#define GL_INFO_LOG_LENGTH 0x8B84
+#endif
+#ifndef GL_LINK_STATUS
+#define GL_LINK_STATUS 0x8B82
+#endif
+#ifndef GL_VERTEX_SHADER
+#define GL_VERTEX_SHADER 0x8B31
+#endif
+#ifndef GL_MAJOR_VERSION
+#define GL_MAJOR_VERSION 0x821B
+#endif
+#ifndef GL_MINOR_VERSION
+#define GL_MINOR_VERSION 0x821C
+#endif
+#ifndef GL_RGBA32F
+#define GL_RGBA32F 0x8814
+#endif
+#ifndef GL_TEXTURE_2D_ARRAY
+#define GL_TEXTURE_2D_ARRAY 0x8C1A
+#endif
+#ifndef GL_GEOMETRY_SHADER
+#define GL_GEOMETRY_SHADER 0x8DD9
+#endif
+#ifndef GL_COLOR_ATTACHMENT0
+#define GL_COLOR_ATTACHMENT0 0x8CE0
+#endif
+#ifndef GL_COLOR_ATTACHMENT1
+#define GL_COLOR_ATTACHMENT1 0x8CE1
+#endif
+#ifndef GL_DEPTH_STENCIL
+#define GL_DEPTH_STENCIL 0x84F9
+#endif
+#ifndef GL_DEPTH_STENCIL_ATTACHMENT
+#define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
+#endif
+#ifndef GL_DEPTH24_STENCIL8
+#define GL_DEPTH24_STENCIL8 0x88F0
+#endif
+#ifndef GL_FRAMEBUFFER
+#define GL_FRAMEBUFFER 0x8D40
+#endif
+#ifndef GL_READ_FRAMEBUFFER
+#define GL_READ_FRAMEBUFFER 0x8CA8
+#endif
+#ifndef GL_INVALID_FRAMEBUFFER_OPERATION
+#define GL_INVALID_FRAMEBUFFER_OPERATION 0x0506
+#endif
+#ifndef GL_UNSIGNED_INT_24_8
+#define GL_UNSIGNED_INT_24_8 0x84FA
+#endif
+#ifndef GL_TABLE_TOO_LARGE
+#define GL_TABLE_TOO_LARGE 0x8031
+#endif
+#ifndef GL_CONTEXT_LOST
+#define GL_CONTEXT_LOST 0x0507
+#endif
+#undef GL_VERSION_1_5
+#undef GL_VERSION_2_0
+#undef GL_VERSION_3_0
+#undef GL_VERSION_3_2
+#undef GL_ARB_framebuffer_object
+#undef GL_ARB_vertex_array_object
+#undef GL_ARB_multi_draw_indirect
+#define GLUTIL_EXT(return_type, name, ...) extern return_type (GLAPIENTRY* name)(__VA_ARGS__);
+#include "glutil_extlist.h"
+#undef GLUTIL_EXT
+void setGLContext(GLContext& glctx);
+void releaseGLContext(void);
+GLContext createGLContext(int cudaDeviceIdx);
+void destroyGLContext(GLContext& glctx);
+const char* getGLErrorString(GLenum err);
+GLUTILHEOF
+
+# Replace glutil.cpp: EGL surfaceless context creation for ROCm/Mesa (headless, no X11)
+cat > "${NVDR_GL}/common/glutil.cpp" << 'GLUTILCPPEOF'
+#include "framework.h"
+#include "glutil.h"
+#include <iostream>
+#include <iomanip>
+#include <cstring>
+#define GLUTIL_EXT(return_type, name, ...) return_type (GLAPIENTRY* name)(__VA_ARGS__) = 0;
+#include "glutil_extlist.h"
+#undef GLUTIL_EXT
+static volatile bool s_glExtInitialized = false;
+const char* getGLErrorString(GLenum err)
+{
+    switch(err)
+    {
+        case GL_NO_ERROR:                       return "GL_NO_ERROR";
+        case GL_INVALID_ENUM:                   return "GL_INVALID_ENUM";
+        case GL_INVALID_VALUE:                  return "GL_INVALID_VALUE";
+        case GL_INVALID_OPERATION:              return "GL_INVALID_OPERATION";
+        case GL_STACK_OVERFLOW:                 return "GL_STACK_OVERFLOW";
+        case GL_STACK_UNDERFLOW:                return "GL_STACK_UNDERFLOW";
+        case GL_OUT_OF_MEMORY:                  return "GL_OUT_OF_MEMORY";
+        case GL_INVALID_FRAMEBUFFER_OPERATION:  return "GL_INVALID_FRAMEBUFFER_OPERATION";
+        case GL_TABLE_TOO_LARGE:                return "GL_TABLE_TOO_LARGE";
+        case GL_CONTEXT_LOST:                   return "GL_CONTEXT_LOST";
+    }
+    return "Unknown error";
+}
+#ifdef __linux__
+static pthread_mutex_t s_getProcAddressMutex = PTHREAD_MUTEX_INITIALIZER;
+typedef void (*PROCFN)();
+static void safeGetProcAddress(const char* name, PROCFN* pfn)
+{
+    PROCFN result = (PROCFN)eglGetProcAddress(name);
+    if (!result)
+    {
+        pthread_mutex_unlock(&s_getProcAddressMutex);
+        LOG(FATAL) << "eglGetProcAddress() failed for '" << name << "'";
+        exit(1);
+    }
+    *pfn = result;
+}
+static void initializeGLExtensions(void)
+{
+    pthread_mutex_lock(&s_getProcAddressMutex);
+    if (!s_glExtInitialized)
+    {
+#define GLUTIL_EXT(return_type, name, ...) safeGetProcAddress(#name, (PROCFN*)&name);
+#include "glutil_extlist.h"
+#undef GLUTIL_EXT
+        s_glExtInitialized = true;
+    }
+    pthread_mutex_unlock(&s_getProcAddressMutex);
+}
+void setGLContext(GLContext& glctx)
+{
+    if (!glctx.context)
+        LOG(FATAL) << "setGLContext() called with null context";
+    if (!eglMakeCurrent(glctx.display, EGL_NO_SURFACE, EGL_NO_SURFACE, glctx.context))
+        LOG(ERROR) << "eglMakeCurrent() failed when setting GL context";
+    if (glctx.extInitialized)
+        return;
+    initializeGLExtensions();
+    glctx.extInitialized = 1;
+}
+void releaseGLContext(void)
+{
+    EGLDisplay display = eglGetCurrentDisplay();
+    if (display == EGL_NO_DISPLAY)
+        return;
+    eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+}
+GLContext createGLContext(int cudaDeviceIdx)
+{
+    LOG(INFO) << "Creating EGL context for HIP device " << cudaDeviceIdx;
+    typedef EGLBoolean (*eglQueryDevicesEXT_t)(EGLint, EGLDeviceEXT*, EGLint*);
+    typedef EGLDisplay (*eglGetPlatformDisplayEXT_t)(EGLenum, void*, const EGLint*);
+    eglQueryDevicesEXT_t pQueryDevices = (eglQueryDevicesEXT_t)eglGetProcAddress("eglQueryDevicesEXT");
+    eglGetPlatformDisplayEXT_t pGetPlatformDisplay = (eglGetPlatformDisplayEXT_t)eglGetProcAddress("eglGetPlatformDisplayEXT");
+    EGLDisplay display = EGL_NO_DISPLAY;
+    if (pQueryDevices && pGetPlatformDisplay)
+    {
+        EGLint numDevices = 0;
+        pQueryDevices(0, 0, &numDevices);
+        if (numDevices > 0)
+        {
+            EGLDeviceEXT* devices = (EGLDeviceEXT*)malloc(numDevices * sizeof(EGLDeviceEXT));
+            pQueryDevices(numDevices, devices, &numDevices);
+            int idx = (cudaDeviceIdx >= 0 && cudaDeviceIdx < numDevices) ? cudaDeviceIdx : 0;
+            display = pGetPlatformDisplay(EGL_PLATFORM_DEVICE_EXT, devices[idx], 0);
+            LOG(INFO) << "EGL: found " << numDevices << " devices, using device " << idx;
+            free(devices);
+        }
+    }
+    if (display == EGL_NO_DISPLAY)
+    {
+        display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        LOG(INFO) << "EGL: using default display";
+    }
+    if (display == EGL_NO_DISPLAY)
+        LOG(FATAL) << "eglGetDisplay() failed";
+    EGLint major, minor;
+    if (!eglInitialize(display, &major, &minor))
+        LOG(FATAL) << "eglInitialize() failed";
+    LOG(INFO) << "EGL version: " << major << "." << minor;
+    if (!eglBindAPI(EGL_OPENGL_API))
+        LOG(FATAL) << "eglBindAPI(EGL_OPENGL_API) failed - desktop OpenGL not supported?";
+    static const EGLint configAttribs[] = {
+        EGL_SURFACE_TYPE,    EGL_PBUFFER_BIT,
+        EGL_RED_SIZE,        8,
+        EGL_GREEN_SIZE,      8,
+        EGL_BLUE_SIZE,       8,
+        EGL_ALPHA_SIZE,      8,
+        EGL_DEPTH_SIZE,      24,
+        EGL_STENCIL_SIZE,    8,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        EGL_NONE
+    };
+    EGLConfig config;
+    EGLint numConfigs;
+    if (!eglChooseConfig(display, configAttribs, &config, 1, &numConfigs) || numConfigs == 0)
+        LOG(FATAL) << "eglChooseConfig() failed";
+    static const EGLint ctxAttribs[] = {
+        EGL_CONTEXT_MAJOR_VERSION, 4,
+        EGL_CONTEXT_MINOR_VERSION, 4,
+        EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+        EGL_NONE
+    };
+    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctxAttribs);
+    if (context == EGL_NO_CONTEXT)
+        LOG(FATAL) << "eglCreateContext() failed (error 0x" << std::hex << eglGetError() << ")";
+    LOG(INFO) << "EGL OpenGL context created successfully";
+    GLContext glctx = {display, context, 0};
+    return glctx;
+}
+void destroyGLContext(GLContext& glctx)
+{
+    if (!glctx.context) LOG(FATAL) << "destroyGLContext() called with null context";
+    if (eglGetCurrentContext() == glctx.context) releaseGLContext();
+    eglDestroyContext(glctx.display, glctx.context);
+    LOG(INFO) << "EGL OpenGL context destroyed";
+    memset(&glctx, 0, sizeof(GLContext));
+}
+#endif // __linux__
+GLUTILCPPEOF
+
+# Replace glutil_extlist.h: add glBufferSubData and glFramebufferTextureLayer
+cat > "${NVDR_GL}/common/glutil_extlist.h" << 'EXTLISTEOF'
+// Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+//
+// NVIDIA CORPORATION and its licensors retain all intellectual property
+// and proprietary rights in and to this software, related documentation
+// and any modifications thereto.  Any use, reproduction, disclosure or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA CORPORATION is strictly prohibited.
+
+#ifndef GL_VERSION_1_2
+GLUTIL_EXT(void,   glTexImage3D,                GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void *pixels);
+#endif
+#ifndef GL_VERSION_1_5
+GLUTIL_EXT(void,   glBindBuffer,                GLenum target, GLuint buffer);
+GLUTIL_EXT(void,   glBufferData,                GLenum target, ptrdiff_t size, const void* data, GLenum usage);
+GLUTIL_EXT(void,   glBufferSubData,             GLenum target, ptrdiff_t offset, ptrdiff_t size, const void* data);
+GLUTIL_EXT(void,   glGenBuffers,                GLsizei n, GLuint* buffers);
+#endif
+#ifndef GL_VERSION_2_0
+GLUTIL_EXT(void,   glAttachShader,              GLuint program, GLuint shader);
+GLUTIL_EXT(void,   glCompileShader,             GLuint shader);
+GLUTIL_EXT(GLuint, glCreateProgram,             void);
+GLUTIL_EXT(GLuint, glCreateShader,              GLenum type);
+GLUTIL_EXT(void,   glDrawBuffers,               GLsizei n, const GLenum* bufs);
+GLUTIL_EXT(void,   glEnableVertexAttribArray,   GLuint index);
+GLUTIL_EXT(void,   glGetProgramInfoLog,         GLuint program, GLsizei bufSize, GLsizei* length, char* infoLog);
+GLUTIL_EXT(void,   glGetProgramiv,              GLuint program, GLenum pname, GLint* param);
+GLUTIL_EXT(void,   glLinkProgram,               GLuint program);
+GLUTIL_EXT(void,   glShaderSource,              GLuint shader, GLsizei count, const char *const* string, const GLint* length);
+GLUTIL_EXT(void,   glUniform1f,                 GLint location, GLfloat v0);
+GLUTIL_EXT(void,   glUniform2f,                 GLint location, GLfloat v0, GLfloat v1);
+GLUTIL_EXT(void,   glUseProgram,                GLuint program);
+GLUTIL_EXT(void,   glVertexAttribPointer,       GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer);
+#endif
+#ifndef GL_VERSION_3_0
+GLUTIL_EXT(void,   glFramebufferTextureLayer,   GLenum target, GLenum attachment, GLuint texture, GLint level, GLint layer);
+#endif
+#ifndef GL_VERSION_3_2
+GLUTIL_EXT(void,   glFramebufferTexture,        GLenum target, GLenum attachment, GLuint texture, GLint level);
+#endif
+#ifndef GL_ARB_framebuffer_object
+GLUTIL_EXT(void,   glBindFramebuffer,           GLenum target, GLuint framebuffer);
+GLUTIL_EXT(void,   glGenFramebuffers,           GLsizei n, GLuint* framebuffers);
+#endif
+#ifndef GL_ARB_vertex_array_object
+GLUTIL_EXT(void,   glBindVertexArray,           GLuint array);
+GLUTIL_EXT(void,   glGenVertexArrays,           GLsizei n, GLuint* arrays);
+#endif
+#ifndef GL_ARB_multi_draw_indirect
+GLUTIL_EXT(void,   glMultiDrawElementsIndirect, GLenum mode, GLenum type, const void *indirect, GLsizei primcount, GLsizei stride);
+#endif
+
+//------------------------------------------------------------------------
+EXTLISTEOF
+
+# Patch framework.h: CUDA→HIP aliases for CPU-bounce path (no GL interop types needed)
+cat > "${NVDR_GL}/common/framework.h" << 'FWGLEOF'
+#pragma once
+#ifdef NVDR_TORCH
+#if defined(__HIP_PLATFORM_AMD__)
+#include <hip/hip_runtime.h>
+typedef hipStream_t cudaStream_t;
+typedef hipError_t cudaError_t;
+#define cudaSuccess hipSuccess
+#define cudaMemcpyDeviceToDevice hipMemcpyDeviceToDevice
+#define cudaMemcpyDeviceToHost hipMemcpyDeviceToHost
+#define cudaMemcpyHostToDevice hipMemcpyHostToDevice
+#define cudaMemcpyAsync hipMemcpyAsync
+#define cudaDeviceSynchronize hipDeviceSynchronize
+#include <torch/extension.h>
+#include <c10/hip/HIPStream.h>
+#include <c10/hip/HIPGuard.h>
+// ROCm torch は Python から見える device type を cuda のままにしている。
+// 素の c10::hip::OptionalHIPGuard は DeviceType::HIP しか受けず、
+// 「HIPGuardImpl initialized with non-HIP DeviceType: cuda」で落ちる。
+// cuda を名乗ったまま HIP へ回す Masquerading 版を使うこと。
+#include <ATen/hip/impl/HIPGuardImplMasqueradingAsCUDA.h>
+#include <ATen/hip/impl/HIPStreamMasqueradingAsCUDA.h>
+#include <pybind11/numpy.h>
+namespace at { namespace cuda {
+    // torch 2.10.0+rocm7.2.1 に c10::cuda は無い。HIP 側の同等物へ束ねる。
+    using OptionalCUDAGuard = at::hip::OptionalHIPGuardMasqueradingAsCUDA;
+    inline at::hip::HIPStreamMasqueradingAsCUDA getCurrentCUDAStream(c10::DeviceIndex device_index = -1) {
+        return at::hip::getCurrentHIPStreamMasqueradingAsCUDA(device_index);
+    }
+    inline bool check_device(c10::ArrayRef<at::Tensor> ts) {
+        if (ts.empty()) return true;
+        at::Device curDevice = ts.front().device();
+        for (const at::Tensor& t : ts) { if (t.device() != curDevice) return false; }
+        return true;
+    }
+}}
+#else
+#ifndef __CUDACC__
+#include <torch/extension.h>
+#include <ATen/cuda/CUDAContext.h>
+#include <ATen/cuda/CUDAUtils.h>
+#include <c10/cuda/CUDAGuard.h>
+#include <pybind11/numpy.h>
+#endif
+#endif
+#define NVDR_CTX_ARGS int _nvdr_ctx_dummy
+#define NVDR_CTX_PARAMS 0
+#define NVDR_CHECK(COND, ERR) do { TORCH_CHECK(COND, ERR) } while(0)
+#define NVDR_CHECK_GL_ERROR(GL_CALL) do { GL_CALL; GLenum err = glGetError(); TORCH_CHECK(err == GL_NO_ERROR, "OpenGL error: ", getGLErrorString(err), "[", #GL_CALL, ";]"); } while(0)
+#if defined(__HIP_PLATFORM_AMD__)
+#define NVDR_CHECK_CUDA_ERROR(CALL) do { hipError_t err = CALL; TORCH_CHECK(!err, "HIP error: ", hipGetErrorString(err), "[", #CALL, ";]"); } while(0)
+#else
+#define NVDR_CHECK_CUDA_ERROR(CUDA_CALL) do { cudaError_t err = CUDA_CALL; TORCH_CHECK(!err, "Cuda error: ", cudaGetLastError(), "[", #CUDA_CALL, ";]"); } while(0)
+#endif
+#endif // NVDR_TORCH
+FWGLEOF
+
+# Patch rasterize_gl.h: remove cudaGraphicsResource_t members, add CPU staging buffer
+cat > "${NVDR_GL}/common/rasterize_gl.h" << 'RGLHEOF'
+// Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+//
+// NVIDIA CORPORATION and its licensors retain all intellectual property
+// and proprietary rights in and to this software, related documentation
+// and any modifications thereto.  Any use, reproduction, disclosure or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA CORPORATION is strictly prohibited.
+
+#pragma once
+
+//------------------------------------------------------------------------
+// Do not try to include OpenGL stuff when compiling CUDA kernels for torch.
+
+#if !(defined(NVDR_TORCH) && defined(__CUDACC__))
+#include "framework.h"
+#include "glutil.h"
+#include <cstddef>
+
+//------------------------------------------------------------------------
+// OpenGL-related persistent state for forward op.
+
+struct RasterizeGLState // Must be initializable by memset to zero.
+{
+    int                     width;              // Allocated frame buffer width.
+    int                     height;             // Allocated frame buffer height.
+    int                     depth;              // Allocated frame buffer depth.
+    int                     posCount;           // Allocated position buffer in floats.
+    int                     triCount;           // Allocated triangle buffer in ints.
+    GLContext               glctx;
+    GLuint                  glFBO;
+    GLuint                  glColorBuffer[2];
+    GLuint                  glPrevOutBuffer;
+    GLuint                  glDepthStencilBuffer;
+    GLuint                  glVAO;
+    GLuint                  glTriBuffer;
+    GLuint                  glPosBuffer;
+    GLuint                  glProgram;
+    GLuint                  glProgramDP;
+    GLuint                  glVertexShader;
+    GLuint                  glGeometryShader;
+    GLuint                  glFragmentShader;
+    GLuint                  glFragmentShaderDP;
+    int                     enableDB;
+    int                     enableZModify;      // Modify depth in shader, workaround for a rasterization issue on A100.
+    int                     prevOutAllocated;    // Has glPrevOutBuffer been given storage?
+    // CPU staging buffer for bounce transfers (ROCm/Mesa path).
+    void*                   cpuStagingBuffer;
+    size_t                  cpuStagingSize;
+};
+
+//------------------------------------------------------------------------
+// Shared C++ code prototypes.
+
+void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceIdx);
+void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, int posCount, int triCount, int width, int height, int depth);
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx);
+void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth);
+void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s);
+
+//------------------------------------------------------------------------
+#endif // !(defined(NVDR_TORCH) && defined(__CUDACC__))
+RGLHEOF
+
+# Patch rasterize_gl.cpp: replace entire file with CPU-bounce version.
+cat > "${NVDR_GL}/common/rasterize_gl.cpp" << 'RGLCPPEOF'
+// Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+//
+// NVIDIA CORPORATION and its licensors retain all intellectual property
+// and proprietary rights in and to this software, related documentation
+// and any modifications thereto.  Any use, reproduction, disclosure or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA CORPORATION is strictly prohibited.
+
+#include "rasterize_gl.h"
+#include "glutil.h"
+#include <vector>
+#include <cstdlib>
+#include <cstring>
+#define STRINGIFY_SHADER_SOURCE(x) #x
+
+//------------------------------------------------------------------------
+// CPU staging buffer helpers for bounce transfers (ROCm/Mesa path).
+
+static void ensureStagingBuffer(RasterizeGLState& s, size_t needed)
+{
+    if (s.cpuStagingSize >= needed)
+        return;
+    free(s.cpuStagingBuffer);
+    s.cpuStagingBuffer = malloc(needed);
+    s.cpuStagingSize = needed;
+}
+
+//------------------------------------------------------------------------
+// Helpers.
+
+#define ROUND_UP(x, y) ((((x) + ((y) - 1)) / (y)) * (y))
+static int ROUND_UP_BITS(uint32_t x, uint32_t y)
+{
+    // Round x up so that it has at most y bits of mantissa.
+    if (x < (1u << y))
+        return x;
+    uint32_t m = 0;
+    while (x & ~m)
+        m = (m << 1) | 1u;
+    m >>= y;
+    if (!(x & m))
+        return x;
+    return (x | m) + 1u;
+}
+
+//------------------------------------------------------------------------
+// Draw command struct used by rasterizer.
+
+struct GLDrawCmd
+{
+    uint32_t    count;
+    uint32_t    instanceCount;
+    uint32_t    firstIndex;
+    uint32_t    baseVertex;
+    uint32_t    baseInstance;
+};
+
+//------------------------------------------------------------------------
+// GL helpers.
+
+static void compileGLShader(NVDR_CTX_ARGS, const RasterizeGLState& s, GLuint* pShader, GLenum shaderType, const char* src_buf)
+{
+    std::string src(src_buf);
+
+    // Set preprocessor directives.
+    int n = src.find('\n') + 1; // After first line containing #version directive.
+    if (s.enableZModify)
+        src.insert(n, "#define IF_ZMODIFY(x) x\n");
+    else
+        src.insert(n, "#define IF_ZMODIFY(x)\n");
+
+    const char *cstr = src.c_str();
+    *pShader = 0;
+    NVDR_CHECK_GL_ERROR(*pShader = glCreateShader(shaderType));
+    NVDR_CHECK_GL_ERROR(glShaderSource(*pShader, 1, &cstr, 0));
+    NVDR_CHECK_GL_ERROR(glCompileShader(*pShader));
+}
+
+static void constructGLProgram(NVDR_CTX_ARGS, GLuint* pProgram, GLuint glVertexShader, GLuint glGeometryShader, GLuint glFragmentShader)
+{
+    *pProgram = 0;
+
+    GLuint glProgram = 0;
+    NVDR_CHECK_GL_ERROR(glProgram = glCreateProgram());
+    NVDR_CHECK_GL_ERROR(glAttachShader(glProgram, glVertexShader));
+    NVDR_CHECK_GL_ERROR(glAttachShader(glProgram, glGeometryShader));
+    NVDR_CHECK_GL_ERROR(glAttachShader(glProgram, glFragmentShader));
+    NVDR_CHECK_GL_ERROR(glLinkProgram(glProgram));
+
+    GLint linkStatus = 0;
+    NVDR_CHECK_GL_ERROR(glGetProgramiv(glProgram, GL_LINK_STATUS, &linkStatus));
+    if (!linkStatus)
+    {
+        GLint infoLen = 0;
+        NVDR_CHECK_GL_ERROR(glGetProgramiv(glProgram, GL_INFO_LOG_LENGTH, &infoLen));
+        if (infoLen)
+        {
+            const char* hdr = "glLinkProgram() failed:\n";
+            std::vector<char> info(strlen(hdr) + infoLen);
+            strcpy(&info[0], hdr);
+            NVDR_CHECK_GL_ERROR(glGetProgramInfoLog(glProgram, infoLen, &infoLen, &info[strlen(hdr)]));
+            NVDR_CHECK(0, &info[0]);
+        }
+        NVDR_CHECK(0, "glLinkProgram() failed");
+    }
+
+    *pProgram = glProgram;
+}
+
+//------------------------------------------------------------------------
+// Shared C++ functions.
+
+void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceIdx)
+{
+    // Create GL context and set it current.
+    s.glctx = createGLContext(cudaDeviceIdx);
+    setGLContext(s.glctx);
+
+    // Version check.
+    GLint vMajor = 0;
+    GLint vMinor = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &vMajor);
+    glGetIntegerv(GL_MINOR_VERSION, &vMinor);
+    glGetError(); // Clear possible GL_INVALID_ENUM error in version query.
+    LOG(INFO) << "OpenGL version reported as " << vMajor << "." << vMinor;
+    NVDR_CHECK((vMajor == 4 && vMinor >= 4) || vMajor > 4, "OpenGL 4.4 or later is required");
+
+    // Enable depth modification workaround on A100 and later (NVIDIA only).
+#if defined(__HIP_PLATFORM_AMD__)
+    s.enableZModify = 0; // Not needed on AMD GPUs.
+#else
+    int capMajor = 0;
+    NVDR_CHECK_CUDA_ERROR(cudaDeviceGetAttribute(&capMajor, cudaDevAttrComputeCapabilityMajor, cudaDeviceIdx));
+    s.enableZModify = (capMajor >= 8);
+#endif
+
+    // Number of output buffers.
+    int num_outputs = s.enableDB ? 2 : 1;
+
+    // Set up vertex shader.
+    compileGLShader(NVDR_CTX_PARAMS, s, &s.glVertexShader, GL_VERTEX_SHADER,
+        "#version 330\n"
+        "#extension GL_ARB_shader_draw_parameters : enable\n"
+        STRINGIFY_SHADER_SOURCE(
+            layout(location = 0) in vec4 in_pos;
+            out int v_layer;
+            out int v_offset;
+            void main()
+            {
+                int layer = gl_DrawIDARB;
+                gl_Position = in_pos;
+                v_layer = layer;
+                v_offset = gl_BaseInstanceARB; // Sneak in TriID offset here.
+            }
+        )
+    );
+
+    // Geometry and fragment shaders depend on if bary differential output is enabled or not.
+    if (s.enableDB)
+    {
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
+            "#version 430\n"
+            STRINGIFY_SHADER_SOURCE(
+                layout(triangles) in;
+                layout(triangle_strip, max_vertices=3) out;
+                layout(location = 0) uniform vec2 vp_scale;
+                in int v_layer[];
+                in int v_offset[];
+                out vec4 var_uvzw;
+                out vec4 var_db;
+                void main()
+                {
+                    float w0 = gl_in[0].gl_Position.w;
+                    float w1 = gl_in[1].gl_Position.w;
+                    float w2 = gl_in[2].gl_Position.w;
+                    vec2 p0 = gl_in[0].gl_Position.xy;
+                    vec2 p1 = gl_in[1].gl_Position.xy;
+                    vec2 p2 = gl_in[2].gl_Position.xy;
+                    vec2 e0 = p0*w2 - p2*w0;
+                    vec2 e1 = p1*w2 - p2*w1;
+                    float a = e0.x*e1.y - e0.y*e1.x;
+                    float eps = 1e-6f;
+                    float ca = (abs(a) >= eps) ? a : (a < 0.f) ? -eps : eps;
+                    float ia = 1.f / ca;
+                    vec2 ascl = ia * vp_scale;
+                    float dudx =  e1.y * ascl.x;
+                    float dudy = -e1.x * ascl.y;
+                    float dvdx = -e0.y * ascl.x;
+                    float dvdy =  e0.x * ascl.y;
+                    float duwdx = w2 * dudx;
+                    float dvwdx = w2 * dvdx;
+                    float duvdx = w0 * dudx + w1 * dvdx;
+                    float duwdy = w2 * dudy;
+                    float dvwdy = w2 * dvdy;
+                    float duvdy = w0 * dudy + w1 * dvdy;
+                    vec4 db0 = vec4(duvdx - dvwdx, duvdy - dvwdy, dvwdx, dvwdy);
+                    vec4 db1 = vec4(duwdx, duwdy, duvdx - duwdx, duvdy - duwdy);
+                    vec4 db2 = vec4(duwdx, duwdy, dvwdx, dvwdy);
+                    int layer_id = v_layer[0];
+                    int prim_id = gl_PrimitiveIDIn + v_offset[0];
+                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_uvzw = vec4(1.f, 0.f, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_db = db0; EmitVertex();
+                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[1].gl_Position.x, gl_in[1].gl_Position.y, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_uvzw = vec4(0.f, 1.f, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_db = db1; EmitVertex();
+                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[2].gl_Position.x, gl_in[2].gl_Position.y, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_uvzw = vec4(0.f, 0.f, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_db = db2; EmitVertex();
+                }
+            )
+        );
+
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
+            "#version 430\n"
+            STRINGIFY_SHADER_SOURCE(
+                in vec4 var_uvzw;
+                in vec4 var_db;
+                layout(location = 0) out vec4 out_raster;
+                layout(location = 1) out vec4 out_db;
+                IF_ZMODIFY(layout(location = 1) uniform float in_dummy;)
+                void main()
+                {
+                    int id_int = gl_PrimitiveID + 1;
+                    float id_float = (id_int <= 0x01000000) ? float(id_int) : intBitsToFloat(0x4a800000 + id_int);
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, id_float);
+                    out_db = var_db * var_uvzw.w;
+                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
+                }
+            )
+        );
+
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
+            "#version 430\n"
+            STRINGIFY_SHADER_SOURCE(
+                in vec4 var_uvzw;
+                in vec4 var_db;
+                layout(binding = 0) uniform sampler2DArray out_prev;
+                layout(location = 0) out vec4 out_raster;
+                layout(location = 1) out vec4 out_db;
+                IF_ZMODIFY(layout(location = 1) uniform float in_dummy;)
+                void main()
+                {
+                    int id_int = gl_PrimitiveID + 1;
+                    float id_float = (id_int <= 0x01000000) ? float(id_int) : intBitsToFloat(0x4a800000 + id_int);
+                    vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
+                    float depth_new = var_uvzw.z / var_uvzw.w;
+                    if (prev.w == 0 || depth_new <= prev.z)
+                        discard;
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, depth_new, id_float);
+                    out_db = var_db * var_uvzw.w;
+                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
+                }
+            )
+        );
+    }
+    else
+    {
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
+            "#version 330\n"
+            STRINGIFY_SHADER_SOURCE(
+                layout(triangles) in;
+                layout(triangle_strip, max_vertices=3) out;
+                in int v_layer[];
+                in int v_offset[];
+                out vec4 var_uvzw;
+                void main()
+                {
+                    int layer_id = v_layer[0];
+                    int prim_id = gl_PrimitiveIDIn + v_offset[0];
+                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[0].gl_Position.x, gl_in[0].gl_Position.y, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); var_uvzw = vec4(1.f, 0.f, gl_in[0].gl_Position.z, gl_in[0].gl_Position.w); EmitVertex();
+                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[1].gl_Position.x, gl_in[1].gl_Position.y, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); var_uvzw = vec4(0.f, 1.f, gl_in[1].gl_Position.z, gl_in[1].gl_Position.w); EmitVertex();
+                    gl_Layer = layer_id; gl_PrimitiveID = prim_id; gl_Position = vec4(gl_in[2].gl_Position.x, gl_in[2].gl_Position.y, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); var_uvzw = vec4(0.f, 0.f, gl_in[2].gl_Position.z, gl_in[2].gl_Position.w); EmitVertex();
+                }
+            )
+        );
+
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
+            "#version 430\n"
+            STRINGIFY_SHADER_SOURCE(
+                in vec4 var_uvzw;
+                layout(location = 0) out vec4 out_raster;
+                IF_ZMODIFY(layout(location = 1) uniform float in_dummy;)
+                void main()
+                {
+                    int id_int = gl_PrimitiveID + 1;
+                    float id_float = (id_int <= 0x01000000) ? float(id_int) : intBitsToFloat(0x4a800000 + id_int);
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, id_float);
+                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
+                }
+            )
+        );
+
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
+            "#version 430\n"
+            STRINGIFY_SHADER_SOURCE(
+                in vec4 var_uvzw;
+                layout(binding = 0) uniform sampler2DArray out_prev;
+                layout(location = 0) out vec4 out_raster;
+                IF_ZMODIFY(layout(location = 1) uniform float in_dummy;)
+                void main()
+                {
+                    int id_int = gl_PrimitiveID + 1;
+                    float id_float = (id_int <= 0x01000000) ? float(id_int) : intBitsToFloat(0x4a800000 + id_int);
+                    vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
+                    float depth_new = var_uvzw.z / var_uvzw.w;
+                    if (prev.w == 0 || depth_new <= prev.z)
+                        discard;
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, id_float);
+                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
+                }
+            )
+        );
+    }
+
+    // Finalize programs.
+    constructGLProgram(NVDR_CTX_PARAMS, &s.glProgram, s.glVertexShader, s.glGeometryShader, s.glFragmentShader);
+    constructGLProgram(NVDR_CTX_PARAMS, &s.glProgramDP, s.glVertexShader, s.glGeometryShader, s.glFragmentShaderDP);
+
+    // Construct main fbo and bind permanently.
+    NVDR_CHECK_GL_ERROR(glGenFramebuffers(1, &s.glFBO));
+    NVDR_CHECK_GL_ERROR(glBindFramebuffer(GL_FRAMEBUFFER, s.glFBO));
+
+    // Enable two color attachments.
+    GLenum draw_buffers[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    NVDR_CHECK_GL_ERROR(glDrawBuffers(num_outputs, draw_buffers));
+
+    // Construct vertex array object.
+    NVDR_CHECK_GL_ERROR(glGenVertexArrays(1, &s.glVAO));
+    NVDR_CHECK_GL_ERROR(glBindVertexArray(s.glVAO));
+
+    // Construct position buffer, bind permanently, enable, set ptr.
+    NVDR_CHECK_GL_ERROR(glGenBuffers(1, &s.glPosBuffer));
+    NVDR_CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, s.glPosBuffer));
+    NVDR_CHECK_GL_ERROR(glEnableVertexAttribArray(0));
+    NVDR_CHECK_GL_ERROR(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0));
+
+    // Construct index buffer and bind permanently.
+    NVDR_CHECK_GL_ERROR(glGenBuffers(1, &s.glTriBuffer));
+    NVDR_CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, s.glTriBuffer));
+
+    // Set up depth test.
+    NVDR_CHECK_GL_ERROR(glEnable(GL_DEPTH_TEST));
+    NVDR_CHECK_GL_ERROR(glDepthFunc(GL_LESS));
+    NVDR_CHECK_GL_ERROR(glClearDepth(1.0));
+
+    // Create and bind output buffers. Storage is allocated later.
+    NVDR_CHECK_GL_ERROR(glGenTextures(num_outputs, s.glColorBuffer));
+    for (int i=0; i < num_outputs; i++)
+    {
+        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
+        NVDR_CHECK_GL_ERROR(glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, s.glColorBuffer[i], 0));
+    }
+
+    // Create and bind depth/stencil buffer. Storage is allocated later.
+    NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glDepthStencilBuffer));
+    NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glDepthStencilBuffer));
+    NVDR_CHECK_GL_ERROR(glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, s.glDepthStencilBuffer, 0));
+
+    // Create texture name for previous output buffer (depth peeling).
+    NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPrevOutBuffer));
+}
+
+void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, int posCount, int triCount, int width, int height, int depth)
+{
+    changes = false;
+
+    // Resize vertex buffer?
+    if (posCount > s.posCount)
+    {
+        s.posCount = (posCount > 64) ? ROUND_UP_BITS(posCount, 2) : 64;
+        LOG(INFO) << "Increasing position buffer size to " << s.posCount << " float32";
+        NVDR_CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, s.posCount * sizeof(float), NULL, GL_DYNAMIC_DRAW));
+        changes = true;
+    }
+
+    // Resize triangle buffer?
+    if (triCount > s.triCount)
+    {
+        s.triCount = (triCount > 64) ? ROUND_UP_BITS(triCount, 2) : 64;
+        LOG(INFO) << "Increasing triangle buffer size to " << s.triCount << " int32";
+        NVDR_CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, s.triCount * sizeof(int32_t), NULL, GL_DYNAMIC_DRAW));
+        changes = true;
+    }
+
+    // Resize framebuffer?
+    if (width > s.width || height > s.height || depth > s.depth)
+    {
+        int num_outputs = s.enableDB ? 2 : 1;
+
+        // New framebuffer size.
+        s.width  = (width > s.width) ? width : s.width;
+        s.height = (height > s.height) ? height : s.height;
+        s.depth  = (depth > s.depth) ? depth : s.depth;
+        s.width  = ROUND_UP(s.width, 32);
+        s.height = ROUND_UP(s.height, 32);
+        LOG(INFO) << "Increasing frame buffer size to (width, height, depth) = (" << s.width << ", " << s.height << ", " << s.depth << ")";
+
+        // Allocate color buffers.
+        for (int i=0; i < num_outputs; i++)
+        {
+            NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
+            NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+        }
+
+        // Allocate depth/stencil buffer.
+        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glDepthStencilBuffer));
+        NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH24_STENCIL8, s.width, s.height, s.depth, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, 0));
+
+        changes = true;
+    }
+}
+
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
+{
+    // Only copy inputs if we are on first iteration of depth peeling or not doing it at all.
+    if (peeling_idx < 1)
+    {
+        // Synchronize the HIP stream so GPU data is ready before we copy to CPU.
+        NVDR_CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+
+        if (triPtr)
+        {
+            // Copy both position and triangle buffers via CPU bounce.
+            size_t posBytes = posCount * sizeof(float);
+            size_t triBytes = triCount * sizeof(int32_t);
+            size_t totalBytes = posBytes + triBytes;
+            ensureStagingBuffer(s, totalBytes);
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(s.cpuStagingBuffer, posPtr, posBytes, cudaMemcpyDeviceToHost, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync((char*)s.cpuStagingBuffer + posBytes, triPtr, triBytes, cudaMemcpyDeviceToHost, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+            NVDR_CHECK_GL_ERROR(glBufferSubData(GL_ARRAY_BUFFER, 0, posBytes, s.cpuStagingBuffer));
+            NVDR_CHECK_GL_ERROR(glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, triBytes, (char*)s.cpuStagingBuffer + posBytes));
+        }
+        else
+        {
+            // Copy position buffer only. Triangles are already copied and known to be constant.
+            size_t posBytes = posCount * sizeof(float);
+            ensureStagingBuffer(s, posBytes);
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(s.cpuStagingBuffer, posPtr, posBytes, cudaMemcpyDeviceToHost, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+            NVDR_CHECK_GL_ERROR(glBufferSubData(GL_ARRAY_BUFFER, 0, posBytes, s.cpuStagingBuffer));
+        }
+    }
+
+    // Select program based on whether we have a depth peeling input or not.
+    if (peeling_idx < 1)
+    {
+        // Normal case: No peeling, or peeling disabled.
+        NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
+    }
+    else
+    {
+        // If we haven't allocated storage for the previous output buffer yet, do so.
+        if (!s.prevOutAllocated)
+        {
+            NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glPrevOutBuffer));
+            NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+            s.prevOutAllocated = 1;
+        }
+
+        // Swap the GL buffers.
+        GLuint glTempBuffer = s.glPrevOutBuffer;
+        s.glPrevOutBuffer = s.glColorBuffer[0];
+        s.glColorBuffer[0] = glTempBuffer;
+
+        // Bind the new output buffer.
+        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[0]));
+        NVDR_CHECK_GL_ERROR(glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, s.glColorBuffer[0], 0));
+
+        // Bind old buffer as the input texture.
+        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glPrevOutBuffer));
+
+        // Activate the correct program.
+        NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgramDP));
+    }
+
+    // Set viewport, clear color buffer(s) and depth/stencil buffer.
+    NVDR_CHECK_GL_ERROR(glViewport(0, 0, width, height));
+    NVDR_CHECK_GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT));
+
+    // If outputting bary differentials, set resolution uniform
+    if (s.enableDB)
+        NVDR_CHECK_GL_ERROR(glUniform2f(0, 2.f / (float)width, 2.f / (float)height));
+
+    // Set the dummy uniform if depth modification workaround is active.
+    if (s.enableZModify)
+        NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
+
+    // Render the meshes.
+    if (depth == 1 && !rangesPtr)
+    {
+        // Trivial case.
+        NVDR_CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, triCount, GL_UNSIGNED_INT, 0));
+    }
+    else
+    {
+        // Populate a buffer for draw commands and execute it.
+        std::vector<GLDrawCmd> drawCmdBuffer(depth);
+
+        if (!rangesPtr)
+        {
+            for (int i=0; i < depth; i++)
+            {
+                GLDrawCmd& cmd = drawCmdBuffer[i];
+                cmd.firstIndex    = 0;
+                cmd.count         = triCount;
+                cmd.baseVertex    = vtxPerInstance * i;
+                cmd.baseInstance  = 0;
+                cmd.instanceCount = 1;
+            }
+        }
+        else
+        {
+            for (int i=0, j=0; i < depth; i++)
+            {
+                GLDrawCmd& cmd = drawCmdBuffer[i];
+                int first = rangesPtr[j++];
+                int count = rangesPtr[j++];
+                NVDR_CHECK(first >= 0 && count >= 0, "range contains negative values");
+                NVDR_CHECK((first + count) * 3 <= triCount, "range extends beyond end of triangle buffer");
+                cmd.firstIndex    = first * 3;
+                cmd.count         = count * 3;
+                cmd.baseVertex    = 0;
+                cmd.baseInstance  = first;
+                cmd.instanceCount = 1;
+            }
+        }
+
+        // Draw!
+        NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
+    }
+}
+
+void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth)
+{
+    // Copy color buffers to output tensors via CPU bounce.
+    int num_outputs = s.enableDB ? 2 : 1;
+
+    size_t allocLayerBytes = (size_t)s.width * s.height * 4 * sizeof(float);
+    size_t allocTotalBytes = allocLayerBytes * s.depth;
+    size_t outLayerBytes = (size_t)width * height * 4 * sizeof(float);
+    size_t outTotalBytes = outLayerBytes * depth;
+    ensureStagingBuffer(s, allocTotalBytes);
+
+    NVDR_CHECK_GL_ERROR(glFinish());
+
+    for (int i = 0; i < num_outputs; i++)
+    {
+        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
+        glGetTexImage(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, GL_FLOAT, s.cpuStagingBuffer);
+        GLenum err = glGetError();
+        NVDR_CHECK(err == GL_NO_ERROR, "OpenGL error in glGetTexImage");
+
+        if (width == s.width && height == s.height && depth == s.depth)
+        {
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(outputPtr[i], s.cpuStagingBuffer, outTotalBytes, cudaMemcpyHostToDevice, stream));
+        }
+        else
+        {
+            size_t allocRowBytes = (size_t)s.width * 4 * sizeof(float);
+            size_t outRowBytes = (size_t)width * 4 * sizeof(float);
+            char* src = (char*)s.cpuStagingBuffer;
+            size_t neededTotal = allocTotalBytes + outTotalBytes;
+            ensureStagingBuffer(s, neededTotal);
+            src = (char*)s.cpuStagingBuffer;
+            char* dst = src + allocTotalBytes;
+            for (int z = 0; z < depth; z++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    memcpy(dst + (z * height + y) * outRowBytes,
+                           src + (z * s.height + y) * allocRowBytes,
+                           outRowBytes);
+                }
+            }
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(outputPtr[i], dst, outTotalBytes, cudaMemcpyHostToDevice, stream));
+        }
+        NVDR_CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+    }
+}
+
+void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s)
+{
+    // Free CPU staging buffer.
+    if (s.cpuStagingBuffer)
+    {
+        free(s.cpuStagingBuffer);
+        s.cpuStagingBuffer = 0;
+        s.cpuStagingSize = 0;
+    }
+}
+
+//------------------------------------------------------------------------
+RGLCPPEOF
+
+# Build GL plugin as CppExtension (NOT CUDAExtension to avoid hipify mangling).
+cat > "${TMPBUILD}/nvdiffrast_gl/setup_gl.py" << 'GLSETUPEOF'
+import os
+from setuptools import setup
+from torch.utils.cpp_extension import CppExtension, BuildExtension
+nvdr_dir = os.path.join(os.path.dirname(__file__), 'nvdiffrast')
+setup(
+    name='nvdiffrast_plugin_gl',
+    ext_modules=[
+        CppExtension(
+            name='nvdiffrast_plugin_gl',
+            sources=[
+                os.path.join(nvdr_dir, 'common', 'common.cpp'),
+                os.path.join(nvdr_dir, 'common', 'glutil.cpp'),
+                os.path.join(nvdr_dir, 'common', 'rasterize_gl.cpp'),
+                os.path.join(nvdr_dir, 'torch', 'torch_bindings_gl.cpp'),
+                os.path.join(nvdr_dir, 'torch', 'torch_rasterize_gl.cpp'),
+            ],
+            include_dirs=[
+                os.path.join(nvdr_dir, 'common'),
+                os.path.join(nvdr_dir, 'torch'),
+                '/opt/rocm/include',
+            ],
+            define_macros=[('NVDR_TORCH', None), ('__HIP_PLATFORM_AMD__', '1')],
+            libraries=['GL', 'EGL', 'amdhip64'],
+            library_dirs=['/opt/rocm/lib'],
+        ),
+    ],
+    cmdclass={'build_ext': BuildExtension},
+)
+GLSETUPEOF
+
+echo -e "${yellow}Building GL plugin extension...${reset}"
+cd "${TMPBUILD}/nvdiffrast_gl"
+$PYTHON_EXE setup_gl.py build_ext --inplace 2>&1
+GL_SO=$(find "${TMPBUILD}/nvdiffrast_gl" -name 'nvdiffrast_plugin_gl*.so' -type f | head -1)
+if [ -n "$GL_SO" ]; then
+    cp "$GL_SO" "${SITE_PACKAGES}/"
+    echo -e "${green}GL plugin built and installed: $(basename $GL_SO)${reset}"
+else
+    echo -e "${warning}WARNING: nvdiffrast GL plugin build failed. OpenGL rasterization will not work.${reset}"
+fi
+cd "${TMPBUILD}"
+echo ""
+
+# Now patch the installed ops.py to restore the GL context and dispatch logic.
+echo -e "${yellow}Patching nvdiffrast ops.py to restore OpenGL rasterizer support...${reset}"
+NVDR_OPS="${NVDR_INSTALLED}/torch/ops.py"
+
+$PYTHON_EXE << PYEOF
+import re
+
+with open("${NVDR_OPS}", "r") as f:
+    content = f.read()
+
+# 1. Add import for the pre-built GL plugin (after existing imports)
+gl_imports = '''
+import importlib
+import logging
+
+# Pre-built GL plugin for OpenGL rasterizer (from v0.3.5 sources)
+_gl_plugin = None
+def _get_gl_plugin():
+    global _gl_plugin
+    if _gl_plugin is not None:
+        return _gl_plugin
+    try:
+        import nvdiffrast_plugin_gl
+        _gl_plugin = nvdiffrast_plugin_gl
+    except ImportError:
+        raise RuntimeError(
+            "nvdiffrast GL plugin not found. "
+            "The OpenGL rasterizer requires the nvdiffrast_plugin_gl extension. "
+            "Please rebuild with the ROCm install script."
+        )
+    return _gl_plugin
+'''
+
+# Insert after the existing imports
+content = content.replace('import _nvdiffrast_c', 'import _nvdiffrast_c' + gl_imports)
+
+# 2. Replace the stub RasterizeGLContext with a real one
+old_gl_class = re.compile(
+    r'class RasterizeGLContext\(RasterizeCudaContext\):.*?(?=\n#[-]+|\nclass |\Z)',
+    re.DOTALL
+)
+new_gl_class = '''class RasterizeGLContext:
+    def __init__(self, output_db=True, mode='automatic', device=None):
+        assert output_db is True or output_db is False
+        assert mode in ['automatic', 'manual']
+        self.output_db = output_db
+        self.mode = mode
+        if device is None:
+            cuda_device_idx = torch.cuda.current_device()
+        else:
+            with torch.cuda.device(device):
+                cuda_device_idx = torch.cuda.current_device()
+        self.cpp_wrapper = _get_gl_plugin().RasterizeGLStateWrapper(output_db, mode == 'automatic', cuda_device_idx)
+        self.active_depth_peeler = None
+
+    def set_context(self):
+        assert self.mode == 'manual'
+        self.cpp_wrapper.set_context()
+
+    def release_context(self):
+        assert self.mode == 'manual'
+        self.cpp_wrapper.release_context()
+
+'''
+content = old_gl_class.sub(new_gl_class, content)
+
+# 3. Patch _rasterize_func.forward to dispatch GL vs CUDA
+old_forward = '''    def forward(ctx, raster_ctx, pos, tri, resolution, ranges, grad_db, peeling_idx):
+        out, out_db = _nvdiffrast_c.rasterize_fwd_cuda(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)'''
+new_forward = '''    def forward(ctx, raster_ctx, pos, tri, resolution, ranges, grad_db, peeling_idx):
+        if isinstance(raster_ctx, RasterizeGLContext):
+            out, out_db = _get_gl_plugin().rasterize_fwd_gl(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
+        else:
+            out, out_db = _nvdiffrast_c.rasterize_fwd_cuda(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)'''
+content = content.replace(old_forward, new_forward)
+
+# 4. Patch the rasterize() function to accept both context types
+content = content.replace(
+    'assert isinstance(glctx, RasterizeCudaContext)',
+    'assert isinstance(glctx, (RasterizeGLContext, RasterizeCudaContext))'
+)
+
+# 5. Add output_db handling for GL context (v0.4.0 removed it)
+content = content.replace(
+    '''    assert grad_db is True or grad_db is False
+
+    # Sanitize inputs.''',
+    '''    assert grad_db is True or grad_db is False
+    grad_db = grad_db and getattr(glctx, 'output_db', True)
+
+    # Sanitize inputs.'''
+)
+
+with open("${NVDR_OPS}", "w") as f:
+    f.write(content)
+
+print("ops.py patched successfully")
+PYEOF
+
+# Clear bytecode cache so the patched ops.py is used
+find "${NVDR_INSTALLED}" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+
+echo ""
+
+# --- nvdiffrec_render (patched for ROCm/HIP) ---
+echo -e "${green}:::::::::::::: Building ${yellow}nvdiffrec_render${green} from source (ROCm)${reset}"
+if [ -d "${TMPBUILD}/nvdiffrec" ]; then rm -rf "${TMPBUILD}/nvdiffrec"; fi
+git clone -b renderutils https://github.com/JeffreyXiang/nvdiffrec.git "${TMPBUILD}/nvdiffrec"
+
+echo -e "${yellow}Applying ROCm patches to nvdiffrec_render...${reset}"
+NVREC="${TMPBUILD}/nvdiffrec"
+NVREC_SRC="${NVREC}/nvdiffrec_render/renderutils/c_src"
+
+# Remove -lcuda -lnvrtc linker flags (CUDA-only)
+sed -i "s/'-lcuda', '-lnvrtc'//g" "${NVREC}/setup.py"
+
+# Fix 64-bit warp sync masks for ROCm 7.2
+sed -i 's/0xFFFFFFFF/(unsigned long long)0xFFFFFFFF/g' "${NVREC_SRC}/loss.cu"
+
+# Rename .cpp files to .cu so hipcc compiles them (need CUDA→HIP header mapping)
+for f in common torch_bindings; do
+    if [ -f "${NVREC_SRC}/${f}.cpp" ]; then
+        mv "${NVREC_SRC}/${f}.cpp" "${NVREC_SRC}/${f}.cu"
+        sed -i "s|${f}.cpp|${f}.cu|" "${NVREC}/setup.py"
+    fi
+done
+
+# Patch torch_bindings to use HIP headers
+sed -i 's|#include <ATen/cuda/CUDAContext.h>|#ifdef __HIP_PLATFORM_AMD__\n#include <ATen/hip/HIPContext.h>\n#include <ATen/hip/HIPUtils.h>\n#else\n#include <ATen/cuda/CUDAContext.h>\n#endif|' "${NVREC_SRC}/torch_bindings.cu"
+sed -i 's|#include <ATen/cuda/CUDAUtils.h>||' "${NVREC_SRC}/torch_bindings.cu"
+
+# Replace cudaError_t/cudaGetLastError with HIP equivalents
+sed -i 's/cudaError_t/hipError_t/g; s/cudaGetLastError/hipGetLastError/g; s/AT_CUDA_CHECK/AT_CUDA_CHECK/g' "${NVREC_SRC}/torch_bindings.cu"
+
+$PYTHON_EXE -m pip install "${NVREC}" --no-build-isolation $PIPargs || \
+    echo -e "${warning}WARNING: nvdiffrec_render build failed. Some mesh features may not work.${reset}"
+echo ""
+
