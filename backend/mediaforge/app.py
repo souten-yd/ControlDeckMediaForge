@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect
 from starlette.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError, __version__ as PILLOW_VERSION
@@ -2329,11 +2329,15 @@ def create_app(
             raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
 
     @app.get("/schemas/{schema_name}")
-    async def schema(schema_name: str) -> FileResponse:
+    async def schema(schema_name: str) -> JSONResponse:
         allowed = {item.name for item in SCHEMAS_DIR.glob("*.json")}
         if schema_name not in allowed:
             raise HTTPException(status_code=404, detail={"code": "schema_not_found"})
-        return FileResponse(SCHEMAS_DIR / schema_name, media_type="application/schema+json")
+        # Host discovery bounds decoded response bytes to 64 KiB. Keep readable
+        # canonical files, but omit formatting whitespace on the wire so expanded
+        # additive scene contracts remain discoverable without changing semantics.
+        value = json.loads((SCHEMAS_DIR / schema_name).read_text(encoding="utf-8"))
+        return JSONResponse(value, media_type="application/schema+json")
 
     @app.post("/addon/v1/commands/create")
     async def create_command(request: Request) -> dict[str, Any]:

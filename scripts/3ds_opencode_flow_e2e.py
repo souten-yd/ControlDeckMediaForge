@@ -11,6 +11,7 @@ from fnmatch import fnmatchcase
 import hashlib
 import json
 import os
+import re
 import subprocess
 import time
 import uuid
@@ -179,6 +180,21 @@ def assert_direct_mcp_permissions(resolved: dict[str, Any]) -> None:
         assert rules and rules[-1]["action"] == "allow", f"Direct MCP permission is unavailable: {name}"
 
 
+
+def custom_acceptance_task(prompt_path: Path, filenames: list[str]) -> tuple[str, set[str]]:
+    """Load an operator-owned acceptance prompt; retain the same MCP authority boundary."""
+    if prompt_path.is_symlink() or not prompt_path.is_file() or not 1 <= prompt_path.stat().st_size <= 65536:
+        raise ValueError("acceptance prompt must be a regular file of 1..65536 bytes")
+    prompt = prompt_path.read_text(encoding="utf-8")
+    if not prompt.strip():
+        raise ValueError("acceptance prompt is empty")
+    if not 1 <= len(filenames) <= 32 or len(set(filenames)) != len(filenames):
+        raise ValueError("expected output names must be unique and bounded")
+    if any(re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}", name) is None for name in filenames):
+        raise ValueError("expected outputs must be basenames")
+    return prompt, set(filenames)
+
+
 def main() -> None:
     from app.database import SessionLocal
     from app.features import registry
@@ -204,7 +220,16 @@ def main() -> None:
                         help="Require matching saved clip settings before automatic-skin delivery")
     parser.add_argument("--director-authored-mesh", action="store_true",
                         help="Require director read, capability guidance and authored armor mesh GLB delivery")
+    parser.add_argument("--task-prompt", type=Path,
+                        help="Operator-owned custom acceptance prompt; keeps private MCP-only configuration")
+    parser.add_argument("--expected-file", action="append", default=[],
+                        help="Expected delivered basename for the custom task; repeat for each output")
     args = parser.parse_args()
+    custom = None
+    if args.task_prompt is not None or args.expected_file:
+        if args.task_prompt is None or not args.expected_file or args.restored_ui_evidence or args.retry_empty_output:
+            parser.error("Custom task requires a prompt and output names in a new dedicated project")
+        custom = custom_acceptance_task(args.task_prompt, args.expected_file)
     if args.saved_settings and not args.director_auto_skin:
         parser.error("--saved-settings requires --director-auto-skin")
     if sum((args.director_static, args.director_motion, args.director_array, args.director_auto_skin,
@@ -228,6 +253,8 @@ def main() -> None:
             prompt += SAVED_SETTINGS_CHECK
     elif args.director_authored_mesh:
         prompt = DIRECTOR_AUTHORED_MESH
+    if custom is not None:
+        prompt = custom[0]
     output_directory = "exports"
     if args.restored_ui_evidence:
         assert args.project_name.startswith("MF3DS-") and args.project_name in project_names
@@ -278,6 +305,11 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
                                 "director_array": args.director_array, "director_auto_skin": args.director_auto_skin,
                                 "saved_settings": args.saved_settings}
     evidence["director_authored_mesh"] = args.director_authored_mesh
+    evidence["custom_acceptance_task"] = custom is not None
+    if custom is not None:
+        evidence["prompt_sha256"] = hashlib.sha256(prompt.encode()).hexdigest()
+        evidence["expected_files"] = sorted(custom[1])
+        (args.evidence_dir / "prompt.txt").write_text(prompt)
     process = None
     try:
         payload = json.loads(config.read_text())
@@ -364,6 +396,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
             expected = {"weighted.glb"}
         elif args.director_authored_mesh:
             expected = {"armor.glb"}
+        if custom is not None:
+            expected = custom[1]
         assert set(evidence["output_files"]) == expected
     finally:
         if process is not None and process.poll() is None:

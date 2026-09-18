@@ -1183,3 +1183,6 @@ Unknown/legacy metadata preserves repeat behavior. Play resumes a paused clip
 or restarts a finished clip; explicit Stop restores rest, while Restart returns
 the selected clip to its first frame. Switching stops old actions before activating
 the selected clip, including tracks which animate different properties.
+
+Public `/schemas/{schema_name}` responses use compact JSON so expanded scene contracts
+fit the Host 64 KiB discovery limit. Parsed schema content and media type are unchanged.
