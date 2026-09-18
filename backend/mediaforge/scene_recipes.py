@@ -324,6 +324,54 @@ class UvSmartProject(BaseModel):
     island_margin: float = Field(default=0.02, ge=0, le=0.25)
 
 
+class TransformApplyScale(BaseModel):
+    """Apply positive scale to independent static mesh coordinates before baking.
+    Geometry is hash pinned; only subdivision modifiers are retained. Procedural
+    controls become stale when a non-unit scale changes the cage coordinates.
+    """
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["transform.apply_scale"]
+    object_id: ObjectId
+    expected_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class UvSeamsSet(BaseModel):
+    """Mark or clear bounded mesh edges as UV seams using actual geometry selectors."""
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["uv.seams.set"]
+    object_id: ObjectId
+    expected_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    edges: list[tuple[Annotated[int, Field(ge=0, le=16383, strict=True)], Annotated[int, Field(ge=0, le=16383, strict=True)]]] = Field(min_length=1, max_length=4096)
+    mark: bool = Field(default=True, strict=True)
+    clear_existing: bool = Field(default=False, strict=True)
+
+    @model_validator(mode="after")
+    def unique_edges(self) -> "UvSeamsSet":
+        if any(a == b for a,b in self.edges) or len({tuple(sorted(e)) for e in self.edges}) != len(self.edges):
+            raise ValueError("seam edges must be unique and distinct")
+        return self
+
+
+class UvUnwrap(BaseModel):
+    """Unwrap a bounded mesh after explicit seams; selection is hash pinned."""
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["uv.unwrap"]
+    object_id: ObjectId
+    expected_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    method: Literal["ANGLE_BASED", "CONFORMAL"] = "ANGLE_BASED"
+    margin: float = Field(default=0.02, ge=0.001, le=0.25)
+
+
+class UvPack(BaseModel):
+    """Pack existing UV islands into a unit tile under a bounded geometry hash."""
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["uv.pack"]
+    object_id: ObjectId
+    expected_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    margin: float = Field(default=0.02, ge=0.001, le=0.25)
+    rotate: bool = Field(default=True, strict=True)
+
+
 class LightAdd(BaseModel):
     """Add one local light preset with a stable object ID."""
     model_config = ConfigDict(extra="forbid")
@@ -508,6 +556,10 @@ SceneOperation = Annotated[
     | BevelModifier
     | MaterialSet
     | UvSmartProject
+    | TransformApplyScale
+    | UvSeamsSet
+    | UvUnwrap
+    | UvPack
     | LightAdd
     | CameraAdd
     | ObjectDuplicate
@@ -613,7 +665,7 @@ class SceneJobReferenceRequest(BaseModel):
 class SceneTaskRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: str = Field(pattern=r"^job_[0-9a-f]{32}$")
-    operation: Literal["scene.create", "scene.edit", "scene.material", "scene.observe", "scene.review", "scene.refine"]
+    operation: Literal["scene.create", "scene.edit", "scene.material", "scene.observe", "scene.review", "scene.refine", "scene.bake"]
     owner: str = Field(min_length=1, max_length=256)
     host_job_id: str = Field(min_length=1, max_length=128)
     runtime_id: str = Field(min_length=1, max_length=128)

@@ -941,3 +941,8 @@ renewable detached scene Job. Host remains responsible for AI resource admission
 The current child identity is obtained before each AI request; no long loop pins
 an expired token or exposes tokens in a report. MediaForge owns only bounded CPU
 Blender work, immutable candidates and comparison evidence under existing stores.
+
+M4 UV/bake stays within MediaForge's existing scene Jobs/runtime pins/Assets.
+Private low/high Blend staging uses verified Asset IDs and fixed filenames, not
+Host paths. The fixed CPU worker disables GPU devices; no second GPU scheduler,
+model download, inference endpoint or Host-specific bake implementation is added.

@@ -1449,3 +1449,21 @@ No model response can grant final asset approval; a selected candidate is an
 advisory result. Existing scene/Asset/Jobs store all candidates and report lineage.
 Failure/cancel retains published evidence, releases active resources and never
 advances the original scene. Restart fails the existing Job; retry is explicit.
+
+### 2026-09-18 UV and CPU bake surface slice
+
+M4 adds hash-pinned seam marking, UV unwrap/pack and `media.scene.bake` to existing
+scene Jobs. Baking reads an immutable low revision plus an optional separately
+owned high revision at the same Blender version; high geometry is never merged
+into the deliverable low scene. Tangent normal requires an explicit high source.
+AO is the isolated target's ambient occlusion, not full-scene lighting. Only CPU,
+fixed frame 0, 16 samples and 256/512/1024 PNGs are admitted under bounded geometry.
+Outputs are normal/AO image Assets with both source hashes and bake settings;
+existing material binding can apply the normal map. Bake does not advance either
+scene head, manufacture a clay-quality approval or automatically texture a draft.
+The authoring loop's clay evidence must be assessed before final surface work.
+The low bake target is an unmodified static unit-scale mesh. Additive
+transform.apply_scale offers explicit, hash-pinned scale application to an
+independent unweighted static mesh; it invalidates previous geometry selectors.
+UV bounds/degeneracy and PNG alpha counts are measured, but UV overlap and
+ray-hit coverage remain unmeasured and cannot grant surface approval.

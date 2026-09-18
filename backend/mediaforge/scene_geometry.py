@@ -18,6 +18,24 @@ class CurveControlFact(BaseModel):
     smooth: bool = Field(strict=True)
 
 
+class UvMapFact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=64)
+    uv_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    loops: int = Field(ge=0, le=1_000_000, strict=True)
+    finite: bool = Field(strict=True)
+    degenerate_triangles: int | None = Field(default=None, ge=0, le=1_000_000, strict=True)
+    bounds_min: tuple[float, float] | None = None
+    bounds_max: tuple[float, float] | None = None
+
+    @model_validator(mode="after")
+    def finite_bounds(self) -> "UvMapFact":
+        import math
+        if any(not math.isfinite(x) for bound in (self.bounds_min,self.bounds_max) if bound for x in bound):
+            raise ValueError("UV bounds must be finite or null")
+        return self
+
+
 class MeshGeometryFact(BaseModel):
     model_config = ConfigDict(extra="forbid")
     object_id: ObjectId
@@ -30,6 +48,7 @@ class MeshGeometryFact(BaseModel):
     boundary_loops: list[Annotated[list[Annotated[int, Field(ge=0, le=16383, strict=True)]],
                                   Field(min_length=3, max_length=64)]] = Field(max_length=16)
     curve: CurveControlFact | None = None
+    uv_maps: list[UvMapFact] | None = Field(default=None, max_length=8)
 
     @model_validator(mode="after")
     def indices(self) -> "MeshGeometryFact":

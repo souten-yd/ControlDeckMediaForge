@@ -191,6 +191,22 @@
             }
           ],
           "default": null
+        },
+        "uv_maps": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/UvMapFact"
+              },
+              "maxItems": 8,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uv Maps"
         }
       },
       "required": [
@@ -204,6 +220,98 @@
         "boundary_loops"
       ],
       "title": "MeshGeometryFact",
+      "type": "object"
+    },
+    "UvMapFact": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "uv_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Uv Sha256",
+          "type": "string"
+        },
+        "loops": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Loops",
+          "type": "integer"
+        },
+        "finite": {
+          "title": "Finite",
+          "type": "boolean"
+        },
+        "degenerate_triangles": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Degenerate Triangles"
+        },
+        "bounds_min": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bounds Min"
+        },
+        "bounds_max": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bounds Max"
+        }
+      },
+      "required": [
+        "name",
+        "uv_sha256",
+        "loops",
+        "finite"
+      ],
+      "title": "UvMapFact",
       "type": "object"
     }
   },

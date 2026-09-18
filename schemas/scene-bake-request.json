@@ -1,0 +1,144 @@
+{
+  "$defs": {
+    "HighBakeSource": {
+      "additionalProperties": false,
+      "properties": {
+        "scene_id": {
+          "pattern": "^scene_[0-9a-f]{32}$",
+          "title": "Scene Id",
+          "type": "string"
+        },
+        "revision_id": {
+          "pattern": "^revision_[0-9a-f]{32}$",
+          "title": "Revision Id",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Geometry Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scene_id",
+        "revision_id",
+        "object_id",
+        "geometry_sha256"
+      ],
+      "title": "HighBakeSource",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Bake bounded tangent-normal or target-only AO maps from immutable Blender revisions.\n\nSupply the low scene/revision, stable mesh ID, current cage geometry hash and\na UV map. Normal baking requires a separately identified high mesh/revision at\nthe same Blender runtime. Uses CPU only, frame 0, 16 samples. Returns a detached\nJob; poll media.job.status for image Assets and settings/source-hash evidence.\nNo scene head is changed and no map is automatically applied. Assess fixed clay\nshape evidence before final surface work; baking is not visual/UV/rig approval.",
+  "properties": {
+    "scene_id": {
+      "pattern": "^scene_[0-9a-f]{32}$",
+      "title": "Scene Id",
+      "type": "string"
+    },
+    "revision_id": {
+      "pattern": "^revision_[0-9a-f]{32}$",
+      "title": "Revision Id",
+      "type": "string"
+    },
+    "object_id": {
+      "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9._-]*$",
+      "title": "Object Id",
+      "type": "string"
+    },
+    "geometry_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Geometry Sha256",
+      "type": "string"
+    },
+    "high_source": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HighBakeSource"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "uv_map": {
+      "default": "UVMap",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+      "title": "Uv Map",
+      "type": "string"
+    },
+    "channels": {
+      "items": {
+        "enum": [
+          "normal",
+          "ao"
+        ],
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 1,
+      "title": "Channels",
+      "type": "array"
+    },
+    "resolution": {
+      "default": 512,
+      "enum": [
+        256,
+        512,
+        1024
+      ],
+      "title": "Resolution",
+      "type": "integer"
+    },
+    "margin_px": {
+      "default": 8,
+      "maximum": 32,
+      "minimum": 1,
+      "title": "Margin Px",
+      "type": "integer"
+    },
+    "cage_extrusion_m": {
+      "default": 0.02,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Cage Extrusion M",
+      "type": "number"
+    },
+    "retry_job_id": {
+      "anyOf": [
+        {
+          "pattern": "^job_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retry Job Id"
+    }
+  },
+  "required": [
+    "scene_id",
+    "revision_id",
+    "object_id",
+    "geometry_sha256"
+  ],
+  "title": "SceneBakeRequest",
+  "type": "object"
+}

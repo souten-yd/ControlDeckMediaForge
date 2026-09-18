@@ -171,3 +171,14 @@ scene.editのpublish_mode=candidateは元headを保持した別sceneを返す。
 2回連続不改善で停止する。選択候補はadvisoryであり、Job成功を完成品質に読み替えない。
 selected_scene_id/revision_id、stop_reason、remaining_issuesと比較ZIPを確認し、
 元sceneは保持する。未対応修正やVLM不在を任意Pythonやtext-only判定で代用しない。
+
+### 形状を確認してからUVとベイクへ進む（M4）
+
+最新mesh_geometryのhashでuv.seams.setの実辺を指定し、uv.unwrap→uv.packを行う。
+uv_mapsの有限性・縮退・範囲を確認する。非重複や均一な密度の合格とは扱わない。
+scaleを適用する場合はtransform.apply_scale後の新hashを再取得する。
+lowはmodifierなし・unit scaleとし、highは別candidateへsubdivision等で用意する。
+3d.scene_bakeがavailableならmedia.scene.bakeで両revision/hashを固定する。
+normalはOpenGL/non_colorとして既存材質bindingへ渡す。AOは画像Assetの出力までである。
+nontransparent_pixelsは不透明画素の数であり、投射の命中率やUV coverageではない。
+clayで確認していない比率・接合の欠陥をtextureで隠して完成扱いにしない。

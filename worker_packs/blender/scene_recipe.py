@@ -16,6 +16,7 @@ import bpy
 # This directory is a shipped trusted worker pack, never an input asset path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scene_curves
+import scene_surface
 
 
 FIXED = {"recipe.json", "source.blend", "scene.blend", "result.json"}
@@ -622,7 +623,13 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
     obj = objects.get(object_id)
     if obj is None:
         raise RuntimeError(f"unknown stable object ID: {object_id}")
-    if kind == "mesh.sections.set":
+    if kind == "transform.apply_scale":
+        check_growth(objects, 0)
+        scene_surface.apply_scale(obj, operation)
+    elif kind in {"uv.seams.set", "uv.unwrap", "uv.pack"}:
+        check_growth(objects, 0)
+        scene_surface.apply_uv(obj, operation)
+    elif kind == "mesh.sections.set":
         check_growth(objects, 0)
         scene_curves.set_sections(obj, operation)
     elif kind == "mesh.bridge_loops":
@@ -780,7 +787,7 @@ def main() -> None:
         "autoexec_disabled": not bpy.context.preferences.filepaths.use_scripts_auto_execute,
         "operation_count": len(operations),
         "stable_object_ids": sorted(objects),
-        "mesh_geometry": [scene_curves.mesh_fact(obj) for key,obj in sorted(objects.items())[:256]
+        "mesh_geometry": [{**scene_curves.mesh_fact(obj), "uv_maps": scene_surface.uv_facts(obj.data)} for key,obj in sorted(objects.items())[:256]
                           if obj.type == "MESH" and len(obj.data.vertices) <= scene_curves.MAX_VERTICES
                           and len(obj.data.polygons) <= 32768],
     }

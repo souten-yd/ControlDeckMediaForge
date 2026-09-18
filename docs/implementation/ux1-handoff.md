@@ -3,6 +3,19 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-18 M4 UV and CPU bake source
+
+ux1/3d-surface-bake、親PR542/c208c67。hash付きseam/unwrap/pack/scale適用、
+media.scene.bakeを既存Jobsへ追加。low/high別revision、CPU normal/AO、画像Asset来歴。
+実Blender4.5.13でUV1.670秒、256 bake0.453秒、normal付きGLB30592B、3GLB再import成功。
+actual stale拒否0.193秒、所有PID1916264取消終了、pin0/staging空、scale適用後AO成功。
+両source hash/head保持。nontransparent_pixelsはalpha件数でありcoverageではない。
+最終./mf.sh testは2119passed/2warnings/227.67秒、exit0（handle62641）。
+以後product変更なし。surface-sourceへscript/report/image/GLB/full logを保存。
+詳細は[実装・実機記録](m4-surface-20260918.md)。
+NOT TESTED: UV重複/投射coverage/完成表面、実新tool installed/MCP/OpenCode、変形/animation/viewer。
+原root/稼働0.28.84/Host/model変更0。次はweight補正/脚IKとtranslation clips。
+
 ## 2026-09-18 M3b candidate loop source
 
 worktree /tmp/mediaforge-reference-plan-20260918、branch ux1/3d-refinement-loop、親PR541/1724a6c。

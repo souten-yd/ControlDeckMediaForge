@@ -7100,6 +7100,7 @@ async function saveAsset(assetId) {
 /* 検証の記録は、そのまま出すと JSON の塊が 1 行に並ぶ。読む人が知りたいのは
    「何を見て、通ったのか」だけである。名前を訳し、通否だけを添える。 */
 const VALIDATOR_LABEL = {
+  "scene.bake": "3Dテクスチャのベイクと入力形式",
   "scene.refinement": "3D候補比較の根拠と形式",
   "scene.review": "3D画像レビューの根拠と形式",
   "reference_set.package": "参照画像セットの構成",

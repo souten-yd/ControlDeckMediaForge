@@ -858,6 +858,9 @@ Community source is anecdotal.採用判断はBlender一次資料、MediaForgeの
 
 ## 19. Reference-guided authoring slices (2026-09-18)
 
+M4 sourceはhash付きUV/scaleとCPU normal/AO bakeを追加。実曲面fixture/GLB再import/取消を
+確認。形状承認・完成表面・installed新toolは別gate。[記録](m4-surface-20260918.md)。
+
 M3b sourceはcandidate編集とbounded refine loopを追加。原head保持/2不改善停止は
 controlled応答と実Blenderで検証、実Host推論・品質はNOT TESTED。
 

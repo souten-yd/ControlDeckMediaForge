@@ -1082,3 +1082,43 @@ current AI await is canceled. Actual Host provider termination/resource release
 requires its own live acceptance. Restart marks active refinement stages failed;
 an explicit identical-input retry starts a new Job without changing the original.
 The refreshed child identity is read before every AI request.
+
+### Hash-pinned UV editing and CPU texture baking (M4)
+
+Recipes add `uv.seams.set`, `uv.unwrap`, `uv.pack` and `transform.apply_scale`.
+Each names a stable mesh `object_id` and its current `expected_geometry_sha256`.
+Seam selection is 1–4096 actual vertex-index edge pairs, with `mark` (default true)
+and `clear_existing` (default false). Unwrap supports ANGLE_BASED/CONFORMAL;
+unwrap/pack margin is 0.001–0.25 (default 0.02). Pack optionally rotates islands.
+Results must have finite UV coordinates in the unit tile. Snapshot mesh facts
+add up to eight UV map hashes, bounds and degenerate-triangle counts. These facts
+do not certify overlap, texel density or appearance.
+
+`transform.apply_scale` folds positive bounded scale into independent static,
+unweighted mesh coordinates and sets object scale to one. Parents, children,
+constraints, animation, shape keys and modifiers other than subdivision are
+rejected. It changes the geometry hash and invalidates old procedural selectors.
+
+`media.scene.bake` (`POST /addon/v1/agent/scene/bake`, `{input:{...}}`) creates an
+existing detached scene Job. See `schemas/scene-bake-request.json`. Inputs pin
+low scene/revision/object/geometry hash, optional `high_source` with the same four
+identifiers, UV map (default UVMap), unique channels normal/ao, resolution
+256/512/1024, margin 1–32 pixels and cage extrusion 0–1 meters. Normal requires
+high_source. Both revisions must belong to the caller and use the same pinned
+runtime. The historical low revision need not be the current scene head.
+
+The fixed Blender worker uses CPU Cycles, frame zero, 16 samples, two threads
+and disabled autoexec. The low target must be static, unit-scale, unmodified and
+have finite, nondegenerate UVs in [0,1]. High geometry is loaded only in the
+private bake process, never inserted into the low scene. Normal is tangent-space
+OpenGL; AO is isolated target occlusion. Existing geometry growth limits apply.
+
+All PNGs and source hashes are verified before publication through existing
+Assets/provenance. Metadata is stripped. Both parent source hashes, settings,
+UV hash and worker/output hashes are retained. `nontransparent_pixels` counts
+alpha values at least 0.5; it is **not** ray-hit coverage. Results explicitly mark
+`ray_hit_coverage=not_measured`, `uv_overlap=not_checked` and
+`surface_approval=not_granted`. No scene head changes. Normal images can be applied
+through existing non_color normal material binding. AO binding/export is not
+added by this slice. Cancellation/timeout drains the owned process and runtime
+pin; failed publication rolls back outputs. Restart fails active bake Jobs.
