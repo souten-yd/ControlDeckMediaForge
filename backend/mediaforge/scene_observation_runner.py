@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 import shutil
 from typing import TYPE_CHECKING, Any
@@ -144,7 +145,8 @@ async def observe(
                 runtime_adapter="blender.scene-observation", runtime_version=runtime_version,
                 tool_versions={"media-forge": __version__, "blender": runtime_version}, seed=0,
                 parameters={"scene_id": value.scene_id, "revision_id": revision.id, "runtime_id": runtime_id,
-                            "view": view, "observation": value.observation.model_dump(mode="json")},
+                            "view": view, "observation": value.observation.model_dump(mode="json"),
+                            "object_ids": result.get("object_ids", [])},
                 reference_asset_hashes={source_asset.id: source_asset.sha256}, postprocessing=[],
                 validation=[{"validator": "scene.observation", "status": "passed", "device": "CPU",
                              "frame": 0, "samples": 16}], warnings=[], output_sha256=digest, created_at=now,
@@ -154,7 +156,7 @@ async def observe(
             images.append({"view": view, "asset_id": asset_id, "sha256": digest})
         return {"scene": document.model_dump(mode="json"), "revision": revision.model_dump(mode="json"),
                 "asset_ids": registered, "observation": value.observation.model_dump(mode="json"),
-                "images": images, "object_colors": result["object_colors"],
+                "images": images, "object_colors": result["object_colors"], "object_ids": result.get("object_ids", []),
                 "renderer": {"runtime_id": runtime_id, "version": runtime_version, "device": "CPU",
                              "frame": 0, "samples": 16}, "semantic_review": "not_tested"}
     except BaseException:
@@ -174,6 +176,11 @@ def validate_report(result: Any, value: SceneObserveRequest, runtime_version: st
     if result.get("images") != [{"view": view, "filename": f"{view}.png"} for view in value.observation.views]:
         raise ValueError("report images differ")
     colors = result.get("object_colors")
+    ids = result.get("object_ids", [])
+    if (not isinstance(ids, list) or len(ids) > 256
+            or any(not isinstance(key, str) or re.fullmatch(r"[a-z][a-z0-9._-]{0,63}", key) is None for key in ids)
+            or len(set(ids)) != len(ids)):
+        raise ValueError("invalid observation object IDs")
     if not isinstance(colors, list) or len(colors) > 256 or (value.observation.mode != "object_id" and colors):
         raise ValueError("object colors exceed bound")
     for item in colors:

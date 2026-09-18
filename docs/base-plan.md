@@ -1369,6 +1369,16 @@ Exact scene backups retain the package bytes and original image identities as
 historical provenance. Restored Library IDs do not rewrite IDs inside that ZIP;
 the embedded reference images remain usable without those original Library rows.
 
+The additive media.scene.review Job consumes verified observation image Assets
+from one pinned revision and, optionally, that revision's pinned ReferenceSet.
+It submits labelled bounded image bytes through Host vision.analyze, records
+the exact submitted-image digests, and returns at most three typed issues with
+validated evidence/object IDs. The report is an immutable ZIP Asset with normal
+lineage; geometry-validation facts and advisory visual findings remain separate.
+Unavailable vision, malformed output or inconsistent evidence fail closed. A
+completed review never promotes the reference package or a whole game asset to
+approved, and no suggested edit is executed by the review Job.
+
 2026-09-13 user priority: game-asset authoring through the existing MCP surface
 precedes further Web Blender acceptance. Characters, creatures, environment props,
 tools, vehicles, weapons and armor remain in scope. Authored meshes may explicitly

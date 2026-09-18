@@ -848,6 +848,11 @@ ReferenceSet packaging reuses media.generate/asset.pack with profile
 3d.reference_set and existing input Asset IDs. Its ZIP and images stay in the
 same Library/provenance graph. Binding a package to a scene requires that scene's
 existing owner/revision checks; the Host acquires no geometry or reference-view logic.
+media.scene.review uses the existing detached child Job identity and ai.inference
+grant with Host vision.analyze. Image payload construction, revision/hash checks
+and bounded issue validation remain MediaForge-owned. Host provider/Broker routing
+is unchanged; a missing vision capability is an explicit failure, never text-only
+fallback. The review retains no MediaForge GPU lease while waiting for Host AI.
 
 2026-09-09 game-authoring expansion follows
 [the game asset plan](design-game-asset-authoring.md). New mesh/UV/material/rig/

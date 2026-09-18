@@ -1,0 +1,67 @@
+{
+  "additionalProperties": false,
+  "description": "Review actual observation images of an exact scene revision through local Host vision.\n\nSupply 2–4 observation Assets including front and side under identical camera settings.\nThe revision's pinned reference images are included automatically. Returns a detached\nJob; poll media.job.status for a ZIP report with up to three evidence-backed issues.\nThis is advisory: it neither edits the scene nor approves topology, animation or\ngame readiness. Missing vision fails explicitly; there is no text-only fallback.",
+  "properties": {
+    "scene_id": {
+      "pattern": "^scene_[0-9a-f]{32}$",
+      "title": "Scene Id",
+      "type": "string"
+    },
+    "revision_id": {
+      "pattern": "^revision_[0-9a-f]{32}$",
+      "title": "Revision Id",
+      "type": "string"
+    },
+    "observation_asset_ids": {
+      "items": {
+        "pattern": "^asset_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "maxItems": 4,
+      "minItems": 2,
+      "title": "Observation Asset Ids",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "reference_set_asset_id": {
+      "anyOf": [
+        {
+          "pattern": "^asset_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reference Set Asset Id"
+    },
+    "intent": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Intent",
+      "type": "string"
+    },
+    "retry_job_id": {
+      "anyOf": [
+        {
+          "pattern": "^job_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retry Job Id"
+    }
+  },
+  "required": [
+    "scene_id",
+    "revision_id",
+    "observation_asset_ids",
+    "intent"
+  ],
+  "title": "SceneReviewRequest",
+  "type": "object"
+}

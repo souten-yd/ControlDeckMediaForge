@@ -125,6 +125,7 @@ from .scene_workspace import SceneWorkspace
 from .scene_recipe_jobs import SceneRecipeJobManager
 from .scene_authoring_guidance import scene_authoring_guidance
 from .scene_observation import SceneObserveRequest
+from .scene_review import SceneReviewRequest
 from .scene_recipes import (
     SceneCreateRequest,
     SceneEditRequest,
@@ -281,7 +282,7 @@ def create_app(
         process_timeout_sec=resolved.blender_timeout_sec,
     )
     material_previews = MaterialPreviewManager(scene_workspace)
-    scene_recipe_jobs = SceneRecipeJobManager(store, scene_workspace, host)
+    scene_recipe_jobs = SceneRecipeJobManager(store, scene_workspace, host, ai_gateway=ai_gateway)
     try:
         blender_runtimes.register_legacy()
     except BlenderRuntimeRegistryError as exc:
@@ -1096,6 +1097,7 @@ def create_app(
                 "agent_tool:media.scene.edit": token_state,
                 "agent_tool:media.scene.material": token_state,
                 "agent_tool:media.scene.observe": token_state,
+                "agent_tool:media.scene.review": token_state,
                 "agent_tool:media.scene.snapshot": token_state,
                 "agent_tool:media.scene.export": token_state,
                 "agent_tool:media.job.status": token_state,
@@ -1400,11 +1402,19 @@ def create_app(
                      "views": ["front", "side", "back", "three-quarter"],
                      "resolutions": [256, 512], "max_views": 4, "device": "CPU", "frame": 0,
                      "limits": {"mesh_objects": 256, "scene_objects": 1024, "geometry_cost": 1_000_000},
-                     "semantic_review": "unavailable", "local_only": True}
+                     "semantic_review": "available" if semantic_available else "unavailable", "local_only": True}
                     if blender_runtimes.resolve_g8() is not None
                     else {"state": "unavailable", "reason": "runtime_not_installed", "local_only": True}
                 ),
                 # 旗を立てて回るのではなく、実際に走らせられるかで決める。
+                "3d.scene_review": (
+                    {"state": "available", "max_observations": 4, "max_issues": 3,
+                     "schema_path": "/schemas/scene-review-request.json", "advisory_only": True,
+                     "image_capability": "vision.analyze", "local_only": True}
+                    if semantic_available and blender_runtimes.resolve_g8() is not None
+                    else {"state": "unavailable", "reason": "vision_analyzer_unavailable" if not semantic_available
+                          else "runtime_not_installed", "local_only": True}
+                ),
                 # 実測済みの動画モデルと動画 runtime の両方が揃ったときだけ出す。
                 "video.text_to_video": video_capability("video.text_to_video"),
                 # 入力画像から動かす経路は worker にまだ無い。
@@ -2590,7 +2600,7 @@ def create_app(
         return value
 
     async def submit_scene_tool(
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest,
         identity: HostIdentity,
     ) -> dict[str, Any]:
         try:
@@ -2674,6 +2684,15 @@ def create_app(
             value = SceneObserveRequest.model_validate(scene_tool_input(await request.json()))
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail={"code": "invalid_scene_observation"}) from exc
+        return await submit_scene_tool(value, identity)
+
+    @app.post("/addon/v1/agent/scene/review")
+    async def agent_scene_review(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneReviewRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_review"}) from exc
         return await submit_scene_tool(value, identity)
 
     @app.post("/addon/v1/agent/scene/snapshot")

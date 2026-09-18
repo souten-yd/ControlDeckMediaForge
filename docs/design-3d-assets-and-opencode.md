@@ -33,6 +33,10 @@ versioned manifestと正規化PNG、元画像ID/hash/license/provenanceを固定
 needs_review。正面・側面・canonical・寸法/軸・部位/landmarkを保持するが、整合性や正投影を
 保証しない。SceneRevisionの既存dependencyへ`role=reference_set`としてZIP ID/hashを紐づける。
 source→preview→exportの来歴を維持し、差し替えても過去版は書き換えない。
+レビュー結果も既存ZIP Assetとして保存し、観察画像・参照ZIP・scene sourceの来歴を持つ。
+モデルの指摘は助言であり、deterministicな検査結果と分離する。参照セットの承認状態や
+scene headをレビューJobで変更しない。Hostへ送るラベル付き画像シートのhashと画像領域を
+記録し、実画像入力のない文章評価を視覚受入へ流用しない。
 MediaForge内の `asset_...` とHostの `asset:` / `grant:` は異なるID体系であり変換を推測しない。
 Hostへの配置は既存output commitとreceiptを使う。生pathをAPIへ持ち込まない。
 

@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 import sys
 from typing import Any
@@ -182,6 +183,7 @@ def render(spec: dict[str, Any]) -> dict[str, Any]:
     return {"schema_version": "media-forge.scene-observation-result@1", "observation": spec,
             "blender_version": bpy.app.version_string.split()[0], "device": "CPU", "frame": 0,
             "samples": 16, "images": images, "object_colors": object_colors,
+            "object_ids": sorted(key for key in ids if re.fullmatch(r"[a-z][a-z0-9._-]{0,63}", key)),
             "autoexec_disabled": not bpy.context.preferences.filepaths.use_scripts_auto_execute}
 
 
