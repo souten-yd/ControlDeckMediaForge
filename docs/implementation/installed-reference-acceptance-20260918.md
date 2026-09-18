@@ -177,3 +177,94 @@ create/edit to at most three operations, compact JSON, and omitted defaults.
 The initial two-operation body create succeeded, followed by a successful small edit.
 Remaining anatomy, real review/refinement and output quality are still in progress.
 The diagnostic code's full gate passed:2,177 tests/2 warnings/230.83s, exit0.
+
+## Completed short-request pilot and quality comparison
+
+The third run completed through the installed local OpenCode → MCP → Blender and
+Host VLM path: session `ses_f4d29fed0ffeDkKDSJWj0CbJaQ`, 929.597s, 43 tool calls,
+exit0. Private ten-tool permissions were verified; no shell/read/write was enabled.
+The authoring brief requested at most three operations per call; this is a measured
+prompt workaround, not a new public API limit or a proven cure for the native stream bug.
+The LLM chose all coordinates. It created the body with loft/subdivision, added limbs
+with small edits, then observed, reviewed, refined and delivered four files.
+Primitive toes/fingers were also used, despite the brief reserving primitives for eyes/teeth.
+
+New scene `scene_245a22d2554c45ef9986ec76ff9ffe5d`, authored revision
+`revision_ad5998a80e0449d2bc6ea2f0d42e4fa7`. Observe Job
+`job_8798b5ab77aa499296c151e70102fc52` produced front/side/back/three-quarter PNGs
+at 512px, clay, center(0,0,1), span4m, matching the old scene's observation settings.
+Copied PNGs were checked against their Asset hashes and provenance.
+Review Job `job_02d9041cf3ea44968962eeeb6871a20b` succeeded in54.800s
+(terminal timestamp difference including queue), report `asset_1f34fa2f6a30476da347a587e45ae6a3`.
+It reported issues in head/jaw/teeth, torso silhouette and arms, reference consistency
+uncertain, review_state=needs_review, no unsupported suggested operation names.
+The VLM's claim that the reference requires an angular dorsal silhouette is advisory;
+it did not adequately identify the axis mismatch and floating teeth visible in the render.
+
+Refinement made another real review and stopped with `baseline_needs_review`,
+zero attempts, shape_gate=advisory_only, asset_approval=not_granted.
+Report `asset_83b85e1cff6145d79c3df34a7a56c768`; original/selected revision is unchanged.
+Independent SQLite inspection confirmed the original scene head. This exercises
+uncertainty-stop behavior, **not successful candidate improvement**.
+
+All four committed delivery receipts were independently matched to the actual Asset
+bytes, SHA256 and output file size. `curved-before.glb` and `curved-final.glb` are
+byte-identical,129520B, SHA256
+`f9d2dc1de3b437fcb266c6f94e406408f605088b783539e30ca1cad42dd533c6`.
+`curved-review.zip` is7378B; `refinement-report.zip` is2515B. Terminal active Jobs=0.
+
+Real Blender4.5.13 reimport, excluding meshes named ground/floor:
+
+| Measurement | Historical primitive T-Rex | New reference + curves |
+|---|---:|---:|
+| Triangles | 1474 | 4524 |
+| X extent (m) | 1.182475 | 3.217136 |
+| Y extent (m) | 3.155000 | 1.416754 |
+| Z extent (m) | 1.782249 | 2.351730 |
+| Minimum vertex Z (m) | -0.002249 | -0.025000 |
+| Requested 3m±5% length | FAIL (slightly above3.15) | FAIL |
+| ≤5000 triangles | PASS | PASS |
+| Visual quality | Boxy torso/hidden teeth/thin tail | FAIL: axis and attachment defects |
+
+The new body/jaws extend along X while eyes/limbs use the requested -Y-forward
+convention. The smooth body does not establish anatomical improvement: eyes sit in
+the wrong region and teeth visibly float away from the jaws. Bounding boxes do not
+prove mesh connectivity, contact or deformation. Reference images themselves have
+finger/toe-count and projection defects, so the unverified ReferenceSet is not an
+approved anatomical blueprint. No UV/rig/animation quality claim is made for this model.
+This is one historical baseline versus one successful new authoring run, following
+two failed authoring attempts; it is not the R2 controlled27-trial benchmark.
+
+Installed viewer acceptance was attempted with the existing harness and no source
+overlay. Chrome launch timed out after180000ms before the first page: viewer pixels,
+controls and mobile acceptance remain **NOT TESTED**. No product failure is inferred
+from this browser-launch failure. Evidence: curved-installed-viewer.log.
+
+Evidence under maintenance/release-0.28.86-20260918:
+curved-steps-opencode/{events.jsonl,observations.json,prompt.txt},
+curved-independent/{observation.json,review.json,review-metadata.json,*.png},
+curved-glb-inspection.{json,log}, curved-delivery-verified.json.
+The comparison artifact at
+`/data1tb/ControlDeck/CodeDEV/MF3DS-Trex-Steps-20260918/comparison/index.html`
+has four switchable paired views, actual metrics, GLB/report links and comparison.json.
+Its eight images are byte copies of the observation Assets. It makes no network requests.
+
+### Next acceptance work, in dependency order
+
+1. Correct and approve same-individual reference views: consistent projection, arms,
+   two fingers and three principal toes. Keep needs_review until actually inspected.
+2. Before detail generation, inspect a low-cost body/jaw/eye/limb landmark fixture in
+   one explicit common coordinate frame. Use snapshots and orthographic renders to
+   detect orientation/attachment errors, then add teeth. Do not infer attachment from
+   object names or a successful tool response. This is a follow-up, not measured progress.
+3. Re-run fixed-view shape acceptance; preserve original and compare candidates.
+   VLM suggestions remain advisory and require geometric checks; do not bypass the
+   current uncertainty stop merely to make a refinement report appear successful.
+4. Only after shape acceptance evaluate surface, joint deformation, gait/contact and
+   actual installed viewer. Re-run browser acceptance once Chrome can launch.
+5. Execute the full R2 matrix (T-Rex/quadruped/prop ×3methods ×3trials), including
+   failure counts and measured resource/runtime costs. It remains NOT TESTED.
+
+Implementation/deployment/real-VLM pilot comparison are complete; high-quality asset
+acceptance is not. Full code gate:2177passed/2warnings/230.83s, exit0; subsequent changes
+are documentation and standalone evidence artifacts only.

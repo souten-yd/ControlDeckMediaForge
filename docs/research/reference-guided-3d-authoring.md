@@ -1,6 +1,7 @@
 # 参照画像から曲面・アニメーション付き3Dへ
 
-調査日: 2026-09-18。状態: 設計採用 / 新機能の実機受入は未実施。
+調査日: 2026-09-18。状態: 設計採用・実装・署名0.28.86導入済み。実LLM/VLM pilotは実施、造形品質FAIL。
+[実測比較と残gate](../implementation/installed-reference-acceptance-20260918.md#completed-short-request-pilot-and-quality-comparison)を参照。R2全27試行は未実施。
 
 ## 結論と対象
 

@@ -858,6 +858,13 @@ Community source is anecdotal.採用判断はBlender一次資料、MediaForgeの
 
 ## 19. Reference-guided authoring slices (2026-09-18)
 
+最新受入: 署名0.28.86導入、実MCP28tools、参照pack、実LLM曲面制作、実Host VLM
+review/refine/納品を確認。refineはbaseline_needs_reviewで停止、候補改善なし。
+恐竜の軸・顔配置に欠陥があり品質FAIL。installed viewerはChrome起動timeoutでNOT TESTED。
+[実測比較](installed-reference-acceptance-20260918.md#completed-short-request-pilot-and-quality-comparison)。
+R2全27試行と完成表面・変形・自然なclip品質は未完了。
+以下のsource段階の記録は当時の範囲を示す。現在のinstalled実測は上記を優先する。
+
 M6 sourceは旧rotation互換translation keysとtyped GLB playback intent、viewer停止を追加。
 実3clip再import/standalone source UI再生成功、完成歩行/installedは別gate。[記録](m6-motion-20260918.md)。
 

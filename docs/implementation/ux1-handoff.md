@@ -3,7 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
-## 2026-09-18 bounded OpenCode production acceptance in progress
+## 2026-09-18 installed reference / real VLM pilot completed; quality FAIL
+
+署名0.28.86の通常導入、実MCP28tools、条件付き参照画像/pack納品、実OpenCode曲面制作と
+実Host VLM review/refineまで実施。最終run ses_f4d29fed0ffeDkKDSJWj0CbJaQ は
+929.597秒/43tool calls/exit0、4納品のreceipt/Asset/file SHA256一致、終端active Jobs0。
+scene_245a22d2554c45ef9986ec76ff9ffe5d / revision_ad5998a80e0449d2bc6ea2f0d42e4fa7。
+refineはbaseline_needs_review、attempts0、元head維持、前後GLB byte一致。
+新GLB実Blender再import:4524tris、XYZ3.217136/1.416754/2.351730m、最低Z−0.025m。
+曲面化しても軸・顔部品配置が不整合で恐竜品質はFAIL。VLM助言を承認に読み替えない。
+可動版viewerはChrome launch180秒timeout、画素/操作受入はNOT TESTED。
+全test2177pass2warnings230.83秒/exit0、以後変更は記録のみ。
+比較artifact: /data1tb/ControlDeck/CodeDEV/MF3DS-Trex-Steps-20260918/comparison/index.html。
+[詳細・次の優先順](installed-reference-acceptance-20260918.md#completed-short-request-pilot-and-quality-comparison)。
+次は参照整合性承認→共通座標/部位接合の確認→clay形状再受入。R2全27試行、表面・変形・
+自然なclipとinstalled viewerの受入は残る。今回の実測比較完了を高品質恐竜の完成とはしない。
+
+## 2026-09-18 bounded OpenCode production acceptance — earlier checkpoint (superseded)
 
 0.28.86 installed/28 MCP tools/参照pack再受入はPASS。新しい造形runは未完了。
 最初のcurved runはcapability結果ファイル取得への誤要求を反復、373.432秒/11callsで所有PIDのみTERM。
