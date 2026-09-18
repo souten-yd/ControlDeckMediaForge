@@ -404,6 +404,35 @@ UV 展開済み GLB（WebP の PBR テクスチャ）まで出る。bf16 で 16 
 res-1024 で 3〜7 分（RTX 5060 Ti 実測）。Python 依存も要らない。
 RDNA4 での実績は明示されていないが、Vulkan は Mesa RADV が RDNA4 を十分に扱う。
 
+### 2.6 方針転換: ROCm をやめて Vulkan（trellis.cpp）へ（2026-09-19）
+
+§2.5 の調査を受けて**利用者が Vulkan を選択**した。ROCm 経路（TRELLIS.2 / Pixal3D）は
+ここで止める。
+
+**Vulkan は素直に通った。**
+
+```
+deviceName = AMD Radeon AI PRO R9700 (RADV GFX1201)
+driverName = radv / Mesa 25.2.8 / Vulkan 1.4.318
+```
+
+`pwilkin/trellis.cpp` のビルドはパッチ無しで成功した（596 target、エラー 0）。
+
+```
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON
+cmake --build build -j
+```
+
+**ROCm 経路との差が大きい。** あちらはネイティブ拡張6本の HIP 移植、gated モデル2つ、
+sparse attention の実装追加、ラスタライザの差し替えが要った。こちらは cmake 一発である。
+
+**gated の問題も消える。** 重みは `ilintar/trellis2-gguf` に GGUF で揃っており、
+**DINOv3 と BiRefNet も同梱**されている。HF のライセンス承諾も token も要らない。
+bf16 一式で約 16.5 GB、q8 で約 9.0 GB、q4 で約 5.5 GB。背景除去も CLI に内蔵
+（`--bg-removal threshold|birefnet`）。
+
+まず bf16 で確かめる。量子化は変数を増やすので、素の品質を見てから判断する。
+
 ---
 
 ## 3. production adapter と G8 への受け渡し
@@ -595,7 +624,9 @@ NOT TESTED かを記録する）に従う。
 | 2b-3 | L01 4面図からの生成 | **未達** | 前処理は良好だがメッシュが破片になる（§2.1） |
 | 2b-4 | fp32 GEMM 破損の原因特定 | **完了・回避策あり** | hipBLASLt。`ROCBLAS_USE_HIPBLASLT=0` で完全に直る（§2.3）。ただしメッシュは直らない（§2.4） |
 | 2b-5 | AMD 向け対応の十分性を調査 | **完了** | 不十分。コミュニティは RDNA3 まで、RDNA4 は黙って誤る前例が複数（§2.5）。代替は trellis.cpp の Vulkan |
-| 2c | Pixal3D の重み取得と生成計測 | 未着手 | 18.5〜46 GB。多視点版 `inference_mv.py` あり |
+| 2c | Pixal3D の多視点 | **中止** | 重みと入力は用意したが、§2.6 で Vulkan へ切り替えたため走らせていない |
+| 2d | trellis.cpp を Vulkan でビルド | **完了** | パッチ無しで成功（596 target / エラー0）。RADV GFX1201 を認識（§2.6） |
+| 2e | GGUF 取得と生成 | 進行中 | bf16 約16.5GB。DINOv3 / BiRefNet 同梱で gated 問題なし |
 | 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | 未着手 | |
 | 2b | `runtimes/pixal3d-probe` + `worker_packs/three_d/pixal3d_probe.py` | 未着手 | |
 | 3 | **probe を実機実行して報告・判断を仰ぐ（ここで止まる）** | 未着手 | 所要秒数／ピーク VRAM／attention backend／GLB 検証 |
