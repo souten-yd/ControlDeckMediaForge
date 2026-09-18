@@ -3,6 +3,17 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+
+## 2026-09-18 local LLM T-Rex trial
+
+origin/main9304129から別worktree /tmp/mediaforge-trex-docs-20260918、ux1/trex-opencode-evidence。
+利用者依頼の実OpenCode/Qwen/MCP制作・1回修正を完走。GLB/receipt/hash/実再importはPASS、
+箱型体形・歯の隠れが残り品質PARTIAL。M1 authored meshや全GA完了の証拠にしない。
+MF3DS-Trex-20260918にtrex.glb/trex-v2.glb・previews・evidenceを利用者向けに保持。
+run/repair private config回収、所有process終端、maintenance作業領域回収。
+製品変更0、./mf.sh test1952pass/2warnings/208.81秒。詳細はtrex-opencode-20260918.md。
+元root branch/未push mergeは保全。文書commit/push/PRで記録を保存する。
+
 ## 2026-09-15 library download
 
 作業branch ux1/library-download、origin/main 4f978a0から。版0.28.83（addon.json/__init__.py）。

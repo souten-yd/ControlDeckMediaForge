@@ -1,5 +1,20 @@
 # Media Forge implementation status
 
+
+## 2026-09-18 local OpenCode / MCP T-Rex sample
+
+実OpenCode1.18.30 / Qwen3.8-27B / installed0.28.84 / Blender4.5.13で恐竜を制作。
+初回600.595秒（最初の300秒provider timeoutと自動retryを含む）、10tools、create54ops＋口・歯edit。
+親の実render目視で尾の離脱・逆向きと足先の向きの不良を確認し、同sessionへ自然言語feedback。
+追加156.502秒/7tools/20opsで修正し、両run exit0、3制作Job succeeded。
+GLB初回135988B、修正版136196B、各receipt/file/metadata/provenance hash一致、初回hash不変。
+実Blender再import/CPU3方向render成功、修正版34meshes/1486triangles、ground除外前後長約3.155m。
+尾の接続と向き・足先は改善。箱型の体形と歯の隠れが残り、品質PARTIAL。高品質完成とはしない。
+専用project MF3DS-Trex-20260918は利用者へ渡すサンプルとしてGLB2件・比較画像・evidenceを保持。
+詳細と再現commandは[実測記録](implementation/trex-opencode-20260918.md)。
+Host/global/model変更0。source9304129で./mf.sh test1952pass/2warnings/208.81秒。
+LLM自身のVLM目視、rig/animation、UV/bake、game engine、全M1/GA受入はNOT TESTED。
+
 ## 2026-09-16 release the GPU on demand instead of on a clock
 
 feat/release-gpu-on-demand、origin/main d6c8ab0から。版0.28.84。
