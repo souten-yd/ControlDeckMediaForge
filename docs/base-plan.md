@@ -1467,3 +1467,27 @@ transform.apply_scale offers explicit, hash-pinned scale application to an
 independent unweighted static mesh; it invalidates previous geometry selectors.
 UV bounds/degeneracy and PNG alpha counts are measured, but UV overlap and
 ray-hit coverage remain unmeasured and cannot grant surface approval.
+
+### 2026-09-18 bounded deformation correction
+
+M5 extends existing typed rigs/binding with skin.weights.set/smooth/normalize.
+A revision plus actual cage hash identifies 1–4096 selected vertices. Explicit
+weights name known deform bones, at most four normalized influences. Smoothing
+is deterministic mesh-edge neighbor averaging, 1–8 iterations, with a bounded
+factor and top-four normalization. Only an existing independent typed binding
+with armature-first/subdivision-after stack is supported; locked/unknown groups
+and invalid inputs fail rather than silently losing weights. Whole-result
+unweighted/count/sum checks and additive snapshot facts remain structural checks,
+not joint-quality approval. Unselected vertex weights remain unchanged.
+
+ik.leg.bake solves one connected two-bone chain in an identity typed rig with
+explicit world target/pole samples, at most 120 frames. Fixed CPU Blender IK
+uses no stretch, and rejects singular/unreachable samples. Temporary control
+objects/constraints are removed; rest-local rotation keys use the existing clip
+contract and are independently reevaluated within 1 cm of every sampled target.
+Existing other clips remain stashed. Root translation, foot orientation, multi-leg
+coordination and anatomical rig generation are separate features; this operation
+cannot claim a full walk cycle or good deformation by itself.
+A fixed 0.1-radian local knee seed resolves a straight-chain solver initialization
+singularity. It is not accepted as the final pose: every IK and baked-frame target
+must still satisfy the fixed tolerance, and loop solutions must agree.

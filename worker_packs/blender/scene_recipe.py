@@ -17,6 +17,8 @@ import bpy
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scene_curves
 import scene_surface
+import scene_weights
+import scene_ik
 
 
 FIXED = {"recipe.json", "source.blend", "scene.blend", "result.json"}
@@ -646,6 +648,12 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         modifier = obj.modifiers.new(name="Media Forge Subdivision", type="SUBSURF")
         modifier.subdivision_type = "CATMULL_CLARK"
         modifier.levels = modifier.render_levels = levels
+    elif kind in {"skin.weights.set", "skin.weights.smooth", "skin.weights.normalize"}:
+        check_growth(objects, 0)
+        scene_weights.apply(obj, operation, objects, rigid_armature)
+    elif kind == "ik.leg.bake":
+        check_growth(objects, 0)
+        scene_ik.bake(obj, operation, objects, rigid_armature, create_clip)
     elif kind == "animation.clip":
         create_clip(obj, operation, objects)
     elif kind == "skin.bind":
@@ -769,6 +777,12 @@ def main() -> None:
                 "automatic skin weights are missing": "auto_weights_missing",
                 "automatic skin weights are invalid": "auto_weights_invalid",
                 "geometry selection is stale": "geometry_selection_stale",
+                "IK target is unreachable or singular": "ik_target_unreachable",
+                "IK pole is singular": "ik_pole_singular",
+                "IK solve misses target tolerance": "ik_target_missed",
+                "baked IK clip misses target tolerance": "ik_target_missed",
+                "resulting skin weights need further correction": "skin_weights_invalid",
+                "unknown or locked weight group": "skin_weights_locked_or_unknown",
             }.get(str(exc), "operation_rejected")
             (Path.cwd() / args.result).write_text(json.dumps({
                 "schema_version": "media-forge.scene-recipe-failure@1",
@@ -787,7 +801,7 @@ def main() -> None:
         "autoexec_disabled": not bpy.context.preferences.filepaths.use_scripts_auto_execute,
         "operation_count": len(operations),
         "stable_object_ids": sorted(objects),
-        "mesh_geometry": [{**scene_curves.mesh_fact(obj), "uv_maps": scene_surface.uv_facts(obj.data)} for key,obj in sorted(objects.items())[:256]
+        "mesh_geometry": [{**scene_curves.mesh_fact(obj), "uv_maps": scene_surface.uv_facts(obj.data), "skin_weights": scene_weights.facts(obj)} for key,obj in sorted(objects.items())[:256]
                           if obj.type == "MESH" and len(obj.data.vertices) <= scene_curves.MAX_VERTICES
                           and len(obj.data.polygons) <= 32768],
     }

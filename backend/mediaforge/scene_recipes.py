@@ -470,6 +470,83 @@ class SkinBindAuto(BaseModel):
         return self
 
 
+class WeightSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    object_id: ObjectId
+    rig_object_id: ObjectId
+    expected_geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    vertex_indices: list[Annotated[int, Field(ge=0, le=16383, strict=True)]] = Field(min_length=1, max_length=4096)
+
+    @model_validator(mode="after")
+    def distinct_vertices(self) -> "WeightSelection":
+        if len(set(self.vertex_indices)) != len(self.vertex_indices) or self.object_id == self.rig_object_id:
+            raise ValueError("weight selection must be unique and separate from rig")
+        return self
+
+
+class BoneInfluence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bone_id: BoneId
+    weight: float = Field(gt=0, le=1, allow_inf_nan=False)
+
+
+class SkinWeightsSet(WeightSelection):
+    """Replace selected vertex weights with at most four known bone influences summing to one."""
+    type: Literal["skin.weights.set"]
+    influences: list[BoneInfluence] = Field(min_length=1, max_length=4)
+
+    @model_validator(mode="after")
+    def normalized(self) -> "SkinWeightsSet":
+        if len({i.bone_id for i in self.influences}) != len(self.influences) or abs(sum(i.weight for i in self.influences)-1)>1e-5:
+            raise ValueError("weights must name distinct bones and sum to one")
+        return self
+
+
+class SkinWeightsSmooth(WeightSelection):
+    """Average selected weights along actual cage edges, retaining top four influences."""
+    type: Literal["skin.weights.smooth"]
+    iterations: int = Field(default=1, ge=1, le=8, strict=True)
+    factor: float = Field(default=.5, gt=0, le=1, allow_inf_nan=False)
+
+
+class SkinWeightsNormalize(WeightSelection):
+    """Normalize selected nonempty existing weights and retain at most four influences."""
+    type: Literal["skin.weights.normalize"]
+
+
+class IkTargetKey(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    frame: int = Field(ge=0, le=120, strict=True)
+    target: Vector3
+    pole: Vector3
+
+
+class IkLegBake(BaseModel):
+    """Bake a two-bone leg's world target/pole to a bounded rotation clip. No stretch or persistent IK controls."""
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["ik.leg.bake"]
+    object_id: ObjectId
+    upper_bone_id: BoneId
+    lower_bone_id: BoneId
+    clip_id: BoneId
+    name: str = Field(min_length=1, max_length=120)
+    fps: int = Field(default=24, ge=1, le=60, strict=True)
+    frame_count: int = Field(ge=1, le=120, strict=True)
+    loop: bool = Field(default=False, strict=True)
+    replace: bool = Field(default=False, strict=True)
+    pole_angle_degrees: float = Field(default=0, ge=-180, le=180, allow_inf_nan=False)
+    targets: list[IkTargetKey] = Field(min_length=2, max_length=121)
+
+    @model_validator(mode="after")
+    def ordered_targets(self) -> "IkLegBake":
+        frames=[item.frame for item in self.targets]
+        if self.upper_bone_id==self.lower_bone_id or frames[0]!=0 or frames[-1]!=self.frame_count or any(a>=b for a,b in zip(frames,frames[1:])):
+            raise ValueError("IK chain and ordered endpoint samples must differ")
+        if self.loop and (self.targets[0].target!=self.targets[-1].target or self.targets[0].pole!=self.targets[-1].pole):
+            raise ValueError("loop target and pole endpoints must match")
+        return self
+
+
 class BonePose(BaseModel):
     model_config = ConfigDict(extra="forbid")
     bone_id: BoneId
@@ -568,6 +645,10 @@ SceneOperation = Annotated[
     | ArmatureCreate
     | SkinBind
     | SkinBindAuto
+    | SkinWeightsSet
+    | SkinWeightsSmooth
+    | SkinWeightsNormalize
+    | IkLegBake
     | PoseSet
     | AnimationClip,
     Field(discriminator="type"),

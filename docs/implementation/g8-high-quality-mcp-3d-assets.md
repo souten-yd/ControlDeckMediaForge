@@ -858,6 +858,9 @@ Community source is anecdotal.採用判断はBlender一次資料、MediaForgeの
 
 ## 19. Reference-guided authoring slices (2026-09-18)
 
+M5 sourceは局所weightsと2骨IKのrotation bakeを追加。実脚fixture/足joint再importを確認。
+完成モデルの変形・協調歩行・installedは別gate。[記録](m5-deformation-20260918.md)。
+
 M4 sourceはhash付きUV/scaleとCPU normal/AO bakeを追加。実曲面fixture/GLB再import/取消を
 確認。形状承認・完成表面・installed新toolは別gate。[記録](m4-surface-20260918.md)。
 

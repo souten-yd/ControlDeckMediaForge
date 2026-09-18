@@ -3,6 +3,20 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-18 M5 bounded weights and leg IK source
+
+ux1/3d-deformation-tools、親PR543/c4d21a8。局所weight set/smooth/normalize、
+2骨IK→既存rotation clipを追加。hash/rig/選択/影響数/全頂点和を確認し元版を保持。
+実4.5.13連続146vertex脚、bind0.440秒/補正0.424秒/IK0.438秒。
+98未選択vertexのweightsと全cage座標不変。最大2影響、和誤差2.98e-8。
+25frameの目標誤差max9.48e-5m、実GLB再importの足joint差max4.79e-7m、loop端点差0。
+straight chain初期値の特異で未到達を検出し、固定knee seedで修正。許容幅1cmは不変。
+actual stale/unreachable拒否、head/Asset保持、pin0/staging空。曲げ脚画像も描画/側面目視。
+最終./mf.sh testは2150pass2warnings232.85秒、exit0（26601）。以後product変更なし。
+詳細は[実装・実機記録](m5-deformation-20260918.md)、証跡deformation-source。
+NOT TESTED: 完成恐竜/四足の潰れ・離脱・貫通、歩行協調、実新tool installed/MCP/OpenCode/viewer。
+原root/稼働0.28.84/Host/model変更0。次はtranslation互換とidle/walk/attack、viewer再生。
+
 ## 2026-09-18 M4 UV and CPU bake source
 
 ux1/3d-surface-bake、親PR542/c208c67。hash付きseam/unwrap/pack/scale適用、

@@ -1016,6 +1016,7 @@
                 "animation.clip": "#/$defs/AnimationClip",
                 "armature.create": "#/$defs/ArmatureCreate",
                 "camera.add": "#/$defs/CameraAdd",
+                "ik.leg.bake": "#/$defs/IkLegBake",
                 "light.add": "#/$defs/LightAdd",
                 "material.set": "#/$defs/MaterialSet",
                 "mesh.bridge_loops": "#/$defs/MeshBridgeLoops",
@@ -1032,6 +1033,9 @@
                 "primitive.add": "#/$defs/PrimitiveAdd",
                 "skin.bind": "#/$defs/SkinBind",
                 "skin.bind_auto": "#/$defs/SkinBindAuto",
+                "skin.weights.normalize": "#/$defs/SkinWeightsNormalize",
+                "skin.weights.set": "#/$defs/SkinWeightsSet",
+                "skin.weights.smooth": "#/$defs/SkinWeightsSmooth",
                 "transform.apply_scale": "#/$defs/TransformApplyScale",
                 "transform.set": "#/$defs/TransformSet",
                 "uv.pack": "#/$defs/UvPack",
@@ -1110,6 +1114,18 @@
               },
               {
                 "$ref": "#/$defs/SkinBindAuto"
+              },
+              {
+                "$ref": "#/$defs/SkinWeightsSet"
+              },
+              {
+                "$ref": "#/$defs/SkinWeightsSmooth"
+              },
+              {
+                "$ref": "#/$defs/SkinWeightsNormalize"
+              },
+              {
+                "$ref": "#/$defs/IkLegBake"
               },
               {
                 "$ref": "#/$defs/PoseSet"
@@ -2306,10 +2322,375 @@
       ],
       "title": "TransformApplyScale",
       "type": "object"
+    },
+    "BoneInfluence": {
+      "additionalProperties": false,
+      "properties": {
+        "bone_id": {
+          "maxLength": 48,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Bone Id",
+          "type": "string"
+        },
+        "weight": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "bone_id",
+        "weight"
+      ],
+      "title": "BoneInfluence",
+      "type": "object"
+    },
+    "IkLegBake": {
+      "additionalProperties": false,
+      "description": "Bake a two-bone leg's world target/pole to a bounded rotation clip. No stretch or persistent IK controls.",
+      "properties": {
+        "type": {
+          "const": "ik.leg.bake",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "upper_bone_id": {
+          "maxLength": 48,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Upper Bone Id",
+          "type": "string"
+        },
+        "lower_bone_id": {
+          "maxLength": 48,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Lower Bone Id",
+          "type": "string"
+        },
+        "clip_id": {
+          "maxLength": 48,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Clip Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "fps": {
+          "default": 24,
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "frame_count": {
+          "maximum": 120,
+          "minimum": 1,
+          "title": "Frame Count",
+          "type": "integer"
+        },
+        "loop": {
+          "default": false,
+          "title": "Loop",
+          "type": "boolean"
+        },
+        "replace": {
+          "default": false,
+          "title": "Replace",
+          "type": "boolean"
+        },
+        "pole_angle_degrees": {
+          "default": 0,
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Pole Angle Degrees",
+          "type": "number"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/IkTargetKey"
+          },
+          "maxItems": 121,
+          "minItems": 2,
+          "title": "Targets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "upper_bone_id",
+        "lower_bone_id",
+        "clip_id",
+        "name",
+        "frame_count",
+        "targets"
+      ],
+      "title": "IkLegBake",
+      "type": "object"
+    },
+    "IkTargetKey": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "maximum": 120,
+          "minimum": 0,
+          "title": "Frame",
+          "type": "integer"
+        },
+        "target": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Target",
+          "type": "array"
+        },
+        "pole": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Pole",
+          "type": "array"
+        }
+      },
+      "required": [
+        "frame",
+        "target",
+        "pole"
+      ],
+      "title": "IkTargetKey",
+      "type": "object"
+    },
+    "SkinWeightsNormalize": {
+      "additionalProperties": false,
+      "description": "Normalize selected nonempty existing weights and retain at most four influences.",
+      "properties": {
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "rig_object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Rig Object Id",
+          "type": "string"
+        },
+        "expected_geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Geometry Sha256",
+          "type": "string"
+        },
+        "vertex_indices": {
+          "items": {
+            "maximum": 16383,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Vertex Indices",
+          "type": "array"
+        },
+        "type": {
+          "const": "skin.weights.normalize",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "object_id",
+        "rig_object_id",
+        "expected_geometry_sha256",
+        "vertex_indices",
+        "type"
+      ],
+      "title": "SkinWeightsNormalize",
+      "type": "object"
+    },
+    "SkinWeightsSet": {
+      "additionalProperties": false,
+      "description": "Replace selected vertex weights with at most four known bone influences summing to one.",
+      "properties": {
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "rig_object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Rig Object Id",
+          "type": "string"
+        },
+        "expected_geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Geometry Sha256",
+          "type": "string"
+        },
+        "vertex_indices": {
+          "items": {
+            "maximum": 16383,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Vertex Indices",
+          "type": "array"
+        },
+        "type": {
+          "const": "skin.weights.set",
+          "title": "Type",
+          "type": "string"
+        },
+        "influences": {
+          "items": {
+            "$ref": "#/$defs/BoneInfluence"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Influences",
+          "type": "array"
+        }
+      },
+      "required": [
+        "object_id",
+        "rig_object_id",
+        "expected_geometry_sha256",
+        "vertex_indices",
+        "type",
+        "influences"
+      ],
+      "title": "SkinWeightsSet",
+      "type": "object"
+    },
+    "SkinWeightsSmooth": {
+      "additionalProperties": false,
+      "description": "Average selected weights along actual cage edges, retaining top four influences.",
+      "properties": {
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "rig_object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Rig Object Id",
+          "type": "string"
+        },
+        "expected_geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Geometry Sha256",
+          "type": "string"
+        },
+        "vertex_indices": {
+          "items": {
+            "maximum": 16383,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "title": "Vertex Indices",
+          "type": "array"
+        },
+        "type": {
+          "const": "skin.weights.smooth",
+          "title": "Type",
+          "type": "string"
+        },
+        "iterations": {
+          "default": 1,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Iterations",
+          "type": "integer"
+        },
+        "factor": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Factor",
+          "type": "number"
+        }
+      },
+      "required": [
+        "object_id",
+        "rig_object_id",
+        "expected_geometry_sha256",
+        "vertex_indices",
+        "type"
+      ],
+      "title": "SkinWeightsSmooth",
+      "type": "object"
     }
   },
   "additionalProperties": false,
-  "description": "Build a 3D scene from nothing: floors, props, lights and a camera, as a list of operations. To change a scene that already exists use media.scene.edit — creating again makes a second, unrelated scene.\n\nReturns a job id immediately; follow it with media.job.status. Scenes are immutable: every change makes a new revision, and edits name the revision they change so two callers cannot overwrite each other.",
+  "description": "Build a 3D scene from nothing: floors, props, lights and a camera, as a list of operations. To change a scene that already exists use media.scene.edit \u2014 creating again makes a second, unrelated scene.\n\nReturns a job id immediately; follow it with media.job.status. Scenes are immutable: every change makes a new revision, and edits name the revision they change so two callers cannot overwrite each other.",
   "properties": {
     "name": {
       "maxLength": 120,

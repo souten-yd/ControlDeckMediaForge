@@ -36,6 +36,16 @@ class UvMapFact(BaseModel):
         return self
 
 
+class SkinWeightFact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    rig_object_id: ObjectId
+    vertices: int = Field(ge=0, le=16384, strict=True)
+    unweighted_vertices: int = Field(ge=0, le=16384, strict=True)
+    invalid_vertices: int = Field(ge=0, le=16384, strict=True)
+    max_influences: int = Field(ge=0, le=128, strict=True)
+    max_sum_error: float = Field(ge=0, allow_inf_nan=False)
+
+
 class MeshGeometryFact(BaseModel):
     model_config = ConfigDict(extra="forbid")
     object_id: ObjectId
@@ -47,6 +57,7 @@ class MeshGeometryFact(BaseModel):
     inconsistent_edges: int = Field(ge=0, le=1_000_000, strict=True)
     boundary_loops: list[Annotated[list[Annotated[int, Field(ge=0, le=16383, strict=True)]],
                                   Field(min_length=3, max_length=64)]] = Field(max_length=16)
+    skin_weights: SkinWeightFact | None = None
     curve: CurveControlFact | None = None
     uv_maps: list[UvMapFact] | None = Field(default=None, max_length=8)
 

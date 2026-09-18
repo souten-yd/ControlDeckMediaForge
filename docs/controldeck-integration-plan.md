@@ -946,3 +946,8 @@ M4 UV/bake stays within MediaForge's existing scene Jobs/runtime pins/Assets.
 Private low/high Blend staging uses verified Asset IDs and fixed filenames, not
 Host paths. The fixed CPU worker disables GPU devices; no second GPU scheduler,
 model download, inference endpoint or Host-specific bake implementation is added.
+
+M5 deformation remains fixed CPU recipe work in the existing immutable scene
+Job. Vertex selectors, rig IDs and finite target coordinates are MediaForge
+schema data, not Blender expressions or Host paths. No new Host executor,
+inference lease or separate skeleton storage is introduced.
