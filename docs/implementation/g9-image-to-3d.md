@@ -404,10 +404,10 @@ UV 展開済み GLB（WebP の PBR テクスチャ）まで出る。bf16 で 16 
 res-1024 で 3〜7 分（RTX 5060 Ti 実測）。Python 依存も要らない。
 RDNA4 での実績は明示されていないが、Vulkan は Mesa RADV が RDNA4 を十分に扱う。
 
-### 2.6 方針転換: ROCm をやめて Vulkan（trellis.cpp）へ（2026-09-19）
+### 2.6 Vulkan（trellis.cpp）を並べて評価する（2026-09-19）
 
-§2.5 の調査を受けて**利用者が Vulkan を選択**した。ROCm 経路（TRELLIS.2 / Pixal3D）は
-ここで止める。
+§2.5 の調査を受けて Vulkan を試し、**最終的に両経路を同じ入力で比べて採用を決める**
+方針になった。**選ばれなかった側は重みを捨て、手順だけ残す。**
 
 **Vulkan は素直に通った。**
 
@@ -432,6 +432,36 @@ bf16 一式で約 16.5 GB、q8 で約 9.0 GB、q4 で約 5.5 GB。背景除去�
 （`--bg-removal threshold|birefnet`）。
 
 まず bf16 で確かめる。量子化は変数を増やすので、素の品質を見てから判断する。
+
+### 2.7 評価の段取り（両経路を同じ入力で比べる）
+
+**比べるもの**
+
+| | 経路 | 入力 |
+|---|---|---|
+| A | trellis.cpp / **Vulkan** | 単視点（L01 正面） |
+| B | TRELLIS.2 / **ROCm** | 単視点（L01 正面）。上流サンプルは済み（§2.1） |
+| C | Pixal3D / **ROCm** | **多視点**（L01 4面図）。未実施 |
+
+C は「ROCm だから駄目」ではなく、`einops` の入れ忘れで pipeline 初期化の途中で
+落ちただけだった。requirements へ追加済み。
+
+**判断の軸**: L01 が形になるか、所要時間、ピーク VRAM、手順の重さ。
+
+**再現の担保**（選ばれなかった側のため）
+
+| ファイル | 役割 |
+|---|---|
+| `setup-rocm.sh` | ROCm 環境をゼロから組み直す。拡張5本のビルドと3種のパッチを全部含む |
+| `fetch-rocm-weights.sh` | 重みを取り直す（TRELLIS.2-4B / Pixal3D） |
+| `build-nvdiffrast-rocm.sh` | nvdiffrast + nvdiffrec の HIP 移植 |
+| `patch-trellis2-source.sh` | sparse attention の sdpa 追加とラスタライザ差し替え |
+| `requirements.txt` | 版を固定した依存 |
+
+Vulkan 側は `cmake -DGGML_VULKAN=ON` と GGUF の取得だけで、追加の手当ては要らない。
+
+**重みを捨てても作り直せる**のがこの節の目的である。捨てるのは成果物だけで、
+作り方は git に残る。
 
 ---
 
@@ -624,7 +654,7 @@ NOT TESTED かを記録する）に従う。
 | 2b-3 | L01 4面図からの生成 | **未達** | 前処理は良好だがメッシュが破片になる（§2.1） |
 | 2b-4 | fp32 GEMM 破損の原因特定 | **完了・回避策あり** | hipBLASLt。`ROCBLAS_USE_HIPBLASLT=0` で完全に直る（§2.3）。ただしメッシュは直らない（§2.4） |
 | 2b-5 | AMD 向け対応の十分性を調査 | **完了** | 不十分。コミュニティは RDNA3 まで、RDNA4 は黙って誤る前例が複数（§2.5）。代替は trellis.cpp の Vulkan |
-| 2c | Pixal3D の多視点 | **中止** | 重みと入力は用意したが、§2.6 で Vulkan へ切り替えたため走らせていない |
+| 2c | Pixal3D の多視点 | 再開 | 前回は `einops` の不足で初期化中に落ちただけ。ROCm の問題ではない。重み再取得中 |
 | 2d | trellis.cpp を Vulkan でビルド | **完了** | パッチ無しで成功（596 target / エラー0）。RADV GFX1201 を認識（§2.6） |
 | 2e | GGUF 取得と生成 | 進行中 | bf16 約16.5GB。DINOv3 / BiRefNet 同梱で gated 問題なし |
 | 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | 未着手 | |
