@@ -65,6 +65,15 @@ falseへ変更して検査を回避しない。MCPエラーが各辺の詳細を
 
 ## 4. 実画像で観察する
 
+`3d.scene_observation.state=available`かつ実tool schemaを確認した場合、
+`media.scene.observe`へscene_id/revision_idとobservationを渡す。
+center（world XYZ、m）とspan_m（正投影画角）は明示し、修正前後で同じ値を使う。
+Z上、frontは-Yから、sideは+Xから、backは+Yから見る。frame0、CPU固定、256/512px、最大4view。
+material/clay/silhouette/object_idは1 Jobにつき1 mode。過去revisionも観察でき、headは変更しない。
+返却Jobをmedia.job.statusで追跡し、result.imagesのAssetを正規経路で取得する。
+object_id modeのobject_colorsで色とstable object IDを対応させる。IDなしimportはobject_nameのみ。
+観察画像の生成はsemantic reviewではない。VLMが実際に画像を受け取ったかは別に確認する。
+
 構造snapshotは画像ではない。GLB参照だけなら画像を見たと書かない。
 正規assetアクセスで実画像を取得し、可能なら正面・側面・背面・重要箇所の近接を比較する。
 camera、scale、中立照明を固定し、光や画角で欠陥を隠さない。

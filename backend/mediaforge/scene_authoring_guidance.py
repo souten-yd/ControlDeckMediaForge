@@ -59,6 +59,11 @@ def scene_authoring_guidance() -> dict[str, Any]:
             "Generated reference/base-color images are not automatically UV-ready or valid normal, "
             "roughness and metallic maps. Read material binding schemas and inspect channel conventions.",
         ],
+        "observation": "If 3d.scene_observation is available and media.scene.observe is present, "
+        "render an explicit scene_id/revision_id using fixed world center/span_m. Reuse the same spec "
+        "and renderer version for comparisons. Z up; front from -Y, side from +X. CPU frame 0, at most "
+        "four views, 256/512 pixels. Poll media.job.status for image Assets. Historical observation "
+        "does not advance the scene. Rendering alone is not semantic review or visual approval.",
         "visual_review": {
             "availability": "not_asserted_by_this_guidance",
             "required_evidence": ["scene_id", "revision_id", "actual_image_asset_id", "view", "visible_defect"],

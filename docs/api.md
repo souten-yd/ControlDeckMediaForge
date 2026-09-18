@@ -860,3 +860,45 @@ and required fields are unchanged.
 G7 V0 likewise keeps contract version `1.0`: the two generic video operations,
 two output formats/MIME types, and optional video metadata are additive. A
 measured runtime is deliberately not advertised by this contract-only slice.
+
+
+## Scene observation (additive M2a)
+
+`media.scene.observe` → `POST /addon/v1/agent/scene/observe`.
+Input schema: [`scene-observe-request.json`](../schemas/scene-observe-request.json).
+Use the normal authenticated agent envelope. Requires existing `jobs.write` authority.
+
+```json
+{"input":{"scene_id":"scene_11111111111111111111111111111111",
+"revision_id":"revision_22222222222222222222222222222222",
+"observation":{"center":[0,0,1],"span_m":4,"views":["front","side","back","three-quarter"],
+"mode":"clay","resolution":512}}}
+```
+
+Returns the existing detached scene Job projection (`job_id`, `status`, `host_job_id`,
+`input_sha256`). Poll `media.job.status`; cancellation/retry use the existing scene Job
+lifecycle. Optional retry_job_id requires identical input and the original runtime pin.
+Historical revisions are allowed; ownership and revision membership are verified before
+Host child admission. Rendering does not commit a new scene revision.
+
+The succeeded result contains the selected `revision`, scene document, frozen `observation`,
+`images` entries with view/asset_id/sha256, renderer identity, and `object_colors` for object-ID
+mode. Job asset_ids are ordinary PNG assets. Source hash/revision/spec are in provenance. Renderer PNG metadata (including private paths and dates)
+is stripped before registration; image pixels are preserved as RGB.
+The scene document may have a newer current_revision_id than the historical rendered revision.
+
+Limits: center coordinates ±10000m; span_m >0.001 and ≤10000m; 1–4 unique fixed views;
+256 or 512 square pixels; one mode (material/clay/silhouette/object_id); frame0;
+256 mesh objects / 1024 total objects; conservative geometry cost ≤1000000;
+only mesh/armature/empty/light/camera, no instances or particles, and bounded
+bevel/mirror/fixed array/armature modifiers; unsupported geometry is rejected;
+each PNG ≤4MiB; worker report ≤128KiB; existing Blender timeout.
+CPU Cycles, 2 threads, 16 samples, fixed lights and explicit orthographic framing.
+No GPU is used or leased. A scene render is evidence, not an automatic quality verdict;
+semantic_review remains not_tested, and no media.scene.review tool is added in this slice.
+No workflow action is added; existing create/edit/material workflow contracts are unchanged.
+
+Invalid input returns invalid_scene_observation; runtime/owner/revision failures reuse scene
+errors. Worker/timeout/report failures are scene_observation_failed/scene_observation_timeout/
+scene_observation_invalid. Partial images are never published as a succeeded observation.
+Untrusted scripts, paths, arbitrary cameras, render engines or operators are not accepted.

@@ -858,6 +858,10 @@ Community source is anecdotal.採用判断はBlender一次資料、MediaForgeの
 
 ## 19. Reference-guided authoring slices (2026-09-18)
 
+実装状態: R0記録とM1小閉meshのinstalled実OpenCode受入は完了。
+M2a観察は[source実装・実Blender受入](m2-observation-20260918.md)まで進行。
+新toolのsigned installed/OpenCode受入はNOT TESTED。M2全体や高品質制作の完了とはしない。
+
 採用理由・一次資料・比較手法は[参照画像調査](../research/reference-guided-3d-authoring.md)。
 利用者の指定は汎用基盤、曲面のstylized表現、animation込み、初回Blender＋MediaForge viewer。
 既存M1〜M10/GAの範囲を削除せず、その中に次の小sliceを配置する。

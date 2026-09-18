@@ -1350,6 +1350,13 @@ weights are optional G9 candidates, never a fallback for unavailable authoring.
 See [reference-guided research](research/reference-guided-3d-authoring.md) and
 [the implementation slices](implementation/g8-high-quality-mcp-3d-assets.md#19-reference-guided-authoring-slices-2026-09-18).
 
+The initial observation slice is CPU-only and read-only with respect to scene
+revisions. Require an explicit frame center and orthographic span in meters;
+never auto-fit each candidate separately. Render at most four fixed views at
+256 or 512 square pixels, one diagnostic mode per Job, at frame zero. Preserve
+the source revision, source hash, exact observation specification and renderer
+version in every image's provenance. It produces evidence, not a visual verdict.
+
 2026-09-13 user priority: game-asset authoring through the existing MCP surface
 precedes further Web Blender acceptance. Characters, creatures, environment props,
 tools, vehicles, weapons and armor remain in scope. Authored meshes may explicitly

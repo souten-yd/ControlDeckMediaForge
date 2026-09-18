@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "ObservationSpec": {
+      "additionalProperties": false,
+      "description": "Fixed world-space framing: Z up, front viewed from -Y, side from +X.\n\nReuse this exact spec for before/after comparison. No automatic fitting.\nCPU Cycles, frame 0, fixed lighting, 16 samples and Standard color transform.",
+      "properties": {
+        "schema_version": {
+          "const": "media-forge.scene-observation@1",
+          "default": "media-forge.scene-observation@1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "center": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Center",
+          "type": "array"
+        },
+        "span_m": {
+          "exclusiveMinimum": 0.001,
+          "maximum": 10000,
+          "title": "Span M",
+          "type": "number"
+        },
+        "views": {
+          "items": {
+            "enum": [
+              "front",
+              "side",
+              "back",
+              "three-quarter"
+            ],
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Views",
+          "type": "array"
+        },
+        "mode": {
+          "default": "clay",
+          "enum": [
+            "material",
+            "clay",
+            "silhouette",
+            "object_id"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "resolution": {
+          "default": 512,
+          "enum": [
+            256,
+            512
+          ],
+          "title": "Resolution",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "center",
+        "span_m"
+      ],
+      "title": "ObservationSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Render an authorized immutable revision as ordinary image Assets.\n\nHistorical revisions are valid. This operation never advances the scene head.\nPoll media.job.status; images are not a semantic quality approval.",
+  "properties": {
+    "scene_id": {
+      "pattern": "^scene_[0-9a-f]{32}$",
+      "title": "Scene Id",
+      "type": "string"
+    },
+    "revision_id": {
+      "pattern": "^revision_[0-9a-f]{32}$",
+      "title": "Revision Id",
+      "type": "string"
+    },
+    "observation": {
+      "$ref": "#/$defs/ObservationSpec"
+    },
+    "retry_job_id": {
+      "anyOf": [
+        {
+          "pattern": "^job_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retry Job Id"
+    }
+  },
+  "required": [
+    "scene_id",
+    "revision_id",
+    "observation"
+  ],
+  "title": "SceneObserveRequest",
+  "type": "object"
+}

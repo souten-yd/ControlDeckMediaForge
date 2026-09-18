@@ -411,7 +411,7 @@ class Store:
                        SELECT id FROM jobs WHERE status = ?
                        AND json_extract(error_json, '$.code') = 'service_restarted'
                    )
-                   AND stage IN ('queued', 'validate_recipe', 'blender_recipe', 'publish_revision')""",
+                   AND stage IN ('queued', 'validate_recipe', 'blender_recipe', 'publish_revision', 'publish_observation')""",
                 (utc_now(), JobStatus.FAILED),
             )
             blender_terminal = tuple(

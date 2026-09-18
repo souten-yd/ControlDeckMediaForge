@@ -202,6 +202,7 @@ OpenCode → ControlDeck `controldeck_addons` stdio MCP → MediaForge agent con
 | `media.scene.create` | validated scene recipeから新規sceneを作る |
 | `media.scene.edit` | scene ID + base revision + typed operationsで修正 |
 | `media.scene.material` | scene/revision + MaterialBindingの検証・適用 |
+| `media.scene.observe` | revision固定のCPU多視点画像を既存Assetへ返す。headを進めず、判定は別gate |
 | `media.scene.snapshot` | 所有sceneの安全な構造・preview参照を返す |
 | `media.scene.export` | 固定profileでGLB等のassetを生成。配置はmedia.pack |
 | `media.job.status` / `media.job.cancel` | 長時間jobの状態と取消。既存公開surfaceがあればそれを再利用 |

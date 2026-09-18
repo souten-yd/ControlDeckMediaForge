@@ -835,7 +835,7 @@ If a proposed Media Forge feature bypasses ControlDeck's generic identity, proje
 
 Reference-guided authoring (2026-09-18) retains this boundary. ReferenceSet,
 ObservationSpec and structured reviews belong to MediaForge's existing Asset,
-provenance and durable Job facilities. Planned additive media.scene.observe and
+provenance and durable Job facilities. The additive media.scene.observe and planned
 media.scene.review accept authorized scene/revision/asset IDs, never host paths.
 Observation pins the source revision and renderer settings; review consumes the
 actual resulting images via the existing Host AI vision.analyze capability.
