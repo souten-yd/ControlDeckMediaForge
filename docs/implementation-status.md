@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-18 signed install and MCP schema discovery repair
+
+0.28.85を固定df70be4から構築/既存鍵署名/公開/再取得検証し、通常feature updateで導入。
+実health正常、current=0.28.85。更新前後DB16table/2604asset属性/runtime registry一致。
+実MCP一覧26toolsで新observe/review/refine/bakeを確認したが、create/editが欠落。
+75KB schemaがHostの64KiB上限を超過。MediaForge側のcompact JSON応答で内容不変に修正。
+実source HTTP create42547B/edit42609B、canonical parsed equalityを確認。Host変更なし。
+custom受入promptを既存private MCP-only runnerへ追加。変更前full2170pass228.42秒。
+修正後./mf.sh testは2171pass2warnings229.08秒、exit0。以後product変更なし。
+実OpenCode旧T-Rex評価は530.018秒/10tool calls/exit0、実VLM3issueを検出しZIP納品。
+observe Job4.679秒、review Job22.986秒（終端timestamp差、待ちを含む）。
+歯不可視/尾が細い円錐/腕・爪不明瞭。未対応提案3種は実行せずneeds_review、承認なし。
+参照画像生成を新projectで開始、終端待ち。
+詳細: [installed受入](implementation/installed-reference-acceptance-20260918.md)。
+未完了: 修正版の署名配布/導入、実MCP create/edit再確認、実VLMと恐竜比較。
+
 ## 2026-09-18 v0.28.85 release preparation
 
 利用者が実VLM評価・稼働導入・恐竜比較を追加要求。PR536〜545を依存順にmainへ統合。

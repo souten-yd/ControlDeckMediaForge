@@ -71,6 +71,16 @@ def test_schema_path_cannot_escape_schema_directory(client):
     assert client.get("/schemas/not-present.json").status_code == 404
 
 
+def test_all_public_schemas_fit_host_discovery_without_contract_changes(client):
+    root = Path(__file__).parents[1] / "schemas"
+    for path in sorted(root.glob("*.json")):
+        response = client.get(f"/schemas/{path.name}")
+        assert response.status_code == 200, path.name
+        assert response.headers["content-type"] == "application/schema+json"
+        assert len(response.content) <= 64 * 1024, path.name
+        assert response.json() == json.loads(path.read_text(encoding="utf-8")), path.name
+
+
 def test_fake_generation_registers_asset_and_complete_provenance(client):
     created = client.post("/api/v1/jobs", json=request())
     assert created.status_code == 202
