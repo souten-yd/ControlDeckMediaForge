@@ -1491,3 +1491,20 @@ cannot claim a full walk cycle or good deformation by itself.
 A fixed 0.1-radian local knee seed resolves a straight-chain solver initialization
 singularity. It is not accepted as the final pose: every IK and baked-frame target
 must still satisfy the fixed tolerance, and loop solutions must agree.
+
+### 2026-09-18 translation clips and viewer playback
+
+M6 adds optional rest-bone-local translation_m to existing rotation keys. Rotation
+remains required and its meaning/budget is preserved. A translation track must
+provide all its keys, finite ±100 m per axis, with matching loop endpoints.
+Absent/null translation is omitted from serialized legacy payloads to preserve
+retry identity. Only requested location channels are added; existing clips remain
+unchanged. Real GLB reimport must compare both old rotation and new translations.
+
+Typed clip exports add a small per-animation extras record with clip ID, FPS,
+frame count and requested loop flag. It declares playback intent, not loop quality.
+The MediaForge viewer reads only this versioned record; missing/invalid metadata
+retains legacy repeat playback. Nonloop clips play once and pause on the last
+frame. Explicit stop restores the rest pose; switching stops old actions before
+starting the selected action. Play/pause/loop/switch/stop require actual GLB and
+viewer validation. No root-motion extraction or gameplay controller is implied.

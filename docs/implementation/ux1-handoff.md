@@ -3,6 +3,23 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-18 M6 translation and viewer playback source
+
+ux1/3d-motion-playback、親PR544/0538de7。optional translation_mを旧回転JSON互換で追加。
+GLB typed clip extrasとviewerの1回再生/loop/明示停止を実装。
+実4.5.13のidle48/walk24/attack36frames@24fpsは0.431/0.433/0.441秒、最終GLB18252B。
+旧idle曲線不変。49/25/37frameのGLB実再importで位置差max8.54e-9m、loop端点一致。
+実source HTTP＋Chrome/WebGL2でLibrary→実Asset表示、loop/切替/pause/1回終了/stopを確認。
+独立source viewerでありsigned installed受入ではない。合成脚fixtureで、自然な歩行の証明ではない。
+Node実Three mixer6件PASS。最終./mf.sh testは2162pass2warnings228.34秒、exit0（63601）。
+最初のfull19128は旧案内修正のため所有test root1932899をTERM。成功扱いせずfinalを採用。
+以後product変更なし。証跡motion-sourceにnative/reimport/browser/full logを保存。
+詳細は[実装・実機記録](m6-motion-20260918.md)。一時source serverは停止済み。
+NOT TESTED: 実canonical条件付き参照画像生成/実VLM比較、新版installed MCP/OpenCode、
+完成T-Rex/四足/propの品質と3条件×各3回、自然な関節変形・接地・攻撃。計画全体完了ではない。
+稼働current=versions/0.28.84、Host/root/model変更0。旧8097の直health/slotsはURLErrorを観測したが、
+on-demand Host VLMが利用不能という証拠には使わない。認証付き新tool/実画像評価の受入を継続する。
+
 ## 2026-09-18 M5 bounded weights and leg IK source
 
 ux1/3d-deformation-tools、親PR543/c4d21a8。局所weight set/smooth/normalize、

@@ -628,8 +628,9 @@ Only typed actions and muted single-action NLA stashes are accepted; drivers,
 constraints, other rig kinds and non-rig animation are rejected. Unrelated clips
 remain stashed, the new clip becomes active. Original blend/GLB scene revisions
 remain immutable. Clip display names are metadata; Blender/glTF action names use
-`mf.<clip_id>.<rig_hash>`. This does not yet add translation/root motion, scale
-tracks, IK/FK, retargeting, distributed skin weights, or engine integration.
+`mf.<clip_id>.<rig_hash>`. Later additive M5/M6 operations below provide local
+weights, fixed leg IK baking and optional translation keys. Scale tracks, general
+IK/FK controls, retargeting and engine gameplay integration remain separate.
 Available `3d.scene_recipe.supported_operations` is derived from the same
 request vocabulary. Check the current schema/capability before sending a new
 operation to an older deployment; existing operations retain their meaning.
@@ -1160,3 +1161,25 @@ The source action retains a bounded `media_forge_ik_audit` JSON property with
 sample count, maximum target error and zero retained constraints. Other clips
 remain stashed. This is not foot orientation, root motion, multi-leg coordination
 or a complete walk generator; pose and viewer acceptance remain necessary.
+
+### Translation keys and typed playback intent (M6)
+
+`animation.clip` rotation keys add optional `translation_m`, a rest-bone-local
+XYZ meter offset bounded to ±100 on each axis. Rotation remains required. Every
+key in a translated track must include translation; loop clips require equal
+first/last offsets as well as rotations. Missing/null translation is omitted
+from serialized requests, preserving legacy retry payloads and rotation-only
+curves/budgets. Added location curves count toward the same scalar-key budget.
+Saved typed location channels are recognized when appending/replacing clips;
+old clips and their immutable revisions are retained. This is node translation,
+not gameplay root-motion extraction or retargeting.
+
+GLB animation extras add `media_forge_clip` only for matched typed action names:
+`schema_version=media-forge.clip-playback@1`, `clip_id`, `fps`, `frame_count`,
+`loop_requested`. Other animation extras and binary buffers are retained.
+This declares playback intent, not seam/velocity quality. In the MediaForge
+viewer, a valid typed false flag plays once and holds the last frame; true repeats.
+Unknown/legacy metadata preserves repeat behavior. Play resumes a paused clip
+or restarts a finished clip; explicit Stop restores rest, while Restart returns
+the selected clip to its first frame. Switching stops old actions before activating
+the selected clip, including tracks which animate different properties.

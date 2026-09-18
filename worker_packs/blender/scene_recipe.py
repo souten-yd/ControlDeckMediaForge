@@ -252,26 +252,38 @@ def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: di
     if not isinstance(tracks, list) or not 1 <= len(tracks) <= 128:
         raise RuntimeError("clip track count differs")
     parsed = {}
+    translations = {}
     for track in tracks:
         key = bone_id(track.get("bone_id"))
         values = track.get("keys")
         if key in parsed or key not in obj.pose.bones or not isinstance(values, list) or not 2 <= len(values) <= 256:
             raise RuntimeError("clip bone or key count differs")
-        rows, previous = [], -1
+        rows, offsets, previous = [], [], -1
         for item in values:
             frame, rotation = item.get("frame"), vector(item.get("rotation_degrees"))
             if type(frame) is not int or not previous < frame <= end or any(abs(v) > 180 for v in rotation):
                 raise RuntimeError("clip key differs")
             previous = frame
             rows.append((frame, rotation))
+            raw_offset = item.get("translation_m")
+            offset = vector(raw_offset) if raw_offset is not None else None
+            if offset is not None and any(abs(v)>100 for v in offset):
+                raise RuntimeError("clip translation exceeds bounds")
+            offsets.append(offset)
         if rows[0][0] != 0 or rows[-1][0] != end:
             raise RuntimeError("clip endpoints differ")
         if operation.get("loop", False) and rows[0][1] != rows[-1][1]:
             raise RuntimeError("loop rotations differ")
+        if any(v is not None for v in offsets):
+            if any(v is None for v in offsets):
+                raise RuntimeError("clip translation track is incomplete")
+            if operation.get("loop", False) and offsets[0] != offsets[-1]:
+                raise RuntimeError("loop translations differ")
+            translations[key] = offsets
         parsed[key] = rows
     for pose in obj.pose.bones:
         parsed.setdefault(pose.name, [(0, (0,0,0)), (end, (0,0,0))])
-    scalar_keys = sum(len(rows)*3 for rows in parsed.values())
+    scalar_keys = sum(len(rows)*3 for rows in parsed.values()) + sum(len(rows)*3 for rows in translations.values())
     samples = (end+1)*len(obj.data.bones)
     actions = list(bpy.data.actions)
     matches = [a for a in actions if a.get("media_forge_rig_id") == operation["object_id"]
@@ -317,7 +329,7 @@ def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: di
         if len(action.layers) != 1 or len(action.layers[0].strips) != 1 or len(action.slots) != 1:
             raise RuntimeError("existing clip structure differs")
         strip = action.layers[0].strips[0]
-        if len(strip.channelbags) != 1 or len(strip.channelbags[0].fcurves) > 384:
+        if len(strip.channelbags) != 1 or len(strip.channelbags[0].fcurves) > 768:
             raise RuntimeError("existing clip channels differ")
         old_end = action.get("media_forge_frame_count")
         if type(old_end) is not int or not 1 <= old_end <= 600:
@@ -327,8 +339,8 @@ def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: di
         for curve in strip.channelbags[0].fcurves:
             if not 2 <= len(curve.keyframe_points) <= 256 or curve.modifiers:
                 raise RuntimeError("existing clip key bounds differ")
-            if re.fullmatch(r'pose.bones\["[a-z][a-z0-9._-]{0,47}"\].rotation_euler', curve.data_path) is None:
-                raise RuntimeError("existing clip channel is not a bone rotation")
+            if re.fullmatch(r'pose.bones\["[a-z][a-z0-9._-]{0,47}"\].(?:rotation_euler|location)', curve.data_path) is None:
+                raise RuntimeError("existing clip channel is not a bone rotation or translation")
             for point in curve.keyframe_points:
                 if not all(math.isfinite(v) for v in point.co) or not 0 <= point.co.x <= old_end:
                     raise RuntimeError("existing clip key is outside its frame bound")
@@ -372,6 +384,14 @@ def create_clip(obj: bpy.types.Object, operation: dict[str, object], objects: di
                 point.co = (frame, math.radians(rotation[axis]))
                 point.interpolation = "LINEAR"
             curve.update()
+        if key in translations:
+            for axis in range(3):
+                curve = bag.fcurves.new(data_path=pose.path_from_id("location"), index=axis)
+                curve.keyframe_points.add(len(rows))
+                for point, (frame, _), offset in zip(curve.keyframe_points, rows, translations[key], strict=True):
+                    point.co = (frame, offset[axis])
+                    point.interpolation = "LINEAR"
+                curve.update()
     track = animation.nla_tracks.new()
     track.name = action.name
     stash = track.strips.new(action.name, 0, action)

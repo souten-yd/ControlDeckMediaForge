@@ -139,8 +139,9 @@ uv.smart_projectは初期投影で、継ぎ目や密度を保証しない。顔�
 対応チャンネル、色空間、UV set、asset IDを確認する。参照画像は完成textureではない。
 
 skin.bind_autoは初期weightである。肩・肘・股関節・膝を曲げ、衣服と防具も確認する。
-pose.setは骨回転、animation.clipは骨回転trackの対応で、IK、root motion、
-retargetや表情を意味しない。Blenderの機能一覧からMCP対応を推測しない。
+pose.setは骨回転、animation.clipは骨回転とoptional translation_mに対応する。
+ik.leg.bake以外のIK、root motion抽出、retargetや表情を意味しない。
+Blenderの機能一覧からMCP対応を推測しない。
 柔らかい布と硬い板を同じように曲げない。未提供の補正・転送は未完成項目として残す。
 
 ## 7. 納品と報告
@@ -192,3 +193,11 @@ skin.bind_auto後、skin_weights factsの未重み数・影響数・和誤差を
 ik.leg.bakeは上腿/下腿の2骨とworld target/poleを指定し、120frames以内のrotation clipへ
 焼き込む。到達不能・pole特異は具体的に修正する。1 cm gateを通っても歩行全体の合格ではない。
 clip ID、loop、fps、旧clip保持を検証し、GLB再import後の関節位置も比較する。
+
+### 回転と移動を別々に検証する（M6）
+
+animation.clipのrotation_degreesは既存どおり必須。移動するtrackは全keyに
+rest-bone-localメートルのtranslation_mを指定し、loop両端を回転・移動とも一致させる。
+まず24fpsでidle48frame/歩行24frame/攻撃36frame。これは時間仕様であり自然な動作の証明ではない。
+GLB再import後に旧回転、移動、時間を比較し、MediaForge viewerでループ・1回再生・切替・
+一時停止・停止を確認する。攻撃はloop=falseを明示する。歩行の足滑り・接地・重心は別に評価する。

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from .material_binding import MaterialBinding
 
@@ -570,12 +570,23 @@ class PoseSet(BaseModel):
 
 
 class RotationKey(BaseModel):
-    """One key in a rest-local XYZ rotation track."""
+    """Rest-local XYZ rotation plus optional rest-bone-local translation in meters."""
     model_config = ConfigDict(extra="forbid")
     frame: int = Field(ge=0, le=600, strict=True)
     rotation_degrees: tuple[Annotated[float, Field(ge=-180, le=180)],
                             Annotated[float, Field(ge=-180, le=180)],
                             Annotated[float, Field(ge=-180, le=180)]]
+
+    translation_m: tuple[Annotated[float, Field(ge=-100, le=100, allow_inf_nan=False)],
+                         Annotated[float, Field(ge=-100, le=100, allow_inf_nan=False)],
+                         Annotated[float, Field(ge=-100, le=100, allow_inf_nan=False)]] | None = None
+
+    @model_serializer(mode="wrap")
+    def legacy_omission(self, handler: Any) -> dict[str, Any]:
+        result = handler(self)
+        if self.translation_m is None:
+            result.pop("translation_m", None)
+        return result
 
 
 class AnimationTrack(BaseModel):
@@ -616,6 +627,11 @@ class AnimationClip(BaseModel):
             seen.add(track.bone_id)
             if frames[0] != 0 or frames[-1] != self.frame_count or any(a >= b for a,b in zip(frames, frames[1:])):
                 raise ValueError("track frames must increase from zero to frame_count")
+            supplied = [key.translation_m is not None for key in track.keys]
+            if any(supplied) and not all(supplied):
+                raise ValueError("translation must be supplied at every key in its track")
+            if self.loop and track.keys[0].translation_m != track.keys[-1].translation_m:
+                raise ValueError("loop translation endpoints must match")
             if self.loop and track.keys[0].rotation_degrees != track.keys[-1].rotation_degrees:
                 raise ValueError("loop track endpoints must match")
         return self

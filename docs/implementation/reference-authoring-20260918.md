@@ -6,7 +6,26 @@
 [slice表](g8-high-quality-mcp-3d-assets.md#19-reference-guided-authoring-slices-2026-09-18)を追加し、
 base-plan §25、integration §18、game asset設計と同期した。
 対象は汎用の曲面stylized制作、animation込み、Blender＋MediaForge viewer受入。
-R0文書は実装済み。ReferenceSet/observe/review/curve/weight/IKの新機能はまだ未実装。
+R0作成時に未実装だった下記の基盤は、後続sliceでsource実装を進めた。
+現在の正はimplementation-statusと各slice記録。実装と受入を区別する。
+
+| 段階 | source保存先 | 現在の実測と残件 |
+|---|---|---|
+| M2a observe | [PR538](https://github.com/souten-yd/ControlDeckMediaForge/pull/538) | 実CPU多視点/旧版/取消、installed新tool未受入 |
+| R1 storage | [PR539](https://github.com/souten-yd/ControlDeckMediaForge/pull/539) | 参照ZIP/hash/restore実測、canonical画像生成/整合性未受入 |
+| M2b review | [PR540](https://github.com/souten-yd/ControlDeckMediaForge/pull/540) | 実画像入力準備、実Host VLM判定NOT TESTED |
+| M3a curves | [PR541](https://github.com/souten-yd/ControlDeckMediaForge/pull/541) | 恐竜/四足/prop/接合/GLB再import、完成品質未受入 |
+| M3b iteration | [PR542](https://github.com/souten-yd/ControlDeckMediaForge/pull/542) | controlled応答＋実Blenderの2不改善停止/元head保持、実VLM改善判定未受入 |
+| M4 surface | [PR543](https://github.com/souten-yd/ControlDeckMediaForge/pull/543) | UV/normal/AO/材質GLB実測、完成表面/UV重複未受入 |
+| M5 deformation | [PR544](https://github.com/souten-yd/ControlDeckMediaForge/pull/544) | weight補正/2骨IK/25frame GLB比較、完成キャラクター変形未受入 |
+| M6 motion | ux1/3d-motion-playback / [記録](m6-motion-20260918.md) | 旧回転互換/移動/3clip実再import、実source viewer再生/loop/切替/停止。installed未受入 |
+
+後続の受入順: 正式な新版projectionの確認→既存承認済みlocal画像/VLM経路でcanonicalと
+条件付きfront/side/back/3qを生成→整合ReferenceSet→実OpenCode曲面制作/実VLM比較→
+形状→表面→変形→動作。T-Rex/四足/propそれぞれ3条件×各3試行を同じbriefで記録する。
+実画像が無ければ画像評価、LLM traceが無ければLLM制作を成功にしない。
+G9重み導入は明示license同意・AMD実測の別gateで、今回採用0。
+この表はsource基盤の進捗であり、参照画像から高精度な恐竜が完成したという報告ではない。
 
 ## M1実OpenCode受入
 
