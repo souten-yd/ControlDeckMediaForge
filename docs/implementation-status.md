@@ -1,5 +1,19 @@
 # Media Forge implementation status
 
+## 2026-09-18 reference-guided plan / M1 installed gate
+
+参照画像→曲面→観察/局所修正→rig/animationの採用設計をbase/integration/GAへ同期。
+調査とslice表を追加。汎用stylized基盤、初回Blender＋MediaForge viewerを対象とする。
+標準M1 promptは487.794秒/2calls/納品0、provider header timeout後にstream Invalid diff3件、所有子TERM。
+6頂点の比較promptは183.572秒/8calls/exit0。既存verifier PASS、require_closed=true、
+Job/snapshot/export/grant/receipt/file/provenance一致。実Blender4.5.13再importで1mesh/6vertices/8triangles。
+GLB1260B/SHA2efa90962d694a1050e311d592dcca207dbac666ac774719c7fa3f64decf2c28。
+M1小meshのinstalled/実OpenCode納品gateはPASS。長い引数streamの安定性は未修正、
+高品質/参照画像/VLM/rig/animation/engineはNOT TESTED。M2以降の新機能は未実装。
+比較用project MF3DS-M1-SixVertex-20260918にGLB/evidence保持。
+文書slice ./mf.sh test1949pass3skip2warnings206.37秒、skipした署名3件は既存build venvで追加PASS。
+詳細は[計画・受入記録](implementation/reference-authoring-20260918.md)。
+
 
 ## 2026-09-18 local OpenCode / MCP T-Rex sample
 
