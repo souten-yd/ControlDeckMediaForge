@@ -348,6 +348,62 @@ VRAM に収まらない、のいずれでも止めて報告する。Pixal3D だ�
 背景除去は MediaForge が既に持っている BiRefNet の ONNX（MIT、CPU）を使った
 （`worker_packs/image/matte.py`）。gated なモデルを増やさずに済む。
 
+### 2.3 実測: hipBLASLt が gfx1201 で fp32 GEMM を壊していた（2026-09-19）
+
+§1.5 の破損の**原因を特定した。hipBLASLt である。**
+
+```
+ROCBLAS_USE_HIPBLASLT=0
+```
+
+これだけで直る。M = 2^19 / 2^19+1 / 2^20 / 1,500,000 / 4,000,000 のすべてで
+CPU と完全一致（max 0.00e+00）になった。効かなかったもの:
+`TORCH_BLAS_PREFER_HIPBLASLT=0`、`DISABLE_ADDMM_HIP_LT=1`（どちらも不一致のまま）。
+
+bf16 の速度に目立った影響はない（4096³ を 20 回で 266 ms）。
+
+**この機体で torch を使う経路は、すべてこれを設定しておくべきである。** G9 に限らない。
+
+### 2.4 それでもメッシュは直らなかった
+
+hipBLASLt を切って L01 を生成し直したが、破片のままだった
+（3,405,493 頂点 / 4,636,230 面）。構造はいくらか読めるようになったが、
+装甲板が散る状態は変わらない。**GEMM 破損は真の不具合だが、この症状の原因ではない。**
+
+残る容疑者は sparse conv（`flex_gemm`）、o_voxel、そして単視点モデルの入力適性。
+いずれも未切り分け。
+
+### 2.5 調査: AMD 向けの現状は十分ではない
+
+**コミュニティの到達点は RDNA3 まで。** TRELLIS.2 の ROCm 移植として見つかるのは
+`toastmanAu/trellis-2-rocm-comfyui`（gfx1100 / RX 7900 XTX）、
+`DrBearJew/trellis2-convrot-rocm`（**gfx1100 のみと明記**）、
+`iceblue03/trellis2-rocm-bridge`（gfx1150 / iGPU）、`CalebisGross/TRELLIS-AMD`（RX 7800 XT）。
+**gfx1201 / RDNA4 で通ったという報告は見つからない。**
+
+上流の立場も CUDA 前提で、非 CUDA backend は
+[microsoft/TRELLIS.2 issue #74](https://github.com/microsoft/TRELLIS.2/issues/74) で
+「探索中」の扱いにとどまる。
+
+**RDNA4 は黙って誤る前例が複数ある。**
+
+- vLLM [PR #40827](https://github.com/vllm-project/vllm/pull/40827)「RDNA4 の
+  skinny-GEMM kernel の correctness bug 2件」。gfx1201 で
+  **「100% of elements mismatched, max abs diff 520」**と記録されている。
+- ROCm TransformerEngine [#520](https://github.com/ROCm/TransformerEngine/issues/520):
+  gfx1201 が arch table に無く、FP8 WMMA が**黙って** FP32 へ落ちる。
+- 量子化 matmul が **NaN ではなく「妥当に見える誤った値」**を返す例が報告されている。
+
+§2.3 で見つけた hipBLASLt の件も同じ系統で、**この機体固有ではなく RDNA4 全体の
+傾向**と見るべきである。新しい GPU 経路を採るたびに CPU と突き合わせる必要がある。
+
+**より確度の高い代替: `pwilkin/trellis.cpp`。** TRELLIS.2-4B を C++/GGML で書き直した
+実装で、**Vulkan backend を持つ**。rocBLAS / hipBLASLt を一切通らないので、
+上に挙げた系統の不具合を構造的に避けられる。参照実装と op 単位で一致すると謳っており、
+UV 展開済み GLB（WebP の PBR テクスチャ）まで出る。bf16 で 16 GB 級に載り、
+res-1024 で 3〜7 分（RTX 5060 Ti 実測）。Python 依存も要らない。
+RDNA4 での実績は明示されていないが、Vulkan は Mesa RADV が RDNA4 を十分に扱う。
+
 ---
 
 ## 3. production adapter と G8 への受け渡し
@@ -536,7 +592,9 @@ NOT TESTED かを記録する）に従う。
 | 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | **完了** | `RasterizeGLContext` 取得 OK。ラスタライズ被覆と補間を実値で検算して一致 |
 | 2b-1 | TRELLIS.2 の重み取得 | **完了** | 16.24 GB / 22分34秒。`microsoft/TRELLIS.2-4B` MIT（§1.7） |
 | 2b-2 | TRELLIS.2 の生成計測 | **完了** | 上流サンプルは破綻なし。ピーク VRAM 4.88 GB、生成 81〜122 秒（§2.1） |
-| 2b-3 | L01 4面図からの生成 | **未達** | 前処理は良好だがメッシュが破片になる。原因未確定（§2.1） |
+| 2b-3 | L01 4面図からの生成 | **未達** | 前処理は良好だがメッシュが破片になる（§2.1） |
+| 2b-4 | fp32 GEMM 破損の原因特定 | **完了・回避策あり** | hipBLASLt。`ROCBLAS_USE_HIPBLASLT=0` で完全に直る（§2.3）。ただしメッシュは直らない（§2.4） |
+| 2b-5 | AMD 向け対応の十分性を調査 | **完了** | 不十分。コミュニティは RDNA3 まで、RDNA4 は黙って誤る前例が複数（§2.5）。代替は trellis.cpp の Vulkan |
 | 2c | Pixal3D の重み取得と生成計測 | 未着手 | 18.5〜46 GB。多視点版 `inference_mv.py` あり |
 | 2a-4 | nvdiffrast の OpenGL backend を headless（EGL）で取れるか | 未着手 | |
 | 2b | `runtimes/pixal3d-probe` + `worker_packs/three_d/pixal3d_probe.py` | 未着手 | |
