@@ -1289,23 +1289,46 @@
                 "camera.add": "#/$defs/CameraAdd",
                 "light.add": "#/$defs/LightAdd",
                 "material.set": "#/$defs/MaterialSet",
+                "mesh.bridge_loops": "#/$defs/MeshBridgeLoops",
+                "mesh.create": "#/$defs/MeshCreate",
+                "mesh.loft": "#/$defs/MeshLoft",
+                "mesh.sections.set": "#/$defs/MeshSectionsSet",
+                "mesh.sweep": "#/$defs/MeshSweep",
+                "modifier.array": "#/$defs/ArrayModifier",
                 "modifier.bevel": "#/$defs/BevelModifier",
                 "modifier.mirror": "#/$defs/MirrorModifier",
+                "modifier.subdivision": "#/$defs/SubdivisionModifier",
                 "object.duplicate": "#/$defs/ObjectDuplicate",
                 "pose.set": "#/$defs/PoseSet",
                 "primitive.add": "#/$defs/PrimitiveAdd",
                 "skin.bind": "#/$defs/SkinBind",
-                "transform.set": "#/$defs/TransformSet",
-                "uv.smart_project": "#/$defs/UvSmartProject",
-                "modifier.array": "#/$defs/ArrayModifier",
                 "skin.bind_auto": "#/$defs/SkinBindAuto",
-                "mesh.create": "#/$defs/MeshCreate"
+                "transform.set": "#/$defs/TransformSet",
+                "uv.smart_project": "#/$defs/UvSmartProject"
               },
               "propertyName": "type"
             },
             "oneOf": [
               {
                 "$ref": "#/$defs/PrimitiveAdd"
+              },
+              {
+                "$ref": "#/$defs/MeshCreate"
+              },
+              {
+                "$ref": "#/$defs/MeshLoft"
+              },
+              {
+                "$ref": "#/$defs/MeshSweep"
+              },
+              {
+                "$ref": "#/$defs/MeshSectionsSet"
+              },
+              {
+                "$ref": "#/$defs/MeshBridgeLoops"
+              },
+              {
+                "$ref": "#/$defs/SubdivisionModifier"
               },
               {
                 "$ref": "#/$defs/TransformSet"
@@ -1332,25 +1355,22 @@
                 "$ref": "#/$defs/MirrorModifier"
               },
               {
+                "$ref": "#/$defs/ArrayModifier"
+              },
+              {
                 "$ref": "#/$defs/ArmatureCreate"
               },
               {
                 "$ref": "#/$defs/SkinBind"
               },
               {
+                "$ref": "#/$defs/SkinBindAuto"
+              },
+              {
                 "$ref": "#/$defs/PoseSet"
               },
               {
                 "$ref": "#/$defs/AnimationClip"
-              },
-              {
-                "$ref": "#/$defs/ArrayModifier"
-              },
-              {
-                "$ref": "#/$defs/SkinBindAuto"
-              },
-              {
-                "$ref": "#/$defs/MeshCreate"
               }
             ]
           },
@@ -1800,6 +1820,560 @@
         "faces"
       ],
       "title": "MeshCreate",
+      "type": "object"
+    },
+    "CurveSection": {
+      "additionalProperties": false,
+      "properties": {
+        "center": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Center",
+          "type": "array"
+        },
+        "radii": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 100,
+              "minimum": 0.001,
+              "type": "number"
+            },
+            {
+              "maximum": 100,
+              "minimum": 0.001,
+              "type": "number"
+            }
+          ],
+          "title": "Radii",
+          "type": "array"
+        }
+      },
+      "required": [
+        "center",
+        "radii"
+      ],
+      "title": "CurveSection",
+      "type": "object"
+    },
+    "MeshBridgeLoops": {
+      "additionalProperties": false,
+      "description": "Join two independent static meshes across equal-sized open boundary loops.\nRequires current geometry hashes and ordered boundary indices, consumes the\nsecond object, preserves existing faces/materials/UVs, and ends procedural\nsection editing. It does not cut holes or prove an intersection-free joint.",
+      "properties": {
+        "type": {
+          "const": "mesh.bridge_loops",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "other_object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Other Object Id",
+          "type": "string"
+        },
+        "expected_geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Geometry Sha256",
+          "type": "string"
+        },
+        "other_geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Other Geometry Sha256",
+          "type": "string"
+        },
+        "boundary": {
+          "items": {
+            "maximum": 16383,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 64,
+          "minItems": 3,
+          "title": "Boundary",
+          "type": "array"
+        },
+        "other_boundary": {
+          "items": {
+            "maximum": 16383,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 64,
+          "minItems": 3,
+          "title": "Other Boundary",
+          "type": "array"
+        },
+        "twist_offset": {
+          "default": 0,
+          "maximum": 63,
+          "minimum": -63,
+          "title": "Twist Offset",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "other_object_id",
+        "expected_geometry_sha256",
+        "other_geometry_sha256",
+        "boundary",
+        "other_boundary"
+      ],
+      "title": "MeshBridgeLoops",
+      "type": "object"
+    },
+    "MeshLoft": {
+      "additionalProperties": false,
+      "description": "Generate an elliptical loft in local meters. The worker expands bounded sections;\ncaps close ends, not intersections. Same-count sections can later be edited using\nthe geometry hash returned by the recipe and snapshot.",
+      "properties": {
+        "type": {
+          "const": "mesh.loft",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "sections": {
+          "items": {
+            "$ref": "#/$defs/CurveSection"
+          },
+          "maxItems": 32,
+          "minItems": 2,
+          "title": "Sections",
+          "type": "array"
+        },
+        "radial_segments": {
+          "default": 16,
+          "maximum": 32,
+          "minimum": 8,
+          "title": "Radial Segments",
+          "type": "integer"
+        },
+        "samples_per_segment": {
+          "default": 3,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Samples Per Segment",
+          "type": "integer"
+        },
+        "caps": {
+          "default": "both",
+          "enum": [
+            "both",
+            "start",
+            "end",
+            "none"
+          ],
+          "title": "Caps",
+          "type": "string"
+        },
+        "up": {
+          "default": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Up",
+          "type": "array"
+        },
+        "smooth": {
+          "default": true,
+          "title": "Smooth",
+          "type": "boolean"
+        },
+        "location": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Location",
+          "type": "array"
+        },
+        "rotation_degrees": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Degrees",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "name",
+        "sections"
+      ],
+      "title": "MeshLoft",
+      "type": "object"
+    },
+    "MeshSectionsSet": {
+      "additionalProperties": false,
+      "description": "Replace all control sections, preserving vertex/face order, weights and UVs.\nRequires an unchanged procedural mesh and its actual geometry hash. The number\nof sections and sampling settings cannot change through this operation.",
+      "properties": {
+        "type": {
+          "const": "mesh.sections.set",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "expected_geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Geometry Sha256",
+          "type": "string"
+        },
+        "sections": {
+          "items": {
+            "$ref": "#/$defs/CurveSection"
+          },
+          "maxItems": 32,
+          "minItems": 2,
+          "title": "Sections",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "expected_geometry_sha256",
+        "sections"
+      ],
+      "title": "MeshSectionsSet",
+      "type": "object"
+    },
+    "MeshSweep": {
+      "additionalProperties": false,
+      "description": "Sweep a constant elliptical cross-section along a bounded local-meter path.",
+      "properties": {
+        "type": {
+          "const": "mesh.sweep",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "path_points": {
+          "items": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "maximum": 10000,
+                "minimum": -10000,
+                "type": "number"
+              },
+              {
+                "maximum": 10000,
+                "minimum": -10000,
+                "type": "number"
+              },
+              {
+                "maximum": 10000,
+                "minimum": -10000,
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "maxItems": 32,
+          "minItems": 2,
+          "title": "Path Points",
+          "type": "array"
+        },
+        "radii": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 100,
+              "minimum": 0.001,
+              "type": "number"
+            },
+            {
+              "maximum": 100,
+              "minimum": 0.001,
+              "type": "number"
+            }
+          ],
+          "title": "Radii",
+          "type": "array"
+        },
+        "radial_segments": {
+          "default": 16,
+          "maximum": 32,
+          "minimum": 8,
+          "title": "Radial Segments",
+          "type": "integer"
+        },
+        "samples_per_segment": {
+          "default": 3,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Samples Per Segment",
+          "type": "integer"
+        },
+        "caps": {
+          "default": "both",
+          "enum": [
+            "both",
+            "start",
+            "end",
+            "none"
+          ],
+          "title": "Caps",
+          "type": "string"
+        },
+        "up": {
+          "default": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Up",
+          "type": "array"
+        },
+        "smooth": {
+          "default": true,
+          "title": "Smooth",
+          "type": "boolean"
+        },
+        "location": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Location",
+          "type": "array"
+        },
+        "rotation_degrees": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Degrees",
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "name",
+        "path_points",
+        "radii"
+      ],
+      "title": "MeshSweep",
+      "type": "object"
+    },
+    "SubdivisionModifier": {
+      "additionalProperties": false,
+      "description": "Add one bounded Catmull-Clark subdivision modifier; estimated scene growth\nis checked before evaluation. This smooths geometry, not semantic quality.",
+      "properties": {
+        "type": {
+          "const": "modifier.subdivision",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "levels": {
+          "default": 1,
+          "maximum": 2,
+          "minimum": 1,
+          "title": "Levels",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "object_id"
+      ],
+      "title": "SubdivisionModifier",
       "type": "object"
     }
   },

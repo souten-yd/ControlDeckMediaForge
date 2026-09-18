@@ -37,6 +37,20 @@ def scene_authoring_guidance() -> dict[str, Any]:
             "grant and verify receipt. Report each untested stage separately.",
         ],
         "operation_notes": {
+            "mesh.loft": "Use 2..32 local-meter centers and positive elliptical radii, 8..32 radial "
+            "vertices and 1..8 samples/segment. Worker expands a smooth centerline with transported "
+            "frames. Explicit caps both/start/end/none. Caps and closed edges do not prove no intersections.",
+            "mesh.sweep": "Constant elliptical radii along 2..32 local-meter path_points; same bounds "
+            "as loft. Prefer compact controls to large raw vertex lists for curved forms.",
+            "mesh.sections.set": "Read recipe result or snapshot mesh_geometry for current geometry_sha256 "
+            "and curve controls. Supply that hash and the same number of sections. Vertex/face order, UVs "
+            "and weights remain; shape quality must be observed again. A stale hash fails without commit.",
+            "mesh.bridge_loops": "Join two unweighted static meshes at equal-size open boundary loops "
+            "using both actual hashes. Consumes other_object_id. No modifiers/parent/animation; bridge "
+            "before subdivision and skin. New joint UVs require projection; procedural section edits "
+            "end after joining. No implicit hole cutting or surface/intersection approval.",
+            "modifier.subdivision": "One Catmull-Clark modifier, levels 1..2, checked against the scene "
+            "geometry budget. Smooth surfaces still need silhouette and deformation review.",
             "mesh.create": "Local-meter vertices, zero-based triangle/quad indices; outward winding. "
             "3..4096 vertices, 1..4096 faces, all vertices referenced. Unique face indices, no duplicate "
             "faces or zero-area fan triangles. Open cloth panels are permitted. Smooth changes normals, "

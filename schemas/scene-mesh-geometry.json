@@ -1,0 +1,215 @@
+{
+  "$defs": {
+    "CurveControlFact": {
+      "additionalProperties": false,
+      "properties": {
+        "sections": {
+          "items": {
+            "$ref": "#/$defs/CurveSection"
+          },
+          "maxItems": 32,
+          "minItems": 2,
+          "title": "Sections",
+          "type": "array"
+        },
+        "radial_segments": {
+          "maximum": 32,
+          "minimum": 8,
+          "title": "Radial Segments",
+          "type": "integer"
+        },
+        "samples_per_segment": {
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Samples Per Segment",
+          "type": "integer"
+        },
+        "caps": {
+          "pattern": "^(both|start|end|none)$",
+          "title": "Caps",
+          "type": "string"
+        },
+        "up": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Up",
+          "type": "array"
+        },
+        "smooth": {
+          "title": "Smooth",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sections",
+        "radial_segments",
+        "samples_per_segment",
+        "caps",
+        "up",
+        "smooth"
+      ],
+      "title": "CurveControlFact",
+      "type": "object"
+    },
+    "CurveSection": {
+      "additionalProperties": false,
+      "properties": {
+        "center": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            },
+            {
+              "maximum": 10000,
+              "minimum": -10000,
+              "type": "number"
+            }
+          ],
+          "title": "Center",
+          "type": "array"
+        },
+        "radii": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 100,
+              "minimum": 0.001,
+              "type": "number"
+            },
+            {
+              "maximum": 100,
+              "minimum": 0.001,
+              "type": "number"
+            }
+          ],
+          "title": "Radii",
+          "type": "array"
+        }
+      },
+      "required": [
+        "center",
+        "radii"
+      ],
+      "title": "CurveSection",
+      "type": "object"
+    },
+    "MeshGeometryFact": {
+      "additionalProperties": false,
+      "properties": {
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "geometry_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Geometry Sha256",
+          "type": "string"
+        },
+        "vertices": {
+          "maximum": 16384,
+          "minimum": 0,
+          "title": "Vertices",
+          "type": "integer"
+        },
+        "triangles": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Triangles",
+          "type": "integer"
+        },
+        "boundary_edges": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Boundary Edges",
+          "type": "integer"
+        },
+        "nonmanifold_edges": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Nonmanifold Edges",
+          "type": "integer"
+        },
+        "inconsistent_edges": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Inconsistent Edges",
+          "type": "integer"
+        },
+        "boundary_loops": {
+          "items": {
+            "items": {
+              "maximum": 16383,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 64,
+            "minItems": 3,
+            "type": "array"
+          },
+          "maxItems": 16,
+          "title": "Boundary Loops",
+          "type": "array"
+        },
+        "curve": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CurveControlFact"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "object_id",
+        "geometry_sha256",
+        "vertices",
+        "triangles",
+        "boundary_edges",
+        "nonmanifold_edges",
+        "inconsistent_edges",
+        "boundary_loops"
+      ],
+      "title": "MeshGeometryFact",
+      "type": "object"
+    }
+  },
+  "items": {
+    "$ref": "#/$defs/MeshGeometryFact"
+  },
+  "maxItems": 256,
+  "type": "array"
+}

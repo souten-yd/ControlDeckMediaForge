@@ -981,3 +981,54 @@ Invalid input returns invalid_scene_observation; runtime/owner/revision failures
 errors. Worker/timeout/report failures are scene_observation_failed/scene_observation_timeout/
 scene_observation_invalid. Partial images are never published as a succeeded observation.
 Untrusted scripts, paths, arbitrary cameras, render engines or operators are not accepted.
+
+### Bounded curve operations and mesh selectors (M3a)
+
+Scene recipes add `mesh.loft`, `mesh.sweep`, `mesh.sections.set`,
+`mesh.bridge_loops` and `modifier.subdivision`. Public create/edit/workflow
+schemas enumerate the exact fields. Existing operations retain their meaning.
+
+```json
+{"type":"mesh.loft","object_id":"tail","name":"Tail",
+ "sections":[{"center":[0,0,0],"radii":[0.3,0.25]},
+             {"center":[0,0.7,0.1],"radii":[0.15,0.13]},
+             {"center":[0,1.3,0.3],"radii":[0.01,0.01]}],
+ "radial_segments":16,"samples_per_segment":3,"caps":"both"}
+```
+
+Sweep uses `path_points` (coordinate arrays, never filesystem paths).
+Loft/sweep use 2–32 controls, 8–32 radial segments, 1–8 samples per segment,
+local-meter coordinates and positive radii 0.001–100 m. Uniform Catmull-Rom
+centers with transported elliptical frames produce mesh geometry. Radius
+interpolation is linear. Optional location/rotation transforms act on the whole
+mesh. Closed caps do not check self-intersection or anatomical quality.
+
+Recipe results, source provenance and `media.scene.snapshot.mesh_geometry`
+provide bounded facts conforming to `schemas/scene-mesh-geometry.json`: actual
+float32 position/face SHA256, counts, edge diagnostics, up to 16 boundary loops
+of 3–64 indices, and valid procedural controls. This is a partial selector
+projection: only meshes up to 16,384 vertices / 32,768 polygons among the first
+256 stable object IDs are included. Older/non-recipe revisions may have no
+recorded facts; absence is not a passed geometry audit.
+
+`mesh.sections.set` requires `expected_geometry_sha256` and the same number
+of control sections. Sampling/topology, UVs and vertex weights are retained;
+stale hashes or externally changed topology fail before mutation/publication.
+Scene edits also retain the existing current-base-revision check.
+
+`mesh.bridge_loops` requires `object_id`, `other_object_id`, both geometry hashes,
+ordered `boundary` / `other_boundary` with equal counts, and optional
+`twist_offset` -63..63. Both meshes must be independent, static, unweighted and
+without modifiers/parents/constraints; transforms must be nonsingular and not
+reflected. The worker verifies single-face boundary edges, chooses nearest loop
+alignment plus twist, preserves face winding and consumes the other object.
+Existing materials/UVs are preserved. New joint UVs are unset (zero) and require
+an explicit UV operation. Procedural controls end after joining; old revisions
+remain available. No hole cutting, intersection resolution or retopology is implied.
+
+`modifier.subdivision` adds one Catmull-Clark modifier at levels 1–2. It is
+non-destructive and accepted by fixed observation. Conservative triangulated
+geometry estimates are checked before growth, including repeated modifier
+amplification. Geometry selectors refer to the original cage, not evaluated
+subdivision vertices. Rig binding order/compatibility and deformation require
+separate acceptance.

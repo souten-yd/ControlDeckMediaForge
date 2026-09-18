@@ -858,6 +858,10 @@ Community source is anecdotal.採用判断はBlender一次資料、MediaForgeの
 
 ## 19. Reference-guided authoring slices (2026-09-18)
 
+M3a sourceはbounded loft/sweep、断面更新、開端接合、subdivisionと実mesh selectorを追加。
+実曲面fixtureとinstalled/LLM/品質の受入は分離する。
+
+
 実装状態: R0記録とM1小閉meshのinstalled実OpenCode受入は完了。
 M2a観察は[source実装・実Blender受入](m2-observation-20260918.md)まで進行。
 R1の保存・scene参照部分は既存asset.packの3d.reference_set profileで実装。

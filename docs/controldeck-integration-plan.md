@@ -931,3 +931,7 @@ leaves the outbox pending. Retry never re-executes the recipe or creates another
 
 These are target requirements. This documentation change does not register new tools, modify Host,
 install Blender, or claim the new GUI/session integration has passed acceptance.
+
+M3a (2026-09-18): bounded curve operations and geometry selectors stay within
+existing recipe/schema discovery, scene Jobs and revision provenance. Snapshot
+mesh facts are an additive MediaForge result; Host receives no geometry executor.

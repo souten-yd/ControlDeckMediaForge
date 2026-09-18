@@ -152,3 +152,13 @@ receiptと実asset/hashを照合する。書出しだけをゲーム導入成功
 「実行／構造／見た目／変形／receipt／実engine」をPASS・FAIL・NOT TESTEDと根拠で報告する。
 有効なGLBや単純な部品の組合せを高品質キャラクター完成例にしない。
 検証専用データは作成一覧と使用中参照を確認して回収し、制作物とruntimeを保護する。
+
+### 曲面をcompactな制御情報で作る（M3a）
+
+capabilityのsupported_operationsに現れる場合、mesh.loftの断面center/radii、
+mesh.sweepのpath_points/radiiで曲面を作る。raw頂点を大量出力する必要はない。
+recipe結果またはsnapshotのmesh_geometryで実geometry_sha256とcurve制御を読み、
+mesh.sections.setで同じ断面数の局所変更をする。古いhashを推測で更新しない。
+mesh.bridge_loopsは開いた端だけを接合し、他方IDを消費する。接合はsubdivision/skin前に行い、
+新接合面をUV投影する。modifier.subdivisionはlevels1〜2。capsの閉殻検査や滑らかな陰影だけを
+視覚・変形合格にしない。固定clay/side/frontで再確認し、旧版と比較する。

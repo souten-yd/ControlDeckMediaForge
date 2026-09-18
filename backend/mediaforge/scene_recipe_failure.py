@@ -11,6 +11,7 @@ from .scene_recipes import SceneRecipe
 
 
 REASONS = {
+    "geometry_selection_stale": "geometry selection is stale; read the current snapshot and its geometry hash",
     "operation_rejected": "operation rejected; inspect the scene and operation constraints",
     "object_not_found": "target object does not exist; inspect stable object IDs",
     "object_exists": "target object ID already exists; choose a new stable ID",

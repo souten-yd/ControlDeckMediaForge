@@ -1,5 +1,20 @@
 # Media Forge implementation status
 
+## 2026-09-18 M3a bounded curve source
+
+ux1/3d-bounded-curves、親PR540/4f18ef1。loft/sweep/断面更新/境界接合/subdivisionを追加。
+actual geometry hash＋base revisionでstale拒否、原mesh factsをsnapshot/provenanceへ。
+実Blender4.5.13で恐竜/四足/prop、断面編集の旧版保持、開端接合/閉辺、4view描画を確認。
+初回恐竜0.525秒/描画2.167秒、接合130vertices/256triangles/境界・非多様体・逆向き辺0。
+独自属性保護の追加でBlender編集選択属性を拒否する退行を実機で検出、許容集合を修正。
+途中full98686は修正のため所有processのみTERM。次75027はpath名禁止1fail/2070pass。
+座標列をpath_pointsへ明確化し、最終66203は2071pass2warnings221.02秒/exit0。
+最終実Blender恐竜0.505秒/4view2.198秒、5GLB再importでtriangle数/有限座標一致。
+旧版保持・stale拒否・runtime pin0/staging空をassert、原恐竜projectに曲面prototypeも保存。
+詳細は[実装・実機記録](implementation/m3-bounded-curves-20260918.md)。
+NOT TESTED: signed installed/実OpenCode、新VLMレビュー、最終形状・変形・animation品質。
+稼働0.28.84、Host、モデル、利用者rootは変更していない。計画全体完了ではない。
+
 ## 2026-09-18 M2b advisory review (source; live vision pending)
 
 ux1/3d-vision-review、PR539/1930778上。media.scene.reviewを既存scene Jobsへ追加。

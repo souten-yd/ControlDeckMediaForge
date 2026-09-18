@@ -3,6 +3,18 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-18 M3a bounded curves source
+
+worktree /tmp/mediaforge-reference-plan-20260918、branch ux1/3d-bounded-curves、親PR540/4f18ef1。
+新5recipe操作・meshfacts schema/snapshot・独立core/worker検査、元版保持/actual stale拒否。
+実4.5.13 fixture恐竜/四足/prop、接合、clay4view成功。画像目視は曲面下地で、完成品質ではない。
+新属性保護が.select_*を拒否する退行を実機検出・修正。旧full98686はTERM。次75027はpath名禁止1fail/2070pass、path_pointsへ修正。
+最終66203 exit0/2071pass2warnings221.02秒、実5GLB再importも成功。
+証跡はM1 project/evidence/curves-source/final-contract、曲面恐竜は原project/curve-prototypes。
+以後product変更なし。commit/push/PR保存へ。
+以後source/MCP/installed/semantic/変形/納品を別gateにする。次はM3b候補比較/反復停止。
+原root/稼働0.28.84/Host/model不変。
+
 ## 2026-09-18 M2b advisory review source
 
 worktree /tmp/mediaforge-reference-plan-20260918、branch ux1/3d-vision-review、親PR539/1930778。

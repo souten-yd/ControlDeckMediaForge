@@ -72,6 +72,8 @@ def validate_scene_objects(objects: list[Any]) -> list[Any]:
                 cost *= 2 ** sum(modifier.use_axis)
             elif modifier.type == "BEVEL":
                 cost *= 24 * int(modifier.segments) + 48
+            elif modifier.type == "SUBSURF" and modifier.subdivision_type == "CATMULL_CLARK" and 1 <= modifier.levels <= 2 and modifier.render_levels == modifier.levels:
+                cost *= 6 * 4 ** (modifier.levels - 1)
             elif modifier.type == "ARRAY" and modifier.fit_type == "FIXED_COUNT" and 1 <= modifier.count <= 64 and modifier.start_cap is None and modifier.end_cap is None:
                 cost *= modifier.count
             else:
