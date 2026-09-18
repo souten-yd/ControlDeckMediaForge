@@ -162,3 +162,12 @@ mesh.sections.setで同じ断面数の局所変更をする。古いhashを推�
 mesh.bridge_loopsは開いた端だけを接合し、他方IDを消費する。接合はsubdivision/skin前に行い、
 新接合面をUV投影する。modifier.subdivisionはlevels1〜2。capsの閉殻検査や滑らかな陰影だけを
 視覚・変形合格にしない。固定clay/side/frontで再確認し、旧版と比較する。
+
+### 候補を採用前に比較する（M3b）
+
+scene.editのpublish_mode=candidateは元headを保持した別sceneを返す。
+3d.scene_refinementがavailableならmedia.scene.refineでfixed clay front/side条件、
+現在base revisionと意図を指定する。最大3指摘を局所断面/mesh変換で直し、同条件画像で比較。
+2回連続不改善で停止する。選択候補はadvisoryであり、Job成功を完成品質に読み替えない。
+selected_scene_id/revision_id、stop_reason、remaining_issuesと比較ZIPを確認し、
+元sceneは保持する。未対応修正やVLM不在を任意Pythonやtext-only判定で代用しない。

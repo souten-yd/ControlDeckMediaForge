@@ -935,3 +935,9 @@ install Blender, or claim the new GUI/session integration has passed acceptance.
 M3a (2026-09-18): bounded curve operations and geometry selectors stay within
 existing recipe/schema discovery, scene Jobs and revision provenance. Snapshot
 mesh facts are an additive MediaForge result; Host receives no geometry executor.
+
+M3b calls the existing Host text.generate/vision.analyze capabilities from one
+renewable detached scene Job. Host remains responsible for AI resource admission.
+The current child identity is obtained before each AI request; no long loop pins
+an expired token or exposes tokens in a report. MediaForge owns only bounded CPU
+Blender work, immutable candidates and comparison evidence under existing stores.

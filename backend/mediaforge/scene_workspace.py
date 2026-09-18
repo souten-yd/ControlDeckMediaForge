@@ -43,6 +43,7 @@ from .scenes import (
 from .scene_geometry import validate_geometry_facts
 from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
+from .scene_refinement import SceneRefineRequest
 from .scene_recipes import SceneCreateRequest, SceneEditRequest, SceneMaterialRequest, SceneRecipe
 from .scene_recipe_failure import recipe_failure_message
 from .store import Store, utc_now
@@ -215,6 +216,15 @@ class SceneWorkspace:
         return await review(self, owner, job_id, value, gateway=gateway, identity=identity,
                             runtime_id=runtime_id, runtime_version=runtime_version)
 
+    async def refine_scene(
+        self, owner: str, job_id: str, value: SceneRefineRequest,
+        *, gateway: HostAIGateway, identity_provider: Callable[[], HostIdentity],
+        runtime_id: str, runtime_version: str,
+    ) -> dict[str, Any]:
+        from .scene_refinement_runner import refine
+        return await refine(self, owner, job_id, value, gateway=gateway, identity_provider=identity_provider,
+                            runtime_id=runtime_id, runtime_version=runtime_version)
+
     async def observe_scene(
         self, owner: str, job_id: str, value: SceneObserveRequest,
         *, runtime_id: str, runtime_version: str,
@@ -290,6 +300,8 @@ class SceneWorkspace:
                         "operation_count": len(value.recipe.operations),
                         "stable_object_ids": worker_facts["stable_object_ids"],
                         "mesh_geometry": worker_facts.get("mesh_geometry", []),
+                        **({"candidate_origin": {"scene_id": value.scene_id, "revision_id": value.base_revision_id}}
+                           if isinstance(value, SceneEditRequest) and value.publish_mode == "candidate" else {}),
                     },
                 )
                 registered.extend([source_asset.id, preview_asset.id])
@@ -309,6 +321,10 @@ class SceneWorkspace:
                         collection=value.collection,
                         revision=revision_value,
                     )
+                elif value.publish_mode == "candidate":
+                    # A separate document owns the candidate. No original head is advanced.
+                    document, revision = self.catalog.create(owner, name=document.name[:108] + " candidate",
+                        tags=document.tags, collection=document.collection, revision=revision_value)
                 else:
                     document, revision = self.catalog.commit(
                         owner, value.scene_id, value.base_revision_id, revision_value
@@ -326,7 +342,7 @@ class SceneWorkspace:
                     generated.unlink()
 
     def acquire_recipe_runtime(
-        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest,
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
         *, retry_pin: tuple[str, str, str | None] | None = None,
     ) -> tuple[ExitStack, tuple[str, str, str | None]]:
         """Select and pin atomically with removal; call and close off the event loop.
@@ -355,14 +371,14 @@ class SceneWorkspace:
             raise
 
     def recipe_runtime_pin(
-        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest
     ) -> tuple[str, str, str | None]:
         owner = validate_scene_owner(owner)
-        if isinstance(value, (SceneEditRequest, SceneMaterialRequest, SceneObserveRequest, SceneReviewRequest)):
+        if isinstance(value, (SceneEditRequest, SceneMaterialRequest, SceneObserveRequest, SceneReviewRequest, SceneRefineRequest)):
             document, revisions = self.catalog.get(owner, value.scene_id)
             base_revision_id = (
                 value.base_revision_id
-                if isinstance(value, SceneEditRequest)
+                if isinstance(value, (SceneEditRequest, SceneRefineRequest))
                 else value.revision_id if isinstance(value, (SceneObserveRequest, SceneReviewRequest))
                 else value.binding.source_revision_id
             )

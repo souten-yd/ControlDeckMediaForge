@@ -1032,3 +1032,53 @@ geometry estimates are checked before growth, including repeated modifier
 amplification. Geometry selectors refer to the original cage, not evaluated
 subdivision vertices. Rig binding order/compatibility and deformation require
 separate acceptance.
+
+### Candidate edits and bounded refinement (M3b)
+
+`media.scene.edit` accepts additive `publish_mode: "advance" | "candidate"`.
+The default preserves existing behavior and durable retry payloads. Candidate
+mode applies the recipe to the exact named current revision, validates the output
+and creates a separate owner-scoped scene. The original head stays unchanged;
+source provenance records `candidate_origin` and the original source hash.
+Returned scene/revision IDs belong to the new candidate. No implicit adoption
+or overwrite occurs.
+
+`media.scene.refine` (`POST /addon/v1/agent/scene/refine`) accepts the existing
+`{input:{...}}` envelope and returns a detached scene Job. Inputs are `scene_id`,
+`base_revision_id`, `intent`, a fixed clay `observation` including front/side,
+`max_iterations` 1–6 (default 3), and optional unchanged-input `retry_job_id`.
+It requires current bounded geometry facts, the pinned runtime, jobs.write and
+ai.inference, plus available Host vision.analyze and text.generate capabilities.
+
+The loop renders actual observations, obtains at most three visual issues,
+requests a typed local repair, creates a candidate, renders it under the same
+settings and compares baseline/candidate/reference image sheets. The initial
+local vocabulary is `mesh.sections.set` and `transform.set` on known mesh issue
+targets, at most six operations per attempt. Camera/light/material changes,
+unknown targets or hashes, arbitrary scripts and unavailable operations cannot
+substitute for a local repair. A missing supported repair ends with
+`local_repair_unavailable`; contradictory/uncertain initial references end with
+`baseline_needs_review`.
+
+Comparison includes at most four image sheets (two observations plus up to two
+reference sheets). Each image/region/submitted JPEG hash is retained. A candidate
+is selected only for an evidence-valid `improved` comparison with no increase in
+reported boundary/nonmanifold/inconsistently wound edges and no missing bounded
+mesh IDs. These deterministic checks are partial negative checks, not proof of
+intersection-free or deformable geometry. Unchanged/worse/inconclusive or
+structurally regressed candidates count as non-improvements. Two consecutive
+non-improvements stop; a selected improvement resets that counter.
+
+The original scene head is never advanced. The result includes selected
+scene/revision IDs, all published Asset IDs, `report_asset_id` and a `refinement`
+report with attempts, comparisons, stop reason and remaining issues. The immutable
+ZIP report records full parent hashes. `asset_approval=not_granted` and
+`shape_gate=advisory_only` remain fixed; surface/deformation are NOT TESTED.
+Job success means bounded execution finished, including an explicit stop.
+
+On failure/cancel, published candidates/evidence and a partial `refining` task
+result remain inspectable. Active CPU preparation/processes are drained and the
+current AI await is canceled. Actual Host provider termination/resource release
+requires its own live acceptance. Restart marks active refinement stages failed;
+an explicit identical-input retry starts a new Job without changing the original.
+The refreshed child identity is read before every AI request.

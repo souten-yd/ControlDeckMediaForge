@@ -1430,3 +1430,22 @@ new joint UVs require explicit projection, and procedural control editing ends.
 Subdivision is fixed Catmull-Clark levels 1–2 under the existing geometry budget.
 Closed edges and smooth surfaces alone are not self-intersection/deformation or
 visual approval. No raw Python, new service, GPU admission or Host contract.
+
+### 2026-09-18 bounded candidate refinement
+
+M3b runs a bounded observe/review/local-repair/compare loop through the existing
+scene Job manager. `media.scene.refine` uses fixed clay front/side views, Host
+vision.analyze plus text.generate and at most three evidence-backed issues.
+The first local repair vocabulary is section replacement and object transform;
+unsupported repair needs remain explicit. A recipe never changes cameras,
+lighting, materials or arbitrary code to mask shape defects.
+
+Additive scene.edit `publish_mode=candidate` creates a separate scene with parent
+source lineage and retains the original scene head. The loop selects a candidate
+only after actual image comparison reports improvement and deterministic mesh
+checks do not regress; worse/unchanged/inconclusive candidates remain separate.
+Two consecutive non-improvements stop. Attempts are bounded to 1–6 (default 3).
+No model response can grant final asset approval; a selected candidate is an
+advisory result. Existing scene/Asset/Jobs store all candidates and report lineage.
+Failure/cancel retains published evidence, releases active resources and never
+advances the original scene. Restart fails the existing Job; retry is explicit.

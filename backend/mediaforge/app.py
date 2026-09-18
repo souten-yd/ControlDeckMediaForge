@@ -126,6 +126,7 @@ from .scene_recipe_jobs import SceneRecipeJobManager
 from .scene_authoring_guidance import scene_authoring_guidance
 from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
+from .scene_refinement import SceneRefineRequest
 from .scene_recipes import (
     SceneCreateRequest,
     SceneEditRequest,
@@ -1098,6 +1099,7 @@ def create_app(
                 "agent_tool:media.scene.material": token_state,
                 "agent_tool:media.scene.observe": token_state,
                 "agent_tool:media.scene.review": token_state,
+                "agent_tool:media.scene.refine": token_state,
                 "agent_tool:media.scene.snapshot": token_state,
                 "agent_tool:media.scene.export": token_state,
                 "agent_tool:media.job.status": token_state,
@@ -1407,6 +1409,15 @@ def create_app(
                     else {"state": "unavailable", "reason": "runtime_not_installed", "local_only": True}
                 ),
                 # 旗を立てて回るのではなく、実際に走らせられるかで決める。
+                "3d.scene_refinement": (
+                    {"state": "available", "max_issues": 3, "max_iterations": 6,
+                     "stop_after_non_improvements": 2, "original_head_retained": True,
+                     "local_operations": ["mesh.sections.set", "transform.set"],
+                     "schema_path": "/schemas/scene-refine-request.json", "advisory_only": True, "local_only": True}
+                    if semantic_available and text_direction_available and blender_runtimes.resolve_g8() is not None
+                    else {"state": "unavailable", "reason": "host_ai_unavailable" if not (semantic_available and text_direction_available)
+                          else "runtime_not_installed", "local_only": True}
+                ),
                 "3d.scene_review": (
                     {"state": "available", "max_observations": 4, "max_issues": 3,
                      "schema_path": "/schemas/scene-review-request.json", "advisory_only": True,
@@ -2600,7 +2611,7 @@ def create_app(
         return value
 
     async def submit_scene_tool(
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest,
         identity: HostIdentity,
     ) -> dict[str, Any]:
         try:
@@ -2693,6 +2704,15 @@ def create_app(
             value = SceneReviewRequest.model_validate(scene_tool_input(await request.json()))
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail={"code": "invalid_scene_review"}) from exc
+        return await submit_scene_tool(value, identity)
+
+    @app.post("/addon/v1/agent/scene/refine")
+    async def agent_scene_refine(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneRefineRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_refinement"}) from exc
         return await submit_scene_tool(value, identity)
 
     @app.post("/addon/v1/agent/scene/snapshot")

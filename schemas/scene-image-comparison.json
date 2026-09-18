@@ -1,0 +1,140 @@
+{
+  "$defs": {
+    "ComparisonIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "enum": [
+            "object",
+            "scene"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "object_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9._-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Object Id"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^candidate\\.(front|side|back|three-quarter)$",
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "description": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "expected_improvement": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Expected Improvement",
+          "type": "string"
+        },
+        "suggested_operation": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9._-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Suggested Operation"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        }
+      },
+      "required": [
+        "scope",
+        "object_id",
+        "evidence_ids",
+        "description",
+        "expected_improvement",
+        "suggested_operation",
+        "confidence"
+      ],
+      "title": "ComparisonIssue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "change": {
+      "enum": [
+        "improved",
+        "unchanged",
+        "worse",
+        "inconclusive"
+      ],
+      "title": "Change",
+      "type": "string"
+    },
+    "explanation": {
+      "maxLength": 600,
+      "minLength": 1,
+      "title": "Explanation",
+      "type": "string"
+    },
+    "evidence_ids": {
+      "items": {
+        "pattern": "^(baseline|candidate)\\.(front|side|back|three-quarter)$",
+        "type": "string"
+      },
+      "maxItems": 8,
+      "minItems": 2,
+      "title": "Evidence Ids",
+      "type": "array"
+    },
+    "remaining_issues": {
+      "items": {
+        "$ref": "#/$defs/ComparisonIssue"
+      },
+      "maxItems": 3,
+      "title": "Remaining Issues",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "maxLength": 300,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Limitations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "change",
+    "explanation",
+    "evidence_ids",
+    "remaining_issues",
+    "limitations"
+  ],
+  "title": "ImageComparison",
+  "type": "object"
+}

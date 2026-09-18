@@ -858,6 +858,9 @@ Community source is anecdotal.採用判断はBlender一次資料、MediaForgeの
 
 ## 19. Reference-guided authoring slices (2026-09-18)
 
+M3b sourceはcandidate編集とbounded refine loopを追加。原head保持/2不改善停止は
+controlled応答と実Blenderで検証、実Host推論・品質はNOT TESTED。
+
 M3a sourceはbounded loft/sweep、断面更新、開端接合、subdivisionと実mesh selectorを追加。
 実曲面fixtureとinstalled/LLM/品質の受入は分離する。
 
