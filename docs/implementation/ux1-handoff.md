@@ -4,6 +4,19 @@
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
 
+## 2026-09-18 M2a observation source
+
+作業worktree /tmp/mediaforge-reference-plan-20260918、branch ux1/3d-observe-revision。
+親PR537/c790834（さらにPR536）。利用者root9304129/feat/release-gpu-on-demandを保持。
+新media.scene.observe、固定revision/center/spanのCPU4view、既存Jobs/Asset/provenanceへ実装。
+history/head保持、PNG metadata除去、symlink拒否、入力/増幅/出力上限、取消/再起動を検証。
+実Blender4.5.13で16PNG、同条件再描画hash一致、編集前後と旧版不変、実描画途中取消/解放PASS。
+最終全test1990passed2warnings207.47秒、以後product変更なし。詳細status/M2記録を参照。
+最新full handle71027はexit0。途中gate12447はsource修正のためTERM/exit143、成功扱いしない。
+source実装の保存後、通常署名配布/installed新tool projection/実OpenCode受入が次。
+R1 ReferenceSet/M2b review/M3 curve/M5 rig改善/M6追加motionは未実装。
+稼働版0.28.84は未変更。新M2a installed/VLM/品質はNOT TESTED。
+
 ## 2026-09-18 reference-guided authoring
 
 branch ux1/reference-guided-3d-plan、worktree /tmp/mediaforge-reference-plan-20260918、親PR536/30e2971。

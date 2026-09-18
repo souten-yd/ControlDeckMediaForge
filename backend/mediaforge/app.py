@@ -124,6 +124,7 @@ from .scenes import SceneCatalog, SceneError
 from .scene_workspace import SceneWorkspace
 from .scene_recipe_jobs import SceneRecipeJobManager
 from .scene_authoring_guidance import scene_authoring_guidance
+from .scene_observation import SceneObserveRequest
 from .scene_recipes import (
     SceneCreateRequest,
     SceneEditRequest,
@@ -276,6 +277,7 @@ def create_app(
         REPOSITORY_ROOT / "worker_packs/blender/scene_document.py",
         material_worker=REPOSITORY_ROOT / "worker_packs/blender/material_binding.py",
         recipe_worker=REPOSITORY_ROOT / "worker_packs/blender/scene_recipe.py",
+        observation_worker=REPOSITORY_ROOT / "worker_packs/blender/scene_observation.py",
         process_timeout_sec=resolved.blender_timeout_sec,
     )
     material_previews = MaterialPreviewManager(scene_workspace)
@@ -1093,6 +1095,7 @@ def create_app(
                 "agent_tool:media.scene.create": token_state,
                 "agent_tool:media.scene.edit": token_state,
                 "agent_tool:media.scene.material": token_state,
+                "agent_tool:media.scene.observe": token_state,
                 "agent_tool:media.scene.snapshot": token_state,
                 "agent_tool:media.scene.export": token_state,
                 "agent_tool:media.job.status": token_state,
@@ -1383,6 +1386,16 @@ def create_app(
                         "authoring_guidance": scene_authoring_guidance(),
                         "local_only": True,
                     }
+                    if blender_runtimes.resolve_g8() is not None
+                    else {"state": "unavailable", "reason": "runtime_not_installed", "local_only": True}
+                ),
+                "3d.scene_observation": (
+                    {"state": "available", "schema_version": "media-forge.scene-observation@1",
+                     "modes": ["material", "clay", "silhouette", "object_id"],
+                     "views": ["front", "side", "back", "three-quarter"],
+                     "resolutions": [256, 512], "max_views": 4, "device": "CPU", "frame": 0,
+                     "limits": {"mesh_objects": 256, "scene_objects": 1024, "geometry_cost": 1_000_000},
+                     "semantic_review": "unavailable", "local_only": True}
                     if blender_runtimes.resolve_g8() is not None
                     else {"state": "unavailable", "reason": "runtime_not_installed", "local_only": True}
                 ),
@@ -2572,7 +2585,7 @@ def create_app(
         return value
 
     async def submit_scene_tool(
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest,
         identity: HostIdentity,
     ) -> dict[str, Any]:
         try:
@@ -2648,6 +2661,15 @@ def create_app(
             "status": submitted["status"],
             "asset_ids": submitted["asset_ids"],
         }
+
+    @app.post("/addon/v1/agent/scene/observe")
+    async def agent_scene_observe(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneObserveRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_observation"}) from exc
+        return await submit_scene_tool(value, identity)
 
     @app.post("/addon/v1/agent/scene/snapshot")
     async def agent_scene_snapshot(request: Request) -> dict[str, Any]:

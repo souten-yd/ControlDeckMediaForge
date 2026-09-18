@@ -150,6 +150,13 @@
         "permission": "workflows.run"
       },
       {
+        "id": "media.scene.observe",
+        "label": "Observe a fixed 3D scene revision",
+        "endpoint": "/addon/v1/agent/scene/observe",
+        "schema_path": "/schemas/scene-observe-request.json",
+        "permission": "workflows.run"
+      },
+      {
         "id": "media.scene.snapshot",
         "label": "Read back the current state of a 3D scene",
         "endpoint": "/addon/v1/agent/scene/snapshot",

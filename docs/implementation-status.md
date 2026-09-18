@@ -1,5 +1,24 @@
 # Media Forge implementation status
 
+## 2026-09-18 M2a revision-pinned scene observation (source)
+
+ux1/3d-observe-revision、PR537/c790834上の独立slice。
+media.scene.observeを既存detached scene Jobs/Asset/provenance/runtime pinへ追加。
+固定center/span、4方向、material/clay/silhouette/object_id、CPU/frame0、256/512px。
+過去revisionを観察可能、head不変。入力/画像/増幅上限、全画像検証、rollback、取消、再起動を追加。
+PNG内部path/date metadataを除去し、同root内の画像symlinkも拒否する。
+source schema/addon/health/capability/API/agent guide/Library検査名を同期、Host変更0。
+実Blender4.5.13で4mode×4view=16PNG/256px/220675B。
+各4viewのwall timeはmaterial1.073秒/clay0.856秒/silhouette0.444秒/object_id0.449秒。
+同版・同条件4画像hash一致、Xへ0.08m編集後の変化、旧版再観察で旧hash復帰/head維持をassert。
+実front画像生成後に取消、PID不在/staging空/公開Asset0/runtime参照0をassert。
+専用projectのevidence/observation-sourceに実PNG/report/comparison/cancel/再現scriptを保存。
+最初の全gateでvalidator日本語label漏れ1failを修正。最終./mf.sh testはexit0、
+1990passed/2warnings/207.47秒。以後product変更なし。ローカル文書link/diff check成功。
+詳細は[実装・受入記録](implementation/m2-observation-20260918.md)。
+NOT TESTED: 新toolのsigned installed/実OpenCode、VLM診断、参照画像整合、曲面、rig/animation、engine。
+M2a source受入とinstalled受入は別。次は通常署名配布/導入と実MCP受入。
+
 ## 2026-09-18 reference-guided plan / M1 installed gate
 
 参照画像→曲面→観察/局所修正→rig/animationの採用設計をbase/integration/GAへ同期。

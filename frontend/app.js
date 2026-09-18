@@ -7107,6 +7107,7 @@ const VALIDATOR_LABEL = {
   "image.outpaint.source_pixel_diff": "元の絵が変わっていない",
   "image.strict_edit.unmasked_pixel_diff": "塗った所だけ変わっている",
   "glb.structure": "3Dファイルの構造",
+  "scene.observation": "3D観察画像の出力",
   "glb.output_structure": "書き出した3Dファイルの構造",
   "package.deterministic_zip": "3Dパッケージの再現性",
   "scene.backup": "3Dシーンのバックアップ",

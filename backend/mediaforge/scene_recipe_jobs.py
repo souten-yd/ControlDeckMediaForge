@@ -13,6 +13,7 @@ from typing import Any
 from .domain import ErrorDetail, Job, JobRequest, JobStatus
 from .host.client import ControlDeckHostClient, HostApiError, HostIdentity
 from .host.jobs import HostExecution, HostJobReporter
+from .scene_observation import SceneObserveRequest
 from .scene_recipes import (
     SceneCreateRequest,
     SceneEditRequest,
@@ -93,7 +94,7 @@ class SceneRecipeJobManager:
 
     async def submit(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest,
         identity: HostIdentity,
         *,
         retry_of: str | None = None,
@@ -109,7 +110,7 @@ class SceneRecipeJobManager:
 
     async def _submit(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest,
         identity: HostIdentity,
         *,
         retry_of: str | None = None,
@@ -133,6 +134,7 @@ class SceneRecipeJobManager:
             if isinstance(value, SceneCreateRequest)
             else "scene.material"
             if isinstance(value, SceneMaterialRequest)
+            else "scene.observe" if isinstance(value, SceneObserveRequest)
             else "scene.edit"
         )
         encoded = json.dumps(external, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -160,7 +162,7 @@ class SceneRecipeJobManager:
 
     async def _submit_pinned(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest,
         identity: HostIdentity,
         owner: str,
         external: dict[str, Any],
@@ -198,6 +200,8 @@ class SceneRecipeJobManager:
                 if isinstance(value, SceneCreateRequest)
                 else f"Apply a typed material binding to {value.scene_id}"
                 if isinstance(value, SceneMaterialRequest)
+                else f"Observe fixed Blender scene revision {value.revision_id}"
+                if isinstance(value, SceneObserveRequest)
                 else f"Apply typed Blender scene edit to {value.scene_id}"
             ),
             constraints={"scene_operation": operation, "scene_recipe": external},
@@ -252,7 +256,7 @@ class SceneRecipeJobManager:
     async def _run_pinned(
         self,
         job_id: str,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest,
         references: ExitStack,
         started: asyncio.Event,
     ) -> None:
@@ -365,7 +369,7 @@ class SceneRecipeJobManager:
     async def _run(
         self,
         job_id: str,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest,
     ) -> None:
         execution = self._executions[job_id]
         reporter = HostJobReporter(self.host, execution)
@@ -409,6 +413,10 @@ class SceneRecipeJobManager:
                         runtime_version=task.runtime_version,
                     )
                     if isinstance(value, SceneMaterialRequest)
+                    else self.workspace.observe_scene(
+                        task.owner, job_id, value,
+                        runtime_id=task.runtime_id, runtime_version=task.runtime_version,
+                    ) if isinstance(value, SceneObserveRequest)
                     else self.workspace.apply_recipe(
                         task.owner,
                         job_id,
@@ -450,8 +458,9 @@ class SceneRecipeJobManager:
                         acquired = False
                 if acquired:
                     self._execution_guard.release()
-            self.store.update_job(job_id, phase="publish_revision", progress=0.9)
-            self.store.update_scene_recipe_task(job_id, stage="publish_revision")
+            publish_stage = "publish_observation" if isinstance(value, SceneObserveRequest) else "publish_revision"
+            self.store.update_job(job_id, phase=publish_stage, progress=0.9)
+            self.store.update_scene_recipe_task(job_id, stage=publish_stage)
             assets = list(result.pop("asset_ids")) if "asset_ids" in result else [
                 result["revision"]["source_asset_id"],
                 result["revision"]["preview_asset_id"],

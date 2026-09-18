@@ -37,6 +37,7 @@ from .scenes import (
     SceneWorkingCopy,
     validate_scene_owner,
 )
+from .scene_observation import SceneObserveRequest
 from .scene_recipes import SceneCreateRequest, SceneEditRequest, SceneMaterialRequest, SceneRecipe
 from .scene_recipe_failure import recipe_failure_message
 from .store import Store, utc_now
@@ -122,6 +123,7 @@ class SceneWorkspace:
         *,
         material_worker: Path | None = None,
         recipe_worker: Path | None = None,
+        observation_worker: Path | None = None,
         now: Callable[[], datetime] | None = None,
         process_timeout_sec: float = SCENE_WORKER_TIMEOUT_SEC,
     ) -> None:
@@ -134,6 +136,7 @@ class SceneWorkspace:
         self.recipe_worker = (
             Path(os.path.abspath(recipe_worker)) if recipe_worker is not None else None
         )
+        self.observation_worker = Path(os.path.abspath(observation_worker)) if observation_worker is not None else None
         self.catalog = SceneCatalog(store)
         self.scene_root = contained(store.data_dir, store.data_dir / "scenes")
         self.upload_root = contained(self.scene_root, self.scene_root / "uploads")
@@ -141,6 +144,7 @@ class SceneWorkspace:
         self.validation_root = contained(self.scene_root, self.scene_root / "validation")
         self.material_root = contained(self.scene_root, self.scene_root / "materials")
         self.recipe_root = contained(self.scene_root, self.scene_root / "recipes")
+        self.observation_root = contained(self.scene_root, self.scene_root / "observations")
         self._now = now or (lambda: datetime.now(UTC))
         self.process_timeout_sec = process_timeout_sec
         self._guard = threading.RLock()
@@ -155,6 +159,7 @@ class SceneWorkspace:
             self.validation_root,
             self.material_root,
             self.recipe_root,
+            self.observation_root,
         ):
             root.mkdir(mode=0o700, parents=True, exist_ok=True)
         for entry in self.upload_root.iterdir():
@@ -181,6 +186,20 @@ class SceneWorkspace:
                 shutil.rmtree(bounded)
             else:
                 bounded.unlink()
+
+        for entry in self.observation_root.iterdir():
+            bounded = contained(self.observation_root, entry)
+            if bounded.is_dir() and not bounded.is_symlink():
+                shutil.rmtree(bounded)
+            else:
+                bounded.unlink()
+
+    async def observe_scene(
+        self, owner: str, job_id: str, value: SceneObserveRequest,
+        *, runtime_id: str, runtime_version: str,
+    ) -> dict[str, Any]:
+        from .scene_observation_runner import observe
+        return await observe(self, owner, job_id, value, runtime_id=runtime_id, runtime_version=runtime_version)
 
     async def apply_recipe(
         self,
@@ -271,7 +290,7 @@ class SceneWorkspace:
                     generated.unlink()
 
     def acquire_recipe_runtime(
-        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest,
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest,
         *, retry_pin: tuple[str, str, str | None] | None = None,
     ) -> tuple[ExitStack, tuple[str, str, str | None]]:
         """Select and pin atomically with removal; call and close off the event loop.
@@ -300,17 +319,18 @@ class SceneWorkspace:
             raise
 
     def recipe_runtime_pin(
-        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest
     ) -> tuple[str, str, str | None]:
         owner = validate_scene_owner(owner)
-        if isinstance(value, (SceneEditRequest, SceneMaterialRequest)):
+        if isinstance(value, (SceneEditRequest, SceneMaterialRequest, SceneObserveRequest)):
             document, revisions = self.catalog.get(owner, value.scene_id)
             base_revision_id = (
                 value.base_revision_id
                 if isinstance(value, SceneEditRequest)
+                else value.revision_id if isinstance(value, SceneObserveRequest)
                 else value.binding.source_revision_id
             )
-            if document.current_revision_id != base_revision_id:
+            if not isinstance(value, SceneObserveRequest) and document.current_revision_id != base_revision_id:
                 raise SceneError("scene_revision_conflict", "scene current revision changed")
             revision = next(
                 (item for item in revisions if item.id == base_revision_id), None
