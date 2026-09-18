@@ -181,6 +181,17 @@
           "title": "Boundary Loops",
           "type": "array"
         },
+        "skin_weights": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SkinWeightFact"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "curve": {
           "anyOf": [
             {
@@ -220,6 +231,58 @@
         "boundary_loops"
       ],
       "title": "MeshGeometryFact",
+      "type": "object"
+    },
+    "SkinWeightFact": {
+      "additionalProperties": false,
+      "properties": {
+        "rig_object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Rig Object Id",
+          "type": "string"
+        },
+        "vertices": {
+          "maximum": 16384,
+          "minimum": 0,
+          "title": "Vertices",
+          "type": "integer"
+        },
+        "unweighted_vertices": {
+          "maximum": 16384,
+          "minimum": 0,
+          "title": "Unweighted Vertices",
+          "type": "integer"
+        },
+        "invalid_vertices": {
+          "maximum": 16384,
+          "minimum": 0,
+          "title": "Invalid Vertices",
+          "type": "integer"
+        },
+        "max_influences": {
+          "maximum": 128,
+          "minimum": 0,
+          "title": "Max Influences",
+          "type": "integer"
+        },
+        "max_sum_error": {
+          "minimum": 0,
+          "title": "Max Sum Error",
+          "type": "number"
+        }
+      },
+      "required": [
+        "rig_object_id",
+        "vertices",
+        "unweighted_vertices",
+        "invalid_vertices",
+        "max_influences",
+        "max_sum_error"
+      ],
+      "title": "SkinWeightFact",
       "type": "object"
     },
     "UvMapFact": {

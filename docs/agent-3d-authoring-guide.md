@@ -182,3 +182,13 @@ lowはmodifierなし・unit scaleとし、highは別candidateへsubdivision等�
 normalはOpenGL/non_colorとして既存材質bindingへ渡す。AOは画像Assetの出力までである。
 nontransparent_pixelsは不透明画素の数であり、投射の命中率やUV coverageではない。
 clayで確認していない比率・接合の欠陥をtextureで隠して完成扱いにしない。
+
+### ウェイトを局所補正し、脚IKを焼き込む（M5）
+
+ReferenceSetの部位・接続意図をstable mesh IDsとtyped骨格へ対応させ、rest形状を確認する。
+skin.bind_auto後、skin_weights factsの未重み数・影響数・和誤差を確認する。
+現在hashと実vertex_indicesでskin.weights.set/smooth/normalizeを使い、選択外を保持する。
+肩・肘・股関節・膝を曲げた実画像を比較し、和が1でも潰れ・離脱・貫通を見逃さない。
+ik.leg.bakeは上腿/下腿の2骨とworld target/poleを指定し、120frames以内のrotation clipへ
+焼き込む。到達不能・pole特異は具体的に修正する。1 cm gateを通っても歩行全体の合格ではない。
+clip ID、loop、fps、旧clip保持を検証し、GLB再import後の関節位置も比較する。

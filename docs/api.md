@@ -1122,3 +1122,41 @@ alpha values at least 0.5; it is **not** ray-hit coverage. Results explicitly ma
 through existing non_color normal material binding. AO binding/export is not
 added by this slice. Cancellation/timeout drains the owned process and runtime
 pin; failed publication rolls back outputs. Restart fails active bake Jobs.
+
+### Local weights and baked leg IK (M5)
+
+Recipes add `skin.weights.set`, `skin.weights.smooth`, `skin.weights.normalize`
+and `ik.leg.bake`. Existing bind/pose/rotation clip contracts remain intact.
+Weight operations name mesh `object_id`, `rig_object_id`, the current
+`expected_geometry_sha256` and 1–4096 unique `vertex_indices` (0–16383).
+`set` replaces each selected vertex's influences with 1–4 distinct known deform
+bones, positive weights summing to one. `smooth` averages along actual cage edges
+with factor (0,1] (default .5), 1–8 iterations (default 1), deterministic top-four
+selection and normalization each iteration. Neighbors outside the selection
+contribute but are not changed. `normalize` retains/normalizes the strongest four
+existing nonzero weights, with group-index tie breaking.
+
+Targets must be independent meshes already parented to a typed rig with an
+armature-first/subdivision-after stack. Unknown/locked groups, invalid weights,
+stale geometry and resulting unweighted/unnormalized bindings fail without a new
+revision. Geometry and unselected weights are preserved. Additive `skin_weights`
+mesh facts report counts, maximum influences and sum error for bounded meshes;
+no collapse/intersection or anatomical quality approval is implied.
+
+`ik.leg.bake` requires an identity typed rig, connected known `upper_bone_id` and
+`lower_bone_id`, `clip_id`, `name`, `fps` 1–60 (default 24), `frame_count` 1–120,
+`loop` / `replace` (default false), optional pole_angle_degrees ±180 and 2–121
+ordered `targets`. Each target has `frame`, finite world `target` and `pole`
+coordinates. First/last frames are zero/frame_count; loop endpoints must match.
+Target/pole values interpolate linearly and are solved at every integer frame.
+
+Fixed CPU Blender IK uses two bones, 64 iterations and no stretch. A fixed small
+knee rotation seeds a straight chain; targets/poles determine the solution.
+Unreachable targets and singular poles fail before scene controls are created.
+Temporary controls/constraints are removed, then the ordinary rotation clip is
+created and reevaluated at every sample. Any target error above 1 cm or unrepresentable
+translation/scale fails. Loop solutions must agree before endpoint rounding.
+The source action retains a bounded `media_forge_ik_audit` JSON property with
+sample count, maximum target error and zero retained constraints. Other clips
+remain stashed. This is not foot orientation, root motion, multi-leg coordination
+or a complete walk generator; pose and viewer acceptance remain necessary.

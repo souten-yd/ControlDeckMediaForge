@@ -62,6 +62,15 @@ def scene_authoring_guidance() -> dict[str, Any]:
             "or a guarantee of texture continuity. Inspect seams before accepting image placement.",
             "skin.bind_auto": "Initial automatic weights, not final deformation quality. "
             "Check shoulders, elbows, hips and knees in bent poses; clothing penetration needs inspection.",
+            "skin.weights.set": "Use current mesh geometry_sha256 and 1..4096 vertex_indices. "
+            "Assign up to four known deform bones summing to one; unselected weights remain unchanged.",
+            "skin.weights.smooth": "Bounded edge-neighbor averaging, factor (0,1], 1..8 iterations. "
+            "Inspect bent joints; normalization and four influences do not certify deformation quality.",
+            "skin.weights.normalize": "Normalize selected existing nonempty weights, retaining the top four. "
+            "Unknown/locked groups or a resulting incomplete binding fail without advancing the revision.",
+            "ik.leg.bake": "Two-bone parent/child chain, identity typed rig, explicit world target/pole keys, "
+            "at most 120 frames. Fixed no-stretch IK is baked to an ordinary rotation clip and checked at "
+            "every frame within 1 cm. No persistent controls, root translation or coordinated walk is implied.",
             "pose.set": "Bone rotations only; do not assume IK, translations or corrective shapes.",
             "animation.clip": "Bone rotation tracks only; do not claim root motion, retargeting, "
             "morph animation or engine gameplay integration from a generated clip.",

@@ -11,6 +11,11 @@ from .scene_recipes import SceneRecipe
 
 
 REASONS = {
+    "ik_target_unreachable": "IK target is unreachable or singular; revise the target relative to chain lengths",
+    "ik_pole_singular": "IK pole lies on the chain direction; choose a distinct bend plane",
+    "ik_target_missed": "IK or its baked clip misses the 1 cm target tolerance",
+    "skin_weights_invalid": "resulting binding has missing or invalid weights; correct the selected region",
+    "skin_weights_locked_or_unknown": "weight groups are locked or reference unknown deform bones",
     "geometry_selection_stale": "geometry selection is stale; read the current snapshot and its geometry hash",
     "operation_rejected": "operation rejected; inspect the scene and operation constraints",
     "object_not_found": "target object does not exist; inspect stable object IDs",
