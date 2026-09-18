@@ -195,6 +195,17 @@ def custom_acceptance_task(prompt_path: Path, filenames: list[str]) -> tuple[str
     return prompt, set(filenames)
 
 
+def restrict_custom_mcp_scope(payload: dict[str, Any], names: list[str]) -> None:
+    """Constrain only this run's model-facing tools; never edit global settings."""
+    if not 1 <= len(names) <= 32 or len(set(names)) != len(names) or any(
+        re.fullmatch(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+", name) is None for name in names
+    ):
+        raise ValueError("custom MCP scope requires unique canonical tool names")
+    allowed = {"controldeck_addons_" + name.replace(".", "_"): True for name in names}
+    payload["permission"] = {"*": "deny", **{name: "allow" for name in allowed}}
+    payload["agent"]["build"]["tools"] = {"controldeck_addons_*": False, **allowed}
+
+
 def main() -> None:
     from app.database import SessionLocal
     from app.features import registry
@@ -224,6 +235,8 @@ def main() -> None:
                         help="Operator-owned custom acceptance prompt; keeps private MCP-only configuration")
     parser.add_argument("--expected-file", action="append", default=[],
                         help="Expected delivered basename for the custom task; repeat for each output")
+    parser.add_argument("--mcp-tool", action="append", default=[],
+                        help="Optional exact model-facing MCP tool scope for a custom task; repeat canonical names")
     args = parser.parse_args()
     custom = None
     if args.task_prompt is not None or args.expected_file:
@@ -237,6 +250,8 @@ def main() -> None:
         parser.error("Choose one director scenario")
     director_enabled = (args.director_static or args.director_motion or args.director_array
                         or args.director_auto_skin or args.director_authored_mesh)
+    if args.mcp_tool and (custom is None or director_enabled):
+        parser.error("Exact MCP scope requires a custom task without a director scenario")
     if director_enabled and (args.restored_ui_evidence or args.retry_empty_output):
         parser.error("Director acceptance requires a new project/scene")
     os.umask(0o077)
@@ -306,6 +321,7 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
                                 "saved_settings": args.saved_settings}
     evidence["director_authored_mesh"] = args.director_authored_mesh
     evidence["custom_acceptance_task"] = custom is not None
+    evidence["custom_mcp_tools"] = args.mcp_tool
     if custom is not None:
         evidence["prompt_sha256"] = hashlib.sha256(prompt.encode()).hexdigest()
         evidence["expected_files"] = sorted(custom[1])
@@ -318,6 +334,8 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
         restrict_tools(payload, director_static=args.director_static, director_motion=args.director_motion,
                        director_array=args.director_array, director_auto_skin=args.director_auto_skin,
                        director_authored_mesh=args.director_authored_mesh)
+        if args.mcp_tool:
+            restrict_custom_mcp_scope(payload, args.mcp_tool)
         config.write_text(json.dumps(payload))
         if director_enabled:
             debug = subprocess.run([str(registry.executable("opencode")), "debug", "agent", "build", "--pure"],
@@ -336,6 +354,19 @@ MediaForge toolとcontrol_deck.project_output_grantだけを使い、shell/file/
         listing = json.loads(preflight.stdout)["result"]["tools"]
         names = {tool["name"] for tool in listing}
         assert {"media.scene.snapshot", "media.scene.export", "media.pack", "control_deck.project_output_grant"} <= names
+        if args.mcp_tool:
+            assert set(args.mcp_tool) <= names, "Requested MCP scope contains unavailable tools"
+            debug = subprocess.run([str(registry.executable("opencode")), "debug", "agent", "build", "--pure"],
+                env=dict(os.environ, OPENCODE_CONFIG=str(config)), capture_output=True, text=True, timeout=30)
+            assert debug.returncode == 0, "Scoped agent permission preflight failed"
+            resolved = json.loads(debug.stdout)
+            assert not any(resolved["tools"].get(name) for name in ("bash", "read", "edit", "write", "task", "webfetch"))
+            for name in names:
+                permission = "controldeck_addons_" + name.replace(".", "_")
+                rules = [rule for rule in resolved["permission"]
+                         if fnmatchcase(permission, rule["permission"]) and rule.get("pattern") == "*"]
+                assert rules and (rules[-1]["action"] == "allow") == (name in args.mcp_tool), name
+            evidence["custom_mcp_scope_verified"] = True
         if director_enabled:
             schema = json.dumps(next(tool["inputSchema"] for tool in listing if tool["name"] == "media.scene.create"))
             required = ("armature.create", "skin.bind", "animation.clip") if args.director_motion else ("object.duplicate", "modifier.mirror")

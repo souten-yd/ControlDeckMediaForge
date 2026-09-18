@@ -201,3 +201,15 @@ rest-bone-localメートルのtranslation_mを指定し、loop両端を回転・
 まず24fpsでidle48frame/歩行24frame/攻撃36frame。これは時間仕様であり自然な動作の証明ではない。
 GLB再import後に旧回転、移動、時間を比較し、MediaForge viewerでループ・1回再生・切替・
 一時停止・停止を確認する。攻撃はloop=falseを明示する。歩行の足滑り・接地・重心は別に評価する。
+
+### 実ローカルLLMでの小刻みな制作と品質ゲート
+
+2026-09-18のinstalled0.28.86では、private MCP scopeを必要な10toolに限定し、
+1 create/editを最大3操作、defaults省略の短い要求にしたrunが納品まで到達した。
+これはpromptの実測例でありpublic APIの上限ではない。大きい要求ではnative streamの
+`Invalid diff: now finding less tool calls`も観測したが、小要求で必ず直るとは主張しない。
+
+曲面操作の成功は部位配置の成功ではない。同runはbody/jawとeye/limbの座標軸が不整合で
+品質FAILだった。詳細を増やす前に共通座標でbody・jaw・eye・limbの位置関係を観察する。
+参照セットneeds_review、VLMのuncertain、refineのbaseline_needs_reviewを承認扱いしない。
+[実例と比較](implementation/installed-reference-acceptance-20260918.md#completed-short-request-pilot-and-quality-comparison)。

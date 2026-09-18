@@ -3,6 +3,51 @@
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
+## 2026-09-18 installed reference / real VLM pilot completed; quality FAIL
+
+署名0.28.86の通常導入、実MCP28tools、条件付き参照画像/pack納品、実OpenCode曲面制作と
+実Host VLM review/refineまで実施。最終run ses_f4d29fed0ffeDkKDSJWj0CbJaQ は
+929.597秒/43tool calls/exit0、4納品のreceipt/Asset/file SHA256一致、終端active Jobs0。
+scene_245a22d2554c45ef9986ec76ff9ffe5d / revision_ad5998a80e0449d2bc6ea2f0d42e4fa7。
+refineはbaseline_needs_review、attempts0、元head維持、前後GLB byte一致。
+新GLB実Blender再import:4524tris、XYZ3.217136/1.416754/2.351730m、最低Z−0.025m。
+曲面化しても軸・顔部品配置が不整合で恐竜品質はFAIL。VLM助言を承認に読み替えない。
+可動版viewerはChrome launch180秒timeout、画素/操作受入はNOT TESTED。
+全test2177pass2warnings230.83秒/exit0、以後変更は記録のみ。
+比較artifact: /data1tb/ControlDeck/CodeDEV/MF3DS-Trex-Steps-20260918/comparison/index.html。
+[詳細・次の優先順](installed-reference-acceptance-20260918.md#completed-short-request-pilot-and-quality-comparison)。
+次は参照整合性承認→共通座標/部位接合の確認→clay形状再受入。R2全27試行、表面・変形・
+自然なclipとinstalled viewerの受入は残る。今回の実測比較完了を高品質恐竜の完成とはしない。
+
+## 2026-09-18 bounded OpenCode production acceptance — earlier checkpoint (superseded)
+
+0.28.86 installed/28 MCP tools/参照pack再受入はPASS。新しい造形runは未完了。
+最初のcurved runはcapability結果ファイル取得への誤要求を反復、373.432秒/11callsで所有PIDのみTERM。
+次にprivate configのMCPを10toolへ限定。実debug agentで許可/拒否を確認、他の設定は不変。
+そのrunもnative tool streamの `Invalid diff: now finding less tool calls` を観測し、
+287.211秒/3callsで所有PID1990921のみTERM。いずれも新造形成功とはしない、停止時active Job0。
+次は1要求最大3操作へ短縮し、MF3DS-Trex-Steps-20260918 / PID1996039で制作中。
+初回2操作scene.create Job0280a1df...はsucceeded、続く小editもsucceeded。元版を保持。
+runnerの新--mcp-tool scopeはprivate configだけを制限、組込みshell/read/write等はdeny継続。
+./mf.sh test 2177pass2warnings230.83秒/exit0（43492）、以後code変更なし。
+次は進行中runの終端確認→VLM/候補/GLB/可動版viewerの実測→比較資料/文書を更新。
+
+## 2026-09-18 v0.28.86 installed MCP recovery and quality comparison
+
+PR548 merge bb0a991から署名bundleを構築・公開・再取得検証。
+31,768,618B、SHA256 14c8569f0eb6da2c04dc329686b06c4b5638874c8b109e38014f9993f286a664。
+通常feature updateでcurrent=0.28.86、PID1986947、実health healthy。
+更新前後DB全table/asset属性/runtime registry snapshot一致、active Job0で更新。
+実MCP tools/listは28tools、create/edit復旧、curves/weights/IK/translationと参照pack項目あり。
+実schema応答create42547B/edit42609B/job-request14429B。
+旧T-Rexの実VLM3欠点と基準画像＋同画像由来3editは確認済み。
+参照pack再受入は156.978秒/3tool calls/exit0、4画像＋1490959B ZIPの納品/来歴PASS。
+同4画像を再生成せず使用し、status=needs_review/projection=unverifiedを保持。
+新規MF3DS-Trex-Curved-20260918で参照セット固定の実LLM曲面恐竜制作を開始。
+次は終端/receipt/ZIP来歴確認、実LLM曲面恐竜作成→同条件observe/review/refine→品質比較。
+NOT TESTED: 曲面恐竜の新installed実LLM/実候補改善、R2全27試行。
+詳細はinstalled-reference-acceptance-20260918.md。目標は未完了。
+
 ## 2026-09-18 v0.28.86 release preparation
 
 PR547 / merge4480f7aでschema compact配信を統合。0.28.85で欠落したMCP create/editを

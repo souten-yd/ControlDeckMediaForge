@@ -25,3 +25,20 @@ def test_custom_prompt_rejects_links_empty_and_oversized(tmp_path: Path) -> None
     for text in ('',' '*10,'x'*65537):
         path.write_text(text)
         with pytest.raises(ValueError):runner.custom_acceptance_task(path,['result.zip'])
+
+
+def test_exact_mcp_scope_retains_builtin_denials_and_removes_broad_allow() -> None:
+    payload = {}
+    runner.restrict_tools(payload, director_static=False)
+    runner.restrict_custom_mcp_scope(payload, ['media.scene.create', 'media.scene.review'])
+    assert all(payload['tools'][name] is False for name in ('bash', 'read', 'edit', 'write', 'task'))
+    assert payload['permission'] == {'*': 'deny', 'controldeck_addons_media_scene_create': 'allow',
+                                     'controldeck_addons_media_scene_review': 'allow'}
+    assert payload['agent']['build']['tools'] == {'controldeck_addons_*': False,
+        'controldeck_addons_media_scene_create': True, 'controldeck_addons_media_scene_review': True}
+
+
+@pytest.mark.parametrize('names', [[], ['media.*'], ['bash'], ['media.scene.create'] * 2])
+def test_exact_mcp_scope_rejects_wildcards_builtins_and_duplicates(names: list[str]) -> None:
+    with pytest.raises(ValueError):
+        runner.restrict_custom_mcp_scope({}, names)
