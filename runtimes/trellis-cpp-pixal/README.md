@@ -501,3 +501,77 @@ The original trellis.cpp SS decoder hardcodes a 16³ latent while a pinned Pixal
 training config declares 8³. Actual deployed config and decoder compatibility
 must be established before wiring that decoder; these stage fixtures do not
 establish full image-to-3D generation or Library acceptance.
+
+## Sparse structure neural decoder
+
+`convert_ss_decoder.py` converts a local safetensors checkpoint plus explicit
+`SparseStructureDecoder` config to private `pixal3d-ss-decoder` GGUF. It checks
+every tensor/name/shape/type, finite values, storage overflow and provenance,
+packing Torch Conv3d OC/IC into GGML's four-dimensional layout without moving
+elements. Bias/norm tensors remain F32; convolution storage may be F32 or F16.
+The converter has no hub/model loader and never downloads weights.
+
+`SsDecoderModel` verifies metadata, the tensor table and file extents before
+backend allocation, then validates weight values through the same owned file
+handle. Backend ownership remains with the caller; there is no device selection
+or fallback. `decode_structure` implements input convolution, configurable
+middle/residual blocks, pixel shuffle and output normalization/convolution in
+separate graph segments. Cancellation/progress are checked at segment boundaries
+and during CPU pixel shuffle. All graph operations must be supported by the
+selected backend; stats report segment graph buffer sizes, not GPU peak VRAM.
+
+The current arithmetic is F32, including explicitly promoted F16 stored weights.
+Configs whose reference torso uses FP16 require explicit `f32_arithmetic=true`;
+mixed-activation execution is not implemented or claimed. Pinned Pixal uses
+channel LayerNorm inside every residual block even when the decoder config says
+`norm_type=group`; only the final output norm uses 32-group GroupNorm. The native
+graph preserves that behavior. Input size is validated independently of weights.
+
+`sample_sparse_structure` now joins the existing SS flow to the actual decoder
+and pooled occupancy coordinates. It validates flow/decoder/grid compatibility,
+propagates both cancellation callbacks through decoding, and publishes diagnostic
+outputs only after completion. These coordinates can feed the shape stage.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_ss_decoder.py \
+  --pixal-source "$PIXAL_SOURCE" --naf-source "$NAF_SOURCE" \
+  --checkpoint-fixtures "$PIXAL_CHECKPOINT_REPORT" \
+  --vision-fixtures "$PIXAL_VISION_CHECKPOINT_REPORT" \
+  --stages-fixtures "$PIXAL_STAGES_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-ss-decoder-check \
+  --output-dir "$PIXAL_SS_DECODER_REPORT"
+```
+
+Measured CPU evidence: `maintenance/g9-pixal-ss-decoder-20260919/cpu-final`.
+Eight synthetic checkpoint cases pass 129 intermediate/output comparisons,
+all 386 serialized/loaded tensors match exactly, and 12 converter plus 22 native
+rejection cases pass. Cases cover 8³/16³ input, up to 64³ output with reduced
+channel widths, one/three stages, zero/nonzero residual blocks, final GroupNorm,
+F32/F16/BF16 source/storage and explicit F32 evaluation of an FP16 reference config.
+Seven direct decodes repeat bitwise with/without retained diagnostic tensors.
+The connected case runs actual RGB/DINO/NAF → SS flow → SS neural decoder →
+57 pooled coordinates → shape flow, comparing all six sampled flow steps.
+SS decoder output fixtures are no longer used in that connected case.
+
+Maximum occupancy-logit error is `6.8247318267822266e-06`; all coordinate arrays
+match exactly. General atol/rtol remain 5e-5. The four-channel 8³ case amplified
+preceding convolution roundoff at final LayerNorm to `7.270276546478271e-05`;
+that intermediate uses atol1e-4/rtol5e-5, explicitly documented instead of hiding
+the initial failure. Eight additional same-input source/native norm comparisons
+pass the original 5e-5 gate (maximum error `2.86102294921875e-06`). Final logits,
+coordinates and downstream shape retain their original gates. Initial failure
+logs also retain the corrected Fortran-layout noise fixture error.
+
+Public JSON metadata only was inspected at Pixal model revision
+`b0cb2e1b794cab9aa0ac38a95d794a4d9337437f`: the distributed SS flow uses 16³,
+and its decoder declares channels `[512,128,32]`, 8 latent channels and FP16.
+All four deployed flow configs and the SS decoder config pass metadata validators
+(700 tensors per flow, 74 decoder tensors). Files/URLs/hashes are retained under
+`public-configs`. This resolves the earlier deployed-config uncertainty; it does
+not validate learned weights or full-width execution. The source also declares
+texture NAF target1024, so its existing full-map capacity issue remains.
+
+Trained checkpoint execution, full-width capacity/quality, mixed activations,
+Vulkan under a genuine Host lease, shape/texture neural decoders, MoGe/removal,
+GLB generation, adoption/release and newly generated Library assets remain
+**NOT TESTED**. Torch GPU initialized=false; trained weights were not used.

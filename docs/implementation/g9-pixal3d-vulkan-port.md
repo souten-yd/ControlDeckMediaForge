@@ -1,5 +1,51 @@
 # Pixal3D Vulkan port: scope and measured first component
 
+## 2026-09-19 sparse structure neural decoder and connected shape sampling
+
+`ux1/pixal3d-ss-decoder`, based on PR562 / `b6592f0`, adds strict local
+safetensors/config conversion, native GGUF inspection/loading and the actual
+SS decoder graph. It supports configurable channels/residual stages and input
+resolution, with segment cleanup, explicit backend support, progress/cancellation
+and no automatic device selection. Conv3d/pixel-shuffle layout and the pinned
+source's residual LayerNorm/final optional GroupNorm placement are preserved.
+F32 is the implemented arithmetic. FP16-reference configs require an explicit
+F32 evaluation option; mixed activations remain unimplemented and untested.
+
+Eight synthetic learned-checkpoint cases execute the unmodified pinned decoder
+class: 129 comparisons pass, 386 serialized/loaded tensors match exactly, and
+12 converter +22 native rejections pass. Seven direct decode cases repeat
+bitwise with/without diagnostic tensor retention. Input8³/16³ and output64³
+are tested with reduced channel widths, not a full-width trained decoder.
+One connected image/DINO/NAF/SS-flow/SS-decoder/shape-flow case matches all six
+sampled steps and exactly 57 coordinates; there are no supplied SS decoder logits.
+The combined helper propagates sampler cancellation through decoder stages.
+
+Final logits max absolute error `6.8247318267822266e-06`, coordinates exact.
+An 8³ case with four output-feature channels amplifies prior roundoff through
+final LayerNorm to `7.270276546478271e-05`. The final norm intermediate gate is
+explicitly atol1e-4/rtol5e-5; general/final-logit gates stay atol/rtol5e-5.
+Eight same-input norm comparisons independently pass the original gate, max
+`2.86102294921875e-06`. The initial stricter-norm failure and corrected
+Fortran-order noise fixture error are preserved in the evidence logs.
+
+Public model JSON metadata (no weights) was fetched at immutable revision
+`b0cb2e1b794cab9aa0ac38a95d794a4d9337437f`. The deployed
+[SS flow config](https://huggingface.co/TencentARC/Pixal3D/blob/b0cb2e1b794cab9aa0ac38a95d794a4d9337437f/ckpts/ss_flow_img_dit_1_3B_64_bf16.json)
+uses16³ input; the
+[SS decoder config](https://huggingface.co/TencentARC/Pixal3D/blob/b0cb2e1b794cab9aa0ac38a95d794a4d9337437f/ckpts/ss_dec_conv3d_16l8_fp16.json)
+declares latent8, channels512/128/32, two middle and two per-stage residual
+blocks, reference FP16. The current validators accept all four flow configs
+(700 expected tensors each) and the SS decoder config (74 tensors). This closes
+the earlier metadata uncertainty, without asserting learned checkpoint acceptance.
+
+Evidence: managed `maintenance/g9-pixal-ss-decoder-20260919/cpu-final`, initial
+failure logs, `public-configs/{retrieval,native-config-compatibility}.json` and
+build provenance. GPU initialized=false; pretrained weights, installed runtime,
+Host and Library remain unchanged. Remaining: full-width trained compatibility/
+capacity, mixed precision/Vulkan with a genuine Host lease, shape/texture decoders,
+MoGe/removal, GLB/quality/adoption/release/new Library assets. License consent
+remains unanswered. No rigged animation was produced; the overall goal is incomplete.
+
 ## 2026-09-19 foreground and stage/cascade connection
 
 `ux1/pixal3d-stage-bridge`, based on PR561 / `d231f87`, adds worker-side
