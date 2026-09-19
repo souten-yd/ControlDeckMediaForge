@@ -1,5 +1,44 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D projected NAF output memory
+
+`ux1/pixal3d-naf-projection`、親PR567 / `35d6c5e`。NAFの全encoder/Qとpooled Kを保ち、
+各sparse座標の4画素だけattentionを実行し、同じGGMLの4項積和で投影する経路を追加。
+LR/HR shape・textureのnative pipelineへ接続し、全画素high mapを保持しない。
+入力座標順/重複、border、behind-camera、dilation/nearest/pooling、samplerとdecoderを維持。
+従来dense APIは維持し、事前投影済みconditionの幅/finite/negative branchをstageで検証する。
+取消を各tileへ伝播。モデル/backend選択やHost leaseを内部で捏造しない。
+
+実NAF + NATTEN CPU flex referenceの9条件142比較pass、最大絶対誤差1.3969839e-5、
+atol/rtol5e-5維持。各条件で3cameraのnative dense→projectionと新経路はbitwise一致し、
+tile変更もbitwise一致。F16格納/F32演算、非整列extent、tile1、最終端tileを含む。
+異常/取消14件pass。既存stage回帰は前処理8・bridge7・接続3・拒否25件pass。
+
+容量実測: 64² guide、既定NAF encoder幅256/2layer/kernel9、64²×1024 low feature、
+1024² target、重複なし49,152座標（8corner含む）。synthetic重み・空間的に一定のVによる
+解析期待値と最大差3.5762787e-7でpass。native CPU 25.202264秒、出力201,326,592byte
+（192MiB）、4点query196,608、1536tile、子process最大RSS7,033,384,960byte。
+全画素出力なら4,294,967,296byteになるのは寸法からの算出で、旧経路の4GiB確保を実測した
+意味ではない。encoder/attention graph個別確保は3,758,757,024 / 1,179,691,008byte。
+**全体が192MiBで動くという意味ではない**。全画像1024²・実DINO/flow重み・Vulkanの容量は未検証。
+16GiB address-space limit、2 CPU thread、300秒timeoutで自分の子processだけを試験した。
+
+接続pipelineは7 GLB run、元Pixal runとの111比較、拒否/取消34件、core/Blender実import5件pass。
+実SIGTERMはSS flowを0.001084秒でreap、GLB公開なし。親PR567の7 GLBと比較し、生成時刻のみ
+除いたJSONと全binaryが完全一致。入力画像変更によるlatent/GLBの変化も引き続き確認。
+縮小幅synthetic/人工planar topologyの検証であり、学習済み生成品質を受入したとはしない。
+
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 240.54秒 / exit0**。以後product変更なし。
+証跡: managed `maintenance/g9-pixal-naf-projection-20260919/` の`naf-final/report.json`、
+`capacity-final/report.json`、`pipeline-first/report.json`、`stage-regression/report.json`、
+`parent-output-comparison.json`、build logs/provenance、full-test.log。初回のNAF/容量成功結果も保持。
+学習済み重み取得/使用0、Torch GPU initialized=false、Host/元runtime/installed/Library変更0。
+
+**NOT TESTED / 残り**: full画像/全モデル容量、MoGe/背景除去、trained/full幅/mixed precision、
+実Host lease付きVulkan、生成品質、実画像worker/adoption/署名導入、新規Library登録、骨付きanimation。
+重みlicense同意は既出質問への回答待ち。次はMoGe/背景除去とprivate worker入口を接続し、
+正規lease・同意済み重みが揃った条件で実GPU受入へ進める。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D connected native RGB-to-GLB pipeline
 
 `ux1/pixal3d-native-pipeline`、親PR566 / `4d0350c`。一つの`generate_glb`へ、

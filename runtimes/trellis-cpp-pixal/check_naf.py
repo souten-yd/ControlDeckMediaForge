@@ -129,6 +129,11 @@ def main() -> int:
         (directory/"weights.txt").write_text("\n".join(model.state_dict())+"\n")
         (directory/"params.txt").write_text(f"{D} {heads} {rope_heads} {layers} {kernel} {tile} {iw} {ih} {ow} {oh}\n")
         np.save(directory/"rgb.npy",rgb[0].numpy()); np.save(directory/"low.npy",low[0].permute(1,2,0).numpy())
+        coords=torch.tensor([[3,1,0],[0,0,2],[2,3,1],[3,1,0],[1,1,2],[0,3,0],[2,2,2]])
+        np.save(directory/"coordinates.npy",coords.numpy().astype(np.float32))
+        for i,cam in enumerate(((.857556,2.,1.),(.1,.2,1.),(1.7,.1,.3))):
+            projected_high=namespace["ProjGrid"](4,iw)(high,*[torch.tensor([v]) for v in cam],BHWC=False)
+            expected["sparse"+str(i)]=projected_high.reshape(1,4,4,4,-1)[:,coords[:,0],coords[:,1],coords[:,2]].numpy().reshape(-1)
         command=[str(args.binary.resolve()),str(directory.resolve()),args.backend]
         if args.device_index is not None: command += ["--device",str(args.device_index)]
         if half: command += ["--f16-storage"]
@@ -200,6 +205,17 @@ def main() -> int:
         negatives[case]={"returncode":native.returncode,"stderr":native.stderr.strip(),
                          "passed":native.returncode==1 and not list(directory.glob("actual_*")) and
                          (expected_message is None or expected_message in native.stderr)}
+    for case,flags,error in (("projected_cancel_before",["--cancel-at","1"],"cancelled"),
+                             ("projected_cancel_tiles",["--cancel-at","8"],"cancelled"),
+                             ("projected_cancel_final",["--cancel-at","25"],"cancelled"),
+                             ("projected_bad_coord",[],"coordinate")):
+        directory=args.output_dir/"negative"/case
+        shutil.copytree(args.output_dir/"regular",directory,ignore=shutil.ignore_patterns("actual_*","expected_*","native*","stats.json"))
+        if case=="projected_bad_coord":
+            v=np.load(directory/"coordinates.npy");v[0,0]=4;np.save(directory/"coordinates.npy",v)
+        native=subprocess.run([str(args.binary.resolve()),str(directory.resolve()),"cpu","--projected-only",*flags],capture_output=True,text=True,timeout=30)
+        negatives[case]={"returncode":native.returncode,"stderr":native.stderr.strip(),
+                         "passed":native.returncode==1 and error in native.stderr and not list(directory.glob("actual_*"))}
     references=["src/model/naf.py","src/layers/attentions.py","src/layers/convolutions.py","src/layers/rope.py"]
     report={"passed":all(r["passed"] for r in reports) and all(r["passed"] for r in negatives.values()) and tiled_equal,
             "naf_revision":NAF_REVISION,"reference_sha256":{p:digest(args.naf_source/p) for p in references},

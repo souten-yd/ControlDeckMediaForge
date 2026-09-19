@@ -52,11 +52,13 @@ struct Graph {
         if (!allocator || !ggml_gallocr_alloc_graph(allocator,graph)) throw std::runtime_error("NAF graph allocation failed");
         return ggml_gallocr_get_buffer_size(allocator,0);
     }
-    void compute(ggml_backend* backend,const std::function<bool()>& cancelled,bool upload_floats=true) {
+    void compute(ggml_backend* backend,const std::function<bool()>& cancelled,bool upload_floats=true,
+                 const std::function<void()>& extra_upload={}) {
         check_cancel(cancelled);
         // Inputs may share allocator storage. Re-upload every execution.
         if (upload_floats) for (const auto& [t,v]:floats) ggml_backend_tensor_set(t,v.data(),0,v.size()*sizeof(float));
         for (const auto& [t,v]:indices) ggml_backend_tensor_set(t,v.data(),0,v.size()*sizeof(int32_t));
+        if (extra_upload) extra_upload();
         if (ggml_backend_graph_compute(backend,graph)!=GGML_STATUS_SUCCESS) throw std::runtime_error("NAF graph compute failed");
         check_cancel(cancelled);
     }
@@ -97,12 +99,12 @@ int window_start(int coordinate,int size,int dilation,int kernel) {
     const int count=(size-1-residue)/dilation+1;
     return residue+dilation*std::clamp(coordinate/dilation-kernel/2,0,count-kernel);
 }
-}
 
-FeatureMap upsample_naf(const trellis::Model& model,const NafParams& p,
+std::vector<float> evaluate_naf(const trellis::Model& model,const NafParams& p,
                         const std::vector<float>& rgb,int iw,int ih,const FeatureMap& low,int ow,int oh,
                         NafStats* stats,std::map<std::string,std::vector<float>>* debug,
-                        const std::function<bool()>& cancelled) {
+                        const std::function<bool()>& cancelled,const ProjectionPlan* projection) {
+    const size_t rows=projection ? projection->indices[0].size() : size_t(std::max(ow,0))*std::max(oh,0);
     if (!model.backend || p.channels<16 || p.channels>512 || p.channels%16 ||
         p.heads<1 || p.heads>16 || p.channels%p.heads || p.rope_heads<1 || p.rope_heads>16 ||
         p.channels%(4*p.rope_heads) || p.layers<0 || p.layers>4 || p.kernel<3 || p.kernel>15 || p.kernel%2==0 ||
@@ -110,7 +112,7 @@ FeatureMap upsample_naf(const trellis::Model& model,const NafParams& p,
         ow<1 || oh<1 || ow>1024 || oh>1024 || low.width<1 || low.height<1 || low.width>ow || low.height>oh ||
         low.channels<1 || low.channels>4096 || low.channels%p.heads ||
         rgb.size()!=size_t(3)*iw*ih || low.values.size()!=size_t(low.channels)*low.width*low.height ||
-        size_t(low.channels)*ow*oh>size_t(512)*1024*1024)
+        rows<1 || rows>1048576 || size_t(low.channels)*rows>size_t(512)*1024*1024)
         throw std::invalid_argument("invalid NAF configuration/input dimensions");
     const int dx=ow/low.width,dy=oh/low.height;
     if (ow/dx<p.kernel || oh/dy<p.kernel) throw std::invalid_argument("NAF neighborhood exceeds dilated feature extent");
@@ -198,10 +200,14 @@ FeatureMap upsample_naf(const trellis::Model& model,const NafParams& p,
         query=trellis::tensor_to_f32(q); key=trellis::tensor_to_f32(k); finite(query); finite(key);
         if (debug) for (const auto& [name,t]:observed) (*debug)[name]=trellis::tensor_to_f32(t);
     }
-    FeatureMap output{C,ow,oh,std::vector<float>(size_t(C)*N)};
+    std::vector<float> output(size_t(C)*rows);
+    measured.output_bytes=output.size()*sizeof(float);
+    measured.dense_output_bytes=size_t(C)*N*sizeof(float);
+    measured.attention_queries=rows*(projection ? 4 : 1);
     {
         Graph g; auto* c=g.ctx;
-        const int B=std::min(N,p.tile_pixels),K=p.kernel*p.kernel,VD=C/p.heads;
+        const int tile_rows=std::min(rows,size_t(projection ? std::max(1,p.tile_pixels/4) : p.tile_pixels));
+        const int B=tile_rows*(projection ? 4 : 1),K=p.kernel*p.kernel,VD=C/p.heads;
         T* q=g.input(D,N,query),*k=g.input(D,LR,key),*v=g.input(C,LR,low.values);
         T* qi=g.index(std::vector<int32_t>(B)),*ki=g.index(std::vector<int32_t>(size_t(K)*B));
         T* qt=ggml_reshape_4d(c,ggml_get_rows(c,q,qi),HD,p.heads,1,B);
@@ -212,23 +218,55 @@ FeatureMap upsample_naf(const trellis::Model& model,const NafParams& p,
         T* vt=ggml_reshape_4d(c,ggml_get_rows(c,v,ki),VD,p.heads,K,B);
         vt=ggml_cont(c,ggml_permute(c,vt,1,2,0,3));
         T* result=ggml_reshape_2d(c,ggml_cont(c,ggml_mul_mat(c,vt,attention)),C,B);
+        ProjectionInputs reduced{};
+        ProjectionPlan tile_plan{B,1,{},{}};
+        if (projection) {
+            reduced=build_projection(c,result,B,1,tile_rows); result=reduced.result;
+            for (int corner=0;corner<4;++corner) {
+                tile_plan.indices[corner].resize(tile_rows); tile_plan.weights[corner].resize(tile_rows);
+                for (int t=0;t<tile_rows;++t) tile_plan.indices[corner][t]=4*t+corner;
+            }
+        }
+        // Graph owns the upload copies; release the encoder readback copies.
+        std::vector<float>().swap(query); std::vector<float>().swap(key);
         // Retain Q/K/V buffers across tiles so they are uploaded only once.
         measured.attention_graph_bytes=g.allocate(model.backend,{result,q,k,v});
-        for (int start=0;start<N;start+=B) {
+        for (size_t start=0;start<rows;start+=tile_rows) {
             check_cancel(cancelled);
             auto& qindex=g.indices[0].second; auto& kindex=g.indices[1].second;
             for (int t=0;t<B;++t) {
-                int pos=std::min(start+t,N-1); qindex[t]=pos;
+                size_t row=std::min(start+(projection ? t/4 : t),rows-1);
+                int pos=projection ? projection->indices[t%4][row] : int(row); qindex[t]=pos;
+                if (projection) tile_plan.weights[t%4][t/4]=projection->weights[t%4][row];
                 int x=pos%ow,y=pos/ow,x0=window_start(x,ow,dx,p.kernel),y0=window_start(y,oh,dy,p.kernel);
                 for (int ky=0;ky<p.kernel;++ky) for (int kx=0;kx<p.kernel;++kx)
                     kindex[size_t(t)*K+ky*p.kernel+kx]=nearest(y0+ky*dy,low.height,oh)*low.width+nearest(x0+kx*dx,low.width,ow);
             }
-            g.compute(model.backend,cancelled,start==0); auto tile=trellis::tensor_to_f32(result); finite(tile);
-            std::copy_n(tile.begin(),size_t(std::min(B,N-start))*C,output.values.begin()+size_t(start)*C);
+            g.compute(model.backend,cancelled,start==0,[&]() { if (projection) upload_projection(reduced,tile_plan); }); auto tile=trellis::tensor_to_f32(result); finite(tile);
+            std::copy_n(tile.begin(),std::min(size_t(tile_rows),rows-start)*C,output.begin()+start*C);
             ++measured.tiles;
         }
     }
     if (stats) *stats=measured;
     return output;
+}
+} // namespace
+
+FeatureMap upsample_naf(const trellis::Model& model,const NafParams& p,
+                        const std::vector<float>& rgb,int iw,int ih,const FeatureMap& low,int ow,int oh,
+                        NafStats* stats,std::map<std::string,std::vector<float>>* debug,
+                        const std::function<bool()>& cancelled) {
+    return {low.channels,ow,oh,evaluate_naf(model,p,rgb,iw,ih,low,ow,oh,stats,debug,cancelled,nullptr)};
+}
+std::vector<float> project_naf(const trellis::Model& model,const NafParams& p,
+                        const std::vector<float>& rgb,int iw,int ih,const FeatureMap& low,int ow,int oh,
+                        const std::vector<std::array<int,3>>& coords,int grid,const Camera& camera,
+                        NafStats* stats,std::map<std::string,std::vector<float>>* debug,
+                        const std::function<bool()>& cancelled) {
+    check_cancel(cancelled);
+    if (coords.empty() || coords.size()>1048576 || ow<1 || oh<1 || ow>1024 || oh>1024)
+        throw std::invalid_argument("invalid projected NAF extent");
+    auto plan=project_front_view(coords,grid,ow,oh,camera);
+    return evaluate_naf(model,p,rgb,iw,ih,low,ow,oh,stats,debug,cancelled,&plan);
 }
 }

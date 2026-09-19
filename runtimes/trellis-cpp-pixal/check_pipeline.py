@@ -177,9 +177,10 @@ def main() -> int:
             pixels=np.asarray(resized,dtype=np.float32).transpose(2,0,1).copy()/255
             rgb=torch.from_numpy(pixels)[None]
             tokens=ex.extract_features(ex.transform(rgb));record(label+'.global',tokens[:,:5]);record(label+'.patches',tokens[:,5:])
+            pair=ns[method](self,rgb,*rest,**kw) if method=='get_proj_cond_ss' else ns[method](self,ex,rgb,*rest,**kw)
             if ex.use_naf_upsample:
-                high=ex.naf_model(rgb,tokens[:,5:].reshape(1,ex.patch_number,ex.patch_number,32).permute(0,3,1,2),ex.naf_target_size);record(label+'.high',high.permute(0,2,3,1))
-            return ns[method](self,rgb,*rest,**kw) if method=='get_proj_cond_ss' else ns[method](self,ex,rgb,*rest,**kw)
+                record(label+'.projected',pair['cond']['proj'].feats)
+            return pair
         for name in ('preprocess_image','sample_sparse_structure','sample_shape_slat','sample_tex_slat','decode_shape_slat','decode_tex_slat'):
             setattr(pipeline,name,MethodType(ns[name],pipeline))
         pipeline.get_proj_cond_ss=MethodType(image_condition,pipeline);pipeline.get_proj_cond_shape=MethodType(image_condition,pipeline)

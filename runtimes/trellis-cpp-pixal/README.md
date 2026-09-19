@@ -881,3 +881,34 @@ cases/11 rejections and surface regression 9 runs/74 comparisons/19 rejections
 also pass. Trained/full-width/full-image-size/mixed-precision/Vulkan generation,
 MoGe/removal/full NAF capacity, quality, adoption/deployment/Library and rigging
 remain NOT TESTED. No installed capability is enabled by these source changes.
+
+## Projected NAF output retention
+
+The connected pipeline uses `project_naf` for sparse shape/texture conditions.
+It keeps the full encoder and pooled keys, computes only the four pixels each
+coordinate needs, and reduces them with the existing GGML projection graph.
+No dense 1024²×1024 F32 output is retained. The dense `upsample_naf` API remains
+available for reference checks. Token order, repeats, bilinear borders and exact
+NAF dilation/neighborhood behavior are preserved. There is no resolution fallback.
+
+`check_naf.py` now compares all three camera cases with actual upstream NAF and
+requires bitwise equality to native dense projection and another tile size.
+`check_pipeline.py` compares the resulting sparse conditions and the complete
+neural/GLB path with pinned Pixal CPU execution. Learned weights are not used.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_naf_capacity.py \
+  --naf-fixtures "$PIXAL_NAF_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-naf-check \
+  --output-dir "$PIXAL_NAF_CAPACITY_REPORT"
+```
+
+This explicit CPU capacity probe requires 12 GiB available RAM, limits its child
+address space to 16 GiB and execution to 300 s, and uses two CPU threads. It uses
+the synthetic default-width NAF fixture, a **64² guide image**, 1024² target,
+1024 value channels and 49,152 distinct coordinates. Spatially constant values
+provide an analytic oracle. Measured final execution: 25.202264 s, 192 MiB output,
+7,033,384,960-byte peak child RSS, max error 3.5762787e-7. The dense 4 GiB size is
+calculated from dimensions. Neither output bytes nor individual GGML graph
+allocation sizes represent total RAM/VRAM. Full-image/trained/Vulkan memory and
+production worker/Library acceptance remain outstanding.

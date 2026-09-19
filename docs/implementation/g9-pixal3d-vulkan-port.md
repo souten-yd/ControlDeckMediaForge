@@ -1,5 +1,41 @@
 # Pixal3D Vulkan port: scope and measured first component
 
+## 2026-09-19 projected NAF output memory
+
+The LR/HR shape and texture stages now evaluate the four NAF pixels needed by
+each sparse projection and perform the original ordered four multiply/adds on
+the selected GGML backend. The complete encoder, Q and pooled K are retained;
+this changes output retention, not the learned attention or neighborhood rule.
+The dense API remains available with its original output limit. The projected
+API validates coordinates and limits retained elements by sparse token count.
+Tile sizes below four evaluate one complete four-corner token. DINO and NAF
+weights have separate lifetimes; only projected positive/negative conditions
+are retained for subsequent flow sampling.
+
+CPU evidence in `maintenance/g9-pixal-naf-projection-20260919/`:
+
+- NAF: 9 cases / 142 reference comparisons, max abs 1.3969839e-5 under the
+  existing 5e-5 tolerance. Three cameras per case match native dense projection
+  bit-for-bit, including border/behind-camera, repeated coordinates, unequal
+  dilation, F16 storage/F32 arithmetic and changed tile sizes. 14 negatives pass.
+- Capacity: target 1024², value width 1024, 49,152 distinct tokens including all
+  corners, encoder width 256 / two layers / kernel 9. **Guide image is 64²** and
+  weights are synthetic; a spatially constant V provides an analytic oracle.
+  25.202264 s CPU, max abs 3.5762787e-7, 192 MiB actual projected output,
+  7,033,384,960 bytes maximum child RSS. The 4 GiB dense equivalent is calculated
+  from dimensions, not an observed old-path allocation. Graph allocation sizes
+  are 3,758,757,024 (encoder) / 1,179,691,008 (attention) bytes, not peak VRAM.
+- Pipeline: 7 GLB runs / 111 reference comparisons / 34 negatives / 5 independent
+  core and Blender imports. All seven outputs equal the parent PR567 GLB JSON
+  except generation time and match its entire binary payload. Actual SIGTERM
+  reaps the owned SS-flow process in 0.001084 s with no published GLB.
+- Dense stage regression: 8 preprocessing, 7 bridge, 3 connected cases and
+  25 negatives pass. No learned weights, GPU execution or Library writes.
+
+Full-image/full-model memory, trained quality/mixed precision, genuine Host
+lease plus Vulkan, MoGe/background removal, worker adoption/deployment and new
+Library assets/rigs remain NOT TESTED. The overall goal is incomplete.
+
 ## 2026-09-19 connected native RGB-to-GLB pipeline
 
 `ux1/pixal3d-native-pipeline`, parent PR566 / `4d0350c`, connects all implemented
@@ -394,9 +430,11 @@ Evidence: `maintenance/g9-pixal-vision-20260919/cpu-final`.
 
 This is still synthetic CPU evidence, not actual checkpoint/Vulkan acceptance.
 The source's texture ft1024 training config requests a 1024 NAF target, which
-would exceed the current NAF output-element cap at 1024 channels in F32. This
-needs measured memory planning/implementation without silently reducing the
-stage target. Deployed pipeline config has not been inspected/accepted yet.
+exceeded the dense NAF output-element cap at 1024 channels in F32 when this
+checkpoint slice was measured. The later projected-NAF slice above removes
+that output retention requirement and preserves the target size. Its reduced
+guide CPU capacity result is not full-image/Vulkan acceptance. Deployed config
+has since been inspected for the connected pipeline; trained adoption remains pending.
 
 ## Required remaining acceptance
 
@@ -407,7 +445,7 @@ stage target. Deployed pipeline config has not been inspected/accepted yet.
 - Validate authorized DINO/NAF checkpoints through the implemented converters/
   loaders and bind the deployed pipeline parameters. Compare trained-model outputs and
   BF16/FlashAttention behavior on the admitted Vulkan device.
-- Measure full-sized NAF on Vulkan and resolve output-memory limits for actual
+- Measure full-image NAF and the projected output path on Vulkan at actual
   requested stage targets. Integrate MoGe camera estimation or a separately
   verified native image-only camera path preserving the requested behavior.
 - Integrate all SS/LR shape/HR shape/texture stages, cascade coordinate/latent

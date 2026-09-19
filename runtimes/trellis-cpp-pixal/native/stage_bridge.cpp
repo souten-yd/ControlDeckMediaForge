@@ -38,19 +38,32 @@ std::vector<float> transform(const std::vector<float>& values, const LatentNorma
     }
     finite(result); return result;
 }
-std::vector<float> run(const FlowModel& model, const ImageFeatures& image, const FeatureMap* high,
-    const Camera& camera, const Coordinates& coords, int grid, const std::vector<float>& noise,
-    const std::vector<float>& concat, const StageOptions& options) {
+std::vector<float> run_conditioned(const FlowModel& model,const ConditionPair& pair,
+    const Coordinates& coords,int grid,const std::vector<float>& noise,
+    const std::vector<float>& concat,const StageOptions& options) {
     check_cancel(options); check_coords(coords,grid);
-    const int channels=model.spec().params.out_ch;
-    if (noise.size()!=coords.size()*size_t(channels)) throw std::invalid_argument("stage noise extent mismatch");
+    const auto& p=model.spec().params;
+    if (noise.size()!=coords.size()*size_t(p.out_ch)) throw std::invalid_argument("stage noise extent mismatch");
     finite(noise);
-    auto pair=image_conditions(model.weights().backend,image,coords,grid,camera,high);
-    check_cancel(options);
-    FlowRunner runner(model,coords,int(image.global.size()/image.patches.channels),options.f32_weight_arithmetic);
+    if (pair.positive.global.empty() || pair.positive.global.size()%p.d_cond ||
+        pair.positive.global.size()/p.d_cond>17 || pair.negative.global.size()!=pair.positive.global.size() ||
+        pair.positive.projected.size()!=coords.size()*size_t(p.proj_in_channels) ||
+        pair.negative.projected.size()!=pair.positive.projected.size())
+        throw std::invalid_argument("stage condition extent mismatch");
+    finite(pair.positive.global); finite(pair.negative.global);
+    finite(pair.positive.projected); finite(pair.negative.projected);
+    FlowRunner runner(model,coords,int(pair.positive.global.size()/p.d_cond),options.f32_weight_arithmetic);
     auto forward=[&](const std::vector<float>& x,float t,const FlowCondition& condition) { return runner.forward(x,t,condition,concat); };
     return sample_flow(forward,noise,pair.positive,pair.negative,options.sampler,
-        model.spec().stage!="ss",channels,options.trace,options.cancelled,options.progress);
+        model.spec().stage!="ss",p.out_ch,options.trace,options.cancelled,options.progress);
+}
+std::vector<float> run(const FlowModel& model,const ImageFeatures& image,const FeatureMap* high,
+    const Camera& camera,const Coordinates& coords,int grid,const std::vector<float>& noise,
+    const std::vector<float>& concat,const StageOptions& options) {
+    check_cancel(options); check_coords(coords,grid);
+    if (noise.size()!=coords.size()*size_t(model.spec().params.out_ch)) throw std::invalid_argument("stage noise extent mismatch");
+    finite(noise);
+    return run_conditioned(model,image_conditions(model.weights().backend,image,coords,grid,camera,high),coords,grid,noise,concat,options);
 }
 }
 std::vector<float> normalize_latent(const std::vector<float>& v,const LatentNormalization& n) { return transform(v,n,false); }
@@ -128,6 +141,28 @@ SparseLatent sample_texture_latent(const FlowModel& model,const ImageFeatures& i
     check_cancel(options);
     auto concat=normalize_latent(shape.values,shape_norm);
     auto sample=run(model,image,high,camera,shape.coords,shape.grid_resolution,noise,concat,options);
+    return {shape.coords,shape.grid_resolution,model.spec().params.out_ch,denormalize_latent(sample,texture_norm)};
+}
+
+SparseLatent sample_shape_latent_conditioned(const FlowModel& model,const ConditionPair& pair,
+    const Coordinates& coords,int grid,const std::vector<float>& noise,
+    const LatentNormalization& norm,const StageOptions& options) {
+    if (model.spec().stage!="shape") throw std::invalid_argument("shape stage requires a shape checkpoint");
+    check_norm(norm,model.spec().params.out_ch);
+    auto sample=run_conditioned(model,pair,coords,grid,noise,{},options);
+    return {coords,grid,model.spec().params.out_ch,denormalize_latent(sample,norm)};
+}
+SparseLatent sample_texture_latent_conditioned(const FlowModel& model,const ConditionPair& pair,
+    const SparseLatent& shape,const std::vector<float>& noise,
+    const LatentNormalization& shape_norm,const LatentNormalization& texture_norm,const StageOptions& options) {
+    if (model.spec().stage!="texture") throw std::invalid_argument("texture stage requires a texture checkpoint");
+    check_norm(shape_norm,shape.channels); check_norm(texture_norm,model.spec().params.out_ch);
+    check_coords(shape.coords,shape.grid_resolution);
+    if (shape.channels!=model.spec().params.in_ch-model.spec().params.out_ch ||
+        shape.values.size()!=shape.coords.size()*size_t(shape.channels)) throw std::invalid_argument("texture shape conditioning extent mismatch");
+    check_cancel(options);
+    auto concat=normalize_latent(shape.values,shape_norm);
+    auto sample=run_conditioned(model,pair,shape.coords,shape.grid_resolution,noise,concat,options);
     return {shape.coords,shape.grid_resolution,model.spec().params.out_ch,denormalize_latent(sample,texture_norm)};
 }
 }

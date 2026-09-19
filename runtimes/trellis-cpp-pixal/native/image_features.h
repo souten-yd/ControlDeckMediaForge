@@ -31,4 +31,8 @@ ImageFeatures encode_dino(const trellis::Model& model, const DinoParams& params,
 ConditionPair image_conditions(ggml_backend* backend, const ImageFeatures& features,
                                const std::vector<std::array<int,3>>& coords, int grid_resolution,
                                const Camera& camera, const FeatureMap* high_resolution = nullptr);
+// High features are already NAF-projected in the same coordinate order.
+ConditionPair image_conditions_projected(ggml_backend* backend,const ImageFeatures& features,
+                               const std::vector<std::array<int,3>>& coords,int grid_resolution,
+                               const Camera& camera,const std::vector<float>& projected_high);
 }

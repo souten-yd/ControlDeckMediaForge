@@ -13,15 +13,17 @@ namespace pixal=mediaforge::pixal;
 namespace trellis { extern bool g_no_fa; }
 int main(int argc,char** argv) {
     try {
-        if (argc<3) throw std::invalid_argument("usage: pixal-naf-check fixture cpu|vulkan [--device N] [--flow-gguf path] [--cancel-at N] [--f16-storage]");
+        if (argc<3) throw std::invalid_argument("usage: pixal-naf-check fixture cpu|vulkan [--device N] [--flow-gguf path] [--cancel-at N] [--f16-storage] [--projected-only] [--grid N]");
         std::string directory=argv[1],kind=argv[2],flow_path;
-        int device=-1,cancel_at=0,checks=0; bool half=false;
+        int device=-1,cancel_at=0,checks=0,grid=4; bool half=false,projected_only=false;
         for (int i=3;i<argc;++i) {
             std::string flag=argv[i];
             if (flag=="--device" && i+1<argc) device=std::stoi(argv[++i]);
             else if (flag=="--flow-gguf" && i+1<argc) flow_path=argv[++i];
             else if (flag=="--cancel-at" && i+1<argc) cancel_at=std::stoi(argv[++i]);
             else if (flag=="--f16-storage") half=true;
+            else if (flag=="--projected-only") projected_only=true;
+            else if (flag=="--grid" && i+1<argc) grid=std::stoi(argv[++i]);
             else throw std::invalid_argument("invalid NAF checker argument");
         }
         if ((kind!="cpu" && kind!="vulkan") || (kind=="vulkan")!=(device>=0)) throw std::invalid_argument("explicit backend/device required");
@@ -32,12 +34,12 @@ int main(int argc,char** argv) {
         pixal::NafParams p; int iw=0,ih=0,ow=0,oh=0;
         std::ifstream config(directory+"/params.txt");
         config >> p.channels >> p.heads >> p.rope_heads >> p.layers >> p.kernel >> p.tile_pixels >> iw >> ih >> ow >> oh;
-        if (!config || p.channels>256 || p.layers>2 || iw>128 || ih>128 || ow>64 || oh>64)
+        if (!config || p.channels>256 || p.layers>2 || iw>128 || ih>128 || ow>(projected_only ? 1024 : 64) || oh>(projected_only ? 1024 : 64))
             throw std::invalid_argument("invalid synthetic NAF dimensions");
         p.f32_weight_arithmetic=true;
         auto load=[&](const std::string& name) {
             auto a=npy::load(directory+"/"+name+".npy");
-            if (a.numel()>4000000) throw std::invalid_argument("synthetic NAF tensor too large");
+            if (a.numel()>8000000) throw std::invalid_argument("synthetic NAF tensor too large");
             return a;
         };
         trellis::Model model; model.backend=backend.get();
@@ -67,24 +69,46 @@ int main(int argc,char** argv) {
         pixal::FeatureMap fmap{int(low.shape[2]),int(low.shape[1]),int(low.shape[0]),low.data};
         std::map<std::string,std::vector<float>> debug; pixal::NafStats stats;
         auto cancelled=[&]() { ++checks; return cancel_at>0 && checks>=cancel_at; };
-        auto high=pixal::upsample_naf(model,p,load("rgb").data,iw,ih,fmap,ow,oh,&stats,&debug,cancelled);
-        debug["high"]=high.values;
-        pixal::NafStats repeated_stats;
-        auto repeated=pixal::upsample_naf(model,p,load("rgb").data,iw,ih,fmap,ow,oh,&repeated_stats);
-        if (high.values!=repeated.values) {
-            float maximum=0.f; size_t index=0;
-            for (size_t i=0;i<high.values.size();++i) if (std::abs(high.values[i]-repeated.values[i])>maximum) {
-                maximum=std::abs(high.values[i]-repeated.values[i]); index=i;
-            }
-            throw std::runtime_error("NAF output changed on repetition without debug graph; max_abs="+std::to_string(maximum)+" index="+std::to_string(index));
+        auto array=load("coordinates");
+        if (array.shape.size()!=2 || array.shape[1]!=3) throw std::invalid_argument("invalid test coordinates");
+        std::vector<std::array<int,3>> coords;
+        for (size_t i=0;i<array.data.size();i+=3) coords.push_back({int(array.data[i]),int(array.data[i+1]),int(array.data[i+2])});
+        auto rgb=load("rgb").data;
+        pixal::NafStats repeated_stats,projected_stats;
+        const pixal::Camera camera{.857556f,2.f,1.f,iw};
+        if (projected_only) {
+            auto value=pixal::project_naf(model,p,rgb,iw,ih,fmap,ow,oh,coords,grid,camera,&projected_stats,nullptr,cancelled);
+            npy::save(directory+"/actual_sparse.npy",value.data(),{int64_t(value.size())});
+            std::ofstream info(directory+"/stats.json");
+            info << "{\"encoder_graph_bytes\":" << projected_stats.encoder_graph_bytes
+                 << ",\"attention_graph_bytes\":" << projected_stats.attention_graph_bytes
+                 << ",\"tiles\":" << projected_stats.tiles << ",\"output_bytes\":" << projected_stats.output_bytes
+                 << ",\"dense_output_bytes\":" << projected_stats.dense_output_bytes
+                 << ",\"attention_queries\":" << projected_stats.attention_queries << "}\n";
+            return 0;
         }
+        auto high=pixal::upsample_naf(model,p,rgb,iw,ih,fmap,ow,oh,&stats,&debug,cancelled);
+        debug["high"]=high.values;
+        auto repeated=pixal::upsample_naf(model,p,rgb,iw,ih,fmap,ow,oh,&repeated_stats);
+        if (high.values!=repeated.values) throw std::runtime_error("dense NAF output changed without debug graph");
+        const std::vector<pixal::Camera> cameras{camera,{.1f,.2f,1.f,iw},{1.7f,.1f,.3f,iw}};
+        std::vector<float> sparse;
+        for (size_t i=0;i<cameras.size();++i) {
+            auto value=pixal::project_naf(model,p,rgb,iw,ih,fmap,ow,oh,coords,grid,cameras[i],&projected_stats);
+            debug["sparse"+std::to_string(i)]=value;
+            pixal::ImageFeatures features{std::vector<float>(5*fmap.channels,0.f),fmap};
+            auto full=pixal::image_conditions(backend.get(),features,coords,grid,cameras[i],&high);
+            auto reduced=pixal::image_conditions_projected(backend.get(),features,coords,grid,cameras[i],value);
+            if (full.positive.projected!=reduced.positive.projected || full.negative.projected!=reduced.negative.projected)
+                throw std::runtime_error("projected NAF differs from native dense NAF projection");
+            if (i==0) sparse=value;
+        }
+        auto other=p;other.tile_pixels=p.tile_pixels==128 ? 7 : 128;
+        if (sparse!=pixal::project_naf(model,other,rgb,iw,ih,fmap,ow,oh,coords,grid,camera))
+            throw std::runtime_error("projected NAF changed with tile size");
         if (!flow_path.empty()) {
-            auto array=load("coordinates");
-            if (array.shape.size()!=2 || array.shape[1]!=3) throw std::invalid_argument("invalid test coordinates");
-            std::vector<std::array<int,3>> coords;
-            for (size_t i=0;i<array.data.size();i+=3) coords.push_back({int(array.data[i]),int(array.data[i+1]),int(array.data[i+2])});
             pixal::ImageFeatures features{load("global").data,fmap};
-            auto pair=pixal::image_conditions(backend.get(),features,coords,4,{.857556f,2.f,1.f,iw},&high);
+            auto pair=pixal::image_conditions_projected(backend.get(),features,coords,grid,camera,sparse);
             debug["projected"]=pair.positive.projected;
             pixal::FlowModel flow(flow_path,backend.get()); trellis::g_no_fa=true;
             pixal::FlowRunner runner(flow,coords,features.global.size()/fmap.channels,true);
@@ -98,6 +122,11 @@ int main(int argc,char** argv) {
         std::ofstream info(directory+"/stats.json");
         info << "{\"encoder_graph_bytes\":" << repeated_stats.encoder_graph_bytes << ",\"attention_graph_bytes\":" << repeated_stats.attention_graph_bytes
              << ",\"tiles\":" << stats.tiles << ",\"guide_width\":" << stats.guide_width << ",\"guide_height\":" << stats.guide_height
+             << ",\"projected_output_bytes\":" << projected_stats.output_bytes
+             << ",\"dense_output_bytes\":" << projected_stats.dense_output_bytes
+             << ",\"projected_attention_queries\":" << projected_stats.attention_queries
+             << ",\"projected_tiles\":" << projected_stats.tiles
+             << ",\"projected_dense_bitwise_equal\":true,\"projected_retile_bitwise_equal\":true"
              << ",\"repeat_bitwise_equal\":true,\"cancel_checks\":" << checks << "}\n";
         std::cout << "backend=" << ggml_backend_name(backend.get()) << " tiles=" << stats.tiles << '\n';
         return 0;
