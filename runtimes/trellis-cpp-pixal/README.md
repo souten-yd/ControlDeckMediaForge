@@ -345,3 +345,97 @@ weights, full-sized images, mixed-precision and Vulkan execution, full pipeline
 foreground/camera/cascade/decoder/GLB integration and Library/adoption/release.
 This component neither fetches weights nor enables a capability. Source licenses
 and attribution are in `NOTICE`, `LICENSE.naf`, and `LICENSE.natten`.
+
+## DINO/NAF checkpoint loading and connected image inference
+
+`convert_vision.py` converts a local authorized DINOv3 ViT or NAF checkpoint
+into a private `pixal3d-vision` GGUF and provenance manifest. DINO accepts the
+Hugging Face config and a single safetensors file; NAF accepts safetensors or
+an explicitly selected PyTorch archive and an inference config such as
+`{"name":"NAF","args":{"dim":256,"heads_attn":4,"heads_rope":4,"kernel_size":9,"img_layers":2}}`.
+NAF omitted arguments use the fixed upstream defaults. Unsupported settings,
+unknown/missing/extra tensors, wrong shapes/types, non-finite values and storage
+overflow fail. Encoder-disabled NAF, gated-MLP DINO and sharded checkpoints
+are not supported. No model or pretrained loader is instantiated.
+
+DINO Q/K/V matrices are fused in that order, filling only absent source biases
+with zeros. Projection and MLP bias flags, layer-normalization epsilon and RoPE
+base come from the validated config. The unused mask token and final affine
+norm are still checked and hashed, with the reason for omission recorded:
+Pixal uses unmasked patches and its own non-affine final normalization. NAF's
+persistent periods buffer is preserved, including non-default values.
+F16 storage applies only to linear/convolution matrices; tokens, normalization,
+bias and periods remain F32. F32 storage is the default.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/convert_vision.py \
+  --kind dino --checkpoint "$DINO_SAFETENSORS" --config "$DINO_CONFIG" \
+  --storage f32 --source-kind checkpoint \
+  --source-repository "$DINO_REPOSITORY" --source-revision "$DINO_REVISION" \
+  --output-dir "$DINO_CONVERTED"
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/convert_vision.py \
+  --kind naf --input-format torch-weights-only \
+  --checkpoint "$NAF_AUTHORIZED_ARCHIVE" --config "$NAF_INFERENCE_CONFIG" \
+  --source-kind checkpoint --source-repository "$NAF_REPOSITORY" \
+  --source-revision "$NAF_REVISION" --output-dir "$NAF_CONVERTED"
+```
+
+The NAF archive path uses the pinned worker torch2.10.0 reader with
+`map_location="cpu", weights_only=True, mmap=True`. It requires a plain tensor
+state dictionary and never retries with unrestricted pickle, registers custom
+safe globals, or invokes hub entrypoints. This is for authorized local runtime
+inputs, not untrusted Library uploads. Conversion stages output in a temporary
+directory, verifies source/config hashes again, and refuses existing outputs.
+Source/config/output/tensor hashes, source identity, format, package versions,
+mapping and intentionally unused tensors are retained. A manifest is provenance
+evidence; it neither grants model permission nor binds an adoption receipt.
+
+`inspect_vision_checkpoint` verifies architecture/schema/reference, dimensions,
+bias flags, the complete tensor table and data extents without a backend.
+`VisionModel` validates the same metadata and loads from one owned file handle
+onto the caller's borrowed backend. It checks finite values/positive periods
+before uploading each tensor and releases allocations on failure/destruction.
+There is no device heuristic or CPU fallback. Accepted local artifact identity
+must still be verified against an admission/adoption receipt by the caller.
+
+`encode_vision` connects the loaded DINO to optional loaded NAF, returning global,
+LR and actual HR features for `image_conditions`. SS can request LR only.
+For NAF, the caller must explicitly supply the stage's target size; it is not
+guessed from the checkpoint or image. Models must use the same selected backend.
+Input RGB is already foreground-framed; background removal and camera estimation
+remain outside this helper. Cancellation is checked around DINO and by NAF.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_vision_checkpoints.py \
+  --naf-source "$NAF_SOURCE" --pixal-source "$PIXAL_SOURCE" \
+  --checkpoint-fixtures "$PIXAL_CHECKPOINT_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-vision-check \
+  --output-dir "$PIXAL_VISION_CHECKPOINT_REPORT"
+```
+
+Measured CPU checks execute actual HF DINO/NAF classes and pinned Pixal
+extractor/sampler with synthetic learned parameters. Seven saved-checkpoint
+cases pass all 174 intermediate/output comparisons (max absolute error
+`1.4901161193847656e-06`, atol/rtol5e-5). All 406 serialized tensors match the
+native-loaded values exactly. Every case continues through flow sampling:
+six sparse-shape cases and one dense-SS case, 21 sampled latent states in total.
+F32/F16/BF16 source, F32/F16 storage with F32 arithmetic, NAF torch archives,
+no-bias and mixed Q/K/V-bias configurations, non-default epsilon/RoPE/periods,
+different NAF/DINO widths and LR-only SS are covered. NATTEN's CPU reference
+backend/channel adaptation is the same as described in the NAF section above.
+
+Both converters are byte-deterministic for the repeated inputs. Repeated native
+encoding without diagnostics is bitwise equal, and destroying the models retains
+the borrowed backend. Fourteen converter rejection cases and nineteen native
+metadata/value/component/cancellation/target-size rejection cases pass with no
+published output. These include a rejected non-tensor torch archive; no unsafe
+fallback was used. Torch GPU initialized=false. Evidence:
+`maintenance/g9-pixal-vision-20260919/cpu-final`.
+
+Remaining: actual trained checkpoint compatibility, full-size/mixed-precision
+Vulkan, foreground and MoGe, all stage/cascade/decoder/GLB wiring, generated
+quality, Library registration, adoption and installed release acceptance.
+The existing NAF output-element cap also needs measured resolution planning:
+the pinned source has a 1024-target texture training config, whose full F32
+1024-channel map exceeds that cap. Do not silently lower the requested target
+or treat a source training config as the uninspected deployed pipeline config.

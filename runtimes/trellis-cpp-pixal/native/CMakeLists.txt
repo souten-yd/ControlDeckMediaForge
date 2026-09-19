@@ -48,7 +48,7 @@ set_target_properties(pixal-dit-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DI
 add_executable(pixal-flow-check flow_check.cpp)
 target_link_libraries(pixal-flow-check PRIVATE pixal_dit "${GGML_vulkan}")
 set_target_properties(pixal-flow-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
-add_library(pixal_image STATIC image_features.cpp naf.cpp)
+add_library(pixal_image STATIC image_features.cpp naf.cpp vision_checkpoint.cpp)
 target_link_libraries(pixal_image PUBLIC pixal_dit pixal_projection)
 target_compile_options(pixal_image PRIVATE -Wall -Wextra -Werror)
 add_executable(pixal-image-check image_check.cpp)
@@ -59,6 +59,10 @@ add_executable(pixal-naf-check naf_check.cpp)
 target_link_libraries(pixal-naf-check PRIVATE pixal_image "${GGML_vulkan}")
 target_compile_options(pixal-naf-check PRIVATE -Wall -Wextra -Werror)
 set_target_properties(pixal-naf-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
+add_executable(pixal-vision-check vision_check.cpp)
+target_link_libraries(pixal-vision-check PRIVATE pixal_image "${GGML_vulkan}")
+target_compile_options(pixal-vision-check PRIVATE -Wall -Wextra -Werror)
+set_target_properties(pixal-vision-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
 
 # Compile the unchanged upstream graph as a separate binary for exact regression
 # comparison of the legacy mode, including its default GELU implementation.

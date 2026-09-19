@@ -56,3 +56,12 @@ without copying or introducing a GPU kernel. The CPU checker calls the installed
 original NATTEN flex backend, splitting/padding V channels as required by that
 backend, instead of NAF's hard-coded cutlass backend. This is not a cutlass or
 Vulkan acceptance result.
+
+native/vision_checkpoint.cpp adapts local GGUF container/weight loading from
+the pinned trellis.cpp src/trellis_model.cpp (MIT, LICENSE.trellis), using a
+borrowed backend and an owned file handle. Changes: strict vision metadata and
+tensor/file-extent validation, finite-value checks, exception cleanup, and
+DINO/NAF image-feature orchestration without device selection or fallback.
+convert_vision.py maps the public Hugging Face DINOv3ViTModel parameter layout
+from transformers4.57.3 and the pinned NAF state_dict into the existing native
+graphs. It does not copy model implementation code or include trained weights.
