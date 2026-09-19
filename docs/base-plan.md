@@ -1283,7 +1283,16 @@ Deliver:
 Candidate benchmark: Hunyuan3D 2.1 and then-current local alternatives.
 
 The 2026-09-19 requested candidates are trellis.cpp (native Vulkan) and Pixal3D
-(an isolated Python worker). `media.scene.from_image` accepts an existing image
+(an isolated Python worker and, additionally requested by the user, a native
+Vulkan port based on trellis.cpp). The Vulkan port must preserve Pixal3D's
+camera-aware projected conditioning, global-token selection, NAF feature
+upsampling, stage-specific weights and sampling behavior. It cannot be presented
+as Pixal3D by merely swapping TRELLIS.2 weights or omitting those operations.
+CPU reference comparisons, genuine broker-leased Vulkan operator comparisons,
+full-model generation and independent output/quality checks are separate gates.
+Port source and reproducible build inputs stay in MediaForge's runtime tooling;
+the existing working trellis.cpp runtime is preserved side by side.
+`media.scene.from_image` accepts an existing image
 Asset and adds a detached operation to the existing Scene Jobs lifecycle. The
 GPU process must own a Host broker lease, then release it before the CPU Blender
 import/validation step creates the `.blend` revision and Library GLB. Existing

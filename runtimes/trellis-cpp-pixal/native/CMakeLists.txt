@@ -1,0 +1,30 @@
+cmake_minimum_required(VERSION 3.20)
+project(mediaforge_pixal_projection LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(TRELLIS_SOURCE_DIR "" CACHE PATH "Pinned trellis.cpp source checkout")
+set(TRELLIS_BUILD_DIR "" CACHE PATH "Matching trellis.cpp build with GGML libraries")
+if(NOT EXISTS "${TRELLIS_SOURCE_DIR}/thirdparty/ggml/include/ggml.h")
+  message(FATAL_ERROR "TRELLIS_SOURCE_DIR must contain the pinned GGML checkout")
+endif()
+execute_process(COMMAND git -C "${TRELLIS_SOURCE_DIR}" rev-parse HEAD
+  OUTPUT_VARIABLE TRELLIS_REV OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+execute_process(COMMAND git -C "${TRELLIS_SOURCE_DIR}/thirdparty/ggml" rev-parse HEAD
+  OUTPUT_VARIABLE GGML_REV OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+if(NOT TRELLIS_REV STREQUAL "2516c48b677050c570f47eba2e68dc8a5bc918b0" OR
+   NOT GGML_REV STREQUAL "737e88f25d4f62254f3b7a726fd9663036cc94da")
+  message(FATAL_ERROR "trellis.cpp/GGML source revisions differ from the projection port pins")
+endif()
+foreach(component base cpu vulkan)
+  find_library(GGML_${component} NAMES ggml-${component}
+               PATHS "${TRELLIS_BUILD_DIR}" NO_DEFAULT_PATH REQUIRED)
+endforeach()
+add_library(pixal_projection STATIC projection.cpp)
+target_include_directories(pixal_projection PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}" "${TRELLIS_SOURCE_DIR}/thirdparty/ggml/include")
+target_compile_options(pixal_projection PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(pixal_projection PUBLIC "${GGML_base}")
+add_executable(pixal-projection-check projection_check.cpp)
+target_include_directories(pixal-projection-check PRIVATE "${TRELLIS_SOURCE_DIR}/include")
+target_link_libraries(pixal-projection-check PRIVATE pixal_projection "${GGML_cpu}" "${GGML_vulkan}")
+set_target_properties(pixal-projection-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")

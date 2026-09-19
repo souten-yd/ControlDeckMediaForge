@@ -1,5 +1,32 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D Vulkan port started; projection CPU parity passed
+
+利用者がPixal3DのVulkan移植も明示要求。base-planへ要件を追加し、
+`ux1/pixal3d-vulkan` / 親ux1/g9-runtime-preparation `0fd6143`で着手。
+新native componentは固定trellis.cpp/GGMLへリンクし、画像特徴のカメラ投影を
+C++座標計画＋GGML get_rows/mul/addで構築。選択backendで全opを実行できない場合は
+拒否し、暗黙CPU fallbackなし。既存trellis runtime/モデル/Library原本は変更なし。
+
+実CMake/GCC13.3 build成功。固定Pixal3D sourceの未変更ProjGridをCPUで実行し、
+密grid/非2冪grid/1pixel/画像端と背面/順不同と重複sparse/高解像度の6条件全pass。
+最大絶対誤差1.621246337890625e-05 (atol3e-5/rtol2e-5)、scale0拒否pass。
+torch GPU initialized=false。reference/source/library/binary hashと全fixtureを
+managed data `maintenance/g9-pixal-vulkan-20260919`へ保存。
+これは生成pipeline未接続の最初の演算部品であり、Vulkan実行成功とはしない。
+
+**NOT TESTED / 残り**: 実Host lease付きVulkan数値照合、GGUF変換、各block投影条件、
+DINO global token差分、NAF、MoGe camera、全sampling/decoder、実推論/品質/Library登録、
+通常署名配布。重み利用の先の同意質問は回答待ち。詳細はg9-pixal3d-vulkan-port.md。
+
+利用者の骨入れ質問に対し、ref_vk原本をCPU Blenderで4方向から実描画。
+機械のgear/piston assembly、1mesh/227918vertices/armature0。
+既存auto skinの50000頂点上限を超え、機械部品の分割・rigid bindingが適する。
+証跡 `maintenance/g9-rig-evaluation-20260919`。骨付き出力は未作成、対象選択質問中。
+原本2件がinstalled APIでHTTP200で取得可能、0.28.87のhealth healthyも再確認済。
+
+最終 `./mf.sh test`: `2211 passed, 2 warnings in 236.33s (0:03:56)` / exit0。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D isolated software preparation; GPU generation not yet evaluated
 
 `ux1/g9-runtime-preparation`、親PR553 / `183f2d9`。core/既存image workerとは別の

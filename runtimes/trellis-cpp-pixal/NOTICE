@@ -1,0 +1,13 @@
+Pixal3D Vulkan port for MediaForge
+
+Projection mathematics in native/projection.cpp are adapted from
+TencentARC/Pixal3D, revision f7cf38429b0bd264f1995f0f8743a88b1c728b94,
+pixal3d/trainers/flow_matching/mixins/image_conditioned_proj.py.
+Copyright (c) 2026 Tencent. MIT license: see LICENSE.pixal3d.
+
+Changes: C++ front-view coordinate planning, GGML feature sampling, explicit
+backend selection, sparse index order preservation and numerical test driver.
+This component does not include model weights.
+
+trellis.cpp and its GGML checkout are external, pinned build dependencies;
+their notices and licenses remain in those source/runtime distributions.
