@@ -1,0 +1,114 @@
+--- a/include/dit.h
++++ b/include/dit.h
+@@ -16,11 +16,13 @@
+     int d_model    = 1536;
+     int d_mlp      = 8192;     // int(1536 * 5.3334)
+     int d_cond     = 1024;
++    int proj_in_channels = 0; // 0: TRELLIS cross; >0: Pixal3D per-block projected conditioning
+     int in_ch      = 8;
+     int out_ch     = 8;
+     float ln_eps       = 1e-6f;
+     float final_ln_eps = 1e-5f;
+     float rms_eps      = 1e-12f;
++    bool  exact_gelu = false; // opt-in F32 tanh formula; default preserves existing GGML GELU
+     bool  cast_f32     = false;   // cast f16 weights to f32 before matmul (precision test)
+ };
+ 
+@@ -30,10 +32,12 @@
+ //   tfreq: [256]               sinusoidal timestep embedding (host-computed)
+ //   cond : [d_cond, Lc]        conditioning tokens
+ //   cos/sin: [1, head_dim/2, 1, L]  precomputed 3D-RoPE tables
++//   proj : [proj_in_channels, L] Pixal3D condition, required iff proj_in_channels > 0
+ // Returns the [out_ch, L] velocity; `inter` (optional) collects named intermediates.
+ ggml_tensor* build_dit_dense(ggml_context* gctx, const Model& m, const DiTParams& p,
+                              ggml_tensor* h0, ggml_tensor* tfreq, ggml_tensor* cond,
+                              ggml_tensor* cos, ggml_tensor* sin,
+-                             std::map<std::string, ggml_tensor*>* inter = nullptr);
++                             std::map<std::string, ggml_tensor*>* inter = nullptr,
++                             ggml_tensor* proj = nullptr);
+ 
+ } // namespace trellis
+--- a/src/dit.cpp
++++ b/src/dit.cpp
+@@ -6,6 +6,7 @@
+ #include <cmath>
+ #include <cstdlib>
+ #include <string>
++#include <stdexcept>
+ 
+ namespace trellis {
+ 
+@@ -223,6 +224,16 @@
+     return lin(c, m, pre + ".to_out", sdpa(c, q, k, v, p.d_model, mask));
+ }
+ 
++// GGML CPU GELU uses an FP16 lookup by default. This opt-in graph evaluates
++// the same tanh approximation as PyTorch in F32, without the lookup rounding.
++static T* gelu_f32(ggml_context* c, T* x) {
++    T* cubic = ggml_mul(c, ggml_mul(c, x, x), x);
++    T* inner = ggml_add(c, x, ggml_scale(c, cubic, 0.044715f));
++    T* tanh_value = ggml_tanh(c, ggml_scale(c, inner, 0.7978845608028654f));
++    // 0.5*x*(1+tanh) without a backend scalar input or broadcast constant.
++    return ggml_scale(c, ggml_add(c, x, ggml_mul(c, x, tanh_value)), 0.5f);
++}
++
+ // x*(1+scale)+shift, scale/shift: [d_model] broadcast over L
+ static T* modulate(ggml_context* c, T* x, T* scale, T* shift) {
+     return ggml_add(c, ggml_add(c, x, ggml_mul(c, x, scale)), shift);
+@@ -230,7 +241,7 @@
+ 
+ static T* block(ggml_context* c, const Model& m, int i, T* h, T* mod, T* cond,
+                 T* cos, T* sin, const DiTParams& p, std::map<std::string, T*>* inter = nullptr,
+-                T* self_mask = nullptr, T* cross_mask = nullptr) {
++                T* self_mask = nullptr, T* cross_mask = nullptr, T* proj = nullptr) {
+     const std::string b = "blocks." + std::to_string(i);
+     const int dm = p.d_model;
+     auto dbg = [&](const char* n, T* t) { if (inter && i == 0) { (*inter)[n] = t; ggml_set_name(t, n); } return t; };
+@@ -246,14 +257,22 @@
+     h = ggml_add(c, h, ggml_mul(c, hh, gate_msa));
+ 
+     hh = layernorm(c, h, p.ln_eps, m.get(b + ".norm2.weight"), m.get(b + ".norm2.bias"));
+-    hh = cross_attn(c, m, b + ".cross_attn", hh, cond, p, cross_mask);
++    const std::string cross_prefix = b + ".cross_attn";
++    hh = cross_attn(c, m, cross_prefix + (p.proj_in_channels > 0 ? ".cross_attn_block" : ""),
++                    hh, cond, p, cross_mask);
++    dbg("blk0_global_cross", hh);
++    if (p.proj_in_channels > 0) {
++        T* projected = lin(c, m, cross_prefix + ".proj_linear", proj);
++        dbg("blk0_projected", projected);
++        hh = ggml_add(c, hh, projected);
++    }
+     dbg("blk0_cross", hh);
+     h = ggml_add(c, h, hh);
+ 
+     hh = layernorm(c, h, p.ln_eps);
+     hh = modulate(c, hh, scale_mlp, shift_mlp);
+     hh = lin(c, m, b + ".mlp.mlp.0", hh);
+-    hh = ggml_gelu(c, hh);                                      // GELU(approximate=tanh)
++    hh = p.exact_gelu ? gelu_f32(c, hh) : ggml_gelu(c, hh);       // GELU(approximate=tanh)
+     hh = lin(c, m, b + ".mlp.mlp.2", hh);
+     dbg("blk0_mlp", hh);
+     h = ggml_add(c, h, ggml_mul(c, hh, gate_mlp));
+@@ -262,7 +281,12 @@
+ 
+ ggml_tensor* build_dit_dense(ggml_context* c, const Model& m, const DiTParams& p,
+                              T* h0, T* tfreq, T* cond, T* cos, T* sin,
+-                             std::map<std::string, T*>* inter) {
++                             std::map<std::string, T*>* inter, T* proj) {
++    if (p.proj_in_channels < 0 || (p.proj_in_channels > 0) != (proj != nullptr))
++        throw std::invalid_argument("DiT projected conditioning mode/input mismatch");
++    if (proj && (proj->ne[0] != p.proj_in_channels || proj->ne[1] != h0->ne[1] ||
++                 proj->ne[2] != 1 || proj->ne[3] != 1 || proj->type != GGML_TYPE_F32))
++        throw std::invalid_argument("DiT projected conditioning shape/type mismatch");
+     g_cast_f32 = p.cast_f32;
+     auto keep = [&](const char* n, T* t) { if (inter) (*inter)[n] = t; ggml_set_name(t, n); return t; };
+ 
+@@ -281,7 +305,7 @@
+     T* self_mask  = build_pad_mask(c, h0->ne[1], h0->ne[1]);
+     T* cross_mask = build_pad_mask(c, cond->ne[1], h0->ne[1]);
+     for (int i = 0; i < p.n_blocks; ++i) {
+-        h = block(c, m, i, h, mod, cond, cos, sin, p, inter, self_mask, cross_mask);
++        h = block(c, m, i, h, mod, cond, cos, sin, p, inter, self_mask, cross_mask, proj);
+         if (i == 0) keep("after_block0", h);
+         if (i == 1) keep("after_block1", h);
+         if (i == p.n_blocks - 1) keep("after_block29", h);

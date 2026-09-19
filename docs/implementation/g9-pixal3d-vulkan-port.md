@@ -48,13 +48,36 @@ Evidence: managed data `maintenance/g9-pixal-vulkan-20260919/projection-cpu`.
 This component is not connected to the generation runner yet. A linked Vulkan
 library, backend support query or CPU result does not prove GPU execution.
 
+## Projected DiT component measured on 2026-09-19
+
+The next slice `ux1/pixal3d-projected-dit`, based on PR555 / `86527e2`, adds a
+reproducible patch for the shared trellis.cpp DiT graph. It loads the nested
+Pixal3D cross-attention weights and adds the per-block projection linear output.
+It refuses omitted or mismatched projected conditions. The source is generated
+in the build directory from pinned Git objects; the installed runtime is intact.
+
+Five small-model CPU cases execute the actual pinned upstream flow class with
+synthetic deterministic parameters, covering 59 intermediates/final outputs.
+Maximum absolute error: `9.5367431640625e-07`. One case connects the native
+projection graph directly to the two-block DiT in one computation graph.
+Zero negative conditions retain projection bias. Both negative-input checks pass.
+
+The first comparison exposed the existing GGML CPU FP16 GELU lookup error;
+an opt-in F32 formula now matches PyTorch without changing the test tolerance.
+The default is unchanged. A separate executable compiled from unmodified
+upstream source matches the patched legacy path bit-for-bit. GPU initialized=false.
+Evidence: `maintenance/g9-pixal-dit-20260919/cpu-combined`, plus earlier failure
+reports and binary/source/library hashes. These are synthetic small-model results,
+not trained-model or Vulkan acceptance.
+
 ## Required remaining acceptance
 
 - Genuine Host lease and physical-device mapping; run the same numerical cases
   on Vulkan, recording device, exact source/library/binary hashes and results.
 - Pixal3D checkpoint-to-GGUF conversion and model metadata/shape validation.
-- Per-block projected conditioning and correct global token selection in DiT;
-  compare intermediate block outputs against PyTorch.
+- Integrate the implemented projected DiT with the real stage runner and correct
+  DINO global-token selection. Compare trained-model block outputs and
+  BF16/FlashAttention behavior on the admitted Vulkan device.
 - NAF native feature upsampling, with measured memory-bounded execution and
   numerical comparison. Integrate MoGe camera estimation or a separately
   verified native image-only camera path preserving the requested behavior.

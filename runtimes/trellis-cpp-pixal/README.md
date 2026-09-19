@@ -1,6 +1,6 @@
-# Pixal3D native Vulkan port — projection component
+# Pixal3D native Vulkan port — projection and DiT conditioning
 
-This is the first component of the user-requested Pixal3D port onto trellis.cpp.
+These are the first components of the user-requested Pixal3D port onto trellis.cpp.
 It is not yet a complete Pixal3D runner and does not enable MediaForge's Pixal3D
 capability. The installed trellis.cpp runtime and generated GLBs are unchanged.
 
@@ -56,3 +56,51 @@ Evidence: managed data `maintenance/g9-pixal-vulkan-20260919/projection-cpu/`.
 Full-model generation, Vulkan numerical parity, performance, memory, visual
 quality and Library publication remain NOT TESTED. See
 [remaining port work](../../docs/implementation/g9-pixal3d-vulkan-port.md).
+
+## Projected DiT graph
+
+`patches/projected-dit.patch` adds optional per-block projected conditioning to
+the pinned trellis.cpp graph. `prepare_trellis.py` materializes two canonical
+source files from Git into a separate build directory, applies the patch there,
+and records original/patched hashes. Existing runtime sources are not edited.
+Reusing a differing generated directory fails instead of silently overwriting it.
+CMake names generated directories by patch hash and builds both the patched
+and unmodified graph test drivers against the same GGML libraries.
+
+The new `DiTParams.proj_in_channels` defaults to zero (existing TRELLIS mode).
+A positive value requires the exact `[projected_channels, token_count]` F32
+condition. It selects `cross_attn.cross_attn_block` weights and adds each block's
+`cross_attn.proj_linear` output. A missing/misshaped projected input is an error;
+zero-valued negative conditioning remains a real input and retains learned bias.
+
+`DiTParams.exact_gelu` is an opt-in F32 tanh GELU graph. The default remains the
+existing GGML GELU. The initial strict F32 comparison localized an error up to
+0.00021521 to GGML CPU's FP16 GELU lookup, while the new projected combination
+already matched within 4.77e-7. Enabling the F32 formula reduced the full tiny
+model comparison below 9.54e-7 without relaxing its tolerance.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_dit.py \
+  --pixal-source "$PIXAL_SOURCE" \
+  --binary /tmp/pixal-projection-build/pixal-dit-check \
+  --baseline-binary /tmp/pixal-projection-build/pixal-dit-baseline-check \
+  --output-dir "$PIXAL_DIT_REPORT" --backend cpu
+```
+
+The checker instantiates the pinned upstream sparse-structure flow class with
+small dimensions and deterministic synthetic parameters. It does not use a
+pretrained checkpoint. Exact F32 attention isolates the graph changes from
+FlashAttention's separate low-precision behavior. The five measured cases cover
+ordinary cross attention, projected conditioning, concatenated-feature channel
+width, all-zero conditioning, and a single graph connecting native image-feature
+projection to both DiT blocks and the final output. All 59 tensor comparisons
+passed with maximum absolute error `9.5367431640625e-07` (atol/rtol=5e-5).
+The legacy/default GELU mode also matched the separately compiled unmodified
+upstream executable bit-for-bit for every retained intermediate/output. Missing
+and incorrectly shaped projected inputs were rejected. Torch GPU initialized=false.
+
+Evidence: managed data `maintenance/g9-pixal-dit-20260919/cpu-combined` and the
+initial `cpu` / `cpu-exact` results, with build manifests and binary/library hashes.
+Vulkan execution, real trained weights, BF16/FlashAttention parity, sampler
+integration, DINO/NAF/MoGe execution and full image-to-GLB generation are still
+NOT TESTED. These source components alone do not enable runtime adoption.
