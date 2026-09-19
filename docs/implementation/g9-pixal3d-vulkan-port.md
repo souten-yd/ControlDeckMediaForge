@@ -1,5 +1,36 @@
 # Pixal3D Vulkan port: scope and measured first component
 
+## 2026-09-19 CPU surface export acceptance
+
+`ux1/pixal3d-surface-export`, based on PR565 / `40c50c4`, connects the decoded
+surface to hole filling, original-surface BVH projection, CPU remesh/simplify,
+UV/PBR bake and PNG/WebP GLB export. Source changes live in a content-addressed
+overlay; the installed trellis.cpp checkout/build is unchanged. Pixal's band 1,
+project_back 0, final axes, PBR packing and no component-drop behavior are explicit.
+The <100-active-voxel trellis heuristic found by the first real check is removed.
+The implementation is a CPU adaptation; CuMesh/nvdiffrast/OpenCV whole-output
+parity has NOT been established. No fallback mesh/atlas/codec hides a failure.
+
+Measured 9 export runs / 74 comparisons / 19 negative and lifecycle checks passed.
+8 artifacts independently pass core GLB validation and actual Blender 4.5.9 import,
+including material channels, both embedded 128-square images, UVs, face counts
+and orientation/bounds. Three previous synthetic neural-decoder outputs reach
+80/272/292 triangles and 9088/28720/22140 bytes. This does not rerun the neural
+inference or use trained weights. Sampler error against actual FlexGEMM Torch
+with CPU hash adapters is at most 1.1920929e-7; negative-grid boundary checks are
+analytic because Torch's truncation differs from its CUDA floor semantics.
+PNG/baked bytes and repeat arrays are exact; analytic interior PBR is within
+one byte. WebP 80 is explicitly lossy. A real subprocess SIGTERM during UV work
+reaps in 0.001070 s without publishing a GLB; parent cleanup removes staging.
+
+Evidence: `maintenance/g9-pixal-surface-export-20260919/cpu-final`, retained
+`cpu-first.log` failure, successful `cpu-second`, build provenance and full tests.
+The default 4096 texture was only exercised through cancellation; successful
+completion at that size is NOT TESTED. Remaining: native whole-pipeline wiring,
+MoGe/removal/full NAF capacity, trained/full-width and mixed-precision evaluation,
+real Host lease/Vulkan, quality, adoption/deployment/new Library outputs and rigs.
+The earlier weight-license question remains pending. The goal is incomplete.
+
 ## 2026-09-19 sparse structure neural decoder and connected shape sampling
 
 `ux1/pixal3d-ss-decoder`, based on PR562 / `b6592f0`, adds strict local
