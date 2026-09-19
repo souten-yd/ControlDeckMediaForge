@@ -96,3 +96,18 @@ reference methods via AST extraction. It executes original source locally,
 without copying that implementation or importing its GPU autotuning kernels.
 The Pixal sparse-conv dispatcher is adapted only inside the evaluation process;
 the external files and production model implementation remain unchanged.
+
+native/mesh_decode.cpp follows pinned trellis.cpp src/dual_grid.cpp (MIT above)
+and Microsoft TRELLIS.2 revision 75fbf0183001ed9876c8dbb35de6b68552ee08bd,
+o-voxel/o_voxel/convert/flexible_dual_grid.py. Copyright (c) Microsoft Corporation,
+MIT license: see LICENSE.trellis2. Pixal's FDG head and PBR affine conversion
+follow fdg_vae.py and pixal3d_image_to_3d.py at the pinned Pixal revision above.
+Changes: validated coordinates/fields/margin, configurable actual grid, bounded
+triangle count, cancellation/progress, shared shape-to-texture subdivisions and
+an explicit unrepaired surface intermediate. No GPU kernel is introduced.
+
+check_mesh_decode.py executes the original o_voxel triangulation and Pixal FDG
+class/texture method locally. Only GPU hashmap insertion/lookup is replaced by
+a CPU dictionary preserving in-grid lookup and uint32 missing-index semantics.
+It loads original source via AST without importing GPU-only cumesh dependencies.
+This is not acceptance of o_voxel GPU kernels or CuMesh hole filling.

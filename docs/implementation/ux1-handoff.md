@@ -1,5 +1,38 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D dual-grid mesh and connected PBR decoding CPU parity
+
+`ux1/pixal3d-dual-grid`、親PR564 / `76373a1`。shape生7channel→頂点/面、texture生6channel→
+PBR affine変換、両neural decoder→shared subdivision→geometry/PBR接続を追加。
+CPU geometryは実grid/voxel margin、頂点順、4近傍、三角形winding、対角線のstrict比較を維持。
+不正/重複座標、非finite、budget超過、通常経路の空meshを拒否。両cancelを伝播し、
+同一借用backend/model roles/入力座標順を照合。PBRは元と同じ*.5+.5、暗黙clampなし。
+戻り値はUnrepairedSurfaceであり、後続の穴埋め・UV/bake・GLBを書き出したとはしない。
+
+固定o_voxelの未変更triangulationと実Pixal FDG class/texture methodをCPU参照として実行。
+GPU専用hashmap部分のみ、bounds/sentinelを維持したCPU検索へ置換。GPU kernel実測ではない。
+17条件: raw field12、接続成功4、接続empty拒否1。116比較全pass、面/順序/座標完全一致。
+頂点最大絶対誤差5.960464477539063e-08（atol/rtol2e-6）、全比較最大はPBRの
+1.043081283569336e-06。raw PBRは完全一致、neural接続PBRは既存5e-5 gateを維持。
+成功したdiagnostic/接続16runは反復bitwise一致。raw10条件は元trellis.cpp geometryとも照合。
+追加negative/cancel20件は意図した理由で拒否、出力array公開0。
+
+配布block数[4,16,8,4,0]の縮小幅planar synthetic条件は768頂点/1350三角形。
+前sliceのnative画像→shape latentを使う接続条件は228頂点/14三角形。上流推論再実行ではない。
+旧two-child synthetic条件は線状で面0、元実装と同じ結果を観測して通常経路で拒否した。
+これを生成成功には数えない。初回checkerのempty legacy face array欠落と、その次の
+全synthetic decoderが面を出すという誤った期待のfailure logsを保持。許容誤差は緩和なし。
+
+証跡: managed `maintenance/g9-pixal-dual-grid-20260919/cpu-final`、first/second failure logs、
+`build-provenance.json`、`full-test.log`。最終 `./mf.sh test`: **2211 passed / 2 warnings /
+238.83秒 / exit0**。以後product変更なし。
+Torch GPU initialized=false、学習済み重み取得/使用0、Host/元runtime/installed/Library変更0。
+
+**NOT TESTED / 残り**: CuMesh相当の穴埋め、UV/material bake、GLB実生成/品質/新Asset登録、
+trained/full幅/mixed precision、full NAF容量、MoGe/背景除去、実Host lease付きVulkan、
+採用/署名導入。重みlicense同意は既出の質問に回答待ち。骨付き版は未作成。
+次はCPUでの穴埋めと既存trellis UV/bake/export経路を照合して接続。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D shape/texture sparse decoder CPU parity
 
 `ux1/pixal3d-sparse-decoders`、親PR563 / `d37ae2c`。local safetensors/config→strict GGUF、
