@@ -1,5 +1,40 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D shape/texture sparse decoder CPU parity
+
+`ux1/pixal3d-sparse-decoders`、親PR563 / `d37ae2c`。local safetensors/config→strict GGUF、
+借用backend loader、ConvNeXt/C2S sparse decoderとupsampleを追加。既存GGMLでchunk毎に
+neighbor gather→im2col GEMMを実行し、選択された子voxelだけを展開。shapeの生subdivisionを
+textureへ共有し、親座標/並び/実gridを各段で照合。未知設定、重複/範囲外座標、空の細分化、
+予算超過、guide不一致を拒否。F32演算のみ、FP16 referenceは明示評価optionを必須にした。
+cancel/progress、op support、RAII回収あり。statsは個別graph/input buffer最大で、VRAM peakではない。
+
+固定Pixal実SparseUnetVaeDecoderとFlexGEMM自身のTorch referenceをCPU実行。
+GPU autotune importを避けるため元functionをAST抽出。GPU FlexGEMM kernelの受入ではない。
+同referenceとdense Torch conv3dも比較し、最大絶対誤差1.9073486328125e-06でpass。
+全parameter syntheticの6条件、262中間/出力/反復比較pass（atol/rtol5e-5）、
+最大絶対誤差3.337860107421875e-06。全座標/順序厳密一致、920保存/loaded tensor完全一致。
+chunkを変更しdebugを外した12出力はbitwise一致。2〜5段、配布block数[4,16,8,4,0]の
+縮小幅、F16/BF16 source/F16格納、logit厳密>0、境界/非整列座標を含む。
+前sliceの実native画像→SS→shape flow出力57座標を保存artifactから入力し、228voxelの
+shape/texture整合を確認。この条件で上流を再実行しておらずtexture latentはsynthetic。
+
+converter拒否12/native拒否27件pass。最初のfixtureは既存NPY readerが受けない整数型で失敗。
+初回logを保持し、最終はexact整数F32 fixture、fault別error照合に修正。初回の別理由による
+fault拒否は受入に数えない。公開配布JSONのshape292/texture284tensor構成をvalidatorが受理。
+学習済みtensorや実幅の受入とはしない。Torch GPU initialized=false、重み取得/使用0。
+
+証跡: managed `maintenance/g9-pixal-sparse-decoders-20260919/` の `cpu-final/report.json`、
+初回failure log、public-config-compatibility.json、build-provenance.json、full-test.log。
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 237.52秒 / exit0**。以後product変更なし。
+Host/元runtime/installed/Library変更0。
+
+**NOT TESTED / 残り**: learned/full幅/mixed precision、実Host lease付きVulkan、full NAF容量、
+MoGe/背景除去、dual-grid mesh変換/GLB実生成/画質/新Asset登録、採用/署名導入。
+今回のdecoderは生7/6channel fieldまで。sigmoid/softplusとmesh復元を済ませたとはしない。
+重みlicense同意は既出の質問への回答待ち。骨付きアセットも未作成。
+次は既存dual-grid実装を照合してmesh復元へ接続。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D SS neural decoder; connected image-to-shape CPU parity passed
 
 `ux1/pixal3d-ss-decoder`、親PR562 / `b6592f0`。strict local safetensors/config→GGUF変換、

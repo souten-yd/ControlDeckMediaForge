@@ -78,3 +78,21 @@ Its checkpoint loader follows our strict vision loader derived from trellis.cpp.
 The architecture and parameter layout follow pinned TencentARC/Pixal3D
 pixal3d/models/sparse_structure_vae.py (MIT above), which is run externally as
 the numerical reference. No pretrained weights are included.
+
+native/sparse_decoder.cpp and convert_sparse_decoder.py follow the pinned
+TencentARC/Pixal3D sc_vaes/sparse_unet_vae.py and fdg_vae.py parameter layout,
+ConvNeXt/C2S architecture and modules/sparse/spatial/spatial2channel.py ordering
+(MIT, LICENSE.pixal3d). The GGML graph/loader structure also adapts the pinned
+trellis.cpp sparse.cpp/shape_decoder.cpp and our strict loaders (MIT above).
+Changes: explicit borrowed backend, configurable stages/width, one gathered
+im2col GEMM per chunk, selected-child-only C2S output, strict coordinate/guide
+alignment and bounds, cancellation/progress, RAII and raw-field diagnostics.
+No GPU kernels or trained weights are included.
+
+sparse_cpu_reference.py loads external, pinned FlexGEMM revision
+6dd94a859c26ee8246888502eada3dd8ad85532e,
+flex_gemm/ops/spconv/submanifold_conv3d.py's Torch neighbor and explicit-GEMM
+reference methods via AST extraction. It executes original source locally,
+without copying that implementation or importing its GPU autotuning kernels.
+The Pixal sparse-conv dispatcher is adapted only inside the evaluation process;
+the external files and production model implementation remain unchanged.
