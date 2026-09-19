@@ -111,3 +111,22 @@ class/texture method locally. Only GPU hashmap insertion/lookup is replaced by
 a CPU dictionary preserving in-grid lookup and uint32 missing-index semantics.
 It loads original source via AST without importing GPU-only cumesh dependencies.
 This is not acceptance of o_voxel GPU kernels or CuMesh hole filling.
+
+native/surface_export.cpp and patches/surface-export.patch adapt the pinned
+trellis.cpp uv_bake.cpp, remesh_dc.cpp and mesh_glb.cpp (MIT, LICENSE.trellis).
+Pipeline ordering/PBR packing/coordinate composition follow pinned Pixal3D
+inference.py and pinned TRELLIS.2 o_voxel/postprocess.py (MIT notices above).
+Changes: explicit CPU surface handoff, validation and budgets, original-surface
+projection for every sample, sparse boundary/empty semantics, component retention,
+removal of the small-grid remesh skip, bounded CPU threads, owned synchronous
+charting, strict codec selection, Pixal final axes, provenance, atomic no-overwrite
+publication and independent core/Blender evaluation. CPU postprocess algorithms
+are adaptations; parity with the GPU reference is not claimed.
+
+check_surface_export.py executes the pinned FlexGEMM Torch grid-sample class via
+AST, replacing only CUDA hash insertion/lookup with a CPU dictionary. The
+external reference source remains unchanged and is not copied into this package.
+The new target also compiles pinned external xatlas/meshoptimizer and uses the
+existing external libwebp/sharpyuv libraries and stb headers. Their licenses and
+notices remain in the external source/runtime distributions; any eventual binary
+runtime packaging must retain them. This slice ships no such runtime binary.

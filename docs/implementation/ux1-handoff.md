@@ -1,5 +1,42 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D CPU surface postprocessing and textured GLB export
+
+`ux1/pixal3d-surface-export`、親PR565 / `40c50c4`。decoded surfaceから穴埋め・元面BVH・
+CPU再メッシュ化・面削減・UV/PBR bake・PNG/WebP GLBまで接続。Pixalのband1/project0、
+最終座標(-x,y,-z)、PBR配置を保持し、毎sampleで元面へ投影して疎voxelを正規化補間。
+空近傍は0、非finite/projection失敗はerror。小component除去・shell crawl・別atlas/codecへの
+fallbackなし。xatlasを所有subprocess内で同期実行し、thread放置をなくした。
+元runtimeを変更せず固定sourceの別overlayをbuild。CPUスレッドは最大4。
+
+入力/予算/provenanceを検証し、既存ファイルへ上書きしないhard linkでGLB公開。
+4096texture/100万faceが既定、GLB上限64MiB。remesh=falseは診断専用であり、
+Pixalの別non-remesh cleanup全体を実装したとはしない。CPU contouring/QEM/charting/
+raster/Teleaは移植・代替実装で、CuMesh/nvdiffrast/OpenCV全体との数値・topology同等性は未検証。
+
+実機CPUで9出力run、74比較、異常/取消/上書き拒否19件pass。8 GLBを別coreプロセスの
+MediaForge検証器とBlender4.5.9で実importし、面数・UV・128²texture2枚・PBR接続・向きを確認。
+固定FlexGEMMの実Torch samplerはGPU hashだけCPUへ置換、補間誤差最大1.1920929e-7。
+負座標ではTorchのint truncationとCUDAのfloorが異なるため、境界/空近傍は解析的期待値と照合。
+PNGはbaked画素と完全一致、内部texelの解析PBRは最大1byte差、反復geometry/UV/画素bitwise一致。
+WebP80はlossyで、planeのbase最大/平均差7/1.06866455、MRは2/0.25891113byte。
+
+前sliceのsynthetic neural decoder出力3件から再メッシュ化して、80/272/292三角形、
+9088/28720/22140byteのGLBを生成。上流neural inferenceは保存artifactを再利用し再実行していない。
+実プロセスをUV段階でSIGTERMし0.001070秒でreap、公開GLBなし、parentがstagingを回収。
+初回はtrellisのactive voxel<100でremeshを省略するheuristicに当たり失敗。overlayで省略を外して
+再測定しpass。初回failureとその後の成功logsを保持し、許容誤差は変更なし。
+
+証跡: managed `maintenance/g9-pixal-surface-export-20260919/` の`cpu-final/report.json`、
+`cpu-first.log`、`cpu-second`、`surface-overlay-manifest.json`、`build-provenance.json`、`full-test.log`。
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 236.49秒 / exit0**。以後product変更なし。
+Torch GPU initialized=false、学習済み重み取得/利用0、Host/元runtime/installed/Library変更0。
+
+**NOT TESTED / 残り**: 4096textureの書き出し完走（今回は途中停止のみ）、trained/full幅/
+mixed precision、MoGe/背景除去/full NAF容量、実Host lease付きVulkan、生成品質、新Asset登録、
+採用/署名導入、骨付きanimation。重みlicense同意は既出質問への回答待ち。
+次はnative全pipelineの実decoder/GLB接続を一つの入口へまとめる。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D dual-grid mesh and connected PBR decoding CPU parity
 
 `ux1/pixal3d-dual-grid`、親PR564 / `76373a1`。shape生7channel→頂点/面、texture生6channel→

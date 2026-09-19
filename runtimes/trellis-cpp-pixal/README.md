@@ -713,3 +713,82 @@ GLB export, trained/full-width/mixed-precision execution, full NAF capacity,
 MoGe/background removal, genuine leased Vulkan, visual quality, adoption,
 signed installation, new generated Library assets and rigging. No trained
 weights were downloaded/used and Torch GPU initialized=false.
+
+## CPU surface postprocessing and GLB export
+
+`bake_surface` consumes the preceding slice's `UnrepairedSurface`. It fills
+boundary loops with perimeter below 0.03 twice (the reference decode/to_glb
+stages), builds the original-surface BVH, runs CPU narrow-band dual contouring
+with band=1/project_back=0, simplifies to the requested face budget, and unwraps
+and bakes the six PBR fields. Default texture size is 4096 and target faces 1M.
+`remesh=false` is a diagnostic path; the reference's separate non-remesh cleanup
+pipeline is not implemented by that option.
+
+`patches/surface-export.patch` is applied only to an independent, content-addressed
+copy of the pinned trellis.cpp sources. The texture sampler always projects to
+the original surface before normalized sparse trilinear interpolation. Missing
+neighbors contribute zero weight; an empty neighborhood produces zeros. Bounds,
+non-finite samples and projection errors are checked. The port removes trellis's
+small-active-grid remesh skip, component-dropping heuristics, shell-crawl sampling
+and detached charting thread. xatlas has owned cleanup and runs synchronously;
+a caller-owned subprocess must enforce wall time and terminate/reap it on cancel.
+The worker parent also removes private staging after an abrupt process exit.
+
+These CPU primitives are adaptations, **not measured CuMesh/nvdiffrast/OpenCV
+pixel or topology parity**. In particular, CPU contouring/simplification, chart
+partitioning, rasterization and Telea inpainting differ from the GPU reference.
+Do not interpret the synthetic sampling comparison as full postprocess parity.
+No box/chart fallback or unrepaired-mesh substitution is made on an error.
+
+`export_surface_glb` supports embedded PNG and lossy WebP 80; requested WebP
+encoding errors fail rather than switching codecs. It applies Pixal inference's
+combined `(-x,y,-z)` transform, preserves winding and the final export UV mapping,
+and writes base RGBA plus metallic-roughness `[0,roughness,metallic,255]` textures.
+The glTF material is OPAQUE, with doubleSided=false for the remeshed path.
+GLB extras retain synthetic/checkpoint kind, source/input SHA256, reference
+revision and experimental status. These private extras do not replace Library
+provenance or grant runtime adoption. The file is staged privately and published
+by a same-directory hard link, refusing any existing destination and enforcing
+the current 64 MiB GLB limit. The caller supplies an allowed private output root
+and independently validates before creating an Asset.
+
+The build uses the pinned runtime's existing libwebp/sharpyuv static libraries
+and headers under `build/_deps`, in addition to its GGML libraries. No packages
+or trained weights are downloaded by this build. Record all library hashes for
+adoption; this directory does not ship those external runtime binaries.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_surface_export.py \
+  --pixal-source "$PIXAL_SOURCE" --trellis-source "$TRELLIS_SOURCE" \
+  --flex-source "$FLEX_SOURCE" --mesh-fixtures "$DUAL_GRID_CPU_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-surface-export \
+  --core-python "$MEDIAFORGE_CORE_PYTHON" --blender "$MANAGED_BLENDER" \
+  --output-dir "$SURFACE_EXPORT_CPU_REPORT"
+```
+
+The private CLI uses local C-contiguous F32 NPY files: vertices[N,3], faces[F,3]
+(exact integer values), coords[M,3], pbr[M,6] (already transformed by*.5+.5),
+and settings=[grid,texture_size,target_faces,remesh,seed]. Inputs are local
+handoff artifacts, not a public upload protocol. Optional query and diagnostic
+arrays and fault flags are for evaluation. Run checks in the isolated worker
+Python; the core validator and Blender execute in their own environments.
+
+Measured CPU evidence at `maintenance/g9-pixal-surface-export-20260919/cpu-final`:
+9 export runs, 74 comparisons, 19 negative/cancel/no-overwrite checks; 8 GLBs pass
+the independent MediaForge validator and Blender 4.5.9 import. Actual FlexGEMM's
+Torch sampler runs with CPU hash lookup adapters; its negative-neighbor truncation
+differs from its CUDA kernel, so boundary/empty cases use analytic kernel-semantic
+expectations instead. Interior sampling maximum absolute error is 1.1920929e-7.
+PNG pixels are byte-exact to the baked arrays, interior analytic PBR differs by
+at most one byte, and repeat geometry/UV/textures are bitwise equal. WebP is
+lossy: the planar fixture base image's maximum/mean absolute differences are
+7/1.06866455 byte values, metallic-roughness 2/0.25891113.
+
+Three retained synthetic neural-decoder outputs were remeshed and exported:
+80/272/292 triangles, 9088/28720/22140 bytes. Upstream neural inference was not
+repeated in this export check. A real UV-stage SIGTERM was reaped in 0.001070 s,
+with no published GLB; the parent removed staging. The first failed evaluation
+revealed trellis's <100-active-voxel skip, now removed in the overlay. Its log is
+retained; no tolerance was relaxed. Trained generation/quality, full 4096 texture
+completion, Vulkan, installed Library/browser acceptance and rigging remain
+NOT TESTED. The 4096 case is deliberately terminated, not an export success.

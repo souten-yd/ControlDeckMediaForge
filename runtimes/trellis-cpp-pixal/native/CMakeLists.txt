@@ -82,6 +82,28 @@ target_link_libraries(pixal-mesh-check PRIVATE pixal_image "${GGML_vulkan}")
 target_compile_options(pixal-mesh-check PRIVATE -Wall -Wextra -Werror)
 set_target_properties(pixal-mesh-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
 
+# CPU postprocessing overlay; never compile the optional QEM GPU backends.
+file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/../patches/surface-export.patch" SURFACE_PATCH_SHA)
+set(SURFACE_OVERLAY "${CMAKE_CURRENT_BINARY_DIR}/surface-${SURFACE_PATCH_SHA}")
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../prepare_trellis.py"
+  --source "${TRELLIS_SOURCE_DIR}" --destination "${SURFACE_OVERLAY}" --component surface
+  COMMAND_ERROR_IS_FATAL ANY)
+find_library(PIXAL_WEBP NAMES webp PATHS "${TRELLIS_BUILD_DIR}/_deps/libwebp-build" NO_DEFAULT_PATH REQUIRED)
+find_library(PIXAL_SHARPYUV NAMES sharpyuv PATHS "${TRELLIS_BUILD_DIR}/_deps/libwebp-build" NO_DEFAULT_PATH REQUIRED)
+add_library(pixal_surface STATIC surface_export.cpp
+  "${SURFACE_OVERLAY}/src/uv_bake.cpp" "${SURFACE_OVERLAY}/src/mesh_glb.cpp" "${SURFACE_OVERLAY}/src/remesh_dc.cpp"
+  "${TRELLIS_SOURCE_DIR}/src/tri_bvh.cpp" "${TRELLIS_SOURCE_DIR}/src/decimate_qem.cpp"
+  "${TRELLIS_SOURCE_DIR}/thirdparty/xatlas/xatlas.cpp" "${TRELLIS_SOURCE_DIR}/thirdparty/meshoptimizer/simplifier.cpp")
+target_include_directories(pixal_surface BEFORE PUBLIC "${SURFACE_OVERLAY}/include")
+target_include_directories(pixal_surface PRIVATE "${TRELLIS_SOURCE_DIR}/thirdparty/stb" "${TRELLIS_SOURCE_DIR}/thirdparty/fqms"
+  "${TRELLIS_SOURCE_DIR}/thirdparty/xatlas" "${TRELLIS_SOURCE_DIR}/thirdparty/meshoptimizer" "${TRELLIS_BUILD_DIR}/_deps/libwebp-src/src")
+target_compile_definitions(pixal_surface PRIVATE TRELLIS_HAVE_WEBP XA_MULTITHREADED=0)
+set_source_files_properties(surface_export.cpp surface_export_cli.cpp PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror;-ffp-contract=off")
+target_link_libraries(pixal_surface PUBLIC pixal_image "${PIXAL_WEBP}" "${PIXAL_SHARPYUV}")
+add_executable(pixal-surface-export surface_export_cli.cpp)
+target_link_libraries(pixal-surface-export PRIVATE pixal_surface)
+set_target_properties(pixal-surface-export PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
+
 # Compile the unchanged upstream graph as a separate binary for exact regression
 # comparison of the legacy mode, including its default GELU implementation.
 add_executable(pixal-dit-baseline-check dit_check.cpp "${TRELLIS_SOURCE_DIR}/src/dit.cpp"
