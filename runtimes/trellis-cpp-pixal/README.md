@@ -1,5 +1,65 @@
 # Pixal3D native Vulkan port — image features, NAF, projection and flow sampling
 
+## Trained checkpoint evaluation (2026-09-19)
+
+The operator accepted the previously presented DINOv3/Pixal weight terms.
+`trained-models-lock.json` records eleven local evaluation candidates, immutable
+revisions, published weight digests and effective configuration hashes. It is
+an integrity inventory, not an adoption receipt or permission to use a GPU.
+Weights remain outside this repository and the Python environment.
+The released SS flow includes a persistent complex `rope_phases` buffer.
+Conversion accepts it only for SS, after exact comparison with the fixed
+coordinate-derived constant, and records its hash/shape in `derived_buffers`.
+The native graph regenerates these phases. Altered/non-finite constants and
+unknown tensors are rejected; the buffer is never silently discarded.
+
+The official Facebook DINO repository still returned `GatedRepoError` for its
+config with no HF token present. No original HF checkpoint was acquired. The
+operator already owned the pinned `ilintar/trellis2-gguf` DINO file from the
+earlier trellis.cpp run. `import_trellis_dino.py` imports **only that local file**:
+it checks the published size/SHA-256, exact 318-tensor table, architecture and
+finite F16/F32 values. It preserves every used value exactly after F32 promotion,
+including prefix tokens, and records the two unused affine final-norm tensors.
+Its `trellis-gguf` provenance names the actual publisher and revision. It does
+not download a mirror or claim the original HF checkpoint's precision.
+
+```bash
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/import_trellis_dino.py \
+  --checkpoint "$EXISTING_AUTHORIZED_DINO_GGUF" --output-dir "$NEW_DINO_DIRECTORY"
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_trained_dino.py \
+  --checkpoint "$EXISTING_AUTHORIZED_DINO_GGUF" \
+  --converted "$NEW_DINO_DIRECTORY/model.gguf" --rgb "$PREPARED/rgb_low.npy" \
+  --binary "$PIXAL_BUILD/pixal-vision-eval-cpu" --output-dir "$NEW_DINO_REPORT"
+```
+
+The CPU-only evaluator supports 256/512/1024 square inputs without retaining
+every layer's debug tensors or exporting all weights. The independent checker
+uses timm **1.0.22**, strictly loads all original tensors, and applies Pixal's
+non-affine final normalization. Use `--image-size 1024` with `rgb_high.npy` for
+the high-resolution comparison. These checks used real trained weights and a
+real input image; neither executes the full 3D pipeline.
+
+`check_trained_flow.py` compares a trained full-width shape flow with the pinned
+Pixal source using eight deterministic synthetic coordinates/conditions and
+two CFG/rescale steps. Both sides explicitly use F32 arithmetic after declared
+F16 matrix storage rounding. It does not establish parity with upstream BF16
+arithmetic. The native `pixal-flow-check --trained-cpu` opt-in rejects Vulkan,
+fault flags, more than 16 coordinates or more than two steps. Existing small
+synthetic checks retain their prior bounds.
+
+```bash
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_trained_flow.py \
+  --pixal-source "$PIXAL_SOURCE" --checkpoint "$TRAINED_SHAPE_SAFETENSORS" \
+  --config "$TRAINED_SHAPE_CONFIG" --converted "$CONVERTED_SHAPE/model.gguf" \
+  --binary "$PIXAL_BUILD/pixal-flow-check" --output-dir "$NEW_FLOW_REPORT"
+```
+
+Measured results and remaining gates are in
+[`g9-trained-models-20260919.md`](../../docs/implementation/g9-trained-models-20260919.md).
+The explicit CPU background provider remains the pinned full BiRefNet; upstream
+pipeline JSON's BRIA RMBG-2.0 weights were not acquired. GPU admission, trained
+full-grid generation/quality and runtime adoption are separate acceptance gates.
+
 These are the first components of the user-requested Pixal3D port onto trellis.cpp.
 It is not yet a complete Pixal3D runner and does not enable MediaForge's Pixal3D
 capability. The installed trellis.cpp runtime and generated GLBs are unchanged.

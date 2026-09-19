@@ -172,6 +172,28 @@ def main() -> int:
     base_config = json.loads((args.output_dir / "ss_f32_f32/config.json").read_text())
     from safetensors.torch import load_file
     base_state = load_file(args.output_dir / "ss_f32_f32/source.safetensors")
+    # Released SS checkpoints also serialize this non-learned complex buffer.
+    # Validate it against the actual pinned reference and reject altered phases.
+    buffer_model = SparseStructureFlowModel(**base_config['args']).eval()
+    buffer_state = dict(base_state, rope_phases=buffer_model.rope_phases.clone())
+    buffer_source = negative_dir / 'valid_rope_buffer.safetensors'
+    save_file(buffer_state, buffer_source)
+    buffer_manifest = convert(buffer_source, args.output_dir / 'ss_f32_f32/config.json',
+                              negative_dir / 'valid_rope_buffer', stage='ss', storage='f32', **conversion_args)
+    negatives['valid_rope_buffer'] = {'passed': buffer_manifest['derived_buffers']['rope_phases']['recomputed_values_identical']}
+    for case in ('changed_phase', 'rope_nan', 'rope_shape', 'rope_dtype'):
+        state = {k: v.clone() for k, v in buffer_state.items()}
+        if case == 'changed_phase': state['rope_phases'][0, 0] = .5 + .5j
+        elif case == 'rope_nan': state['rope_phases'][0, 0] = complex(float('nan'), 0)
+        elif case == 'rope_shape': state['rope_phases'] = state['rope_phases'][:-1].contiguous()
+        else: state['rope_phases'] = state['rope_phases'].real.contiguous()
+        path = negative_dir / (case + '.safetensors'); save_file(state, path)
+        output = negative_dir / case
+        try:
+            convert(path, args.output_dir / 'ss_f32_f32/config.json', output, stage='ss', storage='f32', **conversion_args)
+            negatives[case] = {'passed': False}
+        except ValueError as error:
+            negatives[case] = {'passed': not output.exists(), 'error': str(error)}
     for case in ("missing_projection", "wrong_shape", "extra_weight", "gated_mode", "wrong_stage",
                  "nan", "f16_overflow", "invalid_heads", "unknown_argument", "truncated", "duplicate_json"):
         state = {k: v.clone() for k, v in base_state.items()}

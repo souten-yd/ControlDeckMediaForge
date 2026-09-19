@@ -1292,6 +1292,11 @@ CPU reference comparisons, genuine broker-leased Vulkan operator comparisons,
 full-model generation and independent output/quality checks are separate gates.
 Port source and reproducible build inputs stay in MediaForge's runtime tooling;
 the existing working trellis.cpp runtime is preserved side by side.
+An already-owned, explicitly authorized DINOv3 GGUF may be reused by Pixal only
+through a pinned local import: verify the original published digest and complete
+tensor table, preserve every used value, record the actual GGUF publisher and
+revision, and validate the resulting features. This is not acquisition of the
+gated original checkpoint or proof of parity with its original precision.
 Camera estimation may run the pinned MoGe 2 implementation as an explicit CPU
 preprocessing stage in the isolated worker before the native generator starts.
 Its backend/precision/model identity are recorded separately from GGML/Vulkan;

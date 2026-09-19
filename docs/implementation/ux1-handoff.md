@@ -1,5 +1,35 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Trained model consent, preparation and CPU evaluation
+
+`ux1/g9-trained-models`、親PR574 / `68cb66a`。利用者の「同意する」により、提示済み
+DINOv3/Pixal重みのローカル利用同意を記録。以前の「同意回答待ち」は解消。
+base-plan先行更新、既存trellis DINO GGUFの固定local importerと全幅CPU評価入口を追加。
+元のDINO全318tensorを検査し、使用値を数値で完全保存。実publisher/revisionを残し、
+gated Facebook HF原本の取得/precision同等とはしない。公式configはGatedRepoError、tokenなし。
+
+実画像で学習済みBiRefNet→MoGe CPU入力準備が完走。DINO全24層/1024幅の512²/1024²で
+参照比較pass（patch最大誤差2.426729e-4 / 2.586842e-4）。学習済みshape flow全30層/1536幅を
+8合成座標/2stepで比較し6出力pass、最大9.155274e-5。いずれもF16格納後の明示F32演算。
+既存vision/flow回帰、追加拒否7条件pass。GPU実行0、trained full-grid GLB生成0。
+最終 `./mf.sh test`: **2242 passed / 2 warnings / 249.38秒 / exit0**。以後product/checker変更なし。
+一巡で既存材質previewのfake worker 0.2秒timeoutを観測。対象単独pass後、コード変更なしで
+全件を再実行し上記の通過を確認。失敗logも保持。
+詳細は [trained評価記録](g9-trained-models-20260919.md)。モデルlockへ11役割の配布identityを固定。
+Pixal7本24,044,852,614byteの取得/hash照合、native9GGUFへの変換が完了。
+実SSだけに存在するcomplex rope_phasesを固定式との完全一致検査後に除外する対応を追加。
+未知/改変/NaN/型違いの拒否を維持。checkpoint6条件＋17確認＋native拒否9がpass。
+全9モデルinspect valid=true、11役割を使った実worker prepare68.673440秒/exit0、
+直接前処理との4ファイルhash一致。trained-job/readyは未採用入力であり、GPU実行0。
+
+既存Library3件を実HTTPで掲載/全GLB hashまで再確認、追加登録0、合成Pixal表示を維持。
+13:00Zの実Host auth/meは401、正規実行contextの接続質問は回答待ち。採用receiptは両方なし。
+重み同意を認証/leaseへ読み替えず、Host内部session生成を使わない。
+次は正規Host admission・device mapping・renew/reap/releaseを用意し、Vulkanとfull生成を評価。
+現workerのFlashAttention無効状態も全token/graph allocation受入で確認する。
+NOT TESTED: 全grid/品質/VRAM/Vulkan、adoption、署名導入、installed画像→新GLB→Library、骨。
+全体目標は未完了。既存元checkout/Host/installedを変更しない。
+
 ## 2026-09-19 Image-to-3D engine UI
 
 `ux1/pixal3d-engine-ui`、親PR573 / `5fe356f`。前ターンの次着手点に従い、既存formへ
