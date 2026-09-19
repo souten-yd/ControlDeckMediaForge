@@ -1015,3 +1015,64 @@ rejection, existing-output preservation and a real SIGTERM during inference.
 These artificial masks and GLBs do not establish trained segmentation or 3D
 quality. BiRefNet/MoGe have not been ported to Vulkan; production adoption and
 genuine broker-leased native Vulkan evaluation remain separate work.
+
+## Private worker entry and exact seed transport
+
+`worker_entry.py prepare` and `worker_entry.py generate` separate CPU inference
+from the native process that will run under the parent's GPU lease. They are
+server-private tooling, not an adopted engine or a replacement Job/Asset service.
+The core still needs to connect these entries to Scene Jobs and its admission
+receipt. No local descriptor/manifest grants a GPU lease or license consent.
+
+`worker_spec.py` validates `media-forge.pixal-worker@1`: exact native model roles,
+file sizes/SHA-256, bounded private roots, explicit camera/background inputs,
+sampling/normalization and resource limits. The native executable has its own
+declared binary root. Source/model paths are normalized before use. Raw image,
+descriptor, prepared arrays and final bytes are hashed; no opaque model name or
+unverified default is resolved over the network.
+
+```sh
+# CPU process exits before the parent requests the native GPU lease.
+"$PIXAL_PYTHON" worker_entry.py prepare \
+  --job "$PRIVATE_JOB_JSON" --allowed-root "$MANAGED_ROOT" \
+  --binary-root "$NATIVE_RUNTIME_ROOT" --input "$PRIVATE_IMAGE" \
+  --output "$PRIVATE_PREPARED" --seed 2147483647
+
+# Only after real parent-owned Host admission/activation; CPU is an explicit
+# evaluation backend, never an automatic replacement for Vulkan.
+"$PIXAL_PYTHON" worker_entry.py generate \
+  --job "$PRIVATE_JOB_JSON" --allowed-root "$MANAGED_ROOT" \
+  --binary-root "$NATIVE_RUNTIME_ROOT" --prepared "$PRIVATE_PREPARED" \
+  --prepared-sha256 "$READY_MANIFEST_SHA256" --output "$PRIVATE_OUTPUT" \
+  --backend vulkan --device "$ADMITTED_NATIVE_DEVICE_INDEX"
+```
+
+Preparation publishes `ready.json` last, binding the exact integer seed and all
+input files. Generation rechecks descriptor/models and sealed inputs before
+starting, then again before publishing `complete.json`. Existing outputs are
+preserved; failed/canceled owned output trees are removed. Native stderr tails
+are returned as private diagnostics even if those trees are removed. The native
+child shares the worker process group so the caller can stop/reap the group;
+cooperative cancellation and bounded timeout also terminate/reap it directly.
+The final GLB still requires independent core/Blender validation and Library
+registration by the existing Scene Jobs workflow.
+
+The new `pixal-generate` CMake target uses `inspect` and `generate` modes.
+`inspect` checks cross-model contracts without creating a backend. `generate`
+requires explicit CPU or Vulkan/device, F32 arithmetic, limits and provenance.
+It has no fault-injection, externally supplied noise or diagnostic-array switches.
+RNG remains `mt19937-box-muller-f32-v1`; it is not Torch-seed equivalent.
+Seed 0..2^31−1 travels as an integer argument, avoiding the evaluation driver's
+F32 settings-array precision limit. `bounded_npy.h` checks NPY v1 layout,
+dimensions/product, exact payload size and finite F32 values before tensor use;
+allocation occurs only after header/product/file-size checks.
+
+`check_worker.py` runs actual isolated prepare/generate processes using the
+previous synthetic checkpoints. It checks opaque-array compatibility, exact
+GLB payload agreement with the evaluation entry, repeated output, seeds
+16,777,216/16,777,217/2,147,483,647, tampering, malformed NPY headers, unsupported
+evaluation arguments, and independent core/Blender imports. Adjacent large seeds
+produce different GLB binaries. `check_worker_lifecycle.py` additionally observes
+a real native child in its worker group and verifies cancellation during SS flow
+and timeout cleanup. These CPU/synthetic checks do not prove trained quality,
+real broker-leased Vulkan, installed adoption or core Scene Jobs integration.

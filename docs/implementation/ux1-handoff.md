@@ -1,5 +1,31 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D private prepare/generate worker entry
+
+`ux1/pixal3d-worker-entry`、親PR571 / `f887fbc`。base-plan先行更新。
+評価CLIのF32 seed/固定limit/fault入力をproduction入口へ流用せず、private descriptor、
+CPU prepare→ready manifest→明示backendのnative generate→complete manifestを追加。
+既存core Scene Jobsへの接続・adoption receiptはまだ未実装。manifestはlicense同意・leaseではない。
+CPU前処理process終了後に親が正規Host admissionを行い、native子と同じgroupを停止/reapしてから
+既存Blender/Assetへ渡す境界を維持。GPUやtrained weightsを実行したとはしない。
+
+実process CPU/synthetic: opaque prepare18.296240秒、generate1.216938秒、590三角形/48,532byte。
+PR571前処理4ファイル一致、旧評価入口と反復生成のGLBは生成時刻を除くJSON/binary一致。
+seed16,777,216/16,777,217/2,147,483,647を整数として保持し、隣接seedのbinary差を確認。
+5 GLBは独立core/Blender4.5.9検査pass、拒否/保持15条件pass。
+背景encoder SIGTERM: exit1/reap0.917840秒、native SS flow取消: exit1/reap0.047917秒、
+native timeout0.2秒: 子観測後0.211352秒でexit1/reap。native子の同一process groupと出力回収を確認。
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 237.85秒 / exit0**。以後product変更なし。
+詳細は [worker記録](g9-pixal-worker-20260919.md)、managed `maintenance/g9-pixal-worker-20260919/`。
+73 source hash、native/GGML hashとビルド由来を保存。元rootは`524553d`でclean、origin/mainは`bbdc69a`。
+
+LibraryはPR570で登録済みのtrellis2点と合成Pixal1点を実HTTPで再確認。全GLB hash/掲載一致、
+Pixalの検証用表示を維持。今回の追加登録0、ブラウザ画素NOT TESTED。
+次はprivate receipt/prepare段を既存`three_d_runtime.py`/`scene_generation_jobs.py`へ接続する。
+venv Python launcherのsymlinkと基底interpreterのidentity、Pixalの1024/1536とpublic512制約、
+queued admission取消/late grant/retry/lease lossを明示的に扱う。Trellis用10モデルreceiptを流用しない。
+学習済み重みの同意・正規leaseは未取得。trained品質/Vulkan/adoption/署名導入/骨付き版は未完了。
+
 ## 2026-09-19 Pixal3D explicit CPU background preprocessing
 
 `ux1/pixal3d-background`、親PR569 / `71ecc7d`。base-plan先行更新、固定通常版BiRefNetの
