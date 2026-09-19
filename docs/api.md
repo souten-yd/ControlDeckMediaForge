@@ -438,7 +438,11 @@ The additive import endpoint accepts a raw PNG/JPEG request body, converts it
 to the canonical RGBA PNG representation, and returns an Asset document. With
 `Content-Type: model/gltf-binary`, `purpose=source` instead accepts one GLB 2.0
 file, validates its bounded embedded structure independently of Blender, and
-stores the original bytes unchanged. GLB external URIs, unknown required
+stores the original bytes unchanged. Embedded WebP textures using
+`EXT_texture_webp` are accepted (validator 1.1.0), including required extensions
+without a PNG/JPEG fallback. The extension source must reference an embedded
+`image/webp` image and be declared in `extensionsUsed`; without a fallback it
+must also be in `extensionsRequired`. GLB external URIs, unknown required
 extensions, and sparse accessors are rejected by the initial fail-closed
 boundary. Input is bounded to 64 MiB; images are additionally bounded to
 4,194,304 decoded pixels. The endpoint accepts no filename or filesystem path.

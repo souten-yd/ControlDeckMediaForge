@@ -1,5 +1,24 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 WebP GLB acceptance / 0.28.87 preparation
+
+利用者依頼で `EXT_texture_webp` をrequired allowlistへ追加。validator 1.1.0は
+embedded image参照、image/webp MIME、used/required宣言を検査し、元GLB bytesを保持。
+未知required extension/外部URIの拒否は維持。公開契約は加法対応、Host変更0。
+sourceはorigin/main 8a8f1a2上のux1/3d-webp-textures、元feat/g9-image-to-3dは保全。
+API/opaque upload回帰19pass。実trellis.cpp原本ref_vk/s01_vk＋Blender4.5.9/4.5.13
+export→re-import4件は新validatorでpassed。両版で各2枚2048×2048画像has_data=true。
+三角形数ref276178/s01283034は前後一致。再exportの頂点はref227918→228180、
+s01218505→218991。最初の測定scriptは頂点数の完全一致assertionで停止したため、
+その結果も保存し、再測定では差を記録した。原本直接importは変換しない。
+Chrome隔離viewer確認はPage.navigateの30秒timeoutで停止、描画はNOT TESTED。
+証跡root: maintenance/release-0.28.87-20260919（installed data_dirの親配下）。
+更新前DB16table/asset属性2716件/runtime registry snapshotを取得、未終端Jobs/GUI/runtime0。
+最終 `./mf.sh test`: 2186passed/2warnings/236.12秒、exit0。以後product変更なし。
+次は署名bundle公開/再取得検証→通常feature update→managed data照合→
+原本2件の実HTTP登録とcontent/来歴/一覧照合。現時点では未公開・未導入・原本未登録。
+
+
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 

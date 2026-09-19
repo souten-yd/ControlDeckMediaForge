@@ -123,6 +123,10 @@ B1の初期allowlistはrequired extension 0件とする。`extensionsUsed`だけ
 required extensionはB2で実Blender re-importを個別に確認してから追加する。sparse accessorも同じ理由で
 B1ではfail-closedとし、未検証のlayoutを通過扱いにしない。
 
+2026-09-19: 実trellis.cpp sampleのBlender re-importを確認し、`EXT_texture_webp`を
+required allowlistへ追加（validator 1.1.0）。embedded WebP参照・MIME・拡張宣言を検査し、
+元GLB bytesを保持する。未測定の他required extensionと外部URIは引き続き拒否する。
+
 B1 fixtureはrepository内でコード生成した小さいtriangle/cube GLBとする。第三者modelをtest fixtureへ
 持ち込まず、licenseを曖昧にしない。truncated header、declared-length mismatch、chunk escape、external URI、
 oversized count、symlink escapeをnegative testに含める。
