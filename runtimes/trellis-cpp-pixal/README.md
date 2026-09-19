@@ -575,3 +575,76 @@ Trained checkpoint execution, full-width capacity/quality, mixed activations,
 Vulkan under a genuine Host lease, shape/texture neural decoders, MoGe/removal,
 GLB generation, adoption/release and newly generated Library assets remain
 **NOT TESTED**. Torch GPU initialized=false; trained weights were not used.
+
+## Shape and texture sparse decoders
+
+`convert_sparse_decoder.py` accepts explicit local safetensors and the deployed
+Pixal decoder JSON structure. It validates every argument and tensor, preserves
+source/config/output hashes, and writes a private `pixal3d-sparse-decoder` GGUF.
+Convolution weights retain FlexGEMM's `[Co,Kx,Ky,Kz,Ci]` order as `[Co,27,Ci]`;
+linear/conv storage can be F16, while biases and affine norms stay F32.
+No download or model adoption occurs during conversion.
+
+`SparseDecoderModel` validates metadata, tensor layout and file extents before
+backend allocation, checks finite weights and borrows the caller's backend.
+`decode_sparse` executes ConvNeXt and C2S with existing GGML operations. Sparse
+convolutions gather a bounded row chunk and evaluate one im2col GEMM. C2S emits
+only selected children, preserving parent order and X/Y/Z child bits. Texture
+must receive the exact shape subdivision guides, including coordinate order and
+actual grid at each level. Invalid/duplicate coordinates, mismatched guides,
+empty subdivisions and an exceeded explicit voxel budget fail without truncation.
+`upsample_shape` returns the same intermediate coordinates as Pixal's method.
+
+Activations/arithmetic are currently F32. An FP16 reference configuration
+requires the explicit `f32_arithmetic` evaluation option. This is not acceptance
+of mixed-precision inference. Cancellation and progress are propagated, and
+caller diagnostics/statistics are published only on completion. Stats are
+individual graph/input-buffer maxima, **not** concurrent memory or VRAM peaks.
+Weights, host intermediates, neighbor tables and concurrent buffers must still
+be included in a future full-scale memory assessment.
+
+The outputs are raw seven-channel dual-grid fields and six-channel PBR fields.
+Sigmoid/softplus transforms, dual-grid triangulation, material remap, GLB export
+and trained generation are not provided by these decoder methods.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_sparse_decoders.py \
+  --pixal-source "$PIXAL_SOURCE" --flex-source "$FLEX_SOURCE" \
+  --ss-fixtures "$PIXAL_SS_DECODER_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-sparse-decoder-check \
+  --output-dir "$PIXAL_SPARSE_DECODER_REPORT"
+```
+
+CPU evidence: `maintenance/g9-pixal-sparse-decoders-20260919/cpu-final`.
+The reference runs the actual Pixal `SparseUnetVaeDecoder` raw-field path and
+FlexGEMM's own Torch neighbor-cache/explicit-GEMM reference methods. AST extraction
+avoids importing GPU-only autotuning; it does **not** validate FlexGEMM GPU kernels.
+A dense Torch conv3d cross-check of that reference also passes. External source
+files remain unchanged and pinned.
+
+Six synthetic checkpoint cases pass 262 intermediate/output/chunk comparisons
+at atol/rtol5e-5 (maximum absolute error `3.337860107421875e-06`). Every output and
+intermediate coordinate array matches exactly. All 920 serialized/native-loaded
+weight tensors match exactly; all 12 repeated shape/texture outputs are bitwise
+identical with changed chunk size and no diagnostic capture. Coverage includes
+F32/F16/BF16 source values, F16 storage with F32 arithmetic, 2–5 stages, the actual
+`[4,16,8,4,0]` deployed block counts at reduced channel widths, non-sorted boundary
+coordinates, strict `logit > 0` child selection and final-stage MLP variation.
+One case consumes the saved native 57-coordinate shape latent from the preceding
+image/DINO/NAF/SS/shape-flow check and produces 228 aligned output voxels. It does
+not rerun those stages and its texture latent is synthetic.
+
+Twelve converter and 27 native failure cases pass, including cancellation,
+malformed metadata before backend initialization, non-finite weights, guide
+misalignment and precision mismatch. The first checker run used an integer NPY
+fixture unsupported by the existing native reader; its failure log is retained.
+Final fixtures use validated exact F32 integers, and fault checks require their
+specific error messages so a fixture-format error cannot count as acceptance.
+Public deployed JSON configurations validate as 292 shape / 284 texture tensors;
+this is metadata compatibility, not learned-weight or full-width acceptance.
+
+**NOT TESTED**: trained/full-width decoders, mixed activations, genuine leased
+Vulkan, full-capacity NAF, MoGe/removal, mesh/GLB generation, visual quality,
+adoption/release, new Library assets and rigging. Torch GPU initialized=false;
+no trained weights were downloaded or used. See the implementation status for
+remaining integration and authorization prerequisites.
