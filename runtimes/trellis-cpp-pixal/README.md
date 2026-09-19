@@ -1,5 +1,65 @@
 # Pixal3D native Vulkan port — image features, NAF, projection and flow sampling
 
+## Trained checkpoint evaluation (2026-09-19)
+
+The operator accepted the previously presented DINOv3/Pixal weight terms.
+`trained-models-lock.json` records eleven local evaluation candidates, immutable
+revisions, published weight digests and effective configuration hashes. It is
+an integrity inventory, not an adoption receipt or permission to use a GPU.
+Weights remain outside this repository and the Python environment.
+The released SS flow includes a persistent complex `rope_phases` buffer.
+Conversion accepts it only for SS, after exact comparison with the fixed
+coordinate-derived constant, and records its hash/shape in `derived_buffers`.
+The native graph regenerates these phases. Altered/non-finite constants and
+unknown tensors are rejected; the buffer is never silently discarded.
+
+The official Facebook DINO repository still returned `GatedRepoError` for its
+config with no HF token present. No original HF checkpoint was acquired. The
+operator already owned the pinned `ilintar/trellis2-gguf` DINO file from the
+earlier trellis.cpp run. `import_trellis_dino.py` imports **only that local file**:
+it checks the published size/SHA-256, exact 318-tensor table, architecture and
+finite F16/F32 values. It preserves every used value exactly after F32 promotion,
+including prefix tokens, and records the two unused affine final-norm tensors.
+Its `trellis-gguf` provenance names the actual publisher and revision. It does
+not download a mirror or claim the original HF checkpoint's precision.
+
+```bash
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/import_trellis_dino.py \
+  --checkpoint "$EXISTING_AUTHORIZED_DINO_GGUF" --output-dir "$NEW_DINO_DIRECTORY"
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_trained_dino.py \
+  --checkpoint "$EXISTING_AUTHORIZED_DINO_GGUF" \
+  --converted "$NEW_DINO_DIRECTORY/model.gguf" --rgb "$PREPARED/rgb_low.npy" \
+  --binary "$PIXAL_BUILD/pixal-vision-eval-cpu" --output-dir "$NEW_DINO_REPORT"
+```
+
+The CPU-only evaluator supports 256/512/1024 square inputs without retaining
+every layer's debug tensors or exporting all weights. The independent checker
+uses timm **1.0.22**, strictly loads all original tensors, and applies Pixal's
+non-affine final normalization. Use `--image-size 1024` with `rgb_high.npy` for
+the high-resolution comparison. These checks used real trained weights and a
+real input image; neither executes the full 3D pipeline.
+
+`check_trained_flow.py` compares a trained full-width shape flow with the pinned
+Pixal source using eight deterministic synthetic coordinates/conditions and
+two CFG/rescale steps. Both sides explicitly use F32 arithmetic after declared
+F16 matrix storage rounding. It does not establish parity with upstream BF16
+arithmetic. The native `pixal-flow-check --trained-cpu` opt-in rejects Vulkan,
+fault flags, more than 16 coordinates or more than two steps. Existing small
+synthetic checks retain their prior bounds.
+
+```bash
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_trained_flow.py \
+  --pixal-source "$PIXAL_SOURCE" --checkpoint "$TRAINED_SHAPE_SAFETENSORS" \
+  --config "$TRAINED_SHAPE_CONFIG" --converted "$CONVERTED_SHAPE/model.gguf" \
+  --binary "$PIXAL_BUILD/pixal-flow-check" --output-dir "$NEW_FLOW_REPORT"
+```
+
+Measured results and remaining gates are in
+[`g9-trained-models-20260919.md`](../../docs/implementation/g9-trained-models-20260919.md).
+The explicit CPU background provider remains the pinned full BiRefNet; upstream
+pipeline JSON's BRIA RMBG-2.0 weights were not acquired. GPU admission, trained
+full-grid generation/quality and runtime adoption are separate acceptance gates.
+
 These are the first components of the user-requested Pixal3D port onto trellis.cpp.
 It is not yet a complete Pixal3D runner and does not enable MediaForge's Pixal3D
 capability. The installed trellis.cpp runtime and generated GLBs are unchanged.
@@ -933,8 +993,8 @@ Integrity hashes do not grant license permission or runtime adoption.
 `prepare_camera.py` is a private CPU process entry for foreground framing,
 MoGe inference, low/high RGB arrays and camera values. It uses transparent input
 or, via the Python interface, an explicitly provided background-removal provider.
-The CLI does not yet perform neural background removal for opaque images.
-Camera tensors/models are released before native generation. The manifest binds
+The CLI also accepts the explicit pinned CPU BiRefNet provider described below.
+Camera/background tensors/models are released before native generation. The manifest binds
 the input, camera checkpoint/source, CPU/F32 mode, framing parameters and output
 file hashes. It is published after complete arrays; existing output directories
 are preserved. Cooperative cancellation/SIGTERM cleans the owned staging tree.
@@ -961,6 +1021,170 @@ are calibrated for valid UV correlation/masks; they do not represent trained
 quality. Four aspect/scale/extension cases match the reference exactly and repeat
 exactly. The CPU worker's estimated camera drives two native image-to-GLB runs,
 with matching repeated arrays/GLB payloads and independent core/Blender imports.
-The default trained ViT-L, full image/token counts, opaque removal, Vulkan and
+The default trained ViT-L, full image/token counts, trained opaque removal, Vulkan and
 installed Library acceptance remain untested. See the current handoff for measured
 results and retained failure logs.
+
+## Explicit CPU background removal
+
+`background.py` runs the full Swin-L BiRefNet used by Pixal, independently of
+MediaForge's Lite ONNX image-matting worker. It uses pinned local source files
+from [ZhengPeng7/BiRefNet](https://huggingface.co/ZhengPeng7/BiRefNet/tree/e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4).
+`birefnet.py`, `BiRefNet_config.py` and `config.json` must match `SOURCE_HASHES`.
+The verified Python bytes are compiled directly, so adjacent cached bytecode
+cannot replace the pinned implementation. There is no `trust_remote_code`,
+`from_pretrained`, repository-ID resolution or automatic weight download.
+
+The local checkpoint is safetensors, bounded to 2 GiB and identified by an
+explicit SHA-256. Its complete tensor names/shapes, floating types/finiteness,
+fixed relative-position indices and batch counters are checked before model
+storage allocation. The architecture always disables backbone pretraining.
+F16/BF16/F32 storage is accepted and inference is explicitly CPU/F32. The
+caller must independently establish consent/adoption; an integrity hash and
+the `source-kind` declaration are not an adoption receipt.
+
+PIL input follows the original torchvision resize to 1024 square, normalization,
+final output sigmoid, `ToPILImage` uint8 truncation and Pillow mask resize.
+`frame_foreground` retains the upstream 1024-edge preprocessing and alpha>0.8
+crop/compositing rule. Input alpha skips provider loading entirely, including
+when a provider was specified. A supplied Python callback remains supported but
+is recorded as caller-owned/unspecified, never mislabeled as verified BiRefNet.
+
+To the camera command above, add all four arguments for opaque input:
+
+```sh
+  --background-source "$BIREFNET_LOCAL_SOURCE" \
+  --background-checkpoint "$BIREFNET_LOCAL_CHECKPOINT" \
+  --background-checkpoint-sha256 "$BIREFNET_CHECKPOINT_SHA256" \
+  --background-source-kind checkpoint
+```
+
+The manifest records whether input alpha or the provider was actually used,
+the source/checkpoint identity, declared synthetic/checkpoint provenance,
+CPU/F32 and input extent. Background model scope ends before camera loading.
+Cooperative cancellation is checked between Swin blocks and decoder stages;
+the parent still owns timeout/reaping after forced termination.
+
+`check_background.py` exercises the actual full 220,176,498-parameter Swin-L
+architecture at 1024², with synthetic F16-stored tensors and calibrated input
+skip convolutions. It compares against the pinned Pixal wrapper with only its
+CUDA device literal changed to CPU, then runs the private preprocessing process,
+MoGe and the existing native CPU pipeline through independent GLB/Blender
+verification. It also checks transparent-input compatibility, source/checkpoint
+rejection, existing-output preservation and a real SIGTERM during inference.
+These artificial masks and GLBs do not establish trained segmentation or 3D
+quality. BiRefNet/MoGe have not been ported to Vulkan; production adoption and
+genuine broker-leased native Vulkan evaluation remain separate work.
+
+## Private worker entry and exact seed transport
+
+`worker_entry.py prepare` and `worker_entry.py generate` separate CPU inference
+from the native process that will run under the parent's GPU lease. They are
+server-private tooling, not an adopted engine or a replacement Job/Asset service.
+The core connects these entries to existing Scene Jobs through a separate
+private adoption receipt. No local descriptor/manifest grants a GPU lease or
+license consent; the installed engine remains unavailable until measured adoption.
+
+`worker_spec.py` validates `media-forge.pixal-worker@1`: exact native model roles,
+file sizes/SHA-256, bounded private roots, explicit camera/background inputs,
+sampling/normalization and resource limits. The native executable has its own
+declared binary root. Source/model paths are normalized before use. Raw image,
+descriptor, prepared arrays and final bytes are hashed; no opaque model name or
+unverified default is resolved over the network.
+
+```sh
+# CPU process exits before the parent requests the native GPU lease.
+"$PIXAL_PYTHON" worker_entry.py prepare \
+  --job "$PRIVATE_JOB_JSON" --allowed-root "$MANAGED_ROOT" \
+  --binary-root "$NATIVE_RUNTIME_ROOT" --input "$PRIVATE_IMAGE" \
+  --output "$PRIVATE_PREPARED" --seed 2147483647
+
+# Only after real parent-owned Host admission/activation; CPU is an explicit
+# evaluation backend, never an automatic replacement for Vulkan.
+"$PIXAL_PYTHON" worker_entry.py generate \
+  --job "$PRIVATE_JOB_JSON" --allowed-root "$MANAGED_ROOT" \
+  --binary-root "$NATIVE_RUNTIME_ROOT" --prepared "$PRIVATE_PREPARED" \
+  --prepared-sha256 "$READY_MANIFEST_SHA256" --output "$PRIVATE_OUTPUT" \
+  --backend vulkan --device "$ADMITTED_NATIVE_DEVICE_INDEX"
+```
+
+Preparation publishes `ready.json` last, binding the exact integer seed and all
+input files. Generation rechecks descriptor/models and sealed inputs before
+starting, then again before publishing `complete.json`. Existing outputs are
+preserved; failed/canceled owned output trees are removed. Native stderr tails
+are returned as private diagnostics even if those trees are removed. The native
+child shares the worker process group so the caller can stop/reap the group;
+cooperative cancellation and bounded timeout also terminate/reap it directly.
+The final GLB still requires independent core/Blender validation and Library
+registration by the existing Scene Jobs workflow.
+
+The new `pixal-generate` CMake target uses `inspect` and `generate` modes.
+`inspect` checks cross-model contracts without creating a backend. `generate`
+requires explicit CPU or Vulkan/device, F32 arithmetic, limits and provenance.
+It has no fault-injection, externally supplied noise or diagnostic-array switches.
+RNG remains `mt19937-box-muller-f32-v1`; it is not Torch-seed equivalent.
+Seed 0..2^31−1 travels as an integer argument, avoiding the evaluation driver's
+F32 settings-array precision limit. `bounded_npy.h` checks NPY v1 layout,
+dimensions/product, exact payload size and finite F32 values before tensor use;
+allocation occurs only after header/product/file-size checks.
+
+`check_worker.py` runs actual isolated prepare/generate processes using the
+previous synthetic checkpoints. It checks opaque-array compatibility, exact
+GLB payload agreement with the evaluation entry, repeated output, seeds
+16,777,216/16,777,217/2,147,483,647, tampering, malformed NPY headers, unsupported
+evaluation arguments, and independent core/Blender imports. Adjacent large seeds
+produce different GLB binaries. `check_worker_lifecycle.py` additionally observes
+a real native child in its worker group and verifies cancellation during SS flow
+and timeout cleanup. These CPU/synthetic checks do not prove trained quality,
+real broker-leased Vulkan, installed adoption or core Scene Jobs integration.
+
+## Core Scene Jobs adapter
+
+`backend/mediaforge/pixal_runtime.py` implements the private
+`media-forge.pixal3d-runtime@1` receipt and adapter. Its receipt file is
+`<data-dir>/runtime-state/pixal3d-runtime.json`, separate from the TRELLIS receipt.
+No receipt is supplied/generated by the CPU checkers. The receipt requires
+checkpoint source kind, explicit license acceptance, measured Vulkan device/
+peak VRAM/runtime/output identity, and the measured public resolution (1024).
+The native evaluator's 1536 mode is not an adopted public API resolution.
+
+The receipt pins an allowed root, runtime root, relative worker entry/venv
+launcher, explicit base-interpreter file identity, runtime-file inventory and
+the full worker descriptor. The runtime inventory must cover the worker,
+isolated environment/configuration and native executable/dependencies being
+adopted. The descriptor binds all nine native model roles plus camera/background
+checkpoints and settings. These are private operator paths, never API inputs.
+
+The launcher directory is normalized inside the runtime, while its symlink may
+resolve only to the explicitly pinned interpreter. The original venv launcher
+path is used, not its dereferenced base executable. Core's venv and system site
+packages are rejected. Python ignores inherited environment/site settings and
+uses an empty per-process bytecode-cache prefix with bytecode writes disabled.
+Core imports no Torch or worker module. Transparent images still bypass the
+background model inside the isolated worker.
+
+`ThreeDGenerator` resolves either receipt and exposes an additive `engines` map.
+An existing TRELLIS receipt remains the `auto` preference; malformed receipts and
+unmeasured resolutions fail without selecting another engine. Pixal is considered
+for `auto` only if the TRELLIS receipt is absent. Explicit engine selection is
+independent. File identities are checked before preparation and generation and
+again before publication; synthetic descriptors cannot become adopted engines.
+
+`scene_generation_jobs.py` runs `prepare_3d_input` before requesting a GPU lease.
+It rechecks the pinned adoption after preparation and queued admission. The
+existing child-identity request, activation, renewal, cancellation, Blender import
+and Asset/lineage flow are reused. Lease renewal continues until a canceled
+worker has drained. Late grants are still collected/released. Repeated cancel,
+timeout, a full output pipe and wrapper failure drain the owned process group;
+live orphan group members are killed before returning the reservation.
+
+Pixal provenance adds descriptor, sealed-input and original-image hashes,
+explicit CPU/F32 preprocessing and Vulkan/F32 generation, and preprocessing time.
+Existing TRELLIS facts remain valid. No new Jobs or Asset foundation is introduced.
+
+`scripts/3ds_pixal_worker_process_e2e.py` exercises this core process supervisor
+against the real isolated CPU/synthetic worker, then checks the GLB independently
+with core and Blender. It also cancels/times out actual Python/native process
+groups. It uses `PixalWorkerLaunch` only, creates no adoption receipt or Host
+lease, and does not register installed Assets. The pytest Scene Jobs/receipt
+fixtures are explicitly protocol fixtures, not real Host/GPU acceptance.

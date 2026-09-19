@@ -1,4 +1,4 @@
-// Trusted local synthetic fixtures only. GPU caller must hold a real Host lease.
+// Trusted local fixtures. Bounded trained evaluation is CPU-only.
 #include "flow_runner.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
         if (argc < 4) throw std::invalid_argument("usage: pixal-flow-check <fixture> <gguf> cpu|vulkan [--device N]");
         const std::string directory = argv[1], checkpoint = argv[2], kind = argv[3];
         int device = -1, cancel_after = -1;
-        bool omit_proj=false, omit_concat=false, nan=false, short_output=false, analytic=false;
+        bool omit_proj=false, omit_concat=false, nan=false, short_output=false, analytic=false, trained=false;
         for (int i=4; i<argc; ++i) {
             const std::string flag = argv[i];
             if (flag == "--device" && i+1<argc) device = std::stoi(argv[++i]);
@@ -28,12 +28,16 @@ int main(int argc, char** argv) {
             else if (flag == "--nan-velocity") nan = true;
             else if (flag == "--short-output") short_output = true;
             else if (flag == "--analytic") analytic = true;
+            else if (flag == "--trained-cpu") trained = true;
             else throw std::invalid_argument("unknown flow check argument");
         }
         if ((kind != "cpu" && kind != "vulkan") || (kind == "vulkan") != (device >= 0))
             throw std::invalid_argument("select CPU or an explicit Vulkan device index");
         auto spec = pixal::inspect_flow_checkpoint(checkpoint);
-        if (spec.params.n_blocks > 4 || spec.params.d_model > 256)
+        if (trained && (kind!="cpu" || spec.source_kind!="checkpoint" || spec.stage!="shape" ||
+            spec.params.n_blocks!=30 || spec.params.d_model!=1536 || omit_proj || omit_concat || nan || short_output || analytic || cancel_after>=0))
+            throw std::invalid_argument("trained check requires full-width shape checkpoint and CPU without fault flags");
+        if (!trained && (spec.params.n_blocks > 4 || spec.params.d_model > 256))
             throw std::invalid_argument("flow check accepts small synthetic checkpoints only");
         std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)> backend(
             kind == "cpu" ? ggml_backend_cpu_init() : ggml_backend_vk_init(device), ggml_backend_free);
@@ -51,6 +55,8 @@ int main(int argc, char** argv) {
         auto coordinate_array = load("coordinates");
         if (coordinate_array.shape.size()!=2 || coordinate_array.shape[1]!=3 || coordinate_array.shape[0]>4096)
             throw std::invalid_argument("invalid synthetic coordinates");
+        if (trained && (coordinate_array.shape[0]<1 || coordinate_array.shape[0]>16))
+            throw std::invalid_argument("trained check accepts at most 16 coordinates");
         for (size_t i=0; i<coordinate_array.data.size(); i+=3) {
             std::array<int,3> c;
             for (int j=0; j<3; ++j) {
@@ -64,6 +70,7 @@ int main(int argc, char** argv) {
         auto global = load("global");
         if (global.shape.size()!=2 || global.shape[1]!=spec.params.d_cond)
             throw std::invalid_argument("invalid synthetic global condition");
+        if (trained && global.shape[0]!=5) throw std::invalid_argument("trained check requires five prefix tokens");
         pixal::FlowCondition positive{global.data, load("projected").data};
         pixal::FlowCondition negative{load("negative_global").data, load("negative_projected").data};
         if (omit_proj) positive.projected.clear();
@@ -75,6 +82,7 @@ int main(int argc, char** argv) {
         config >> params.steps >> params.rescale_t >> params.sigma_min >> params.guidance_strength
                >> params.guidance_rescale >> params.interval_start >> params.interval_end;
         if (!config) throw std::invalid_argument("invalid sampler fixture");
+        if (trained && (params.steps<1 || params.steps>2)) throw std::invalid_argument("trained check accepts one or two steps");
         std::vector<pixal::FlowStep> trace;
         std::vector<float> samples;
         std::vector<std::array<int,2>> progress;

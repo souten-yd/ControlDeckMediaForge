@@ -59,7 +59,9 @@ std::unique_ptr<Parsed> parse(const std::string& path) {
             throw std::invalid_argument("invalid vision source digest/revision");
     }
     auto format=string("pixal.input_format");
-    if (string("pixal.source_repository").empty() || (format!="safetensors" && !(result.kind=="naf" && format=="torch-weights-only")))
+    if (string("pixal.source_repository").empty() || (format!="safetensors"
+        && !(result.kind=="naf" && format=="torch-weights-only")
+        && !(result.kind=="dino" && format=="trellis-gguf" && result.source_kind=="checkpoint")))
         throw std::invalid_argument("invalid vision source provenance");
     std::map<std::string,std::vector<int64_t>> shapes;
     auto linear=[&](const std::string& name,int in,int out,bool bias) {

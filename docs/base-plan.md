@@ -1292,6 +1292,11 @@ CPU reference comparisons, genuine broker-leased Vulkan operator comparisons,
 full-model generation and independent output/quality checks are separate gates.
 Port source and reproducible build inputs stay in MediaForge's runtime tooling;
 the existing working trellis.cpp runtime is preserved side by side.
+An already-owned, explicitly authorized DINOv3 GGUF may be reused by Pixal only
+through a pinned local import: verify the original published digest and complete
+tensor table, preserve every used value, record the actual GGUF publisher and
+revision, and validate the resulting features. This is not acquisition of the
+gated original checkpoint or proof of parity with its original precision.
 Camera estimation may run the pinned MoGe 2 implementation as an explicit CPU
 preprocessing stage in the isolated worker before the native generator starts.
 Its backend/precision/model identity are recorded separately from GGML/Vulkan;
@@ -1300,6 +1305,19 @@ The default image-only path uses measured camera inference, never a silently
 fixed FOV. Transparent input follows the upstream alpha path; opaque input
 requires an explicitly admitted background-removal provider. Camera/removal
 weights and temporary tensors are released before native generation admission.
+The opaque-image provider may explicitly run pinned full BiRefNet on CPU/F32 in
+the isolated preprocessing process. It preserves Pixal's 1024-square transform,
+mask conversion and resizing; Lite weights are not an implicit substitute.
+Source and checkpoint identities, synthetic/trained provenance and the actual
+provider used are recorded separately. Transparent inputs skip provider loading.
+Pinned local code and hash-verified local tensors are required; runtime remote
+code loading and implicit model downloads are not part of this path.
+The private worker prepares and seals CPU inputs before GPU admission, then
+starts the native generator as a separate process. Its typed local job descriptor
+binds model/runtime hashes, sampling/normalization, explicit resource limits and
+the exact integer seed. Evaluation-only fault/noise inputs are not production
+arguments. The parent owns genuine lease admission/renewal, process-group reaping
+and final Blender/Asset publication; a worker manifest grants no GPU authority.
 `media.scene.from_image` accepts an existing image
 Asset and adds a detached operation to the existing Scene Jobs lifecycle. The
 GPU process must own a Host broker lease, then release it before the CPU Blender
@@ -1308,6 +1326,15 @@ scene authoring tools remain supported. No second job or asset service is added.
 License consent and measured runtime/device/model identities are prerequisites
 for adopting a candidate. A private, pinned adoption receipt may enable only the
 resolution actually measured; an absent or changed runtime stays unavailable.
+Pixal3D has a separate private adoption receipt for its worker environment,
+native executable, complete worker descriptor and measured Vulkan device. Its
+venv launcher remains inside the admitted runtime; an explicitly hash-pinned
+base interpreter may be the launcher's symlink target. The launcher path is
+preserved so the isolated venv is used. CPU preparation completes before the
+existing Scene Job requests GPU admission. The sealed input and receipt identity
+must still match after queued admission and before publication. Automatic engine
+selection prefers an existing TRELLIS receipt and uses Pixal only when no TRELLIS
+receipt exists; invalid receipts or unmeasured resolutions do not trigger fallback.
 Generation provenance includes the input Asset hash, pinned weights/runtime,
 seed and raw output hash. Successful structural validation does not establish
 visual or semantic quality; those remain separate experimental acceptance gates.

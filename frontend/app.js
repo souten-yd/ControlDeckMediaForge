@@ -168,8 +168,10 @@ const state = {
   scenes: [],
   sceneGeneration: null,
   sceneGenerationImages: [],
+  sceneGenerationEngine: null,
+  sceneGenerationResolution: null,
   sceneGenerationBusy: false,
-  sceneGenerationPolling: false,
+  sceneGenerationPolling: "",
   sceneGenerationMessage: "",
   sceneWorkingCopies: [],
   selectedSceneId: "",
@@ -5006,7 +5008,11 @@ function sceneGenerationText() {
     title: "Generate 3D from an image (experimental)",
     note: "Generate an editable scene from a Library image. Check its shape and unseen surfaces after generation.",
     image: "Input image", name: "Scene name", library: "Add an image in Library", refresh: "Refresh",
-    options: "Advanced options", resolution: "Generation resolution", seed: "Seed", cancel: "Cancel", submit: "Generate 3D",
+    options: "Advanced options", engine: "Generation engine", auto: "Automatic", notReady: "Not ready",
+    engineUnavailable: "This generation engine is unavailable. Select another engine or retry when it is ready.",
+    resolutionUnavailable: "This resolution is unavailable. Select a supported resolution.",
+    preparing: "Preparing the input image…",
+    resolution: "Generation resolution", seed: "Seed", cancel: "Cancel", submit: "Generate 3D",
     choose: "Select an image", queued: "Waiting for GPU capacity…", running: "Generating 3D…",
     validating: "Validating and saving the scene…", succeeded: "Scene saved. Open it in the scene list or Library.",
     canceled: "Generation canceled.", failed: "Generation failed. Check Activity for details.",
@@ -5016,7 +5022,11 @@ function sceneGenerationText() {
     title: "画像から3Dを生成（実験的）",
     note: "ライブラリの画像から3Dを生成し、編集できるシーンとして保存します。形状や見えない面は生成後に確認してください。",
     image: "入力画像", name: "シーン名", library: "ライブラリで画像を追加", refresh: "更新",
-    options: "詳細設定", resolution: "生成解像度", seed: "シード", cancel: "中止", submit: "3Dを生成",
+    options: "詳細設定", engine: "生成エンジン", auto: "自動", notReady: "準備未完了",
+    engineUnavailable: "この生成エンジンは現在利用できません。別のエンジンを選ぶか、準備完了後に再試行してください。",
+    resolutionUnavailable: "この解像度は現在利用できません。利用可能な解像度を選び直してください。",
+    preparing: "入力画像を準備しています…",
+    resolution: "生成解像度", seed: "シード", cancel: "中止", submit: "3Dを生成",
     choose: "画像を選んでください", queued: "GPUの空きを待っています…", running: "3Dを生成しています…",
     validating: "シーンを検証して保存しています…", succeeded: "シーンを保存しました。シーン一覧またはライブラリから開けます。",
     canceled: "生成を中止しました。", failed: "生成できませんでした。状況画面で詳細を確認できます。",
@@ -5025,15 +5035,41 @@ function sceneGenerationText() {
   };
 }
 
+const SCENE_GENERATION_ENGINES = {trellis_cpp: "trellis.cpp", pixal3d: "Pixal3D"};
+
+function sceneGenerationChoices() {
+  const capability = state.capabilities["3d.image_to_3d"] || {};
+  const text = sceneGenerationText();
+  const choice = (value, label, item) => {
+    const resolutions = Array.isArray(item?.resolutions)
+      ? [...new Set(item.resolutions.filter((resolution) => [512, 1024].includes(resolution)))] : [];
+    return {value, label, resolutions,
+      available: ["available", "experimental"].includes(item?.state) && resolutions.length > 0};
+  };
+  const implementation = SCENE_GENERATION_ENGINES[capability.implementation];
+  const choices = [choice("auto", implementation ? `${text.auto} · ${implementation}` : text.auto, capability)];
+  for (const [engine, label] of Object.entries(SCENE_GENERATION_ENGINES)) {
+    if (Object.hasOwn(capability.engines || {}, engine)) choices.push(choice(engine, label, capability.engines[engine]));
+  }
+  // Preserve an explicit choice that disappeared; never choose another engine
+  // after a capability refresh or a failed request on the user's behalf.
+  if (state.sceneGenerationEngine && !choices.some((item) => item.value === state.sceneGenerationEngine)) {
+    choices.push(choice(state.sceneGenerationEngine, SCENE_GENERATION_ENGINES[state.sceneGenerationEngine] || text.engine, null));
+  }
+  return choices;
+}
+
 function renderSceneGeneration() {
   const form = byId("scene-generation-form");
-  const capability = state.capabilities["3d.image_to_3d"] || {};
-  form.hidden = !["available", "experimental"].includes(capability.state) && !state.sceneGeneration;
+  const choices = sceneGenerationChoices();
+  const selectedEngine = state.sceneGenerationEngine || choices.find((item) => item.available)?.value || "auto";
+  const choice = choices.find((item) => item.value === selectedEngine);
+  form.hidden = !choices.some((item) => item.available) && !state.sceneGeneration && !state.sceneGenerationEngine;
   const text = sceneGenerationText();
   for (const key of ["title", "note", "library", "refresh", "options", "cancel", "submit"]) {
     byId(`scene-generation-${key}`).textContent = text[key];
   }
-  for (const key of ["image", "name", "resolution", "seed"]) {
+  for (const key of ["image", "name", "engine", "resolution", "seed"]) {
     byId(`scene-generation-${key}-label`).textContent = text[key];
   }
   const image = byId("scene-generation-image");
@@ -5041,17 +5077,35 @@ function renderSceneGeneration() {
   replaceMaterialOptions(image, state.sceneGenerationImages.map((asset) => ({
     value: asset.id, label: asset.suggested_filename || asset.id,
   })), selected, text.choose);
+  const engine = byId("scene-generation-engine");
+  engine.replaceChildren(...choices.map((item) => {
+    const option = materialOption(item.value, item.available ? item.label : `${item.label} · ${text.notReady}`);
+    option.disabled = !item.available;
+    return option;
+  }));
+  engine.value = selectedEngine;
   const resolution = byId("scene-generation-resolution");
-  const currentResolution = resolution.value;
-  const resolutions = (capability.resolutions || []).filter((value) => [512, 1024].includes(value));
-  replaceMaterialOptions(resolution, resolutions.map((value) => ({value: String(value), label: String(value)})),
-    currentResolution || String(resolutions[0] || ""));
+  const resolutions = choice?.resolutions || [];
+  const selectedResolution = state.sceneGenerationResolution ?? resolutions[0];
+  const options = resolutions.map((value) => materialOption(String(value), String(value)));
+  if (selectedResolution != null && !resolutions.includes(selectedResolution)) {
+    const previous = materialOption(String(selectedResolution), `${selectedResolution} · ${text.notReady}`);
+    previous.disabled = true;
+    options.push(previous);
+  }
+  resolution.replaceChildren(...options);
+  resolution.value = selectedResolution == null ? "" : String(selectedResolution);
+  const selectionReady = choice?.available && resolutions.includes(selectedResolution);
+  const reason = !choice?.available ? text.engineUnavailable : !selectionReady ? text.resolutionUnavailable : "";
+  byId("scene-generation-engine-status").textContent = reason;
+  byId("scene-generation-engine-status").hidden = !reason;
   const job = state.sceneGeneration;
   const running = Boolean(job && !TERMINAL.has(job.status));
   const blocked = state.sceneGenerationBusy || running || state.disabled;
-  for (const key of ["image", "name", "resolution", "seed"]) byId(`scene-generation-${key}`).disabled = blocked;
+  for (const key of ["image", "name", "engine", "resolution", "seed"]) byId(`scene-generation-${key}`).disabled = blocked;
+  resolution.disabled = blocked || !choice?.available;
   byId("scene-generation-submit").disabled = blocked || window.parent === window
-    || !resolutions.length || !image.value || !byId("scene-generation-name").value.trim();
+    || !selectionReady || !image.value || !byId("scene-generation-name").value.trim();
   byId("scene-generation-cancel").hidden = !running;
   byId("scene-generation-cancel").disabled = state.sceneGenerationBusy;
   byId("scene-generation-progress").hidden = !running;
@@ -5060,8 +5114,10 @@ function renderSceneGeneration() {
   if (job?.status === "succeeded") message = text.succeeded;
   else if (job?.status === "failed") message = text.failed;
   else if (job?.status === "canceled") message = text.canceled;
-  else if (running) message = job.phase === "waiting_resource" || job.status === "queued" ? text.queued
+  else if (running) message = job.phase === "prepare_3d_input" ? text.preparing
+    : job.phase === "waiting_resource" || job.status === "queued" ? text.queued
     : job.phase === "validate_generated_scene" ? text.validating : text.running;
+  if (!running && reason && window.parent !== window) message = message ? `${message} ${reason}` : reason;
   byId("scene-generation-status").textContent = state.sceneGenerationMessage || message;
 }
 
@@ -5076,12 +5132,19 @@ async function loadSceneGenerationImages() {
 }
 
 async function pollSceneGeneration() {
-  if (state.sceneGenerationPolling || !state.sceneGeneration) return;
-  state.sceneGenerationPolling = true;
-  const jobId = state.sceneGeneration.job_id;
+  const jobId = state.sceneGeneration?.job_id;
+  if (!jobId || state.sceneGenerationPolling === jobId) return;
+  state.sceneGenerationPolling = jobId;
   try {
-    while (!state.disabled && state.sceneGeneration?.job_id === jobId) {
-      state.sceneGeneration = await call("scenes.jobs.get", {job_id: jobId});
+    while (!state.disabled && state.sceneGeneration?.job_id === jobId
+        && state.sceneGenerationPolling === jobId && !TERMINAL.has(state.sceneGeneration.status)) {
+      const job = await call("scenes.jobs.get", {job_id: jobId});
+      // A canceled job may still have an outstanding read when a new generation
+      // starts. Its response must not replace the new job or undo cancellation.
+      if (state.disabled || state.sceneGeneration?.job_id !== jobId
+          || state.sceneGenerationPolling !== jobId || TERMINAL.has(state.sceneGeneration.status)) return;
+      if (job?.job_id !== jobId) throw new Error("Scene job identity changed");
+      state.sceneGeneration = job;
       state.sceneGenerationMessage = "";
       renderSceneGeneration();
       if (TERMINAL.has(state.sceneGeneration.status)) {
@@ -5091,20 +5154,32 @@ async function pollSceneGeneration() {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   } catch {
-    state.sceneGenerationMessage = sceneGenerationText().connection;
-    renderSceneGeneration();
+    if (!state.disabled && state.sceneGeneration?.job_id === jobId
+        && state.sceneGenerationPolling === jobId && !TERMINAL.has(state.sceneGeneration.status)) {
+      state.sceneGenerationMessage = sceneGenerationText().connection;
+      renderSceneGeneration();
+    }
   } finally {
-    state.sceneGenerationPolling = false;
+    if (state.sceneGenerationPolling === jobId) state.sceneGenerationPolling = "";
   }
 }
 
 async function submitSceneGeneration() {
   if (state.disabled || state.sceneGenerationBusy || (state.sceneGeneration && !TERMINAL.has(state.sceneGeneration.status))) return;
+  const engine = byId("scene-generation-engine").value;
+  const resolution = Number(byId("scene-generation-resolution").value);
+  const choice = sceneGenerationChoices().find((item) => item.value === engine);
+  if (window.parent === window || !choice?.available || !choice.resolutions.includes(resolution)) {
+    renderSceneGeneration();
+    return;
+  }
+  state.sceneGenerationEngine = engine;
+  state.sceneGenerationResolution = resolution;
   state.sceneGenerationBusy = true;
   state.sceneGenerationMessage = "";
   const value = {
     name: byId("scene-generation-name").value.trim(), input_asset_id: byId("scene-generation-image").value,
-    resolution: Number(byId("scene-generation-resolution").value), seed: Number(byId("scene-generation-seed").value), local_only: true,
+    engine, resolution, seed: Number(byId("scene-generation-seed").value), local_only: true,
   };
   renderSceneGeneration();
   try {
@@ -8576,6 +8651,17 @@ byId("scene-generation-form").addEventListener("submit", (event) => {
 for (const id of ["scene-generation-image", "scene-generation-name"]) {
   byId(id).addEventListener("input", renderSceneGeneration);
 }
+byId("scene-generation-engine").addEventListener("change", (event) => {
+  state.sceneGenerationEngine = event.target.value;
+  state.sceneGenerationResolution = null;
+  state.sceneGenerationMessage = "";
+  renderSceneGeneration();
+});
+byId("scene-generation-resolution").addEventListener("change", (event) => {
+  state.sceneGenerationResolution = Number(event.target.value);
+  state.sceneGenerationMessage = "";
+  renderSceneGeneration();
+});
 byId("scene-generation-library").addEventListener("click", () => activate("library"));
 byId("scene-generation-refresh").addEventListener("click", () => {
   state.sceneGenerationMessage = "";

@@ -2,7 +2,8 @@
 """Private CPU image/camera preprocessing entry; no GPU or runtime adoption.
 
 Opaque inputs need a separately admitted background provider. This entry accepts
-transparent inputs, preserving upstream framing. It publishes a manifest only
+explicit local BiRefNet weights or transparent input, preserving Pixal framing.
+It publishes a manifest only
 after local MoGe inference and all arrays complete. The parent owns timeout,
 termination/reaping and cleanup after forced process death.
 """
@@ -18,6 +19,7 @@ import signal
 from typing import Any, Callable
 
 from camera import MOGE_REVISION, check_cancel, contained_file, file_sha256, infer_camera, local_moge
+from background import BackgroundSpec, infer_background, local_birefnet
 from prepare_image import frame_foreground, prepare_rgb
 
 
@@ -28,13 +30,16 @@ def prepare_camera_input(*, source: Path, checkpoint: Path, checkpoint_sha256: s
                          extend_pixel: int = 0, image_resolution: int = 512,
                          cancelled: Callable[[], bool] | None = None,
                          progress: Callable[[str, int, int], None] | None = None,
-                         remove_background: Callable[[Any], Any] | None = None) -> dict[str, Any]:
+                         remove_background: Callable[[Any], Any] | None = None,
+                         background_spec: BackgroundSpec | None = None) -> dict[str, Any]:
     import numpy as np
     from PIL import Image
 
     check_cancel(cancelled)
     if source_kind not in {'synthetic', 'checkpoint'}:
         raise ValueError('explicit camera source_kind is required')
+    if background_spec is not None and remove_background is not None:
+        raise ValueError('only one background provider may be selected')
     root = allowed_root.resolve(strict=True)
     image_path = contained_file(image_path, root)
     output = output_dir.absolute()
@@ -43,12 +48,27 @@ def prepare_camera_input(*, source: Path, checkpoint: Path, checkpoint_sha256: s
         raise ValueError('camera output escapes the allowed root')
     # Always anchor output creation to the checked real parent.
     output = parent / output.name
+    if output.exists() or output.is_symlink():
+        raise FileExistsError(output)
     input_hash = file_sha256(image_path)
+    background = {'method': 'caller-provided', 'provider_used': True,
+                  'backend': 'caller-owned', 'source_kind': 'unspecified'}
+    if background_spec is not None:
+        def remove_background(image: Any) -> Any:
+            if progress:
+                progress('background_load', 0, 1)
+            with local_birefnet(background_spec, root, cancelled=cancelled) as model:
+                return infer_background(model, image, cancelled=cancelled, progress=progress)
+        background = background_spec.descriptor()
     with Image.open(image_path) as image:
         if min(image.size) < 2 or max(image.size) > 8192 or image.width * image.height > 32_000_000:
             raise ValueError('camera source image exceeds extent bound')
         image.load()
         frame = frame_foreground(image, remove_background=remove_background)
+    # The callback's model scope has ended before camera/native allocation.
+    gc.collect()
+    if frame.used_input_alpha:
+        background = {'method': 'input-alpha', 'provider_used': False}
     check_cancel(cancelled)
     if file_sha256(image_path) != input_hash:
         raise ValueError('camera source image changed during decoding')
@@ -72,6 +92,7 @@ def prepare_camera_input(*, source: Path, checkpoint: Path, checkpoint_sha256: s
         manifest = {'schema_version': 1, 'kind': 'pixal-camera-input', 'source_kind': source_kind,
                     'input_sha256': input_hash, 'checkpoint_sha256': checkpoint_sha256,
                     'moge_source_revision': MOGE_REVISION, 'camera': camera.as_dict(),
+                    'background': background,
                     'num_tokens': num_tokens, 'resolution_level': 9, 'extend_pixel': extend_pixel,
                     'framing': {'original_size': frame.original_size, 'resized_size': frame.resized_size,
                                 'used_input_alpha': frame.used_input_alpha, 'crop_box': frame.crop_box},
@@ -101,7 +122,16 @@ def main() -> int:
     parser.add_argument('--mesh-scale', type=float, default=1.)
     parser.add_argument('--extend-pixel', type=int, default=0)
     parser.add_argument('--image-resolution', type=int, default=512)
+    parser.add_argument('--background-source', type=Path)
+    parser.add_argument('--background-checkpoint', type=Path)
+    parser.add_argument('--background-checkpoint-sha256')
+    parser.add_argument('--background-source-kind', choices=('synthetic', 'checkpoint'))
     args = parser.parse_args()
+    background_values = (args.background_source, args.background_checkpoint,
+                         args.background_checkpoint_sha256, args.background_source_kind)
+    if any(value is not None for value in background_values) and not all(value is not None for value in background_values):
+        parser.error('all four background provider arguments are required together')
+    background_spec = BackgroundSpec(*background_values) if background_values[0] is not None else None
     # This process explicitly owns CPU preprocessing, irrespective of whether
     # the installed Torch wheel also supports GPUs.
     os.environ.update(HIP_VISIBLE_DEVICES='-1', ROCR_VISIBLE_DEVICES='-1', CUDA_VISIBLE_DEVICES='-1', HF_HUB_OFFLINE='1')
@@ -121,7 +151,8 @@ def main() -> int:
                                       image_path=args.input, output_dir=args.output_dir, source_kind=args.source_kind,
                                       low_size=args.low_size, high_size=args.high_size, num_tokens=args.num_tokens,
                                       mesh_scale=args.mesh_scale, extend_pixel=args.extend_pixel,
-                                      image_resolution=args.image_resolution, cancelled=lambda: stop, progress=progress)
+                                      image_resolution=args.image_resolution, cancelled=lambda: stop, progress=progress,
+                                      background_spec=background_spec)
         print(json.dumps({'completed': True, 'camera': result['camera']}), flush=True)
         return 0
     except Exception as error:

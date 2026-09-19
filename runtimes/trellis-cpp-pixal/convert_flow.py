@@ -127,6 +127,37 @@ def expected_shapes(spec: dict[str, int]) -> dict[str, tuple[int, ...]]:
     return shapes
 
 
+def validate_rope_phases(tensors: Any, spec: dict[str, int]) -> dict[str, Any]:
+    """Validate the optional SS constant, which native recomputes from coordinates.
+
+    This is a persistent buffer in the pinned upstream model, not a learned
+    weight. Accept only exact complex64 phases for the already-supported grid
+    and default frequencies; changed constants must never be silently dropped.
+    """
+    import torch
+
+    count, half = spec['resolution'] ** 3, spec['head_dim'] // 2
+    view = tensors.get_slice('rope_phases')
+    if count * half > 8 * 1024**2 or view.get_shape() != [count, half] or view.get_dtype() != 'C64':
+        raise ValueError('unsupported SS rope_phases shape/dtype/budget')
+    value = tensors.get_tensor('rope_phases')
+    if not torch.isfinite(value).all():
+        raise ValueError('non-finite SS rope_phases')
+    coords = torch.stack(torch.meshgrid(*[torch.arange(spec['resolution'])] * 3, indexing='ij'), dim=-1)
+    freq_dim = half // 3
+    frequencies = 1. / (10000. ** (torch.arange(freq_dim, dtype=torch.float32) / freq_dim))
+    angles = torch.outer(coords.reshape(-1), frequencies)
+    expected = torch.polar(torch.ones_like(angles), angles).reshape(count, freq_dim * 3)
+    if expected.shape[1] < half:
+        expected = torch.cat([expected, torch.ones(count, half - expected.shape[1], dtype=torch.complex64)], dim=1)
+    if not torch.equal(value, expected):
+        raise ValueError('SS rope_phases differ from the fixed coordinate-derived constant')
+    return {'shape': [count, half], 'dtype': 'complex64',
+            'sha256': hashlib.sha256(value.numpy().tobytes()).hexdigest(),
+            'recomputed_values_identical': True,
+            'handling': 'validated then omitted; native computes phases from the same coordinates'}
+
+
 def convert(checkpoint: Path, config_path: Path, output_dir: Path, *, stage: str,
             storage: str, source_repository: str, source_revision: str,
             source_kind: str) -> dict[str, Any]:
@@ -160,9 +191,10 @@ def convert(checkpoint: Path, config_path: Path, output_dir: Path, *, stage: str
         raise ValueError("install the pinned gguf-lock.txt in the worker environment")
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     with safe_open(checkpoint, framework="pt", device="cpu") as tensors:
-        if set(tensors.keys()) != set(shapes):
+        constants = {'rope_phases'} if stage == 'ss' and 'rope_phases' in tensors.keys() else set()
+        if set(tensors.keys()) != set(shapes) | constants:
             raise ValueError(f"checkpoint tensor set mismatch: missing={sorted(set(shapes)-set(tensors.keys()))}, "
-                             f"extra={sorted(set(tensors.keys())-set(shapes))}")
+                             f"extra={sorted(set(tensors.keys())-set(shapes)-constants)}")
         # Validate all metadata before reading/converting large tensors.
         for name, shape in shapes.items():
             view = tensors.get_slice(name)
@@ -170,6 +202,7 @@ def convert(checkpoint: Path, config_path: Path, output_dir: Path, *, stage: str
                 raise ValueError(f"checkpoint shape/dtype mismatch: {name}")
             if len(name.encode()) >= 64:
                 raise ValueError("tensor name exceeds pinned GGML name capacity")
+        derived_buffers = {'rope_phases': validate_rope_phases(tensors, spec)} if constants else {}
         with tempfile.TemporaryDirectory(prefix=".pixal-convert-", dir=output_dir.parent) as temporary:
             directory = Path(temporary) / "result"
             directory.mkdir()
@@ -222,6 +255,8 @@ def convert(checkpoint: Path, config_path: Path, output_dir: Path, *, stage: str
                                      for name in ("gguf", "safetensors", "numpy", "torch")},
                         "output_sha256": digest(result), "output_bytes": result.stat().st_size,
                         "torch_gpu_initialized": torch.cuda.is_initialized(), "adopted": False}
+            if derived_buffers:
+                manifest['derived_buffers'] = derived_buffers
             (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
             directory.rename(output_dir)
     return manifest

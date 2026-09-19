@@ -1,5 +1,146 @@
 # Media Forge implementation status
 
+## 2026-09-19 Trained model consent, preparation and CPU evaluation
+
+`ux1/g9-trained-models`、親PR574 / `68cb66a`。利用者の「同意する」により、提示済み
+DINOv3/Pixal重みのローカル利用同意を記録。以前の「同意回答待ち」は解消。
+base-plan先行更新、既存trellis DINO GGUFの固定local importerと全幅CPU評価入口を追加。
+元のDINO全318tensorを検査し、使用値を数値で完全保存。実publisher/revisionを残し、
+gated Facebook HF原本の取得/precision同等とはしない。公式configはGatedRepoError、tokenなし。
+
+実画像で学習済みBiRefNet→MoGe CPU入力準備が完走。DINO全24層/1024幅の512²/1024²で
+参照比較pass（patch最大誤差2.426729e-4 / 2.586842e-4）。学習済みshape flow全30層/1536幅を
+8合成座標/2stepで比較し6出力pass、最大9.155274e-5。いずれもF16格納後の明示F32演算。
+既存vision/flow回帰、追加拒否7条件pass。GPU実行0、trained full-grid GLB生成0。
+最終 `./mf.sh test`: **2242 passed / 2 warnings / 249.38秒 / exit0**。以後product/checker変更なし。
+一巡で既存材質previewのfake worker 0.2秒timeoutを観測。対象単独pass後、コード変更なしで
+全件を再実行し上記の通過を確認。失敗logも保持。
+詳細は [trained評価記録](implementation/g9-trained-models-20260919.md)。モデルlockへ11役割の配布identityを固定。
+Pixal7本24,044,852,614byteの取得/hash照合、native9GGUFへの変換が完了。
+実SSだけに存在するcomplex rope_phasesを固定式との完全一致検査後に除外する対応を追加。
+未知/改変/NaN/型違いの拒否を維持。checkpoint6条件＋17確認＋native拒否9がpass。
+全9モデルinspect valid=true、11役割を使った実worker prepare68.673440秒/exit0、
+直接前処理との4ファイルhash一致。trained-job/readyは未採用入力であり、GPU実行0。
+
+既存Library3件を実HTTPで掲載/全GLB hashまで再確認、追加登録0、合成Pixal表示を維持。
+13:00Zの実Host auth/meは401、正規実行contextの接続質問は回答待ち。採用receiptは両方なし。
+重み同意を認証/leaseへ読み替えず、Host内部session生成を使わない。
+次は正規Host admission・device mapping・renew/reap/releaseを用意し、Vulkanとfull生成を評価。
+現workerのFlashAttention無効状態も全token/graph allocation受入で確認する。
+NOT TESTED: 全grid/品質/VRAM/Vulkan、adoption、署名導入、installed画像→新GLB→Library、骨。
+全体目標は未完了。既存元checkout/Host/installedを変更しない。
+
+## 2026-09-19 Image-to-3D engine selection and polling recovery
+
+`ux1/pixal3d-engine-ui`、親PR573 / `5fe356f`。既存画像→3D formの詳細設定へ
+capability由来のauto/trellis.cpp/Pixal3D選択とengine別resolutionを接続。明示選択が利用不能に
+なった場合は保持して送信を止める。CPU入力準備の表示をGPU待機/生成/検証保存から分離。
+実ブラウザで見つけた取消直後の新Job監視停止を修正し、古い応答による上書きも防ぐ。
+
+Chrome151.0.7922.169、opaque iframeの実frontend + transport fixtureで6ケースpass、page error0。
+320px日本語/1280px英語でscroll widthは各viewportと一致、engine/resolution44px、
+name/seed/submit46px。Pixal1024→取消→TRELLIS512、seed16777217、4phase表示、通信失敗→更新、
+locale切替、選択engine/resolution消失時の保持/送信拒否、遅延旧Job応答の無視を確認。
+初回失敗と診断logを保持。画像生成/Host応答はfixtureで、実Vulkanの証拠ではない。
+詳細は [UI実測記録](implementation/g9-pixal-ui-20260919.md)。
+
+最終 `./mf.sh test`: **2242 passed / 2 warnings / 252.41秒 / exit0**。
+初回は内部Job identity例外のcodeが説明文規約に抵触して1failed。既存の接続失敗catch内で扱う
+Errorへ修正し、対象テスト・wrong Job ID拒否を加えたブラウザ6ケース・全件を再実行した。
+失敗logも保持。最終検証以後product/checker変更なし。
+
+2026-09-19T09:35:15Z、実installed HTTPで既存Library3点の掲載とGLB全bytes/hash一致を再確認。
+Pixal1点は引き続きCPU/合成重みの検証用表示。今回の追加登録0。
+証跡はmanaged `maintenance/g9-pixal-ui-20260919/` のbrowser-final/report.json、
+日本語/英語capture、library-recheck.json。元root `524553d` clean、origin/main `bbdc69a`。
+
+NOT TESTED: installed新form、正規Host lease付きVulkan、trained/full幅/品質、採用receipt、
+署名導入、installed画像生成→Library、GLB viewer画素、骨付きanimation。
+重み同意・正規leaseは未取得。source UIを実装しても未採用runtimeは利用可能にしない。
+全体目標は未完了。Host/installed/runtime/model/receipt/Libraryへの変更なし。
+
+後続実機監査（09:49:26Z）: installed health healthy、公開`3d.image_to_3d`は
+`unavailable / planned_for_g9`。両engineの採用receiptなし。Host `/api/v1/auth/me`は401
+「認証が必要です」、この実行環境にHost実行用認証の環境変数なし。Host内部からsessionを
+生成する既存受入scriptは流用しない。DINOv3 License本文を再確認し、未回答の学習済み重み
+利用同意を確認中。正規の認証済み実行経路と同意が揃うまでtrained/GPU実行は保留。
+証跡: 同maintenance配下`next-admission-audit.json`。product/checker変更なし。
+
+## 2026-09-19 Pixal3D existing Scene Jobs adapter
+
+`ux1/pixal3d-scene-jobs`、親PR572 / `0e2b870`。独立private adoption receiptとcore adapterを追加し、
+CPU前処理process終了→既存Host GPU admission→生成→release→Blender/Scene/Assetを接続。
+画像/descriptor/seed/prepared input/出力hashと実測device/resolutionを検査し、synthetic採用を拒否。
+venv launcherと基底interpreterのidentityを別に保持、coreのML import・環境共有なし。
+capabilityへengine別状態を加法追加。TRELLISの既存receipt/auto優先と未実測拒否を維持する。
+worker終了前のlease解放を避け、取消のdrain中もrenew。待機中adoption変更、late grant、retry、
+lease lossを既存Jobsで扱う。新しいJobs/Asset基盤・Host変更はない。
+
+対象51件exit0。両engineのScene/lineage登録、取消各段、前処理取消時のGPU要求0、
+wrong device/lost renewal/retry、adoption変更、cleanup中renew、hash thread/output pipeのdrainを確認。
+これらのHost/Blender/生成reportはprotocol fixtureであり、GPU/モデル採用の実測ではない。
+別の実CPU/synthetic workerをcore supervisorから実行: prepare22.244655秒→native1.324380秒、
+48,532byte/590三角形GLB。独立core/Blender4.5.9 pass、前回array/GLB payload一致。
+実SS flowのPython/native同一groupを観測し、取消0.062088秒、timeout0.7秒設定で0.762311秒、
+両PID消失・owned生成出力なし。実行中adoption receipt/Host leaseは作成していない。
+
+`./mf.sh test`: **2242 passed / 2 warnings / 249.79秒 / exit0**。以後product/checker変更なし。
+詳細は [Jobs接続記録](implementation/g9-pixal-jobs-20260919.md)、証跡はmanaged
+`maintenance/g9-pixal-jobs-20260919/` のtargeted/full-test log、`cpu-final/report.json`とsource hash。
+venv fixtureのcopy/symlink指定、checker起動時PYTHONPATHの誤りは修正し、失敗log/理由を記録。
+
+NOT TESTED: 正規Host admission付きPixal/Vulkan、trained/full幅/品質、採用receipt、署名導入、
+installed画像生成→Library、ブラウザ、骨付きanimation。元root/Host/installed/runtime/Library変更なし。
+全体目標は未完了。次は既存画像→3D formのengine選択とCPU prepare表示を接続する。
+学習済み重みの同意・正規leaseは未取得であり、trained/GPU評価を実行しない。
+
+## 2026-09-19 Pixal3D private worker entry and exact integer seeds
+
+`ux1/pixal3d-worker-entry`、親PR571 / `f887fbc`。private CPU prepareとnative generateを分離し、
+descriptor/ready/completeのhash、model role、設定、出力上限を検証する入口を追加。
+native `pixal-generate inspect`はbackendを作らずmodel契約検査、`generate`は明示CPUまたは
+Vulkan/device/F32を要求。評価専用fault/noiseを受け付けず、seedを整数0..2^31−1で渡す。
+NPYはheader/dimension積/exact payload sizeを確保前に検査。既存出力を保持し、取消/失敗時は
+owned出力を回収、native子をTERM/KILL/reapする。親workerと同じprocess groupを使う。
+core Scene Jobsへの接続・採用receipt・実Host admissionは今回の実装/受入に含まない。
+
+実機CPU/syntheticでopaque prepare18.296240秒→generate1.216938秒、48,532byte/590三角形。
+PR571入力4ファイル、従来評価入口と反復のGLB JSON（生成時刻除外）/binaryが完全一致。
+大きいseed3件を正確に保持し、16,777,216と16,777,217のGLB binaryが異なることを確認。
+5 GLBを独立core/Blender4.5.9で検査、15拒否/既存出力保持条件pass。
+背景encoder取消0.917840秒、native SS flow取消0.047917秒、timeout0.2秒で子観測後0.211352秒。
+すべてexit1、子reapとowned出力なし。同一groupを実/procで確認。実測詳細・再現手順は
+[worker入口記録](implementation/g9-pixal-worker-20260919.md)。
+
+`./mf.sh test`: **2211 passed / 2 warnings / 237.85秒 / exit0**。以後product変更なし。
+証跡: managed `maintenance/g9-pixal-worker-20260919/` の`cpu-first/report.json`、
+`lifecycle-first/report.json`、configure/build/full-test log、73 sourceのbuild-provenance。
+2026-09-19T08:30:11Zに稼働HTTPでLibrary3点を再確認し、掲載・content全hash一致。
+Pixal1点は引き続き「合成重み検証用」。今回の追加登録・学習済み重み取得/使用・GPU実行0。
+元root/Host/installed/runtime変更なし。
+
+NOT TESTED: core Scene Jobs接続、実Host lease付きVulkan、trained/full幅/品質、adoption/署名導入、
+新入口からのLibrary登録、ブラウザ画素、骨付きanimation。全体目標は未完了。
+次はCPU prepareの終了を待って既存GPU admissionへ進むprivate receipt/worker接続を行う。
+同意済み重みと正規leaseが揃うまではtrained/GPUを実行しない。
+
+## 2026-09-19 Pixal3D explicit CPU background preprocessing
+
+`ux1/pixal3d-background`、親PR569 / `71ecc7d`。固定通常版BiRefNetのCPU/F32前処理を実装し、
+opaque画像→背景除去→既存framing→MoGe→native GLBを接続。source3ファイルhashとlocal
+safetensors全tensor/shape/type/finite/position indexを検査し、backbone downloadなし。
+透明画像ではproviderを読まず、既存output保持・stage取消・manifest公開境界を維持する。
+
+実full Swin-L 220,176,498parameter /1024² /合成F16格納→F32計算。
+新forward14.781299秒、固定Pixal参照14.441112秒、RGBA全bytes一致。
+別CPU前処理process18.439189秒後、native0.704632秒で48,532byte/590三角形GLBを生成。
+独立coreとBlender4.5.9のUV/画像/材質/向き検査pass。alpha skipはPR569の4出力と全bytes一致。
+拒否等17条件pass、実encoder block中SIGTERMはexit1/0.940673秒reap/outputなし。
+synthetic赤色mask校正fixtureであり、学習済み精度・品質やVulkan受入ではない。
+詳細・実行・証跡は [背景除去記録](implementation/g9-pixal-background-20260919.md)。
+元runtime/Host/installed/Library/学習済み重みの変更なし。全体目標は未完了。
+最終 `./mf.sh test`: 2211passed /2warnings /237.31秒 /exit0。以後product/checker変更なし。
+
 ## 2026-09-19 generated artifact Library registration
 
 利用者の追加要求に従い、PR569のCPU合成重みGLBを稼働0.28.87の共通Libraryへ1件登録。
