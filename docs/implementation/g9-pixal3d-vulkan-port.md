@@ -1,5 +1,44 @@
 # Pixal3D Vulkan port: scope and measured first component
 
+## 2026-09-19 explicit CPU MoGe camera preprocessing
+
+The base plan now permits the original pinned MoGe 2 inference as a separate
+CPU/F32 preprocessing stage. `camera.py` loads only hash-verified, caller-admitted
+local checkpoints with source/config/tensor validation and strict state loading.
+Parameter metadata is checked before CPU weight storage allocation. Constructor
+constants remain on CPU because upstream DINO reads a linspace scalar during
+initialization. No model download, runtime adoption or MoGe Vulkan claim occurs.
+
+`prepare_camera.py` connects upstream-equivalent alpha framing to actual MoGe
+inference and Pixal's FOV/distance calculation, releases the model, and publishes
+low/high RGB arrays, camera values and a hash-bound manifest. It rejects invalid
+intrinsics or insufficient foreground on the actual 64² fitting grid instead of
+accepting a default camera. Opaque inputs still require a background provider.
+Existing output directories are preserved; cancellation cleans owned staging.
+
+Measured synthetic CPU evidence (`maintenance/g9-pixal-camera-20260919/`):
+
+- Real ViT-S/14 and reduced-width five-level MoGe heads, with synthetic UV/mask
+  calibration, pass four exact comparisons against the unmodified Pixal camera
+  functions. Both paths explicitly use F32; no FP16 equivalence is claimed.
+- RGB changes affect normalized focal by 0.43430909. This demonstrates dependency,
+  not camera accuracy. The connected fixture estimates 3.088564 rad FOV and
+  distance 0.0132603; these are synthetic values, not a physical-camera benchmark.
+- A real preprocessing process completes in 2.015881 s before the native CPU
+  process starts. Two runs produce 576-triangle / 48,220-byte GLBs; repeated
+  arrays and GLB payloads match except generation time. Both pass separate core
+  validation and Blender 4.5.9 material/image/UV/orientation checks.
+- 34 rejection/cancellation checks pass. Actual SIGTERM in an encoder block
+  exits 1 and reaps in 0.393562 s with no retained staging or manifest.
+- Initial metadata-device construction failed at upstream `linspace().item()`;
+  using the existing Accelerate parameter-only metadata context fixes it.
+  The failure and a separate mistyped-source-path launch failure are retained.
+
+Learned MoGe/full-width/full-image performance and accuracy, opaque-removal
+inference, genuine leased native Vulkan, trained 3D quality, production worker
+adoption/deployment and new Library assets remain untested. This adds an actual
+camera stage to the connected native path; it does not complete the overall goal.
+
 ## 2026-09-19 projected NAF output memory
 
 The LR/HR shape and texture stages now evaluate the four NAF pixels needed by

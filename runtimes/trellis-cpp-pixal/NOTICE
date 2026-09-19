@@ -140,3 +140,15 @@ connection to the CPU GLB exporter. It does not include trained model weights.
 check_pipeline.py executes the original run() and model classes locally, with
 CPU evaluation adapters described above and an unrepaired mesh interception
 before GPU-only postprocessing. It does not copy those external model sources.
+
+camera.py adapts the camera-intrinsics/FOV/distance composition from the pinned
+TencentARC/Pixal3D inference.py (MIT, LICENSE.pixal3d). It invokes the external
+Microsoft MoGe 2 source at 07444410f1e33f402353b99d6ccd26bd31e469e8 on CPU/F32.
+The MoGe source (MIT) and its embedded DINOv2 (Apache-2.0) remain external and are
+not copied into this package; any runtime distribution must retain their notices.
+The loader uses local hash-verified tensor/config archives with weights_only,
+metadata parameter initialization and strict state loading, never from_pretrained
+or a network download. Explicit CPU preprocessing does not claim a MoGe Vulkan
+port. check_camera.py executes original MoGe forward/infer and Pixal camera
+functions with synthetic parameters, a ViT-S backbone and reduced decoder widths.
+UV/mask calibration in that fixture is not trained-model quality acceptance.

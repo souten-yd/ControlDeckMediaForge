@@ -1,5 +1,51 @@
 # Media Forge implementation status
 
+## 2026-09-19 Pixal3D explicit CPU MoGe camera preprocessing
+
+`ux1/pixal3d-camera`、親PR568 / `27bb102`。base-planへ明示CPU前処理の境界を先に追記し、
+固定MoGe 2の実forward/infer→Pixalのintrinsics/FOV/distance式→native生成入力を接続。
+CPU/FP32をsidecarへ記録し、MoGeをVulkan移植したとはしない。3D本体のGGML backend選択と
+正規Host lease条件は維持。推定不能時の固定FOV fallbackなし。opaque入力は背景provider必須。
+
+`camera.py`は許可root内のlocal checkpoint hash、固定source/既存import由来、設定、finite、
+完全tensor tableを検査。weights_only/mmapとstrict load、parameter metadataによる構成検査を
+使い、CPU model領域を確保する前に欠落/shape不一致を拒否。ダウンロード/採用receipt生成なし。
+既存worker venvのTorch/Accelerate/Scipy/utils3dだけを使い、core/Hostへ依存を追加しない。
+`prepare_camera.py`はprivate CPU processでalpha framing→カメラ→RGB low/high/3値arrayを作り、
+モデル解放後にhash付きmanifestを最後に公開。元入力・既存outputを維持し、取消時はowned出力を回収。
+強制killのreap/残骸回収は親workerの責務。source/weightのhashはlicense同意や採用証明ではない。
+
+実機CPU: 実MoGe ViT-S/14（22,611,784 parameter）、32幅5段neck/heads、synthetic重み。
+UV/maskの最終parameterを校正してfocal fittingを可能にしたfixtureで、学習済み品質ではない。
+正方形/横長/縦長/scale+extensionの4条件で、固定Pixalの未変更camera関数とFOV/distanceが
+完全一致し反復も完全一致。参照も明示FP32（source既定FP16の受入ではない）。RGB変更で
+normalized focal差0.43430909を観測。公開MoGe train/v2.json設定のvalidationも通過したが、
+配布checkpointの全tensor/実幅推論を受入した意味ではない。
+
+前処理実processは2.015881秒で終了後、既存native全pipelineをCPUで起動。SS7→upsample1792→
+HR51座標→1024-grid、576三角形/48,220byte GLBを2回生成。全保存arrayと、生成時刻のみ除いた
+GLB JSON/binaryが一致。source manifestへ9個のnative modelとMoGe checkpoint hash、input側へ
+カメラ/前処理manifestを束縛。2件とも独立core検証器とBlender4.5.9の材質/画像/UV/向き検査pass。
+このsynthetic画像の推定FOVは3.088564 rad / distance0.0132603で、物理的画角精度の受入ではない。
+
+拒否/取消34条件pass（欠落/shape/NaN/integer重み、設定、hash、scope、intrinsics、64² fitting grid
+の有効点不足、既存output保持、各neural段取消等）。実encoder block中にSIGTERMし、exit1、
+0.393562秒でreap、staging/manifestなしを確認。既存modelを借りた取消後の再利用も通過。
+最初のmeta-device初期化は上流DINOのlinspace().item()で失敗し、parameterだけmetaにして定数を
+CPUに保持する既存Accelerate方式へ修正。推論式/許容誤差は変更なし。sourceがCPUのfloat32
+inner autocastを無効化するwarningを出すが、明示FP32処理は完走。失敗logを保持する。
+
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 236.57秒 / exit0**。以後product変更なし。
+証跡: managed `maintenance/g9-pixal-camera-20260919/cpu-verified/report.json`、初回成功`cpu-first`、
+meta失敗`cpu-final.log`、修正成功`cpu-second`、参照path誤記で起動前に失敗したlaunch log、
+build/source provenance、full-test.log。学習済み重み取得/使用0、Torch GPU initialized=false。
+Host/元runtime/installed/Libraryへの変更なし。骨付き版は未作成。
+
+**NOT TESTED / 残り**: MoGe trained/full幅/full画像token数/実画角精度、背景除去モデル、native生成の
+trained/mixed precision/実Host lease付きVulkan/品質、production worker・採用/署名導入・新規Library登録。
+重みlicense同意は既出質問への回答待ち。次は明示CPU背景providerとprivate native worker入口を
+つなぎ、正規lease・同意済み重みが揃った条件で実GPU/Library受入へ進める。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D projected NAF output memory
 
 `ux1/pixal3d-naf-projection`、親PR567 / `35d6c5e`。NAFの全encoder/Qとpooled Kを保ち、
