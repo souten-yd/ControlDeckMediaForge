@@ -28,6 +28,12 @@ Host/installed/runtime/model/receipt/Library変更なし。学習済み重み同
 計測と採用を進める。合成CPUの成功だけでreceiptを発行せず、UI fixtureをinstalled証拠にしない。
 同意/leaseが依然ない場合は、それを記録してdependent実行を待つ。全体目標は未完了。
 
+後続09:49:26Z監査: installed healthy、画像→3D capabilityは`unavailable/planned_for_g9`、
+両採用receiptなし。Host auth/meは401、現在の環境変数にもHost実行認証なし。
+既存scriptのHost内部session生成を流用しない。DINOv3独自License本文を再確認し、
+学習済み重み同意をasync質問で再提示。返答なしを同意とみなさない。
+実機snapshotは`next-admission-audit.json`。この監査でproduct/checker/GPU/モデル変更なし。
+
 ## 2026-09-19 Pixal3D core Scene Jobs接続
 
 `ux1/pixal3d-scene-jobs`、親PR572 / `0e2b870`。前ターンをprogressと判定して開始。

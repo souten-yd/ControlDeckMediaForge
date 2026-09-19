@@ -29,6 +29,13 @@ NOT TESTED: installed新form、正規Host lease付きVulkan、trained/full幅/�
 重み同意・正規leaseは未取得。source UIを実装しても未採用runtimeは利用可能にしない。
 全体目標は未完了。Host/installed/runtime/model/receipt/Libraryへの変更なし。
 
+後続実機監査（09:49:26Z）: installed health healthy、公開`3d.image_to_3d`は
+`unavailable / planned_for_g9`。両engineの採用receiptなし。Host `/api/v1/auth/me`は401
+「認証が必要です」、この実行環境にHost実行用認証の環境変数なし。Host内部からsessionを
+生成する既存受入scriptは流用しない。DINOv3 License本文を再確認し、未回答の学習済み重み
+利用同意を確認中。正規の認証済み実行経路と同意が揃うまでtrained/GPU実行は保留。
+証跡: 同maintenance配下`next-admission-audit.json`。product/checker変更なし。
+
 ## 2026-09-19 Pixal3D existing Scene Jobs adapter
 
 `ux1/pixal3d-scene-jobs`、親PR572 / `0e2b870`。独立private adoption receiptとcore adapterを追加し、
