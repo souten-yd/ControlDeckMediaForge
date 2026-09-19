@@ -1,0 +1,143 @@
+{
+  "schema_version": "media-forge.pixal-evaluation-models@1",
+  "purpose": "Local evaluation candidates; integrity is not adoption or GPU authority",
+  "pixal_source_revision": "f7cf38429b0bd264f1995f0f8743a88b1c728b94",
+  "pipeline_config": {
+    "filename": "pipeline.json",
+    "sha256": "1647217de06e32477702d14895e826fea73497d94537b809a53637f13482a237"
+  },
+  "background_provider": "Explicit full BiRefNet CPU provider; upstream pipeline BRIA RMBG-2.0 was not downloaded",
+  "models": {
+    "shape-decoder": {
+      "repository": "TencentARC/Pixal3D",
+      "revision": "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f",
+      "filename": "ckpts/shape_dec_next_dc_f16c32_fp16.safetensors",
+      "size_bytes": 948490494,
+      "sha256": "e3b718d3e43e4f8780e9a24ac6fff231811a67e3b058e336e10fe654c911d581",
+      "license": "MIT",
+      "format": "safetensors",
+      "config": {
+        "filename": "ckpts/shape_dec_next_dc_f16c32_fp16.json",
+        "sha256": "5f1b856dffce79466fb18f5f0eefc08f08c673b24b3c05b20359c0b6d318a209"
+      }
+    },
+    "shape-hr": {
+      "repository": "TencentARC/Pixal3D",
+      "revision": "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f",
+      "filename": "ckpts/slat_flow_img2shape_dit_1_3B_1024_bf16.safetensors",
+      "size_bytes": 5546764048,
+      "sha256": "3e6d1df0e62bc5bc863320d1d63d6b996235eef4abb8b851e878c88f316369f1",
+      "license": "MIT",
+      "format": "safetensors",
+      "config": {
+        "filename": "ckpts/slat_flow_img2shape_dit_1_3B_1024_bf16.json",
+        "sha256": "f47fca56311959a643e8cfd2750229a2c53cbab0027406d8426cd564ce4fb5bc"
+      }
+    },
+    "shape-lr": {
+      "repository": "TencentARC/Pixal3D",
+      "revision": "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f",
+      "filename": "ckpts/slat_flow_img2shape_dit_1_3B_512_bf16.safetensors",
+      "size_bytes": 5546764048,
+      "sha256": "63569838c1da93f010e2fa805b202ecf802cc758830230abac202a81b70e5b45",
+      "license": "MIT",
+      "format": "safetensors",
+      "config": {
+        "filename": "ckpts/slat_flow_img2shape_dit_1_3B_512_bf16.json",
+        "sha256": "2f7b736e8535aae96e7c41e8d123c24a14ee809fc25bea76eeac72643d21b997"
+      }
+    },
+    "texture-flow": {
+      "repository": "TencentARC/Pixal3D",
+      "revision": "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f",
+      "filename": "ckpts/slat_flow_imgshape2tex_dit_1_3B_1024_bf16.safetensors",
+      "size_bytes": 5546960656,
+      "sha256": "65df179ad02f9e92bc18335d7861fadd95f268e6249217352468dd83cb79d1d0",
+      "license": "MIT",
+      "format": "safetensors",
+      "config": {
+        "filename": "ckpts/slat_flow_imgshape2tex_dit_1_3B_1024_bf16.json",
+        "sha256": "f18455729d08d2ce7ef809f947ffa47f6f468b3bcf8a86473e8c326e80128ac2"
+      }
+    },
+    "ss-decoder": {
+      "repository": "TencentARC/Pixal3D",
+      "revision": "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f",
+      "filename": "ckpts/ss_dec_conv3d_16l8_fp16.safetensors",
+      "size_bytes": 147591972,
+      "sha256": "1c76d4a40519aa2d711cc263a8404105231ac26db31d946bed48b84fee79009a",
+      "license": "MIT",
+      "format": "safetensors",
+      "config": {
+        "filename": "ckpts/ss_dec_conv3d_16l8_fp16.json",
+        "sha256": "646781293f1cda74720de85d1cef50a957fb4aebd9a4bd014e454e32f2330ac5"
+      }
+    },
+    "ss-flow": {
+      "repository": "TencentARC/Pixal3D",
+      "revision": "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f",
+      "filename": "ckpts/ss_flow_img_dit_1_3B_64_bf16.safetensors",
+      "size_bytes": 5359822584,
+      "sha256": "6d0147bb347eb61fa81c304cc68c7fd69d447e91870357a549b47e1d0fd77242",
+      "license": "MIT",
+      "format": "safetensors",
+      "config": {
+        "filename": "ckpts/ss_flow_img_dit_1_3B_64_bf16.json",
+        "sha256": "2b3ef4c63b72a3de8adf745bd9d9d36b7960bdd7ba3740a6fa4d18fea6c475dd"
+      }
+    },
+    "texture-decoder": {
+      "repository": "TencentARC/Pixal3D",
+      "revision": "b0cb2e1b794cab9aa0ac38a95d794a4d9337437f",
+      "filename": "ckpts/tex_dec_next_dc_f16c32_fp16.safetensors",
+      "size_bytes": 948458812,
+      "sha256": "97ea69addea2ecd9312910f5f548234665eef51c088386180b7cd5b258645e3c",
+      "license": "MIT",
+      "format": "safetensors",
+      "config": {
+        "filename": "ckpts/tex_dec_next_dc_f16c32_fp16.json",
+        "sha256": "22074e4ab5b28e2b72d33a3fe61bf416134b89e12d0fc5c729f37da75da0c4d1"
+      }
+    },
+    "camera": {
+      "repository": "Ruicheng/moge-2-vitl",
+      "revision": "39c4d5e957afe587e04eec59dc2bcc3be5ecd968",
+      "filename": "model.pt",
+      "size_bytes": 1305030700,
+      "sha256": "3eefd4abb2102f38f12b2d1992e5ff15e4923e5431c67dd494afe157e0111cd5",
+      "license": "MIT",
+      "format": "torch-weights-only"
+    },
+    "background": {
+      "repository": "ZhengPeng7/BiRefNet",
+      "revision": "e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4",
+      "filename": "model.safetensors",
+      "size_bytes": 444473596,
+      "sha256": "9ab37426bf4de0567af6b5d21b16151357149139362e6e8992021b8ce356a154",
+      "license": "MIT",
+      "format": "safetensors"
+    },
+    "naf": {
+      "repository": "valeoai/NAF",
+      "revision": "37f2dfc180f2de53d98bd601109c0da0dd6b0f43",
+      "filename": "naf_release.pth",
+      "size_bytes": 2664431,
+      "sha256": "c096c1ab2217a5c3ac136365f721685e2201379cb69d509cfb0261183847c98f",
+      "license": "Apache-2.0",
+      "format": "torch-weights-only",
+      "asset_url": "https://github.com/valeoai/NAF/releases/download/model/naf_release.pth"
+    },
+    "dino": {
+      "repository": "ilintar/trellis2-gguf",
+      "revision": "a57397bd3d351599d9729fc144b3f87c3f87d65b",
+      "filename": "dinov3.gguf",
+      "size_bytes": 606773440,
+      "sha256": "b2e84087aebeb06440da4f5970413153f7f27f71ede7bab993e82accd839d936",
+      "license": "DINOv3 License",
+      "format": "trellis-gguf",
+      "acquisition": "existing operator-owned local file only",
+      "variant": "timm vit_large_patch16_dinov3, no QKV bias, F16 matrices",
+      "original_hf_checkpoint_acquired": false
+    }
+  }
+}
