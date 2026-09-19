@@ -1,5 +1,44 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D connected native RGB-to-GLB pipeline
+
+`ux1/pixal3d-native-pipeline`、親PR566 / `4d0350c`。一つの`generate_glb`へ、
+RGB→DINO/SS flow→実SS decoder→32-grid→NAF/LR shape→実4段upsample→HR cascade→
+HR shape/texture flow→実shape/texture decoder→mesh/PBR→GLBを接続。decoder出力の入力欄はない。
+モデルを段階ごとにload/freeし、役割・幅・cascade段数・source_kind・sampler/入力/出力を事前検査。
+cancel/progressを全段へ伝播し、公開後の遅いcallback取消は行わない。Host lease/backend/許可pathは
+callerが所有する。private検証CLIであり、installed画像生成workerへ採用済みとはしない。
+
+固定Pixalの実`run()`と実neural decoderをCPUで実行し、1024/1536/1536→1024の111比較pass。
+最大絶対誤差1.2278557e-5、既存atol/rtol5e-5（頂点2e-6）維持。座標と面indices/順序は完全一致。
+最低1024でもtoken budget未達の場合、元と同じbudget_met=falseを返して継続し、切り捨てなし。
+CPU adapterはPIL-listの.cuda()、既存NATTEN/FlexGEMM/geometry hash、CuMesh手前の未修復mesh境界。
+完成GLBとCuMesh/nvdiffrast/OpenCV全体の同等性を証明したとはしない。
+
+native完走7件。SS4座標→upsample1024→HR36/56座標→1024/1536-gridを経て、
+代表2件のGLBは578/574三角形・47236/46092byte。DINO画像12/16、NAF8/12、3step、texture128²、
+縮小幅synthetic重みでの実測である。SS flow headはzero velocity、SS出力biasは4voxel選択、
+shapeのsubdivision/intersectionはplanarを選ぶ人工設定であり、学習済み形状・画質の受入ではない。
+画像色変更でHR latent最大差0.31782913とGLB binary変更を観測。exact-noise/native-seed各反復は
+全保存arrayと生成時刻のみ除いたGLB JSON/binaryが一致。native RNGはmt19937 Box-Mullerで、
+Torchとseed同一出力にはならない。方式とモデル一式/入力条件manifest hashをGLBへ記録。
+
+異常入力/role/取消34件は出力公開なしで拒否。SS flow中の実SIGTERMは0.001081秒でreap、GLBなし、
+parentがstaging回収。5 GLBを独立core検証器とBlender4.5.9で読み込み、材質・画像・UV・面・向き確認。
+共有validator変更のflow回帰10件/拒否11件、surface回帰9run/74比較/拒否19件もpass。
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 238.37秒 / exit0**。以後product変更なし。
+
+証跡: managed `maintenance/g9-pixal-pipeline-20260919/cpu-second/report.json`、初回成功`cpu-first`、
+native build logs、`flow-regression`、`surface-regression`、`build-provenance.json`、`full-test.log`。
+最初のnative buildはWerrorのindentation、後のbuildはcanonical戻り値未使用で失敗し、修正して再build。
+数値gateのfailureや許容誤差変更はなし。Torch GPU initialized=false、学習済み重み取得/使用0、
+Host/元runtime/installed/Library変更0。既定1536とsampler既定値は固定source/配布JSONを維持。
+
+**NOT TESTED / 残り**: full NAF容量、MoGe/背景除去、trained/full幅/full画像サイズ/mixed precision、
+実Host lease付きVulkan、生成品質、実画像worker/adoption/署名導入、新規Library登録、骨付きanimation。
+重みlicense同意は既出質問への回答待ち。次はfull NAFの保持容量を改善し、MoGe/背景除去と
+private画像worker入口を接続する。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D CPU surface postprocessing and textured GLB export
 
 `ux1/pixal3d-surface-export`、親PR565 / `40c50c4`。decoded surfaceから穴埋め・元面BVH・

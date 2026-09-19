@@ -90,7 +90,7 @@ execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../
   COMMAND_ERROR_IS_FATAL ANY)
 find_library(PIXAL_WEBP NAMES webp PATHS "${TRELLIS_BUILD_DIR}/_deps/libwebp-build" NO_DEFAULT_PATH REQUIRED)
 find_library(PIXAL_SHARPYUV NAMES sharpyuv PATHS "${TRELLIS_BUILD_DIR}/_deps/libwebp-build" NO_DEFAULT_PATH REQUIRED)
-add_library(pixal_surface STATIC surface_export.cpp
+add_library(pixal_surface STATIC surface_export.cpp pipeline.cpp
   "${SURFACE_OVERLAY}/src/uv_bake.cpp" "${SURFACE_OVERLAY}/src/mesh_glb.cpp" "${SURFACE_OVERLAY}/src/remesh_dc.cpp"
   "${TRELLIS_SOURCE_DIR}/src/tri_bvh.cpp" "${TRELLIS_SOURCE_DIR}/src/decimate_qem.cpp"
   "${TRELLIS_SOURCE_DIR}/thirdparty/xatlas/xatlas.cpp" "${TRELLIS_SOURCE_DIR}/thirdparty/meshoptimizer/simplifier.cpp")
@@ -98,7 +98,7 @@ target_include_directories(pixal_surface BEFORE PUBLIC "${SURFACE_OVERLAY}/inclu
 target_include_directories(pixal_surface PRIVATE "${TRELLIS_SOURCE_DIR}/thirdparty/stb" "${TRELLIS_SOURCE_DIR}/thirdparty/fqms"
   "${TRELLIS_SOURCE_DIR}/thirdparty/xatlas" "${TRELLIS_SOURCE_DIR}/thirdparty/meshoptimizer" "${TRELLIS_BUILD_DIR}/_deps/libwebp-src/src")
 target_compile_definitions(pixal_surface PRIVATE TRELLIS_HAVE_WEBP XA_MULTITHREADED=0)
-set_source_files_properties(surface_export.cpp surface_export_cli.cpp PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror;-ffp-contract=off")
+set_source_files_properties(surface_export.cpp surface_export_cli.cpp pipeline.cpp pipeline_check.cpp PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror;-ffp-contract=off")
 target_link_libraries(pixal_surface PUBLIC pixal_image "${PIXAL_WEBP}" "${PIXAL_SHARPYUV}")
 add_executable(pixal-surface-export surface_export_cli.cpp)
 target_link_libraries(pixal-surface-export PRIVATE pixal_surface)
@@ -113,3 +113,7 @@ target_include_directories(pixal-dit-baseline-check PRIVATE "${TRELLIS_SOURCE_DI
   "${TRELLIS_SOURCE_DIR}/thirdparty/ggml/include")
 target_link_libraries(pixal-dit-baseline-check PRIVATE pixal_projection "${GGML_base}" "${GGML_cpu}" "${GGML_registry}" "${GGML_vulkan}")
 set_target_properties(pixal-dit-baseline-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
+
+add_executable(pixal-pipeline-check pipeline_check.cpp)
+target_link_libraries(pixal-pipeline-check PRIVATE pixal_surface "${GGML_vulkan}")
+set_target_properties(pixal-pipeline-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")

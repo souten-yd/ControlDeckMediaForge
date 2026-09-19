@@ -6,7 +6,7 @@ namespace mediaforge::pixal {
 struct FlowCheckpoint {
     trellis::DiTParams params;
     int resolution;
-    std::string stage;
+    std::string stage, source_kind;
 };
 // Inspect metadata and every weight name/type/shape BEFORE allocating a backend.
 // Input is a trusted local converted checkpoint, never a public asset upload.

@@ -792,3 +792,92 @@ revealed trellis's <100-active-voxel skip, now removed in the overlay. Its log i
 retained; no tolerance was relaxed. Trained generation/quality, full 4096 texture
 completion, Vulkan, installed Library/browser acceptance and rigging remain
 NOT TESTED. The 4096 case is deliberately terminated, not an export success.
+
+## Connected native pipeline
+
+`native/pipeline.{h,cpp}` exposes `generate_glb`: framed low/high RGB inputs,
+explicit camera and normalization, nine local model paths, one borrowed backend,
+settings and an output path produce a textured GLB. It runs DINO/SS flow/the real
+SS decoder → 32-grid coordinates → DINO/NAF/LR shape flow → four actual learned
+decoder subdivision stages → reference cascade quantization/backoff → HR shape
+flow → texture flow → both actual sparse decoders with shared subdivisions →
+dual-grid mesh/PBR → CPU surface export. No supplied occupancy, upsampled
+coordinates or decoded mesh is accepted by this entrypoint.
+
+Weights and graphs have stage-scoped lifetimes, including separate shape and
+texture decoder loading. Image features and latents are released when their
+stage no longer needs them. This is an implementation property, not measured
+full-model VRAM acceptance. `inspect_pipeline` validates all model roles, widths,
+SS pooling, the four-stage 512→1024/1536 cascade and consistent source kinds.
+Input frames, camera, normalization, sampler settings and the output path are
+checked; cancellation propagates through vision, flow, decoding, geometry and
+export. Prompt termination of an individual long operation still requires the
+caller-owned process boundary. No callback can turn an already published GLB
+into a late cooperative cancellation.
+
+Defaults follow the pinned inference/deployed pipeline parameters: resolution
+1536, low/high image inputs 512/1024, NAF targets 512/512/1024, twelve steps,
+SS time-rescale 5/guidance 7.5/rescale 0.7, shape 3/7.5/0.5 and texture 3/1/0.
+Guidance intervals are [0.6,1] for SS/shape and [0.6,0.9] for texture. Reduced
+sizes and F32 evaluation of FP16-reference configurations are explicit options.
+The caller must supply adopted normalization arrays and camera parameters;
+MoGe and background-removal model inference are not implemented by this function.
+Foreground framing/resize remains the isolated worker's Pillow responsibility.
+
+The optional exact-noise callback supports reference comparison. Without it,
+the native runner draws from its own seeded `mt19937-box-muller-f32-v1` generator.
+Both modes are named in the result and GLB extras. The native RNG is repeatable
+in the measured build, **not Torch seed-equivalent**. It must not be used to
+claim same-seed upstream image quality parity. Model-bundle and input-manifest
+hashes bind the checker's GLBs to all nine checkpoints, frames, camera, settings,
+normalization and (when used) explicit noises. An adopting worker must verify
+those admitted files, enforce allowed roots, own the Host lease and independently
+validate/publish through the existing Library service.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_pipeline.py \
+  --pixal-source "$PIXAL_SOURCE" --naf-source "$NAF_SOURCE" \
+  --flex-source "$FLEX_SOURCE" --trellis2-source "$TRELLIS2_SOURCE" \
+  --vision-fixtures "$VISION_CPU_REPORT" --flow-fixtures "$CHECKPOINT_CPU_REPORT" \
+  --ss-fixtures "$SS_DECODER_CPU_REPORT" --mesh-fixtures "$DUAL_GRID_CPU_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-pipeline-check \
+  --core-python "$MEDIAFORGE_CORE_PYTHON" --blender "$MANAGED_BLENDER" \
+  --output-dir "$PIPELINE_CPU_REPORT"
+```
+
+The private checker executable consumes local NPY frames/settings and checkpoint
+arguments; it is not yet the MediaForge image-generation worker adapter. Its
+`cpu|vulkan` selection is explicit, and Vulkan additionally requires the admitted
+physical device index. It never obtains or fabricates a Host lease itself.
+
+CPU evidence: `maintenance/g9-pixal-pipeline-20260919/cpu-second/report.json`.
+The original `run()` and actual neural models execute on CPU. Adaptations are
+limited to the list-of-PIL CUDA input path, the already checked NATTEN/FlexGEMM
+CPU adapters, geometry hash lookup, and interception at the unrepaired mesh
+boundary before GPU-only CuMesh operations. Native postprocessing is separately
+validated as an adaptation; its topology/pixels are not compared to CuMesh.
+
+Seven complete native runs passed. Three exact-noise reference cases cover 1024,
+1536 and 1536→1024 backoff (the reference continues with budget_met=false at its
+minimum; no tokens are silently truncated). All 111 comparisons pass with maximum
+absolute error 1.2278557e-5, using existing 5e-5 gates and 2e-6 for vertices. All
+coordinates and triangle indices/order match exactly. The cases use actual
+SS output 32³ and final mesh grids 1024/1536, but reduced channels, DINO images
+12/16 pixels, NAF maps 8/12, three sampling steps and 128-square textures.
+
+All parameters are synthetic. The SS flow output head is zero velocity and the
+SS decoder output bias is calibrated to a bounded four-voxel structure; shape
+subdivision/intersection logits select planar topology. These are numerical
+fixtures, not learned shape or visual-quality evidence. Changing RGB changes
+the HR latent by up to 0.31782913 and changes the exported GLB binary payload.
+Exact-noise and native-seed repetitions match all retained arrays and the full
+GLB JSON/binary payload after excluding only its generation timestamp.
+
+34 invalid-input/role/cancel checks reject without a published output. Real
+SIGTERM during SS flow reaps in 0.001081 s with no GLB; the parent removes staging.
+Five artifacts pass independent core validation and Blender 4.5.9 import,
+including material/texture/UV/triangle/orientation checks. Flow regression 10
+cases/11 rejections and surface regression 9 runs/74 comparisons/19 rejections
+also pass. Trained/full-width/full-image-size/mixed-precision/Vulkan generation,
+MoGe/removal/full NAF capacity, quality, adoption/deployment/Library and rigging
+remain NOT TESTED. No installed capability is enabled by these source changes.

@@ -188,16 +188,21 @@ std::vector<float> FlowRunner::forward(const std::vector<float>& latent, float t
     return result;
 }
 
+void validate_flow_sampler(const FlowSamplerParams& p) {
+    for (double value : {p.rescale_t, p.sigma_min, p.guidance_strength, p.guidance_rescale, p.interval_start, p.interval_end})
+        if (!std::isfinite(value)) throw std::invalid_argument("non-finite sampler parameter");
+    if (p.steps < 1 || p.steps > 1000 || p.rescale_t <= 0 || p.sigma_min < 0 || p.sigma_min >= 1 ||
+        p.guidance_rescale < 0 || p.guidance_rescale > 1 || p.interval_start < 0 || p.interval_end > 1 ||
+        p.interval_start > p.interval_end)
+        throw std::invalid_argument("invalid flow sampler parameters");
+}
+
 std::vector<float> sample_flow(const FlowForward& forward, std::vector<float> sample,
                               const FlowCondition& positive, const FlowCondition& negative,
                               const FlowSamplerParams& p, bool sparse, int channels,
                               std::vector<FlowStep>* trace, const CancelCheck& cancelled, const Progress& progress) {
-    for (double value : {p.rescale_t, p.sigma_min, p.guidance_strength, p.guidance_rescale, p.interval_start, p.interval_end})
-        if (!std::isfinite(value)) throw std::invalid_argument("non-finite sampler parameter");
-    if (!forward || p.steps < 1 || p.steps > 1000 || p.rescale_t <= 0 || p.sigma_min < 0 || p.sigma_min >= 1 ||
-        p.guidance_rescale < 0 || p.guidance_rescale > 1 || p.interval_start < 0 || p.interval_end > 1 ||
-        p.interval_start > p.interval_end || channels < 1 || sample.size() < 2 || sample.size()%channels)
-        throw std::invalid_argument("invalid flow sampler parameters");
+    validate_flow_sampler(p);
+    if (!forward || channels<1 || sample.size()<2 || sample.size()%channels) throw std::invalid_argument("invalid flow sampler parameters");
     finite(sample, "initial noise");
     auto predict = [&](float scaled_t, const FlowCondition& cond) {
         check_cancel(cancelled);
