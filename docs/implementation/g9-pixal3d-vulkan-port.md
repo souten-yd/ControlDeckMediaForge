@@ -1,5 +1,56 @@
 # Pixal3D Vulkan port: scope and measured first component
 
+## 2026-09-19 foreground and stage/cascade connection
+
+`ux1/pixal3d-stage-bridge`, based on PR561 / `d231f87`, adds worker-side
+foreground framing and native stage bridges. The alpha decision before resize,
+strict threshold, crop rounding and composition follow the pinned pipeline.
+Opaque input requires an explicit background-removal provider; its neural model
+is not implemented or claimed by a deterministic protocol fixture.
+
+The existing image/flow graphs now run through SS, shape and texture helpers with
+explicit input noise, actual grid, separate shape/texture normalization, progress
+and cancellation. SS output is transposed to the decoder's channel-major layout.
+Occupancy logits pool to ordered coordinates; shape-decoder upsample coordinates
+use the actual `run()` quantization (grid-1, rounding, sorted unique), strict token
+budget and 128-pixel backoff. The old Pixal helper/TRELLIS floor quantization is
+different. A plan at 1024 may report an unmet budget; it never truncates tokens.
+HR shape and texture preserve the selected grid/coordinate order.
+
+Actual CPU measurements, all learned parameters synthetic:
+
+- Eight foreground cases: exact upstream pixel equality, including transparency,
+  threshold/edge rounding, downsize, custom background and opaque callback paths.
+- Seven bridge cases: 28 exact comparisons for pooling/cascade/budget attempts,
+  including equality at the strict limit and backoff ending over budget at 1024.
+- Three loaded-checkpoint RGB/DINO/NAF/SS/LR/HR/texture cases: all 78 comparisons
+  pass, maximum absolute error `1.6689300537109375e-06` (atol/rtol5e-5). All 36
+  sampler step states, normalization, SS decoder layout and progress agree.
+  1024, 1536 and 1536→1408 with the actual conditioning grid are included.
+- All repeated connected computations are bitwise equal; 25 invalid-input/
+  cancellation checks reject, without publishing native outputs. GPU initialized=false.
+
+The oracle extracts unchanged pipeline methods and the quantization statements
+from `run`; image tensors use the supported CPU input branch and Pillow pixels
+are independently compared. The source's PIL-list branch hardcodes `.cuda()`.
+SS's deterministic positional buffer is constructed by the reference model;
+learned checkpoint tensors still load strictly. Initial oracle failures for
+these boundaries and the test's initial-zero progress count are retained in logs;
+the native numerical tolerance was not relaxed. NATTEN CPU adaptation is unchanged.
+
+Evidence: managed `maintenance/g9-pixal-stages-20260919/cpu-final`, failure logs
+and build provenance. Supplied decoder logits/upsampled coordinates are explicitly
+synthetic fixtures; real neural decoders are not tested. Native inputs use saved
+Torch noise, not a claimed seed-identical native RNG. No trained weights, GPU
+execution, installed capability changes or new generated assets occurred.
+
+Remaining: actual neural decoder/config compatibility, MoGe and removal models,
+full-size capacity/mixed precision/Vulkan under a genuine Host lease, full GLB
+generation/quality, adoption/release and installed Library acceptance. The original
+TRELLIS SS decoder hardcodes 16³ latent input, whereas a pinned Pixal training
+config declares 8³; do not blindly connect it without deployed config validation.
+Earlier weight-license consent remains unanswered. The overall goal is incomplete.
+
 The user explicitly requested Pixal3D Vulkan support on 2026-09-19, in addition
 to the original image-to-3D integration, Pixal3D evaluation and Library outputs.
 This expands the requested implementation; a Python/ROCm-only evaluation is

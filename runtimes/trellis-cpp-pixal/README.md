@@ -439,3 +439,65 @@ The existing NAF output-element cap also needs measured resolution planning:
 the pinned source has a 1024-target texture training config, whose full F32
 1024-channel map exceeds that cap. Do not silently lower the requested target
 or treat a source training config as the uninspected deployed pipeline config.
+
+## Foreground and stage boundaries
+
+`prepare_image.frame_foreground` implements the pinned pipeline's alpha decision
+before resizing, 1024-pixel limit, strict alpha >204 bounds, 1.1 crop sizing,
+Pillow coordinate rounding and RGB background composition. Opaque input requires
+an explicit background-removal callback returning same-size RGBA. That callback
+owns its model and resource lifecycle; this module provides no removal model.
+Empty masks, degenerate crops and malformed provider outputs fail explicitly.
+The returned frame includes original/resized sizes, crop box and alpha source.
+Pass its RGB image to `prepare_rgb` for each image encoder's configured size.
+
+`native/stage_bridge` connects the existing image projection and flow runner to
+dense SS, sparse shape and texture stages. The caller supplies noise, camera,
+actual grid and separate shape/texture normalization from the pipeline config.
+SS results are returned channel-major `[C,X,Y,Z]` for decoding; sparse results
+are token-major with their original coordinates and actual grid retained.
+Texture re-normalizes the supplied shape and concatenates it at every model
+call, integrating texture channels only, then applies texture normalization.
+Progress (including initial zero) and cancellation reach the underlying sampler.
+
+`occupancy_coordinates` accepts actual decoder logits, applies >0 then pooling
+and emits ordered coordinates. `plan_shape_cascade` accepts actual LR decoder
+upsample coordinates on the 512 grid. It follows Pixal **run()**:
+`round((xyz+.5)/512*(grid-1))`, sorted unique, strict `< max_tokens`, and 128-pixel
+resolution backoff from 1536 to 1024. It reports each attempt and whether the
+budget was met at the floor, without truncating tokens. The older Pixal cascade
+helper and TRELLIS CLI use a different floor quantization; do not substitute
+them. Pass `actual_resolution/16` into both HR shape and texture conditioning.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_stages.py \
+  --pixal-source "$PIXAL_SOURCE" --naf-source "$NAF_SOURCE" \
+  --checkpoint-fixtures "$PIXAL_CHECKPOINT_REPORT" \
+  --vision-fixtures "$PIXAL_VISION_CHECKPOINT_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-stages-check \
+  --output-dir "$PIXAL_STAGES_REPORT"
+```
+
+CPU evidence `maintenance/g9-pixal-stages-20260919/cpu-final`: eight foreground
+cases match upstream pixels exactly; seven bridge cases pass 28 exact coordinate,
+resolution and attempt comparisons. Three connected checkpoint cases run RGB →
+DINO/NAF → SS → LR shape → HR shape → texture with explicit synthetic decoder
+outputs between stages. All 78 comparisons pass (maximum absolute error
+`1.6689300537109375e-06`, atol/rtol5e-5), including 36 sampled step latents,
+decoder input layout, normalization and progress. Resolution 1024, 1536 and
+1536→1408 backoff, F16 vision storage with explicit F32 arithmetic are included.
+Repeated computations are bitwise equal. Twenty-five rejection cases pass with
+no published native result. Torch GPU initialized=false; no trained weights.
+
+The reference executes unmodified pipeline methods and the actual `run` cascade
+AST. Its public tensor image branch runs on CPU, because the PIL-list branch
+hardcodes `.cuda()`; Pillow pixels are compared independently. NATTEN uses the
+previously documented CPU adaptation. Saved Torch noise is supplied explicitly
+to native code; native RNG seed equivalence is **not tested**.
+
+Neural SS/shape/texture decoding, real background removal, MoGe, GLB output,
+full-size/Vulkan execution and generated asset adoption remain **NOT TESTED**.
+The original trellis.cpp SS decoder hardcodes a 16³ latent while a pinned Pixal
+training config declares 8³. Actual deployed config and decoder compatibility
+must be established before wiring that decoder; these stage fixtures do not
+establish full image-to-3D generation or Library acceptance.

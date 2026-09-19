@@ -1,5 +1,41 @@
 # Media Forge implementation status
 
+## 2026-09-19 Pixal3D foreground and stage/cascade bridges; connected CPU parity passed
+
+`ux1/pixal3d-stage-bridge`、親PR561 / `d231f87`。foregroundのalpha判定・1024縮小・
+strict alpha閾値・cropのPillow丸め・背景合成を接続。opaque入力は明示の背景除去providerが
+必須で、providerの推論実装を代替したとはしない。空/退化mask、不正provider出力は拒否。
+
+nativeのSS/shape/texture stage helperへ既存image projection/flow samplerを接続。
+SS出力をdecoder用channel-majorへ変換し、occupancy logitsの閾値/pool→座標、
+LR decoder座標→HR quantization、shape/texture各正規化、固定shapeのtexture連結を保持。
+実際のPixal run()はgrid-1でroundするため、旧helper/TRELLISのfloorを流用しない。
+strict token予算・128刻みbackoff・1024での予算未達を明示し、tokenを切り捨てない。
+HR/textureの投影には実際に選んだgridを渡す。cancelと初期0を含むprogressを伝播。
+
+固定upstreamの未変更preprocess/stage/condition method、runのquantization ASTとCPU比較。
+foreground8条件は画素完全一致。bridge7条件/28比較は座標・解像度・試行順すべて完全一致。
+実GGUF load→RGB→DINO/NAF→SS→LR shape→HR shape→textureの3条件/78比較が全pass、
+最大絶対誤差1.6689300537109375e-06 (atol/rtol5e-5)。全36step latent、SS decoder入力layout、
+正規化、progressが一致。1024/1536/1536→1408とF16 vision格納・明示F32演算を含む。
+反復はbitwise一致、異常入力/cancelの25条件全pass、native失敗時の出力公開0。
+
+全learned parameterとdecoder logits/upsample座標はsynthetic。**実neural decoder未検証**。
+noiseはTorchで生成した値をnativeへ渡すためnative RNGのseed同一性とはしない。
+sourceのPIL-list経路が.cuda()固定のため、画素を独立照合して公開tensor経路をCPU実行。
+初回の参照SS buffer/list画像経路・検証側のprogress初期値カウントの失敗ログも保持し、
+数値許容誤差は変更していない。NATTEN CPU adaptationは既存sliceと同じ。
+GPU initialized=false、学習済み重み取得/利用0、元runtime/Library/installed変更0。
+
+証跡: managed data `maintenance/g9-pixal-stages-20260919/cpu-final`、failure logs、
+`build-provenance.json`。最終 `./mf.sh test`: **2211 passed / 2 warnings / 240.28秒 / exit0**。
+
+**NOT TESTED / 残り**: actual decoder/checkpoint互換性、背景除去/MoGe推論、実寸容量計画/
+mixed precision/実Host lease付きVulkan、GLB実生成/画質/新Asset登録、採用/署名配布/installed。
+既存TRELLIS SS decoderはlatent16³固定で、Pixalのtraining configには8³がある。
+deployed configとdecoderを確認してから接続する。重みlicense同意は先の質問に回答待ち。
+骨付きアニメーションも未作成。次はdecoderとcameraの接続を進める。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D vision checkpoints; connected RGB/DINO/NAF CPU round-trip passed
 
 `ux1/pixal3d-vision-checkpoints`、親PR560 / `6a1cfd0`。DINO/NAFのlocal checkpoint→
