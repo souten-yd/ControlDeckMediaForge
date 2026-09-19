@@ -105,6 +105,19 @@ PipelineResult generate_glb(const PipelineModels& m,ggml_backend* backend,const 
         progress(stage,1,1);return f;
     };
     auto cam=[&](int size) { auto c=camera;c.image_resolution=size;return c; };
+    auto sparse_vision=[&](const std::string& stage,const std::vector<float>& rgb,int size,int target,
+                           const Coordinates& points,int grid) {
+        progress(stage,0,1); ImageFeatures features;
+        { VisionModel dino(m.dino,backend);
+          features=encode_vision(dino,nullptr,rgb,size,0,0,o.f32_arithmetic,nullptr,nullptr,cancelled).dino; }
+        diagnostic(stage+".global",features.global);diagnostic(stage+".patches",features.patches.values);
+        std::vector<float> high;
+        { VisionModel naf(m.naf,backend);auto params=naf.spec().naf;params.f32_weight_arithmetic=o.f32_arithmetic;
+          high=project_naf(naf.weights(),params,rgb,size,size,features.patches,target,target,points,grid,cam(size),nullptr,nullptr,cancelled); }
+        auto pair=image_conditions_projected(backend,features,points,grid,cam(size),high);
+        diagnostic(stage+".projected",pair.positive.projected);
+        progress(stage,1,1);return pair;
+    };
     auto dec=o.decoder;dec.f32_arithmetic=o.f32_arithmetic;
     dec.cancelled=[&]() { return cancelled() || (o.decoder.cancelled && o.decoder.cancelled()); };
     auto mesh=o.mesh;mesh.cancelled=[&]() { return cancelled() || (o.mesh.cancelled && o.mesh.cancelled()); };
@@ -127,9 +140,9 @@ PipelineResult generate_glb(const PipelineModels& m,ggml_backend* backend,const 
     CascadePlan plan;
     {
         SparseLatent lr;
-        { auto features=vision("lr_image",frames.low,frames.low_size,o.naf_lr); std::vector<FlowStep> trace;
+        { auto features=sparse_vision("lr_image",frames.low,frames.low_size,o.naf_lr,coords,32); std::vector<FlowStep> trace;
           { FlowModel flow(m.shape_lr_flow,backend);
-            lr=sample_shape_latent(flow,features.dino,&*features.high,cam(frames.low_size),coords,32,noise("lr",coords.size(),flow.spec().params.out_ch),sn,stage_options("lr_flow",o.shape_sampler,trace)); }
+            lr=sample_shape_latent_conditioned(flow,features,coords,32,noise("lr",coords.size(),flow.spec().params.out_ch),sn,stage_options("lr_flow",o.shape_sampler,trace)); }
           trace_diagnostic("lr",trace); }
         diagnostic("lr",lr.values);
         Coordinates up;
@@ -145,14 +158,14 @@ PipelineResult generate_glb(const PipelineModels& m,ggml_backend* backend,const 
     std::vector<float> attempts;for (const auto& attempt:plan.attempts) { attempts.push_back(float(attempt.resolution));attempts.push_back(float(attempt.tokens)); }
     diagnostic("cascade_attempts",attempts);
     SparseLatent shape,texture;
-    { auto features=vision("hr_image",frames.high,frames.high_size,o.naf_hr);std::vector<FlowStep> trace;
+    { auto features=sparse_vision("hr_image",frames.high,frames.high_size,o.naf_hr,plan.coords,plan.actual_resolution/16);std::vector<FlowStep> trace;
       { FlowModel flow(m.shape_hr_flow,backend);
-        shape=sample_shape_latent(flow,features.dino,&*features.high,cam(frames.high_size),plan.coords,plan.actual_resolution/16,noise("hr",plan.coords.size(),flow.spec().params.out_ch),sn,stage_options("hr_flow",o.shape_sampler,trace)); }
+        shape=sample_shape_latent_conditioned(flow,features,plan.coords,plan.actual_resolution/16,noise("hr",plan.coords.size(),flow.spec().params.out_ch),sn,stage_options("hr_flow",o.shape_sampler,trace)); }
       trace_diagnostic("hr",trace); }
     plan.coords.clear();plan.coords.shrink_to_fit();diagnostic("hr",shape.values);
-    { auto features=vision("texture_image",frames.high,frames.high_size,o.naf_texture);std::vector<FlowStep> trace;
+    { auto features=sparse_vision("texture_image",frames.high,frames.high_size,o.naf_texture,shape.coords,shape.grid_resolution);std::vector<FlowStep> trace;
       { FlowModel flow(m.texture_flow,backend);
-        texture=sample_texture_latent(flow,features.dino,&*features.high,cam(frames.high_size),shape,noise("texture",shape.coords.size(),flow.spec().params.out_ch),sn,tn,stage_options("texture_flow",o.texture_sampler,trace)); }
+        texture=sample_texture_latent_conditioned(flow,features,shape,noise("texture",shape.coords.size(),flow.spec().params.out_ch),sn,tn,stage_options("texture_flow",o.texture_sampler,trace)); }
       trace_diagnostic("texture",trace); }
     diagnostic("texture",texture.values);
     SparseDecodeResult decoded_shape;

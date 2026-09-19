@@ -47,4 +47,12 @@ SparseLatent sample_texture_latent(const FlowModel& model, const ImageFeatures& 
     const FeatureMap* high, const Camera& camera, const SparseLatent& shape,
     const std::vector<float>& noise, const LatentNormalization& shape_norm,
     const LatentNormalization& texture_norm, const StageOptions& options = {});
+// Preprojected conditions avoid retaining dense high-resolution feature maps.
+// Both condition branches are validated against the model before execution.
+SparseLatent sample_shape_latent_conditioned(const FlowModel& model,const ConditionPair& conditions,
+    const Coordinates& coords,int grid_resolution,const std::vector<float>& noise,
+    const LatentNormalization& shape_norm,const StageOptions& options = {});
+SparseLatent sample_texture_latent_conditioned(const FlowModel& model,const ConditionPair& conditions,
+    const SparseLatent& shape,const std::vector<float>& noise,
+    const LatentNormalization& shape_norm,const LatentNormalization& texture_norm,const StageOptions& options = {});
 }

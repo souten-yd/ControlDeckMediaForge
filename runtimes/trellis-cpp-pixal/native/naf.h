@@ -13,11 +13,22 @@ struct NafParams {
 struct NafStats {
     size_t encoder_graph_bytes=0, attention_graph_bytes=0;
     int tiles=0, guide_width=0, guide_height=0;
+    size_t output_bytes=0, dense_output_bytes=0, attention_queries=0;
 };
 FeatureMap upsample_naf(const trellis::Model& model, const NafParams& params,
                         const std::vector<float>& rgb_chw, int image_width, int image_height,
                         const FeatureMap& low, int output_width, int output_height,
                         NafStats* stats=nullptr,
+                        std::map<std::string,std::vector<float>>* debug=nullptr,
+                        const std::function<bool()>& cancelled={});
+// Computes only the four NAF pixels used by each sparse projection, then
+// reduces them on the selected backend. The encoder and pooled keys remain
+// complete: this avoids the dense C*W*H output, not the full encoder memory.
+std::vector<float> project_naf(const trellis::Model& model, const NafParams& params,
+                        const std::vector<float>& rgb_chw, int image_width, int image_height,
+                        const FeatureMap& low, int output_width, int output_height,
+                        const std::vector<std::array<int,3>>& coords, int grid_resolution,
+                        const Camera& camera, NafStats* stats=nullptr,
                         std::map<std::string,std::vector<float>>* debug=nullptr,
                         const std::function<bool()>& cancelled={});
 }

@@ -4,6 +4,7 @@
 #include "ggml.h"
 #include "ggml-backend.h"
 #include "ggml-alloc.h"
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -157,5 +158,24 @@ ConditionPair image_conditions(ggml_backend* backend,const ImageFeatures& featur
     conditions.negative.global.resize(conditions.positive.global.size(),0.f);
     conditions.negative.projected.resize(conditions.positive.projected.size(),0.f);
     return conditions;
+}
+
+ConditionPair image_conditions_projected(ggml_backend* backend,const ImageFeatures& features,
+                               const std::vector<std::array<int,3>>& coords,int grid,
+                               const Camera& camera,const std::vector<float>& high) {
+    if (features.patches.channels<1 || coords.empty() || coords.size()>1048576 ||
+        high.size()!=coords.size()*size_t(features.patches.channels))
+        throw std::invalid_argument("projected NAF feature extent mismatch");
+    finite(high);
+    auto result=image_conditions(backend,features,coords,grid,camera);
+    const size_t channels=features.patches.channels;
+    std::vector<float> combined(2*high.size());
+    for (size_t i=0;i<coords.size();++i) {
+        std::copy_n(result.positive.projected.begin()+i*channels,channels,combined.begin()+2*i*channels);
+        std::copy_n(high.begin()+i*channels,channels,combined.begin()+(2*i+1)*channels);
+    }
+    result.positive.projected=std::move(combined);
+    result.negative.projected.assign(result.positive.projected.size(),0.f);
+    return result;
 }
 }
