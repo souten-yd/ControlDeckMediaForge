@@ -134,14 +134,40 @@ Evidence: `maintenance/g9-pixal-runner-20260919/cpu-release`, checkpoint and DiT
 regression reports. No pretrained model or GPU execution was used. The native
 stage functions are implemented; the complete image-to-GLB pipeline is not wired.
 
+## Image feature connection measured on 2026-09-19
+
+`ux1/pixal3d-image-features`, based on PR558 / `e8c48f1`, connects resized RGB
+pixels through native DINOv3, CLS/register/patch splitting, camera projection
+and explicit positive/negative flow conditions. The graph adapts pinned
+trellis.cpp without editing its original source. Only plain-GELU DINO is
+supported; its required weights and input dimensions/range are validated.
+Pillow preprocessing preserves Pixal's LANCZOS-then-RGB order, after foreground
+framing/compositing. Those earlier image pipeline operations remain separate.
+
+Six small synthetic CPU cases execute transformers4.57.3's actual DINO layers
+and unmodified pinned Pixal extractor/projection methods. All 99 intermediate
+and sampled-latent comparisons pass, maximum absolute error
+`1.1920928955078125e-06` at atol/rtol5e-5. Resize outputs match exactly.
+Five cases continue through native flow sampling, with all 15 step states
+compared; the wider feature-only case does not use the narrow flow fixture.
+Attention biases, register/head dimensions, single-patch inputs, non-square
+source images and supplied HR concatenation are covered. HR features are
+synthetic inputs, not NAF output. Six invalid-input checks and the existing
+10-case/108-comparison flow regression pass. Torch GPU initialized=false.
+
+Evidence: `maintenance/g9-pixal-dino-20260919/cpu-release` and `flow-regression`.
+The reference extractor is instantiated without calling its pretrained loader.
+No trained DINO/Pixal weights were used. DINO model metadata/conversion/loading
+in the production pipeline, NAF/MoGe and full image-to-GLB remain unfinished.
+
 ## Required remaining acceptance
 
 - Genuine Host lease and physical-device mapping; run the same numerical cases
   on Vulkan, recording device, exact source/library/binary hashes and results.
 - Validate the implemented converter against authorized real trained checkpoint
   configurations/weights; small synthetic conversion is not model acceptance.
-- Feed the implemented stage runner from correct DINO global-token selection,
-  projected image features and fixed pipeline parameters. Compare trained-model block outputs and
+- Bind authorized DINO checkpoints/metadata and fixed pipeline parameters to
+  the implemented image-feature/stage path. Compare trained-model block outputs and
   BF16/FlashAttention behavior on the admitted Vulkan device.
 - NAF native feature upsampling, with measured memory-bounded execution and
   numerical comparison. Integrate MoGe camera estimation or a separately

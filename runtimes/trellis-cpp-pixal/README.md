@@ -1,4 +1,4 @@
-# Pixal3D native Vulkan port — projection, DiT, checkpoints and sampling
+# Pixal3D native Vulkan port — image features, projection and flow sampling
 
 These are the first components of the user-requested Pixal3D port onto trellis.cpp.
 It is not yet a complete Pixal3D runner and does not enable MediaForge's Pixal3D
@@ -228,3 +228,56 @@ checkpoint/DiT regression reports. These are small synthetic models. Full-stage
 trained weights, Vulkan/mixed precision, actual image feature extraction,
 DINO global token selection, NAF/MoGe, cascade/decoder/GLB integration and
 MediaForge adoption/Library publication remain NOT TESTED. No capability is enabled.
+
+## Pixels to image features and flow conditions
+
+`native/image_features` adapts trellis.cpp's DINOv3 ViT graph to configurable
+dimensions while preserving its existing weight naming. It validates RGB range,
+image/config dimensions and required weight shapes; applies ImageNet
+normalization; executes patch embedding, CLS/register insertion, RoPE, attention,
+plain erf GELU MLPs and non-affine final normalization on the model's explicit
+backend. Unsupported backend operations fail. The installed trellis.cpp source
+and its original encoder are unchanged. Gated-MLP DINO variants are not supported.
+
+The output separates CLS + register tokens from spatial patch features, matching
+Pixal3D. `image_conditions` projects the patch feature map at dense/sparse voxel
+coordinates, optionally projects supplied **actual NAF features** independently,
+and concatenates LR then HR channels for each voxel. It returns explicit positive
+conditions and equally shaped zero negative conditions for `FlowRunner`.
+
+`prepare_image.prepare_rgb` uses the reference Pillow LANCZOS resize-before-RGB
+order and returns contiguous unnormalized CHW floats. Its input is an image
+already framed/composited by the pipeline. Foreground removal, alpha bounding
+box/crop/background compositing and MoGe camera inference are separate work;
+this helper does not claim to implement them. Unnormalized RGB remains available
+as the NAF guide instead of reusing the normalized DINO input.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_image_features.py \
+  --pixal-source "$PIXAL_SOURCE" \
+  --checkpoint-fixtures "$PIXAL_CHECKPOINT_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-image-check \
+  --output-dir "$PIXAL_IMAGE_FEATURE_REPORT"
+```
+
+Measured CPU results: six image-feature cases, 99 tensor comparisons all passed,
+maximum absolute error `1.1920928955078125e-06` at atol/rtol5e-5. The checker uses
+transformers4.57.3's real two-layer DINO class with all parameters replaced by
+synthetic values and the pinned, unmodified Pixal extractor/projection methods.
+It never calls `from_pretrained`. It covers non-square source image resizing,
+attention bias on/off, different head/register dimensions, one patch and supplied
+HR features. All resize results match exactly. Five cases continue through the
+native flow runner/sampler, comparing all 15 resulting latent states against
+actual Pixal sampling. The 64-channel feature case does not run the 32-channel
+synthetic flow. Supplied HR maps are synthetic; NAF inference was not tested.
+
+Six invalid RGB/weight/camera/HR-channel cases fail with no published output.
+Existing flow regression remains passed (10 cases/108 comparisons/11 negatives).
+Torch GPU initialized=false. Evidence:
+`maintenance/g9-pixal-dino-20260919/cpu-release` and `flow-regression`, including
+RGB PNGs, NPY inputs/weights/intermediates and fixed reference source hashes.
+
+Remaining: production DINO checkpoint conversion/metadata/loader binding, full
+trained dimensions, F16/BF16/Vulkan, native NAF, foreground/camera/cascade/decoder
+integration, generated GLB quality and installed Library/adoption/release checks.
+These CPU synthetic results do not make image-to-3D available to users yet.
