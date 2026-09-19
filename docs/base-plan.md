@@ -1321,6 +1321,15 @@ scene authoring tools remain supported. No second job or asset service is added.
 License consent and measured runtime/device/model identities are prerequisites
 for adopting a candidate. A private, pinned adoption receipt may enable only the
 resolution actually measured; an absent or changed runtime stays unavailable.
+Pixal3D has a separate private adoption receipt for its worker environment,
+native executable, complete worker descriptor and measured Vulkan device. Its
+venv launcher remains inside the admitted runtime; an explicitly hash-pinned
+base interpreter may be the launcher's symlink target. The launcher path is
+preserved so the isolated venv is used. CPU preparation completes before the
+existing Scene Job requests GPU admission. The sealed input and receipt identity
+must still match after queued admission and before publication. Automatic engine
+selection prefers an existing TRELLIS receipt and uses Pixal only when no TRELLIS
+receipt exists; invalid receipts or unmeasured resolutions do not trigger fallback.
 Generation provenance includes the input Asset hash, pinned weights/runtime,
 seed and raw output hash. Successful structural validation does not establish
 visual or semantic quality; those remain separate experimental acceptance gates.

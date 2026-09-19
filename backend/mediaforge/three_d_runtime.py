@@ -14,20 +14,17 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from .glb import validate_glb_path
 from .host.jobs import HostExecution
 from .paths import contained
+from .pixal_runtime import (PixalRuntimeReceipt, PreparedPixalInput, generate_pixal,
+                            prepare_pixal, read_json, verify_pixal_files)
 from .scene_generation import GenerationFacts, SceneFromImageRequest
 from .scenes import SceneError
+from .three_d_runtime_files import RuntimeFile, sha256_file
 
 MODEL_FILES = frozenset({
     'dinov3.gguf', 'birefnet.gguf', 'ss_flow.gguf', 'ss_dec.gguf',
     'shape_flow_512.gguf', 'shape_flow_1024.gguf', 'shape_dec.gguf',
     'tex_flow_512.gguf', 'tex_flow_1024.gguf', 'tex_dec.gguf',
 })
-
-
-class RuntimeFile(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
-    size_bytes: int = Field(gt=0, le=64*1024**3, strict=True)
 
 
 class ThreeDRuntimeReceipt(BaseModel):
@@ -66,37 +63,45 @@ class ThreeDRuntimeReceipt(BaseModel):
         return self
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open('rb') as stream:
-        while content := stream.read(1024*1024):
-            digest.update(content)
-    return digest.hexdigest()
+RuntimeReceipt = ThreeDRuntimeReceipt | PixalRuntimeReceipt
 
 
 class ThreeDGenerator:
-    def __init__(self, receipt_path: Path, *, timeout_sec: float = 1800) -> None:
+    def __init__(self, receipt_path: Path, *, pixal_receipt_path: Path | None = None,
+                 timeout_sec: float = 1800, preparation_timeout_sec: float = 900) -> None:
         self.receipt_path = receipt_path
+        self.pixal_receipt_path = pixal_receipt_path or receipt_path.with_name('pixal3d-runtime.json')
         self.timeout_sec = timeout_sec
+        self.preparation_timeout_sec = preparation_timeout_sec
 
-    def resolve(self, engine: str = 'auto', resolution: int | None = None) -> ThreeDRuntimeReceipt:
-        if engine not in {'auto', 'trellis_cpp'}:
+    def resolve(self, engine: str = 'auto', resolution: int | None = None) -> RuntimeReceipt:
+        if engine not in {'auto', 'trellis_cpp', 'pixal3d'}:
             raise SceneError('three_d_runtime_not_adopted', 'Requested 3D engine has not been adopted')
+        if engine == 'auto':
+            engine = 'trellis_cpp' if self.receipt_path.exists() or self.receipt_path.is_symlink() else 'pixal3d'
+        path = self.pixal_receipt_path if engine == 'pixal3d' else self.receipt_path
         try:
-            if self.receipt_path.is_symlink() or self.receipt_path.stat().st_size > 128*1024:
+            if path.is_symlink():
                 raise ValueError('invalid runtime receipt')
-            receipt = ThreeDRuntimeReceipt.model_validate_json(self.receipt_path.read_bytes())
+            receipt: RuntimeReceipt
+            if engine == 'pixal3d':
+                receipt = PixalRuntimeReceipt.model_validate(read_json(path, 16*1024**2))
+            else:
+                receipt = ThreeDRuntimeReceipt.model_validate(read_json(path, 128*1024))
             if resolution is not None and resolution != receipt.evaluated_resolution:
                 raise SceneError('three_d_resolution_not_evaluated', 'Requested resolution has not been measured')
             self.verify_files(receipt, hashes=False)
             return receipt
-        except (OSError, ValueError, ValidationError) as exc:
+        except (OSError, ValueError, ValidationError, KeyError, TypeError, AttributeError) as exc:
             if isinstance(exc, SceneError):
                 raise
             raise SceneError('three_d_runtime_unavailable', 'Verified 3D runtime is unavailable') from exc
 
     @staticmethod
-    def verify_files(receipt: ThreeDRuntimeReceipt, *, hashes: bool) -> None:
+    def verify_files(receipt: RuntimeReceipt, *, hashes: bool) -> None:
+        if isinstance(receipt, PixalRuntimeReceipt):
+            verify_pixal_files(receipt, hashes=hashes)
+            return
         snapshot = contained(receipt.model_repository, receipt.model_repository / receipt.model_snapshot)
         if snapshot.name != receipt.model_revision:
             raise ValueError('model snapshot does not match its pinned revision')
@@ -114,32 +119,50 @@ class ThreeDGenerator:
             raise ValueError('runtime executable is not executable')
 
     def status(self) -> dict[str, object]:
+        engines: dict[str, object] = {}
+        for engine in ('trellis_cpp', 'pixal3d'):
+            try:
+                adopted = self.resolve(engine)
+                engines[engine] = {'state':'experimental', 'resolutions':[adopted.evaluated_resolution],
+                                  'estimated_runtime_sec':adopted.measured_runtime_sec}
+            except SceneError as exc:
+                engines[engine] = {'state':'unavailable', 'reason':exc.code}
         try:
             receipt = self.resolve()
         except SceneError as exc:
-            return {'state':'unavailable', 'reason':exc.code}
-        return {'state':'experimental', 'implementation':'trellis_cpp',
+            return {'state':'unavailable', 'reason':exc.code, 'engines':engines}
+        return {'state':'experimental', 'implementation':receipt.engine, 'engines':engines,
                 'input':'image', 'resolutions':[receipt.evaluated_resolution],
                 'estimated_runtime_sec':receipt.measured_runtime_sec}
 
     @staticmethod
-    def resource_request(receipt: ThreeDRuntimeReceipt, execution: HostExecution) -> dict[str, object]:
+    def resource_request(receipt: RuntimeReceipt, execution: HostExecution) -> dict[str, object]:
         return {
             'job_id':execution.host_job_id, 'device':'auto', 'preferred_devices':[receipt.device_id],
             'vram':{'resident_bytes':0, 'execution_peak_bytes':receipt.measured_peak_vram_bytes,
                     'cold_load_peak_bytes':receipt.measured_peak_vram_bytes, 'headroom_bytes':512*1024**2,
                     'confidence':'high'},
             'compute_mode':'shared-safe', 'priority':20, 'class':execution.workload_class,
-            'residency_key':f'mediaforge:trellis-cpp:{receipt.model_revision}',
+            'residency_key':f'mediaforge:{"trellis-cpp" if receipt.engine == "trellis_cpp" else "pixal3d"}:{receipt.model_revision}',
             'estimated_runtime_sec':receipt.measured_runtime_sec, 'max_wait_sec':300, 'on_insufficient':'queue',
         }
 
+    async def prepare(
+        self, receipt: RuntimeReceipt, value: SceneFromImageRequest, image: Path, root: Path,
+    ) -> PreparedPixalInput | None:
+        if isinstance(receipt, PixalRuntimeReceipt):
+            return await prepare_pixal(receipt, value, image, root, timeout=self.preparation_timeout_sec)
+        return None
+
     async def generate(
-        self, receipt: ThreeDRuntimeReceipt, value: SceneFromImageRequest,
+        self, receipt: RuntimeReceipt, value: SceneFromImageRequest,
         image: Path, root: Path, execution: HostExecution,
+        *, prepared: PreparedPixalInput | None = None,
     ) -> tuple[Path, GenerationFacts]:
         from .scene_workspace import _bounded_read, _stop_process
 
+        if isinstance(receipt, PixalRuntimeReceipt):
+            return await generate_pixal(receipt, value, image, root, execution, prepared, timeout=self.timeout_sec)
         if not execution.lease_id or execution.device_id != receipt.device_id:
             raise SceneError('host_lease_required', 'Image-to-3D generation requires its granted GPU lease')
         if value.resolution != receipt.evaluated_resolution:

@@ -23,6 +23,20 @@ class SceneFromImageRequest(BaseModel):
     retry_job_id: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
 
 
+class GenerationExecutionFacts(BaseModel):
+    """Additive record of explicit Pixal backend and CPU preprocessing identity."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    backend: Literal["vulkan"]
+    precision: Literal["float32"]
+    descriptor_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    prepared_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    input_image_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    preprocessing_backend: Literal["cpu"]
+    preprocessing_precision: Literal["float32"]
+    preprocessing_elapsed_sec: float = Field(ge=0, le=86400)
+
+
 class GenerationFacts(BaseModel):
     """Worker facts plus identities verified by the core before execution."""
 
@@ -38,3 +52,4 @@ class GenerationFacts(BaseModel):
     resolution: Literal[512, 1024]
     elapsed_sec: float = Field(ge=0, le=86400)
     output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    execution: GenerationExecutionFacts | None = None

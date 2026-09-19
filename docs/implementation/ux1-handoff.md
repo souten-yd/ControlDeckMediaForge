@@ -1,5 +1,33 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D core Scene Jobs接続
+
+`ux1/pixal3d-scene-jobs`、親PR572 / `0e2b870`。前ターンをprogressと判定して開始。
+private Pixal adoption receiptとcore adapterを追加し、CPU prepare終了→既存GPU admission→
+native generate→lease解放→既存Blender/Scene/Assetを接続。source実装であり、採用receiptは未発行。
+既存TRELLIS receiptを維持、`auto`はTRELLISが存在する限りそれを選び、不正時のfallbackなし。
+Pixalは独立receipt/11model役割、Vulkan/device/実測1024、license同意を要求。syntheticは採用拒否。
+venv launcherをdereferenceせず、明示hashの基底interpreterだけ許可。core venv/system site packagesは
+拒否、private pycache、ML importなし。provenanceへCPU/F32前処理とnative/Vulkan/F32のidentityを追加。
+
+Scene Jobsの取消/queued/late grant/retry/lease lossを両engineで契約検証。前処理取消時のGPU要求0、
+adoption待機中変更はactivateなしでrelease、worker cleanup中もrenewを継続。spawn/hash thread/
+出力pipe上限/繰返し取消をdrain。対象51件exit0。fake Host/Blender/scriptの値は実GPU証拠ではない。
+
+実core process supervisor→既存CPU/synthetic workerは22.244655秒prepare→1.324380秒native、
+48,532byte/590三角形GLB、独立core/Blender4.5.9 pass。前回4arrayとprovenance以外のGLBが一致。
+SS flow中のPython/native同一groupを観測し、取消0.062088秒、core timeout0.7秒は0.762311秒で
+両PID消失・owned生成出力回収。adoption/Host leaseを作らず`PixalWorkerLaunch`だけで実行した。
+最終 `./mf.sh test`: **2242 passed / 2 warnings / 249.79秒 / exit0**。以後product/checker変更なし。
+詳細は [Jobs接続記録](g9-pixal-jobs-20260919.md)、managed `maintenance/g9-pixal-jobs-20260919/`。
+元root `524553d` clean、origin/main `bbdc69a`、installed/Host/runtime/model/Library変更なし。
+
+次の安全な着手点: `frontend/app.js:renderSceneGeneration/submitSceneGeneration`は既存画像→3D formを
+持つがengine未送信（auto）で、追加したcapability.enginesを未使用。詳細設定のengine選択と
+選択engineの実測resolution、CPU prepare中の表示を接続する。第二UI/Jobsを作らない。
+その後もtrained/full幅/品質・正規Host lease付きVulkan・adoption・署名導入・installed一巡は残る。
+重みlicense同意は既出質問への回答待ち、正規leaseも未取得。trained/GPU/骨付き版は未完了。
+
 ## 2026-09-19 Pixal3D private prepare/generate worker entry
 
 `ux1/pixal3d-worker-entry`、親PR571 / `f887fbc`。base-plan先行更新。

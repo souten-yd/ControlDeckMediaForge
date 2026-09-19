@@ -13,13 +13,13 @@ from .host.jobs import HostExecution, HostJobReporter
 from .paths import contained
 from .scene_generation import SceneFromImageRequest
 from .scenes import SceneError
-from .three_d_runtime import ThreeDRuntimeReceipt
+from .three_d_runtime import RuntimeReceipt
 
 if TYPE_CHECKING:
     from .scene_recipe_jobs import SceneRecipeJobManager
 
 
-def receipt_digest(receipt: ThreeDRuntimeReceipt) -> str:
+def receipt_digest(receipt: RuntimeReceipt) -> str:
     return hashlib.sha256(receipt.model_dump_json().encode()).hexdigest()
 
 
@@ -90,6 +90,11 @@ async def generate_scene_from_image(
         image.chmod(0o600)
         if manager.workspace._sha256(image) != asset.sha256:
             raise SceneError('scene_generation_input_invalid', 'Generation input changed while staging')
+        if receipt.engine == 'pixal3d':
+            await phase('prepare_3d_input', 0.15)
+        prepared = await generator.prepare(receipt, value, image, root)
+        if receipt_digest(generator.resolve(value.engine, value.resolution)) != constraints.get('generation_runtime_sha256'):
+            raise SceneError('three_d_runtime_changed', '3D adoption changed during input preparation')
         await phase('waiting_resource', 0.25)
         request_task = asyncio.create_task(manager.host.request_resource(
             execution.identity, generator.resource_request(receipt, execution),
@@ -106,13 +111,15 @@ async def generate_scene_from_image(
             capture_status(status)
         if status.get('state') != 'granted':
             raise SceneError('resource_unavailable', 'ControlDeck could not grant the 3D resource request')
+        if receipt_digest(generator.resolve(value.engine, value.resolution)) != constraints.get('generation_runtime_sha256'):
+            raise SceneError('three_d_runtime_changed', '3D adoption changed while waiting for GPU admission')
         if (execution.device_id != receipt.device_id or execution.granted_bytes is None
                 or execution.granted_bytes < receipt.measured_peak_vram_bytes):
             raise SceneError('resource_grant_incompatible', 'Host grant cannot run the measured 3D runtime')
         await manager.host.lease_action(execution.identity, execution.lease_id or '', 'activate')
         await phase('generate_3d', 0.35)
         renewal = asyncio.create_task(renew_lease())
-        worker = asyncio.create_task(generator.generate(receipt, value, image, root, execution))
+        worker = asyncio.create_task(generator.generate(receipt, value, image, root, execution, prepared=prepared))
         try:
             done, _ = await asyncio.wait({worker, renewal}, return_when=asyncio.FIRST_COMPLETED)
             if renewal in done:
@@ -121,8 +128,13 @@ async def generate_scene_from_image(
             output, facts = worker.result()
         finally:
             worker.cancel()
-            renewal.cancel()
-            await _finish_cleanup(asyncio.create_task(_drain(worker, renewal)))
+            # Keep renewing while cancellation reaps a CPU wrapper/native group.
+            # Releasing or abandoning the lease before drain could overlap jobs.
+            try:
+                await _finish_cleanup(asyncio.create_task(_drain(worker)))
+            finally:
+                renewal.cancel()
+                await _finish_cleanup(asyncio.create_task(_drain(renewal)))
         # GPU process is reaped before releasing the lease. Blender validation
         # is CPU-only and does not retain the generation resource reservation.
         await release_resource()

@@ -559,13 +559,21 @@ executor. The opaque workspace method is `scenes.from_image`; its job methods
 are `scenes.jobs.get` and `scenes.jobs.cancel`, each taking only `job_id`.
 
 Check `3d.image_to_3d` before submission. A missing adoption receipt, unavailable
-Blender, or unmeasured resolution fails closed. Pixal3D is a named candidate,
-not an available adapter until its independent adoption is implemented and
-measured. Admission requires `jobs.write` and `resources.acquire`. The returned
+Blender, or unmeasured resolution fails closed. Pixal3D has its own private worker
+adapter and adoption receipt; it remains unavailable until independently measured
+and adopted. The additive `engines` map reports each adapter separately. `auto`
+prefers an existing TRELLIS receipt, and considers Pixal only when that receipt is
+absent; invalid receipts or unmeasured resolutions do not select another engine.
+Pixal currently accepts only an adopted 1024 resolution through this public API.
+Admission requires `jobs.write` and `resources.acquire`. The returned
 detached Job uses the existing `media.job.status` / `media.job.cancel` endpoints
-and owner checks. Its phases cover GPU waiting, generation, and independent
+and owner checks. Its phases cover CPU input preparation (`prepare_3d_input` for
+Pixal), GPU waiting, generation, and independent
 Blender validation. The CPU Blender step follows GPU process termination and
 lease release; another scene's CPU work can proceed while GPU admission waits.
+Pixal preparation exits before requesting the GPU lease. Cancellation and timeout
+drain the owned process group before releasing it. Its generation provenance also
+records the descriptor/prepared-input hashes and explicit CPU/Vulkan stages.
 
 Success creates one Scene revision with an editable packed `.blend` and a GLB
 in the shared Library. Source provenance names the input Asset, pinned model
