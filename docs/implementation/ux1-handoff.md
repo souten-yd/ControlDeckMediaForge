@@ -1,5 +1,20 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 generated artifact Library registration
+
+`ux1/pixal3d-library`、親PR569 / `71ecc7d`。利用者の成果物登録要求を優先し、
+CPU合成重みGLBを稼働0.28.87へ追加。`asset_fb6f0e144cfe45e3bec02996b366eb53` /48,220byte。
+Library要約とwarningsで「検証用・合成重み・学習済み生成ではない」と明示。
+元bytes不変、実HTTP Asset/provenance/Job/contentとLibrary3件掲載を確認。
+既存trellis.cpp元WebP2件は再取得hash一致。再実行created=falseで重複追加なし。
+実viewer open/全chunk取得/closeも3件pass、hash一致と所有handle解放を確認。
+標準Storeの保守登録、既存版/原root/GPU/weights/Host変更なし。
+`./mf.sh test` 2211passed /2warnings /237.96秒 /exit0、以後変更は記録のみ。
+詳細は [登録記録](g9-pixal-library-20260919.md)。実ブラウザ表示はNOT TESTED。
+全体目標は未完了。学習済み生成・正規lease付きVulkan・adoption/production導入は残る。
+背景provider作業tree`/tmp/mediaforge-pixal-background-20260919`は親71ecc7dのまま未変更。
+固定BiRefNetHFのsource/configだけ取得済み、重み未取得。次の生成実装はそこから継続できる。
+
 ## 2026-09-19 Pixal3D explicit CPU MoGe camera preprocessing
 
 `ux1/pixal3d-camera`、親PR568 / `27bb102`。base-planへ明示CPU前処理の境界を先に追記し、
