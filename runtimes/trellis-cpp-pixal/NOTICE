@@ -27,3 +27,12 @@ Changes: borrowed explicit backend, typed positive/negative projected conditions
 fixed texture concatenation, bounded validation, cancellation/progress hooks,
 graph reuse and non-finite failure instead of silent numerical repair.
 These adaptations are covered by the corresponding MIT licenses above.
+
+native/image_features.cpp adapts the DINOv3 GGML graph from trellis.cpp
+src/dinov3.cpp at the pinned revision above. Changes: configurable dimensions,
+strict input/weight validation, ImageNet normalization, explicit backend support
+checks, resource cleanup, CLS/register/patch splitting and diagnostic outputs.
+Image feature selection, LR/HR projection concatenation and zero negative
+conditioning follow TencentARC/Pixal3D's image_conditioned_proj.py at its pin.
+prepare_image.py preserves the reference Pillow resize/RGB order. Foreground
+removal, NAF, MoGe and pretrained model weights are not included in this slice.

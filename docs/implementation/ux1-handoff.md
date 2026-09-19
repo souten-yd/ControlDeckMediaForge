@@ -1,5 +1,32 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D RGB/DINO/projection connection; CPU sampled-latent parity passed
+
+`ux1/pixal3d-image-features`、親PR558 / `e8c48f1`。native DINO画像特徴、
+CLS/registerとpatchの分離、dense/sparseカメラ投影、positive/negative条件を既存stageへ接続。
+native graphは固定trellis.cppを元に別sourceへ実装し、元runtime/モデル/Libraryを変更しない。
+明示backendの全op対応とRGB/config/weight shapeを検査。Pillow LANCZOS→RGB順を維持。
+入力は既にforeground crop/composite済画像であり、背景除去・crop・MoGe実装とはしない。
+
+固定transformers4.57.3の実DINO classを2layer/32または64channelにし全parameterを
+synthetic値へ置換。固定Pixal extractor/projectionの未変更methodと6画像条件/99tensor比較が
+全pass、最大絶対誤差1.1920928955078125e-06 (atol/rtol5e-5)。resize結果は厳密一致。
+うち5条件はnative flow samplingまで進め、15stepのlatentを実Pixal samplerと照合。
+64channel条件は特徴抽出だけ。bias on/off・異なるhead/register数・1patch・非正方形入力・
+HR特徴連結を含む。HRは明示synthetic入力でありNAF推論ではない。
+RGB/weight/camera/HR channel不正の6negative、既存flow10条件/108比較/11negativeもpass。
+from_pretrained呼出・重み取得なし。torch GPU initialized=false。
+
+証跡: managed data `maintenance/g9-pixal-dino-20260919/cpu-release` と
+`flow-regression`。入力PNG/NPY、合成重み、中間出力、reference/source/library/binary hashを保存。
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 237.77秒 / exit0**。
+
+**NOT TESTED / 残り**: production DINO checkpoint変換/metadata/loader接続、trained実寸モデル、
+F16/BF16/Vulkan、NAF、foreground/MoGe/cascade/decoder/GLB統合、実生成/画質/新Asset登録、
+採用receipt/通常配布/installed操作。先の重みlicense同意は回答待ち。骨付き出力も未作成。
+次はNAFの近傍attention/補間をnative化し、実画像条件pipelineへ統合する。
+全体目標は未完了。
+
 ## 2026-09-19 Pixal3D native stage runner/sampler; CPU step parity passed
 
 `ux1/pixal3d-flow-runner`、親PR557 / `aef84a3`。明示backendを借用するGGUF loader、
