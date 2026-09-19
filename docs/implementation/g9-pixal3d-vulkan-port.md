@@ -194,17 +194,57 @@ NAF trained checkpoint conversion/metadata/loading, real-sized images, Vulkan,
 mixed precision and full GLB pipeline remain NOT TESTED. Earlier fixture/layout
 and buffer-reuse failures are retained in sibling logs. This is not adoption.
 
+## Vision checkpoints and connected image path measured on 2026-09-19
+
+`ux1/pixal3d-vision-checkpoints`, based on PR560 / `6a1cfd0`, adds strict local
+DINO/NAF checkpoint-to-GGUF conversion, source/config/output/tensor provenance,
+native metadata/file-extent validation and explicit borrowed-backend loading.
+DINO Q/K/V and absent bias mapping, config epsilon/RoPE/biases and NAF persistent
+periods feed the implemented image graphs. Unused DINO mask/final-affine-norm
+values are validated/hashed and their omission is documented. Unknown/unsupported
+settings and inconsistent tensors fail; no best-effort parameter renaming.
+
+The default input is safetensors. NAF's explicit torch archive path uses pinned
+torch2.10.0 `weights_only=True`, CPU mapping and mmap, accepting plain tensor state
+dictionaries only. It does not invoke hub loading or retry unsafe pickle.
+`encode_vision` connects loaded DINO -> optional actual NAF -> global/LR/HR maps;
+the caller supplies the stage's NAF target explicitly. Source/original runtime
+weights and installed Library remain unchanged. No adoption receipt is created.
+
+Seven synthetic checkpoint cases pass all 174 CPU intermediate/output comparisons,
+max absolute error 1.4901161193847656e-06 (atol/rtol5e-5). All 406 serialized
+tensors exactly match native-loaded values. Six shape and one SS condition
+continue through native sampling and match all 21 reference sampled states.
+The reference executes pinned HF DINO, NAF and Pixal extractor/sampler; NATTEN
+uses the previously documented CPU backend and independent-V-channel adaptation.
+Cases cover F32/F16/BF16 sources, F32/F16 storage with explicit F32 arithmetic,
+NAF .pth, bias variations, non-default normalization/RoPE/periods, different
+encoder/value dimensions, and LR-only SS. Repeated encoding with/without debug
+is bitwise equal; borrowed backend survives model destruction.
+
+Fourteen converter and nineteen native rejection checks pass without published
+output. Native metadata/table/truncation failures occur before backend setup;
+NaN weight and nonpositive period checks occur while loading values. Both
+converters produce identical repeated GGUF bytes. Torch GPU initialized=false.
+Evidence: `maintenance/g9-pixal-vision-20260919/cpu-final`.
+
+This is still synthetic CPU evidence, not actual checkpoint/Vulkan acceptance.
+The source's texture ft1024 training config requests a 1024 NAF target, which
+would exceed the current NAF output-element cap at 1024 channels in F32. This
+needs measured memory planning/implementation without silently reducing the
+stage target. Deployed pipeline config has not been inspected/accepted yet.
+
 ## Required remaining acceptance
 
 - Genuine Host lease and physical-device mapping; run the same numerical cases
   on Vulkan, recording device, exact source/library/binary hashes and results.
 - Validate the implemented converter against authorized real trained checkpoint
   configurations/weights; small synthetic conversion is not model acceptance.
-- Bind authorized DINO checkpoints/metadata and fixed pipeline parameters to
-  the implemented image-feature/stage path. Compare trained-model block outputs and
+- Validate authorized DINO/NAF checkpoints through the implemented converters/
+  loaders and bind the deployed pipeline parameters. Compare trained-model outputs and
   BF16/FlashAttention behavior on the admitted Vulkan device.
-- Bind authorized NAF checkpoints and measure full-sized tiled upsampling on
-  Vulkan. Integrate MoGe camera estimation or a separately
+- Measure full-sized NAF on Vulkan and resolve output-memory limits for actual
+  requested stage targets. Integrate MoGe camera estimation or a separately
   verified native image-only camera path preserving the requested behavior.
 - Integrate all SS/LR shape/HR shape/texture stages, cascade coordinate/latent
   transformations and shared decoder checks into a complete native pipeline.

@@ -1,5 +1,43 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D vision checkpoints; connected RGB/DINO/NAF CPU round-trip passed
+
+`ux1/pixal3d-vision-checkpoints`、親PR560 / `6a1cfd0`。DINO/NAFのlocal checkpoint→
+GGUF変換、source/config/output/tensor hashと対応表付きmanifest、nativeのmetadata/table/
+file extent検証、借用する明示backendへのloaderを追加。DINOのQ/K/V・欠落bias・epsilon/
+RoPE/bias flags、NAFのpersistent periodsを実graphへ渡す。未知設定/不一致tensorは拒否。
+Pixalが使わないDINO mask tokenと最終affine normも検査/hash記録し、除外理由を明示。
+
+既定入力はsafetensors。NAFの明示torch archive経路は固定torch2.10.0でCPU map、
+weights_only=True、mmap=True、plain tensor state_dictだけを受ける。hub/remote loader/
+unsafe pickle fallbackなし。coreへのML依存追加なし。元runtime/学習済み重み/Library変更なし。
+encode_visionはloaded DINO→任意のloaded NAF→global/LR/HRを接続し、SSのLR-onlyも保持。
+NAF targetはstageの値を呼出側が明示する。camera/foreground推定の実装とはしない。
+
+固定HF DINO/NAF/Pixal extractor/sampler、全parameterがsyntheticの7checkpoint条件で
+実変換→native load→RGB→画像特徴→投影→flow samplingを実行。174中間/出力比較全pass、
+最大絶対誤差1.4901161193847656e-06 (atol/rtol5e-5)。406保存tensorとnative loaded値は
+厳密一致。shape6条件＋SS1条件、全21stepのlatentが一致。F32/F16/BF16 source、F32/F16格納・
+明示F32演算、NAF .pth、biasなし/混在、非既定epsilon/RoPE/periods、異なるencoder幅を含む。
+NATTEN参照は前sliceと同じCPU flex backend＋独立V channel分割/padding。重み取得なし。
+
+converter拒否14条件、native metadata/値/component/cancel/target拒否19条件全pass、
+失敗時の出力公開0。metadata/table/truncatedはbackend初期化前に拒否、NaN/period不正は
+値読込時に拒否。DINO/NAF再変換GGUF bytes一致、debug有無の再実行bitwise一致、model破棄後も
+借用backendが存続。torch GPU initialized=false。初回GCC FILE deleter属性の-Werrorは
+専用deleterで修正、数値許容誤差やwarning gateは緩めていない。
+
+証跡: managed data `maintenance/g9-pixal-vision-20260919/cpu-final` と
+`build-provenance.json`。source/package/library/binary/変換前後hashと全fixtureを保存。
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 237.47秒 / exit0**。
+
+**NOT TESTED / 残り**: authorized trained checkpoint互換性、実寸/mixed precision/Vulkan、
+foreground/MoGe、全stage/cascade/decoder/GLB統合、実生成/画質/新Asset登録、採用/署名配布/
+installed操作。重みlicense同意は回答待ち。骨付き出力も未作成。固定sourceのtexture ft1024
+training configはNAF target1024を指定し、1024channel F32 mapは現NAFの出力要素上限を超える。
+実deployed configは未確認。targetを黙って下げず、実測した容量計画と実装で解く必要がある。
+次はforegroundとstage/cascade/decoderのpipeline接続、camera処理へ進む。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D native NAF upsampling; CPU projection/sampled-latent parity passed
 
 `ux1/pixal3d-naf`、親PR559 / `aa0e419`。固定NAFの2枝reflect畳み込み、GroupNorm/SiLU、
