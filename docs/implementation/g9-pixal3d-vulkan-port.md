@@ -160,6 +160,40 @@ The reference extractor is instantiated without calling its pretrained loader.
 No trained DINO/Pixal weights were used. DINO model metadata/conversion/loading
 in the production pipeline, NAF/MoGe and full image-to-GLB remain unfinished.
 
+## NAF upsampling measured on 2026-09-19
+
+`ux1/pixal3d-naf`, based on PR559 / `aa0e419`, implements the pinned NAF
+evaluation encoder and tiled neighborhood attention with existing GGML ops.
+It preserves reflected convolution padding, GroupNorm/SiLU, guide-resize rules,
+adaptive pooling, persistent RoPE periods, nearest-exact LR gathering and border
+shifts within each dilation residue. Encoder intermediates are freed before
+attention; Q/K/V stay resident across tiles on the explicit selected backend.
+Unsupported operations fail; no automatic CPU fallback or new GPU kernel.
+
+Nine synthetic CPU cases pass all 115 comparisons with the actual NAF class
+(all parameters overwritten) and NATTEN0.21.0. The reference redirects only
+NAF's hard-coded cutlass choice to CPU flex-fna and splits/pads independent V
+channels for that backend's equal-head-width constraint; NATTEN computes the
+original neighborhood mask/attention. Max absolute error 1.3969838619232178e-05,
+atol/rtol5e-5. Six cases continue through real LR/HR projection and sparse shape
+sampling; all 18 sampled latent states match. Irregular image/pool sizes,
+unequal dilation, default 256-channel/9x9 NAF, different feature widths and
+F16 storage with explicit F32 arithmetic are included.
+
+Tile-size changes and repetition without diagnostic outputs are bitwise equal.
+The latter initially exposed a query view-owner reuse issue, now fixed by
+protecting the underlying output tensor; tolerances were not relaxed.
+The regular attention graph uses 36768 bytes at tile7 vs 236032 bytes at tile64.
+These CPU graph buffers do not establish GPU VRAM/process peak/full-size memory.
+Ten negative/cancellation checks pass without publishing output, including
+cancellation after final tile compute. DINO regression: 6 cases/99 comparisons/
+6 negatives passed. Torch GPU initialized=false; trained weights not used.
+
+Evidence: `maintenance/g9-pixal-naf-20260919/cpu-release` and `image-regression`.
+NAF trained checkpoint conversion/metadata/loading, real-sized images, Vulkan,
+mixed precision and full GLB pipeline remain NOT TESTED. Earlier fixture/layout
+and buffer-reuse failures are retained in sibling logs. This is not adoption.
+
 ## Required remaining acceptance
 
 - Genuine Host lease and physical-device mapping; run the same numerical cases
@@ -169,8 +203,8 @@ in the production pipeline, NAF/MoGe and full image-to-GLB remain unfinished.
 - Bind authorized DINO checkpoints/metadata and fixed pipeline parameters to
   the implemented image-feature/stage path. Compare trained-model block outputs and
   BF16/FlashAttention behavior on the admitted Vulkan device.
-- NAF native feature upsampling, with measured memory-bounded execution and
-  numerical comparison. Integrate MoGe camera estimation or a separately
+- Bind authorized NAF checkpoints and measure full-sized tiled upsampling on
+  Vulkan. Integrate MoGe camera estimation or a separately
   verified native image-only camera path preserving the requested behavior.
 - Integrate all SS/LR shape/HR shape/texture stages, cascade coordinate/latent
   transformations and shared decoder checks into a complete native pipeline.

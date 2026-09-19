@@ -1,4 +1,4 @@
-# Pixal3D native Vulkan port — image features, projection and flow sampling
+# Pixal3D native Vulkan port — image features, NAF, projection and flow sampling
 
 These are the first components of the user-requested Pixal3D port onto trellis.cpp.
 It is not yet a complete Pixal3D runner and does not enable MediaForge's Pixal3D
@@ -281,3 +281,67 @@ Remaining: production DINO checkpoint conversion/metadata/loader binding, full
 trained dimensions, F16/BF16/Vulkan, native NAF, foreground/camera/cascade/decoder
 integration, generated GLB quality and installed Library/adoption/release checks.
 These CPU synthetic results do not make image-to-3D available to users yet.
+
+## NAF high-resolution image features
+
+`native/naf` implements pinned [NAF](https://github.com/valeoai/NAF/tree/37f2dfc180f2de53d98bd601109c0da0dd6b0f43)
+evaluation with existing GGML operations. It preserves both reflected-padding
+convolution branches, GroupNorm/SiLU blocks, the exact guide-resize rule,
+adaptive-average pooling, axial half-rotation using the checkpoint's persistent
+periods, pooled keys and nearest-exact key/value sampling. Positional training
+augmentation and encoder-disabled variants are not supported.
+
+Attention shifts each neighborhood within the query's dilation residue class
+at image borders. It gathers bounded tiles from LR keys/values rather than
+materializing every pixel's expanded neighborhood. Q/K/V remain on the selected
+backend between tiles; encoder intermediates are released before attention.
+The output is the actual attention-weighted HR feature map, suitable for
+`image_conditions`' LR/HR concatenation. No backend is chosen inside the library;
+every operation must be supported by the caller's backend. Cancellation is
+checked before/after encoder computation and each tile, including the last.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_naf.py \
+  --naf-source "$NAF_SOURCE" --pixal-source "$PIXAL_SOURCE" \
+  --checkpoint-fixtures "$PIXAL_CHECKPOINT_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-naf-check \
+  --output-dir "$PIXAL_NAF_REPORT"
+```
+
+Measured CPU results: nine synthetic cases and 115 tensor comparisons all pass,
+max absolute error `1.3969838619232178e-05` at atol/rtol5e-5. The actual pinned
+NAF class executes with all learned parameters replaced by synthetic values.
+Its hard-coded cutlass call is redirected to NATTEN0.21.0's original CPU
+`flex-fna`, without compilation. That backend requires equal QK/V head widths,
+so independent V channels are split/padded while Q/K, attention scale and
+NATTEN's neighborhood mask remain unchanged. This does not validate cutlass.
+
+Cases cover irregular rectangular/adaptive bins, pooling to a larger output,
+guide downsampling, unequal X/Y dilation, differing QK/V channel widths, default
+256-channel/two-block/9x9 architecture, tile tails, and F16 storage with explicit
+F32 arithmetic. Six cases continue through LR/HR projection and actual sparse
+shape sampling, comparing all 18 sampled states with pinned Pixal code.
+Different tile sizes give bitwise-identical output; repeating with/without
+diagnostic intermediates also gives bitwise-identical output.
+
+The regular fixture's attention graph allocates 36768 bytes with seven-pixel
+tiles versus 236032 bytes with one 64-pixel tile, with identical outputs. The
+default-architecture 18x18 fixture allocates 2578048 encoder bytes and 27019520
+attention bytes. These are small CPU graph-buffer measurements, not process
+peak memory, production performance, GPU VRAM or real trained-model evidence.
+Ten invalid-input/cancellation cases fail without publishing output. Existing
+DINO/image-to-flow regression also passes (six cases/99 comparisons/six negatives).
+
+During development, intermediate retention exposed a GGML view-owner reuse
+bug (query output changed by up to 0.088560 without diagnostics). Output owners
+are now protected from reuse; strict tolerances were retained. Initial checker
+failures from projection layout and unsupported one-neighbor reference settings
+are retained in the evidence logs; fixtures were corrected to supported layouts
+and neighborhoods. Torch GPU initialized=false. Evidence:
+`maintenance/g9-pixal-naf-20260919/cpu-release` and `image-regression`.
+
+Remaining: production NAF checkpoint conversion/metadata/loading, trained
+weights, full-sized images, mixed-precision and Vulkan execution, full pipeline
+foreground/camera/cascade/decoder/GLB integration and Library/adoption/release.
+This component neither fetches weights nor enables a capability. Source licenses
+and attribution are in `NOTICE`, `LICENSE.naf`, and `LICENSE.natten`.

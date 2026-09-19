@@ -1,5 +1,38 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D native NAF upsampling; CPU projection/sampled-latent parity passed
+
+`ux1/pixal3d-naf`、親PR559 / `aa0e419`。固定NAFの2枝reflect畳み込み、GroupNorm/SiLU、
+guide縮小、adaptive pooling、persistent RoPE periods、nearest-exact近傍attentionを
+既存GGML演算で実装。明示backendだけで実行し、未対応opは拒否。encoderの一時領域を
+解放してから小さいtile単位でattentionを計算し、Q/K/Vはtile間で再uploadせず保持する。
+元trellis runtime/モデル/Library変更なし。新GPU kernelや採用receiptは作らない。
+
+固定NAF classの全parameterをsynthetic値へ置換。NAFのcutlass指定だけをNATTEN0.21.0
+CPU flex-fnaへ変更し、そのbackendのQK/V同幅制約にはVの独立channel分割/paddingで対応。
+NATTENの近傍mask/attentionは実実装を実行。9条件/115tensor比較が全pass、最大絶対誤差
+1.3969838619232178e-05 (atol/rtol5e-5)。うち6条件はnative LR/HR投影→shape sampling
+まで接続し、18stepのlatentが実Pixal samplerと一致。矩形/非整除pool/guide縮小/拡大pool/
+XYで異なるdilation/既定256channel・9x9/異なるQK-V幅/F16格納・明示F32演算を含む。
+
+tileサイズ変更・debug中間保持の有無とも出力bitwise一致。初回はreshapeの出力ownerが
+再利用され、debugなしでqueryが変わる問題を検出（出力差最大0.088560）。ownerも保持して
+修正し、許容誤差を緩めず再照合。regular attention graphはtile7で36768bytes、tile64で
+236032bytes。小型CPU graph buffer実測であり、実寸モデルのGPU VRAM/全process peakではない。
+入力/weight/period/extent/head不正と開始前・tile間・最終compute後cancelの10negative全pass、
+失敗時の出力公開0。既存DINO6条件/99比較/6negative回帰もpass。torch GPU initialized=false。
+
+証跡: managed data `maintenance/g9-pixal-naf-20260919/cpu-release` と `image-regression`。
+初回fixtureの投影layout/NATTEN非対応kernel指定エラー、buffer問題のログも保持。
+NAF/source/package/library/binary hash、入力・合成重み・全中間NPYを保存。
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 239.39秒 / exit0**。
+
+**NOT TESTED / 残り**: DINO/NAF本番checkpoint変換・metadata・loader接続、trained重み、
+実寸画像、mixed precision、実Host lease付きVulkan、foreground/MoGe/cascade/decoder/GLB、
+実生成/画質/新Asset登録、採用/署名配布/installed操作。先の重みlicense同意は回答待ち。
+骨付き出力も未作成。次はDINO/NAFのcheckpoint境界とimage条件pipelineを接続し、
+その後camera/cascade/decoderへ進む。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D RGB/DINO/projection connection; CPU sampled-latent parity passed
 
 `ux1/pixal3d-image-features`、親PR558 / `e8c48f1`。native DINO画像特徴、
