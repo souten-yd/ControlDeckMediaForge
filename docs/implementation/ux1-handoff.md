@@ -1,5 +1,33 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 trellis.cpp samples: WebP to PNG and installed import
+
+利用者指定の既存sampleを変換。product code/validator許可list/Host/runtime/weights変更0。
+Claude scratchpadの `vk/ref_vk.glb` / `vk/s01_vk.glb` はgenerator
+`trellis.cpp v0.6.0`、両方 `required extension is not allowed: EXT_texture_webp`。
+既存 `ref_vk_png.glb` もWebPのままなので使用せず、原本2件から独立PNG版を作成。
+各2枚の2048×2048画像をPNGへ再encode、texture.sourceへ付替え、WebP extension宣言を除去。
+全非画像bufferView bytes、geometry/UV/material/scene/generator metadata、decoded RGBA画素一致。
+原本SHA256不変。GLB構造検証は両方passed。
+
+稼働0.28.86 / 127.0.0.1:9130へ `POST /api/v1/assets/import?purpose=source`
+（Content-Type:model/gltf-binary）は各HTTP201。content再取得は投入bytes/SHA256一致。
+`GET /api/v1/assets` HTTP200の一覧にも両ID/model-gltf-binaryを確認。
+- ref_vk_png.glb: 20,277,572B / `asset_dbe35726ecf6405a94f865476b5e6904`
+- s01_vk_png.glb: 18,810,044B / `asset_8bbb30aa5d7a432083a259e212fa76b8`
+
+実Blender4.5.13でWebP原本2件＋PNG版2件のimport成功、各2画像has_data=true。
+refは227,918vertices/276,178triangles、s01は218,505vertices/283,034trianglesで前後一致。
+Three.js bundle内にEXT_texture_webp対応あり。今後の直接許可は候補だが今回policyは不変。
+Chrome headless/CDPはPage.navigateで30秒timeout、所有browser停止。
+NOT TESTED: viewer画素/Host Library UI操作、WebP直接許可したinstalled import、再export加工。
+G9生成runtime採用や品質受入の証拠にはしない。次回trellis.cpp CLIは `--webp off` も可能。
+証跡/出力/再現script/元と先のSHA256・asset来歴:
+`/data1tb/ControlDeck/CodeDEV/Trellis-PNG-20260919/`。
+同一product treeの原checkoutで `./mf.sh test`: 2177passed/2warnings/233.69秒、exit0。
+以後変更は本実測記録のみ。
+
+
 **次のセッションはこのファイルを最初に読む。** 更新義務は
 `ux1-workspace.md` §14.3。推測ではなく current Git/PR/process を再確認する。
 
