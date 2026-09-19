@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-19 Pixal3D existing Scene Jobs adapter
+
+`ux1/pixal3d-scene-jobs`、親PR572 / `0e2b870`。独立private adoption receiptとcore adapterを追加し、
+CPU前処理process終了→既存Host GPU admission→生成→release→Blender/Scene/Assetを接続。
+画像/descriptor/seed/prepared input/出力hashと実測device/resolutionを検査し、synthetic採用を拒否。
+venv launcherと基底interpreterのidentityを別に保持、coreのML import・環境共有なし。
+capabilityへengine別状態を加法追加。TRELLISの既存receipt/auto優先と未実測拒否を維持する。
+worker終了前のlease解放を避け、取消のdrain中もrenew。待機中adoption変更、late grant、retry、
+lease lossを既存Jobsで扱う。新しいJobs/Asset基盤・Host変更はない。
+
+対象51件exit0。両engineのScene/lineage登録、取消各段、前処理取消時のGPU要求0、
+wrong device/lost renewal/retry、adoption変更、cleanup中renew、hash thread/output pipeのdrainを確認。
+これらのHost/Blender/生成reportはprotocol fixtureであり、GPU/モデル採用の実測ではない。
+別の実CPU/synthetic workerをcore supervisorから実行: prepare22.244655秒→native1.324380秒、
+48,532byte/590三角形GLB。独立core/Blender4.5.9 pass、前回array/GLB payload一致。
+実SS flowのPython/native同一groupを観測し、取消0.062088秒、timeout0.7秒設定で0.762311秒、
+両PID消失・owned生成出力なし。実行中adoption receipt/Host leaseは作成していない。
+
+`./mf.sh test`: **2242 passed / 2 warnings / 249.79秒 / exit0**。以後product/checker変更なし。
+詳細は [Jobs接続記録](implementation/g9-pixal-jobs-20260919.md)、証跡はmanaged
+`maintenance/g9-pixal-jobs-20260919/` のtargeted/full-test log、`cpu-final/report.json`とsource hash。
+venv fixtureのcopy/symlink指定、checker起動時PYTHONPATHの誤りは修正し、失敗log/理由を記録。
+
+NOT TESTED: 正規Host admission付きPixal/Vulkan、trained/full幅/品質、採用receipt、署名導入、
+installed画像生成→Library、ブラウザ、骨付きanimation。元root/Host/installed/runtime/Library変更なし。
+全体目標は未完了。次は既存画像→3D formのengine選択とCPU prepare表示を接続する。
+学習済み重みの同意・正規leaseは未取得であり、trained/GPU評価を実行しない。
+
 ## 2026-09-19 Pixal3D private worker entry and exact integer seeds
 
 `ux1/pixal3d-worker-entry`、親PR571 / `f887fbc`。private CPU prepareとnative generateを分離し、

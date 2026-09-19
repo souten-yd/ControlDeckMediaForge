@@ -14,6 +14,7 @@ from mediaforge.store import AssetInUse
 from test_scene_generation_import import setup
 from test_scene_recipe_jobs import Host, IDENTITY
 from test_three_d_runtime import native_runtime
+from test_pixal_runtime import pixal_runtime
 
 GENERATION_IDENTITY = replace(IDENTITY, granted_capabilities=frozenset({'jobs.write','resources.acquire'}))
 
@@ -55,21 +56,37 @@ class ResourceHost(Host):
         return {}
 
 
-def manager_fixture(tmp_path,mode='success'):
+def manager_fixture(tmp_path,mode='success',engine='trellis_cpp'):
     data=setup(tmp_path/'workspace')
     store,workspace,resolver,request,*_=data
     resolver.resolve_active=lambda: resolver.runtime
     runtime_root=tmp_path/'native';runtime_root.mkdir()
-    generator,receipt=native_runtime(runtime_root,script="pathlib.Path('pid').write_text(str(os.getpid()))\ntime.sleep(0.1)\n" if mode=='success' else "pathlib.Path('pid').write_text(str(os.getpid()))\ntime.sleep(60)\n")
+    if engine == 'pixal3d':
+        generator,receipt=pixal_runtime(runtime_root,allowed_root=tmp_path,
+            fault='' if mode=='success' else 'sleep_prepare' if mode=='preparation' else 'sleep_generate')
+        request=request.model_copy(update={'engine':'pixal3d','seed':16777217})
+    else:
+        generator,receipt=native_runtime(runtime_root,script="pathlib.Path('pid').write_text(str(os.getpid()))\ntime.sleep(0.1)\n" if mode=='success' else "pathlib.Path('pid').write_text(str(os.getpid()))\ntime.sleep(60)\n")
     host=ResourceHost(mode)
     manager=SceneRecipeJobManager(store,workspace,host,generator=generator,
         control_poll_sec=0.01,lease_renew_sec=0.02,resource_poll_sec=0.01)
     return manager,host,request,receipt
 
 
-def test_image_generation_uses_child_lease_existing_scene_library_and_provenance(tmp_path):
+@pytest.mark.parametrize('engine',['trellis_cpp','pixal3d'])
+def test_image_generation_uses_child_lease_existing_scene_library_and_provenance(tmp_path,engine):
     async def scenario():
-        manager,host,request,receipt=manager_fixture(tmp_path)
+        manager,host,request,receipt=manager_fixture(tmp_path,engine=engine)
+        if engine == 'pixal3d':
+            original_request=host.request_resource
+            async def after_preparation(identity,payload):
+                roots=list(manager.workspace.recipe_root.glob('native_*'))
+                assert len(roots)==1 and (roots[0]/'pixal-prepared/ready.json').exists()
+                pid=int((roots[0]/'prepare.started').read_text())
+                assert not Path(f'/proc/{pid}').exists()
+                assert not (roots[0]/'generate.started').exists()
+                return await original_request(identity,payload)
+            host.request_resource=after_preparation
         original=manager.workspace.import_generated_glb
         async def checked_import(*args,**kwargs):
             assert host.events[-1]=='release'
@@ -84,6 +101,10 @@ def test_image_generation_uses_child_lease_existing_scene_library_and_provenance
         source=manager.store.get_provenance(final.asset_ids[0])
         assert source.parent_asset_ids==[request.input_asset_id]
         assert source.model_version==receipt.model_revision
+        if engine == 'pixal3d':
+            assert source.parameters['generation']['execution']['preprocessing_backend']=='cpu'
+            assert source.parameters['generation']['execution']['backend']=='vulkan'
+            assert source.seed==16777217
         assert host.events[:2]==['request','activate'] and 'renew' in host.events
         assert host.events.count('release')==1
         assert manager.projection(job.id,'user:7')['result']['scene']['name']==request.name
@@ -96,16 +117,17 @@ def test_image_generation_uses_child_lease_existing_scene_library_and_provenance
 
 
 @pytest.mark.parametrize('stage',['request','waiting','worker'])
-def test_cancellation_cleans_pending_admission_or_worker_before_release(tmp_path,stage):
+@pytest.mark.parametrize('engine',['trellis_cpp','pixal3d'])
+def test_cancellation_cleans_pending_admission_or_worker_before_release(tmp_path,stage,engine):
     async def scenario():
-        manager,host,request,_=manager_fixture(tmp_path,stage)
+        manager,host,request,_=manager_fixture(tmp_path,stage,engine)
         job,_=await manager.submit(request,GENERATION_IDENTITY)
         await asyncio.wait_for(host.requested.wait(),2)
         if stage in {'waiting', 'request'}:
             assert not manager._execution_guard.locked()
         if stage=='worker':
             for _ in range(200):
-                pids=list(manager.workspace.recipe_root.glob('native_*/pid'))
+                pids=list(manager.workspace.recipe_root.glob('native_*/'+('generate.started' if engine=='pixal3d' else 'pid')))
                 if pids: break
                 await asyncio.sleep(0.01)
             assert pids
@@ -131,9 +153,10 @@ def test_cancellation_cleans_pending_admission_or_worker_before_release(tmp_path
 
 
 @pytest.mark.parametrize('mode,code',[('wrong_device','resource_grant_incompatible'),('renew_failure','host_lease_lost')])
-def test_invalid_grant_or_lost_lease_fails_without_publishing(tmp_path,mode,code):
+@pytest.mark.parametrize('engine',['trellis_cpp','pixal3d'])
+def test_invalid_grant_or_lost_lease_fails_without_publishing(tmp_path,mode,code,engine):
     async def scenario():
-        manager,host,request,_=manager_fixture(tmp_path,mode)
+        manager,host,request,_=manager_fixture(tmp_path,mode,engine)
         job,_=await manager.submit(request,GENERATION_IDENTITY)
         await manager.wait_cleanup(job.id)
         final=manager.store.get_job(job.id)
@@ -146,21 +169,23 @@ def test_invalid_grant_or_lost_lease_fails_without_publishing(tmp_path,mode,code
     asyncio.run(scenario())
 
 
-def test_generation_checks_capability_and_adoption_before_host_admission(tmp_path):
+@pytest.mark.parametrize('engine',['trellis_cpp','pixal3d'])
+def test_generation_checks_capability_and_adoption_before_host_admission(tmp_path,engine):
     async def scenario():
-        manager,host,request,_=manager_fixture(tmp_path)
+        manager,host,request,_=manager_fixture(tmp_path,engine=engine)
         with pytest.raises(SceneError,match='resources.acquire'):
             await manager.submit(request,IDENTITY)
-        manager.generator.receipt_path.unlink()
+        (manager.generator.pixal_receipt_path if engine=='pixal3d' else manager.generator.receipt_path).unlink()
         with pytest.raises(SceneError,match='unavailable'):
             await manager.submit(request,GENERATION_IDENTITY)
         assert host.created==[] and host.events==[]
     asyncio.run(scenario())
 
 
-def test_generation_retry_preserves_identity_and_can_publish_after_bad_grant(tmp_path):
+@pytest.mark.parametrize('engine',['trellis_cpp','pixal3d'])
+def test_generation_retry_preserves_identity_and_can_publish_after_bad_grant(tmp_path,engine):
     async def scenario():
-        manager,host,request,_=manager_fixture(tmp_path)
+        manager,host,request,_=manager_fixture(tmp_path,engine=engine)
         host.mode='wrong_device'
         first,_=await manager.submit(request,GENERATION_IDENTITY)
         await manager.wait_cleanup(first.id)
@@ -173,9 +198,74 @@ def test_generation_retry_preserves_identity_and_can_publish_after_bad_grant(tmp
         assert record.input_sha256==manager.store.get_scene_recipe_task(first.id).input_sha256
         assert len(manager.store.list_assets())==3
         receipt=manager.generator.resolve()
-        manager.generator.receipt_path.write_text(receipt.model_copy(update={'measured_runtime_sec':2}).model_dump_json())
+        path=manager.generator.pixal_receipt_path if engine=='pixal3d' else manager.generator.receipt_path
+        path.write_text(receipt.model_copy(update={'measured_runtime_sec':2}).model_dump_json())
         with pytest.raises(SceneError,match='runtime or input changed'):
             await manager.submit(request,GENERATION_IDENTITY,retry_of=first.id)
         assert len(host.created)==2
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_pixal_preparation_cancel_creates_no_gpu_request(tmp_path):
+    async def scenario():
+        manager,host,request,_=manager_fixture(tmp_path,'preparation','pixal3d')
+        job,_=await manager.submit(request,GENERATION_IDENTITY)
+        for _ in range(200):
+            pids=list(manager.workspace.recipe_root.glob('native_*/prepare.started'))
+            if pids: break
+            await asyncio.sleep(.01)
+        assert pids and host.events==[]
+        assert manager.store.get_job(job.id).phase=='prepare_3d_input'
+        pid=int(pids[0].read_text())
+        await manager.cancel(job.id,'user:7')
+        await manager.wait_cleanup(job.id)
+        assert manager.store.get_job(job.id).status==JobStatus.CANCELED
+        assert host.events==[] and not Path(f'/proc/{pid}').exists()
+        assert len(manager.store.list_assets())==1 and list(manager.workspace.recipe_root.iterdir())==[]
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_pixal_adoption_changed_while_admission_pending_releases_without_activation(tmp_path):
+    async def scenario():
+        manager,host,request,receipt=manager_fixture(tmp_path,'request','pixal3d')
+        job,_=await manager.submit(request,GENERATION_IDENTITY)
+        await asyncio.wait_for(host.requested.wait(),2)
+        manager.generator.pixal_receipt_path.write_text(receipt.model_copy(update={'measured_runtime_sec':2}).model_dump_json())
+        host.allow_response.set()
+        await manager.wait_cleanup(job.id)
+        final=manager.store.get_job(job.id)
+        assert final.status==JobStatus.FAILED and final.error.code=='three_d_runtime_changed'
+        assert host.events==['request','release']
+        assert len(manager.store.list_assets())==1 and list(manager.workspace.recipe_root.iterdir())==[]
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_gpu_lease_keeps_renewing_until_canceled_worker_finishes_cleanup(tmp_path):
+    async def scenario():
+        manager,host,request,_=manager_fixture(tmp_path)
+        running=asyncio.Event();cleaning=asyncio.Event();allow_cleanup=asyncio.Event()
+        async def generation(*args,**kwargs):
+            running.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                await allow_cleanup.wait()
+        manager.generator.generate=generation
+        job,_=await manager.submit(request,GENERATION_IDENTITY)
+        await asyncio.wait_for(running.wait(),2)
+        cancellation=asyncio.create_task(manager.cancel(job.id,'user:7'))
+        await asyncio.wait_for(cleaning.wait(),2)
+        before=host.events.count('renew')
+        await asyncio.sleep(.08)
+        assert host.events.count('renew')>before and 'release' not in host.events
+        assert not cancellation.done()
+        allow_cleanup.set()
+        await asyncio.wait_for(cancellation,2)
+        await manager.wait_cleanup(job.id)
+        assert host.events[-1]=='release' and manager.store.get_job(job.id).status==JobStatus.CANCELED
         await manager.stop()
     asyncio.run(scenario())
