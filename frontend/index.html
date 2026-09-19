@@ -375,11 +375,14 @@
                 <button type="button" id="scene-generation-refresh">更新</button>
               </div>
               <label for="scene-generation-name" id="scene-generation-name-label">シーン名</label>
-              <input id="scene-generation-name" maxlength="120" required autocomplete="off">
+              <input id="scene-generation-name" type="text" maxlength="120" required autocomplete="off">
               <details>
                 <summary id="scene-generation-options">詳細設定</summary>
+                <label for="scene-generation-engine" id="scene-generation-engine-label">生成エンジン</label>
+                <select id="scene-generation-engine" aria-describedby="scene-generation-engine-status" required></select>
+                <p id="scene-generation-engine-status" class="hint" role="status" hidden></p>
                 <label for="scene-generation-resolution" id="scene-generation-resolution-label">生成解像度</label>
-                <select id="scene-generation-resolution"></select>
+                <select id="scene-generation-resolution" required></select>
                 <label for="scene-generation-seed" id="scene-generation-seed-label">シード</label>
                 <input id="scene-generation-seed" type="number" min="0" max="2147483647" step="1" value="42" required>
               </details>
