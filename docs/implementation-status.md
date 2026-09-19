@@ -1,5 +1,34 @@
 # Media Forge implementation status
 
+## 2026-09-19 Image-to-3D engine selection and polling recovery
+
+`ux1/pixal3d-engine-ui`、親PR573 / `5fe356f`。既存画像→3D formの詳細設定へ
+capability由来のauto/trellis.cpp/Pixal3D選択とengine別resolutionを接続。明示選択が利用不能に
+なった場合は保持して送信を止める。CPU入力準備の表示をGPU待機/生成/検証保存から分離。
+実ブラウザで見つけた取消直後の新Job監視停止を修正し、古い応答による上書きも防ぐ。
+
+Chrome151.0.7922.169、opaque iframeの実frontend + transport fixtureで6ケースpass、page error0。
+320px日本語/1280px英語でscroll widthは各viewportと一致、engine/resolution44px、
+name/seed/submit46px。Pixal1024→取消→TRELLIS512、seed16777217、4phase表示、通信失敗→更新、
+locale切替、選択engine/resolution消失時の保持/送信拒否、遅延旧Job応答の無視を確認。
+初回失敗と診断logを保持。画像生成/Host応答はfixtureで、実Vulkanの証拠ではない。
+詳細は [UI実測記録](implementation/g9-pixal-ui-20260919.md)。
+
+最終 `./mf.sh test`: **2242 passed / 2 warnings / 252.41秒 / exit0**。
+初回は内部Job identity例外のcodeが説明文規約に抵触して1failed。既存の接続失敗catch内で扱う
+Errorへ修正し、対象テスト・wrong Job ID拒否を加えたブラウザ6ケース・全件を再実行した。
+失敗logも保持。最終検証以後product/checker変更なし。
+
+2026-09-19T09:35:15Z、実installed HTTPで既存Library3点の掲載とGLB全bytes/hash一致を再確認。
+Pixal1点は引き続きCPU/合成重みの検証用表示。今回の追加登録0。
+証跡はmanaged `maintenance/g9-pixal-ui-20260919/` のbrowser-final/report.json、
+日本語/英語capture、library-recheck.json。元root `524553d` clean、origin/main `bbdc69a`。
+
+NOT TESTED: installed新form、正規Host lease付きVulkan、trained/full幅/品質、採用receipt、
+署名導入、installed画像生成→Library、GLB viewer画素、骨付きanimation。
+重み同意・正規leaseは未取得。source UIを実装しても未採用runtimeは利用可能にしない。
+全体目標は未完了。Host/installed/runtime/model/receipt/Libraryへの変更なし。
+
 ## 2026-09-19 Pixal3D existing Scene Jobs adapter
 
 `ux1/pixal3d-scene-jobs`、親PR572 / `0e2b870`。独立private adoption receiptとcore adapterを追加し、

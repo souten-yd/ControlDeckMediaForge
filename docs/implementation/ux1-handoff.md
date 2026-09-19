@@ -1,5 +1,33 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Image-to-3D engine UI
+
+`ux1/pixal3d-engine-ui`、親PR573 / `5fe356f`。前ターンの次着手点に従い、既存formへ
+engine選択・engine別resolution・CPU prepare表示を追加。UX設計を先に更新。
+capabilityから導出し、未準備選択肢はdisabled、利用者の明示選択が消えたら保持/送信停止。
+既存scenes.from_imageへengineを送る。第二UI/Jobs/Assetは作らない。
+
+実Chrome151.0.7922.169 + opaque iframe + transport fixtureで6ケースpass、page error0。
+320ja/1280en、横overflow0、selector44px/主要input・submit46px。Pixal1024→取消→TRELLIS512、
+整数seed16777217保持、4phase、通信失敗/更新、locale、capability変更を実操作で確認。
+取消直後の新Jobがpollされない不具合を初回/診断runで再現。poll所有者をJob IDへ変更し、
+遅延する旧応答/cleanupが新Jobを上書きしないことをheld responseで検証した。
+source UI受入であり、実Host/実生成やinstalled受入ではない。
+詳細は [UI記録](g9-pixal-ui-20260919.md)、managed `maintenance/g9-pixal-ui-20260919/`。
+
+最終 `./mf.sh test`: **2242 passed / 2 warnings / 252.41秒 / exit0**。
+初回のUI内部例外code/説明規約の1failedを修正後、対象・ブラウザ・全件を再検証。
+wrong Job ID応答も既存接続エラー扱いで拒否し、Refreshで復帰。以後product/checker変更なし。
+
+実installed HTTPでLibraryのtrellis2点・合成Pixal1点の掲載/全GLB hashを09:35:15Zに再確認。
+追加登録0、Pixal検証用ラベル維持。元root `524553d` clean、origin/main `bbdc69a`。
+Host/installed/runtime/model/receipt/Library変更なし。学習済み重み同意は既出質問への回答待ち、
+正規leaseも未取得。trained/full幅/品質、Vulkan、adoption、署名導入、installed一巡、骨は未完了。
+
+次は既出の同意回答/実Host admission条件を再確認し、条件が揃ったengineから実モデル・実GPUの
+計測と採用を進める。合成CPUの成功だけでreceiptを発行せず、UI fixtureをinstalled証拠にしない。
+同意/leaseが依然ない場合は、それを記録してdependent実行を待つ。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D core Scene Jobs接続
 
 `ux1/pixal3d-scene-jobs`、親PR572 / `0e2b870`。前ターンをprogressと判定して開始。
