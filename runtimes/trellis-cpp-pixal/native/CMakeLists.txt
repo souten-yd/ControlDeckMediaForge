@@ -28,3 +28,28 @@ add_executable(pixal-projection-check projection_check.cpp)
 target_include_directories(pixal-projection-check PRIVATE "${TRELLIS_SOURCE_DIR}/include")
 target_link_libraries(pixal-projection-check PRIVATE pixal_projection "${GGML_cpu}" "${GGML_vulkan}")
 set_target_properties(pixal-projection-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+find_library(GGML_registry NAMES ggml PATHS "${TRELLIS_BUILD_DIR}" NO_DEFAULT_PATH REQUIRED)
+file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/../patches/projected-dit.patch" DIT_PATCH_SHA)
+set(DIT_OVERLAY "${CMAKE_CURRENT_BINARY_DIR}/dit-${DIT_PATCH_SHA}")
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../prepare_trellis.py"
+  --source "${TRELLIS_SOURCE_DIR}" --destination "${DIT_OVERLAY}"
+  COMMAND_ERROR_IS_FATAL ANY)
+add_library(pixal_dit STATIC "${DIT_OVERLAY}/src/dit.cpp" "${TRELLIS_SOURCE_DIR}/src/trellis_model.cpp")
+target_include_directories(pixal_dit PUBLIC "${DIT_OVERLAY}/include" "${TRELLIS_SOURCE_DIR}/include"
+  "${TRELLIS_SOURCE_DIR}/thirdparty/ggml/include")
+target_link_libraries(pixal_dit PUBLIC "${GGML_base}" "${GGML_cpu}" "${GGML_registry}")
+add_executable(pixal-dit-check dit_check.cpp)
+target_link_libraries(pixal-dit-check PRIVATE pixal_dit pixal_projection "${GGML_vulkan}")
+set_target_properties(pixal-dit-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
+
+# Compile the unchanged upstream graph as a separate binary for exact regression
+# comparison of the legacy mode, including its default GELU implementation.
+add_executable(pixal-dit-baseline-check dit_check.cpp "${TRELLIS_SOURCE_DIR}/src/dit.cpp"
+  "${TRELLIS_SOURCE_DIR}/src/trellis_model.cpp")
+target_compile_definitions(pixal-dit-baseline-check PRIVATE MEDIAFORGE_UNPATCHED_DIT=1)
+target_include_directories(pixal-dit-baseline-check PRIVATE "${TRELLIS_SOURCE_DIR}/include"
+  "${TRELLIS_SOURCE_DIR}/thirdparty/ggml/include")
+target_link_libraries(pixal-dit-baseline-check PRIVATE pixal_projection "${GGML_base}" "${GGML_cpu}" "${GGML_registry}" "${GGML_vulkan}")
+set_target_properties(pixal-dit-baseline-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")

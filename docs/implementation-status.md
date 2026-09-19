@@ -1,5 +1,31 @@
 # Media Forge implementation status
 
+## 2026-09-19 Pixal3D projected DiT source; five CPU cases passed
+
+`ux1/pixal3d-projected-dit`、親PR555 / `86527e2`。固定trellis.cppから生成する
+side-by-side source patchで、各blockの投影条件・専用linear重みをGGML graphへ追加。
+既存cross modeを既定に維持し、Pixal用の条件欠落/shape不一致は拒否。
+元runtime source/binary、既存モデル、Libraryを変更しない。
+
+固定upstream PyTorch Flow classを小型化し、全parameterを明示synthetic random値にして
+実C++ graphと照合。cross/proj/2倍特徴channel/zero条件/投影→DiT直結の5条件、
+59tensor比較が全pass。最大絶対誤差9.5367431640625e-07、atol/rtol5e-5。
+zero条件でもprojection biasを保持。条件欠落/shape違い2negative check pass。
+初回F32比較はGGML CPU GELUのFP16 tableで最大0.00021521のMLP誤差を検出。
+opt-in F32 GELU graphを追加して閾値を緩めず一致。既定GELU/cross modeは別途
+未変更upstream executableと全中間/出力がbitwise一致。torch GPU initialized=false。
+
+証跡: managed data `maintenance/g9-pixal-dit-20260919`。
+original/patched source、patch、library、binaryのhashと全synthetic fixtureを保存。
+最終 `./mf.sh test`: 2211 passed / 2 warnings / 237.60秒 / exit0。
+モデル重みは使っていない。
+
+**NOT TESTED / 残り**: Vulkan実行、実trained checkpoint/GGUF、BF16/FlashAttention、
+実stage runner/sampler接続、DINO global token/NAF/MoGe、実生成/画質/新出力Library登録、
+採用receiptと通常配布。先のlicense同意は回答待ち。骨入り版も未作成。
+次はGGUF変換/固定model metadataとstage runnerへ接続し、実Host admission下の照合へ進む。
+全体目標は未完了。詳細: g9-pixal3d-vulkan-port.md。
+
 ## 2026-09-19 Pixal3D Vulkan port started; projection CPU parity passed
 
 利用者がPixal3DのVulkan移植も明示要求。base-planへ要件を追加し、

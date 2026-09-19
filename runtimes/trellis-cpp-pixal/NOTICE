@@ -11,3 +11,9 @@ This component does not include model weights.
 
 trellis.cpp and its GGML checkout are external, pinned build dependencies;
 their notices and licenses remain in those source/runtime distributions.
+
+The projected DiT patch modifies trellis.cpp include/dit.h and src/dit.cpp,
+revision 2516c48b677050c570f47eba2e68dc8a5bc918b0.
+Copyright (c) 2026 Piotr Wilkin. MIT license: see LICENSE.trellis.
+Changes: optional per-block projected conditioning, strict input checks and
+opt-in F32 GELU for numerical parity. The original runtime is not modified.
