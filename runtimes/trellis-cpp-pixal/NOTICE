@@ -36,3 +36,23 @@ Image feature selection, LR/HR projection concatenation and zero negative
 conditioning follow TencentARC/Pixal3D's image_conditioned_proj.py at its pin.
 prepare_image.py preserves the reference Pillow resize/RGB order. Foreground
 removal, NAF, MoGe and pretrained model weights are not included in this slice.
+
+native/naf.cpp ports the evaluation encoder, adaptive pooling, key/value resize
+and neighborhood attention architecture from valeoai/NAF, revision
+37f2dfc180f2de53d98bd601109c0da0dd6b0f43,
+src/model/naf.py and src/layers/{attentions,convolutions}.py.
+Copyright the NAF authors. Apache-2.0 license: see LICENSE.naf.
+Changes: C++/GGML graphs, explicit caller backend, reflected convolution padding,
+separable adaptive pooling, bounded tiles, persistent Q/K/V, cancellation,
+validation and synthetic numerical comparison. No trained weights are included.
+The positional half-rotation graph reuses our trellis-derived image_features.cpp
+construction above; NAF's Python rope.py (which carries a separate DINOv3 notice)
+is executed as an external reference, not copied into this distribution.
+
+Neighborhood border/residue mathematics follow NATTEN 0.21.0's
+natten/backends/flex.py, copyright (c) 2022-2025 Ali Hassani, MIT license:
+see LICENSE.natten. Changes: native index planning with nearest-exact LR mapping,
+without copying or introducing a GPU kernel. The CPU checker calls the installed
+original NATTEN flex backend, splitting/padding V channels as required by that
+backend, instead of NAF's hard-coded cutlass backend. This is not a cutlass or
+Vulkan acceptance result.
