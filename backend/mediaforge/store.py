@@ -1038,6 +1038,18 @@ class Store:
         if scene_reference is not None:
             raise AssetInUse(asset_id, str(scene_reference["id"]))
 
+        with self._connect() as connection:
+            generation_reference = connection.execute(
+                """SELECT task.job_id FROM scene_recipe_tasks AS task
+                   JOIN jobs ON jobs.id = task.job_id
+                   WHERE task.operation = 'scene.from_image'
+                   AND jobs.status IN ('queued', 'running')
+                   AND json_extract(task.request_json, '$.input_asset_id') = ? LIMIT 1""",
+                (asset_id,),
+            ).fetchone()
+        if generation_reference is not None:
+            raise AssetInUse(asset_id, str(generation_reference['job_id']))
+
         storage = contained(self.asset_dir, self.asset_dir / str(row["storage_name"]))
         sidecar = contained(self.asset_dir, self.asset_dir / f"{asset_id}.provenance.json")
         with self._lock, self._connect() as connection:

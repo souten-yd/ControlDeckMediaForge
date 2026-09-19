@@ -123,6 +123,8 @@ from .scene_backup_transport import SceneBackupSession
 from .scenes import SceneCatalog, SceneError
 from .scene_workspace import SceneWorkspace
 from .scene_recipe_jobs import SceneRecipeJobManager
+from .scene_generation import SceneFromImageRequest
+from .three_d_runtime import ThreeDGenerator
 from .scene_authoring_guidance import scene_authoring_guidance
 from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
@@ -282,10 +284,15 @@ def create_app(
         recipe_worker=REPOSITORY_ROOT / "worker_packs/blender/scene_recipe.py",
         observation_worker=REPOSITORY_ROOT / "worker_packs/blender/scene_observation.py",
         bake_worker=REPOSITORY_ROOT / "worker_packs/blender/scene_bake.py",
+        generation_import_worker=REPOSITORY_ROOT / "worker_packs/blender/import_generated_glb.py",
         process_timeout_sec=resolved.blender_timeout_sec,
     )
     material_previews = MaterialPreviewManager(scene_workspace)
-    scene_recipe_jobs = SceneRecipeJobManager(store, scene_workspace, host, ai_gateway=ai_gateway)
+    three_d_generator = ThreeDGenerator(resolved.data_dir / "runtime-state/image-to-3d-runtime.json")
+    scene_recipe_jobs = SceneRecipeJobManager(
+        store, scene_workspace, host, ai_gateway=ai_gateway, generator=three_d_generator,
+        lease_renew_sec=resolved.host_lease_renew_sec,
+    )
     try:
         blender_runtimes.register_legacy()
     except BlenderRuntimeRegistryError as exc:
@@ -1097,6 +1104,7 @@ def create_app(
                 "agent_tool:media.inspect": token_state,
                 "agent_tool:media.pack": token_state,
                 "agent_tool:media.scene.create": token_state,
+                "agent_tool:media.scene.from_image": token_state,
                 "agent_tool:media.scene.edit": token_state,
                 "agent_tool:media.scene.material": token_state,
                 "agent_tool:media.scene.observe": token_state,
@@ -1443,7 +1451,11 @@ def create_app(
                     "state": "unavailable",
                     "reason": "video_runtime_not_adopted",
                 },
-                "3d.image_to_3d": {"state": "unavailable", "reason": "planned_for_g9"},
+                "3d.image_to_3d": {
+                    **(three_d_generator.status() if blender_runtimes.resolve_g8() is not None
+                       else {"state": "unavailable", "reason": "runtime_not_installed"}),
+                    "schema_path": "/schemas/scene-from-image-request.json", "local_only": True,
+                },
             },
         }
 
@@ -1960,11 +1972,20 @@ def create_app(
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "job_not_found"}) from exc
 
+    async def cancel_media_job(job_id: str, identity: HostIdentity | None = None) -> dict[str, Any]:
+        try:
+            scene_task = store.get_scene_recipe_task(job_id)
+        except KeyError:
+            await manager.cancel(job_id)
+        else:
+            owner = scene_owner(identity) if identity is not None else scene_task.owner
+            await scene_recipe_jobs.cancel(job_id, owner)
+        return store.get_job(job_id).model_dump(mode="json")
+
     @app.delete("/api/v1/jobs/{job_id}")
     async def cancel_job(job_id: str) -> dict[str, Any]:
         try:
-            await manager.cancel(job_id)
-            return store.get_job(job_id).model_dump(mode="json")
+            return await cancel_media_job(job_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "job_not_found"}) from exc
 
@@ -2625,7 +2646,7 @@ def create_app(
         return value
 
     async def submit_scene_tool(
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest | SceneFromImageRequest,
         identity: HostIdentity,
     ) -> dict[str, Any]:
         try:
@@ -2646,6 +2667,15 @@ def create_app(
             "host_job_id": task.host_job_id,
             "input_sha256": task.input_sha256,
         }
+
+    @app.post("/addon/v1/agent/scene/from-image")
+    async def agent_scene_from_image(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneFromImageRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_generation"}) from exc
+        return await submit_scene_tool(value, identity)
 
     @app.post("/addon/v1/agent/scene/create")
     async def agent_scene_create(request: Request) -> dict[str, Any]:
@@ -2689,6 +2719,8 @@ def create_app(
                 if action == "edit"
                 else SceneMaterialRequest.model_validate(value)
                 if action == "material"
+                else SceneFromImageRequest.model_validate(value)
+                if action == "from_image"
                 else None
             )
         except ValidationError as exc:
@@ -3392,7 +3424,7 @@ def create_app(
                             manager.host_terminals.schedule(identity)
                         result = store.get_job(str(params.get("job_id", ""))).model_dump(mode="json")
                     elif method == "jobs.cancel":
-                        result = (await manager.cancel(str(params.get("job_id", "")))).model_dump(mode="json")
+                        result = await cancel_media_job(str(params.get("job_id", "")), identity)
                     elif method == "jobs.list":
                         result = {"items": [item.model_dump(mode="json") for item in store.list_jobs(100)]}
                     elif method == "jobs.clear":
@@ -3942,6 +3974,14 @@ def create_app(
                         )
                     elif method == "creative.evaluate":
                         result = await evaluate_creative_candidates(params, identity)
+                    elif method == "scenes.from_image":
+                        result = await submit_scene_tool(SceneFromImageRequest.model_validate(params), identity)
+                    elif method in {"scenes.jobs.get", "scenes.jobs.cancel"}:
+                        reference = SceneJobReferenceRequest.model_validate(params)
+                        if method == "scenes.jobs.cancel":
+                            await scene_recipe_jobs.cancel(reference.job_id, scene_owner(identity))
+                        await scene_recipe_jobs.reconcile_terminal(reference.job_id, identity)
+                        result = scene_recipe_jobs.projection(reference.job_id, scene_owner(identity))
                     elif method == "scenes.list":
                         if params:
                             raise ValueError("scene list accepts no parameters")

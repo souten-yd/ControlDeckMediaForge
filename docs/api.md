@@ -547,6 +547,35 @@ Both workspace scene lists include owner-scoped `working_copies` for recovery UI
 
 ### Typed 3D scene Agent and workflow tools
 
+`media.scene.from_image` adds image-conditioned generation through
+`POST /addon/v1/agent/scene/from-image` (the usual `{"input": {...}}` envelope).
+`schemas/scene-from-image-request.json` requires `name` and `input_asset_id`;
+optional fields are `engine` (`auto`, `trellis_cpp`, `pixal3d`), `resolution`
+(512 or 1024; only the adopted runtime's measured value is accepted), `seed`,
+`tags`, `collection`, and `retry_job_id`. `local_only` can only be true.
+Paths, URLs, arbitrary scripts, and model downloads are not public inputs.
+The additive workflow action is `from_image` on the existing `media.scene`
+executor. The opaque workspace method is `scenes.from_image`; its job methods
+are `scenes.jobs.get` and `scenes.jobs.cancel`, each taking only `job_id`.
+
+Check `3d.image_to_3d` before submission. A missing adoption receipt, unavailable
+Blender, or unmeasured resolution fails closed. Pixal3D is a named candidate,
+not an available adapter until its independent adoption is implemented and
+measured. Admission requires `jobs.write` and `resources.acquire`. The returned
+detached Job uses the existing `media.job.status` / `media.job.cancel` endpoints
+and owner checks. Its phases cover GPU waiting, generation, and independent
+Blender validation. The CPU Blender step follows GPU process termination and
+lease release; another scene's CPU work can proceed while GPU admission waits.
+
+Success creates one Scene revision with an editable packed `.blend` and a GLB
+in the shared Library. Source provenance names the input Asset, pinned model
+and runtime identities, weights hash, seed, resolution, elapsed generation time,
+and raw GLB hash. Preview provenance links to that source. The original image is
+retained and cannot be deleted during the active Job or while referenced by the
+published assets. Retry preserves the exact input, generator receipt fingerprint
+and Blender version; changed identities require a new request. Structural
+validation and visual quality are distinct; this capability is experimental.
+
 3DS-7 adds `media.scene.create`, `media.scene.edit`, `media.scene.material`,
 `media.scene.snapshot`, `media.scene.export`, `media.job.status`, and
 `media.job.cancel`, plus the `media.scene` workflow executor. Their self-contained

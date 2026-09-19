@@ -45,6 +45,7 @@ from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
 from .scene_refinement import SceneRefineRequest
 from .scene_bake import SceneBakeRequest
+from .scene_generation import GenerationFacts, SceneFromImageRequest
 from .scene_recipes import SceneCreateRequest, SceneEditRequest, SceneMaterialRequest, SceneRecipe
 from .scene_recipe_failure import recipe_failure_message
 from .store import Store, utc_now
@@ -132,6 +133,7 @@ class SceneWorkspace:
         recipe_worker: Path | None = None,
         observation_worker: Path | None = None,
         bake_worker: Path | None = None,
+        generation_import_worker: Path | None = None,
         now: Callable[[], datetime] | None = None,
         process_timeout_sec: float = SCENE_WORKER_TIMEOUT_SEC,
     ) -> None:
@@ -146,6 +148,7 @@ class SceneWorkspace:
         )
         self.observation_worker = Path(os.path.abspath(observation_worker)) if observation_worker is not None else None
         self.bake_worker = Path(os.path.abspath(bake_worker)) if bake_worker is not None else None
+        self.generation_import_worker = Path(os.path.abspath(generation_import_worker)) if generation_import_worker is not None else None
         self.catalog = SceneCatalog(store)
         self.scene_root = contained(store.data_dir, store.data_dir / "scenes")
         self.upload_root = contained(self.scene_root, self.scene_root / "uploads")
@@ -244,6 +247,17 @@ class SceneWorkspace:
     ) -> dict[str, Any]:
         from .scene_observation_runner import observe
         return await observe(self, owner, job_id, value, runtime_id=runtime_id, runtime_version=runtime_version)
+
+    async def import_generated_glb(
+        self, owner: str, job_id: str, value: SceneFromImageRequest, source: Path,
+        source_root: Path, facts: GenerationFacts, *, runtime_id: str, runtime_version: str,
+    ) -> dict[str, Any]:
+        from .scene_generation_import import import_generated_glb
+
+        return await import_generated_glb(
+            self, owner, job_id, value, source, source_root, facts,
+            runtime_id=runtime_id, runtime_version=runtime_version,
+        )
 
     async def apply_recipe(
         self,
@@ -355,7 +369,7 @@ class SceneWorkspace:
                     generated.unlink()
 
     def acquire_recipe_runtime(
-        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest | SceneFromImageRequest,
         *, retry_pin: tuple[str, str, str | None] | None = None,
     ) -> tuple[ExitStack, tuple[str, str, str | None]]:
         """Select and pin atomically with removal; call and close off the event loop.
@@ -366,7 +380,7 @@ class SceneWorkspace:
         references = ExitStack()
         try:
             with self.resolver.removal_guard():
-                if retry_pin is not None and isinstance(value, SceneCreateRequest):
+                if retry_pin is not None and isinstance(value, (SceneCreateRequest, SceneFromImageRequest)):
                     validate_scene_owner(owner)
                     if retry_pin[2] is not None:
                         raise SceneError("scene_retry_changed", "create retry cannot name a base revision")
@@ -384,7 +398,7 @@ class SceneWorkspace:
             raise
 
     def recipe_runtime_pin(
-        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest
+        self, owner: str, value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest | SceneFromImageRequest
     ) -> tuple[str, str, str | None]:
         owner = validate_scene_owner(owner)
         if isinstance(value, (SceneEditRequest, SceneMaterialRequest, SceneObserveRequest, SceneReviewRequest, SceneRefineRequest, SceneBakeRequest)):
@@ -1777,6 +1791,7 @@ class SceneWorkspace:
         dependencies: list[SceneDependency] | None = None,
         operation: str | None = None,
         parameters: dict[str, Any] | None = None,
+        generation: GenerationFacts | None = None,
     ) -> tuple[Asset, Asset]:
         if operation == "scene.material.bind" and parent_revision is not None:
             parameters = {**(parameters or {}), "mesh_geometry": self.geometry_facts(parent_revision)}
@@ -1821,27 +1836,28 @@ class SceneWorkspace:
                 "scene.material.bind": "Apply scene material binding",
                 "scene.recipe.create": "Create a Blender scene from a typed recipe",
                 "scene.recipe.edit": "Edit a Blender scene with a typed recipe",
+                "scene.from_image": "Generate a local 3D scene from an image",
                 "scene.recovery.fork": "Recover retained Blender bytes as a separate scene",
             }.get(
                 operation,
                 "Import Blender scene" if parent_revision is None else "Commit Blender scene revision",
             ),
-            model_id="none",
-            model_version="0",
-            weights_hash="none",
-            license=(
+            model_id=generation.model_id if generation else "none",
+            model_version=generation.model_revision if generation else "0",
+            weights_hash=generation.weights_sha256 if generation else "none",
+            license=generation.license if generation else (
                 "generated-local"
                 if operation == "scene.recipe.create"
                 else "derived"
                 if operation in {"scene.recipe.edit", "scene.material.bind", "scene.recovery.fork"}
                 else "user-provided"
             ),
-            runtime_adapter=(
+            runtime_adapter=generation.runtime_adapter if generation else (
                 "blender.scene-recipe"
                 if operation in {"scene.recipe.create", "scene.recipe.edit"}
                 else "blender.scene-document"
             ),
-            runtime_version=runtime.version,
+            runtime_version=generation.runtime_version if generation else runtime.version,
             tool_versions={
                 "media-forge": __version__,
                 "blender": runtime.version,
@@ -1851,7 +1867,7 @@ class SceneWorkspace:
                     else {}
                 ),
             },
-            seed=0,
+            seed=generation.seed if generation else 0,
             parameters={"runtime_id": runtime.runtime_id, **(parameters or {})},
             reference_asset_hashes=reference_hashes,
             postprocessing=(
