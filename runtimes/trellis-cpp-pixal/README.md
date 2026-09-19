@@ -648,3 +648,68 @@ Vulkan, full-capacity NAF, MoGe/removal, mesh/GLB generation, visual quality,
 adoption/release, new Library assets and rigging. Torch GPU initialized=false;
 no trained weights were downloaded or used. See the implementation status for
 remaining integration and authorization prerequisites.
+
+## Dual-grid mesh and PBR decoding
+
+`mesh_from_fields` converts the shape decoder's seven raw channels to vertices
+and triangles on CPU. It applies the configured voxel margin and actual grid,
+retains voxel order, checks four-neighbor connectivity for each positive edge,
+and preserves upstream quad winding and strict split-weight comparison. Missing
+neighbors are omitted exactly as in the source. Duplicate/out-of-grid coordinates,
+non-finite fields, invalid extents and exceeded budgets are rejected. No vertex
+compaction or implicit geometry cleanup is performed. Empty surfaces fail by
+default; the explicit `require_faces=false` option is for raw-field diagnostics.
+
+`pbr_from_fields` preserves the pipeline's `raw * .5 + .5` transform without
+clamping, in base-color RGB / metallic / roughness / alpha order. Texture values
+outside [0,1] are retained at this intermediate stage, as in Pixal's pipeline.
+`decode_surface` joins both learned decoders, the shared shape subdivisions,
+CPU geometry conversion and the PBR transform. It validates source coordinate
+alignment, decoder roles and one borrowed backend, and propagates both decoder
+and geometry cancellation callbacks. It returns `UnrepairedSurface` deliberately:
+Pixal's subsequent CuMesh `fill_holes` step, UV baking and GLB writing are still
+required before claiming full generation. No runtime is adopted by this helper.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_mesh_decode.py \
+  --pixal-source "$PIXAL_SOURCE" --trellis2-source "$TRELLIS2_SOURCE" \
+  --flex-source "$FLEX_SOURCE" --sparse-fixtures "$PIXAL_SPARSE_DECODER_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-mesh-check \
+  --output-dir "$PIXAL_MESH_REPORT"
+```
+
+Measured CPU evidence: `maintenance/g9-pixal-dual-grid-20260919/cpu-final`.
+The checker executes unchanged o_voxel triangulation, the actual Pixal FDG
+class (including its sigmoid/softplus geometry head), and the pipeline's texture
+method. Only o_voxel's GPU hashmap insertion/lookup is adapted to CPU lookup,
+with the original bounds checks and missing-index sentinel. This reference
+covers grids with volume below 2^32; it does not run or validate the GPU kernels.
+The existing sparse decoder CPU-reference adaptation is unchanged.
+
+Seventeen cases include 12 raw-field conditions, four successful connected
+shape/texture decodes and one connected empty-surface rejection. All 116
+comparisons pass. Faces, winding, order and coordinates match exactly. Vertex
+comparisons use atol/rtol2e-6; raw-field PBR transforms are exact; connected PBR
+retains the neural decoder's atol/rtol5e-5 gate. The maximum error across all
+comparisons is 1.043081283569336e-06. All 16 successful diagnostic/connected runs
+repeat bitwise. Ten raw-field conditions also compare against unchanged
+upstream trellis.cpp geometry. Twenty additional rejection/cancellation cases
+publish no output arrays.
+
+Coverage includes reordered/boundary coordinates, missing neighbors, both quad
+splits and ties, margins 0/.5/2, strict intersection thresholds, extreme finite
+logits, actual grid1536, F16 storage with explicit F32 arithmetic, and shared
+shape/texture decoding from the prior image-to-shape latent. The full-depth
+planar synthetic fixture produces 768 vertices / 1,350 triangles and exercises
+all deployed `[4,16,8,4,0]` blocks at reduced width. It is not a trained asset.
+The preceding two-child full-depth fixture yields a line with no quads; both
+reference and native observed zero triangles, and the normal native path rejects
+it. The first checker attempt omitted the empty legacy face array; the second
+expected the line fixture to yield a surface. Both failure logs are retained;
+neither is counted as generated 3D success.
+
+**NOT TESTED / remaining**: hole filling/topology repair, UV/material baking,
+GLB export, trained/full-width/mixed-precision execution, full NAF capacity,
+MoGe/background removal, genuine leased Vulkan, visual quality, adoption,
+signed installation, new generated Library assets and rigging. No trained
+weights were downloaded/used and Torch GPU initialized=false.
