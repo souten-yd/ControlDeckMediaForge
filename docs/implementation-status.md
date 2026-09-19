@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-19 WebP GLB allowed in installed 0.28.87; originals registered
+
+PR551 / merge b1b92ed659e3a2e8805ee2c5e3152fb6f2b6a25f、test済b3750e0とtree差分0。
+署名0.28.87 bundle31,769,276B、SHA256
+`2832e2c5af52989733fc15b6b317f00802dc22e7fef744e23d765f877a02716a`。
+既存publisher署名・Host trusted key検証・改ざん拒否、公開4asset再取得検証成功。
+通常 `./deck.sh feature update media-forge` exit0、current=versions/0.28.87、healthy/enabled。
+rollback版0.28.86保持。更新直前/直後DB16table論理hash・asset属性2716件・Blender registry
+hash一致。Jobs/GUI/runtime/model operation未終端0。Hostコード・モデル・runtime変更0。
+
+稼働 `POST http://127.0.0.1:9130/api/v1/assets/import?purpose=source`
+（Content-Type:model/gltf-binary）へtrellis.cpp WebP原本2件を登録し各HTTP201。
+- `ref_vk.glb`: 11,443,236B / `asset_eb160c5649954d48a615693f0e3c3c6b`
+- `s01_vk.glb`: 11,189,676B / `asset_77a23cf2d502453a8046b376d161adec`
+
+content再取得は原本bytes/SHA256一致、来歴asset.import / validator.glb=1.1.0 /
+required_extensions=[EXT_texture_webp] / passed。両IDがLibrary一覧に存在。
+先行PNG版asset_dbe35726ecf6405a94f865476b5e6904/asset_8bbb30aa5d7a432083a259e212fa76b8も保持。
+unknown required extension同梱の実HTTPは422 invalid_glb_importで拒否。
+全test2186pass2warnings236.12秒。実Blender4.5.9/4.5.13原本→export→re-importの
+2モデル×2版は全画像読み込み/三角形数一致、新validatorでも全6GLB passed。
+NOT TESTED: 実Host Library画素/操作（Chrome Page.navigate30秒timeout）、更新後rollback操作。
+原本登録とWebP許可は完了。G9生成品質やruntime採用完了とはしない。
+証跡: `/data1tb/ControlDeck/data/feature-data/media-forge/maintenance/release-0.28.87-20260919/`。
+再現script、hash/検証/導入/登録/来歴/一覧report、test/build logを保持。
+自身が作成した再出力GLB・配布物の重複copy・移行不要の一時DB backupは照合後回収済。
+
+
 ## 2026-09-19 WebP GLB acceptance / 0.28.87 preparation
 
 利用者依頼で `EXT_texture_webp` をrequired allowlistへ追加。validator 1.1.0は
