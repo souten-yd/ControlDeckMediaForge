@@ -130,3 +130,13 @@ The new target also compiles pinned external xatlas/meshoptimizer and uses the
 existing external libwebp/sharpyuv libraries and stb headers. Their licenses and
 notices remain in the external source/runtime distributions; any eventual binary
 runtime packaging must retain them. This slice ships no such runtime binary.
+
+native/pipeline.cpp follows pinned TencentARC/Pixal3D's
+pixal3d/pipelines/pixal3d_image_to_3d.py run() control flow (MIT above).
+Changes: staged local checkpoint lifetime, explicit borrowed backend/camera/frame
+inputs, cross-model contract validation, actual neural decoder handoffs,
+cancellation/progress, native deterministic RNG with separate provenance and
+connection to the CPU GLB exporter. It does not include trained model weights.
+check_pipeline.py executes the original run() and model classes locally, with
+CPU evaluation adapters described above and an unrepaired mesh interception
+before GPU-only postprocessing. It does not copy those external model sources.

@@ -18,7 +18,7 @@ struct SurfaceExportStats {
     int holes_filled=0;
 };
 struct BakedSurface { trellis::BakedMesh atlas; SurfaceExportStats stats; bool remeshed; };
-struct SurfaceProvenance { std::string source_kind,source_sha256,input_sha256; int64_t seed=0; };
+struct SurfaceProvenance { std::string source_kind,source_sha256,input_sha256; int64_t seed=0; std::string rng_algorithm={}; };
 // CPU-only postprocessing. Call from a bounded subprocess: charting/remeshing
 // can only be interrupted promptly by terminating that caller-owned process.
 BakedSurface bake_surface(const UnrepairedSurface& surface,const SurfaceExportOptions& options={});

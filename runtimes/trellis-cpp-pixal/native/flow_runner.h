@@ -59,6 +59,7 @@ private:
 std::vector<std::array<int,3>> dense_coordinates(int resolution);
 // sparse=true preserves the reference SparseTensor population-moment std;
 // dense uses torch's corrected std. Ratios are NOT clamped or silently repaired.
+void validate_flow_sampler(const FlowSamplerParams& params);
 std::vector<float> sample_flow(const FlowForward& forward, std::vector<float> noise,
                               const FlowCondition& positive, const FlowCondition& negative,
                               const FlowSamplerParams& params, bool sparse, int channels,

@@ -84,12 +84,14 @@ SurfaceExportStats export_surface_glb(const BakedSurface& surface,const std::str
     validate_options(o); validate_baked(surface.atlas); cancel(o);
     if ((p.source_kind!="synthetic" && p.source_kind!="checkpoint") || p.seed<0) throw std::invalid_argument("invalid surface provenance");
     for (const auto& hash:{p.source_sha256,p.input_sha256}) if (hash.size()!=64 || hash.find_first_not_of("0123456789abcdef")!=std::string::npos) throw std::invalid_argument("invalid surface provenance hash");
+    if (!p.rng_algorithm.empty() && p.rng_algorithm!="provided-f32-v1" && p.rng_algorithm!="mt19937-box-muller-f32-v1") throw std::invalid_argument("invalid surface RNG provenance");
     auto destination=std::filesystem::path(path);
     if (destination.filename().empty() || destination.filename()=="." || destination.filename()=="..") throw std::invalid_argument("invalid GLB destination");
     auto parent=std::filesystem::canonical(destination.parent_path()); destination=parent/destination.filename();
     if (std::filesystem::symlink_status(destination).type()!=std::filesystem::file_type::not_found) throw std::invalid_argument("GLB destination exists; refusing overwrite");
     TemporaryFile staging(parent); const auto& b=surface.atlas;
     std::string provenance="{\"source_kind\":\""+p.source_kind+"\",\"source_sha256\":\""+p.source_sha256+"\",\"input_sha256\":\""+p.input_sha256+"\",\"reference_revision\":\"f7cf38429b0bd264f1995f0f8743a88b1c728b94\",\"experimental\":true}";
+    if (!p.rng_algorithm.empty()) { provenance.pop_back();provenance+=",\"rng_algorithm\":\""+p.rng_algorithm+"\"}"; }
     phase(o,"encode");
     if (!trellis::write_glb_textured(staging.path.c_str(),b.verts.data(),int64_t(b.verts.size()/3),b.uv.data(),b.faces.data(),int64_t(b.faces.size()/3),b.base.data(),b.mr.data(),b.T,!surface.remeshed,p.seed,nullptr,o.webp,provenance.c_str())) throw std::runtime_error("surface GLB encoder failed");
     auto size=std::filesystem::file_size(staging.path);

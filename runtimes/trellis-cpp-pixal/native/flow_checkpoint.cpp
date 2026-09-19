@@ -46,6 +46,7 @@ FlowCheckpoint inspect_flow_checkpoint(const std::string& path) {
     if ((source_kind != "synthetic" && source_kind != "checkpoint") || string("pixal.source_repository").empty())
         throw std::invalid_argument("invalid flow provenance");
     FlowCheckpoint result;
+    result.source_kind = source_kind;
     auto& p = result.params;
     p.n_blocks = integer("n_blocks", 1, 64);
     p.n_heads = integer("n_heads", 1, 64);

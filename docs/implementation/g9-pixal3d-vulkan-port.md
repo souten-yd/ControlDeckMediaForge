@@ -1,5 +1,41 @@
 # Pixal3D Vulkan port: scope and measured first component
 
+## 2026-09-19 connected native RGB-to-GLB pipeline
+
+`ux1/pixal3d-native-pipeline`, parent PR566 / `4d0350c`, connects all implemented
+vision/flow/neural-decoder stages and GLB export through one `generate_glb` call.
+It preserves SS pooling to 32, actual four-stage LR upsampling, quantization and
+resolution backoff, HR/texture conditioning, shared decoder subdivisions and
+final mesh resolution. It does not accept supplied decoder outputs. Models are
+loaded/released by stage; the caller retains backend/Host admission ownership.
+The private evaluation CLI is not the installed image-generation adapter.
+
+Original pinned `run()` with actual CPU neural decoders passes 111 comparisons
+for 1024, 1536 and 1536→1024, maximum absolute error 1.2278557e-5; all coordinates
+and face indices/order are exact. Seven native GLB runs include exact-noise and
+native-seed repeats plus a changed image. All repeated arrays and GLB payloads
+match excluding generation timestamp. RGB change alters HR latent by 0.31782913
+and changes the exported binary. Five GLBs independently pass core and Blender
+4.5.9 material/UV/texture/geometry checks. 34 invalid/role/cancel checks pass, plus
+real SS-flow process SIGTERM/reap in 0.001081 s without GLB publication.
+
+These are reduced-width, synthetic checkpoints with explicit small image/NAF/
+texture extents. SS zero velocity and calibrated decoder bias select four voxels;
+shape subdivision/intersection logits intentionally make planar fixture topology.
+The final grids are 1024/1536, but this is not learned shape or quality acceptance.
+Reference CPU adapters and the unrepaired-mesh boundary are explicit; GPU CuMesh
+postprocess parity is not claimed. Native seeded Box-Muller RNG is recorded in
+GLB extras and is not Torch seed-equivalent. Exact-noise comparisons supply the
+reference's actual draws. Default sampler parameters and resolution 1536 follow
+the pinned source/deployed config; reduced settings are explicit test overrides.
+
+Evidence: `maintenance/g9-pixal-pipeline-20260919/cpu-second`, retained first
+successful run, native build logs, flow/surface regressions and full tests.
+Remaining: full NAF memory, MoGe/background removal, trained/full-width/full-size/
+mixed precision, genuine Host lease/Vulkan, quality, worker/adoption/deployment
+and generated Library assets/rigs. Weight-license consent remains pending.
+The overall goal remains incomplete.
+
 ## 2026-09-19 CPU surface export acceptance
 
 `ux1/pixal3d-surface-export`, based on PR565 / `40c50c4`, connects the decoded
