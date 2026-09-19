@@ -36,13 +36,18 @@ set(DIT_OVERLAY "${CMAKE_CURRENT_BINARY_DIR}/dit-${DIT_PATCH_SHA}")
 execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../prepare_trellis.py"
   --source "${TRELLIS_SOURCE_DIR}" --destination "${DIT_OVERLAY}"
   COMMAND_ERROR_IS_FATAL ANY)
-add_library(pixal_dit STATIC flow_checkpoint.cpp "${DIT_OVERLAY}/src/dit.cpp" "${TRELLIS_SOURCE_DIR}/src/trellis_model.cpp")
+add_library(pixal_dit STATIC flow_checkpoint.cpp flow_runner.cpp "${DIT_OVERLAY}/src/dit.cpp" "${TRELLIS_SOURCE_DIR}/src/trellis_model.cpp")
+set_source_files_properties(flow_checkpoint.cpp flow_runner.cpp flow_check.cpp
+  PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror")
 target_include_directories(pixal_dit PUBLIC "${DIT_OVERLAY}/include" "${TRELLIS_SOURCE_DIR}/include"
   "${TRELLIS_SOURCE_DIR}/thirdparty/ggml/include")
 target_link_libraries(pixal_dit PUBLIC "${GGML_base}" "${GGML_cpu}" "${GGML_registry}")
 add_executable(pixal-dit-check dit_check.cpp)
 target_link_libraries(pixal-dit-check PRIVATE pixal_dit pixal_projection "${GGML_vulkan}")
 set_target_properties(pixal-dit-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
+add_executable(pixal-flow-check flow_check.cpp)
+target_link_libraries(pixal-flow-check PRIVATE pixal_dit "${GGML_vulkan}")
+set_target_properties(pixal-flow-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
 
 # Compile the unchanged upstream graph as a separate binary for exact regression
 # comparison of the legacy mode, including its default GELU implementation.

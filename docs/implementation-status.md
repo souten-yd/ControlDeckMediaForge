@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-19 Pixal3D native stage runner/sampler; CPU step parity passed
+
+`ux1/pixal3d-flow-runner`、親PR557 / `aef84a3`。明示backendを借用するGGUF loader、
+再利用するDiT graph、Pixal Euler/CFG samplerを追加。GPU自動選択/fallbackなし。
+positive/negativeのglobal＋projected条件を毎forward再uploadし、textureは固定shape条件を
+tokenごとに連結、texture latentだけを積分する。元trellis runtime/モデル/Library変更なし。
+非有限値をzero置換せず失敗にする。各model callの前後にcancel確認、step progressを通知。
+
+固定upstream samplerとdense SS/sparse ElasticSLat classを小型synthetic checkpointで照合。
+10条件/36step/108velocity・clean・sample比較が全pass、最大絶対誤差
+1.6689300537109375e-06 (atol/rtol5e-5)。timestepとpositive/negative呼出順も完全一致。
+CFG0/1、interval境界、time/CFG rescale、sparse/texture、F16格納/F32演算を含む。
+旧TRELLISのratio clampを超えるanalytic canaryも一致。同graph再利用の反復結果bitwise一致、
+model/runner破棄後も借用backendが存続。欠落条件/NaN/出力サイズ/variance0/不正step・座標/
+開始前・CFG間・最終forward中のcancelの11negative全pass、失敗時の出力公開0。
+既存checkpoint72比較/DiT59比較/legacy bitwise回帰もpass。torch GPU initialized=false。
+
+証跡: managed data `maintenance/g9-pixal-runner-20260919/cpu-release`、
+`checkpoint-regression`、`dit-regression`。CPU graph allocatorの実測値はreportに保存。
+これをGPU VRAM測定やtrainedモデルの生成成功とはしない。
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 239.03秒 / exit0**。
+
+**NOT TESTED / 残り**: trained checkpoint/モデル、Vulkan・mixed precision、画像前処理と
+DINO global token/NAF/MoGe接続、cascade/decoder/GLBまでの実pipeline、実生成/画質/
+新Asset登録、採用receipt/通常配布/installed操作。重み利用の先のlicense同意は回答待ち。
+骨付き出力も未作成。次はnative DINOのglobal/patch特徴とPixal前処理を照合し、
+画像特徴→投影→実stageへ接続する。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D flow checkpoint conversion; native CPU round-trip passed
 
 `ux1/pixal3d-checkpoint`、親PR556 / `3003a21`。固定gguf0.19.0によるlocal
