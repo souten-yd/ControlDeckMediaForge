@@ -19,7 +19,7 @@ MAX_GLB_BYTES = 64 * 1024 * 1024
 MAX_JSON_BYTES = 8 * 1024 * 1024
 MAX_JSON_VALUES = 1_000_000
 MAX_JSON_DEPTH = 128
-VALIDATION_VERSION = "1.0.0"
+VALIDATION_VERSION = "1.1.0"
 
 ARRAY_LIMITS = {
     "scenes": 4_096,
@@ -40,7 +40,7 @@ MAX_PRIMITIVES = 200_000
 
 # Additions require a Blender re-import measurement. Unknown required extensions
 # fail closed; extensionsUsed remains descriptive unless it is also required.
-ALLOWED_REQUIRED_EXTENSIONS: frozenset[str] = frozenset()
+ALLOWED_REQUIRED_EXTENSIONS: frozenset[str] = frozenset({"EXT_texture_webp"})
 
 COMPONENT_BYTES = {5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4}
 TYPE_COMPONENTS = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT2": 4, "MAT3": 9, "MAT4": 16}
@@ -216,6 +216,23 @@ def _validate_document(document: dict[str, Any], binary: bytes | None) -> dict[s
         _index(image["bufferView"], buffer_views, f"images[{index}].bufferView")
         if image.get("mimeType") not in {"image/jpeg", "image/png", "image/webp", "image/ktx2"}:
             raise GlbValidationError(f"images[{index}].mimeType is unsupported")
+
+    for index, raw in enumerate(arrays["textures"]):
+        texture = _object(raw, f"textures[{index}]")
+        extensions = _object(texture.get("extensions", {}), f"textures[{index}].extensions")
+        if "EXT_texture_webp" not in extensions:
+            continue
+        label = f"textures[{index}].extensions.EXT_texture_webp"
+        webp = _object(extensions["EXT_texture_webp"], label)
+        source = _index(webp.get("source"), images, f"{label}.source")
+        if images[source]["mimeType"] != "image/webp":
+            raise GlbValidationError(f"{label}.source must reference image/webp")
+        if "EXT_texture_webp" not in document.get("extensionsUsed", []):
+            raise GlbValidationError("EXT_texture_webp must be declared in extensionsUsed")
+        if "source" in texture:
+            _index(texture["source"], images, f"textures[{index}].source")
+        elif "EXT_texture_webp" not in document.get("extensionsRequired", []):
+            raise GlbValidationError("EXT_texture_webp without fallback must be required")
 
     primitives = 0
     for mesh_index, raw in enumerate(arrays["meshes"]):
