@@ -1300,6 +1300,13 @@ The default image-only path uses measured camera inference, never a silently
 fixed FOV. Transparent input follows the upstream alpha path; opaque input
 requires an explicitly admitted background-removal provider. Camera/removal
 weights and temporary tensors are released before native generation admission.
+The opaque-image provider may explicitly run pinned full BiRefNet on CPU/F32 in
+the isolated preprocessing process. It preserves Pixal's 1024-square transform,
+mask conversion and resizing; Lite weights are not an implicit substitute.
+Source and checkpoint identities, synthetic/trained provenance and the actual
+provider used are recorded separately. Transparent inputs skip provider loading.
+Pinned local code and hash-verified local tensors are required; runtime remote
+code loading and implicit model downloads are not part of this path.
 `media.scene.from_image` accepts an existing image
 Asset and adds a detached operation to the existing Scene Jobs lifecycle. The
 GPU process must own a Host broker lease, then release it before the CPU Blender

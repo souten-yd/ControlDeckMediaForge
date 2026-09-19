@@ -1,5 +1,28 @@
 # 実装引き継ぎ状態
 
+## 2026-09-19 Pixal3D explicit CPU background preprocessing
+
+`ux1/pixal3d-background`、親PR569 / `71ecc7d`。base-plan先行更新、固定通常版BiRefNetの
+local source/checkpoint検査とCPU/F32 providerを追加。CLIのopaque入力→背景除去→MoGe→
+native GLBを接続。透明入力はprovider未load、既存4出力がPR569とbyte一致。
+
+実full Swin-L 220,176,498parameter、1024²、合成F16格納/F32推論。
+14.781299秒でmask出力、固定Pixal CPU参照14.441112秒と全RGBA一致。
+別process前処理18.439189秒→native0.704632秒→590三角形/48,532byte GLB、
+独立core/Blender4.5.9再import pass。拒否等17条件、実SIGTERM exit1/reap0.940673秒/outputなし。
+詳細と再現は [背景除去記録](g9-pixal-background-20260919.md)、証跡はmanaged
+`maintenance/g9-pixal-background-20260919/cpu-first`、source-provenance/full-test log。
+最終 `./mf.sh test` 2211passed /2warnings /237.31秒 /exit0。以後product/checker変更なし。
+人工red-mask校正fixtureであり、trained segmentation/3D品質・Vulkan受入ではない。
+前ターンPR570のLibrary3件はそのまま保持。今回の追加Library登録・weights取得/使用0。
+元root/Host/installed/runtime変更なし。次はproduction worker入口へCPU前処理/nativeを接続し、
+正規Host admission/取消/Blender/Assetを通す。同意と実leaseが揃うまではtrained/GPUを実行しない。
+次の着手点をread-onlyで確認済み: `backend/mediaforge/three_d_runtime.py`のreceipt/resolveは
+現在trellis_cppだけを扱い、`scene_generation_jobs.py`は画像stage後に直ちにleaseを要求する。
+Pixalのprivate receiptと入力準備段を加法接続し、背景/MoGe process終了後に既存lease経路へ
+進む必要がある。既存TRELLIS.2の10ファイル表や実測済みresolution契約を流用して偽装しない。
+全体目標は未完了。
+
 ## 2026-09-19 Pixal3D explicit CPU MoGe camera preprocessing
 
 `ux1/pixal3d-camera`、親PR568 / `27bb102`。base-planへ明示CPU前処理の境界を先に追記し、

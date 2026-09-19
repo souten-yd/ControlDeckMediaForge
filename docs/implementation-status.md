@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-19 Pixal3D explicit CPU background preprocessing
+
+`ux1/pixal3d-background`、親PR569 / `71ecc7d`。固定通常版BiRefNetのCPU/F32前処理を実装し、
+opaque画像→背景除去→既存framing→MoGe→native GLBを接続。source3ファイルhashとlocal
+safetensors全tensor/shape/type/finite/position indexを検査し、backbone downloadなし。
+透明画像ではproviderを読まず、既存output保持・stage取消・manifest公開境界を維持する。
+
+実full Swin-L 220,176,498parameter /1024² /合成F16格納→F32計算。
+新forward14.781299秒、固定Pixal参照14.441112秒、RGBA全bytes一致。
+別CPU前処理process18.439189秒後、native0.704632秒で48,532byte/590三角形GLBを生成。
+独立coreとBlender4.5.9のUV/画像/材質/向き検査pass。alpha skipはPR569の4出力と全bytes一致。
+拒否等17条件pass、実encoder block中SIGTERMはexit1/0.940673秒reap/outputなし。
+synthetic赤色mask校正fixtureであり、学習済み精度・品質やVulkan受入ではない。
+詳細・実行・証跡は [背景除去記録](implementation/g9-pixal-background-20260919.md)。
+元runtime/Host/installed/Library/学習済み重みの変更なし。全体目標は未完了。
+最終 `./mf.sh test`: 2211passed /2warnings /237.31秒 /exit0。以後product/checker変更なし。
+
 ## 2026-09-19 Pixal3D explicit CPU MoGe camera preprocessing
 
 `ux1/pixal3d-camera`、親PR568 / `27bb102`。base-planへ明示CPU前処理の境界を先に追記し、

@@ -933,8 +933,8 @@ Integrity hashes do not grant license permission or runtime adoption.
 `prepare_camera.py` is a private CPU process entry for foreground framing,
 MoGe inference, low/high RGB arrays and camera values. It uses transparent input
 or, via the Python interface, an explicitly provided background-removal provider.
-The CLI does not yet perform neural background removal for opaque images.
-Camera tensors/models are released before native generation. The manifest binds
+The CLI also accepts the explicit pinned CPU BiRefNet provider described below.
+Camera/background tensors/models are released before native generation. The manifest binds
 the input, camera checkpoint/source, CPU/F32 mode, framing parameters and output
 file hashes. It is published after complete arrays; existing output directories
 are preserved. Cooperative cancellation/SIGTERM cleans the owned staging tree.
@@ -961,6 +961,57 @@ are calibrated for valid UV correlation/masks; they do not represent trained
 quality. Four aspect/scale/extension cases match the reference exactly and repeat
 exactly. The CPU worker's estimated camera drives two native image-to-GLB runs,
 with matching repeated arrays/GLB payloads and independent core/Blender imports.
-The default trained ViT-L, full image/token counts, opaque removal, Vulkan and
+The default trained ViT-L, full image/token counts, trained opaque removal, Vulkan and
 installed Library acceptance remain untested. See the current handoff for measured
 results and retained failure logs.
+
+## Explicit CPU background removal
+
+`background.py` runs the full Swin-L BiRefNet used by Pixal, independently of
+MediaForge's Lite ONNX image-matting worker. It uses pinned local source files
+from [ZhengPeng7/BiRefNet](https://huggingface.co/ZhengPeng7/BiRefNet/tree/e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4).
+`birefnet.py`, `BiRefNet_config.py` and `config.json` must match `SOURCE_HASHES`.
+The verified Python bytes are compiled directly, so adjacent cached bytecode
+cannot replace the pinned implementation. There is no `trust_remote_code`,
+`from_pretrained`, repository-ID resolution or automatic weight download.
+
+The local checkpoint is safetensors, bounded to 2 GiB and identified by an
+explicit SHA-256. Its complete tensor names/shapes, floating types/finiteness,
+fixed relative-position indices and batch counters are checked before model
+storage allocation. The architecture always disables backbone pretraining.
+F16/BF16/F32 storage is accepted and inference is explicitly CPU/F32. The
+caller must independently establish consent/adoption; an integrity hash and
+the `source-kind` declaration are not an adoption receipt.
+
+PIL input follows the original torchvision resize to 1024 square, normalization,
+final output sigmoid, `ToPILImage` uint8 truncation and Pillow mask resize.
+`frame_foreground` retains the upstream 1024-edge preprocessing and alpha>0.8
+crop/compositing rule. Input alpha skips provider loading entirely, including
+when a provider was specified. A supplied Python callback remains supported but
+is recorded as caller-owned/unspecified, never mislabeled as verified BiRefNet.
+
+To the camera command above, add all four arguments for opaque input:
+
+```sh
+  --background-source "$BIREFNET_LOCAL_SOURCE" \
+  --background-checkpoint "$BIREFNET_LOCAL_CHECKPOINT" \
+  --background-checkpoint-sha256 "$BIREFNET_CHECKPOINT_SHA256" \
+  --background-source-kind checkpoint
+```
+
+The manifest records whether input alpha or the provider was actually used,
+the source/checkpoint identity, declared synthetic/checkpoint provenance,
+CPU/F32 and input extent. Background model scope ends before camera loading.
+Cooperative cancellation is checked between Swin blocks and decoder stages;
+the parent still owns timeout/reaping after forced termination.
+
+`check_background.py` exercises the actual full 220,176,498-parameter Swin-L
+architecture at 1024², with synthetic F16-stored tensors and calibrated input
+skip convolutions. It compares against the pinned Pixal wrapper with only its
+CUDA device literal changed to CPU, then runs the private preprocessing process,
+MoGe and the existing native CPU pipeline through independent GLB/Blender
+verification. It also checks transparent-input compatibility, source/checkpoint
+rejection, existing-output preservation and a real SIGTERM during inference.
+These artificial masks and GLBs do not establish trained segmentation or 3D
+quality. BiRefNet/MoGe have not been ported to Vulkan; production adoption and
+genuine broker-leased native Vulkan evaluation remain separate work.
