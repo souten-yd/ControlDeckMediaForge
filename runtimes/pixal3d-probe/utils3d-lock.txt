@@ -1,0 +1,4 @@
+# Install after python-lock.txt. The wheel is specified by Pixal3D README.
+utils3d @ https://github.com/LDYang694/Storages/releases/download/20260430/utils3d-0.0.2-py3-none-any.whl --hash=sha256:ff63440827d6933807dd06c8a5a2db7e51fd5f33c7f3dddcc766a80e0f419252
+moderngl==5.12.0 --hash=sha256:b6c4972f3ddd10a3de6c30311da2c25bc493d023796e16c5d4e0f8bd6d5770be
+glcontext==3.0.0 --hash=sha256:04921720740438ceea8fb8a38b5665963520c7c8f27bef03df8aeb3ea3cfbfb6

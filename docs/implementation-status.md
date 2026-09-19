@@ -1,5 +1,37 @@
 # Media Forge implementation status
 
+## 2026-09-19 Pixal3D isolated software preparation; GPU generation not yet evaluated
+
+`ux1/g9-runtime-preparation`、親PR553 / `183f2d9`。core/既存image workerとは別の
+managed `runtimes/pixal3d-probe/.venv` (Python3.12)へAMD torch2.10.0/ROCm7.2.1、
+transformers4.57.3、diffusers0.37.1、NATTEN0.21.0とutils3dを導入。
+依存artifact SHA256 lock、source full revision、software-only preflightを記録。
+MoGe HEADは3.0へ進んでいたため、Pixal3Dが参照するMoGe2を`07444410f1e33f402353b99d6ccd26bd31e469e8`
+に固定。MoGe/NAFは固定sourceからのmodule importのみ、hub entrypoint/重み取得なし。
+
+GPU visibilityを全て-1にして、公式ROCm build経路でo-voxel45.187秒/exit0、
+FlexGEMM32.522秒/exit0。FlexGEMM setupのHOMEは専用build-homeへ隔離。
+CuMesh固定forkは32.763秒/exit1、`clean_up.hip:234:27: no member named 'cuda' in the global namespace`。
+CuMesh、nvdiffrast、nvdiffrec_renderは未導入。カーネル自作や既存cache削除は行っていない。
+
+実preflightはtorch/torchvision/transformers/diffusers/NATTEN/utils3d/MoGe2/NAF/
+o_voxel._Cのimport成功、NATTEN tiny CPU演算passed、torch GPU initialized=false。
+FlexGEMM/o-voxel wrapperはGPUを隠した状態でGPU情報を照会して失敗。
+これを実GPU不適合の証拠にはしない。full preflight exit1、native追加後pip checkも
+未導入cumesh依存によりexit1。単なるlazy pipeline importを推論成功とはしない。
+
+証跡: managed data `maintenance/g9-runtime-preparation-20260919`。
+初回full testは2210pass/1fail/235.66秒。既存autosave非blocking testの1秒制限で
+実測1.1666秒となった。対象単独再試験はpass。testや製品codeの制限は変更していない。
+最終 `./mf.sh test`: `2211 passed, 2 warnings in 236.09s (0:03:56)` / exit0。
+ロック3段階からの新規再構築はNOT TESTED。
+
+利用者が**Pixal3DのVulkan移植**も明示要求。`ux1/pixal3d-vulkan`で独立に開始し、
+trellis.cppを再利用する投影処理のC++/GGML実装とPyTorch数値照合を進める。
+ROCm構築をVulkan互換性の証拠にしない。重み利用への先の明示同意は回答待ち。
+実Host lease/モデル推論/VRAM/時間/画質評価/新生成物installed登録/署名配布は未完了。
+全体目標を完了扱いにしない。
+
 ## 2026-09-19 G9 image-to-3D source integration; adoption remains pending
 
 `ux1/3d-image-generation` / base main `bbdc69a`。入力画像Assetからnative trellis.cppを

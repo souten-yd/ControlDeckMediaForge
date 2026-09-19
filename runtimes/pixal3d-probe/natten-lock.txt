@@ -1,0 +1,2 @@
+# Install after python-lock.txt, with GPU visibility disabled.
+natten==0.21.0 --hash=sha256:810aaf179e1a6fdb0a9279d7858d00412a0d3f045e546cada415205215ccd539
