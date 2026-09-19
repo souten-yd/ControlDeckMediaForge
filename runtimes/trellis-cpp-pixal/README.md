@@ -1,4 +1,4 @@
-# Pixal3D native Vulkan port — projection, DiT and checkpoints
+# Pixal3D native Vulkan port — projection, DiT, checkpoints and sampling
 
 These are the first components of the user-requested Pixal3D port onto trellis.cpp.
 It is not yet a complete Pixal3D runner and does not enable MediaForge's Pixal3D
@@ -166,6 +166,65 @@ Evidence: managed data `maintenance/g9-pixal-checkpoint-20260919/cpu-release` an
 `dit-regression`. Torch GPU initialized=false. The first run reached all six
 positive cases but its negative-fixture writer refused a non-contiguous slice;
 the fixture was made contiguous before the complete rerun. No tolerance changed.
-Real checkpoints, mixed precision, sampler integration, Vulkan and full generated
-assets remain NOT TESTED. The next step is stage-runner/sampler integration with
-both positive and negative projected conditions and explicit backend ownership.
+Real checkpoints, mixed precision, Vulkan and full generated assets remain
+NOT TESTED. The following slice implements stage execution/sampling on synthetic
+checkpoints, with both positive and negative projected conditions.
+
+## Stage runner and Euler/CFG sampler
+
+`native/flow_runner.h` provides `FlowModel`, `FlowRunner` and `sample_flow`.
+`FlowModel` uploads validated GGUF weights to a caller-supplied backend, without
+device enumeration, a largest-device heuristic, or fallback. The backend is
+borrowed and must outlive the model and its runners. The caller owns Host
+admission/renewal/release; the library cannot claim or create a lease.
+Models/runners release their own weight/graph allocations on destruction and
+constructor failure. They are used sequentially on their selected backend.
+
+The runner builds and allocates one projected DiT graph for the stage's token
+count, then reuses it. Every forward uploads all inputs, including both global
+and projected conditions and the RoPE tables, because GGML's graph allocator
+can reuse their storage. Latent and condition vectors are token-major with
+contiguous channels. Sparse coordinate order/repeats are preserved; SS requires
+the complete ordered dense grid. Texture concatenates the fixed normalized
+shape condition after noisy texture channels for each token and returns only
+texture velocity. The shape condition is never integrated by the sampler.
+
+The sampler follows pinned Pixal3D's double-precision time schedule, inclusive
+guidance interval, positive/negative dispatch, CFG and rescaling. Sparse std
+uses the upstream SparseTensor moment formula; dense std uses corrected sample
+variance. It does not inherit TRELLIS's CFG ratio clamp or replace NaN velocity
+with zeros. Non-finite conditions/velocities/rescale/sample and invalid shapes
+fail explicitly. Cancellation is checked before/after each model call, including
+between the two CFG forwards and after the final forward; progress callbacks
+report completed steps. Process cancellation during a GPU operation remains
+the surrounding worker's responsibility.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_flow.py \
+  --pixal-source "$PIXAL_SOURCE" \
+  --checkpoint-fixtures "$PIXAL_CHECKPOINT_REPORT" \
+  --binary /tmp/pixal-projection-build/pixal-flow-check \
+  --output-dir "$PIXAL_FLOW_REPORT"
+```
+
+Measured CPU results: 10 conditions, 36 Euler steps, 108 velocity/clean/sample
+comparisons against the actual pinned upstream sampler and SS/ElasticSLat models,
+all passed. Maximum absolute error `1.6689300537109375e-06`, atol/rtol5e-5.
+The exact timestep/positive-negative forward sequences match. Cases include
+positive-only, negative-only, interval boundaries, time rescaling, CFG rescaling,
+sparse shape, texture concatenation and one F16-storage/F32-arithmetic case.
+An analytic scale canary independently exercises a ratio above TRELLIS's clamp.
+Repeated sampling through the same allocated graph is bitwise identical, and
+model/runner destruction retains the borrowed backend.
+
+Eleven negative cases pass: missing positive/negative projection, missing
+texture concatenation, non-finite/short velocity, three cancellation points,
+zero-variance CFG, invalid steps and invalid coordinates. No output is published
+on these failures. Previous checkpoint (72 comparisons) and DiT (59 comparisons,
+legacy bitwise parity) regression checks also pass. Torch GPU initialized=false.
+
+Evidence: managed data `maintenance/g9-pixal-runner-20260919/cpu-release` plus
+checkpoint/DiT regression reports. These are small synthetic models. Full-stage
+trained weights, Vulkan/mixed precision, actual image feature extraction,
+DINO global token selection, NAF/MoGe, cascade/decoder/GLB integration and
+MediaForge adoption/Library publication remain NOT TESTED. No capability is enabled.

@@ -97,7 +97,7 @@ Evidence: `maintenance/g9-pixal-checkpoint-20260919/cpu-release` and
 `dit-regression`, with retained source/GGUF/NPY artifacts and hashes.
 An initial negative-fixture writer rejected a non-contiguous slice; corrected
 fixture creation allowed the complete rerun. The native arithmetic tolerance
-was not changed. Native stage-runner/sampler integration remains unfinished.
+was not changed. The subsequent runner slice is described below.
 
 The next runner slice must pass both global and projected positive/negative
 conditions explicitly. Texture sampling concatenates the fixed shape condition
@@ -108,19 +108,46 @@ Do not silently inherit these changes: compare each Euler/CFG/rescale step and
 report non-finite model output as failure. Model loading must use the admitted
 explicit backend, avoiding trellis.cpp's largest-device heuristic/fallback.
 
+## Stage runner/sampler measured on 2026-09-19
+
+`ux1/pixal3d-flow-runner`, based on PR557 / `aef84a3`, implements an explicit
+borrowed-backend model loader, reusable projected DiT graph and Pixal Euler/CFG
+sampler. It preserves both positive/negative projected conditions and fixed
+texture shape concatenation, rejects unsupported operations on the selected
+backend, and never enumerates/selects/falls back to another device. Resource
+admission belongs to the existing Host/worker layer, not this native library.
+Cancellation before/after each model call and completed-step progress are wired.
+Non-finite velocity/rescale is an error instead of a silent numerical repair.
+
+Ten small synthetic CPU cases run the pinned upstream SS/ElasticSLat classes
+and real Pixal sampler. All 108 velocity/clean-latent/sample comparisons over
+36 Euler steps pass; maximum absolute error `1.6689300537109375e-06`, atol/rtol5e-5.
+Forward timestep and positive/negative sequences match exactly. Reusing the graph
+for identical sampling is bitwise deterministic. Cases cover time/CFG rescale,
+guidance intervals, positive-only/negative-only, shape/texture and F16 storage
+with F32 arithmetic. An analytic scale canary covers rescale beyond the old
+TRELLIS clamp. Eleven invalid-input/non-finite/cancellation cases reject with
+no published output. Prior 72 checkpoint and 59 DiT comparisons plus legacy
+bitwise regression pass. Torch GPU initialized=false.
+
+Evidence: `maintenance/g9-pixal-runner-20260919/cpu-release`, checkpoint and DiT
+regression reports. No pretrained model or GPU execution was used. The native
+stage functions are implemented; the complete image-to-GLB pipeline is not wired.
+
 ## Required remaining acceptance
 
 - Genuine Host lease and physical-device mapping; run the same numerical cases
   on Vulkan, recording device, exact source/library/binary hashes and results.
 - Validate the implemented converter against authorized real trained checkpoint
   configurations/weights; small synthetic conversion is not model acceptance.
-- Integrate the implemented projected DiT with the real stage runner and correct
-  DINO global-token selection. Compare trained-model block outputs and
+- Feed the implemented stage runner from correct DINO global-token selection,
+  projected image features and fixed pipeline parameters. Compare trained-model block outputs and
   BF16/FlashAttention behavior on the admitted Vulkan device.
 - NAF native feature upsampling, with measured memory-bounded execution and
   numerical comparison. Integrate MoGe camera estimation or a separately
   verified native image-only camera path preserving the requested behavior.
-- All SS/LR shape/HR shape/texture sampling stages and shared decoder checks.
+- Integrate all SS/LR shape/HR shape/texture stages, cascade coordinate/latent
+  transformations and shared decoder checks into a complete native pipeline.
   Do not silently substitute TRELLIS.2 weights or skip expensive Pixal3D stages.
 - Same-image, same-seed full Vulkan generation; real GPU time/memory, independent
   Blender validation, multi-view visual review and retained reference artifacts.
