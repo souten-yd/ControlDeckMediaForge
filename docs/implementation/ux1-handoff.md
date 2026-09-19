@@ -1,5 +1,26 @@
 # 実装引き継ぎ状態
 
+## 2026-09-20 G9 merge and v0.28.88 release preparation
+
+利用者の通常手順でのマージ/リリース指示に従い、PR553〜575の23件を依存順にmainへmerge。
+PR570の文書追記競合は最新trained評価と過去Library登録記録を両方残して解消。
+mainは`33ed5e68c0e4e4196e30cdbda7b7f03473c296d3`。PR必須ruleset、承認必須0、
+required CIなしを実GitHubで確認。保護迂回なし、各head照合、変更要求レビュー0。
+原checkout `feat/g9-image-to-3d` / `524553d`は変更せず、隔離worktreeで版数を0.28.88へ更新。
+
+`./mf.sh test`: **2242 passed / 2 warnings / 252.68秒 / exit0**。
+最終product差分はaddon/core版数のみ。Pixal/native/modelは軽量bundleへ同梱しない。
+0.28.87の実health healthy、16 DB table/2722 asset filesの比較記録とSQLite backupを取得。
+実行中Job/Blender session/runtime operation/model operationは0。
+Host auth/meとaddons/effectiveは401。認証sessionの捏造やHost内部importを使わない。
+利用者の重み同意は有効であり再質問しない。両engineの採用receiptなしを維持する。
+
+証跡: managed `maintenance/release-0.28.88-20260920/` のPR/head/merge記録、
+`full-test.log`、`before.json`、`pre-update.sqlite3`、`http-before.json`。
+次はこの版数PRのmerge commitから標準build/sign/publish、独立再取得検証、通常feature update、
+DB/Asset保持照合とinstalled browser受入を行う。
+NOT TESTED（この記録時点）: 0.28.88配布/導入、authenticated Host UI、Vulkan/full trained生成、骨。
+
 ## 2026-09-19 Trained model consent, preparation and CPU evaluation
 
 `ux1/g9-trained-models`、親PR574 / `68cb66a`。利用者の「同意する」により、提示済み
@@ -140,6 +161,21 @@ native GLBを接続。透明入力はprovider未load、既存4出力がPR569とb
 Pixalのprivate receiptと入力準備段を加法接続し、背景/MoGe process終了後に既存lease経路へ
 進む必要がある。既存TRELLIS.2の10ファイル表や実測済みresolution契約を流用して偽装しない。
 全体目標は未完了。
+
+## 2026-09-19 generated artifact Library registration
+
+`ux1/pixal3d-library`、親PR569 / `71ecc7d`。利用者の成果物登録要求を優先し、
+CPU合成重みGLBを稼働0.28.87へ追加。`asset_fb6f0e144cfe45e3bec02996b366eb53` /48,220byte。
+Library要約とwarningsで「検証用・合成重み・学習済み生成ではない」と明示。
+元bytes不変、実HTTP Asset/provenance/Job/contentとLibrary3件掲載を確認。
+既存trellis.cpp元WebP2件は再取得hash一致。再実行created=falseで重複追加なし。
+実viewer open/全chunk取得/closeも3件pass、hash一致と所有handle解放を確認。
+標準Storeの保守登録、既存版/原root/GPU/weights/Host変更なし。
+`./mf.sh test` 2211passed /2warnings /237.96秒 /exit0、以後変更は記録のみ。
+詳細は [登録記録](g9-pixal-library-20260919.md)。実ブラウザ表示はNOT TESTED。
+全体目標は未完了。学習済み生成・正規lease付きVulkan・adoption/production導入は残る。
+背景provider作業tree`/tmp/mediaforge-pixal-background-20260919`は親71ecc7dのまま未変更。
+固定BiRefNetHFのsource/configだけ取得済み、重み未取得。次の生成実装はそこから継続できる。
 
 ## 2026-09-19 Pixal3D explicit CPU MoGe camera preprocessing
 

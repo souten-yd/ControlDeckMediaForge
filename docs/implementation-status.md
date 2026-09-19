@@ -1,5 +1,26 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 merge and v0.28.88 release preparation
+
+利用者の通常手順でのマージ/リリース指示に従い、PR553〜575の23件を依存順にmainへmerge。
+PR570の文書追記競合は最新trained評価と過去Library登録記録を両方残して解消。
+mainは`33ed5e68c0e4e4196e30cdbda7b7f03473c296d3`。PR必須ruleset、承認必須0、
+required CIなしを実GitHubで確認。保護迂回なし、各head照合、変更要求レビュー0。
+原checkout `feat/g9-image-to-3d` / `524553d`は変更せず、隔離worktreeで版数を0.28.88へ更新。
+
+`./mf.sh test`: **2242 passed / 2 warnings / 252.68秒 / exit0**。
+最終product差分はaddon/core版数のみ。Pixal/native/modelは軽量bundleへ同梱しない。
+0.28.87の実health healthy、16 DB table/2722 asset filesの比較記録とSQLite backupを取得。
+実行中Job/Blender session/runtime operation/model operationは0。
+Host auth/meとaddons/effectiveは401。認証sessionの捏造やHost内部importを使わない。
+利用者の重み同意は有効であり再質問しない。両engineの採用receiptなしを維持する。
+
+証跡: managed `maintenance/release-0.28.88-20260920/` のPR/head/merge記録、
+`full-test.log`、`before.json`、`pre-update.sqlite3`、`http-before.json`。
+次はこの版数PRのmerge commitから標準build/sign/publish、独立再取得検証、通常feature update、
+DB/Asset保持照合とinstalled browser受入を行う。
+NOT TESTED（この記録時点）: 0.28.88配布/導入、authenticated Host UI、Vulkan/full trained生成、骨。
+
 ## 2026-09-19 Trained model consent, preparation and CPU evaluation
 
 `ux1/g9-trained-models`、親PR574 / `68cb66a`。利用者の「同意する」により、提示済み
@@ -140,6 +161,19 @@ synthetic赤色mask校正fixtureであり、学習済み精度・品質やVulkan
 詳細・実行・証跡は [背景除去記録](implementation/g9-pixal-background-20260919.md)。
 元runtime/Host/installed/Library/学習済み重みの変更なし。全体目標は未完了。
 最終 `./mf.sh test`: 2211passed /2warnings /237.31秒 /exit0。以後product/checker変更なし。
+
+## 2026-09-19 generated artifact Library registration
+
+利用者の追加要求に従い、PR569のCPU合成重みGLBを稼働0.28.87の共通Libraryへ1件登録。
+`asset_fb6f0e144cfe45e3bec02996b366eb53`、48,220byte、元GLBと取得bytes一致。
+要約は「[検証用] Pixal3D CPU移植・合成重みサンプル（学習済み生成ではありません）」、
+source_kind/backend/hashと警告をprovenanceへ保持。既存trellis.cpp WebP2件も実HTTPで
+再取得hash一致、Libraryの3件掲載を確認。再実行はcreated=false、重複登録なし。
+3件の実viewer open/全chunk取得/closeもHTTP200、hash一致、所有handle解放を確認。
+標準Storeで既存Asset/Jobsへ追加し、製品code/installed/GPU/モデル重み変更なし。
+`./mf.sh test`: 2211passed /2warnings /237.96秒 /exit0。以後変更は記録のみ。
+詳細・実行・hash・NOT TESTEDは [登録記録](implementation/g9-pixal-library-20260919.md)。
+学習済みPixal3Dの新規生成、Vulkan、viewer画素、骨付き版は未受入。全体目標は未完了。
 
 ## 2026-09-19 Pixal3D explicit CPU MoGe camera preprocessing
 
