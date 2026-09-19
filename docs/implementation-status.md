@@ -1,5 +1,44 @@
 # Media Forge implementation status
 
+## 2026-09-19 Pixal3D SS neural decoder; connected image-to-shape CPU parity passed
+
+`ux1/pixal3d-ss-decoder`、親PR562 / `b6592f0`。strict local safetensors/config→GGUF変換、
+metadata/tensor/file extent検査、明示backendを借用するloader、実SS neural decoderを追加。
+latentサイズ/channel/residual構成を設定から検証し、Conv3d/LayerNorm/SiLU/pixel shuffleを
+既存GGML演算で実行。sourceのgroup指定でもresidual内部はLayerNorm、最終出力だけ
+GroupNormという実装を維持。segment単位のRAII回収、cancel/progress、backend op確認あり。
+F32演算のみ。FP16 reference configは明示F32評価optionなしに実行しない。
+
+既存SS flow→実decoder→pool/座標→shape flowを接続。flow/decoder/grid不一致を拒否し、
+sampler側cancelもdecoderへ伝播。固定upstream実classとsynthetic learned checkpointの8条件で
+129中間/出力比較pass、386保存tensor/native loaded値完全一致。直接decode7条件はdebug保持の
+有無で反復bitwise一致。8³/16³入力・64³出力は縮小channelで検証、full幅実行とはしない。
+画像→DINO/NAF→SS flow→SS decoder→shape flowの1条件は**仮decoder出力なし**で動作し、
+57座標が厳密一致、SS/shapeの全6stepと最終shape latentが一致。converter拒否12/native拒否22。
+
+occupancy logits最大絶対誤差6.8247318267822266e-06、全座標厳密一致。
+4channelの8³条件は最後のLayerNormで前段誤差が7.270276546478271e-05へ増幅。
+この中間点はatol1e-4/rtol5e-5へ明示的に設定し、初回失敗ログを保持。最終logits等の
+atol/rtol5e-5は維持。正規化そのものもnative直前入力を同じsource演算へ渡して8条件照合し、
+最大2.86102294921875e-06で元のgateを通過。Fortran-order noise fixtureの初回失敗も記録。
+全体を「5e-5ですべて一致」とはしない。F32評価でありmixed precision受入ではない。
+
+public JSONのみ取得して配布model revision b0cb2e1b794cab9aa0ac38a95d794a4d9337437fを確認。
+現配布SS flowは16³、decoderはlatent8/channel512,128,32/residual2/middle2/referenceFP16。
+SS decoder metadata74tensor、flow4設定各700tensorを既存validatorが受理。
+以前の配布設定未確認は解消したが、学習済みtensor互換性/full幅/生成品質とはしない。
+source inference.pyのtexture NAF target1024も確認し、既存出力map容量問題は残る。
+
+証跡: managed `maintenance/g9-pixal-ss-decoder-20260919/cpu-final`、初回failure logs、
+`public-configs/{retrieval,native-config-compatibility}.json`、`build-provenance.json`。
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 236.99秒 / exit0**。GPU initialized=false。
+学習済み重み取得/使用0、Host/元runtime/installed/Library変更0。
+
+**NOT TESTED / 残り**: trained/full幅decoder、mixed precision/実Host lease付きVulkan、
+shape/texture neural decoder、MoGe/背景除去、GLB実生成/画質/新Asset登録、採用/署名配布/installed。
+重みlicense同意は先の質問に回答待ち。骨付き出力も未作成。
+次は配布shape/texture decoder構成を元に、sparse畳み込み/C2S/mesh復元を接続する。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D foreground and stage/cascade bridges; connected CPU parity passed
 
 `ux1/pixal3d-stage-bridge`、親PR561 / `d231f87`。foregroundのalpha判定・1024縮小・

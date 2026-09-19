@@ -65,3 +65,16 @@ DINO/NAF image-feature orchestration without device selection or fallback.
 convert_vision.py maps the public Hugging Face DINOv3ViTModel parameter layout
 from transformers4.57.3 and the pinned NAF state_dict into the existing native
 graphs. It does not copy model implementation code or include trained weights.
+
+prepare_image.py foreground framing and native/stage_bridge.cpp follow pinned
+TencentARC/Pixal3D pixal3d/pipelines/pixal3d_image_to_3d.py (MIT above).
+Changes: explicit removal-provider boundary, strict dimensions, native stage
+handoffs and actual run() cascade planning, with synthetic numerical checks.
+
+native/ss_decoder.cpp adapts pinned trellis.cpp src/ss_decoder.cpp (MIT above)
+to configurable spatial/channel extents, exact Pixal normalization placement,
+F32 evaluation, strict backend support, cancellation/progress and RAII cleanup.
+Its checkpoint loader follows our strict vision loader derived from trellis.cpp.
+The architecture and parameter layout follow pinned TencentARC/Pixal3D
+pixal3d/models/sparse_structure_vae.py (MIT above), which is run externally as
+the numerical reference. No pretrained weights are included.
