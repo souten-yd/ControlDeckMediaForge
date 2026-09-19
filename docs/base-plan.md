@@ -1282,6 +1282,19 @@ Deliver:
 
 Candidate benchmark: Hunyuan3D 2.1 and then-current local alternatives.
 
+The 2026-09-19 requested candidates are trellis.cpp (native Vulkan) and Pixal3D
+(an isolated Python worker). `media.scene.from_image` accepts an existing image
+Asset and adds a detached operation to the existing Scene Jobs lifecycle. The
+GPU process must own a Host broker lease, then release it before the CPU Blender
+import/validation step creates the `.blend` revision and Library GLB. Existing
+scene authoring tools remain supported. No second job or asset service is added.
+License consent and measured runtime/device/model identities are prerequisites
+for adopting a candidate. A private, pinned adoption receipt may enable only the
+resolution actually measured; an absent or changed runtime stays unavailable.
+Generation provenance includes the input Asset hash, pinned weights/runtime,
+seed and raw output hash. Successful structural validation does not establish
+visual or semantic quality; those remain separate experimental acceptance gates.
+
 Exit criterion: generated 3D can flow through the same asset lineage and validation pipeline, while failures remain isolated from the stable Blender feature.
 
 ### Phase 6 — Manga library/studio

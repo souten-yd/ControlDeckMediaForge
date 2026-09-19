@@ -1,5 +1,38 @@
 # Media Forge implementation status
 
+## 2026-09-19 G9 image-to-3D source integration; adoption remains pending
+
+`ux1/3d-image-generation` / base main `bbdc69a`。入力画像Assetからnative trellis.cppを
+実行するadapter、既存Scene Jobs/Host leaseへの接続、GLB→packed blend→独立検証→
+Scene revision/Library登録を追加。Agent `media.scene.from_image`、既存Workflowの
+`from_image`、opaque workspaceと入力画像/生成/状況/中止フォームを加法実装。
+入力hash/実行環境receiptを固定し、待機中の入力削除・異なる環境でのretryを拒否。
+GPU待機ではBlender slotを保持せず、worker終了・lease解放後にCPU検証を行う。
+未採用環境はunavailable。Pixal3Dを利用可能とは報告しない。Hostコード変更なし。
+
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 237.44秒 / exit0**。
+Node `--check frontend/app.js` / `git diff --check` exit0。
+新規testは実subprocess fixtureによる終了/取消、遅延admission回収、lease更新失敗、
+割当不一致、retry、来歴・owner・入力削除保護、Agent/Workflow/Library到達を確認。
+
+実Blender4.5.9で既存WebP GLB2件を新importerへ通し、隔離Storeへ各1revision/2assetsを
+保存。ref 11,443,236B / 1.077秒、s01 11,189,676B / 1.052秒。
+原本hash不変、保存Asset/provenance hash一致、staging空、runtime参照0。
+入力画像・generation metadataは明示fixtureであり、実モデル生成の証拠にはしない。
+証跡: maintenance/g9-import-20260919-ref と g9-import-20260919-s01。
+
+Pixal3D sourceを既存managed dataのruntimes/pixal3d-sourceへ取得し、
+`f7cf38429b0bd264f1995f0f8743a88b1c728b94`でdetach、cleanを確認。
+LICENSE/NOTICE/requirements/inference hashをpixal3d-source.jsonに保存。
+このstepで重量環境構築・重み取得・推論は実行していない。
+
+**NOT TESTED / 未完了**: trellis.cpp新規推論の実Host admission/VRAM/時間/画質評価、
+Pixal3D環境/重み/実生成評価、両者の実生成物のinstalled登録、署名配布、installed
+Agent/Workflow/opaque UI/GLB描画。DINOv3/Pixal3D重み利用の明示同意は回答待ち。
+WebP対応と旧生成GLB2件登録済の0.28.87は維持。目標全体は未完了。
+次: [G9統合と残る受入](implementation/g9-image-generation-integration.md) に従い、
+固定環境の評価/採用tooling→同意後の実lease付き生成→Pixal3D評価→通常配布と実機受入。
+
 ## 2026-09-19 WebP GLB allowed in installed 0.28.87; originals registered
 
 PR551 / merge b1b92ed659e3a2e8805ee2c5e3152fb6f2b6a25f、test済b3750e0とtree差分0。

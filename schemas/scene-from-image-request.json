@@ -1,0 +1,86 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "input_asset_id": {
+      "pattern": "^asset_[0-9a-f]{32}$",
+      "title": "Input Asset Id",
+      "type": "string"
+    },
+    "engine": {
+      "default": "auto",
+      "enum": [
+        "auto",
+        "trellis_cpp",
+        "pixal3d"
+      ],
+      "title": "Engine",
+      "type": "string"
+    },
+    "resolution": {
+      "default": 1024,
+      "enum": [
+        512,
+        1024
+      ],
+      "title": "Resolution",
+      "type": "integer"
+    },
+    "seed": {
+      "default": 42,
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "local_only": {
+      "const": true,
+      "default": true,
+      "title": "Local Only",
+      "type": "boolean"
+    },
+    "tags": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Tags",
+      "type": "array"
+    },
+    "collection": {
+      "default": "experiment",
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Collection",
+      "type": "string"
+    },
+    "retry_job_id": {
+      "anyOf": [
+        {
+          "pattern": "^job_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retry Job Id"
+    }
+  },
+  "required": [
+    "name",
+    "input_asset_id"
+  ],
+  "title": "SceneFromImageRequest",
+  "type": "object",
+  "description": "Generate an experimental 3D scene from an existing PNG, JPEG or WebP image Asset using a locally adopted runtime. Returns a detached Job; use media.job.status or media.job.cancel. Preserves the input image, publishes a validated Blender revision and GLB with lineage. Check 3d.image_to_3d capability before calling. Structural validation does not guarantee visual quality."
+}

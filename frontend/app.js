@@ -166,6 +166,11 @@ const state = {
   librarySelecting: false,
   librarySelected: new Set(),
   scenes: [],
+  sceneGeneration: null,
+  sceneGenerationImages: [],
+  sceneGenerationBusy: false,
+  sceneGenerationPolling: false,
+  sceneGenerationMessage: "",
   sceneWorkingCopies: [],
   selectedSceneId: "",
   sceneDocument: null,
@@ -4996,7 +5001,125 @@ function renderSceneBackupControls() {
   byId("scene-import-submit").disabled = busy || !sceneRuntimeReady();
 }
 
+function sceneGenerationText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    title: "Generate 3D from an image (experimental)",
+    note: "Generate an editable scene from a Library image. Check its shape and unseen surfaces after generation.",
+    image: "Input image", name: "Scene name", library: "Add an image in Library", refresh: "Refresh",
+    options: "Advanced options", resolution: "Generation resolution", seed: "Seed", cancel: "Cancel", submit: "Generate 3D",
+    choose: "Select an image", queued: "Waiting for GPU capacity…", running: "Generating 3D…",
+    validating: "Validating and saving the scene…", succeeded: "Scene saved. Open it in the scene list or Library.",
+    canceled: "Generation canceled.", failed: "Generation failed. Check Activity for details.",
+    connection: "Could not refresh the generation status. Select Refresh to reconnect.",
+    unavailable: "Open MediaForge in ControlDeck to generate 3D.", imagesFailed: "Could not load Library images. Select Refresh to retry.",
+  } : {
+    title: "画像から3Dを生成（実験的）",
+    note: "ライブラリの画像から3Dを生成し、編集できるシーンとして保存します。形状や見えない面は生成後に確認してください。",
+    image: "入力画像", name: "シーン名", library: "ライブラリで画像を追加", refresh: "更新",
+    options: "詳細設定", resolution: "生成解像度", seed: "シード", cancel: "中止", submit: "3Dを生成",
+    choose: "画像を選んでください", queued: "GPUの空きを待っています…", running: "3Dを生成しています…",
+    validating: "シーンを検証して保存しています…", succeeded: "シーンを保存しました。シーン一覧またはライブラリから開けます。",
+    canceled: "生成を中止しました。", failed: "生成できませんでした。状況画面で詳細を確認できます。",
+    connection: "生成状況を取得できませんでした。「更新」で再接続してください。",
+    unavailable: "ControlDeckからMediaForgeを開くと3Dを生成できます。", imagesFailed: "画像一覧を取得できませんでした。「更新」で再試行してください。",
+  };
+}
+
+function renderSceneGeneration() {
+  const form = byId("scene-generation-form");
+  const capability = state.capabilities["3d.image_to_3d"] || {};
+  form.hidden = !["available", "experimental"].includes(capability.state) && !state.sceneGeneration;
+  const text = sceneGenerationText();
+  for (const key of ["title", "note", "library", "refresh", "options", "cancel", "submit"]) {
+    byId(`scene-generation-${key}`).textContent = text[key];
+  }
+  for (const key of ["image", "name", "resolution", "seed"]) {
+    byId(`scene-generation-${key}-label`).textContent = text[key];
+  }
+  const image = byId("scene-generation-image");
+  const selected = image.value;
+  replaceMaterialOptions(image, state.sceneGenerationImages.map((asset) => ({
+    value: asset.id, label: asset.suggested_filename || asset.id,
+  })), selected, text.choose);
+  const resolution = byId("scene-generation-resolution");
+  const currentResolution = resolution.value;
+  const resolutions = (capability.resolutions || []).filter((value) => [512, 1024].includes(value));
+  replaceMaterialOptions(resolution, resolutions.map((value) => ({value: String(value), label: String(value)})),
+    currentResolution || String(resolutions[0] || ""));
+  const job = state.sceneGeneration;
+  const running = Boolean(job && !TERMINAL.has(job.status));
+  const blocked = state.sceneGenerationBusy || running || state.disabled;
+  for (const key of ["image", "name", "resolution", "seed"]) byId(`scene-generation-${key}`).disabled = blocked;
+  byId("scene-generation-submit").disabled = blocked || window.parent === window
+    || !resolutions.length || !image.value || !byId("scene-generation-name").value.trim();
+  byId("scene-generation-cancel").hidden = !running;
+  byId("scene-generation-cancel").disabled = state.sceneGenerationBusy;
+  byId("scene-generation-progress").hidden = !running;
+  byId("scene-generation-progress").value = Number(job?.progress) || 0;
+  let message = window.parent === window ? text.unavailable : "";
+  if (job?.status === "succeeded") message = text.succeeded;
+  else if (job?.status === "failed") message = text.failed;
+  else if (job?.status === "canceled") message = text.canceled;
+  else if (running) message = job.phase === "waiting_resource" || job.status === "queued" ? text.queued
+    : job.phase === "validate_generated_scene" ? text.validating : text.running;
+  byId("scene-generation-status").textContent = state.sceneGenerationMessage || message;
+}
+
+async function loadSceneGenerationImages() {
+  try {
+    const listed = await call("assets.list");
+    state.sceneGenerationImages = (listed.items || []).filter((asset) => ["image/png", "image/jpeg", "image/webp"].includes(asset.mime_type));
+  } catch {
+    state.sceneGenerationMessage = sceneGenerationText().imagesFailed;
+  }
+  renderSceneGeneration();
+}
+
+async function pollSceneGeneration() {
+  if (state.sceneGenerationPolling || !state.sceneGeneration) return;
+  state.sceneGenerationPolling = true;
+  const jobId = state.sceneGeneration.job_id;
+  try {
+    while (!state.disabled && state.sceneGeneration?.job_id === jobId) {
+      state.sceneGeneration = await call("scenes.jobs.get", {job_id: jobId});
+      state.sceneGenerationMessage = "";
+      renderSceneGeneration();
+      if (TERMINAL.has(state.sceneGeneration.status)) {
+        if (state.sceneGeneration.status === "succeeded") await loadScenes();
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  } catch {
+    state.sceneGenerationMessage = sceneGenerationText().connection;
+    renderSceneGeneration();
+  } finally {
+    state.sceneGenerationPolling = false;
+  }
+}
+
+async function submitSceneGeneration() {
+  if (state.disabled || state.sceneGenerationBusy || (state.sceneGeneration && !TERMINAL.has(state.sceneGeneration.status))) return;
+  state.sceneGenerationBusy = true;
+  state.sceneGenerationMessage = "";
+  const value = {
+    name: byId("scene-generation-name").value.trim(), input_asset_id: byId("scene-generation-image").value,
+    resolution: Number(byId("scene-generation-resolution").value), seed: Number(byId("scene-generation-seed").value), local_only: true,
+  };
+  renderSceneGeneration();
+  try {
+    state.sceneGeneration = await call("scenes.from_image", value);
+    void pollSceneGeneration();
+  } catch (error) {
+    state.sceneGenerationMessage = failureText(error?.code);
+  } finally {
+    state.sceneGenerationBusy = false;
+    renderSceneGeneration();
+  }
+}
+
 function renderSceneText() {
+  renderSceneGeneration();
   const text = sceneText();
   const switcher = byId("create-media-3d");
   switcher.setAttribute("aria-label", text.switchLabel);
@@ -5087,6 +5210,7 @@ function sceneDay(value) {
 }
 
 function renderScenes() {
+  renderSceneGeneration();
   const text = sceneText();
   const list = byId("scene-list");
   list.replaceChildren(...state.scenes.map((scene) => {
@@ -5119,6 +5243,7 @@ async function loadScenes() {
     state.scenes = result.items || [];
     state.sceneWorkingCopies = result.working_copies || [];
     renderScenes();
+    if (!byId("scene-generation-form").hidden) await loadSceneGenerationImages();
   } catch {
     byId("scene-list-count").textContent = sceneText().listFailed;
   }
@@ -8444,6 +8569,33 @@ byId("scene-import-file").addEventListener("change", (event) => {
   }
   byId("scene-import-status").textContent = sceneRuntimeReady() ? "" : sceneText().runtimeMissing;
 });
+byId("scene-generation-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  void submitSceneGeneration();
+});
+for (const id of ["scene-generation-image", "scene-generation-name"]) {
+  byId(id).addEventListener("input", renderSceneGeneration);
+}
+byId("scene-generation-library").addEventListener("click", () => activate("library"));
+byId("scene-generation-refresh").addEventListener("click", () => {
+  state.sceneGenerationMessage = "";
+  void loadSceneGenerationImages();
+  void pollSceneGeneration();
+});
+byId("scene-generation-cancel").addEventListener("click", async () => {
+  if (!state.sceneGeneration || state.sceneGenerationBusy) return;
+  state.sceneGenerationBusy = true;
+  renderSceneGeneration();
+  try {
+    state.sceneGeneration = await call("scenes.jobs.cancel", {job_id: state.sceneGeneration.job_id});
+    state.sceneGenerationMessage = "";
+  } catch (error) {
+    state.sceneGenerationMessage = failureText(error?.code);
+  } finally {
+    state.sceneGenerationBusy = false;
+    renderSceneGeneration();
+  }
+});
 byId("scene-import-form").addEventListener("submit", (event) => {
   event.preventDefault();
   if (!state.sceneImport) void importScene();
@@ -9475,6 +9627,7 @@ function applySessionParts(snapshot) {
     state.presets = snapshot.capabilities.presets || [];
     render3dProject();
     renderCreateMedia();
+    renderSceneGeneration();
   }
   if (usable(snapshot.profiles)) state.profiles = snapshot.profiles.items || [];
   if (usable(snapshot.reference_collections)) {
@@ -9655,6 +9808,10 @@ window.addEventListener("message", (event) => {
     }
     if (message.event === "disable.pending") {
       state.disabled = true;
+      if (state.sceneGeneration && !TERMINAL.has(state.sceneGeneration.status)) {
+        void call("scenes.jobs.cancel", {job_id: state.sceneGeneration.job_id}).catch(() => {});
+      }
+      renderSceneGeneration();
       void closeSceneCompare();
       const active = activeBlenderSession();
       if (active) {

@@ -2999,13 +2999,105 @@
       ],
       "title": "SkinWeightsSmooth",
       "type": "object"
+    },
+    "SceneFromImageAction": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "input_asset_id": {
+          "pattern": "^asset_[0-9a-f]{32}$",
+          "title": "Input Asset Id",
+          "type": "string"
+        },
+        "engine": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "trellis_cpp",
+            "pixal3d"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "resolution": {
+          "default": 1024,
+          "enum": [
+            512,
+            1024
+          ],
+          "title": "Resolution",
+          "type": "integer"
+        },
+        "seed": {
+          "default": 42,
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "local_only": {
+          "const": true,
+          "default": true,
+          "title": "Local Only",
+          "type": "boolean"
+        },
+        "tags": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f/\\\\]+$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Tags",
+          "type": "array"
+        },
+        "collection": {
+          "default": "experiment",
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Collection",
+          "type": "string"
+        },
+        "retry_job_id": {
+          "anyOf": [
+            {
+              "pattern": "^job_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retry Job Id"
+        },
+        "action": {
+          "const": "from_image",
+          "title": "Action",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "input_asset_id",
+        "action"
+      ],
+      "title": "SceneFromImageAction",
+      "type": "object"
     }
   },
   "discriminator": {
     "mapping": {
       "create": "#/$defs/SceneCreateAction",
       "edit": "#/$defs/SceneEditAction",
-      "material": "#/$defs/SceneMaterialAction"
+      "material": "#/$defs/SceneMaterialAction",
+      "from_image": "#/$defs/SceneFromImageAction"
     },
     "propertyName": "action"
   },
@@ -3018,6 +3110,9 @@
     },
     {
       "$ref": "#/$defs/SceneMaterialAction"
+    },
+    {
+      "$ref": "#/$defs/SceneFromImageAction"
     }
   ],
   "$schema": "https://json-schema.org/draft/2020-12/schema",

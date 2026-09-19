@@ -18,6 +18,9 @@ from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
 from .scene_refinement import SceneRefineRequest
 from .scene_bake import SceneBakeRequest
+from .scene_generation import SceneFromImageRequest
+from .three_d_runtime import ThreeDGenerator
+from .scene_generation_jobs import generate_scene_from_image, receipt_digest
 from .scene_recipes import (
     SceneCreateRequest,
     SceneEditRequest,
@@ -53,7 +56,15 @@ class SceneRecipeJobManager:
         control_poll_sec: float = 1.0,
         credential_refresh_margin_sec: int = 120,
         ai_gateway: HostAIGateway | None = None,
+        generator: ThreeDGenerator | None = None,
+        lease_renew_sec: float = 10.0,
+        resource_poll_sec: float = 0.5,
+        resource_wait_sec: float = 300.0,
     ) -> None:
+        self.generator = generator
+        self.lease_renew_sec = lease_renew_sec
+        self.resource_poll_sec = resource_poll_sec
+        self.resource_wait_sec = resource_wait_sec
         self.store = store
         self.workspace = workspace
         self.host = host
@@ -100,7 +111,7 @@ class SceneRecipeJobManager:
 
     async def submit(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest | SceneFromImageRequest,
         identity: HostIdentity,
         *,
         retry_of: str | None = None,
@@ -116,7 +127,7 @@ class SceneRecipeJobManager:
 
     async def _submit(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest | SceneFromImageRequest,
         identity: HostIdentity,
         *,
         retry_of: str | None = None,
@@ -126,6 +137,16 @@ class SceneRecipeJobManager:
             raise SceneError("host_capability_not_granted", "Host jobs.write capability is required")
         if isinstance(value, (SceneReviewRequest, SceneRefineRequest)) and "ai.inference" not in identity.granted_capabilities:
             raise SceneError("host_ai_not_granted", "Host AI access is required for image review")
+        if isinstance(value, SceneFromImageRequest):
+            if "resources.acquire" not in identity.granted_capabilities:
+                raise SceneError("host_capability_not_granted", "Host resources.acquire capability is required")
+            if self.generator is None:
+                raise SceneError("three_d_runtime_unavailable", "3D generator is unavailable")
+            self.generator.resolve(value.engine, value.resolution)
+            image = self.store.get_asset(value.input_asset_id)
+            if image.mime_type not in {"image/png", "image/jpeg", "image/webp"}:
+                raise SceneError("scene_generation_input_invalid", "Generation requires a PNG, JPEG or WebP image Asset")
+            self.workspace._verified_revision_asset(image.id, image.mime_type)
         owner = identity.actor_subject or identity.subject
         external = value.model_dump(mode="json", exclude={"retry_job_id"})
         # Preserve the durable payload of requests submitted before this additive field.
@@ -143,7 +164,8 @@ class SceneRecipeJobManager:
                 raise SceneError("scene_retry_changed", "a retry must preserve the original typed input")
             retry_pin = (previous.runtime_id, previous.runtime_version, previous.base_revision_id)
         operation = (
-            "scene.create"
+            "scene.from_image" if isinstance(value, SceneFromImageRequest)
+            else "scene.create"
             if isinstance(value, SceneCreateRequest)
             else "scene.material"
             if isinstance(value, SceneMaterialRequest)
@@ -178,7 +200,7 @@ class SceneRecipeJobManager:
 
     async def _submit_pinned(
         self,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest | SceneFromImageRequest,
         identity: HostIdentity,
         owner: str,
         external: dict[str, Any],
@@ -189,6 +211,17 @@ class SceneRecipeJobManager:
         pin: tuple[str, str, str | None],
     ) -> tuple[Job, SceneTaskRecord]:
         runtime_id, runtime_version, base_revision_id = pin
+        generation_constraints = {}
+        if isinstance(value, SceneFromImageRequest):
+            assert self.generator is not None
+            generation_constraints = {
+                "generation_runtime_sha256": receipt_digest(self.generator.resolve(value.engine, value.resolution)),
+                "generation_input_sha256": self.store.get_asset(value.input_asset_id).sha256,
+            }
+            if retry_of is not None:
+                previous_constraints = self.store.get_job(retry_of).request.constraints
+                if any(previous_constraints.get(k) != v for k, v in generation_constraints.items()):
+                    raise SceneError("scene_retry_changed", "Retry generation runtime or input changed")
         attached = await self.host.create_or_attach_job(
             identity, title="Media Forge 3D scene recipe", detached=True
         )
@@ -212,7 +245,8 @@ class SceneRecipeJobManager:
         request = JobRequest(
             operation="media.inspect",
             intent=(
-                f"Create typed Blender scene: {value.name}"
+                f"Generate 3D from image: {value.name}" if isinstance(value, SceneFromImageRequest)
+                else f"Create typed Blender scene: {value.name}"
                 if isinstance(value, SceneCreateRequest)
                 else f"Apply a typed material binding to {value.scene_id}"
                 if isinstance(value, SceneMaterialRequest)
@@ -226,7 +260,7 @@ class SceneRecipeJobManager:
                 if isinstance(value, SceneReviewRequest)
                 else f"Apply typed Blender scene edit to {value.scene_id}"
             ),
-            constraints={"scene_operation": operation, "scene_recipe": external},
+            constraints={"scene_operation": operation, "scene_recipe": external, **generation_constraints},
         )
         job = self.store.create_job(request, host_managed=True)
         record = self.store.create_scene_recipe_task(
@@ -278,7 +312,7 @@ class SceneRecipeJobManager:
     async def _run_pinned(
         self,
         job_id: str,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest | SceneFromImageRequest,
         references: ExitStack,
         started: asyncio.Event,
     ) -> None:
@@ -392,10 +426,17 @@ class SceneRecipeJobManager:
                 raise TimeoutError(f"scene recipe job {job_id} cleanup did not finish")
             await asyncio.sleep(0.01)
 
+    async def _acquire_recipe_slot(self, value: object) -> bool:
+        if isinstance(value, SceneFromImageRequest):
+            # GPU admission belongs exclusively to the Host broker. Reserve the
+            # existing Blender slot only after native generation has finished.
+            return False
+        return await self._execution_guard.acquire()
+
     async def _run(
         self,
         job_id: str,
-        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest,
+        value: SceneCreateRequest | SceneEditRequest | SceneMaterialRequest | SceneObserveRequest | SceneReviewRequest | SceneRefineRequest | SceneBakeRequest | SceneFromImageRequest,
     ) -> None:
         execution = self._executions[job_id]
         reporter = HostJobReporter(self.host, execution)
@@ -406,13 +447,13 @@ class SceneRecipeJobManager:
             self.store.update_job(job_id, status=JobStatus.RUNNING, phase="validate_recipe", progress=0.05)
             self.store.update_scene_recipe_task(job_id, stage="validate_recipe")
             await self._report_progress(reporter, "validate_recipe", 0.05)
-            execution_phase = "blender_bake" if isinstance(value, SceneBakeRequest) else "scene_refinement" if isinstance(value, SceneRefineRequest) else "vision_review" if isinstance(value, SceneReviewRequest) else "blender_recipe"
+            execution_phase = "waiting_resource" if isinstance(value, SceneFromImageRequest) else "blender_bake" if isinstance(value, SceneBakeRequest) else "scene_refinement" if isinstance(value, SceneRefineRequest) else "vision_review" if isinstance(value, SceneReviewRequest) else "blender_recipe"
             self.store.update_job(job_id, phase=execution_phase, progress=0.25)
             self.store.update_scene_recipe_task(job_id, stage=execution_phase)
             await self._report_progress(reporter, execution_phase, 0.25)
             task = self.store.get_scene_recipe_task(job_id)
             acquire = asyncio.create_task(
-                self._execution_guard.acquire(),
+                self._acquire_recipe_slot(value),
                 name=f"scene-recipe-slot-{job_id}",
             )
             acquired = False
@@ -428,10 +469,11 @@ class SceneRecipeJobManager:
                             "ControlDeck child Job control or credential refresh failed",
                         ) from error
                     raise asyncio.CancelledError
-                await acquire
-                acquired = True
+                acquired = await acquire
                 execution_call = (
-                    self.workspace.apply_material_binding(
+                    generate_scene_from_image(self, job_id, value, execution, reporter)
+                    if isinstance(value, SceneFromImageRequest)
+                    else self.workspace.apply_material_binding(
                         task.owner,
                         value.scene_id,
                         value.binding,
@@ -621,7 +663,7 @@ class SceneRecipeJobManager:
                     actor_subject=execution.identity.actor_subject,
                 )
             control = await self.host.job_control(execution.identity, execution.host_job_id)
-            if control.get("cancel_requested") is True:
+            if control.get("cancel_requested") is True or control.get("status") == "canceled":
                 return True
             if control.get("status") in {"succeeded", "failed", "interrupted"}:
                 raise HostApiError("host_job_terminated", "Host Job ended before local execution finished")

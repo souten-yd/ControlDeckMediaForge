@@ -129,6 +129,13 @@
         "permission": "workflows.run"
       },
       {
+        "id": "media.scene.from_image",
+        "label": "Generate an experimental 3D scene from an image Asset",
+        "endpoint": "/addon/v1/agent/scene/from-image",
+        "schema_path": "/schemas/scene-from-image-request.json",
+        "permission": "workflows.run"
+      },
+      {
         "id": "media.scene.create",
         "label": "Create a 3D scene",
         "endpoint": "/addon/v1/agent/scene/create",
