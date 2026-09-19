@@ -1,5 +1,27 @@
 # 実装引き継ぎ状態
 
+## 2026-09-20 G9 merged and signed 0.28.88 installed
+
+利用者の通常手順による指示を実施。G9 PR553〜575の23件と版数PR576をPR経由でmerge。
+release commit `a30181cc7c6a1c7faba4b87cbd8cab616309b2c3`、全test2242passed/2warnings/
+252.68秒/exit0。標準build/既存鍵署名/公開/独立再取得検証を完了。bundle31,818,827byte、
+SHA256 `14a91d84b2aa4249bf32d54fd6036b7d1c7e11e076f25025f5e0c3724f699f7a`。
+通常`deck.sh feature update media-forge` exit0、current=0.28.88、healthy/enabled、旧0.28.87保持。
+16table/2722asset file/Blender registry比較は更新・browser・再起動後も一致。
+
+実Chrome151のinstalled standalone UI/実HTTPで1280pxと320pxのLibrary3 GLB表示/close、
+3D画面の未採用表示を確認。横overflow/HTTP失敗/page例外0、再起動後も8ケースpass。
+原WebP2件＋合成Pixal1件の全content hash一致、検証用ラベル維持、今回の追加登録0。
+feature serviceのPID2600491→2601191、実doctorも0.28.88。両engine未採用/unavailableを維持。
+Host effective認証は401のためHost iframeはNOT TESTED。Vulkan/full trained品質/VRAM、
+新規画像→GLB→Library、骨・animation、cold provision/実rollbackは未受入。
+重み同意済みは有効。次の生成評価には正規Host実行contextとbroker lease/device mappingが必要。
+
+詳細: [release実機記録](release-0.28.88-acceptance-20260920.md)。証跡はmanaged maintenance/release-0.28.88-20260920。
+検証済の不要な配布tarball2コピーと一時DB backupだけを削除し75,794,582byte回収。
+正式release/current/rollback、モデル/runtime、利用者assets、元checkoutは保持。
+今回のマージ・公開・導入は完了。G9生成/骨の全体目標は未完了。
+
 ## 2026-09-20 G9 merge and v0.28.88 release preparation
 
 利用者の通常手順でのマージ/リリース指示に従い、PR553〜575の23件を依存順にmainへmerge。
