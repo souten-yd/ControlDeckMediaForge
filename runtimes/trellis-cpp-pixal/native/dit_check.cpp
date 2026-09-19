@@ -7,6 +7,9 @@
 #include "ggml-cpu.h"
 #include "ggml-vulkan.h"
 #include "npy.h"
+#ifndef MEDIAFORGE_UNPATCHED_DIT
+#include "flow_checkpoint.h"
+#endif
 #include <cctype>
 #include <fstream>
 #include <iostream>
@@ -15,13 +18,14 @@
 #include <stdexcept>
 #include <string>
 
-namespace trellis { extern bool g_no_fa; }
+namespace trellis { extern bool g_no_fa; extern int g_cpu_threads; }
 
 int main(int argc, char** argv) {
     try {
         if (argc < 3) throw std::invalid_argument("usage: pixal-dit-check <fixture-dir> cpu|vulkan [--device N] [--omit-proj|--short-proj]");
         const std::string dir = argv[1], kind = argv[2];
         int device_index = -1;
+        std::string checkpoint;
         bool omit_projection = false, short_projection = false, legacy_gelu = false, from_features = false;
         for (int i = 3; i < argc; ++i) {
             const std::string flag = argv[i];
@@ -30,6 +34,7 @@ int main(int argc, char** argv) {
             else if (flag == "--short-proj") short_projection = true;
             else if (flag == "--legacy-gelu") legacy_gelu = true;
             else if (flag == "--from-features") from_features = true;
+            else if (flag == "--gguf" && i+1 < argc) checkpoint = argv[++i];
             else throw std::invalid_argument("unknown test argument");
         }
         if ((kind != "cpu" && kind != "vulkan") || ((kind == "vulkan") != (device_index >= 0)))
@@ -39,6 +44,17 @@ int main(int argc, char** argv) {
         int projected_channels = 0;
         config >> p.n_blocks >> p.n_heads >> p.head_dim >> p.d_model >> p.d_mlp
                >> p.d_cond >> projected_channels >> p.in_ch >> p.out_ch;
+        if (!checkpoint.empty()) {
+#ifdef MEDIAFORGE_UNPATCHED_DIT
+            throw std::invalid_argument("unmodified baseline does not support Pixal GGUF");
+#else
+            // CPU round-trip driver only. Production Vulkan device selection
+            // must use the admitted explicit backend, not Model::load's heuristic.
+            if (kind != "cpu") throw std::invalid_argument("GGUF round-trip currently requires CPU");
+            p = mediaforge::pixal::inspect_flow_checkpoint(checkpoint).params;
+            projected_channels = p.proj_in_channels;
+#endif
+        }
 #ifdef MEDIAFORGE_UNPATCHED_DIT
         if (projected_channels != 0 || !legacy_gelu)
             throw std::invalid_argument("unmodified baseline supports only legacy TRELLIS conditioning/GELU");
@@ -46,12 +62,15 @@ int main(int argc, char** argv) {
         p.proj_in_channels = projected_channels;
         p.exact_gelu = !legacy_gelu;
 #endif
-        if (!config || p.n_blocks < 1 || p.n_blocks > 4 || p.d_model < 1 || p.d_model > 256 ||
+        if ((!config && checkpoint.empty()) || p.n_blocks < 1 || p.n_blocks > 4 || p.d_model < 1 || p.d_model > 256 ||
             p.n_heads < 1 || p.n_heads > 16 || p.head_dim < 8 || p.head_dim > 64 ||
             p.d_model != p.n_heads * p.head_dim || p.d_cond < 1 || p.d_cond > 256 ||
             projected_channels < 0 || projected_channels > 512 || p.in_ch < 1 || p.in_ch > 64 ||
             p.out_ch < 1 || p.out_ch > 64 || p.d_mlp < 1 || p.d_mlp > 1024)
             throw std::invalid_argument("invalid synthetic test dimensions");
+        // The storage round-trip gate checks the exact converted values using
+        // F32 arithmetic. Mixed-precision matmul is a separate acceptance gate.
+        if (!checkpoint.empty()) p.cast_f32 = true;
         if (from_features && (projected_channels == 0 || omit_projection || short_projection))
             throw std::invalid_argument("combined projection test requires a complete projected condition");
         std::unique_ptr<ggml_context, decltype(&ggml_free)> ctx(
@@ -70,6 +89,11 @@ int main(int argc, char** argv) {
             return tensor;
         };
         trellis::Model model;
+        struct ModelGuard { trellis::Model& model; ~ModelGuard() { model.free(); } } guard{model};
+        if (!checkpoint.empty()) {
+            trellis::g_cpu_threads = 2;
+            model = trellis::Model::load(checkpoint, -1);
+        } else {
         std::ifstream weights(dir + "/weights.txt");
         if (!weights) throw std::invalid_argument("missing synthetic weights list");
         std::string name;
@@ -78,6 +102,7 @@ int main(int argc, char** argv) {
                 name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._") != std::string::npos)
                 throw std::invalid_argument("invalid synthetic weight name");
             model.tensors[name] = load("weights/" + name);
+        }
         }
         auto* h0 = load("input");
         auto* time = load("timestep");

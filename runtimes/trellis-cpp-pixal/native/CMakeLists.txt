@@ -36,7 +36,7 @@ set(DIT_OVERLAY "${CMAKE_CURRENT_BINARY_DIR}/dit-${DIT_PATCH_SHA}")
 execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../prepare_trellis.py"
   --source "${TRELLIS_SOURCE_DIR}" --destination "${DIT_OVERLAY}"
   COMMAND_ERROR_IS_FATAL ANY)
-add_library(pixal_dit STATIC "${DIT_OVERLAY}/src/dit.cpp" "${TRELLIS_SOURCE_DIR}/src/trellis_model.cpp")
+add_library(pixal_dit STATIC flow_checkpoint.cpp "${DIT_OVERLAY}/src/dit.cpp" "${TRELLIS_SOURCE_DIR}/src/trellis_model.cpp")
 target_include_directories(pixal_dit PUBLIC "${DIT_OVERLAY}/include" "${TRELLIS_SOURCE_DIR}/include"
   "${TRELLIS_SOURCE_DIR}/thirdparty/ggml/include")
 target_link_libraries(pixal_dit PUBLIC "${GGML_base}" "${GGML_cpu}" "${GGML_registry}")

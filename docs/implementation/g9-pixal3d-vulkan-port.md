@@ -70,11 +70,50 @@ Evidence: `maintenance/g9-pixal-dit-20260919/cpu-combined`, plus earlier failure
 reports and binary/source/library hashes. These are synthetic small-model results,
 not trained-model or Vulkan acceptance.
 
+## Flow checkpoint component measured on 2026-09-19
+
+`ux1/pixal3d-checkpoint`, based on PR556 / `3003a21`, adds a local-only
+safetensors/config-to-GGUF converter using pinned gguf0.19.0. It validates all
+names/shapes/dtypes and the implemented model configuration, preserves projected
+weights, emits source/config/output/tensor hashes, and rejects unsupported or
+incomplete input without publishing a partial output. F32 is the default;
+F16 storage applies only to linear matrices, retaining normalization in F32.
+C++ inspects versioned metadata and every weight before backend allocation.
+No trained checkpoint was used and no runtime was adopted.
+
+Six synthetic CPU cases use actual upstream dense SS and sparse ElasticSLat
+classes. Safetensors F32/BF16/F16 -> GGUF F32/F16 -> real native Model::load ->
+projected DiT yields 72 passed comparisons, max absolute error
+`7.152557373046875e-07` at atol/rtol5e-5. All serialized values match exactly.
+Sparse coordinate order/repeats and doubled texture channels are included.
+F16 storage is explicitly cast to F32 for arithmetic; mixed precision is a
+separate gate. All eight pinned source training-config denoiser sections are
+accepted by the config validator (700 expected tensors each); this does not
+verify deployed checkpoint configs or values. Twelve converter and nine native
+pre-allocation rejection checks pass; repeated conversion is byte-identical. Existing DiT 59-comparison and
+legacy bitwise checks pass. Torch GPU initialized=false.
+
+Evidence: `maintenance/g9-pixal-checkpoint-20260919/cpu-release` and
+`dit-regression`, with retained source/GGUF/NPY artifacts and hashes.
+An initial negative-fixture writer rejected a non-contiguous slice; corrected
+fixture creation allowed the complete rerun. The native arithmetic tolerance
+was not changed. Native stage-runner/sampler integration remains unfinished.
+
+The next runner slice must pass both global and projected positive/negative
+conditions explicitly. Texture sampling concatenates the fixed shape condition
+with the evolving texture latent; it must not integrate the shape channels.
+The existing trellis.cpp sampler also contains robustness clamps and replacement
+of non-finite velocity by zero that are absent from the pinned Pixal sampler.
+Do not silently inherit these changes: compare each Euler/CFG/rescale step and
+report non-finite model output as failure. Model loading must use the admitted
+explicit backend, avoiding trellis.cpp's largest-device heuristic/fallback.
+
 ## Required remaining acceptance
 
 - Genuine Host lease and physical-device mapping; run the same numerical cases
   on Vulkan, recording device, exact source/library/binary hashes and results.
-- Pixal3D checkpoint-to-GGUF conversion and model metadata/shape validation.
+- Validate the implemented converter against authorized real trained checkpoint
+  configurations/weights; small synthetic conversion is not model acceptance.
 - Integrate the implemented projected DiT with the real stage runner and correct
   DINO global-token selection. Compare trained-model block outputs and
   BF16/FlashAttention behavior on the admitted Vulkan device.
