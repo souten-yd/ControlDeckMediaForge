@@ -1292,6 +1292,14 @@ CPU reference comparisons, genuine broker-leased Vulkan operator comparisons,
 full-model generation and independent output/quality checks are separate gates.
 Port source and reproducible build inputs stay in MediaForge's runtime tooling;
 the existing working trellis.cpp runtime is preserved side by side.
+Camera estimation may run the pinned MoGe 2 implementation as an explicit CPU
+preprocessing stage in the isolated worker before the native generator starts.
+Its backend/precision/model identity are recorded separately from GGML/Vulkan;
+this is not a claim that MoGe runs on Vulkan or an automatic GPU fallback.
+The default image-only path uses measured camera inference, never a silently
+fixed FOV. Transparent input follows the upstream alpha path; opaque input
+requires an explicitly admitted background-removal provider. Camera/removal
+weights and temporary tensors are released before native generation admission.
 `media.scene.from_image` accepts an existing image
 Asset and adds a detached operation to the existing Scene Jobs lifecycle. The
 GPU process must own a Host broker lease, then release it before the CPU Blender

@@ -912,3 +912,55 @@ provide an analytic oracle. Measured final execution: 25.202264 s, 192 MiB outpu
 calculated from dimensions. Neither output bytes nor individual GGML graph
 allocation sizes represent total RAM/VRAM. Full-image/trained/Vulkan memory and
 production worker/Library acceptance remain outstanding.
+
+## Explicit CPU camera preprocessing
+
+`camera.py` connects the fixed MoGe 2 implementation to Pixal's original
+intrinsics → horizontal FOV → camera-distance formula. It runs on CPU with
+explicit F32 arithmetic in the separate worker environment. This does not port
+MoGe to Vulkan and does not automatically fall back from a failed GPU operation.
+The native 3D generator retains its explicit GGML backend/admission boundary.
+
+`local_moge` accepts a local caller-admitted tensor/config checkpoint and its
+expected SHA-256, checks path containment and source revision, uses
+`torch.load(weights_only=True)` and validates configuration, finite tensors and
+the complete tensor table before CPU model storage allocation. Metadata-only
+parameters use the already-pinned Accelerate package; constructor constants
+stay on CPU for DINO's scalar reads. State loading is strict. No `from_pretrained`,
+remote code download, model-ID resolution or adoption receipt is generated.
+Integrity hashes do not grant license permission or runtime adoption.
+
+`prepare_camera.py` is a private CPU process entry for foreground framing,
+MoGe inference, low/high RGB arrays and camera values. It uses transparent input
+or, via the Python interface, an explicitly provided background-removal provider.
+The CLI does not yet perform neural background removal for opaque images.
+Camera tensors/models are released before native generation. The manifest binds
+the input, camera checkpoint/source, CPU/F32 mode, framing parameters and output
+file hashes. It is published after complete arrays; existing output directories
+are preserved. Cooperative cancellation/SIGTERM cleans the owned staging tree.
+A parent must still bound, terminate/reap and clean a forcibly killed process.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/prepare_camera.py \
+  --source "$MOGE_SOURCE" --checkpoint "$MOGE_CHECKPOINT" \
+  --checkpoint-sha256 "$MOGE_CHECKPOINT_SHA256" \
+  --allowed-root "$PRIVATE_ALLOWED_ROOT" --input "$PRIVATE_INPUT_IMAGE" \
+  --output-dir "$PRIVATE_PREPARED_INPUT" --source-kind checkpoint
+```
+
+These are server-private paths, not public Host path arguments. The default
+camera resolution is 512 and MoGe uses its checkpoint's maximum token count
+(resolution level 9). `--num-tokens` and low/high sizes are explicit evaluation
+overrides. Invalid intrinsics, nonpositive FOV/distance and insufficient valid
+foreground on the actual 64² focal-fitting sample grid fail; no fixed FOV is
+substituted for missing camera inference.
+
+`check_camera.py` runs the real upstream MoGe neural forward/infer and unmodified
+Pixal camera functions. Synthetic ViT-S/14 plus reduced-width five-level heads
+are calibrated for valid UV correlation/masks; they do not represent trained
+quality. Four aspect/scale/extension cases match the reference exactly and repeat
+exactly. The CPU worker's estimated camera drives two native image-to-GLB runs,
+with matching repeated arrays/GLB payloads and independent core/Blender imports.
+The default trained ViT-L, full image/token counts, opaque removal, Vulkan and
+installed Library acceptance remain untested. See the current handoff for measured
+results and retained failure logs.
