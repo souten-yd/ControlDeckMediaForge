@@ -1,4 +1,4 @@
-# Pixal3D native Vulkan port — projection and DiT conditioning
+# Pixal3D native Vulkan port — projection, DiT and checkpoints
 
 These are the first components of the user-requested Pixal3D port onto trellis.cpp.
 It is not yet a complete Pixal3D runner and does not enable MediaForge's Pixal3D
@@ -104,3 +104,68 @@ initial `cpu` / `cpu-exact` results, with build manifests and binary/library has
 Vulkan execution, real trained weights, BF16/FlashAttention parity, sampler
 integration, DINO/NAF/MoGe execution and full image-to-GLB generation are still
 NOT TESTED. These source components alone do not enable runtime adoption.
+
+## Flow checkpoint conversion
+
+`convert_flow.py` converts a local, authorized checkpoint (`.safetensors` plus
+its `{name,args}` inference JSON) into a new directory containing `model.gguf`
+and `manifest.json`. It uses the [official GGUF writer](https://github.com/ggml-org/llama.cpp/tree/master/gguf-py),
+pinned by `gguf-lock.txt`, and the worker environment's safetensors reader.
+Install the extra package into the isolated Pixal environment only:
+
+```sh
+"$PIXAL_PYTHON" -m pip install --require-hashes --no-deps \
+  -r runtimes/trellis-cpp-pixal/gguf-lock.txt
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/convert_flow.py \
+  --checkpoint "$PIXAL_CHECKPOINT" --config "$PIXAL_CHECKPOINT_CONFIG" \
+  --stage ss --storage f32 --source-kind checkpoint \
+  --source-repository "$PIXAL_MODEL_REPOSITORY" --source-revision "$PIXAL_MODEL_REVISION" \
+  --output-dir "$PIXAL_CONVERTED_DIRECTORY"
+```
+
+The converter supports the implemented projected/shared-modulation/RoPE/QK RMS
+flow configuration for `ss`, `shape`, and `texture`. It validates the exact set
+of parameter names and shapes, preserves nested projection weights, and rejects
+unknown settings, missing/extra parameters, non-finite tensors, truncated files
+and F16 overflow. It never executes pickle or a remote model loader. F32 is the
+default; optional F16 storage converts linear matrices while retaining biases
+and normalization values (including rank-two RMS gamma) in F32. One tensor is
+converted at a time into the writer's temporary spool. No trained checkpoint
+has been converted or tested yet.
+
+GGUF metadata carries a private versioned architecture, explicit stage/dimensions,
+source/config hashes and fixed reference revision. The manifest adds output and
+tensor hashes plus converter/package provenance. Conversion checks source hashes
+again before publishing the completed directory and refuses an existing output.
+`inspect_flow_checkpoint` validates metadata and every tensor's name/type/shape
+before backend allocation. These are trusted runtime artifacts, not Library
+uploads. Manifest hashes are provenance evidence; runtime adoption must separately
+verify the admitted artifact against its pinned receipt. Conversion does not
+assert license acceptance, enable a capability or write an adoption receipt.
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_checkpoint.py \
+  --pixal-source "$PIXAL_SOURCE" \
+  --binary /tmp/pixal-projection-build/pixal-dit-check \
+  --output-dir "$PIXAL_CHECKPOINT_REPORT"
+```
+
+Measured CPU checks: six cases, using the actual upstream dense SS and sparse
+ElasticSLat classes with all parameters replaced by deterministic synthetic
+values. All serialized values match exactly; all 72 native intermediate/output
+comparisons pass (max absolute error `7.152557373046875e-07`, atol/rtol=5e-5).
+Cases cover F32, BF16 and F16 source tensors, F32/F16 storage, reordered/repeated
+sparse coordinates and doubled texture input channels. Arithmetic is explicitly
+F32 even for F16 storage; this does not validate mixed-precision/Vulkan execution.
+Dimensions come from GGUF, without the previous NPY driver's `params.txt`.
+Twelve converter rejection checks and nine native pre-allocation rejection
+checks pass, and repeated conversion produces identical GGUF bytes. The existing
+five-case DiT and bitwise legacy regression checks still pass.
+
+Evidence: managed data `maintenance/g9-pixal-checkpoint-20260919/cpu-release` and
+`dit-regression`. Torch GPU initialized=false. The first run reached all six
+positive cases but its negative-fixture writer refused a non-contiguous slice;
+the fixture was made contiguous before the complete rerun. No tolerance changed.
+Real checkpoints, mixed precision, sampler integration, Vulkan and full generated
+assets remain NOT TESTED. The next step is stage-runner/sampler integration with
+both positive and negative projected conditions and explicit backend ownership.

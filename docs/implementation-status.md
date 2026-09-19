@@ -1,5 +1,33 @@
 # Media Forge implementation status
 
+## 2026-09-19 Pixal3D flow checkpoint conversion; native CPU round-trip passed
+
+`ux1/pixal3d-checkpoint`、親PR556 / `3003a21`。固定gguf0.19.0によるlocal
+safetensors/config→GGUF変換、source/config/output/tensor hash付きmanifest、
+C++側のbackend確保前metadata/全weight検査を追加。投影重みを含む厳密な名前/形状を
+要求し、未知設定・欠落・余分なtensor・非有限値・F16 overflowを拒否。
+F32既定、F16はlinear行列だけに適用しnormalization/biasをF32で保持。
+既存trellis runtime/モデル/Libraryは変更していない。公開契約の変更なし。
+
+固定upstream dense SSとsparse ElasticSLat classの全parameterを明示synthetic値へ置換。
+構造/形状/texture × F32またはF16格納の6条件で、実safetensors→GGUF→C++
+Model::load→DiTを実行。72tensor比較全pass、最大絶対誤差7.152557373046875e-07
+(atol/rtol5e-5)。BF16/F16 source、順不同/重複sparse座標、textureの2倍入力幅を含む。
+serialized値は全て厳密一致、同入力の再変換GGUF bytes一致。native寸法はGGUFから取得。
+12converter拒否・9native backend確保前拒否check pass。F16 weightも演算は明示F32であり、
+mixed precisionの合格とはしない。既存DiT 59比較/legacy bitwise回帰もpass。
+torch GPU initialized=false。初回negative fixture作成の非連続tensor拒否はfixtureを修正し再実行。
+
+証跡: managed data `maintenance/g9-pixal-checkpoint-20260919/cpu-release` と
+`dit-regression`。合成safetensors/GGUF/NPYとsource/library/binary hashを保持。
+最終 `./mf.sh test`: **2211 passed / 2 warnings / 236.01秒 / exit0**。
+
+**NOT TESTED / 残り**: trained checkpoint変換/重み利用、Vulkan・mixed precision、
+実stage runner/CFG sampler、DINO global token/NAF/MoGe、全生成/画質/新Asset登録、
+採用receipt・通常配布・installed操作。重み利用の先のlicense同意は回答待ち。
+骨付き出力も未作成。次はpositive/negative投影条件とtexture concat条件を実stage runnerへ
+接続し、固定upstream samplerの各stepを照合する。全体目標は未完了。
+
 ## 2026-09-19 Pixal3D projected DiT source; five CPU cases passed
 
 `ux1/pixal3d-projected-dit`、親PR555 / `86527e2`。固定trellis.cppから生成する
