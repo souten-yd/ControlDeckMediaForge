@@ -117,3 +117,8 @@ set_target_properties(pixal-dit-baseline-check PROPERTIES BUILD_RPATH "${TRELLIS
 add_executable(pixal-pipeline-check pipeline_check.cpp)
 target_link_libraries(pixal-pipeline-check PRIVATE pixal_surface "${GGML_vulkan}")
 set_target_properties(pixal-pipeline-check PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")
+
+add_executable(pixal-generate worker_cli.cpp)
+target_link_libraries(pixal-generate PRIVATE pixal_surface "${GGML_vulkan}")
+target_compile_options(pixal-generate PRIVATE -Wall -Wextra -Werror -ffp-contract=off)
+set_target_properties(pixal-generate PROPERTIES BUILD_RPATH "${TRELLIS_BUILD_DIR}")

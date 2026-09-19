@@ -1307,6 +1307,12 @@ Source and checkpoint identities, synthetic/trained provenance and the actual
 provider used are recorded separately. Transparent inputs skip provider loading.
 Pinned local code and hash-verified local tensors are required; runtime remote
 code loading and implicit model downloads are not part of this path.
+The private worker prepares and seals CPU inputs before GPU admission, then
+starts the native generator as a separate process. Its typed local job descriptor
+binds model/runtime hashes, sampling/normalization, explicit resource limits and
+the exact integer seed. Evaluation-only fault/noise inputs are not production
+arguments. The parent owns genuine lease admission/renewal, process-group reaping
+and final Blender/Asset publication; a worker manifest grants no GPU authority.
 `media.scene.from_image` accepts an existing image
 Asset and adds a detached operation to the existing Scene Jobs lifecycle. The
 GPU process must own a Host broker lease, then release it before the CPU Blender

@@ -1,5 +1,35 @@
 # Media Forge implementation status
 
+## 2026-09-19 Pixal3D private worker entry and exact integer seeds
+
+`ux1/pixal3d-worker-entry`、親PR571 / `f887fbc`。private CPU prepareとnative generateを分離し、
+descriptor/ready/completeのhash、model role、設定、出力上限を検証する入口を追加。
+native `pixal-generate inspect`はbackendを作らずmodel契約検査、`generate`は明示CPUまたは
+Vulkan/device/F32を要求。評価専用fault/noiseを受け付けず、seedを整数0..2^31−1で渡す。
+NPYはheader/dimension積/exact payload sizeを確保前に検査。既存出力を保持し、取消/失敗時は
+owned出力を回収、native子をTERM/KILL/reapする。親workerと同じprocess groupを使う。
+core Scene Jobsへの接続・採用receipt・実Host admissionは今回の実装/受入に含まない。
+
+実機CPU/syntheticでopaque prepare18.296240秒→generate1.216938秒、48,532byte/590三角形。
+PR571入力4ファイル、従来評価入口と反復のGLB JSON（生成時刻除外）/binaryが完全一致。
+大きいseed3件を正確に保持し、16,777,216と16,777,217のGLB binaryが異なることを確認。
+5 GLBを独立core/Blender4.5.9で検査、15拒否/既存出力保持条件pass。
+背景encoder取消0.917840秒、native SS flow取消0.047917秒、timeout0.2秒で子観測後0.211352秒。
+すべてexit1、子reapとowned出力なし。同一groupを実/procで確認。実測詳細・再現手順は
+[worker入口記録](implementation/g9-pixal-worker-20260919.md)。
+
+`./mf.sh test`: **2211 passed / 2 warnings / 237.85秒 / exit0**。以後product変更なし。
+証跡: managed `maintenance/g9-pixal-worker-20260919/` の`cpu-first/report.json`、
+`lifecycle-first/report.json`、configure/build/full-test log、73 sourceのbuild-provenance。
+2026-09-19T08:30:11Zに稼働HTTPでLibrary3点を再確認し、掲載・content全hash一致。
+Pixal1点は引き続き「合成重み検証用」。今回の追加登録・学習済み重み取得/使用・GPU実行0。
+元root/Host/installed/runtime変更なし。
+
+NOT TESTED: core Scene Jobs接続、実Host lease付きVulkan、trained/full幅/品質、adoption/署名導入、
+新入口からのLibrary登録、ブラウザ画素、骨付きanimation。全体目標は未完了。
+次はCPU prepareの終了を待って既存GPU admissionへ進むprivate receipt/worker接続を行う。
+同意済み重みと正規leaseが揃うまではtrained/GPUを実行しない。
+
 ## 2026-09-19 Pixal3D explicit CPU background preprocessing
 
 `ux1/pixal3d-background`、親PR569 / `71ecc7d`。固定通常版BiRefNetのCPU/F32前処理を実装し、
