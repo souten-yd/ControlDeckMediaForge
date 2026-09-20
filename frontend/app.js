@@ -5080,6 +5080,9 @@ function sceneGenerationChoices() {
     const resolutions = Array.isArray(item?.resolutions)
       ? [...new Set(item.resolutions.filter((resolution) => [512, 1024].includes(resolution)))] : [];
     return {value, label, resolutions, seconds: Number(item?.estimated_runtime_sec) || 0,
+      // 解像度ごとに測っているなら、選んだ解像度の実測を使う。既定の 1 つだけを
+      // 全解像度の目安として出すと、5 倍かかる側でも同じ数字を出してしまう。
+      secondsByResolution: item?.estimated_runtime_by_resolution || {},
       available: ["available", "experimental"].includes(item?.state) && resolutions.length > 0};
   };
   const implementation = SCENE_GENERATION_ENGINES[capability.implementation];
@@ -5138,12 +5141,6 @@ function renderSceneGeneration() {
   byId("scene-generation-photo-label").textContent = text.photo;
   byId("scene-generation-refine-label").textContent = text.refine;
   const refine = sceneGenerationRefineChoice();
-  const baseSeconds = choice?.seconds || 0;
-  byId("scene-generation-refine-hint").textContent = !refine.available ? text.refineUnavailable
-    : baseSeconds && refine.seconds && refine.resolution
-      ? text.refineHint(sceneGenerationDuration(baseSeconds),
-                        sceneGenerationDuration(baseSeconds + refine.seconds), refine.resolution)
-      : "";
   const image = byId("scene-generation-image");
   const selected = image.value;
   replaceMaterialOptions(image, state.sceneGenerationImages.map((asset) => ({
@@ -5159,7 +5156,12 @@ function renderSceneGeneration() {
   const resolution = byId("scene-generation-resolution");
   const resolutions = choice?.resolutions || [];
   const selectedResolution = state.sceneGenerationResolution ?? resolutions[0];
-  const options = resolutions.map((value) => materialOption(String(value), String(value)));
+  const resolutionSeconds = (value) => Number(choice?.secondsByResolution?.[String(value)]) || 0;
+  const options = resolutions.map((value) => {
+    const seconds = resolutionSeconds(value);
+    const estimate = seconds ? sceneGenerationDuration(seconds) : "";
+    return materialOption(String(value), estimate ? `${value} · ${estimate}` : String(value));
+  });
   if (selectedResolution != null && !resolutions.includes(selectedResolution)) {
     const previous = materialOption(String(selectedResolution), `${selectedResolution} · ${text.notReady}`);
     previous.disabled = true;
@@ -5167,6 +5169,12 @@ function renderSceneGeneration() {
   }
   resolution.replaceChildren(...options);
   resolution.value = selectedResolution == null ? "" : String(selectedResolution);
+  const baseSeconds = resolutionSeconds(selectedResolution) || choice?.seconds || 0;
+  byId("scene-generation-refine-hint").textContent = !refine.available ? text.refineUnavailable
+    : baseSeconds && refine.seconds && refine.resolution
+      ? text.refineHint(sceneGenerationDuration(baseSeconds),
+                        sceneGenerationDuration(baseSeconds + refine.seconds), refine.resolution)
+      : "";
   const selectionReady = choice?.available && resolutions.includes(selectedResolution);
   const reason = !choice?.available ? text.engineUnavailable : !selectionReady ? text.resolutionUnavailable : "";
   byId("scene-generation-engine-status").textContent = reason;
