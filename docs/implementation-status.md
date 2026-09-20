@@ -1,5 +1,20 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 operator login CSRF correction
+
+利用者の端末ログイン失敗をHost実ログで確認。00:44:16Z/00:44:36ZのPOST loginは403。
+helperに必須`X-Requested-With: ControlDeck`が欠落し、資格情報検証前に拒否されていた。
+Hostと同じheaderをclientへ追加し、login/logoutと後続resource操作へ適用。
+失敗時はHTTP番号のみ追加表示し、秘密値/response body非表示・自動再試行なしを維持。
+fixtureもPOST header必須へ修正。対象37test pass、実Hostへ無資格情報の空JSONを送信して
+旧client403→修正client422（username/password必須）を確認。cookieなし、auth/me401維持。
+managed helperをSHA照合付きで差替え、`bash ~/mf-login.sh`で再実行するよう提示済み。
+初期fixtureのpassを実Hostログイン受入へ読み替えない。今回も実認証成功は未確認。
+詳細・証跡: [operator手順](implementation/g9-operator-session-20260920.md)、
+maintenance/g9-operator-csrf-20260920。最終`./mf.sh test`は2279passed/2warnings/
+259.96秒/exit0。以後helper/test変更なし。bundle外の修正のため版数更新なし。
+Host/installed0.28.88/採用receiptは変更なし。GPU/full生成/新GLB登録はNOT TESTED。
+
 ## 2026-09-20 G9 trained flow CPU allocation capacity
 
 main1866087/PR578の次スライス。専用Host sessionは未作成、auth/me実HTTP401を再確認。

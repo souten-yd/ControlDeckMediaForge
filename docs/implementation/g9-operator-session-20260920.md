@@ -1,5 +1,41 @@
 # G9 operator authentication for runtime evaluation
 
+## 2026-09-20 correction: required Host CSRF header
+
+The operator's terminal attempts reached the live Host at 00:44:16Z and
+00:44:36Z, but both returned HTTP403 **before credential verification**.
+The original helper omitted `X-Requested-With: ControlDeck`, which the Host
+requires for cookie-based mutations, including login and logout. The initial
+HTTP fixture did not enforce that middleware contract, so its passing login
+tests did not detect the omission. These attempts do not show an incorrect
+password, username, TOTP or insufficient account permissions.
+
+The helper now sends the same header as the ordinary Host web client. Its
+post-login operator client retains it for resource mutations and logout.
+Host middleware, accounts, permissions and session authentication are unchanged.
+Login failure reports the numeric HTTP status without response bodies, secrets
+or automatic retries. The fixture now rejects headerless POSTs, including
+cleanup/logout, and five new cases cover CSRF rejection and redacted HTTP
+401/403/429/503 errors without retries. All37 focused tests passed.
+
+Real HTTP verification used an empty JSON login body with **no credentials**:
+the old client returned403/CSRF rejection; the repaired client returned422 with
+missing username/password fields. No cookie was issued; unauthenticated
+`auth/me` still returned401. This proves the CSRF gate is satisfied and the
+request reaches input validation; it does not establish a successful real login.
+The managed helper copy was atomically replaced after these checks. The existing
+`bash ~/mf-login.sh` shortcut uses the repaired helper. The operator was asked to
+retry in the terminal; no password or TOTP was requested in chat.
+
+Evidence: `maintenance/g9-operator-csrf-20260920/` contains the filtered real
+attempt statuses, `live-empty-login.json`, helper hashes and focused test log.
+Final `./mf.sh test`: **2279 passed / 2 warnings / 259.96s / exit0**.
+No helper or test changes followed. This private helper is outside the app bundle;
+the installed version stays0.28.88 without restart or release version change.
+Real authenticated session/lease/generation acceptance remains pending.
+
+## Initial authentication boundary
+
 The installed 0.28.88 adapters still require measured adoption and genuine Host
 GPU admission. On 2026-09-20, unauthenticated `/api/v1/auth/me` and
 `/api/v1/resources` both returned HTTP401. No authenticated ControlDeck tool,
@@ -26,8 +62,11 @@ evidence directory. This command works independently of the preserved original
 checkout, which remains on `feat/g9-image-to-3d`:
 
 ```bash
-bash /data1tb/ControlDeck/data/feature-data/media-forge/maintenance/g9-operator-20260920/login.sh
+bash ~/mf-login.sh
 ```
+
+The shortcut points to `maintenance/g9-operator-20260920/login.sh` under the
+MediaForge feature-data directory; it avoids pasted line breaks in the long path.
 
 Enter the ordinary ControlDeck username and password in that terminal; the helper
 requests the two-factor code only when the Host requires it. Password/code entry
@@ -42,7 +81,9 @@ verifies `/api/v1/auth/me`, and stores only its cookie, Host origin and expiry.
 The directory must be operator-owned mode0700, and the file mode0600, outside Git
 checkouts. Symlinks, hardlinks, special files, oversized files and existing-session
 overwrites are refused. HTTP requests use a literal loopback origin, no environment
-proxy and no redirects. TLS verification is retained for HTTPS.
+proxy and no redirects. TLS verification is retained for HTTPS. Every request
+includes the ordinary `X-Requested-With: ControlDeck` CSRF header; this header
+alone does not authenticate a user or grant a GPU lease.
 
 To check or revoke the dedicated session, use the same Python/helper with
 `status` or `logout` in place of `login` and the same `--session-dir`. Logout uses
@@ -61,7 +102,7 @@ monitor the native process, reap it, and release the lease on every terminal pat
 Use the ordinary Add-on/Scene Jobs boundary for the later installed generation
 acceptance. A successful login is not proof of either generation or adoption.
 
-## Validation
+## Initial validation (before the CSRF correction above)
 
 The new test module exercises a real helper process in a pseudo-terminal against
 a **local HTTP protocol fixture**: password/TOTP are absent from captured terminal

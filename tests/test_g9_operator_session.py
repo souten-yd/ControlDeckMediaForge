@@ -14,6 +14,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
+import httpx
 
 from scripts import g9_operator_session as sessions
 
@@ -27,7 +28,7 @@ SCRIPT = Path(sessions.__file__)
 def host():
     """HTTP contract fixture only; never a real ControlDeck session/lease."""
     state = {'active': False, 'two_factor': True, 'permissions': True,
-             'logout_fails': False, 'redirect': False, 'calls': []}
+             'logout_fails': False, 'redirect': False, 'calls': [], 'login_status': None}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -57,6 +58,9 @@ def host():
 
         def do_POST(self):
             state['calls'].append(('POST', self.path))
+            # The real Host enforces this before routing or checking credentials.
+            if self.headers.get('X-Requested-With') != 'ControlDeck':
+                return self.response(403, {'detail': 'CSRF check failed'})
             if self.path == '/api/v1/auth/logout':
                 if state['logout_fails']:
                     return self.response(503, {'detail': TOKEN})
@@ -65,6 +69,8 @@ def host():
                 return self.response(200, {'ok': True})
             if self.path != '/api/v1/auth/login':
                 return self.response(404, {})
+            if state['login_status'] is not None:
+                return self.response(state['login_status'], {'detail': PASSWORD+' '+TOKEN})
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             if state['redirect']:
                 return self.response(302, {}, redirect=True)
@@ -152,6 +158,29 @@ def test_real_process_hidden_tty_login_reuse_and_revoke(tmp_path, host):
     assert not (directory/'session.json').exists()
     assert all(path.startswith('/api/v1/auth/') for _, path in state['calls'])
     assert not any(secret in result.stdout+result.stderr for secret in (PASSWORD, OTP, TOKEN))
+
+
+def test_host_contract_rejects_missing_csrf_header(host):
+    origin, state = host
+    with httpx.Client(base_url=origin, trust_env=False) as client:
+        result = client.post('/api/v1/auth/login', json={'username': 'operator', 'password': PASSWORD})
+    assert result.status_code == 403 and not state['active']
+    with sessions.new_client(origin) as client:
+        result = client.post('/api/v1/auth/login', json={'username': 'operator', 'password': PASSWORD})
+    assert result.status_code == 401 and result.json()['detail'] == 'two_factor_required'
+
+
+@pytest.mark.parametrize('status', [401, 403, 429, 503])
+def test_login_failure_reports_only_http_status_without_retry(tmp_path, host, monkeypatch, status):
+    origin, state = host
+    state['login_status'] = status
+    mock_terminal(monkeypatch)
+    with pytest.raises(sessions.SessionError) as error:
+        sessions.login(tmp_path/'private', origin)
+    assert str(error.value) == f'host_login_failed_http_{status}_no_automatic_retry'
+    assert not any(secret in str(error.value) for secret in (PASSWORD, OTP, TOKEN))
+    assert state['calls'] == [('POST', '/api/v1/auth/login')]
+    assert not (tmp_path/'private/session.json').exists()
 
 
 @pytest.mark.parametrize('case', ['password', 'permission', 'redirect'])
