@@ -6827,7 +6827,7 @@ const viewer = {
 };
 
 let modelViewerModulePromise = null;
-const MODEL_VIEWER_BUNDLE = "a0194e0faa2ea6c3";
+const MODEL_VIEWER_BUNDLE = "3a86ca91deb71ba0";
 
 function loadModelViewer() {
   if (modelViewerModulePromise) return modelViewerModulePromise;
