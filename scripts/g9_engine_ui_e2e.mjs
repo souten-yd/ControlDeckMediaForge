@@ -51,8 +51,11 @@ await new Promise((ready) => server.listen(0, '127.0.0.1', ready));
 const base = `http://127.0.0.1:${server.address().port}`;
 const imageId = `asset_${'1'.repeat(32)}`;
 const baseCapability = () => ({state: 'experimental', implementation: 'trellis_cpp', resolutions: [512],
-  engines: {trellis_cpp: {state: 'experimental', resolutions: [512]},
-    pixal3d: {state: 'experimental', resolutions: [1024]}}});
+  estimated_runtime_sec: 300,
+  engines: {trellis_cpp: {state: 'experimental', resolutions: [512], estimated_runtime_sec: 300},
+    pixal3d: {state: 'experimental', resolutions: [1024], estimated_runtime_sec: 1200}},
+  refine: {state: 'experimental', resolutions: [1024], estimated_runtime_sec: 1200}});
+// 実機は trellis.cpp を 512、Pixal3D を 1024 で採用している。段ごとに違う。
 const report = {mode: 'source_browser_opaque_iframe_with_transport_fixtures', passed: false,
   real_host: false, gpu_executed: false, weights_used: false, installed_assets_registered: 0,
   source_sha256: Object.fromEntries(Object.entries(source).map(([name, text]) =>
@@ -83,8 +86,22 @@ try {
         else if (request.method === 'creative.templates') result = {
           domains: [], scenes: [], poses: [], compositions: [], cameras: [], variations: [],
         };
+        else if (request.method === 'assets.import.begin') {
+          fixture.upload = {media_type: request.params.media_type, size: request.params.size, received: 0};
+          result = {upload_id: 'upload_fixture', chunk_bytes: 512 * 1024};
+        } else if (request.method === 'assets.import.chunk') {
+          fixture.upload.received += Buffer.from(request.params.base64, 'base64').length;
+          result = {received: fixture.upload.received};
+        } else if (request.method === 'assets.import.commit') {
+          fixture.imported = {id: `asset_${'2'.repeat(32)}`, mime_type: 'image/png',
+            suggested_filename: 'media-forge-import-22222222.png'};
+          result = fixture.imported;
+        }
+        else if (request.method === 'assets.thumbnail') result = {mime_type: 'image/png', base64:
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='};
         else if (request.method === 'assets.list') result = {items: [
           {id: imageId, mime_type: 'image/png', suggested_filename: 'UI fixture.png'},
+          ...(fixture.imported ? [fixture.imported] : []),
         ]};
         else if (request.method === 'scenes.from_image') {
           fixture.requests.push(request.params);
@@ -143,7 +160,7 @@ try {
     try {
       const by = (name) => frame.locator(`#scene-generation-${name}`);
       await by('options').click();
-      assert.equal(await by('engine').inputValue(), 'auto');
+      assert.equal(await by('engine').inputValue(), 'trellis_cpp');
       assert.equal(await by('resolution').inputValue(), '512');
       await by('engine').selectOption('pixal3d');
       assert.deepEqual((await options(frame, 'resolution')).map((item) => item.value), ['1024']);
@@ -165,7 +182,7 @@ try {
       await by('submit').click();
       await status(frame, locale === 'ja' ? '入力画像を準備' : 'Preparing the input image');
       assert.deepEqual(fixture.requests[0], {name: 'Pixal source UI fixture', input_asset_id: imageId,
-        engine: 'pixal3d', resolution: 1024, seed: 16777217, local_only: true});
+        engine: 'pixal3d', refine_with_pixal3d: false, resolution: 1024, seed: 16777217, local_only: true});
       for (const name of ['engine', 'resolution', 'image', 'name', 'seed']) assert(await by(name).isDisabled());
       await screenshot(page, frame, `${width}-${locale}-preparing.png`);
       fixture.job.phase = 'waiting_resource';
@@ -200,6 +217,7 @@ try {
       await status(frame, locale === 'ja' ? '3Dを生成しています' : 'Generating 3D');
       assert.equal(fixture.requests[1].engine, 'trellis_cpp');
       assert.equal(fixture.requests[1].resolution, 512);
+      assert.equal(fixture.requests[1].refine_with_pixal3d, false);
       fixture.releaseGet();
       fixture.job.status = 'failed';
       await status(frame, locale === 'ja' ? '生成できません' : 'Generation failed');
@@ -230,7 +248,79 @@ try {
       const finalChoices = await options(frame, 'engine');
       assert(finalChoices.find((item) => item.value === 'pixal3d').disabled);
       assert(!finalChoices.some((item) => item.value === 'unknown_engine'));
+      // 「標準は trellis.cpp まで、チェックで Pixal3D まで」を実画面で確かめる。
+      fixture.capability = baseCapability();
+      await refresh(frame);
+      await by('engine').selectOption('trellis_cpp');
+      await by('resolution').selectOption('512');
+      const refine = frame.locator('#scene-generation-refine');
+      assert(!(await refine.isChecked()), 'Pixal3D must be off by default');
+      assert(!(await refine.isDisabled()), 'adopted Pixal3D must be selectable');
+      await frame.waitForFunction((value) =>
+        document.querySelector('#scene-generation-refine-hint').textContent.includes(value),
+        locale === 'ja' ? 'Pixal3Dまで実行すると合計で約25分かかり、1024で走って'
+                        : 'takes about 25 min in total, runs at 1024');
+      const photo = frame.locator('#scene-generation-photo');
+      assert.equal(await photo.count(), 1, 'a device photo picker must exist');
+      assert((await photo.getAttribute('accept')).includes('image/*'), 'the picker must accept device photos');
+      assert((await photo.getAttribute('accept')).toLowerCase().includes('heic'), 'iPhone photos are HEIC');
+      const touchHeight = await frame.evaluate(() => [
+        document.getElementById('scene-generation-refine').closest('label').getBoundingClientRect().height,
+        document.getElementById('scene-generation-photo').getBoundingClientRect().height,
+      ]);
+      assert(touchHeight.every((value) => value >= 44), JSON.stringify(touchHeight));
+      // 端末の写真をその場で入力にする。Chromium は HEIC を復号しないので、ここで
+      // 測れるのは「PNG/JPEG 以外が選択を通り、原本が core へ届いて選ばれる」まで。
+      await by('name').fill('');
+      await photo.setInputFiles({name: 'IMG_0001.HEIC', mimeType: 'image/heic',
+        buffer: Buffer.from('not a decodable HEIC for this browser')});
+      await frame.waitForFunction(() => !state.sceneGenerationPhotoBusy && state.sceneGenerationPhotoMessage.length > 0);
+      const photoMessage = await frame.evaluate(() => state.sceneGenerationPhotoMessage);
+      assert.equal(await by('image').inputValue(), `asset_${'2'.repeat(32)}`, photoMessage);
+      assert.equal(fixture.upload.media_type, 'image/heic', 'the original photo must reach core');
+      // 空のときだけ名前を埋める。利用者が書いた名前は写真で上書きしない。
+      assert.equal(await by('name').inputValue(), 'IMG_0001');
+      await by('name').fill('Kept by the user');
+      await photo.setInputFiles({name: 'IMG_0002.HEIC', mimeType: 'image/heic',
+        buffer: Buffer.from('a second device photo')});
+      await frame.waitForFunction(() => !state.sceneGenerationPhotoBusy
+        && state.sceneGenerationPhotoMessage.includes('IMG_0002') === false);
+      assert.equal(await by('name').inputValue(), 'Kept by the user');
+      await frame.waitForFunction(() => !document.getElementById('scene-generation-preview').hidden);
+      await by('image').selectOption(imageId);
+      await refine.check();
+      await by('name').fill('Refined source UI fixture');
+      await by('submit').click();
+      await status(frame, locale === 'ja' ? '3Dを生成しています' : 'Generating 3D');
+      const refined = fixture.requests[fixture.requests.length - 1];
+      assert.equal(refined.refine_with_pixal3d, true);
+      assert.equal(refined.engine, 'trellis_cpp');
+      fixture.job.phase = 'generate_3d_refine';
+      await status(frame, locale === 'ja' ? 'Pixal3Dで仕上げ' : 'Finishing with Pixal3D');
+      fixture.job.status = 'succeeded';
+      fixture.job.result = {refine: {state: 'succeeded', engine: 'pixal3d'},
+        scene: {id: `scene_${'3'.repeat(32)}`}};
+      await status(frame, locale === 'ja' ? 'Pixal3Dの版' : 'Pixal3D revision');
+      // 「一覧から開けます」で終わらせず、その場から開ける。
+      await frame.locator('#scene-generation-open').waitFor({state: 'visible'});
+      assert(!(await frame.locator('#scene-generation-open').isDisabled()));
+      // 採用されていない段は、既定で出さずに理由を言う。
+      fixture.capability = baseCapability();
+      fixture.capability.engines.pixal3d = {state: 'unavailable', reason: 'three_d_runtime_unavailable'};
+      fixture.capability.refine = fixture.capability.engines.pixal3d;
+      await refresh(frame);
+      assert(await refine.isDisabled(), 'unavailable Pixal3D must not be selectable');
+      assert(!(await refine.isChecked()));
+      await frame.waitForFunction((value) =>
+        document.querySelector('#scene-generation-refine-hint').textContent.includes(value),
+        locale === 'ja' ? 'Pixal3Dが準備できていない' : 'Pixal3D is not ready');
+      await screenshot(page, frame, `${width}-${locale}-refine.png`);
+      fixture.capability = baseCapability();
+      await refresh(frame);
       report.cases.push({width, locale, passed: true, layout, requests: fixture.requests,
+        refine_default_off: true, refine_opt_in_sends_flag: true, refine_phase_reported: true,
+        refine_unavailable_blocks_and_explains: true, device_photo_picker: true,
+        device_photo_reaches_core_undecoded: true, selected_input_preview: true,
         phases: ['prepare_3d_input', 'waiting_resource', 'generate_3d', 'validate_generated_scene'],
         cancellation: true, refresh_after_connection_error: true, mismatched_job_response_rejected: true,
         locale_preserves_input: true,

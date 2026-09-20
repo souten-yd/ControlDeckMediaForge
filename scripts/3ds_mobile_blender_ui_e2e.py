@@ -26,7 +26,8 @@ def main() -> None:
             page.add_style_tag(content=(root / 'frontend/styles.css').read_text())
             texts = 'const SCENE_TEXT = ' + script.split('const SCENE_TEXT = ', 1)[1].split('function sceneText()', 1)[0]
             page.add_script_tag(content=texts + '''
-              const state = {blenderRfb: null, blenderRfbConnected: false};
+              const state = {blenderRfb: null, blenderRfbConnected: false,
+                blenderPointerMode: 'select', blenderModifiers: [], blenderTyping: false};
               const byId = id => document.getElementById(id);
               const sent = [];
               function connectBlenderRfb() {
@@ -58,14 +59,78 @@ def main() -> None:
                 bounds = page.locator('#scene-blender-dialog').bounding_box()
                 assert bounds and bounds['width'] <= width
                 assert page.evaluate('byId("scene-blender-dialog").scrollWidth <= byId("scene-blender-dialog").clientWidth')
-                for key in ('Escape', 'Tab', 'Enter', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'ArrowRight'):
+                for key in ('Escape', 'Tab', 'Enter', 'Numpad1', 'Numpad3', 'Numpad7', 'Home',
+                            'ArrowLeft', 'ArrowUp', 'ArrowDown', 'ArrowRight'):
                     page.locator(f'[data-blender-key="{key}"]').tap()
-                assert page.evaluate('sent.slice(-7).map(x => x[1])') == [
-                    'Escape', 'Tab', 'Enter', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'ArrowRight']
+                assert page.evaluate('sent.slice(-11).map(x => x[1])') == [
+                    'Escape', 'Tab', 'Enter', 'Numpad1', 'Numpad3', 'Numpad7', 'Home',
+                    'ArrowLeft', 'ArrowUp', 'ArrowDown', 'ArrowRight']
+                # 指だけで視点を動かす帯。押す的は 44px 以上あり、横へはみ出さない。
+                for name in ('select', 'orbit', 'pan', 'zoom'):
+                    box = page.locator(f'[data-blender-pointer="{name}"]').bounding_box()
+                    assert box and box['height'] >= 44, (name, box)
+                assert page.evaluate('byId("scene-blender-touch").scrollWidth <= innerWidth')
+                # 修飾キーは押したままになり、もう一度押すと離す。
+                page.locator('[data-blender-modifier="Shift"]').tap()
+                assert page.evaluate('sent.at(-1)') == [0xffe1, 'ShiftLeft', True]
+                assert page.get_attribute('[data-blender-modifier="Shift"]', 'aria-pressed') == 'true'
+                page.locator('[data-blender-modifier="Shift"]').tap()
+                assert page.evaluate('sent.at(-1)') == [0xffe1, 'ShiftLeft', False]
+                # 指の操作を「回す」にすると、1 本指のドラッグが中ボタンになる。
+                pointer = page.evaluate('''() => {
+                  const canvas = document.createElement('canvas');
+                  byId('scene-blender-screen').replaceChildren(canvas);
+                  const seen = [];
+                  for (const type of ['mousedown', 'mousemove', 'mouseup'])
+                    canvas.addEventListener(type, e => seen.push([e.type, e.buttons]));
+                  canvas.addEventListener('wheel', e => seen.push(['wheel', Math.sign(e.deltaY)]));
+                  const rect = canvas.getBoundingClientRect();
+                  const at = (dy) => new Touch({identifier: 1, target: canvas,
+                    clientX: rect.left + 10, clientY: rect.top + 40 + dy});
+                  // canvas へ投げる。横取りは親の capture で行うので、届くかどうかで
+                  // 「選ぶ」のときに noVNC 本来の経路が生きていることを確かめられる。
+                  const fire = (type, touches, changed = touches) => canvas.dispatchEvent(
+                    new TouchEvent(type, {bubbles: true, cancelable: true, touches, changedTouches: changed}));
+                  setBlenderPointerMode('orbit');
+                  fire('touchstart', [at(0)]); fire('touchmove', [at(20)]); fire('touchend', [], [at(20)]);
+                  const orbit = seen.filter(([type]) => type !== 'wheel');
+                  seen.length = 0;
+                  // ずらすは Shift + 中ドラッグ。Shift はドラッグの間だけこちらが握る。
+                  sent.length = 0;
+                  setBlenderPointerMode('pan');
+                  fire('touchstart', [at(0)]); fire('touchmove', [at(20)]); fire('touchend', [], [at(20)]);
+                  const pan = sent.slice();
+                  seen.length = 0;
+                  setBlenderPointerMode('zoom');
+                  fire('touchstart', [at(0)]); fire('touchmove', [at(-30)]); fire('touchend', [], [at(-30)]);
+                  const zoomed = seen.filter(([type]) => type === 'wheel');
+                  seen.length = 0;
+                  // 「選ぶ」では横取りしない。noVNC 本来のジェスチャがそのまま動く。
+                  setBlenderPointerMode('select');
+                  let reached = false;
+                  canvas.addEventListener('touchstart', () => { reached = true; });
+                  fire('touchstart', [at(0)]); fire('touchend', [], [at(0)]);
+                  return JSON.stringify({orbit, pan, zoomed, reached});
+                }''')
+                expected = json.dumps({'orbit': [['mousemove', 0], ['mousedown', 4], ['mousemove', 4], ['mouseup', 0]],
+                                       'pan': [[0xffe1, 'ShiftLeft', True], [0xffe1, 'ShiftLeft', False]],
+                                       'zoomed': [['wheel', -1]], 'reached': True}, separators=(',', ':'))
+                assert pointer == expected, (pointer, expected)
+                # 画面キーボードは隠し入力へ文字を受け、keysym にして送る。
+                page.evaluate('setBlenderPointerMode("select")')
+                page.locator('#scene-blender-keyboard').tap()
+                assert page.locator('#scene-blender-typing').is_visible()
+                page.locator('#scene-blender-typing').fill('g')
+                assert page.evaluate('sent.at(-1)') == [0x67, None]
+                page.locator('#scene-blender-keyboard').tap()
+                assert not page.locator('#scene-blender-typing').is_visible()
                 count = page.evaluate('sent.length')
                 page.evaluate('disconnectBlenderRfb(); sendBlenderAssistKey("Enter")')
                 assert page.evaluate('sent.length') == count
-                assert page.locator('#scene-blender-keys button:disabled').count() == 7
+                assert page.locator('#scene-blender-keys button:disabled').count() == 11
+                # 切れたら、押したままの表示と横取りは残さない。
+                assert page.evaluate('state.blenderModifiers.length === 0 && state.blenderPointerMode === "select"')
+                assert page.locator('#scene-blender-touch button:disabled').count() == 8
                 assert page.evaluate('''async () => {
                   const canvas = document.createElement('canvas');
                   byId('scene-blender-screen').replaceChildren(canvas);

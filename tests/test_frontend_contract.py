@@ -39,7 +39,22 @@ def test_mobile_blender_access_preserves_runtime_guards_and_connection_keys() ->
     assert "web_pack?.state" in controls and "Boolean(conflict)" in controls
     assert "#scene-blender-dialog { display: none; }" not in styles
     assert "height: 100dvh" in styles
-    assert 'role="group"' in html and html.count('data-blender-key="') == 7
+    # 補助キーは Esc/Tab/Enter、numpad の 正面/右/上、Home、矢印4つ。numpad を
+    # 持たない端末では視点のリセットに手が出せなかったので足している。
+    assert 'role="group"' in html and html.count('data-blender-key="') == 11
+    # 指の操作は canvas へ届く前に捕まえる。「選ぶ」のときは横取りしない。
+    assert 'installBlenderPointerTranslation(byId("scene-blender-screen"))' in script
+    assert 'state.blenderPointerMode !== "select" && state.blenderRfbConnected' in script
+    assert '{capture: true, passive: false}' in script
+    # 修飾キーは押したままにでき、切断時は必ず離す。
+    assert 'releaseBlenderModifiers();' in script
+    assert 'state.blenderRfb?.sendKey(key.keysym, key.code, down)' in script
+    assert 'if (!holdBlenderModifier(name, !held)) return;' in script
+    # ずらすは Shift + 中ドラッグ。利用者が自分で押している分はこちらで離さない。
+    assert 'const BLENDER_POINTER_MODIFIER = {pan: "Shift"};' in script
+    assert 'if (active.modifier) holdBlenderModifier(active.modifier, false);' in script
+    # 総称ボタン規則に負けない指定で、押す的を 44px に保つ。
+    assert '#scene-blender-dialog #scene-blender-touch button { min-height: 44px;' in styles
     assert '!state.blenderRfbConnected || !Object.hasOwn(keys, code)' in script
     assert 'setBlenderKeysEnabled(false)' in script
     assert 'if (state.blenderRfb !== rfb) return;' in script

@@ -369,13 +369,32 @@
               <h2 id="scene-generation-title">画像から3Dを生成（実験的）</h2>
               <p id="scene-generation-note" class="hint">ライブラリの画像から3Dを生成し、編集できるシーンとして保存します。形状や見えない面は生成後に確認してください。</p>
               <label for="scene-generation-image" id="scene-generation-image-label">入力画像</label>
-              <select id="scene-generation-image" required></select>
-              <div class="split-actions">
-                <button type="button" id="scene-generation-library">ライブラリで画像を追加</button>
-                <button type="button" id="scene-generation-refresh">更新</button>
+              <div class="scene-generation-source">
+                <img id="scene-generation-preview" alt="" hidden>
+                <div class="scene-generation-source-controls">
+                  <select id="scene-generation-image" required></select>
+                  <label class="scene-file-picker scene-generation-photo-picker" id="scene-generation-photo-picker" for="scene-generation-photo">
+                    <span id="scene-generation-photo-label">端末の写真を選ぶ</span>
+                    <input id="scene-generation-photo" type="file" accept="image/*,.heic,.heif,.HEIC,.HEIF">
+                  </label>
+                  <div class="split-actions">
+                    <button type="button" id="scene-generation-library">ライブラリで画像を追加</button>
+                    <button type="button" id="scene-generation-refresh">更新</button>
+                  </div>
+                </div>
               </div>
+              <p id="scene-generation-photo-status" class="hint" role="status"></p>
               <label for="scene-generation-name" id="scene-generation-name-label">シーン名</label>
               <input id="scene-generation-name" type="text" maxlength="120" required autocomplete="off">
+              <div class="scene-generation-quality">
+                <label class="check-row" for="scene-generation-refine">
+                  <input id="scene-generation-refine" type="checkbox" aria-describedby="scene-generation-refine-hint">
+                  <span class="check-body">
+                    <span id="scene-generation-refine-label">Pixal3Dで仕上げまで実行する</span>
+                    <span id="scene-generation-refine-hint" class="hint"></span>
+                  </span>
+                </label>
+              </div>
               <details>
                 <summary id="scene-generation-options">詳細設定</summary>
                 <label for="scene-generation-engine" id="scene-generation-engine-label">生成エンジン</label>
@@ -390,6 +409,7 @@
               <p id="scene-generation-status" class="hint" role="status"></p>
               <div class="split-actions">
                 <button type="button" id="scene-generation-cancel" hidden>中止</button>
+                <button type="button" id="scene-generation-open" hidden>作ったシーンを開く</button>
                 <button type="submit" id="scene-generation-submit" class="primary">3Dを生成</button>
               </div>
             </form>
@@ -1017,10 +1037,35 @@
         </div>
         <p id="scene-blender-guidance" class="hint"></p>
         <div id="scene-blender-screen" tabindex="0" aria-label="Blender remote desktop"></div>
+        <div id="scene-blender-touch" hidden>
+          <div class="blender-touch-row" id="scene-blender-pointer" role="group" aria-labelledby="scene-blender-pointer-label">
+            <span class="blender-touch-label" id="scene-blender-pointer-label">指の操作</span>
+            <button type="button" data-blender-pointer="select" aria-pressed="true" disabled>選ぶ</button>
+            <button type="button" data-blender-pointer="orbit" aria-pressed="false" disabled>回す</button>
+            <button type="button" data-blender-pointer="pan" aria-pressed="false" disabled>ずらす</button>
+            <button type="button" data-blender-pointer="zoom" aria-pressed="false" disabled>寄る・引く</button>
+          </div>
+          <div class="blender-touch-row" id="scene-blender-modifiers" role="group" aria-labelledby="scene-blender-modifier-label">
+            <span class="blender-touch-label" id="scene-blender-modifier-label">押したままにする</span>
+            <button type="button" data-blender-modifier="Shift" aria-pressed="false" disabled>Shift</button>
+            <button type="button" data-blender-modifier="Control" aria-pressed="false" disabled>Ctrl</button>
+            <button type="button" data-blender-modifier="Alt" aria-pressed="false" disabled>Alt</button>
+            <button type="button" id="scene-blender-keyboard" aria-pressed="false" disabled>キーボード</button>
+          </div>
+          <label class="blender-typing" id="scene-blender-typing-label" hidden>
+            <span id="scene-blender-typing-text">Blenderへ送る文字</span>
+            <input id="scene-blender-typing" type="text" autocomplete="off" autocapitalize="off"
+                   autocorrect="off" spellcheck="false" enterkeyhint="enter" inputmode="text">
+          </label>
+        </div>
         <div id="scene-blender-keys" role="group">
           <button type="button" data-blender-key="Escape" disabled>Esc</button>
           <button type="button" data-blender-key="Tab" disabled>Tab</button>
           <button type="button" data-blender-key="Enter" disabled>Enter</button>
+          <button type="button" data-blender-key="Numpad1" disabled>正面</button>
+          <button type="button" data-blender-key="Numpad3" disabled>右</button>
+          <button type="button" data-blender-key="Numpad7" disabled>上</button>
+          <button type="button" data-blender-key="Home" disabled>全体</button>
           <button type="button" data-blender-key="ArrowLeft" disabled>←</button>
           <button type="button" data-blender-key="ArrowUp" disabled>↑</button>
           <button type="button" data-blender-key="ArrowDown" disabled>↓</button>

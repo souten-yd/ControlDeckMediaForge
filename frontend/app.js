@@ -170,6 +170,10 @@ const state = {
   sceneGenerationImages: [],
   sceneGenerationEngine: null,
   sceneGenerationResolution: null,
+  sceneGenerationRefine: false,
+  sceneGenerationPhotoBusy: false,
+  sceneGenerationPhotoMessage: "",
+  sceneGenerationPreviewId: "",
   sceneGenerationBusy: false,
   sceneGenerationPolling: "",
   sceneGenerationMessage: "",
@@ -214,6 +218,9 @@ const state = {
   blenderRfbAttempts: 0,
   blenderRfbManual: false,
   blenderSessionBusy: false,
+  blenderPointerMode: "select",
+  blenderModifiers: [],
+  blenderTyping: false,
   modelCatalog: [],
   modelOperations: new Map(),
   catalogResults: [],
@@ -4294,6 +4301,7 @@ const FAILURES = {
     exit: "選び直す", action: "open_create",
   },
   invalid_import_size: {text: "この画像は取り込めません。", exit: "別の画像を選ぶ", action: "open_create"},
+  undecodable_photo: {text: "この写真を読み込めませんでした。", exit: "別の写真を選ぶ", action: "open_create"},
   invalid_image_import: {text: "この画像は取り込めません。", exit: "別の画像を選ぶ", action: "open_create"},
   asset_import_too_large: {text: "この画像は大きすぎます。", exit: "別の画像を選ぶ", action: "open_create"},
   scene_import_canceled: {text: "シーンの取り込みを中止しました。", exit: "別のファイルを選ぶ", action: "open_create"},
@@ -5016,8 +5024,22 @@ function sceneGenerationText() {
     choose: "Select an image", queued: "Waiting for GPU capacity…", running: "Generating 3D…",
     validating: "Validating and saving the scene…", succeeded: "Scene saved. Open it in the scene list or Library.",
     canceled: "Generation canceled.", failed: "Generation failed. Check Activity for details.",
+    open: "Open the new scene",
     connection: "Could not refresh the generation status. Select Refresh to reconnect.",
     unavailable: "Open MediaForge in ControlDeck to generate 3D.", imagesFailed: "Could not load Library images. Select Refresh to retry.",
+    photo: "Choose a photo on this device",
+    photoReading: "Reading the photo…", photoUploading: "Adding the photo to Library…",
+    photoFailed: "This device could not read the photo. Choose another one.",
+    photoRejected: "The photo could not be added. Choose another one.",
+    photoAdded: (name) => `Added ${name} and selected it.`,
+    refine: "Also finish with Pixal3D",
+    refineHint: (base, both, resolution) => `trellis.cpp alone takes about ${base}. Adding Pixal3D takes about ${both} in total, runs at ${resolution}, and is saved as a second revision of the same scene.`,
+    refineUnavailable: "Pixal3D is not ready on this machine, so only trellis.cpp runs.",
+    refining: "Finishing with Pixal3D…",
+    refineDone: "Saved both the trellis.cpp revision and the Pixal3D revision.",
+    refineFailed: "trellis.cpp was saved. The Pixal3D stage did not finish.",
+    estimate: (text) => `Estimated time: about ${text}`,
+    minutes: (value) => `${value} min`, seconds: (value) => `${value} s`,
   } : {
     title: "画像から3Dを生成（実験的）",
     note: "ライブラリの画像から3Dを生成し、編集できるシーンとして保存します。形状や見えない面は生成後に確認してください。",
@@ -5030,8 +5052,22 @@ function sceneGenerationText() {
     choose: "画像を選んでください", queued: "GPUの空きを待っています…", running: "3Dを生成しています…",
     validating: "シーンを検証して保存しています…", succeeded: "シーンを保存しました。シーン一覧またはライブラリから開けます。",
     canceled: "生成を中止しました。", failed: "生成できませんでした。状況画面で詳細を確認できます。",
+    open: "作ったシーンを開く",
     connection: "生成状況を取得できませんでした。「更新」で再接続してください。",
     unavailable: "ControlDeckからMediaForgeを開くと3Dを生成できます。", imagesFailed: "画像一覧を取得できませんでした。「更新」で再試行してください。",
+    photo: "端末の写真を選ぶ",
+    photoReading: "写真を読み込んでいます…", photoUploading: "写真をライブラリへ追加しています…",
+    photoFailed: "この写真を読み込めませんでした。別の写真を選んでください。",
+    photoRejected: "この写真を追加できませんでした。別の写真を選んでください。",
+    photoAdded: (name) => `${name} を追加して選びました。`,
+    refine: "Pixal3Dで仕上げまで実行する",
+    refineHint: (base, both, resolution) => `trellis.cpp だけなら約${base}。Pixal3Dまで実行すると合計で約${both}かかり、${resolution}で走って同じシーンの2つ目の版として保存します。`,
+    refineUnavailable: "この機械ではPixal3Dが準備できていないため、trellis.cppまでで終わります。",
+    refining: "Pixal3Dで仕上げています…",
+    refineDone: "trellis.cppの版とPixal3Dの版をどちらも保存しました。",
+    refineFailed: "trellis.cppの版は保存しました。Pixal3Dの仕上げは完了しませんでした。",
+    estimate: (text) => `目安の所要時間：約${text}`,
+    minutes: (value) => `${value}分`, seconds: (value) => `${value}秒`,
   };
 }
 
@@ -5043,7 +5079,7 @@ function sceneGenerationChoices() {
   const choice = (value, label, item) => {
     const resolutions = Array.isArray(item?.resolutions)
       ? [...new Set(item.resolutions.filter((resolution) => [512, 1024].includes(resolution)))] : [];
-    return {value, label, resolutions,
+    return {value, label, resolutions, seconds: Number(item?.estimated_runtime_sec) || 0,
       available: ["available", "experimental"].includes(item?.state) && resolutions.length > 0};
   };
   const implementation = SCENE_GENERATION_ENGINES[capability.implementation];
@@ -5059,19 +5095,55 @@ function sceneGenerationChoices() {
   return choices;
 }
 
+/* 段の所要時間は、採用時に測った値だけを出す。推測の数字を出さない。 */
+function sceneGenerationDuration(seconds) {
+  const text = sceneGenerationText();
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  return seconds >= 90 ? text.minutes(Math.round(seconds / 60)) : text.seconds(Math.round(seconds));
+}
+
+/* 追加の段（Pixal3D）が本当に選べるか。使えないものを既定で出さないため、
+   採用されていなければチェック自体を無効にして理由を 1 行で言う。 */
+function sceneGenerationRefineChoice() {
+  const capability = state.capabilities["3d.image_to_3d"] || {};
+  const item = capability.refine || (capability.engines || {}).pixal3d || {};
+  const resolutions = Array.isArray(item?.resolutions)
+    ? item.resolutions.filter((value) => [512, 1024].includes(value)) : [];
+  return {
+    // 採用されていても実測解像度が無ければ受付で断られる。出さない。
+    available: ["available", "experimental"].includes(item?.state) && resolutions.length > 0,
+    seconds: Number(item?.estimated_runtime_sec) || 0,
+    // 追加の段は自分が測られた解像度で走る。1 段目と違うことがあるので黙らせない。
+    resolution: resolutions.length ? String(resolutions[0]) : "",
+    reason: item?.reason || "",
+  };
+}
+
 function renderSceneGeneration() {
   const form = byId("scene-generation-form");
   const choices = sceneGenerationChoices();
-  const selectedEngine = state.sceneGenerationEngine || choices.find((item) => item.available)?.value || "auto";
+  // 既定は trellis.cpp までで終える段にする。おまかせは詳細設定から選ぶ。
+  const preferred = choices.find((item) => item.value === "trellis_cpp" && item.available)
+    || choices.find((item) => item.available);
+  const selectedEngine = state.sceneGenerationEngine || preferred?.value || "auto";
   const choice = choices.find((item) => item.value === selectedEngine);
   form.hidden = !choices.some((item) => item.available) && !state.sceneGeneration && !state.sceneGenerationEngine;
   const text = sceneGenerationText();
-  for (const key of ["title", "note", "library", "refresh", "options", "cancel", "submit"]) {
+  for (const key of ["title", "note", "library", "refresh", "options", "cancel", "submit", "open"]) {
     byId(`scene-generation-${key}`).textContent = text[key];
   }
   for (const key of ["image", "name", "engine", "resolution", "seed"]) {
     byId(`scene-generation-${key}-label`).textContent = text[key];
   }
+  byId("scene-generation-photo-label").textContent = text.photo;
+  byId("scene-generation-refine-label").textContent = text.refine;
+  const refine = sceneGenerationRefineChoice();
+  const baseSeconds = choice?.seconds || 0;
+  byId("scene-generation-refine-hint").textContent = !refine.available ? text.refineUnavailable
+    : baseSeconds && refine.seconds && refine.resolution
+      ? text.refineHint(sceneGenerationDuration(baseSeconds),
+                        sceneGenerationDuration(baseSeconds + refine.seconds), refine.resolution)
+      : "";
   const image = byId("scene-generation-image");
   const selected = image.value;
   replaceMaterialOptions(image, state.sceneGenerationImages.map((asset) => ({
@@ -5101,24 +5173,125 @@ function renderSceneGeneration() {
   byId("scene-generation-engine-status").hidden = !reason;
   const job = state.sceneGeneration;
   const running = Boolean(job && !TERMINAL.has(job.status));
-  const blocked = state.sceneGenerationBusy || running || state.disabled;
+  const blocked = state.sceneGenerationBusy || state.sceneGenerationPhotoBusy || running || state.disabled;
   for (const key of ["image", "name", "engine", "resolution", "seed"]) byId(`scene-generation-${key}`).disabled = blocked;
   resolution.disabled = blocked || !choice?.available;
+  byId("scene-generation-photo").disabled = blocked;
+  byId("scene-generation-photo-picker") // ラベルは disabled を持たないので見た目だけ合わせる
+    ?.classList.toggle("disabled", blocked);
+  const refineInput = byId("scene-generation-refine");
+  refineInput.disabled = blocked || !refine.available;
+  refineInput.checked = refine.available && state.sceneGenerationRefine;
   byId("scene-generation-submit").disabled = blocked || window.parent === window
     || !selectionReady || !image.value || !byId("scene-generation-name").value.trim();
   byId("scene-generation-cancel").hidden = !running;
   byId("scene-generation-cancel").disabled = state.sceneGenerationBusy;
+  // 「一覧から開けます」とだけ言って終わらない。その場から開けるようにする。
+  const produced = job?.status === "succeeded" ? job.result?.scene?.id : null;
+  byId("scene-generation-open").hidden = !produced;
+  byId("scene-generation-open").disabled = blocked;
   byId("scene-generation-progress").hidden = !running;
   byId("scene-generation-progress").value = Number(job?.progress) || 0;
+  byId("scene-generation-photo-status").textContent = state.sceneGenerationPhotoMessage || "";
+  void renderSceneGenerationPreview(image.value);
   let message = window.parent === window ? text.unavailable : "";
-  if (job?.status === "succeeded") message = text.succeeded;
-  else if (job?.status === "failed") message = text.failed;
+  const refineState = job?.result?.refine?.state;
+  if (job?.status === "succeeded") {
+    message = refineState === "succeeded" ? `${text.succeeded} ${text.refineDone}`
+      : refineState === "failed" ? `${text.succeeded} ${text.refineFailed}` : text.succeeded;
+  } else if (job?.status === "failed") message = text.failed;
   else if (job?.status === "canceled") message = text.canceled;
-  else if (running) message = job.phase === "prepare_3d_input" ? text.preparing
-    : job.phase === "waiting_resource" || job.status === "queued" ? text.queued
-    : job.phase === "validate_generated_scene" ? text.validating : text.running;
+  else if (running) {
+    const phase = String(job.phase || "");
+    // 追加の段は `_refine` が付く。どちらの段を走っているかを黙らせない。
+    message = phase.endsWith("_refine") ? text.refining
+      : phase === "prepare_3d_input" ? text.preparing
+      : phase === "waiting_resource" || job.status === "queued" ? text.queued
+      : phase === "validate_generated_scene" ? text.validating : text.running;
+  } else if (selectionReady && baseSeconds) {
+    const total = refineInput.checked ? baseSeconds + refine.seconds : baseSeconds;
+    message = text.estimate(sceneGenerationDuration(total));
+  }
   if (!running && reason && window.parent !== window) message = message ? `${message} ${reason}` : reason;
   byId("scene-generation-status").textContent = state.sceneGenerationMessage || message;
+}
+
+/* 選んだ画像をそのまま見せる。名前だけの select では、iPhone から足した写真が
+   意図したものかを押す前に確かめられない。 */
+async function renderSceneGenerationPreview(assetId) {
+  const preview = byId("scene-generation-preview");
+  if (!assetId) {
+    preview.hidden = true;
+    preview.removeAttribute("src");
+    state.sceneGenerationPreviewId = "";
+    return;
+  }
+  if (state.sceneGenerationPreviewId === assetId) return;
+  state.sceneGenerationPreviewId = assetId;
+  try {
+    const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 320});
+    if (state.sceneGenerationPreviewId !== assetId) return;
+    preview.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
+    preview.hidden = false;
+  } catch {
+    if (state.sceneGenerationPreviewId !== assetId) return;
+    preview.hidden = true;
+    preview.removeAttribute("src");
+  }
+}
+
+/* 端末の写真をその場で入力にする。HEIC は端末の復号器を通して PNG へ直し、
+   core も HEIC のまま受けられるようにしてあるので、どちらでも届く。 */
+async function attachSceneGenerationPhoto(file) {
+  const text = sceneGenerationText();
+  if (!file || state.sceneGenerationPhotoBusy || state.disabled) return;
+  state.sceneGenerationPhotoBusy = true;
+  state.sceneGenerationPhotoMessage = text.photoReading;
+  state.sceneGenerationMessage = "";
+  renderSceneGeneration();
+  try {
+    const measured = await measure(file);
+    let upload = file;
+    let mediaType = file.type || "application/octet-stream";
+    // 端末が読めなくても core が読めることがある（HEIC がそれで、iPhone 以外の
+    // ブラウザは復号器を持たない）。ここで諦めず、原本を送って core に任せる。
+    // 断られたら断られた理由を出す。黙って「選んでも何も起きない」にしない。
+    const oversized = Boolean(measured) && measured.width * measured.height > MAX_IMPORT_PIXELS;
+    if (measured && (oversized || !IMPORTABLE_TYPES.has(file.type))) {
+      // 端末が読めた形式は、そのまま送ると受付で断られることがある。読めている
+      // うちに PNG へ直す。向きは `openBitmap` が EXIF どおりに当てている。
+      const bounded = fitToImportBound(measured.width, measured.height);
+      const bitmap = await openBitmap(file);
+      try {
+        const drawn = await drawToPng(bitmap, bounded.width, bounded.height);
+        if (drawn) {
+          upload = drawn.file;
+          mediaType = "image/png";
+        } else if (oversized) {
+          throw {code: "undecodable_photo"};
+        }
+      } finally {
+        bitmap.close?.();
+      }
+    }
+    state.sceneGenerationPhotoMessage = text.photoUploading;
+    renderSceneGeneration();
+    const asset = await importFile(upload, "source", null, mediaType);
+    await loadSceneGenerationImages();
+    byId("scene-generation-image").value = asset.id;
+    if (!byId("scene-generation-name").value.trim()) {
+      byId("scene-generation-name").value = (file.name || asset.suggested_filename || "")
+        .replace(/\.[^.]+$/, "").slice(0, 120);
+    }
+    state.sceneGenerationPhotoMessage = text.photoAdded(asset.suggested_filename || asset.id);
+  } catch (error) {
+    state.sceneGenerationPhotoMessage = error?.code === "undecodable_photo"
+      ? text.photoFailed : `${text.photoRejected} ${failureText(error?.code)}`.trim();
+  } finally {
+    state.sceneGenerationPhotoBusy = false;
+    byId("scene-generation-photo").value = "";
+    renderSceneGeneration();
+  }
 }
 
 async function loadSceneGenerationImages() {
@@ -5173,13 +5346,18 @@ async function submitSceneGeneration() {
     renderSceneGeneration();
     return;
   }
+  const refine = sceneGenerationRefineChoice();
+  const wantRefine = refine.available && byId("scene-generation-refine").checked;
   state.sceneGenerationEngine = engine;
   state.sceneGenerationResolution = resolution;
+  state.sceneGenerationRefine = wantRefine;
   state.sceneGenerationBusy = true;
   state.sceneGenerationMessage = "";
+  state.sceneGenerationPhotoMessage = "";
   const value = {
     name: byId("scene-generation-name").value.trim(), input_asset_id: byId("scene-generation-image").value,
-    engine, resolution, seed: Number(byId("scene-generation-seed").value), local_only: true,
+    engine, refine_with_pixal3d: wantRefine, resolution,
+    seed: Number(byId("scene-generation-seed").value), local_only: true,
   };
   renderSceneGeneration();
   try {
@@ -5195,6 +5373,8 @@ async function submitSceneGeneration() {
 
 function renderSceneText() {
   renderSceneGeneration();
+  // 言語切替は reload せずに反映する。指の操作の帯もここで言い直す。
+  renderBlenderTouchControls();
   const text = sceneText();
   const switcher = byId("create-media-3d");
   switcher.setAttribute("aria-label", text.switchLabel);
@@ -6195,6 +6375,7 @@ async function connectBlenderRfb(session) {
 
 function disconnectBlenderRfb({manual = true, clearTarget = false} = {}) {
   state.blenderInputAnchor = null;
+  releaseBlenderModifiers();
   setBlenderKeysEnabled(false);
   window.clearTimeout(state.blenderRfbReconnect);
   state.blenderRfbReconnect = 0;
@@ -6218,6 +6399,13 @@ function setBlenderKeysEnabled(enabled) {
   byId("scene-blender-keys").querySelectorAll("button").forEach((button) => {
     button.disabled = !enabled;
   });
+  if (!enabled) {
+    // 切れた接続に keyup は届かない。押したままの表示だけ残さない。
+    state.blenderModifiers = [];
+    state.blenderTyping = false;
+    state.blenderPointerMode = "select";
+  }
+  renderBlenderTouchControls();
 }
 
 function installBlenderTouchButtons(container) {
@@ -6264,8 +6452,214 @@ function rememberBlenderInput(event) {
   };
 }
 
+/* 指だけで Blender を回せるようにする。
+
+   noVNC のジェスチャは 1 本指＝左ボタンで、中ボタンのドラッグを作れない。
+   Blender の視点操作は中ボタン（+Shift で平行移動）なので、モードを選んで
+   いるあいだは canvas へ届く前に touch を捕まえ、望んだボタンの mouse event
+   を合成して渡す。「選ぶ」のときは何もせず、noVNC 本来の操作をそのまま使う。 */
+// 値は DOM の buttons ビット（4 = 中ボタン）と、その操作に要る修飾キー。
+// Blender の平行移動は Shift + 中ドラッグなので、ずらすは Shift を自分で握る。
+const BLENDER_POINTER_BUTTONS = {select: 0, orbit: 4, pan: 4, zoom: 0};
+const BLENDER_POINTER_MODIFIER = {pan: "Shift"};
+const BLENDER_MODIFIER_KEYS = {
+  Shift: {keysym: 0xffe1, code: "ShiftLeft"},
+  Control: {keysym: 0xffe3, code: "ControlLeft"},
+  Alt: {keysym: 0xffe9, code: "AltLeft"},
+};
+
+function blenderCanvas() {
+  return byId("scene-blender-screen").querySelector("canvas");
+}
+
+function blenderPointerEnabled() {
+  return state.blenderPointerMode !== "select" && state.blenderRfbConnected;
+}
+
+function sendBlenderMouse(type, clientX, clientY, buttons) {
+  const canvas = blenderCanvas();
+  if (!canvas) return;
+  canvas.dispatchEvent(new MouseEvent(type, {
+    bubbles: true, cancelable: true, view: window, clientX, clientY, buttons,
+    button: buttons === 4 ? 1 : buttons === 2 ? 2 : 0,
+  }));
+}
+
+function sendBlenderWheel(clientX, clientY, deltaY) {
+  const canvas = blenderCanvas();
+  if (!canvas) return;
+  canvas.dispatchEvent(new WheelEvent("wheel", {
+    bubbles: true, cancelable: true, view: window, clientX, clientY,
+    deltaY, deltaMode: 0,
+  }));
+}
+
+/* 指の操作モードでは canvas へ届く前に捕まえる。capture で止めるので、
+   noVNC 側のジェスチャ判定は動かない。「選ぶ」では何も横取りしない。 */
+function installBlenderPointerTranslation(container) {
+  let active = null;
+  const point = (event) => [...event.changedTouches].find((item) => item.identifier === active?.id)
+    || [...event.touches].find((item) => item.identifier === active?.id) || null;
+
+  container.addEventListener("touchstart", (event) => {
+    if (!blenderPointerEnabled() || !blenderCanvas() || event.touches.length !== 1) return;
+    event.stopPropagation();
+    event.preventDefault();
+    const touch = event.touches[0];
+    const mode = state.blenderPointerMode;
+    active = {id: touch.identifier, mode, x: touch.clientX, y: touch.clientY,
+              buttons: BLENDER_POINTER_BUTTONS[mode] || 0,
+              // 利用者が自分で押したままにしている分は、こちらで離さない。
+              modifier: state.blenderModifiers.includes(BLENDER_POINTER_MODIFIER[mode])
+                ? null : BLENDER_POINTER_MODIFIER[mode] || null};
+    if (active.modifier) holdBlenderModifier(active.modifier, true);
+    // Blender は「押した場所」で動きを解釈する。まず位置を合わせてから押す。
+    sendBlenderMouse("mousemove", touch.clientX, touch.clientY, 0);
+    if (active.buttons) sendBlenderMouse("mousedown", touch.clientX, touch.clientY, active.buttons);
+  }, {capture: true, passive: false});
+
+  container.addEventListener("touchmove", (event) => {
+    if (!active) return;
+    event.stopPropagation();
+    event.preventDefault();
+    const touch = point(event);
+    if (!touch) return;
+    if (active.mode === "zoom") {
+      // 縦に動かした量をそのままホイールにする。上へ動かすと寄る。
+      const delta = active.y - touch.clientY;
+      if (Math.abs(delta) >= 8) {
+        sendBlenderWheel(active.x, active.y, -delta);
+        active.y = touch.clientY;
+      }
+      return;
+    }
+    sendBlenderMouse("mousemove", touch.clientX, touch.clientY, active.buttons);
+  }, {capture: true, passive: false});
+
+  const finish = (event) => {
+    if (!active) return;
+    event.stopPropagation();
+    const touch = point(event);
+    const x = touch ? touch.clientX : active.x;
+    const y = touch ? touch.clientY : active.y;
+    if (active.buttons) sendBlenderMouse("mouseup", x, y, 0);
+    if (active.modifier) holdBlenderModifier(active.modifier, false);
+    active = null;
+  };
+  container.addEventListener("touchend", finish, {capture: true, passive: false});
+  container.addEventListener("touchcancel", finish, {capture: true, passive: false});
+}
+
+function setBlenderPointerMode(mode) {
+  if (!Object.hasOwn(BLENDER_POINTER_BUTTONS, mode)) return;
+  state.blenderPointerMode = mode;
+  renderBlenderTouchControls();
+}
+
+/* 修飾キーの押下/解放だけを送る。表示は変えない（帯の押下表示は利用者の指定を表す）。 */
+function holdBlenderModifier(name, down) {
+  const key = BLENDER_MODIFIER_KEYS[name];
+  if (!key || !state.blenderRfbConnected) return false;
+  try {
+    state.blenderRfb?.sendKey(key.keysym, key.code, down);
+  } catch { return false; }
+  return true;
+}
+
+/* 修飾キーは押しっぱなしにする。Shift+中ドラッグのような組み合わせは、
+   押した瞬間に離す作りでは作れない。もう一度押すと離す。 */
+function toggleBlenderModifier(name) {
+  if (!BLENDER_MODIFIER_KEYS[name] || !state.blenderRfb || !state.blenderRfbConnected) return;
+  const held = state.blenderModifiers.includes(name);
+  if (!holdBlenderModifier(name, !held)) return;
+  state.blenderModifiers = held
+    ? state.blenderModifiers.filter((item) => item !== name)
+    : [...state.blenderModifiers, name];
+  renderBlenderTouchControls();
+}
+
+/* 画面を閉じる・切れるときに、押したままの修飾キーを必ず離す。
+   離さずに切ると、次に繋いだ側で Shift が押されたままになる。 */
+function releaseBlenderModifiers() {
+  const rfb = state.blenderRfb;
+  for (const name of state.blenderModifiers) {
+    const key = BLENDER_MODIFIER_KEYS[name];
+    try { rfb?.sendKey(key.keysym, key.code, false); } catch { /* already closed */ }
+  }
+  state.blenderModifiers = [];
+}
+
+function blenderTypingText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    pointer: "Touch does", select: "Select", orbit: "Orbit", pan: "Pan", zoom: "Zoom",
+    modifier: "Hold down", keyboard: "Keyboard", typing: "Text sent to Blender",
+  } : {
+    pointer: "指の操作", select: "選ぶ", orbit: "回す", pan: "ずらす", zoom: "寄る・引く",
+    modifier: "押したままにする", keyboard: "キーボード", typing: "Blenderへ送る文字",
+  };
+}
+
+function renderBlenderTouchControls() {
+  const text = blenderTypingText();
+  const connected = state.blenderRfbConnected;
+  byId("scene-blender-touch").hidden = false;
+  byId("scene-blender-pointer-label").textContent = text.pointer;
+  byId("scene-blender-modifier-label").textContent = text.modifier;
+  byId("scene-blender-typing-text").textContent = text.typing;
+  for (const button of byId("scene-blender-pointer").querySelectorAll("button[data-blender-pointer]")) {
+    const mode = button.dataset.blenderPointer;
+    button.textContent = text[mode] || mode;
+    button.setAttribute("aria-pressed", String(state.blenderPointerMode === mode));
+    button.disabled = !connected;
+  }
+  for (const button of byId("scene-blender-modifiers").querySelectorAll("button[data-blender-modifier]")) {
+    button.setAttribute("aria-pressed", String(state.blenderModifiers.includes(button.dataset.blenderModifier)));
+    button.disabled = !connected;
+  }
+  const keyboard = byId("scene-blender-keyboard");
+  keyboard.textContent = text.keyboard;
+  keyboard.disabled = !connected;
+  keyboard.setAttribute("aria-pressed", String(state.blenderTyping));
+  byId("scene-blender-typing-label").hidden = !state.blenderTyping;
+  // 指の操作を横取りしているあいだは、ブラウザ側のスクロールと拡大を止める。
+  byId("scene-blender-screen").style.touchAction = blenderPointerEnabled() ? "none" : "";
+}
+
+/* iOS の画面キーボードは canvas では出ない。隠し入力へ焦点を移し、
+   打たれた文字を keysym にして送る。Blender の G / R / S もこれで届く。 */
+function installBlenderTyping() {
+  const input = byId("scene-blender-typing");
+  input.addEventListener("input", () => {
+    const value = input.value;
+    input.value = "";
+    const rfb = state.blenderRfb;
+    if (!rfb || !state.blenderRfbConnected) return;
+    for (const character of value) {
+      const point = character.codePointAt(0);
+      // Latin-1 はそのまま keysym。それ以外は Unicode keysym の領域へ移す。
+      const keysym = point < 0x100 ? point : 0x01000000 + point;
+      try { rfb.sendKey(keysym, null); } catch { return; }
+    }
+  });
+  input.addEventListener("keydown", (event) => {
+    const keys = {Backspace: 0xff08, Enter: 0xff0d, Escape: 0xff1b, Tab: 0xff09};
+    if (!Object.hasOwn(keys, event.key)) return;
+    event.preventDefault();
+    try { state.blenderRfb?.sendKey(keys[event.key], event.code); } catch { /* already closed */ }
+  });
+}
+
+function toggleBlenderTyping() {
+  state.blenderTyping = !state.blenderTyping;
+  renderBlenderTouchControls();
+  const input = byId("scene-blender-typing");
+  if (state.blenderTyping) input.focus();
+  else input.blur();
+}
+
 async function sendBlenderAssistKey(code) {
   const keys = {Escape: 0xff1b, Tab: 0xff09, Enter: 0xff0d,
+    Numpad1: 0xffb1, Numpad3: 0xffb3, Numpad7: 0xffb7, Home: 0xff50,
     ArrowUp: 0xff52, ArrowDown: 0xff54, ArrowLeft: 0xff51, ArrowRight: 0xff53};
   const rfb = state.blenderRfb;
   if (!rfb || !state.blenderRfbConnected || !Object.hasOwn(keys, code)) return;
@@ -8662,6 +9056,18 @@ byId("scene-generation-resolution").addEventListener("change", (event) => {
   state.sceneGenerationMessage = "";
   renderSceneGeneration();
 });
+byId("scene-generation-refine").addEventListener("change", (event) => {
+  state.sceneGenerationRefine = event.target.checked;
+  state.sceneGenerationMessage = "";
+  renderSceneGeneration();
+});
+byId("scene-generation-photo").addEventListener("change", (event) => {
+  void attachSceneGenerationPhoto(event.target.files?.[0] || null);
+});
+byId("scene-generation-open").addEventListener("click", () => {
+  const sceneId = state.sceneGeneration?.result?.scene?.id;
+  if (sceneId) void openScene(sceneId);
+});
 byId("scene-generation-library").addEventListener("click", () => activate("library"));
 byId("scene-generation-refresh").addEventListener("click", () => {
   state.sceneGenerationMessage = "";
@@ -8748,6 +9154,21 @@ byId("scene-blender-keys").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-blender-key]");
   if (button && !button.disabled) sendBlenderAssistKey(button.dataset.blenderKey);
 });
+installBlenderTouchButtons(byId("scene-blender-touch"));
+installBlenderPointerTranslation(byId("scene-blender-screen"));
+installBlenderTyping();
+byId("scene-blender-pointer").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-blender-pointer]");
+  if (button && !button.disabled) setBlenderPointerMode(button.dataset.blenderPointer);
+});
+byId("scene-blender-modifiers").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-blender-modifier]");
+  if (button && !button.disabled) toggleBlenderModifier(button.dataset.blenderModifier);
+});
+byId("scene-blender-keyboard").addEventListener("click", () => {
+  if (!byId("scene-blender-keyboard").disabled) toggleBlenderTyping();
+});
+renderBlenderTouchControls();
 byId("scene-blender-save").addEventListener("click", () => void finishBlenderSession("save"));
 byId("scene-blender-discard").addEventListener("click", () => void finishBlenderSession("stop"));
 byId("scene-blender-dialog").addEventListener("cancel", (event) => {
