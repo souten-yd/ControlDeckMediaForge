@@ -126,6 +126,11 @@ def main() -> int:
                 "--onefile",
                 "--name", "mediaforge-core",
                 "--paths", str(ROOT / "backend"),
+                # 端末の写真を復号する。取り込みは関数の中で import するので、
+                # 名指ししないと束に入らず、installed だけ HEIC が受けられなくなる。
+                # libheif の共有ライブラリも一緒に連れていく。
+                "--hidden-import", "pillow_heif",
+                "--collect-binaries", "pillow_heif",
                 "--distpath", str(dist),
                 "--workpath", str(work / "build"),
                 "--specpath", str(work),
