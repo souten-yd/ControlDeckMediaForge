@@ -10,8 +10,14 @@
 別途320pxの「全体」が横視野角を無視し、左端179行でモデルが切れる不具合を実測。
 横/縦の狭い視野角に合わせる修正候補は、追加縮小なしでx47–230/左右端0pixel。
 1280px描画は不変、実Host overlayでpage/HTTP/request/overflow各0、元asset/runtime保持。
-branch ux1/3d-viewer-fit-quality、0.28.91準備。全2279test/2warnings/272.46秒pass。
-署名導入/導入後browserは未実施。木目/金属色のある別入力でTRELLIS実生成中、Pixalは次。
+PR589 merge fc6e0c9、署名0.28.91を通常update済み。全2279test/2warnings/272.46秒pass。
+更新・idle再起動後も16table/2740asset属性/registry保持、実Host320/1280px表示pass。
+初回/全体とも320pxでx47–230・左右端0pixel、1280px不変。page/HTTP/request/overflow各0。
+色付き木箱はTRELLIS512で183.317879秒、blend/GLBをLibraryへ登録、来歴/HTTP hash一致。
+GLB asset_83b93b9570394d069ff3c16f6232e329、135930tris/1024²texture2枚。
+独立Blender4方向と実Host320/1280pxで木目・金属色を確認。細部平滑化/推定裏面は残る。
+Pixal1024同一入力/seed42は job_409a09766ec442629eb3d4a75ef5039a で実行中。
+CPU前処理画像の全体/色保持を確認し、genuine leaseでVulkan device1へ進行。終端品質は未確認。
 詳細: [texture/portrait監査](g9-texture-viewer-audit-20260920.md)。
 
 ## 2026-09-20 G9 installed Pixal Vulkan / image-to-3D acceptance completed

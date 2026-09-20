@@ -55,7 +55,8 @@ on either side edge, without zoom-out clicks. Desktop pixel bounds and count
 are identical to the previous build. Model counts remain 935214 triangles,
 one mesh/material, zero animation, and the material mode is active. Page/HTTP/
 request errors and horizontal overflow are zero. Screenshots were inspected.
-The overlay is source acceptance only; signed installation is still pending.
+The overlay is source acceptance. Signed installation and restart acceptance
+below independently reproduce the same result without a response overlay.
 
 Evidence: installed feature data `maintenance/g9-texture-audit-20260920/`:
 `inspection.json`, `native-textures.json`, extracted original texture bytes,
@@ -64,7 +65,7 @@ No credentials are logged or stored in these reports.
 
 ## Release and remaining checks
 
-0.28.91 is prepared for the viewer fix. Final `./mf.sh test`: **2279 passed,
+0.28.91 includes the viewer fix. Final `./mf.sh test`: **2279 passed,
 2 warnings, 272.46 seconds, exit 0**. The first full run retained two failures:
 this change had not yet updated the viewer lock hashes, and an unchanged Blender
 registry repair test observed staging cleanup after terminal-state publication.
@@ -74,14 +75,73 @@ full rerun also passes. No assertion or unrelated runtime code was weakened.
 The first run's three signing skips were eliminated by using the existing isolated
 MediaForge bundle-build runtime in this worktree.
 
-Normal PR merge, signed package verification/update and post-update/restart
-browser checks are pending. The quality limitations remain after the viewer fix.
+PR [589](https://github.com/souten-yd/ControlDeckMediaForge/pull/589) merged as
+`fc6e0c977af816d096038e82d66242077abb57a5`. The signed
+[0.28.91 release](https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.28.91)
+was built from that exact merge, verified against the Host's trusted publisher
+key, independently downloaded and verified again. Canonical manifest/signature,
+tamper rejection, SHA sidecar, six-member archive and embedded viewer hash pass.
+The 31,819,207-byte artifact SHA256 is
+`29da67e4937ce77c953ea804a6758f9291b6717e4bd7b580c44247dbdac078a8`.
+Fresh-directory package smoke passes in 0.865923 seconds: unauthenticated setup
+and unadopted generation remain unavailable, rather than becoming false success.
+
+`./deck.sh feature update media-forge` installed 0.28.91 with 0.28.90 retained.
+The actual `current` target, effective API HTTP200 and healthy service agree.
+The served viewer SHA256 is
+`3a86ca91deb71ba0be7ea8b89a01d08052914f600b6cfd7898fb57b2a32e8c88`.
+All 16 database tables, 2740 asset-file size/mtime records and Blender registry
+hash match immediately before/after update. A fresh idle snapshot and restart
+(PID2852320 → 2853139) preserve them again. The Pixal adoption receipt is unchanged;
+TRELLIS512/Pixal1024 remain adopted experimental engines. Both existing mechanical
+GLBs and the new TRELLIS color blend/GLB pass HTTP content hash verification.
+
+Actual installed Host browser checks, without overlay or manual zoom-out, pass
+before and after restart at 320/1280px. Initial open and Fit both reproduce
+x47–230 / 20073 bright model pixels at 320px, zero left/right-edge pixels;
+desktop remains x262–687 / 107165 pixels. Page/HTTP/request errors and horizontal
+overflow are zero. The quality limitations remain after the viewer fix.
+Release evidence: installed feature data `maintenance/release-0.28.91-20260920/`
+(`artifacts/verification.json`, `downloaded/verification.json`, `clean-smoke.json`,
+`state/`, `restart/`, `installed-check.json`, `restarted-check.json`).
+
+## Colored-reference generation
 
 A separately identified color/pattern evaluation uses the existing pinned
 TRELLIS showcase `assets/showcase/chest/chest.png` (wood grain, brown panels,
 gold/dark metal). The source was visually inspected and imported by the ordinary
 MediaForge image API as `asset_5a43f6f825d242fcb9fececaa85792b4`. TRELLIS 512,
 seed 42 was submitted through the actual authenticated Host agent-tool API;
-Job `job_73a467fb80ae43b2acdb964b4fc033a7` is running under genuine resource
-admission. Terminal color/geometry acceptance and Pixal's same-input comparison
-are pending. This does not reuse the gray input as proof of color fidelity.
+Job `job_73a467fb80ae43b2acdb964b4fc033a7` succeeded in 183.317879 seconds,
+including native generation 167.717147 seconds. Genuine Host lease
+`2e7b8dcb-974e-4954-a7a3-821a8d33ac01` reserved 9,522,905,088 bytes and is released.
+
+- Name: `TRELLIS 色・模様検証 木製宝箱`.
+- Source: `asset_5a43f6f825d242fcb9fececaa85792b4`;
+  normalized input SHA256 `42381be89464914529c73dc2ebd25ef953d2099e62f851613a23421cb3d53723`.
+- Blend: `asset_66b3820e158c4be7809b26c76fea5ce8`, 13,552,257 bytes,
+  SHA256 `bee723480206f87d503b7eff1974da334499f8d2478cf2c772d84b5699ee2c87`.
+- GLB: `asset_83b93b9570394d069ff3c16f6232e329`, 5,368,720 bytes,
+  SHA256 `8ad7563a4503a038425bd30b10508cc0f2244018040a57cf901ed09a0582f99a`.
+
+The existing Scene/Library contains both assets and their source lineage.
+Independent Blender4.5.13 import and four CPU-rendered views pass: 108709 vertices,
+135930 triangles, one mesh/material, two embedded 1024² textures, finite coordinates,
+zero bones/actions. The base texture RGB ranges are 17–193 / 0–164 / 0–123;
+channel standard deviations are 24.66428 / 25.55253 / 25.26202. Atlas, four renders
+and installed Host 320/1280px screenshots were visually inspected: brown wood
+grain, gold trim and dark metal bands remain visible. Viewer errors/overflow are
+zero. This establishes color/material delivery for this reference. Fine-grain
+detail is smoothed, hardware shapes are approximate, and the unseen sides are
+inferred; exact reconstruction, watertightness and animation readiness are not
+accepted from these images. Generation provenance correctly records 0.28.90,
+the version used before the viewer-only update.
+
+Pixal's same-input comparison is separately running on installed 0.28.91:
+Job `job_409a09766ec442629eb3d4a75ef5039a`, Host child `eb3b6aad5c0d`,
+1024/seed42. Its prepared manifest matches the same normalized source SHA256;
+the actual background-removed/framed image was inspected and retains the entire
+colored chest. CPU preprocessing and subsequent Vulkan device1 inference are
+distinct stages. Terminal texture/geometry acceptance remains pending.
+Evidence: `maintenance/g9-texture-audit-20260920/color-trellis_cpp/`,
+`color-pixal3d/`, `installed-*`, `restarted-*`, `installed-pixel-bounds.json`.
