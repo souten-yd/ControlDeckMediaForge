@@ -1,5 +1,17 @@
 # 実装引き継ぎ状態
 
+## 2026-09-20 G9 installed workflow priority / 0.28.90 preparation
+
+署名0.28.89を通常updateで導入、healthy/rollback0.28.88保持。16table/2724asset file/
+Blender registry不変、既存3GLB hash一致。実測済TRELLIS512をhash再検証後に採用。
+正規Host media.scene.from_imageの受付は成功したが、実Scene Jobはresource要求422で失敗。
+実Host logでworkflow priority上限15に対しadapter20を特定し、標準0へ修正。
+修正bodyのpublic resource APIは202/granted（activateせず明示release）。
+addon/coreを0.28.90へ揃え、./mf.sh testは2279passed/2warnings/272.22秒/exit0。
+次は署名0.28.90導入と実Host Scene Job再実行。現在生成GLB登録/ブラウザ受入は未完了。
+詳細: [workflow priority修正](g9-workflow-priority-20260920.md)。
+Pixalは別branchでNAF中間buffer分割/F32実測を継続し、未採用を維持。
+
 ## 2026-09-20 G9 signed 0.28.89 release preparation
 
 PR581の実Host GPU予約contract修正をmain71d72a7へmerge済み。
