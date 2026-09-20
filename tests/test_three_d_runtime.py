@@ -74,6 +74,8 @@ def test_native_generation_requires_exact_lease_and_produces_verified_facts(tmp_
     assert resource_request['estimated_runtime_sec'] == 1
     # Host VramConfidence accepts measured/estimated/low, never high.
     assert resource_request['vram']['confidence'] == 'measured'
+    assert resource_request['class'] == 'workflow'
+    assert resource_request['priority'] == 0  # Host workflow ceiling is 15.
 
 
 def test_unadopted_or_changed_runtime_cannot_start(tmp_path):
