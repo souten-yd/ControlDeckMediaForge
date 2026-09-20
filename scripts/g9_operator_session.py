@@ -132,7 +132,10 @@ class PrivateSession:
 
 
 def new_client(origin: str) -> httpx.Client:
-    return httpx.Client(base_url=host_origin(origin), timeout=15, follow_redirects=False, trust_env=False)
+    # Ordinary Host cookie APIs require this CSRF header, including login,
+    # logout and subsequent operator resource mutations. It is not a credential.
+    return httpx.Client(base_url=host_origin(origin), headers={'X-Requested-With': 'ControlDeck'},
+                        timeout=15, follow_redirects=False, trust_env=False)
 
 
 def read_secret(prompt: str) -> str:
@@ -217,7 +220,7 @@ def login(directory: Path, origin: str) -> dict[str, Any]:
                         body['totp_code'] = read_secret('ControlDeck TOTP code (hidden): ')
                         response = client.post('/api/v1/auth/login', json=body)
                 if response.status_code != 200:
-                    raise SessionError('host_login_failed_no_automatic_retry')
+                    raise SessionError(f'host_login_failed_http_{response.status_code}_no_automatic_retry')
                 result = check_identity(client)
                 cookies = [c for c in client.cookies.jar if c.name == COOKIE_NAME]
                 if len(cookies) != 1 or cookies[0].expires is None:
