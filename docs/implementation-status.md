@@ -1,5 +1,19 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 real Vulkan evaluation and broker correction
+
+正規operator sessionを実Hostで確認し、GPU評価を再開。R9700はHost gpu0/native index1。
+TRELLIS512は306.481171秒/exit0、WebP GLB6,361,036byte、sampled device VRAM peak
+8,986,034,176byte。独立Blender4.5.13 import/CPU4方向描画pass、145472三角形、骨0。
+参照機械部品の外形を確認したが裏面に荒れ。1024はHR buffer-size limitでexit-6、
+Pixal trained Vulkanは61.607146秒/exit1、NAF IM2COL未対応。全leaseはprocess終了後release。
+元画像を既存Libraryへ登録し、正規化前後RGBA画素一致を確認。生成GLB登録/採用はまだ未実施。
+実Host422で発見した共通adapterのconfidence=highをmeasuredへ修正（両engine回帰確認）。
+最終./mf.sh testは2279passed/2warnings/257.81秒/exit0。
+次は署名patch release→TRELLIS512採用→実Host画像入力→Scene/Library/viewer受入。
+Pixal失敗は別途診断。詳細: [実GPU評価](implementation/g9-real-generation-20260920.md)。
+全体目標は未完了。installed生成/Pixal full GLB/骨はNOT TESTED。
+
 ## 2026-09-20 G9 operator login CSRF correction
 
 利用者の端末ログイン失敗をHost実ログで確認。00:44:16Z/00:44:36ZのPOST loginは403。
