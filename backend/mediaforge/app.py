@@ -31,6 +31,7 @@ from . import __version__, library, library_download, preferences, thumbnails
 from .scene_material_preview import MaterialPreviewManager
 from .asset_import import (
     MAX_IMPORT_BYTES,
+    IMPORT_MEDIA_TYPES,
     MAX_VIDEO_IMPORT_BYTES,
     VIDEO_MEDIA_TYPES,
     AssetImportError,
@@ -3437,9 +3438,7 @@ def create_app(
                         media_type = params.get("media_type")
                         if media_type is not None and (
                             not isinstance(media_type, str)
-                            or media_type not in {
-                                "application/octet-stream", "image/png", "image/jpeg", "model/gltf-binary"
-                            }
+                            or media_type not in IMPORT_MEDIA_TYPES
                         ):
                             raise ValueError("asset import media type is invalid")
                         if not isinstance(encoded, str) or len(encoded) > (MAX_IMPORT_BYTES * 4 // 3 + 8):
@@ -3486,9 +3485,7 @@ def create_app(
                                 media_type is not None
                                 and (
                                     not isinstance(media_type, str)
-                                    or media_type not in {
-                                        "application/octet-stream", "image/png", "image/jpeg", "model/gltf-binary"
-                                    }
+                                    or media_type not in IMPORT_MEDIA_TYPES
                                 )
                             )
                             or len(uploads) >= 2
