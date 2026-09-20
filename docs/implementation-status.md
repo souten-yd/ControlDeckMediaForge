@@ -1,5 +1,19 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 texture quality correction / portrait viewer fix
+
+利用者の「一部しか生成されず、画像が貼られていない」指摘を実GLB/実Hostで再検証。
+入力画像自体が低contrast無彩色。GLBにはtexture/UV/materialあり、native→Libraryの
+画像byte hash一致。ただしTRELLIS色画像RGB203–204、Pixalもほぼ灰白色。
+画像2枚の存在を色/模様の生成品質受入としない。裏面穴/荒れは実geometryにも残る。
+完全形状/色模様再現はNOT ACCEPTED。前の完了はVulkan実行・保存経路の範囲。
+別途320pxの「全体」が横視野角を無視し、左端179行でモデルが切れる不具合を実測。
+横/縦の狭い視野角に合わせる修正候補は、追加縮小なしでx47–230/左右端0pixel。
+1280px描画は不変、実Host overlayでpage/HTTP/request/overflow各0、元asset/runtime保持。
+branch ux1/3d-viewer-fit-quality、0.28.91準備。全2279test/2warnings/272.46秒pass。
+署名導入/導入後browserは未実施。木目/金属色のある別入力でTRELLIS実生成中、Pixalは次。
+詳細: [texture/portrait監査](implementation/g9-texture-viewer-audit-20260920.md)。
+
 ## 2026-09-20 G9 installed Pixal Vulkan / image-to-3D acceptance completed
 
 branch `ux1/pixal-installed-acceptance`、PR588。既存U0〜U7の状態変更なし。

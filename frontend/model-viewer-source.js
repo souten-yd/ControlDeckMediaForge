@@ -120,8 +120,10 @@ export async function createModelViewer({canvas, bytes, background = "#0b1110", 
     if (box.isEmpty()) throw new Error("model has no renderable bounds");
     const sphere = box.getBoundingSphere(new THREE.Sphere());
     const radius = Math.max(sphere.radius, 0.001);
-    const halfFov = THREE.MathUtils.degToRad(camera.fov / 2);
-    const distance = radius / Math.sin(halfFov) * 1.15;
+    const verticalHalfFov = THREE.MathUtils.degToRad(camera.fov / 2);
+    const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * camera.aspect);
+    // Fit the bounding sphere within both canvas dimensions, including portrait views.
+    const distance = radius / Math.sin(Math.min(verticalHalfFov, horizontalHalfFov)) * 1.15;
     const direction = new THREE.Vector3(1, 0.72, 1).normalize();
     camera.position.copy(sphere.center).addScaledVector(direction, distance);
     camera.near = Math.max(distance / 1000, 0.001);
