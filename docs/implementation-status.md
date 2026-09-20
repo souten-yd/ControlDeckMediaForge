@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 Pixal Vulkan NAF numeric acceptance / full generation deferred
+
+Pixal実GPUでNAF im2colの巨大buffer拒否を観測し、畳み込みを64行ずつに分割。
+global reflection/normalizationを保持。F32宣言に反してGPUがF16へ丸める差も実測し、
+native CLIでGGMLのF16/coopmat無効設定を固定。既存GGML演算のみ、kernel自作なし。
+固定NAF/NATTEN/Pixal参照比較はCPU10条件＋14拒否pass、GPU10条件pass（拒否はCPU）。
+GPU最大絶対誤差2.205372e-6、許容atol/rtol5e-5維持。実Host lease/device1で測定。
+修正後の学習済み全体はNAFを通過したがHR flowでnon-finite flow velocity、132.113766秒/
+exit1、VRAM sampled peak4,992,151,552byte。GLBなし、26renew後process回収/release。
+Pixalは未採用/未登録を維持し、安定しないモデルの規約に従いfull受入を延期。
+再開条件は失敗HR flowの固定入力・重み・F32方針による限定診断と参照比較。
+最終./mf.sh test:2279passed/2warnings/266.95秒/exit0。軽量bundle変更なし。
+詳細: [NAF Vulkan実測](implementation/g9-pixal-vulkan-naf-20260920.md)。
+TRELLISは署名installed0.28.90で正規Host retryの実生成中
+(job_9576be19cd974c229e5cbd57a8d9e6c5)。その終了・Library/viewer受入を別途記録する。
+
 ## 2026-09-20 G9 installed workflow priority / 0.28.90 preparation
 
 署名0.28.89を通常updateで導入、healthy/rollback0.28.88保持。16table/2724asset file/

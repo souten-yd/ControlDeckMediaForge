@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <charconv>
 #include <csignal>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -80,6 +81,10 @@ int main(int argc,char** argv) {
         owned=output;if (chmod(output.c_str(),0700)!=0) throw std::runtime_error("cannot protect worker output");
         options.cancelled=[](){return interrupted!=0;};
         options.progress=[](const std::string& stage,int done,int total){std::cout<<"stage="<<stage<<" "<<done<<"/"<<total<<std::endl;};
+        // The pinned Vulkan backend may round F32 matmul operands to F16
+        // even with F32 tensor storage. Honor the declared float32 policy.
+        if (gpu) for (const char* name:{"GGML_VK_DISABLE_F16","GGML_VK_DISABLE_COOPMAT","GGML_VK_DISABLE_COOPMAT2"})
+            if (setenv(name,"1",1)!=0) throw std::runtime_error("cannot enforce Vulkan float32 policy");
         std::unique_ptr<ggml_backend,decltype(&ggml_backend_free)> backend(gpu?ggml_backend_vk_init(device):ggml_backend_cpu_init(),ggml_backend_free);
         if (!backend) throw std::runtime_error("requested worker backend unavailable");
         if (!gpu) ggml_backend_cpu_set_n_threads(backend.get(),2);

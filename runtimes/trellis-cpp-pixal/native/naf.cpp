@@ -45,8 +45,16 @@ struct Graph {
         }
         for (int i=0;i<ggml_graph_n_nodes(graph);++i) {
             T* t=ggml_graph_node(graph,i);
-            if (!ggml_backend_dev_supports_op(ggml_backend_get_device(backend),t))
-                throw std::runtime_error(std::string("selected backend cannot execute NAF operation: ")+ggml_op_name(t->op));
+            if (!ggml_backend_dev_supports_op(ggml_backend_get_device(backend),t)) {
+                std::string detail=ggml_op_name(t->op);
+                detail += std::string(" output=")+ggml_type_name(t->type);
+                detail += ":"+std::to_string(ggml_nbytes(t))+"bytes";
+                for (int j=0;j<2;++j) if (t->src[j]) {
+                    detail += " source"+std::to_string(j)+"="+ggml_type_name(t->src[j]->type);
+                    detail += ggml_is_contiguous(t->src[j]) ? ":contiguous" : ":strided";
+                }
+                throw std::runtime_error("selected backend cannot execute NAF operation: "+detail);
+            }
         }
         allocator=ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend));
         if (!allocator || !ggml_gallocr_alloc_graph(allocator,graph)) throw std::runtime_error("NAF graph allocation failed");
@@ -147,7 +155,19 @@ std::vector<float> evaluate_naf(const trellis::Model& model,const NafParams& p,
                 }
                 x=spatial(g,ggml_get_rows(c,pixel(g,x),g.index(reflected)),w+2,h+2,in);
             }
-            T* y=ggml_conv_2d(c,weights,x,1,1,0,0,1,1);
+            // A full 1024-square, 128-channel 3x3 F32 im2col exceeds
+            // Vulkan's buffer limit. Tile only convolution output rows;
+            // global reflection above and normalization below stay exact.
+            // Every strip includes the kernel halo from the global input.
+            T* y=nullptr;
+            constexpr int tile_rows=64;
+            for (int first=0;first<h;first+=tile_rows) {
+                const int rows=std::min(tile_rows,h-first);
+                T* strip=ggml_cont(c,ggml_view_3d(c,x,x->ne[0],rows+kernel-1,in,
+                                                x->nb[1],x->nb[2],first*x->nb[1]));
+                T* part=ggml_conv_2d(c,weights,strip,1,1,0,0,1,1);
+                y=y ? ggml_concat(c,y,part,1) : part;
+            }
             return ggml_add(c,y,ggml_reshape_3d(c,weight(name+".bias",{out}),1,1,out));
         };
         auto norm=[&](T* x,const std::string& name) {
