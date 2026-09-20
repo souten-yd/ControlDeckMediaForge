@@ -3024,6 +3024,12 @@
           "title": "Engine",
           "type": "string"
         },
+        "refine_with_pixal3d": {
+          "default": false,
+          "title": "Refine With Pixal3D",
+          "type": "boolean",
+          "description": "Also run the Pixal3D stage after trellis.cpp and publish its result as the next revision of the same scene. Much slower; Pixal3D runs at its own measured resolution. Check the 3d.image_to_3d capability before requesting it."
+        },
         "resolution": {
           "default": 1024,
           "enum": [

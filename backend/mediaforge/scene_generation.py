@@ -15,6 +15,10 @@ class SceneFromImageRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     input_asset_id: str = Field(pattern=r"^asset_[0-9a-f]{32}$")
     engine: Literal["auto", "trellis_cpp", "pixal3d"] = "auto"
+    # 既定は trellis.cpp までで終える。true のときだけ、その後ろに Pixal3D を
+    # 足して同じシーンの次の版として保存する。engine=pixal3d を明示した場合は
+    # すでに Pixal3D なので、この指定は段を増やさない。
+    refine_with_pixal3d: bool = False
     resolution: Literal[512, 1024] = 1024
     seed: int = Field(default=42, ge=0, le=2**31 - 1, strict=True)
     local_only: Literal[True] = True

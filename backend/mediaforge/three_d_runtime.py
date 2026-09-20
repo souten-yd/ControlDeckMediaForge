@@ -97,6 +97,22 @@ class ThreeDGenerator:
                 raise
             raise SceneError('three_d_runtime_unavailable', 'Verified 3D runtime is unavailable') from exc
 
+    def resolve_stages(self, engine: str = 'auto', resolution: int | None = None,
+                       refine_with_pixal3d: bool = False) -> list[RuntimeReceipt]:
+        """The pinned chain for one request, in the order it will run.
+
+        既定は 1 段（trellis.cpp）。`refine_with_pixal3d` のときだけ Pixal3D を
+        後ろへ足す。すでに Pixal3D を名指ししている場合は段を増やさない。
+        足す段が採用されていなければ、黙って 1 段へ落とさずに理由を返す。
+        """
+        primary = self.resolve(engine, resolution)
+        if not refine_with_pixal3d or primary.engine == 'pixal3d':
+            return [primary]
+        # 追加の段は自分が測られた解像度で走る。1 段目の解像度を押し付けると、
+        # 512 で採用した trellis.cpp と 1024 で採用した Pixal3D が噛み合わず、
+        # 画面では選べるのに受付で必ず落ちる組み合わせになる。
+        return [primary, self.resolve('pixal3d')]
+
     @staticmethod
     def verify_files(receipt: RuntimeReceipt, *, hashes: bool) -> None:
         if isinstance(receipt, PixalRuntimeReceipt):
@@ -127,12 +143,15 @@ class ThreeDGenerator:
                                   'estimated_runtime_sec':adopted.measured_runtime_sec}
             except SceneError as exc:
                 engines[engine] = {'state':'unavailable', 'reason':exc.code}
+        refine = engines.get('pixal3d', {})
         try:
             receipt = self.resolve()
         except SceneError as exc:
-            return {'state':'unavailable', 'reason':exc.code, 'engines':engines}
+            return {'state':'unavailable', 'reason':exc.code, 'engines':engines, 'refine':refine}
         return {'state':'experimental', 'implementation':receipt.engine, 'engines':engines,
                 'input':'image', 'resolutions':[receipt.evaluated_resolution],
+                # 画面のチェックボックスはここだけを見る。既定の段と、足せる段を分ける。
+                'refine':refine, 'refine_engine':'pixal3d',
                 'estimated_runtime_sec':receipt.measured_runtime_sec}
 
     @staticmethod

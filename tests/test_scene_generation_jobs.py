@@ -13,6 +13,7 @@ from mediaforge.scenes import SceneError
 from mediaforge.store import AssetInUse
 from test_scene_generation_import import setup
 from test_scene_recipe_jobs import Host, IDENTITY
+from mediaforge.three_d_runtime import ThreeDGenerator
 from test_three_d_runtime import native_runtime
 from test_pixal_runtime import pixal_runtime
 
@@ -80,7 +81,7 @@ def test_image_generation_uses_child_lease_existing_scene_library_and_provenance
         if engine == 'pixal3d':
             original_request=host.request_resource
             async def after_preparation(identity,payload):
-                roots=list(manager.workspace.recipe_root.glob('native_*'))
+                roots=list(manager.workspace.recipe_root.glob('native_*/stage1'))
                 assert len(roots)==1 and (roots[0]/'pixal-prepared/ready.json').exists()
                 pid=int((roots[0]/'prepare.started').read_text())
                 assert not Path(f'/proc/{pid}').exists()
@@ -127,7 +128,7 @@ def test_cancellation_cleans_pending_admission_or_worker_before_release(tmp_path
             assert not manager._execution_guard.locked()
         if stage=='worker':
             for _ in range(200):
-                pids=list(manager.workspace.recipe_root.glob('native_*/'+('generate.started' if engine=='pixal3d' else 'pid')))
+                pids=list(manager.workspace.recipe_root.glob('native_*/stage1/'+('generate.started' if engine=='pixal3d' else 'pid')))
                 if pids: break
                 await asyncio.sleep(0.01)
             assert pids
@@ -212,7 +213,7 @@ def test_pixal_preparation_cancel_creates_no_gpu_request(tmp_path):
         manager,host,request,_=manager_fixture(tmp_path,'preparation','pixal3d')
         job,_=await manager.submit(request,GENERATION_IDENTITY)
         for _ in range(200):
-            pids=list(manager.workspace.recipe_root.glob('native_*/prepare.started'))
+            pids=list(manager.workspace.recipe_root.glob('native_*/stage1/prepare.started'))
             if pids: break
             await asyncio.sleep(.01)
         assert pids and host.events==[]
@@ -267,5 +268,99 @@ def test_gpu_lease_keeps_renewing_until_canceled_worker_finishes_cleanup(tmp_pat
         await asyncio.wait_for(cancellation,2)
         await manager.wait_cleanup(job.id)
         assert host.events[-1]=='release' and manager.store.get_job(job.id).status==JobStatus.CANCELED
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def refine_fixture(tmp_path, *, pixal_fault=''):
+    """trellis.cpp のあとに Pixal3D を足した、2 段の採用を 1 つの generator で持つ。
+
+    実機と同じく段ごとに測った解像度が違う（trellis.cpp 512 / Pixal3D 1024）。
+    1 段目の解像度を 2 段目へ押し付けると、選べるのに必ず落ちる組み合わせになる。
+    """
+    data=setup(tmp_path/'workspace')
+    store,workspace,resolver,request,*_=data
+    resolver.resolve_active=lambda: resolver.runtime
+    runtime_root=tmp_path/'native';runtime_root.mkdir()
+    _,native=native_runtime(runtime_root,script="time.sleep(0.05)\n")
+    (runtime_root/'receipt.json').write_text(
+        native.model_copy(update={'evaluated_resolution':512}).model_dump_json())
+    pixal_runtime(runtime_root,allowed_root=tmp_path,fault=pixal_fault)
+    generator=ThreeDGenerator(runtime_root/'receipt.json',
+        pixal_receipt_path=runtime_root/'pixal3d-runtime.json')
+    request=request.model_copy(update={'engine':'trellis_cpp','refine_with_pixal3d':True,'resolution':512})
+    host=ResourceHost()
+    manager=SceneRecipeJobManager(store,workspace,host,generator=generator,
+        control_poll_sec=0.01,lease_renew_sec=0.02,resource_poll_sec=0.01)
+    return manager,host,request
+
+
+def test_requested_pixal_stage_runs_after_trellis_and_keeps_both_revisions(tmp_path):
+    """「Pixal3D まで実行する」は、1 段目を捨てずに同じシーンの次の版にする。"""
+    async def scenario():
+        manager,host,request=refine_fixture(tmp_path)
+        job,_=await manager.submit(request,GENERATION_IDENTITY)
+        await manager.wait_cleanup(job.id)
+        final=manager.store.get_job(job.id)
+        assert final.status==JobStatus.SUCCEEDED, final.error
+        result=manager.projection(job.id,'user:7')['result']
+        assert result['refine']=={'state':'succeeded','engine':'pixal3d','reason':None}
+        # 版は 2 つ。現在の版は Pixal3D の側である。
+        assert result['scene']['revision_count']==2
+        assert result['revision']['sequence']==2
+        assert result['scene']['current_revision_id']==result['revision']['id']
+        assert result['generation']['runtime_adapter']=='pixal3d'
+        # 段ごとに測った解像度で走る。1 段目 512 / 2 段目 1024。
+        assert result['generation']['resolution']==1024
+        first={manager.store.get_provenance(a).parameters['generation']['resolution']
+               for a in final.asset_ids
+               if manager.store.get_provenance(a).runtime_adapter=='native.trellis-cpp'}
+        assert first=={512}
+        # 1 段目の Asset も残る。並べて比べられることが、選ぶ理由である。
+        assert len(final.asset_ids)==4
+        adapters={manager.store.get_provenance(a).runtime_adapter for a in final.asset_ids}
+        assert adapters=={'native.trellis-cpp','pixal3d'}
+        # 2段目は1段目の.blendからではなく同じ入力画像から作られている。
+        # 版の親子はcatalogが持つ。Assetのlineageに前段を親として入れない。
+        blends=[a for a in final.asset_ids
+                if manager.store.get_asset(a).mime_type=='application/x-blender']
+        assert len(blends)==2
+        for asset_id in blends:
+            assert manager.store.get_provenance(asset_id).parent_asset_ids==[request.input_asset_id]
+        # 段ごとに lease を取り、段ごとに返している。またいで握らない。
+        assert host.events.count('activate')==2 and host.events.count('release')==2
+        assert list(manager.workspace.recipe_root.iterdir())==[]
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_failed_pixal_stage_keeps_the_published_trellis_scene_and_says_why(tmp_path):
+    """追加の段が落ちても、既定の段の成果物は残す。落ちたことは黙らせない。"""
+    async def scenario():
+        manager,host,request=refine_fixture(tmp_path,pixal_fault='fail_generate')
+        job,_=await manager.submit(request,GENERATION_IDENTITY)
+        await manager.wait_cleanup(job.id)
+        final=manager.store.get_job(job.id)
+        assert final.status==JobStatus.SUCCEEDED, final.error
+        result=manager.projection(job.id,'user:7')['result']
+        assert result['refine']['state']=='failed'
+        assert result['refine']['reason']=='three_d_generation_failed'
+        assert result['scene']['revision_count']==1
+        assert result['generation']['runtime_adapter']=='native.trellis-cpp'
+        assert len(final.asset_ids)==2
+        assert host.events.count('release')==2
+        assert list(manager.workspace.recipe_root.iterdir())==[]
+        await manager.stop()
+    asyncio.run(scenario())
+
+
+def test_unadopted_pixal_stage_is_refused_at_admission(tmp_path):
+    """足せない段を黙って落とさない。受付で理由を返す。"""
+    async def scenario():
+        manager,host,request=refine_fixture(tmp_path)
+        manager.generator.pixal_receipt_path.unlink()
+        with pytest.raises(SceneError,match='3D runtime is unavailable|has not been adopted|unavailable'):
+            await manager.submit(request,GENERATION_IDENTITY)
+        assert host.created==[]
         await manager.stop()
     asyncio.run(scenario())

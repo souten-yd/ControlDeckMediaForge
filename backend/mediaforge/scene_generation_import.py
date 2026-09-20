@@ -65,9 +65,16 @@ async def _import_worker(workspace: SceneWorkspace, root: Path, runtime: Resolve
 async def import_generated_glb(
     workspace: SceneWorkspace, owner: str, job_id: str, value: SceneFromImageRequest,
     source: Path, source_root: Path, facts: GenerationFacts, *, runtime_id: str, runtime_version: str,
+    scene_id: str | None = None, base_revision_id: str | None = None,
 ) -> dict[str, Any]:
-    """Only an internal generation caller can provide the staging path and facts."""
+    """Only an internal generation caller can provide the staging path and facts.
+
+    `scene_id` / `base_revision_id` を渡すと、新しいシーンを作らずに既存シーンの
+    次の版として commit する。2 段目（Pixal3D）の成果物を、1 段目と同じシーンに
+    並べて残すための経路であり、外から呼べる API は増やしていない。
+    """
     owner = validate_scene_owner(owner)
+    appending = scene_id is not None and base_revision_id is not None
     if facts.seed != value.seed or facts.resolution != value.resolution:
         raise SceneError("scene_generation_invalid", "generation facts differ from the request")
     input_asset = workspace.store.get_asset(value.input_asset_id)
@@ -95,25 +102,43 @@ async def import_generated_glb(
         with workspace.resolver.runtime_reference(runtime_id) as runtime:
             if runtime is None or runtime.version != runtime_version:
                 raise SceneError("scene_runtime_unavailable", "pinned Blender runtime is unavailable")
+            if appending:
+                document, revisions = workspace.catalog.get(owner, str(scene_id))
+                if document.current_revision_id != base_revision_id:
+                    raise SceneError("scene_revision_conflict", "scene current revision changed")
+                parent = next((item for item in revisions if item.id == base_revision_id), None)
+                if parent is None:
+                    raise SceneError("scene_revision_not_found", "scene revision is unavailable")
+                if runtime.runtime_id != parent.runtime_id or runtime.version != parent.runtime_version:
+                    raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
             blend = await _import_worker(workspace, root, runtime)
             preview, blender_facts, glb_facts = await workspace._validate(blend, runtime)
             current, _, _ = workspace._verified_revision_asset(input_asset.id, input_asset.mime_type)
             if current.sha256 != dependency.sha256:
                 raise SceneError("scene_generation_input_invalid", "generation input changed")
+            # 版の親子は catalog が記録する。Asset の lineage は「何から作られたか」で、
+            # 後段は前段の .blend からではなく同じ入力画像から作られている。
+            # 前段を親として名乗らせない（来歴に嘘を入れない）。
             source_asset, preview_asset = workspace._register_assets(
                 job_id, blend, preview, runtime, blender_facts, glb_facts,
                 parent_revision=None, dependencies=[dependency], operation="scene.from_image",
                 parameters={"generation": facts.model_dump(mode="json")}, generation=facts,
             )
             registered.extend([source_asset.id, preview_asset.id])
-            document, revision = workspace.catalog.create(
-                owner, name=value.name, tags=value.tags, collection=value.collection,
-                revision=SceneRevisionInput(
-                    source_asset_id=source_asset.id, preview_asset_id=preview_asset.id,
-                    dependencies=[dependency], runtime_id=runtime.runtime_id, runtime_version=runtime.version,
-                    validation=workspace._validation(blender_facts, glb_facts),
-                ),
+            revision_input = SceneRevisionInput(
+                source_asset_id=source_asset.id, preview_asset_id=preview_asset.id,
+                dependencies=[dependency], runtime_id=runtime.runtime_id, runtime_version=runtime.version,
+                validation=workspace._validation(blender_facts, glb_facts),
             )
+            if appending:
+                document, revision = workspace.catalog.commit(
+                    owner, str(scene_id), str(base_revision_id), revision_input,
+                )
+            else:
+                document, revision = workspace.catalog.create(
+                    owner, name=value.name, tags=value.tags, collection=value.collection,
+                    revision=revision_input,
+                )
             return {**workspace._scene_projection(document, revision), "asset_ids": registered,
                     "generation": facts.model_dump(mode="json")}
     except BaseException:
