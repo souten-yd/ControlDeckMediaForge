@@ -1,5 +1,16 @@
 # Pixal3D Vulkan port: scope and measured first component
 
+## Current trained acceptance, 2026-09-20
+
+The learned Vulkan pipeline now completes a 1024 GLB in 1172.211559 seconds
+with sampled peak whole-device VRAM 4,996,214,784 bytes. CPU preparation and mesh
+postprocessing remain explicit. The independently validated runtime is adopted,
+and the evaluated trained GLB is registered in Library. See the
+[full managed/installed acceptance record](g9-pixal-installed-20260920.md) for
+exact hashes, actual Host UI Job status, release provenance and quality limits.
+License consent/authentication are satisfied. Earlier NOT TESTED statements
+below describe their dated component checkpoints, not the latest overall state.
+
 ## 2026-09-19 explicit CPU MoGe camera preprocessing
 
 The base plan now permits the original pinned MoGe 2 inference as a separate

@@ -1,5 +1,16 @@
 # G9 image generation integration — source implementation and remaining acceptance
 
+## Current acceptance, 2026-09-20
+
+The historical source-stage blockers below have newer measured results:
+[signed 0.28.90 and installed TRELLIS 512](g9-installed-acceptance-20260920.md),
+and [trained Pixal Vulkan, adoption and Library acceptance](g9-pixal-installed-20260920.md).
+License consent and ordinary operator authentication are already satisfied.
+The latter record is authoritative for the latest Pixal installed Job status and
+remaining quality limits. CPU preprocessing/postprocessing is explicit; ROCm
+inference is not required by the adopted Pixal path. The dated evidence below is
+retained as the original source-only checkpoint.
+
 The requested outcome is image-to-3D through trellis.cpp, plus installation,
 evaluation and Library outputs for Pixal3D. The existing `feat/g9-image-to-3d`
 checkout is preserved. This additive integration starts from main `bbdc69a`;
