@@ -1,5 +1,23 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 trained Pixal Vulkan evaluation GLB registered
+
+branch `ux1/pixal-installed-acceptance`、記録PR準備。既存U0〜U7の状態変更なし。
+PR586/587はmerge済み（50cc8b0）。学習済みVulkanで保存した実形状を修正版CPUでGLB化。
+349.854642秒/exit0、32,437,052byte、935214三角形、4096²WebP2枚。独立validator/
+Blender4.5.13再import/4方向CPU描画pass。入力の円盤/胴体/配管を確認、裏面に穴と荒れ。
+既存Libraryへasset_47ac692256534508b068cf044a08da29を登録、実HTTP bytes/来歴/一覧一致。
+名称は「[実験的] Pixal3D Vulkan・機械部品 1024」。元画像を親にし、段階別評価を明記。
+同script再実行created=false、旧4GLBのhash保持。0 bones/actions。
+実Host opaque iframeの1280/320pxで表示/close、追加fit/zoom操作も確認。
+320px初期表示はcropped、縮小3回で全体表示。追加scriptは詳細を開く手順漏れで一度失敗し修正。
+managed native/workerは準備済み（CPU49.317878秒）。exact full Vulkanは推論を通過し
+CPU simplify実行中。終了・独立GLB検証までPixal未採用を維持。installed0.28.90/TRELLIS保持。
+次: managed full結果を確認し、成功後の独立import/render→採用→実Hostフォーム生成へ進む。
+再開: `tail -n 12 /data1tb/ControlDeck/data/feature-data/media-forge/maintenance/g9-pixal-hr-diagnosis-20260920/surface-managed-trained-vulkan/output/native.stdout.log`
+最新product test2279passed/2warnings/256.60秒。今回は記録のみ。全体目標は未完了。
+詳細: [Pixal成果物とLibrary受入](implementation/g9-pixal-installed-20260920.md)。
+
 ## 2026-09-20 G9 Pixal trained surface intermediate limit
 
 branch `ux1/pixal-surface-diagnosis`、PR作成準備。既存U0〜U7の状態変更なし。
