@@ -44,6 +44,9 @@ def main() -> int:
     if args.output_dir.exists(): parser.error("use a fresh output directory")
     os.environ.update({"HIP_VISIBLE_DEVICES":"-1","ROCR_VISIBLE_DEVICES":"-1","CUDA_VISIBLE_DEVICES":"-1",
                        "HF_HUB_OFFLINE":"1","ATTN_BACKEND":"sdpa","SPARSE_ATTN_BACKEND":"sdpa","SPARSE_CONV_BACKEND":"none"})
+    if args.backend == "vulkan":
+        # Match the production worker's explicit F32 arithmetic policy.
+        os.environ.update(GGML_VK_DISABLE_F16="1", GGML_VK_DISABLE_COOPMAT="1", GGML_VK_DISABLE_COOPMAT2="1")
     sys.path[:0]=[str(args.naf_source.resolve()),str(args.pixal_source.resolve())]
     import numpy as np
     import torch
@@ -93,6 +96,7 @@ def main() -> int:
         ("f16_storage",32,4,2,2,3,7,16,16,8,8,4,4,32,True),
         ("unequal_dilation",32,4,2,2,3,7,16,12,12,9,3,3,32,False),
         ("regular_one_tile",32,4,2,2,3,128,16,16,8,8,4,4,32,False),
+        ("tiled_encoder",32,4,2,1,3,128,96,128,32,32,16,16,32,False),
     ]
     reports=[]
     for case,D,heads,rope_heads,layers,kernel,tile,iw,ih,ow,oh,lw,lh,C,half in cases:
