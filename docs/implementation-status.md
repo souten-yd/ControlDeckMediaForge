@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 trained flow CPU allocation capacity
+
+main1866087/PR578の次スライス。専用Host sessionは未作成、auth/me実HTTP401を再確認。
+学習済み4flowの本番規模graphを、24GiB address-space/90秒制限付きCPU専用probeで確保。
+全30層/1536幅、F16格納/F32演算、5global token、現worker同様non-FAを維持。
+SS4096/LR32768/HR49152/texture49152 tokensで全exit0。graph確保bytesは順に
+934532096/3328594944/6181770240/6178821120。重み込み実推論peakとは区別する。
+graph pagesは推論でtouchしておらず、RSS約2.72〜2.83GB。forward/GPU実行0。
+制限なし/不足/不正count等10拒否がpass、straceのGPU device fileアクセス0。
+実HTTPで既存Library3GLBの全hash一致、0.28.88 healthy、両adoption receiptなし。
+最終 `./mf.sh test`: 2274 passed / 2 warnings / 257.58秒 / exit0。以後code変更なし。
+private診断のみ、bundle/版数変更なし。証跡はmaintenance/g9-flow-capacity-20260920。
+詳細: [CPU確保実測](implementation/g9-flow-capacity-20260920.md)。
+次は既に提示済みの正規terminal login完了後、Host lease/device対応を確認しTRELLIS/Pixal
+Vulkan実生成・独立GLB/画素評価・採用・installed画像→Libraryへ進む。
+NOT TESTED: full trained生成、Vulkan、実推論peak RAM/VRAM、品質、新規登録、骨。
+
 ## 2026-09-20 G9 operator login boundary and concrete unblock command
 
 前ターンは状態説明のみで生成の進捗なし。実main `2b344be`/installed0.28.88/両未採用を再監査。
