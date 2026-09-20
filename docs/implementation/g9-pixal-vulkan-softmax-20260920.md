@@ -98,3 +98,20 @@ diagnostics, not the lightweight app bundle or public contracts; no app version 
 
 NOT TESTED: completed full trained Pixal GLB, visual quality, managed full runtime
 measurement, Pixal adoption/installed image-to-Library/browser and bone animation.
+
+## Terminal follow-up
+
+PR586 was merged as `9bc0061442054fedeb7d162aa0a004d6ec54eec2`.
+The full trained attempt completed all shape/texture flow and decoder stages,
+then failed in CPU surface processing after `surface_remesh 0/1` with
+`invalid surface mesh dimensions`. It exited 1 after **842.030839 seconds**,
+167 lease renewals, sampled device VRAM peak **4,995,760,128 bytes** and
+owned-process-tree RSS peak **5,279,264,768 bytes**. The owned process was reaped
+and its lease released. The failure removed staging and published no GLB.
+This proves progress beyond the Vulkan softmax failure, not complete generation.
+
+A separately bounded CPU 1024 box reproduction reached 12,024,064 vertices and
+24,048,120 faces, then hit the fixed 16-million-face intermediate limit. This
+does not by itself identify the trained object's counts. One diagnostic Vulkan
+run now captures its unrepaired surface before the unchanged CPU export so that
+subsequent surface investigations can replay on CPU without repeated inference.

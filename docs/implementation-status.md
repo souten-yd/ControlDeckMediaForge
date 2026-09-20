@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 Pixal trained surface intermediate limit
+
+branch `ux1/pixal-surface-diagnosis`、PR作成準備。既存U0〜U7の状態変更なし。
+PR586のVulkan softmax修正は9bc0061へmerge済み。full Vulkan推論/decoderを通過したが
+CPU remesh後の固定16M面上限でexit1、842.030839秒。GLBなし、process回収/lease解放。
+1回の診断captureで実形状を保存し、9,483,982頂点/18,976,340面が上限超過と確認。
+以後の表面処理は保存入力でCPUのみ再現可能。capture829.822180秒/exit1、lease解放。
+中間面だけ32Mまで許可し、頂点16M・raw/final16M・GLB64MiBの制限を維持。
+実1024箱の24,048,120面も修正前拒否→修正後simplify到達/意図cancel/清掃を確認。
+既存CPU surface9export/74比較/19拒否、core検証8/Blender4.5.13 import8もpass。
+最終`./mf.sh test`:2279passed/2warnings/256.60秒/exit0。公開契約/bundle変更なし。
+managed候補build/CPU準備49.317878秒pass。実trained surfaceの修正版CPU exportは実行中。
+Pixal未採用・新GLB未登録。installed0.28.90/TRELLIS512/元checkout保持。
+次: 保存した実形状のCPU GLB export結果を確認し、成功なら独立import/4方向描画する。
+再開: `tail -n 12 /data1tb/ControlDeck/data/feature-data/media-forge/maintenance/g9-pixal-hr-diagnosis-20260920/surface-fixed-replay.log`
+詳細: [CPU remesh上限実測](implementation/g9-pixal-surface-budget-20260920.md)。全体目標は未完了。
+
 ## 2026-09-20 G9 Pixal Vulkan HR softmax correction
 
 branch `ux1/pixal-hr-flow-diagnosis`、PR作成準備。既存U0〜U7の状態変更なし。

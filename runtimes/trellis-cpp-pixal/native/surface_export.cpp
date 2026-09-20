@@ -17,9 +17,10 @@ void validate_options(const SurfaceExportOptions& o) {
     if (o.texture_size<32 || o.texture_size>4096 || (o.texture_size&(o.texture_size-1)) || o.target_faces<4 || o.target_faces>5000000 ||
         o.max_glb_bytes<1024 || o.max_glb_bytes>64*1024*1024) throw std::invalid_argument("invalid surface export options");
 }
-void validate_mesh(const std::vector<float>& v,const std::vector<int32_t>& f) {
-    if (v.empty() || f.empty() || v.size()%3 || f.size()%3 || v.size()/3>16000000 || f.size()/3>16000000)
-        throw std::invalid_argument("invalid surface mesh dimensions");
+void validate_mesh(const std::vector<float>& v,const std::vector<int32_t>& f,size_t max_faces=16000000) {
+    if (v.empty() || f.empty() || v.size()%3 || f.size()%3 || v.size()/3>16000000 || f.size()/3>max_faces)
+        throw std::invalid_argument("invalid surface mesh dimensions: vertices="+std::to_string(v.size()/3)+
+            ", faces="+std::to_string(f.size()/3)+", max_vertices=16000000, max_faces="+std::to_string(max_faces));
     for (float x:v) if (!std::isfinite(x) || std::abs(x)>16) throw std::invalid_argument("invalid surface vertex");
     for (auto i:f) if (i<0 || size_t(i)>=v.size()/3) throw std::invalid_argument("surface face index outside vertex buffer");
 }
@@ -71,7 +72,10 @@ BakedSurface bake_surface(const UnrepairedSurface& input,const SurfaceExportOpti
         if (mesh.faces.empty()) throw std::runtime_error("surface remesh produced no faces");
         prepared_vertices=std::move(mesh.verts); prepared_faces=std::move(mesh.faces);
     } else { prepared_vertices=vertices; prepared_faces=faces; }
-    validate_mesh(prepared_vertices,prepared_faces); s.remesh_vertices=prepared_vertices.size()/3; s.remesh_faces=prepared_faces.size()/3;
+    // The unsigned-distance remesher makes both sides of a closed offset shell.
+    // At 1024 a valid box has 12,024,064 vertices and 24,048,120 triangles.
+    // Admit this bounded intermediate before QEM; input/final limits stay fixed.
+    validate_mesh(prepared_vertices,prepared_faces,32000000); s.remesh_vertices=prepared_vertices.size()/3; s.remesh_faces=prepared_faces.size()/3;
     phase(o,"simplify"); std::vector<float> simplified; std::vector<int32_t> simplified_faces;
     trellis::decimate_qem(prepared_vertices,int(prepared_vertices.size()/3),prepared_faces,int(prepared_faces.size()/3),o.target_faces,simplified,simplified_faces);
     validate_mesh(simplified,simplified_faces); s.simplified_vertices=simplified.size()/3; s.simplified_faces=simplified_faces.size()/3;

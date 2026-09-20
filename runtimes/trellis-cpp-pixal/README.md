@@ -876,6 +876,26 @@ by a same-directory hard link, refusing any existing destination and enforcing
 the current 64 MiB GLB limit. The caller supplies an allowed private output root
 and independently validates before creating an Asset.
 
+The raw and final mesh checks allow at most 16 million vertices/faces. The
+post-remesh intermediate retains the 16-million-vertex ceiling but permits
+32 million triangles before QEM: a valid 1024 cube's unsigned-distance shell
+has 12,024,064 vertices and 24,048,120 triangles. This does not increase the
+requested final face budget or the 64 MiB GLB limit. The caller still bounds
+CPU address space and wall time; reaching QEM does not prove final export.
+Dimension errors include the observed counts and limits.
+
+The real high-resolution CPU remesher regression deliberately cancels at QEM
+entry, verifies staging cleanup, and can compare the original failing binary:
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_surface_budget.py \
+  --binary "$FIXED_SURFACE_BINARY" --baseline-binary "$ORIGINAL_SURFACE_BINARY" \
+  --output-dir "$SURFACE_BUDGET_REPORT"
+```
+
+Each child is bounded to 12 GiB address space and 180 seconds. This checker
+does not request a GPU, evaluate trained quality, or publish a GLB.
+
 The build uses the pinned runtime's existing libwebp/sharpyuv static libraries
 and headers under `build/_deps`, in addition to its GGML libraries. No packages
 or trained weights are downloaded by this build. Record all library hashes for
