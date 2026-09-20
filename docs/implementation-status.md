@@ -1,22 +1,27 @@
 # Media Forge implementation status
 
-## 2026-09-20 G9 trained Pixal Vulkan adopted / installed UI generation running
+## 2026-09-20 G9 installed Pixal Vulkan / image-to-3D acceptance completed
 
-branch `ux1/pixal-installed-acceptance`、記録PR準備。既存U0〜U7の状態変更なし。
-PR586/587はmerge済み（50cc8b0）。managed full Vulkanが1172.211559秒/exit0でGLB生成成功。
-実Host lease233renew/released、sampled VRAM peak4,996,214,784byte/RSS5,253,251,072byte。
-GLB32,437,096byte/935214tris/4096²WebP2枚。独立validator/Blender4.5.13 import/4方向描画pass。
-段階別評価GLBとBIN/描画pixel一致。円盤/胴体/配管を確認、裏面穴・荒れ、骨/animation0。
-評価asset_47ac692256534508b068cf044a08da29は既存Library登録済み、実Host1280/320px表示pass。
-元画像を親にしsplit-phase来歴を保持。同script再実行created=false、旧4GLBhash保持。
-全hash再検証後にPixalを採用。exact core CPU準備52.571055秒、非empty runtime35485fileをpin。
-empty497fileは別途検証記録しreceiptに含めない。既存contract/runtime packageを変更せず。
-idle再起動後healthy、16table/2730asset属性/Blender registry不変。installed0.28.90を維持。
-実Host Create→3D→詳細でPixal3D/1024/seed42を選びsubmit済み、Vulkan推論中。
-Job job_9f4e1ce6efb94811927835616bcd2570、lease4908a94b-b0d2-4868-88b6-317d3636e4fd。
-次: このJobの完了→新blend/GLB来歴・Library表示→idle再起動保持を確認。二重submit不要。
-証跡: maintenance/g9-pixal-hr-diagnosis-20260920/installed-result/job.json とnative.stdout.log。
-最新product test2279passed/2warnings/256.60秒。今回は記録のみ。全体目標はまだ未完了。
+branch `ux1/pixal-installed-acceptance`、PR588。既存U0〜U7の状態変更なし。
+PR586/587はmerge済み（50cc8b0）。managed full Vulkan1172.211559秒/exit0、
+Host lease233renew/released、sampled VRAM peak4,996,214,784byte/RSS5,253,251,072byte。
+独立validator/Blender4.5.13 import/4方向描画と全hash確認後にruntimeを採用。
+実Host画面Create→3D→詳細設定→Pixal3D/1024/seed42からの生成もsucceeded。
+Job job_9f4e1ce6efb94811927835616bcd2570、全体1281.756346秒（約21分22秒）。
+画像→blend(asset_c282bf8dca7649d1b2fd3332cfec9d01)→GLB
+(asset_d5864d5cce8449ce8f2ff27ec37cfe69)を既存Scene/Libraryに保存。HTTP/来歴hash一致。
+scene_800758bca9394464bead9cbaa121ae62、名称「Pixal3D 画像から3D・機械部品 1024」。
+GLB32,520,356byte/935214tris/4096²WebP2枚。独立Blender再import/4方向描画pass。
+円盤/胴体/配管を確認、裏面穴・荒れあり、骨/animation0。experimentalを維持。
+段階別評価asset_47ac692256534508b068cf044a08da29もLibrary登録/表示済み、混同しない。
+実Host opaque iframe1280/320pxで新GLB表示/fit/縮小/closeとPixal1024form確認、各error0。
+idle再起動PID2821940→2832066、16table/2734asset属性/Blender registry不変。
+新旧8assetのcontent hash、採用receipt、healthy/effectiveHTTP200を確認。再起動後browserもpass。
+署名release0.28.90を継続、TRELLIS512保持。native修正は軽量bundle外、Host変更なし。
+最新product test2279passed/2warnings/256.60秒、今回は記録のみ。元checkout/HEAD保持。
+画像生成導入・Pixal Vulkan評価・Library登録の目標を達成。別の未受入を完了扱いしない:
+骨/animation制作、裏面品質/CAD精度、TRELLIS1024、cold provisioning/rollback、
+実端末GPU性能、installed Pixal cancel/retry/別MCP・Workflow invocationはNOT TESTED。
 詳細: [Pixal成果物とLibrary受入](implementation/g9-pixal-installed-20260920.md)。
 
 ## 2026-09-20 G9 Pixal trained surface intermediate limit

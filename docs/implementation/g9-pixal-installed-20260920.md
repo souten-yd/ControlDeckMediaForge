@@ -140,17 +140,74 @@ runtime 1172.211559 seconds. Automatic selection still uses measured TRELLIS 512
 The authenticated actual Host Create → 3D form opened its detail section,
 selected Pixal3D, 1024 and seed 42, and submitted the real image Asset. The UI
 created MediaForge Job `job_9f4e1ce6efb94811927835616bcd2570` at
-05:56:00.231388 UTC. It is currently running. Real Add-on lease
-`4908a94b-b0d2-4868-88b6-317d3636e4fd` reserves 5,533,085,696 bytes on gpu0 for
-detached Host Job `099b310cb1c7`. The browser closed while the detached Job
-continued. There was no second submission or manual replacement of Job output.
+05:56:00.231388 UTC. It reached **succeeded at 06:17:21.987734 UTC**,
+**1281.756346 seconds** overall. Detached Host Job `099b310cb1c7` also succeeded.
+Generation provenance records 1254.619989 seconds including 62.925330 seconds
+of CPU preparation. This is distinct from the 1172.211559-second adoption
+measurement above. Actual native facts confirm checkpoint/Vulkan/float32,
+device 1, 1024, seed 42, 18000 HR tokens and the satisfied token budget.
+Real Add-on lease `4908a94b-b0d2-4868-88b6-317d3636e4fd` reserved
+5,533,085,696 bytes on gpu0 and was observed active, then released after exit.
+The browser closed while the detached Job continued; there was no second
+submission or manual replacement of Job output. Owned native staging was removed.
 
-No additional login or license consent was needed. Terminal installed Job,
-Scene/Library publication and generated-asset restart verification are pending.
+Scene `scene_800758bca9394464bead9cbaa121ae62`, revision
+`revision_3742e5885a264d77ba28ac019582b1f9`, is named
+`Pixal3D 画像から3D・機械部品 1024`. Existing Assets/Library contain:
+
+| Role | Asset | Bytes | SHA256 |
+|---|---|---:|---|
+| Source image | `asset_8cd35ff5ffb145ba94febf7a79cf6583` | 331690 | `13513e9e7b12dc92e97fcf279b427ef9b91c31ebd6ebb19a66dfbd3451e60e83` |
+| Editable Blender | `asset_c282bf8dca7649d1b2fd3332cfec9d01` | 88752658 | `954eed1bfa3c206c88c1678ca4a11cbf56735029e79ca14ea48664197be4baf2` |
+| Library GLB | `asset_d5864d5cce8449ce8f2ff27ec37cfe69` | 32520356 | `a0a3bcc9e106572978a03056cb8cc8c467c129ae27d6a5ad0a7b300626c25432` |
+
+Live HTTP content and provenance hashes match; parent links are image → Blender
+→ GLB. Both generated Assets preserve identical generation identities, pinned
+weights/runtime, accepted licenses, seed, resolution, Vulkan and CPU preparation
+facts. The intermediate native GLB hash
+`28ea521cd216e1765052c187f10e6219f091ca2c59122bc18b7f9dd3000eee1c`
+is distinct from the Blender-exported Library preview.
+
+The published GLB independently passes core validation and Blender 4.5.13 import:
+663075 vertices, 935214 triangles, one mesh/material, two 4096² images, finite
+coordinates, zero bones/actions. Four CPU-rendered views were inspected; the
+disc, housing and pipe remain recognizable, with rough/holed unseen rear surfaces.
+The native importer and re-exported preview have different vertex counts; this
+does not claim identical whole-file bytes across the export boundary.
+
+## Installed browser and persistence
+
+The generated Library GLB displayed in the authenticated Host opaque iframe at
+1280 and 320 pixels. Fit, mobile three-step zoom-out and close passed; the viewer
+reported 935214 triangles / one mesh/material / zero animations. The Pixal 1024
+form remained usable. Page errors, HTTP errors, failed requests and horizontal
+overflow were zero. These checks did not resubmit generation.
+
+Once all Jobs and sessions were terminal, an ordinary service restart changed
+PID **2821940 → 2832066**. Immediately afterwards, all **16 database tables,
+2734 asset-file attributes and Blender registry** matched the fresh pre-restart
+snapshot. Health is healthy, the Pixal receipt hash is unchanged, and eight
+source/new/previous Asset downloads retain their hashes. Authenticated Host
+effective contributions returned HTTP 200. Post-restart authenticated browser
+checks passed again at both widths with identical model counts, usable Pixal
+1024 form, zero page/HTTP/request errors and zero horizontal overflow.
+The actual desktop/mobile viewer screenshots were visually inspected.
+
+Evidence is in `installed-result/` (terminal Job, Host Job, released lease,
+Assets/provenance/downloads, core validation and Blender renders),
+`host-pixal-browser-generated.json`, `host-pixal-browser-generated-restarted.json`
+and `installed-restart/`. Executed helpers
+were `collect-installed.py`, Blender with `inspect_render.py`,
+`run-pixal-host-browser.py ... generated pixal3d`, its `generated-restarted`
+repeat and `restart-installed.py`;
+each exited 0. No additional login or license consent was needed.
 
 Latest product gate (PR587): **2279 tests passed, 2 warnings, 256.60 s, exit 0**.
-This acceptance slice changes records only.
+This acceptance slice changes records only. The requested image-to-3D integration,
+trained Pixal Vulkan evaluation and generated Library registration are complete.
+The original `feat/g9-image-to-3d` checkout remains clean at `524553d`.
 
-NOT TESTED: successful completion of the installed Pixal generation, its generated
-Blender/Library lineage and restart persistence, bones/animation, cold provisioning,
-real rollback and physical-device browser performance.
+NOT TESTED: bones/animation authoring,
+CAD fidelity/watertightness, cold provisioning, real rollback, physical-device
+browser performance, and installed Pixal cancellation/retry or separate MCP/Workflow
+invocations. Successful UI submission is not substituted for these other routes.
