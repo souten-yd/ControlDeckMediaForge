@@ -1,5 +1,29 @@
 # Pixal3D native Vulkan port — image features, NAF, projection and flow sampling
 
+## Allocation-only CPU capacity check (2026-09-20)
+
+`pixal-flow-allocate-cpu CHECKPOINT TOKENS` loads one trained checkpoint and
+allocates its flow graph without any forward pass or GPU initialization. It uses
+the worker's F16 storage/F32 arithmetic, five global tokens and non-FlashAttention
+path. Zero tokens selects the complete SS grid; a positive count makes distinct
+synthetic sparse coordinates within the checkpoint grid, capped at 65,536.
+It requires an explicit address-space limit of at most 24 GiB. For example:
+
+```bash
+cmake --build "$PIXAL_BUILD" --target pixal-flow-allocate-cpu -j 2
+env -u TRELLIS_ATTN_CHUNK_MB timeout --kill-after=5 90 \
+  prlimit --as=25769803776 --core=0 -- \
+  "$PIXAL_BUILD/pixal-flow-allocate-cpu" "$TRAINED_SHAPE_HR_GGUF" 49152
+```
+
+The JSON distinguishes allocated graph/weight buffer bytes from process peak
+RSS. Graph pages are not touched by inference; allocation success does not prove
+physical resident capacity, GPU memory use, full generation or visual quality.
+The upstream non-FA attention path already chunks queries and caps the number
+of chunks at 32. This diagnostic does not change attention or enable an engine.
+Real four-stage results and limits are in
+[`g9-flow-capacity-20260920.md`](../../docs/implementation/g9-flow-capacity-20260920.md).
+
 ## Trained checkpoint evaluation (2026-09-19)
 
 The operator accepted the previously presented DINOv3/Pixal weight terms.
