@@ -259,6 +259,24 @@ class SceneWorkspace:
             runtime_id=runtime_id, runtime_version=runtime_version,
         )
 
+    async def commit_generated_glb(
+        self, owner: str, job_id: str, value: SceneFromImageRequest, source: Path,
+        source_root: Path, facts: GenerationFacts, *, scene_id: str, base_revision_id: str,
+        previous_asset_ids: list[str], runtime_id: str, runtime_version: str,
+    ) -> dict[str, Any]:
+        """Publish a later generation stage as the next revision of the same scene."""
+        from .scene_generation_import import import_generated_glb
+
+        result = await import_generated_glb(
+            self, owner, job_id, value, source, source_root, facts,
+            runtime_id=runtime_id, runtime_version=runtime_version,
+            scene_id=scene_id, base_revision_id=base_revision_id,
+        )
+        # 版が増えても、1 段目で登録した Asset は消さない。並べて比べられることが
+        # 「Pixal3D まで実行する」を選ぶ理由なので、どちらの id も返す。
+        result["asset_ids"] = [*previous_asset_ids, *result.get("asset_ids", [])]
+        return result
+
     async def apply_recipe(
         self,
         owner: str,

@@ -1,5 +1,57 @@
 # 実装引き継ぎ状態
 
+## 2026-09-20 G9 段の選択・端末写真・Web Blenderのモバイル操作
+
+依頼4件を実装。既定はtrellis.cppまで、チェックでPixal3Dを後ろに足す2段。`refine_with_pixal3d`を
+追加のみで足し`engine`の意味は不変。段ごとにlease取得/返却、1段目を先にpublishし2段目は同じ
+sceneの次の版としてcommit。両方のAssetを残す。2段目が落ちても1段目は残し`refine{state,reason}`で言う。
+admission digestは段の並び全体にした。採用解像度は段ごとに違う（trellis.cpp512/Pixal3D1024）ので
+追加段は自分の実測解像度で走る。押し付けると「選べるのに必ず落ちる」組み合わせになる。
+複数角度入力はNOT IMPLEMENTED：`trellis_args.cpp:80`が単一代入、Pixal workerの`prepare`も1枚。
+条件（精度が上がるなら）が成立しないため実装せず、再開条件を記録した。
+iPhone写真はpillow-heifで復号形式を足し、EXIFの向きを取り込み時に当てる。保管はPNGのままで
+Asset契約は不変。3D画面に「端末の写真を選ぶ」を置き、端末が読めない形式は原本をcoreへ回す。
+Web Blenderは「指の操作」（選ぶ/回す/ずらす/寄る・引く）で1本指を中ボタン等へ変換、修飾キーの
+押しっぱなし、隠し入力の画面キーボード、numpad視点キーを追加。選ぶでは横取りしない。
+総称ボタン規則の:not()内idに負けて押す的が39pxだった件はidを2つ書いて44pxへ。
+
+実測（添付R05 WEAVER）：trellis.cpp Vulkan device1 res512 で104.1秒/131,508面/atlas1024²、
+Pixal3D Vulkan float32 res1024 でCPU52.907686秒+GPU632.072820秒=684.980506秒/991,938面/4096²。
+どちらも独立rendererの4方向で形状と色を確認。形状・姿勢の完全再現はNOT ACCEPTED。
+どちらのGLBもcoreのglb.structure validator 1.1.0をpassed。
+全体pytest 2285 collected / 2279 passed / 3 skipped（既知の環境依存3件はmain時点から同じ）。実Chromeの
+`g9_engine_ui_e2e.mjs`6 cases・`3ds_mobile_blender_ui_e2e.py`6 viewportがpassed。
+詳細: [段の選択・端末写真・モバイル操作](g9-3d-ux-mobile-20260920.md)。
+
+## 現在の slice の結果
+
+```text
+PASS       既定engine=trellis_cpp。チェックでrefine_with_pixal3d=trueを送る（実Chrome）
+PASS       2段実行で版2つ・Asset4つ・activate/release各2回。1段目512/2段目1024
+PASS       2段目が落ちても1段目のsceneは残り、refine.state=failedとreasonが出る
+PASS       足せない段を要求したら受付で断る。黙って1段へ落とさない
+PASS       HEIC取り込み（pillow-heif 1.7.0）とEXIF向き補正。保管はPNGのまま
+PASS       端末写真ピッカー。端末が読めないHEICは原本がcoreへ届いて選択される
+PASS       利用者が書いたscene名は写真選択で上書きしない
+PASS       指1本ドラッグ→中ボタン、ずらすはShiftをドラッグ中だけ握る、縦ドラッグ→wheel
+PASS       「選ぶ」では横取りせず、canvasへtouchが届く（noVNC本来の経路が生きている）
+PASS       修飾キーの押下/解放、切断で押したままが残らない、隠し入力→keysym
+FIXED      押す的39px（総称ボタン規則の:not()内idに負けていた）
+FIXED      trellis512+Pixal1024が受付で必ず落ちる組み合わせ。追加段は自分の解像度で走る
+NOT IMPL   複数角度入力。採用中のCLI/workerが1枚しか受けない（条件不成立）
+NOT TESTED 実iPhone/Safariでの写真選択とHEIC復号
+NOT TESTED 実Blenderセッションへの指入力（fixture RFBまで）
+NOT TESTED 署名releaseのinstalled Hostでの2段実行
+```
+
+## 次にやること（1つだけ）
+
+```text
+1. 署名releaseを作り、installed Hostで「Pixal3Dまで実行する」を実画面から1回通す
+2. そのとき版2つがscene一覧に並び、両方がviewerで開けることを実機で確かめる
+3. 実iPhoneでの写真選択は利用者に依頼する（Chromiumでは測れない）
+```
+
 ## 2026-09-20 G9 texture quality correction / portrait viewer fix
 
 利用者の「一部しか生成されず、画像が貼られていない」指摘を実GLB/実Hostで再検証。

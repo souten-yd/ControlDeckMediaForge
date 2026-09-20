@@ -435,7 +435,12 @@ routing.
 - `POST /api/v1/assets/import?purpose=source|edit_mask`
 
 The additive import endpoint accepts a raw PNG/JPEG request body, converts it
-to the canonical RGBA PNG representation, and returns an Asset document. With
+to the canonical RGBA PNG representation, and returns an Asset document. Where a
+HEIF/HEIC decoder is installed it also accepts phone photos in that format and
+converts them the same way, so the stored Asset media type set is unchanged. The
+declared request media type only has to be one the device sends; the body is
+always decoded to decide what it is. EXIF orientation is applied on import, so a
+stored Asset has the dimensions the photo is seen with. With
 `Content-Type: model/gltf-binary`, `purpose=source` instead accepts one GLB 2.0
 file, validates its bounded embedded structure independently of Blender, and
 stores the original bytes unchanged. Embedded WebP textures using
@@ -550,7 +555,8 @@ Both workspace scene lists include owner-scoped `working_copies` for recovery UI
 `media.scene.from_image` adds image-conditioned generation through
 `POST /addon/v1/agent/scene/from-image` (the usual `{"input": {...}}` envelope).
 `schemas/scene-from-image-request.json` requires `name` and `input_asset_id`;
-optional fields are `engine` (`auto`, `trellis_cpp`, `pixal3d`), `resolution`
+optional fields are `engine` (`auto`, `trellis_cpp`, `pixal3d`),
+`refine_with_pixal3d`, `resolution`
 (512 or 1024; only the adopted runtime's measured value is accepted), `seed`,
 `tags`, `collection`, and `retry_job_id`. `local_only` can only be true.
 Paths, URLs, arbitrary scripts, and model downloads are not public inputs.
@@ -565,12 +571,26 @@ and adopted. The additive `engines` map reports each adapter separately. `auto`
 prefers an existing TRELLIS receipt, and considers Pixal only when that receipt is
 absent; invalid receipts or unmeasured resolutions do not select another engine.
 Pixal currently accepts only an adopted 1024 resolution through this public API.
+
+`refine_with_pixal3d` (default false) runs one pinned chain instead of one engine:
+the selected engine first, then Pixal3D. It adds no stage when the selected engine
+is already `pixal3d`, and admission fails closed when Pixal3D is not adopted rather
+than silently falling back to a single stage. The later stage runs at its own
+measured resolution, because the two adapters are measured independently and need
+not share one. Each stage takes and releases its own resource lease. The first
+stage publishes the Scene; the later stage is committed as the next revision of
+that same Scene, so both generations and their Assets remain. When only the later
+stage fails, the published first stage is kept and the Job result reports
+`refine` as `{state, engine, reason}`; `state` is `not_requested`, `succeeded` or
+`failed`. Admission pins the digest of the whole ordered chain, so replacing any
+adopted stage after admission is detected. Multi-view conditioning is not offered:
+the adopted `trellis-cli` and Pixal worker each accept exactly one input image.
 Admission requires `jobs.write` and `resources.acquire`. The returned
 detached Job uses the existing `media.job.status` / `media.job.cancel` endpoints
 and owner checks. Its phases cover CPU input preparation (`prepare_3d_input` for
 Pixal), GPU waiting, generation, and independent
-Blender validation. The CPU Blender step follows GPU process termination and
-lease release; another scene's CPU work can proceed while GPU admission waits.
+Blender validation. A later stage repeats those phases with a `_refine` suffix.
+The CPU Blender step follows GPU process termination and lease release; another scene's CPU work can proceed while GPU admission waits.
 Pixal preparation exits before requesting the GPU lease. Cancellation and timeout
 drain the owned process group before releasing it. Its generation provenance also
 records the descriptor/prepared-input hashes and explicit CPU/Vulkan stages.

@@ -34,6 +34,7 @@ assert P(sys.pycache_prefix)==P.cwd()/(mode+'-user')/'pycache'
 assert 'AUTHORIZATION' not in os.environ and 'PYTHONPATH' not in os.environ
 P(mode+'.started').write_text(str(os.getpid()))
 if FAULT=='sleep_'+mode: time.sleep(60)
+if FAULT=='fail_'+mode: sys.exit(3)
 if FAULT=='flood_'+mode:
  sys.stdout.write('x'*(16*1024*1024));sys.stdout.flush();time.sleep(60)
 out=P(arg('output'));out.mkdir()

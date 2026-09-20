@@ -306,6 +306,26 @@ main { flex: 1; min-height: 0; padding: 16px; }
 }
 .scene-file-picker { display: grid; gap: 6px; font-size: .82rem; font-weight: 700; }
 .scene-file-picker input { min-width: 0; }
+.scene-file-picker.disabled { opacity: .5; }
+
+/* 画像から3D：入力画像の選び方を 1 か所にまとめ、押す前に何を渡すかを見せる。 */
+.scene-generation-source { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; }
+.scene-generation-source-controls { display: grid; gap: 8px; min-width: 0; }
+.scene-generation-source-controls select { width: 100%; min-width: 0; }
+#scene-generation-preview {
+  width: 96px; height: 96px; border-radius: 10px; object-fit: cover;
+  background: #101412; border: 1px solid var(--border);
+}
+.scene-generation-photo-picker input { min-height: 44px; }
+.scene-generation-quality { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.check-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; min-height: 44px; cursor: pointer; }
+.check-row > input { width: 20px; height: 20px; margin-top: 2px; }
+.check-row .check-body { display: grid; gap: 2px; font-weight: 700; }
+.check-row .check-body .hint { margin: 0; font-weight: 400; }
+@media (max-width: 520px) {
+  .scene-generation-source { grid-template-columns: 1fr; }
+  #scene-generation-preview { width: 100%; height: 180px; object-fit: contain; }
+}
 #scene-import-progress { width: 100%; }
 #scene-backup-progress { width: 100%; }
 .scene-browser { min-height: 260px; }
@@ -388,6 +408,19 @@ html:has(#scene-compare-dialog[open]) { overflow: hidden; }
 .blender-session-actions { flex-wrap: wrap; }
 #scene-blender-keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 #scene-blender-keys button { min-width: 44px; min-height: 44px; }
+
+/* 指だけで操作するための帯。PC でも同じものを出す（外付けが無い機械がある）。 */
+#scene-blender-touch { display: grid; gap: 6px; margin-top: 8px; }
+.blender-touch-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.blender-touch-label { font-size: .78rem; font-weight: 700; opacity: .75; margin-right: 2px; }
+/* 総称ボタン規則は `:not(#shell-nav button)` を含むので id を 1 つ持つ。
+   class だけでも id 1 つでも勝てず、実描画で 39px になっていた。id を 2 つ書く。 */
+#scene-blender-dialog #scene-blender-touch button { min-height: 44px; padding: 0 12px; }
+#scene-blender-dialog #scene-blender-touch button[aria-pressed="true"] {
+  border-color: var(--accent); color: var(--accent); font-weight: 700;
+}
+.blender-typing { display: grid; gap: 4px; font-size: .78rem; font-weight: 700; }
+.blender-typing input { min-height: 44px; width: 100%; }
 
 @media (max-width: 767px) {
   #app[data-create-media="3d"] #scene-studio { grid-template-columns: 1fr; }

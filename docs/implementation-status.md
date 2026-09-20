@@ -1,5 +1,82 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 段の選択・端末写真・Web Blenderのモバイル操作
+
+利用者の依頼4件を実装し、実機で測った。既定はtrellis.cppまでで終え、チェックを入れたときだけ
+Pixal3Dを後ろに足す。`SceneFromImageRequest.refine_with_pixal3d`（既定false）を追加のみで足し、
+`engine`の意味は変えていない。段ごとにHostからleaseを取り段ごとに返す（またいで握らない）。
+1段目は先にpublishし、2段目は同じsceneの次の版としてcommitする。どちらのAssetも残す。
+2段目が落ちても1段目は消さず、結果の`refine{state,engine,reason}`と画面文言で必ず言う。
+admissionの`generation_runtime_sha256`は段の並び全体のdigestにした。1段目だけ見ていると
+2段目の採用差し替えが受付後の検査を素通りする。
+
+採用解像度が段ごとに違うことを実機で確認した。trellis.cpp 512 / Pixal3D 1024。
+1段目の解像度を2段目へ押し付けると「画面では選べるのに受付で必ず落ちる」組み合わせになるため、
+追加の段は自分の実測解像度で走らせる。factsもその解像度で記録する。画面もその旨を1行出す。
+
+**複数角度の画像はNOT IMPLEMENTED**（条件不成立）。採用中の実体を読んだ結果である。
+`trellis-cli` の引数解析は `src/trellis_args.cpp:80` が `p.image = v` の単一代入で、`--image` を
+複数渡しても最後の1枚が勝つだけ。`--help`にも多視点入力は無い（READMEの"multi-view render"は
+出来上がったGLBを複数方向から描画するtoolで入力側ではない）。Pixal3D workerの`prepare`も
+`--input`1枚で、複数視点を束ねるargumentもmanifest項目も無い。画面だけ複数枚受けて内部で
+1枚に落とすのは効くように見えて効かない入力になるので実装しない。再開条件は上流が多視点
+条件付けを持つ版を出し、それを実測して採用し直したとき。
+
+iPhone写真はpillow-heifで復号形式を足した。実際にPillowへ載ったopenerだけを宣言し、
+入っていなければPNG/JPEGへ戻る。保管はPNG正規化のままでAsset mime_type契約は増やしていない。
+転送で名乗れるmedia typeにimage/heic等を足した（中身は必ず復号して確かめる）。EXIFの向きを
+取り込み時に当てるようにした。当てないと画面が測った寸法と預かった寸法が食い違い、横倒しの
+まま3Dへ入ると前段の背景抜きが横倒しの物体を切り出す。3D生成画面に「端末の写真を選ぶ」を
+置き、端末が復号できない場合は原本をそのままcoreへ送って復号させる。
+
+Web Blenderは指だけで視点が動かせなかった。noVNCのジェスチャは1本指＝左ボタンで、Blenderの
+視点操作に要る中ボタンのドラッグが作れない。「指の操作」を選ぶ/回す/ずらす/寄る・引くから選び、
+選ぶ以外のときだけcanvasへ届く前にtouchを捕まえて望んだボタンのmouse eventを合成する。
+選ぶでは横取りしないのでnoVNC本来のタップ・ドラッグ・2本指スクロールがそのまま動く。
+修飾キー（Shift/Ctrl/Alt）は押したままにでき、切断時は必ず離す。画面キーボードはcanvasでは
+出ないので隠し入力へ焦点を移してkeysymにして送る。補助キーにnumpadの正面/右/上とHomeを足した。
+総称ボタン規則`button:not(…):not(#shell-nav button)`が:not()内にidを持つため、classだけでも
+id1つでも勝てず押す的が実描画39pxだった。idを2つ書いて44pxへ直した。
+
+### 実測（添付のR05 WEAVER画像から生成）
+
+入力 robot.png 538,533 B SHA256 `f9288dfa970a62fb42cc7c9b7a025655b091893894d460c8554050a3475b27a8`。
+採用済みruntimeをbackendと同じ引数で直に起動した（Host/UIを経由しない経路の測定）。
+
+- trellis.cpp / Vulkan / R9700 GFX1201 device1 / res512 / seed42 / --require-gpu:
+  wall 104.1秒（/usr/bin/time 全体1:44.10）、最大RSS 2,726,684 KiB。
+  GLB 5,986,092 B SHA256 `2c828ae9b1924195916870a3fdc2b49847c0a7d0901ee0d0f274fd09dea78f55`。
+  V=127,802 / F=131,508、atlas 1024²、WebP texture。remesh前は4,355,928面をQEMで削減。
+- Pixal3D / Vulkan / device1 / float32 / res1024 / seed42:
+  CPU prepare 52.907686秒 + GPU generate 632.072820秒 = 684.980506秒。
+  GLB 38,480,920 B SHA256 `fd3c8f1140c515c877b1f2102251f1188c00cca841ba0f9efd1b3d063bc5e7fe`。
+  V=749,011 / F=991,938、texture 4096²、ss_tokens 2205 / hr_tokens 10065 / token_budget_met。
+  `complete.json`のbackend=vulkan / precision=float32 / device_index=1 / rng mt19937-box-muller-f32-v1。
+
+どちらのGLBもcoreの`glb.structure` validator 1.1.0をpassed（EXT_texture_webp required、
+mesh1/material1/images2/textures2/accessors4、trellis 5,986,092 B / Pixal 38,480,920 B）。
+独立rendererで4方向描画し、どちらも6脚・ドーム胴・触角の形状とteal/白の色が出ることを確認。
+Pixal3Dはパネル分割・関節・ドーム上の"R05"文字まで出ており、trellis.cpp 512より細かい。
+部分面だけ描画すると斑に見えるのはrenderer側のsubsampling由来で、全991,938面では出ない。
+形状・姿勢の完全再現はNOT ACCEPTED（Pixalは胴の一部を別の円形ポートとして解釈している）。
+
+### 試験
+
+全体`pytest -q` 2285 collected / 2279 passed / 3 skipped
+（新規: 端末写真取り込み3、2段実行3）。既知の環境依存3件はmain時点から同じく落ちる（`test_ipc_scope_denies_external_peers…` /
+`test_evaluation_cancel_terminates_process_and_releases_lease` /
+`test_invalid_grant_or_lost_lease_fails_without_publishing[pixal3d-renew_failure-host_lease_lost]`）。
+実Chrome 151.0.7922.169の`scripts/g9_engine_ui_e2e.mjs`は320px/ja・1280px/enの両方でpassed、
+6 cases、page errors 0。既定engine=trellis_cpp、チェックでrefine_with_pixal3d=true送信、
+`generate_3d_refine` phaseの文言、採用外Pixal3Dの無効化と理由、端末写真（HEIC名）がcoreへ
+原本のまま届いて選択される、利用者が書いたscene名を上書きしないこと、生成後に開けることを検査。
+`scripts/3ds_mobile_blender_ui_e2e.py`は320x640/640x320/1280x800のja/en計6 viewportでpassed。
+1本指ドラッグ→中ボタン、縦ドラッグ→wheel、選ぶでは横取りなし（canvasへ到達）、修飾キーの
+押下/解放、隠し入力→keysym、切断で押したままの表示と横取りが残らないことを検査。
+
+NOT TESTED: 実iPhone / 実Safariでの写真選択とHEIC復号、実Blenderセッションへの指入力、
+署名releaseのinstalled Hostでの2段実行（本slice はsource実行とruntime直叩きまで）。
+
 ## 2026-09-20 G9 texture quality correction / portrait viewer fix
 
 利用者の「一部しか生成されず、画像が貼られていない」指摘を実GLB/実Hostで再検証。

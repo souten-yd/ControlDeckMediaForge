@@ -9,7 +9,7 @@ from fractions import Fraction
 import uuid
 from pathlib import Path
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from . import __version__
 from .domain import Asset, ErrorDetail, JobRequest, JobStatus, Provenance
@@ -19,6 +19,46 @@ from .paths import contained
 from .store import Store, utc_now
 from .validators import validate_png
 
+
+def _register_phone_photo_formats() -> frozenset[str]:
+    """iPhone の既定は HEIC で、端末が JPEG へ直さずに送ってくることがある。
+
+    Pillow 単体は HEIF を読めないので、読める形式を `pillow-heif` で足す。
+    入っていなければ黙って PNG / JPEG だけに戻す。取り込みが落ちるのは
+    「この形式は受けられません」であって、サービスが落ちる理由ではない。
+    """
+    formats = {"PNG", "JPEG"}
+    try:
+        import pillow_heif
+    except ImportError:
+        return frozenset(formats)
+    for register in ("register_heif_opener", "register_avif_opener"):
+        # 版によって AVIF は Pillow 本体側へ移り、この関数が無いことがある。
+        opener = getattr(pillow_heif, register, None)
+        if opener is None:
+            continue
+        try:
+            opener()
+        except (RuntimeError, OSError, ValueError):
+            continue
+    # 名乗りではなく、実際に Pillow へ載った復号器だけを受けると宣言する。
+    for name in ("HEIF", "AVIF"):
+        if name in Image.ID or name in Image.OPEN:
+            formats.add(name)
+    return frozenset(formats)
+
+
+# 取り込みが復号する形式。PNG / JPEG は常に、HEIF / AVIF は復号器がある環境だけ。
+IMPORTABLE_FORMATS = _register_phone_photo_formats()
+
+# 転送で名乗れる画像の media type。中身は必ず復号して確かめるので、ここは
+# 「端末がその名前で送ってくる」ものを通すためだけにある。iPhone は写真を
+# image/heic のまま添付することがあり、名前だけで断ると写真が届かない。
+IMPORT_MEDIA_TYPES = frozenset({
+    "application/octet-stream", "image/png", "image/jpeg", "image/webp",
+    "image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence",
+    "image/avif", "model/gltf-binary",
+})
 
 MAX_IMPORT_BYTES = 64 * 1024 * 1024
 # 端末の写真を、撮ったままの解像度で預かれる大きさに置く。2048x2048 は strict edit を
@@ -218,13 +258,18 @@ def import_image_asset(store: Store, content: bytes, *, purpose: str) -> Asset:
     try:
         with Image.open(io.BytesIO(content)) as opened:
             opened.load()
-            if opened.format not in {"PNG", "JPEG"}:
-                raise AssetImportError("image import supports PNG and JPEG only")
+            if opened.format not in IMPORTABLE_FORMATS:
+                raise AssetImportError(
+                    "image import supports " + ", ".join(sorted(IMPORTABLE_FORMATS)) + " only"
+                )
             if opened.width < 1 or opened.height < 1 or opened.width * opened.height > MAX_IMPORT_PIXELS:
                 raise AssetImportError(
                     f"image import dimensions exceed the {MAX_IMPORT_PIXELS:,} pixel bound"
                 )
-            image = opened.convert("RGBA")
+            # 端末の写真は EXIF で向きを持つ。画面は復号時に向きを当てて寸法を測るので、
+            # ここで当てないと測った寸法と預かった寸法が食い違う。横倒しのまま 3D へ
+            # 入ると、生成の前段の背景抜きがそのまま横倒しの物体を切り出す。
+            image = ImageOps.exif_transpose(opened).convert("RGBA")
     except AssetImportError:
         raise
     except (UnidentifiedImageError, OSError, SyntaxError) as exc:
