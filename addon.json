@@ -2,7 +2,7 @@
   "api_version": "2",
   "id": "media-forge",
   "name": "Media Forge",
-  "version": "0.28.91",
+  "version": "0.28.92",
   "description": "Local-first media generation and asset library",
   "publisher": "souten-yd",
   "requires": {
