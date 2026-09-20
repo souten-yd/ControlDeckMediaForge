@@ -1,5 +1,13 @@
 # 実装引き継ぎ状態
 
+## 2026-09-20 G9 signed 0.28.89 release preparation
+
+PR581の実Host GPU予約contract修正をmain71d72a7へmerge済み。
+addon/core版数を0.28.89へ揃え、./mf.sh testは2279passed/2warnings/261.88秒/exit0。
+次はexact merge commitから標準bundle生成・署名・公開・通常feature updateを実施し、
+TRELLIS512採用と正規Host経路の画像→Scene/Libraryを実測する。まだ公開/導入は未実施。
+Pixal NAF分割の評価は別branchで継続し、本releaseに未検証nativeを含めない。
+
 ## 2026-09-20 G9 real Vulkan evaluation and broker correction
 
 正規operator sessionを実Hostで確認し、GPU評価を再開。R9700はHost gpu0/native index1。
