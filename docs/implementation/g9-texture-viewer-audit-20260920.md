@@ -31,8 +31,9 @@ quality check. This input cannot establish correct color/pattern generation;
 it also does not prove that the input alone explains the near-uniform result.
 
 The prior independent four-view renders already show roughness/holes on unseen
-surfaces. A camera fix does not repair that geometry. Complete-object fidelity,
-colored-reference reproduction and animation readiness remain NOT ACCEPTED.
+surfaces. A camera fix does not repair that geometry. Complete-object fidelity
+and animation readiness remain NOT ACCEPTED. Color/material delivery is
+separately measured with the reference below.
 No learned model or image was silently replaced. This initial comparison reused
 existing outputs; the additional colored-input run below is separately identified.
 Existing Asset bytes and runtime receipts are preserved.
@@ -137,11 +138,69 @@ inferred; exact reconstruction, watertightness and animation readiness are not
 accepted from these images. Generation provenance correctly records 0.28.90,
 the version used before the viewer-only update.
 
-Pixal's same-input comparison is separately running on installed 0.28.91:
+Pixal's same-input comparison succeeded on installed 0.28.91:
 Job `job_409a09766ec442629eb3d4a75ef5039a`, Host child `eb3b6aad5c0d`,
 1024/seed42. Its prepared manifest matches the same normalized source SHA256;
 the actual background-removed/framed image was inspected and retains the entire
-colored chest. CPU preprocessing and subsequent Vulkan device1 inference are
-distinct stages. Terminal texture/geometry acceptance remains pending.
+colored chest. Total Job elapsed time is 1105.231606 seconds (18m25s), generation
+facts 1078.385081 seconds including CPU preprocessing 79.932288 seconds.
+Subsequent neural inference uses Vulkan device1 / float32; CPU preprocessing and
+surface processing are distinct stages. Genuine Host gpu0 lease
+`1c0de4ef-91cf-47b8-b78d-27a928001165` reserved 5,533,085,696 bytes, was renewed
+and is released. The owned native recipe directory was removed by normal cleanup.
+
+- Name: `Pixal3D 色・模様検証 木製宝箱`.
+- Blend: `asset_81497d6049c5440e9a22fecee6b11848`, 96,436,384 bytes,
+  SHA256 `cf072580f97193622034a344b41f950281b4f4e5bd442dfc1a39aae5e7410853`.
+- GLB: `asset_6f52e48162974d1c827e9b54b72fb3a6`, 38,303,512 bytes,
+  SHA256 `6ef649bbb77b4af1948f251501f8549c15f041f3c6097495d190b5ba0183e60b`.
+
+Independent Blender4.5.13 import/four CPU renders pass: 729844 vertices,
+973502 triangles, one mesh/material, two 4096² textures, finite coordinates,
+zero bones/actions. The base-color RGB ranges are 18–222 / 2–204 / 0–149;
+standard deviations are 25.14150 / 24.03227 / 17.63739. Native→published base-color
+and metallic/roughness embedded image bytes match exactly. Base-color image SHA256
+is `9e2f4d35d8a5ffabda68ead732e82eddba3b5da94a641e1f27624c65017242b5`;
+metallic/roughness is `3c015cc73c686c3f2182e2a68c71d3811dffe2ad5b9ba1809262d53d71280583`.
+The registered asset/lineage/provenance and HTTP content hashes agree.
+
+Four renders and actual installed Host 320/1280px screenshots visibly retain
+brown wood grain, gold trim and dark bands. Material mode and initial/Fit views
+load without manual zoom-out; page/HTTP/request errors and horizontal overflow
+are zero. Pixal's generated object is tilted, panels/hardware are distorted and
+an unseen lid-side gap remains. Those are geometry/pose quality limitations,
+not fixed by texture delivery. Exact reconstruction and watertightness remain
+NOT ACCEPTED. The original mechanical assets retain their earlier holes/roughness;
+neither color experiment is a repaired replacement for them.
+
+The actual Host scene-list response contains both named scenes:
+`scene_f2803b465d184a66841fc140af7ea627` (TRELLIS),
+`scene_b9aad097879747d5ab674bdd78eda073` (Pixal), one revision each.
+The current Library GLB card instead displays the generic provenance summary
+`Export validated scene preview` and a `3D` placeholder; it does not display the
+scene name or a rendered thumbnail. Therefore scene names above identify the
+3D Studio scene list, not a Library card label. Opening each actual GLB in the
+Library is independently verified and does display the textures.
+
+| Gate | Result |
+|---|---|
+| Portrait initial/Fit clipping | Fixed in installed signed 0.28.91, including restart |
+| Native→Library texture transfer | Exact embedded image hashes preserved |
+| Colored-reference material display | Both engines pass for this wooden chest |
+| Exact geometry/detail/pose reconstruction | Not accepted; documented distortions/gaps remain |
+| Original mechanical-part geometry repair | Not performed; prior limitations remain |
+| Rigging/animation, general-input quality | NOT TESTED by this color evaluation |
+
 Evidence: `maintenance/g9-texture-audit-20260920/color-trellis_cpp/`,
 `color-pixal3d/`, `installed-*`, `restarted-*`, `installed-pixel-bounds.json`.
+
+After acceptance, HTTP hashes of all six copied registered outputs were checked
+again. Eleven owned redundant files (318,916,079 bytes: downloaded blend/GLB
+copies, captured native GLB, duplicate release archives and completed-update DB
+snapshots) were removed; see `cleanup.json`. Their raw copies no longer exist in
+the evidence directories. Registered originals, scene history, runtimes and the
+Host's official rollback version are untouched. Reports/signatures, source and
+texture images, four-view renders and browser screenshots remain for the user's
+follow-up review of this reported quality issue; they can be reclaimed when that
+comparison is closed. Final service health is healthy. The original checkout
+remains clean at `524553d5700121dfcfc8c556e232638ba15f6873`.

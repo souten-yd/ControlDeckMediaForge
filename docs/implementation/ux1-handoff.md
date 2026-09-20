@@ -16,8 +16,14 @@ PR589 merge fc6e0c9、署名0.28.91を通常update済み。全2279test/2warnings
 色付き木箱はTRELLIS512で183.317879秒、blend/GLBをLibraryへ登録、来歴/HTTP hash一致。
 GLB asset_83b93b9570394d069ff3c16f6232e329、135930tris/1024²texture2枚。
 独立Blender4方向と実Host320/1280pxで木目・金属色を確認。細部平滑化/推定裏面は残る。
-Pixal1024同一入力/seed42は job_409a09766ec442629eb3d4a75ef5039a で実行中。
-CPU前処理画像の全体/色保持を確認し、genuine leaseでVulkan device1へ進行。終端品質は未確認。
+Pixal1024同一入力/seed42もVulkan device1で1105.231606秒/約18分25秒でsucceeded。
+GLB asset_6f52e48162974d1c827e9b54b72fb3a6、973502tris/4096²texture2枚。
+独立Blender4方向と実Host320/1280pxで木目・金属色を確認、native→保存texture byte一致。
+正規lease更新/解放・owned native作業dir清掃済み。画像欠落ではないが、傾き/蓋隙間/歪みは残る。
+完全形状・細部・姿勢の再現は未受入、元の機械部品の補修ではない。骨/animationは未実施。
+名前は3D Studioのscene一覧で確認済み。LibraryのGLBカードは汎用summary/3D placeholder、
+カードにscene名/描画thumbnailは出ない。開いた実GLBのtexture表示は両方確認済み。
+受入記録branch ux1/3d-color-installed-acceptance、PR590。製品コードの追加変更なし。
 詳細: [texture/portrait監査](g9-texture-viewer-audit-20260920.md)。
 
 ## 2026-09-20 G9 installed Pixal Vulkan / image-to-3D acceptance completed
