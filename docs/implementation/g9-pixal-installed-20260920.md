@@ -38,9 +38,9 @@ input; the unseen rear has holes and rough surfaces. The native bake also report
 559 faces with collapsed UVs. This is an experimental single-image reconstruction,
 not CAD fidelity, watertightness or an animation-ready quality acceptance.
 
-This is a **split-phase trained Vulkan capture plus CPU export**, not a successful
-single invocation of the managed production worker. That separate full run is
-still in progress below; neither result is substituted for the other.
+This is a **split-phase trained Vulkan capture plus CPU export**. The separate
+single invocation of the managed production worker also succeeded, as recorded
+below; the artifacts and timings are kept distinct.
 
 ## Existing Library registration
 
@@ -79,30 +79,78 @@ After adding the actual detail click, desktop fit and mobile fit/three zoom-out
 clicks, close and the existing TRELLIS 512 form all passed. The failed report is
 retained alongside `host-pixal-browser-evaluation-controls-v2.json`.
 
-## Managed candidate and remaining acceptance
+## Managed full Vulkan measurement
 
 `candidates/native-surface32m-v1` / `worker-surface32m-v1` use the exact merged
 source and separate corrected GGML libraries inside the managed Pixal runtime.
-CPU preparation completed in **49.317878 seconds, exit 0**. A full ordinary
-operator-leased Vulkan run is active as `surface-managed-trained-vulkan`; it has
-passed all learned stages and reached CPU simplification. Its terminal GLB,
-runtime and memory measurements are still pending.
+CPU preparation completed in **49.317878 seconds, exit 0**. The full ordinary
+operator-leased `surface-managed-trained-vulkan` run completed in
+**1172.211559 seconds, exit 0**. All learned stages used the Vulkan backend,
+float32 policy and native device 1; image preparation and mesh postprocessing
+used CPU. The model is TencentARC/Pixal3D revision
+`b0cb2e1b794cab9aa0ac38a95d794a4d9337437f`, seed 42, resolution 1024, all 12
+sampler steps and the measured 49152-token limit. Weights are genuine checkpoints.
+
+Sampled whole-device VRAM peaked at **4,996,214,784 bytes**; process-tree RSS
+peaked at **5,253,251,072 bytes**. Real Host lease
+`5d0c7d36-0cb4-4e76-81e2-31ebb7ddb77a` received 233 renewals and was released
+after process exit. The result is **32,437,096 bytes**, SHA256
+`be18d7d31652a0fc7be7d083c79f4b65e4c914be2712ecedb1a9a204e92558ec`.
+Independent core GLB validation and Blender 4.5.13 import/four CPU renders passed.
+Its complete BIN chunk is identical to the split-phase evaluated GLB (SHA256
+`0eaa804daaa84db51107f7823c4f25983bf1c8194362ce7ae4cf881a27371bec`);
+all four rendered RGBA pixel arrays are identical too. JSON metadata differs,
+so these are not incorrectly assigned the same file hash.
+
+An additional preparation rehearsal used the exact core `run_worker` launch and
+minimal environment: **52.571055 seconds, exit 0**, CPU only. Prepared image,
+camera, low/high RGB tensors, samplers and normalization arrays match the full
+evaluation inputs by hash. An initial diagnostic helper import missed the repo
+root on PYTHONPATH and stopped before creating a worker; the corrected rehearsal
+is retained separately as `installed-prepare-rehearsal-v2`.
+
+## Adoption and actual installed generation
 
 A hash inventory covers 35,982 runtime/venv/library members (6,937,326-byte JSON)
 and the base Python interpreter separately. It includes actual GGML loader
 symlink names and excludes bytecode caches; the installed worker uses its private
 pycache prefix. All staged source files match the merged code. This inventory
-grants no adoption. `adopt_pixal.py` is prepared but not executed: it requires the
-exact managed run to succeed, release its lease, and pass GLB plus independent
-Blender verification before checking all hashes and publishing a private receipt.
+alone grants no adoption. After the successful full run, lease release and
+independent verification, `adopt_pixal.py` rechecked the complete inventory and
+atomically created the private runtime receipt. Native executable SHA256 is
+`b8dd89d8e1e1a43e57fced67c6f4efa14cf45199326f5e04e18cf072a5b9e341`.
 
-At this checkpoint the installed capability still reports TRELLIS 512 as
-experimental and Pixal as unavailable. No additional login or license consent
-is needed. Next: complete the managed full measurement, then adopt and exercise
-the real Host image→3D form through new Scene/Library publication and persistence.
+The existing receipt schema requires positive file sizes. The first construction
+therefore rejected 497 empty package markers before writing anything. Their
+hashes/sizes were independently checked and retained in `runtime-empty-members.json`;
+35,485 nonempty files are pinned by the published receipt. This does not claim
+continuous receipt coverage of the empty markers or relax the public contract.
+The receipt is 6,855,338 bytes, SHA256
+`49ef12180751a6b0d68b0e856e4ce93e753609291c6b07af0b90e5dcd7ccdc78`.
+The already accepted MIT, Apache-2.0 and DINOv3 license identities remain recorded.
+
+After adoption, an idle service restart returned healthy PID 2821940 and retained
+the exact 16-table database snapshot, 2730 asset-file attributes and Blender
+registry. The preliminary PID helper used the wrong Python and could not import
+httpx; no before-PID measurement is claimed. The restart command exited 0 and
+the subsequent health, capabilities and full persistence check passed.
+
+The live capability now exposes **Pixal3D / 1024 / experimental** with measured
+runtime 1172.211559 seconds. Automatic selection still uses measured TRELLIS 512.
+The authenticated actual Host Create → 3D form opened its detail section,
+selected Pixal3D, 1024 and seed 42, and submitted the real image Asset. The UI
+created MediaForge Job `job_9f4e1ce6efb94811927835616bcd2570` at
+05:56:00.231388 UTC. It is currently running. Real Add-on lease
+`4908a94b-b0d2-4868-88b6-317d3636e4fd` reserves 5,533,085,696 bytes on gpu0 for
+detached Host Job `099b310cb1c7`. The browser closed while the detached Job
+continued. There was no second submission or manual replacement of Job output.
+
+No additional login or license consent was needed. Terminal installed Job,
+Scene/Library publication and generated-asset restart verification are pending.
 
 Latest product gate (PR587): **2279 tests passed, 2 warnings, 256.60 s, exit 0**.
 This acceptance slice changes records only.
 
-NOT TESTED: managed full success/adoption, installed Pixal generation submission,
-its generated Blender/Library lineage and restart persistence, bones/animation.
+NOT TESTED: successful completion of the installed Pixal generation, its generated
+Blender/Library lineage and restart persistence, bones/animation, cold provisioning,
+real rollback and physical-device browser performance.

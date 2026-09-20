@@ -1,21 +1,22 @@
 # 実装引き継ぎ状態
 
-## 2026-09-20 G9 trained Pixal Vulkan evaluation GLB registered
+## 2026-09-20 G9 trained Pixal Vulkan adopted / installed UI generation running
 
 branch `ux1/pixal-installed-acceptance`、記録PR準備。既存U0〜U7の状態変更なし。
-PR586/587はmerge済み（50cc8b0）。学習済みVulkanで保存した実形状を修正版CPUでGLB化。
-349.854642秒/exit0、32,437,052byte、935214三角形、4096²WebP2枚。独立validator/
-Blender4.5.13再import/4方向CPU描画pass。入力の円盤/胴体/配管を確認、裏面に穴と荒れ。
-既存Libraryへasset_47ac692256534508b068cf044a08da29を登録、実HTTP bytes/来歴/一覧一致。
-名称は「[実験的] Pixal3D Vulkan・機械部品 1024」。元画像を親にし、段階別評価を明記。
-同script再実行created=false、旧4GLBのhash保持。0 bones/actions。
-実Host opaque iframeの1280/320pxで表示/close、追加fit/zoom操作も確認。
-320px初期表示はcropped、縮小3回で全体表示。追加scriptは詳細を開く手順漏れで一度失敗し修正。
-managed native/workerは準備済み（CPU49.317878秒）。exact full Vulkanは推論を通過し
-CPU simplify実行中。終了・独立GLB検証までPixal未採用を維持。installed0.28.90/TRELLIS保持。
-次: managed full結果を確認し、成功後の独立import/render→採用→実Hostフォーム生成へ進む。
-再開: `tail -n 12 /data1tb/ControlDeck/data/feature-data/media-forge/maintenance/g9-pixal-hr-diagnosis-20260920/surface-managed-trained-vulkan/output/native.stdout.log`
-最新product test2279passed/2warnings/256.60秒。今回は記録のみ。全体目標は未完了。
+PR586/587はmerge済み（50cc8b0）。managed full Vulkanが1172.211559秒/exit0でGLB生成成功。
+実Host lease233renew/released、sampled VRAM peak4,996,214,784byte/RSS5,253,251,072byte。
+GLB32,437,096byte/935214tris/4096²WebP2枚。独立validator/Blender4.5.13 import/4方向描画pass。
+段階別評価GLBとBIN/描画pixel一致。円盤/胴体/配管を確認、裏面穴・荒れ、骨/animation0。
+評価asset_47ac692256534508b068cf044a08da29は既存Library登録済み、実Host1280/320px表示pass。
+元画像を親にしsplit-phase来歴を保持。同script再実行created=false、旧4GLBhash保持。
+全hash再検証後にPixalを採用。exact core CPU準備52.571055秒、非empty runtime35485fileをpin。
+empty497fileは別途検証記録しreceiptに含めない。既存contract/runtime packageを変更せず。
+idle再起動後healthy、16table/2730asset属性/Blender registry不変。installed0.28.90を維持。
+実Host Create→3D→詳細でPixal3D/1024/seed42を選びsubmit済み、Vulkan推論中。
+Job job_9f4e1ce6efb94811927835616bcd2570、lease4908a94b-b0d2-4868-88b6-317d3636e4fd。
+次: このJobの完了→新blend/GLB来歴・Library表示→idle再起動保持を確認。二重submit不要。
+証跡: maintenance/g9-pixal-hr-diagnosis-20260920/installed-result/job.json とnative.stdout.log。
+最新product test2279passed/2warnings/256.60秒。今回は記録のみ。全体目標はまだ未完了。
 詳細: [Pixal成果物とLibrary受入](g9-pixal-installed-20260920.md)。
 
 ## 2026-09-20 G9 Pixal trained surface intermediate limit
