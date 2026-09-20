@@ -1,5 +1,24 @@
 # 実装引き継ぎ状態
 
+## 2026-09-20 G9 installed TRELLIS image-to-3D / Library acceptance completed
+
+通常operator loginは01:23:50Zに成功済み。active test accounts mf-e2e/mfe2eも実HTTP確認。
+追加ログイン/重み同意は不要。PR583の署名0.28.90を通常updateで導入、healthy/rollback0.28.89。
+正規HostからTRELLIS512をretryし、親/子/Scene Jobすべてsucceeded。
+job_9576be19cd974c229e5cbd57a8d9e6c5、native305.373791秒、全体320.072120秒。
+実Host gpu0/native1へ9,522,905,088byte予約、終了後lease releasedを確認。
+元画像→.blend(asset_51150a6edd0444c6ad38de8c93e32919)→WebP GLB
+(asset_1171977ee90444ef873538a86f56255e)を既存Libraryへ登録、content/来歴SHA一致。
+GLB6,366,644byte/145472tris、独立Blender再import/CPU4方向描画pass。裏面荒れあり、骨0。
+実認証Host opaque iframeの1280/320pxでLibrary表示/closeと画像→3D form512選択を確認。
+idle再起動後もhealthy/採用/新旧asset hash/画面受入pass。再起動直後16table/2728file属性一致。
+その後UI保存でpreferences更新時刻のみ変化、値と他15table/asset/registry不変を実行比較。
+PR584 native修正もmerge済みだがPixal trained HR flowは失敗し未採用。安定しないモデルの
+規約に従い延期、同じfull runを繰り返さず固定HR入力の限定比較を再開条件とする。
+最終product test2279passed/2warnings/266.95秒、今回は記録のみ。元checkout保持。
+詳細: [署名release・実生成・Host画面・再起動受入](g9-installed-acceptance-20260920.md)。
+残る未完了: Pixal full GLB、TRELLIS1024、生成物の骨/animation。全体目標の完了ではない。
+
 ## 2026-09-20 G9 Pixal Vulkan NAF numeric acceptance / full generation deferred
 
 Pixal実GPUでNAF im2colの巨大buffer拒否を観測し、畳み込みを64行ずつに分割。
