@@ -1,5 +1,29 @@
 # 実装引き継ぎ状態
 
+## 2026-09-21 trellis.cpp 1024 採用（512 併存）/ installed 0.28.93
+
+既定の生成解像度を 512 → 1024。512 は残す。receipt が測った解像度の集合を持てるようにした。
+密な入力は 1024 で `shape_decode` の c2s バッファが 4 GiB を越えて落ちる（RSS 9.39 GB なので
+ホスト RAM ではない）ため、逃げ道として 512 が要る。
+
+```text
+PASS       採用実測 1024=507.788254s/VRAM 11,261,169,664B、512=98.430916s/3,498,651,648B
+PASS       installed 0.28.93 で capability resolutions=[1024,512]、解像度ごとの目安時間つき
+PASS       正規Host経路 res1024 succeeded 514.9s、res512 succeeded 107.1s
+PASS       署名v0.28.93公開・標準update 12.847s・previous 0.28.92保持
+FIXED      receipt を旧coreへ先に当てるとfail-closed。版を入れてから当てる順番を記録
+NOTE       evaluated_output_sha256 は再現しない（GLBに生成時刻。2回の差は5バイト）
+NOT IMPL   2048。65,535 workgroup 上限とdevice lost。ggml-vulkan の分割改修が要る
+NOT TESTED 実iPhone/Safariでの写真選択、実Blenderセッションへの指入力
+```
+
+## 次にやること（1つだけ）
+
+```text
+1. ブラウザ拡張が繋がったら、実Web Blenderセッションで「指の操作」を実測する
+2. 2048 を目指すなら ggml-vulkan のディスパッチ/バッファ分割を別スライスで
+```
+
 ## 2026-09-20 installed 0.28.92 の2段生成 実機受入
 
 正規Host経路で `refine_with_pixal3d: true` を1回通し、**同じシーンに版が2つ並ぶ**ことを実測した。
