@@ -1,5 +1,32 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 operator login boundary and concrete unblock command
+
+前ターンは状態説明のみで生成の進捗なし。実main `2b344be`/installed0.28.88/両未採用を再監査。
+Host auth/meとresourcesは実HTTP401、利用可能な認証付きHost tool/browser/実行credentialなし。
+通常のログインAPIを使うprivate operator補助を追加し、base-planへ境界を先行記録。
+`scripts/g9_operator_session.py`は端末でpassword/TOTPを非表示入力し、新しい専用sessionを
+Hostで作成、auth/meの権限を検証してrepo外0700/0600へ保存。token生成/Host内部import/
+ブラウザcookie取得/アカウント変更はしない。originは明示loopback、proxy/redirectなし。
+status/logout、expiry、失効失敗時の保持、既存credential保護を実装。GPU予約/採用は行わない。
+
+追加32 test: 実PTY子process＋local HTTP protocol fixtureでpassword/TOTP/token出力なし、
+通常login→再利用→logoutを確認。権限不足/誤password/redirect/非TTY/期限切れ/
+symlink/hardlink/FIFO/過剰権限/不正origin/内容/秘密値診断を拒否。実Host受入とは区別。
+最終 `./mf.sh test`: **2274 passed / 2 warnings / 255.76秒 / exit0**。
+以後product/helper/test変更なし。managed helperコピーはsourceとSHA一致。
+証跡: maintenance/g9-operator-20260920（full-test.log、admission-audit.json、helper-provenance.json）。
+
+利用者へ具体的な端末コマンドをasync提示済み:
+`bash /data1tb/ControlDeck/data/feature-data/media-forge/maintenance/g9-operator-20260920/login.sh`
+通常password/TOTPは端末へ入力し、チャットへ送らない。専用session-dirは隣の`g9-operator-auth`。
+この時点で実session fileなし、回答待ち。重み同意の再質問はしていない。
+次は専用sessionを検証し、正規Host brokerのdevice対応/予約/activate/renew/reap/release下で
+TRELLIS実生成を計測し、独立GLB/Blender/画素評価から採用・既存Scene Jobs/Libraryへ進める。
+その後Pixal trained/Vulkanも同じ境界で評価する。ログイン成功だけでreceiptを作らない。
+詳細は[operator手順](implementation/g9-operator-session-20260920.md)。今回の変更はbundle外のprivate評価補助であり、稼働0.28.88の変更なし。
+GPU/新GLB/採用0、Vulkan/full品質/実画像→Library/骨はNOT TESTED。全体目標は未完了。
+
 ## 2026-09-20 G9 merged and signed 0.28.88 installed
 
 利用者の通常手順による指示を実施。G9 PR553〜575の23件と版数PR576をPR経由でmerge。
