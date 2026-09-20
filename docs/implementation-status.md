@@ -1,5 +1,77 @@
 # Media Forge implementation status
 
+## 2026-09-21 G9 trellis.cpp を 1024 で採用し、512 を残す（installed 0.28.93）
+
+利用者の「生成解像度をもっと上げられないか」に対し、trellis.cpp の既定を 512 から
+**1024** へ上げた。512 は選択肢として残す。Pixal3D は元から 1024 で変更なし。
+
+### なぜ 512 を残すか（実測）
+
+採用 receipt は解像度を1つしか持てず、差し替えると下が選べなくなる。密な入力
+（asset_8cd35ff5ffb145ba94febf7a79cf6583、700x700、upsampled coords @res512=4,901,804）を
+1024 で回すと `trellis::shape_decode` の c2s グラフ用バッファ確保が失敗して落ちる
+（`c2s: alloc failed`、exit 134）。**ホスト RAM ではない**。RSS ピークは 9,391,968 KiB =
+9.39 GB で、掛けた 20 GB の枠に届いていない。落ちているのは GPU 側の1本のバッファで、
+ドライバが申告する `maxMemoryAllocationSize` / `maxBufferSize` = 0xfffffffc（約 4 GiB）を
+越えたためである。同じ入力は 512 では通る。小さい対象は速くて軽い 512 を使えるようにする。
+
+receipt が「測った解像度の集合」（既定が先頭）と解像度ごとの実測時間を持てるようにした。
+省略時は今までどおり1つだけ測ったものとして読むので、既存 receipt はそのまま読める。
+申告する `measured_peak_vram_bytes` は両解像度の大きい方にした。小さい方で申告すると
+上の解像度のときに Host が足りない grant を出す。
+
+### 採用の実測（Library 正規化済みの入力、seed 42、backend と同じ引数）
+
+入力 asset_ce04e72d7ebe434f9504e9e973b9d8f8（585,270 B、SHA256 `1d9c3c15c4b83f3a…`）。
+
+| res | 結果 | 時間 | device VRAM ピーク | GLB | 面数 | atlas |
+|---|---|---:|---:|---:|---:|---|
+| 1024（新しい既定） | exit 0 | 507.788254 秒 | 11,261,169,664 B | 12,230,356 B | 279,824 | 2048² |
+| 512（残す） | exit 0 | 98.430916 秒 | 3,498,651,648 B | 5,986,092 B | 131,508 | 1024² |
+
+**`evaluated_output_sha256` は再現しない。** GLB の `asset.extras.generated` に生成時刻が
+入るためで、同じ入力・同じ seed の2回の出力は **5 バイトしか違わなかった**（長さ同じ、
+差分 0.00%）。生成自体は決定的である。この項目は receipt の記録であって照合には使われない
+（`backend/` 内に比較箇所は無い）ことを確認した。今回は名前に反する性質を記録に留め、
+契約は変えていない。
+
+### installed 0.28.93 での受入
+
+PR #595 を main へ merge し、exact commit から標準 bundle を生成、既存 publisher key で署名、
+ControlDeck の公開鍵で独立検証（署名 valid / sha256・size・identity 一致）。
+artifact 37,923,568 B、SHA256 `efc8428a5356946117d7a74ce6f595976c4680c0109266e9ed9410e00abea4b2`。
+GitHub Release v0.28.93 として4 asset を公開。標準 update は 12.847 秒で healthy、
+previous 0.28.92 を保持。
+
+受入の順番に1つ注意がある。**receipt を先に当ててはいけない。** 新しい項目は
+`extra='forbid'` の旧 core が読めず、`three_d_runtime_unavailable` で fail-closed になる
+（実際に 0.28.92 稼働中に当ててしまい、画像→3D が一時的に unavailable になった。
+バックアップから戻して復帰を確認済み）。版を入れてから receipt を当てる。
+
+installed 0.28.93 + 新 receipt で実測:
+- capability の `resolutions` が `[1024, 512]`、`estimated_runtime_by_resolution` が
+  `{'1024': 507.788254, '512': 98.430916}`。
+- 正規 Host 経路で res 1024 の生成が job_d236a141344b4570b507b265d119a686、514.9 秒で
+  succeeded。来歴 `native.trellis-cpp` / resolution 1024 / elapsed 506.1 秒。
+  scene「R05 WEAVER 1024 採用確認」owner user:16。
+- res 512 も job_7738072d8783471fba504634e3cce17a、107.1 秒で succeeded。
+  小さい対象向けの経路が生きていることを確認した。
+
+### 2048 は入れていない
+
+`--res` は 512 超なら何でも受けるが、cascade のトークン数が上限に当たる。同じ入力で
+res2048 はグリッド 128 で 72,908 トークン必要で、backoff（-128 ずつ、下限 1024）が
+1920 → 1792 → 1664 と落ちて 1536（37,893 トークン）で止まる。
+`GGML_VK_FORCE_MAX_ALLOCATION_SIZE` / `GGML_VK_FORCE_MAX_BUFFER_SIZE` を 16 GiB へ
+上書きして越えさせると、res2048 は `maxComputeWorkGroupCount`（Y/Z が 65,535）超過で
+GGML_ASSERT abort、res1920（63,093 トークン）は `vk::DeviceLostError` で GPU が落ちた。
+どちらも env で外せる制限ではなく、ggml-vulkan 側でディスパッチとバッファを分割する
+改修が要る。GPU とサービスはいずれの試行後も復帰を確認した。
+なお res1536 自体は上書きなしで完走する（1273.0 秒 / 290,600 面 / atlas 4096²）が、
+1024 比で時間 2.5 倍・面数 +3.9% なので既定にも選択肢にもしていない。
+
+NOT TESTED: 実 iPhone / Safari での写真選択、実 Blender セッションへの指入力。
+
 ## 2026-09-20 G9 installed 0.28.92 で2段生成を正規Host経路で実行
 
 installed 0.28.92 に対し、ControlDeck 自身の `app.addons.tokens.issue` で短命の add-on
