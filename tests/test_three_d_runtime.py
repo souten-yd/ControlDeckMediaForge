@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 
 import pytest
+from pydantic import ValidationError
 
 from mediaforge.host.jobs import HostExecution
 from mediaforge.scene_generation import SceneFromImageRequest
@@ -115,3 +116,65 @@ def test_native_timeout_or_cancel_reaps_worker(tmp_path,cancel):
     pid=int((work/'pid').read_text())
     assert not Path(f'/proc/{pid}').exists()
     assert not (work/'generated.glb').exists()
+
+
+def test_receipt_may_measure_more_than_one_resolution(tmp_path):
+    """採用は解像度ごとに測る。上へ上げても下を落とさない。
+
+    実機は trellis.cpp を 512 で採用していた。1024 へ上げるだけだと、密な入力が
+    1024 でホスト RAM を使い切るときに逃げ道が無くなる。既定は上、選択肢に下も残す。
+    """
+    generator, receipt = native_runtime(tmp_path)
+    generator.receipt_path.write_text(receipt.model_copy(update={
+        'evaluated_resolution': 1024, 'evaluated_resolutions': [1024, 512],
+        'measured_runtime_by_resolution': {'1024': 513.6, '512': 104.1},
+    }).model_dump_json())
+    adopted = generator.resolve('trellis_cpp')
+    assert adopted.measured_resolutions() == [1024, 512]
+    # 既定が先頭。画面はこれを既定として出す。
+    assert adopted.evaluated_resolution == 1024
+    assert adopted.runtime_sec(512) == 104.1 and adopted.runtime_sec(1024) == 513.6
+    for resolution in (512, 1024):
+        assert generator.resolve('trellis_cpp', resolution).evaluated_resolution == 1024
+    status = generator.status()
+    assert status['resolutions'] == [1024, 512]
+    assert status['estimated_runtime_by_resolution'] == {'1024': 513.6, '512': 104.1}
+    assert status['engines']['trellis_cpp']['resolutions'] == [1024, 512]
+
+
+def test_unmeasured_resolution_is_still_refused(tmp_path):
+    generator, receipt = native_runtime(tmp_path)
+    generator.receipt_path.write_text(receipt.model_copy(update={
+        'evaluated_resolution': 1024, 'evaluated_resolutions': [1024],
+    }).model_dump_json())
+    with pytest.raises(SceneError, match='has not been measured'):
+        generator.resolve('trellis_cpp', 512)
+
+
+def test_receipt_rejects_a_default_outside_its_measured_set(tmp_path):
+    generator, receipt = native_runtime(tmp_path)
+    for update in (
+        # 既定が宣言の外
+        {'evaluated_resolution': 1024, 'evaluated_resolutions': [512]},
+        # 宣言が重複
+        {'evaluated_resolution': 512, 'evaluated_resolutions': [512, 512]},
+        # 計測時間が宣言と食い違う
+        {'evaluated_resolution': 512, 'evaluated_resolutions': [512],
+         'measured_runtime_by_resolution': {'1024': 1.0}},
+        # 計測時間が不正
+        {'evaluated_resolution': 512, 'evaluated_resolutions': [512],
+         'measured_runtime_by_resolution': {'512': 0.0}},
+    ):
+        payload = receipt.model_copy(update=update).model_dump(mode='json')
+        with pytest.raises(ValidationError):
+            ThreeDRuntimeReceipt.model_validate(payload)
+
+
+def test_existing_single_resolution_receipts_still_load(tmp_path):
+    """省略時は今までどおり 1 つだけ測ったものとして読む。"""
+    generator, receipt = native_runtime(tmp_path)
+    assert receipt.evaluated_resolutions is None
+    adopted = generator.resolve('trellis_cpp')
+    assert adopted.measured_resolutions() == [receipt.evaluated_resolution]
+    assert adopted.runtime_sec(receipt.evaluated_resolution) == receipt.measured_runtime_sec
+    assert generator.status()['resolutions'] == [receipt.evaluated_resolution]

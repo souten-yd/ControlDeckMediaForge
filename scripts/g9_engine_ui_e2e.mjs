@@ -50,10 +50,15 @@ const server = createServer((request, response) => {
 await new Promise((ready) => server.listen(0, '127.0.0.1', ready));
 const base = `http://127.0.0.1:${server.address().port}`;
 const imageId = `asset_${'1'.repeat(32)}`;
-const baseCapability = () => ({state: 'experimental', implementation: 'trellis_cpp', resolutions: [512],
-  estimated_runtime_sec: 300,
-  engines: {trellis_cpp: {state: 'experimental', resolutions: [512], estimated_runtime_sec: 300},
-    pixal3d: {state: 'experimental', resolutions: [1024], estimated_runtime_sec: 1200}},
+// 実機は trellis.cpp を 1024（既定）と 512 の 2 つで採用し、Pixal3D は 1024。
+// 既定は先頭。解像度ごとに測った時間を持つ。
+const baseCapability = () => ({state: 'experimental', implementation: 'trellis_cpp',
+  resolutions: [1024, 512], estimated_runtime_sec: 520,
+  estimated_runtime_by_resolution: {'1024': 520, '512': 104},
+  engines: {trellis_cpp: {state: 'experimental', resolutions: [1024, 512], estimated_runtime_sec: 520,
+      estimated_runtime_by_resolution: {'1024': 520, '512': 104}},
+    pixal3d: {state: 'experimental', resolutions: [1024], estimated_runtime_sec: 1200,
+      estimated_runtime_by_resolution: {'1024': 1200}}},
   refine: {state: 'experimental', resolutions: [1024], estimated_runtime_sec: 1200}});
 // 実機は trellis.cpp を 512、Pixal3D を 1024 で採用している。段ごとに違う。
 const report = {mode: 'source_browser_opaque_iframe_with_transport_fixtures', passed: false,
@@ -161,7 +166,10 @@ try {
       const by = (name) => frame.locator(`#scene-generation-${name}`);
       await by('options').click();
       assert.equal(await by('engine').inputValue(), 'trellis_cpp');
-      assert.equal(await by('resolution').inputValue(), '512');
+      // 採用の先頭が既定。解像度ごとに測った目安が選択肢に出る。
+      assert.equal(await by('resolution').inputValue(), '1024');
+      assert.deepEqual((await options(frame, 'resolution')).map((item) => item.label),
+        locale === 'ja' ? ['1024 · 9分', '512 · 2分'] : ['1024 · 9 min', '512 · 2 min']);
       await by('engine').selectOption('pixal3d');
       assert.deepEqual((await options(frame, 'resolution')).map((item) => item.value), ['1024']);
       await by('image').selectOption(imageId);
@@ -212,7 +220,8 @@ try {
       assert.equal(await by('engine').inputValue(), 'pixal3d');
       assert(!(await by('submit').isDisabled()));
       await by('engine').selectOption('trellis_cpp');
-      assert.equal(await by('resolution').inputValue(), '512');
+      assert.equal(await by('resolution').inputValue(), '1024');
+      await by('resolution').selectOption('512');
       await by('submit').click();
       await status(frame, locale === 'ja' ? '3Dを生成しています' : 'Generating 3D');
       assert.equal(fixture.requests[1].engine, 'trellis_cpp');
@@ -235,7 +244,9 @@ try {
       await screenshot(page, frame, `${width}-${locale}-unavailable.png`);
       await by('options').click();
       fixture.capability = baseCapability();
+      // 採用から 512 が消えたら、選んでいた 512 は理由付きで無効にして送らせない。
       fixture.capability.engines.trellis_cpp.resolutions = [1024];
+      fixture.capability.engines.trellis_cpp.estimated_runtime_by_resolution = {'1024': 520};
       await refresh(frame);
       assert.equal(await by('resolution').inputValue(), '512');
       assert((await options(frame, 'resolution')).find((item) => item.value === '512').disabled);
@@ -258,8 +269,8 @@ try {
       assert(!(await refine.isDisabled()), 'adopted Pixal3D must be selectable');
       await frame.waitForFunction((value) =>
         document.querySelector('#scene-generation-refine-hint').textContent.includes(value),
-        locale === 'ja' ? 'Pixal3Dまで実行すると合計で約25分かかり、1024で走って'
-                        : 'takes about 25 min in total, runs at 1024');
+        locale === 'ja' ? 'Pixal3Dまで実行すると合計で約22分かかり、1024で走って'
+                        : 'takes about 22 min in total, runs at 1024');
       const photo = frame.locator('#scene-generation-photo');
       assert.equal(await photo.count(), 1, 'a device photo picker must exist');
       assert((await photo.getAttribute('accept')).includes('image/*'), 'the picker must accept device photos');

@@ -46,6 +46,12 @@ class ThreeDRuntimeReceipt(BaseModel):
     device_id: str = Field(pattern=r'^gpu[0-9]+$')
     native_device_index: int = Field(ge=0, le=31, strict=True)
     evaluated_resolution: Literal[512, 1024]
+    # 採用は解像度ごとに測る。1 つしか持てないと、上の解像度へ上げた瞬間に下が
+    # 選べなくなる。密な入力は上の解像度でホスト RAM を使い切るので、逃げ道を
+    # 残せないと「選べるのに必ず落ちる」入力ができてしまう。
+    # 省略時は evaluated_resolution 1 つだけを測ったものとして読む（既存 receipt 互換）。
+    evaluated_resolutions: list[Literal[512, 1024]] | None = Field(default=None, min_length=1, max_length=2)
+    measured_runtime_by_resolution: dict[str, float] | None = None
     measured_peak_vram_bytes: int = Field(gt=0, le=256*1024**3, strict=True)
     measured_runtime_sec: float = Field(gt=0, le=86400)
     evaluated_output_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
@@ -60,10 +66,48 @@ class ThreeDRuntimeReceipt(BaseModel):
                 raise ValueError('runtime receipt contains an escaping relative path')
         if self.executable not in self.runtime_files or set(self.model_files) != MODEL_FILES:
             raise ValueError('runtime receipt does not cover executable and required models')
+        declared = self.evaluated_resolutions
+        if declared is not None and (
+            self.evaluated_resolution not in declared or len(set(declared)) != len(declared)
+        ):
+            raise ValueError('runtime receipt default resolution is not among its measured ones')
+        measured = self.measured_resolutions()
+        timings = self.measured_runtime_by_resolution or {}
+        if timings and (set(timings) != {str(value) for value in measured}
+                        or any(not 0 < seconds <= 86400 for seconds in timings.values())):
+            raise ValueError('runtime receipt timings do not cover its measured resolutions')
         return self
+
+    def measured_resolutions(self) -> list[int]:
+        """Every resolution this adoption measured, the default first.
+
+        宣言した集合が正で、既定はその中に無ければならない（上の検証）。ここで
+        既定を足してはいけない。足すと、どんな宣言でも既定が入ってしまい、
+        検証が素通りする。
+        """
+        declared = self.evaluated_resolutions
+        if declared is None:
+            return [self.evaluated_resolution]
+        return [self.evaluated_resolution,
+                *(value for value in declared if value != self.evaluated_resolution)]
+
+    def runtime_sec(self, resolution: int) -> float:
+        return (self.measured_runtime_by_resolution or {}).get(str(resolution), self.measured_runtime_sec)
 
 
 RuntimeReceipt = ThreeDRuntimeReceipt | PixalRuntimeReceipt
+
+
+def measured_resolutions(receipt: RuntimeReceipt) -> list[int]:
+    """Both adapters answer the same question; only trellis.cpp measures more than one."""
+    if isinstance(receipt, ThreeDRuntimeReceipt):
+        return receipt.measured_resolutions()
+    return [receipt.evaluated_resolution]
+
+
+def runtime_by_resolution(receipt: RuntimeReceipt) -> dict[str, float]:
+    return {str(value): receipt.runtime_sec(value) if isinstance(receipt, ThreeDRuntimeReceipt)
+            else receipt.measured_runtime_sec for value in measured_resolutions(receipt)}
 
 
 class ThreeDGenerator:
@@ -88,7 +132,7 @@ class ThreeDGenerator:
                 receipt = PixalRuntimeReceipt.model_validate(read_json(path, 16*1024**2))
             else:
                 receipt = ThreeDRuntimeReceipt.model_validate(read_json(path, 128*1024))
-            if resolution is not None and resolution != receipt.evaluated_resolution:
+            if resolution is not None and resolution not in measured_resolutions(receipt):
                 raise SceneError('three_d_resolution_not_evaluated', 'Requested resolution has not been measured')
             self.verify_files(receipt, hashes=False)
             return receipt
@@ -139,8 +183,9 @@ class ThreeDGenerator:
         for engine in ('trellis_cpp', 'pixal3d'):
             try:
                 adopted = self.resolve(engine)
-                engines[engine] = {'state':'experimental', 'resolutions':[adopted.evaluated_resolution],
-                                  'estimated_runtime_sec':adopted.measured_runtime_sec}
+                engines[engine] = {'state':'experimental', 'resolutions':measured_resolutions(adopted),
+                                  'estimated_runtime_sec':adopted.measured_runtime_sec,
+                                  'estimated_runtime_by_resolution':runtime_by_resolution(adopted)}
             except SceneError as exc:
                 engines[engine] = {'state':'unavailable', 'reason':exc.code}
         refine = engines.get('pixal3d', {})
@@ -149,7 +194,8 @@ class ThreeDGenerator:
         except SceneError as exc:
             return {'state':'unavailable', 'reason':exc.code, 'engines':engines, 'refine':refine}
         return {'state':'experimental', 'implementation':receipt.engine, 'engines':engines,
-                'input':'image', 'resolutions':[receipt.evaluated_resolution],
+                'input':'image', 'resolutions':measured_resolutions(receipt),
+                'estimated_runtime_by_resolution':runtime_by_resolution(receipt),
                 # 画面のチェックボックスはここだけを見る。既定の段と、足せる段を分ける。
                 'refine':refine, 'refine_engine':'pixal3d',
                 'estimated_runtime_sec':receipt.measured_runtime_sec}
@@ -184,7 +230,7 @@ class ThreeDGenerator:
             return await generate_pixal(receipt, value, image, root, execution, prepared, timeout=self.timeout_sec)
         if not execution.lease_id or execution.device_id != receipt.device_id:
             raise SceneError('host_lease_required', 'Image-to-3D generation requires its granted GPU lease')
-        if value.resolution != receipt.evaluated_resolution:
+        if value.resolution not in measured_resolutions(receipt):
             raise SceneError('three_d_resolution_not_evaluated', 'Requested resolution has not been measured')
         try:
             await asyncio.to_thread(self.verify_files, receipt, hashes=True)
