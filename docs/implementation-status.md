@@ -1,5 +1,43 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 installed 0.28.92 で2段生成を正規Host経路で実行
+
+installed 0.28.92 に対し、ControlDeck 自身の `app.addons.tokens.issue` で短命の add-on
+service token を作り（subject `command:16` / actor_user_id 16 = 既存63シーンの所有者）、
+`POST /addon/v1/agent/scene/from-image` へ `refine_with_pixal3d: true` / `engine trellis_cpp` /
+`resolution 512` / `seed 42` を投げた。入力は登録済みの asset_ce04e72d7ebe434f9504e9e973b9d8f8。
+job_0602300b83ca40f6b996e3bcee3d0ab7 は 22:22:42 投入、22:38:41 succeeded（約16分）。
+
+**同じシーンに版が2つ並んだ。** scene_5aff4588fad34159a2aa6a164a2e000b「R05 WEAVER 2段生成」
+owner user:16、revision_count 2、current は rev2。
+
+- rev1 blend asset_6541881473514bca818a3f16d09f5d85 / preview asset_96658595d82d4e72adfccd1e1350de4c
+  来歴 runtime_adapter `native.trellis-cpp` / model ilintar/trellis2-gguf / **resolution 512** /
+  elapsed 103.9秒 / 131,508面 / 1024²texture。13:25:54Z に publish 済み。
+- rev2 blend asset_359695433aa14d8aa7cc114e39fad527 / preview asset_c3a79f9de0d645ae8c143368ce2e85c8
+  来歴 runtime_adapter `pixal3d` / model TencentARC/Pixal3D / **resolution 1024** /
+  elapsed 728.0秒（CPU preparation 72.1秒を含む）/ execution backend vulkan・precision float32 /
+  991,938面 / 4096²texture。job結果の `refine` は `{state: succeeded, engine: pixal3d, reason: null}`。
+
+**要求は512だが2段目は自分の実測解像度1024で走った。** 実プロセスの引数でも確認した
+（`stage2/` 配下、`--backend vulkan --device 1 --resolution 1024`）。押し付けていたら
+受付で必ず落ちる組み合わせだったので、この経路の修正が効いていることの実証になる。
+
+段ごとにleaseを取り段ごとに返していることを、Host側の監査記録で確認した。
+22:22–22:40の区間で `addon.runtime.resource.request` 2件・`lease.activate` 2件・
+`lease.release` 2件・`lease.renew` 76件、すべてsuccess。`job.create` 1件、
+`job.credential.refresh` 1件（短命tokenのままでは16分持たないので、実際に更新されている）。
+
+両版のAsset lineageは入力画像1件のみで、2段目が1段目のblendを親として名乗っていない。
+版の親子は scene_revisions が持つ（rev2.parent_revision_id = rev1）。
+独立rendererの4方向描画でも、rev2はパネル分割・関節・ドーム上の文字までrev1より細かい。
+形状・姿勢の完全再現はNOT ACCEPTED（Pixalは胴の一部を別の円形ポートとして解釈する）。
+
+NOT TESTED（外部要因で実施できず）:
+- 実Blenderセッションへの指入力。ブラウザ拡張が未接続で実画面を操作できない。
+  fixture RFBでの検証までは通っている。
+- 実iPhone / Safariでの写真選択とHEIC復号。利用者の端末でしか測れない。
+
 ## 2026-09-20 G9 署名0.28.92の公開・通常update・検証済み3Dのライブラリ登録
 
 PR591（段の選択/端末写真/モバイル操作）とPR592（版数と束のHEIC復号器）をmainへmerge。
