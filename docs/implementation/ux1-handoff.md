@@ -1,5 +1,38 @@
 # 実装引き継ぎ状態
 
+## 2026-09-20 署名0.28.92 installed / 検証済み3DのLibrary登録
+
+PR591/592をmainへmerge、exact 28c89aadからbundle生成・署名・GitHub Release v0.28.92公開。
+公開前に束そのものを別portで起こしHEICをPOSTし201を確認（PyInstallerが`pillow_heif`を
+連れていくよう`--hidden-import`/`--collect-binaries`を追加済み）。
+ControlDeck標準updateは11.679秒でhealthy、previous 0.28.91保持、`current`は0.28.92。
+別プロセスからのupdateなので`control-deck-web`を再起動してschema cacheを更新した。
+installedで配信schemaの`refine_with_pixal3d`、capabilityの`refine`/`refine_engine`、
+HEIC取り込み201を実測。検証済みの入力画像と2つのGLBをLibraryへ登録し、HTTPで取り出した
+bytesのSHA256が生成物と一致することを確認した（来歴は`asset.import`。生成Jobではない）。
+検証用サーバ停止時のpkillが稼働featureにも一致して一時停止させたが、systemdで復帰し
+データ不変を確認済み。
+
+```text
+PASS       署名v0.28.92公開、再取得bytesがbuildと一致、latest tag一致
+PASS       束そのものでHEIC 201（1132x1536 PNG）。installedでも320x240で201
+PASS       標準update 11.679秒 / healthy / previous 0.28.91保持 / asset 100件不変
+PASS       installed配信schemaにrefine_with_pixal3d、capabilityにrefine/refine_engine
+PASS       入力画像+2 GLBをLibraryへ登録、glb.structure passed、bytes一致
+NOTE       登録の来歴はasset.import（user-provided）。生成Jobの来歴は付かない
+FIXED      pkillが稼働featureに一致して一時停止。systemdで復帰、データ不変
+NOT TESTED installed Hostのブラウザ画面からの2段生成（Scene 2版としての保存）
+NOT TESTED 実iPhone/Safariでの写真選択、実Blenderセッションへの指入力
+```
+
+## 次にやること（1つだけ）
+
+```text
+1. installed 0.28.92の画面から「Pixal3Dで仕上げまで実行する」を1回通し、
+   同じシーンに版が2つ並ぶことと、両方がviewerで開けることを実機で確かめる
+2. 実iPhoneでの写真選択は利用者に依頼する（Chromiumでは測れない）
+```
+
 ## 2026-09-20 G9 段の選択・端末写真・Web Blenderのモバイル操作
 
 依頼4件を実装。既定はtrellis.cppまで、チェックでPixal3Dを後ろに足す2段。`refine_with_pixal3d`を

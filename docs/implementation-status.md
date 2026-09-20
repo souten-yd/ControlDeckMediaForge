@@ -1,5 +1,52 @@
 # Media Forge implementation status
 
+## 2026-09-20 G9 署名0.28.92の公開・通常update・検証済み3Dのライブラリ登録
+
+PR591（段の選択/端末写真/モバイル操作）とPR592（版数と束のHEIC復号器）をmainへmerge。
+exact merge commit `28c89aad21e296c90763d1f0288fffdf84caab45` から標準bundleを生成した。
+artifact 37,921,046 B、SHA256 `dcc97ba60449f2f306d1a6ba2df648d6b6d3ceeafd60db8aed521475db4ca24c`。
+既存publisher keyで署名し、ControlDeckの`trusted-catalog.json`が持つ公開鍵で独立検証した
+（署名valid、manifestのsha256/size一致、feature_id/version/platform/arch一致）。
+
+**束にHEIC復号器が入っているかを、公開前に束そのもので実測した。** 取り込みは関数の中で
+`pillow_heif`をimportするので、名指ししないとPyInstallerが連れていかない。`--hidden-import`と
+`--collect-binaries`を足し、展開した`mediaforge-core serve`を捨てデータ・別port 9188で起こして
+HEICをPOSTした。HTTP 201、1132x1536のPNGとして受理。libheifの共有ライブラリも入っている。
+
+公開はGitHub Release `v0.28.92`（4 asset）。再取得したtar.gzのSHA256はbuild時と一致し、
+`releases/latest`のtagもv0.28.92。ControlDeck標準の`registry.apply('update','media-forge')`は
+11.679秒で`version 0.28.92 / health healthy / previous_version 0.28.91`を返した。
+`versions/`に0.28.91を保持（retain 2）、`current`は0.28.92を指す。asset 100件・最新asset不変。
+別プロセスからのupdateなので稼働中`control-deck-web`のschema cacheが古いまま残る。
+`systemctl --user restart control-deck-web.service`まで実施し、両service activeを確認した。
+
+installed 0.28.92で実測:
+- 配信schemaに`refine_with_pixal3d`が出る（default false / boolean / 説明つき）。
+- `3d.image_to_3d`に`refine{state:experimental, resolutions:[1024], estimated_runtime_sec:1172.211559}`
+  と`refine_engine:pixal3d`が出る。既定段はtrellis_cpp 512 / 306.481171秒。
+- HEICのPOSTがHTTP 201、320x240のPNGとして受理（asset_f37dcf0017574a8e807cfeb61ac7c55c）。
+
+検証済みの成果物をLibraryへ登録した（`asset.import` / license user-provided）。
+- 入力画像 robot.png 585,270 B → asset_ce04e72d7ebe434f9504e9e973b9d8f8、
+  validation image.non_empty/dimensions/mode/alpha。
+- trellis.cpp 512のGLB 5,986,092 B → asset_c74269cc28b14886b64f052632f5cbae。
+- Pixal3D 1024のGLB 38,480,920 B → asset_ccb64ab0a57e4cd0ab1138a5559dc7aa。
+  どちらも`glb.structure` validation passed。HTTPで取り出したbytesのSHA256は
+  `2c828ae9…dea78f55` / `fd3c8f11…3bc5e7fe` で生成物と一致。
+
+来歴は`asset.import`であり生成Jobではない。採用済みruntimeをbackendと同じ引数で直に起動して
+作ったものを登録しているので、Scene revisionやgeneration provenanceは付かない。
+正規Host経路での2段実行（Scene 2版として保存されること）はinstalledでまだ実行していない。
+
+事故と復旧を1件記録する。検証用サーバを止めるときの`pkill -f "mediaforge-core serve"`が
+稼働中featureのprocessにも一致し、installed 0.28.91を一時停止させた。
+`systemctl --user start cdapp-feature-media-forge.service`で復帰、healthy・asset 100件・
+最新asset id/時刻が停止前と一致することを確認した。データ喪失なし。
+
+NOT TESTED: 実iPhone/Safariでの写真選択、実Blenderセッションへの指入力、
+installed Hostのブラウザ画面からの2段生成、生成Jobとしての来歴付き登録。
+詳細: [段の選択・端末写真・モバイル操作](implementation/g9-3d-ux-mobile-20260920.md)。
+
 ## 2026-09-20 G9 段の選択・端末写真・Web Blenderのモバイル操作
 
 利用者の依頼4件を実装し、実機で測った。既定はtrellis.cppまでで終え、チェックを入れたときだけ
