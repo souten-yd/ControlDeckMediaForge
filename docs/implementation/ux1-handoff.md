@@ -1,5 +1,32 @@
 # 実装引き継ぎ状態
 
+## 2026-09-20 installed 0.28.92 の2段生成 実機受入
+
+正規Host経路で `refine_with_pixal3d: true` を1回通し、**同じシーンに版が2つ並ぶ**ことを実測した。
+scene_5aff4588fad34159a2aa6a164a2e000b / owner user:16 / revision_count 2。
+rev1は`native.trellis-cpp` 512 / 103.9秒、rev2は`pixal3d` 1024 / 728.0秒（vulkan float32）。
+要求は512だが2段目は自分の実測解像度1024で走った（実プロセス引数でも確認）。
+Host監査で resource.request 2 / lease.activate 2 / lease.release 2 / renew 76、
+job.credential.refresh 1（16分のjobが短命tokenで切れていない）。
+
+```text
+PASS       installed 2段実行 succeeded、refine {succeeded, pixal3d, reason null}
+PASS       同一sceneに版2つ。currentはrev2。rev2.parent_revision_id = rev1
+PASS       rev1=trellis.cpp/512/103.9s、rev2=pixal3d/1024/728.0s、backend vulkan/float32
+PASS       段ごとlease取得・返却（Host監査でrequest/activate/release各2件）
+PASS       両版のAsset lineageは入力画像のみ。2段目が1段目のblendを親に名乗らない
+NOT TESTED 実Blenderセッションへの指入力（ブラウザ拡張が未接続）
+NOT TESTED 実iPhone / Safariでの写真選択とHEIC復号（利用者の端末が要る）
+```
+
+## 次にやること（1つだけ）
+
+```text
+1. ブラウザ拡張が繋がったら、実Web Blenderセッションで「指の操作」を1回通し、
+   回す/ずらす/寄る・引くが遠隔のBlender視点を実際に動かすことを実測する
+2. 実iPhoneでの写真選択は利用者に依頼する
+```
+
 ## 2026-09-20 署名0.28.92 installed / 検証済み3DのLibrary登録
 
 PR591/592をmainへmerge、exact 28c89aadからbundle生成・署名・GitHub Release v0.28.92公開。
