@@ -106,6 +106,46 @@ this check is not a claim that an arbitrary build directory has trusted binary
 provenance. Evaluation/adoption must also record and verify the library hashes.
 No binary, model weight, venv, GPU driver or separate service is shipped here.
 
+### Vulkan softmax at trained HR sizes
+
+The pinned GGML's existing long-row Vulkan softmax has a maximum-reduction bug:
+two reduction loops reuse the lane's original maximum instead of its accumulated
+shared-memory value. Rows above 16384 columns can consequently overflow despite
+finite inputs. `patches/ggml-vulkan-softmax.patch` corrects those two expressions;
+it does not create a new kernel or introduce CPU/ROCm inference fallback.
+`prepare_ggml.py` exports the exact pinned Git revision into a separate directory,
+applies that patch and records source/archive/patch hashes. The working TRELLIS
+checkout and libraries must remain unchanged.
+
+Use fresh directories for both candidate builds:
+
+```sh
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/prepare_ggml.py \
+  --source "$TRELLIS_SOURCE/thirdparty/ggml" --destination "$PIXAL_GGML_SOURCE"
+cmake -S "$PIXAL_GGML_SOURCE" -B "$PIXAL_GGML_BUILD" \
+  -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_VULKAN=ON \
+  -DGGML_HIP=OFF -DGGML_CUDA=OFF -DGGML_BLAS=OFF \
+  -DGGML_BUILD_TESTS=OFF -DGGML_BUILD_EXAMPLES=OFF -DBUILD_SHARED_LIBS=ON
+cmake --build "$PIXAL_GGML_BUILD" -j 4
+cmake -S runtimes/trellis-cpp-pixal/native -B "$PIXAL_BUILD" \
+  -DCMAKE_BUILD_TYPE=Release -DTRELLIS_SOURCE_DIR="$TRELLIS_SOURCE" \
+  -DTRELLIS_BUILD_DIR="$TRELLIS_BUILD" -DPIXAL_GGML_BUILD_DIR="$PIXAL_GGML_BUILD"
+cmake --build "$PIXAL_BUILD" -j 4
+"$PIXAL_PYTHON" runtimes/trellis-cpp-pixal/check_softmax.py \
+  --binary "$PIXAL_BUILD/pixal-softmax-check" --output-dir "$PIXAL_SOFTMAX_REPORT" \
+  --backend cpu
+```
+
+`PIXAL_GGML_BUILD_DIR` defaults to the original TRELLIS build for compatibility.
+The explicit candidate path changes both library lookup and executable run paths;
+inspect actual linked libraries and hash them before measurement/adoption. The
+checker covers diffuse rows, moving extreme maxima, the 16384/16385 boundary,
+18000/32769/49152 columns and attention sinks, against a stable F64 reference.
+`--captured-rows` can add bounded finite F32 score rows from real HR diagnostics.
+For a Vulkan check, add `--backend vulkan --device-index N` only inside the
+caller's genuine Host lease. A passing operator check does not adopt the runtime
+or prove full trained generation/quality.
+
 ```sh
 cmake -S runtimes/trellis-cpp-pixal/native -B /tmp/pixal-projection-build \
   -DTRELLIS_SOURCE_DIR="$TRELLIS_SOURCE" -DTRELLIS_BUILD_DIR="$TRELLIS_BUILD"

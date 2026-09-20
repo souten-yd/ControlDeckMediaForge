@@ -1,5 +1,21 @@
 # 実装引き継ぎ状態
 
+## 2026-09-20 G9 Pixal Vulkan HR softmax correction
+
+branch `ux1/pixal-hr-flow-diagnosis`、PR作成準備。既存U0〜U7の状態変更なし。
+失敗した18,000-token HR入力を固定し、最初の非有限値を既存GGML Vulkan softmaxへ局在化。
+長列最大値reductionの2行を修正し、元TRELLISを変えず別source/buildへ適用。
+修正前17条件中5失敗→修正後CPU/Vulkan全17pass、GPU最大誤差5.426629e-8。
+実入力の全30層HR forwardは19.479243秒/exit0/finite。8-token CPU参照6比較もpass。
+18,000-token CPU参照全体は600秒timeout/exit124、未完了を成功扱いしない。
+同じ重み/seed/resolutionで再開したfull VulkanはHR12stepを通過しtexture flow実行中。
+別managed候補はbuild/CPU前処理58.425481秒/exit0、full測定/採用は未実施。
+Pixal未採用・新GLB未登録を維持。署名installed0.28.90/TRELLIS512は変更なし。
+最終`./mf.sh test`:2279passed/2warnings/266.43秒/exit0。公開契約/bundle変更なし。
+次: 実行中full生成の終了を確認し、成功なら独立GLB再import/4方向描画で評価する。
+再開: `tail -n 12 /data1tb/ControlDeck/data/feature-data/media-forge/maintenance/g9-pixal-hr-diagnosis-20260920/fixed-trained-vulkan/output/native.stdout.log`
+詳細: [HR softmax診断と実測](g9-pixal-vulkan-softmax-20260920.md)。全体目標は未完了。
+
 ## 2026-09-20 G9 installed TRELLIS image-to-3D / Library acceptance completed
 
 通常operator loginは01:23:50Zに成功済み。active test accounts mf-e2e/mfe2eも実HTTP確認。
