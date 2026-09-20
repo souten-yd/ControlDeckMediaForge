@@ -142,6 +142,7 @@ def test_pixal_seals_cpu_inputs_uses_venv_and_preserves_provenance(tmp_path, mon
     request = generator.resource_request(receipt, execution)
     assert request['residency_key'] == 'mediaforge:pixal3d:' + 'a'*40
     assert request['estimated_runtime_sec'] == 1
+    assert request['vram']['confidence'] == 'measured'
 
 
 @pytest.mark.parametrize('change', ['synthetic', 'descriptor', 'model', 'python', 'worker', 'resolution'])

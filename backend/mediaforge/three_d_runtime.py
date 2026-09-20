@@ -141,7 +141,7 @@ class ThreeDGenerator:
             'job_id':execution.host_job_id, 'device':'auto', 'preferred_devices':[receipt.device_id],
             'vram':{'resident_bytes':0, 'execution_peak_bytes':receipt.measured_peak_vram_bytes,
                     'cold_load_peak_bytes':receipt.measured_peak_vram_bytes, 'headroom_bytes':512*1024**2,
-                    'confidence':'high'},
+                    'confidence':'measured'},
             'compute_mode':'shared-safe', 'priority':20, 'class':execution.workload_class,
             'residency_key':f'mediaforge:{"trellis-cpp" if receipt.engine == "trellis_cpp" else "pixal3d"}:{receipt.model_revision}',
             'estimated_runtime_sec':receipt.measured_runtime_sec, 'max_wait_sec':300, 'on_insufficient':'queue',

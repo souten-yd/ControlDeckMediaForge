@@ -70,7 +70,10 @@ def test_native_generation_requires_exact_lease_and_produces_verified_facts(tmp_
     assert facts.output_sha256==hashlib.sha256(output.read_bytes()).hexdigest()
     assert facts.model_revision==receipt.model_revision and facts.elapsed_sec>0
     assert generator.status()['state']=='experimental'
-    assert generator.resource_request(receipt,execution)['estimated_runtime_sec']==1
+    resource_request = generator.resource_request(receipt, execution)
+    assert resource_request['estimated_runtime_sec'] == 1
+    # Host VramConfidence accepts measured/estimated/low, never high.
+    assert resource_request['vram']['confidence'] == 'measured'
 
 
 def test_unadopted_or_changed_runtime_cannot_start(tmp_path):
