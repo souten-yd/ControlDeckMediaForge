@@ -1326,6 +1326,14 @@ scene authoring tools remain supported. No second job or asset service is added.
 License consent and measured runtime/device/model identities are prerequisites
 for adopting a candidate. A private, pinned adoption receipt may enable only the
 resolution actually measured; an absent or changed runtime stays unavailable.
+Operator evaluation uses the Host's ordinary authenticated HTTP boundary. A
+private local helper may obtain a dedicated session through `/api/v1/auth/login`
+with interactive password/TOTP entry and validate `/api/v1/auth/me` before saving
+it in an operator-owned 0700 directory/0600 file outside the repository. It must
+not read browser cookies, import Host internals, modify Host users, or mint tokens.
+Credentials never appear in command arguments, reports, logs or release bundles;
+the dedicated session is revoked through the normal logout endpoint when finished.
+Session possession alone grants neither a broker lease nor runtime adoption.
 Pixal3D has a separate private adoption receipt for its worker environment,
 native executable, complete worker descriptor and measured Vulkan device. Its
 venv launcher remains inside the admitted runtime; an explicitly hash-pinned
