@@ -2210,6 +2210,7 @@ def create_app(
             limit=limit,
             media_kind=media_kind,
             thumbnail=grid_thumbnail,
+            membership=store.scene_membership,
         )
 
     @app.get("/api/v1/reference-collections")
@@ -3259,6 +3260,7 @@ def create_app(
                 include_masks=False,
                 limit=limit,
                 thumbnail=grid_thumbnail,
+                membership=store.scene_membership,
             )
 
         producers: dict[str, Any] = {
@@ -4372,6 +4374,7 @@ def create_app(
                             media_kind=str(media_kind),
                             # 既定で同梱する。呼び出し側が明示的に切れる。
                             thumbnail=None if params.get("thumbnails") is False else grid_thumbnail,
+                            membership=store.scene_membership,
                         )
                     elif method == "assets.delete":
                         # 複数選択できるので、1 件ずつの結果を返す。1 件の失敗で

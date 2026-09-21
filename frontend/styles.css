@@ -912,6 +912,12 @@ table.catalog td[data-label="操作"] > button { white-space: nowrap; flex: 0 0 
 }
 .library-thumbnails .hint { margin: 0; flex: 1 1 auto; }
 .library-thumbnails button { flex: 0 0 auto; }
+.library-grouping { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+.library-grouping .hint { margin: 0; flex: 1 1 auto; }
+.library-grouping button { flex: 0 0 auto; }
+/* 束ねたカードに何版ぶんが入っているかを、形式の札と同じ行に出す。
+   .card .meta は space-between なので、3 つ目が来ても自然に右端へ寄る。 */
+.card-versions { white-space: nowrap; }
 #viewer-image[hidden] { display: none !important; }
 .card .meta { display: flex; justify-content: space-between; gap: 6px; font-size: .72rem; color: var(--muted); }
 .card .sum { font-size: .8rem; overflow-wrap: anywhere; }

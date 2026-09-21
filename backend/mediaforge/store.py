@@ -8,7 +8,7 @@ import shutil
 import sqlite3
 import threading
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypeVar
@@ -967,6 +967,58 @@ class Store:
             ).fetchall()
         assets = readable_rows(rows, Asset, "metadata_json", kind="asset")
         return [item for item in assets if item.mime_type == "model/gltf-binary"][:limit]
+
+    def scene_membership(self, asset_ids: Sequence[str]) -> dict[str, dict[str, object]]:
+        """どの資産がどのシーンの何版目かを、1 往復でまとめて引く。
+
+        1 つの版は 2 つの資産を登録する（編集の土台になる .blend と、見るための
+        GLB）。編集を重ねると一覧の行は版の数の 2 倍になり、同じものが連番で並ぶ。
+        まとめて出せるように、行 1 つずつに「どのシーンの何版目か」を持たせる。
+        まとめ方そのものは画面が決める（版は頁をまたいで届くので、server 側で
+        畳むと頁送りの錨が資産の行でなくなる）。
+        """
+        wanted = list(dict.fromkeys(asset_ids))
+        if not wanted:
+            return {}
+        found: dict[str, dict[str, object]] = {}
+        with self._connect() as connection:
+            # SQLite の変数上限（既定 999）に収まるよう、両方の列へ同じ並びを
+            # 渡す 2 倍を見込んで区切る。
+            for start in range(0, len(wanted), 400):
+                chunk = wanted[start:start + 400]
+                marks = ",".join("?" * len(chunk))
+                rows = connection.execute(
+                    f"""SELECT revision.scene_id AS scene_id,
+                               revision.sequence AS sequence,
+                               revision.source_asset_id AS source_asset_id,
+                               revision.preview_asset_id AS preview_asset_id,
+                               document.value_json AS document_json
+                          FROM scene_revisions AS revision
+                          JOIN scene_documents AS document ON document.id = revision.scene_id
+                         WHERE revision.source_asset_id IN ({marks})
+                            OR revision.preview_asset_id IN ({marks})""",
+                    (*chunk, *chunk),
+                ).fetchall()
+                for row in rows:
+                    try:
+                        document = SceneDocument.model_validate_json(str(row["document_json"]))
+                    except ValidationError:
+                        # 読めないシーンは束ねない。行はそのまま 1 件ずつ出る。
+                        continue
+                    for asset_id, role in (
+                        (str(row["source_asset_id"]), "source"),
+                        (str(row["preview_asset_id"]), "preview"),
+                    ):
+                        if asset_id not in wanted:
+                            continue
+                        found[asset_id] = {
+                            "scene_id": str(row["scene_id"]),
+                            "scene_name": document.name,
+                            "scene_revision_count": document.revision_count,
+                            "sequence": int(row["sequence"]),
+                            "role": role,
+                        }
+        return found
 
     def list_asset_records(self, limit: int, before: str | None = None) -> list[tuple[Asset, Provenance]]:
         """Return asset+provenance pairs so the workspace never issues N+1 lookups."""

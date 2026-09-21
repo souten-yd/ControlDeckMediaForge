@@ -163,6 +163,7 @@ const state = {
   libraryCursor: null,
   libraryItems: [],
   libraryMedia: "all",
+  libraryGrouping: true,
   librarySelecting: false,
   librarySelected: new Set(),
   scenes: [],
@@ -7402,16 +7403,11 @@ async function loadLibrary({reset = false} = {}) {
   state.libraryCursor = page.next_before;
   byId("library-more").hidden = !page.next_before;
   if (reset) state.libraryItems = [];
-  // カードは待たずに全部並べる。以前は 1 枚ずつ await していたため、サムネの
-  // 往復が直列になり、前のカードが終わるまで次が出なかった。画像は img の src に
-  // 任せてあるので、ブラウザが可視のぶんだけ並列に取りに行く。
-  for (const item of page.items) {
-    state.libraryItems.push(item);
-    grid.append(libraryCard(item));
-  }
+  for (const item of page.items) state.libraryItems.push(item);
   // 消えた素材を選んだままにしない。削除の後で数だけ残ると、押しても何も起きない。
   const present = new Set(state.libraryItems.map((item) => item.asset_id));
   for (const id of [...state.librarySelected]) if (!present.has(id)) state.librarySelected.delete(id);
+  renderLibraryGrid();
   renderLibrarySelection();
   const empty = grid.childElementCount === 0;
   byId("library-empty").hidden = !empty;
@@ -7419,6 +7415,71 @@ async function loadLibrary({reset = false} = {}) {
   byId("library-count").textContent = empty
     ? "" : `${state.libraryItems.length} 件${page.next_before ? "＋" : ""}`;
   renderModelThumbnailBackfill();
+}
+
+/* ── 同じシーンの版を 1 枚にまとめる ───────────────────────────────────
+   1 つの版は 2 つの資産を登録する。編集の土台になる .blend（シーンファイル）と、
+   見るための GLB である。そのため直すたびに一覧の行が 2 つずつ増え、同じものが
+   連番で並ぶ。実機では 454 行が 85 シーンぶんだった。
+
+   まとめるのは表示だけで、資産は 1 つずつのままである。選択中は束ねない。
+   束ねたまま選ぶと、1 枚押しただけで版ぜんぶを消すことになり、押した人の
+   思っている範囲と合わない。 */
+
+function libraryGroups(items) {
+  const groups = [];
+  const bySceneId = new Map();
+  for (const item of items) {
+    const sceneId = item.scene?.scene_id;
+    if (!sceneId) { groups.push({single: item}); continue; }
+    const existing = bySceneId.get(sceneId);
+    if (existing) { existing.members.push(item); continue; }
+    const group = {sceneId, members: [item]};
+    bySceneId.set(sceneId, group);
+    groups.push(group);
+  }
+  return groups;
+}
+
+// 代表は「いちばん新しい版の、見るための GLB」。無ければ新しい版の何かを出す。
+function libraryGroupLead(members) {
+  const ranked = [...members].sort((left, right) =>
+    (right.scene.sequence - left.scene.sequence)
+    || ((right.scene.role === "preview") - (left.scene.role === "preview")));
+  return ranked.find((item) => item.scene.role === "preview" && item.thumbnail) || ranked[0];
+}
+
+function libraryGroupCard(group) {
+  const lead = libraryGroupLead(group.members);
+  const card = libraryCard(lead, group.members);
+  card.dataset.sceneId = group.sceneId;
+  // 名前はシーンのもの。操作の説明（「Export validated scene preview」）ではなく、
+  // 何のモデルかが読めるようにする。
+  card.querySelector(".sum").textContent = lead.scene.scene_name;
+  const versions = document.createElement("span");
+  versions.className = "card-versions";
+  const shown = new Set(group.members.map((item) => item.scene.sequence)).size;
+  const total = lead.scene.scene_revision_count;
+  // 読み込んだ範囲に全部が居るとは限らない。見えている数と全体を区別して言う。
+  versions.textContent = shown < total ? `版 ${shown}/${total}` : `${total} 版`;
+  card.querySelector(".meta").append(versions);
+  return card;
+}
+
+function renderLibraryGrid() {
+  const grid = byId("library-grid");
+  const grouping = state.libraryGrouping && !state.librarySelecting;
+  const groups = grouping ? libraryGroups(state.libraryItems) : null;
+  grid.replaceChildren(...(groups
+    ? groups.map((group) => group.single ? libraryCard(group.single) : libraryGroupCard(group))
+    : state.libraryItems.map((item) => libraryCard(item))));
+  const collapsed = groups ? state.libraryItems.length - groups.length : 0;
+  const hint = byId("library-group-hint");
+  byId("library-group").setAttribute("aria-pressed", String(state.libraryGrouping));
+  byId("library-group").disabled = state.librarySelecting;
+  hint.textContent = state.librarySelecting
+    ? "選ぶあいだは 1 件ずつ出します。"
+    : collapsed > 0 ? `同じシーンの ${collapsed} 行をまとめています。` : "";
 }
 
 /* ── まとめて消す ─────────────────────────────────────────────────────
@@ -7430,6 +7491,8 @@ function setLibrarySelecting(active) {
   state.librarySelecting = active;
   if (!active) state.librarySelected.clear();
   byId("library-grid").classList.toggle("selecting", active);
+  // 選ぶあいだは束ねない。束ねたまま 1 枚押すと版ぜんぶが対象になる。
+  renderLibraryGrid();
   const toggle = byId("library-select");
   toggle.setAttribute("aria-pressed", String(active));
   toggle.textContent = active ? "やめる" : "選択";
@@ -7540,7 +7603,7 @@ function renderLibraryMediaFilter() {
   }
 }
 
-function libraryCard(item) {
+function libraryCard(item, siblings) {
   const card = document.createElement("button");
   card.type = "button";
   card.className = "card";
@@ -7585,7 +7648,9 @@ function libraryCard(item) {
   card.addEventListener("click", () => {
     if (state.librarySelecting) return toggleLibrarySelection(item.asset_id);
     if (item.mime_type === "application/x-blender") return void openDetail(item.asset_id);
-    void openViewer(item.asset_id, item, state.libraryItems);
+    // 束ねたカードから開いたときは、送り先をその版だけにする。一覧ぜんぶを
+    // 送り先にすると、まとめて見えているのに隣が無関係なものになる。
+    void openViewer(item.asset_id, item, siblings || state.libraryItems);
   });
   if (item.preview_kind === "model_3d") {
     // GLB は絵ではないので、一覧では viewer が撮った版を出す。撮れていない
@@ -10228,6 +10293,10 @@ for (const holder of [byId("activity-list"), byId("create-error")]) {
 
 byId("library-more").addEventListener("click", () => void loadLibrary());
 byId("library-thumbnails-run").addEventListener("click", () => void backfillModelThumbnails());
+byId("library-group").addEventListener("click", () => {
+  state.libraryGrouping = !state.libraryGrouping;
+  renderLibraryGrid();
+});
 byId("library-media-kinds").addEventListener("click", (event) => {
   const button = event.target.closest("[data-library-media]");
   if (!button || button.dataset.libraryMedia === state.libraryMedia) return;
