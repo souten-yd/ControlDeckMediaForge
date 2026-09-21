@@ -123,9 +123,17 @@ def bind_skin(obj: bpy.types.Object, operation: dict[str, object], objects: dict
     bpy.context.view_layer.update()
 
 
+# Blender の bone heat は 1 を超える重みを返すことがある。実測した生成メッシュでは
+# 35,338 頂点のうち 1,283 頂点が範囲外で、最大 2.12 だった。この関数は直後に合計で
+# 割るので、絶対値の大きさは結果に影響しない。効くのは有限であること・負でないこと・
+# 少なくとも 1 つが正であることだけで、上限 1 を強制する理由が無い。
+# それでも桁の壊れた出力は弾きたいので、正気の範囲として上限は残す。
+MAX_RAW_HEAT_WEIGHT = 1000.0
+
+
 def normalized_influences(groups: list[tuple[int, float]], allowed: set[int]) -> list[tuple[int, float]]:
     """Validate raw heat output before discarding zero/small influences."""
-    if any(index not in allowed or not math.isfinite(weight) or not 0 <= weight <= 1
+    if any(index not in allowed or not math.isfinite(weight) or not 0 <= weight <= MAX_RAW_HEAT_WEIGHT
            for index, weight in groups) or len({index for index, _ in groups}) != len(groups):
         raise RuntimeError("automatic skin weights are invalid")
     selected = sorted(((index, weight) for index, weight in groups if weight > 0),
