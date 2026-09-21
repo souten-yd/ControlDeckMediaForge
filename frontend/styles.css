@@ -906,6 +906,12 @@ table.catalog td[data-label="操作"] > button { white-space: nowrap; flex: 0 0 
 }
 .library-media-kinds { margin: 0 0 12px; flex-wrap: nowrap; overflow-x: auto; }
 .library-media-kinds button { flex: 0 1 auto; min-width: 58px; }
+/* 絵の無い 3D が残っているときだけ出る行。数を先に言い、押す場所は右に置く。 */
+.library-thumbnails {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px;
+}
+.library-thumbnails .hint { margin: 0; flex: 1 1 auto; }
+.library-thumbnails button { flex: 0 0 auto; }
 #viewer-image[hidden] { display: none !important; }
 .card .meta { display: flex; justify-content: space-between; gap: 6px; font-size: .72rem; color: var(--muted); }
 .card .sum { font-size: .8rem; overflow-wrap: anywhere; }

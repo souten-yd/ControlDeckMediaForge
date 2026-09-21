@@ -609,6 +609,13 @@
             <button type="button" data-library-media="glb" aria-pressed="false">GLB</button>
             <button type="button" data-library-media="blend" aria-pressed="false">Blender</button>
           </div>
+          <!-- GLB は絵ではないので、サムネイルは viewer で描いてから撮る。
+               一覧を開くだけで 3D ランタイムと GLB を運ぶのは重いので、
+               押されたときにだけ動かす。 -->
+          <div id="library-thumbnails" class="library-thumbnails" hidden>
+            <p id="library-thumbnails-hint" class="hint" role="status"></p>
+            <button type="button" id="library-thumbnails-run">3D の絵を作る</button>
+          </div>
           <div id="library-grid" class="grid"></div>
           <p id="library-empty" class="hint" hidden>まだ素材はありません。</p>
           <p id="library-note" class="hint" role="status" hidden></p>

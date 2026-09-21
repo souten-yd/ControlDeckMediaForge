@@ -337,11 +337,42 @@ def test_3d_assets_use_the_validated_chunk_viewer_with_a_project_preview_fallbac
     assert "openModelViewer(assetId, item, token)" in package
     model = SCRIPT[SCRIPT.index("async function openModelViewer"):SCRIPT.index("async function openViewer")]
     assert 'call("assets.model.open"' in model
-    assert 'call("assets.model.bytes"' in model
+    assert "streamModelBytes(opened" in model
     assert 'call("assets.model.close"' in model
     assert 'const modulePromise = loadModelViewer()' in model
+    # バイト列を集める場所は 1 つだけにする。viewer と一覧の裏取りが別々に
+    # 組み立てると、片方だけ検査が抜ける。
+    stream = SCRIPT[SCRIPT.index("async function streamModelBytes"):SCRIPT.index("async function saveModelThumbnail")]
+    assert 'call("assets.model.bytes"' in stream
+    assert "MODEL_BROWSER_BYTE_LIMIT" in stream
+    assert "model byte sequence changed" in stream
+    assert SCRIPT.count('call("assets.model.bytes"') == 1
     assert 'call("assets.thumbnail"' in package
     assert package.index("openModelViewer") < package.index('call("assets.content"')
+
+
+def test_library_glb_pictures_are_captured_only_when_asked():
+    card = SCRIPT[SCRIPT.index("function libraryCard"):SCRIPT.index("/* ── 全画面ビューア")]
+    model = card[card.index('item.preview_kind === "model_3d"'):]
+    # 撮れている版があれば一覧はそれを出す。札は撮れていないものだけ。
+    assert model.index("item.thumbnail?.base64") < model.index("modelPlaceholder.hidden = false")
+    backfill = SCRIPT[
+        SCRIPT.index("const MODEL_THUMBNAIL_SOURCE_LIMIT"):SCRIPT.index("async function loadLibrary")
+    ]
+    # 一覧を開くだけでは 3D ランタイムも GLB のバイト列も運ばない。
+    library = SCRIPT[SCRIPT.index("async function loadLibrary"):SCRIPT.index("function setLibrarySelecting")]
+    assert "renderModelThumbnailBackfill()" in library
+    assert "backfillModelThumbnails()" not in library
+    assert 'byId("library-thumbnails-run").addEventListener' in SCRIPT
+    # 絵 1 枚のために大きな GLB を運ばない。撮れなかったものを回り続けない。
+    assert "MODEL_THUMBNAIL_SOURCE_LIMIT" in backfill and "modelThumbnailSkipped" in backfill
+    assert "generation !== modelThumbnailGeneration" in backfill
+    # 撮影ごとに canvas を作り直す。dispose は forceContextLoss まで行う。
+    assert "canvas?.remove()" in backfill
+    assert "document.createElement(\"canvas\")" in backfill
+    # 保存は今までと同じ、上限付きの 1 枚を送る経路をそのまま使う。
+    assert 'call("assets.model.thumbnail"' in backfill
+    assert "blob.size > 256 * 1024" in backfill
 
 
 def test_library_does_not_request_a_thumbnail_for_non_preview_assets():
