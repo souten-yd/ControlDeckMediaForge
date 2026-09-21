@@ -660,6 +660,34 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         check_growth(objects, 2*len(count) if isinstance(count, list) else MAX_GROWTH_GEOMETRY+1)
         scene_curves.bridge(obj, objects.get(other_id), operation)
         del objects[other_id]
+    elif kind == "mesh.decimate":
+        if obj.type != "MESH":
+            raise RuntimeError("decimate target is not a mesh")
+        if any(m.type in {"SUBSURF", "MIRROR", "ARRAY", "BEVEL"} for m in obj.modifiers):
+            raise RuntimeError("apply generating modifiers before decimating")
+        if obj.data.shape_keys is not None:
+            raise RuntimeError("decimate cannot run on a mesh with shape keys")
+        ratio = operation.get("ratio")
+        if type(ratio) is not float or not 0.001 < ratio < 1.0:
+            raise RuntimeError("decimate ratio is out of bounds")
+        minimum = scene_curves.bounded_int(operation.get("min_faces", 64), 4, 1_000_000)
+        before = (len(obj.data.vertices), len(obj.data.polygons))
+        if before[1] <= minimum:
+            raise RuntimeError("mesh is already at or below the requested face floor")
+        check_growth(objects, 0)
+        modifier = obj.modifiers.new(name="Media Forge Decimate", type="DECIMATE")
+        modifier.decimate_type = "COLLAPSE"
+        modifier.ratio = ratio
+        modifier.use_collapse_triangulate = True
+        # 落とすだけの操作なので、その場で適用して形を確定させる。修飾子を
+        # 残したままにすると、後段の bind やクリップが評価前の密な形を見る。
+        with bpy.context.temp_override(object=obj, active_object=obj, selected_objects=[obj]):
+            bpy.ops.object.modifier_apply(modifier=modifier.name)
+        after = (len(obj.data.vertices), len(obj.data.polygons))
+        if after[1] < minimum or after[1] < 4 or after[0] < 4:
+            raise RuntimeError("decimate fell below the requested face floor")
+        if after[1] >= before[1]:
+            raise RuntimeError("decimate did not reduce the mesh")
     elif kind == "modifier.subdivision":
         if obj.type != "MESH" or any(m.type == "SUBSURF" for m in obj.modifiers):
             raise RuntimeError("subdivision requires a mesh without existing subdivision")

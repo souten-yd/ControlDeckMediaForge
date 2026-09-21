@@ -39,7 +39,7 @@ def test_new_static_operations_match_published_schemas() -> None:
         "armature.create", "skin.bind", "pose.set",
         "animation.clip", "modifier.array", "skin.bind_auto", "skin.weights.set", "skin.weights.smooth", "skin.weights.normalize", "ik.leg.bake", "mesh.create",
         "mesh.loft", "mesh.sweep", "mesh.sections.set", "mesh.bridge_loops", "modifier.subdivision",
-        "uv.seams.set", "uv.unwrap", "uv.pack", "transform.apply_scale",
+        "uv.seams.set", "uv.unwrap", "uv.pack", "transform.apply_scale", "mesh.decimate",
     }
 
 
@@ -118,3 +118,94 @@ def test_worker_rejects_missing_source_and_second_mirror(monkeypatch: pytest.Mon
     obj = mesh([SimpleNamespace(type="MIRROR")])
     with pytest.raises(RuntimeError, match="one mirror"):
         module.apply_operation({"type":"modifier.mirror","object_id":"mesh","axes":["X"]}, {"mesh":obj})
+
+
+def decimating_mesh(faces: int = 1000, verts: int = 900) -> Any:
+    """適用で実際に減るメッシュの代役。Blender の modifier_apply を差し替えて使う。"""
+    data = SimpleNamespace(vertices=list(range(verts)),
+                           polygons=[SimpleNamespace(loop_total=3)] * faces, shape_keys=None)
+    return SimpleNamespace(type="MESH", data=data, modifiers=Modifiers())
+
+
+class Modifiers(list):
+    def new(self, name: str, type: str) -> Any:
+        modifier = SimpleNamespace(name=name, type=type, decimate_type=None,
+                                   ratio=None, use_collapse_triangulate=None)
+        self.append(modifier)
+        return modifier
+
+
+def decimating_bpy(target: Any, after_faces: int, after_verts: int) -> Any:
+    def apply(modifier: str) -> None:
+        target.data.polygons = [SimpleNamespace(loop_total=3)] * after_faces
+        target.data.vertices = list(range(after_verts))
+        target.modifiers.clear()
+
+    class Override:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+
+    return SimpleNamespace(
+        ops=SimpleNamespace(object=SimpleNamespace(modifier_apply=lambda modifier: apply(modifier))),
+        context=SimpleNamespace(temp_override=lambda **_: Override()),
+    )
+
+
+def test_decimate_collapses_and_applies_in_place(monkeypatch: pytest.MonkeyPatch) -> None:
+    """生成メッシュを骨入れの上限以下へ落とす。修飾子は残さず、その場で確定させる。"""
+    module = worker(monkeypatch)
+    obj = decimating_mesh()
+    monkeypatch.setattr(module, "bpy", decimating_bpy(obj, 280, 260))
+    module.apply_operation({"type": "mesh.decimate", "object_id": "mesh", "ratio": 0.3}, {"mesh": obj})
+    assert len(obj.data.polygons) == 280 and len(obj.data.vertices) == 260
+    # 残したままにすると、後段の bind やクリップが評価前の密な形を見る。
+    assert list(obj.modifiers) == []
+
+
+@pytest.mark.parametrize("operation,message", [
+    ({"type": "mesh.decimate", "object_id": "mesh", "ratio": 1.0}, "out of bounds"),
+    ({"type": "mesh.decimate", "object_id": "mesh", "ratio": 0.0}, "out of bounds"),
+    ({"type": "mesh.decimate", "object_id": "mesh", "ratio": "0.3"}, "out of bounds"),
+    ({"type": "mesh.decimate", "object_id": "mesh", "ratio": 0.3, "min_faces": 2000},
+     "already at or below"),
+])
+def test_decimate_rejects_invalid_requests(monkeypatch: pytest.MonkeyPatch,
+                                           operation: dict[str, Any], message: str) -> None:
+    module = worker(monkeypatch)
+    obj = decimating_mesh()
+    monkeypatch.setattr(module, "bpy", decimating_bpy(obj, 280, 260))
+    with pytest.raises(RuntimeError, match=message):
+        module.apply_operation(operation, {"mesh": obj})
+
+
+def test_decimate_refuses_generating_modifiers_and_shape_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = worker(monkeypatch)
+    obj = decimating_mesh()
+    monkeypatch.setattr(module, "bpy", decimating_bpy(obj, 280, 260))
+    obj.modifiers.append(SimpleNamespace(type="SUBSURF"))
+    with pytest.raises(RuntimeError, match="generating modifiers"):
+        module.apply_operation({"type": "mesh.decimate", "object_id": "mesh", "ratio": 0.3}, {"mesh": obj})
+    obj.modifiers.clear()
+    obj.data.shape_keys = SimpleNamespace()
+    with pytest.raises(RuntimeError, match="shape keys"):
+        module.apply_operation({"type": "mesh.decimate", "object_id": "mesh", "ratio": 0.3}, {"mesh": obj})
+
+
+def test_decimate_fails_when_nothing_was_removed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """成功したことにして黙って密なまま進めない。"""
+    module = worker(monkeypatch)
+    obj = decimating_mesh()
+    monkeypatch.setattr(module, "bpy", decimating_bpy(obj, 1000, 900))
+    with pytest.raises(RuntimeError, match="did not reduce"):
+        module.apply_operation({"type": "mesh.decimate", "object_id": "mesh", "ratio": 0.9}, {"mesh": obj})
+
+
+def test_decimate_contract_is_published(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mediaforge.scene_recipes import MeshDecimate
+    value = request({"type": "primitive.add", "object_id": "body", "name": "Body",
+                     "primitive": "cube", "dimensions": [1.0, 1.0, 1.0]},
+                    {"type": "mesh.decimate", "object_id": "body", "ratio": 0.3})
+    for filename in ("scene-create-request.json", "scene-edit-request.json"):
+        schema = json.loads((ROOT / "schemas" / filename).read_text())
+        assert schema["$defs"]["MeshDecimate"] == MeshDecimate.model_json_schema()
+    jsonschema.validate(value, json.loads((ROOT / "schemas/scene-create-request.json").read_text()))
