@@ -683,6 +683,9 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         recalculate = operation.get("recalculate_normals", True)
         if type(recalculate) is not bool:
             raise RuntimeError("weld normal flag differs")
+        allow_noop = operation.get("allow_noop", False)
+        if type(allow_noop) is not bool:
+            raise RuntimeError("weld no-op flag differs")
         check_growth(objects, 0)
         import bmesh
 
@@ -700,7 +703,10 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
             working.free()
         obj.data.update()
         after = (len(obj.data.vertices), len(obj.data.polygons))
-        if after[0] >= before[0]:
+        # 単独で頼まれた weld が 1 頂点も繋がなければ、思っているものと違う物を
+        # 指している。ただし軽量化のように「念のため繋いでおく」使い方では、
+        # 既に繋がっているのが正常なので、そこだけ許す。
+        if after[0] >= before[0] and not allow_noop:
             raise RuntimeError("weld did not merge any vertices")
         # 面まで消えるのは、同じ位置とみなす距離が大きすぎる。
         if after[1] < before[1] * 0.5:
@@ -922,8 +928,9 @@ def main() -> None:
         "operation_count": len(operations),
         "stable_object_ids": sorted(objects),
         "mesh_geometry": [{**scene_curves.mesh_fact(obj), "uv_maps": scene_surface.uv_facts(obj.data), "skin_weights": scene_weights.facts(obj)} for key,obj in sorted(objects.items())[:256]
-                          if obj.type == "MESH" and len(obj.data.vertices) <= scene_curves.MAX_VERTICES
-                          and len(obj.data.polygons) <= 32768],
+                          if obj.type == "MESH"
+                          and len(obj.data.vertices) <= scene_curves.MAX_FACT_VERTICES
+                          and len(obj.data.polygons) <= scene_curves.MAX_FACT_POLYGONS],
         # 骨はリグあたり 128 本までなので、mesh_geometry のような上限は要らない。
         # これが無いと、クリップを書く側は骨の名前も回す向きも知りようがない。
         "skeletons": [fact for fact in (

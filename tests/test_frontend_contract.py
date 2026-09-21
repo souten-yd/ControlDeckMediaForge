@@ -351,6 +351,38 @@ def test_3d_assets_use_the_validated_chunk_viewer_with_a_project_preview_fallbac
     assert package.index("openModelViewer") < package.index('call("assets.content"')
 
 
+def test_reduction_always_measures_against_the_version_it_reduces():
+    """60% のあと 55% を選んだら、元の 55% でなければ割合が嘘になる。"""
+    submit = SCRIPT[SCRIPT.index("async function submitSceneSimplify"):SCRIPT.index("async function renderSimplifyOrigin") if "async function renderSimplifyOrigin" in SCRIPT else SCRIPT.index("async function forkSceneRecovery")]
+    assert "from_revision_id" in submit, "the page does not say what to reduce from"
+    origin = SCRIPT[SCRIPT.index("function renderSimplifyOrigin"):SCRIPT.index("function renderSceneSimplify")]
+    # 既定は最初の版。作り直した版を元にしたいこともあるので選べる。
+    assert "left.sequence - right.sequence" in origin and "ordered[0]?.id" in origin
+    assert 'id="scene-simplify-origin"' in MARKUP
+    # 刻みは 1%。5% 刻みでは狙った軽さに寄せられない。
+    slider = MARKUP[MARKUP.index('id="scene-simplify-ratio"'):]
+    slider = slider[:slider.index(">")]
+    assert 'step="1"' in slider, f"the reduction slider is still coarse: {slider}"
+
+
+def test_the_pipeline_panel_only_chooses_what_to_run_not_how():
+    """段の並びはサーバ側にある。画面が送るのは始点と、どこまでやるかだけ。"""
+    assert 'id="pipeline-panel"' in MARKUP and 'id="pipeline-stages"' in MARKUP
+    act = SCRIPT[SCRIPT.index("async function actOnPipeline"):SCRIPT.index("async function forkSceneRecovery")]
+    assert 'call("pipelines.start"' in act and 'call("pipelines.status"' in act
+    # recipe も段の名前も画面からは送らない。
+    for forbidden in ("operations", "mesh.weld", "rig.auto", "stages:"):
+        assert forbidden not in act, f"the page is assembling {forbidden}"
+    # 見ていない間に勝手に進まない。進むのは poll したときだけ。
+    poll = SCRIPT[SCRIPT.index("async function pollPipeline"):SCRIPT.index("async function actOnPipeline")]
+    assert 'call("pipelines.status"' in poll
+    assert "awaiting_approval" in poll, "approval must stop the polling loop"
+    # 確認待ちのときだけ「次へ進む」が出る。
+    render = SCRIPT[SCRIPT.index("function renderPipeline"):SCRIPT.index("async function pollPipeline")]
+    assert 'byId("pipeline-approve").hidden = !waiting' in render
+    assert 'byId("pipeline-start").hidden = active' in render
+
+
 def test_library_glb_pictures_are_captured_only_when_asked():
     card = SCRIPT[SCRIPT.index("function libraryCard"):SCRIPT.index("/* ── 全画面ビューア")]
     model = card[card.index('item.preview_kind === "model_3d"'):]

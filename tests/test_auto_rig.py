@@ -70,6 +70,9 @@ def test_the_rig_sequence_is_built_in_one_place() -> None:
     # 来ないと bone heat が 1 頂点も解けない。
     assert [item["type"] for item in recipe["operations"]] == [
         "mesh.weld", "mesh.decimate", "rig.auto"]
+    # 既に繋がっているメッシュにも掛けられる。単独の mesh.weld は今までどおり
+    # 何も繋がなければ失敗する（相手を間違えている合図である）。
+    assert recipe["operations"][0]["allow_noop"] is True
     # 既に軽いモデルには落とす手を挟まない。繋ぐのは常に要る。
     light = SceneWorkspace.rig_recipe(
         "generated_0", "rig", "Auto rig", None, None, 0.00001, 2000, 24, 24)

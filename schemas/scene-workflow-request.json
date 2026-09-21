@@ -2559,6 +2559,11 @@
           "default": true,
           "title": "Recalculate Normals",
           "type": "boolean"
+        },
+        "allow_noop": {
+          "default": false,
+          "title": "Allow Noop",
+          "type": "boolean"
         }
       },
       "required": [

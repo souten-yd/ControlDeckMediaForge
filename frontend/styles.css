@@ -918,6 +918,18 @@ table.catalog td[data-label="操作"] > button { white-space: nowrap; flex: 0 0 
 /* 束ねたカードに何版ぶんが入っているかを、形式の札と同じ行に出す。
    .card .meta は space-between なので、3 つ目が来ても自然に右端へ寄る。 */
 .card-versions { white-space: nowrap; }
+/* 通しで作るときの段の並び。今どこに居るかが一目で分かればよい。 */
+.pipeline-stages { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
+.pipeline-stages li {
+  display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; font-size: .84rem;
+}
+.pipeline-stages li[data-state="running"] { border-color: var(--accent); }
+.pipeline-stages li[data-state="awaiting_approval"] { border-style: dashed; border-color: var(--accent); }
+.pipeline-stages li[data-state="succeeded"] .pipeline-state { color: var(--accent); }
+.pipeline-stages li[data-state="failed"] .pipeline-state { color: #ff8a80; }
+.pipeline-stages li[data-state="skipped"] { opacity: .6; }
+.pipeline-state { color: var(--muted); }
 #viewer-image[hidden] { display: none !important; }
 .card .meta { display: flex; justify-content: space-between; gap: 6px; font-size: .72rem; color: var(--muted); }
 .card .sum { font-size: .8rem; overflow-wrap: anywhere; }

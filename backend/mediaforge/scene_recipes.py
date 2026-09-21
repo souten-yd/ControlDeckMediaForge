@@ -235,6 +235,10 @@ class MeshWeld(BaseModel):
     # 同じ位置とみなす距離。既定は浮動小数の誤差ぶんだけ。
     distance_m: float = Field(default=0.00001, gt=0, le=0.01, allow_inf_nan=False)
     recalculate_normals: bool = Field(default=True, strict=True)
+    # 1 頂点も繋がなかったときに、それを正常とみなすか。単独で頼んだ weld が
+    # 何もしなければ普通は相手を間違えているので、既定では失敗させる。
+    # 「念のため繋いでおく」使い方（軽量化の前段）だけがこれを立てる。
+    allow_noop: bool = Field(default=False, strict=True)
 
 
 class MeshDecimate(BaseModel):
