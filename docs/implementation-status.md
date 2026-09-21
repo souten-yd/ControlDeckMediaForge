@@ -1,5 +1,57 @@
 # Media Forge implementation status
 
+## 2026-09-21 G9 Web Blender の選択とワークフロー（installed 0.28.94）
+
+利用者が実 iPhone の画面を示して「選択は従来のライブラリのものも選択したいし。この選択と
+Web Blender のワークフローが使いにくい」と指摘した。画面では押すボタンが panel の上、
+選ぶ一覧がずっと下、あいだに .blend 取り込みフォームが挟まっていた。
+「編集するシーンを選んでください」と言われても、選ぶ物が画面に無い状態だった。
+
+### ワークフロー
+
+編集対象の選択を、押すボタンのすぐ上（同じ panel 内）へ置いた。選んでいるものは
+サムネで見える。携帯（767px 以下）では取り込みフォームを編集入口の後ろへ回した。
+案内文の「下の一覧からシーンを選び」もやめた。
+
+### ライブラリの 3D も選べるように
+
+シーンに紐づかないライブラリの GLB は、Blender で開く経路が無かった。実機の内訳は
+GLB 227 件のうち 219 件が版のプレビューで、残り 8 件がシーンを持たない単体だった
+（前日 Library へ登録したロボット 2 件を含む）。
+
+- `scenes.list` が `library_models` を返す。どの版の preview / source でもない GLB だけを
+  サーバ側で選り分ける。画面は `scenes.list` から asset id を得られないので、自力では
+  選り分けられなかった。
+- opaque workspace method `scenes.from_glb`（`asset_id` / `name` / 任意の `tags`・`collection`）が
+  それを編集できるシーンにする。生成側が使っている隔離 Blender での取り込み・検証・
+  版の publish をそのまま通す。新しい検証経路も第二の Jobs 基盤も作っていない。
+- 元の GLB は `source_glb` 依存かつ来歴の親として記録する。使用中になるので削除もできない。
+- 既に版のプレビューになっている GLB は、二重にシーンを作らず拒否する。
+- Agent / workflow tool には出していない（workspace method のみ、OpenAPI 非公開）。
+
+### installed 0.28.94 での確認
+
+PR #597 を main へ merge、exact commit から bundle 生成（37,927,317 B、SHA256
+`6fc3384fa318b06c6993942a96448ef80333d5abf9e4a865060fb1442b0d90cb`）、既存 publisher key で
+署名し ControlDeck の公開鍵で独立検証。GitHub Release v0.28.94 として 4 asset を公開。
+標準 update は 12.588 秒で healthy、previous 0.28.93 を保持。
+
+- 配信中の画面に `scene-blender-target` が 17 箇所、「編集するもの」の文言、
+  `scenes.from_glb` / `library_models` の参照が 3 箇所あることを HTTP で確認した。
+- サーバ側の選り分けを実 DB の read-only 照会で確認した。編集できるライブラリの 3D は
+  8 件で、シーン 79 件とは別に並ぶ。
+
+### 試験
+
+`pytest -q` 2293 collected / 2287 passed / 3 skipped。新規 4 件（ライブラリ GLB のシーン化、
+選り分け、二重作成の拒否、GLB 以外と空名の拒否）。既知の環境依存 3 件は不変。
+実 Chrome 151 の `g9_engine_ui_e2e.mjs` は 6 cases passed（320px/ja・1280px/en、page errors 0）。
+選択欄が panel 内にあること、ボタンとの間に他が挟まらないこと、当たり判定 44px、
+携帯で取り込みが後ろへ回ること（order 0 / 1）、ライブラリの GLB を選ぶと `scenes.from_glb`
+が飛んでシーン側へ移ることを検査する。
+
+NOT TESTED: 実 iPhone での操作、実 Blender セッションで実際に編集まで進むこと。
+
 ## 2026-09-21 G9 trellis.cpp を 1024 で採用し、512 を残す（installed 0.28.93）
 
 利用者の「生成解像度をもっと上げられないか」に対し、trellis.cpp の既定を 512 から
