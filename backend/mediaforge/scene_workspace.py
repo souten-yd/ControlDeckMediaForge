@@ -259,6 +259,17 @@ class SceneWorkspace:
             runtime_id=runtime_id, runtime_version=runtime_version,
         )
 
+    async def import_library_glb(
+        self, owner: str, asset_id: str, *, name: str,
+        tags: list[str] | None = None, collection: str | None = None,
+    ) -> dict[str, Any]:
+        """Open a GLB that is already in the Library as an editable scene."""
+        from .scene_generation_import import import_library_glb
+
+        return await import_library_glb(
+            self, owner, asset_id, name, tags or ["g9"], collection or "experiment",
+        )
+
     async def commit_generated_glb(
         self, owner: str, job_id: str, value: SceneFromImageRequest, source: Path,
         source_root: Path, facts: GenerationFacts, *, scene_id: str, base_revision_id: str,

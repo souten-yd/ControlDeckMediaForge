@@ -179,6 +179,10 @@ const state = {
   sceneGenerationMessage: "",
   sceneWorkingCopies: [],
   selectedSceneId: "",
+  libraryModels: [],
+  blenderTargetPreviewId: "",
+  blenderTargetBusy: false,
+  blenderTargetMessage: "",
   sceneDocument: null,
   sceneRevisions: [],
   sceneRevisionRenderKey: "",
@@ -4805,8 +4809,8 @@ const SCENE_TEXT = {
   ja: {
     switchLabel: "3Dを作る", title: "3D Studio",
     blenderEntryTitle: "Web Blenderで編集",
-    blenderEntryGuide: "下の一覧からシーンを選び、「Blenderで編集」を押すと編集画面が開きます。シーンがない場合は.blendを取り込むか、OpenCodeで制作して一覧を更新してください。",
-    blenderSelect: "編集するシーンを選んでください。",
+    blenderEntryGuide: "編集するものを選び、「Blenderで編集」を押すと編集画面が開きます。ライブラリにあってまだシーンが無い3Dも、同じ欄から選べます。",
+    blenderSelect: "編集するものを選んでください。",
     blenderSelected: (name) => `編集対象: ${name}`,
     blenderSettings: "Blenderの設定を開く",
     note: "Blender制作ファイルを取り込み、検証済みの版として保存します。",
@@ -4893,8 +4897,8 @@ const SCENE_TEXT = {
   en: {
     switchLabel: "Create 3D", title: "3D Studio",
     blenderEntryTitle: "Edit in Web Blender",
-    blenderEntryGuide: 'Select a scene below, then choose "Edit in Blender" to open the editor. If there are no scenes, import a .blend file or create one with OpenCode and refresh the list.',
-    blenderSelect: "Select a scene to edit.",
+    blenderEntryGuide: 'Choose what to edit, then select "Edit in Blender" to open the editor. Library 3D models that have no scene yet can be chosen from the same list.',
+    blenderSelect: "Choose what to edit.",
     blenderSelected: (name) => `Editing target: ${name}`,
     blenderSettings: "Open Blender settings",
     note: "Import a Blender project and save it as a validated revision.",
@@ -5504,6 +5508,7 @@ async function loadScenes() {
   try {
     const result = await call("scenes.list");
     state.scenes = result.items || [];
+    state.libraryModels = result.library_models || [];
     state.sceneWorkingCopies = result.working_copies || [];
     renderScenes();
     if (!byId("scene-generation-form").hidden) await loadSceneGenerationImages();
@@ -6221,7 +6226,9 @@ function renderBlenderSessionControls() {
   byId("scene-blender-status").textContent = status;
   const target = state.scenes.find((item) => item.id === state.selectedSceneId)
     || (state.sceneDocument?.id === state.selectedSceneId ? state.sceneDocument : null);
-  byId("scene-blender-selection").textContent = target ? text.blenderSelected(target.name) : text.blenderSelect;
+  byId("scene-blender-selection").textContent = state.blenderTargetMessage
+    || (target ? text.blenderSelected(target.name) : text.blenderSelect);
+  renderBlenderTarget();
   const autosaveWarning = byId("scene-blender-autosave-warning");
   const autosaveFailed = active?.state === "ready" && active.error_code === "blender_session_autosave_failed";
   autosaveWarning.hidden = !autosaveFailed;
@@ -6231,6 +6238,116 @@ function renderBlenderSessionControls() {
   if (state.blenderRfbSessionId) {
     const current = state.blenderSessions.find((item) => item.id === state.blenderRfbSessionId);
     if (!current || current.state !== "ready") closeBlenderView();
+  }
+}
+
+/* 編集対象を 1 か所で選ばせる。
+
+   以前は押すボタンが上、選ぶ一覧がずっと下にあり、間に取り込みフォームが
+   挟まっていた。携帯では「選んでください」と言われても選ぶ物が見えない。
+   シーンに加えて、シーンをまだ持たないライブラリの GLB も同じ欄から選ぶ。 */
+function blenderTargetText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    label: "What to edit", choose: "Choose what to edit",
+    scenes: "Scenes", models: "Library 3D models (no scene yet)",
+    version: (count) => `${count} rev`,
+    preparing: "Opening this model as a scene…",
+    prepared: (name) => `Opened ${name} as a scene. It can be edited now.`,
+    failed: "Could not open this model as a scene.",
+  } : {
+    label: "編集するもの", choose: "編集するものを選んでください",
+    scenes: "シーン", models: "ライブラリの3D（まだシーンが無いもの）",
+    version: (count) => `版${count}`,
+    preparing: "この3Dをシーンとして開いています…",
+    prepared: (name) => `${name} をシーンとして開きました。編集できます。`,
+    failed: "この3Dをシーンとして開けませんでした。",
+  };
+}
+
+function renderBlenderTarget() {
+  const select = byId("scene-blender-target");
+  if (!select) return;
+  const text = blenderTargetText();
+  byId("scene-blender-target-label").textContent = text.label;
+  const placeholder = materialOption("", text.choose);
+  const groups = [];
+  if (state.scenes.length) {
+    const group = document.createElement("optgroup");
+    group.label = text.scenes;
+    group.append(...state.scenes.map((scene) => materialOption(
+      `scene:${scene.id}`, `${scene.name} · ${text.version(scene.revision_count)}`)));
+    groups.push(group);
+  }
+  if (state.libraryModels.length) {
+    const group = document.createElement("optgroup");
+    group.label = text.models;
+    group.append(...state.libraryModels.map((asset) => materialOption(
+      `asset:${asset.id}`, asset.suggested_filename || asset.id)));
+    groups.push(group);
+  }
+  select.replaceChildren(placeholder, ...groups);
+  select.value = state.selectedSceneId ? `scene:${state.selectedSceneId}` : "";
+  select.disabled = state.blenderTargetBusy || Boolean(activeBlenderSession()) || state.disabled;
+  void renderBlenderTargetPreview();
+}
+
+async function renderBlenderTargetPreview() {
+  const preview = byId("scene-blender-target-preview");
+  if (!preview) return;
+  const revision = state.sceneRevisions.find((item) => item.id === state.sceneDocument?.current_revision_id);
+  const assetId = state.sceneDocument?.id === state.selectedSceneId ? revision?.preview_asset_id : null;
+  if (!assetId) {
+    preview.hidden = true;
+    preview.removeAttribute("src");
+    state.blenderTargetPreviewId = "";
+    return;
+  }
+  if (state.blenderTargetPreviewId === assetId) return;
+  state.blenderTargetPreviewId = assetId;
+  try {
+    const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 192});
+    if (state.blenderTargetPreviewId !== assetId) return;
+    preview.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
+    preview.hidden = false;
+  } catch {
+    if (state.blenderTargetPreviewId !== assetId) return;
+    preview.hidden = true;
+    preview.removeAttribute("src");
+  }
+}
+
+/* ライブラリの GLB には開く先のシーンがない。選ばれた時点で一度だけ
+   シーンにしてから、以降はそのシーンとして扱う。 */
+async function chooseBlenderTarget(value) {
+  const text = blenderTargetText();
+  if (state.blenderTargetBusy || state.disabled) return;
+  state.blenderTargetMessage = "";
+  if (!value) {
+    state.selectedSceneId = "";
+    state.sceneDocument = null;
+    renderScenes();
+    return;
+  }
+  if (value.startsWith("scene:")) {
+    await openScene(value.slice(6));
+    return;
+  }
+  const asset = state.libraryModels.find((item) => `asset:${item.id}` === value);
+  if (!asset) return;
+  state.blenderTargetBusy = true;
+  state.blenderTargetMessage = text.preparing;
+  renderScenes();
+  try {
+    const name = (asset.suggested_filename || asset.id).replace(/\.[^.]+$/, "").slice(0, 120);
+    const created = await call("scenes.from_glb", {asset_id: asset.id, name});
+    state.blenderTargetMessage = text.prepared(created.scene.name);
+    await loadScenes();
+    await openScene(created.scene.id);
+  } catch (error) {
+    state.blenderTargetMessage = `${text.failed} ${failureText(error?.code)}`.trim();
+  } finally {
+    state.blenderTargetBusy = false;
+    renderScenes();
   }
 }
 
@@ -9145,6 +9262,9 @@ for (const id of [
   byId(id).addEventListener("change", () => renderSceneMaterialControls({targetsChanged: false}));
 }
 byId("scene-blender-open").addEventListener("click", () => void startOrOpenBlender());
+byId("scene-blender-target").addEventListener("change", (event) => {
+  void chooseBlenderTarget(event.target.value);
+});
 byId("scene-blender-settings").addEventListener("click", () => {
   activate("settings");
   byId("blender-settings").focus();
@@ -10166,6 +10286,7 @@ function applySessionParts(snapshot) {
   }
   if (usable(snapshot.scenes)) {
     state.scenes = snapshot.scenes.items || [];
+    state.libraryModels = snapshot.scenes.library_models || [];
     state.sceneWorkingCopies = snapshot.scenes.working_copies || [];
     renderScenes();
   }

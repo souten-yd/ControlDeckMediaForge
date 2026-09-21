@@ -548,7 +548,15 @@ unchanged, including on validation failure. Repeating a candidate returns the
 same recovered scene; owner checks apply before lookup. The original revision,
 candidate hash and source asset lineage are in the new source provenance.
 This private operation is excluded from OpenAPI and Agent/workflow tools.
-Both workspace scene lists include owner-scoped `working_copies` for recovery UI.
+Both workspace scene lists include owner-scoped `working_copies` for recovery UI,
+and `library_models`: the Library GLBs that no scene revision owns yet. The
+opaque workspace method `scenes.from_glb` (`asset_id`, `name`, optional `tags`
+and `collection`) turns one of those into an editable scene through the same
+isolated Blender import, validation and revision publication the generated path
+uses. A GLB that already is a revision's preview is refused rather than
+duplicated; the source GLB is recorded as a `source_glb` dependency and as the
+new blend's lineage parent. It is a workspace method, not an Agent or workflow
+tool, and stays out of OpenAPI.
 
 ### Typed 3D scene Agent and workflow tools
 
