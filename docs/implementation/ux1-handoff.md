@@ -1,5 +1,32 @@
 # 実装引き継ぎ状態
 
+## 2026-09-21 生成モデルの骨入れと歩行（0.28.95〜0.28.98）
+
+生成した 3D に骨を入れて歩かせるところまで実機で通した。壁は 3 つあり全て製品側を直した。
+`mesh.decimate`（0.28.95）、`mesh.weld`（0.28.96、本命）、bone heat の重み上限（0.28.97）、
+画面からの軽量化 `scenes.simplify`（0.28.98）。
+
+```text
+PASS       生成→weld→decimate 0.6→armature 17骨→bind_auto→walk 24f の1 recipeがsucceeded
+PASS       版2は35,338頂点/78,392面/17骨/walkクリップ。GLBにskins1・JOINTS_0・WEIGHTS_0
+PASS       Blenderで読み直しフレーム0/6/12/18の姿勢変化を確認（三脚歩行）
+PASS       骨の位置は実形状から測定（上=+Y、脚6方位、触角4、胴上下）
+PASS       weldだけで頂点52%減。繋がずに削ると骨が入らず、繋いで強く削ると形が壊れる
+PASS       画面から強さを選んで軽量化。recipeの組み立てはサーバ側
+PASS       MCPは既存のmedia.scene.editのまま。recipe操作は31個、weld/decimate公開済み
+NOTE       テクスチャはGLBの5%。軽量化の本体は幾何
+BLOCKED    法線焼き込みの生成モデルへの適用。mesh_geometry factsが16,384頂点/32,768面まで
+NOT TESTED 実iPhone、実Blenderセッションへの指入力、歩行の質、エンジン再生
+```
+
+## 次にやること（1つだけ）
+
+```text
+1. mesh_geometry facts の上限を測って引き上げ、生成モデルへ法線/AOを焼けるようにする
+2. そのうえで「軽量化→焼く→割り当て」を画面で1本に繋ぐ
+3. 残: ライブラリのGLBサムネイル、同系列の版のまとめ表示、通しフロー、ローカルLLM
+```
+
 ## 2026-09-21 Web Blender の選択とワークフロー（installed 0.28.94）
 
 編集対象の選択をボタンのすぐ上へ移し、携帯では取り込みフォームを後ろへ回した。
