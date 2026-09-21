@@ -21,10 +21,16 @@ const screenshot = required("--screenshot");
 const observations = {};
 const errors = [];
 const moduleRequests = [];
+// 撮影に要るのは WebGL が動くことだけなので、ここは headless + 軟体描画で回す。
+// 確かめたいのは「撮って host に残り、読み直しても残る」ことであり、GPU の
+// 実力ではない（GPU での描画は 3ds3_viewer_e2e.mjs が実機で見ている）。
 const browser = await chromium.launch({
   executablePath: "/usr/bin/google-chrome",
-  headless: false,
-  args: ["--enable-webgl", "--ignore-gpu-blocklist"],
+  headless: true,
+  args: [
+    "--enable-webgl", "--ignore-gpu-blocklist",
+    "--enable-unsafe-swiftshader", "--use-gl=angle", "--use-angle=swiftshader",
+  ],
 });
 
 try {
