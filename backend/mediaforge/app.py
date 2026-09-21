@@ -1415,7 +1415,10 @@ def create_app(
                     {"state": "available", "schema_version": "media-forge.scene-observation@1",
                      "modes": ["material", "clay", "silhouette", "object_id"],
                      "views": ["front", "side", "back", "three-quarter"],
-                     "resolutions": [256, 512], "max_views": 4, "device": "CPU", "frame": 0,
+                     "resolutions": [256, 512], "max_views": 4, "device": "CPU",
+                     # クリップを名指すと、その姿勢のフレームを描ける。CPU の
+                     # パストレースなので views×frames に歯止めがある。
+                     "poses_clips": True, "max_frames": 8, "max_images_per_observation": 8,
                      "limits": {"mesh_objects": 256, "scene_objects": 1024, "geometry_cost": 1_000_000},
                      "semantic_review": "available" if semantic_available else "unavailable", "local_only": True}
                     if blender_runtimes.resolve_g8() is not None

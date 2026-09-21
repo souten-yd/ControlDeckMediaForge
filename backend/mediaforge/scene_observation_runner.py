@@ -103,9 +103,10 @@ async def observe(
             raise SceneError("scene_observation_invalid", "observation report differs from the request") from exc
         images = []
         # Validate every image before registering any Asset.
-        outputs: list[tuple[str, Path]] = []
+        outputs: list[tuple[str, int, Path]] = []
         for view in value.observation.views:
-            candidate = root / f"{view}.png"
+          for frame in value.observation.rendered_frames():
+            candidate = root / f"{view}-f{frame}.png"
             if candidate.is_symlink():
                 raise SceneError("scene_observation_invalid", "observation image cannot be a symlink")
             path = contained(root, candidate)
@@ -126,8 +127,8 @@ async def observe(
                     raise ValueError("normalized image exceeds bound")
             except (OSError, ValueError) as exc:
                 raise SceneError("scene_observation_invalid", "observation image is invalid") from exc
-            outputs.append((view, path))
-        for view, path in outputs:
+            outputs.append((view, frame, path))
+        for view, frame, path in outputs:
             now = utc_now()
             asset_id, provenance_id = f"asset_{uuid.uuid4().hex}", f"prov_{uuid.uuid4().hex}"
             digest = workspace._sha256(path)
@@ -135,7 +136,11 @@ async def observe(
                 id=asset_id, job_id=job_id, parent_asset_ids=[source_asset.id], mime_type="image/png",
                 width=value.observation.resolution, height=value.observation.resolution,
                 size_bytes=path.stat().st_size, sha256=digest,
-                suggested_filename=f"scene-{revision.id[9:17]}-{value.observation.mode}-{view}.png",
+                suggested_filename=(
+                    f"scene-{revision.id[9:17]}-{value.observation.mode}-{view}"
+                    + (f"-{value.observation.clip_id}-f{frame}" if value.observation.clip_id else "")
+                    + ".png"
+                ),
                 provenance_id=provenance_id, created_at=now,
             )
             provenance = Provenance(
@@ -145,20 +150,24 @@ async def observe(
                 runtime_adapter="blender.scene-observation", runtime_version=runtime_version,
                 tool_versions={"media-forge": __version__, "blender": runtime_version}, seed=0,
                 parameters={"scene_id": value.scene_id, "revision_id": revision.id, "runtime_id": runtime_id,
-                            "view": view, "observation": value.observation.model_dump(mode="json"),
+                            "view": view, "frame": frame,
+                            "observation": value.observation.model_dump(mode="json"),
                             "object_ids": result.get("object_ids", [])},
                 reference_asset_hashes={source_asset.id: source_asset.sha256}, postprocessing=[],
                 validation=[{"validator": "scene.observation", "status": "passed", "device": "CPU",
-                             "frame": 0, "samples": 16}], warnings=[], output_sha256=digest, created_at=now,
+                             "frame": frame, "clip_id": value.observation.clip_id,
+                             "samples": 16}], warnings=[], output_sha256=digest, created_at=now,
             )
             workspace.store.register_asset(asset, provenance, path)
             registered.append(asset_id)
-            images.append({"view": view, "asset_id": asset_id, "sha256": digest})
+            images.append({"view": view, "frame": frame, "asset_id": asset_id, "sha256": digest})
         return {"scene": document.model_dump(mode="json"), "revision": revision.model_dump(mode="json"),
                 "asset_ids": registered, "observation": value.observation.model_dump(mode="json"),
                 "images": images, "object_colors": result["object_colors"], "object_ids": result.get("object_ids", []),
                 "renderer": {"runtime_id": runtime_id, "version": runtime_version, "device": "CPU",
-                             "frame": 0, "samples": 16}, "semantic_review": "not_tested"}
+                             "frames": value.observation.rendered_frames(),
+                             "clip_id": value.observation.clip_id, "samples": 16},
+                "semantic_review": "not_tested"}
     except BaseException:
         workspace._rollback_assets(registered)
         raise
@@ -171,9 +180,15 @@ def validate_report(result: Any, value: SceneObserveRequest, runtime_version: st
         raise ValueError("invalid report")
     if result.get("observation") != value.observation.model_dump(mode="json") or result.get("blender_version") != runtime_version:
         raise ValueError("report identity differs")
-    if result.get("device") != "CPU" or result.get("autoexec_disabled") is not True or result.get("frame") != 0 or result.get("samples") != 16:
+    if result.get("device") != "CPU" or result.get("autoexec_disabled") is not True or result.get("samples") != 16:
         raise ValueError("report execution differs")
-    if result.get("images") != [{"view": view, "filename": f"{view}.png"} for view in value.observation.views]:
+    if (result.get("frames") != value.observation.rendered_frames()
+            or result.get("clip_id") != value.observation.clip_id):
+        raise ValueError("report pose differs")
+    if result.get("images") != [
+        {"view": view, "frame": frame, "filename": f"{view}-f{frame}.png"}
+        for view in value.observation.views for frame in value.observation.rendered_frames()
+    ]:
         raise ValueError("report images differ")
     colors = result.get("object_colors")
     ids = result.get("object_ids", [])
