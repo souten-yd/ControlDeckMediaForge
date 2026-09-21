@@ -910,13 +910,29 @@ def test_every_failure_offers_one_exit():
 
 def test_library_cards_open_the_full_screen_viewer():
     """一覧のサムネイルは小さい。タップで原寸を見られる場所へ行く。"""
-    assert "openViewer(item.asset_id, item, state.libraryItems)" in SCRIPT, \
+    assert "openViewer(item.asset_id, item, siblings || state.libraryItems)" in SCRIPT, \
         "一覧のタップがビューアへ行っていない"
     assert "#viewer[open] { display: grid" in STYLES, "ビューアが全画面になっていない"
     # 12 MiB を超える素材は運べないので、代わりに何を出すかを決めてある
     viewer = SCRIPT.split("async function openViewer(", 1)[1].split("\nasync function ", 1)[0]
     assert "assets.thumbnail" in viewer, "原寸を運べないときの代替が無い"
     assert "書き出して確認" in viewer, "代替表示の理由が書かれていない"
+
+
+def test_library_collapses_the_revisions_of_one_scene_into_one_card():
+    """1 つの版は 2 つの資産を登録するので、直すたびに同じものが連番で並ぶ。"""
+    group = SCRIPT[SCRIPT.index("function libraryGroups"):SCRIPT.index("function setLibrarySelecting")]
+    # 束ねる鍵はシーンの id。名前で束ねると、同じ名前の別シーンが混ざる。
+    assert "item.scene?.scene_id" in group and "scene_name" not in group.split("function libraryGroupCard")[0]
+    # 代表はいちばん新しい版の、見るための GLB。
+    assert "scene.sequence" in group and '"preview"' in group
+    # 選ぶあいだは束ねない。束ねたまま 1 枚押すと版ぜんぶが対象になる。
+    assert "state.libraryGrouping && !state.librarySelecting" in group
+    assert "renderLibraryGrid()" in SCRIPT[SCRIPT.index("function setLibrarySelecting"):]
+    # 読み込んだ範囲に全部が居るとは限らないので、見えている数と全体を区別する。
+    assert "shown < total" in group
+    assert 'byId("library-group").addEventListener' in SCRIPT
+    assert 'id="library-group"' in MARKUP
 
 
 def test_viewer_supports_touch_zoom():

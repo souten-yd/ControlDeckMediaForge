@@ -120,6 +120,7 @@ def page(
     limit: int,
     media_kind: str = "all",
     thumbnail: Callable[[Asset], dict[str, Any] | None] | None = None,
+    membership: Callable[[list[str]], dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """Filter a fetched page, keeping pagination anchored on real asset rows.
 
@@ -143,6 +144,16 @@ def page(
             if rendered is not None:
                 value["thumbnail"] = rendered
         items.append(value)
+    # 1 つの版は 2 つの資産を登録する（編集の土台の .blend と、見るための GLB）。
+    # 編集を重ねると同じものが連番で並ぶので、行それぞれに「どのシーンの何版目か」
+    # を持たせて、画面がまとめられるようにする。ここで畳まないのは、版が頁を
+    # またいで届くためと、頁送りの錨を資産の行のままにしておくためである。
+    if membership is not None and items:
+        found = membership([str(value["asset_id"]) for value in items])
+        for value in items:
+            record = found.get(str(value["asset_id"]))
+            if record is not None:
+                value["scene"] = record
     exhausted = len(records) < limit
     return {
         "items": items,

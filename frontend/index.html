@@ -609,6 +609,12 @@
             <button type="button" data-library-media="glb" aria-pressed="false">GLB</button>
             <button type="button" data-library-media="blend" aria-pressed="false">Blender</button>
           </div>
+          <!-- 1 つのシーンは版ごとに 2 つの資産を登録するので、直すたびに同じものが
+               連番で並ぶ。既定では 1 枚にまとめ、押せば元の 1 行ずつに戻せる。 -->
+          <div class="library-grouping">
+            <button type="button" id="library-group" aria-pressed="true">版をまとめる</button>
+            <p id="library-group-hint" class="hint" role="status"></p>
+          </div>
           <!-- GLB は絵ではないので、サムネイルは viewer で描いてから撮る。
                一覧を開くだけで 3D ランタイムと GLB を運ぶのは重いので、
                押されたときにだけ動かす。 -->
