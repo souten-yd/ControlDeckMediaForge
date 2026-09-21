@@ -7233,9 +7233,162 @@ async function cancelSceneBackup() {
 
 /* ── library ──────────────────────────────────────────────────────────── */
 
+/* ── 一覧の 3D サムネイルを裏で埋める ─────────────────────────────────
+   GLB は絵ではないので、サムネイルは viewer が描いた画面を撮って作る。
+   ただし撮影は「開いたとき」しか起きなかったので、実機では GLB 240 件のうち
+   12 件しか絵が無く、一覧が「3D」の札で埋まっていた。
+
+   ここは一覧に並んだ札だけを対象に、同じ撮影経路を裏で 1 件ずつ通す。
+   新しい信頼は増えない（送るのは今までと同じ、上限付きの WebP 1 枚である）。
+   増えるのは GLB のバイト列を運ぶ費用なので、そこに歯止めを置く。 */
+
+// 絵 1 枚のために 36 MB を base64 で運ぶ価値はない。大きいものは札のままにする。
+const MODEL_THUMBNAIL_SOURCE_LIMIT = 16 * 1024 * 1024;
+// 一覧は 24 件ずつ増える。1 回に撮るのはその範囲までとし、押した「もっと見る」
+// のぶんは次の呼び出しで撮る。
+const MODEL_THUMBNAIL_BATCH = 24;
+const MODEL_THUMBNAIL_CANVAS_SIDE = 320;
+
+let modelThumbnailGeneration = 0;
+let modelThumbnailRunning = false;
+// 撮れないモデル（壊れた GLB、context が取れない等）を覚えて回り続けないようにする。
+const modelThumbnailSkipped = new Set();
+
+// 1 枚ごとに新しい canvas を作る。dispose は forceContextLoss まで行うので、
+// 同じ canvas を使い回すと 2 枚目から context が取れない。
+function modelThumbnailCanvas() {
+  const canvas = document.createElement("canvas");
+  // display:none だと getBoundingClientRect が 0 になり、viewer が 1px で描く。
+  // 画面の外に置いて、大きさだけは本物にする。
+  canvas.style.cssText = `position:fixed;left:-10000px;top:0;width:${MODEL_THUMBNAIL_CANVAS_SIDE}px;height:${MODEL_THUMBNAIL_CANVAS_SIDE}px;`;
+  canvas.setAttribute("aria-hidden", "true");
+  document.body.append(canvas);
+  return canvas;
+}
+
+async function captureModelThumbnail(item, generation) {
+  let opened;
+  let instance = null;
+  let canvas = null;
+  try {
+    const module = await loadModelViewer();
+    if (generation !== modelThumbnailGeneration) return false;
+    opened = await call("assets.model.open", {asset_id: item.asset_id});
+    const content = await streamModelBytes(opened, {
+      cancelled: () => generation !== modelThumbnailGeneration,
+    });
+    await call("assets.model.close", {handle: opened.handle});
+    opened = undefined;
+    if (generation !== modelThumbnailGeneration) return false;
+    canvas = modelThumbnailCanvas();
+    instance = await module.createModelViewer({canvas, bytes: content, background: "#0b1110"});
+    const blob = await instance.snapshot();
+    if (generation !== modelThumbnailGeneration || blob.size > 256 * 1024) return false;
+    const encoded = encodeBase64(new Uint8Array(await blob.arrayBuffer()));
+    const saved = await call("assets.model.thumbnail", {asset_id: item.asset_id, base64: encoded});
+    if (generation !== modelThumbnailGeneration) return false;
+    // 一覧を丸ごと読み直すと、撮るたびに全カードが作り直される。撮れた 1 枚だけ
+    // 差し替え、state にも書いて再描画でも残るようにする。
+    // 保存の応答は大きさしか返さないので、絵は今撮ったものをそのまま使う。
+    // 次に一覧を開いたときは server が作る一覧用の小さい版に入れ替わる。
+    item.thumbnail = {
+      mime_type: saved.mime_type, width: saved.width, height: saved.height, base64: encoded,
+    };
+    const card = [...byId("library-grid").children].find(
+      (node) => node.dataset?.assetId === item.asset_id
+    );
+    const image = card?.querySelector("img");
+    const placeholder = card?.querySelector(".model-placeholder");
+    if (image && placeholder) {
+      image.src = `data:${saved.mime_type};base64,${encoded}`;
+      image.hidden = false;
+      placeholder.hidden = true;
+    }
+    return true;
+  } catch {
+    // 撮れないモデルは札のままでよい。一覧は続ける。
+    return false;
+  } finally {
+    instance?.dispose();
+    canvas?.remove();
+    if (opened?.handle) await call("assets.model.close", {handle: opened.handle}).catch(() => {});
+  }
+}
+
+function pendingModelThumbnails() {
+  return state.libraryItems.filter((item) =>
+    item.preview_kind === "model_3d"
+    && !item.thumbnail
+    && !modelThumbnailSkipped.has(item.asset_id)
+    && Number(item.size_bytes) > 0
+    && Number(item.size_bytes) <= MODEL_THUMBNAIL_SOURCE_LIMIT
+  ).slice(0, MODEL_THUMBNAIL_BATCH);
+}
+
+/* 押せる場所は、作るものが残っているときだけ出す。何件あるかを先に言う。
+   3D ランタイムも GLB のバイト列も、押されるまで取りに行かない。 */
+function renderModelThumbnailBackfill() {
+  const row = byId("library-thumbnails");
+  const hint = byId("library-thumbnails-hint");
+  const run = byId("library-thumbnails-run");
+  const pending = pendingModelThumbnails();
+  if (modelThumbnailRunning) {
+    row.hidden = false;
+    run.disabled = true;
+    return;
+  }
+  run.disabled = false;
+  row.hidden = pending.length === 0;
+  if (pending.length === 0) return;
+  hint.textContent = `絵の無い 3D が ${pending.length} 件あります。`;
+  run.textContent = "3D の絵を作る";
+}
+
+async function backfillModelThumbnails() {
+  // 走っている間に「もっと見る」で増えたぶんも拾う。1 回だけ見て終わると、
+  // 増えたカードは次に一覧を開くまで札のままになる。
+  if (modelThumbnailRunning) return;
+  const generation = modelThumbnailGeneration;
+  const hint = byId("library-thumbnails-hint");
+  modelThumbnailRunning = true;
+  renderModelThumbnailBackfill();
+  let done = 0;
+  try {
+    for (let pending = pendingModelThumbnails(); pending.length > 0; pending = pendingModelThumbnails()) {
+      const total = done + pending.length;
+      for (const item of pending) {
+        if (generation !== modelThumbnailGeneration) return;
+        hint.textContent = `3D の絵を作っています ${done + 1} / ${total} 件`;
+        const captured = await captureModelThumbnail(item, generation);
+        // 撮れなかったものを次の周で選び直すと、同じ失敗を回り続ける。ただし
+        // 一覧が入れ替わって途中で降りただけのものは、覚えてはいけない。
+        if (!captured && generation === modelThumbnailGeneration) {
+          modelThumbnailSkipped.add(item.asset_id);
+        }
+        done += 1;
+      }
+    }
+  } finally {
+    modelThumbnailRunning = false;
+    if (generation === modelThumbnailGeneration) {
+      renderModelThumbnailBackfill();
+      if (pendingModelThumbnails().length === 0) {
+        byId("library-thumbnails").hidden = false;
+        hint.textContent = `3D の絵を ${done} 件作りました。`;
+        byId("library-thumbnails-run").hidden = true;
+      }
+    }
+  }
+}
+
 async function loadLibrary({reset = false} = {}) {
   const grid = byId("library-grid");
-  if (reset) { grid.replaceChildren(); state.libraryCursor = null; }
+  if (reset) {
+    grid.replaceChildren();
+    state.libraryCursor = null;
+    modelThumbnailGeneration += 1;
+    byId("library-thumbnails-run").hidden = false;
+  }
   let page;
   try {
     page = await call("library.list", {
@@ -7265,6 +7418,7 @@ async function loadLibrary({reset = false} = {}) {
   byId("library-empty").textContent = "まだ素材はありません。";
   byId("library-count").textContent = empty
     ? "" : `${state.libraryItems.length} 件${page.next_before ? "＋" : ""}`;
+  renderModelThumbnailBackfill();
 }
 
 /* ── まとめて消す ─────────────────────────────────────────────────────
@@ -7434,6 +7588,13 @@ function libraryCard(item) {
     void openViewer(item.asset_id, item, state.libraryItems);
   });
   if (item.preview_kind === "model_3d") {
+    // GLB は絵ではないので、一覧では viewer が撮った版を出す。撮れていない
+    // ものだけ「3D」の札を出す。以前はここで常に札にしていたため、撮影済みの
+    // 版が一覧に届いていても使われていなかった。
+    if (item.thumbnail?.base64) {
+      image.src = `data:${item.thumbnail.mime_type};base64,${item.thumbnail.base64}`;
+      return card;
+    }
     image.hidden = true;
     modelPlaceholder.hidden = false;
     return card;
@@ -7648,6 +7809,32 @@ function encodeBase64(bytes) {
   return btoa(binary);
 }
 
+/* 開いた handle からバイト列を集める。viewer と一覧の裏取りで同じ経路を通す。
+   途中で見ている先が変わったら、残りを取らずに諦める。 */
+const MODEL_BROWSER_BYTE_LIMIT = 64 * 1024 * 1024;
+
+async function streamModelBytes(opened, {cancelled, onProgress} = {}) {
+  if (opened.total_bytes > MODEL_BROWSER_BYTE_LIMIT) {
+    throw new Error("model exceeds browser bound");
+  }
+  const content = new Uint8Array(opened.total_bytes);
+  let offset = 0;
+  while (offset < content.length) {
+    if (cancelled?.()) throw new Error("model view changed");
+    const piece = await call("assets.model.bytes", {
+      handle: opened.handle, offset, length: Math.min(opened.chunk_bytes, content.length - offset),
+    });
+    const chunk = decodeBase64(piece.base64);
+    if (piece.offset !== offset || piece.total_bytes !== content.length || !chunk.length) {
+      throw new Error("model byte sequence changed");
+    }
+    content.set(chunk, offset);
+    offset += chunk.length;
+    onProgress?.(offset / content.length);
+  }
+  return content;
+}
+
 async function saveModelThumbnail(assetId, instance, token) {
   try {
     const blob = await instance.snapshot();
@@ -7671,22 +7858,12 @@ async function openModelViewer(assetId, item, token) {
     const modulePromise = loadModelViewer();
     opened = await call("assets.model.open", {asset_id: assetId});
     viewer.modelHandle = opened.handle;
-    if (opened.total_bytes > 64 * 1024 * 1024) throw new Error("model exceeds browser bound");
-    const content = new Uint8Array(opened.total_bytes);
-    let offset = 0;
-    while (offset < content.length) {
-      if (token !== viewer.token) throw new Error("model view changed");
-      const piece = await call("assets.model.bytes", {
-        handle: opened.handle, offset, length: Math.min(opened.chunk_bytes, content.length - offset),
-      });
-      const chunk = decodeBase64(piece.base64);
-      if (piece.offset !== offset || piece.total_bytes !== content.length || !chunk.length) {
-        throw new Error("model byte sequence changed");
-      }
-      content.set(chunk, offset);
-      offset += chunk.length;
-      loading.textContent = `${viewer3dText().loading} ${Math.round(offset / content.length * 100)}%`;
-    }
+    const content = await streamModelBytes(opened, {
+      cancelled: () => token !== viewer.token,
+      onProgress: (ratio) => {
+        loading.textContent = `${viewer3dText().loading} ${Math.round(ratio * 100)}%`;
+      },
+    });
     await call("assets.model.close", {handle: opened.handle});
     viewer.modelHandle = "";
     if (token !== viewer.token) return;
@@ -10050,6 +10227,7 @@ for (const holder of [byId("activity-list"), byId("create-error")]) {
 }
 
 byId("library-more").addEventListener("click", () => void loadLibrary());
+byId("library-thumbnails-run").addEventListener("click", () => void backfillModelThumbnails());
 byId("library-media-kinds").addEventListener("click", (event) => {
   const button = event.target.closest("[data-library-media]");
   if (!button || button.dataset.libraryMedia === state.libraryMedia) return;
