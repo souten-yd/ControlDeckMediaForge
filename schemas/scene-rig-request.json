@@ -1,0 +1,112 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://media-forge.local/schemas/scene-rig-request.json",
+ "additionalProperties": false,
+ "description": "Measure a generated model and fit a rig, skin weights and a walk loop to it.\n\nPoint it at a scene revision holding one dense generated mesh. The model is\nwelded (glTF splits vertices at UV seams, and bone heat solves nothing until\nthey are joined), decimated to fit the bind limits, then measured: a root\nthrough the body, one bone per protrusion, and two per limb found in a\nhorizontal band near the base. Limbs are counted from the shape, so six legs\ngive a tripod gait and four give a diagonal one.\n\nReturns a detached Job; poll media.job.status. Success appends a revision\nwhose preview GLB carries the skin and the clip. Nothing is overwritten.\n\nIt needs a legged shape. A model with fewer than two limbs in that band\nfails rather than inventing bones, and rigging a character by hand stays\nmedia.scene.edit with armature.create.",
+ "properties": {
+  "schema_version": {
+   "const": "media-forge.scene-rig@1",
+   "default": "media-forge.scene-rig@1",
+   "title": "Schema Version",
+   "type": "string"
+  },
+  "scene_id": {
+   "pattern": "^scene_[0-9a-f]{32}$",
+   "title": "Scene Id",
+   "type": "string"
+  },
+  "base_revision_id": {
+   "pattern": "^revision_[0-9a-f]{32}$",
+   "title": "Base Revision Id",
+   "type": "string"
+  },
+  "object_id": {
+   "default": "generated_0",
+   "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+   "maxLength": 64,
+   "minLength": 1,
+   "pattern": "^[a-z][a-z0-9._-]*$",
+   "title": "Object Id",
+   "type": "string"
+  },
+  "rig_object_id": {
+   "default": "rig",
+   "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+   "maxLength": 64,
+   "minLength": 1,
+   "pattern": "^[a-z][a-z0-9._-]*$",
+   "title": "Rig Object Id",
+   "type": "string"
+  },
+  "name": {
+   "default": "Auto rig",
+   "maxLength": 120,
+   "minLength": 1,
+   "title": "Name",
+   "type": "string"
+  },
+  "ratio": {
+   "anyOf": [
+    {
+     "exclusiveMaximum": 1.0,
+     "exclusiveMinimum": 0.05,
+     "type": "number"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": 0.6,
+   "title": "Ratio"
+  },
+  "min_faces": {
+   "default": 2000,
+   "maximum": 1000000,
+   "minimum": 4,
+   "title": "Min Faces",
+   "type": "integer"
+  },
+  "weld_distance_m": {
+   "default": 1e-05,
+   "exclusiveMinimum": 0.0,
+   "maximum": 0.01,
+   "title": "Weld Distance M",
+   "type": "number"
+  },
+  "clip_id": {
+   "anyOf": [
+    {
+     "maxLength": 48,
+     "minLength": 1,
+     "pattern": "^[a-z][a-z0-9._-]*$",
+     "type": "string"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": "walk",
+   "title": "Clip Id"
+  },
+  "fps": {
+   "default": 24,
+   "maximum": 60,
+   "minimum": 1,
+   "title": "Fps",
+   "type": "integer"
+  },
+  "frame_count": {
+   "default": 24,
+   "maximum": 120,
+   "minimum": 2,
+   "title": "Frame Count",
+   "type": "integer"
+  }
+ },
+ "required": [
+  "scene_id",
+  "base_revision_id"
+ ],
+ "title": "SceneRigRequest",
+ "type": "object"
+}

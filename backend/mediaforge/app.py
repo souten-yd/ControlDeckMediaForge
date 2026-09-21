@@ -131,6 +131,7 @@ from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
 from .scene_refinement import SceneRefineRequest
 from .scene_bake import SceneBakeRequest
+from .scene_rig import SceneRigRequest
 from .scene_recipes import (
     SceneCreateRequest,
     SceneEditRequest,
@@ -2697,6 +2698,25 @@ def create_app(
             raise HTTPException(status_code=422, detail={"code": "invalid_scene_recipe"}) from exc
         return await submit_scene_tool(value, identity)
 
+    @app.post("/addon/v1/agent/scene/rig")
+    async def agent_scene_rig(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = SceneRigRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_scene_rig"}) from exc
+        # 並びの組み立てはここではなく scene_workspace にある。画面と MCP で
+        # 別々に組むと、どちらかが weld を落として「重みが付かない」で止まる。
+        return await submit_scene_tool(SceneEditRequest.model_validate({
+            "scene_id": value.scene_id,
+            "base_revision_id": value.base_revision_id,
+            "recipe": scene_workspace.rig_recipe(
+                value.object_id, value.rig_object_id, value.name, value.clip_id,
+                value.ratio, value.weld_distance_m, value.min_faces,
+                value.fps, value.frame_count,
+            ),
+        }), identity)
+
     @app.post("/addon/v1/agent/scene/material")
     async def agent_scene_material(request: Request) -> dict[str, Any]:
         identity = await authorize_host(request)
@@ -2792,6 +2812,9 @@ def create_app(
             "scene": document.model_dump(mode="json"),
             "revision": current.model_dump(mode="json"),
             "mesh_geometry": await asyncio.to_thread(scene_workspace.geometry_facts, current),
+            # 骨の名前・親子・レスト姿勢と、どの軸を回すと先端がどちらへ動くか。
+            # これが無いとクリップは当て推量になる。
+            "skeletons": await asyncio.to_thread(scene_workspace.skeleton_facts, current),
         }
 
     @app.post("/addon/v1/agent/scene/export")
@@ -4026,6 +4049,38 @@ def create_app(
                             "base_revision_id": str(params.get("base_revision_id", "")),
                             "recipe": scene_workspace.simplify_recipe(
                                 str(target), ratio, distance, floor),
+                        }), identity)
+                    elif method == "scenes.rig":
+                        # 画面から任意の recipe を撃たせない。骨入れは「繋ぐ→落とす→
+                        # 測って組む」の決まった並びで、組み立てはサーバ側。利用者が
+                        # 決めるのは削る強さと歩かせるかどうかだけ。
+                        if set(params) - {
+                            "ratio", "weld_distance_m", "min_faces", "object_id",
+                            "rig_object_id", "name", "clip_id", "fps", "frame_count",
+                        } != {"scene_id", "base_revision_id"}:
+                            raise ValueError("scene rig fields differ")
+                        ratio = params.get("ratio")
+                        if ratio is not None and (type(ratio) is not float or not 0.05 <= ratio < 1.0):
+                            raise ValueError("scene rig ratio is out of bounds")
+                        distance = params.get("weld_distance_m", 0.00001)
+                        if type(distance) is not float or not 0.0 < distance <= 0.01:
+                            raise ValueError("scene rig weld distance is out of bounds")
+                        floor = params.get("min_faces", 2000)
+                        if type(floor) is not int or isinstance(floor, bool) or not 4 <= floor <= 1_000_000:
+                            raise ValueError("scene rig face floor is out of bounds")
+                        clip_id = params.get("clip_id", "walk")
+                        if clip_id is not None and not isinstance(clip_id, str):
+                            raise ValueError("scene rig clip differs")
+                        result = await submit_scene_tool(SceneEditRequest.model_validate({
+                            "scene_id": str(params.get("scene_id", "")),
+                            "base_revision_id": str(params.get("base_revision_id", "")),
+                            "recipe": scene_workspace.rig_recipe(
+                                str(params.get("object_id", "generated_0")),
+                                str(params.get("rig_object_id", "rig")),
+                                str(params.get("name", "Auto rig")),
+                                clip_id, ratio, distance, floor,
+                                int(params.get("fps", 24)), int(params.get("frame_count", 24)),
+                            ),
                         }), identity)
                     elif method == "scenes.from_glb":
                         if set(params) - {"name", "tags", "collection"} != {"asset_id"}:

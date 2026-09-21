@@ -573,6 +573,25 @@
                     </div>
                   </form>
                 </details>
+                <details id="scene-rig-tools">
+                  <summary id="scene-rig-title">骨を入れて歩かせる</summary>
+                  <form id="scene-rig-form" class="scene-simplify-body" novalidate>
+                    <p id="scene-rig-note" class="hint">模型を測って、胴と脚に骨を置き、歩くループを付けます。脚のある形にだけ使えます。繋ぐ・面を減らすところまで一度に行い、新しい版として保存します。</p>
+                    <label for="scene-rig-ratio" id="scene-rig-ratio-label">残す面の割合</label>
+                    <input id="scene-rig-ratio" type="range" min="10" max="95" step="5" value="60">
+                    <p id="scene-rig-estimate" class="hint" role="status"></p>
+                    <label class="checkbox" for="scene-rig-walk">
+                      <input type="checkbox" id="scene-rig-walk" checked>
+                      <span id="scene-rig-walk-label">歩くループも付ける</span>
+                    </label>
+                    <progress id="scene-rig-progress" max="1" value="0" hidden></progress>
+                    <p id="scene-rig-status" class="hint" role="status"></p>
+                    <div class="split-actions">
+                      <button type="button" id="scene-rig-cancel" hidden>中止</button>
+                      <button type="submit" id="scene-rig-submit" class="primary">骨を入れて新しい版を保存</button>
+                    </div>
+                  </form>
+                </details>
                 <p id="scene-revisions-title" class="section-label">保存した版</p>
                 <p id="scene-revision-status" class="hint" role="status"></p>
                 <div id="scene-revisions" class="rows"></div>

@@ -254,6 +254,40 @@ class MeshDecimate(BaseModel):
     min_faces: int = Field(default=64, ge=4, le=1_000_000, strict=True)
 
 
+class RigAuto(BaseModel):
+    """Measure a legged mesh and fit a rig, a bone-heat bind and a walk loop to its shape.
+
+    骨の位置は当て推量では置けない。bone heat は、どの骨からも遠い頂点に重みを
+    付けられずに失敗するので、骨は「動かしたい所」だけでなく「頂点が届く所」にも
+    要る。この操作は毎回モデルを測り、胴を貫く root・突起ごとの骨・脚ごとの
+    上下 2 本を置いてから `skin.bind_auto` と同じ経路で縛る。
+
+    `armature.create` を自分で書くのと違うのは、座標をこちらが測る点だけである。
+    出した骨は同じ検査（本数・階層・長さ・骨の総数）を通る。
+
+    入る前に繋いで落としておくこと。glTF は UV の継ぎ目で頂点を割るので、
+    `mesh.weld` を通さないと bone heat が 1 頂点も解けない。`skin.bind_auto` には
+    5 万頂点の上限があるので、`mesh.decimate` も要ることが多い。
+    """
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["rig.auto"]
+    # 測る相手のメッシュ。
+    object_id: ObjectId
+    # 作る armature に付ける安定 ID。既にあると失敗する。
+    rig_object_id: ObjectId
+    name: str = Field(min_length=1, max_length=120)
+    # 歩行ループの ID。省くと骨だけ入れて動きは付けない。
+    clip_id: BoneId | None = None
+    fps: int = Field(default=24, ge=1, le=60, strict=True)
+    frame_count: int = Field(default=24, ge=2, le=120, strict=True)
+
+    @model_validator(mode="after")
+    def distinct_objects(self) -> "RigAuto":
+        if self.object_id == self.rig_object_id:
+            raise ValueError("rig.auto cannot write the armature over its own mesh")
+        return self
+
+
 class TransformSet(BaseModel):
     """Replace one or more transforms on an existing stable object ID."""
     model_config = ConfigDict(extra="forbid")
@@ -698,6 +732,7 @@ SceneOperation = Annotated[
     | ArmatureCreate
     | SkinBind
     | SkinBindAuto
+    | RigAuto
     | SkinWeightsSet
     | SkinWeightsSmooth
     | SkinWeightsNormalize

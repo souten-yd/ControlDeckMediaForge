@@ -15,7 +15,9 @@ import bpy
 
 # This directory is a shipped trusted worker pack, never an input asset path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import rig_auto
 import scene_curves
+import scene_skeleton
 import scene_surface
 import scene_weights
 import scene_ik
@@ -751,6 +753,33 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         bind_skin(obj, operation, objects)
     elif kind == "skin.bind_auto":
         bind_skin_auto(obj, operation, objects)
+    elif kind == "rig.auto":
+        # 骨の位置は当て推量では置けない。ここでモデルを測り、その形から
+        # armature / bind / 歩行クリップの operation を組んで、手で書いたときと
+        # 同じ関数へ渡す。新しい低水準の仕組みは増やさず、検査も同じものを通す。
+        rig_object_id = str(operation["rig_object_id"])
+        if rig_object_id in objects:
+            raise RuntimeError("automatic rig target ID is already used")
+        try:
+            facts = rig_auto.measure(obj)
+        except rig_auto.RigAutoError as error:
+            raise RuntimeError(str(error)) from error
+        rig = create_armature(
+            rig_auto.armature_operation(facts, rig_object_id, str(operation["name"]))
+        )
+        objects[rig_object_id] = rig
+        bind_skin_auto(rig, {
+            "type": "skin.bind_auto", "object_id": rig_object_id,
+            "mesh_object_ids": [object_id],
+        }, objects)
+        clip_id = operation.get("clip_id")
+        if clip_id is not None:
+            create_clip(rig, rig_auto.walk_operation(
+                facts, rig_object_id, str(clip_id),
+                int(operation.get("fps", 24)), int(operation.get("frame_count", 24)),
+            ), objects)
+        # 測った結果は版の facts（骨の数・クリップ）に出るので、ここでは返さない。
+        # operation ごとの戻り値の道は無く、作るとこの 1 つのために増えてしまう。
     elif kind == "pose.set":
         set_pose(obj, operation)
     elif kind == "transform.set":
@@ -895,6 +924,12 @@ def main() -> None:
         "mesh_geometry": [{**scene_curves.mesh_fact(obj), "uv_maps": scene_surface.uv_facts(obj.data), "skin_weights": scene_weights.facts(obj)} for key,obj in sorted(objects.items())[:256]
                           if obj.type == "MESH" and len(obj.data.vertices) <= scene_curves.MAX_VERTICES
                           and len(obj.data.polygons) <= 32768],
+        # 骨はリグあたり 128 本までなので、mesh_geometry のような上限は要らない。
+        # これが無いと、クリップを書く側は骨の名前も回す向きも知りようがない。
+        "skeletons": [fact for fact in (
+            scene_skeleton.facts(obj) for _, obj in sorted(objects.items())[:256]
+            if obj.type == "ARMATURE"
+        ) if fact is not None],
     }
     (Path.cwd() / args.result).write_text(
         json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
