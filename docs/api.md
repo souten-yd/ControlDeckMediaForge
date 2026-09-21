@@ -1055,7 +1055,7 @@ Untrusted scripts, paths, arbitrary cameras, render engines or operators are not
 ### Bounded curve operations and mesh selectors (M3a)
 
 Scene recipes add `mesh.loft`, `mesh.sweep`, `mesh.sections.set`,
-`mesh.bridge_loops` and `modifier.subdivision`. Public create/edit/workflow
+`mesh.bridge_loops`, `modifier.subdivision` and `mesh.decimate`. Public create/edit/workflow
 schemas enumerate the exact fields. Existing operations retain their meaning.
 
 ```json
@@ -1095,6 +1095,17 @@ alignment plus twist, preserves face winding and consumes the other object.
 Existing materials/UVs are preserved. New joint UVs are unset (zero) and require
 an explicit UV operation. Procedural controls end after joining; old revisions
 remain available. No hole cutting, intersection resolution or retopology is implied.
+
+`mesh.decimate` collapse-decimates one mesh in place to `ratio` of its faces
+(0.001 < ratio < 1) and applies the modifier immediately, so later operations see
+the reduced cage rather than an unevaluated dense one. `min_faces` is a floor: a
+mesh already at or below it, or a decimation that would fall below it, fails
+instead of committing. It refuses meshes carrying generating modifiers (subsurf,
+mirror, array, bevel) or shape keys, and fails when nothing was removed. This
+exists because generated 3D arrives as one dense mesh while `skin.bind_auto`
+caps at 50,000 vertices and 100,000 polygons; collapse keeps panel edges that a
+voxel-grid reduction erases. Reducing geometry is lossy and is not a retopology
+or a quality operation.
 
 `modifier.subdivision` adds one Catmull-Clark modifier at levels 1–2. It is
 non-destructive and accepted by fixed observation. Conservative triangulated

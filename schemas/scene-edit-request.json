@@ -1072,7 +1072,8 @@
                 "uv.pack": "#/$defs/UvPack",
                 "uv.seams.set": "#/$defs/UvSeamsSet",
                 "uv.smart_project": "#/$defs/UvSmartProject",
-                "uv.unwrap": "#/$defs/UvUnwrap"
+                "uv.unwrap": "#/$defs/UvUnwrap",
+                "mesh.decimate": "#/$defs/MeshDecimate"
               },
               "propertyName": "type"
             },
@@ -1097,6 +1098,9 @@
               },
               {
                 "$ref": "#/$defs/SubdivisionModifier"
+              },
+              {
+                "$ref": "#/$defs/MeshDecimate"
               },
               {
                 "$ref": "#/$defs/TransformSet"
@@ -2168,6 +2172,45 @@
       "title": "SubdivisionModifier",
       "type": "object"
     },
+    "MeshDecimate": {
+      "additionalProperties": false,
+      "description": "Collapse-decimate one mesh in place, keeping its UVs and material.\n\n生成した 3D は 1 枚の密なメッシュとして届く。骨を入れる（`skin.bind_auto`）には\n頂点・面の上限があり、そのままでは越える。trellis 側の格子まとめで落とすと\n薄い装甲板が升目に飲まれて表面が虫食いになるので、辺の縮約で落とす。\n平らな面は粗く、エッジは残る。増やす操作ではないので成長量の検査は要らない。",
+      "properties": {
+        "type": {
+          "const": "mesh.decimate",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "ratio": {
+          "exclusiveMaximum": 1.0,
+          "exclusiveMinimum": 0.001,
+          "title": "Ratio",
+          "type": "number"
+        },
+        "min_faces": {
+          "default": 64,
+          "maximum": 1000000,
+          "minimum": 4,
+          "title": "Min Faces",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "ratio"
+      ],
+      "title": "MeshDecimate",
+      "type": "object"
+    },
     "UvPack": {
       "additionalProperties": false,
       "description": "Pack existing UV islands into a unit tile under a bounded geometry hash.",
@@ -2721,7 +2764,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Change a 3D scene that already exists: move, add or remove things, adjust lights, aim the camera. This is the only way to change one \u2014 media.scene.snapshot only reads it back, and media.scene.create would start a new one.\n\nName the revision you are changing (media.scene.snapshot returns it). If someone changed it first the edit fails instead of overwriting their work; read the scene again and retry. Returns a job id; follow it with media.job.status.",
+  "description": "Change a 3D scene that already exists: move, add or remove things, adjust lights, aim the camera. This is the only way to change one — media.scene.snapshot only reads it back, and media.scene.create would start a new one.\n\nName the revision you are changing (media.scene.snapshot returns it). If someone changed it first the edit fails instead of overwriting their work; read the scene again and retry. Returns a job id; follow it with media.job.status.",
   "properties": {
     "scene_id": {
       "pattern": "^scene_[0-9a-f]{32}$",

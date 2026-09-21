@@ -220,6 +220,23 @@ class SubdivisionModifier(BaseModel):
     levels: int = Field(default=1, ge=1, le=2, strict=True)
 
 
+class MeshDecimate(BaseModel):
+    """Collapse-decimate one mesh in place, keeping its UVs and material.
+
+    生成した 3D は 1 枚の密なメッシュとして届く。骨を入れる（`skin.bind_auto`）には
+    頂点・面の上限があり、そのままでは越える。trellis 側の格子まとめで落とすと
+    薄い装甲板が升目に飲まれて表面が虫食いになるので、辺の縮約で落とす。
+    平らな面は粗く、エッジは残る。増やす操作ではないので成長量の検査は要らない。
+    """
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["mesh.decimate"]
+    object_id: ObjectId
+    # 残す面の割合。1.0 は何もしないのと同じなので受けない。
+    ratio: float = Field(gt=0.001, lt=1.0, allow_inf_nan=False)
+    # 下限を割ってまで落とさない。形が消えるくらいなら失敗させる。
+    min_faces: int = Field(default=64, ge=4, le=1_000_000, strict=True)
+
+
 class TransformSet(BaseModel):
     """Replace one or more transforms on an existing stable object ID."""
     model_config = ConfigDict(extra="forbid")
@@ -646,6 +663,7 @@ SceneOperation = Annotated[
     | MeshSectionsSet
     | MeshBridgeLoops
     | SubdivisionModifier
+    | MeshDecimate
     | TransformSet
     | BevelModifier
     | MaterialSet
