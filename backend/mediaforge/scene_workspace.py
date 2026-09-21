@@ -259,6 +259,24 @@ class SceneWorkspace:
             runtime_id=runtime_id, runtime_version=runtime_version,
         )
 
+    @staticmethod
+    def simplify_recipe(object_id: str, ratio: float, weld_distance_m: float,
+                        min_faces: int) -> dict[str, Any]:
+        """The fixed two-step reduction the screen and MCP both send.
+
+        画面から任意の recipe を撃たせない。軽量化は「繋いでから削る」の 2 手で、
+        繋ぐ側は既定のままにする。glTF の継ぎ目で割れた頂点を繋ぐだけで半分近く
+        減るので、利用者が触るのは削る強さだけでよい。
+        """
+        return {
+            "schema_version": "media-forge.scene-recipe@1",
+            "operations": [
+                {"type": "mesh.weld", "object_id": object_id, "distance_m": weld_distance_m},
+                {"type": "mesh.decimate", "object_id": object_id, "ratio": ratio,
+                 "min_faces": min_faces},
+            ],
+        }
+
     async def import_library_glb(
         self, owner: str, asset_id: str, *, name: str,
         tags: list[str] | None = None, collection: str | None = None,

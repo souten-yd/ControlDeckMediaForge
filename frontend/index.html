@@ -558,6 +558,21 @@
                     </div>
                   </form>
                 </details>
+                <details id="scene-simplify-tools">
+                  <summary id="scene-simplify-title">軽量化（ローポリ化）</summary>
+                  <form id="scene-simplify-form" class="scene-simplify-body" novalidate>
+                    <p id="scene-simplify-note" class="hint">継ぎ目で分かれた頂点を繋いでから面を減らし、新しい版として保存します。強さは下で調整できます。</p>
+                    <label for="scene-simplify-ratio" id="scene-simplify-ratio-label">残す面の割合</label>
+                    <input id="scene-simplify-ratio" type="range" min="10" max="95" step="5" value="60">
+                    <p id="scene-simplify-estimate" class="hint" role="status"></p>
+                    <progress id="scene-simplify-progress" max="1" value="0" hidden></progress>
+                    <p id="scene-simplify-status" class="hint" role="status"></p>
+                    <div class="split-actions">
+                      <button type="button" id="scene-simplify-cancel" hidden>中止</button>
+                      <button type="submit" id="scene-simplify-submit" class="primary">軽量化して新しい版を保存</button>
+                    </div>
+                  </form>
+                </details>
                 <p id="scene-revisions-title" class="section-label">保存した版</p>
                 <p id="scene-revision-status" class="hint" role="status"></p>
                 <div id="scene-revisions" class="rows"></div>

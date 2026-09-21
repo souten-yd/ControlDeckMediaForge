@@ -308,6 +308,14 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .scene-file-picker input { min-width: 0; }
 .scene-file-picker.disabled { opacity: .5; }
 
+/* 軽量化：強さを 1 か所で決め、結果の見込みをその場に出す。 */
+#scene-simplify-tools { border: 1px solid var(--border); border-radius: 10px; margin: 10px 0; }
+#scene-simplify-tools > summary { cursor: pointer; padding: 10px 12px; font-weight: 700; }
+.scene-simplify-body { display: grid; gap: 8px; padding: 0 12px 12px; }
+.scene-simplify-body input[type="range"] { width: 100%; min-height: 44px; }
+#scene-simplify-ratio-label { font-size: .82rem; font-weight: 700; }
+#scene-simplify-progress { width: 100%; }
+
 /* 画像から3D：入力画像の選び方を 1 か所にまとめ、押す前に何を渡すかを見せる。 */
 .scene-generation-source { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; }
 .scene-generation-source-controls { display: grid; gap: 8px; min-width: 0; }

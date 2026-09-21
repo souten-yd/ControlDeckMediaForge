@@ -547,6 +547,15 @@ a separate, validated scene. The retained candidate and original head remain
 unchanged, including on validation failure. Repeating a candidate returns the
 same recovered scene; owner checks apply before lookup. The original revision,
 candidate hash and source asset lineage are in the new source provenance.
+The opaque workspace method `scenes.simplify` (`scene_id`, `base_revision_id`,
+`ratio`, optional `weld_distance_m`, `min_faces` and `object_id`) submits the
+fixed reduction as an ordinary scene edit job: `mesh.weld` followed by
+`mesh.decimate` at the requested ratio. The screen sends only the strength; the
+recipe is assembled on the server, so the workspace never gains the ability to
+run an arbitrary recipe. Agents already reach the same two operations through
+`media.scene.edit`, which is why no new Agent tool is added. Poll it with
+`scenes.jobs.get` like any other scene job.
+
 This private operation is excluded from OpenAPI and Agent/workflow tools.
 Both workspace scene lists include owner-scoped `working_copies` for recovery UI,
 and `library_models`: the Library GLBs that no scene revision owns yet. The

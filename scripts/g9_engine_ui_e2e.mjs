@@ -109,6 +109,12 @@ try {
           result = {scene, revision: {id: scene.current_revision_id, sequence: 1,
             preview_asset_id: `asset_${'8'.repeat(32)}`, dependencies: []}};
         }
+        else if (request.method === 'scenes.simplify') {
+          fixture.simplify = request.params;
+          fixture.job = {job_id: `job_${'9'.repeat(32)}`, status: 'running', phase: 'blender_recipe', progress: .3};
+          fixture.jobs.set(fixture.job.job_id, fixture.job);
+          result = fixture.job;
+        }
         else if (request.method === 'scenes.get') result = {
           scene: fixture.scenes.find((item) => item.id === request.params.scene_id),
           revisions: [{id: `revision_${'7'.repeat(32)}`, sequence: 1,
@@ -395,10 +401,29 @@ try {
         (items) => items.map((item) => [item.label, item.children.length]));
       assert.equal(after.length, 1, JSON.stringify(after));
       assert.equal(after[0][1], 2, JSON.stringify(after));
+      // 軽量化は画面から強さを決めて出せる。任意の recipe は画面から撃てない。
+      const ratio = frame.locator('#scene-simplify-ratio');
+      assert.equal(await ratio.count(), 1, 'the scene detail must carry a reduction control');
+      await frame.locator('#scene-simplify-tools > summary').click();
+      await ratio.fill('40');
+      await frame.waitForFunction(() =>
+        document.querySelector('#scene-simplify-estimate').textContent.includes('40'));
+      const sliderHeight = await frame.evaluate(() =>
+        document.getElementById('scene-simplify-ratio').getBoundingClientRect().height);
+      assert(sliderHeight >= 44, String(sliderHeight));
+      await frame.locator('#scene-simplify-submit').click();
+      await frame.waitForFunction(() => state.sceneSimplify !== null);
+      assert.equal(fixture.simplify.ratio, 0.4);
+      assert.equal(fixture.simplify.scene_id, `scene_${'7'.repeat(32)}`);
+      assert.equal(fixture.simplify.base_revision_id, `revision_${'7'.repeat(32)}`);
+      // 画面は recipe を組み立てない。送るのは強さだけ。
+      assert(!('recipe' in fixture.simplify), JSON.stringify(fixture.simplify));
+      await screenshot(page, frame, `${width}-${locale}-simplify.png`);
       await screenshot(page, frame, `${width}-${locale}-blender-target.png`);
       report.cases.push({width, locale, passed: true, layout, requests: fixture.requests,
         blender_picker_in_panel: true, library_glb_selectable: true,
         library_glb_becomes_scene: true, mobile_import_moved_below: width <= 767,
+        web_simplify_ratio_control: true, simplify_sends_only_strength: true,
         refine_default_off: true, refine_opt_in_sends_flag: true, refine_phase_reported: true,
         refine_unavailable_blocks_and_explains: true, device_photo_picker: true,
         device_photo_reaches_core_undecoded: true, selected_input_preview: true,
