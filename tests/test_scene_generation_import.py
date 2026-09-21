@@ -179,3 +179,21 @@ def test_non_glb_and_bad_names_are_refused(tmp_path):
     glb = import_asset_bytes(store, glb_bytes(), purpose='source', media_type='model/gltf-binary')
     with pytest.raises(SceneError, match='1 to 120 characters'):
         asyncio.run(workspace.import_library_glb('user:7', glb.id, name='   '))
+
+
+def test_simplify_recipe_is_weld_then_decimate(tmp_path):
+    """画面と MCP が同じ 2 手を送る。組み立てはサーバ側に置く。"""
+    _, workspace, *_ = setup(tmp_path / 'workspace')
+    recipe = workspace.simplify_recipe('generated_0', 0.6, 0.00001, 2000)
+    assert recipe['schema_version'] == 'media-forge.scene-recipe@1'
+    assert [op['type'] for op in recipe['operations']] == ['mesh.weld', 'mesh.decimate']
+    weld, decimate = recipe['operations']
+    assert weld['object_id'] == decimate['object_id'] == 'generated_0'
+    assert weld['distance_m'] == 0.00001
+    assert decimate['ratio'] == 0.6 and decimate['min_faces'] == 2000
+    # 組み立てたものが公開契約として通ること。
+    from mediaforge.scene_recipes import SceneEditRequest
+    SceneEditRequest.model_validate({
+        'scene_id': 'scene_' + 'a' * 32, 'base_revision_id': 'revision_' + 'b' * 32,
+        'recipe': recipe,
+    })

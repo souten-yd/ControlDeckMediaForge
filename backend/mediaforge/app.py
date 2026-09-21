@@ -4002,6 +4002,29 @@ def create_app(
                             "scene": document.model_dump(mode="json"),
                             "revisions": [item.model_dump(mode="json") for item in revisions],
                         }
+                    elif method == "scenes.simplify":
+                        # 画面から任意の recipe を撃たせず、軽量化だけを名前付きで出す。
+                        # 組み立てはサーバ側。利用者が決めるのは削る強さだけ。
+                        if set(params) - {"weld_distance_m", "min_faces", "object_id"} != {
+                            "scene_id", "base_revision_id", "ratio"
+                        }:
+                            raise ValueError("scene simplify fields differ")
+                        ratio = params.get("ratio")
+                        if type(ratio) is not float or not 0.05 <= ratio < 1.0:
+                            raise ValueError("scene simplify ratio is out of bounds")
+                        distance = params.get("weld_distance_m", 0.00001)
+                        if type(distance) is not float or not 0.0 < distance <= 0.01:
+                            raise ValueError("scene simplify weld distance is out of bounds")
+                        floor = params.get("min_faces", 2000)
+                        if type(floor) is not int or isinstance(floor, bool) or not 4 <= floor <= 1_000_000:
+                            raise ValueError("scene simplify face floor is out of bounds")
+                        target = params.get("object_id", "generated_0")
+                        result = await submit_scene_tool(SceneEditRequest.model_validate({
+                            "scene_id": str(params.get("scene_id", "")),
+                            "base_revision_id": str(params.get("base_revision_id", "")),
+                            "recipe": scene_workspace.simplify_recipe(
+                                str(target), ratio, distance, floor),
+                        }), identity)
                     elif method == "scenes.from_glb":
                         if set(params) - {"name", "tags", "collection"} != {"asset_id"}:
                             raise ValueError("scene from GLB fields differ")

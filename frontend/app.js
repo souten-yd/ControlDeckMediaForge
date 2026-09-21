@@ -180,6 +180,10 @@ const state = {
   sceneWorkingCopies: [],
   selectedSceneId: "",
   libraryModels: [],
+  sceneSimplify: null,
+  sceneSimplifyBusy: false,
+  sceneSimplifyPolling: "",
+  sceneSimplifyMessage: "",
   blenderTargetPreviewId: "",
   blenderTargetBusy: false,
   blenderTargetMessage: "",
@@ -6226,6 +6230,7 @@ function renderBlenderSessionControls() {
   byId("scene-blender-status").textContent = status;
   const target = state.scenes.find((item) => item.id === state.selectedSceneId)
     || (state.sceneDocument?.id === state.selectedSceneId ? state.sceneDocument : null);
+  renderSceneSimplify();
   byId("scene-blender-selection").textContent = state.blenderTargetMessage
     || (target ? text.blenderSelected(target.name) : text.blenderSelect);
   renderBlenderTarget();
@@ -6348,6 +6353,119 @@ async function chooseBlenderTarget(value) {
   } finally {
     state.blenderTargetBusy = false;
     renderScenes();
+  }
+}
+
+function simplifyText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    title: "Make it lighter (low poly)",
+    note: "Joins vertices split at seams, then removes faces, and saves the result as a new revision. The strength is yours to set below.",
+    ratio: "Share of faces to keep", submit: "Reduce and save a new revision", cancel: "Cancel",
+    estimate: (percent) => `Keeping ${percent}% of the faces.`,
+    estimateWith: (percent, from, to) => `Keeping ${percent}% of the faces: about ${from.toLocaleString()} → ${to.toLocaleString()} triangles.`,
+    running: "Reducing…", validating: "Validating and saving the revision…",
+    succeeded: "Saved the lighter revision.", failed: "Could not reduce this scene.",
+    canceled: "Reduction canceled.", needScene: "Open a scene first.",
+    connection: "Could not refresh the status.",
+  } : {
+    title: "軽量化（ローポリ化）",
+    note: "継ぎ目で分かれた頂点を繋いでから面を減らし、新しい版として保存します。強さは下で調整できます。",
+    ratio: "残す面の割合", submit: "軽量化して新しい版を保存", cancel: "中止",
+    estimate: (percent) => `面を${percent}%残します。`,
+    estimateWith: (percent, from, to) => `面を${percent}%残します：約 ${from.toLocaleString()} → ${to.toLocaleString()} 三角形。`,
+    running: "軽量化しています…", validating: "検証して版を保存しています…",
+    succeeded: "軽量化した版を保存しました。", failed: "このシーンは軽量化できませんでした。",
+    canceled: "軽量化を中止しました。", needScene: "先にシーンを開いてください。",
+    connection: "状況を取得できませんでした。",
+  };
+}
+
+function renderSceneSimplify() {
+  const form = byId("scene-simplify-form");
+  if (!form) return;
+  const text = simplifyText();
+  byId("scene-simplify-title").textContent = text.title;
+  byId("scene-simplify-note").textContent = text.note;
+  byId("scene-simplify-ratio-label").textContent = text.ratio;
+  byId("scene-simplify-submit").textContent = text.submit;
+  byId("scene-simplify-cancel").textContent = text.cancel;
+  const percent = Number(byId("scene-simplify-ratio").value);
+  // 面数は viewer が実際に読んだ値だけを使う。無いときは割合だけ言う。
+  const current = state.viewer3d?.modelStats?.triangles;
+  byId("scene-simplify-estimate").textContent = Number.isFinite(current) && current > 0
+    ? text.estimateWith(percent, current, Math.round(current * percent / 100))
+    : text.estimate(percent);
+  const job = state.sceneSimplify;
+  const running = Boolean(job && !TERMINAL.has(job.status));
+  const blocked = state.sceneSimplifyBusy || running || state.disabled
+    || Boolean(activeBlenderSession()) || Boolean(state.sceneImport) || Boolean(state.sceneBackup);
+  byId("scene-simplify-ratio").disabled = blocked;
+  byId("scene-simplify-submit").disabled = blocked || !state.selectedSceneId
+    || !state.sceneDocument?.current_revision_id;
+  byId("scene-simplify-cancel").hidden = !running;
+  byId("scene-simplify-cancel").disabled = state.sceneSimplifyBusy;
+  byId("scene-simplify-progress").hidden = !running;
+  byId("scene-simplify-progress").value = Number(job?.progress) || 0;
+  let message = state.selectedSceneId ? "" : text.needScene;
+  if (job?.status === "succeeded") message = text.succeeded;
+  else if (job?.status === "failed") message = text.failed;
+  else if (job?.status === "canceled") message = text.canceled;
+  else if (running) message = job.phase === "validating" ? text.validating : text.running;
+  byId("scene-simplify-status").textContent = state.sceneSimplifyMessage || message;
+}
+
+async function pollSceneSimplify() {
+  const jobId = state.sceneSimplify?.job_id;
+  if (!jobId || state.sceneSimplifyPolling === jobId) return;
+  state.sceneSimplifyPolling = jobId;
+  try {
+    while (!state.disabled && state.sceneSimplify?.job_id === jobId
+        && state.sceneSimplifyPolling === jobId && !TERMINAL.has(state.sceneSimplify.status)) {
+      const job = await call("scenes.jobs.get", {job_id: jobId});
+      if (state.disabled || state.sceneSimplify?.job_id !== jobId
+          || state.sceneSimplifyPolling !== jobId) return;
+      if (job?.job_id !== jobId) throw new Error("scene job identity changed");
+      state.sceneSimplify = job;
+      state.sceneSimplifyMessage = "";
+      renderSceneSimplify();
+      if (TERMINAL.has(job.status)) {
+        if (job.status === "succeeded") {
+          await loadScenes();
+          await openScene(state.selectedSceneId);
+        }
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  } catch {
+    if (!state.disabled && state.sceneSimplify?.job_id === jobId) {
+      state.sceneSimplifyMessage = simplifyText().connection;
+      renderSceneSimplify();
+    }
+  } finally {
+    if (state.sceneSimplifyPolling === jobId) state.sceneSimplifyPolling = "";
+  }
+}
+
+async function submitSceneSimplify() {
+  if (state.sceneSimplifyBusy || state.disabled) return;
+  const sceneId = state.selectedSceneId;
+  const revisionId = state.sceneDocument?.current_revision_id;
+  if (!sceneId || !revisionId) return;
+  state.sceneSimplifyBusy = true;
+  state.sceneSimplifyMessage = "";
+  renderSceneSimplify();
+  try {
+    state.sceneSimplify = await call("scenes.simplify", {
+      scene_id: sceneId, base_revision_id: revisionId,
+      ratio: Number(byId("scene-simplify-ratio").value) / 100,
+    });
+    void pollSceneSimplify();
+  } catch (error) {
+    state.sceneSimplifyMessage = failureText(error?.code);
+  } finally {
+    state.sceneSimplifyBusy = false;
+    renderSceneSimplify();
   }
 }
 
@@ -9262,6 +9380,25 @@ for (const id of [
   byId(id).addEventListener("change", () => renderSceneMaterialControls({targetsChanged: false}));
 }
 byId("scene-blender-open").addEventListener("click", () => void startOrOpenBlender());
+byId("scene-simplify-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  void submitSceneSimplify();
+});
+byId("scene-simplify-ratio").addEventListener("input", renderSceneSimplify);
+byId("scene-simplify-cancel").addEventListener("click", async () => {
+  if (!state.sceneSimplify || state.sceneSimplifyBusy) return;
+  state.sceneSimplifyBusy = true;
+  renderSceneSimplify();
+  try {
+    state.sceneSimplify = await call("scenes.jobs.cancel", {job_id: state.sceneSimplify.job_id});
+    state.sceneSimplifyMessage = "";
+  } catch (error) {
+    state.sceneSimplifyMessage = failureText(error?.code);
+  } finally {
+    state.sceneSimplifyBusy = false;
+    renderSceneSimplify();
+  }
+});
 byId("scene-blender-target").addEventListener("change", (event) => {
   void chooseBlenderTarget(event.target.value);
 });
