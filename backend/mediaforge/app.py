@@ -131,6 +131,10 @@ from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
 from .scene_refinement import SceneRefineRequest
 from .scene_bake import SceneBakeRequest
+from .asset_pipeline import (
+    AssetPipeline, AssetPipelineActionRequest, AssetPipelineRequest, PipelineStage,
+)
+from .asset_pipeline_runner import PipelineDeps, PipelineStalled, advance, approve, cancel
 from .scene_rig import SceneRigRequest
 from .scene_recipes import (
     SceneCreateRequest,
@@ -2847,6 +2851,110 @@ def create_app(
             "revision_id": current.id,
             "asset": asset.model_dump(mode="json"),
         }
+
+    def pipeline_deps() -> PipelineDeps:
+        """既存の経路だけを束ねて渡す。ここで新しい job の作り方は決めない。"""
+
+        async def submit_image(prompt: str, width: int, height: int) -> dict[str, Any]:
+            value = await imported_inputs(host_job_input({"input": {
+                "intent": prompt, "width": width, "height": height,
+            }}), identity_holder["identity"])
+            job = await submit_hosted(
+                value, identity_holder["identity"], workload_class="agent-interactive"
+            )
+            return {"job_id": job["id"]}
+
+        async def submit_model(value: AssetPipelineRequest, asset_id: str) -> dict[str, Any]:
+            return await submit_scene_tool(SceneFromImageRequest.model_validate({
+                "name": value.name, "input_asset_id": asset_id,
+                "resolution": value.resolution, "seed": value.seed,
+                "refine_with_pixal3d": value.refine_with_pixal3d,
+            }), identity_holder["identity"])
+
+        async def submit_rig(value: AssetPipelineRequest, scene_id: str, revision_id: str) -> dict[str, Any]:
+            return await submit_scene_tool(SceneEditRequest.model_validate({
+                "scene_id": scene_id, "base_revision_id": revision_id,
+                "recipe": scene_workspace.rig_recipe(
+                    value.rig_object_id, "rig", f"{value.name} rig", value.clip_id,
+                    value.rig_ratio, 0.00001, 2000, 24, 24,
+                ),
+            }), identity_holder["identity"])
+
+        async def export_scene(scene_id: str, fmt: str) -> dict[str, Any]:
+            document, revisions = scenes.get(scene_owner(identity_holder["identity"]), scene_id)
+            current = next(item for item in revisions if item.id == document.current_revision_id)
+            return {"asset_id": current.preview_asset_id if fmt == "glb" else current.source_asset_id}
+
+        async def media_job(job_id: str) -> dict[str, Any]:
+            job = store.get_job(job_id).model_dump(mode="json")
+            return {"status": job["status"], "asset_ids": job.get("asset_ids") or [],
+                    "error": job.get("error")}
+
+        async def scene_job(job_id: str) -> dict[str, Any]:
+            await scene_recipe_jobs.reconcile_terminal(job_id, identity_holder["identity"])
+            return scene_recipe_jobs.projection(
+                job_id, scene_owner(identity_holder["identity"]))
+
+        return PipelineDeps(
+            submit_image=submit_image, submit_model=submit_model, submit_rig=submit_rig,
+            export_scene=export_scene, media_job=media_job, scene_job=scene_job,
+            now=lambda: utc_now(),
+        )
+
+    # deps の中から今の呼び出しの identity を見るための箱。要求ごとに差し替える。
+    identity_holder: dict[str, Any] = {"identity": None}
+
+    async def run_pipeline(pipeline: AssetPipeline, identity: HostIdentity) -> dict[str, Any]:
+        identity_holder["identity"] = identity
+        try:
+            advanced = await advance(pipeline, pipeline_deps())
+        except (KeyError, SceneError, HostApiError) as exc:
+            code = getattr(exc, "code", "pipeline_stage_failed")
+            raise HTTPException(status_code=422, detail={"code": code}) from exc
+        await asyncio.to_thread(store.save_pipeline, advanced)
+        return advanced.model_dump(mode="json")
+
+    @app.post("/addon/v1/agent/pipeline/start")
+    async def agent_pipeline_start(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = AssetPipelineRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_asset_pipeline"}) from exc
+        now = utc_now()
+        pipeline = AssetPipeline(
+            id=f"pipeline_{uuid.uuid4().hex}", owner=scene_owner(identity), name=value.name,
+            mode=value.mode, request=value.model_dump(mode="json"),
+            stages=[PipelineStage(name=name) for name in value.planned_stages()],
+            created_at=now, updated_at=now,
+        )
+        return await run_pipeline(pipeline, identity)
+
+    @app.post("/addon/v1/agent/pipeline/status")
+    async def agent_pipeline_status(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = AssetPipelineActionRequest.model_validate(
+                scene_tool_input(await request.json())
+            )
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_id"}) from exc
+        owner = scene_owner(identity)
+        try:
+            pipeline = await asyncio.to_thread(store.get_pipeline, value.pipeline_id, owner)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "pipeline_not_found"}) from exc
+        identity_holder["identity"] = identity
+        try:
+            if value.action == "approve":
+                approve(pipeline, pipeline_deps())
+            elif value.action == "cancel":
+                cancel(pipeline, pipeline_deps())
+                await asyncio.to_thread(store.save_pipeline, pipeline)
+                return pipeline.model_dump(mode="json")
+        except PipelineStalled as exc:
+            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
+        return await run_pipeline(pipeline, identity)
 
     @app.post("/addon/v1/agent/job/status")
     async def agent_scene_job_status(request: Request) -> dict[str, Any]:

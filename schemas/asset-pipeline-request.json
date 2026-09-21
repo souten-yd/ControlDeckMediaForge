@@ -1,0 +1,144 @@
+{
+ "additionalProperties": false,
+ "description": "Take a prompt or an image all the way to a rigged, exported game asset.\n\nRuns the steps in the order that works: generate the image, reconstruct the\n3D, weld and reduce and fit a rig by measuring the model, then export a GLB.\nEach step is an ordinary Job you can also run on its own; this only keeps\nthe order and remembers where it is.\n\nmode=\"confirm\" stops before each step so you can look at what the last one\nproduced and approve or stop. mode=\"auto\" runs straight through. Either way\nthe pipeline only advances when you poll it, so nothing happens unwatched.\n\nGive a prompt to generate the starting image, or an image_asset_id to start\nfrom one you already have — exactly one of the two.",
+ "properties": {
+  "schema_version": {
+   "const": "media-forge.asset-pipeline@1",
+   "default": "media-forge.asset-pipeline@1",
+   "title": "Schema Version",
+   "type": "string"
+  },
+  "name": {
+   "maxLength": 120,
+   "minLength": 1,
+   "title": "Name",
+   "type": "string"
+  },
+  "mode": {
+   "default": "confirm",
+   "enum": [
+    "auto",
+    "confirm"
+   ],
+   "title": "Mode",
+   "type": "string"
+  },
+  "prompt": {
+   "anyOf": [
+    {
+     "maxLength": 2000,
+     "minLength": 1,
+     "type": "string"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": null,
+   "title": "Prompt"
+  },
+  "image_asset_id": {
+   "anyOf": [
+    {
+     "pattern": "^asset_[0-9a-f]{32}$",
+     "type": "string"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": null,
+   "title": "Image Asset Id"
+  },
+  "width": {
+   "default": 1024,
+   "maximum": 2048,
+   "minimum": 256,
+   "title": "Width",
+   "type": "integer"
+  },
+  "height": {
+   "default": 1024,
+   "maximum": 2048,
+   "minimum": 256,
+   "title": "Height",
+   "type": "integer"
+  },
+  "resolution": {
+   "default": 1024,
+   "enum": [
+    512,
+    1024
+   ],
+   "title": "Resolution",
+   "type": "integer"
+  },
+  "refine_with_pixal3d": {
+   "default": false,
+   "title": "Refine With Pixal3D",
+   "type": "boolean"
+  },
+  "seed": {
+   "default": 42,
+   "maximum": 2147483647,
+   "minimum": 0,
+   "title": "Seed",
+   "type": "integer"
+  },
+  "rig": {
+   "default": true,
+   "title": "Rig",
+   "type": "boolean"
+  },
+  "rig_ratio": {
+   "default": 0.6,
+   "exclusiveMaximum": 1.0,
+   "exclusiveMinimum": 0.05,
+   "title": "Rig Ratio",
+   "type": "number"
+  },
+  "rig_object_id": {
+   "default": "generated_0",
+   "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+   "maxLength": 64,
+   "minLength": 1,
+   "pattern": "^[a-z][a-z0-9._-]*$",
+   "title": "Rig Object Id",
+   "type": "string"
+  },
+  "clip_id": {
+   "anyOf": [
+    {
+     "maxLength": 48,
+     "minLength": 1,
+     "pattern": "^[a-z][a-z0-9._-]*$",
+     "type": "string"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": "walk",
+   "title": "Clip Id"
+  },
+  "export": {
+   "default": true,
+   "title": "Export",
+   "type": "boolean"
+  },
+  "export_format": {
+   "default": "glb",
+   "enum": [
+    "glb",
+    "blend"
+   ],
+   "title": "Export Format",
+   "type": "string"
+  }
+ },
+ "required": [
+  "name"
+ ],
+ "title": "AssetPipelineRequest",
+ "type": "object"
+}

@@ -1,0 +1,26 @@
+{
+ "additionalProperties": false,
+ "description": "Poll a pipeline, or tell it to go on or to stop.\n\nPolling is what moves it: nothing runs unwatched. \"approve\" releases the\nstep a confirm-mode run is waiting on; \"cancel\" stops before the next step\nand leaves whatever is already running to finish on its own.",
+ "properties": {
+  "pipeline_id": {
+   "pattern": "^pipeline_[0-9a-f]{32}$",
+   "title": "Pipeline Id",
+   "type": "string"
+  },
+  "action": {
+   "default": "status",
+   "enum": [
+    "status",
+    "approve",
+    "cancel"
+   ],
+   "title": "Action",
+   "type": "string"
+  }
+ },
+ "required": [
+  "pipeline_id"
+ ],
+ "title": "AssetPipelineActionRequest",
+ "type": "object"
+}

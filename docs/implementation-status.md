@@ -1,5 +1,81 @@
 # Media Forge implementation status
 
+## 2026-09-21 画像→3D→骨→書き出しの通しフロー（0.31.0）
+
+「openCode から MCP を使って、画像を生成し、その後 3d を生成し、アニメーションを
+つけてゲームなどのアセットとして使いたい。確認フロー個別でもできるし、流れでも
+できるようにして欲しい」への答え。
+
+### 足りなかったのは実行系ではなく順番
+
+段はすべて道具として既にあった。足りないのは**順番と、その順番が守っている理由**
+である。繋ぐ側が毎回組み立てると、どこかで 1 手落ちる。落ちたときの症状が
+分かりにくいのが厄介で、骨入れで `mesh.weld` を落とすと「骨が入らない」ではなく
+**「重みが 1 つも付かない」**で止まる。
+
+### 新しい実行系は作らない
+
+`media.pipeline.start` が段の並びを作り、`media.pipeline.status` が 1 歩進める。
+実行は既存の job をそのまま使い、段ごとに job を 1 つ出して job_id を覚えるだけ。
+
+**裏で走り続ける番人は置かなかった。** 置くと再起動やクラッシュのたびに
+「誰が続きをやるのか」を決めることになり、job の所有者が二重になる。呼ばれた
+ときに 1 歩進める形なら、状態は表 1 つ（`asset_pipelines`）で足りるし、
+進んだ理由も呼んだ人に説明できる。poll しないと何も起きない。
+
+### 2 つのモード
+
+| mode | 振る舞い |
+|---|---|
+| `auto` | 前の段が終わっていれば次を自動で出す |
+| `confirm` | 最初の段以外は `approve` が来るまで出さない |
+
+### 承認が次の poll で消えるバグを 1 つ潰した
+
+`approve` が段を `pending` に戻すだけだったので、次の poll で confirm の門が
+また `awaiting_approval` に戻していた。承認は**段が覚える**必要がある
+（`PipelineStage.approved`）。テストで固定した。
+
+### 失敗したら止める
+
+失敗した出力を次の段へ持ち込まない。`succeeded` でも版が返っていなければ
+`stage_produced_no_revision` として失敗にする。`cancel` は始まっていない段だけを
+飛ばし、走っている job はそのまま終わらせる（途中で切ると資産が中途半端に残る）。
+
+### 道具は 20 個になった
+
+```
+media.pipeline.start    prompt か image_asset_id から通しで
+media.pipeline.status   様子を見る／次を承認する／止める
+```
+
+入力は平たい値だけ。この schema はモデルの制約付きデコードへそのまま渡るので、
+入れ子にすると文法が膨らんで道具が使えなくなる。
+
+### 実機で通した
+
+画像 1 枚を入れ、確認モードで段ごとに承認しながら最後まで回した。
+
+```
+[running          ] model:running    | rig:pending           | export:pending
+[awaiting_approval] model:succeeded  | rig:awaiting_approval | export:pending
+  → rig を承認
+[running          ] model:succeeded  | rig:running           | export:pending
+[awaiting_approval] model:succeeded  | rig:succeeded         | export:awaiting_approval
+  → export を承認
+[succeeded        ] model:succeeded  | rig:succeeded         | export:succeeded
+```
+
+出てきた資産:
+
+```
+5,909,000 B / skins 1 / joints 17 / mf.walk 51ch
+JOINTS_0・WEIGHTS_0 あり
+root / extra1-4 / leg1-6_upper,lower
+```
+
+**画像 1 枚から、骨と歩行の入ったゲーム用 GLB がそのまま出る。**
+
 ## 2026-09-21 動いている姿を見る（0.30.0〜0.30.1）
 
 骨格 facts で「LLM が任意の動きを書ける」ところまでは通った。残っていたのは
