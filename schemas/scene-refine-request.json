@@ -1,137 +1,171 @@
 {
-  "$defs": {
-    "ObservationSpec": {
-      "additionalProperties": false,
-      "description": "Fixed world-space framing: Z up, front viewed from -Y, side from +X.\n\nReuse this exact spec for before/after comparison. No automatic fitting.\nCPU Cycles, frame 0, fixed lighting, 16 samples and Standard color transform.",
-      "properties": {
-        "schema_version": {
-          "const": "media-forge.scene-observation@1",
-          "default": "media-forge.scene-observation@1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "center": {
-          "maxItems": 3,
-          "minItems": 3,
-          "prefixItems": [
-            {
-              "maximum": 10000,
-              "minimum": -10000,
-              "type": "number"
-            },
-            {
-              "maximum": 10000,
-              "minimum": -10000,
-              "type": "number"
-            },
-            {
-              "maximum": 10000,
-              "minimum": -10000,
-              "type": "number"
-            }
-          ],
-          "title": "Center",
-          "type": "array"
-        },
-        "span_m": {
-          "exclusiveMinimum": 0.001,
-          "maximum": 10000,
-          "title": "Span M",
-          "type": "number"
-        },
-        "views": {
-          "items": {
-            "enum": [
-              "front",
-              "side",
-              "back",
-              "three-quarter"
-            ],
-            "type": "string"
-          },
-          "maxItems": 4,
-          "minItems": 1,
-          "title": "Views",
-          "type": "array"
-        },
-        "mode": {
-          "default": "clay",
-          "enum": [
-            "material",
-            "clay",
-            "silhouette",
-            "object_id"
-          ],
-          "title": "Mode",
-          "type": "string"
-        },
-        "resolution": {
-          "default": 512,
-          "enum": [
-            256,
-            512
-          ],
-          "title": "Resolution",
-          "type": "integer"
-        }
+ "$defs": {
+  "ObservationSpec": {
+   "additionalProperties": false,
+   "description": "Fixed world-space framing: Z up, front viewed from -Y, side from +X.\n\nReuse this exact spec for before/after comparison. No automatic fitting.\nCPU Cycles, fixed lighting, 16 samples and Standard color transform.\n\nName a clip_id to pose the rig with that clip and render the listed frames;\nwithout one the scene renders at its rest pose. Rendering is CPU path\ntracing, so views x frames is capped: ask for the moments that decide the\nquestion, not a filmstrip.",
+   "properties": {
+    "schema_version": {
+     "const": "media-forge.scene-observation@1",
+     "default": "media-forge.scene-observation@1",
+     "title": "Schema Version",
+     "type": "string"
+    },
+    "center": {
+     "maxItems": 3,
+     "minItems": 3,
+     "prefixItems": [
+      {
+       "maximum": 10000,
+       "minimum": -10000,
+       "type": "number"
       },
-      "required": [
-        "center",
-        "span_m"
+      {
+       "maximum": 10000,
+       "minimum": -10000,
+       "type": "number"
+      },
+      {
+       "maximum": 10000,
+       "minimum": -10000,
+       "type": "number"
+      }
+     ],
+     "title": "Center",
+     "type": "array"
+    },
+    "span_m": {
+     "exclusiveMinimum": 0.001,
+     "maximum": 10000,
+     "title": "Span M",
+     "type": "number"
+    },
+    "views": {
+     "items": {
+      "enum": [
+       "front",
+       "side",
+       "back",
+       "three-quarter"
       ],
-      "title": "ObservationSpec",
-      "type": "object"
+      "type": "string"
+     },
+     "maxItems": 4,
+     "minItems": 1,
+     "title": "Views",
+     "type": "array"
+    },
+    "mode": {
+     "default": "clay",
+     "enum": [
+      "material",
+      "clay",
+      "silhouette",
+      "object_id"
+     ],
+     "title": "Mode",
+     "type": "string"
+    },
+    "resolution": {
+     "default": 512,
+     "enum": [
+      256,
+      512
+     ],
+     "title": "Resolution",
+     "type": "integer"
+    },
+    "clip_id": {
+     "anyOf": [
+      {
+       "maxLength": 48,
+       "minLength": 1,
+       "pattern": "^[a-z][a-z0-9._-]*$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Clip Id"
+    },
+    "frames": {
+     "anyOf": [
+      {
+       "items": {
+        "maximum": 600,
+        "minimum": 0,
+        "type": "integer"
+       },
+       "maxItems": 8,
+       "minItems": 1,
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Frames"
     }
+   },
+   "required": [
+    "center",
+    "span_m"
+   ],
+   "title": "ObservationSpec",
+   "type": "object"
+  }
+ },
+ "additionalProperties": false,
+ "description": "Render, review and locally refine an exact current scene into separate candidates.\n\nUses Host vision.analyze and text.generate with actual fixed clay observations.\nThe original scene head is retained. At most three issues are addressed per\nattempt; two consecutive non-improvements stop the loop. A returned selected\ncandidate is advisory and does not approve deformation or game readiness.\nMissing vision/text capabilities fail without a text-only visual substitute.\nPoll the detached Job and read its refinement report before choosing a result.",
+ "properties": {
+  "scene_id": {
+   "pattern": "^scene_[0-9a-f]{32}$",
+   "title": "Scene Id",
+   "type": "string"
   },
-  "additionalProperties": false,
-  "description": "Render, review and locally refine an exact current scene into separate candidates.\n\nUses Host vision.analyze and text.generate with actual fixed clay observations.\nThe original scene head is retained. At most three issues are addressed per\nattempt; two consecutive non-improvements stop the loop. A returned selected\ncandidate is advisory and does not approve deformation or game readiness.\nMissing vision/text capabilities fail without a text-only visual substitute.\nPoll the detached Job and read its refinement report before choosing a result.",
-  "properties": {
-    "scene_id": {
-      "pattern": "^scene_[0-9a-f]{32}$",
-      "title": "Scene Id",
-      "type": "string"
+  "base_revision_id": {
+   "pattern": "^revision_[0-9a-f]{32}$",
+   "title": "Base Revision Id",
+   "type": "string"
+  },
+  "intent": {
+   "maxLength": 2000,
+   "minLength": 1,
+   "title": "Intent",
+   "type": "string"
+  },
+  "observation": {
+   "$ref": "#/$defs/ObservationSpec"
+  },
+  "max_iterations": {
+   "default": 3,
+   "maximum": 6,
+   "minimum": 1,
+   "title": "Max Iterations",
+   "type": "integer"
+  },
+  "retry_job_id": {
+   "anyOf": [
+    {
+     "pattern": "^job_[0-9a-f]{32}$",
+     "type": "string"
     },
-    "base_revision_id": {
-      "pattern": "^revision_[0-9a-f]{32}$",
-      "title": "Base Revision Id",
-      "type": "string"
-    },
-    "intent": {
-      "maxLength": 2000,
-      "minLength": 1,
-      "title": "Intent",
-      "type": "string"
-    },
-    "observation": {
-      "$ref": "#/$defs/ObservationSpec"
-    },
-    "max_iterations": {
-      "default": 3,
-      "maximum": 6,
-      "minimum": 1,
-      "title": "Max Iterations",
-      "type": "integer"
-    },
-    "retry_job_id": {
-      "anyOf": [
-        {
-          "pattern": "^job_[0-9a-f]{32}$",
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Retry Job Id"
+    {
+     "type": "null"
     }
-  },
-  "required": [
-    "scene_id",
-    "base_revision_id",
-    "intent",
-    "observation"
-  ],
-  "title": "SceneRefineRequest",
-  "type": "object"
+   ],
+   "default": null,
+   "title": "Retry Job Id"
+  }
+ },
+ "required": [
+  "scene_id",
+  "base_revision_id",
+  "intent",
+  "observation"
+ ],
+ "title": "SceneRefineRequest",
+ "type": "object"
 }

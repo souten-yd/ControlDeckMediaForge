@@ -18,7 +18,9 @@ VIEWS = {"front": (0, -1, 0), "side": (1, 0, 0), "back": (0, 1, 0),
 
 
 def validate_spec(value: Any) -> dict[str, Any]:
-    if not isinstance(value, dict) or set(value) != {"schema_version", "center", "span_m", "views", "mode", "resolution"}:
+    if not isinstance(value, dict) or set(value) != {
+        "schema_version", "center", "span_m", "views", "mode", "resolution", "clip_id", "frames",
+    }:
         raise RuntimeError("invalid observation fields")
     if value["schema_version"] != "media-forge.scene-observation@1":
         raise RuntimeError("invalid observation version")
@@ -37,6 +39,21 @@ def validate_spec(value: Any) -> dict[str, Any]:
         raise RuntimeError("invalid observation mode")
     if type(value["resolution"]) is not int or value["resolution"] not in (256, 512):
         raise RuntimeError("invalid observation resolution")
+    clip_id, frames = value["clip_id"], value["frames"]
+    if clip_id is not None and (
+        type(clip_id) is not str or re.fullmatch(r"[a-z][a-z0-9._-]{0,47}", clip_id) is None
+    ):
+        raise RuntimeError("invalid observation clip")
+    if frames is not None:
+        if (not isinstance(frames, list) or not 1 <= len(frames) <= 8
+                or any(type(f) is not int or not 0 <= f <= 600 for f in frames)
+                or sorted(set(frames)) != frames):
+            raise RuntimeError("invalid observation frames")
+    # フレームだけ動かしても姿勢は変わらない。片方だけ来たら受けない。
+    if (clip_id is None) != (frames is None):
+        raise RuntimeError("observation clip and frames must be given together")
+    if len(views) * len(frames or [0]) > 8:
+        raise RuntimeError("observation image count exceeds bound")
     return value
 
 
@@ -86,10 +103,46 @@ def validate_scene_objects(objects: list[Any]) -> list[Any]:
     return meshes
 
 
+def pose_with_clip(clip_id: str) -> Any:
+    """Assign the named typed clip so the rendered frames actually show motion.
+
+    クリップは muted な NLA track に仕舞われた action として保存されている。
+    名前で 1 つだけ選び、その骨へ割り当てる。ここで選ばないと、どのフレームを
+    描いてもレスト姿勢のままになる（それが「動いて見えない」の正体だった）。
+    """
+    matches = [
+        action for action in bpy.data.actions
+        if action.get("media_forge_clip_schema") == 1
+        and action.get("media_forge_clip_id") == clip_id
+    ]
+    if len(matches) != 1:
+        raise RuntimeError("observation clip is missing or ambiguous")
+    action = matches[0]
+    rig_id = action.get("media_forge_rig_id")
+    rigs = [
+        obj for obj in bpy.data.objects
+        if obj.type == "ARMATURE" and obj.get("media_forge_id") == rig_id
+    ]
+    if len(rigs) != 1:
+        raise RuntimeError("observation clip has no single owning rig")
+    rig = rigs[0]
+    if rig.animation_data is None:
+        rig.animation_data_create()
+    rig.animation_data.action = action
+    # 仕舞ってある track が鳴ると、割り当てた action と二重に効く。
+    for track in rig.animation_data.nla_tracks:
+        track.mute = True
+    return rig
+
+
 def render(spec: dict[str, Any]) -> dict[str, Any]:
     scene = bpy.context.scene
     meshes = validate_scene_objects(list(scene.objects))
-    scene.frame_set(0)
+    clip_id = spec.get("clip_id")
+    frames = spec.get("frames") or [0]
+    if clip_id is not None:
+        pose_with_clip(str(clip_id))
+    scene.frame_set(int(frames[0]))
     for obj in list(bpy.data.objects):
         if obj.type in {"LIGHT", "CAMERA"}:
             bpy.data.objects.remove(obj, do_unlink=True)
@@ -178,12 +231,15 @@ def render(spec: dict[str, Any]) -> dict[str, Any]:
     for view in spec["views"]:
         camera.location = center + Vector(VIEWS[view]).normalized() * span * 4
         camera.rotation_euler = (center - camera.location).to_track_quat("-Z", "Y").to_euler()
-        filename = f"{view}.png"
-        scene.render.filepath = str(Path.cwd() / filename)
-        bpy.ops.render.render(write_still=True)
-        images.append({"view": view, "filename": filename})
+        for frame in frames:
+            scene.frame_set(int(frame))
+            filename = f"{view}-f{int(frame)}.png"
+            scene.render.filepath = str(Path.cwd() / filename)
+            bpy.ops.render.render(write_still=True)
+            images.append({"view": view, "frame": int(frame), "filename": filename})
     return {"schema_version": "media-forge.scene-observation-result@1", "observation": spec,
-            "blender_version": bpy.app.version_string.split()[0], "device": "CPU", "frame": 0,
+            "blender_version": bpy.app.version_string.split()[0], "device": "CPU",
+            "frames": [int(frame) for frame in frames], "clip_id": clip_id,
             "samples": 16, "images": images, "object_colors": object_colors,
             "object_ids": sorted(key for key in ids if re.fullmatch(r"[a-z][a-z0-9._-]{0,63}", key)),
             "autoexec_disabled": not bpy.context.preferences.filepaths.use_scripts_auto_execute}
