@@ -185,6 +185,10 @@ const state = {
   sceneSimplifyBusy: false,
   sceneSimplifyPolling: "",
   sceneSimplifyMessage: "",
+  sceneRig: null,
+  sceneRigBusy: false,
+  sceneRigPolling: "",
+  sceneRigMessage: "",
   blenderTargetPreviewId: "",
   blenderTargetBusy: false,
   blenderTargetMessage: "",
@@ -6232,6 +6236,7 @@ function renderBlenderSessionControls() {
   const target = state.scenes.find((item) => item.id === state.selectedSceneId)
     || (state.sceneDocument?.id === state.selectedSceneId ? state.sceneDocument : null);
   renderSceneSimplify();
+  renderSceneRig();
   byId("scene-blender-selection").textContent = state.blenderTargetMessage
     || (target ? text.blenderSelected(target.name) : text.blenderSelect);
   renderBlenderTarget();
@@ -6467,6 +6472,130 @@ async function submitSceneSimplify() {
   } finally {
     state.sceneSimplifyBusy = false;
     renderSceneSimplify();
+  }
+}
+
+/* ── 骨を入れて歩かせる ───────────────────────────────────────────────
+   軽量化と同じ作り。違うのは、送るのが「繋ぐ→落とす→測って骨を置く」の
+   並びである点だけで、並びの組み立てはサーバ側にある。画面が決めるのは
+   削る強さと、歩かせるかどうか。 */
+
+function rigText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    title: "Add bones and make it walk",
+    note: "Measures the model, places bones through the body and along each limb, and adds a walking loop. It needs a legged shape. Joining and face reduction happen in the same pass, saved as a new revision.",
+    ratio: "Share of faces to keep", walk: "Add the walking loop too",
+    submit: "Add bones and save a new revision", cancel: "Cancel",
+    estimate: (percent) => `Keeping ${percent}% of the faces.`,
+    estimateWith: (percent, from, to) => `Keeping ${percent}% of the faces: about ${from.toLocaleString()} → ${to.toLocaleString()} triangles.`,
+    running: "Measuring and fitting the rig…", validating: "Validating and saving the revision…",
+    succeeded: "Saved the rigged revision.",
+    failed: "Could not fit a rig to this scene. It needs a legged shape with at least two limbs.",
+    canceled: "Rigging canceled.", needScene: "Open a scene first.",
+    connection: "Could not refresh the status.",
+  } : {
+    title: "骨を入れて歩かせる",
+    note: "模型を測って、胴と脚に骨を置き、歩くループを付けます。脚のある形にだけ使えます。繋ぐ・面を減らすところまで一度に行い、新しい版として保存します。",
+    ratio: "残す面の割合", walk: "歩くループも付ける",
+    submit: "骨を入れて新しい版を保存", cancel: "中止",
+    estimate: (percent) => `面を${percent}%残します。`,
+    estimateWith: (percent, from, to) => `面を${percent}%残します：約 ${from.toLocaleString()} → ${to.toLocaleString()} 三角形。`,
+    running: "測って骨を組んでいます…", validating: "検証して版を保存しています…",
+    succeeded: "骨を入れた版を保存しました。",
+    failed: "このシーンには骨を入れられませんでした。脚が 2 本以上ある形が要ります。",
+    canceled: "骨入れを中止しました。", needScene: "先にシーンを開いてください。",
+    connection: "状況を取得できませんでした。",
+  };
+}
+
+function renderSceneRig() {
+  const form = byId("scene-rig-form");
+  if (!form) return;
+  const text = rigText();
+  byId("scene-rig-title").textContent = text.title;
+  byId("scene-rig-note").textContent = text.note;
+  byId("scene-rig-ratio-label").textContent = text.ratio;
+  byId("scene-rig-walk-label").textContent = text.walk;
+  byId("scene-rig-submit").textContent = text.submit;
+  byId("scene-rig-cancel").textContent = text.cancel;
+  const percent = Number(byId("scene-rig-ratio").value);
+  const current = state.viewer3d?.modelStats?.triangles;
+  byId("scene-rig-estimate").textContent = Number.isFinite(current) && current > 0
+    ? text.estimateWith(percent, current, Math.round(current * percent / 100))
+    : text.estimate(percent);
+  const job = state.sceneRig;
+  const running = Boolean(job && !TERMINAL.has(job.status));
+  const blocked = state.sceneRigBusy || running || state.disabled
+    || Boolean(activeBlenderSession()) || Boolean(state.sceneImport) || Boolean(state.sceneBackup);
+  byId("scene-rig-ratio").disabled = blocked;
+  byId("scene-rig-walk").disabled = blocked;
+  byId("scene-rig-submit").disabled = blocked || !state.selectedSceneId
+    || !state.sceneDocument?.current_revision_id;
+  byId("scene-rig-cancel").hidden = !running;
+  byId("scene-rig-cancel").disabled = state.sceneRigBusy;
+  byId("scene-rig-progress").hidden = !running;
+  byId("scene-rig-progress").value = Number(job?.progress) || 0;
+  let message = state.selectedSceneId ? "" : text.needScene;
+  if (job?.status === "succeeded") message = text.succeeded;
+  else if (job?.status === "failed") message = text.failed;
+  else if (job?.status === "canceled") message = text.canceled;
+  else if (running) message = job.phase === "validating" ? text.validating : text.running;
+  byId("scene-rig-status").textContent = state.sceneRigMessage || message;
+}
+
+async function pollSceneRig() {
+  const jobId = state.sceneRig?.job_id;
+  if (!jobId || state.sceneRigPolling === jobId) return;
+  state.sceneRigPolling = jobId;
+  try {
+    while (!state.disabled && state.sceneRig?.job_id === jobId
+        && state.sceneRigPolling === jobId && !TERMINAL.has(state.sceneRig.status)) {
+      const job = await call("scenes.jobs.get", {job_id: jobId});
+      if (state.disabled || state.sceneRig?.job_id !== jobId
+          || state.sceneRigPolling !== jobId) return;
+      if (job?.job_id !== jobId) throw new Error("scene job identity changed");
+      state.sceneRig = job;
+      state.sceneRigMessage = "";
+      renderSceneRig();
+      if (TERMINAL.has(job.status)) {
+        if (job.status === "succeeded") {
+          await loadScenes();
+          await openScene(state.selectedSceneId);
+        }
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  } catch {
+    if (!state.disabled && state.sceneRig?.job_id === jobId) {
+      state.sceneRigMessage = rigText().connection;
+      renderSceneRig();
+    }
+  } finally {
+    if (state.sceneRigPolling === jobId) state.sceneRigPolling = "";
+  }
+}
+
+async function submitSceneRig() {
+  if (state.sceneRigBusy || state.disabled) return;
+  const sceneId = state.selectedSceneId;
+  const revisionId = state.sceneDocument?.current_revision_id;
+  if (!sceneId || !revisionId) return;
+  state.sceneRigBusy = true;
+  state.sceneRigMessage = "";
+  renderSceneRig();
+  try {
+    state.sceneRig = await call("scenes.rig", {
+      scene_id: sceneId, base_revision_id: revisionId,
+      ratio: Number(byId("scene-rig-ratio").value) / 100,
+      clip_id: byId("scene-rig-walk").checked ? "walk" : null,
+    });
+    void pollSceneRig();
+  } catch (error) {
+    state.sceneRigMessage = failureText(error?.code);
+  } finally {
+    state.sceneRigBusy = false;
+    renderSceneRig();
   }
 }
 
@@ -9639,6 +9768,26 @@ byId("scene-simplify-cancel").addEventListener("click", async () => {
   } finally {
     state.sceneSimplifyBusy = false;
     renderSceneSimplify();
+  }
+});
+byId("scene-rig-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  void submitSceneRig();
+});
+byId("scene-rig-ratio").addEventListener("input", renderSceneRig);
+byId("scene-rig-walk").addEventListener("change", renderSceneRig);
+byId("scene-rig-cancel").addEventListener("click", async () => {
+  if (!state.sceneRig || state.sceneRigBusy) return;
+  state.sceneRigBusy = true;
+  renderSceneRig();
+  try {
+    state.sceneRig = await call("scenes.jobs.cancel", {job_id: state.sceneRig.job_id});
+    state.sceneRigMessage = "";
+  } catch (error) {
+    state.sceneRigMessage = failureText(error?.code);
+  } finally {
+    state.sceneRigBusy = false;
+    renderSceneRig();
   }
 });
 byId("scene-blender-target").addEventListener("change", (event) => {

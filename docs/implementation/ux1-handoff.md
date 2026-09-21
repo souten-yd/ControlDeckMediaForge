@@ -1,5 +1,41 @@
 # 実装引き継ぎ状態
 
+## 2026-09-21 骨を見せる `skeletons` facts（0.29.2〜0.29.3）
+
+`animation.clip` は最初から任意のキーフレームを受ける。足りていなかったのは語彙では
+なく、版が件数しか返さず骨を見られなかったこと。
+
+```text
+PASS       骨1本ごとにid/親/子/head/tail/長さ/ローカル軸/rotation_responseを返す
+PASS       実機でパターン無しにクリップを組んで通した（触角を振る＝rig.autoにない動き）
+FIXED      応答の単位化をやめた。骨に沿う軸が[0,0,-1]という嘘を返していた
+PASS       修正後、骨に沿う軸は[0,0,0]。効く軸は長さ1.00
+PASS       facts は fail-closed で検証。長さ1超・未知の親子・重複IDは拒む
+NOT TESTED 確認の輪（observeで描いて見て直す）はまだ繋いでいない
+```
+
+## 2026-09-21 測って骨を置く `rig.auto`（0.29.1）
+
+骨の位置を手で測って書くのをやめ、Blender worker の中で測る typed operation にした。
+
+```text
+PASS       実機で media.scene.rig から succeeded。手測り版と同じ 35,338頂点/78,392面/17骨
+PASS       自動測定が脚6本・触角4本を検出（root/extra1-4/leg1-6_upper,lower）
+PASS       GLBに skins1・JOINTS_0・WEIGHTS_0・walk 51ch。読み直して unweighted 0
+PASS       足の高さがフレームごとに変わる。frame12が基本姿勢なのは逆位相の性質で正しい
+PASS       並びは SceneWorkspace.rig_recipe の1か所。画面とMCPが同じものを呼ぶ
+PASS       道具の入力は平たい値だけ（制約付きデコードに渡るため）。テストで固定
+NOT TESTED 6脚以外の形（4脚・2脚）、Webの「骨を入れて歩かせる」の実機操作
+```
+
+## 次にやること
+
+```text
+1. 画像→3D→骨→書き出しの通しフロー（各段の確認あり／なし）
+2. ローカルLLMに形を見せて骨組みとアニメを選ばせる（今はLLMが動いていない）
+3. 残: mesh_geometry factsの上限を上げて生成モデルに法線を焼く
+```
+
 ## 2026-09-21 同じシーンの版を 1 枚にまとめる（0.29.0）
 
 「シーンファイル」は `.blend` で、版の土台（`source_asset_id`）である。1 つの版が

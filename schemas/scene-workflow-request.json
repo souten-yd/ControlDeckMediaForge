@@ -1355,7 +1355,8 @@
                 "uv.smart_project": "#/$defs/UvSmartProject",
                 "uv.unwrap": "#/$defs/UvUnwrap",
                 "mesh.decimate": "#/$defs/MeshDecimate",
-                "mesh.weld": "#/$defs/MeshWeld"
+                "mesh.weld": "#/$defs/MeshWeld",
+                "rig.auto": "#/$defs/RigAuto"
               },
               "propertyName": "type"
             },
@@ -1434,6 +1435,9 @@
               },
               {
                 "$ref": "#/$defs/SkinBindAuto"
+              },
+              {
+                "$ref": "#/$defs/RigAuto"
               },
               {
                 "$ref": "#/$defs/SkinWeightsSet"
@@ -1755,6 +1759,76 @@
         "mesh_object_ids"
       ],
       "title": "SkinBindAuto",
+      "type": "object"
+    },
+    "RigAuto": {
+      "additionalProperties": false,
+      "description": "Measure a legged mesh and fit a rig, a bone-heat bind and a walk loop to its shape.\n\n骨の位置は当て推量では置けない。bone heat は、どの骨からも遠い頂点に重みを\n付けられずに失敗するので、骨は「動かしたい所」だけでなく「頂点が届く所」にも\n要る。この操作は毎回モデルを測り、胴を貫く root・突起ごとの骨・脚ごとの\n上下 2 本を置いてから `skin.bind_auto` と同じ経路で縛る。\n\n`armature.create` を自分で書くのと違うのは、座標をこちらが測る点だけである。\n出した骨は同じ検査（本数・階層・長さ・骨の総数）を通る。\n\n入る前に繋いで落としておくこと。glTF は UV の継ぎ目で頂点を割るので、\n`mesh.weld` を通さないと bone heat が 1 頂点も解けない。`skin.bind_auto` には\n5 万頂点の上限があるので、`mesh.decimate` も要ることが多い。",
+      "properties": {
+        "type": {
+          "const": "rig.auto",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "rig_object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Rig Object Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "clip_id": {
+          "anyOf": [
+            {
+              "maxLength": 48,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9._-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clip Id"
+        },
+        "fps": {
+          "default": 24,
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "frame_count": {
+          "default": 24,
+          "maximum": 120,
+          "minimum": 2,
+          "title": "Frame Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "object_id",
+        "rig_object_id",
+        "name"
+      ],
+      "title": "RigAuto",
       "type": "object"
     },
     "MeshCreate": {

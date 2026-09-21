@@ -40,6 +40,7 @@ def test_new_static_operations_match_published_schemas() -> None:
         "animation.clip", "modifier.array", "skin.bind_auto", "skin.weights.set", "skin.weights.smooth", "skin.weights.normalize", "ik.leg.bake", "mesh.create",
         "mesh.loft", "mesh.sweep", "mesh.sections.set", "mesh.bridge_loops", "modifier.subdivision",
         "uv.seams.set", "uv.unwrap", "uv.pack", "transform.apply_scale", "mesh.decimate", "mesh.weld",
+        "rig.auto",
     }
 
 

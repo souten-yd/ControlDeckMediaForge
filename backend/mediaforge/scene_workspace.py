@@ -41,6 +41,7 @@ from .scenes import (
     validate_scene_owner,
 )
 from .scene_geometry import validate_geometry_facts
+from .scene_skeleton import validate_skeleton_facts
 from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
 from .scene_refinement import SceneRefineRequest
@@ -260,6 +261,38 @@ class SceneWorkspace:
         )
 
     @staticmethod
+    def rig_recipe(
+        object_id: str, rig_object_id: str, name: str, clip_id: str | None,
+        ratio: float | None, weld_distance_m: float, min_faces: int, fps: int, frame_count: int,
+    ) -> dict[str, Any]:
+        """The fixed sequence that gets a rig onto a generated model.
+
+        順番に意味がある。glTF は UV の継ぎ目で頂点を割るので、繋がないと
+        bone heat は 1 頂点も解けない。`skin.bind_auto` には 5 万頂点の上限が
+        あるので、繋いだうえで落とす。骨の座標は `rig.auto` が測って置く。
+
+        この 3 手を画面と MCP が別々に組み立てると、片方だけ順番を落とす。
+        ここが 1 つの並びとして出す。
+        """
+        operations: list[dict[str, Any]] = [
+            {"type": "mesh.weld", "object_id": object_id, "distance_m": weld_distance_m},
+        ]
+        if ratio is not None:
+            operations.append({
+                "type": "mesh.decimate", "object_id": object_id,
+                "ratio": ratio, "min_faces": min_faces,
+            })
+        rig: dict[str, Any] = {
+            "type": "rig.auto", "object_id": object_id,
+            "rig_object_id": rig_object_id, "name": name,
+            "fps": fps, "frame_count": frame_count,
+        }
+        if clip_id is not None:
+            rig["clip_id"] = clip_id
+        operations.append(rig)
+        return {"schema_version": "media-forge.scene-recipe@1", "operations": operations}
+
+    @staticmethod
     def simplify_recipe(object_id: str, ratio: float, weld_distance_m: float,
                         min_faces: int) -> dict[str, Any]:
         """The fixed two-step reduction the screen and MCP both send.
@@ -374,6 +407,8 @@ class SceneWorkspace:
                         "operation_count": len(value.recipe.operations),
                         "stable_object_ids": worker_facts["stable_object_ids"],
                         "mesh_geometry": worker_facts.get("mesh_geometry", []),
+                        # クリップを書く側が骨を見られるように、版と一緒に残す。
+                        "skeletons": worker_facts.get("skeletons", []),
                         **({"candidate_origin": {"scene_id": value.scene_id, "revision_id": value.base_revision_id}}
                            if isinstance(value, SceneEditRequest) and value.publish_mode == "candidate" else {}),
                     },
@@ -554,7 +589,8 @@ class SceneWorkspace:
                 raise SceneError("scene_recipe_worker_invalid", "scene recipe result is invalid") from exc
             expected = {"schema_version", "blender_version", "autoexec_disabled", "operation_count", "stable_object_ids"}
             if (
-                not isinstance(result, dict) or not expected <= set(result) or set(result) - expected - {"mesh_geometry"}
+                not isinstance(result, dict) or not expected <= set(result)
+                or set(result) - expected - {"mesh_geometry", "skeletons"}
                 or result["schema_version"] != "media-forge.scene-recipe-result@1"
                 or result["blender_version"] != runtime.version
                 or result["autoexec_disabled"] is not True
@@ -566,6 +602,9 @@ class SceneWorkspace:
             try:
                 if "mesh_geometry" in result:
                     result["mesh_geometry"] = validate_geometry_facts(result["mesh_geometry"], result["stable_object_ids"])
+                if "skeletons" in result:
+                    result["skeletons"] = validate_skeleton_facts(
+                        result["skeletons"], result["stable_object_ids"])
             except (ValidationError, ValueError) as exc:
                 raise SceneError("scene_recipe_worker_invalid", "scene mesh facts differ") from exc
             os.replace(output, retained)
@@ -2016,6 +2055,19 @@ class SceneWorkspace:
             return validate_geometry_facts(provenance.parameters.get("mesh_geometry", []))
         except (ValidationError, ValueError) as exc:
             raise SceneError("scene_geometry_invalid", "stored geometry facts differ") from exc
+
+    def skeleton_facts(self, revision: SceneRevision) -> list[dict[str, Any]]:
+        """Expose the rig as measured, so a clip can be written for it.
+
+        `animation.clip` は最初から任意のキーフレームを受ける。足りていなかったのは
+        語彙ではなく、書く側が骨の名前も回す向きも知りようがなかったことである。
+        """
+        _, provenance, _ = self._verified_revision_asset(
+            revision.source_asset_id, "application/x-blender")
+        try:
+            return validate_skeleton_facts(provenance.parameters.get("skeletons", []))
+        except (ValidationError, ValueError) as exc:
+            raise SceneError("scene_skeleton_invalid", "stored skeleton facts differ") from exc
 
     @staticmethod
     def _scene_projection(document: SceneDocument, revision: SceneRevision) -> dict[str, Any]:

@@ -2,7 +2,7 @@
   "api_version": "2",
   "id": "media-forge",
   "name": "Media Forge",
-  "version": "0.29.0",
+  "version": "0.29.3",
   "description": "Local-first media generation and asset library",
   "publisher": "souten-yd",
   "requires": {
@@ -150,6 +150,13 @@
         "permission": "workflows.run"
       },
       {
+        "id": "media.scene.rig",
+        "label": "Fit a rig and a walk loop to a generated model by measuring it",
+        "endpoint": "/addon/v1/agent/scene/rig",
+        "schema_path": "/schemas/scene-rig-request.json",
+        "permission": "workflows.run"
+      },
+      {
         "id": "media.scene.material",
         "label": "Change a material on a 3D scene",
         "endpoint": "/addon/v1/agent/scene/material",
@@ -186,7 +193,7 @@
       },
       {
         "id": "media.scene.snapshot",
-        "label": "Read back the current state of a 3D scene",
+        "label": "Read back a 3D scene: its mesh facts and its rig, bone by bone",
         "endpoint": "/addon/v1/agent/scene/snapshot",
         "schema_path": "/schemas/scene-reference.json",
         "permission": "workflows.run"
