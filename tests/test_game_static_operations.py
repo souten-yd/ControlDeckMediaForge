@@ -39,7 +39,7 @@ def test_new_static_operations_match_published_schemas() -> None:
         "armature.create", "skin.bind", "pose.set",
         "animation.clip", "modifier.array", "skin.bind_auto", "skin.weights.set", "skin.weights.smooth", "skin.weights.normalize", "ik.leg.bake", "mesh.create",
         "mesh.loft", "mesh.sweep", "mesh.sections.set", "mesh.bridge_loops", "modifier.subdivision",
-        "uv.seams.set", "uv.unwrap", "uv.pack", "transform.apply_scale", "mesh.decimate",
+        "uv.seams.set", "uv.unwrap", "uv.pack", "transform.apply_scale", "mesh.decimate", "mesh.weld",
     }
 
 
@@ -208,4 +208,102 @@ def test_decimate_contract_is_published(monkeypatch: pytest.MonkeyPatch) -> None
     for filename in ("scene-create-request.json", "scene-edit-request.json"):
         schema = json.loads((ROOT / "schemas" / filename).read_text())
         assert schema["$defs"]["MeshDecimate"] == MeshDecimate.model_json_schema()
+    jsonschema.validate(value, json.loads((ROOT / "schemas/scene-create-request.json").read_text()))
+
+
+class WeldBmesh:
+    """remove_doubles / recalc_face_normals の代役。実際の縮約はしない。"""
+    def __init__(self, verts: int, faces: int, after_verts: int, after_faces: int) -> None:
+        self.verts = list(range(verts))
+        self.faces = list(range(faces))
+        self.after = (after_verts, after_faces)
+        self.merged = False
+        self.recalculated = False
+        self.freed = False
+
+    def from_mesh(self, data: Any) -> None:
+        self.source = data
+
+    def to_mesh(self, data: Any) -> None:
+        data.vertices = list(range(self.after[0]))
+        data.polygons = [SimpleNamespace(loop_total=3)] * self.after[1]
+
+    def free(self) -> None:
+        self.freed = True
+
+
+def welding_bmesh_module(handle: WeldBmesh) -> Any:
+    def remove_doubles(bm, verts, dist):
+        handle.merged = True
+        bm.verts = list(range(handle.after[0]))
+        bm.faces = list(range(handle.after[1]))
+
+    def recalc(bm, faces):
+        handle.recalculated = True
+
+    return SimpleNamespace(new=lambda: handle,
+                           ops=SimpleNamespace(remove_doubles=remove_doubles, recalc_face_normals=recalc))
+
+
+def weldable_mesh(verts: int = 1000, faces: int = 900) -> Any:
+    return SimpleNamespace(type="MESH", modifiers=[], data=SimpleNamespace(
+        vertices=list(range(verts)), polygons=[SimpleNamespace(loop_total=3)] * faces,
+        shape_keys=None, update=lambda: None))
+
+
+def run_weld(monkeypatch: pytest.MonkeyPatch, operation: dict[str, Any], *,
+             verts: int = 1000, faces: int = 900, after_verts: int = 480,
+             after_faces: int = 880) -> tuple[Any, Any, WeldBmesh]:
+    module = worker(monkeypatch)
+    obj = weldable_mesh(verts, faces)
+    handle = WeldBmesh(verts, faces, after_verts, after_faces)
+    monkeypatch.setitem(sys.modules, "bmesh", welding_bmesh_module(handle))
+    module.apply_operation(operation, {"mesh": obj})
+    return module, obj, handle
+
+
+def test_weld_merges_split_vertices_and_recalculates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """glTF は継ぎ目で頂点を割る。繋がないと bone heat が一切解けない。"""
+    _, obj, handle = run_weld(monkeypatch, {"type": "mesh.weld", "object_id": "mesh"})
+    assert handle.merged and handle.recalculated and handle.freed
+    assert len(obj.data.vertices) == 480
+    # 面は残る。頂点だけが繋がる。
+    assert len(obj.data.polygons) == 880
+
+
+def test_weld_can_skip_normal_recalculation(monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, handle = run_weld(monkeypatch, {"type": "mesh.weld", "object_id": "mesh",
+                                          "recalculate_normals": False})
+    assert handle.merged and not handle.recalculated
+
+
+@pytest.mark.parametrize("operation,message", [
+    ({"type": "mesh.weld", "object_id": "mesh", "distance_m": 0.0}, "out of bounds"),
+    ({"type": "mesh.weld", "object_id": "mesh", "distance_m": 0.02}, "out of bounds"),
+    ({"type": "mesh.weld", "object_id": "mesh", "distance_m": "1e-5"}, "out of bounds"),
+    ({"type": "mesh.weld", "object_id": "mesh", "recalculate_normals": "yes"}, "normal flag"),
+])
+def test_weld_rejects_invalid_requests(monkeypatch: pytest.MonkeyPatch,
+                                       operation: dict[str, Any], message: str) -> None:
+    with pytest.raises(RuntimeError, match=message):
+        run_weld(monkeypatch, operation)
+
+
+def test_weld_refuses_when_nothing_merged_or_too_much_removed(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(RuntimeError, match="did not merge"):
+        run_weld(monkeypatch, {"type": "mesh.weld", "object_id": "mesh"}, after_verts=1000)
+    # 距離が大きすぎると面ごと潰れる。黙って進めない。
+    with pytest.raises(RuntimeError, match="too many faces"):
+        run_weld(monkeypatch, {"type": "mesh.weld", "object_id": "mesh"},
+                 after_verts=480, after_faces=100)
+
+
+def test_weld_contract_is_published() -> None:
+    from mediaforge.scene_recipes import MeshWeld
+    value = request({"type": "primitive.add", "object_id": "body", "name": "Body",
+                     "primitive": "cube", "dimensions": [1.0, 1.0, 1.0]},
+                    {"type": "mesh.weld", "object_id": "body", "distance_m": 0.0001})
+    for filename in ("scene-create-request.json", "scene-edit-request.json"):
+        schema = json.loads((ROOT / "schemas" / filename).read_text())
+        assert schema["$defs"]["MeshWeld"] == MeshWeld.model_json_schema()
     jsonschema.validate(value, json.loads((ROOT / "schemas/scene-create-request.json").read_text()))

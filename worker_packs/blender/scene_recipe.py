@@ -660,6 +660,41 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         check_growth(objects, 2*len(count) if isinstance(count, list) else MAX_GROWTH_GEOMETRY+1)
         scene_curves.bridge(obj, objects.get(other_id), operation)
         del objects[other_id]
+    elif kind == "mesh.weld":
+        if obj.type != "MESH":
+            raise RuntimeError("weld target is not a mesh")
+        if any(m.type in {"SUBSURF", "MIRROR", "ARRAY", "BEVEL"} for m in obj.modifiers):
+            raise RuntimeError("apply generating modifiers before welding")
+        if obj.data.shape_keys is not None:
+            raise RuntimeError("weld cannot run on a mesh with shape keys")
+        distance = operation.get("distance_m", 0.00001)
+        if type(distance) is not float or not 0.0 < distance <= 0.01:
+            raise RuntimeError("weld distance is out of bounds")
+        recalculate = operation.get("recalculate_normals", True)
+        if type(recalculate) is not bool:
+            raise RuntimeError("weld normal flag differs")
+        check_growth(objects, 0)
+        import bmesh
+
+        before = (len(obj.data.vertices), len(obj.data.polygons))
+        working = bmesh.new()
+        try:
+            working.from_mesh(obj.data)
+            bmesh.ops.remove_doubles(working, verts=list(working.verts), dist=distance)
+            if recalculate:
+                bmesh.ops.recalc_face_normals(working, faces=list(working.faces))
+            if len(working.faces) < 4 or len(working.verts) < 4:
+                raise RuntimeError("weld would remove the mesh")
+            working.to_mesh(obj.data)
+        finally:
+            working.free()
+        obj.data.update()
+        after = (len(obj.data.vertices), len(obj.data.polygons))
+        if after[0] >= before[0]:
+            raise RuntimeError("weld did not merge any vertices")
+        # 面まで消えるのは、同じ位置とみなす距離が大きすぎる。
+        if after[1] < before[1] * 0.5:
+            raise RuntimeError("weld removed too many faces; reduce the distance")
     elif kind == "mesh.decimate":
         if obj.type != "MESH":
             raise RuntimeError("decimate target is not a mesh")

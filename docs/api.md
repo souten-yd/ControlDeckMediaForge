@@ -1055,7 +1055,7 @@ Untrusted scripts, paths, arbitrary cameras, render engines or operators are not
 ### Bounded curve operations and mesh selectors (M3a)
 
 Scene recipes add `mesh.loft`, `mesh.sweep`, `mesh.sections.set`,
-`mesh.bridge_loops`, `modifier.subdivision` and `mesh.decimate`. Public create/edit/workflow
+`mesh.bridge_loops`, `modifier.subdivision`, `mesh.weld` and `mesh.decimate`. Public create/edit/workflow
 schemas enumerate the exact fields. Existing operations retain their meaning.
 
 ```json
@@ -1095,6 +1095,17 @@ alignment plus twist, preserves face winding and consumes the other object.
 Existing materials/UVs are preserved. New joint UVs are unset (zero) and require
 an explicit UV operation. Procedural controls end after joining; old revisions
 remain available. No hole cutting, intersection resolution or retopology is implied.
+
+`mesh.weld` merges vertices that share a position (`distance_m`, default 1e-5)
+and optionally recalculates normals. glTF splits vertices at UV seams and the
+importer does not rejoin them, so generated 3D arrives as a triangle soup: one
+measured model held 47,262 vertices in 11,466 disconnected shells with 16,902
+loose vertices, and bone-heat binding could not weight a single vertex. Welding
+it produced one shell with no loose vertices and a complete bind. UVs live on
+face corners, so merging by position does not move a seam. It fails when nothing
+merged, and when more than half the faces disappeared, rather than accepting a
+distance that dissolved the model. Welding alone removed 52% of the vertices
+here, so the decimation that follows can stay gentle.
 
 `mesh.decimate` collapse-decimates one mesh in place to `ratio` of its faces
 (0.001 < ratio < 1) and applies the modifier immediately, so later operations see

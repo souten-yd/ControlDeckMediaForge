@@ -220,6 +220,23 @@ class SubdivisionModifier(BaseModel):
     levels: int = Field(default=1, ge=1, le=2, strict=True)
 
 
+class MeshWeld(BaseModel):
+    """Merge vertices that share a position, keeping per-corner UVs.
+
+    glTF は UV の継ぎ目で頂点を複製する。取り込みはそれを繋ぎ直さないので、
+    生成した 3D は「面が繋がっていない三角形の寄せ集め」として届く（実測で
+    47,262 頂点が 11,466 個の破片、浮き頂点 16,902）。bone heat は繋がった面を
+    要求するので、この状態では骨を一切入れられない。UV は面の角に持つので、
+    位置で繋いでも継ぎ目の見た目は変わらない。
+    """
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["mesh.weld"]
+    object_id: ObjectId
+    # 同じ位置とみなす距離。既定は浮動小数の誤差ぶんだけ。
+    distance_m: float = Field(default=0.00001, gt=0, le=0.01, allow_inf_nan=False)
+    recalculate_normals: bool = Field(default=True, strict=True)
+
+
 class MeshDecimate(BaseModel):
     """Collapse-decimate one mesh in place, keeping its UVs and material.
 
@@ -663,6 +680,7 @@ SceneOperation = Annotated[
     | MeshSectionsSet
     | MeshBridgeLoops
     | SubdivisionModifier
+    | MeshWeld
     | MeshDecimate
     | TransformSet
     | BevelModifier

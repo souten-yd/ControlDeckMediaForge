@@ -1354,7 +1354,8 @@
                 "uv.seams.set": "#/$defs/UvSeamsSet",
                 "uv.smart_project": "#/$defs/UvSmartProject",
                 "uv.unwrap": "#/$defs/UvUnwrap",
-                "mesh.decimate": "#/$defs/MeshDecimate"
+                "mesh.decimate": "#/$defs/MeshDecimate",
+                "mesh.weld": "#/$defs/MeshWeld"
               },
               "propertyName": "type"
             },
@@ -1379,6 +1380,9 @@
               },
               {
                 "$ref": "#/$defs/SubdivisionModifier"
+              },
+              {
+                "$ref": "#/$defs/MeshWeld"
               },
               {
                 "$ref": "#/$defs/MeshDecimate"
@@ -2451,6 +2455,43 @@
         "object_id"
       ],
       "title": "SubdivisionModifier",
+      "type": "object"
+    },
+    "MeshWeld": {
+      "additionalProperties": false,
+      "description": "Merge vertices that share a position, keeping per-corner UVs.\n\nglTF は UV の継ぎ目で頂点を複製する。取り込みはそれを繋ぎ直さないので、\n生成した 3D は「面が繋がっていない三角形の寄せ集め」として届く（実測で\n47,262 頂点が 11,466 個の破片、浮き頂点 16,902）。bone heat は繋がった面を\n要求するので、この状態では骨を一切入れられない。UV は面の角に持つので、\n位置で繋いでも継ぎ目の見た目は変わらない。",
+      "properties": {
+        "type": {
+          "const": "mesh.weld",
+          "title": "Type",
+          "type": "string"
+        },
+        "object_id": {
+          "description": "Stable recipe object ID used by all later operations; it is not a Blender name.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "title": "Object Id",
+          "type": "string"
+        },
+        "distance_m": {
+          "default": 1e-05,
+          "exclusiveMinimum": 0,
+          "maximum": 0.01,
+          "title": "Distance M",
+          "type": "number"
+        },
+        "recalculate_normals": {
+          "default": true,
+          "title": "Recalculate Normals",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "object_id"
+      ],
+      "title": "MeshWeld",
       "type": "object"
     },
     "MeshDecimate": {
