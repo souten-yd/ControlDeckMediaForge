@@ -43,11 +43,26 @@ def test_auto_bind_invalid_inputs(changes: dict[str, Any]) -> None:
 
 
 @pytest.mark.parametrize("groups", [[], [(0, 0)], [(0, -1), (1, 1)],
-    [(0, float("nan")), (1, 1)], [(0, float("inf"))], [(0, 1.1)],
+    [(0, float("nan")), (1, 1)], [(0, float("inf"))], [(0, 1001.0)],
     [(9, 1)], [(0, .5), (0, .5)]])
 def test_heat_missing_invalid_unknown_weights_fail(monkeypatch: pytest.MonkeyPatch, groups: list) -> None:
     with pytest.raises(RuntimeError, match="weights"):
         worker(monkeypatch).normalized_influences(groups, {0, 1})
+
+
+def test_heat_weights_above_one_are_normalized_not_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Blender の bone heat は 1 を超える重みを返す。合計で割るので大きさは効かない。
+
+    実測した生成メッシュでは 35,338 頂点のうち 1,283 頂点が 1 を超え、最大 2.12 だった。
+    ここで弾くと、正規化すれば問題ない出力のせいで骨入れ全体が失敗する。
+    """
+    module = worker(monkeypatch)
+    result = module.normalized_influences([(0, 2.1210287), (1, 0.8789713)], {0, 1})
+    assert [index for index, _ in result] == [0, 1]
+    assert dict(result)[0] == pytest.approx(2.1210287 / 3.0)
+    assert sum(weight for _, weight in result) == pytest.approx(1)
+    # 桁の壊れた出力までは通さない。
+    assert module.MAX_RAW_HEAT_WEIGHT == 1000.0
 
 
 def test_heat_explicit_top_four_and_normalization(monkeypatch: pytest.MonkeyPatch) -> None:
