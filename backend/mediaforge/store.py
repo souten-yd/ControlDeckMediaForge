@@ -950,6 +950,24 @@ class Store:
             rows = connection.execute("SELECT metadata_json FROM assets ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
         return readable_rows(rows, Asset, "metadata_json", kind="asset")
 
+    def list_editable_glb_assets(self, limit: int = 50) -> list[Asset]:
+        """Library GLBs that no scene revision already owns.
+
+        版のプレビュー／元になっている GLB は、そのシーンを開けばよい。ここに
+        出すのは「ライブラリにあるのに、開く先のシーンが無い」ものだけである。
+        画面が自力で選り分けられない（scenes.list は asset id を持たない）ので、
+        選り分けはここで済ませる。
+        """
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT metadata_json FROM assets
+                   WHERE id NOT IN (SELECT preview_asset_id FROM scene_revisions)
+                     AND id NOT IN (SELECT source_asset_id FROM scene_revisions)
+                   ORDER BY created_at DESC""",
+            ).fetchall()
+        assets = readable_rows(rows, Asset, "metadata_json", kind="asset")
+        return [item for item in assets if item.mime_type == "model/gltf-binary"][:limit]
+
     def list_asset_records(self, limit: int, before: str | None = None) -> list[tuple[Asset, Provenance]]:
         """Return asset+provenance pairs so the workspace never issues N+1 lookups."""
         query = "SELECT metadata_json, provenance_json FROM assets"
@@ -1478,6 +1496,18 @@ class Store:
             )
         self._notify_session("scenes")
         return document
+
+    def scene_revision_for_preview(self, asset_id: str) -> str | None:
+        """The revision this GLB is already the preview of, if any.
+
+        版のプレビューをもう一度シーンにすると、同じものが二重に並ぶ。
+        既にシーンがあるなら、そのシーンを開けばよい。
+        """
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT id FROM scene_revisions WHERE preview_asset_id = ? LIMIT 1", (asset_id,),
+            ).fetchone()
+        return str(row["id"]) if row is not None else None
 
     def get_scene(self, scene_id: str, owner: str) -> SceneDocument:
         with self._connect() as connection:

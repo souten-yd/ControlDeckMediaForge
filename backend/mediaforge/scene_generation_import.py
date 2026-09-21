@@ -8,6 +8,7 @@ import shutil
 from typing import TYPE_CHECKING, Any
 import uuid
 
+from .domain import ErrorDetail, JobRequest, JobStatus
 from .glb import GlbValidationError, validate_glb_path
 from .paths import contained
 from .scene_generation import GenerationFacts, SceneFromImageRequest
@@ -144,6 +145,101 @@ async def import_generated_glb(
     except BaseException:
         workspace._rollback_assets(registered)
         raise
+    finally:
+        if preview is not None and preview.exists():
+            preview.unlink()
+        workspace._remove_tree(root, workspace.recipe_root)
+
+
+MAX_LIBRARY_GLB_BYTES = 256 * 1024 * 1024
+
+
+async def import_library_glb(
+    workspace: SceneWorkspace, owner: str, asset_id: str, name: str,
+    tags: list[str], collection: str,
+) -> dict[str, Any]:
+    """Make an editable scene out of a GLB that is already in the shared Library.
+
+    生成で作ったシーンは版として残るが、ライブラリに単体で置いた GLB には
+    シーンが無く、Web Blender で開けなかった。取り込みは既存の経路をそのまま
+    通す（隔離した Blender で GLB を読み、検証してから版を作る）。新しい
+    検証経路も第二の Jobs 基盤も作らない。
+    """
+    from .scenes import SceneRevisionInput
+
+    owner = validate_scene_owner(owner)
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 120:
+        raise SceneError("scene_name_invalid", "scene name must be 1 to 120 characters")
+    asset = workspace.store.get_asset(asset_id)
+    if asset.mime_type != "model/gltf-binary":
+        raise SceneError("scene_source_invalid", "editing requires a GLB Asset")
+    if not 1 <= asset.size_bytes <= MAX_LIBRARY_GLB_BYTES:
+        raise SceneError("scene_source_invalid", "GLB Asset exceeds the editable size bound")
+    # 版の元になっている GLB は、その版を開けばよい。二重に別シーンを作らせない。
+    if workspace.store.scene_revision_for_preview(asset_id) is not None:
+        raise SceneError("scene_source_in_use", "this GLB already belongs to a scene revision")
+    verified, _, source = workspace._verified_revision_asset(asset.id, asset.mime_type)
+    dependency = SceneDependency(role="source_glb", asset_id=asset.id, sha256=verified.sha256)
+    runtime = workspace.resolver.resolve_active()
+    if runtime is None:
+        raise SceneError("scene_runtime_unavailable", "active Blender runtime is unavailable")
+    root = contained(workspace.recipe_root, workspace.recipe_root / f"library_{uuid.uuid4().hex}")
+    root.mkdir(mode=0o700)
+    registered: list[str] = []
+    preview: Path | None = None
+    job_id: str | None = None
+    committed = False
+    try:
+        staged = root / "generated.glb"
+        shutil.copyfile(source, staged)
+        staged.chmod(0o600)
+        if workspace._sha256(staged) != verified.sha256:
+            raise SceneError("scene_source_invalid", "GLB Asset changed while staging")
+        validate_glb_path(staged, root)
+        job = workspace.store.create_job(JobRequest(
+            operation="media.inspect", intent="Open a Library GLB as an editable scene",
+        ))
+        job_id = job.id
+        workspace.store.update_job(job_id, status=JobStatus.RUNNING, phase="validating", progress=0.2)
+        with workspace.resolver.runtime_reference(runtime.runtime_id) as pinned:
+            if pinned is None or pinned.version != runtime.version:
+                raise SceneError("scene_runtime_unavailable", "active Blender runtime is unavailable")
+            blend = await _import_worker(workspace, root, pinned)
+            preview, blender_facts, glb_facts = await workspace._validate(blend, pinned)
+            current, _, _ = workspace._verified_revision_asset(asset.id, asset.mime_type)
+            if current.sha256 != dependency.sha256:
+                raise SceneError("scene_source_invalid", "GLB Asset changed during import")
+            source_asset, preview_asset = workspace._register_assets(
+                job_id, blend, preview, pinned, blender_facts, glb_facts,
+                parent_revision=None, dependencies=[dependency], operation="scene.from_glb",
+                parameters={"source_asset_id": asset.id, "source_sha256": dependency.sha256},
+            )
+            registered.extend([source_asset.id, preview_asset.id])
+            document, revision = workspace.catalog.create(
+                owner, name=name.strip(), tags=tags, collection=collection,
+                revision=SceneRevisionInput(
+                    source_asset_id=source_asset.id, preview_asset_id=preview_asset.id,
+                    dependencies=[dependency], runtime_id=pinned.runtime_id,
+                    runtime_version=pinned.version,
+                    validation=workspace._validation(blender_facts, glb_facts),
+                ),
+            )
+            committed = True
+            workspace.store.update_job(job_id, status=JobStatus.SUCCEEDED, progress=1, asset_ids=registered)
+            return {**workspace._scene_projection(document, revision), "asset_ids": registered}
+    except (Exception, asyncio.CancelledError) as exc:
+        if not committed:
+            workspace._rollback_assets(registered)
+            if job_id is not None:
+                workspace.store.update_job(
+                    job_id,
+                    status=JobStatus.CANCELED if isinstance(exc, asyncio.CancelledError) else JobStatus.FAILED,
+                    error=ErrorDetail(code=getattr(exc, "code", "scene_source_import_failed"),
+                                      message="Library GLB import did not complete"),
+                )
+        if isinstance(exc, (SceneError, asyncio.CancelledError)):
+            raise
+        raise SceneError("scene_source_import_failed", "Library GLB import did not complete") from exc
     finally:
         if preview is not None and preview.exists():
             preview.unlink()

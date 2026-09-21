@@ -3985,6 +3985,9 @@ def create_app(
                         result = {"items": [
                             item.model_dump(mode="json")
                             for item in scenes.list(scene_owner(identity))
+                        ], "library_models": [
+                            item.model_dump(mode="json")
+                            for item in store.list_editable_glb_assets()
                         ], "working_copies": [
                             item.model_dump(mode="json")
                             for item in scene_workspace.list_working_copies(scene_owner(identity))
@@ -3999,6 +4002,21 @@ def create_app(
                             "scene": document.model_dump(mode="json"),
                             "revisions": [item.model_dump(mode="json") for item in revisions],
                         }
+                    elif method == "scenes.from_glb":
+                        if set(params) - {"name", "tags", "collection"} != {"asset_id"}:
+                            raise ValueError("scene from GLB fields differ")
+                        tags = params.get("tags")
+                        if tags is not None and (
+                            not isinstance(tags, list) or len(tags) > 32
+                            or any(not isinstance(item, str) for item in tags)
+                        ):
+                            raise ValueError("scene from GLB tags are invalid")
+                        result = await scene_workspace.import_library_glb(
+                            scene_owner(identity), str(params.get("asset_id", "")),
+                            name=str(params.get("name", "")),
+                            tags=tags,
+                            collection=str(params["collection"]) if params.get("collection") else None,
+                        )
                     elif method == "scenes.recovery.fork":
                         if set(params) != {"scene_id", "recovery_working_id"}:
                             raise ValueError("scene recovery fork fields differ")

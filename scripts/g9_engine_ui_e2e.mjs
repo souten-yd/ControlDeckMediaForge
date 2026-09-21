@@ -76,7 +76,13 @@ try {
     const page = await context.newPage();
     page.setDefaultTimeout(10000);
     page.on('pageerror', (error) => report.page_errors.push(String(error)));
-    const fixture = {capability, requests: [], traffic: [], jobs: new Map(), job: null, failGet: false};
+    const fixture = {capability, requests: [], traffic: [], jobs: new Map(), job: null, failGet: false,
+      scenes: [{id: `scene_${'5'.repeat(32)}`, name: 'Existing scene', revision_count: 2,
+        current_revision_id: `revision_${'5'.repeat(32)}`, tags: [], collection: 'experiment',
+        created_at: '2026-09-20T00:00:00Z', updated_at: '2026-09-20T00:00:00Z'}],
+      // シーンをまだ持たないライブラリの 3D。画面はこれも選べなければならない。
+      libraryModels: [{id: `asset_${'6'.repeat(32)}`, mime_type: 'model/gltf-binary',
+        suggested_filename: 'library-robot.glb', size_bytes: 5986092}]};
     await page.routeWebSocket('**/x/media-forge/ws', (socket) => {
       socket.onMessage((data) => {
         const request = JSON.parse(String(data));
@@ -85,8 +91,28 @@ try {
         if (request.method === 'workspace.session') result = {
           preferences: {values: {last_view: 'web-blender'}},
           capabilities: {capabilities: {'3d.image_to_3d': fixture.capability}},
-          blender_runtime: {state: 'ready'}, scenes: {items: [], working_copies: []},
+          blender_runtime: {state: 'ready'},
+          scenes: {items: fixture.scenes, library_models: fixture.libraryModels, working_copies: []},
           library: {items: []}, profiles: {items: []}, reference_collections: {items: []},
+        };
+        else if (request.method === 'scenes.list') result = {
+          items: fixture.scenes, library_models: fixture.libraryModels, working_copies: [],
+        };
+        else if (request.method === 'scenes.from_glb') {
+          fixture.fromGlb = request.params;
+          const scene = {id: `scene_${'7'.repeat(32)}`, name: request.params.name,
+            revision_count: 1, current_revision_id: `revision_${'7'.repeat(32)}`,
+            tags: [], collection: 'experiment', created_at: '2026-09-21T00:00:00Z',
+            updated_at: '2026-09-21T00:00:00Z'};
+          fixture.scenes = [scene, ...fixture.scenes];
+          fixture.libraryModels = fixture.libraryModels.filter((item) => item.id !== request.params.asset_id);
+          result = {scene, revision: {id: scene.current_revision_id, sequence: 1,
+            preview_asset_id: `asset_${'8'.repeat(32)}`, dependencies: []}};
+        }
+        else if (request.method === 'scenes.get') result = {
+          scene: fixture.scenes.find((item) => item.id === request.params.scene_id),
+          revisions: [{id: `revision_${'7'.repeat(32)}`, sequence: 1,
+            preview_asset_id: `asset_${'8'.repeat(32)}`, dependencies: [], validation: []}],
         };
         else if (request.method === 'creative.templates') result = {
           domains: [], scenes: [], poses: [], compositions: [], cameras: [], variations: [],
@@ -328,7 +354,51 @@ try {
       await screenshot(page, frame, `${width}-${locale}-refine.png`);
       fixture.capability = baseCapability();
       await refresh(frame);
+      // 編集対象は押すボタンのすぐ上で選べる。シーンとライブラリの 3D が同じ欄に並ぶ。
+      const target = frame.locator('#scene-blender-target');
+      assert.equal(await target.count(), 1, 'the Blender panel must carry its own picker');
+      const groups = await frame.locator('#scene-blender-target optgroup').evaluateAll(
+        (items) => items.map((item) => [item.label, [...item.children].map((o) => o.textContent)]));
+      assert.equal(groups.length, 2, JSON.stringify(groups));
+      assert(groups[1][1].some((label) => label.includes('library-robot.glb')),
+        'a Library GLB with no scene must be選べる: ' + JSON.stringify(groups));
+      // ボタンと選択欄のあいだに他のパネルが挟まっていないこと。
+      const geometry = await frame.evaluate(() => {
+        const pick = document.getElementById('scene-blender-target').getBoundingClientRect();
+        const open = document.getElementById('scene-blender-open').getBoundingClientRect();
+        const entry = document.getElementById('scene-blender-entry');
+        return {gap: open.top - pick.bottom, pickHeight: pick.height,
+          samePanel: entry.contains(document.getElementById('scene-blender-target')),
+          importOrder: getComputedStyle(document.querySelector('[data-secondary="import"]')).order,
+          entryOrder: getComputedStyle(entry).order};
+      });
+      assert(geometry.samePanel, 'the picker must live in the Blender panel');
+      // 案内文も「下の一覧から」をやめ、同じ欄から選べることを言う。
+      const guide = await frame.locator('#scene-blender-entry-guide').textContent();
+      assert(!guide.includes('下の一覧') && !guide.includes('Select a scene below'), guide);
+      assert(guide.includes(locale === 'ja' ? 'ライブラリにあってまだシーンが無い' : 'no scene yet'), guide);
+      assert(geometry.pickHeight >= 44, JSON.stringify(geometry));
+      assert(geometry.gap >= 0 && geometry.gap < 200, JSON.stringify(geometry));
+      if (width <= 767) {
+        // 携帯では取り込みフォームを編集入口の後ろへ回す。
+        assert.equal(geometry.entryOrder, '0', JSON.stringify(geometry));
+        assert.equal(geometry.importOrder, '1', JSON.stringify(geometry));
+      }
+      // ライブラリの 3D を選ぶと、その場でシーンにしてから選択に入る。
+      await target.selectOption(`asset:asset_${'6'.repeat(32)}`);
+      await frame.waitForFunction(() => !state.blenderTargetBusy && state.selectedSceneId.length > 0);
+      assert.equal(fixture.fromGlb.asset_id, `asset_${'6'.repeat(32)}`);
+      assert.equal(fixture.fromGlb.name, 'library-robot');
+      assert.equal(await frame.evaluate(() => state.selectedSceneId), `scene_${'7'.repeat(32)}`);
+      // 取り込んだものは「シーンが無いもの」から消え、シーン側に並ぶ。
+      const after = await frame.locator('#scene-blender-target optgroup').evaluateAll(
+        (items) => items.map((item) => [item.label, item.children.length]));
+      assert.equal(after.length, 1, JSON.stringify(after));
+      assert.equal(after[0][1], 2, JSON.stringify(after));
+      await screenshot(page, frame, `${width}-${locale}-blender-target.png`);
       report.cases.push({width, locale, passed: true, layout, requests: fixture.requests,
+        blender_picker_in_panel: true, library_glb_selectable: true,
+        library_glb_becomes_scene: true, mobile_import_moved_below: width <= 767,
         refine_default_off: true, refine_opt_in_sends_flag: true, refine_phase_reported: true,
         refine_unavailable_blocks_and_explains: true, device_photo_picker: true,
         device_photo_reaches_core_undecoded: true, selected_input_preview: true,

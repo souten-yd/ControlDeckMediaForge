@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from mediaforge.asset_import import import_asset_bytes
 from mediaforge.domain import JobRequest
+from mediaforge.store import AssetInUse
 from mediaforge.scene_generation import GenerationFacts, SceneFromImageRequest
 from mediaforge.scenes import SceneError
 from test_glb_import import glb_bytes
@@ -122,3 +123,59 @@ def test_from_image_rejects_remote_or_path_input() -> None:
     for extra in ({'local_only':False}, {'image_path':'/tmp/input.png'}, {'image_url':'https://example.com/image.png'}, {'seed':True}):
         with pytest.raises(ValidationError):
             SceneFromImageRequest.model_validate({**base, **extra})
+
+
+def test_library_glb_becomes_an_editable_scene(tmp_path):
+    """シーンを持たないライブラリの GLB を、そのまま Blender で開けるようにする。"""
+    store, workspace, resolver, *_ = setup(tmp_path / 'workspace')
+    resolver.resolve_active = lambda: resolver.runtime
+    asset = import_asset_bytes(store, glb_bytes(), purpose='source', media_type='model/gltf-binary')
+    result = asyncio.run(workspace.import_library_glb(
+        'user:7', asset.id, name='Library model'))
+    assert result['scene']['name'] == 'Library model'
+    assert result['revision']['sequence'] == 1
+    # 元の GLB は依存として記録し、来歴の親に置く。どこから来たか辿れること。
+    assert [d['role'] for d in result['revision']['dependencies']] == ['source_glb']
+    assert result['revision']['dependencies'][0]['asset_id'] == asset.id
+    blend = store.get_provenance(result['revision']['source_asset_id'])
+    assert blend.operation == 'scene.from_glb'
+    assert blend.parent_asset_ids == [asset.id]
+    assert blend.parameters['source_asset_id'] == asset.id
+    # 元の GLB は使われているので消せない。
+    with pytest.raises(AssetInUse):
+        store.delete_asset(asset.id)
+
+
+def test_library_listing_hides_glbs_a_scene_already_owns(tmp_path):
+    store, workspace, resolver, *_ = setup(tmp_path / 'workspace')
+    resolver.resolve_active = lambda: resolver.runtime
+    asset = import_asset_bytes(store, glb_bytes(), purpose='source', media_type='model/gltf-binary')
+    assert [item.id for item in store.list_editable_glb_assets()] == [asset.id]
+    result = asyncio.run(workspace.import_library_glb('user:7', asset.id, name='Library model'))
+    # 版のプレビューになった GLB は、もう「シーンが無いもの」ではない。
+    listed = {item.id for item in store.list_editable_glb_assets()}
+    assert result['revision']['preview_asset_id'] not in listed
+    assert asset.id in listed  # 元の GLB 自体は依存であってプレビューではない
+
+
+def test_a_glb_that_already_has_a_scene_is_refused(tmp_path):
+    store, workspace, resolver, *_ = setup(tmp_path / 'workspace')
+    resolver.resolve_active = lambda: resolver.runtime
+    asset = import_asset_bytes(store, glb_bytes(), purpose='source', media_type='model/gltf-binary')
+    result = asyncio.run(workspace.import_library_glb('user:7', asset.id, name='Library model'))
+    preview = result['revision']['preview_asset_id']
+    with pytest.raises(SceneError, match='already belongs to a scene revision'):
+        asyncio.run(workspace.import_library_glb('user:7', preview, name='Again'))
+
+
+def test_non_glb_and_bad_names_are_refused(tmp_path):
+    store, workspace, resolver, *_ = setup(tmp_path / 'workspace')
+    resolver.resolve_active = lambda: resolver.runtime
+    image = io.BytesIO()
+    Image.new('RGB', (16, 16), (10, 20, 30)).save(image, format='PNG')
+    png = import_asset_bytes(store, image.getvalue(), purpose='source', media_type='image/png')
+    with pytest.raises(SceneError, match='requires a GLB Asset'):
+        asyncio.run(workspace.import_library_glb('user:7', png.id, name='Not a model'))
+    glb = import_asset_bytes(store, glb_bytes(), purpose='source', media_type='model/gltf-binary')
+    with pytest.raises(SceneError, match='1 to 120 characters'):
+        asyncio.run(workspace.import_library_glb('user:7', glb.id, name='   '))
