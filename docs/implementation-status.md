@@ -1,5 +1,26 @@
 # Media Forge implementation status
 
+## 2026-09-22 派生画像→元3D・モバイル材質変更を0.33.6でリリース/適用完了
+
+PR617〜620をmergeし、source51a0e54から0.33.6を署名公開・通常Host更新。
+画像viewer/詳細から元scene/制作元版を呼び出し、選んだ画像を材質へ渡せる。
+元3Dにも材質変更の入口を追加。通常画像編集の親/元scene文脈も保持する。
+
+- 実Hostの1280/320pxでtapによる画像→scene/材質比較→破棄、制作元GLB→材質を通過。
+  opaque/横overflow0/page error0。320pxの履歴説明・比較操作も全文表示、44px以上。
+- 通常Host UIの320pxで検証用コピーへ材質採用→1から2版へ保存し、元の宝箱は不変。
+  保存GLBのbaseColor画像は選択画像とRGBA画素SHA一致。
+- 更新と再起動後も1521 Asset保持、代表3 AssetのHTTP SHA/served source bytes一致。
+  元画像→元sceneと画像選択、検証コピー2版/材質を保持。最終PID3739883/healthy、
+  Host effective healthy、active Job0/未解放lease0。
+- 最終 ./mf.sh test: 2410 passed / 3 warnings / 274.07秒。正式配布物の再取得/署名/内容照合、
+  fresh package起動も通過。実スマホ本体/fresh GPU構築/rollback/今回の新規AI生成はNOT TESTED。
+- 元checkout feat/g9-image-to-3d/524553dはcleanのまま。独立source fixtureは停止。
+  リリース/適用の残件なし。以下の「準備」は当時の履歴であり現在の状態ではない。
+
+詳細・scene/Asset ID・証跡: [0.33.6最終受入](implementation/release-0.33.6-20260922.md)。
+
+
 ## 2026-09-22 モバイル材質変更後の保存履歴を読みやすくする（0.33.6準備）
 
 0.33.5を通常適用し、実Hostの1280/320pxで元画像→元3D/材質比較を通過。
