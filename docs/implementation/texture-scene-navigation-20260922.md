@@ -51,3 +51,15 @@ ownerは認証identityまたはstandaloneのlocal ownerから決め、クライ�
 
 通常PR merge、署名公開/通常Host更新、installed Hostの実画像からの導線、
 320pxの比較/版保存と再起動後の関連復元は未実施。実スマートフォン本体ではNOT TESTED。
+
+## 0.33.3公開後・通常更新前の追加確認
+
+sourceの`stale-target.mjs stale-target-before`で、制作元objectが現行版にない条件を確認。
+移動直後は`target="" / disabled=true`、材質再取得後に`Mesh_0 / disabled=false`となり失敗。
+元の対象が無いときだけを例外にするのではなく、対象の単一候補自動選択自体を除去する。
+有効な元対象の復元と利用者の明示選択は維持。0.33.3はローカルへ適用せず0.33.4へ進む。
+
+`stale-target.mjs stale-target-after`は移動直後/材質再取得後とも
+`target="" / disabled=true`で通過。320pxのLibrary編集導線も再確認し、詳細44px、
+viewer60pxの操作面と元Asset/元scene文脈の維持を確認した。
+0.33.3はprereleaseへ変更し通常更新の対象から外した。修正版0.33.4の ./mf.sh test: **2410 passed / 3 warnings / 276.06秒 / exit0**。
