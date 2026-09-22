@@ -5,6 +5,15 @@ Date: 2026-09-22. Branch: `ux1/3d-texture-variants`.
 利用者が既存3Dの画像をAIで改善し、画像だけ複数作って選択・貼り替えたいと依頼。
 既存の画像Job/Library/MaterialBinding/比較・採用を拡張し、別の基盤を追加しない。
 
+## 最終状態: 0.33.2 installed受入完了
+
+PR613〜615をmerge、署名release/通常更新/再起動まで実施。実Hostで宝箱の元画像から
+実FLUX.2-kleinによる1024角3候補を44.528250秒で生成し、Libraryへ登録した。
+2枚目選択→実Blender比較→破棄、元scene不変、PC/320px表示、restart後3候補復元を確認。
+候補の自動採用は行わず、利用者が選択できる状態。UV配置の完全保持は保証しない。
+実測・Asset ID・署名/適用・残る検証範囲は[0.33.2受入記録](release-0.33.2-20260922.md)。
+以下の未実施/準備中は経過記録。
+
 ## 実装
 
 - 材質パネルに現在画像/選択したLibrary画像/新規作成と1〜4候補を追加。
@@ -43,7 +52,7 @@ Chromeで確認。1280pxで3候補→2枚目を選択→実Blender材質preview�
 PR612のQwen sliceを統合し、0.33.0として ./mf.sh test:
 2400 passed / 3 warnings / 272.68秒 / exit0。既存の時間制限テストも含め全件通過。
 
-## 残件
+## 0.33.0公開前時点の残件（後続で実施済み）
 
 PR merge、Qwen通常生成sliceとの統合、署名release・通常更新、実Hostの画像編集3候補、
 Library lineage、材質比較、モバイル/restart受入は未実施。実AIでのUV保持・
