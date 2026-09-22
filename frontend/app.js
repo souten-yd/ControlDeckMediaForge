@@ -242,6 +242,9 @@ const state = {
   sceneTexturePollingJobs: new Set(),
   sceneTextureWatchingJobs: new Set(),
   blenderSessions: [],
+  blenderFinishSessionId: "",
+  blenderFinishBusy: false,
+  blenderFinishError: false,
   blenderRfb: null,
   blenderRfbConnected: false,
   blenderInputAnchor: null,
@@ -4910,7 +4913,7 @@ const SCENE_TEXT = {
     blenderStart: "Blenderで編集", blenderOpen: "Blenderへ戻る", blenderStarting: "Blenderを準備しています…",
     blenderReady: "Blenderは表示を閉じても動き続けます。保存または破棄で終了します。",
     blenderAutosaveFailed: "自動復旧用の保存に失敗しました。直前の候補は保持しています。明示的に保存するか、次の自動保存をお待ちください。",
-    blenderSaving: "検証済みの新しい版として保存しています…", blenderStopping: "変更を破棄しています…",
+    blenderSaving: "検証済みの新しい版として保存しています…", blenderStopping: "Web Blenderを終了しています…",
     blenderFailed: "Blenderセッションを開始できませんでした。", blenderBusy: "別のシーンを編集中です。",
     blenderSetup: "設定でブラウザ操作環境を導入すると編集できます。",
     blenderDesktop: "細かなBlender編集にはPC・キーボード・マウスを推奨します。",
@@ -5007,7 +5010,7 @@ const SCENE_TEXT = {
     blenderStart: "Edit in Blender", blenderOpen: "Return to Blender", blenderStarting: "Preparing Blender…",
     blenderReady: "Blender keeps running when this view closes. Save or discard to end the session.",
     blenderAutosaveFailed: "Automatic recovery save failed. The previous snapshot is retained. Save explicitly or wait for the next automatic save.",
-    blenderSaving: "Saving as a new validated revision…", blenderStopping: "Discarding changes…",
+    blenderSaving: "Saving as a new validated revision…", blenderStopping: "Ending Web Blender…",
     blenderFailed: "The Blender session could not start.", blenderBusy: "Another scene is being edited.",
     blenderSetup: "Install the browser control runtime in Settings to edit.",
     blenderDesktop: "A PC, keyboard and mouse are recommended for detailed Blender editing.",
@@ -6727,6 +6730,7 @@ function selectedRecoveryCandidate() {
 }
 
 function renderBlenderSessionControls() {
+  renderBlenderFinishControls();
   const button = byId("scene-blender-open");
   if (!button) return;
   const text = sceneText();
@@ -7767,19 +7771,86 @@ function closeBlenderView() {
   if (byId("scene-blender-dialog").open) byId("scene-blender-dialog").close();
 }
 
-async function finishBlenderSession(action) {
-  const sessionId = state.blenderRfbSessionId || activeBlenderSession()?.id;
-  if (!sessionId) return;
-  byId("scene-blender-save").disabled = true;
-  byId("scene-blender-discard").disabled = true;
+function blenderFinishText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    title: "End Web Blender", cancel: "Go back", starting: "Cancel startup",
+    target: (name) => `Web Blender: ${name}`,
+    description: "Save your edits as a new revision before ending. Discarding ends the session without saving your edits. Saved revisions are kept.",
+    preparing: "End startup and release the session. Saved revisions are kept.",
+    failed: "Could not request an end to this session. Check its status and try again.",
+    ended: "This session has ended.",
+  } : {
+    title: "Web Blenderを終了", cancel: "戻る", starting: "起動を取り消す",
+    target: (name) => `Web Blender：${name}`,
+    description: "編集内容を新しい版として保存して終了できます。「変更を破棄して終了」では未保存の編集が失われます。保存済みの版は残ります。",
+    preparing: "起動を取り消して終了します。保存済みの版は残ります。",
+    failed: "終了を要求できませんでした。状態を確認して、もう一度お試しください。",
+    ended: "このWeb Blenderは終了しています。",
+  };
+}
+
+function renderBlenderFinishControls() {
+  const active = activeBlenderSession();
+  const text = blenderFinishText();
+  const labels = sceneText();
+  const targetName = (session) => state.scenes.find((item) => item.id === session?.scene_id)?.name || session?.scene_id || "";
+  const busy = (session) => state.blenderFinishBusy || ["saving", "stopping"].includes(session?.state);
+  const progress = (session) => session?.state === "saving" ? labels.blenderSaving
+    : session?.state === "stopping" ? labels.blenderStopping : "";
+  byId("blender-session-banner").hidden = !active;
+  byId("blender-session-summary").textContent = active ? `${text.target(targetName(active))} ${progress(active)}` : "";
+  byId("blender-session-finish").textContent = text.title;
+  byId("blender-session-finish").disabled = busy(active);
+  const session = state.blenderSessions.find((item) => item.id === state.blenderFinishSessionId);
+  const ready = session?.state === "ready";
+  const canStop = ["queued", "preparing", "starting", "ready"].includes(session?.state);
+  byId("blender-finish-title").textContent = text.title;
+  byId("blender-finish-target").textContent = text.target(targetName(session));
+  byId("blender-finish-description").textContent = progress(session)
+    || (!canStop ? text.ended : ready ? text.description : text.preparing);
+  byId("blender-finish-error").textContent = state.blenderFinishError ? text.failed : "";
+  byId("blender-finish-cancel").textContent = text.cancel;
+  byId("blender-finish-save").textContent = labels.blenderSave;
+  byId("blender-finish-save").hidden = !ready;
+  byId("blender-finish-save").disabled = !ready || busy(session);
+  byId("blender-finish-discard").textContent = ready ? labels.blenderDiscard : text.starting;
+  byId("blender-finish-discard").disabled = !canStop || busy(session);
+  const viewed = state.blenderSessions.find((item) => item.id === state.blenderRfbSessionId) || active;
+  byId("scene-blender-save").disabled = viewed?.state !== "ready" || busy(viewed);
+  byId("scene-blender-discard").disabled = !viewed || busy(viewed);
+}
+
+function requestBlenderFinish(sessionId = activeBlenderSession()?.id) {
+  if (!sessionId || state.blenderFinishBusy) return;
+  state.blenderFinishSessionId = sessionId;
+  state.blenderFinishError = false;
+  renderBlenderFinishControls();
+  byId("blender-finish-dialog").showModal();
+  byId("blender-finish-cancel").focus();
+}
+
+async function finishBlenderSession(action, sessionId = state.blenderRfbSessionId || activeBlenderSession()?.id) {
+  const session = state.blenderSessions.find((item) => item.id === sessionId);
+  if (state.blenderFinishBusy || !session || !["save", "stop"].includes(action)) return;
+  if (action === "save" ? session.state !== "ready" : !["queued", "preparing", "starting", "ready"].includes(session.state)) return;
+  state.blenderFinishBusy = true;
+  state.blenderFinishError = false;
+  renderBlenderFinishControls();
   try {
-    await call(`blender.sessions.${action}`, {session_id: sessionId});
+    const updated = await call(`blender.sessions.${action}`, {session_id: sessionId});
+    state.blenderSessions = state.blenderSessions.map((item) => item.id === sessionId ? updated : item);
+    byId("blender-finish-dialog").close();
     closeBlenderView();
+    renderBlenderSessionControls();
     await refreshSession(["blender_sessions", "scenes"]);
     void pollStandaloneBlenderSession(sessionId);
+  } catch {
+    state.blenderFinishSessionId = sessionId;
+    state.blenderFinishError = true;
+    if (!byId("blender-finish-dialog").open) byId("blender-finish-dialog").showModal();
   } finally {
-    byId("scene-blender-save").disabled = false;
-    byId("scene-blender-discard").disabled = false;
+    state.blenderFinishBusy = false;
+    renderBlenderFinishControls();
   }
 }
 
@@ -10701,7 +10772,11 @@ byId("scene-blender-keyboard").addEventListener("click", () => {
 });
 renderBlenderTouchControls();
 byId("scene-blender-save").addEventListener("click", () => void finishBlenderSession("save"));
-byId("scene-blender-discard").addEventListener("click", () => void finishBlenderSession("stop"));
+byId("scene-blender-discard").addEventListener("click", () => requestBlenderFinish(state.blenderRfbSessionId || activeBlenderSession()?.id));
+byId("blender-session-finish").addEventListener("click", () => requestBlenderFinish());
+byId("blender-finish-cancel").addEventListener("click", () => byId("blender-finish-dialog").close());
+byId("blender-finish-save").addEventListener("click", () => void finishBlenderSession("save", state.blenderFinishSessionId));
+byId("blender-finish-discard").addEventListener("click", () => void finishBlenderSession("stop", state.blenderFinishSessionId));
 byId("scene-blender-dialog").addEventListener("cancel", (event) => {
   event.preventDefault();
   closeBlenderView();
