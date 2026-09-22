@@ -80,8 +80,17 @@ def main() -> None:
     if uv is None:raise RuntimeError('bake UV map is unavailable')
     low.data.uv_layers.active_index=list(low.data.uv_layers).index(uv);uv.active_render=True
     uv_fact=next(item for item in scene_surface.uv_facts(low.data) if item['name']==uv.name)
-    if not uv_fact['finite'] or uv_fact['degenerate_triangles'] or uv_fact['bounds_min'] is None or min(uv_fact['bounds_min']) < -1e-5 or max(uv_fact['bounds_max'])>1.00001:
-        raise RuntimeError('bake UV map must be finite nondegenerate and in the unit tile')
+    # UV が面積ゼロの三角形を少数含むのは、面を削った結果として普通に起きる
+    # （実測: 24,900 三角形のうち 1 つ）。その三角形にテクセルが乗らないだけで
+    # 他の面には影響しないので、全体を断る理由にはならない。壊れた UV
+    # （ほとんどが潰れている）は今までどおり断る。
+    triangles=sum(max(0,len(polygon.vertices)-2) for polygon in low.data.polygons)
+    degenerate_allowance=max(64,triangles//1000)
+    if (not uv_fact['finite'] or uv_fact['degenerate_triangles'] is None
+            or uv_fact['degenerate_triangles']>degenerate_allowance
+            or uv_fact['bounds_min'] is None or min(uv_fact['bounds_min']) < -1e-5
+            or max(uv_fact['bounds_max'])>1.00001):
+        raise RuntimeError('bake UV map must be finite, mostly nondegenerate and in the unit tile')
     for obj in low_objects+high_objects:
         obj.hide_render=obj not in (low,high);obj.hide_set(False)
     scene.render.engine='CYCLES';scene.cycles.device='CPU';scene.cycles.samples=16

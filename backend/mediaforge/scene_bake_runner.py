@@ -33,7 +33,15 @@ def validate_report(report: Any,value: SceneBakeRequest,version: str) -> None:
     if report['device']!='CPU' or report['frame']!=0 or report['samples']!=16 or report['autoexec_disabled'] is not True:
         raise ValueError('bake execution differs')
     uv=UvMapFact.model_validate(report['uv'])
-    if uv.name!=value.uv_map or not uv.finite or uv.degenerate_triangles!=0 or uv.bounds_min is None or uv.bounds_max is None or min(uv.bounds_min)<-1e-5 or max(uv.bounds_max)>1.00001:
+    # 面積ゼロの UV 三角形が少数あるのは、面を削った結果として普通に起きる
+    # （実測: 24,900 三角形のうち 1 つ）。その三角形にテクセルが乗らないだけで
+    # 他の面には影響しない。worker と同じ許容（1000 分の 1 か 64 の大きい方）で
+    # 見る。ほとんどが潰れている UV は今までどおり断る。
+    allowance=max(64,(uv.loops or 0)//1000)
+    if (uv.name!=value.uv_map or not uv.finite or uv.degenerate_triangles is None
+            or uv.degenerate_triangles>allowance
+            or uv.bounds_min is None or uv.bounds_max is None
+            or min(uv.bounds_min)<-1e-5 or max(uv.bounds_max)>1.00001):
         raise ValueError('bake UV facts differ')
     images=report['images']
     if not isinstance(images,list) or len(images)!=len(value.channels):raise ValueError('bake image count differs')

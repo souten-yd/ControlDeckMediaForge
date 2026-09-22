@@ -1,5 +1,24 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 法線・AO の焼き込み（0.32.1）
+
+```text
+PASS       実機で生成モデルへ焼けた。normal 680,481 B / ao 321,903 B、全面被覆
+FIXED      UVの退化三角形1個（24,900中）で全体を断っていた。許容は1000分の1か64
+NOTE       品質はまだ良くない。法線に斑点。cageの追い込みは別作業
+NOTE       製品自身が surface_approval: not_granted と返している（良いと言っていない）
+```
+
+## Qwen-Image-2.1 の評価計画（0.32.1 に同梱、コードなし）
+
+```text
+FOUND      2026-09-20 公開。台帳のQwen-Image-2512(53.7GiB)とは別物
+FOUND      重み30.84GiB / 7B / QwenImage21Pipeline / bf16既定 / RGBA透過
+BLOCKER    license が Qwen Research（Apache-2.0ではない）。測る前に法的判断が要る
+BLOCKER    diffusers==0.40.0 固定。上げると採用済みFLUX.2-kleinの経路に影響
+WATCH      gfx1201 fp32 GEMM破損。同一seed3回のsha256一致で検出する
+```
+
 ## 2026-09-22 ローポリ化の割合（0.32.0）
 
 削る相手が head だったので、割合が元に対する値になっていなかった。

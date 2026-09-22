@@ -148,3 +148,41 @@ def test_bake_cancel_drain_and_staging_recovery(tmp_path):
     outside=tmp_path/'kept.txt';outside.write_text('keep')
     (workspace.bake_root/'stale').mkdir();(workspace.bake_root/'link').symlink_to(outside)
     workspace.initialize();assert outside.read_text()=='keep' and not list(workspace.bake_root.iterdir())
+
+
+def test_a_few_zero_area_uv_triangles_do_not_block_a_bake() -> None:
+    """面を削ると UV に面積ゼロの三角形が少数できる。実測 24,900 中 1 つ。
+
+    その三角形にテクセルが乗らないだけで他の面には影響しないので、全体を
+    断る理由にはならない。ほとんどが潰れている UV は今までどおり断る。
+    """
+    from mediaforge.scene_bake_runner import validate_report
+
+    value = SceneBakeRequest.model_validate({
+        "scene_id": "scene_" + "a" * 32, "revision_id": "revision_" + "b" * 32,
+        "object_id": "generated_0", "geometry_sha256": "c" * 64,
+        "channels": ["ao"], "resolution": 256,
+    })
+
+    def report(degenerate: int) -> dict:
+        return {
+            "schema_version": "media-forge.scene-bake-result@1", "blender_version": "4.5.13",
+            "spec": value.worker_spec(), "device": "CPU", "frame": 0, "samples": 16,
+            "autoexec_disabled": True,
+            "uv": {"name": "UVMap", "uv_sha256": "d" * 64, "loops": 74_700, "finite": True,
+                   "degenerate_triangles": degenerate,
+                   "bounds_min": [0.0, 0.0], "bounds_max": [1.0, 1.0]},
+            "images": [{"channel": "ao", "filename": "ao.png", "sha256": "e" * 64,
+                        "nontransparent_pixels": 1000, "color_space": "non_color",
+                        "normal_convention": None}],
+        }
+
+    # 実測値（24,900 三角形のうち 1 つ）は通る。
+    validate_report(report(1), value, "4.5.13")
+    # 許容は 1000 分の 1 か 64 の大きい方。
+    validate_report(report(74), value, "4.5.13")
+    with pytest.raises(ValueError):
+        validate_report(report(75), value, "4.5.13")
+    # 数えられなかった UV は通さない。
+    with pytest.raises(ValueError):
+        validate_report(report(None), value, "4.5.13")
