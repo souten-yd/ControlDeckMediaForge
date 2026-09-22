@@ -1,6 +1,6 @@
 # Qwen-Image-2.1: Vulkan configuration
 
-Date: 2026-09-22. Status: source integration accepted for manual text-to-image; installed acceptance pending.
+Date: 2026-09-22. Status: manual text-to-image accepted and installed in signed release 0.33.2.
 
 The user requested community investigation and application of an appropriate
 configuration after accepting the Research License. This is a new evaluation
@@ -8,6 +8,17 @@ following the [completed Quanto evaluation](qwen-image-21-evaluation-20260922.md
 The earlier tooling-only instructions describe that completed slice; the new
 authorization permits a measured local research integration. Commercial use is
 not included in the consent.
+
+## Final installed acceptance
+
+PR612 was merged and shipped with the following texture/dimension fixes through
+0.33.2. Normal managed installation passed, and the actual Host generated a
+1024×768 ordinary apple and a 1024×1024 transparent cutout through the existing
+background-removal path. Both are registered in Library and remained visible
+at 1280/320px after update/restart. Native Vulkan alpha and Qwen reference
+editing remain unadopted. See the [final release record](release-0.33.2-20260922.md)
+for actual Job/Asset IDs, provenance limitations and remaining NOT TESTED scope.
+Historical pending steps below describe the pre-release evaluation.
 
 ## Configuration and sources
 
@@ -67,7 +78,9 @@ name, Host device mapping and the full measured VRAM budget. The worker reports
 GGUF Q8_0/Q4_K_M provenance without initializing or reporting the Torch allocator.
 Native alpha is not accepted: the product worker keeps RGB unchanged and sets
 alpha to opaque, reporting `alpha.set_opaque`. Explicit cutout requests continue
-through the existing BiRefNet matting stage. A native child receives PDEATHSIG before exec; a real CPU process test
+through the existing background-removal stage. The installed sample does not
+record which removal method was selected, so it is not evidence of a specific
+BiRefNet execution. A native child receives PDEATHSIG before exec; a real CPU process test
 confirmed that it terminates when its owning worker is killed. Actual GPU cancellation also passed: after loading more than 12 GiB,
 SIGTERM of the worker terminated its native child and returned GPU usage to
 59,912,192 bytes within 0.504 seconds, with no output. This checks cancellation

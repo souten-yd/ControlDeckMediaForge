@@ -1,5 +1,27 @@
 # Media Forge implementation status
 
+## 2026-09-22 0.33.2署名公開・通常更新・実Host受入を完了
+
+PR612〜615を通常mergeし、source `1ceedb9`から0.33.2を署名公開・通常適用。
+公開物の再取得/署名/SHA/内容照合、fresh package startup、実サービスの再起動後もhealthy。
+既存1513 Assetのmetadata保持、代表3 AssetのHTTP content SHA一致、served frontend一致を確認。
+
+- Qwen手動生成: 実Hostで通常1024×768と背景除去付き1024角のリンゴを生成・Library登録。
+  透過PNGはalpha 0〜255、白/黒/市松背景で目視確認。native Vulkan alphaは品質不通過のため
+  未採用。透過は既存背景除去を使用し、Qwen参照編集も製品capabilityへ追加していない。
+- 既存Pixal3D宝箱: 元4096角の材質画像から実FLUX.2-kleinで1024角3候補を44.528250秒で生成。
+  全候補をLibraryへ登録し、抽出画像→元.blend/候補→抽出画像のlineageを照合。
+  正規Host grant15,419,755,724Bを使用・返却。通常生成のモデル既定・依存は保持。
+- 実Host UIで2枚目選択→実Blender材質比較→破棄を確認。元scene/head/source不変。
+  候補3枚は残し、利用者が選んで採用できる。AIによるUV配置の完全保持は保証しない。
+- PC1280px/320pxともQwen2枚+候補3枚をLibraryで表示、opaque iframe/overflow0/page error0。
+  service再起動後も5画像表示と3候補復元を確認。終了時Host effective healthy、関連GPU lease0。
+- 最終実装 ./mf.sh test: 2407 passed / 3 warnings / 275.70秒。以降の変更は受入文書のみ。
+  元checkout `feat/g9-image-to-3d`/`524553d`はcleanのまま。release/適用の残件なし。
+
+詳細・Asset ID・証跡・NOT TESTED: [0.33.2実機受入](implementation/release-0.33.2-20260922.md)。
+以下は経過記録であり、準備中・未受入の記述は当時の状態を示す。
+
 ## 2026-09-22 3Dテクスチャ参照編集の実測と枠修正（0.33.2準備）
 
 0.33.1でQwen横長1024×768と背景除去付き1024角PNGを実Hostから生成・Library登録済み。
