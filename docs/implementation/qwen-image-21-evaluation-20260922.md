@@ -156,6 +156,22 @@ environments; it is an evaluation setting, not a production recommendation.
 All nine files of both private FLUX quantized cache copies still matched the
 production originals by SHA-256 after these runs.
 
+After the test suite finished, both explicit-hipBLAS runs were repeated in new
+processes. Baseline load1.171304seconds, generations25.849204/19.435465/18.193117;
+candidate load1.084208seconds, generations25.000540/18.826840/18.140547.
+All six hashes remained the explicit-hipBLAS hash above; both allocator peaks
+remained6,606,511,616 allocated /9,126,805,504 reserved bytes. The download still
+ran concurrently, but the CPU test suite no longer overlapped either run.
+For this bounded input, the candidate dependencies showed no image, allocator
+memory or latency regression under matching backend conditions.
+
+The supervisor's OOM reporting was separately exercised with a CPU-only control:
+a256MiB allocation inside a128MiB cgroup exited1, and the owned unit reported
+`Result=oom-kill`, `ExecMainCode=2`, `ExecMainStatus=9`. That unit's failed state
+was cleared after recording it. This is a supervisor control, not a Qwen memory
+measurement; it ensures a killed model process will not be mislabeled as a
+successful empty result.
+
 ## Offline measurement tool
 
 [`scripts/qwen_image_probe.py`](../../scripts/qwen_image_probe.py) runs in an

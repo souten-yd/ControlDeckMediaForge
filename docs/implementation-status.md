@@ -16,6 +16,8 @@ Host/frame横overflow0、console/page error0、failed request0。新規pipeline�
 明示hipBLASではfp32/bf16の10形状一致、fp16の400万行は不一致。
 評価probeへBLAS選択・記録を追加し、focused18件通過。
 ./mf.sh test:2379 passed / 3 warnings / 281.34秒 / exit0。
+全suite後、明示BLASで現行/候補を各3回再測定。全PNG一致、allocatorピーク一致。
+現行25.849/19.435/18.193秒、候補25.001/18.827/18.141秒。重み取得は並行中。
 詳細・残項目は[評価記録](implementation/qwen-image-21-evaluation-20260922.md)。
 
 ## 2026-09-22 Qwen-Image-2.1の評価準備（実推論は未実施）
