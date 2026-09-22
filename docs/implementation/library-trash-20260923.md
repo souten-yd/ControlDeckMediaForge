@@ -47,3 +47,29 @@ backupは保持した版だけのsnapshotとして連番を付け、元のcanoni
 2428 passed /3 warnings /157.29秒。node構文/git diffも通過。
 署名公開・installed受入はhandoff/statusに追記する。
 NOT TESTED: 認証付き実Host埋め込み画面、実スマートフォン本体、新規AI推論の生成品質。
+
+## 公開・installed受入
+
+PR629 merge `2535ea7378f0f156d4a2ab80bc4583da2d5ff735` のclean worktreeから
+`build_release_bundle.py --version 0.33.10`、既存publisherでsign、独立verificationを実行。
+38,052,381 B、SHA256 `9629afb69d7caf77179dae0fd5d4d9be303af112c5d6a5f598b36590cf89c5ab`。
+4つの公開assetを再取得しcanonical manifest/Ed25519/改ざん拒否/bytesを再確認した。
+241 embedded entriesにvenv/weights/DB/秘密鍵なし。frontendと対象workerはsource一致。
+
+証跡: `maintenance/release-0.33.10-20260923/`。
+`clean-smoke.py` は新規管理dataで起動0.866661秒、setup_requiredとBlender未導入を正しく表示。
+`update-local.py` はactive Job/session0でDB backup後に通常 `deck.sh feature update media-forge`。
+`check-installed.py` と `restart-ready.py` でcurrent/.json/実PID/exe/cwd/served frontendを照合。
+再起動PID4089268、healthy0.823135秒。代表3 Asset HTTP SHAと3D capability不変。
+
+`prepare-installed.py` は実installed通常APIのみで合成cube/画像/2版×2sceneを作成。
+`browser.mjs` は1280/320pxで画像の取消/復元/完全削除、古い版pair完全削除、残った青い
+12三角形cubeの描画、日英、46px/overflow0/page error0。`extra.mjs` は320pxの版ボタン、
+全ごみ箱2件、取消/通信失敗後再試行/二重送信なし。実応答の対象が自作fixtureだけと検査後に確定。
+`cleanup-fixtures.py` が通常APIで残りのfixtureを片付け、12 Asset content404、pending0。
+更新直前の1532 Asset metadataと全既存scene document/revisionがDB snapshotと一致し、
+元のworking_fb7a...はrecoveryのまま保持。正式利用者Assetは試験削除していない。
+
+source用serverと各Chromeは終了。全体2428件のgateは実装headで通過し、本追記は文書のみ。
+実Host認証付きiframe・実スマートフォン本体・完全削除後の旧版data復旧はNOT TESTED。
+完全削除したbytesの復元を保証しない。認証待ちを偽のsessionで回避していない。

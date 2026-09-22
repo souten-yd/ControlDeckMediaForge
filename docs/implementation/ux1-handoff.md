@@ -1,5 +1,26 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 0.33.10を署名公開・ローカル適用（ごみ箱と個別削除）
+
+PR629/source2535ea7から0.33.10を公開し、通常Host更新・再起動でhealthy。
+画像・材質画像・3D各版の個別削除/復元と、ごみ箱の完全削除/全体削除を反映した。
+詳細はlibrary-trash-20260923.md。
+
+- 署名/改ざん拒否/公開物再取得/配信frontend一致を確認。bundle38,052,381 B、
+  SHA256 9629afb69d7caf77179dae0fd5d4d9be303af112c5d6a5f598b36590cf89c5ab。
+  新規dataのpackage起動0.866661秒、Blenderなしをunavailableと正しく表示。
+- active Job/session0で更新、直前DBのsnapshotを保持。current versions/0.33.10、
+  再起動PID4089268/healthy0.823135秒。更新直前の1532 Asset metadataと代表3 Asset HTTP SHA不変。
+- 実installed HTTP＋Chrome1280/320pxの合成sceneで取消/ごみ箱/復元/完全削除/残版の青いcube描画。
+  320pxの版ボタン、全ごみ箱2件、失敗再試行、二重要求なし、46px/overflow0/page error0。
+  実installed素材操作は通常APIのみ。全ごみ箱は確認した対象が自作fixtureの2件だけと検査した。
+- 作成した12 Assetの実ファイルは通常APIで完全削除済み、pending0/active Job0。
+  元の1532 Assetと全既存scene document/revisionをbefore snapshotと照合して不変。
+  既存working_fb7a...のrecoveryも保持。source試験serverとChromeは終了済み。
+- 全体2428 passed/157.29秒。実Host認証付きiframeと実スマホ本体はNOT TESTED。
+  通常loginの専用session不在を確認し、認証を偽装して受入扱いにはしていない。
+  根元feat/g9-image-to-3d /524553dはcleanのまま保持。Hostの製品コードは変更していない。
+
 ## 2026-09-23 Libraryの個別削除とごみ箱（0.33.10準備）
 
 画像/材質画像と3Dの各版を独立してごみ箱へ移動・復元・完全削除できるようにした。
