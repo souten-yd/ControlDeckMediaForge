@@ -159,6 +159,7 @@ class ModelDescriptor:
     # 実測にもとづく動画の作り方。持たないモデルは None。
     video: dict[str, Any] | None = None
     upscale: dict[str, Any] | None = None
+    texture_edit: dict[str, Any] | None = None
     max_references: int = 0
     reference_roles: tuple[str, ...] = ()
     supports_reference_strength: bool = False
@@ -316,7 +317,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
     if not isinstance(runtime_options, dict) or set(runtime_options) - {
         "device_mode", "disable_mmap", "negative_prompt", "guidance_scale",
         "default_steps", "native_width", "native_height", "base_model",
-        "trigger_words", "video", "upscale", "transformer_quantization",
+        "trigger_words", "video", "upscale", "texture_edit", "transformer_quantization",
         # text_encoder を int8 にする。FLUX.2 は重みの 8 割が text_encoder
         # （Qwen3）で、削ると生成の山が 3 GB 下がる（実測 18.35 → 15.30 GiB）。
         "text_encoder_quantization",
@@ -392,6 +393,20 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
             )
         ):
             raise ModelRegistryError("model registry video options are invalid")
+
+    texture_edit = runtime_options.get("texture_edit")
+    if texture_edit is not None:
+        if not isinstance(texture_edit, dict) or set(texture_edit) != {
+            "execution_peak_vram_bytes", "worker_vram_budget_bytes", "measured_runtime_sec", "measured_count",
+        }:
+            raise ModelRegistryError("model registry texture edit measurements are invalid")
+        for key, number in texture_edit.items():
+            if isinstance(number, bool) or not isinstance(number, (int, float)) or not 0 < number < float("inf"):
+                raise ModelRegistryError("model registry texture edit measurements are invalid")
+            if key != "measured_runtime_sec" and not isinstance(number, int):
+                raise ModelRegistryError("model registry texture edit measurements are invalid")
+        if texture_edit["measured_count"] > 8:
+            raise ModelRegistryError("model registry texture edit measurements are invalid")
 
     # 拡大は倍率を重みが持っている。核が掛け算をするので、その値と、どこまでを
     # 受けるかをモデルの側から言う。画面が共通の決め打ちを持つと、別の倍率の
@@ -503,6 +518,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         base_model=base_model,
         video=video,
         upscale=upscale,
+        texture_edit=texture_edit,
         trigger_words=tuple(trigger_words),
         **({"default_steps_source": "declared"} if default_steps is not None else {}),
         **native_size,

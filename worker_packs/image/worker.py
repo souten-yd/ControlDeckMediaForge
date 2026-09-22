@@ -378,6 +378,8 @@ class ImageWorker:
             # 塗った所が無ければ、これは参照編集であって別の用事である。
             # 黙って別のものを作らない。
             raise ValueError("a masked edit requires an edit mask")
+        texture_reference = (operation == "image.edit" and edit_mode == "reference"
+                             and not strict_edit and isinstance(constraints.get("scene_texture"), dict))
         for index in range(count):
             output_seed = seed + index
             output_path = output_dir / f"output-{index}.png"
@@ -403,6 +405,7 @@ class ImageWorker:
                     strict_edit=strict_edit,
                     edit_mode=edit_mode,
                     reference_paths=reference_paths + profile_reference_paths,
+                    fit_reference_to_output=texture_reference,
                 ))
             else:
                 result = adapter.generate(ImageGenerationRequest(
@@ -464,6 +467,7 @@ class ImageWorker:
             },
             "seed": seed,
             "postprocessing": ["alpha.set_opaque"] if runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21" else (
+                ["reference.fit_to_output", "pil.convert.rgba"] if texture_reference else
                 ["pil.convert.rgba", "outpaint.source_pixel_copy"]
                 if operation == "image.edit" and edit_mode == "outpaint"
                 else ["pil.convert.rgba", "strict_edit.mask_composite", "strict_edit.protected_pixel_copy"]

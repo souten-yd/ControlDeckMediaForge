@@ -284,3 +284,7 @@ provenanceへ持ち、派生画像は通常のimage.edit入力から親子関係
 scenes.material.extractを使用し、既存公開toolやHost契約は追加しない。
 候補一覧には同じ対象の過去Jobも残し、画像を選んだだけでは材質を変更しない。
 既存のpreview/adoptへ引き継いで比較し、採用時だけ新revisionを保存する。
+
+材質画像の派生候補は1024角を指定し、参照もその生成canvasへ揃える。元画像は
+保持する。通常生成よりVRAMを使うため、catalog内のtexture_edit実測profileを
+使用し、broker予約・worker上限・時間見積りを同じ実測条件へ合わせる。

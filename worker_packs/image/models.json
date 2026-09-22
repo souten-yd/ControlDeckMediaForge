@@ -16,7 +16,13 @@
         "native_width": 1024,
         "native_height": 1024,
         "text_encoder_quantization": "int8",
-        "transformer_quantization": "int8"
+        "transformer_quantization": "int8",
+        "texture_edit": {
+          "execution_peak_vram_bytes": 13057523712,
+          "worker_vram_budget_bytes": 12884901888,
+          "measured_runtime_sec": 51.989532131003216,
+          "measured_count": 3
+        }
       },
       "generation_limits": {
         "max_width": 1024,
