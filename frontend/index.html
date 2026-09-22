@@ -52,7 +52,7 @@
           </button>
         </div>
         <div class="modeswitch" role="group" aria-label="表示モード">
-          <button type="button" id="mode-simple" aria-pressed="true">シンプル</button>
+          <button type="button" id="mode-simple" aria-pressed="true">簡易</button>
           <button type="button" id="mode-advanced" aria-pressed="false">詳細</button>
         </div>
         <span class="grow"></span>
@@ -94,7 +94,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Zm0 9 8-4.5M12 12 4 7.5M12 12v9"/>
           </svg>
-          <span>Web Blender</span>
+          <span>3D</span>
         </button>
       </nav>
 
@@ -364,7 +364,22 @@
         </section>
 
         <section id="view-web-blender" class="view" data-view="web-blender" hidden>
-          <section id="scene-studio" aria-labelledby="scene-studio-title">
+          <section id="scene-studio" aria-labelledby="scene-workflow-title">
+            <div class="panel scene-workflow">
+              <h2 id="scene-workflow-title">3Dを作る・編集する</h2>
+              <div id="scene-workflow-tabs" class="split-actions" role="group" aria-label="3Dの操作">
+                <button type="button" data-scene-task="create">画像から作る</button>
+                <button type="button" data-scene-task="edit">作った3Dを編集</button>
+                <button type="button" data-scene-task="import">ファイルを取り込む</button>
+              </div>
+              <p id="scene-workflow-guide" class="hint"></p>
+              <p id="scene-workflow-active-status" class="hint" role="status" hidden></p>
+              <div class="split-actions">
+                <span id="scene-recommended-status" class="hint" role="status"></span>
+                <button type="button" id="scene-recommended-reset" hidden>推奨設定に戻す</button>
+                <button type="button" id="scene-advanced-open">詳細設定を変更</button>
+              </div>
+            </div>
             <form id="scene-generation-form" class="panel" hidden>
               <h2 id="scene-generation-title">画像から3Dを生成（実験的）</h2>
               <p id="scene-generation-note" class="hint">ライブラリの画像から3Dを生成し、編集できるシーンとして保存します。形状や見えない面は生成後に確認してください。</p>
@@ -395,7 +410,7 @@
                   </span>
                 </label>
               </div>
-              <details>
+              <details id="scene-generation-advanced" data-scene-advanced>
                 <summary id="scene-generation-options">詳細設定</summary>
                 <label for="scene-generation-engine" id="scene-generation-engine-label">生成エンジン</label>
                 <select id="scene-generation-engine" aria-describedby="scene-generation-engine-status" required></select>
@@ -415,7 +430,7 @@
             </form>
             <!-- 画像 1 枚から、骨と歩行の入った GLB まで通しで作る。段ごとに
                  止めて見るか、通しで走らせるかを選べる。 -->
-            <div id="pipeline-panel" class="panel" role="region" aria-labelledby="pipeline-title">
+            <div id="pipeline-panel" data-scene-advanced class="panel" role="region" aria-labelledby="pipeline-title">
               <h2 id="pipeline-title">通しで作る（画像 → 3D → 骨 → 書き出し）</h2>
               <p id="pipeline-guide" class="hint">上で選んだ画像から、3D にして骨を入れ、GLB まで一度に作ります。段ごとに止めて確かめることもできます。</p>
               <label class="checkbox" for="pipeline-confirm">
@@ -434,7 +449,7 @@
                 <button type="button" id="pipeline-start" class="primary">通しで作る</button>
               </div>
             </div>
-            <div id="scene-blender-entry" class="panel" role="region" aria-labelledby="scene-blender-entry-title">
+            <div id="scene-blender-entry" data-scene-advanced class="panel" role="region" aria-labelledby="scene-blender-entry-title">
               <h2 id="scene-blender-entry-title">Web Blenderで編集</h2>
               <p id="scene-blender-entry-guide" class="hint">編集するものを選び、「Blenderで編集」を押すと編集画面が開きます。シーンがない場合は.blendを取り込むか、OpenCodeで制作して一覧を更新してください。</p>
               <label for="scene-blender-target" id="scene-blender-target-label">編集するもの</label>
@@ -475,7 +490,7 @@
               </div>
             </form>
 
-            <div class="panel scene-browser">
+            <div id="scene-browser" class="panel scene-browser">
               <div class="view-head one-line">
                 <div>
                   <p id="scene-list-title" class="section-label">シーン</p>
@@ -508,6 +523,7 @@
                     <p id="scene-detail-summary" class="hint"></p>
                   </div>
                   <div class="scene-detail-actions">
+                    <button type="button" id="scene-open-preview">3Dで見る</button>
                     <button type="button" id="scene-open-material" class="primary">材質を変更</button>
                     <button type="button" id="scene-backup-download">バックアップを保存</button>
                     <button type="button" id="scene-detail-close">閉じる</button>
@@ -516,16 +532,63 @@
                 <details id="scene-material-tools" class="scene-material-tools">
                   <summary id="scene-material-title">画像素材を割り当て</summary>
                   <form id="scene-material-form">
+                    <p id="scene-material-flow" class="hint">場所 → 画像 → 3Dで確認 → 採用</p>
+                    <h3 id="scene-material-target-step">1. 貼り替える場所</h3>
                     <div class="scene-material-grid">
                       <label><span id="scene-material-object-label">対象</span>
                         <select id="scene-material-object" required></select>
                       </label>
-                      <label><span id="scene-material-slot-label">マテリアル</span>
+                      <label id="scene-material-slot-field"><span id="scene-material-slot-label">マテリアル</span>
                         <select id="scene-material-slot" required></select>
                       </label>
-                      <label><span id="scene-material-image-label">ライブラリ画像</span>
+                    </div>
+                    <p id="scene-material-target-summary" class="hint"></p>
+                    <h3 id="scene-material-image-step">2. 使う画像を用意</h3>
+                    <label><span id="scene-material-action-label">画像の用意方法</span>
+                      <select id="scene-material-action">
+                        <option value="generate">AIで画像を作る・改良する</option>
+                        <option value="choose">画像を選んで貼り替える</option>
+                      </select>
+                    </label>
+                    <div id="scene-texture-source-controls">
+                      <label><span id="scene-texture-mode-label">元にする画像</span>
+                        <select id="scene-texture-mode">
+                          <option value="current">3Dに貼ってある画像を改良</option>
+                          <option value="library">この画面で選んだ画像を改良</option>
+                          <option value="new">元画像なしで新しく作る</option>
+                        </select>
+                      </label>
+                      <p id="scene-texture-source-description" class="hint" role="status"></p>
+                    </div>
+                    <div id="scene-material-image-picker" class="scene-material-image-picker" aria-labelledby="scene-material-image-scope-label">
+                      <label><span id="scene-material-image-scope-label">画像の表示範囲</span>
+                        <select id="scene-material-image-scope">
+                          <option value="base">この3Dの元画像</option>
+                          <option value="related">元画像と派生候補</option>
+                          <option value="all">すべての画像</option>
+                        </select>
+                      </label>
+                      <label id="scene-material-image-field" data-scene-advanced><span id="scene-material-image-label">ライブラリ画像</span>
                         <select id="scene-material-image" required></select>
                       </label>
+                      <div id="scene-material-image-cards" class="scene-texture-variants"></div>
+                      <p id="scene-material-image-status" class="hint" role="status"></p>
+                      <div class="split-actions">
+                        <button type="button" id="scene-material-image-previous">前の画像</button>
+                        <span id="scene-material-image-page" class="hint"></span>
+                        <button type="button" id="scene-material-image-next">次の画像</button>
+                      </div>
+                      <div class="split-actions">
+                        <button type="button" id="scene-material-image-more" hidden>ライブラリの続きを読み込む</button>
+                        <button type="button" id="scene-material-image-retry" hidden>画像を再読み込み</button>
+                        <button type="button" id="scene-material-image-extract">今の材質画像を取り出す</button>
+                      </div>
+                      <img id="scene-material-image-preview" class="scene-texture-preview" alt="" hidden>
+                      <p id="scene-material-image-selected" class="hint" role="status"></p>
+                    </div>
+                    <details id="scene-material-advanced" class="scene-material-advanced" data-scene-advanced>
+                      <summary id="scene-material-advanced-title">詳細設定</summary>
+                      <div class="scene-material-grid">
                       <label><span id="scene-material-channel-label">用途</span>
                         <select id="scene-material-channel">
                           <option value="base_color">ベースカラー</option>
@@ -535,10 +598,6 @@
                           <option value="emission">発光</option>
                         </select>
                       </label>
-                    </div>
-                    <details class="scene-material-advanced">
-                      <summary id="scene-material-advanced-title">詳細設定</summary>
-                      <div class="scene-material-grid">
                         <label><span id="scene-material-uv-label">UVマップ</span>
                           <select id="scene-material-uv" required></select>
                         </label>
@@ -557,17 +616,10 @@
                         </label>
                       </div>
                     </details>
-                    <div class="scene-texture-generator" aria-labelledby="scene-texture-title">
+                    <div id="scene-texture-generator" class="scene-texture-generator" aria-labelledby="scene-texture-title">
                       <h3 id="scene-texture-title">この場所の画像を新しく作る</h3>
                       <div class="scene-material-grid">
-                        <label><span id="scene-texture-mode-label">作り方</span>
-                          <select id="scene-texture-mode">
-                            <option value="current">貼ってある画像を改善</option>
-                            <option value="library">選択したライブラリ画像を改善</option>
-                            <option value="new">新しく作る</option>
-                          </select>
-                        </label>
-                        <label><span id="scene-texture-count-label">候補の数</span>
+                        <label id="scene-texture-count-field" data-scene-advanced><span id="scene-texture-count-label">候補の数</span>
                           <select id="scene-texture-count">
                             <option value="1">1</option><option value="2">2</option>
                             <option value="3" selected>3</option><option value="4">4</option>
@@ -590,6 +642,7 @@
                         <button type="button" id="scene-texture-generate" aria-describedby="scene-texture-status">画像を作る</button>
                       </div>
                     </div>
+                    <h3 id="scene-material-compare-step">3. 3Dで確認して採用</h3>
                     <p id="scene-material-safety" class="hint">画像はシーン内へ格納され、元のライブラリ素材との関係を記録します。</p>
                     <div class="split-actions">
                       <span id="scene-material-status" class="hint" role="status"></span>
@@ -601,10 +654,12 @@
                   <summary id="scene-simplify-title">軽量化（ローポリ化）</summary>
                   <form id="scene-simplify-form" class="scene-simplify-body" novalidate>
                     <p id="scene-simplify-note" class="hint">元の版から面を減らし、新しい版として保存します。元の版はそのまま残ります。割合は常に元の版に対するものです。</p>
+                    <div id="scene-simplify-settings" data-scene-advanced>
                     <label for="scene-simplify-origin" id="scene-simplify-origin-label">元にする版</label>
                     <select id="scene-simplify-origin"></select>
                     <label for="scene-simplify-ratio" id="scene-simplify-ratio-label">残す面の割合</label>
                     <input id="scene-simplify-ratio" type="range" min="5" max="95" step="1" value="60">
+                    </div>
                     <p id="scene-simplify-estimate" class="hint" role="status"></p>
                     <progress id="scene-simplify-progress" max="1" value="0" hidden></progress>
                     <p id="scene-simplify-status" class="hint" role="status"></p>
@@ -618,8 +673,10 @@
                   <summary id="scene-rig-title">骨を入れて歩かせる</summary>
                   <form id="scene-rig-form" class="scene-simplify-body" novalidate>
                     <p id="scene-rig-note" class="hint">模型を測って、胴と脚に骨を置き、歩くループを付けます。脚のある形にだけ使えます。繋ぐ・面を減らすところまで一度に行い、新しい版として保存します。</p>
+                    <div id="scene-rig-settings" data-scene-advanced>
                     <label for="scene-rig-ratio" id="scene-rig-ratio-label">残す面の割合</label>
                     <input id="scene-rig-ratio" type="range" min="10" max="95" step="5" value="60">
+                    </div>
                     <p id="scene-rig-estimate" class="hint" role="status"></p>
                     <label class="checkbox" for="scene-rig-walk">
                       <input type="checkbox" id="scene-rig-walk" checked>
@@ -633,9 +690,11 @@
                     </div>
                   </form>
                 </details>
-                <p id="scene-revisions-title" class="section-label">保存した版</p>
-                <p id="scene-revision-status" class="hint" role="status"></p>
-                <div id="scene-revisions" class="rows"></div>
+                <details id="scene-history">
+                  <summary id="scene-revisions-title">保存した版</summary>
+                  <p id="scene-revision-status" class="hint" role="status"></p>
+                  <div id="scene-revisions" class="rows"></div>
+                </details>
               </article>
             </div>
           </section>

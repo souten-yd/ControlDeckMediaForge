@@ -215,7 +215,19 @@ const state = {
   sceneBackup: null,
   sceneBackupStatusKey: "",
   sceneMaterialTargets: [],
+  sceneTask: "create",
+  sceneMaterialAction: "generate",
   sceneMaterialImages: [],
+  sceneMaterialImageSceneId: "",
+  sceneMaterialImageScope: "base",
+  sceneMaterialImagePage: 0,
+  sceneMaterialLibraryImages: [],
+  sceneMaterialLibraryBefore: null,
+  sceneMaterialLibraryLoaded: false,
+  sceneMaterialImagesTruncated: false,
+  sceneMaterialImageLoading: false,
+  sceneMaterialImageError: "",
+  sceneMaterialThumbnailPending: new Set(),
   sceneMaterialRevisionId: "",
   sceneMaterialBusy: false,
   sceneRecoveryBusy: false,
@@ -264,7 +276,11 @@ const state = {
   pending: new Map(),
 };
 
-const byId = (id) => document.getElementById(id);
+// Detached 3D settings retain their values and handlers across mode changes.
+// They are absent from the simple-mode document, tab order and accessibility tree.
+const sceneAdvancedNodes = new Map();
+const sceneAdvancedPanels = [];
+const byId = (id) => document.getElementById(id) || sceneAdvancedNodes.get(id);
 const app = () => byId("app");
 
 /* ── theme ────────────────────────────────────────────────────────────── */
@@ -779,6 +795,9 @@ async function standaloneCall(method, params) {
       method: "POST", body: JSON.stringify({recovery_working_id: params.recovery_working_id}),
     });
   }
+  if (method === "scenes.material.images") {
+    return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/material-images`);
+  }
   if (method === "scenes.material.targets") {
     return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/material-targets`);
   }
@@ -957,6 +976,8 @@ function setMode(mode, {persist = true} = {}) {
   mountAdvanced();
   renderPackProfiles();
   render3dProject();
+  renderSceneText();
+  renderSceneExperience();
   if (persist) void savePreferences({mode: state.mode});
 }
 
@@ -4856,8 +4877,8 @@ const SCENE_TEXT = {
     note: "Blender制作ファイルを取り込み、検証済みの版として保存します。",
     file: "Blenderファイル（.blend、最大256 MiB）", name: "シーン名",
     safety: "ファイル内のscriptは実行せず、隔離したBlenderで検査します。",
-    import: "取り込む", cancel: "取り込みを中止", scenes: "シーン", refresh: "更新",
-    empty: "まだシーンはありません。", close: "閉じる", revisions: "保存した版",
+    import: "取り込む", cancel: "取り込みを中止", scenes: "保存した3D", refresh: "更新",
+    empty: "まだ保存した3Dはありません。", close: "閉じる", revisions: "保存した版",
     count: (value) => `${value} 件`, version: (value) => `版 ${value}`,
     revision: (value) => `版 ${value}`, preview: "3Dで見る", validated: "検証済み",
     currentRevision: "現在", compareRevision: "現在と比較", compareTitle: "保存した版を比較",
@@ -4908,11 +4929,11 @@ const SCENE_TEXT = {
     blenderRevoked: "Hostの権限が終了したため停止しました。未保存内容は復旧候補に残しました。",
     blenderDisabled: "Add-onの停止に備えて終了しました。未保存内容は復旧候補に残しました。",
     materialEdit: "材質を変更", materialTargetChanged: "元の割り当て先が現在の版にありません。対象・マテリアル・UVを選び直してください。",
-    materialTitle: "画像素材を割り当て", materialObject: "対象", materialSlot: "マテリアル",
-    materialImage: "ライブラリ画像", materialChannel: "用途", materialAdvanced: "詳細設定",
-    materialUv: "UVマップ", materialWrap: "画像の繰り返し", materialNormal: "法線形式",
-    materialSafety: "画像はシーン内へ格納され、元のライブラリ素材との関係を記録します。",
-    materialApply: "割り当てて比較", materialLoading: "割り当て先を確認しています…",
+    materialTitle: "色・模様を変更", materialObject: "変更する部分", materialSlot: "貼り替える材質",
+    materialImage: "貼り替えに使う画像", materialChannel: "画像の用途", materialAdvanced: "詳細設定",
+    materialUv: "模様の配置（UVマップ）", materialWrap: "画像の繰り返し", materialNormal: "法線形式",
+    materialSafety: "まず現在の見た目と比較します。採用したときだけ新しい版を保存し、元の版は残ります。",
+    materialApply: "選んだ画像を3Dで確認", materialLoading: "割り当て先を確認しています…",
     candidateTitle: "材質の変更を比較", candidateLabel: "変更候補（未保存）",
     candidateSummary: "現在の版は変わりません。比較してから採用してください。候補は10分で失効します。",
     candidateAdopt: "候補を採用して新しい版を保存", candidateDiscard: "候補を破棄",
@@ -4924,21 +4945,21 @@ const SCENE_TEXT = {
     materialNoTargets: "UVマップのあるメッシュがありません。",
     materialNoImages: "ライブラリ画像を選ぶか、この場所の画像を新しく作ってください。",
     materialChoose: "選択してください",
-    textureTitle: "画像の改善案を作る", texturePrompt: "変えたい模様や質感",
-    textureMode: "作り方", textureCount: "候補の数", textureVariants: "画像の候補",
-    textureModes: {current: "貼ってある画像を改善", library: "選択したライブラリ画像を改善", new: "新しく作る"},
+    textureTitle: "AIへの指示と画像の候補", texturePrompt: "変えたい模様や質感",
+    textureMode: "元にする画像", textureCount: "候補の数", textureVariants: "画像の候補",
+    textureModes: {current: "3Dに貼ってある画像を改良（推奨）", library: "この画面で選んだ画像を改良", new: "元画像なしで新しく作る"},
     textureNote: "候補は1024×1024で作成します。元の配置を保つよう指示しますが、貼り替える前に3Dで比較してください。",
     textureChannelUnsupported: "貼ってある画像の改善は、ベースカラーまたは発光を選んでください。",
-    textureExtracting: "元の材質画像を取り出しています…", textureSourceRequired: "改善するライブラリ画像を選んでください。",
+    textureExtracting: "元の材質画像を取り出しています…", textureSourceRequired: "この画面の画像一覧から、改良する元画像を選んでください。",
     textureCandidate: (index) => `候補 ${index}`, textureEditUnavailable: "画像編集を利用できません。設定で対応モデルを確認してください。",
     textureGenerate: "画像を作る", textureCancel: "中止", textureRetry: "同じ指示でもう一度",
-    textureUse: "この画像を選ぶ", texturePromptRequired: "作りたい模様や質感を入力してください。",
+    textureUse: "この候補を貼り替え用に選ぶ", texturePromptRequired: "作りたい模様や質感を入力してください。",
     textureTargetRequired: "先に対象、マテリアル、UVマップを選んでください。",
     textureQueued: "画像を作る順番を待っています…", textureRunning: "画像を作っています…",
     textureSucceeded: "画像ができました。確認してから、この画像を選んでください。",
     textureFailed: "画像を作れませんでした。同じ指示で再試行できます。",
     textureCanceled: "画像作成を中止しました。", textureStale: "画像はできましたが、シーンの版が変わっています。現在の対象を確認してから選んでください。",
-    materialChannels: {base_color: "ベースカラー", roughness: "粗さ", metallic: "メタリック", normal: "法線", emission: "発光"},
+    materialChannels: {base_color: "色・模様（ベースカラー）", roughness: "表面のざらつき", metallic: "金属らしさ", normal: "細かい凹凸（法線）", emission: "光る部分（発光）"},
     materialWraps: {repeat: "繰り返す", extend: "端を伸ばす", clip: "範囲外を透明にする"},
   },
   en: {
@@ -5005,11 +5026,11 @@ const SCENE_TEXT = {
     blenderRevoked: "Host authorization ended. Unsaved bytes were retained as a recovery candidate.",
     blenderDisabled: "The session ended for add-on disable. Unsaved bytes were retained as a recovery candidate.",
     materialEdit: "Change material", materialTargetChanged: "The original target is missing in the current revision. Choose the target, material and UV again.",
-    materialTitle: "Assign image material", materialObject: "Target", materialSlot: "Material",
-    materialImage: "Library image", materialChannel: "Use", materialAdvanced: "Advanced settings",
+    materialTitle: "Change color and pattern", materialObject: "Part to change", materialSlot: "Surface",
+    materialImage: "Image to apply", materialChannel: "Image purpose", materialAdvanced: "Advanced settings",
     materialUv: "UV map", materialWrap: "Image wrapping", materialNormal: "Normal convention",
-    materialSafety: "The image is packed into the scene and its relationship to the Library source is recorded.",
-    materialApply: "Assign and compare", materialLoading: "Inspecting material targets…",
+    materialSafety: "Compare with the current appearance first. Adopting saves a new revision and keeps the original.",
+    materialApply: "Review the selected image in 3D", materialLoading: "Inspecting material targets…",
     candidateTitle: "Compare material changes", candidateLabel: "Candidate (not saved)",
     candidateSummary: "The current revision is unchanged. Compare before adopting. Candidates expire in 10 minutes.",
     candidateAdopt: "Adopt candidate as a new revision", candidateDiscard: "Discard candidate",
@@ -5022,10 +5043,10 @@ const SCENE_TEXT = {
     materialNoImages: "Choose a Library image or create a new image for this target.", materialChoose: "Choose…",
     textureTitle: "Create image variants", texturePrompt: "Pattern or surface changes",
     textureMode: "Source", textureCount: "Candidates", textureVariants: "Image candidates",
-    textureModes: {current: "Improve the current texture", library: "Improve the selected Library image", new: "Create a new image"},
+    textureModes: {current: "Improve the current 3D texture (recommended)", library: "Improve the image selected below", new: "Create without a source image"},
     textureNote: "Candidates are created at 1024×1024 and instructed to retain the layout. Compare them on the 3D model before adopting.",
     textureChannelUnsupported: "Select base color or emission to improve the current texture.",
-    textureExtracting: "Extracting the current material image…", textureSourceRequired: "Choose a Library image to improve.",
+    textureExtracting: "Extracting the current material image…", textureSourceRequired: "Choose the image to improve in the gallery on this screen.",
     textureCandidate: (index) => `Candidate ${index}`, textureEditUnavailable: "Image editing is unavailable. Check compatible models in Settings.",
     textureGenerate: "Create image", textureCancel: "Cancel", textureRetry: "Retry same request",
     textureUse: "Choose this image", texturePromptRequired: "Describe the pattern or surface to create.",
@@ -5038,6 +5059,142 @@ const SCENE_TEXT = {
     materialWraps: {repeat: "Repeat", extend: "Extend edge", clip: "Transparent outside"},
   },
 };
+
+function sceneExperienceText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    title: "Create and edit 3D", tasks: {create: "Create from image", edit: "Edit existing 3D", import: "Import a file"},
+    guides: {create: "Choose a photo → generate 3D → review the result. Recommended settings are ready to use.",
+      edit: "Open a 3D below, then change its appearance or prepare it for use.", import: "Import a Blender file, then open the saved 3D to edit it."},
+    recommended: "Using recommended settings", customized: "Using changed settings", reset: "Restore recommended settings", advanced: "Change advanced settings",
+    flow: "Choose a surface → prepare an image → review in 3D → adopt",
+    target: "1. Choose the surface", image: "2. Prepare an image", compare: "3. Review in 3D and adopt",
+    action: "How to prepare the image", actions: {generate: "Create or improve with AI", choose: "Choose an image to apply"},
+    surface: "Surface", targetEmpty: "Choose which part of the 3D to change.",
+    current: (name, part) => `The image currently applied to “${part}” in “${name}” will be extracted and improved.`,
+    library: "AI will improve the image selected in the gallery below. Its preview is shown below the gallery.",
+    fresh: "AI will create an image from your description, without a source image.",
+    defaults: "Recommended: color and pattern, existing UV, repeat, three candidates.",
+  } : {
+    title: "3Dを作る・編集する", tasks: {create: "画像から作る", edit: "作った3Dを編集", import: "ファイルを取り込む"},
+    guides: {create: "写真を選ぶ → 3Dを生成 → 出来上がりを確認。推奨設定のまま始められます。",
+      edit: "下の一覧から3Dを開き、見た目の変更や用途に合わせた加工を選んでください。", import: "Blenderファイルを取り込み、保存した3Dを開いて編集します。"},
+    recommended: "推奨設定を使用中", customized: "変更した設定を使用中", reset: "推奨設定に戻す", advanced: "詳細設定を変更",
+    flow: "場所 → 画像 → 3Dで確認 → 採用",
+    target: "1. 貼り替える場所", image: "2. 使う画像を用意", compare: "3. 3Dで確認して採用",
+    action: "画像の用意方法", actions: {generate: "AIで画像を作る・改良する", choose: "画像を選んで貼り替える"},
+    surface: "貼り替える材質", targetEmpty: "3Dのどの部分を変更するか選んでください。",
+    current: (name, part) => `「${name}」の「${part}」に今貼ってある画像を取り出して改良します。`,
+    library: "この下の一覧で選んだ画像をAIで改良します。選んでいる画像は一覧の下に大きく表示します。",
+    fresh: "元画像は使わず、入力した説明から画像を作ります。",
+    defaults: "推奨：色・模様／既存のUV／繰り返し／候補3枚。",
+  };
+}
+
+function sceneSettingsChanged() {
+  const choices = sceneGenerationChoices();
+  const preferred = choices.find(item => item.value === "trellis_cpp" && item.available) || choices.find(item => item.available);
+  const target = selectedMaterialTarget();
+  const oldest = [...state.sceneRevisions].sort((a, b) => a.sequence - b.sequence)[0]?.id;
+  return Boolean((state.sceneGenerationEngine && state.sceneGenerationEngine !== preferred?.value)
+    || (state.sceneGenerationResolution != null && state.sceneGenerationResolution !== preferred?.resolutions?.[0])
+    || byId("scene-generation-seed").value !== "42"
+    || byId("scene-material-channel").value !== "base_color" || byId("scene-material-wrap").value !== "repeat"
+    || byId("scene-material-normal").value !== "open_gl" || byId("scene-texture-count").value !== "3"
+    || (target && byId("scene-material-uv").value !== target.uv_maps?.[0])
+    || byId("scene-simplify-ratio").value !== "60" || byId("scene-rig-ratio").value !== "60"
+    || (oldest && byId("scene-simplify-origin").value && byId("scene-simplify-origin").value !== oldest));
+}
+
+function renderSceneExperience() {
+  if (!sceneAdvancedPanels.length) {
+    for (const panel of document.querySelectorAll("[data-scene-advanced]")) {
+      const anchor = document.createComment("3D advanced settings");
+      panel.before(anchor);
+      for (const node of [panel, ...panel.querySelectorAll("[id]")]) if (node.id) sceneAdvancedNodes.set(node.id, node);
+      sceneAdvancedPanels.push({panel, anchor});
+    }
+  }
+  const advanced = state.mode === "advanced";
+  const activePipeline = state.pipeline && !["succeeded", "failed", "canceled"].includes(state.pipeline.state);
+  const activeBlender = Boolean(activeBlenderSession()) || Boolean(selectedRecoveryCandidate());
+  for (const {panel, anchor} of sceneAdvancedPanels) {
+    const visible = advanced || (panel.id === "pipeline-panel" && activePipeline)
+      || (panel.id === "scene-blender-entry" && activeBlender);
+    if (visible && !panel.isConnected) anchor.after(panel);
+    else if (!visible && panel.isConnected) panel.remove();
+  }
+  const text = sceneExperienceText();
+  byId("scene-workflow-title").textContent = text.title;
+  for (const button of byId("scene-workflow-tabs").children) {
+    button.textContent = text.tasks[button.dataset.sceneTask];
+    button.setAttribute("aria-pressed", String(button.dataset.sceneTask === state.sceneTask));
+  }
+  byId("scene-workflow-guide").textContent = text.guides[state.sceneTask];
+  const summary = byId("scene-workflow-active-status");
+  const pipelineStatus = state.pipeline && !activePipeline && !advanced ? byId("pipeline-status").textContent : "";
+  const failedSession = state.blenderSessions.find(item => item.scene_id === state.selectedSceneId)?.state === "failed";
+  summary.textContent = [pipelineStatus, failedSession && !activeBlender && !advanced ? byId("scene-blender-status").textContent : ""].filter(Boolean).join(" · ");
+  summary.hidden = !summary.textContent;
+  const generating = state.sceneGenerationBusy || state.sceneGenerationPhotoBusy
+    || (state.sceneGeneration && !TERMINAL.has(state.sceneGeneration.status));
+  // Active work and its stop control remain visible even when the task changes.
+  byId("scene-generation-form").hidden = (state.sceneTask !== "create" && !generating)
+    || (!sceneGenerationChoices().some(item => item.available) && !state.sceneGeneration && !state.sceneGenerationEngine);
+  byId("scene-import-form").hidden = state.sceneTask !== "import" && !state.sceneImport;
+  const editing = state.sceneMaterialBusy || state.sceneTextureBusy
+    || (selectedSceneTextureJob() && !TERMINAL.has(selectedSceneTextureJob().status))
+    || (state.sceneRig && !TERMINAL.has(state.sceneRig.status))
+    || (state.sceneSimplify && !TERMINAL.has(state.sceneSimplify.status));
+  byId("scene-browser").hidden = state.sceneTask !== "edit" && !editing;
+  byId("pipeline-panel").hidden = state.sceneTask !== "create" && !activePipeline;
+  byId("scene-blender-entry").hidden = state.sceneTask !== "edit" && !activeBlender;
+  const changed = sceneSettingsChanged();
+  byId("scene-recommended-status").textContent = changed ? text.customized : text.recommended;
+  byId("scene-recommended-reset").hidden = !changed;
+  byId("scene-recommended-reset").textContent = text.reset;
+  byId("scene-recommended-reset").disabled = Boolean(generating || state.sceneMaterialBusy || state.sceneTextureBusy
+    || state.sceneRigBusy || state.sceneSimplifyBusy || (selectedSceneTextureJob() && !TERMINAL.has(selectedSceneTextureJob().status))
+    || (state.sceneRig && !TERMINAL.has(state.sceneRig.status)) || (state.sceneSimplify && !TERMINAL.has(state.sceneSimplify.status)));
+  byId("scene-advanced-open").hidden = advanced;
+  byId("scene-advanced-open").textContent = text.advanced;
+  for (const [id, value] of [["flow", text.flow], ["target-step", text.target], ["image-step", text.image],
+    ["compare-step", text.compare], ["action-label", text.action]]) byId(`scene-material-${id}`).textContent = value;
+  const action = byId("scene-material-action");
+  action.value = state.sceneMaterialAction;
+  for (const option of action.options) option.textContent = text.actions[option.value];
+  const choose = action.value === "choose";
+  byId("scene-texture-source-controls").hidden = choose;
+  const textureRunning = selectedSceneTextureJob() && !TERMINAL.has(selectedSceneTextureJob().status);
+  byId("scene-texture-generator").hidden = choose && !state.sceneTextureBusy && !textureRunning;
+  byId("scene-material-image-picker").hidden = !choose && byId("scene-texture-mode").value !== "library";
+  const target = selectedMaterialTarget();
+  byId("scene-material-slot-field").hidden = !advanced && (target?.material_slots?.length || 0) <= 1;
+  const slotName = !advanced && target?.material_slots?.length === 1 ? text.surface
+    : byId("scene-material-slot").selectedOptions[0]?.textContent || "";
+  const partName = !advanced && state.sceneMaterialTargets.filter(item => item.uv_maps?.length).length === 1
+    ? (document.documentElement.lang.startsWith("en") ? "Whole model" : "3D全体") : target?.object_name || "";
+  byId("scene-material-target-summary").textContent = target ? `${state.sceneDocument?.name || ""} · ${partName} · ${slotName}` : text.targetEmpty;
+  const mode = byId("scene-texture-mode").value;
+  byId("scene-texture-source-description").textContent = mode === "current"
+    ? target ? text.current(state.sceneDocument?.name || "", `${partName} / ${slotName}`) : text.targetEmpty
+    : mode === "library" ? text.library : text.fresh;
+}
+
+function resetSceneRecommendedSettings() {
+  if (byId("scene-recommended-reset").disabled) return;
+  state.sceneGenerationEngine = "";
+  state.sceneGenerationResolution = null;
+  for (const [id, value] of [["scene-generation-seed", "42"], ["scene-material-channel", "base_color"],
+    ["scene-material-wrap", "repeat"], ["scene-material-normal", "open_gl"], ["scene-texture-count", "3"],
+    ["scene-simplify-ratio", "60"], ["scene-rig-ratio", "60"]]) byId(id).value = value;
+  const target = selectedMaterialTarget();
+  byId("scene-material-uv").value = target?.uv_maps?.[0] || "";
+  byId("scene-simplify-origin").value = [...state.sceneRevisions].sort((a,b) => a.sequence - b.sequence)[0]?.id || "";
+  renderSceneText();
+  renderSceneSimplify();
+  renderSceneRig();
+  renderSceneExperience();
+}
 
 function sceneText() {
   return document.documentElement.lang.toLowerCase().startsWith("en") ? SCENE_TEXT.en : SCENE_TEXT.ja;
@@ -5099,9 +5256,9 @@ function sceneGenerationText() {
     estimate: (text) => `Estimated time: about ${text}`,
     minutes: (value) => `${value} min`, seconds: (value) => `${value} s`,
   } : {
-    title: "画像から3Dを生成（実験的）",
-    note: "ライブラリの画像から3Dを生成し、編集できるシーンとして保存します。形状や見えない面は生成後に確認してください。",
-    image: "入力画像", name: "シーン名", library: "ライブラリで画像を追加", refresh: "更新",
+    title: "画像から3Dを作る（試験機能）",
+    note: "画像を選んで3Dを作ります。出来上がったら、形や見えない面も確認してください。",
+    image: "3Dの元にする画像", name: "3Dの名前", library: "ライブラリで画像を追加", refresh: "更新",
     options: "詳細設定", engine: "生成エンジン", auto: "自動", notReady: "準備未完了",
     engineUnavailable: "この生成エンジンは現在利用できません。別のエンジンを選ぶか、準備完了後に再試行してください。",
     resolutionUnavailable: "この解像度は現在利用できません。利用可能な解像度を選び直してください。",
@@ -5110,7 +5267,7 @@ function sceneGenerationText() {
     choose: "画像を選んでください", queued: "GPUの空きを待っています…", running: "3Dを生成しています…",
     validating: "シーンを検証して保存しています…", succeeded: "シーンを保存しました。シーン一覧またはライブラリから開けます。",
     canceled: "生成を中止しました。", failed: "生成できませんでした。状況画面で詳細を確認できます。",
-    open: "作ったシーンを開く",
+    open: "作った3Dを開く",
     connection: "生成状況を取得できませんでした。「更新」で再接続してください。",
     unavailable: "ControlDeckからMediaForgeを開くと3Dを生成できます。", imagesFailed: "画像一覧を取得できませんでした。「更新」で再試行してください。",
     photo: "端末の写真を選ぶ",
@@ -5280,6 +5437,7 @@ function renderSceneGeneration() {
   }
   if (!running && reason && window.parent !== window) message = message ? `${message} ${reason}` : reason;
   byId("scene-generation-status").textContent = state.sceneGenerationMessage || message;
+  renderSceneExperience();
 }
 
 /* 選んだ画像をそのまま見せる。名前だけの select では、iPhone から足した写真が
@@ -5486,6 +5644,7 @@ function renderSceneText() {
   byId("scene-material-safety").textContent = text.materialSafety;
   byId("scene-material-apply").textContent = text.materialApply;
   byId("scene-open-material").textContent = text.materialEdit;
+  byId("scene-open-preview").textContent = text.preview;
   byId("scene-texture-title").textContent = text.textureTitle;
   byId("scene-texture-mode-label").textContent = text.textureMode;
   byId("scene-texture-count-label").textContent = text.textureCount;
@@ -5527,7 +5686,7 @@ function renderSceneText() {
   renderBlenderSessionControls();
   renderSceneMaterialControls();
   renderScenes();
-  if (state.selectedSceneId) void openScene(state.selectedSceneId);
+  if (state.selectedSceneId) void openScene(state.selectedSceneId, {navigate: false});
 }
 
 function sceneDay(value) {
@@ -5577,9 +5736,11 @@ async function loadScenes() {
   }
 }
 
-async function openScene(sceneId) {
+async function openScene(sceneId, {navigate = true} = {}) {
   if (state.selectedSceneId !== sceneId) state.sceneRecoveryStatusKey = "";
   state.selectedSceneId = sceneId;
+  if (navigate) state.sceneTask = "edit";
+  renderSceneExperience();
   byId("scene-revision-status").textContent = "";
   renderScenes();
   try {
@@ -6041,7 +6202,12 @@ function sceneTextureInputProblem(target = selectedMaterialTarget()) {
 
 function showSceneTextureInputProblem(problem) {
   byId("scene-texture-status").textContent = problem.message;
-  const field = byId(problem.id);
+  let field = byId(problem.id);
+  if (problem.id === "scene-material-image" && !field.isConnected) {
+    field = byId("scene-material-image-cards").querySelector("button") || byId("scene-material-image-scope");
+  } else if (!field.isConnected) {
+    setMode("advanced");
+  }
   for (let panel = field.closest("details"); panel; panel = panel.parentElement?.closest("details")) {
     panel.open = true;
   }
@@ -6061,6 +6227,10 @@ function renderSceneTextureControls(blocked, target) {
   for (const option of mode.options) option.disabled = option.value !== "new" && !canEdit;
   if (!canEdit) mode.value = "new";
   const busy = blocked || running || state.sceneTextureBusy;
+  if (state.mode !== "advanced") byId("scene-texture-note").textContent = document.documentElement.lang.startsWith("en")
+    ? `Creates ${byId("scene-texture-count").value} candidates. Review how the pattern fits on the 3D before adopting.`
+    : `候補を${byId("scene-texture-count").value}枚作ります。模様の位置が合うか、貼り替える前に3Dで確認してください。`;
+  else byId("scene-texture-note").textContent = text.textureNote;
   const problem = sceneTextureInputProblem(target);
   // Missing input should explain itself on tap, while active work stays locked.
   byId("scene-texture-generate").disabled = busy;
@@ -6107,7 +6277,8 @@ function renderSceneMaterialControls({targetsChanged = true} = {}) {
   ));
   if (targetsChanged) {
     replaceMaterialOptions(objectSelect, usableTargets.map((item) => ({
-      value: item.object_name, label: item.object_name,
+      value: item.object_name, label: state.mode !== "advanced" && usableTargets.length === 1
+      ? (document.documentElement.lang.startsWith("en") ? "Whole model" : "3D全体") : item.object_name,
     })), oldObject, text.materialChoose);
   }
   const target = selectedMaterialTarget();
@@ -6117,10 +6288,9 @@ function renderSceneMaterialControls({targetsChanged = true} = {}) {
   replaceMaterialOptions(uvSelect, (target?.uv_maps || []).map((name) => ({
     value: name, label: name,
   })), oldUv);
-  replaceMaterialOptions(imageSelect, state.sceneMaterialImages.map((item) => ({
-    value: item.asset_id,
-    label: item.suggested_filename || item.summary || item.asset_id,
-  })), oldImage, text.materialChoose);
+  replaceMaterialOptions(imageSelect, materialImageOptions().map((item) => ({
+    value: item.asset_id, label: materialImageLabel(item),
+  })), oldImage, materialImageText().choose);
   for (const option of byId("scene-material-channel").options) {
     option.textContent = text.materialChannels[option.value];
   }
@@ -6133,13 +6303,16 @@ function renderSceneMaterialControls({targetsChanged = true} = {}) {
     || Boolean(state.sceneBackup) || Boolean(activeBlenderSession())
     || !state.sceneMaterialRevisionId || state.sceneMaterialRevisionId !== state.sceneDocument?.current_revision_id;
   const ready = Boolean(target && slotSelect.value && uvSelect.value && imageSelect.value);
-  for (const control of form.querySelectorAll("select,button,textarea")) control.disabled = blocked;
+  for (const control of [...form.querySelectorAll("select,button,textarea"),
+    ...byId("scene-material-advanced").querySelectorAll("select"), byId("scene-material-image"), byId("scene-texture-count")]) control.disabled = blocked;
   byId("scene-material-apply").disabled = blocked || !ready;
   let status = state.sceneMaterialStatusKey ? text[state.sceneMaterialStatusKey] : "";
   if (!status && state.sceneMaterialRevisionId && !usableTargets.length) status = text.materialNoTargets;
   else if (!status && state.sceneMaterialRevisionId && !state.sceneMaterialImages.length) status = text.materialNoImages;
   byId("scene-material-status").textContent = status || "";
   renderSceneTextureControls(blocked, target);
+  renderMaterialImagePicker(blocked);
+  renderSceneExperience();
 }
 
 async function createSceneTexture({retry = false} = {}) {
@@ -6237,8 +6410,13 @@ async function useSceneTextureResult() {
   const assetId = job?.status === "succeeded" && job.asset_ids?.includes(state.sceneTexturePreviewAssetId)
     ? state.sceneTexturePreviewAssetId : "";
   if (!assetId) return;
+  const sceneId = state.selectedSceneId;
   try {
-    state.sceneMaterialImages = await loadSceneMaterialImages();
+    const images = await loadSceneMaterialImages(sceneId);
+    if (state.selectedSceneId !== sceneId) return;
+    state.sceneMaterialImages = images;
+    state.sceneMaterialImageScope = "related";
+    state.sceneMaterialAction = "choose";
     renderSceneMaterialControls({targetsChanged: false});
     const context = sceneTextureContext(job);
     if (context?.source_revision_id === state.sceneMaterialRevisionId) {
@@ -6266,6 +6444,18 @@ async function useSceneTextureResult() {
 
 async function loadSceneMaterialData(sceneId, revisionId) {
   state.sceneMaterialStatusKey = "materialLoading";
+  if (state.sceneMaterialImageSceneId !== sceneId) {
+    state.sceneMaterialImageSceneId = sceneId;
+    state.sceneMaterialImageScope = "base";
+    state.sceneMaterialAction = "generate";
+    state.sceneMaterialImagePage = 0;
+    state.sceneMaterialImages = [];
+    state.sceneMaterialLibraryImages = [];
+    state.sceneMaterialLibraryBefore = null;
+    state.sceneMaterialLibraryLoaded = false;
+    state.sceneMaterialImageLoading = false;
+    state.sceneMaterialImageError = "";
+  }
   const cachedTargets = state.sceneMaterialRevisionId === revisionId;
   if (!cachedTargets) {
     state.sceneMaterialTargets = [];
@@ -6277,7 +6467,7 @@ async function loadSceneMaterialData(sceneId, revisionId) {
       cachedTargets
         ? Promise.resolve({targets: state.sceneMaterialTargets})
         : call("scenes.material.targets", {scene_id: sceneId}),
-      loadSceneMaterialImages(),
+      loadSceneMaterialImages(sceneId),
     ]);
     if (state.selectedSceneId !== sceneId) return;
     state.sceneMaterialTargets = targets.targets || [];
@@ -6291,18 +6481,195 @@ async function loadSceneMaterialData(sceneId, revisionId) {
   renderSceneMaterialControls();
 }
 
-async function loadSceneMaterialImages() {
-  const items = [];
-  let before = null;
-  for (let page = 0; page < 10 && items.length < 120; page += 1) {
-    const params = {media_kind: "image", limit: 120, thumbnails: false};
-    if (before) params.before = before;
-    const result = await call("library.list", params);
-    items.push(...(result.items || []).slice(0, 120 - items.length));
-    before = result.next_before || null;
-    if (!before) break;
+async function loadSceneMaterialImages(sceneId = state.selectedSceneId) {
+  const result = await call("scenes.material.images", {scene_id: sceneId});
+  if (state.selectedSceneId === sceneId) state.sceneMaterialImagesTruncated = result.truncated;
+  return result.items || [];
+}
+
+function materialImageText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    scopes: {base: "This 3D's source images", related: "Source images and variants", all: "All Library images"},
+    kinds: {used: "Used in this 3D", base: "Source image", variant: "Variant", library: "Library image"},
+    scope: "Show images", choose: "Choose an image below", selected: "Selected image",
+    empty: "No images in this group. Extract the current texture or choose another group.",
+    extract: "Extract the current texture", loading: "Loading images…", failed: "Could not load images. Try again.",
+    truncated: "Only part of the related images is shown. Use All Library images to find older images.",
+    previous: "Previous images", next: "Next images", more: "Load more Library images", retry: "Reload images",
+    thumbFailed: "Preview unavailable", page: (first, last, total) => `${first}–${last} of ${total}`,
+  } : {
+    scopes: {base: "この3Dの元画像", related: "元画像と派生候補", all: "すべての画像"},
+    kinds: {used: "この3Dで使用中", base: "元画像", variant: "派生候補", library: "ライブラリ画像"},
+    scope: "画像の表示範囲", choose: "画像を選んでください", selected: "選んでいる画像",
+    empty: "この範囲に画像がありません。今の材質画像を取り出すか、表示範囲を切り替えてください。",
+    extract: "今の材質画像を取り出す", loading: "画像を読み込んでいます…", failed: "画像を読み込めませんでした。再読み込みしてください。",
+    truncated: "関連画像の一部を表示しています。見つからない画像は「すべての画像」で探せます。",
+    previous: "前の画像", next: "次の画像", more: "ライブラリの続きを読み込む", retry: "画像を再読み込み",
+    thumbFailed: "プレビューを取得できません", page: (first, last, total) => `${total}枚中 ${first}〜${last}枚`,
+  };
+}
+
+function materialImageOptions() {
+  const selected = byId("scene-material-image").value;
+  const related = [];
+  const extracted = new Map();
+  for (const item of state.sceneMaterialImages) {
+    if (item.operation !== "scene.material.extract" || !item.sha256) { related.push(item); continue; }
+    if (!extracted.has(item.sha256) || item.asset_id === selected) extracted.set(item.sha256, item);
   }
-  return items;
+  related.push(...extracted.values());
+  if (state.sceneMaterialImageScope === "base") return related.filter(item => ["base", "used"].includes(item.scene_image_kind));
+  if (state.sceneMaterialImageScope === "related") return related;
+  return [...new Map([...state.sceneMaterialLibraryImages, ...related].map(item => [item.asset_id, item])).values()];
+}
+
+function materialImageLabel(item) {
+  const text = materialImageText();
+  const role = item.scene_image_kind === "base" && item.operation === "scene.material.extract"
+    ? (document.documentElement.lang.startsWith("en") ? "Source texture" : "材質の元画像")
+    : text.kinds[item.scene_image_kind || "library"];
+  const size = item.width && item.height ? `${item.width}×${item.height}` : "";
+  // Internal extraction instructions are not useful names for the person choosing an image.
+  const description = item.operation === "scene.material.extract" || String(item.summary).startsWith("Improve this existing UV texture")
+    ? "" : item.summary || "";
+  const created = item.created_at ? new Date(item.created_at).toLocaleString(document.documentElement.lang || "ja", {month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit"}) : "";
+  return [role, size, description.slice(0, 48) || created].filter(Boolean).join(" · ");
+}
+
+function selectMaterialImage(assetId) {
+  byId("scene-material-image").value = assetId;
+  state.sceneTextureError = "";
+  renderSceneMaterialControls({targetsChanged: false});
+}
+
+function renderMaterialImagePicker(blocked = false) {
+  const text = materialImageText();
+  const scope = byId("scene-material-image-scope");
+  scope.value = state.sceneMaterialImageScope;
+  for (const option of scope.options) option.textContent = text.scopes[option.value];
+  byId("scene-material-image-scope-label").textContent = text.scope;
+  const items = materialImageOptions();
+  const pages = Math.max(1, Math.ceil(items.length / 8));
+  state.sceneMaterialImagePage = Math.min(state.sceneMaterialImagePage, pages - 1);
+  const offset = state.sceneMaterialImagePage * 8;
+  const visible = items.slice(offset, offset + 8);
+  const selectedId = byId("scene-material-image").value;
+  const selected = items.find(item => item.asset_id === selectedId);
+  const holder = byId("scene-material-image-cards");
+  const keys = visible.map(item => item.asset_id).join(",");
+  if (holder.dataset.keys !== keys) {
+    holder.dataset.keys = keys;
+    holder.replaceChildren(...visible.map(item => {
+      const button = document.createElement("button");
+      button.type = "button"; button.dataset.assetId = item.asset_id;
+      const image = document.createElement("img"); image.alt = "";
+      const label = document.createElement("span");
+      button.append(image, label);
+      button.addEventListener("click", () => selectMaterialImage(item.asset_id));
+      return button;
+    }));
+  }
+  for (const [index, button] of [...holder.children].entries()) {
+    const item = visible[index];
+    const src = state.sceneTextureThumbnails.get(item.asset_id);
+    button.disabled = blocked;
+    button.setAttribute("aria-pressed", String(item.asset_id === selectedId));
+    button.querySelector("span").textContent = materialImageLabel(item);
+    const image = button.querySelector("img");
+    image.hidden = !src;
+    if (src) image.src = src;
+    button.title = src === "" ? text.thumbFailed : materialImageLabel(item);
+  }
+  const preview = byId("scene-material-image-preview");
+  const src = state.sceneTextureThumbnails.get(selectedId);
+  preview.hidden = !src;
+  if (src) preview.src = src;
+  byId("scene-material-image-selected").textContent = selected ? `${text.selected}: ${materialImageLabel(selected)}` : text.choose;
+  byId("scene-material-image-status").textContent = state.sceneMaterialImageError
+    || (state.sceneMaterialImageLoading ? text.loading : !items.length ? text.empty
+      : state.sceneMaterialImagesTruncated && scope.value !== "all" ? text.truncated : "");
+  byId("scene-material-image-page").textContent = items.length ? text.page(offset + 1, offset + visible.length, items.length) : "";
+  for (const direction of ["previous", "next", "more", "retry"]) byId(`scene-material-image-${direction}`).textContent = text[direction];
+  byId("scene-material-image-previous").hidden = pages < 2;
+  byId("scene-material-image-next").hidden = pages < 2;
+  byId("scene-material-image-previous").disabled = blocked || offset === 0;
+  byId("scene-material-image-next").disabled = blocked || state.sceneMaterialImagePage >= pages - 1;
+  byId("scene-material-image-more").hidden = scope.value !== "all" || (state.sceneMaterialLibraryLoaded && !state.sceneMaterialLibraryBefore);
+  byId("scene-material-image-more").disabled = blocked || state.sceneMaterialImageLoading;
+  byId("scene-material-image-retry").hidden = !state.sceneMaterialImageError && !visible.some(item => state.sceneTextureThumbnails.get(item.asset_id) === "");
+  byId("scene-material-image-retry").disabled = blocked || state.sceneMaterialImageLoading;
+  byId("scene-material-image-extract").textContent = text.extract;
+  byId("scene-material-image-extract").disabled = blocked || state.sceneTextureBusy;
+  // Fetch only visible previews. A failed preview remains a visible, retryable state.
+  for (const item of [...visible, ...(selected ? [selected] : [])]) {
+    const id = item.asset_id;
+    if (state.sceneTextureThumbnails.has(id) || state.sceneMaterialThumbnailPending.has(id)) continue;
+    state.sceneMaterialThumbnailPending.add(id);
+    const sceneId = state.selectedSceneId;
+    void call("assets.thumbnail", {asset_id: id, max_side: 192}).then(thumbnail => {
+      state.sceneTextureThumbnails.set(id, `data:${thumbnail.mime_type};base64,${thumbnail.base64}`);
+    }).catch(() => state.sceneTextureThumbnails.set(id, "")).finally(() => {
+      state.sceneMaterialThumbnailPending.delete(id);
+      if (state.selectedSceneId === sceneId) renderSceneMaterialControls({targetsChanged: false});
+    });
+  }
+}
+
+async function loadMaterialLibraryPage() {
+  if (state.sceneMaterialImageLoading) return;
+  const sceneId = state.selectedSceneId;
+  state.sceneMaterialImageLoading = true;
+  state.sceneMaterialImageError = "";
+  renderSceneMaterialControls({targetsChanged: false});
+  try {
+    const params = {media_kind: "image", limit: 120, thumbnails: false};
+    if (state.sceneMaterialLibraryBefore) params.before = state.sceneMaterialLibraryBefore;
+    const result = await call("library.list", params);
+    if (state.selectedSceneId !== sceneId) return;
+    state.sceneMaterialLibraryImages.push(...(result.items || []));
+    state.sceneMaterialLibraryBefore = result.next_before || null;
+    state.sceneMaterialLibraryLoaded = true;
+  } catch {
+    if (state.selectedSceneId === sceneId) state.sceneMaterialImageError = materialImageText().failed;
+  } finally {
+    if (state.selectedSceneId === sceneId) {
+      state.sceneMaterialImageLoading = false;
+      renderSceneMaterialControls({targetsChanged: false});
+    }
+  }
+}
+
+async function extractMaterialPickerImage() {
+  if (state.sceneTextureBusy || state.sceneMaterialBusy) return;
+  const problem = sceneTextureInputProblem();
+  if (problem && ["scene-material-object", "scene-material-slot", "scene-material-uv"].includes(problem.id)) {
+    showSceneTextureInputProblem(problem); return;
+  }
+  const channel = byId("scene-material-channel").value;
+  if (!["base_color", "emission"].includes(channel)) {
+    showSceneTextureInputProblem({id: "scene-material-channel", message: sceneText().textureChannelUnsupported}); return;
+  }
+  const sceneId = state.selectedSceneId;
+  const selection = {schema_version: SCENE_TEXTURE_SCHEMA, scene_id: sceneId,
+    source_revision_id: state.sceneMaterialRevisionId, object_name: selectedMaterialTarget().object_name,
+    material_slot: Number(byId("scene-material-slot").value), channel, uv_map: byId("scene-material-uv").value};
+  state.sceneTextureBusy = true;
+  state.sceneTextureError = "";
+  renderSceneMaterialControls({targetsChanged: false});
+  try {
+    const result = await call("scenes.material.extract", {scene_id: sceneId, selection});
+    const images = await loadSceneMaterialImages(sceneId);
+    if (state.selectedSceneId !== sceneId) return;
+    state.sceneMaterialImages = images;
+    state.sceneMaterialImageScope = "base";
+    renderSceneMaterialControls({targetsChanged: false});
+    selectMaterialImage(result.asset.id);
+  } catch (error) {
+    if (state.selectedSceneId === sceneId) state.sceneTextureError = error?.message || sceneText().materialFailed;
+  } finally {
+    state.sceneTextureBusy = false;
+    renderSceneMaterialControls({targetsChanged: false});
+  }
 }
 
 async function applySceneMaterial() {
@@ -6594,9 +6961,9 @@ function renderSceneSimplify() {
   const percent = Number(byId("scene-simplify-ratio").value);
   // 面数は viewer が実際に読んだ値だけを使う。無いときは割合だけ言う。
   const current = state.viewer3d?.modelStats?.triangles;
-  byId("scene-simplify-estimate").textContent = Number.isFinite(current) && current > 0
+  byId("scene-simplify-estimate").textContent = (Number.isFinite(current) && current > 0
     ? text.estimateWith(percent, current, Math.round(current * percent / 100))
-    : text.estimate(percent);
+    : text.estimate(percent)) + ` · ${text.origin}: ${byId("scene-simplify-origin").selectedOptions[0]?.textContent || ""}`;
   const job = state.sceneSimplify;
   const running = Boolean(job && !TERMINAL.has(job.status));
   const blocked = state.sceneSimplifyBusy || running || state.disabled
@@ -6879,6 +7246,7 @@ function renderPipeline() {
   else if (waiting) message = text.waiting;
   else if (active) message = text.running;
   byId("pipeline-status").textContent = state.pipelineMessage || message;
+  renderSceneExperience();
 }
 
 async function pollPipeline() {
@@ -8710,6 +9078,8 @@ async function openLinkedScene(link, asset, {useImage = false} = {}) {
   if (!loaded || state.sceneDocument?.id !== link.scene_id) return;
   if (useImage && String(asset.mime_type).startsWith("image/")) {
     // Explicit navigation must also work for images outside the newest Library page.
+    state.sceneMaterialImageScope = "related";
+    state.sceneMaterialAction = "choose";
     if (!state.sceneMaterialImages.some((item) => item.asset_id === asset.id)) {
       state.sceneMaterialImages.push({...asset, asset_id: asset.id});
     }
@@ -10179,6 +10549,20 @@ byId("scene-detail-close").addEventListener("click", () => {
   byId("scene-detail").hidden = true;
   renderScenes();
 });
+byId("scene-workflow-tabs").addEventListener("click", event => {
+  const button = event.target.closest("[data-scene-task]");
+  if (!button) return;
+  state.sceneTask = button.dataset.sceneTask;
+  renderSceneExperience();
+});
+byId("scene-advanced-open").addEventListener("click", () => setMode("advanced"));
+byId("scene-recommended-reset").addEventListener("click", resetSceneRecommendedSettings);
+byId("scene-material-action").addEventListener("change", () => {
+  state.sceneMaterialAction = byId("scene-material-action").value;
+  state.sceneTextureError = "";
+  renderSceneMaterialControls({targetsChanged: false});
+});
+byId("scene-studio").addEventListener("change", renderSceneExperience);
 byId("scene-material-form").addEventListener("submit", (event) => {
   event.preventDefault();
   void applySceneMaterial();
@@ -10188,10 +10572,37 @@ byId("scene-texture-prompt").addEventListener("input", () => {
   renderSceneMaterialControls({targetsChanged: false});
 });
 byId("scene-open-material").addEventListener("click", revealSceneMaterials);
+byId("scene-open-preview").addEventListener("click", () => {
+  const revision = state.sceneRevisions.find(item => item.id === state.sceneDocument?.current_revision_id);
+  if (!revision) return;
+  void openViewer(revision.preview_asset_id, {asset_id: revision.preview_asset_id, media_kind: "3d",
+    mime_type: "model/gltf-binary", preview_kind: "model_3d", summary: state.sceneDocument.name}, []);
+});
 byId("scene-texture-generate").addEventListener("click", () => void createSceneTexture());
 byId("scene-texture-cancel").addEventListener("click", () => void cancelSceneTexture());
 byId("scene-texture-retry").addEventListener("click", () => void createSceneTexture({retry: true}));
 byId("scene-texture-use").addEventListener("click", () => void useSceneTextureResult());
+byId("scene-material-image-scope").addEventListener("change", () => {
+  state.sceneMaterialImageScope = byId("scene-material-image-scope").value;
+  state.sceneMaterialImagePage = 0;
+  state.sceneTextureError = "";
+  renderSceneMaterialControls({targetsChanged: false});
+  if (state.sceneMaterialImageScope === "all" && !state.sceneMaterialLibraryLoaded) void loadMaterialLibraryPage();
+});
+for (const [name, delta] of [["previous", -1], ["next", 1]]) {
+  byId(`scene-material-image-${name}`).addEventListener("click", () => {
+    state.sceneMaterialImagePage += delta;
+    renderSceneMaterialControls({targetsChanged: false});
+  });
+}
+byId("scene-material-image-more").addEventListener("click", () => void loadMaterialLibraryPage());
+byId("scene-material-image-retry").addEventListener("click", () => {
+  for (const [id, src] of state.sceneTextureThumbnails) if (!src) state.sceneTextureThumbnails.delete(id);
+  state.sceneMaterialImageError = "";
+  if (state.sceneMaterialImageScope === "all") void loadMaterialLibraryPage();
+  else void loadSceneMaterialData(state.selectedSceneId, state.sceneMaterialRevisionId);
+});
+byId("scene-material-image-extract").addEventListener("click", () => void extractMaterialPickerImage());
 byId("scene-material-object").addEventListener("change", () => {
   state.sceneTextureError = "";
   renderSceneMaterialControls({targetsChanged: false});

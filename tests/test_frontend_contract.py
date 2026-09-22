@@ -695,7 +695,8 @@ def test_scene_material_binding_uses_library_assets_and_private_path_free_bridge
     ]
     assert "loadSceneMaterialImages()" in material
     assert 'const params = {media_kind: "image", limit: 120, thumbnails: false};' in material
-    assert "page < 10 && items.length < 120" in material
+    assert 'call("scenes.material.images", {scene_id: sceneId})' in material
+    assert "state.sceneMaterialLibraryBefore = result.next_before || null" in material
     assert 'call("scenes.material.targets"' in material
     assert 'call("scenes.material.apply"' not in material
     assert "await compareMaterialCandidate(sceneId, binding)" in material

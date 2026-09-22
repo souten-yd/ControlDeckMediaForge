@@ -1335,3 +1335,11 @@ immutable PNG with scene-source lineage, leaving the scene unchanged. External
 images and shader-derived appearances are rejected. The texture panel uses
 normal `image.edit` inputs for 1–4 candidates, so their parent image is recorded.
 Candidate selection still requires separate material preview and adoption.
+
+Private `scenes.material.images` accepts only `{scene_id}` and returns Library metadata
+with `scene_image_kind` (`used`, `base`, `variant`) for authorized scene revisions,
+source ancestors and image descendants. `GET /workspace-api/scenes/{scene_id}/material-images`
+uses the standalone owner. Reads do not extract images or create jobs. Traversal is
+bounded to 1024 direct matches, 1024 graph records, eight edges per direction
+and 256 returned images;
+`truncated` is explicit. No asset bytes, paths or client-supplied owner are accepted.
