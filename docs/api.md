@@ -505,6 +505,18 @@ then lists the owner-scoped scene documents and immutable revision history. A
 revision preview opens through the same validated GLB viewer used by Library;
 the raw `.blend` bytes are not exposed to the browser after import.
 
+Private `assets.relations` (and `GET /workspace-api/assets/{asset_id}/relations`)
+additionally returns `scene_links`: owner-checked scene name/ID, original revision
+ID/sequence/preview, current revision ID and optional material selection. Resolution
+uses immutable provenance/parent Assets and SceneRevisions, not the recent Jobs list.
+It visits at most 64 Assets over eight parent edges and returns at most 16 scenes.
+Library editing may retain the typed source selection in the additive
+`constraints.source_scene_texture` provenance field. This is a navigation hint,
+not a Studio execution request or an authorization token. It does not change
+image routing, progress, canvas sizing or worker resource profiles.
+Caller-supplied owner/path fields are rejected. The standalone mirror uses its local
+owner. Scene navigation does not start Blender GUI or commit material changes.
+
 3DS-6a adds the typed
 [`media-forge.material-binding@1`](../schemas/material-binding.json) document.
 It fixes the selected source revision, Library image Asset, object/material

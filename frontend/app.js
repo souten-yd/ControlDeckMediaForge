@@ -137,6 +137,7 @@ const state = {
   referenceAnalysis: null,
   referenceFocus: "overall",
   sourceAsset: null,
+  librarySource: null,
   project3dAsset: null,
   editMode: "",
   source: null,
@@ -2875,6 +2876,7 @@ async function prepareUpload() {
   } else {
     state.upload = file;
     state.source = measured;
+    if (state.librarySource?.file === file) state.sourceAsset = state.librarySource.asset;
     label.textContent = preservesResolution(state.editMode)
       ? `${measured.width}×${measured.height}（原寸のまま）`
       : `${measured.width}×${measured.height}`;
@@ -3514,6 +3516,10 @@ async function submitJob(event) {
   const submit = byId("create-submit");
   const preset = currentPreset();
   const constraints = buildConstraints(preset);
+  if (state.librarySource?.file === attachedFile() && state.librarySource?.selection) {
+    // Preserve the source link without turning a Create job into a Studio job.
+    constraints.source_scene_texture = state.librarySource.selection;
+  }
   applyProfileConstraints(constraints);
   const problem = requestProblem(constraints);
   if (problem) { showError(problem); return; }
@@ -4901,6 +4907,7 @@ const SCENE_TEXT = {
     blenderDisconnectedStopped: "切断猶予を過ぎたため終了しました。未保存内容は復旧候補に残しました。",
     blenderRevoked: "Hostの権限が終了したため停止しました。未保存内容は復旧候補に残しました。",
     blenderDisabled: "Add-onの停止に備えて終了しました。未保存内容は復旧候補に残しました。",
+    materialEdit: "材質を変更", materialTargetChanged: "元の割り当て先が現在の版にありません。対象・マテリアル・UVを選び直してください。",
     materialTitle: "画像素材を割り当て", materialObject: "対象", materialSlot: "マテリアル",
     materialImage: "ライブラリ画像", materialChannel: "用途", materialAdvanced: "詳細設定",
     materialUv: "UVマップ", materialWrap: "画像の繰り返し", materialNormal: "法線形式",
@@ -4997,6 +5004,7 @@ const SCENE_TEXT = {
     blenderDisconnectedStopped: "The disconnected grace period ended. Unsaved bytes were retained as a recovery candidate.",
     blenderRevoked: "Host authorization ended. Unsaved bytes were retained as a recovery candidate.",
     blenderDisabled: "The session ended for add-on disable. Unsaved bytes were retained as a recovery candidate.",
+    materialEdit: "Change material", materialTargetChanged: "The original target is missing in the current revision. Choose the target, material and UV again.",
     materialTitle: "Assign image material", materialObject: "Target", materialSlot: "Material",
     materialImage: "Library image", materialChannel: "Use", materialAdvanced: "Advanced settings",
     materialUv: "UV map", materialWrap: "Image wrapping", materialNormal: "Normal convention",
@@ -5477,6 +5485,7 @@ function renderSceneText() {
   byId("scene-material-normal-label").textContent = text.materialNormal;
   byId("scene-material-safety").textContent = text.materialSafety;
   byId("scene-material-apply").textContent = text.materialApply;
+  byId("scene-open-material").textContent = text.materialEdit;
   byId("scene-texture-title").textContent = text.textureTitle;
   byId("scene-texture-mode-label").textContent = text.textureMode;
   byId("scene-texture-count-label").textContent = text.textureCount;
@@ -5629,8 +5638,10 @@ async function openScene(sceneId) {
     renderSceneBackupControls();
     renderBlenderSessionControls();
     await loadSceneMaterialData(sceneId, scene.current_revision_id);
+    return state.selectedSceneId === sceneId;
   } catch {
     byId("scene-list-count").textContent = sceneText().detailFailed;
+    return false;
   }
 }
 
@@ -6067,6 +6078,7 @@ function renderSceneMaterialControls({targetsChanged = true} = {}) {
     replaceMaterialOptions(objectSelect, usableTargets.map((item) => ({
       value: item.object_name, label: item.object_name,
     })), oldObject, text.materialChoose);
+    if (!objectSelect.value && usableTargets.length === 1) objectSelect.value = usableTargets[0].object_name;
   }
   const target = selectedMaterialTarget();
   replaceMaterialOptions(slotSelect, (target?.material_slots || []).map((item) => ({
@@ -8426,6 +8438,7 @@ async function openViewer(assetId, item, list, {keepList = false} = {}) {
   viewer.assetId = assetId;
   viewer.filename = item?.suggested_filename || "";
   byId("viewer-edit").hidden = item?.media_kind === "3d";
+  void loadViewerSceneLinks(assetId, token);
   if (!keepList) {
     viewer.list = Array.isArray(list)
       ? list.filter((entry) => entry.mime_type !== "application/x-blender"
@@ -8651,6 +8664,104 @@ function validationList(validation) {
   return holder;
 }
 
+function revealSceneMaterials() {
+  const panel = byId("scene-material-tools");
+  panel.open = true;
+  panel.scrollIntoView({block: "start"});
+  byId("scene-material-object").focus({preventScroll: true});
+}
+
+async function openLinkedScene(link, asset, {useImage = false} = {}) {
+  byId("viewer").close();
+  byId("detail-dialog").close();
+  activate("web-blender");
+  const loaded = await openScene(link.scene_id);
+  if (!loaded || state.sceneDocument?.id !== link.scene_id) return;
+  if (useImage && String(asset.mime_type).startsWith("image/")) {
+    // Explicit navigation must also work for images outside the newest Library page.
+    if (!state.sceneMaterialImages.some((item) => item.asset_id === asset.id)) {
+      state.sceneMaterialImages.push({...asset, asset_id: asset.id});
+    }
+    renderSceneMaterialControls();
+    const context = link.material_selection;
+    let matched = true;
+    if (context) {
+      const target = state.sceneMaterialTargets.find((item) => item.object_name === context.object_name);
+      matched = Boolean(target?.material_slots?.some((item) => item.index === context.material_slot)
+        && target?.uv_maps?.includes(context.uv_map));
+      byId("scene-material-object").value = matched ? context.object_name : "";
+      renderSceneMaterialControls({targetsChanged: false});
+      if (matched) {
+        byId("scene-material-slot").value = String(context.material_slot);
+        byId("scene-material-uv").value = context.uv_map;
+        byId("scene-material-channel").value = context.channel;
+      }
+    }
+    byId("scene-material-image").value = asset.id;
+    state.sceneMaterialStatusKey = matched ? "" : "materialTargetChanged";
+    renderSceneMaterialControls({targetsChanged: false});
+  }
+  revealSceneMaterials();
+}
+
+function assetSceneActions(link, asset, {compact = false} = {}) {
+  const holder = document.createElement("div");
+  holder.className = "asset-scene-actions";
+  const english = document.documentElement.lang.startsWith("en");
+  const isImage = String(asset.mime_type).startsWith("image/");
+  const action = (label, name, handler) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.dataset.sceneLinkAction = name;
+    button.dataset.sceneId = link.scene_id;
+    button.addEventListener("click", () => void handler());
+    holder.append(button);
+  };
+  action(isImage ? (english ? "Open source 3D" : "元の3Dを開く")
+    : (english ? "Change material" : "材質を変更"), "open", () => openLinkedScene(link, asset));
+  if (isImage) {
+    action(english ? "Use this image on 3D" : "この画像で材質を変更", "material", () => (
+      openLinkedScene(link, asset, {useImage: true})
+    ));
+  }
+  if (!compact) {
+    action(english ? "View source revision" : "制作元の版を見る", "preview", () => {
+      byId("detail-dialog").close();
+      const item = {asset_id: link.preview_asset_id, media_kind: "3d", preview_kind: "model_3d",
+        suggested_filename: link.scene_name};
+      return openViewer(link.preview_asset_id, item, [item]);
+    });
+  }
+  return holder;
+}
+
+async function loadViewerSceneLinks(assetId, token) {
+  const holder = byId("viewer-scene-links");
+  holder.replaceChildren();
+  holder.hidden = true;
+  try {
+    const relations = await call("assets.relations", {asset_id: assetId});
+    if (token !== viewer.token) return;
+    const links = relations.scene_links || [];
+    if (links.length === 1) {
+      holder.append(assetSceneActions(links[0], relations.asset, {compact: true}));
+    } else if (links.length > 1) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = document.documentElement.lang.startsWith("en") ? "Related 3D scenes" : "関連する3Dを選ぶ";
+      button.addEventListener("click", () => { byId("viewer").close(); void openDetail(assetId); });
+      holder.append(button);
+    }
+    holder.hidden = !links.length;
+  } catch {
+    if (token !== viewer.token) return;
+    holder.hidden = false;
+    holder.textContent = document.documentElement.lang.startsWith("en")
+      ? "Could not load 3D links. Open Details to retry." : "3Dとの関連を読み込めませんでした。詳細から再確認できます。";
+  }
+}
+
 let detailRequest = 0;
 async function openDetail(assetId, offset = 0) {
   const request = ++detailRequest;
@@ -8686,6 +8797,18 @@ async function openDetail(assetId, offset = 0) {
       else dd.textContent = String(value);
       wrap.append(dt, dd);
       summary.append(wrap);
+    }
+    for (const link of relations.scene_links || []) {
+      const section = document.createElement("section");
+      section.className = "asset-scene-link";
+      const heading = document.createElement("h3");
+      heading.textContent = `${english ? "Source 3D" : "元の3D"}: ${link.scene_name}`;
+      const revision = document.createElement("p");
+      revision.className = "hint";
+      revision.textContent = english ? `Created from revision ${link.source_sequence}. Material changes create a new revision after comparison.`
+        : `制作元: 第${link.source_sequence}版。材質は比較してから新しい版として保存します。`;
+      section.append(heading, revision, assetSceneActions(link, relations.asset));
+      body.append(section);
     }
     body.append(summary);
     for (const [key, title] of [["parents", english ? "Source assets" : "元になった素材"],
@@ -10033,6 +10156,7 @@ byId("scene-texture-prompt").addEventListener("input", () => {
   state.sceneTextureError = "";
   renderSceneMaterialControls({targetsChanged: false});
 });
+byId("scene-open-material").addEventListener("click", revealSceneMaterials);
 byId("scene-texture-generate").addEventListener("click", () => void createSceneTexture());
 byId("scene-texture-cancel").addEventListener("click", () => void cancelSceneTexture());
 byId("scene-texture-retry").addEventListener("click", () => void createSceneTexture({retry: true}));
@@ -10832,9 +10956,11 @@ async function editFromLibrary(assetId) {
   const note = byId("viewer-save-note");
   note.hidden = false;
   note.textContent = "読み込んでいます…";
-  let fetched;
+  let fetched, relations;
   try {
-    fetched = await assetBlob(assetId);
+    [fetched, relations] = await Promise.all([
+      assetBlob(assetId), call("assets.relations", {asset_id: assetId}),
+    ]);
   } catch (error) {
     note.textContent = failureText(error?.code) || "読み込めませんでした。";
     return;
@@ -10846,6 +10972,9 @@ async function editFromLibrary(assetId) {
   const transfer = new DataTransfer();
   transfer.items.add(new File([fetched.blob], fetched.filename || "source.png", {type: fetched.mime}));
   byId("source-file").files = transfer.files;
+  const links = relations.scene_links || [];
+  state.librarySource = {file: attachedFile(), asset: relations.asset,
+    selection: links.length === 1 ? links[0].material_selection : null};
   byId("viewer").close();
   // 媒体は変えない。いま選んでいるモードへ入れる。こちらで「写真を直す」へ
   // 移していたが、それは利用者が選んだ場所を勝手に捨てることだった。
@@ -11263,6 +11392,7 @@ window.addEventListener("message", (event) => {
         void openDetail(byId("detail-body").dataset.assetId, Number(byId("detail-body").dataset.offset || 0));
       }
       renderViewer3dText();
+      if (byId("viewer").open) void loadViewerSceneLinks(viewer.assetId, viewer.token);
       renderSceneText();
     }
     if (message.event === "safe_area.changed") applySafeArea(message.data);

@@ -1,5 +1,14 @@
 # Media Forge implementation status
 
+## 2026-09-22 派生画像→元3Dと材質変更のモバイル導線（0.33.3準備）
+
+Libraryの画像/3Dビューアーと詳細へ、元シーン・制作元版・材質変更の入口を追加。
+coreが保存済み来歴とownerを照合し、Job履歴整理後も元シーンへ戻れる。
+通常画像編集でも来歴を保持し、材質変更は既存の比較→採用→新しい版へ接続する。
+独立source/実Blenderで1280/320pxの画像→scene→比較、320pxで1→2版保存を確認。
+画像は明示fake fixture、installed実画像の受入はこれから。横overflow0/page error0。
+最終 ./mf.sh test: 2410 passed / 3 warnings / 272.53秒。署名公開/通常更新/installed受入を継続。詳細: [実装と証跡](implementation/texture-scene-navigation-20260922.md)。
+
 ## 2026-09-22 0.33.2署名公開・通常更新・実Host受入を完了
 
 PR612〜615を通常mergeし、source `1ceedb9`から0.33.2を署名公開・通常適用。

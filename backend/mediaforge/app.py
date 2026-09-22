@@ -2201,7 +2201,9 @@ def create_app(
     @app.get("/workspace-api/assets/{asset_id}/relations", include_in_schema=False)
     async def standalone_asset_relations(asset_id: str, offset: int = Query(default=0, ge=0, le=1_000_000)) -> dict[str, Any]:
         try:
-            return await asyncio.to_thread(store.asset_relations, asset_id, offset=offset)
+            return await asyncio.to_thread(
+                store.asset_relations, asset_id, offset=offset, owner=preferences.STANDALONE_SUBJECT
+            )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
 
@@ -3690,7 +3692,8 @@ def create_app(
                         if "asset_id" not in params or set(params) - {"asset_id", "offset"}:
                             raise ValueError("asset relations accepts asset_id and offset")
                         result = await asyncio.to_thread(
-                            store.asset_relations, str(params["asset_id"]), offset=params.get("offset", 0)
+                            store.asset_relations, str(params["asset_id"]), offset=params.get("offset", 0),
+                            owner=scene_owner(identity)
                         )
                     elif method == "assets.model.open":
                         if set(params) != {"asset_id"}:

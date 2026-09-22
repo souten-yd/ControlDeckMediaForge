@@ -37,6 +37,7 @@ from .models.operations import (
     ModelOperationAction,
     ModelOperationState,
 )
+from .material_binding import SceneTextureRequest
 from .paths import contained
 from .profiles import Profile, ProfileInput, ReferenceCollection, ReferenceCollectionInput
 from .scenes import (
@@ -1088,7 +1089,82 @@ class Store:
             )
         return pairs
 
-    def asset_relations(self, asset_id: str, *, limit: int = 60, offset: int = 0) -> dict[str, Any]:
+    def asset_scene_links(self, asset_id: str, owner: str) -> list[dict[str, Any]]:
+        """Resolve saved texture lineage and scene assets without consulting Jobs.
+
+        Walk at most 64 assets over eight parent edges. Every returned scene and
+        revision is joined to the authenticated owner; imported context alone
+        cannot disclose another owner's scene or redirect to a foreign revision.
+        """
+        validate_scene_owner(owner)
+        self.get_asset(asset_id)
+        pending = [(asset_id, 0)]
+        visited: set[str] = set()
+        links: dict[str, dict[str, Any]] = {}
+        with self._connect() as connection:
+            while pending and len(visited) < 64 and len(links) < 16:
+                current_id, depth = pending.pop(0)
+                if current_id in visited:
+                    continue
+                visited.add(current_id)
+                row = connection.execute(
+                    "SELECT metadata_json, provenance_json FROM assets WHERE id = ?", (current_id,)
+                ).fetchone()
+                if row is None:
+                    continue
+                asset = Asset.model_validate_json(row["metadata_json"])
+                provenance = Provenance.model_validate_json(row["provenance_json"])
+                parameters = provenance.parameters
+                constraints = parameters.get("constraints")
+                raw = parameters.get("scene_texture") or (
+                    (constraints.get("scene_texture") or constraints.get("source_scene_texture"))
+                    if isinstance(constraints, dict) else None
+                )
+                context = None
+                if raw is not None:
+                    try:
+                        context = SceneTextureRequest.model_validate(raw)
+                    except ValidationError:
+                        pass  # Untrusted/legacy context is not a scene association.
+                query = """SELECT d.value_json AS document_json, r.value_json AS revision_json
+                           FROM scene_revisions r JOIN scene_documents d ON d.id = r.scene_id
+                           WHERE d.owner = ? AND """
+                matches = []
+                if context is not None:
+                    matches.extend(connection.execute(
+                        query + "r.scene_id = ? AND r.id = ?",
+                        (owner, context.scene_id, context.source_revision_id),
+                    ).fetchall())
+                matches.extend(connection.execute(
+                    query + "(r.source_asset_id = ? OR r.preview_asset_id = ?) ORDER BY r.sequence DESC LIMIT 16",
+                    (owner, current_id, current_id),
+                ).fetchall())
+                for match in matches:
+                    if len(links) >= 16:
+                        break
+                    document = SceneDocument.model_validate_json(match["document_json"])
+                    revision = SceneRevision.model_validate_json(match["revision_json"])
+                    if document.id in links:
+                        continue  # Prefer the nearest explicit texture context.
+                    selection = context if context is not None and (
+                        context.scene_id == document.id and context.source_revision_id == revision.id
+                    ) else None
+                    links[document.id] = {
+                        "scene_id": document.id, "scene_name": document.name,
+                        "source_revision_id": revision.id, "source_sequence": revision.sequence,
+                        "current_revision_id": document.current_revision_id,
+                        "preview_asset_id": revision.preview_asset_id,
+                        "material_selection": selection.model_dump(mode="json") if selection else None,
+                    }
+                if depth < 8:
+                    for parent_id in asset.parent_asset_ids:
+                        if parent_id not in visited and len(pending) + len(visited) < 64:
+                            pending.append((parent_id, depth + 1))
+        return list(links.values())
+
+    def asset_relations(
+        self, asset_id: str, *, limit: int = 60, offset: int = 0, owner: str | None = None,
+    ) -> dict[str, Any]:
         """Bounded metadata-only lineage, independent of the current Library page."""
         asset = self.get_asset(asset_id)
         if type(offset) is not int or not 0 <= offset <= 1_000_000:
@@ -1106,6 +1182,7 @@ class Store:
             "asset": asset.model_dump(mode="json"),
             "parents": [self.get_asset(value).model_dump(mode="json") for value in asset.parent_asset_ids[offset:offset + limit]],
             "children": [Asset.model_validate_json(row["metadata_json"]).model_dump(mode="json") for row in rows[:limit]],
+            "scene_links": self.asset_scene_links(asset_id, owner) if owner is not None else [],
             "parents_truncated": len(asset.parent_asset_ids) > offset + limit,
             "children_truncated": len(rows) > limit,
             "offset": offset,
