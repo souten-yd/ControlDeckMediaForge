@@ -16,7 +16,7 @@ Cookieなし埋め込み画面の3D module取得を既存Bridge headerへ接続�
   専用sessionが不在のため通常loginを依頼済み。Cookieなしfixtureの成功と混同しない。
   ログイン後に正式Host内でLibrary/3Dと終了操作を再確認する。認証を偽装しない。
 - source serverと試験browserは終了、専用pytest一時dataと重複配布tar4個を回収。
-  根元のfeat/g9-image-to-3d /524553dはcleanで保持。正式素材/installed/rollbackは変更しない。
+  根元のfeat/g9-image-to-3d /524553dはcleanで保持。正式素材/installed/rollbackは削除していない。
 
 
 ## 2026-09-22 PCビューアのCookieなし認証読み込み（0.33.9準備）
