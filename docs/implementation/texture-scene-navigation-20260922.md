@@ -1,6 +1,6 @@
 # 派生画像と元3Dの相互移動・モバイル材質変更
 
-Date: 2026-09-22. Branch: `ux1/texture-scene-navigation`. Release: 0.33.3準備。
+Date: 2026-09-22. Branch: `ux1/texture-scene-navigation`. 初回実装: 0.33.3。最終release: 0.33.6。
 
 ## 利用者の操作
 
@@ -47,10 +47,11 @@ ownerは認証identityまたはstandaloneのlocal ownerから決め、クライ�
 - 最終 `./mf.sh test`: **2410 passed / 3 warnings / 272.53秒 / exit0**。
   署名3件を含めskipなし。`node --check frontend/app.js`、`git diff --check`も通過。
 
-## 残る受入
+## 最終受入
 
-通常PR merge、署名公開/通常Host更新、installed Hostの実画像からの導線、
-320pxの比較/版保存と再起動後の関連復元は未実施。実スマートフォン本体ではNOT TESTED。
+通常PR merge、署名公開/Host更新、installed実画像からの導線、320pxの比較/版保存と
+再起動後の関連復元を0.33.6で完了。詳細は[0.33.6最終受入](release-0.33.6-20260922.md)。
+実スマートフォン本体はNOT TESTED。以下は公開・適用中に発見して修正した経過を示す。
 
 ## 0.33.3公開後・通常更新前の追加確認
 
