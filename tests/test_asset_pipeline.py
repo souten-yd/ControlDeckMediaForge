@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from dataclasses import replace
 
 import pytest
 
 from mediaforge.asset_pipeline import AssetPipeline, AssetPipelineRequest, PipelineStage
-from mediaforge.asset_pipeline_runner import PipelineDeps, PipelineStalled, advance, approve, cancel
+from mediaforge.asset_pipeline_runner import (
+    PipelineCoordinator, PipelineDeps, PipelineStalled, advance, approve, cancel,
+)
 
 SCENE = "scene_" + "a" * 32
 REVISION_MODEL = "revision_" + "b" * 32
@@ -151,6 +154,9 @@ def test_a_failed_step_stops_the_chain() -> None:
     assert pipeline.stages[0].error_code == "generation_failed"
     assert fake.submitted == ["image"]
     assert [stage.state for stage in pipeline.stages[1:]] == ["pending"] * 3
+    run(pipeline, deps)
+    assert fake.submitted == ["image"]
+    assert pipeline.state == "failed"
 
 
 def test_a_succeeded_model_step_without_a_revision_is_a_failure() -> None:
@@ -183,6 +189,10 @@ def test_cancel_skips_what_has_not_started() -> None:
     assert [stage.state for stage in pipeline.stages[1:]] == ["skipped"] * 3
     with pytest.raises(PipelineStalled):
         cancel(pipeline, deps)
+    fake.finish(pipeline.stages[0].job_id, asset_ids=["asset_" + "d" * 32])
+    run(pipeline, deps)
+    assert pipeline.state == "canceled"
+    assert fake.submitted == ["image"]
 
 
 def test_stage_order_is_fixed() -> None:
@@ -192,3 +202,82 @@ def test_stage_order_is_fixed() -> None:
             stages=[PipelineStage(name="rig"), PipelineStage(name="model")],
             created_at="2026-09-21T00:00:00+00:00", updated_at="2026-09-21T00:00:00+00:00",
         )
+
+
+def test_concurrent_polls_submit_once_and_keep_cancel_terminal() -> None:
+    async def scenario() -> None:
+        pipeline, _ = build()
+        stored = {pipeline.id: pipeline.model_copy(deep=True)}
+        fake = Fake()
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        def load(key: str, owner: str) -> AssetPipeline:
+            assert stored[key].owner == owner
+            return stored[key].model_copy(deep=True)
+
+        def save(value: AssetPipeline) -> None:
+            stored[value.id] = value.model_copy(deep=True)
+
+        async def submit(prompt: str, width: int, height: int) -> dict[str, Any]:
+            entered.set()
+            await release.wait()
+            return fake._job("image")
+
+        deps = replace(fake.deps(), submit_image=submit)
+        coordinator = PipelineCoordinator(load, save)
+        first = asyncio.create_task(coordinator.action(pipeline.id, "tester", "status", deps))
+        await entered.wait()
+        second = asyncio.create_task(coordinator.action(pipeline.id, "tester", "status", deps))
+        stop = asyncio.create_task(coordinator.action(pipeline.id, "tester", "cancel", deps))
+        release.set()
+        await asyncio.gather(first, second, stop)
+        assert fake.submitted == ["image"]
+        final = await coordinator.action(pipeline.id, "tester", "status", deps)
+        assert final.state == "canceled"
+
+    asyncio.run(scenario())
+
+
+def test_different_owners_advance_independently_with_their_own_dependencies() -> None:
+    async def scenario() -> None:
+        left, _ = build()
+        right = left.model_copy(deep=True)
+        right.id = "pipeline_" + "2" * 32
+        right.owner = "second"
+        stored = {left.id: left, right.id: right}
+        ready, release = asyncio.Event(), asyncio.Event()
+        seen = []
+
+        def load(key: str, owner: str) -> AssetPipeline:
+            if stored[key].owner != owner:
+                raise KeyError(key)
+            return stored[key].model_copy(deep=True)
+
+        def save(value: AssetPipeline) -> None:
+            stored[value.id] = value
+
+        async def first(*args: Any) -> dict[str, Any]:
+            ready.set()
+            await release.wait()
+            seen.append("tester")
+            return {"job_id": "job_" + "a" * 32}
+
+        async def second(*args: Any) -> dict[str, Any]:
+            seen.append("second")
+            return {"job_id": "job_" + "b" * 32}
+
+        coordinator = PipelineCoordinator(load, save)
+        deps = Fake().deps()
+        pending = asyncio.create_task(coordinator.action(
+            left.id, left.owner, "status", replace(deps, submit_image=first)))
+        await ready.wait()
+        await coordinator.action(right.id, right.owner, "status", replace(deps, submit_image=second))
+        release.set()
+        await pending
+        assert seen == ["second", "tester"]
+        assert stored[left.id].stages[0].job_id == "job_" + "a" * 32
+        assert stored[right.id].stages[0].job_id == "job_" + "b" * 32
+        with pytest.raises(KeyError):
+            await coordinator.action(left.id, right.owner, "status", deps)
+
+    asyncio.run(scenario())

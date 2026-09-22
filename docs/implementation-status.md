@@ -1,5 +1,25 @@
 # Media Forge implementation status
 
+## 2026-09-22 0.32.2正式リリース準備（PR #608）
+
+実checkout /tmp/mediaforge-3d-ux-20260920、base main8a1bfe6、未公開head3a43efa。
+公開latest0.30.1、installedローカル試験0.32.1を照合。Hostの同一version再利用を避ける
+ため0.32.2へ版上げ。通しフローの同時poll重複投入・共有identity・terminal再開を修正。
+worker/coreのUV許容は実三角形数を分母に揃え、半数以上が退化したUVは拒否する。
+
+./mf.sh test: 2360 passed / 3 warnings / 265.45秒 / exit0。
+対象2ファイルのfocused pytest:36 passed / 1 warning / 2.11秒。
+既存Job63538fbbの不変blend2件をSHA確認して複製し、修正workerをBlender4.5.13 CPUで
+実行。1.766秒/exit0、32663三角形中退化1、normal753561 B / AO256522 B、core report検証pass。
+これはworker回帰であり、新規Asset登録・Host経由bake・視覚品質はNOT TESTED。
+Qwen評価2文書は容量見積もりと実測を分離し、hash再現性と演算正確性を分離。
+transformers>=5.17の公式要件、Research非商用研究評価の条件を明記した。
+
+merge/publish/update/Host browser/restartは次の受入。以前のoperator専用sessionは
+失効（通常auth/me401）、正規ログイン更新を利用者へ依頼。署名release準備は継続する。
+証跡はfeature-data/media-forge/maintenance/release-0.32.2-20260922/。
+
+
 ## 2026-09-22 生成モデルに法線と AO を焼く（0.32.1）
 
 `mesh_geometry` facts の上限を上げて対象を指定できるようになった続き。

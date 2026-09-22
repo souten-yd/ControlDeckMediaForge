@@ -87,6 +87,7 @@ def main() -> None:
     triangles=sum(max(0,len(polygon.vertices)-2) for polygon in low.data.polygons)
     degenerate_allowance=max(64,triangles//1000)
     if (not uv_fact['finite'] or uv_fact['degenerate_triangles'] is None
+            or triangles <= 0 or uv_fact['degenerate_triangles']*2 >= triangles
             or uv_fact['degenerate_triangles']>degenerate_allowance
             or uv_fact['bounds_min'] is None or min(uv_fact['bounds_min']) < -1e-5
             or max(uv_fact['bounds_max'])>1.00001):
@@ -123,7 +124,7 @@ def main() -> None:
         node.image=None;bpy.data.images.remove(image)
     Path('result.json').write_text(json.dumps({'schema_version':'media-forge.scene-bake-result@1','blender_version':args.expected_version,
         'spec':spec,'device':'CPU','frame':0,'samples':16,'autoexec_disabled':not bpy.context.preferences.filepaths.use_scripts_auto_execute,
-        'uv':uv_fact,'images':rows},sort_keys=True,separators=(',',':'))+'\n')
+        'uv_triangle_count':triangles,'uv':uv_fact,'images':rows},sort_keys=True,separators=(',',':'))+'\n')
 
 
 if __name__=='__main__':main()

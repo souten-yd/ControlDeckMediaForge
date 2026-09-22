@@ -1,5 +1,24 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 正式0.32.2リリース前の修正・検証
+
+PR #608の未公開0.31.0〜0.32.1を引き継いだ。installedはローカル試験版0.32.1、
+公開latestは0.30.1。Host updaterが同一versionの既存directoryを再利用するため、
+署名した正式bundleは0.32.2にする。元checkout feat/g9-image-to-3dは変更しない。
+
+- FIXED: requestごとのidentityを閉包に保持。同一pipelineのread/advance/writeを直列化。
+- FIXED: failed/canceledへの再pollで次段へ進めたり状態を書き戻したりしない。
+- FIXED: bakeの許容数をworker/coreとも実三角形数で算出。半数以上の退化は拒否。
+- PASS: ./mf.sh test、2360 passed / 3 warnings / 265.45秒。
+- PASS: 既存登録blendの複製でCPU bake、1.766秒、32663三角形中退化1、
+  normal753561 B / ao256522 B。core report検証通過。品質はNOT TESTED。
+- CORRECTED: Qwen文書のint8容量断定、hash=演算正確性、transformers依存・Research条件。
+- PENDING: merge、署名bundle、通常update、installed/restart受入。
+- AUTH: 以前の専用operator sessionは期限切れ、auth/me401。通常ログイン更新を依頼済み。
+
+証跡: maintenance/release-0.32.2-20260922/{full.log,bake-regression.json}。
+
+
 ## 2026-09-22 法線・AO の焼き込み（0.32.1）
 
 ```text
@@ -16,7 +35,7 @@ FOUND      2026-09-20 公開。台帳のQwen-Image-2512(53.7GiB)とは別物
 FOUND      重み30.84GiB / 7B / QwenImage21Pipeline / bf16既定 / RGBA透過
 BLOCKER    license が Qwen Research（Apache-2.0ではない）。測る前に法的判断が要る
 BLOCKER    diffusers==0.40.0 固定。上げると採用済みFLUX.2-kleinの経路に影響
-WATCH      gfx1201 fp32 GEMM破損。同一seed3回のsha256一致で検出する
+WATCH      同一seed3回のsha256は再現性の検査。GEMMの数値正確性は別の参照比較が必要
 ```
 
 ## 2026-09-22 ローポリ化の割合（0.32.0）

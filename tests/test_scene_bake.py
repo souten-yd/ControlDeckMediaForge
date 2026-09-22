@@ -36,7 +36,7 @@ def fixture(root: Path,mode='valid'):
         "if mode=='slow':time.sleep(30)\n"+
         f"data=base64.b64decode({base64.b64encode(buffer.getvalue()).decode()!r})\n"+
         "images=[]\nfor channel in spec['channels']:\n pathlib.Path(channel+'.png').write_bytes(data)\n images.append({'channel':channel,'filename':channel+'.png','sha256':hashlib.sha256(data).hexdigest(),'nontransparent_pixels':65536,'color_space':'non_color','normal_convention':'open_gl' if channel=='normal' else None})\n"+
-        "report={'schema_version':'media-forge.scene-bake-result@1','blender_version':'4.5.9','spec':spec,'device':'CPU','frame':0,'samples':16,'autoexec_disabled':True,'uv':{'name':'UVMap','uv_sha256':'a'*64,'loops':3,'finite':True,'degenerate_triangles':0,'bounds_min':[0,0],'bounds_max':[1,1]},'images':images}\n"+
+        "report={'schema_version':'media-forge.scene-bake-result@1','blender_version':'4.5.9','spec':spec,'device':'CPU','frame':0,'samples':16,'autoexec_disabled':True,'uv_triangle_count':1,'uv':{'name':'UVMap','uv_sha256':'a'*64,'loops':3,'finite':True,'degenerate_triangles':0,'bounds_min':[0,0],'bounds_max':[1,1]},'images':images}\n"+
         "if mode=='gpu':report['device']='GPU'\nif mode=='settings':report['spec']={**spec,'resolution':512}\nif mode=='empty':images[0]['nontransparent_pixels']=0\n"+
         "if mode=='bad_image':pathlib.Path('ao.png').write_bytes(b'bad')\nif mode=='symlink':\n pathlib.Path('normal.png').unlink()\n pathlib.Path('normal.png').symlink_to('ao.png')\n"+
         "pathlib.Path('result.json').write_text(json.dumps(report))\n")
@@ -168,7 +168,7 @@ def test_a_few_zero_area_uv_triangles_do_not_block_a_bake() -> None:
         return {
             "schema_version": "media-forge.scene-bake-result@1", "blender_version": "4.5.13",
             "spec": value.worker_spec(), "device": "CPU", "frame": 0, "samples": 16,
-            "autoexec_disabled": True,
+            "autoexec_disabled": True, "uv_triangle_count": 24_900,
             "uv": {"name": "UVMap", "uv_sha256": "d" * 64, "loops": 74_700, "finite": True,
                    "degenerate_triangles": degenerate,
                    "bounds_min": [0.0, 0.0], "bounds_max": [1.0, 1.0]},
@@ -180,9 +180,16 @@ def test_a_few_zero_area_uv_triangles_do_not_block_a_bake() -> None:
     # 実測値（24,900 三角形のうち 1 つ）は通る。
     validate_report(report(1), value, "4.5.13")
     # 許容は 1000 分の 1 か 64 の大きい方。
-    validate_report(report(74), value, "4.5.13")
+    validate_report(report(64), value, "4.5.13")
     with pytest.raises(ValueError):
-        validate_report(report(75), value, "4.5.13")
+        validate_report(report(65), value, "4.5.13")
     # 数えられなかった UV は通さない。
     with pytest.raises(ValueError):
         validate_report(report(None), value, "4.5.13")
+
+    # Small meshes cannot pass with all or most UV triangles collapsed.
+    small = report(1)
+    small["uv_triangle_count"] = 1
+    small["uv"]["loops"] = 3
+    with pytest.raises(ValueError):
+        validate_report(small, value, "4.5.13")

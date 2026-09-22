@@ -26,7 +26,7 @@ MAX_IMAGE_BYTES=8*1024*1024
 
 
 def validate_report(report: Any,value: SceneBakeRequest,version: str) -> None:
-    if not isinstance(report,dict) or set(report)!={'schema_version','blender_version','spec','device','frame','samples','autoexec_disabled','uv','images'}:
+    if not isinstance(report,dict) or set(report)!={'schema_version','blender_version','spec','device','frame','samples','autoexec_disabled','uv_triangle_count','uv','images'}:
         raise ValueError('invalid bake report')
     if report['schema_version']!='media-forge.scene-bake-result@1' or report['blender_version']!=version or report['spec']!=value.worker_spec():
         raise ValueError('bake identity differs')
@@ -37,8 +37,12 @@ def validate_report(report: Any,value: SceneBakeRequest,version: str) -> None:
     # （実測: 24,900 三角形のうち 1 つ）。その三角形にテクセルが乗らないだけで
     # 他の面には影響しない。worker と同じ許容（1000 分の 1 か 64 の大きい方）で
     # 見る。ほとんどが潰れている UV は今までどおり断る。
-    allowance=max(64,(uv.loops or 0)//1000)
+    triangles=report['uv_triangle_count']
+    if type(triangles) is not int or not 0 < triangles <= uv.loops:
+        raise ValueError('bake triangle count differs')
+    allowance=max(64,triangles//1000)
     if (uv.name!=value.uv_map or not uv.finite or uv.degenerate_triangles is None
+            or uv.degenerate_triangles*2 >= triangles
             or uv.degenerate_triangles>allowance
             or uv.bounds_min is None or uv.bounds_max is None
             or min(uv.bounds_min)<-1e-5 or max(uv.bounds_max)>1.00001):

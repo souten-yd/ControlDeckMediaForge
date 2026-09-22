@@ -10,8 +10,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
+from weakref import WeakValueDictionary
 
 from .asset_pipeline import AssetPipeline, AssetPipelineRequest, PipelineStage
 
@@ -134,6 +136,8 @@ async def advance(pipeline: AssetPipeline, deps: PipelineDeps) -> AssetPipeline:
     1 回の呼び出しで、終わった段は次へ進め、始められる段は 1 つだけ始める。
     走っている段が終わるまで待たない（待つと poll が返らない）。
     """
+    if pipeline.state in TERMINAL:
+        return pipeline
     value = AssetPipelineRequest.model_validate(pipeline.request)
     for _ in range(len(pipeline.stages) + 1):
         stage = pipeline.current()
@@ -171,6 +175,8 @@ async def advance(pipeline: AssetPipeline, deps: PipelineDeps) -> AssetPipeline:
 
 def approve(pipeline: AssetPipeline, deps: PipelineDeps) -> AssetPipeline:
     """Let the step the pipeline is waiting on start on the next poll."""
+    if pipeline.state in TERMINAL:
+        raise PipelineStalled("pipeline_already_finished")
     stage = pipeline.current()
     if stage is None or stage.state != "awaiting_approval":
         raise PipelineStalled("pipeline_is_not_awaiting_approval")
@@ -179,6 +185,41 @@ def approve(pipeline: AssetPipeline, deps: PipelineDeps) -> AssetPipeline:
     pipeline.state = "running"
     pipeline.updated_at = deps.now()
     return pipeline
+
+
+class PipelineCoordinator:
+    """Serialize a pipeline's read/advance/write in the single core process.
+
+    Different pipelines keep independent request-bound dependencies. Weak locks
+    are retained by all callers while waiting, then reclaimed after use.
+    """
+
+    def __init__(self, load: Callable[[str, str], AssetPipeline],
+                 save: Callable[[AssetPipeline], None]) -> None:
+        self.load = load
+        self.save = save
+        self.locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+
+    async def start(self, pipeline: AssetPipeline, deps: PipelineDeps) -> AssetPipeline:
+        # The identifier is private until this request returns.
+        result = await advance(pipeline, deps)
+        await asyncio.to_thread(self.save, result)
+        return result
+
+    async def action(self, pipeline_id: str, owner: str, action: str,
+                     deps: PipelineDeps) -> AssetPipeline:
+        lock = self.locks.setdefault(pipeline_id, asyncio.Lock())
+        async with lock:
+            pipeline = await asyncio.to_thread(self.load, pipeline_id, owner)
+            if action == "approve":
+                approve(pipeline, deps)
+            elif action == "cancel":
+                cancel(pipeline, deps)
+            elif action != "status":
+                raise PipelineStalled("invalid_pipeline_action")
+            result = await advance(pipeline, deps)
+            await asyncio.to_thread(self.save, result)
+            return result
 
 
 def cancel(pipeline: AssetPipeline, deps: PipelineDeps) -> AssetPipeline:

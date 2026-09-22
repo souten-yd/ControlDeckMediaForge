@@ -134,7 +134,7 @@ from .scene_bake import SceneBakeRequest
 from .asset_pipeline import (
     AssetPipeline, AssetPipelineActionRequest, AssetPipelineRequest, PipelineStage,
 )
-from .asset_pipeline_runner import PipelineDeps, PipelineStalled, advance, approve, cancel
+from .asset_pipeline_runner import PipelineCoordinator, PipelineDeps, PipelineStalled
 from .scene_rig import SceneRigRequest
 from .scene_recipes import (
     SceneCreateRequest,
@@ -2852,15 +2852,15 @@ def create_app(
             "asset": asset.model_dump(mode="json"),
         }
 
-    def pipeline_deps() -> PipelineDeps:
+    def pipeline_deps(identity: HostIdentity) -> PipelineDeps:
         """既存の経路だけを束ねて渡す。ここで新しい job の作り方は決めない。"""
 
         async def submit_image(prompt: str, width: int, height: int) -> dict[str, Any]:
             value = await imported_inputs(host_job_input({"input": {
                 "intent": prompt, "width": width, "height": height,
-            }}), identity_holder["identity"])
+            }}), identity)
             job = await submit_hosted(
-                value, identity_holder["identity"], workload_class="agent-interactive"
+                value, identity, workload_class="agent-interactive"
             )
             return {"job_id": job["id"]}
 
@@ -2869,7 +2869,7 @@ def create_app(
                 "name": value.name, "input_asset_id": asset_id,
                 "resolution": value.resolution, "seed": value.seed,
                 "refine_with_pixal3d": value.refine_with_pixal3d,
-            }), identity_holder["identity"])
+            }), identity)
 
         async def submit_rig(value: AssetPipelineRequest, scene_id: str, revision_id: str) -> dict[str, Any]:
             return await submit_scene_tool(SceneEditRequest.model_validate({
@@ -2878,10 +2878,10 @@ def create_app(
                     value.rig_object_id, "rig", f"{value.name} rig", value.clip_id,
                     value.rig_ratio, 0.00001, 2000, 24, 24,
                 ),
-            }), identity_holder["identity"])
+            }), identity)
 
         async def export_scene(scene_id: str, fmt: str) -> dict[str, Any]:
-            document, revisions = scenes.get(scene_owner(identity_holder["identity"]), scene_id)
+            document, revisions = scenes.get(scene_owner(identity), scene_id)
             current = next(item for item in revisions if item.id == document.current_revision_id)
             return {"asset_id": current.preview_asset_id if fmt == "glb" else current.source_asset_id}
 
@@ -2891,9 +2891,9 @@ def create_app(
                     "error": job.get("error")}
 
         async def scene_job(job_id: str) -> dict[str, Any]:
-            await scene_recipe_jobs.reconcile_terminal(job_id, identity_holder["identity"])
+            await scene_recipe_jobs.reconcile_terminal(job_id, identity)
             return scene_recipe_jobs.projection(
-                job_id, scene_owner(identity_holder["identity"]))
+                job_id, scene_owner(identity))
 
         return PipelineDeps(
             submit_image=submit_image, submit_model=submit_model, submit_rig=submit_rig,
@@ -2901,18 +2901,28 @@ def create_app(
             now=lambda: utc_now(),
         )
 
-    # deps の中から今の呼び出しの identity を見るための箱。要求ごとに差し替える。
-    identity_holder: dict[str, Any] = {"identity": None}
+    pipeline_coordinator = PipelineCoordinator(store.get_pipeline, store.save_pipeline)
 
     async def run_pipeline(pipeline: AssetPipeline, identity: HostIdentity) -> dict[str, Any]:
-        identity_holder["identity"] = identity
         try:
-            advanced = await advance(pipeline, pipeline_deps())
+            advanced = await pipeline_coordinator.start(pipeline, pipeline_deps(identity))
         except (KeyError, SceneError, HostApiError) as exc:
             code = getattr(exc, "code", "pipeline_stage_failed")
             raise HTTPException(status_code=422, detail={"code": code}) from exc
-        await asyncio.to_thread(store.save_pipeline, advanced)
         return advanced.model_dump(mode="json")
+
+    async def pipeline_action(pipeline_id: str, action: str,
+                              identity: HostIdentity) -> dict[str, Any]:
+        try:
+            result = await pipeline_coordinator.action(
+                pipeline_id, scene_owner(identity), action, pipeline_deps(identity))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "pipeline_not_found"}) from exc
+        except PipelineStalled as exc:
+            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
+        except (SceneError, HostApiError) as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
+        return result.model_dump(mode="json")
 
     @app.post("/addon/v1/agent/pipeline/start")
     async def agent_pipeline_start(request: Request) -> dict[str, Any]:
@@ -2939,22 +2949,7 @@ def create_app(
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_id"}) from exc
-        owner = scene_owner(identity)
-        try:
-            pipeline = await asyncio.to_thread(store.get_pipeline, value.pipeline_id, owner)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail={"code": "pipeline_not_found"}) from exc
-        identity_holder["identity"] = identity
-        try:
-            if value.action == "approve":
-                approve(pipeline, pipeline_deps())
-            elif value.action == "cancel":
-                cancel(pipeline, pipeline_deps())
-                await asyncio.to_thread(store.save_pipeline, pipeline)
-                return pipeline.model_dump(mode="json")
-        except PipelineStalled as exc:
-            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
-        return await run_pipeline(pipeline, identity)
+        return await pipeline_action(value.pipeline_id, value.action, identity)
 
     @app.post("/addon/v1/agent/job/status")
     async def agent_scene_job_status(request: Request) -> dict[str, Any]:
@@ -4207,18 +4202,8 @@ def create_app(
                         action = str(params.get("action", "status"))
                         if action not in {"status", "approve", "cancel"}:
                             raise ValueError("pipeline action differs")
-                        owner = scene_owner(identity)
-                        loaded = await asyncio.to_thread(
-                            store.get_pipeline, str(params.get("pipeline_id", "")), owner)
-                        identity_holder["identity"] = identity
-                        if action == "approve":
-                            approve(loaded, pipeline_deps())
-                        elif action == "cancel":
-                            cancel(loaded, pipeline_deps())
-                            await asyncio.to_thread(store.save_pipeline, loaded)
-                            result = loaded.model_dump(mode="json")
-                        if action != "cancel":
-                            result = await run_pipeline(loaded, identity)
+                        result = await pipeline_action(
+                            str(params.get("pipeline_id", "")), action, identity)
                     elif method == "pipelines.list":
                         if set(params) - {"limit"} != set():
                             raise ValueError("pipeline list fields differ")
@@ -4836,22 +4821,7 @@ def create_app(
         action = str(payload.get("action", "status"))
         if action not in {"status", "approve", "cancel"}:
             raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_action"})
-        try:
-            pipeline = await asyncio.to_thread(
-                store.get_pipeline, pipeline_id, preferences.STANDALONE_SUBJECT)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail={"code": "pipeline_not_found"}) from exc
-        identity_holder["identity"] = standalone_identity()
-        try:
-            if action == "approve":
-                approve(pipeline, pipeline_deps())
-            elif action == "cancel":
-                cancel(pipeline, pipeline_deps())
-                await asyncio.to_thread(store.save_pipeline, pipeline)
-                return pipeline.model_dump(mode="json")
-        except PipelineStalled as exc:
-            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
-        return await run_pipeline(pipeline, standalone_identity())
+        return await pipeline_action(pipeline_id, action, standalone_identity())
 
     @app.get("/workspace-api/scenes", include_in_schema=False)
     async def standalone_scenes() -> dict[str, Any]:
