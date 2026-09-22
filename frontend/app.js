@@ -6017,6 +6017,38 @@ function watchSceneTextureJob(job) {
   void pollJob(job.id).finally(() => state.sceneTexturePollingJobs.delete(job.id));
 }
 
+function sceneTextureInputProblem(target = selectedMaterialTarget()) {
+  const text = sceneText();
+  for (const [id, ready] of [
+    ["scene-material-object", Boolean(target)],
+    ["scene-material-slot", byId("scene-material-slot").value !== ""],
+    ["scene-material-uv", Boolean(byId("scene-material-uv").value)],
+  ]) {
+    if (!ready) return {id, message: text.textureTargetRequired};
+  }
+  const mode = byId("scene-texture-mode").value;
+  if (mode === "library" && !byId("scene-material-image").value) {
+    return {id: "scene-material-image", message: text.textureSourceRequired};
+  }
+  if (mode === "current" && !["base_color", "emission"].includes(byId("scene-material-channel").value)) {
+    return {id: "scene-material-channel", message: text.textureChannelUnsupported};
+  }
+  if (!byId("scene-texture-prompt").value.trim()) {
+    return {id: "scene-texture-prompt", message: text.texturePromptRequired};
+  }
+  return null;
+}
+
+function showSceneTextureInputProblem(problem) {
+  byId("scene-texture-status").textContent = problem.message;
+  const field = byId(problem.id);
+  for (let panel = field.closest("details"); panel; panel = panel.parentElement?.closest("details")) {
+    panel.open = true;
+  }
+  field.scrollIntoView({block: "center"});
+  field.focus({preventScroll: true});
+}
+
 function renderSceneTextureControls(blocked, target) {
   const text = sceneText();
   const job = selectedSceneTextureJob();
@@ -6024,15 +6056,14 @@ function renderSceneTextureControls(blocked, target) {
   const running = Boolean(job && !TERMINAL.has(job.status));
   if (running) watchSceneTextureJob(job);
   const prompt = byId("scene-texture-prompt");
-  const targetReady = Boolean(target && byId("scene-material-slot").value && byId("scene-material-uv").value);
   const mode = byId("scene-texture-mode");
   const canEdit = capabilityState("image.single_reference_edit") === "available";
   for (const option of mode.options) option.disabled = option.value !== "new" && !canEdit;
   if (!canEdit) mode.value = "new";
   const busy = blocked || running || state.sceneTextureBusy;
-  const sourceReady = mode.value !== "library" || Boolean(byId("scene-material-image").value);
-  const channelReady = mode.value !== "current" || ["base_color", "emission"].includes(byId("scene-material-channel").value);
-  byId("scene-texture-generate").disabled = busy || !targetReady || !sourceReady || !channelReady || !prompt.value.trim();
+  const problem = sceneTextureInputProblem(target);
+  // Missing input should explain itself on tap, while active work stays locked.
+  byId("scene-texture-generate").disabled = busy;
   mode.disabled = busy;
   byId("scene-texture-count").disabled = busy;
   prompt.disabled = busy;
@@ -6056,7 +6087,7 @@ function renderSceneTextureControls(blocked, target) {
   } else if (job?.status === "failed") status = text.textureFailed;
   else if (job?.status === "canceled") status = text.textureCanceled;
   byId("scene-texture-status").textContent = state.sceneTextureBusy ? text.textureExtracting
-    : state.sceneTextureError || (!channelReady ? text.textureChannelUnsupported : status);
+    : state.sceneTextureError || (!running && problem ? problem.message : status);
 }
 
 function renderSceneMaterialControls({targetsChanged = true} = {}) {
@@ -6120,13 +6151,14 @@ async function createSceneTexture({retry = false} = {}) {
   const previous = retry ? selectedSceneTextureJob() : null;
   const previousContext = sceneTextureContext(previous);
   const intent = retry ? previous?.request?.intent : byId("scene-texture-prompt").value.trim();
+  const problem = retry ? null : sceneTextureInputProblem(target);
+  if (problem) {
+    showSceneTextureInputProblem(problem);
+    return;
+  }
   if (!intent) {
     byId("scene-texture-status").textContent = text.texturePromptRequired;
     byId("scene-texture-prompt").focus();
-    return;
-  }
-  if (!retry && (!target || materialSlot === "" || !uvMap)) {
-    byId("scene-texture-status").textContent = text.textureTargetRequired;
     return;
   }
   if (retry && !previousContext) return;
@@ -10161,13 +10193,17 @@ byId("scene-texture-cancel").addEventListener("click", () => void cancelSceneTex
 byId("scene-texture-retry").addEventListener("click", () => void createSceneTexture({retry: true}));
 byId("scene-texture-use").addEventListener("click", () => void useSceneTextureResult());
 byId("scene-material-object").addEventListener("change", () => {
+  state.sceneTextureError = "";
   renderSceneMaterialControls({targetsChanged: false});
 });
 for (const id of [
   "scene-material-slot", "scene-material-image", "scene-material-channel",
   "scene-material-uv", "scene-material-wrap", "scene-material-normal", "scene-texture-mode", "scene-texture-count",
 ]) {
-  byId(id).addEventListener("change", () => renderSceneMaterialControls({targetsChanged: false}));
+  byId(id).addEventListener("change", () => {
+    state.sceneTextureError = "";
+    renderSceneMaterialControls({targetsChanged: false});
+  });
 }
 byId("scene-blender-open").addEventListener("click", () => void startOrOpenBlender());
 byId("scene-simplify-form").addEventListener("submit", (event) => {
