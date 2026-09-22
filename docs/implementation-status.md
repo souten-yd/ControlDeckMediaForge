@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-22 材質画像「新しく作る」の無反応表示を修正（0.33.7準備）
+
+実installed0.33.6で、対象が未選択だと画像生成ボタンdisabledのまま、過去Jobの
+「画像ができました」が出る状態を再現。通常Createのtapはjobs.createまで到達した。
+材質の未選択/未入力は押せる状態にし、不足欄を開いてfocus・理由を表示する。
+生成中・材質読込中はdisableを維持。対象の自動選択や未完成要求の送信は行わない。
+
+- 同じ修正関数を実Hostへ一時適用し1280/320px touchで対象/指示/画像/用途の
+  不足欄への移動、invalid要求0、valid要求1、二重送信防止、overflow0/page error0を確認。
+  要求はGPU実行前に捕捉。最終公開bundleの受入とは区別する。
+- 診断中に利用者の別操作でjob_67b63c9...がimage.generate/19.387043秒/3画像成功。
+  診断要求とは別（推論runtime変更なし）。原本maintenance/create-button-20260922。
+- ./mf.sh test: 2410 passed / 3 warnings / 273.31秒、node構文/git diff確認通過。
+  0.33.7通常リリース/適用/再起動後確認を継続する。
+
+
 ## 2026-09-22 派生画像→元3D・モバイル材質変更を0.33.6でリリース/適用完了
 
 PR617〜620をmergeし、source51a0e54から0.33.6を署名公開・通常Host更新。
