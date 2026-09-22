@@ -1,5 +1,23 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 Qwen導入評価を完了（現構成は見送り）
+
+branch `ux1/qwen-image-21-evaluation`、PR #611へ評価道具・実測・結論を記録。
+固定revision790c9263の28file/33,134,949,212Bを取得し、全digestとoffline snapshotを確認。
+
+- CPU/int8: packed-int8のcontiguous制約で失敗、画像0枚。RSS25.130GiBで25GiB条件も不通過。
+- GPU/bf16+CPU offload: 24.608秒のsampleでHost空きRAMが3GiB未満となり監視停止、画像0枚。
+- GPU/int8: load35.902秒、通常画像1枚708.136秒。GPU実使用ピーク27.832GiB。
+  リンゴと葉の画像を目視確認。900秒上限で2枚目を停止、3回の再現性確認はNOT TESTED。
+- native RGBA: 別の1枚試験は300秒上限で停止、画像0枚。透過品質の比較はNOT TESTED。
+- 全run OOM0、Host応答200、GPU lease解放済み。終了後もMediaForge0.32.2 healthy、GPU予約0。
+- 製品台帳・adapter・共有runtimeは変更なし。全suite2380 passed/3 warnings/275.48秒、focused19件。
+  最終テスト後のrepository変更は文書のみ。評価は終了、実行中の測定や同意待ちはない。
+
+次の評価はCPU量子化互換性・RAM余裕・60秒条件を改善する具体的変更がある場合に限る。
+同じ設定の長時間再試行や製品採用へ自動で進めない。再開条件・証跡・未検証範囲は以下。
+詳細: [Qwen評価記録](qwen-image-21-evaluation-20260922.md)。
+
 ## 2026-09-22 Qwen評価を再開（同意・通常ログイン済み）
 
 利用者が提示済みResearch License条件を明示承認し、通常operator loginも更新した。

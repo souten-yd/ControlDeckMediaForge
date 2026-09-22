@@ -1,6 +1,8 @@
 # Codex への実装指示（Qwen-Image-2.1 評価）
 
-2026-09-22実行状態: [評価準備の実測と未実施項目](qwen-image-21-evaluation-20260922.md)。
+2026-09-22実行状態: [実機評価結果と未実施項目](qwen-image-21-evaluation-20260922.md)。
+評価道具と回帰確認は実装・実測済み。Qwenは通常画像1枚を生成したが708秒を要した。
+CPU互換性・RAM余裕・時間の条件は不通過。製品台帳・adapter・共有runtimeの変更なし。
 
 対象: MediaForge（`worker_packs/image`, `scripts`）
 背景: `docs/implementation/qwen-image-evaluation-plan.md`
