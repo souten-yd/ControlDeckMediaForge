@@ -120,7 +120,13 @@ def measure(obj) -> dict[str, object]:
     band = _band(points, bottom + height * (LEG_BAND_HEIGHT - LEG_BAND_THICKNESS / 2),
                  bottom + height * (LEG_BAND_HEIGHT + LEG_BAND_THICKNESS / 2))
     if len(band) < 24:
-        raise RigAutoError("no horizontal band near the base carries enough geometry to find limbs")
+        # 面ではなく頂点を数えている。角柱や円柱は端面にしか頂点が無いので、
+        # 脚の途中の帯に何も掛からない。生成した 3D は密なので当たるが、
+        # 手で置いた原始形状はここで落ちる。理由が分かる言い方にしておく。
+        raise RigAutoError(
+            "no vertices sit in the horizontal band near the base; "
+            "automatic rigging reads a densely tessellated surface"
+        )
     groups = _clusters([(point[0], point[1]) for point in band], cell,
                        max(4, int(len(band) * MIN_CLUSTER_SHARE)))
     if len(groups) < 2:

@@ -131,6 +131,10 @@ from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
 from .scene_refinement import SceneRefineRequest
 from .scene_bake import SceneBakeRequest
+from .asset_pipeline import (
+    AssetPipeline, AssetPipelineActionRequest, AssetPipelineRequest, PipelineStage,
+)
+from .asset_pipeline_runner import PipelineCoordinator, PipelineDeps, PipelineStalled
 from .scene_rig import SceneRigRequest
 from .scene_recipes import (
     SceneCreateRequest,
@@ -2848,6 +2852,105 @@ def create_app(
             "asset": asset.model_dump(mode="json"),
         }
 
+    def pipeline_deps(identity: HostIdentity) -> PipelineDeps:
+        """既存の経路だけを束ねて渡す。ここで新しい job の作り方は決めない。"""
+
+        async def submit_image(prompt: str, width: int, height: int) -> dict[str, Any]:
+            value = await imported_inputs(host_job_input({"input": {
+                "intent": prompt, "width": width, "height": height,
+            }}), identity)
+            job = await submit_hosted(
+                value, identity, workload_class="agent-interactive"
+            )
+            return {"job_id": job["id"]}
+
+        async def submit_model(value: AssetPipelineRequest, asset_id: str) -> dict[str, Any]:
+            return await submit_scene_tool(SceneFromImageRequest.model_validate({
+                "name": value.name, "input_asset_id": asset_id,
+                "resolution": value.resolution, "seed": value.seed,
+                "refine_with_pixal3d": value.refine_with_pixal3d,
+            }), identity)
+
+        async def submit_rig(value: AssetPipelineRequest, scene_id: str, revision_id: str) -> dict[str, Any]:
+            return await submit_scene_tool(SceneEditRequest.model_validate({
+                "scene_id": scene_id, "base_revision_id": revision_id,
+                "recipe": scene_workspace.rig_recipe(
+                    value.rig_object_id, "rig", f"{value.name} rig", value.clip_id,
+                    value.rig_ratio, 0.00001, 2000, 24, 24,
+                ),
+            }), identity)
+
+        async def export_scene(scene_id: str, fmt: str) -> dict[str, Any]:
+            document, revisions = scenes.get(scene_owner(identity), scene_id)
+            current = next(item for item in revisions if item.id == document.current_revision_id)
+            return {"asset_id": current.preview_asset_id if fmt == "glb" else current.source_asset_id}
+
+        async def media_job(job_id: str) -> dict[str, Any]:
+            job = store.get_job(job_id).model_dump(mode="json")
+            return {"status": job["status"], "asset_ids": job.get("asset_ids") or [],
+                    "error": job.get("error")}
+
+        async def scene_job(job_id: str) -> dict[str, Any]:
+            await scene_recipe_jobs.reconcile_terminal(job_id, identity)
+            return scene_recipe_jobs.projection(
+                job_id, scene_owner(identity))
+
+        return PipelineDeps(
+            submit_image=submit_image, submit_model=submit_model, submit_rig=submit_rig,
+            export_scene=export_scene, media_job=media_job, scene_job=scene_job,
+            now=lambda: utc_now(),
+        )
+
+    pipeline_coordinator = PipelineCoordinator(store.get_pipeline, store.save_pipeline)
+
+    async def run_pipeline(pipeline: AssetPipeline, identity: HostIdentity) -> dict[str, Any]:
+        try:
+            advanced = await pipeline_coordinator.start(pipeline, pipeline_deps(identity))
+        except (KeyError, SceneError, HostApiError) as exc:
+            code = getattr(exc, "code", "pipeline_stage_failed")
+            raise HTTPException(status_code=422, detail={"code": code}) from exc
+        return advanced.model_dump(mode="json")
+
+    async def pipeline_action(pipeline_id: str, action: str,
+                              identity: HostIdentity) -> dict[str, Any]:
+        try:
+            result = await pipeline_coordinator.action(
+                pipeline_id, scene_owner(identity), action, pipeline_deps(identity))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "pipeline_not_found"}) from exc
+        except PipelineStalled as exc:
+            raise HTTPException(status_code=409, detail={"code": exc.code}) from exc
+        except (SceneError, HostApiError) as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
+        return result.model_dump(mode="json")
+
+    @app.post("/addon/v1/agent/pipeline/start")
+    async def agent_pipeline_start(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = AssetPipelineRequest.model_validate(scene_tool_input(await request.json()))
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_asset_pipeline"}) from exc
+        now = utc_now()
+        pipeline = AssetPipeline(
+            id=f"pipeline_{uuid.uuid4().hex}", owner=scene_owner(identity), name=value.name,
+            mode=value.mode, request=value.model_dump(mode="json"),
+            stages=[PipelineStage(name=name) for name in value.planned_stages()],
+            created_at=now, updated_at=now,
+        )
+        return await run_pipeline(pipeline, identity)
+
+    @app.post("/addon/v1/agent/pipeline/status")
+    async def agent_pipeline_status(request: Request) -> dict[str, Any]:
+        identity = await authorize_host(request)
+        try:
+            value = AssetPipelineActionRequest.model_validate(
+                scene_tool_input(await request.json())
+            )
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_id"}) from exc
+        return await pipeline_action(value.pipeline_id, value.action, identity)
+
     @app.post("/addon/v1/agent/job/status")
     async def agent_scene_job_status(request: Request) -> dict[str, Any]:
         identity = await authorize_host(request)
@@ -4033,9 +4136,9 @@ def create_app(
                     elif method == "scenes.simplify":
                         # 画面から任意の recipe を撃たせず、軽量化だけを名前付きで出す。
                         # 組み立てはサーバ側。利用者が決めるのは削る強さだけ。
-                        if set(params) - {"weld_distance_m", "min_faces", "object_id"} != {
-                            "scene_id", "base_revision_id", "ratio"
-                        }:
+                        if set(params) - {
+                            "weld_distance_m", "min_faces", "object_id", "from_revision_id",
+                        } != {"scene_id", "base_revision_id", "ratio"}:
                             raise ValueError("scene simplify fields differ")
                         ratio = params.get("ratio")
                         if type(ratio) is not float or not 0.05 <= ratio < 1.0:
@@ -4047,12 +4150,67 @@ def create_app(
                         if type(floor) is not int or isinstance(floor, bool) or not 4 <= floor <= 1_000_000:
                             raise ValueError("scene simplify face floor is out of bounds")
                         target = params.get("object_id", "generated_0")
+                        scene_id = str(params.get("scene_id", ""))
+                        head = str(params.get("base_revision_id", ""))
+                        # 削るのは常に選んだ版そのものであって、前回の結果ではない。
+                        # 前回の結果に重ねると 60% のあと 55% を選んだときに
+                        # 元の 33% になり、画面が言っている割合が嘘になる。
+                        # 編集は head の上にしか積めないので、先に元の版を head へ戻す。
+                        origin = params.get("from_revision_id")
+                        if isinstance(origin, str) and origin and origin != head:
+                            restored = await asyncio.to_thread(
+                                scene_workspace.restore_revision,
+                                scene_owner(identity), scene_id, head, origin,
+                            )
+                            head = str(restored["revision"]["id"])
                         result = await submit_scene_tool(SceneEditRequest.model_validate({
-                            "scene_id": str(params.get("scene_id", "")),
-                            "base_revision_id": str(params.get("base_revision_id", "")),
+                            "scene_id": scene_id,
+                            "base_revision_id": head,
                             "recipe": scene_workspace.simplify_recipe(
                                 str(target), ratio, distance, floor),
                         }), identity)
+                        result["base_revision_id"] = head
+                    elif method == "pipelines.start":
+                        # 画面が決めるのは「何から始めるか」と「どこまでやるか」だけ。
+                        # 段の並びはサーバ側にある。
+                        if set(params) - {
+                            "mode", "resolution", "rig", "rig_ratio", "clip_id", "export",
+                        } != {"name", "image_asset_id"}:
+                            raise ValueError("pipeline start fields differ")
+                        value = AssetPipelineRequest.model_validate({
+                            "name": str(params.get("name", "")),
+                            "image_asset_id": params.get("image_asset_id"),
+                            "mode": str(params.get("mode", "confirm")),
+                            "resolution": params.get("resolution", 1024),
+                            "rig": params.get("rig", True) is not False,
+                            "rig_ratio": float(params.get("rig_ratio", 0.6)),
+                            "clip_id": params.get("clip_id", "walk"),
+                            "export": params.get("export", True) is not False,
+                        })
+                        now = utc_now()
+                        pipeline = AssetPipeline(
+                            id=f"pipeline_{uuid.uuid4().hex}", owner=scene_owner(identity),
+                            name=value.name, mode=value.mode,
+                            request=value.model_dump(mode="json"),
+                            stages=[PipelineStage(name=name) for name in value.planned_stages()],
+                            created_at=now, updated_at=now,
+                        )
+                        result = await run_pipeline(pipeline, identity)
+                    elif method == "pipelines.status":
+                        if set(params) - {"action"} != {"pipeline_id"}:
+                            raise ValueError("pipeline status fields differ")
+                        action = str(params.get("action", "status"))
+                        if action not in {"status", "approve", "cancel"}:
+                            raise ValueError("pipeline action differs")
+                        result = await pipeline_action(
+                            str(params.get("pipeline_id", "")), action, identity)
+                    elif method == "pipelines.list":
+                        if set(params) - {"limit"} != set():
+                            raise ValueError("pipeline list fields differ")
+                        items = await asyncio.to_thread(
+                            store.list_pipelines, scene_owner(identity),
+                            int(params.get("limit", 10)))
+                        result = {"items": [item.model_dump(mode="json") for item in items]}
                     elif method == "scenes.rig":
                         # 画面から任意の recipe を撃たせない。骨入れは「繋ぐ→落とす→
                         # 測って組む」の決まった並びで、組み立てはサーバ側。利用者が
@@ -4625,6 +4783,45 @@ def create_app(
     async def standalone_clear_jobs() -> dict[str, Any]:
         """Same-origin workspace bridge for standalone mode; not a public API."""
         return {"cleared": store.clear_finished_jobs()}
+
+    def standalone_identity() -> HostIdentity:
+        return HostIdentity("", "media-forge", preferences.STANDALONE_SUBJECT, 0, frozenset())
+
+    @app.get("/workspace-api/pipelines", include_in_schema=False)
+    async def standalone_pipelines() -> dict[str, Any]:
+        items = await asyncio.to_thread(
+            store.list_pipelines, preferences.STANDALONE_SUBJECT, 10)
+        return {"items": [item.model_dump(mode="json") for item in items]}
+
+    @app.post("/workspace-api/pipelines", include_in_schema=False)
+    async def standalone_pipeline_start(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            value = AssetPipelineRequest.model_validate({
+                "name": payload.get("name"), "image_asset_id": payload.get("image_asset_id"),
+                "mode": payload.get("mode", "confirm"),
+                "resolution": payload.get("resolution", 1024),
+                "rig": payload.get("rig", True) is not False,
+                "rig_ratio": float(payload.get("rig_ratio", 0.6)),
+                "clip_id": payload.get("clip_id", "walk"),
+                "export": payload.get("export", True) is not False,
+            })
+        except (ValidationError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_asset_pipeline"}) from exc
+        now = utc_now()
+        pipeline = AssetPipeline(
+            id=f"pipeline_{uuid.uuid4().hex}", owner=preferences.STANDALONE_SUBJECT,
+            name=value.name, mode=value.mode, request=value.model_dump(mode="json"),
+            stages=[PipelineStage(name=name) for name in value.planned_stages()],
+            created_at=now, updated_at=now,
+        )
+        return await run_pipeline(pipeline, standalone_identity())
+
+    @app.post("/workspace-api/pipelines/{pipeline_id}", include_in_schema=False)
+    async def standalone_pipeline_status(pipeline_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        action = str(payload.get("action", "status"))
+        if action not in {"status", "approve", "cancel"}:
+            raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_action"})
+        return await pipeline_action(pipeline_id, action, standalone_identity())
 
     @app.get("/workspace-api/scenes", include_in_schema=False)
     async def standalone_scenes() -> dict[str, Any]:

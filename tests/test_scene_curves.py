@@ -10,7 +10,7 @@ import jsonschema
 import pytest
 from pydantic import ValidationError
 
-from mediaforge.scene_geometry import validate_geometry_facts
+from mediaforge.scene_geometry import MAX_FACT_VERTICES, validate_geometry_facts
 from mediaforge.scene_recipes import SceneCreateRequest, MeshLoft, MeshSweep
 from test_game_static_operations import ROOT, request, worker
 
@@ -98,9 +98,15 @@ def test_geometry_projection_rejects_unbounded_or_foreign_selectors() -> None:
     fact={"object_id":"body","geometry_sha256":"a"*64,"vertices":3,"triangles":1,"boundary_edges":3,
           "nonmanifold_edges":0,"inconsistent_edges":0,"boundary_loops":[[0,1,2]]}
     assert validate_geometry_facts([fact],["body"])==[fact]
-    for bad in ([{**fact,"boundary_loops":[[0,1,3]]}],[fact,fact],[{**fact,"vertices":16385}]):
+    # 読む側の上限は生成した 3D を載せられる大きさまで上げてある。要約なので
+    # payload は頂点数に比例しない（実測 127,796 頂点で 1.4 KB）。
+    over = MAX_FACT_VERTICES + 1
+    for bad in ([{**fact,"boundary_loops":[[0,1,3]]}],[fact,fact],[{**fact,"vertices":over}]):
         with pytest.raises(ValueError):validate_geometry_facts(bad,["body"])
     with pytest.raises(ValueError):validate_geometry_facts([fact],["other"])
+    # 生成した 3D の実寸が通ること。ここが通らないと法線を焼く相手を指定できない。
+    real={**fact,"vertices":35338,"triangles":78392,"boundary_loops":[[0,1,35337]]}
+    assert validate_geometry_facts([real],["body"])==[real]
 
 
 def test_code_paths_and_duplicate_creations_rejected() -> None:

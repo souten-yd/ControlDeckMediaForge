@@ -36,12 +36,17 @@ class UvMapFact(BaseModel):
         return self
 
 
+# 読む側の上限。worker の scene_curves.MAX_FACT_VERTICES と同じ値にする。
+# 要約なので payload は頂点数に比例しない（実測 127,796 頂点で 1.4 KB）。
+MAX_FACT_VERTICES = 262_144
+
+
 class SkinWeightFact(BaseModel):
     model_config = ConfigDict(extra="forbid")
     rig_object_id: ObjectId
-    vertices: int = Field(ge=0, le=16384, strict=True)
-    unweighted_vertices: int = Field(ge=0, le=16384, strict=True)
-    invalid_vertices: int = Field(ge=0, le=16384, strict=True)
+    vertices: int = Field(ge=0, le=MAX_FACT_VERTICES, strict=True)
+    unweighted_vertices: int = Field(ge=0, le=MAX_FACT_VERTICES, strict=True)
+    invalid_vertices: int = Field(ge=0, le=MAX_FACT_VERTICES, strict=True)
     max_influences: int = Field(ge=0, le=128, strict=True)
     max_sum_error: float = Field(ge=0, allow_inf_nan=False)
 
@@ -50,12 +55,12 @@ class MeshGeometryFact(BaseModel):
     model_config = ConfigDict(extra="forbid")
     object_id: ObjectId
     geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    vertices: int = Field(ge=0, le=16384, strict=True)
+    vertices: int = Field(ge=0, le=MAX_FACT_VERTICES, strict=True)
     triangles: int = Field(ge=0, le=1_000_000, strict=True)
     boundary_edges: int = Field(ge=0, le=1_000_000, strict=True)
     nonmanifold_edges: int = Field(ge=0, le=1_000_000, strict=True)
     inconsistent_edges: int = Field(ge=0, le=1_000_000, strict=True)
-    boundary_loops: list[Annotated[list[Annotated[int, Field(ge=0, le=16383, strict=True)]],
+    boundary_loops: list[Annotated[list[Annotated[int, Field(ge=0, le=MAX_FACT_VERTICES - 1, strict=True)]],
                                   Field(min_length=3, max_length=64)]] = Field(max_length=16)
     skin_weights: SkinWeightFact | None = None
     curve: CurveControlFact | None = None

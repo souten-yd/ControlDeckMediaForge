@@ -1,5 +1,79 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 正式0.32.2リリース前の修正・検証
+
+PR #608の未公開0.31.0〜0.32.1を引き継いだ。installedはローカル試験版0.32.1、
+公開latestは0.30.1。Host updaterが同一versionの既存directoryを再利用するため、
+署名した正式bundleは0.32.2にする。元checkout feat/g9-image-to-3dは変更しない。
+
+- FIXED: requestごとのidentityを閉包に保持。同一pipelineのread/advance/writeを直列化。
+- FIXED: failed/canceledへの再pollで次段へ進めたり状態を書き戻したりしない。
+- FIXED: bakeの許容数をworker/coreとも実三角形数で算出。半数以上の退化は拒否。
+- PASS: ./mf.sh test、2360 passed / 3 warnings / 265.45秒。
+- PASS: 既存登録blendの複製でCPU bake、1.766秒、32663三角形中退化1、
+  normal753561 B / ao256522 B。core report検証通過。品質はNOT TESTED。
+- CORRECTED: Qwen文書のint8容量断定、hash=演算正確性、transformers依存・Research条件。
+- PENDING: merge、署名bundle、通常update、installed/restart受入。
+- AUTH: 以前の専用operator sessionは期限切れ、auth/me401。通常ログイン更新を依頼済み。
+
+証跡: maintenance/release-0.32.2-20260922/{full.log,bake-regression.json}。
+
+
+## 2026-09-22 法線・AO の焼き込み（0.32.1）
+
+```text
+PASS       実機で生成モデルへ焼けた。normal 680,481 B / ao 321,903 B、全面被覆
+FIXED      UVの退化三角形1個（24,900中）で全体を断っていた。許容は1000分の1か64
+NOTE       品質はまだ良くない。法線に斑点。cageの追い込みは別作業
+NOTE       製品自身が surface_approval: not_granted と返している（良いと言っていない）
+```
+
+## Qwen-Image-2.1 の評価計画（0.32.1 に同梱、コードなし）
+
+```text
+FOUND      2026-09-20 公開。台帳のQwen-Image-2512(53.7GiB)とは別物
+FOUND      重み30.84GiB / 7B / QwenImage21Pipeline / bf16既定 / RGBA透過
+BLOCKER    license が Qwen Research（Apache-2.0ではない）。測る前に法的判断が要る
+BLOCKER    diffusers==0.40.0 固定。上げると採用済みFLUX.2-kleinの経路に影響
+WATCH      同一seed3回のsha256は再現性の検査。GEMMの数値正確性は別の参照比較が必要
+```
+
+## 2026-09-22 ローポリ化の割合（0.32.0）
+
+削る相手が head だったので、割合が元に対する値になっていなかった。
+
+```text
+PASS       実機で 60%→78,392面(60.0%) / 30%→39,195面(30.0%)。どちらも元から
+PASS       重ね掛けなら 30% は元の18%になっていた
+PASS       刻みを1%へ（範囲5〜95）。画面に「元にする版」を出した
+PASS       画面E2E: 単体表示では理由を出して押せない。画像一覧8件・console errors 0
+NOTE       通しフローは host の資源を借りるので単体表示では走らない（原理的）
+```
+
+## 2026-09-21 画像→3D→骨→書き出しの通しフロー（0.31.0）
+
+段は全部道具として既にあった。足りなかったのは順番と、その順番が守っている理由。
+
+```text
+PASS       実機で画像1枚→model→rig→export を確認モードで通した
+PASS       出た GLB は skins1 / joints17 / mf.walk 51ch / JOINTS_0・WEIGHTS_0
+PASS       confirm は最初の段以外で止まり、approveで進む。autoは通しで走る
+PASS       新しい実行系を作らない。既存jobを出してjob_idを覚えるだけ
+PASS       裏の番人を置かない。pollしたときだけ1歩進む（所有者が二重にならない）
+FIXED      approveが次のpollで消えるバグ。承認は段が覚える必要があった
+PASS       失敗した出力を次の段へ持ち込まない。cancelは走っているjobを切らない
+NOT TESTED autoモードの実機通し、画像生成から始める通し、Webからの操作
+```
+
+## 次にやること
+
+```text
+1. 6脚以外（4脚・2脚）での rig.auto
+2. Web から通しフローと骨入れを操作
+3. mesh_geometry facts の上限と、生成モデルへの法線焼き込み
+4. ローカルLLMを繋いで「書く→描く→見る→直す」を回す
+```
+
 ## 2026-09-21 動いている姿を見る（0.30.0〜0.30.1）
 
 観察は `frame_set(0)` 固定で、クリップを付けても立ち姿しか描けなかった。

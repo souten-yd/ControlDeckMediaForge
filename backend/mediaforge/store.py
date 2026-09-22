@@ -15,6 +15,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from .asset_pipeline import AssetPipeline
 from .composer import CreativeCompositionRecord
 from .creative_batches import CreativeBatchRecord
 from .blender_publication import PublicationIdentity, PublicationJournal
@@ -323,6 +324,15 @@ class Store:
                     ON scene_working_copies(scene_id) WHERE state = 'active';
                 CREATE INDEX IF NOT EXISTS idx_scene_working_copies_owner_updated
                     ON scene_working_copies(owner, updated_at DESC);
+                CREATE TABLE IF NOT EXISTS asset_pipelines (
+                    id TEXT PRIMARY KEY,
+                    owner TEXT NOT NULL,
+                    value_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_asset_pipelines_owner_updated
+                    ON asset_pipelines(owner, updated_at DESC);
                 CREATE TABLE IF NOT EXISTS scene_recipe_tasks (
                     job_id TEXT PRIMARY KEY REFERENCES jobs(id),
                     operation TEXT NOT NULL,
@@ -967,6 +977,37 @@ class Store:
             ).fetchall()
         assets = readable_rows(rows, Asset, "metadata_json", kind="asset")
         return [item for item in assets if item.mime_type == "model/gltf-binary"][:limit]
+
+    def save_pipeline(self, value: AssetPipeline) -> None:
+        """Write the whole record. 段は 4 つまでなので、差分更新は要らない。"""
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """INSERT INTO asset_pipelines (id, owner, value_json, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET value_json = excluded.value_json,
+                                                 updated_at = excluded.updated_at""",
+                (value.id, value.owner, value.model_dump_json(),
+                 value.created_at, value.updated_at),
+            )
+
+    def get_pipeline(self, pipeline_id: str, owner: str) -> AssetPipeline:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT value_json FROM asset_pipelines WHERE id = ? AND owner = ?",
+                (pipeline_id, owner),
+            ).fetchone()
+        if row is None:
+            raise KeyError(pipeline_id)
+        return AssetPipeline.model_validate_json(str(row["value_json"]))
+
+    def list_pipelines(self, owner: str, limit: int = 20) -> list[AssetPipeline]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT value_json FROM asset_pipelines WHERE owner = ?
+                   ORDER BY updated_at DESC LIMIT ?""",
+                (owner, max(1, min(100, limit))),
+            ).fetchall()
+        return readable_rows(rows, AssetPipeline, "value_json", kind="asset pipeline")
 
     def scene_membership(self, asset_ids: Sequence[str]) -> dict[str, dict[str, object]]:
         """どの資産がどのシーンの何版目かを、1 往復でまとめて引く。

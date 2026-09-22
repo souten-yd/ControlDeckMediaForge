@@ -9,7 +9,14 @@ import struct
 from typing import Any
 
 Vec = tuple[float, float, float]
+# 作る側の上限。recipe が生成できる大きさを縛る。上げると、1 つの操作で
+# いくらでも重いものを作れてしまう。
 MAX_VERTICES = 16_384
+# 読む側の上限。既にあるメッシュを要約するだけなので、payload は増えない
+# （実測: 127,796 頂点でも 1.4 KB、計算 1.7 秒）。生成した 3D を選べるように
+# するには、作る側とは別の上限が要る。
+MAX_FACT_VERTICES = 262_144
+MAX_FACT_POLYGONS = 524_288
 
 
 def vec(value: Any) -> Vec:
@@ -143,7 +150,7 @@ def validate_faces(vertices: list[Any], faces: list[list[int]]) -> None:
 
 
 def mesh_hash(mesh: Any) -> str:
-    if len(mesh.vertices) > MAX_VERTICES or len(mesh.polygons) > 32768:
+    if len(mesh.vertices) > MAX_FACT_VERTICES or len(mesh.polygons) > MAX_FACT_POLYGONS:
         raise RuntimeError("editable mesh exceeds bounds")
     digest = hashlib.sha256(struct.pack("<2I",len(mesh.vertices),len(mesh.polygons)))
     for vertex in mesh.vertices:

@@ -275,7 +275,8 @@ class SceneWorkspace:
         ここが 1 つの並びとして出す。
         """
         operations: list[dict[str, Any]] = [
-            {"type": "mesh.weld", "object_id": object_id, "distance_m": weld_distance_m},
+            {"type": "mesh.weld", "object_id": object_id,
+             "distance_m": weld_distance_m, "allow_noop": True},
         ]
         if ratio is not None:
             operations.append({
@@ -300,11 +301,20 @@ class SceneWorkspace:
         画面から任意の recipe を撃たせない。軽量化は「繋いでから削る」の 2 手で、
         繋ぐ側は既定のままにする。glTF の継ぎ目で割れた頂点を繋ぐだけで半分近く
         減るので、利用者が触るのは削る強さだけでよい。
+
+        削る相手は呼ぶ側が選んだ版である。前回の結果に重ねると、60% のあと 55%
+        を選んだときに元の 33% になり、画面が言っている割合が嘘になる。
         """
         return {
             "schema_version": "media-forge.scene-recipe@1",
             "operations": [
-                {"type": "mesh.weld", "object_id": object_id, "distance_m": weld_distance_m},
+                # ここでの weld は「念のため繋いでおく」ためのもので、繋ぐこと自体が
+                # 目的ではない。手で組んだシーンのメッシュは最初から繋がっており、
+                # 何も統合しないのが正常なので、そこだけ許す。単独で頼まれた
+                # mesh.weld は今までどおり、何も繋がなければ失敗する（相手を
+                # 間違えている合図になる）。
+                {"type": "mesh.weld", "object_id": object_id,
+                 "distance_m": weld_distance_m, "allow_noop": True},
                 {"type": "mesh.decimate", "object_id": object_id, "ratio": ratio,
                  "min_faces": min_faces},
             ],

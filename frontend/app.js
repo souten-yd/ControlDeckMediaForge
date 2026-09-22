@@ -185,6 +185,10 @@ const state = {
   sceneSimplifyBusy: false,
   sceneSimplifyPolling: "",
   sceneSimplifyMessage: "",
+  pipeline: null,
+  pipelineBusy: false,
+  pipelinePolling: "",
+  pipelineMessage: "",
   sceneRig: null,
   sceneRigBusy: false,
   sceneRigPolling: "",
@@ -726,6 +730,8 @@ async function standaloneCall(method, params) {
   if (method === "library.list") {
     return json("/workspace-api/library", {method: "POST", body: JSON.stringify(params)});
   }
+  // 単体表示でも素材を一覧できないと、3D の元になる画像を選べない。
+  if (method === "assets.list") return json("/api/v1/assets");
   if (method === "assets.thumbnail") {
     return json(`/workspace-api/assets/${encodeURIComponent(params.asset_id)}/thumbnail`, {
       method: "POST", body: JSON.stringify({max_side: params.max_side}),
@@ -751,6 +757,15 @@ async function standaloneCall(method, params) {
       method: "POST", body: JSON.stringify({base64: params.base64}),
     });
   }
+  if (method === "pipelines.start") {
+    return json("/workspace-api/pipelines", {method: "POST", body: JSON.stringify(params)});
+  }
+  if (method === "pipelines.status") {
+    return json(`/workspace-api/pipelines/${encodeURIComponent(params.pipeline_id)}`, {
+      method: "POST", body: JSON.stringify({action: params.action || "status"}),
+    });
+  }
+  if (method === "pipelines.list") return json("/workspace-api/pipelines");
   if (method === "scenes.list") return json("/workspace-api/scenes");
   if (method === "scenes.get") {
     return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}`);
@@ -6237,6 +6252,7 @@ function renderBlenderSessionControls() {
     || (state.sceneDocument?.id === state.selectedSceneId ? state.sceneDocument : null);
   renderSceneSimplify();
   renderSceneRig();
+  renderPipeline();
   byId("scene-blender-selection").textContent = state.blenderTargetMessage
     || (target ? text.blenderSelected(target.name) : text.blenderSelect);
   renderBlenderTarget();
@@ -6365,8 +6381,9 @@ async function chooseBlenderTarget(value) {
 function simplifyText() {
   return document.documentElement.lang.startsWith("en") ? {
     title: "Make it lighter (low poly)",
-    note: "Joins vertices split at seams, then removes faces, and saves the result as a new revision. The strength is yours to set below.",
-    ratio: "Share of faces to keep", submit: "Reduce and save a new revision", cancel: "Cancel",
+    note: "Removes faces from the revision you pick and saves the result as a new one. The original stays. The share is always of that original, never of the last reduction.",
+    ratio: "Share of faces to keep", origin: "Reduce from",
+    submit: "Reduce and save a new revision", cancel: "Cancel",
     estimate: (percent) => `Keeping ${percent}% of the faces.`,
     estimateWith: (percent, from, to) => `Keeping ${percent}% of the faces: about ${from.toLocaleString()} → ${to.toLocaleString()} triangles.`,
     running: "Reducing…", validating: "Validating and saving the revision…",
@@ -6375,8 +6392,9 @@ function simplifyText() {
     connection: "Could not refresh the status.",
   } : {
     title: "軽量化（ローポリ化）",
-    note: "継ぎ目で分かれた頂点を繋いでから面を減らし、新しい版として保存します。強さは下で調整できます。",
-    ratio: "残す面の割合", submit: "軽量化して新しい版を保存", cancel: "中止",
+    note: "元の版から面を減らし、新しい版として保存します。元の版はそのまま残ります。割合は常に元の版に対するものです。",
+    ratio: "残す面の割合", origin: "元にする版",
+    submit: "軽量化して新しい版を保存", cancel: "中止",
     estimate: (percent) => `面を${percent}%残します。`,
     estimateWith: (percent, from, to) => `面を${percent}%残します：約 ${from.toLocaleString()} → ${to.toLocaleString()} 三角形。`,
     running: "軽量化しています…", validating: "検証して版を保存しています…",
@@ -6386,6 +6404,29 @@ function simplifyText() {
   };
 }
 
+/* 削る相手は「元の版」であって、前回の結果ではない。前回に重ねると 60% の
+   あと 55% を選んだときに元の 33% になり、画面が言っている割合が嘘になる。
+   既定は最初の版。作り直した版（Pixal3D の追加段など）を元にしたいこともある
+   ので選べるようにし、何を削るのかを画面に出しておく。 */
+function renderSimplifyOrigin() {
+  const select = byId("scene-simplify-origin");
+  if (!select) return;
+  const language = document.documentElement.lang.startsWith("en") ? "en" : "ja";
+  const ordered = [...state.sceneRevisions].sort((left, right) => left.sequence - right.sequence);
+  const chosen = select.value;
+  select.replaceChildren(...ordered.map((revision) => {
+    const option = document.createElement("option");
+    option.value = revision.id;
+    option.textContent = language === "en"
+      ? `Revision ${revision.sequence}${revision.sequence === 1 ? " (original)" : ""}`
+      : `版 ${revision.sequence}${revision.sequence === 1 ? "（元）" : ""}`;
+    return option;
+  }));
+  const known = ordered.some((revision) => revision.id === chosen);
+  select.value = known ? chosen : (ordered[0]?.id || "");
+  select.disabled = ordered.length < 2;
+}
+
 function renderSceneSimplify() {
   const form = byId("scene-simplify-form");
   if (!form) return;
@@ -6393,6 +6434,8 @@ function renderSceneSimplify() {
   byId("scene-simplify-title").textContent = text.title;
   byId("scene-simplify-note").textContent = text.note;
   byId("scene-simplify-ratio-label").textContent = text.ratio;
+  byId("scene-simplify-origin-label").textContent = text.origin;
+  renderSimplifyOrigin();
   byId("scene-simplify-submit").textContent = text.submit;
   byId("scene-simplify-cancel").textContent = text.cancel;
   const percent = Number(byId("scene-simplify-ratio").value);
@@ -6406,6 +6449,7 @@ function renderSceneSimplify() {
   const blocked = state.sceneSimplifyBusy || running || state.disabled
     || Boolean(activeBlenderSession()) || Boolean(state.sceneImport) || Boolean(state.sceneBackup);
   byId("scene-simplify-ratio").disabled = blocked;
+  byId("scene-simplify-origin").disabled = blocked || state.sceneRevisions.length < 2;
   byId("scene-simplify-submit").disabled = blocked || !state.selectedSceneId
     || !state.sceneDocument?.current_revision_id;
   byId("scene-simplify-cancel").hidden = !running;
@@ -6464,6 +6508,8 @@ async function submitSceneSimplify() {
   try {
     state.sceneSimplify = await call("scenes.simplify", {
       scene_id: sceneId, base_revision_id: revisionId,
+      // 常に元の版から削る。サーバが先にその版を head へ戻してから削る。
+      from_revision_id: byId("scene-simplify-origin").value || revisionId,
       ratio: Number(byId("scene-simplify-ratio").value) / 100,
     });
     void pollSceneSimplify();
@@ -6596,6 +6642,145 @@ async function submitSceneRig() {
   } finally {
     state.sceneRigBusy = false;
     renderSceneRig();
+  }
+}
+
+/* ── 通しで作る ───────────────────────────────────────────────────────
+   段はすべて個別にも使えるが、順番を毎回組み立てるのは利用者の仕事ではない。
+   ここが決めるのは「何から始めるか」と「どこまでやるか」だけで、段の並びは
+   サーバ側にある。進むのは poll したときだけなので、見ていない間に
+   勝手に進むことはない。 */
+
+const PIPELINE_STAGE_TEXT = {
+  ja: {image: "画像", model: "3D にする", rig: "骨を入れる", export: "書き出す"},
+  en: {image: "Image", model: "Reconstruct", rig: "Rig", export: "Export"},
+};
+const PIPELINE_STATE_TEXT = {
+  ja: {pending: "待ち", awaiting_approval: "確認待ち", running: "実行中",
+       succeeded: "完了", failed: "失敗", skipped: "飛ばした"},
+  en: {pending: "queued", awaiting_approval: "needs approval", running: "running",
+       succeeded: "done", failed: "failed", skipped: "skipped"},
+};
+
+function pipelineText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    idle: "Pick an image above, then start.",
+    needImage: "Pick an image above first.",
+    needHost: "Open this from ControlDeck to run it: 3D generation and Blender borrow the host's resources.",
+    running: "Working…", waiting: "Waiting for you to approve the next step.",
+    succeeded: "Done. The asset is in the library.",
+    failed: (code) => `Stopped at a failed step (${code}).`,
+    canceled: "Stopped.",
+  } : {
+    idle: "上で画像を選んでから始めてください。",
+    needImage: "先に上で画像を選んでください。",
+    needHost: "通しで作るには ControlDeck から開いてください。3D の生成と Blender は host の資源を借りて動きます。",
+    running: "実行中です…", waiting: "次へ進めてよいか確かめてください。",
+    succeeded: "できました。ライブラリに入っています。",
+    failed: (code) => `失敗した段で止まりました（${code}）。`,
+    canceled: "止めました。",
+  };
+}
+
+function renderPipeline() {
+  const panel = byId("pipeline-panel");
+  if (!panel) return;
+  const language = document.documentElement.lang.startsWith("en") ? "en" : "ja";
+  const text = pipelineText();
+  const pipeline = state.pipeline;
+  const list = byId("pipeline-stages");
+  list.replaceChildren(...((pipeline?.stages) || []).map((stage) => {
+    const row = document.createElement("li");
+    row.dataset.stage = stage.name;
+    row.dataset.state = stage.state;
+    const name = document.createElement("span");
+    name.textContent = PIPELINE_STAGE_TEXT[language][stage.name] || stage.name;
+    const value = document.createElement("span");
+    value.className = "pipeline-state";
+    value.textContent = stage.error_code
+      || PIPELINE_STATE_TEXT[language][stage.state] || stage.state;
+    row.append(name, value);
+    return row;
+  }));
+  const active = Boolean(pipeline) && !["succeeded", "failed", "canceled"].includes(pipeline.state);
+  const waiting = pipeline?.state === "awaiting_approval";
+  byId("pipeline-approve").hidden = !waiting;
+  byId("pipeline-approve").disabled = state.pipelineBusy;
+  byId("pipeline-cancel").hidden = !active;
+  byId("pipeline-cancel").disabled = state.pipelineBusy;
+  byId("pipeline-start").hidden = active;
+  // 3D の生成も Blender も host の資源を借りて動く。単体表示では借りられない
+  // ので、押せてから失敗させるのではなく、先に理由を言う。
+  const hosted = window.parent !== window;
+  byId("pipeline-start").disabled = state.pipelineBusy || state.disabled || !hosted
+    || !byId("scene-generation-image")?.value;
+  byId("pipeline-confirm").disabled = active;
+  byId("pipeline-rig").disabled = active;
+  let message = !hosted ? text.needHost
+    : byId("scene-generation-image")?.value ? text.idle : text.needImage;
+  if (pipeline?.state === "succeeded") message = text.succeeded;
+  else if (pipeline?.state === "failed") {
+    const failed = pipeline.stages.find((stage) => stage.state === "failed");
+    message = text.failed(failed?.error_code || "unknown");
+  } else if (pipeline?.state === "canceled") message = text.canceled;
+  else if (waiting) message = text.waiting;
+  else if (active) message = text.running;
+  byId("pipeline-status").textContent = state.pipelineMessage || message;
+}
+
+async function pollPipeline() {
+  const id = state.pipeline?.id;
+  if (!id || state.pipelinePolling === id) return;
+  state.pipelinePolling = id;
+  try {
+    while (!state.disabled && state.pipeline?.id === id && state.pipelinePolling === id
+        && !["succeeded", "failed", "canceled", "awaiting_approval"].includes(state.pipeline.state)) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (state.pipeline?.id !== id || state.pipelinePolling !== id) return;
+      const value = await call("pipelines.status", {pipeline_id: id});
+      if (value?.id !== id) throw new Error("pipeline identity changed");
+      state.pipeline = value;
+      state.pipelineMessage = "";
+      renderPipeline();
+      if (value.state === "succeeded") { await loadScenes(); await loadLibrary({reset: true}); }
+    }
+  } catch (error) {
+    if (!state.disabled && state.pipeline?.id === id) {
+      state.pipelineMessage = failureText(error?.code);
+      renderPipeline();
+    }
+  } finally {
+    if (state.pipelinePolling === id) state.pipelinePolling = "";
+  }
+}
+
+async function actOnPipeline(action) {
+  if (state.pipelineBusy || state.disabled) return;
+  state.pipelineBusy = true;
+  state.pipelineMessage = "";
+  renderPipeline();
+  try {
+    if (action === "start") {
+      const imageId = byId("scene-generation-image").value;
+      if (!imageId) return;
+      state.pipeline = await call("pipelines.start", {
+        name: byId("scene-generation-name").value.trim() || "通しで作った資産",
+        image_asset_id: imageId,
+        mode: byId("pipeline-confirm").checked ? "confirm" : "auto",
+        rig: byId("pipeline-rig").checked,
+      });
+    } else {
+      state.pipeline = await call("pipelines.status", {
+        pipeline_id: state.pipeline.id, action,
+      });
+    }
+    state.pipelinePolling = "";
+    void pollPipeline();
+  } catch (error) {
+    state.pipelineMessage = failureText(error?.code);
+  } finally {
+    state.pipelineBusy = false;
+    renderPipeline();
   }
 }
 
@@ -9657,7 +9842,7 @@ byId("scene-generation-form").addEventListener("submit", (event) => {
   void submitSceneGeneration();
 });
 for (const id of ["scene-generation-image", "scene-generation-name"]) {
-  byId(id).addEventListener("input", renderSceneGeneration);
+  byId(id).addEventListener("input", () => { renderSceneGeneration(); renderPipeline(); });
 }
 byId("scene-generation-engine").addEventListener("change", (event) => {
   state.sceneGenerationEngine = event.target.value;
@@ -9770,6 +9955,11 @@ byId("scene-simplify-cancel").addEventListener("click", async () => {
     renderSceneSimplify();
   }
 });
+byId("pipeline-start").addEventListener("click", () => void actOnPipeline("start"));
+byId("pipeline-approve").addEventListener("click", () => void actOnPipeline("approve"));
+byId("pipeline-cancel").addEventListener("click", () => void actOnPipeline("cancel"));
+byId("pipeline-confirm").addEventListener("change", renderPipeline);
+byId("pipeline-rig").addEventListener("change", renderPipeline);
 byId("scene-rig-form").addEventListener("submit", (event) => {
   event.preventDefault();
   void submitSceneRig();
