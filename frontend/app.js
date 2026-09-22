@@ -6078,7 +6078,6 @@ function renderSceneMaterialControls({targetsChanged = true} = {}) {
     replaceMaterialOptions(objectSelect, usableTargets.map((item) => ({
       value: item.object_name, label: item.object_name,
     })), oldObject, text.materialChoose);
-    if (!objectSelect.value && usableTargets.length === 1) objectSelect.value = usableTargets[0].object_name;
   }
   const target = selectedMaterialTarget();
   replaceMaterialOptions(slotSelect, (target?.material_slots || []).map((item) => ({
