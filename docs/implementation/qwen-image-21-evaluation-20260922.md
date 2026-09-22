@@ -1,7 +1,8 @@
 # Qwen-Image-2.1 evaluation preparation
 
 Date: 2026-09-22
-Status: tooling ready; model inference and adoption NOT TESTED
+Status: consent received; FLUX regression measured; Qwen weights provisioning;
+Qwen inference and adoption NOT TESTED
 
 MediaForge 0.32.2 was published and installed before this work. See
 [release verification](release-0.32.2-20260922.md). This slice adds an offline
@@ -13,14 +14,19 @@ are unchanged.
 The pinned [model metadata](https://huggingface.co/api/models/Qwen/Qwen-Image-2.1/revision/790c92633540aa0cb11d9abf19eb46d861714758?blobs=true)
 reports `Qwen/Qwen-Image-2.1`, revision
 `790c92633540aa0cb11d9abf19eb46d861714758`, seven safetensors files,
-33,115,613,408 bytes (30.841318339 GiB). No model weights were downloaded.
+33,115,613,408 bytes (30.841318339 GiB). Weight provisioning began after the
+explicit consent below; complete-file verification is still in progress.
 
 The [license at that revision](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/790c92633540aa0cb11d9abf19eb46d861714758/LICENSE)
 has SHA-256 `8dc973f024ff95966bea25866efa443fd16776dcb1001e681e3d467ea572b28d`.
 It is the Qwen Research License: research/evaluation purposes only; commercial
 use requires a separate license; redistribution has agreement, modification
-notice and attribution conditions. Explicit user consent for the pinned weights
-was requested and has not yet been received. No acceptance ID was fabricated.
+notice and attribution conditions. On 2026-09-22 the user explicitly approved
+the presented terms: 「規約同意を承認する」. Private `license-consent.json` records
+the exact revision, license digest, message and noncommercial evaluation scope.
+The pinned remote license bytes and metadata were rechecked and matched the
+previous records before starting a separate 26-file provisioning operation.
+No product acceptance ID was fabricated and no model registry entry was added.
 
 ## Candidate dependencies
 
@@ -59,8 +65,96 @@ the candidate hub to 1.32.0 resolved that failure. With all GPU devices hidden:
 - A fresh check of the installed production package metadata matched the
   original versions in the table.
 
-These checks establish import compatibility only. FLUX.2 generation, quality,
-VRAM and latency regression are NOT TESTED; production pins must stay unchanged.
+Those initial checks established import compatibility only. The subsequent
+ordinary Host login and measured FLUX comparison are recorded below. Production
+pins remain unchanged.
+
+## Consent, ordinary login and FLUX comparison
+
+The user refreshed the dedicated login after consenting. The normal helper
+reported `authenticated: true`, `operator_permissions: true`. All GPU processes
+used ordinary `/api/v1/resources` requests, declared `estimated_runtime_sec`,
+renewed active exclusive leases and released their own leases afterward.
+The broker GPU capacity matched card0 / PCI 0000:03:00.0, and the child verified
+one visible device, R9700 / gfx1201 / 34,208,743,424 bytes.
+
+The private supervisor starts one named systemd user service per evaluation,
+with cgroup memory limits, swap disabled, a timeout, a 3 GiB host available-memory
+floor and Host auth/me latency samples. Production FLUX quantized caches were
+copied into separate baseline/candidate directories before invoking the existing
+adapter; candidate failures cannot rewrite the production cache.
+
+First measured comparison: identical apple prompt, seed42, 1024x1024, four
+steps, int8 text encoder and transformer, CPU offload, four CPU threads,
+`ROCBLAS_USE_HIPBLASLT=0`, otherwise automatic PyTorch BLAS selection:
+
+| Metric | Production dependencies | Candidate dependencies |
+|---|---:|---:|
+| Process cold model load, seconds | 1.046959 | 0.964734 |
+| First generation, seconds | 20.604085 | 14.461918 |
+| Following generations, seconds | 5.888875 / 5.229638 | 5.777503 / 5.104223 |
+| PyTorch peak allocated bytes | 6,572,957,184 | 6,572,957,184 |
+| PyTorch peak reserved bytes | 9,093,251,072 | 9,093,251,072 |
+| Sampled total device peak bytes | 12,400,848,896 | 9,984,790,528 |
+| Sampled process peak RSS bytes | 11,182,993,408 | 11,495,989,248 |
+
+All six PNG hashes were identical:
+`856d293206a59a3db9bb69031d50684ff2395b61961ad38829fc95ec4f4c4ea5`.
+The viewed image contains the requested red apple, green leaf and white studio
+background. There was no image or allocator-memory regression for this input.
+The Qwen download ran concurrently; disk page caches and first-use kernel caches
+were not flushed. Cold numbers are process/model loading, not uncached disk
+throughput. This one prompt does not cover all FLUX edit/reference operations.
+All sampled Host auth/me requests returned200, maximum latency0.007862seconds;
+both evaluation cgroups recorded zero OOM/OOM-kill events.
+
+## Numerical reference checks
+
+The historical environment-variable workaround was not assumed sufficient.
+Under the candidate worker and `ROCBLAS_USE_HIPBLASLT=0`, an independent CPU
+comparison used `A(M,64) @ B(64,32)`, seed42, integer-valued inputs in {-1,0,1}.
+Every exact dot product is representable in all three tested dtypes, so both
+tolerances were zero. M was262144,524288,524289,1048576,4000000.
+
+- Automatic BLAS: fp32 failed above524288 rows, with maximum absolute differences
+  14,27,30; bf16/fp16 matched for all five shapes. Finite values did not detect
+  these wrong fp32 results.
+- Explicit `torch.backends.cuda.preferred_blas_library("cublas")` (hipBLAS alias
+  on this ROCm build): all ten fp32/bf16 cases matched exactly. fp16 at4000000
+  rows failed with maximum difference29 and56,305,468 mismatched elements.
+- The initial preferred backend was `_BlasBackend.Cublaslt`; explicitly selecting
+  the other library reported `_BlasBackend.Cublas`.
+
+This is a measured limitation of these operations/build, not proof of Qwen-wide
+correctness or a claim that every gfx1201 operation is broken. No kernel was
+patched. The probe now permits explicit `--blas-library cublas` for a GPU run
+and records the actual preference. fp16 is not used for the forthcoming Qwen
+acceptance. FLUX baseline/candidate were repeated with the explicit setting
+before interpreting Qwen results under it.
+The library names and alias are the installed PyTorch API, also described in
+the [upstream backend documentation](https://docs.pytorch.org/docs/stable/backends.html#torch.backends.cuda.preferred_blas_library).
+This preference is not a guarantee that every operation uses that library.
+
+The explicit-hipBLAS FLUX comparison again produced six identical images across
+the two dependency environments, SHA-256
+`5e204790611a6ba700d2c9d066c7ccada785a345c5510c231acd83959425d3b2`.
+These differ from the automatic-library images at the byte level; visual
+inspection still showed the requested apple, leaf and white background.
+
+| Metric with explicit hipBLAS | Production dependencies | Candidate dependencies |
+|---|---:|---:|
+| Process cold model load, seconds | 1.202841 | 0.925454 |
+| First generation, seconds | 26.544660 | 26.517920 |
+| Following generations, seconds | 18.623572 / 18.076541 | 19.718783 / 18.183155 |
+| PyTorch peak allocated bytes | 6,606,511,616 | 6,606,511,616 |
+| PyTorch peak reserved bytes | 9,126,805,504 | 9,126,805,504 |
+
+The candidate run overlapped the CPU test suite, in addition to the continuing
+weight download, so these timings do not isolate small latency changes.
+The explicit library is much slower than automatic selection in both dependency
+environments; it is an evaluation setting, not a production recommendation.
+All nine files of both private FLUX quantized cache copies still matched the
+production originals by SHA-256 after these runs.
 
 ## Offline measurement tool
 
@@ -123,6 +217,10 @@ between baseline and candidate FLUX runs.
 
 ## Executed checks and remaining gates
 
+- After explicit BLAS selection was added: `./mf.sh test`,2379 passed,
+  3 warnings,281.34seconds. Focused probe tests:18 passed; additional cases
+  cover backend selection before loading, selection failure without fallback,
+  and rejection of a GPU backend setting on the CPU route.
 - `./mf.sh test`: 2376 passed, 3 warnings, 267.19 seconds.
 - Focused final probe tests: 15 passed, 2 warnings, 0.22 seconds. Coverage includes
   differing repeated images, alpha semantics, non-finite latents/decoder output,
@@ -137,11 +235,11 @@ The read-only capacity sample was host RAM 32,605,822,976 bytes, available
 208,059,334,656 bytes. These are a snapshot, not a future resource reservation
 or model peak measurement.
 
-Remaining: user license consent; normal Host login refresh; actual FLUX.2
-baseline/candidate regression; bounded Qwen CPU load/generation; GPU bf16 and
-int8 runs; numerical reference comparison; RGBA versus existing background
-removal and visual quality. The earlier dedicated Host session returned 401;
-`bash ~/mf-login.sh` was requested. No GPU inference was run without a lease.
+Remaining: complete pinned weight verification; bounded Qwen CPU load/generation;
+GPU bf16 and int8 runs; Qwen
+numerical reference comparison; RGBA versus existing background removal and
+visual quality. The earlier expired dedicated Host session has been refreshed.
+No GPU inference was run without a lease.
 No model registry, product routing, resolution default or quantization default
 was changed. The model is not adopted and no Qwen-generated assets exist yet.
 

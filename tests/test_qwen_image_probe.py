@@ -38,7 +38,13 @@ def fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
         (directory / "config.json").write_text("{}")
         (directory / "model.safetensors").write_bytes(b"fixture")
     state = SimpleNamespace(root=root, calls=[], events=[], varying=False, alpha=255,
-                            nan=False, latent_finite=True, load_failure=False, gpu=False)
+                            nan=False, latent_finite=True, load_failure=False, gpu=False, blas="fixture-auto")
+
+    def preferred_blas_library(value: str | None = None) -> str:
+        if value is not None:
+            state.blas = value
+            state.events.append("blas:" + value)
+        return state.blas
 
     def snapshot(model_id: str, **kwargs: Any) -> str:
         assert model_id == "Qwen/Qwen-Image-2.1"
@@ -101,6 +107,7 @@ def fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
             return SimpleNamespace(name=path.name)
 
     torch = SimpleNamespace(bfloat16="bf16", float16="fp16", Generator=Generator, version=SimpleNamespace(hip="fixture"),
+        backends=SimpleNamespace(cuda=SimpleNamespace(preferred_blas_library=preferred_blas_library)),
         isfinite=lambda _: SimpleNamespace(all=lambda: SimpleNamespace(item=lambda: state.latent_finite)),
         cuda=SimpleNamespace(is_available=lambda: state.gpu, get_device_name=lambda _: "fixture GPU", reset_peak_memory_stats=lambda: None,
             synchronize=lambda: None, max_memory_allocated=lambda: 1234, max_memory_reserved=lambda: 2345))
@@ -163,6 +170,32 @@ def test_gpu_offload_and_allocator_measurements_are_explicit(fake: SimpleNamespa
     assert result["vram_peak_bytes"] == 1234
     assert result["vram_peak_reserved_bytes"] == 2345
     assert all(row["generator"].device == "cuda" for row in fake.calls)
+
+
+def test_explicit_gpu_blas_is_selected_before_loading_and_recorded(fake: SimpleNamespace) -> None:
+    fake.gpu = True
+    result = probe.probe(arguments("--device", "gpu", "--blas-library", "cublas"))
+    assert result["error"] is None
+    assert fake.events == ["blas:cublas", "pipeline", "cuda"]
+    assert result["blas_library"] == {"requested": "cublas", "selected": "cublas"}
+
+
+def test_blas_selection_failure_stops_before_model_loading(fake: SimpleNamespace, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake.gpu = True
+
+    def unavailable(_: str) -> None:
+        raise RuntimeError("fixture BLAS unavailable")
+
+    monkeypatch.setattr(sys.modules["torch"].backends.cuda, "preferred_blas_library", unavailable)
+    result = probe.probe(arguments("--device", "gpu", "--blas-library", "cublas"))
+    assert result["error"]["code"] == "probe_failed"
+    assert fake.events == []
+
+
+def test_cpu_rejects_gpu_blas_selection(fake: SimpleNamespace) -> None:
+    result = probe.probe(arguments("--blas-library", "cublas"))
+    assert result["error"]["code"] == "invalid_arguments"
+    assert fake.events == []
 
 
 def test_incomplete_shards_are_weights_missing(fake: SimpleNamespace) -> None:

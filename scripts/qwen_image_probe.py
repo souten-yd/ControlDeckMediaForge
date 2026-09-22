@@ -44,6 +44,8 @@ def arguments(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--device", choices=("cpu", "gpu"), required=True)
     parser.add_argument("--dtype", choices=("bf16", "fp16"), required=True)
     parser.add_argument("--quantization", choices=("none", "int8"), required=True)
+    parser.add_argument("--blas-library", choices=("auto", "cublas", "cublaslt"), default="auto",
+                        help="Explicit PyTorch GPU BLAS preference; cublas maps to hipBLAS on ROCm")
     parser.add_argument("--offload", action="store_true")
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--seed", type=int, required=True)
@@ -62,6 +64,8 @@ def arguments(argv: list[str] | None) -> argparse.Namespace:
         raise ProbeError("invalid_arguments", "dimensions must be multiples of 32 in 64..2048")
     if args.offload and args.device != "gpu":
         raise ProbeError("invalid_arguments", "CPU offload requires the GPU route")
+    if args.blas_library != "auto" and args.device != "gpu":
+        raise ProbeError("invalid_arguments", "GPU BLAS selection requires the GPU route")
     return args
 
 
@@ -179,6 +183,10 @@ def probe(argv: list[str] | None = None) -> dict[str, Any]:
         if gpu:
             result["device_name"] = torch.cuda.get_device_name(0)
             result["hip_version"] = getattr(torch.version, "hip", None)
+            if args.blas_library != "auto":
+                torch.backends.cuda.preferred_blas_library(args.blas_library)
+            result["blas_library"] = {"requested": args.blas_library,
+                                      "selected": str(torch.backends.cuda.preferred_blas_library())}
         root = cached_snapshot(args)
         result["versions"] = {}
         for package in ("torch", "diffusers", "transformers", "tokenizers", "optimum-quanto", "huggingface-hub"):

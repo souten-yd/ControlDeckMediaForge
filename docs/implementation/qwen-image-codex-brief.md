@@ -30,6 +30,9 @@ FLUX.2-klein も使う。**
 - 引数: `--model-id` `--revision` `--device {cpu,gpu}`
   `--dtype {bf16,fp16}` `--quantization {none,int8}`
   `--offload` `--prompt` `--seed` `--repeat` `--width` `--height` `--rgba`
+- GPU評価では任意の `--blas-library {auto,cublas,cublaslt}` を受け、実際の
+  PyTorch preferenceも記録する。ROCmでcublasはhipBLASに対応する。
+  2026-09-22の参照比較では環境変数単独でfp32不一致が残ったため追加した。
 - JSON を 1 つ標準出力へ出して終了する:
 
 ```json

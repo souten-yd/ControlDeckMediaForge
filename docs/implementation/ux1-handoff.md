@@ -1,5 +1,23 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 Qwen評価を再開（同意・通常ログイン済み）
+
+利用者が提示済みResearch License条件を明示承認し、通常operator loginも更新した。
+固定revision790c9263・license SHAをremoteと再照合し、評価限定の同意記録を保存。
+重み26fileの取得・digest照合を進行中。Qwenの生成自体はまだNOT TESTED。
+
+- Host effective healthy、mobile embedded。実Chromium1280/320pxで画像8件、
+  選択後のpipeline開始有効、横overflow0、console/page error0、failed request0。
+- Host lease下で現行/候補FLUX.2を各3回生成。最初の比較では6枚すべて同じSHA、
+  PyTorch peak allocated6,572,957,184B。共有runtime/製品cacheは変更していない。
+- 数値比較: ROCBLAS_USE_HIPBLASLT=0だけではfp32大規模GEMM不一致を再現。
+  明示cublas(hipBLAS)ではfp32/bf16の計10形状一致、fp16の400万行は不一致。
+  probeに明示BLAS指定と記録を追加。focused18件、全suite2379件通過
+  （3 warnings / 281.34秒）。
+- 次: 明示BLASでFLUX比較を確定、重み全件検証後にbounded CPU/Qwen GPU評価。
+
+詳細: [Qwen評価記録](qwen-image-21-evaluation-20260922.md)。
+
 ## 2026-09-22 Qwen-Image-2.1の評価準備（実推論は未実施）
 
 0.32.2の公開・通常適用後に開始。評価用probe、固定依存、fakeテストを追加。

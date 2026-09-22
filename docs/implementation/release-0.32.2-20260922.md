@@ -87,16 +87,28 @@ bytes, 3D capabilities and the three asset hashes passed again. All 17 tables,
 standalone browser fixture passed again. The previous 0.32.1 directory remains
 available for rollback; an actual rollback was not exercised.
 
+## Authenticated Host follow-up after login refresh
+
+The user refreshed the ordinary dedicated Host login on2026-09-22 using
+`bash ~/mf-login.sh`. The authenticated effective projection reported healthy
+MediaForge, available pipeline start/status contributions and `mobile: embedded`.
+Real Chromium at1280px and320px opened `/x/media-forge/workspace/create`, loaded
+the opaque iframe, switched to3D and listed eight source images. Selecting an
+image enabled pipeline start. Both widths had zero Host/iframe horizontal
+overflow, zero console/page errors and zero failed requests. Screenshots were
+retained; the mobile screenshot was visually inspected.
+
+Only the user's normal session cookie was passed privately to the browser.
+Accounts/passwords were not changed and no Host session was minted internally.
+The first fixture attempt inspected page.frames before the iframe navigation
+completed and closed early. Waiting for the actual frame navigation fixed that
+fixture race; no product source change was needed.
+
 ## Remaining acceptance
 
-The previous dedicated ordinary Host login had expired. A read-only auth/me
-request returned 401; that expired dedicated session was revoked via the normal
-logout API. The user was asked to refresh it using `bash ~/mf-login.sh`.
-Accounts/passwords were not changed and no Host session was minted internally.
-
-NOT TESTED in this release verification: authenticated Host effective projection,
-Host embedded desktop/mobile pipeline operations, a new real GPU prompt-to-3D
-chain, auto mode end-to-end, visual/deformation quality, and rollback execution.
+NOT TESTED in this release verification: submitting a new pipeline from the
+Host browser, a new real GPU prompt-to-3D chain, auto mode end-to-end,
+visual/deformation quality, and rollback execution.
 These remain distinct from the earlier recorded successful image-to-rig pipeline.
 
 Evidence: private feature maintenance directory

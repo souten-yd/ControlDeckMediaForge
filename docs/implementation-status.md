@@ -1,5 +1,23 @@
 # Media Forge implementation status
 
+## 2026-09-22 Qwen評価再開・Host埋め込み画面の実測
+
+提示済みQwen Research Licenseへ利用者が明示同意、通常Host loginも更新。
+固定revision790c9263とlicense SHAを再確認して評価用重みの取得を開始した。
+Qwen生成・採用はまだNOT TESTED、製品台帳・adapter・共有runtimeは変更なし。
+
+実Host effectiveはhealthy/mobile embedded。Chromium1280pxと320pxの両方で
+opaque iframe内の3D画面、画像8件、選択後のpipeline開始有効を確認。
+Host/frame横overflow0、console/page error0、failed request0。新規pipeline投入なし。
+
+通常broker lease下で現行/候補FLUX.2の1024/int8/offload/seed42を各3回生成。
+最初の比較で6枚すべて同じSHA、PyTorch peak allocatedは両方6,572,957,184B。
+別のCPU/GPU演算比較で、環境変数単独ではfp32の大規模GEMM不一致を再現。
+明示hipBLASではfp32/bf16の10形状一致、fp16の400万行は不一致。
+評価probeへBLAS選択・記録を追加し、focused18件通過。
+./mf.sh test:2379 passed / 3 warnings / 281.34秒 / exit0。
+詳細・残項目は[評価記録](implementation/qwen-image-21-evaluation-20260922.md)。
+
 ## 2026-09-22 Qwen-Image-2.1の評価準備（実推論は未実施）
 
 0.32.2の公開・通常適用後に開始。評価用probe、固定依存、fakeテストを追加。
