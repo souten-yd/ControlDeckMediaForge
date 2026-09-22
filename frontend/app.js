@@ -10230,6 +10230,10 @@ byId("scene-blender-close").addEventListener("click", closeBlenderView);
 byId("scene-blender-screen").addEventListener("pointerdown", rememberBlenderInput, true);
 installBlenderTouchButtons(byId("scene-blender-open").parentElement);
 installBlenderTouchButtons(byId("scene-blender-dialog"));
+// Navigation and Library/material buttons share the same opaque frame offset.
+// Existing nested handlers preventDefault, so each tap still activates once.
+// Image/canvas gestures and native selects are not button activations.
+installBlenderTouchButtons(byId("app"));
 byId("scene-blender-keys").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-blender-key]");
   if (button && !button.disabled) sendBlenderAssistKey(button.dataset.blenderKey);

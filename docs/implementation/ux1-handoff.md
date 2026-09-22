@@ -1,5 +1,17 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 embedded画面の画像→3Dタップを補正（0.33.5準備）
+
+0.33.4を通常適用し、実Hostでscene_linksと既存1517 Asset保持を確認。
+実タップではtouchstart/endがボタンへ届く一方、合成clickがiframe位置分ずれて
+viewer-stageへ届き、移動しなかった（マウスclickは正常）。既存Blender用の
+単一タップ補正をworkspaceにも適用する。ナビ/Library/詳細/材質/比較が対象。
+既存の内側処理とは重複実行せず、canvas操作・selectは対象外。
+実測原本: maintenance/release-0.33.4-20260922/touch-debug.json。
+同じ補正の実Host事前検証で1280/320pxのタップ/材質比較/破棄が通過、元scene不変。
+./mf.sh test: 2410 passed / 3 warnings / 277.88秒。正式0.33.5の保存・再起動後確認を継続中。
+
+
 ## 2026-09-22 元の材質対象が無い場合の未選択を維持（0.33.4準備）
 
 PR617/0.33.3は署名公開済みだが、通常更新前の追加確認で次の不具合を再現した。
