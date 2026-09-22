@@ -404,6 +404,12 @@ html:has(#scene-compare-dialog[open]) { overflow: hidden; }
   .scene-texture-actions { display: grid; grid-template-columns: 1fr; }
   .scene-compare-grid { grid-template-columns: 1fr; }
   .scene-compare-stage { height: 260px; }
+  #scene-revisions .row { grid-template-columns: minmax(0, 1fr); }
+  #scene-revisions .scene-revision-actions { justify-content: flex-start; }
+  #view-web-blender #scene-revisions button { min-height: 44px; }
+  #scene-compare-dialog .dialog-actions { display: grid; grid-template-columns: minmax(0, 1fr); bottom: 0; }
+  #scene-compare-dialog #scene-compare-cancel,
+  #scene-compare-dialog #scene-compare-restore { min-height: 44px; }
 }
 #scene-blender-dialog {
   width: min(1400px, calc(100% - 24px));

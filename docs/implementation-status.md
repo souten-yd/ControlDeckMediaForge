@@ -1,5 +1,18 @@
 # Media Forge implementation status
 
+## 2026-09-22 モバイル材質変更後の保存履歴を読みやすくする（0.33.6準備）
+
+0.33.5を通常適用し、実Hostの1280/320pxで元画像→元3D/材質比較を通過。
+320pxの検証用コピーで材質採用→2版保存、再起動後の関連・材質保持も確認。
+最終screenshotで保存履歴の説明が操作列に押されて1文字幅になっていたため、
+520px以下は説明と操作を縦に配置し、比較の操作も1列にして下端の全文を見せる。
+原本: maintenance/release-0.33.5-20260922/copy-mobile-saved.png。
+同じCSSの実Host事前適用で説明幅0→236px、2版とも高さ61.984375px。
+比較ボタン44/50pxで全文表示、版preview表示/比較破棄/overflow0/page error0を確認。
+元sceneは不変。./mf.sh test: 2410 passed / 3 warnings / 274.07秒。
+最終frontend contract160 passed。0.33.6の正式installed配置確認を継続する。
+
+
 ## 2026-09-22 embedded画面の画像→3Dタップを補正（0.33.5準備）
 
 0.33.4を通常適用し、実Hostでscene_linksと既存1517 Asset保持を確認。
