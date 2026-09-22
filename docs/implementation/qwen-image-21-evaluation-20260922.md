@@ -1,0 +1,415 @@
+# Qwen-Image-2.1 evaluation
+
+Date: 2026-09-22
+Status: bounded evaluation complete; defer product adoption on this configuration.
+Qwen CPU/int8 failed, GPU/bf16 offload stopped at the host RAM floor,
+GPU/int8 produced one image in708seconds but timed out on its repeat, and the
+native-RGBA diagnostic timed out without an image. All leases are released.
+
+MediaForge 0.32.2 was published and installed before this work. See
+[release verification](release-0.32.2-20260922.md). This slice adds an offline
+probe and tests; the model catalog, production adapter and shared runtime pins
+are unchanged.
+
+## Identity and consent boundary
+
+The pinned [model metadata](https://huggingface.co/api/models/Qwen/Qwen-Image-2.1/revision/790c92633540aa0cb11d9abf19eb46d861714758?blobs=true)
+reports `Qwen/Qwen-Image-2.1`, revision
+`790c92633540aa0cb11d9abf19eb46d861714758`, seven safetensors files,
+33,115,613,408 bytes (30.841318339 GiB). All seven weight files and the complete
+28-file snapshot (33,134,949,212 bytes) were acquired after the explicit consent
+below and verified against the pinned upstream digests.
+
+The [license at that revision](https://huggingface.co/Qwen/Qwen-Image-2.1/blob/790c92633540aa0cb11d9abf19eb46d861714758/LICENSE)
+has SHA-256 `8dc973f024ff95966bea25866efa443fd16776dcb1001e681e3d467ea572b28d`.
+It is the Qwen Research License: research/evaluation purposes only; commercial
+use requires a separate license; redistribution has agreement, modification
+notice and attribution conditions. On 2026-09-22 the user explicitly approved
+the presented terms: 「規約同意を承認する」. Private `license-consent.json` records
+the exact revision, license digest, message and noncommercial evaluation scope.
+The pinned remote license bytes and metadata were rechecked and matched the
+previous records before starting a separate 26-file provisioning operation.
+That download and verification took2617.900570seconds. The first CPU probe
+returned `weights_missing`: huggingface-hub1.32's complete-snapshot check also
+required the excluded `.gitattributes` and `assets/qr.png`. Those two files were
+then downloaded and verified in2.456365seconds; the offline complete-snapshot
+check passed. This cache preflight failure did not load or exercise Qwen.
+No product acceptance ID was fabricated and no model registry entry was added.
+
+## Candidate dependencies
+
+[Upstream PR #14804](https://github.com/huggingface/diffusers/pull/14804) is merged;
+the current PyPI diffusers release is still 0.40.0. The candidate is pinned to
+diffusers commit `7263f3317f6b392d62f41e9d75ed9d7e21fc5a5c` (0.41.0.dev0).
+The downloaded source archive SHA-256 is
+`7a2b2685c2ee6f41327dfecf14a2a8c2c778012b0add1c7c0b004ccd6515ef2a`.
+The [upstream pipeline documentation](https://github.com/huggingface/diffusers/blob/7263f3317f6b392d62f41e9d75ed9d7e21fc5a5c/docs/source/en/api/pipelines/qwenimage21.md)
+specifies 40 steps and no classifier-free guidance by default.
+
+| Dependency | Installed production | Evaluation candidate |
+|---|---|---|
+| Torch | 2.10.0+rocm7.2.1.lw.gitb07cec22 | same worker package |
+| diffusers | 0.40.0 | 0.41.0.dev0, pinned commit above |
+| transformers | 5.15.1 | 5.17.0 |
+| tokenizers | 0.22.2 | 0.23.1 |
+| huggingface-hub | 1.28.0 | 1.32.0 |
+| optimum-quanto | 0.2.7 | 0.2.7 |
+
+An isolated evaluation Python uses the existing image worker's site-packages as
+a read-only base, with candidate packages installed locally using `--no-deps
+--ignore-installed`. Its directory is under private feature maintenance,
+`qwen-image-21-evaluation-20260922/candidate/.venv`. It is not a registered
+production runtime. [Candidate pins](../../scripts/qwen_image_probe_requirements.txt)
+must not be installed into core or the shared production runtime.
+
+The first import failed because the new diffusers imports `httpx` from
+`huggingface_hub.utils`, which the installed 1.28.0 does not export. Updating only
+the candidate hub to 1.32.0 resolved that failure. With all GPU devices hidden:
+
+- `QwenImage21Pipeline`, `Flux2KleinPipeline` and
+  `Qwen3VLForConditionalGeneration` imported successfully.
+- `pip check` returned `No broken requirements found`.
+- Torch remained ROCm, reporting HIP 7.2.53211; no CUDA wheel replacement occurred.
+- A fresh check of the installed production package metadata matched the
+  original versions in the table.
+
+Those initial checks established import compatibility only. The subsequent
+ordinary Host login and measured FLUX comparison are recorded below. Production
+pins remain unchanged.
+
+## Consent, ordinary login and FLUX comparison
+
+The user refreshed the dedicated login after consenting. The normal helper
+reported `authenticated: true`, `operator_permissions: true`. All GPU processes
+used ordinary `/api/v1/resources` requests, declared `estimated_runtime_sec`,
+renewed active exclusive leases and released their own leases afterward.
+The broker GPU capacity matched card0 / PCI 0000:03:00.0, and the child verified
+one visible device, R9700 / gfx1201 / 34,208,743,424 bytes.
+
+The private supervisor starts one named systemd user service per evaluation,
+with cgroup memory limits, swap disabled, a timeout, a 3 GiB host available-memory
+floor and Host auth/me latency samples. Production FLUX quantized caches were
+copied into separate baseline/candidate directories before invoking the existing
+adapter; candidate failures cannot rewrite the production cache.
+
+First measured comparison: identical apple prompt, seed42, 1024x1024, four
+steps, int8 text encoder and transformer, CPU offload, four CPU threads,
+`ROCBLAS_USE_HIPBLASLT=0`, otherwise automatic PyTorch BLAS selection:
+
+| Metric | Production dependencies | Candidate dependencies |
+|---|---:|---:|
+| Process cold model load, seconds | 1.046959 | 0.964734 |
+| First generation, seconds | 20.604085 | 14.461918 |
+| Following generations, seconds | 5.888875 / 5.229638 | 5.777503 / 5.104223 |
+| PyTorch peak allocated bytes | 6,572,957,184 | 6,572,957,184 |
+| PyTorch peak reserved bytes | 9,093,251,072 | 9,093,251,072 |
+| Sampled total device peak bytes | 12,400,848,896 | 9,984,790,528 |
+| Sampled process peak RSS bytes | 11,182,993,408 | 11,495,989,248 |
+
+All six PNG hashes were identical:
+`856d293206a59a3db9bb69031d50684ff2395b61961ad38829fc95ec4f4c4ea5`.
+The viewed image contains the requested red apple, green leaf and white studio
+background. There was no image or allocator-memory regression for this input.
+The Qwen download ran concurrently; disk page caches and first-use kernel caches
+were not flushed. Cold numbers are process/model loading, not uncached disk
+throughput. This one prompt does not cover all FLUX edit/reference operations.
+All sampled Host auth/me requests returned200, maximum latency0.007862seconds;
+both evaluation cgroups recorded zero OOM/OOM-kill events.
+
+## Numerical reference checks
+
+The historical environment-variable workaround was not assumed sufficient.
+Under the candidate worker and `ROCBLAS_USE_HIPBLASLT=0`, an independent CPU
+comparison used `A(M,64) @ B(64,32)`, seed42, integer-valued inputs in {-1,0,1}.
+Every exact dot product is representable in all three tested dtypes, so both
+tolerances were zero. M was262144,524288,524289,1048576,4000000.
+
+- Automatic BLAS: fp32 failed above524288 rows, with maximum absolute differences
+  14,27,30; bf16/fp16 matched for all five shapes. Finite values did not detect
+  these wrong fp32 results.
+- Explicit `torch.backends.cuda.preferred_blas_library("cublas")` (hipBLAS alias
+  on this ROCm build): all ten fp32/bf16 cases matched exactly. fp16 at4000000
+  rows failed with maximum difference29 and56,305,468 mismatched elements.
+- The initial preferred backend was `_BlasBackend.Cublaslt`; explicitly selecting
+  the other library reported `_BlasBackend.Cublas`.
+
+This is a measured limitation of these operations/build, not proof of Qwen-wide
+correctness or a claim that every gfx1201 operation is broken. No kernel was
+patched. The probe now permits explicit `--blas-library cublas` for a GPU run
+and records the actual preference. fp16 is not used for the forthcoming Qwen
+acceptance. FLUX baseline/candidate were repeated with the explicit setting
+before interpreting Qwen results under it.
+The library names and alias are the installed PyTorch API, also described in
+the [upstream backend documentation](https://docs.pytorch.org/docs/stable/backends.html#torch.backends.cuda.preferred_blas_library).
+This preference is not a guarantee that every operation uses that library.
+
+The explicit-hipBLAS FLUX comparison again produced six identical images across
+the two dependency environments, SHA-256
+`5e204790611a6ba700d2c9d066c7ccada785a345c5510c231acd83959425d3b2`.
+These differ from the automatic-library images at the byte level; visual
+inspection still showed the requested apple, leaf and white background.
+
+| Metric with explicit hipBLAS | Production dependencies | Candidate dependencies |
+|---|---:|---:|
+| Process cold model load, seconds | 1.202841 | 0.925454 |
+| First generation, seconds | 26.544660 | 26.517920 |
+| Following generations, seconds | 18.623572 / 18.076541 | 19.718783 / 18.183155 |
+| PyTorch peak allocated bytes | 6,606,511,616 | 6,606,511,616 |
+| PyTorch peak reserved bytes | 9,126,805,504 | 9,126,805,504 |
+
+The candidate run overlapped the CPU test suite, in addition to the continuing
+weight download, so these timings do not isolate small latency changes.
+The explicit library is much slower than automatic selection in both dependency
+environments; it is an evaluation setting, not a production recommendation.
+All nine files of both private FLUX quantized cache copies still matched the
+production originals by SHA-256 after these runs.
+
+After the test suite finished, both explicit-hipBLAS runs were repeated in new
+processes. Baseline load1.171304seconds, generations25.849204/19.435465/18.193117;
+candidate load1.084208seconds, generations25.000540/18.826840/18.140547.
+All six hashes remained the explicit-hipBLAS hash above; both allocator peaks
+remained6,606,511,616 allocated /9,126,805,504 reserved bytes. The download still
+ran concurrently, but the CPU test suite no longer overlapped either run.
+For this bounded input, the candidate dependencies showed no image, allocator
+memory or latency regression under matching backend conditions.
+
+The supervisor's OOM reporting was separately exercised with a CPU-only control:
+a256MiB allocation inside a128MiB cgroup exited1, and the owned unit reported
+`Result=oom-kill`, `ExecMainCode=2`, `ExecMainStatus=9`. That unit's failed state
+was cleared after recording it. This is a supervisor control, not a Qwen memory
+measurement; it ensures a killed model process will not be mislabeled as a
+successful empty result.
+
+## Offline measurement tool
+
+[`scripts/qwen_image_probe.py`](../../scripts/qwen_image_probe.py) runs in an
+isolated worker Python. Device, dtype, quantization, dimensions, seed and repeat
+count are explicit arguments. It forces offline HF access and accepts immutable
+revisions only. It checks local component/shard presence before loading.
+
+For int8 it loads and quantizes the text encoder first, then the transformer,
+checks that quantized modules exist, and leaves the VAE unquantized. It does not
+silently fall back or create a quantization cache. Actual runtime failures are
+recorded separately below; quantization module counts alone do not prove support.
+
+The result is one JSON object, including ordinary load errors, missing weights,
+GPU unavailability and SIGTERM cancellation. Python and native stdout logs go
+to stderr, including buffered native shutdown output. An external SIGKILL or
+OOM kill cannot be handled by the killed process; the evaluation supervisor
+must record that outcome.
+
+Metrics distinguish cold model loading (including quantization), per-image
+inference times (including latent finite checks), process peak RSS, and PyTorch
+peak allocated/reserved VRAM. Allocator peaks are not total device usage; the
+lease supervisor must also sample the physical device. Unavailable values are
+null. The optional output directory must be empty and receives PNG samples and
+`probe-result.json`, retaining the model revision, inputs, seed, dependency
+versions, measurements and output hashes alongside the images.
+
+Each iteration resets the generator to the same seed. The tool checks finite
+latents, the raw VAE decoder tensor before the image processor can clamp
+infinities, and floating image output before converting to PNG. A generation
+which bypasses either callback is rejected. `has_alpha`
+requires both nonopaque pixels and retained visible pixels; opaque RGBA and
+fully transparent empty images do not pass. Hash agreement measures
+repeatability only. The result explicitly leaves numerical reference comparison
+`NOT TESTED`; image quality and foreground correctness still require inspection.
+
+Example, after license consent and separate weight provisioning:
+
+```bash
+HF_HUB_OFFLINE=1 ROCBLAS_USE_HIPBLASLT=0 \
+  "$PROBE_PYTHON" scripts/qwen_image_probe.py \
+  --model-id Qwen/Qwen-Image-2.1 \
+  --revision 790c92633540aa0cb11d9abf19eb46d861714758 \
+  --device cpu --dtype bf16 --quantization int8 \
+  --prompt "a red cube" --seed 42 --repeat 3 \
+  --width 1024 --height 1024 --steps 40 --rgba \
+  --output-dir "$PROBE_OUTPUT"
+```
+
+Set `PROBE_PYTHON` to the candidate worker interpreter and `PROBE_OUTPUT` to a
+new private evidence directory. The example must run under bounded host memory
+and time supervision. GPU runs additionally require an ordinary Host broker
+lease with `estimated_runtime_sec`, renewals and cleanup of only the owned job.
+
+The earlier GEMM investigation is recorded at
+[commit 57f2838](https://github.com/souten-yd/ControlDeckMediaForge/commit/57f283892d6f733ead644a207672287a8bc03cdf):
+it identified hipBLASLt for the measured fp32 shapes and reported a workaround
+using `ROCBLAS_USE_HIPBLASLT=0`. That historical result is not a numerical
+acceptance of Qwen or of every operation/dtype. Record the BLAS environment,
+recheck relevant CPU/GPU reference operations, and compare the same setting
+between baseline and candidate FLUX runs.
+
+## Existing background-removal baseline
+
+The candidate explicit-hipBLAS apple image was passed through the existing
+`worker_packs.image.matte` CPU provider, with the existing pinned
+`onnx-community/BiRefNet_lite-ONNX` revision
+`de15b22ba131738a16dff04aab8bdf8dc32e3ac1`. Its224,005,088-byte ONNX file matched
+SHA-256`5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333`.
+The CPU worker, constrained to four CPU equivalents, took13.514410seconds
+including session construction and inference; peak RSS7,827,091,456bytes.
+The existing core `apply_matte` then accepted a copy in0.212644seconds.
+The original source PNG remained byte-identical.
+
+The1024px RGBA result had798,167 fully transparent pixels,239,906 opaque pixels
+and10,503 partial-alpha pixels. Its SHA-256 is
+`d619fc09478972c64c2f28a877cfe3b749b7b47ac0f12b3b3cd3b703df62048b`.
+Visual inspection confirmed the apple and leaf remained; fine edge/fringe
+quality still needs comparison with Qwen. This is a concrete baseline, not
+evidence that Qwen's native alpha is better. All outputs remain private
+evaluation files with model/input/hash provenance; no Library asset was added.
+
+## Actual Qwen runs
+
+Common input: apple and green leaf product photograph, seed42,1024x1024,
+40steps, bf16 activations. CPU was hidden from all GPU devices; GPU diagnostics
+used an exclusive broker lease, explicit hipBLAS preference and
+`ROCBLAS_USE_HIPBLASLT=0`. Each process had a24.5GiB cgroup memory limit, no swap,
+four CPU equivalents and a3GiB host available-memory floor. The later RGBA run
+used24.25GiB instead of24.5GiB after a fresh host-memory preflight.
+
+| Run | Result | Load seconds | Process peak RSS bytes | Images |
+|---|---|---:|---:|---:|
+| CPU/int8, repeat1 | CPU packed-int8 operation failed | 33.116152 | 26,983,485,440 | 0 |
+| GPU/bf16 + CPU offload, repeat3 requested | Supervisor stopped at RAM floor | 2.875663 | 26,280,861,696 | 0 |
+| GPU/int8, repeat3 requested | First image completed; timeout during second | 35.901934 | 26,748,932,096 | 1 |
+| GPU/int8, native-RGBA repeat1 | 300second timeout | 36.144707 | 26,896,199,680 | 0 |
+
+The CPU/int8 run quantized369 text-encoder and232 transformer modules, then
+failed with `_weight_int8pack_mm_cpu : A must be contiguous on the last dimension.`
+Its supervised wall time was37.129912seconds. Peak process RSS was25.130GiB,
+also above the plan's25GiB gate. No kernel or tensor-layout workaround was added.
+The probe emitted a JSON error and exited0 by its diagnostic contract; this is
+not a generation success. The minimum sampled host available RAM was
+12,186,394,624bytes; all Host checks returned200, maximum0.015229seconds.
+
+The bf16/offload diagnostic crossed the3GiB host floor at the24.608325second
+telemetry sample:3,186,024,448bytes remained. The supervisor canceled its owned
+process and released the lease. Peak sampled device use was18,200,649,728bytes;
+PyTorch allocated peak17,613,857,792bytes. All Host checks returned200,
+maximum0.002783seconds. Both cgroups recorded zero OOM and OOM-kill events.
+The sampled RSS and cgroup accounting differ from process peak RSS; they are
+retained separately in the evidence and are not interchangeable.
+
+The subsequent GPU/int8 run was a bounded diagnostic despite the failed CPU and
+bf16 gates, not a continuation of successful acceptance. It requested28GiB VRAM
+and900seconds, with the same safeguards. Its first1024px image completed in
+708.135995seconds after35.901934seconds of model loading. It depicts the requested
+red apple, green leaf and white studio background without an obvious visual
+failure. PNG SHA-256:
+`e691a9afa436b38aa0294635a7ddd88a85c0993e2f5a392a621cf342f87cf911`.
+The image passed latent, raw decoder and floating pixel finite checks before
+being written. This does not prove model-wide numerical correctness.
+
+The900.133158second telemetry sample triggered the timeout during the second
+image. The child handled SIGTERM, retained the completed sample and a canceled
+JSON result; the supervisor released its lease. One image completed, the second
+was canceled, and the third was not started. Three-repeat hash consistency,
+warm generation time and a stable failure rate are therefore NOT TESTED.
+The first image already exceeded the60second gate. No claim of a60second warm
+path is made from the interrupted second attempt.
+
+Peak PyTorch allocated memory was28,241,912,832bytes, reserved29,450,305,536bytes;
+sampled total GPU peak was29,884,125,184bytes (27.832GiB). The weight-only int8
+estimate is not an execution-memory measurement. Host available RAM remained
+above11,239,514,112bytes, every sampled Host response was200, maximum0.007760s,
+and no OOM/OOM-kill event occurred.
+
+The ordinary prompt's PNG is RGBA with alpha253..255;2642 pixels have alpha below
+255, but none are transparent. This demonstrates why `has_alpha` is only a
+syntactic measurement: it does not establish useful foreground isolation.
+The canceled run's aggregate fields are incomplete; inspect the retained
+per-image facts rather than treating initialized aggregate values as verdicts.
+
+A separate native-RGBA prompt was attempted once under a300second limit. This
+was a quality diagnostic, not a retry of the already failed CPU or latency
+acceptance. The same resolution,40steps, seed, int8 components and explicit BLAS
+were used; the prompt asked for a visible isolated apple and leaf rather than a
+white background. Loading took36.144707seconds; the300.180127second telemetry
+sample triggered the timeout before any image completed. Sampled device peak
+was19,130,073,088bytes, host available RAM stayed above11,633,278,976bytes,
+Host responses were200 with maximum0.004571seconds, and no OOM event occurred.
+Cancellation produced a JSON result and released the lease. Native-alpha
+foreground/edge quality and superiority to BiRefNet are NOT TESTED, not failed
+visual comparisons. A longer run was not scheduled after the existing latency
+and CPU gates had already failed.
+
+## Conclusion and conditions to resume
+
+The evaluation tooling works, the approved weights are verified and one real
+Qwen image exists. Product adoption is deferred for this measured R9700/gfx1201,
+32GB-host-RAM, candidate-PyTorch/quanto configuration. This does not establish
+that Qwen cannot run on another runtime or machine. The measured failures are:
+
+- CPU packed-int8 operation rejects the input layout, with RSS above25GiB.
+- Full bf16 with CPU offload violates the protected Host RAM headroom.
+- GPU/int8 needs708seconds for the completed image; the60second gate and
+  three-repeat acceptance are not met.
+- Useful native transparency has not been demonstrated within the bounded run.
+
+Resume only with a concrete runtime/quantization or memory change addressing
+those failures. Re-run the CPU support/RSS gate, protected GPU cold/warm timings
+and three-repeat check, scoped numerical references, and actual RGBA foreground
+comparison before proposing adoption. Do not repeat the same long runs as if
+time alone resolved the failures. Editing, ten-reference input,2048px generation,
+full-model numerical correctness and product-path Qwen integration are NOT TESTED.
+
+After the final run, ordinary Host auth/me and MediaForge health both returned200,
+MediaForge reportedhealthy, installed version remained0.32.2, GPU lease-reserved
+bytes returned to0 and observed device use to59,912,192bytes. Production package
+metadata still matched the original versions above. The production catalog,
+adapter and defaults remain unchanged.
+
+## Executed checks and remaining gates
+
+- Final raw-decoder check: `./mf.sh test`,2380 passed,3 warnings,275.48seconds;
+  focused probe tests19 passed. A raw non-finite decoder tensor is rejected
+  even when the image processor would return finite clamped pixels.
+- After explicit BLAS selection was added: `./mf.sh test`,2379 passed,
+  3 warnings,281.34seconds. Focused probe tests:18 passed; additional cases
+  cover backend selection before loading, selection failure without fallback,
+  and rejection of a GPU backend setting on the CPU route.
+- `./mf.sh test`: 2376 passed, 3 warnings, 267.19 seconds.
+- Focused final probe tests: 15 passed, 2 warnings, 0.22 seconds. Coverage includes
+  differing repeated images, alpha semantics, non-finite latents/decoder output,
+  component quantization order, output preservation, native stdout and SIGTERM.
+- Real candidate Python, all GPUs hidden, the documented CPU/int8/1024 request:
+  exit 0, exactly one JSON line, `weights_missing`, zero generated images.
+- Real candidate Python, GPUs hidden, GPU request: exit 0, exactly one JSON
+  line, `gpu_unavailable`, zero generated images.
+
+The read-only capacity sample was host RAM 32,605,822,976 bytes, available
+26,889,367,552 bytes, discrete GPU VRAM 34,208,743,424 bytes, and available disk
+208,059,334,656 bytes. These are a snapshot, not a future resource reservation
+or model peak measurement.
+
+Evaluation is closed with the defer result above. Unmet acceptance gates and
+NOT TESTED items are conditions for a future evaluation, not queued work or an
+implicit product approval. The earlier expired dedicated Host session was
+refreshed and no further login/consent is needed for this completed evaluation.
+No GPU inference was run without a lease.
+No model registry, product routing, resolution default or quantization default
+was changed. The model is not adopted. One Qwen sample exists in private
+evaluation evidence; no Qwen asset has been registered in Library.
+
+Evidence lives in private feature maintenance
+`qwen-image-21-evaluation-20260922/`: identity/license digest, dependency pins,
+candidate import report, unchanged production metadata, capacity and test logs.
+`weight-provision-complete.json` records all28 verified files and the successful
+offline snapshot check. Actual runs retain `supervisor.json`, `telemetry.jsonl`,
+stdout/stderr and `samples/probe-result.json` under `qwen-cpu-int8-2`,
+`qwen-gpu-bf16-offload-1`, `qwen-gpu-int8-rgb-1` and `qwen-gpu-int8-rgba-1`.
+`qwen-measurements-summary.json` contains the final measurements, lease cleanup,
+installed health and unchanged production dependency check. Earlier preflight
+errors remain separate.
+
+Executed runner command, with the MediaForge core interpreter and private
+evaluation root shown above: `python supervise-evaluation.py <job.json>`.
+The exact argument vectors, limits and preflight snapshots are retained in
+`job-qwen-cpu-int8-2.json`, `job-qwen-gpu-bf16-offload-1.json`,
+`job-qwen-gpu-int8-rgb-1.json` and `job-qwen-gpu-int8-rgba-1.json`, and copied into
+each supervisor receipt. `summarize-evaluation.py` performed the final read-only
+Host/production check. Existing evidence directories are immutable run records;
+the supervisor rejects reusing their names.

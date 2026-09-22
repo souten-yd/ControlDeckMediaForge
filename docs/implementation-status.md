@@ -1,5 +1,59 @@
 # Media Forge implementation status
 
+## 2026-09-22 Qwen導入評価を完了（現構成は見送り）
+
+branch `ux1/qwen-image-21-evaluation`、PR #611へ評価道具・実測・結論を記録。
+固定revision790c9263の28file/33,134,949,212Bを取得し、全digestとoffline snapshotを確認。
+
+- CPU/int8: packed-int8のcontiguous制約で失敗、画像0枚。RSS25.130GiBで25GiB条件も不通過。
+- GPU/bf16+CPU offload: 24.608秒のsampleでHost空きRAMが3GiB未満となり監視停止、画像0枚。
+- GPU/int8: load35.902秒、通常画像1枚708.136秒。GPU実使用ピーク27.832GiB。
+  リンゴと葉の画像を目視確認。900秒上限で2枚目を停止、3回の再現性確認はNOT TESTED。
+- native RGBA: 別の1枚試験は300秒上限で停止、画像0枚。透過品質の比較はNOT TESTED。
+- 全run OOM0、Host応答200、GPU lease解放済み。終了後もMediaForge0.32.2 healthy、GPU予約0。
+- 製品台帳・adapter・共有runtimeは変更なし。全suite2380 passed/3 warnings/275.48秒、focused19件。
+  最終テスト後のrepository変更は文書のみ。評価は終了、実行中の測定や同意待ちはない。
+
+次の評価はCPU量子化互換性・RAM余裕・60秒条件を改善する具体的変更がある場合に限る。
+同じ設定の長時間再試行や製品採用へ自動で進めない。再開条件・証跡・未検証範囲は以下。
+詳細: [Qwen評価記録](implementation/qwen-image-21-evaluation-20260922.md)。
+
+## 2026-09-22 Qwen評価再開・Host埋め込み画面の実測
+
+提示済みQwen Research Licenseへ利用者が明示同意、通常Host loginも更新。
+固定revision790c9263とlicense SHAを再確認して評価用重みの取得を開始した。
+Qwen生成・採用はまだNOT TESTED、製品台帳・adapter・共有runtimeは変更なし。
+
+実Host effectiveはhealthy/mobile embedded。Chromium1280pxと320pxの両方で
+opaque iframe内の3D画面、画像8件、選択後のpipeline開始有効を確認。
+Host/frame横overflow0、console/page error0、failed request0。新規pipeline投入なし。
+
+通常broker lease下で現行/候補FLUX.2の1024/int8/offload/seed42を各3回生成。
+最初の比較で6枚すべて同じSHA、PyTorch peak allocatedは両方6,572,957,184B。
+別のCPU/GPU演算比較で、環境変数単独ではfp32の大規模GEMM不一致を再現。
+明示hipBLASではfp32/bf16の10形状一致、fp16の400万行は不一致。
+評価probeへBLAS選択・記録を追加し、focused18件通過。
+./mf.sh test:2379 passed / 3 warnings / 281.34秒 / exit0。
+全suite後、明示BLASで現行/候補を各3回再測定。全PNG一致、allocatorピーク一致。
+現行25.849/19.435/18.193秒、候補25.001/18.827/18.141秒。重み取得は並行中。
+raw VAE出力をclamp前に検査する追加後の最終テスト: focused19件、
+./mf.sh test:2380 passed / 3 warnings / 275.48秒 / exit0。
+詳細・残項目は[評価記録](implementation/qwen-image-21-evaluation-20260922.md)。
+
+## 2026-09-22 Qwen-Image-2.1の評価準備（実推論は未実施）
+
+0.32.2の公開・通常適用後に開始。評価用probe、固定依存、fakeテストを追加。
+候補diffusers7263f331/transformers5.17.0/tokenizers0.23.1/hub1.32.0でQwen21・FLUX.2
+class importとpip check通過。既存Torch ROCmを保持し、稼働中の共有runtime版は不変。
+./mf.sh test:2376 passed / 3 warnings / 267.19秒。probe15件も最終再確認pass。
+実候補Pythonでweights_missing / gpu_unavailableを各exit0・JSON1件として確認した。
+これは失敗時の動作確認であり、生成性能・画質・VRAMの受入ではない。
+
+利用者へ固定revisionのResearch License同意と通常Host login更新を依頼済み、返答待ち。
+重み取得なし、実GPU推論なし、製品adapter/モデル台帳/既定設定の変更なし。
+次はHost leaseを通すFLUX.2現行/候補の比較、その後に同意済みQwenの実測。
+詳細: [Qwen評価準備と残ゲート](implementation/qwen-image-21-evaluation-20260922.md)。
+
 ## 2026-09-22 正式0.32.2を公開・通常適用・再起動確認
 
 PR608/609 merge済み。公開source c9d25e9、署名bundle37,997,030 B、

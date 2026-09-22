@@ -1,5 +1,9 @@
 # Codex への実装指示（Qwen-Image-2.1 評価）
 
+2026-09-22実行状態: [実機評価結果と未実施項目](qwen-image-21-evaluation-20260922.md)。
+評価道具と回帰確認は実装・実測済み。Qwenは通常画像1枚を生成したが708秒を要した。
+CPU互換性・RAM余裕・時間の条件は不通過。製品台帳・adapter・共有runtimeの変更なし。
+
 対象: MediaForge（`worker_packs/image`, `scripts`）
 背景: `docs/implementation/qwen-image-evaluation-plan.md`
 範囲: **計画の段 2〜6 を回すための道具だけ。採用の判断はしない。**
@@ -28,6 +32,9 @@ FLUX.2-klein も使う。**
 - 引数: `--model-id` `--revision` `--device {cpu,gpu}`
   `--dtype {bf16,fp16}` `--quantization {none,int8}`
   `--offload` `--prompt` `--seed` `--repeat` `--width` `--height` `--rgba`
+- GPU評価では任意の `--blas-library {auto,cublas,cublaslt}` を受け、実際の
+  PyTorch preferenceも記録する。ROCmでcublasはhipBLASに対応する。
+  2026-09-22の参照比較では環境変数単独でfp32不一致が残ったため追加した。
 - JSON を 1 つ標準出力へ出して終了する:
 
 ```json
