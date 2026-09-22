@@ -3346,7 +3346,9 @@ function renderModelSettings() {
       && settings.guidance_scale !== undefined) {
     guidance.value = settings.guidance_scale;
   }
-  byId("model-settings-note").textContent = settings.native_width
+  byId("model-settings-note").textContent = owner?.runtime_adapter === "native.stable-diffusion-cpp-qwen-image-21"
+    ? "選んだ出力サイズで作成します（最大1024×1024）。"
+    : settings.native_width
     ? `サイズは ${settings.native_width}×${settings.native_height} と同じ面積に自動で寄せます。`
     : "";
 }
@@ -4918,7 +4920,7 @@ const SCENE_TEXT = {
     textureTitle: "画像の改善案を作る", texturePrompt: "変えたい模様や質感",
     textureMode: "作り方", textureCount: "候補の数", textureVariants: "画像の候補",
     textureModes: {current: "貼ってある画像を改善", library: "選択したライブラリ画像を改善", new: "新しく作る"},
-    textureNote: "元の配置を保つよう指示して改善案を作ります。貼り替える前に3Dで比較してください。",
+    textureNote: "候補は1024×1024で作成します。元の配置を保つよう指示しますが、貼り替える前に3Dで比較してください。",
     textureChannelUnsupported: "貼ってある画像の改善は、ベースカラーまたは発光を選んでください。",
     textureExtracting: "元の材質画像を取り出しています…", textureSourceRequired: "改善するライブラリ画像を選んでください。",
     textureCandidate: (index) => `候補 ${index}`, textureEditUnavailable: "画像編集を利用できません。設定で対応モデルを確認してください。",
@@ -5013,7 +5015,7 @@ const SCENE_TEXT = {
     textureTitle: "Create image variants", texturePrompt: "Pattern or surface changes",
     textureMode: "Source", textureCount: "Candidates", textureVariants: "Image candidates",
     textureModes: {current: "Improve the current texture", library: "Improve the selected Library image", new: "Create a new image"},
-    textureNote: "Edits are instructed to retain the layout. Compare them on the 3D model before adopting.",
+    textureNote: "Candidates are created at 1024×1024 and instructed to retain the layout. Compare them on the 3D model before adopting.",
     textureChannelUnsupported: "Select base color or emission to improve the current texture.",
     textureExtracting: "Extracting the current material image…", textureSourceRequired: "Choose a Library image to improve.",
     textureCandidate: (index) => `Candidate ${index}`, textureEditUnavailable: "Image editing is unavailable. Check compatible models in Settings.",
@@ -6149,6 +6151,7 @@ async function createSceneTexture({retry = false} = {}) {
         constraints: {
           asset_brief: {role: "texture", target_surface: "3d"},
           scene_texture: context,
+          width: 1024, height: 1024,
           seed: crypto.getRandomValues(new Uint32Array(1))[0],
         },
         output: {format: "png", count: Number(byId("scene-texture-count").value)},

@@ -205,3 +205,32 @@ def test_native_does_not_claim_resident_weights_between_jobs(tmp_path):
     manager._warm_worker = (SimpleNamespace(returncode=None), None)
     manager._warm_model = model.model_id
     assert manager._warm_holds(model) is False
+
+
+@pytest.mark.parametrize("size,expected", [
+    ((1024, 768), (1024, 768)), ((768, 1024), (768, 1024)),
+    ((512, 512), (512, 512)), ((1008, 752), (992, 736)),
+])
+def test_core_canvas_reaches_native_worker_within_admitted_limits(native_setup, tmp_path, size, expected):
+    from mediaforge.domain import JobRequest
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+    from tests.test_image_evaluation import descriptor
+
+    _, model_path, request = native_setup
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    model = descriptor(default_steps=16, native_width=1024, native_height=1024)
+    model = replace(model, runtime_adapter="native.stable-diffusion-cpp-qwen-image-21",
+                    max_width=1024, max_height=1024, max_pixels=1024**2)
+    job = store.create_job(JobRequest(operation="image.generate", intent="test",
+                                    constraints={"width": size[0], "height": size[1]}))
+    manager._validate_generation_limits(job, model)
+    resolved = manager._resolved_request(job, model)["constraints"]
+    native_request = replace(request, width=resolved["width"], height=resolved["height"],
+                             steps=resolved["steps"])
+    result = NativeQwenImage21Adapter(model_path).generate(native_request)
+    with Image.open(result.output_path) as image:
+        assert image.size == expected
+    assert (job.request.constraints["width"], job.request.constraints["height"]) == size

@@ -48,3 +48,9 @@ PR612のQwen sliceを統合し、0.33.0として ./mf.sh test:
 PR merge、Qwen通常生成sliceとの統合、署名release・通常更新、実Hostの画像編集3候補、
 Library lineage、材質比較、モバイル/restart受入は未実施。実AIでのUV保持・
 改善品質はNOT TESTED。元checkoutは変更していない。
+
+## 0.33.0 installedで判明した出力寸法の欠落
+
+正規Hostで4096角の抽出まで成功したが、image.editの候補寸法が未指定のため
+入力4096角が生成上限検査へ入りresource_limitで失敗。0.33.1で候補1024角を
+明示し、画面にも表示する。実AI候補の再確認はこれから。
