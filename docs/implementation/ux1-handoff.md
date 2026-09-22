@@ -1,5 +1,20 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 installed 0.33.0の寸法処理を修正（0.33.1準備）
+
+PR613/0.33.0公開・通常適用済み。署名/公開物再取得/clean startup/既存1509 Asset保持を確認。
+実Hostで次の失敗を確認したため、成功扱いせず0.33.1で修正する。
+
+- Qwen横長1024×768: coreの学習面積への拡大によりworkerの辺1024上限を超えた。
+  native Qwenだけ受付寸法を保ち32pixelへ揃える。最終出力は要求canvasへ既存処理で整合。
+- 4096角の宝箱texture: 候補の出力寸法が未指定で、入力寸法が生成上限の検査に使われた。
+  候補1024×1024を明示して画面にも表示。入力画像・元sceneの解像度/版は保持する。
+- normal model installでQwenの14,549,481,427Bをdigest照合・登録しhealthyを確認。
+  実HostのQwen生成とtexture候補は上記失敗、まだNOT TESTED/未受入。
+- 横長/縦長/512角/16pixel端数からcore→native workerの回帰4条件を追加。
+  focused41件通過。./mf.sh test: 2404 passed / 3 warnings / 275.07秒。
+  修正後installed受入はrelease後に確認する。
+
 ## 2026-09-22 既存3Dテクスチャの派生候補（0.33.0準備）
 
 既存packed画像またはLibrary画像を入力に、通常image.editで1〜4候補を作成。

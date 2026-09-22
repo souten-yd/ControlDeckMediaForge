@@ -1576,9 +1576,19 @@ class JobManager:
             if width is None or height is None:
                 constraints["width"], constraints["height"] = native
             elif isinstance(width, int) and isinstance(height, int):
-                constraints["width"], constraints["height"] = snap_to_native(
-                    width, height, int(native[0])
-                )
+                if selected.runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21":
+                    # Admission bounds each side at 1024. Area-based snapping
+                    # expands a 1024x768 canvas beyond 1024 and exceeds that
+                    # measured envelope. Keep the admitted canvas, aligned to
+                    # this runtime's 32-pixel grid; output conformance retains
+                    # the caller's requested dimensions.
+                    constraints["width"], constraints["height"] = (
+                        max(256, width // 32 * 32), max(256, height // 32 * 32),
+                    )
+                else:
+                    constraints["width"], constraints["height"] = snap_to_native(
+                        width, height, int(native[0])
+                    )
         request["constraints"] = constraints
         return request
 
