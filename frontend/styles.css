@@ -431,6 +431,11 @@ html:has(#scene-compare-dialog[open]) { overflow: hidden; }
   object-fit: contain;
 }
 .blender-session-actions { flex-wrap: wrap; }
+#blender-session-banner { margin-bottom: 16px; }
+#blender-session-summary, #blender-finish-target { overflow-wrap: anywhere; }
+#blender-finish-dialog { width: min(520px, calc(100vw - 24px)); box-sizing: border-box; }
+#blender-finish-dialog .dialog-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+#blender-finish-dialog button, #blender-session-finish { min-height: 44px; white-space: normal; }
 #scene-blender-keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 #scene-blender-keys button { min-width: 44px; min-height: 44px; }
 

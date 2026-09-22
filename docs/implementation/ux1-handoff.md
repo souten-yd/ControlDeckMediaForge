@@ -1,5 +1,24 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 Web BlenderをWeb画面から終了（0.33.8準備）
+
+Web Blender稼働中は全画面共通の上部に対象名と「Web Blenderを終了」を表示。
+簡易/詳細・320pxから保存終了/明示破棄/準備中の取消へ到達でき、RFB再接続は不要。
+確認対象sessionを固定し、処理中の二重送信、失敗後再試行、日英を処理する。
+
+- 本番確認時はactive session0 / Blender・Xtigervncプロセス0。直前のsessionは切断timeoutで
+  interrupted、working_fb7a...はrecovery。利用者データの破棄やプロセスkillは実施していない。
+- source Chrome1280/320pxで全4画面/簡易詳細、44px、overflow0/page error0。
+  応答を制御した試験で要求失敗/再試行・二重送信・別sessionへの誤操作防止・準備中取消を確認。
+- source API/実Blender4.5.13の検証用sceneで320px touchから破棄0.265秒/保存4.614秒。
+  RFBを開かず終了、両systemd unit inactive。破棄は2版維持、保存は2→3版。
+  本番の既存sceneとは別。NOT TESTED: 実スマホ本体、認証付きinstalled Host browser。
+- ./mf.sh test: 2413 passed /3 warnings /154.72秒（短いNVMe basetemp）。
+  frontend contract160件、node構文/git diff通過。証跡はmaintenance/web-blender-exit-20260922。
+- 0.33.8を通常merge/署名release/Host更新する。本番に別の生成Jobがあるため、更新前に
+  active Job/session0を再確認する。専用operator loginは引き続き不在、偽装しない。
+
+
 ## 2026-09-22 0.33.7を署名公開・ローカル更新（Host browser再ログイン待ち）
 
 PR622/623をmerge、source6705400から0.33.7を通常署名公開/Host更新。

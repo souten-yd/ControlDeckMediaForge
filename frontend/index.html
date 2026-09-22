@@ -99,6 +99,10 @@
       </nav>
 
       <main>
+        <aside id="blender-session-banner" class="panel" aria-label="Web Blender" hidden>
+          <p id="blender-session-summary" role="status"></p>
+          <button type="button" id="blender-session-finish">Web Blenderを終了</button>
+        </aside>
         <!-- 作る -->
         <section id="view-create" class="view" data-view="create">
           <!-- 検証は requestProblem() が行う。ブラウザ既定の吹き出しは文言を持てず、
@@ -1178,6 +1182,18 @@
             <button type="button" id="scene-compare-cancel">そのまま戻る</button>
             <button type="button" id="scene-compare-restore" class="primary" disabled>左の内容を新しい版として復元</button>
           </div>
+        </div>
+      </dialog>
+
+      <dialog id="blender-finish-dialog" aria-labelledby="blender-finish-title" aria-describedby="blender-finish-description">
+        <h2 id="blender-finish-title">Web Blenderを終了</h2>
+        <p id="blender-finish-target"></p>
+        <p id="blender-finish-description" class="hint"></p>
+        <p id="blender-finish-error" role="alert"></p>
+        <div class="dialog-actions blender-session-actions">
+          <button type="button" id="blender-finish-cancel">戻る</button>
+          <button type="button" id="blender-finish-discard">変更を破棄して終了</button>
+          <button type="button" id="blender-finish-save" class="primary">新しい版として保存して終了</button>
         </div>
       </dialog>
 
