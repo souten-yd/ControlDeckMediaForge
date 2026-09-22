@@ -661,3 +661,38 @@ def test_material_replaces_same_target_channel_and_failures_release_writer(
     assert not any(
         item.state == "active" for item in store.list_scene_working_copies("user:1")
     )
+
+
+def test_material_extract_keeps_scene_and_registers_source_lineage(tmp_path, monkeypatch):
+    store, workspace, resolver = fake_scene_workspace(tmp_path)
+    imported = upload_scene(workspace, b"BLENDER-texture-source")
+    scene_id = imported["scene"]["id"]
+    selection = {"schema_version": "media-forge.scene-texture-request@1", "scene_id": scene_id,
+                 "source_revision_id": imported["revision"]["id"], "object_name": "Cube",
+                 "material_slot": 0, "channel": "base_color", "uv_map": "UVMap"}
+    before = workspace.catalog.get("user:1", scene_id)
+    source = store.asset_path(imported["revision"]["source_asset_id"]).read_bytes()
+    async def extract(_source, _runtime, **options):
+        assert options["action"] == "extract"
+        assert options["source_context"].model_dump(mode="json") == selection
+        output = workspace.material_root / "source.png"
+        Image.new("RGBA", (32, 32), (12, 34, 56, 78)).save(output)
+        return {"binding": {"texture_sha256": hashlib.sha256(output.read_bytes()).hexdigest()}}, output
+    monkeypatch.setattr(workspace, "_material_operation", extract)
+    result = asyncio.run(workspace.extract_material_image("user:1", scene_id, selection))
+    asset = store.get_asset(result["asset"]["id"])
+    provenance = store.get_provenance(asset.id)
+    assert workspace.catalog.get("user:1", scene_id) == before
+    assert store.asset_path(imported["revision"]["source_asset_id"]).read_bytes() == source
+    assert asset.parent_asset_ids == [imported["revision"]["source_asset_id"]]
+    assert provenance.operation == "scene.material.extract"
+    assert provenance.reference_asset_hashes == {asset.parent_asset_ids[0]: hashlib.sha256(source).hexdigest()}
+    with Image.open(store.asset_path(asset.id)) as image:
+        assert image.getpixel((0, 0)) == (12, 34, 56, 78)
+    assert not any(workspace.material_root.iterdir())
+    assert resolver.references == 0
+    for owner, value in [("user:2", selection), ("user:1", {**selection, "channel": "normal"}),
+                         ("user:1", {**selection, "source_revision_id": "revision_" + "0" * 32})]:
+        with pytest.raises(SceneError):
+            asyncio.run(workspace.extract_material_image(owner, scene_id, value))
+    assert len(workspace.catalog.get("user:1", scene_id)[1]) == 1

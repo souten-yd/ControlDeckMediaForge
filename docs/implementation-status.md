@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-22 既存3Dテクスチャの派生候補（0.33.0準備）
+
+既存packed画像またはLibrary画像を入力に、通常image.editで1〜4候補を作成。
+サムネイルから選び、既存の3D材質比較→採用へ渡す。生成だけでは元sceneを変更しない。
+抽出画像→元.blend、生成候補→抽出画像のparent lineageを保持。reload後も候補を復元。
+
+- 実Blender4.5.13: 既存Pixal3D宝箱から4096角/20,926,322Bの画像を5.001458秒で抽出。
+  元source/revision不変、parent hash照合、一時ファイル0。
+- 独立source UI: 画像worker/capabilityは明示fake、Blenderは実物。
+  3候補→2枚目選択→3D比較→破棄、320px overflow0、reload復元、page error0。
+  実AIの画像品質やinstalled受入とは別の証跡。
+- Qwen PR612のmerged source794e9c9を統合。0.33.0でまとめて署名公開する。
+- ./mf.sh test: 2400 passed / 3 warnings / 272.68秒。実Host AI3候補、installed比較/mobile/restartはNOT TESTED。
+
+詳細: [3D材質画像の派生候補](implementation/3d-texture-variants-20260922.md)。
+
 ## 2026-09-22 Qwen Q8 Vulkanの通常生成を受入、適用準備
 
 `ux1/qwen-image-21-vulkan`。コミュニティの構成と上流実装を調べ、別の固定Vulkan

@@ -223,6 +223,9 @@ const state = {
   sceneTexturePreviewJobId: "",
   sceneTexturePreviewAssetId: "",
   sceneTextureLoadedJobs: new Set(),
+  sceneTextureThumbnails: new Map(),
+  sceneTextureBusy: false,
+  sceneTextureError: "",
   sceneTexturePollingJobs: new Set(),
   sceneTextureWatchingJobs: new Set(),
   blenderSessions: [],
@@ -777,6 +780,11 @@ async function standaloneCall(method, params) {
   }
   if (method === "scenes.material.targets") {
     return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/material-targets`);
+  }
+  if (method === "scenes.material.extract") {
+    return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/material-image`, {
+      method: "POST", body: JSON.stringify({selection: params.selection}),
+    });
   }
   if (method === "scenes.material.apply") {
     return json(`/workspace-api/scenes/${encodeURIComponent(params.scene_id)}/materials`, {
@@ -4907,7 +4915,13 @@ const SCENE_TEXT = {
     materialNoTargets: "UVマップのあるメッシュがありません。",
     materialNoImages: "ライブラリ画像を選ぶか、この場所の画像を新しく作ってください。",
     materialChoose: "選択してください",
-    textureTitle: "この場所の画像を新しく作る", texturePrompt: "作りたい模様や質感",
+    textureTitle: "画像の改善案を作る", texturePrompt: "変えたい模様や質感",
+    textureMode: "作り方", textureCount: "候補の数", textureVariants: "画像の候補",
+    textureModes: {current: "貼ってある画像を改善", library: "選択したライブラリ画像を改善", new: "新しく作る"},
+    textureNote: "元の配置を保つよう指示して改善案を作ります。貼り替える前に3Dで比較してください。",
+    textureChannelUnsupported: "貼ってある画像の改善は、ベースカラーまたは発光を選んでください。",
+    textureExtracting: "元の材質画像を取り出しています…", textureSourceRequired: "改善するライブラリ画像を選んでください。",
+    textureCandidate: (index) => `候補 ${index}`, textureEditUnavailable: "画像編集を利用できません。設定で対応モデルを確認してください。",
     textureGenerate: "画像を作る", textureCancel: "中止", textureRetry: "同じ指示でもう一度",
     textureUse: "この画像を選ぶ", texturePromptRequired: "作りたい模様や質感を入力してください。",
     textureTargetRequired: "先に対象、マテリアル、UVマップを選んでください。",
@@ -4996,7 +5010,13 @@ const SCENE_TEXT = {
     materialOriginalPreserved: "The current revision is unchanged.",
     materialNoTargets: "No mesh with a UV map is available.",
     materialNoImages: "Choose a Library image or create a new image for this target.", materialChoose: "Choose…",
-    textureTitle: "Create a new image for this target", texturePrompt: "Pattern or surface to create",
+    textureTitle: "Create image variants", texturePrompt: "Pattern or surface changes",
+    textureMode: "Source", textureCount: "Candidates", textureVariants: "Image candidates",
+    textureModes: {current: "Improve the current texture", library: "Improve the selected Library image", new: "Create a new image"},
+    textureNote: "Edits are instructed to retain the layout. Compare them on the 3D model before adopting.",
+    textureChannelUnsupported: "Select base color or emission to improve the current texture.",
+    textureExtracting: "Extracting the current material image…", textureSourceRequired: "Choose a Library image to improve.",
+    textureCandidate: (index) => `Candidate ${index}`, textureEditUnavailable: "Image editing is unavailable. Check compatible models in Settings.",
     textureGenerate: "Create image", textureCancel: "Cancel", textureRetry: "Retry same request",
     textureUse: "Choose this image", texturePromptRequired: "Describe the pattern or surface to create.",
     textureTargetRequired: "Choose a target, material, and UV map first.",
@@ -5456,6 +5476,11 @@ function renderSceneText() {
   byId("scene-material-safety").textContent = text.materialSafety;
   byId("scene-material-apply").textContent = text.materialApply;
   byId("scene-texture-title").textContent = text.textureTitle;
+  byId("scene-texture-mode-label").textContent = text.textureMode;
+  byId("scene-texture-count-label").textContent = text.textureCount;
+  byId("scene-texture-note").textContent = text.textureNote;
+  byId("scene-texture-variants").setAttribute("aria-label", text.textureVariants);
+  for (const option of byId("scene-texture-mode").options) option.textContent = text.textureModes[option.value];
   byId("scene-texture-prompt-label").textContent = text.texturePrompt;
   byId("scene-texture-generate").textContent = text.textureGenerate;
   byId("scene-texture-cancel").textContent = text.textureCancel;
@@ -5899,23 +5924,71 @@ async function prepareSceneTextureResult(job) {
   if (job.status !== "succeeded" || !job.asset_ids?.length
       || state.sceneTextureLoadedJobs.has(job.id)) return;
   state.sceneTextureLoadedJobs.add(job.id);
-  const assetId = job.asset_ids[0];
+  const sceneId = state.selectedSceneId;
   try {
-    const [images, thumbnail] = await Promise.all([
-      loadSceneMaterialImages(),
-      call("assets.thumbnail", {asset_id: assetId, max_side: 320}),
-    ]);
+    const images = await loadSceneMaterialImages();
+    for (const assetId of job.asset_ids) {
+      const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 192});
+      state.sceneTextureThumbnails.set(assetId, `data:${thumbnail.mime_type};base64,${thumbnail.base64}`);
+    }
+    if (state.selectedSceneId !== sceneId) return;
     state.sceneMaterialImages = images;
-    state.sceneTexturePreviewJobId = job.id;
-    state.sceneTexturePreviewAssetId = assetId;
-    const preview = byId("scene-texture-preview");
-    preview.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`;
     renderSceneMaterialControls({targetsChanged: false});
   } catch {
-    // The durable job and Library asset remain valid. A later render retries the
-    // presentation work without changing or hiding the succeeded job.
     state.sceneTextureLoadedJobs.delete(job.id);
   }
+}
+
+function sceneTextureVariants() {
+  return (state.jobs || []).filter((job) => {
+    const context = sceneTextureContext(job);
+    return job.status === "succeeded" && context?.scene_id === state.selectedSceneId
+      && context.object_name === byId("scene-material-object").value
+      && String(context.material_slot) === byId("scene-material-slot").value
+      && context.channel === byId("scene-material-channel").value;
+  }).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+    .flatMap((job) => (job.asset_ids || []).map((assetId) => ({job, assetId}))).slice(0, 24);
+}
+
+function renderSceneTextureVariants(blocked) {
+  const variants = sceneTextureVariants();
+  if (!variants.some((item) => item.assetId === state.sceneTexturePreviewAssetId)) {
+    state.sceneTexturePreviewAssetId = variants[0]?.assetId || "";
+    state.sceneTexturePreviewJobId = variants[0]?.job.id || "";
+  }
+  const holder = byId("scene-texture-variants");
+  // Reuse nodes while jobs poll so keyboard focus is not lost.
+  const keys = variants.map((item) => item.assetId).join(",");
+  if (holder.dataset.keys !== keys) {
+    holder.dataset.keys = keys;
+    holder.replaceChildren(...variants.map(({job, assetId}, index) => {
+      const button = document.createElement("button");
+      button.type = "button"; button.dataset.assetId = assetId;
+      const image = document.createElement("img"); image.alt = "";
+      const label = document.createElement("span"); label.textContent = sceneText().textureCandidate(index + 1);
+      button.append(image, label);
+      button.addEventListener("click", () => {
+        state.sceneTexturePreviewAssetId = assetId;
+        state.sceneTexturePreviewJobId = job.id;
+        renderSceneMaterialControls({targetsChanged: false});
+      });
+      return button;
+    }));
+  }
+  for (const [index, button] of [...holder.children].entries()) {
+    const assetId = button.dataset.assetId;
+    button.disabled = blocked;
+    button.setAttribute("aria-pressed", String(assetId === state.sceneTexturePreviewAssetId));
+    button.querySelector("span").textContent = sceneText().textureCandidate(index + 1);
+    const src = state.sceneTextureThumbnails.get(assetId);
+    if (src) button.querySelector("img").src = src;
+  }
+  for (const job of new Set(variants.map((item) => item.job))) void prepareSceneTextureResult(job);
+  const preview = byId("scene-texture-preview");
+  const src = state.sceneTextureThumbnails.get(state.sceneTexturePreviewAssetId);
+  preview.hidden = !src;
+  if (src) preview.src = src;
+  return variants.length > 0;
 }
 
 function watchSceneTextureJob(job) {
@@ -5939,21 +6012,27 @@ function renderSceneTextureControls(blocked, target) {
   if (running) watchSceneTextureJob(job);
   const prompt = byId("scene-texture-prompt");
   const targetReady = Boolean(target && byId("scene-material-slot").value && byId("scene-material-uv").value);
-  byId("scene-texture-generate").disabled = blocked || running || !targetReady || !prompt.value.trim();
-  prompt.disabled = blocked || running;
+  const mode = byId("scene-texture-mode");
+  const canEdit = capabilityState("image.single_reference_edit") === "available";
+  for (const option of mode.options) option.disabled = option.value !== "new" && !canEdit;
+  if (!canEdit) mode.value = "new";
+  const busy = blocked || running || state.sceneTextureBusy;
+  const sourceReady = mode.value !== "library" || Boolean(byId("scene-material-image").value);
+  const channelReady = mode.value !== "current" || ["base_color", "emission"].includes(byId("scene-material-channel").value);
+  byId("scene-texture-generate").disabled = busy || !targetReady || !sourceReady || !channelReady || !prompt.value.trim();
+  mode.disabled = busy;
+  byId("scene-texture-count").disabled = busy;
+  prompt.disabled = busy;
   byId("scene-texture-cancel").hidden = !running;
   byId("scene-texture-cancel").disabled = blocked;
   byId("scene-texture-retry").hidden = !job || !["failed", "canceled"].includes(job.status);
   byId("scene-texture-retry").disabled = blocked;
   const succeeded = job?.status === "succeeded" && Boolean(job.asset_ids?.length);
-  byId("scene-texture-use").hidden = !succeeded;
+  byId("scene-texture-use").hidden = !renderSceneTextureVariants(blocked);
   byId("scene-texture-use").disabled = blocked;
   const progress = byId("scene-texture-progress");
   progress.hidden = !running;
   progress.value = Number(job?.progress) || 0;
-  const preview = byId("scene-texture-preview");
-  preview.hidden = !(succeeded && state.sceneTexturePreviewJobId === job.id
-    && state.sceneTexturePreviewAssetId === job.asset_ids[0] && preview.src);
   let status = "";
   if (job?.status === "queued") status = text.textureQueued;
   else if (running) status = text.textureRunning;
@@ -5963,7 +6042,8 @@ function renderSceneTextureControls(blocked, target) {
     void prepareSceneTextureResult(job);
   } else if (job?.status === "failed") status = text.textureFailed;
   else if (job?.status === "canceled") status = text.textureCanceled;
-  byId("scene-texture-status").textContent = status;
+  byId("scene-texture-status").textContent = state.sceneTextureBusy ? text.textureExtracting
+    : state.sceneTextureError || (!channelReady ? text.textureChannelUnsupported : status);
 }
 
 function renderSceneMaterialControls({targetsChanged = true} = {}) {
@@ -6046,27 +6126,53 @@ async function createSceneTexture({retry = false} = {}) {
     channel: byId("scene-material-channel").value,
     uv_map: uvMap,
   };
-  const request = {
-    operation: "image.generate",
-    intent,
-    inputs: [],
-    constraints: {
-      asset_brief: {role: "texture", target_surface: "3d"},
-      scene_texture: context,
-    },
-    output: {format: "png", count: 1},
-    local_only: true,
-    model_policy: "auto",
-  };
+  if (state.sceneTextureBusy) return;
+  state.sceneTextureBusy = true;
+  state.sceneTextureError = "";
+  renderSceneMaterialControls({targetsChanged: false});
   try {
+    let request;
+    if (retry) {
+      request = {...previous.request, constraints: {...previous.request.constraints}};
+    } else {
+      const mode = byId("scene-texture-mode").value;
+      let sourceId = mode === "library" ? byId("scene-material-image").value : "";
+      if (mode === "current") {
+        const extracted = await call("scenes.material.extract", {scene_id: context.scene_id, selection: context});
+        sourceId = extracted.asset.id;
+      }
+      if (mode !== "new" && !sourceId) throw new Error(text.textureSourceRequired);
+      request = {
+        operation: "image.generate",
+        intent,
+        inputs: [],
+        constraints: {
+          asset_brief: {role: "texture", target_surface: "3d"},
+          scene_texture: context,
+          seed: crypto.getRandomValues(new Uint32Array(1))[0],
+        },
+        output: {format: "png", count: Number(byId("scene-texture-count").value)},
+        local_only: true,
+        model_policy: "auto",
+      };
+      if (sourceId) {
+        request.operation = "image.edit";
+        request.inputs = [{asset_id: sourceId}];
+        request.constraints.edit_mode = "reference";
+        request.intent = "Improve this existing UV texture image while preserving the exact layout, positions, borders and silhouette of every region. Do not move, rotate, crop or add regions. " + intent;
+      }
+    }
     const job = await call("jobs.create", request);
     rememberJob(job);
     state.sceneTexturePreviewJobId = "";
     state.sceneTexturePreviewAssetId = "";
     watchSceneTextureJob(job);
-    renderSceneMaterialControls({targetsChanged: false});
   } catch (error) {
-    byId("scene-texture-status").textContent = error?.message || failureText(error?.code);
+    state.sceneTextureError = error?.message || failureText(error?.code);
+    return;
+  } finally {
+    state.sceneTextureBusy = false;
+    renderSceneMaterialControls({targetsChanged: false});
   }
 }
 
@@ -6081,8 +6187,9 @@ async function cancelSceneTexture() {
 }
 
 async function useSceneTextureResult() {
-  const job = selectedSceneTextureJob();
-  const assetId = job?.status === "succeeded" ? job.asset_ids?.[0] : "";
+  const job = (state.jobs || []).find((item) => item.id === state.sceneTexturePreviewJobId);
+  const assetId = job?.status === "succeeded" && job.asset_ids?.includes(state.sceneTexturePreviewAssetId)
+    ? state.sceneTexturePreviewAssetId : "";
   if (!assetId) return;
   try {
     state.sceneMaterialImages = await loadSceneMaterialImages();
@@ -9920,6 +10027,7 @@ byId("scene-material-form").addEventListener("submit", (event) => {
   void applySceneMaterial();
 });
 byId("scene-texture-prompt").addEventListener("input", () => {
+  state.sceneTextureError = "";
   renderSceneMaterialControls({targetsChanged: false});
 });
 byId("scene-texture-generate").addEventListener("click", () => void createSceneTexture());
@@ -9931,7 +10039,7 @@ byId("scene-material-object").addEventListener("change", () => {
 });
 for (const id of [
   "scene-material-slot", "scene-material-image", "scene-material-channel",
-  "scene-material-uv", "scene-material-wrap", "scene-material-normal",
+  "scene-material-uv", "scene-material-wrap", "scene-material-normal", "scene-texture-mode", "scene-texture-count",
 ]) {
   byId(id).addEventListener("change", () => renderSceneMaterialControls({targetsChanged: false}));
 }
