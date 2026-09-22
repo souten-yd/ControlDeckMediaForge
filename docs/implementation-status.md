@@ -1,5 +1,18 @@
 # Media Forge implementation status
 
+## 2026-09-22 正式0.32.2を公開・通常適用・再起動確認
+
+PR608/609 merge済み。公開source c9d25e9、署名bundle37,997,030 B、
+SHA c3989f4bc7fbb11ce9d59ae3dd7985ab0c9d4dba47c571bcdbedbe1662465dcb。
+通常deck.sh feature updateでcurrent0.32.2、healthy。更新・idle再起動の両方で
+DB17table/asset3010file属性/Blender registry不変。骨入りGLB・normal・AOの実HTTP
+contentと登録SHA一致。served frontendもrelease source一致。
+単体Chromium1280pxは画像8件、Hostが必要な説明と開始無効、console error0を再確認。
+Host embeddedの確認は通常operator login更新待ち（旧専用sessionは401で失効）。
+Qwen評価はここから。製品経路への採用・重量モデル取得はまだ行っていない。
+
+詳細・NOT TESTED: [0.32.2 release受入](implementation/release-0.32.2-20260922.md)。
+
 ## 2026-09-22 文章からのpipeline開始を公開前に修正
 
 PR608は65aaac3へmerge済み。公開前のAPI点検でprompt開始の要求が既存JobRequestと
