@@ -1,5 +1,24 @@
 # Media Forge implementation status
 
+## 2026-09-22 0.33.9を公開・ローカル適用（PCビューア認証経路）
+
+PR627/sourcef1b4ae5から0.33.9を署名公開、通常Host更新・再起動でhealthy。
+Cookieなし埋め込み画面の3D module取得を既存Bridge headerへ接続した。
+0.33.8のWeb Blender終了ボタンも反映済み。詳細はpc-viewer-bridge-20260922.md。
+
+- 公開物再取得の署名/改ざん拒否/bytes確認通過。active Job/session0で更新。
+  1543 Asset metadata保持、代表3 Asset HTTP SHA、served source一致、3D capability不変。
+- current versions/0.33.9、再起動後PID3866679/healthy（0.822935秒）。通常PC Chrome/実AMD GPUで
+  3 GLB描画、page/console error0。Web Blender process/session0、元復旧候補保持。
+- sourceのopaque/HTTP LAN fixtureで1440/320pxの旧版401→修正版描画を確認済み。
+  全2414 test通過。HostコードやGLB/WebP許可条件は変更していない。
+- **実利用者の当該PC/認証付きHost browserの最終受入はNOT TESTED**。
+  専用sessionが不在のため通常loginを依頼済み。Cookieなしfixtureの成功と混同しない。
+  ログイン後に正式Host内でLibrary/3Dと終了操作を再確認する。認証を偽装しない。
+- source serverと試験browserは終了、専用pytest一時dataと重複配布tar4個を回収。
+  根元のfeat/g9-image-to-3d /524553dはcleanで保持。正式素材/installed/rollbackは変更しない。
+
+
 ## 2026-09-22 PCビューアのCookieなし認証読み込み（0.33.9準備）
 
 Hostログ13:29:17 UTCのthree-viewer.js GET401を確認。GLB4件は検証200、実PC Chrome/AMD GPUでは
