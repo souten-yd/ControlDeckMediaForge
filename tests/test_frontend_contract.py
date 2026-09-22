@@ -339,7 +339,8 @@ def test_3d_assets_use_the_validated_chunk_viewer_with_a_project_preview_fallbac
     assert 'call("assets.model.open"' in model
     assert "streamModelBytes(opened" in model
     assert 'call("assets.model.close"' in model
-    assert 'const modulePromise = loadModelViewer()' in model
+    assert 'const module = await loadModelViewer()' in model
+    assert model.index('await loadModelViewer()') < model.index('call("assets.model.open"')
     # バイト列を集める場所は 1 つだけにする。viewer と一覧の裏取りが別々に
     # 組み立てると、片方だけ検査が抜ける。
     stream = SCRIPT[SCRIPT.index("async function streamModelBytes"):SCRIPT.index("async function saveModelThumbnail")]
