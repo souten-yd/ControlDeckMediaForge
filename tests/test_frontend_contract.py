@@ -1332,9 +1332,11 @@ def test_deleting_assets_asks_first_and_reports_what_survived():
     body = SCRIPT[SCRIPT.index("async function deleteSelectedAssets"):]
     body = body[:body.index("\n}")]
     assert "confirmModelAction" in body, "確認なしで消している"
-    assert "元には戻せません" in body
-    assert "asset_in_use" in body, "残った理由を伝えていない"
-    assert "deleted_count" in body
+    assert "library.trash.preview" in body and "library.trash.apply" in body
+    assert "confirmation_fingerprint" in body
+    assert '"library-purge"' in SCRIPT
+    assert "元には戻せません" in SCRIPT
+    assert "library_production_busy" in SCRIPT
 
 
 def test_the_download_history_can_be_cleared_and_a_failure_retried():

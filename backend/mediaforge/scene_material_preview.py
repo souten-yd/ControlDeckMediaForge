@@ -241,6 +241,8 @@ class MaterialPreviewManager:
             self._verify_file(candidate.root / "scene.blend", candidate.source_sha256)
             self._verify_file(candidate.root / "preview.glb", candidate.preview_sha256)
             for dependency in candidate.dependencies or []:
+                if self.workspace.store.asset_is_purged(dependency.asset_id, dependency.sha256):
+                    continue  # Validated candidate has no external images.
                 try:
                     path = self.workspace.store.asset_path(dependency.asset_id)
                     self._verify_file(path, dependency.sha256)

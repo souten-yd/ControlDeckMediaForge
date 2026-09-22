@@ -182,6 +182,12 @@ class Store:
                     storage_name TEXT NOT NULL UNIQUE,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS library_trash (
+                    asset_id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+                    removed_at TEXT NOT NULL,
+                    purged_at TEXT,
+                    cleanup_pending INTEGER NOT NULL DEFAULT 0
+                );
                 CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
                 CREATE TABLE IF NOT EXISTS owned_job_terminals (
                     job_id TEXT PRIMARY KEY REFERENCES jobs(id),
@@ -945,6 +951,8 @@ class Store:
         return metadata
 
     def get_asset(self, asset_id: str) -> Asset:
+        if self.asset_is_purged(asset_id):
+            raise KeyError(asset_id)
         row = self._asset_row(asset_id)
         return Asset.model_validate_json(row["metadata_json"])
 
@@ -953,12 +961,14 @@ class Store:
         return Provenance.model_validate_json(row["provenance_json"])
 
     def asset_path(self, asset_id: str) -> Path:
+        if self.asset_is_purged(asset_id):
+            raise KeyError(asset_id)
         row = self._asset_row(asset_id)
         return contained(self.asset_dir, self.asset_dir / str(row["storage_name"]))
 
     def list_assets(self, limit: int = 100) -> list[Asset]:
         with self._connect() as connection:
-            rows = connection.execute("SELECT metadata_json FROM assets ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+            rows = connection.execute("SELECT metadata_json FROM assets WHERE id NOT IN (SELECT asset_id FROM library_trash) ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
         return readable_rows(rows, Asset, "metadata_json", kind="asset")
 
     def list_editable_glb_assets(self, limit: int = 50) -> list[Asset]:
@@ -972,7 +982,8 @@ class Store:
         with self._connect() as connection:
             rows = connection.execute(
                 """SELECT metadata_json FROM assets
-                   WHERE id NOT IN (SELECT preview_asset_id FROM scene_revisions)
+                   WHERE id NOT IN (SELECT asset_id FROM library_trash)
+                     AND id NOT IN (SELECT preview_asset_id FROM scene_revisions)
                      AND id NOT IN (SELECT source_asset_id FROM scene_revisions)
                    ORDER BY created_at DESC""",
             ).fetchall()
@@ -1034,7 +1045,14 @@ class Store:
                                revision.sequence AS sequence,
                                revision.source_asset_id AS source_asset_id,
                                revision.preview_asset_id AS preview_asset_id,
-                               document.value_json AS document_json
+                               document.value_json AS document_json,
+                               (SELECT COUNT(*) FROM scene_revisions visible
+                                WHERE visible.scene_id = revision.scene_id
+                                AND (visible.preview_asset_id IN (SELECT asset_id FROM library_trash)) =
+                                    (revision.preview_asset_id IN (SELECT asset_id FROM library_trash))
+                                AND visible.preview_asset_id NOT IN
+                                    (SELECT asset_id FROM library_trash WHERE purged_at IS NOT NULL AND cleanup_pending = 0)
+                               ) AS visible_revision_count
                           FROM scene_revisions AS revision
                           JOIN scene_documents AS document ON document.id = revision.scene_id
                          WHERE revision.source_asset_id IN ({marks})
@@ -1056,18 +1074,20 @@ class Store:
                         found[asset_id] = {
                             "scene_id": str(row["scene_id"]),
                             "scene_name": document.name,
-                            "scene_revision_count": document.revision_count,
+                            "scene_revision_count": int(row["visible_revision_count"]),
                             "sequence": int(row["sequence"]),
                             "role": role,
                         }
         return found
 
-    def list_asset_records(self, limit: int, before: str | None = None) -> list[tuple[Asset, Provenance]]:
+    def list_asset_records(self, limit: int, before: str | None = None, *, trash: bool = False) -> list[tuple[Asset, Provenance]]:
         """Return asset+provenance pairs so the workspace never issues N+1 lookups."""
-        query = "SELECT metadata_json, provenance_json FROM assets"
+        query = ("SELECT metadata_json, provenance_json FROM assets WHERE id "
+                 + ("IN" if trash else "NOT IN") + " (SELECT asset_id FROM library_trash"
+                 + (" WHERE purged_at IS NULL OR cleanup_pending = 1" if trash else "") + ")")
         parameters: list[object] = []
         if before:
-            query += " WHERE created_at < ?"
+            query += " AND created_at < ?"
             parameters.append(before)
         query += " ORDER BY created_at DESC LIMIT ?"
         parameters.append(limit)
@@ -1128,7 +1148,10 @@ class Store:
                         pass  # Untrusted/legacy context is not a scene association.
                 query = """SELECT d.value_json AS document_json, r.value_json AS revision_json
                            FROM scene_revisions r JOIN scene_documents d ON d.id = r.scene_id
-                           WHERE d.owner = ? AND """
+                           WHERE d.owner = ?
+                           AND r.source_asset_id NOT IN (SELECT asset_id FROM library_trash)
+                           AND r.preview_asset_id NOT IN (SELECT asset_id FROM library_trash)
+                           AND """
                 matches = []
                 if context is not None:
                     matches.extend(connection.execute(
@@ -1181,6 +1204,7 @@ class Store:
         roots = {value for revision in revisions for value in
                  (revision.source_asset_id, revision.preview_asset_id,
                   *(item.asset_id for item in revision.dependencies))}
+        trashed = self.trashed_asset_ids()
         records: dict[str, tuple[Asset, Provenance, str]] = {}
         seen: set[str] = set()
         truncated = False
@@ -1203,7 +1227,7 @@ class Store:
         def remember(row: Any, default_kind: str) -> tuple[Asset, Provenance]:
             asset = Asset.model_validate_json(row["metadata_json"])
             provenance = Provenance.model_validate_json(row["provenance_json"])
-            if asset.mime_type in {"image/png", "image/jpeg", "image/webp"} and provenance.parameters.get("purpose") != "edit_mask":
+            if asset.id not in trashed and asset.mime_type in {"image/png", "image/jpeg", "image/webp"} and provenance.parameters.get("purpose") != "edit_mask":
                 kind = "used" if asset.id in used else (
                     "base" if provenance.operation == "scene.material.extract" else default_kind
                 )
@@ -1310,16 +1334,35 @@ class Store:
                    ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?""",
                 (asset_id, limit + 1, offset),
             ).fetchall()
+        trashed = self.trashed_asset_ids()
+        def projection(record: Asset) -> dict[str, Any]:
+            return {**record.model_dump(mode="json"), "in_trash": record.id in trashed, "purged": self.asset_is_purged(record.id)}
         return {
-            "asset": asset.model_dump(mode="json"),
-            "parents": [self.get_asset(value).model_dump(mode="json") for value in asset.parent_asset_ids[offset:offset + limit]],
-            "children": [Asset.model_validate_json(row["metadata_json"]).model_dump(mode="json") for row in rows[:limit]],
+            "asset": projection(asset),
+            "parents": [projection(Asset.model_validate_json(self._asset_row(value)["metadata_json"])) for value in asset.parent_asset_ids[offset:offset + limit]],
+            "children": [projection(Asset.model_validate_json(row["metadata_json"])) for row in rows[:limit]],
             "scene_links": self.asset_scene_links(asset_id, owner) if owner is not None else [],
             "parents_truncated": len(asset.parent_asset_ids) > offset + limit,
             "children_truncated": len(rows) > limit,
             "offset": offset,
             "next_offset": offset + limit if len(rows) > limit or len(asset.parent_asset_ids) > offset + limit else None,
         }
+
+    def asset_is_purged(self, asset_id: str, sha256: str | None = None) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT a.metadata_json FROM library_trash t JOIN assets a ON a.id = t.asset_id
+                   WHERE t.asset_id = ? AND t.purged_at IS NOT NULL""", (asset_id,),
+            ).fetchone()
+        if row is None:
+            return False
+        if sha256 is not None and json.loads(row["metadata_json"])["sha256"] != sha256:
+            raise SceneError("scene_dependency_changed", "deleted dependency identity differs")
+        return True
+
+    def trashed_asset_ids(self) -> set[str]:
+        with self._connect() as connection:
+            return {str(row[0]) for row in connection.execute("SELECT asset_id FROM library_trash")}
 
     def delete_asset(self, asset_id: str) -> None:
         """Remove one asset, its provenance sidecar, and its cached thumbnails.
@@ -1404,6 +1447,9 @@ class Store:
             except ValidationError as exc:
                 raise SceneError("scene_asset_invalid", "scene revision asset is unreadable") from exc
 
+        for asset_id in (revision.source_asset_id, revision.preview_asset_id):
+            if connection.execute("SELECT 1 FROM library_trash WHERE asset_id = ?", (asset_id,)).fetchone():
+                raise SceneError("scene_asset_not_found", "scene source or preview was removed")
         source = asset(revision.source_asset_id)
         preview = asset(revision.preview_asset_id)
         if source.mime_type != "application/x-blender":
@@ -1814,7 +1860,10 @@ class Store:
     def get_scene(self, scene_id: str, owner: str) -> SceneDocument:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT value_json FROM scene_documents WHERE id = ? AND owner = ?",
+                """SELECT value_json FROM scene_documents WHERE id = ? AND owner = ?
+                   AND current_revision_id NOT IN (SELECT id FROM scene_revisions
+                     WHERE source_asset_id IN (SELECT asset_id FROM library_trash)
+                        OR preview_asset_id IN (SELECT asset_id FROM library_trash))""",
                 (scene_id, owner),
             ).fetchone()
         if row is None:
@@ -1828,6 +1877,8 @@ class Store:
         with self._connect() as connection:
             rows = connection.execute(
                 """SELECT value_json FROM scene_documents WHERE owner = ?
+                   AND current_revision_id NOT IN (
+                     SELECT id FROM scene_revisions WHERE preview_asset_id IN (SELECT asset_id FROM library_trash))
                    ORDER BY updated_at DESC LIMIT ?""",
                 (owner, max(1, min(100, limit))),
             ).fetchall()
@@ -1838,6 +1889,8 @@ class Store:
         with self._connect() as connection:
             rows = connection.execute(
                 """SELECT value_json FROM scene_revisions WHERE scene_id = ?
+                   AND source_asset_id NOT IN (SELECT asset_id FROM library_trash)
+                   AND preview_asset_id NOT IN (SELECT asset_id FROM library_trash)
                    ORDER BY sequence""",
                 (scene_id,),
             ).fetchall()
@@ -1846,7 +1899,8 @@ class Store:
     def scene_runtime_reference_count(self, runtime_id: str) -> int:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT COUNT(DISTINCT scene_id) AS count FROM scene_revisions WHERE runtime_id = ?",
+                """SELECT COUNT(DISTINCT scene_id) AS count FROM scene_revisions WHERE runtime_id = ?
+                   AND source_asset_id NOT IN (SELECT asset_id FROM library_trash WHERE purged_at IS NOT NULL)""",
                 (runtime_id,),
             ).fetchone()
         return int(row["count"])

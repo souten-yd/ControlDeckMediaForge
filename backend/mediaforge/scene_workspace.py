@@ -943,6 +943,8 @@ class SceneWorkspace:
                 if runtime is None or runtime.version != candidate.runtime_version:
                     raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
                 for dependency in base.dependencies:
+                    if self.store.asset_is_purged(dependency.asset_id, dependency.sha256):
+                        continue  # Packed Blender data remains; only historical input bytes were deleted.
                     dependency_path = self.store.asset_path(dependency.asset_id)
                     if not dependency_path.is_file() or self._sha256(dependency_path) != dependency.sha256:
                         raise SceneError("scene_dependency_changed", "recovery dependency bytes changed")
@@ -1169,6 +1171,8 @@ class SceneWorkspace:
             target.preview_asset_id, "model/gltf-binary"
         )
         for dependency in target.dependencies:
+            if self.store.asset_is_purged(dependency.asset_id, dependency.sha256):
+                continue  # Intentional deletion is distinct from missing/corrupt storage.
             try:
                 asset = self.store.get_asset(dependency.asset_id)
                 provenance = self.store.get_provenance(dependency.asset_id)

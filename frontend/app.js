@@ -167,6 +167,8 @@ const state = {
   libraryGrouping: true,
   librarySelecting: false,
   librarySelected: new Set(),
+  libraryTrash: false,
+  libraryMutationBusy: false,
   scenes: [],
   sceneGeneration: null,
   sceneGenerationImages: [],
@@ -678,6 +680,10 @@ async function standaloneCall(method, params) {
   }
   if (method === "jobs.clear") {
     return json("/workspace-api/jobs/clear", {method: "POST"});
+  }
+  if (method === "library.trash.preview" || method === "library.trash.apply") {
+    return json(`/workspace-api/library/trash/${method.endsWith("preview") ? "preview" : "apply"}`,
+      {method: "POST", body: JSON.stringify(params)});
   }
   if (method === "assets.delete") {
     return json("/workspace-api/assets/delete", {method: "POST", body: JSON.stringify(
@@ -5793,6 +5799,15 @@ async function openScene(sceneId, {navigate = true} = {}) {
         preview.dataset.sceneName = scene.name;
         preview.textContent = sceneText().preview;
         actions.append(preview);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = document.documentElement.lang.startsWith("en") ? "Delete this revision" : "この版を削除";
+        remove.dataset.sceneRemove = revision.id;
+        remove.addEventListener("click", () => {
+          if (state.libraryMutationBusy) return;
+          void deleteSelectedAssets("trash", [revision.preview_asset_id]);
+        });
+        actions.append(remove);
         if (revision.id === scene.current_revision_id) {
           const current = document.createElement("span");
           current.className = "state current";
@@ -8311,7 +8326,7 @@ async function loadLibrary({reset = false} = {}) {
   let page;
   try {
     page = await call("library.list", {
-      kind: "all", media_kind: state.libraryMedia, limit: 24, before: state.libraryCursor,
+      kind: "all", media_kind: state.libraryMedia, limit: 24, before: state.libraryCursor, trash: state.libraryTrash,
     });
   } catch {
     byId("library-empty").hidden = false;
@@ -8329,7 +8344,7 @@ async function loadLibrary({reset = false} = {}) {
   renderLibrarySelection();
   const empty = grid.childElementCount === 0;
   byId("library-empty").hidden = !empty;
-  byId("library-empty").textContent = "まだ素材はありません。";
+  byId("library-empty").textContent = state.libraryTrash ? libraryRemovalText().emptyTrash : "まだ素材はありません。";
   byId("library-count").textContent = empty
     ? "" : `${state.libraryItems.length} 件${page.next_before ? "＋" : ""}`;
   renderModelThumbnailBackfill();
@@ -8406,6 +8421,7 @@ function renderLibraryGrid() {
    別の意味を重ねるので、選択中だと分かる印を必ず出す。 */
 
 function setLibrarySelecting(active) {
+  if (state.libraryMutationBusy) return;
   state.librarySelecting = active;
   if (!active) state.librarySelected.clear();
   byId("library-grid").classList.toggle("selecting", active);
@@ -8422,9 +8438,26 @@ function renderLibrarySelection() {
   bar.hidden = !state.librarySelecting;
   const count = state.librarySelected.size;
   byId("library-selection-count").textContent = `${count} 件を選択`;
-  byId("library-delete").disabled = count === 0;
-  byId("library-delete").textContent = count ? `${count} 件を削除` : "削除";
-  byId("library-download").disabled = count === 0;
+  const text = libraryRemovalText();
+  const busy = state.libraryMutationBusy;
+  byId("library-trash-toggle").textContent = state.libraryTrash ? text.back : text.trash;
+  byId("library-trash-toggle").setAttribute("aria-pressed", String(state.libraryTrash));
+  byId("library-trash-toggle").disabled = busy;
+  byId("library-trash-help").hidden = !state.libraryTrash;
+  byId("library-trash-help").textContent = text.retained;
+  byId("library-empty-trash").hidden = !state.libraryTrash;
+  byId("library-empty-trash").textContent = text.emptyAction;
+  byId("library-empty-trash").disabled = busy || !state.libraryItems.length;
+  byId("library-delete").hidden = state.libraryTrash;
+  byId("library-restore").hidden = !state.libraryTrash;
+  byId("library-purge").hidden = !state.libraryTrash;
+  byId("library-purge").disabled = !count || busy;
+  byId("library-purge").textContent = text.purge;
+  byId("library-restore").textContent = text.restore;
+  for (const id of ["library-select", "library-select-all", "library-select-none", "library-restore"]) byId(id).disabled = busy || (id === "library-restore" && !count);
+  byId("library-delete").disabled = count === 0 || busy;
+  byId("library-delete").textContent = count ? text.removeCount(count) : text.remove;
+  byId("library-download").disabled = count === 0 || busy;
   byId("library-download").textContent = count > 1 ? `${count} 件をダウンロード` : "ダウンロード";
   for (const card of byId("library-grid").querySelectorAll(".card")) {
     card.setAttribute("aria-selected", String(state.librarySelected.has(card.dataset.assetId)));
@@ -8438,6 +8471,7 @@ function libraryNote(text) {
 }
 
 function toggleLibrarySelection(assetId) {
+  if (state.libraryMutationBusy) return;
   if (state.librarySelected.has(assetId)) state.librarySelected.delete(assetId);
   else state.librarySelected.add(assetId);
   renderLibrarySelection();
@@ -8476,34 +8510,111 @@ function downloadSelectedAssets() {
     : `${assetIds.length} 件を 1 つの zip にまとめています。始まるまで少しかかります。`);
 }
 
-async function deleteSelectedAssets() {
-  const assetIds = [...state.librarySelected];
-  if (!assetIds.length) return;
-  const accepted = await confirmModelAction({
-    title: `${assetIds.length} 件を削除`,
-    detail: "選んだ素材とその来歴を消します。元には戻せません。",
-    confirmLabel: "削除する",
-  });
-  if (!accepted) return;
-  let response;
+function libraryRemovalText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    emptyAction: "Empty Trash",
+    trash: "Trash", back: "Back to Library", emptyTrash: "Trash is empty.",
+    remove: "Delete", restore: "Restore", purge: "Delete permanently",
+    purgeDetail: "Permanently delete the selected files. This cannot be undone. Existing 3D keeps its embedded textures. Source IDs and creation records remain marked as deleted.",
+    purgeTitle: n => `Permanently delete ${n} assets`,
+    purged: n => `Permanently deleted ${n} assets.`, removeCount: n => `Delete ${n} assets`,
+    title: (action, n) => action === "restore" ? `Restore ${n} assets` : `Move ${n} assets to Trash`,
+    scope: (name, n) => `${name}: revision ${n} (Blender and GLB)`,
+    retained: "Files and history are retained so related assets keep working. Moving to Trash does not free disk space. Use Delete permanently to remove files.",
+    detail: "Only the confirmed assets move to Trash. Source images and other 3D productions remain unless selected. You can restore these assets from Trash.",
+    restoreDetail: "Restore the confirmed assets to Library, including only the listed 3D revisions.",
+    confirm: "Move to Trash", restoring: "Restore", busy: "Updating Library…",
+    success: (action, n) => action === "restore" ? `Restored ${n} assets.` : `Moved ${n} assets to Trash. Related assets remain usable.`,
+    errors: {
+      library_trash_empty: "There are no assets this account can permanently delete from Trash.",
+      library_texture_not_embedded: "A remaining 3D has not been verified to contain this texture. Save it in Blender first.",
+      library_trash_required: "Move the selected assets to Trash first.",
+      library_asset_purged: "Permanently deleted files cannot be restored.",
+      library_purge_cleanup_pending: "File cleanup is incomplete. Select Delete permanently again to retry.",
+      library_selection_invalid: "Select 1 to 100 assets at a time.",
+      library_scene_owner_required: "Use the account that owns this 3D to delete or restore it.",
+      library_production_busy: "This asset is in use. Finish editing or wait for the running job, then try again.",
+      library_selection_changed: "The selected assets or revisions changed. Review the selection and try again.",
+      asset_not_found: "A selected asset is no longer available. Reload Library and select again.",
+    },
+    failed: "Could not update Library. Check the connection and try again. If it persists, reopen MediaForge.",
+  } : {
+    emptyAction: "ごみ箱を空にする",
+    trash: "ごみ箱", back: "ライブラリに戻る", emptyTrash: "ごみ箱は空です。",
+    remove: "削除", restore: "復元", purge: "完全削除",
+    purgeDetail: "選んだ素材の実ファイルを完全に削除します。元には戻せません。作成済み3Dに保存されたテクスチャは残ります。生成元IDなどの作成記録だけを「削除済み」として保持します。",
+    purgeTitle: n => `${n} 件を完全削除`,
+    purged: n => `${n} 件を完全削除しました。`, removeCount: n => `${n} 件を削除`,
+    title: (action, n) => action === "restore" ? `${n} 件を復元` : `${n} 件をごみ箱に移動`,
+    scope: (name, n) => `${name}：第${n}版（Blender・GLB）`,
+    retained: "関連素材を利用できるようファイルと履歴を保持します。ごみ箱へ移すだけでは容量は減りません。「完全削除」で実ファイルを消せます。",
+    detail: "確認した素材だけをごみ箱に移します。選んでいない入力画像や別の3Dは残ります。ごみ箱から復元できます。",
+    restoreDetail: "確認した素材をライブラリに戻します。3Dは記載された版だけを復元します。",
+    confirm: "ごみ箱に移動", restoring: "復元する", busy: "ライブラリを更新しています…",
+    success: (action, n) => action === "restore" ? `${n} 件を復元しました。` : `${n} 件をごみ箱に移しました。関連素材は引き続き利用できます。`,
+    errors: {
+      library_trash_empty: "このアカウントで完全削除できる素材はごみ箱にありません。",
+      library_texture_not_embedded: "残す3Dへの画像の埋め込みを確認できません。先にBlenderで保存してください。",
+      library_trash_required: "完全削除する素材を先にごみ箱へ移してください。",
+      library_asset_purged: "完全削除されたファイルは復元できません。",
+      library_purge_cleanup_pending: "一部のファイルを削除できませんでした。「完全削除」を押して再試行してください。",
+      library_selection_invalid: "一度に選べるのは100件までです。選択を減らしてください。",
+      library_scene_owner_required: "この3Dを作成したアカウントで削除・復元してください。",
+      library_production_busy: "編集中または生成処理で使用中です。編集の終了・処理の完了後にやり直してください。",
+      library_selection_changed: "素材や版が更新されました。削除・復元の対象を確認し直してください。",
+      asset_not_found: "選んだ素材が見つかりません。一覧を更新して選び直してください。",
+    },
+    failed: "ライブラリを更新できませんでした。接続を確認してやり直してください。続く場合はMediaForgeを開き直してください。",
+  };
+}
+
+async function deleteSelectedAssets(action = "trash", selectedIds = [...state.librarySelected]) {
+  const assetIds = selectedIds === null ? null : [...selectedIds];
+  if ((assetIds && !assetIds.length) || state.libraryMutationBusy) return;
+  const selection = assetIds === null ? {all_trashed: true} : {asset_ids: assetIds};
+  const text = libraryRemovalText();
+  const note = message => {
+    libraryNote(message);
+    if (state.view !== "library") byId("scene-revision-status").textContent = message;
+  };
+  if (assetIds && assetIds.length > 100) return note(text.errors.library_selection_invalid);
+  state.libraryMutationBusy = true;
+  renderLibrarySelection();
+  let completed = false;
   try {
-    response = await call("assets.delete", {asset_ids: assetIds});
-  } catch {
-    return libraryNote("削除できませんでした。");
+    const plan = await call("library.trash.preview", {...selection, action});
+    const detail = [action === "purge" ? text.purgeDetail : action === "restore" ? text.restoreDetail : text.detail,
+      ...plan.scenes.map(scene => text.scope(scene.name, scene.sequence)), ...(action === "purge" ? [] : [text.retained])].join("\n\n");
+    const accepted = await confirmModelAction({
+      title: action === "purge" ? text.purgeTitle(plan.asset_count) : text.title(action, plan.asset_count), detail,
+      confirmLabel: action === "purge" ? text.purge : action === "restore" ? text.restoring : text.confirm,
+    });
+    if (!accepted) return;
+    note(text.busy);
+    const response = await call("library.trash.apply", {
+      ...selection, action, confirmation_fingerprint: plan.confirmation_fingerprint,
+    });
+    completed = true;
+    note(action === "purge" ? text.purged(response.asset_count) : text.success(action, response.asset_count));
+  } catch (error) {
+    note(text.errors[error?.code] || text.failed);
+  } finally {
+    state.libraryMutationBusy = false;
+    if (completed) {
+      setLibrarySelecting(false);
+      await loadLibrary({reset: true});
+      await loadScenes();
+      if (state.selectedSceneId && state.scenes.some(scene => scene.id === state.selectedSceneId)) {
+        await openScene(state.selectedSceneId, {navigate: false});
+      } else if (state.selectedSceneId) {
+        state.selectedSceneId = null;
+        state.sceneDocument = null;
+        state.sceneRevisions = [];
+        byId("scene-detail").hidden = true;
+      }
+    }
+    renderLibrarySelection();
   }
-  // 全部消えたとは限らない。何が残ったのかを、理由込みで伝える。
-  const failed = (response.items || []).filter((item) => !item.deleted);
-  for (const item of failed) state.librarySelected.add(item.asset_id);
-  for (const item of response.items || []) {
-    if (item.deleted) state.librarySelected.delete(item.asset_id);
-  }
-  libraryNote(failed.length
-    ? `${response.deleted_count} 件を削除しました。${failed.length} 件は${
-        failed.some((item) => item.code === "asset_in_use")
-          ? "他の素材の元になっているため" : ""}残りました。`
-    : `${response.deleted_count} 件を削除しました。`);
-  if (!failed.length) setLibrarySelecting(false);
-  await loadLibrary({reset: true});
 }
 
 const KIND_LABEL = {generated: "作った", edited: "直した", imported: "取り込み"};
@@ -8513,6 +8624,7 @@ const LIBRARY_MEDIA_TEXT = {
 };
 
 function renderLibraryMediaFilter() {
+  renderLibrarySelection();
   const language = document.documentElement.lang.toLowerCase().startsWith("en") ? "en" : "ja";
   byId("library-media-kinds").setAttribute("aria-label", LIBRARY_MEDIA_TEXT[language].label);
   for (const button of byId("library-media-kinds").querySelectorAll("[data-library-media]")) {
@@ -9339,7 +9451,8 @@ async function openDetail(assetId, offset = 0) {
         const button = document.createElement("button");
         button.type = "button";
         button.dataset.relatedAssetId = related.id;
-        button.textContent = `${related.suggested_filename || related.id} · ${related.mime_type}`;
+        button.disabled = related.purged === true;
+        button.textContent = `${related.suggested_filename || related.id} · ${related.mime_type}${related.purged ? (english ? " · Deleted" : " · 削除済み") : related.in_trash ? (english ? " · In Trash" : " · ごみ箱") : ""}`;
         button.style.overflowWrap = "anywhere";
         button.addEventListener("click", () => void openDetail(related.id));
         section.append(button);
@@ -11618,6 +11731,16 @@ byId("library-select-none").addEventListener("click", () => {
   renderLibrarySelection();
 });
 byId("library-delete").addEventListener("click", () => void deleteSelectedAssets());
+byId("library-empty-trash").addEventListener("click", () => void deleteSelectedAssets("purge", null));
+byId("library-purge").addEventListener("click", () => void deleteSelectedAssets("purge"));
+byId("library-restore").addEventListener("click", () => void deleteSelectedAssets("restore"));
+byId("library-trash-toggle").addEventListener("click", () => {
+  if (state.libraryMutationBusy) return;
+  state.libraryTrash = !state.libraryTrash;
+  setLibrarySelecting(false);
+  libraryNote("");
+  void loadLibrary({reset: true});
+});
 byId("library-download").addEventListener("click", downloadSelectedAssets);
 const catalogQuery = byId("catalog-query");
 const catalogClear = byId("catalog-clear");
