@@ -1117,6 +1117,8 @@ def create_app(
                 "agent_tool:media.scene.review": token_state,
                 "agent_tool:media.scene.refine": token_state,
                 "agent_tool:media.scene.bake": token_state,
+                "agent_tool:media.pipeline.start": token_state,
+                "agent_tool:media.pipeline.status": token_state,
                 "agent_tool:media.scene.snapshot": token_state,
                 "agent_tool:media.scene.export": token_state,
                 "agent_tool:media.job.status": token_state,
@@ -2857,7 +2859,8 @@ def create_app(
 
         async def submit_image(prompt: str, width: int, height: int) -> dict[str, Any]:
             value = await imported_inputs(host_job_input({"input": {
-                "intent": prompt, "width": width, "height": height,
+                "operation": "image.generate", "intent": prompt,
+                "constraints": {"width": width, "height": height},
             }}), identity)
             job = await submit_hosted(
                 value, identity, workload_class="agent-interactive"

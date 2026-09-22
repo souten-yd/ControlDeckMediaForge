@@ -31,6 +31,24 @@ Host Jobs and resource APIs. Workflow and Context Action execution use the
 Host-signed actor and exact per-call grant allowlist; there is no unleased,
 raw-path, or cookie-based fallback.
 
+`media.pipeline.start` (`POST /addon/v1/agent/pipeline/start`) accepts
+`asset-pipeline-request.json`: exactly one `prompt` or `image_asset_id`, a name,
+confirmation mode, and bounded generation/rig/export options. A prompt first
+submits an ordinary `image.generate` Job; an image starts at model reconstruction.
+`media.pipeline.status` (`POST /addon/v1/agent/pipeline/status`) accepts
+`asset-pipeline-action.json` with `pipeline_id` and `action=status|approve|cancel`.
+Both use the existing `{"input": ...}` agent envelope and return the persisted
+pipeline record, including stages, child Job IDs, scene/revision and final asset IDs.
+
+Status calls advance at most one new Job; polling is required in both modes.
+`confirm` pauses before each stage after the first until approved. Cancellation
+stops future stages and leaves an already running child Job to finish; it does
+not cancel that Job. Failed and canceled pipelines stay terminal on later polls.
+Pipeline records belong to the Host actor; other actors receive 404. Concurrent
+read/advance/write operations on one pipeline are serialized in the single core
+process, while unrelated pipelines retain independent request identities.
+This is not a promise of exactly-once submission across abrupt process crashes.
+
 The embedded opaque-origin workspace uses the private `/ws` transport through
 ControlDeck's nonce-bound WebSocket proxy. It accepts only a bounded set of
 structured job/asset methods, requires the same Add-on service identity, rejects

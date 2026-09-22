@@ -1,5 +1,19 @@
 # Media Forge implementation status
 
+## 2026-09-22 文章からのpipeline開始を公開前に修正
+
+PR608は65aaac3へmerge済み。公開前のAPI点検でprompt開始の要求が既存JobRequestと
+不整合（operation欠落、width/heightの位置違い）と確認。image.generate + constraintsへ修正。
+healthへpipeline2toolを明記し、docs/api.mdを公開schemaと同期。
+
+- 実HTTP coreプロセス: 修正前422、修正後200・画像Asset作成・awaiting_approval。
+  Hostはstub、画像はfake workerであり、実GPUの文章→3D通しはNOT TESTED。
+- APIテスト: 別actorのpipeline参照404、画像寸法、結果の引き渡し、確認待ちを確認。
+- ./mf.sh test:2358 passed / 3 skipped / 3 warnings / 268.30秒 / exit0。
+  新worktreeで未接続だったbuild runtimeを接続し、skipした署名3件を別実行:
+  tests/test_release_signing.py:3 passed / 2 warnings / 0.20秒。
+- 先行bundleは非公開。修正merge後のコミットから0.32.2を再ビルド・署名する。
+
 ## 2026-09-22 0.32.2正式リリース準備（PR #608）
 
 実checkout /tmp/mediaforge-3d-ux-20260920、base main8a1bfe6、未公開head3a43efa。
