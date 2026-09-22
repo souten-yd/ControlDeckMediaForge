@@ -104,7 +104,7 @@ from .jobs import JobManager, ProfileResolutionError
 from .m5_companion import profile_documents as m5_profile_documents
 from .model_evaluator import H3ModelEvaluator, unmeasured_lora_bases
 from .model_viewer import ModelViewerError, ModelViewerSession
-from .models.adapters import is_runnable
+from .models.adapters import runtime_installed, with_runtime_availability
 from .model_manager import MAX_MANAGED_MODEL_DOWNLOAD_BYTES, ModelOperationManager
 from .models import (
     ModelOperationError,
@@ -346,6 +346,7 @@ def create_app(
         image_runtime_python=resolved.image_runtime_python,
         video_runtime_python=resolved.video_runtime_python,
         native_media_runtime_root=resolved.native_media_runtime_root,
+        native_vulkan_runtime_root=resolved.native_vulkan_runtime_root,
         wan_source_root=resolved.wan_source_root,
         creative_evaluator=evaluator,
         extra_manifests=custom_models.overlay,
@@ -405,6 +406,9 @@ def create_app(
             download_origin=model_download_origin,
             transport=model_download_transport,
             custom_models=custom_models,
+            runtime_available=lambda adapter: runtime_installed(
+                adapter, vulkan_root=resolved.native_vulkan_runtime_root,
+            ),
         )
         if resolved.model_catalog_manifest is not None
         else None
@@ -753,10 +757,11 @@ def create_app(
             "revision": item.revision,
             "license": item.license,
             "runtime_adapter": item.runtime_adapter,
+            "manual_only": item.manual_only,
             "capabilities": list(item.capabilities),
             "state": item.state,
             "installed": item.installed,
-            "healthy": item.healthy,
+            "healthy": with_runtime_availability((item,), vulkan_root=resolved.native_vulkan_runtime_root)[0].healthy,
             "measured_vram_bytes": item.measured_vram_bytes,
             "measured_runtime_sec": item.measured_runtime_sec,
             "measurement_confidence": item.measurement_confidence,
@@ -766,7 +771,7 @@ def create_app(
             "base_model": item.base_model,
             "trigger_words": list(item.trigger_words),
         }
-        if item.runtime_adapter.startswith("diffusers.") and item.installed:
+        if (item.runtime_adapter.startswith("diffusers.") or item.runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21") and item.installed:
             # 何が決まっていて何が決まっていないかは、判定した側が言う。
             # UI で組み立てると同じ判断が 2 か所に分かれて片方だけ直る。
             value["generation"] = {
@@ -809,7 +814,7 @@ def create_app(
                 "ownership": item.ownership,
                 # 測れることと使えることは別。走らせる worker が居ないモデルは、
             # 評価しても選べるようにはならない。画面がそれを言えるようにする。
-            "has_runtime": is_runnable(item.runtime_adapter),
+            "has_runtime": runtime_installed(item.runtime_adapter, vulkan_root=resolved.native_vulkan_runtime_root),
             # 動画の作り方はモデルごとに違う。画面が共通の決め打ちを持つと、
             # どれかのモデルで「選べるのに作れない」値を出すことになる。
             # 歩数もここへ入れる。`generation` は diffusers 経路にしか付かず、
@@ -841,7 +846,7 @@ def create_app(
         picker and refused by routing in the same breath.
         """
         extra_models, extra_catalog, measurements = custom_models.overlay()
-        return list(ModelRegistry.load(
+        return list(with_runtime_availability(ModelRegistry.load(
             resolved.model_manifest,
             hf_home=resolved.hf_home,
             catalog_manifest=resolved.model_catalog_manifest,
@@ -849,7 +854,7 @@ def create_app(
             extra_models=extra_models,
             extra_catalog=extra_catalog,
             measurements=measurements,
-        ).all())
+        ).all(), vulkan_root=resolved.native_vulkan_runtime_root))
 
     def model_catalog() -> dict[str, Any]:
         try:

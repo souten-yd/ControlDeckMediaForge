@@ -60,6 +60,7 @@ class ModelOperationManager:
         civitai_origin: str = CIVITAI_ORIGIN,
         transport: httpx.AsyncBaseTransport | None = None,
         custom_models: "CustomModelCatalog | None" = None,
+        runtime_available: Callable[[str], bool] = is_runnable,
     ):
         self.store = store
         self.model_manifest = model_manifest
@@ -71,6 +72,7 @@ class ModelOperationManager:
         self.civitai_origin = civitai_origin.rstrip("/")
         self.transport = transport
         self.custom_models = custom_models
+        self.runtime_available = runtime_available
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._guard = asyncio.Semaphore(1)
 
@@ -364,6 +366,24 @@ class ModelOperationManager:
         existing = target.stat().st_size if target.is_file() else 0
         if expected_size is not None and existing == expected_size:
             return
+        # Composite native bundles may already have their exact component
+        # snapshots in the shared HF cache. Copy into the normal staging area;
+        # the usual SHA verification and atomic install still run afterward.
+        if existing == 0 and expected_size is not None and source.kind == "huggingface":
+            try:
+                cache = self.hf_home.resolve(strict=True)
+                repo = (cache / "hub" / ("models--" + source.repo_id.replace("/", "--"))).resolve(strict=True)
+                cached = (repo / "snapshots" / source.revision / relative).resolve(strict=True)
+                reusable = (
+                    repo.is_relative_to(cache) and cached.is_relative_to(repo)
+                    and cached.is_file() and cached.stat().st_size == expected_size
+                )
+            except OSError:
+                reusable = False
+            if reusable:
+                await asyncio.to_thread(shutil.copyfile, cached, target)
+                self.store.update_model_operation(operation.id, bytes_done=self._partial_bytes(files_root))
+                return
         if expected_size is not None and existing > expected_size:
             target.unlink()
             existing = 0
@@ -508,11 +528,14 @@ class ModelOperationManager:
             } if source is not None else None,
             "ownership": model.ownership,
             "installed": model.installed,
-            "healthy": model.healthy,
+            "healthy": model.healthy and (
+                model.runtime_adapter != "native.stable-diffusion-cpp-qwen-image-21"
+                or self.runtime_available(model.runtime_adapter)
+            ),
             "removable": model.removable,
             "state": model.state,
             # 走らせる worker が居るか。居ないものは測っても選べるようにならない。
-            "has_runtime": is_runnable(model.runtime_adapter),
+            "has_runtime": self.runtime_available(model.runtime_adapter),
             # 画面が画質と長さの選択肢を組むのに要る。落とすと、どのモデルを
             # 選んでも同じ選択肢が出る。
             **({"video": dict(model.video)} if model.video else {}),
@@ -529,6 +552,7 @@ class ModelOperationManager:
             "license": model.license,
             "license_notice": model.license_notice,
             "runtime_adapter": model.runtime_adapter,
+            "manual_only": model.manual_only,
             "hardware_backends": list(model.hardware_backends),
             "capabilities": list(model.capabilities),
             "weights_hash": model.weights_hash,

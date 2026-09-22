@@ -463,6 +463,30 @@ These are adapter targets, not architecture dependencies.
 - FLUX.2 [klein] 4B: strong candidate for fast local generation/editing and multi-reference work; Apache-2.0 for the 4B model.
 - Qwen-Image family: candidate for general generation/editing, typography, posters/comics, and tasks benefiting from strong text/layout handling.
 
+The 2026-09-22 user request authorizes investigating community configurations and
+applying a measured Qwen-Image-2.1 configuration for local research. This follows
+explicit acceptance of the Qwen Research License; it does not authorize commercial
+use. The previous Diffusers/Quanto evaluation remains a failed adoption candidate.
+The new candidate uses a separately pinned Vulkan build of stable-diffusion.cpp,
+GGUF Q8 diffusion weights, the matching Qwen3-VL-8B Q4 encoder, and the dedicated
+Qwen-Image-2.1 BF16 VAE. Reference editing additionally needs the matching vision
+projection weights. INT8 ConvRot is unsuitable for this Vulkan evaluation because
+the pinned upstream implementation falls back to CPU for its quantized operators.
+
+The existing Jobs, Host resource leases, model licensing, assets and provenance
+remain authoritative. A native runtime is selected inside the image worker;
+ROCm and Vulkan are distinct backend capabilities. The existing FLUX/H3 native
+build and Python dependency pins must remain available. Model defaults and
+capabilities are promoted only after actual generation, resource and output
+acceptance; file download and successful compilation are not adoption evidence.
+This research configuration is manual-only: automatic routing excludes it even
+when other models are absent. The optional model metadata `manual_only` defaults
+to false for existing models. Native RGBA is not accepted: measured outputs have
+background residue and edge artifacts. The product path normalizes ordinary
+output to opaque RGB and uses the existing explicit matting flow for cutouts.
+The original native RGBA evaluation samples remain available for comparison.
+See [Vulkan evaluation and integration](implementation/qwen-image-21-vulkan-20260922.md).
+
 **Vision QA**
 
 - a local multimodal VLM such as the Qwen-VL family or another model available through a local worker/ControlDeck-compatible endpoint.

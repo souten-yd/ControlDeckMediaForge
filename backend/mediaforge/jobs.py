@@ -45,7 +45,7 @@ from .m5_companion import (
 from .models import ModelDescriptor, ModelRegistry, ModelRegistryError
 from .models.generation_defaults import normalize_base_model, snap_to_native
 from .outpaint import outpaint_plan, validate_outpaint
-from .models.adapters import VIDEO_ADAPTERS
+from .models.adapters import VIDEO_ADAPTERS, runtime_installed, with_runtime_availability
 from .paths import contained
 from .profiles import profile_prompt
 from .reference_set import (
@@ -208,6 +208,7 @@ class JobManager:
         image_runtime_python: Path | None = None,
         video_runtime_python: Path | None = None,
         native_media_runtime_root: Path | None = None,
+        native_vulkan_runtime_root: Path | None = None,
         wan_source_root: Path | None = None,
         creative_evaluator: CreativeEvaluator | None = None,
         creative_director: Any | None = None,
@@ -228,6 +229,7 @@ class JobManager:
         self.image_runtime_python = image_runtime_python
         self.video_runtime_python = video_runtime_python
         self.native_media_runtime_root = native_media_runtime_root
+        self.native_vulkan_runtime_root = native_vulkan_runtime_root
         self.wan_source_root = wan_source_root
         self.creative_evaluator = creative_evaluator
         # 演出の立案と検証。従来は画面が順番に呼び、途中結果をページが持って
@@ -684,6 +686,7 @@ class JobManager:
         except ModelRegistryError as exc:
             raise WorkerFailure("model_registry_invalid", str(exc)) from exc
         lora_family = self._required_lora_family(job, models)
+        models = with_runtime_availability(models, vulkan_root=self.native_vulkan_runtime_root)
         if lora_family:
             # LoRA is the user's selection.  Its family becomes a hard routing
             # constraint; choosing a checkpoint first would expose an internal
@@ -727,7 +730,7 @@ class JobManager:
                 capability=capability,
                 policy=job.request.model_policy,
                 model_id=job.request.model_id,
-                hardware_backend="rocm",
+                hardware_backend=("rocm", "vulkan"),
                 # ControlDeck performs live admission against current free VRAM.
                 free_vram_bytes=2**63 - 1,
                 domain=self._job_domain(job),
@@ -2352,6 +2355,13 @@ class JobManager:
                     raise WorkerFailure("worker_not_installed", "image runtime is not installed")
                 executable = self.image_runtime_python
                 module = "worker_packs.image.worker"
+                if selected.runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21":
+                    if not runtime_installed(selected.runtime_adapter, vulkan_root=self.native_vulkan_runtime_root):
+                        raise WorkerFailure("worker_not_installed", "native Vulkan image runtime is not installed")
+                    if execution is None or execution.lease_id is None or execution.device_id != "gpu0":
+                        raise WorkerFailure("resource_unavailable", "native Vulkan generation requires a GPU lease")
+                    environment["MEDIA_FORGE_NATIVE_VULKAN_RUNTIME_ROOT"] = str(self.native_vulkan_runtime_root)
+                    environment["MEDIA_FORGE_GPU_DEVICE_ID"] = execution.device_id
                 # 画像にも native の駆動系を使うものがある（FLUX.2-dev は GGUF を
                 # sd-cli で回す）。場所を渡さないと、adapter は起動できない。
                 if self.native_media_runtime_root is not None:
@@ -2896,6 +2906,9 @@ class JobManager:
         要求を組み立てる時点では自分の device はまだ決まっていないので、そこを
         見ると常に空になる（実機で minimum_bytes が一度も出なかったのがこれ）。
         """
+        if selected.runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21":
+            # Each sd-cli invocation releases all weights before responding.
+            return False
         warm = self._warm_worker
         if warm is None or warm[0].returncode is not None:
             return False

@@ -1,5 +1,23 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 Qwen Q8 Vulkanの通常生成を受入、適用準備
+
+`ux1/qwen-image-21-vulkan`。コミュニティの構成と上流実装を調べ、別の固定Vulkan
+buildでDiT Q8 / Qwen3-VL Q4 / 専用BF16 VAEを実測。通常1024角16歩50.991秒、
+GPUピーク19,295,055,872B。20歩を別workerで3回生成しPNG SHA一致。Host lease使用、
+全run OOM0/Host200/lease解放。実worker停止でnative子終了、0.504秒でGPU使用量59,912,192B。
+
+- 採用範囲は手動の通常生成だけ。全automatic policyから除外。既存FLUX/H3と共有依存を保持。
+- native alphaは背景残り・過剰な色で品質不通過。製品経路はopaque化+既存の明示背景除去。
+- 参照編集512は良好、1024/16歩は質感変化が過剰。製品capabilityへ追加しない。
+- 通常画像/編集/透過比較の計4枚を正規import APIで登録。RGBA画素不変、実Host Library表示確認。
+- `./mf.sh test`: 2399 passed / 3 warnings / 271.69秒。native/runtime/配置/cacheの回帰を含む。
+- 新native runtimeを別directoryへ配置しbinary SHA照合。installedは0.32.2のまま。
+- 残件: PR merge、署名release/update、通常モデルinstall、installed生成/mobile/restart受入。
+- 新たな依頼の「既存3D画像から複数派生案」は別slice `ux1/3d-texture-variants`で進行。
+
+詳細: [Qwen Vulkan実測](qwen-image-21-vulkan-20260922.md)。元checkout `feat/g9-image-to-3d`は変更していない。
+
 ## 2026-09-22 Qwen導入評価を完了（現構成は見送り）
 
 branch `ux1/qwen-image-21-evaluation`、PR #611へ評価道具・実測・結論を記録。

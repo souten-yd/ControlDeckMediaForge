@@ -634,6 +634,33 @@
       "recommended_profiles": [],
       "gated": false,
       "license_notice": "MIT (BiRefNet, Zheng et al.). ONNX export mirrored by onnx-community; review the model card before redistribution."
+    },
+    {
+      "model_id": "leejet/Qwen-Image-2.1-GGUF",
+      "display_name": "Qwen-Image-2.1 Q8 (Vulkan / Research)",
+      "domains": [
+        "general",
+        "illustration",
+        "game2d"
+      ],
+      "media_types": [
+        "image"
+      ],
+      "description": "研究用の手動選択モデル。Vulkan / R9700で1024角・16歩の通常生成を約51秒、GPU使用ピーク約18GiBで確認。透過は既存の背景除去を使用。参照編集・モデル本体の透過は品質確認中。",
+      "approx_download_bytes": 14549481427,
+      "source": {
+        "kind": "huggingface",
+        "repo_id": "leejet/Qwen-Image-2.1-GGUF",
+        "revision": "cc11433936a06e9765f7c0c0b1f0436cfd2b9856"
+      },
+      "ownership": "managed",
+      "supports_lora": false,
+      "max_references": 0,
+      "reference_roles": [],
+      "supports_reference_strength": false,
+      "recommended_profiles": [],
+      "gated": true,
+      "license_notice": "Qwen Research License: research/evaluation only; commercial use requires a separate license. Diffusion and VAE derivatives inherit https://huggingface.co/Qwen/Qwen-Image-2.1/blob/790c92633540aa0cb11d9abf19eb46d861714758/LICENSE (SHA256 8dc973f024ff95966bea25866efa443fd16776dcb1001e681e3d467ea572b28d). Official Qwen3-VL-8B encoder: Apache-2.0. Review redistribution and attribution requirements before sharing weights."
     }
   ]
 }

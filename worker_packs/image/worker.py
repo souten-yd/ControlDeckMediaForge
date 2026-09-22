@@ -19,6 +19,7 @@ from .adapters import (
     ImageEditRequest,
     ImageGenerationRequest,
     NativeFlux2Adapter,
+    NativeQwenImage21Adapter,
     SpandrelUpscaleAdapter,
 )
 
@@ -77,6 +78,7 @@ ADAPTERS = {
     # 32B は python の拡散スタックに載らない。GGUF を、動画側が既に使っている
     # pinned build（sd-cli）で回す。駆動系を 2 つ持たない。
     "native.stable-diffusion-cpp-flux2": "NativeFlux2Adapter",
+    "native.stable-diffusion-cpp-qwen-image-21": "NativeQwenImage21Adapter",
 }
 
 
@@ -167,6 +169,9 @@ class ImageWorker:
         runtime_adapter = model.get("runtime_adapter")
         if runtime_adapter not in ADAPTERS:
             raise ValueError("worker model adapter is unsupported")
+        native = runtime_adapter.startswith("native.")
+        if not native:
+            _apply_vram_budget()
         model_id = model.get("id")
         if not isinstance(model_id, str) or not model_id:
             raise ValueError("worker model ID is invalid")
@@ -410,6 +415,15 @@ class ImageWorker:
                     reference_paths=profile_reference_paths,
                 ))
             generation_sec += float(adapter.last_generation_sec or 0)
+            if runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21":
+                # Native alpha is not accepted for this measured configuration.
+                # Keep RGB untouched and let core's existing matting stage handle
+                # explicit cutout requests; tiny VAE alpha errors must not make
+                # ordinary backgrounds or opaque material textures translucent.
+                with Image.open(result.output_path) as image:
+                    opaque = image.convert("RGBA")
+                    opaque.putalpha(255)
+                    opaque.save(result.output_path, format="PNG")
             outputs.append({
                 "path": str(result.output_path),
                 "mime_type": "image/png",
@@ -449,7 +463,7 @@ class ImageWorker:
                 ),
             },
             "seed": seed,
-            "postprocessing": (
+            "postprocessing": ["alpha.set_opaque"] if runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21" else (
                 ["pil.convert.rgba", "outpaint.source_pixel_copy"]
                 if operation == "image.edit" and edit_mode == "outpaint"
                 else ["pil.convert.rgba", "strict_edit.mask_composite", "strict_edit.protected_pixel_copy"]
@@ -467,11 +481,12 @@ class ImageWorker:
                 **{key: family_options[key]
                    for key in ("text_encoder_quantization", "transformer_quantization")
                    if key in family_options},
+                **getattr(adapter, "quantization_metrics", {}),
                 "placement": adapter.placement,
                 "vram_budget_bytes": int(os.environ.get("MEDIA_FORGE_VRAM_BUDGET_BYTES") or 0),
                 # この process が実際に確保した量。外から カード全体を見ると、
                 # 同時に載っている LLM のぶんまで数えてしまう。
-                **_own_vram_peak(),
+                **({} if native else _own_vram_peak()),
             },
         }
 
@@ -530,7 +545,6 @@ def _own_vram_peak() -> dict[str, int]:
 
 def main() -> int:
     _terminate_with_parent()
-    _apply_vram_budget()
     worker = ImageWorker()
     # readline を使う。`for raw in sys.stdin.buffer` は先読みバッファが
     # 埋まるか EOF まで1行目を返さないので、stdin を開いたまま次の要求を
