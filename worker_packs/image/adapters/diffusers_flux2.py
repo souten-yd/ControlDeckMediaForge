@@ -528,6 +528,10 @@ class DiffusersFlux2KleinAdapter:
         elif request.strict_edit:
             assert isinstance(reference, Image.Image)
             generation_size = self._patch_generation_size(reference.width, reference.height)
+        elif request.fit_reference_to_output:
+            # A texture variant has an explicitly admitted output canvas. Its
+            # packed source may be 4K; never use that as the inference size.
+            generation_size = self._generation_size(request.width, request.height)
         else:
             generation_size = self._generation_size(source.width, source.height)
         if request.edit_mode == "multi_reference" or request.reference_paths:

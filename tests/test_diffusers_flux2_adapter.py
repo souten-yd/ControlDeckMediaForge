@@ -268,12 +268,13 @@ def test_strict_edit_generates_only_bounded_patch_then_preserves_protected_pixel
     assert validate_strict_edit(source_path, mask_path, output_path)["protected_pixel_difference"] == 0
 
 
-def test_reference_edit_uses_full_source_and_requested_output(monkeypatch, tmp_path: Path):
+@pytest.mark.parametrize("texture", [False, True])
+def test_reference_edit_uses_full_source_and_requested_output(monkeypatch, tmp_path: Path, texture):
     model = tmp_path / "model"
     model.mkdir()
     source_path = tmp_path / "source.png"
     output_path = tmp_path / "edited.png"
-    Image.new("RGBA", (320, 256), "navy").save(source_path, format="PNG")
+    Image.new("RGBA", (4096, 4096) if texture else (320, 256), "navy").save(source_path, format="PNG")
     calls: dict[str, object] = {}
 
     class Generator:
@@ -300,19 +301,22 @@ def test_reference_edit_uses_full_source_and_requested_output(monkeypatch, tmp_p
         prompt="make a cheerful variation",
         source_path=source_path,
         mask_path=None,
-        width=320,
-        height=256,
+        width=1024 if texture else 320,
+        height=1024 if texture else 256,
         steps=4,
         seed=23,
         output_path=output_path,
         strict_edit=False,
+        fit_reference_to_output=texture,
     ))
 
     pipeline_call = calls["pipeline"]
-    assert pipeline_call["image"].size == (320, 256)
-    assert pipeline_call["width"] == 320 and pipeline_call["height"] == 256
+    expected = (1024, 1024) if texture else (320, 256)
+    assert pipeline_call["image"].size == expected
+    assert (pipeline_call["width"], pipeline_call["height"]) == expected
+    assert Image.open(source_path).size == ((4096, 4096) if texture else (320, 256))
     assert calls["generator_device"] == "cuda" and calls["seed"] == 23
-    assert Image.open(output_path).size == (320, 256)
+    assert Image.open(output_path).size == expected
 
 
 def test_multi_reference_edit_passes_bounded_image_list(monkeypatch, tmp_path: Path):

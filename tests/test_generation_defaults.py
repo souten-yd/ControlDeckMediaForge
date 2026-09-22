@@ -332,3 +332,22 @@ def test_the_worker_refuses_to_invent_a_step_count(monkeypatch, tmp_path):
             },
             "worker_output_dir": str(work_root / "job" / "outputs"),
         })
+
+
+def test_texture_canvas_does_not_expand_beyond_its_admitted_sides(tmp_path: Path):
+    from mediaforge.domain import JobRequest
+    from mediaforge.jobs import JobManager
+    from mediaforge.store import Store
+    from tests.test_image_evaluation import descriptor
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    job = store.create_job(JobRequest(operation="image.edit", intent="texture", inputs=[{"asset_id": "asset_" + "c" * 32}], constraints={
+        "width": 512, "height": 768,
+        "scene_texture": {"scene_id": "scene_" + "a" * 32,
+                          "source_revision_id": "revision_" + "b" * 32,
+                          "object_name": "Mesh_0", "material_slot": 0,
+                          "channel": "base_color", "uv_map": "UVMap"},
+    }))
+    resolved = manager._resolved_request(job, descriptor(default_steps=4, native_width=1024, native_height=1024))
+    assert (resolved["constraints"]["width"], resolved["constraints"]["height"]) == (512, 768)

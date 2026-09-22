@@ -1,5 +1,21 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 3Dテクスチャ参照編集の実測と枠修正（0.33.2準備）
+
+0.33.1でQwen横長1024×768と背景除去付き1024角PNGを実Hostから生成・Library登録済み。
+宝箱の材質抽出は成功したが、編集adapterが元の4096角を推論寸法に使い、通常生成の
+8.8GiB枠でOOMした。画像編集の実機測定を追加し、0.33.2で次を修正する。
+
+- texture候補だけ参照画像を要求canvasへ揃えて推論。元Assetは保持する。
+  coreもscene_textureでは学習面積への拡大を行わず、測定済みの各辺内で渡す。
+- 実FLUX.2-klein/int8/cpu_offload、元4096角→候補1024角3枚を51.990秒で生成。
+  3SHAは別。通常Host lease14GiB、Torch上限12GiB、GPU全体ピーク12,581,740,544B。
+  先の同条件12GiB lease試験では13,057,523,712Bで監視停止したため、この観測最大値を
+  texture専用profileのpeakに採用。通常生成の値・モデル選択・依存は変えない。
+- texture実測profileでpeakと所要時間をbrokerへ申告し、workerは測った12GiB内へ制限。
+  GPU以外の余裕は既存headroomを維持。最終成功runはHost200、cgroup OOM0、lease返却済み。
+- ./mf.sh test: 2407 passed / 3 warnings / 275.70秒。0.33.2 installed UI/3D比較は公開後。実測原本: maintenance/texture-runtime-20260922。
+
 ## 2026-09-22 installed 0.33.0の寸法処理を修正（0.33.1準備）
 
 PR613/0.33.0公開・通常適用済み。署名/公開物再取得/clean startup/既存1509 Asset保持を確認。

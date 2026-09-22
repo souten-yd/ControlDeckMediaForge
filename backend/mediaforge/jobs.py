@@ -1576,14 +1576,16 @@ class JobManager:
             if width is None or height is None:
                 constraints["width"], constraints["height"] = native
             elif isinstance(width, int) and isinstance(height, int):
-                if selected.runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21":
+                native_qwen = selected.runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21"
+                if native_qwen or isinstance(constraints.get("scene_texture"), dict):
                     # Admission bounds each side at 1024. Area-based snapping
                     # expands a 1024x768 canvas beyond 1024 and exceeds that
                     # measured envelope. Keep the admitted canvas, aligned to
-                    # this runtime's 32-pixel grid; output conformance retains
+                    # the runtime's pixel grid; output conformance retains
                     # the caller's requested dimensions.
+                    multiple = 32 if native_qwen else 16
                     constraints["width"], constraints["height"] = (
-                        max(256, width // 32 * 32), max(256, height // 32 * 32),
+                        max(256, width // multiple * multiple), max(256, height // multiple * multiple),
                     )
                 else:
                     constraints["width"], constraints["height"] = snap_to_native(
@@ -1779,6 +1781,11 @@ class JobManager:
         超える。上限を上げただけでは、受け付けた job が時間切れで落ちる）。
         """
         measured = float(selected.measured_runtime_sec or 0)
+        texture = self._texture_edit_profile(job, selected)
+        if texture:
+            return max(measured, float(texture["measured_runtime_sec"]) * max(
+                1.0, job.request.output.count / int(texture["measured_count"]),
+            ))
         profile = selected.upscale or {}
         cost = profile.get("per_source_megapixel_sec")
         if cost is None or job.request.constraints.get("edit_mode") not in {"upscale", "deblur"}:
@@ -1791,6 +1798,15 @@ class JobManager:
         if pixels <= 0:
             return measured
         return max(measured, float(cost) * pixels / 1_000_000)
+
+    @staticmethod
+    def _texture_edit_profile(job: Job, selected: ModelDescriptor) -> dict[str, Any] | None:
+        if (job.request.operation == "image.edit" and len(job.request.inputs) == 1
+                and job.request.constraints.get("edit_mode", "reference") == "reference"
+                and job.request.constraints.get("strict_edit") is not True
+                and isinstance(job.request.constraints.get("scene_texture"), dict)):
+            return selected.texture_edit
+        return None
 
     def _validate_generation_limits(self, job: Job, selected: ModelDescriptor) -> None:
         # 詳細設定から来る値。範囲を外れたものは、worker が読み込みを終えて
@@ -2393,7 +2409,11 @@ class JobManager:
             # その process だけが OOM で落ち、同じカードに載っている LLM は無傷で
             # 済む（実測、枠 7/6/4/3 GiB のいずれでも LLM は無傷だった）。
             if execution is not None and execution.granted_bytes:
-                environment["MEDIA_FORGE_VRAM_BUDGET_BYTES"] = str(int(execution.granted_bytes))
+                worker_budget = int(execution.granted_bytes)
+                texture_profile = self._texture_edit_profile(job, selected)
+                if texture_profile:
+                    worker_budget = min(worker_budget, int(texture_profile["worker_vram_budget_bytes"]))
+                environment["MEDIA_FORGE_VRAM_BUDGET_BYTES"] = str(worker_budget)
             else:
                 environment.pop("MEDIA_FORGE_VRAM_BUDGET_BYTES", None)
             stdin_payload += b"\n"
@@ -2897,6 +2917,10 @@ class JobManager:
             )
         )
         if selected is not None:
+            texture_profile = self._texture_edit_profile(job, selected)
+            if texture_profile:
+                for key in ("execution_peak_bytes", "cold_load_peak_bytes"):
+                    request["vram"][key] = max(int(request["vram"][key]), int(texture_profile["execution_peak_vram_bytes"]))
             floor = self._admission_floor_bytes.get(selected.model_id)
             if floor is not None:
                 headroom = int(request["vram"]["headroom_bytes"])

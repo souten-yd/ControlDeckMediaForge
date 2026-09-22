@@ -467,3 +467,27 @@ def test_routing_without_the_extra_models_finds_nothing(tmp_path: Path):
         manager._select_real_model(job)
 
     assert failure.value.code == "capability_unavailable"
+
+
+def test_texture_admission_uses_separate_measured_profile(tmp_path: Path):
+    from mediaforge.models.registry import ModelRegistry
+    root = Path(__file__).parents[1]
+    model = next(m for m in ModelRegistry.load(root / "worker_packs/image/models.json").all()
+                 if m.model_id == "black-forest-labs/FLUX.2-klein-4B")
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    ordinary = store.create_job(JobRequest(operation="image.generate", intent="ordinary"))
+    baseline = manager._resource_request(ordinary, host_execution(), model, 1.0)
+    texture = store.create_job(JobRequest(operation="image.edit", intent="texture",
+        inputs=[{"asset_id": "asset_" + "a" * 32}], output={"format": "png", "count": 3},
+        constraints={"scene_texture": {"scene_id": "scene_" + "b" * 32,
+            "source_revision_id": "revision_" + "c" * 32, "object_name": "Mesh_0",
+            "material_slot": 0, "channel": "base_color", "uv_map": "UVMap"}}))
+    request = manager._resource_request(texture, host_execution(), model, 1.0)
+    assert request["vram"]["execution_peak_bytes"] == model.texture_edit["execution_peak_vram_bytes"]
+    assert request["vram"]["cold_load_peak_bytes"] >= request["vram"]["execution_peak_bytes"]
+    assert request["vram"]["headroom_bytes"] == baseline["vram"]["headroom_bytes"]
+    assert request["estimated_runtime_sec"] == model.texture_edit["measured_runtime_sec"]
+    assert baseline["vram"]["execution_peak_bytes"] == model.execution_peak_vram_bytes
+    assert baseline["estimated_runtime_sec"] == model.measured_runtime_sec
