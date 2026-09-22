@@ -11,6 +11,14 @@ core は worker の実装を import しない（AGENTS.md）。しかし「測�
 
 from __future__ import annotations
 
+import os
+from dataclasses import replace
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .registry import ModelDescriptor
+
 # 画像 worker（worker_packs/image/worker.py）が実装するもの。
 IMAGE_ADAPTERS = frozenset({
     "diffusers.flux2-klein",
@@ -22,6 +30,7 @@ IMAGE_ADAPTERS = frozenset({
     # FLUX.2-dev 32B。GGUF を stable-diffusion.cpp の pinned build で回す。
     # 動画側の MiniMax H3 と同じ駆動系・同じ commit である。
     "native.stable-diffusion-cpp-flux2",
+    "native.stable-diffusion-cpp-qwen-image-21",
 })
 
 # 画像ランタイムの中で走るが、生成の worker とは別の入口を持つもの
@@ -50,6 +59,40 @@ def is_runnable(runtime_adapter: str) -> bool:
     ものであって、採用の手続きではない。
     """
     return runtime_adapter in RUNNABLE_ADAPTERS
+
+
+def runtime_installed(runtime_adapter: str, *, vulkan_root: Path | None) -> bool:
+    """Qwen's independently pinned build is required as well as its weights.
+
+    The worker verifies the binary digest and admitted-device mapping before use.
+    This inexpensive availability check keeps missing runtimes out of pickers.
+    """
+    if runtime_adapter != "native.stable-diffusion-cpp-qwen-image-21":
+        return is_runnable(runtime_adapter)
+    if vulkan_root is None:
+        return False
+    try:
+        root = vulkan_root.resolve(strict=True)
+        executable = (root / "build/bin/sd-cli").resolve(strict=True)
+        profile = (root / "runtime.json").resolve(strict=True)
+        return (
+            executable.is_relative_to(root) and profile.is_relative_to(root)
+            and executable.is_file() and profile.is_file() and os.access(executable, os.X_OK)
+        )
+    except OSError:
+        return False
+
+
+def with_runtime_availability(
+    models: tuple[ModelDescriptor, ...], *, vulkan_root: Path | None,
+) -> tuple[ModelDescriptor, ...]:
+    return tuple(
+        replace(item, healthy=False)
+        if item.runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21"
+        and not runtime_installed(item.runtime_adapter, vulkan_root=vulkan_root)
+        else item
+        for item in models
+    )
 
 
 # CPU（システムRAM）だけで走らせられる adapter。ControlDeck の broker が

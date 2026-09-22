@@ -100,6 +100,7 @@ class ModelDescriptor:
     policy_rank: dict[str, int]
     required_files: tuple[str, ...]
     weights: tuple[WeightFile, ...]
+    manual_only: bool = False
     installed: bool = False
     healthy: bool = False
     local_path: Path | None = None
@@ -469,6 +470,9 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         disable_mmap, bool
     ):
         raise ModelRegistryError("model registry runtime_options are invalid")
+    manual_only = value.get("manual_only", False)
+    if not isinstance(manual_only, bool):
+        raise ModelRegistryError("model registry manual_only must be a boolean")
     return ModelDescriptor(
         model_id=model_id,
         family=_required_string(value, "family"),
@@ -483,6 +487,7 @@ def _descriptor(value: dict[str, Any]) -> ModelDescriptor:
         policy_rank=dict(policy),
         required_files=required_files,
         weights=tuple(weights),
+        manual_only=manual_only,
         measurement_confidence=confidence,
         device_mode=device_mode,
         disable_mmap=disable_mmap,

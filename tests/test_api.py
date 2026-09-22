@@ -221,6 +221,7 @@ def test_model_catalog_adds_trusted_presentation_metadata(tmp_path: Path):
         # 切り抜きの重みも、画像を扱う道具として並ぶ。生成の routing には
         # 出ない（capabilities が image.matting だけである）。
         "BiRefNet Lite 切り抜き",
+        "Qwen-Image-2.1 Q8 (Vulkan / Research)",
     ]
     assert all(item["source"]["revision"] == item["revision"] for item in images)
     assert all("path" not in item for item in response.json()["items"])

@@ -141,6 +141,46 @@ def test_successful_install_is_atomic_and_registry_visible(tmp_path: Path):
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("cache_case", ["valid", "corrupt", "escape"])
+def test_composite_install_reuses_only_contained_cache_and_verifies_digest(tmp_path: Path, cache_case: str):
+    async def scenario() -> None:
+        runtime, catalog = manifests(tmp_path)
+        manifest = json.loads(runtime.read_text())
+        manifest["models"][0]["weights"][0]["source"] = {
+            "kind": "huggingface", "repo_id": "auxiliary/weights", "revision": "a" * 40,
+        }
+        runtime.write_text(json.dumps(manifest))
+        cached = tmp_path / "external/hub/models--auxiliary--weights/snapshots" / ("a" * 40) / "model.safetensors"
+        cached.parent.mkdir(parents=True)
+        if cache_case == "escape":
+            outside = tmp_path / "outside-weight"
+            outside.write_bytes(WEIGHT)
+            cached.symlink_to(outside)
+        else:
+            cached.write_bytes(WEIGHT if cache_case == "valid" else b"x" * len(WEIGHT))
+        requested: list[str] = []
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(request.url.path)
+            return httpx.Response(200, content=CONFIG if request.url.path.endswith("config.json") else WEIGHT)
+        store = Store(tmp_path / "data")
+        store.initialize()
+        service = manager(tmp_path, store, runtime, catalog, mock=httpx.MockTransport(handler))
+        await service.start()
+        try:
+            operation = service.install("owner/model")
+            finished = await wait_terminal(store, operation.id)
+            assert finished.state == (ModelOperationState.FAILED if cache_case == "corrupt" else ModelOperationState.READY)
+            assert any(path.endswith("model.safetensors") for path in requested) == (cache_case == "escape")
+            if cache_case == "corrupt":
+                assert finished.error_code == "model_verify_failed"
+            else:
+                model = service._registry().all()[0]
+                assert (model.local_path / "model.safetensors").read_bytes() == WEIGHT
+        finally:
+            await service.stop()
+    asyncio.run(scenario())
+
+
 def test_composite_bundle_downloads_weight_from_its_pinned_auxiliary_source(tmp_path: Path):
     async def scenario() -> None:
         runtime, catalog = manifests(tmp_path)

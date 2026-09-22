@@ -15,6 +15,11 @@ Date: 2026-08-22
 
 The API is capability-driven. `model_id` is not required. Normal clients use `model_policy=auto`; an explicit model ID is accepted only with the opt-in `manual` policy.
 
+Model descriptors may additionally expose `manual_only` (default false). Such a
+model requires explicit `model_policy=manual` and its `model_id`; all automatic
+policies exclude it, including when no other model is installed. This supports
+explicit selection of local research configurations without changing defaults.
+
 ## Current availability
 
 G1 implements `/health`, `/schemas/{schema_name}`, the local job/capability/

@@ -32,7 +32,7 @@ def route_model(
     *,
     capability: str,
     policy: str,
-    hardware_backend: str,
+    hardware_backend: str | tuple[str, ...],
     free_vram_bytes: int,
     model_id: str | None = None,
     domain: str | None = None,
@@ -53,7 +53,7 @@ def route(
     *,
     capability: str,
     policy: str,
-    hardware_backend: str,
+    hardware_backend: str | tuple[str, ...],
     free_vram_bytes: int,
     model_id: str | None = None,
     domain: str | None = None,
@@ -63,10 +63,11 @@ def route(
     # "auto" と未指定は同じ意味。catalog の domains は general を持つので、
     # 指定が無いときの既定は general になる。
     requested_domain = domain if domain and domain != "auto" else "general"
+    backends = (hardware_backend,) if isinstance(hardware_backend, str) else hardware_backend
     candidates = [
         item for item in models
         if capability in item.capabilities
-        and hardware_backend in item.hardware_backends
+        and any(backend in item.hardware_backends for backend in backends)
         and item.installed
         and item.local_path is not None
     ]
@@ -94,7 +95,10 @@ def route(
     else:
         if policy not in {"auto", "fast", "balanced", "quality", "low_vram"}:
             raise ModelRouteError("invalid_model_policy", "the model policy is unsupported")
-        candidates = [item for item in candidates if item.state == ModelState.AVAILABLE and item.healthy]
+        candidates = [
+            item for item in candidates
+            if item.state == ModelState.AVAILABLE and item.healthy and not item.manual_only
+        ]
         candidates = [
             item for item in candidates
             if item.measured_vram_bytes is not None and item.measured_vram_bytes <= free_vram_bytes

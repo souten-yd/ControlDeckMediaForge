@@ -189,6 +189,11 @@
         "experimental"
       ]
     },
+    "manual_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "Requires explicit model_policy=manual and model_id; never selected by automatic policies."
+    },
     "installed": {
       "type": "boolean"
     },
