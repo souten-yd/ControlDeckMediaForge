@@ -1,5 +1,24 @@
 # Media Forge implementation status
 
+## 2026-09-22 0.33.7を署名公開・ローカル更新（Host browser再ログイン待ち）
+
+PR622/623をmerge、source6705400から0.33.7を通常署名公開/Host更新。
+3Dの入口、簡易/詳細の推奨設定、元画像の絞り込み、材質生成の入力案内を反映した。
+
+- `./mf.sh test`: 2413 passed / 3 warnings / 155.79秒。source/実Blenderの1280/320pxで
+  元画像選択・比較/破棄・詳細設定保持/復帰を確認。画像capabilityは明示fake、要求はGPU前に捕捉。
+- 公開物再取得/署名/改ざん拒否/bytes照合/fresh package起動を通過。
+- installed0.33.7と再起動後PID3807845/healthy。1535 Asset metadata保持、代表3 AssetのHTTP SHA一致、
+  served frontend一致。image-to-3D capability不変。Host CLIもenabled/0.33.7/healthy、active Job0。
+- 正式installedの単体Chrome1280/320pxで入口と簡易/詳細切替、overflow0/page error0。
+  **認証付きHost browserの最終確認はNOT TESTED**。専用session期限切れを通常logoutで失効し、
+  利用者へ `bash ~/mf-login.sh` を依頼済み。認証を迂回して完了扱いにしない。
+- 残件はログイン後の `ui-installed.mjs` / `post-restart.mjs` / `host-final.py`。
+  配布/ローカル更新は済み。実スマホ本体・新規AI推論・fresh GPU構築・rollbackは今回NOT TESTED。
+
+詳細と再開コマンド: [0.33.7実機記録](implementation/release-0.33.7-20260922.md)。
+
+
 ## 2026-09-22 3Dの簡易操作と関連元画像の選択（0.33.7準備）
 
 材質の画像候補を保存済みscene来歴から抽出し、既定は元画像だけをサムネイル表示。
