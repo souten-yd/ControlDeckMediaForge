@@ -29,7 +29,7 @@ FIXED_FILES = {
 def arguments() -> argparse.Namespace:
     values = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     parser = argparse.ArgumentParser()
-    parser.add_argument("--action", choices=("inspect", "apply"), required=True)
+    parser.add_argument("--action", choices=("inspect", "apply", "extract"), required=True)
     parser.add_argument("--source", choices=(FIXED_FILES["source"],), required=True)
     parser.add_argument("--result", choices=(FIXED_FILES["result"],), required=True)
     parser.add_argument("--expected-version", required=True)
@@ -99,6 +99,45 @@ def material_targets() -> list[dict[str, object]]:
             raise RuntimeError("UV map count exceeds its bound")
         targets.append({"object_name": obj.name, "material_slots": slots, "uv_maps": uv_maps})
     return targets
+
+
+def extract_texture(root: Path) -> dict[str, object]:
+    value = json.loads((root / "binding.json").read_text(encoding="utf-8"))
+    if (not isinstance(value, dict) or set(value) != {
+            "schema_version", "scene_id", "source_revision_id", "object_name",
+            "material_slot", "channel", "uv_map"}
+            or value["schema_version"] != "media-forge.scene-texture-request@1"
+            or value["channel"] not in {"base_color", "emission"}):
+        raise RuntimeError("texture source selection is invalid")
+    obj = bpy.data.objects.get(value["object_name"])
+    slot = value["material_slot"]
+    if (obj is None or obj.type != "MESH" or type(slot) is not int
+            or not 0 <= slot < len(obj.material_slots) or value["uv_map"] not in obj.data.uv_layers):
+        raise RuntimeError("texture source target is unavailable")
+    material = obj.material_slots[slot].material
+    if material is None or not material.use_nodes:
+        raise RuntimeError("texture source material has no image")
+    shaders = [node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED"]
+    if len(shaders) != 1:
+        raise RuntimeError("texture source shader is ambiguous")
+    socket = shaders[0].inputs["Base Color" if value["channel"] == "base_color" else "Emission Color"]
+    if len(socket.links) != 1:
+        raise RuntimeError("texture source channel has no direct image")
+    node = socket.links[0].from_node
+    if node.type != "TEX_IMAGE" or node.image is None or node.image.packed_file is None:
+        raise RuntimeError("texture source must be a directly linked packed image")
+    image = node.image
+    if image.source != "FILE" or max(image.size) > 8192 or image.size[0] * image.size[1] > 24_000_000:
+        raise RuntimeError("texture source image exceeds its bounds")
+    data = bytes(image.packed_file.data)
+    if not 1 <= len(data) <= 64 * 1024**2:
+        raise RuntimeError("texture source packed bytes exceed their bounds")
+    (root / "texture.png").write_bytes(data)
+    return {
+        "object_name": obj.name, "material_slot": slot, "material_name": material.name,
+        "channel": value["channel"], "uv_map": value["uv_map"], "packed": True,
+        "texture_sha256": hashlib.sha256(data).hexdigest(),
+    }
 
 
 def principled(material: bpy.types.Material) -> bpy.types.ShaderNodeBsdfPrincipled:
@@ -253,6 +292,11 @@ def main() -> None:
             raise RuntimeError("inspect material arguments differ")
         result["targets"] = material_targets()
         result["binding"] = None
+    elif args.action == "extract":
+        if not args.binding or args.texture or args.output:
+            raise RuntimeError("extract material arguments differ")
+        result["binding"] = extract_texture(root)
+        result["targets"] = None
     else:
         if not args.texture or not args.binding or not args.output:
             raise RuntimeError("apply material arguments differ")

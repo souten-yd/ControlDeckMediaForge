@@ -109,8 +109,8 @@ class JobRequest(BaseModel):
             raise ValueError("mp4 and webm output are accepted only by video operations")
         texture = self.constraints.get("scene_texture")
         if texture is not None:
-            if self.operation != "image.generate":
-                raise ValueError("scene_texture is accepted only by image.generate")
+            if self.operation not in {"image.generate", "image.edit"}:
+                raise ValueError("scene_texture is accepted only by image generation or editing")
             parsed = SceneTextureRequest.model_validate(texture)
             self.constraints = {
                 **self.constraints,

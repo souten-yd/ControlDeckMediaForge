@@ -274,3 +274,13 @@ jobの中間成果物はstagingへ出力し、検証後だけimmutable assetと�
 autosave、正式revision、export derivative、cacheは別の保持policy。
 バックアップはDB・asset・依存画像・runtime pin・recipeを一貫したsnapshotとして扱う。
 restore時にmissing dependencyを検出し、画像や.Blendの実体がない状態を復旧成功と表示しない。
+
+## 2026-09-22 材質画像の派生候補
+
+材質パネルで「現在の画像を改善」「選んだライブラリ画像を改善」「新規作成」を選び、
+1〜4枚を生成する。現在画像の抽出はscene/revision/object/slot/channelを固定し、
+packed画像だけを新しいimmutable Assetとして登録する。抽出元.blendのID/hashを
+provenanceへ持ち、派生画像は通常のimage.edit入力から親子関係を持つ。private
+scenes.material.extractを使用し、既存公開toolやHost契約は追加しない。
+候補一覧には同じ対象の過去Jobも残し、画像を選んだだけでは材質を変更しない。
+既存のpreview/adoptへ引き継いで比較し、採用時だけ新revisionを保存する。

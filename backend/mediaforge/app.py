@@ -4279,6 +4279,13 @@ def create_app(
                         result = await scene_workspace.material_targets(
                             scene_owner(identity), str(params.get("scene_id", ""))
                         )
+                    elif method == "scenes.material.extract":
+                        if set(params) != {"scene_id", "selection"}:
+                            raise ValueError("scene material extract fields differ")
+                        result = await scene_workspace.extract_material_image(
+                            scene_owner(identity), str(params.get("scene_id", "")),
+                            params.get("selection", {}),
+                        )
                     elif method == "scenes.material.apply":
                         if set(params) != {"scene_id", "binding"}:
                             raise ValueError("scene material apply fields differ")
@@ -4883,6 +4890,18 @@ def create_app(
             raise HTTPException(
                 status_code=422, detail={"code": exc.code, "message": str(exc)}
             ) from exc
+
+    @app.post("/workspace-api/scenes/{scene_id}/material-image", include_in_schema=False)
+    async def standalone_scene_material_extract(scene_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if set(payload) != {"selection"}:
+                raise SceneError("scene_material_source_invalid", "material source fields differ")
+            return await scene_workspace.extract_material_image(
+                preferences.STANDALONE_SUBJECT, scene_id, payload.get("selection", {}),
+            )
+        except SceneError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
 
     @app.post(
         "/workspace-api/scenes/{scene_id}/materials", include_in_schema=False

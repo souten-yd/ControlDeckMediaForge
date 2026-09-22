@@ -112,6 +112,12 @@ def test_scene_texture_job_context_is_bounded_and_only_valid_for_image_generatio
         constraints={"scene_texture": context},
     )
     assert request.constraints["scene_texture"] == context
+    edited = JobRequest(operation="image.edit", intent="refine the existing wood grain",
+                        inputs=[{"asset_id": "asset_" + "3" * 32}],
+                        constraints={"scene_texture": context, "edit_mode": "reference"},
+                        output={"count": 3})
+    jsonschema.validate(edited.model_dump(mode="json", exclude_none=True), job_schema)
+    assert edited.constraints["scene_texture"] == context and edited.output.count == 3
     response = client.post("/api/v1/jobs", json=request.model_dump(mode="json"))
     assert response.status_code == 202
     finished = wait_terminal(client, response.json()["id"])

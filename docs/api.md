@@ -545,11 +545,11 @@ reclamation can wait for an in-flight operation to finish.
 3DS-6b reuses the existing durable `image.generate` job for new scene images.
 `constraints.scene_texture` is the typed `media-forge.scene-texture-request@1`
 return context: scene ID, source revision ID, object, material slot, channel,
-and UV map. It is valid only on `image.generate`, is bounded by
+and UV map. It is valid on `image.generate` and `image.edit`, is bounded by
 `schemas/scene-texture-request.json`, and grants no scene mutation authority.
 The request also carries `constraints.asset_brief.role = texture`; the resolved
 image is an ordinary immutable Library Asset with normal provenance. 3D Studio
-can recover, cancel, or retry the job after reload, preview its first output,
+can recover, cancel, or retry the job after reload, preview up to four outputs,
 and explicitly select it. Only the separate current-revision MaterialBinding
 operation can commit that selected Asset as a new SceneRevision.
 
@@ -1314,3 +1314,12 @@ For agent discovery, `job-request.json` also declares the existing ReferenceSetS
 fields directly in `constraints`. They are optional on generic jobs; the existing
 `3d.reference_set` pack validator still requires its name/views/scale/origin fields.
 Image generation does not require them. No wrapper field or second packing API is added.
+
+Private `scenes.material.extract` (`POST /workspace-api/scenes/{scene_id}/material-image`
+for standalone) accepts `selection` as the existing scene-texture context. It
+verifies owner/current revision and extracts only directly connected packed
+base-color or emission images through the trusted Blender worker. It creates an
+immutable PNG with scene-source lineage, leaving the scene unchanged. External
+images and shader-derived appearances are rejected. The texture panel uses
+normal `image.edit` inputs for 1–4 candidates, so their parent image is recorded.
+Candidate selection still requires separate material preview and adoption.

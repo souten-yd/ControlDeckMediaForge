@@ -1597,3 +1597,14 @@ retains legacy repeat playback. Nonloop clips play once and pause on the last
 frame. Explicit stop restores the rest pose; switching stops old actions before
 starting the selected action. Play/pause/loop/switch/stop require actual GLB and
 viewer validation. No root-motion extraction or gameplay controller is implied.
+
+## 2026-09-22 既存3Dの画像材質から派生案を作る
+
+利用者の指示により、3Dの材質画像を画像編集の入力として取り出し、1〜4枚の
+派生画像を既存のdurable image.edit Jobで生成する。画像は共通Libraryへ保存し、
+元のシーン版・材質画像とのlineageを保持する。UV配置を維持する指示を付けるが、
+生成AIによる位置ずれがないとは保証せず、既存の材質preview→比較→採用で確認する。
+画像生成だけではsceneを変更しない。選択した画像を貼った新revisionを作り元版を残す。
+抽出は所有者がアクセスできるcurrent revisionのpacked base color/emission画像に限定。
+外部ファイル、複雑なshaderの見た目、normal/roughness等の物理mapを推測して取り出さない。
+既存の新規画像生成も維持し、参照編集が利用可能な場合に改善モードを提供する。

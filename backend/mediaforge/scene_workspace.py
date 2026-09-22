@@ -26,7 +26,7 @@ from .domain import Asset, ErrorDetail, JobRequest, JobStatus, Provenance
 from .glb import GlbValidationError, validate_glb_path
 from .host.ai import HostAIGateway
 from .host.client import HostIdentity
-from .material_binding import MaterialBinding
+from .material_binding import MaterialBinding, SceneTextureRequest
 from .paths import contained
 from .reference_set import ReferenceSetError, read_reference_set
 from .scenes import (
@@ -50,6 +50,7 @@ from .scene_generation import GenerationFacts, SceneFromImageRequest
 from .scene_recipes import SceneCreateRequest, SceneEditRequest, SceneMaterialRequest, SceneRecipe
 from .scene_recipe_failure import recipe_failure_message
 from .store import Store, utc_now
+from .validators import validate_png
 
 
 MAX_BLEND_BYTES = 256 * 1024 * 1024
@@ -1366,6 +1367,72 @@ class SceneWorkspace:
             "targets": result["targets"],
         }
 
+    async def extract_material_image(
+        self, owner: str, scene_id: str, value: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Register a packed material image without changing the source revision."""
+        owner = validate_scene_owner(owner)
+        try:
+            selection = SceneTextureRequest.model_validate(value)
+        except ValidationError as exc:
+            raise SceneError("scene_material_source_invalid", "material source selection is invalid") from exc
+        if selection.scene_id != scene_id or selection.channel not in {"base_color", "emission"}:
+            raise SceneError("scene_material_source_invalid", "select a base color or emission image")
+        document, revisions = self.catalog.get(owner, scene_id)
+        if document.current_revision_id != selection.source_revision_id:
+            raise SceneError("scene_revision_conflict", "material source revision is no longer current")
+        revision = next(item for item in revisions if item.id == selection.source_revision_id)
+        source_asset, source_provenance, source = await asyncio.to_thread(
+            self._verified_revision_asset, revision.source_asset_id, "application/x-blender",
+        )
+        job = self.store.create_job(JobRequest(operation="media.inspect", intent="Extract current 3D material image"))
+        self.store.update_job(job.id, status=JobStatus.RUNNING, phase="extracting", progress=0.1)
+        output: Path | None = None
+        try:
+            with self.resolver.runtime_reference(revision.runtime_id) as runtime:
+                if runtime is None or runtime.version != revision.runtime_version:
+                    raise SceneError("scene_runtime_unavailable", "scene Blender runtime is unavailable")
+                result, output = await self._material_operation(
+                    source, runtime, action="extract", source_context=selection,
+                )
+            if output is None:
+                raise SceneError("scene_material_worker_invalid", "material image is unavailable")
+            width, height, validation = await asyncio.to_thread(validate_png, output)
+            digest = await asyncio.to_thread(self._sha256, output)
+            asset_id, provenance_id = f"asset_{uuid.uuid4().hex}", f"prov_{uuid.uuid4().hex}"
+            now = utc_now()
+            asset = Asset(
+                id=asset_id, job_id=job.id, parent_asset_ids=[source_asset.id], mime_type="image/png",
+                width=width, height=height, size_bytes=output.stat().st_size, sha256=digest,
+                suggested_filename=f"media-forge-texture-source-{asset_id[6:14]}.png",
+                provenance_id=provenance_id, created_at=now,
+            )
+            provenance = Provenance(
+                id=provenance_id, asset_id=asset.id, parent_asset_ids=[source_asset.id],
+                operation="scene.material.extract", intent=job.request.intent,
+                model_id="none", model_version="0", weights_hash="none",
+                license=source_provenance.license, runtime_adapter="blender.material-extract",
+                runtime_version=revision.runtime_version, seed=0,
+                tool_versions={"media-forge": __version__, "blender": revision.runtime_version},
+                parameters={"scene_texture": selection.model_dump(mode="json"), "binding": result["binding"]},
+                reference_asset_hashes={source_asset.id: source_asset.sha256},
+                postprocessing=["packed_image.extract", "png.normalize"], validation=validation,
+                warnings=[], output_sha256=digest, created_at=now,
+            )
+            self.store.register_asset(asset, provenance, output)
+            self.store.update_job(job.id, status=JobStatus.SUCCEEDED, progress=1, asset_ids=[asset.id])
+            return {"asset": asset.model_dump(mode="json"), "scene_texture": selection.model_dump(mode="json")}
+        except BaseException as exc:
+            self.store.update_job(
+                job.id, status=JobStatus.CANCELED if isinstance(exc, asyncio.CancelledError) else JobStatus.FAILED,
+                error=ErrorDetail(code=getattr(exc, "code", "scene_material_source_unavailable"),
+                                  message="The selected material has no supported packed image"),
+            )
+            raise
+        finally:
+            if output is not None:
+                output.unlink(missing_ok=True)
+
     async def apply_material_binding(
         self,
         owner: str,
@@ -1469,6 +1536,7 @@ class SceneWorkspace:
         action: str,
         binding: MaterialBinding | None = None,
         texture: Path | None = None,
+        source_context: SceneTextureRequest | None = None,
     ) -> tuple[dict[str, Any], Path | None]:
         if self.material_worker is None or self.material_worker.is_symlink() or not self.material_worker.is_file():
             raise SceneError("scene_material_worker_unavailable", "trusted material worker is unavailable")
@@ -1518,6 +1586,9 @@ class SceneWorkspace:
             command.extend([
                 "--texture", "texture.png", "--binding", "binding.json", "--output", "bound.blend",
             ])
+        elif action == "extract" and source_context is not None:
+            self._atomic_json(root / "binding.json", source_context.model_dump(mode="json"))
+            command.extend(["--binding", "binding.json"])
         elif action != "inspect":
             self._remove_tree(root, self.material_root)
             raise SceneError("scene_material_action_invalid", "material action is invalid")
@@ -1578,6 +1649,11 @@ class SceneWorkspace:
                 result = json.loads(result_path.read_text(encoding="utf-8"))
             except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise SceneError("scene_material_worker_invalid", "material worker result is invalid") from exc
+            if action == "extract":
+                output = contained(root, root / "texture.png")
+                if output.is_symlink() or not output.is_file() or not 1 <= output.stat().st_size <= 64 * 1024**2:
+                    raise SceneError("scene_material_worker_invalid", "extracted image exceeds its bounds")
+                digest = self._sha256(output)
             self._validate_material_result(
                 result,
                 runtime.version,
@@ -1585,7 +1661,8 @@ class SceneWorkspace:
                 expected_binding=(
                     binding.worker_value(texture_sha256=digest)
                     if action == "apply" and binding is not None
-                    else None
+                    else {**source_context.model_dump(mode="json"), "texture_sha256": digest}
+                    if action == "extract" and source_context is not None else None
                 ),
             )
             if action == "apply":
@@ -1598,10 +1675,37 @@ class SceneWorkspace:
                     self.material_root, self.material_root / f"bound_{uuid.uuid4().hex}.blend"
                 )
                 os.replace(output, retained)
+            elif action == "extract":
+                retained = contained(self.material_root, self.material_root / f"extracted_{uuid.uuid4().hex}.png")
+                normalize = asyncio.create_task(asyncio.to_thread(self._normalize_extracted_texture, output, retained))
+                try:
+                    await asyncio.shield(normalize)
+                except asyncio.CancelledError:
+                    # Do not remove the staging directory while its thread is
+                    # still decoding/writing the bounded image.
+                    await asyncio.gather(normalize, return_exceptions=True)
+                    retained.unlink(missing_ok=True)
+                    raise
+                except BaseException:
+                    retained.unlink(missing_ok=True)
+                    raise
             return result, retained
         finally:
             if root.exists():
                 self._remove_tree(root, self.material_root)
+
+    @staticmethod
+    def _normalize_extracted_texture(source: Path, destination: Path) -> None:
+        try:
+            with Image.open(source) as opened:
+                if (opened.format not in {"PNG", "JPEG", "WEBP"}
+                        or max(opened.size) > MAX_TEXTURE_SIDE
+                        or opened.width * opened.height > 24_000_000):
+                    raise SceneError("scene_material_asset_invalid", "unsupported packed image")
+                opened.convert("RGBA").save(destination, format="PNG")
+            destination.chmod(0o600)
+        except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
+            raise SceneError("scene_material_asset_invalid", "packed image could not be decoded") from exc
 
     @staticmethod
     def _validate_material_result(
