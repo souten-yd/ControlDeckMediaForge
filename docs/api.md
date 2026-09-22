@@ -1343,3 +1343,22 @@ uses the standalone owner. Reads do not extract images or create jobs. Traversal
 bounded to 1024 direct matches, 1024 graph records, eight edges per direction
 and 256 returned images;
 `truncated` is explicit. No asset bytes, paths or client-supplied owner are accepted.
+
+## Library Trash (private workspace)
+
+`library.trash.preview` / `library.trash.apply` (workspace WebSocket) and
+`POST /workspace-api/library/trash/{preview|apply}` (standalone workspace)
+accept `action: trash|restore|purge` and 1–100 `asset_ids`. A scene asset expands
+only to its revision's Blender/GLB pair. Apply requires the preview's
+`confirmation_fingerprint`; changed selections must be confirmed again.
+`all_trashed: true` replaces `asset_ids` only for purge, bounded to 5,000 assets
+and excluding scene revisions owned by another account. Running work blocks removal.
+These are private workspace operations; the frozen public required fields remain unchanged.
+
+Normal Library/scene lists omit trashed revisions. Trash listing uses `trash: true`.
+Purged content/metadata asset endpoints return 404; immutable provenance and lineage
+records remain with a deletion tombstone. Private relation projections expose
+`in_trash` / `purged`. Completed scenes retain embedded images; purge verifies
+packing for retained material dependencies. Filesystem cleanup is durable/retryable:
+a failed unlink returns `library_purge_cleanup_pending`, remains in Trash, and is
+retried on startup or another explicit purge. Purged assets cannot be restored.

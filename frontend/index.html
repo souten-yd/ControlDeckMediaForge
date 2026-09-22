@@ -735,6 +735,7 @@
           <!-- 1 つのシーンは版ごとに 2 つの資産を登録するので、直すたびに同じものが
                連番で並ぶ。既定では 1 枚にまとめ、押せば元の 1 行ずつに戻せる。 -->
           <div class="library-grouping">
+            <button type="button" id="library-trash-toggle" aria-pressed="false">ごみ箱</button>
             <button type="button" id="library-group" aria-pressed="true">版をまとめる</button>
             <p id="library-group-hint" class="hint" role="status"></p>
           </div>
@@ -745,6 +746,8 @@
             <p id="library-thumbnails-hint" class="hint" role="status"></p>
             <button type="button" id="library-thumbnails-run">3D の絵を作る</button>
           </div>
+          <p id="library-trash-help" class="hint" hidden></p>
+          <button type="button" id="library-empty-trash" class="danger" hidden>ごみ箱を空にする</button>
           <div id="library-grid" class="grid"></div>
           <p id="library-empty" class="hint" hidden>まだ素材はありません。</p>
           <p id="library-note" class="hint" role="status" hidden></p>
@@ -755,6 +758,8 @@
               <button type="button" id="library-select-all">全部</button>
               <button type="button" id="library-select-none">解除</button>
               <button type="button" id="library-download" disabled>ダウンロード</button>
+              <button type="button" id="library-purge" class="danger" hidden disabled>完全削除</button>
+              <button type="button" id="library-restore" hidden disabled>復元</button>
               <button type="button" id="library-delete" class="danger" disabled>削除</button>
             </div>
           </div>

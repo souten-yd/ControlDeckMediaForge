@@ -1608,3 +1608,28 @@ viewer validation. No root-motion extraction or gameplay controller is implied.
 抽出は所有者がアクセスできるcurrent revisionのpacked base color/emission画像に限定。
 外部ファイル、複雑なshaderの見た目、normal/roughness等の物理mapを推測して取り出さない。
 既存の新規画像生成も維持し、参照編集が利用可能な場合に改善モードを提供する。
+## 2026-09-23 Library trash, revision removal and permanent deletion
+
+Users can remove an image, a 3D revision, a material image, or any selected combination
+regardless of historical lineage. Library Delete moves selected items to persistent Trash;
+Restore and Delete permanently are separate confirmed operations in Trash. A scene-owned
+GLB/Blender selection expands only to that revision's source/preview pair, never all versions
+or input images. Preview binds exact IDs, scene/revision labels and current state with a
+fingerprint. Changed scope, foreign scene owner, live Jobs and editing sessions are rejected.
+The latest remaining revision becomes current if a current revision is removed. Sequence
+numbers and immutable provenance are not rewritten. Removing all versions hides the scene.
+
+Trash retains bytes and can be restored. Permanent deletion removes stored content, sidecars
+and cached thumbnails, retaining only immutable metadata/provenance tombstones for lineage.
+Deleted files cannot be reopened or restored. Packed pixels already embedded in retained
+Blender/GLB files remain part of those independent artifacts. Existing validation requires
+external_images=0; deliberately purged historical dependencies are distinguished from missing
+or corrupt files in restore/recovery/material adoption. Backups snapshot only retained revisions
+with compact snapshot links and available dependencies; canonical revision records are unchanged.
+Permanent file cleanup has a durable intent and retry state, resumes on startup, and never
+reports a cleanup error as success. It does not erase external exports, backups or recovery copies.
+
+Use the existing Store plus an additive library_trash state table and private workspace
+transport. No second asset/Jobs foundation or public required-field change. Old releases do
+not understand purged tombstones: rollback after permanent deletion requires restoring a
+pre-deletion data backup; never roll back only the binary and claim deleted bytes are restored.

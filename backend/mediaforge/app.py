@@ -156,6 +156,7 @@ from .reference_intelligence import (
 )
 from .image_evaluation import measure_image_model
 from .store import AssetInUse, Store, utc_now
+from .library_trash import LibraryTrash
 from .thumbnails import ThumbnailError
 
 # workspace は base64 でしか運べない。これを超えるものは縮小版を返す。
@@ -548,6 +549,7 @@ def create_app(
                 initialization_canceled = True
         if initialization_canceled:
             raise asyncio.CancelledError
+        await asyncio.to_thread(LibraryTrash(store).cleanup)
         scene_workspace.initialize()
         material_previews.initialize()
         standalone_scene_backups.initialize()
@@ -2219,7 +2221,7 @@ def create_app(
         before = payload.get("before")
         if before is not None and not isinstance(before, str):
             raise HTTPException(status_code=422, detail={"code": "workspace_request_rejected"})
-        records = store.list_asset_records(limit, before)
+        records = store.list_asset_records(limit, before, trash=payload.get("trash") is True)
         return library.page(
             records,
             kind=kind,
@@ -4607,7 +4609,7 @@ def create_app(
                             raise ValueError("library cursor must be a string")
                         limit = library.clamp_limit(params.get("limit"))
                         result = library.page(
-                            store.list_asset_records(limit, before),
+                            store.list_asset_records(limit, before, trash=params.get("trash") is True),
                             kind=str(kind),
                             include_masks=params.get("include_masks") is True,
                             limit=limit,
@@ -4615,6 +4617,12 @@ def create_app(
                             # 既定で同梱する。呼び出し側が明示的に切れる。
                             thumbnail=None if params.get("thumbnails") is False else grid_thumbnail,
                             membership=store.scene_membership,
+                        )
+                    elif method in {"library.trash.preview", "library.trash.apply"}:
+                        operation = LibraryTrash(store)
+                        result = await asyncio.to_thread(
+                            operation.preview if method.endswith("preview") else operation.apply,
+                            scene_owner(identity), params,
                         )
                     elif method == "assets.delete":
                         # 複数選択できるので、1 件ずつの結果を返す。1 件の失敗で
@@ -5190,6 +5198,20 @@ def create_app(
             raise SceneError("scene_working_action_invalid", "working copy action is invalid")
         except SceneError as exc:
             raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
+
+    @app.post("/workspace-api/library/trash/{action}", include_in_schema=False)
+    async def standalone_library_trash(action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            reject_host_paths(payload)
+            if action not in {"preview", "apply"}:
+                raise SceneError("library_selection_invalid", "Unknown Library operation")
+            operation = LibraryTrash(store)
+            return await asyncio.to_thread(
+                operation.preview if action == "preview" else operation.apply,
+                preferences.STANDALONE_SUBJECT, payload,
+            )
+        except SceneError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
 
     @app.post("/workspace-api/assets/delete", include_in_schema=False)
     async def standalone_delete_assets(payload: dict[str, Any]) -> dict[str, Any]:

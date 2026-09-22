@@ -198,6 +198,19 @@ class SceneBackupCodec:
         owner = validate_scene_owner(owner)
         document = self.store.get_scene(scene_id, owner)
         revisions = self.store.list_scene_revisions(scene_id, owner)
+        # The backup is a new snapshot of retained revisions, not an export of
+        # removed files. Preserve source/provenance bytes; compact snapshot links.
+        compacted = []
+        for index, revision in enumerate(revisions, 1):
+            compacted.append(revision.model_copy(update={
+                "sequence": index,
+                "parent_revision_id": compacted[-1].id if compacted else None,
+                "dependencies": [dependency for dependency in revision.dependencies
+                                 if not self.store.asset_is_purged(dependency.asset_id, dependency.sha256)],
+            }))
+        revisions = compacted
+        document = document.model_copy(update={"revision_count": len(revisions),
+                                               "current_revision_id": revisions[-1].id})
         entries: list[SceneBackupEntry] = []
         sources: dict[str, Path] = {}
         dependency_revisions: dict[str, list[str]] = {}

@@ -1,5 +1,22 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 Libraryの個別削除とごみ箱（0.33.10準備）
+
+画像/材質画像と3Dの各版を独立してごみ箱へ移動・復元・完全削除できるようにした。
+選択した版のBlender/GLBだけを対として確認し、他の版/入力画像は保持する。
+「ごみ箱を空にする」は全ページを対象に確認し、ownerと稼働中保護を維持する。
+
+- 実Blender4.5.13で材質画像を完全削除後も残GLB hash/埋め込みRGBA不変、旧版復元、
+  working copy再保存、backupを確認。詳細はlibrary-trash-20260923.md。
+- source実HTTP/Chrome1280/320pxで取消/復元/完全削除/残版の青いcube描画、46px/overflow0。
+  320pxの版ボタン、全ごみ箱2件、通信失敗再試行、未選択入力保持、二重要求なしも確認。
+- `PYTEST_ADDOPTS='--basetemp=/data1tb/mf-trash-final' ./mf.sh test`:
+  **2428 passed /3 warnings /157.29秒**。node構文/git diff検査も通過。
+- purgeは実ファイル/sidecar/thumbnailを削除し、来歴DBの削除済み記録だけ保持する。
+  unlink失敗は永続pendingとして再試行し、成功扱いしない。旧binaryだけのrollbackは不可。
+- 正式利用者Assetに破壊的試験はしていない。根元checkoutは保持しHostコード変更なし。
+  通常PR/署名release/ローカル更新を継続する。実Host認証画面・実スマホ本体はNOT TESTED。
+
 ## 2026-09-22 0.33.9を公開・ローカル適用（PCビューア認証経路）
 
 PR627/sourcef1b4ae5から0.33.9を署名公開、通常Host更新・再起動でhealthy。
