@@ -1055,7 +1055,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .74rem; backgro
   color: #eef5f3;
   display: none;
 }
-#viewer[open] { display: grid; grid-template-rows: 1fr auto; }
+#viewer[open] { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; }
 /* Keep the full-viewport modal from overflowing a scrollbar-narrowed root. */
 html:has(#viewer[open]) { overflow: hidden; }
 #viewer::backdrop { background: #000; }
@@ -1669,3 +1669,19 @@ table.catalog .tag {
 .scene-texture-variants button { display:grid; gap:4px; min-width:0; padding:6px; }
 .scene-texture-variants button[aria-pressed="true"] { outline:2px solid var(--accent); outline-offset:1px; }
 .scene-texture-variants img { width:100%; aspect-ratio:1; object-fit:contain; border-radius:4px; }
+
+/* Source-scene navigation remains usable in the 320px embedded workspace. */
+.asset-scene-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+#detail-dialog #detail-body .asset-scene-actions button, #viewer #viewer-scene-links button { min-height: 44px; white-space: normal; overflow-wrap: anywhere; }
+.asset-scene-link { padding: 12px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 8px; }
+.asset-scene-link h3 { margin-top: 0; overflow-wrap: anywhere; }
+#viewer-scene-links { padding: 8px 12px; background: #101716; }
+#viewer-scene-links > .asset-scene-actions { width: 100%; }
+#viewer-scene-links button { flex: 1 1 120px; color: #eef5f3; }
+#scene-open-material, #scene-material-tools > summary, #scene-material-form select,
+#scene-material-tools #scene-material-form button { min-height: 44px; }
+@media (max-width: 767px) {
+  .asset-scene-link .asset-scene-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  #scene-detail .scene-detail-actions { width: 100%; }
+  #scene-detail .scene-detail-actions > button { flex: 1 1 100px; min-height: 44px; }
+}
