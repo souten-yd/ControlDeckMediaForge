@@ -63,3 +63,25 @@ sourceの`stale-target.mjs stale-target-before`で、制作元objectが現行版
 `target="" / disabled=true`で通過。320pxのLibrary編集導線も再確認し、詳細44px、
 viewer60pxの操作面と元Asset/元scene文脈の維持を確認した。
 0.33.3はprereleaseへ変更し通常更新の対象から外した。修正版0.33.4の ./mf.sh test: **2410 passed / 3 warnings / 276.06秒 / exit0**。
+
+## 0.33.4 installedでのタップ失敗と0.33.5補正
+
+通常更新後、scene_linksは正しく返ったが、新しい導線のtapが動かなかった。
+実Chromeのevent捕捉でtouchstart/endはbutton(x268,y855)、合成clickは
+viewer-stage(x44,y799)だった。差224/56pxはHost iframeの配置と一致し、
+マウスclickでは元sceneへ開けた。同じずれがLibraryへ戻るナビにも発生した。
+既存Blender用の単一タップ補正をworkspaceルートにも適用する。
+内側の処理がpreventDefaultしたイベントは重ねて発火しない。
+
+- installed画面へ同じ1行を一時適用した事前検証: 1280/320pxとも実tapで
+  画像→元scene/画像を選んだ材質→実Blender比較→破棄、制作元GLB→材質を通過。
+  元の宝箱scene/head/source不変、3種overflow0、page error0、opaque sandbox維持。
+  これは正式0.33.5 installed受入とは区別する。
+- Chromeの合成gesture検査: ネストした補正でも単一tapはclick1回。
+  drag/cancel/multi/disabled/canvas/selectでは追加clickなし。
+- 最終sourceの320px通常Library編集は元Assetとsource_scene_textureを保持。
+  要求捕捉のみで新規AI生成はしていない。frontend contract 160 passed / 2 warnings / 0.10秒。
+- 原本: maintenance/release-0.33.4-20260922/{touch-debug,scene-links-host-touch-patch}.json、
+  maintenance/release-0.33.5-20260922/{touch-guards.json,ui-edit.log,frontend-final.log}。
+
+0.33.5の全suite: `./mf.sh test` **2410 passed / 3 warnings / 277.88秒 / exit0**。
