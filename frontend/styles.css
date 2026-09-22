@@ -1691,3 +1691,21 @@ table.catalog .tag {
   #scene-detail .scene-detail-actions { width: 100%; }
   #scene-detail .scene-detail-actions > button { flex: 1 1 100px; min-height: 44px; }
 }
+
+/* Material images are scoped to durable scene lineage and shown visually. */
+.scene-material-image-picker { display: grid; gap: 10px; margin: 12px 0; min-width: 0; }
+#scene-material-tools #scene-material-image-cards { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+#scene-material-image-cards button { min-width: 0; overflow-wrap: anywhere; }
+#scene-material-image-cards span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+#scene-studio .scene-workflow { display: grid; gap: 10px; }
+#scene-studio #scene-workflow-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#scene-studio #scene-workflow-tabs button { min-height: 44px; white-space: normal; }
+#scene-studio #scene-workflow-tabs button[aria-pressed="true"] { border-color: var(--accent); background: var(--surface); }
+#scene-material-tools h3 { margin: 18px 0 8px; font-size: 1rem; }
+#scene-material-tools #scene-material-flow { margin-top: 14px; }
+#scene-studio [hidden] { display: none !important; }
+@media (max-width: 520px) {
+  #scene-studio #scene-workflow-tabs { grid-template-columns: 1fr; }
+  #scene-studio #scene-recommended-reset, #scene-studio #scene-advanced-open { min-height: 44px; }
+}

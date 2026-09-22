@@ -1,5 +1,32 @@
 # Media Forge implementation status
 
+## 2026-09-22 3Dの簡易操作と関連元画像の選択（0.33.7準備）
+
+材質の画像候補を保存済みscene来歴から抽出し、既定は元画像だけをサムネイル表示。
+派生候補・Library全体へ切替でき、同じ抽出画像は表示上まとめる。全体一覧は続きへ到達可能。
+private経路はscene ownerを照合し、Job履歴の保存件数に依存せず、画像bytesを読まない。
+
+- 3D入口を画像から作る/既存を編集/ファイル取込へ分離。材質は場所→画像→3Dで確認→採用。
+  簡易は採用済み既定を使い、材質channel/UV/wrap/候補数、生成/軽量化/rigの数値をDOMから外す。
+  詳細の変更を保持し、変更済み表示と明示的な推奨値復帰を追加。入力の出所を日英で説明。
+- source/実Blender、画像capabilityだけ明示fakeのChromeで1280/320px touch:
+  元画像2件/全画像6件、関連候補選択、比較/破棄、現行版表示、詳細値保持/復帰を確認。
+  不足入力の要求0、有効image.edit要求1（GPU前に捕捉）、二重送信防止、overflow0/page error0。
+  既存fixtureのheadは不変。新規AI推論・実スマホ本体の受入ではない。
+- 本番宝箱を新resolverでmetadata読取: 元画像4/派生3の7件、0.010463秒、truncated=false。
+  generation_inputを貼付中と誤表示せず、material.* / texture.*だけ使用中として扱う。
+- 全体テスト初回は2412 passed/1 timeout（既存Pixal admission待ち2秒）/371.49秒。
+  該当test単独は通過。次の全体では別の既存API待ち2秒がtimeout（2412 passed/409.71秒）、
+  これも単独は通過。NVMe上の長い試験pathではRFBのUnix socket長制限で20件失敗
+  （2393 passed/160.57秒）。短い専用path `/data1tb/mf-test-0922` で同じ
+  `./mf.sh test` が **2413 passed / 3 warnings / 155.79秒**。製品コード/テスト期限は変更なし。
+  最終frontend contract160件、node構文、ID重複なし、git diff確認も通過。
+- 証跡: maintenance/3d-simple-flow-20260922（ui-source.json、related-production.json、full*.log）。
+  PR622の生成ボタン修正と合わせて0.33.7を署名公開/通常更新し、installed受入を続ける。
+  実Host browser用の専用sessionが期限切れになり、利用者へ通常loginを依頼済み。
+  期限切れ専用sessionは正規logoutで失効。認証境界を迂回して受入済みとはしない。
+
+
 ## 2026-09-22 材質画像「新しく作る」の無反応表示を修正（0.33.7準備）
 
 実installed0.33.6で、対象が未選択だと画像生成ボタンdisabledのまま、過去Jobの

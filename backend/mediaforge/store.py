@@ -1162,6 +1162,138 @@ class Store:
                             pending.append((parent_id, depth + 1))
         return list(links.values())
 
+    def scene_material_image_records(
+        self, scene_id: str, owner: str,
+    ) -> tuple[list[tuple[Asset, Provenance, str]], bool]:
+        """Find source images and image descendants in durable scene lineage.
+
+        Read metadata only, independently of the recent Library/Jobs pages.
+        Bound direct matches and graph traversal to 1024 records each,
+        with eight graph edges in each direction;
+        report truncation instead of claiming a complete list.
+        """
+        validate_scene_owner(owner)
+        document = self.get_scene(scene_id, owner)
+        revisions = self.list_scene_revisions(scene_id, owner)
+        revision_ids = {revision.id for revision in revisions}
+        current = next(revision for revision in revisions if revision.id == document.current_revision_id)
+        used = {item.asset_id for item in current.dependencies if item.role.startswith(("texture.", "material."))}
+        roots = {value for revision in revisions for value in
+                 (revision.source_asset_id, revision.preview_asset_id,
+                  *(item.asset_id for item in revision.dependencies))}
+        records: dict[str, tuple[Asset, Provenance, str]] = {}
+        seen: set[str] = set()
+        truncated = False
+        maximum = 1024
+
+        def context(provenance: Provenance) -> tuple[bool, SceneTextureRequest | None]:
+            parameters = provenance.parameters
+            constraints = parameters.get("constraints")
+            raw = parameters.get("scene_texture") or (
+                (constraints.get("scene_texture") or constraints.get("source_scene_texture"))
+                if isinstance(constraints, dict) else None
+            )
+            if raw is None:
+                return False, None
+            try:
+                return True, SceneTextureRequest.model_validate(raw)
+            except ValidationError:
+                return True, None
+
+        def remember(row: Any, default_kind: str) -> tuple[Asset, Provenance]:
+            asset = Asset.model_validate_json(row["metadata_json"])
+            provenance = Provenance.model_validate_json(row["provenance_json"])
+            if asset.mime_type in {"image/png", "image/jpeg", "image/webp"} and provenance.parameters.get("purpose") != "edit_mask":
+                kind = "used" if asset.id in used else (
+                    "base" if provenance.operation == "scene.material.extract" else default_kind
+                )
+                records.setdefault(asset.id, (asset, provenance, kind))
+            return asset, provenance
+
+        with self._connect() as connection:
+            direct = connection.execute(
+                """SELECT metadata_json, provenance_json FROM assets WHERE
+                   json_extract(provenance_json, '$.parameters.scene_texture.scene_id') = ? OR
+                   json_extract(provenance_json, '$.parameters.constraints.scene_texture.scene_id') = ? OR
+                   json_extract(provenance_json, '$.parameters.constraints.source_scene_texture.scene_id') = ?
+                   ORDER BY created_at DESC, id DESC LIMIT ?""",
+                (scene_id, scene_id, scene_id, maximum + 1),
+            ).fetchall()
+            truncated = len(direct) > maximum
+            for row in direct[:maximum]:
+                provenance = Provenance.model_validate_json(row["provenance_json"])
+                _, selection = context(provenance)
+                if selection is None or selection.scene_id != scene_id or selection.source_revision_id not in revision_ids:
+                    continue
+                asset, _ = remember(row, "variant")
+                roots.add(asset.id)
+
+            frontier = sorted(roots)
+            for depth in range(9):
+                pending = [value for value in frontier if value not in seen]
+                if not pending:
+                    break
+                room = maximum - len(seen)
+                if len(pending) > room:
+                    truncated = True
+                pending = pending[:room]
+                parents: set[str] = set()
+                for start in range(0, len(pending), 64):
+                    batch = pending[start:start + 64]
+                    placeholders = ",".join("?" for _ in batch)
+                    rows = connection.execute(
+                        f"SELECT metadata_json, provenance_json FROM assets WHERE id IN ({placeholders})", batch,
+                    ).fetchall()
+                    for row in rows:
+                        asset, _ = remember(row, "base")
+                        parents.update(asset.parent_asset_ids)
+                seen.update(pending)
+                frontier = sorted(parents - seen)
+                if depth == 8 and frontier:
+                    truncated = True
+
+            # Only follow image children: another scene/model built from the
+            # same photograph must not pull its whole scene into this picker.
+            frontier = sorted(seen)
+            for depth in range(8):
+                children: set[str] = set()
+                for start in range(0, len(frontier), 64):
+                    batch = frontier[start:start + 64]
+                    placeholders = ",".join("?" for _ in batch)
+                    rows = connection.execute(
+                        f"""SELECT metadata_json, provenance_json FROM assets
+                            WHERE json_extract(metadata_json, '$.mime_type') IN ('image/png','image/jpeg','image/webp')
+                            AND EXISTS (SELECT 1 FROM json_each(assets.metadata_json, '$.parent_asset_ids')
+                                        WHERE value IN ({placeholders}))
+                            ORDER BY created_at DESC, id DESC LIMIT ?""",
+                        [*batch, maximum + 1],
+                    ).fetchall()
+                    if len(rows) > maximum:
+                        truncated = True
+                    for row in rows[:maximum]:
+                        asset = Asset.model_validate_json(row["metadata_json"])
+                        if asset.id in seen:
+                            continue
+                        if len(seen) >= maximum:
+                            truncated = True
+                            break
+                        seen.add(asset.id)
+                        provenance = Provenance.model_validate_json(row["provenance_json"])
+                        explicit, selection = context(provenance)
+                        if explicit and (selection is None or selection.scene_id != scene_id
+                                         or selection.source_revision_id not in revision_ids):
+                            continue
+                        remember(row, "variant")
+                        children.add(asset.id)
+                frontier = sorted(children)
+                if not frontier:
+                    break
+                if depth == 7:
+                    truncated = True
+        ordered = sorted(records.values(), key=lambda item: (item[0].created_at, item[0].id), reverse=True)
+        ordered.sort(key=lambda item: {"used": 0, "base": 1, "variant": 2}[item[2]])
+        return ordered[:256], truncated or len(ordered) > 256
+
     def asset_relations(
         self, asset_id: str, *, limit: int = 60, offset: int = 0, owner: str | None = None,
     ) -> dict[str, Any]:

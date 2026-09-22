@@ -4276,6 +4276,12 @@ def create_app(
                             scene_owner(identity), str(params.get("scene_id", "")),
                             str(params.get("recovery_working_id", "")),
                         )
+                    elif method == "scenes.material.images":
+                        if set(params) != {"scene_id"}:
+                            raise ValueError("scene material images accepts only scene_id")
+                        result = await scene_material_image_options(
+                            scene_owner(identity), str(params.get("scene_id", ""))
+                        )
                     elif method == "scenes.material.targets":
                         if set(params) != {"scene_id"}:
                             raise ValueError("scene material targets accepts only scene_id")
@@ -4878,6 +4884,21 @@ def create_app(
             return await scene_workspace.fork_recovery(
                 preferences.STANDALONE_SUBJECT, scene_id, payload["recovery_working_id"]
             )
+        except SceneError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
+
+    async def scene_material_image_options(owner: str, scene_id: str) -> dict[str, Any]:
+        records, truncated = await asyncio.to_thread(store.scene_material_image_records, scene_id, owner)
+        return {
+            "items": [{**library.entry(asset, provenance), "scene_image_kind": kind, "sha256": asset.sha256}
+                      for asset, provenance, kind in records],
+            "truncated": truncated,
+        }
+
+    @app.get("/workspace-api/scenes/{scene_id}/material-images", include_in_schema=False)
+    async def standalone_scene_material_images(scene_id: str) -> dict[str, Any]:
+        try:
+            return await scene_material_image_options(preferences.STANDALONE_SUBJECT, scene_id)
         except SceneError as exc:
             raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)}) from exc
 
