@@ -18,6 +18,8 @@ Host/frame横overflow0、console/page error0、failed request0。新規pipeline�
 ./mf.sh test:2379 passed / 3 warnings / 281.34秒 / exit0。
 全suite後、明示BLASで現行/候補を各3回再測定。全PNG一致、allocatorピーク一致。
 現行25.849/19.435/18.193秒、候補25.001/18.827/18.141秒。重み取得は並行中。
+raw VAE出力をclamp前に検査する追加後の最終テスト: focused19件、
+./mf.sh test:2380 passed / 3 warnings / 275.48秒 / exit0。
 詳細・残項目は[評価記録](implementation/qwen-image-21-evaluation-20260922.md)。
 
 ## 2026-09-22 Qwen-Image-2.1の評価準備（実推論は未実施）

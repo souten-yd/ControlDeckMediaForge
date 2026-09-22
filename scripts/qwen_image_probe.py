@@ -212,6 +212,21 @@ def probe(argv: list[str] | None = None) -> dict[str, Any]:
         result["cold_load_sec"] = time.perf_counter() - started
         result["quantized_module_counts"] = quantized
         result["vae_quantization"] = "none"
+        decoded_checks = 0
+        original_decode = pipeline.vae.decode
+
+        def finite_decode(*decode_args: Any, **decode_kwargs: Any) -> Any:
+            nonlocal decoded_checks
+            decoded = original_decode(*decode_args, **decode_kwargs)
+            sample = decoded[0] if isinstance(decoded, tuple) else decoded.sample
+            # The image processor clamps infinities into [0,1]. Check the raw
+            # decoder tensor before that normalization can hide them.
+            if not bool(torch.isfinite(sample).all().item()):
+                raise ProbeError("numerical_nonfinite", "raw VAE decoder output contains non-finite values")
+            decoded_checks += 1
+            return decoded
+
+        pipeline.vae.decode = finite_decode
         prompt = args.prompt
         if args.rgba:
             prompt = ("This is an RGBA image with transparency. " + prompt
@@ -229,6 +244,7 @@ def probe(argv: list[str] | None = None) -> dict[str, Any]:
         for index in range(args.repeat):
             generator = torch.Generator(device="cuda" if gpu else "cpu").manual_seed(args.seed)
             previous_checks = finite_checks
+            previous_decoded_checks = decoded_checks
             began = time.perf_counter()
             generated = pipeline(prompt=prompt, height=args.height, width=args.width,
                 num_inference_steps=args.steps, true_cfg_scale=1.0, generator=generator,
@@ -238,6 +254,8 @@ def probe(argv: list[str] | None = None) -> dict[str, Any]:
             result["per_image_seconds"].append(time.perf_counter() - began)
             if finite_checks == previous_checks:
                 raise ProbeError("output_invalid", "pipeline did not run the latent finite check")
+            if decoded_checks == previous_decoded_checks:
+                raise ProbeError("output_invalid", "pipeline did not run the raw decoder finite check")
             content, facts = png_bytes(generated.images[0])
             if (facts["width"], facts["height"]) != (args.width, args.height):
                 raise ProbeError("output_invalid", "generated dimensions differ from the request")
@@ -250,6 +268,7 @@ def probe(argv: list[str] | None = None) -> dict[str, Any]:
         result["has_alpha"] = all(row["has_alpha"] for row in result["output_facts"])
         result["finite_latents_and_decoder_output"] = True
         result["finite_latent_check_count"] = finite_checks
+        result["finite_decoded_tensor_check_count"] = decoded_checks
     except (Exception, KeyboardInterrupt) as exc:
         result["error"] = {"code": exc.code if isinstance(exc, ProbeError) else
                            "canceled" if isinstance(exc, KeyboardInterrupt) else

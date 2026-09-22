@@ -199,7 +199,9 @@ null. The optional output directory must be empty and receives PNG samples and
 versions, measurements and output hashes alongside the images.
 
 Each iteration resets the generator to the same seed. The tool checks finite
-latents and floating decoder output before converting to PNG. `has_alpha`
+latents, the raw VAE decoder tensor before the image processor can clamp
+infinities, and floating image output before converting to PNG. A generation
+which bypasses either callback is rejected. `has_alpha`
 requires both nonopaque pixels and retained visible pixels; opaque RGBA and
 fully transparent empty images do not pass. Hash agreement measures
 repeatability only. The result explicitly leaves numerical reference comparison
@@ -231,8 +233,31 @@ acceptance of Qwen or of every operation/dtype. Record the BLAS environment,
 recheck relevant CPU/GPU reference operations, and compare the same setting
 between baseline and candidate FLUX runs.
 
+## Existing background-removal baseline
+
+The candidate explicit-hipBLAS apple image was passed through the existing
+`worker_packs.image.matte` CPU provider, with the existing pinned
+`onnx-community/BiRefNet_lite-ONNX` revision
+`de15b22ba131738a16dff04aab8bdf8dc32e3ac1`. Its224,005,088-byte ONNX file matched
+SHA-256`5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333`.
+The CPU worker, constrained to four CPU equivalents, took13.514410seconds
+including session construction and inference; peak RSS7,827,091,456bytes.
+The existing core `apply_matte` then accepted a copy in0.212644seconds.
+The original source PNG remained byte-identical.
+
+The1024px RGBA result had798,167 fully transparent pixels,239,906 opaque pixels
+and10,503 partial-alpha pixels. Its SHA-256 is
+`d619fc09478972c64c2f28a877cfe3b749b7b47ac0f12b3b3cd3b703df62048b`.
+Visual inspection confirmed the apple and leaf remained; fine edge/fringe
+quality still needs comparison with Qwen. This is a concrete baseline, not
+evidence that Qwen's native alpha is better. All outputs remain private
+evaluation files with model/input/hash provenance; no Library asset was added.
+
 ## Executed checks and remaining gates
 
+- Final raw-decoder check: `./mf.sh test`,2380 passed,3 warnings,275.48seconds;
+  focused probe tests19 passed. A raw non-finite decoder tensor is rejected
+  even when the image processor would return finite clamped pixels.
 - After explicit BLAS selection was added: `./mf.sh test`,2379 passed,
   3 warnings,281.34seconds. Focused probe tests:18 passed; additional cases
   cover backend selection before loading, selection failure without fallback,

@@ -14,6 +14,8 @@
   明示cublas(hipBLAS)ではfp32/bf16の計10形状一致、fp16の400万行は不一致。
   probeに明示BLAS指定と記録を追加。focused18件、全suite2379件通過
   （3 warnings / 281.34秒）。
+- 後処理のclamp前にraw VAE出力を検査するよう補強。最終focused19件、
+  全suite2380 passed / 3 warnings / 275.48秒。Qwen実推論は重み取得待ち。
 - 明示BLASでも現行/候補各3回、全PNG一致・allocatorピーク一致。
   全suite終了後の再測定でも候補の速度悪化なし。詳細に秒数・測定条件を記録。
 - 次: 進行中の重み取得・全件digest検証後にbounded CPU/Qwen GPU評価。

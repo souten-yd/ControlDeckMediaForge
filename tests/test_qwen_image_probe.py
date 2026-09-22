@@ -38,7 +38,8 @@ def fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
         (directory / "config.json").write_text("{}")
         (directory / "model.safetensors").write_bytes(b"fixture")
     state = SimpleNamespace(root=root, calls=[], events=[], varying=False, alpha=255,
-                            nan=False, latent_finite=True, load_failure=False, gpu=False, blas="fixture-auto")
+                            nan=False, latent_finite=True, decoded_finite=True,
+                            load_failure=False, gpu=False, blas="fixture-auto")
 
     def preferred_blas_library(value: str | None = None) -> str:
         if value is not None:
@@ -73,6 +74,9 @@ def fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
             return self.values.tobytes()
 
     class Pipeline:
+        def __init__(self) -> None:
+            self.vae = SimpleNamespace(decode=lambda *args, **kwargs: (SimpleNamespace(decoded=True),))
+
         @classmethod
         def from_pretrained(cls, path: Path, **kwargs: Any) -> Pipeline:
             assert path == root
@@ -96,6 +100,7 @@ def fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
             state.calls.append(kwargs)
             for index in range(kwargs["num_inference_steps"]):
                 kwargs["callback_on_step_end"](self, index, index, {"latents": object()})
+            self.vae.decode(None, return_dict=False)
             color = len(state.calls) / 10 if state.varying else .5
             return SimpleNamespace(images=[Frame(kwargs["width"], kwargs["height"], color)])
 
@@ -108,7 +113,8 @@ def fake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
 
     torch = SimpleNamespace(bfloat16="bf16", float16="fp16", Generator=Generator, version=SimpleNamespace(hip="fixture"),
         backends=SimpleNamespace(cuda=SimpleNamespace(preferred_blas_library=preferred_blas_library)),
-        isfinite=lambda _: SimpleNamespace(all=lambda: SimpleNamespace(item=lambda: state.latent_finite)),
+        isfinite=lambda value: SimpleNamespace(all=lambda: SimpleNamespace(
+            item=lambda: state.decoded_finite if getattr(value, "decoded", False) else state.latent_finite)),
         cuda=SimpleNamespace(is_available=lambda: state.gpu, get_device_name=lambda _: "fixture GPU", reset_peak_memory_stats=lambda: None,
             synchronize=lambda: None, max_memory_allocated=lambda: 1234, max_memory_reserved=lambda: 2345))
     monkeypatch.setitem(sys.modules, "torch", torch)
@@ -132,6 +138,7 @@ def test_repeated_seed_is_preserved_and_different_outputs_fail_repeatability(fak
     assert len(set(result["output_sha256"])) == 3
     assert [row["generator"].seed for row in fake.calls] == [42, 42, 42]
     assert result["finite_latent_check_count"] == 6
+    assert result["finite_decoded_tensor_check_count"] == 3
 
 
 @pytest.mark.parametrize("alpha,expected", [(255, False), (0, False), (128, True)])
@@ -210,6 +217,14 @@ def test_nonfinite_decoder_is_not_hidden_by_image_conversion(fake: SimpleNamespa
     fake.nan = True
     result = probe.probe(arguments())
     assert result["error"]["code"] == "numerical_nonfinite"
+    assert result["output_sha256"] == []
+
+
+def test_nonfinite_raw_decoder_is_rejected_before_finite_clamped_pixels(fake: SimpleNamespace) -> None:
+    fake.decoded_finite = False
+    result = probe.probe(arguments())
+    assert result["error"]["code"] == "numerical_nonfinite"
+    assert "raw VAE" in result["error"]["message"]
     assert result["output_sha256"] == []
 
 
