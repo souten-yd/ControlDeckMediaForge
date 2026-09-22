@@ -1,5 +1,15 @@
 # Media Forge Workspace UX — 設計の正
 
+## 3Dビューアの埋め込み画面での読み込み（2026-09-22）
+
+遅延ロードする3Dビューアbundleは、Hostが渡したBridge sessionを既存の
+`X-Control-Deck-Bridge-Session` headerへ載せて取得する。frame cookieの保存可否に依存せず、
+固定された同一Add-onのURLだけを取得し、redirectを拒否する。nonceをURLやログへ出さない。
+取得した単一bundleはBlob moduleとして評価し、読み込み後にURLを解放する。
+認証/通信の読み込み失敗は3Dファイル破損と区別し、画面を開き直す案内を表示する。
+認証方式・Hostコード・GLB/WebP検証を緩めない。standaloneは従来の同一origin moduleを使う。
+
+
 ## Web Blenderの終了導線（2026-09-22）
 
 Web Blenderの稼働中は全画面共通の上部に対象名と「Web Blenderを終了」を表示する。

@@ -4296,6 +4296,14 @@ async function finishJob(job) {
 /* 失敗は「何が起きたか」と「次に何ができるか」を必ず対にする。
    exit は job があるときだけ意味を持つものと、いつでも押せるものがある。 */
 const FAILURES = {
+  model_viewer_module_auth: {
+    text: "ビューアの接続を認証できませんでした。MediaForgeを開き直してください。",
+    exit: "ライブラリへ戻る", action: "open_library",
+  },
+  model_viewer_module_load: {
+    text: "3Dビューアを読み込めませんでした。接続を確認し、MediaForgeを開き直してください。",
+    exit: "ライブラリへ戻る", action: "open_library",
+  },
   invalid_edit_mask: {
     text: "変えたい場所が指定されていません。",
     exit: "もう一度やる", action: "rerun",
@@ -4414,6 +4422,10 @@ async function rerun(job, {withoutReview = false} = {}) {
 
 /* 失敗行の出口。押した先で必ず次の操作ができる状態にする。 */
 function runExit(action, job) {
+  if (action === "open_library") {
+    byId("viewer").close();
+    return activate("library");
+  }
   if (action === "rerun") return void rerun(job);
   if (action === "rerun_without_review") return void rerun(job, {withoutReview: true});
   if (action === "open_settings") return activate("settings");
@@ -8600,26 +8612,55 @@ const MODEL_VIEWER_BUNDLE = "3a86ca91deb71ba0";
 
 function loadModelViewer() {
   if (modelViewerModulePromise) return modelViewerModulePromise;
-  modelViewerModulePromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.type = "module";
-    script.crossOrigin = "use-credentials";
-    script.src = `${workspaceFrameRoot()}/static/three-viewer.js?v=${MODEL_VIEWER_BUNDLE}`;
-    script.onload = () => {
-      script.remove();
-      const createModelViewer = globalThis.__mediaForgeCreateModelViewer;
-      if (typeof createModelViewer === "function") resolve({createModelViewer});
-      else reject(new Error("3D viewer module did not register"));
-    };
-    script.onerror = () => { script.remove(); reject(new Error("3D viewer module could not be loaded")); };
-    document.head.append(script);
-  }).catch((error) => { modelViewerModulePromise = null; throw error; });
+  modelViewerModulePromise = (async () => {
+    const source = `${workspaceFrameRoot()}/static/three-viewer.js?v=${MODEL_VIEWER_BUNDLE}`;
+    let objectUrl = "";
+    try {
+      if (window.parent !== window) {
+        // Opaque frames may not store cookies (HTTP LAN / browser privacy settings).
+        // Use the same scoped session as the workspace, never a URL credential.
+        if (!state.nonce) throw {code: "model_viewer_module_auth"};
+        const response = await fetch(source, {
+          headers: {"X-Control-Deck-Bridge-Session": state.nonce},
+          credentials: "omit", redirect: "error",
+        });
+        if (!response.ok) throw {code: [401, 403].includes(response.status)
+          ? "model_viewer_module_auth" : "model_viewer_module_load"};
+        const blob = await response.blob();
+        if (!/javascript/i.test(blob.type) || blob.size > 2 * 1024 * 1024) {
+          throw {code: "model_viewer_module_load"};
+        }
+        objectUrl = URL.createObjectURL(blob);
+      }
+      return await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.type = "module";
+        script.crossOrigin = "use-credentials";
+        script.src = objectUrl || source;
+        script.onload = () => {
+          script.remove();
+          const createModelViewer = globalThis.__mediaForgeCreateModelViewer;
+          if (typeof createModelViewer === "function") resolve({createModelViewer});
+          else reject({code: "model_viewer_module_load"});
+        };
+        script.onerror = () => { script.remove(); reject({code: "model_viewer_module_load"}); };
+        document.head.append(script);
+      });
+    } catch (error) {
+      throw {code: error?.code === "model_viewer_module_auth"
+        ? "model_viewer_module_auth" : "model_viewer_module_load"};
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+  })().catch((error) => { modelViewerModulePromise = null; throw error; });
   return modelViewerModulePromise;
 }
 
 const VIEWER_3D_TEXT = {
   ja: {
     loading: "3Dモデルを読み込んでいます…", failed: "3Dモデルを表示できません",
+    moduleAuth: "ビューアの接続を認証できませんでした。MediaForgeを開き直してください。",
+    moduleLoad: "3Dビューアを読み込めませんでした。接続を確認し、MediaForgeを開き直してください。",
     canvas: "3Dモデル", toolbar: "3D表示", previous: "前の素材", next: "次の素材",
     zoomIn: "拡大", zoomOut: "縮小", rotate: (axis, direction) => `${axis}軸${direction > 0 ? "正" : "負"}方向へ15度回転`,
     fit: "全体", shading: {material: "材質", neutral: "形状", wireframe: "ワイヤー"},
@@ -8632,6 +8673,8 @@ const VIEWER_3D_TEXT = {
   },
   en: {
     loading: "Loading 3D model…", failed: "The 3D model cannot be displayed",
+    moduleAuth: "Viewer authentication failed. Reopen MediaForge to reconnect.",
+    moduleLoad: "Could not load the 3D viewer. Check the connection and reopen MediaForge.",
     canvas: "3D model", toolbar: "3D view controls", previous: "Previous asset", next: "Next asset",
     zoomIn: "Zoom in", zoomOut: "Zoom out", rotate: (axis, direction) => `Rotate ${axis} ${direction > 0 ? "+" : "−"}15 degrees`,
     fit: "Fit", shading: {material: "Material", neutral: "Shape", wireframe: "Wireframe"},
@@ -8826,7 +8869,8 @@ async function openModelViewer(assetId, item, token) {
   byId("viewer-3d-tools").hidden = true;
   let opened;
   try {
-    const modulePromise = loadModelViewer();
+    const module = await loadModelViewer();
+    if (token !== viewer.token) return;
     opened = await call("assets.model.open", {asset_id: assetId});
     viewer.modelHandle = opened.handle;
     const content = await streamModelBytes(opened, {
@@ -8837,8 +8881,6 @@ async function openModelViewer(assetId, item, token) {
     });
     await call("assets.model.close", {handle: opened.handle});
     viewer.modelHandle = "";
-    if (token !== viewer.token) return;
-    const module = await modulePromise;
     if (token !== viewer.token) return;
     const instance = await module.createModelViewer({
       canvas: byId("viewer-3d-canvas"),
@@ -8880,15 +8922,18 @@ async function openModelViewer(assetId, item, token) {
     if (item?.preview_kind === "model_3d" && !item?.thumbnail) {
       void saveModelThumbnail(assetId, instance, token);
     }
-  } catch {
+  } catch (error) {
     if (opened?.handle && viewer.modelHandle === opened.handle) {
       await call("assets.model.close", {handle: opened.handle}).catch(() => {});
       viewer.modelHandle = "";
     }
     if (token !== viewer.token) return;
     loading.hidden = false;
-    loading.textContent = viewer3dText().failed;
-    byId("viewer-caption").textContent = viewer3dText().failed;
+    const text = viewer3dText();
+    const message = error?.code === "model_viewer_module_auth" ? text.moduleAuth
+      : error?.code === "model_viewer_module_load" ? text.moduleLoad : text.failed;
+    loading.textContent = message;
+    byId("viewer-caption").textContent = message;
     if (item?.preview_kind === "project_3d") {
       try {
         const thumbnail = await call("assets.thumbnail", {asset_id: assetId, max_side: 512});

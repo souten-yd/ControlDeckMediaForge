@@ -347,6 +347,14 @@ ControlDeck is the identity authority when Media Forge is used as an add-on.
 
 Media Forge must not receive the raw ControlDeck session cookie.
 
+For a lazy-loaded, self-contained browser module in an opaque frame, use the existing
+Host `X-Control-Deck-Bridge-Session` request header with the current Bridge nonce.
+Fetch only the fixed Add-on-scoped URL, omit cookies and reject redirects; never put
+the nonce in a URL or log. Execute the received JavaScript as a temporary Blob module
+and revoke its URL after loading. This uses the existing Host proxy authentication,
+including cookie-less LAN clients, and adds no Host permission or new credential.
+
+
 Use a short-lived audience-bound add-on credential or host-proxied request model with properties such as:
 
 ```text

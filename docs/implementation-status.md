@@ -1,5 +1,19 @@
 # Media Forge implementation status
 
+## 2026-09-22 PCビューアのCookieなし認証読み込み（0.33.9準備）
+
+Hostログ13:29:17 UTCのthree-viewer.js GET401を確認。GLB4件は検証200、実PC Chrome/AMD GPUでは
+3件描画できたため、moduleの認証取得を修正した。実利用者のブラウザ設定は未確定。
+
+- opaque frameでは既存Bridge nonce headerで固定URLを取得、Cookie省略/redirect拒否。
+  一時Blob moduleを解放し、認証/通信エラーを日英表示。GLB転送前にmoduleを待つ。
+- 実Chromeのopaque試験とHTTP LAN/isSecureContext=falseで、Cookieなし旧版401→修正版200を再現。
+  1440/320pxで描画、親DOM拒否。fake認証fixtureであり実Host sessionの偽装/迂回ではない。
+  401/302拒否と再試行、URLへのnonceなし、source UIで失敗時GLB転送0も確認。
+- ./mf.sh test:2414 passed /3 warnings /161.33秒。詳細はpc-viewer-bridge-20260922.md。
+  Host変更なし。通常merge/release/ローカル更新を継続。認証付きHost最終確認は通常login待ち。
+
+
 ## 2026-09-22 0.33.8の署名公開・ローカル更新と終了ボタン
 
 PR625/source2a737f8から0.33.8を署名公開、通常Host更新・再起動でhealthy。
