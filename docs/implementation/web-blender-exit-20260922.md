@@ -56,3 +56,6 @@ Hostログ13:29:17 UTCにはthree-viewer.jsの401があった。Cookieなしのm
 専用operator session.jsonは不在。認証付きinstalled Host browserは再ログイン待ちで
 NOT TESTED。認証を偽装せず、確認済みのsource実Blenderと区別する。
 実スマホ本体・新規画像推論・fresh GPU構築・rollbackは今回NOT TESTED。
+
+0.33.9でPC viewerの認証取得を修正して通常更新済み。終了ボタンは維持。
+[0.33.9の実機記録](pc-viewer-bridge-20260922.md)を参照。

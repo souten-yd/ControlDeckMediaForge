@@ -48,7 +48,24 @@ standaloneは従来の同一origin moduleを使う。0.33.8のWeb Blender終了�
 
 ## 未実施と反映
 
-0.33.9を通常merge/署名公開/Host更新して記録を追記する。
+PR627を通常mergeし、source `f1b4ae5ac1feeae0e4d74a7d59b83a53dd2f8743` から署名公開。
+release: https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/0.33.9 。
+38,037,460B、SHA256 `773c0616c66f3694b69eb1b3fb774b60dbfababcf72385bb4f417279ad6914aa`。
+公開物の再取得後も署名/改ざん拒否、archive6/embedded241、frontend/対象worker bytes照合通過。
+fresh managed dirsは0.867048秒で起動、runtime未導入のsetup_required/3D unavailableを維持。
+
+active Job/session0で `deck.sh feature update media-forge` を実行し、currentはversions/0.33.9。
+更新後PID3865779/healthy、1543 Asset metadata保持、代表3 Asset HTTP SHA/served frontend一致、
+3D capability不変を確認。通常再起動後PID3866679/healthy（0.822935秒）で同じ照合を通過。
+再起動後のinstalled standalone/通常Chrome/実AMD GPUで上記3 GLBが1.224 /3.475 /0.469秒で描画、
+page/console error0。active Job/session0、Web Blender process0、元working copyのrecovery保持。
+
+証跡: maintenance/release-0.33.9-20260922 のverification/installed/restarted-check、
+headed-probe、final-core-state。0.33.8/0.33.9の検証済み重複tar4個（152,147,762B）と
+今回のpytest専用一時directoryは回収。署名manifest/checksum/verificationと公開release、
+正式installed/rollback版は保持し、利用者素材は削除しない。
+
+配布とローカル適用は完了。
 専用operator sessionが不在で、利用者へ通常loginを依頼済み。
 認証付きinstalled Host browser、利用者が報告した当該PC/browserでの再確認はNOT TESTED。
 実スマホ本体、新規AI推論、fresh GPU構築、rollbackも今回NOT TESTED。
