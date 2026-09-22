@@ -1,5 +1,19 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 0.33.8の署名公開・ローカル更新と終了ボタン
+
+PR625/source2a737f8から0.33.8を署名公開、通常Host更新・再起動でhealthy。
+Web Blenderの全画面共通の終了ボタンを簡易/詳細/モバイルへ反映した。
+
+- 既存3D生成Jobのsucceededを待ち、active Job/session0で更新。1543 Asset metadata保持、
+  代表3 Asset HTTP SHA、served frontend、3D capabilityの不変を確認。
+- current versions/0.33.8、再起動後PID3844880/healthy（0.828258秒）。公開物再取得の署名/bytes確認通過。
+- source実Blenderの保存/破棄終了、installed単体Chrome1280/320pxの応答制御UI確認は通過。
+  認証付きHost browserは専用login不在のためNOT TESTED。詳細はweb-blender-exit-20260922.md。
+- 別件PCの3D表示エラーはHostのthree-viewer.js GET401を確認。通常PC Chrome/AMD GPUでは3件描画。
+  Cookieなしmodule読み込みを既存Bridge header経路へ変える次sliceで調査/修正を継続する。
+
+
 ## 2026-09-22 Web BlenderをWeb画面から終了（0.33.8準備）
 
 Web Blender稼働中は全画面共通の上部に対象名と「Web Blenderを終了」を表示。
