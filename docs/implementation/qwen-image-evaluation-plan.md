@@ -1,5 +1,7 @@
 # Qwen-Image-2.1 導入評価計画
 
+2026-09-22実行状態: [評価準備の実測と未実施項目](qwen-image-21-evaluation-20260922.md)。
+
 Date: 2026-09-22
 
 ## 0. 同定（済み）
@@ -78,6 +80,8 @@ MediaForge は `asset_brief.alpha_intent` を既に持っている。**透過を
 [公式要件](https://github.com/QwenLM/Qwen-Image-2.1#requirements)は
 transformers>=5.17も指定している。現在の5.15.1からの更新も回帰対象に含む。
 対応するdiffusersの不変commitとtransformersの版を固定した候補環境で先に測る。
+今回固定した候補はtokenizers 0.23.1とhuggingface-hub 1.32.0も使用する。
+既存hub 1.28.0ではdiffusersのimportに失敗した（詳細は上記の実行記録）。
 
 **この runtime は採用済みの FLUX.2-klein も使っている。** 版を上げると
 既定モデルの経路に影響する。Qwen のためだけに上げて既定を壊すのは割に合わない。

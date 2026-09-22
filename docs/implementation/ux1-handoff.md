@@ -1,5 +1,19 @@
 # 実装引き継ぎ状態
 
+## 2026-09-22 Qwen-Image-2.1の評価準備（実推論は未実施）
+
+0.32.2の公開・通常適用後に開始。評価用probe、固定依存、fakeテストを追加。
+候補diffusers7263f331/transformers5.17.0/tokenizers0.23.1/hub1.32.0でQwen21・FLUX.2
+class importとpip check通過。既存Torch ROCmを保持し、稼働中の共有runtime版は不変。
+./mf.sh test:2376 passed / 3 warnings / 267.19秒。probe15件も最終再確認pass。
+実候補Pythonでweights_missing / gpu_unavailableを各exit0・JSON1件として確認した。
+これは失敗時の動作確認であり、生成性能・画質・VRAMの受入ではない。
+
+利用者へ固定revisionのResearch License同意と通常Host login更新を依頼済み、返答待ち。
+重み取得なし、実GPU推論なし、製品adapter/モデル台帳/既定設定の変更なし。
+次はHost leaseを通すFLUX.2現行/候補の比較、その後に同意済みQwenの実測。
+詳細: [Qwen評価準備と残ゲート](qwen-image-21-evaluation-20260922.md)。
+
 ## 2026-09-22 正式0.32.2を公開・通常適用・再起動確認
 
 PR608/609 merge済み。公開source c9d25e9、署名bundle37,997,030 B、

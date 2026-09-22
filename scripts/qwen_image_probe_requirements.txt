@@ -1,0 +1,8 @@
+# Evaluation overlay for an existing isolated ROCm image-worker environment.
+# Install only in the candidate environment with --no-deps. Never install in core
+# or update the shared production runtime before real FLUX.2 regression passes.
+diffusers @ https://codeload.github.com/huggingface/diffusers/tar.gz/7263f3317f6b392d62f41e9d75ed9d7e21fc5a5c
+transformers==5.17.0
+tokenizers==0.23.1
+huggingface-hub==1.32.0
+optimum-quanto==0.2.7

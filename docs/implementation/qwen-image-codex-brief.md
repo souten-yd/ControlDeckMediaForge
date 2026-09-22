@@ -1,5 +1,7 @@
 # Codex への実装指示（Qwen-Image-2.1 評価）
 
+2026-09-22実行状態: [評価準備の実測と未実施項目](qwen-image-21-evaluation-20260922.md)。
+
 対象: MediaForge（`worker_packs/image`, `scripts`）
 背景: `docs/implementation/qwen-image-evaluation-plan.md`
 範囲: **計画の段 2〜6 を回すための道具だけ。採用の判断はしない。**
