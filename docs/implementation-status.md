@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-23 商店街の実MCP納品・Hostブラウザ受入
+
+実OpenCode/sculptor/Qwen/MCP Job781d15da871fがsucceeded。NPC2体を各1回rigし、
+通常grant/packで納品。元画像/元revision、旧failed pipelineを保持、DB/納品/manifest SHA一致。
+全7GLB 24,931,924B、8店舗/主人公/6NPC。通常Host内のGLB画像がCSPで灰色になる不具合を
+project側の画像ローダーと欠損検査で修正。Host/model変更・追加DL0。
+全15配置のテクスチャ、再読込、PC移動、320/390px同時タッチ、店舗衝突、足底接地、
+画像欠損時の再試行を実確認。PC内蔵Radeon/Chromeで57.9583fps（5.0036秒）。物理スマホはNOT TESTED。
+成果物CodeDEV/MF3DS-ShoppingStreet-20260923、local commit91b37c3。詳細[納品・実表示](implementation/rig-surface-20260923.md)。
+複数面生成のUI/採用、残るMCPエラー表現の改善は未完了。既存Pixal Vulkan/共通重みを再利用し、
+追加モデル取得をしない。全体goalはactiveのまま。
+
 ## 2026-09-23 0.33.16を通常公開・ローカル更新
 
 PR642/1e5fc51を固定して署名公開・再取得検証・通常feature update。

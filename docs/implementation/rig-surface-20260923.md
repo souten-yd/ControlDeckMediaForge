@@ -1,6 +1,6 @@
 # 生成人物の軽量化停止と腕を下ろした姿勢の自動rig
 
-Status: 0.33.16 merged/released/installed。実OpenCode/sculptor/MCPでNPC2体のrig成功。納品・商店街全体は確認中。
+Status: 0.33.16 merged/released/installed。実MCPのNPC納品、通常Hostの商店街表示/操作を確認済み。物理スマホはNOT TESTED。
 
 実OpenCode/Qwen/MCPで生成済みの歩行者2体を、元の画像/3Dを再生成せず診断した。
 元revision/Assetを変更せず、feature-data/media-forge/maintenance/shopping-street-20260923の
@@ -99,3 +99,45 @@ coral 7,261,520B/SHA7391b3924dfe7e0ea25ae8c39a3e1614e738a5073daa16cc06f5f45eaa4c
 blue 7,147,348B/SHAc110ffa2f46b8afc50efd3b600122e8e7bacc24e835fed35a52d48a366a7de72。
 旧failed pipelineは再試行・書換していない。agentが書いたsubmitted_atは実Job時刻と
 一致しないため時間計測には使用しない。通常grantでの納品と最終Web受入は確認中。
+
+## 実MCP納品と通常Hostの最終受入
+
+Host OpenCode Job781d15da871fはsucceeded。sculptorから各NPCのscene.rigを1回、
+buildからmedia.inspect/project_output_grant/media.packを実行した。
+pack Host Joba5ee99b930f8、両receipt committed。独立read-only検査で
+DB原本/納品GLB/manifest SHA・サイズ一致、元revisionを親とする第2版、元画像依存、
+12joints/1skin/1clip/2texturesを確認。GLB三角形数はcoral85647、blue85343。
+agentの推定submitted_atは除き、OpenCodeの記録したtool時刻と実revision公開時刻を区別した。
+
+4店舗の各30,000trianglesと、既存1024主人公を含め7GLB合計24,931,924B。
+元GLB/画像/ZIP/来歴も保持。商店街projectのlocal commit91b37c3へコード・素材・証跡を保存。
+ControlDeck → Project Lab → MF3DS-ShoppingStreet-20260923 → index.htmlから開く。
+
+通常Hostで最初は形だけ描画され、15配置すべてのbase-color画像が未ロードだった。
+Three r185のImageBitmapLoaderがGLB内のblob画像をfetchし、Hostのconnect-srcが拒否。
+page error0やGLB成功だけでは検出できなかった。CSP違反consoleと画像数0を実測。
+project側のGLTFParser画像loaderをTextureLoaderへ替え、既存img-srcの許可経路を使う。
+さらに生成済み各meshの実画像dimensionsを検査し、未ロードなら成功とせず再試行を表示。
+Host CSP/権限/認証を変更しない。GLB/モデル/テクスチャの再生成・追加取得も0。
+
+修正後、通常Host opaque iframe（origin null / allow-same-originなし）で15配置全ての画像を確認。
+全7モデル/8店舗/6NPC、PCキーボード移動、接地minY約.062m（路面.06m）、help、再読込成功。
+390/320pxでiframeの実幅373/303px、overflow0、同時タッチ移動と視点変更を実測。
+mobileの短い操作案内を中央へ寄せ、Hostの左下操作ボタンと重ならないようにした。
+実機はPC内蔵Radeon Graphics/Chrome、5.0036秒290frames、57.958270fps、p95 18ms。
+物理電話のGPU/速度/タッチ品質はNOT TESTED。scene内797755triangles、代表可視frame737743/37calls。
+初期人物20k目標は未達で、品質を保つため約85kを残した。この負荷を全電話で問題なしとはしない。
+
+独立実Chromeでは本屋503を注入して失敗表示→retry→全モデル復帰、距離連動歩行/停止fade、
+blurで入力解除、320px同時タッチ、WebGL context loss表示/復帰を再確認。
+実花屋のminX4.515322mに対し、主人公は4.015322mで継続右入力でも停止して建物へ入らない。
+別の画像禁止CSPでは7モデル全てを失敗として表示し、灰色のまま開始しないことを確認。
+
+証跡はproject/evidenceのnpc-delivery-independent、shop-packs-independent、installed-npc-*、
+web-actual-mechanics、host-street-acceptance、host-street-textures-before、texture-error-acceptance JSON/PNG。
+初期Host操作harnessの2失敗はcanvas上の視点領域と開いたproject menuをクリック対象にしたため。
+通常UIでmenuを閉じて操作し、検査を通すためのforce clickは使っていない。
+
+MediaForge sourceは2496tests通過からproduct変更なし。今回の変更はproject HTML/記録のみ。
+残る課題: asset.packのoutput.format省略時エラー案内、Host側MCP失敗時の受理済みJob ID伝達、
+複数面入力の比較・製品UI・採用。既存Pixal Vulkanと共通重みを再利用し、追加モデル取得はしない。
