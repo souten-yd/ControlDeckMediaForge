@@ -1,6 +1,6 @@
 # 人物rigの小片に残った重み欠損
 
-Status: source実機受入済み / 0.33.12 release準備。0.33.11で脚交差を直した512版とは別の1024候補の不具合。
+Status: 0.33.12 merged/released/installed / 実MCP再実行待ち。0.33.11で脚交差を直した512版とは別の1024候補の不具合。
 
 実OpenCode/MCPのJob_dcd564c62d2d453f8de8dd8db242ce32はrigでfailed。
 同じ元モデル/recipeをBlender4.5.13で診断し、人物12bonesの検出には成功、
@@ -36,3 +36,16 @@ trusted workerのscene_recipe.py、scene_document.pyを順に実行した。
 NOT TESTED: 修正版のsigned installed/MCP再実行、物理スマホ。
 pipeline.statusには失敗段retryがまだないため、元pipeline再開は別の修正が必要。
 商店街HTMLの完成を意味しない。
+
+## 0.33.12公開・ローカル適用
+
+PR634 / source94cadf1a97c049303336d64756e12ca7475a818bを署名公開。
+公開物再取得のsignature/改ざん拒否/6tar entries/243 embedded entriesと
+worker source一致、秘密値・重み・venv混入なしを検証。bundle38,056,339B、
+SHA256 d380909af48595bc0f1a23e96c58f37a17a14712a5ea0f8318381a191a4234e5。
+新規dataでpackage起動.865896秒、Blenderなしをunavailableと正しく表示。
+
+active Job/session0でDB snapshot保持後、通常deck.sh feature update media-forgeと再起動。
+current versions/0.33.12、実PID78171、healthy .828300秒。更新前1567Asset metadata保持、
+代表3 AssetのHTTP SHA、served frontend一致、image-to-3D capability不変。
+証跡release-0.33.12-20260923。元pipeline再開はretry契約追加後に実MCPで確認する。
