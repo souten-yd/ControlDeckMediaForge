@@ -1,6 +1,6 @@
 # 生成人物の軽量化停止と腕を下ろした姿勢の自動rig
 
-Status: source実機受入済み。0.33.16のsigned installed/MCP再実行と商店街全体はNOT TESTED。
+Status: 0.33.16 merged/released/installed。実OpenCode/sculptor/MCPでNPC2体のrig成功。納品・商店街全体は確認中。
 
 実OpenCode/Qwen/MCPで生成済みの歩行者2体を、元の画像/3Dを再生成せず診断した。
 元revision/Assetを変更せず、feature-data/media-forge/maintenance/shopping-street-20260923の
@@ -62,3 +62,40 @@ NOT TESTED: signed installed/MCP、正常Hostの商店街全7モデル、物理�
 新回帰は実面の断面/重複面/移動・拡大/不正・作業量上限、近接腕、疎な脚帯、
 既存成功時の非再測定、縮約停止の拒否と固定案内。既存4/6脚・欠損腕の判定を維持。
 GLBは青7,147,496B/85343 triangles、赤7,261,680B/85647 triangles（書出し後）。
+
+## 0.33.16の公開・ローカル更新
+
+PR642、source bb7dad8ce2cf2942222e96a8e35a763290e791ac、merge
+1e5fc5197da72633f5b364bb57869609c2de4b72を固定して既存鍵で署名公開。
+38,063,409B、SHA256 52b1fcd45850591c410a28a25c98d7cd24b58c7f9501aa3c0b86113c962c4149。
+公開物再取得、signature/改ざん拒否、6tar/244embedded entry、worker source一致を確認。
+新規dataのpackage起動.869142秒、Blenderなしをunavailableと正しく表示。
+
+active MF Job/Blender session0でDB snapshot後、通常feature updateとservice restart。
+current versions/0.33.16、PID217691、healthy .824489秒。更新前1580 Asset metadataと
+代表3 AssetのHTTP SHA、served frontend、image-to-3D capability、TRELLIS/Pixalのruntime receipt SHAを保持。
+モデルの新規取得なし。証跡release-0.33.16-20260923。
+
+通常loginのHost HTTPで実OpenCode/Qwen3.8-27Bを起動。
+最初のJob6903af33e230は誤って別のtool_contractを探す指示を与え、agentが自runの認証設定を
+読んでMCPをHTTPで直接照会したため取消。秘密値は証跡へ転記せず、この経路を受入に使わない。
+次の1b7ca9df922eは設定探索禁止を守ったが、buildに見えない道具をcapabilitiesから探し続けた。
+Hostの現行providerを確認し、buildからscene/job toolsを外してsculptorへ割り当てる設計と判明。
+これも正常cancelで停止。両runともMF生成Job0/停止後unit inactiveを確認し、重複生成なし。
+
+正しい既存sculptor経路を明示したJob781d15da871fを開始。契約schemaはMCP一覧にあり、
+別tool_contractは現設定では非公開。認証設定を読む必要はない。Host code/config変更なし。
+元NPCの画像/3Dとscene.rig ratio=.30を使用。旧pipelineのratio=.15 failedを成功に読み替えない。
+sculptorから公開MCPを実呼出し、両sceneの元headを確認してratio=.30を各1回送信。
+media.job.statusで両方succeeded、元画像依存と元revisionを親に持つ第2版を確認。
+
+|対象|MF Job|新revision|preview GLB Asset|
+|---|---|---|---|
+|coral|job_21bde7a799e54d0f90a46b00a67f10dd|revision_57fd9ebbce6f406e8b7bf361e4cffc3f|asset_fa903c1fd175423f93585a95bd82819e|
+|blue|job_46200fdc76fc458e83642c036da13930|revision_84a16e0add014eb7bb460e95af194436|asset_0c7229a98f3043798fc8ca26985800dc|
+
+両方12bones/1walk clip、重み欠損・不正0、最大4影響。DBのpreview metadataは
+coral 7,261,520B/SHA7391b3924dfe7e0ea25ae8c39a3e1614e738a5073daa16cc06f5f45eaa4cd8ab、
+blue 7,147,348B/SHAc110ffa2f46b8afc50efd3b600122e8e7bacc24e835fed35a52d48a366a7de72。
+旧failed pipelineは再試行・書換していない。agentが書いたsubmitted_atは実Job時刻と
+一致しないため時間計測には使用しない。通常grantでの納品と最終Web受入は確認中。
