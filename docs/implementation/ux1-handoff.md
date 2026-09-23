@@ -1,5 +1,21 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 0.33.21を通常導入、実MCP成功・候補品質は未採用
+
+PR657/7db182a、署名公開と通常更新完了。current0.33.21/PID711535/healthy。
+旧1593 Asset metadata/代表3SHA/runtime全JSON保持。Host PID674922不変。
+実OpenCode3c589f2cfcec、session ses_f3221e6f0ffeyqMVHep2QYu1XE、170.563235秒。
+MCP1回54.256秒、Host d0bf3b8f6dad/MF job_230f25e4c7ce4aa78d089b2032e940abとも成功。
+背面候補asset_2d4d8458e4464731ac93f1b7e945a73f、1024RGBA、元正面への親/実SHA保持。
+seed/alphaは保持しpack項目混入は解消。この依頼でもbriefのaspect_intentを落とし空任意項目を足しており、完全転記は未達。
+背面のバッグの手が反対で体形も変化したため3Dへ未採用。新規モデルDL/再送/停止0。
+LLM3/画像1lease released/active0、元Asset/project不変。4面入力の異なる実画素も再照合。
+PC1280/タッチ320の通常Libraryで候補と既存4面GLBの表示/閉じる/GLB回転、overflow0/errors0。
+このbranch ux1/image-edit-mcp-installed-0-33-21は文書のみ、製品全2559passからcode変更なし。
+次: 自動方向候補の比較/明示選択UIと形状/持ち物の一貫性評価。失敗候補を自動投入しない。
+完全な引数転記、物理スマホ、cold同時到着/実OpenCodeのHost再起動越し受入も未完了。全体goal継続。
+[詳細](image-edit-mcp-schema-20260923.md#installed-opencodemcpの再受入と候補品質)。
+
 ## 2026-09-23 実OpenCodeの背面候補要求が受付前に失敗
 
 branch ux1/image-edit-mcp-schema、base19e0388。通常OpenCode/Qwen Job50715bdc703e、
