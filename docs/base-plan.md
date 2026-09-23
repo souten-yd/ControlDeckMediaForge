@@ -836,6 +836,12 @@ clip in a new immutable scene revision; ordinary clip creation remains insert-on
 Unrelated clips and old revision bytes must be preserved, with the same resource budgets.
 Keep generic GLB/glTF as the first interchange baseline until the user chooses
 an engine; engine-specific readiness requires a real import/playback test.
+Automatic rigs must distinguish an upright body with two arms and two legs
+from a radial legged shape. A detected upright body needs separate arm and
+head support; arm vertices must not determine the knee position or be driven
+by leg swing. Classify only when surface cross-sections support that layout,
+and retain the existing general rig otherwise. Detection is provisional until
+posed meshes are checked for attachment, torso stability and ground contact.
 No new model weights, Blender add-ons, external account or global config changes
 are authorized merely by the broader authoring goal.
 

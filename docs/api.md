@@ -1362,3 +1362,18 @@ records remain with a deletion tombstone. Private relation projections expose
 packing for retained material dependencies. Filesystem cleanup is durable/retryable:
 a failed unlink returns `library_purge_cleanup_pending`, remains in Trash, and is
 retried on startup or another explicit purge. Purged assets cannot be restored.
+
+
+### Automatic rigging of upright characters (0.33.11)
+
+The existing `media.scene.rig` / `rig.auto` contracts are unchanged. When the
+mesh has two separated feet and multiple torso cross-sections containing the
+body and both arms, the worker recognizes an upright character with lateral X
+and vertical Z axes. It adds head, upper-arm, forearm and hand support and uses
+forward/back leg swing with opposing arms. Other shapes retain the general
+limb rig. Classification does not certify anatomy or animation quality; inspect
+the saved revision's deformation and contact with the ground.
+
+The source revision remains immutable. Already rigged revisions are not
+rewritten by a service update; restore the original unrigged revision as a new
+revision before applying the improved rig.

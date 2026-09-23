@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import math
 
+import rig_humanoid
+
 # 測るのは形であって精度ではない。大きな模型でも 1 回の走査で足りる数に間引く。
 MAX_SAMPLED_VERTICES = 200_000
 # 脚の断面を数える水平帯の高さ（模型の高さに対する割合）と厚み。
@@ -134,6 +136,10 @@ def measure(obj) -> dict[str, object]:
     if len(groups) > MAX_LEGS:
         raise RigAutoError(f"found {len(groups)} limbs, more than automatic rigging handles")
 
+    humanoid = rig_humanoid.measure(points, groups, cell, _clusters)
+    if humanoid is not None:
+        return humanoid
+
     # 胴の太さは、上半分にある点の中央値の半径で見る。脚は下に伸びているので、
     # 上半分は胴だけで占められている。
     upper = [point for point in points if point[2] >= bottom + height * 0.55]
@@ -209,6 +215,8 @@ def armature_operation(facts: dict[str, object], rig_object_id: str, name: str) 
         "head": [centre_x, centre_y, body_bottom],
         "tail": [centre_x, centre_y, body_top],
     }]
+    if facts.get("body_plan") == "humanoid":
+        bones.extend(rig_humanoid.bones(facts))
     attachment = [centre_x, centre_y, body_bottom + (body_top - body_bottom) * 0.72]
     for index, tip in enumerate(facts["extras"]):
         bones.append({
@@ -239,6 +247,12 @@ def walk_operation(
     手で置いた骨に当てると意図した向きに曲がらない。
     """
     tracks = []
+    if facts.get("body_plan") == "humanoid":
+        return {
+            "type": "animation.clip", "object_id": rig_object_id, "clip_id": clip_id,
+            "name": clip_id, "fps": fps, "frame_count": frame_count, "loop": True,
+            "tracks": rig_humanoid.walk_tracks(facts, frame_count),
+        }
     for index, leg in enumerate(facts["legs"]):
         phase = 0.0 if index % 2 == 0 else 0.5
         upper, lower = [], []
