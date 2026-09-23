@@ -1,5 +1,15 @@
 # Media Forge implementation status
 
+## 2026-09-23 複数面3枚のVulkan実測
+
+既存native/参照重み/公式画像で正面・右・背面3枚を生成、531.111765秒/exit0。
+Broker105回更新/released、device観測最大5,973,966,848B、追加DL/重みコピー0。
+実Blenderで991406tris/674113vertices/4096角2画像を再importし元camera4面をCPU描画。
+平均輪郭IoU.980499、顔/後頭部の対応を目視。1物体の輪郭一致であり材質品質の採用判断ではない。
+1面SV/人物/非対称/生成視点/取消/installed/MCP/320pxのMV操作は未受入。
+同時にHostの継続OpenCodeを自動停止しない方針へ修正中。Codexによる依頼された停止・自身の検証cleanupは許容。
+詳細[MV実測](implementation/multiview-20260923.md)。現行単視点runtimeとライブラリは変更なし。
+
 ## 2026-09-23 複数面2枚の実測と単視点の再利用準備
 
 既存native/重み/公式画像で正面・右側2枚をVulkan生成、543.873269秒/exit0、観測最大5.571GiB。

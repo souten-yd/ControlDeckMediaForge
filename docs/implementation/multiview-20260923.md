@@ -1,6 +1,6 @@
 # 複数方向画像からの3D: 調査・評価・モバイル統合
 
-Status: 公式2/4面のVulkan生成・同一camera描画を確認。現行1枚入力を維持。追加UI/多視点runtimeは未採用。
+Status: 公式2/3/4面のVulkan生成・同一camera描画を確認。現行1枚入力を維持。追加UI/多視点runtimeは未採用。
 利用者の2026-09-23依頼: 1枚→別方向画像生成→3D、手動2/3/4枚の追加、モバイル操作。
 脚交差修正と商店街制作も継続し、本件で置き換えない。
 
@@ -95,7 +95,7 @@ owned process RSS最大3,885,461,504B。追加DL/重みコピー0。GLB SHA256
 同じ入力/seed/解像度の形状整合は近いが、元画像の細かい表面模様や鼻輪の色は忠実ではない。
 輪郭一致を高品質素材や全体の採用判定に読み替えない。
 
-3枚比較、1枚との改善比較、左右非対称/人物、
+1枚との改善比較、左右非対称/人物、
 生成した別方向画像、取消、installed/MCP、320px UIはNOT TESTED。モデル一覧/autoへは採用しない。
 1枚→別方向画像の既存image.edit試行は1024/512ともresource_oomで失敗。
 実画像がないため生成視点の品質成功としない。証跡`generated-right*`。
@@ -148,3 +148,25 @@ sv-reuse-inventory.json、sv-reuse-manifest.jsonに根拠を保存。再取得/�
 1面の比較はMV重みを1枚へ誤用せず、--pixal3d-weights svを明示する準備をした。
 その1面と3面のjob JSONは準備のみ、まだ実行していない。SVは既存F16/MVはQ8なので、
 今後の差を画像枚数だけの効果とは呼ばない。既存単視点runtimeの登録は変更していない。
+
+## 3面の実測（2026-09-23追記）
+
+上記準備済みofficial-3-reuse-job.jsonだけを新規実行。既存a18bc842/binary/9参照重みと
+同じ公式RGBAの先頭3枚（正面/右/背面）、res1024/seed42/GPU1/R9700。
+各conditioning段でview0/1/2の使用をlogで確認。追加ダウンロード/重みコピー0。
+Host maintenance/exclusive lease4ddce9d0-86e3-42a1-8a9a-9c8a5458cbe3を105回更新後released。
+exit0、531.111765秒、device観測最大5,973,966,848B、owned process tree RSS最大3,806,732,288B。
+GLB35,564,196B、SHA256 ae2b29fd59d133679b0e23c233f25b98101dfba57e984482167076b7651b7039。
+Blender4.5.13再import:1mesh/991406triangles/674113vertices/4096角2画像、有限geometry/UV/材質。
+既存render-calibrated.pyで元camera4方向をCPU描画、geometry変更なし。
+正面と背面を目視し、顔/後頭部/台座の対応を確認。材質は輪郭IoUから評価しない。
+
+|入力|正面|右側面|背面|左側面|4方向平均|
+|---|---|---|---|---|---|
+|3面|0.980511|0.979946|0.981542|0.979996|0.980499|
+
+2/4面と同じ512角・alpha閾値128・camera変換だけで比較。3面が全般に優れるとは判断できない。
+非入力の左側面も輪郭は近いが、今回の公式fixtureはほぼ対称な1物体である。
+証跡official-3-reuse/{result,render,silhouette-calibrated-comparison}.json、stdout.log、camera-0〜3.png。
+1面SVは未開始。人物/非対称物体/生成視点/取消/installed/MCP/320px MV UIはNOT TESTED。
+既存単視点receipt/登録は保持。製品へのMV採用は未完了。今回は文書のみ更新。
