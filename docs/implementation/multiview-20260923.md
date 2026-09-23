@@ -218,6 +218,96 @@ base-plan/統合/3D UI設計へ加法方針を記録。単一画像互換、全�
 参照編集の不足した枠は別PR651/0.33.19で修正し、通常Host経由の512角候補をLibraryへ保存した。
 PC/320pxで実表示、元正面Assetと公式正面のdecoded RGBA画素一致も確認済み。
 512角では顔が片側になったが、構図/材質/厳密な角度は未受入で、3D入力にはまだ使わない。
+
+## 入力の実画素検査・人物と非対称・実行取消
+
+専用operatorへ通常再ログイン後、0.33.19参照編集のHost Job50f9ce2160f3のlease
+057d8785-5975-439f-ad44-1696285ce14cが`released`と通常HTTPで確認できた。
+その時点のactive/reservedは0。以前の期限切れ後の終端照会NOT TESTEDを解消した。
+再生成/追加モデル取得は行っていない。
+
+`scripts/verify_multiview_inputs.py <views-directory> [--count 2|3|4]`を追加。
+これはoperator用の読み取り専用評価道具であり、製品UI/APIやruntime採用を有効にしない。
+実画像2〜4枚、共通の正方形RGBA canvas、非空の前景と透過、境界内のファイル、
+有限・正規直交・右手系camera、FOV/距離を検査する。同じpath/poseや重複JSON keyも拒否する。
+入力順、全ファイルSHA、alphaを乗じた8bit画素SHA、camera、選択した枚数を一つのJSONに出す。
+透明画素のRGBやPNG圧縮を変えても同一画像を別方向として通さない。似た画像の知覚判定、
+写真とcameraの実対応の推定、生成品質判定はしない。
+
+実fixtureで公式4面と人物4面の検査成功を確認。同じ公式正面を別名・異なるPNG圧縮にした
+negativeは`duplicate_image_content`で拒否され、native生成へ投入していない。
+証跡`official-input-preflight.json`、`person-input-preflight.json`、`same-pixels-rejection.json`。
+native sourceも各frameのpathからRGBAを読み、SS/LR/HR/材質ごとに`views[v].rgb_premult`を
+使うことを固定a18bc842の`trellis_cli.cpp`、`pixal3d_cond.cpp`、`pixal3d_cond_gpu.cpp`で再照合した。
+
+取消は公式4面のnativeだけを新規起動し、SS flow実行中20.062806秒で自身のprocess groupへ
+SIGTERM。0.200211秒でexit -15、process group消滅、GLBなし、lease
+0c809c39-e559-42e8-a7de-bb8007346d6eを4回renew後`released`。
+`official-4-cancel/result.json`とSS step10/12のlogを保存。
+これは実nativeとoperator supervisorの取消受入であり、未接続の製品MV Jobs/UIの取消受入ではない。
+
+人物の検証画像は商店街の既存主人公GLB（SHA14e5b8c2…）を読み、rest poseと同じ材質を使う。
+検証用sceneだけに片側の赤い持ち物を加え、全体を同じ倍率で正規化して、公式と同じ4cameraで
+Cycles CPU/1024角RGBAを描画。元GLBの前後SHA一致、4PNGのSHAが全て異なることを確認した。
+最初の補助描画はglTF importerの不可視bone widgetまで可視化する誤りがあり、画像を見て拒否。
+visible meshだけへ修正して再描画した。拒否した画像はどの3D生成にも使っていない。
+これは実物の4方向写真やAIで生成した方向画像の受入ではなく、既知cameraの検証用画像である。
+
+4面`person-asymmetric-4`: Vulkan1/R9700、同じ既存9重み参照、res1024/seed42。
+138.620338秒/exit0、27回renew/released、device観測最大6,077,775,872B、
+owned tree RSS最大1,643,675,648B。追加DL/重みコピー0。
+GLB SHA44035566e8a950c0e3cbf09ca349dc09b9cf5f46dc62221af14b10417d5b11d8。
+Blender4.5.13で1mesh/991928tris/750663vertices/4096角2画像、元camera4面CPU描画。
+輪郭IoUは正面.965098/右.961427/背面.965805/左.958688、平均.962755（位置/倍率のfitなし）。
+目視した4面で顔は前側、脚2本、片側の持ち物を保持。前/背面の赤い領域の重心は元画像から
+512角で1px未満、反対側へ大きな赤い領域の複製なし。これは色領域の補助観測であり、
+厳密な材質忠実度・細かい手指・rig/歩行・軽量化は未受入。
+
+同じ人物の正面/右2面`person-asymmetric-2`も132.692209秒/exit0、26回renew/released。
+device観測最大5,866,340,352B、owned tree RSS1,613,254,656B。
+GLB SHA f90291755d983284836d31a014b51d220d9f044eea75211b7f8093a0da2931aa、
+1mesh/964868tris/755617vertices/4096角2画像。平均輪郭IoU.960514。
+正面/未入力の背面・左面を目視し、脚2本・持ち物の片側保持を確認したが、
+入力していないバッグの背面へ白い矩形模様が生じた。4面版にこの模様はない。
+輪郭の近さだけで材質を受入としない。2面実行はCPUの全unit suiteと時間が重なっており、
+138秒対132秒を枚数による速度改善の証拠にはしない。
+
+正面/右/背面3面`person-asymmetric-3`は127.899962秒/exit0、25回renew/released。
+device観測最大6,791,278,592B、owned tree RSS1,684,561,920B。
+GLB SHA388f638d02572136d6c4387e05c27c3a7d7f98f05418eb213559b71ec848a51a、
+1mesh/998786tris/878753vertices/4096角2画像。
+元camera4面での平均輪郭IoU.958994（正面.967073/右.953912/背面.966784/左.948207）。
+背面を含む4面を目視し、2面版のバッグ背面の白い矩形模様が3面版にはないことを確認。
+赤い持ち物は片側で、後頭部へ顔が描かれていない。輪郭IoUは2面よりわずかに低いため、
+枚数増加による全指標の単調改善や全素材への保証にはしない。別方向の入力で未入力面の材質の
+逸脱を減らせた1例として記録する。追加DL/重みコピー0。
+3人物runと取消runの4leaseが全てreleased、active/reserved0を最後に通常Host HTTPで再照合。
+既存trellis/Pixal SV receipt SHAは不変。証跡`person-and-cancel-resource-terminal.json`。
+
+入力検査の対象17testsを通過。最終`./mf.sh test`は2537passed/3warnings/338.77秒、
+skip0（既存bundle build環境参照あり）。試験ログ`input-preflight-full-test.log`。
+当初のテスト記述の構文誤りは修正後に全体を実行した。runtime採用・製品code/UIの変更はない。
+
+### 製品へ接続するときに同時に扱う境界
+
+- APIは既存1枚payload/過去のretry JSONを保持し、複数面だけを加法的に指定する。
+  未採用MVを受けて既存SVへ落としたり、先頭画像以外を無視したりしない。
+  現在のtrellis.cpp→Pixal3Dの2段は同じ1枚から各エンジンで生成して版を残す実装であり、
+  複数面でも前段meshの加工でもない。「仕上げ」の文言と複数面入力を混同させない。
+- 全入力を受付で検証・pinし、admission/staging/再試行/出版直前にも照合する。
+  既存`Store.delete_asset`の稼働scene.from_image保護は単一`input_asset_id`だけなので、
+  追加した全画像を同じ保護へ含める。公開したscene dependency/lineageも全画像を記録する。
+- 現行Pixal SV receipt/prepared入力はfloat32/CPU camera推定の事実を表す。
+  MVのQ8 flow＋既存F16共通重み・native conditioningをそこへ偽装しない。
+  実測した独立のprivate MV receiptと加法的実行来歴を持つ。
+- nativeはRGBA画像をそのままcameraへ対応させる。単視点の独立crop/framing処理を
+  流用しない。JPEG/HEICからの背景除去は共通canvasを保持する別の受入が必要。
+- 簡易画面は正面/右/背面/左の画像を見せ、追加/差替/削除を320pxで操作する。
+  詳細でcameraの前提と設定へ到達できるようにする。撮影方向のラベルだけで校正済みとはしない。
+- 自動の方向画像は既存image.editで候補として保存し、方向ごとの比較・選択を挟む。
+  失敗候補を自動投入しない。手動の複数面入力と従来1枚生成は独立して使えるようにする。
+
+製品へのMV runtime/UI接続、実MCP/installed/モバイルMV操作は引き続きNOT TESTED。
 1024角候補には顔重複が残る。詳細は[参照編集の実測と導入](reference-edit-admission-20260923.md)。
 生成/Library表示確認後に専用operator認証が期限切れになり、通常logoutと再ログイン依頼を実施。
 再認証後のGPU評価・製品MV runtime/UI統合を続ける。既存の1枚生成と採用receiptは保持。

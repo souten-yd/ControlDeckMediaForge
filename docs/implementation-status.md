@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-23 複数面の実画素検査・人物/非対称・native取消
+
+利用者の再ログイン後、参照編集50f9ce2160f3のlease released/active0を通常HTTPで確認。
+公式4方向の別画像に加え、同じ画像を別名/別PNG圧縮にした入力を実画素SHAで拒否する
+operator preflightを追加。これは評価用で、製品UI/APIには未接続。
+既存主人公GLBから既知cameraの4RGBAをCPU描画し、検証sceneだけに片側の赤い持ち物を追加。
+元GLB不変。4面Vulkanは138.620秒/exit0、27renew/released、平均輪郭IoU.962755。
+2面は132.692秒/exit0、26renew/released、IoU.960514。脚2本/持ち物片側を保持したが、
+2面では未入力のバッグ背面に白い模様が生じ、4面では生じなかった。材質忠実度とrigは未受入。
+実nativeをSS flow中に取消、0.200秒でown process group消滅/GLBなし/lease released。
+製品MV Jobs/UI取消と混同しない。対象17tests、全2537passed/3warnings/338.77秒/skip0。
+3面人物も127.900秒/exit0/25renew/released、IoU.958994。2面で出た白い模様はなく、
+輪郭の全指標の単調改善はしない。全4lease released/active0を通常HTTPで再照合。
+追加DL/モデルコピー0、既存SV採用/current0.33.19は変更なし。
+次は全入力のpin/削除保護/来歴を含む製品MV経路と320px操作を実装・受入する。
+[詳細](implementation/multiview-20260923.md)。全体goalは継続。
+
 ## 2026-09-23 参照編集0.33.19を通常導入・Library実表示
 
 PR651/90788fcを署名公開・再取得検証・通常feature update、current0.33.19/PID513777/healthy。
