@@ -56,3 +56,8 @@ served frontend一致、3D capability不変。実配信schemaにretry/expected_j
 また、通常認証Host Libraryの主人公第4版を1280/320pxで実再生/停止した。
 12bones/22122tris/1clip、320px overflow0、origin null、page errors0。
 証跡shopping-street-20260923/host-walk-confirm.json。物理電話/ゲーム移動時の接地は未受入。
+
+Job718d8c07704dは、Web実装と同一LLMの競合を避けるため通常Host cancelでcanceled。
+OpenCode session ses_f3413c04dffeTRXeGwyeZ3f6BOにMCP呼出しはなく、元pipelineの
+failed rig Job dcd564c62d2d453f8de8dd8db242ce32が保持されていることをDB読取で確認。
+Web Jobe67c69a17071終了後、別receiptで同じ07a指示を再開する。新規画像/3Dは送信していない。
