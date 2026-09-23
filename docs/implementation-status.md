@@ -1,12 +1,14 @@
 # Media Forge implementation status
 
-## 2026-09-23 複数方向画像の追加依頼・上流調査
+## 2026-09-23 複数面Vulkan実測・既存重みの再利用へ修正
 
-公式Pixal3Dは専用MV重み＋カメラ付き複数画像を公開。Vulkan候補raven38/pixal3d.cppを
-固定a18bc842で調査。2/3/4枚と1枚→別方向生成の実評価後に有効範囲をモバイル統合する。
-現行1枚入力は維持。重み7.536GiBはVRAM実測ではない。GPU/品質/UIはNOT TESTED。
-詳細[multiview調査](implementation/multiview-20260923.md)。商店街制作と歩行修正も継続。
-
+利用者の指摘どおり、既存Pixal3D Vulkan移植版は導入済み。registry/重み/1枚経路を保持。
+共通部まで取得した誤りを訂正し、追加DL停止、不要な取得コピー5個2.08158GiBを削除。
+既存共通5個を参照し、未導入だったMV専用4個5.45466GiBだけを使用する構成へ変更。
+公式4面/res1024/seed42の再利用構成はVulkan1/R9700で531.780454秒/exit0、観測最大6.510GiB。
+1mesh/947980tris/4096角2画像、4面renderと平均輪郭IoU0.980221599。色/細部の忠実性は未受入。
+2/3枚・生成別方向・mobile・installed/MCPのMVはNOT TESTED。runtimeを既定へ採用していない。
+詳細[MV調査と再利用](implementation/multiview-20260923.md)。商店街制作/人物rig修正は別途継続。
 
 ## 2026-09-23 自動ボーン付けworker結果の本体検証修正（0.33.14準備）
 
