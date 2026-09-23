@@ -378,6 +378,16 @@ Conceptual job request:
 
 Engine-specific advanced parameters may exist under a namespaced `engine_options` object, but profiles and agents should avoid relying on them.
 
+For `asset.pack`, omitted `output` or omitted `output.format` resolves to one
+ZIP; the image default remains PNG. An explicitly different pack format or a
+count other than one is an ingress validation error, before durable Job creation
+or resource admission. This preserves the existing deterministic pack contract:
+such requests previously created Jobs that could only fail with
+`unsupported_pack_profile`. Existing successful ZIP requests are unchanged,
+and tolerant historical request reads preserve their original values. Default
+resolution must copy caller-owned options, not mutate them. This is a request
+usability correction, not an additional model or generation operation.
+
 ### 5.1 Internal creative planning
 
 The workspace may use versioned `CreativeSpec`, `SceneSpec`, `PoseSpec`,

@@ -1,5 +1,16 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 asset.packの出力形式省略（0.33.17準備）
+
+branch ux1/pack-output-default。実MCPでpack形式省略がPNGになり失敗した問題を修正。
+省略時ZIP、明示不正形式/countはJob前422。画像既定PNG/共有options/過去保存要求を保持。
+実source HTTP＋既存Blender4.5.9で省略3.660855秒/明示1.017983秒、同一1,380,849B ZIP。
+元GLB不変、親/実content/GLB/PNG検査、拒否時追加Job0を確認。
+最初の全体testで旧PNG fixture1件を修正。最終全2509tests/3warnings/426.99秒通過。
+次はcommit/push/PR、通常署名公開・ローカル更新と実MCP受入。
+Pixal Vulkan導入済みを再確認。重複5ファイル2.08GiBは削除済み、モデル追加取得0。
+installed新版/形式省略MCPはNOT TESTED。[詳細](pack-output-default-20260923.md)。
+
 ## 2026-09-23 商店街の実MCP納品・Hostブラウザ受入
 
 実OpenCode/sculptor/Qwen/MCP Job781d15da871fがsucceeded。NPC2体を各1回rigし、
