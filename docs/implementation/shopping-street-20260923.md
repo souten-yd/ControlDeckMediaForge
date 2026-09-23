@@ -1,6 +1,6 @@
 # 歩ける商店街: OpenCode / Qwen3.8-27B / MCP 制作受入
 
-Status: IN PROGRESS。主人公の参照画像1枚を実生成・目視確認済み。3D/HTMLは未完了。
+Status: IN PROGRESS。主人公の画像→3D→rigを実MCPで実行。歩行/色の品質はFAIL、修正中。HTML未完了。
 
 ## 利用者の目標（完了条件を縮めない）
 
@@ -104,3 +104,32 @@ NOT TESTED: 3D生成、人物の変形品質、HTML表示/操作、物理モバ�
 2436 passed /3 warnings /171.40秒。rootはcleanのまま。
 回収Job996d740d02a6はsucceeded、MCP inspect/packのreceiptと実PNG SHAが一致。
 主人公3Dのconfirm pipelineを開始するHost Jobb5bfee084e46を起動し追跡中。
+
+## 2026-09-23 09:40 JST checkpoint
+
+- 生成元7画像（主人公、パン屋/カフェ/花屋/本屋、歩行者2人）を実生成・目視確認。
+  6画像batchのHost Jobefcdd0c284eb/session ses_f3460aa98ffepr3co9Rgep8CPlはsucceeded。
+  exports/*-source.pngへMCP inspect/packで配置しevidence/references.jsonへreceipt保存。
+- 主人公model Hostb5bfee084e46/session ses_f346f056cffeQ79iSbxHiUf08U succeeded。
+  pipeline_9840d28cf9164e0288c10cf8f80da18b、scene_889d23ec8c874d91bfa6347b3d4076a5。
+  native TRELLIS Vulkan512/seed1729、生成74.206241秒。GLB asset_0b420f1f16584fccb9c0283e790af61f。
+  148034tris/1material/2embedded images。元画像に比べ肌が赤く黄色上着が茶色。外観FAIL。
+- 続きのrig/export Host4ed3fd8be8f5/session ses_f3469baf4ffens73MH0YssF81i succeeded。
+  版revision_bf86dc9e51b3454ea75c772119da3603、GLB asset_62cde187b3ea449fb8b67bcbfbbc4afb。
+  88687tris/6bones/skin1/1s walk、MCP pack後bytes一致。
+  実描画で腕の巻き込みと脚交差を確認、利用者も交差を指摘。rig品質FAIL。
+- 別slice ux1/humanoid-rigで人物用測定/12bones/前後歩行を修正中。
+  source実Blenderで旧足表面X間隔−.383876m→22122tris候補+.098814m、手の脚重み平均.989627→0。
+  まだinstalled修正/正式Asset再登録ではない。詳細は同sliceのhumanoid-rig-20260923.md。
+- Host cold同時起動のPR336はmerge ea7212865c834bd1955e0beacf9262e73195e437。
+  最終./deck.sh test:1141passed/2skipped/109.40秒。
+  rootをff更新し通常deck.shでrebuild/restart、PID11639/HTTPhealth200。
+  実cold再試験はNOT TESTED。warmの新規OpenCode実行は継続している。
+- 更新後の通常認証Host opaque iframeで主人公のLibrary viewerを1280/320pxで表示。
+  88687 triangles/1 material/1 animation、overflow0/page errors0。物理電話は未試験。
+- パン屋のみOpenCode Hostea1473f4ad30から3D化を開始、同じpipelineを追跡中。
+  pipeline_6bc96c7c443b40ac90e8a6f07d75e64a、model Job17a78add...はDB読取でsucceeded。
+  packing完了/外観は未検証。ほかの店舗・歩行者3D/HTMLはまだ未作成。
+
+NOT TESTED: 修正版installed人物rig、色の修正、商店街全体、HTML/操作/移動時接地/性能、物理端末。
+MCP502の元Job情報不足は別途未修正。目標はactive。

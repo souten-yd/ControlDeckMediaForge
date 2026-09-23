@@ -1,5 +1,14 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 商店街の実制作: 画像7枚、主人公3D品質FAIL、修正継続
+
+OpenCode/Qwen3.8-27B/MCPで主人公画像→TRELLIS Vulkan512→rig→GLB配置まで実行。
+6追加参照画像も生成/pack成功。主人公は88687tris/6bonesだが腕の巻込みと脚交差があり不合格。
+利用者指摘と実Blender全25frameで交差を再現し、別sliceで人物測定/歩行を修正中。
+Host同時cold起動PR336はmerge/apply済み（1141tests通過）、実cold再受入は未実施。
+通常認証Host viewerは1280/320pxで表示/overflow0/errors0。パン屋3Dを同じJobで追跡中。
+HTMLは未作成、完成を主張しない。詳細shopping-street-20260923.md。
+
 ## 2026-09-23 歩ける商店街のOpenCode/MCP制作（進行中）
 
 利用者の通常login後、OpenCode1.18.30 / ローカルQwen3.8-27B Q4_K_MでMCPを実行。
