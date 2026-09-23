@@ -281,6 +281,12 @@ the file before the job runs. A path is never accepted. The whole-image modes
 pair the same way generation does; the modes with their own size invariant
 (strict editing, outpaint, and the repairs) keep deciding for themselves.
 
+The open `constraints` object explicitly publishes `seed` as an optional integer
+and `additionalProperties: true` for schema-constrained local callers. This keeps
+the existing open dictionary contract; omission still uses the worker default.
+Image requests should omit pack-only fields such as `origin_notes`, `scale_m` and
+`compile_options`, rather than fill unused fields with empty values.
+
 Those same modes honour `constraints.asset_brief`. A brief that requires
 transparency makes the edit deliver a cut-out subject, the same way generation
 does. Transparency is never inferred from the intent on an edit: it applies only
