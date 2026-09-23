@@ -1,6 +1,6 @@
 # 直立人物の自動rig: 実生成からの修正
 
-Status: IN PROGRESS。installedは未修正。
+Status: 0.33.11 merged/released/installed。主人公512版の歩行修正を通常Host UIで再登録・実測。1024候補は別のbind失敗。
 
 OpenCode / Qwen3.8-27B / MCP pipelineで実画像から作成した主人公を検査。
 scene_889d23ec8c874d91bfa6347b3d4076a5の版2は88687 triangles、6 bones、
@@ -48,3 +48,30 @@ rootは足底から頭頂まで貫き、上部の頭/髪をextraと扱い、腕�
 
 NOT TESTED: 修正版のsigned installed/MCP、物理モバイル端末。
 別件の肌/上着の色ずれは生成済みテクスチャ自体にあり、このrig修正では解決しない。
+
+
+## 署名releaseとinstalled再受入
+
+PR632 / merge e2bbbe931762f3a5dd6b062b43c90f4d7f9544f9を固定して0.33.11を構築・署名・公開。
+公開物を再取得し署名/改ざん拒否/embedded rig_auto.py・rig_humanoid.pyのsource一致を確認。
+38,054,468 B、SHA256 4ca217d344af8dd192adb442e7ff31f78e98adb36498af505fb313a95f4cde4a。
+新規dataでpackage起動.865497秒、Blender未導入をunavailableと表示。
+
+active MF Job/Blender session0でDB backup、通常deck.sh feature updateとservice restart。
+current0.33.11/PID52808/healthy.825814秒、更新前1559 Asset metadata保持、代表3 HTTP SHAと配信source一致。
+利用者の通常login cookieを非表示stdinで渡し、正規Host opaque iframeで自作主人公を操作。
+元の版1を新しい版3へ復元してからratio15%でrigを1回実行、Job690ef644... succeeded。
+scene_889d23ec8c874d91bfa6347b3d4076a5は第4版revision_496964560f624255ae5698c1c94275bdへ。
+GLB asset_0480355b176141a4ae51f17f8eee66b7、Blender asset_621924b6c9304e14aa29cc377b92a297。
+元版1/旧歩行版2は保持。320px表示22122tris/1material/1animation、overflow0/page errors0。
+installed .blendを全25frameで再測定し、足表面X間隔最小+.098814m/手の脚重み0を確認。
+
+browser自動操作の初回はdetailsの開閉/非表示、次はrange入力の未反映で送信前に停止。
+復元済み版3を照合して再開し、編集tabを明示選択、range input eventと通常submitで成功。
+同じrigの二重送信はない。物理touchでsliderを変更した受入とはしない。
+
+同じ画像/seedをTRELLIS1024で生成した別sceneは、0.33.11の実OpenCode/MCP rigでfailed。
+Host2506347a7351、pipeline_9dd4bab1fef94853bba40dcc8f0a30bd、Jobdcd564c6...。
+原因はautomatic binding left vertices without weights。重み欠損のままrevisionを公開せず、
+export未実行。512版修正の成功を任意生成メッシュのrig保証に拡張しない。
+1024候補の欠損頂点/形状を別途調べる。商店街HTML・移動時接地・物理電話はNOT TESTED。

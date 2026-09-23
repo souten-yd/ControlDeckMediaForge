@@ -1,5 +1,14 @@
 # Media Forge implementation status
 
+## 2026-09-23 0.33.11導入と主人公の脚交差修正
+
+PR632/e2bbbe9から署名release/再取得検証/通常ローカル更新。current0.33.11/PID52808/healthy、
+1559既存Asset metadata保持。通常認証Host UIで主人公の元版を復元し、新しい第4版へ再rig。
+GLB asset_0480355b176141a4ae51f17f8eee66b7、22122tris/12bones/1秒loop。
+全25frameの脚交差なし（足表面X間隔最小+.098814m）、手の脚重み0、320px overflow0/errors0。
+全2437tests通過294.66秒。別の1024候補は実MCP bindで重み欠損を検出し正しくfailed、未修正。
+詳細[人物rig受入](implementation/humanoid-rig-20260923.md)。商店街全体と物理電話は未完了。
+
 ## 2026-09-23 人物の脚交差と腕変形をsource修正（0.33.11準備）
 
 実OpenCode/MCP生成主人公で利用者指摘の脚交差を再現。旧rigは手を脚に含め、
