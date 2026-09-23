@@ -38,9 +38,13 @@ pack形式省略はZIP、不正PNG/countは422/追加Job0。実installedの代�
 active Job/scene/WebBlender/runtime/model操作0でDBを保存し、通常feature update。
 current0.33.18/PID393256/healthy、既存1585 Asset metadata、代表3content SHA、
 全runtime-state JSON、3D capability、配信frontendを保持。
-汎用Host PR337/786e76cを別途mainへ統合し、全Host Job/実OpenCode unit/active lease0を確認後、
+汎用Host PR337/786e76cを別途mainへ統合し、全Host Job/active lease0を確認後、
 DBを保存して通常deck.shで再起動。PID394222/health ok、frontendとllama-runtime設定を保持。
 モデル取得0。証跡maintenance/release-0.33.18-20260923。
+後続監査で更新前のunit列挙は旧cdapp-opencode-*だけだったと判明。
+現行providerのcdfeature-opencode-*を含む完全な更新前列挙だったとは主張しない。
+更新helperを両prefixへ修正し、更新後に両prefix全状態のunit0を実確認。
+元helperとopencode-unit-audit-correction.jsonを保存し、この訂正のための再起動はしていない。
 
 ## 実OpenCode/Qwen/MCPでの失敗追跡
 
