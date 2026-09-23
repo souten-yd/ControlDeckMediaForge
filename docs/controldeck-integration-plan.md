@@ -627,6 +627,11 @@ video.image_to_video = unavailable
 
 Agents do not hardcode FLUX/Qwen/Wan model IDs unless the user explicitly pins a model.
 
+Single-reference image editing may select a separately measured memory/runtime profile
+inside MediaForge. Its reservation still uses the ordinary Host resource request and
+granted worker limit. MediaForge does not bypass admission because the device appears
+empty, change Host scheduling, or imply that an image edit guarantees camera calibration.
+
 The planned image-to-3D multiview extension remains additive to the existing
 MediaForge scene tool and detached Jobs. Every input is an ordinary Asset ID with
 pinned hash and lineage; no browser/Host file path or second asset service is added.

@@ -17,6 +17,12 @@
         "native_height": 1024,
         "text_encoder_quantization": "int8",
         "transformer_quantization": "int8",
+        "reference_edit": {
+          "execution_peak_vram_bytes": 17675771904,
+          "worker_vram_budget_bytes": 12884901888,
+          "measured_runtime_sec": 196.5259901639074,
+          "measured_count": 1
+        },
         "texture_edit": {
           "execution_peak_vram_bytes": 13057523712,
           "worker_vram_budget_bytes": 12884901888,

@@ -1668,6 +1668,22 @@ viewer validation. No root-motion extraction or gameplay controller is implied.
 抽出は所有者がアクセスできるcurrent revisionのpacked base color/emission画像に限定。
 外部ファイル、複雑なshaderの見た目、normal/roughness等の物理mapを推測して取り出さない。
 既存の新規画像生成も維持し、参照編集が利用可能な場合に改善モードを提供する。
+## 2026-09-23 Single-reference edit admission
+
+Reference editing has a different memory peak from text-to-image generation.
+An adopted single-reference profile pins its measured device peak, worker allocator
+budget and runtime independently; it does not increase ordinary generation's reservation.
+Core requests the measured edit peak through the existing Host Broker and the worker
+stays within its granted budget. Native allocations outside the PyTorch allocator must
+be included in the device measurement. Resource shortage remains an explicit failure.
+
+For that profile, non-strict single-reference edits fit the whole reference to the
+admitted output canvas before inference. Explicit output dimensions are retained,
+aligned to the model grid; a 4K source must not silently cause 4K inference for a
+512-pixel request. Strict masked edits, outpaint, other adapters and multi-reference
+adoption keep their separate contracts and measurements. Image generation success
+does not establish that a requested camera direction or subject identity was preserved.
+
 ## 2026-09-23 Library trash, revision removal and permanent deletion
 
 Users can remove an image, a 3D revision, a material image, or any selected combination

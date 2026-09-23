@@ -531,7 +531,7 @@ def test_the_catalog_options_allowed_by_core_and_worker_are_the_same():
                      'if not isinstance(runtime_options, dict) or set(runtime_options) - {')
 
     # core がその場で立てるものは、カタログに書かれないので registry を通らない。
-    RUNTIME_ONLY = {"keep_resident"}
+    RUNTIME_ONLY = {"keep_resident", "fit_reference_to_output"}
     # worker が受けるものは、core も通せなければカタログが読めない。
     assert worker - RUNTIME_ONLY <= core, (
         f"core が知らない runtime_options: {sorted(worker - RUNTIME_ONLY - core)}"
@@ -794,3 +794,44 @@ def test_both_quantized_parts_are_kept_instead_of_rebuilt():
     # 要る。名乗らないと save_pretrained は通るのに from_pretrained だけが
     # ValueError になり、毎回 3.61 GiB を書いては読めずに捨てることになる。
     assert "base_class" in transformer, "base_class を名乗っていない。保存はできても読み直せない"
+
+
+@pytest.mark.parametrize("bounded", [False, True])
+def test_reference_worker_honors_admitted_canvas_and_reports_fitting(monkeypatch, tmp_path, bounded):
+    model = tmp_path / "models/model"
+    work = tmp_path / "work"
+    model.mkdir(parents=True)
+    work.mkdir()
+    source = work / "source.png"
+    Image.new("RGBA", (4096, 4096), "navy").save(source)
+    before = source.read_bytes()
+    monkeypatch.setenv("MEDIA_FORGE_MODEL_ROOT", str(model.parent))
+    monkeypatch.setenv("MEDIA_FORGE_WORK_ROOT", str(work))
+    monkeypatch.setattr(image_worker.importlib.metadata, "version", lambda _: "test")
+    calls = []
+
+    class Adapter:
+        load_sec = 0
+        last_generation_sec = 0
+        placement = {}
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def edit(self, request):
+            calls.append(request)
+            Image.new("RGBA", (request.width, request.height), "orange").save(request.output_path)
+            return ImageGenerationResult(request.output_path, request.seed)
+
+    monkeypatch.setattr(image_worker, "DiffusersFlux2KleinAdapter", Adapter)
+    value = payload(model, work / "outputs")
+    value["model"]["runtime_options"] = {"fit_reference_to_output": bounded}
+    value["request"]["operation"] = "image.edit"
+    value["request"]["constraints"].update(width=512, height=384, edit_mode="reference", strict_edit=False)
+    value["worker_inputs"] = {"source_path": str(source)}
+    result = image_worker.ImageWorker().handle(value)
+    assert calls[0].fit_reference_to_output is bounded
+    assert (calls[0].width, calls[0].height) == (512, 384)
+    assert ("reference.fit_to_output" in result["postprocessing"]) is bounded
+    assert source.read_bytes() == before
+    assert Image.open(result["outputs"][0]["path"]).size == (512, 384)

@@ -1,5 +1,26 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 参照編集0.33.19を通常導入・Library実表示
+
+PR651/90788fcを署名公開・再取得検証・通常feature update、current0.33.19/PID513777/healthy。
+既存1585 Asset metadata/代表3content SHA/runtime全JSON保持、追加モデル取得0。
+通常Host Job50f9ce2160f3は17.511秒/succeeded、512角の側面候補asset_74dbc48f1ac24554b03c3e56f486fbe5を保存。
+元正面Assetの親/SHAとfit来歴を確認。PC1280/touch320の通常Library→画像表示、overflow0/error0。
+画像の厳密な方向/材質一致は未受入、3D生成には未使用。4方向の公式入力は各別画像で重複なし。
+全2517pass/3skip/3warnings352.92秒。skipした署名3testは既存build環境参照で別途全通過。
+表示確認後に専用operator認証が期限切れ。通常logoutで専用sessionを無効化し再ログイン依頼中。
+installed lease終端追加照会/物理電話はNOT TESTED。次はMVの人物/非対称/取消/手動入力とUI。
+[詳細](reference-edit-admission-20260923.md)。複数面の製品runtime/UIはまだ未採用、全体goalは継続。
+
+## 2026-09-23 単一参照編集の枠とcanvasを修正中（0.33.19）
+
+GPU空き23.2GiBでも通常生成用worker上限8.8GiBで参照編集がOOMになることを実確認。
+別profileでHost枠/worker上限/推論canvasを一致させ、小さい前Jobのlease持ち回りも拒否。
+既存重みの実workerで512角15.579秒、1024角12.855秒、1024×768は196.526秒で出力。
+入力SHA不変/来歴fit/lease解放を確認。初回14GiBのdevice枠超過は自身だけ停止し記録。
+側面候補の品質は未受入で、複数面3Dには投入していない。追加DL0。
+対象84tests通過。最終全2517passed/3skipped/3warnings/352.92秒、exit0。installed/署名配布は未実施。[詳細](reference-edit-admission-20260923.md)。
+
 ## 2026-09-23 複数面入力の同一画像確認
 
 利用者の指摘を受け、実入力4PNGの異なるSHA/正面・右・背面・左の画素を確認。
