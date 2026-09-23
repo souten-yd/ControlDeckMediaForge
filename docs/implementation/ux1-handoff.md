@@ -1,5 +1,14 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 MCP失敗時のJob参照（0.33.18準備）
+
+branch ux1/agent-failure-job-reference。media.generateの受理後失敗/取消/cleanup timeoutへ
+同一Job ID/確定済み状態を追加し、未受理/成功応答を保持。設計・API記載を同期。
+実source HTTPで502/failed/同一保存Jobを照合。Hostの別worktreeでは汎用保持も修正し、
+実HTTP/stdio/隔離DBでfailed3/succeeded1、再送0、path除外を確認した。
+MF全2512tests/3warnings/418.24秒通過。次はcommit/push/PR→署名通常更新・実MCP受入。
+installed新経路はNOT TESTED。モデル追加取得0。[詳細](agent-failure-reference-20260923.md)。
+
 ## 2026-09-23 0.33.17を公開・導入、実MCPの形式省略を受入
 
 PR645/77464d9から既存鍵で署名公開・再取得検証・通常feature update。
