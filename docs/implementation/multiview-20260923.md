@@ -1,6 +1,6 @@
 # 複数方向画像からの3D: 調査・評価・モバイル統合
 
-Status: 公式2/3/4面のVulkan生成・同一camera描画を確認。現行1枚入力を維持。追加UI/多視点runtimeは未採用。
+Status: 公式1/2/3/4面のVulkan生成・同一camera描画を確認。現行1枚入力を維持。追加UI/多視点runtimeは未採用。
 利用者の2026-09-23依頼: 1枚→別方向画像生成→3D、手動2/3/4枚の追加、モバイル操作。
 脚交差修正と商店街制作も継続し、本件で置き換えない。
 
@@ -170,3 +170,34 @@ Blender4.5.13再import:1mesh/991406triangles/674113vertices/4096角2画像、有
 証跡official-3-reuse/{result,render,silhouette-calibrated-comparison}.json、stdout.log、camera-0〜3.png。
 1面SVは未開始。人物/非対称物体/生成視点/取消/installed/MCP/320px MV UIはNOT TESTED。
 既存単視点receipt/登録は保持。製品へのMV採用は未完了。今回は文書のみ更新。
+
+## 1面SVの実測と参照画像編集の失敗箇所
+
+既存SV F16 flowと既存共通5重みの9参照だけで、同じnative・公式正面・res1024/seed42を実行。
+`official-1-sv-reuse`: 453.378568秒/exit0、Broker90回更新/released、
+device観測最大6,727,626,752B、owned process tree RSS最大3,167,158,272B。
+GLB SHA256 f772bad7e965875252af9ff5b3d1cd468e4a8663c800f2a2bd74e021b5ddfb82。
+実Blender4.5.13で1mesh/970868triangles/651265vertices/4096角2画像を確認。
+元camera4方向をCycles CPUで描画し、正面と背面を目視。追加DL/重みコピー0。
+
+| 入力 | 正面IoU | 右IoU | 背面IoU | 左IoU | 平均IoU |
+|---|---:|---:|---:|---:|---:|
+| 1枚SV | .979940 | .860550 | .877435 | .861829 | .894938 |
+| 2枚MV | .983405 | .978032 | .979296 | .977966 | .979675 |
+| 3枚MV | .980511 | .979946 | .981542 | .979996 | .980499 |
+| 4枚MV | .979751 | .979788 | .981167 | .980181 | .980222 |
+
+この物体では複数面の側面・背面の輪郭が元画像に近い。SVの背面は首/台座の接合形状が異なる。
+ただし1物体・seed42であり、SV F16とMV Q8 flowというモデル/精度の違いもある。
+枚数だけの効果を分離した比較でも、一般的な品質向上・テクスチャ忠実度の証明でもない。
+証跡: `official-1-sv-reuse/{result,render,silhouette-calibrated-comparison}.json`、camera-0〜3.png。
+
+先の参照編集失敗はLLM同居だけが原因とは確定できないため、quiet条件で1回再評価した。
+`generated-right-512-quiet/quiet-before-submit.json`: device270,532,608B、active/reserved lease0。
+実Host Job8a2765972b00 / MF job_ea504bbddcdd4382825976fd190da193はresource_oom。
+workerはHIPの上限8.80GiBに達し2.25GiBの確保に失敗。device空き23.20GiBという実エラーを保存。
+core sourceは通常生成の枠を参照編集にも使い、別測定済みの編集枠はscene_textureだけに限定していた。
+さらに通常参照編集は元画像1024角で推論し、要求512角への縮小は後処理だった。
+同一要求を反復せず、既存重み・明示Broker leaseで編集枠を個別評価する。
+未解決時点で自動視点生成や生成画像の整合性を成功扱いしない。
+人物/左右非対称、取消、installed/MCP/320pxでのMV操作はNOT TESTED。
