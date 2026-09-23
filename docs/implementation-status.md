@@ -1,5 +1,14 @@
 # Media Forge implementation status
 
+## 2026-09-23 0.33.14導入・実MCP主人公rig再開を確認
+
+PR637を署名release/通常ローカル更新。current0.33.14/PID135776/healthy、既存Asset1573件保持。
+実OpenCode/Qwen/MCPで同一主人公の失敗rigだけ再試行し成功。revision818f77...、GLB3,602,564B、
+通常grant配置とAsset SHA一致。2体のNPCは脚断面の頂点不足でrig失敗、成功扱いしない。
+0.33.13の再試行で既存本屋/NPC2体のmodel生成も成功、次工程の確認待ちを保持。
+全2471tests/401.67秒のsourceからproduct変更なし。商店街全体・物理電話・自然な歩行品質は未受入。
+詳細[rig結果受入](implementation/rig-result-contract-20260923.md)、[工程再試行](implementation/pipeline-retry-20260923.md)。
+
 ## 2026-09-23 自動ボーン付けworker結果の本体検証修正（0.33.14準備）
 
 0.33.13の実MCP retryはworker結果の未知項目でfailed。元model/画像/scene保持。
