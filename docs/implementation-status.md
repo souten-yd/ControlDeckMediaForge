@@ -1,5 +1,14 @@
 # Media Forge implementation status
 
+## 2026-09-23 人物の脚交差と腕変形をsource修正（0.33.11準備）
+
+実OpenCode/MCP生成主人公で利用者指摘の脚交差を再現。旧rigは手を脚に含め、
+脚用の横振りを人物にも適用していた。直立人物の断面検出、腕/頭支持、前後歩行を追加。
+同じ元モデルを実Blender4.5.13で再rigし、88687/22122trisとも12 bones。
+全25frameの足表面X間隔は旧−.383876m→軽量候補最小+.098814m、手の脚重み平均.989627→0。
+画像packed SHA不変、実Three描画page error0。接地最大1.89cm下がり・色ずれは残る。
+詳細humanoid-rig-20260923.md。全test 2437 passed, 3 warnings in 294.66s (0:04:54)。signed installed/MCPはNOT TESTED。
+
 ## 2026-09-23 0.33.10を署名公開・ローカル適用（ごみ箱と個別削除）
 
 PR629/source2535ea7から0.33.10を公開し、通常Host更新・再起動でhealthy。
