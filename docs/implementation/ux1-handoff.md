@@ -1,5 +1,13 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 更新時unit監査の訂正
+
+Host更新helperの列挙が旧cdapp-opencode-*だけだったため、現行cdfeature-opencode-*も対象へ修正。
+更新前に全実unitを確認済みという表現を訂正。更新後は両prefixの全状態でunit0を実確認。
+元helper/訂正JSONを保存。製品コード/稼働サービス変更なし、追加再起動/モデル取得なし。
+商店街にはREADMEと要件別受入表を追加しlocal commite5f562bへ保存。既知のHost再起動時unit残留と
+cold同時要求の実機受入は未完了として表へ残した。複数面2枚評価は既存重みで実行中。
+
 ## 2026-09-23 0.33.18/Host修正を導入し実MCP失敗追跡を受入
 
 PR647/c392021を署名公開・通常feature update、current0.33.18/PID393256/healthy。
