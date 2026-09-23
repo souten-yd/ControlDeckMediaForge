@@ -321,6 +321,7 @@ main { flex: 1; min-height: 0; padding: 16px; }
 .scene-generation-source-controls { display: grid; gap: 8px; min-width: 0; }
 .scene-generation-source-controls select { width: 100%; min-width: 0; }
 #scene-generation-views { min-width: 0; margin-block: 12px; }
+#scene-generation-direction { width: 100%; min-width: 0; max-width: 100%; }
 #scene-view-candidates { margin-block: 16px; min-width: 0; }
 .scene-view-candidate-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .scene-view-candidate-list button { display: flex; flex-direction: column; align-items: center; min-width: 0; white-space: normal; }

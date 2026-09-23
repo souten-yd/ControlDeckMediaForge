@@ -1,5 +1,19 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 複数面の追加方向を自由選択（0.33.24準備）
+
+正面に対して右/背面/左の任意部分集合を受理し、追加する方向の選択欄を実装。
+AI候補も選んだ方向だけ追加。入力順とcamera角の混同、余分な空欄、順番の強制を除去。
+1枚/4面・重複拒否・削除保護・全入力来歴を保持。対象49testsと実Chrome1280/320の
+20check（制御通信、画像選択一致/overflow0/errors0/44px）を確認。
+実Vulkan正面＋左132.273743秒/26renew、正面＋背面136.900591秒/27renew、全lease released。
+2親/Blender importを確認。左のhelper初期化不足は同じ生成GLBを再利用して回復。
+初回旧card0の計測失敗も記録し、再生成による隠蔽はしない。追加モデルDL0。
+最終 ./mf.sh test は2592passed/2warnings/304.89秒、exit0。code変更なし。
+予備gateの中断と初回fullの40ms idle試験1failも保持。単独pass後、同一codeの全gateを通過。
+次は最終gate→PR/署名公開/通常更新→installed選択/生成とLibraryを確認。
+詳細は[方向選択](multiview-direction-choice-20260923.md)。物理スマホ/任意角度/自動方向候補の品質は未受入。
+
 ## 2026-09-23 商店街の制作・修正・最終監査完了
 
 通常ログインを再確認。Project LabのMF3DS-ShoppingStreet-20260923/index.htmlで

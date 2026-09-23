@@ -5390,10 +5390,10 @@ function sceneGenerationRefineChoice() {
 
 function sceneViewsText() {
   return document.documentElement.lang.startsWith("en") ? {
-    title: "Add other views", add: "Add another view", remove: "Remove this view",
+    title: "Add other views", add: "Add this view", direction: "View to add", allAdded: "All views added", remove: "Remove this view",
     directions: {front: "Front", right: "Right", back: "Back", left: "Left"},
-    note: "Use front + right, then optionally back and left. Use different views of the same subject, with transparent backgrounds and matching square canvases (64–2048 px). Keep the subject's framing consistent.",
-    missing: "Select each view in order: front, right, back, left. Remove unneeded cards to return to one image.",
+    note: "The first image is the front. Add any of right, back or left, such as front + left or front + back. Use different views of the same subject, with transparent backgrounds and matching square canvases (64–2048 px). Keep the subject's framing consistent.",
+    missing: "Choose an image for the front and each added view. Remove unneeded cards to return to one image.",
     duplicate: "The same image is selected more than once. Choose a different view for each direction.",
     unavailable: "The measured multiview runtime is unavailable. Remove extra views to generate from one image.",
     camera: "Multiview camera settings", cameraNote: "These are shared turntable assumptions, not automatic photo calibration. Recommended: 20° horizontal field of view, distance 3.1192, elevation 0°, scale 1.",
@@ -5403,10 +5403,10 @@ function sceneViewsText() {
     invalid: "Use distinct, transparent RGBA PNG or WebP images on matching square canvases, 64–2048 pixels.",
     changed: "An input image or the runtime changed. Refresh and submit a new request.",
   } : {
-    title: "別の方向の画像を追加", add: "別の方向を追加", remove: "この画像を外す",
+    title: "別の方向の画像を追加", add: "この方向を追加", direction: "追加する方向", allAdded: "全方向を追加済み", remove: "この画像を外す",
     directions: {front: "正面", right: "右側面", back: "背面", left: "左側面"},
-    note: "正面＋右側面に、背面・左側面を追加できます。同じ被写体の別方向を選び、背景透過・同じ正方形サイズ（64〜2048px）・同じ位置と大きさに揃えてください。",
-    missing: "正面・右側面・背面・左側面の順で画像を選んでください。追加したカードを外すと1枚生成に戻れます。",
+    note: "最初の画像を正面として、右側面・背面・左側面から必要な方向を追加できます。正面＋左側面、正面＋背面だけでも使えます。同じ被写体の別方向を選び、背景透過・同じ正方形サイズ（64〜2048px）・同じ位置と大きさに揃えてください。",
+    missing: "正面と、追加した方向の画像を選んでください。追加したカードを外すと1枚生成に戻れます。",
     duplicate: "同じ画像が重複しています。方向ごとに別の画像を選んでください。",
     unavailable: "複数面の実行環境を利用できません。追加画像を外すと従来の1枚で生成できます。",
     camera: "複数面のカメラ設定", cameraNote: "共通の撮影条件の推定値です。写真から自動で校正する機能ではありません。推奨：水平画角20度、距離3.1192、仰角0度、倍率1。",
@@ -5423,9 +5423,9 @@ function sceneMultiview() {
   const views = state.sceneGenerationViews;
   const available = ["available", "experimental"].includes(cap.state) && Array.isArray(cap.view_counts);
   const selected = [byId("scene-generation-image").value, ...views.map(v => v.assetId)];
-  const dirs = ["right", "back", "left"].slice(0, views.length);
   const duplicate = selected.filter(Boolean).some((id, i, all) => all.indexOf(id) !== i);
-  const complete = selected.every(Boolean) && dirs.every(d => views.some(v => v.direction === d));
+  const complete = selected.every(Boolean) && views.every(v => ["right", "back", "left"].includes(v.direction))
+    && new Set(views.map(v => v.direction)).size === views.length;
   const obsolete = views.some(v => v.candidateSourceId && v.candidateSourceId !== selected[0]);
   const ready = available && cap.view_counts.includes(views.length + 1) && complete && !duplicate && !obsolete;
   const text = sceneViewsText();
@@ -5447,6 +5447,13 @@ function renderSceneViews(blocked) {
   byId("scene-generation-views").hidden = !mv.available && !mv.active;
   byId("scene-generation-views-title").textContent = text.title;
   byId("scene-generation-views-note").textContent = text.note;
+  byId("scene-generation-direction-label").textContent = text.direction;
+  const directionSelect = byId("scene-generation-direction");
+  const remainingDirections = ["right", "back", "left"].filter(d => !state.sceneGenerationViews.some(v => v.direction === d));
+  replaceMaterialOptions(directionSelect, remainingDirections.map(d => ({value: d, label: text.directions[d]})),
+    remainingDirections.includes(directionSelect.value) ? directionSelect.value : remainingDirections[0] || "",
+    remainingDirections.length ? "" : text.allAdded);
+  directionSelect.disabled = blocked || !mv.available || remainingDirections.length === 0;
   byId("scene-generation-add-view").textContent = text.add;
   byId("scene-generation-add-view").disabled = blocked || !mv.available || state.sceneGenerationViews.length === 3;
   byId("scene-generation-views-status").textContent = mv.active ? mv.ready ? text.ready(state.sceneGenerationViews.length + 1) : mv.reason : "";
@@ -5715,11 +5722,9 @@ async function useViewCandidate() {
     const result = await call('images.views.select', {source_asset_id: selected.sourceId, asset_id: selected.assetId, direction: selected.direction});
     if (selected.sourceId !== byId('scene-generation-image').value) return;
     if (!state.sceneGenerationImages.some(a => a.id === result.asset.id)) state.sceneGenerationImages.push(result.asset);
-    for (const direction of ['right','back','left']) {
-      let view = state.sceneGenerationViews.find(v => v.direction === direction);
-      if (!view) { view = {direction, assetId: '', previewId: ''}; state.sceneGenerationViews.push(view); }
-      if (direction === selected.direction) { view.assetId = result.asset.id; view.candidateSourceId = selected.sourceId; break; }
-    }
+    let view = state.sceneGenerationViews.find(v => v.direction === selected.direction);
+    if (!view) { view = {direction: selected.direction, assetId: '', previewId: ''}; state.sceneGenerationViews.push(view); }
+    view.assetId = result.asset.id; view.candidateSourceId = selected.sourceId;
     state.sceneGenerationViews.sort((a,b) => ['right','back','left'].indexOf(a.direction) - ['right','back','left'].indexOf(b.direction));
     byId('scene-view-candidate-confirm').checked = false;
     state.sceneViewCandidateError = viewCandidateText().selected;
@@ -11122,8 +11127,8 @@ byId("scene-generation-form").addEventListener("submit", (event) => {
 });
 byId("scene-generation-add-view").addEventListener("click", () => {
   if (byId("scene-generation-add-view").disabled) return;
-  const direction = ['right', 'back', 'left'].find(d => !state.sceneGenerationViews.some(v => v.direction === d));
-  if (direction) {
+  const direction = byId('scene-generation-direction').value;
+  if (['right', 'back', 'left'].includes(direction) && !state.sceneGenerationViews.some(v => v.direction === direction)) {
     state.sceneGenerationViews.push({direction, assetId: '', previewId: ''});
     state.sceneGenerationViews.sort((a,b) => ['right','back','left'].indexOf(a.direction) - ['right','back','left'].indexOf(b.direction));
   }
