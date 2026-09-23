@@ -842,6 +842,13 @@ head support; arm vertices must not determine the knee position or be driven
 by leg swing. Classify only when surface cross-sections support that layout,
 and retain the existing general rig otherwise. Detection is provisional until
 posed meshes are checked for attachment, torso stability and ground contact.
+For a detected upright body only, a bone-heat result may repair tiny unweighted
+surface islands from nearby, originally weighted vertices. Limit the missing
+set to 0.5 percent and 128 vertices, each connected island to 64 vertices and
+2 percent of body height, and every donor distance to 0.5 percent of height.
+Never infer an entire missing limb or propagate through repaired vertices.
+Preserve geometry and UVs, report repair counts/distances in the recipe facts,
+and reject the candidate if any bound or final weight validation fails.
 No new model weights, Blender add-ons, external account or global config changes
 are authorized merely by the broader authoring goal.
 
