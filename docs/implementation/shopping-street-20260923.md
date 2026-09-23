@@ -1,6 +1,6 @@
 # 歩ける商店街: OpenCode / Qwen3.8-27B / MCP 制作受入
 
-Status: IN PROGRESS。主人公の画像→3D→rigを実MCPで実行。歩行/色の品質はFAIL、修正中。HTML未完了。
+Status: IN PROGRESS。512主人公の脚交差修正を0.33.11/Library第4版で受入。1024再rigと残り素材/HTMLは制作中。
 
 ## 利用者の目標（完了条件を縮めない）
 
@@ -135,7 +135,7 @@ NOT TESTED: 修正版installed人物rig、色の修正、商店街全体、HTML/
 MCP502の元Job情報不足は別途未修正。目標はactive。
 
 
-## 2026-09-23 10:00 JST continuation
+## 2026-09-23 installed walk continuation
 
 歩行修正PR632を0.33.11として署名公開・通常ローカル更新。元の主人公sceneは第4版
 revision_496964560f624255ae5698c1c94275bdへ再rigしてLibrary登録、旧版を保持。
@@ -152,3 +152,22 @@ GLB asset_bed82e10e6c14c4f97c76a10ea4eda01、134392tris、SHA867d2437e4dc37ddaf2
 残るカフェ/花屋/本屋（512）とNPC2種類（1024）のmodel段のみをHost03447db06990で開始。
 receipt remaining-models-job.jsonとproject evidence/remaining-models.jsonを継続観測。
 rig/export承認前で止め、モデルごとの形状・材質・bind可能性を先に確認する。
+
+## 0.33.12 installed / retryとWeb実装の継続
+
+高解像度主人公の肩14頂点だけの重み欠損をbounded repairで修正し、0.33.12として
+署名公開・通常更新。current0.33.12/実PID78171/healthy、1567既存Asset metadata保持。
+実Blenderの元入力再実行ではgeometry/UV/画像不変、足間隔最小+.111551m。
+MCP pipelineのfailed段にはretryがないため、同じ元modelを保持して再開する追加契約を
+別slice ux1/pipeline-retryで検証中。実MCP再開前であり登録完了とはしない。
+
+残り5modelのHost03447db06990は終了。カフェ/花屋はmodel succeeded/export待ち、
+本屋/NPC2種はresource_wait_timeout。新規pipelineを乱発せず、同じfailed Jobを指定した
+明示retryで1件ずつ再開予定。生成元7画像は保持する。
+
+Webのみの実装をOpenCode/Qwen3.8-27Bに開始、Hoste67c69a17071、
+session ses_f34235b71ffep1Np1UF6Cgo821、receipt web-job.json。
+06b promptは実GLBの最終URLを読むHTML/CSS/JSだけを編集し、MCPや別agent呼出しはしない。
+欠けたGLBは読み込み失敗として扱い、旧不良rigやprimitiveへの代替は禁止。
+project BRIEFの古い認証待ちを履歴表示へ直し、assets/manifest.jsonに7納品先を固定。
+物理電話/最終HTML/性能/移動時接地/残りモデルの品質はNOT TESTED。
