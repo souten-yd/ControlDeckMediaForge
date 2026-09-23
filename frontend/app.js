@@ -7925,10 +7925,10 @@ function setBlenderKeysEnabled(enabled) {
   renderBlenderTouchControls();
 }
 
-function installBlenderTouchButtons(container) {
+function installBlenderTouchButtons(container, selector = "button") {
   let tap = null;
   container.addEventListener("touchstart", (event) => {
-    const button = event.target.closest("button");
+    const button = event.target.closest(selector);
     const touch = event.touches[0];
     tap = event.touches.length === 1 && button && container.contains(button) && !button.disabled
       ? {button, id: touch.identifier, x: touch.clientX, y: touch.clientY} : null;
@@ -11342,6 +11342,9 @@ installBlenderTouchButtons(byId("scene-blender-dialog"));
 // Existing nested handlers preventDefault, so each tap still activates once.
 // Image/canvas gestures and native selects are not button activations.
 installBlenderTouchButtons(byId("app"));
+// Candidate disclosure/confirmation also need exact touch activation in the
+// opaque frame. Keep this scoped; native selects and canvas gestures stay native.
+installBlenderTouchButtons(byId("scene-view-candidates"), 'summary, input[type="checkbox"], label:has(input[type="checkbox"])');
 byId("scene-blender-keys").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-blender-key]");
   if (button && !button.disabled) sendBlenderAssistKey(button.dataset.blenderKey);
