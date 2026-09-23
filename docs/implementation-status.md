@@ -1,5 +1,27 @@
 # Media Forge implementation status
 
+## 2026-09-23 継続OpenCodeの表示・停止と実cold起動
+
+利用者はOpenCodeが明示停止まで継続することを許容。Codexからの停止も可と確認。
+自動停止案を取り下げ、汎用Host PR340で保存Jobと実unitを照合し、owner/RBAC付き個別停止を追加。
+Host31e3420を通常適用、PID456446/healthy、1280/320pxで実行一覧と停止ボタンを確認。
+隔離Host/実systemdの3unitは再起動を越えて継続し、PC/320px/APIから対象だけを停止。
+これを実OpenCode推論の再起動越し受入と混同しない。未回収の結果は成功へ変えない。
+停止中Qwen3.8-27Bから実OpenCode Job2291014cbcf0は77.058秒/succeeded、read2回・変更0。
+Broker3要求granted/released（cold30,979,147,560B、warm0B/0B）、再試行/追加DL0。
+lock前の厳密な同時到着はNOT TESTED。同名JobはHost PR341で時刻/IDを補足して導入。実OpenCode Jobcfce488f01aaを320pxから停止し、canceled/unit inactive/lease0を確認。
+MF製品code/runtimeは変更なし。商店街evidenceの自動回収待ちの記述を継続許容方針へ訂正。
+次は手元の重みで複数面の品質/1面比較とUI、未測定の同時cold到着を扱う。
+[詳細](implementation/opencode-continuation-20260923.md)。
+
+## 2026-09-23 更新時unit監査の訂正
+
+Host更新helperの列挙が旧cdapp-opencode-*だけだったため、現行cdfeature-opencode-*も対象へ修正。
+更新前に全実unitを確認済みという表現を訂正。更新後は両prefixの全状態でunit0を実確認。
+元helper/訂正JSONを保存。製品コード/稼働サービス変更なし、追加再起動/モデル取得なし。
+商店街にはREADMEと要件別受入表を追加しlocal commite5f562bへ保存。既知のHost再起動時unit残留と
+cold同時要求の実機受入は未完了として表へ残した。複数面2枚評価は既存重みで実行中。
+
 ## 2026-09-23 複数面3枚のVulkan実測
 
 既存native/参照重み/公式画像で正面・右・背面3枚を生成、531.111765秒/exit0。
