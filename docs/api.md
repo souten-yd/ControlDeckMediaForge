@@ -652,8 +652,29 @@ that same Scene, so both generations and their Assets remain. When only the late
 stage fails, the published first stage is kept and the Job result reports
 `refine` as `{state, engine, reason}`; `state` is `not_requested`, `succeeded` or
 `failed`. Admission pins the digest of the whole ordered chain, so replacing any
-adopted stage after admission is detected. Multi-view conditioning is not offered:
-the adopted `trellis-cli` and Pixal worker each accept exactly one input image.
+adopted stage after admission is detected. Both single-image stages use the same
+source image; the second does not edit the first stage's mesh.
+
+For separately adopted multiview inference, `additional_views` accepts up to three
+`{direction, asset_id}` entries. `input_asset_id` is the front; measured combinations
+are front/right, front/right/back, and front/right/back/left. All input Assets and
+their decoded premultiplied pixel content must be distinct. Use matching square,
+matted RGBA PNG/WebP canvases of 64–2048 pixels. The core preserves framing and
+does not estimate camera calibration or independently crop each view. Optional
+`view_camera` supplies shared turntable assumptions: `fov_degrees` (default 20),
+`distance` (3.1192049980163574 normalized units), `elevation_degrees` (0), and
+`mesh_scale` (1). These settings do not calibrate arbitrary photographs.
+Multiview requires `engine=auto|pixal3d`, resolution 1024, and no
+`refine_with_pixal3d` chain. Check `3d.image_to_3d.multiview`, including measured
+`view_counts`, before submission. A missing multiview receipt fails explicitly;
+additional views are never silently ignored or sent through the single-image runtime.
+The same detached Job, cancellation, revision and Library boundaries apply.
+Admission pins all input hashes and the separate native Vulkan receipt; running
+Jobs protect every view from deletion, and generated provenance/dependencies
+retain every input. The additive `generation.multiview` facts identify cameras,
+all views, preparation hash and the measured mixed Q8-flow/F16-shared precision.
+The previous single-view float32 preprocessing record is not reused for MV.
+Omitted additional fields preserve the original saved request and retry identity.
 Admission requires `jobs.write` and `resources.acquire`. The returned
 detached Job uses the existing `media.job.status` / `media.job.cancel` endpoints
 and owner checks. Its phases cover CPU input preparation (`prepare_3d_input` for

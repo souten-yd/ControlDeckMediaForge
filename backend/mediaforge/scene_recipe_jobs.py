@@ -19,6 +19,7 @@ from .scene_review import SceneReviewRequest
 from .scene_refinement import SceneRefineRequest
 from .scene_bake import SceneBakeRequest
 from .scene_generation import SceneFromImageRequest
+from .scene_generation_inputs import inspect_views
 from .three_d_runtime import ThreeDGenerator
 from .scene_generation_jobs import generate_scene_from_image, stages_digest
 from .scene_recipes import (
@@ -142,13 +143,20 @@ class SceneRecipeJobManager:
                 raise SceneError("host_capability_not_granted", "Host resources.acquire capability is required")
             if self.generator is None:
                 raise SceneError("three_d_runtime_unavailable", "3D generator is unavailable")
-            self.generator.resolve_stages(value.engine, value.resolution, value.refine_with_pixal3d)
+            self.generator.resolve_request(value)
             image = self.store.get_asset(value.input_asset_id)
             if image.mime_type not in {"image/png", "image/jpeg", "image/webp"}:
                 raise SceneError("scene_generation_input_invalid", "Generation requires a PNG, JPEG or WebP image Asset")
             self.workspace._verified_revision_asset(image.id, image.mime_type)
+            if value.additional_views:
+                await asyncio.to_thread(inspect_views, self.workspace, value)
         owner = identity.actor_subject or identity.subject
         external = value.model_dump(mode="json", exclude={"retry_job_id"})
+        if isinstance(value, SceneFromImageRequest):
+            if not value.additional_views:
+                external.pop('additional_views', None)
+            if value.view_camera is None:
+                external.pop('view_camera', None)
         # Preserve the durable payload of requests submitted before this additive field.
         if external.get("reference_set_asset_id") is None:
             external.pop("reference_set_asset_id", None)
@@ -216,9 +224,12 @@ class SceneRecipeJobManager:
             assert self.generator is not None
             generation_constraints = {
                 "generation_runtime_sha256": stages_digest(
-                    self.generator.resolve_stages(value.engine, value.resolution, value.refine_with_pixal3d)),
+                    self.generator.resolve_request(value)),
                 "generation_input_sha256": self.store.get_asset(value.input_asset_id).sha256,
             }
+            if value.additional_views:
+                views, _ = await asyncio.to_thread(inspect_views, self.workspace, value)
+                generation_constraints['generation_views'] = [v.model_dump(mode='json') for v in views]
             if retry_of is not None:
                 previous_constraints = self.store.get_job(retry_of).request.constraints
                 if any(previous_constraints.get(k) != v for k, v in generation_constraints.items()):

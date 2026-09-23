@@ -1407,8 +1407,10 @@ class Store:
                    JOIN jobs ON jobs.id = task.job_id
                    WHERE task.operation = 'scene.from_image'
                    AND jobs.status IN ('queued', 'running')
-                   AND json_extract(task.request_json, '$.input_asset_id') = ? LIMIT 1""",
-                (asset_id,),
+                   AND (json_extract(task.request_json, '$.input_asset_id') = ?
+                        OR EXISTS (SELECT 1 FROM json_each(task.request_json, '$.additional_views') AS view
+                                   WHERE json_extract(view.value, '$.asset_id') = ?)) LIMIT 1""",
+                (asset_id, asset_id),
             ).fetchone()
         if generation_reference is not None:
             raise AssetInUse(asset_id, str(generation_reference['job_id']))

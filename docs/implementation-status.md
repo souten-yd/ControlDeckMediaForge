@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-23 手動2/3/4面の製品経路・モバイル入力（0.33.20準備）
+
+branch ux1/multiview-generation。既存scene.from_imageへ追加画像と共通cameraを加法実装。
+全画像の重複画素/透過/canvas/identityを確認し、全親の来歴と実行中の削除保護を維持。
+単視点とは独立した採用receiptとmixed precisionを使用し、未採用時のfallbackはしない。
+既存重み参照のまま実source adapterで人物4面をVulkan生成、141.713559秒、28renew/released。
+device観測最大6,943,510,528B。実Blender4.5.13で4親/dependencyと991,928tris/4096角2画像を照合。
+元4方向とstaging/factsの実画素SHAは方向ごと一致、4枚の画素は互いに異なる。
+CPU4方向を目視し、顔/後頭部・2脚・片側バッグと画像材質を確認した。
+source Chrome opaque iframeの1280/320pxで追加/選択/除去/差し替え/取消/詳細camera/1枚復帰を受入。
+一般CSSに負けていた削除ボタンを44pxへ修正し、overflow0/pageerror0を再確認。
+通信はcontrolled fixtureでありinstalled受入ではない。旧SV receipt2件のSHA保持、追加DL/重みコピー0。
+最初の全2556pass/3warnings/409.32秒後に版数とAPI3面検証を追加。
+API検証の旧固定Asset数を修正し対象4件通過。最終./mf.sh testは2558pass/3warnings/409.46秒、exit0。
+未実施: 新版署名公開/通常更新/installed MCPと実Job/mobile、自動方向画像→3D、物理スマホ。
+[詳細](implementation/multiview-20260923.md)。全体goal継続。
+
 ## 2026-09-23 複数面の実画素検査・人物/非対称・native取消
 
 利用者の再ログイン後、参照編集50f9ce2160f3のlease released/active0を通常HTTPで確認。
