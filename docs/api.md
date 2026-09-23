@@ -41,7 +41,7 @@ raw-path, or cookie-based fallback.
 confirmation mode, and bounded generation/rig/export options. A prompt first
 submits an ordinary `image.generate` Job; an image starts at model reconstruction.
 `media.pipeline.status` (`POST /addon/v1/agent/pipeline/status`) accepts
-`asset-pipeline-action.json` with `pipeline_id` and `action=status|approve|cancel`.
+`asset-pipeline-action.json` with `pipeline_id` and `action=status|approve|cancel|retry`.
 Both use the existing `{"input": ...}` agent envelope and return the persisted
 pipeline record, including stages, child Job IDs, scene/revision and final asset IDs.
 
@@ -49,6 +49,16 @@ Status calls advance at most one new Job; polling is required in both modes.
 `confirm` pauses before each stage after the first until approved. Cancellation
 stops future stages and leaves an already running child Job to finish; it does
 not cancel that Job. Failed and canceled pipelines stay terminal on later polls.
+Since 0.33.13, explicit `retry` requires `expected_job_id` equal to the failed
+stage's current Job ID. The ordinary Job must itself be failed or canceled.
+Successful earlier stages, the input request and later confirm-mode approvals
+are preserved. The stage records up to eight `failed_attempts`, containing the
+previous Job ID, error and timestamps. Repeated/stale requests return 409 and
+cannot retry a newer failed attempt. Other actors still receive 404.
+Export failures without a Job, successful Jobs with missing results and unknown
+submission outcomes are not blindly retried. An interrupted retry dispatch is
+persisted before submission and becomes a terminal failure if its Job is unknown.
+The `expected_job_id` field is only valid with `action=retry`.
 Pipeline records belong to the Host actor; other actors receive 404. Concurrent
 read/advance/write operations on one pipeline are serialized in the single core
 process, while unrelated pipelines retain independent request identities.

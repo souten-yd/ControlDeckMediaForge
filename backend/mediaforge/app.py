@@ -2924,10 +2924,11 @@ def create_app(
         return advanced.model_dump(mode="json")
 
     async def pipeline_action(pipeline_id: str, action: str,
-                              identity: HostIdentity) -> dict[str, Any]:
+                              identity: HostIdentity, *, expected_job_id: str | None = None) -> dict[str, Any]:
         try:
             result = await pipeline_coordinator.action(
-                pipeline_id, scene_owner(identity), action, pipeline_deps(identity))
+                pipeline_id, scene_owner(identity), action, pipeline_deps(identity),
+                expected_job_id=expected_job_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "pipeline_not_found"}) from exc
         except PipelineStalled as exc:
@@ -2961,7 +2962,8 @@ def create_app(
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_id"}) from exc
-        return await pipeline_action(value.pipeline_id, value.action, identity)
+        return await pipeline_action(value.pipeline_id, value.action, identity,
+                                     expected_job_id=value.expected_job_id)
 
     @app.post("/addon/v1/agent/job/status")
     async def agent_scene_job_status(request: Request) -> dict[str, Any]:
@@ -4210,13 +4212,10 @@ def create_app(
                         )
                         result = await run_pipeline(pipeline, identity)
                     elif method == "pipelines.status":
-                        if set(params) - {"action"} != {"pipeline_id"}:
-                            raise ValueError("pipeline status fields differ")
-                        action = str(params.get("action", "status"))
-                        if action not in {"status", "approve", "cancel"}:
-                            raise ValueError("pipeline action differs")
+                        value = AssetPipelineActionRequest.model_validate(params)
                         result = await pipeline_action(
-                            str(params.get("pipeline_id", "")), action, identity)
+                            value.pipeline_id, value.action, identity,
+                            expected_job_id=value.expected_job_id)
                     elif method == "pipelines.list":
                         if set(params) - {"limit"} != set():
                             raise ValueError("pipeline list fields differ")
@@ -4850,10 +4849,12 @@ def create_app(
 
     @app.post("/workspace-api/pipelines/{pipeline_id}", include_in_schema=False)
     async def standalone_pipeline_status(pipeline_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        action = str(payload.get("action", "status"))
-        if action not in {"status", "approve", "cancel"}:
-            raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_action"})
-        return await pipeline_action(pipeline_id, action, standalone_identity())
+        try:
+            value = AssetPipelineActionRequest.model_validate({**payload, "pipeline_id": pipeline_id})
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_action"}) from exc
+        return await pipeline_action(pipeline_id, value.action, standalone_identity(),
+                                     expected_job_id=value.expected_job_id)
 
     @app.get("/workspace-api/scenes", include_in_schema=False)
     async def standalone_scenes() -> dict[str, Any]:

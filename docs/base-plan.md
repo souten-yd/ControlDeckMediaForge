@@ -1386,6 +1386,17 @@ visual or semantic quality; those remain separate experimental acceptance gates.
 
 Exit criterion: generated 3D can flow through the same asset lineage and validation pipeline, while failures remain isolated from the stable Blender feature.
 
+The orchestration pipeline may explicitly retry only its failed stage whose
+ordinary Job is confirmed failed or canceled. The caller supplies that exact
+failed Job ID, making a duplicate/stale retry unable to restart a newer attempt.
+Keep successful image/model revisions, the original request and up to eight
+failed-attempt records. Never regenerate earlier stages or auto-approve later
+confirm-mode stages. Before dispatch, persist that the attempt has been consumed;
+an interrupted dispatch with no known Job ID stays failed/uncertain rather than
+being resubmitted on status polling. Existing owner checks and Broker admission
+remain authoritative. Unknown submission outcomes and successful Jobs lacking
+results require reconciliation, not blind retry.
+
 ### Phase 6 — Manga library/studio
 
 Deliver:

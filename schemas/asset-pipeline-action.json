@@ -1,6 +1,6 @@
 {
  "additionalProperties": false,
- "description": "Poll a pipeline, or tell it to go on or to stop.\n\nPolling is what moves it: nothing runs unwatched. \"approve\" releases the\nstep a confirm-mode run is waiting on; \"cancel\" stops before the next step\nand leaves whatever is already running to finish on its own.",
+ "description": "Poll a pipeline, or tell it to go on or to stop.\n\nPolling is what moves it: nothing runs unwatched. \"approve\" releases the\nstep a confirm-mode run is waiting on; \"cancel\" stops before the next step\nand leaves whatever is already running to finish on its own.\n\"retry\" reruns only a failed stage; expected_job_id must be its current\nfailed Job ID. Read status first. Earlier results and later approvals stay\nunchanged. Do not use retry for an unknown submission outcome.",
  "properties": {
   "pipeline_id": {
    "pattern": "^pipeline_[0-9a-f]{32}$",
@@ -12,10 +12,24 @@
    "enum": [
     "status",
     "approve",
-    "cancel"
+    "cancel",
+    "retry"
    ],
    "title": "Action",
    "type": "string"
+  },
+  "expected_job_id": {
+   "anyOf": [
+    {
+     "pattern": "^job_[0-9a-f]{32}$",
+     "type": "string"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": null,
+   "title": "Expected Job Id"
   }
  },
  "required": [

@@ -1,5 +1,15 @@
 # Media Forge implementation status
 
+## 2026-09-23 MCP pipelineの失敗段だけ再試行（0.33.13準備）
+
+0.33.12はmerge/release/installed済み（PID78171/healthy、1567既存Asset保持）。
+実MCPで失敗した1024主人公rigと本屋/NPC modelを再生成せず再開するため、
+retry＋expected_job_idを追加。元model/画像を保持し、履歴・owner・実Job終端・古い要求を検査。
+dispatch前に保存し、通信例外/取消/再起動後の不明結果を自動再送しない。
+実source HTTP（Host/画像のみ明示fake）で拒否→再試行成功→次段確認待ち、他owner404、旧ID409。
+全体2454 passed/3 skipped/353.97秒、build venv参照後にskipした署名3件もpassed/.23秒。
+詳細[工程再試行](implementation/pipeline-retry-20260923.md)。signed installed/MCP再開・物理電話はNOT TESTED。商店街HTMLは制作中。
+
 ## 2026-09-23 人物rigの微小な重み欠損を修正（0.33.12準備）
 
 1024主人公の実MCP失敗を再現。16391頂点のうち肩の14頂点だけ重み欠損。

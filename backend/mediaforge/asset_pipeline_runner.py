@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 from weakref import WeakValueDictionary
 
-from .asset_pipeline import AssetPipeline, AssetPipelineRequest, PipelineStage
+from .asset_pipeline import AssetPipeline, AssetPipelineRequest, FailedPipelineAttempt, PipelineStage
 
 TERMINAL = {"succeeded", "failed", "canceled"}
 
@@ -207,11 +207,27 @@ class PipelineCoordinator:
         return result
 
     async def action(self, pipeline_id: str, owner: str, action: str,
-                     deps: PipelineDeps) -> AssetPipeline:
+                     deps: PipelineDeps, *, expected_job_id: str | None = None) -> AssetPipeline:
         lock = self.locks.setdefault(pipeline_id, asyncio.Lock())
         async with lock:
             pipeline = await asyncio.to_thread(self.load, pipeline_id, owner)
-            if action == "approve":
+            if action == "retry":
+                stage = await retry_stage(pipeline, expected_job_id, deps)
+                # Consume the old attempt before dispatch. After a crash, a
+                # running stage without a known Job fails closed on polling.
+                await asyncio.to_thread(self.save, pipeline)
+                try:
+                    await _start(pipeline, stage, AssetPipelineRequest.model_validate(pipeline.request), deps)
+                except (Exception, asyncio.CancelledError):
+                    _finish(stage, "failed", deps, "pipeline_submission_uncertain")
+                    pipeline.state = "failed"
+                    pipeline.updated_at = deps.now()
+                    await asyncio.shield(asyncio.to_thread(self.save, pipeline))
+                    raise
+                if stage.state == "failed":
+                    pipeline.state = "failed"
+                await asyncio.to_thread(self.save, pipeline)
+            elif action == "approve":
                 approve(pipeline, deps)
             elif action == "cancel":
                 cancel(pipeline, deps)
@@ -220,6 +236,35 @@ class PipelineCoordinator:
             result = await advance(pipeline, deps)
             await asyncio.to_thread(self.save, result)
             return result
+
+
+async def retry_stage(pipeline: AssetPipeline, expected_job_id: str | None,
+                      deps: PipelineDeps) -> PipelineStage:
+    failed = [stage for stage in pipeline.stages if stage.state == "failed"]
+    if pipeline.state != "failed" or len(failed) != 1:
+        raise PipelineStalled("pipeline_is_not_failed")
+    stage = failed[0]
+    if not expected_job_id or stage.job_id != expected_job_id:
+        raise PipelineStalled("pipeline_retry_job_changed")
+    if stage.name == "export" or stage.asset_id or stage.revision_id:
+        raise PipelineStalled("pipeline_retry_needs_reconciliation")
+    if len(stage.failed_attempts) >= 8:
+        raise PipelineStalled("pipeline_retry_limit")
+    job = await (deps.media_job if stage.name == "image" else deps.scene_job)(expected_job_id)
+    if job.get("status") not in {"failed", "canceled"}:
+        raise PipelineStalled("pipeline_retry_needs_reconciliation")
+    stage.failed_attempts.append(FailedPipelineAttempt(
+        job_id=expected_job_id, error_code=stage.error_code,
+        started_at=stage.started_at, finished_at=stage.finished_at))
+    stage.state = "running"
+    stage.job_id = None
+    stage.error_code = None
+    stage.started_at = deps.now()
+    stage.finished_at = None
+    stage.approved = True
+    pipeline.state = "running"
+    pipeline.updated_at = deps.now()
+    return stage
 
 
 def cancel(pipeline: AssetPipeline, deps: PipelineDeps) -> AssetPipeline:
