@@ -1,5 +1,13 @@
 # Media Forge implementation status
 
+## 2026-09-23 複数面入力の同一画像確認
+
+利用者の指摘を受け、実入力4PNGの異なるSHA/正面・右・背面・左の画素を確認。
+2枚は正面/右、3枚は正面/右/背面、4枚は全方向をnativeの各conditioningで処理。
+正面を複製して各方向にしていない。AI側面候補は3D入力に使っていない。
+canonical設計へ各方向の実画像表示・重複画像の拒否・手動/候補の分離・320px操作を追記。
+製品MV UI/runtimeは未採用。別branch ux1/reference-edit-admissionで参照編集のOOM修正を実測/検証中。
+
 ## 2026-09-23 単視点SVとの比較・別方向画像の失敗原因
 
 既存9重み参照で1面SVをVulkan生成、453.378568秒/exit0、90回renew/released。
