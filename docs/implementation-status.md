@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-23 実MCPの画像編集引数を修正候補で検証
+
+通常OpenCode/Qwen3.8-27B Job50715bdc703eは208.725451秒で終端したが、
+MCPは不正なorigin_notesを加え3回とも422。生成Job/画像0、元Asset/project保持、Host PID不変。
+再送禁止への違反も記録。seed非掲載と自由形式objectの暗黙許可がローカルdecoderと不一致。
+seed型/追加キーの明示とpack専用項目の説明を追加し、対象23testsと隔離実HTTPを確認。
+固定b10917 converterで旧grammarにseed/追加キー規則なし、候補にあり。
+初回全2558pass/1fail（参照セットfieldの追加説明）/364.23秒。
+共通定義を保持する修正後は対象56pass、0.33.21で最終全2559pass/3warnings/398.92秒、exit0。
+配布/installed再確認/背面の実生成はNOT TESTED。
+[詳細](implementation/image-edit-mcp-schema-20260923.md)。全体goal継続。
+
 ## 2026-09-23 自動方向候補の人物評価は未採用
 
 通常Host/image.editで保存済み正面から右側面候補1件を生成しLibraryへ保存。

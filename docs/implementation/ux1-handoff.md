@@ -1,5 +1,20 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 実OpenCodeの背面候補要求が受付前に失敗
+
+branch ux1/image-edit-mcp-schema、base19e0388。通常OpenCode/Qwen Job50715bdc703e、
+session ses_f323df276ffeTbroqFwprYEwdn、208.725451秒。
+再送禁止に反し同じ不正引数で3回MCP422。画像seed/alpha欠落、pack項目混入。
+MF Job追加0/元Assetとproject保持/Host PID674922不変/active lease0。停止操作0。
+schemaの既存seedを掲載、自由形式の追加キー許可を明示し、pack専用項目の説明を補強。
+対象23tests/隔離実HTTP/固定b10917 Python converterを確認。
+初回全2558pass/1fail（参照セットfieldの追加説明）。共通定義を保持する修正後、対象56pass。
+0.33.21へ版更新し最終全2559pass/3warnings/398.92秒、exit0。以後製品code変更なし。
+installed0.33.20は変更なし。これは修正候補であり、原因すべての解消・実生成を未受入。
+次: full gate→PR→署名配布と通常更新→同じ実OpenCode/MCP要求を再確認。
+自動方向候補UI/比較採用/自動3D/物理スマホも未完了。追加モデル取得0。
+[詳細](image-edit-mcp-schema-20260923.md)。全体goal継続。
+
 ## 2026-09-23 自動方向候補の人物評価とHost watchdog
 
 手動MVはPR654/655で公開・installed受入済み。branch ux1/multiview-candidate-evaluationは評価記録のみ。

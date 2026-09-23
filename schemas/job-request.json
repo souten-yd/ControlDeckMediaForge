@@ -70,7 +70,7 @@
     "constraints": {
       "type": "object",
       "default": {},
-      "description": "Free-form generation constraints. Explicit integer width/height here always win over anything inferred, for image.generate and for the image.edit modes that redraw the whole picture. Prefer describing purpose in constraints.asset_brief and letting Media Forge resolve the geometry. For operation=asset.pack with profile=3d.reference_set, this object itself is the ReferenceSetSpec: include name, views (front and side at minimum), scale_m and origin_notes. Optional canonical_asset_id, scale_axis, forward_axis, up_axis, parts and landmarks belong here directly. Do not wrap in asset_brief, and do not include image-generation constraints in that pack request. For operation=asset.pack with profile=3d.project.glb, use only constraints.compile_options with schema_version=3d.compile-options@1 and optional triangle_budget/LOD/material options. Reference-set fields such as scale_m, origin_notes or canonical_asset_id must not be included for 3d.project.glb.",
+      "description": "For image.generate/image.edit, include only the settings needed by the image request: width, height, seed, edit_mode, strict_edit, asset_brief. Do not fill unused optional fields with empty strings or defaults. The name/views/scale_m/origin_notes/compile_options fields below are for asset.pack and should be omitted from image requests. Free-form generation constraints. Explicit integer width/height here always win over anything inferred, for image.generate and for the image.edit modes that redraw the whole picture. Prefer describing purpose in constraints.asset_brief and letting Media Forge resolve the geometry. For operation=asset.pack with profile=3d.reference_set, this object itself is the ReferenceSetSpec: include name, views (front and side at minimum), scale_m and origin_notes. Optional canonical_asset_id, scale_axis, forward_axis, up_axis, parts and landmarks belong here directly. Do not wrap in asset_brief, and do not include image-generation constraints in that pack request. For operation=asset.pack with profile=3d.project.glb, use only constraints.compile_options with schema_version=3d.compile-options@1 and optional triangle_budget/LOD/material options. Reference-set fields such as scale_m, origin_notes or canonical_asset_id must not be included for 3d.project.glb.",
       "properties": {
         "width": {
           "type": "integer",
@@ -80,12 +80,9 @@
           "type": "integer",
           "description": "Exact output height. Overrides every inferred geometry rule."
         },
-        "asset_brief": {
-          "$ref": "#/$defs/assetBrief"
-        },
-        "scene_texture": {
-          "$ref": "#/$defs/sceneTextureRequest",
-          "description": "Durable 3D Studio return context for an image.generate or image.edit job. It does not grant scene mutation authority; applying the resulting immutable image still requires MaterialBinding against the current revision."
+        "seed": {
+          "type": "integer",
+          "description": "Optional image-generation or image-edit seed. Omit to use the existing worker default of 0. Use a nonnegative integer; the worker validates the supported range for the requested output count."
         },
         "edit_mode": {
           "type": "string",
@@ -107,6 +104,13 @@
           "type": "boolean",
           "default": false,
           "description": "Keep the pixels outside the edited area unchanged. This is for touching up part of a picture, not for redrawing it: a pose or angle change needs the whole image redrawn, so leave this false there. 'inpaint' and 'outpaint' require it; 'variation' refuses it."
+        },
+        "asset_brief": {
+          "$ref": "#/$defs/assetBrief"
+        },
+        "scene_texture": {
+          "$ref": "#/$defs/sceneTextureRequest",
+          "description": "Durable 3D Studio return context for an image.generate or image.edit job. It does not grant scene mutation authority; applying the resulting immutable image still requires MaterialBinding against the current revision."
         },
         "name": {
           "maxLength": 128,
@@ -208,7 +212,8 @@
           "$ref": "#/$defs/CompileOptions",
           "description": "For asset.pack + profile=3d.project.glb only. Put these options inside constraints.compile_options, with no other constraints keys. Preserve materials by default. triangle_budget reduces faces; this is not new 3D generation."
         }
-      }
+      },
+      "additionalProperties": true
     },
     "output": {
       "$ref": "#/$defs/output",
