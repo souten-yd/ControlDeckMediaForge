@@ -1,5 +1,22 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 0.33.23公開・導入、別方向3画像を保存・品質未採用
+
+PR660/4fadfffを既存鍵で署名公開・通常更新し、current0.33.23/PID770023/healthy。
+旧1594 Asset metadata/代表3SHA/runtime全JSONを保持、Host PID674922/NRestarts0。
+320pxの通常候補UIからbatch_ad986d092bfb4a60bdfb6ecce4507692を1回依頼し、3件成功/156.636秒。
+right7213c04a、backe37bfeb6、leftd935d74aの画像をLibraryへ保存（各IDのprefix）。
+元正面62eafeaeへの親/実SHA/方向context、全画素相異、3lease released/active0を独立照合。
+rightの向き/余計なストラップ、backの持ち手逆転、体形差によりこの組は3Dへ未採用。
+PC1280/320で3候補と元画像の比較、Activity URL→比較を確認。
+Libraryの3画像/既存4面GLB表示・回転・closeは初回7件、最後のPC closeを別途1件確認。
+初回helperの比較/固定nav/PC close timeoutを保持し、固定navの同一フローは未受入。
+Asset総数1597/active Job0/商店街不変/追加モデルDL0。追加生成・取消0。
+製品は全2576pass/345.50秒のgateから変更なし。このbranchは受入文書のみ。
+次: 候補画像の方向/持ち物/形状の整合性、固定navの実入力、物理スマホを別に評価。
+新UIのinstalled採用・取消は未受入。失敗候補を自動3Dへ入れない。全体goal継続。
+[詳細](view-candidates-20260923.md)。
+
 ## 2026-09-23 installed候補欄のタッチずれを修正（0.33.23準備）
 
 PR659/4c4b3c6の0.33.22を既存鍵で署名公開、通常更新。current0.33.22/PID751496/healthy、
