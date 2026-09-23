@@ -1,0 +1,22 @@
+MediaForge 0.33.13導入済み。実MCPで既存主人公1024の失敗rigだけ再開し、完成済み店舗2つと共に納品する。
+同じprojectの別工程がWebコードを書いている。HTML/CSS/JS/BRIEF/AGENTS/vendorに触れない。
+新規画像・3D生成、pipeline.start、別agent、shellでAPI/Blender実行は禁止。今回はCPU rigとpackだけ。
+
+media.pipeline.statusの実schemaにはaction=retry、expected_job_idが追加された。
+主人公pipeline_9dd4bab1fef94853bba40dcc8f0a30bdをstatusで確認。
+failed rigの現在Jobがjob_dcd564c62d2d453f8de8dd8db242ce32なら、
+action=retryとexpected_job_id=job_dcd564c62d2d453f8de8dd8db242ce32を指定して1回だけ再試行。
+すでにrunning/succeededなら再試行せずその結果を追う。新しいJob IDは即座にevidence/rig-ready-exports.jsonへ保存。
+15秒間隔で同じpipelineをpoll。rig成功後のexport待ちをapproveし、GLBをinspectして、
+通常project_output_grantとmedia.packでexports/player-1024-rigged.glbへ配置。
+元modelを作り直さない。手元の古いplayer-rigged.glbは不良rigなので使わない。
+
+次に、カフェpipeline_3df6d5608a824dafbda23f514bd3640fと
+花屋pipeline_892771ec5ecd4b15a63e985d02c5810eをstatusで確認し、export待ちならapprove。
+成功GLBをinspect/packしexports/cafe.glb、exports/florist.glbへ配置。
+
+evidence/rig-ready-exports.jsonに各scene/revision/Asset/元画像/新旧Job/hash/pack receiptを簡潔に保存。
+assets/manifest.jsonの対象3件だけstateとasset_id/sha256/scene_id/revision_idを事実で更新可能。
+URL/kind/heightは変更しない。本屋/NPCは今回触らない。
+failedになったらその対象を再送せず記録。通信エラーは未受付と断定せず記録して停止。
+冗長なschema転記不要、短いMCP操作と証跡だけ実行。品質評価は監督側が担当する。

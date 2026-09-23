@@ -171,3 +171,10 @@ session ses_f34235b71ffep1Np1UF6Cgo821、receipt web-job.json。
 欠けたGLBは読み込み失敗として扱い、旧不良rigやprimitiveへの代替は禁止。
 project BRIEFの古い認証待ちを履歴表示へ直し、assets/manifest.jsonに7納品先を固定。
 物理電話/最終HTML/性能/移動時接地/残りモデルの品質はNOT TESTED。
+
+0.33.13の明示retryを署名公開・ローカル適用後、Web実装と独立したCPUだけの
+主人公1024再rig＋完成済みカフェ/花屋exportをHost718d8c07704dで開始。
+receipt rig-ready-exports-job.json、prompt07a。GPUを使う本屋/NPC再生成はこの工程に含めない。
+Web Jobe67c69a17071はまだ実装中。中間app.jsのfoot座標/店舗clone/カメラなどの
+sourceレビュー指摘はmaintenance/web-review-before.mdへ保存し、書込み終了後に実描画で再検証する。
+中間実装の存在をHTML完成とは扱わない。
