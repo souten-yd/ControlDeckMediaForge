@@ -1,5 +1,19 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 複数面の実画素検査・人物/非対称・native取消
+
+branch ux1/multiview-person-cancel。通常再ログイン確認、参照編集のlease releasedを追加照会済み。
+読み取り専用scripts/verify_multiview_inputs.pyを追加。別名/別圧縮の同一画素を拒否、
+公式4面と人物4面のcamera/透過/共通canvas/全入力SHAを実検査。製品UI/APIへは未接続。
+既存主人公GLBを変更せず、検証sceneだけ片側に持ち物を足して4方向をCPU描画。
+4面Vulkan138.620秒/2面132.692秒、両方exit0/lease released。輪郭平均IoU.962755/.960514。
+脚2本/持ち物片側を目視。2面の未入力バッグ背面に白い模様、4面はなし。厳密な材質/rigは未受入。
+nativeのSS flowをown process groupだけ停止、0.200秒/GLBなし/lease released。
+全2537tests/3warnings/338.77秒/skip0を通過。追加DL0/current0.33.19変更なし。
+3面人物も127.900秒/exit0/25renew/released、IoU.958994、2面の白い模様はない。
+全4lease released/active0を通常HTTPで確認。次は既存Jobsへ全入力のpin/削除保護/来歴/取消を接続し、mobile UIを受入。
+独立cropやSVのfloat32来歴の流用は禁止。詳細[multiview](multiview-20260923.md)。全体goal継続。
+
 ## 2026-09-23 参照編集0.33.19を通常導入・Library実表示
 
 PR651/90788fcを署名公開・再取得検証・通常feature update、current0.33.19/PID513777/healthy。

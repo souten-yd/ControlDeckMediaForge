@@ -79,3 +79,8 @@ opaque origin、横overflow0、page error0をassertしPNGも目視。物理ス�
 installed lease終端の追加HTTP照会はNOT TESTEDとして記録し、認証を迂回しない。
 期限切れの専用sessionだけを通常logoutで無効化し、利用者へ再ログインを依頼。
 公開・更新・生成・保存・Library表示の受入は完了。追加MV評価は再認証後に継続する。
+
+利用者の通常再ログイン後、2026-09-23T07:50:53Zに同じHost Job50f9ce2160f3のlease
+057d8785-5975-439f-ad44-1696285ce14cを通常`GET /api/v1/resources`で照会し、
+`released`を確認。その時点のactive/reservedは0。この追加終端照会のNOT TESTEDを解消した。
+再生成/認証迂回なし。証跡release-0.33.19-20260923/resource-check-after-login.json。
