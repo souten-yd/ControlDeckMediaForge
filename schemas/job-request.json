@@ -70,7 +70,7 @@
     "constraints": {
       "type": "object",
       "default": {},
-      "description": "Free-form generation constraints. Explicit integer width/height here always win over anything inferred, for image.generate and for the image.edit modes that redraw the whole picture. Prefer describing purpose in constraints.asset_brief and letting Media Forge resolve the geometry. For operation=asset.pack with profile=3d.reference_set, this object itself is the ReferenceSetSpec: include name, views (front and side at minimum), scale_m and origin_notes. Optional canonical_asset_id, scale_axis, forward_axis, up_axis, parts and landmarks belong here directly. Do not wrap in asset_brief, and do not include image-generation constraints in that pack request.",
+      "description": "Free-form generation constraints. Explicit integer width/height here always win over anything inferred, for image.generate and for the image.edit modes that redraw the whole picture. Prefer describing purpose in constraints.asset_brief and letting Media Forge resolve the geometry. For operation=asset.pack with profile=3d.reference_set, this object itself is the ReferenceSetSpec: include name, views (front and side at minimum), scale_m and origin_notes. Optional canonical_asset_id, scale_axis, forward_axis, up_axis, parts and landmarks belong here directly. Do not wrap in asset_brief, and do not include image-generation constraints in that pack request. For operation=asset.pack with profile=3d.project.glb, use only constraints.compile_options with schema_version=3d.compile-options@1 and optional triangle_budget/LOD/material options. Reference-set fields such as scale_m, origin_notes or canonical_asset_id must not be included for 3d.project.glb.",
       "properties": {
         "width": {
           "type": "integer",
@@ -203,6 +203,10 @@
           "minLength": 1,
           "title": "Origin Notes",
           "type": "string"
+        },
+        "compile_options": {
+          "$ref": "#/$defs/CompileOptions",
+          "description": "For asset.pack + profile=3d.project.glb only. Put these options inside constraints.compile_options, with no other constraints keys. Preserve materials by default. triangle_budget reduces faces; this is not new 3D generation."
         }
       }
     },
@@ -651,6 +655,98 @@
         "asset_id"
       ],
       "title": "ReferenceView",
+      "type": "object"
+    },
+    "CompileOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3d.compile-options@1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "apply_transforms": {
+          "const": true,
+          "default": true,
+          "title": "Apply Transforms",
+          "type": "boolean"
+        },
+        "repair_normals": {
+          "default": false,
+          "title": "Repair Normals",
+          "type": "boolean"
+        },
+        "remove_degenerate": {
+          "default": false,
+          "title": "Remove Degenerate",
+          "type": "boolean"
+        },
+        "merge_by_distance_m": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 1e-07,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Merge By Distance M"
+        },
+        "triangle_budget": {
+          "anyOf": [
+            {
+              "maximum": 200000,
+              "minimum": 12,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Triangle Budget"
+        },
+        "lod_ratios": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 3,
+          "title": "Lod Ratios",
+          "type": "array"
+        },
+        "collision": {
+          "default": "none",
+          "enum": [
+            "none",
+            "box",
+            "convex_hull"
+          ],
+          "title": "Collision",
+          "type": "string"
+        },
+        "materials": {
+          "default": "preserve",
+          "enum": [
+            "preserve",
+            "basic_pbr"
+          ],
+          "title": "Materials",
+          "type": "string"
+        },
+        "preview": {
+          "const": "fixed_workbench",
+          "default": "fixed_workbench",
+          "title": "Preview",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version"
+      ],
+      "title": "CompileOptions",
       "type": "object"
     }
   },

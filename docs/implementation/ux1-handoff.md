@@ -1,5 +1,15 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 MCPからGLB軽量化設定を指定できない問題（0.33.15準備）
+
+実OpenCode Job5304c9bb2c0cがcompile_optionsを構成できず、空引数や参照セット項目を反復。
+公開schemaに既存CompileOptions型がなかったため、型付き引数生成から発見できなかった。
+既存schemaへ型と参照を追加し、asset.pack/3d.project.glbだけの設定であることを明記した。
+実source Uvicorn HTTP200、16186B、公開型/元schema一致、Host上限64KiB未満を確認。
+初回全体gateは2472pass/1fail（40ms idle timeoutの既存timing test）。単独関連fileは通過。
+最終全体2473passed/3warnings/341.53秒、exit0。signed installed/MCPによる軽量化再受入はNOT TESTED。
+詳細[GLB設定公開](compile-options-discovery-20260923.md)。
+
 ## 2026-09-23 0.33.14導入・実MCP主人公rig再開を確認
 
 PR637を署名release/通常ローカル更新。current0.33.14/PID135776/healthy、既存Asset1573件保持。

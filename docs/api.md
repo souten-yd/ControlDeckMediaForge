@@ -945,7 +945,7 @@ exported GLB and PNG are independently revalidated before the immutable ZIP is
 registered. No Blender path, script, operator name, or project path is a public
 input.
 
-The optional private `constraints.compile_options` object is versioned as
+The optional `constraints.compile_options` object is included in the published job request schema and versioned as
 `3d.compile-options@1` and rejects unknown fields. `apply_transforms=true` and
 `preview=fixed_workbench` are fixed. Typed additions are
 `repair_normals`/`remove_degenerate` booleans, merge distance `1e-7..1.0` m,
