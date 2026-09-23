@@ -70,7 +70,7 @@
     "constraints": {
       "type": "object",
       "default": {},
-      "description": "Free-form generation constraints. Explicit integer width/height here always win over anything inferred, for image.generate and for the image.edit modes that redraw the whole picture. Prefer describing purpose in constraints.asset_brief and letting Media Forge resolve the geometry. For operation=asset.pack with profile=3d.reference_set, this object itself is the ReferenceSetSpec: include name, views (front and side at minimum), scale_m and origin_notes. Optional canonical_asset_id, scale_axis, forward_axis, up_axis, parts and landmarks belong here directly. Do not wrap in asset_brief, and do not include image-generation constraints in that pack request.",
+      "description": "Free-form generation constraints. Explicit integer width/height here always win over anything inferred, for image.generate and for the image.edit modes that redraw the whole picture. Prefer describing purpose in constraints.asset_brief and letting Media Forge resolve the geometry. For operation=asset.pack with profile=3d.reference_set, this object itself is the ReferenceSetSpec: include name, views (front and side at minimum), scale_m and origin_notes. Optional canonical_asset_id, scale_axis, forward_axis, up_axis, parts and landmarks belong here directly. Do not wrap in asset_brief, and do not include image-generation constraints in that pack request. For operation=asset.pack with profile=3d.project.glb, use only constraints.compile_options with schema_version=3d.compile-options@1 and optional triangle_budget/LOD/material options. Reference-set fields such as scale_m, origin_notes or canonical_asset_id must not be included for 3d.project.glb.",
       "properties": {
         "width": {
           "type": "integer",
@@ -203,11 +203,16 @@
           "minLength": 1,
           "title": "Origin Notes",
           "type": "string"
+        },
+        "compile_options": {
+          "$ref": "#/$defs/CompileOptions",
+          "description": "For asset.pack + profile=3d.project.glb only. Put these options inside constraints.compile_options, with no other constraints keys. Preserve materials by default. triangle_budget reduces faces; this is not new 3D generation."
         }
       }
     },
     "output": {
-      "$ref": "#/$defs/output"
+      "$ref": "#/$defs/output",
+      "description": "Output options. For asset.pack, omitted output or omitted format selects one ZIP; explicitly use format=zip and count=1. Image operations default to PNG. Video operations require an explicit mp4 or webm format."
     },
     "qa": {
       "$ref": "#/$defs/qa"
@@ -287,6 +292,33 @@
         "properties": {
           "inputs": {
             "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "asset.pack"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "output": {
+            "properties": {
+              "format": {
+                "const": "zip",
+                "default": "zip"
+              },
+              "count": {
+                "const": 1
+              }
+            }
           }
         }
       }
@@ -386,14 +418,15 @@
             "webm",
             "zip"
           ],
-          "default": "png"
+          "default": "png",
+          "description": "PNG by default for images. For asset.pack the omitted format resolves to ZIP, and any explicit format must be zip."
         },
         "count": {
           "type": "integer",
           "minimum": 1,
           "maximum": 8,
           "default": 1,
-          "description": "How many images to produce from this one request. They are generated in the same call with the model kept loaded, each from a different seed, so asking for several takes far less time than repeating the call. Use it to get alternatives of the same idea and pick one; the spread between them is not steerable."
+          "description": "How many images to produce from this one request. They are generated in the same call with the model kept loaded, each from a different seed, so asking for several takes far less time than repeating the call. Use it to get alternatives of the same idea and pick one; the spread between them is not steerable. For asset.pack this must be 1."
         }
       },
       "default": {}
@@ -651,6 +684,98 @@
         "asset_id"
       ],
       "title": "ReferenceView",
+      "type": "object"
+    },
+    "CompileOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "3d.compile-options@1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "apply_transforms": {
+          "const": true,
+          "default": true,
+          "title": "Apply Transforms",
+          "type": "boolean"
+        },
+        "repair_normals": {
+          "default": false,
+          "title": "Repair Normals",
+          "type": "boolean"
+        },
+        "remove_degenerate": {
+          "default": false,
+          "title": "Remove Degenerate",
+          "type": "boolean"
+        },
+        "merge_by_distance_m": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 1e-07,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Merge By Distance M"
+        },
+        "triangle_budget": {
+          "anyOf": [
+            {
+              "maximum": 200000,
+              "minimum": 12,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Triangle Budget"
+        },
+        "lod_ratios": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 3,
+          "title": "Lod Ratios",
+          "type": "array"
+        },
+        "collision": {
+          "default": "none",
+          "enum": [
+            "none",
+            "box",
+            "convex_hull"
+          ],
+          "title": "Collision",
+          "type": "string"
+        },
+        "materials": {
+          "default": "preserve",
+          "enum": [
+            "preserve",
+            "basic_pbr"
+          ],
+          "title": "Materials",
+          "type": "string"
+        },
+        "preview": {
+          "const": "fixed_workbench",
+          "default": "fixed_workbench",
+          "title": "Preview",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version"
+      ],
+      "title": "CompileOptions",
       "type": "object"
     }
   },

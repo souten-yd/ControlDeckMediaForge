@@ -1,5 +1,103 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 0.33.18/Host修正を導入し実MCP失敗追跡を受入
+
+PR647/c392021を署名公開・通常feature update、current0.33.18/PID393256/healthy。
+既存1585 Asset metadata/代表3content SHA/runtime全JSONを保持。Host PR337/786e76cも通常起動で適用。
+実OpenCode/Qwen Jobace32c6b7a89が意図的unsupported packを1回だけ呼び、期待するtool error。
+Host94bde79e1799/MFjob_0fe3e640c9c341b0a2c3ded01c01402bとfailedが返り、通常Jobs API/保存結果と一致。
+再送/生成/モデル取得0、元Asset不変。scene専用media.job.statusによるpack照会の成功ではない。
+更新後の通常Host1280/390/320pxで全7モデル/15画像付き配置、移動/視点/help/再読込成功。
+実PC内蔵GPUで59.971214fps/5.0024秒、物理電話はNOT TESTED。製品code変更なし、文書のみ。
+次は既存重みで複数面比較・UI/採用を評価する。[実測詳細](agent-failure-reference-20260923.md)。
+
+## 2026-09-23 MCP失敗時のJob参照（0.33.18準備）
+
+branch ux1/agent-failure-job-reference。media.generateの受理後失敗/取消/cleanup timeoutへ
+同一Job ID/確定済み状態を追加し、未受理/成功応答を保持。設計・API記載を同期。
+実source HTTPで502/failed/同一保存Jobを照合。Hostの別worktreeでは汎用保持も修正し、
+実HTTP/stdio/隔離DBでfailed3/succeeded1、再送0、path除外を確認した。
+MF全2512tests/3warnings/418.24秒通過。次はcommit/push/PR→署名通常更新・実MCP受入。
+installed新経路はNOT TESTED。モデル追加取得0。[詳細](agent-failure-reference-20260923.md)。
+
+## 2026-09-23 0.33.17を公開・導入、実MCPの形式省略を受入
+
+PR645/77464d9から既存鍵で署名公開・再取得検証・通常feature update。
+current0.33.17/PID281578/healthy、既存1584 Asset metadataと代表3 content SHA、runtime-state全JSONを保持。
+実OpenCode/Qwen/MCP Jobc2118762e2c4はsucceeded。output省略の実tool引数を確認し、
+pack1回/inspect1回でZIP3,949,008Bを作成。来歴/実bytes/hash/GLB/PNGを独立確認、元Asset不変。
+商店街projectの作業treeはclean。追加画像/3D生成・モデル取得・自動再送0。
+source全2509tests/426.99秒以後product変更なし。この追記は文書のみ。
+branch ux1/pack-output-installed。次は既存ファイルだけで多視点の2/3枚比較を評価する。
+複数面UI/採用、汎用MCP失敗時のJob ID伝達は未完了。詳細[pack受入](pack-output-default-20260923.md)。
+
+## 2026-09-23 asset.packの出力形式省略（0.33.17準備）
+
+branch ux1/pack-output-default。実MCPでpack形式省略がPNGになり失敗した問題を修正。
+省略時ZIP、明示不正形式/countはJob前422。画像既定PNG/共有options/過去保存要求を保持。
+実source HTTP＋既存Blender4.5.9で省略3.660855秒/明示1.017983秒、同一1,380,849B ZIP。
+元GLB不変、親/実content/GLB/PNG検査、拒否時追加Job0を確認。
+最初の全体testで旧PNG fixture1件を修正。最終全2509tests/3warnings/426.99秒通過。
+次はcommit/push/PR、通常署名公開・ローカル更新と実MCP受入。
+Pixal Vulkan導入済みを再確認。重複5ファイル2.08GiBは削除済み、モデル追加取得0。
+installed新版/形式省略MCPはNOT TESTED。[詳細](pack-output-default-20260923.md)。
+
+## 2026-09-23 商店街の実MCP納品・Hostブラウザ受入
+
+実OpenCode/sculptor/Qwen/MCP Job781d15da871fがsucceeded。NPC2体を各1回rigし、
+通常grant/packで納品。元画像/元revision、旧failed pipelineを保持、DB/納品/manifest SHA一致。
+全7GLB 24,931,924B、8店舗/主人公/6NPC。通常Host内のGLB画像がCSPで灰色になる不具合を
+project側の画像ローダーと欠損検査で修正。Host/model変更・追加DL0。
+全15配置のテクスチャ、再読込、PC移動、320/390px同時タッチ、店舗衝突、足底接地、
+画像欠損時の再試行を実確認。PC内蔵Radeon/Chromeで57.9583fps（5.0036秒）。物理スマホはNOT TESTED。
+成果物CodeDEV/MF3DS-ShoppingStreet-20260923、local commit91b37c3。詳細[納品・実表示](rig-surface-20260923.md)。
+複数面生成のUI/採用、残るMCPエラー表現の改善は未完了。既存Pixal Vulkan/共通重みを再利用し、
+追加モデル取得をしない。全体goalはactiveのまま。
+
+## 2026-09-23 0.33.16を通常公開・ローカル更新
+
+PR642/1e5fc51を固定して署名公開・再取得検証・通常feature update。
+current0.33.16/PID217691/healthy、既存1580 Asset metadata/代表3 content SHA/生成capability/runtime receiptを保持。
+追加モデル取得0。実OpenCode/sculptor/Qwen/MCP Job781d15da871fで既存NPC2体のrig成功、納品を確認中。
+先行2runは委任経路の指示誤りで取消、生成Job0。Hostの既存sculptor構成を確認して訂正。
+両方12bones/1walk clip/重み欠損0、元画像・元revision保持。最終商店街、物理スマホはNOT TESTED。[詳細](rig-surface-20260923.md)。
+
+## 2026-09-23 生成人物の軽量化・近接した腕の検出（0.33.16準備）
+
+元NPC2体のratio15%は目標面数へ到達できず形状も破壊。到達不能な目標を拒否し、面を残す案内を追加。
+ratio30%で形を保持。必要時だけ実面の断面を測り、腕を下ろした人物も12bonesで検出する。
+実core→Blender→検証は青4.960461秒/赤5.033492秒成功、旧主人公512/1024のgeometry/UV/画像/骨/重み一致。
+全25frameで脚交差なし、手の脚重み0。raw接地沈みは最大1.98cm残り、Web補正との最終受入は未実施。
+全2496tests/3warnings/313.80秒通過。追加モデル取得0。installed/MCP再実行と最終商店街はNOT TESTED。[詳細](rig-surface-20260923.md)。
+
+## 2026-09-23 0.33.15を通常リリース・ローカル更新
+
+PR639/f11bd33を既存鍵で署名公開し、公開物の再取得検証後に通常feature updateで導入。
+current0.33.15/PID178386/healthy、更新前1576 Asset metadataと代表3実content SHAを保持。
+実installedのjob schemaは16186Bでcompile_optionsを明示。従来3D capability不変。
+実OpenCode/Qwen/MCPで既存4店舗の軽量化を再開（Job25f23f603894、進行中）。
+この再実行の成功・最終GLB/商店街品質はまだNOT TESTED。
+詳細[GLB設定公開](compile-options-discovery-20260923.md)。
+
+## 2026-09-23 MCPからGLB軽量化設定を指定できない問題（0.33.15準備）
+
+実OpenCode Job5304c9bb2c0cがcompile_optionsを構成できず、空引数や参照セット項目を反復。
+公開schemaに既存CompileOptions型がなかったため、型付き引数生成から発見できなかった。
+既存schemaへ型と参照を追加し、asset.pack/3d.project.glbだけの設定であることを明記した。
+実source Uvicorn HTTP200、16186B、公開型/元schema一致、Host上限64KiB未満を確認。
+初回全体gateは2472pass/1fail（40ms idle timeoutの既存timing test）。単独関連fileは通過。
+最終全体2473passed/3warnings/341.53秒、exit0。signed installed/MCPによる軽量化再受入はNOT TESTED。
+詳細[GLB設定公開](compile-options-discovery-20260923.md)。
+
+## 2026-09-23 0.33.14導入・実MCP主人公rig再開を確認
+
+PR637を署名release/通常ローカル更新。current0.33.14/PID135776/healthy、既存Asset1573件保持。
+実OpenCode/Qwen/MCPで同一主人公の失敗rigだけ再試行し成功。revision818f77...、GLB3,602,564B、
+通常grant配置とAsset SHA一致。2体のNPCは脚断面の頂点不足でrig失敗、成功扱いしない。
+0.33.13の再試行で既存本屋/NPC2体のmodel生成も成功、次工程の確認待ちを保持。
+全2471tests/401.67秒のsourceからproduct変更なし。商店街全体・物理電話・自然な歩行品質は未受入。
+詳細[rig結果受入](rig-result-contract-20260923.md)、[工程再試行](pipeline-retry-20260923.md)。
+
 ## 2026-09-23 複数面Vulkan実測・既存重みの再利用へ修正
 
 利用者の指摘どおり、既存Pixal3D Vulkan移植版は導入済み。registry/重み/1枚経路を保持。

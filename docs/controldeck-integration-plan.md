@@ -5,6 +5,18 @@ Date: 2026-08-20
 
 ## 1. Executive decision
 
+2026-09-23 synchronous agent failure references: after MediaForge accepts a
+`media.generate` request, terminal failure/cancellation and cleanup timeout retain
+the public MediaForge `job_id` and last observed `status` in the error detail.
+The wait deadline already returns its accepted Job ID; it does not assert a
+terminal state. Before admission, errors have no invented Job ID. HTTP errors
+remain errors, and existing successful responses are unchanged. The generic Host
+must distinguish its own `job_id` from an add-on's `upstream_job_id`, preserve only
+bounded identifiers/status codes through durable failed Jobs and the MCP bridge,
+and retain owner-scoped status access. An error is never authorization to resend
+an accepted request automatically. No paths, credentials, or raw worker errors
+cross this reference boundary.
+
 2026-09-10 ordinary hosted media jobs renew authentication before expiry while
 waiting for resources: use the existing owned Job credential refresh before a
 lease exists, and the existing lease credential refresh after admission. Preserve

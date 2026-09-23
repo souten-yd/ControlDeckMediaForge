@@ -2477,10 +2477,18 @@ def create_app(
         value = await imported_inputs(host_job_input(payload), identity)
         job = await submit_hosted(value, identity, workload_class="agent-interactive")
         terminal = await wait_for_terminal(job["id"])
-        await manager.wait_cleanup(job["id"])
+        try:
+            await manager.wait_cleanup(job["id"])
+        except TimeoutError as exc:
+            raise HTTPException(status_code=504, detail={
+                "code": "job_cleanup_timeout", "job_id": job["id"], "status": terminal["status"],
+            }) from exc
         if terminal["status"] != "succeeded":
             error = terminal.get("error") or {"code": "media_job_failed"}
-            raise HTTPException(status_code=502, detail={"code": error.get("code", "media_job_failed")})
+            raise HTTPException(status_code=502, detail={
+                "code": error.get("code", "media_job_failed"),
+                "job_id": job["id"], "status": terminal["status"],
+            })
         result = submitted_reference(terminal)
         result["asset_id"] = terminal["asset_ids"][0] if terminal["asset_ids"] else None
         return result

@@ -850,6 +850,15 @@ route accepts a model name or filesystem path.
 
 ControlDeck calls `/addon/v1/*` endpoints declared by [`addon.json`](../addon.json). Workflow and agent payloads use `{input, correlation}` envelopes. Responses return structured `job_id` and `asset_ids`; agents do not scrape filenames and do not receive a selected model name from generation or capability discovery.
 
+After `media.generate` accepts a Job, terminal failure/cancellation returns HTTP
+502 with `detail.code`, `detail.job_id` and its terminal `detail.status`.
+A cleanup timeout returns 504 with `job_cleanup_timeout` and the same accepted
+Job reference/last observed status. A wait deadline returns 504 with
+`job_wait_timeout` and the Job ID, without asserting termination. Callers must
+inspect that Job before deciding on an explicit retry. Pre-admission errors have
+no accepted Job ID. Success responses are unchanged; errors do not expose worker
+messages or paths.
+
 `media.generate.batch` (`POST /addon/v1/agent/generate/batch`) takes up to 50
 independent generation items and runs them one after another inside a single
 call. It exists because a separate call per asset is not merely slower: the Host
@@ -892,7 +901,10 @@ documents. `asset.pack` with `profile=m5.companion.pack` accepts exactly one
 `base/front`, the fixed 12 eye slots, and the fixed 8 mouth slots through its
 normal immutable `inputs` lineage. `constraints.entries` maps each input asset
 ID to its fixed layer/name and `constraints.pack_name` is lowercase snake case.
-The output must request `format=zip`.
+For `asset.pack`, omitted `output` or omitted `output.format` selects ZIP. An explicit
+format must be `zip`, with `count=1`. Invalid explicit formats/counts are rejected
+before Job creation. Image defaults remain PNG; historical Job requests keep their
+original values.
 
 The deterministic result is an `application/zip` asset containing the 21 PNG
 layers, `atlas.png`, `manifest.json`, and a current-firmware pack at
@@ -945,7 +957,7 @@ exported GLB and PNG are independently revalidated before the immutable ZIP is
 registered. No Blender path, script, operator name, or project path is a public
 input.
 
-The optional private `constraints.compile_options` object is versioned as
+The optional `constraints.compile_options` object is included in the published job request schema and versioned as
 `3d.compile-options@1` and rejects unknown fields. `apply_transforms=true` and
 `preview=fixed_workbench` are fixed. Typed additions are
 `repair_normals`/`remove_degenerate` booleans, merge distance `1e-7..1.0` m,

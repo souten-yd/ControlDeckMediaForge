@@ -67,6 +67,16 @@ def test_auto_bind_failure_is_actionable_without_raw_worker_text(tmp_path: Path,
     assert message == "Operation 1/1 (skin.bind_auto, object_id=rig) failed: " + failure_reader.REASONS[reason]
 
 
+def test_decimation_failure_explains_how_to_retry(tmp_path: Path) -> None:
+    recipe = SceneRecipe.model_validate({"operations": [
+        {"type": "mesh.decimate", "object_id": "body", "ratio": .15}]})
+    path = tmp_path / 'result.json'
+    path.write_text(json.dumps({**VALID, 'reason': 'decimate_target_unreachable'}))
+    message = recipe_failure_message(path, recipe, '4.5.13')
+    assert 'mesh.decimate, object_id=body' in message
+    assert 'increase ratio to retain more faces' in message
+
+
 @pytest.mark.parametrize("changes", [
     {"operation_index": True}, {"operation_index": -1}, {"operation_index": 1},
     {"operation_index": 0.0}, {"operation_index": "0"},

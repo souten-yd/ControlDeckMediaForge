@@ -23,6 +23,7 @@ REASONS = {
     "clip_target_missing": "clip replacement target is missing or ambiguous",
     "auto_weights_missing": "automatic binding left vertices without weights; inspect mesh and bone placement",
     "auto_weights_invalid": "automatic binding produced invalid weights; inspect mesh and bone placement",
+    "decimate_target_unreachable": "mesh topology prevents the requested reduction; increase ratio to retain more faces and inspect the result",
 }
 
 
