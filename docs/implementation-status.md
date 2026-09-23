@@ -1,5 +1,24 @@
 # Media Forge implementation status
 
+## 2026-09-23 商店街の制作・修正・最終監査完了
+
+通常ログインを再確認。Project LabのMF3DS-ShoppingStreet-20260923/index.htmlで
+7実GLB/15配置の画像、主人公+6NPC、PC移動、320/390px同時touchと視点操作、help、
+再読込を確認。page error0/overflow0、内蔵Radeonで59.971214fps/p95 16.8ms。
+全7納品SHA一致/24,931,924B、人物3種のskin/12joints/walk clipを再照合。
+制作と不具合修正の実MCP/実変形/失敗履歴はproject evidenceと各修正sliceに保持。
+既存4面の実content/画素SHAは全相異。AI別方向3候補は品質不整合のため3Dへ未採用。
+固定navの失敗はnative945pxにviewport1000pxを指定した検証条件に依存。
+同じpageを844pxへ変えるとtouchが届く。320/390/1280で比較→状況→比較の12check成功。
+商店街のcode/modelと稼働0.33.23/PID770023、Host PID674922/NRestarts0を保持。
+active MF Job0/lease0/Asset1597、追加生成/モデルDL0。物理スマホはNOT TESTED。
+未mergeのPR631へmain d0ee4b6を統合し、制作runner/段階prompt/最終受入記録を整理。
+runnerの通常preflightはQwen3.8-27B/runtime v1で成功。最終 ./mf.sh test は
+2581passed/3skipped/3warnings/387.39秒。build runtime参照不足の署名3件は
+既存環境へのsymlinkを補って個別に3pass/exit0、未実行のままにはしていない。
+詳細は[商店街の最終監査](implementation/shopping-street-20260923.md)。制作HTMLと必須受入は完了。PR631は配布外runner/tests/prompts/記録だけで、
+稼働製品コードは変更なし。物理スマホ・自動方向画像品質の制限は別に明記する。
+
 ## 2026-09-23 0.33.23公開・導入、別方向3画像を保存・品質未採用
 
 PR660/4fadfffを既存鍵で署名公開・通常更新し、current0.33.23/PID770023/healthy。
@@ -373,6 +392,31 @@ GLB asset_0480355b176141a4ae51f17f8eee66b7、22122tris/12bones/1秒loop。
 全25frameの足表面X間隔は旧−.383876m→軽量候補最小+.098814m、手の脚重み平均.989627→0。
 画像packed SHA不変、実Three描画page error0。接地最大1.89cm下がり・色ずれは残る。
 詳細humanoid-rig-20260923.md。全test 2437 passed, 3 warnings in 294.66s (0:04:54)。signed installed/MCPはNOT TESTED。
+
+
+## 2026-09-23 商店街の実制作: 画像7枚、主人公3D品質FAIL、修正継続
+
+OpenCode/Qwen3.8-27B/MCPで主人公画像→TRELLIS Vulkan512→rig→GLB配置まで実行。
+6追加参照画像も生成/pack成功。主人公は88687tris/6bonesだが腕の巻込みと脚交差があり不合格。
+利用者指摘と実Blender全25frameで交差を再現し、別sliceで人物測定/歩行を修正中。
+Host同時cold起動PR336はmerge/apply済み（1141tests通過）、実cold再受入は未実施。
+通常認証Host viewerは1280/320pxで表示/overflow0/errors0。パン屋3Dを同じJobで追跡中。
+HTMLは未作成、完成を主張しない。詳細shopping-street-20260923.md。
+
+## 2026-09-23 歩ける商店街のOpenCode/MCP制作（進行中）
+
+利用者の通常login後、OpenCode1.18.30 / ローカルQwen3.8-27B Q4_K_MでMCPを実行。
+主人公の1024px画像1枚を生成・目視確認。3D/rig/HTMLはまだ未完了。
+生成初回はWriteTimeout、再送分は成功。曖昧な502を未生成と推測したOpenCodeをcancelし、
+成功済みAssetの回収だけを別の通常Host Jobで継続。詳細はshopping-street-20260923.md。
+
+同時LLM cold startで後続が300秒待つ不具合を実観測・実Broker試験で再現。
+Host別worktree fix/gateway-concurrent-cold-startで修正検証中。installed適用は未実施。
+MFはux1/shopping-street-acceptanceで通常認証HTTP runner/段階prompt/受入記録を追加。
+./mf.sh test: 2436 passed /3 warnings /171.40秒。画像回収inspect/pack/SHA一致。
+同画像の3D化Host Jobb5bfee084e46を起動し追跡中。
+root feat/g9-image-to-3dは変更せず保持。実3D/変形/HTML/物理スマホはNOT TESTED。
+
 
 ## 2026-09-23 0.33.10を署名公開・ローカル適用（ごみ箱と個別削除）
 

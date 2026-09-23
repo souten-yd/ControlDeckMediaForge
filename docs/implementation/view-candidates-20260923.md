@@ -1,5 +1,21 @@
 # 別方向の画像候補と比較・明示選択
 
+## 0.33.23の固定ナビ再監査（2026-09-23）
+
+前回の比較→固定「状況」→比較のtimeoutを、同じ通常Host/同じ生成済み画像で診断。
+検証Chromeはviewport高さ1000pxに対しnative window高さ945pxで、画面下部の
+locator.tap/明示touchのどちらもiframeへ入力eventが届かなかった。DOMのhit testは対象内。
+同じbrowser/pageをreloadせずviewport844pxへ変更するとtrusted touchが届きActivityへ遷移した。
+CDPのwindow拡張要求1085px自体は受理されたが、拡張だけでのtapは未測定。
+よって実ウィンドウを超える検証viewportの条件に依存する失敗として記録する。
+
+`private-browser.py candidates-fitted.mjs` で実native windowの高さも検査し、
+320/390/1280×844pxの通常opaque iframeから3候補の比較→固定ナビ→状況内の比較で復帰。
+全12check成功、page error0、横overflow0。生成・採用・取消・製品コード変更0。
+証跡はmanaged `maintenance/mobile-nav-20260923/nav-diagnose-window-fit.json` と
+`candidates-fitted.json`。以前の失敗記録は保持する。
+物理スマホ、installed候補採用/取消と方向生成の品質はこの再監査に含めない。
+
 ## スコープ
 
 branch `ux1/multiview-candidates-ui`、base `7bce85d`、0.33.22。

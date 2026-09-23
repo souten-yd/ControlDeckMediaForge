@@ -1,0 +1,13 @@
+既存の失敗3D生成だけを実MCPで順番に再試行する。画像再生成、新規pipeline.start、rig承認、Webコード編集は禁止。
+このrunは各modelが成功し次段awaiting_approvalになるまで。rig/export/packは後のrunが行う。
+
+1. 本屋 pipeline_9171d0e4e2d6421d9b1719c400eec575、failed model job_ec49ed49e42c4feebd00281ac26da539。
+2. コーラル歩行者 pipeline_26c659a48d51466ca2b9074b85ef139d、failed model job_802bf913278d4bb19a1b24ac13ea40dc。
+3. ブルー歩行者 pipeline_877d59a9344047e9ab730427037819b7、failed model job_2552094f316243f5bdbd8db6ce0caa17。
+
+必ず最初にmedia.pipeline.statusで現在を読む。上記Jobのfailedならaction=retry,expected_job_idを指定して1回。
+新Job IDを直ちにevidence/remaining-model-retries.jsonへ短く保存する。すでにrunningなら再送せず同じpipelineをpoll。
+15秒待ち同じpipelineをpollし、modelが終端になるまで次のmodelを開始しない。modelがsucceededならその対象は終了し次へ。
+failedなら新errorを記録しその対象を再送せず次へ。通信失敗なら未受付と決めつけず記録しrunを終了する。
+最後に各pipeline/modelのJob、state、source画像、scene/revision、元failed JobをJSONへ保存。冗長な説明やschema転記不要。
+他のagentやshell推論を使わない。MCP発見済みschemaを利用する。
