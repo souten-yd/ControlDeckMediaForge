@@ -1657,3 +1657,7 @@ Use the existing Store plus an additive library_trash state table and private wo
 transport. No second asset/Jobs foundation or public required-field change. Old releases do
 not understand purged tombstones: rollback after permanent deletion requires restoring a
 pre-deletion data backup; never roll back only the binary and claim deleted bytes are restored.
+
+### 2026-09-23 private recipe補修結果の整合性
+
+`automatic_weight_repairs`はworker内部結果の任意項目として、本体で型・有限値・補修上限・rig.auto対象IDを検証する。旧workerの省略と新workerの空配列をともに受理し、未知項目や不正な補修報告は引き続き拒否する。公開契約の変更はない。worker単体成功だけではなく本体境界とinstalled MCPで受入する。

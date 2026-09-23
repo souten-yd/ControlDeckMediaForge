@@ -1,5 +1,14 @@
 # Media Forge implementation status
 
+## 2026-09-23 自動ボーン付けworker結果の本体検証修正（0.33.14準備）
+
+0.33.13の実MCP retryはworker結果の未知項目でfailed。元model/画像/scene保持。
+補修報告の型・対象・上限検証を本体へ追加、旧省略/空配列互換、未知項目拒否を維持。
+実同一1024 sourceで本体→Blender→結果検証: 修正前3.449秒failed、後3.568秒成功。
+14境界回帰pass、全gate2471 passed /3 warnings /401.67秒。installed/MCP再受入はNOT TESTED。
+詳細[rig結果境界](implementation/rig-result-contract-20260923.md)。
+
+
 ## 2026-09-23 MCP pipelineの失敗段だけ再試行（0.33.13準備）
 
 0.33.12はmerge/release/installed済み（PID78171/healthy、1567既存Asset保持）。
