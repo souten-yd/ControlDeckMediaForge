@@ -1,5 +1,23 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 自動方向候補の人物評価とHost watchdog
+
+手動MVはPR654/655で公開・installed受入済み。branch ux1/multiview-candidate-evaluationは評価記録のみ。
+保存済み正面から通常image.editで右側面候補を1件生成。MediaForge job_6d66e0f9b6d34734bee4fe4da837cac5は
+161.480503秒（保存時刻差）でsucceeded、asset_e425aec656204ce1ba79ec96f582ad78をLibraryへ保存。
+同時期にHostがwatchdog再起動し、Host22aaf130c5adはinterrupted。成功へ書き換えない。
+実stackはHost定期監視→OpenCode featureの同期version確認。
+汎用Host PR343/e3d374aを通常適用し、PID674922/health ok。
+130秒/65health応答（最大4.432ms）でPID不変/NRestarts0。全Host1175pass/2skip。
+更新後PC1280/320pxのLibraryで既存4面GLB/側面候補の表示・閉じる、GLB回転を確認。
+overflow0/pageerror0。current0.33.20/PID581793、旧Asset/runtime/配布static filesも保持。
+側面1人/服/髪/バッグ1個/透過を確認。既知の右面と比べバッグ寸法・手/腕・構図に差があり、
+3D入力への採用はしない。背面/左面は未送信。元画像のmetadata/実SHA保持、worker終了/active lease0。
+旧leaseの終端履歴はHost再起動後取得不可。追加モデル取得0。
+自動候補UI/自動校正/候補から3Dの実生成/実OpenCode MCP/物理スマホはNOT TESTED。
+通常Host agent-tool HTTPで同一画像の追加方向を拒否しMF Job追加0。stdio MCPの受入とは区別。
+[詳細](multiview-20260923.md#正面からの側面候補人物1件)。全体goal継続。
+
 ## 2026-09-23 手動複数面0.33.20を公開・導入、実生成と320px取消を確認
 
 PR654/5177a7bを既存鍵で署名公開し、再取得検証後に通常feature update。
