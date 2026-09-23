@@ -1,5 +1,6 @@
 from conftest import wait_terminal
 from test_host_execution import host_client
+from pathlib import Path
 
 
 def test_prompt_pipeline_creates_an_image_job_through_the_host_contract(tmp_path):
@@ -29,3 +30,32 @@ def test_prompt_pipeline_creates_an_image_job_through_the_host_contract(tmp_path
         health = client.get('/health').json()['contributions']
         assert health['agent_tool:media.pipeline.start'] == 'available'
         assert health['agent_tool:media.pipeline.status'] == 'available'
+
+
+def test_explicit_pipeline_retry_uses_expected_failed_job_and_actor(tmp_path: Path) -> None:
+    client, headers, state = host_client(tmp_path, token='valid-user')
+    state['reject_resources'] = True
+    with client:
+        response = client.post('/addon/v1/agent/pipeline/start', headers=headers, json={
+            'input': {'name': 'Retry contract', 'prompt': 'a red robot',
+                      'width': 256, 'height': 256, 'mode': 'confirm'},
+        })
+        assert response.status_code == 200
+        pipeline = response.json()
+        original = pipeline['stages'][0]['job_id']
+        assert wait_terminal(client, original)['status'] == 'failed'
+        url = '/addon/v1/agent/pipeline/status'
+        assert client.post(url, headers=headers, json={'input': {'pipeline_id': pipeline['id']}}).json()['state'] == 'failed'
+        retry = {'pipeline_id': pipeline['id'], 'action': 'retry', 'expected_job_id': original}
+        assert client.post(url, headers={**headers, 'Authorization': 'Bearer valid-other'},
+                           json={'input': retry}).status_code == 404
+        state['reject_resources'] = False
+        response = client.post(url, headers=headers, json={'input': retry})
+        assert response.status_code == 200, response.json()
+        newer = response.json()['stages'][0]
+        assert newer['job_id'] != original and newer['failed_attempts'][0]['job_id'] == original
+        assert wait_terminal(client, newer['job_id'])['status'] == 'succeeded'
+        assert client.post(url, headers=headers, json={'input': retry}).status_code == 409
+        value = client.post(url, headers=headers, json={'input': {'pipeline_id': pipeline['id']}}).json()
+        assert value['state'] == 'awaiting_approval'
+        assert value['stages'][1]['job_id'] is None

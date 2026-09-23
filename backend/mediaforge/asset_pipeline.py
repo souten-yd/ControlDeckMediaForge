@@ -93,6 +93,14 @@ class AssetPipelineRequest(BaseModel):
         return stages
 
 
+class FailedPipelineAttempt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_id: str = Field(pattern=r"^job_[0-9a-f]{32}$")
+    error_code: str | None = Field(default=None, min_length=1, max_length=64)
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
 class PipelineStage(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: StageName
@@ -107,6 +115,7 @@ class PipelineStage(BaseModel):
     error_code: str | None = Field(default=None, min_length=1, max_length=64)
     started_at: str | None = None
     finished_at: str | None = None
+    failed_attempts: list[FailedPipelineAttempt] = Field(default_factory=list, max_length=8)
 
 
 class AssetPipeline(BaseModel):
@@ -148,8 +157,18 @@ class AssetPipelineActionRequest(BaseModel):
     Polling is what moves it: nothing runs unwatched. "approve" releases the
     step a confirm-mode run is waiting on; "cancel" stops before the next step
     and leaves whatever is already running to finish on its own.
+    "retry" reruns only a failed stage; expected_job_id must be its current
+    failed Job ID. Read status first. Earlier results and later approvals stay
+    unchanged. Do not use retry for an unknown submission outcome.
     """
 
     model_config = ConfigDict(extra="forbid")
     pipeline_id: str = Field(pattern=r"^pipeline_[0-9a-f]{32}$")
-    action: Literal["status", "approve", "cancel"] = "status"
+    action: Literal["status", "approve", "cancel", "retry"] = "status"
+    expected_job_id: str | None = Field(default=None, pattern=r"^job_[0-9a-f]{32}$")
+
+    @model_validator(mode="after")
+    def retry_has_expected_job(self) -> "AssetPipelineActionRequest":
+        if (self.action == "retry") != (self.expected_job_id is not None):
+            raise ValueError("only retry requires expected_job_id")
+        return self

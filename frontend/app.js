@@ -791,7 +791,8 @@ async function standaloneCall(method, params) {
   }
   if (method === "pipelines.status") {
     return json(`/workspace-api/pipelines/${encodeURIComponent(params.pipeline_id)}`, {
-      method: "POST", body: JSON.stringify({action: params.action || "status"}),
+      method: "POST", body: JSON.stringify({action: params.action || "status",
+        ...(params.expected_job_id ? {expected_job_id: params.expected_job_id} : {})}),
     });
   }
   if (method === "pipelines.list") return json("/workspace-api/pipelines");
