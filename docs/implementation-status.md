@@ -1,5 +1,20 @@
 # Media Forge implementation status
 
+## 2026-09-23 0.33.21公開・導入と実MCPの単一参照編集
+
+PR657/7db182aを既存鍵で署名公開・再取得検証し、通常feature update。
+current0.33.21/PID711535/healthy。旧1593 Asset metadata/代表3content SHA/runtime全JSON保持。
+実OpenCode3c589f2cfcecは170.563235秒、MCP1回/54.256秒で画像Job成功。再送/停止/追加DL0。
+seed/alpha指定と無関係なpack項目の除去を確認。ただしbriefのaspect_intent欠落と空任意項目追加は残る。
+背面候補asset_2d4d8458e4464731ac93f1b7e945a73fを元正面の親/SHA付きでLibraryへ保存。
+バッグを持つ手が反対になるため3Dには未採用。方向画像の品質完成とは扱わない。
+Host PID674922不変/4lease released/active0、商店街と元Asset不変。
+PC1280/タッチ320pxで候補/既存4面GLB表示・閉じる・GLB回転、overflow0/errors0。
+4面入力は実content再取得でも全画素SHA相異/方向別fixtureと一致。
+製品コードは2559pass/398.92秒の受入後から変更なし。今回は受入記録のみ。
+自動候補UI/自動3D/完全な引数転記/物理スマホは未受入。全体goal継続。
+[詳細](implementation/image-edit-mcp-schema-20260923.md#installed-opencodemcpの再受入と候補品質)。
+
 ## 2026-09-23 実MCPの画像編集引数を修正候補で検証
 
 通常OpenCode/Qwen3.8-27B Job50715bdc703eは208.725451秒で終端したが、
