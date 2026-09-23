@@ -1,5 +1,14 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 単一参照編集の枠とcanvasを修正中（0.33.19）
+
+GPU空き23.2GiBでも通常生成用worker上限8.8GiBで参照編集がOOMになることを実確認。
+別profileでHost枠/worker上限/推論canvasを一致させ、小さい前Jobのlease持ち回りも拒否。
+既存重みの実workerで512角15.579秒、1024角12.855秒、1024×768は196.526秒で出力。
+入力SHA不変/来歴fit/lease解放を確認。初回14GiBのdevice枠超過は自身だけ停止し記録。
+側面候補の品質は未受入で、複数面3Dには投入していない。追加DL0。
+対象84tests通過。最終全2517passed/3skipped/3warnings/352.92秒、exit0。installed/署名配布は未実施。[詳細](reference-edit-admission-20260923.md)。
+
 ## 2026-09-23 継続OpenCodeの表示・停止と実cold起動
 
 利用者はOpenCodeが明示停止まで継続することを許容。Codexからの停止も可と確認。

@@ -491,3 +491,62 @@ def test_texture_admission_uses_separate_measured_profile(tmp_path: Path):
     assert request["estimated_runtime_sec"] == model.texture_edit["measured_runtime_sec"]
     assert baseline["vram"]["execution_peak_bytes"] == model.execution_peak_vram_bytes
     assert baseline["estimated_runtime_sec"] == model.measured_runtime_sec
+
+
+def test_reference_edit_reserves_its_measured_peak_and_keeps_small_canvas(tmp_path: Path):
+    from mediaforge.models.registry import ModelRegistry
+    root = Path(__file__).parents[1]
+    model = next(m for m in ModelRegistry.load(root / "worker_packs/image/models.json").all()
+                 if m.model_id == "black-forest-labs/FLUX.2-klein-4B")
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    job = store.create_job(JobRequest(operation="image.edit", intent="right view",
+        inputs=[{"asset_id": "asset_" + "a" * 32}],
+        constraints={"width": 512, "height": 384, "edit_mode": "reference", "strict_edit": False}))
+    requested = manager._resource_request(job, host_execution(), model, 1)
+    assert requested["vram"]["execution_peak_bytes"] == model.reference_edit["execution_peak_vram_bytes"]
+    assert requested["vram"]["cold_load_peak_bytes"] >= requested["vram"]["execution_peak_bytes"]
+    assert requested["estimated_runtime_sec"] == model.reference_edit["measured_runtime_sec"]
+    resolved = manager._resolved_request(job, model)["constraints"]
+    assert (resolved["width"], resolved["height"]) == (512, 384)
+    # Missing profile must not manufacture measured admission for another model.
+    legacy = replace(model, reference_edit=None)
+    assert manager._reference_edit_profile(job, legacy) is None
+
+
+@pytest.mark.parametrize("operation, mode, strict, count", [
+    ("image.generate", "reference", False, 0),
+    ("image.edit", "masked_edit", True, 1),
+    ("image.edit", "outpaint", False, 1),
+    ("image.edit", "multi_reference", False, 2),
+])
+def test_reference_profile_does_not_change_other_workloads(tmp_path, operation, mode, strict, count):
+    model = replace(measured_model(), reference_edit={"execution_peak_vram_bytes": 4000,
+        "worker_vram_budget_bytes": 3000, "measured_runtime_sec": 30, "measured_count": 1})
+    store = Store(tmp_path / "data")
+    store.initialize()
+    manager = JobManager(store)
+    job = store.create_job(JobRequest(operation=operation, intent="test",
+        inputs=[{"asset_id": "asset_" + str(i) * 32} for i in range(count)],
+        constraints={"edit_mode": mode, "strict_edit": strict}))
+    request = manager._resource_request(job, host_execution(), model, 1)
+    assert request["vram"]["execution_peak_bytes"] == model.execution_peak_vram_bytes
+    assert request["estimated_runtime_sec"] == model.measured_runtime_sec
+
+
+def test_small_generation_lease_cannot_carry_into_reference_edit(tmp_path):
+    manager, host = _warm_manager(tmp_path)
+    model = replace(measured_model(), reference_edit={"execution_peak_vram_bytes": 12 * 1024**3,
+        "worker_vram_budget_bytes": 10 * 1024**3, "measured_runtime_sec": 30, "measured_count": 1})
+    job = manager.store.create_job(JobRequest(operation="image.edit", intent="reference",
+        inputs=[{"asset_id": "asset_" + "a" * 32}]))
+    manager._carried_lease = _granted("small-lease")
+    manager._carried_model = model.model_id
+    target = host_execution()
+    assert not asyncio.run(manager._adopt_carried_lease(target, model, job=job))
+    assert target.lease_id is None
+    assert host.lease_actions == [("small-lease", "release")]
+    assert manager._warm_worker is None
+    request = manager._resource_request(job, target, model, 1)
+    assert request["vram"]["minimum_bytes"] == 12 * 1024**3 + model.headroom_vram_bytes
