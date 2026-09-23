@@ -1,6 +1,6 @@
 # 複数方向画像からの3D: 調査・評価・モバイル統合
 
-Status: 公式4面のVulkan生成を評価中。現行1枚入力を維持。追加UI/多視点runtimeは未採用。
+Status: 公式2/4面のVulkan生成・同一camera描画を確認。現行1枚入力を維持。追加UI/多視点runtimeは未採用。
 利用者の2026-09-23依頼: 1枚→別方向画像生成→3D、手動2/3/4枚の追加、モバイル操作。
 脚交差修正と商店街制作も継続し、本件で置き換えない。
 
@@ -95,7 +95,7 @@ owned process RSS最大3,885,461,504B。追加DL/重みコピー0。GLB SHA256
 同じ入力/seed/解像度の形状整合は近いが、元画像の細かい表面模様や鼻輪の色は忠実ではない。
 輪郭一致を高品質素材や全体の採用判定に読み替えない。
 
-2/3枚比較、1枚との改善比較、左右非対称/人物、
+3枚比較、1枚との改善比較、左右非対称/人物、
 生成した別方向画像、取消、installed/MCP、320px UIはNOT TESTED。モデル一覧/autoへは採用しない。
 1枚→別方向画像の既存image.edit試行は1024/512ともresource_oomで失敗。
 実画像がないため生成視点の品質成功としない。証跡`generated-right*`。
@@ -111,3 +111,40 @@ owned process RSS最大3,885,461,504B。追加DL/重みコピー0。GLB SHA256
 
 MediaForge product変更なし。基準82a69c7の全2471tests/401.67秒の既存gateを維持し、
 今回はnative実評価と文書のみ。既存Pixal/trellis receiptの参照ファイルも変更していない。
+
+## 2面の比較と1面用既存重みの棚卸し
+
+main6383fdcをmergeし、製品差分なし・文書3ファイルだけの差分を確認。
+公式4面と同じnative/shared weights/res1024/seed42で、先頭の正面/右側面2枚を入力。
+既存Brokerのmaintenance/exclusive lease 80cb64f4-eb39-4ab1-972d-4f290917af74を取得し、
+108回更新後にreleased。既存画像/重みのみを使用し、追加取得/重みコピー0。
+official-2-reuse: exit0、543.873269秒、device観測最大5,981,609,984B、
+owned process tree RSS最大4,074,057,728B。各conditioning段のview0/1使用をlogで確認。
+このVRAMはdevice全体の0.2秒周期観測であり、厳密なプロセス確保量ではない。
+GLB SHA256 54cc4eca5cfa5a7d915f2bbddd19e9dbe71051c6e6e87aa7c269bb7d9dc3d29a。
+Blender4.5.13実再importは1mesh/947086triangles/622043vertices/4096角2画像。
+既存render-calibrated.pyで元camera4方向をCPU描画。正面/背面の2面版と4面版を目視し、
+顔と後頭部の対応を確認。見た目だけで4面が優れるとは判定できない。
+
+compare-silhouettes.pyは元RGBAのalphaを1024→512 LANCZOS、閾値128で同条件比較。
+形状の位置/倍率を合わせ込まず、上記source由来の座標変換だけを使用する。
+4面の再計算は既存値と完全一致。2面の非入力方向も検査した。
+
+|入力|正面|右側面|背面|左側面|4方向平均|
+|---|---|---|---|---|---|
+|2面|0.983405|0.978032|0.979296|0.977966|0.979675|
+|4面|0.979751|0.979788|0.981167|0.980181|0.980222|
+
+これは公式の1物体・1seedの輪郭IoUであり、一般的な生成精度/材質再現の改善証明ではない。
+前景/背面の大形状は両者で近い。正面の鼻輪・目・細部の色や模様は差があり、
+人物/非対称物体の品質、2面の採用判断は未受入。
+証跡official-2-reuse/{result,render,silhouette-calibrated-comparison}.json/4PNG。
+
+既存installed単視点descriptorのSS/形状512/形状1024/材質flow4ファイルも棚卸し。
+GGUFReaderでそれぞれ700tensorの名前とshapeがcandidateの対応MV flowと一致することを確認。
+これは互換な構造の確認であって、重み値の一致や単視点実行の成功ではない。
+既存F16単視点4flowと共通5個への9symlinkをmodels/pixal3d-sv-reuse-v1へ作成。
+sv-reuse-inventory.json、sv-reuse-manifest.jsonに根拠を保存。再取得/重みコピー0。
+1面の比較はMV重みを1枚へ誤用せず、--pixal3d-weights svを明示する準備をした。
+その1面と3面のjob JSONは準備のみ、まだ実行していない。SVは既存F16/MVはQ8なので、
+今後の差を画像枚数だけの効果とは呼ばない。既存単視点runtimeの登録は変更していない。
