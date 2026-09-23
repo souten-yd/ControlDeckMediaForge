@@ -201,6 +201,23 @@ def test_decimate_fails_when_nothing_was_removed(monkeypatch: pytest.MonkeyPatch
         module.apply_operation({"type": "mesh.decimate", "object_id": "mesh", "ratio": 0.9}, {"mesh": obj})
 
 
+def test_decimate_rejects_stalled_topology_before_binding(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = worker(monkeypatch)
+    obj = decimating_mesh(verts=132755, faces=285012)
+    # Measured generated NPC: every collapsible region disappeared before the
+    # non-manifold remnants could reach 15%. A reduced count was not success.
+    monkeypatch.setattr(module, "bpy", decimating_bpy(obj, 60642, 20508))
+    with pytest.raises(RuntimeError, match="retain more faces"):
+        module.apply_operation({"type": "mesh.decimate", "object_id": "mesh", "ratio": 0.15}, {"mesh": obj})
+
+
+def test_decimate_accepts_integer_triangle_rounding(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = worker(monkeypatch)
+    obj = decimating_mesh()
+    monkeypatch.setattr(module, "bpy", decimating_bpy(obj, 301, 260))
+    module.apply_operation({"type": "mesh.decimate", "object_id": "mesh", "ratio": 0.3}, {"mesh": obj})
+
+
 def test_decimate_contract_is_published(monkeypatch: pytest.MonkeyPatch) -> None:
     from mediaforge.scene_recipes import MeshDecimate
     value = request({"type": "primitive.add", "object_id": "body", "name": "Body",

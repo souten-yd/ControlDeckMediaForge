@@ -52,3 +52,12 @@ served frontend/source一致、従来3D.image_to_3d capability一致。
 実OpenCode/Qwen/MCPの明示再実行Job25f23f603894を開始し、runningを確認。
 新promptはinputの不要なrole項目も除去し、最新版tool_contractの再確認を指示。
 実MCPの軽量GLB出力・納品・最終商店街受入はまだNOT TESTED。
+
+## 0.33.15の実OpenCode再実行完了
+
+Job25f23f603894はsucceeded。4店舗を実MCP asset.packで各30000三角形へ加工し、
+通常grant/media.packでprojectへ納品。独立検査で全ZIPの固定3entry、ZIP Asset SHA、
+manifestの元GLB SHA、展開GLB SHA、最終project GLB SHAが一致。2texture/店舗を保持。
+証跡shopping-street-20260923/shop-packs-independent.json、project/evidence/shop-packs-final.json。
+LLMがoutput.format=zipを省略した3要求はunsupported_pack_profileで失敗し、明示後に成功。
+省略時の分かりにくいエラーは未修正。納品成功を最終商店街描画の品質受入とはしない。

@@ -842,6 +842,15 @@ head support; arm vertices must not determine the knee position or be driven
 by leg swing. Classify only when surface cross-sections support that layout,
 and retain the existing general rig otherwise. Detection is provisional until
 posed meshes are checked for attachment, torso stability and ground contact.
+When simplification leaves too few vertices in a joint band, measure bounded
+intersections with the existing triangle surface instead of changing the mesh.
+For an upright two-foot candidate whose arms are close to the torso, one finer
+surface-section check may confirm separate arms; retain the same anatomical
+guards and the existing result when vertex measurements already succeed.
+Reject a decimation candidate that stalls above its requested triangle budget.
+A face count floor or successful binding alone does not prove that
+simplification preserved the surface, particularly for non-manifold meshes.
+Keep original revisions and report a fixed instruction to retain more faces.
 For a detected upright body only, a bone-heat result may repair tiny unweighted
 surface islands from nearby, originally weighted vertices. Limit the missing
 set to 0.5 percent and 128 vertices, each connected island to 64 vertices and
