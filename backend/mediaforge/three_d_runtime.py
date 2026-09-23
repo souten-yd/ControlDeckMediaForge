@@ -14,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from .glb import validate_glb_path
 from .host.jobs import HostExecution
 from .paths import contained
+from .multiview_runtime import (MultiviewRuntimeReceipt, PreparedMultiview, generate_multiview,
+                                prepare_multiview, verify_runtime as verify_multiview_runtime)
 from .pixal_runtime import (PixalRuntimeReceipt, PreparedPixalInput, generate_pixal,
                             prepare_pixal, read_json, verify_pixal_files)
 from .scene_generation import GenerationFacts, SceneFromImageRequest
@@ -95,7 +97,7 @@ class ThreeDRuntimeReceipt(BaseModel):
         return (self.measured_runtime_by_resolution or {}).get(str(resolution), self.measured_runtime_sec)
 
 
-RuntimeReceipt = ThreeDRuntimeReceipt | PixalRuntimeReceipt
+RuntimeReceipt = ThreeDRuntimeReceipt | PixalRuntimeReceipt | MultiviewRuntimeReceipt
 
 
 def measured_resolutions(receipt: RuntimeReceipt) -> list[int]:
@@ -112,11 +114,32 @@ def runtime_by_resolution(receipt: RuntimeReceipt) -> dict[str, float]:
 
 class ThreeDGenerator:
     def __init__(self, receipt_path: Path, *, pixal_receipt_path: Path | None = None,
-                 timeout_sec: float = 1800, preparation_timeout_sec: float = 900) -> None:
+                 timeout_sec: float = 1800, preparation_timeout_sec: float = 900,
+                 multiview_receipt_path: Path | None = None) -> None:
         self.receipt_path = receipt_path
         self.pixal_receipt_path = pixal_receipt_path or receipt_path.with_name('pixal3d-runtime.json')
+        self.multiview_receipt_path = multiview_receipt_path or receipt_path.with_name('pixal3d-multiview-runtime.json')
         self.timeout_sec = timeout_sec
         self.preparation_timeout_sec = preparation_timeout_sec
+
+    def resolve_multiview(self, count: int | None = None) -> MultiviewRuntimeReceipt:
+        try:
+            if self.multiview_receipt_path.is_symlink():
+                raise ValueError('invalid multiview receipt')
+            receipt = MultiviewRuntimeReceipt.model_validate(read_json(self.multiview_receipt_path, 128*1024))
+            if count is not None and count not in receipt.evaluated_view_counts:
+                raise SceneError('three_d_multiview_not_evaluated', 'This number of views has not been measured')
+            verify_multiview_runtime(receipt, hashes=False)
+            return receipt
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            if isinstance(exc, SceneError):
+                raise
+            raise SceneError('three_d_multiview_unavailable', 'Measured multiview runtime is unavailable') from exc
+
+    def resolve_request(self, value: SceneFromImageRequest) -> list[RuntimeReceipt]:
+        if value.additional_views:
+            return [self.resolve_multiview(len(value.input_asset_ids()))]
+        return self.resolve_stages(value.engine, value.resolution, value.refine_with_pixal3d)
 
     def resolve(self, engine: str = 'auto', resolution: int | None = None) -> RuntimeReceipt:
         if engine not in {'auto', 'trellis_cpp', 'pixal3d'}:
@@ -159,6 +182,9 @@ class ThreeDGenerator:
 
     @staticmethod
     def verify_files(receipt: RuntimeReceipt, *, hashes: bool) -> None:
+        if isinstance(receipt, MultiviewRuntimeReceipt):
+            verify_multiview_runtime(receipt, hashes=hashes)
+            return
         if isinstance(receipt, PixalRuntimeReceipt):
             verify_pixal_files(receipt, hashes=hashes)
             return
@@ -179,6 +205,14 @@ class ThreeDGenerator:
             raise ValueError('runtime executable is not executable')
 
     def status(self) -> dict[str, object]:
+        try:
+            mv = self.resolve_multiview()
+            multiview: dict[str, object] = {'state': 'experimental', 'view_counts': mv.evaluated_view_counts,
+                'resolutions': [1024], 'estimated_runtime_sec': mv.measured_runtime_sec,
+                'directions': ['front', 'right', 'back', 'left'], 'requires_transparency': True,
+                'minimum_side': 64, 'maximum_side': 2048, 'shared_square_canvas': True}
+        except SceneError as exc:
+            multiview = {'state': 'unavailable', 'reason': exc.code}
         engines: dict[str, object] = {}
         for engine in ('trellis_cpp', 'pixal3d'):
             try:
@@ -192,13 +226,13 @@ class ThreeDGenerator:
         try:
             receipt = self.resolve()
         except SceneError as exc:
-            return {'state':'unavailable', 'reason':exc.code, 'engines':engines, 'refine':refine}
+            return {'state':'unavailable', 'reason':exc.code, 'engines':engines, 'refine':refine, 'multiview':multiview}
         return {'state':'experimental', 'implementation':receipt.engine, 'engines':engines,
                 'input':'image', 'resolutions':measured_resolutions(receipt),
                 'estimated_runtime_by_resolution':runtime_by_resolution(receipt),
                 # 画面のチェックボックスはここだけを見る。既定の段と、足せる段を分ける。
                 'refine':refine, 'refine_engine':'pixal3d',
-                'estimated_runtime_sec':receipt.measured_runtime_sec}
+                'estimated_runtime_sec':receipt.measured_runtime_sec, 'multiview':multiview}
 
     @staticmethod
     def resource_request(receipt: RuntimeReceipt, execution: HostExecution) -> dict[str, object]:
@@ -207,14 +241,17 @@ class ThreeDGenerator:
             'vram':{'resident_bytes':0, 'execution_peak_bytes':receipt.measured_peak_vram_bytes,
                     'cold_load_peak_bytes':receipt.measured_peak_vram_bytes, 'headroom_bytes':512*1024**2,
                     'confidence':'measured'},
-            'compute_mode':'shared-safe', 'priority':0, 'class':execution.workload_class,
+            'compute_mode':'exclusive-required' if isinstance(receipt, MultiviewRuntimeReceipt) else 'shared-safe',
+            'priority':0, 'class':execution.workload_class,
             'residency_key':f'mediaforge:{"trellis-cpp" if receipt.engine == "trellis_cpp" else "pixal3d"}:{receipt.model_revision}',
             'estimated_runtime_sec':receipt.measured_runtime_sec, 'max_wait_sec':300, 'on_insufficient':'queue',
         }
 
     async def prepare(
         self, receipt: RuntimeReceipt, value: SceneFromImageRequest, image: Path, root: Path,
-    ) -> PreparedPixalInput | None:
+    ) -> PreparedPixalInput | PreparedMultiview | None:
+        if isinstance(receipt, MultiviewRuntimeReceipt):
+            return await prepare_multiview(receipt, value, image, root)
         if isinstance(receipt, PixalRuntimeReceipt):
             return await prepare_pixal(receipt, value, image, root, timeout=self.preparation_timeout_sec)
         return None
@@ -222,10 +259,13 @@ class ThreeDGenerator:
     async def generate(
         self, receipt: RuntimeReceipt, value: SceneFromImageRequest,
         image: Path, root: Path, execution: HostExecution,
-        *, prepared: PreparedPixalInput | None = None,
+        *, prepared: PreparedPixalInput | PreparedMultiview | None = None,
     ) -> tuple[Path, GenerationFacts]:
         from .scene_workspace import _bounded_read, _stop_process
 
+        if isinstance(receipt, MultiviewRuntimeReceipt):
+            return await generate_multiview(receipt, value, image, root, execution,
+                prepared if isinstance(prepared, PreparedMultiview) else None, timeout=self.timeout_sec)
         if isinstance(receipt, PixalRuntimeReceipt):
             return await generate_pixal(receipt, value, image, root, execution, prepared, timeout=self.timeout_sec)
         if not execution.lease_id or execution.device_id != receipt.device_id:

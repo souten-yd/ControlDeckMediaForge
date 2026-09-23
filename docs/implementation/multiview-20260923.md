@@ -1,6 +1,6 @@
 # 複数方向画像からの3D: 調査・評価・モバイル統合
 
-Status: 公式1/2/3/4面のVulkan生成・同一camera描画を確認。現行1枚入力を維持。追加UI/多視点runtimeは未採用。
+Status: 公式1/2/3/4面・人物2/3/4面の実測を完了。手動入力の製品code/source受入を追加中。installedは0.33.19で多視点未採用。
 利用者の2026-09-23依頼: 1枚→別方向画像生成→3D、手動2/3/4枚の追加、モバイル操作。
 脚交差修正と商店街制作も継続し、本件で置き換えない。
 
@@ -311,3 +311,40 @@ skip0（既存bundle build環境参照あり）。試験ログ`input-preflight-f
 1024角候補には顔重複が残る。詳細は[参照編集の実測と導入](reference-edit-admission-20260923.md)。
 生成/Library表示確認後に専用operator認証が期限切れになり、通常logoutと再ログイン依頼を実施。
 再認証後のGPU評価・製品MV runtime/UI統合を続ける。既存の1枚生成と採用receiptは保持。
+## 製品への接続: 0.33.20 source受入
+
+`ux1/multiview-generation`で既存`scene.from_image`へoptionalな
+`additional_views`/`view_camera`を追加。1枚の保存要求は新しい空fieldを含めず従来互換。
+2枚=正面/右、3枚=正面/右/背面、4枚=全方向に限定し、全入力の実画素SHA・
+共通canvas・透過・来歴を検査する。入場、待機、準備後、公開直前で同一性を確認し、
+生成中は全入力の削除/Trashを拒否。取り消しは既存Jobのprocess/lease cleanupを使用。
+単視点とは独立したprivate receipt、mixed precision来歴を持ち、未採用時の1枚へのfallbackは行わない。
+
+モデル追加取得/コピー0。nativeと共有libraryだけ67,336,656Bを永続runtimeへ複製し、
+全13memberと既存9重みのSHAを検証した。実行時と同じ`LD_LIBRARY_PATH`で
+`ldd`の全ggml依存が永続runtime配下に解決することを確認。
+`maintenance/multiview-20260923/candidate-runtime.json`はsource用候補であり、
+installedの新機能採用はこの時点ではNOT TESTED。
+
+private `product-source.py`から実`ThreeDGenerator.prepare/generate`を実行。
+通常operator認証のHost Broker leaseを取得、人物の異なる4RGBAを投入した。
+141.713559秒、device全体観測最大6,943,510,528B、28renew、released。
+GLB SHA `d365be30f9552f01339a7ce7b642d8401443faf29e3b40c80178655c88d32305`。
+実Blender4.5.13で既存Scene/Assetへのimport、4親画像/4dependency/mixed precision来歴を照合。
+991,928tris、750,663vertices、4096角2texture、EXT_texture_webpの構造検査通過。
+同cameraでCPU4方向を描画し、顔/後頭部・2脚・片側バッグと画像材質を目視。
+これは既知cameraの人物1fixtureであり、任意写真の整合性やrig/deformation受入ではない。
+初回private helperはtimeout設定、次はDB初期化不足で生成前に終了。成功runはv3だけで、
+途中で私有source workspaceディレクトリを作成した。製品の失敗や再生成として計上しない。
+
+source実Chromeのopaque iframeでPC1280/touch320を操作。
+異なる4preview、方向別選択/削除/再追加/端末入力、全画像を含む要求、取消、
+詳細camera変更、英語切替、1枚生成への復帰を確認。overflow0/pageerror0。
+削除ボタンの一般CSS優先で39pxになる問題を検出し、44pxへ修正して再受入。
+通信応答は制御fixtureであり、実installed Host/Jobsの受入とは分離する。
+実物理スマホ、自動3方向候補→選択→3D、installed MCPはNOT TESTED。
+
+最初の全体testは2,556pass/3warnings/409.32秒。
+その後CSS、版数、API/Workflowの3面要求検証を更新。追加API検証の旧固定Asset件数2件を修正し、
+最終./mf.sh testは2,558pass/3warnings/409.46秒、exit0。以後product変更なし。
+source成功を製品全体や自動複数面生成の完成とは扱わない。

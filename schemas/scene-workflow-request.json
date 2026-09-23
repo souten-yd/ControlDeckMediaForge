@@ -3250,6 +3250,25 @@
           "const": "from_image",
           "title": "Action",
           "type": "string"
+        },
+        "additional_views": {
+          "items": {
+            "$ref": "#/$defs/AdditionalGenerationView"
+          },
+          "maxItems": 3,
+          "title": "Additional Views",
+          "type": "array"
+        },
+        "view_camera": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GenerationViewCamera"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -3258,6 +3277,67 @@
         "action"
       ],
       "title": "SceneFromImageAction",
+      "type": "object"
+    },
+    "AdditionalGenerationView": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "enum": [
+            "right",
+            "back",
+            "left"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "asset_id": {
+          "pattern": "^asset_[0-9a-f]{32}$",
+          "title": "Asset Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "direction",
+        "asset_id"
+      ],
+      "title": "AdditionalGenerationView",
+      "type": "object"
+    },
+    "GenerationViewCamera": {
+      "additionalProperties": false,
+      "description": "Shared turntable camera assumptions; does not calibrate arbitrary photos.",
+      "properties": {
+        "fov_degrees": {
+          "default": 20.0,
+          "maximum": 160,
+          "minimum": 1,
+          "title": "Fov Degrees",
+          "type": "number"
+        },
+        "distance": {
+          "default": 3.1192049980163574,
+          "maximum": 100,
+          "minimum": 0.01,
+          "title": "Distance",
+          "type": "number"
+        },
+        "elevation_degrees": {
+          "default": 0.0,
+          "maximum": 45,
+          "minimum": -45,
+          "title": "Elevation Degrees",
+          "type": "number"
+        },
+        "mesh_scale": {
+          "default": 1.0,
+          "maximum": 100,
+          "minimum": 0.01,
+          "title": "Mesh Scale",
+          "type": "number"
+        }
+      },
+      "title": "GenerationViewCamera",
       "type": "object"
     }
   },

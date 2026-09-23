@@ -1,5 +1,11 @@
 # ControlDeck Media Forge — ControlDeck Integration Plan
 
+2026-09-23 複数面の加法拡張: `scene.from_image`の追加画像もHostからはAsset IDだけを受ける。
+カメラは型付きの数値設定とし、外部path/URL/実行コードを受けない。実測済み枚数のMVだけを
+capabilityへ公開し、独立したprivate receiptを固定する。GPU leaseと取消/renew/解放は既存scene Jobを使う。
+追加画像の存在とSHAを受付から出版まで照合し、全画像を既存削除保護とlineageへ含める。
+既存単視点の保存要求・retry identityは、追加field省略時に変えない。Host固有変更は不要。
+
 Status: Draft / target architecture  
 Date: 2026-08-20
 

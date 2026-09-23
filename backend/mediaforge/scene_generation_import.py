@@ -11,7 +11,8 @@ import uuid
 from .domain import ErrorDetail, JobRequest, JobStatus
 from .glb import GlbValidationError, validate_glb_path
 from .paths import contained
-from .scene_generation import GenerationFacts, SceneFromImageRequest
+from .scene_generation import GenerationFacts, GenerationViewCamera, SceneFromImageRequest
+from .scene_generation_inputs import inspect_views
 from .scenes import SceneDependency, SceneError, SceneRevisionInput, validate_scene_owner
 
 if TYPE_CHECKING:
@@ -82,6 +83,15 @@ async def import_generated_glb(
     if not input_asset.mime_type.startswith("image/"):
         raise SceneError("scene_generation_input_invalid", "generation requires an image Asset")
     dependency = SceneDependency(role="generation_input", asset_id=input_asset.id, sha256=input_asset.sha256)
+    dependencies = [dependency]
+    if value.additional_views:
+        views, _ = await asyncio.to_thread(inspect_views, workspace, value)
+        if (facts.multiview is None or facts.multiview.views != views
+                or facts.multiview.camera != (value.view_camera or GenerationViewCamera())):
+            raise SceneError('scene_generation_invalid', 'Multiview facts differ from the input images or cameras')
+        dependencies = [SceneDependency(role='generation_input', asset_id=v.asset_id, sha256=v.sha256) for v in views]
+    elif facts.multiview is not None:
+        raise SceneError('scene_generation_invalid', 'Single-image request cannot claim multiview provenance')
     workspace._verified_revision_asset(input_asset.id, input_asset.mime_type)
     try:
         validate_glb_path(source, source_root)
@@ -117,18 +127,23 @@ async def import_generated_glb(
             current, _, _ = workspace._verified_revision_asset(input_asset.id, input_asset.mime_type)
             if current.sha256 != dependency.sha256:
                 raise SceneError("scene_generation_input_invalid", "generation input changed")
+            for dependency_view in dependencies[1:]:
+                current_view = workspace.store.get_asset(dependency_view.asset_id)
+                workspace._verified_revision_asset(current_view.id, current_view.mime_type)
+                if current_view.sha256 != dependency_view.sha256:
+                    raise SceneError('scene_generation_input_invalid', 'Additional generation image changed')
             # 版の親子は catalog が記録する。Asset の lineage は「何から作られたか」で、
             # 後段は前段の .blend からではなく同じ入力画像から作られている。
             # 前段を親として名乗らせない（来歴に嘘を入れない）。
             source_asset, preview_asset = workspace._register_assets(
                 job_id, blend, preview, runtime, blender_facts, glb_facts,
-                parent_revision=None, dependencies=[dependency], operation="scene.from_image",
+                parent_revision=None, dependencies=dependencies, operation="scene.from_image",
                 parameters={"generation": facts.model_dump(mode="json")}, generation=facts,
             )
             registered.extend([source_asset.id, preview_asset.id])
             revision_input = SceneRevisionInput(
                 source_asset_id=source_asset.id, preview_asset_id=preview_asset.id,
-                dependencies=[dependency], runtime_id=runtime.runtime_id, runtime_version=runtime.version,
+                dependencies=dependencies, runtime_id=runtime.runtime_id, runtime_version=runtime.version,
                 validation=workspace._validation(blender_facts, glb_facts),
             )
             if appending:

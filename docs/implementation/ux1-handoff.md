@@ -1,5 +1,20 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 手動2/3/4面の製品経路・モバイル入力（0.33.20準備）
+
+branch ux1/multiview-generation、base0d5ab0b。追加画像/camera、全画像pin/来歴/削除保護、
+独立mixed precision runtime、方向別preview/端末取込/除去/詳細cameraを既存Jobs/UIへ接続。
+人物4面を実source adapterから生成、141.713559秒/28renew/released、既存Blender4.5.13 import成功。
+4入力とstagingの実画素SHA一致/全4枚相異、991,928tris/4096角2画像/4親を確認。
+CPU4面を目視し顔/背面/2脚/片側バッグを確認。rig/deformationや任意写真の品質受入ではない。
+source opaque iframe1280/320で追加/選択/除去/取込/取消/camera/1枚復帰、overflow0/errors0。
+削除ボタンの既存CSS優先を44pxへ修正して再確認。通信応答は制御fixture。
+最初の全2556pass/409.32秒後、版数/API3面検証を追加。旧固定Asset数のfixtureを修正し、最終全2558pass/3warnings/409.46秒、exit0。
+private証跡maintenance/multiview-20260923/product-*、配布準備maintenance/release-0.33.20-20260923。
+currentは0.33.19。新receiptはcandidate-runtime.jsonのみ、旧SV2receiptのSHA不変、追加DL/重みコピー0。
+次: commit/push/PR/merge→既存鍵署名と通常feature update→candidate receipt採用→実installed UI/Job/取消/Library。
+自動方向候補→選択→3D、installed MCP、物理スマホはNOT TESTED。全体goal継続。
+
 ## 2026-09-23 複数面の実画素検査・人物/非対称・native取消
 
 branch ux1/multiview-person-cancel。通常再ログイン確認、参照編集のlease releasedを追加照会済み。

@@ -1,5 +1,14 @@
 # ControlDeck Media Forge — Base Plan
 
+2026-09-23 複数面の実装境界: 既存`scene.from_image`へ`additional_views`（右/背面/左の
+Asset ID、最大3）と任意の`view_camera`（共通turntableの水平FOV/距離/仰角/mesh scale）を追加する。
+元`input_asset_id`が正面で、同一Asset/実画素の重複を拒否する。省略時は従来の単一画像と同一。
+複数面は独立に実測したPixal MV receiptだけを使い、SVやtrellisへ代替しない。
+最初は背景を除いた共通正方形RGBA入力を受け、camera/framingを変更せず渡す。
+任意写真の自動校正や、個別cropによる見かけの位置合わせを実装済みとは扱わない。
+各画像のpin/実行中削除保護/生成物の親を保持し、既存Jobs/Library/scene revisionへ統合する。
+自動別方向画像は候補の明示選択を経る別工程であり、本手動入力経路の採用条件に混ぜない。
+
 Status: Draft / baseline architecture  
 Date: 2026-08-20
 

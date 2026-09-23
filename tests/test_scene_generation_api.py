@@ -15,8 +15,13 @@ from test_scene_generation_jobs import GENERATION_IDENTITY, manager_fixture
 
 
 @pytest.mark.parametrize('workflow',[False,True])
-def test_image_generation_public_entry_reaches_durable_scene_and_library(tmp_path,workflow):
-    fixture,host,value,_=manager_fixture(tmp_path)
+@pytest.mark.parametrize('multiview',[False,True])
+def test_image_generation_public_entry_reaches_durable_scene_and_library(tmp_path,workflow,multiview):
+    if multiview:
+        from test_scene_multiview import multiview_manager
+        fixture,host,value,_=multiview_manager(tmp_path,3)
+    else:
+        fixture,host,value,_=manager_fixture(tmp_path)
     async def authenticate(headers): return GENERATION_IDENTITY
     async def close(): pass
     host.authenticate=authenticate
@@ -24,6 +29,7 @@ def test_image_generation_public_entry_reaches_durable_scene_and_library(tmp_pat
     for job in fixture.store.list_jobs():
         if job.status==JobStatus.QUEUED:
             fixture.store.update_job(job.id,status=JobStatus.SUCCEEDED)
+    original_assets = {asset.id for asset in fixture.store.list_assets()}
     app=create_app(fake_settings(tmp_path/'workspace'),host_client=host)
     manager=app.state.scene_recipe_jobs
     manager.workspace=fixture.workspace
@@ -55,7 +61,12 @@ def test_image_generation_public_entry_reaches_durable_scene_and_library(tmp_pat
             assert client.get('/api/v1/assets/'+asset_id+'/content').status_code==200
             p=client.get('/api/v1/assets/'+asset_id+'/provenance').json()
             assert p['model_id']=='test/model'
-        assert len(client.get('/api/v1/assets').json()['items'])==3
+        assert {asset['id'] for asset in client.get('/api/v1/assets').json()['items']} == original_assets | set(final['asset_ids'])
+        assert len(final['asset_ids']) == 2
+        if multiview:
+            source = client.get('/api/v1/assets/'+final['asset_ids'][0]+'/provenance').json()
+            assert source['parent_asset_ids'] == value.input_asset_ids()
+            assert len(source['parameters']['generation']['multiview']['views']) == 3
 
 
 def test_schema_and_endpoints_reject_paths_remote_execution_and_unadopted_runtime(tmp_path):
