@@ -348,3 +348,69 @@ source実Chromeのopaque iframeでPC1280/touch320を操作。
 その後CSS、版数、API/Workflowの3面要求検証を更新。追加API検証の旧固定Asset件数2件を修正し、
 最終./mf.sh testは2,558pass/3warnings/409.46秒、exit0。以後product変更なし。
 source成功を製品全体や自動複数面生成の完成とは扱わない。
+
+## 0.33.20の署名配布とinstalled受入
+
+PR [654](https://github.com/souten-yd/ControlDeckMediaForge/pull/654)を通常mergeし、
+`5177a7b6e5d8baa54775aa9360e80f7f6c0fd8d4`のclean checkoutからbundle生成。
+既存publisher鍵で署名し、[v0.33.20](https://github.com/souten-yd/ControlDeckMediaForge/releases/tag/v0.33.20)へ公開。
+38,092,498B、SHA `0436bd2905f98150f759bdb4a77efbe73859e601470d4af5b944d1448b4d3df7`。
+公開後のassets一覧cacheが空だったためrelease assets APIの実一覧から正規URLを取得し、
+全4assetのsize/digestを照合した。upload再試行は同名422で上書きなし。
+consumer再取得後に既存trusted key/署名/tamper拒否、safe tar6entry、PyInstaller244entry、
+source一致、重み/venv/秘密値なしを検証。clean bundleの実HTTPでsetup_requiredと旧既定、
+不正入力の拒否を確認した。Blender不在時の親capabilityだけを返す既存契約を検査helperで訂正。
+
+active Job/Blender session/管理操作/OpenCode unit/resourceがない状態でDBをbackupし、
+`deck.sh feature update media-forge`を実行。currentは0.33.20、実exe/cwd一致、PID581793、healthy。
+配信JS/CSS/moduleはrelease sourceと一致。更新前1586 Asset metadata、代表3content SHA、
+旧runtime全JSON/単視点capabilityを生成確認後にも再検査し保持を確認した。
+新しい独立MV receiptだけを採用、既存9重みを参照。実workerの`/proc/.../maps`で
+ggml全4libraryが永続runtimeからロードされることを確認した。追加モデル取得/重みコピー0。
+
+通常operator認証を使い、Hostのopaque iframe（allow-same-originなし）の実file pickerを
+320px/touchで操作。正面/右/背面/左の4RGBAを取り込み、別々のpreviewと横はみ出し0を確認。
+「複数面：人物と赤いバッグ（4方向）」を送信し、151.703秒で成功した。
+native来歴143.241228秒は同じJobの内部計測であり、UI全体の時間とは区別する。
+
+| 結果 | ID |
+|---|---|
+| MediaForge Job | `job_e7a5e8375b96460b9d14520655120f28` |
+| Host Job | `a8037b884af3` |
+| scene | `scene_36dfcedb514d4148a9779df0c108d28f` |
+| 制作版 | `asset_309cc771285949e781b7c5c169e9700f` |
+| GLB | `asset_774b74adc7574ccb8ac168b64138c715` |
+
+生成中は4入力ともTrash previewを`library_production_busy`で拒否。
+生成後に通常Asset HTTPの実bytesを取得し、4入力のraw SHA/画素SHAを来歴と照合した。
+元fixtureと各方向の画素が一致し、4枚の画素SHAはすべて異なる。
+制作版の全4親/`generation_input` dependency、GLBの制作版親、出力2件の実SHA/size、
+`vulkan / q8_0_flows_f16_shared`の来歴を確認。従来のfloat32実行来歴は流用していない。
+
+GLBは41,107,216B、991,928tris/1材質/2画像、EXT_texture_webp。
+通常PCの実AMD内蔵GPUブラウザで1280pxと320pxの表示・閉じるを確認し、
+服/髪/赤いバッグのテクスチャを目視。overflow0/pageerror0、物理スマホはNOT TESTED。
+初回headlessはWebGL2 contextを作れず表示失敗、GPUブラウザの初回PC終了入力も届かなかった。
+これらの失敗を保持し、別runの320px→1280pxでは実pointer/click/closeを記録して成功を確認した。
+全runは同じ保存済みGLBを開いており、表示のための再生成はない。
+
+初回取消helperはprivate作業directoryにJob IDが含まれるという誤りでPIDを照合できず、
+自身の`job_c96262c9110c46b6a7f9f294e743f29a`だけを通常APIで取消した。
+照合を訂正した別Job `job_bb6513bd6cfc472da89a31f446cb11a6`では実nativeを観測後、
+320pxの中止ボタンを押し、0.212秒でcanceled/native消滅/追加Asset0を確認。
+Host `9865c7df9b8f`もcanceled、lease `23eea61d-ea7a-4d67-9a29-4b29d7a48bcb`はreleased。
+元4画像と成功済みsceneを保持、終了後の4入力のTrash previewも成功（削除は実行しない）。
+最後に正常1件/取消2件のHost終端、該当3lease released/active0を通常HTTPで確認した。
+
+private証跡は`maintenance/release-0.33.20-20260923/`の
+`multiview.json`、`viewer-hardware.json`、`cancel-ui.json`、`verify-multiview.json`、
+`post-multiview-check.json`と実画面PNG。実行は同directoryの
+`private-browser.py viewer-hardware.mjs` / `private-browser.py cancel-ui.mjs` /
+`verify-multiview.py` / `check-installed.py <release-source> post-multiview`。
+cookieはprivate stdinのみ、公開文書やhelperログへ記録しない。
+
+利用入口は「作る→3D→元画像→別の方向を追加」。2枚は正面/右、3枚は背面を追加、
+4枚は左も追加。追加カードを外すと従来1枚へ戻る。cameraは詳細モードで変更可能。
+実installed生成は4枚を受入、2/3枚は先のnative実測とsource契約検証を根拠とする。
+任意写真の校正/品質、rig/deformation、自動方向候補→比較→明示選択、実installed MCP、
+物理スマホは未受入。この文書sliceに製品変更はなく、既受入2558testsは再実行していない。

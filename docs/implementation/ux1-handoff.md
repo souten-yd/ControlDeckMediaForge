@@ -1,5 +1,22 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 手動複数面0.33.20を公開・導入、実生成と320px取消を確認
+
+PR654/5177a7bを既存鍵で署名公開し、再取得検証後に通常feature update。
+current0.33.20/PID581793/healthy、旧1586 Asset metadataと代表3content SHA、旧runtime全JSONを保持。
+独立MV receiptを採用。実workerのggml全4libraryは永続runtimeから読み込み、追加モデル取得0。
+通常ログイン/opaque iframeの320pxで異なる4RGBAを取り込み、151.703秒で生成成功。
+scene_36dfcedb514d4148a9779df0c108d28f「複数面：人物と赤いバッグ（4方向）」をLibraryへ保存。
+4方向の画素と元fixture/来歴を照合し、4親/dependency、GLB/.blendの実SHAを検証。
+PC1280/320pxで画像付きGLB表示・閉じる、overflow0/pageerror0。物理スマホはNOT TESTED。
+別の自身のJobを320pxの中止ボタンで取消、0.212秒、native終了/出力0/lease released。
+成功と取消2件のHost終端/3lease released/active0を照合。初回取消helperの誤ったPID照合はAPIでcleanup済み。
+headless WebGL不可と初回PC操作の失敗はprivate証跡に保持し、実GPUでの最終受入と分離。
+branch ux1/multiview-installed-0-33-20は文書のみ。製品testは既受入2558pass/409.46秒から変更なし。
+次: 自動方向候補の生成→比較→明示選択、実installed MCP。自動生成画像を無審査で3Dへ渡さない。
+厳密同時cold到着/実OpenCode推論のHost再起動越し受入も未完了。全体goal継続。
+[詳細](multiview-20260923.md#03320の署名配布とinstalled受入)。
+
 ## 2026-09-23 手動2/3/4面の製品経路・モバイル入力（0.33.20準備）
 
 branch ux1/multiview-generation、base0d5ab0b。追加画像/camera、全画像pin/来歴/削除保護、
