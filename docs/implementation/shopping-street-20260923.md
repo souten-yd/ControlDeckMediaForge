@@ -133,3 +133,22 @@ NOT TESTED: 3D生成、人物の変形品質、HTML表示/操作、物理モバ�
 
 NOT TESTED: 修正版installed人物rig、色の修正、商店街全体、HTML/操作/移動時接地/性能、物理端末。
 MCP502の元Job情報不足は別途未修正。目標はactive。
+
+
+## 2026-09-23 10:00 JST continuation
+
+歩行修正PR632を0.33.11として署名公開・通常ローカル更新。元の主人公sceneは第4版
+revision_496964560f624255ae5698c1c94275bdへ再rigしてLibrary登録、旧版を保持。
+GLB asset_0480355b176141a4ae51f17f8eee66b7は22122tris/12bones、全25frameで脚交差なし。
+同じ元画像/seedの1024比較Host35fef7cff431は成功し、scene_37ab4d0bcec24c8d9d55cabd0e0ab356、
+未rig GLB asset_2d6fb609125b4cafa0497b09ffb198dc（279538tris）。肌の赤さは改善、服はまだ茶色。
+続く実MCP Host2506347a7351は新規startせず同じpipelineを継続したが、rig Jobdcd564c6...が
+unweighted verticesでfailed。出力を公開せずexport/packなし。欠損部位を実Blenderで調査中。
+
+パン屋Hostea1473f4ad30は成功、MCP export/pack済み。
+GLB asset_bed82e10e6c14c4f97c76a10ea4eda01、134392tris、SHA867d2437e4dc37ddaf218f47ec1bc390f94429262cca0d252c6a4597540c94e6。
+屋根/庇/売場は立体化されているが、看板文字は潰れ、部分的に表面に傷が見える。
+そのまま高品質合格とはしない。HTMLでの距離と軽量化後に再評価する。
+残るカフェ/花屋/本屋（512）とNPC2種類（1024）のmodel段のみをHost03447db06990で開始。
+receipt remaining-models-job.jsonとproject evidence/remaining-models.jsonを継続観測。
+rig/export承認前で止め、モデルごとの形状・材質・bind可能性を先に確認する。
