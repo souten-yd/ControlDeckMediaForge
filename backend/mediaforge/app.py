@@ -72,6 +72,7 @@ from .composer import (
 )
 from .creative import CreativeCompileResult, CreativeCompiler, CreativeSpec, CreativeValidationError
 from .creative_batches import CreativeBatchPlanner, CreativeBatchRecord, project_batch
+from .view_candidate_service import ViewCandidateService
 from .creative_intelligence import (
     CreativeDirector,
     CreativeMode,
@@ -1358,6 +1359,11 @@ def create_app(
             {"id": "portrait", "label_key": "size.portrait", "width": portrait[0], "height": portrait[1]},
         ]
 
+    view_candidates = ViewCandidateService(
+        store, lambda: image_capability("image.single_reference_edit")["state"] == "available", size_envelope,
+    )
+    app.state.view_candidates = view_candidates
+
     async def capability_document(identity: HostIdentity | None = None) -> dict[str, Any]:
         text_direction_available = await creative_director.available(identity)
         evaluator_available = await evaluator.available(identity)
@@ -2477,10 +2483,18 @@ def create_app(
         value = await imported_inputs(host_job_input(payload), identity)
         job = await submit_hosted(value, identity, workload_class="agent-interactive")
         terminal = await wait_for_terminal(job["id"])
-        await manager.wait_cleanup(job["id"])
+        try:
+            await manager.wait_cleanup(job["id"])
+        except TimeoutError as exc:
+            raise HTTPException(status_code=504, detail={
+                "code": "job_cleanup_timeout", "job_id": job["id"], "status": terminal["status"],
+            }) from exc
         if terminal["status"] != "succeeded":
             error = terminal.get("error") or {"code": "media_job_failed"}
-            raise HTTPException(status_code=502, detail={"code": error.get("code", "media_job_failed")})
+            raise HTTPException(status_code=502, detail={
+                "code": error.get("code", "media_job_failed"),
+                "job_id": job["id"], "status": terminal["status"],
+            })
         result = submitted_reference(terminal)
         result["asset_id"] = terminal["asset_ids"][0] if terminal["asset_ids"] else None
         return result
@@ -2924,10 +2938,11 @@ def create_app(
         return advanced.model_dump(mode="json")
 
     async def pipeline_action(pipeline_id: str, action: str,
-                              identity: HostIdentity) -> dict[str, Any]:
+                              identity: HostIdentity, *, expected_job_id: str | None = None) -> dict[str, Any]:
         try:
             result = await pipeline_coordinator.action(
-                pipeline_id, scene_owner(identity), action, pipeline_deps(identity))
+                pipeline_id, scene_owner(identity), action, pipeline_deps(identity),
+                expected_job_id=expected_job_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"code": "pipeline_not_found"}) from exc
         except PipelineStalled as exc:
@@ -2961,7 +2976,8 @@ def create_app(
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_id"}) from exc
-        return await pipeline_action(value.pipeline_id, value.action, identity)
+        return await pipeline_action(value.pipeline_id, value.action, identity,
+                                     expected_job_id=value.expected_job_id)
 
     @app.post("/addon/v1/agent/job/status")
     async def agent_scene_job_status(request: Request) -> dict[str, Any]:
@@ -4076,6 +4092,15 @@ def create_app(
                             director_plan=director_plan,
                             reference_context=reference_context,
                         ).model_dump(mode="json")
+                    elif method == "images.views.create":
+                        async def submit_view_child(child: JobRequest) -> dict[str, Any]:
+                            return await submit_hosted(child, identity, workload_class="interactive")
+
+                        result = await view_candidates.create(params, submit_view_child)
+                    elif method == "images.views.list":
+                        result = await asyncio.to_thread(view_candidates.list, params)
+                    elif method == "images.views.select":
+                        result = await asyncio.to_thread(view_candidates.select, params)
                     elif method == "creative.batches.create":
                         async def submit_batch_child(child: JobRequest) -> dict[str, Any]:
                             return await submit_hosted(child, identity, workload_class="interactive")
@@ -4210,13 +4235,10 @@ def create_app(
                         )
                         result = await run_pipeline(pipeline, identity)
                     elif method == "pipelines.status":
-                        if set(params) - {"action"} != {"pipeline_id"}:
-                            raise ValueError("pipeline status fields differ")
-                        action = str(params.get("action", "status"))
-                        if action not in {"status", "approve", "cancel"}:
-                            raise ValueError("pipeline action differs")
+                        value = AssetPipelineActionRequest.model_validate(params)
                         result = await pipeline_action(
-                            str(params.get("pipeline_id", "")), action, identity)
+                            value.pipeline_id, value.action, identity,
+                            expected_job_id=value.expected_job_id)
                     elif method == "pipelines.list":
                         if set(params) - {"limit"} != set():
                             raise ValueError("pipeline list fields differ")
@@ -4850,10 +4872,12 @@ def create_app(
 
     @app.post("/workspace-api/pipelines/{pipeline_id}", include_in_schema=False)
     async def standalone_pipeline_status(pipeline_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        action = str(payload.get("action", "status"))
-        if action not in {"status", "approve", "cancel"}:
-            raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_action"})
-        return await pipeline_action(pipeline_id, action, standalone_identity())
+        try:
+            value = AssetPipelineActionRequest.model_validate({**payload, "pipeline_id": pipeline_id})
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "invalid_pipeline_action"}) from exc
+        return await pipeline_action(pipeline_id, value.action, standalone_identity(),
+                                     expected_job_id=value.expected_job_id)
 
     @app.get("/workspace-api/scenes", include_in_schema=False)
     async def standalone_scenes() -> dict[str, Any]:
@@ -5402,6 +5426,27 @@ def create_app(
             "items": annotate_candidates(rows),
             "installed_families": sorted(installed_families()),
         }
+
+    @app.post("/workspace-api/images/views/{action}", include_in_schema=False)
+    async def standalone_view_candidates(action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        async def submit_child(child: JobRequest) -> dict[str, Any]:
+            return manager.submit(apply_asset_brief(child)).model_dump(mode="json")
+
+        try:
+            reject_host_paths(payload)
+            if action == "create":
+                return await view_candidates.create(payload, submit_child)
+            if action == "list":
+                return await asyncio.to_thread(view_candidates.list, payload)
+            if action == "select":
+                return await asyncio.to_thread(view_candidates.select, payload)
+            raise ValueError("unknown view candidate action")
+        except CreativeValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"code": "workspace_request_rejected", "message": str(exc)[:300]}) from exc
 
     @app.post("/workspace-api/creative/batches", include_in_schema=False)
     async def standalone_creative_batch(payload: dict[str, Any]) -> dict[str, Any]:

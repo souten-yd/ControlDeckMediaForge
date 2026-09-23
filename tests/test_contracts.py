@@ -47,6 +47,32 @@ def test_job_schema_does_not_require_model_id():
     jsonschema.validate({"operation": "image.generate", "intent": "a blue robot"}, schema)
 
 
+def test_image_edit_seed_and_open_constraints_are_visible_to_model_decoders():
+    """Real OpenCode calls lost seed/alpha and filled unrelated pack fields."""
+    schema = json.loads((ROOT / "schemas/job-request.json").read_text(encoding="utf-8"))
+    constraints = schema["properties"]["constraints"]
+    # llama.cpp defaults undeclared additionalProperties to false. The public
+    # JSON-schema default alone does not expose the existing open dictionary.
+    assert constraints["additionalProperties"] is True
+    assert constraints["properties"]["seed"]["type"] == "integer"
+    request = {
+        "operation": "image.edit", "intent": "Show this same person from behind",
+        "inputs": [{"asset_id": "asset_" + "1" * 32}],
+        "constraints": {
+            "width": 1024, "height": 1024, "seed": 42,
+            "edit_mode": "reference", "strict_edit": False,
+            "asset_brief": {"role": "general", "alpha_intent": "required", "aspect_intent": "square"},
+            "guidance_scale": 1.0,
+        },
+        "output": {"format": "png", "count": 1}, "local_only": True,
+    }
+    jsonschema.validate(request, schema)
+    assert JobRequest.model_validate(request).constraints == request["constraints"]
+    # Discovery guidance must not loosen validation of optional pack metadata.
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({**request, "constraints": {**request["constraints"], "origin_notes": ""}}, schema)
+
+
 def test_the_generate_contract_points_at_batch_and_at_the_asset_brief():
     """一覧から media.generate を選ぶ側にも、二つのことを伝える。
 

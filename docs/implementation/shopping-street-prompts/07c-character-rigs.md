@@ -1,0 +1,16 @@
+MediaForge 0.33.14を導入した後の人物3体の実MCP rig/GLB納品工程。生成元を作り直さない。
+画像生成、新規3D生成、pipeline.start、Webコード編集、他agentは禁止。rigとpackだけ。
+最初に同じpipelineをstatusで読み、成功済みなら再送せず結果回収。runningなら同じIDを追う。
+
+主人公1024: pipeline_9dd4bab1fef94853bba40dcc8f0a30bd。
+failed rig Jobがjob_480aa45fd5a14d148aedb0b7dfe9c3e3ならaction=retry、expected_job_id=job_480aa45fd5a14d148aedb0b7dfe9c3e3を1回。
+コーラル: pipeline_26c659a48d51466ca2b9074b85ef139d。
+ブルー: pipeline_877d59a9344047e9ab730427037819b7。
+両歩行者のmodel成功後rigがawaiting_approvalならapprove。
+
+各対象は15秒間隔の同一pipeline pollでrig終端を確認してからexport approve。実GLBをmedia.inspectし
+project_output_grantとmedia.packでexports/player-1024-rigged.glb、exports/npc-coral.glb、exports/npc-blue.glbへ納品。
+各Job IDを返った直後にevidence/character-rigs-final.jsonへ短く保存。各scene/revision/Asset/元画像/hash/pack receiptも保存。
+ローカル納品GLBのSHAとreceiptを照合し、assets/manifest.jsonの対象3件のみstate=exportedと事実を更新。
+失敗したらその対象を再送せず記録し、他の対象へ進む。通信失敗は未受付と推測せず記録してrunを終了。
+古いexports/player-rigged.glbは不良rigで使用禁止。新しいモデルや診断ファイルで代替しない。

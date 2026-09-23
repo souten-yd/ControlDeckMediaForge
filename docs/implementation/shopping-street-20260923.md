@@ -1,6 +1,71 @@
 # 歩ける商店街: OpenCode / Qwen3.8-27B / MCP 制作受入
 
-Status: IN PROGRESS。512主人公の脚交差修正を0.33.11/Library第4版で受入。1024再rigと残り素材/HTMLは制作中。
+Status: HTML制作・実MCP納品・不具合修正・通常Hostでの受入完了。MediaForge 0.33.23で再確認。
+物理スマートフォンの性能・操作品質と、任意画像からの正確な別方向生成は未受入。
+
+## 最終成果物と2026-09-23の再監査
+
+ControlDeckの **Project Lab → MF3DS-ShoppingStreet-20260923 → index.html** から開く。
+左スティックで移動、右側のドラッグで視点変更。PCはWASD/矢印キーを使う。
+店舗4種類を8軒、操作人物1人、歩行者2種類を計6人配置した三人称HTML。
+モデル・テクスチャ・Three.jsはローカル同梱。商店街のコードとモデルは今回変更していない。
+
+通常認証HTTP runner `scripts/shopping_street_opencode.py` は、この制作で使用した
+OpenCode実行のモデル固定・送信前receipt・同一Job観測を再現する補助スクリプト。
+既存receiptの再送を拒否し、観測HTTPの失敗をJob終了にしない。自動停止処理はない。
+今回のpreflightも通常ログインで成功し、Qwen3.8-27B/runtime v1を確認した。
+
+| 受入 | 証拠と結果 |
+|---|---|
+| 実OpenCode/ローカルLLM/MCP | 店舗Host Job25f23f603894、人物Job781d15da871f。projectのdiscovery/references/shop-packs/npc-delivery JSONに実tool・画像・GLB・grant receiptを保持 |
+| HTML制作と修正 | OpenCodeのWeb Jobe67c69a17071はHost再起動でinterrupted。書き出されたHTML/CSS/JSを保持し、監督側で読み込み判定/独立clone/接地/停止/衝突/画像読み込みを修正。初回Jobを成功へ書き換えていない |
+| 実成果物の独立検査 | manifestの7GLBと実SHAが全一致。合計24,931,924 B。各2画像をGLB内に保持し外部URIなし。店舗各30,000tris、人物41,827/85,647/85,343tris |
+| 人物rig | 全3人物にskin、12 joints、JOINTS_0/WEIGHTS_0、1秒/36channelのwalk clip。既受入の実25frame変形・左右脚非交差の対象と同じ成果物。骨格の存在だけを変形品質の証明にはしない |
+| 通常Host表示 | opaque iframeで7モデル/15配置の画像読み込み、8店舗/主人公/6NPCを再確認。PC/320/390pxの実画面も目視。灰色モデルで成功扱いしない |
+| 操作 | PC前進、320/390pxで同時touch移動＋視点操作、help開閉、再読込で7モデル再現。移動距離1.205913/1.050369m、横overflow0、page error/console warning0 |
+| 接地と性能 | 7人物の足底Y=.062m。PC内蔵Radeon/Chromeで300frame/5.0024秒、59.971214fps、p95 16.8ms。ready観測時performance.now=1628.1ms。ResourceTimingのdecodedBytes=0はopaque iframeでの観測値であり転送量0ではない |
+| 不具合修正 | 脚交差、微小weight欠損、失敗段retry、rig結果契約、軽量化設定のMCP掲載、形状保持、Host内画像CSP、pack既定形式、失敗Job ID保持を別sliceで修正・通常導入・実MCP/描画で再受入 |
+
+上記修正はmainに統合・署名リリース済み。稼働MediaForgeは0.33.23/PID770023、
+HostはPID674922/NRestarts0。この最終監査は追加生成0・モデルdownload0。
+2026-09-23T12:29:09Zの通常auth/me成功、active MediaForge Job0/lease0、Asset1597。
+原root `feat/g9-image-to-3d` は変更しない。
+
+今回の直接証跡はmanaged `maintenance/shopping-street-20260923/final-audit-0.33.23/` の
+`artifact-audit.json`、`host-street-acceptance.json`、PC/320/390px PNG、`inputs-and-idle.json`。
+実行は `private-browser.py street-final-audit.mjs`（通常ログイン/実Chrome/実Project Lab）。
+以前の衝突・停止fade・blur・WebGL loss/recoveryはprojectの
+`evidence/web-actual-mechanics.json`、変形・納品は`evidence/acceptance-summary.md`参照。
+同一SHAの再確認により対応付け、今回すべての故障注入を再実行したとは記録しない。
+
+### 統合時の検証
+
+PR631へmain d0ee4b6を統合後、`./mf.sh test` は2581passed/3skipped/3warnings、
+387.39秒、exit0。署名3件だけは作業treeにbuild runtime参照がなくskipしたため、
+手元の既存build venvへsymlinkを追加し、
+`.venv/bin/python -m pytest tests/test_release_signing.py -q` で全3件pass/exit0。
+新規依存取得なし。これらを「fullでskipなし」と書き換えない。
+ログは最終監査rootのfull-tests.log/signing-tests.log。以後code変更なし。
+変更文書4件の相対リンクとgit diff --checkも通過。
+
+このPRは配布外の評価runner/tests/prompts/記録だけで、0.33.23の製品payload差分は0。
+新たな版数更新・再配布・Host再起動は不要。商店街projectの最終記録はlocal commit6a8056b。
+
+### 追加依頼の範囲と残る限界
+
+- 手動1/2/3/4面のVulkan生成とモバイルUIは0.33.20で導入済み。
+  既存4面の実contentを再取得し、ファイルSHA/透過を考慮した画素SHAが記録と一致、
+  全4枚相異を確認。同じ正面の複製ではない。商店街本体の制作は単一画像経路である。
+- 1枚から右/背面/左候補を作り、元画像と比較して明示選択するUIは0.33.23で導入済み。
+  実3候補をLibraryに保存したが、向き・バッグを持つ手・形状の差で3Dには未採用。
+  自動校正/任意画像での正しい3面生成を完成とはしない。比較と判断を挟む範囲を提供する。
+- OpenCodeは利用者の方針どおり明示停止まで継続可能。owner/RBAC付き個別停止は
+  Host PR340/341で導入・実OpenCode Jobcfce488f01aaの320px停止で受入。
+  実推論中のHost再起動、cold要求の厳密な同時到着は追加の未試験条件として残す。
+- 物理スマホの速度/タッチ品質はNOT TESTED。人物20kの初期目安は未達であり、
+  形状を保つ約85kを選んだ。全端末での快適さ、高品質な自動rig全般の保証にはしない。
+
+以下は制作途中の履歴であり、現在の未完了状態ではない。失敗結果と元Assetは保持する。
 
 ## 利用者の目標（完了条件を縮めない）
 
@@ -34,7 +99,7 @@ OpenCodeとローカルQwen3.8-27Bを実際に使用し、MCPで画像から商�
 実測と外観を見て調整する。片側だけの見た目や足滑りを隠して合格にしない。
 最初に1人物の画像→3D→歩行を検証し、破綻した形を大量複製しない。
 
-## 現在の実測（2026-09-23）
+## 初回着手時の実測（履歴）
 
 - rootはfeat/g9-image-to-3d /524553dでclean。変更せずorigin/main 5dc52bfから別worktree。
 - installed MediaForge0.33.10/healthy、active Jobs0。商店街用既存projectなし。

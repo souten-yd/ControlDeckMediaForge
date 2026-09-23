@@ -1,5 +1,14 @@
 # ControlDeck Media Forge — Base Plan
 
+2026-09-23 複数面の実装境界: 既存`scene.from_image`へ`additional_views`（右/背面/左の
+Asset ID、最大3）と任意の`view_camera`（共通turntableの水平FOV/距離/仰角/mesh scale）を追加する。
+元`input_asset_id`が正面で、同一Asset/実画素の重複を拒否する。省略時は従来の単一画像と同一。
+複数面は独立に実測したPixal MV receiptだけを使い、SVやtrellisへ代替しない。
+最初は背景を除いた共通正方形RGBA入力を受け、camera/framingを変更せず渡す。
+任意写真の自動校正や、個別cropによる見かけの位置合わせを実装済みとは扱わない。
+各画像のpin/実行中削除保護/生成物の親を保持し、既存Jobs/Library/scene revisionへ統合する。
+自動別方向画像は候補の明示選択を経る別工程であり、本手動入力経路の採用条件に混ぜない。
+
 Status: Draft / baseline architecture  
 Date: 2026-08-20
 
@@ -377,6 +386,16 @@ Conceptual job request:
 ```
 
 Engine-specific advanced parameters may exist under a namespaced `engine_options` object, but profiles and agents should avoid relying on them.
+
+For `asset.pack`, omitted `output` or omitted `output.format` resolves to one
+ZIP; the image default remains PNG. An explicitly different pack format or a
+count other than one is an ingress validation error, before durable Job creation
+or resource admission. This preserves the existing deterministic pack contract:
+such requests previously created Jobs that could only fail with
+`unsupported_pack_profile`. Existing successful ZIP requests are unchanged,
+and tolerant historical request reads preserve their original values. Default
+resolution must copy caller-owned options, not mutate them. This is a request
+usability correction, not an additional model or generation operation.
 
 ### 5.1 Internal creative planning
 
@@ -836,6 +855,28 @@ clip in a new immutable scene revision; ordinary clip creation remains insert-on
 Unrelated clips and old revision bytes must be preserved, with the same resource budgets.
 Keep generic GLB/glTF as the first interchange baseline until the user chooses
 an engine; engine-specific readiness requires a real import/playback test.
+Automatic rigs must distinguish an upright body with two arms and two legs
+from a radial legged shape. A detected upright body needs separate arm and
+head support; arm vertices must not determine the knee position or be driven
+by leg swing. Classify only when surface cross-sections support that layout,
+and retain the existing general rig otherwise. Detection is provisional until
+posed meshes are checked for attachment, torso stability and ground contact.
+When simplification leaves too few vertices in a joint band, measure bounded
+intersections with the existing triangle surface instead of changing the mesh.
+For an upright two-foot candidate whose arms are close to the torso, one finer
+surface-section check may confirm separate arms; retain the same anatomical
+guards and the existing result when vertex measurements already succeed.
+Reject a decimation candidate that stalls above its requested triangle budget.
+A face count floor or successful binding alone does not prove that
+simplification preserved the surface, particularly for non-manifold meshes.
+Keep original revisions and report a fixed instruction to retain more faces.
+For a detected upright body only, a bone-heat result may repair tiny unweighted
+surface islands from nearby, originally weighted vertices. Limit the missing
+set to 0.5 percent and 128 vertices, each connected island to 64 vertices and
+2 percent of body height, and every donor distance to 0.5 percent of height.
+Never infer an entire missing limb or propagate through repaired vertices.
+Preserve geometry and UVs, report repair counts/distances in the recipe facts,
+and reject the candidate if any bound or final weight validation fails.
 No new model weights, Blender add-ons, external account or global config changes
 are authorized merely by the broader authoring goal.
 
@@ -1371,7 +1412,35 @@ Generation provenance includes the input Asset hash, pinned weights/runtime,
 seed and raw output hash. Successful structural validation does not establish
 visual or semantic quality; those remain separate experimental acceptance gates.
 
+2026-09-23 multi-view extension: retain the existing single-image contract and
+adoption receipts. Add camera-aware views only through a separately pinned,
+measured Pixal MV adapter in the same Scene Jobs/Asset lifecycle. Directions,
+camera assumptions and every input Asset/hash must survive admission, retries
+and provenance. Do not duplicate a front image into different camera slots or
+treat a collage as multiple camera inputs. Reject repeated assets/content and
+retain per-view thumbnails so the user can inspect the actual inputs.
+
+Simple mode uses explicitly described front/right/back/left turntable assumptions;
+these are assumptions, not camera calibration inferred from arbitrary photos.
+Advanced mode exposes the measured camera/framing controls. Preserve the common
+canvas rather than independently cropping each direction. Only evaluated view
+counts and camera arrangements become available. Generated extra directions
+remain editable candidates requiring visual review; image-edit success alone
+does not prove view consistency. Manual extra images do not depend on successful
+automatic view generation. No new model download follows merely from adding views.
+
 Exit criterion: generated 3D can flow through the same asset lineage and validation pipeline, while failures remain isolated from the stable Blender feature.
+
+The orchestration pipeline may explicitly retry only its failed stage whose
+ordinary Job is confirmed failed or canceled. The caller supplies that exact
+failed Job ID, making a duplicate/stale retry unable to restart a newer attempt.
+Keep successful image/model revisions, the original request and up to eight
+failed-attempt records. Never regenerate earlier stages or auto-approve later
+confirm-mode stages. Before dispatch, persist that the attempt has been consumed;
+an interrupted dispatch with no known Job ID stays failed/uncertain rather than
+being resubmitted on status polling. Existing owner checks and Broker admission
+remain authoritative. Unknown submission outcomes and successful Jobs lacking
+results require reconciliation, not blind retry.
 
 ### Phase 6 — Manga library/studio
 
@@ -1608,6 +1677,22 @@ viewer validation. No root-motion extraction or gameplay controller is implied.
 抽出は所有者がアクセスできるcurrent revisionのpacked base color/emission画像に限定。
 外部ファイル、複雑なshaderの見た目、normal/roughness等の物理mapを推測して取り出さない。
 既存の新規画像生成も維持し、参照編集が利用可能な場合に改善モードを提供する。
+## 2026-09-23 Single-reference edit admission
+
+Reference editing has a different memory peak from text-to-image generation.
+An adopted single-reference profile pins its measured device peak, worker allocator
+budget and runtime independently; it does not increase ordinary generation's reservation.
+Core requests the measured edit peak through the existing Host Broker and the worker
+stays within its granted budget. Native allocations outside the PyTorch allocator must
+be included in the device measurement. Resource shortage remains an explicit failure.
+
+For that profile, non-strict single-reference edits fit the whole reference to the
+admitted output canvas before inference. Explicit output dimensions are retained,
+aligned to the model grid; a 4K source must not silently cause 4K inference for a
+512-pixel request. Strict masked edits, outpaint, other adapters and multi-reference
+adoption keep their separate contracts and measurements. Image generation success
+does not establish that a requested camera direction or subject identity was preserved.
+
 ## 2026-09-23 Library trash, revision removal and permanent deletion
 
 Users can remove an image, a 3D revision, a material image, or any selected combination
@@ -1633,3 +1718,16 @@ Use the existing Store plus an additive library_trash state table and private wo
 transport. No second asset/Jobs foundation or public required-field change. Old releases do
 not understand purged tombstones: rollback after permanent deletion requires restoring a
 pre-deletion data backup; never roll back only the binary and claim deleted bytes are restored.
+
+### 2026-09-23 private recipe補修結果の整合性
+
+`automatic_weight_repairs`はworker内部結果の任意項目として、本体で型・有限値・補修上限・rig.auto対象IDを検証する。旧workerの省略と新workerの空配列をともに受理し、未知項目や不正な補修報告は引き続き拒否する。公開契約の変更はない。worker単体成功だけではなく本体境界とinstalled MCPで受入する。
+
+### 2026-09-23 別方向画像の候補と明示選択
+
+別方向の候補は既存の採用済みsingle-reference image.editで試作する。方向の正しさを保証する
+新runtimeとして公開しない。既存CreativeBatch/Job/Assetに1〜3件の依頼を記録し、元画像IDと
+要求方向を来歴に残す。方向ごとに異なる依頼を出し、同じ画像の複製で枚数を満たさない。
+UIは実験的な候補作成と明示し、元画像との比較・利用者の確認・選択を経て追加画像へ設定する。
+画像生成の成功を方向/被写体一致や3D生成の開始許可に読み替えない。候補と元画像の実画素重複、
+canvas/透過不適合、削除済み素材は選択時と既存3D受付で拒否する。新しいJob/asset基盤は作らない。

@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator
 
 from .material_binding import SceneTextureRequest
+from .view_candidates import ViewCandidateContext
 
 
 class JobStatus(StrEnum):
@@ -100,6 +101,13 @@ class JobRequest(BaseModel):
             raise ValueError("video.edit accepts at most eight input assets")
         if self.operation == "asset.pack" and not self.inputs:
             raise ValueError("asset.pack requires input assets")
+        if self.operation == "asset.pack":
+            if "format" not in self.output.model_fields_set:
+                self.output = self.output.model_copy(update={"format": "zip"})
+            if self.output.format != "zip":
+                raise ValueError("asset.pack requires output.format=zip; omit format to use ZIP")
+            if self.output.count != 1:
+                raise ValueError("asset.pack requires output.count=1")
         if self.operation != "asset.pack" and self.output.format == "zip":
             raise ValueError("zip output is accepted only by asset.pack")
         is_video = self.operation in {"video.generate", "video.edit"}
@@ -108,6 +116,15 @@ class JobRequest(BaseModel):
         if not is_video and self.output.format in {"mp4", "webm"}:
             raise ValueError("mp4 and webm output are accepted only by video operations")
         texture = self.constraints.get("scene_texture")
+        candidate = self.constraints.get("view_candidate")
+        if candidate is not None:
+            parsed_view = ViewCandidateContext.model_validate(candidate)
+            if (self.operation != "image.edit" or texture is not None or len(self.inputs) != 1
+                    or self.inputs[0].asset_id != parsed_view.source_asset_id
+                    or self.constraints.get("edit_mode") != "reference"
+                    or self.constraints.get("strict_edit", False) is not False):
+                raise ValueError("view_candidate requires one matching source in a non-strict reference edit")
+            self.constraints = {**self.constraints, "view_candidate": parsed_view.model_dump(mode="json")}
         if texture is not None:
             if self.operation not in {"image.generate", "image.edit"}:
                 raise ValueError("scene_texture is accepted only by image generation or editing")

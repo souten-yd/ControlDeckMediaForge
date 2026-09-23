@@ -13,6 +13,7 @@ from .host.client import HostApiError
 from .host.jobs import HostExecution, HostJobReporter
 from .paths import contained
 from .scene_generation import GenerationFacts, SceneFromImageRequest
+from .scene_generation_inputs import inspect_views
 from .scenes import SceneError
 from .three_d_runtime import RuntimeReceipt
 
@@ -48,7 +49,7 @@ async def generate_scene_from_image(
     generator = manager.generator
     if generator is None:
         raise SceneError('three_d_runtime_unavailable', '3D generator is unavailable')
-    receipts = generator.resolve_stages(value.engine, value.resolution, value.refine_with_pixal3d)
+    receipts = generator.resolve_request(value)
     constraints = manager.store.get_job(job_id).request.constraints
     if stages_digest(receipts) != constraints.get('generation_runtime_sha256'):
         raise SceneError('three_d_runtime_changed', '3D runtime changed after job admission')
@@ -56,6 +57,11 @@ async def generate_scene_from_image(
     if asset.sha256 != constraints.get('generation_input_sha256'):
         raise SceneError('scene_generation_input_invalid', 'Generation input changed after admission')
     _, _, source = manager.workspace._verified_revision_asset(asset.id, asset.mime_type)
+    view_sources: list[Path] = []
+    if value.additional_views:
+        views, view_sources = await asyncio.to_thread(inspect_views, manager.workspace, value)
+        if [v.model_dump(mode='json') for v in views] != constraints.get('generation_views'):
+            raise SceneError('scene_generation_input_invalid', 'Additional views changed after admission')
     root = contained(manager.workspace.recipe_root, manager.workspace.recipe_root / f'native_{uuid.uuid4().hex}')
     root.mkdir(mode=0o700)
     # 段ごとの進み。1 段だけなら今までと同じ 0.15〜0.75 を使う。
@@ -73,6 +79,12 @@ async def generate_scene_from_image(
             image.chmod(0o600)
             if manager.workspace._sha256(image) != asset.sha256:
                 raise SceneError('scene_generation_input_invalid', 'Generation input changed while staging')
+            for view_index, view_source in enumerate(view_sources[1:], 1):
+                staged_view = stage_root/f'view-source-{view_index}'
+                shutil.copyfile(view_source, staged_view)
+                staged_view.chmod(0o600)
+                if manager.workspace._sha256(staged_view) != constraints['generation_views'][view_index]['sha256']:
+                    raise SceneError('scene_generation_input_invalid', 'Additional view changed while staging')
             try:
                 output, facts = await _run_stage(
                     manager, job_id, value, stage_value, execution, reporter, receipt,
@@ -88,6 +100,10 @@ async def generate_scene_from_image(
                                     'reason': getattr(exc, 'code', 'three_d_refine_failed')}
                 break
             task = manager.store.get_scene_recipe_task(job_id)
+            if value.additional_views:
+                current_views, _ = await asyncio.to_thread(inspect_views, manager.workspace, value)
+                if [v.model_dump(mode='json') for v in current_views] != constraints.get('generation_views'):
+                    raise SceneError('scene_generation_input_invalid', 'Additional view changed before publication')
             async with manager._execution_guard:
                 if result is None:
                     result = await manager.workspace.import_generated_glb(
@@ -129,9 +145,7 @@ async def _run_stage(
     suffix = '' if stage_index == 0 else '_refine'
 
     def unchanged() -> None:
-        if stages_digest(generator.resolve_stages(
-            value.engine, value.resolution, value.refine_with_pixal3d,
-        )) != constraints.get('generation_runtime_sha256'):
+        if stages_digest(generator.resolve_request(value)) != constraints.get('generation_runtime_sha256'):
             raise SceneError('three_d_runtime_changed', '3D adoption changed during generation')
 
     def capture_status(status: dict[str, Any]) -> None:
@@ -178,6 +192,10 @@ async def _run_stage(
         if receipt.engine == 'pixal3d':
             await phase('prepare_3d_input' + suffix, start)
         prepared = await generator.prepare(receipt, stage_value, image, root)
+        if value.additional_views:
+            from .multiview_runtime import PreparedMultiview
+            if not isinstance(prepared, PreparedMultiview) or [v.model_dump(mode='json') for v in prepared.facts] != constraints.get('generation_views'):
+                raise SceneError('scene_generation_input_invalid', 'Prepared views differ from admitted inputs')
         unchanged()
         await phase('waiting_resource', start + (end - start) * .2)
         request_task = asyncio.create_task(manager.host.request_resource(

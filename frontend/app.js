@@ -172,6 +172,16 @@ const state = {
   scenes: [],
   sceneGeneration: null,
   sceneGenerationImages: [],
+  sceneGenerationViews: [],
+  sceneViewCandidateSource: "",
+  sceneViewCandidateBatches: [],
+  sceneViewCandidateNext: null,
+  sceneViewCandidateLoading: false,
+  sceneViewCandidateBusy: false,
+  sceneViewCandidateError: "",
+  sceneViewCandidateSelected: null,
+  sceneViewCandidateThumbnails: new Map(),
+  sceneViewCandidateTimer: null,
   sceneGenerationEngine: null,
   sceneGenerationResolution: null,
   sceneGenerationRefine: false,
@@ -569,6 +579,9 @@ async function standaloneCall(method, params) {
   if (method === "creative.batches.create") {
     return json("/workspace-api/creative/batches", {method: "POST", body: JSON.stringify(params)});
   }
+  if (["images.views.create", "images.views.list", "images.views.select"].includes(method)) {
+    return json(`/workspace-api/images/views/${method.split(".").at(-1)}`, {method: "POST", body: JSON.stringify(params)});
+  }
   if (method === "creative.batches.list") return json("/workspace-api/creative/batches");
   if (method === "creative.batches.get") {
     return json(`/workspace-api/creative/batches/${encodeURIComponent(params.batch_id)}`);
@@ -791,7 +804,8 @@ async function standaloneCall(method, params) {
   }
   if (method === "pipelines.status") {
     return json(`/workspace-api/pipelines/${encodeURIComponent(params.pipeline_id)}`, {
-      method: "POST", body: JSON.stringify({action: params.action || "status"}),
+      method: "POST", body: JSON.stringify({action: params.action || "status",
+        ...(params.expected_job_id ? {expected_job_id: params.expected_job_id} : {})}),
     });
   }
   if (method === "pipelines.list") return json("/workspace-api/pipelines");
@@ -5119,6 +5133,9 @@ function sceneSettingsChanged() {
   return Boolean((state.sceneGenerationEngine && state.sceneGenerationEngine !== preferred?.value)
     || (state.sceneGenerationResolution != null && state.sceneGenerationResolution !== preferred?.resolutions?.[0])
     || byId("scene-generation-seed").value !== "42"
+    || byId("scene-view-candidates-seed").value !== "42" || byId("scene-view-candidates-notes").value.trim()
+    || Number(byId("scene-generation-fov").value) !== 20 || Number(byId("scene-generation-distance").value) !== 3.1192049980163574
+    || Number(byId("scene-generation-elevation").value) !== 0 || Number(byId("scene-generation-mesh-scale").value) !== 1
     || byId("scene-material-channel").value !== "base_color" || byId("scene-material-wrap").value !== "repeat"
     || byId("scene-material-normal").value !== "open_gl" || byId("scene-texture-count").value !== "3"
     || (target && byId("scene-material-uv").value !== target.uv_maps?.[0])
@@ -5126,7 +5143,17 @@ function sceneSettingsChanged() {
     || (oldest && byId("scene-simplify-origin").value && byId("scene-simplify-origin").value !== oldest));
 }
 
+let renderingSceneExperience = false;
 function renderSceneExperience() {
+  // Removing a focused advanced panel dispatches blur/change synchronously.
+  // Those handlers may request the same render before DOM removal finishes.
+  if (renderingSceneExperience) return;
+  renderingSceneExperience = true;
+  try { renderSceneExperienceContent(); }
+  finally { renderingSceneExperience = false; }
+}
+
+function renderSceneExperienceContent() {
   if (!sceneAdvancedPanels.length) {
     for (const panel of document.querySelectorAll("[data-scene-advanced]")) {
       const anchor = document.createComment("3D advanced settings");
@@ -5160,7 +5187,7 @@ function renderSceneExperience() {
     || (state.sceneGeneration && !TERMINAL.has(state.sceneGeneration.status));
   // Active work and its stop control remain visible even when the task changes.
   byId("scene-generation-form").hidden = (state.sceneTask !== "create" && !generating)
-    || (!sceneGenerationChoices().some(item => item.available) && !state.sceneGeneration && !state.sceneGenerationEngine);
+    || (!sceneGenerationChoices().some(item => item.available) && !sceneMultiview().available && !state.sceneGeneration && !state.sceneGenerationEngine);
   byId("scene-import-form").hidden = state.sceneTask !== "import" && !state.sceneImport;
   const editing = state.sceneMaterialBusy || state.sceneTextureBusy
     || (selectedSceneTextureJob() && !TERMINAL.has(selectedSceneTextureJob().status))
@@ -5205,7 +5232,10 @@ function resetSceneRecommendedSettings() {
   if (byId("scene-recommended-reset").disabled) return;
   state.sceneGenerationEngine = "";
   state.sceneGenerationResolution = null;
-  for (const [id, value] of [["scene-generation-seed", "42"], ["scene-material-channel", "base_color"],
+  for (const [key, value] of [['fov', 20], ['distance', 3.1192049980163574], ['elevation', 0], ['mesh-scale', 1]])
+    byId(`scene-generation-${key}`).value = String(value);
+  for (const [id, value] of [["scene-generation-seed", "42"], ["scene-view-candidates-seed", "42"],
+    ["scene-view-candidates-notes", ""], ["scene-material-channel", "base_color"],
     ["scene-material-wrap", "repeat"], ["scene-material-normal", "open_gl"], ["scene-texture-count", "3"],
     ["scene-simplify-ratio", "60"], ["scene-rig-ratio", "60"]]) byId(id).value = value;
   const target = selectedMaterialTarget();
@@ -5268,10 +5298,10 @@ function sceneGenerationText() {
     photoFailed: "This device could not read the photo. Choose another one.",
     photoRejected: "The photo could not be added. Choose another one.",
     photoAdded: (name) => `Added ${name} and selected it.`,
-    refine: "Also finish with Pixal3D",
-    refineHint: (base, both, resolution) => `trellis.cpp alone takes about ${base}. Adding Pixal3D takes about ${both} in total, runs at ${resolution}, and is saved as a second revision of the same scene.`,
+    refine: "Also generate a Pixal3D version from the same image",
+    refineHint: (base, both, resolution) => `trellis.cpp alone takes about ${base}; both take about ${both}. Pixal3D independently uses the same image at ${resolution}, saved as another revision for comparison.`,
     refineUnavailable: "Pixal3D is not ready on this machine, so only trellis.cpp runs.",
-    refining: "Finishing with Pixal3D…",
+    refining: "Generating the Pixal3D version…",
     refineDone: "Saved both the trellis.cpp revision and the Pixal3D revision.",
     refineFailed: "trellis.cpp was saved. The Pixal3D stage did not finish.",
     estimate: (text) => `Estimated time: about ${text}`,
@@ -5296,12 +5326,12 @@ function sceneGenerationText() {
     photoFailed: "この写真を読み込めませんでした。別の写真を選んでください。",
     photoRejected: "この写真を追加できませんでした。別の写真を選んでください。",
     photoAdded: (name) => `${name} を追加して選びました。`,
-    refine: "Pixal3Dで仕上げまで実行する",
-    refineHint: (base, both, resolution) => `trellis.cpp だけなら約${base}。Pixal3Dまで実行すると合計で約${both}かかり、${resolution}で走って同じシーンの2つ目の版として保存します。`,
+    refine: "同じ画像からPixal3D版も作る",
+    refineHint: (base, both, resolution) => `trellis.cppだけなら約${base}、両方で約${both}。Pixal3Dも同じ元画像から${resolution}で別途生成し、比較できる別の版として保存します。`,
     refineUnavailable: "この機械ではPixal3Dが準備できていないため、trellis.cppまでで終わります。",
-    refining: "Pixal3Dで仕上げています…",
+    refining: "Pixal3Dの版を生成しています…",
     refineDone: "trellis.cppの版とPixal3Dの版をどちらも保存しました。",
-    refineFailed: "trellis.cppの版は保存しました。Pixal3Dの仕上げは完了しませんでした。",
+    refineFailed: "trellis.cppの版は保存しました。Pixal3D版の生成は完了しませんでした。",
     estimate: (text) => `目安の所要時間：約${text}`,
     minutes: (value) => `${value}分`, seconds: (value) => `${value}秒`,
   };
@@ -5358,15 +5388,372 @@ function sceneGenerationRefineChoice() {
   };
 }
 
+function sceneViewsText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    title: "Add other views", add: "Add another view", remove: "Remove this view",
+    directions: {front: "Front", right: "Right", back: "Back", left: "Left"},
+    note: "Use front + right, then optionally back and left. Use different views of the same subject, with transparent backgrounds and matching square canvases (64–2048 px). Keep the subject's framing consistent.",
+    missing: "Select each view in order: front, right, back, left. Remove unneeded cards to return to one image.",
+    duplicate: "The same image is selected more than once. Choose a different view for each direction.",
+    unavailable: "The measured multiview runtime is unavailable. Remove extra views to generate from one image.",
+    camera: "Multiview camera settings", cameraNote: "These are shared turntable assumptions, not automatic photo calibration. Recommended: 20° horizontal field of view, distance 3.1192, elevation 0°, scale 1.",
+    fov: "Horizontal field of view (degrees)", distance: "Camera distance (normalized units)", elevation: "Elevation (degrees)", scale: "Subject scale",
+    ready: (count) => `${count} different views → Pixal3D multiview`,
+    pipeline: "For multiple views, use Generate 3D above. You can add bones to the saved model afterward.",
+    invalid: "Use distinct, transparent RGBA PNG or WebP images on matching square canvases, 64–2048 pixels.",
+    changed: "An input image or the runtime changed. Refresh and submit a new request.",
+  } : {
+    title: "別の方向の画像を追加", add: "別の方向を追加", remove: "この画像を外す",
+    directions: {front: "正面", right: "右側面", back: "背面", left: "左側面"},
+    note: "正面＋右側面に、背面・左側面を追加できます。同じ被写体の別方向を選び、背景透過・同じ正方形サイズ（64〜2048px）・同じ位置と大きさに揃えてください。",
+    missing: "正面・右側面・背面・左側面の順で画像を選んでください。追加したカードを外すと1枚生成に戻れます。",
+    duplicate: "同じ画像が重複しています。方向ごとに別の画像を選んでください。",
+    unavailable: "複数面の実行環境を利用できません。追加画像を外すと従来の1枚で生成できます。",
+    camera: "複数面のカメラ設定", cameraNote: "共通の撮影条件の推定値です。写真から自動で校正する機能ではありません。推奨：水平画角20度、距離3.1192、仰角0度、倍率1。",
+    fov: "水平画角（度）", distance: "撮影距離（正規化した単位）", elevation: "仰角（度）", scale: "被写体の倍率",
+    ready: (count) => `${count}方向の画像 → Pixal3Dで3Dを生成`,
+    pipeline: "複数面では上の「3Dを生成」を使ってください。保存した3Dへ後からボーンを追加できます。",
+    invalid: "背景透過のPNGまたはWebPを使い、全方向を同じ正方形サイズ（64〜2048px）に揃えてください。",
+    changed: "入力画像または実行環境が変わりました。更新して新しい依頼として実行してください。",
+  };
+}
+
+function sceneMultiview() {
+  const cap = state.capabilities["3d.image_to_3d"]?.multiview || {};
+  const views = state.sceneGenerationViews;
+  const available = ["available", "experimental"].includes(cap.state) && Array.isArray(cap.view_counts);
+  const selected = [byId("scene-generation-image").value, ...views.map(v => v.assetId)];
+  const dirs = ["right", "back", "left"].slice(0, views.length);
+  const duplicate = selected.filter(Boolean).some((id, i, all) => all.indexOf(id) !== i);
+  const complete = selected.every(Boolean) && dirs.every(d => views.some(v => v.direction === d));
+  const obsolete = views.some(v => v.candidateSourceId && v.candidateSourceId !== selected[0]);
+  const ready = available && cap.view_counts.includes(views.length + 1) && complete && !duplicate && !obsolete;
+  const text = sceneViewsText();
+  return {active: views.length > 0, available, ready, seconds: Number(cap.estimated_runtime_sec) || 0,
+    reason: !available ? text.unavailable : obsolete ? viewCandidateText().sourceChanged : duplicate ? text.duplicate : !ready ? text.missing : ""};
+}
+
+function sceneViewError(code) {
+  const text = sceneViewsText();
+  if (code === "scene_multiview_duplicate_image") return text.duplicate;
+  if (["scene_multiview_input_invalid", "scene_multiview_canvas_mismatch"].includes(code)) return text.invalid;
+  if (code === "scene_multiview_input_changed") return text.changed;
+  if (["three_d_multiview_unavailable", "three_d_multiview_not_evaluated"].includes(code)) return text.unavailable;
+  return failureText(code);
+}
+
+function renderSceneViews(blocked) {
+  const text = sceneViewsText(), mv = sceneMultiview();
+  byId("scene-generation-views").hidden = !mv.available && !mv.active;
+  byId("scene-generation-views-title").textContent = text.title;
+  byId("scene-generation-views-note").textContent = text.note;
+  byId("scene-generation-add-view").textContent = text.add;
+  byId("scene-generation-add-view").disabled = blocked || !mv.available || state.sceneGenerationViews.length === 3;
+  byId("scene-generation-views-status").textContent = mv.active ? mv.ready ? text.ready(state.sceneGenerationViews.length + 1) : mv.reason : "";
+  const container = byId("scene-generation-view-cards");
+  for (const direction of ["right", "back", "left"]) {
+    const view = state.sceneGenerationViews.find(v => v.direction === direction);
+    let card = document.getElementById(`scene-view-${direction}`);
+    if (!view) { card?.remove(); continue; }
+    if (!card) {
+      card = document.createElement("div");
+      card.id = `scene-view-${direction}`;
+      card.className = "scene-view-card";
+      card.innerHTML = '<h4></h4><img hidden><label></label><select></select><label class="scene-file-picker"><span></span><input type="file" accept="image/*,.heic,.heif"></label><button type="button"></button>';
+      const select = card.querySelector("select");
+      select.id = `scene-view-image-${direction}`;
+      card.querySelector("label").htmlFor = select.id;
+      select.addEventListener("change", () => { view.assetId = select.value; delete view.candidateSourceId; state.sceneGenerationMessage = ""; renderSceneGeneration(); });
+      card.querySelector('input').addEventListener("change", event => void attachSceneGenerationPhoto(event.target.files?.[0], direction));
+      card.querySelector('button').addEventListener("click", () => {
+        state.sceneGenerationViews = state.sceneGenerationViews.filter(v => v.direction !== direction);
+        state.sceneGenerationMessage = ""; renderSceneGeneration(); renderPipeline();
+      });
+      const nextCard = [...container.children].find(item =>
+        ["right", "back", "left"].indexOf(item.id.replace("scene-view-", "")) >
+        ["right", "back", "left"].indexOf(direction));
+      container.insertBefore(card, nextCard || null);
+    }
+    card.querySelector('h4').textContent = text.directions[direction];
+    card.querySelector('label').textContent = text.directions[direction];
+    card.querySelector('span').textContent = sceneGenerationText().photo;
+    card.querySelector('button').textContent = text.remove;
+    const select = card.querySelector('select');
+    const used = new Set([byId('scene-generation-image').value,
+      ...state.sceneGenerationViews.filter(v => v !== view).map(v => v.assetId)]);
+    replaceMaterialOptions(select, state.sceneGenerationImages.filter(a => !used.has(a.id) || a.id === view.assetId)
+      .map(a => ({value: a.id, label: a.suggested_filename || a.id})), view.assetId, sceneGenerationText().choose);
+    for (const control of card.querySelectorAll('select,input,button')) control.disabled = blocked;
+    const preview = card.querySelector('img');
+    preview.alt = text.directions[direction];
+    if (view.previewId !== view.assetId) {
+      view.previewId = view.assetId;
+      preview.hidden = true; preview.removeAttribute('src');
+      const selected = view.assetId;
+      if (selected) void call('assets.thumbnail', {asset_id: selected, max_side: 320}).then(thumbnail => {
+        if (view.assetId !== selected || !card.isConnected) return;
+        preview.src = `data:${thumbnail.mime_type};base64,${thumbnail.base64}`; preview.hidden = false;
+      }).catch(() => { if (view.assetId === selected) preview.alt = sceneGenerationText().imagesFailed; });
+    }
+  }
+  byId('scene-generation-view-camera').hidden = !mv.active;
+  byId('scene-generation-camera-title').textContent = text.camera;
+  byId('scene-generation-camera-note').textContent = text.cameraNote;
+  for (const [key, label] of [['fov', text.fov], ['distance', text.distance], ['elevation', text.elevation], ['mesh-scale', text.scale]]) {
+    byId(`scene-generation-${key}-label`).textContent = label;
+    byId(`scene-generation-${key}`).disabled = blocked || !mv.active;
+  }
+  renderViewCandidates(blocked);
+}
+
+function viewCandidateText() {
+  return document.documentElement.lang.startsWith("en") ? {
+    title: "Make other-view candidates (experimental)",
+    note: "AI estimates unseen sides and may change shapes or swap an accessory's side. Compare each candidate with the front, then choose it explicitly. Generating candidates does not start 3D generation.",
+    directions: "Views to request", create: "Make candidates", cancel: "Stop candidate generation", refresh: "Refresh candidates",
+    options: "Candidate settings", notes: "Additional instructions", seed: "Seed", more: "Earlier candidates",
+    confirm: "I checked the direction, shape and accessories", use: "Use for this view", source: "Original front image",
+    candidate: d => `${sceneViewsText().directions[d]} candidate`, count: n => ` (${n} image${n === 1 ? "" : "s"})`,
+    loading: "Loading candidates…", submitting: "Processing candidates…", running: "Generating candidates. You can leave this page; accepted Jobs continue.",
+    choose: "Choose the front image above.", unavailable: "Single-reference editing is unavailable. You can still add your own views.",
+    empty: "Candidates will appear here. Choose an image to compare it with the front.", ready: "Choose a candidate to compare. Only selected images become 3D inputs.",
+    sourceChanged: "The front image changed. Reselect candidates made from this front, or remove the additional cards.",
+    selected: "The candidate was added to its view. Check all views before generating 3D.",
+    deleted: "This image is in Trash or unavailable.", duplicate: "This candidate is the same image as the front.",
+    invalid: "Use a transparent, square RGBA PNG or WebP, within the installed editor's supported size. The candidate must match the front canvas.",
+  } : {
+    title: "別方向の候補を作る（実験的）",
+    note: "見えない面はAIの推測です。形が変わったり持ち物の左右が逆になる場合があります。正面と見比べて、使う候補を選んでください。候補を作るだけでは3D生成は始まりません。",
+    directions: "作る方向", create: "候補を作る", cancel: "候補の生成を中止", refresh: "候補を更新",
+    options: "候補の詳細設定", notes: "追加の指示", seed: "シード", more: "以前の候補を見る",
+    confirm: "向き・形・持ち物を確認した", use: "この方向の画像に使う", source: "元画像（正面）",
+    candidate: d => `${sceneViewsText().directions[d]}の候補`, count: n => `（${n}枚）`,
+    loading: "候補を読み込んでいます…", submitting: "候補を処理しています…", running: "候補を生成中です。画面を閉じても受付済みの処理は続きます。",
+    choose: "上で元になる正面の画像を選んでください。", unavailable: "参照画像の編集を利用できません。手持ちの別方向画像は追加できます。",
+    empty: "生成した候補がここに並びます。画像を選ぶと、正面と見比べられます。", ready: "候補を選んで正面と比較してください。選んだ画像だけを3D入力に使います。",
+    sourceChanged: "元画像が変わりました。この正面から作った候補を選び直すか、追加カードを外してください。",
+    selected: "この方向の画像へ設定しました。各方向を確認してから3Dを生成してください。",
+    deleted: "画像がごみ箱にあるか、利用できません。", duplicate: "この候補は正面と同じ画像です。",
+    invalid: "背景透過の正方形RGBA PNG/WebPを使い、導入済み画像モデルが扱えるサイズにしてください。候補と正面は同じサイズが必要です。",
+  };
+}
+
+function viewCandidateFailure(error) {
+  const text = viewCandidateText(), code = error?.code;
+  if (code === 'view_candidate_duplicate') return text.duplicate;
+  if (code === 'view_candidate_deleted' || code === 'asset_not_found') return text.deleted;
+  if (code === 'view_candidate_source_mismatch') return text.sourceChanged;
+  if (code === 'view_candidate_unavailable') return text.unavailable;
+  if (['view_candidate_image_invalid', 'view_candidate_image_changed', 'view_candidate_canvas_unsupported', 'view_candidate_canvas_mismatch'].includes(code)) return text.invalid;
+  return error?.message || failureText(code);
+}
+
+function viewCandidateEntries() {
+  return state.sceneViewCandidateBatches.flatMap(batch => batch.children.flatMap(job => {
+    const context = job.request?.constraints?.view_candidate;
+    if (!context || context.source_asset_id !== state.sceneViewCandidateSource) return [];
+    return (job.asset_ids || []).filter(id => batch.selectable_asset_ids.includes(id))
+      .map(assetId => ({assetId, job, direction: context.direction, sourceId: context.source_asset_id}));
+  }));
+}
+
+async function loadViewCandidates({more = false} = {}) {
+  const source = byId('scene-generation-image').value;
+  if (!source || state.disabled || state.sceneViewCandidateLoading) return;
+  state.sceneViewCandidateLoading = true;
+  clearTimeout(state.sceneViewCandidateTimer);
+  const offset = more ? state.sceneViewCandidateNext : 0;
+  try {
+    const result = await call('images.views.list', {source_asset_id: source, offset: offset || 0});
+    if (source !== byId('scene-generation-image').value) return;
+    state.sceneViewCandidateBatches = more ? [...state.sceneViewCandidateBatches, ...result.items] : result.items;
+    state.sceneViewCandidateNext = result.next_offset;
+    state.sceneViewCandidateError = '';
+    for (const batch of result.items) for (const job of batch.children) rememberJob(job);
+  } catch (error) {
+    if (source === byId('scene-generation-image').value) state.sceneViewCandidateError = viewCandidateFailure(error);
+  } finally {
+    // An old response must not clear a new source's in-flight state.
+    if (source === state.sceneViewCandidateSource) {
+      state.sceneViewCandidateLoading = false;
+      renderViewCandidates();
+      if (state.sceneViewCandidateBatches.some(b => b.state === 'running')) {
+        state.sceneViewCandidateTimer = setTimeout(() => void loadViewCandidates(), 2000);
+      }
+    }
+  }
+}
+
+function loadViewCandidateThumbnail(assetId) {
+  if (state.sceneViewCandidateThumbnails.has(assetId)) return;
+  state.sceneViewCandidateThumbnails.set(assetId, '');
+  void call('assets.thumbnail', {asset_id: assetId, max_side: 512}).then(value => {
+    state.sceneViewCandidateThumbnails.set(assetId, `data:${value.mime_type};base64,${value.base64}`);
+    renderViewCandidates();
+  }).catch(() => {
+    state.sceneViewCandidateThumbnails.set(assetId, null);
+    renderViewCandidates();
+  });
+}
+
+function renderViewCandidates(blocked = false) {
+  blocked ||= state.sceneGenerationBusy || state.sceneGenerationPhotoBusy ||
+    Boolean(state.sceneGeneration && !TERMINAL.has(state.sceneGeneration.status));
+  const text = viewCandidateText(), source = byId('scene-generation-image').value;
+  if (source !== state.sceneViewCandidateSource) {
+    clearTimeout(state.sceneViewCandidateTimer);
+    state.sceneViewCandidateSource = source;
+    state.sceneViewCandidateBatches = [];
+    state.sceneViewCandidateNext = null;
+    state.sceneViewCandidateSelected = null;
+    state.sceneViewCandidateError = '';
+    state.sceneViewCandidateLoading = false;
+    byId('scene-view-candidate-confirm').checked = false;
+    if (source) void loadViewCandidates();
+  }
+  for (const [id, key] of [['title','title'], ['note','note'], ['directions-label','directions'], ['create','create'], ['cancel','cancel'], ['refresh','refresh'], ['options-title','options'], ['notes-label','notes'], ['seed-label','seed'], ['more','more']]) {
+    byId(`scene-view-candidates-${id}`).textContent = text[key];
+  }
+  for (const option of byId('scene-view-candidates-directions').options) {
+    const directions = option.value.split(',');
+    option.textContent = directions.map(d => sceneViewsText().directions[d]).join(' · ') + text.count(directions.length);
+  }
+  const running = state.sceneViewCandidateBatches.some(b => b.state === 'running');
+  const busy = blocked || state.disabled || state.sceneViewCandidateBusy;
+  const available = capabilityState('image.single_reference_edit') === 'available';
+  if (source) loadViewCandidateThumbnail(source);
+  for (const id of ['directions', 'notes', 'seed']) byId(`scene-view-candidates-${id}`).disabled = busy;
+  byId('scene-view-candidates-create').disabled = busy || state.sceneViewCandidateLoading || running || !source || !available;
+  byId('scene-view-candidates-cancel').hidden = !running;
+  byId('scene-view-candidates-cancel').disabled = busy;
+  byId('scene-view-candidates-refresh').disabled = busy || !source || state.sceneViewCandidateLoading;
+  byId('scene-view-candidates-more').hidden = state.sceneViewCandidateNext == null;
+  byId('scene-view-candidates-more').disabled = busy || state.sceneViewCandidateLoading || running;
+  const entries = viewCandidateEntries();
+  const failures = state.sceneViewCandidateBatches.slice(0, 1).flatMap(b => [
+    ...b.submission_errors.map(e => `${sceneViewsText().directions[e.message] || ''}: ${failureText(e.code)}`),
+    ...b.children.filter(j => j.status === 'failed' || j.status === 'canceled').map(j =>
+      `${sceneViewsText().directions[j.request?.constraints?.view_candidate?.direction] || ''}: ${j.status === 'canceled' ? sceneGenerationText().canceled : failureText(j.error?.code)}`),
+  ]);
+  byId('scene-view-candidates-status').textContent = state.sceneViewCandidateError ||
+    (state.sceneViewCandidateBusy ? text.submitting : state.sceneViewCandidateLoading ? text.loading :
+      !source ? text.choose : running ? text.running : !available ? text.unavailable : entries.length ? text.ready : text.empty)
+      + (failures.length ? ' ' + failures.join(' · ') : '');
+  const list = byId('scene-view-candidates-list');
+  const ids = new Set(entries.map(e => e.assetId));
+  for (const child of [...list.children]) if (!ids.has(child.dataset.viewCandidate)) child.remove();
+  for (const entry of entries) {
+    let button = [...list.children].find(c => c.dataset.viewCandidate === entry.assetId);
+    if (!button) {
+      button = document.createElement('button'); button.type = 'button'; button.dataset.viewCandidate = entry.assetId;
+      button.innerHTML = '<img alt=""><span></span>';
+      button.addEventListener('click', () => {
+        state.sceneViewCandidateSelected = entry;
+        byId('scene-view-candidate-confirm').checked = false;
+        renderViewCandidates();
+        byId('scene-view-candidates-compare').scrollIntoView({block: 'nearest'});
+      });
+      list.append(button);
+    }
+    button.querySelector('span').textContent = state.sceneViewCandidateThumbnails.get(entry.assetId) === null
+      ? text.deleted : text.candidate(entry.direction);
+    button.querySelector('img').alt = text.candidate(entry.direction);
+    const thumb = state.sceneViewCandidateThumbnails.get(entry.assetId);
+    button.disabled = busy || !thumb;
+    button.setAttribute('aria-pressed', String(state.sceneViewCandidateSelected?.assetId === entry.assetId));
+    if (thumb) button.querySelector('img').src = thumb;
+    loadViewCandidateThumbnail(entry.assetId);
+  }
+  const selected = state.sceneViewCandidateSelected;
+  const valid = selected?.sourceId === source && ids.has(selected.assetId)
+    && state.sceneViewCandidateThumbnails.get(source) && state.sceneViewCandidateThumbnails.get(selected.assetId);
+  byId('scene-view-candidates-compare').hidden = !valid;
+  byId('scene-view-candidate-confirm-label').textContent = text.confirm;
+  byId('scene-view-candidate-use').textContent = text.use;
+  byId('scene-view-candidate-use').disabled = busy || !valid || !byId('scene-view-candidate-confirm').checked;
+  if (valid) {
+    byId('scene-view-candidate-source').src = state.sceneViewCandidateThumbnails.get(source);
+    byId('scene-view-candidate-source').alt = text.source;
+    byId('scene-view-candidate-source-label').textContent = text.source;
+    byId('scene-view-candidate-preview').src = state.sceneViewCandidateThumbnails.get(selected.assetId) || '';
+    byId('scene-view-candidate-preview').alt = text.candidate(selected.direction);
+    byId('scene-view-candidate-preview-label').textContent = text.candidate(selected.direction);
+  }
+}
+
+async function createViewCandidates() {
+  if (byId('scene-view-candidates-create').disabled) return;
+  const source = byId('scene-generation-image').value;
+  state.sceneViewCandidateBusy = true; state.sceneViewCandidateError = ''; renderSceneGeneration();
+  try {
+    const batch = await call('images.views.create', {source_asset_id: source,
+      directions: byId('scene-view-candidates-directions').value.split(','),
+      seed: Number(byId('scene-view-candidates-seed').value), notes: byId('scene-view-candidates-notes').value.trim()});
+    for (const job of batch.children) rememberJob(job);
+    if (source === byId('scene-generation-image').value) await loadViewCandidates();
+  } catch (error) {
+    if (source === byId('scene-generation-image').value) state.sceneViewCandidateError = viewCandidateFailure(error);
+  } finally { state.sceneViewCandidateBusy = false; renderSceneGeneration(); }
+}
+
+async function cancelViewCandidates() {
+  if (state.sceneViewCandidateBusy) return;
+  const batches = state.sceneViewCandidateBatches.filter(b => b.state === 'running');
+  state.sceneViewCandidateBusy = true; renderSceneGeneration();
+  try {
+    for (const batch of batches) await call('creative.batches.cancel', {batch_id: batch.id});
+    await loadViewCandidates();
+  } catch (error) { state.sceneViewCandidateError = viewCandidateFailure(error); }
+  finally { state.sceneViewCandidateBusy = false; renderSceneGeneration(); }
+}
+
+async function useViewCandidate() {
+  if (byId('scene-view-candidate-use').disabled) return;
+  const selected = state.sceneViewCandidateSelected;
+  state.sceneViewCandidateBusy = true; renderSceneGeneration();
+  try {
+    const result = await call('images.views.select', {source_asset_id: selected.sourceId, asset_id: selected.assetId, direction: selected.direction});
+    if (selected.sourceId !== byId('scene-generation-image').value) return;
+    if (!state.sceneGenerationImages.some(a => a.id === result.asset.id)) state.sceneGenerationImages.push(result.asset);
+    for (const direction of ['right','back','left']) {
+      let view = state.sceneGenerationViews.find(v => v.direction === direction);
+      if (!view) { view = {direction, assetId: '', previewId: ''}; state.sceneGenerationViews.push(view); }
+      if (direction === selected.direction) { view.assetId = result.asset.id; view.candidateSourceId = selected.sourceId; break; }
+    }
+    state.sceneGenerationViews.sort((a,b) => ['right','back','left'].indexOf(a.direction) - ['right','back','left'].indexOf(b.direction));
+    byId('scene-view-candidate-confirm').checked = false;
+    state.sceneViewCandidateError = viewCandidateText().selected;
+  } catch (error) { state.sceneViewCandidateError = viewCandidateFailure(error); }
+  finally { state.sceneViewCandidateBusy = false; renderSceneGeneration(); renderPipeline(); }
+}
+
+async function openViewCandidateBatch(batch) {
+  const sourceId = batch.child_plans?.[0]?.view_candidate?.source_asset_id;
+  if (!sourceId) return;
+  try {
+    const result = await call('images.views.list', {source_asset_id: sourceId});
+    state.sceneTask = 'create';
+    setCreateMedia('3d'); activate('web-blender');
+    await loadSceneGenerationImages();
+    if (!state.sceneGenerationImages.some(a => a.id === sourceId)) state.sceneGenerationImages.push(result.source);
+    renderSceneGeneration();
+    byId('scene-generation-image').value = sourceId;
+    renderSceneGeneration();
+    byId('scene-view-candidates').open = true;
+    byId('scene-view-candidates').scrollIntoView({block: 'start'});
+  } catch (error) { showError(viewCandidateFailure(error)); }
+}
+
 function renderSceneGeneration() {
   const form = byId("scene-generation-form");
   const choices = sceneGenerationChoices();
   // 既定は trellis.cpp までで終える段にする。おまかせは詳細設定から選ぶ。
   const preferred = choices.find((item) => item.value === "trellis_cpp" && item.available)
     || choices.find((item) => item.available);
-  const selectedEngine = state.sceneGenerationEngine || preferred?.value || "auto";
-  const choice = choices.find((item) => item.value === selectedEngine);
-  form.hidden = !choices.some((item) => item.available) && !state.sceneGeneration && !state.sceneGenerationEngine;
+  const mv = sceneMultiview();
+  const selectedEngine = mv.active ? "pixal3d" : state.sceneGenerationEngine || preferred?.value || "auto";
+  const choice = mv.active ? {available: mv.available, resolutions: [1024], seconds: mv.seconds} : choices.find((item) => item.value === selectedEngine);
+  form.hidden = !choices.some((item) => item.available) && !mv.available && !state.sceneGeneration && !state.sceneGenerationEngine;
   const text = sceneGenerationText();
   for (const key of ["title", "note", "library", "refresh", "options", "cancel", "submit", "open"]) {
     byId(`scene-generation-${key}`).textContent = text[key];
@@ -5374,6 +5761,7 @@ function renderSceneGeneration() {
   for (const key of ["image", "name", "engine", "resolution", "seed"]) {
     byId(`scene-generation-${key}-label`).textContent = text[key];
   }
+  if (mv.active) byId("scene-generation-image-label").textContent = `${text.image} · ${sceneViewsText().directions.front}`;
   byId("scene-generation-photo-label").textContent = text.photo;
   byId("scene-generation-refine-label").textContent = text.refine;
   const refine = sceneGenerationRefineChoice();
@@ -5383,7 +5771,7 @@ function renderSceneGeneration() {
     value: asset.id, label: asset.suggested_filename || asset.id,
   })), selected, text.choose);
   const engine = byId("scene-generation-engine");
-  engine.replaceChildren(...choices.map((item) => {
+  engine.replaceChildren(...(mv.active ? [{value: "pixal3d", label: "Pixal3D", available: mv.available}] : choices).map((item) => {
     const option = materialOption(item.value, item.available ? item.label : `${item.label} · ${text.notReady}`);
     option.disabled = !item.available;
     return option;
@@ -5391,7 +5779,7 @@ function renderSceneGeneration() {
   engine.value = selectedEngine;
   const resolution = byId("scene-generation-resolution");
   const resolutions = choice?.resolutions || [];
-  const selectedResolution = state.sceneGenerationResolution ?? resolutions[0];
+  const selectedResolution = mv.active ? 1024 : state.sceneGenerationResolution ?? resolutions[0];
   const resolutionSeconds = (value) => Number(choice?.secondsByResolution?.[String(value)]) || 0;
   const options = resolutions.map((value) => {
     const seconds = resolutionSeconds(value);
@@ -5411,21 +5799,24 @@ function renderSceneGeneration() {
       ? text.refineHint(sceneGenerationDuration(baseSeconds),
                         sceneGenerationDuration(baseSeconds + refine.seconds), refine.resolution)
       : "";
-  const selectionReady = choice?.available && resolutions.includes(selectedResolution);
-  const reason = !choice?.available ? text.engineUnavailable : !selectionReady ? text.resolutionUnavailable : "";
+  const selectionReady = choice?.available && resolutions.includes(selectedResolution) && (!mv.active || mv.ready);
+  const reason = mv.active ? mv.reason : !choice?.available ? text.engineUnavailable : !selectionReady ? text.resolutionUnavailable : "";
   byId("scene-generation-engine-status").textContent = reason;
   byId("scene-generation-engine-status").hidden = !reason;
   const job = state.sceneGeneration;
   const running = Boolean(job && !TERMINAL.has(job.status));
-  const blocked = state.sceneGenerationBusy || state.sceneGenerationPhotoBusy || running || state.disabled;
+  const blocked = state.sceneGenerationBusy || state.sceneGenerationPhotoBusy || state.sceneViewCandidateBusy || running || state.disabled;
   for (const key of ["image", "name", "engine", "resolution", "seed"]) byId(`scene-generation-${key}`).disabled = blocked;
-  resolution.disabled = blocked || !choice?.available;
+  resolution.disabled = blocked || !choice?.available || mv.active;
+  engine.disabled = blocked || mv.active;
   byId("scene-generation-photo").disabled = blocked;
   byId("scene-generation-photo-picker") // ラベルは disabled を持たないので見た目だけ合わせる
     ?.classList.toggle("disabled", blocked);
   const refineInput = byId("scene-generation-refine");
-  refineInput.disabled = blocked || !refine.available;
-  refineInput.checked = refine.available && state.sceneGenerationRefine;
+  refineInput.disabled = blocked || !refine.available || mv.active;
+  refineInput.checked = !mv.active && refine.available && state.sceneGenerationRefine;
+  refineInput.closest('.scene-generation-quality').hidden = mv.active;
+  renderSceneViews(blocked);
   byId("scene-generation-submit").disabled = blocked || window.parent === window
     || !selectionReady || !image.value || !byId("scene-generation-name").value.trim();
   byId("scene-generation-cancel").hidden = !running;
@@ -5443,7 +5834,7 @@ function renderSceneGeneration() {
   if (job?.status === "succeeded") {
     message = refineState === "succeeded" ? `${text.succeeded} ${text.refineDone}`
       : refineState === "failed" ? `${text.succeeded} ${text.refineFailed}` : text.succeeded;
-  } else if (job?.status === "failed") message = text.failed;
+  } else if (job?.status === "failed") message = `${text.failed} ${job.error?.code ? sceneViewError(job.error.code) : ""}`;
   else if (job?.status === "canceled") message = text.canceled;
   else if (running) {
     const phase = String(job.phase || "");
@@ -5487,7 +5878,7 @@ async function renderSceneGenerationPreview(assetId) {
 
 /* 端末の写真をその場で入力にする。HEIC は端末の復号器を通して PNG へ直し、
    core も HEIC のまま受けられるようにしてあるので、どちらでも届く。 */
-async function attachSceneGenerationPhoto(file) {
+async function attachSceneGenerationPhoto(file, direction = null) {
   const text = sceneGenerationText();
   if (!file || state.sceneGenerationPhotoBusy || state.disabled) return;
   state.sceneGenerationPhotoBusy = true;
@@ -5523,7 +5914,10 @@ async function attachSceneGenerationPhoto(file) {
     renderSceneGeneration();
     const asset = await importFile(upload, "source", null, mediaType);
     await loadSceneGenerationImages();
-    byId("scene-generation-image").value = asset.id;
+    if (direction) {
+      const view = state.sceneGenerationViews.find(v => v.direction === direction);
+      if (view) { view.assetId = asset.id; delete view.candidateSourceId; }
+    } else byId("scene-generation-image").value = asset.id;
     if (!byId("scene-generation-name").value.trim()) {
       byId("scene-generation-name").value = (file.name || asset.suggested_filename || "")
         .replace(/\.[^.]+$/, "").slice(0, 120);
@@ -5535,6 +5929,10 @@ async function attachSceneGenerationPhoto(file) {
   } finally {
     state.sceneGenerationPhotoBusy = false;
     byId("scene-generation-photo").value = "";
+    if (direction) {
+      const picker = document.querySelector(`#scene-view-${direction} input`);
+      if (picker) picker.value = "";
+    }
     renderSceneGeneration();
   }
 }
@@ -5587,14 +5985,14 @@ async function submitSceneGeneration() {
   const engine = byId("scene-generation-engine").value;
   const resolution = Number(byId("scene-generation-resolution").value);
   const choice = sceneGenerationChoices().find((item) => item.value === engine);
-  if (window.parent === window || !choice?.available || !choice.resolutions.includes(resolution)) {
+  const mv = sceneMultiview();
+  if (window.parent === window || (mv.active ? !mv.ready : !choice?.available || !choice.resolutions.includes(resolution))) {
     renderSceneGeneration();
     return;
   }
   const refine = sceneGenerationRefineChoice();
-  const wantRefine = refine.available && byId("scene-generation-refine").checked;
-  state.sceneGenerationEngine = engine;
-  state.sceneGenerationResolution = resolution;
+  const wantRefine = !mv.active && refine.available && byId("scene-generation-refine").checked;
+  if (!mv.active) { state.sceneGenerationEngine = engine; state.sceneGenerationResolution = resolution; }
   state.sceneGenerationRefine = wantRefine;
   state.sceneGenerationBusy = true;
   state.sceneGenerationMessage = "";
@@ -5604,12 +6002,18 @@ async function submitSceneGeneration() {
     engine, refine_with_pixal3d: wantRefine, resolution,
     seed: Number(byId("scene-generation-seed").value), local_only: true,
   };
+  if (mv.active) {
+    value.additional_views = state.sceneGenerationViews.map(v => ({direction: v.direction, asset_id: v.assetId}));
+    value.view_camera = {fov_degrees: Number(byId('scene-generation-fov').value),
+      distance: Number(byId('scene-generation-distance').value), elevation_degrees: Number(byId('scene-generation-elevation').value),
+      mesh_scale: Number(byId('scene-generation-mesh-scale').value)};
+  }
   renderSceneGeneration();
   try {
     state.sceneGeneration = await call("scenes.from_image", value);
     void pollSceneGeneration();
   } catch (error) {
-    state.sceneGenerationMessage = failureText(error?.code);
+    state.sceneGenerationMessage = sceneViewError(error?.code);
   } finally {
     state.sceneGenerationBusy = false;
     renderSceneGeneration();
@@ -7264,6 +7668,7 @@ function renderPipeline() {
   // ので、押せてから失敗させるのではなく、先に理由を言う。
   const hosted = window.parent !== window;
   byId("pipeline-start").disabled = state.pipelineBusy || state.disabled || !hosted
+    || state.sceneGenerationViews.length > 0
     || !byId("scene-generation-image")?.value;
   byId("pipeline-confirm").disabled = active;
   byId("pipeline-rig").disabled = active;
@@ -7276,6 +7681,7 @@ function renderPipeline() {
   } else if (pipeline?.state === "canceled") message = text.canceled;
   else if (waiting) message = text.waiting;
   else if (active) message = text.running;
+  else if (state.sceneGenerationViews.length) message = sceneViewsText().pipeline;
   byId("pipeline-status").textContent = state.pipelineMessage || message;
   renderSceneExperience();
 }
@@ -7308,6 +7714,7 @@ async function pollPipeline() {
 
 async function actOnPipeline(action) {
   if (state.pipelineBusy || state.disabled) return;
+  if (action === 'start' && state.sceneGenerationViews.length) { renderPipeline(); return; }
   state.pipelineBusy = true;
   state.pipelineMessage = "";
   renderPipeline();
@@ -7518,10 +7925,10 @@ function setBlenderKeysEnabled(enabled) {
   renderBlenderTouchControls();
 }
 
-function installBlenderTouchButtons(container) {
+function installBlenderTouchButtons(container, selector = "button") {
   let tap = null;
   container.addEventListener("touchstart", (event) => {
-    const button = event.target.closest("button");
+    const button = event.target.closest(selector);
     const touch = event.touches[0];
     tap = event.touches.length === 1 && button && container.contains(button) && !button.disabled
       ? {button, id: touch.identifier, x: touch.clientX, y: touch.clientY} : null;
@@ -9513,7 +9920,7 @@ function updateActivityBadge(count) {
 function renderActivity() {
   const list = byId("activity-list");
   const items = state.jobs || [];
-  const batches = state.mode === "advanced" ? (state.batches || []) : [];
+  const batches = (state.batches || []).filter((batch) => state.mode === "advanced" || batch.axis === "view");
   const running = items.filter((job) => !TERMINAL.has(job.status));
   const finished = items.filter((job) => TERMINAL.has(job.status));
   const batchRows = batches.map(creativeBatchRow);
@@ -9558,7 +9965,7 @@ async function loadActivity() {
 
 function restoreCreativeBatch(snapshot) {
   if (!usable(snapshot.creative_batches)) return;
-  const active = (state.batches || []).find((batch) => batch.state === "running");
+  const active = (state.batches || []).find((batch) => batch.state === "running" && batch.axis !== 'view');
   if (!active) return;
   state.activeBatch = active.id;
   showBatchProgress(active);
@@ -9587,10 +9994,13 @@ function creativeBatchRow(batch) {
   const info = document.createElement("div");
   const title = document.createElement("p");
   title.className = "t";
-  title.textContent = `差分セット · ${batch.axis}`;
+  title.textContent = batch.axis === 'view'
+    ? (document.documentElement.lang.startsWith('en') ? 'Other-view candidates' : '別方向の候補')
+    : `差分セット · ${batch.axis}`;
   const sub = document.createElement("p");
   sub.className = "s";
-  sub.textContent = `${batch.succeeded_count}/${batch.requested_count} 枚完成 · ${batch.id}`;
+  sub.textContent = `${batch.succeeded_count}/${batch.requested_count} 枚完成`
+    + (state.mode === "advanced" ? ` · ${batch.id}` : "");
   const children = document.createElement("details");
   const summary = document.createElement("summary");
   summary.textContent = `子ジョブ ${batch.child_job_ids.length} 件`;
@@ -9598,7 +10008,8 @@ function creativeBatchRow(batch) {
   childList.className = "s";
   childList.textContent = batch.child_job_ids.map((id, index) => `${index + 1}. ${id}`).join("\n");
   children.append(summary, childList);
-  info.append(title, sub, children);
+  info.append(title, sub);
+  if (state.mode === "advanced") info.append(children);
 
   const side = document.createElement("div");
   side.className = "row-side";
@@ -9606,6 +10017,11 @@ function creativeBatchRow(batch) {
   status.className = "state";
   status.textContent = STATUS_LABEL[batch.state] || (batch.state === "partial" ? "一部完了" : batch.state);
   side.append(status);
+  if (batch.axis === 'view') {
+    const open = document.createElement('button'); open.type = 'button';
+    open.textContent = document.documentElement.lang.startsWith('en') ? 'Compare candidates' : '候補を比較';
+    open.addEventListener('click', () => void openViewCandidateBatch(batch)); side.append(open);
+  }
   if (batch.state === "running") {
     const cancel = document.createElement("button");
     cancel.type = "button";
@@ -10704,6 +11120,22 @@ byId("scene-generation-form").addEventListener("submit", (event) => {
   event.preventDefault();
   void submitSceneGeneration();
 });
+byId("scene-generation-add-view").addEventListener("click", () => {
+  if (byId("scene-generation-add-view").disabled) return;
+  const direction = ['right', 'back', 'left'].find(d => !state.sceneGenerationViews.some(v => v.direction === d));
+  if (direction) {
+    state.sceneGenerationViews.push({direction, assetId: '', previewId: ''});
+    state.sceneGenerationViews.sort((a,b) => ['right','back','left'].indexOf(a.direction) - ['right','back','left'].indexOf(b.direction));
+  }
+  state.sceneGenerationMessage = "";
+  renderSceneGeneration(); renderPipeline();
+});
+byId('scene-view-candidates-create').addEventListener('click', () => void createViewCandidates());
+byId('scene-view-candidates-cancel').addEventListener('click', () => void cancelViewCandidates());
+byId('scene-view-candidates-refresh').addEventListener('click', () => void loadViewCandidates());
+byId('scene-view-candidates-more').addEventListener('click', () => void loadViewCandidates({more: true}));
+byId('scene-view-candidate-confirm').addEventListener('change', () => renderViewCandidates());
+byId('scene-view-candidate-use').addEventListener('click', () => void useViewCandidate());
 for (const id of ["scene-generation-image", "scene-generation-name"]) {
   byId(id).addEventListener("input", () => { renderSceneGeneration(); renderPipeline(); });
 }
@@ -10910,6 +11342,9 @@ installBlenderTouchButtons(byId("scene-blender-dialog"));
 // Existing nested handlers preventDefault, so each tap still activates once.
 // Image/canvas gestures and native selects are not button activations.
 installBlenderTouchButtons(byId("app"));
+// Candidate disclosure/confirmation also need exact touch activation in the
+// opaque frame. Keep this scoped; native selects and canvas gestures stay native.
+installBlenderTouchButtons(byId("scene-view-candidates"), 'summary, input[type="checkbox"], label:has(input[type="checkbox"])');
 byId("scene-blender-keys").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-blender-key]");
   if (button && !button.disabled) sendBlenderAssistKey(button.dataset.blenderKey);

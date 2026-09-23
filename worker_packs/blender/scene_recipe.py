@@ -16,6 +16,7 @@ import bpy
 # This directory is a shipped trusted worker pack, never an input asset path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rig_auto
+import rig_weight_repair
 import scene_curves
 import scene_skeleton
 import scene_surface
@@ -27,6 +28,7 @@ FIXED = {"recipe.json", "source.blend", "scene.blend", "result.json"}
 MAX_OPERATIONS = 64
 MAX_GROWTH_GEOMETRY = 1_000_000
 MAX_SCENE_BONES = 256
+AUTOMATIC_WEIGHT_REPAIRS: list[dict[str, object]] = []
 
 
 def bone_id(value: object) -> str:
@@ -133,11 +135,15 @@ def bind_skin(obj: bpy.types.Object, operation: dict[str, object], objects: dict
 MAX_RAW_HEAT_WEIGHT = 1000.0
 
 
-def normalized_influences(groups: list[tuple[int, float]], allowed: set[int]) -> list[tuple[int, float]]:
-    """Validate raw heat output before discarding zero/small influences."""
+def validate_heat_influences(groups: list[tuple[int, float]], allowed: set[int]) -> None:
     if any(index not in allowed or not math.isfinite(weight) or not 0 <= weight <= MAX_RAW_HEAT_WEIGHT
            for index, weight in groups) or len({index for index, _ in groups}) != len(groups):
         raise RuntimeError("automatic skin weights are invalid")
+
+
+def normalized_influences(groups: list[tuple[int, float]], allowed: set[int]) -> list[tuple[int, float]]:
+    """Validate raw heat output before discarding zero/small influences."""
+    validate_heat_influences(groups, allowed)
     selected = sorted(((index, weight) for index, weight in groups if weight > 0),
                       key=lambda item: (-item[1], item[0]))[:4]
     total = sum(weight for _, weight in selected)
@@ -146,7 +152,8 @@ def normalized_influences(groups: list[tuple[int, float]], allowed: set[int]) ->
     return [(index, weight / total) for index, weight in selected]
 
 
-def bind_skin_auto(obj: bpy.types.Object, operation: dict[str, object], objects: dict[str, bpy.types.Object]) -> None:
+def bind_skin_auto(obj: bpy.types.Object, operation: dict[str, object], objects: dict[str, bpy.types.Object],
+                   *, repair_small_islands: bool = False) -> None:
     rigid_armature(obj)
     if obj.parent is not None or any(not math.isfinite(obj.matrix_world[i][j]) or
             abs(obj.matrix_world[i][j] - (1 if i == j else 0)) > 1e-6 for i in range(4) for j in range(4)):
@@ -202,9 +209,21 @@ def bind_skin_auto(obj: bpy.types.Object, operation: dict[str, object], objects:
         if mesh.parent != obj or len(mesh.modifiers) != 1 or mesh.modifiers[0].type != "ARMATURE" or mesh.modifiers[0].object != obj:
             raise RuntimeError("automatic bind modifier result differs")
         allowed = {group.index for group in mesh.vertex_groups if group.name in obj.data.bones}
+        repaired = {}
+        if repair_small_islands:
+            original_weights = []
+            for vertex in mesh.data.vertices:
+                raw = [(group.group, group.weight) for group in vertex.groups]
+                validate_heat_influences(raw, allowed)
+                original_weights.append(dict(normalized_influences(raw, allowed))
+                                        if any(weight > 0 for _, weight in raw) else {})
+            if any(not value for value in original_weights):
+                repaired, report = rig_weight_repair.for_mesh(mesh, original_weights)
+                AUTOMATIC_WEIGHT_REPAIRS.append({"object_id": mesh.get("media_forge_id"), **report})
         for vertex in mesh.data.vertices:
             raw = [(group.group, group.weight) for group in vertex.groups]
-            weights = normalized_influences(raw, allowed)
+            weights = (list(repaired[vertex.index].items()) if vertex.index in repaired
+                       else normalized_influences(raw, allowed))
             for index, _ in raw:
                 mesh.vertex_groups[index].remove([vertex.index])
             for index, weight in weights:
@@ -725,6 +744,7 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         before = (len(obj.data.vertices), len(obj.data.polygons))
         if before[1] <= minimum:
             raise RuntimeError("mesh is already at or below the requested face floor")
+        target_triangles = math.ceil(sum(p.loop_total - 2 for p in obj.data.polygons) * ratio)
         check_growth(objects, 0)
         modifier = obj.modifiers.new(name="Media Forge Decimate", type="DECIMATE")
         modifier.decimate_type = "COLLAPSE"
@@ -739,6 +759,8 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
             raise RuntimeError("decimate fell below the requested face floor")
         if after[1] >= before[1]:
             raise RuntimeError("decimate did not reduce the mesh")
+        if after[1] > target_triangles + max(2, math.ceil(target_triangles * .01)):
+            raise RuntimeError("decimate cannot reach the requested ratio; retain more faces")
     elif kind == "modifier.subdivision":
         if obj.type != "MESH" or any(m.type == "SUBSURF" for m in obj.modifiers):
             raise RuntimeError("subdivision requires a mesh without existing subdivision")
@@ -777,7 +799,7 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         bind_skin_auto(rig, {
             "type": "skin.bind_auto", "object_id": rig_object_id,
             "mesh_object_ids": [object_id],
-        }, objects)
+        }, objects, repair_small_islands=facts.get("body_plan") == "humanoid")
         clip_id = operation.get("clip_id")
         if clip_id is not None:
             create_clip(rig, rig_auto.walk_operation(
@@ -872,6 +894,7 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
 
 
 def main() -> None:
+    AUTOMATIC_WEIGHT_REPAIRS.clear()
     args = arguments()
     if tuple(bpy.app.version[:3]) != tuple(int(part) for part in args.expected_version.split(".")):
         raise RuntimeError("Blender runtime identity differs")
@@ -902,6 +925,7 @@ def main() -> None:
                 "clip replacement target is missing or ambiguous": "clip_target_missing",
                 "automatic skin weights are missing": "auto_weights_missing",
                 "automatic skin weights are invalid": "auto_weights_invalid",
+                "decimate cannot reach the requested ratio; retain more faces": "decimate_target_unreachable",
                 "geometry selection is stale": "geometry_selection_stale",
                 "IK target is unreachable or singular": "ik_target_unreachable",
                 "IK pole is singular": "ik_pole_singular",
@@ -926,6 +950,7 @@ def main() -> None:
         "blender_version": args.expected_version,
         "autoexec_disabled": not bpy.context.preferences.filepaths.use_scripts_auto_execute,
         "operation_count": len(operations),
+        "automatic_weight_repairs": AUTOMATIC_WEIGHT_REPAIRS,
         "stable_object_ids": sorted(objects),
         "mesh_geometry": [{**scene_curves.mesh_fact(obj), "uv_maps": scene_surface.uv_facts(obj.data), "skin_weights": scene_weights.facts(obj)} for key,obj in sorted(objects.items())[:256]
                           if obj.type == "MESH"

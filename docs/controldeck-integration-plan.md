@@ -1,9 +1,27 @@
 # ControlDeck Media Forge — ControlDeck Integration Plan
 
+2026-09-23 複数面の加法拡張: `scene.from_image`の追加画像もHostからはAsset IDだけを受ける。
+カメラは型付きの数値設定とし、外部path/URL/実行コードを受けない。実測済み枚数のMVだけを
+capabilityへ公開し、独立したprivate receiptを固定する。GPU leaseと取消/renew/解放は既存scene Jobを使う。
+追加画像の存在とSHAを受付から出版まで照合し、全画像を既存削除保護とlineageへ含める。
+既存単視点の保存要求・retry identityは、追加field省略時に変えない。Host固有変更は不要。
+
 Status: Draft / target architecture  
 Date: 2026-08-20
 
 ## 1. Executive decision
+
+2026-09-23 synchronous agent failure references: after MediaForge accepts a
+`media.generate` request, terminal failure/cancellation and cleanup timeout retain
+the public MediaForge `job_id` and last observed `status` in the error detail.
+The wait deadline already returns its accepted Job ID; it does not assert a
+terminal state. Before admission, errors have no invented Job ID. HTTP errors
+remain errors, and existing successful responses are unchanged. The generic Host
+must distinguish its own `job_id` from an add-on's `upstream_job_id`, preserve only
+bounded identifiers/status codes through durable failed Jobs and the MCP bridge,
+and retain owner-scoped status access. An error is never authorization to resend
+an accepted request automatically. No paths, credentials, or raw worker errors
+cross this reference boundary.
 
 2026-09-10 ordinary hosted media jobs renew authentication before expiry while
 waiting for resources: use the existing owned Job credential refresh before a
@@ -614,6 +632,18 @@ video.image_to_video = unavailable
 ```
 
 Agents do not hardcode FLUX/Qwen/Wan model IDs unless the user explicitly pins a model.
+
+Single-reference image editing may select a separately measured memory/runtime profile
+inside MediaForge. Its reservation still uses the ordinary Host resource request and
+granted worker limit. MediaForge does not bypass admission because the device appears
+empty, change Host scheduling, or imply that an image edit guarantees camera calibration.
+
+The planned image-to-3D multiview extension remains additive to the existing
+MediaForge scene tool and detached Jobs. Every input is an ordinary Asset ID with
+pinned hash and lineage; no browser/Host file path or second asset service is added.
+Per-direction image candidates use the existing local image-edit capability and
+remain reviewable before a measured multiview request. Unsupported view counts,
+missing adoption receipts and repeated image contents fail before GPU submission.
 
 Agent file writes follow the same project grant rules and cannot bypass ControlDeck filesystem restrictions through Media Forge.
 

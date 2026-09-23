@@ -1,5 +1,401 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 商店街の制作・修正・最終監査完了
+
+通常ログインを再確認。Project LabのMF3DS-ShoppingStreet-20260923/index.htmlで
+7実GLB/15配置の画像、主人公+6NPC、PC移動、320/390px同時touchと視点操作、help、
+再読込を確認。page error0/overflow0、内蔵Radeonで59.971214fps/p95 16.8ms。
+全7納品SHA一致/24,931,924B、人物3種のskin/12joints/walk clipを再照合。
+制作と不具合修正の実MCP/実変形/失敗履歴はproject evidenceと各修正sliceに保持。
+既存4面の実content/画素SHAは全相異。AI別方向3候補は品質不整合のため3Dへ未採用。
+固定navの失敗はnative945pxにviewport1000pxを指定した検証条件に依存。
+同じpageを844pxへ変えるとtouchが届く。320/390/1280で比較→状況→比較の12check成功。
+商店街のcode/modelと稼働0.33.23/PID770023、Host PID674922/NRestarts0を保持。
+active MF Job0/lease0/Asset1597、追加生成/モデルDL0。物理スマホはNOT TESTED。
+未mergeのPR631へmain d0ee4b6を統合し、制作runner/段階prompt/最終受入記録を整理。
+runnerの通常preflightはQwen3.8-27B/runtime v1で成功。最終 ./mf.sh test は
+2581passed/3skipped/3warnings/387.39秒。build runtime参照不足の署名3件は
+既存環境へのsymlinkを補って個別に3pass/exit0、未実行のままにはしていない。
+詳細は[商店街の最終監査](shopping-street-20260923.md)。制作HTMLと必須受入は完了。PR631は配布外runner/tests/prompts/記録だけで、
+稼働製品コードは変更なし。物理スマホ・自動方向画像品質の制限は別に明記する。
+
+## 2026-09-23 0.33.23公開・導入、別方向3画像を保存・品質未採用
+
+PR660/4fadfffを既存鍵で署名公開・通常更新し、current0.33.23/PID770023/healthy。
+旧1594 Asset metadata/代表3SHA/runtime全JSONを保持、Host PID674922/NRestarts0。
+320pxの通常候補UIからbatch_ad986d092bfb4a60bdfb6ecce4507692を1回依頼し、3件成功/156.636秒。
+right7213c04a、backe37bfeb6、leftd935d74aの画像をLibraryへ保存（各IDのprefix）。
+元正面62eafeaeへの親/実SHA/方向context、全画素相異、3lease released/active0を独立照合。
+rightの向き/余計なストラップ、backの持ち手逆転、体形差によりこの組は3Dへ未採用。
+PC1280/320で3候補と元画像の比較、Activity URL→比較を確認。
+Libraryの3画像/既存4面GLB表示・回転・closeは初回7件、最後のPC closeを別途1件確認。
+初回helperの比較/固定nav/PC close timeoutを保持し、固定navの同一フローは未受入。
+Asset総数1597/active Job0/商店街不変/追加モデルDL0。追加生成・取消0。
+製品は全2576pass/345.50秒のgateから変更なし。このbranchは受入文書のみ。
+次: 候補画像の方向/持ち物/形状の整合性、固定navの実入力、物理スマホを別に評価。
+新UIのinstalled採用・取消は未受入。失敗候補を自動3Dへ入れない。全体goal継続。
+[詳細](view-candidates-20260923.md)。
+
+## 2026-09-23 installed候補欄のタッチずれを修正（0.33.23準備）
+
+PR659/4c4b3c6の0.33.22を既存鍵で署名公開、通常更新。current0.33.22/PID751496/healthy、
+旧1594 Asset metadata/代表3SHA/runtime全JSON保持、Host PID674922不変。
+通常320pxで候補見出しのtouchstart/endは正しいがclickが隣の方向追加へずれる問題を実確認。
+画像Job追加0。branch ux1/multiview-candidate-touchで既存activationを再利用し、候補欄の
+summary/確認checkbox/labelだけを対象に追加。既存button/native select/canvas経路を保持。
+通常Hostへ関数のみsource overlayしてsummaryのclick1回/open維持を確認。
+source opaque iframeを88px下げた1280/320では、依頼/中止/比較/確認labelの実タップ/
+明示採用/履歴/詳細切替/複製拒否を確認。overflow0/pageerror0/44px。生成通信はfixture。
+最終 ./mf.sh test は2576passed/3warnings/345.50秒、exit0。以後製品コード変更なし。
+次: commit/push/PR→0.33.23署名と通常更新→通常installed UIで実3方向生成/比較/Library。
+現時点で新規モデルDL0、実モデル候補生成/0.33.23 installed/物理スマホはNOT TESTED。
+[詳細](view-candidates-20260923.md)。全体goal継続。
+
+## 2026-09-23 別方向候補の比較UIと来歴（0.33.22準備）
+
+branch ux1/multiview-candidates-ui、base7bce85d。既存image.edit/CreativeBatch/Jobを再利用し、
+右/背面/左の別指示、元画像と方向context、候補比較と明示採用を追加。自動3D開始なし。
+元画像別の永続履歴、重複画素/削除/来歴不一致の拒否、簡易モードの状況→比較を実装。
+opaque iframeの実Chromium1280/320で依頼/取消/比較/採用/履歴/正面切替/詳細設定保持を確認。
+従来の手動4面/1枚復帰も確認し、overflow0/pageerror0/44px。通信応答は制御fixture。
+隔離実HTTP/偽workerは3件中2件alpha不足・1件成功。全件成功を期待したhelperの失敗を保持し、
+再送なしで同DB再起動/Job clear後の候補復元・来歴・選択を確認。実モデル品質とは分離。
+既存installed4面は実content再取得で全画素SHA相異を確認。新規モデルDL0。
+最終 ./mf.sh test は2576passed/3warnings/322.27秒、exit0（中断した予備gateとは別）。
+実行中にconstructor戻り型Noneの注釈だけ補足し、対象service testsも追加実行。
+次: commit/push/PR→既存鍵署名公開→通常feature update→installed生成/比較/Library。
+新UIのinstalled受入、生成候補品質、物理スマホはNOT TESTED。全体goal継続。
+[詳細](view-candidates-20260923.md)。
+
+## 2026-09-23 0.33.21を通常導入、実MCP成功・候補品質は未採用
+
+PR657/7db182a、署名公開と通常更新完了。current0.33.21/PID711535/healthy。
+旧1593 Asset metadata/代表3SHA/runtime全JSON保持。Host PID674922不変。
+実OpenCode3c589f2cfcec、session ses_f3221e6f0ffeyqMVHep2QYu1XE、170.563235秒。
+MCP1回54.256秒、Host d0bf3b8f6dad/MF job_230f25e4c7ce4aa78d089b2032e940abとも成功。
+背面候補asset_2d4d8458e4464731ac93f1b7e945a73f、1024RGBA、元正面への親/実SHA保持。
+seed/alphaは保持しpack項目混入は解消。この依頼でもbriefのaspect_intentを落とし空任意項目を足しており、完全転記は未達。
+背面のバッグの手が反対で体形も変化したため3Dへ未採用。新規モデルDL/再送/停止0。
+LLM3/画像1lease released/active0、元Asset/project不変。4面入力の異なる実画素も再照合。
+PC1280/タッチ320の通常Libraryで候補と既存4面GLBの表示/閉じる/GLB回転、overflow0/errors0。
+このbranch ux1/image-edit-mcp-installed-0-33-21は文書のみ、製品全2559passからcode変更なし。
+次: 自動方向候補の比較/明示選択UIと形状/持ち物の一貫性評価。失敗候補を自動投入しない。
+完全な引数転記、物理スマホ、cold同時到着/実OpenCodeのHost再起動越し受入も未完了。全体goal継続。
+[詳細](image-edit-mcp-schema-20260923.md#installed-opencodemcpの再受入と候補品質)。
+
+## 2026-09-23 実OpenCodeの背面候補要求が受付前に失敗
+
+branch ux1/image-edit-mcp-schema、base19e0388。通常OpenCode/Qwen Job50715bdc703e、
+session ses_f323df276ffeTbroqFwprYEwdn、208.725451秒。
+再送禁止に反し同じ不正引数で3回MCP422。画像seed/alpha欠落、pack項目混入。
+MF Job追加0/元Assetとproject保持/Host PID674922不変/active lease0。停止操作0。
+schemaの既存seedを掲載、自由形式の追加キー許可を明示し、pack専用項目の説明を補強。
+対象23tests/隔離実HTTP/固定b10917 Python converterを確認。
+初回全2558pass/1fail（参照セットfieldの追加説明）。共通定義を保持する修正後、対象56pass。
+0.33.21へ版更新し最終全2559pass/3warnings/398.92秒、exit0。以後製品code変更なし。
+installed0.33.20は変更なし。これは修正候補であり、原因すべての解消・実生成を未受入。
+次: full gate→PR→署名配布と通常更新→同じ実OpenCode/MCP要求を再確認。
+自動方向候補UI/比較採用/自動3D/物理スマホも未完了。追加モデル取得0。
+[詳細](image-edit-mcp-schema-20260923.md)。全体goal継続。
+
+## 2026-09-23 自動方向候補の人物評価とHost watchdog
+
+手動MVはPR654/655で公開・installed受入済み。branch ux1/multiview-candidate-evaluationは評価記録のみ。
+保存済み正面から通常image.editで右側面候補を1件生成。MediaForge job_6d66e0f9b6d34734bee4fe4da837cac5は
+161.480503秒（保存時刻差）でsucceeded、asset_e425aec656204ce1ba79ec96f582ad78をLibraryへ保存。
+同時期にHostがwatchdog再起動し、Host22aaf130c5adはinterrupted。成功へ書き換えない。
+実stackはHost定期監視→OpenCode featureの同期version確認。
+汎用Host PR343/e3d374aを通常適用し、PID674922/health ok。
+130秒/65health応答（最大4.432ms）でPID不変/NRestarts0。全Host1175pass/2skip。
+更新後PC1280/320pxのLibraryで既存4面GLB/側面候補の表示・閉じる、GLB回転を確認。
+overflow0/pageerror0。current0.33.20/PID581793、旧Asset/runtime/配布static filesも保持。
+側面1人/服/髪/バッグ1個/透過を確認。既知の右面と比べバッグ寸法・手/腕・構図に差があり、
+3D入力への採用はしない。背面/左面は未送信。元画像のmetadata/実SHA保持、worker終了/active lease0。
+旧leaseの終端履歴はHost再起動後取得不可。追加モデル取得0。
+自動候補UI/自動校正/候補から3Dの実生成/実OpenCode MCP/物理スマホはNOT TESTED。
+通常Host agent-tool HTTPで同一画像の追加方向を拒否しMF Job追加0。stdio MCPの受入とは区別。
+[詳細](multiview-20260923.md#正面からの側面候補人物1件)。全体goal継続。
+
+## 2026-09-23 手動複数面0.33.20を公開・導入、実生成と320px取消を確認
+
+PR654/5177a7bを既存鍵で署名公開し、再取得検証後に通常feature update。
+current0.33.20/PID581793/healthy、旧1586 Asset metadataと代表3content SHA、旧runtime全JSONを保持。
+独立MV receiptを採用。実workerのggml全4libraryは永続runtimeから読み込み、追加モデル取得0。
+通常ログイン/opaque iframeの320pxで異なる4RGBAを取り込み、151.703秒で生成成功。
+scene_36dfcedb514d4148a9779df0c108d28f「複数面：人物と赤いバッグ（4方向）」をLibraryへ保存。
+4方向の画素と元fixture/来歴を照合し、4親/dependency、GLB/.blendの実SHAを検証。
+PC1280/320pxで画像付きGLB表示・閉じる、overflow0/pageerror0。物理スマホはNOT TESTED。
+別の自身のJobを320pxの中止ボタンで取消、0.212秒、native終了/出力0/lease released。
+成功と取消2件のHost終端/3lease released/active0を照合。初回取消helperの誤ったPID照合はAPIでcleanup済み。
+headless WebGL不可と初回PC操作の失敗はprivate証跡に保持し、実GPUでの最終受入と分離。
+branch ux1/multiview-installed-0-33-20は文書のみ。製品testは既受入2558pass/409.46秒から変更なし。
+次: 自動方向候補の生成→比較→明示選択、実installed MCP。自動生成画像を無審査で3Dへ渡さない。
+厳密同時cold到着/実OpenCode推論のHost再起動越し受入も未完了。全体goal継続。
+[詳細](multiview-20260923.md#03320の署名配布とinstalled受入)。
+
+## 2026-09-23 手動2/3/4面の製品経路・モバイル入力（0.33.20準備）
+
+branch ux1/multiview-generation、base0d5ab0b。追加画像/camera、全画像pin/来歴/削除保護、
+独立mixed precision runtime、方向別preview/端末取込/除去/詳細cameraを既存Jobs/UIへ接続。
+人物4面を実source adapterから生成、141.713559秒/28renew/released、既存Blender4.5.13 import成功。
+4入力とstagingの実画素SHA一致/全4枚相異、991,928tris/4096角2画像/4親を確認。
+CPU4面を目視し顔/背面/2脚/片側バッグを確認。rig/deformationや任意写真の品質受入ではない。
+source opaque iframe1280/320で追加/選択/除去/取込/取消/camera/1枚復帰、overflow0/errors0。
+削除ボタンの既存CSS優先を44pxへ修正して再確認。通信応答は制御fixture。
+最初の全2556pass/409.32秒後、版数/API3面検証を追加。旧固定Asset数のfixtureを修正し、最終全2558pass/3warnings/409.46秒、exit0。
+private証跡maintenance/multiview-20260923/product-*、配布準備maintenance/release-0.33.20-20260923。
+currentは0.33.19。新receiptはcandidate-runtime.jsonのみ、旧SV2receiptのSHA不変、追加DL/重みコピー0。
+次: commit/push/PR/merge→既存鍵署名と通常feature update→candidate receipt採用→実installed UI/Job/取消/Library。
+自動方向候補→選択→3D、installed MCP、物理スマホはNOT TESTED。全体goal継続。
+
+## 2026-09-23 複数面の実画素検査・人物/非対称・native取消
+
+branch ux1/multiview-person-cancel。通常再ログイン確認、参照編集のlease releasedを追加照会済み。
+読み取り専用scripts/verify_multiview_inputs.pyを追加。別名/別圧縮の同一画素を拒否、
+公式4面と人物4面のcamera/透過/共通canvas/全入力SHAを実検査。製品UI/APIへは未接続。
+既存主人公GLBを変更せず、検証sceneだけ片側に持ち物を足して4方向をCPU描画。
+4面Vulkan138.620秒/2面132.692秒、両方exit0/lease released。輪郭平均IoU.962755/.960514。
+脚2本/持ち物片側を目視。2面の未入力バッグ背面に白い模様、4面はなし。厳密な材質/rigは未受入。
+nativeのSS flowをown process groupだけ停止、0.200秒/GLBなし/lease released。
+全2537tests/3warnings/338.77秒/skip0を通過。追加DL0/current0.33.19変更なし。
+3面人物も127.900秒/exit0/25renew/released、IoU.958994、2面の白い模様はない。
+全4lease released/active0を通常HTTPで確認。次は既存Jobsへ全入力のpin/削除保護/来歴/取消を接続し、mobile UIを受入。
+独立cropやSVのfloat32来歴の流用は禁止。詳細[multiview](multiview-20260923.md)。全体goal継続。
+
+## 2026-09-23 参照編集0.33.19を通常導入・Library実表示
+
+PR651/90788fcを署名公開・再取得検証・通常feature update、current0.33.19/PID513777/healthy。
+既存1585 Asset metadata/代表3content SHA/runtime全JSON保持、追加モデル取得0。
+通常Host Job50f9ce2160f3は17.511秒/succeeded、512角の側面候補asset_74dbc48f1ac24554b03c3e56f486fbe5を保存。
+元正面Assetの親/SHAとfit来歴を確認。PC1280/touch320の通常Library→画像表示、overflow0/error0。
+画像の厳密な方向/材質一致は未受入、3D生成には未使用。4方向の公式入力は各別画像で重複なし。
+全2517pass/3skip/3warnings352.92秒。skipした署名3testは既存build環境参照で別途全通過。
+表示確認後に専用operator認証が期限切れ。通常logoutで専用sessionを無効化し再ログイン依頼中。
+installed lease終端追加照会/物理電話はNOT TESTED。次はMVの人物/非対称/取消/手動入力とUI。
+[詳細](reference-edit-admission-20260923.md)。複数面の製品runtime/UIはまだ未採用、全体goalは継続。
+
+## 2026-09-23 単一参照編集の枠とcanvasを修正中（0.33.19）
+
+GPU空き23.2GiBでも通常生成用worker上限8.8GiBで参照編集がOOMになることを実確認。
+別profileでHost枠/worker上限/推論canvasを一致させ、小さい前Jobのlease持ち回りも拒否。
+既存重みの実workerで512角15.579秒、1024角12.855秒、1024×768は196.526秒で出力。
+入力SHA不変/来歴fit/lease解放を確認。初回14GiBのdevice枠超過は自身だけ停止し記録。
+側面候補の品質は未受入で、複数面3Dには投入していない。追加DL0。
+対象84tests通過。最終全2517passed/3skipped/3warnings/352.92秒、exit0。installed/署名配布は未実施。[詳細](reference-edit-admission-20260923.md)。
+
+## 2026-09-23 複数面入力の同一画像確認
+
+利用者の指摘を受け、実入力4PNGの異なるSHA/正面・右・背面・左の画素を確認。
+2枚は正面/右、3枚は正面/右/背面、4枚は全方向をnativeの各conditioningで処理。
+正面を複製して各方向にしていない。AI側面候補は3D入力に使っていない。
+canonical設計へ各方向の実画像表示・重複画像の拒否・手動/候補の分離・320px操作を追記。
+製品MV UI/runtimeは未採用。別branch ux1/reference-edit-admissionで参照編集のOOM修正を実測/検証中。
+
+## 2026-09-23 単視点SVとの比較・別方向画像の失敗原因
+
+既存9重み参照で1面SVをVulkan生成、453.378568秒/exit0、90回renew/released。
+実Blenderで970868tris/4096角2画像、同じcamera4面CPU描画。輪郭平均IoUは1枚.894938、
+2枚.979675、3枚.980499、4枚.980222。この1物体で側背面が改善したが、SV/MVの重みと精度も異なる。
+追加DL/重みコピー0。GPU空き時の参照編集512は通常生成枠8.8GiBに達して失敗し、device空き23.2GiB。
+参照編集用の枠が材質編集にしか適用されないことをsourceで確認し、個別の実測を開始。
+自動視点画像、人物/非対称/取消、installed/MCP/mobileのMVは未受入。[詳細](multiview-20260923.md)。
+
+## 2026-09-23 継続OpenCodeの表示・停止と実cold起動
+
+利用者はOpenCodeが明示停止まで継続することを許容。Codexからの停止も可と確認。
+自動停止案を取り下げ、汎用Host PR340で保存Jobと実unitを照合し、owner/RBAC付き個別停止を追加。
+Host31e3420を通常適用、PID456446/healthy、1280/320pxで実行一覧と停止ボタンを確認。
+隔離Host/実systemdの3unitは再起動を越えて継続し、PC/320px/APIから対象だけを停止。
+これを実OpenCode推論の再起動越し受入と混同しない。未回収の結果は成功へ変えない。
+停止中Qwen3.8-27Bから実OpenCode Job2291014cbcf0は77.058秒/succeeded、read2回・変更0。
+Broker3要求granted/released（cold30,979,147,560B、warm0B/0B）、再試行/追加DL0。
+lock前の厳密な同時到着はNOT TESTED。同名JobはHost PR341で時刻/IDを補足して導入。実OpenCode Jobcfce488f01aaを320pxから停止し、canceled/unit inactive/lease0を確認。
+MF製品code/runtimeは変更なし。商店街evidenceの自動回収待ちの記述を継続許容方針へ訂正。
+次は手元の重みで複数面の品質/1面比較とUI、未測定の同時cold到着を扱う。
+[詳細](opencode-continuation-20260923.md)。
+
+## 2026-09-23 更新時unit監査の訂正
+
+Host更新helperの列挙が旧cdapp-opencode-*だけだったため、現行cdfeature-opencode-*も対象へ修正。
+更新前に全実unitを確認済みという表現を訂正。更新後は両prefixの全状態でunit0を実確認。
+元helper/訂正JSONを保存。製品コード/稼働サービス変更なし、追加再起動/モデル取得なし。
+商店街にはREADMEと要件別受入表を追加しlocal commite5f562bへ保存。既知のHost再起動時unit残留と
+cold同時要求の実機受入は未完了として表へ残した。複数面2枚評価は既存重みで実行中。
+
+## 2026-09-23 複数面3枚のVulkan実測
+
+既存native/参照重み/公式画像で正面・右・背面3枚を生成、531.111765秒/exit0。
+Broker105回更新/released、device観測最大5,973,966,848B、追加DL/重みコピー0。
+実Blenderで991406tris/674113vertices/4096角2画像を再importし元camera4面をCPU描画。
+平均輪郭IoU.980499、顔/後頭部の対応を目視。1物体の輪郭一致であり材質品質の採用判断ではない。
+1面SV/人物/非対称/生成視点/取消/installed/MCP/320pxのMV操作は未受入。
+同時にHostの継続OpenCodeを自動停止しない方針へ修正中。Codexによる依頼された停止・自身の検証cleanupは許容。
+詳細[MV実測](multiview-20260923.md)。現行単視点runtimeとライブラリは変更なし。
+
+## 2026-09-23 複数面2枚の実測と単視点の再利用準備
+
+既存native/重み/公式画像で正面・右側2枚をVulkan生成、543.873269秒/exit0、観測最大5.571GiB。
+947086tris/4096角2画像を実Blender再importし4面CPU描画。平均輪郭IoU2面.979675/4面.980222。
+同一1物体の結果であり、一般的改善・材質品質や2面の採用判定は未完了。
+既存SV4flow各700tensorの名前/shape一致を確認し、共通5個と合わせ9参照で1面比較を準備。
+追加DL/重みコピー0。1面SV/3面のjob JSONは準備のみ。次は同じreceiptを再実行せず、新しい未開始jobを使う。
+main6383fdcをmerge、製品差分なし。詳細[MV実測](multiview-20260923.md)。
+
+## 2026-09-23 0.33.18/Host修正を導入し実MCP失敗追跡を受入
+
+PR647/c392021を署名公開・通常feature update、current0.33.18/PID393256/healthy。
+既存1585 Asset metadata/代表3content SHA/runtime全JSONを保持。Host PR337/786e76cも通常起動で適用。
+実OpenCode/Qwen Jobace32c6b7a89が意図的unsupported packを1回だけ呼び、期待するtool error。
+Host94bde79e1799/MFjob_0fe3e640c9c341b0a2c3ded01c01402bとfailedが返り、通常Jobs API/保存結果と一致。
+再送/生成/モデル取得0、元Asset不変。scene専用media.job.statusによるpack照会の成功ではない。
+更新後の通常Host1280/390/320pxで全7モデル/15画像付き配置、移動/視点/help/再読込成功。
+実PC内蔵GPUで59.971214fps/5.0024秒、物理電話はNOT TESTED。製品code変更なし、文書のみ。
+次は既存重みで複数面比較・UI/採用を評価する。[実測詳細](agent-failure-reference-20260923.md)。
+
+## 2026-09-23 MCP失敗時のJob参照（0.33.18準備）
+
+branch ux1/agent-failure-job-reference。media.generateの受理後失敗/取消/cleanup timeoutへ
+同一Job ID/確定済み状態を追加し、未受理/成功応答を保持。設計・API記載を同期。
+実source HTTPで502/failed/同一保存Jobを照合。Hostの別worktreeでは汎用保持も修正し、
+実HTTP/stdio/隔離DBでfailed3/succeeded1、再送0、path除外を確認した。
+MF全2512tests/3warnings/418.24秒通過。次はcommit/push/PR→署名通常更新・実MCP受入。
+installed新経路はNOT TESTED。モデル追加取得0。[詳細](agent-failure-reference-20260923.md)。
+
+## 2026-09-23 0.33.17を公開・導入、実MCPの形式省略を受入
+
+PR645/77464d9から既存鍵で署名公開・再取得検証・通常feature update。
+current0.33.17/PID281578/healthy、既存1584 Asset metadataと代表3 content SHA、runtime-state全JSONを保持。
+実OpenCode/Qwen/MCP Jobc2118762e2c4はsucceeded。output省略の実tool引数を確認し、
+pack1回/inspect1回でZIP3,949,008Bを作成。来歴/実bytes/hash/GLB/PNGを独立確認、元Asset不変。
+商店街projectの作業treeはclean。追加画像/3D生成・モデル取得・自動再送0。
+source全2509tests/426.99秒以後product変更なし。この追記は文書のみ。
+branch ux1/pack-output-installed。次は既存ファイルだけで多視点の2/3枚比較を評価する。
+複数面UI/採用、汎用MCP失敗時のJob ID伝達は未完了。詳細[pack受入](pack-output-default-20260923.md)。
+
+## 2026-09-23 asset.packの出力形式省略（0.33.17準備）
+
+branch ux1/pack-output-default。実MCPでpack形式省略がPNGになり失敗した問題を修正。
+省略時ZIP、明示不正形式/countはJob前422。画像既定PNG/共有options/過去保存要求を保持。
+実source HTTP＋既存Blender4.5.9で省略3.660855秒/明示1.017983秒、同一1,380,849B ZIP。
+元GLB不変、親/実content/GLB/PNG検査、拒否時追加Job0を確認。
+最初の全体testで旧PNG fixture1件を修正。最終全2509tests/3warnings/426.99秒通過。
+次はcommit/push/PR、通常署名公開・ローカル更新と実MCP受入。
+Pixal Vulkan導入済みを再確認。重複5ファイル2.08GiBは削除済み、モデル追加取得0。
+installed新版/形式省略MCPはNOT TESTED。[詳細](pack-output-default-20260923.md)。
+
+## 2026-09-23 商店街の実MCP納品・Hostブラウザ受入
+
+実OpenCode/sculptor/Qwen/MCP Job781d15da871fがsucceeded。NPC2体を各1回rigし、
+通常grant/packで納品。元画像/元revision、旧failed pipelineを保持、DB/納品/manifest SHA一致。
+全7GLB 24,931,924B、8店舗/主人公/6NPC。通常Host内のGLB画像がCSPで灰色になる不具合を
+project側の画像ローダーと欠損検査で修正。Host/model変更・追加DL0。
+全15配置のテクスチャ、再読込、PC移動、320/390px同時タッチ、店舗衝突、足底接地、
+画像欠損時の再試行を実確認。PC内蔵Radeon/Chromeで57.9583fps（5.0036秒）。物理スマホはNOT TESTED。
+成果物CodeDEV/MF3DS-ShoppingStreet-20260923、local commit91b37c3。詳細[納品・実表示](rig-surface-20260923.md)。
+複数面生成のUI/採用、残るMCPエラー表現の改善は未完了。既存Pixal Vulkan/共通重みを再利用し、
+追加モデル取得をしない。全体goalはactiveのまま。
+
+## 2026-09-23 0.33.16を通常公開・ローカル更新
+
+PR642/1e5fc51を固定して署名公開・再取得検証・通常feature update。
+current0.33.16/PID217691/healthy、既存1580 Asset metadata/代表3 content SHA/生成capability/runtime receiptを保持。
+追加モデル取得0。実OpenCode/sculptor/Qwen/MCP Job781d15da871fで既存NPC2体のrig成功、納品を確認中。
+先行2runは委任経路の指示誤りで取消、生成Job0。Hostの既存sculptor構成を確認して訂正。
+両方12bones/1walk clip/重み欠損0、元画像・元revision保持。最終商店街、物理スマホはNOT TESTED。[詳細](rig-surface-20260923.md)。
+
+## 2026-09-23 生成人物の軽量化・近接した腕の検出（0.33.16準備）
+
+元NPC2体のratio15%は目標面数へ到達できず形状も破壊。到達不能な目標を拒否し、面を残す案内を追加。
+ratio30%で形を保持。必要時だけ実面の断面を測り、腕を下ろした人物も12bonesで検出する。
+実core→Blender→検証は青4.960461秒/赤5.033492秒成功、旧主人公512/1024のgeometry/UV/画像/骨/重み一致。
+全25frameで脚交差なし、手の脚重み0。raw接地沈みは最大1.98cm残り、Web補正との最終受入は未実施。
+全2496tests/3warnings/313.80秒通過。追加モデル取得0。installed/MCP再実行と最終商店街はNOT TESTED。[詳細](rig-surface-20260923.md)。
+
+## 2026-09-23 0.33.15を通常リリース・ローカル更新
+
+PR639/f11bd33を既存鍵で署名公開し、公開物の再取得検証後に通常feature updateで導入。
+current0.33.15/PID178386/healthy、更新前1576 Asset metadataと代表3実content SHAを保持。
+実installedのjob schemaは16186Bでcompile_optionsを明示。従来3D capability不変。
+実OpenCode/Qwen/MCPで既存4店舗の軽量化を再開（Job25f23f603894、進行中）。
+この再実行の成功・最終GLB/商店街品質はまだNOT TESTED。
+詳細[GLB設定公開](compile-options-discovery-20260923.md)。
+
+## 2026-09-23 MCPからGLB軽量化設定を指定できない問題（0.33.15準備）
+
+実OpenCode Job5304c9bb2c0cがcompile_optionsを構成できず、空引数や参照セット項目を反復。
+公開schemaに既存CompileOptions型がなかったため、型付き引数生成から発見できなかった。
+既存schemaへ型と参照を追加し、asset.pack/3d.project.glbだけの設定であることを明記した。
+実source Uvicorn HTTP200、16186B、公開型/元schema一致、Host上限64KiB未満を確認。
+初回全体gateは2472pass/1fail（40ms idle timeoutの既存timing test）。単独関連fileは通過。
+最終全体2473passed/3warnings/341.53秒、exit0。signed installed/MCPによる軽量化再受入はNOT TESTED。
+詳細[GLB設定公開](compile-options-discovery-20260923.md)。
+
+## 2026-09-23 0.33.14導入・実MCP主人公rig再開を確認
+
+PR637を署名release/通常ローカル更新。current0.33.14/PID135776/healthy、既存Asset1573件保持。
+実OpenCode/Qwen/MCPで同一主人公の失敗rigだけ再試行し成功。revision818f77...、GLB3,602,564B、
+通常grant配置とAsset SHA一致。2体のNPCは脚断面の頂点不足でrig失敗、成功扱いしない。
+0.33.13の再試行で既存本屋/NPC2体のmodel生成も成功、次工程の確認待ちを保持。
+全2471tests/401.67秒のsourceからproduct変更なし。商店街全体・物理電話・自然な歩行品質は未受入。
+詳細[rig結果受入](rig-result-contract-20260923.md)、[工程再試行](pipeline-retry-20260923.md)。
+
+## 2026-09-23 複数面Vulkan実測・既存重みの再利用へ修正
+
+利用者の指摘どおり、既存Pixal3D Vulkan移植版は導入済み。registry/重み/1枚経路を保持。
+共通部まで取得した誤りを訂正し、追加DL停止、不要な取得コピー5個2.08158GiBを削除。
+既存共通5個を参照し、未導入だったMV専用4個5.45466GiBだけを使用する構成へ変更。
+公式4面/res1024/seed42の再利用構成はVulkan1/R9700で531.780454秒/exit0、観測最大6.510GiB。
+1mesh/947980tris/4096角2画像、4面renderと平均輪郭IoU0.980221599。色/細部の忠実性は未受入。
+2/3枚・生成別方向・mobile・installed/MCPのMVはNOT TESTED。runtimeを既定へ採用していない。
+詳細[MV調査と再利用](multiview-20260923.md)。商店街制作/人物rig修正は別途継続。
+
+## 2026-09-23 自動ボーン付けworker結果の本体検証修正（0.33.14準備）
+
+0.33.13の実MCP retryはworker結果の未知項目でfailed。元model/画像/scene保持。
+補修報告の型・対象・上限検証を本体へ追加、旧省略/空配列互換、未知項目拒否を維持。
+実同一1024 sourceで本体→Blender→結果検証: 修正前3.449秒failed、後3.568秒成功。
+14境界回帰pass、全gate2471 passed /3 warnings /401.67秒。installed/MCP再受入はNOT TESTED。
+詳細[rig結果境界](rig-result-contract-20260923.md)。
+
+
+## 2026-09-23 MCP pipelineの失敗段だけ再試行（0.33.13準備）
+
+0.33.12はmerge/release/installed済み（PID78171/healthy、1567既存Asset保持）。
+実MCPで失敗した1024主人公rigと本屋/NPC modelを再生成せず再開するため、
+retry＋expected_job_idを追加。元model/画像を保持し、履歴・owner・実Job終端・古い要求を検査。
+dispatch前に保存し、通信例外/取消/再起動後の不明結果を自動再送しない。
+実source HTTP（Host/画像のみ明示fake）で拒否→再試行成功→次段確認待ち、他owner404、旧ID409。
+全体2454 passed/3 skipped/353.97秒、build venv参照後にskipした署名3件もpassed/.23秒。
+詳細[工程再試行](pipeline-retry-20260923.md)。signed installed/MCP再開・物理電話はNOT TESTED。商店街HTMLは制作中。
+
+## 2026-09-23 人物rigの微小な重み欠損を修正（0.33.12準備）
+
+1024主人公の実MCP失敗を再現。16391頂点のうち肩の14頂点だけ重み欠損。
+直立人物rig.autoに限定し、近い元heat donorから微小片だけを補間する。
+実Blenderで重み欠損/不正0、geometry/UV/画像不変、既存512の重みSHA一致。
+全25frameの足表面X間隔最小+.111551m、手の脚重み0。接地最大1.63cm沈みは別課題。
+全2446tests通過433.49秒。signed installed/MCPはNOT TESTED。
+詳細[受入記録](rig-small-islands-20260923.md)。商店街全体は未完了。
+
+## 2026-09-23 0.33.11導入と主人公の脚交差修正
+
+PR632/e2bbbe9から署名release/再取得検証/通常ローカル更新。current0.33.11/PID52808/healthy、
+1559既存Asset metadata保持。通常認証Host UIで主人公の元版を復元し、新しい第4版へ再rig。
+GLB asset_0480355b176141a4ae51f17f8eee66b7、22122tris/12bones/1秒loop。
+全25frameの脚交差なし（足表面X間隔最小+.098814m）、手の脚重み0、320px overflow0/errors0。
+全2437tests通過294.66秒。別の1024候補は実MCP bindで重み欠損を検出し正しくfailed、未修正。
+詳細[人物rig受入](humanoid-rig-20260923.md)。商店街全体と物理電話は未完了。
+
+## 2026-09-23 人物の脚交差と腕変形をsource修正（0.33.11準備）
+
+実OpenCode/MCP生成主人公で利用者指摘の脚交差を再現。旧rigは手を脚に含め、
+脚用の横振りを人物にも適用していた。直立人物の断面検出、腕/頭支持、前後歩行を追加。
+同じ元モデルを実Blender4.5.13で再rigし、88687/22122trisとも12 bones。
+全25frameの足表面X間隔は旧−.383876m→軽量候補最小+.098814m、手の脚重み平均.989627→0。
+画像packed SHA不変、実Three描画page error0。接地最大1.89cm下がり・色ずれは残る。
+詳細humanoid-rig-20260923.md。全test 2437 passed, 3 warnings in 294.66s (0:04:54)。signed installed/MCPはNOT TESTED。
+
+
 ## 2026-09-23 商店街の実制作: 画像7枚、主人公3D品質FAIL、修正継続
 
 OpenCode/Qwen3.8-27B/MCPで主人公画像→TRELLIS Vulkan512→rig→GLB配置まで実行。

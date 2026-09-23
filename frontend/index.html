@@ -403,13 +403,55 @@
                 </div>
               </div>
               <p id="scene-generation-photo-status" class="hint" role="status"></p>
+              <div id="scene-generation-views" hidden role="group" aria-labelledby="scene-generation-views-title">
+                <h3 id="scene-generation-views-title">別の方向の画像を追加</h3>
+                <p id="scene-generation-views-note" class="hint"></p>
+                <div id="scene-generation-view-cards"></div>
+                <button id="scene-generation-add-view" type="button">別の方向を追加</button>
+                <p id="scene-generation-views-status" class="hint" role="status"></p>
+                <details id="scene-view-candidates">
+                  <summary id="scene-view-candidates-title">別方向の候補を作る（実験的）</summary>
+                  <p id="scene-view-candidates-note" class="hint"></p>
+                  <label id="scene-view-candidates-directions-label" for="scene-view-candidates-directions">作る方向</label>
+                  <select id="scene-view-candidates-directions">
+                    <option value="right,back,left">右側面・背面・左側面（3枚）</option>
+                    <option value="right,back">右側面・背面（2枚）</option>
+                    <option value="right">右側面（1枚）</option>
+                    <option value="back">背面（1枚）</option>
+                    <option value="left">左側面（1枚）</option>
+                  </select>
+                  <details id="scene-view-candidates-options" data-scene-advanced>
+                    <summary id="scene-view-candidates-options-title">候補の詳細設定</summary>
+                    <label id="scene-view-candidates-notes-label" for="scene-view-candidates-notes">追加の指示</label>
+                    <textarea id="scene-view-candidates-notes" maxlength="2000" rows="3"></textarea>
+                    <label id="scene-view-candidates-seed-label" for="scene-view-candidates-seed">シード</label>
+                    <input id="scene-view-candidates-seed" type="number" min="0" max="2147483644" step="1" value="42">
+                  </details>
+                  <div class="split-actions">
+                    <button id="scene-view-candidates-create" type="button">候補を作る</button>
+                    <button id="scene-view-candidates-cancel" type="button" hidden>候補の生成を中止</button>
+                    <button id="scene-view-candidates-refresh" type="button">候補を更新</button>
+                  </div>
+                  <p id="scene-view-candidates-status" class="hint" role="status"></p>
+                  <div id="scene-view-candidates-list" class="scene-view-candidate-list"></div>
+                  <button id="scene-view-candidates-more" type="button" hidden>以前の候補を見る</button>
+                  <div id="scene-view-candidates-compare" hidden>
+                    <div class="scene-view-candidate-comparison">
+                      <figure><img id="scene-view-candidate-source" alt=""><figcaption id="scene-view-candidate-source-label"></figcaption></figure>
+                      <figure><img id="scene-view-candidate-preview" alt=""><figcaption id="scene-view-candidate-preview-label"></figcaption></figure>
+                    </div>
+                    <label class="check-row"><input id="scene-view-candidate-confirm" type="checkbox"><span id="scene-view-candidate-confirm-label">向き・形・持ち物を確認した</span></label>
+                    <button id="scene-view-candidate-use" type="button" disabled>この方向の画像に使う</button>
+                  </div>
+                </details>
+              </div>
               <label for="scene-generation-name" id="scene-generation-name-label">シーン名</label>
               <input id="scene-generation-name" type="text" maxlength="120" required autocomplete="off">
               <div class="scene-generation-quality">
                 <label class="check-row" for="scene-generation-refine">
                   <input id="scene-generation-refine" type="checkbox" aria-describedby="scene-generation-refine-hint">
                   <span class="check-body">
-                    <span id="scene-generation-refine-label">Pixal3Dで仕上げまで実行する</span>
+                    <span id="scene-generation-refine-label">同じ画像からPixal3D版も作る</span>
                     <span id="scene-generation-refine-hint" class="hint"></span>
                   </span>
                 </label>
@@ -423,6 +465,18 @@
                 <select id="scene-generation-resolution" required></select>
                 <label for="scene-generation-seed" id="scene-generation-seed-label">シード</label>
                 <input id="scene-generation-seed" type="number" min="0" max="2147483647" step="1" value="42" required>
+                <fieldset id="scene-generation-view-camera" hidden>
+                  <legend id="scene-generation-camera-title">複数面のカメラ設定</legend>
+                  <p id="scene-generation-camera-note" class="hint"></p>
+                  <label id="scene-generation-fov-label" for="scene-generation-fov">水平画角（度）</label>
+                  <input id="scene-generation-fov" type="number" min="1" max="160" step="any" value="20">
+                  <label id="scene-generation-distance-label" for="scene-generation-distance">撮影距離</label>
+                  <input id="scene-generation-distance" type="number" min="0.01" max="100" step="any" value="3.1192049980163574">
+                  <label id="scene-generation-elevation-label" for="scene-generation-elevation">仰角（度）</label>
+                  <input id="scene-generation-elevation" type="number" min="-45" max="45" step="any" value="0">
+                  <label id="scene-generation-mesh-scale-label" for="scene-generation-mesh-scale">被写体の倍率</label>
+                  <input id="scene-generation-mesh-scale" type="number" min="0.01" max="100" step="any" value="1">
+                </fieldset>
               </details>
               <progress id="scene-generation-progress" max="1" value="0" hidden></progress>
               <p id="scene-generation-status" class="hint" role="status"></p>

@@ -637,7 +637,7 @@ class JobManager:
                 # host（システムRAM）を割り当てるので、場所を空けてもらう必要が
                 # 無くなった。降ろさせると、使っている最中の OpenCode や chat の
                 # モデルを画像 1 枚のために落とすことになる。
-                admitted = await self._adopt_carried_lease(execution, selected)
+                admitted = await self._adopt_carried_lease(execution, selected, job=job)
                 if not admitted:
                     admitted = await self._acquire_host_lease(job, execution, reporter)
                 if not admitted:
@@ -1577,7 +1577,8 @@ class JobManager:
                 constraints["width"], constraints["height"] = native
             elif isinstance(width, int) and isinstance(height, int):
                 native_qwen = selected.runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21"
-                if native_qwen or isinstance(constraints.get("scene_texture"), dict):
+                if (native_qwen or isinstance(constraints.get("scene_texture"), dict)
+                        or self._reference_edit_profile(job, selected)):
                     # Admission bounds each side at 1024. Area-based snapping
                     # expands a 1024x768 canvas beyond 1024 and exceeds that
                     # measured envelope. Keep the admitted canvas, aligned to
@@ -1781,7 +1782,7 @@ class JobManager:
         超える。上限を上げただけでは、受け付けた job が時間切れで落ちる）。
         """
         measured = float(selected.measured_runtime_sec or 0)
-        texture = self._texture_edit_profile(job, selected)
+        texture = self._measured_edit_profile(job, selected)
         if texture:
             return max(measured, float(texture["measured_runtime_sec"]) * max(
                 1.0, job.request.output.count / int(texture["measured_count"]),
@@ -1800,13 +1801,23 @@ class JobManager:
         return max(measured, float(cost) * pixels / 1_000_000)
 
     @staticmethod
-    def _texture_edit_profile(job: Job, selected: ModelDescriptor) -> dict[str, Any] | None:
+    def _reference_edit_profile(job: Job, selected: ModelDescriptor) -> dict[str, Any] | None:
+        if (job.request.operation == "image.edit" and len(job.request.inputs) == 1
+                and job.request.constraints.get("edit_mode", "reference") == "reference"
+                and job.request.constraints.get("strict_edit") is not True
+                and job.request.profile is None
+                and not isinstance(job.request.constraints.get("scene_texture"), dict)):
+            return selected.reference_edit
+        return None
+
+    @classmethod
+    def _measured_edit_profile(cls, job: Job, selected: ModelDescriptor) -> dict[str, Any] | None:
         if (job.request.operation == "image.edit" and len(job.request.inputs) == 1
                 and job.request.constraints.get("edit_mode", "reference") == "reference"
                 and job.request.constraints.get("strict_edit") is not True
                 and isinstance(job.request.constraints.get("scene_texture"), dict)):
             return selected.texture_edit
-        return None
+        return cls._reference_edit_profile(job, selected)
 
     def _validate_generation_limits(self, job: Job, selected: ModelDescriptor) -> None:
         # 詳細設定から来る値。範囲を外れたものは、worker が読み込みを終えて
@@ -1950,7 +1961,7 @@ class JobManager:
         return warm is not None and warm[0].returncode is None
 
     async def _adopt_carried_lease(
-        self, execution: HostExecution, selected: ModelDescriptor | None
+        self, execution: HostExecution, selected: ModelDescriptor | None, *, job: Job | None = None
     ) -> bool:
         """前の件から持ち回った lease を、この件のものとして使う。
 
@@ -1969,6 +1980,14 @@ class JobManager:
         previous = self._carried_lease
         if previous is None:
             return False
+        profile = self._measured_edit_profile(job, selected) if job is not None and selected is not None else None
+        if profile and selected is not None:
+            minimum = int(profile["execution_peak_vram_bytes"]) + int(selected.headroom_vram_bytes or 0)
+            if (previous.granted_bytes or 0) < minimum:
+                # The same model can need a larger edit reservation. End our
+                # idle worker before returning its smaller generation lease.
+                await self._retire_warm_worker()
+                return False
         warm = self._warm_worker
         usable = (
             selected is not None
@@ -2328,6 +2347,8 @@ class JobManager:
                         # 同じ RAM 逼迫をもっと激しく起こす（実測: 4 枚の batch で
                         # 2 枚目が 147 秒）。抱えたままなら読み直しが 1 回で済む。
                         "keep_resident": bool(self._keep_warm),
+                        **({"fit_reference_to_output": True}
+                           if self._reference_edit_profile(job, selected) else {}),
                         # 系統ごとの既定。持たないモデルには送らない。
                         **({"negative_prompt": selected.negative_prompt}
                            if selected.negative_prompt else {}),
@@ -2410,9 +2431,9 @@ class JobManager:
             # 済む（実測、枠 7/6/4/3 GiB のいずれでも LLM は無傷だった）。
             if execution is not None and execution.granted_bytes:
                 worker_budget = int(execution.granted_bytes)
-                texture_profile = self._texture_edit_profile(job, selected)
-                if texture_profile:
-                    worker_budget = min(worker_budget, int(texture_profile["worker_vram_budget_bytes"]))
+                edit_profile = self._measured_edit_profile(job, selected)
+                if edit_profile:
+                    worker_budget = min(worker_budget, int(edit_profile["worker_vram_budget_bytes"]))
                 environment["MEDIA_FORGE_VRAM_BUDGET_BYTES"] = str(worker_budget)
             else:
                 environment.pop("MEDIA_FORGE_VRAM_BUDGET_BYTES", None)
@@ -2917,10 +2938,16 @@ class JobManager:
             )
         )
         if selected is not None:
-            texture_profile = self._texture_edit_profile(job, selected)
-            if texture_profile:
+            edit_profile = self._measured_edit_profile(job, selected)
+            if edit_profile:
                 for key in ("execution_peak_bytes", "cold_load_peak_bytes"):
-                    request["vram"][key] = max(int(request["vram"][key]), int(texture_profile["execution_peak_vram_bytes"]))
+                    request["vram"][key] = max(int(request["vram"][key]), int(edit_profile["execution_peak_vram_bytes"]))
+                # A smaller text-generation grant has not been measured for
+                # this edit workload, even when the model is already warm.
+                request["vram"]["minimum_bytes"] = (
+                    max(request["vram"]["execution_peak_bytes"], request["vram"]["cold_load_peak_bytes"])
+                    + request["vram"]["headroom_bytes"]
+                )
             floor = self._admission_floor_bytes.get(selected.model_id)
             if floor is not None:
                 headroom = int(request["vram"]["headroom_bytes"])

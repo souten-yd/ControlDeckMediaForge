@@ -42,6 +42,7 @@ from .scenes import (
 )
 from .scene_geometry import validate_geometry_facts
 from .scene_skeleton import validate_skeleton_facts
+from .scene_weight_repairs import validate_weight_repairs
 from .scene_observation import SceneObserveRequest
 from .scene_review import SceneReviewRequest
 from .scene_refinement import SceneRefineRequest
@@ -601,7 +602,7 @@ class SceneWorkspace:
             expected = {"schema_version", "blender_version", "autoexec_disabled", "operation_count", "stable_object_ids"}
             if (
                 not isinstance(result, dict) or not expected <= set(result)
-                or set(result) - expected - {"mesh_geometry", "skeletons"}
+                or set(result) - expected - {"mesh_geometry", "skeletons", "automatic_weight_repairs"}
                 or result["schema_version"] != "media-forge.scene-recipe-result@1"
                 or result["blender_version"] != runtime.version
                 or result["autoexec_disabled"] is not True
@@ -611,6 +612,9 @@ class SceneWorkspace:
             ):
                 raise SceneError("scene_recipe_worker_invalid", "scene recipe result differs")
             try:
+                if "automatic_weight_repairs" in result:
+                    result["automatic_weight_repairs"] = validate_weight_repairs(
+                        result["automatic_weight_repairs"], result["stable_object_ids"], recipe)
                 if "mesh_geometry" in result:
                     result["mesh_geometry"] = validate_geometry_facts(result["mesh_geometry"], result["stable_object_ids"])
                 if "skeletons" in result:

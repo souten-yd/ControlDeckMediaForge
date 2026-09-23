@@ -41,7 +41,7 @@ raw-path, or cookie-based fallback.
 confirmation mode, and bounded generation/rig/export options. A prompt first
 submits an ordinary `image.generate` Job; an image starts at model reconstruction.
 `media.pipeline.status` (`POST /addon/v1/agent/pipeline/status`) accepts
-`asset-pipeline-action.json` with `pipeline_id` and `action=status|approve|cancel`.
+`asset-pipeline-action.json` with `pipeline_id` and `action=status|approve|cancel|retry`.
 Both use the existing `{"input": ...}` agent envelope and return the persisted
 pipeline record, including stages, child Job IDs, scene/revision and final asset IDs.
 
@@ -49,6 +49,16 @@ Status calls advance at most one new Job; polling is required in both modes.
 `confirm` pauses before each stage after the first until approved. Cancellation
 stops future stages and leaves an already running child Job to finish; it does
 not cancel that Job. Failed and canceled pipelines stay terminal on later polls.
+Since 0.33.13, explicit `retry` requires `expected_job_id` equal to the failed
+stage's current Job ID. The ordinary Job must itself be failed or canceled.
+Successful earlier stages, the input request and later confirm-mode approvals
+are preserved. The stage records up to eight `failed_attempts`, containing the
+previous Job ID, error and timestamps. Repeated/stale requests return 409 and
+cannot retry a newer failed attempt. Other actors still receive 404.
+Export failures without a Job, successful Jobs with missing results and unknown
+submission outcomes are not blindly retried. An interrupted retry dispatch is
+persisted before submission and becomes a terminal failure if its Job is unknown.
+The `expected_job_id` field is only valid with `action=retry`.
 Pipeline records belong to the Host actor; other actors receive 404. Concurrent
 read/advance/write operations on one pipeline are serialized in the single core
 process, while unrelated pipelines retain independent request identities.
@@ -244,6 +254,35 @@ route; successful child assets are retained when siblings fail or are canceled.
 The standalone same-origin `/workspace-api/creative/batches` bridge mirrors
 these methods for development, is excluded from OpenAPI, and is not a public API.
 
+`images.views.create` is private workspace orchestration for experimental
+other-view candidates. It accepts `source_asset_id`, 1..3 distinct `directions`
+(`right`, `back`, `left`, all three by default), optional `seed` (42 by default,
+0..2147483644), and `notes` (up to 2000 characters). The source must be a stored
+square RGBA image with transparency and a canvas supported by the installed
+single-reference editor. Each direction creates one ordinary `image.edit` Job
+with the same source, its own directional prompt and seed, PNG output, and
+required alpha. It uses the existing CreativeBatch (`axis=view`, 1..3 children),
+Host identity/Broker admission, Job cancellation, Asset and provenance stores.
+Partial results remain available if siblings fail; completion does not start 3D.
+
+`images.views.list` accepts `source_asset_id` and optional `offset` (default 0),
+returning source metadata, up to ten source-filtered batches, and `next_offset`.
+Filtering happens before pagination and survives clearing the recent Job list.
+`selectable_asset_ids` excludes deleted images without rewriting Job history.
+`images.views.select` accepts the source, candidate `asset_id`, and `direction`.
+It checks immutable parent/provenance/source hashes, direction context, canvas,
+transparency, and non-identical premultiplied pixels. Its response requires
+visual confirmation and does not infer camera calibration or guarantee shape
+consistency. Final multi-view 3D ingress independently rejects duplicate images.
+`creative.batches.cancel` cancels remaining children. The standalone development
+mirror is `POST /workspace-api/images/views/{create|list|select}`, excluded from
+OpenAPI. These methods accept asset IDs, never paths or remote inference.
+
+The optional public `JobRequest.constraints.view_candidate` context is defined
+in [`job-request.json`](../schemas/job-request.json). It records source and
+requested direction, only on a matching non-strict single-reference edit;
+it is provenance, not evidence that the image shows the requested direction.
+
 `creative.compositions.create` is the corresponding private multi-cut surface.
 It accepts an existing JobRequest-shaped object, internal CreativeSpec, and a
 trusted `poster` or `character_sheet` layout with 2..4 shots. Children use normal
@@ -270,6 +309,12 @@ the file before the job runs. A path is never accepted. The whole-image modes
 (`reference`, `variation`, `multi_reference`) honour an explicit `width`/`height`
 pair the same way generation does; the modes with their own size invariant
 (strict editing, outpaint, and the repairs) keep deciding for themselves.
+
+The open `constraints` object explicitly publishes `seed` as an optional integer
+and `additionalProperties: true` for schema-constrained local callers. This keeps
+the existing open dictionary contract; omission still uses the worker default.
+Image requests should omit pack-only fields such as `origin_notes`, `scale_m` and
+`compile_options`, rather than fill unused fields with empty values.
 
 Those same modes honour `constraints.asset_brief`. A brief that requires
 transparency makes the edit deliver a cut-out subject, the same way generation
@@ -318,6 +363,13 @@ independent validator measures zero changed protected pixels. Other reserved
 operation names fail with `capability_unavailable` until their goal is delivered.
 `variation` cannot be combined with `strict_edit`; a mask ID without strict
 editing also fails explicitly rather than being ignored.
+
+The adopted FLUX single-reference route fits the full input to the admitted output
+canvas before inference. Explicit width/height stay within its measured 1024-pixel
+limits instead of inferring at the original photo size and shrinking afterward.
+It uses a separate measured resource reservation; ordinary text-to-image generation
+and strict masked edits keep their existing profiles. A successful edit is not a
+verification of a requested camera angle or identity preservation.
 
 Multi-reference editing uses `edit_mode=multi_reference`, `strict_edit=false`,
 and 2..4 `inputs`. The first input is the editable primary and sole lineage
@@ -635,8 +687,29 @@ that same Scene, so both generations and their Assets remain. When only the late
 stage fails, the published first stage is kept and the Job result reports
 `refine` as `{state, engine, reason}`; `state` is `not_requested`, `succeeded` or
 `failed`. Admission pins the digest of the whole ordered chain, so replacing any
-adopted stage after admission is detected. Multi-view conditioning is not offered:
-the adopted `trellis-cli` and Pixal worker each accept exactly one input image.
+adopted stage after admission is detected. Both single-image stages use the same
+source image; the second does not edit the first stage's mesh.
+
+For separately adopted multiview inference, `additional_views` accepts up to three
+`{direction, asset_id}` entries. `input_asset_id` is the front; measured combinations
+are front/right, front/right/back, and front/right/back/left. All input Assets and
+their decoded premultiplied pixel content must be distinct. Use matching square,
+matted RGBA PNG/WebP canvases of 64–2048 pixels. The core preserves framing and
+does not estimate camera calibration or independently crop each view. Optional
+`view_camera` supplies shared turntable assumptions: `fov_degrees` (default 20),
+`distance` (3.1192049980163574 normalized units), `elevation_degrees` (0), and
+`mesh_scale` (1). These settings do not calibrate arbitrary photographs.
+Multiview requires `engine=auto|pixal3d`, resolution 1024, and no
+`refine_with_pixal3d` chain. Check `3d.image_to_3d.multiview`, including measured
+`view_counts`, before submission. A missing multiview receipt fails explicitly;
+additional views are never silently ignored or sent through the single-image runtime.
+The same detached Job, cancellation, revision and Library boundaries apply.
+Admission pins all input hashes and the separate native Vulkan receipt; running
+Jobs protect every view from deletion, and generated provenance/dependencies
+retain every input. The additive `generation.multiview` facts identify cameras,
+all views, preparation hash and the measured mixed Q8-flow/F16-shared precision.
+The previous single-view float32 preprocessing record is not reused for MV.
+Omitted additional fields preserve the original saved request and retry identity.
 Admission requires `jobs.write` and `resources.acquire`. The returned
 detached Job uses the existing `media.job.status` / `media.job.cancel` endpoints
 and owner checks. Its phases cover CPU input preparation (`prepare_3d_input` for
@@ -840,6 +913,15 @@ route accepts a model name or filesystem path.
 
 ControlDeck calls `/addon/v1/*` endpoints declared by [`addon.json`](../addon.json). Workflow and agent payloads use `{input, correlation}` envelopes. Responses return structured `job_id` and `asset_ids`; agents do not scrape filenames and do not receive a selected model name from generation or capability discovery.
 
+After `media.generate` accepts a Job, terminal failure/cancellation returns HTTP
+502 with `detail.code`, `detail.job_id` and its terminal `detail.status`.
+A cleanup timeout returns 504 with `job_cleanup_timeout` and the same accepted
+Job reference/last observed status. A wait deadline returns 504 with
+`job_wait_timeout` and the Job ID, without asserting termination. Callers must
+inspect that Job before deciding on an explicit retry. Pre-admission errors have
+no accepted Job ID. Success responses are unchanged; errors do not expose worker
+messages or paths.
+
 `media.generate.batch` (`POST /addon/v1/agent/generate/batch`) takes up to 50
 independent generation items and runs them one after another inside a single
 call. It exists because a separate call per asset is not merely slower: the Host
@@ -882,7 +964,10 @@ documents. `asset.pack` with `profile=m5.companion.pack` accepts exactly one
 `base/front`, the fixed 12 eye slots, and the fixed 8 mouth slots through its
 normal immutable `inputs` lineage. `constraints.entries` maps each input asset
 ID to its fixed layer/name and `constraints.pack_name` is lowercase snake case.
-The output must request `format=zip`.
+For `asset.pack`, omitted `output` or omitted `output.format` selects ZIP. An explicit
+format must be `zip`, with `count=1`. Invalid explicit formats/counts are rejected
+before Job creation. Image defaults remain PNG; historical Job requests keep their
+original values.
 
 The deterministic result is an `application/zip` asset containing the 21 PNG
 layers, `atlas.png`, `manifest.json`, and a current-firmware pack at
@@ -935,7 +1020,7 @@ exported GLB and PNG are independently revalidated before the immutable ZIP is
 registered. No Blender path, script, operator name, or project path is a public
 input.
 
-The optional private `constraints.compile_options` object is versioned as
+The optional `constraints.compile_options` object is included in the published job request schema and versioned as
 `3d.compile-options@1` and rejects unknown fields. `apply_transforms=true` and
 `preview=fixed_workbench` are fixed. Typed additions are
 `repair_normals`/`remove_degenerate` booleans, merge distance `1e-7..1.0` m,
@@ -1362,3 +1447,26 @@ records remain with a deletion tombstone. Private relation projections expose
 packing for retained material dependencies. Filesystem cleanup is durable/retryable:
 a failed unlink returns `library_purge_cleanup_pending`, remains in Trash, and is
 retried on startup or another explicit purge. Purged assets cannot be restored.
+
+
+### Automatic rigging of upright characters (0.33.11)
+
+The existing `media.scene.rig` / `rig.auto` contracts are unchanged. When the
+mesh has two separated feet and multiple torso cross-sections containing the
+body and both arms, the worker recognizes an upright character with lateral X
+and vertical Z axes. It adds head, upper-arm, forearm and hand support and uses
+forward/back leg swing with opposing arms. Other shapes retain the general
+limb rig. Classification does not certify anatomy or animation quality; inspect
+the saved revision's deformation and contact with the ground.
+
+The source revision remains immutable. Already rigged revisions are not
+rewritten by a service update; restore the original unrigged revision as a new
+revision before applying the improved rig.
+
+Since 0.33.12, upright `rig.auto` can interpolate a tiny missing heat-weight
+island from the nearest original weighted vertices. Missing vertices must be
+at most 0.5% of the mesh and 128 total, each island at most 64 vertices and 2%
+of body height across, and donors within 0.5% of height. The worker records
+counts and distances in `automatic_weight_repairs`; geometry, UVs and images
+are preserved. Larger omissions still fail. General `skin.bind_auto` keeps
+its strict missing-weight rejection.

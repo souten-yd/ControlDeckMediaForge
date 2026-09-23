@@ -1407,8 +1407,10 @@ class Store:
                    JOIN jobs ON jobs.id = task.job_id
                    WHERE task.operation = 'scene.from_image'
                    AND jobs.status IN ('queued', 'running')
-                   AND json_extract(task.request_json, '$.input_asset_id') = ? LIMIT 1""",
-                (asset_id,),
+                   AND (json_extract(task.request_json, '$.input_asset_id') = ?
+                        OR EXISTS (SELECT 1 FROM json_each(task.request_json, '$.additional_views') AS view
+                                   WHERE json_extract(view.value, '$.asset_id') = ?)) LIMIT 1""",
+                (asset_id, asset_id),
             ).fetchone()
         if generation_reference is not None:
             raise AssetInUse(asset_id, str(generation_reference['job_id']))
@@ -3060,6 +3062,18 @@ class Store:
                 (max(1, min(100, limit)),),
             ).fetchall()
         return readable_rows(rows, CreativeBatchRecord, "value_json", kind="creative batch")
+
+    def list_view_candidate_batches(self, source_asset_id: str, offset: int = 0) -> list[CreativeBatchRecord]:
+        """Search persisted source context before pagination, including cleared Jobs."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT value_json FROM creative_batches
+                   WHERE json_extract(value_json, '$.axis') = 'view'
+                   AND json_extract(value_json, '$.child_plans[0].view_candidate.source_asset_id') = ?
+                   ORDER BY created_at DESC, id DESC LIMIT 11 OFFSET ?""",
+                (source_asset_id, offset),
+            ).fetchall()
+        return readable_rows(rows, CreativeBatchRecord, "value_json", kind="view candidate batch")
 
     def create_creative_composition(
         self, value: CreativeCompositionRecord

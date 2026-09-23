@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import math
 
+import rig_humanoid
+import rig_surface
+
 # 測るのは形であって精度ではない。大きな模型でも 1 回の走査で足りる数に間引く。
 MAX_SAMPLED_VERTICES = 200_000
 # 脚の断面を数える水平帯の高さ（模型の高さに対する割合）と厚み。
@@ -47,6 +50,17 @@ def _sampled_points(obj) -> list[tuple[float, float, float]]:
         world = matrix @ vertices[index].co
         points.append((world.x, world.y, world.z))
     return points
+
+
+def _surface_points(obj, cell: float) -> list[tuple[float, float, float]]:
+    obj.data.calc_loop_triangles()
+    world = [obj.matrix_world @ vertex.co for vertex in obj.data.vertices]
+    try:
+        return rig_surface.sample(
+            [(p.x, p.y, p.z) for p in world],
+            (tuple(tri.vertices) for tri in obj.data.loop_triangles), cell * .25)
+    except rig_surface.SurfaceMeasurementError as exc:
+        raise RigAutoError(str(exc)) from exc
 
 
 def _clusters(points: list[tuple[float, float]], cell: float, minimum: int) -> list[list[tuple[float, float]]]:
@@ -119,13 +133,21 @@ def measure(obj) -> dict[str, object]:
 
     band = _band(points, bottom + height * (LEG_BAND_HEIGHT - LEG_BAND_THICKNESS / 2),
                  bottom + height * (LEG_BAND_HEIGHT + LEG_BAND_THICKNESS / 2))
+    used_surface = len(band) < 24
+    if used_surface:
+        # Decimation can remove every intermediate vertex from flat trousers.
+        # Measure the remaining surface; keep the established dense-mesh path
+        # byte-for-byte unchanged, including its bone/weight placement.
+        points = _surface_points(obj, cell)
+        bottom, top = min(p[2] for p in points), max(p[2] for p in points)
+        height = top - bottom
+        band = _band(points, bottom + height * (LEG_BAND_HEIGHT - LEG_BAND_THICKNESS / 2),
+                     bottom + height * (LEG_BAND_HEIGHT + LEG_BAND_THICKNESS / 2))
+        centre_x = sum(point[0] for point in points) / len(points)
+        centre_y = sum(point[1] for point in points) / len(points)
     if len(band) < 24:
-        # 面ではなく頂点を数えている。角柱や円柱は端面にしか頂点が無いので、
-        # 脚の途中の帯に何も掛からない。生成した 3D は密なので当たるが、
-        # 手で置いた原始形状はここで落ちる。理由が分かる言い方にしておく。
         raise RigAutoError(
-            "no vertices sit in the horizontal band near the base; "
-            "automatic rigging reads a densely tessellated surface"
+            "too little surface crosses the horizontal band near the base"
         )
     groups = _clusters([(point[0], point[1]) for point in band], cell,
                        max(4, int(len(band) * MIN_CLUSTER_SHARE)))
@@ -133,6 +155,23 @@ def measure(obj) -> dict[str, object]:
         raise RigAutoError("fewer than two limbs were found; this model is not a legged shape")
     if len(groups) > MAX_LEGS:
         raise RigAutoError(f"found {len(groups)} limbs, more than automatic rigging handles")
+
+    humanoid = rig_humanoid.measure(points, groups, cell, _clusters)
+    if humanoid is None and len(groups) == 2 and height > spread * 1.4:
+        # Close arms can share neighbouring coarse cells with the torso.
+        # A finer grid alone splits sparse flat faces into false components;
+        # first sample the actual surface, then repeat the same body guards.
+        surface = points if used_surface else _surface_points(obj, cell)
+        surface_bottom = min(p[2] for p in surface)
+        surface_height = max(p[2] for p in surface) - surface_bottom
+        feet_band = _band(surface,
+                          surface_bottom + surface_height * (LEG_BAND_HEIGHT - LEG_BAND_THICKNESS / 2),
+                          surface_bottom + surface_height * (LEG_BAND_HEIGHT + LEG_BAND_THICKNESS / 2))
+        feet = _clusters([(p[0], p[1]) for p in feet_band], cell,
+                         max(4, int(len(feet_band) * MIN_CLUSTER_SHARE)))
+        humanoid = rig_humanoid.measure(surface, feet, cell * .75, _clusters)
+    if humanoid is not None:
+        return humanoid
 
     # 胴の太さは、上半分にある点の中央値の半径で見る。脚は下に伸びているので、
     # 上半分は胴だけで占められている。
@@ -209,6 +248,8 @@ def armature_operation(facts: dict[str, object], rig_object_id: str, name: str) 
         "head": [centre_x, centre_y, body_bottom],
         "tail": [centre_x, centre_y, body_top],
     }]
+    if facts.get("body_plan") == "humanoid":
+        bones.extend(rig_humanoid.bones(facts))
     attachment = [centre_x, centre_y, body_bottom + (body_top - body_bottom) * 0.72]
     for index, tip in enumerate(facts["extras"]):
         bones.append({
@@ -239,6 +280,12 @@ def walk_operation(
     手で置いた骨に当てると意図した向きに曲がらない。
     """
     tracks = []
+    if facts.get("body_plan") == "humanoid":
+        return {
+            "type": "animation.clip", "object_id": rig_object_id, "clip_id": clip_id,
+            "name": clip_id, "fps": fps, "frame_count": frame_count, "loop": True,
+            "tracks": rig_humanoid.walk_tracks(facts, frame_count),
+        }
     for index, leg in enumerate(facts["legs"]):
         phase = 0.0 if index % 2 == 0 else 0.5
         upper, lower = [], []
