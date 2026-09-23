@@ -329,6 +329,13 @@ operation names fail with `capability_unavailable` until their goal is delivered
 `variation` cannot be combined with `strict_edit`; a mask ID without strict
 editing also fails explicitly rather than being ignored.
 
+The adopted FLUX single-reference route fits the full input to the admitted output
+canvas before inference. Explicit width/height stay within its measured 1024-pixel
+limits instead of inferring at the original photo size and shrinking afterward.
+It uses a separate measured resource reservation; ordinary text-to-image generation
+and strict masked edits keep their existing profiles. A successful edit is not a
+verification of a requested camera angle or identity preservation.
+
 Multi-reference editing uses `edit_mode=multi_reference`, `strict_edit=false`,
 and 2..4 `inputs`. The first input is the editable primary and sole lineage
 parent; remaining inputs are visual references. Provenance records the content

@@ -627,6 +627,11 @@ video.image_to_video = unavailable
 
 Agents do not hardcode FLUX/Qwen/Wan model IDs unless the user explicitly pins a model.
 
+Single-reference image editing may select a separately measured memory/runtime profile
+inside MediaForge. Its reservation still uses the ordinary Host resource request and
+granted worker limit. MediaForge does not bypass admission because the device appears
+empty, change Host scheduling, or imply that an image edit guarantees camera calibration.
+
 Agent file writes follow the same project grant rules and cannot bypass ControlDeck filesystem restrictions through Media Forge.
 
 ### 11.1 Non-interactive project output grant prerequisite

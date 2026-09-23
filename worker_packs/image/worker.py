@@ -192,9 +192,11 @@ class ImageWorker:
             # 絵を描く側の量子化。山を決めているのはこちらである。
             "transformer_quantization",
             # まとめ生成の途中なら抱えたままにする。core が立てる。
-            "keep_resident",
+            "keep_resident", "fit_reference_to_output",
         }:
             raise ValueError("worker model runtime options are invalid")
+        if "fit_reference_to_output" in runtime_options and type(runtime_options["fit_reference_to_output"]) is not bool:
+            raise ValueError("fit_reference_to_output must be a boolean")
         declared_steps = runtime_options.get("default_steps")
         if declared_steps is not None and (
             isinstance(declared_steps, bool)
@@ -380,6 +382,10 @@ class ImageWorker:
             raise ValueError("a masked edit requires an edit mask")
         texture_reference = (operation == "image.edit" and edit_mode == "reference"
                              and not strict_edit and isinstance(constraints.get("scene_texture"), dict))
+        bounded_reference = texture_reference or (
+            operation == "image.edit" and edit_mode == "reference" and not strict_edit
+            and runtime_options.get("fit_reference_to_output") is True
+        )
         for index in range(count):
             output_seed = seed + index
             output_path = output_dir / f"output-{index}.png"
@@ -405,7 +411,7 @@ class ImageWorker:
                     strict_edit=strict_edit,
                     edit_mode=edit_mode,
                     reference_paths=reference_paths + profile_reference_paths,
-                    fit_reference_to_output=texture_reference,
+                    fit_reference_to_output=bounded_reference,
                 ))
             else:
                 result = adapter.generate(ImageGenerationRequest(
@@ -467,7 +473,7 @@ class ImageWorker:
             },
             "seed": seed,
             "postprocessing": ["alpha.set_opaque"] if runtime_adapter == "native.stable-diffusion-cpp-qwen-image-21" else (
-                ["reference.fit_to_output", "pil.convert.rgba"] if texture_reference else
+                ["reference.fit_to_output", "pil.convert.rgba"] if bounded_reference else
                 ["pil.convert.rgba", "outpaint.source_pixel_copy"]
                 if operation == "image.edit" and edit_mode == "outpaint"
                 else ["pil.convert.rgba", "strict_edit.mask_composite", "strict_edit.protected_pixel_copy"]
