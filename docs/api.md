@@ -1377,3 +1377,11 @@ the saved revision's deformation and contact with the ground.
 The source revision remains immutable. Already rigged revisions are not
 rewritten by a service update; restore the original unrigged revision as a new
 revision before applying the improved rig.
+
+Since 0.33.12, upright `rig.auto` can interpolate a tiny missing heat-weight
+island from the nearest original weighted vertices. Missing vertices must be
+at most 0.5% of the mesh and 128 total, each island at most 64 vertices and 2%
+of body height across, and donors within 0.5% of height. The worker records
+counts and distances in `automatic_weight_repairs`; geometry, UVs and images
+are preserved. Larger omissions still fail. General `skin.bind_auto` keeps
+its strict missing-weight rejection.

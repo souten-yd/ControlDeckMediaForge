@@ -1,5 +1,14 @@
 # Media Forge implementation status
 
+## 2026-09-23 人物rigの微小な重み欠損を修正（0.33.12準備）
+
+1024主人公の実MCP失敗を再現。16391頂点のうち肩の14頂点だけ重み欠損。
+直立人物rig.autoに限定し、近い元heat donorから微小片だけを補間する。
+実Blenderで重み欠損/不正0、geometry/UV/画像不変、既存512の重みSHA一致。
+全25frameの足表面X間隔最小+.111551m、手の脚重み0。接地最大1.63cm沈みは別課題。
+全2446tests通過433.49秒。signed installed/MCPはNOT TESTED。
+詳細[受入記録](implementation/rig-small-islands-20260923.md)。商店街全体は未完了。
+
 ## 2026-09-23 0.33.11導入と主人公の脚交差修正
 
 PR632/e2bbbe9から署名release/再取得検証/通常ローカル更新。current0.33.11/PID52808/healthy、
