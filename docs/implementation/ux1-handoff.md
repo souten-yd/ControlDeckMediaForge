@@ -1,5 +1,14 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 0.33.15を通常リリース・ローカル更新
+
+PR639/f11bd33を既存鍵で署名公開し、公開物の再取得検証後に通常feature updateで導入。
+current0.33.15/PID178386/healthy、更新前1576 Asset metadataと代表3実content SHAを保持。
+実installedのjob schemaは16186Bでcompile_optionsを明示。従来3D capability不変。
+実OpenCode/Qwen/MCPで既存4店舗の軽量化を再開（Job25f23f603894、進行中）。
+この再実行の成功・最終GLB/商店街品質はまだNOT TESTED。
+詳細[GLB設定公開](compile-options-discovery-20260923.md)。
+
 ## 2026-09-23 MCPからGLB軽量化設定を指定できない問題（0.33.15準備）
 
 実OpenCode Job5304c9bb2c0cがcompile_optionsを構成できず、空引数や参照セット項目を反復。

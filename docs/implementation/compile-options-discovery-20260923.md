@@ -31,3 +31,24 @@ parsed schemaはsourceと一致し、Hostの64KiB上限内。TestClientだけの
 証跡: maintenance/shopping-street-20260923/compile-discovery-{focused,full,flake-recheck,full-recheck}.log、
 compile-discovery-source-http.json。signed release/local update、実Host projected MCP schema、
 実OpenCodeから3万triangle GLBを作る再受入はNOT TESTED。
+
+
+## 0.33.15 signed release and local update
+
+PR639 merged f11bd3388e4b07cf98eb3ce90201d646b21614c8。製品sourceは最終2473tests gateから不変。
+固定commitから構築し既存publisher鍵で署名。bundle38,061,607B、SHA256
+3141c62c3cff49682c39f5c15fe1c41cc7ebe3af2ab9d8f81b637dd43d4315f0。
+署名/改ざん拒否、6tar entries/243embedded entries、frontend/worker/schema source一致を確認。
+新規dataの実packageは0.868546秒でsetup_required。実runtimeなしをunavailableと正しく表示。
+公開releaseの4artifactを再取得して同じ検証を通過。
+
+MediaForge active Job/session0で通常ControlDeck feature update、その後restart。
+current versions/0.33.15、PID178386、healthyまで0.827180秒。
+更新前1576 Asset metadata一致、代表3Assetの実HTTP content SHA一致、
+served frontend/source一致、従来3D.image_to_3d capability一致。
+実installed GET /schemas/job-request.jsonは16186Bでcompile_optionsの型を明示。
+証跡maintenance/release-0.33.15-20260923。既存Pixal/Trellis runtime設定は変更していない。
+
+実OpenCode/Qwen/MCPの明示再実行Job25f23f603894を開始し、runningを確認。
+新promptはinputの不要なrole項目も除去し、最新版tool_contractの再確認を指示。
+実MCPの軽量GLB出力・納品・最終商店街受入はまだNOT TESTED。
