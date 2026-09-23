@@ -1,5 +1,13 @@
 # Media Forge implementation status
 
+## 2026-09-23 複数方向画像の追加依頼・上流調査
+
+公式Pixal3Dは専用MV重み＋カメラ付き複数画像を公開。Vulkan候補raven38/pixal3d.cppを
+固定a18bc842で調査。2/3/4枚と1枚→別方向生成の実評価後に有効範囲をモバイル統合する。
+現行1枚入力は維持。重み7.536GiBはVRAM実測ではない。GPU/品質/UIはNOT TESTED。
+詳細[multiview調査](implementation/multiview-20260923.md)。商店街制作と歩行修正も継続。
+
+
 ## 2026-09-23 自動ボーン付けworker結果の本体検証修正（0.33.14準備）
 
 0.33.13の実MCP retryはworker結果の未知項目でfailed。元model/画像/scene保持。
