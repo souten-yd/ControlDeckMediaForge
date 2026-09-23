@@ -17,7 +17,8 @@ def auto(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     return importlib.import_module('rig_auto')
 
 
-def surface(*, arms: bool = True) -> list[tuple[float, float, float]]:
+def surface(*, arms: bool = True, straight_arms_x: float | None = None,
+            angular_samples: int = 48) -> list[tuple[float, float, float]]:
     points = []
     for step in range(101):
         z = step / 100
@@ -30,11 +31,11 @@ def surface(*, arms: bool = True) -> list[tuple[float, float, float]]:
             radius = math.sqrt(max(0., 1 - ((z - .89) / .11) ** 2))
             circles.append((0, .10 * radius, .085 * radius))
         if arms and .38 <= z <= .74:
-            x = .12 + (.74 - z) * .36
+            x = straight_arms_x if straight_arms_x is not None else .12 + (.74 - z) * .36
             circles.extend([(-x, .028, .028), (x, .028, .028)])
         for x, rx, ry in circles:
-            for angle in range(48):
-                theta = angle * math.tau / 48
+            for angle in range(angular_samples):
+                theta = angle * math.tau / angular_samples
                 points.append((x + rx * math.cos(theta), ry * math.sin(theta), z))
     return points
 
@@ -42,6 +43,7 @@ def surface(*, arms: bool = True) -> list[tuple[float, float, float]]:
 def measured(auto: ModuleType, monkeypatch: pytest.MonkeyPatch,
              points: list[tuple[float, float, float]]) -> dict[str, Any]:
     monkeypatch.setattr(auto, '_sampled_points', lambda obj: points)
+    monkeypatch.setattr(auto, '_surface_points', lambda obj, cell: points)
     obj = SimpleNamespace(type='MESH', data=SimpleNamespace(vertices=[1]))
     return auto.measure(obj)
 
@@ -77,6 +79,41 @@ def test_dense_hand_topology_does_not_move_the_knees_up(auto: ModuleType, monkey
 def test_missing_arms_are_not_claimed_as_a_humanoid(auto: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     facts = measured(auto, monkeypatch, surface(arms=False))
     assert facts.get('body_plan') != 'humanoid'
+    assert len(facts['legs']) == 2
+
+
+def test_successful_vertex_measurements_do_not_resample(auto: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    points = surface()
+    monkeypatch.setattr(auto, '_sampled_points', lambda obj: points)
+    def unexpected(obj: Any, cell: float) -> list:
+        raise AssertionError('existing successful measurements must stay unchanged')
+    monkeypatch.setattr(auto, '_surface_points', unexpected)
+    facts = auto.measure(SimpleNamespace(type='MESH', data=SimpleNamespace(vertices=[1])))
+    assert facts['body_plan'] == 'humanoid'
+
+
+def test_close_arms_use_surface_sections_before_finer_clustering(
+    auto: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Reducing the grid alone fragments the sparsely sampled torso. The actual
+    # continuous surface has separate arms on both sides, including their wrists.
+    vertices = surface(straight_arms_x=.164)
+    sections = surface(straight_arms_x=.164, angular_samples=192)
+    monkeypatch.setattr(auto, '_sampled_points', lambda obj: vertices)
+    monkeypatch.setattr(auto, '_surface_points', lambda obj, cell: sections)
+    facts = auto.measure(SimpleNamespace(type='MESH', data=SimpleNamespace(vertices=[1])))
+    assert facts['body_plan'] == 'humanoid'
+    assert len(facts['arms']) == len(facts['legs']) == 2
+    assert all(leg['foot'][2] < leg['knee'][2] < leg['hip'][2] for leg in facts['legs'])
+
+
+def test_missing_joint_vertices_use_existing_surface(auto: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    sections = surface()
+    vertices = [p for p in sections if not .08 < p[2] < .17]
+    monkeypatch.setattr(auto, '_sampled_points', lambda obj: vertices)
+    monkeypatch.setattr(auto, '_surface_points', lambda obj, cell: sections)
+    facts = auto.measure(SimpleNamespace(type='MESH', data=SimpleNamespace(vertices=[1])))
+    assert facts['body_plan'] == 'humanoid'
     assert len(facts['legs']) == 2
 
 

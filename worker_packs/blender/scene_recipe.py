@@ -744,6 +744,7 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
         before = (len(obj.data.vertices), len(obj.data.polygons))
         if before[1] <= minimum:
             raise RuntimeError("mesh is already at or below the requested face floor")
+        target_triangles = math.ceil(sum(p.loop_total - 2 for p in obj.data.polygons) * ratio)
         check_growth(objects, 0)
         modifier = obj.modifiers.new(name="Media Forge Decimate", type="DECIMATE")
         modifier.decimate_type = "COLLAPSE"
@@ -758,6 +759,8 @@ def apply_operation(operation: dict[str, object], objects: dict[str, bpy.types.O
             raise RuntimeError("decimate fell below the requested face floor")
         if after[1] >= before[1]:
             raise RuntimeError("decimate did not reduce the mesh")
+        if after[1] > target_triangles + max(2, math.ceil(target_triangles * .01)):
+            raise RuntimeError("decimate cannot reach the requested ratio; retain more faces")
     elif kind == "modifier.subdivision":
         if obj.type != "MESH" or any(m.type == "SUBSURF" for m in obj.modifiers):
             raise RuntimeError("subdivision requires a mesh without existing subdivision")
@@ -922,6 +925,7 @@ def main() -> None:
                 "clip replacement target is missing or ambiguous": "clip_target_missing",
                 "automatic skin weights are missing": "auto_weights_missing",
                 "automatic skin weights are invalid": "auto_weights_invalid",
+                "decimate cannot reach the requested ratio; retain more faces": "decimate_target_unreachable",
                 "geometry selection is stale": "geometry_selection_stale",
                 "IK target is unreachable or singular": "ik_target_unreachable",
                 "IK pole is singular": "ik_pole_singular",
