@@ -17,6 +17,7 @@ from mediaforge.host.jobs import HostExecution
 from mediaforge.library_trash import LibraryTrash
 from mediaforge.multiview_runtime import MV_MODEL_FILES, MultiviewRuntimeReceipt
 from mediaforge.scene_generation import SceneFromImageRequest
+from mediaforge.scene_generation_inputs import view_transforms
 from mediaforge.scenes import SceneError
 from mediaforge.store import AssetInUse
 from test_scene_generation_jobs import GENERATION_IDENTITY, manager_fixture
@@ -31,13 +32,14 @@ def rgba_asset(store, index: int):
     return import_asset_bytes(store, stream.getvalue(), purpose='source', media_type='image/png')
 
 
-def multiview_manager(tmp_path: Path, count: int = 4, mode: str = 'success'):
+def multiview_manager(tmp_path: Path, count: int = 4, mode: str = 'success', *,
+                      directions: tuple[str, ...] | None = None):
     manager, host, original, base = manager_fixture(tmp_path, mode)
     assets = [rgba_asset(manager.store, i) for i in range(count)]
     value = SceneFromImageRequest.model_validate({**original.model_dump(),
         'input_asset_id': assets[0].id, 'additional_views': [
             {'direction': direction, 'asset_id': asset.id}
-            for direction, asset in zip(('right', 'back', 'left'), assets[1:])]})
+            for direction, asset in zip(directions or ('right', 'back', 'left'), assets[1:])]})
     snapshot = base.model_repository/base.model_snapshot
     for name in MV_MODEL_FILES:
         (snapshot/name).write_bytes(b'fake multiview weight')
@@ -69,10 +71,13 @@ assert len(set(images)) == len(images)
     return manager, host, value, receipt
 
 
-@pytest.mark.parametrize('count', [2, 3, 4])
-def test_multiview_uses_every_input_and_publishes_all_parents(tmp_path: Path, count: int) -> None:
+@pytest.mark.parametrize('directions', [
+    ('right',), ('back',), ('left',), ('right', 'back'),
+    ('left', 'right'), ('left', 'back'), ('left', 'right', 'back'),
+])
+def test_multiview_uses_every_input_and_publishes_all_parents(tmp_path: Path, directions: tuple[str, ...]) -> None:
     async def scenario() -> None:
-        manager, host, value, _ = multiview_manager(tmp_path, count)
+        manager, host, value, _ = multiview_manager(tmp_path, len(directions) + 1, directions=directions)
         job, record = await manager.submit(value, GENERATION_IDENTITY)
         await manager.wait_cleanup(job.id)
         final = manager.store.get_job(job.id)
@@ -82,6 +87,7 @@ def test_multiview_uses_every_input_and_publishes_all_parents(tmp_path: Path, co
         facts = provenance.parameters['generation']
         assert facts['runtime_adapter'] == 'native.pixal3d-multiview'
         assert facts['execution'] is None
+        assert [v['direction'] for v in facts['multiview']['views']] == [d for d, _ in value.ordered_views()]
         assert [v['asset_id'] for v in facts['multiview']['views']] == value.input_asset_ids()
         scene_id = manager.projection(job.id, 'user:7')['result']['scene']['id']
         _, revisions = manager.workspace.catalog.get('user:7', scene_id)
@@ -216,7 +222,8 @@ def test_prepared_data_changes_never_start_the_native_process(tmp_path: Path, ch
 @pytest.mark.parametrize('change', [
     {'engine': 'trellis_cpp'}, {'resolution': 512}, {'refine_with_pixal3d': True},
     {'additional_views': [{'direction': 'right', 'asset_id': 'asset_'+'1'*32}]},
-    {'additional_views': [{'direction': 'back', 'asset_id': 'asset_'+'2'*32}]},
+    {'additional_views': [{'direction': 'back', 'asset_id': 'asset_'+'2'*32},
+                          {'direction': 'back', 'asset_id': 'asset_'+'3'*32}]},
     {'view_camera': {'fov_degrees': float('nan')}},
     {'view_camera': {'distance': True}},
 ])
@@ -224,3 +231,18 @@ def test_invalid_multiview_contract(change: dict[str, object]) -> None:
     base = {'name': 'test', 'input_asset_id': 'asset_'+'1'*32,
             'additional_views': [{'direction': 'right', 'asset_id': 'asset_'+'2'*32}]}
     with pytest.raises(ValidationError): SceneFromImageRequest.model_validate({**base, **change})
+
+
+@pytest.mark.parametrize('directions', [('back',), ('left',), ('left', 'back'), ('left', 'right')])
+def test_sparse_directions_keep_their_camera_angles(directions: tuple[str, ...]) -> None:
+    value = SceneFromImageRequest(name='directions', input_asset_id='asset_'+'1'*32,
+        additional_views=[{'direction': d, 'asset_id': 'asset_'+str(i+2)*32}
+                          for i, d in enumerate(directions)],
+        view_camera={'distance': 2.0})
+    frames = view_transforms(value)['frames']
+    expected_positions = {'front': (0, -2, 0), 'right': (2, 0, 0),
+                          'back': (0, 2, 0), 'left': (-2, 0, 0)}
+    assert [f['name'] for f in frames] == ['front', *[d for d in ('right', 'back', 'left') if d in directions]]
+    for index, frame in enumerate(frames):
+        assert frame['file_path'] == f'view-{index}.png'
+        assert [row[3] for row in frame['transform_matrix'][:3]] == pytest.approx(expected_positions[frame['name']])

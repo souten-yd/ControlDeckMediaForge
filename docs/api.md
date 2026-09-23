@@ -691,8 +691,9 @@ adopted stage after admission is detected. Both single-image stages use the same
 source image; the second does not edit the first stage's mesh.
 
 For separately adopted multiview inference, `additional_views` accepts up to three
-`{direction, asset_id}` entries. `input_asset_id` is the front; measured combinations
-are front/right, front/right/back, and front/right/back/left. All input Assets and
+`{direction, asset_id}` entries. `input_asset_id` is the front; choose any distinct
+subset of `right`, `back`, and `left`, including front/left or front/back alone.
+Camera angles follow direction names rather than input count or insertion order. All input Assets and
 their decoded premultiplied pixel content must be distinct. Use matching square,
 matted RGBA PNG/WebP canvases of 64–2048 pixels. The core preserves framing and
 does not estimate camera calibration or independently crop each view. Optional

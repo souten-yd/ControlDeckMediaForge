@@ -49,8 +49,6 @@ class SceneFromImageRequest(BaseModel):
             raise ValueError('each view must use a different image Asset')
         if len({v.direction for v in self.additional_views}) != len(self.additional_views):
             raise ValueError('each additional view must have a different direction')
-        if {v.direction for v in self.additional_views} != set(('right', 'back', 'left')[:len(self.additional_views)]):
-            raise ValueError('measured views are front/right, front/right/back, or all four directions')
         if self.additional_views and (self.engine == 'trellis_cpp' or self.refine_with_pixal3d or self.resolution != 1024):
             raise ValueError('multiple views require Pixal3D at 1024, without the single-image refinement chain')
         if not self.additional_views and self.view_camera is not None:
