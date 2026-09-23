@@ -1403,6 +1403,23 @@ Generation provenance includes the input Asset hash, pinned weights/runtime,
 seed and raw output hash. Successful structural validation does not establish
 visual or semantic quality; those remain separate experimental acceptance gates.
 
+2026-09-23 multi-view extension: retain the existing single-image contract and
+adoption receipts. Add camera-aware views only through a separately pinned,
+measured Pixal MV adapter in the same Scene Jobs/Asset lifecycle. Directions,
+camera assumptions and every input Asset/hash must survive admission, retries
+and provenance. Do not duplicate a front image into different camera slots or
+treat a collage as multiple camera inputs. Reject repeated assets/content and
+retain per-view thumbnails so the user can inspect the actual inputs.
+
+Simple mode uses explicitly described front/right/back/left turntable assumptions;
+these are assumptions, not camera calibration inferred from arbitrary photos.
+Advanced mode exposes the measured camera/framing controls. Preserve the common
+canvas rather than independently cropping each direction. Only evaluated view
+counts and camera arrangements become available. Generated extra directions
+remain editable candidates requiring visual review; image-edit success alone
+does not prove view consistency. Manual extra images do not depend on successful
+automatic view generation. No new model download follows merely from adding views.
+
 Exit criterion: generated 3D can flow through the same asset lineage and validation pipeline, while failures remain isolated from the stable Blender feature.
 
 The orchestration pipeline may explicitly retry only its failed stage whose
