@@ -1,5 +1,20 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 歩ける商店街のOpenCode/MCP制作（進行中）
+
+利用者の通常login後、OpenCode1.18.30 / ローカルQwen3.8-27B Q4_K_MでMCPを実行。
+主人公の1024px画像1枚を生成・目視確認。3D/rig/HTMLはまだ未完了。
+生成初回はWriteTimeout、再送分は成功。曖昧な502を未生成と推測したOpenCodeをcancelし、
+成功済みAssetの回収だけを別の通常Host Jobで継続。詳細はshopping-street-20260923.md。
+
+同時LLM cold startで後続が300秒待つ不具合を実観測・実Broker試験で再現。
+Host別worktree fix/gateway-concurrent-cold-startで修正検証中。installed適用は未実施。
+MFはux1/shopping-street-acceptanceで通常認証HTTP runner/段階prompt/受入記録を追加。
+./mf.sh test: 2436 passed /3 warnings /171.40秒。画像回収inspect/pack/SHA一致。
+同画像の3D化Host Jobb5bfee084e46を起動し追跡中。
+root feat/g9-image-to-3dは変更せず保持。実3D/変形/HTML/物理スマホはNOT TESTED。
+
+
 ## 2026-09-23 0.33.10を署名公開・ローカル適用（ごみ箱と個別削除）
 
 PR629/source2535ea7から0.33.10を公開し、通常Host更新・再起動でhealthy。
