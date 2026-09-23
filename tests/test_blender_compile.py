@@ -181,7 +181,10 @@ def test_runtime_capability_requires_exact_stamp_and_trusted_files(tmp_path: Pat
     assert blender_compile.runtime_available() is False
 
 
-def test_asset_pack_3d_profile_registers_deterministic_zip_and_provenance(client, monkeypatch) -> None:
+@pytest.mark.parametrize("output_options", [None, {}, {"count": 1}, {"format": "zip", "count": 1}])
+def test_asset_pack_3d_profile_registers_deterministic_zip_and_provenance(
+    client, monkeypatch, output_options: dict | None,
+) -> None:
     reference_counts: list[int] = []
 
     async def reference_checked_blender(*args, **kwargs):
@@ -219,11 +222,16 @@ def test_asset_pack_3d_profile_registers_deterministic_zip_and_provenance(client
         "local_only": True,
     }
     schema = json.loads(Path("schemas/job-request.json").read_text(encoding="utf-8"))
+    if output_options is None:
+        request.pop("output")
+    else:
+        request["output"] = output_options
     jsonschema.validate(request, schema)
     hashes: list[str] = []
     for _ in range(2):
         created = client.post("/api/v1/jobs", json=request)
         assert created.status_code == 202, created.text
+        assert created.json()["request"]["output"] == {"format": "zip", "count": 1}
         terminal = wait_terminal(client, created.json()["id"])
         assert terminal["status"] == "succeeded", terminal
         asset = client.get(f"/api/v1/assets/{terminal['asset_ids'][0]}").json()

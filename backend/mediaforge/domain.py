@@ -100,6 +100,13 @@ class JobRequest(BaseModel):
             raise ValueError("video.edit accepts at most eight input assets")
         if self.operation == "asset.pack" and not self.inputs:
             raise ValueError("asset.pack requires input assets")
+        if self.operation == "asset.pack":
+            if "format" not in self.output.model_fields_set:
+                self.output = self.output.model_copy(update={"format": "zip"})
+            if self.output.format != "zip":
+                raise ValueError("asset.pack requires output.format=zip; omit format to use ZIP")
+            if self.output.count != 1:
+                raise ValueError("asset.pack requires output.count=1")
         if self.operation != "asset.pack" and self.output.format == "zip":
             raise ValueError("zip output is accepted only by asset.pack")
         is_video = self.operation in {"video.generate", "video.edit"}

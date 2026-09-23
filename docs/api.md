@@ -892,7 +892,10 @@ documents. `asset.pack` with `profile=m5.companion.pack` accepts exactly one
 `base/front`, the fixed 12 eye slots, and the fixed 8 mouth slots through its
 normal immutable `inputs` lineage. `constraints.entries` maps each input asset
 ID to its fixed layer/name and `constraints.pack_name` is lowercase snake case.
-The output must request `format=zip`.
+For `asset.pack`, omitted `output` or omitted `output.format` selects ZIP. An explicit
+format must be `zip`, with `count=1`. Invalid explicit formats/counts are rejected
+before Job creation. Image defaults remain PNG; historical Job requests keep their
+original values.
 
 The deterministic result is an `application/zip` asset containing the 21 PNG
 layers, `atlas.png`, `manifest.json`, and a current-firmware pack at

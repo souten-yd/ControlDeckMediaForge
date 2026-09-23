@@ -211,7 +211,8 @@
       }
     },
     "output": {
-      "$ref": "#/$defs/output"
+      "$ref": "#/$defs/output",
+      "description": "Output options. For asset.pack, omitted output or omitted format selects one ZIP; explicitly use format=zip and count=1. Image operations default to PNG. Video operations require an explicit mp4 or webm format."
     },
     "qa": {
       "$ref": "#/$defs/qa"
@@ -291,6 +292,33 @@
         "properties": {
           "inputs": {
             "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "asset.pack"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "output": {
+            "properties": {
+              "format": {
+                "const": "zip",
+                "default": "zip"
+              },
+              "count": {
+                "const": 1
+              }
+            }
           }
         }
       }
@@ -390,14 +418,15 @@
             "webm",
             "zip"
           ],
-          "default": "png"
+          "default": "png",
+          "description": "PNG by default for images. For asset.pack the omitted format resolves to ZIP, and any explicit format must be zip."
         },
         "count": {
           "type": "integer",
           "minimum": 1,
           "maximum": 8,
           "default": 1,
-          "description": "How many images to produce from this one request. They are generated in the same call with the model kept loaded, each from a different seed, so asking for several takes far less time than repeating the call. Use it to get alternatives of the same idea and pick one; the spread between them is not steerable."
+          "description": "How many images to produce from this one request. They are generated in the same call with the model kept loaded, each from a different seed, so asking for several takes far less time than repeating the call. Use it to get alternatives of the same idea and pick one; the spread between them is not steerable. For asset.pack this must be 1."
         }
       },
       "default": {}
