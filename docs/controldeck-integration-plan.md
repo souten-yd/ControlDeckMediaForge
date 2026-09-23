@@ -632,6 +632,13 @@ inside MediaForge. Its reservation still uses the ordinary Host resource request
 granted worker limit. MediaForge does not bypass admission because the device appears
 empty, change Host scheduling, or imply that an image edit guarantees camera calibration.
 
+The planned image-to-3D multiview extension remains additive to the existing
+MediaForge scene tool and detached Jobs. Every input is an ordinary Asset ID with
+pinned hash and lineage; no browser/Host file path or second asset service is added.
+Per-direction image candidates use the existing local image-edit capability and
+remain reviewable before a measured multiview request. Unsupported view counts,
+missing adoption receipts and repeated image contents fail before GPU submission.
+
 Agent file writes follow the same project grant rules and cannot bypass ControlDeck filesystem restrictions through Media Forge.
 
 ### 11.1 Non-interactive project output grant prerequisite
