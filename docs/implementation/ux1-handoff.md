@@ -1,5 +1,13 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 0.33.16を通常公開・ローカル更新
+
+PR642/1e5fc51を固定して署名公開・再取得検証・通常feature update。
+current0.33.16/PID217691/healthy、既存1580 Asset metadata/代表3 content SHA/生成capability/runtime receiptを保持。
+追加モデル取得0。実OpenCode/sculptor/Qwen/MCP Job781d15da871fで既存NPC2体のrig成功、納品を確認中。
+先行2runは委任経路の指示誤りで取消、生成Job0。Hostの既存sculptor構成を確認して訂正。
+両方12bones/1walk clip/重み欠損0、元画像・元revision保持。最終商店街、物理スマホはNOT TESTED。[詳細](rig-surface-20260923.md)。
+
 ## 2026-09-23 生成人物の軽量化・近接した腕の検出（0.33.16準備）
 
 元NPC2体のratio15%は目標面数へ到達できず形状も破壊。到達不能な目標を拒否し、面を残す案内を追加。
