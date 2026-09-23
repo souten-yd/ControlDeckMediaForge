@@ -850,6 +850,15 @@ route accepts a model name or filesystem path.
 
 ControlDeck calls `/addon/v1/*` endpoints declared by [`addon.json`](../addon.json). Workflow and agent payloads use `{input, correlation}` envelopes. Responses return structured `job_id` and `asset_ids`; agents do not scrape filenames and do not receive a selected model name from generation or capability discovery.
 
+After `media.generate` accepts a Job, terminal failure/cancellation returns HTTP
+502 with `detail.code`, `detail.job_id` and its terminal `detail.status`.
+A cleanup timeout returns 504 with `job_cleanup_timeout` and the same accepted
+Job reference/last observed status. A wait deadline returns 504 with
+`job_wait_timeout` and the Job ID, without asserting termination. Callers must
+inspect that Job before deciding on an explicit retry. Pre-admission errors have
+no accepted Job ID. Success responses are unchanged; errors do not expose worker
+messages or paths.
+
 `media.generate.batch` (`POST /addon/v1/agent/generate/batch`) takes up to 50
 independent generation items and runs them one after another inside a single
 call. It exists because a separate call per asset is not merely slower: the Host
