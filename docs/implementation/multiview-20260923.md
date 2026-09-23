@@ -414,3 +414,62 @@ cookieはprivate stdinのみ、公開文書やhelperログへ記録しない。
 実installed生成は4枚を受入、2/3枚は先のnative実測とsource契約検証を根拠とする。
 任意写真の校正/品質、rig/deformation、自動方向候補→比較→明示選択、実installed MCP、
 物理スマホは未受入。この文書sliceに製品変更はなく、既受入2558testsは再実行していない。
+
+## 正面からの側面候補：人物1件
+
+手動MVのinstalled受入後、既存のFLUX.2-klein単一参照編集で、上記人物の正面Assetから
+右/背/左を1件ずつ評価するprivate helperを実行。新しいモデルや重みは取得しない。
+最初の右側面だけを送信した段階でHostがwatchdogにより再起動し、通信が切れた。
+後続方向は送信せず、同じ生成を再試行しなかった。
+
+| 記録 | 観測 |
+|---|---|
+| Host | `22aaf130c5ad` / interrupted（再起動） |
+| MediaForge | `job_6d66e0f9b6d34734bee4fe4da837cac5` / succeeded |
+| 出力 | `asset_e425aec656204ce1ba79ec96f582ad78` / 1024角RGBA / 871,790B |
+| SHA | `10c8f8d3401fe992c2dfe0c354e58d467783bb18f0ce6c15f23c3fc7f44abca8` |
+| 元画像 | `asset_62eafeae60dc4662883843d73304494c` / 全metadataと実SHA保持 |
+| 所要時間 | durable created_at→updated_atの差161.480503秒（正常なHost完了応答ではない） |
+
+Host復帰後、通常HTTPで同じHost Jobのinterrupted、coreのsucceeded、保存済み出力と親/実SHAを照合。
+Hostの状態を手動で成功へ書き換えない。画像workerとmatteの自身のPIDは終了し、
+通常Broker照会でactive lease0。旧leaseの終端履歴は再起動後取得できず、releasedと断定しない。
+生成前後の原画像metadataと実bytes SHAは同一。候補はLibraryに残し、3Dへは渡していない。
+
+候補は1人の側面を描き、茶色の上着/暗いズボン/白靴/黒髪の結び/赤いバッグ1個を保持。
+四隅alpha0、完全透明画素割合0.880848885、alpha範囲0..255。
+既知の右面と比べバッグ寸法、手/腕、身体の形、構図に差がある。
+前景boundsは候補`[407,90,635,969]`、既知右面`[402,101,609,939]`。
+これは画像編集の候補出力であり、同じ被写体の校正済み方向画像としては未受入。
+向きが変わることだけで自動3Dへ進めない。比較・選択UIの製品接続も未実装のまま保持する。
+
+実journalの18:41:25 JST stall stackはHostの`idle_unload_loop` →
+`_revive_endpoint_for_opencode` → feature status → `subprocess.run(--version)`。
+18:41:26に30秒watchdog、Host PID486604→604536、memory peak430.5MiB。
+再起動原因はこの同期監視であり、MediaForge側からHost loopの待機を解消できない。
+汎用Host PR343を`e3d374ad1ff582070a528ae3bddc449d35acde82`でマージし、
+active Job/unit/lease0の時点で通常deck.shによりrootへ適用。PID674922/health ok。
+同期待機をthreadへ移し、Gateway時の不要なversion照会を省略した。
+Host全1175pass/2skip/105.71秒、実隔離HTTPで4秒version照会2回中にも81health応答。
+installedの130秒/65health応答は最大4.432ms、PID不変/NRestarts0。
+モデル変更やOpenCodeの一括停止は行っていない。
+
+Host更新後、通常Libraryの各カードから4面GLBとこの側面候補をPC1280/320pxで開き、
+表示/閉じる、GLB回転による画面変化を実GPU Chromeで確認。横overflow0/pageerror0。
+初回private helperのcanvas.toDataURL比較は描画buffer非保持により失敗し、
+その証跡を保存して実画面captureの比較へ訂正した。製品viewerは変更していない。
+MediaForge current0.33.20/PID581793/healthy、旧1586 Asset metadata、代表3content SHA、
+旧runtime全JSON、単視点capability、配布JS/CSS/moduleを再照合した。
+この再確認では画像/3Dの再生成なし。物理スマホはNOT TESTED。
+追加証跡は`maintenance/release-0.33.20-20260923/host-installed/`と
+`post-host-update-check.json`。Host側の詳細はControlDeckの
+`docs/opencode-revive-nonblocking-20260923.md`へ記録。
+
+通常Hostのagent-tool HTTPにも追加方向付きの同一Asset要求を1回送り、
+`invalid_scene_generation`、MediaForge Job追加0を確認した。
+Host応答は502で、これは重複入力拒否の伝達確認に限る。実OpenCode/stdio MCP受入ではない。
+
+private証跡は`maintenance/multiview-20260923/person-generated-candidates/`の
+`recovered-result.json`、`right-{host,core}-recovered.json`、`right-asset.json`、
+`right-provenance.json`、`alpha-review.json`、`cleanup.json`とPNG。
+元の`result.json`と通信例外logも保持。記録だけのsliceで製品テストを再実行していない。

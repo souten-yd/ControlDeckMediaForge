@@ -1,5 +1,20 @@
 # Media Forge implementation status
 
+## 2026-09-23 自動方向候補の人物評価は未採用
+
+通常Host/image.editで保存済み正面から右側面候補1件を生成しLibraryへ保存。
+MF job_6d66e0f9b6d34734bee4fe4da837cac5はsucceeded、保存時刻差161.480503秒。
+生成中にHost定期監視の同期version確認がwatchdog再起動を起こし、Host22aaf130c5adはinterrupted。
+再送せず既存出力asset_e425aec656204ce1ba79ec96f582ad78を回収・照合。背面/左は未送信。
+側面1人・服・髪・赤いバッグ1個、四隅alpha0を確認。既知右面から形状/構図差があり3Dへ未採用。
+元画像のmetadata/実SHA保持、自身のworker終了/active lease0。旧lease履歴は再起動後取得不可。
+Host汎用修正は別repositoryのPR343/e3d374aでマージ・通常適用済み、PID674922/health ok。
+130秒/65health応答（最大4.432ms）でPID不変/NRestarts0。MediaForge製品code変更/新規モデル取得0。
+更新後の通常Libraryで既存4面GLBと側面候補をPC1280/320pxで表示・閉じる、GLB回転を確認。
+overflow0/pageerror0。current0.33.20/PID581793と旧Asset/runtime/配布static filesを再照合。
+通常agent-tool HTTPの重複画像拒否/MF Job追加0も確認。実OpenCode/stdio MCPは未受入。
+[詳細](implementation/multiview-20260923.md#正面からの側面候補人物1件)。全体goal継続。
+
 ## 2026-09-23 手動複数面0.33.20の署名公開・installed受入
 
 PR654/5177a7bを署名公開・再取得検証し通常feature update、current0.33.20/PID581793/healthy。
