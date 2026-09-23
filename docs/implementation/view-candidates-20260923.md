@@ -41,3 +41,39 @@ CreativeBatch/Job/Asset/来歴とHost admissionを再利用する。
 追加モデルdownload0。既存Assetや商店街は変更しない。
 署名配布・installed新UIでの実生成/選択/Library・候補画質・物理スマホは
 このソース受入時点で NOT TESTED。失敗候補を3Dへ自動投入しない。
+
+## 0.33.22の署名配布と通常更新
+
+PR659 `4c4b3c6`（source `ea1e1c0`）を通常merge。署名bundleは38,110,741 B、
+SHA-256 `757ae97bd91e8819ca102acdfbcaa5b1e68162fb1285f6ce93f330143a32425a`。
+既存trusted公開鍵、canonical署名、改ざん拒否、6tar entries、244embedded entries、
+新service moduleとfrontend/schema/workerのsource一致、重み/DB/秘密値混入なしを確認。
+4assetを公開後に再取得して同じ検証を通過。
+
+抽出した配布物を新規data/cacheで起動し0.886458秒で応答。未導入3D/参照編集は
+unavailableで、候補要求はJob作成前に拒否。既存packの既定zip/不正output拒否も確認。
+
+実行中Job/model操作/Blender session/両prefixのOpenCode unitとactive leaseがない
+状態でDB backupを保存し、通常 `deck.sh feature update media-forge` を実行。
+current0.33.22/PID751496/healthy。旧1594 Asset metadata、代表3content SHA、
+runtime-state全JSONを保持。配信app.js/styles/schemaは配布sourceと一致。
+3D capabilityは更新前と同じ、Host PID674922を保持。
+証跡: maintenance/release-0.33.22-20260923。
+
+### installed 0.33.22で見つかったタッチ不具合
+
+通常ログイン/320pxで生成前に候補見出しのタップが失敗し、画像Job追加0。
+診断でtouchstart/endはscene-view-candidates-titleへ届く一方、後続のtrusted clickが
+scene-generation-add-viewへずれ、候補を開かず右面の空欄が増えることを確認。
+スクロール停止を500ms待っても再現。初回helper失敗を成功へ書き換えない。
+
+0.33.23修正候補: 既存のtouch activationを任意selectorで再利用し、新しい候補欄の
+summaryとcheckbox/そのlabelに限定して追加。既存button経路は同じ。
+ドラッグ/複数指/無効/領域外終了の既存guardを保持し、native select/canvasは対象外。
+通常Hostにこの関数だけをsource overlayした診断では、実touchが正しいsummaryの
+click1回に変わり、details.open=trueを維持。これはinstalled配布受入ではない。
+実モデル生成と0.33.23配布は、この修正の最終gate後に行う。
+
+最終 ./mf.sh test は2576passed/3warnings/345.50秒、exit0。以後製品コード変更なし。
+source opaque iframeを88px下げた1280/320で比較/確認labelのタップ/明示採用/履歴等も通過。
+通信応答はfixture、overflow0/pageerror0/44px。証跡touch-source-ui/result.json。

@@ -1,5 +1,20 @@
 # Media Forge implementation status
 
+## 2026-09-23 installed候補欄のタッチずれを修正（0.33.23準備）
+
+PR659/4c4b3c6の0.33.22を既存鍵で署名公開、通常更新。current0.33.22/PID751496/healthy、
+旧1594 Asset metadata/代表3SHA/runtime全JSON保持、Host PID674922不変。
+通常320pxで候補見出しのtouchstart/endは正しいがclickが隣の方向追加へずれる問題を実確認。
+画像Job追加0。branch ux1/multiview-candidate-touchで既存activationを再利用し、候補欄の
+summary/確認checkbox/labelだけを対象に追加。既存button/native select/canvas経路を保持。
+通常Hostへ関数のみsource overlayしてsummaryのclick1回/open維持を確認。
+source opaque iframeを88px下げた1280/320では、依頼/中止/比較/確認labelの実タップ/
+明示採用/履歴/詳細切替/複製拒否を確認。overflow0/pageerror0/44px。生成通信はfixture。
+最終 ./mf.sh test は2576passed/3warnings/345.50秒、exit0。以後製品コード変更なし。
+次: commit/push/PR→0.33.23署名と通常更新→通常installed UIで実3方向生成/比較/Library。
+現時点で新規モデルDL0、実モデル候補生成/0.33.23 installed/物理スマホはNOT TESTED。
+[詳細](implementation/view-candidates-20260923.md)。全体goal継続。
+
 ## 2026-09-23 別方向候補の比較UIと来歴（0.33.22準備）
 
 branch ux1/multiview-candidates-ui、base7bce85d。既存image.edit/CreativeBatch/Jobを再利用し、
