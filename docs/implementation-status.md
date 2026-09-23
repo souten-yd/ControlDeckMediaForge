@@ -1,5 +1,16 @@
 # Media Forge implementation status
 
+## 2026-09-23 0.33.17を公開・導入、実MCPの形式省略を受入
+
+PR645/77464d9から既存鍵で署名公開・再取得検証・通常feature update。
+current0.33.17/PID281578/healthy、既存1584 Asset metadataと代表3 content SHA、runtime-state全JSONを保持。
+実OpenCode/Qwen/MCP Jobc2118762e2c4はsucceeded。output省略の実tool引数を確認し、
+pack1回/inspect1回でZIP3,949,008Bを作成。来歴/実bytes/hash/GLB/PNGを独立確認、元Asset不変。
+商店街projectの作業treeはclean。追加画像/3D生成・モデル取得・自動再送0。
+source全2509tests/426.99秒以後product変更なし。この追記は文書のみ。
+branch ux1/pack-output-installed。次は既存ファイルだけで多視点の2/3枚比較を評価する。
+複数面UI/採用、汎用MCP失敗時のJob ID伝達は未完了。詳細[pack受入](implementation/pack-output-default-20260923.md)。
+
 ## 2026-09-23 asset.packの出力形式省略（0.33.17準備）
 
 branch ux1/pack-output-default。実MCPでpack形式省略がPNGになり失敗した問題を修正。
