@@ -1,5 +1,21 @@
 # Media Forge implementation status
 
+## 2026-09-23 複数面の方向選択0.33.24を公開・通常導入
+
+PR662/b0e2185を既存鍵で署名公開・再取得検証し、通常feature updateでcurrent0.33.24、
+PID29370/healthy。Host PID2418/NRestarts0、更新前1599 Asset metadata/代表3SHA/runtime全JSON保持。
+旧build venvのHEIF不足を公開前に検出し、既存cacheから依存を復元。新bundleの実HEIC取込201/PNGと
+新規dataでのclean smokeを確認。失敗bundleは未公開、追加モデルDL0。
+通常ログイン/opaque iframeの320/1280pxで全7方向組合せ/削除/1枚復帰を確認。
+正面＋左をUIから1回送信、job_a9a6fa664f8f44d3a034888b12e4cf80は130.635秒で成功。
+Libraryの「複数面：正面＋左側面（方向選択の確認）」へ保存し、実2入力SHA/相異画素/2親と
+GLB/.blendの実SHAを再取得検証。Host e6cea94b42f2も成功、lease released/active0。
+実GLBの320/1280表示・閉じるを含め16check/overflow0/errors0。人物/2脚/片側バッグを確認。
+服の細かな斑点は残り、任意画像の品質保証/rig/物理スマホ/斜め自由角度/AI候補品質は未受入。
+最終Asset1601/active Job0。2592passの製品codeから変更なし、本branchは受入文書のみ。
+完了した隔離probe実体・重複bundle・今回のprivate backupは回収し、結果/失敗/描画を保持。
+正式Library/元画像/重み/managed rollback版は保持。詳細は[方向選択](implementation/multiview-direction-choice-20260923.md)。
+
 ## 2026-09-23 複数面の追加方向を自由選択（0.33.24準備）
 
 正面に対して右/背面/左の任意部分集合を受理し、追加する方向の選択欄を実装。
