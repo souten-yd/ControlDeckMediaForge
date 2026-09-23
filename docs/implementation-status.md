@@ -1,5 +1,22 @@
 # Media Forge implementation status
 
+## 2026-09-23 手動複数面0.33.20の署名公開・installed受入
+
+PR654/5177a7bを署名公開・再取得検証し通常feature update、current0.33.20/PID581793/healthy。
+旧1586 Asset metadata、代表3content SHA、旧runtime全JSONと単視点capabilityを保持。
+独立MV receipt採用後、通常Host opaque iframeの320pxで別々の4RGBAを取り込み、
+実Vulkan job_e7a5e8375b96460b9d14520655120f28が151.703秒で成功（native来歴143.241228秒）。
+4入力の画素SHAは元の各方向と一致し、互いに異なる。全4親/dependency/実content SHAを照合。
+生成中の全入力Trashをlibrary_production_busyで保護、終了後はpreview可能。
+GLBは991,928tris/1材質/2画像/EXT_texture_webp、通常PC1280/320pxで画像付き表示と閉じる操作を確認。
+headless環境はWebGL不可。初回PC close入力未着も記録し、最終GPU実表示の受入と分離した。
+別job_bb6513bd6cfc472da89a31f446cb11a6を320pxから中止、0.212秒でcanceled/native終了/出力0。
+初回private取消helperのPID照合失敗も自身のJobだけAPIで取消済み。
+正常1件/取消2件のHost終端、3lease released/active0を通常HTTPで確認。追加モデル取得0。
+製品codeは既受入2558pass/409.46秒から変更なし。この追記は文書のみ。
+未実施: 任意写真の品質、rig/deformation、自動方向候補→選択→3D、installed MCP、物理スマホ。
+[詳細](implementation/multiview-20260923.md#03320の署名配布とinstalled受入)。全体goal継続。
+
 ## 2026-09-23 手動2/3/4面の製品経路・モバイル入力（0.33.20準備）
 
 branch ux1/multiview-generation。既存scene.from_imageへ追加画像と共通cameraを加法実装。
