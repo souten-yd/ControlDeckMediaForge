@@ -211,6 +211,10 @@
         "compile_options": {
           "$ref": "#/$defs/CompileOptions",
           "description": "For asset.pack + profile=3d.project.glb only. Put these options inside constraints.compile_options, with no other constraints keys. Preserve materials by default. triangle_budget reduces faces; this is not new 3D generation."
+        },
+        "view_candidate": {
+          "$ref": "#/$defs/ViewCandidateContext",
+          "description": "Optional lineage for a candidate direction made from one matching source in a non-strict reference image edit. It does not certify the direction, subject identity, or camera calibration, and never starts 3D generation."
         }
       },
       "additionalProperties": true
@@ -781,6 +785,37 @@
         "schema_version"
       ],
       "title": "CompileOptions",
+      "type": "object"
+    },
+    "ViewCandidateContext": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "media-forge.view-candidate@1",
+          "default": "media-forge.view-candidate@1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_asset_id": {
+          "pattern": "^asset_[0-9a-f]{32}$",
+          "title": "Source Asset Id",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "right",
+            "back",
+            "left"
+          ],
+          "title": "Direction",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_asset_id",
+        "direction"
+      ],
+      "title": "ViewCandidateContext",
       "type": "object"
     }
   },

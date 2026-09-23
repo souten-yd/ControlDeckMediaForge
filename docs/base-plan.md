@@ -1722,3 +1722,12 @@ pre-deletion data backup; never roll back only the binary and claim deleted byte
 ### 2026-09-23 private recipe補修結果の整合性
 
 `automatic_weight_repairs`はworker内部結果の任意項目として、本体で型・有限値・補修上限・rig.auto対象IDを検証する。旧workerの省略と新workerの空配列をともに受理し、未知項目や不正な補修報告は引き続き拒否する。公開契約の変更はない。worker単体成功だけではなく本体境界とinstalled MCPで受入する。
+
+### 2026-09-23 別方向画像の候補と明示選択
+
+別方向の候補は既存の採用済みsingle-reference image.editで試作する。方向の正しさを保証する
+新runtimeとして公開しない。既存CreativeBatch/Job/Assetに1〜3件の依頼を記録し、元画像IDと
+要求方向を来歴に残す。方向ごとに異なる依頼を出し、同じ画像の複製で枚数を満たさない。
+UIは実験的な候補作成と明示し、元画像との比較・利用者の確認・選択を経て追加画像へ設定する。
+画像生成の成功を方向/被写体一致や3D生成の開始許可に読み替えない。候補と元画像の実画素重複、
+canvas/透過不適合、削除済み素材は選択時と既存3D受付で拒否する。新しいJob/asset基盤は作らない。

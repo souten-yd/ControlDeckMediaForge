@@ -72,6 +72,7 @@ from .composer import (
 )
 from .creative import CreativeCompileResult, CreativeCompiler, CreativeSpec, CreativeValidationError
 from .creative_batches import CreativeBatchPlanner, CreativeBatchRecord, project_batch
+from .view_candidate_service import ViewCandidateService
 from .creative_intelligence import (
     CreativeDirector,
     CreativeMode,
@@ -1357,6 +1358,11 @@ def create_app(
             {"id": "landscape", "label_key": "size.landscape", "width": landscape[0], "height": landscape[1]},
             {"id": "portrait", "label_key": "size.portrait", "width": portrait[0], "height": portrait[1]},
         ]
+
+    view_candidates = ViewCandidateService(
+        store, lambda: image_capability("image.single_reference_edit")["state"] == "available", size_envelope,
+    )
+    app.state.view_candidates = view_candidates
 
     async def capability_document(identity: HostIdentity | None = None) -> dict[str, Any]:
         text_direction_available = await creative_director.available(identity)
@@ -4086,6 +4092,15 @@ def create_app(
                             director_plan=director_plan,
                             reference_context=reference_context,
                         ).model_dump(mode="json")
+                    elif method == "images.views.create":
+                        async def submit_view_child(child: JobRequest) -> dict[str, Any]:
+                            return await submit_hosted(child, identity, workload_class="interactive")
+
+                        result = await view_candidates.create(params, submit_view_child)
+                    elif method == "images.views.list":
+                        result = await asyncio.to_thread(view_candidates.list, params)
+                    elif method == "images.views.select":
+                        result = await asyncio.to_thread(view_candidates.select, params)
                     elif method == "creative.batches.create":
                         async def submit_batch_child(child: JobRequest) -> dict[str, Any]:
                             return await submit_hosted(child, identity, workload_class="interactive")
@@ -5411,6 +5426,27 @@ def create_app(
             "items": annotate_candidates(rows),
             "installed_families": sorted(installed_families()),
         }
+
+    @app.post("/workspace-api/images/views/{action}", include_in_schema=False)
+    async def standalone_view_candidates(action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        async def submit_child(child: JobRequest) -> dict[str, Any]:
+            return manager.submit(apply_asset_brief(child)).model_dump(mode="json")
+
+        try:
+            reject_host_paths(payload)
+            if action == "create":
+                return await view_candidates.create(payload, submit_child)
+            if action == "list":
+                return await asyncio.to_thread(view_candidates.list, payload)
+            if action == "select":
+                return await asyncio.to_thread(view_candidates.select, payload)
+            raise ValueError("unknown view candidate action")
+        except CreativeValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": exc.code, "message": str(exc)[:300]}) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"code": "asset_not_found"}) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"code": "workspace_request_rejected", "message": str(exc)[:300]}) from exc
 
     @app.post("/workspace-api/creative/batches", include_in_schema=False)
     async def standalone_creative_batch(payload: dict[str, Any]) -> dict[str, Any]:

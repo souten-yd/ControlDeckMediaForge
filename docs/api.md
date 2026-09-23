@@ -254,6 +254,35 @@ route; successful child assets are retained when siblings fail or are canceled.
 The standalone same-origin `/workspace-api/creative/batches` bridge mirrors
 these methods for development, is excluded from OpenAPI, and is not a public API.
 
+`images.views.create` is private workspace orchestration for experimental
+other-view candidates. It accepts `source_asset_id`, 1..3 distinct `directions`
+(`right`, `back`, `left`, all three by default), optional `seed` (42 by default,
+0..2147483644), and `notes` (up to 2000 characters). The source must be a stored
+square RGBA image with transparency and a canvas supported by the installed
+single-reference editor. Each direction creates one ordinary `image.edit` Job
+with the same source, its own directional prompt and seed, PNG output, and
+required alpha. It uses the existing CreativeBatch (`axis=view`, 1..3 children),
+Host identity/Broker admission, Job cancellation, Asset and provenance stores.
+Partial results remain available if siblings fail; completion does not start 3D.
+
+`images.views.list` accepts `source_asset_id` and optional `offset` (default 0),
+returning source metadata, up to ten source-filtered batches, and `next_offset`.
+Filtering happens before pagination and survives clearing the recent Job list.
+`selectable_asset_ids` excludes deleted images without rewriting Job history.
+`images.views.select` accepts the source, candidate `asset_id`, and `direction`.
+It checks immutable parent/provenance/source hashes, direction context, canvas,
+transparency, and non-identical premultiplied pixels. Its response requires
+visual confirmation and does not infer camera calibration or guarantee shape
+consistency. Final multi-view 3D ingress independently rejects duplicate images.
+`creative.batches.cancel` cancels remaining children. The standalone development
+mirror is `POST /workspace-api/images/views/{create|list|select}`, excluded from
+OpenAPI. These methods accept asset IDs, never paths or remote inference.
+
+The optional public `JobRequest.constraints.view_candidate` context is defined
+in [`job-request.json`](../schemas/job-request.json). It records source and
+requested direction, only on a matching non-strict single-reference edit;
+it is provenance, not evidence that the image shows the requested direction.
+
 `creative.compositions.create` is the corresponding private multi-cut surface.
 It accepts an existing JobRequest-shaped object, internal CreativeSpec, and a
 trusted `poster` or `character_sheet` layout with 2..4 shots. Children use normal

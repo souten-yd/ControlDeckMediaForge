@@ -3063,6 +3063,18 @@ class Store:
             ).fetchall()
         return readable_rows(rows, CreativeBatchRecord, "value_json", kind="creative batch")
 
+    def list_view_candidate_batches(self, source_asset_id: str, offset: int = 0) -> list[CreativeBatchRecord]:
+        """Search persisted source context before pagination, including cleared Jobs."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT value_json FROM creative_batches
+                   WHERE json_extract(value_json, '$.axis') = 'view'
+                   AND json_extract(value_json, '$.child_plans[0].view_candidate.source_asset_id') = ?
+                   ORDER BY created_at DESC, id DESC LIMIT 11 OFFSET ?""",
+                (source_asset_id, offset),
+            ).fetchall()
+        return readable_rows(rows, CreativeBatchRecord, "value_json", kind="view candidate batch")
+
     def create_creative_composition(
         self, value: CreativeCompositionRecord
     ) -> CreativeCompositionRecord:

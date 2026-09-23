@@ -1,5 +1,21 @@
 # 実装引き継ぎ状態
 
+## 2026-09-23 別方向候補の比較UIと来歴（0.33.22準備）
+
+branch ux1/multiview-candidates-ui、base7bce85d。既存image.edit/CreativeBatch/Jobを再利用し、
+右/背面/左の別指示、元画像と方向context、候補比較と明示採用を追加。自動3D開始なし。
+元画像別の永続履歴、重複画素/削除/来歴不一致の拒否、簡易モードの状況→比較を実装。
+opaque iframeの実Chromium1280/320で依頼/取消/比較/採用/履歴/正面切替/詳細設定保持を確認。
+従来の手動4面/1枚復帰も確認し、overflow0/pageerror0/44px。通信応答は制御fixture。
+隔離実HTTP/偽workerは3件中2件alpha不足・1件成功。全件成功を期待したhelperの失敗を保持し、
+再送なしで同DB再起動/Job clear後の候補復元・来歴・選択を確認。実モデル品質とは分離。
+既存installed4面は実content再取得で全画素SHA相異を確認。新規モデルDL0。
+最終 ./mf.sh test は2576passed/3warnings/322.27秒、exit0（中断した予備gateとは別）。
+実行中にconstructor戻り型Noneの注釈だけ補足し、対象service testsも追加実行。
+次: commit/push/PR→既存鍵署名公開→通常feature update→installed生成/比較/Library。
+新UIのinstalled受入、生成候補品質、物理スマホはNOT TESTED。全体goal継続。
+[詳細](view-candidates-20260923.md)。
+
 ## 2026-09-23 0.33.21を通常導入、実MCP成功・候補品質は未採用
 
 PR657/7db182a、署名公開と通常更新完了。current0.33.21/PID711535/healthy。
