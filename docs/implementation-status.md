@@ -1,5 +1,16 @@
 # Media Forge implementation status
 
+## 2026-09-23 0.33.18/Host修正を導入し実MCP失敗追跡を受入
+
+PR647/c392021を署名公開・通常feature update、current0.33.18/PID393256/healthy。
+既存1585 Asset metadata/代表3content SHA/runtime全JSONを保持。Host PR337/786e76cも通常起動で適用。
+実OpenCode/Qwen Jobace32c6b7a89が意図的unsupported packを1回だけ呼び、期待するtool error。
+Host94bde79e1799/MFjob_0fe3e640c9c341b0a2c3ded01c01402bとfailedが返り、通常Jobs API/保存結果と一致。
+再送/生成/モデル取得0、元Asset不変。scene専用media.job.statusによるpack照会の成功ではない。
+更新後の通常Host1280/390/320pxで全7モデル/15画像付き配置、移動/視点/help/再読込成功。
+実PC内蔵GPUで59.971214fps/5.0024秒、物理電話はNOT TESTED。製品code変更なし、文書のみ。
+次は既存重みで複数面比較・UI/採用を評価する。[実測詳細](implementation/agent-failure-reference-20260923.md)。
+
 ## 2026-09-23 MCP失敗時のJob参照（0.33.18準備）
 
 branch ux1/agent-failure-job-reference。media.generateの受理後失敗/取消/cleanup timeoutへ
