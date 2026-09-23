@@ -1,5 +1,17 @@
 # Media Forge implementation status
 
+## 2026-09-23 参照編集0.33.19を通常導入・Library実表示
+
+PR651/90788fcを署名公開・再取得検証・通常feature update、current0.33.19/PID513777/healthy。
+既存1585 Asset metadata/代表3content SHA/runtime全JSON保持、追加モデル取得0。
+通常Host Job50f9ce2160f3は17.511秒/succeeded、512角の側面候補asset_74dbc48f1ac24554b03c3e56f486fbe5を保存。
+元正面Assetの親/SHAとfit来歴を確認。PC1280/touch320の通常Library→画像表示、overflow0/error0。
+画像の厳密な方向/材質一致は未受入、3D生成には未使用。4方向の公式入力は各別画像で重複なし。
+全2517pass/3skip/3warnings352.92秒。skipした署名3testは既存build環境参照で別途全通過。
+表示確認後に専用operator認証が期限切れ。通常logoutで専用sessionを無効化し再ログイン依頼中。
+installed lease終端追加照会/物理電話はNOT TESTED。次はMVの人物/非対称/取消/手動入力とUI。
+[詳細](implementation/reference-edit-admission-20260923.md)。複数面の製品runtime/UIはまだ未採用、全体goalは継続。
+
 ## 2026-09-23 単一参照編集の枠とcanvasを修正中（0.33.19）
 
 GPU空き23.2GiBでも通常生成用worker上限8.8GiBで参照編集がOOMになることを実確認。

@@ -46,3 +46,36 @@ workerはreference.fit_to_outputを来歴へ返し、元のAsset bytesを変更�
 自身のpytestへSIGINTで終了。新しい回帰を追加し、最終 ./mf.sh test は2517passed/3skipped/3warnings/352.92秒、exit0。
 0.33.19を準備。製品codeは最終全test後に変更なし。installed Host経由の生成/Library登録、署名通常更新はNOT TESTED。
 複数面runtime/UIの採用はこの修正の範囲外であり、別の評価を継続する。
+
+
+## 0.33.19の通常公開・installed受入
+
+PR651 / merge90788fcee2900d4214868aa7e1ec3107bcd174ebを固定しbundleを構築。
+38,063,572B、SHA256 b7c460d4f6ddf6bcb9e8e6aac3c4a5cf3a4664ebfe504b5a5efce2f5b0424f56。
+既存publisher keyで署名、Host trusted key照合/改変拒否、秘密値・重み混入なし、公開物を再取得して再検証。
+全testの3skipはbuild venvへの参照不足による署名testで、既存環境を参照して当該3件を全て通過。
+製品codeは最終全test後に変更なし。clean bundleは0.873154秒で起動、setup_required/
+3D unavailableを確認し、実環境のhealthyとは混同しない。
+
+実行中Jobs/GUI/runtime操作/Host lease0、両prefixのOpenCode unit0を確認し通常feature update。
+current0.33.19/PID513777/healthy、更新前1585 Asset metadata/代表3content SHA/runtime全JSONを保持。
+Hostコード、採用済み単視点Pixal/trellis runtime、モデル重みは変更しない。
+
+通常Host media.generate Job50f9ce2160f3 / MFjob_76034e60aa5c4ebd84d3881b9d742a4d:
+succeeded、Host timestamp差17.511011秒、再送0。
+Library Asset asset_74dbc48f1ac24554b03c3e56f486fbe5、512×512 RGBA/260,317B、
+SHA256 e5eac5767803252a5fb35351a9515e3cb3f717e5a8a24210a719ae76b7058eb6。
+元Asset asset_3fdf91288b124c6eab6b3f946af73f13の親参照/画像SHAを保持し、provenanceに
+image.edit、FLUX.2-klein-4B、0.33.19、reference.fit_to_outputを確認。
+元Assetは公式正面とdecoded RGBA画素が全て一致（PNG保存形式のSHAは異なる）。
+新候補の顔は片側になったが、厳密なcamera/構図/材質一致は未受入で、複数面3Dへ投入していない。
+
+実Hostの通常LibraryからPC1280とtouch320pxでカードを開き、512角画像の読み込み、
+opaque origin、横overflow0、page error0をassertしPNGも目視。物理スマホはNOT TESTED。
+証跡: maintenance/release-0.33.19-20260923/{installed-check,library,source-image-integrity}.json。
+生成の入力/Host終端/Asset/来歴/PNGはmultiview-20260923/generated-right-512-installed-0.33.19。
+
+表示確認の後に専用operator sessionのローカル有効期限切れを検出。
+installed lease終端の追加HTTP照会はNOT TESTEDとして記録し、認証を迂回しない。
+期限切れの専用sessionだけを通常logoutで無効化し、利用者へ再ログインを依頼。
+公開・更新・生成・保存・Library表示の受入は完了。追加MV評価は再認証後に継続する。
