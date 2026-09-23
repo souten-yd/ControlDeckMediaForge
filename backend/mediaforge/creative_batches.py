@@ -17,7 +17,7 @@ class CreativeBatchRecord(BaseModel):
 
     id: str = Field(pattern=r"^batch_[0-9a-f]{32}$")
     axis: str
-    requested_count: int = Field(ge=2, le=8)
+    requested_count: int = Field(ge=1, le=8)
     child_plans: list[dict[str, Any]]
     child_job_ids: list[str] = Field(default_factory=list)
     submission_errors: list[dict[str, str]] = Field(default_factory=list)

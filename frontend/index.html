@@ -409,6 +409,41 @@
                 <div id="scene-generation-view-cards"></div>
                 <button id="scene-generation-add-view" type="button">別の方向を追加</button>
                 <p id="scene-generation-views-status" class="hint" role="status"></p>
+                <details id="scene-view-candidates">
+                  <summary id="scene-view-candidates-title">別方向の候補を作る（実験的）</summary>
+                  <p id="scene-view-candidates-note" class="hint"></p>
+                  <label id="scene-view-candidates-directions-label" for="scene-view-candidates-directions">作る方向</label>
+                  <select id="scene-view-candidates-directions">
+                    <option value="right,back,left">右側面・背面・左側面（3枚）</option>
+                    <option value="right,back">右側面・背面（2枚）</option>
+                    <option value="right">右側面（1枚）</option>
+                    <option value="back">背面（1枚）</option>
+                    <option value="left">左側面（1枚）</option>
+                  </select>
+                  <details id="scene-view-candidates-options" data-scene-advanced>
+                    <summary id="scene-view-candidates-options-title">候補の詳細設定</summary>
+                    <label id="scene-view-candidates-notes-label" for="scene-view-candidates-notes">追加の指示</label>
+                    <textarea id="scene-view-candidates-notes" maxlength="2000" rows="3"></textarea>
+                    <label id="scene-view-candidates-seed-label" for="scene-view-candidates-seed">シード</label>
+                    <input id="scene-view-candidates-seed" type="number" min="0" max="2147483644" step="1" value="42">
+                  </details>
+                  <div class="split-actions">
+                    <button id="scene-view-candidates-create" type="button">候補を作る</button>
+                    <button id="scene-view-candidates-cancel" type="button" hidden>候補の生成を中止</button>
+                    <button id="scene-view-candidates-refresh" type="button">候補を更新</button>
+                  </div>
+                  <p id="scene-view-candidates-status" class="hint" role="status"></p>
+                  <div id="scene-view-candidates-list" class="scene-view-candidate-list"></div>
+                  <button id="scene-view-candidates-more" type="button" hidden>以前の候補を見る</button>
+                  <div id="scene-view-candidates-compare" hidden>
+                    <div class="scene-view-candidate-comparison">
+                      <figure><img id="scene-view-candidate-source" alt=""><figcaption id="scene-view-candidate-source-label"></figcaption></figure>
+                      <figure><img id="scene-view-candidate-preview" alt=""><figcaption id="scene-view-candidate-preview-label"></figcaption></figure>
+                    </div>
+                    <label class="check-row"><input id="scene-view-candidate-confirm" type="checkbox"><span id="scene-view-candidate-confirm-label">向き・形・持ち物を確認した</span></label>
+                    <button id="scene-view-candidate-use" type="button" disabled>この方向の画像に使う</button>
+                  </div>
+                </details>
               </div>
               <label for="scene-generation-name" id="scene-generation-name-label">シーン名</label>
               <input id="scene-generation-name" type="text" maxlength="120" required autocomplete="off">
